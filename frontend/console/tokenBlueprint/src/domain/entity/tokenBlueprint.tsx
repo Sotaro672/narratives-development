@@ -2,7 +2,7 @@
 
 /**
  * console/tokenBlueprint の domain 型は、shell の shared 型を唯一のソースとして参照する。
- * これにより module 間で TokenBlueprint 型がズレない（minted も boolean に統一される）。
+ * これにより module 間で TokenBlueprint 型がズレない。
  */
 import type {
   ContentFileType as SharedContentFileType,
@@ -14,12 +14,5 @@ import type {
 export type ContentFileType = SharedContentFileType;
 export type ContentFile = SharedContentFile;
 
-/**
- * TokenBlueprint
- * - shell/shared を正として使う
- * - 過去に console 側で companyId を要求していた場合に備え、互換のため optional で拡張だけ許す
- *   （不要なら削除してOK）
- */
-export type TokenBlueprint = SharedTokenBlueprint & {
-  companyId?: string;
-};
+// Shared を完全に正とする（companyId なども含めて一致させる）
+export type TokenBlueprint = SharedTokenBlueprint;

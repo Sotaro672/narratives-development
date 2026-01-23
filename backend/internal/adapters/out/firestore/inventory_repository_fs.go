@@ -33,7 +33,7 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // ============================================================
-// Firestore record shape (entity.go 準拠・互換なし)
+// Firestore record shape
 //
 // inventories/{docId}
 // - docId = productBlueprintId__tokenBlueprintId

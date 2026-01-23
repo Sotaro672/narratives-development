@@ -1,11 +1,10 @@
-// backend\internal\adapters\in\http\console\handler\list_handler.go
+// backend/internal/adapters/in/http/console/handler/list_handler.go
 package consoleHandler
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -54,7 +53,7 @@ func NewListHandlerWithQueries(
 	return &ListHandler{uc: uc, qMgmt: qMgmt, qDetail: qDetail, imgUploader: nil, imgDeleter: nil}
 }
 
-// ✅ NEW: ListImage も注入できる ctor（既存呼び出しを壊さない）
+// ✅ NEW: ListImage も注入できる ctor
 func NewListHandlerWithQueriesAndListImage(
 	uc *usecase.ListUsecase,
 	qMgmt *query.ListManagementQuery,
@@ -69,14 +68,6 @@ func NewListHandlerWithQueriesAndListImage(
 		imgUploader: uploader,
 		imgDeleter:  deleter,
 	}
-}
-
-// ✅ backward-ish: 片方だけ注入したい場合
-func NewListHandlerWithManagementQuery(uc *usecase.ListUsecase, q *query.ListManagementQuery) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: q, qDetail: nil, imgUploader: nil, imgDeleter: nil}
-}
-func NewListHandlerWithDetailQuery(uc *usecase.ListUsecase, q *query.ListDetailQuery) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: nil, qDetail: q, imgUploader: nil, imgDeleter: nil}
 }
 
 func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +147,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				sub = strings.TrimSpace(parts[2])
 			}
 
-			// ✅ NEW: /lists/{id}/images/signed-url で signed URL を発行
+			// /lists/{id}/images/signed-url で signed URL を発行
 			if strings.EqualFold(sub, "signed-url") {
 				if r.Method != http.MethodPost {
 					methodNotAllowed(w)
@@ -166,17 +157,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// ✅ NEW: /lists/{id}/images/upload（dataURL 直アップロード） ※旧方式互換
-			if strings.EqualFold(sub, "upload") {
-				if r.Method != http.MethodPost {
-					methodNotAllowed(w)
-					return
-				}
-				h.uploadImage(w, r, id)
-				return
-			}
-
-			// ✅ NEW: /lists/{id}/images/{imageId} DELETE
+			// /lists/{id}/images/{imageId} DELETE
 			if r.Method == http.MethodDelete && sub != "" {
 				h.deleteImage(w, r, id, sub)
 				return
@@ -219,10 +200,8 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // POST /lists/{id}/images/signed-url
 // ==============================
 //
-// ✅ フロントが `signed_url_response_invalid` を出さないように、
-//
-//	必須キーを handler 側で "固定の形" に正規化して返す。
-//	- uploadUrl / bucket / objectPath / id / publicUrl を必ず返す（可能な限り）
+// 必須キーを handler 側で "固定の形" に正規化して返す。
+// - uploadUrl / bucket / objectPath / id / publicUrl を必ず返す（可能な限り）
 func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
@@ -259,7 +238,6 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 		return
 	}
 
-	// ✅ map[string]struct{} の value(struct{})を TrimSpace しない（以前のコンパイルエラー対策）
 	if _, ok := listimgdom.SupportedImageMIMEs[ct]; !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unsupported contentType"})
@@ -272,7 +250,7 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 		return
 	}
 
-	rawOut, err := h.uc.IssueImageSignedURL(ctx, usecase.ListImageIssueSignedURLInput{
+	out, err := h.uc.IssueImageSignedURL(ctx, usecase.ListImageIssueSignedURLInput{
 		ListID:           listID,
 		FileName:         strings.TrimSpace(req.FileName),
 		ContentType:      ct,
@@ -290,126 +268,11 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 		return
 	}
 
-	// ------------------------------------------------------------
-	// ✅ 正規化（usecase の返却形が多少ズレてもフロントが壊れないようにする）
-	// ------------------------------------------------------------
-	bs, _ := json.Marshal(rawOut)
-	var m map[string]any
-	_ = json.Unmarshal(bs, &m)
-
-	getString := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := m[k]; ok {
-				switch t := v.(type) {
-				case string:
-					if s := strings.TrimSpace(t); s != "" {
-						return s
-					}
-				}
-			}
-		}
-		return ""
-	}
-	getInt64 := func(keys ...string) int64 {
-		for _, k := range keys {
-			if v, ok := m[k]; ok {
-				switch t := v.(type) {
-				case float64:
-					return int64(t)
-				case int64:
-					return t
-				case int:
-					return int64(t)
-				case string:
-					s := strings.TrimSpace(t)
-					if s == "" {
-						continue
-					}
-					if n, e := strconv.ParseInt(s, 10, 64); e == nil {
-						return n
-					}
-				}
-			}
-		}
-		return 0
-	}
-	getInt := func(keys ...string) int {
-		for _, k := range keys {
-			if v, ok := m[k]; ok {
-				switch t := v.(type) {
-				case float64:
-					return int(t)
-				case int:
-					return t
-				case int64:
-					return int(t)
-				case string:
-					s := strings.TrimSpace(t)
-					if s == "" {
-						continue
-					}
-					if n, e := strconv.Atoi(s); e == nil {
-						return n
-					}
-				}
-			}
-		}
-		return 0
-	}
-
-	// 互換候補キーを広めに吸収
-	id := getString("id", "imageId", "imageID")
-	bucket := getString("bucket")
-	objectPath := getString("objectPath", "object_path", "object", "path")
-	publicURL := getString("publicUrl", "publicURL", "public_url", "url")
-	uploadURL := getString("uploadUrl", "uploadURL", "signedUrl", "signedURL", "signed_url", "upload_url", "putUrl", "putURL")
-	expiresAt := getString("expiresAt", "expires_at", "expireAt", "expire_at")
-	fileName := getString("fileName", "filename", "file_name")
-	contentType := getString("contentType", "content_type", "mime")
-
-	// 値の補完
-	if strings.TrimSpace(fileName) == "" {
-		fileName = strings.TrimSpace(req.FileName)
-	}
-	if strings.TrimSpace(contentType) == "" {
-		contentType = ct
-	}
-	if strings.TrimSpace(publicURL) == "" && strings.TrimSpace(bucket) != "" && strings.TrimSpace(objectPath) != "" {
-		publicURL = fmt.Sprintf("https://storage.googleapis.com/%s/%s", strings.TrimSpace(bucket), strings.TrimLeft(strings.TrimSpace(objectPath), "/"))
-	}
-	if strings.TrimSpace(id) == "" {
-		// objectPath が {listId}/{imageId}/{fileName} の想定なら imageId を抜く
-		p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-		pp := strings.Split(p, "/")
-		if len(pp) >= 3 && strings.TrimSpace(pp[1]) != "" {
-			id = strings.TrimSpace(pp[1])
-		} else if p != "" {
-			// 最終フォールバック（フロントが "id が必須" の場合に落ちないように）
-			id = p
-		}
-	}
-
-	size := getInt64("size")
-	if size <= 0 {
-		size = req.Size
-	}
-	displayOrder := getInt("displayOrder", "display_order", "order")
-	if displayOrder == 0 {
-		displayOrder = req.DisplayOrder
-	}
-
-	// expiresAt が無い場合は計算して埋める（フロントが必須扱いの場合の保険）
-	if strings.TrimSpace(expiresAt) == "" {
-		sec := req.ExpiresInSeconds
-		if sec <= 0 {
-			sec = 15 * 60
-		}
-		expiresAt = time.Now().UTC().Add(time.Duration(sec) * time.Second).Format(time.RFC3339)
-	}
-
-	// ✅ フロントが "uploadUrl が無い" と invalid 扱いするケースが多いので、ここで弾く
-	if strings.TrimSpace(uploadURL) == "" || strings.TrimSpace(bucket) == "" || strings.TrimSpace(objectPath) == "" || strings.TrimSpace(id) == "" {
-		// 期待形にできない＝フロントが invalid になるので 500 で明示
+	// 必須チェック（usecase 側でも行うが二重化）
+	if strings.TrimSpace(out.UploadURL) == "" ||
+		strings.TrimSpace(out.Bucket) == "" ||
+		strings.TrimSpace(out.ObjectPath) == "" ||
+		strings.TrimSpace(out.ID) == "" {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "signed_url_response_invalid"})
 		return
@@ -430,16 +293,16 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(resp{
-		ID:           strings.TrimSpace(id),
-		Bucket:       strings.TrimSpace(bucket),
-		ObjectPath:   strings.TrimLeft(strings.TrimSpace(objectPath), "/"),
-		PublicURL:    strings.TrimSpace(publicURL),
-		UploadURL:    strings.TrimSpace(uploadURL),
-		ExpiresAt:    strings.TrimSpace(expiresAt),
-		ContentType:  strings.TrimSpace(contentType),
-		Size:         size,
-		DisplayOrder: displayOrder,
-		FileName:     strings.TrimSpace(fileName),
+		ID:           strings.TrimSpace(out.ID),
+		Bucket:       strings.TrimSpace(out.Bucket),
+		ObjectPath:   strings.TrimLeft(strings.TrimSpace(out.ObjectPath), "/"),
+		PublicURL:    strings.TrimSpace(out.PublicURL),
+		UploadURL:    strings.TrimSpace(out.UploadURL),
+		ExpiresAt:    strings.TrimSpace(out.ExpiresAt),
+		ContentType:  strings.TrimSpace(out.ContentType),
+		Size:         out.Size,
+		DisplayOrder: out.DisplayOrder,
+		FileName:     strings.TrimSpace(out.FileName),
 	})
 }
 
@@ -456,7 +319,7 @@ func (h *ListHandler) createSeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ management query が無いと seed を作れない
+	// management query が無いと seed を作れない
 	if h.qMgmt == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
@@ -612,7 +475,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ✅ modelNumbers 互換は廃止。modelIds のみ採用。
+	// modelIds のみ採用。
 	if vv := qp["modelIds"]; len(vv) > 0 {
 		for _, x := range vv {
 			x = strings.TrimSpace(x)
@@ -656,7 +519,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	perPage := parseIntDefault(qp.Get("perPage"), 50)
 	page := listdom.Page{Number: pageNum, PerPage: perPage}
 
-	// ✅ management query があれば query 経由で返す
+	// management query があれば query 経由で返す
 	if h.qMgmt != nil {
 		pr, err := h.qMgmt.ListRows(ctx, f, sort, page)
 		if err != nil {
@@ -756,7 +619,7 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ listId は inventoryId と独立したIDを使う（事故防止）
+	// listId は inventoryId と独立したIDを使う（事故防止）
 	if item.ID == item.InventoryID {
 		item.ID = ""
 	}
@@ -917,79 +780,7 @@ func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id stri
 	_ = json.NewEncoder(w).Encode(items)
 }
 
-// ✅ 旧方式互換: POST /lists/{id}/images/upload
-func (h *ListHandler) uploadImage(w http.ResponseWriter, r *http.Request, listID string) {
-	ctx := r.Context()
-
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
-		return
-	}
-	if h.imgUploader == nil {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-		return
-	}
-
-	var req struct {
-		ImageData    string  `json:"imageData"`
-		FileName     string  `json:"fileName"`
-		SetAsPrimary bool    `json:"setAsPrimary"`
-		DisplayOrder *int    `json:"displayOrder"`
-		CreatedBy    string  `json:"createdBy"`
-		UpdatedBy    *string `json:"updatedBy"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	listID = strings.TrimSpace(listID)
-	if listID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
-		return
-	}
-
-	createdBy := strings.TrimSpace(req.CreatedBy)
-	if createdBy == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "createdBy is required"})
-		return
-	}
-
-	in := listimgdom.UploadImageInput{
-		ImageData: strings.TrimSpace(req.ImageData),
-		FileName:  strings.TrimSpace(req.FileName),
-		ListID:    listID,
-	}
-
-	img, err := h.imgUploader.Upload(ctx, in)
-	if err != nil {
-		writeListErr(w, err)
-		return
-	}
-	if img == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "upload returned nil"})
-		return
-	}
-
-	if req.SetAsPrimary {
-		now := time.Now().UTC()
-		_, e := h.uc.SetPrimaryImage(ctx, listID, strings.TrimSpace(img.ID), now, normalizeStrPtr(req.UpdatedBy))
-		if e != nil {
-			log.Printf("[list_handler] WARN: SetPrimaryImage failed listID=%s imageID=%s err=%v", listID, strings.TrimSpace(img.ID), e)
-		}
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(img)
-}
-
-// ✅ NEW: DELETE /lists/{id}/images/{imageId}
+// DELETE /lists/{id}/images/{imageId}
 func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID string, imageID string) {
 	ctx := r.Context()
 
@@ -1027,15 +818,19 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+
 	var req struct {
-		ID           string  `json:"id"`
-		FileName     string  `json:"fileName"`
-		Bucket       string  `json:"bucket"`
-		ObjectPath   string  `json:"objectPath"`
-		Size         int64   `json:"size"`
-		DisplayOrder int     `json:"displayOrder"`
-		CreatedBy    string  `json:"createdBy"`
-		CreatedAt    *string `json:"createdAt"`
+		ID           string `json:"id"`
+		FileName     string `json:"fileName"` // kept for request compatibility; not used by usecase
+		Bucket       string `json:"bucket"`
+		ObjectPath   string `json:"objectPath"`
+		Size         int64  `json:"size"`
+		DisplayOrder int    `json:"displayOrder"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1043,29 +838,24 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 		return
 	}
 
-	if strings.TrimSpace(req.ID) == "" || strings.TrimSpace(req.ObjectPath) == "" {
+	req.ID = strings.TrimSpace(req.ID)
+	req.Bucket = strings.TrimSpace(req.Bucket)
+	req.ObjectPath = strings.TrimSpace(req.ObjectPath)
+
+	if req.ID == "" || req.ObjectPath == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id and objectPath are required"})
 		return
 	}
 
-	ca := time.Now().UTC()
-	if req.CreatedAt != nil && strings.TrimSpace(*req.CreatedAt) != "" {
-		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.CreatedAt)); err == nil {
-			ca = t.UTC()
-		}
-	}
-
 	img, err := h.uc.SaveImageFromGCS(
 		ctx,
-		strings.TrimSpace(req.ID),
+		req.ID,
 		strings.TrimSpace(listID),
-		strings.TrimSpace(req.Bucket),
-		strings.TrimSpace(req.ObjectPath),
+		req.Bucket,
+		req.ObjectPath,
 		req.Size,
 		req.DisplayOrder,
-		strings.TrimSpace(req.CreatedBy),
-		ca,
 	)
 	if err != nil {
 		if isNotSupported(err) {
@@ -1076,6 +866,7 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 		writeListErr(w, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(img)
 }

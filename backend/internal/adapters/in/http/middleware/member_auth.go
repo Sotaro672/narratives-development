@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\middleware\member_auth.go
+// backend/internal/adapters/in/http/middleware/member_auth.go
 package middleware
 
 import (
@@ -124,11 +124,11 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		if memberOK {
 			ctx = context.WithValue(ctx, ctxKeyMember, member)
 
-			// ★★★ usecase に memberID をセット（従来互換）★★★
+			// usecase に memberID をセット
 			if strings.TrimSpace(member.ID) != "" {
 				ctx = usecase.WithMemberID(ctx, member.ID)
 			} else {
-				// 互換: placeholder 等で member.ID が空の場合
+				// placeholder 等で member.ID が空の場合
 				ctx = usecase.WithMemberID(ctx, uid)
 			}
 
@@ -138,7 +138,6 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, ctxKeyFullName, strings.TrimSpace(fullName))
 			}
 		} else {
-			// ここに来ることは基本ない（companyId 解決できない時点で return するため）
 			returnErr(w, errors.New("member not found"))
 			return
 		}
@@ -152,18 +151,9 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			}
 		}
 
-		// ★ 互換のため、application 側の companyIDFromContext が拾える "文字列キー" も追加で積む
-		ctx = withLegacyStringKey(ctx, "currentMember", member)
-		ctx = withLegacyStringKey(ctx, "member", member)
-
 		// companyId 格納（必須）
 		ctx = usecase.WithCompanyID(ctx, companyID)
 		ctx = context.WithValue(ctx, ctxKeyCompanyID, companyID)
-
-		// ★ 互換: 文字列キーでも companyId を積む
-		ctx = withLegacyStringKey(ctx, "companyId", companyID)
-		ctx = withLegacyStringKey(ctx, "companyID", companyID)
-		ctx = withLegacyStringKey(ctx, "company_id", companyID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -175,13 +165,6 @@ func returnErr(w http.ResponseWriter, err error) {
 		return
 	}
 	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
-// withLegacyStringKey is intentionally using string keys for backward compatibility.
-// (e.g. existing companyIDFromContext implementations that still do ctx.Value("companyId"))
-func withLegacyStringKey(ctx context.Context, key string, val interface{}) context.Context {
-	//lint:ignore SA1029 We intentionally use string keys for backward compatibility with older context extractors.
-	return context.WithValue(ctx, key, val)
 }
 
 // CurrentMember は現在ログイン中の Member を取得します。

@@ -30,8 +30,8 @@ const FallbackListImageBucket = "narratives-development-list"
 // - objectPath: {listId}/{imageId}/{fileName}
 //
 // NOTE:
-// - gcs/tokenIcon_repository_gcs.go に sanitizeFileName / isKeepObject が既にあるため、こちらでは定義しない。
-// - ファイル名の正規化は tokenIcon 側 sanitizeFileName を再利用する（同一 package gcs）。
+// - ファイル名の正規化は package gcs の sanitizeFileName を再利用する。
+// - ".keep" 除外は package gcs の isKeepObject を再利用する。
 type ListImageRepositoryGCS struct {
 	Client *storage.Client
 	Bucket string // optional (if empty, use env or fallback)
@@ -141,7 +141,7 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 		)
 	}
 
-	// Normalize fileName (reuse sanitizeFileName from tokenIcon_repository_gcs.go)
+	// Normalize fileName
 	normName := strings.TrimSpace(in.FileName)
 	if normName == "" {
 		normName = "image"
@@ -210,127 +210,11 @@ func isSupportedListImageMIME(mime string) bool {
 	return false
 }
 
-// UploadResult is a pure GCS result (record creation is handled elsewhere).
-type UploadResult struct {
-	Bucket      string
-	ObjectPath  string
-	PublicURL   string
-	Size        int64
-	ContentType string
-	FileName    string // normalized filename actually used
-	ImageID     string // resolved (generated if empty)
-}
-
-// UploadDataURL uploads a data URL image to GCS.
-// It validates payload using domain validator and stores it under:
-//
-//	{listId}/{imageId}/{fileName}
-//
-// - listID: required（期待値: list_create 時の id をディレクトリ名に）
-// - imageID: optional（空なら生成。複数画像対応のため imageId で衝突回避）
-// - fileName: optional（空なら "image" + 推定拡張子）
-func (r *ListImageRepositoryGCS) UploadDataURL(
-	ctx context.Context,
-	listID string,
-	imageID string,
-	fileName string,
-	dataURL string,
-) (UploadResult, error) {
-	if r == nil || r.Client == nil {
-		return UploadResult{}, fmt.Errorf("ListImageRepositoryGCS.UploadDataURL: storage client is nil")
-	}
-
-	listID = strings.TrimSpace(listID)
-	if listID == "" {
-		return UploadResult{}, fmt.Errorf("ListImageRepositoryGCS.UploadDataURL: listID is empty")
-	}
-
-	// Validate and decode (domain policy)
-	mime, payload, err := listimagedom.ValidateDataURL(
-		strings.TrimSpace(dataURL),
-		int(listimagedom.DefaultMaxImageSizeBytes),
-		listimagedom.SupportedImageMIMEs,
-	)
-	if err != nil {
-		return UploadResult{}, err
-	}
-
-	// Normalize fileName (reuse sanitizeFileName from tokenIcon_repository_gcs.go)
-	normName := strings.TrimSpace(fileName)
-	if normName == "" {
-		normName = "image"
-	}
-	normName = sanitizeFileName(normName)
-	normName = ensureExtensionByMIME(normName, mime)
-
-	// Resolve imageID
-	imgID := strings.TrimSpace(imageID)
-	if imgID == "" {
-		imgID = newObjectID()
-	}
-
-	objPath, err := buildListImageObjectPath(listID, imgID, normName)
-	if err != nil {
-		return UploadResult{}, err
-	}
-
-	bucket := r.ResolveBucket()
-
-	w := r.Client.Bucket(bucket).Object(objPath).NewWriter(ctx)
-	w.ContentType = mime
-	w.Metadata = map[string]string{
-		"listId":     listID,
-		"imageId":    imgID,
-		"fileName":   normName,
-		"uploadedAt": time.Now().UTC().Format(time.RFC3339Nano),
-	}
-
-	if _, err := w.Write(payload); err != nil {
-		_ = w.Close()
-		return UploadResult{}, fmt.Errorf("ListImageRepositoryGCS.UploadDataURL: write failed: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return UploadResult{}, fmt.Errorf("ListImageRepositoryGCS.UploadDataURL: close failed: %w", err)
-	}
-
-	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objPath)
-
-	return UploadResult{
-		Bucket:      bucket,
-		ObjectPath:  objPath,
-		PublicURL:   publicURL,
-		Size:        int64(len(payload)),
-		ContentType: mime,
-		FileName:    normName,
-		ImageID:     imgID,
-	}, nil
-}
-
-// DeleteObject deletes a GCS object by bucket/objectPath.
-func (r *ListImageRepositoryGCS) DeleteObject(ctx context.Context, bucket string, objectPath string) error {
-	if r == nil || r.Client == nil {
-		return fmt.Errorf("ListImageRepositoryGCS.DeleteObject: storage client is nil")
-	}
-	b := strings.TrimSpace(bucket)
-	if b == "" {
-		b = r.ResolveBucket()
-	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if obj == "" {
-		return fmt.Errorf("ListImageRepositoryGCS.DeleteObject: objectPath is empty")
-	}
-
-	if err := r.Client.Bucket(b).Object(obj).Delete(ctx); err != nil {
-		return fmt.Errorf("ListImageRepositoryGCS.DeleteObject: delete failed: %w", err)
-	}
-	return nil
-}
-
 // ============================================================
-// usecase required methods (方針A)
+// usecase required methods (署名付きURL前提 / 旧互換削除後)
 // - ListByListID(ctx, listID) ([]ListImage, error)
 // - GetByID(ctx, id) (ListImage, error)
-// - SaveFromBucketObject(ctx, id, listID, bucket, objectPath, size, displayOrder, createdBy, createdAt) (ListImage, error)
+// - SaveFromBucketObject(ctx, id, listID, bucket, objectPath, size, displayOrder) (ListImage, error)
 // ============================================================
 
 // ListByListID lists images under "{listId}/" prefix.
@@ -367,7 +251,7 @@ func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string
 			continue
 		}
 
-		// ".keep" は除外（tokenIcon 側の helper を再利用）
+		// ".keep" は除外
 		if isKeepObject(attrs.Name) {
 			continue
 		}
@@ -421,10 +305,6 @@ func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, id string) (listim
 // - already-uploaded object を前提に、GCS metadata を整えて domain ListImage を返す。
 // - objectPath policy は "{listId}/{imageId}/{fileName}" を推奨。
 // - id は objectPath を採用（= GetByID で一意に引ける）
-//
-// NOTE:
-// - createdAt/createdBy は domain から削除されたため、この adapter では保持・検証しない。
-// - usecase interface 互換のため引数は残す（未使用）。
 func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	ctx context.Context,
 	id string,
@@ -433,12 +313,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	objectPath string,
 	size int64,
 	displayOrder int,
-	createdBy string, // unused (kept for compatibility)
-	createdAt time.Time, // unused (kept for compatibility)
 ) (listimagedom.ListImage, error) {
-	_ = createdBy
-	_ = createdAt
-
 	if r == nil || r.Client == nil {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: storage client is nil")
 	}

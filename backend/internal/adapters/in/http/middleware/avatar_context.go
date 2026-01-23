@@ -19,7 +19,6 @@ var (
 )
 
 // AvatarResolver resolves avatarId + walletAddress by Firebase uid.
-// ✅ New-only contract (旧式互換は廃止)
 type AvatarResolver interface {
 	ResolveAvatarByUID(ctx context.Context, uid string) (avatarId string, walletAddress string, err error)
 }

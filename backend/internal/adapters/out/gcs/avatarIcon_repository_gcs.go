@@ -26,9 +26,8 @@ const FallbackAvatarIconBucket = "narratives-development_avatar_icon"
 
 // AvatarIconRepositoryGCS is a small GCS adapter for Avatar icons.
 //
-// ObjectPath policy:
-// - 推奨: {avatarId}/{iconId}/{fileName}  (複数アイコン/履歴保持向け)
-// - 互換: {avatarId}/{fileName}          (handler が {avatarId}/{random}.{ext} を作るケース)
+// ObjectPath policy (ONLY):
+// - {avatarId}/{iconId}/{fileName}  (複数アイコン/履歴保持向け)
 //
 // NOTE:
 // - gcs/tokenIcon_repository_gcs.go に sanitizeFileName / isKeepObject / sanitizePathSegment がある前提で再利用する（同一 package gcs）。
@@ -227,116 +226,6 @@ func (r *AvatarIconRepositoryGCS) IssueSignedURL(
 	}, nil
 }
 
-// IssueSignedURLForOverwrite issues a signed PUT url for uploading avatar icon images
-// to an EXISTING objectPath (fixed URL overwrite).
-//
-// This is used when the product expectation is:
-// - avatarIcon (public URL) string stays the same
-// - only the GCS object bytes are replaced (PUT overwrite) or deleted
-//
-// objectPath examples:
-// - "{avatarId}/{fileName}"                 (legacy/handler style: avatarId/random.png)
-// - "{avatarId}/{iconId}/{fileName}"        (recommended style)
-//
-// NOTE:
-//   - This method is intentionally NOT part of usecase.AvatarIconObjectStoragePort compatibility;
-//     it can be called by a dedicated "me" icon update flow where the server resolves current avatarIcon URL,
-//     parses bucket/objectPath, and issues overwrite signed URL.
-func (r *AvatarIconRepositoryGCS) IssueSignedURLForOverwrite(
-	ctx context.Context,
-	bucket string,
-	objectPath string,
-	contentType string,
-	size int64,
-	expiresInSeconds int64,
-) (avicon.IssueSignedURLOutput, error) {
-	_ = ctx
-
-	if r == nil || r.Client == nil {
-		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURLForOverwrite: storage client is nil")
-	}
-
-	b := strings.TrimSpace(bucket)
-	if b == "" {
-		b = r.ResolveBucket()
-	}
-
-	objPath := normalizeObjectPath(objectPath)
-	if objPath == "" {
-		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURLForOverwrite: objectPath is empty")
-	}
-	// very small safety check (reject traversal)
-	if strings.Contains(objPath, "..") {
-		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURLForOverwrite: invalid objectPath=%q", objPath)
-	}
-
-	ct := strings.ToLower(strings.TrimSpace(contentType))
-	if ct == "" {
-		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURLForOverwrite: contentType is empty")
-	}
-	if !isSupportedAvatarIconMIME(ct) {
-		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURLForOverwrite: unsupported contentType=%q", ct)
-	}
-
-	// optional: size validation (if provided)
-	if size > 0 && avicon.DefaultMaxIconSizeBytes > 0 && size > avicon.DefaultMaxIconSizeBytes {
-		return avicon.IssueSignedURLOutput{}, fmt.Errorf(
-			"AvatarIconRepositoryGCS.IssueSignedURLForOverwrite: file too large: %d > %d",
-			size,
-			avicon.DefaultMaxIconSizeBytes,
-		)
-	}
-
-	sec := expiresInSeconds
-	if sec <= 0 {
-		sec = 15 * 60
-	}
-	if sec > 60*60 {
-		sec = 60 * 60
-	}
-	expiresAt := time.Now().UTC().Add(time.Duration(sec) * time.Second)
-
-	uploadURL, err := r.Client.Bucket(b).SignedURL(objPath, &storage.SignedURLOptions{
-		Scheme:      storage.SigningSchemeV4,
-		Method:      "PUT",
-		Expires:     expiresAt,
-		ContentType: ct,
-	})
-	if err != nil {
-		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURLForOverwrite: signed url failed: %w", err)
-	}
-
-	publicURL := avicon.PublicURL(b, objPath)
-
-	// fileName is best-effort (for client debug/logging)
-	fn := sanitizeFileName(path.Base(objPath))
-	if fn == "" {
-		fn = "icon"
-	}
-
-	return avicon.IssueSignedURLOutput{
-		ID:          objPath, // policy: id = objectPath
-		Bucket:      b,
-		ObjectPath:  objPath,
-		UploadURL:   uploadURL,
-		PublicURL:   publicURL,
-		FileName:    fn,
-		ContentType: ct,
-		Size:        size,
-		ExpiresAt:   expiresAt.UTC().Format(time.RFC3339),
-	}, nil
-}
-
-func normalizeObjectPath(p string) string {
-	s := strings.TrimSpace(p)
-	s = strings.TrimLeft(s, "/")
-	// collapse accidental double slashes (best-effort)
-	for strings.Contains(s, "//") {
-		s = strings.ReplaceAll(s, "//", "/")
-	}
-	return s
-}
-
 func isSupportedAvatarIconMIME(mime string) bool {
 	switch strings.ToLower(strings.TrimSpace(mime)) {
 	case "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif":
@@ -351,6 +240,7 @@ func isSupportedAvatarIconMIME(mime string) bool {
 // ============================================================
 
 // GetByAvatarID lists objects under "{avatarId}/" prefix and returns domain AvatarIcon list.
+// NOTE: objectPath policy外の object（例: "{avatarId}/{fileName}"）は除外する。
 func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID string) ([]avicon.AvatarIcon, error) {
 	if r == nil || r.Client == nil {
 		return nil, fmt.Errorf("AvatarIconRepositoryGCS.GetByAvatarID: storage client is nil")
@@ -405,7 +295,7 @@ func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID st
 }
 
 // Save updates GCS metadata for an already-uploaded object and returns AvatarIcon.
-// - opts は現状未使用（互換のため受ける）
+// - opts は現状未使用（usecase 側の interface 都合で受ける）
 func (r *AvatarIconRepositoryGCS) Save(
 	ctx context.Context,
 	ic avicon.AvatarIcon,
@@ -417,7 +307,7 @@ func (r *AvatarIconRepositoryGCS) Save(
 		return avicon.AvatarIcon{}, fmt.Errorf("AvatarIconRepositoryGCS.Save: storage client is nil")
 	}
 
-	// bucket/objectPath を URL から解決（基本は NewFromBucketObject が public URL を作る）
+	// bucket/objectPath を URL から解決
 	bucket := r.ResolveBucket()
 	objectPath := ""
 
@@ -428,10 +318,16 @@ func (r *AvatarIconRepositoryGCS) Save(
 		objectPath = strings.TrimLeft(strings.TrimSpace(obj), "/")
 	}
 	if objectPath == "" {
-		// fallback: ID を objectPath とみなす
+		// fallback: ID を objectPath とみなす（policy: id=objectPath）
 		objectPath = strings.TrimLeft(strings.TrimSpace(ic.ID), "/")
 	}
 	if objectPath == "" {
+		return avicon.AvatarIcon{}, avicon.ErrNotFound
+	}
+
+	// policy check: "{avatarId}/{iconId}/{fileName}"
+	aidFromPath, _, ok := splitAvatarIconObjectPath(objectPath)
+	if !ok || strings.TrimSpace(aidFromPath) == "" {
 		return avicon.AvatarIcon{}, avicon.ErrNotFound
 	}
 
@@ -451,10 +347,7 @@ func (r *AvatarIconRepositoryGCS) Save(
 		aid = strings.TrimSpace(*ic.AvatarID)
 	}
 	if aid == "" {
-		// objectPath から推定（"{avatarId}/{...}"）
-		if p0, _, ok := splitAvatarIconObjectPath(objectPath); ok {
-			aid = p0
-		}
+		aid = aidFromPath
 	}
 
 	// fileName
@@ -566,6 +459,7 @@ func buildAvatarIconObjectPath(avatarID, iconID, fileName string) (string, error
 }
 
 // buildAvatarIconFromAttrs converts GCS attrs to domain AvatarIcon (best-effort).
+// NOTE: objectPath policy外の object は除外する。
 func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon.AvatarIcon, bool) {
 	if attrs == nil {
 		return avicon.AvatarIcon{}, false
@@ -573,6 +467,12 @@ func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon
 
 	obj := strings.TrimSpace(attrs.Name)
 	if obj == "" {
+		return avicon.AvatarIcon{}, false
+	}
+
+	// policy check: "{avatarId}/{iconId}/{fileName}"
+	avatarIDFromPath, _, ok := splitAvatarIconObjectPath(obj)
+	if !ok {
 		return avicon.AvatarIcon{}, false
 	}
 
@@ -586,10 +486,7 @@ func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon
 
 	avatarID := getMeta("avatarId")
 	if avatarID == "" {
-		// supports both "{avatarId}/{fileName}" and "{avatarId}/{iconId}/{fileName}"
-		if aid, _, ok := splitAvatarIconObjectPath(obj); ok {
-			avatarID = aid
-		}
+		avatarID = avatarIDFromPath
 	}
 	var aidPtr *string
 	if strings.TrimSpace(avatarID) != "" {
@@ -648,27 +545,19 @@ func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon
 	return ic, true
 }
 
-// splitAvatarIconObjectPath supports BOTH patterns:
-//
-// A) "{avatarId}/{iconId}/{fileName}" (len(parts) >= 3)
-// B) "{avatarId}/{fileName}"         (len(parts) == 2)  ※ handler style: avatarId/random.png
-//
-// It returns:
-// - avatarID: parts[0]
-// - iconID:   parts[1] (best-effort; for pattern B this is fileName, but callers only need "avatarID")
-// - ok:       true if at least 2 segments and avatarId is non-empty
+// splitAvatarIconObjectPath expects "{avatarId}/{iconId}/{fileName}".
 func splitAvatarIconObjectPath(objectPath string) (avatarID string, iconID string, ok bool) {
 	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if p == "" {
 		return "", "", false
 	}
 	parts := strings.Split(p, "/")
-	if len(parts) < 2 {
+	if len(parts) < 3 {
 		return "", "", false
 	}
 
 	avatarID = strings.TrimSpace(parts[0])
-	iconID = strings.TrimSpace(parts[1]) // pattern B: this is fileName; pattern A: iconId
+	iconID = strings.TrimSpace(parts[1])
 
 	if avatarID == "" || iconID == "" {
 		return "", "", false

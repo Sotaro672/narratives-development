@@ -422,14 +422,8 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 	objectPath := fmt.Sprintf("%s/%s%s", id, oid, ext)
 
 	// signer email (Cloud Run)
-	signerEmail := strings.TrimSpace(os.Getenv("AVATAR_ICON_SIGNER_EMAIL"))
-	if signerEmail == "" {
-		// compatibility: reuse existing envs
-		signerEmail = strings.TrimSpace(os.Getenv("TOKEN_ICON_SIGNER_EMAIL"))
-	}
-	if signerEmail == "" {
-		signerEmail = strings.TrimSpace(os.Getenv("GCS_SIGNER_EMAIL"))
-	}
+	// NOTE: GCS_SIGNER_EMAIL のみを使用する（フォールバック削除）
+	signerEmail := strings.TrimSpace(os.Getenv("GCS_SIGNER_EMAIL"))
 
 	// local: key file signing if present
 	credPath := strings.TrimSpace(os.Getenv("GCS_SIGNER_CREDENTIALS"))
@@ -484,9 +478,9 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 	// B) IAM Credentials signing (Cloud Run)
 	// ------------------------------------------------------------
 	if signerEmail == "" {
-		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url missing signer email (set AVATAR_ICON_SIGNER_EMAIL)\n", id)
+		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url missing signer email (set GCS_SIGNER_EMAIL)\n", id)
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing signer email (set AVATAR_ICON_SIGNER_EMAIL)"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing signer email (set GCS_SIGNER_EMAIL)"})
 		return
 	}
 

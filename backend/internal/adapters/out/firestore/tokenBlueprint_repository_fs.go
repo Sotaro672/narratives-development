@@ -63,7 +63,6 @@ func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*t
 }
 
 // GetPatchByID returns a lightweight Patch used by read-models.
-// NOTE: entity.go を正とし、名揺れ吸収・旧データ互換（reflect / any / iconId 等）は削除。
 func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error) {
 	if r.Client == nil {
 		return tbdom.Patch{}, errors.New("firestore client is nil")

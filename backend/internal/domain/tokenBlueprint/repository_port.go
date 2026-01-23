@@ -1,9 +1,8 @@
-// backend\internal\domain\tokenBlueprint\repository_port.go
+// backend/internal/domain/tokenBlueprint/repository_port.go
 package tokenBlueprint
 
 import (
 	"context"
-	"io"
 	"time"
 )
 
@@ -150,16 +149,6 @@ type RepositoryPort interface {
 	// 一意性チェック
 	IsSymbolUnique(ctx context.Context, symbol string, excludeID string) (bool, error)
 	IsNameUnique(ctx context.Context, name string, excludeID string) (bool, error)
-
-	// ストレージ（方針Aでは icon は signed URL を使う想定だが、Port は残す）
-	UploadIcon(ctx context.Context, fileName, contentType string, r io.Reader) (url string, err error)
-	UploadContentFile(ctx context.Context, fileName, contentType string, r io.Reader) (url string, err error)
-
-	// トランザクション
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
-
-	// テスト/開発用リセット
-	Reset(ctx context.Context) error
 }
 
 // ===============================

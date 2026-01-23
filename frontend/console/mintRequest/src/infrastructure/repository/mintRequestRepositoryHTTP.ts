@@ -2,6 +2,11 @@
 
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+
+// ✅ Console API base resolver（修正案A）
+// - VITE_BACKEND_BASE_URL は origin のみ想定
+// - /console は apiBase 側で付与（env に /console が混入しても正規化して除去）
+import { API_BASE as CONSOLE_API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import type {
   InspectionBatchDTO,
   MintListRowDTO,
@@ -106,17 +111,8 @@ type MintRequestsPayloadRaw =
     }
   | MintRequestRowRaw[];
 
-// 🔙 BACKEND の BASE URL
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-export const API_BASE = ENV_BASE || FALLBACK_BASE;
+// ✅ Console API base（/console 付き）
+export const API_BASE = CONSOLE_API_BASE;
 
 // ---------------------------------------------------------
 // ✅ DEBUG: HTTP ログ（渡したリクエストが分かる）
@@ -374,7 +370,10 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
     logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
       method: "GET",
       url: url1,
-      headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${safeTokenHint(idToken)}`,
+        "Content-Type": "application/json",
+      },
     });
 
     const res1 = await fetch(url1, { method: "GET", headers: buildHeaders(idToken) });
@@ -405,7 +404,10 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
   logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP(fallback)", {
     method: "GET",
     url: url2,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
   });
 
   const res2 = await fetch(url2, { method: "GET", headers: buildHeaders(idToken) });
@@ -420,7 +422,9 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
   if (!res2.ok) {
     const body = await res2.text().catch(() => "");
     throw new Error(
-      `Failed to fetch productions: ${res2.status} ${res2.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch productions: ${res2.status} ${res2.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -444,7 +448,10 @@ async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
   logHttpRequest("fetchProductionIdsForCurrentCompanyHTTP", {
     method: "GET",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
   });
 
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
@@ -459,7 +466,9 @@ async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch productions: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch productions: ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -498,8 +507,9 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
   if (!v) return null;
 
   const pid =
-    asMaybeString(v?.productionId ?? v?.ProductionID ?? v?.ProductionId ?? v?.id ?? v?.ID) ??
-    null;
+    asMaybeString(
+      v?.productionId ?? v?.ProductionID ?? v?.ProductionId ?? v?.id ?? v?.ID,
+    ) ?? null;
 
   const inspectionId =
     asMaybeString(
@@ -556,7 +566,8 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
   // ✅ detail の主要フィールド（UI 側で使うキー）
   // tokenBlueprintId は lowerCamel を正として扱う（名揺れ吸収を削減）
   const tokenBlueprintIdFromTop = asMaybeString(v?.tokenBlueprintId) ?? null;
-  const tokenBlueprintIdFromMint = asMaybeString((mint as any)?.tokenBlueprintId) ?? null;
+  const tokenBlueprintIdFromMint =
+    asMaybeString((mint as any)?.tokenBlueprintId) ?? null;
   const tokenBlueprintId = tokenBlueprintIdFromTop ?? tokenBlueprintIdFromMint ?? null;
 
   const productName =
@@ -565,9 +576,7 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
     null;
 
   const tokenName =
-    asMaybeString(v?.tokenName) ??
-    asMaybeString((mint as any)?.tokenName) ??
-    null;
+    asMaybeString(v?.tokenName) ?? asMaybeString((mint as any)?.tokenName) ?? null;
 
   return {
     ...(v ?? {}),
@@ -598,7 +607,10 @@ export async function fetchMintRequestDetailByProductionIdHTTP(
   logHttpRequest("fetchMintRequestDetailByProductionIdHTTP", {
     method: "GET",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
     productionId: pid,
   });
 
@@ -616,7 +628,9 @@ export async function fetchMintRequestDetailByProductionIdHTTP(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch mint request detail: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch mint request detail: ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -649,7 +663,10 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
   logHttpRequest("fetchInspectionBatchesByProductionIdsHTTP", {
     method: "GET",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
     productionIds: ids,
   });
 
@@ -665,7 +682,9 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch inspections (mint): ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch inspections (mint): ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -696,7 +715,8 @@ export async function fetchInspectionByProductionIdHTTP(
   const hit =
     batches.find(
       (b: any) =>
-        String((b as any)?.productionId ?? (b as any)?.ProductionID ?? "").trim() === trimmed,
+        String((b as any)?.productionId ?? (b as any)?.ProductionID ?? "").trim() ===
+        trimmed,
     ) ?? null;
 
   return hit ?? null;
@@ -718,7 +738,10 @@ export async function fetchProductBlueprintPatchHTTP(
   logHttpRequest("fetchProductBlueprintPatchHTTP", {
     method: "GET",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
     productBlueprintId,
   });
 
@@ -736,7 +759,9 @@ export async function fetchProductBlueprintPatchHTTP(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch productBlueprintPatch: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch productBlueprintPatch: ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -768,7 +793,10 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
   logHttpRequest("fetchBrandsForMintHTTP", {
     method: "GET",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
   });
 
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
@@ -783,7 +811,9 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch brands (mint): ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch brands (mint): ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -835,7 +865,10 @@ export async function fetchTokenBlueprintsByBrandHTTP(
   logHttpRequest("fetchTokenBlueprintsByBrandHTTP", {
     method: "GET",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
     brandId: trimmed,
   });
 
@@ -853,7 +886,9 @@ export async function fetchTokenBlueprintsByBrandHTTP(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch tokenBlueprints (mint): ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch tokenBlueprints (mint): ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -895,8 +930,7 @@ function normalizeModelVariationForMintDTO(v: any): ModelVariationForMintDTO | n
   const id = String(v?.id ?? v?.ID ?? "").trim();
   if (!id) return null;
 
-  const modelNumber =
-    String(v?.modelNumber ?? v?.ModelNumber ?? "").trim() || null;
+  const modelNumber = String(v?.modelNumber ?? v?.ModelNumber ?? "").trim() || null;
   const size = String(v?.size ?? v?.Size ?? "").trim() || null;
 
   const colorObj = v?.color ?? v?.Color ?? null;
@@ -940,7 +974,10 @@ export async function fetchModelVariationByIdForMintHTTP(
       logHttpRequest("fetchModelVariationByIdForMintHTTP", {
         method: "GET",
         url,
-        headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${safeTokenHint(idToken)}`,
+          "Content-Type": "application/json",
+        },
         variationId: vid,
       });
 
@@ -959,7 +996,9 @@ export async function fetchModelVariationByIdForMintHTTP(
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(
-          `Failed to fetch model variation: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+          `Failed to fetch model variation: ${res.status} ${res.statusText}${
+            body ? ` body=${body.slice(0, 400)}` : ""
+          }`,
         );
       }
 
@@ -1022,7 +1061,10 @@ async function fetchMintRequestsRowsRaw(
   logHttpRequest("fetchMintRequestsRowsRaw", {
     method: "GET",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
     productionIds: ids,
     view,
   });
@@ -1047,7 +1089,9 @@ async function fetchMintRequestsRowsRaw(
       bodyPreview: body ? body.slice(0, 800) : "",
     });
     throw new Error(
-      `Failed to fetch mint requests: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to fetch mint requests: ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 
@@ -1189,7 +1233,10 @@ export async function postMintRequestHTTP(
   logHttpRequest("postMintRequestHTTP", {
     method: "POST",
     url,
-    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      "Content-Type": "application/json",
+    },
     productionId: trimmed,
     payload,
   });
@@ -1220,7 +1267,9 @@ export async function postMintRequestHTTP(
       bodyPreview: body ? body.slice(0, 1200) : "",
     });
     throw new Error(
-      `Failed to post mint request: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+      `Failed to post mint request: ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
     );
   }
 

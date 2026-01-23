@@ -395,14 +395,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
 	// =========================================================
-	// ✅ TokenBlueprintUsecase (現行シグネチャへ削ぎ落とし)
-	// - NewTokenMetadataBuilder は存在しないため削除
-	// - tokenContentsRepo / tokenIconRepo / ArweaveUploader 注入は廃止（後方互換削除）
-	// - 現行: NewTokenBlueprintUsecase(tokenBlueprintRepo, memberSvc)
+	// ✅ TokenBlueprintUsecase
+	// 現行: NewTokenBlueprintUsecase(tokenBlueprintRepo, memberSvc, gcsClient)
 	// =========================================================
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,
 		memberSvc,
+		gcsClient, // ★追加: bucket/.keep 作成に必要
 	)
 
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)

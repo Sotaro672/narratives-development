@@ -312,7 +312,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ CreatedBy は request から受け取らない。actorId を正とする（後方互換削除）
+	// ✅ CreatedBy は request から受け取らない。
 	tb, err := h.uc.Create(ctx, uc.CreateBlueprintRequest{
 		Name:        strings.TrimSpace(req.Name),
 		Symbol:      strings.TrimSpace(req.Symbol),

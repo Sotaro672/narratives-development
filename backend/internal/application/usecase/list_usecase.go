@@ -28,17 +28,14 @@ type ListImageIssueSignedURLInput struct {
 type ListImageIssueSignedURLOutput struct {
 	// id は objectPath を採用（SaveFromBucketObject / GetByID で一意に引ける）
 	ID         string `json:"id"`
-	ImageID    string `json:"imageId"` // ✅ alias (frontend 互換)
 	Bucket     string `json:"bucket"`
 	ObjectPath string `json:"objectPath"`
 
-	// ✅ signed url
+	// signed url
 	UploadURL string `json:"uploadUrl"`
-	SignedURL string `json:"signedUrl"` // ✅ alias (frontend 互換)
 
-	// ✅ public url
+	// public url
 	PublicURL string `json:"publicUrl"`
-	URL       string `json:"url"` // ✅ alias (frontend 互換)
 
 	FileName     string `json:"fileName"`
 	ContentType  string `json:"contentType"`
@@ -107,8 +104,6 @@ type ListImageObjectSaver interface {
 		objectPath string,
 		size int64,
 		displayOrder int,
-		createdBy string,
-		createdAt time.Time,
 	) (listimgdom.ListImage, error)
 }
 
@@ -136,7 +131,7 @@ type ListUsecase struct {
 	imageReader          ListImageReader
 	imageByIDReader      ListImageByIDReader
 	imageObjectSaver     ListImageObjectSaver
-	imageSignedURLIssuer ListImageSignedURLIssuer // ✅ NEW
+	imageSignedURLIssuer ListImageSignedURLIssuer // signed-url issuer
 }
 
 // NewListUsecase はユースケースを初期化します。
@@ -161,7 +156,7 @@ func NewListUsecase(
 		imageSignedURLIssuer: nil, // auto-wire below
 	}
 
-	// 既存DIを壊さずに、listReader(実体はrepo)が ListLister/ListUpdater を実装していれば自動で配線
+	// listReader(実体はrepo)が ListLister/ListUpdater を実装していれば自動で配線
 	if listReader != nil {
 		if lister, ok := any(listReader).(ListLister); ok {
 			uc.listLister = lister
@@ -171,7 +166,7 @@ func NewListUsecase(
 		}
 	}
 
-	// ✅ signed-url: imageObjectSaver が issuer を実装していれば自動で配線
+	// signed-url: imageObjectSaver が issuer を実装していれば自動で配線
 	if imageObjectSaver != nil {
 		if issuer, ok := any(imageObjectSaver).(ListImageSignedURLIssuer); ok {
 			uc.imageSignedURLIssuer = issuer
@@ -181,7 +176,7 @@ func NewListUsecase(
 	return uc
 }
 
-// 作成にも対応したコンストラクタ（既存呼び出しを壊さない）
+// 作成にも対応したコンストラクタ
 func NewListUsecaseWithCreator(
 	listReader ListReader,
 	listCreator ListCreator,
@@ -224,7 +219,7 @@ func NewListUsecaseWithCreator(
 		}
 	}
 
-	// ✅ signed-url: imageObjectSaver が issuer を実装していれば自動で配線
+	// signed-url: imageObjectSaver が issuer を実装していれば自動で配線
 	if imageObjectSaver != nil {
 		if issuer, ok := any(imageObjectSaver).(ListImageSignedURLIssuer); ok {
 			uc.imageSignedURLIssuer = issuer
@@ -234,9 +229,7 @@ func NewListUsecaseWithCreator(
 	return uc
 }
 
-// ✅ NEW: IssueImageSignedURL は GCS signed-url を発行します。
-// - フロントの「signed_url_response_invalid」対策として、ここで必須フィールドを正規化して返す。
-// - uploadUrl/signedUrl、publicUrl/url、id/imageId を必ず揃える。
+// IssueImageSignedURL は GCS signed-url を発行します。
 func (uc *ListUsecase) IssueImageSignedURL(ctx context.Context, in ListImageIssueSignedURLInput) (ListImageIssueSignedURLOutput, error) {
 	if uc.imageSignedURLIssuer == nil {
 		return ListImageIssueSignedURLOutput{}, ErrNotSupported("List.IssueImageSignedURL")
@@ -251,42 +244,19 @@ func (uc *ListUsecase) IssueImageSignedURL(ctx context.Context, in ListImageIssu
 		return ListImageIssueSignedURLOutput{}, err
 	}
 
-	// ---- normalize (trim + alias + defaults) ----
+	// ---- normalize (trim + defaults) ----
 	out.ID = strings.TrimSpace(out.ID)
-	out.ImageID = strings.TrimSpace(out.ImageID)
 	out.Bucket = strings.TrimSpace(out.Bucket)
 	out.ObjectPath = strings.TrimLeft(strings.TrimSpace(out.ObjectPath), "/")
 	out.UploadURL = strings.TrimSpace(out.UploadURL)
-	out.SignedURL = strings.TrimSpace(out.SignedURL)
 	out.PublicURL = strings.TrimSpace(out.PublicURL)
-	out.URL = strings.TrimSpace(out.URL)
 	out.FileName = strings.TrimSpace(out.FileName)
 	out.ContentType = strings.TrimSpace(out.ContentType)
 	out.ExpiresAt = strings.TrimSpace(out.ExpiresAt)
 
-	// aliases: uploadUrl <-> signedUrl
-	if out.UploadURL == "" && out.SignedURL != "" {
-		out.UploadURL = out.SignedURL
-	}
-	if out.SignedURL == "" && out.UploadURL != "" {
-		out.SignedURL = out.UploadURL
-	}
-
-	// aliases: publicUrl <-> url
-	if out.PublicURL == "" && out.URL != "" {
-		out.PublicURL = out.URL
-	}
-	if out.URL == "" && out.PublicURL != "" {
-		out.URL = out.PublicURL
-	}
-
 	// id defaults: objectPath を採用（方針）
 	if out.ID == "" && out.ObjectPath != "" {
 		out.ID = out.ObjectPath
-	}
-	// alias: imageId
-	if out.ImageID == "" && out.ID != "" {
-		out.ImageID = out.ID
 	}
 
 	// bucket default
@@ -297,7 +267,6 @@ func (uc *ListUsecase) IssueImageSignedURL(ctx context.Context, in ListImageIssu
 	// public url default（空なら生成）
 	if out.PublicURL == "" && out.Bucket != "" && out.ObjectPath != "" {
 		out.PublicURL = listimgdom.PublicURL(out.Bucket, out.ObjectPath)
-		out.URL = out.PublicURL
 	}
 
 	// expiresAt default（空なら計算）
@@ -309,7 +278,7 @@ func (uc *ListUsecase) IssueImageSignedURL(ctx context.Context, in ListImageIssu
 		out.ExpiresAt = time.Now().UTC().Add(time.Duration(sec) * time.Second).Format(time.RFC3339)
 	}
 
-	// 最低限の必須チェック（ここで落とすと handler も 500 にできる）
+	// 必須チェック
 	if out.UploadURL == "" || out.Bucket == "" || out.ObjectPath == "" || out.ID == "" {
 		return ListImageIssueSignedURLOutput{}, errors.New("signed_url_response_invalid")
 	}
@@ -334,7 +303,7 @@ func (uc *ListUsecase) Count(ctx context.Context, filter listdom.Filter) (int, e
 }
 
 // Create は List を作成します。
-// ✅ 期待値更新: 作成後に「listId の名前のバケット」を初期化する（実装があれば）。
+// 作成後に「listId の名前のバケット」を初期化する（実装があれば）。
 func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.List, error) {
 	if uc.listCreator == nil {
 		return listdom.List{}, ErrNotSupported("List.Create")
@@ -345,7 +314,7 @@ func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.L
 		return listdom.List{}, err
 	}
 
-	// ✅ listId 名のバケット（または prefix）初期化（実装があれば）
+	// listId 名のバケット（または prefix）初期化（実装があれば）
 	listID := strings.TrimSpace(created.ID)
 	if listID != "" && uc.imageObjectSaver != nil {
 		if init, ok := any(uc.imageObjectSaver).(ListImageBucketInitializer); ok {
@@ -363,7 +332,7 @@ func (uc *ListUsecase) Update(ctx context.Context, item listdom.List) (listdom.L
 		return listdom.List{}, listdom.ErrInvalidID
 	}
 
-	// ✅ 最優先: domain.Repository 互換の patch Update(Update(ctx, id, patch)) が叩けるならそれを使う
+	// 最優先: domain.Repository 互換の patch Update(Update(ctx, id, patch)) が叩けるならそれを使う
 	patch := buildPatchFromItem(item)
 
 	if uc.listReader != nil {
@@ -439,8 +408,6 @@ func (uc *ListUsecase) SaveImageFromGCS(
 	objectPath string,
 	size int64,
 	displayOrder int,
-	createdBy string,
-	createdAt time.Time,
 ) (listimgdom.ListImage, error) {
 	if uc.imageObjectSaver == nil {
 		return listimgdom.ListImage{}, ErrNotSupported("List.SaveImageFromGCS")
@@ -454,14 +421,12 @@ func (uc *ListUsecase) SaveImageFromGCS(
 		strings.TrimSpace(objectPath),
 		size,
 		displayOrder,
-		strings.TrimSpace(createdBy),
-		createdAt.UTC(),
 	)
 	if err != nil {
 		return listimgdom.ListImage{}, err
 	}
 
-	// ✅ ここだけログを残す：listImage バケットURLが作成/解決できたか
+	// ここだけログを残す：listImage バケットURLが作成/解決できたか
 	log.Printf(
 		"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s bucketHint=%s objectPath=%s",
 		strings.TrimSpace(img.URL) != "",
@@ -476,7 +441,7 @@ func (uc *ListUsecase) SaveImageFromGCS(
 }
 
 // SetPrimaryImage は指定の ListImage を List の代表画像に設定します。
-// ✅ 方針更新: List.ImageID には「画像URL（bucket上のURL）」を格納する。
+// 方針: List.ImageID には「画像URL（bucket上のURL）」を格納する。
 // - imageID が URL の場合: そのまま List.ImageID に設定
 // - imageID が ListImage の ID の場合: ListImage を取得して URL を解決して設定
 func (uc *ListUsecase) SetPrimaryImage(
@@ -506,7 +471,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return uc.listPatcher.UpdateImageID(
 			ctx,
 			lid,
-			iid, // ✅ URL
+			iid, // URL
 			now.UTC(),
 			normalizeStrPtr(updatedBy),
 		)
@@ -545,7 +510,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 	return uc.listPatcher.UpdateImageID(
 		ctx,
 		lid,
-		imageURL, // ✅ URL を格納
+		imageURL, // URL を格納
 		now.UTC(),
 		normalizeStrPtr(updatedBy),
 	)
@@ -563,7 +528,7 @@ func isImageURL(v string) bool {
 func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 	statusV := item.Status
 	assigneeV := strings.TrimSpace(item.AssigneeID)
-	imageV := strings.TrimSpace(item.ImageID) // ✅ URL格納方針
+	imageV := strings.TrimSpace(item.ImageID) // URL格納方針
 	titleV := strings.TrimSpace(item.Title)
 	descV := strings.TrimSpace(item.Description)
 
@@ -581,7 +546,7 @@ func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 		updatedAtV = item.UpdatedAt.UTC()
 	}
 
-	// ✅ prices: nil(未指定)なら patch に入れない（意図せず全削除を防ぐ）
+	// prices: nil(未指定)なら patch に入れない（意図せず全削除を防ぐ）
 	var pricesPtr *[]listdom.ListPriceRow
 	if item.Prices != nil {
 		pv := item.Prices

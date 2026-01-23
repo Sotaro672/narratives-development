@@ -65,3 +65,13 @@ func newObjectID() string {
 	// fallback
 	return fmt.Sprintf("%d", time.Now().UTC().UnixNano())
 }
+
+// isKeepObject returns true if the objectPath represents a ".keep" object.
+// Both "xxx/.keep" and ".keep" are treated as keep objects.
+func isKeepObject(objectPath string) bool {
+	p := strings.TrimSpace(objectPath)
+	if p == "" {
+		return false
+	}
+	return strings.HasSuffix(p, "/.keep") || lastSegment(p) == ".keep"
+}

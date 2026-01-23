@@ -23,93 +23,15 @@ type UpdateTokenIconInput struct {
 	Size     *int64  `json:"size,omitempty"`
 }
 
-// 検索条件
-type Filter struct {
-	IDs          []string
-	FileNameLike string
-
-	SizeMin *int64
-	SizeMax *int64
-}
-
-// 並び順
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-
-const (
-	SortByFileName SortColumn = "fileName"
-	SortBySize     SortColumn = "size"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
-// ページング
-type Page struct {
-	Number  int
-	PerPage int
-}
-
-type PageResult struct {
-	Items      []TokenIcon
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
-}
-
-// 統計（任意契約）
-type TokenIconStats struct {
-	Total       int
-	TotalSize   int64
-	AverageSize float64
-	LargestIcon *struct {
-		ID       string
-		FileName string
-		Size     int64
-	}
-	SmallestIcon *struct {
-		ID       string
-		FileName string
-		Size     int64
-	}
-}
-
 // Repository Port（契約のみ）
 type RepositoryPort interface {
 	// 取得
 	GetByID(ctx context.Context, id string) (*TokenIcon, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
 
 	// 作成/更新/削除
 	Create(ctx context.Context, in CreateTokenIconInput) (*TokenIcon, error)
 	Update(ctx context.Context, id string, in UpdateTokenIconInput) (*TokenIcon, error)
 	Delete(ctx context.Context, id string) error
-
-	// ───────────────────────────────────────────────────────────
-	// 旧: バックエンドが直接アップロードする方式（互換のため残す）
-	// ※ 今後は Signed URL を推奨（下の SignedUploadURLIssuer を参照）
-	// 戻り値: 生成URL, 実サイズ(byte)
-	// ───────────────────────────────────────────────────────────
-	// UploadIcon(ctx context.Context, fileName, contentType string, r io.Reader) (url string, size int64, err error)
-
-	// 統計（任意）
-	GetTokenIconStats(ctx context.Context) (TokenIconStats, error)
-
-	// （任意）トランザクション境界
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
-
-	// （任意）開発/テスト用メンテ
-	Reset(ctx context.Context) error
 }
 
 // ─────────────────────────────────────────────────────────────

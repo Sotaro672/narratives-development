@@ -590,30 +590,3 @@ func (a *avatarStateRepoAdapter) Upsert(ctx context.Context, s avatarstate.Avata
 
 	return avatarstate.AvatarState{}, errors.New("avatarState repo missing Upsert")
 }
-
-// ---- PostImage adapter ----
-
-type postImageIssuerV2 interface {
-	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error)
-}
-
-type postImageIssuerV1 interface {
-	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, error)
-}
-
-type postImageRepoAdapter struct {
-	repo any
-}
-
-func (a *postImageRepoAdapter) IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error) {
-	if a == nil || a.repo == nil {
-		return "", "", "", errors.New("postImage repo not configured")
-	}
-	if v2, ok := a.repo.(postImageIssuerV2); ok {
-		return v2.IssueSignedUploadURL(ctx, avatarID, fileName, contentType, expiresIn)
-	}
-	if _, ok := a.repo.(postImageIssuerV1); ok {
-		return "", "", "", errors.New("postImage repo has legacy IssueSignedUploadURL signature; expected (uploadURL, publicURL, objectPath, error)")
-	}
-	return "", "", "", errors.New("postImage repo missing IssueSignedUploadURL")
-}

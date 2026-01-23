@@ -1,12 +1,6 @@
 // frontend/console/tokenBlueprint/src/presentation/components/tokenContentsCard.tsx
 import * as React from "react";
-import {
-  FileText,
-  Upload,
-  ChevronLeft,
-  ChevronRight,
-  Trash2,
-} from "lucide-react";
+import { FileText, Upload, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
 import {
   Card,
@@ -32,10 +26,11 @@ type TokenContentsCardProps = {
   mode?: Mode;
 
   /**
-   * edit モードで「ファイル追加」を押した時のハンドラ（任意）。
-   * 未指定なら何もしない（alert は出さない）。
+   * file picker でファイルが選択されたときに呼ばれる（推奨）。
+   * 実際のアップロード（署名付きURL取得→PUT→contentFiles更新）に接続するための口。
+   * 未指定でもローカルプレビュー追加までは動作する。
    */
-  onUploadClick?: () => void;
+  onFilesSelected?: (files: File[]) => void | Promise<void>;
 
   /**
    * edit モードで削除したい時のハンドラ（任意）。
@@ -44,15 +39,23 @@ type TokenContentsCardProps = {
   onDelete?: (item: GCSTokenContent, index: number) => void | Promise<void>;
 };
 
+function guessContentType(file: File): GCSTokenContent["type"] {
+  const mime = String(file.type || "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime === "application/pdf") return "pdf";
+  return "document";
+}
+
 export default function TokenContentsCard({
   contents,
   mode = "edit",
-  onUploadClick,
+  onFilesSelected,
   onDelete,
 }: TokenContentsCardProps) {
   const isEditMode = mode === "edit";
 
-  // props から表示用 items を構築（GCSTokenContent[] に正規化）
+  // props から表示用 items を構築
   const derivedItems = React.useMemo<GCSTokenContent[]>(() => {
     if (contents && contents.length > 0) return contents;
     return [];
@@ -62,11 +65,29 @@ export default function TokenContentsCard({
   const [items, setItems] = React.useState<GCSTokenContent[]>(derivedItems);
   const [index, setIndex] = React.useState(0);
 
-  // 外部 props の変化に追従
+  // file picker
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const objectUrlsRef = React.useRef<Set<string>>(new Set());
+
+  // 外部 props の変化に追従（※ローカルで追加した分は、呼び出し側で contents を更新したら同期される想定）
   React.useEffect(() => {
     setItems(derivedItems);
     setIndex(0);
   }, [derivedItems]);
+
+  // object URL の後始末
+  React.useEffect(() => {
+    return () => {
+      for (const u of objectUrlsRef.current) {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {
+          // noop
+        }
+      }
+      objectUrlsRef.current.clear();
+    };
+  }, []);
 
   const hasItems = items.length > 0;
 
@@ -80,9 +101,56 @@ export default function TokenContentsCard({
     setIndex((i) => (i + 1) % items.length);
   };
 
-  const handleUpload = () => {
+  const openFilePicker = () => {
+    inputRef.current?.click();
+  };
+
+  const handleUploadClick = () => {
     if (!isEditMode) return;
-    onUploadClick?.();
+    openFilePicker();
+  };
+
+  const handleFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isEditMode) return;
+
+    const list = e.target.files;
+    if (!list || list.length === 0) return;
+
+    const files = Array.from(list);
+
+    // 1) 呼び出し側に通知（任意）
+    if (onFilesSelected) {
+      await onFilesSelected(files);
+    }
+
+    // 2) UI でプレビューできるようにローカルに追加（実データ連携前でも動く）
+    const now = Date.now();
+    const newItems: GCSTokenContent[] = files.map((f, i) => {
+      const url = URL.createObjectURL(f);
+      objectUrlsRef.current.add(url);
+
+      const id = `local_${now}_${i}`;
+      const name = f.name || id;
+
+      return {
+        id,
+        name,
+        type: guessContentType(f),
+        url,
+        size: typeof f.size === "number" ? f.size : 0,
+      };
+    });
+
+    setItems((prevItems) => {
+      const merged = [...prevItems, ...newItems];
+      if (merged.length > 0) {
+        setIndex(Math.max(0, merged.length - newItems.length));
+      }
+      return merged;
+    });
+
+    // 同じファイルを連続で選べるように value をクリア
+    e.target.value = "";
   };
 
   const handleDelete = async (targetIndex: number) => {
@@ -96,7 +164,17 @@ export default function TokenContentsCard({
       await onDelete(target, targetIndex);
     }
 
-    // 2) UI から除去（ローカル）
+    // 2) objectURL なら破棄
+    if (typeof target.url === "string" && target.url.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(target.url);
+      } catch {
+        // noop
+      }
+      objectUrlsRef.current.delete(target.url);
+    }
+
+    // 3) UI から除去（ローカル）
     setItems((prevItems) => {
       if (prevItems.length === 0) return prevItems;
 
@@ -123,19 +201,26 @@ export default function TokenContentsCard({
           <span className="token-contents-card__title-icon">
             <FileText className="token-contents-card__title-icon-svg" />
           </span>
-          <CardTitle className="token-contents-card__title">
-            コンテンツ
-          </CardTitle>
+          <CardTitle className="token-contents-card__title">コンテンツ</CardTitle>
         </div>
+
+        {/* hidden file input */}
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          // 必要なら絞る（例: "image/*,video/*,application/pdf"）
+          // accept="image/*,video/*,application/pdf"
+          style={{ display: "none" }}
+          onChange={(e) => void handleFilesChange(e)}
+        />
 
         {/* 編集モード時のみ「ファイル追加」を表示 */}
         {isEditMode && (
           <Button
             type="button"
             className="token-contents-card__add-btn"
-            onClick={handleUpload}
-            disabled={!onUploadClick}
-            title={!onUploadClick ? "アップロード処理が未接続です" : undefined}
+            onClick={handleUploadClick}
           >
             <Upload className="token-contents-card__add-btn-icon" />
             ファイル追加
