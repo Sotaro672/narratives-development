@@ -5,7 +5,7 @@
 //   - ProductBlueprint の printed: notYet → printed 更新
 // ======================================================================
 
-import type { Production } from "../../application/productionCreateService";
+import type { Production } from "../../application/create/ProductionCreateTypes";
 
 import {
   getProductBlueprintDetail,

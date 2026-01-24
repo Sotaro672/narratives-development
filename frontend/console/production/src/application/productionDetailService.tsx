@@ -178,7 +178,9 @@ export async function loadProductionDetail(
     productBlueprintId: blueprintId,
 
     productName: resolvedProductName,
-    brandName: asString(raw.brandName ?? raw.BrandName ?? raw.brand ?? raw.Brand ?? ""),
+    brandName: asString(
+      raw.brandName ?? raw.BrandName ?? raw.brand ?? raw.Brand ?? "",
+    ),
 
     assigneeId: asString(raw.assigneeId ?? raw.AssigneeID ?? ""),
     assigneeName: asString(raw.assigneeName ?? raw.AssigneeName ?? ""),
@@ -202,7 +204,8 @@ export async function loadProductionDetail(
 
     const match = (listItems as any[]).find((item) => {
       const itemId = item.id ?? item.ID ?? "";
-      const itemBlueprintId = item.productBlueprintId ?? item.ProductBlueprintID ?? "";
+      const itemBlueprintId =
+        item.productBlueprintId ?? item.ProductBlueprintID ?? "";
       return (
         itemId === detail.id ||
         (itemBlueprintId && itemBlueprintId === detail.productBlueprintId)
@@ -269,11 +272,7 @@ export async function loadProductBlueprintDetail(
 
   const qa = raw.qualityAssurance ?? raw.QualityAssurance ?? [];
 
-  const rawTag =
-    raw.productIdTag ??
-    raw.ProductIdTag ??
-    raw.ProductIDTag ??
-    null;
+  const rawTag = raw.productIdTag ?? raw.ProductIdTag ?? raw.ProductIDTag ?? null;
 
   let productIdTag = "";
   if (typeof rawTag === "string") {
@@ -355,22 +354,41 @@ export function buildQuantityRowsFromModels(
   const safeModels = Array.isArray(models) ? models : [];
 
   const rows: ProductionQuantityRow[] = safeModels.map((m: any, index) => {
-    const id = m.ModelID ?? m.id ?? m.ID ?? `${index}`;
+    // ✅ camelCase / PascalCase 両対応で modelId を解決する
+    const rawModelId =
+      m.modelId ??
+      m.ModelID ??
+      m.modelID ??
+      m.model_id ??
+      m.id ??
+      m.ID ??
+      null;
 
-    const quantityRaw = m.Quantity ?? 0;
+    // modelId が取れない場合でも UI が壊れないように index fallback
+    const id = rawModelId ? String(rawModelId) : String(index);
+
+    // ✅ camelCase / PascalCase 両対応で quantity を解決する
+    const quantityRaw = m.quantity ?? m.Quantity ?? 0;
 
     const quantity = Number.isFinite(Number(quantityRaw))
       ? Math.max(0, Math.floor(Number(quantityRaw)))
       : 0;
 
+    // ✅ backend の詳細 DTO が modelNumber/color/size/rgb を返している場合はそれを優先する
+    const modelNumberFromModel = m.modelNumber ?? m.ModelNumber ?? "";
+    const sizeFromModel = m.size ?? m.Size ?? "";
+    const colorFromModel = m.color ?? m.Color ?? "";
+    const rgbFromModel = m.rgb ?? m.RGB ?? null;
+
+    // ✅ 取れなかった分は modelIndex で補完する
     const meta = id ? modelIndex[id] : undefined;
 
     const row: ProductionQuantityRow = {
       id,
-      modelNumber: meta?.modelNumber ?? "",
-      size: meta?.size ?? "",
-      color: meta?.color ?? "",
-      rgb: meta?.rgb ?? null,
+      modelNumber: modelNumberFromModel || meta?.modelNumber || "",
+      size: sizeFromModel || meta?.size || "",
+      color: colorFromModel || meta?.color || "",
+      rgb: rgbFromModel ?? meta?.rgb ?? null,
       quantity,
     };
 

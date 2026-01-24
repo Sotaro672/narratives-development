@@ -18,19 +18,40 @@ import {
 } from "../../../../shell/src/shared/ui/table";
 import { Input } from "../../../../shell/src/shared/ui/input";
 
-import type { ProductionQuantityRow } from "../../application/productionCreateService";
+// ✅ Application ではなく Presentation の UI 型を参照する
+import type { ProductionQuantityRow } from "../create/types";
 
 import "../styles/production.css";
 
 // ----------------------------------------------------------
 // RGB → HEX (#RRGGBB)
+// - number: 0xRRGGBB 相当（10進の数値として渡ってくる想定）
+// - string: "#RRGGBB"（backend DTO 想定）または数値文字列（10進）
 // ----------------------------------------------------------
 function rgbIntToHex(rgb: number | string | null | undefined): string | null {
   if (rgb === null || rgb === undefined) return null;
-  const n = typeof rgb === "string" ? Number(rgb) : rgb;
-  if (!Number.isFinite(n)) return null;
 
-  const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
+  // string の場合: "#RRGGBB" をそのまま許容し、
+  // それ以外は数値文字列として解釈する
+  if (typeof rgb === "string") {
+    const s = rgb.trim();
+
+    // backend の想定: "#RRGGBB"
+    if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
+
+    // 数値文字列（10進）として解釈
+    const n = Number(s);
+    if (!Number.isFinite(n)) return null;
+
+    const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
+    const hex = clamped.toString(16).padStart(6, "0");
+    return `#${hex}`;
+  }
+
+  // number の場合
+  if (!Number.isFinite(rgb)) return null;
+
+  const clamped = Math.max(0, Math.min(0xffffff, Math.floor(rgb)));
   const hex = clamped.toString(16).padStart(6, "0");
   return `#${hex}`;
 }

@@ -1,7 +1,8 @@
 // frontend/console/production/src/infrastructure/http/productionRepositoryHTTP.ts
 /// <reference types="vite/client" />
 
-import type { Production } from "../../application/productionCreateService";
+import type { Production } from "../../application/create/ProductionCreateTypes";
+import type { ProductionRepository } from "../../application/create/ProductionCreateRepository";
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // ----------------------------------------------------------------------
@@ -33,32 +34,10 @@ async function getIdTokenOrThrow(): Promise<string> {
 }
 
 // ----------------------------------------------------------------------
-// Repository インターフェース
+// HTTP 実装（Adapter）
 // ----------------------------------------------------------------------
-export interface ProductionRepository {
-  /** 新規作成 */
-  create(payload: Production): Promise<Production>;
-
-  /** 単一取得 */
-  getById(id: string): Promise<Production>;
-
-  /** 更新（部分更新） */
-  update(id: string, patch: Partial<Production>): Promise<Production>;
-
-  /** 削除 */
-  delete(id: string): Promise<void>;
-
-  /**
-   * 対応する商品設計(ProductBlueprint)の printed フラグを
-   * notYet → printed に更新する
-   * - backend: POST /product-blueprints/{id}/mark-printed
-   */
-  markProductBlueprintPrinted(productBlueprintId: string): Promise<void>;
-}
-
-// ----------------------------------------------------------------------
-// HTTP 実装
-// ----------------------------------------------------------------------
+// - Application Port: ProductionRepository を実装する
+// - I/O の詳細（HTTP / Auth / BaseURL）をここで吸収する
 export class ProductionRepositoryHTTP implements ProductionRepository {
   private readonly baseUrl: string;
 

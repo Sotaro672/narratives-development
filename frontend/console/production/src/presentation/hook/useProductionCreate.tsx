@@ -1,35 +1,48 @@
 // frontend/console/production/src/presentation/hook/useProductionCreate.tsx
+
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 // ★ currentMember.fullName, companyId, id 取得
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// ★ アプリケーション層サービス
+// ★ Infrastructure(API) から取得系を import（application からは参照しない）
 import {
   loadBrands,
-  buildBrandOptions,
   loadProductBlueprints,
+  loadDetailAndModels,
+  loadAssigneeCandidates,
+} from "../../infrastructure/api/productionCreateApi";
+
+// ★ Presentation(UI) 変換・UI型
+import {
+  buildBrandOptions,
   filterProductBlueprintsByBrand,
   buildProductRows,
-  loadDetailAndModels,
   buildSelectedForCard,
-  loadAssigneeCandidates,
   buildAssigneeOptions,
   mapModelVariationsToRows,
-  buildProductionPayload,
-  createProduction, // ★ Production 作成API呼び出し
-} from "../../application/productionCreateService";
+} from "../create/mappers";
 
-// ★ 型
 import type {
-  Brand,
-  ProductBlueprintManagementRow,
-  Member,
   ProductBlueprintForCard,
-  ModelVariationResponse,
   ProductionQuantityRow,
-} from "../../application/productionCreateService";
+} from "../create/types";
+
+// ★ 型（domain / other modules）
+import type { Brand } from "../../../../brand/src/domain/entity/brand";
+import type { Member } from "../../../../member/src/domain/entity/member";
+import type { ProductBlueprintManagementRow } from "../../../../productBlueprint/src/infrastructure/query/productBlueprintQuery";
+import type { ModelVariationResponse } from "../../../../productBlueprint/src/application/productBlueprintDetailService";
+
+// ★ Application(usecase) はコマンド生成・実行のみ
+import {
+  buildProductionPayload,
+  createProduction,
+} from "../../application/create/ProductionCreateService";
+
+// ★ Application Port 実装（HTTP Adapter）
+import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 
 export function useProductionCreate() {
   const navigate = useNavigate();
@@ -45,8 +58,9 @@ export function useProductionCreate() {
   // ==========================
   // 商品設計一覧 / 選択状態
   // ==========================
-  const [allProductBlueprints, setAllProductBlueprints] =
-    React.useState<ProductBlueprintManagementRow[]>([]);
+  const [allProductBlueprints, setAllProductBlueprints] = React.useState<
+    ProductBlueprintManagementRow[]
+  >([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
 
@@ -59,9 +73,9 @@ export function useProductionCreate() {
   // ==========================
   // 生産数 rows（ProductionQuantityCard 編集対象）
   // ==========================
-  const [quantityRows, setQuantityRows] = React.useState<
-    ProductionQuantityRow[]
-  >([]);
+  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>(
+    [],
+  );
 
   // ==========================
   // 管理情報（担当者など）
@@ -86,21 +100,18 @@ export function useProductionCreate() {
 
   React.useEffect(() => {
     loadBrands()
-      .then((items) => setBrands(items))
+      .then((items: Brand[]) => setBrands(items))
       .catch(() => setBrands([]));
   }, []);
 
-  const brandOptions = React.useMemo(
-    () => buildBrandOptions(brands),
-    [brands],
-  );
+  const brandOptions = React.useMemo(() => buildBrandOptions(brands), [brands]);
 
   // ==========================
   // 商品設計一覧取得
   // ==========================
   React.useEffect(() => {
     loadProductBlueprints()
-      .then((rows) => setAllProductBlueprints(rows))
+      .then((rows: ProductBlueprintManagementRow[]) => setAllProductBlueprints(rows))
       .catch(() => setAllProductBlueprints([]));
   }, []);
 
@@ -136,7 +147,7 @@ export function useProductionCreate() {
       try {
         const { detail, models } = await loadDetailAndModels(selectedId);
         setSelectedDetail(detail);
-        setModelVariations(models);
+        setModelVariations(models as ModelVariationResponse[]);
       } catch {
         setSelectedDetail(null);
         setModelVariations([]);
@@ -147,18 +158,17 @@ export function useProductionCreate() {
 
   // models → quantityRows 初期化
   React.useEffect(() => {
-    const rows = mapModelVariationsToRows(modelVariations);
+    const rows: ProductionQuantityRow[] = mapModelVariationsToRows(modelVariations);
     setQuantityRows(rows);
   }, [modelVariations]);
 
   // ==========================
   // ProductBlueprintCard 表示用データ
   // ==========================
-  const selectedProductBlueprintForCard: ProductBlueprintForCard =
-    React.useMemo(
-      () => buildSelectedForCard(selectedDetail, selectedMgmtRow),
-      [selectedDetail, selectedMgmtRow],
-    );
+  const selectedProductBlueprintForCard: ProductBlueprintForCard = React.useMemo(
+    () => buildSelectedForCard(selectedDetail, selectedMgmtRow),
+    [selectedDetail, selectedMgmtRow],
+  );
 
   const hasSelectedProductBlueprint =
     selectedDetail != null || selectedMgmtRow != null;
@@ -177,7 +187,7 @@ export function useProductionCreate() {
     (async () => {
       try {
         setLoadingMembers(true);
-        const members = await loadAssigneeCandidates(companyId);
+        const members: Member[] = await loadAssigneeCandidates(companyId);
         setAssigneeCandidates(members);
       } catch {
         setAssigneeCandidates([]);
@@ -188,13 +198,13 @@ export function useProductionCreate() {
   }, [companyId]);
 
   const assigneeOptions = React.useMemo(
-    () => buildAssigneeOptions(assigneeCandidates),
+    () => buildAssigneeOptions(assigneeCandidates) as Array<{ id: string; name: string }>,
     [assigneeCandidates],
   );
 
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
-      const selected = assigneeOptions.find((o) => o.id === id);
+      const selected = assigneeOptions.find((o: { id: string; name: string }) => o.id === id);
       const name = selected?.name ?? "未設定";
 
       setAssigneeId(id);
@@ -225,15 +235,21 @@ export function useProductionCreate() {
     const payload = buildProductionPayload({
       productBlueprintId: selectedId,
       assigneeId,
-      rows: quantityRows,
+      rows: quantityRows.map((r) => ({
+        modelVariationId: r.modelVariationId,
+        quantity: r.quantity ?? 0,
+      })),
       currentMemberId,
     });
 
     try {
-      await createProduction(payload);
+      // Application の usecase は repo 注入
+      const repo = new ProductionRepositoryHTTP();
+      await createProduction(repo, payload);
+
       alert("生産計画を作成しました");
       navigate("/production");
-    } catch (e) {
+    } catch {
       alert("生産計画の作成に失敗しました");
     }
   }, [selectedId, assigneeId, quantityRows, currentMemberId, navigate]);

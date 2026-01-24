@@ -17,8 +17,8 @@ import {
   type ProductionQuantityRow as DetailQuantityRow,
 } from "../../application/productionDetailService";
 
-// create 用行型（modelNumber / color / rgb / quantity を持つ）
-import type { ProductionQuantityRow as CreateQuantityRow } from "../../application/productionCreateService";
+// ✅ create 用行型は application ではなく presentation の UI 型を参照する
+import type { ProductionQuantityRow as CreateQuantityRow } from "../create/types";
 
 // ★ 印刷用ロジックを分離した hook を利用
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";

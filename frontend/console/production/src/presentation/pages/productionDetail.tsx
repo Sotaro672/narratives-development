@@ -11,7 +11,6 @@ import { useProductionDetail } from "../hook/useProductionDetail";
 import "../styles/production.css";
 
 import LogCard from "../../../../log/src/presentation/LogCard";
-import { Button } from "../../../../shell/src/shared/ui/button";
 
 // ProductBlueprintCard の型用
 import type {
@@ -66,21 +65,11 @@ export default function ProductionDetail() {
   // ==========================
   // usePrintCard: 印刷 + print_log 取得
   // ==========================
-  const {
-    onPrint,
-    printLogs,
-    printing,
-    error: printError,
-  } = usePrintCard({
+  const { onPrint, printing } = usePrintCard({
     productionId: productionId ?? null,
     hasProduction: !!production,
     rows: quantityRows,
   });
-
-  // ==========================
-  // 印刷結果ダイアログ用 state
-  // ==========================
-  const [printDialogOpen, setPrintDialogOpen] = React.useState(false);
 
   // ==========================
   // ヘッダー操作
@@ -104,8 +93,6 @@ export default function ProductionDetail() {
   // ==========================
   // ★ 印刷ボタン押下時処理
   //   - usePrintCard.onPrint を呼び出し
-  //   - 戻り値として Hook 内部に保持された printLogs を
-  //     ダイアログで表示する
   // ==========================
   const handlePrint = React.useCallback(async () => {
     if (!productionId) {
@@ -113,19 +100,14 @@ export default function ProductionDetail() {
       return;
     }
 
-    const ok = window.confirm(
-      "印刷",
-    );
+    const ok = window.confirm("印刷");
     if (!ok) return;
 
     // usePrintCard 内で:
     //   1. Product を作成
     //   2. print_log を作成
-    //   3. print_log 一覧（QR ペイロード付き）を取得して保持
+    //   3. print_log 一覧（QR ペイロード付き）を取得して保持（※UI表示はしない）
     await onPrint();
-
-    // Hook が保持している printLogs をダイアログで確認する
-    setPrintDialogOpen(true);
   }, [productionId, onPrint]);
 
   // ==========================
@@ -224,86 +206,6 @@ export default function ProductionDetail() {
           />
         </div>
       </PageStyle>
-
-      {/* ==========================
-          ★ print_log 一覧 + QR ペイロード ダイアログ
-         ========================== */}
-      {printDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-2xl rounded-lg bg-white p-4 shadow-lg">
-            <h2 className="mb-2 text-lg font-semibold">
-              発行された print_log 一覧
-            </h2>
-
-            {printError && (
-              <p className="mb-2 text-sm text-red-600">{printError}</p>
-            )}
-
-            {printLogs.length === 0 ? (
-              <p className="text-sm text-gray-600">
-                該当する print_log はありません。
-              </p>
-            ) : (
-              <div className="max-h-80 space-y-3 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 text-sm">
-                {printLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="rounded border border-gray-200 bg-white p-2"
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="font-semibold">
-                        print_log ID: {log.id}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        printedAt: {log.printedAt}
-                      </span>
-                    </div>
-                    <div className="mb-1 text-xs text-gray-500">
-                      printedBy: {log.printedBy}
-                    </div>
-
-                    {log.productIds.length === 0 ? (
-                      <div className="text-xs text-gray-500">
-                        productId は記録されていません。
-                      </div>
-                    ) : (
-                      <ul className="space-y-1 text-xs font-mono">
-                        {log.productIds.map((pid, idx) => (
-                          <li key={`${log.id}-${pid}-${idx}`}>
-                            <span className="font-semibold">productId:</span>{" "}
-                            {pid}
-                            {log.qrPayloads[idx] && (
-                              <span className="ml-2 text-[11px] text-blue-600 underline">
-                                {/* QR ペイロードは URL を想定。 */}
-                                <a
-                                  href={log.qrPayloads[idx]}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  QR ペイロードを開く
-                                </a>
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setPrintDialogOpen(false)}
-              >
-                閉じる
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

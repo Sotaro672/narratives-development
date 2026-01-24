@@ -53,17 +53,14 @@ type ModelQuantity struct {
 type ProductionStatus string
 
 const (
-	StatusManufacturing ProductionStatus = "manufacturing"
-	StatusInspected     ProductionStatus = "inspected"
-	StatusPrinted       ProductionStatus = "printed"
-	StatusPlanning      ProductionStatus = "planning"
-	StatusDeleted       ProductionStatus = "deleted"
-	StatusSuspended     ProductionStatus = "suspended"
+	StatusPrinted  ProductionStatus = "printed"
+	StatusPlanning ProductionStatus = "planning"
+	StatusDeleted  ProductionStatus = "deleted"
 )
 
 func IsValidStatus(s ProductionStatus) bool {
 	switch s {
-	case StatusManufacturing, StatusPrinted, StatusInspected, StatusPlanning, StatusDeleted, StatusSuspended:
+	case StatusPrinted, StatusPlanning, StatusDeleted:
 		return true
 	default:
 		return false
@@ -108,7 +105,7 @@ var (
 
 // ===== Constructors =====
 
-// New creates a Production. If status is empty, defaults to manufacturing.
+// New creates a Production. If status is empty, defaults to planning.
 func New(
 	id, productBlueprintID, assigneeID string,
 	models []ModelQuantity,
@@ -118,7 +115,7 @@ func New(
 	createdAt time.Time,
 ) (Production, error) {
 	if status == "" {
-		status = StatusManufacturing
+		status = StatusPlanning
 	}
 	p := Production{
 		ID:                 strings.TrimSpace(id),
@@ -215,9 +212,9 @@ func NewFromStringTimes(
 
 // ===== Behavior (state transitions) =====
 
-// MarkPrinted: manufacturing/planning/suspended -> printed
+// MarkPrinted: planning -> printed
 func (p *Production) MarkPrinted(at time.Time) error {
-	if !(p.Status == StatusManufacturing || p.Status == StatusPlanning || p.Status == StatusSuspended) {
+	if p.Status != StatusPlanning {
 		return ErrTransition
 	}
 	if at.IsZero() {
@@ -229,19 +226,9 @@ func (p *Production) MarkPrinted(at time.Time) error {
 	return nil
 }
 
-// MarkInspected: printed -> inspected
-// inspectedAt は持たないため、ステータスのみを遷移させる。
-func (p *Production) MarkInspected(_ time.Time) error {
-	if p.Status != StatusPrinted {
-		return ErrTransition
-	}
-	p.Status = StatusInspected
-	return nil
-}
-
-// ResetToManufacturing: any -> manufacturing (clears timestamps)
-func (p *Production) ResetToManufacturing() {
-	p.Status = StatusManufacturing
+// ResetToPlanning: any -> planning (clears timestamps)
+func (p *Production) ResetToPlanning() {
+	p.Status = StatusPlanning
 	p.PrintedAt = nil
 	p.PrintedBy = nil
 }
@@ -280,14 +267,9 @@ func (p Production) validate() error {
 
 	// Status/time coherence
 	switch p.Status {
-	case StatusManufacturing, StatusPlanning, StatusSuspended:
+	case StatusPlanning:
 		// times may be nil
 	case StatusPrinted:
-		if p.PrintedAt == nil {
-			return ErrInvalidPrintedAt
-		}
-	case StatusInspected:
-		// 検品済みでも、PrintedAt だけは存在しているべき
 		if p.PrintedAt == nil {
 			return ErrInvalidPrintedAt
 		}
