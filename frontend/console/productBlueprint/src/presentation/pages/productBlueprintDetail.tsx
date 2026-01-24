@@ -1,5 +1,4 @@
 // frontend/console/productBlueprint/src/presentation/pages/productBlueprintDetail.tsx
-
 import * as React from "react";
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
@@ -20,7 +19,6 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
-    // ▼ ブランド編集用フィールド
     brandId,
     brandOptions,
     brandLoading,
@@ -42,14 +40,14 @@ export default function ProductBlueprintDetail() {
     assignee,
     creator,
     createdAt,
+    updater,
+    updatedAt,
 
     onBack,
 
-    // 編集用
     onSave,
     onDelete,
     onChangeProductName,
-    // ▼ アイテム種別も edit 時に変更可能にする
     onChangeItemType,
     onChangeFit,
     onChangeMaterials,
@@ -59,14 +57,12 @@ export default function ProductBlueprintDetail() {
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
-    onChangeColorRgb, // ★ 追加
+    onChangeColorRgb,
 
-    // サイズ操作
     onAddSize,
     onRemoveSize,
     onChangeSize,
 
-    // モデルナンバー操作
     onChangeModelNumber,
 
     onClickAssignee,
@@ -89,13 +85,11 @@ export default function ProductBlueprintDetail() {
   const noopStr = (_: string) => {};
   const noopColor = (_: string) => {};
 
-  // 保存押下時
   const handleSave = () => {
     if (onSave) onSave();
     setEditMode(false);
   };
 
-  // 削除押下時
   const handleDelete = () => {
     if (!onDelete) return;
     onDelete();
@@ -117,13 +111,11 @@ export default function ProductBlueprintDetail() {
           mode={editMode ? "edit" : "view"}
           productName={productName}
           brand={brand}
-          // ▼ ブランド編集用 props を連携
           brandId={brandId}
           brandOptions={brandOptions}
           brandLoading={brandLoading}
           brandError={brandError}
           onChangeBrandId={editMode ? onChangeBrandId : undefined}
-          // ▼ アイテム種別
           itemType={normalizedItemType}
           fit={fit}
           materials={materials}
@@ -131,7 +123,6 @@ export default function ProductBlueprintDetail() {
           washTags={washTags}
           productIdTag={productIdTag}
           onChangeProductName={editMode ? onChangeProductName : undefined}
-          // ⭐ アイテム種別を edit モードで変更可能に
           onChangeItemType={editMode ? onChangeItemType : undefined}
           onChangeFit={editMode ? onChangeFit : undefined}
           onChangeMaterials={editMode ? onChangeMaterials : undefined}
@@ -176,6 +167,9 @@ export default function ProductBlueprintDetail() {
           assigneeName={assignee}
           createdByName={creator}
           createdAt={createdAt}
+          // ★ 追加：最終更新者 / 最終更新日
+          updatedByName={updater}
+          updatedAt={updatedAt}
           mode={editMode ? "edit" : "view"}
           onClickAssignee={editMode ? onClickAssignee : noop}
         />

@@ -12,16 +12,13 @@ import {
 import {
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
-  updateProductBlueprint, // ★ UPDATE 用
-  softDeleteProductBlueprint, // ★ 論理削除用
+  updateProductBlueprint,
+  softDeleteProductBlueprint,
 } from "../../application/productBlueprintDetailService";
 
 import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
 
-// ★ ModelNumber / SizeVariation の UI ロジックを model 側 hook に委譲
 import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
-
-// ★ ブランド一覧取得
 import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
 
 export {
@@ -66,8 +63,12 @@ export interface UseProductBlueprintDetailResult {
   getCode: (sizeLabel: string, color: string) => string;
 
   assignee: string;
+
+  /** 管理情報 */
   creator: string;
   createdAt: string;
+  updater: string;
+  updatedAt: string;
 
   onBack: () => void;
   onSave: () => void;
@@ -105,6 +106,47 @@ export interface UseProductBlueprintDetailResult {
   onClickAssignee: () => void;
 }
 
+/**
+ * 日時を yyyy/MM/dd HH:mm に統一
+ * - Firestore Timestamp など { toDate(): Date } にも対応
+ * - パース不能なら formatProductBlueprintDate(=従来) にフォールバック
+ */
+function formatDateTimeYYYYMMDDHHmm(value: any): string {
+  if (value == null) return "";
+
+  // Firestore Timestamp 等
+  try {
+    if (typeof value?.toDate === "function") {
+      const d: Date = value.toDate();
+      if (!Number.isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "ngsB");
+        return `${y}/${m}/${day} ${hh}:${mm}`;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) {
+    return formatProductBlueprintDate(value) || s;
+  }
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}/${m}/${day} ${hh}:${mm}`;
+}
+
 export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const navigate = useNavigate();
   const { blueprintId } = useParams<{ blueprintId: string }>();
@@ -133,8 +175,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   );
 
   const [assignee, setAssignee] = React.useState("担当者未設定");
+
+  // ★ 管理情報（updater/updatedAt は「未設定文字列」で埋めず、空文字で管理する）
   const [creator, setCreator] = React.useState("作成者未設定");
   const [createdAt, setCreatedAt] = React.useState("");
+  const [updater, setUpdater] = React.useState("");
+  const [updatedAt, setUpdatedAt] = React.useState("");
 
   // ★ サーバに渡すための ID を保持
   const [brandId, setBrandId] = React.useState<string>("");
@@ -161,7 +207,13 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         const assigneeNameFromService = (detail as any).assigneeName as
           | string
           | undefined;
+
         const createdByNameFromService = (detail as any).createdByName as
+          | string
+          | undefined;
+
+        // ★ 追加: 最終更新者（表示名）
+        const updatedByNameFromService = (detail as any).updatedByName as
           | string
           | undefined;
 
@@ -202,7 +254,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
             }));
             setBrandOptions(options);
 
-            // brandId がセットされている場合、brand ラベルが空ならここで補完
             if (!brandNameFromService && detail.brandId) {
               const found = options.find((o) => o.id === detail.brandId);
               if (found) {
@@ -228,15 +279,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         // --------------------------------------------------
         try {
           const variations =
-            await listModelVariationsByProductBlueprintId(
-              productBlueprintId,
-            );
+            await listModelVariationsByProductBlueprintId(productBlueprintId);
 
           const varsAny = variations as any[];
 
-          // -------------------------------
-          // colors（Color.Name / color.name）
-          // -------------------------------
+          // colors
           const uniqueColors = Array.from(
             new Set(
               varsAny
@@ -254,9 +301,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           );
           setColors(uniqueColors);
 
-          // -------------------------------
-          // sizes（Size / size）+ measurements を反映
-          // -------------------------------
+          // sizes + measurements
           const uniqueSizes = Array.from(
             new Set(
               varsAny
@@ -274,13 +319,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           );
 
           const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => {
-            // any ベースで組み立ててから SizeRow にキャストする
             const base: any = {
               id: String(index + 1),
               sizeLabel: label,
             };
 
-            // 該当サイズの最初の variation
             const found = varsAny.find((v) => {
               const sz =
                 typeof v.size === "string"
@@ -296,7 +339,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
             if (ms && typeof ms === "object") {
               if (itemTypeFromDetail === "ボトムス") {
-                // ボトムス用: Firestore の日本語キー → base.* にマッピング
                 base.waist = ms["ウエスト"] ?? undefined;
                 base.hip = ms["ヒップ"] ?? undefined;
                 base.rise = ms["股上"] ?? undefined;
@@ -304,13 +346,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
                 const thighVal = ms["わたり幅"] ?? undefined;
                 if (thighVal != null) {
-                  // 正規フィールド + alias の両方に入れておく
                   base.thigh = thighVal;
                 }
 
                 base.hemWidth = ms["裾幅"] ?? undefined;
               } else {
-                // デフォルト（トップス）
                 const lenVal = ms["着丈"] ?? undefined;
                 if (lenVal != null) {
                   base.length = lenVal;
@@ -318,11 +358,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
                 const chestVal = ms["胸囲"] ?? undefined;
                 if (chestVal != null) {
-                  base.chest = chestVal; // 正規フィールド
+                  base.chest = chestVal;
                 }
                 const widthVal = ms["身幅"] ?? undefined;
                 if (widthVal != null) {
-                  base.width = widthVal; // 正規フィールド
+                  base.width = widthVal;
                 }
                 const shoulderVal = ms["肩幅"] ?? undefined;
                 if (shoulderVal != null) {
@@ -341,9 +381,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
           setSizes(sizeRows);
 
-          // -------------------------------
-          // modelNumbers（ModelNumber / modelNumber）
-          // -------------------------------
+          // modelNumbers
           const modelNumberRows: ModelNumberRow[] = varsAny.map((v) => {
             const size =
               (typeof v.size === "string"
@@ -364,9 +402,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           });
           setModelNumbers(modelNumberRows);
 
-          // -------------------------------
-          // colorRgbMap（rgb int → #rrggbb）
-          // -------------------------------
+          // colorRgbMap
           const rgbMap: Record<string, string> = {};
           varsAny.forEach((v) => {
             const name =
@@ -410,7 +446,25 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           createdByNameFromService ?? detail.createdBy ?? "作成者未設定",
         );
 
-        setCreatedAt(formatProductBlueprintDate(detail.createdAt) || "");
+        // createdAt は HH:mm まで表示
+        setCreatedAt(
+          formatDateTimeYYYYMMDDHHmm((detail as any).createdAt) || "",
+        );
+
+        // ★ updater/updatedAt は「両方揃っている時だけ」セットする（揃っていないなら行を非表示にするため空文字に寄せる）
+        const updatedByRaw =
+          (updatedByNameFromService ?? (detail as any).updatedBy ?? "") as any;
+        const updaterName = String(updatedByRaw ?? "").trim();
+        const updatedAtDisp =
+          formatDateTimeYYYYMMDDHHmm((detail as any).updatedAt) || "";
+
+        if (!updaterName || !updatedAtDisp) {
+          setUpdater("");
+          setUpdatedAt("");
+        } else {
+          setUpdater(updaterName);
+          setUpdatedAt(updatedAtDisp);
+        }
       } catch (e) {
         console.error("[useProductBlueprintDetail] fetch failed:", e);
       }
@@ -428,7 +482,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         );
         const trimmed = nextCode.trim();
 
-        // 空文字の場合はエントリを削除（必要に応じてバリデーションで拾う）
         if (!trimmed) {
           if (idx === -1) return prev;
           const copy = [...prev];
@@ -460,7 +513,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
     sizes,
     colors,
-    modelNumbers: modelNumbers as any, // 形は ModelNumberRow と互換
+    modelNumbers: modelNumbers as any,
     colorRgbMap,
   });
 
@@ -473,21 +526,18 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       return;
     }
 
-    // itemType が未選択の場合は一旦ガード
     if (!itemType) {
       alert("アイテム種別を選択してください");
       return;
     }
 
-    // ★ モデルナンバーのバリデーション
-    // サイズラベル & カラーの組み合わせで、どこか 1 つでも modelNumber が空ならエラー
     const hasEmptyModelNumber = sizes.some((s) => {
       const sizeLabel = (s.sizeLabel ?? "").trim();
-      if (!sizeLabel) return false; // サイズ未設定行は無視
+      if (!sizeLabel) return false;
 
       return colors.some((c) => {
         const color = (c ?? "").trim();
-        if (!color) return false; // 空のカラー名は無視
+        if (!color) return false;
 
         const code = getCode(sizeLabel, color);
         return !code || !code.trim();
@@ -501,7 +551,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
     (async () => {
       try {
-        // ★ 保存ボタン押下時のスナップショットを出力（編集後の状態）
         console.log("[useProductBlueprintDetail] onSave payload snapshot", {
           blueprintId,
           productName,
@@ -532,7 +581,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           sizes,
           modelNumbers,
           colorRgbMap,
-          // ★ サーバ側で空にされないよう brandId / assigneeId も送る
           brandId,
           assigneeId,
         } as any);
@@ -579,7 +627,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       try {
         await softDeleteProductBlueprint(blueprintId);
         alert("削除しました");
-        // 一覧へ戻る
         navigate("/productBlueprint");
       } catch (e) {
         console.error("[useProductBlueprintDetail] delete failed:", e);
@@ -588,7 +635,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     })();
   }, [blueprintId, navigate]);
 
-  // ★ 戻るボタン: 相対 -1 ではなく、商品設計一覧の絶対パスへ
   const onBack = React.useCallback(() => {
     navigate("/productBlueprint");
   }, [navigate]);
@@ -604,27 +650,22 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     const key = name.trim();
     if (!key) return;
 
-    // colors から削除
     setColors((prev) => prev.filter((c) => c !== key));
 
-    // 対応する RGB も削除しておく
     setColorRgbMap((prev) => {
       const next = { ...prev };
       delete next[key];
       return next;
     });
 
-    // この color に紐づく modelNumber も削除
     setModelNumbers((prevMN) => prevMN.filter((m) => m.color !== key));
   }, []);
 
-  // ★ カラーの RGB(hex) 更新
   const onChangeColorRgb = React.useCallback((name: string, hex: string) => {
     const colorName = name.trim();
     let value = hex.trim();
     if (!colorName || !value) return;
 
-    // 「#」が無かったら付ける
     if (!value.startsWith("#")) {
       value = `#${value}`;
     }
@@ -643,7 +684,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       if (target) {
         const sizeLabel = (target.sizeLabel ?? "").trim();
         if (sizeLabel) {
-          // この size に紐づく modelNumber も削除
           setModelNumbers((prevMN) =>
             prevMN.filter((m) => m.size !== sizeLabel),
           );
@@ -654,10 +694,8 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     });
   }, []);
 
-  // ★ サイズ追加: 新しい空行を 1 行追加
   const onAddSize = React.useCallback(() => {
     setSizes((prev) => {
-      // 既存 id の最大値 + 1 を採番（数字でない id があっても安全側に倒す）
       const nextNum =
         prev.reduce((max, row) => {
           const n = Number(row.id);
@@ -668,17 +706,14 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       const next: SizeRow = {
         id: String(nextNum),
         sizeLabel: "",
-        // 他のフィールド(length, chest, ...) は undefined のままで OK
       } as SizeRow;
 
       return [...prev, next];
     });
   }, []);
 
-  // ★ サイズ 1 行分の変更
   const onChangeSize = React.useCallback(
     (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
-      // 数値項目は 0 未満にならないようにクランプ（create と同じノリ）
       const safePatch: Partial<Omit<SizeRow, "id">> = { ...patch };
 
       const clampField = (key: keyof Omit<SizeRow, "id">) => {
@@ -704,7 +739,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     console.log("assignee clicked:", assignee);
   }, [assignee]);
 
-  // ★ ブランド変更ハンドラ（id と表示名の両方を更新）
   const onChangeBrandId = React.useCallback(
     (id: string) => {
       setBrandId(id);
@@ -728,7 +762,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     washTags,
     productIdTag: productIdTagType || "",
 
-    // ブランド編集用
     brandId,
     brandOptions,
     brandLoading,
@@ -744,8 +777,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     getCode,
 
     assignee,
+
     creator,
     createdAt,
+    updater,
+    updatedAt,
 
     onBack,
     onSave,
@@ -769,9 +805,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onAddSize,
     onChangeSize,
 
-    // ★ UI からの onChange:
-    //   - useModelCard 側の codeMap を更新
-    //   - application state (modelNumbers) も更新
     onChangeModelNumber: (sizeLabel, color, nextCode) => {
       uiOnChangeModelNumber(sizeLabel, color, nextCode);
       handleChangeModelNumber(sizeLabel, color, nextCode);

@@ -1,3 +1,5 @@
+// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintManagement.ts
+
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -30,20 +32,21 @@ export interface UseProductBlueprintManagementResult {
   handleCreate: () => void;
   handleReset: () => void;
 
-  // ★ ゴミ箱ボタン押下時のハンドラ（削除一覧ページへ遷移）
+  // ゴミ箱ボタン押下時のハンドラ（削除一覧ページへ遷移）
   handleTrash: () => void;
 }
 
 /**
- * ISO8601 → yyyy/MM/dd HH:mm 形式に整形
- * - パースできなければ入力をそのまま返す（安全側）
+ * ISO8601/RFC3339 → yyyy/MM/dd HH:mm 形式に整形
+ * - 過去互換は不要（"YYYY/MM/DD" 等の旧形式対応は行わない）
+ * - パースできなければ空文字を返す（UIを壊さない）
  */
-function formatDateTimeYYYYMMDDHHmm(isoLike: any): string {
-  const s = String(isoLike ?? "").trim();
+function formatDateTimeYYYYMMDDHHmm(iso: string): string {
+  const s = String(iso ?? "").trim();
   if (!s) return "";
 
   const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
+  if (Number.isNaN(d.getTime())) return "";
 
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -107,13 +110,13 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     [allRows, brandFilter, assigneeFilter, tagFilter, sortedKey, sortedDir],
   );
 
-  // ★ 表示用に createdAt / updatedAt を yyyy/MM/dd HH:mm に整形して返す
-  // - UiRow の型が strict でも壊れないよう、同じキーを書き換えるだけにする
+  // 表示用に createdAt / updatedAt を yyyy/MM/dd HH:mm に整形して返す
+  // - UiRow のキーを上書きするだけ（型を増やさない）
   const rows: UiRow[] = useMemo(() => {
     return filteredSortedRows.map((r) => ({
       ...r,
-      createdAt: r.createdAt ? formatDateTimeYYYYMMDDHHmm(r.createdAt) : r.createdAt,
-      updatedAt: r.updatedAt ? formatDateTimeYYYYMMDDHHmm(r.updatedAt) : r.updatedAt,
+      createdAt: formatDateTimeYYYYMMDDHHmm(r.createdAt),
+      updatedAt: formatDateTimeYYYYMMDDHHmm(r.updatedAt),
     }));
   }, [filteredSortedRows]);
 
@@ -163,7 +166,7 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     void load();
   }, [load]);
 
-  // ★ ゴミ箱ボタン押下 → 削除済み一覧ページへ遷移
+  // ゴミ箱ボタン押下 → 削除済み一覧ページへ遷移
   const handleTrash = useCallback(() => {
     navigate("/productBlueprint/deleted");
   }, [navigate]);

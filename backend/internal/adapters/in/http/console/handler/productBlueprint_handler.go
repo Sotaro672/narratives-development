@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\productBlueprint_handler.go
+// backend/internal/adapters/in/http/console/handler/productBlueprint_handler.go
 package consoleHandler
 
 import (
@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	usecase "narratives/internal/application/usecase"
 	brand "narratives/internal/domain/brand"
@@ -181,7 +182,7 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
 		CreatedBy:        createdBy,
-		// ★ printed は bool に変更。create 時は常に false（未印刷）
+		// printed は bool。create 時は常に false（未印刷）
 		Printed: false,
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
@@ -253,9 +254,6 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
 		},
-		// Printed はここでは明示設定しない（既存値を repo.Save 側で維持する前提なら
-		// ここでフィールドを省略しても良いですが、struct literal なのでゼロ値 false になります。
-		// もし「更新時に Printed を維持したい」場合は、別途 Get → マージが必要になります）
 	}
 
 	updated, err := h.uc.Update(ctx, pb)
@@ -319,6 +317,7 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 
 // ---------------------------------------------------
 // GET /product-blueprints
+// - 旧式互換は不要: createdAt/updatedAt は "2006-01-02T15:04:05Z07:00"（RFC3339）で返す
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
@@ -345,6 +344,7 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	out := make([]ProductBlueprintListOutput, 0, len(rows))
 	for _, pb := range rows {
 		brandId := strings.TrimSpace(pb.BrandID)
+
 		assigneeId := strings.TrimSpace(pb.AssigneeID)
 		if assigneeId == "" {
 			assigneeId = "-"
@@ -367,12 +367,12 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 		createdAt := ""
 		if !pb.CreatedAt.IsZero() {
-			createdAt = pb.CreatedAt.Format("2006/01/02")
+			createdAt = pb.CreatedAt.Format(time.RFC3339)
 		}
 
-		updatedAt := createdAt
+		updatedAt := ""
 		if !pb.UpdatedAt.IsZero() {
-			updatedAt = pb.UpdatedAt.Format("2006/01/02")
+			updatedAt = pb.UpdatedAt.Format(time.RFC3339)
 		}
 
 		out = append(out, ProductBlueprintListOutput{
@@ -423,12 +423,12 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 
 		deletedAtStr := ""
 		if pb.DeletedAt != nil && !pb.DeletedAt.IsZero() {
-			deletedAtStr = pb.DeletedAt.Format("2006/01/02")
+			deletedAtStr = pb.DeletedAt.Format(time.RFC3339)
 		}
 
 		expireAtStr := ""
 		if pb.ExpireAt != nil && !pb.ExpireAt.IsZero() {
-			expireAtStr = pb.ExpireAt.Format("2006/01/02")
+			expireAtStr = pb.ExpireAt.Format(time.RFC3339)
 		}
 
 		out = append(out, ProductBlueprintDeletedListOutput{
@@ -446,6 +446,7 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 
 // ---------------------------------------------------
 // GET /product-blueprints/printed
+// - 旧式互換は不要: createdAt/updatedAt は RFC3339 で返す
 // ---------------------------------------------------
 
 func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Request) {
@@ -460,6 +461,7 @@ func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Req
 	out := make([]ProductBlueprintListOutput, 0, len(rows))
 	for _, pb := range rows {
 		brandId := strings.TrimSpace(pb.BrandID)
+
 		assigneeId := strings.TrimSpace(pb.AssigneeID)
 		if assigneeId == "" {
 			assigneeId = "-"
@@ -482,12 +484,12 @@ func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Req
 
 		createdAt := ""
 		if !pb.CreatedAt.IsZero() {
-			createdAt = pb.CreatedAt.Format("2006/01/02")
+			createdAt = pb.CreatedAt.Format(time.RFC3339)
 		}
 
-		updatedAt := createdAt
+		updatedAt := ""
 		if !pb.UpdatedAt.IsZero() {
-			updatedAt = pb.UpdatedAt.Format("2006/01/02")
+			updatedAt = pb.UpdatedAt.Format(time.RFC3339)
 		}
 
 		out = append(out, ProductBlueprintListOutput{
@@ -531,6 +533,7 @@ func (h *ProductBlueprintHandler) markPrinted(w http.ResponseWriter, r *http.Req
 
 // ---------------------------------------------------
 // GET /product-blueprints/{id}/history
+// - history は秒まで欲しいケースがあるため RFC3339 を維持（旧式互換不要）
 // ---------------------------------------------------
 
 type ProductBlueprintHistoryOutput struct {
@@ -570,17 +573,17 @@ func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Req
 
 		updatedAtStr := ""
 		if !pb.UpdatedAt.IsZero() {
-			updatedAtStr = pb.UpdatedAt.Format("2006/01/02 15:04:05")
+			updatedAtStr = pb.UpdatedAt.Format(time.RFC3339)
 		}
 
 		deletedAtStr := ""
 		if pb.DeletedAt != nil && !pb.DeletedAt.IsZero() {
-			deletedAtStr = pb.DeletedAt.Format("2006/01/02")
+			deletedAtStr = pb.DeletedAt.Format(time.RFC3339)
 		}
 
 		expireAtStr := ""
 		if pb.ExpireAt != nil && !pb.ExpireAt.IsZero() {
-			expireAtStr = pb.ExpireAt.Format("2006/01/02")
+			expireAtStr = pb.ExpireAt.Format(time.RFC3339)
 		}
 
 		out = append(out, ProductBlueprintHistoryOutput{
