@@ -7,14 +7,6 @@ import (
 	productiondom "narratives/internal/domain/production"
 )
 
-// ProductionManagementRowDTO is the response DTO for ProductionManagement screen.
-//
-// Frontend usage (useProductionManagement.tsx):
-// - blueprint filter: productBlueprintId + productName
-// - brand filter: brandName
-// - assignee filter: assigneeId + assigneeName
-// - sort keys: totalQuantity / printedAt / createdAt
-// - optional labels: printedAtLabel / createdAtLabel
 type ProductionManagementRowDTO struct {
 	// --- base (Production) ---
 	ID                 string                         `json:"id"`
@@ -35,8 +27,4 @@ type ProductionManagementRowDTO struct {
 	ProductName   string `json:"productName,omitempty"`
 	BrandName     string `json:"brandName,omitempty"`
 	AssigneeName  string `json:"assigneeName,omitempty"`
-
-	// --- labels for UI (optional) ---
-	PrintedAtLabel string `json:"printedAtLabel,omitempty"`
-	CreatedAtLabel string `json:"createdAtLabel,omitempty"`
 }

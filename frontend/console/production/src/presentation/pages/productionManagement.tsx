@@ -1,6 +1,4 @@
 // frontend/console/production/src/presentation/pages/productionManagement.tsx
-
-import React, { useEffect } from "react";
 import { useProductionManagement } from "../hook/useProductionManagement";
 import List from "../../../../shell/src/layout/List/List";
 

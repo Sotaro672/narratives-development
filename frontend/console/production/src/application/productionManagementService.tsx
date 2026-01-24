@@ -11,8 +11,7 @@ export type SortKey = "printedAt" | "createdAt" | "totalQuantity" | null;
 
 /**
  * 一覧表示用に totalQuantity などを付与した行型（内部用）
- * - Production の assigneeId 等が string | null | undefined になり得るため、
- *   Omit で除外してここで string に確定させる（TS2322/TS2345 対策）
+ * - Backend DTO に合わせて camelCase を主とする
  */
 export type ProductionRow = Omit<
   Production,
@@ -51,14 +50,24 @@ const toTs = (iso?: string | null): number => {
   return Number.isNaN(t) ? 0 : t;
 };
 
-const formatDate = (iso?: string | null): string => {
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/**
+ * yyyy/mm/dd hh:mm
+ * - backend は time.Time を JSON で返すので、ここでは ISO 文字列として受ける想定
+ */
+const formatDateTime = (iso?: string | null): string => {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
+
   const y = d.getFullYear();
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
-  return `${y}/${m}/${day}`;
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mm = pad2(d.getMinutes());
+
+  return `${y}/${m}/${day} ${hh}:${mm}`;
 };
 
 const asString = (v: any): string => (typeof v === "string" ? v : "");
@@ -70,16 +79,25 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
   const items = await listProductionsHTTP();
 
   const rows: ProductionRow[] = items.map((raw: any) => {
+    // ✅ DTO 優先（camelCase）、互換のため PascalCase も fallback
     const rawModels = Array.isArray(raw.models)
       ? raw.models
       : Array.isArray(raw.Models)
         ? raw.Models
         : [];
 
-    const totalQuantity = rawModels.reduce(
+    // DTO には totalQuantity が来る想定だが、互換のため再計算 fallback も残す
+    const computedTotalQuantity = rawModels.reduce(
       (sum: number, m: any) => sum + (m?.quantity ?? m?.Quantity ?? 0),
       0,
     );
+
+    const totalQuantity =
+      typeof raw.totalQuantity === "number"
+        ? raw.totalQuantity
+        : typeof raw.TotalQuantity === "number"
+          ? raw.TotalQuantity
+          : computedTotalQuantity;
 
     const blueprintId = asNonEmptyString(
       raw.productBlueprintId ?? raw.ProductBlueprintID ?? "",
@@ -88,7 +106,6 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
     const productName =
       asNonEmptyString(raw.productName ?? raw.ProductName) || blueprintId;
 
-    // ✅ UI 内部表現では string に正規化して持つ
     const assigneeId = asString(raw.assigneeId ?? raw.AssigneeID ?? "");
     const assigneeName = asString(raw.assigneeName ?? raw.AssigneeName ?? "");
     const brandName = asString(raw.brandName ?? raw.BrandName ?? "");
@@ -106,9 +123,12 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
       assigneeName,
 
       status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
+
+      // time は backend の time.Time が ISO で来る前提（string / null）
       printedAt: (raw.printedAt ?? raw.PrintedAt ?? null) as any,
       createdAt: (raw.createdAt ?? raw.CreatedAt ?? null) as any,
       updatedAt: (raw.updatedAt ?? raw.UpdatedAt ?? null) as any,
+
       models: rawModels as any,
 
       totalQuantity,
@@ -178,8 +198,8 @@ export function buildRowsView(params: {
     assigneeName: p.assigneeName,
     status: p.status,
     totalQuantity: p.totalQuantity,
-    printedAtLabel: formatDate((p as any).printedAt ?? null),
-    createdAtLabel: formatDate((p as any).createdAt ?? null),
+    printedAtLabel: formatDateTime((p as any).printedAt ?? null),
+    createdAtLabel: formatDateTime((p as any).createdAt ?? null),
     brandName: p.brandName,
   }));
 
