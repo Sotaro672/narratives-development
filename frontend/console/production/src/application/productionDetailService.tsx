@@ -18,12 +18,20 @@ import {
 
 /**
  * 詳細表示用型（Production）
+ * - createdAt/updatedAt/printedAt は Date として保持する
  */
-export type ProductionDetail = Production & {
+export type ProductionDetail = Omit<
+  Production,
+  "createdAt" | "updatedAt" | "printedAt"
+> & {
   totalQuantity: number;
   assigneeName?: string;
   productName?: string;
   brandName?: string;
+
+  printedAt: Date | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
 };
 
 export type ModelVariationSummary = {
@@ -45,6 +53,7 @@ export type ProductionQuantityRow = {
 
 /**
  * ProductBlueprint 詳細用
+ * ※ このファイルの要件対象外ですが、こちらも Date に寄せたい場合は同様に toDate を使って置き換え可能です。
  */
 export type ProductBlueprintDetail = {
   id: string;
@@ -78,6 +87,60 @@ async function getIdTokenOrThrow(): Promise<string> {
   return user.getIdToken();
 }
 
+// ---------- helpers ----------
+const asString = (v: any): string => (typeof v === "string" ? v : "");
+const asNonEmptyString = (v: any): string =>
+  typeof v === "string" && v.trim() ? v.trim() : "";
+
+/**
+ * API から来る日時を Date に正規化する
+ * - string (ISO) / number (ms) / Date / Firestore Timestamp っぽいもの を許容
+ * - 変換できなければ null
+ */
+const toDate = (v: any): Date | null => {
+  if (!v) return null;
+
+  // already Date
+  if (v instanceof Date) {
+    return Number.isNaN(v.getTime()) ? null : v;
+  }
+
+  // Firestore Timestamp shape (best-effort)
+  // { seconds: number, nanoseconds: number } or { _seconds, _nanoseconds }
+  const seconds =
+    typeof v?.seconds === "number"
+      ? v.seconds
+      : typeof v?._seconds === "number"
+        ? v._seconds
+        : null;
+  const nanos =
+    typeof v?.nanoseconds === "number"
+      ? v.nanoseconds
+      : typeof v?._nanoseconds === "number"
+        ? v._nanoseconds
+        : 0;
+
+  if (typeof seconds === "number") {
+    const ms = seconds * 1000 + Math.floor((nanos ?? 0) / 1e6);
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // number (ms)
+  if (typeof v === "number") {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // string
+  if (typeof v === "string") {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  return null;
+};
+
 /* ---------------------------------------------------------
  * Production 詳細取得
  * --------------------------------------------------------- */
@@ -93,33 +156,40 @@ export async function loadProductionDetail(
   const rawModels = Array.isArray(raw.models)
     ? raw.models
     : Array.isArray(raw.Models)
-    ? raw.Models
-    : [];
+      ? raw.Models
+      : [];
 
   const totalQuantity = rawModels.reduce(
     (sum: number, m: any) => sum + (m?.quantity ?? m?.Quantity ?? 0),
     0,
   );
 
-  const blueprintId =
-    raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
+  const blueprintId = asNonEmptyString(
+    raw.productBlueprintId ?? raw.ProductBlueprintID ?? "",
+  );
 
   const resolvedProductName =
-    raw.productName ?? raw.ProductName ?? blueprintId;
+    asNonEmptyString(raw.productName ?? raw.ProductName) || blueprintId;
 
   let detail: ProductionDetail = {
     ...(raw as Production),
-    id: raw.id ?? raw.ID ?? "",
+
+    id: asNonEmptyString(raw.id ?? raw.ID ?? ""),
     productBlueprintId: blueprintId,
+
     productName: resolvedProductName,
-    brandName:
-      raw.brandName ?? raw.BrandName ?? raw.brand ?? raw.Brand ?? "",
-    assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
-    assigneeName: raw.assigneeName ?? raw.AssigneeName ?? "",
+    brandName: asString(raw.brandName ?? raw.BrandName ?? raw.brand ?? raw.Brand ?? ""),
+
+    assigneeId: asString(raw.assigneeId ?? raw.AssigneeID ?? ""),
+    assigneeName: asString(raw.assigneeName ?? raw.AssigneeName ?? ""),
+
     status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
-    printedAt: raw.printedAt ?? raw.PrintedAt ?? null,
-    createdAt: raw.createdAt ?? raw.CreatedAt ?? null,
-    updatedAt: raw.updatedAt ?? raw.UpdatedAt ?? null,
+
+    // ✅ time として保持（Date）
+    printedAt: toDate(raw.printedAt ?? raw.PrintedAt ?? null),
+    createdAt: toDate(raw.createdAt ?? raw.CreatedAt ?? null),
+    updatedAt: toDate(raw.updatedAt ?? raw.UpdatedAt ?? null),
+
     models: rawModels,
     totalQuantity,
   };
@@ -132,12 +202,10 @@ export async function loadProductionDetail(
 
     const match = (listItems as any[]).find((item) => {
       const itemId = item.id ?? item.ID ?? "";
-      const itemBlueprintId =
-        item.productBlueprintId ?? item.ProductBlueprintID ?? "";
+      const itemBlueprintId = item.productBlueprintId ?? item.ProductBlueprintID ?? "";
       return (
         itemId === detail.id ||
-        (itemBlueprintId &&
-          itemBlueprintId === detail.productBlueprintId)
+        (itemBlueprintId && itemBlueprintId === detail.productBlueprintId)
       );
     });
 
@@ -148,13 +216,11 @@ export async function loadProductionDetail(
       detail = {
         ...detail,
         productName:
-          detail.productName &&
-          detail.productName !== detail.productBlueprintId
+          detail.productName && detail.productName !== detail.productBlueprintId
             ? detail.productName
             : matchProductName,
 
-        brandName:
-          detail.brandName || match.brandName || match.BrandName || "",
+        brandName: detail.brandName || match.brandName || match.BrandName || "",
 
         assigneeName:
           detail.assigneeName ||
@@ -201,8 +267,7 @@ export async function loadProductBlueprintDetail(
 
   const raw = (await res.json()) as any;
 
-  const qa =
-    raw.qualityAssurance ?? raw.QualityAssurance ?? [];
+  const qa = raw.qualityAssurance ?? raw.QualityAssurance ?? [];
 
   const rawTag =
     raw.productIdTag ??
@@ -214,11 +279,7 @@ export async function loadProductBlueprintDetail(
   if (typeof rawTag === "string") {
     productIdTag = rawTag;
   } else if (rawTag && typeof rawTag === "object") {
-    productIdTag =
-      rawTag.Type ??
-      rawTag.type ??
-      rawTag.tag ??
-      "";
+    productIdTag = rawTag.Type ?? rawTag.type ?? rawTag.tag ?? "";
   }
 
   const detail: ProductBlueprintDetail = {
@@ -294,15 +355,9 @@ export function buildQuantityRowsFromModels(
   const safeModels = Array.isArray(models) ? models : [];
 
   const rows: ProductionQuantityRow[] = safeModels.map((m: any, index) => {
-    const id =
-      m.ModelID ??
-      m.id ??
-      m.ID ??
-      `${index}`;
+    const id = m.ModelID ?? m.id ?? m.ID ?? `${index}`;
 
-    const quantityRaw =
-      m.Quantity ??
-      0;
+    const quantityRaw = m.Quantity ?? 0;
 
     const quantity = Number.isFinite(Number(quantityRaw))
       ? Math.max(0, Math.floor(Number(quantityRaw)))
@@ -397,6 +452,8 @@ export async function notifyPrintLogCompleted(params: {
   }
 
   const printedBy = user.uid;
+
+  // ✅ payload は ISO 文字列で送る（API契約として妥当）
   const printedAt = new Date().toISOString();
 
   try {

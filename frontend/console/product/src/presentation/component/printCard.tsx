@@ -30,7 +30,7 @@ const PrintCard: React.FC<PrintCardProps> = ({ printing, onClick }) => {
             className="w-full max-w-xs"
             disabled={printing}
           >
-            {printing ? "発行中..." : "印刷用 Product を発行"}
+            {printing ? "発行中..." : "印刷"}
           </Button>
         </div>
       </CardContent>

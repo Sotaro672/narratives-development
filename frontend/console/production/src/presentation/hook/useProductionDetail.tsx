@@ -1,4 +1,5 @@
 // frontend/console/production/src/presentation/hook/useProductionDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -207,12 +208,13 @@ export function useProductionDetail() {
   // production.models × modelIndex → quantityRows
   // ======================================================
   React.useEffect(() => {
-    if (!production?.models || !Array.isArray((production as any).models)) {
+    if (!production?.models || !Array.isArray(production.models as any)) {
       setQuantityRows([]);
       return;
     }
 
-    const rawModels = (production as any).models as any[];
+    // canonical DTO 前提：production.models をそのまま使う
+    const rawModels = production.models as any[];
 
     const detailRows: DetailQuantityRow[] = buildQuantityRowsFromModels(
       rawModels,

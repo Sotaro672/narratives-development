@@ -114,7 +114,7 @@ export default function ProductionDetail() {
     }
 
     const ok = window.confirm(
-      "印刷用の Product / print_log を発行します。よろしいですか？",
+      "印刷",
     );
     if (!ok) return;
 
@@ -197,9 +197,6 @@ export default function ProductionDetail() {
                 mode={isEditMode ? "edit" : "view"}
                 onChangeRows={isEditMode ? setQuantityRows : undefined}
               />
-
-              {/* ===== 分離した印刷カード =====
-                  ★ edit モードでは非表示 */}
               {isViewMode && (
                 <PrintCard printing={printing} onClick={handlePrint} />
               )}
