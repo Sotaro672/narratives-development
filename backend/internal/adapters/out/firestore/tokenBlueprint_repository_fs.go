@@ -81,19 +81,14 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 		return tbdom.Patch{}, err
 	}
 
-	// Patch 用に最低限だけ読む（TokenBlueprint 全体に依存しない）
-	// entity.go 正: iconId は存在しない / minted は bool / metadataUri は string
-	// ★追加: tokenIconObjectPath / tokenContentsObjectPath を永続化し Patch に含める
 	var raw struct {
-		Name                    string `firestore:"name"`
-		Symbol                  string `firestore:"symbol"`
-		BrandID                 string `firestore:"brandId"`
-		CompanyID               string `firestore:"companyId"`
-		Description             string `firestore:"description"`
-		MetadataURI             string `firestore:"metadataUri"`
-		Minted                  bool   `firestore:"minted"`
-		TokenIconObjectPath     string `firestore:"tokenIconObjectPath"`
-		TokenContentsObjectPath string `firestore:"tokenContentsObjectPath"`
+		Name        string `firestore:"name"`
+		Symbol      string `firestore:"symbol"`
+		BrandID     string `firestore:"brandId"`
+		CompanyID   string `firestore:"companyId"`
+		Description string `firestore:"description"`
+		MetadataURI string `firestore:"metadataUri"`
+		Minted      bool   `firestore:"minted"`
 	}
 	if err := snap.DataTo(&raw); err != nil {
 		return tbdom.Patch{}, err
@@ -110,10 +105,7 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 		Description: trim(raw.Description),
 		Minted:      raw.Minted,
 		MetadataURI: trim(raw.MetadataURI),
-
-		// ★追加
-		TokenIconObjectPath:     trim(raw.TokenIconObjectPath),
-		TokenContentsObjectPath: trim(raw.TokenContentsObjectPath),
+		// IconURL は adapter(HTTP) が docId から生成して返す方針なので、ここでは保持しない
 	}
 
 	return patch, nil
@@ -354,7 +346,6 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		createdAt = in.CreatedAt.UTC()
 	}
 
-	// entity.go 正: ContentFiles は []ContentFile（embedded）
 	var contentFiles []tbdom.ContentFile
 	if in.ContentFiles != nil {
 		contentFiles = sanitizeContentFiles(in.ContentFiles)
@@ -362,15 +353,9 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		contentFiles = []tbdom.ContentFile{}
 	}
 
-	// minted は create 時は必ず false
 	minted := false
 
 	docRef := r.col().NewDoc()
-
-	// ★追加: tokenIconObjectPath / tokenContentsObjectPath（objectPath を永続化）
-	// - 既存互換のため空でも保存は許容（後から更新される運用もあり得る）
-	iconOP := strings.TrimSpace(in.TokenIconObjectPath)
-	contentsOP := strings.TrimSpace(in.TokenContentsObjectPath)
 
 	data := map[string]any{
 		"name":         strings.TrimSpace(in.Name),
@@ -385,10 +370,6 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"deletedAt":    nil,
 		"deletedBy":    nil,
 		"metadataUri":  strings.TrimSpace(in.MetadataURI), // 空でもOK
-
-		// ★追加
-		"tokenIconObjectPath":     iconOP,
-		"tokenContentsObjectPath": contentsOP,
 	}
 
 	if s := strings.TrimSpace(in.CreatedBy); s != "" {
@@ -459,11 +440,6 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	setStr("description", in.Description)
 	setStr("assigneeId", in.AssigneeID)
 
-	// ★追加: tokenIconObjectPath / tokenContentsObjectPath
-	setStr("tokenIconObjectPath", in.TokenIconObjectPath)
-	setStr("tokenContentsObjectPath", in.TokenContentsObjectPath)
-
-	// metadataUri
 	if in.MetadataURI != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "metadataUri",
@@ -471,7 +447,6 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		})
 	}
 
-	// minted (bool)
 	if in.Minted != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "minted",
@@ -479,9 +454,6 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		})
 	}
 
-	// entity.go 正: iconId は存在しないため更新しない（objectPath で管理）
-
-	// contentFiles (embedded)
 	if in.ContentFiles != nil {
 		files := sanitizeContentFiles(*in.ContentFiles)
 		updates = append(updates, firestore.Update{
@@ -614,7 +586,6 @@ func (r *TokenBlueprintRepositoryFS) Delete(ctx context.Context, id string) erro
 	return nil
 }
 
-// IsSymbolUnique checks if symbol is unique, excluding given ID.
 func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(ctx context.Context, symbol string, excludeID string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")
@@ -645,7 +616,6 @@ func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(ctx context.Context, symbol 
 	return true, nil
 }
 
-// IsNameUnique checks if name is unique, excluding given ID.
 func (r *TokenBlueprintRepositoryFS) IsNameUnique(ctx context.Context, name string, excludeID string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")
@@ -685,7 +655,6 @@ func (r *TokenBlueprintRepositoryFS) UploadContentFile(ctx context.Context, file
 	return "", fmt.Errorf("UploadContentFile: not implemented in Firestore repository")
 }
 
-// WithTx: Firestore transactions wrapper (simple passthrough).
 func (r *TokenBlueprintRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -693,7 +662,6 @@ func (r *TokenBlueprintRepositoryFS) WithTx(ctx context.Context, fn func(ctx con
 	return fn(ctx)
 }
 
-// Reset: delete all docs (for tests/dev) using transactions instead of deprecated Batch.
 func (r *TokenBlueprintRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -741,26 +709,22 @@ func (r *TokenBlueprintRepositoryFS) Reset(ctx context.Context) error {
 // ========================================
 
 func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint, error) {
-	// entity.go 正: iconId 無し / contentFiles は embedded / minted は bool
-	// ★追加: tokenIconObjectPath / tokenContentsObjectPath を読む
 	var raw struct {
-		Name                    string           `firestore:"name"`
-		Symbol                  string           `firestore:"symbol"`
-		BrandID                 string           `firestore:"brandId"`
-		CompanyID               string           `firestore:"companyId"`
-		Description             string           `firestore:"description"`
-		ContentFiles            []map[string]any `firestore:"contentFiles"`
-		AssigneeID              string           `firestore:"assigneeId"`
-		Minted                  bool             `firestore:"minted"`
-		CreatedAt               time.Time        `firestore:"createdAt"`
-		CreatedBy               string           `firestore:"createdBy"`
-		UpdatedAt               time.Time        `firestore:"updatedAt"`
-		UpdatedBy               string           `firestore:"updatedBy"`
-		DeletedAt               *time.Time       `firestore:"deletedAt"`
-		DeletedBy               *string          `firestore:"deletedBy"`
-		MetadataURI             string           `firestore:"metadataUri"`
-		TokenIconObjectPath     string           `firestore:"tokenIconObjectPath"`
-		TokenContentsObjectPath string           `firestore:"tokenContentsObjectPath"`
+		Name         string           `firestore:"name"`
+		Symbol       string           `firestore:"symbol"`
+		BrandID      string           `firestore:"brandId"`
+		CompanyID    string           `firestore:"companyId"`
+		Description  string           `firestore:"description"`
+		ContentFiles []map[string]any `firestore:"contentFiles"`
+		AssigneeID   string           `firestore:"assigneeId"`
+		Minted       bool             `firestore:"minted"`
+		CreatedAt    time.Time        `firestore:"createdAt"`
+		CreatedBy    string           `firestore:"createdBy"`
+		UpdatedAt    time.Time        `firestore:"updatedAt"`
+		UpdatedBy    string           `firestore:"updatedBy"`
+		DeletedAt    *time.Time       `firestore:"deletedAt"`
+		DeletedBy    *string          `firestore:"deletedBy"`
+		MetadataURI  string           `firestore:"metadataUri"`
 	}
 	if err := doc.DataTo(&raw); err != nil {
 		return tbdom.TokenBlueprint{}, err
@@ -786,10 +750,6 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		UpdatedAt:    raw.UpdatedAt.UTC(),
 		UpdatedBy:    strings.TrimSpace(raw.UpdatedBy),
 		MetadataURI:  strings.TrimSpace(raw.MetadataURI),
-
-		// ★追加
-		TokenIconObjectPath:     strings.TrimSpace(raw.TokenIconObjectPath),
-		TokenContentsObjectPath: strings.TrimSpace(raw.TokenContentsObjectPath),
 	}
 
 	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
@@ -805,8 +765,6 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 	return tb, nil
 }
 
-// matchTBFilter applies tbdom.Filter in-memory.
-// entity.go 正: HasIcon は無意味（iconId が無い）なので削除。
 func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	trim := func(s string) string { return strings.TrimSpace(s) }
 
@@ -871,7 +829,6 @@ func sanitizeContentFiles(xs []tbdom.ContentFile) []tbdom.ContentFile {
 	seen := make(map[string]struct{}, len(xs))
 
 	for _, f := range xs {
-		// defaults
 		f.ID = strings.TrimSpace(f.ID)
 		f.Name = strings.TrimSpace(f.Name)
 		f.ObjectPath = strings.TrimSpace(f.ObjectPath)
@@ -892,7 +849,6 @@ func sanitizeContentFiles(xs []tbdom.ContentFile) []tbdom.ContentFile {
 	return out
 }
 
-// Firestore へ保存する contentFiles の表現（map に落とす）
 func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 	out := make([]map[string]any, 0, len(xs))
 	for _, f := range xs {
@@ -914,7 +870,6 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 	return out
 }
 
-// Firestore から読み出した contentFiles を domain 型へ戻す
 func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 	out := make([]tbdom.ContentFile, 0, len(xs))
 
@@ -940,7 +895,6 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 			f.Visibility = tbdom.ContentVisibility(strings.TrimSpace(v))
 		}
 
-		// size は Firestore で int64 / int / float64 等になり得るので、厳格に拾う
 		switch v := m["size"].(type) {
 		case int64:
 			f.Size = v
@@ -968,7 +922,6 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 			f.UpdatedAt = v.UTC()
 		}
 
-		// domain validation（entity.go を正）
 		if strings.TrimSpace(string(f.Visibility)) == "" {
 			f.Visibility = tbdom.VisibilityPrivate
 		}
@@ -979,6 +932,5 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 		out = append(out, f)
 	}
 
-	// dedup
 	return sanitizeContentFiles(out), nil
 }

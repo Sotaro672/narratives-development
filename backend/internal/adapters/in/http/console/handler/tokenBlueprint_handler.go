@@ -7,6 +7,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -61,11 +63,94 @@ func extractFirstSegmentAfterPrefix(path, prefix string) string {
 	return strings.TrimSpace(parts[0])
 }
 
+// GCS URL helpers ----------------------------------------------------------
+
+// defaults (あなたの実パスに合わせる)
+const (
+	defaultTokenIconBucket     = "narratives-development_token_icon"
+	defaultTokenContentsBucket = "narratives-development-token-contents"
+)
+
+func tokenIconBucketName() string {
+	if v := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET")); v != "" {
+		return v
+	}
+	return defaultTokenIconBucket
+}
+
+func tokenContentsBucketName() string {
+	if v := strings.TrimSpace(os.Getenv("TOKEN_CONTENTS_BUCKET")); v != "" {
+		return v
+	}
+	return defaultTokenContentsBucket
+}
+
+func gcsObjectPublicURL(bucket, objectPath string) string {
+	b := strings.Trim(strings.TrimSpace(bucket), "/")
+	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	if b == "" || p == "" {
+		return ""
+	}
+	u := url.URL{
+		Scheme: "https",
+		Host:   "storage.googleapis.com",
+		Path:   "/" + b + "/" + p,
+	}
+	return u.String()
+}
+
+func withCacheBuster(u string, t time.Time) string {
+	u = strings.TrimSpace(u)
+	if u == "" {
+		return ""
+	}
+	if t.IsZero() {
+		return u
+	}
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	return u + sep + "v=" + strconv.FormatInt(t.UnixNano(), 10)
+}
+
+// iconUrl:  https://storage.googleapis.com/narratives-development_token_icon/{id}/icon?v=...
+func (h *TokenBlueprintHandler) resolveTokenIconURL(tb *tbdom.TokenBlueprint) string {
+	if tb == nil {
+		return ""
+	}
+	id := strings.TrimSpace(tb.ID)
+	if id == "" {
+		return ""
+	}
+
+	objectPath := id + "/icon"
+	base := gcsObjectPublicURL(tokenIconBucketName(), objectPath)
+	if base == "" {
+		return ""
+	}
+
+	ver := tb.UpdatedAt
+	if ver.IsZero() {
+		ver = tb.CreatedAt
+	}
+	return withCacheBuster(base, ver)
+}
+
+// contentsUrl: https://storage.googleapis.com/narratives-development-token-contents/{id}
+func (h *TokenBlueprintHandler) resolveTokenContentsURL(tb *tbdom.TokenBlueprint) string {
+	if tb == nil {
+		return ""
+	}
+	id := strings.TrimSpace(tb.ID)
+	if id == "" {
+		return ""
+	}
+	return gcsObjectPublicURL(tokenContentsBucketName(), id)
+}
+
 // DTO --------------------------------------------------------------------
 
-// ✅ backward compatible fields removed:
-// - createdBy (request) is not accepted; backend uses X-Actor-Id only
-// - contentFiles (request) is not accepted on create (contents are managed via separate flows)
 type createTokenBlueprintRequest struct {
 	Name        string `json:"name"`
 	Symbol      string `json:"symbol"`
@@ -73,9 +158,7 @@ type createTokenBlueprintRequest struct {
 	Description string `json:"description,omitempty"`
 	AssigneeID  string `json:"assigneeId"`
 
-	// ★追加: icon upload を行うか（フロントが File を持っている場合 true）
-	HasIconFile bool `json:"hasIconFile"`
-	// ★追加: 例 "image/png"
+	HasIconFile     bool   `json:"hasIconFile"`
 	IconContentType string `json:"iconContentType,omitempty"`
 }
 
@@ -86,12 +169,9 @@ type updateTokenBlueprintRequest struct {
 	Description *string `json:"description,omitempty"`
 	AssigneeID  *string `json:"assigneeId,omitempty"`
 
-	// entity.go 正: embedded contents (replace all when provided)
 	ContentFiles *[]tbdom.ContentFile `json:"contentFiles,omitempty"`
 
-	// ★追加: update時にも icon の署名付きURLを返す（フロントはこれでPUTする）
-	HasIconFile bool `json:"hasIconFile"`
-	// ★追加: 例 "image/png"
+	HasIconFile     bool   `json:"hasIconFile"`
 	IconContentType string `json:"iconContentType,omitempty"`
 }
 
@@ -104,7 +184,6 @@ type tokenBlueprintResponse struct {
 	CompanyID   string `json:"companyId"`
 	Description string `json:"description,omitempty"`
 
-	// entity.go 正: embedded
 	ContentFiles []tbdom.ContentFile `json:"contentFiles"`
 
 	AssigneeID   string `json:"assigneeId"`
@@ -112,22 +191,18 @@ type tokenBlueprintResponse struct {
 
 	CreatedAt time.Time `json:"createdAt"`
 
-	// ✅ backward compat removed:
 	CreatedByID   string `json:"createdById"`
 	CreatedByName string `json:"createdByName"`
 
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy string     `json:"updatedBy"`
 
-	// metadataUri
 	MetadataURI string `json:"metadataUri"`
 
-	// ★追加: tokenIcon / tokenContents の objectPath をレスポンスに含める
-	// - 永続化が未実装/既存データの場合は空文字になり得る（互換のためomitempty）
-	TokenIconObjectPath     string `json:"tokenIconObjectPath,omitempty"`
-	TokenContentsObjectPath string `json:"tokenContentsObjectPath,omitempty"`
+	// ★docId から生成
+	IconURL     string `json:"iconUrl,omitempty"`
+	ContentsURL string `json:"contentsUrl,omitempty"`
 
-	// ★追加: create/update時に icon の署名付きURLを返す（フロントはこれでPUTする）
 	IconUpload *uc.TokenIconUploadURL `json:"iconUpload,omitempty"`
 }
 
@@ -139,8 +214,6 @@ type tokenBlueprintPageResponse struct {
 	PerPage    int                      `json:"perPage"`
 }
 
-// TokenBlueprintCard 用 patch
-// GET /token-blueprints/{id}/patch
 type tokenBlueprintPatchResponse struct {
 	ID          string `json:"id"`
 	TokenName   string `json:"tokenName"`
@@ -151,6 +224,10 @@ type tokenBlueprintPatchResponse struct {
 
 	Minted      bool   `json:"minted"`
 	MetadataURI string `json:"metadataUri"`
+
+	// ★docId から生成
+	IconURL     string `json:"iconUrl,omitempty"`
+	ContentsURL string `json:"contentsUrl,omitempty"`
 }
 
 // name resolver helpers ----------------------------------------------------
@@ -212,12 +289,9 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		UpdatedBy:   strings.TrimSpace(tb.UpdatedBy),
 		MetadataURI: strings.TrimSpace(tb.MetadataURI),
 
-		// ★追加: objectPath をレスポンスに出力
-		// - entity.go / repo の実装がまだの場合でも compile は通る前提（フィールドが存在する前提）
-		TokenIconObjectPath:     strings.TrimSpace(tb.TokenIconObjectPath),
-		TokenContentsObjectPath: strings.TrimSpace(tb.TokenContentsObjectPath),
+		IconURL:     h.resolveTokenIconURL(tb),
+		ContentsURL: h.resolveTokenContentsURL(tb),
 
-		// 既定では返さない。create/update 時に必要に応じて上書きする。
 		IconUpload: nil,
 	}
 }
@@ -235,6 +309,9 @@ func (h *TokenBlueprintHandler) toPatchResponse(ctx context.Context, tb *tbdom.T
 		Description: strings.TrimSpace(tb.Description),
 		Minted:      tb.Minted,
 		MetadataURI: strings.TrimSpace(tb.MetadataURI),
+
+		IconURL:     h.resolveTokenIconURL(tb),
+		ContentsURL: h.resolveTokenContentsURL(tb),
 	}
 }
 
@@ -254,8 +331,6 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.list(w, r)
 		return
 
-	// TokenBlueprintCard 用 patch
-	// GET /token-blueprints/{id}/patch
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path, "/token-blueprints/") &&
 		strings.HasSuffix(path, "/patch"):
@@ -264,7 +339,6 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.getPatch(w, r, id)
 		return
 
-	// update/delete/get は「{id} の次に余計なセグメントが来ても巻き込まない」ように first segment を取る
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) &&
 		strings.HasPrefix(path, "/token-blueprints/"):
 		id := extractFirstSegmentAfterPrefix(path, "/token-blueprints/")
@@ -335,7 +409,6 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CreatedBy は request から受け取らない（X-Actor-Id）
 	tb, err := h.uc.Create(ctx, uc.CreateBlueprintRequest{
 		Name:        strings.TrimSpace(req.Name),
 		Symbol:      strings.TrimSpace(req.Symbol),
@@ -352,25 +425,16 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] create success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
-		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
-	)
-
 	resp := h.toResponse(ctx, tb)
 
-	// ★ここが統一の肝：hasIconFile=true の場合、署名URLを返す
 	if req.HasIconFile {
 		ct := strings.TrimSpace(req.IconContentType)
 		if ct == "" {
-			// フロントが file.type を渡していない場合のフォールバック
 			ct = "application/octet-stream"
 		}
 
 		iconUpload, err := h.uc.IssueTokenIconUploadURL(ctx, tb.ID, "", ct)
 		if err != nil {
-			// ここは要件次第：
-			// - 厳格にするなら create 自体を失敗させる
-			// - 現状運用では「作成は成功、アイコンだけ失敗」を許容しログで追うのが扱いやすい
 			log.Printf("[tokenBlueprint_handler] iconUpload issue FAILED id=%q err=%v", tb.ID, err)
 		} else {
 			resp.IconUpload = iconUpload
@@ -388,8 +452,6 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
 	id = strings.TrimSpace(id)
 
-	log.Printf("[tokenBlueprint_handler] getPatch start id=%q companyId(ctx)=%q", id, companyID)
-
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -403,25 +465,17 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 
 	tb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[tokenBlueprint_handler] getPatch failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	// tenant boundary
 	if strings.TrimSpace(tb.CompanyID) != companyID {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
 	}
 
-	resp := h.toPatchResponse(ctx, tb)
-
-	log.Printf("[tokenBlueprint_handler] getPatch success id=%q brandId=%q minted=%v metadataUri=%q",
-		resp.ID, resp.BrandID, resp.Minted, resp.MetadataURI,
-	)
-
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(h.toPatchResponse(ctx, tb))
 }
 
 // get ---------------------------------------------------------------------
@@ -429,21 +483,11 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
-	id = strings.TrimSpace(id)
-
-	log.Printf("[tokenBlueprint_handler] get start id=%q companyId(ctx)=%q", id, companyID)
-
-	tb, err := h.uc.GetByID(ctx, id)
+	tb, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
 	if err != nil {
-		log.Printf("[tokenBlueprint_handler] get failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
-
-	log.Printf("[tokenBlueprint_handler] get success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
-		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
-	)
 
 	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
 }
@@ -478,45 +522,28 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	brandID := strings.TrimSpace(q.Get("brandId"))
 	mintedFilter := strings.TrimSpace(q.Get("minted"))
 
-	page := tbdom.Page{
-		Number:  pageNum,
-		PerPage: perPage,
-	}
-
-	log.Printf("[tokenBlueprint_handler] list start companyId=%q page=%d perPage=%d brandId=%q minted=%q",
-		companyID, pageNum, perPage, brandID, mintedFilter,
-	)
+	page := tbdom.Page{Number: pageNum, PerPage: perPage}
 
 	var (
 		result tbdom.PageResult
 		err    error
-		mode   string
 	)
 
 	switch {
 	case brandID != "" && mintedFilter == "":
-		mode = "ListByBrandID"
 		result, err = h.uc.ListByBrandID(ctx, brandID, page)
 	case mintedFilter == "notYet":
-		mode = "ListMintedNotYet"
 		result, err = h.uc.ListMintedNotYet(ctx, page)
 	case mintedFilter == "minted":
-		mode = "ListMintedCompleted"
 		result, err = h.uc.ListMintedCompleted(ctx, page)
 	default:
-		mode = "ListByCompanyID"
 		result, err = h.uc.ListByCompanyID(ctx, companyID, page)
 	}
 
 	if err != nil {
-		log.Printf("[tokenBlueprint_handler] list failed mode=%s companyId=%q err=%v", mode, companyID, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
-
-	log.Printf("[tokenBlueprint_handler] list success mode=%s companyId=%q totalCount=%d page=%d perPage=%d items=%d",
-		mode, companyID, result.TotalCount, result.Page, result.PerPage, len(result.Items),
-	)
 
 	items := make([]tokenBlueprintResponse, 0, len(result.Items))
 	for i := range result.Items {
@@ -541,32 +568,15 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 
-	log.Printf("[tokenBlueprint_handler] update start id=%q companyId(ctx)=%q actorId=%q", id, companyID, actorID)
-
 	var req updateTokenBlueprintRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("[tokenBlueprint_handler] update decode failed id=%q err=%v", id, err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] update request id=%q hasName=%v hasSymbol=%v hasBrandId=%v hasDesc=%v hasAssignee=%v hasContentFiles=%v hasIconFile=%v iconContentType=%q",
-		id,
-		req.Name != nil,
-		req.Symbol != nil,
-		req.BrandID != nil,
-		req.Description != nil,
-		req.AssigneeID != nil,
-		req.ContentFiles != nil,
-		req.HasIconFile,
-		strings.TrimSpace(req.IconContentType),
-	)
-
-	// tenant boundary check (companyId一致)
 	tb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[tokenBlueprint_handler] update get failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
@@ -587,18 +597,12 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		ActorID:      actorID,
 	})
 	if err != nil {
-		log.Printf("[tokenBlueprint_handler] update failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] update success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q contents=%d",
-		updated.ID, updated.CompanyID, updated.BrandID, updated.AssigneeID, updated.Minted, updated.MetadataURI, len(updated.ContentFiles),
-	)
-
 	resp := h.toResponse(ctx, updated)
 
-	// ★方針A: updateでも hasIconFile=true の場合、署名URLを返す
 	if req.HasIconFile {
 		ct := strings.TrimSpace(req.IconContentType)
 		if ct == "" {
@@ -607,7 +611,6 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 
 		iconUpload, err := h.uc.IssueTokenIconUploadURL(ctx, updated.ID, "", ct)
 		if err != nil {
-			// update 自体は成功させ、アイコンURL発行失敗はログで追えるようにする
 			log.Printf("[tokenBlueprint_handler] iconUpload issue FAILED (update) id=%q err=%v", updated.ID, err)
 		} else {
 			resp.IconUpload = iconUpload
@@ -624,14 +627,9 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 	id = strings.TrimSpace(id)
 
 	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
-	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 
-	log.Printf("[tokenBlueprint_handler] delete start id=%q companyId(ctx)=%q actorId=%q", id, companyID, actorID)
-
-	// tenant boundary check
 	tb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[tokenBlueprint_handler] delete get failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
@@ -642,12 +640,10 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 	}
 
 	if err := h.uc.Delete(ctx, id); err != nil {
-		log.Printf("[tokenBlueprint_handler] delete failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] delete success id=%q", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

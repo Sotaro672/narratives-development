@@ -16,7 +16,6 @@ import (
 // Types
 // ============================================================
 
-// ContentFileType mirrors TS: 'image' | 'video' | 'pdf' | 'document'
 type ContentFileType string
 
 const (
@@ -26,10 +25,6 @@ const (
 	ContentDocument ContentFileType = "document"
 )
 
-// ContentVisibility controls how the content is delivered.
-//
-// - private: member + ATA==1 のユーザーにのみ、バックエンドが GET 署名URLを発行して配布
-// - public: allUsers が GCS 公開バケットの URL で閲覧可能（UIで切替）
 type ContentVisibility string
 
 const (
@@ -37,19 +32,16 @@ const (
 	VisibilityPublic  ContentVisibility = "public"
 )
 
-// 汎用エラー（リポジトリ/サービス共通）
 var (
 	ErrNotFound = errors.New("tokenBlueprint: not found")
 	ErrConflict = errors.New("tokenBlueprint: conflict")
 	ErrInvalid  = errors.New("tokenBlueprint: invalid")
 )
 
-// 判定ヘルパー
 func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
 func IsConflict(err error) bool { return errors.Is(err, ErrConflict) }
 func IsInvalid(err error) bool  { return errors.Is(err, ErrInvalid) }
 
-// ラップヘルパー（原因を保持）
 func WrapInvalid(err error, msg string) error {
 	if err == nil {
 		return fmt.Errorf("%w: %s", ErrInvalid, msg)
@@ -96,20 +88,21 @@ func IsValidVisibility(v ContentVisibility) bool {
 // ContentFile is embedded in TokenBlueprint (single Firestore document).
 //
 // NOTE:
-// - URL を永続化しない（Signed URL は短寿命のため）
-// - 永続化するのは objectPath（docId配下の規約）と visibility
+// - URL を永続化しない（Signed URL は短寿命）
+// - 永続化するのは objectPath（規約）と visibility
 type ContentFile struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
 	Type        ContentFileType   `json:"type"`
-	ContentType string            `json:"contentType,omitempty"` // MIME
+	ContentType string            `json:"contentType,omitempty"`
 	Size        int64             `json:"size"`
-	ObjectPath  string            `json:"objectPath"` // e.g. "{tokenBlueprintId}/contents/{contentId}"
-	Visibility  ContentVisibility `json:"visibility"` // private|public
-	CreatedAt   time.Time         `json:"createdAt"`  // 監査（任意だが推奨）
-	CreatedBy   string            `json:"createdBy"`  // 監査（任意だが推奨）
-	UpdatedAt   time.Time         `json:"updatedAt"`  // 監査（任意）
-	UpdatedBy   string            `json:"updatedBy"`  // 監査（任意）
+	ObjectPath  string            `json:"objectPath"` // e.g. "{tokenBlueprintId}/{contentId}" など規約次第
+	Visibility  ContentVisibility `json:"visibility"`
+
+	CreatedAt time.Time `json:"createdAt"`
+	CreatedBy string    `json:"createdBy"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedBy string    `json:"updatedBy"`
 }
 
 func (f ContentFile) Validate() error {
@@ -131,8 +124,6 @@ func (f ContentFile) Validate() error {
 	if f.Size < 0 {
 		return fmt.Errorf("%w: size", ErrInvalidContentFile)
 	}
-	// contentType は空を許容（不明な場合）
-	// createdAt/createdBy は移行や既存データ互換のため validate では必須にしない
 	return nil
 }
 
@@ -142,25 +133,20 @@ func (f ContentFile) Validate() error {
 
 // TokenBlueprint is the only persisted aggregate (Firestore).
 //
-// Design decisions for current implementation policy:
-// - iconId/iconUrl は保持しない（icon は "{docId}/icon" 規約、表示URLは metadata 解決結果に含める）
-// - content は tokenBlueprint に埋め込み（他テーブル参照しない）
-//
-// ★追加方針（今回の要件）:
-// - tokenIcon / tokenContents の objectPath を Firestore に永続化する
-//   - tokenIconObjectPath: 例 "{id}/icon"
-//   - tokenContentsObjectPath: 例 "{id}/.keep"（contents “存在保証” 用）
+// ★重要変更:
+// - tokenIconObjectPath / tokenContentsObjectPath は保持しない（項目から削除）
+// - iconUrl / contentsUrl は tokenBlueprintId (=docId) から組み立てる（adapter側で生成してレスポンスに含める）
 type TokenBlueprint struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Symbol      string `json:"symbol"`
 	BrandID     string `json:"brandId"`
 	CompanyID   string `json:"companyId"`
-	Description string `json:"description,omitempty"` // 空OK（既存データ互換）
+	Description string `json:"description,omitempty"`
 
 	ContentFiles []ContentFile `json:"contentFiles"` // embedded
 	AssigneeID   string        `json:"assigneeId"`
-	Minted       bool          `json:"minted"` // false | true
+	Minted       bool          `json:"minted"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	CreatedBy string    `json:"createdBy"`
@@ -170,15 +156,7 @@ type TokenBlueprint struct {
 	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 	DeletedBy *string    `json:"deletedBy,omitempty"`
 
-	// metadataUri: backend resolver URL (Irys/Arweave discontinued).
-	// e.g. "https://api.example.com/v1/token-blueprints/{id}/metadata"
 	MetadataURI string `json:"metadataUri,omitempty"`
-
-	// ★追加: GCS objectPath を永続化（URLではなく objectPath）
-	// - 空の場合は resolver/usecase が規約に基づき補完できるが、
-	//   永続化しておくことで将来の規約変更や移行に耐える。
-	TokenIconObjectPath     string `json:"tokenIconObjectPath,omitempty"`
-	TokenContentsObjectPath string `json:"tokenContentsObjectPath,omitempty"`
 }
 
 // Errors
@@ -200,9 +178,6 @@ var (
 	ErrInvalidContentType       = errors.New("tokenBlueprint: invalid contentFile.type")
 	ErrInvalidContentVisibility = errors.New("tokenBlueprint: invalid contentFile.visibility")
 
-	// minted=true の場合のコアフィールド/削除制約用
-	// - name / symbol / brandId の変更は禁止（コア定義）
-	// - Delete 系（DeletedBy/DeletedAt）は禁止
 	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; core fields or deletion are not allowed")
 )
 
@@ -232,9 +207,6 @@ func (t TokenBlueprint) validate() error {
 		return ErrInvalidAssigneeID
 	}
 
-	// Description は空OK（既存データ互換 + UI上の任意入力を想定）
-	t.Description = strings.TrimSpace(t.Description)
-
 	for _, f := range t.ContentFiles {
 		if err := f.Validate(); err != nil {
 			return err
@@ -248,10 +220,7 @@ func (t TokenBlueprint) validate() error {
 		return ErrInvalidCreatedBy
 	}
 
-	// MetadataURI は resolver URL だが、移行・作成直後の差分を考慮して validate では必須にしない
-	//
-	// TokenIconObjectPath / TokenContentsObjectPath も、
-	// 既存データ互換・移行を考慮して validate では必須にしない。
+	// MetadataURI は移行や作成直後を考慮し必須にしない
 	return nil
 }
 
@@ -277,16 +246,12 @@ func New(
 		Description:  strings.TrimSpace(description),
 		ContentFiles: dedupContentFiles(contentFiles),
 		AssigneeID:   strings.TrimSpace(assigneeID),
-		Minted:       false, // create 時は常に false
+		Minted:       false,
 		CreatedAt:    createdAt.UTC(),
 		CreatedBy:    strings.TrimSpace(createdBy),
 		UpdatedAt:    updatedAt.UTC(),
 		UpdatedBy:    "",
 		MetadataURI:  "",
-
-		// ★追加: objectPath はここでは空（usecase/repo で補完・永続化）
-		TokenIconObjectPath:     "",
-		TokenContentsObjectPath: "",
 	}
 
 	if err := tb.validate(); err != nil {
@@ -333,7 +298,6 @@ func (t *TokenBlueprint) ensureMutableCoreOrDeletable() error {
 // Mutators
 // ============================================================
 
-// Description は空OK
 func (t *TokenBlueprint) UpdateDescription(desc string) error {
 	if t == nil {
 		return nil
@@ -342,7 +306,6 @@ func (t *TokenBlueprint) UpdateDescription(desc string) error {
 	return nil
 }
 
-// minted=true でも assigneeId は変更可能（要件より）
 func (t *TokenBlueprint) UpdateAssignee(id string) error {
 	if t == nil {
 		return nil
@@ -355,10 +318,6 @@ func (t *TokenBlueprint) UpdateAssignee(id string) error {
 	return nil
 }
 
-// SetMinted updates minted flag (false / true)
-// - false → true: 許可
-// - true → true: 許可（冪等）
-// - true → false: 禁止（ErrAlreadyMinted）
 func (t *TokenBlueprint) SetMinted(status bool) error {
 	if t == nil {
 		return nil
@@ -370,7 +329,6 @@ func (t *TokenBlueprint) SetMinted(status bool) error {
 	return nil
 }
 
-// minted=true では brandId 変更禁止
 func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
@@ -393,7 +351,6 @@ func (t TokenBlueprint) ValidateBrandLink() error {
 	return nil
 }
 
-// minted=true でも assigneeId の設定は許可
 func (t *TokenBlueprint) SetAssignee(m memberdom.Member) error {
 	if t == nil {
 		return nil
@@ -451,7 +408,6 @@ func (t TokenBlueprint) ValidateUpdatedByLink() error {
 	return nil
 }
 
-// minted=true の場合は削除マーク禁止（＝ Delete 不可）
 func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
@@ -467,7 +423,6 @@ func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	return nil
 }
 
-// minted=true の場合は削除状態変更も禁止
 func (t *TokenBlueprint) ClearDeletedBy() error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
@@ -489,7 +444,6 @@ func (t TokenBlueprint) ValidateDeletedByLink() error {
 	return nil
 }
 
-// SetMetadataURI sets backend resolver URL (not Arweave/Irys).
 func (t *TokenBlueprint) SetMetadataURI(uri string) error {
 	if t == nil {
 		return nil
@@ -502,8 +456,6 @@ func (t *TokenBlueprint) SetMetadataURI(uri string) error {
 // ContentFiles operations (embedded)
 // ============================================================
 
-// AddContentFile adds new content (default visibility is private if empty).
-// minted=true でも contents の変更は許可（要件より）
 func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 	if t == nil {
 		return nil
@@ -515,7 +467,6 @@ func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 		return err
 	}
 
-	// duplicate check by ID
 	for _, existing := range t.ContentFiles {
 		if strings.TrimSpace(existing.ID) == strings.TrimSpace(f.ID) {
 			return WrapConflict(nil, "content file id already exists")
@@ -527,7 +478,6 @@ func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 	return nil
 }
 
-// ReplaceContentFiles replaces all content files (used for admin operations).
 func (t *TokenBlueprint) ReplaceContentFiles(files []ContentFile) error {
 	if t == nil {
 		return nil
@@ -542,7 +492,6 @@ func (t *TokenBlueprint) ReplaceContentFiles(files []ContentFile) error {
 	return nil
 }
 
-// SetContentVisibility updates visibility for a specific contentId.
 func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibility, actorID string, now time.Time) error {
 	if t == nil {
 		return nil
@@ -608,7 +557,6 @@ func dedupContentFiles(xs []ContentFile) []ContentFile {
 	for _, x := range xs {
 		id := strings.TrimSpace(x.ID)
 		if id == "" {
-			// invalid は validate で弾く。ここでは落とさず維持しておく（デバッグ性）
 			continue
 		}
 		if _, ok := seen[id]; ok {
