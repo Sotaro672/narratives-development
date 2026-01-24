@@ -15,6 +15,7 @@ import (
 // - contentFiles は []ContentFile（embedded）
 // - minted は create 時は常に false（入力として持たせても repo 側で無視/固定化して良い）
 // - metadataUri は任意
+// - ★ tokenIcon/tokenContents の objectPath を永続化する（今回追加）
 type CreateTokenBlueprintInput struct {
 	Name        string `json:"name"`
 	Symbol      string `json:"symbol"`
@@ -31,6 +32,13 @@ type CreateTokenBlueprintInput struct {
 	UpdatedBy string     `json:"updatedBy"`
 
 	MetadataURI string `json:"metadataUri,omitempty"`
+
+	// ★追加: icon / contents の objectPath（URLではなく objectPath）
+	// 例:
+	// - TokenIconObjectPath: "{tokenBlueprintId}/icon"
+	// - TokenContentsObjectPath: "{tokenBlueprintId}/.keep"
+	TokenIconObjectPath     string `json:"tokenIconObjectPath,omitempty"`
+	TokenContentsObjectPath string `json:"tokenContentsObjectPath,omitempty"`
 }
 
 // ===============================
@@ -42,6 +50,7 @@ type CreateTokenBlueprintInput struct {
 // - contentFiles は []ContentFile の全置換
 // - minted は bool
 // - metadataUri は任意
+// - ★ tokenIcon/tokenContents の objectPath を更新可能にする（今回追加）
 type UpdateTokenBlueprintInput struct {
 	Name        *string `json:"name,omitempty"`
 	Symbol      *string `json:"symbol,omitempty"`
@@ -58,6 +67,11 @@ type UpdateTokenBlueprintInput struct {
 	DeletedBy *string    `json:"deletedBy,omitempty"`
 
 	MetadataURI *string `json:"metadataUri,omitempty"`
+
+	// ★追加: icon / contents の objectPath（URLではなく objectPath）
+	// 既存互換のため optional（nil は変更しない、"" はクリア）
+	TokenIconObjectPath     *string `json:"tokenIconObjectPath,omitempty"`
+	TokenContentsObjectPath *string `json:"tokenContentsObjectPath,omitempty"`
 }
 
 // ===============================
@@ -65,9 +79,11 @@ type UpdateTokenBlueprintInput struct {
 // ===============================
 //
 // entity.go 正に寄せる:
-// - Patch は read-model 用の最小情報（string/bool を基本）
-// - icon は objectPath 規約＋metadata解決で返すため、ここでは IconURL だけを保持（任意）
-// - metadataUri を含める
+//   - Patch は read-model 用の最小情報（string/bool を基本）
+//   - icon は objectPath 規約＋metadata解決で返すため、ここでは IconURL だけを保持（任意）
+//   - metadataUri を含める
+//   - ★ objectPath も必要なら read-model が参照できるように保持（今回追加）
+//     （UI/metadata 組み立て/検証に使える）
 type Patch struct {
 	ID          string `json:"id"`
 	TokenName   string `json:"tokenName"`
@@ -79,6 +95,10 @@ type Patch struct {
 	Minted      bool   `json:"minted"`
 	MetadataURI string `json:"metadataUri"`
 	IconURL     string `json:"iconUrl,omitempty"`
+
+	// ★追加
+	TokenIconObjectPath     string `json:"tokenIconObjectPath,omitempty"`
+	TokenContentsObjectPath string `json:"tokenContentsObjectPath,omitempty"`
 }
 
 // ===============================

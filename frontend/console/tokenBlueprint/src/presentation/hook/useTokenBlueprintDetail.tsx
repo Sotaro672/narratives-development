@@ -205,6 +205,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     try {
       setLoading(true);
 
+      // ★ A案：vm.iconFile を単一ソースにしたため、options を渡さなくても service 側で拾える設計
+      // （service 側が cardVm.iconFile を拾う実装になっている前提）
       const updated = await updateTokenBlueprintFromCard(blueprint, cardVm);
 
       setBlueprint(updated);

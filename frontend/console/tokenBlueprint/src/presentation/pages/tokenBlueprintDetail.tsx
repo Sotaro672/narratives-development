@@ -33,10 +33,11 @@ export default function TokenBlueprintDetail() {
     cardHandlers,
   } = handlers;
 
-  // ★ 将来/実装差分吸収:
-  // useTokenBlueprintDetail が selectedIconFile を vm に載せる実装になっていても壊れないようにする
+  // ★ A案：単一ソースは cardVm.iconFile
+  // useTokenBlueprintDetail が selectedIconFile を vm に載せる実装でも壊れないようにフォールバックも残す
   const selectedIconFile: File | null =
-    ((vm as any)?.selectedIconFile as File | null) ?? null;
+    (cardVm?.iconFile as File | null | undefined)
+    ?? (((vm as any)?.selectedIconFile as File | null) ?? null);
 
   // データが無い場合のフォールバック
   if (!blueprint) {
@@ -85,20 +86,10 @@ export default function TokenBlueprintDetail() {
 
         <div style={{ marginTop: 16 }}>
           {/* ★ images 互換は削除済み：contents(GCSTokenContent[]) を渡す */}
+          {/* ★ TokenContentsCardProps に onUploadClick が存在しないため渡さない */}
           <TokenContentsCard
             mode={isEditMode ? "edit" : "view"}
             contents={tokenContents}
-            onUploadClick={
-              isEditMode
-                ? () => {
-                    // 方針A: 呼び出し側で onUploadClick を配線する
-                    // ここは後続で file picker → upload → tokenContents 更新 に接続する想定
-                    // eslint-disable-next-line no-console
-                    console.log("[TokenBlueprintDetail.page] TokenContentsCard upload clicked");
-                    alert("ファイル追加（未接続）");
-                  }
-                : undefined
-            }
           />
         </div>
       </div>

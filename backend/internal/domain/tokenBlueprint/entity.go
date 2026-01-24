@@ -145,6 +145,11 @@ func (f ContentFile) Validate() error {
 // Design decisions for current implementation policy:
 // - iconId/iconUrl は保持しない（icon は "{docId}/icon" 規約、表示URLは metadata 解決結果に含める）
 // - content は tokenBlueprint に埋め込み（他テーブル参照しない）
+//
+// ★追加方針（今回の要件）:
+// - tokenIcon / tokenContents の objectPath を Firestore に永続化する
+//   - tokenIconObjectPath: 例 "{id}/icon"
+//   - tokenContentsObjectPath: 例 "{id}/.keep"（contents “存在保証” 用）
 type TokenBlueprint struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -168,6 +173,12 @@ type TokenBlueprint struct {
 	// metadataUri: backend resolver URL (Irys/Arweave discontinued).
 	// e.g. "https://api.example.com/v1/token-blueprints/{id}/metadata"
 	MetadataURI string `json:"metadataUri,omitempty"`
+
+	// ★追加: GCS objectPath を永続化（URLではなく objectPath）
+	// - 空の場合は resolver/usecase が規約に基づき補完できるが、
+	//   永続化しておくことで将来の規約変更や移行に耐える。
+	TokenIconObjectPath     string `json:"tokenIconObjectPath,omitempty"`
+	TokenContentsObjectPath string `json:"tokenContentsObjectPath,omitempty"`
 }
 
 // Errors
@@ -238,6 +249,9 @@ func (t TokenBlueprint) validate() error {
 	}
 
 	// MetadataURI は resolver URL だが、移行・作成直後の差分を考慮して validate では必須にしない
+	//
+	// TokenIconObjectPath / TokenContentsObjectPath も、
+	// 既存データ互換・移行を考慮して validate では必須にしない。
 	return nil
 }
 
@@ -269,6 +283,10 @@ func New(
 		UpdatedAt:    updatedAt.UTC(),
 		UpdatedBy:    "",
 		MetadataURI:  "",
+
+		// ★追加: objectPath はここでは空（usecase/repo で補完・永続化）
+		TokenIconObjectPath:     "",
+		TokenContentsObjectPath: "",
 	}
 
 	if err := tb.validate(); err != nil {

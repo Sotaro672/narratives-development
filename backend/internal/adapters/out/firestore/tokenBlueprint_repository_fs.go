@@ -83,14 +83,17 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 
 	// Patch 用に最低限だけ読む（TokenBlueprint 全体に依存しない）
 	// entity.go 正: iconId は存在しない / minted は bool / metadataUri は string
+	// ★追加: tokenIconObjectPath / tokenContentsObjectPath を永続化し Patch に含める
 	var raw struct {
-		Name        string `firestore:"name"`
-		Symbol      string `firestore:"symbol"`
-		BrandID     string `firestore:"brandId"`
-		CompanyID   string `firestore:"companyId"`
-		Description string `firestore:"description"`
-		MetadataURI string `firestore:"metadataUri"`
-		Minted      bool   `firestore:"minted"`
+		Name                    string `firestore:"name"`
+		Symbol                  string `firestore:"symbol"`
+		BrandID                 string `firestore:"brandId"`
+		CompanyID               string `firestore:"companyId"`
+		Description             string `firestore:"description"`
+		MetadataURI             string `firestore:"metadataUri"`
+		Minted                  bool   `firestore:"minted"`
+		TokenIconObjectPath     string `firestore:"tokenIconObjectPath"`
+		TokenContentsObjectPath string `firestore:"tokenContentsObjectPath"`
 	}
 	if err := snap.DataTo(&raw); err != nil {
 		return tbdom.Patch{}, err
@@ -107,6 +110,10 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 		Description: trim(raw.Description),
 		Minted:      raw.Minted,
 		MetadataURI: trim(raw.MetadataURI),
+
+		// ★追加
+		TokenIconObjectPath:     trim(raw.TokenIconObjectPath),
+		TokenContentsObjectPath: trim(raw.TokenContentsObjectPath),
 	}
 
 	return patch, nil
@@ -348,7 +355,6 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 	}
 
 	// entity.go 正: ContentFiles は []ContentFile（embedded）
-	// NOTE: CreateTokenBlueprintInput.ContentFiles が「[]ContentFile」になったため、間接参照はしない。
 	var contentFiles []tbdom.ContentFile
 	if in.ContentFiles != nil {
 		contentFiles = sanitizeContentFiles(in.ContentFiles)
@@ -360,6 +366,11 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 	minted := false
 
 	docRef := r.col().NewDoc()
+
+	// ★追加: tokenIconObjectPath / tokenContentsObjectPath（objectPath を永続化）
+	// - 既存互換のため空でも保存は許容（後から更新される運用もあり得る）
+	iconOP := strings.TrimSpace(in.TokenIconObjectPath)
+	contentsOP := strings.TrimSpace(in.TokenContentsObjectPath)
 
 	data := map[string]any{
 		"name":         strings.TrimSpace(in.Name),
@@ -374,6 +385,10 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"deletedAt":    nil,
 		"deletedBy":    nil,
 		"metadataUri":  strings.TrimSpace(in.MetadataURI), // 空でもOK
+
+		// ★追加
+		"tokenIconObjectPath":     iconOP,
+		"tokenContentsObjectPath": contentsOP,
 	}
 
 	if s := strings.TrimSpace(in.CreatedBy); s != "" {
@@ -444,6 +459,10 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	setStr("description", in.Description)
 	setStr("assigneeId", in.AssigneeID)
 
+	// ★追加: tokenIconObjectPath / tokenContentsObjectPath
+	setStr("tokenIconObjectPath", in.TokenIconObjectPath)
+	setStr("tokenContentsObjectPath", in.TokenContentsObjectPath)
+
 	// metadataUri
 	if in.MetadataURI != nil {
 		updates = append(updates, firestore.Update{
@@ -460,7 +479,7 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		})
 	}
 
-	// entity.go 正: iconId は存在しないため更新しない
+	// entity.go 正: iconId は存在しないため更新しない（objectPath で管理）
 
 	// contentFiles (embedded)
 	if in.ContentFiles != nil {
@@ -723,22 +742,25 @@ func (r *TokenBlueprintRepositoryFS) Reset(ctx context.Context) error {
 
 func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint, error) {
 	// entity.go 正: iconId 無し / contentFiles は embedded / minted は bool
+	// ★追加: tokenIconObjectPath / tokenContentsObjectPath を読む
 	var raw struct {
-		Name         string           `firestore:"name"`
-		Symbol       string           `firestore:"symbol"`
-		BrandID      string           `firestore:"brandId"`
-		CompanyID    string           `firestore:"companyId"`
-		Description  string           `firestore:"description"`
-		ContentFiles []map[string]any `firestore:"contentFiles"`
-		AssigneeID   string           `firestore:"assigneeId"`
-		Minted       bool             `firestore:"minted"`
-		CreatedAt    time.Time        `firestore:"createdAt"`
-		CreatedBy    string           `firestore:"createdBy"`
-		UpdatedAt    time.Time        `firestore:"updatedAt"`
-		UpdatedBy    string           `firestore:"updatedBy"`
-		DeletedAt    *time.Time       `firestore:"deletedAt"`
-		DeletedBy    *string          `firestore:"deletedBy"`
-		MetadataURI  string           `firestore:"metadataUri"`
+		Name                    string           `firestore:"name"`
+		Symbol                  string           `firestore:"symbol"`
+		BrandID                 string           `firestore:"brandId"`
+		CompanyID               string           `firestore:"companyId"`
+		Description             string           `firestore:"description"`
+		ContentFiles            []map[string]any `firestore:"contentFiles"`
+		AssigneeID              string           `firestore:"assigneeId"`
+		Minted                  bool             `firestore:"minted"`
+		CreatedAt               time.Time        `firestore:"createdAt"`
+		CreatedBy               string           `firestore:"createdBy"`
+		UpdatedAt               time.Time        `firestore:"updatedAt"`
+		UpdatedBy               string           `firestore:"updatedBy"`
+		DeletedAt               *time.Time       `firestore:"deletedAt"`
+		DeletedBy               *string          `firestore:"deletedBy"`
+		MetadataURI             string           `firestore:"metadataUri"`
+		TokenIconObjectPath     string           `firestore:"tokenIconObjectPath"`
+		TokenContentsObjectPath string           `firestore:"tokenContentsObjectPath"`
 	}
 	if err := doc.DataTo(&raw); err != nil {
 		return tbdom.TokenBlueprint{}, err
@@ -764,6 +786,10 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		UpdatedAt:    raw.UpdatedAt.UTC(),
 		UpdatedBy:    strings.TrimSpace(raw.UpdatedBy),
 		MetadataURI:  strings.TrimSpace(raw.MetadataURI),
+
+		// ★追加
+		TokenIconObjectPath:     strings.TrimSpace(raw.TokenIconObjectPath),
+		TokenContentsObjectPath: strings.TrimSpace(raw.TokenContentsObjectPath),
 	}
 
 	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {

@@ -253,6 +253,9 @@ export function useTokenBlueprintCard(params: {
     minted, // ★ boolean
     isEditMode,
     brandOptions,
+
+    // ★ A案：単一ソース（カード表示・保存判定の基準）
+    iconFile: selectedIconFile,
   };
 
   // -------------------------

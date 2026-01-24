@@ -5,7 +5,10 @@ import type { TokenBlueprint } from "../domain/entity/tokenBlueprint";
 import type { SignedIconUpload } from "../../../shell/src/shared/types/tokenBlueprint";
 import type { ContentFileDTO } from "../infrastructure/dto/tokenBlueprint.dto";
 
-import { fetchTokenBlueprintById, updateTokenBlueprint } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
+import {
+  fetchTokenBlueprintById,
+  updateTokenBlueprint,
+} from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { putFileToSignedUrl } from "../infrastructure/upload/signedUrlPut";
 
 /**
@@ -51,6 +54,17 @@ export function buildUpdatePayloadFromCardVm(
   const trimOrUndefined = (v: unknown): string | undefined =>
     typeof v === "string" ? v.trim() : undefined;
 
+  // iconUrl は「blob:」を送らない（プレビュー専用URLのため）
+  const iconUrlRaw =
+    typeof fields.iconUrl === "string"
+      ? fields.iconUrl.trim()
+      : typeof (blueprint as any)?.iconUrl === "string"
+        ? String((blueprint as any).iconUrl).trim()
+        : undefined;
+
+  const iconUrl =
+    iconUrlRaw && iconUrlRaw.startsWith("blob:") ? undefined : iconUrlRaw;
+
   const payload: Record<string, any> = {
     name: trimOrUndefined(fields.name ?? blueprint.name),
     symbol: trimOrUndefined(fields.symbol ?? blueprint.symbol),
@@ -59,12 +73,7 @@ export function buildUpdatePayloadFromCardVm(
     assigneeId: trimOrUndefined(fields.assigneeId ?? blueprint.assigneeId),
 
     // iconUrl は更新対象（imageUrl_resolver に委譲）
-    iconUrl:
-      typeof fields.iconUrl === "string"
-        ? fields.iconUrl.trim()
-        : (typeof (blueprint as any)?.iconUrl === "string"
-            ? String((blueprint as any).iconUrl).trim()
-            : undefined),
+    iconUrl,
 
     // contentFiles は ContentFileDTO[] を期待（string[] は許容しない）
     contentFiles: normalizeContentFilesForSend(
@@ -73,7 +82,9 @@ export function buildUpdatePayloadFromCardVm(
   };
 
   // minted / metadataUri が UI にあるなら任意で反映
-  if (fields.metadataUri !== undefined) payload.metadataUri = String(fields.metadataUri ?? "").trim();
+  if (fields.metadataUri !== undefined) {
+    payload.metadataUri = String(fields.metadataUri ?? "").trim();
+  }
   if (fields.minted !== undefined) payload.minted = Boolean(fields.minted);
 
   // iconId は entity.go 正として UI からは送らない（事故防止）
@@ -90,7 +101,7 @@ type UpdateFromCardOptions = {
 
   /**
    * ★ デバッグ用途: 強制的に iconUpload を見たい/試したい場合に true
-   * （現状の backend 実装が update レスポンスでも iconUpload を返す想定）
+   * （backend 実装が update レスポンスでも iconUpload を返す想定）
    */
   forceIconUploadFlow?: boolean;
 };
@@ -101,6 +112,7 @@ type UpdateFromCardOptions = {
  * 方針:
  * - iconFile がある場合:
  *    1) update（iconUrl/contentFiles 等。ただし iconUrl は PUT 後に確定したいので一旦消す）
+ *       ★ update で iconUpload を返すために hasIconFile/iconContentType を送る
  *    2) update レスポンスの iconUpload を使って PUT
  *    3) publicUrl を iconUrl として再 update（確定）
  * - iconFile が無い場合: 通常 update のみ
@@ -110,7 +122,13 @@ export async function updateTokenBlueprintFromCard(
   cardVm: any,
   options?: UpdateFromCardOptions,
 ): Promise<TokenBlueprint> {
-  const iconFile = options?.iconFile ?? null;
+  // ★ A案：呼び出し側が options.iconFile を渡し忘れても vm/iconFile から拾う
+  const iconFile =
+    options?.iconFile ??
+    (cardVm?.iconFile as File | null | undefined) ??
+    (cardVm?.fields?.iconFile as File | null | undefined) ??
+    null;
+
   const forceIconUploadFlow = Boolean(options?.forceIconUploadFlow);
 
   // 1) まず payload を組む
@@ -131,7 +149,22 @@ export async function updateTokenBlueprintFromCard(
   });
 
   // 2) update
-  const updated = await updateTokenBlueprint(blueprint.id, payload as any);
+  // ★ UpdateTokenBlueprintOptions に存在するのは hasIconFile/iconContentType のみ（iconFileName は渡さない）
+  const updated = await updateTokenBlueprint(
+    blueprint.id,
+    payload as any,
+    iconFile
+      ? {
+          hasIconFile: true,
+          iconContentType: String(iconFile.type ?? "").trim() || "application/octet-stream",
+        }
+      : forceIconUploadFlow
+        ? {
+            hasIconFile: true,
+            iconContentType: "application/octet-stream",
+          }
+        : undefined,
+  );
 
   // 3) iconFile が無い & force も無いなら終了
   if (!iconFile && !forceIconUploadFlow) return updated;
@@ -155,7 +188,7 @@ export async function updateTokenBlueprintFromCard(
   // iconFile が無い（forceのみ）なら PUT はできないので終了
   if (!iconFile) return updated;
 
-  // iconUpload が無い場合はアップロードできない（backend 側の返却条件 or env不足）
+  // iconUpload が無い場合はアップロードできない（backend 側の返却条件 or env不足 or repo が未対応）
   if (!uploadUrl || !publicUrl) {
     // eslint-disable-next-line no-console
     console.warn(
@@ -182,9 +215,12 @@ export async function updateTokenBlueprintFromCard(
 
   // 6) icon を publicUrl で確定（= DBに紐付け）
   // - backend 側 imageUrl_resolver が publicUrl を保存用に加工し、加工後URLを返す想定
-  const attached = await updateTokenBlueprint(String((updated as any)?.id ?? blueprint.id), {
-    iconUrl: publicUrl,
-  } as any);
+  const attached = await updateTokenBlueprint(
+    String((updated as any)?.id ?? blueprint.id),
+    {
+      iconUrl: publicUrl,
+    } as any,
+  );
 
   // eslint-disable-next-line no-console
   console.log("[tokenBlueprintDetailService.updateTokenBlueprintFromCard] icon attach success", {

@@ -29,6 +29,12 @@ export type CreateTokenBlueprintOptions = {
   iconContentType?: string;
 };
 
+// ★ Update 時に iconUpload を発行して欲しい場合のオプション（body で渡す）
+export type UpdateTokenBlueprintOptions = {
+  hasIconFile?: boolean;
+  iconContentType?: string;
+};
+
 // ---------------------------------------------------------
 // Send payload types (repo-local)
 // - dto/tokenBlueprint.dto.ts には存在しないため、ここで定義する
@@ -58,6 +64,11 @@ export type UpdateTokenBlueprintPayload = Partial<{
   contentFiles: ContentFileDTO[];
   metadataUri: string;
   minted: boolean;
+
+  // ★ console/handler/updateTokenBlueprintRequest と整合させる
+  // update でも iconUpload を返してほしい場合に使う
+  hasIconFile: boolean;
+  iconContentType: string;
 }>;
 
 // ---------------------------------------------------------
@@ -145,6 +156,7 @@ export async function createTokenBlueprint(
 export async function updateTokenBlueprint(
   id: string,
   payload: UpdateTokenBlueprintPayload,
+  options?: UpdateTokenBlueprintOptions,
 ): Promise<TokenBlueprint> {
   const trimmed = id.trim();
   if (!trimmed) throw new Error("id is empty");
@@ -171,6 +183,19 @@ export async function updateTokenBlueprint(
     body.metadataUri = String(payload.metadataUri).trim();
 
   if (payload.minted !== undefined) body.minted = !!payload.minted;
+
+  // ★ update で iconUpload を返すためのフラグ/CT（payload と options どちらでも渡せる）
+  const hasIconFile =
+    typeof payload.hasIconFile === "boolean"
+      ? payload.hasIconFile
+      : Boolean(options?.hasIconFile);
+
+  const iconContentType =
+    String(payload.iconContentType ?? "").trim() ||
+    String(options?.iconContentType ?? "").trim();
+
+  if (hasIconFile) body.hasIconFile = true;
+  if (iconContentType) body.iconContentType = iconContentType;
 
   const res = await apiPutJson(
     `/token-blueprints/${encodeURIComponent(trimmed)}`,

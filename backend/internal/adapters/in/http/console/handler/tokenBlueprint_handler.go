@@ -88,6 +88,11 @@ type updateTokenBlueprintRequest struct {
 
 	// entity.go 正: embedded contents (replace all when provided)
 	ContentFiles *[]tbdom.ContentFile `json:"contentFiles,omitempty"`
+
+	// ★追加: update時にも icon の署名付きURLを返す（フロントはこれでPUTする）
+	HasIconFile bool `json:"hasIconFile"`
+	// ★追加: 例 "image/png"
+	IconContentType string `json:"iconContentType,omitempty"`
 }
 
 type tokenBlueprintResponse struct {
@@ -117,7 +122,12 @@ type tokenBlueprintResponse struct {
 	// metadataUri
 	MetadataURI string `json:"metadataUri"`
 
-	// ★追加: create時に icon の署名付きURLを返す（フロントはこれでPUTする）
+	// ★追加: tokenIcon / tokenContents の objectPath をレスポンスに含める
+	// - 永続化が未実装/既存データの場合は空文字になり得る（互換のためomitempty）
+	TokenIconObjectPath     string `json:"tokenIconObjectPath,omitempty"`
+	TokenContentsObjectPath string `json:"tokenContentsObjectPath,omitempty"`
+
+	// ★追加: create/update時に icon の署名付きURLを返す（フロントはこれでPUTする）
 	IconUpload *uc.TokenIconUploadURL `json:"iconUpload,omitempty"`
 }
 
@@ -202,7 +212,13 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		UpdatedBy:   strings.TrimSpace(tb.UpdatedBy),
 		MetadataURI: strings.TrimSpace(tb.MetadataURI),
 
-		IconUpload: nil, // GET/LIST は返さない（create時だけ上書き）
+		// ★追加: objectPath をレスポンスに出力
+		// - entity.go / repo の実装がまだの場合でも compile は通る前提（フィールドが存在する前提）
+		TokenIconObjectPath:     strings.TrimSpace(tb.TokenIconObjectPath),
+		TokenContentsObjectPath: strings.TrimSpace(tb.TokenContentsObjectPath),
+
+		// 既定では返さない。create/update 時に必要に応じて上書きする。
+		IconUpload: nil,
 	}
 }
 
@@ -535,7 +551,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] update request id=%q hasName=%v hasSymbol=%v hasBrandId=%v hasDesc=%v hasAssignee=%v hasContentFiles=%v",
+	log.Printf("[tokenBlueprint_handler] update request id=%q hasName=%v hasSymbol=%v hasBrandId=%v hasDesc=%v hasAssignee=%v hasContentFiles=%v hasIconFile=%v iconContentType=%q",
 		id,
 		req.Name != nil,
 		req.Symbol != nil,
@@ -543,6 +559,8 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		req.Description != nil,
 		req.AssigneeID != nil,
 		req.ContentFiles != nil,
+		req.HasIconFile,
+		strings.TrimSpace(req.IconContentType),
 	)
 
 	// tenant boundary check (companyId一致)
@@ -579,6 +597,23 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	)
 
 	resp := h.toResponse(ctx, updated)
+
+	// ★方針A: updateでも hasIconFile=true の場合、署名URLを返す
+	if req.HasIconFile {
+		ct := strings.TrimSpace(req.IconContentType)
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+
+		iconUpload, err := h.uc.IssueTokenIconUploadURL(ctx, updated.ID, "", ct)
+		if err != nil {
+			// update 自体は成功させ、アイコンURL発行失敗はログで追えるようにする
+			log.Printf("[tokenBlueprint_handler] iconUpload issue FAILED (update) id=%q err=%v", updated.ID, err)
+		} else {
+			resp.IconUpload = iconUpload
+		}
+	}
+
 	_ = json.NewEncoder(w).Encode(resp)
 }
 

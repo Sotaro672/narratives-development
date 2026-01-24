@@ -32,6 +32,13 @@ type CreateBlueprintRequest struct {
 	AssigneeID string
 	CreatedBy  string
 
+	// ★ objectPath 永続化（tokenIcon / tokenContents）
+	// - tokenIconObjectPath: 例 "{id}/icon"（tokenIconObjectPath(id)）
+	// - tokenContentsObjectPath: 例 "{id}/.keep"（keepObjectPath(id)）
+	//   ※ token-contents は “参照パス” として .keep を採用する方針に合わせる
+	TokenIconObjectPath     string
+	TokenContentsObjectPath string
+
 	// ActorID is intentionally not used by pure CRUD usecase (audit is handled by repo/inputs).
 	ActorID string
 }
@@ -57,8 +64,13 @@ func (u *TokenBlueprintCRUDUsecase) Create(ctx context.Context, in CreateBluepri
 		CreatedBy: strings.TrimSpace(in.CreatedBy),
 		UpdatedAt: nil,
 		UpdatedBy: "",
+
 		// metadataUri は別ユースケースで補完可能
 		MetadataURI: "",
+
+		// ★ objectPath 永続化
+		TokenIconObjectPath:     strings.TrimSpace(in.TokenIconObjectPath),
+		TokenContentsObjectPath: strings.TrimSpace(in.TokenContentsObjectPath),
 	})
 	if err != nil {
 		return nil, err
@@ -129,6 +141,12 @@ type UpdateBlueprintRequest struct {
 	Description *string
 	AssigneeID  *string
 
+	// ★ objectPath 永続化（tokenIcon / tokenContents）
+	// - tokenIconObjectPath: 例 "{id}/icon"
+	// - tokenContentsObjectPath: 例 "{id}/.keep"
+	TokenIconObjectPath     *string
+	TokenContentsObjectPath *string
+
 	// entity.go 正: embedded
 	ContentFiles *[]tbdom.ContentFile // 全置換
 
@@ -148,6 +166,10 @@ func (u *TokenBlueprintCRUDUsecase) Update(ctx context.Context, in UpdateBluepri
 		AssigneeID:  trimPtr(in.AssigneeID),
 
 		ContentFiles: normalizeContentFilesPtr(in.ContentFiles),
+
+		// ★ objectPath 永続化
+		TokenIconObjectPath:     trimPtr(in.TokenIconObjectPath),
+		TokenContentsObjectPath: trimPtr(in.TokenContentsObjectPath),
 
 		UpdatedAt: nil,
 		UpdatedBy: ptr(strings.TrimSpace(in.ActorID)),
