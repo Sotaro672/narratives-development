@@ -25,6 +25,11 @@ const envGCSSignerEmail = "GCS_SIGNER_EMAIL"
 // 署名付きURLの有効期限（PUT）
 const tokenContentsSignedURLTTL = 15 * time.Minute
 
+// 閲覧用（GET）の署名付きURLの有効期限
+// - バケットが private のため、storage.googleapis.com の素URLは 403 になる
+// - 画面表示には GET の署名付きURLが必要
+const tokenContentsViewSignedURLTTL = 15 * time.Minute
+
 // tokenContentsBucketName は tokenBlueprint_bucket_usecase.go 側の定義を利用する。
 // （このファイルで再定義すると DuplicateDecl になるため禁止）
 
@@ -32,15 +37,19 @@ func gcsSignerEmail() string {
 	return strings.TrimSpace(os.Getenv(envGCSSignerEmail))
 }
 
-// tokenContentsObjectPath returns stable object path under "{tokenBlueprintId}/contents/".
-// fileName は保存上の識別子として使う（表示用ではない）。
+// tokenContentsObjectPath returns stable object path.
+//
+// あなたの実パスに合わせる:
+// - narratives-development-token-contents/{tokenBlueprintId}/{contentId}
+//
+// fileName はここでは contentId として扱う想定。
 func tokenContentsObjectPath(tokenBlueprintID, fileName string) string {
 	id := strings.Trim(strings.TrimSpace(tokenBlueprintID), "/")
 	fn := strings.TrimLeft(strings.TrimSpace(fileName), "/")
 	if fn == "" {
 		fn = "file"
 	}
-	return id + "/contents/" + fn
+	return id + "/" + fn
 }
 
 // ============================================================
@@ -57,22 +66,28 @@ func NewTokenBlueprintContentUsecase(tbRepo tbdom.RepositoryPort) *TokenBlueprin
 }
 
 // TokenContentsUploadURL is returned to front for direct PUT.
+// 追加:
+// - ViewURL: private bucket の閲覧用（GET）署名付きURL
 type TokenContentsUploadURL struct {
-	UploadURL  string     `json:"uploadUrl"`
-	PublicURL  string     `json:"publicUrl"`
-	ObjectPath string     `json:"objectPath"`
-	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+	UploadURL     string     `json:"uploadUrl"`
+	PublicURL     string     `json:"publicUrl"`
+	ViewURL       string     `json:"viewUrl"`
+	ObjectPath    string     `json:"objectPath"`
+	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
+	ViewExpiresAt *time.Time `json:"viewExpiresAt,omitempty"`
 }
 
-// IssueTokenContentsUploadURL issues V4 signed PUT URL for "{tokenBlueprintId}/contents/{fileName}".
+// IssueTokenContentsUploadURL issues V4 signed PUT URL for "{tokenBlueprintId}/{contentId}".
+// 併せて、閲覧用の V4 signed GET URL（ViewURL）も発行する。
 //
 // Required:
 // - env TOKEN_CONTENTS_BUCKET set
 // - env GCS_SIGNER_EMAIL set
 // - Cloud Run runtime SA has iam.serviceAccounts.signBlob for signer SA
 //
-// Note:
-// - SignedURL includes ContentType; frontend PUT must match.
+// Notes:
+// - PUT の SignedURL は ContentType を署名に含むため、frontend の PUT は Content-Type を一致させる必要がある。
+// - GET の SignedURL は ContentType を署名に含めない（ブラウザが Content-Type ヘッダを送らないため）。
 func (u *TokenBlueprintContentUsecase) IssueTokenContentsUploadURL(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -107,6 +122,7 @@ func (u *TokenBlueprintContentUsecase) IssueTokenContentsUploadURL(
 
 	objectPath := tokenContentsObjectPath(id, fileName)
 
+	// PUT 用 Content-Type（未指定は octet-stream）
 	ct := strings.TrimSpace(contentType)
 	if ct == "" {
 		ct = "application/octet-stream"
@@ -129,6 +145,9 @@ func (u *TokenBlueprintContentUsecase) IssueTokenContentsUploadURL(
 		return base64.StdEncoding.DecodeString(resp.SignedBlob)
 	}
 
+	// --------------------------
+	// PUT (upload) signed URL
+	// --------------------------
 	expires := time.Now().UTC().Add(tokenContentsSignedURLTTL)
 
 	uploadURL, err := storage.SignedURL(bucket, objectPath, &storage.SignedURLOptions{
@@ -137,20 +156,42 @@ func (u *TokenBlueprintContentUsecase) IssueTokenContentsUploadURL(
 		GoogleAccessID: accessID,
 		SignBytes:      signBytes,
 		Expires:        expires,
-		ContentType:    ct,
+
+		// PUT は Content-Type を署名に含める（frontend PUT で一致必須）
+		ContentType: ct,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("sign gcs url: %w", err)
+		return nil, fmt.Errorf("sign gcs upload url: %w", err)
 	}
 
 	// NOTE: public URL 生成も tokenBlueprint_bucket_usecase.go 側の共通関数を利用（重複定義禁止）
+	// private bucket では直接 GET できないが、安定識別子としては有用（DB保存やログ等）
 	publicURL := gcsObjectPublicURL(bucket, objectPath)
 
+	// --------------------------
+	// GET (view) signed URL
+	// --------------------------
+	viewExpires := time.Now().UTC().Add(tokenContentsViewSignedURLTTL)
+
+	// GET は ContentType を設定しない（署名ヘッダに含まれてしまい、ブラウザの素fetch/imgが失敗する）
+	viewURL, err := storage.SignedURL(bucket, objectPath, &storage.SignedURLOptions{
+		Scheme:         storage.SigningSchemeV4,
+		Method:         "GET",
+		GoogleAccessID: accessID,
+		SignBytes:      signBytes,
+		Expires:        viewExpires,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sign gcs view url: %w", err)
+	}
+
 	return &TokenContentsUploadURL{
-		UploadURL:  strings.TrimSpace(uploadURL),
-		PublicURL:  strings.TrimSpace(publicURL),
-		ObjectPath: strings.TrimSpace(objectPath),
-		ExpiresAt:  ptr(expires),
+		UploadURL:     strings.TrimSpace(uploadURL),
+		PublicURL:     strings.TrimSpace(publicURL),
+		ViewURL:       strings.TrimSpace(viewURL),
+		ObjectPath:    strings.TrimSpace(objectPath),
+		ExpiresAt:     ptr(expires),
+		ViewExpiresAt: ptr(viewExpires),
 	}, nil
 }
 

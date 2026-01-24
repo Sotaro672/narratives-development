@@ -19,7 +19,28 @@ func (u *TokenBlueprintUsecase) IssueTokenIconUploadURL(
 	fileName string,
 	contentType string,
 ) (*TokenIconUploadURL, error) {
+	if u == nil || u.icon == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/icon usecase is nil")
+	}
 	return u.icon.IssueTokenIconUploadURL(ctx, tokenBlueprintID, fileName, contentType)
+}
+
+// =========================
+// Signed URL : token_contents
+// =========================
+
+// IssueTokenContentUploadURL is a facade method used by handlers.
+// It delegates to TokenBlueprintContentUsecase.IssueTokenContentsUploadURL.
+func (u *TokenBlueprintUsecase) IssueTokenContentUploadURL(
+	ctx context.Context,
+	tokenBlueprintID string,
+	fileName string,
+	contentType string,
+) (*TokenContentsUploadURL, error) {
+	if u == nil || u.content == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/content usecase is nil")
+	}
+	return u.content.IssueTokenContentsUploadURL(ctx, tokenBlueprintID, fileName, contentType)
 }
 
 // =========================
@@ -45,10 +66,6 @@ func (u *TokenBlueprintUsecase) Create(ctx context.Context, in CreateBlueprintRe
 	}
 
 	// --- 必須: 起票後に .keep を保証（icon/contents 両方） ---
-	// NOTE:
-	// - ここで落とすと tokenBlueprint は既に作成済みだが、要件は「登録されなかったらエラー」であるため
-	//   create を失敗（500）にし、コンソールログで検知できるようにする。
-	// - 冪等（.keep が既に存在しても成功）であることが前提。
 	log.Printf(
 		"[TokenBlueprintBucket] ensure keep start id=%q (iconBucket=%q contentsBucket=%q)",
 		tb.ID,

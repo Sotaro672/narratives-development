@@ -31,13 +31,17 @@ export default function TokenBlueprintDetail() {
     onEditAssignee,
     onClickAssignee,
     cardHandlers,
+
+    // ★ token-contents: upload / delete handlers
+    onTokenContentsFilesSelected,
+    onDeleteTokenContent,
   } = handlers;
 
   // ★ A案：単一ソースは cardVm.iconFile
   // useTokenBlueprintDetail が selectedIconFile を vm に載せる実装でも壊れないようにフォールバックも残す
   const selectedIconFile: File | null =
-    (cardVm?.iconFile as File | null | undefined)
-    ?? (((vm as any)?.selectedIconFile as File | null) ?? null);
+    (cardVm?.iconFile as File | null | undefined) ??
+    (((vm as any)?.selectedIconFile as File | null) ?? null);
 
   // データが無い場合のフォールバック
   if (!blueprint) {
@@ -86,10 +90,12 @@ export default function TokenBlueprintDetail() {
 
         <div style={{ marginTop: 16 }}>
           {/* ★ images 互換は削除済み：contents(GCSTokenContent[]) を渡す */}
-          {/* ★ TokenContentsCardProps に onUploadClick が存在しないため渡さない */}
+          {/* ★ upload / delete を Hook の handler に接続 */}
           <TokenContentsCard
             mode={isEditMode ? "edit" : "view"}
             contents={tokenContents}
+            onFilesSelected={onTokenContentsFilesSelected}
+            onDelete={onDeleteTokenContent}
           />
         </div>
       </div>

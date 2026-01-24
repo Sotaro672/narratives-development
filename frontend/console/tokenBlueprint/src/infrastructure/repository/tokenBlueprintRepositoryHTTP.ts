@@ -1,15 +1,11 @@
 // frontend/console/tokenBlueprint/src/infrastructure/repository/tokenBlueprintRepositoryHTTP.ts
 
 import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
-
 import type { ContentFileDTO } from "../dto/tokenBlueprint.dto";
 
 import { handleJsonResponse } from "../http/json";
 import { apiDelete, apiGet, apiPostJson, apiPutJson } from "../http/client";
-import {
-  normalizePageResult,
-  normalizeTokenBlueprint,
-} from "../dto/tokenBlueprint.mapper";
+import { normalizePageResult, normalizeTokenBlueprint } from "../dto/tokenBlueprint.mapper";
 import { putFileToSignedUrl } from "../upload/signedUrlPut";
 
 // ---------------------------------------------------------
@@ -23,7 +19,8 @@ export interface TokenBlueprintPageResult {
   perPage: number;
 }
 
-// ★ Create 時に iconUpload を発行して欲しい場合のオプション（ヘッダで渡す）
+// ★ Create 時に iconUpload を発行して欲しい場合のオプション
+// NOTE: backend は JSON body の hasIconFile/iconContentType を見ます（header のみでは発行されません）
 export type CreateTokenBlueprintOptions = {
   iconFileName?: string;
   iconContentType?: string;
@@ -51,6 +48,11 @@ export type CreateTokenBlueprintPayload = {
   createdBy: string;
   iconUrl?: string | null;
   contentFiles: ContentFileDTO[];
+
+  // backend create が見るのはこれ（createTokenBlueprintRequest）
+  // - create サービス側は options から注入するので通常は UI から触らない
+  hasIconFile?: boolean;
+  iconContentType?: string;
 };
 
 export type UpdateTokenBlueprintPayload = Partial<{
@@ -72,6 +74,44 @@ export type UpdateTokenBlueprintPayload = Partial<{
 }>;
 
 // ---------------------------------------------------------
+// token-contents: signed PUT URL issuance (repo-local)
+// ---------------------------------------------------------
+
+export type IssueTokenContentsUploadURLsRequest = {
+  files: Array<{
+    contentId: string;
+    name: string;
+    type: "image" | "video" | "pdf" | "document";
+    contentType?: string;
+    size: number;
+    visibility?: "private" | "public";
+  }>;
+};
+
+// backend の現実に合わせて「upload ネスト」を正とする（互換で flat も optional に残す）
+export type IssueTokenContentsUploadURLsResponse = {
+  items: Array<{
+    contentId: string;
+    url: string; // 表示用 URL（cache buster 付き）
+    contentFile: any;
+
+    // NEW（推奨）：backend はこれを返す
+    upload?: {
+      uploadUrl?: string;
+      publicUrl?: string;
+      objectPath?: string;
+      expiresAt?: string;
+      contentType?: string;
+    };
+
+    // LEGACY（互換）：古い実装が返す可能性があるため optional
+    uploadUrl?: string;
+    publicUrl?: string;
+    objectPath?: string;
+  }>;
+};
+
+// ---------------------------------------------------------
 // Public API
 // ---------------------------------------------------------
 
@@ -81,17 +121,14 @@ export async function fetchTokenBlueprints(params?: {
 }): Promise<TokenBlueprintPageResult> {
   const url = new URL("/token-blueprints", "http://local"); // base は後で捨てる
   if (params?.page != null) url.searchParams.set("page", String(params.page));
-  if (params?.perPage != null)
-    url.searchParams.set("perPage", String(params.perPage));
+  if (params?.perPage != null) url.searchParams.set("perPage", String(params.perPage));
 
   const res = await apiGet(url.pathname + url.search);
   const raw = await handleJsonResponse<any>(res);
   return normalizePageResult(raw);
 }
 
-export async function listTokenBlueprintsByCompanyId(
-  companyId: string,
-): Promise<TokenBlueprint[]> {
+export async function listTokenBlueprintsByCompanyId(companyId: string): Promise<TokenBlueprint[]> {
   const cid = companyId.trim();
   if (!cid) return [];
 
@@ -104,9 +141,7 @@ export async function listTokenBlueprintsByCompanyId(
   return page.items.filter((x: any) => String(x?.companyId ?? "").trim() === cid);
 }
 
-export async function fetchTokenBlueprintById(
-  id: string,
-): Promise<TokenBlueprint> {
+export async function fetchTokenBlueprintById(id: string): Promise<TokenBlueprint> {
   const trimmed = id.trim();
   if (!trimmed) throw new Error("id is empty");
 
@@ -125,14 +160,14 @@ export async function createTokenBlueprint(
     throw new Error("companyId is required");
   }
 
-  const body: CreateTokenBlueprintPayload = {
-    name: payload.name.trim(),
-    symbol: payload.symbol.trim(),
-    brandId: payload.brandId.trim(),
+  const body: any = {
+    name: String(payload.name ?? "").trim(),
+    symbol: String(payload.symbol ?? "").trim(),
+    brandId: String(payload.brandId ?? "").trim(),
     companyId,
-    description: payload.description.trim(),
-    assigneeId: payload.assigneeId.trim(),
-    createdBy: payload.createdBy.trim(),
+    description: String(payload.description ?? "").trim(),
+    assigneeId: String(payload.assigneeId ?? "").trim(),
+    createdBy: String(payload.createdBy ?? "").trim(),
     iconUrl: payload.iconUrl === undefined ? undefined : payload.iconUrl,
     contentFiles: (payload.contentFiles ?? []).map(normalizeContentFileForSend),
   };
@@ -142,10 +177,16 @@ export async function createTokenBlueprint(
   const iconCT = String(options?.iconContentType ?? "").trim();
   const iconFN = String(options?.iconFileName ?? "").trim();
 
-  // ★ 日本語ファイル名を header に入れない（ISO-8859-1 問題回避）
-  if (iconCT || iconFN) {
-    headers["X-Icon-Content-Type"] = iconCT || "application/octet-stream";
-    headers["X-Icon-File-Name"] = "icon" + (iconCT === "image/png" ? ".png" : "");
+  const wantsIconUpload = Boolean(iconCT || iconFN);
+
+  if (wantsIconUpload) {
+    // ★重要: backend(createTokenBlueprintRequest) は JSON body を見て iconUpload を返す
+    body.hasIconFile = true;
+    body.iconContentType = iconCT || "application/octet-stream";
+
+    // ヘッダは「互換/将来用」に残しても害はない（日本語ファイル名は入れない）
+    headers["X-Icon-Content-Type"] = body.iconContentType;
+    headers["X-Icon-File-Name"] = "icon" + (body.iconContentType === "image/png" ? ".png" : "");
   }
 
   const res = await apiPostJson("/token-blueprints", body, headers);
@@ -166,41 +207,29 @@ export async function updateTokenBlueprint(
   if (payload.name !== undefined) body.name = payload.name.trim();
   if (payload.symbol !== undefined) body.symbol = payload.symbol.trim();
   if (payload.brandId !== undefined) body.brandId = payload.brandId.trim();
-  if (payload.description !== undefined)
-    body.description = payload.description.trim();
-  if (payload.assigneeId !== undefined)
-    body.assigneeId = payload.assigneeId.trim();
+  if (payload.description !== undefined) body.description = payload.description.trim();
+  if (payload.assigneeId !== undefined) body.assigneeId = payload.assigneeId.trim();
 
   if (payload.iconUrl !== undefined) body.iconUrl = payload.iconUrl;
 
   if (payload.contentFiles !== undefined) {
-    body.contentFiles = (payload.contentFiles ?? []).map(
-      normalizeContentFileForSend,
-    );
+    body.contentFiles = (payload.contentFiles ?? []).map(normalizeContentFileForSend);
   }
 
-  if (payload.metadataUri !== undefined)
-    body.metadataUri = String(payload.metadataUri).trim();
-
+  if (payload.metadataUri !== undefined) body.metadataUri = String(payload.metadataUri).trim();
   if (payload.minted !== undefined) body.minted = !!payload.minted;
 
   // ★ update で iconUpload を返すためのフラグ/CT（payload と options どちらでも渡せる）
   const hasIconFile =
-    typeof payload.hasIconFile === "boolean"
-      ? payload.hasIconFile
-      : Boolean(options?.hasIconFile);
+    typeof payload.hasIconFile === "boolean" ? payload.hasIconFile : Boolean(options?.hasIconFile);
 
   const iconContentType =
-    String(payload.iconContentType ?? "").trim() ||
-    String(options?.iconContentType ?? "").trim();
+    String(payload.iconContentType ?? "").trim() || String(options?.iconContentType ?? "").trim();
 
   if (hasIconFile) body.hasIconFile = true;
   if (iconContentType) body.iconContentType = iconContentType;
 
-  const res = await apiPutJson(
-    `/token-blueprints/${encodeURIComponent(trimmed)}`,
-    body,
-  );
+  const res = await apiPutJson(`/token-blueprints/${encodeURIComponent(trimmed)}`, body);
   const raw = await handleJsonResponse<any>(res);
   return normalizeTokenBlueprint(raw);
 }
@@ -211,6 +240,63 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
 
   const res = await apiDelete(`/token-blueprints/${encodeURIComponent(trimmed)}`);
   await handleJsonResponse<unknown>(res);
+}
+
+// ---------------------------------------------------------
+// token-contents helpers (NEW)
+// ---------------------------------------------------------
+
+/**
+ * POST /token-blueprints/{id}/contents/upload-urls
+ * - handler が JSON を返す前提（Cloud Run 側）
+ */
+export async function issueTokenContentsUploadURLs(params: {
+  tokenBlueprintId: string;
+  actorId?: string;
+  body: IssueTokenContentsUploadURLsRequest;
+}): Promise<IssueTokenContentsUploadURLsResponse> {
+  const id = params.tokenBlueprintId.trim();
+  if (!id) throw new Error("tokenBlueprintId is empty");
+
+  const headers: Record<string, string> = {};
+  const actorId = String(params.actorId ?? "").trim();
+  if (actorId) headers["X-Actor-Id"] = actorId;
+
+  const res = await apiPostJson(
+    `/token-blueprints/${encodeURIComponent(id)}/contents/upload-urls`,
+    params.body,
+    headers,
+  );
+
+  const raw = await handleJsonResponse<any>(res);
+  return raw as IssueTokenContentsUploadURLsResponse;
+}
+
+/**
+ * PATCH /token-blueprints/{id}
+ * - contentFiles を差し替える
+ */
+export async function patchTokenBlueprintContentFiles(params: {
+  tokenBlueprintId: string;
+  actorId?: string;
+  contentFiles: any[];
+}): Promise<TokenBlueprint> {
+  const id = params.tokenBlueprintId.trim();
+  if (!id) throw new Error("tokenBlueprintId is empty");
+
+  const headers: Record<string, string> = {};
+  const actorId = String(params.actorId ?? "").trim();
+  if (actorId) headers["X-Actor-Id"] = actorId;
+
+  // backend handler は PATCH/PUT の両方を update に通す設計なので、ここでは PUT を採用する
+  const res = await apiPutJson(
+    `/token-blueprints/${encodeURIComponent(id)}`,
+    { contentFiles: params.contentFiles } as any,
+    headers as any,
+  );
+
+  const raw = await handleJsonResponse<any>(res);
+  return normalizeTokenBlueprint(raw);
 }
 
 // ---------------------------------------------------------
@@ -269,9 +355,7 @@ function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
 
   const visibilityRaw = String(obj.visibility ?? "").trim().toLowerCase();
   const visibility =
-    visibilityRaw === "public" || visibilityRaw === "private"
-      ? visibilityRaw
-      : "private";
+    visibilityRaw === "public" || visibilityRaw === "private" ? visibilityRaw : "private";
 
   const size = Number(obj.size ?? 0);
   const safeSize = Number.isFinite(size) && size > 0 ? size : 0;

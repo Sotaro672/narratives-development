@@ -1,7 +1,16 @@
 // frontend/console/tokenBlueprint/src/infrastructure/dto/tokenBlueprint.mapper.ts
 
-import type { TokenBlueprint, ContentFile, ContentFileType } from "../../domain/entity/tokenBlueprint";
-import type { TokenBlueprintDTO, TokenBlueprintPageResultDTO, SignedIconUploadDTO, ContentFileDTO } from "./tokenBlueprint.dto";
+import type {
+  TokenBlueprint,
+  ContentFile,
+  ContentFileType,
+} from "../../domain/entity/tokenBlueprint";
+import type {
+  TokenBlueprintDTO,
+  TokenBlueprintPageResultDTO,
+  SignedIconUploadDTO,
+  ContentFileDTO,
+} from "./tokenBlueprint.dto";
 
 function asObject(raw: any): Record<string, any> {
   return raw && typeof raw === "object" ? (raw as Record<string, any>) : {};
@@ -43,8 +52,9 @@ function normalizeIconUpload(raw: any): SignedIconUploadDTO | undefined {
  * （id/name/type/contentType/size/objectPath/visibility/createdAt/createdBy/updatedAt/updatedBy）
  * である前提でマッピングします。
  *
- * もし shared の ContentFile が日付型(Date)を要求する等の場合は、
- * ここだけを調整すれば repo/uc/UI に波及しません。
+ * 追加要件:
+ * - backend が返す contentFiles[].url を落とさず blueprint.contentFiles に保持する
+ *   （GCS が private の場合でも、アプリ側で「閲覧用URL（署名URL/プロキシURL）」を載せる運用があるため）
  */
 function normalizeContentFiles(raw: any): ContentFile[] {
   const arr = Array.isArray(raw) ? raw : [];
@@ -52,6 +62,7 @@ function normalizeContentFiles(raw: any): ContentFile[] {
     .map((x) => asObject(x))
     .map((o) => {
       const visibility = s(o.visibility) || "private";
+
       const cf: any = {
         id: s(o.id),
         name: s(o.name),
@@ -61,6 +72,11 @@ function normalizeContentFiles(raw: any): ContentFile[] {
         objectPath: s(o.objectPath),
         visibility,
       };
+
+      // ★ 追加: backend が返す url を保持する（存在する場合のみ）
+      // - 署名URL/プロキシURL/公開URLなど、表示に必要なURLが入るケースがある
+      const url = s(o.url);
+      if (url) cf.url = url;
 
       // optional fields
       if (o.createdAt != null) cf.createdAt = String(o.createdAt);

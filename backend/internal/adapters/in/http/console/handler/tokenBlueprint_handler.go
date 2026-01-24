@@ -138,6 +138,7 @@ func (h *TokenBlueprintHandler) resolveTokenIconURL(tb *tbdom.TokenBlueprint) st
 }
 
 // contentsUrl: https://storage.googleapis.com/narratives-development-token-contents/{id}
+// NOTE: バケットが private の場合、このURL自体は 403 になる（安定識別子としてのみ利用）。
 func (h *TokenBlueprintHandler) resolveTokenContentsURL(tb *tbdom.TokenBlueprint) string {
 	if tb == nil {
 		return ""
@@ -175,6 +176,41 @@ type updateTokenBlueprintRequest struct {
 	IconContentType string `json:"iconContentType,omitempty"`
 }
 
+// token-contents: signed PUT URLs issuance
+type issueTokenContentsUploadURLsRequest struct {
+	Files []issueTokenContentsUploadURLsFile `json:"files"`
+}
+
+type issueTokenContentsUploadURLsFile struct {
+	ContentID   string `json:"contentId"`             // required (uuid等)
+	Name        string `json:"name"`                  // required
+	Type        string `json:"type"`                  // required: "image"|"video"|"pdf"|"document"
+	ContentType string `json:"contentType,omitempty"` // optional: e.g. "image/png"
+	Size        int64  `json:"size"`                  // required (>=0)
+	Visibility  string `json:"visibility,omitempty"`  // optional: "private"|"public" (default private)
+}
+
+// ★ A. 構造体ごと返す（推奨）
+// upload: 署名付きPUT URL + public URL + view URL + objectPath + expiresAt
+type tokenContentUploadItemResponse struct {
+	ContentID string                     `json:"contentId"`
+	URL       string                     `json:"url"` // 表示用（private bucket は viewUrl を返す）
+	Upload    *uc.TokenContentsUploadURL `json:"upload"`
+	Content   tbdom.ContentFile          `json:"contentFile"`
+}
+
+type issueTokenContentsUploadURLsResponse struct {
+	Items []tokenContentUploadItemResponse `json:"items"`
+}
+
+// ★ 追加: GET 詳細/更新レスポンスで contentFiles[].url を返すためのラッパー
+// - tbdom.ContentFile に url フィールドが無くても返せる
+// - 署名URLには cache buster を付けない（署名が壊れるため）
+type contentFileResponse struct {
+	tbdom.ContentFile
+	URL string `json:"url,omitempty"`
+}
+
 type tokenBlueprintResponse struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -184,7 +220,8 @@ type tokenBlueprintResponse struct {
 	CompanyID   string `json:"companyId"`
 	Description string `json:"description,omitempty"`
 
-	ContentFiles []tbdom.ContentFile `json:"contentFiles"`
+	// ★ 変更: contentFiles に url を付与できる型へ
+	ContentFiles []contentFileResponse `json:"contentFiles"`
 
 	AssigneeID   string `json:"assigneeId"`
 	AssigneeName string `json:"assigneeName"`
@@ -256,7 +293,62 @@ func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string)
 	return name
 }
 
-func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenBlueprint) tokenBlueprintResponse {
+// ★ 追加: private bucket 表示用の viewUrl を解決する
+// NOTE(短期): IssueTokenContentUploadURL を流用して ViewURL を得る（UploadURL はレスポンスに載せない）。
+// 将来的には GET専用の署名発行（view専用）を usecase に用意するのが望ましい。
+func (h *TokenBlueprintHandler) resolveTokenContentViewURL(ctx context.Context, tokenBlueprintID string, f tbdom.ContentFile) string {
+	if h == nil || h.uc == nil {
+		return ""
+	}
+	id := strings.TrimSpace(tokenBlueprintID)
+	cid := strings.TrimSpace(f.ID)
+	if id == "" || cid == "" {
+		return ""
+	}
+
+	ct := strings.TrimSpace(f.ContentType)
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+
+	issued, err := h.uc.IssueTokenContentUploadURL(ctx, id, cid, ct)
+	if err != nil || issued == nil {
+		return ""
+	}
+
+	// private bucket 前提では ViewURL を返す
+	if v := strings.TrimSpace(issued.ViewURL); v != "" {
+		return v
+	}
+
+	// フォールバック（public bucket の場合のみ意味がある）
+	if p := strings.TrimSpace(issued.PublicURL); p != "" {
+		return p
+	}
+	return ""
+}
+
+func (h *TokenBlueprintHandler) toContentFilesResponse(ctx context.Context, tb *tbdom.TokenBlueprint, includeViewURL bool) []contentFileResponse {
+	if tb == nil || len(tb.ContentFiles) == 0 {
+		return []contentFileResponse{}
+	}
+
+	out := make([]contentFileResponse, 0, len(tb.ContentFiles))
+	for _, f := range tb.ContentFiles {
+		var viewURL string
+		if includeViewURL {
+			viewURL = h.resolveTokenContentViewURL(ctx, tb.ID, f)
+		}
+		out = append(out, contentFileResponse{
+			ContentFile: f,
+			URL:         strings.TrimSpace(viewURL),
+		})
+	}
+	return out
+}
+
+// ★ 変更: includeContentViewURL を追加（list では署名発行を避ける）
+func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenBlueprint, includeContentViewURL bool) tokenBlueprintResponse {
 	if tb == nil {
 		return tokenBlueprintResponse{}
 	}
@@ -277,7 +369,8 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		BrandName:    h.resolveBrandName(ctx, tb.BrandID),
 		CompanyID:    strings.TrimSpace(tb.CompanyID),
 		Description:  strings.TrimSpace(tb.Description),
-		ContentFiles: tb.ContentFiles,
+		ContentFiles: h.toContentFilesResponse(ctx, tb, includeContentViewURL),
+
 		AssigneeID:   strings.TrimSpace(tb.AssigneeID),
 		AssigneeName: h.resolveAssigneeName(ctx, tb.AssigneeID),
 		CreatedAt:    tb.CreatedAt,
@@ -331,12 +424,22 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.list(w, r)
 		return
 
+	// TokenBlueprintCard 用 patch
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path, "/token-blueprints/") &&
 		strings.HasSuffix(path, "/patch"):
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/token-blueprints/"), "/patch")
 		id = strings.Trim(id, "/")
 		h.getPatch(w, r, id)
+		return
+
+	// ★ token-contents: signed upload urls
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(path, "/token-blueprints/") &&
+		strings.HasSuffix(path, "/contents/upload-urls"):
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/token-blueprints/"), "/contents/upload-urls")
+		id = strings.Trim(id, "/")
+		h.issueContentsUploadURLs(w, r, id)
 		return
 
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) &&
@@ -425,7 +528,8 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := h.toResponse(ctx, tb)
+	// ★ create も detail と同様に viewUrl を含めて返す（コンテンツが無ければ空）
+	resp := h.toResponse(ctx, tb, true)
 
 	if req.HasIconFile {
 		ct := strings.TrimSpace(req.IconContentType)
@@ -442,6 +546,174 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// issueContentsUploadURLs --------------------------------------------------
+// POST /token-blueprints/{id}/contents/upload-urls
+//
+// Response で返すもの（フロント実装を最短化）:
+// - upload: 署名付き PUT URL / publicUrl / viewUrl / objectPath / expiresAt（構造体ごと）
+// - url: 表示用（private bucket は viewUrl を返す。署名URLに cache buster は付けない）
+// - contentFile: そのまま PATCH contentFiles に投入できる形（createdAt/By もサーバ統一）
+func (h *TokenBlueprintHandler) issueContentsUploadURLs(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+	id = strings.TrimSpace(id)
+
+	log.Printf("[tokenBlueprint_handler] issueContentsUploadURLs start id=%q companyId(ctx)=%q actorId=%q", id, companyID, actorID)
+
+	if companyID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
+		return
+	}
+	if actorID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "X-Actor-Id is required"})
+		return
+	}
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is empty"})
+		return
+	}
+
+	// tenant boundary check
+	tb, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		log.Printf("[tokenBlueprint_handler] issueContentsUploadURLs get failed id=%q err=%v", id, err)
+		writeTokenBlueprintErr(w, err)
+		return
+	}
+	if strings.TrimSpace(tb.CompanyID) != companyID {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		return
+	}
+
+	var req issueTokenContentsUploadURLsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[tokenBlueprint_handler] issueContentsUploadURLs decode failed id=%q err=%v", id, err)
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+	if len(req.Files) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "files is empty"})
+		return
+	}
+
+	now := time.Now().UTC()
+
+	items := make([]tokenContentUploadItemResponse, 0, len(req.Files))
+	for _, f := range req.Files {
+		contentID := strings.TrimSpace(f.ContentID)
+		name := strings.TrimSpace(f.Name)
+		typ := tbdom.ContentFileType(strings.TrimSpace(f.Type))
+		size := f.Size
+
+		if contentID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "contentId is required"})
+			return
+		}
+		if name == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "name is required"})
+			return
+		}
+		if !tbdom.IsValidContentType(typ) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid type"})
+			return
+		}
+		if size < 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid size"})
+			return
+		}
+
+		ct := strings.TrimSpace(f.ContentType)
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+
+		vis := tbdom.VisibilityPrivate
+		if v := strings.TrimSpace(f.Visibility); v != "" {
+			vis = tbdom.ContentVisibility(v)
+		}
+		if !tbdom.IsValidVisibility(vis) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid visibility"})
+			return
+		}
+
+		// ★ Usecase から *TokenContentsUploadURL（構造体）を返す（PUT + GET(view)）
+		upload, err := h.uc.IssueTokenContentUploadURL(ctx, id, contentID, ct)
+		if err != nil {
+			log.Printf("[tokenBlueprint_handler] issueContentsUploadURLs signedUrl FAILED id=%q contentId=%q ct=%q err=%v", id, contentID, ct, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to issue upload url"})
+			return
+		}
+		if upload == nil || strings.TrimSpace(upload.UploadURL) == "" {
+			log.Printf("[tokenBlueprint_handler] issueContentsUploadURLs signedUrl EMPTY id=%q contentId=%q", id, contentID)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to issue upload url"})
+			return
+		}
+
+		// objectPath は Usecase 側の返却を正とする（空の場合はフォールバック）
+		objectPath := strings.TrimSpace(upload.ObjectPath)
+		if objectPath == "" {
+			objectPath = id + "/" + contentID
+		}
+
+		contentFile := tbdom.ContentFile{
+			ID:          contentID,
+			Name:        name,
+			Type:        typ,
+			ContentType: ct,
+			Size:        size,
+			ObjectPath:  objectPath,
+			Visibility:  vis,
+			CreatedAt:   now,
+			CreatedBy:   actorID,
+			UpdatedAt:   now,
+			UpdatedBy:   actorID,
+		}
+		if err := contentFile.Validate(); err != nil {
+			log.Printf("[tokenBlueprint_handler] issueContentsUploadURLs contentFile invalid id=%q contentId=%q err=%v", id, contentID, err)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid contentFile"})
+			return
+		}
+
+		// ★ 表示URL:
+		// - private bucket: upload.ViewURL（GET署名）を返す（cache buster は付けない）
+		// - fallback: publicUrl + cache buster（public bucket の場合）
+		displayURL := strings.TrimSpace(upload.ViewURL)
+		if displayURL == "" {
+			basePublic := strings.TrimSpace(upload.PublicURL)
+			if basePublic == "" {
+				basePublic = gcsObjectPublicURL(tokenContentsBucketName(), objectPath)
+			}
+			displayURL = withCacheBuster(basePublic, now)
+		}
+
+		items = append(items, tokenContentUploadItemResponse{
+			ContentID: contentID,
+			URL:       displayURL,
+			Upload:    upload,
+			Content:   contentFile,
+		})
+	}
+
+	log.Printf("[tokenBlueprint_handler] issueContentsUploadURLs success id=%q items=%d", id, len(items))
+	_ = json.NewEncoder(w).Encode(issueTokenContentsUploadURLsResponse{Items: items})
 }
 
 // getPatch -----------------------------------------------------------------
@@ -483,13 +755,28 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
+	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	if companyID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
+		return
+	}
+
 	tb, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
+	// ★ 追加: tenant boundary check（越境参照防止）
+	if strings.TrimSpace(tb.CompanyID) != companyID {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		return
+	}
+
+	// ★ 詳細は viewUrl を含めて返す
+	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb, true))
 }
 
 // list --------------------------------------------------------------------
@@ -547,7 +834,8 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]tokenBlueprintResponse, 0, len(result.Items))
 	for i := range result.Items {
-		items = append(items, h.toResponse(ctx, &result.Items[i]))
+		// ★ list では署名発行を避ける（重いので url は空）
+		items = append(items, h.toResponse(ctx, &result.Items[i], false))
 	}
 
 	_ = json.NewEncoder(w).Encode(tokenBlueprintPageResponse{
@@ -567,6 +855,18 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 
 	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+
+	if companyID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
+		return
+	}
+	// ★ 追加: 更新は actor 必須
+	if actorID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "X-Actor-Id is required"})
+		return
+	}
 
 	var req updateTokenBlueprintRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -601,7 +901,8 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	resp := h.toResponse(ctx, updated)
+	// ★ update は viewUrl を含めて返す（直後の画面表示のため）
+	resp := h.toResponse(ctx, updated, true)
 
 	if req.HasIconFile {
 		ct := strings.TrimSpace(req.IconContentType)

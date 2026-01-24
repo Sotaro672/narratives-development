@@ -1,4 +1,3 @@
-// frontend/console/tokenBlueprint/src/presentation/components/tokenContentsCard.tsx
 import * as React from "react";
 import { FileText, Upload, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
@@ -26,15 +25,14 @@ type TokenContentsCardProps = {
   mode?: Mode;
 
   /**
-   * file picker でファイルが選択されたときに呼ばれる（推奨）。
+   * file picker でファイルが選択されたときに呼ばれる（必須級）。
    * 実際のアップロード（署名付きURL取得→PUT→contentFiles更新）に接続するための口。
-   * 未指定でもローカルプレビュー追加までは動作する。
    */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
 
   /**
    * edit モードで削除したい時のハンドラ（任意）。
-   * 未指定なら UI 内で items を削除するだけ（サーバ反映は呼び出し側で実装）。
+   * サーバ反映は呼び出し側で実装。
    */
   onDelete?: (item: GCSTokenContent, index: number) => void | Promise<void>;
 };
@@ -45,6 +43,56 @@ function guessContentType(file: File): GCSTokenContent["type"] {
   if (mime.startsWith("video/")) return "video";
   if (mime === "application/pdf") return "pdf";
   return "document";
+}
+
+function renderMain(item: GCSTokenContent) {
+  if (!item) return null;
+
+  switch (item.type) {
+    case "image":
+      return (
+        <img
+          src={item.url}
+          alt={item.name || "content"}
+          className="token-contents-card__image"
+          onError={(e) => {
+            // eslint-disable-next-line no-console
+            console.warn("[TokenContentsCard] image load failed:", item.url);
+            // 壊れた img を出し続けない（最低限のフォールバック）
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+      );
+
+    case "video":
+      return (
+        <video className="token-contents-card__video" controls src={item.url} />
+      );
+
+    case "pdf":
+      return (
+        <a
+          className="token-contents-card__file-link"
+          href={item.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          PDF を開く: {item.name || "document.pdf"}
+        </a>
+      );
+
+    default:
+      return (
+        <a
+          className="token-contents-card__file-link"
+          href={item.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          ファイルを開く: {item.name || "document"}
+        </a>
+      );
+  }
 }
 
 export default function TokenContentsCard({
@@ -61,21 +109,49 @@ export default function TokenContentsCard({
     return [];
   }, [contents]);
 
-  // UI 内での削除（onDelete 未指定でも動作するようにローカル state を持つ）
-  const [items, setItems] = React.useState<GCSTokenContent[]>(derivedItems);
+  // ★ ローカルプレビュー専用 state（親propsが空に戻っても消さない）
+  const [localItems, setLocalItems] = React.useState<GCSTokenContent[]>([]);
   const [index, setIndex] = React.useState(0);
 
   // file picker
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = React.useRef<Set<string>>(new Set());
 
-  // 外部 props の変化に追従（※ローカルで追加した分は、呼び出し側で contents を更新したら同期される想定）
-  React.useEffect(() => {
-    setItems(derivedItems);
-    setIndex(0);
-  }, [derivedItems]);
+  // ★ 表示する items は「サーバ由来があるならそれを優先。無いならローカルを表示」
+  const items = React.useMemo<GCSTokenContent[]>(() => {
+    return derivedItems.length > 0 ? derivedItems : localItems;
+  }, [derivedItems, localItems]);
 
-  // object URL の後始末
+  const hasItems = items.length > 0;
+
+  // ★ サーバ由来が入ってきたら、ローカルプレビューを掃除（重複/混乱防止）
+  React.useEffect(() => {
+    if (derivedItems.length > 0) {
+      // 既存の blob URL を破棄
+      for (const u of objectUrlsRef.current) {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {
+          // noop
+        }
+      }
+      objectUrlsRef.current.clear();
+      setLocalItems([]);
+      setIndex(0);
+      return;
+    }
+
+    // derivedItems が空になっただけでは localItems を消さない（今回の主原因対策）
+    // ただし index は安全側に寄せる
+    setIndex((i) => {
+      const len = items.length;
+      if (len === 0) return 0;
+      return Math.min(i, len - 1);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedItems.length]);
+
+  // object URL の後始末（unmount）
   React.useEffect(() => {
     return () => {
       for (const u of objectUrlsRef.current) {
@@ -88,8 +164,6 @@ export default function TokenContentsCard({
       objectUrlsRef.current.clear();
     };
   }, []);
-
-  const hasItems = items.length > 0;
 
   const prev = () => {
     if (!hasItems) return;
@@ -118,12 +192,27 @@ export default function TokenContentsCard({
 
     const files = Array.from(list);
 
-    // 1) 呼び出し側に通知（任意）
-    if (onFilesSelected) {
-      await onFilesSelected(files);
+    // 重要: アップロード処理が未接続なら「追加されたように見せない」
+    if (!onFilesSelected) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[TokenContentsCard] onFilesSelected is not provided. No request will be sent to backend."
+      );
+      e.target.value = "";
+      return;
     }
 
-    // 2) UI でプレビューできるようにローカルに追加（実データ連携前でも動く）
+    // 1) 呼び出し側に通知（アップロードの本体）
+    try {
+      await onFilesSelected(files);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[TokenContentsCard] onFilesSelected failed", err);
+      e.target.value = "";
+      return;
+    }
+
+    // 2) ローカルプレビュー（ただし、サーバ由来が返ってこないケースでも見えるように localItems に入れる）
     const now = Date.now();
     const newItems: GCSTokenContent[] = files.map((f, i) => {
       const url = URL.createObjectURL(f);
@@ -141,7 +230,7 @@ export default function TokenContentsCard({
       };
     });
 
-    setItems((prevItems) => {
+    setLocalItems((prevItems) => {
       const merged = [...prevItems, ...newItems];
       if (merged.length > 0) {
         setIndex(Math.max(0, merged.length - newItems.length));
@@ -161,37 +250,37 @@ export default function TokenContentsCard({
 
     // 1) 呼び出し側に通知（任意）
     if (onDelete) {
-      await onDelete(target, targetIndex);
-    }
-
-    // 2) objectURL なら破棄
-    if (typeof target.url === "string" && target.url.startsWith("blob:")) {
       try {
-        URL.revokeObjectURL(target.url);
-      } catch {
-        // noop
+        await onDelete(target, targetIndex);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[TokenContentsCard] onDelete failed", err);
+        return; // サーバ側が失敗したならUIも消さない
       }
-      objectUrlsRef.current.delete(target.url);
     }
 
-    // 3) UI から除去（ローカル）
-    setItems((prevItems) => {
-      if (prevItems.length === 0) return prevItems;
-
-      const nextItems = prevItems.filter((_, i) => i !== targetIndex);
-
-      // index 調整
-      if (nextItems.length === 0) {
-        setIndex(0);
-      } else if (targetIndex === index || targetIndex < index) {
-        const newIndex = Math.max(0, index - 1);
-        setIndex(Math.min(newIndex, nextItems.length - 1));
-      } else if (index >= nextItems.length) {
-        setIndex(nextItems.length - 1);
+    // 2) ローカル items ならここで消す（サーバ由来は親props更新を待つ）
+    if (String(target.id || "").startsWith("local_")) {
+      if (typeof target.url === "string" && target.url.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(target.url);
+        } catch {
+          // noop
+        }
+        objectUrlsRef.current.delete(target.url);
       }
 
-      return nextItems;
-    });
+      setLocalItems((prevItems) => {
+        const nextItems = prevItems.filter((x) => x.id !== target.id);
+        return nextItems;
+      });
+
+      setIndex((i) => {
+        const len = items.length - 1;
+        if (len <= 0) return 0;
+        return Math.min(i, len - 1);
+      });
+    }
   };
 
   return (
@@ -209,8 +298,6 @@ export default function TokenContentsCard({
           ref={inputRef}
           type="file"
           multiple
-          // 必要なら絞る（例: "image/*,video/*,application/pdf"）
-          // accept="image/*,video/*,application/pdf"
           style={{ display: "none" }}
           onChange={(e) => void handleFilesChange(e)}
         />
@@ -246,11 +333,7 @@ export default function TokenContentsCard({
           <div className="token-contents-card__image-slot">
             {hasItems ? (
               <div className="token-contents-card__image-main-wrap">
-                <img
-                  src={items[index].url}
-                  alt={items[index].name || `コンテンツ ${index + 1}`}
-                  className="token-contents-card__image"
-                />
+                {renderMain(items[index])}
 
                 {/* 編集モード時のみ削除 */}
                 {isEditMode && (
@@ -289,9 +372,7 @@ export default function TokenContentsCard({
             {items.map((item, i) => (
               <div
                 key={`${item.id}-${i}`}
-                className={`token-contents-card__thumb-wrap${
-                  i === index ? " is-active" : ""
-                }`}
+                className={`token-contents-card__thumb-wrap${i === index ? " is-active" : ""}`}
               >
                 <button
                   type="button"
@@ -299,11 +380,17 @@ export default function TokenContentsCard({
                   onClick={() => setIndex(i)}
                   aria-label={`コンテンツ ${i + 1} を表示`}
                 >
-                  <img
-                    src={item.url}
-                    alt={item.name || `コンテンツ サムネイル ${i + 1}`}
-                    className="token-contents-card__thumb-image"
-                  />
+                  {item.type === "image" ? (
+                    <img
+                      src={item.url}
+                      alt={item.name || `コンテンツ サムネイル ${i + 1}`}
+                      className="token-contents-card__thumb-image"
+                    />
+                  ) : (
+                    <span className="token-contents-card__thumb-nonimage">
+                      {String(item.type || "").toUpperCase()}
+                    </span>
+                  )}
                 </button>
 
                 {/* 編集モード時のみ削除 */}

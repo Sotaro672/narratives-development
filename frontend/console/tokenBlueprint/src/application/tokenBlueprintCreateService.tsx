@@ -14,7 +14,10 @@
 
 import type { TokenBlueprint } from "../domain/entity/tokenBlueprint";
 
-import { createTokenBlueprint, updateTokenBlueprint } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
+import {
+  createTokenBlueprint,
+  updateTokenBlueprint,
+} from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 // Brand API は repositoryHTTP から外す（分割案A）
 import {
@@ -62,6 +65,14 @@ export type CreateTokenBlueprintInput = CreateTokenBlueprintPayload & {
   iconFile?: File | null;
 };
 
+function normalizeIconUrlForSend(raw: unknown): string | undefined {
+  const u = typeof raw === "string" ? raw.trim() : undefined;
+  if (!u) return undefined;
+  // detail と同様：blob URL を保存しない
+  if (u.startsWith("blob:")) return undefined;
+  return u;
+}
+
 /**
  * TokenBlueprint を作成する。
  * - iconFile がある場合:
@@ -81,6 +92,7 @@ export async function createTokenBlueprintWithOptionalIcon(
 
   // entity.go 正:
   // - Create payload に iconId は存在しない（iconUrl を渡す設計）
+  // - ただし blob: は送らない（事故防止）
   const payload: CreateTokenBlueprintPayload = {
     name: input.name,
     symbol: input.symbol,
@@ -89,9 +101,18 @@ export async function createTokenBlueprintWithOptionalIcon(
     description: input.description,
     assigneeId: input.assigneeId,
     createdBy: input.createdBy,
-    iconUrl: input.iconUrl === undefined ? undefined : input.iconUrl,
+
+    // ★ 改修: blob URL は送らない
+    iconUrl: normalizeIconUrlForSend(input.iconUrl),
+
+    // 現状 create では [] 運用でもOK（create後に contents をアップロードする方針なら空で問題なし）
     contentFiles: input.contentFiles ?? [],
   };
+
+  // ★ 改修: iconFile がある場合、iconUrl を create payload で決め打ちしない（PUT後に publicUrl で確定するため）
+  if (iconFile) {
+    delete (payload as any).iconUrl;
+  }
 
   console.log("[tokenBlueprintCreateService] create start", {
     name: payload.name,
@@ -110,8 +131,9 @@ export async function createTokenBlueprintWithOptionalIcon(
     payload,
     iconFile
       ? {
+          // NOTE: createTokenBlueprint 側の options のキー名仕様に合わせる
           iconFileName: iconFile.name,
-          iconContentType: iconFile.type || "application/octet-stream",
+          iconContentType: (iconFile.type || "").trim() || "application/octet-stream",
         }
       : undefined,
   );
@@ -137,7 +159,12 @@ export async function createTokenBlueprintWithOptionalIcon(
 
   const uploadUrl = String(iconUpload?.uploadUrl ?? "").trim();
   const publicUrl = String(iconUpload?.publicUrl ?? "").trim();
-  const signedContentType = String(iconUpload?.contentType ?? "").trim();
+
+  // ★ 改修: contentType フォールバックを強化（detail と同様の考え方）
+  const putContentType =
+    String(iconUpload?.contentType ?? "").trim() ||
+    String(iconFile.type ?? "").trim() ||
+    "application/octet-stream";
 
   if (!uploadUrl || !publicUrl) {
     console.warn(
@@ -152,10 +179,10 @@ export async function createTokenBlueprintWithOptionalIcon(
   console.log("[tokenBlueprintCreateService] icon PUT start", {
     id: (tb as any)?.id,
     file: { name: iconFile.name, type: iconFile.type, size: iconFile.size },
-    signedContentType,
+    putContentType,
   });
 
-  await putFileToSignedUrl(uploadUrl, iconFile, signedContentType);
+  await putFileToSignedUrl(uploadUrl, iconFile, putContentType);
 
   console.log("[tokenBlueprintCreateService] icon PUT success", {
     id: (tb as any)?.id,
