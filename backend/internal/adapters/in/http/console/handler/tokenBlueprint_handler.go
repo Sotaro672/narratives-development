@@ -72,6 +72,11 @@ type createTokenBlueprintRequest struct {
 	BrandID     string `json:"brandId"`
 	Description string `json:"description,omitempty"`
 	AssigneeID  string `json:"assigneeId"`
+
+	// ★追加: icon upload を行うか（フロントが File を持っている場合 true）
+	HasIconFile bool `json:"hasIconFile"`
+	// ★追加: 例 "image/png"
+	IconContentType string `json:"iconContentType,omitempty"`
 }
 
 type updateTokenBlueprintRequest struct {
@@ -80,10 +85,6 @@ type updateTokenBlueprintRequest struct {
 	BrandID     *string `json:"brandId,omitempty"`
 	Description *string `json:"description,omitempty"`
 	AssigneeID  *string `json:"assigneeId,omitempty"`
-
-	// entity.go 正:
-	// tokenBlueprint は iconId を保持しない（icon は "{docId}/icon" 規約、表示URLは metadata 解決結果に含める）
-	// よって iconId/iconUrl は update では扱わない。
 
 	// entity.go 正: embedded contents (replace all when provided)
 	ContentFiles *[]tbdom.ContentFile `json:"contentFiles,omitempty"`
@@ -107,15 +108,17 @@ type tokenBlueprintResponse struct {
 	CreatedAt time.Time `json:"createdAt"`
 
 	// ✅ backward compat removed:
-	// CreatedBy is now the member ID (domain value).
 	CreatedByID   string `json:"createdById"`
 	CreatedByName string `json:"createdByName"`
 
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy string     `json:"updatedBy"`
 
-	// metadataUri: backend resolver URL
+	// metadataUri
 	MetadataURI string `json:"metadataUri"`
+
+	// ★追加: create時に icon の署名付きURLを返す（フロントはこれでPUTする）
+	IconUpload *uc.TokenIconUploadURL `json:"iconUpload,omitempty"`
 }
 
 type tokenBlueprintPageResponse struct {
@@ -198,6 +201,8 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		UpdatedAt:   updPtr,
 		UpdatedBy:   strings.TrimSpace(tb.UpdatedBy),
 		MetadataURI: strings.TrimSpace(tb.MetadataURI),
+
+		IconUpload: nil, // GET/LIST は返さない（create時だけ上書き）
 	}
 }
 
@@ -296,11 +301,13 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] create request name=%q symbol=%q brandId=%q assigneeId=%q",
+	log.Printf("[tokenBlueprint_handler] create request name=%q symbol=%q brandId=%q assigneeId=%q hasIconFile=%v iconContentType=%q",
 		strings.TrimSpace(req.Name),
 		strings.TrimSpace(req.Symbol),
 		strings.TrimSpace(req.BrandID),
 		strings.TrimSpace(req.AssigneeID),
+		req.HasIconFile,
+		strings.TrimSpace(req.IconContentType),
 	)
 
 	if strings.TrimSpace(req.Name) == "" ||
@@ -312,7 +319,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ CreatedBy は request から受け取らない。
+	// CreatedBy は request から受け取らない（X-Actor-Id）
 	tb, err := h.uc.Create(ctx, uc.CreateBlueprintRequest{
 		Name:        strings.TrimSpace(req.Name),
 		Symbol:      strings.TrimSpace(req.Symbol),
@@ -334,6 +341,26 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	)
 
 	resp := h.toResponse(ctx, tb)
+
+	// ★ここが統一の肝：hasIconFile=true の場合、署名URLを返す
+	if req.HasIconFile {
+		ct := strings.TrimSpace(req.IconContentType)
+		if ct == "" {
+			// フロントが file.type を渡していない場合のフォールバック
+			ct = "application/octet-stream"
+		}
+
+		iconUpload, err := h.uc.IssueTokenIconUploadURL(ctx, tb.ID, "", ct)
+		if err != nil {
+			// ここは要件次第：
+			// - 厳格にするなら create 自体を失敗させる
+			// - 現状運用では「作成は成功、アイコンだけ失敗」を許容しログで追うのが扱いやすい
+			log.Printf("[tokenBlueprint_handler] iconUpload issue FAILED id=%q err=%v", tb.ID, err)
+		} else {
+			resp.IconUpload = iconUpload
+		}
+	}
+
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
@@ -406,11 +433,7 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 }
 
 // list --------------------------------------------------------------------
-// クエリパラメータで挙動が変わる:
-// - ?brandId=xxxx                        → ListByBrandID
-// - ?minted=notYet                      → ListMintedNotYet
-// - ?minted=minted                      → ListMintedCompleted
-// - いずれも指定なし                     → ListByCompanyID
+
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

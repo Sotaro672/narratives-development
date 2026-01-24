@@ -3,11 +3,15 @@ package usecase
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"cloud.google.com/go/storage"
 
 	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
+
+	"narratives/internal/infra/arweave"
 )
 
 type TokenBlueprintUsecase struct {
@@ -42,7 +46,15 @@ func NewTokenBlueprintUsecase(
 	query := NewTokenBlueprintQueryUsecase(tbRepo, memberSvc)
 	content := NewTokenBlueprintContentUsecase(tbRepo)
 	command := NewTokenBlueprintCommandUsecase(tbRepo)
-	metadata := NewTokenBlueprintMetadataUsecase(tbRepo)
+
+	// ------------------------------------------------------------
+	// ★追加: Arweave/Irys uploader (Cloud Run) を注入して metadataUri を生成
+	// ------------------------------------------------------------
+	baseURL := strings.TrimSpace(os.Getenv("ARWEAVE_BASE_URL"))
+	apiKey := strings.TrimSpace(os.Getenv("IRYS_SERVICE_API_KEY"))
+	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
+
+	metadata := NewTokenBlueprintMetadataUsecase(tbRepo, uploader)
 
 	// ★変更: GCS client を注入
 	buckets := NewTokenBlueprintBucketUsecase(gcsClient)
