@@ -17,7 +17,7 @@ export default function TokenBlueprintDetail() {
     assigneeName,
     createdByName,
     createdAt,
-    tokenContents, // ★ tokenContentsIds は廃止 → tokenContents に統一
+    tokenContents,
     cardVm,
     isEditMode,
   } = vm;
@@ -89,7 +89,6 @@ export default function TokenBlueprintDetail() {
         <TokenBlueprintCard vm={cardVm} handlers={cardHandlers} />
 
         <div style={{ marginTop: 16 }}>
-          {/* ★ images 互換は削除済み：contents(GCSTokenContent[]) を渡す */}
           {/* ★ upload / delete を Hook の handler に接続 */}
           <TokenContentsCard
             mode={isEditMode ? "edit" : "view"}

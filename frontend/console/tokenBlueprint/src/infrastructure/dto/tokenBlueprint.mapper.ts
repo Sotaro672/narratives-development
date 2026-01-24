@@ -101,6 +101,11 @@ export function normalizeTokenBlueprint(raw: any): TokenBlueprint {
 
   const iconUpload = normalizeIconUpload(obj.iconUpload);
 
+  // ★追加: backend が返す表示名（ベストエフォート）
+  const assigneeName = obj.assigneeName != null ? s(obj.assigneeName) : undefined;
+  const createdByName = obj.createdByName != null ? s(obj.createdByName) : undefined;
+  const updatedByName = obj.updatedByName != null ? s(obj.updatedByName) : undefined;
+
   // shared 型を正として返す（未知フィールドは極力載せない/載せても害がない範囲に）
   const out: any = {
     id: s(obj.id),
@@ -122,6 +127,11 @@ export function normalizeTokenBlueprint(raw: any): TokenBlueprint {
     ...(iconUrl !== undefined ? { iconUrl } : {}),
     ...(iconUpload ? { iconUpload } : {}),
     ...(obj.brandName != null ? { brandName: s(obj.brandName) } : {}),
+
+    // ★追加: 名前解決結果を保持
+    ...(assigneeName !== undefined ? { assigneeName } : {}),
+    ...(createdByName !== undefined ? { createdByName } : {}),
+    ...(updatedByName !== undefined ? { updatedByName } : {}),
   };
 
   return out as TokenBlueprint;

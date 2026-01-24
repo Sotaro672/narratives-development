@@ -103,11 +103,6 @@ export type IssueTokenContentsUploadURLsResponse = {
       expiresAt?: string;
       contentType?: string;
     };
-
-    // LEGACY（互換）：古い実装が返す可能性があるため optional
-    uploadUrl?: string;
-    publicUrl?: string;
-    objectPath?: string;
   }>;
 };
 

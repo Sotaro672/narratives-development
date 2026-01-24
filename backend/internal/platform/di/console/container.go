@@ -400,12 +400,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	// =========================================================
 	// ✅ TokenBlueprintUsecase
-	// 現行: NewTokenBlueprintUsecase(tokenBlueprintRepo, memberSvc, gcsClient)
+	// 現行: NewTokenBlueprintUsecase(tokenBlueprintRepo, nameResolver, gcsClient)
 	// =========================================================
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,
-		memberSvc,
-		gcsClient, // ★追加: bucket/.keep 作成に必要
+		nameResolver, // ★修正: memberSvc ではなく nameResolver を渡す
+		gcsClient,    // ★追加: bucket/.keep 作成に必要
 	)
 
 	// =========================================================
@@ -414,7 +414,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// =========================================================
 	tokenBlueprintQueryUC := uc.NewTokenBlueprintQueryUsecase(
 		tokenBlueprintRepo,
-		memberSvc,
+		nameResolver, // ★修正: memberSvc ではなく nameResolver を渡す
 	)
 
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)

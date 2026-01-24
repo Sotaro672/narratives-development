@@ -53,6 +53,11 @@ export type TokenBlueprintDTO = {
 
   // 必要なら来る補助
   brandName?: string;
+
+  // ★追加: backend が解決して返す表示名
+  assigneeName?: string;
+  createdByName?: string;
+  updatedByName?: string;
 };
 
 export type TokenBlueprintPageResultDTO = {

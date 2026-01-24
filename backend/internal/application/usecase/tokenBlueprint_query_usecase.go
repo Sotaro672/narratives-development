@@ -6,20 +6,23 @@ import (
 	"fmt"
 	"strings"
 
-	memdom "narratives/internal/domain/member"
+	appresolver "narratives/internal/application/resolver"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // TokenBlueprintQueryUsecase handles read-model conveniences (joins / name resolutions).
 type TokenBlueprintQueryUsecase struct {
-	tbRepo    tbdom.RepositoryPort
-	memberSvc *memdom.Service
+	tbRepo       tbdom.RepositoryPort
+	nameResolver *appresolver.NameResolver
 }
 
-func NewTokenBlueprintQueryUsecase(tbRepo tbdom.RepositoryPort, memberSvc *memdom.Service) *TokenBlueprintQueryUsecase {
+func NewTokenBlueprintQueryUsecase(
+	tbRepo tbdom.RepositoryPort,
+	nameResolver *appresolver.NameResolver,
+) *TokenBlueprintQueryUsecase {
 	return &TokenBlueprintQueryUsecase{
-		tbRepo:    tbRepo,
-		memberSvc: memberSvc,
+		tbRepo:       tbRepo,
+		nameResolver: nameResolver,
 	}
 }
 
@@ -32,7 +35,7 @@ type TokenBlueprintMemberNames struct {
 
 // ResolveMemberNames resolves memberId -> display name (best-effort).
 // - dedup ids
-// - if memberSvc is nil, returns empty map
+// - if nameResolver is nil, returns empty map values ("")
 // - if resolution fails for an id, value becomes ""
 func (u *TokenBlueprintQueryUsecase) ResolveMemberNames(
 	ctx context.Context,
@@ -43,18 +46,8 @@ func (u *TokenBlueprintQueryUsecase) ResolveMemberNames(
 	}
 
 	out := make(map[string]string, len(ids))
-	if u.memberSvc == nil {
-		// memberSvc が無い構成でも落とさない（空で返す）
-		for _, id := range ids {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				continue
-			}
-			out[id] = ""
-		}
-		return out, nil
-	}
 
+	// dedup
 	seen := make(map[string]struct{}, len(ids))
 	uniq := make([]string, 0, len(ids))
 	for _, id := range ids {
@@ -69,20 +62,24 @@ func (u *TokenBlueprintQueryUsecase) ResolveMemberNames(
 		uniq = append(uniq, id)
 	}
 
-	// ベストエフォート：1件失敗しても他は返す
-	for _, mid := range uniq {
-		name, err := u.memberSvc.GetNameLastFirstByID(ctx, mid)
-		if err != nil {
+	// resolver が無い構成でも落とさない（空で返す）
+	if u.nameResolver == nil {
+		for _, mid := range uniq {
 			out[mid] = ""
-			continue
 		}
-		out[mid] = strings.TrimSpace(name)
+		return out, nil
+	}
+
+	// ★ memberSvc は使わず resolver のみ
+	for _, mid := range uniq {
+		out[mid] = strings.TrimSpace(u.nameResolver.ResolveMemberName(ctx, mid))
 	}
 
 	return out, nil
 }
 
 // GetByIDWithCreatorName keeps backward-compat method (optional).
+// ★ memberSvc は使わず resolver のみ
 func (u *TokenBlueprintQueryUsecase) GetByIDWithCreatorName(
 	ctx context.Context,
 	id string,
@@ -97,25 +94,23 @@ func (u *TokenBlueprintQueryUsecase) GetByIDWithCreatorName(
 	if err != nil {
 		return nil, "", err
 	}
-
-	if u.memberSvc == nil {
-		return tb, "", nil
+	if tb == nil {
+		return nil, "", tbdom.ErrNotFound
 	}
 
 	memberID := strings.TrimSpace(tb.CreatedBy)
-	if memberID == "" {
+	if memberID == "" || u.nameResolver == nil {
 		return tb, "", nil
 	}
 
-	name, err := u.memberSvc.GetNameLastFirstByID(ctx, memberID)
-	if err != nil {
-		return tb, "", nil
-	}
-
-	return tb, strings.TrimSpace(name), nil
+	return tb, strings.TrimSpace(u.nameResolver.ResolveMemberName(ctx, memberID)), nil
 }
 
 // GetByIDWithMemberNames returns tb and resolved member names for console response.
+// ★ 下記3つは resolver のみで解決
+// tb.AssigneeID → AssigneeName
+// tb.CreatedBy  → CreatedByName
+// tb.UpdatedBy  → UpdatedByName
 func (u *TokenBlueprintQueryUsecase) GetByIDWithMemberNames(
 	ctx context.Context,
 	id string,

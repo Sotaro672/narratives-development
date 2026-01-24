@@ -8,9 +8,8 @@ import (
 
 	"cloud.google.com/go/storage"
 
-	memdom "narratives/internal/domain/member"
+	resolver "narratives/internal/application/resolver"
 	tbdom "narratives/internal/domain/tokenBlueprint"
-
 	"narratives/internal/infra/arweave"
 )
 
@@ -28,7 +27,7 @@ type TokenBlueprintUsecase struct {
 
 func NewTokenBlueprintUsecase(
 	tbRepo tbdom.RepositoryPort,
-	memberSvc *memdom.Service,
+	nameResolver *resolver.NameResolver, // ★変更: memberSvc ではなく resolver を受け取る
 	gcsClient *storage.Client, // ★追加: .keep 作成に必要
 ) *TokenBlueprintUsecase {
 
@@ -43,7 +42,10 @@ func NewTokenBlueprintUsecase(
 
 	crud := NewTokenBlueprintCRUDUsecase(tbRepo)
 	icon := NewTokenBlueprintIconUsecase(tbRepo)
-	query := NewTokenBlueprintQueryUsecase(tbRepo, memberSvc)
+
+	// ★変更: Query は resolver のみで名前解決する
+	query := NewTokenBlueprintQueryUsecase(tbRepo, nameResolver)
+
 	content := NewTokenBlueprintContentUsecase(tbRepo)
 	command := NewTokenBlueprintCommandUsecase(tbRepo)
 
