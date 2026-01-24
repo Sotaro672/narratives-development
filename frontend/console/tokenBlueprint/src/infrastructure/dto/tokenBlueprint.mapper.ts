@@ -29,6 +29,62 @@ function n(v: any): number {
   return Number.isFinite(x) ? x : 0;
 }
 
+/**
+ * 時刻フィールドを string(ISO) に寄せる best-effort 変換。
+ * - string: そのまま trim
+ * - number: Date(ms) とみなして ISO 化
+ * - { seconds, nanos } / { _seconds, _nanoseconds } 等: Firestore Timestamp 風として ISO 化
+ * - Date: toISOString
+ * - 変換不能: ""（空）
+ */
+function normalizeTimeToISO(v: any): string {
+  if (v == null) return "";
+
+  if (typeof v === "string") return v.trim();
+
+  if (v instanceof Date) {
+    const t = v.getTime();
+    return Number.isNaN(t) ? "" : v.toISOString();
+  }
+
+  if (typeof v === "number") {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+  }
+
+  const o = asObject(v);
+
+  const sec =
+    o.seconds != null
+      ? Number(o.seconds)
+      : o._seconds != null
+        ? Number(o._seconds)
+        : NaN;
+
+  const nanos =
+    o.nanos != null
+      ? Number(o.nanos)
+      : o.nanoseconds != null
+        ? Number(o.nanoseconds)
+        : o._nanoseconds != null
+          ? Number(o._nanoseconds)
+          : NaN;
+
+  if (Number.isFinite(sec)) {
+    const ms = sec * 1000 + (Number.isFinite(nanos) ? Math.floor(nanos / 1e6) : 0);
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+  }
+
+  // fallback: stringify（最終手段）
+  try {
+    const str = String(v).trim();
+    return str === "[object Object]" ? "" : str;
+  } catch {
+    return "";
+  }
+}
+
 function normalizeIconUpload(raw: any): SignedIconUploadDTO | undefined {
   const o = asObject(raw);
   const uploadUrl = s(o.uploadUrl);
@@ -73,15 +129,17 @@ function normalizeContentFiles(raw: any): ContentFile[] {
         visibility,
       };
 
-      // ★ 追加: backend が返す url を保持する（存在する場合のみ）
-      // - 署名URL/プロキシURL/公開URLなど、表示に必要なURLが入るケースがある
+      // backend が返す url を保持（存在する場合のみ）
       const url = s(o.url);
       if (url) cf.url = url;
 
       // optional fields
-      if (o.createdAt != null) cf.createdAt = String(o.createdAt);
+      const ca = normalizeTimeToISO(o.createdAt);
+      const ua = normalizeTimeToISO(o.updatedAt);
+
+      if (ca) cf.createdAt = ca;
       if (o.createdBy != null) cf.createdBy = s(o.createdBy);
-      if (o.updatedAt != null) cf.updatedAt = String(o.updatedAt);
+      if (ua) cf.updatedAt = ua;
       if (o.updatedBy != null) cf.updatedBy = s(o.updatedBy);
 
       return cf as ContentFile;
@@ -101,10 +159,14 @@ export function normalizeTokenBlueprint(raw: any): TokenBlueprint {
 
   const iconUpload = normalizeIconUpload(obj.iconUpload);
 
-  // ★追加: backend が返す表示名（ベストエフォート）
+  // backend が返す表示名（ベストエフォート）
   const assigneeName = obj.assigneeName != null ? s(obj.assigneeName) : undefined;
   const createdByName = obj.createdByName != null ? s(obj.createdByName) : undefined;
   const updatedByName = obj.updatedByName != null ? s(obj.updatedByName) : undefined;
+
+  // ★ 作成/更新日時（一覧で表示するために必要）
+  const createdAt = normalizeTimeToISO(obj.createdAt);
+  const updatedAt = normalizeTimeToISO(obj.updatedAt);
 
   // shared 型を正として返す（未知フィールドは極力載せない/載せても害がない範囲に）
   const out: any = {
@@ -113,14 +175,19 @@ export function normalizeTokenBlueprint(raw: any): TokenBlueprint {
     symbol: s(obj.symbol),
 
     brandId: s(obj.brandId),
-    // companyId は domain 側で optional 拡張しているのでここで入れてOK
-    companyId: obj.companyId != null ? s(obj.companyId) : undefined,
+
+    // companyId は shared 型では必須だが、現実のレスポンスで欠ける可能性もあるため best-effort
+    companyId: obj.companyId != null ? s(obj.companyId) : "",
 
     description: s(obj.description),
-    assigneeId: obj.assigneeId != null ? s(obj.assigneeId) : undefined,
+
+    // shared 型では必須だが、現実のレスポンスで欠ける可能性があるため best-effort
+    assigneeId: obj.assigneeId != null ? s(obj.assigneeId) : "",
 
     minted,
-    metadataUri: obj.metadataUri != null ? s(obj.metadataUri) : undefined,
+
+    // shared 型では必須
+    metadataUri: obj.metadataUri != null ? s(obj.metadataUri) : "",
 
     contentFiles,
 
@@ -128,10 +195,16 @@ export function normalizeTokenBlueprint(raw: any): TokenBlueprint {
     ...(iconUpload ? { iconUpload } : {}),
     ...(obj.brandName != null ? { brandName: s(obj.brandName) } : {}),
 
-    // ★追加: 名前解決結果を保持
+    // ★ 名前解決結果
     ...(assigneeName !== undefined ? { assigneeName } : {}),
     ...(createdByName !== undefined ? { createdByName } : {}),
     ...(updatedByName !== undefined ? { updatedByName } : {}),
+
+    // ★ 作成/更新情報（画面に出すため）
+    ...(createdAt ? { createdAt } : {}),
+    ...(obj.createdBy != null ? { createdBy: s(obj.createdBy) } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+    ...(obj.updatedBy != null ? { updatedBy: s(obj.updatedBy) } : {}),
   };
 
   return out as TokenBlueprint;

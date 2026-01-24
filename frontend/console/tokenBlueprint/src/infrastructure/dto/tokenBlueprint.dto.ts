@@ -25,6 +25,9 @@ export type ContentFileDTO = {
   createdBy?: string;
   updatedAt?: string;
   updatedBy?: string;
+
+  // backend が返す閲覧用 URL（署名URL/プロキシURL/公開URL等）
+  url?: string;
 };
 
 // TokenBlueprint のHTTPレスポンス形（domain(shared)ではない）
@@ -54,10 +57,16 @@ export type TokenBlueprintDTO = {
   // 必要なら来る補助
   brandName?: string;
 
-  // ★追加: backend が解決して返す表示名
+  // ★ backend が解決して返す表示名
   assigneeName?: string;
   createdByName?: string;
   updatedByName?: string;
+
+  // ★ 作成/更新情報（一覧で表示するために必要）
+  createdAt?: string; // ISO8601 想定
+  createdBy?: string; // memberId
+  updatedAt?: string; // ISO8601 想定（未更新なら来ない場合あり）
+  updatedBy?: string; // memberId（未更新なら来ない場合あり）
 };
 
 export type TokenBlueprintPageResultDTO = {

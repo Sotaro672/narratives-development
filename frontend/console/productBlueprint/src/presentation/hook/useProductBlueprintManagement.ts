@@ -1,5 +1,3 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintManagement.ts
-
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -34,6 +32,26 @@ export interface UseProductBlueprintManagementResult {
 
   // ★ ゴミ箱ボタン押下時のハンドラ（削除一覧ページへ遷移）
   handleTrash: () => void;
+}
+
+/**
+ * ISO8601 → yyyy/MM/dd HH:mm 形式に整形
+ * - パースできなければ入力をそのまま返す（安全側）
+ */
+function formatDateTimeYYYYMMDDHHmm(isoLike: any): string {
+  const s = String(isoLike ?? "").trim();
+  if (!s) return "";
+
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+
+  return `${y}/${m}/${day} ${hh}:${mm}`;
 }
 
 /**
@@ -76,7 +94,7 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   // ---------------------------
   // フィルタ・ソート適用
   // ---------------------------
-  const rows: UiRow[] = useMemo(
+  const filteredSortedRows: UiRow[] = useMemo(
     () =>
       filterAndSortProductBlueprintRows({
         allRows,
@@ -88,6 +106,16 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
       }),
     [allRows, brandFilter, assigneeFilter, tagFilter, sortedKey, sortedDir],
   );
+
+  // ★ 表示用に createdAt / updatedAt を yyyy/MM/dd HH:mm に整形して返す
+  // - UiRow の型が strict でも壊れないよう、同じキーを書き換えるだけにする
+  const rows: UiRow[] = useMemo(() => {
+    return filteredSortedRows.map((r) => ({
+      ...r,
+      createdAt: r.createdAt ? formatDateTimeYYYYMMDDHHmm(r.createdAt) : r.createdAt,
+      updatedAt: r.updatedAt ? formatDateTimeYYYYMMDDHHmm(r.updatedAt) : r.updatedAt,
+    }));
+  }, [filteredSortedRows]);
 
   // ---------------------------
   // ハンドラ群

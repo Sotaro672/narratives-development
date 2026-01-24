@@ -1,5 +1,3 @@
-// frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintDetail.tsx
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -12,7 +10,6 @@ import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
 import {
   fetchTokenBlueprintDetail,
   updateTokenBlueprintFromCard,
-  formatCreatedAt,
 } from "../../application/tokenBlueprintDetailService";
 
 import type { GCSTokenContent } from "../../../../shell/src/shared/types/tokenContents";
@@ -28,8 +25,12 @@ type UseTokenBlueprintDetailVM = {
   blueprint: TokenBlueprint | null;
   title: string;
   assigneeName: string;
+
+  // ★ 管理情報
   createdByName: string;
   createdAt: string;
+  updatedByName: string;
+  updatedAt: string;
 
   tokenContents: GCSTokenContent[];
 
@@ -69,6 +70,26 @@ function guessContentType(file: File): GCSTokenContent["type"] {
 }
 
 /**
+ * ISO8601 → yyyy/MM/dd HH:mm 形式に整形
+ * - パースできない文字列はそのまま返す（安全側）
+ */
+function formatDateTimeYYYYMMDDHHmm(isoLike: any): string {
+  const s = String(isoLike ?? "").trim();
+  if (!s) return "";
+
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+
+  return `${y}/${m}/${day} ${hh}:${mm}`;
+}
+
+/**
  * 署名付きURL（GCS V4 Signed URL 等）を壊さない cache buster
  *
  * - 署名付きURLはクエリ文字列が署名対象なので、`&v=...` の追加は署名不一致で 403 になります。
@@ -98,7 +119,10 @@ function cacheBuster(url: string, t?: Date | number | string): string {
 
   // 既に v= が付いているならそのまま返す（重複させない）
   try {
-    const parsed = new URL(u, typeof window !== "undefined" ? window.location.origin : "http://local");
+    const parsed = new URL(
+      u,
+      typeof window !== "undefined" ? window.location.origin : "http://local",
+    );
     if (parsed.searchParams.has("v")) return u;
   } catch {
     // URL として parse できない文字列なら従来どおり append を試す
@@ -240,9 +264,28 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     };
   }, [tokenBlueprintId, navigate]);
 
-  const createdByName = useMemo(() => String((blueprint as any)?.createdBy ?? ""), [blueprint]);
+  // ★ 管理情報（backend が name を返すならそれを優先）
+  const createdByName = useMemo(() => {
+    const name = String((blueprint as any)?.createdByName ?? "").trim();
+    if (name) return name;
+    const fallback = String((blueprint as any)?.createdBy ?? "").trim();
+    return fallback;
+  }, [blueprint]);
 
-  const createdAt = useMemo(() => formatCreatedAt((blueprint as any)?.createdAt), [blueprint]);
+  const updatedByName = useMemo(() => {
+    const name = String((blueprint as any)?.updatedByName ?? "").trim();
+    if (name) return name;
+    const fallback = String((blueprint as any)?.updatedBy ?? "").trim();
+    return fallback;
+  }, [blueprint]);
+
+  const createdAt = useMemo(() => {
+    return formatDateTimeYYYYMMDDHHmm((blueprint as any)?.createdAt);
+  }, [blueprint]);
+
+  const updatedAt = useMemo(() => {
+    return formatDateTimeYYYYMMDDHHmm((blueprint as any)?.updatedAt);
+  }, [blueprint]);
 
   const initialIconUrl = useMemo(() => {
     const url = String((blueprint as any)?.iconUrl ?? "").trim();
@@ -365,7 +408,9 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
           throw new Error("no upload url items returned");
         }
         if (issued.items.length !== files.length) {
-          throw new Error(`upload url items mismatch: items=${issued.items.length} files=${files.length}`);
+          throw new Error(
+            `upload url items mismatch: items=${issued.items.length} files=${files.length}`,
+          );
         }
 
         // 3) PUT uploads (match by contentId)
@@ -382,7 +427,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
           }
 
           const contentType =
-            String(item?.contentFile?.contentType ?? file.type ?? "").trim() || "application/octet-stream";
+            String(item?.contentFile?.contentType ?? file.type ?? "").trim() ||
+            "application/octet-stream";
 
           // ★ uploadUrl は item.upload.uploadUrl（ネスト）を優先して読む
           const signedPutUrl = getSignedUploadUrl(item);
@@ -482,8 +528,13 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     blueprint,
     title: "トークン設計",
     assigneeName: assignee || (blueprint as any)?.assigneeName || blueprint?.assigneeId || "",
+
+    // ★ 管理情報
     createdByName,
     createdAt,
+    updatedByName,
+    updatedAt,
+
     tokenContents,
     cardVm,
     isEditMode,

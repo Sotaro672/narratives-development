@@ -1,5 +1,3 @@
-// frontend/console/productBlueprint/src/presentation/pages/productBlueprintManagement.tsx
-
 import List, {
   FilterableTableHeader,
   SortableTableHeader,

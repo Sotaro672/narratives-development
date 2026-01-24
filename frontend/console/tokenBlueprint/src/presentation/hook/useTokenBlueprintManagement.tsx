@@ -1,5 +1,3 @@
-// frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintManagement.tsx
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
@@ -30,18 +28,25 @@ export type UseTokenBlueprintManagementResult = {
 };
 
 /**
- * ISO8601 → yyyy/MM/dd 形式に整形
+ * ISO8601 → yyyy/MM/dd HH:mm 形式に整形
+ * - 例: 2026/01/24 13:05
  */
-function formatDateYYYYMMDD(iso: string): string {
+function formatDateYYYYMMDDHHmm(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) {
     return iso; // パースできなければそのまま返す
   }
+
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${y}/${m}/${day}`;
+
+  // 24h 表記
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+
+  return `${y}/${m}/${day} ${hh}:${mm}`;
 }
 
 /**
@@ -133,12 +138,12 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     });
   }, [rows, brandFilter, assigneeFilter, sortKey, sortDir]);
 
-  // createdAt / updatedAt を yyyy/MM/dd 形式に整形して UI へ渡す
+  // createdAt / updatedAt を yyyy/MM/dd HH:mm 形式に整形して UI へ渡す
   const displayRows: TokenBlueprint[] = useMemo(() => {
     return filteredRows.map((tb) => ({
       ...tb,
-      createdAt: tb.createdAt ? formatDateYYYYMMDD(tb.createdAt) : tb.createdAt,
-      updatedAt: tb.updatedAt ? formatDateYYYYMMDD(tb.updatedAt) : tb.updatedAt,
+      createdAt: tb.createdAt ? formatDateYYYYMMDDHHmm(tb.createdAt) : tb.createdAt,
+      updatedAt: tb.updatedAt ? formatDateYYYYMMDDHHmm(tb.updatedAt) : tb.updatedAt,
     }));
   }, [filteredRows]);
 

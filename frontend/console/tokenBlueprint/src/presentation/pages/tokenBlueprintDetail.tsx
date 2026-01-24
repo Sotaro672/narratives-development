@@ -1,5 +1,3 @@
-// frontend/console/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx
-
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
@@ -15,8 +13,13 @@ export default function TokenBlueprintDetail() {
   const {
     blueprint,
     assigneeName,
+
+    // ★ 追加: 管理情報
     createdByName,
     createdAt,
+    updatedByName,
+    updatedAt,
+
     tokenContents,
     cardVm,
     isEditMode,
@@ -106,6 +109,9 @@ export default function TokenBlueprintDetail() {
           assigneeName={assigneeName}
           createdByName={createdByName}
           createdAt={createdAt}
+          // ★ 追加
+          updatedByName={updatedByName}
+          updatedAt={updatedAt}
           onEditAssignee={onEditAssignee}
           onClickAssignee={onClickAssignee}
         />
