@@ -15,25 +15,24 @@ import (
 
 	uc "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
-	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // TokenBlueprintHandler handles /token-blueprints endpoints.
 type TokenBlueprintHandler struct {
 	uc       *uc.TokenBlueprintUsecase
-	memSvc   *memdom.Service
+	queryUc  *uc.TokenBlueprintQueryUsecase
 	brandSvc *branddom.Service
 }
 
 func NewTokenBlueprintHandler(
 	ucase *uc.TokenBlueprintUsecase,
-	memSvc *memdom.Service,
+	queryUcase *uc.TokenBlueprintQueryUsecase,
 	brandSvc *branddom.Service,
 ) http.Handler {
 	return &TokenBlueprintHandler{
 		uc:       ucase,
-		memSvc:   memSvc,
+		queryUc:  queryUcase,
 		brandSvc: brandSvc,
 	}
 }
@@ -231,8 +230,9 @@ type tokenBlueprintResponse struct {
 	CreatedByID   string `json:"createdById"`
 	CreatedByName string `json:"createdByName"`
 
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy string     `json:"updatedBy"`
+	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy     string     `json:"updatedBy"`     // memberId（互換維持）
+	UpdatedByName string     `json:"updatedByName"` // memberId -> name（query usecase）
 
 	MetadataURI string `json:"metadataUri"`
 
@@ -268,22 +268,6 @@ type tokenBlueprintPatchResponse struct {
 }
 
 // name resolver helpers ----------------------------------------------------
-
-func (h *TokenBlueprintHandler) resolveAssigneeName(ctx context.Context, id string) string {
-	if h == nil || h.memSvc == nil {
-		return ""
-	}
-	name, _ := h.memSvc.GetNameLastFirstByID(ctx, strings.TrimSpace(id))
-	return name
-}
-
-func (h *TokenBlueprintHandler) resolveCreatorName(ctx context.Context, id string) string {
-	if h == nil || h.memSvc == nil {
-		return ""
-	}
-	name, _ := h.memSvc.GetNameLastFirstByID(ctx, strings.TrimSpace(id))
-	return name
-}
 
 func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string) string {
 	if h == nil || h.brandSvc == nil {
@@ -347,8 +331,13 @@ func (h *TokenBlueprintHandler) toContentFilesResponse(ctx context.Context, tb *
 	return out
 }
 
-// ★ 変更: includeContentViewURL を追加（list では署名発行を避ける）
-func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenBlueprint, includeContentViewURL bool) tokenBlueprintResponse {
+// ★ 変更: names(=query usecase が作成した member name 群) を受け取って詰めるだけ
+func (h *TokenBlueprintHandler) toResponse(
+	ctx context.Context,
+	tb *tbdom.TokenBlueprint,
+	includeContentViewURL bool,
+	names *uc.TokenBlueprintMemberNames,
+) tokenBlueprintResponse {
 	if tb == nil {
 		return tokenBlueprintResponse{}
 	}
@@ -359,7 +348,18 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		updPtr = &t
 	}
 
+	assigneeID := strings.TrimSpace(tb.AssigneeID)
 	createdByID := strings.TrimSpace(tb.CreatedBy)
+	updatedByID := strings.TrimSpace(tb.UpdatedBy)
+
+	assigneeName := ""
+	createdByName := ""
+	updatedByName := ""
+	if names != nil {
+		assigneeName = strings.TrimSpace(names.AssigneeName)
+		createdByName = strings.TrimSpace(names.CreatedByName)
+		updatedByName = strings.TrimSpace(names.UpdatedByName)
+	}
 
 	return tokenBlueprintResponse{
 		ID:           strings.TrimSpace(tb.ID),
@@ -371,15 +371,18 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		Description:  strings.TrimSpace(tb.Description),
 		ContentFiles: h.toContentFilesResponse(ctx, tb, includeContentViewURL),
 
-		AssigneeID:   strings.TrimSpace(tb.AssigneeID),
-		AssigneeName: h.resolveAssigneeName(ctx, tb.AssigneeID),
-		CreatedAt:    tb.CreatedAt,
+		AssigneeID:   assigneeID,
+		AssigneeName: assigneeName,
+
+		CreatedAt: tb.CreatedAt,
 
 		CreatedByID:   createdByID,
-		CreatedByName: h.resolveCreatorName(ctx, createdByID),
+		CreatedByName: createdByName,
 
-		UpdatedAt:   updPtr,
-		UpdatedBy:   strings.TrimSpace(tb.UpdatedBy),
+		UpdatedAt:     updPtr,
+		UpdatedBy:     updatedByID,   // 互換維持（ID）
+		UpdatedByName: updatedByName, // 名前
+
 		MetadataURI: strings.TrimSpace(tb.MetadataURI),
 
 		IconURL:     h.resolveTokenIconURL(tb),
@@ -528,8 +531,20 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ★ 方針: member name 群は QueryUsecase に作らせる
+	var (
+		names uc.TokenBlueprintMemberNames
+	)
+	if h != nil && h.queryUc != nil {
+		// best-effort: 失敗してもレスポンスは返す（名前は空）
+		if tb2, n, e := h.queryUc.GetByIDWithMemberNames(ctx, tb.ID); e == nil && tb2 != nil {
+			tb = tb2
+			names = n
+		}
+	}
+
 	// ★ create も detail と同様に viewUrl を含めて返す（コンテンツが無ければ空）
-	resp := h.toResponse(ctx, tb, true)
+	resp := h.toResponse(ctx, tb, true, &names)
 
 	if req.HasIconFile {
 		ct := strings.TrimSpace(req.IconContentType)
@@ -762,21 +777,28 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	tb, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
+	// ★ 方針: 1件取得 + member name 群は QueryUsecase に作らせる
+	if h == nil || h.queryUc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "query usecase is not configured"})
+		return
+	}
+
+	tb, names, err := h.queryUc.GetByIDWithMemberNames(ctx, strings.TrimSpace(id))
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	// ★ 追加: tenant boundary check（越境参照防止）
+	// tenant boundary check（越境参照防止）
 	if strings.TrimSpace(tb.CompanyID) != companyID {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
 	}
 
-	// ★ 詳細は viewUrl を含めて返す
-	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb, true))
+	// ★ 詳細は viewUrl を含めて返す（member名は query usecase が解決済み）
+	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb, true, &names))
 }
 
 // list --------------------------------------------------------------------
@@ -832,10 +854,37 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ★ list は member 名を一括解決（QueryUsecase に委譲）
+	var nameByMemberID map[string]string
+	if h != nil && h.queryUc != nil && len(result.Items) > 0 {
+		ids := make([]string, 0, len(result.Items)*3)
+		for i := range result.Items {
+			ids = append(ids,
+				strings.TrimSpace(result.Items[i].AssigneeID),
+				strings.TrimSpace(result.Items[i].CreatedBy),
+				strings.TrimSpace(result.Items[i].UpdatedBy),
+			)
+		}
+		m, _ := h.queryUc.ResolveMemberNames(ctx, ids)
+		nameByMemberID = m
+	}
+
 	items := make([]tokenBlueprintResponse, 0, len(result.Items))
 	for i := range result.Items {
+		tb := &result.Items[i]
+
+		assigneeID := strings.TrimSpace(tb.AssigneeID)
+		createdByID := strings.TrimSpace(tb.CreatedBy)
+		updatedByID := strings.TrimSpace(tb.UpdatedBy)
+
+		names := &uc.TokenBlueprintMemberNames{
+			AssigneeName:  strings.TrimSpace(nameByMemberID[assigneeID]),
+			CreatedByName: strings.TrimSpace(nameByMemberID[createdByID]),
+			UpdatedByName: strings.TrimSpace(nameByMemberID[updatedByID]),
+		}
+
 		// ★ list では署名発行を避ける（重いので url は空）
-		items = append(items, h.toResponse(ctx, &result.Items[i], false))
+		items = append(items, h.toResponse(ctx, tb, false, names))
 	}
 
 	_ = json.NewEncoder(w).Encode(tokenBlueprintPageResponse{
@@ -901,8 +950,18 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
+	// ★ 方針: member name 群は QueryUsecase に作らせる
+	var names uc.TokenBlueprintMemberNames
+	if h != nil && h.queryUc != nil {
+		// best-effort
+		if tb2, n, e := h.queryUc.GetByIDWithMemberNames(ctx, updated.ID); e == nil && tb2 != nil {
+			updated = tb2
+			names = n
+		}
+	}
+
 	// ★ update は viewUrl を含めて返す（直後の画面表示のため）
-	resp := h.toResponse(ctx, updated, true)
+	resp := h.toResponse(ctx, updated, true, &names)
 
 	if req.HasIconFile {
 		ct := strings.TrimSpace(req.IconContentType)

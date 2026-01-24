@@ -93,10 +93,14 @@ type Container struct {
 	ShippingAddressUC  *uc.ShippingAddressUsecase
 	TokenUC            *uc.TokenUsecase
 	TokenBlueprintUC   *uc.TokenBlueprintUsecase
-	TokenOperationUC   *uc.TokenOperationUsecase
-	TrackingUC         *uc.TrackingUsecase
-	UserUC             *uc.UserUsecase
-	WalletUC           *uc.WalletUsecase
+
+	// ★ 追加: TokenBlueprint read-model（memberId -> name 解決を担当）
+	TokenBlueprintQueryUC *uc.TokenBlueprintQueryUsecase
+
+	TokenOperationUC *uc.TokenOperationUsecase
+	TrackingUC       *uc.TrackingUsecase
+	UserUC           *uc.UserUsecase
+	WalletUC         *uc.WalletUsecase
 
 	// Cart / Post
 	CartUC *uc.CartUsecase
@@ -404,6 +408,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		gcsClient, // ★追加: bucket/.keep 作成に必要
 	)
 
+	// =========================================================
+	// ★ TokenBlueprintQueryUsecase（read-model: memberId -> name 解決）
+	// - handler 側の重複解決を排除し、query usecase に集約する前提
+	// =========================================================
+	tokenBlueprintQueryUC := uc.NewTokenBlueprintQueryUsecase(
+		tokenBlueprintRepo,
+		memberSvc,
+	)
+
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)
 	trackingUC := uc.NewTrackingUsecase(trackingRepo)
 	userUC := uc.NewUserUsecase(userRepo)
@@ -518,10 +531,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ShippingAddressUC:  shippingAddressUC,
 		TokenUC:            tokenUC,
 		TokenBlueprintUC:   tokenBlueprintUC,
-		TokenOperationUC:   tokenOperationUC,
-		TrackingUC:         trackingUC,
-		UserUC:             userUC,
-		WalletUC:           walletUC,
+
+		// ★ 追加
+		TokenBlueprintQueryUC: tokenBlueprintQueryUC,
+
+		TokenOperationUC: tokenOperationUC,
+		TrackingUC:       trackingUC,
+		UserUC:           userUC,
+		WalletUC:         walletUC,
 
 		CartUC: cartUC,
 
@@ -572,10 +589,14 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		ShippingAddressUC:  c.ShippingAddressUC,
 		TokenBlueprintUC:   c.TokenBlueprintUC,
-		TokenOperationUC:   c.TokenOperationUC,
-		TrackingUC:         c.TrackingUC,
-		UserUC:             c.UserUC,
-		WalletUC:           c.WalletUC,
+
+		// ★ 追加: handler が QueryUsecase を受け取る想定
+		TokenBlueprintQueryUC: c.TokenBlueprintQueryUC,
+
+		TokenOperationUC: c.TokenOperationUC,
+		TrackingUC:       c.TrackingUC,
+		UserUC:           c.UserUC,
+		WalletUC:         c.WalletUC,
 
 		CompanyProductionQueryService: c.CompanyProductionQueryService,
 		MintRequestQueryService:       c.MintRequestQueryService,

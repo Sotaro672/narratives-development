@@ -72,6 +72,9 @@ type RouterDeps struct {
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
 
+	// ★ 追加: TokenBlueprint の read-model（名前解決含む）
+	TokenBlueprintQueryUC *usecase.TokenBlueprintQueryUsecase
+
 	// ★ 追加: Company → ProductBlueprintIds → Productions の Query 専用（GET一覧）
 	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
 
@@ -330,7 +333,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.TokenBlueprintUC != nil {
 		tbH := consoleHandler.NewTokenBlueprintHandler(
 			deps.TokenBlueprintUC,
-			deps.MemberService,
+			deps.TokenBlueprintQueryUC, // ★ 変更: MemberService ではなく QueryUsecase を渡す
 			deps.BrandService,
 		)
 
