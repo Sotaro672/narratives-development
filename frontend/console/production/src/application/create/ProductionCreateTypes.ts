@@ -1,3 +1,4 @@
+//frontend\console\production\src\application\create\ProductionCreateTypes.ts
 // ======================================================================
 // Production モデル（バックエンド準拠 / Usecase Input-Output）
 // ======================================================================

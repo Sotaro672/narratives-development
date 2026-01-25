@@ -20,7 +20,7 @@ import {
 } from "../utils/qrPdfBuilder";
 
 // ★ 印刷完了シグナルを送るために ProductionDetailService を import
-import { notifyPrintLogCompleted } from "../../../production/src/application/productionDetailService";
+import { notifyPrintLogCompleted } from "../../../production/src/application/detail/notifyPrintLogCompleted";
 
 // ==============================
 // 型の再エクスポート（既存の import を壊さないため）

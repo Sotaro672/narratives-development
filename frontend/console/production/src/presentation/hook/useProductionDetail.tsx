@@ -7,16 +7,17 @@ import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrent
 
 import {
   loadProductionDetail,
-  loadProductBlueprintDetail,
   loadModelVariationIndexByProductBlueprintId,
   buildQuantityRowsFromModels,
   updateProductionDetail,
   type ProductionDetail,
-  type ProductBlueprintDetail,
   type ModelVariationSummary,
   type ProductionQuantityRow as DetailQuantityRow,
-} from "../../application/productionDetailService";
-
+} from "../../application/detail/index";
+import {
+loadProductBlueprintDetail,
+type ProductBlueprintDetail,
+}from "../../application/productBlueprint/index";
 // ✅ create 用行型は application ではなく presentation の UI 型を参照する
 import type { ProductionQuantityRow as CreateQuantityRow } from "../create/types";
 
