@@ -1,4 +1,4 @@
-//frontend\console\production\src\application\detail\notifyPrintLogCompleted.ts
+// frontend\console\production\src\application\detail\notifyPrintLogCompleted.ts
 import type { ProductionStatus } from "../../../../shell/src/shared/types/production";
 
 import { getCurrentUser, getIdTokenOrThrow } from "../../infrastructure/auth/firebaseAuth";
@@ -6,7 +6,8 @@ import { updateProduction } from "../../infrastructure/http/productionClient";
 
 /* ---------------------------------------------------------
  * 印刷完了シグナル受信（usecase）
- *   - Production を printed に更新
+ *   - Production を printed に更新（初回のみ）
+ *   - 2回目以降（既存ログ再利用）は更新しない
  *   - ProductBlueprint の printed 更新は printService 側に委譲
  * --------------------------------------------------------- */
 export async function notifyPrintLogCompleted(params: {
@@ -15,10 +16,13 @@ export async function notifyPrintLogCompleted(params: {
   totalQrCount: number;
   reusedExistingLogs?: boolean;
 }): Promise<void> {
-  const { productionId } = params;
+  const { productionId, reusedExistingLogs } = params;
 
   const id = productionId.trim();
   if (!id) return;
+
+  // ✅ 2回目以降（既存ログ再利用）の場合は production を更新しない
+  if (reusedExistingLogs) return;
 
   const user = getCurrentUser();
   if (!user) return;
