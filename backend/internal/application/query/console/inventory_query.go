@@ -99,7 +99,13 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		rgb         *int
 	}
 
-	group := map[key]int{}
+	// ✅ availableStock と reservedCount を両方集計する
+	type agg struct {
+		available int
+		reserved  int
+	}
+
+	group := map[key]agg{}
 
 	productNameCache := map[string]string{}
 	tokenNameCache := map[string]string{}
@@ -147,13 +153,21 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 				tokenNameCache[tbID] = name
 			}
 
+			// ✅ inv.Stock が空でも「inventory テーブルがある限り list」する
+			// - modelNumber は不明なので "-" を採用
 			if len(inv.Stock) == 0 {
+				k := key{pbID: pbID, tbID: tbID, modelNum: "-"}
+				if _, ok := group[k]; !ok {
+					group[k] = agg{available: 0, reserved: 0}
+				}
 				continue
 			}
 
 			for modelID, ms := range inv.Stock {
 				modelID = strings.TrimSpace(modelID)
 				if modelID == "" {
+					// modelId が壊れている場合でも inventory から来た行を落としすぎないため、
+					// ここはスキップするが pb×tb 自体は上の fallback で出せる
 					continue
 				}
 
@@ -178,26 +192,34 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 				}
 				modelNumber := modelAttrCache[modelID].modelNumber
 
-				stock := modelStockLen(ms)
-				if stock <= 0 {
-					continue
-				}
+				// ✅ availableStock/reservedCount は同一ロジックで算出
+				// ✅ 0 でも行を落とさない（要件）
+				_, reserved, available := modelStockNumbers(ms)
 
 				k := key{pbID: pbID, tbID: tbID, modelNum: modelNumber}
-				group[k] += stock
+				a := group[k]
+				a.available += available
+				a.reserved += reserved
+				group[k] = a
 			}
 		}
 	}
 
 	rows := make([]querydto.InventoryManagementRowDTO, 0, len(group))
-	for k, stock := range group {
+	for k, a := range group {
 		rows = append(rows, querydto.InventoryManagementRowDTO{
 			ProductBlueprintID: k.pbID,
 			ProductName:        productNameCache[k.pbID],
 			TokenBlueprintID:   k.tbID,
 			TokenName:          tokenNameCache[k.tbID],
 			ModelNumber:        k.modelNum,
-			Stock:              stock,
+
+			// 互換: Stock は availableStock と同義
+			Stock: a.available,
+
+			// ✅ NEW: 画面へ渡す
+			AvailableStock: a.available,
+			ReservedCount:  a.reserved,
 		})
 	}
 
@@ -403,10 +425,8 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			continue
 		}
 
-		cnt := modelStockLen(ms)
-		if cnt <= 0 {
-			continue
-		}
+		// ✅ 0 でも行を落とさない（要件）
+		_, _, available := modelStockNumbers(ms)
 
 		attr := q.resolveModelResolved(ctx, modelID)
 
@@ -434,7 +454,7 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		if missingColor || missingRGB {
 			log.Printf(
 				"[inventory_query][GetDetailByID] modelResolved inventoryId=%q pbId=%q tbId=%q modelId=%q mn=%q size=%q color=%q rgb=%v rgbType=%T stock=%d missing={color:%t,rgb:%t}",
-				id, pbID, tbID, modelID, mn, sz, cl, attr.RGB, attr.RGB, cnt, missingColor, missingRGB,
+				id, pbID, tbID, modelID, mn, sz, cl, attr.RGB, attr.RGB, available, missingColor, missingRGB,
 			)
 		}
 
@@ -444,10 +464,10 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			Size:        sz,
 			Color:       cl,
 			RGB:         attr.RGB,
-			Stock:       cnt,
+			Stock:       available, // availableStock（0 も返す）
 		})
 
-		total += cnt
+		total += available
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
@@ -479,7 +499,7 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		ProductBlueprintPatch: pbPatchPtr, // ✅ *Patch（nil なら omitempty で出ない）
 		TokenBlueprintPatch:   tbPatchPtr, // ✅ NEW: TokenBlueprintCard 用
 		Rows:                  rows,
-		TotalStock:            total,
+		TotalStock:            total, // availableStock 合計（0 行は足しこまれない）
 		UpdatedAt:             updatedAt,
 	}
 
@@ -604,34 +624,49 @@ type tokenBlueprintPatchReader interface {
 // Stock helpers
 // ============================================================
 
-func modelStockLen(ms invdom.ModelStock) int {
-	rv := reflect.ValueOf(ms)
-	if !rv.IsValid() {
-		return 0
+// modelStockNumbers は UI 表示用の在庫数を安定して算出する。
+// 方針:
+//   - accumulation は ms.Accumulation を正とし、0 の場合のみ len(Products) をフォールバック
+//   - reservedCount は「availableStock 計算に使った値」と一致させる（= max(stored, sum(ReservedByOrder))）
+//   - available は accumulation - reservedCount（負なら 0 に丸めて WARN）
+func modelStockNumbers(ms invdom.ModelStock) (accumulation int, reservedCount int, available int) {
+	// accumulation
+	accumulation = ms.Accumulation
+	if accumulation == 0 && len(ms.Products) > 0 {
+		accumulation = len(ms.Products)
 	}
 
-	if rv.Kind() == reflect.Map {
-		return rv.Len()
+	// reservedCount（ドメイン更新の値を基本にしつつ、表示は過大在庫を防ぐ）
+	reservedStored := ms.ReservedCount
+
+	sum := 0
+	for _, q := range ms.ReservedByOrder {
+		sum += q
 	}
 
-	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
-		return rv.Len()
+	// ✅ availableStock 計算に使う reservedCount（DTO に渡す reservedCount もこれ）
+	reservedCount = reservedStored
+	if sum > reservedCount {
+		reservedCount = sum
 	}
 
-	if rv.Kind() == reflect.Struct {
-		for i := 0; i < rv.NumField(); i++ {
-			f := rv.Field(i)
-
-			if f.Kind() == reflect.Map && f.Type().Key().Kind() == reflect.String {
-				return f.Len()
-			}
-			if f.Kind() == reflect.Slice || f.Kind() == reflect.Array {
-				return f.Len()
-			}
-		}
+	if reservedStored != sum {
+		log.Printf(
+			"[inventory_query][stock] WARN reservedCount mismatch stored=%d sum(ReservedByOrder)=%d orders=%d accumulation=%d -> use reservedCount=%d for display",
+			reservedStored, sum, len(ms.ReservedByOrder), accumulation, reservedCount,
+		)
 	}
 
-	return 0
+	available = accumulation - reservedCount
+	if available < 0 {
+		log.Printf(
+			"[inventory_query][stock] WARN availableStock negative accumulation=%d reservedCount=%d (stored=%d sum=%d) -> clamp to 0",
+			accumulation, reservedCount, reservedStored, sum,
+		)
+		available = 0
+	}
+
+	return accumulation, reservedCount, available
 }
 
 // ============================================================

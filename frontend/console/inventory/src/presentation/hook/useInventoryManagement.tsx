@@ -1,5 +1,3 @@
-// frontend/console/inventory/src/presentation/hook/useInventoryManagement.tsx
-
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -14,7 +12,7 @@ export type SortDirection = "asc" | "desc" | null;
 
 /**
  * ✅ InventoryRow は inventory_query.go の結果を元にした一覧用の行。
- * 列順: [プロダクト名, トークン名, 在庫数]
+ * 列順: [プロダクト名, トークン名, 在庫数, 注文数]
  */
 export type InventoryRow = {
   id: string; // 一覧の主キー（UI用）
@@ -26,6 +24,7 @@ export type InventoryRow = {
   tokenName: string;
 
   stock: number;
+  reservedCount: number; // ✅ 注文数
 };
 
 /** フックの返却型 */
@@ -63,6 +62,7 @@ function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
     tokenName: x.tokenName,
 
     stock: x.stock,
+    reservedCount: x.reservedCount,
   }));
 }
 
@@ -108,7 +108,8 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       const productOk =
         productFilter.length === 0 || productFilter.includes(r.productName);
 
-      const tokenOk = tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
+      const tokenOk =
+        tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
 
       return productOk && tokenOk;
     });
@@ -125,6 +126,8 @@ export function useInventoryManagement(): UseInventoryManagementResult {
         if (sortKey === "tokenName")
           return dir * as(a.tokenName).localeCompare(as(b.tokenName));
         if (sortKey === "stock") return dir * (an(a.stock) - an(b.stock));
+        if (sortKey === "reservedCount")
+          return dir * (an(a.reservedCount) - an(b.reservedCount));
 
         return 0;
       });
@@ -144,6 +147,7 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       tokenBlueprintId: r.tokenBlueprintId,
       tokenName: r.tokenName,
       stock: r.stock,
+      reservedCount: r.reservedCount, // ✅ 必須
     }));
 
     const base = buildInventoryFilterOptionsFromRows(asServiceRows);
@@ -167,9 +171,7 @@ export function useInventoryManagement(): UseInventoryManagementResult {
         return;
       }
 
-      navigate(
-        `/inventory/detail/${encodeURIComponent(pbId)}/${encodeURIComponent(tbId)}`,
-      );
+      navigate(`/inventory/detail/${encodeURIComponent(pbId)}/${encodeURIComponent(tbId)}`);
     },
     [navigate],
   );

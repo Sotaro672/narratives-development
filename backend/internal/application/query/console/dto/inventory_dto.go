@@ -12,7 +12,13 @@ type InventoryManagementRowDTO struct {
 	TokenBlueprintID   string `json:"tokenBlueprintId"` // ✅ 必須
 	TokenName          string `json:"tokenName"`
 	ModelNumber        string `json:"modelNumber"`
-	Stock              int    `json:"stock"`
+
+	// 互換: 従来の stock は availableStock と同義にする
+	Stock int `json:"stock"`
+
+	// ✅ NEW: 画面で必要な内訳
+	AvailableStock int `json:"availableStock"`
+	ReservedCount  int `json:"reservedCount"`
 }
 
 // ============================================================

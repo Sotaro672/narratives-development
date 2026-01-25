@@ -23,9 +23,12 @@ import (
 //   -> 在庫が 0 / inventory.Stock に存在しない modelId でも、PriceRows に行を出せる。
 //   -> stock は inventory があれば反映、無ければ 0 で返す。
 //
-// NOTE:
-// - productBlueprintPatchReader / tokenBlueprintPatchReader / inventoryReader / modelStockLen は
+// ✅ NOTE:
+// - productBlueprintPatchReader / tokenBlueprintPatchReader / inventoryReader / getStringFieldAny / modelStockNumbers は
 //   inventory_query.go 側の定義を正として「重複定義しない」
+//
+// ✅ IMPORTANT:
+// - stock は availableStock（accumulation - reservedCount）を返す
 // ============================================================
 
 type ListCreateQuery struct {
@@ -313,6 +316,8 @@ func parseInventoryID(inventoryID string) (pbID string, tbID string, ok bool) {
 // - 母集団: modelRepo(=models/variations) があればそれを正とする
 // - stock: inventory が取れれば picked.Stock[modelId] を反映、無ければ 0
 // - 重要: stock==0 でも行を出す（価格入力のため）
+//
+// ✅ stock は availableStock（accumulation - reservedCount）
 // ============================================================
 
 func (q *ListCreateQuery) buildPriceRowsByIDs(
@@ -384,7 +389,9 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		stock := 0
 		if picked != nil && picked.Stock != nil {
 			if ms, ok := picked.Stock[mid]; ok {
-				stock = modelStockLen(ms) // defined in inventory_query.go
+				// ✅ availableStock を採用（accumulation - reservedCount）
+				_, _, available := modelStockNumbers(ms) // defined in inventory_query.go
+				stock = available
 			}
 		}
 
@@ -404,7 +411,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 
 		rows = append(rows, querydto.ListCreatePriceRowDTO{
 			ModelID: mid,
-			Stock:   stock, // ✅ 0 でも出す
+			Stock:   stock, // ✅ 0 でも出す（availableStock）
 			Size:    sz,
 			Color:   cl,
 			RGB:     attr.RGB,
@@ -497,7 +504,9 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 		stock := 0
 		if picked != nil && picked.Stock != nil {
 			if ms, ok := picked.Stock[mid]; ok {
-				stock = modelStockLen(ms) // defined in inventory_query.go
+				// ✅ availableStock を採用（accumulation - reservedCount）
+				_, _, available := modelStockNumbers(ms) // defined in inventory_query.go
+				stock = available
 			}
 		}
 
@@ -517,7 +526,7 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 
 		rows = append(rows, querydto.ListCreatePriceRowDTO{
 			ModelID: mid,
-			Stock:   stock, // ✅ 0 でも出す
+			Stock:   stock, // ✅ 0 でも出す（availableStock）
 			Size:    sz,
 			Color:   cl,
 			RGB:     attr.RGB,

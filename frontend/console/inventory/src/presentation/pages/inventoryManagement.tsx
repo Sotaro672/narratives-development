@@ -1,5 +1,3 @@
-// frontend/console/inventory/src/presentation/pages/inventoryManagement.tsx
-
 import List from "../../../../shell/src/layout/List/List";
 import "../styles/inventory.css";
 
@@ -63,6 +61,11 @@ export default function InventoryManagementPage() {
             {/* 在庫数 */}
             <td>
               <span className="inv__total-pill">{row.stock}</span>
+            </td>
+
+            {/* 注文数 */}
+            <td>
+              <span className="inv__total-pill">{row.reservedCount}</span>
             </td>
           </tr>
         ))}

@@ -1,5 +1,3 @@
-// frontend/console/inventory/src/application/inventoryManagementService.tsx
-
 import React from "react";
 import {
   FilterableTableHeader,
@@ -14,7 +12,7 @@ import {
 
 // ============================================================
 // Types (ViewModel for Inventory Management table)
-//   columns: [productName, tokenName, stock]
+//   columns: [productName, tokenName, stock, reservedCount]
 //   - key: productBlueprintId + tokenBlueprintId
 // ============================================================
 
@@ -25,10 +23,11 @@ export type InventoryManagementRow = {
   tokenBlueprintId: string;
   tokenName: string;
 
-  stock: number;
+  stock: number; // (= availableStock)
+  reservedCount: number; // ✅ 注文数
 };
 
-export type InventorySortKey = "productName" | "tokenName" | "stock";
+export type InventorySortKey = "productName" | "tokenName" | "stock" | "reservedCount";
 
 /** ヘッダー生成時に必要なコンテキスト型 */
 export type InventoryHeaderContext = {
@@ -112,7 +111,7 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
   }
 
   // ② inventories（一覧DTO）を 1 回だけ
-  // 期待: [{ productBlueprintId, productName, tokenBlueprintId, tokenName, modelNumber, stock }, ...]
+  // 期待: [{ productBlueprintId, productName, tokenBlueprintId, tokenName, modelNumber, stock, availableStock, reservedCount }, ...]
   const items: any[] = await fetchInventoryListDTO();
 
   console.log("[inventoryMgmt/loadInventoryRowsFromBackend] inventory list raw", {
@@ -127,7 +126,8 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
       productBlueprintId: string;
       tokenBlueprintId: string;
       tokenName: string;
-      stock: number;
+      stock: number; // (= availableStock)
+      reservedCount: number;
     }
   >();
 
@@ -149,9 +149,15 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
     if (!printedByPbId.has(pbId)) continue;
 
     const tokenName = asString(it?.tokenName) || tbId;
-    const stock = asNumber(it?.stock);
 
-    if (stock <= 0) continue;
+    // ✅ stock は availableStock 優先（無ければ stock）
+    const stock = asNumber(it?.availableStock ?? it?.stock);
+
+    // ✅ 注文数（reservedCount）
+    const reservedCount = asNumber(it?.reservedCount);
+
+    // ✅ 0行(在庫0/注文0)も除外しない（inventory テーブルがある限り list したい要件）
+    // if (stock <= 0 && reservedCount <= 0) continue;
 
     const key = `${pbId}__${tbId}`;
     const cur = agg.get(key);
@@ -161,9 +167,11 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
         tokenBlueprintId: tbId,
         tokenName,
         stock,
+        reservedCount,
       });
     } else {
       cur.stock += stock;
+      cur.reservedCount += reservedCount;
       // tokenName は先勝ち
     }
   }
@@ -179,6 +187,7 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
       tokenBlueprintId: v.tokenBlueprintId, // ✅ "-" 埋めをしない
       tokenName: v.tokenName || "-",
       stock: v.stock,
+      reservedCount: v.reservedCount,
     });
   }
 
@@ -196,7 +205,7 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
 
 /**
  * 在庫管理一覧テーブルのヘッダー生成ロジック
- * 列順: [プロダクト名, トークン名, 在庫数]
+ * 列順: [プロダクト名, トークン名, 在庫数, 注文数]
  */
 export function buildInventoryHeaders(
   productOptions: Array<{ value: string; label: string }>,
@@ -222,6 +231,17 @@ export function buildInventoryHeaders(
       key="stock"
       label="在庫数"
       sortKey="stock"
+      activeKey={ctx.sortKey}
+      direction={ctx.sortDir ?? null}
+      onChange={(key, dir) => {
+        ctx.setSortKey(key as InventorySortKey);
+        ctx.setSortDir(dir);
+      }}
+    />,
+    <SortableTableHeader
+      key="reservedCount"
+      label="注文数"
+      sortKey="reservedCount"
       activeKey={ctx.sortKey}
       direction={ctx.sortDir ?? null}
       onChange={(key, dir) => {

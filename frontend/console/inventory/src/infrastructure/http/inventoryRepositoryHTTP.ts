@@ -1,5 +1,3 @@
-// frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.ts
-
 // ✅ API_BASE 互換が必要な箇所があるかもしれないので re-export（任意）
 export { API_BASE } from "../api/inventoryApi";
 
@@ -46,7 +44,13 @@ export type InventoryListRowDTO = {
   tokenName: string;
 
   modelNumber: string;
+
+  // ✅ 互換: stock は (= availableStock) として扱う
   stock: number;
+
+  // ✅ NEW: 画面側が使う値を落とさず返す
+  availableStock: number;
+  reservedCount: number;
 };
 
 function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null {
@@ -57,10 +61,30 @@ function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null {
   const tokenName = s(raw?.tokenName);
 
   const modelNumber = s(raw?.modelNumber ?? raw?.modelNum);
-  const stock = n(raw?.stock);
+
+  // ✅ 受け取り揺れ吸収（camel / Pascal / snake）
+  const hasAvailableStock =
+    raw?.availableStock !== undefined ||
+    raw?.AvailableStock !== undefined ||
+    raw?.available_stock !== undefined;
+
+  const availableStockRaw = n(
+    raw?.availableStock ?? raw?.AvailableStock ?? raw?.available_stock,
+  );
+
+  const stockRaw = n(raw?.stock ?? raw?.Stock ?? raw?.stock_count);
+
+  const reservedCount = n(
+    raw?.reservedCount ?? raw?.ReservedCount ?? raw?.reserved_count,
+  );
 
   // ✅ 方針A: pbId/tbId は必須。ここで落とす（"-" 埋めはしない）
   if (!productBlueprintId || !tokenBlueprintId) return null;
+
+  // ✅ stock は互換のため残すが、「在庫数(表示)」= availableStock を正とする
+  // - availableStock が来ているならそれを採用（0でも採用）
+  // - 来ていない場合のみ stock を availableStock とみなす
+  const availableStock = hasAvailableStock ? availableStockRaw : stockRaw;
 
   return {
     productBlueprintId,
@@ -68,13 +92,19 @@ function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null {
     tokenBlueprintId,
     tokenName,
     modelNumber,
-    stock,
+
+    // 互換: stock は availableStock と同義で返す
+    stock: availableStock,
+
+    availableStock,
+    reservedCount,
   };
 }
 
 /**
  * ✅ Inventory 一覧DTO
  * - 戻り値は "必ず tokenBlueprintId を含む" 正規化済み配列
+ * - reservedCount / availableStock を落とさず返す
  */
 export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
   const data = (await getInventoryListRaw()) as any;
