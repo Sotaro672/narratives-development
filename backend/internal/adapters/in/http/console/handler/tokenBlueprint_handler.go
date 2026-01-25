@@ -13,21 +13,22 @@ import (
 	"strings"
 	"time"
 
-	uc "narratives/internal/application/usecase"
+	tbapp "narratives/internal/application/tokenBlueprint" // ✅ moved TokenBlueprint usecases/types here
+	usecase "narratives/internal/application/usecase"      // ✅ keep for CompanyIDFromContext etc.
 	branddom "narratives/internal/domain/brand"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // TokenBlueprintHandler handles /token-blueprints endpoints.
 type TokenBlueprintHandler struct {
-	uc       *uc.TokenBlueprintUsecase
-	queryUc  *uc.TokenBlueprintQueryUsecase
+	uc       *tbapp.TokenBlueprintUsecase
+	queryUc  *tbapp.TokenBlueprintQueryUsecase
 	brandSvc *branddom.Service
 }
 
 func NewTokenBlueprintHandler(
-	ucase *uc.TokenBlueprintUsecase,
-	queryUcase *uc.TokenBlueprintQueryUsecase,
+	ucase *tbapp.TokenBlueprintUsecase,
+	queryUcase *tbapp.TokenBlueprintQueryUsecase,
 	brandSvc *branddom.Service,
 ) http.Handler {
 	return &TokenBlueprintHandler{
@@ -192,10 +193,10 @@ type issueTokenContentsUploadURLsFile struct {
 // ★ A. 構造体ごと返す（推奨）
 // upload: 署名付きPUT URL + public URL + view URL + objectPath + expiresAt
 type tokenContentUploadItemResponse struct {
-	ContentID string                     `json:"contentId"`
-	URL       string                     `json:"url"` // 表示用（private bucket は viewUrl を返す）
-	Upload    *uc.TokenContentsUploadURL `json:"upload"`
-	Content   tbdom.ContentFile          `json:"contentFile"`
+	ContentID string                        `json:"contentId"`
+	URL       string                        `json:"url"` // 表示用（private bucket は viewUrl を返す）
+	Upload    *tbapp.TokenContentsUploadURL `json:"upload"`
+	Content   tbdom.ContentFile             `json:"contentFile"`
 }
 
 type issueTokenContentsUploadURLsResponse struct {
@@ -240,7 +241,7 @@ type tokenBlueprintResponse struct {
 	IconURL     string `json:"iconUrl,omitempty"`
 	ContentsURL string `json:"contentsUrl,omitempty"`
 
-	IconUpload *uc.TokenIconUploadURL `json:"iconUpload,omitempty"`
+	IconUpload *tbapp.TokenIconUploadURL `json:"iconUpload,omitempty"`
 }
 
 type tokenBlueprintPageResponse struct {
@@ -336,7 +337,7 @@ func (h *TokenBlueprintHandler) toResponse(
 	ctx context.Context,
 	tb *tbdom.TokenBlueprint,
 	includeContentViewURL bool,
-	names *uc.TokenBlueprintMemberNames,
+	names *tbapp.TokenBlueprintMemberNames,
 ) tokenBlueprintResponse {
 	if tb == nil {
 		return tokenBlueprintResponse{}
@@ -473,7 +474,7 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 
 	log.Printf("[tokenBlueprint_handler] create start companyId=%q actorId=%q", companyID, actorID)
@@ -515,7 +516,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tb, err := h.uc.Create(ctx, uc.CreateBlueprintRequest{
+	tb, err := h.uc.Create(ctx, tbapp.CreateBlueprintRequest{
 		Name:        strings.TrimSpace(req.Name),
 		Symbol:      strings.TrimSpace(req.Symbol),
 		BrandID:     strings.TrimSpace(req.BrandID),
@@ -532,9 +533,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ★ 方針: member name 群は QueryUsecase に作らせる
-	var (
-		names uc.TokenBlueprintMemberNames
-	)
+	var names tbapp.TokenBlueprintMemberNames
 	if h != nil && h.queryUc != nil {
 		// best-effort: 失敗してもレスポンスは返す（名前は空）
 		if tb2, n, e := h.queryUc.GetByIDWithMemberNames(ctx, tb.ID); e == nil && tb2 != nil {
@@ -573,7 +572,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 func (h *TokenBlueprintHandler) issueContentsUploadURLs(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 	id = strings.TrimSpace(id)
 
@@ -736,7 +735,7 @@ func (h *TokenBlueprintHandler) issueContentsUploadURLs(w http.ResponseWriter, r
 func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	id = strings.TrimSpace(id)
 
 	if companyID == "" {
@@ -770,7 +769,7 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -806,7 +805,7 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -877,7 +876,7 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		createdByID := strings.TrimSpace(tb.CreatedBy)
 		updatedByID := strings.TrimSpace(tb.UpdatedBy)
 
-		names := &uc.TokenBlueprintMemberNames{
+		names := &tbapp.TokenBlueprintMemberNames{
 			AssigneeName:  strings.TrimSpace(nameByMemberID[assigneeID]),
 			CreatedByName: strings.TrimSpace(nameByMemberID[createdByID]),
 			UpdatedByName: strings.TrimSpace(nameByMemberID[updatedByID]),
@@ -902,7 +901,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	ctx := r.Context()
 	id = strings.TrimSpace(id)
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 
 	if companyID == "" {
@@ -935,7 +934,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	updated, err := h.uc.Update(ctx, uc.UpdateBlueprintRequest{
+	updated, err := h.uc.Update(ctx, tbapp.UpdateBlueprintRequest{
 		ID:           id,
 		Name:         req.Name,
 		Symbol:       req.Symbol,
@@ -951,7 +950,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	}
 
 	// ★ 方針: member name 群は QueryUsecase に作らせる
-	var names uc.TokenBlueprintMemberNames
+	var names tbapp.TokenBlueprintMemberNames
 	if h != nil && h.queryUc != nil {
 		// best-effort
 		if tb2, n, e := h.queryUc.GetByIDWithMemberNames(ctx, updated.ID); e == nil && tb2 != nil {
@@ -986,7 +985,7 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 	ctx := r.Context()
 	id = strings.TrimSpace(id)
 
-	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 
 	tb, err := h.uc.GetByID(ctx, id)
 	if err != nil {

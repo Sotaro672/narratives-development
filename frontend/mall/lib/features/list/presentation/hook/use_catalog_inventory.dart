@@ -1,4 +1,3 @@
-// frontend/mall/lib/features/list/presentation/hook/use_catalog_inventory.dart
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../infrastructure/list_repository_http.dart';
 
@@ -107,7 +106,7 @@ class UseCatalogInventory {
       }
     }
 
-    // models が無いなら inventory 側の modelIds を使う（旧式互換は不要なので stockKeys fallback は不要）
+    // models が無いなら inventory 側の modelIds を使う
     if (modelIds.isEmpty && inv != null) {
       modelIds.addAll(
         inv.modelIds.map((e) => e.trim()).where((e) => e.isNotEmpty),
@@ -130,13 +129,13 @@ class UseCatalogInventory {
       final label = meta != null ? _modelLabel(meta) : modelId;
 
       final stock = inv?.stock[modelId];
-      final count = stock != null ? _availableStock(stock) : 0; // ✅ HERE
+      final count = stock != null ? _availableStock(stock) : 0;
 
       final price = priceMap[modelId];
 
-      final int? rgb = (meta != null && meta.colorRGB > 0)
-          ? meta.colorRGB
-          : null;
+      // ✅ FIX: ブラック(0x000000=0) を null 扱いしない
+      // ※「未設定」が 0 で来る設計だとブラックと区別できないため、DTO側で nullable 等に分離するのが理想
+      final int? rgb = meta?.colorRGB;
 
       final s = (meta?.size ?? '').trim();
       final String? size = s.isNotEmpty ? s : null;

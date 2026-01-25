@@ -1,4 +1,3 @@
-//frontend\mall\lib\features\list\presentation\components\catalog_inventory.dart
 import 'package:flutter/material.dart';
 
 class CatalogInventoryCard extends StatefulWidget {
@@ -258,7 +257,10 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
 
   Color? _rgbToColor(int? rgb) {
     if (rgb == null) return null;
-    if (rgb <= 0) return null;
+
+    // ✅ FIX: ブラック (0x000000 = 0) を有効値として扱う
+    // 負値は不正値として弾く
+    if (rgb < 0) return null;
 
     if (rgb >= 0xFF000000) return Color(rgb);
     return Color(0xFF000000 | (rgb & 0x00FFFFFF));
@@ -402,7 +404,9 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
     final set = <int>{};
     for (final r in rows) {
       final rgb = _pickRgb(r);
-      if (rgb != null && rgb > 0) set.add(rgb);
+
+      // ✅ FIX: 0(black) を除外しない。負値のみ除外。
+      if (rgb != null && rgb >= 0) set.add(rgb);
     }
     final out = set.toList()..sort();
     return out;
@@ -412,7 +416,9 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
     return rows.where((r) {
       if (_selectedRgb != null) {
         final rgb = _pickRgb(r);
-        if (rgb == null || rgb <= 0) return false;
+
+        // ✅ FIX: 0(black) を弾かない（null のみ除外）
+        if (rgb == null) return false;
         if (rgb != _selectedRgb) return false;
       }
       if (_selectedSize != null) {
@@ -470,7 +476,12 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
                   children: [
                     ...rgbs.map((rgb) {
                       final c = _rgbToColor(rgb);
-                      final label = _colorNameForRgb(rows, rgb) ?? '';
+
+                      // 表示ラベル（best-effort）
+                      final label =
+                          _colorNameForRgb(rows, rgb) ??
+                          (rgb == 0 ? 'ブラック' : '');
+
                       return ChoiceChip(
                         selected: _selectedRgb == rgb,
                         onSelected: (_) => setState(() {

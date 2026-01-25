@@ -14,6 +14,9 @@ import (
 	// ★ InspectionUsecase 移動先
 	inspectionapp "narratives/internal/application/inspection"
 
+	// ✅ TokenBlueprint usecases 移動先
+	tbapp "narratives/internal/application/tokenBlueprint"
+
 	usecase "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
@@ -66,14 +69,17 @@ type RouterDeps struct {
 	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
 	ShippingAddressUC  *usecase.ShippingAddressUsecase
-	TokenBlueprintUC   *usecase.TokenBlueprintUsecase
-	TokenOperationUC   *usecase.TokenOperationUsecase
-	TrackingUC         *usecase.TrackingUsecase
-	UserUC             *usecase.UserUsecase
-	WalletUC           *usecase.WalletUsecase
+
+	// ✅ moved: TokenBlueprint usecases/types
+	TokenBlueprintUC *tbapp.TokenBlueprintUsecase
+
+	TokenOperationUC *usecase.TokenOperationUsecase
+	TrackingUC       *usecase.TrackingUsecase
+	UserUC           *usecase.UserUsecase
+	WalletUC         *usecase.WalletUsecase
 
 	// ★ 追加: TokenBlueprint の read-model（名前解決含む）
-	TokenBlueprintQueryUC *usecase.TokenBlueprintQueryUsecase
+	TokenBlueprintQueryUC *tbapp.TokenBlueprintQueryUsecase
 
 	// ★ 追加: Company → ProductBlueprintIds → Productions の Query 専用（GET一覧）
 	CompanyProductionQueryService *companyquery.CompanyProductionQueryService

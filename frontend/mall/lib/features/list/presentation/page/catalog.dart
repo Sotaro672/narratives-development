@@ -153,8 +153,8 @@ class _CatalogPageState extends State<CatalogPage> {
                           const SizedBox(height: 6),
                           Text(
                             availableStock != null
-                                ? '在庫（Available）: $availableStock'
-                                : '在庫（Available）: -',
+                                ? '在庫: $availableStock'
+                                : '在庫: -',
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
 

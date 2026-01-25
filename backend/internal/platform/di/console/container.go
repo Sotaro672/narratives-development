@@ -31,6 +31,7 @@ import (
 	productionapp "narratives/internal/application/production"
 	companyquery "narratives/internal/application/query/console"
 	resolver "narratives/internal/application/resolver"
+	tokenblueprintapp "narratives/internal/application/tokenBlueprint" // ✅ moved from application/usecase
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
@@ -92,10 +93,12 @@ type Container struct {
 	ProductBlueprintUC *uc.ProductBlueprintUsecase
 	ShippingAddressUC  *uc.ShippingAddressUsecase
 	TokenUC            *uc.TokenUsecase
-	TokenBlueprintUC   *uc.TokenBlueprintUsecase
+
+	// ✅ moved: TokenBlueprint usecases are now under application/tokenBlueprint
+	TokenBlueprintUC *tokenblueprintapp.TokenBlueprintUsecase
 
 	// ★ 追加: TokenBlueprint read-model（memberId -> name 解決を担当）
-	TokenBlueprintQueryUC *uc.TokenBlueprintQueryUsecase
+	TokenBlueprintQueryUC *tokenblueprintapp.TokenBlueprintQueryUsecase
 
 	TokenOperationUC *uc.TokenOperationUsecase
 	TrackingUC       *uc.TrackingUsecase
@@ -399,20 +402,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
 	// =========================================================
-	// ✅ TokenBlueprintUsecase
+	// ✅ TokenBlueprintUsecase (moved)
 	// 現行: NewTokenBlueprintUsecase(tokenBlueprintRepo, nameResolver, gcsClient)
 	// =========================================================
-	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
+	tokenBlueprintUC := tokenblueprintapp.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,
 		nameResolver, // ★修正: memberSvc ではなく nameResolver を渡す
 		gcsClient,    // ★追加: bucket/.keep 作成に必要
 	)
 
 	// =========================================================
-	// ★ TokenBlueprintQueryUsecase（read-model: memberId -> name 解決）
+	// ★ TokenBlueprintQueryUsecase（read-model: memberId -> name 解決）(moved)
 	// - handler 側の重複解決を排除し、query usecase に集約する前提
 	// =========================================================
-	tokenBlueprintQueryUC := uc.NewTokenBlueprintQueryUsecase(
+	tokenBlueprintQueryUC := tokenblueprintapp.NewTokenBlueprintQueryUsecase(
 		tokenBlueprintRepo,
 		nameResolver, // ★修正: memberSvc ではなく nameResolver を渡す
 	)
@@ -530,8 +533,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ProductBlueprintUC: productBlueprintUC,
 		ShippingAddressUC:  shippingAddressUC,
 		TokenUC:            tokenUC,
-		TokenBlueprintUC:   tokenBlueprintUC,
 
+		// ✅ moved
+		TokenBlueprintUC: tokenBlueprintUC,
 		// ★ 追加
 		TokenBlueprintQueryUC: tokenBlueprintQueryUC,
 
@@ -588,7 +592,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ProductionUC:       c.ProductionUC,
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		ShippingAddressUC:  c.ShippingAddressUC,
-		TokenBlueprintUC:   c.TokenBlueprintUC,
+
+		// ✅ moved
+		TokenBlueprintUC: c.TokenBlueprintUC,
 
 		// ★ 追加: handler が QueryUsecase を受け取る想定
 		TokenBlueprintQueryUC: c.TokenBlueprintQueryUC,
