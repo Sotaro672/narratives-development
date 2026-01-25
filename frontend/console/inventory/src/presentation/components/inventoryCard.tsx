@@ -18,6 +18,9 @@ import {
 
 import "../styles/inventory.css";
 
+// ✅ レイヤー違反解消: Row 型は application に寄せ、presentation は参照する
+import type { InventoryRow } from "../../application/inventoryTypes";
+
 // ----------------------------------------------------------
 // RGB(int) → HEX (#RRGGBB)
 // - InventoryRow.rgb は string | number | null どれでも来うる前提で安全に変換
@@ -31,15 +34,6 @@ function rgbIntToHex(rgb: number | string | null | undefined): string | null {
   const hex = clamped.toString(16).padStart(6, "0");
   return `#${hex}`;
 }
-
-export type InventoryRow = {
-  token?:       string;/** トークン表示（例: "Token A" / "TB-xxxx" / tokenBlueprint name など） */
-  modelNumber:  string;/** 型番 (例: "LM-SB-S-WHT") */  
-  size:         string;/** サイズ (例: "S" | "M" | "L") */
-  color:        string;/** カラー表示名 (例: "ホワイト") */
-  rgb?:         number | string | null;/* RGB - int(0xRRGGBB) で来ることもあるので、表示時に hex 化して dot に反映する*/
-  stock:        number;/** 在庫数 */
-};
 
 type InventoryCardProps = {
   title?: string;
