@@ -1,11 +1,11 @@
 // frontend/console/inventory/src/presentation/hook/useInventoryDetail.tsx
 
 import * as React from "react";
-import type { InventoryRow } from "../components/inventoryCard";
+import type { InventoryRow } from "../../application/inventoryTypes";
 import {
   queryInventoryDetailByProductAndToken,
   type InventoryDetailViewModel,
-} from "../../application/inventoryDetailService";
+} from "../../application/inventoryDetail/inventoryDetailService";
 import {
   fetchTokenBlueprintPatchDTO,
   type TokenBlueprintPatchDTO,

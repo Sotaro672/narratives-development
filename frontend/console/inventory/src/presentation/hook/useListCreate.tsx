@@ -31,7 +31,7 @@ import {
   type ResolvedListCreateParams,
   type ImageInputRef,
   type PriceRowEx,
-} from "../../application/listCreateService";
+} from "../../application/listCreate/listCreateService";
 
 import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
 

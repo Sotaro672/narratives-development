@@ -1,3 +1,4 @@
+//frontend\console\inventory\src\application\inventoryManagementService.tsx
 import React from "react";
 import {
   FilterableTableHeader,
