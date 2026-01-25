@@ -1,5 +1,3 @@
-// frontend/console/production/src/presentation/components/productionQuantityCard.tsx
-
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {
@@ -18,28 +16,32 @@ import {
 } from "../../../../shell/src/shared/ui/table";
 import { Input } from "../../../../shell/src/shared/ui/input";
 
-// ✅ Application ではなく Presentation の UI 型を参照する
 import type { ProductionQuantityRow } from "../create/types";
 
+// ✅ あなたが貼ったCSSファイルに合わせて import を修正してください。
+// 例：同階層に配置するなら "./productionQuantityCard.css" など。
+// ここでは、コンポーネントと同階層に置く想定のパス例を示します。
 import "../styles/production.css";
 
 // ----------------------------------------------------------
 // RGB → HEX (#RRGGBB)
-// - number: 0xRRGGBB 相当（10進の数値として渡ってくる想定）
-// - string: "#RRGGBB"（backend DTO 想定）または数値文字列（10進）
 // ----------------------------------------------------------
 function rgbIntToHex(rgb: number | string | null | undefined): string | null {
   if (rgb === null || rgb === undefined) return null;
 
-  // string の場合: "#RRGGBB" をそのまま許容し、
-  // それ以外は数値文字列として解釈する
   if (typeof rgb === "string") {
     const s = rgb.trim();
 
-    // backend の想定: "#RRGGBB"
+    // "#RRGGBB"
     if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
 
-    // 数値文字列（10進）として解釈
+    // "RRGGBB" (hex without '#')
+    if (/^[0-9a-fA-F]{6}$/.test(s)) return `#${s}`;
+
+    // "0xRRGGBB"
+    if (/^0x[0-9a-fA-F]{6}$/.test(s)) return `#${s.slice(2)}`;
+
+    // 数値文字列（10進）
     const n = Number(s);
     if (!Number.isFinite(n)) return null;
 
@@ -48,7 +50,6 @@ function rgbIntToHex(rgb: number | string | null | undefined): string | null {
     return `#${hex}`;
   }
 
-  // number の場合
   if (!Number.isFinite(rgb)) return null;
 
   const clamped = Math.max(0, Math.min(0xffffff, Math.floor(rgb)));
@@ -94,101 +95,79 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   );
 
   return (
-    <Card className={`ivc ${className ?? ""}`}>
-      <CardHeader className="ivc__header">
-        <div className="ivc__header-inner">
-          <Palette className="ivc__icon" size={18} />
-          <CardTitle className="ivc__title">
-            {title}
-            {isEditable && (
-              <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
-                （編集）
-              </span>
-            )}
-          </CardTitle>
+    <Card className={`mqc ${className ?? ""}`}>
+      <CardHeader className="mqc__header">
+        <div className="mqc__header-inner">
+          <Palette size={18} />
+          <CardTitle className="mqc__title">{title}</CardTitle>
         </div>
       </CardHeader>
 
-      <CardContent className="ivc__body">
-        <div className="ivc__table-wrap">
-          <Table className="ivc__table">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="ivc__th ivc__th--left">型番</TableHead>
-                <TableHead className="ivc__th">サイズ</TableHead>
-                <TableHead className="ivc__th">カラー</TableHead>
-                <TableHead className="ivc__th ivc__th--right">生産数</TableHead>
-              </TableRow>
-            </TableHeader>
+      <CardContent className="mqc__body">
+        <Table className="mqc__table">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="mqc__th mqc__th--left">型番</TableHead>
+              <TableHead className="mqc__th">サイズ</TableHead>
+              <TableHead className="mqc__th">カラー</TableHead>
+              <TableHead className="mqc__th mqc__cell">生産数</TableHead>
+            </TableRow>
+          </TableHeader>
 
-            <TableBody>
-              {rows.map((row, idx) => {
-                const rgb = row.rgb;
-                const rgbHex = rgbIntToHex(rgb);
-                const bgColor = rgbHex ?? "#ffffff";
+          <TableBody>
+            {rows.map((row, idx) => {
+              const rgbHex = rgbIntToHex(row.rgb);
+              const bgColor = rgbHex ?? "#ffffff";
 
-                return (
-                  <TableRow key={`${row.modelNumber}-${idx}`} className="ivc__tr">
-                    {/* 型番 */}
-                    <TableCell className="ivc__model">{row.modelNumber}</TableCell>
+              return (
+                <TableRow key={`${row.modelNumber}-${idx}`}>
+                  <TableCell>{row.modelNumber}</TableCell>
+                  <TableCell className="mqc__size">{row.size}</TableCell>
 
-                    {/* サイズ */}
-                    <TableCell className="ivc__size">{row.size}</TableCell>
-
-                    {/* カラー */}
-                    <TableCell className="ivc__color-cell">
+                  <TableCell>
+                    <span className="mqc__color">
                       <span
-                        className="ivc__color-dot"
+                        className="mqc__color-dot"
                         style={{
                           backgroundColor: bgColor,
-                          boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
                         }}
                         title={rgbHex ?? ""}
                       />
-                      <span className="ivc__color-label">{row.color}</span>
-                    </TableCell>
+                      <span>{row.color}</span>
+                    </span>
+                  </TableCell>
 
-                    {/* 生産数 */}
-                    <TableCell className="ivc__quantity">
-                      {isEditable ? (
-                        <Input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={row.quantity ?? 0}
-                          onChange={(e) => handleChangeQuantity(idx, e.target.value)}
-                          className="ivc__quantity-input w-20 text-right"
-                          aria-label={`${row.modelNumber} の生産数`}
-                        />
-                      ) : (
-                        <span className="ivc__quantity-number">{row.quantity}</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-
-              {rows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="ivc__empty">
-                    表示できる生産数データがありません。
+                  <TableCell className="mqc__cell">
+                    {isEditable ? (
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={row.quantity ?? 0}
+                        onChange={(e) => handleChangeQuantity(idx, e.target.value)}
+                        className="mqc__input"
+                        aria-label={`${row.modelNumber} の生産数`}
+                      />
+                    ) : (
+                      <span>{row.quantity}</span>
+                    )}
                   </TableCell>
                 </TableRow>
-              )}
+              );
+            })}
 
-              {rows.length > 0 && (
-                <TableRow className="ivc__total-row">
-                  <TableCell colSpan={3} className="ivc__total-label ivc__th--right">
-                    合計
-                  </TableCell>
-                  <TableCell className="ivc__total-value">
-                    <strong>{totalQuantity}</strong>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+            {rows.length > 0 && (
+              <TableRow className="mqc__footer-row">
+                <TableCell colSpan={3} className="mqc__footer-label">
+                  合計
+                </TableCell>
+                <TableCell className="mqc__footer-cell">
+                  <span className="mqc__pill mqc__pill--total">{totalQuantity}</span>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );

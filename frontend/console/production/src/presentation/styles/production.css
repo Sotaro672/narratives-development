@@ -1,4 +1,4 @@
-/* frontend/production/src/pages/productionQuantityCard.css
+/* frontend\console\production\src\presentation\styles\production.css
    生産数カード（期待見た目に合わせてテーブル罫線・フッター行を調整）
 */
 .mqc {
@@ -405,4 +405,17 @@
   width: 60%;              /* ボタン幅を調整（お好みで変更可） */
   max-width: 280px;        /* 最大幅 */
   margin-top: 12px;
+}
+.mqc__color {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mqc__color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.18);
 }

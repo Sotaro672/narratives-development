@@ -1,5 +1,4 @@
-/* frontend/console/list/src/presentation/components/listImageCard.css */
-
+/* frontend\console\inventory\src\presentation\styles\inventory.css
 /* モデル別在庫一覧カード */
 .ivc {
   background-color: var(--pbp-surface, #ffffff);
@@ -261,4 +260,18 @@
 .lic__add-title {
   font-size: 0.75rem;
   color: rgba(51, 65, 85, 1);
+}
+/* color dot (InventoryCard / ProductionQuantityCard 共通想定) */
+.ivc__color-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ivc__color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
 }
