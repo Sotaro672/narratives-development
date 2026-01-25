@@ -44,7 +44,7 @@ class WalletContentsPage extends HookWidget {
   /// metadata name
   final String? tokenName;
 
-  /// metadata image url
+  /// metadata image url（互換: 既存ルートから渡される可能性あり）
   final String? imageUrl;
 
   /// optional return path (decoded, plain string)
@@ -109,12 +109,18 @@ class WalletContentsPage extends HookWidget {
       children.add(const SizedBox(height: 12));
     }
 
+    // ✅ contents を「URL表示」ではなく「バケット上の実体を取得してプレビュー表示」
+    // （URL文字列自体はUIに出さない）
+    children.add(_ContentsArea(contentsUrl: vm.contentsUrl));
+    children.add(const SizedBox(height: 12));
+
     children.add(
       _Card(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _smallIcon(context, vm.imageUrl),
+            // ✅ 推奨: imageUrl 互換ではなく iconUrl を表示
+            _smallIcon(context, vm.iconUrl),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -268,6 +274,107 @@ class WalletContentsPage extends HookWidget {
                   );
                 },
               ),
+      ),
+    );
+  }
+}
+
+class _ContentsArea extends StatelessWidget {
+  const _ContentsArea({required this.contentsUrl});
+
+  final String contentsUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final u = contentsUrl.trim();
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Contents',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+
+          if (u.isEmpty)
+            Text(
+              '（contents 未取得）',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            )
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(minHeight: 160),
+                color: cs.surface,
+                child: Image.network(
+                  u,
+                  fit: BoxFit.contain,
+                  // ✅ bucket上の実体へアクセスして描画（URL文字列はUIに表示しない）
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => _PreviewNotAvailable(),
+                ),
+              ),
+            ),
+
+          if (u.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '（プレビュー不可の場合は、コンテンツ形式または空ファイルの可能性があります）',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewNotAvailable extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.insert_drive_file_outlined,
+              color: cs.onSurfaceVariant,
+              size: 28,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'このコンテンツはプレビューできません',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

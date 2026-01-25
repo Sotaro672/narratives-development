@@ -17,7 +17,14 @@ class WalletContentsViewModel {
     required this.brandName,
     required this.productName,
     required this.tokenName,
+
+    /// 互換性維持: 従来の imageUrl（= iconUrl と同義）
     required this.imageUrl,
+
+    /// 追加: token icon / token contents を画面へ渡す
+    required this.iconUrl,
+    required this.contentsUrl,
+
     required this.goPreviewByProductId,
     required this.openContents,
   });
@@ -33,7 +40,13 @@ class WalletContentsViewModel {
   final String brandName;
   final String productName;
   final String tokenName;
+
+  /// 従来フィールド（互換）
   final String imageUrl;
+
+  /// 追加フィールド
+  final String iconUrl;
+  final String contentsUrl;
 
   final void Function(BuildContext context, String productId)
   goPreviewByProductId;
@@ -50,7 +63,14 @@ WalletContentsViewModel useWalletContentsViewModel({
   String? brandName,
   String? productName,
   String? tokenName,
+
+  /// 互換: 既存呼び出し側が imageUrl を渡している場合に対応
   String? imageUrl,
+
+  /// 追加: 新しく iconUrl / contentsUrl を明示的に prefill できるようにする
+  String? iconUrl,
+  String? contentsUrl,
+
   String? from,
 }) {
   final repo = useMemoized(() => WalletRepositoryHttp());
@@ -133,7 +153,9 @@ WalletContentsViewModel useWalletContentsViewModel({
         s(brandName).isNotEmpty ||
         s(productName).isNotEmpty ||
         s(tokenName).isNotEmpty ||
-        s(imageUrl).isNotEmpty;
+        s(imageUrl).isNotEmpty ||
+        s(iconUrl).isNotEmpty ||
+        s(contentsUrl).isNotEmpty;
 
     if (!hasPrefill) {
       load();
@@ -144,7 +166,10 @@ WalletContentsViewModel useWalletContentsViewModel({
         s(brandName).isEmpty ||
         s(productName).isEmpty ||
         s(tokenName).isEmpty ||
-        s(imageUrl).isEmpty;
+        // icon は imageUrl 互換もあるため、両方 empty なら不足扱い
+        (s(imageUrl).isEmpty && s(iconUrl).isEmpty) ||
+        // contents は画面上必須でないならここを外してもよいが、取得目的のため不足扱い
+        s(contentsUrl).isEmpty;
 
     if (missing) load();
 
@@ -158,7 +183,23 @@ WalletContentsViewModel useWalletContentsViewModel({
   final pname = firstNonEmpty([productName, resolved.value?.productName]);
 
   final tname = firstNonEmpty([tokenName, metadata.value?.name]);
-  final img = firstNonEmpty([imageUrl, metadata.value?.image]);
+
+  // icon: prefill(iconUrl or imageUrl) -> metadata.tokenIconUri -> metadata.image
+  final icon = firstNonEmpty([
+    iconUrl,
+    imageUrl,
+    metadata.value?.tokenIconUri,
+    metadata.value?.image,
+  ]);
+
+  // contents: prefill(contentsUrl) -> metadata.tokenContentsUri
+  final contents = firstNonEmpty([
+    contentsUrl,
+    metadata.value?.tokenContentsUri,
+  ]);
+
+  // 互換: 従来の imageUrl は icon と同義で返す
+  final img = icon;
 
   void goPreviewByProductId(BuildContext context, String productId) {
     final pid = productId.trim();
@@ -167,8 +208,6 @@ WalletContentsViewModel useWalletContentsViewModel({
   }
 
   // ✅ tokenName 押下時に contents.dart へ遷移
-  // ルーティングのパスはプロジェクト側の実装に合わせて変更してください。
-  // ここでは一般的な想定として '/wallet/contents' を使用します。
   void openContents(BuildContext context) {
     final mint = mintAddress.trim();
     if (mint.isEmpty) return;
@@ -187,7 +226,14 @@ WalletContentsViewModel useWalletContentsViewModel({
     putIf('brandName', bname);
     putIf('productName', pname);
     putIf('tokenName', tname);
+
+    // 互換: 既存の imageUrl
     putIf('imageUrl', img);
+
+    // 追加: icon / contents
+    putIf('iconUrl', icon);
+    putIf('contentsUrl', contents);
+
     putIf('from', s(from));
 
     final loc = Uri(path: path, queryParameters: qp).toString();
@@ -202,7 +248,11 @@ WalletContentsViewModel useWalletContentsViewModel({
     brandName: bname,
     productName: pname,
     tokenName: tname,
-    imageUrl: img,
+
+    imageUrl: img, // 互換
+    iconUrl: icon, // 追加
+    contentsUrl: contents, // 追加
+
     goPreviewByProductId: goPreviewByProductId,
     openContents: openContents,
   );
