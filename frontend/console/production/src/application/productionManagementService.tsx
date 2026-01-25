@@ -86,18 +86,13 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
         ? raw.Models
         : [];
 
-    // DTO には totalQuantity が来る想定だが、互換のため再計算 fallback も残す
-    const computedTotalQuantity = rawModels.reduce(
-      (sum: number, m: any) => sum + (m?.quantity ?? m?.Quantity ?? 0),
-      0,
-    );
-
+    // ✅ totalQuantity は backend からの値のみを利用（再計算 fallback は削除）
     const totalQuantity =
       typeof raw.totalQuantity === "number"
         ? raw.totalQuantity
         : typeof raw.TotalQuantity === "number"
           ? raw.TotalQuantity
-          : computedTotalQuantity;
+          : 0;
 
     const blueprintId = asNonEmptyString(
       raw.productBlueprintId ?? raw.ProductBlueprintID ?? "",

@@ -100,7 +100,7 @@ export default function ProductionDetail() {
       return;
     }
 
-    const ok = window.confirm("印刷");
+    const ok = window.confirm("印刷後は生産数を更新できません。\n印刷後に追加生産が必要になった場合は生産計画を新規作成してください。");
     if (!ok) return;
 
     // usePrintCard 内で:

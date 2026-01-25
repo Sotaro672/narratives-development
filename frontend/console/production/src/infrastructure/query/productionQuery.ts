@@ -24,7 +24,7 @@ async function getIdTokenOrThrow(): Promise<string> {
 // ==============================
 
 // backend の Production モデルに対応する最小限の一覧用型
-export type ProductionStatus = "draft" | "planned" | "in_progress";
+export type ProductionStatus =  "planned" | "printed";
 
 export type ProductionSummary = {
   id: string;

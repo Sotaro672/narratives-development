@@ -13,7 +13,7 @@
  * ProductionStatus
  * backend/internal/domain/production/entity.go の ProductionStatus に準拠
  */
-export type ProductionStatus = "printed" | "planning" | "deleted";
+export type ProductionStatus = "printed" | "planned" | "deleted";
 
 /**
  * ProductionModel

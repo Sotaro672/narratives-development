@@ -36,6 +36,22 @@ function isInvalidCompanyIDError(e: unknown): boolean {
   return msg.includes("invalid companyId") || msg.includes("invalid companyID");
 }
 
+/**
+ * ProductionStatus -> 日本語ラベル
+ * - UI 表示のための formatter（presentation 層）
+ */
+function formatProductionStatusJa(status: ProductionStatus): string {
+  switch (status) {
+    case "planned":
+      return "計画中";
+    case "printed":
+      return "印刷済み";
+    default:
+      // 想定外の値はそのまま出してデバッグ可能性を残す
+      return String(status ?? "");
+  }
+}
+
 export function useProductionManagement() {
   const navigate = useNavigate();
 
@@ -152,13 +168,16 @@ export function useProductionManagement() {
     }));
   }, [baseRows]);
 
-  // ステータスフィルタ
+  // ステータスフィルタ（label を日本語に変換）
   const statusOptions = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<ProductionStatus>();
     for (const row of baseRows) {
       if (row.status) set.add(row.status);
     }
-    return Array.from(set).map((v) => ({ value: v, label: v }));
+    return Array.from(set).map((v) => ({
+      value: v,
+      label: formatProductionStatusJa(v),
+    }));
   }, [baseRows]);
 
   // ===== フィルタ＋ソート適用 → 表示用行に変換 =====
@@ -185,9 +204,15 @@ export function useProductionManagement() {
   // ブランドフィルタは View 行に対して適用
   const rows: ProductionRowView[] = useMemo(() => {
     if (brandFilter.length === 0) return allRowsView;
-    return allRowsView.filter((r) =>
-      brandFilter.includes((r.brandName ?? "").trim()),
-    );
+
+    return allRowsView
+      .filter((r) => brandFilter.includes((r.brandName ?? "").trim()))
+      .map((r) => ({
+        ...r,
+        // 一覧表示用に status を日本語化した値へ上書き（画面表示上のみ）
+        // ※型は ProductionStatus のままなので any 経由で付与
+        status: formatProductionStatusJa(r.status as any) as any,
+      }));
   }, [allRowsView, brandFilter]);
 
   // ===== ヘッダー =====

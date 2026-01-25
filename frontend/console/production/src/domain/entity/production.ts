@@ -16,24 +16,18 @@ export interface ModelQuantity {
  * backend/internal/domain/production/entity.go の ProductionStatus に対応
  */
 export type ProductionStatus =
-  | "manufacturing"
-  | "inspected"
   | "printed"
   | "planned"
   | "deleted"
-  | "suspended";
 
 /** Status の妥当性チェック */
 export function isValidProductionStatus(
   status: string
 ): status is ProductionStatus {
   return (
-    status === "manufacturing" ||
-    status === "inspected" ||
     status === "printed" ||
     status === "planned" ||
-    status === "deleted" ||
-    status === "suspended"
+    status === "deleted" 
   );
 }
 
@@ -123,10 +117,6 @@ export function validateProduction(p: Production): string[] {
   // printed / inspected / deleted の整合性チェック（backend ロジック準拠で簡略）
   if (p.status === "printed" && !p.printedAt) {
     errors.push("printedAt is required when status is printed");
-  }
-  if (p.status === "inspected") {
-    if (!p.printedAt) errors.push("printedAt is required when inspected");
-    if (!p.inspectedAt) errors.push("inspectedAt is required when inspected");
   }
   if (p.status === "deleted" && !p.deletedAt) {
     errors.push("deletedAt is required when status is deleted");
