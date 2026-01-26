@@ -51,7 +51,6 @@ export default function MintRequestDetail() {
     hasMint,
 
     // ✅ 表示制御（hook 側で算出）
-    // minted=true のときだけ非表示、それ以外は表示
     isMintRequested,
     showMintButton,
     showBrandSelectorCard,
@@ -70,7 +69,7 @@ export default function MintRequestDetail() {
     mintMintedAtLabel,
     onChainTxSignature,
 
-    // ✅ NEW: requester display name
+    // ✅ requester display name
     requestedByName,
   } = useMintRequestDetail();
 
@@ -81,7 +80,8 @@ export default function MintRequestDetail() {
       layout="grid-2"
       title={title}
       onBack={onBack}
-      onSave={handleSave}
+      // ✅ minted=true のときは保存ボタンを出さない（onSave を渡さない）
+      onSave={isMintRequested ? undefined : handleSave}
     >
       {/* 左カラム */}
       <div className="space-y-4 mt-4">
@@ -191,8 +191,8 @@ export default function MintRequestDetail() {
 
       {/* 右カラム */}
       <div className="space-y-4 mt-4">
-        {/* ✅ mint 情報は「mintが存在するなら常に表示」 */}
-        {hasMint && (
+        {/* ✅ minted:true の場合のみ「ミント情報」を表示（minted:false は非表示） */}
+        {isMintRequested && (
           <Card className="pb-select">
             <CardHeader>
               <CardTitle>ミント情報</CardTitle>
@@ -208,19 +208,14 @@ export default function MintRequestDetail() {
 
                 <div>焼却予定日: {mintScheduledBurnDateLabel}</div>
 
-                {/* ✅ NEW: リクエスト者ラベル */}
-                <div>
-                  リクエスト者: {requestedByName || "（不明）"}
-                </div>
+                <div>リクエスト者: {requestedByName || "（不明）"}</div>
 
                 <div>ミント日時: {mintMintedAtLabel}</div>
 
                 {onChainTxSignature && (
                   <div className="break-all">
                     txSignature:{" "}
-                    <span className="font-mono text-xs">
-                      {onChainTxSignature}
-                    </span>
+                    <span className="font-mono text-xs">{onChainTxSignature}</span>
                   </div>
                 )}
               </div>
@@ -259,9 +254,7 @@ export default function MintRequestDetail() {
                     ))}
 
                     {brandOptions.length === 0 && (
-                      <div className="pb-select__empty">
-                        ブランド候補が未設定です
-                      </div>
+                      <div className="pb-select__empty">ブランド候補が未設定です</div>
                     )}
                   </div>
                 </PopoverContent>
@@ -277,9 +270,7 @@ export default function MintRequestDetail() {
             </CardHeader>
             <CardContent>
               {!selectedBrandId && (
-                <div className="pb-select__empty">
-                  先にブランドを選択してください。
-                </div>
+                <div className="pb-select__empty">先にブランドを選択してください。</div>
               )}
 
               {selectedBrandId && tokenBlueprintOptions.length > 0 && (

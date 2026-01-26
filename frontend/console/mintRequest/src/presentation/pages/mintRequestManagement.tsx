@@ -10,7 +10,7 @@ export default function MintRequestManagementPage() {
   return (
     <div className="p-0">
       <List
-        title="ミントリクエスト管理"
+        title="ミント申請一覧"
         headerCells={headers}
         showCreateButton={false}
         showResetButton
@@ -36,14 +36,19 @@ export default function MintRequestManagementPage() {
               onKeyDown={(e) => handleRowKeyDown(e, r.id)}
               aria-label={`ミント申請 ${r.productName} の詳細へ`}
             >
+              {/* ✅ ラベル表示を廃止して “文字列” として表示 */}
               <td>
-                <span className="lp-brand-pill">{tokenLabel}</span>
+                <span className="truncate">{tokenLabel}</span>
               </td>
+
+              {/* ✅ ラベル表示を廃止して “文字列” として表示 */}
               <td>
-                <span className="lp-brand-pill">{r.productName}</span>
+                <span className="truncate">{r.productName ?? "-"}</span>
               </td>
+
               <td>{r.mintQuantity}</td>
               <td>{r.productionQuantity ?? "-"}</td>
+
               <td>
                 {r.status === "minted" ? (
                   <span className="mint-badge is-done">{r.statusLabel}</span>
