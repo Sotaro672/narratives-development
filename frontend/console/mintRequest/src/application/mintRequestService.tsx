@@ -22,7 +22,7 @@ import {
   fetchTokenBlueprintsByBrandHTTP,
   postMintRequestHTTP,
   fetchProductBlueprintIdByProductionIdHTTP,
-} from "../infrastructure/repository/mintRequestRepositoryHTTP";
+} from "../infrastructure/repository";
 
 // ✅ tokenBlueprint patch（Inventory 側の query endpoint を利用）
 import {
@@ -825,5 +825,8 @@ export async function submitMintRequestAndRefresh(
     refreshed = null;
   }
 
-  return { updatedBatch: (updated ?? null) as any, refreshedMint: (refreshed ?? null) as any };
+  return {
+    updatedBatch: (updated ?? null) as any,
+    refreshedMint: (refreshed ?? null) as any,
+  };
 }

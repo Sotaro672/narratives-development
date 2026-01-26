@@ -4,9 +4,10 @@ import {
   fetchInspectionBatchesHTTP,
   fetchInspectionByProductionIdHTTP,
   fetchInspectionBatchesByProductionIdsHTTP,
-} from "../repository/mintRequestRepositoryHTTP";
+} from "../repository";
 
-import * as repo from "../repository/mintRequestRepositoryHTTP";
+// ※ 段階移行・型ガードのため、repo 名前空間でも参照しておく
+import * as repo from "../repository";
 
 import type {
   InspectionItem,
@@ -99,7 +100,7 @@ export async function fetchInspectionBatchesByProductionIds(
       | [];
   }
 
-  // 直接 import しているので基本ここに来ないが、念のため
+  // 直接 export しているので基本ここに来ないが、念のため
   return fetchInspectionBatchesByProductionIdsHTTP(ids);
 }
 
@@ -107,7 +108,7 @@ export async function fetchInspectionBatchesByProductionIds(
  * ✅ mints(list row) を inspectionIds (= productionIds) でまとめて取得する。
  *
  * 推奨: repository の listMintsByInspectionIDsHTTP を優先して呼ぶ
- * （内部で view=list を試し、ダメならフォールバックする実装にしてある）
+ * （内部で view=list を試し、ダメならフォールバックする実装にしてある）※想定
  */
 export async function fetchMintsMapByInspectionIds(
   inspectionIds: string[],

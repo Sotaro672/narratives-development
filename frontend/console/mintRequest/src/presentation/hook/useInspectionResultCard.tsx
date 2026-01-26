@@ -1,16 +1,11 @@
 // frontend/console/mintRequest/src/presentation/hook/useInspectionResultCard.tsx
 
 import * as React from "react";
-import type {
-  InspectionBatch,
-  InspectionItem,
-} from "../../domain/entity/inspections";
+import type { InspectionBatch } from "../../domain/entity/inspections";
 
 // ★ 追加：modelId -> ModelVariation を引く（modelNumber/size/color を解決する）
-import {
-  fetchModelVariationByIdForMintHTTP,
-  type ModelVariationForMintDTO,
-} from "../../infrastructure/repository/mintRequestRepositoryHTTP";
+import { fetchModelVariationByIdForMintHTTP } from "../../infrastructure/repository";
+import type { ModelVariationForMintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 /**
  * バックエンドの MintInspectionView に相当する型のうち、

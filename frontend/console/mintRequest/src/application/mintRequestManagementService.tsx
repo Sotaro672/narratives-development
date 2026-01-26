@@ -12,7 +12,7 @@ import {
   listMintsByInspectionIDsHTTP,
   fetchMintsByInspectionIdsHTTP,
   fetchMintByInspectionIdHTTP,
-} from "../infrastructure/repository/mintRequestRepositoryHTTP";
+} from "../infrastructure/repository";
 
 // ✅ MintRequestQueryService 呼び出し用（ID Token）
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
@@ -289,17 +289,11 @@ function buildRowsFromQueryDTO(items: MintRequestManagementRowDTO[]): ViewRow[] 
 
     // ✅ 数量は mintQuantity / productionQuantity を最優先（←ここが今回の修正点）
     const mintQuantity = asNumber0(
-      raw.mintQuantity ??
-        raw.totalPassed ??
-        raw.inspection?.totalPassed ??
-        0,
+      raw.mintQuantity ?? raw.totalPassed ?? raw.inspection?.totalPassed ?? 0,
     );
 
     const productionQuantity = asNumber0(
-      raw.productionQuantity ??
-        raw.quantity ??
-        raw.inspection?.quantity ??
-        0,
+      raw.productionQuantity ?? raw.quantity ?? raw.inspection?.quantity ?? 0,
     );
 
     // ✅ tokenBlueprintId も維持（detail 画面や更新API用）
@@ -381,9 +375,7 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
 
       // array 想定
       if (Array.isArray(dto)) {
-        const rows = buildRowsFromQueryDTO(
-          dto as MintRequestManagementRowDTO[],
-        );
+        const rows = buildRowsFromQueryDTO(dto as MintRequestManagementRowDTO[]);
         log("MintRequestQueryService success", {
           path,
           rowsLen: rows.length,
