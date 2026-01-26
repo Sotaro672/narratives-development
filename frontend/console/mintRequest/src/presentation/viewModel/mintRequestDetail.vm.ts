@@ -59,7 +59,7 @@ export type MintInfoVM = {
   createdBy: string;
   createdByName?: string | null;
   createdAt: string | null;
-
+  requestedByName?: string | null;
   minted: boolean;
   mintedAt?: string | null;
   onChainTxSignature?: string | null;

@@ -1,6 +1,4 @@
 // frontend/console/mintRequest/src/presentation/pages/mintRequestDetail.tsx
-import * as React from "react";
-
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
@@ -70,8 +68,10 @@ export default function MintRequestDetail() {
     mintCreatedByLabel,
     mintScheduledBurnDateLabel,
     mintMintedAtLabel,
-    mintedLabel,
     onChainTxSignature,
+
+    // ✅ NEW: requester display name
+    requestedByName,
   } = useMintRequestDetail();
 
   const handleSave = () => {};
@@ -208,8 +208,12 @@ export default function MintRequestDetail() {
 
                 <div>焼却予定日: {mintScheduledBurnDateLabel}</div>
 
-                <div>minted: {mintedLabel}</div>
-                <div>mintedAt: {mintMintedAtLabel}</div>
+                {/* ✅ NEW: リクエスト者ラベル */}
+                <div>
+                  リクエスト者: {requestedByName || "（不明）"}
+                </div>
+
+                <div>ミント日時: {mintMintedAtLabel}</div>
 
                 {onChainTxSignature && (
                   <div className="break-all">

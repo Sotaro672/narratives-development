@@ -23,14 +23,11 @@ export type MintRequestManagementRowVM = {
 
   status: MintRequestRowStatus;
   inspectionStatus: InspectionStatus;
-
-  createdByName: string | null;
   mintedAt: string | null;
 
   // detail 画面や更新用に保持（表示には使わない前提でも、payload 構築で必要）
   tokenBlueprintId: string | null;
-  requestedBy: string | null;
-
+  requestedByName: string | null;
   productBlueprintId: string | null;
   scheduledBurnDate: string | null;
   minted: boolean;

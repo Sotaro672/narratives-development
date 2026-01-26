@@ -22,7 +22,8 @@ export type ViewRow = {
   status: MintRequestRowStatus;
   inspectionStatus: InspectionStatus;
 
-  createdByName: string | null;
+  createdByName: string | null; // compat
+  requestedByName: string | null; // ✅ NEW: requester display name
   mintedAt: string | null;
 
   tokenBlueprintId: string | null;
@@ -92,7 +93,15 @@ function mapDTOToRow(dto: MintRequestManagementRowDTO): ViewRow {
   const inspectionStatus = normalizeInspectionStatus((dto as any)?.inspectionStatus);
 
   const requestedBy = asStringOrNull((dto as any)?.requestedBy);
-  const createdByName = asStringOrNull((dto as any)?.createdByName);
+
+  // ✅ prefer requestedByName, fallback to createdByName, then requestedBy (id)
+  const requestedByName =
+    asStringOrNull((dto as any)?.requestedByName) ??
+    asStringOrNull((dto as any)?.createdByName) ??
+    requestedBy;
+
+  // compat: keep createdByName but align it with requestedByName for stability
+  const createdByName = requestedByName;
 
   const mintedAt = asStringOrNull((dto as any)?.mintedAt);
   const minted =
@@ -126,6 +135,7 @@ function mapDTOToRow(dto: MintRequestManagementRowDTO): ViewRow {
     inspectionStatus,
 
     createdByName,
+    requestedByName,
     mintedAt,
 
     tokenBlueprintId,

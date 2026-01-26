@@ -368,6 +368,21 @@ export function useMintRequestDetail() {
     return v ? v : null;
   }, [mint]);
 
+  // ✅ NEW: requestedByName（表示名）
+  // - mintInfo が requestedByName を持つ場合はそれを最優先
+  // - 次に createdByName
+  // - 最後に createdBy（id）
+  const requestedByName: string | null = React.useMemo(() => {
+    const a = asNonEmptyString((mint as any)?.requestedByName);
+    if (a) return a;
+
+    const b = asNonEmptyString((mint as any)?.createdByName);
+    if (b) return b;
+
+    const c = asNonEmptyString((mint as any)?.createdBy);
+    return c ? c : null;
+  }, [mint]);
+
   const requestedAt: string | null = React.useMemo(() => {
     const v = asNonEmptyString(mint?.createdAt ?? null);
     return v ? v : null;
@@ -602,12 +617,12 @@ export function useMintRequestDetail() {
   );
 
   const mintCreatedByLabel = React.useMemo(() => {
-    const name = asNonEmptyString(mint?.createdByName);
+    const name = asNonEmptyString(requestedByName);
     if (name) return name;
 
     const fallback = asNonEmptyString(mint?.createdBy);
     return fallback ? fallback : "（不明）";
-  }, [mint?.createdByName, mint?.createdBy]);
+  }, [requestedByName, mint?.createdBy]);
 
   const mintScheduledBurnDateLabel = React.useMemo(
     () => safeDateLabelJa(mint?.scheduledBurnDate ?? null, "（未設定）"),
@@ -654,6 +669,7 @@ export function useMintRequestDetail() {
     showTokenSelectorCard,
 
     requestedBy,
+    requestedByName,
     requestedAt,
 
     productBlueprintCardView,

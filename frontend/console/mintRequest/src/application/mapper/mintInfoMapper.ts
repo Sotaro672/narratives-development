@@ -14,7 +14,7 @@ export type MintInfo = {
 
   brandId: string;
   tokenBlueprintId: string;
-
+  requestedByName?: string | null;
   createdBy: string;
   createdByName?: string | null;
   createdAt: string | null;

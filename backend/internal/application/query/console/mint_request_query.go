@@ -204,7 +204,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 		tokenBlueprintID := ""
 		tokenName := ""
 		requestedBy := ""
-		createdByName := ""
+		requestedByName := ""
 		var mintedAt *time.Time
 
 		if hasMint {
@@ -223,12 +223,13 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 				tokenName = tokenBlueprintID
 			}
 
+			// ✅ requestedBy の名前解決（memberId -> "姓 名"）
 			if s.nameResolver != nil {
-				cb := requestedBy
-				createdByName = strings.TrimSpace(s.nameResolver.ResolveCreatedByName(ctx, &cb))
+				rb := requestedBy
+				requestedByName = strings.TrimSpace(s.nameResolver.ResolveRequestedByName(ctx, &rb))
 			}
-			if createdByName == "" {
-				createdByName = requestedBy
+			if requestedByName == "" {
+				requestedByName = requestedBy
 			}
 		}
 
@@ -243,9 +244,13 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 			MintQuantity:       mintQty,
 			ProductionQuantity: prodQty,
 			InspectionStatus:   inspStatus,
-			RequestedBy:        requestedBy,
-			CreatedByName:      createdByName,
-			MintedAt:           mintedAt,
+
+			// RequestedBy は「識別子（memberId）」を維持
+			RequestedBy: requestedBy,
+			// CreatedByName は「requestedBy の表示名」を格納（既存 DTO を壊さない）
+			CreatedByName: requestedByName,
+
+			MintedAt: mintedAt,
 
 			Inspection: nil,
 			Mint:       mintPtr,
@@ -468,7 +473,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	tokenBlueprintID := ""
 	tokenName := ""
 	requestedBy := ""
-	createdByName := ""
+	requestedByName := ""
 	var mintedAt *time.Time
 	var mintSummary *querydto.MintSummaryDTO
 
@@ -484,12 +489,13 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			tokenName = tokenBlueprintID
 		}
 
+		// ✅ requestedBy の名前解決（memberId -> "姓 名"）
 		if s.nameResolver != nil {
-			cb := requestedBy
-			createdByName = strings.TrimSpace(s.nameResolver.ResolveCreatedByName(ctx, &cb))
+			rb := requestedBy
+			requestedByName = strings.TrimSpace(s.nameResolver.ResolveRequestedByName(ctx, &rb))
 		}
-		if createdByName == "" {
-			createdByName = requestedBy
+		if requestedByName == "" {
+			requestedByName = requestedBy
 		}
 
 		// mint -> safe summary（products の shape 揺れ回避のため json 経由）
@@ -520,11 +526,14 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		sort.Strings(productIDs)
 
 		mintSummary = &querydto.MintSummaryDTO{
-			ID:                strings.TrimSpace(ml.ID),
-			BrandID:           strings.TrimSpace(ml.BrandID),
-			TokenBlueprintID:  strings.TrimSpace(ml.TokenBlueprintID),
-			CreatedBy:         strings.TrimSpace(ml.CreatedBy),
-			CreatedByName:     strings.TrimSpace(createdByName),
+			ID:               strings.TrimSpace(ml.ID),
+			BrandID:          strings.TrimSpace(ml.BrandID),
+			TokenBlueprintID: strings.TrimSpace(ml.TokenBlueprintID),
+			CreatedBy:        strings.TrimSpace(ml.CreatedBy),
+
+			// ✅ 表示名は requestedByName を入れる（既存 DTO を壊さない）
+			CreatedByName: strings.TrimSpace(requestedByName),
+
 			CreatedAt:         ml.CreatedAt,
 			Minted:            ml.Minted,
 			MintedAt:          ml.MintedAt,
@@ -562,14 +571,16 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		MintQuantity:       mintQty,
 		ProductionQuantity: prodQty,
 		InspectionStatus:   inspStatus,
-		RequestedBy:        requestedBy,
-		CreatedByName:      createdByName,
-		MintedAt:           mintedAt,
-		Production:         prodSummary,
-		Inspection:         inspSummary,
-		Mint:               mintSummary,
-		ModelMeta:          modelMeta,
-		TokenBlueprint:     nil,
+
+		RequestedBy:   requestedBy,
+		CreatedByName: requestedByName,
+
+		MintedAt:       mintedAt,
+		Production:     prodSummary,
+		Inspection:     inspSummary,
+		Mint:           mintSummary,
+		ModelMeta:      modelMeta,
+		TokenBlueprint: nil,
 	}
 
 	log.Printf("[mint_request_qs] detail built pid=%q elapsed=%s dto=%s",

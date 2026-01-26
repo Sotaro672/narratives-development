@@ -77,8 +77,8 @@ const toManagementRowVM = (r: ManagementRow): MintRequestManagementRowVM => {
   const statusLabel = r.status === "minted" ? "ミント完了" : inspectionStatusLabel(r.inspectionStatus);
 
   return {
-    ...r,
-
+    ...r, 
+requestedByName: r.requestedByName,
     // ✅ mintedAt 表示は "yyyy/mm/dd hh:mm:ss" に固定（dateJa.ts の確定版を利用）
     mintedAt: r.mintedAt ? safeDateTimeLabelJa(r.mintedAt, "") : null,
 
@@ -160,7 +160,7 @@ export const useMintRequestManagement = () => {
   const requesterOptions = useMemo(() => {
     const s = new Set<string>();
     rawRows.forEach((r) => {
-      const v = normalizeText(r.createdByName ?? null);
+      const v = normalizeText(r.requestedByName ?? null);
       if (v) s.add(v);
     });
     return [...s].map((v) => ({ value: v, label: v }));
@@ -185,7 +185,7 @@ export const useMintRequestManagement = () => {
     let data = rawRows.filter((r) => {
       const token = normalizeText(r.tokenName ?? null);
       const product = normalizeText(r.productName ?? null);
-      const requester = normalizeText(r.createdByName ?? null);
+      const requester = normalizeText(r.requestedByName ?? null);
 
       const tokenOk =
         tokenFilter.length === 0 || (token && tokenFilter.includes(token));
@@ -287,7 +287,7 @@ export const useMintRequestManagement = () => {
     />,
     <FilterableTableHeader
       key="status"
-      label="検査ステータス"
+      label="ステータス"
       options={statusOptions}
       selected={statusFilter}
       onChange={(next: string[]) => {

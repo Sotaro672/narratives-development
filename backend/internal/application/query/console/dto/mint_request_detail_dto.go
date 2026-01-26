@@ -43,8 +43,9 @@ type MintRequestDetailDTO struct {
 	InspectionStatus string `json:"inspectionStatus"` // inspecting/completed/notYet ...
 
 	// requester (mint.createdBy)
-	RequestedBy   string `json:"requestedBy"`
-	CreatedByName string `json:"createdByName"` // resolved member name (compat: list uses this name)
+	RequestedBy     string `json:"requestedBy"`
+	CreatedByName   string `json:"createdByName"`             // resolved member name (compat: list uses this name)
+	RequestedByName string `json:"requestedByName,omitempty"` // ✅ NEW: requestedBy の表示名（memberId -> "姓 名"）
 
 	// minted timestamp (optional)
 	MintedAt *time.Time `json:"mintedAt,omitempty"`
