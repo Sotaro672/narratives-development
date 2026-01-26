@@ -4,10 +4,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-} from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO, MintDTO } from "../../infrastructure/api/mintRequestApi";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
@@ -26,16 +23,9 @@ import {
   type TokenBlueprintPatchDTO,
 } from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
 
-import {
-  safeDateLabelJa,
-  safeDateTimeLabelJa,
-} from "../formatter/dateJa";
+import { safeDateLabelJa, safeDateTimeLabelJa } from "../formatter/dateJa";
 
-import {
-  asNonEmptyString,
-  buildModelRowsFromBatch,
-  type ModelInspectionRow,
-} from "../../application/mapper/modelInspectionMapper";
+import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
 
 import {
   extractMintInfoFromBatch,
@@ -49,7 +39,6 @@ import type {
   ProductBlueprintCardVM as ProductBlueprintCardViewModel,
   TokenBlueprintCardVM as TokenBlueprintCardViewModel,
   TokenBlueprintCardHandlersVM as TokenBlueprintCardHandlers,
-  MintModelMetaEntryVM as MintModelMetaEntry,
 } from "../viewModel/mintRequestDetail.vm";
 
 function extractProductBlueprintIdFromBatch(batch: any): string {
@@ -154,9 +143,6 @@ export function useMintRequestDetail() {
 
   const [productBlueprintId, setProductBlueprintId] = React.useState<string>("");
 
-  const [modelMetaMap] = React.useState<Record<string, MintModelMetaEntry>>({});
-  const [modelRows, setModelRows] = React.useState<ModelInspectionRow[]>([]);
-
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -179,10 +165,6 @@ export function useMintRequestDetail() {
   // tokenBlueprint patch（iconUrl/description 等の “正” をここから取る）
   const [tokenBlueprintPatch, setTokenBlueprintPatch] =
     React.useState<TokenBlueprintPatchDTO | null>(null);
-  const [tokenPatchLoading, setTokenPatchLoading] = React.useState(false);
-  const [tokenPatchError, setTokenPatchError] = React.useState<string | null>(
-    null,
-  );
 
   const title = `ミント申請詳細`;
 
@@ -213,8 +195,6 @@ export function useMintRequestDetail() {
 
         setInspectionBatch((batch ?? null) as any);
         setMintDTO((mint ?? null) as any);
-
-        setModelRows(buildModelRowsFromBatch((batch ?? null) as any));
 
         const resolvedPB = await resolveProductBlueprintIdByRequestId(
           rid,
@@ -277,9 +257,6 @@ export function useMintRequestDetail() {
   });
 
   const totalMintQuantity = inspectionCardData.totalPassed;
-
-  // 互換: 現状は未使用（保持だけ）
-  const tokenBlueprint = undefined;
 
   // ④ ProductBlueprintCard 用 VM（brandName のみ渡す）
   const productBlueprintCardView: ProductBlueprintCardViewModel | null =
@@ -363,12 +340,7 @@ export function useMintRequestDetail() {
     return Boolean(mint?.minted === true);
   }, [mint]);
 
-  const requestedBy: string | null = React.useMemo(() => {
-    const v = asNonEmptyString(mint?.createdBy);
-    return v ? v : null;
-  }, [mint]);
-
-  // ✅ NEW: requestedByName（表示名）
+  // ✅ requestedByName（表示名）
   // - mintInfo が requestedByName を持つ場合はそれを最優先
   // - 次に createdByName
   // - 最後に createdBy（id）
@@ -381,11 +353,6 @@ export function useMintRequestDetail() {
 
     const c = asNonEmptyString((mint as any)?.createdBy);
     return c ? c : null;
-  }, [mint]);
-
-  const requestedAt: string | null = React.useMemo(() => {
-    const v = asNonEmptyString(mint?.createdAt ?? null);
-    return v ? v : null;
   }, [mint]);
 
   const mintRequestedTokenBlueprintId = React.useMemo(() => {
@@ -456,8 +423,6 @@ export function useMintRequestDetail() {
   React.useEffect(() => {
     if (!tokenBlueprintIdForPatch) {
       setTokenBlueprintPatch(null);
-      setTokenPatchLoading(false);
-      setTokenPatchError(null);
       return;
     }
 
@@ -465,20 +430,12 @@ export function useMintRequestDetail() {
 
     (async () => {
       try {
-        setTokenPatchLoading(true);
-        setTokenPatchError(null);
-
         const p = await fetchTokenBlueprintPatchById(tokenBlueprintIdForPatch);
         if (cancelled) return;
-
         setTokenBlueprintPatch((p ?? null) as any);
-      } catch (e: any) {
+      } catch {
         if (cancelled) return;
         setTokenBlueprintPatch(null);
-        setTokenPatchError(String(e?.message ?? e));
-      } finally {
-        if (cancelled) return;
-        setTokenPatchLoading(false);
       }
     })();
 
@@ -514,7 +471,6 @@ export function useMintRequestDetail() {
 
       if (updatedBatch) {
         setInspectionBatch(updatedBatch as any);
-        setModelRows(buildModelRowsFromBatch(updatedBatch as any));
       }
 
       if (refreshedMint) {
@@ -634,13 +590,6 @@ export function useMintRequestDetail() {
     [mint?.mintedAt],
   );
 
-  const mintedLabel = React.useMemo(() => {
-    if (typeof mint?.minted === "boolean") {
-      return mint.minted ? "minted" : "notYet";
-    }
-    return "（不明）";
-  }, [mint?.minted]);
-
   const onChainTxSignature = React.useMemo(
     () => asNonEmptyString(mint?.onChainTxSignature),
     [mint?.onChainTxSignature],
@@ -651,56 +600,49 @@ export function useMintRequestDetail() {
     loading,
     error,
     inspectionCardData,
-    tokenBlueprint,
+
     totalMintQuantity,
     onBack,
     handleMint,
 
-    productBlueprintId,
+    // ★ mint 情報
     hasMint,
-    mint,
 
-    modelMetaMap,
-    modelRows,
-
+    // ✅ 表示制御
     isMintRequested,
     showMintButton,
     showBrandSelectorCard,
     showTokenSelectorCard,
 
-    requestedBy,
+    // ✅ requester display name
     requestedByName,
-    requestedAt,
 
     productBlueprintCardView,
     pbPatchLoading,
     pbPatchError,
 
+    // ブランド選択カード用
     brandOptions,
     selectedBrandId,
     selectedBrandName,
     handleSelectBrand,
 
+    // トークン設計一覧カード用
     tokenBlueprintOptions,
     selectedTokenBlueprintId,
     handleSelectTokenBlueprint,
 
-    selectedTokenBlueprint,
-
+    // mint 情報表示用ラベル
     tokenBlueprintCardVm,
     tokenBlueprintCardHandlers,
-
     mintCreatedAtLabel,
     mintCreatedByLabel,
     mintScheduledBurnDateLabel,
     mintMintedAtLabel,
-    mintedLabel,
     onChainTxSignature,
 
+    // 焼却予定日
     scheduledBurnDate,
     setScheduledBurnDate,
-
-    tokenPatchLoading,
-    tokenPatchError,
   };
 }

@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/infrastructure/normalizers/mintRequestsRows.ts
 
-import type { MintRequestRowRaw, MintRequestsPayloadRaw } from "../dto/mintRequestRaw.dto";
+import type { MintRequestRowRaw} from "../dto/mintRequestRaw.dto";
 
 /**
  * /mint/requests の payload から rows 配列を抽出（名揺れ吸収）
