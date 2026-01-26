@@ -1,26 +1,33 @@
 // frontend/console/mintRequest/src/application/mapper/mintRequestRowMapper.ts
+//
+// Query DTO（MintRequestQueryService /mint/requests）専用版
+// - legacy/join（inspections + mints + productions）を廃止
+// - presentation 専用の statusLabel は作らない
+// - application/usecase が扱う “行” を返す
 
 import type { InspectionStatus } from "../../domain/entity/inspections";
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-  MintListRowDTO,
-} from "../../infrastructure/api/mintRequestApi";
+import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
+
+import {
+  asNonEmptyString,
+  asStringOrNull,
+  asNumber0,
+} from "../util/primitive";
 
 // ============================================================
-// Types
+// Types (Application row for Management list)
 // ============================================================
 
 export type MintRequestRowStatus = "planning" | "requested" | "minted";
 
-export type ViewRow = {
-  id: string; // = productionId (= inspectionId 扱い)
+export type MintRequestManagementRow = {
+  id: string; // productionId (= inspectionId 扱い)
 
   tokenName: string | null;
   productName: string | null;
 
-  mintQuantity: number; // = inspection.totalPassed
-  productionQuantity: number; // = inspection.quantity (fallback: production.totalQuantity)
+  mintQuantity: number;
+  productionQuantity: number;
 
   status: MintRequestRowStatus;
   inspectionStatus: InspectionStatus;
@@ -28,218 +35,155 @@ export type ViewRow = {
   createdByName: string | null;
   mintedAt: string | null;
 
+  // detail 画面や更新 payload 構築のため保持（表示責務は presentation）
   tokenBlueprintId: string | null;
   requestedBy: string | null;
-
-  productBlueprintId: string | null;
-  scheduledBurnDate: string | null;
-  minted: boolean;
-
-  statusLabel: string;
-};
-
-export type ProductionIndex = {
-  productionIds: string[];
-  productNameById: Record<string, string | null>;
-  totalQuantityById: Record<string, number>;
-  productBlueprintIdById: Record<string, string | null>;
 };
 
 // ============================================================
-// small helpers
+// Normalizers
 // ============================================================
 
-export function asTrimmedString(v: any): string {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+export function normalizeInspectionStatus(v: any): InspectionStatus {
+  const s = String(v ?? "").trim();
+  if (s === "completed") return "completed";
+  if (s === "inspecting") return "inspecting";
+  // domain 側に notYet が存在する前提
+  return "notYet" as any;
 }
 
-export function asMaybeString(v: any): string | null {
-  const s = asTrimmedString(v);
-  return s ? s : null;
+export function normalizeRowId(raw: MintRequestManagementRowDTO): string {
+  return (
+    asNonEmptyString(raw.productionId) ||
+    asNonEmptyString(raw.inspectionId) ||
+    asNonEmptyString(raw.id)
+  );
 }
 
-export function normalizeProductionId(v: any): string {
-  return String(v?.productionId ?? v?.inspectionId ?? v?.id ?? "").trim();
+export function pickMintedAt(raw: MintRequestManagementRowDTO): string | null {
+  return asStringOrNull(raw.mintedAt) ?? asStringOrNull(raw.mint?.mintedAt);
 }
 
-export function inspectionStatusLabel(
-  s: InspectionStatus | null | undefined,
-): string {
-  switch (s) {
-    case "inspecting":
-      return "検査中";
-    case "completed":
-      return "検査完了";
-    default:
-      return "未検査";
-  }
+export function pickTokenName(raw: MintRequestManagementRowDTO): string | null {
+  return asStringOrNull(raw.tokenName) ?? asStringOrNull(raw.mint?.tokenName);
 }
 
-export function deriveMintStatusFromMintDTO(
-  mint: MintDTO | null,
+export function pickProductName(raw: MintRequestManagementRowDTO): string | null {
+  return (
+    asStringOrNull(raw.productName) ?? asStringOrNull(raw.inspection?.productName)
+  );
+}
+
+export function pickMintQuantity(raw: MintRequestManagementRowDTO): number {
+  // ✅ backend は mintQuantity / productionQuantity を返すので最優先
+  return asNumber0(raw.mintQuantity ?? raw.totalPassed ?? raw.inspection?.totalPassed ?? 0);
+}
+
+export function pickProductionQuantity(raw: MintRequestManagementRowDTO): number {
+  return asNumber0(
+    raw.productionQuantity ?? raw.quantity ?? raw.inspection?.quantity ?? 0,
+  );
+}
+
+export function pickTokenBlueprintId(raw: MintRequestManagementRowDTO): string | null {
+  return (
+    asStringOrNull(raw.tokenBlueprintId) ??
+    asStringOrNull(raw.mint?.tokenBlueprintId) ??
+    asStringOrNull(raw.mint?.tokenBlueprintID) ??
+    asStringOrNull(raw.mint?.tokenBlueprint)
+  );
+}
+
+export function pickRequestedBy(raw: MintRequestManagementRowDTO): string | null {
+  // requestedBy = mint.createdBy（想定）
+  return asStringOrNull(raw.requestedBy) ?? asStringOrNull(raw.mint?.createdBy);
+}
+
+export function pickRequesterName(raw: MintRequestManagementRowDTO): string | null {
+  // 表示は createdByName/requestedByName を優先するが、application は値だけ返す
+  return (
+    asStringOrNull(raw.requestedByName) ??
+    asStringOrNull(raw.createdByName) ??
+    pickRequestedBy(raw)
+  );
+}
+
+// ============================================================
+// Status derivation
+// ============================================================
+
+export function deriveRowStatus(
+  mintedAt: string | null,
+  tokenBlueprintId: string | null,
+  tokenName: string | null,
+  requestedBy: string | null,
 ): MintRequestRowStatus {
-  if (!mint) return "planning";
-  if ((mint as any)?.mintedAt) return "minted";
-  if ((mint as any)?.minted === true) return "minted";
-  return "requested";
-}
+  if (mintedAt) return "minted";
 
-export function pickTokenBlueprintId(mintDTO: any, mintList: any): string | null {
-  const v =
-    mintDTO?.tokenBlueprintId ??
-    mintDTO?.TokenBlueprintID ??
-    mintList?.tokenBlueprintId ??
-    mintList?.TokenBlueprintID ??
-    null;
+  // “申請が存在する” シグナルがあれば requested
+  const hasRequestSignal = Boolean(
+    tokenBlueprintId || tokenName || requestedBy,
+  );
 
-  const s = typeof v === "string" ? v.trim() : "";
-  return s ? s : null;
-}
-
-export function pickRequestedBy(mintDTO: any, mintList: any): string | null {
-  const v =
-    mintDTO?.createdBy ??
-    mintDTO?.requestedBy ??
-    mintList?.createdBy ??
-    mintList?.requestedBy ??
-    null;
-
-  const s = typeof v === "string" ? v.trim() : "";
-  return s ? s : null;
-}
-
-export function pickScheduledBurnDate(mintDTO: any): string | null {
-  const v = mintDTO?.scheduledBurnDate ?? mintDTO?.ScheduledBurnDate ?? null;
-  if (!v) return null;
-  const s = typeof v === "string" ? v.trim() : String(v);
-  return s.trim() ? s.trim() : null;
-}
-
-export function pickMinted(mintDTO: any, mintList: any): boolean {
-  if (typeof mintDTO?.minted === "boolean") return mintDTO.minted;
-  if (mintDTO?.mintedAt) return true;
-
-  if (typeof mintList?.minted === "boolean") return mintList.minted;
-  if (mintList?.mintedAt) return true;
-
-  return false;
-}
-
-export function pickProductBlueprintId(
-  batch: any,
-  productBlueprintIdById: Record<string, string | null>,
-  pid: string,
-): string | null {
-  const v = batch?.productBlueprintId ?? batch?.productBlueprint?.id ?? null;
-
-  const s1 = typeof v === "string" ? v.trim() : "";
-  if (s1) return s1;
-
-  const s2 = String(productBlueprintIdById?.[pid] ?? "").trim();
-  return s2 ? s2 : null;
-}
-
-export function indexBatchesByProductionId(
-  batches: InspectionBatchDTO[],
-): Record<string, InspectionBatchDTO> {
-  const out: Record<string, InspectionBatchDTO> = {};
-  for (const b of batches ?? []) {
-    const pid = normalizeProductionId(b);
-    if (!pid) continue;
-    out[pid] = b;
-  }
-  return out;
+  return hasRequestSignal ? "requested" : "planning";
 }
 
 // ============================================================
-// builder
+// Mapper (public)
 // ============================================================
 
-export function buildRowsJoined(
-  productionIds: string[],
-  productNameById: Record<string, string | null>,
-  totalQuantityById: Record<string, number>,
-  productBlueprintIdById: Record<string, string | null>,
-  batchesById: Record<string, InspectionBatchDTO>,
-  mintsDTOById: Record<string, MintDTO>,
-  mintsListById: Record<string, MintListRowDTO>,
-): ViewRow[] {
-  const rows: ViewRow[] = [];
+/**
+ * QueryService の “一覧 DTO” を application 行へ正規化して返す。
+ * - ここでは presentation 専用の statusLabel は付与しない
+ */
+export function mapMintRequestManagementRows(
+  items: MintRequestManagementRowDTO[],
+): MintRequestManagementRow[] {
+  return (items ?? [])
+    .map((raw) => {
+      const id = normalizeRowId(raw);
+      if (!id) return null;
 
-  for (const pid of productionIds ?? []) {
-    const b = batchesById?.[pid] ?? null;
+      const inspectionStatus = normalizeInspectionStatus(
+        raw.inspectionStatus ?? raw.inspection?.status,
+      );
 
-    const mintDTO: MintDTO | null = (mintsDTOById?.[pid] ?? null) as any;
-    const mintList: MintListRowDTO | null = (mintsListById?.[pid] ?? null) as any;
+      const mintedAt = pickMintedAt(raw);
+      const tokenName = pickTokenName(raw);
+      const productName = pickProductName(raw);
 
-    const inspStRaw = (b as any)?.status ?? null;
-    const inspSt: InspectionStatus = (inspStRaw ?? "notYet") as any;
+      const mintQuantity = pickMintQuantity(raw);
+      const productionQuantity = pickProductionQuantity(raw);
 
-    const status = deriveMintStatusFromMintDTO(mintDTO);
+      const tokenBlueprintId = pickTokenBlueprintId(raw);
+      const requestedBy = pickRequestedBy(raw);
+      const createdByName = pickRequesterName(raw);
 
-    const tokenBlueprintId = pickTokenBlueprintId(mintDTO as any, mintList as any);
-    const requestedBy = pickRequestedBy(mintDTO as any, mintList as any);
+      const status = deriveRowStatus(
+        mintedAt,
+        tokenBlueprintId,
+        tokenName,
+        requestedBy,
+      );
 
-    const tokenName =
-      asMaybeString((mintList as any)?.tokenName) ??
-      asMaybeString((mintDTO as any)?.tokenName) ??
-      null;
+      return {
+        id,
 
-    const createdByName = asMaybeString((mintList as any)?.createdByName) ?? null;
+        tokenName,
+        productName,
 
-    const mintedAt =
-      (asMaybeString((mintDTO as any)?.mintedAt) ??
-        asMaybeString((mintList as any)?.mintedAt) ??
-        null) as string | null;
+        mintQuantity,
+        productionQuantity,
 
-    const mintQuantity = Number((b as any)?.totalPassed ?? 0) || 0;
+        status,
+        inspectionStatus,
 
-    const productionQuantity =
-      Number(
-        (b as any)?.quantity ??
-          ((b as any)?.inspections?.length ?? 0) ??
-          totalQuantityById?.[pid] ??
-          0,
-      ) || 0;
+        createdByName,
+        mintedAt,
 
-    const productName =
-      (productNameById?.[pid] ?? null) ??
-      (asMaybeString((b as any)?.productName) ?? null);
-
-    const productBlueprintId = pickProductBlueprintId(
-      b as any,
-      productBlueprintIdById ?? {},
-      pid,
-    );
-
-    const scheduledBurnDate = pickScheduledBurnDate(mintDTO as any);
-    const minted = pickMinted(mintDTO as any, mintList as any);
-
-    rows.push({
-      id: pid,
-
-      tokenName,
-      productName,
-
-      mintQuantity,
-      productionQuantity,
-
-      status,
-      inspectionStatus: inspSt,
-
-      createdByName,
-      mintedAt,
-
-      tokenBlueprintId,
-      requestedBy,
-
-      productBlueprintId,
-      scheduledBurnDate,
-      minted,
-
-      statusLabel: inspectionStatusLabel(inspSt),
-    });
-  }
-
-  return rows;
+        tokenBlueprintId,
+        requestedBy,
+      } satisfies MintRequestManagementRow;
+    })
+    .filter((v): v is MintRequestManagementRow => v !== null);
 }

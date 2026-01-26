@@ -39,7 +39,7 @@ export type MintRequestManagementRowVM = {
 };
 
 /**
- * 一覧全体で使う VM
+ * 一覧全体で使う VM（必要な場合のみ利用）
  */
 export type MintRequestManagementVM = {
   rows: MintRequestManagementRowVM[];

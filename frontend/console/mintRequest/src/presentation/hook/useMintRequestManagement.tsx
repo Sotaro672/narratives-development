@@ -1,4 +1,5 @@
 // frontend/console/mintRequest/src/presentation/hook/useMintRequestManagement.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -7,42 +8,83 @@ import {
 } from "../../../../shell/src/layout/List/List";
 
 import type { InspectionStatus } from "../../domain/entity/inspections";
+
+// ✅ 3層分離：presentation -> application/usecase
 import {
   loadMintRequestManagementRows,
-  type ViewRow,
-} from "../../application/mintRequestManagementService";
+  type ViewRow as ManagementRow,
+} from "../../application/usecase/loadMintRequestManagementRows";
 
-// 日時文字列 → timestamp（不正や null は -1）
-const toTs = (s: string | null | undefined): number => {
-  if (!s) return -1;
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? -1 : t;
+// ✅ presentation VM（画面の入出力型）
+import type { MintRequestManagementRowVM } from "../viewModel/mintRequestManagement.vm";
+
+// ✅ presentation formatter
+import { inspectionStatusLabel } from "../formatter/inspectionStatusLabel";
+
+// ---------------------------
+// Helpers
+// ---------------------------
+
+/**
+ * Date文字列 -> timestamp
+ * - 解析不能や空文字は null（= sort で常に末尾）
+ * - "YYYY/MM/DD" や "YYYY/MM/DD HH:mm(:ss)" の簡易フォールバックも対応
+ */
+const toTs = (s: string | null | undefined): number | null => {
+  const v = typeof s === "string" ? s.trim() : "";
+  if (!v) return null;
+
+  const t = Date.parse(v);
+  if (!Number.isNaN(t)) return t;
+
+  const m =
+    v.match(
+      /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/,
+    ) ?? null;
+
+  if (!m) return null;
+
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const hh = Number(m[4] ?? "0");
+  const mm = Number(m[5] ?? "0");
+  const ss = Number(m[6] ?? "0");
+
+  const dt = new Date(year, month - 1, day, hh, mm, ss);
+  const ts = dt.getTime();
+  return Number.isNaN(ts) ? null : ts;
 };
 
 // Sorting key
-type SortKey = "mintedAt" | "mintQuantity" | null;
+type SortKey = "mintedAt" | "mintQuantity" | "productionQuantity" | null;
 
-// 🔥 検査ステータスの表示ラベル（InspectionStatus）
-const inspectionStatusLabel = (
-  s: InspectionStatus | null | undefined,
-): string => {
-  switch (s) {
-    case "inspecting":
-      return "検査中";
-    case "completed":
-      return "検査完了";
-    default:
-      return "未検査";
+const normalizeText = (v: string | null | undefined): string => {
+  return typeof v === "string" ? v.trim() : "";
+};
+
+const asInspectionStatus = (v: string): InspectionStatus | null => {
+  const s = String(v ?? "").trim();
+  if (s === "inspecting" || s === "completed" || s === "notYet") {
+    return s as InspectionStatus;
   }
+  return null;
+};
+
+const toManagementRowVM = (r: ManagementRow): MintRequestManagementRowVM => {
+  return {
+    ...r,
+    statusLabel: inspectionStatusLabel(r.inspectionStatus),
+  };
 };
 
 export const useMintRequestManagement = () => {
   const navigate = useNavigate();
 
   // ---------------------------
-  // データ取得（serviceに委譲）
+  // データ取得（usecase に委譲）
   // ---------------------------
-  const [rawRows, setRawRows] = useState<ViewRow[]>([]);
+  const [rawRows, setRawRows] = useState<MintRequestManagementRowVM[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +99,8 @@ export const useMintRequestManagement = () => {
         const rows = await loadMintRequestManagementRows();
 
         if (!cancelled) {
-          setRawRows(rows ?? []);
+          const vms = (rows ?? []).map(toManagementRowVM);
+          setRawRows(vms);
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to fetch mint requests");
@@ -78,9 +121,7 @@ export const useMintRequestManagement = () => {
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
   const [productionFilter, setProductionFilter] = useState<string[]>([]);
   const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<InspectionStatus[] | string[]>(
-    [],
-  );
+  const [statusFilter, setStatusFilter] = useState<InspectionStatus[]>([]);
 
   // Sorting（デフォルト：mintedAt DESC）
   const [sortKey, setSortKey] = useState<SortKey>("mintedAt");
@@ -89,22 +130,30 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   // Filter options
   // ---------------------------
-
   const tokenOptions = useMemo(() => {
     const s = new Set<string>();
-    rawRows.forEach((r) => r.tokenName && s.add(r.tokenName.trim()));
+    rawRows.forEach((r) => {
+      const v = normalizeText(r.tokenName ?? null);
+      if (v) s.add(v);
+    });
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
   const productionOptions = useMemo(() => {
     const s = new Set<string>();
-    rawRows.forEach((r) => r.productName && s.add(r.productName.trim()));
+    rawRows.forEach((r) => {
+      const v = normalizeText(r.productName ?? null);
+      if (v) s.add(v);
+    });
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
   const requesterOptions = useMemo(() => {
     const s = new Set<string>();
-    rawRows.forEach((r) => r.createdByName && s.add(r.createdByName.trim()));
+    rawRows.forEach((r) => {
+      const v = normalizeText(r.createdByName ?? null);
+      if (v) s.add(v);
+    });
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
@@ -123,23 +172,22 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   // Filter + sort rows
   // ---------------------------
-
   const rows = useMemo(() => {
     let data = rawRows.filter((r) => {
-      const tokenOk =
-        tokenFilter.length === 0 ||
-        (r.tokenName && tokenFilter.includes(r.tokenName));
+      const token = normalizeText(r.tokenName ?? null);
+      const product = normalizeText(r.productName ?? null);
+      const requester = normalizeText(r.createdByName ?? null);
 
+      const tokenOk =
+        tokenFilter.length === 0 || (token && tokenFilter.includes(token));
       const productionOk =
         productionFilter.length === 0 ||
-        (r.productName && productionFilter.includes(r.productName));
-
+        (product && productionFilter.includes(product));
       const requesterOk =
-        requesterFilter.length === 0 ||
-        requesterFilter.includes(r.createdByName ?? "");
+        requesterFilter.length === 0 || requesterFilter.includes(requester);
 
-      const st = r.inspectionStatus ?? "notYet"; // fallback
-      const statusOk = statusFilter.length === 0 || statusFilter.includes(st as any);
+      const st = (r.inspectionStatus ?? ("notYet" as any)) as InspectionStatus;
+      const statusOk = statusFilter.length === 0 || statusFilter.includes(st);
 
       return tokenOk && productionOk && requesterOk && statusOk;
     });
@@ -148,12 +196,24 @@ export const useMintRequestManagement = () => {
       data = [...data].sort((a, b) => {
         if (sortKey === "mintQuantity") {
           return sortDir === "asc"
-            ? a.mintQuantity - b.mintQuantity
-            : b.mintQuantity - a.mintQuantity;
+            ? (a.mintQuantity ?? 0) - (b.mintQuantity ?? 0)
+            : (b.mintQuantity ?? 0) - (a.mintQuantity ?? 0);
         }
 
-        const av = toTs(a.mintedAt);
-        const bv = toTs(b.mintedAt);
+        if (sortKey === "productionQuantity") {
+          return sortDir === "asc"
+            ? (a.productionQuantity ?? 0) - (b.productionQuantity ?? 0)
+            : (b.productionQuantity ?? 0) - (a.productionQuantity ?? 0);
+        }
+
+        // mintedAt: 未設定/不正は常に末尾（asc/desc とも）
+        const av = toTs(a.mintedAt ?? null);
+        const bv = toTs(b.mintedAt ?? null);
+
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+
         return sortDir === "asc" ? av - bv : bv - av;
       });
     }
@@ -172,7 +232,6 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   // 画面遷移
   // ---------------------------
-
   const goDetail = (id: string) => {
     navigate(`/mintRequest/${encodeURIComponent(id)}`);
   };
@@ -180,7 +239,6 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   // テーブルヘッダ
   // ---------------------------
-
   const headers: React.ReactNode[] = [
     <FilterableTableHeader
       key="tokenName"
@@ -207,15 +265,28 @@ export const useMintRequestManagement = () => {
         setSortDir(dir);
       }}
     />,
-    "生産量",
+    <SortableTableHeader
+      key="productionQuantity"
+      label="生産量"
+      sortKey="productionQuantity"
+      activeKey={sortKey}
+      direction={sortDir ?? null}
+      onChange={(key, dir) => {
+        setSortKey(key as SortKey);
+        setSortDir(dir);
+      }}
+    />,
     <FilterableTableHeader
       key="status"
       label="検査ステータス"
       options={statusOptions}
       selected={statusFilter}
-      onChange={(next: string[]) =>
-        setStatusFilter(next as InspectionStatus[] | string[])
-      }
+      onChange={(next: string[]) => {
+        const mapped = (next ?? [])
+          .map((v) => asInspectionStatus(v))
+          .filter((v): v is InspectionStatus => v !== null);
+        setStatusFilter(mapped);
+      }}
     />,
     <FilterableTableHeader
       key="requester"

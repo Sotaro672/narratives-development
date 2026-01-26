@@ -7,3 +7,4 @@ export * from "./http/brands";
 export * from "./http/tokenBlueprints";
 export * from "./http/modelVariations";
 export * from "./http/mintRequests";
+export * from "./http/mintRequestManagementQuery";

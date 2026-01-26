@@ -10,7 +10,7 @@ import {
   safeTokenHint,
 } from "../../http/httpLogger";
 
-import type { InspectionBatchDTO } from "../../api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../dto/inspectionBatch.dto";
 import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
 
 import { fetchProductionIdsForCurrentCompanyHTTP } from "./productions";
@@ -33,10 +33,11 @@ function looksLikeInspectionBatchDTO(x: any): boolean {
 }
 
 // ===============================
-// detail: /mint/inspections/{productionId}
+// private: detail fetch (/mint/inspections/{productionId})
+// - public API からは export しない
 // ===============================
 
-export async function fetchMintRequestDetailByProductionIdHTTP(
+async function fetchMintRequestDetailByProductionIdHTTP(
   productionId: string,
 ): Promise<MintRequestDetailDTO | null> {
   const pid = String(productionId ?? "").trim();
@@ -151,34 +152,21 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
 
 // ===============================
 // single: inspection by productionId
+// - 旧互換（list fallback）は削除
 // ===============================
 
 export async function fetchInspectionByProductionIdHTTP(
   productionId: string,
 ): Promise<InspectionBatchDTO | null> {
-  const trimmed = String(productionId ?? "").trim();
-  if (!trimmed) throw new Error("productionId が空です");
+  const pid = String(productionId ?? "").trim();
+  if (!pid) throw new Error("productionId が空です");
 
-  // ✅ detail を優先（batch-shape のときだけ採用）
-  try {
-    const detail = await fetchMintRequestDetailByProductionIdHTTP(trimmed);
-    const inspection = (detail?.inspection ?? null) as any;
+  // ✅ detail 取得のみ（旧互換の list fallback は削除）
+  const detail = await fetchMintRequestDetailByProductionIdHTTP(pid);
+  const inspection = (detail?.inspection ?? null) as any;
 
-    if (looksLikeInspectionBatchDTO(inspection)) {
-      return inspection as InspectionBatchDTO;
-    }
-  } catch (_e: any) {
-    // noop: fallbackへ
-  }
+  if (!inspection) return null;
+  if (!looksLikeInspectionBatchDTO(inspection)) return null;
 
-  // 🔙 fallback: list ルート
-  const batches = await fetchInspectionBatchesByProductionIdsHTTP([trimmed]);
-  const hit =
-    batches.find(
-      (b: any) =>
-        String((b as any)?.productionId ?? (b as any)?.ProductionID ?? "").trim() ===
-        trimmed,
-    ) ?? null;
-
-  return hit ?? null;
+  return inspection as InspectionBatchDTO;
 }
