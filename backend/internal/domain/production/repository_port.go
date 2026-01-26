@@ -62,6 +62,16 @@ type PageResult struct {
 }
 
 // ========================================
+// Aggregation contracts
+// ========================================
+
+// ModelTotalQuantity - modelId ごとの合計数量
+type ModelTotalQuantity struct {
+	ModelID       string
+	TotalQuantity int
+}
+
+// ========================================
 // Repository Port (interface contracts only)
 // ========================================
 
@@ -80,6 +90,10 @@ type RepositoryPort interface {
 	// 複数の productBlueprintId に紐づく Production 一覧
 	// ★一覧取得は必ずこのメソッド経由（productBlueprintIds を上位層で companyId から解決する）
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]Production, error)
+
+	// ★追加: productBlueprintIDs 配下の Production.Models を集計し、modelId ごとの totalQuantity を返す
+	// ★集計も companyId 直指定はせず、上位層で companyId → productBlueprintIDs を解決してから呼ぶ
+	GetTotalQuantityByModelID(ctx context.Context, productBlueprintIDs []string) ([]ModelTotalQuantity, error)
 
 	// ★ 追加: productionId → productBlueprintId を返す関数
 	//
@@ -103,7 +117,4 @@ type RepositoryPort interface {
 
 	// Exists: productionId の存在確認
 	Exists(ctx context.Context, id string) (bool, error)
-
-	// Tx
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

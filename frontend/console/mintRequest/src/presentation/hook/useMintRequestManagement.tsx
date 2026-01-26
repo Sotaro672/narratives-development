@@ -73,6 +73,9 @@ const asInspectionStatus = (v: string): InspectionStatus | null => {
 };
 
 const toManagementRowVM = (r: ManagementRow): MintRequestManagementRowVM => {
+  // ✅ minted のときは「ミント完了」を優先、それ以外は検査ステータス表示
+  const statusLabel = r.status === "minted" ? "ミント完了" : inspectionStatusLabel(r.inspectionStatus);
+
   return {
     ...r,
 
@@ -80,7 +83,7 @@ const toManagementRowVM = (r: ManagementRow): MintRequestManagementRowVM => {
     mintedAt: r.mintedAt ? safeDateTimeLabelJa(r.mintedAt, "") : null,
 
     // ✅ 表示ラベル
-    statusLabel: inspectionStatusLabel(r.inspectionStatus),
+    statusLabel,
   };
 };
 

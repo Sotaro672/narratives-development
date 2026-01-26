@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ import (
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
+	productiondom "narratives/internal/domain/production"
 )
 
 // ========================================
@@ -217,7 +219,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	permissionRepo := fs.NewPermissionRepositoryFS(fsClient)
 	productRepo := fs.NewProductRepositoryFS(fsClient)
 	productBlueprintRepo := fs.NewProductBlueprintRepositoryFS(fsClient)
+
 	productionRepo := fs.NewProductionRepositoryFS(fsClient)
+	// ✅ Adapter: productionapp.ProductionRepo が要求する GetTotalQuantityByModelID を付与
+	productionRepoForUC := &productionRepoTotalQuantityAdapter{ProductionRepositoryFS: productionRepo}
+
 	shippingAddressRepo := fs.NewShippingAddressRepositoryFS(fsClient)
 	tokenBlueprintRepo := fs.NewTokenBlueprintRepositoryFS(fsClient)
 	tokenOperationRepo := fs.NewTokenOperationRepositoryFS(fsClient)
@@ -361,7 +367,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	)
 
 	productionUC := productionapp.NewProductionUsecase(
-		productionRepo,
+		productionRepoForUC, // ✅ missing method を補完した adapter を渡す
 		pbSvc,
 		nameResolver,
 	)
@@ -736,4 +742,83 @@ func (a avatarNameReaderAdapter) GetNameByID(ctx context.Context, avatarID strin
 	}
 
 	return strings.TrimSpace(av.AvatarName), nil
+}
+
+// ============================================================
+// ✅ Adapter: ProductionRepositoryFS に GetTotalQuantityByModelID を付与
+// - productionapp.ProductionRepo が要求する集計メソッドを DI 側で補完する
+// - 実装は ListByProductBlueprintID を利用して modelId ごとに quantity を合算
+// ============================================================
+
+type productionRepoTotalQuantityAdapter struct {
+	*fs.ProductionRepositoryFS
+}
+
+func (a *productionRepoTotalQuantityAdapter) GetTotalQuantityByModelID(
+	ctx context.Context,
+	productBlueprintIDs []string,
+) ([]productiondom.ModelTotalQuantity, error) {
+	if a == nil || a.ProductionRepositoryFS == nil {
+		return nil, errors.New("production repo adapter is nil")
+	}
+
+	// sanitize + dedup ids
+	ids := make([]string, 0, len(productBlueprintIDs))
+	seen := make(map[string]struct{}, len(productBlueprintIDs))
+	for _, id := range productBlueprintIDs {
+		t := strings.TrimSpace(id)
+		if t == "" {
+			continue
+		}
+		k := strings.ToLower(t)
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		ids = append(ids, t)
+	}
+	if len(ids) == 0 {
+		return []productiondom.ModelTotalQuantity{}, nil
+	}
+
+	prods, err := a.ListByProductBlueprintID(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	totalByKey := make(map[string]int, 64)
+	origByKey := make(map[string]string, 64)
+
+	for _, p := range prods {
+		// deleted は集計対象外（安全側）
+		if p.Status == productiondom.StatusDeleted || p.DeletedAt != nil {
+			continue
+		}
+		for _, mq := range p.Models {
+			mid := strings.TrimSpace(mq.ModelID)
+			if mid == "" || mq.Quantity <= 0 {
+				continue
+			}
+			key := strings.ToLower(mid)
+			if _, ok := origByKey[key]; !ok {
+				origByKey[key] = mid
+			}
+			totalByKey[key] += mq.Quantity
+		}
+	}
+
+	out := make([]productiondom.ModelTotalQuantity, 0, len(totalByKey))
+	for k, total := range totalByKey {
+		out = append(out, productiondom.ModelTotalQuantity{
+			ModelID:       origByKey[k],
+			TotalQuantity: total,
+		})
+	}
+
+	// stable order
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].ModelID) < strings.ToLower(out[j].ModelID)
+	})
+
+	return out, nil
 }

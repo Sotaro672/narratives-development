@@ -80,9 +80,9 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 
 	// Convert unknown production type -> lightweight struct via JSON.
 	type prodLite struct {
-		ID          string `json:"id"`
-		Quantity    int    `json:"quantity"`
-		ProductName string `json:"productName"`
+		ID            string `json:"id"`
+		TotalQuantity int    `json:"totalQuantity"`
+		ProductName   string `json:"productName"`
 
 		// ✅ ProductBlueprintID が正（ここに一本化）
 		ProductBlueprintID string `json:"ProductBlueprintID"`
@@ -128,11 +128,11 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 
 	// InspectionBatch の実体(struct)に依存せず JSON 経由で吸収する（型ズレ回避）
 	type inspectionLite struct {
-		ProductionID string `json:"productionId"`
-		Status       string `json:"status"`
-		TotalPassed  int    `json:"totalPassed"`
-		Quantity     int    `json:"quantity"`
-		MintID       string `json:"mintId"`
+		ProductionID  string `json:"productionId"`
+		Status        string `json:"status"`
+		TotalPassed   int    `json:"totalPassed"`
+		TotalQuantity int    `json:"totalQuantity"`
+		MintID        string `json:"mintId"`
 	}
 	batches := make([]inspectionLite, 0)
 	if b, mErr := json.Marshal(batchesAny); mErr == nil {
@@ -193,12 +193,12 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 			if strings.TrimSpace(insp.Status) != "" {
 				inspStatus = strings.TrimSpace(insp.Status)
 			}
-			if insp.Quantity > 0 {
-				prodQty = insp.Quantity
+			if insp.TotalQuantity > 0 {
+				prodQty = insp.TotalQuantity
 			}
 		}
 		if prodQty == 0 {
-			prodQty = p.Quantity
+			prodQty = p.TotalQuantity
 		}
 
 		tokenBlueprintID := ""
@@ -290,7 +290,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 	type prodLite struct {
 		ID                 string `json:"id"`
-		Quantity           int    `json:"quantity"`
+		TotalQuantity      int    `json:"totalQuantity"`
 		ProductName        string `json:"productName"`
 		ProductBlueprintID string `json:"ProductBlueprintID"`
 	}
@@ -332,11 +332,11 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		ModelNumber      string `json:"modelNumber,omitempty"`
 	}
 	type inspectionBatchLite struct {
-		ProductionID string               `json:"productionId"`
-		Status       string               `json:"status"`
-		TotalPassed  int                  `json:"totalPassed"`
-		Quantity     int                  `json:"quantity"`
-		Inspections  []inspectionItemLite `json:"inspections"`
+		ProductionID  string               `json:"productionId"`
+		Status        string               `json:"status"`
+		TotalPassed   int                  `json:"totalPassed"`
+		TotalQuantity int                  `json:"totalQuantity"`
+		Inspections   []inspectionItemLite `json:"inspections"`
 	}
 	batches := make([]inspectionBatchLite, 0)
 	if b, mErr := json.Marshal(batchesAny); mErr == nil {
@@ -412,7 +412,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	productName := strings.TrimSpace(prod.ProductName)
 
 	mintQty := 0
-	prodQty := prod.Quantity
+	prodQty := prod.TotalQuantity
 	inspStatus := "notYet"
 
 	inspectionItems := make([]querydto.InspectionItemDTO, 0)
@@ -422,8 +422,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		if strings.TrimSpace(insp.Status) != "" {
 			inspStatus = strings.TrimSpace(insp.Status)
 		}
-		if insp.Quantity > 0 {
-			prodQty = insp.Quantity
+		if insp.TotalQuantity > 0 {
+			prodQty = insp.TotalQuantity
 		}
 
 		// inspections[] を DTO へ（modelMeta があれば上書き）
@@ -547,7 +547,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			ProductionID: strings.TrimSpace(insp.ProductionID),
 			Status:       strings.TrimSpace(insp.Status),
 			TotalPassed:  insp.TotalPassed,
-			Quantity:     insp.Quantity,
+			Quantity:     insp.TotalQuantity,
 			ProductName:  "",
 			Inspections:  inspectionItems,
 		}
