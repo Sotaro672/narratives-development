@@ -1,40 +1,147 @@
 // frontend/console/mintRequest/src/presentation/hook/useMintRequestDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type { InspectionBatchDTO, MintDTO } from "../../infrastructure/api/mintRequestApi";
+import type {
+  InspectionBatchDTO,
+  MintDTO,
+} from "../../infrastructure/api/mintRequestApi";
+
+import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import {
-  // types
-  type ProductBlueprintPatchDTO,
-  type ProductBlueprintCardViewModel,
-  type BrandOption,
-  type TokenBlueprintOption,
-  type TokenBlueprintCardViewModel,
-  type TokenBlueprintCardHandlers,
-  type MintInfo,
-  type MintModelMetaEntry,
-  type ModelInspectionRow,
+  fetchInspectionByProductionIdHTTP,
+  fetchMintByInspectionIdHTTP,
+  fetchProductBlueprintIdByProductionIdHTTP,
+  fetchProductBlueprintPatchHTTP,
+  fetchBrandsForMintHTTP,
+  fetchTokenBlueprintsByBrandHTTP,
+  postMintRequestHTTP,
+} from "../../infrastructure/repository";
 
-  // helpers / loaders
-  asNonEmptyString,
-  safeDateTimeLabelJa,
+import {
+  fetchInventoryTokenBlueprintPatch,
+  type TokenBlueprintPatchDTO,
+} from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
+
+import {
   safeDateLabelJa,
-  buildModelRowsFromBatch,
-  fetchInspectionAndMintByRequestId,
-  resolveProductBlueprintIdByRequestId,
-  fetchProductBlueprintPatchById,
-  fetchBrandOptionsForMint,
-  fetchTokenBlueprintOptionsByBrand,
-  resolveBlueprintForMintRequest,
-  extractMintInfoFromMintDTO,
-  extractMintInfoFromBatch,
-  fetchTokenBlueprintPatchById,
-  submitMintRequestAndRefresh,
-} from "../../application/mintRequestService";
+  safeDateTimeLabelJa,
+} from "../formatter/dateJa";
 
-import type { TokenBlueprintPatchDTO } from "../../../../inventory/src/infrastructure/http/inventoryRepositoryHTTP";
+import {
+  asNonEmptyString,
+  buildModelRowsFromBatch,
+  type ModelInspectionRow,
+} from "../../application/mapper/modelInspectionMapper";
+
+import {
+  extractMintInfoFromBatch,
+  extractMintInfoFromMintDTO,
+  type MintInfo,
+} from "../../application/mapper/mintInfoMapper";
+
+import type {
+  BrandOptionVM as BrandOption,
+  TokenBlueprintOptionVM as TokenBlueprintOption,
+  ProductBlueprintCardVM as ProductBlueprintCardViewModel,
+  TokenBlueprintCardVM as TokenBlueprintCardViewModel,
+  TokenBlueprintCardHandlersVM as TokenBlueprintCardHandlers,
+  MintModelMetaEntryVM as MintModelMetaEntry,
+} from "../viewModel/mintRequestDetail.vm";
+
+function extractProductBlueprintIdFromBatch(batch: any): string {
+  if (!batch) return "";
+  const v = batch.productBlueprintId ?? batch.productBlueprint?.id ?? "";
+  return asNonEmptyString(v);
+}
+
+async function resolveProductBlueprintIdByRequestId(
+  requestId: string,
+  batch: InspectionBatchDTO | null,
+): Promise<string> {
+  const rid = String(requestId ?? "").trim();
+  if (!rid) return "";
+
+  const pbFromBatch = extractProductBlueprintIdFromBatch(batch as any);
+  if (pbFromBatch) return pbFromBatch;
+
+  const pbFromProduction = await fetchProductBlueprintIdByProductionIdHTTP(rid).catch(
+    () => null,
+  );
+  return asNonEmptyString(pbFromProduction);
+}
+
+async function fetchProductBlueprintPatchById(
+  productBlueprintId: string,
+): Promise<ProductBlueprintPatchDTO | null> {
+  const id = String(productBlueprintId ?? "").trim();
+  if (!id) return null;
+
+  const patch = await fetchProductBlueprintPatchHTTP(id);
+  return (patch ?? null) as any;
+}
+
+async function fetchBrandOptionsForMint(): Promise<BrandOption[]> {
+  const brands = await fetchBrandsForMintHTTP();
+  return (brands ?? []).map((b: any) => ({
+    id: String(b?.id ?? "").trim(),
+    name: String(b?.name ?? "").trim(),
+  }));
+}
+
+async function fetchTokenBlueprintOptionsByBrand(
+  brandId: string,
+): Promise<TokenBlueprintOption[]> {
+  const id = String(brandId ?? "").trim();
+  if (!id) return [];
+
+  const list = await fetchTokenBlueprintsByBrandHTTP(id);
+
+  return (list ?? []).map((tb: any) => ({
+    id: String(tb?.id ?? "").trim(),
+    name: String(tb?.name ?? "").trim(),
+    symbol: String(tb?.symbol ?? "").trim(),
+    iconUrl: asNonEmptyString(tb?.iconUrl) || undefined,
+  }));
+}
+
+async function fetchTokenBlueprintPatchById(
+  tokenBlueprintId: string,
+): Promise<TokenBlueprintPatchDTO | null> {
+  const tbId = String(tokenBlueprintId ?? "").trim();
+  if (!tbId) return null;
+  return await fetchInventoryTokenBlueprintPatch(tbId);
+}
+
+async function submitMintRequestAndRefresh(
+  productionId: string,
+  tokenBlueprintId: string,
+  scheduledBurnDate?: string,
+): Promise<{
+  updatedBatch: InspectionBatchDTO | null;
+  refreshedMint: MintDTO | null;
+}> {
+  const pid = String(productionId ?? "").trim();
+  const tbId = String(tokenBlueprintId ?? "").trim();
+  if (!pid || !tbId) return { updatedBatch: null, refreshedMint: null };
+
+  const updated = await postMintRequestHTTP(pid, tbId, scheduledBurnDate);
+
+  let refreshed: MintDTO | null = null;
+  try {
+    refreshed = await fetchMintByInspectionIdHTTP(pid).catch(() => null);
+  } catch {
+    refreshed = null;
+  }
+
+  return {
+    updatedBatch: (updated ?? null) as any,
+    refreshedMint: (refreshed ?? null) as any,
+  };
+}
 
 export function useMintRequestDetail() {
   const navigate = useNavigate();
@@ -69,7 +176,7 @@ export function useMintRequestDetail() {
 
   const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
 
-  // ✅ tokenBlueprint patch（iconUrl/description など “正” をここから取る）
+  // tokenBlueprint patch（iconUrl/description 等の “正” をここから取る）
   const [tokenBlueprintPatch, setTokenBlueprintPatch] =
     React.useState<TokenBlueprintPatchDTO | null>(null);
   const [tokenPatchLoading, setTokenPatchLoading] = React.useState(false);
@@ -95,17 +202,23 @@ export function useMintRequestDetail() {
       setError(null);
 
       try {
-        const { batch, mint } = await fetchInspectionAndMintByRequestId(requestId);
+        const rid = String(requestId).trim();
+
+        const [batch, mint] = await Promise.all([
+          fetchInspectionByProductionIdHTTP(rid).catch(() => null),
+          fetchMintByInspectionIdHTTP(rid).catch(() => null),
+        ]);
+
         if (cancelled) return;
 
-        setInspectionBatch(batch ?? null);
-        setMintDTO(mint ?? null);
+        setInspectionBatch((batch ?? null) as any);
+        setMintDTO((mint ?? null) as any);
 
-        setModelRows(buildModelRowsFromBatch(batch ?? null));
+        setModelRows(buildModelRowsFromBatch((batch ?? null) as any));
 
         const resolvedPB = await resolveProductBlueprintIdByRequestId(
-          requestId,
-          batch ?? null,
+          rid,
+          (batch ?? null) as any,
         );
         if (cancelled) return;
 
@@ -164,22 +277,24 @@ export function useMintRequestDetail() {
   });
 
   const totalMintQuantity = inspectionCardData.totalPassed;
-  const tokenBlueprint = resolveBlueprintForMintRequest(requestId);
 
-  // ④ ProductBlueprintCard 用 VM（✅ brandName のみ渡す）
+  // 互換: 現状は未使用（保持だけ）
+  const tokenBlueprint = undefined;
+
+  // ④ ProductBlueprintCard 用 VM（brandName のみ渡す）
   const productBlueprintCardView: ProductBlueprintCardViewModel | null =
     React.useMemo(() => {
       if (!pbPatch) return null;
 
       return {
-        productName: pbPatch.productName ?? undefined,
-        brand: pbPatch.brandName ?? undefined,
-        itemType: pbPatch.itemType ?? undefined,
-        fit: pbPatch.fit ?? undefined,
-        materials: pbPatch.material ?? undefined,
-        weight: pbPatch.weight ?? undefined,
-        washTags: pbPatch.qualityAssurance ?? undefined,
-        productIdTag: pbPatch.productIdTag?.type ?? undefined,
+        productName: (pbPatch as any)?.productName ?? undefined,
+        brand: (pbPatch as any)?.brandName ?? undefined,
+        itemType: (pbPatch as any)?.itemType ?? undefined,
+        fit: (pbPatch as any)?.fit ?? undefined,
+        materials: (pbPatch as any)?.material ?? undefined,
+        weight: (pbPatch as any)?.weight ?? undefined,
+        washTags: (pbPatch as any)?.qualityAssurance ?? undefined,
+        productIdTag: (pbPatch as any)?.productIdTag?.type ?? undefined,
       };
     }, [pbPatch]);
 
@@ -230,7 +345,7 @@ export function useMintRequestDetail() {
   }, []);
 
   // ============================================================
-  // ★ mint 情報（mintDTO 優先）
+  // mint 情報（mintDTO 優先）
   // ============================================================
 
   const mint: MintInfo | null = React.useMemo(() => {
@@ -243,7 +358,7 @@ export function useMintRequestDetail() {
 
   const hasMint = React.useMemo(() => !!mint, [mint]);
 
-  // ✅ “minted=true のときのみ非表示” 判定（= mint 完了扱い）
+  // minted=true のときのみ非表示判定（= mint 完了扱い）
   const isMintRequested = React.useMemo(() => {
     return Boolean(mint?.minted === true);
   }, [mint]);
@@ -307,13 +422,13 @@ export function useMintRequestDetail() {
     if (asDate) setScheduledBurnDate(asDate);
   }, [hasMint, mint, scheduledBurnDate]);
 
-  // ✅ minted=true のときだけ非表示
+  // minted=true のときだけ非表示
   const showMintButton = !isMintRequested;
   const showBrandSelectorCard = !isMintRequested;
   const showTokenSelectorCard = !isMintRequested;
 
   // ============================================================
-  // ✅ TokenBlueprintPatch を “正” として取得（iconUrl/description を安定させる）
+  // TokenBlueprintPatch を “正” として取得
   // ============================================================
 
   const tokenBlueprintIdForPatch = React.useMemo(() => {
@@ -357,7 +472,7 @@ export function useMintRequestDetail() {
     };
   }, [tokenBlueprintIdForPatch]);
 
-  // ★ ミント申請（未申請時のみ）
+  // ミント申請（未申請時のみ）
   const handleMint = React.useCallback(async () => {
     if (!inspectionBatch) {
       alert("検査バッチ情報が取得できていません。");
@@ -407,9 +522,12 @@ export function useMintRequestDetail() {
     scheduledBurnDate,
   ]);
 
-  const handleSelectTokenBlueprint = React.useCallback((tokenBlueprintId: string) => {
-    setSelectedTokenBlueprintId(tokenBlueprintId);
-  }, []);
+  const handleSelectTokenBlueprint = React.useCallback(
+    (tokenBlueprintId: string) => {
+      setSelectedTokenBlueprintId(tokenBlueprintId);
+    },
+    [],
+  );
 
   const selectedTokenBlueprint = React.useMemo(
     () =>
@@ -439,7 +557,9 @@ export function useMintRequestDetail() {
         asNonEmptyString((tokenBlueprintPatch as any)?.symbol) ||
         asNonEmptyString(selectedTokenBlueprint?.symbol);
 
-      const description = asNonEmptyString((tokenBlueprintPatch as any)?.description);
+      const description = asNonEmptyString(
+        (tokenBlueprintPatch as any)?.description,
+      );
 
       const iconUrl =
         asNonEmptyString((tokenBlueprintPatch as any)?.iconUrl) ||
