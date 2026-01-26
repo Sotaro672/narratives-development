@@ -20,6 +20,7 @@ import type { MintRequestManagementRowVM } from "../viewModel/mintRequestManagem
 
 // ✅ presentation formatter
 import { inspectionStatusLabel } from "../formatter/inspectionStatusLabel";
+import { safeDateTimeLabelJa } from "../formatter/dateJa";
 
 // ---------------------------
 // Helpers
@@ -74,6 +75,11 @@ const asInspectionStatus = (v: string): InspectionStatus | null => {
 const toManagementRowVM = (r: ManagementRow): MintRequestManagementRowVM => {
   return {
     ...r,
+
+    // ✅ mintedAt 表示は "yyyy/mm/dd hh:mm:ss" に固定（dateJa.ts の確定版を利用）
+    mintedAt: r.mintedAt ? safeDateTimeLabelJa(r.mintedAt, "") : null,
+
+    // ✅ 表示ラベル
     statusLabel: inspectionStatusLabel(r.inspectionStatus),
   };
 };

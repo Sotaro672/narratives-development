@@ -21,10 +21,6 @@ export type MintRequestManagementRawDTO = {
 
   inspectionStatus?: InspectionStatus | string | null;
 
-  // legacy / alternative
-  totalPassed?: number | null;
-  quantity?: number | null;
-
   requestedBy?: string | null;
   requestedByName?: string | null;
   createdByName?: string | null;
@@ -48,9 +44,6 @@ export type MintRequestManagementRawDTO = {
   inspection?: {
     status?: InspectionStatus | string | null;
     productName?: string | null;
-
-    totalPassed?: number | null;
-    quantity?: number | null;
   } | null;
 };
 
