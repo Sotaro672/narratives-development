@@ -1,5 +1,5 @@
 // backend/internal/application/usecase/tokenBlueprint_crud_usecase.go
-package usecase
+package tokenBlueprint
 
 import (
 	"context"

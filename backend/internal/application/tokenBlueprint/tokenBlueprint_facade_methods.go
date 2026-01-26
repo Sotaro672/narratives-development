@@ -1,5 +1,5 @@
 // backend/internal/application/usecase/tokenBlueprint_facade_methods.go
-package usecase
+package tokenBlueprint
 
 import (
 	"context"

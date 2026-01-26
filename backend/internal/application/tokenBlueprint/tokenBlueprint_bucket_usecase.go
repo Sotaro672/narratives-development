@@ -1,4 +1,5 @@
-package usecase
+// backend\internal\application\tokenBlueprint\tokenBlueprint_bucket_usecase.go
+package tokenBlueprint
 
 import (
 	"context"

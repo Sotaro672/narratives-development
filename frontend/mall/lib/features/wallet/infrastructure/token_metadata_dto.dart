@@ -136,6 +136,16 @@ class TokenMetadataDTO {
     );
   }
 
+  /// TokenBlueprintID を metadata.attributes から抽出する（任意だが便利）
+  String get tokenBlueprintId {
+    for (final a in attributes) {
+      if (a.traitType.trim() == 'TokenBlueprintID') {
+        return a.value.trim();
+      }
+    }
+    return '';
+  }
+
   /// 取得したい“全リソースURI”を返す（image + properties.files[*].uri）
   /// - 重複は排除
   /// - 空文字は除外
@@ -164,7 +174,10 @@ class TokenMetadataDTO {
     return null;
   }
 
-  /// narratives-development-token-contents 側（type: application/octet-stream を想定）
+  /// 旧来: narratives-development-token-contents 側の“素URI”を返す
+  /// 注意:
+  /// - bucket が private の場合、この URI はブラウザ/アプリから直接 GET できないことがある（403）。
+  /// - 今後は server が返す tokenContentsFiles[*].viewUri（署名付き）を優先すること。
   String? get tokenContentsUri {
     final files = properties?.files ?? const <TokenMetadataFileDTO>[];
     for (final f in files) {

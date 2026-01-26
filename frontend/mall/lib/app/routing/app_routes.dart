@@ -1,4 +1,3 @@
-// frontend/mall/lib/app/routing/app_routes.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -177,8 +176,18 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
           path: AppRoutePath.walletContents,
           name: AppRouteName.walletContents,
           pageBuilder: (context, state) {
-            final extra = state.extra;
-            final mint = (extra is String ? extra : '').trim();
+            String s(String? v) => (v ?? '').trim();
+            String? asOpt(String v) => v.trim().isEmpty ? null : v.trim();
+
+            final qp = state.uri.queryParameters;
+
+            // ✅ primary: query param, fallback: state.extra(String)
+            final mintFromQP = s(qp['mintAddress']);
+            final mintFromExtra = s(
+              state.extra is String ? state.extra as String : null,
+            );
+            final mint = mintFromQP.isNotEmpty ? mintFromQP : mintFromExtra;
+
             if (mint.isEmpty) {
               return const NoTransitionPage(
                 child: Center(child: Text('mintAddress is required.')),
@@ -187,7 +196,26 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
 
             return NoTransitionPage(
               key: ValueKey('wallet-contents-$mint'),
-              child: WalletContentsPage(mintAddress: mint),
+              child: WalletContentsPage(
+                mintAddress: mint,
+
+                // ✅ query から補完（prefill用）
+                productId: asOpt(s(qp['productId'])),
+                brandId: asOpt(s(qp['brandId'])),
+                brandName: asOpt(s(qp['brandName'])),
+                productName: asOpt(s(qp['productName'])),
+                tokenName: asOpt(s(qp['tokenName'])),
+
+                // 互換
+                imageUrl: asOpt(s(qp['imageUrl'])),
+
+                // ✅ 追加: icon/contents（prefill）
+                iconUrl: asOpt(s(qp['iconUrl'])),
+                contentsUrl: asOpt(s(qp['contentsUrl'])),
+
+                // ✅ 戻り先
+                from: asOpt(s(qp['from'])),
+              ),
             );
           },
         ),

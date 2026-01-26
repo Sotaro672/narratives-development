@@ -1,5 +1,5 @@
 // backend/internal/application/usecase/tokenBlueprint_content_usecase.go
-package usecase
+package tokenBlueprint
 
 import (
 	"context"

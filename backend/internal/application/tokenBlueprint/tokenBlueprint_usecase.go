@@ -1,5 +1,5 @@
 // backend/internal/application/tokenBlueprint/tokenBlueprint_usecase.go
-package usecase
+package tokenBlueprint
 
 import (
 	"fmt"

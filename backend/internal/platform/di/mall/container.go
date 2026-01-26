@@ -18,6 +18,9 @@ import (
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 
+	// ✅ tokenBlueprint usecases (package was changed to tokenBlueprint)
+	tokenbp "narratives/internal/application/tokenBlueprint"
+
 	// inbound (for ImageURLResolver interface type)
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 
@@ -71,6 +74,9 @@ type Container struct {
 
 	// ✅ TokenBlueprint (buyer-facing patch handler 用に repo を保持)
 	TokenBlueprintRepo any
+
+	// ✅ TokenBlueprint Bucket Usecase (tokenBlueprint package)
+	TokenBlueprintBucketUC *tokenbp.TokenBlueprintBucketUsecase
 
 	// ✅ Token Icon public URL resolver（objectPath -> public URL）
 	TokenIconURLResolver mallhandler.ImageURLResolver
@@ -192,6 +198,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	// ListPatcher
 	listPatcher := mallfs.NewListPatcherRepo(fsClient)
+
+	// --------------------------------------------------------
+	// ✅ TokenBlueprint Bucket Usecase (tokenBlueprint package)
+	// --------------------------------------------------------
+	c.TokenBlueprintBucketUC = tokenbp.NewTokenBlueprintBucketUsecase(gcsClient)
 
 	// --------------------------------------------------------
 	// ✅ Solana wallet service (AvatarWalletService)
@@ -451,7 +462,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	selfBaseURLConfigured := strings.TrimSpace(infra.SelfBaseURL) != ""
 
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t transferUC=%t walletUC=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenBlueprintBucketUC=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t transferUC=%t walletUC=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
@@ -464,6 +475,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.MeAvatarRepo != nil,
 		c.InventoryUC != nil,
 		c.TokenBlueprintRepo != nil,
+		c.TokenBlueprintBucketUC != nil,
 		c.TokenIconURLResolver != nil,
 		selfBaseURLConfigured,
 		c.PreviewQ != nil,

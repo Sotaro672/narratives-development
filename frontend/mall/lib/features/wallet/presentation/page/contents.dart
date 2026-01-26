@@ -1,4 +1,3 @@
-// frontend/mall/lib/features/wallet/presentation/page/contents.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
@@ -19,6 +18,11 @@ class WalletContentsPage extends HookWidget {
     this.productName,
     this.tokenName,
     this.imageUrl,
+
+    // ✅ 追加: prefill 用（imageUrl互換とは別に明示で渡せる）
+    this.iconUrl,
+    this.contentsUrl,
+
     this.from,
 
     /// ✅ Preview 埋め込み時:
@@ -47,6 +51,10 @@ class WalletContentsPage extends HookWidget {
   /// metadata image url（互換: 既存ルートから渡される可能性あり）
   final String? imageUrl;
 
+  /// ✅ 新規: token icon / token contents の prefill
+  final String? iconUrl;
+  final String? contentsUrl;
+
   /// optional return path (decoded, plain string)
   final String? from;
 
@@ -67,7 +75,14 @@ class WalletContentsPage extends HookWidget {
       brandName: brandName,
       productName: productName,
       tokenName: tokenName,
+
+      // 互換
       imageUrl: imageUrl,
+
+      // ✅ 追加: prefill
+      iconUrl: iconUrl,
+      contentsUrl: contentsUrl,
+
       from: from,
     );
 

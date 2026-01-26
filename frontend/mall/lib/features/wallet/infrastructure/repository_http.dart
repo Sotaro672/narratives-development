@@ -14,6 +14,8 @@ class WalletRepositoryHttp {
 
   void dispose() {}
 
+  static const Duration _timeout = Duration(seconds: 10);
+
   String _normalizeBase(String base) {
     var b = base.trim();
     while (b.endsWith('/')) {
@@ -103,7 +105,9 @@ class WalletRepositoryHttp {
       headers1['Authorization'] = 'Bearer $token1';
     }
 
-    http.Response res = await http.get(uri, headers: headers1);
+    http.Response res = await http
+        .get(uri, headers: headers1)
+        .timeout(_timeout);
 
     // retry 401
     if (res.statusCode == 401) {
@@ -112,7 +116,7 @@ class WalletRepositoryHttp {
       if (token2 != null) {
         headers2['Authorization'] = 'Bearer $token2';
       }
-      res = await http.get(uri, headers: headers2);
+      res = await http.get(uri, headers: headers2).timeout(_timeout);
     }
 
     if (res.statusCode < 200 || res.statusCode >= 300) return null;
@@ -133,11 +137,9 @@ class WalletRepositoryHttp {
       headers1['Authorization'] = 'Bearer $token1';
     }
 
-    http.Response res = await http.post(
-      uri,
-      headers: headers1,
-      body: jsonEncode({}),
-    );
+    http.Response res = await http
+        .post(uri, headers: headers1, body: jsonEncode({}))
+        .timeout(_timeout);
 
     if (res.statusCode == 401) {
       final token2 = await _getIdToken(forceRefresh: true);
@@ -148,7 +150,9 @@ class WalletRepositoryHttp {
       if (token2 != null) {
         headers2['Authorization'] = 'Bearer $token2';
       }
-      res = await http.post(uri, headers: headers2, body: jsonEncode({}));
+      res = await http
+          .post(uri, headers: headers2, body: jsonEncode({}))
+          .timeout(_timeout);
     }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -169,6 +173,10 @@ class WalletRepositoryHttp {
   ///
   /// Backend:
   /// - GET /mall/me/wallets/tokens/resolve?mintAddress=...
+  ///
+  /// Note:
+  /// - Backend may return 403 when mint ownership check fails.
+  /// - Backend may return 404 when token not found.
   Future<TokenResolveDTO?> resolveTokenByMintAddress(String mintAddress) async {
     final m = mintAddress.trim();
     if (m.isEmpty) return null;
@@ -184,7 +192,9 @@ class WalletRepositoryHttp {
       headers1['Authorization'] = 'Bearer $token1';
     }
 
-    http.Response res = await http.get(uri, headers: headers1);
+    http.Response res = await http
+        .get(uri, headers: headers1)
+        .timeout(_timeout);
 
     // retry 401
     if (res.statusCode == 401) {
@@ -193,10 +203,13 @@ class WalletRepositoryHttp {
       if (token2 != null) {
         headers2['Authorization'] = 'Bearer $token2';
       }
-      res = await http.get(uri, headers: headers2);
+      res = await http.get(uri, headers: headers2).timeout(_timeout);
     }
 
-    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      // 今回は失敗理由が重要（403/404/503 等が起こり得る）
+      throw Exception('resolve failed: ${res.statusCode} ${res.body}');
+    }
 
     final decoded = _unwrapData(_decodeObject(res.body));
     return TokenResolveDTO.fromJson(decoded);
@@ -204,10 +217,10 @@ class WalletRepositoryHttp {
 
   /// Fetch token metadata JSON via backend proxy to avoid CORS.
   ///
-  /// Backend (example):
-  /// - GET /mall/me/wallets/metadata/proxy?url=https://... (metadataUri)
+  /// Backend:
+  /// - GET /mall/me/wallets/metadata/proxy?url=https://...
   ///
-  /// Proxy response should be a JSON object of the metadata itself.
+  /// Proxy response should be the metadata JSON itself (no envelope).
   Future<TokenMetadataDTO?> fetchTokenMetadata(String metadataUri) async {
     final url = metadataUri.trim();
     if (url.isEmpty) return null;
@@ -221,7 +234,9 @@ class WalletRepositoryHttp {
       headers1['Authorization'] = 'Bearer $token1';
     }
 
-    http.Response res = await http.get(uri, headers: headers1);
+    http.Response res = await http
+        .get(uri, headers: headers1)
+        .timeout(_timeout);
 
     // retry 401
     if (res.statusCode == 401) {
@@ -230,12 +245,15 @@ class WalletRepositoryHttp {
       if (token2 != null) {
         headers2['Authorization'] = 'Bearer $token2';
       }
-      res = await http.get(uri, headers: headers2);
+      res = await http.get(uri, headers: headers2).timeout(_timeout);
     }
 
-    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('metadata fetch failed: ${res.statusCode} ${res.body}');
+    }
 
-    final decoded = _unwrapData(_decodeObject(res.body));
+    // proxy は metadata JSON をそのまま返す前提なので unwrapData は通さない
+    final decoded = _decodeObject(res.body);
     return TokenMetadataDTO.fromJson(decoded);
   }
 }

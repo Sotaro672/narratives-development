@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,10 @@ import (
 //   - GET     /mall/me/wallets
 //   - POST    /mall/me/wallets/sync
 //   - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
-//     -> returns { productId, brandId, brandName, productBlueprintId, productName, metadataUri, mintAddress }
+//     -> returns {
+//     productId, brandId, brandName, productBlueprintId, productName, metadataUri, mintAddress,
+//     tokenBlueprintId, tokenContentsFiles
+//     }
 //   - OPTIONS /mall/me/wallets/metadata/proxy?url=...
 //   - GET     /mall/me/wallets/metadata/proxy?url=...   (CORS avoidance; fetch metadata JSON)
 //
@@ -51,6 +55,9 @@ func NewMallWalletHandler(walletUC *usecase.WalletUsecase) http.Handler {
 			"www.arweave.net":     {},
 			"ipfs.io":             {},
 			"cloudflare-ipfs.com": {},
+
+			// ✅ (状況次第) metadataUri が GCS の場合に備える
+			"storage.googleapis.com": {},
 		},
 	}
 }
@@ -75,7 +82,7 @@ func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.syncMeWallets(w, r)
 		return
 
-	// ✅ resolve token by mintAddress (+ brandName + productName)
+	// ✅ resolve token by mintAddress (+ brandName + productName + tokenContents signed URLs)
 	case r.Method == http.MethodGet && path0 == "/mall/me/wallets/tokens/resolve":
 		h.resolveTokenByMintAddress(w, r)
 		return
@@ -156,7 +163,10 @@ func (h *MallWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Request
 }
 
 // GET /mall/me/wallets/tokens/resolve?mintAddress=...
-// - returns: { productId, brandId, brandName, productBlueprintId, productName, metadataUri, mintAddress }
+//   - returns: {
+//     productId, brandId, brandName, productBlueprintId, productName, metadataUri, mintAddress,
+//     tokenBlueprintId, tokenContentsFiles
+//     }
 func (h *MallWalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -189,11 +199,61 @@ func (h *MallWalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *
 		maskID(mintAddress),
 	)
 
+	// =========================================================
+	// ✅ (強推奨) mint の所有検証
+	// - まず Firestore の wallet snapshot と整合するかチェック
+	// - snapshot に無ければ、OnchainReader が設定されている場合のみ RPC でフォールバック（任意）
+	// =========================================================
+	if h.walletUC.WalletRepo == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet repository not configured"})
+		return
+	}
+
+	snap, err := h.walletUC.WalletRepo.GetByAvatarID(ctx, avatarID)
+	if err != nil {
+		writeMallWalletErr(w, err)
+		return
+	}
+
+	owned := walletSnapshotHasMint(snap, mintAddress)
+	if !owned && h.walletUC.OnchainReader != nil {
+		addr := strings.TrimSpace(snap.WalletAddress)
+		if addr != "" {
+			mints, e := h.walletUC.OnchainReader.ListOwnedTokenMints(ctx, addr)
+			if e == nil {
+				owned = stringSliceContainsExact(mints, mintAddress)
+			} else {
+				log.Printf(
+					"[mall_wallet_handler] WARN onchain ownership check failed avatarId=%q walletAddress=%q mint=%q err=%v",
+					maskID(avatarID),
+					maskID(addr),
+					maskID(mintAddress),
+					e,
+				)
+			}
+		}
+	}
+
+	if !owned {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintAddress is not owned by current avatar"})
+		return
+	}
+
+	// =========================================================
+	// ✅ resolve (includes tokenContents signed URLs)
+	// =========================================================
 	res, err := h.walletUC.ResolveTokenByMintAddressWithBrandName(ctx, mintAddress)
 	if err != nil {
 		writeMallWalletErr(w, err)
 		return
 	}
+
+	// =========================================================
+	// ✅ (推奨) .keep 除外（閲覧対象ではないため）
+	// =========================================================
+	files := filterOutKeepFiles(res.TokenContentsFiles)
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"productId":          strings.TrimSpace(res.ProductID),
@@ -203,6 +263,10 @@ func (h *MallWalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *
 		"productName":        strings.TrimSpace(res.ProductName),
 		"metadataUri":        strings.TrimSpace(res.MetadataURI),
 		"mintAddress":        strings.TrimSpace(res.MintAddress),
+
+		// ✅ (必須) 追加
+		"tokenBlueprintId":   strings.TrimSpace(res.TokenBlueprintID),
+		"tokenContentsFiles": files,
 	})
 }
 
@@ -267,6 +331,9 @@ func (h *MallWalletHandler) metadataProxy(w http.ResponseWriter, r *http.Request
 			"www.arweave.net":     {},
 			"ipfs.io":             {},
 			"cloudflare-ipfs.com": {},
+
+			// ✅ (状況次第) metadataUri が GCS の場合に備える
+			"storage.googleapis.com": {},
 		}
 	}
 	if _, ok := allow[host]; !ok {
@@ -398,4 +465,158 @@ func maskID(s string) string {
 		return t
 	}
 	return t[:4] + "***" + t[len(t)-4:]
+}
+
+// ============================================================
+// helpers: ownership check (Firestore snapshot), keep exclusion
+// ============================================================
+
+func stringSliceContainsExact(xs []string, target string) bool {
+	t := strings.TrimSpace(target)
+	if t == "" || len(xs) == 0 {
+		return false
+	}
+	for _, x := range xs {
+		if strings.TrimSpace(x) == t {
+			return true
+		}
+	}
+	return false
+}
+
+// walletSnapshotHasMint checks whether the given mintAddress exists in the persisted wallet snapshot.
+//
+// Implementation notes:
+// - walletdom.Wallet の内部構造に依存しないよう、reflection でスライス候補を探索する。
+// - 以下の形式を best-effort でサポートする:
+//   - []string (mint list)
+//   - []struct{ MintAddress string } / []struct{ Mint string } / []struct{ Address string }
+//   - []*struct{ ... } (pointer elements)
+func walletSnapshotHasMint(w walletdom.Wallet, mintAddress string) bool {
+	m := strings.TrimSpace(mintAddress)
+	if m == "" {
+		return false
+	}
+
+	v := reflect.ValueOf(w)
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return false
+		}
+		v = v.Elem()
+	}
+	if !v.IsValid() || v.Kind() != reflect.Struct {
+		return false
+	}
+
+	// Common-ish candidates (update if your wallet model differs)
+	candidates := []string{
+		"Tokens",
+		"OwnedTokens",
+		"TokenMints",
+		"OwnedTokenMints",
+		"Mints",
+		"MintAddresses",
+		"Items",
+		"WalletItems",
+	}
+
+	for _, name := range candidates {
+		f := v.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		if f.Kind() == reflect.Pointer {
+			if f.IsNil() {
+				continue
+			}
+			f = f.Elem()
+		}
+		if f.Kind() != reflect.Slice && f.Kind() != reflect.Array {
+			continue
+		}
+
+		// []string
+		if f.Type().Elem().Kind() == reflect.String {
+			for i := 0; i < f.Len(); i++ {
+				if strings.TrimSpace(f.Index(i).String()) == m {
+					return true
+				}
+			}
+			continue
+		}
+
+		// []struct or []*struct
+		for i := 0; i < f.Len(); i++ {
+			el := f.Index(i)
+			if el.Kind() == reflect.Pointer {
+				if el.IsNil() {
+					continue
+				}
+				el = el.Elem()
+			}
+			if !el.IsValid() || el.Kind() != reflect.Struct {
+				continue
+			}
+
+			// try common field names
+			for _, fn := range []string{"MintAddress", "Mint", "Address"} {
+				ff := el.FieldByName(fn)
+				if !ff.IsValid() {
+					continue
+				}
+				if ff.Kind() == reflect.String && strings.TrimSpace(ff.String()) == m {
+					return true
+				}
+			}
+		}
+	}
+
+	// fallback: if wallet struct itself has a "Tokens" map or similar, scan map[string]...
+	// (optional; not implemented unless needed)
+
+	return false
+}
+
+func filterOutKeepFiles(in []usecase.SignedTokenContentFile) []usecase.SignedTokenContentFile {
+	if len(in) == 0 {
+		return in
+	}
+
+	out := make([]usecase.SignedTokenContentFile, 0, len(in))
+	for _, f := range in {
+		// Prefer checking publicUri; fallback to viewUri if needed.
+		if isKeepObjectURI(f.PublicURI) || isKeepObjectURI(f.ViewURI) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// isKeepObjectURI returns true when the URI points to an object named ".keep".
+func isKeepObjectURI(raw string) bool {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return false
+	}
+
+	// Quick path
+	if strings.Contains(s, "/.keep") || strings.HasSuffix(s, ".keep") {
+		// continue with parse for precision
+	}
+
+	u, err := url.Parse(s)
+	if err != nil || u == nil {
+		// best-effort fallback
+		return strings.Contains(s, "/.keep") || strings.HasSuffix(s, ".keep")
+	}
+
+	p := strings.TrimSpace(u.Path)
+	if p == "" {
+		return false
+	}
+	// path ends with "/.keep" or ".keep"
+	p = strings.TrimSuffix(p, "/")
+	return strings.HasSuffix(p, "/.keep") || strings.HasSuffix(p, ".keep")
 }

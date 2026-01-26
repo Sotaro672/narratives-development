@@ -96,6 +96,41 @@ WalletContentsViewModel useWalletContentsViewModel({
     error.value = msg.trim();
   }
 
+  String pickBestContentsViewUrl(TokenResolveDTO? r) {
+    if (r == null) return '';
+
+    // tokenContentsFiles は non-nullable 前提（lint がそう言っている）
+    final files = r.tokenContentsFiles;
+    if (files.isEmpty) return '';
+
+    // 念のため .keep は除外（バックエンドでも除外されている想定）
+    final filtered = files
+        .where((f) {
+          final u = f.viewUri.trim();
+          if (u.isEmpty) return false;
+          return !u.endsWith('/.keep') && !u.endsWith('.keep');
+        })
+        .toList(growable: false);
+
+    final target = filtered.isNotEmpty ? filtered : files;
+
+    // application/octet-stream を優先
+    for (final f in target) {
+      final t = f.type.trim();
+      final u = f.viewUri.trim();
+      if (u.isEmpty) continue;
+      if (t == 'application/octet-stream') return u;
+    }
+
+    // それ以外は先頭の viewUri
+    for (final f in target) {
+      final u = f.viewUri.trim();
+      if (u.isNotEmpty) return u;
+    }
+
+    return '';
+  }
+
   Future<void> load() async {
     if (loading.value) return;
 
@@ -109,14 +144,16 @@ WalletContentsViewModel useWalletContentsViewModel({
         return;
       }
 
-      // ✅ avatarId は URL ではなく store から解決（期待値）
+      // NOTE:
+      // backend は middleware から avatarId を取得する設計なら、このチェックは本質的に不要。
+      // UX要件として「自分のavatarIdが解決できないなら止める」なら残してよい。
       final avatarId = (await AvatarIdStore.I.resolveMyAvatarId() ?? '').trim();
       if (avatarId.isEmpty) {
         await setErr('avatarId could not be resolved.');
         return;
       }
 
-      // 1) resolve（product/brand/metadataUri 等）
+      // 1) resolve（product/brand/metadataUri + tokenBlueprintId/tokenContentsFiles 等）
       final r = await repo.resolveTokenByMintAddress(mint);
       if (r == null) {
         await setErr('Failed to resolve token by mintAddress.');
@@ -168,7 +205,7 @@ WalletContentsViewModel useWalletContentsViewModel({
         s(tokenName).isEmpty ||
         // icon は imageUrl 互換もあるため、両方 empty なら不足扱い
         (s(imageUrl).isEmpty && s(iconUrl).isEmpty) ||
-        // contents は画面上必須でないならここを外してもよいが、取得目的のため不足扱い
+        // contents が空なら resolve を走らせる
         s(contentsUrl).isEmpty;
 
     if (missing) load();
@@ -182,6 +219,7 @@ WalletContentsViewModel useWalletContentsViewModel({
   final bname = firstNonEmpty([brandName, resolved.value?.brandName]);
   final pname = firstNonEmpty([productName, resolved.value?.productName]);
 
+  // tokenName: prefill -> metadata.name
   final tname = firstNonEmpty([tokenName, metadata.value?.name]);
 
   // icon: prefill(iconUrl or imageUrl) -> metadata.tokenIconUri -> metadata.image
@@ -192,10 +230,13 @@ WalletContentsViewModel useWalletContentsViewModel({
     metadata.value?.image,
   ]);
 
-  // contents: prefill(contentsUrl) -> metadata.tokenContentsUri
+  // contents:
+  // prefill(contentsUrl) -> resolve.tokenContentsFiles[*].viewUri (SIGNED, expected) -> metadata.tokenContentsUri (fallback)
+  final resolvedContentsView = pickBestContentsViewUrl(resolved.value);
   final contents = firstNonEmpty([
     contentsUrl,
-    metadata.value?.tokenContentsUri,
+    resolvedContentsView,
+    metadata.value?.tokenContentsUri, // fallback（素URLで403になり得る）
   ]);
 
   // 互換: 従来の imageUrl は icon と同義で返す
@@ -230,7 +271,7 @@ WalletContentsViewModel useWalletContentsViewModel({
     // 互換: 既存の imageUrl
     putIf('imageUrl', img);
 
-    // 追加: icon / contents
+    // 追加: icon / contents（contents は署名付き viewUrl を優先）
     putIf('iconUrl', icon);
     putIf('contentsUrl', contents);
 
@@ -251,7 +292,7 @@ WalletContentsViewModel useWalletContentsViewModel({
 
     imageUrl: img, // 互換
     iconUrl: icon, // 追加
-    contentsUrl: contents, // 追加
+    contentsUrl: contents, // 追加（署名付き viewUrl を優先）
 
     goPreviewByProductId: goPreviewByProductId,
     openContents: openContents,
