@@ -1,7 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/tokenBlueprints.ts
+
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import { getIdTokenOrThrow } from "../../http/firebaseAuth";
-import { buildHeaders } from "../../http/httpClient";
+import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 import {
   logHttpRequest,
   logHttpResponse,
@@ -21,23 +21,29 @@ export async function fetchTokenBlueprintsByBrandHTTP(
   const trimmed = String(brandId ?? "").trim();
   if (!trimmed) return [];
 
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
+  if (!authValue) {
+    throw new Error("Authorization header is missing (not logged in or token unavailable)");
+  }
 
-  const url = `${API_BASE}/mint/token_blueprints?brandId=${encodeURIComponent(
-    trimmed,
-  )}`;
+  // For logging only
+  const m = authValue.match(/^Bearer\s+(.+)$/i);
+  const idToken = (m?.[1] ?? "").trim();
+
+  const url = `${API_BASE}/mint/token_blueprints?brandId=${encodeURIComponent(trimmed)}`;
 
   logHttpRequest("fetchTokenBlueprintsByBrandHTTP", {
     method: "GET",
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
     brandId: trimmed,
   });
 
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+  const res = await fetch(url, { method: "GET", headers: authHeaders });
 
   logHttpResponse("fetchTokenBlueprintsByBrandHTTP", {
     method: "GET",
@@ -72,14 +78,14 @@ export async function fetchTokenBlueprintsByBrandHTTP(
 
   const rawItems: TokenBlueprintRecordRaw[] = Array.isArray(json)
     ? json
-    : json?.items ?? json?.Items ?? [];
+    : (json as any)?.items ?? (json as any)?.Items ?? [];
 
   return rawItems
     .map((tb) => ({
-      id: String(tb.id ?? tb.ID ?? "").trim(),
-      name: String(tb.name ?? tb.Name ?? "").trim(),
-      symbol: String(tb.symbol ?? tb.Symbol ?? "").trim(),
-      iconUrl: String(tb.iconUrl ?? tb.IconUrl ?? "").trim() || undefined,
+      id: String((tb as any).id ?? (tb as any).ID ?? "").trim(),
+      name: String((tb as any).name ?? (tb as any).Name ?? "").trim(),
+      symbol: String((tb as any).symbol ?? (tb as any).Symbol ?? "").trim(),
+      iconUrl: String((tb as any).iconUrl ?? (tb as any).IconUrl ?? "").trim() || undefined,
     }))
     .filter((tb) => tb.id && tb.name && tb.symbol);
 }

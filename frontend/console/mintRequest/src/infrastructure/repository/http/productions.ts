@@ -1,8 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/productions.ts
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import { getIdTokenOrThrow } from "../../http/firebaseAuth";
-import { buildHeaders } from "../../http/httpClient";
+import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 import {
   logHttpError,
   logHttpRequest,
@@ -15,6 +14,19 @@ import {
   normalizeProductBlueprintIdFromProductionListItem,
 } from "../../normalizers/production";
 
+function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
+  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
+  if (!authValue) {
+    throw new Error("Authorization header is missing (not logged in or token unavailable)");
+  }
+  return authValue;
+}
+
+function extractIdTokenForLog(authValue: string): string {
+  const m = String(authValue ?? "").match(/^Bearer\s+(.+)$/i);
+  return String(m?.[1] ?? "").trim();
+}
+
 /**
  * productionId から productBlueprintId を解決する
  * - primary: GET /productions/{productionId}
@@ -26,7 +38,9 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
   const pid = String(productionId ?? "").trim();
   if (!pid) throw new Error("productionId が空です");
 
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
 
   const url1 = `${API_BASE}/productions/${encodeURIComponent(pid)}`;
 
@@ -35,12 +49,12 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
       method: "GET",
       url: url1,
       headers: {
-        Authorization: `Bearer ${safeTokenHint(idToken)}`,
+        Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
         "Content-Type": "application/json",
       },
     });
 
-    const res1 = await fetch(url1, { method: "GET", headers: buildHeaders(idToken) });
+    const res1 = await fetch(url1, { method: "GET", headers: authHeaders });
 
     logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
       method: "GET",
@@ -69,12 +83,12 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
     method: "GET",
     url: url2,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
   });
 
-  const res2 = await fetch(url2, { method: "GET", headers: buildHeaders(idToken) });
+  const res2 = await fetch(url2, { method: "GET", headers: authHeaders });
 
   logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP(fallback)", {
     method: "GET",
@@ -108,7 +122,9 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
  * 現在の company の productions を取得し、productionId の配列を返す（重複除去）
  */
 export async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
 
   const url = `${API_BASE}/productions`;
 
@@ -116,12 +132,12 @@ export async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[
     method: "GET",
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
   });
 
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+  const res = await fetch(url, { method: "GET", headers: authHeaders });
 
   logHttpResponse("fetchProductionIdsForCurrentCompanyHTTP", {
     method: "GET",

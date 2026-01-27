@@ -1,8 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/mintRequests.ts
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import { getIdTokenOrThrow } from "../../http/firebaseAuth";
-import { buildHeaders } from "../../http/httpClient";
+import { getAuthJsonHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 import {
   logHttpError,
   logHttpRequest,
@@ -32,7 +31,7 @@ import {
 // types
 // ===============================
 
-// ✅ "dto" view は今回の不具合原因になりうるため、フロント側からは使用しない前提で削除remember
+// ✅ "dto" view は今回の不具合原因になりうるため、フロント側からは使用しない前提
 type MintRequestsView = "management" | "list";
 type MintRequestsViewOrNull = MintRequestsView | null;
 
@@ -60,9 +59,7 @@ function uniqTrimmedStrings(xs: string[]): string[] {
 }
 
 function buildMintRequestsUrl(ids: string[], view: MintRequestsViewOrNull): string {
-  const base = `${API_BASE}/mint/requests?productionIds=${encodeURIComponent(
-    ids.join(","),
-  )}`;
+  const base = `${API_BASE}/mint/requests?productionIds=${encodeURIComponent(ids.join(","))}`;
   return view ? `${base}&view=${encodeURIComponent(view)}` : base;
 }
 
@@ -83,6 +80,19 @@ async function readTextSafe(res: Response): Promise<string> {
   }
 }
 
+function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
+  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
+  if (!authValue) {
+    throw new Error("Authorization header is missing (not logged in or token unavailable)");
+  }
+  return authValue;
+}
+
+function extractIdTokenForLog(authValue: string): string {
+  const m = String(authValue ?? "").match(/^Bearer\s+(.+)$/i);
+  return String(m?.[1] ?? "").trim();
+}
+
 /**
  * Raw fetch for a single view.
  * - 404/405 は「その view/ルートが無い」扱いにして上位でフォールバックさせる
@@ -97,14 +107,17 @@ async function fetchMintRequestsRowsRawOnce(
     return { rows: [], usedView: view, usedUrl: "" };
   }
 
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
+
   const url = buildMintRequestsUrl(safeIds, view);
 
   logHttpRequest("fetchMintRequestsRowsRawOnce", {
     method: "GET",
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
     productionIds: safeIds,
@@ -113,7 +126,7 @@ async function fetchMintRequestsRowsRawOnce(
 
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+    res = await fetch(url, { method: "GET", headers: authHeaders });
   } catch (e: any) {
     // fetch 自体が落ちる (CORS / network / DNS etc.)
     logHttpError("fetchMintRequestsRowsRawOnce(fetch)", {
@@ -123,9 +136,7 @@ async function fetchMintRequestsRowsRawOnce(
       productionIds: safeIds,
       error: String(e?.message ?? e),
     });
-    throw new Error(
-      `Failed to fetch mint requests (network): ${String(e?.message ?? e)}`,
-    );
+    throw new Error(`Failed to fetch mint requests (network): ${String(e?.message ?? e)}`);
   }
 
   logHttpResponse("fetchMintRequestsRowsRawOnce", {
@@ -178,9 +189,7 @@ async function fetchMintRequestsRowsRawOnce(
     bodyPreview: body ? body.slice(0, 800) : "",
   });
 
-  const hint = isServiceUnavailableStatus(res.status)
-    ? " (service unavailable)"
-    : "";
+  const hint = isServiceUnavailableStatus(res.status) ? " (service unavailable)" : "";
 
   throw new Error(
     `Failed to fetch mint requests${hint}: ${res.status} ${res.statusText}${
@@ -212,12 +221,10 @@ async function fetchMintRequestsRowsRawWithFallback(
     return { rows: [], usedView: null, usedUrl: "" };
   }
 
-  const candidates: MintRequestsViewOrNull[] = (views ?? []).filter(
-    (v, i, arr) => {
-      // dedupe incl. null
-      return arr.indexOf(v) === i;
-    },
-  );
+  const candidates: MintRequestsViewOrNull[] = (views ?? []).filter((v, i, arr) => {
+    // dedupe incl. null
+    return arr.indexOf(v) === i;
+  });
 
   let lastErr: any = null;
 
@@ -259,10 +266,7 @@ export async function fetchMintByInspectionIdHTTP(
   if (!iid) throw new Error("inspectionId が空です");
 
   // ✅ view fallback（management 優先）
-  const { rows } = await fetchMintRequestsRowsRawWithFallback([iid], [
-    "management",
-    null,
-  ]);
+  const { rows } = await fetchMintRequestsRowsRawWithFallback([iid], ["management", null]);
 
   const row =
     (rows ?? []).find((r) => extractRowKeyAsProductionId(r) === iid) ??
@@ -297,10 +301,7 @@ export async function fetchMintsByInspectionIdsHTTP(
   const ids = uniqTrimmedStrings(inspectionIds ?? []);
   if (ids.length === 0) return {};
 
-  const { rows } = await fetchMintRequestsRowsRawWithFallback(ids, [
-    "management",
-    null,
-  ]);
+  const { rows } = await fetchMintRequestsRowsRawWithFallback(ids, ["management", null]);
 
   const out: Record<string, MintDTO> = {};
   for (const r of rows ?? []) {
@@ -382,11 +383,11 @@ export async function postMintRequestHTTP(
   const trimmed = String(productionId ?? "").trim();
   if (!trimmed) throw new Error("productionId が空です");
 
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthJsonHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
 
-  const url = `${API_BASE}/mint/inspections/${encodeURIComponent(
-    trimmed,
-  )}/request`;
+  const url = `${API_BASE}/mint/inspections/${encodeURIComponent(trimmed)}/request`;
 
   const payload: { tokenBlueprintId: string; scheduledBurnDate?: string } = {
     tokenBlueprintId: String(tokenBlueprintId ?? "").trim(),
@@ -400,7 +401,7 @@ export async function postMintRequestHTTP(
     method: "POST",
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
     productionId: trimmed,
@@ -409,7 +410,7 @@ export async function postMintRequestHTTP(
 
   const res = await fetch(url, {
     method: "POST",
-    headers: buildHeaders(idToken),
+    headers: authHeaders,
     body: JSON.stringify(payload),
   });
 

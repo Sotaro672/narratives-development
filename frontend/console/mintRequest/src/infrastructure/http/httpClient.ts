@@ -1,7 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/http/httpClient.ts
 
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
-import { getIdTokenOrThrow } from "./firebaseAuth";
+import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
 import {
   logHttpError,
   logHttpRequest,
@@ -79,7 +79,7 @@ function parseJsonOrThrow<T>(text: string, url: string): T {
 /**
  * Authorization 付きで JSON を取得する薄いユーティリティ（GET/POST 等共通）
  *
- * - consoleApiBase(API_BASE), firebaseAuth(getIdTokenOrThrow), httpLogger と整合
+ * - consoleApiBase(API_BASE), firebaseAuth(getAuthHeadersOrThrow), httpLogger と整合
  * - 404 を null 扱いにしたい場合は treat404AsNull を true
  * - 返却は「data + text + status」を含め、フォールバック戦略の実装を呼び出し側に委ねる
  */
@@ -90,19 +90,28 @@ export async function requestJsonWithAuth<T>(
 ): Promise<HttpJsonResult<T>> {
   const effectiveInit = (init ?? {}) as RequestInit & { treat404AsNull?: boolean };
 
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
+  if (!authValue) {
+    throw new Error("Authorization header is missing (not logged in or token unavailable)");
+  }
+
+  // For logging and FormData handling, extract token if possible
+  const m = authValue.match(/^Bearer\s+(.+)$/i);
+  const idToken = (m?.[1] ?? "").trim();
+
   const url = buildUrl(path);
-
   const method = String(effectiveInit.method ?? "GET").toUpperCase();
-
-  // headers: 必ず Authorization を付与しつつ、呼び出し側の追加ヘッダも許容
-  const baseHeaders = buildHeaders(idToken);
 
   // FormData のときは Content-Type を固定しない（ブラウザが boundary を付与する）
   const isForm = effectiveInit.body instanceof FormData;
-  const headers = isForm
-    ? mergeHeaders({ Authorization: `Bearer ${idToken}` }, effectiveInit.headers)
-    : mergeHeaders(baseHeaders, effectiveInit.headers);
+
+  // headers: 必ず Authorization を付与しつつ、呼び出し側の追加ヘッダも許容
+  const baseHeaders: HeadersInit = isForm
+    ? { Authorization: authValue }
+    : { ...authHeaders, "Content-Type": "application/json" };
+
+  const headers = mergeHeaders(baseHeaders, effectiveInit.headers);
 
   // body: object を渡されたら JSON stringify（呼び出し側が string を渡してもOK）
   let body: any = effectiveInit.body;
@@ -114,7 +123,7 @@ export async function requestJsonWithAuth<T>(
     method,
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": isForm ? "(form)" : "application/json",
     },
     bodyPreview: toBodyString(effectiveInit.body)?.slice?.(0, 800) ?? "",

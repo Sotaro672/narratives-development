@@ -1,8 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/brands.ts
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import { getIdTokenOrThrow } from "../../http/firebaseAuth";
-import { buildHeaders } from "../../http/httpClient";
+import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 import {
   logHttpRequest,
   logHttpResponse,
@@ -11,25 +10,31 @@ import {
 } from "../../http/httpLogger";
 
 import type { BrandForMintDTO } from "../../dto/mintRequestLocal.dto";
-import type {
-  BrandPageResultDTO,
-  BrandRecordRaw
-} from "../../dto/mintRequestRaw.dto";
+import type { BrandPageResultDTO, BrandRecordRaw } from "../../dto/mintRequestRaw.dto";
 
 export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
+  if (!authValue) {
+    throw new Error("Authorization header is missing (not logged in or token unavailable)");
+  }
+
   const url = `${API_BASE}/mint/brands`;
+
+  // For logging only: extract raw token if possible
+  const m = authValue.match(/^Bearer\s+(.+)$/i);
+  const idToken = (m?.[1] ?? "").trim();
 
   logHttpRequest("fetchBrandsForMintHTTP", {
     method: "GET",
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
   });
 
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+  const res = await fetch(url, { method: "GET", headers: authHeaders });
 
   logHttpResponse("fetchBrandsForMintHTTP", {
     method: "GET",
@@ -56,12 +61,12 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 
   const json = (await res.json()) as BrandPageResultDTO | null | undefined;
 
-  const rawItems: BrandRecordRaw[] = json?.items ?? json?.Items ?? [];
+  const rawItems: BrandRecordRaw[] = json?.items ?? (json as any)?.Items ?? [];
 
   return rawItems
     .map((b) => ({
-      id: String(b.id ?? b.ID ?? "").trim(),
-      name: String(b.name ?? b.Name ?? "").trim(),
+      id: String((b as any).id ?? (b as any).ID ?? "").trim(),
+      name: String((b as any).name ?? (b as any).Name ?? "").trim(),
     }))
     .filter((b) => b.id && b.name);
 }

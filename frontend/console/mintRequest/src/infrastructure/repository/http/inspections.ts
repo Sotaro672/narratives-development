@@ -1,8 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/inspections.ts
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import { getIdTokenOrThrow } from "../../http/firebaseAuth";
-import { buildHeaders } from "../../http/httpClient";
+import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 import {
   logHttpRequest,
   logHttpResponse,
@@ -23,13 +22,26 @@ import { normalizeMintRequestDetail } from "../../normalizers/mintRequestDetail"
 function looksLikeInspectionBatchDTO(x: any): boolean {
   if (!x || typeof x !== "object") return false;
   return (
-    Array.isArray(x.inspections) ||
-    Array.isArray(x.Inspections) ||
-    Array.isArray(x.results) ||
-    Array.isArray(x.Results) ||
-    Array.isArray(x.items) ||
-    Array.isArray(x.Items)
+    Array.isArray((x as any).inspections) ||
+    Array.isArray((x as any).Inspections) ||
+    Array.isArray((x as any).results) ||
+    Array.isArray((x as any).Results) ||
+    Array.isArray((x as any).items) ||
+    Array.isArray((x as any).Items)
   );
+}
+
+function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
+  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
+  if (!authValue) {
+    throw new Error("Authorization header is missing (not logged in or token unavailable)");
+  }
+  return authValue;
+}
+
+function extractIdTokenForLog(authValue: string): string {
+  const m = String(authValue ?? "").match(/^Bearer\s+(.+)$/i);
+  return String(m?.[1] ?? "").trim();
 }
 
 // ===============================
@@ -43,20 +55,23 @@ async function fetchMintRequestDetailByProductionIdHTTP(
   const pid = String(productionId ?? "").trim();
   if (!pid) throw new Error("productionId が空です");
 
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
+
   const url = `${API_BASE}/mint/inspections/${encodeURIComponent(pid)}`;
 
   logHttpRequest("fetchMintRequestDetailByProductionIdHTTP", {
     method: "GET",
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
     productionId: pid,
   });
 
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+  const res = await fetch(url, { method: "GET", headers: authHeaders });
 
   logHttpResponse("fetchMintRequestDetailByProductionIdHTTP", {
     method: "GET",
@@ -106,22 +121,23 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
 
   if (ids.length === 0) return [];
 
-  const idToken = await getIdTokenOrThrow();
-  const url = `${API_BASE}/mint/inspections?productionIds=${encodeURIComponent(
-    ids.join(","),
-  )}`;
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
+
+  const url = `${API_BASE}/mint/inspections?productionIds=${encodeURIComponent(ids.join(","))}`;
 
   logHttpRequest("fetchInspectionBatchesByProductionIdsHTTP", {
     method: "GET",
     url,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
     productionIds: ids,
   });
 
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+  const res = await fetch(url, { method: "GET", headers: authHeaders });
 
   logHttpResponse("fetchInspectionBatchesByProductionIdsHTTP", {
     method: "GET",
@@ -152,7 +168,6 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
 
 // ===============================
 // single: inspection by productionId
-// - 旧互換（list fallback）は削除
 // ===============================
 
 export async function fetchInspectionByProductionIdHTTP(
@@ -161,7 +176,6 @@ export async function fetchInspectionByProductionIdHTTP(
   const pid = String(productionId ?? "").trim();
   if (!pid) throw new Error("productionId が空です");
 
-  // ✅ detail 取得のみ（旧互換の list fallback は削除）
   const detail = await fetchMintRequestDetailByProductionIdHTTP(pid);
   const inspection = (detail?.inspection ?? null) as any;
 

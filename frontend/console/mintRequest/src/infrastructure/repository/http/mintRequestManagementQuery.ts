@@ -2,15 +2,14 @@
 //
 // ✅ productionIds 前提
 // ✅ view フォールバック（list -> management -> dto -> null）
-// ✅ 既存HTTPユーティリティ整合（consoleApiBase / firebaseAuth / httpClient / httpLogger）
+// ✅ 既存HTTPユーティリティ整合（consoleApiBase / httpLogger）
 //
 // NOTE:
 // - CORS を避けるには、API_BASE が「同一オリジンの rewrite 経由」になっている必要があります。
 //   このファイルでは API_BASE を consoleApiBase の値に統一します。
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import { getIdTokenOrThrow } from "../../http/firebaseAuth";
-import { buildHeaders } from "../../http/httpClient";
+import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 import {
   logHttpError,
   logHttpRequest,
@@ -52,10 +51,7 @@ function uniqNonEmptyStrings(xs: string[]): string[] {
   return out;
 }
 
-function buildPath(
-  productionIds: string[],
-  view: MintRequestManagementView,
-): string {
+function buildPath(productionIds: string[], view: MintRequestManagementView): string {
   const ids = uniqNonEmptyStrings(productionIds ?? []);
   const base = `/mint/requests?productionIds=${encodeURIComponent(ids.join(","))}`;
   if (!view) return base;
@@ -97,24 +93,45 @@ function normalizeItemsShape(
   return null;
 }
 
+function normalizeUrl(base: string, path: string): string {
+  const b = String(base ?? "").replace(/\/+$/g, "");
+  const p = String(path ?? "");
+  if (!b) return p.startsWith("/") ? p : `/${p}`;
+  return `${b}${p.startsWith("/") ? p : `/${p}`}`;
+}
+
+function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
+  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
+  if (!authValue) {
+    throw new Error("Authorization header is missing (not logged in or token unavailable)");
+  }
+  return authValue;
+}
+
+function extractIdTokenForLog(authValue: string): string {
+  const m = String(authValue ?? "").match(/^Bearer\s+(.+)$/i);
+  return String(m?.[1] ?? "").trim();
+}
+
 async function requestJSON<T>(path: string): Promise<T> {
-  const idToken = await getIdTokenOrThrow();
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
 
   // API_BASE は consoleApiBase に統一（同一オリジンrewriteで CORS 回避する前提）
-  const url = `${String(API_BASE ?? "").replace(/\/+$/g, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const url = normalizeUrl(API_BASE, path);
 
   logHttpRequest("fetchMintRequestManagementRowsQueryHTTP", {
     method: "GET",
     url,
     path,
     headers: {
-      Authorization: `Bearer ${safeTokenHint(idToken)}`,
-      // buildHeaders が Content-Type を付ける前提（既存仕様に整合）
+      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
   });
 
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+  const res = await fetch(url, { method: "GET", headers: authHeaders });
 
   logHttpResponse("fetchMintRequestManagementRowsQueryHTTP", {
     method: "GET",
@@ -171,12 +188,7 @@ async function requestJSON<T>(path: string): Promise<T> {
 // Public API
 // ============================================================
 
-const DEFAULT_VIEWS: MintRequestManagementView[] = [
-  "list",
-  "management",
-  "dto",
-  null,
-];
+const DEFAULT_VIEWS: MintRequestManagementView[] = ["list", "management", "dto", null];
 
 /**
  * MintRequestManagement 一覧取得（Query Service 直叩き）
@@ -201,9 +213,7 @@ export async function fetchMintRequestManagementRowsQueryHTTP(
       (v) => v === "list" || v === "management" || v === "dto" || v === null,
     ) ?? DEFAULT_VIEWS;
 
-  const productionIds =
-    uniqNonEmptyStrings(args?.productionIds ?? []) ??
-    [];
+  const productionIds = uniqNonEmptyStrings(args?.productionIds ?? []) ?? [];
 
   const effectiveProductionIds =
     productionIds.length > 0
@@ -262,5 +272,4 @@ export async function fetchMintRequestManagementRowsQueryHTTP(
  * 互換 export（命名揺れ吸収）
  * - 既存 usecase 側が fetchMintRequestManagementRowsHTTP を期待していても落ちないようにする
  */
-export const fetchMintRequestManagementRowsHTTP =
-  fetchMintRequestManagementRowsQueryHTTP;
+export const fetchMintRequestManagementRowsHTTP = fetchMintRequestManagementRowsQueryHTTP;
