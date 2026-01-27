@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/application/productBlueprintCreateService.ts 
+// frontend/console/productBlueprint/src/application/productBlueprintCreateService.ts
 
 import type { ItemType } from "../domain/entity/catalog";
 import type { SizeRow } from "../../../model/src/domain/entity/catalog";
@@ -10,36 +10,12 @@ import type {
   NewModelVariationMeasurements,
 } from "../infrastructure/api/productBlueprintApi";
 
+import { hexToRgbInt } from "../../../shell/src/shared/util/color";
+
 export type {
   CreateProductBlueprintParams,
   ProductBlueprintResponse,
 } from "../infrastructure/api/productBlueprintApi";
-
-// ------------------------------
-// HEX → number(RGB) 変換ヘルパー
-// ------------------------------
-
-function hexToRgbInt(hex?: string): number | undefined {
-  if (!hex) return undefined;
-
-  const trimmed = hex.trim();
-  if (!trimmed) return undefined;
-
-  const withoutHash = trimmed.startsWith("#")
-    ? trimmed.slice(1)
-    : trimmed;
-
-  if (!/^[0-9a-fA-F]{6}$/.test(withoutHash)) {
-    return undefined;
-  }
-
-  const parsed = parseInt(withoutHash, 16);
-  if (Number.isNaN(parsed)) {
-    return undefined;
-  }
-
-  return parsed;
-}
 
 // ------------------------------
 // buildMeasurements をこのファイルに集約

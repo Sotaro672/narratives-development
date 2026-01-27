@@ -1,3 +1,4 @@
+// frontend/console/production/src/presentation/components/productionQuantityCard.tsx
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {
@@ -23,39 +24,7 @@ import type { ProductionQuantityRow } from "../create/types";
 // ここでは、コンポーネントと同階層に置く想定のパス例を示します。
 import "../styles/production.css";
 
-// ----------------------------------------------------------
-// RGB → HEX (#RRGGBB)
-// ----------------------------------------------------------
-function rgbIntToHex(rgb: number | string | null | undefined): string | null {
-  if (rgb === null || rgb === undefined) return null;
-
-  if (typeof rgb === "string") {
-    const s = rgb.trim();
-
-    // "#RRGGBB"
-    if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
-
-    // "RRGGBB" (hex without '#')
-    if (/^[0-9a-fA-F]{6}$/.test(s)) return `#${s}`;
-
-    // "0xRRGGBB"
-    if (/^0x[0-9a-fA-F]{6}$/.test(s)) return `#${s.slice(2)}`;
-
-    // 数値文字列（10進）
-    const n = Number(s);
-    if (!Number.isFinite(n)) return null;
-
-    const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
-    const hex = clamped.toString(16).padStart(6, "0");
-    return `#${hex}`;
-  }
-
-  if (!Number.isFinite(rgb)) return null;
-
-  const clamped = Math.max(0, Math.min(0xffffff, Math.floor(rgb)));
-  const hex = clamped.toString(16).padStart(6, "0");
-  return `#${hex}`;
-}
+import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
 
 type ProductionQuantityCardProps = {
   title?: string;
@@ -116,7 +85,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
 
           <TableBody>
             {rows.map((row, idx) => {
-              const rgbHex = rgbIntToHex(row.rgb);
+              const rgbHex = rgbIntToHex(row.rgb) ?? null;
               const bgColor = rgbHex ?? "#ffffff";
 
               return (

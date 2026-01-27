@@ -1,3 +1,4 @@
+//frontend\console\production\src\presentation\create\types.ts
 import type { ItemType, Fit } from "../../../../productBlueprint/src/domain/entity/catalog";
 
 // ======================================================================

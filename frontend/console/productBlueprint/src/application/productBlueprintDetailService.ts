@@ -12,9 +12,8 @@ import type {
 } from "../infrastructure/api/productBlueprintDetailApi";
 
 import { API_BASE } from "../../../shell/src/shared/http/apiBase";
-import {
-  getAuthHeadersOrThrow,
-} from "../../../shell/src/shared/http/authHeaders";
+import { getAuthHeadersOrThrow } from "../../../shell/src/shared/http/authHeaders";
+import { coerceRgbInt, hexToRgbInt } from "../../../shell/src/shared/util/color";
 
 import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
 import { formatLastFirst } from "../../../member/src/infrastructure/query/memberQuery";
@@ -33,22 +32,6 @@ import {
   createModelVariations,
   type CreateModelVariationRequest,
 } from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
-
-// -----------------------------------------
-// HEX -> number(RGB) 変換
-// -----------------------------------------
-function hexToRgbInt(hex?: string): number | undefined {
-  if (!hex) return undefined;
-  const trimmed = hex.trim();
-  const h = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
-
-  if (!/^[0-9a-fA-F]{6}$/.test(h)) return undefined;
-
-  const parsed = parseInt(h, 16);
-  if (Number.isNaN(parsed)) return undefined;
-
-  return parsed;
-}
 
 // size + color → 一意キー
 const makeKey = (sizeLabel: string, color: string) => `${sizeLabel}__${color}`;
@@ -353,14 +336,14 @@ export async function updateProductBlueprint(
     // RGB（hex から int に変換。無ければ既存値を維持）
     const rgbHex = colorRgbMap[colorName];
     const rgbFromHex = hexToRgbInt(rgbHex);
-    const existingRgb =
-      typeof v.color?.rgb === "number"
-        ? v.color.rgb
-        : typeof v.color?.RGB === "number"
-          ? v.color.RGB
-          : typeof v.Color?.RGB === "number"
-            ? v.Color.RGB
-            : undefined;
+
+    const existingRgb = coerceRgbInt(
+      (v as any)?.color?.rgb ??
+        (v as any)?.color?.RGB ??
+        (v as any)?.Color?.rgb ??
+        (v as any)?.Color?.RGB,
+    );
+
     const rgb = rgbFromHex ?? existingRgb;
 
     // 採寸（SizeRow から起こした map）
@@ -434,7 +417,10 @@ export async function updateProductBlueprint(
     })
     .map((v) => v.id);
 
-  console.group("%c[updateProductBlueprint] modelUpdateService 差分削除 指令", "color:#ff9500; font-weight:bold;");
+  console.group(
+    "%c[updateProductBlueprint] modelUpdateService 差分削除 指令",
+    "color:#ff9500; font-weight:bold;",
+  );
   console.log("📦 list 取得済み ModelVariation IDs:", variations.map((v) => v.id));
   console.log("📦 画面上に残すべき ModelVariation IDs (remainingIds):", remainingIds);
   console.groupEnd();
@@ -496,12 +482,7 @@ export async function listModelVariationsByProductBlueprintId(
     const colorRaw = v.color ?? v.Color ?? {};
     const measurementsRaw = v.measurements ?? v.Measurements ?? {};
 
-    const rgbValue =
-      typeof colorRaw.rgb === "number"
-        ? colorRaw.rgb
-        : typeof colorRaw.RGB === "number"
-          ? colorRaw.RGB
-          : null;
+    const rgbValue = coerceRgbInt(colorRaw.rgb ?? colorRaw.RGB) ?? null;
 
     return {
       id: v.id ?? v.ID ?? "",
