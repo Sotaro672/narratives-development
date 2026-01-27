@@ -1,6 +1,10 @@
 // frontend/console/productBlueprint/src/infrastructure/repository/productBlueprintRepositoryHTTP.ts
 
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import {
+  getAuthHeadersOrThrow,
+  getAuthJsonHeadersOrThrow,
+} from "../../../../shell/src/shared/http/authHeaders";
 
 // application 層の型だけを type import
 import type { CreateProductBlueprintParams } from "../../application/productBlueprintCreateService";
@@ -10,32 +14,13 @@ import type {
   ProductBlueprintDetailResponse,
 } from "../../infrastructure/api/productBlueprintDetailApi";
 
-// BASE URL
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
-    ?.replace(/\/+$/g, "") ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-export const API_BASE = ENV_BASE || FALLBACK_BASE;
-
-// -----------------------------------------------------------
-// 共通: Firebase 認証トークン取得
-// -----------------------------------------------------------
-async function getIdTokenOrThrow(): Promise<string> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("未ログインです");
-  return user.getIdToken();
-}
-
 // -----------------------------------------------------------
 // POST: 商品設計 作成
 // -----------------------------------------------------------
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthJsonHeadersOrThrow();
 
   const payload = {
     productName: params.productName,
@@ -55,10 +40,7 @@ export async function createProductBlueprintHTTP(
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 
@@ -76,13 +58,11 @@ export async function createProductBlueprintHTTP(
 // GET: 商品設計 一覧（論理削除されていないもの）
 // -----------------------------------------------------------
 export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
+    headers,
   });
 
   if (!res.ok) {
@@ -99,17 +79,12 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
 //   - backend: GET /product-blueprints/not-yet-printed
 // -----------------------------------------------------------
 export async function listNotYetPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
-  const res = await fetch(
-    `${API_BASE}/product-blueprints/not-yet-printed`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-    },
-  );
+  const res = await fetch(`${API_BASE}/product-blueprints/not-yet-printed`, {
+    method: "GET",
+    headers,
+  });
 
   if (!res.ok) {
     throw new Error(
@@ -125,17 +100,12 @@ export async function listNotYetPrintedProductBlueprintsHTTP(): Promise<ProductB
 //   - backend: GET /product-blueprints/printed
 // -----------------------------------------------------------
 export async function listPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
-  const res = await fetch(
-    `${API_BASE}/product-blueprints/printed`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-    },
-  );
+  const res = await fetch(`${API_BASE}/product-blueprints/printed`, {
+    method: "GET",
+    headers,
+  });
 
   if (!res.ok) {
     throw new Error(
@@ -152,13 +122,11 @@ export async function listPrintedProductBlueprintsHTTP(): Promise<ProductBluepri
 //   - 返却型は Deleted 用 service 側でキャストして利用する
 // -----------------------------------------------------------
 export async function listDeletedProductBlueprintsHTTP(): Promise<any[]> {
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
   const res = await fetch(`${API_BASE}/product-blueprints/deleted`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
+    headers,
   });
 
   if (!res.ok) {
@@ -177,16 +145,13 @@ export async function updateProductBlueprintHTTP(
   id: string,
   params: UpdateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthJsonHeadersOrThrow();
 
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
 
   const res = await fetch(url, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
+    headers,
     // params 内に printed があれば、そのまま backend に渡される
     body: JSON.stringify(params),
   });
@@ -214,15 +179,13 @@ export async function markProductBlueprintPrintedHTTP(
     throw new Error("markProductBlueprintPrintedHTTP: id が空です");
   }
 
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
   const res = await fetch(
     `${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}/mark-printed`,
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
+      headers,
     },
   );
 
@@ -248,15 +211,13 @@ export async function restoreProductBlueprintHTTP(id: string): Promise<void> {
     throw new Error("restoreProductBlueprintHTTP: id が空です");
   }
 
-  const idToken = await getIdTokenOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
   const res = await fetch(
     `${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}/restore`,
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
+      headers,
     },
   );
 

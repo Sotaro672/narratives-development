@@ -14,17 +14,6 @@ import type { ModelNumber } from "../../../../model/src/application/modelCreateS
 import { createProductBlueprintHTTP } from "../repository/productBlueprintRepositoryHTTP";
 import { createModelVariationsFromProductBlueprint } from "../../../../model/src/infrastructure/api/modelCreateApi";
 
-// ISO8601 → "YYYY/MM/DD"（壊れてたらそのまま返す） ※一覧用
-const toDisplayDate = (iso?: string | null): string => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}/${m}/${day}`;
-};
-
 // ISO8601 → "YYYY/M/D" 表示 ※詳細画面用（元の挙動を維持）
 export const formatProductBlueprintDate = (iso?: string | null): string => {
   if (!iso) return "";

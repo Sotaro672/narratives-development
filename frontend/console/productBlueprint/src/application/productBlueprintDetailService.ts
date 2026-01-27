@@ -2,9 +2,7 @@
 
 import type { ItemType } from "../domain/entity/catalog";
 import type { SizeRow } from "../../../model/src/domain/entity/catalog";
-import {
-  updateProductBlueprintHTTP,
-} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
+import { updateProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
 import type {
   ProductBlueprintDetailResponse,
@@ -13,8 +11,10 @@ import type {
   NewModelVariationPayload,
 } from "../infrastructure/api/productBlueprintDetailApi";
 
-import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
-import { API_BASE } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import {
+  getAuthHeadersOrThrow,
+} from "../../../shell/src/shared/http/authHeaders";
 
 import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
 import { formatLastFirst } from "../../../member/src/infrastructure/query/memberQuery";
@@ -51,16 +51,12 @@ function hexToRgbInt(hex?: string): number | undefined {
 }
 
 // size + color → 一意キー
-const makeKey = (sizeLabel: string, color: string) =>
-  `${sizeLabel}__${color}`;
+const makeKey = (sizeLabel: string, color: string) => `${sizeLabel}__${color}`;
 
 // -----------------------------------------
 // itemType → measurements 組み立て（新規作成向け）
 // -----------------------------------------
-function buildMeasurements(
-  itemType: ItemType,
-  size: SizeRow,
-): NewModelVariationMeasurements {
+function buildMeasurements(itemType: ItemType, size: SizeRow): NewModelVariationMeasurements {
   const result: NewModelVariationMeasurements = {};
 
   if (itemType === "ボトムス") {
@@ -160,10 +156,7 @@ async function fetchBrandNameById(brandId: string): Promise<string> {
     const brands = await fetchAllBrandsForCompany("", false);
     return brands.find((b) => b.id === id)?.name ?? "";
   } catch (e) {
-    console.error(
-      "[productBlueprintDetailService] fetchBrandNameById error:",
-      e,
-    );
+    console.error("[productBlueprintDetailService] fetchBrandNameById error:", e);
     return "";
   }
 }
@@ -172,7 +165,7 @@ async function fetchBrandNameById(brandId: string): Promise<string> {
 // メンバー名解決（Repository 経由）
 // -----------------------------------------
 async function resolveMemberNameById(
-  _idToken: string,
+  _authHeaders: Record<string, string>,
   memberId?: string | null,
   fallback: string = "-",
 ): Promise<string> {
@@ -184,15 +177,11 @@ async function resolveMemberNameById(
     const member = await repo.getById(id);
     if (!member) return fallback;
 
-    const name =
-      formatLastFirst(member.lastName, member.firstName)?.trim() || id;
+    const name = formatLastFirst(member.lastName, member.firstName)?.trim() || id;
 
     return name || fallback;
   } catch (e) {
-    console.error(
-      "[productBlueprintDetailService] resolveMemberNameById error:",
-      e,
-    );
+    console.error("[productBlueprintDetailService] resolveMemberNameById error:", e);
     return fallback;
   }
 }
@@ -203,21 +192,19 @@ async function resolveMemberNameById(
 export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("ログイン情報が見つかりません（未ログイン）");
+  const trimmed = String(id ?? "").trim();
+  if (!trimmed) throw new Error("getProductBlueprintDetail: id が空です");
 
-  const idToken = await user.getIdToken();
+  const authHeaders = await getAuthHeadersOrThrow();
 
-  const res = await fetch(`${API_BASE}/product-blueprints/${id}`, {
+  const res = await fetch(`${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}`, {
     method: "GET",
-    headers: { Authorization: `Bearer ${idToken}` },
+    headers: authHeaders,
   });
 
   if (!res.ok) {
     throw new Error(
-      `商品設計詳細の取得に失敗しました（${res.status} ${
-        res.statusText ?? ""
-      }）`,
+      `商品設計詳細の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
     );
   }
 
@@ -237,25 +224,15 @@ export async function getProductBlueprintDetail(
     material: raw.Material,
     weight: raw.Weight,
     qualityAssurance: raw.QualityAssurance ?? [],
-    productIdTag: raw.ProductIdTag
-      ? { type: raw.ProductIdTag.Type ?? "" }
-      : undefined,
+    productIdTag: raw.ProductIdTag ? { type: raw.ProductIdTag.Type ?? "" } : undefined,
     assigneeId: raw.AssigneeID ?? "",
     createdBy: raw.CreatedBy ?? "",
     createdAt: raw.CreatedAt ?? "",
   };
 
   response.brandName = await fetchBrandNameById(response.brandId ?? "");
-  response.assigneeName = await resolveMemberNameById(
-    idToken,
-    response.assigneeId,
-    "-",
-  );
-  response.createdByName = await resolveMemberNameById(
-    idToken,
-    response.createdBy,
-    "作成者未設定",
-  );
+  response.assigneeName = await resolveMemberNameById(authHeaders, response.assigneeId, "-");
+  response.createdByName = await resolveMemberNameById(authHeaders, response.createdBy, "作成者未設定");
 
   return response;
 }
@@ -312,9 +289,7 @@ export async function updateProductBlueprint(
 
   // itemType が不明なら variations 更新はスキップ（メタ情報だけ更新）
   if (!itemType) {
-    console.log(
-      "[updateProductBlueprint] itemType が空のため、ModelVariation の更新はスキップします。",
-    );
+    console.log("[updateProductBlueprint] itemType が空のため、ModelVariation の更新はスキップします。");
     return updated;
   }
 
@@ -326,13 +301,10 @@ export async function updateProductBlueprint(
   const existingMap = new Map<string, any>();
   varsAny.forEach((v) => {
     const sizeLabel: string =
-      (typeof v.size === "string"
-        ? v.size
-        : (v.Size as string | undefined)) ?? "";
+      (typeof v.size === "string" ? v.size : (v.Size as string | undefined)) ?? "";
     const colorName: string =
-      (typeof v.color?.name === "string"
-        ? v.color.name
-        : (v.Color?.Name as string | undefined)) ?? "";
+      (typeof v.color?.name === "string" ? v.color.name : (v.Color?.Name as string | undefined)) ??
+      "";
 
     if (!sizeLabel || !colorName) return;
     const key = makeKey(sizeLabel, colorName);
@@ -341,21 +313,16 @@ export async function updateProductBlueprint(
 
   // 4) size×color → modelNumber(code) のマップ（希望状態）
   const codeMap = new Map<string, string>();
-  modelNumbers.forEach(
-    (m: { size: string; color: string; code: string }) => {
-      if (!m.size || !m.color) return;
-      const key = makeKey(m.size, m.color);
-      codeMap.set(key, m.code ?? "");
-    },
-  );
+  modelNumbers.forEach((m: { size: string; color: string; code: string }) => {
+    if (!m.size || !m.color) return;
+    const key = makeKey(m.size, m.color);
+    codeMap.set(key, m.code ?? "");
+  });
 
   // 5) sizeLabel → measurements(map[string]float64) のマップ
   const measurementsMap = new Map<string, Record<string, number>>();
   (sizes as SizeRow[]).forEach((s) => {
-    const ms = buildMeasurementsFromSizeRowForUpdate(
-      itemType as ItemType,
-      s,
-    );
+    const ms = buildMeasurementsFromSizeRowForUpdate(itemType as ItemType, s);
     if (ms) {
       measurementsMap.set(s.sizeLabel, ms);
     }
@@ -369,13 +336,10 @@ export async function updateProductBlueprint(
     if (!variationId) return;
 
     const sizeLabel: string =
-      (typeof v.size === "string"
-        ? v.size
-        : (v.Size as string | undefined)) ?? "";
+      (typeof v.size === "string" ? v.size : (v.Size as string | undefined)) ?? "";
     const colorName: string =
-      (typeof v.color?.name === "string"
-        ? v.color.name
-        : (v.Color?.Name as string | undefined)) ?? "";
+      (typeof v.color?.name === "string" ? v.color.name : (v.Color?.Name as string | undefined)) ??
+      "";
 
     if (!sizeLabel || !colorName) return;
 
@@ -437,9 +401,7 @@ export async function updateProductBlueprint(
     const [sizeLabel, colorName] = key.split("__");
     if (!sizeLabel || !colorName) return;
 
-    const sizeRow = (sizes as SizeRow[]).find(
-      (s) => s.sizeLabel === sizeLabel,
-    );
+    const sizeRow = (sizes as SizeRow[]).find((s) => s.sizeLabel === sizeLabel);
     if (!sizeRow) return;
 
     const rgbHex = colorRgbMap[colorName];
@@ -460,10 +422,7 @@ export async function updateProductBlueprint(
   });
 
   if (createPayloads.length > 0) {
-    console.log(
-      "[updateProductBlueprint] createModelVariations payload:",
-      createPayloads,
-    );
+    console.log("[updateProductBlueprint] createModelVariations payload:", createPayloads);
     await createModelVariations(id, createPayloads);
   }
 
@@ -475,18 +434,9 @@ export async function updateProductBlueprint(
     })
     .map((v) => v.id);
 
-  console.group(
-    "%c[updateProductBlueprint] modelUpdateService 差分削除 指令",
-    "color:#ff9500; font-weight:bold;",
-  );
-  console.log(
-    "📦 list 取得済み ModelVariation IDs:",
-    variations.map((v) => v.id),
-  );
-  console.log(
-    "📦 画面上に残すべき ModelVariation IDs (remainingIds):",
-    remainingIds,
-  );
+  console.group("%c[updateProductBlueprint] modelUpdateService 差分削除 指令", "color:#ff9500; font-weight:bold;");
+  console.log("📦 list 取得済み ModelVariation IDs:", variations.map((v) => v.id));
+  console.log("📦 画面上に残すべき ModelVariation IDs (remainingIds):", remainingIds);
   console.groupEnd();
 
   await deleteRemovedModelVariations(
@@ -521,24 +471,21 @@ export async function listModelVariationsByProductBlueprintId(
   const id = productBlueprintId.trim();
   if (!id) throw new Error("productBlueprintId が空です");
 
-  const user = auth.currentUser;
-  if (!user) throw new Error("ログイン情報が見つかりません（未ログイン）");
+  const authHeaders = await getAuthHeadersOrThrow();
 
-  const idToken = await user.getIdToken();
-  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(
-    id,
-  )}/variations`;
+  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(id)}/variations`;
 
   const res = await fetch(url, {
     method: "GET",
-    headers: { Authorization: `Bearer ${idToken}`, Accept: "application/json" },
+    headers: {
+      ...authHeaders,
+      Accept: "application/json",
+    },
   });
 
   if (!res.ok) {
     throw new Error(
-      `モデル一覧の取得に失敗しました（${res.status} ${
-        res.statusText ?? ""
-      }）`,
+      `モデル一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
     );
   }
 
@@ -596,29 +543,21 @@ export async function getProductBlueprintHistory(
     throw new Error("getProductBlueprintHistory: productBlueprintId が空です");
   }
 
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
+  const authHeaders = await getAuthHeadersOrThrow();
 
-  const idToken = await user.getIdToken();
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(
-    id,
-  )}/history`;
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}/history`;
 
   const res = await fetch(url, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${idToken}`,
+      ...authHeaders,
       Accept: "application/json",
     },
   });
 
   if (!res.ok) {
     throw new Error(
-      `商品設計履歴の取得に失敗しました（${res.status} ${
-        res.statusText ?? ""
-      }）`,
+      `商品設計履歴の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
     );
   }
 
@@ -640,27 +579,20 @@ export async function getProductBlueprintHistory(
 // -----------------------------------------
 // DELETE: 商品設計 論理削除
 // -----------------------------------------
-export async function softDeleteProductBlueprint(
-  productBlueprintId: string,
-): Promise<void> {
+export async function softDeleteProductBlueprint(productBlueprintId: string): Promise<void> {
   const id = productBlueprintId.trim();
   if (!id) {
     throw new Error("softDeleteProductBlueprint: productBlueprintId が空です");
   }
 
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
-
-  const idToken = await user.getIdToken();
+  const authHeaders = await getAuthHeadersOrThrow();
 
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
 
   const res = await fetch(url, {
     method: "DELETE",
     headers: {
-      Authorization: `Bearer ${idToken}`,
+      ...authHeaders,
       Accept: "application/json",
     },
   });
