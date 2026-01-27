@@ -8,7 +8,7 @@
 // - CORS を避けるには、API_BASE が「同一オリジンの rewrite 経由」になっている必要があります。
 //   このファイルでは API_BASE を consoleApiBase の値に統一します。
 
-import { API_BASE } from "../../http/consoleApiBase";
+import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getIdTokenOrThrow } from "../../http/firebaseAuth";
 import { buildHeaders } from "../../http/httpClient";
 import {

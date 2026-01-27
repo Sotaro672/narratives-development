@@ -1,6 +1,5 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/tokenBlueprints.ts
-
-import { API_BASE } from "../../http/consoleApiBase";
+import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getIdTokenOrThrow } from "../../http/firebaseAuth";
 import { buildHeaders } from "../../http/httpClient";
 import {

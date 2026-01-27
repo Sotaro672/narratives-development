@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/infrastructure/http/httpClient.ts
 
-import { API_BASE } from "./consoleApiBase";
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import { getIdTokenOrThrow } from "./firebaseAuth";
 import {
   logHttpError,
