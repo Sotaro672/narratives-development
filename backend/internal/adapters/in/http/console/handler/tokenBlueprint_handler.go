@@ -840,8 +840,6 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case brandID != "" && mintedFilter == "":
 		result, err = h.uc.ListByBrandID(ctx, brandID, page)
-	case mintedFilter == "notYet":
-		result, err = h.uc.ListMintedNotYet(ctx, page)
 	case mintedFilter == "minted":
 		result, err = h.uc.ListMintedCompleted(ctx, page)
 	default:

@@ -79,16 +79,6 @@ func (u *TokenBlueprintUsecase) Create(ctx context.Context, in CreateBlueprintRe
 	}
 
 	log.Printf("[TokenBlueprintBucket] ensure keep success id=%q", tb.ID)
-
-	// Backward compatible behavior: fill metadataUri if empty (policy component).
-	if u.metadata != nil {
-		updated, uerr := u.metadata.EnsureMetadataURI(ctx, tb, in.ActorID)
-		if uerr == nil && updated != nil {
-			return updated, nil
-		}
-		// EnsureMetadataURI failure should not break create result in current policy.
-	}
-
 	return tb, nil
 }
 
@@ -113,10 +103,6 @@ func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID s
 
 func (u *TokenBlueprintUsecase) ListByBrandID(ctx context.Context, brandID string, page tbdom.Page) (tbdom.PageResult, error) {
 	return u.crud.ListByBrandID(ctx, brandID, page)
-}
-
-func (u *TokenBlueprintUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
-	return u.crud.ListMintedNotYet(ctx, page)
 }
 
 func (u *TokenBlueprintUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {

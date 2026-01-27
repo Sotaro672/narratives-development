@@ -36,6 +36,9 @@ import (
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
+	// ★ mint 直前 metadata 生成で利用
+	"narratives/internal/infra/arweave"
+
 	// domains
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
@@ -43,6 +46,7 @@ import (
 	memdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ========================================
@@ -405,6 +409,28 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	mintUC.SetNameResolver(nameResolver)
 	mintUC.SetInventoryUsecase(inventoryUC)
 
+	// =========================================================
+	// ★ FIX: MintUsecase に TokenBlueprint の ensurer を注入する
+	//  - tbBucketEnsurer_nil により mint が abort していたため必須
+	//  - metadataUri は mint 直前に確定する方針
+	// =========================================================
+
+	// 1) bucket/.keep ensurer
+	tbBucketEnsurer := tokenblueprintapp.NewTokenBlueprintBucketUsecase(gcsClient)
+	mintUC.SetTokenBlueprintBucketEnsurer(tbBucketEnsurer)
+
+	// 2) metadataUri ensurer
+	//    NOTE: TokenBlueprintUsecase 側と同じ環境変数を利用
+	baseURL := strings.TrimSpace(os.Getenv("ARWEAVE_BASE_URL"))
+	apiKey := strings.TrimSpace(os.Getenv("IRYS_SERVICE_API_KEY"))
+	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
+
+	tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(tokenBlueprintRepo, uploader)
+	mintUC.SetTokenBlueprintMetadataEnsurer(&tbMetadataEnsurerByIDAdapter{
+		tbRepo:   tokenBlueprintRepo,
+		metadata: tbMetadataUC,
+	})
+
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
 	// =========================================================
@@ -678,6 +704,52 @@ func callOptionalMethod(obj any, methodName string, arg any) {
 
 func init() {
 	log.Printf("[di.console] container package loaded")
+}
+
+// ============================================================
+// ★ Adapter: MintUsecase port (EnsureMetadataURIByTokenBlueprintID)
+// - mint 側の port は tokenBlueprintID しか受け取らないため、ここで
+//   GetByID -> EnsureMetadataURI を橋渡しする
+// ============================================================
+
+type tbMetadataEnsurerByIDAdapter struct {
+	tbRepo   tbdom.RepositoryPort
+	metadata interface {
+		EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
+	}
+}
+
+func (a *tbMetadataEnsurerByIDAdapter) EnsureMetadataURIByTokenBlueprintID(ctx context.Context, tokenBlueprintID string, actorID string) (string, error) {
+	if a == nil || a.tbRepo == nil || a.metadata == nil {
+		return "", fmt.Errorf("tbMetadataEnsurerByIDAdapter: deps are nil")
+	}
+
+	id := strings.TrimSpace(tokenBlueprintID)
+	if id == "" {
+		return "", fmt.Errorf("tokenBlueprintID is empty")
+	}
+
+	tb, err := a.tbRepo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if tb == nil {
+		return "", fmt.Errorf("tokenBlueprint not found id=%q", id)
+	}
+
+	updated, err := a.metadata.EnsureMetadataURI(ctx, tb, actorID)
+	if err != nil {
+		return "", err
+	}
+	if updated == nil {
+		updated = tb
+	}
+
+	uri := strings.TrimSpace(updated.MetadataURI)
+	if uri == "" {
+		return "", fmt.Errorf("metadataUri is empty after ensure id=%q", id)
+	}
+	return uri, nil
 }
 
 // ============================================================

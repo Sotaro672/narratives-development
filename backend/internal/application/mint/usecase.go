@@ -20,7 +20,11 @@ type MintUsecase struct {
 	inspRepo  mintdom.MintInspectionRepo
 	modelRepo mintdom.MintModelRepo
 
-	// TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ
+	// ★ 追加: mint パッケージ側の Port 経由で tokenBlueprint を操作する（直 import しない）
+	tbBucketEnsurer   TokenBlueprintBucketEnsurer
+	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
+
+	// TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ（既存）
 	tbRepo tbdom.RepositoryPort
 
 	// Brand 一覧取得用
@@ -50,7 +54,7 @@ type MintUsecase struct {
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
-// NameResolver / InventoryUC は任意依存（Setterで後から差し込む）とする。
+// NameResolver / InventoryUC / TokenBlueprint Ensurers は任意依存（Setterで後から差し込む）とする。
 func NewMintUsecase(
 	pbRepo mintdom.MintProductBlueprintRepo,
 	prodRepo mintdom.MintProductionRepo,
@@ -74,12 +78,21 @@ func NewMintUsecase(
 		mintResultMapper:    NewMintResultMapper(),
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
-		inventoryUC:         nil,
-		nameResolver:        nil,
+
+		// ★ 後注入（任意依存）
+		tbBucketEnsurer:   nil,
+		tbMetadataEnsurer: nil,
+
+		inventoryUC:  nil,
+		nameResolver: nil,
 	}
 }
 
-// DI 側で nameResolver を後から注入できるようにする
+// ============================================================
+// Setters (DI 後注入用)
+// ============================================================
+
+// DI 側で NameResolver を後から注入できるようにする
 func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
 	if u == nil {
 		return
@@ -104,4 +117,20 @@ func (u *MintUsecase) SetInventoryUpserter(up InventoryUpserter) {
 		return
 	}
 	u.inventoryUC = up
+}
+
+// ★ 追加: tokenBlueprint bucket ensurer を後注入
+func (u *MintUsecase) SetTokenBlueprintBucketEnsurer(e TokenBlueprintBucketEnsurer) {
+	if u == nil {
+		return
+	}
+	u.tbBucketEnsurer = e
+}
+
+// ★ 追加: tokenBlueprint metadata ensurer を後注入
+func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
+	if u == nil {
+		return
+	}
+	u.tbMetadataEnsurer = e
 }

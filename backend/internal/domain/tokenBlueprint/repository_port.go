@@ -189,35 +189,6 @@ func ListByBrandID(
 }
 
 // ==========================================================
-// ★ minted = false（notYet） のみを一覧取得
-// ==========================================================
-func ListMintedNotYet(
-	ctx context.Context,
-	repo RepositoryPort,
-	page Page,
-) (PageResult, error) {
-
-	// mint 状態で DB フィルタできないため後段でフィルタ
-	result, err := repo.List(ctx, Filter{}, page)
-	if err != nil {
-		return PageResult{}, err
-	}
-
-	items := []TokenBlueprint{}
-	for _, tb := range result.Items {
-		if !tb.Minted {
-			items = append(items, tb)
-		}
-	}
-
-	result.Items = items
-	result.TotalCount = len(items)
-	result.TotalPages = 1 // メモリ内フィルタなので 1 とする
-
-	return result, nil
-}
-
-// ==========================================================
 // ★ minted = true（minted） のみ一覧取得
 // ==========================================================
 func ListMintedCompleted(

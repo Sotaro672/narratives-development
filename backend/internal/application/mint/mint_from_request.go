@@ -4,6 +4,7 @@ package mint
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sort"
 	"strings"
@@ -146,7 +147,76 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		)
 		result = existing
 	} else {
-		// 2) オンチェーンミント実行
+		// ============================================================
+		// ★ 2) オンチェーンミント実行の「直前」に事前処理を挿入
+		//   - bucketの .keep を作成（空でもバケット/プレフィックスを用意するため）
+		//   - metadataUri を空なら生成して token_blueprints に永続化
+		// ============================================================
+
+		// 2-0) Ensure keep objects (bucket prep)
+		if u.tbBucketEnsurer == nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=tbBucketEnsurer_nil mintRequestId=%q tokenBlueprintId=%q elapsed=%s",
+				mintRequestID, tbID, time.Since(start),
+			)
+			return nil, fmt.Errorf("tokenBlueprint bucket ensurer is nil")
+		}
+
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest ensure keep start mintRequestId=%q tokenBlueprintId=%q",
+			mintRequestID, tbID,
+		)
+
+		prepStart := time.Now()
+		if err := u.tbBucketEnsurer.EnsureKeepObjects(ctx, tbID); err != nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=ensure_keep_failed mintRequestId=%q tokenBlueprintId=%q err=%v elapsed=%s totalElapsed=%s",
+				mintRequestID, tbID, err, time.Since(prepStart), time.Since(start),
+			)
+			return nil, err
+		}
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest ensure keep ok mintRequestId=%q tokenBlueprintId=%q elapsed=%s",
+			mintRequestID, tbID, time.Since(prepStart),
+		)
+
+		// 2-1) Ensure metadataUri (must exist before TokenUsecase mint)
+		if u.tbMetadataEnsurer == nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=tbMetadataEnsurer_nil mintRequestId=%q tokenBlueprintId=%q actorId=%q elapsed=%s",
+				mintRequestID, tbID, actorID, time.Since(start),
+			)
+			return nil, fmt.Errorf("tokenBlueprint metadata ensurer is nil")
+		}
+
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest ensure metadata start mintRequestId=%q tokenBlueprintId=%q actorId=%q",
+			mintRequestID, tbID, actorID,
+		)
+
+		metaStart := time.Now()
+		uri, err := u.tbMetadataEnsurer.EnsureMetadataURIByTokenBlueprintID(ctx, tbID, actorID)
+		if err != nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=ensure_metadata_failed mintRequestId=%q tokenBlueprintId=%q actorId=%q err=%v elapsed=%s totalElapsed=%s",
+				mintRequestID, tbID, actorID, err, time.Since(metaStart), time.Since(start),
+			)
+			return nil, err
+		}
+		uri = strings.TrimSpace(uri)
+		if uri == "" {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=ensure_metadata_empty mintRequestId=%q tokenBlueprintId=%q actorId=%q elapsed=%s totalElapsed=%s",
+				mintRequestID, tbID, actorID, time.Since(metaStart), time.Since(start),
+			)
+			return nil, fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintId=%s)", tbID)
+		}
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest ensure metadata ok mintRequestId=%q tokenBlueprintId=%q uri=%q elapsed=%s",
+			mintRequestID, tbID, uri, time.Since(metaStart),
+		)
+
+		// 2-2) オンチェーンミント実行
 		log.Printf("[mint_usecase] MintFromMintRequest onchain mint start mintRequestId=%q", mintRequestID)
 
 		onchainStart := time.Now()
@@ -160,29 +230,21 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			)
 			return nil, onchainErr
 		}
+		if result == nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest onchain mint invalid_result mintRequestId=%q elapsed=%s totalElapsed=%s",
+				mintRequestID, onchainElapsed, time.Since(start),
+			)
+			return nil, fmt.Errorf("onchain mint succeeded but result is nil (mintRequestId=%s)", mintRequestID)
+		}
 
 		log.Printf(
 			"[mint_usecase] MintFromMintRequest onchain mint ok mintRequestId=%q elapsed=%s signature=%q mintAddress=%q slot=%d",
 			mintRequestID,
 			onchainElapsed,
-			func() string {
-				if result == nil {
-					return ""
-				}
-				return strings.TrimSpace(result.Signature)
-			}(),
-			func() string {
-				if result == nil {
-					return ""
-				}
-				return strings.TrimSpace(result.MintAddress)
-			}(),
-			func() uint64 {
-				if result == nil {
-					return 0
-				}
-				return result.Slot
-			}(),
+			strings.TrimSpace(result.Signature),
+			strings.TrimSpace(result.MintAddress),
+			result.Slot,
 		)
 
 		// 3) TokenBlueprint minted=true（未mint の場合のみ）

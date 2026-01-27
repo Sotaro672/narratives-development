@@ -65,10 +65,10 @@ func (u *TokenBlueprintCRUDUsecase) Create(ctx context.Context, in CreateBluepri
 		UpdatedAt: nil,
 		UpdatedBy: "",
 
-		// metadataUri は別ユースケースで補完可能
+		// create 時は metadataUri を作成しない（保存しない方針）
 		MetadataURI: "",
 
-		// ★ objectPath 永続化
+		// ★ objectPath 永続化（create で保存）
 		TokenIconObjectPath:     strings.TrimSpace(in.TokenIconObjectPath),
 		TokenContentsObjectPath: strings.TrimSpace(in.TokenContentsObjectPath),
 	})
@@ -115,12 +115,13 @@ func (u *TokenBlueprintCRUDUsecase) ListByBrandID(ctx context.Context, brandID s
 	return tbdom.ListByBrandID(ctx, u.tbRepo, bid, page)
 }
 
-func (u *TokenBlueprintCRUDUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
-	if u == nil || u.tbRepo == nil {
-		return tbdom.PageResult{}, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
-	}
-	return tbdom.ListMintedNotYet(ctx, u.tbRepo, page)
-}
+// ★ ListMintedNotYet は domain から削除されたため、この usecase からも削除
+// func (u *TokenBlueprintCRUDUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
+// 	if u == nil || u.tbRepo == nil {
+// 		return tbdom.PageResult{}, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+// 	}
+// 	return tbdom.ListMintedNotYet(ctx, u.tbRepo, page)
+// }
 
 func (u *TokenBlueprintCRUDUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
 	if u == nil || u.tbRepo == nil {
@@ -167,9 +168,10 @@ func (u *TokenBlueprintCRUDUsecase) Update(ctx context.Context, in UpdateBluepri
 
 		ContentFiles: normalizeContentFilesPtr(in.ContentFiles),
 
-		// ★ objectPath 永続化
-		TokenIconObjectPath:     trimPtr(in.TokenIconObjectPath),
-		TokenContentsObjectPath: trimPtr(in.TokenContentsObjectPath),
+		// objectPath は update で更新されない方針なら、ここは nil 固定にする
+		// （呼び出し側が値を入れても repo 側で無視する設計に合わせる）
+		TokenIconObjectPath:     nil,
+		TokenContentsObjectPath: nil,
 
 		UpdatedAt: nil,
 		UpdatedBy: ptr(strings.TrimSpace(in.ActorID)),

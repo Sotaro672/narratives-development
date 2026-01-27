@@ -133,9 +133,10 @@ func (f ContentFile) Validate() error {
 
 // TokenBlueprint is the only persisted aggregate (Firestore).
 //
-// ★重要変更:
-// - tokenIconObjectPath / tokenContentsObjectPath は保持しない（項目から削除）
-// - iconUrl / contentsUrl は tokenBlueprintId (=docId) から組み立てる（adapter側で生成してレスポンスに含める）
+// 重要:
+// - tokenIconObjectPath / tokenContentsObjectPath は保持する（Firestoreに永続化）
+// - iconUrl / contentsUrl（Signed URL等）は永続化しない（短寿命）。adapter側で objectPath から生成してレスポンスに含める。
+// - create 時は metadataUri を作成しない（空のまま）。後続ユースケースで補完可能。
 type TokenBlueprint struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -143,6 +144,13 @@ type TokenBlueprint struct {
 	BrandID     string `json:"brandId"`
 	CompanyID   string `json:"companyId"`
 	Description string `json:"description,omitempty"`
+
+	// ★ objectPath 永続化（tokenIcon / tokenContents）
+	// - TokenIconObjectPath: 例 "{id}/icon"（DefaultTokenIconObjectPath(id)）
+	// - TokenContentsObjectPath: 例 "{id}/.keep"（DefaultTokenContentsObjectPath(id)）
+	//   ※ token-contents は “参照パス” として .keep を採用する方針に合わせる
+	TokenIconObjectPath     string `json:"tokenIconObjectPath"`
+	TokenContentsObjectPath string `json:"tokenContentsObjectPath"`
 
 	ContentFiles []ContentFile `json:"contentFiles"` // embedded
 	AssigneeID   string        `json:"assigneeId"`
@@ -177,6 +185,9 @@ var (
 	ErrInvalidContentFile       = errors.New("tokenBlueprint: invalid contentFile")
 	ErrInvalidContentType       = errors.New("tokenBlueprint: invalid contentFile.type")
 	ErrInvalidContentVisibility = errors.New("tokenBlueprint: invalid contentFile.visibility")
+
+	ErrInvalidTokenIconObjectPath     = errors.New("tokenBlueprint: invalid tokenIconObjectPath")
+	ErrInvalidTokenContentsObjectPath = errors.New("tokenBlueprint: invalid tokenContentsObjectPath")
 
 	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; core fields or deletion are not allowed")
 )
@@ -220,7 +231,9 @@ func (t TokenBlueprint) validate() error {
 		return ErrInvalidCreatedBy
 	}
 
-	// MetadataURI は移行や作成直後を考慮し必須にしない
+	// tokenIconObjectPath / tokenContentsObjectPath / MetadataURI は
+	// 「移行」や「作成直後」を考慮し必須にしない。
+	// ※ create は New() がデフォルト補完するので保存される想定。
 	return nil
 }
 
@@ -232,13 +245,28 @@ func New(
 	id, name, symbol, brandID, companyID, description string,
 	contentFiles []ContentFile,
 	assigneeID string,
+	tokenIconObjectPath string,
+	tokenContentsObjectPath string,
 	createdAt time.Time,
 	createdBy string,
 	updatedAt time.Time,
 ) (TokenBlueprint, error) {
 
+	tid := strings.TrimSpace(id)
+
+	iconPath := strings.TrimSpace(tokenIconObjectPath)
+	contentsPath := strings.TrimSpace(tokenContentsObjectPath)
+
+	// create 時に必ず保存されるように、空なら規約で補完する
+	if iconPath == "" {
+		iconPath = DefaultTokenIconObjectPath(tid)
+	}
+	if contentsPath == "" {
+		contentsPath = DefaultTokenContentsObjectPath(tid)
+	}
+
 	tb := TokenBlueprint{
-		ID:           strings.TrimSpace(id),
+		ID:           tid,
 		Name:         strings.TrimSpace(name),
 		Symbol:       strings.TrimSpace(symbol),
 		BrandID:      strings.TrimSpace(brandID),
@@ -247,11 +275,18 @@ func New(
 		ContentFiles: dedupContentFiles(contentFiles),
 		AssigneeID:   strings.TrimSpace(assigneeID),
 		Minted:       false,
-		CreatedAt:    createdAt.UTC(),
-		CreatedBy:    strings.TrimSpace(createdBy),
-		UpdatedAt:    updatedAt.UTC(),
-		UpdatedBy:    "",
-		MetadataURI:  "",
+
+		// ★ objectPath 永続化（createで必ず埋める）
+		TokenIconObjectPath:     iconPath,
+		TokenContentsObjectPath: contentsPath,
+
+		CreatedAt: createdAt.UTC(),
+		CreatedBy: strings.TrimSpace(createdBy),
+		UpdatedAt: updatedAt.UTC(),
+		UpdatedBy: "",
+
+		// ★ create 時は metadataUri を作成しない
+		MetadataURI: "",
 	}
 
 	if err := tb.validate(); err != nil {
@@ -277,7 +312,8 @@ func NewFromStrings(
 		return TokenBlueprint{}, fmt.Errorf("invalid updatedAt: %v", err)
 	}
 
-	return New(id, name, symbol, brandID, companyID, description, nil, assigneeID, ca, createdBy, ua)
+	// objectPath はデフォルト補完させる（create相当）
+	return New(id, name, symbol, brandID, companyID, description, nil, assigneeID, "", "", ca, createdBy, ua)
 }
 
 // ============================================================
@@ -452,6 +488,37 @@ func (t *TokenBlueprint) SetMetadataURI(uri string) error {
 	return nil
 }
 
+// ★ objectPath mutators（mint済みなら禁止）
+func (t *TokenBlueprint) SetTokenIconObjectPath(path string) error {
+	if err := t.ensureMutableCoreOrDeletable(); err != nil {
+		return err
+	}
+	if t == nil {
+		return nil
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ErrInvalidTokenIconObjectPath
+	}
+	t.TokenIconObjectPath = path
+	return nil
+}
+
+func (t *TokenBlueprint) SetTokenContentsObjectPath(path string) error {
+	if err := t.ensureMutableCoreOrDeletable(); err != nil {
+		return err
+	}
+	if t == nil {
+		return nil
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ErrInvalidTokenContentsObjectPath
+	}
+	t.TokenContentsObjectPath = path
+	return nil
+}
+
 // ============================================================
 // ContentFiles operations (embedded)
 // ============================================================
@@ -523,6 +590,22 @@ func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibil
 // ============================================================
 // Helpers
 // ============================================================
+
+func DefaultTokenIconObjectPath(tokenBlueprintID string) string {
+	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
+	if tokenBlueprintID == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/icon", tokenBlueprintID)
+}
+
+func DefaultTokenContentsObjectPath(tokenBlueprintID string) string {
+	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
+	if tokenBlueprintID == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/.keep", tokenBlueprintID)
+}
 
 func parseTime(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)

@@ -1,4 +1,4 @@
-// backend\internal\application\tokenBlueprint\tokenBlueprint_bucket_usecase.go
+// backend/internal/application/tokenBlueprint/tokenBlueprint_bucket_usecase.go
 package tokenBlueprint
 
 import (
@@ -64,6 +64,12 @@ type TokenBlueprintBucketUsecase struct {
 
 func NewTokenBlueprintBucketUsecase(gcs *storage.Client) *TokenBlueprintBucketUsecase {
 	return &TokenBlueprintBucketUsecase{gcs: gcs}
+}
+
+// EnsureKeepObjectsForMint is an alias for EnsureKeepObjects.
+// MintUsecase 側の Port 名に合わせたい場合に利用する想定。
+func (u *TokenBlueprintBucketUsecase) EnsureKeepObjectsForMint(ctx context.Context, tokenBlueprintID string) error {
+	return u.EnsureKeepObjects(ctx, tokenBlueprintID)
 }
 
 // EnsureKeepObjects ensures that BOTH:

@@ -1,3 +1,4 @@
+// backend\internal\adapters\out\firestore\tokenBlueprint_repository_fs.go
 package firestore
 
 import (
@@ -208,6 +209,7 @@ func (r *TokenBlueprintRepositoryFS) List(
 }
 
 // ListByCompanyID: companyId で限定した一覧取得。
+// ★ totalCount の事前計算は削除（コスト削減のため）。TotalCount/TotalPages は 0 を返す。
 func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
@@ -230,48 +232,12 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 		}, nil
 	}
 
-	baseQ := r.col().
+	q := r.col().
 		Where("companyId", "==", cid).
 		OrderBy("createdAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc)
-
-	// totalCount を計算（deletedAt が入っているものは除外）
-	total := 0
-	{
-		it := baseQ.Documents(ctx)
-		defer it.Stop()
-
-		for {
-			doc, err := it.Next()
-			if errors.Is(err, iterator.Done) {
-				break
-			}
-			if err != nil {
-				return tbdom.PageResult{}, err
-			}
-			tb, err := docToTokenBlueprint(doc)
-			if err != nil {
-				return tbdom.PageResult{}, err
-			}
-			if tb.DeletedAt != nil {
-				continue
-			}
-			total++
-		}
-	}
-
-	if total == 0 {
-		return tbdom.PageResult{
-			Items:      []tbdom.TokenBlueprint{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
-	}
-
-	// ページングして items を取得
-	q := baseQ.Offset(offset).Limit(perPage)
+		OrderBy(firestore.DocumentID, firestore.Desc).
+		Offset(offset).
+		Limit(perPage)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -299,8 +265,8 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 
 	return tbdom.PageResult{
 		Items:      items,
-		TotalCount: total,
-		TotalPages: fscommon.ComputeTotalPages(total, perPage),
+		TotalCount: 0, // ★ totalCount は返さない（0固定）
+		TotalPages: 0, // ★ totalPages は返さない（0固定）
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
@@ -355,7 +321,19 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 
 	minted := false
 
+	// docID を先に確定させ、objectPath のデフォルト生成に使う
 	docRef := r.col().NewDoc()
+	docID := strings.TrimSpace(docRef.ID)
+
+	// ★ create 時に必ず永続化する（空なら規約で補完）
+	iconPath := strings.TrimSpace(in.TokenIconObjectPath)
+	if iconPath == "" && docID != "" {
+		iconPath = fmt.Sprintf("%s/icon", docID)
+	}
+	contentsPath := strings.TrimSpace(in.TokenContentsObjectPath)
+	if contentsPath == "" && docID != "" {
+		contentsPath = fmt.Sprintf("%s/.keep", docID)
+	}
 
 	data := map[string]any{
 		"name":         strings.TrimSpace(in.Name),
@@ -369,7 +347,13 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"createdAt":    createdAt,
 		"deletedAt":    nil,
 		"deletedBy":    nil,
-		"metadataUri":  strings.TrimSpace(in.MetadataURI), // 空でもOK
+
+		// ★ objectPath 永続化（create で保存）
+		"tokenIconObjectPath":     iconPath,
+		"tokenContentsObjectPath": contentsPath,
+
+		// ★ create 時は metadataUri を作成しない（保存しない）
+		// "metadataUri": ... は入れない
 	}
 
 	if s := strings.TrimSpace(in.CreatedBy); s != "" {
@@ -439,6 +423,10 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	setStr("brandId", in.BrandID)
 	setStr("description", in.Description)
 	setStr("assigneeId", in.AssigneeID)
+
+	// ★ objectPath は update で更新されない方針のため、更新処理は入れない
+	// setStr("tokenIconObjectPath", in.TokenIconObjectPath)
+	// setStr("tokenContentsObjectPath", in.TokenContentsObjectPath)
 
 	if in.MetadataURI != nil {
 		updates = append(updates, firestore.Update{
@@ -725,6 +713,10 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		DeletedAt    *time.Time       `firestore:"deletedAt"`
 		DeletedBy    *string          `firestore:"deletedBy"`
 		MetadataURI  string           `firestore:"metadataUri"`
+
+		// ★ objectPath 永続化
+		TokenIconObjectPath     string `firestore:"tokenIconObjectPath"`
+		TokenContentsObjectPath string `firestore:"tokenContentsObjectPath"`
 	}
 	if err := doc.DataTo(&raw); err != nil {
 		return tbdom.TokenBlueprint{}, err
@@ -735,8 +727,21 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		return tbdom.TokenBlueprint{}, err
 	}
 
+	docID := strings.TrimSpace(doc.Ref.ID)
+
+	iconPath := strings.TrimSpace(raw.TokenIconObjectPath)
+	if iconPath == "" && docID != "" {
+		// 旧データ互換: フィールドが無い場合は規約で補完
+		iconPath = fmt.Sprintf("%s/icon", docID)
+	}
+	contentsPath := strings.TrimSpace(raw.TokenContentsObjectPath)
+	if contentsPath == "" && docID != "" {
+		// 旧データ互換: フィールドが無い場合は規約で補完
+		contentsPath = fmt.Sprintf("%s/.keep", docID)
+	}
+
 	tb := tbdom.TokenBlueprint{
-		ID:           strings.TrimSpace(doc.Ref.ID),
+		ID:           docID,
 		Name:         strings.TrimSpace(raw.Name),
 		Symbol:       strings.TrimSpace(raw.Symbol),
 		BrandID:      strings.TrimSpace(raw.BrandID),
@@ -750,6 +755,10 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		UpdatedAt:    raw.UpdatedAt.UTC(),
 		UpdatedBy:    strings.TrimSpace(raw.UpdatedBy),
 		MetadataURI:  strings.TrimSpace(raw.MetadataURI),
+
+		// ★ objectPath 永続化
+		TokenIconObjectPath:     iconPath,
+		TokenContentsObjectPath: contentsPath,
 	}
 
 	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {

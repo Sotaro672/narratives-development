@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -29,8 +30,53 @@ func NewTokenBlueprintMetadataUsecase(tbRepo tbdom.RepositoryPort, uploader Arwe
 	}
 }
 
+// EnsureMetadataURIByTokenBlueprintID loads TokenBlueprint by id and ensures metadataUri if empty.
+// Intended for mint-time usage via port adapter/DI.
+// Returns the ensured metadataUri string.
+func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURIByTokenBlueprintID(
+	ctx context.Context,
+	tokenBlueprintID string,
+	actorID string,
+) (string, error) {
+	if u == nil || u.tbRepo == nil {
+		return "", fmt.Errorf("tokenBlueprint metadata usecase/repo is nil")
+	}
+
+	id := strings.TrimSpace(tokenBlueprintID)
+	if id == "" {
+		return "", fmt.Errorf("tokenBlueprintID is empty")
+	}
+
+	tb, err := u.tbRepo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if tb == nil {
+		return "", fmt.Errorf("tokenBlueprint %s not found", id)
+	}
+
+	updated, err := u.EnsureMetadataURI(ctx, tb, actorID)
+	if err != nil {
+		return "", err
+	}
+	if updated == nil {
+		// best-effort fallback
+		uri := strings.TrimSpace(tb.MetadataURI)
+		if uri == "" {
+			return "", fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintID=%s)", id)
+		}
+		return uri, nil
+	}
+
+	uri := strings.TrimSpace(updated.MetadataURI)
+	if uri == "" {
+		return "", fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintID=%s)", id)
+	}
+	return uri, nil
+}
+
 // EnsureMetadataURI sets metadataUri if empty.
-// Current policy (before you switch timing to mint):
+// Policy:
 // - metadataUri が空なら Irys/Arweave に metadata JSON をアップロードして uri を得る
 // - アップロード後も uri が空なら必ずエラー（空を許容しない）
 func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error) {
@@ -89,11 +135,11 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(ctx context.Context, t
 // buildTokenBlueprintMetadataJSON builds Metaplex-compatible metadata JSON.
 // Expectations:
 // - name/symbol/description: TokenBlueprint の項目から連動（固定値禁止）
-// - image: TOKEN_ICON_BUCKET の "{tokenBlueprintId}/icon" の URL
+// - image: TOKEN_ICON_BUCKET の tb.TokenIconObjectPath（空なら規約 "{id}/icon"）の URL
 // - properties.files:
 //   - icon URL は必ず 1 件
-//   - token-contents の “参照パス” も必ず 1 件入れる（{id}/.keep を利用）
-//   - tb.ContentFiles があれば、その contents URL も追加列挙する
+//   - token-contents の “参照パス” も必ず 1 件入れる（tb.TokenContentsObjectPath / 空なら "{id}/.keep"）
+//   - tb.ContentFiles があれば、その f.ObjectPath を列挙する（空なら fallback で "{id}/contents/{contentId}"）
 func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 	id := strings.TrimSpace(tb.ID)
 	if id == "" {
@@ -115,16 +161,42 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 	desc := strings.TrimSpace(tb.Description)
 
 	// ------------------------------------------------------------
+	// bucket helpers (inline: avoid cross-dir package dependency)
+	// ------------------------------------------------------------
+	iconBucket := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET"))
+	if iconBucket == "" {
+		// default should match app/tokenBlueprint bucket policy
+		iconBucket = "narratives-development_token_icon"
+	}
+
+	contentsBucket := strings.TrimSpace(os.Getenv("TOKEN_CONTENTS_BUCKET"))
+	if contentsBucket == "" {
+		// default should match app/tokenBlueprint bucket policy
+		contentsBucket = "narratives-development-token-contents"
+	}
+
+	gcsPublicURL := func(bucket, object string) string {
+		bucket = strings.TrimSpace(bucket)
+		object = strings.TrimLeft(strings.TrimSpace(object), "/")
+		if bucket == "" || object == "" {
+			return ""
+		}
+		return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, object)
+	}
+
+	// ------------------------------------------------------------
 	// image/icon URL
 	// ------------------------------------------------------------
-	iconBucket := tokenIconBucketName()
 	if strings.TrimSpace(iconBucket) == "" {
 		return nil, fmt.Errorf("token icon bucket is empty")
 	}
 
-	// tokenBlueprint_icon_usecase.go と完全一致させる（重要）
-	iconObjectPath := tokenIconObjectPath(id) // => "{id}/icon"
-	imageURL := strings.TrimSpace(gcsObjectPublicURL(iconBucket, iconObjectPath))
+	// ★永続化 objectPath を優先（空ならドメイン規約で補完）
+	iconObjectPath := strings.TrimSpace(tb.TokenIconObjectPath)
+	if iconObjectPath == "" {
+		iconObjectPath = tbdom.DefaultTokenIconObjectPath(id) // => "{id}/icon"
+	}
+	imageURL := strings.TrimSpace(gcsPublicURL(iconBucket, iconObjectPath))
 	if imageURL == "" {
 		return nil, fmt.Errorf("imageURL is empty")
 	}
@@ -141,15 +213,16 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 	})
 
 	// 2) token-contents へのパスも必ず入れる（期待値）
-	//    contents bucket は非公開でも OK（文字列として載せるだけ）。
-	//    “存在が保証される” オブジェクトとして {id}/.keep を使う。
-	contentsBucket := tokenContentsBucketName()
 	if strings.TrimSpace(contentsBucket) == "" {
 		return nil, fmt.Errorf("token contents bucket is empty")
 	}
 
-	contentsKeepObjectPath := keepObjectPath(id) // => "{id}/.keep"（EnsureKeepObjects により作成される想定）
-	contentsKeepURL := strings.TrimSpace(gcsObjectPublicURL(contentsBucket, contentsKeepObjectPath))
+	// ★永続化 objectPath を優先（空ならドメイン規約で補完）
+	contentsKeepObjectPath := strings.TrimSpace(tb.TokenContentsObjectPath)
+	if contentsKeepObjectPath == "" {
+		contentsKeepObjectPath = tbdom.DefaultTokenContentsObjectPath(id) // => "{id}/.keep"
+	}
+	contentsKeepURL := strings.TrimSpace(gcsPublicURL(contentsBucket, contentsKeepObjectPath))
 	if contentsKeepURL == "" {
 		return nil, fmt.Errorf("token contents keep url is empty")
 	}
@@ -159,8 +232,7 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 		"type": "application/octet-stream",
 	})
 
-	// 3) contentFiles があれば、個別の contents オブジェクトも列挙して追加する
-	//    ContentFile の構造が確定できないため、最低限 f.ID を object 名に採用する。
+	// 3) contentFiles があれば、objectPath を列挙して追加する
 	seen := make(map[string]struct{}, len(tb.ContentFiles))
 	for _, f := range tb.ContentFiles {
 		cid := strings.TrimSpace(f.ID)
@@ -172,15 +244,25 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 		}
 		seen[cid] = struct{}{}
 
-		objectPath := tokenContentsObjectPath(id, cid) // => "{id}/contents/{cid}"
-		uri := strings.TrimSpace(gcsObjectPublicURL(contentsBucket, objectPath))
+		objectPath := strings.TrimSpace(f.ObjectPath)
+		if objectPath == "" {
+			// fallback（最低限の互換）
+			objectPath = fmt.Sprintf("%s/contents/%s", id, cid)
+		}
+
+		uri := strings.TrimSpace(gcsPublicURL(contentsBucket, objectPath))
 		if uri == "" {
 			continue
 		}
 
+		ct := strings.TrimSpace(f.ContentType)
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+
 		files = append(files, map[string]any{
 			"uri":  uri,
-			"type": "application/octet-stream",
+			"type": ct,
 		})
 	}
 

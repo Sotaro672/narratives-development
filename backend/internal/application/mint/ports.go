@@ -33,3 +33,21 @@ type InventoryUpserter interface {
 		productIDs []string,
 	) (invdom.Mint, error)
 }
+
+// ============================================================
+// TokenBlueprint bucket ensure port（mint 直前に .keep を保証）
+// ============================================================
+
+type TokenBlueprintBucketEnsurer interface {
+	// icon/contents 両 bucket の "{tokenBlueprintId}/.keep" を保証する（既存なら成功）
+	EnsureKeepObjects(ctx context.Context, tokenBlueprintID string) error
+}
+
+// ============================================================
+// TokenBlueprint metadata ensure port（mint 直前に metadataUri を確定）
+// ============================================================
+
+type TokenBlueprintMetadataEnsurer interface {
+	// 必要なら生成・永続化して、確定した metadataUri を返す
+	EnsureMetadataURIByTokenBlueprintID(ctx context.Context, tokenBlueprintID string, actorID string) (string, error)
+}
