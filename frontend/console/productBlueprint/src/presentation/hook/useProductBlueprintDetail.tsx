@@ -16,13 +16,15 @@ import {
   softDeleteProductBlueprint,
 } from "../../application/productBlueprintDetailService";
 
-import type { Fit, ItemType} from "../../domain/entity/catalog";
-
-import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
+import type { Fit, ItemType } from "../../domain/entity/catalog";
 
 import { formatDateTimeYYYYMMDDHHmm } from "../util/dateFormat";
 import { mapVariationsToUiState } from "../util/variationMapper";
 import { useBrandOptions, type BrandOption } from "./useBrandOptions";
+import {
+  useVariationsEditor,
+  type VariationsUiState,
+} from "./useVariationsEditor";
 
 export {
   FIT_OPTIONS,
@@ -123,14 +125,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [productIdTagType, setProductIdTagType] =
     React.useState<ProductIDTagType | "">("");
 
-  const [colorInput, setColorInput] = React.useState("");
-  const [colors, setColors] = React.useState<string[]>([]);
-  const [sizes, setSizes] = React.useState<SizeRow[]>([]);
-  const [modelNumbers, setModelNumbers] = React.useState<ModelNumberRow[]>([]);
-  const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>(
-    {},
-  );
-
   const [assignee, setAssignee] = React.useState("担当者未設定");
 
   // ★ 管理情報（updater/updatedAt は「未設定文字列」で埋めず、空文字で管理する）
@@ -147,6 +141,27 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [companyId, setCompanyId] = React.useState<string>("");
   const [brandNameFromService, setBrandNameFromService] =
     React.useState<string>("");
+
+  // --------------------------------------------------
+  // variations editor (colors/sizes/modelNumbers/rgbMap) を専用 hook に委譲
+  // --------------------------------------------------
+  const {
+    colors,
+    colorInput,
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+    getCode,
+    setFromUiState,
+    onChangeColorInput,
+    onAddColor,
+    onRemoveColor,
+    onChangeColorRgb,
+    onRemoveSize,
+    onAddSize,
+    onChangeSize,
+    onChangeModelNumber,
+  } = useVariationsEditor();
 
   // --------------------------------------------------
   // ブランド一覧取得 + brandId -> name 解決は専用 hook に委譲
@@ -220,25 +235,24 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
             productBlueprintIdResolved,
           );
 
-          const { colors, sizes, modelNumbers, colorRgbMap } =
-            mapVariationsToUiState({
-              varsAny: variations as any[],
-              itemType: itemTypeFromDetail,
-            });
+          const uiState = mapVariationsToUiState({
+            varsAny: variations as any[],
+            itemType: itemTypeFromDetail,
+          });
 
-          setColors(colors);
-          setSizes(sizes);
-          setModelNumbers(modelNumbers);
-          setColorRgbMap(colorRgbMap);
+          // editor へ反映（colorInput はクリアされる）
+          setFromUiState(uiState as VariationsUiState);
         } catch (e) {
           console.error(
             "[useProductBlueprintDetail] listModelVariationsByProductBlueprintId failed:",
             e,
           );
-          setColors([]);
-          setSizes([]);
-          setModelNumbers([]);
-          setColorRgbMap({});
+          setFromUiState({
+            colors: [],
+            sizes: [],
+            modelNumbers: [],
+            colorRgbMap: {},
+          });
         }
 
         // assignee
@@ -274,54 +288,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         console.error("[useProductBlueprintDetail] fetch failed:", e);
       }
     })();
-  }, [blueprintId]);
+  }, [blueprintId, setFromUiState]);
 
   // brand: hook が解決した name を表示に反映
   React.useEffect(() => {
     setBrand(resolvedBrandName ?? "");
   }, [resolvedBrandName]);
-
-  // ---------------------------------
-  // モデルナンバー変更（アプリケーション状態の更新専用ロジック）
-  // ---------------------------------
-  const handleChangeModelNumber = React.useCallback(
-    (sizeLabel: string, color: string, nextCode: string) => {
-      setModelNumbers((prev) => {
-        const idx = prev.findIndex(
-          (m) => m.size === sizeLabel && m.color === color,
-        );
-        const trimmed = nextCode.trim();
-
-        if (!trimmed) {
-          if (idx === -1) return prev;
-          const copy = [...prev];
-          copy.splice(idx, 1);
-          return copy;
-        }
-
-        const next: ModelNumberRow = { size: sizeLabel, color, code: trimmed };
-
-        if (idx === -1) {
-          return [...prev, next];
-        }
-
-        const copy = [...prev];
-        copy[idx] = next;
-        return copy;
-      });
-    },
-    [],
-  );
-
-  // ---------------------------------
-  // ModelNumberCard 用ロジックは useModelCard に委譲
-  // ---------------------------------
-  const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
-    sizes,
-    colors,
-    modelNumbers: modelNumbers as any,
-    colorRgbMap,
-  });
 
   // ---------------------------------
   // Handlers: 保存
@@ -445,102 +417,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     navigate("/productBlueprint");
   }, [navigate]);
 
-  const onAddColor = React.useCallback(() => {
-    const v = colorInput.trim();
-    if (!v || colors.includes(v)) return;
-    setColors((prev) => [...prev, v]);
-    setColorInput("");
-  }, [colorInput, colors]);
-
-  const onRemoveColor = React.useCallback((name: string) => {
-    const key = name.trim();
-    if (!key) return;
-
-    setColors((prev) => prev.filter((c) => c !== key));
-
-    setColorRgbMap((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-
-    setModelNumbers((prevMN) => prevMN.filter((m) => m.color !== key));
-  }, []);
-
-  const onChangeColorRgb = React.useCallback((name: string, hex: string) => {
-    const colorName = name.trim();
-    let value = hex.trim();
-    if (!colorName || !value) return;
-
-    if (!value.startsWith("#")) {
-      value = `#${value}`;
-    }
-
-    setColorRgbMap((prev) => ({
-      ...prev,
-      [colorName]: value,
-    }));
-  }, []);
-
-  const onRemoveSize = React.useCallback((id: string) => {
-    setSizes((prev) => {
-      const target = prev.find((s) => s.id === id);
-      const next = prev.filter((s) => s.id !== id);
-
-      if (target) {
-        const sizeLabel = (target.sizeLabel ?? "").trim();
-        if (sizeLabel) {
-          setModelNumbers((prevMN) =>
-            prevMN.filter((m) => m.size !== sizeLabel),
-          );
-        }
-      }
-
-      return next;
-    });
-  }, []);
-
-  const onAddSize = React.useCallback(() => {
-    setSizes((prev) => {
-      const nextNum =
-        prev.reduce((max, row) => {
-          const n = Number(row.id);
-          if (Number.isNaN(n)) return max;
-          return n > max ? n : max;
-        }, 0) + 1;
-
-      const next: SizeRow = {
-        id: String(nextNum),
-        sizeLabel: "",
-      } as SizeRow;
-
-      return [...prev, next];
-    });
-  }, []);
-
-  const onChangeSize = React.useCallback(
-    (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
-      const safePatch: Partial<Omit<SizeRow, "id">> = { ...patch };
-
-      const clampField = (key: keyof Omit<SizeRow, "id">) => {
-        const v = safePatch[key];
-        if (typeof v === "number") {
-          safePatch[key] = (v < 0 ? 0 : v) as any;
-        }
-      };
-
-      clampField("chest");
-      clampField("waist");
-      clampField("length");
-      clampField("shoulder");
-
-      setSizes((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),
-      );
-    },
-    [],
-  );
-
   const onClickAssignee = React.useCallback(() => {
     console.log("assignee clicked:", assignee);
   }, [assignee]);
@@ -607,7 +483,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onChangeProductIdTag: (v: string) =>
       setProductIdTagType(v as ProductIDTagType),
 
-    onChangeColorInput: setColorInput,
+    onChangeColorInput,
     onAddColor,
     onRemoveColor,
     onChangeColorRgb,
@@ -616,10 +492,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onAddSize,
     onChangeSize,
 
-    onChangeModelNumber: (sizeLabel, color, nextCode) => {
-      uiOnChangeModelNumber(sizeLabel, color, nextCode);
-      handleChangeModelNumber(sizeLabel, color, nextCode);
-    },
+    onChangeModelNumber,
 
     onClickAssignee,
   };
