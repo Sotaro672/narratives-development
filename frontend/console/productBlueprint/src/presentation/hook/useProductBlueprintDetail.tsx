@@ -3,10 +3,10 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import type { ProductIDTagType } from "../../../../shell/src/shared/types/productBlueprint";
-import {
-  formatProductBlueprintDate,
-  type SizeRow,
-  type ModelNumberRow,
+
+import type {
+  SizeRow,
+  ModelNumberRow,
 } from "../../infrastructure/api/productBlueprintApi";
 
 import {
@@ -16,10 +16,13 @@ import {
   softDeleteProductBlueprint,
 } from "../../application/productBlueprintDetailService";
 
-import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
+import type { Fit, ItemType} from "../../domain/entity/catalog";
 
 import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
-import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
+
+import { formatDateTimeYYYYMMDDHHmm } from "../util/dateFormat";
+import { mapVariationsToUiState } from "../util/variationMapper";
+import { useBrandOptions, type BrandOption } from "./useBrandOptions";
 
 export {
   FIT_OPTIONS,
@@ -27,11 +30,6 @@ export {
   WASH_TAG_OPTIONS,
 } from "../../domain/entity/catalog";
 export type { Fit, WashTagOption } from "../../domain/entity/catalog";
-
-type BrandOption = {
-  id: string;
-  name: string;
-};
 
 export interface UseProductBlueprintDetailResult {
   pageTitle: string;
@@ -106,47 +104,6 @@ export interface UseProductBlueprintDetailResult {
   onClickAssignee: () => void;
 }
 
-/**
- * 日時を yyyy/MM/dd HH:mm に統一
- * - Firestore Timestamp など { toDate(): Date } にも対応
- * - パース不能なら formatProductBlueprintDate(=従来) にフォールバック
- */
-function formatDateTimeYYYYMMDDHHmm(value: any): string {
-  if (value == null) return "";
-
-  // Firestore Timestamp 等
-  try {
-    if (typeof value?.toDate === "function") {
-      const d: Date = value.toDate();
-      if (!Number.isNaN(d.getTime())) {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        const hh = String(d.getHours()).padStart(2, "0");
-        const mm = String(d.getMinutes()).padStart(2, "ngsB");
-        return `${y}/${m}/${day} ${hh}:${mm}`;
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  const s = String(value ?? "").trim();
-  if (!s) return "";
-
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) {
-    return formatProductBlueprintDate(value) || s;
-  }
-
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${y}/${m}/${day} ${hh}:${mm}`;
-}
-
 export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const navigate = useNavigate();
   const { blueprintId } = useParams<{ blueprintId: string }>();
@@ -186,10 +143,25 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [brandId, setBrandId] = React.useState<string>("");
   const [assigneeId, setAssigneeId] = React.useState<string>("");
 
-  // ★ ブランド選択用 state
-  const [brandOptions, setBrandOptions] = React.useState<BrandOption[]>([]);
-  const [brandLoading, setBrandLoading] = React.useState<boolean>(false);
-  const [brandError, setBrandError] = React.useState<Error | null>(null);
+  // brand resolution inputs（service response 由来）
+  const [companyId, setCompanyId] = React.useState<string>("");
+  const [brandNameFromService, setBrandNameFromService] =
+    React.useState<string>("");
+
+  // --------------------------------------------------
+  // ブランド一覧取得 + brandId -> name 解決は専用 hook に委譲
+  // --------------------------------------------------
+  const {
+    brandOptions,
+    brandLoading,
+    brandError,
+    resolvedBrandName,
+    getBrandNameById,
+  } = useBrandOptions({
+    companyId,
+    brandId,
+    brandNameFromService,
+  });
 
   // ---------------------------------
   // service → 詳細データ + variations を反映
@@ -201,9 +173,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       try {
         const detail = await getProductBlueprintDetail(blueprintId);
 
-        const brandNameFromService = (detail as any).brandName as
-          | string
-          | undefined;
+        const brandNameSvc = String((detail as any).brandName ?? "").trim();
         const assigneeNameFromService = (detail as any).assigneeName as
           | string
           | undefined;
@@ -217,16 +187,19 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           | string
           | undefined;
 
-        const productBlueprintId = detail.id ?? blueprintId;
+        const productBlueprintIdResolved = detail.id ?? blueprintId;
         const itemTypeFromDetail = detail.itemType as ItemType;
 
-        setPageTitle(detail.productName ?? productBlueprintId);
+        setPageTitle(detail.productName ?? productBlueprintIdResolved);
         setProductName(detail.productName ?? "");
 
         // brandId / assigneeId を state に保持
-        setBrand(brandNameFromService ?? "");
         setBrandId(detail.brandId ?? "");
         setAssigneeId(detail.assigneeId ?? "");
+
+        // brand hook inputs
+        setCompanyId(detail.companyId ?? "");
+        setBrandNameFromService(brandNameSvc);
 
         setItemType(itemTypeFromDetail ?? "");
         setFit((detail.fit as Fit) ?? ("" as Fit));
@@ -240,191 +213,23 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setProductIdTagType(tagType);
 
         // --------------------------------------------------
-        // ブランド一覧を取得（同一 companyId に紐づくもの）
-        // --------------------------------------------------
-        setBrandLoading(true);
-        setBrandError(null);
-        try {
-          const companyId = detail.companyId ?? "";
-          if (companyId) {
-            const brands = await fetchAllBrandsForCompany(companyId, false);
-            const options: BrandOption[] = brands.map((b: any) => ({
-              id: b.id,
-              name: b.name,
-            }));
-            setBrandOptions(options);
-
-            if (!brandNameFromService && detail.brandId) {
-              const found = options.find((o) => o.id === detail.brandId);
-              if (found) {
-                setBrand(found.name);
-              }
-            }
-          } else {
-            setBrandOptions([]);
-          }
-        } catch (e) {
-          console.error(
-            "[useProductBlueprintDetail] fetchAllBrandsForCompany failed:",
-            e,
-          );
-          setBrandError(e as Error);
-          setBrandOptions([]);
-        } finally {
-          setBrandLoading(false);
-        }
-
-        // --------------------------------------------------
-        // ModelVariation 取得
+        // ModelVariation 取得 → UI state 変換は variationMapper に集約
         // --------------------------------------------------
         try {
-          const variations =
-            await listModelVariationsByProductBlueprintId(productBlueprintId);
-
-          const varsAny = variations as any[];
-
-          // colors
-          const uniqueColors = Array.from(
-            new Set(
-              varsAny
-                .map((v) => {
-                  const nm =
-                    typeof v.color?.name === "string"
-                      ? v.color.name
-                      : typeof v.Color?.Name === "string"
-                        ? v.Color.Name
-                        : "";
-                  return nm.trim();
-                })
-                .filter((c: string) => !!c),
-            ),
-          );
-          setColors(uniqueColors);
-
-          // sizes + measurements
-          const uniqueSizes = Array.from(
-            new Set(
-              varsAny
-                .map((v) => {
-                  const sz =
-                    typeof v.size === "string"
-                      ? v.size
-                      : typeof v.Size === "string"
-                        ? v.Size
-                        : "";
-                  return sz.trim();
-                })
-                .filter((s: string) => !!s),
-            ),
+          const variations = await listModelVariationsByProductBlueprintId(
+            productBlueprintIdResolved,
           );
 
-          const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => {
-            const base: any = {
-              id: String(index + 1),
-              sizeLabel: label,
-            };
-
-            const found = varsAny.find((v) => {
-              const sz =
-                typeof v.size === "string"
-                  ? v.size
-                  : typeof v.Size === "string"
-                    ? v.Size
-                    : "";
-              return sz.trim() === label;
+          const { colors, sizes, modelNumbers, colorRgbMap } =
+            mapVariationsToUiState({
+              varsAny: variations as any[],
+              itemType: itemTypeFromDetail,
             });
 
-            const ms: Record<string, number | null> | undefined =
-              found?.measurements ?? found?.Measurements;
-
-            if (ms && typeof ms === "object") {
-              if (itemTypeFromDetail === "ボトムス") {
-                base.waist = ms["ウエスト"] ?? undefined;
-                base.hip = ms["ヒップ"] ?? undefined;
-                base.rise = ms["股上"] ?? undefined;
-                base.inseam = ms["股下"] ?? undefined;
-
-                const thighVal = ms["わたり幅"] ?? undefined;
-                if (thighVal != null) {
-                  base.thigh = thighVal;
-                }
-
-                base.hemWidth = ms["裾幅"] ?? undefined;
-              } else {
-                const lenVal = ms["着丈"] ?? undefined;
-                if (lenVal != null) {
-                  base.length = lenVal;
-                }
-
-                const chestVal = ms["胸囲"] ?? undefined;
-                if (chestVal != null) {
-                  base.chest = chestVal;
-                }
-                const widthVal = ms["身幅"] ?? undefined;
-                if (widthVal != null) {
-                  base.width = widthVal;
-                }
-                const shoulderVal = ms["肩幅"] ?? undefined;
-                if (shoulderVal != null) {
-                  base.shoulder = shoulderVal;
-                }
-
-                const sleeveVal = ms["袖丈"] ?? undefined;
-                if (sleeveVal != null) {
-                  base.sleeveLength = sleeveVal;
-                }
-              }
-            }
-
-            return base as SizeRow;
-          });
-
-          setSizes(sizeRows);
-
-          // modelNumbers
-          const modelNumberRows: ModelNumberRow[] = varsAny.map((v) => {
-            const size =
-              (typeof v.size === "string"
-                ? v.size
-                : (v.Size as string | undefined)) ?? "";
-
-            const color =
-              (typeof v.color?.name === "string"
-                ? v.color.name
-                : (v.Color?.Name as string | undefined)) ?? "";
-
-            const code =
-              (typeof v.modelNumber === "string"
-                ? v.modelNumber
-                : (v.ModelNumber as string | undefined)) ?? "";
-
-            return { size, color, code } as ModelNumberRow;
-          });
-          setModelNumbers(modelNumberRows);
-
-          // colorRgbMap
-          const rgbMap: Record<string, string> = {};
-          varsAny.forEach((v) => {
-            const name =
-              (typeof v.color?.name === "string"
-                ? v.color.name
-                : (v.Color?.Name as string | undefined)) ?? "";
-
-            const rgbVal =
-              typeof v.color?.rgb === "number"
-                ? v.color.rgb
-                : typeof v.Color?.RGB === "number"
-                  ? v.Color.RGB
-                  : undefined;
-
-            if (name && typeof rgbVal === "number") {
-              const hex =
-                "#" +
-                (rgbVal >>> 0).toString(16).padStart(6, "0").toLowerCase();
-              rgbMap[name] = hex;
-            }
-          });
-          setColorRgbMap(rgbMap);
+          setColors(colors);
+          setSizes(sizes);
+          setModelNumbers(modelNumbers);
+          setColorRgbMap(colorRgbMap);
         } catch (e) {
           console.error(
             "[useProductBlueprintDetail] listModelVariationsByProductBlueprintId failed:",
@@ -451,7 +256,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           formatDateTimeYYYYMMDDHHmm((detail as any).createdAt) || "",
         );
 
-        // ★ updater/updatedAt は「両方揃っている時だけ」セットする（揃っていないなら行を非表示にするため空文字に寄せる）
+        // ★ updater/updatedAt は「両方揃っている時だけ」セットする
         const updatedByRaw =
           (updatedByNameFromService ?? (detail as any).updatedBy ?? "") as any;
         const updaterName = String(updatedByRaw ?? "").trim();
@@ -471,6 +276,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     })();
   }, [blueprintId]);
 
+  // brand: hook が解決した name を表示に反映
+  React.useEffect(() => {
+    setBrand(resolvedBrandName ?? "");
+  }, [resolvedBrandName]);
+
   // ---------------------------------
   // モデルナンバー変更（アプリケーション状態の更新専用ロジック）
   // ---------------------------------
@@ -489,11 +299,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           return copy;
         }
 
-        const next: ModelNumberRow = {
-          size: sizeLabel,
-          color,
-          code: trimmed,
-        };
+        const next: ModelNumberRow = { size: sizeLabel, color, code: trimmed };
 
         if (idx === -1) {
           return [...prev, next];
@@ -741,13 +547,18 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
   const onChangeBrandId = React.useCallback(
     (id: string) => {
-      setBrandId(id);
-      const found = brandOptions.find((b) => b.id === id);
-      if (found) {
-        setBrand(found.name);
+      const nextId = String(id ?? "").trim();
+      setBrandId(nextId);
+
+      // 表示名も即時更新（options が揃っていれば）
+      const nextName = getBrandNameById(nextId);
+      if (nextName) {
+        setBrand(nextName);
+      } else {
+        setBrand(brandNameFromService || "");
       }
     },
-    [brandOptions],
+    [getBrandNameById, brandNameFromService],
   );
 
   return {

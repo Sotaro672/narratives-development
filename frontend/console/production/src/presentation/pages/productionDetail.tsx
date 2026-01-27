@@ -27,7 +27,6 @@ import PrintCard from "../../../../product/src/presentation/component/printCard"
 export default function ProductionDetail() {
   const {
     // モード関連
-    mode,
     isViewMode,
     isEditMode,
     switchToView,

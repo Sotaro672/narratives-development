@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/presentation/formatter/dateJa.ts
+// frontend\console\shell\src\shared\util\dateJa.ts
 
 /**
  * 空/不正な日付でも落とさず、表示を "yyyy/mm/dd hh:mm:ss" / "yyyy/mm/dd" に固定するユーティリティ。

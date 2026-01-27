@@ -20,7 +20,7 @@ import type { MintRequestManagementRowVM } from "../viewModel/mintRequestManagem
 
 // ✅ presentation formatter
 import { inspectionStatusLabel } from "../formatter/inspectionStatusLabel";
-import { safeDateTimeLabelJa } from "../formatter/dateJa";
+import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
 
 // ---------------------------
 // Helpers

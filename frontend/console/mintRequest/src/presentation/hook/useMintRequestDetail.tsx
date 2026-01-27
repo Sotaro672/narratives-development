@@ -23,8 +23,7 @@ import {
   type TokenBlueprintPatchDTO,
 } from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
 
-import { safeDateLabelJa, safeDateTimeLabelJa } from "../formatter/dateJa";
-
+import { safeDateLabelJa, safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
 import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
 
 import {

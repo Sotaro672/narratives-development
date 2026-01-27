@@ -50,8 +50,6 @@ export default function ProductionCreate() {
 
     // 管理カード用
     assignee,
-    creator,
-    createdAt,
     assigneeOptions,
     loadingMembers,
     onSelectAssignee,

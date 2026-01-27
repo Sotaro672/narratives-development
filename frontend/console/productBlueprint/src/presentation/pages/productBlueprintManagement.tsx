@@ -103,9 +103,7 @@ export default function ProductBlueprintManagement() {
           onClick={() => handleRowClick(r)}
         >
           <td>{r.productName}</td>
-          <td>
-            <span className="lp-brand-pill">{r.brandName}</span>
-          </td>
+          <td>{r.brandName}</td>
           <td>{r.assigneeName}</td>
           <td>{r.productIdTag}</td>
           <td>{r.createdAt}</td>

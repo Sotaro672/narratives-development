@@ -11,6 +11,8 @@ import {
   type SortDirection,
 } from "../../application/productBlueprintManagementService";
 
+import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
+
 export interface UseProductBlueprintManagementResult {
   rows: UiRow[];
 
@@ -37,24 +39,20 @@ export interface UseProductBlueprintManagementResult {
 }
 
 /**
- * ISO8601/RFC3339 → yyyy/MM/dd HH:mm 形式に整形
- * - 過去互換は不要（"YYYY/MM/DD" 等の旧形式対応は行わない）
- * - パースできなければ空文字を返す（UIを壊さない）
+ * dateJa.ts を使って安全に整形し、表示は "yyyy/MM/dd HH:mm" に揃える。
+ * - dateJa は "yyyy/MM/dd HH:mm:ss" を返すため、UI表示では秒を落とす
+ * - parse できない場合は dateJa が生文字返しする（既存互換）
  */
-function formatDateTimeYYYYMMDDHHmm(iso: string): string {
-  const s = String(iso ?? "").trim();
-  if (!s) return "";
+function formatDateTimeYYYYMMDDHHmm(v: string | null | undefined): string {
+  const label = safeDateTimeLabelJa(v, "");
+  if (!label) return "";
 
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "";
+  // "yyyy/MM/dd HH:mm:ss" -> "yyyy/MM/dd HH:mm"
+  const m = label.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2})(?::\d{2})?$/);
+  if (m) return m[1];
 
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-
-  return `${y}/${m}/${day} ${hh}:${mm}`;
+  // 想定外フォーマットはそのまま返す（dateJa の方針に合わせる）
+  return label;
 }
 
 /**
