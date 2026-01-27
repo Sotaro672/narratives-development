@@ -1,6 +1,8 @@
 // frontend/console/list/src/presentation/hook/usePriceCard.tsx
 import * as React from "react";
 
+import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
+
 // ----------------------------------------------------------
 // Types
 // ----------------------------------------------------------
@@ -56,17 +58,6 @@ export type PriceCardProps = {
 // ----------------------------------------------------------
 function s(v: unknown): string {
   return String(v ?? "").trim();
-}
-
-// RGB(int) → HEX (#RRGGBB)
-function rgbIntToHex(rgb: number | string | null | undefined): string | null {
-  if (rgb === null || rgb === undefined) return null;
-  const n = typeof rgb === "string" ? Number(rgb) : rgb;
-  if (!Number.isFinite(n)) return null;
-
-  const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
-  const hex = clamped.toString(16).padStart(6, "0");
-  return `#${hex}`;
 }
 
 /**
@@ -147,10 +138,10 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
 
   const rowsVM = React.useMemo<PriceRowVM[]>(() => {
     return rows.map((row, idx) => {
-      const rgbHex = rgbIntToHex(row.rgb);
+      const rgbHex = rgbIntToHex(row.rgb) ?? null;
 
       const bgColor =
-        row.rgb && typeof row.rgb === "string" && row.rgb.trim().startsWith("#")
+        typeof row.rgb === "string" && row.rgb.trim().startsWith("#")
           ? row.rgb.trim()
           : rgbHex ?? "#ffffff";
 
@@ -171,7 +162,8 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
       };
 
       const stableId = s((row as any)?.id);
-      const keyBase = stableId || `${String(row.size)}-${String(row.color)}-${idx}`;
+      const keyBase =
+        stableId || `${String(row.size)}-${String(row.color)}-${idx}`;
 
       return {
         key: keyBase,
