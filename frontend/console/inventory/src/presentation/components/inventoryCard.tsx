@@ -21,19 +21,7 @@ import "../styles/inventory.css";
 // ✅ レイヤー違反解消: Row 型は application に寄せ、presentation は参照する
 import type { InventoryRow } from "../../application/inventoryTypes";
 
-// ----------------------------------------------------------
-// RGB(int) → HEX (#RRGGBB)
-// - InventoryRow.rgb は string | number | null どれでも来うる前提で安全に変換
-// ----------------------------------------------------------
-function rgbIntToHex(rgb: number | string | null | undefined): string | null {
-  if (rgb === null || rgb === undefined) return null;
-  const n = typeof rgb === "string" ? Number(rgb) : rgb;
-  if (!Number.isFinite(n)) return null;
-
-  const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
-  const hex = clamped.toString(16).padStart(6, "0");
-  return `#${hex}`;
-}
+import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
 
 type InventoryCardProps = {
   title?: string;
@@ -84,11 +72,11 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
 
             <TableBody>
               {rows.map((row, idx) => {
-                const rgbHex = rgbIntToHex(row.rgb);
+                const rgbHex = rgbIntToHex(row.rgb) ?? null;
+
+                // row.rgb が "#RRGGBB" を直接持っている場合はそれを優先（互換維持）
                 const bgColor =
-                  row.rgb &&
-                  typeof row.rgb === "string" &&
-                  row.rgb.trim().startsWith("#")
+                  typeof row.rgb === "string" && row.rgb.trim().startsWith("#")
                     ? row.rgb.trim()
                     : rgbHex ?? "#ffffff";
 
