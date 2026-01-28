@@ -25,11 +25,32 @@ const toTs = (yyyyMd: string) => {
   return new Date(y, (m || 1) - 1, d || 1).getTime();
 };
 
+/**
+ * printedFilter は UI 表示文字列で受ける（presentation 側と合わせる）
+ * - "未印刷"
+ * - "印刷済み"
+ */
+function matchPrintedFilter(rowPrinted: boolean, printedFilter: string[]): boolean {
+  if (printedFilter.length === 0) return true;
+
+  const wantsPrinted = printedFilter.includes("印刷済み");
+  const wantsNotPrinted = printedFilter.includes("未印刷");
+
+  // 両方選択されているならフィルタしない（=全件通す）
+  if (wantsPrinted && wantsNotPrinted) return true;
+
+  if (wantsPrinted) return rowPrinted === true;
+  if (wantsNotPrinted) return rowPrinted === false;
+
+  // 想定外値のみの場合は落とす（安全側）
+  return false;
+}
+
 export function filterAndSortProductBlueprintRows(params: {
   allRows: UiRow[];
   brandFilter: string[];
   assigneeFilter: string[];
-  tagFilter: string[];
+  printedFilter: string[];
   sortedKey: ProductBlueprintSortKey;
   sortedDir: SortDirection;
 }): UiRow[] {
@@ -37,7 +58,7 @@ export function filterAndSortProductBlueprintRows(params: {
     allRows,
     brandFilter,
     assigneeFilter,
-    tagFilter,
+    printedFilter,
     sortedKey,
     sortedDir,
   } = params;
@@ -52,8 +73,9 @@ export function filterAndSortProductBlueprintRows(params: {
     work = work.filter((r) => assigneeFilter.includes(r.assigneeName));
   }
 
-  if (tagFilter.length > 0) {
-    work = work.filter((r) => tagFilter.includes(r.productIdTag));
+  // ✅ tagFilter を廃止して printedFilter に置換
+  if (printedFilter.length > 0) {
+    work = work.filter((r) => matchPrintedFilter(Boolean((r as any).printed), printedFilter));
   }
 
   if (sortedKey && sortedDir) {

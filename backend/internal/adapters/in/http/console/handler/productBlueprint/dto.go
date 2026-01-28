@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/console/handler/productBlueprint/dto.go
 package productBlueprint
 
 // ---------------------------------------------------
@@ -42,6 +43,8 @@ type UpdateProductBlueprintInput struct {
 
 // ---------------------------------------------------
 // GET /product-blueprints
+// - backend 側で brandName / assigneeName を解決済みで返す
+// - Printed を追加
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
@@ -50,6 +53,7 @@ type ProductBlueprintListOutput struct {
 	BrandName    string `json:"brandName"`
 	AssigneeName string `json:"assigneeName"`
 	ProductIdTag string `json:"productIdTag"`
+	Printed      bool   `json:"printed"`
 	CreatedAt    string `json:"createdAt"`
 	UpdatedAt    string `json:"updatedAt"`
 }

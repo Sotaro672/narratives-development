@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\console\handler\productBlueprint\endpoints.go
 package productBlueprint
 
 import (
@@ -213,11 +214,6 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			assigneeName = h.getAssigneeNameByID(ctx, assigneeId)
 		}
 
-		productIdTag := "-"
-		if pb.ProductIdTag.Type != "" {
-			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
-		}
-
 		createdAt := ""
 		if !pb.CreatedAt.IsZero() {
 			createdAt = pb.CreatedAt.Format(time.RFC3339)
@@ -233,7 +229,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			ProductName:  pb.ProductName,
 			BrandName:    brandName,
 			AssigneeName: assigneeName,
-			ProductIdTag: productIdTag,
+			Printed:      pb.Printed,
 			CreatedAt:    createdAt,
 			UpdatedAt:    updatedAt,
 		})

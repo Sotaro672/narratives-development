@@ -1,3 +1,4 @@
+// frontend/console/productBlueprint/src/presentation/pages/productBlueprintManagement.tsx
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -12,10 +13,10 @@ export default function ProductBlueprintManagement() {
     rows,
     brandFilter,
     assigneeFilter,
-    tagFilter,
+    printedFilter,
     handleBrandFilterChange,
     handleAssigneeFilterChange,
-    handleTagFilterChange,
+    handlePrintedFilterChange,
     handleSortChange,
     handleRowClick,
     handleCreate,
@@ -38,10 +39,15 @@ export default function ProductBlueprintManagement() {
     new Set(rows.map((r) => r.assigneeName).filter(Boolean)),
   ).map((name) => ({ value: name, label: name }));
 
-  const tagOptions = Array.from(
-    new Set(rows.map((r) => r.productIdTag).filter(Boolean)),
-  ).map((tag) => ({ value: tag, label: tag }));
+  // printed のフィルタ選択肢（固定）
+  const printedOptions = [
+    { value: "未印刷", label: "未印刷" },
+    { value: "印刷済み", label: "印刷済み" },
+  ];
 
+  // ✅ hook が sortKey / sortDirection を返していないため、pages 側では保持しない
+  //    SortableTableHeader へは activeKey / direction を null で渡す（表示だけ提供）
+  //    ※ ソート状態の表示も連動させたい場合は hook の戻り値に sortedKey/sortedDir を追加してください。
   const headers = [
     "プロダクト",
     <FilterableTableHeader
@@ -59,11 +65,11 @@ export default function ProductBlueprintManagement() {
       onChange={handleAssigneeFilterChange}
     />,
     <FilterableTableHeader
-      key="tag"
-      label="タグ種別"
-      options={tagOptions}
-      selected={tagFilter}
-      onChange={handleTagFilterChange}
+      key="printed"
+      label="印刷"
+      options={printedOptions}
+      selected={printedFilter}
+      onChange={handlePrintedFilterChange}
     />,
     <SortableTableHeader
       key="createdAt"
@@ -105,7 +111,7 @@ export default function ProductBlueprintManagement() {
           <td>{r.productName}</td>
           <td>{r.brandName}</td>
           <td>{r.assigneeName}</td>
-          <td>{r.productIdTag}</td>
+          <td>{r.printed ? "印刷済み" : "未印刷"}</td>
           <td>{r.createdAt}</td>
           <td>{r.updatedAt}</td>
         </tr>

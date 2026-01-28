@@ -19,12 +19,12 @@ export interface UseProductBlueprintManagementResult {
   // フィルタ状態
   brandFilter: string[];
   assigneeFilter: string[];
-  tagFilter: string[];
+  printedFilter: string[];
 
   // フィルタ変更ハンドラ
   handleBrandFilterChange: (values: string[]) => void;
   handleAssigneeFilterChange: (values: string[]) => void;
-  handleTagFilterChange: (values: string[]) => void;
+  handlePrintedFilterChange: (values: string[]) => void;
 
   // ソート変更ハンドラ
   handleSortChange: (key: string | null, dir: "asc" | "desc" | null) => void;
@@ -69,7 +69,7 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   // フィルタ & ソート状態
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [printedFilter, setPrintedFilter] = useState<string[]>([]);
   const [sortedKey, setSortedKey] = useState<ProductBlueprintSortKey>(null);
   const [sortedDir, setSortedDir] = useState<SortDirection>(null);
 
@@ -101,11 +101,11 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
         allRows,
         brandFilter,
         assigneeFilter,
-        tagFilter,
+        printedFilter,
         sortedKey,
         sortedDir,
       }),
-    [allRows, brandFilter, assigneeFilter, tagFilter, sortedKey, sortedDir],
+    [allRows, brandFilter, assigneeFilter, printedFilter, sortedKey, sortedDir],
   );
 
   // 表示用に createdAt / updatedAt を yyyy/MM/dd HH:mm に整形して返す
@@ -129,8 +129,8 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     setAssigneeFilter(values);
   }, []);
 
-  const handleTagFilterChange = useCallback((values: string[]) => {
-    setTagFilter(values);
+  const handlePrintedFilterChange = useCallback((values: string[]) => {
+    setPrintedFilter(values);
   }, []);
 
   const handleSortChange = useCallback(
@@ -156,7 +156,7 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     // フィルタ・ソート状態をリセット
     setBrandFilter([]);
     setAssigneeFilter([]);
-    setTagFilter([]);
+    setPrintedFilter([]);
     setSortedKey(null);
     setSortedDir(null);
 
@@ -173,10 +173,10 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     rows,
     brandFilter,
     assigneeFilter,
-    tagFilter,
+    printedFilter,
     handleBrandFilterChange,
     handleAssigneeFilterChange,
-    handleTagFilterChange,
+    handlePrintedFilterChange,
     handleSortChange,
     handleRowClick,
     handleCreate,

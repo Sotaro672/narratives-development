@@ -15,6 +15,11 @@ export type ProductBlueprintManagementRow = {
   productIdTag: string;
 
   /**
+   * printed: backend 側で返す前提（false=未印刷, true=印刷済み）
+   */
+  printed: boolean;
+
+  /**
    * backend は ISO8601/RFC3339 の日時文字列を返す。
    * この層では表示整形を行わず、raw の日時文字列を保持して presentation に渡す。
    */
@@ -36,6 +41,9 @@ type RawProductBlueprintListRow = {
   // backend の JSON は "productIdTag": "QRコード" などの文字列を直接返す想定
   productIdTag?: string | null;
 
+  // printed は boolean を返す想定（未設定/欠損対策で optional）
+  printed?: boolean | null;
+
   // backend は createdAt/updatedAt を ISO8601/RFC3339 の文字列で返す前提
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -43,6 +51,10 @@ type RawProductBlueprintListRow = {
 
 function s(v: unknown): string {
   return v == null ? "" : String(v).trim();
+}
+
+function b(v: unknown, fallback = false): boolean {
+  return typeof v === "boolean" ? v : fallback;
 }
 
 /**
@@ -66,6 +78,8 @@ export async function fetchProductBlueprintManagementRows(): Promise<ProductBlue
 
     const productIdTag = s(pb.productIdTag) || "-";
 
+    const printed = b(pb.printed, false);
+
     const createdAtRaw = s(pb.createdAt);
     const updatedAtRaw = s(pb.updatedAt);
 
@@ -75,6 +89,7 @@ export async function fetchProductBlueprintManagementRows(): Promise<ProductBlue
       brandName,
       assigneeName,
       productIdTag,
+      printed,
       createdAt: createdAtRaw,
       // updatedAt が未設定の場合は createdAt に寄せる（欠損対策）
       updatedAt: updatedAtRaw || createdAtRaw,
