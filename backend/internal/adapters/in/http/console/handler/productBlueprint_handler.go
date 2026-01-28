@@ -84,9 +84,6 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	case r.Method == http.MethodGet && path == "/product-blueprints/deleted":
 		h.listDeleted(w, r)
 
-	case r.Method == http.MethodGet && path == "/product-blueprints/printed":
-		h.listPrinted(w, r)
-
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path, "/product-blueprints/") &&
 		strings.HasSuffix(path, "/history"):
@@ -105,14 +102,6 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		trimmed = strings.TrimSuffix(trimmed, "/restore")
 		id := strings.Trim(trimmed, "/")
 		h.restore(w, r, id)
-
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(path, "/product-blueprints/") &&
-		strings.HasSuffix(path, "/mark-printed"):
-		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
-		trimmed = strings.TrimSuffix(trimmed, "/mark-printed")
-		id := strings.Trim(trimmed, "/")
-		h.markPrinted(w, r, id)
 
 	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
 		strings.HasPrefix(path, "/product-blueprints/"):
@@ -317,7 +306,8 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 
 // ---------------------------------------------------
 // GET /product-blueprints
-// - 旧式互換は不要: createdAt/updatedAt は "2006-01-02T15:04:05Z07:00"（RFC3339）で返す
+// - companyId 必須（usecase で CompanyIDFromContext を必須化済み）
+// - createdAt/updatedAt は RFC3339 で返す
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
@@ -335,7 +325,8 @@ type ProductBlueprintListOutput struct {
 func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rows, err := h.uc.List(ctx)
+	// ✅ List → ListByCompanyID に置き換え
+	rows, err := h.uc.ListByCompanyID(ctx)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
@@ -407,7 +398,8 @@ type ProductBlueprintDeletedListOutput struct {
 func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rows, err := h.uc.ListDeleted(ctx)
+	// ✅ ListDeleted → ListDeletedByCompanyID に置き換え
+	rows, err := h.uc.ListDeletedByCompanyID(ctx)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
@@ -442,93 +434,6 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 	}
 
 	_ = json.NewEncoder(w).Encode(out)
-}
-
-// ---------------------------------------------------
-// GET /product-blueprints/printed
-// - 旧式互換は不要: createdAt/updatedAt は RFC3339 で返す
-// ---------------------------------------------------
-
-func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	rows, err := h.uc.ListPrinted(ctx)
-	if err != nil {
-		writeProductBlueprintErr(w, err)
-		return
-	}
-
-	out := make([]ProductBlueprintListOutput, 0, len(rows))
-	for _, pb := range rows {
-		brandId := strings.TrimSpace(pb.BrandID)
-
-		assigneeId := strings.TrimSpace(pb.AssigneeID)
-		if assigneeId == "" {
-			assigneeId = "-"
-		}
-
-		brandName := h.getBrandNameByID(ctx, brandId)
-		if brandName == "" {
-			brandName = brandId
-		}
-
-		assigneeName := "-"
-		if assigneeId != "-" {
-			assigneeName = h.getAssigneeNameByID(ctx, assigneeId)
-		}
-
-		productIdTag := "-"
-		if pb.ProductIdTag.Type != "" {
-			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
-		}
-
-		createdAt := ""
-		if !pb.CreatedAt.IsZero() {
-			createdAt = pb.CreatedAt.Format(time.RFC3339)
-		}
-
-		updatedAt := ""
-		if !pb.UpdatedAt.IsZero() {
-			updatedAt = pb.UpdatedAt.Format(time.RFC3339)
-		}
-
-		out = append(out, ProductBlueprintListOutput{
-			ID:           pb.ID,
-			ProductName:  pb.ProductName,
-			BrandId:      brandId,
-			BrandName:    brandName,
-			AssigneeId:   assigneeId,
-			AssigneeName: assigneeName,
-			ProductIdTag: productIdTag,
-			CreatedAt:    createdAt,
-			UpdatedAt:    updatedAt,
-		})
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
-}
-
-// ---------------------------------------------------
-// POST /product-blueprints/{id}/mark-printed
-// ---------------------------------------------------
-
-func (h *ProductBlueprintHandler) markPrinted(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	pb, err := h.uc.MarkPrinted(ctx, id)
-	if err != nil {
-		writeProductBlueprintErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(pb)
 }
 
 // ---------------------------------------------------

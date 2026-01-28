@@ -13,11 +13,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	// ✅ ProductBlueprint usecase に紐づく port 定義の移動先
+	// ✅ ProductBlueprint usecase に紐づく port 定義
 	pbuc "narratives/internal/application/productBlueprint/usecase"
-
-	// ✅ ここは CompanyIDFromContext を使っているため残す
-	usecase "narratives/internal/application/usecase"
 
 	pbdom "narratives/internal/domain/productBlueprint"
 )
@@ -43,7 +40,6 @@ func (r *ProductBlueprintRepositoryFS) historyCol(blueprintID string) *firestore
 }
 
 // Compile-time check: ensure this satisfies pbuc.ProductBlueprintRepo
-// および pbuc.ProductBlueprintPrintedRepo.
 var (
 	_ pbuc.ProductBlueprintRepo = (*ProductBlueprintRepositoryFS)(nil)
 )
@@ -128,10 +124,7 @@ func (r *ProductBlueprintRepositoryFS) GetIDByModelID(ctx context.Context, model
 }
 
 // GetProductNameByID returns productName only.
-func (r *ProductBlueprintRepositoryFS) GetProductNameByID(
-	ctx context.Context,
-	id string,
-) (string, error) {
+func (r *ProductBlueprintRepositoryFS) GetProductNameByID(ctx context.Context, id string) (string, error) {
 	if r.Client == nil {
 		return "", errors.New("firestore client is nil")
 	}
@@ -168,10 +161,7 @@ func (r *ProductBlueprintRepositoryFS) GetProductNameByID(
 }
 
 // GetPatchByID returns patch for mint/read-model usecases.
-func (r *ProductBlueprintRepositoryFS) GetPatchByID(
-	ctx context.Context,
-	id string,
-) (pbdom.Patch, error) {
+func (r *ProductBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string) (pbdom.Patch, error) {
 	if r.Client == nil {
 		return pbdom.Patch{}, errors.New("firestore client is nil")
 	}
@@ -231,18 +221,79 @@ func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (b
 	return true, nil
 }
 
-// ListIDsByCompany returns blueprint IDs for given companyID.
-func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
-	ctx context.Context,
-	companyID string,
-) ([]string, error) {
+// ListByCompanyID returns all ProductBlueprints for the given companyID.
+// NOTE: deleted/non-deleted の絞り込みは usecase 側で行う前提（用途に応じて）
+// ただし companyID は必須（空は禁止）
+func (r *ProductBlueprintRepositoryFS) ListByCompanyID(ctx context.Context, companyID string) ([]pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
 	companyID = strings.TrimSpace(companyID)
 	if companyID == "" {
-		return []string{}, nil
+		return nil, pbdom.ErrInvalidCompanyID
+	}
+
+	q := r.col().Query.Where("companyId", "==", companyID)
+
+	snaps, err := q.Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]pbdom.ProductBlueprint, 0, len(snaps))
+	for _, snap := range snaps {
+		pb, err := docToProductBlueprint(snap)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, pb)
+	}
+	return out, nil
+}
+
+// ListDeletedByCompanyID returns only logically deleted blueprints (deletedAt != null) for the given companyID.
+// companyID は必須（空は禁止）
+func (r *ProductBlueprintRepositoryFS) ListDeletedByCompanyID(ctx context.Context, companyID string) ([]pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" {
+		return nil, pbdom.ErrInvalidCompanyID
+	}
+
+	q := r.col().Query.
+		Where("companyId", "==", companyID).
+		Where("deletedAt", ">", time.Time{})
+
+	snaps, err := q.Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]pbdom.ProductBlueprint, 0, len(snaps))
+	for _, snap := range snaps {
+		pb, err := docToProductBlueprint(snap)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, pb)
+	}
+	return out, nil
+}
+
+// ListIDsByCompany returns blueprint IDs for given companyID.
+// companyID が空の場合は ErrInvalidCompanyID（必須）
+func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" {
+		return nil, pbdom.ErrInvalidCompanyID
 	}
 
 	iter := r.col().
@@ -264,57 +315,8 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
 	return ids, nil
 }
 
-// ListPrinted returns printed==true blueprints from ids.
-func (r *ProductBlueprintRepositoryFS) ListPrinted(
-	ctx context.Context,
-	ids []string,
-) ([]pbdom.ProductBlueprint, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	uniq := make(map[string]struct{}, len(ids))
-	cleaned := make([]string, 0, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := uniq[id]; ok {
-			continue
-		}
-		uniq[id] = struct{}{}
-		cleaned = append(cleaned, id)
-	}
-	if len(cleaned) == 0 {
-		return []pbdom.ProductBlueprint{}, nil
-	}
-
-	out := make([]pbdom.ProductBlueprint, 0, len(cleaned))
-	for _, id := range cleaned {
-		snap, err := r.col().Doc(id).Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				continue
-			}
-			return nil, err
-		}
-		pb, err := docToProductBlueprint(snap)
-		if err != nil {
-			return nil, err
-		}
-		if pb.Printed {
-			out = append(out, pb)
-		}
-	}
-	return out, nil
-}
-
 // MarkPrinted sets printed=true and returns updated blueprint.
-func (r *ProductBlueprintRepositoryFS) MarkPrinted(
-	ctx context.Context,
-	id string,
-) (pbdom.ProductBlueprint, error) {
+func (r *ProductBlueprintRepositoryFS) MarkPrinted(ctx context.Context, id string) (pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
 	}
@@ -334,11 +336,9 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 		return pbdom.ProductBlueprint{}, err
 	}
 
-	data := snap.Data()
-	if data != nil {
-		if v, ok := data["printed"].(bool); ok && v {
-			return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
-		}
+	// printed は bool のみ
+	if v, ok := snap.Data()["printed"].(bool); ok && v {
+		return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
 	}
 
 	now := time.Now().UTC()
@@ -363,69 +363,8 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 	return docToProductBlueprint(snap)
 }
 
-// List returns all ProductBlueprints, optionally filtered by companyId in context.
-func (r *ProductBlueprintRepositoryFS) List(ctx context.Context) ([]pbdom.ProductBlueprint, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	q := r.col().Query
-
-	if cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx)); cid != "" {
-		q = q.Where("companyId", "==", cid)
-	}
-
-	snaps, err := q.Documents(ctx).GetAll()
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]pbdom.ProductBlueprint, 0, len(snaps))
-	for _, snap := range snaps {
-		pb, err := docToProductBlueprint(snap)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pb)
-	}
-	return out, nil
-}
-
-// ListDeleted returns only logically deleted blueprints (deletedAt != null), optionally filtered by companyId in context.
-func (r *ProductBlueprintRepositoryFS) ListDeleted(ctx context.Context) ([]pbdom.ProductBlueprint, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	q := r.col().Query
-
-	if cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx)); cid != "" {
-		q = q.Where("companyId", "==", cid)
-	}
-
-	q = q.Where("deletedAt", ">", time.Time{})
-
-	snaps, err := q.Documents(ctx).GetAll()
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]pbdom.ProductBlueprint, 0, len(snaps))
-	for _, snap := range snaps {
-		pb, err := docToProductBlueprint(snap)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pb)
-	}
-	return out, nil
-}
-
 // Create inserts a new ProductBlueprint (no upsert).
-func (r *ProductBlueprintRepositoryFS) Create(
-	ctx context.Context,
-	pb pbdom.ProductBlueprint,
-) (pbdom.ProductBlueprint, error) {
+func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, pb pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
 	}
@@ -473,10 +412,7 @@ func (r *ProductBlueprintRepositoryFS) Create(
 }
 
 // Save upserts a ProductBlueprint.
-func (r *ProductBlueprintRepositoryFS) Save(
-	ctx context.Context,
-	pb pbdom.ProductBlueprint,
-) (pbdom.ProductBlueprint, error) {
+func (r *ProductBlueprintRepositoryFS) Save(ctx context.Context, pb pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
 	}
@@ -605,11 +541,7 @@ func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id
 // History (snapshot, versioned)
 // ========================
 
-func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
-	ctx context.Context,
-	blueprintID string,
-	h pbdom.HistoryRecord,
-) error {
+func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(ctx context.Context, blueprintID string, h pbdom.HistoryRecord) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
@@ -652,10 +584,7 @@ func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
 	return nil
 }
 
-func (r *ProductBlueprintRepositoryFS) ListHistory(
-	ctx context.Context,
-	blueprintID string,
-) ([]pbdom.HistoryRecord, error) {
+func (r *ProductBlueprintRepositoryFS) ListHistory(ctx context.Context, blueprintID string) ([]pbdom.HistoryRecord, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -720,11 +649,7 @@ func (r *ProductBlueprintRepositoryFS) ListHistory(
 	return out, nil
 }
 
-func (r *ProductBlueprintRepositoryFS) GetHistoryByVersion(
-	ctx context.Context,
-	blueprintID string,
-	version int64,
-) (pbdom.HistoryRecord, error) {
+func (r *ProductBlueprintRepositoryFS) GetHistoryByVersion(ctx context.Context, blueprintID string, version int64) (pbdom.HistoryRecord, error) {
 	if r.Client == nil {
 		return pbdom.HistoryRecord{}, errors.New("firestore client is nil")
 	}
