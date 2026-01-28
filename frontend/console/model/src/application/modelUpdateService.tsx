@@ -1,7 +1,6 @@
 import {
   updateModelVariation as updateModelVariationApi,
   deleteModelVariation as deleteModelVariationApi,
-  type ModelVariationUpdateRequest,
   type ModelVariationResponse,
 } from "../infrastructure/api/modelUpdateApi";
 

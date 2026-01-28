@@ -28,6 +28,7 @@ async function getIdTokenOrThrow(): Promise<string> {
 
 /* =========================================================
  * backend/internal/domain/model.NewModelVariation に対応
+ * （dto を正: camelCase / rgb 必須）
  * =======================================================*/
 
 /**
@@ -42,14 +43,15 @@ export type CreateModelVariationRequest = {
   size: string;
   /** カラー名（"ホワイト" など） */
   color: string;
-  /** カラーの RGB 値（0xRRGGBB の int など、backend 側の仕様に合わせる） */
-  rgb?: number;
+  /** カラーの RGB 値（0xRRGGBB の int）。✅ 必須（0=黒も正） */
+  rgb: number;
   /** 採寸値（"ウエスト" など MeasurementKey の日本語ラベルをキーとする） */
   measurements?: Record<string, number | null | undefined>;
 };
 
 /* =========================================================
  * backend/internal/domain/model.ModelVariation に対応するレスポンス想定
+ * （dto を正: camelCase / color.rgb 必須）
  * =======================================================*/
 
 export type ModelVariationResponse = {
@@ -59,71 +61,14 @@ export type ModelVariationResponse = {
   size: string;
   color: {
     name: string;
-    rgb?: number | null;
+    rgb: number; // ✅ 必須（0=黒も正）
   };
-  measurements?: Record<string, number | null>;
+  measurements?: Record<string, number>;
   createdAt?: string | null;
   createdBy?: string | null;
   updatedAt?: string | null;
   updatedBy?: string | null;
 };
-
-// Firestore / Go 構造体からの生 JSON をフロント用に正規化するヘルパー
-function mapRawToModelVariation(raw: any): ModelVariationResponse {
-  if (!raw || typeof raw !== "object") {
-    return {
-      id: "",
-      productBlueprintId: "",
-      modelNumber: "",
-      size: "",
-      color: { name: "", rgb: null },
-      measurements: {},
-      createdAt: null,
-      createdBy: null,
-      updatedAt: null,
-      updatedBy: null,
-    };
-  }
-
-  const id = raw.id ?? raw.ID ?? "";
-  const productBlueprintId =
-    raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
-  const modelNumber = raw.modelNumber ?? raw.ModelNumber ?? "";
-  const size = raw.size ?? raw.Size ?? "";
-
-  // Color 構造体のケースいろいろを吸収
-  const colorObj = raw.color ?? raw.Color ?? null;
-
-  const colorName =
-    colorObj?.name ?? colorObj?.Name ?? raw.colorName ?? raw.ColorName ?? "";
-  const colorRgb =
-    colorObj?.rgb ?? colorObj?.RGB ?? raw.rgb ?? raw.RGB ?? null;
-
-  const measurements = raw.measurements ?? raw.Measurements ?? undefined;
-
-  const createdAt = raw.createdAt ?? raw.CreatedAt ?? null;
-  const createdBy = raw.createdBy ?? raw.CreatedBy ?? null;
-  const updatedAt = raw.updatedAt ?? raw.UpdatedAt ?? null;
-  const updatedBy = raw.updatedBy ?? raw.UpdatedBy ?? null;
-
-  const normalized: ModelVariationResponse = {
-    id,
-    productBlueprintId,
-    modelNumber,
-    size,
-    color: {
-      name: colorName,
-      rgb: colorRgb,
-    },
-    measurements,
-    createdAt,
-    createdBy,
-    updatedAt,
-    updatedBy,
-  };
-
-  return normalized;
-}
 
 /* =========================================================
  * 単一 ModelVariation 作成 API
@@ -153,18 +98,15 @@ export async function createModelVariation(
     productBlueprintId,
   )}/variations`;
 
-  const body: any = {
+  // dto を正: camelCase / rgb 必須
+  const body = {
     productBlueprintId,
     modelNumber: payload.modelNumber,
     size: payload.size,
     color: payload.color,
+    rgb: payload.rgb, // ✅ 常に送る（0=黒も正）
     measurements: cleanedMeasurements,
   };
-
-  // rgb が数値のときだけ送る（undefined の場合はフィールド自体を省略）
-  if (typeof payload.rgb === "number" && Number.isFinite(payload.rgb)) {
-    body.rgb = payload.rgb;
-  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -185,7 +127,6 @@ export async function createModelVariation(
     } catch {
       /* ignore JSON parse error */
     }
-    // detail は握りつぶさずにエラー文面に残す（ただし UI 表示に不要ならここは消してOK）
     const detailMsg =
       typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : "";
     throw new Error(
@@ -195,9 +136,8 @@ export async function createModelVariation(
     );
   }
 
-  const raw = text ? JSON.parse(text) : {};
-  const data = mapRawToModelVariation(raw);
-
+  // dto を正: JSON はそのまま ModelVariationResponse に一致する
+  const data = (text ? JSON.parse(text) : {}) as ModelVariationResponse;
   return data;
 }
 
@@ -258,9 +198,7 @@ export async function getModelVariationById(
     );
   }
 
-  const raw = text ? JSON.parse(text) : {};
-  const data = mapRawToModelVariation(raw);
-
+  const data = (text ? JSON.parse(text) : {}) as ModelVariationResponse;
   return data;
 }
 
@@ -296,11 +234,6 @@ export async function listModelVariationsByProductBlueprintId(
     );
   }
 
-  const rawList = text ? JSON.parse(text) : [];
-
-  const list = Array.isArray(rawList)
-    ? rawList.map((raw) => mapRawToModelVariation(raw))
-    : [];
-
-  return list;
+  const data = (text ? JSON.parse(text) : []) as ModelVariationResponse[];
+  return Array.isArray(data) ? data : [];
 }
