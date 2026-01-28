@@ -9,8 +9,7 @@ import { useProductBlueprintDetail } from "./useProductBlueprintDetail";
 import type { ProductIDTagType } from "../../../../shell/src/shared/types/productBlueprint";
 import type { Fit, ItemType } from "../../domain/entity/catalog";
 import type {
-  SizeRow,
-  ModelNumberRow,
+  SizeRow
 } from "../../infrastructure/api/productBlueprintApi";
 
 // ★ 復旧用サービス（application 層）を利用

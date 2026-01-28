@@ -11,8 +11,7 @@ import type {
   NewModelVariationPayload,
 } from "../infrastructure/api/productBlueprintDetailApi";
 
-import { API_BASE } from "../../../shell/src/shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../shell/src/shared/http/authHeaders";
+import { authorizedFetch } from "../infrastructure/httpClient/authorizedFetch";
 import { coerceRgbInt, hexToRgbInt } from "../../../shell/src/shared/util/color";
 
 import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
@@ -148,7 +147,6 @@ async function fetchBrandNameById(brandId: string): Promise<string> {
 // メンバー名解決（Repository 経由）
 // -----------------------------------------
 async function resolveMemberNameById(
-  _authHeaders: Record<string, string>,
   memberId?: string | null,
   fallback: string = "-",
 ): Promise<string> {
@@ -178,11 +176,9 @@ export async function getProductBlueprintDetail(
   const trimmed = String(id ?? "").trim();
   if (!trimmed) throw new Error("getProductBlueprintDetail: id が空です");
 
-  const authHeaders = await getAuthHeadersOrThrow();
-
-  const res = await fetch(`${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}`, {
+  const res = await authorizedFetch(`/product-blueprints/${encodeURIComponent(trimmed)}`, {
     method: "GET",
-    headers: authHeaders,
+    throwOnError: false,
   });
 
   if (!res.ok) {
@@ -214,8 +210,8 @@ export async function getProductBlueprintDetail(
   };
 
   response.brandName = await fetchBrandNameById(response.brandId ?? "");
-  response.assigneeName = await resolveMemberNameById(authHeaders, response.assigneeId, "-");
-  response.createdByName = await resolveMemberNameById(authHeaders, response.createdBy, "作成者未設定");
+  response.assigneeName = await resolveMemberNameById(response.assigneeId, "-");
+  response.createdByName = await resolveMemberNameById(response.createdBy, "作成者未設定");
 
   return response;
 }
@@ -272,7 +268,9 @@ export async function updateProductBlueprint(
 
   // itemType が不明なら variations 更新はスキップ（メタ情報だけ更新）
   if (!itemType) {
-    console.log("[updateProductBlueprint] itemType が空のため、ModelVariation の更新はスキップします。");
+    console.log(
+      "[updateProductBlueprint] itemType が空のため、ModelVariation の更新はスキップします。",
+    );
     return updated;
   }
 
@@ -457,17 +455,14 @@ export async function listModelVariationsByProductBlueprintId(
   const id = productBlueprintId.trim();
   if (!id) throw new Error("productBlueprintId が空です");
 
-  const authHeaders = await getAuthHeadersOrThrow();
-
-  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(id)}/variations`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      ...authHeaders,
-      Accept: "application/json",
+  const res = await authorizedFetch(
+    `/models/by-blueprint/${encodeURIComponent(id)}/variations`,
+    {
+      method: "GET",
+      throwOnError: false,
+      acceptJson: true,
     },
-  });
+  );
 
   if (!res.ok) {
     throw new Error(
@@ -524,16 +519,10 @@ export async function getProductBlueprintHistory(
     throw new Error("getProductBlueprintHistory: productBlueprintId が空です");
   }
 
-  const authHeaders = await getAuthHeadersOrThrow();
-
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}/history`;
-
-  const res = await fetch(url, {
+  const res = await authorizedFetch(`/product-blueprints/${encodeURIComponent(id)}/history`, {
     method: "GET",
-    headers: {
-      ...authHeaders,
-      Accept: "application/json",
-    },
+    throwOnError: false,
+    acceptJson: true,
   });
 
   if (!res.ok) {
@@ -566,16 +555,10 @@ export async function softDeleteProductBlueprint(productBlueprintId: string): Pr
     throw new Error("softDeleteProductBlueprint: productBlueprintId が空です");
   }
 
-  const authHeaders = await getAuthHeadersOrThrow();
-
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
-
-  const res = await fetch(url, {
+  const res = await authorizedFetch(`/product-blueprints/${encodeURIComponent(id)}`, {
     method: "DELETE",
-    headers: {
-      ...authHeaders,
-      Accept: "application/json",
-    },
+    throwOnError: false,
+    acceptJson: true,
   });
 
   if (!res.ok) {
