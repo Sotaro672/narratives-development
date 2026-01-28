@@ -12,9 +12,10 @@ import (
 	mintapp "narratives/internal/application/mint"
 
 	// ★ InspectionUsecase 移動先
+	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
+	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
 	inspectionapp "narratives/internal/application/inspection"
 
-	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
 	// ✅ TokenBlueprint usecases 移動先
 	tbapp "narratives/internal/application/tokenBlueprint"
 
@@ -438,7 +439,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Models
 	// ================================
 	if deps.ModelUC != nil {
-		modelH := consoleHandler.NewModelHandler(deps.ModelUC)
+		modelH := modelHandler.NewModelHandler(deps.ModelUC)
 
 		var h http.Handler = modelH
 		if authMw != nil {

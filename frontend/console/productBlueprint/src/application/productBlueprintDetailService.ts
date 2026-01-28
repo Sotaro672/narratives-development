@@ -12,7 +12,7 @@ import {
 } from "../infrastructure/api/productBlueprintDetailApi";
 
 import { authorizedFetch } from "../infrastructure/httpClient/authorizedFetch";
-import { coerceRgbInt, hexToRgbInt } from "../../../shell/src/shared/util/color";
+import { hexToRgbInt } from "../../../shell/src/shared/util/color";
 
 // ★ ModelVariation 更新サービスを利用（差分削除も利用）
 import {
@@ -76,6 +76,17 @@ function buildMeasurementsFromSizeRowForUpdate(
 }
 
 // -----------------------------------------
+// CREATE 用: null を除外して map[string]float64 互換にする
+// （backend dto.go: map[string]float64 へ送るため）
+// -----------------------------------------
+function buildMeasurementsForCreate(
+  itemType: ItemType,
+  size: SizeRow,
+): Record<string, number> | undefined {
+  return buildMeasurementsFromSizeRowForUpdate(itemType, size);
+}
+
+// -----------------------------------------
 // GET: 商品設計 詳細
 // ✅ 方針A: backend 正（camelCase + name 解決済み）をそのまま返す
 // -----------------------------------------
@@ -106,7 +117,7 @@ export async function updateProductBlueprint(
     material,
     weight,
     qualityAssurance,
-    productIdTagType, // ✅ 正: UpdateProductBlueprintParams のフィールド
+    productIdTagType,
     brandId,
     assigneeId,
     companyId,
@@ -151,75 +162,59 @@ export async function updateProductBlueprint(
     return updated;
   }
 
-  // 2) 現在の ModelVariation 一覧を取得
+  // UpdateProductBlueprintParams 側の itemType は string 扱いのため、ここで正の ItemType に寄せる
+  const itemTypeValue = itemType as ItemType;
+
+  // 2) 現在の ModelVariation 一覧を取得（backend は camelCase を必ず返す前提）
   const variations = await listModelVariationsByProductBlueprintId(id);
-  const varsAny = variations as any[];
 
   // 3) 既存 variation を size×color → variation にマップ
-  const existingMap = new Map<string, any>();
-  varsAny.forEach((v) => {
-    const sizeLabel: string =
-      (typeof v.size === "string" ? v.size : (v.Size as string | undefined)) ?? "";
-    const colorName: string =
-      (typeof v.color?.name === "string" ? v.color.name : (v.Color?.Name as string | undefined)) ??
-      "";
-
+  const existingMap = new Map<string, ModelVariationResponse>();
+  variations.forEach((v) => {
+    const sizeLabel = (v.size ?? "").trim();
+    const colorName = (v.color?.name ?? "").trim();
     if (!sizeLabel || !colorName) return;
-    const key = makeKey(sizeLabel, colorName);
-    existingMap.set(key, v);
+
+    existingMap.set(makeKey(sizeLabel, colorName), v);
   });
 
   // 4) size×color → modelNumber(code) のマップ（希望状態）
   const codeMap = new Map<string, string>();
-  modelNumbers.forEach((m: { size: string; color: string; code: string }) => {
+  modelNumbers.forEach((m) => {
     if (!m.size || !m.color) return;
-    const key = makeKey(m.size, m.color);
-    codeMap.set(key, m.code ?? "");
+    codeMap.set(makeKey(m.size, m.color), m.code ?? "");
   });
 
-  // 5) sizeLabel → measurements(map[string]float64) のマップ
+  // 5) sizeLabel → measurements(map[string]float64) のマップ（UPDATE 用）
   const measurementsMap = new Map<string, Record<string, number>>();
-  (sizes as SizeRow[]).forEach((s) => {
-    const ms = buildMeasurementsFromSizeRowForUpdate(itemType as ItemType, s);
-    if (ms) {
-      measurementsMap.set(s.sizeLabel, ms);
-    }
+  sizes.forEach((s) => {
+    const ms = buildMeasurementsFromSizeRowForUpdate(itemTypeValue, s);
+    if (ms) measurementsMap.set(s.sizeLabel, ms);
   });
 
   // 6) 既存 variation は updateModelVariation で更新
+  // updateModelVariation は Promise<void> ではないため、void に正規化して積む
   const updateTasks: Promise<void>[] = [];
 
   existingMap.forEach((v, key) => {
-    const variationId: string = v.id ?? v.ID;
+    const variationId = v.id;
     if (!variationId) return;
 
-    const sizeLabel: string =
-      (typeof v.size === "string" ? v.size : (v.Size as string | undefined)) ?? "";
-    const colorName: string =
-      (typeof v.color?.name === "string" ? v.color.name : (v.Color?.Name as string | undefined)) ??
-      "";
-
+    const sizeLabel = (v.size ?? "").trim();
+    const colorName = (v.color?.name ?? "").trim();
     if (!sizeLabel || !colorName) return;
 
     // 希望 side の modelNumber（なければ既存値を維持）
-    const nextCode: string =
-      codeMap.get(key) ??
-      (typeof v.modelNumber === "string"
-        ? v.modelNumber
-        : (v.ModelNumber as string | undefined) ?? "");
+    const nextCode = codeMap.get(key) ?? (v.modelNumber ?? "");
 
-    // RGB（hex から int に変換。無ければ既存値を維持）
+    // RGB（hex -> int）。rgb は必須（colorPicker起点で常に number になる前提）
     const rgbHex = colorRgbMap[colorName];
-    const rgbFromHex = hexToRgbInt(rgbHex);
-
-    const existingRgb = coerceRgbInt(
-      (v as any)?.color?.rgb ??
-        (v as any)?.color?.RGB ??
-        (v as any)?.Color?.rgb ??
-        (v as any)?.Color?.RGB,
-    );
-
-    const rgb = rgbFromHex ?? existingRgb;
+    const rgb = hexToRgbInt(rgbHex);
+    if (typeof rgb !== "number") {
+      throw new Error(
+        `updateProductBlueprint: rgb が解決できません（color="${colorName}", hex="${rgbHex ?? ""}"）`,
+      );
+    }
 
     // 採寸（SizeRow から起こした map）
     const measurements = measurementsMap.get(sizeLabel);
@@ -228,7 +223,7 @@ export async function updateProductBlueprint(
       modelNumber: nextCode,
       size: sizeLabel,
       color: colorName,
-      ...(typeof rgb === "number" ? { rgb } : {}),
+      rgb, // ✅ 必須で常に送る
       ...(measurements ? { measurements } : {}),
     };
 
@@ -237,11 +232,7 @@ export async function updateProductBlueprint(
       payload,
     });
 
-    updateTasks.push(
-      (async () => {
-        await updateModelVariation(variationId, payload);
-      })(),
-    );
+    updateTasks.push(updateModelVariation(variationId, payload).then(() => undefined));
   });
 
   await Promise.all(updateTasks);
@@ -255,20 +246,26 @@ export async function updateProductBlueprint(
     const [sizeLabel, colorName] = key.split("__");
     if (!sizeLabel || !colorName) return;
 
-    const sizeRow = (sizes as SizeRow[]).find((s) => s.sizeLabel === sizeLabel);
+    const sizeRow = sizes.find((s) => s.sizeLabel === sizeLabel);
     if (!sizeRow) return;
 
     const rgbHex = colorRgbMap[colorName];
     const rgb = hexToRgbInt(rgbHex);
+    if (typeof rgb !== "number") {
+      throw new Error(
+        `updateProductBlueprint: rgb が解決できません（color="${colorName}", hex="${rgbHex ?? ""}"）`,
+      );
+    }
 
-    const measurements = buildMeasurements(itemType as ItemType, sizeRow);
+    // CREATE は null を除外して送る（backend dto.go: map[string]float64）
+    const measurements = buildMeasurementsForCreate(itemTypeValue, sizeRow) ?? {};
 
     const createReq: CreateModelVariationRequest = {
       productBlueprintId: id,
       modelNumber: code,
       size: sizeLabel,
       color: colorName,
-      ...(typeof rgb === "number" ? { rgb } : {}),
+      rgb, // ✅ 必須で常に送る
       measurements,
     };
 
@@ -314,8 +311,8 @@ export type ModelVariationResponse = {
   productBlueprintId: string;
   modelNumber: string;
   size: string;
-  color?: { name: string; rgb?: number | null };
-  measurements?: Record<string, number | null>;
+  color: { name: string; rgb: number }; // ✅ backend 正: 常に返す前提
+  measurements?: Record<string, number>; // ✅ backend 正: map[string]int -> number
   createdAt?: string | null;
   createdBy?: string | null;
   updatedAt?: string | null;
@@ -343,32 +340,8 @@ export async function listModelVariationsByProductBlueprintId(
     );
   }
 
-  const raw = (await res.json()) as any[] | null;
-  if (!raw) return [];
-
-  // モデル系は既存互換を壊さないため、camelCase / PascalCase の両対応を維持
-  return raw.map((v: any) => {
-    const colorRaw = v.color ?? v.Color ?? {};
-    const measurementsRaw = v.measurements ?? v.Measurements ?? {};
-
-    const rgbValue = coerceRgbInt(colorRaw.rgb ?? colorRaw.RGB) ?? null;
-
-    return {
-      id: v.id ?? v.ID ?? "",
-      productBlueprintId: v.productBlueprintId ?? v.ProductBlueprintID ?? id,
-      modelNumber: v.modelNumber ?? v.ModelNumber ?? "",
-      size: v.size ?? v.Size ?? "",
-      color: { name: colorRaw.name ?? colorRaw.Name ?? "", rgb: rgbValue },
-      measurements:
-        typeof measurementsRaw === "object"
-          ? (measurementsRaw as Record<string, number | null>)
-          : {},
-      createdAt: v.createdAt ?? v.CreatedAt ?? null,
-      createdBy: v.createdBy ?? v.CreatedBy ?? null,
-      updatedAt: v.updatedAt ?? v.UpdatedAt ?? null,
-      updatedBy: v.updatedBy ?? v.UpdatedBy ?? null,
-    };
-  });
+  const raw = (await res.json()) as ModelVariationResponse[] | null;
+  return raw ?? [];
 }
 
 // -----------------------------------------
