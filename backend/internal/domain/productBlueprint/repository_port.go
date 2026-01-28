@@ -110,11 +110,6 @@ type ProductBlueprintHistoryRepo interface {
 type Repository interface {
 	// Read (live)
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
-	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
-
-	// printed == true のみを対象にページング取得
-	ListPrinted(ctx context.Context, filter Filter, page Page) (PageResult, error)
-
 	// ★ 追加: productBlueprintId から brandId だけを取得するヘルパ
 	//   MintRequest 一覧 / InventoryDetail などで「ID → BrandID」だけ欲しい場合に使用。
 	//   実装側では（可能なら）投影（brandId フィールドのみ取得）で効率化する。
@@ -163,7 +158,4 @@ type Repository interface {
 	SaveHistorySnapshot(ctx context.Context, blueprintID string, h HistoryRecord) error
 	ListHistory(ctx context.Context, blueprintID string) ([]HistoryRecord, error)
 	GetHistoryByVersion(ctx context.Context, blueprintID string, version int64) (HistoryRecord, error)
-
-	// Dev/Test helper
-	Reset(ctx context.Context) error
 }

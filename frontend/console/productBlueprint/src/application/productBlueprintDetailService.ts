@@ -4,19 +4,16 @@ import type { ItemType } from "../domain/entity/catalog";
 import type { SizeRow } from "../../../model/src/domain/entity/catalog";
 import { updateProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
-import type {
-  ProductBlueprintDetailResponse,
-  UpdateProductBlueprintParams,
-  NewModelVariationMeasurements,
-  NewModelVariationPayload,
+import {
+  getProductBlueprintDetailApi,
+  type ProductBlueprintDetailResponse,
+  type UpdateProductBlueprintParams,
+  type NewModelVariationMeasurements,
+  type NewModelVariationPayload,
 } from "../infrastructure/api/productBlueprintDetailApi";
 
 import { authorizedFetch } from "../infrastructure/httpClient/authorizedFetch";
 import { coerceRgbInt, hexToRgbInt } from "../../../shell/src/shared/util/color";
-
-import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
-import { formatLastFirst } from "../../../member/src/infrastructure/query/memberQuery";
-import { MemberRepositoryHTTP } from "../../../member/src/infrastructure/http/memberRepositoryHTTP";
 
 // ★ ModelVariation 更新サービスを利用（差分削除も利用）
 import {
@@ -106,69 +103,8 @@ function toNewModelVariationPayload(
 }
 
 // -----------------------------------------
-// 生レスポンス（PascalCase）型
-// -----------------------------------------
-type RawProductBlueprintDetailResponse = {
-  ID: string;
-  ProductName: string;
-  CompanyID: string;
-  BrandID: string;
-  ItemType: string;
-  Fit: string;
-  Material: string;
-  Weight: number;
-  QualityAssurance?: string[];
-  ProductIdTag?: { Type?: string } | null;
-  AssigneeID?: string | null;
-  CreatedBy?: string | null;
-  CreatedAt?: string | null;
-  UpdatedBy?: string | null;
-  UpdatedAt?: string | null;
-  DeletedBy?: string | null;
-  DeletedAt?: string | null;
-};
-
-// -----------------------------------------
-// ブランド名取得ヘルパー
-// -----------------------------------------
-async function fetchBrandNameById(brandId: string): Promise<string> {
-  const id = brandId.trim();
-  if (!id) return "";
-  try {
-    const brands = await fetchAllBrandsForCompany("", false);
-    return brands.find((b) => b.id === id)?.name ?? "";
-  } catch (e) {
-    console.error("[productBlueprintDetailService] fetchBrandNameById error:", e);
-    return "";
-  }
-}
-
-// -----------------------------------------
-// メンバー名解決（Repository 経由）
-// -----------------------------------------
-async function resolveMemberNameById(
-  memberId?: string | null,
-  fallback: string = "-",
-): Promise<string> {
-  const id = String(memberId ?? "").trim();
-  if (!id) return fallback;
-
-  try {
-    const repo = new MemberRepositoryHTTP();
-    const member = await repo.getById(id);
-    if (!member) return fallback;
-
-    const name = formatLastFirst(member.lastName, member.firstName)?.trim() || id;
-
-    return name || fallback;
-  } catch (e) {
-    console.error("[productBlueprintDetailService] resolveMemberNameById error:", e);
-    return fallback;
-  }
-}
-
-// -----------------------------------------
 // GET: 商品設計 詳細
+// ✅ 方針A: backend 正（camelCase + name 解決済み）をそのまま返す
 // -----------------------------------------
 export async function getProductBlueprintDetail(
   id: string,
@@ -176,44 +112,7 @@ export async function getProductBlueprintDetail(
   const trimmed = String(id ?? "").trim();
   if (!trimmed) throw new Error("getProductBlueprintDetail: id が空です");
 
-  const res = await authorizedFetch(`/product-blueprints/${encodeURIComponent(trimmed)}`, {
-    method: "GET",
-    throwOnError: false,
-  });
-
-  if (!res.ok) {
-    throw new Error(
-      `商品設計詳細の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
-    );
-  }
-
-  const raw = (await res.json()) as RawProductBlueprintDetailResponse;
-
-  const response: ProductBlueprintDetailResponse & {
-    brandName?: string;
-    assigneeName?: string;
-    createdByName?: string;
-  } = {
-    id: raw.ID,
-    productName: raw.ProductName,
-    companyId: raw.CompanyID,
-    brandId: raw.BrandID,
-    itemType: raw.ItemType,
-    fit: raw.Fit,
-    material: raw.Material,
-    weight: raw.Weight,
-    qualityAssurance: raw.QualityAssurance ?? [],
-    productIdTag: raw.ProductIdTag ? { type: raw.ProductIdTag.Type ?? "" } : undefined,
-    assigneeId: raw.AssigneeID ?? "",
-    createdBy: raw.CreatedBy ?? "",
-    createdAt: raw.CreatedAt ?? "",
-  };
-
-  response.brandName = await fetchBrandNameById(response.brandId ?? "");
-  response.assigneeName = await resolveMemberNameById(response.assigneeId, "-");
-  response.createdByName = await resolveMemberNameById(response.createdBy, "作成者未設定");
-
-  return response;
+  return await getProductBlueprintDetailApi(trimmed);
 }
 
 // -----------------------------------------
@@ -234,36 +133,41 @@ export async function updateProductBlueprint(
     material,
     weight,
     qualityAssurance,
-    productIdTag,
+    productIdTagType, // ✅ 正: UpdateProductBlueprintParams のフィールド
     brandId,
     assigneeId,
+    companyId,
     updatedBy,
+    colors,
+    colorRgbMap = {},
     sizes = [],
     modelNumbers = [],
-    colorRgbMap = {},
-  } = params as any;
+  } = params;
 
   if (!id) {
     throw new Error("updateProductBlueprint: id が空です");
   }
 
-  // 1) まず ProductBlueprint 本体のメタ情報を更新
+  // 1) ProductBlueprint 本体のメタ情報を更新
+  //    ✅ variations はこの API へは送らない（ModelVariation は別エンドポイントで更新する）
   const updated = await updateProductBlueprintHTTP(
     id,
     {
-      ...(params as any),
       id,
       productName,
+      brandId,
       itemType,
       fit,
       material,
       weight,
       qualityAssurance,
-      productIdTag,
-      brandId,
+      productIdTagType,
+      companyId,
       assigneeId,
-      updatedBy,
-    } as unknown as UpdateProductBlueprintParams,
+      colors: colors ?? [],
+      colorRgbMap: colorRgbMap ?? {},
+      updatedBy: updatedBy ?? null,
+    } satisfies UpdateProductBlueprintParams,
   );
 
   // itemType が不明なら variations 更新はスキップ（メタ情報だけ更新）
@@ -367,17 +271,13 @@ export async function updateProductBlueprint(
     );
   });
 
-  // 既存分の更新を待つ
   await Promise.all(updateTasks);
 
   // 7) 既存に存在しない（新規の） size×color は CreateModelVariation で作成
   const createPayloads: CreateModelVariationRequest[] = [];
 
   codeMap.forEach((code, key) => {
-    if (existingMap.has(key)) {
-      // 既存 variation については上で更新済み
-      return;
-    }
+    if (existingMap.has(key)) return;
 
     const [sizeLabel, colorName] = key.split("__");
     if (!sizeLabel || !colorName) return;
@@ -473,6 +373,7 @@ export async function listModelVariationsByProductBlueprintId(
   const raw = (await res.json()) as any[] | null;
   if (!raw) return [];
 
+  // モデル系は既存互換を壊さないため、camelCase / PascalCase の両対応を維持
   return raw.map((v: any) => {
     const colorRaw = v.color ?? v.Color ?? {};
     const measurementsRaw = v.measurements ?? v.Measurements ?? {};
@@ -506,7 +407,7 @@ export type ProductBlueprintHistoryItem = {
   brandId: string;
   assigneeId: string;
   updatedAt: string; // "YYYY/MM/DD HH:MM:SS"
-  updatedBy?: string; // メンバーID（表示名は別途解決）
+  updatedBy?: string;
   deletedAt?: string;
   expireAt?: string;
 };
@@ -519,11 +420,14 @@ export async function getProductBlueprintHistory(
     throw new Error("getProductBlueprintHistory: productBlueprintId が空です");
   }
 
-  const res = await authorizedFetch(`/product-blueprints/${encodeURIComponent(id)}/history`, {
-    method: "GET",
-    throwOnError: false,
-    acceptJson: true,
-  });
+  const res = await authorizedFetch(
+    `/product-blueprints/${encodeURIComponent(id)}/history`,
+    {
+      method: "GET",
+      throwOnError: false,
+      acceptJson: true,
+    },
+  );
 
   if (!res.ok) {
     throw new Error(
@@ -549,17 +453,22 @@ export async function getProductBlueprintHistory(
 // -----------------------------------------
 // DELETE: 商品設計 論理削除
 // -----------------------------------------
-export async function softDeleteProductBlueprint(productBlueprintId: string): Promise<void> {
+export async function softDeleteProductBlueprint(
+  productBlueprintId: string,
+): Promise<void> {
   const id = productBlueprintId.trim();
   if (!id) {
     throw new Error("softDeleteProductBlueprint: productBlueprintId が空です");
   }
 
-  const res = await authorizedFetch(`/product-blueprints/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    throwOnError: false,
-    acceptJson: true,
-  });
+  const res = await authorizedFetch(
+    `/product-blueprints/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      throwOnError: false,
+      acceptJson: true,
+    },
+  );
 
   if (!res.ok) {
     let detail = "";
@@ -575,7 +484,4 @@ export async function softDeleteProductBlueprint(productBlueprintId: string): Pr
       }`,
     );
   }
-
-  // handler 側は 204 No Content を返す想定なので、
-  // 正常系では何も返さず終了（void）で問題ありません。
 }

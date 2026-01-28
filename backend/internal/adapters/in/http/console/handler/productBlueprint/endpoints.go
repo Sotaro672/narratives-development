@@ -1,7 +1,7 @@
-// backend\internal\adapters\in\http\console\handler\productBlueprint\endpoints.go
 package productBlueprint
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -53,8 +53,11 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create は現状 entity を返していても良いが、
+	// 正に寄せるなら detail DTO を返す方針が一貫する。
+	out := h.toDetailOutput(ctx, created)
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(created)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ---------------------------------------------------
@@ -83,6 +86,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 		updatedBy = &v
 	}
 
+	// printed は更新させない（印刷済み化は別ユースケースが適切）
 	pb := pbdom.ProductBlueprint{
 		ID:               id,
 		ProductName:      in.ProductName,
@@ -106,7 +110,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(updated)
+	out := h.toDetailOutput(ctx, updated)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ---------------------------------------------------
@@ -156,7 +161,8 @@ func (h *Handler) restore(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(pb)
+	out := h.toDetailOutput(ctx, pb)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ---------------------------------------------------
@@ -179,7 +185,8 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(pb)
+	out := h.toDetailOutput(ctx, pb)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ---------------------------------------------------
@@ -197,16 +204,14 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]ProductBlueprintListOutput, 0, len(rows))
 	for _, pb := range rows {
-		brandId := strings.TrimSpace(pb.BrandID)
-
 		assigneeId := strings.TrimSpace(pb.AssigneeID)
 		if assigneeId == "" {
 			assigneeId = "-"
 		}
 
-		brandName := h.getBrandNameByID(ctx, brandId)
+		brandName := h.getBrandNameByID(ctx, strings.TrimSpace(pb.BrandID))
 		if brandName == "" {
-			brandName = brandId
+			brandName = strings.TrimSpace(pb.BrandID)
 		}
 
 		assigneeName := "-"
@@ -229,9 +234,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			ProductName:  pb.ProductName,
 			BrandName:    brandName,
 			AssigneeName: assigneeName,
-			Printed:      pb.Printed,
-			CreatedAt:    createdAt,
-			UpdatedAt:    updatedAt,
+			// ★ printed:true なら印刷済みとして UI 側が表示できるように
+			Printed:   pb.Printed,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
 		})
 	}
 
@@ -304,12 +310,6 @@ func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request, id string)
 
 	out := make([]ProductBlueprintHistoryOutput, 0, len(rows))
 	for _, pb := range rows {
-		brandId := strings.TrimSpace(pb.BrandID)
-		assigneeId := strings.TrimSpace(pb.AssigneeID)
-		if assigneeId == "" {
-			assigneeId = "-"
-		}
-
 		updatedAtStr := ""
 		if !pb.UpdatedAt.IsZero() {
 			updatedAtStr = pb.UpdatedAt.Format(time.RFC3339)
@@ -328,8 +328,8 @@ func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request, id string)
 		out = append(out, ProductBlueprintHistoryOutput{
 			ID:          pb.ID,
 			ProductName: pb.ProductName,
-			BrandId:     brandId,
-			AssigneeId:  assigneeId,
+			BrandId:     strings.TrimSpace(pb.BrandID),
+			AssigneeId:  strings.TrimSpace(pb.AssigneeID),
 			UpdatedAt:   updatedAtStr,
 			UpdatedBy:   pb.UpdatedBy,
 			DeletedAt:   deletedAtStr,
@@ -338,4 +338,91 @@ func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request, id string)
 	}
 
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ---------------------------------------------------
+// DTO assembler (detail)
+// ---------------------------------------------------
+
+func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint) ProductBlueprintDetailOutput {
+	brandId := strings.TrimSpace(pb.BrandID)
+	brandName := h.getBrandNameByID(ctx, brandId)
+	if brandName == "" {
+		brandName = brandId
+	}
+
+	assigneeId := strings.TrimSpace(pb.AssigneeID)
+	assigneeName := "-"
+	if assigneeId != "" {
+		assigneeName = h.getAssigneeNameByID(ctx, assigneeId)
+		if assigneeName == "" {
+			assigneeName = assigneeId
+		}
+	}
+
+	createdBy := ""
+	if pb.CreatedBy != nil {
+		createdBy = strings.TrimSpace(*pb.CreatedBy)
+	}
+
+	createdByName := ""
+	if createdBy != "" {
+		createdByName = h.getAssigneeNameByID(ctx, createdBy)
+		if createdByName == "" {
+			createdByName = createdBy
+		}
+	}
+
+	createdAt := ""
+	if !pb.CreatedAt.IsZero() {
+		createdAt = pb.CreatedAt.Format(time.RFC3339)
+	}
+
+	updatedAt := ""
+	if !pb.UpdatedAt.IsZero() {
+		updatedAt = pb.UpdatedAt.Format(time.RFC3339)
+	}
+
+	deletedAt := ""
+	if pb.DeletedAt != nil && !pb.DeletedAt.IsZero() {
+		deletedAt = pb.DeletedAt.Format(time.RFC3339)
+	}
+
+	var tag *struct {
+		Type string `json:"type"`
+	}
+	if strings.TrimSpace(string(pb.ProductIdTag.Type)) != "" {
+		tag = &struct {
+			Type string `json:"type"`
+		}{
+			Type: string(pb.ProductIdTag.Type),
+		}
+	}
+
+	return ProductBlueprintDetailOutput{
+		ID:               pb.ID,
+		ProductName:      pb.ProductName,
+		CompanyId:        strings.TrimSpace(pb.CompanyID),
+		BrandId:          brandId,
+		BrandName:        brandName,
+		ItemType:         string(pb.ItemType),
+		Fit:              pb.Fit,
+		Material:         pb.Material,
+		Weight:           pb.Weight,
+		QualityAssurance: pb.QualityAssurance,
+
+		ProductIdTag: tag,
+
+		AssigneeId:   assigneeId,
+		AssigneeName: assigneeName,
+
+		Printed: pb.Printed,
+
+		CreatedBy:     createdBy,
+		CreatedByName: createdByName,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+
+		DeletedAt: deletedAt,
+	}
 }

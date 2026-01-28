@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/console/handler/productBlueprint/dto.go
 package productBlueprint
 
 // ---------------------------------------------------
@@ -24,7 +23,7 @@ type CreateProductBlueprintInput struct {
 }
 
 // ---------------------------------------------------
-// PUT/PATCH /product-blueprints/{id}
+// PATCH/PUT /product-blueprints/{id}
 // ---------------------------------------------------
 
 type UpdateProductBlueprintInput struct {
@@ -42,9 +41,8 @@ type UpdateProductBlueprintInput struct {
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints
-// - backend 側で brandName / assigneeName を解決済みで返す
-// - Printed を追加
+// GET /product-blueprints (list)
+// - backend 側で name 解決済みを返す
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
@@ -52,14 +50,47 @@ type ProductBlueprintListOutput struct {
 	ProductName  string `json:"productName"`
 	BrandName    string `json:"brandName"`
 	AssigneeName string `json:"assigneeName"`
-	ProductIdTag string `json:"productIdTag"`
 	Printed      bool   `json:"printed"`
 	CreatedAt    string `json:"createdAt"`
 	UpdatedAt    string `json:"updatedAt"`
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints/deleted
+// GET /product-blueprints/{id} (detail)
+// - backend 側で name 解決済みを返す
+// ---------------------------------------------------
+
+type ProductBlueprintDetailOutput struct {
+	ID               string   `json:"id"`
+	ProductName      string   `json:"productName"`
+	CompanyId        string   `json:"companyId"`
+	BrandId          string   `json:"brandId"`
+	BrandName        string   `json:"brandName"`
+	ItemType         string   `json:"itemType"`
+	Fit              string   `json:"fit"`
+	Material         string   `json:"material"`
+	Weight           float64  `json:"weight"`
+	QualityAssurance []string `json:"qualityAssurance"`
+
+	ProductIdTag *struct {
+		Type string `json:"type"`
+	} `json:"productIdTag,omitempty"`
+
+	AssigneeId   string `json:"assigneeId"`
+	AssigneeName string `json:"assigneeName"`
+
+	Printed bool `json:"printed"`
+
+	CreatedBy     string `json:"createdBy"`
+	CreatedByName string `json:"createdByName"`
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
+
+	DeletedAt string `json:"deletedAt,omitempty"`
+}
+
+// ---------------------------------------------------
+// GET /product-blueprints/deleted`
 // ---------------------------------------------------
 
 type ProductBlueprintDeletedListOutput struct {
