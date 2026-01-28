@@ -29,6 +29,7 @@ import (
 	// usecases / apps
 	inspectionapp "narratives/internal/application/inspection"
 	mintapp "narratives/internal/application/mint"
+	pbuc "narratives/internal/application/productBlueprint/usecase"
 	productionapp "narratives/internal/application/production"
 	companyquery "narratives/internal/application/query/console"
 	resolver "narratives/internal/application/resolver"
@@ -96,7 +97,7 @@ type Container struct {
 	PermissionUC       *uc.PermissionUsecase
 	PrintUC            *uc.PrintUsecase
 	ProductionUC       *productionapp.ProductionUsecase
-	ProductBlueprintUC *uc.ProductBlueprintUsecase
+	ProductBlueprintUC *pbuc.ProductBlueprintUsecase
 	ShippingAddressUC  *uc.ShippingAddressUsecase
 	TokenUC            *uc.TokenUsecase
 
@@ -376,7 +377,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		nameResolver,
 	)
 
-	productBlueprintUC := uc.NewProductBlueprintUsecase(
+	productBlueprintUC := pbuc.NewProductBlueprintUsecase(
 		productBlueprintRepo,
 		productBlueprintHistoryRepo,
 	)

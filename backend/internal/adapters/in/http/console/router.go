@@ -17,6 +17,9 @@ import (
 	// ✅ TokenBlueprint usecases 移動先
 	tbapp "narratives/internal/application/tokenBlueprint"
 
+	// ✅ ProductBlueprint usecase 移動先
+	pbuc "narratives/internal/application/productBlueprint/usecase"
+
 	usecase "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
@@ -67,7 +70,7 @@ type RouterDeps struct {
 
 	// ★ここだけ型を新パッケージに変更
 	ProductionUC       *productionapp.ProductionUsecase
-	ProductBlueprintUC *usecase.ProductBlueprintUsecase
+	ProductBlueprintUC *pbuc.ProductBlueprintUsecase
 	ShippingAddressUC  *usecase.ShippingAddressUsecase
 
 	// ✅ moved: TokenBlueprint usecases/types

@@ -13,7 +13,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	// ✅ ProductBlueprint usecase に紐づく port 定義の移動先
+	pbuc "narratives/internal/application/productBlueprint/usecase"
+
+	// ✅ ここは CompanyIDFromContext を使っているため残す
 	usecase "narratives/internal/application/usecase"
+
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -37,11 +42,10 @@ func (r *ProductBlueprintRepositoryFS) historyCol(blueprintID string) *firestore
 		Collection("versions")
 }
 
-// Compile-time check: ensure this satisfies usecase.ProductBlueprintRepo
-// および usecase.ProductBlueprintPrintedRepo.
+// Compile-time check: ensure this satisfies pbuc.ProductBlueprintRepo
+// および pbuc.ProductBlueprintPrintedRepo.
 var (
-	_ usecase.ProductBlueprintRepo        = (*ProductBlueprintRepositoryFS)(nil)
-	_ usecase.ProductBlueprintPrintedRepo = (*ProductBlueprintRepositoryFS)(nil)
+	_ pbuc.ProductBlueprintRepo = (*ProductBlueprintRepositoryFS)(nil)
 )
 
 // ========================
@@ -70,14 +74,7 @@ func (r *ProductBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (
 	return docToProductBlueprint(snap)
 }
 
-// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
-//
-// mall.PreviewQuery が要求する ProductBlueprintReader を満たすために追加。
-// ※ どのコレクション/フィールドで紐付けているかが実装・データに依存するため、best-effort で探索します。
-//
-// 探索順:
-// 1) product_blueprints を modelId/variationId 系フィールドで Where 検索
-// 2) models / model_variations の doc(modelID) を見て productBlueprintId 系フィールドを読む
+// GetIDByModelID gets productBlueprintId by modelID (best-effort).
 func (r *ProductBlueprintRepositoryFS) GetIDByModelID(ctx context.Context, modelID string) (string, error) {
 	if r.Client == nil {
 		return "", errors.New("firestore client is nil")
@@ -88,117 +85,49 @@ func (r *ProductBlueprintRepositoryFS) GetIDByModelID(ctx context.Context, model
 		return "", pbdom.ErrNotFound
 	}
 
-	// 1) product_blueprints 側に modelId / variationId を持っているケース
-	//    （スキーマ揺れに耐えるため候補を順に試す）
-	candidateFields := []string{
-		"modelId",
-		"modelID",
-		"variationId",
-		"variationID",
-		"modelVariationId",
-		"model_variation_id",
-		"model_variationId",
+	// product_blueprints 側に modelId を持っているケース
+	iter := r.col().Where("modelId", "==", modelID).Limit(1).Documents(ctx)
+	snap, err := iter.Next()
+	iter.Stop()
+
+	if err == nil && snap != nil {
+		return strings.TrimSpace(snap.Ref.ID), nil
 	}
-
-	for _, f := range candidateFields {
-		iter := r.col().Where(f, "==", modelID).Limit(1).Documents(ctx)
-		snap, err := iter.Next()
-		iter.Stop()
-
-		if err == iterator.Done {
-			continue
-		}
-		if err != nil {
-			// Where に対して "no index" 等が起きる可能性があるが、
-			// 次候補にフォールバックできるように、ここでは即 return しない。
-			// ただし context error はそのまま返す。
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return "", err
-			}
-			continue
-		}
-		if snap != nil {
-			// 基本は docID を blueprintId として扱う
-			return strings.TrimSpace(snap.Ref.ID), nil
+	if err != nil && err != iterator.Done {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return "", err
 		}
 	}
 
-	// 2) models / model_variations 側に productBlueprintId を持っているケース
-	//    docID=modelID で直接取れる前提の best-effort。
-	collections := []string{
-		"models",
-		"model_variations",
-		"modelVariations",
-	}
+	// models / model_variations 側に productBlueprintId を持っているケース（docID=modelID 想定）
+	collections := []string{"models", "model_variations", "modelVariations"}
 
-	readPBIDFromDoc := func(col string) (string, bool, error) {
+	for _, col := range collections {
 		doc, err := r.Client.Collection(col).Doc(modelID).Get(ctx)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				return "", false, nil
+				continue
 			}
-			return "", false, err
-		}
-		data := doc.Data()
-		if data == nil {
-			return "", false, nil
-		}
-
-		getStr := func(keys ...string) string {
-			for _, k := range keys {
-				if v, ok := data[k]; ok && v != nil {
-					if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
-						return strings.TrimSpace(s)
-					}
-				}
-			}
-			return ""
-		}
-
-		pbID := getStr(
-			"productBlueprintId",
-			"product_blueprint_id",
-			"productBlueprintID",
-			"product_blueprintId",
-		)
-		if pbID != "" {
-			return pbID, true, nil
-		}
-
-		// たまにネストしているケース（例: productBlueprint: {id: "..."}）も拾う
-		if v, ok := data["productBlueprint"]; ok && v != nil {
-			if m, ok := v.(map[string]any); ok {
-				if idv, ok := m["id"]; ok {
-					if s, ok := idv.(string); ok && strings.TrimSpace(s) != "" {
-						return strings.TrimSpace(s), true, nil
-					}
-				}
-			}
-		}
-
-		return "", false, nil
-	}
-
-	for _, col := range collections {
-		pbID, ok, err := readPBIDFromDoc(col)
-		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return "", err
 			}
-			// 次へフォールバック
 			continue
 		}
-		if ok && strings.TrimSpace(pbID) != "" {
-			return strings.TrimSpace(pbID), nil
+		data := doc.Data()
+		if data == nil {
+			continue
+		}
+		if v, ok := data["productBlueprintId"]; ok && v != nil {
+			if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+				return strings.TrimSpace(s), nil
+			}
 		}
 	}
 
 	return "", pbdom.ErrNotFound
 }
 
-// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
-// usecase.mintProductBlueprintRepo / productBlueprint.Repository の
-// GetProductNameByID を満たすための薄いラッパ。
+// GetProductNameByID returns productName only.
 func (r *ProductBlueprintRepositoryFS) GetProductNameByID(
 	ctx context.Context,
 	id string,
@@ -222,16 +151,11 @@ func (r *ProductBlueprintRepositoryFS) GetProductNameByID(
 
 	data := snap.Data()
 	if data != nil {
-		// まずはフィールドから直接読む（軽量）
 		if v, ok := data["productName"].(string); ok && strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v), nil
-		}
-		if v, ok := data["product_name"].(string); ok && strings.TrimSpace(v) != "" {
 			return strings.TrimSpace(v), nil
 		}
 	}
 
-	// なければ既存ヘルパでドメイン型に変換してから取り出す
 	pb, err := docToProductBlueprint(snap)
 	if err != nil {
 		return "", err
@@ -243,8 +167,7 @@ func (r *ProductBlueprintRepositoryFS) GetProductNameByID(
 	return name, nil
 }
 
-// ★ 追加: productBlueprintId から Patch 全体を組み立てて返すヘルパ
-// usecase.mintProductBlueprintRepo の GetPatchByID を満たすための実装。
+// GetPatchByID returns patch for mint/read-model usecases.
 func (r *ProductBlueprintRepositoryFS) GetPatchByID(
 	ctx context.Context,
 	id string,
@@ -258,13 +181,11 @@ func (r *ProductBlueprintRepositoryFS) GetPatchByID(
 		return pbdom.Patch{}, pbdom.ErrNotFound
 	}
 
-	// まずは既存の GetByID でライブの ProductBlueprint を取得
 	pb, err := r.GetByID(ctx, id)
 	if err != nil {
 		return pbdom.Patch{}, err
 	}
 
-	// Patch 用にポインタ値を組み立て
 	name := pb.ProductName
 	brandID := pb.BrandID
 	itemType := pb.ItemType
@@ -276,7 +197,7 @@ func (r *ProductBlueprintRepositoryFS) GetPatchByID(
 	productIdTag := pb.ProductIdTag
 	assigneeID := pb.AssigneeID
 
-	patch := pbdom.Patch{
+	return pbdom.Patch{
 		ProductName:      &name,
 		BrandID:          &brandID,
 		ItemType:         &itemType,
@@ -286,9 +207,7 @@ func (r *ProductBlueprintRepositoryFS) GetPatchByID(
 		QualityAssurance: &qa,
 		ProductIdTag:     &productIdTag,
 		AssigneeID:       &assigneeID,
-	}
-
-	return patch, nil
+	}, nil
 }
 
 // Exists reports whether a ProductBlueprint with given ID exists.
@@ -312,8 +231,7 @@ func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (b
 	return true, nil
 }
 
-// ListIDsByCompany は、指定された companyId を持つ product_blueprints の ID 一覧を返します。
-// MintRequest 用のチェーン（companyId → productBlueprintId → production → mintRequest）で利用します。
+// ListIDsByCompany returns blueprint IDs for given companyID.
 func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
 	ctx context.Context,
 	companyID string,
@@ -324,7 +242,6 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
 
 	companyID = strings.TrimSpace(companyID)
 	if companyID == "" {
-		// 空 companyId の場合は空配列を返す（エラーにはしない）
 		return []string{}, nil
 	}
 
@@ -347,8 +264,7 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
 	return ids, nil
 }
 
-// ★ 追加: printed == true だけを、指定 ID 群から取得
-// - ListIDsByCompany → ListPrinted で 1 セットの利用を想定
+// ListPrinted returns printed==true blueprints from ids.
 func (r *ProductBlueprintRepositoryFS) ListPrinted(
 	ctx context.Context,
 	ids []string,
@@ -357,9 +273,8 @@ func (r *ProductBlueprintRepositoryFS) ListPrinted(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	// ID 正規化 & 重複排除
 	uniq := make(map[string]struct{}, len(ids))
-	var cleaned []string
+	cleaned := make([]string, 0, len(ids))
 	for _, id := range ids {
 		id = strings.TrimSpace(id)
 		if id == "" {
@@ -388,7 +303,6 @@ func (r *ProductBlueprintRepositoryFS) ListPrinted(
 		if err != nil {
 			return nil, err
 		}
-
 		if pb.Printed {
 			out = append(out, pb)
 		}
@@ -396,7 +310,7 @@ func (r *ProductBlueprintRepositoryFS) ListPrinted(
 	return out, nil
 }
 
-// ★ 追加: printed: false → true へ更新する（usecase.ProductBlueprintPrintedRepo 用）
+// MarkPrinted sets printed=true and returns updated blueprint.
 func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 	ctx context.Context,
 	id string,
@@ -412,7 +326,6 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 
 	docRef := r.col().Doc(id)
 
-	// 現在状態を取得して printed を確認
 	snap, err := docRef.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -423,23 +336,11 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 
 	data := snap.Data()
 	if data != nil {
-		if v, ok := data["printed"]; ok {
-			switch x := v.(type) {
-			case bool:
-				if x {
-					// すでに printed の場合は Forbidden 扱い（再印刷禁止など）
-					return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
-				}
-			case string:
-				// 旧データ互換: "printed" を true 相当とみなす
-				if strings.TrimSpace(x) == "printed" {
-					return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
-				}
-			}
+		if v, ok := data["printed"].(bool); ok && v {
+			return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
 		}
 	}
 
-	// printed = true, updatedAt = now をセット
 	now := time.Now().UTC()
 	if _, err := docRef.Update(ctx, []firestore.Update{
 		{Path: "printed", Value: true},
@@ -451,7 +352,6 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 		return pbdom.ProductBlueprint{}, err
 	}
 
-	// 再取得してドメイン型へ変換
 	snap, err = docRef.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -463,8 +363,7 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 	return docToProductBlueprint(snap)
 }
 
-// List returns all ProductBlueprints (optionally filtered by companyId in context).
-// （簡易版: フィルタ/ソート/ページングは usecase 側でラップして利用）
+// List returns all ProductBlueprints, optionally filtered by companyId in context.
 func (r *ProductBlueprintRepositoryFS) List(ctx context.Context) ([]pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -472,8 +371,6 @@ func (r *ProductBlueprintRepositoryFS) List(ctx context.Context) ([]pbdom.Produc
 
 	q := r.col().Query
 
-	// usecase.CompanyIDFromContext で context から companyId を取得し、
-	// 指定があればテナント単位で絞り込む
 	if cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx)); cid != "" {
 		q = q.Where("companyId", "==", cid)
 	}
@@ -494,8 +391,7 @@ func (r *ProductBlueprintRepositoryFS) List(ctx context.Context) ([]pbdom.Produc
 	return out, nil
 }
 
-// ListDeleted returns only product_blueprints whose deletedAt is NOT null
-// (i.e. logically deleted ones), optionally filtered by companyId in context.
+// ListDeleted returns only logically deleted blueprints (deletedAt != null), optionally filtered by companyId in context.
 func (r *ProductBlueprintRepositoryFS) ListDeleted(ctx context.Context) ([]pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -503,13 +399,10 @@ func (r *ProductBlueprintRepositoryFS) ListDeleted(ctx context.Context) ([]pbdom
 
 	q := r.col().Query
 
-	// テナントスコープ: companyId が context に入っていれば絞り込む
 	if cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx)); cid != "" {
 		q = q.Where("companyId", "==", cid)
 	}
 
-	// deletedAt が存在して 0 以外の Timestamp が入っているものだけを取得
-	// （フィールド未定義のドキュメントはこの range 条件にマッチしない）
 	q = q.Where("deletedAt", ">", time.Time{})
 
 	snaps, err := q.Documents(ctx).GetAll()
@@ -529,8 +422,6 @@ func (r *ProductBlueprintRepositoryFS) ListDeleted(ctx context.Context) ([]pbdom
 }
 
 // Create inserts a new ProductBlueprint (no upsert).
-// If ID is empty, it is auto-generated.
-// If CreatedAt/UpdatedAt are zero, they are set to now (UTC).
 func (r *ProductBlueprintRepositoryFS) Create(
 	ctx context.Context,
 	pb pbdom.ProductBlueprint,
@@ -582,9 +473,6 @@ func (r *ProductBlueprintRepositoryFS) Create(
 }
 
 // Save upserts a ProductBlueprint.
-// If ID is empty, a new one is generated.
-// If CreatedAt is zero, it is set to now (UTC).
-// UpdatedAt is always set to now (UTC) when saving.
 func (r *ProductBlueprintRepositoryFS) Save(
 	ctx context.Context,
 	pb pbdom.ProductBlueprint,
@@ -617,7 +505,6 @@ func (r *ProductBlueprintRepositoryFS) Save(
 	}
 	data["id"] = pb.ID
 
-	// 完全上書き（MergeAll は使わない）
 	if _, err := docRef.Set(ctx, data); err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
@@ -629,9 +516,7 @@ func (r *ProductBlueprintRepositoryFS) Save(
 	return docToProductBlueprint(snap)
 }
 
-// Delete removes a ProductBlueprint by ID (物理削除用).
-// 通常の画面操作からは usecase.ProductBlueprintUsecase.Delete → SoftDeleteWithModels を利用し、
-// この Delete は 90日後のクリーンアップジョブなどから直接呼ぶ想定。
+// Delete removes a ProductBlueprint by ID (physical delete).
 func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -652,12 +537,7 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) er
 	return nil
 }
 
-// SoftDeleteWithModels:
-//   - 現在は product_blueprints/{id} に deletedAt を立てて論理削除するだけ。
-//   - models コレクションのドキュメントには一切変更を加えない。
-//
-// ※ 現在はユースケース側で SoftDelete + ExpireAt 設定を行うため、
-// このメソッドは将来的に廃止する方向のレガシー実装扱い。
+// SoftDeleteWithModels sets deletedAt only.
 func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -670,7 +550,6 @@ func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context,
 
 	now := time.Now().UTC()
 
-	// まず product_blueprints/{id} が存在するかチェック
 	pbRef := r.col().Doc(id)
 	if _, err := pbRef.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -679,10 +558,8 @@ func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context,
 		return err
 	}
 
-	// productBlueprint を論理削除（models 側には何もしない）
 	if _, err := pbRef.Update(ctx, []firestore.Update{
 		{Path: "deletedAt", Value: now},
-		// DeletedBy は context からのユーザーIDなどを後で組み込む想定
 	}); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return pbdom.ErrNotFound
@@ -693,9 +570,7 @@ func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context,
 	return nil
 }
 
-// RestoreWithModels:
-//   - 論理削除された product_blueprints/{id} の deletedAt / deletedBy をクリアして復旧。
-//   - models コレクションのドキュメントには一切変更を加えない。
+// RestoreWithModels clears deletedAt/deletedBy.
 func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -714,7 +589,6 @@ func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id
 		return err
 	}
 
-	// productBlueprint の論理削除を解除（models 側には何もしない）
 	if _, err := pbRef.Update(ctx, []firestore.Update{
 		{Path: "deletedAt", Value: firestore.Delete},
 		{Path: "deletedBy", Value: firestore.Delete},
@@ -731,8 +605,6 @@ func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id
 // History (snapshot, versioned)
 // ========================
 
-// SaveHistorySnapshot は product_blueprints_history/{blueprintId}/versions/{version}
-// に、その時点の ProductBlueprint のスナップショットを保存する。
 func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
 	ctx context.Context,
 	blueprintID string,
@@ -747,12 +619,10 @@ func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
 		return pbdom.ErrInvalidID
 	}
 
-	// Blueprint.ID が空なら補正、異なる場合も blueprintID を優先
 	if strings.TrimSpace(h.Blueprint.ID) == "" || h.Blueprint.ID != blueprintID {
 		h.Blueprint.ID = blueprintID
 	}
 
-	// UpdatedAt/UpdatedBy（履歴メタ）は Blueprint 側になければ HistoryRecord 側から補完
 	if h.UpdatedAt.IsZero() {
 		h.UpdatedAt = h.Blueprint.UpdatedAt
 	}
@@ -760,7 +630,6 @@ func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
 		h.UpdatedAt = time.Now().UTC()
 	}
 
-	// ドキュメント ID は version 番号文字列
 	docID := fmt.Sprintf("%d", h.Version)
 	docRef := r.historyCol(blueprintID).Doc(docID)
 
@@ -783,8 +652,6 @@ func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
 	return nil
 }
 
-// ListHistory は blueprintID に紐づく全バージョンの履歴を取得する。
-// 基本的には version の降順（新しい順）で返す。
 func (r *ProductBlueprintRepositoryFS) ListHistory(
 	ctx context.Context,
 	blueprintID string,
@@ -816,7 +683,6 @@ func (r *ProductBlueprintRepositoryFS) ListHistory(
 			return nil, err
 		}
 
-		// version の取り出し
 		var version int64
 		if v, ok := data["version"]; ok {
 			switch x := v.(type) {
@@ -829,7 +695,6 @@ func (r *ProductBlueprintRepositoryFS) ListHistory(
 			}
 		}
 
-		// UpdatedAt/UpdatedBy（履歴メタ）
 		var histUpdatedAt time.Time
 		if v, ok := data["historyUpdatedAt"].(time.Time); ok && !v.IsZero() {
 			histUpdatedAt = v.UTC()
@@ -855,7 +720,6 @@ func (r *ProductBlueprintRepositoryFS) ListHistory(
 	return out, nil
 }
 
-// GetHistoryByVersion は特定バージョンの履歴を 1 件取得する。
 func (r *ProductBlueprintRepositoryFS) GetHistoryByVersion(
 	ctx context.Context,
 	blueprintID string,
@@ -889,7 +753,6 @@ func (r *ProductBlueprintRepositoryFS) GetHistoryByVersion(
 		return pbdom.HistoryRecord{}, err
 	}
 
-	// version の取り出し（念のため doc からも読んでおく）
 	var ver int64
 	if v, ok := data["version"]; ok {
 		switch x := v.(type) {
@@ -938,117 +801,97 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		return pbdom.ProductBlueprint{}, fmt.Errorf("empty product_blueprints document: %s", doc.Ref.ID)
 	}
 
-	getStr := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				return strings.TrimSpace(v)
-			}
+	getStr := func(key string) string {
+		if v, ok := data[key].(string); ok {
+			return strings.TrimSpace(v)
 		}
 		return ""
 	}
-	getStrPtr := func(keys ...string) *string {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				s := strings.TrimSpace(v)
-				if s != "" {
-					return &s
-				}
+	getStrPtr := func(key string) *string {
+		if v, ok := data[key].(string); ok {
+			s := strings.TrimSpace(v)
+			if s != "" {
+				return &s
 			}
 		}
 		return nil
 	}
-	getTimeVal := func(keys ...string) time.Time {
-		for _, k := range keys {
-			if v, ok := data[k].(time.Time); ok && !v.IsZero() {
-				return v.UTC()
-			}
+	getTimeVal := func(key string) time.Time {
+		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
+			return v.UTC()
 		}
 		return time.Time{}
 	}
-
-	getStringSlice := func(keys ...string) []string {
-		for _, key := range keys {
-			raw, ok := data[key]
-			if !ok || raw == nil {
-				continue
-			}
-			switch vv := raw.(type) {
-			case []interface{}:
-				out := make([]string, 0, len(vv))
-				for _, x := range vv {
-					if s, ok := x.(string); ok {
-						s = strings.TrimSpace(s)
-						if s != "" {
-							out = append(out, s)
-						}
+	getStringSlice := func(key string) []string {
+		raw, ok := data[key]
+		if !ok || raw == nil {
+			return nil
+		}
+		switch vv := raw.(type) {
+		case []interface{}:
+			out := make([]string, 0, len(vv))
+			for _, x := range vv {
+				if s, ok := x.(string); ok {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						out = append(out, s)
 					}
 				}
-				return dedupTrimStrings(out)
-			case []string:
-				return dedupTrimStrings(vv)
 			}
+			return dedupTrimStrings(out)
+		case []string:
+			return dedupTrimStrings(vv)
+		default:
+			return nil
 		}
-		return nil
 	}
 
-	qas := getStringSlice("qualityAssurance", "quality_assurance")
-	tagTypeStr := getStr("productIdTagType", "product_id_tag_type")
-	itemTypeStr := getStr("itemType", "item_type")
-
-	// printed は bool（新）/ string（旧データ）両対応で読み取る
-	var printedBool bool
-	if v, ok := data["printed"]; ok {
-		switch x := v.(type) {
-		case bool:
-			printedBool = x
-		case string:
-			s := strings.TrimSpace(x)
-			// 旧データ: "printed" を true、それ以外/空は false とみなす
-			printedBool = (s == "printed")
-		}
+	// printed は bool のみ
+	printed := false
+	if v, ok := data["printed"].(bool); ok {
+		printed = v
 	}
 
 	var deletedAtPtr *time.Time
-	if t := getTimeVal("deletedAt", "deleted_at"); !t.IsZero() {
+	if t := getTimeVal("deletedAt"); !t.IsZero() {
 		deletedAtPtr = &t
 	}
 
-	// ExpireAt（TTL 用フィールド）も Firestore から読み込む
 	var expireAtPtr *time.Time
-	if t := getTimeVal("expireAt", "expire_at"); !t.IsZero() {
+	if t := getTimeVal("expireAt"); !t.IsZero() {
 		expireAtPtr = &t
 	}
 
-	// ID はフィールド "id" / "blueprintId" があればそれを優先し、なければ doc.Ref.ID
-	id := getStr("id", "blueprintId", "blueprint_id")
-	if id == "" {
+	id := ""
+	if v, ok := data["id"].(string); ok && strings.TrimSpace(v) != "" {
+		id = strings.TrimSpace(v)
+	} else {
 		id = doc.Ref.ID
 	}
 
 	pb := pbdom.ProductBlueprint{
 		ID:          id,
-		ProductName: getStr("productName", "product_name"),
-		BrandID:     getStr("brandId", "brand_id"),
-		ItemType:    pbdom.ItemType(itemTypeStr),
+		ProductName: getStr("productName"),
+		BrandID:     getStr("brandId"),
+		ItemType:    pbdom.ItemType(getStr("itemType")),
 		Fit:         getStr("fit"),
 		Material:    getStr("material"),
 		Weight:      getFloat64(data["weight"]),
 
-		QualityAssurance: dedupTrimStrings(qas),
+		QualityAssurance: dedupTrimStrings(getStringSlice("qualityAssurance")),
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: pbdom.ProductIDTagType(tagTypeStr),
+			Type: pbdom.ProductIDTagType(getStr("productIdTagType")),
 		},
-		CompanyID:  getStr("companyId", "company_id"),
-		AssigneeID: getStr("assigneeId", "assignee_id"),
+		CompanyID:  getStr("companyId"),
+		AssigneeID: getStr("assigneeId"),
 
-		// New printed フィールド（bool）
-		Printed: printedBool,
+		Printed: printed,
 
-		CreatedBy: getStrPtr("createdBy", "created_by"),
-		CreatedAt: getTimeVal("createdAt", "created_at"),
-		UpdatedBy: getStrPtr("updatedBy", "updated_by"),
-		UpdatedAt: getTimeVal("updatedAt", "updated_at"),
-		DeletedBy: getStrPtr("deletedBy", "deleted_by"),
+		CreatedBy: getStrPtr("createdBy"),
+		CreatedAt: getTimeVal("createdAt"),
+		UpdatedBy: getStrPtr("updatedBy"),
+		UpdatedAt: getTimeVal("updatedAt"),
+		DeletedBy: getStrPtr("deletedBy"),
 		DeletedAt: deletedAtPtr,
 		ExpireAt:  expireAtPtr,
 	}
@@ -1097,7 +940,6 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 			m["deletedBy"] = s
 		}
 	}
-	// ExpireAt も Firestore に書き出す（TTL 対象フィールド）
 	if v.ExpireAt != nil && !v.ExpireAt.IsZero() {
 		m["expireAt"] = v.ExpireAt.UTC()
 	}

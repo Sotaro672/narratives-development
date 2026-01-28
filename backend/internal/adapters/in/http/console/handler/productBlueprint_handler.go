@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	usecase "narratives/internal/application/usecase"
+	pbuc "narratives/internal/application/productBlueprint/usecase"
 	brand "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
@@ -16,13 +16,13 @@ import (
 
 // ProductBlueprintHandler は ProductBlueprint 用の HTTP ハンドラです。
 type ProductBlueprintHandler struct {
-	uc        *usecase.ProductBlueprintUsecase
+	uc        *pbuc.ProductBlueprintUsecase
 	brandSvc  *brand.Service
 	memberSvc *memdom.Service
 }
 
 func NewProductBlueprintHandler(
-	uc *usecase.ProductBlueprintUsecase,
+	uc *pbuc.ProductBlueprintUsecase,
 	brandSvc *brand.Service,
 	memberSvc *memdom.Service,
 ) http.Handler {
