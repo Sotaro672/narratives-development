@@ -14,6 +14,7 @@ import (
 	// ★ InspectionUsecase 移動先
 	inspectionapp "narratives/internal/application/inspection"
 
+	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
 	// ✅ TokenBlueprint usecases 移動先
 	tbapp "narratives/internal/application/tokenBlueprint"
 
@@ -321,7 +322,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Product Blueprints
 	// ================================
 	if deps.ProductBlueprintUC != nil {
-		pbH := consoleHandler.NewProductBlueprintHandler(
+		pbH := productBlueprintHandler.NewProductBlueprintHandler(
 			deps.ProductBlueprintUC,
 			deps.BrandService,
 			deps.MemberService,

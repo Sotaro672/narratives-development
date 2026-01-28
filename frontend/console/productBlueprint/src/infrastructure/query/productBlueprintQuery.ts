@@ -1,31 +1,37 @@
 // frontend/console/productBlueprint/src/infrastructure/query/productBlueprintQuery.ts
 
 import { listProductBlueprintsHTTP } from "../repository/productBlueprintRepositoryHTTP";
-import { fetchBrandNameById } from "../../../../brand/src/infrastructure/http/brandRepositoryHTTP";
-import { fetchMemberDisplayNameById } from "../../../../member/src/infrastructure/http/memberRepositoryHTTP";
 
 export type ProductBlueprintManagementRow = {
   id: string;
   productName: string;
+
+  /**
+   * backend 側で name 解決済みを返す前提
+   */
   brandName: string;
   assigneeName: string;
+
   productIdTag: string;
 
   /**
-   * 修正案B: backend は ISO8601/RFC3339 の日時文字列を返す。
+   * backend は ISO8601/RFC3339 の日時文字列を返す。
    * この層では表示整形を行わず、raw の日時文字列を保持して presentation に渡す。
    */
   createdAt: string; // ISO8601/RFC3339 datetime string
   updatedAt: string; // ISO8601/RFC3339 datetime string
 };
 
-// backend /product-blueprints のレスポンス想定（修正案B固定）
+// backend /product-blueprints のレスポンス想定（backend 側で name 解決済み）
 type RawProductBlueprintListRow = {
   id?: string;
   productName?: string;
 
-  brandId?: string;
-  assigneeId?: string;
+  /**
+   * backend 側で解決済みを返す（フロントでの brandId/assigneeId 解決は不要）
+   */
+  brandName?: string | null;
+  assigneeName?: string | null;
 
   // backend の JSON は "productIdTag": "QRコード" などの文字列を直接返す想定
   productIdTag?: string | null;
@@ -33,8 +39,6 @@ type RawProductBlueprintListRow = {
   // backend は createdAt/updatedAt を ISO8601/RFC3339 の文字列で返す前提
   createdAt?: string | null;
   updatedAt?: string | null;
-
-  // deletedAt はバックエンド側でフィルタされるため、ここでは参照しない
 };
 
 function s(v: unknown): string {
@@ -43,37 +47,25 @@ function s(v: unknown): string {
 
 /**
  * backend から商品設計一覧を取得し、
- * - brandId → brandName 変換
- * - assigneeId → assigneeName 変換
- * を行って ProductBlueprintManagementRow[] を構築する。
- *
- * ※ 論理削除済みの除外は backend (Usecase.List) 側で実施済み。
+ * backend 側で解決済みの
+ * - brandName
+ * - assigneeName
+ * をそのまま UI Row にマッピングする。
  *
  * 修正案B:
  * - createdAt/updatedAt の「表示整形」はこの層で行わない（時刻情報を保持）
  */
 export async function fetchProductBlueprintManagementRows(): Promise<ProductBlueprintManagementRow[]> {
-  const list = await listProductBlueprintsHTTP();
+  const list = (await listProductBlueprintsHTTP()) as RawProductBlueprintListRow[];
 
   const uiRows: ProductBlueprintManagementRow[] = [];
 
-  for (const pb of list as RawProductBlueprintListRow[]) {
-    // ブランド名変換
-    const brandId = s(pb.brandId);
-    const brandName = brandId ? await fetchBrandNameById(brandId) : "";
+  for (const pb of list) {
+    const brandName = s(pb.brandName);
+    const assigneeName = s(pb.assigneeName) || "-";
 
-    // 担当者名変換 (assigneeId -> displayName)
-    const assigneeId = s(pb.assigneeId);
-    let assigneeName = "-";
-    if (assigneeId) {
-      const displayName = await fetchMemberDisplayNameById(assigneeId);
-      assigneeName = s(displayName) || assigneeId;
-    }
-
-    // ProductIDTag（そのまま表示。空なら "-"）
     const productIdTag = s(pb.productIdTag) || "-";
 
-    // 日時は raw のまま保持（ISO8601/RFC3339 前提）
     const createdAtRaw = s(pb.createdAt);
     const updatedAtRaw = s(pb.updatedAt);
 

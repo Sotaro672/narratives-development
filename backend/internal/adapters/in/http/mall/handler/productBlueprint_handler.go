@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/mall/handler/productBlueprint_handler.go
 package mallHandler
 
 import (

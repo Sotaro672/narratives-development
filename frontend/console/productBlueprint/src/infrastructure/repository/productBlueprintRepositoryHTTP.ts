@@ -75,27 +75,6 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
 }
 
 // -----------------------------------------------------------
-// GET: 商品設計 一覧（printed == notYet）
-//   - backend: GET /product-blueprints/not-yet-printed
-// -----------------------------------------------------------
-export async function listNotYetPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
-  const headers = await getAuthHeadersOrThrow();
-
-  const res = await fetch(`${API_BASE}/product-blueprints/not-yet-printed`, {
-    method: "GET",
-    headers,
-  });
-
-  if (!res.ok) {
-    throw new Error(
-      `未印刷の商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）`,
-    );
-  }
-
-  return (await res.json()) as ProductBlueprintDetailResponse[];
-}
-
-// -----------------------------------------------------------
 // GET: 商品設計 一覧（printed == printed）
 //   - backend: GET /product-blueprints/printed
 // -----------------------------------------------------------
