@@ -12,7 +12,7 @@ import type { CreateProductBlueprintParams } from "../../application/productBlue
 import type {
   UpdateProductBlueprintParams,
   ProductBlueprintDetailResponse,
-} from "../../infrastructure/api/productBlueprintDetailApi";
+} from "../api/productBlueprintDetailApi";
 
 // -----------------------------------------------------------
 // POST: 商品設計 作成
@@ -34,8 +34,7 @@ export async function createProductBlueprintHTTP(
     companyId: params.companyId,
     assigneeId: params.assigneeId ?? null,
     createdBy: params.createdBy ?? null,
-    // printed は backend 側でデフォルト "notYet" を設定する想定なので、
-    // フロントからは明示的には渡さない（必要になればここに追加）
+    // printed は backend 側で false を設定する想定なので送らない
   };
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
@@ -50,7 +49,6 @@ export async function createProductBlueprintHTTP(
     );
   }
 
-  // ★ 詳細レスポンスとして返す（printed を含む想定）
   return (await res.json()) as ProductBlueprintDetailResponse;
 }
 
@@ -75,7 +73,7 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
 }
 
 // -----------------------------------------------------------
-// GET: 商品設計 一覧（printed == printed）
+// GET: 商品設計 一覧（printed == true のみ）
 //   - backend: GET /product-blueprints/printed
 // -----------------------------------------------------------
 export async function listPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
@@ -97,8 +95,7 @@ export async function listPrintedProductBlueprintsHTTP(): Promise<ProductBluepri
 
 // -----------------------------------------------------------
 // GET: 商品設計 一覧（論理削除済みのみ）
-//   - backend 側の GET /product-blueprints/deleted を想定
-//   - 返却型は Deleted 用 service 側でキャストして利用する
+//   - backend: GET /product-blueprints/deleted
 // -----------------------------------------------------------
 export async function listDeletedProductBlueprintsHTTP(): Promise<any[]> {
   const headers = await getAuthHeadersOrThrow();
@@ -118,21 +115,45 @@ export async function listDeletedProductBlueprintsHTTP(): Promise<any[]> {
 }
 
 // -----------------------------------------------------------
-// PUT: 商品設計 更新
+// PATCH: 商品設計 更新（DTO を正にして送る）
+//   - backend: PATCH /product-blueprints/{id}
+//   - ✅ variations/colors 等は送らない（別サービスで更新）
+//   - ✅ productIdTagType は productIdTag に変換して送る
 // -----------------------------------------------------------
 export async function updateProductBlueprintHTTP(
   id: string,
   params: UpdateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
-  const headers = await getAuthJsonHeadersOrThrow();
+  const trimmedId = String(id ?? "").trim();
+  if (!trimmedId) {
+    throw new Error("updateProductBlueprintHTTP: id が空です");
+  }
 
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
+  const headers = await getAuthJsonHeadersOrThrow();
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(trimmedId)}`;
+
+  const payload = {
+    productName: params.productName,
+    brandId: params.brandId,
+    itemType: params.itemType,
+    fit: params.fit,
+    material: params.material,
+    weight: params.weight,
+    qualityAssurance: params.qualityAssurance ?? [],
+    productIdTag: {
+      type: params.productIdTagType ?? "",
+    },
+    companyId: params.companyId,
+    assigneeId: params.assigneeId,
+    updatedBy: params.updatedBy ?? null,
+    // printed は更新させない（印刷済み化は専用 endpoint）
+    // variations / colors / sizes / modelNumbers も送らない
+  };
 
   const res = await fetch(url, {
-    method: "PUT",
+    method: "PATCH",
     headers,
-    // params 内に printed があれば、そのまま backend に渡される
-    body: JSON.stringify(params),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -142,18 +163,17 @@ export async function updateProductBlueprintHTTP(
     );
   }
 
-  // ★ 返り値を ProductBlueprintDetailResponse に統一（printed を含む想定）
   return (await res.json()) as ProductBlueprintDetailResponse;
 }
 
 // -----------------------------------------------------------
-// POST: 商品設計 printed フラグ更新（notYet → printed）
+// POST: 商品設計 printed フラグ更新（false → true）
 //   - backend: POST /product-blueprints/{id}/mark-printed
 // -----------------------------------------------------------
 export async function markProductBlueprintPrintedHTTP(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  const trimmed = id?.trim();
+  const trimmed = String(id ?? "").trim();
   if (!trimmed) {
     throw new Error("markProductBlueprintPrintedHTTP: id が空です");
   }
@@ -175,17 +195,15 @@ export async function markProductBlueprintPrintedHTTP(
     );
   }
 
-  // updated な ProductBlueprint（printed: "printed" を含む）を受け取る想定
   return (await res.json()) as ProductBlueprintDetailResponse;
 }
 
 // -----------------------------------------------------------
 // POST: 商品設計 復旧（deletedAt / deletedBy / expireAt をクリア）
-//   - backend 側の POST /product-blueprints/{id}/restore を想定
-//   - 戻り値は特に使わない前提なので void で定義
+//   - backend: POST /product-blueprints/{id}/restore
 // -----------------------------------------------------------
 export async function restoreProductBlueprintHTTP(id: string): Promise<void> {
-  const trimmed = id?.trim();
+  const trimmed = String(id ?? "").trim();
   if (!trimmed) {
     throw new Error("restoreProductBlueprintHTTP: id が空です");
   }

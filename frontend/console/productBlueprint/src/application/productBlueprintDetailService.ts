@@ -9,7 +9,6 @@ import {
   type ProductBlueprintDetailResponse,
   type UpdateProductBlueprintParams,
   type NewModelVariationMeasurements,
-  type NewModelVariationPayload,
 } from "../infrastructure/api/productBlueprintDetailApi";
 
 import { authorizedFetch } from "../infrastructure/httpClient/authorizedFetch";
@@ -74,32 +73,6 @@ function buildMeasurementsFromSizeRowForUpdate(
   });
 
   return Object.keys(result).length > 0 ? result : undefined;
-}
-
-// -----------------------------------------
-// variations payload builder（新規作成向け）
-// -----------------------------------------
-function toNewModelVariationPayload(
-  itemType: ItemType,
-  sizeRow: SizeRow,
-  base: {
-    sizeLabel: string;
-    color: string;
-    modelNumber: string;
-    createdBy: string;
-    rgb?: number;
-  },
-): NewModelVariationPayload {
-  const measurements = buildMeasurements(itemType, sizeRow);
-
-  return {
-    sizeLabel: base.sizeLabel,
-    color: base.color,
-    modelNumber: base.modelNumber,
-    createdBy: base.createdBy,
-    rgb: base.rgb,
-    measurements,
-  };
 }
 
 // -----------------------------------------

@@ -41,6 +41,7 @@ export type ModelNumberRow = {
 export type ProductBlueprintDetailResponse = {
   id: string;
   productName: string;
+
   brandId: string;
   itemType: string;
   fit: string;
@@ -54,6 +55,14 @@ export type ProductBlueprintDetailResponse = {
 
   companyId?: string;
   assigneeId?: string;
+
+  /** ✅ printed を backend 正として受け取る（bool） */
+  printed?: boolean | null;
+
+  /** ✅ name 解決済み（backend 正） */
+  brandName?: string | null;
+  assigneeName?: string | null;
+  createdByName?: string | null;
 
   createdBy?: string | null;
   createdAt?: string | null;
@@ -75,7 +84,7 @@ export type ProductBlueprintDetailResponse = {
   }>;
 };
 
-// 更新用パラメータ
+// 更新用パラメータ（application/service が利用する型）
 export type UpdateProductBlueprintParams = {
   id: string;
 
@@ -87,11 +96,13 @@ export type UpdateProductBlueprintParams = {
   weight: number;
   qualityAssurance: string[];
 
+  /** ✅ backend DTO に合わせ、repository 側で productIdTag に変換して送る */
   productIdTagType: string | null;
 
   companyId: string;
   assigneeId: string;
 
+  /** variations / colors は ProductBlueprint 更新 endpoint に送らない（別系で更新） */
   colors: string[];
   colorRgbMap?: Record<string, string>;
 
@@ -142,48 +153,8 @@ export async function getProductBlueprintDetailApi(
   return json;
 }
 
-// ------------------------------------------------------
-// PATCH /product-blueprints/{id}  更新
-// ------------------------------------------------------
-export async function updateProductBlueprintApi(
-  params: UpdateProductBlueprintParams,
-  variations: NewModelVariationPayload[],
-): Promise<ProductBlueprintDetailResponse> {
-  const headers = {
-    ...(await getAuthHeaders()),
-    "Content-Type": "application/json",
-  };
-
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(params.id)}`;
-
-  const payload = {
-    productName: params.productName,
-    brandId: params.brandId,
-    itemType: params.itemType,
-    fit: params.fit,
-    material: params.material,
-    weight: params.weight,
-    qualityAssurance: params.qualityAssurance,
-    productIdTagType: params.productIdTagType,
-    companyId: params.companyId,
-    assigneeId: params.assigneeId,
-    colors: params.colors,
-    colorRgbMap: params.colorRgbMap ?? {},
-    variations,
-  };
-
-  console.log("[productBlueprintDetailApi] PATCH payload:", {
-    url,
-    payload,
-  });
-
-  const json = (await fetchJSON(url, {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify(payload),
-  })) as ProductBlueprintDetailResponse;
-
-  console.log("[productBlueprintDetailApi] update response:", json);
-
-  return json;
-}
+/**
+ * ✅ UPDATE は repository に集約する方針のため、
+ * updateProductBlueprintApi は削除しました。
+ * - update は productBlueprintRepositoryHTTP.updateProductBlueprintHTTP を利用してください。
+ */
