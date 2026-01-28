@@ -43,6 +43,9 @@ export default function ProductBlueprintDetail() {
     updater,
     updatedAt,
 
+    // ✅ 追加: printed:true の場合は編集ボタンを非表示にする
+    printed,
+
     onBack,
 
     onSave,
@@ -95,13 +98,23 @@ export default function ProductBlueprintDetail() {
     onDelete();
   };
 
+  // ✅ printed:true の場合は「ヘッダーの編集ボタン」を出さない
+  //    さらに安全のため、印刷済みなら editMode を強制的に false に戻す
+  React.useEffect(() => {
+    if (printed && editMode) {
+      setEditMode(false);
+    }
+  }, [printed, editMode]);
+
+  const canEdit = !printed;
+
   return (
     <PageStyle
       layout="grid-2"
       title={pageTitle}
       onBack={onBack}
       onSave={editMode ? handleSave : undefined}
-      onEdit={!editMode ? () => setEditMode(true) : undefined}
+      onEdit={!editMode && canEdit ? () => setEditMode(true) : undefined}
       onDelete={editMode ? handleDelete : undefined}
       onCancel={editMode ? () => setEditMode(false) : undefined}
     >

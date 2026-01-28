@@ -7,7 +7,6 @@ import {
   CardTitle,
   CardContent,
 } from "../../../../shell/src/shared/ui";
-import { Badge } from "../../../../shell/src/shared/ui/badge";
 import { Button } from "../../../../shell/src/shared/ui/button";
 import "../styles/model.css";
 import "../../../../shell/src/shared/ui/card.css";
@@ -157,14 +156,8 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                             </div>
                           </TableCell>
 
-                          <TableCell>
-                            <Badge
-                              className="vc__chip inline-flex items-center gap-1.5 px-2 py-1"
-                              variant="secondary"
-                            >
-                              {c}
-                            </Badge>
-                          </TableCell>
+                          {/* ✅ Badge(pill) を廃止して文字列表示に変更 */}
+                          <TableCell>{c}</TableCell>
 
                           {isEdit && (
                             <TableCell className="text-right">

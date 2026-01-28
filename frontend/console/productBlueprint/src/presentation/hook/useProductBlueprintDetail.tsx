@@ -70,6 +70,9 @@ export interface UseProductBlueprintDetailResult {
   updater: string;
   updatedAt: string;
 
+  /** ✅ 印刷済みかどうか（printed:true の場合は編集ボタンを非表示にする） */
+  printed: boolean;
+
   onBack: () => void;
   onSave: () => void;
   /** 論理削除（削除ボタン用） */
@@ -132,6 +135,9 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [createdAt, setCreatedAt] = React.useState("");
   const [updater, setUpdater] = React.useState("");
   const [updatedAt, setUpdatedAt] = React.useState("");
+
+  // ✅ printed:true の場合にヘッダーの編集ボタンを非表示にするため保持
+  const [printed, setPrinted] = React.useState<boolean>(false);
 
   // ★ サーバに渡すための ID を保持
   const [brandId, setBrandId] = React.useState<string>("");
@@ -207,6 +213,9 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         setPageTitle(detail.productName ?? productBlueprintIdResolved);
         setProductName(detail.productName ?? "");
+
+        // ✅ printed（dto を正: camelCase の printed を読む）
+        setPrinted(Boolean((detail as any).printed));
 
         // brandId / assigneeId を state に保持
         setBrandId(detail.brandId ?? "");
@@ -343,6 +352,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           colorRgbMap,
           brandId,
           assigneeId,
+          printed,
         });
 
         await updateProductBlueprint({
@@ -385,6 +395,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     assigneeId,
     colors,
     getCode,
+    printed,
   ]);
 
   // ---------------------------------
@@ -469,6 +480,8 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     createdAt,
     updater,
     updatedAt,
+
+    printed,
 
     onBack,
     onSave,

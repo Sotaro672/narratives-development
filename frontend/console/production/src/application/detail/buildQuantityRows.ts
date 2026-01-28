@@ -1,43 +1,31 @@
-//frontend\console\production\src\application\detail\buildQuantityRows.ts
+// frontend/console/production/src/application/detail/buildQuantityRows.ts
 import type { ModelVariationSummary, ProductionQuantityRow } from "./types";
 
 /* ---------------------------------------------------------
  * モデル別 生産数行を生成（pure function）
  * --------------------------------------------------------- */
 export function buildQuantityRowsFromModels(
-  models: any[],
+  models: { modelId: string; quantity: number; modelNumber?: string; size?: string; color?: string; rgb?: number }[],
   modelIndex: Record<string, ModelVariationSummary>,
 ): ProductionQuantityRow[] {
   const safeModels = Array.isArray(models) ? models : [];
 
-  const rows: ProductionQuantityRow[] = safeModels.map((m: any, index) => {
-    // ✅ camelCase / PascalCase 両対応で modelId を解決する
-    const rawModelId =
-      m.modelId ??
-      m.ModelID ??
-      m.modelID ??
-      m.model_id ??
-      m.id ??
-      m.ID ??
-      null;
+  const rows: ProductionQuantityRow[] = safeModels.map((m, index) => {
+    // dto を正: modelId は必ず camelCase で来る前提
+    const id = (m.modelId ?? "").trim() || String(index);
 
-    // modelId が取れない場合でも UI が壊れないように index fallback
-    const id = rawModelId ? String(rawModelId) : String(index);
-
-    // ✅ camelCase / PascalCase 両対応で quantity を解決する
-    const quantityRaw = m.quantity ?? m.Quantity ?? 0;
-
-    const quantity = Number.isFinite(Number(quantityRaw))
-      ? Math.max(0, Math.floor(Number(quantityRaw)))
+    // dto を正: quantity は number 前提だが、UI 安全のため clamp のみ実施
+    const quantity = Number.isFinite(m.quantity)
+      ? Math.max(0, Math.floor(m.quantity))
       : 0;
 
-    // ✅ backend の詳細 DTO が modelNumber/color/size/rgb を返している場合はそれを優先する
-    const modelNumberFromModel = m.modelNumber ?? m.ModelNumber ?? "";
-    const sizeFromModel = m.size ?? m.Size ?? "";
-    const colorFromModel = m.color ?? m.Color ?? "";
-    const rgbFromModel = m.rgb ?? m.RGB ?? null;
+    // dto を正: 詳細 DTO が modelNumber/color/size/rgb を返す場合はそれを優先
+    const modelNumberFromModel = (m.modelNumber ?? "").trim();
+    const sizeFromModel = (m.size ?? "").trim();
+    const colorFromModel = (m.color ?? "").trim();
+    const rgbFromModel = typeof m.rgb === "number" ? m.rgb : undefined;
 
-    // ✅ 取れなかった分は modelIndex で補完する
+    // 足りない分は modelIndex で補完する
     const meta = id ? modelIndex[id] : undefined;
 
     const row: ProductionQuantityRow = {
