@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\console\handler\productBlueprint\dto.go
 package productBlueprint
 
 // ---------------------------------------------------
@@ -41,6 +42,21 @@ type UpdateProductBlueprintInput struct {
 }
 
 // ---------------------------------------------------
+// POST /product-blueprints/{id}/model-refs
+// - productBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する
+// - updatedAt / updatedBy は更新しない（repo 側で touch しない更新を行う）
+//
+// ★ 採用方針（案1）
+//   - 入力: modelIds（順序は「色登録順→サイズ登録順」に並んだもの）
+//   - 出力: detail（既存の toDetailOutput）
+// ---------------------------------------------------
+
+type AppendModelRefsInput struct {
+	// model テーブルの docId の配列（順序は displayOrder の採番元）
+	ModelIds []string `json:"modelIds"`
+}
+
+// ---------------------------------------------------
 // GET /product-blueprints (list)
 // - backend 側で name 解決済みを返す
 // ---------------------------------------------------
@@ -59,6 +75,11 @@ type ProductBlueprintListOutput struct {
 // GET /product-blueprints/{id} (detail)
 // - backend 側で name 解決済みを返す
 // ---------------------------------------------------
+
+type ModelRefOutput struct {
+	ModelId      string `json:"modelId"`
+	DisplayOrder int    `json:"displayOrder"`
+}
 
 type ProductBlueprintDetailOutput struct {
 	ID               string   `json:"id"`
@@ -87,6 +108,9 @@ type ProductBlueprintDetailOutput struct {
 	UpdatedAt     string `json:"updatedAt"`
 
 	DeletedAt string `json:"deletedAt,omitempty"`
+
+	// ★ 追加: modelRefs（model docId + displayOrder）
+	ModelRefs []ModelRefOutput `json:"modelRefs,omitempty"`
 }
 
 // ---------------------------------------------------

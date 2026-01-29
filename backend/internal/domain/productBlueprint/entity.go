@@ -104,6 +104,80 @@ func (t ProductIDTag) validate() error {
 }
 
 // ======================================
+// Model references (modelIds + displayOrder)
+// ======================================
+
+// ModelRef は productBlueprint 配下に紐づく model の参照を表す。
+// - ModelID: model テーブルの docId
+// - DisplayOrder: 表示順（1..N の採番）
+type ModelRef struct {
+	ModelID      string
+	DisplayOrder int
+}
+
+// normalizeModelRefs は、modelIds を正規化し displayOrder を 1..N で採番して返す。
+// - 入力の順序を保持する（caller 側で「色登録順→サイズ登録順」に並べてから渡す前提）
+// - 空/空白、重複は除外する（順序は保持）
+// - displayOrder は採番し直す（連番）
+func normalizeModelRefs(modelIDs []string) []ModelRef {
+	seen := make(map[string]struct{}, len(modelIDs))
+	out := make([]ModelRef, 0, len(modelIDs))
+
+	order := 1
+	for _, id := range modelIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+
+		out = append(out, ModelRef{
+			ModelID:      id,
+			DisplayOrder: order,
+		})
+		order++
+	}
+	return out
+}
+
+// mergeAndRenumberModelRefs は既存 + 追加入力をマージし、重複排除しつつ displayOrder を 1..N で採番し直す。
+// - 既存の順序を維持した上で、追加分を末尾に足す
+// - 空/空白、重複は除外
+func mergeAndRenumberModelRefs(existing []ModelRef, appendIDs []string) []ModelRef {
+	seen := make(map[string]struct{}, len(existing)+len(appendIDs))
+	outIDs := make([]string, 0, len(existing)+len(appendIDs))
+
+	for _, r := range existing {
+		id := strings.TrimSpace(r.ModelID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		outIDs = append(outIDs, id)
+	}
+
+	for _, id := range appendIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		outIDs = append(outIDs, id)
+	}
+
+	return normalizeModelRefs(outIDs)
+}
+
+// ======================================
 // Entity（★ Version を完全削除）
 // ======================================
 
@@ -121,6 +195,10 @@ type ProductBlueprint struct {
 	QualityAssurance []string
 	ProductIdTag     ProductIDTag
 	AssigneeID       string
+
+	// ★ 追加: modelIds（model テーブルの docId）と displayOrder を保持
+	//  - displayOrder は ModelRefs を正として採番済みを保持する想定
+	ModelRefs []ModelRef
 
 	// ★ 印刷状態: false=未印刷, true=印刷済み
 	Printed bool
@@ -182,6 +260,10 @@ func New(
 		ProductIdTag:     productIDTag,
 		AssigneeID:       strings.TrimSpace(assigneeID),
 		CompanyID:        strings.TrimSpace(companyID),
+
+		// ★ create 時点では modelRefs は空（後段で追加する運用でもOK）
+		ModelRefs: nil,
+
 		// ★ create 時は常に false（未印刷）をセット
 		Printed:   false,
 		CreatedBy: createdBy,
@@ -287,7 +369,30 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 	return nil
 }
 
-// ★ Version 更新機能（BumpVersion）は削除済み
+// UpdateModelIDs は「通常の更新」として modelIDs を受け取り、displayOrder を採番して置き換える。
+// - 入力順を保持して displayOrder を 1..N で採番
+// - printed の場合は更新不可
+// - updatedAt / updatedBy は更新される（touch）
+func (p *ProductBlueprint) UpdateModelIDs(modelIDs []string, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden // printed のため更新不可
+	}
+	p.ModelRefs = normalizeModelRefs(modelIDs)
+	p.touch(now, updatedBy)
+	return nil
+}
+
+// AppendModelIDsNoTouch は「起票後追記」専用の更新メソッド。
+// 要件: updatedAt / updatedBy を更新しない（touch しない）。
+// - printed の場合は追記不可
+// - 既存順序を保持しつつ追記し、displayOrder は 1..N で採番し直す
+func (p *ProductBlueprint) AppendModelIDsNoTouch(modelIDs []string) error {
+	if !p.canModify() {
+		return ErrForbidden // printed のため更新不可
+	}
+	p.ModelRefs = mergeAndRenumberModelRefs(p.ModelRefs, modelIDs)
+	return nil
+}
 
 // Soft Delete（論理削除 + TTL セット）
 func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time.Duration) error {
@@ -358,6 +463,19 @@ func (p ProductBlueprint) validate() error {
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
+	// ★ ModelRefs の整合（任意）
+	// - 空は許容（後段で追加する運用があるため）
+	// - 入っている場合は ModelID 非空 & DisplayOrder > 0 を要求
+	for _, r := range p.ModelRefs {
+		if strings.TrimSpace(r.ModelID) == "" {
+			return WrapInvalid(nil, "modelRefs.modelId is empty")
+		}
+		if r.DisplayOrder <= 0 {
+			return WrapInvalid(nil, "modelRefs.displayOrder must be > 0")
+		}
+	}
+
 	// Printed は bool のため常に有効
 	return nil
 }

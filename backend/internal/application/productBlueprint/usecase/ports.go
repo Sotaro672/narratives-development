@@ -34,4 +34,9 @@ type ProductBlueprintRepo interface {
 	Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
 	Save(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
 	Delete(ctx context.Context, id string) error
+
+	// ★ 追加: 起票後に modelRefs を追記（updatedAt / updatedBy を更新しない）
+	// - refs は displayOrder を含む（usecase 側で採番して渡す）
+	// - repo 実装側で modelRefs フィールドのみ部分更新し、updatedAt/updatedBy を触らないこと
+	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []productbpdom.ModelRef) (productbpdom.ProductBlueprint, error)
 }

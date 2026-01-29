@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\productBlueprint\handler.go
+// backend/internal/adapters/in/http/console/handler/productBlueprint/handler.go
 package productBlueprint
 
 import (

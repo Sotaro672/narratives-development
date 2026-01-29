@@ -70,6 +70,34 @@ export type ModelVariationResponse = {
   updatedBy?: string | null;
 };
 
+/**
+ * レスポンス JSON から variation id を抽出（キー揺れ吸収）
+ * さらに Location ヘッダからもフォールバックする。
+ */
+function extractVariationId(json: any, locationHeader?: string | null): string {
+  const raw =
+    json?.id ??
+    json?.ID ??
+    json?.docId ??
+    json?.docID ??
+    json?.modelId ??
+    json?.modelID ??
+    json?.variationId ??
+    json?.variationID;
+
+  const idFromJson = typeof raw === "string" ? raw.trim() : "";
+  if (idFromJson) return idFromJson;
+
+  // Location: /models/{id} あるいは .../models/{id} のような形式を想定
+  const loc = typeof locationHeader === "string" ? locationHeader.trim() : "";
+  if (loc) {
+    const m = loc.match(/\/models\/([^/?#]+)(?:[/?#]|$)/);
+    if (m?.[1]) return decodeURIComponent(m[1]).trim();
+  }
+
+  return "";
+}
+
 /* =========================================================
  * 単一 ModelVariation 作成 API
  * POST /models/{productBlueprintId}/variations
@@ -136,21 +164,37 @@ export async function createModelVariation(
     );
   }
 
-  // dto を正: JSON はそのまま ModelVariationResponse に一致する
-  const data = (text ? JSON.parse(text) : {}) as ModelVariationResponse;
-  return data;
+  // ここが今回の最重要：id を必ず抽出する
+  const jsonAny = text ? (JSON.parse(text) as any) : {};
+  const id = extractVariationId(jsonAny, res.headers.get("Location"));
+
+  if (!id) {
+    // 作成自体は成功している前提なので、レスポンス仕様不備を明確化
+    // サーバー側修正（id を返す）を促すため、body も付けて投げる
+    throw new Error(
+      `modelRepositoryHTTP: ModelVariation は作成されましたが id が返りませんでした（response=${text || "{}"}）`,
+    );
+  }
+
+  // 返ってきた JSON を優先しつつ、id だけは必ず保証する
+  return {
+    ...(jsonAny as any),
+    id,
+  } as ModelVariationResponse;
 }
 
 /* =========================================================
  * 複数 ModelVariation の連続作成
  * createModelVariationsFromProductBlueprint() 用
+ *
+ * ★返り値を modelIds(string[]) に統一（要件）
  * =======================================================*/
 
 export async function createModelVariations(
   productBlueprintId: string,
   variations: CreateModelVariationRequest[],
-): Promise<ModelVariationResponse[]> {
-  const results: ModelVariationResponse[] = [];
+): Promise<string[]> {
+  const ids: string[] = [];
 
   for (const v of variations) {
     // 各要素にも productBlueprintId を補完して渡す
@@ -160,10 +204,19 @@ export async function createModelVariations(
     };
 
     const created = await createModelVariation(productBlueprintId, enriched);
-    results.push(created);
+
+    const id = String((created as any)?.id ?? "").trim();
+    if (!id) {
+      // createModelVariation が id 保証するので通常ここには来ないが、念のため
+      throw new Error(
+        "modelRepositoryHTTP: ModelVariation は作成されましたが id を抽出できませんでした",
+      );
+    }
+
+    ids.push(id);
   }
 
-  return results;
+  return ids;
 }
 
 /* =========================================================
@@ -198,8 +251,20 @@ export async function getModelVariationById(
     );
   }
 
-  const data = (text ? JSON.parse(text) : {}) as ModelVariationResponse;
-  return data;
+  const jsonAny = (text ? JSON.parse(text) : {}) as any;
+  const extractedId = extractVariationId(jsonAny, res.headers.get("Location"));
+  const finalId = extractedId || String(jsonAny?.id ?? "").trim();
+
+  if (!finalId) {
+    throw new Error(
+      `modelRepositoryHTTP: getModelVariationById のレスポンスに id がありません（response=${text || "{}"}）`,
+    );
+  }
+
+  return {
+    ...(jsonAny as any),
+    id: finalId,
+  } as ModelVariationResponse;
 }
 
 /* =========================================================
@@ -234,6 +299,15 @@ export async function listModelVariationsByProductBlueprintId(
     );
   }
 
-  const data = (text ? JSON.parse(text) : []) as ModelVariationResponse[];
-  return Array.isArray(data) ? data : [];
+  const data = (text ? JSON.parse(text) : []) as any[];
+  if (!Array.isArray(data)) return [];
+
+  // 一覧系も id 揺れを吸収して正規化しておく（後段の型崩れ防止）
+  return data
+    .map((row) => {
+      const id = extractVariationId(row, null);
+      if (!id) return null;
+      return { ...(row as any), id } as ModelVariationResponse;
+    })
+    .filter(Boolean) as ModelVariationResponse[];
 }

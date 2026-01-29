@@ -1,4 +1,3 @@
-// backend/internal/domain/productBlueprint/repository_port.go
 package productBlueprint
 
 import (
@@ -110,34 +109,20 @@ type ProductBlueprintHistoryRepo interface {
 type Repository interface {
 	// Read (live)
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
+
 	// ★ 追加: productBlueprintId から brandId だけを取得するヘルパ
-	//   MintRequest 一覧 / InventoryDetail などで「ID → BrandID」だけ欲しい場合に使用。
-	//   実装側では（可能なら）投影（brandId フィールドのみ取得）で効率化する。
 	GetBrandIDByID(ctx context.Context, id string) (string, error)
 
 	// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
-	//   MintRequest 一覧などで「ID → 名前」の名前解決だけを行いたいときに使用。
 	GetProductNameByID(ctx context.Context, id string) (string, error)
 
 	// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
-	//   例: Mall 側で modelId しか分からない状況から ProductBlueprint を引きたい場合に使用。
-	//
-	//   - 見つからない場合は error を返す想定（NotFound 等）
-	//   - 実装側では（可能なら）投影（productBlueprintId フィールドのみ取得）で効率化する。
 	GetIDByModelID(ctx context.Context, modelID string) (string, error)
 
 	// ★ 追加: productBlueprintId から Patch 相当の情報を取得するヘルパ
-	//   既存レコードを編集フォームに流し込む用途などで、
-	//   現在の値を Patch 形式（ポインタ付き）で受け取りたいときに使用。
-	//
-	//   典型的な実装イメージ:
-	//     pb, err := r.GetByID(ctx, id)
-	//     if err != nil { ... }
-	//     return pb.ToPatch(), nil
 	GetPatchByID(ctx context.Context, id string) (Patch, error)
 
 	// companyId 単位で productBlueprint の ID 一覧を取得
-	// （MintRequest 用のチェーン: companyId → productBlueprintId → production → mintRequest）
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 
 	// 存在確認（adapter の Exists を port に昇格）
@@ -148,13 +133,21 @@ type Repository interface {
 	Update(ctx context.Context, id string, patch Patch) (ProductBlueprint, error)
 	Delete(ctx context.Context, id string) error
 
+	// ★ 追加: ProductBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する
+	//
+	// 要件:
+	// - updatedAt / updatedBy を更新しない（touch しない部分更新）
+	// - modelRefs だけを書き換える（Firestore の Update / Set(merge) など）
+	//
+	// Contract:
+	// - refs は表示順（DisplayOrder）が埋まっていること（1..N）
+	// - 実装側で既存とマージして重複排除し、必要なら displayOrder を採番し直してよい
+	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []ModelRef) (ProductBlueprint, error)
+
 	// ★ printed: false → true への状態遷移
-	//   - entity.ProductBlueprint.MarkPrinted を内部で利用する想定
-	//   - すでに printed == true の場合は idempotent に振る舞う実装を推奨
 	MarkPrinted(ctx context.Context, id string) (ProductBlueprint, error)
 
 	// History (snapshot, versioned)
-	// ★ version は ProductBlueprint.Version に従う前提。
 	SaveHistorySnapshot(ctx context.Context, blueprintID string, h HistoryRecord) error
 	ListHistory(ctx context.Context, blueprintID string) ([]HistoryRecord, error)
 	GetHistoryByVersion(ctx context.Context, blueprintID string, version int64) (HistoryRecord, error)

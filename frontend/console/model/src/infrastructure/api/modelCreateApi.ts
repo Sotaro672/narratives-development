@@ -11,7 +11,9 @@ import {
  * ProductBlueprint Create 後に受け取る JSON 用の型
  * =======================================================*/
 
-export type NewModelVariationMeasurements = Partial<Record<MeasurementKey, number | null>>;
+export type NewModelVariationMeasurements = Partial<
+  Record<MeasurementKey, number | null>
+>;
 
 export type NewModelVariationPayload = {
   sizeLabel: string;
@@ -64,16 +66,39 @@ function normalizeRgbOrThrow(rgb: number | string | undefined): number {
     }
   }
 
-  throw new Error(`modelCreateApi: rgb が不正または未指定です (rgb=${String(rgb)})`);
+  throw new Error(
+    `modelCreateApi: rgb が不正または未指定です (rgb=${String(rgb)})`,
+  );
+}
+
+function dedupKeepOrder(xs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of xs) {
+    const v = String(raw ?? "").trim();
+    if (!v) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
 }
 
 /**
- * PB 作成後の variations JSON → CreateModelVariationRequest に変換して
- * backend API を叩く
+ * PB 作成後の variations JSON → CreateModelVariationRequest に変換して backend API を叩き、
+ * 作成された modelId(docId) の配列を返す（append API の入力にするため）
+ *
+ * ※ repository(modelRepositoryHTTP.createModelVariations) の返り値は
+ *    「modelIds: string[]」に統一済み、ここでは抽出ロジック不要。
  */
 export async function createModelVariationsFromProductBlueprint(
   payload: ModelVariationsFromProductBlueprint,
-): Promise<void> {
+): Promise<string[]> {
+  const productBlueprintId = String(payload.productBlueprintId ?? "").trim();
+  if (!productBlueprintId) {
+    throw new Error("modelCreateApi: productBlueprintId が空です");
+  }
+
   const requests: CreateModelVariationRequest[] = payload.variations.map((v) => {
     const measurements = normalizeMeasurements(v.measurements);
 
@@ -81,7 +106,7 @@ export async function createModelVariationsFromProductBlueprint(
     const rgbInt = normalizeRgbOrThrow(v.rgb);
 
     return {
-      productBlueprintId: payload.productBlueprintId,
+      productBlueprintId,
       modelNumber: v.modelNumber,
       size: v.sizeLabel,
       color: v.color,
@@ -90,17 +115,23 @@ export async function createModelVariationsFromProductBlueprint(
     };
   });
 
-  /* ============================================
-   * ★★ ここにログを追加 — POST直前の中身を全部出力
-   * ============================================ */
+  // （必要なら残す。運用では env で抑制するのが推奨）
   console.group(
     "%c[modelCreateApi] POST /models payload preview",
     "color: #0077cc; font-weight: bold;",
   );
-  console.log("productBlueprintId:", payload.productBlueprintId);
+  console.log("productBlueprintId:", productBlueprintId);
   console.log("raw variations from screen:", payload.variations);
   console.log("normalized POST requests:", requests);
   console.groupEnd();
 
-  await createModelVariations(payload.productBlueprintId, requests);
+  // ✅ repo の返り値は string[]（modelIds）に統一
+  const modelIds = await createModelVariations(productBlueprintId, requests);
+
+  const out = dedupKeepOrder(modelIds);
+  if (out.length === 0) {
+    throw new Error("modelCreateApi: modelIds が空です");
+  }
+
+  return out;
 }

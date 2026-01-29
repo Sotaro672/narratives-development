@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts 
+// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts
 
 // ─────────────────────────────────────────────
 // 作成系 API 用の型・依存
@@ -13,6 +13,9 @@ import type { ModelNumber } from "../../../../model/src/application/modelCreateS
 
 import { createProductBlueprintHTTP } from "../repository/productBlueprintRepositoryHTTP";
 import { createModelVariationsFromProductBlueprint } from "../../../../model/src/infrastructure/api/modelCreateApi";
+
+// Firebase Auth から ID トークンを取得（append 用）
+import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // ISO8601 → "YYYY/M/D" 表示 ※詳細画面用（元の挙動を維持）
 export const formatProductBlueprintDate = (iso?: string | null): string => {
@@ -48,7 +51,7 @@ export type ModelNumberRow = {
 };
 
 /* =========================================================
- * 作成系 API（createProductBlueprint + variations 作成）
+ * 作成系 API（createProductBlueprint + variations 作成 + modelRefs append）
  * =======================================================*/
 
 // ProductBlueprint 作成時の入力パラメータ
@@ -77,11 +80,12 @@ export type CreateProductBlueprintParams = {
   colorRgbMap?: Record<string, string>;
 };
 
-// backend から返ってくる ProductBlueprint 作成レスポンス
+// backend から返ってくる ProductBlueprint 作成レスポンス（暫定：キー揺れ吸収）
 export type ProductBlueprintResponse = {
   ID?: string;
   id?: string;
   productBlueprintId?: string;
+  productBlueprintID?: string;
   [key: string]: unknown;
 };
 
@@ -110,44 +114,144 @@ export type NewModelVariationPayload = {
 };
 
 /**
- * ProductBlueprint + ModelVariations をまとめて作成する API 呼び出し
+ * ProductBlueprint の ID 抽出（backend のキー揺れを吸収）
+ */
+function extractProductBlueprintId(json: unknown): string {
+  const anyJson = json as any;
+  const raw =
+    anyJson?.productBlueprintId ??
+    anyJson?.productBlueprintID ??
+    anyJson?.id ??
+    anyJson?.ID;
+
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function dedupKeepOrder(xs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of xs ?? []) {
+    const v = String(raw ?? "").trim();
+    if (!v) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
+// 🔙 BACKEND の BASE URL（modelRepositoryHTTP と合わせる：暫定で api.ts 側に置く）
+const ENV_BASE =
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
+    /\/+$/g,
+    "",
+  ) ?? "";
+
+const FALLBACK_BASE =
+  "https://narratives-backend-871263659099.asia-northeast1.run.app";
+
+const API_BASE = ENV_BASE || FALLBACK_BASE;
+
+async function getIdTokenOrThrow(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+  return user.getIdToken();
+}
+
+/**
+ * append API（案1）
+ * POST /product-blueprints/{id}/model-refs
+ * body: { modelIds: string[] }
+ * resp: detail（toDetailOutput）
+ *
+ * NOTE:
+ * - repository 層に寄せたいが、まずは api.ts 側で最短実装する。
+ * - 次手順で productBlueprintRepositoryHTTP に移管する。
+ */
+async function appendModelIdsToProductBlueprint(
+  productBlueprintId: string,
+  modelIds: string[],
+): Promise<ProductBlueprintResponse> {
+  const id = String(productBlueprintId ?? "").trim();
+  if (!id) throw new Error("productBlueprintId is empty");
+
+  const cleaned = dedupKeepOrder(modelIds);
+  if (cleaned.length === 0) {
+    throw new Error("modelIds is empty");
+  }
+
+  const token = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}/model-refs`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ modelIds: cleaned }),
+  });
+
+  const text = await resp.text().catch(() => "");
+
+  if (!resp.ok) {
+    // backend は {error:"..."} を返す想定だが、ここでは text をそのまま載せる
+    throw new Error(
+      `append modelIds failed: ${resp.status} ${resp.statusText}${
+        text ? ` - ${text}` : ""
+      }`,
+    );
+  }
+
+  return (text ? JSON.parse(text) : {}) as ProductBlueprintResponse;
+}
+
+/**
+ * ProductBlueprint + ModelVariations をまとめて作成し、
+ * さらに modelRefs（modelIds）を append する API 呼び出し（案1）。
  *
  * - ProductBlueprint 自体の作成は createProductBlueprintHTTP に委譲
- * - 生成された productBlueprintId を使って
- *   createModelVariationsFromProductBlueprint を呼び出す
+ * - 生成された productBlueprintId を使って variations を作成
+ * - variations 作成で得られた modelIds を順序付きで append
+ * - append の返り値（detail）を最終結果として返す
  */
 export async function createProductBlueprintApi(
   params: CreateProductBlueprintParams,
   variations: NewModelVariationPayload[],
 ): Promise<ProductBlueprintResponse> {
   // 1. ProductBlueprint の作成（HTTP）
-  const json = await createProductBlueprintHTTP(params);
+  const created = await createProductBlueprintHTTP(params);
 
-  // 2. productBlueprintId 抽出（backend がどのキーで返してもある程度吸収する）
-  const anyJson = json as any;
-  const productBlueprintIdRaw =
-    anyJson.productBlueprintId ??
-    anyJson.productBlueprintID ??
-    anyJson.id ??
-    anyJson.ID;
-
-  const productBlueprintId =
-    typeof productBlueprintIdRaw === "string"
-      ? productBlueprintIdRaw.trim()
-      : "";
+  // 2. productBlueprintId 抽出
+  const productBlueprintId = extractProductBlueprintId(created);
 
   if (!productBlueprintId) {
-    // ID が取れない場合は ModelVariation 作成をスキップ
-    return json;
+    // ID が取れない場合は後続をスキップ
+    return created as ProductBlueprintResponse;
   }
 
-  // 3. variations がある場合のみ ModelVariation を作成
-  if (variations.length > 0) {
-    await createModelVariationsFromProductBlueprint({
-      productBlueprintId,
-      variations,
-    });
+  // 3. variations が無いなら append もしない（modelRefs も空のまま）
+  if (variations.length === 0) {
+    return created as ProductBlueprintResponse;
   }
 
-  return json;
+  // 4. variations 作成 → modelIds（string[]）を取得（ここが “型崩れ解消” の本命）
+  const modelIds = await createModelVariationsFromProductBlueprint({
+    productBlueprintId,
+    variations,
+  });
+
+  const cleaned = dedupKeepOrder(modelIds);
+  if (cleaned.length === 0) {
+    // variations は作成したが modelIds が取れないのは異常系として扱う
+    throw new Error("createProductBlueprintApi: modelIds が空です");
+  }
+
+  // 5. append（返り値は detail）
+  const detail = await appendModelIdsToProductBlueprint(productBlueprintId, cleaned);
+  return detail;
 }

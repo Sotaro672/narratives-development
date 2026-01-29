@@ -53,6 +53,58 @@ export async function createProductBlueprintHTTP(
 }
 
 // -----------------------------------------------------------
+// POST: 商品設計に modelRefs（modelIds）を追記（updatedAt/updatedBy を触らない）
+//   - backend: POST /product-blueprints/{id}/model-refs
+//   - body: { modelIds: string[] }
+//   - resp: detail（toDetailOutput）
+// -----------------------------------------------------------
+export async function appendModelRefsHTTP(
+  productBlueprintId: string,
+  modelIds: string[],
+): Promise<ProductBlueprintDetailResponse> {
+  const trimmedId = String(productBlueprintId ?? "").trim();
+  if (!trimmedId) {
+    throw new Error("appendModelRefsHTTP: productBlueprintId が空です");
+  }
+
+  // trim + 空除外 + 重複除外（順序保持）
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const raw of modelIds ?? []) {
+    const v = String(raw ?? "").trim();
+    if (!v) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    cleaned.push(v);
+  }
+
+  if (cleaned.length === 0) {
+    throw new Error("appendModelRefsHTTP: modelIds が空です");
+  }
+
+  const headers = await getAuthJsonHeadersOrThrow();
+
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(
+    trimmedId,
+  )}/model-refs`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ modelIds: cleaned }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `modelRefs の追記に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+    );
+  }
+
+  return (await res.json()) as ProductBlueprintDetailResponse;
+}
+
+// -----------------------------------------------------------
 // GET: 商品設計 一覧（論理削除されていないもの）
 // -----------------------------------------------------------
 export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {

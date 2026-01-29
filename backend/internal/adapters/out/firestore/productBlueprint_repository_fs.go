@@ -70,6 +70,89 @@ func (r *ProductBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (
 	return docToProductBlueprint(snap)
 }
 
+// AppendModelRefsWithoutTouch updates modelRefs only, without touching updatedAt/updatedBy.
+// 要件:
+// - updatedAt / updatedBy を更新しない（このメソッドでは一切書き換えない）
+// - modelRefs のみ部分更新する
+// - printed=true の場合は更新不可（ドメイン制約に合わせて ErrForbidden）
+func (r *ProductBlueprintRepositoryFS) AppendModelRefsWithoutTouch(
+	ctx context.Context,
+	id string,
+	refs []pbdom.ModelRef,
+) (pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.ProductBlueprint{}, pbdom.ErrInvalidID
+	}
+
+	docRef := r.col().Doc(id)
+
+	// existence + printed guard
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+	if v, ok := snap.Data()["printed"].(bool); ok && v {
+		return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
+	}
+
+	// defensive normalize (skip empty modelId, keep order as given)
+	modelRefsDoc := make([]map[string]any, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, mr := range refs {
+		mid := strings.TrimSpace(mr.ModelID)
+		if mid == "" {
+			continue
+		}
+		if _, ok := seen[mid]; ok {
+			continue
+		}
+		seen[mid] = struct{}{}
+
+		order := mr.DisplayOrder
+		if order <= 0 {
+			// displayOrder must be >= 1; if broken input comes, hard fail
+			return pbdom.ProductBlueprint{}, pbdom.WrapInvalid(nil, "modelRefs.displayOrder must be >= 1")
+		}
+
+		modelRefsDoc = append(modelRefsDoc, map[string]any{
+			"modelId":      mid,
+			"displayOrder": order,
+		})
+	}
+
+	if len(modelRefsDoc) == 0 {
+		return pbdom.ProductBlueprint{}, pbdom.WrapInvalid(nil, "modelRefs has no valid items")
+	}
+
+	// IMPORTANT: do NOT update updatedAt/updatedBy here
+	if _, err := docRef.Update(ctx, []firestore.Update{
+		{Path: "modelRefs", Value: modelRefsDoc},
+	}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	// re-fetch
+	snap, err = docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+	return docToProductBlueprint(snap)
+}
+
 // GetIDByModelID gets productBlueprintId by modelID (best-effort).
 func (r *ProductBlueprintRepositoryFS) GetIDByModelID(ctx context.Context, modelID string) (string, error) {
 	if r.Client == nil {
@@ -222,8 +305,6 @@ func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (b
 }
 
 // ListByCompanyID returns all ProductBlueprints for the given companyID.
-// NOTE: deleted/non-deleted の絞り込みは usecase 側で行う前提（用途に応じて）
-// ただし companyID は必須（空は禁止）
 func (r *ProductBlueprintRepositoryFS) ListByCompanyID(ctx context.Context, companyID string) ([]pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -253,7 +334,6 @@ func (r *ProductBlueprintRepositoryFS) ListByCompanyID(ctx context.Context, comp
 }
 
 // ListDeletedByCompanyID returns only logically deleted blueprints (deletedAt != null) for the given companyID.
-// companyID は必須（空は禁止）
 func (r *ProductBlueprintRepositoryFS) ListDeletedByCompanyID(ctx context.Context, companyID string) ([]pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -285,7 +365,6 @@ func (r *ProductBlueprintRepositoryFS) ListDeletedByCompanyID(ctx context.Contex
 }
 
 // ListIDsByCompany returns blueprint IDs for given companyID.
-// companyID が空の場合は ErrInvalidCompanyID（必須）
 func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -777,6 +856,46 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		printed = v
 	}
 
+	// modelRefs
+	var modelRefs []pbdom.ModelRef
+	if raw, ok := data["modelRefs"]; ok && raw != nil {
+		switch xs := raw.(type) {
+		case []interface{}:
+			tmp := make([]pbdom.ModelRef, 0, len(xs))
+			for _, it := range xs {
+				m, ok := it.(map[string]interface{})
+				if !ok || m == nil {
+					continue
+				}
+				mid, _ := m["modelId"].(string)
+
+				order := 0
+				switch v := m["displayOrder"].(type) {
+				case int:
+					order = v
+				case int32:
+					order = int(v)
+				case int64:
+					order = int(v)
+				case float64:
+					order = int(v)
+				}
+
+				mid = strings.TrimSpace(mid)
+				if mid == "" || order <= 0 {
+					continue
+				}
+				tmp = append(tmp, pbdom.ModelRef{
+					ModelID:      mid,
+					DisplayOrder: order,
+				})
+			}
+			if len(tmp) > 0 {
+				modelRefs = tmp
+			}
+		}
+	}
+
 	var deletedAtPtr *time.Time
 	if t := getTimeVal("deletedAt"); !t.IsZero() {
 		deletedAtPtr = &t
@@ -809,6 +928,8 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		},
 		CompanyID:  getStr("companyId"),
 		AssigneeID: getStr("assigneeId"),
+
+		ModelRefs: modelRefs,
 
 		Printed: printed,
 
@@ -845,6 +966,22 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 
 	if v.ProductIdTag.Type != "" {
 		m["productIdTagType"] = strings.TrimSpace(string(v.ProductIdTag.Type))
+	}
+
+	// modelRefs（nil の場合は「未指定」として保存しない。空スライスで明示したい場合は empty を渡す）
+	if v.ModelRefs != nil {
+		arr := make([]map[string]any, 0, len(v.ModelRefs))
+		for _, mr := range v.ModelRefs {
+			mid := strings.TrimSpace(mr.ModelID)
+			if mid == "" || mr.DisplayOrder <= 0 {
+				continue
+			}
+			arr = append(arr, map[string]any{
+				"modelId":      mid,
+				"displayOrder": mr.DisplayOrder,
+			})
+		}
+		m["modelRefs"] = arr
 	}
 
 	if v.CreatedBy != nil {

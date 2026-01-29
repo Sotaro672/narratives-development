@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/console/handler/productBlueprint/endpoints.go
 package productBlueprint
 
 import (
@@ -30,20 +31,20 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pb := pbdom.ProductBlueprint{
-		ProductName:      in.ProductName,
-		BrandID:          in.BrandId,
-		ItemType:         pbdom.ItemType(in.ItemType),
-		Fit:              in.Fit,
-		Material:         in.Material,
+		ProductName:      strings.TrimSpace(in.ProductName),
+		BrandID:          strings.TrimSpace(in.BrandId),
+		ItemType:         pbdom.ItemType(strings.TrimSpace(in.ItemType)),
+		Fit:              strings.TrimSpace(in.Fit),
+		Material:         strings.TrimSpace(in.Material),
 		Weight:           in.Weight,
 		QualityAssurance: in.QualityAssurance,
-		AssigneeID:       in.AssigneeId,
-		CompanyID:        in.CompanyId,
+		AssigneeID:       strings.TrimSpace(in.AssigneeId),
+		CompanyID:        strings.TrimSpace(in.CompanyId),
 		CreatedBy:        createdBy,
 		// printed は bool。create 時は常に false（未印刷）
 		Printed: false,
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
+			Type: pbdom.ProductIDTagType(strings.TrimSpace(in.ProductIdTag.Type)),
 		},
 	}
 
@@ -53,8 +54,6 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create は現状 entity を返していても良いが、
-	// 正に寄せるなら detail DTO を返す方針が一貫する。
 	out := h.toDetailOutput(ctx, created)
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(out)
@@ -89,18 +88,18 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 	// printed は更新させない（印刷済み化は別ユースケースが適切）
 	pb := pbdom.ProductBlueprint{
 		ID:               id,
-		ProductName:      in.ProductName,
-		BrandID:          in.BrandId,
-		ItemType:         pbdom.ItemType(in.ItemType),
-		Fit:              in.Fit,
-		Material:         in.Material,
+		ProductName:      strings.TrimSpace(in.ProductName),
+		BrandID:          strings.TrimSpace(in.BrandId),
+		ItemType:         pbdom.ItemType(strings.TrimSpace(in.ItemType)),
+		Fit:              strings.TrimSpace(in.Fit),
+		Material:         strings.TrimSpace(in.Material),
 		Weight:           in.Weight,
 		QualityAssurance: in.QualityAssurance,
-		AssigneeID:       in.AssigneeId,
-		CompanyID:        in.CompanyId,
+		AssigneeID:       strings.TrimSpace(in.AssigneeId),
+		CompanyID:        strings.TrimSpace(in.CompanyId),
 		UpdatedBy:        updatedBy,
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
+			Type: pbdom.ProductIDTagType(strings.TrimSpace(in.ProductIdTag.Type)),
 		},
 	}
 
@@ -234,10 +233,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			ProductName:  pb.ProductName,
 			BrandName:    brandName,
 			AssigneeName: assigneeName,
-			// ★ printed:true なら印刷済みとして UI 側が表示できるように
-			Printed:   pb.Printed,
-			CreatedAt: createdAt,
-			UpdatedAt: updatedAt,
+			Printed:      pb.Printed,
+			CreatedAt:    createdAt,
+			UpdatedAt:    updatedAt,
 		})
 	}
 
@@ -341,6 +339,70 @@ func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request, id string)
 }
 
 // ---------------------------------------------------
+// POST /product-blueprints/{id}/model-refs
+//   - 起票後に modelRefs（modelId + displayOrder）を追記
+//   - 入力は modelIds（順序が displayOrder の採番元）
+//   - updatedAt / updatedBy は更新しない（usecase/repo 側で保証）
+//   - 出力は detail（既存の toDetailOutput）
+// ---------------------------------------------------
+
+func (h *Handler) appendModelRefs(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var in AppendModelRefsInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	// 入力は modelIds 必須
+	if len(in.ModelIds) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelIds is required"})
+		return
+	}
+
+	// 入力順を保持しつつ、空/重複だけを弾く（順序は保持）
+	seen := make(map[string]struct{}, len(in.ModelIds))
+	modelIds := make([]string, 0, len(in.ModelIds))
+	for _, raw := range in.ModelIds {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		modelIds = append(modelIds, v)
+	}
+
+	if len(modelIds) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelIds has no valid ids"})
+		return
+	}
+
+	// usecase: 入力 modelIds（displayOrder 採番は usecase 側）
+	updated, err := h.uc.AppendModelRefs(ctx, id, modelIds)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := h.toDetailOutput(ctx, updated)
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ---------------------------------------------------
 // DTO assembler (detail)
 // ---------------------------------------------------
 
@@ -399,6 +461,22 @@ func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint)
 		}
 	}
 
+	// modelRefs
+	var modelRefs []ModelRefOutput
+	if len(pb.ModelRefs) > 0 {
+		modelRefs = make([]ModelRefOutput, 0, len(pb.ModelRefs))
+		for _, mr := range pb.ModelRefs {
+			modelID := strings.TrimSpace(mr.ModelID)
+			if modelID == "" {
+				continue
+			}
+			modelRefs = append(modelRefs, ModelRefOutput{
+				ModelId:      modelID,
+				DisplayOrder: mr.DisplayOrder,
+			})
+		}
+	}
+
 	return ProductBlueprintDetailOutput{
 		ID:               pb.ID,
 		ProductName:      pb.ProductName,
@@ -424,5 +502,7 @@ func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint)
 		UpdatedAt:     updatedAt,
 
 		DeletedAt: deletedAt,
+
+		ModelRefs: modelRefs,
 	}
 }
