@@ -22,6 +22,7 @@ import (
 	// outbound
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
+	pbfs "narratives/internal/adapters/out/firestore/productBlueprint"
 	gcso "narratives/internal/adapters/out/gcs"
 
 	// Solana infra
@@ -166,7 +167,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.TokenBlueprintRepo = tokenBlueprintRepo
 
 	// ProductBlueprint (productBlueprint domain) - shared for queries/resolvers
-	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
+	productBlueprintRepoFS := pbfs.NewProductBlueprintRepositoryFS(fsClient)
 
 	// Shared instance for queries/resolvers (avoid duplication)
 	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)

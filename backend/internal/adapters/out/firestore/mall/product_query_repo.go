@@ -9,6 +9,7 @@ import (
 	"cloud.google.com/go/firestore"
 
 	fs "narratives/internal/adapters/out/firestore"
+	pbfs "narratives/internal/adapters/out/firestore/productBlueprint"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -21,7 +22,7 @@ type ProductQueryRepo struct {
 	productRepo          *fs.ProductRepositoryFS
 	modelRepo            *fs.ModelRepositoryFS
 	productionRepo       *fs.ProductionRepositoryFS
-	productBlueprintRepo *fs.ProductBlueprintRepositoryFS
+	productBlueprintRepo *pbfs.ProductBlueprintRepositoryFS
 }
 
 // NewProductQueryRepo builds the adapter with concrete Firestore repositories.
@@ -30,7 +31,7 @@ func NewProductQueryRepo(client *firestore.Client) *ProductQueryRepo {
 		productRepo:          fs.NewProductRepositoryFS(client),
 		modelRepo:            fs.NewModelRepositoryFS(client),
 		productionRepo:       fs.NewProductionRepositoryFS(client),
-		productBlueprintRepo: fs.NewProductBlueprintRepositoryFS(client),
+		productBlueprintRepo: pbfs.NewProductBlueprintRepositoryFS(client),
 	}
 }
 
@@ -39,7 +40,7 @@ func NewProductQueryRepoWithRepos(
 	productRepo *fs.ProductRepositoryFS,
 	modelRepo *fs.ModelRepositoryFS,
 	productionRepo *fs.ProductionRepositoryFS,
-	productBlueprintRepo *fs.ProductBlueprintRepositoryFS,
+	productBlueprintRepo *pbfs.ProductBlueprintRepositoryFS,
 ) *ProductQueryRepo {
 	return &ProductQueryRepo{
 		productRepo:          productRepo,

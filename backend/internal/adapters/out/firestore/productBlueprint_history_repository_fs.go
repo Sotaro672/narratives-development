@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -171,4 +172,198 @@ func (r *ProductBlueprintHistoryRepositoryFS) ListByProductBlueprintID(
 	}
 
 	return out, nil
+}
+
+// ============================================================
+// Local helpers (moved/split対応): productBlueprintToDoc / docToProductBlueprint
+// ============================================================
+
+// productBlueprintToDoc converts domain ProductBlueprint to Firestore document map.
+// It respects `firestore:"..."` struct tags on the domain model.
+func productBlueprintToDoc(pb pbdom.ProductBlueprint, createdAt, updatedAt time.Time) (map[string]any, error) {
+	// keep the same behavior as callers expect: ensure timestamps are reflected
+	if !createdAt.IsZero() {
+		pb.CreatedAt = createdAt
+	}
+	if !updatedAt.IsZero() {
+		pb.UpdatedAt = updatedAt
+	}
+	return structToFirestoreMap(pb)
+}
+
+// docToProductBlueprint converts Firestore document snapshot to domain ProductBlueprint.
+// Unknown fields in the document (e.g., history metadata) are ignored by DataTo.
+func docToProductBlueprint(snap *firestore.DocumentSnapshot) (pbdom.ProductBlueprint, error) {
+	if snap == nil {
+		return pbdom.ProductBlueprint{}, errors.New("docToProductBlueprint: snapshot is nil")
+	}
+	var pb pbdom.ProductBlueprint
+	if err := snap.DataTo(&pb); err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+	return pb, nil
+}
+
+// structToFirestoreMap converts a struct (or pointer to struct) into a map using `firestore` tags.
+// Supports omitempty, "-" and embedded structs. This is intentionally minimal but sufficient
+// to keep existing Firestore field layout stable after repository refactors.
+func structToFirestoreMap(v any) (map[string]any, error) {
+	rv := reflect.ValueOf(v)
+	for rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return map[string]any{}, nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("structToFirestoreMap: expected struct, got %s", rv.Kind())
+	}
+
+	out := make(map[string]any)
+	rt := rv.Type()
+
+	for i := 0; i < rt.NumField(); i++ {
+		sf := rt.Field(i)
+		if sf.PkgPath != "" {
+			// unexported
+			continue
+		}
+
+		tag := sf.Tag.Get("firestore")
+		name, omitEmpty, skip := parseFirestoreTag(tag)
+
+		fv := rv.Field(i)
+
+		// embedded struct: flatten if no explicit tag name and not skipped
+		if sf.Anonymous && !skip && (name == "" || name == sf.Name) {
+			sub, err := valueToFirestoreAny(fv)
+			if err != nil {
+				return nil, err
+			}
+			if m, ok := sub.(map[string]any); ok {
+				for k, v := range m {
+					out[k] = v
+				}
+			} else if sub != nil {
+				// embedded non-struct; fall back to field name
+				out[sf.Name] = sub
+			}
+			continue
+		}
+
+		if skip {
+			continue
+		}
+		if name == "" {
+			name = sf.Name
+		}
+
+		valAny, err := valueToFirestoreAny(fv)
+		if err != nil {
+			return nil, err
+		}
+		if omitEmpty && isEmptyValue(fv) {
+			continue
+		}
+
+		out[name] = valAny
+	}
+
+	return out, nil
+}
+
+func valueToFirestoreAny(v reflect.Value) (any, error) {
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil, nil
+		}
+		v = v.Elem()
+	}
+
+	switch v.Kind() {
+	case reflect.Struct:
+		// Special-case time.Time
+		if v.Type() == reflect.TypeOf(time.Time{}) {
+			t := v.Interface().(time.Time)
+			return t, nil
+		}
+		return structToFirestoreMap(v.Interface())
+	case reflect.Slice, reflect.Array:
+		// []byte should remain []byte
+		if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
+			return v.Bytes(), nil
+		}
+		n := v.Len()
+		arr := make([]any, 0, n)
+		for i := 0; i < n; i++ {
+			item, err := valueToFirestoreAny(v.Index(i))
+			if err != nil {
+				return nil, err
+			}
+			arr = append(arr, item)
+		}
+		return arr, nil
+	case reflect.Map:
+		if v.Type().Key().Kind() != reflect.String {
+			return nil, fmt.Errorf("valueToFirestoreAny: map key must be string, got %s", v.Type().Key().Kind())
+		}
+		m := make(map[string]any)
+		iter := v.MapRange()
+		for iter.Next() {
+			k := iter.Key().String()
+			item, err := valueToFirestoreAny(iter.Value())
+			if err != nil {
+				return nil, err
+			}
+			m[k] = item
+		}
+		return m, nil
+	default:
+		return v.Interface(), nil
+	}
+}
+
+func parseFirestoreTag(tag string) (name string, omitempty bool, skip bool) {
+	if tag == "-" {
+		return "", false, true
+	}
+	if tag == "" {
+		return "", false, false
+	}
+	parts := strings.Split(tag, ",")
+	name = strings.TrimSpace(parts[0])
+	if name == "" {
+		name = ""
+	}
+	for _, p := range parts[1:] {
+		if strings.TrimSpace(p) == "omitempty" {
+			omitempty = true
+		}
+	}
+	return name, omitempty, false
+}
+
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Slice, reflect.Map, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
+	case reflect.Struct:
+		if v.Type() == reflect.TypeOf(time.Time{}) {
+			return v.Interface().(time.Time).IsZero()
+		}
+		// non-time structs are considered non-empty
+		return false
+	default:
+		return false
+	}
 }

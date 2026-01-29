@@ -1,5 +1,5 @@
 // backend/internal/adapters/out/firestore/productBlueprint_repository_fs.go
-package firestore
+package productBlueprint
 
 import (
 	"context"
