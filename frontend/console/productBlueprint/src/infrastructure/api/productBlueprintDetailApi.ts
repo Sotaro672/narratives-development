@@ -37,6 +37,12 @@ export type ModelNumberRow = {
   code: string;
 };
 
+// ✅ ProductBlueprint の modelRefs（displayOrder の唯一のソース）
+export type ProductBlueprintModelRef = {
+  modelId: string;
+  displayOrder: number;
+};
+
 // ProductBlueprint 詳細レスポンス
 export type ProductBlueprintDetailResponse = {
   id: string;
@@ -69,6 +75,16 @@ export type ProductBlueprintDetailResponse = {
   updatedAt?: string | null;
   deletedAt?: string | null;
 
+  /**
+   * ✅ displayOrder に従って並べ替えるために必須
+   * backend: toDetailOutput が返す modelRefs をそのまま受ける
+   */
+  modelRefs?: ProductBlueprintModelRef[];
+
+  /**
+   * 互換のため残して良いが、並び順の正は modelRefs 側に寄せる。
+   * （modelVariations は別 API で取得して join する設計の方が堅い）
+   */
   modelVariations?: Array<{
     id?: string;
     size?: string;
@@ -139,7 +155,12 @@ export async function getProductBlueprintDetailApi(
 ): Promise<ProductBlueprintDetailResponse> {
   const headers = await getAuthHeaders();
 
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
+  const trimmed = String(id ?? "").trim();
+  if (!trimmed) {
+    throw new Error("getProductBlueprintDetailApi: id が空です");
+  }
+
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}`;
 
   console.log("[productBlueprintDetailApi] GET detail:", url);
 

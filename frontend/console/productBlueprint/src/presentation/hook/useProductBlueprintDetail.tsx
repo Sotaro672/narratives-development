@@ -33,6 +33,62 @@ export {
 } from "../../domain/entity/catalog";
 export type { Fit, WashTagOption } from "../../domain/entity/catalog";
 
+// ------------------------------
+// ✅ displayOrder で variations を並べ替えるユーティリティ
+// ------------------------------
+type ModelRefLike = { modelId?: string; displayOrder?: number };
+
+/**
+ * modelRefs(displayOrder) に従い variations を並べ替える。
+ * - refs に存在する id は displayOrder 昇順で先頭に並べる
+ * - refs に無い variations は “元の順” のまま末尾に回す（情報欠損時の保険）
+ */
+function orderVariationsByModelRefs(
+  variations: any[],
+  modelRefs: ModelRefLike[] | undefined,
+): any[] {
+  if (!Array.isArray(variations) || variations.length === 0) return [];
+  if (!Array.isArray(modelRefs) || modelRefs.length === 0) return variations;
+
+  const byId = new Map<string, any>();
+  for (const v of variations) {
+    const id = typeof v?.id === "string" ? v.id.trim() : "";
+    if (!id) continue;
+    // 同一 id は先勝ち（後勝ちにしたいならここを上書きに変更）
+    if (!byId.has(id)) byId.set(id, v);
+  }
+
+  const sortedRefs = [...modelRefs]
+    .map((r) => ({
+      id: typeof r?.modelId === "string" ? r.modelId.trim() : "",
+      order: typeof r?.displayOrder === "number" ? r.displayOrder : Number.NaN,
+    }))
+    .filter((x) => x.id && Number.isFinite(x.order))
+    .sort((a, b) => a.order - b.order);
+
+  const used = new Set<string>();
+  const ordered: any[] = [];
+
+  for (const ref of sortedRefs) {
+    const v = byId.get(ref.id);
+    if (!v) continue;
+    if (used.has(ref.id)) continue;
+    used.add(ref.id);
+    ordered.push(v);
+  }
+
+  // refs に無い variations は元順を維持して末尾へ
+  for (const v of variations) {
+    const id = typeof v?.id === "string" ? v.id.trim() : "";
+    if (!id) continue;
+    if (used.has(id)) continue;
+    used.add(id);
+    ordered.push(v);
+  }
+
+  return ordered;
+}
+
 export interface UseProductBlueprintDetailResult {
   pageTitle: string;
 
@@ -236,16 +292,25 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           (detail.productIdTag?.type as ProductIDTagType | undefined) ?? "";
         setProductIdTagType(tagType);
 
+        // ✅ modelRefs（displayOrder のソース）
+        const modelRefs = (detail as any).modelRefs as ModelRefLike[] | undefined;
+
         // --------------------------------------------------
-        // ModelVariation 取得 → UI state 変換は variationMapper に集約
+        // ModelVariation 取得 → displayOrder で整列 → UI state 変換
         // --------------------------------------------------
         try {
           const variations = await listModelVariationsByProductBlueprintId(
             productBlueprintIdResolved,
           );
 
+          // ✅ 最重要: displayOrder で variations を並べ替える
+          const ordered = orderVariationsByModelRefs(
+            variations as any[],
+            modelRefs,
+          );
+
           const uiState = mapVariationsToUiState({
-            varsAny: variations as any[],
+            varsAny: ordered as any[],
             itemType: itemTypeFromDetail,
           });
 

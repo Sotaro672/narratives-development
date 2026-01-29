@@ -7,12 +7,13 @@ import "time"
 // - ProductionQuantityCard の rows 相当
 // - モデルごとの数量内訳を 1 行ずつ表現する DTO
 type ProductionModelRowDTO struct {
-	ModelID     string  `json:"modelId"`       // model variation の ID
-	ModelNumber string  `json:"modelNumber"`   // 表示用型番
-	Size        string  `json:"size"`          // サイズ（例: "M", "L"）
-	Color       string  `json:"color"`         // カラー名
-	RGB         *string `json:"rgb,omitempty"` // カラーコード (例: "#FFEE00") 任意
-	Quantity    int     `json:"quantity"`      // 生産数量
+	ModelID      string `json:"modelId"`                // model variation の ID（Firestore docId）
+	ModelNumber  string `json:"modelNumber"`            // 表示用型番
+	Size         string `json:"size"`                   // サイズ（例: "M", "L"）
+	Color        string `json:"color"`                  // カラー名
+	RGB          *int   `json:"rgb,omitempty"`          // ✅ カラーRGB（0xRRGGBB）。ModelVariation DTO と統一
+	DisplayOrder int    `json:"displayOrder,omitempty"` // ✅ 採番順（PBのmodelRefs.displayOrder等）。必要な場合のみ利用
+	Quantity     int    `json:"quantity"`               // 生産数量
 }
 
 // ProductionDetailDTO
