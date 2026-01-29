@@ -12,8 +12,6 @@ import (
 	mintapp "narratives/internal/application/mint"
 
 	// ★ InspectionUsecase 移動先
-	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
-	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
 	inspectionapp "narratives/internal/application/inspection"
 
 	// ✅ TokenBlueprint usecases 移動先
@@ -36,6 +34,11 @@ import (
 
 	// ✅ console handlers（正）
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
+
+	// ✅ moved handlers
+	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
+	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
+	productionHandler "narratives/internal/adapters/in/http/console/handler/production"
 
 	"narratives/internal/adapters/in/http/middleware"
 
@@ -421,7 +424,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Productions
 	// ================================
 	if deps.ProductionUC != nil && deps.CompanyProductionQueryService != nil {
-		productionH := consoleHandler.NewProductionHandler(
+		// ✅ production handler は handler/production に移動したため、そちらの NewProductionHandler を使う
+		productionH := productionHandler.NewProductionHandler(
 			deps.CompanyProductionQueryService,
 			deps.ProductionUC,
 		)

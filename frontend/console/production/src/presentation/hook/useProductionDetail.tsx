@@ -14,12 +14,11 @@ import {
   type ModelVariationSummary,
   type ProductionQuantityRow as DetailQuantityRow,
 } from "../../application/detail/index";
+
 import {
-loadProductBlueprintDetail,
-type ProductBlueprintDetail,
-}from "../../application/productBlueprint/index";
-// ✅ create 用行型は application ではなく presentation の UI 型を参照する
-import type { ProductionQuantityRow as CreateQuantityRow } from "../create/types";
+  loadProductBlueprintDetail,
+  type ProductBlueprintDetail,
+} from "../../application/productBlueprint/index";
 
 // ★ 印刷用ロジックを分離した hook を利用
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
@@ -97,7 +96,8 @@ export function useProductionDetail() {
     Record<string, ModelVariationSummary>
   >({});
 
-  const [quantityRows, setQuantityRows] = React.useState<CreateQuantityRow[]>(
+  // ✅ rows は detail DTO（dto/detail.go 正）に統一
+  const [quantityRows, setQuantityRows] = React.useState<DetailQuantityRow[]>(
     [],
   );
 
@@ -207,40 +207,68 @@ export function useProductionDetail() {
 
   // ======================================================
   // production.models × modelIndex → quantityRows
+  //
+  // ✅ 重要:
+  // - dto/detail.go を正としたいが、現状 backend が PascalCase(ModelID/Quantity) を返している
+  // - ここで modelId/quantity に正規化して buildQuantityRowsFromModels に渡す
   // ======================================================
   React.useEffect(() => {
-    if (!production?.models || !Array.isArray(production.models as any)) {
+    const raw = (production as any)?.models;
+
+    if (!raw || !Array.isArray(raw)) {
       setQuantityRows([]);
       return;
     }
 
-    // canonical DTO 前提：production.models をそのまま使う
-    const rawModels = production.models as any[];
+    // ✅ backend の揺れ吸収: modelId / ModelID / ModelId など
+    const normalized = raw.map((m: any, index: number) => {
+      const modelIdRaw =
+        m?.modelId ?? m?.ModelID ?? m?.ModelId ?? m?.modelID ?? "";
+      const quantityRaw = m?.quantity ?? m?.Quantity ?? 0;
+
+      const modelId = String(modelIdRaw ?? "").trim() || String(index);
+
+      const quantity = Number.isFinite(Number(quantityRaw))
+        ? Math.max(0, Math.floor(Number(quantityRaw)))
+        : 0;
+
+      const modelNumber =
+        typeof (m?.modelNumber ?? m?.ModelNumber) === "string"
+          ? (m?.modelNumber ?? m?.ModelNumber)
+          : undefined;
+
+      const size =
+        typeof (m?.size ?? m?.Size) === "string" ? (m?.size ?? m?.Size) : undefined;
+
+      const color =
+        typeof (m?.color ?? m?.Color) === "string" ? (m?.color ?? m?.Color) : undefined;
+
+      const rgbCandidate = m?.rgb ?? m?.RGB;
+      const rgb = typeof rgbCandidate === "number" ? rgbCandidate : undefined;
+
+      const displayOrderCandidate = m?.displayOrder ?? m?.DisplayOrder;
+      const displayOrder =
+        typeof displayOrderCandidate === "number"
+          ? displayOrderCandidate
+          : undefined;
+
+      return {
+        modelId,
+        quantity,
+        modelNumber,
+        size,
+        color,
+        rgb,
+        displayOrder,
+      };
+    });
 
     const detailRows: DetailQuantityRow[] = buildQuantityRowsFromModels(
-      rawModels,
+      normalized,
       modelIndex,
     );
 
-    const mapped: CreateQuantityRow[] = detailRows.map((row) => {
-      const quantity = row.quantity ?? 0;
-
-      const createRow: CreateQuantityRow & {
-        id?: string;
-      } = {
-        modelVariationId: row.id,
-        modelNumber: row.modelNumber,
-        size: row.size,
-        color: row.color,
-        rgb: row.rgb ?? null,
-        quantity,
-        id: row.id,
-      };
-
-      return createRow;
-    });
-
-    setQuantityRows(mapped);
+    setQuantityRows(detailRows);
   }, [production, modelIndex]);
 
   // ======================================================
@@ -257,12 +285,14 @@ export function useProductionDetail() {
     }
 
     try {
+      // dto/detail.go を正: rows は modelId ベース
       const rowsForUpdate: DetailQuantityRow[] = quantityRows.map((row) => ({
-        id: row.modelVariationId,
+        modelId: row.modelId,
         modelNumber: row.modelNumber,
         size: row.size,
         color: row.color,
         rgb: row.rgb ?? null,
+        displayOrder: row.displayOrder,
         quantity: row.quantity ?? 0,
       }));
 
@@ -278,6 +308,7 @@ export function useProductionDetail() {
 
       setMode("view");
     } catch {
+      // eslint-disable-next-line no-alert
       alert("更新に失敗しました");
     }
   }, [productionId, production, quantityRows, canEdit]);
@@ -288,7 +319,16 @@ export function useProductionDetail() {
   const { onPrint } = usePrintCard({
     productionId: productionId ?? null,
     hasProduction: !!production,
-    rows: quantityRows,
+    // ✅ usePrintCard が QuantityRowBase(modelVariationId) を要求する場合があるため、
+    //   最低限ここでアダプトして渡す（productionDetail.tsx 側と同等）
+    rows: (Array.isArray(quantityRows) ? quantityRows : []).map((r) => ({
+      modelVariationId: r.modelId,
+      modelNumber: r.modelNumber,
+      size: r.size,
+      color: r.color,
+      rgb: r.rgb ?? null,
+      quantity: r.quantity ?? 0,
+    })) as any,
   });
 
   // ======================================================

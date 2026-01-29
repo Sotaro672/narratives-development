@@ -1,41 +1,62 @@
-//frontend\console\production\src\application\detail\types.ts
+// frontend\console\production\src\application\detail\types.ts
 import type {
-  Production,
   ProductionStatus,
 } from "../../../../shell/src/shared/types/production";
 
 /**
- * 詳細表示用型（Production）
- * - createdAt/updatedAt/printedAt は Date として保持する
+ * Production 詳細（backend ProductionDetailDTO と整合）
+ * - createdAt/updatedAt/printedAt は Date として保持する（未ロード時は null を許容）
  */
-export type ProductionDetail = Omit<
-  Production,
-  "createdAt" | "updatedAt" | "printedAt"
-> & {
-  totalQuantity: number;
-  assigneeName?: string;
-  productName?: string;
-  brandName?: string;
+export type ProductionDetail = {
+  id: string;
+  productBlueprintId: string;
 
+  // Brand（NameResolver 済み）
+  brandId: string;
+  brandName: string;
+
+  // Assignee（NameResolver 済み）
+  assigneeId: string;
+  assigneeName: string;
+
+  // Status
+  status: ProductionStatus;
+
+  // Model breakdown
+  models: ProductionQuantityRow[];
+  totalQuantity: number;
+
+  // timestamps
   printedAt: Date | null;
+
+  createdById?: string | null;
+  createdByName: string;
   createdAt: Date | null;
+
+  updatedById?: string | null;
+  updatedByName: string;
   updatedAt: Date | null;
 };
 
+/**
+ * backend dto.ProductionModelRowDTO と整合
+ */
 export type ModelVariationSummary = {
-  id: string;
+  modelId: string;
   modelNumber: string;
   size: string;
   color: string;
   rgb?: number | string | null;
+  displayOrder?: number;
 };
 
 export type ProductionQuantityRow = {
-  id: string;
+  modelId: string;
   modelNumber: string;
   size: string;
   color: string;
   rgb?: number | string | null;
+  displayOrder?: number;
   quantity: number;
 };
 

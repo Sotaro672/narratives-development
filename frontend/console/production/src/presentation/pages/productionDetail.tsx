@@ -24,6 +24,9 @@ import { usePrintCard } from "../../../../product/src/presentation/hook/usePrint
 // ★ 分離した印刷カードコンポーネント
 import PrintCard from "../../../../product/src/presentation/component/printCard";
 
+// ✅ detail rows 型（dto/detail.go 正）
+import type { ProductionQuantityRow as DetailQuantityRow } from "../../application/detail/types";
+
 export default function ProductionDetail() {
   const {
     // モード関連
@@ -61,13 +64,107 @@ export default function ProductionDetail() {
     ? new Date(production.createdAt).toLocaleDateString("ja-JP")
     : "-";
 
+  // ==========================================================
+  // ✅ Debug: productionQuantity（production.models / quantityRows）確認ログ
+  // - 目的: この画面が「API 取得 → hook 変換 → rows 反映」できているかを確認
+  // - 期待:
+  //   - production.models が [{modelId, quantity, ...}] で入っている
+  //   - quantityRows が modelId を持ち、行数が一致または補完されている
+  // ==========================================================
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.groupCollapsed("[ProductionDetail] productionQuantity debug");
+
+    // eslint-disable-next-line no-console
+    console.log("productionId:", productionId);
+    // eslint-disable-next-line no-console
+    console.log("loading/error:", { loading, error });
+
+    if (!production) {
+      // eslint-disable-next-line no-console
+      console.log("production: null");
+      // eslint-disable-next-line no-console
+      console.groupEnd();
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log("production.status:", production.status);
+    // eslint-disable-next-line no-console
+    console.log("production.productBlueprintId:", production.productBlueprintId);
+
+    const rawModels = (production as any)?.models;
+    // eslint-disable-next-line no-console
+    console.log("production.models type:", typeof rawModels, "isArray:", Array.isArray(rawModels));
+    // eslint-disable-next-line no-console
+    console.log("production.models length:", Array.isArray(rawModels) ? rawModels.length : 0);
+    // eslint-disable-next-line no-console
+    console.log("production.models (first 5):", Array.isArray(rawModels) ? rawModels.slice(0, 5) : rawModels);
+
+    const qr = Array.isArray(quantityRows) ? quantityRows : [];
+    // eslint-disable-next-line no-console
+    console.log("quantityRows length:", qr.length);
+    // eslint-disable-next-line no-console
+    console.log("quantityRows (first 5):", qr.slice(0, 5));
+
+    // 欠損チェック
+    const missingModelId = qr.filter((r) => !r?.modelId || String(r.modelId).trim() === "");
+    if (missingModelId.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn("quantityRows: missing modelId rows:", missingModelId);
+    }
+
+    // quantityRows の quantity 合計
+    const total = qr.reduce((sum, r) => sum + (Number.isFinite(r.quantity) ? (r.quantity as number) : 0), 0);
+    // eslint-disable-next-line no-console
+    console.log("quantityRows totalQuantity (sum):", total);
+
+    // production.models と quantityRows の突合（modelId）
+    const modelIdsFromProduction = new Set(
+      Array.isArray(rawModels) ? rawModels.map((m: any) => String(m?.modelId ?? "").trim()).filter(Boolean) : [],
+    );
+    const modelIdsFromRows = new Set(qr.map((r) => String(r?.modelId ?? "").trim()).filter(Boolean));
+
+    const onlyInProduction = [...modelIdsFromProduction].filter((id) => !modelIdsFromRows.has(id));
+    const onlyInRows = [...modelIdsFromRows].filter((id) => !modelIdsFromProduction.has(id));
+
+    if (onlyInProduction.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn("modelIds only in production.models:", onlyInProduction);
+    }
+    if (onlyInRows.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn("modelIds only in quantityRows:", onlyInRows);
+    }
+
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+  }, [productionId, production, quantityRows, loading, error]);
+
   // ==========================
   // usePrintCard: 印刷 + print_log 取得
+  // - usePrintCard は QuantityRowBase（modelVariationId 必須）を要求するため、
+  //   detail row（modelId）から変換して渡す
   // ==========================
+  const rowsForPrint = React.useMemo(() => {
+    const safe = Array.isArray(quantityRows) ? quantityRows : [];
+    return safe.map((r: DetailQuantityRow) => ({
+      // usePrintCard 側の要求: modelVariationId
+      modelVariationId: r.modelId,
+
+      // 以降は usePrintCard が参照しうる情報（無害に付与）
+      modelNumber: r.modelNumber,
+      size: r.size,
+      color: r.color,
+      rgb: r.rgb ?? null,
+      quantity: r.quantity ?? 0,
+    }));
+  }, [quantityRows]);
+
   const { onPrint, printing } = usePrintCard({
     productionId: productionId ?? null,
     hasProduction: !!production,
-    rows: quantityRows,
+    rows: rowsForPrint,
   });
 
   // ==========================
@@ -99,13 +196,11 @@ export default function ProductionDetail() {
       return;
     }
 
-    const ok = window.confirm("印刷後は生産数を更新できません。\n印刷後に追加生産が必要になった場合は生産計画を新規作成してください。");
+    const ok = window.confirm(
+      "印刷後は生産数を更新できません。\n印刷後に追加生産が必要になった場合は生産計画を新規作成してください。",
+    );
     if (!ok) return;
 
-    // usePrintCard 内で:
-    //   1. Product を作成
-    //   2. print_log を作成
-    //   3. print_log 一覧（QR ペイロード付き）を取得して保持（※UI表示はしない）
     await onPrint();
   }, [productionId, onPrint]);
 
@@ -178,9 +273,8 @@ export default function ProductionDetail() {
                 mode={isEditMode ? "edit" : "view"}
                 onChangeRows={isEditMode ? setQuantityRows : undefined}
               />
-              {isViewMode && (
-                <PrintCard printing={printing} onClick={handlePrint} />
-              )}
+
+              {isViewMode && <PrintCard printing={printing} onClick={handlePrint} />}
             </>
           )}
         </div>
@@ -198,11 +292,7 @@ export default function ProductionDetail() {
             onSelectAssignee={() => {}}
           />
 
-          <LogCard
-            title="更新履歴"
-            logs={[]}
-            emptyText="更新履歴はまだありません。"
-          />
+          <LogCard title="更新履歴" logs={[]} emptyText="更新履歴はまだありません。" />
         </div>
       </PageStyle>
     </>

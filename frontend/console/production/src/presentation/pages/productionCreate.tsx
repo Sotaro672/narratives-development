@@ -35,6 +35,12 @@ import ProductionQuantityCard from "../components/productionQuantityCard";
 
 import "../styles/production.css";
 
+// ✅ dto/detail.go を正: ProductionQuantityCard は detail の ProductionQuantityRow を受け取る
+import type { ProductionQuantityRow as DetailQuantityRow } from "../../application/detail/types";
+
+// ✅ create 側の row を detail row にアダプトするために型を参照
+import type { ProductionQuantityRow as CreateQuantityRow } from "../create/types";
+
 type ProductRow = {
   id: string;
   name: string;
@@ -64,10 +70,40 @@ export default function ProductionCreate() {
     selectedProductId,
     selectProductById,
 
-    // ProductionQuantityCard 用
+    // ProductionQuantityCard 用（create 側の row 形状）
     modelVariationsForCard,
     setQuantityRows,
   } = useProductionCreate();
+
+  // ✅ create row -> detail row 変換（ProductionQuantityCard の props に合わせる）
+  const rowsForCard: DetailQuantityRow[] = (Array.isArray(modelVariationsForCard)
+    ? modelVariationsForCard
+    : []
+  ).map((r: CreateQuantityRow, index: number) => ({
+    modelId: (r.modelVariationId ?? "").trim() || String(index),
+    modelNumber: r.modelNumber ?? "",
+    size: r.size ?? "",
+    color: r.color ?? "",
+    rgb: r.rgb ?? null,
+    quantity: r.quantity ?? 0,
+    // create 側には displayOrder が無い前提
+    displayOrder: undefined,
+  }));
+
+  // ✅ onChangeRows: detail row -> create row に戻して state 更新
+  const handleChangeRows = (rows: DetailQuantityRow[]) => {
+    const next: CreateQuantityRow[] = (Array.isArray(rows) ? rows : []).map(
+      (r) => ({
+        modelVariationId: r.modelId,
+        modelNumber: r.modelNumber,
+        size: r.size,
+        color: r.color,
+        rgb: r.rgb ?? null,
+        quantity: r.quantity ?? 0,
+      }),
+    );
+    setQuantityRows(next);
+  };
 
   return (
     <PageStyle
@@ -80,10 +116,7 @@ export default function ProductionCreate() {
       <div className="space-y-4">
         {/* 商品設計カード */}
         {hasSelectedProductBlueprint ? (
-          <ProductBlueprintCard
-            mode="view"
-            {...selectedProductBlueprintForCard}
-          />
+          <ProductBlueprintCard mode="view" {...selectedProductBlueprintForCard} />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-500">
             商品設計を選択してください
@@ -94,9 +127,9 @@ export default function ProductionCreate() {
         {hasSelectedProductBlueprint && (
           <ProductionQuantityCard
             title="モデル別 生産数一覧"
-            rows={modelVariationsForCard}
+            rows={rowsForCard}
             mode="edit"
-            onChangeRows={setQuantityRows}
+            onChangeRows={handleChangeRows}
           />
         )}
       </div>
@@ -132,8 +165,7 @@ export default function ProductionCreate() {
                     <button
                       key={b}
                       className={
-                        "pb-select__row" +
-                        (selectedBrand === b ? " is-active" : "")
+                        "pb-select__row" + (selectedBrand === b ? " is-active" : "")
                       }
                       onClick={() => selectBrand(b)}
                     >
