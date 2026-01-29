@@ -11,14 +11,8 @@ import type { ModelNumber } from "../../../../model/src/application/modelCreateS
 
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-import {
-  ITEM_TYPE_MEASUREMENT_OPTIONS,
-} from "../../domain/entity/catalog";
-import type {
-  Fit,
-  ItemType,
-  MeasurementOption,
-} from "../../domain/entity/catalog";
+import { ITEM_TYPE_MEASUREMENT_OPTIONS } from "../../domain/entity/catalog";
+import type { Fit, ItemType, MeasurementOption } from "../../domain/entity/catalog";
 
 import { createProductBlueprint } from "../../application/productBlueprintCreateService";
 
@@ -79,16 +73,9 @@ export interface UseProductBlueprintCreateResult {
 
   onAddSize: () => void;
   onRemoveSize: (id: string) => void;
-  onChangeSize: (
-    id: string,
-    patch: Partial<Omit<SizeRow, "id">>,
-  ) => void;
+  onChangeSize: (id: string, patch: Partial<Omit<SizeRow, "id">>) => void;
 
-  onChangeModelNumber: (
-    sizeLabel: string,
-    color: string,
-    nextCode: string,
-  ) => void;
+  onChangeModelNumber: (sizeLabel: string, color: string, nextCode: string) => void;
 
   onEditAssignee: () => void;
   onClickAssignee: () => void;
@@ -122,10 +109,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       setBrandError(null);
 
       try {
-        const items = await fetchAllBrandsForCompany(
-          effectiveCompanyId,
-          true
-        );
+        const items = await fetchAllBrandsForCompany(effectiveCompanyId, true);
         if (!cancelled) {
           setBrandOptions(items);
         }
@@ -142,7 +126,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     }
 
     void loadBrands();
-    return () => { cancelled = true };
+    return () => {
+      cancelled = true;
+    };
   }, [effectiveCompanyId]);
 
   const brandName = React.useMemo(() => {
@@ -162,9 +148,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([]);
-  const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>(
-    {},
-  );
+  const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>({});
 
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers, setModelNumbers] = React.useState<ModelNumber[]>([]);
@@ -184,8 +168,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     if (assigneeId) return;
 
     const memberId = currentMember.id;
-    const label =
-      currentMember.fullName || currentMember.email || currentMember.id;
+    const label = currentMember.fullName || currentMember.email || currentMember.id;
 
     setAssigneeId(memberId);
     setAssigneeName(label);
@@ -201,10 +184,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     if (!productName.trim()) errors.push("商品名は必須です。");
     if (!brandId) errors.push("ブランドを選択してください。");
     if (!itemType) errors.push("アイテム種別を選択してください。");
-    if (!productIdTagType)
-      errors.push("商品IDタグを選択してください。");
-    if (weight < 0)
-      errors.push("重さは 0 以上の値を入力してください。");
+    if (!productIdTagType) errors.push("商品IDタグを選択してください。");
+    if (weight < 0) errors.push("重さは 0 以上の値を入力してください。");
     if (colors.length === 0)
       errors.push("カラーバリエーションを1つ以上登録してください。");
     if (sizes.length === 0)
@@ -242,9 +223,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
       if (dupCodes.size > 0) {
         errors.push(
-          `モデルナンバーが重複しています。（重複コード: ${Array.from(
-            dupCodes,
-          ).join("、")}）`,
+          `モデルナンバーが重複しています。（重複コード: ${Array.from(dupCodes).join(
+            "、",
+          )}）`,
         );
       }
     }
@@ -257,7 +238,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       sizes.forEach((s) => {
         const labelRaw = (s as any).sizeLabel;
         const label =
-          typeof labelRaw === "string" ? labelRaw.trim() : String(labelRaw ?? "").trim();
+          typeof labelRaw === "string"
+            ? labelRaw.trim()
+            : String(labelRaw ?? "").trim();
         if (!label) return;
         if (seenSizes.has(label)) {
           dupSizes.add(label);
@@ -268,15 +251,12 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
       if (dupSizes.size > 0) {
         errors.push(
-          `サイズ名が重複しています。（重複サイズ: ${Array.from(
-            dupSizes,
-          ).join("、")}）`,
+          `サイズ名が重複しています。（重複サイズ: ${Array.from(dupSizes).join("、")}）`,
         );
       }
     }
 
     // ✅ measurements（chest / waist / length / shoulder 等）の空欄チェックは行わない
-
     return errors;
   }, [
     effectiveCompanyId,
@@ -369,6 +349,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       delete next[name];
       return next;
     });
+
+    // ✅ 追加: 色行削除時に modelNumbers も削除（キャッシュ掃除）
+    setModelNumbers((prev) => prev.filter((mn) => mn.color !== name));
   }, []);
 
   const onAddSize = React.useCallback(() => {
@@ -388,9 +371,24 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     ]);
   }, []);
 
-  const onRemoveSize = React.useCallback((id: string) => {
-    setSizes((prev) => prev.filter((s) => s.id !== id));
-  }, []);
+  const onRemoveSize = React.useCallback(
+    (id: string) => {
+      const target = sizes.find((s) => s.id === id) as any;
+      const labelRaw = target?.sizeLabel;
+      const sizeLabel =
+        typeof labelRaw === "string"
+          ? labelRaw.trim()
+          : String(labelRaw ?? "").trim();
+
+      setSizes((prev) => prev.filter((s) => s.id !== id));
+
+      // ✅ 追加: サイズ行削除時に modelNumbers も削除（キャッシュ掃除）
+      if (sizeLabel) {
+        setModelNumbers((prev) => prev.filter((mn) => mn.size !== sizeLabel));
+      }
+    },
+    [sizes],
+  );
 
   const onChangeSize = React.useCallback(
     (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
@@ -408,19 +406,49 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       clampField("length");
       clampField("shoulder");
 
-      setSizes((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),
-      );
+      // ✅ 追加: sizeLabel 変更時に modelNumbers を追従（rename / 空欄化は削除）
+      const prevRow = sizes.find((s) => s.id === id) as any;
+      const prevLabelRaw = prevRow?.sizeLabel;
+      const prevLabel =
+        typeof prevLabelRaw === "string"
+          ? prevLabelRaw.trim()
+          : String(prevLabelRaw ?? "").trim();
+
+      const nextLabelRaw = (safePatch as any).sizeLabel;
+      const nextLabel =
+        typeof nextLabelRaw === "string"
+          ? nextLabelRaw.trim()
+          : nextLabelRaw == null
+          ? null
+          : String(nextLabelRaw).trim();
+
+      if (nextLabel !== null && nextLabel !== prevLabel) {
+        if (!nextLabel) {
+          // 空欄化したら、そのサイズに紐づく modelNumbers を削除
+          if (prevLabel) {
+            setModelNumbers((prev) => prev.filter((mn) => mn.size !== prevLabel));
+          }
+        } else {
+          // rename したら、既存の modelNumbers の size を付け替え
+          if (prevLabel) {
+            setModelNumbers((prev) =>
+              prev.map((mn) =>
+                mn.size === prevLabel ? { ...mn, size: nextLabel } : mn,
+              ),
+            );
+          }
+        }
+      }
+
+      setSizes((prev) => prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)));
     },
-    [],
+    [sizes],
   );
 
   const onChangeModelNumber = React.useCallback(
     (sizeLabel: string, color: string, nextCode: string) => {
       setModelNumbers((prev) => {
-        const idx = prev.findIndex(
-          (m) => m.size === sizeLabel && m.color === color,
-        );
+        const idx = prev.findIndex((m) => m.size === sizeLabel && m.color === color);
         const trimmed = nextCode.trim();
 
         // 空文字の場合はエントリ削除（上のバリデーションで拾う）
@@ -449,17 +477,14 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     [],
   );
 
-  const onChangeColorRgb = React.useCallback(
-    (name: string, rgbHex: string) => {
-      const key = name.trim();
-      if (!key) return;
-      setColorRgbMap((prev) => ({
-        ...prev,
-        [key]: rgbHex,
-      }));
-    },
-    [],
-  );
+  const onChangeColorRgb = React.useCallback((name: string, rgbHex: string) => {
+    const key = name.trim();
+    if (!key) return;
+    setColorRgbMap((prev) => ({
+      ...prev,
+      [key]: rgbHex,
+    }));
+  }, []);
 
   const handleChangeWeight = React.useCallback((v: number) => {
     if (Number.isNaN(v)) {
@@ -472,8 +497,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const onEditAssignee = React.useCallback(() => {
     if (currentMember) {
       const memberId = currentMember.id;
-      const label =
-        currentMember.fullName || currentMember.email || currentMember.id;
+      const label = currentMember.fullName || currentMember.email || currentMember.id;
       setAssigneeId(memberId);
       setAssigneeName(label);
     }
@@ -482,6 +506,21 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const onClickAssignee = React.useCallback(() => {
     // クリック自体のハンドリングのみ（ログ出力なし）
   }, [assigneeId, assigneeName]);
+
+  // ✅ 追加: colors / sizes 変更時に modelNumbers の整合性を保つ（削除漏れの掃除）
+  React.useEffect(() => {
+    const validColors = new Set(colors.map((c) => c.trim()).filter(Boolean));
+    const validSizes = new Set(
+      sizes
+        .map((s) => (s as any).sizeLabel)
+        .map((v) => (typeof v === "string" ? v.trim() : String(v ?? "").trim()))
+        .filter(Boolean),
+    );
+
+    setModelNumbers((prev) =>
+      prev.filter((mn) => validColors.has(mn.color) && validSizes.has(mn.size)),
+    );
+  }, [colors, sizes]);
 
   return {
     title: "商品設計を作成",
