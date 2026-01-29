@@ -30,13 +30,23 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(ctx context.Context, id s
 		return err
 	}
 
+	// 越境防止
+	if strings.TrimSpace(pb.CompanyID) == "" || strings.TrimSpace(pb.CompanyID) != cid {
+		return productbpdom.ErrForbidden
+	}
+
 	now := time.Now().UTC()
-
 	const softDeleteTTL = 90 * 24 * time.Hour
-	pb.SoftDelete(now, deletedBy, softDeleteTTL)
 
+	// domain 側の制約（printed なら ErrForbidden 等）を尊重
+	if err := pb.SoftDelete(now, deletedBy, softDeleteTTL); err != nil {
+		return err
+	}
+
+	// companyId は context を正として上書き（念のため）
 	pb.CompanyID = cid
 
+	// ✅ Patch に deleted 系が無いので Save を使う（port 側に Save を残す）
 	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {
 		return err
@@ -67,24 +77,22 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(ctx context.Context, id stri
 		return err
 	}
 
-	now := time.Now().UTC()
-
-	pb.DeletedAt = nil
-	pb.DeletedBy = nil
-	pb.ExpireAt = nil
-
-	pb.UpdatedAt = now
-	if restoredBy != nil {
-		if trimmed := strings.TrimSpace(*restoredBy); trimmed != "" {
-			rb := trimmed
-			pb.UpdatedBy = &rb
-		} else {
-			pb.UpdatedBy = nil
-		}
+	// 越境防止
+	if strings.TrimSpace(pb.CompanyID) == "" || strings.TrimSpace(pb.CompanyID) != cid {
+		return productbpdom.ErrForbidden
 	}
 
+	now := time.Now().UTC()
+
+	// domain 側の制約（printed なら ErrForbidden 等）を尊重
+	if err := pb.Restore(now, restoredBy); err != nil {
+		return err
+	}
+
+	// companyId は context を正として上書き（念のため）
 	pb.CompanyID = cid
 
+	// ✅ Patch に deleted 系が無いので Save を使う（port 側に Save を残す）
 	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {
 		return err

@@ -13,14 +13,33 @@ import (
 // Commands
 // ------------------------------------------------------------
 
-func (u *ProductBlueprintUsecase) Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
+// Create creates a ProductBlueprint.
+// NOTE: usecase の公開APIは引き続き ProductBlueprint を受け取るが、repo には CreateInput を渡す。
+func (u *ProductBlueprintUsecase) Create(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (productbpdom.ProductBlueprint, error) {
 	cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	if cid == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
-	v.CompanyID = cid
 
-	created, err := u.repo.Create(ctx, v)
+	in := productbpdom.CreateInput{
+		ProductName:      strings.TrimSpace(v.ProductName),
+		BrandID:          strings.TrimSpace(v.BrandID),
+		ItemType:         v.ItemType,
+		Fit:              strings.TrimSpace(v.Fit),
+		Material:         strings.TrimSpace(v.Material),
+		Weight:           v.Weight,
+		QualityAssurance: v.QualityAssurance,
+		ProductIdTag:     v.ProductIdTag,
+		AssigneeID:       strings.TrimSpace(v.AssigneeID),
+		CompanyID:        cid,
+		CreatedBy:        v.CreatedBy,
+		CreatedAt:        nil, // repo may set if nil（必要なら v.CreatedAt を詰めても良い）
+	}
+
+	created, err := u.repo.Create(ctx, in)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
@@ -56,17 +75,31 @@ func (u *ProductBlueprintUsecase) MarkPrinted(ctx context.Context, id string) (p
 	return updated, nil
 }
 
-func (u *ProductBlueprintUsecase) Save(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
-	cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
-	if cid == "" {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
+// Save is kept for backward compatibility at the usecase layer.
+// - id が空なら Create として扱う
+// - id があれば Update(Patch) に委譲する
+//
+// NOTE: repo port から Save が消えたため、ここでは repo.Save は呼ばない。
+func (u *ProductBlueprintUsecase) Save(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (productbpdom.ProductBlueprint, error) {
+	id := strings.TrimSpace(v.ID)
+	if id == "" {
+		return u.Create(ctx, v)
 	}
-	v.CompanyID = cid
-
-	return u.repo.Save(ctx, v)
+	return u.Update(ctx, v)
 }
 
-func (u *ProductBlueprintUsecase) Update(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
+// Update updates a ProductBlueprint using Patch.
+// - companyId 境界は usecase でチェック（id が漏れても越境更新しない）
+// - Update API では modelRefs を受け取らない方針のため、Patch には modelRefs を入れない（= 変更しない）
+//
+// NOTE: repo port から Save が消えたため、repo.Update を呼ぶ。
+func (u *ProductBlueprintUsecase) Update(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (productbpdom.ProductBlueprint, error) {
 	id := strings.TrimSpace(v.ID)
 	if id == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
@@ -76,21 +109,50 @@ func (u *ProductBlueprintUsecase) Update(ctx context.Context, v productbpdom.Pro
 	if cid == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
-	v.CompanyID = cid
 
-	// ★重要：既存レコードを取得して、モデル参照などの「Update 入力に含まれないフィールド」を引き継ぐ
+	// 既存取得（越境更新の防止、NotFound 明確化、printed 等の参照にも使える）
 	current, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
+	if strings.TrimSpace(current.CompanyID) == "" || strings.TrimSpace(current.CompanyID) != cid {
+		// company 境界違反（id を推測されても更新できないようにする）
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrForbidden
+	}
 
-	// Update API では modelRefs を受け取らない設計のため、ここで必ず引き継ぐ
-	v.ModelRefs = current.ModelRefs
+	// Patch を組み立て（Update で変更したい項目のみ）
+	name := strings.TrimSpace(v.ProductName)
+	brandID := strings.TrimSpace(v.BrandID)
+	itemType := v.ItemType
+	fit := strings.TrimSpace(v.Fit)
+	material := strings.TrimSpace(v.Material)
+	weight := v.Weight
 
-	// printed は Update で変更しない方針なら、ここでも引き継いでおく（安全）
-	v.Printed = current.Printed
+	qa := make([]string, 0, len(v.QualityAssurance))
+	if v.QualityAssurance != nil {
+		qa = append(qa, v.QualityAssurance...)
+	}
 
-	updated, err := u.repo.Save(ctx, v)
+	tag := v.ProductIdTag
+	assigneeID := strings.TrimSpace(v.AssigneeID)
+
+	patch := productbpdom.Patch{
+		ProductName:      &name,
+		BrandID:          &brandID,
+		ItemType:         &itemType,
+		Fit:              &fit,
+		Material:         &material,
+		Weight:           &weight,
+		QualityAssurance: &qa,
+		ProductIdTag:     &tag,
+		AssigneeID:       &assigneeID,
+
+		// NOTE:
+		// - ModelRefs は Update API では受け取らない（変更しない）ため nil のまま
+		// - BrandName / CompanyName 等の表示専用も永続化しないため nil のまま
+	}
+
+	updated, err := u.repo.Update(ctx, id, patch)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
@@ -129,7 +191,7 @@ func sanitizeModelIDs(in []string) []string {
 	return out
 }
 
-// AppendModelRefs は productBlueprint 起票後に modelRefs を追記する（案1）。
+// AppendModelRefs は productBlueprint 起票後に modelRefs を追記する。
 // 要件:
 // - 入力: modelIds（順序が displayOrder の採番元）
 // - 追記時に updatedAt / updatedBy が更新されないこと（repo 側で担保する）
@@ -148,16 +210,19 @@ func (u *ProductBlueprintUsecase) AppendModelRefs(
 	if cid == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
-	_ = cid // repo 実装側で company 境界を確認する場合に備え、ここでは未使用を回避
 
 	modelIds = sanitizeModelIDs(modelIds)
 	if len(modelIds) == 0 {
 		return productbpdom.ProductBlueprint{}, productbpdom.WrapInvalid(nil, "modelIds is required")
 	}
 
-	// 存在確認（NotFound を明確化）
-	if _, err := u.repo.GetByID(ctx, id); err != nil {
+	// 存在確認 + 越境防止
+	current, err := u.repo.GetByID(ctx, id)
+	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
+	}
+	if strings.TrimSpace(current.CompanyID) == "" || strings.TrimSpace(current.CompanyID) != cid {
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrForbidden
 	}
 
 	// displayOrder は usecase 側で採番（順序は保持）

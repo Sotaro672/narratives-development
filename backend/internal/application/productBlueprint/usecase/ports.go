@@ -31,8 +31,18 @@ type ProductBlueprintRepo interface {
 	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
 
 	// Write
-	Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
+	//
+	// ✅ Create は CreateInput を受け取る（repo の contract に合わせる）
+	Create(ctx context.Context, in productbpdom.CreateInput) (productbpdom.ProductBlueprint, error)
+
+	// ✅ Update は Patch を受け取る（repo の contract に合わせる）
+	Update(ctx context.Context, id string, patch productbpdom.Patch) (productbpdom.ProductBlueprint, error)
+
+	// ✅ Save は lifecycle（SoftDelete/Restore）等で entity 全体を永続化するために残す（互換用）
+	// NOTE: 将来的に Patch へ寄せるなら削除可能。ただしその場合は Patch に deleted 系/ttl 系を追加するか別portが必要。
 	Save(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
+
+	// Delete (physical)
 	Delete(ctx context.Context, id string) error
 
 	// ★ 追加: 起票後に modelRefs を追記（updatedAt / updatedBy を更新しない）

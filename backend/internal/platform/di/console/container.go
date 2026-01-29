@@ -4,64 +4,30 @@ package console
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
-	"os"
-	"reflect"
-	"sort"
-	"strings"
-	"time"
-
-	httpin "narratives/internal/adapters/in/http/console"
-	solanainfra "narratives/internal/infra/solana"
 
 	fs "narratives/internal/adapters/out/firestore"
-	gcso "narratives/internal/adapters/out/gcs"
-	mailadp "narratives/internal/adapters/out/mail"
 
-	// ✅ shared owner resolve query (wallet -> avatarId/brandId)
-	sharedfs "narratives/internal/adapters/out/firestore/shared"
-	sharedquery "narratives/internal/application/query/shared"
-
-	// shared infra (Firestore/FirebaseAuth/GCS/MintKey/ArweaveUploader/buckets)
-	shared "narratives/internal/platform/di/shared"
-
-	// usecases / apps
 	inspectionapp "narratives/internal/application/inspection"
 	mintapp "narratives/internal/application/mint"
 	pbuc "narratives/internal/application/productBlueprint/usecase"
 	productionapp "narratives/internal/application/production"
 	companyquery "narratives/internal/application/query/console"
+	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
-	tokenblueprintapp "narratives/internal/application/tokenBlueprint" // ✅ moved from application/usecase
+	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
-	// ★ mint 直前 metadata 生成で利用
-	"narratives/internal/infra/arweave"
+	shared "narratives/internal/platform/di/shared"
 
-	// domains
-	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
-	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
-	pbdom "narratives/internal/domain/productBlueprint"
-	productiondom "narratives/internal/domain/production"
-	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ========================================
 // Container (Console DI)
 // ========================================
-//
-// Console Container owns:
-// - Firestore repositories (FS adapters)
-// - domain services
-// - application usecases
-// - console-only query services
-// - console router deps assembly
-//
-// It depends on shared.Infra for external clients and cross-cutting infra.
 type Container struct {
 	Infra *shared.Infra
 
@@ -101,10 +67,7 @@ type Container struct {
 	ShippingAddressUC  *uc.ShippingAddressUsecase
 	TokenUC            *uc.TokenUsecase
 
-	// ✅ moved: TokenBlueprint usecases are now under application/tokenBlueprint
-	TokenBlueprintUC *tokenblueprintapp.TokenBlueprintUsecase
-
-	// ★ 追加: TokenBlueprint read-model（memberId -> name 解決を担当）
+	TokenBlueprintUC      *tokenblueprintapp.TokenBlueprintUsecase
 	TokenBlueprintQueryUC *tokenblueprintapp.TokenBlueprintQueryUsecase
 
 	TokenOperationUC *uc.TokenOperationUsecase
@@ -112,11 +75,9 @@ type Container struct {
 	UserUC           *uc.UserUsecase
 	WalletUC         *uc.WalletUsecase
 
-	// Cart / Post
 	CartUC *uc.CartUsecase
 	PostUC *uc.PostUsecase
 
-	// Console-only Query Services
 	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
 	MintRequestQueryService       *companyquery.MintRequestQueryService
 	InventoryQuery                *companyquery.InventoryQuery
@@ -124,550 +85,100 @@ type Container struct {
 	ListManagementQuery           *companyquery.ListManagementQuery
 	ListDetailQuery               *companyquery.ListDetailQuery
 
-	// ✅ shared owner resolve query (wallet -> avatarId/brandId)
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
-	// Inspector / Mint
 	ProductUC    *uc.ProductUsecase
 	InspectionUC *inspectionapp.InspectionUsecase
 	MintUC       *mintapp.MintUsecase
 
-	// Invitation
 	InvitationQuery   uc.InvitationQueryPort
 	InvitationCommand uc.InvitationCommandPort
 
-	// auth/bootstrap
 	AuthBootstrap *authuc.BootstrapService
-
-	// NameResolver
-	NameResolver *resolver.NameResolver
+	NameResolver  *resolver.NameResolver
 }
 
-// NewContainer builds console container using shared infra.
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
-	// ---------------------------------------------------------
-	// shared infra
-	// ---------------------------------------------------------
-	if infra == nil {
-		var err error
-		infra, err = shared.NewInfra(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if infra == nil {
-		return nil, errors.New("shared infra is nil")
+	clients, err := ensureClients(ctx, infra)
+	if err != nil {
+		return nil, err
 	}
 
-	// IMPORTANT: Config は後続で参照するので必須
-	if infra.Config == nil {
-		return nil, errors.New("shared infra config is nil")
+	repos := buildRepos(clients)
+	services := buildDomainServices(repos)
+	res := buildResolvers(clients, repos, services)
+	u := buildUsecases(clients, repos, services, res)
+	q := buildQueries(repos, res, u)
+
+	if clients == nil || clients.infra == nil {
+		return nil, errors.New("clients/infra is nil")
 	}
 
-	// ---------------------------------------------------------
-	// Required clients
-	// ---------------------------------------------------------
-	fsClient := infra.Firestore
-	gcsClient := infra.GCS
-	cfg := infra.Config
-
-	if fsClient == nil {
-		projectID := strings.TrimSpace(cfg.FirestoreProjectID)
-		if projectID == "" {
-			projectID = strings.TrimSpace(os.Getenv("FIRESTORE_PROJECT_ID"))
-		}
-		if projectID == "" {
-			projectID = strings.TrimSpace(os.Getenv("GOOGLE_CLOUD_PROJECT"))
-		}
-		hasCredFile := strings.TrimSpace(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")) != ""
-		log.Printf("[di.console] ERROR: infra.Firestore is nil (projectID=%q, GOOGLE_APPLICATION_CREDENTIALS_set=%t)", projectID, hasCredFile)
-		return nil, fmt.Errorf("shared infra firestore client is nil (projectID=%q). shared.NewInfra likely failed to initialize Firestore client", projectID)
-	}
-	if gcsClient == nil {
-		log.Printf("[di.console] ERROR: infra.GCS is nil")
-		return nil, errors.New("shared infra gcs client is nil")
-	}
-
-	// =========================================================
-	// 4. Outbound adapters (repositories)
-	// =========================================================
-	accountRepo := fs.NewAccountRepositoryFS(fsClient)
-	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
-	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
-
-	avatarStateRepo := fs.NewAvatarStateRepositoryFS(fsClient)
-
-	billingAddressRepo := fs.NewBillingAddressRepositoryFS(fsClient)
-	brandRepo := fs.NewBrandRepositoryFS(fsClient)
-	campaignRepo := fs.NewCampaignRepositoryFS(fsClient)
-	companyRepo := fs.NewCompanyRepositoryFS(fsClient)
-	inquiryRepo := fs.NewInquiryRepositoryFS(fsClient)
-
-	// Inventory repo (Firestore)
-	inventoryRepo := fs.NewInventoryRepositoryFS(fsClient)
-	// ✅ Adapter: inventory.RepositoryPort に追加された ApplyTransferResult を満たす
-	inventoryRepoForUC := &inventoryRepoTransferResultAdapter{InventoryRepositoryFS: inventoryRepo}
-
-	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
-
-	listRepoFS := fs.NewListRepositoryFS(fsClient)
-	listRepo := fs.NewListRepositoryForUsecase(listRepoFS)
-
-	memberRepo := fs.NewMemberRepositoryFS(fsClient)
-	messageRepo := fs.NewMessageRepositoryFS(fsClient)
-	modelRepo := fs.NewModelRepositoryFS(fsClient)
-
-	mintRepo := fs.NewMintRepositoryFS(fsClient)
-
-	orderRepo := fs.NewOrderRepositoryFS(fsClient)
-	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
-	permissionRepo := fs.NewPermissionRepositoryFS(fsClient)
-	productRepo := fs.NewProductRepositoryFS(fsClient)
-	productBlueprintRepo := fs.NewProductBlueprintRepositoryFS(fsClient)
-
-	productionRepo := fs.NewProductionRepositoryFS(fsClient)
-	// ✅ Adapter: productionapp.ProductionRepo が要求する GetTotalQuantityByModelID を付与
-	productionRepoForUC := &productionRepoTotalQuantityAdapter{ProductionRepositoryFS: productionRepo}
-
-	shippingAddressRepo := fs.NewShippingAddressRepositoryFS(fsClient)
-	tokenBlueprintRepo := fs.NewTokenBlueprintRepositoryFS(fsClient)
-	tokenOperationRepo := fs.NewTokenOperationRepositoryFS(fsClient)
-	trackingRepo := fs.NewTrackingRepositoryFS(fsClient)
-	userRepo := fs.NewUserRepositoryFS(fsClient)
-	walletRepo := fs.NewWalletRepositoryFS(fsClient)
-
-	cartRepo := fs.NewCartRepositoryFS(fsClient)
-
-	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
-	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
-
-	productBlueprintHistoryRepo := fs.NewProductBlueprintHistoryRepositoryFS(fsClient)
-	modelHistoryRepo := fs.NewModelHistoryRepositoryFS(fsClient)
-
-	invitationTokenFSRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
-	invitationTokenUCRepo := &invitationTokenRepoAdapter{
-		fsRepo: invitationTokenFSRepo,
-	}
-
-	// =========================================================
-	// Domain services
-	// =========================================================
-	companySvc := companydom.NewService(companyRepo)
-	brandSvc := branddom.NewService(brandRepo)
-	memberSvc := memdom.NewService(memberRepo)
-
-	pbDomainRepo := &productBlueprintDomainRepoAdapter{repo: productBlueprintRepo}
-	pbSvc := pbdom.NewService(pbDomainRepo)
-
-	// =========================================================
-	// ✅ shared OwnerResolveQuery (wallet -> avatarId / brandId)
-	// - NewOwnerResolveQuery が NameReader を追加で要求するようになったため、
-	//   console 側も avatarName / brandName 解決ポートを注入する
-	// =========================================================
-	avatarAddrReader := sharedfs.NewAvatarWalletAddressReaderFS(fsClient, "avatars")
-	brandAddrReader := sharedfs.NewBrandWalletAddressReaderFS(fsClient, "brands")
-
-	// ✅ avatarId -> avatarName
-	avatarNameReader := avatarNameReaderAdapter{repo: avatarRepo}
-
-	// ✅ brandId -> brandName は branddom.Service が GetNameByID を持つ前提
-	ownerResolveQ := sharedquery.NewOwnerResolveQuery(
-		avatarAddrReader,
-		brandAddrReader,
-		avatarNameReader,
-		brandSvc,
-	)
-
-	// =========================================================
-	// NameResolver
-	// =========================================================
-	tokenBlueprintNameRepo := &tokenBlueprintNameRepoAdapter{repo: tokenBlueprintRepo}
-	nameResolver := resolver.NewNameResolver(
-		brandRepo,
-		companyRepo,
-		productBlueprintRepo,
-		memberRepo,
-		modelRepo,
-		tokenBlueprintNameRepo,
-	)
-
-	// =========================================================
-	// GCS repositories
-	// =========================================================
-	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, infra.ListImageBucket)
-	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, infra.AvatarIconBucket)
-
-	listPatcher := &listPatcherAdapter{repo: listRepoFS}
-
-	// =========================================================
-	// 5. Application-layer usecases
-	// =========================================================
-	mintRequestPort := fs.NewMintRequestPortFS(
-		fsClient,
-		"mints",
-		"token_blueprints",
-		"brands",
-	)
-
-	var tokenUC *uc.TokenUsecase
-	if infra.MintAuthorityKey != nil {
-		solanaClient := solanainfra.NewMintClient(infra.MintAuthorityKey)
-		tokenUC = uc.NewTokenUsecase(solanaClient, mintRequestPort)
-	} else {
-		tokenUC = uc.NewTokenUsecase(nil, mintRequestPort)
-	}
-
-	accountUC := uc.NewAccountUsecase(accountRepo)
-	announcementUC := uc.NewAnnouncementUsecase(announcementRepo, nil, nil)
-
-	brandWalletSvc := solanainfra.NewBrandWalletService(cfg.FirestoreProjectID)
-	avatarWalletSvc := solanainfra.NewAvatarWalletService(cfg.FirestoreProjectID)
-
-	avatarUC := uc.NewAvatarUsecase(
-		avatarRepo,
-		avatarStateRepo,
-		avatarIconRepo,
-		avatarIconRepo,
-	).
-		WithWalletService(avatarWalletSvc).
-		WithWalletRepo(walletRepo)
-
-	callOptionalMethod(avatarUC, "WithCartRepo", cartRepo)
-
-	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
-	brandUC := uc.NewBrandUsecaseWithWallet(brandRepo, memberRepo, brandWalletSvc)
-	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
-	companyUC := uc.NewCompanyUsecase(companyRepo)
-	inquiryUC := uc.NewInquiryUsecase(inquiryRepo, nil, nil)
-
-	// ✅ FIX: inventoryRepoForUC を渡す（ApplyTransferResult を満たす）
-	inventoryUC := uc.NewInventoryUsecase(inventoryRepoForUC)
-
-	paymentUC := uc.NewPaymentUsecase(paymentRepo)
-	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
-
-	listUC := uc.NewListUsecaseWithCreator(
-		listRepo,
-		listRepo,
-		listPatcher,
-		listImageRepo,
-		listImageRepo,
-		listImageRepo,
-	)
-
-	memberUC := uc.NewMemberUsecase(memberRepo)
-	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
-	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
-
-	orderUC := uc.NewOrderUsecase(orderRepo)
-
-	permissionUC := uc.NewPermissionUsecase(permissionRepo)
-
-	printUC := uc.NewPrintUsecase(
-		productRepo,
-		printLogRepo,
-		inspectionRepo,
-		productBlueprintRepo,
-		nameResolver,
-	)
-
-	productionUC := productionapp.NewProductionUsecase(
-		productionRepoForUC, // ✅ missing method を補完した adapter を渡す
-		pbSvc,
-		nameResolver,
-	)
-
-	productBlueprintUC := pbuc.NewProductBlueprintUsecase(
-		productBlueprintRepo,
-		productBlueprintHistoryRepo,
-	)
-
-	inspectionProductRepo := &inspectionProductRepoAdapter{repo: productRepo}
-	inspectionUC := inspectionapp.NewInspectionUsecase(
-		inspectionRepo,
-		inspectionProductRepo,
-	)
-
-	productQueryRepo := &productQueryRepoAdapter{
-		productRepo:          productRepo,
-		modelRepo:            modelRepo,
-		productionRepo:       productionRepo,
-		productBlueprintRepo: productBlueprintRepo,
-	}
-	productUC := uc.NewProductUsecase(productQueryRepo, brandSvc, companySvc)
-
-	mintUC := mintapp.NewMintUsecase(
-		productBlueprintRepo,
-		productionRepo,
-		inspectionRepo,
-		modelRepo,
-		tokenBlueprintRepo,
-		brandSvc,
-		mintRepo,
-		inspectionRepo,
-		tokenUC,
-	)
-	mintUC.SetNameResolver(nameResolver)
-	mintUC.SetInventoryUsecase(inventoryUC)
-
-	// =========================================================
-	// ★ FIX: MintUsecase に TokenBlueprint の ensurer を注入する
-	//  - tbBucketEnsurer_nil により mint が abort していたため必須
-	//  - metadataUri は mint 直前に確定する方針
-	// =========================================================
-
-	// 1) bucket/.keep ensurer
-	tbBucketEnsurer := tokenblueprintapp.NewTokenBlueprintBucketUsecase(gcsClient)
-	mintUC.SetTokenBlueprintBucketEnsurer(tbBucketEnsurer)
-
-	// 2) metadataUri ensurer
-	//    NOTE: TokenBlueprintUsecase 側と同じ環境変数を利用
-	baseURL := strings.TrimSpace(os.Getenv("ARWEAVE_BASE_URL"))
-	apiKey := strings.TrimSpace(os.Getenv("IRYS_SERVICE_API_KEY"))
-	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
-
-	tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(tokenBlueprintRepo, uploader)
-	mintUC.SetTokenBlueprintMetadataEnsurer(&tbMetadataEnsurerByIDAdapter{
-		tbRepo:   tokenBlueprintRepo,
-		metadata: tbMetadataUC,
-	})
-
-	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
-
-	// =========================================================
-	// ✅ TokenBlueprintUsecase (moved)
-	// 現行: NewTokenBlueprintUsecase(tokenBlueprintRepo, nameResolver, gcsClient)
-	// =========================================================
-	tokenBlueprintUC := tokenblueprintapp.NewTokenBlueprintUsecase(
-		tokenBlueprintRepo,
-		nameResolver, // ★修正: memberSvc ではなく nameResolver を渡す
-		gcsClient,    // ★追加: bucket/.keep 作成に必要
-	)
-
-	// =========================================================
-	// ★ TokenBlueprintQueryUsecase（read-model: memberId -> name 解決）(moved)
-	// - handler 側の重複解決を排除し、query usecase に集約する前提
-	// =========================================================
-	tokenBlueprintQueryUC := tokenblueprintapp.NewTokenBlueprintQueryUsecase(
-		tokenBlueprintRepo,
-		nameResolver, // ★修正: memberSvc ではなく nameResolver を渡す
-	)
-
-	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)
-	trackingUC := uc.NewTrackingUsecase(trackingRepo)
-	userUC := uc.NewUserUsecase(userRepo)
-
-	// ✅ WalletUsecase: 現行のコンストラクタは (walletRepo) のみ
-	// Console 側では on-chain 同期が必要になったタイミングで、
-	// di 側で uc.NewWalletUsecase(walletRepo).WithOnchainReader(...) を追加する。
-	walletUC := uc.NewWalletUsecase(walletRepo)
-
-	cartUC := uc.NewCartUsecase(cartRepo)
-
-	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(companySvc, brandSvc)
-	invitationQueryUC := uc.NewInvitationService(invitationTokenUCRepo, memberRepo)
-	invitationCommandUC := uc.NewInvitationCommandService(
-		invitationTokenUCRepo,
-		memberRepo,
-		invitationMailer,
-	)
-
-	authBootstrapSvc := &authuc.BootstrapService{
-		Members: &authMemberRepoAdapter{repo: memberRepo},
-		Companies: &authCompanyRepoAdapter{
-			repo: companyRepo,
-		},
-	}
-
-	// =========================================================
-	// Console-only queries
-	// =========================================================
-	pbQueryRepo := &pbQueryRepoAdapter{repo: productBlueprintRepo}
-	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
-		pbQueryRepo,
-		productionRepo,
-		nameResolver,
-	)
-
-	mintRequestQueryService := companyquery.NewMintRequestQueryService(
-		mintUC,
-		productionUC,
-		nameResolver,
-	)
-	mintRequestQueryService.SetModelRepo(modelRepo)
-
-	inventoryQuery := companyquery.NewInventoryQueryWithTokenBlueprintPatch(
-		inventoryRepoForUC, // ✅ interfaceを満たす側を渡しておく
-		&pbIDsByCompanyAdapter{repo: productBlueprintRepo},
-		&pbPatchByIDAdapter{repo: productBlueprintRepo},
-		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
-		nameResolver,
-	)
-
-	listCreateQuery := companyquery.NewListCreateQueryWithInventoryAndModels(
-		inventoryRepoForUC, // ✅ interfaceを満たす側を渡しておく
-		modelRepo,
-		&pbPatchByIDAdapter{repo: productBlueprintRepo},
-		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
-		nameResolver,
-	)
-
-	listManagementQuery := companyquery.NewListManagementQueryWithBrandInventoryAndInventoryRows(
-		listRepo,
-		nameResolver,
-		productBlueprintRepo,
-		&tbGetterAdapter{repo: tokenBlueprintRepo},
-		inventoryQuery,
-	)
-
-	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryAndInventoryRows(
-		listRepo,
-		nameResolver,
-		productBlueprintRepo,
-		&tbGetterAdapter{repo: tokenBlueprintRepo},
-		inventoryQuery,
-		inventoryQuery,
-	)
-
-	// =========================================================
-	// Assemble
-	// =========================================================
 	return &Container{
-		Infra: infra,
+		Infra: clients.infra,
 
-		MemberRepo:  memberRepo,
-		MessageRepo: messageRepo,
+		MemberRepo:  repos.memberRepo,
+		MessageRepo: repos.messageRepo,
 
-		MemberService: memberSvc,
-		BrandService:  brandSvc,
+		MemberService: services.memberSvc,
+		BrandService:  services.brandSvc,
 
-		ProductBlueprintHistoryRepo: productBlueprintHistoryRepo,
-		ModelHistoryRepo:            modelHistoryRepo,
+		ProductBlueprintHistoryRepo: repos.productBlueprintHistoryRepo,
+		ModelHistoryRepo:            repos.modelHistoryRepo,
 
-		AccountUC:          accountUC,
-		AnnouncementUC:     announcementUC,
-		AvatarUC:           avatarUC,
-		BillingAddressUC:   billingAddressUC,
-		BrandUC:            brandUC,
-		CampaignUC:         campaignUC,
-		CompanyUC:          companyUC,
-		InquiryUC:          inquiryUC,
-		InventoryUC:        inventoryUC,
-		InvoiceUC:          invoiceUC,
-		ListUC:             listUC,
-		MemberUC:           memberUC,
-		MessageUC:          messageUC,
-		ModelUC:            modelUC,
-		OrderUC:            orderUC,
-		PaymentUC:          paymentUC,
-		PermissionUC:       permissionUC,
-		PrintUC:            printUC,
-		ProductionUC:       productionUC,
-		ProductBlueprintUC: productBlueprintUC,
-		ShippingAddressUC:  shippingAddressUC,
-		TokenUC:            tokenUC,
+		AccountUC:          u.accountUC,
+		AnnouncementUC:     u.announcementUC,
+		AvatarUC:           u.avatarUC,
+		BillingAddressUC:   u.billingAddressUC,
+		BrandUC:            u.brandUC,
+		CampaignUC:         u.campaignUC,
+		CompanyUC:          u.companyUC,
+		InquiryUC:          u.inquiryUC,
+		InventoryUC:        u.inventoryUC,
+		InvoiceUC:          u.invoiceUC,
+		ListUC:             u.listUC,
+		MemberUC:           u.memberUC,
+		MessageUC:          u.messageUC,
+		ModelUC:            u.modelUC,
+		OrderUC:            u.orderUC,
+		PaymentUC:          u.paymentUC,
+		PermissionUC:       u.permissionUC,
+		PrintUC:            u.printUC,
+		ProductionUC:       u.productionUC,
+		ProductBlueprintUC: u.productBlueprintUC,
+		ShippingAddressUC:  u.shippingAddressUC,
+		TokenUC:            u.tokenUC,
 
-		// ✅ moved
-		TokenBlueprintUC: tokenBlueprintUC,
-		// ★ 追加
-		TokenBlueprintQueryUC: tokenBlueprintQueryUC,
+		TokenBlueprintUC:      u.tokenBlueprintUC,
+		TokenBlueprintQueryUC: u.tokenBlueprintQueryUC,
 
-		TokenOperationUC: tokenOperationUC,
-		TrackingUC:       trackingUC,
-		UserUC:           userUC,
-		WalletUC:         walletUC,
+		TokenOperationUC: u.tokenOperationUC,
+		TrackingUC:       u.trackingUC,
+		UserUC:           u.userUC,
+		WalletUC:         u.walletUC,
 
-		CartUC: cartUC,
+		CartUC: u.cartUC,
 
-		CompanyProductionQueryService: companyProductionQueryService,
-		MintRequestQueryService:       mintRequestQueryService,
+		CompanyProductionQueryService: q.companyProductionQueryService,
+		MintRequestQueryService:       q.mintRequestQueryService,
+		InventoryQuery:                q.inventoryQuery,
+		ListCreateQuery:               q.listCreateQuery,
+		ListManagementQuery:           q.listManagementQuery,
+		ListDetailQuery:               q.listDetailQuery,
 
-		InventoryQuery:      inventoryQuery,
-		ListCreateQuery:     listCreateQuery,
-		ListManagementQuery: listManagementQuery,
-		ListDetailQuery:     listDetailQuery,
+		OwnerResolveQ: res.ownerResolveQ,
 
-		// ✅ NEW
-		OwnerResolveQ: ownerResolveQ,
+		ProductUC:    u.productUC,
+		InspectionUC: u.inspectionUC,
+		MintUC:       u.mintUC,
 
-		ProductUC:         productUC,
-		InspectionUC:      inspectionUC,
-		MintUC:            mintUC,
-		InvitationQuery:   invitationQueryUC,
-		InvitationCommand: invitationCommandUC,
-		AuthBootstrap:     authBootstrapSvc,
-		NameResolver:      nameResolver,
+		InvitationQuery:   u.invitationQueryUC,
+		InvitationCommand: u.invitationCommandUC,
+
+		AuthBootstrap: u.authBootstrapSvc,
+
+		NameResolver: res.nameResolver,
 	}, nil
-}
-
-// RouterDeps builds console router deps (no mall wiring here).
-func (c *Container) RouterDeps() httpin.RouterDeps {
-	return httpin.RouterDeps{
-		AccountUC:          c.AccountUC,
-		AnnouncementUC:     c.AnnouncementUC,
-		AvatarUC:           c.AvatarUC,
-		BillingAddressUC:   c.BillingAddressUC,
-		BrandUC:            c.BrandUC,
-		CampaignUC:         c.CampaignUC,
-		CompanyUC:          c.CompanyUC,
-		InquiryUC:          c.InquiryUC,
-		InventoryUC:        c.InventoryUC,
-		InvoiceUC:          c.InvoiceUC,
-		ListUC:             c.ListUC,
-		MemberUC:           c.MemberUC,
-		MessageUC:          c.MessageUC,
-		ModelUC:            c.ModelUC,
-		OrderUC:            c.OrderUC,
-		PaymentUC:          c.PaymentUC,
-		PermissionUC:       c.PermissionUC,
-		PrintUC:            c.PrintUC,
-		TokenUC:            c.TokenUC,
-		ProductionUC:       c.ProductionUC,
-		ProductBlueprintUC: c.ProductBlueprintUC,
-		ShippingAddressUC:  c.ShippingAddressUC,
-
-		// ✅ moved
-		TokenBlueprintUC: c.TokenBlueprintUC,
-
-		// ★ 追加: handler が QueryUsecase を受け取る想定
-		TokenBlueprintQueryUC: c.TokenBlueprintQueryUC,
-
-		TokenOperationUC: c.TokenOperationUC,
-		TrackingUC:       c.TrackingUC,
-		UserUC:           c.UserUC,
-		WalletUC:         c.WalletUC,
-
-		CompanyProductionQueryService: c.CompanyProductionQueryService,
-		MintRequestQueryService:       c.MintRequestQueryService,
-
-		InventoryQuery:  c.InventoryQuery,
-		ListCreateQuery: c.ListCreateQuery,
-
-		ListManagementQuery: c.ListManagementQuery,
-		ListDetailQuery:     c.ListDetailQuery,
-
-		ProductUC:    c.ProductUC,
-		InspectionUC: c.InspectionUC,
-
-		MintUC: c.MintUC,
-
-		InvitationQuery:   c.InvitationQuery,
-		InvitationCommand: c.InvitationCommand,
-
-		AuthBootstrap: c.AuthBootstrap,
-
-		FirebaseAuth: c.Infra.FirebaseAuth,
-		MemberRepo:   c.MemberRepo,
-
-		MemberService: c.MemberService,
-		BrandService:  c.BrandService,
-		NameResolver:  c.NameResolver,
-
-		MessageRepo: c.MessageRepo,
-
-		// ✅ owner resolve query
-		OwnerResolveQ: c.OwnerResolveQ,
-	}
 }
 
 func (c *Container) Close() error {
@@ -677,221 +188,6 @@ func (c *Container) Close() error {
 	return nil
 }
 
-// callOptionalMethod calls obj.<methodName>(arg) when such method exists (best-effort).
-func callOptionalMethod(obj any, methodName string, arg any) {
-	if obj == nil || strings.TrimSpace(methodName) == "" || arg == nil {
-		return
-	}
-	rv := reflect.ValueOf(obj)
-	m := rv.MethodByName(methodName)
-	if !m.IsValid() {
-		return
-	}
-	if m.Type().NumIn() != 1 {
-		return
-	}
-	av := reflect.ValueOf(arg)
-	if !av.IsValid() {
-		return
-	}
-	if !av.Type().AssignableTo(m.Type().In(0)) {
-		if m.Type().In(0).Kind() == reflect.Interface && av.Type().Implements(m.Type().In(0)) {
-			m.Call([]reflect.Value{av})
-		}
-		return
-	}
-	m.Call([]reflect.Value{av})
-}
-
 func init() {
 	log.Printf("[di.console] container package loaded")
-}
-
-// ============================================================
-// ★ Adapter: MintUsecase port (EnsureMetadataURIByTokenBlueprintID)
-// - mint 側の port は tokenBlueprintID しか受け取らないため、ここで
-//   GetByID -> EnsureMetadataURI を橋渡しする
-// ============================================================
-
-type tbMetadataEnsurerByIDAdapter struct {
-	tbRepo   tbdom.RepositoryPort
-	metadata interface {
-		EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
-	}
-}
-
-func (a *tbMetadataEnsurerByIDAdapter) EnsureMetadataURIByTokenBlueprintID(ctx context.Context, tokenBlueprintID string, actorID string) (string, error) {
-	if a == nil || a.tbRepo == nil || a.metadata == nil {
-		return "", fmt.Errorf("tbMetadataEnsurerByIDAdapter: deps are nil")
-	}
-
-	id := strings.TrimSpace(tokenBlueprintID)
-	if id == "" {
-		return "", fmt.Errorf("tokenBlueprintID is empty")
-	}
-
-	tb, err := a.tbRepo.GetByID(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	if tb == nil {
-		return "", fmt.Errorf("tokenBlueprint not found id=%q", id)
-	}
-
-	updated, err := a.metadata.EnsureMetadataURI(ctx, tb, actorID)
-	if err != nil {
-		return "", err
-	}
-	if updated == nil {
-		updated = tb
-	}
-
-	uri := strings.TrimSpace(updated.MetadataURI)
-	if uri == "" {
-		return "", fmt.Errorf("metadataUri is empty after ensure id=%q", id)
-	}
-	return uri, nil
-}
-
-// ============================================================
-// ✅ Adapter: fs.InventoryRepositoryFS に ApplyTransferResult を付与
-// - inventory.RepositoryPort が要求する ApplyTransferResult の戻り値は error
-// - 既存実装 ReleaseReservationAfterTransfer が (int, error) を返すため、
-//   removedCount はログ用途に消費して error のみ返す
-// ============================================================
-
-type inventoryRepoTransferResultAdapter struct {
-	*fs.InventoryRepositoryFS
-}
-
-// ApplyTransferResult updates inventory after transfer by removing productId and decrementing reservation for orderId.
-func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
-	ctx context.Context,
-	productID string,
-	orderID string,
-	now time.Time,
-) error {
-	if a == nil || a.InventoryRepositoryFS == nil {
-		return errors.New("inventory repo adapter is nil")
-	}
-
-	removed, err := a.InventoryRepositoryFS.ReleaseReservationAfterTransfer(ctx, productID, orderID, now)
-	if err != nil {
-		return err
-	}
-
-	// best-effort log (removed can be 0 on idempotent re-run)
-	log.Printf(
-		"[inventory_repo_adapter] ApplyTransferResult ok productId=%q orderId=%q removed=%d at=%s",
-		strings.TrimSpace(productID),
-		strings.TrimSpace(orderID),
-		removed,
-		now.UTC().Format(time.RFC3339),
-	)
-
-	return nil
-}
-
-// ============================================================
-// ✅ Adapter: avatarId -> avatarName (sharedquery.AvatarNameReader)
-// - sharedquery.NewOwnerResolveQuery に渡すための最小実装
-// ============================================================
-
-type avatarNameReaderAdapter struct {
-	repo interface {
-		GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-	}
-}
-
-func (a avatarNameReaderAdapter) GetNameByID(ctx context.Context, avatarID string) (string, error) {
-	id := strings.TrimSpace(avatarID)
-	if id == "" {
-		return "", errors.New("avatarNameReaderAdapter: avatarID is empty")
-	}
-
-	av, err := a.repo.GetByID(ctx, id)
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(av.AvatarName), nil
-}
-
-// ============================================================
-// ✅ Adapter: ProductionRepositoryFS に GetTotalQuantityByModelID を付与
-// - productionapp.ProductionRepo が要求する集計メソッドを DI 側で補完する
-// - 実装は ListByProductBlueprintID を利用して modelId ごとに quantity を合算
-// ============================================================
-
-type productionRepoTotalQuantityAdapter struct {
-	*fs.ProductionRepositoryFS
-}
-
-func (a *productionRepoTotalQuantityAdapter) GetTotalQuantityByModelID(
-	ctx context.Context,
-	productBlueprintIDs []string,
-) ([]productiondom.ModelTotalQuantity, error) {
-	if a == nil || a.ProductionRepositoryFS == nil {
-		return nil, errors.New("production repo adapter is nil")
-	}
-
-	// sanitize + dedup ids
-	ids := make([]string, 0, len(productBlueprintIDs))
-	seen := make(map[string]struct{}, len(productBlueprintIDs))
-	for _, id := range productBlueprintIDs {
-		t := strings.TrimSpace(id)
-		if t == "" {
-			continue
-		}
-		k := strings.ToLower(t)
-		if _, ok := seen[k]; ok {
-			continue
-		}
-		seen[k] = struct{}{}
-		ids = append(ids, t)
-	}
-	if len(ids) == 0 {
-		return []productiondom.ModelTotalQuantity{}, nil
-	}
-
-	prods, err := a.ListByProductBlueprintID(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	totalByKey := make(map[string]int, 64)
-	origByKey := make(map[string]string, 64)
-
-	for _, p := range prods {
-		// deleted は集計対象外（安全側）
-		if p.Status == productiondom.StatusDeleted || p.DeletedAt != nil {
-			continue
-		}
-		for _, mq := range p.Models {
-			mid := strings.TrimSpace(mq.ModelID)
-			if mid == "" || mq.Quantity <= 0 {
-				continue
-			}
-			key := strings.ToLower(mid)
-			if _, ok := origByKey[key]; !ok {
-				origByKey[key] = mid
-			}
-			totalByKey[key] += mq.Quantity
-		}
-	}
-
-	out := make([]productiondom.ModelTotalQuantity, 0, len(totalByKey))
-	for k, total := range totalByKey {
-		out = append(out, productiondom.ModelTotalQuantity{
-			ModelID:       origByKey[k],
-			TotalQuantity: total,
-		})
-	}
-
-	// stable order
-	sort.Slice(out, func(i, j int) bool {
-		return strings.ToLower(out[i].ModelID) < strings.ToLower(out[j].ModelID)
-	})
-
-	return out, nil
 }

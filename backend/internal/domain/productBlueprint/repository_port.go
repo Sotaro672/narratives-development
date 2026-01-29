@@ -1,3 +1,4 @@
+// backend\internal\domain\productBlueprint\repository_port.go
 package productBlueprint
 
 import (
@@ -20,8 +21,15 @@ type CreateInput struct {
 	ProductIdTag     ProductIDTag `json:"productIdTag"`
 	AssigneeID       string       `json:"assigneeId"`
 	CompanyID        string       `json:"companyId"`
-	CreatedBy        *string      `json:"createdBy,omitempty"`
-	CreatedAt        *time.Time   `json:"createdAt,omitempty"` // repo may set if nil
+
+	// ★ modelRefs（modelId + displayOrder）
+	// NOTE:
+	// - create 時点では空でもよい（後段で AppendModelRefsWithoutTouch で追記する運用を許容）
+	// - 永続化は adapter 側で modelRefs として保存する想定
+	ModelRefs []ModelRef `json:"modelRefs,omitempty"`
+
+	CreatedBy *string    `json:"createdBy,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"` // repo may set if nil
 }
 
 type Patch struct {
@@ -34,7 +42,7 @@ type Patch struct {
 	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
 	BrandName *string `json:"brandName,omitempty"`
 
-	// ✅ NEW: company (read-only display fields)
+	// ✅ company (read-only display fields)
 	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
 	CompanyID   *string `json:"companyId,omitempty"`
 	CompanyName *string `json:"companyName,omitempty"`
@@ -46,6 +54,12 @@ type Patch struct {
 	QualityAssurance *[]string     `json:"qualityAssurance,omitempty"`
 	ProductIdTag     *ProductIDTag `json:"productIdTag,omitempty"`
 	AssigneeID       *string       `json:"assigneeId,omitempty"`
+
+	// ★ modelRefs を受ける（displayOrder 含む）
+	// NOTE:
+	// - これを永続化に使う（modelRefs を正にする）
+	// - displayOrder は 1..N の採番済みを期待（ただし実装側で正規化/再採番してよい）
+	ModelRefs *[]ModelRef `json:"modelRefs,omitempty"`
 }
 
 // ========================================
@@ -116,10 +130,11 @@ type Repository interface {
 	// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
 	GetProductNameByID(ctx context.Context, id string) (string, error)
 
-	// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
-	GetIDByModelID(ctx context.Context, modelID string) (string, error)
+	// ★ 変更: modelId(=variationId想定) から modelRefs（displayOrder 含む）を取得するヘルパ
+	GetModelRefsByModelID(ctx context.Context, modelID string) ([]ModelRef, error)
 
 	// ★ 追加: productBlueprintId から Patch 相当の情報を取得するヘルパ
+	// NOTE: Patch.ModelRefs を返せるようにしておく（displayOrder 含む）
 	GetPatchByID(ctx context.Context, id string) (Patch, error)
 
 	// companyId 単位で productBlueprint の ID 一覧を取得
