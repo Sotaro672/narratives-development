@@ -45,6 +45,9 @@ type ProductionUsecase struct {
 	// ★ ID→名前解決ヘルパ
 	nameResolver *resolver.NameResolver
 
+	// ★ list/query は read side に委譲する（CompanyProductionQueryService）
+	listQuery ProductionListQuery
+
 	now func() time.Time
 }
 
@@ -59,6 +62,12 @@ func NewProductionUsecase(
 		nameResolver: nameResolver,
 		now:          time.Now,
 	}
+}
+
+// SetListQuery injects the read/query service used for list endpoints.
+// This is required when list operations are delegated to the query layer.
+func (u *ProductionUsecase) SetListQuery(q ProductionListQuery) {
+	u.listQuery = q
 }
 
 // ============================
