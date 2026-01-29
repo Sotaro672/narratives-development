@@ -7,11 +7,6 @@ import (
 	"log"
 	"strings"
 
-	"cloud.google.com/go/firestore"
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
-	"google.golang.org/api/iterator"
-
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
 	sharedquery "narratives/internal/application/query/shared"
@@ -34,10 +29,8 @@ import (
 	solanaplatform "narratives/internal/infra/solana"
 
 	// domains
-	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	ldom "narratives/internal/domain/list"
-	tokendom "narratives/internal/domain/token"
 
 	shared "narratives/internal/platform/di/shared"
 )
@@ -487,172 +480,4 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	)
 
 	return c, nil
-}
-
-// ============================================================
-// ✅ Design B: Brand signer provider (Secret Manager)
-// ============================================================
-
-var (
-	errSecretProviderNotConfigured = errors.New("di.mall: brandWalletSecretProviderSM not configured")
-)
-
-type brandWalletSecretProviderSM struct {
-	sm           *secretmanager.Client
-	projectID    string
-	secretPrefix string
-	version      string
-}
-
-func (p *brandWalletSecretProviderSM) GetBrandSigner(ctx context.Context, brandID string) (any, error) {
-	if p == nil || p.sm == nil {
-		return nil, errSecretProviderNotConfigured
-	}
-	bid := strings.TrimSpace(brandID)
-	if bid == "" {
-		return nil, errors.New("brandWalletSecretProviderSM: brandID is empty")
-	}
-	prj := strings.TrimSpace(p.projectID)
-	if prj == "" {
-		return nil, errors.New("brandWalletSecretProviderSM: projectID is empty")
-	}
-
-	prefix := strings.TrimSpace(p.secretPrefix)
-	if prefix == "" {
-		return nil, errors.New("brandWalletSecretProviderSM: secretPrefix is empty")
-	}
-	ver := strings.TrimSpace(p.version)
-	if ver == "" {
-		ver = "latest"
-	}
-
-	secretID := prefix + bid
-	name := "projects/" + prj + "/secrets/" + secretID + "/versions/" + ver
-	resp, err := p.sm.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{Name: name})
-	if err != nil {
-		return nil, errors.New("brandWalletSecretProviderSM: AccessSecretVersion failed (" + name + "): " + err.Error())
-	}
-	if resp == nil || resp.Payload == nil {
-		return nil, errors.New("brandWalletSecretProviderSM: empty payload (" + name + ")")
-	}
-
-	return strings.TrimSpace(string(resp.Payload.Data)), nil
-}
-
-// ============================================================
-// ✅ NEW: TokenQueryFS (mintAddress -> productId(docId), brandId, metadataUri)
-//   - outfs.NewTokenQueryFS(...) が無い前提で、DI側に最小実装を置く
-// ============================================================
-
-type tokenQueryFS struct {
-	client *firestore.Client
-	col    string
-}
-
-func newTokenQueryFS(client *firestore.Client) *tokenQueryFS {
-	return &tokenQueryFS{
-		client: client,
-		col:    "tokens",
-	}
-}
-
-func (q *tokenQueryFS) ResolveTokenByMintAddress(
-	ctx context.Context,
-	mintAddress string,
-) (tokendom.ResolveTokenByMintAddressResult, error) {
-
-	if q == nil || q.client == nil {
-		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("tokenQueryFS is not initialized")
-	}
-
-	m := strings.TrimSpace(mintAddress)
-	if m == "" {
-		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("mintAddress is empty")
-	}
-
-	it := q.client.Collection(q.col).
-		Where("mintAddress", "==", m).
-		Limit(2).
-		Documents(ctx)
-	defer it.Stop()
-
-	// 1件目
-	doc, err := it.Next()
-	if errors.Is(err, iterator.Done) {
-		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("token not found for mintAddress")
-	}
-	if err != nil {
-		return tokendom.ResolveTokenByMintAddressResult{}, err
-	}
-
-	// 2件目があればユニーク違反
-	doc2, err := it.Next()
-	if err == nil && doc2 != nil {
-		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("multiple tokens found for mintAddress")
-	}
-	if err != nil && !errors.Is(err, iterator.Done) {
-		return tokendom.ResolveTokenByMintAddressResult{}, err
-	}
-
-	raw := doc.Data()
-
-	brandID, _ := raw["brandId"].(string)
-	metadataURI, _ := raw["metadataUri"].(string)
-
-	brandID = strings.TrimSpace(brandID)
-	metadataURI = strings.TrimSpace(metadataURI)
-
-	// Firestore では docID が productId（あなたの設計前提）
-	productID := strings.TrimSpace(doc.Ref.ID)
-	if productID == "" {
-		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("resolved productId is empty")
-	}
-
-	return tokendom.ResolveTokenByMintAddressResult{
-		ProductID:   productID,
-		MintAddress: m,
-		BrandID:     brandID,
-		MetadataURI: metadataURI,
-	}, nil
-}
-
-// ============================================================
-// ✅ Adapter: modelId -> productBlueprintId (usecase port)
-// ============================================================
-
-type modelPBIDResolverAdapter struct {
-	r interface {
-		GetIDByModelID(ctx context.Context, modelID string) (string, error)
-	}
-}
-
-func (a modelPBIDResolverAdapter) GetProductBlueprintIDByModelID(ctx context.Context, modelID string) (string, error) {
-	if a.r == nil {
-		return "", errors.New("modelPBIDResolverAdapter: resolver is nil")
-	}
-	return a.r.GetIDByModelID(ctx, strings.TrimSpace(modelID))
-}
-
-// ============================================================
-// ✅ Adapter: avatarId -> avatarName (sharedquery.AvatarNameReader)
-// ============================================================
-
-type avatarNameReaderAdapter struct {
-	repo interface {
-		GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-	}
-}
-
-func (a avatarNameReaderAdapter) GetNameByID(ctx context.Context, avatarID string) (string, error) {
-	id := strings.TrimSpace(avatarID)
-	if id == "" {
-		return "", errors.New("avatarNameReaderAdapter: avatarID is empty")
-	}
-
-	av, err := a.repo.GetByID(ctx, id)
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(av.AvatarName), nil
 }
