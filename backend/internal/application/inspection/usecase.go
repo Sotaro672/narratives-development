@@ -35,7 +35,7 @@ type InspectionMintGetter interface {
 	GetByInspectionID(ctx context.Context, inspectionID string) (mintdom.Mint, error)
 }
 
-// ★ 追加：modelVariationId から ModelVariation を 1 件取得するための最小ポート
+// ★ 追加：modelId から ModelVariation を 1 件取得するための最小ポート
 type ModelVariationGetter interface {
 	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 }

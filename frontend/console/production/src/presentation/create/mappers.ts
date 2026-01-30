@@ -85,23 +85,27 @@ export function buildAssigneeOptions(
 
 // ======================================================================
 // ModelVariations → ProductionQuantityRow（UI入力用の行に変換）
+// - ✅ modelId のみを正キーとして採用
+// - displayOrder は detail.modelRefs 側が唯一のソースなので、ここでは注入しない
 // ======================================================================
 export function mapModelVariationsToRows(
   list: ModelVariationResponse[],
 ): ProductionQuantityRow[] {
-  return list.map((mv) => ({
-    // ✅ modelRefs の modelId と一致するキーとして使う（現状は mv.id と同値でOK）
-    modelId: mv.id,
+  const safe = Array.isArray(list) ? list : [];
 
-    modelNumber: mv.modelNumber,
-    size: mv.size,
+  return safe.map((mv, index) => {
+    const modelId = String(mv?.id ?? "").trim() || String(index);
 
-    color: mv.color?.name ?? "",
-    rgb: mv.color?.rgb ?? null,
+    return {
+      modelId,
+      modelNumber: String(mv?.modelNumber ?? "").trim(),
+      size: String(mv?.size ?? "").trim(),
 
-    // displayOrder は detail.modelRefs 側が唯一のソースなので、ここでは注入しない
-    displayOrder: undefined,
+      color: String(mv?.color?.name ?? "").trim(),
+      rgb: (mv?.color?.rgb ?? null) as number | string | null,
 
-    quantity: 0,
-  }));
+      displayOrder: undefined,
+      quantity: 0,
+    };
+  });
 }

@@ -2,6 +2,9 @@
 
 import type { ItemType, Fit } from "../../../../productBlueprint/src/domain/entity/catalog";
 
+// ✅ domain を正にする（modelId/quantity の最小表現）
+import type { ModelQuantity } from "../../../../production/src/domain/entity/production";
+
 // ======================================================================
 // ProductBlueprintCard（UI向け ViewModel）
 // ======================================================================
@@ -20,16 +23,11 @@ export type ProductBlueprintForCard = {
 
 // ======================================================================
 // ProductionQuantityRow（UI 専用）
-// - ProductionQuantityCard（application/detail 側）が参照する modelId/displayOrder に寄せる
+// - ✅ 正キーは modelId（domain と一致）
+// - ✅ quantity は domain と一致
+// - UI 表示に必要なメタ情報のみを追加
 // ======================================================================
-export type ProductionQuantityRow = {
-  /**
-   * ✅ 正キー
-   * ProductBlueprint.detail.modelRefs の modelId と join するキー
-   * backend でも modelId のみを利用する
-   */
-  modelId: string;
-
+export type ProductionQuantityRow = ModelQuantity & {
   /** 型番（例: “GM”） */
   modelNumber: string;
 
@@ -43,6 +41,4 @@ export type ProductionQuantityRow = {
 
   /** 表示順（ProductBlueprint.detail.modelRefs.displayOrder を注入） */
   displayOrder?: number;
-
-  quantity: number;
 };

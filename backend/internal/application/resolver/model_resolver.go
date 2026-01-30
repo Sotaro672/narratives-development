@@ -25,7 +25,7 @@ type ModelResolved struct {
 	RGB         *int
 }
 
-// ResolveModelResolved は modelVariationId から modelNumber/size/color/rgb を解決する。
+// ResolveModelResolved は modelId から modelNumber/size/color/rgb を解決する。
 // 取得できなかった場合はゼロ値を返す。
 func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID string) ModelResolved {
 	if r == nil || r.modelNumberRepo == nil {

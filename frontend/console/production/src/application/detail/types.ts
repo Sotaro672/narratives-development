@@ -1,7 +1,11 @@
-// frontend\console\production\src\application\detail\types.ts
+// frontend/console/production/src/application/detail/types.ts
+
 import type {
+  // ✅ domain を正にする（ProductionStatus をここから取る）
   ProductionStatus,
-} from "../../../../shell/src/shared/types/production";
+  // ✅ quantity の最小表現は domain を正にする
+  ModelQuantity,
+} from "../../../../production/src/domain/entity/production";
 
 /**
  * Production 詳細（backend ProductionDetailDTO と整合）
@@ -50,14 +54,18 @@ export type ModelVariationSummary = {
   displayOrder?: number;
 };
 
-export type ProductionQuantityRow = {
-  modelId: string;
+/**
+ * ✅ domain の ModelQuantity（modelId, quantity）を正として拡張する
+ * - modelId が正キー
+ * - quantity は domain と同一
+ * - 表示用のメタ情報だけを追加
+ */
+export type ProductionQuantityRow = ModelQuantity & {
   modelNumber: string;
   size: string;
   color: string;
   rgb?: number | string | null;
   displayOrder?: number;
-  quantity: number;
 };
 
 export type { ProductionStatus };

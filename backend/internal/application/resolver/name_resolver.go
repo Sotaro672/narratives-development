@@ -270,7 +270,7 @@ func (r *NameResolver) ResolvePrintedByName(ctx context.Context, printedBy *stri
 // ModelVariation (modelId → modelNumber) 関連
 // ------------------------------------------------------------
 
-// ResolveModelNumber は modelVariationId から modelNumber を解決する。
+// ResolveModelNumber は modelId から modelNumber を解決する。
 // 取得できなかった場合は空文字列を返す。
 func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID string) string {
 	if r == nil || r.modelNumberRepo == nil {
