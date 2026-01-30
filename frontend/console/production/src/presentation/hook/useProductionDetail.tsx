@@ -11,7 +11,6 @@ import {
   updateProductionDetail,
   type ProductionDetail,
   type ModelVariationSummary,
-  type ProductionQuantityRow as DetailQuantityRow,
 } from "../../application/detail/index";
 
 import {
@@ -19,7 +18,7 @@ import {
   type ProductBlueprintDetail,
 } from "../../application/productBlueprint/index";
 
-// ★ 印刷用ロジックを分離した hook を利用
+// ★ 印刷用ロジックを分離した hook を利用（modelId を正にした版）
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
 // ★ domain の ProductionStatus 型を import
@@ -27,17 +26,15 @@ import type {
   ProductionStatus as DomainProductionStatus,
 } from "../../../../production/src/domain/entity/production";
 
-// ★ ViewModel
+// ★ ViewModel（modelId を正）
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
 import { normalizeProductionModels } from "../viewModels/normalizeProductionModels";
 import { toProductionDetailUpdateRows } from "../viewModels/toProductionDetailUpdateRows";
-import { toPrintCardRows } from "../viewModels/toPrintCardRows";
 
 type Mode = "view" | "edit";
 
 // ★ 編集可能なステータス（domain 型に基づく）
-//   status が "planned" のときだけ編集可能にする
 const EDITABLE_STATUS: DomainProductionStatus = "planned";
 
 export function useProductionDetail() {
@@ -88,8 +85,8 @@ export function useProductionDetail() {
     Record<string, ModelVariationSummary>
   >({});
 
-  // ✅ 方針B: rows は VM を正にする
-  const [quantityRowVMs, setQuantityRowVMs] = React.useState<
+  // ✅ 画面 state / 返却は VM を正にする（modelId をキー）
+  const [quantityRows, setQuantityRows] = React.useState<
     ProductionQuantityRowVM[]
   >([]);
 
@@ -109,7 +106,7 @@ export function useProductionDetail() {
         setProductBlueprint(null);
         setPbError(null);
         setModelIndex({});
-        setQuantityRowVMs([]);
+        setQuantityRows([]);
 
         const data = await loadProductionDetail(productionId);
         if (cancelled) return;
@@ -119,7 +116,7 @@ export function useProductionDetail() {
         if (!cancelled) {
           setError("生産情報の取得に失敗しました");
           setProduction(null);
-          setQuantityRowVMs([]);
+          setQuantityRows([]);
           setProductBlueprint(null);
           setModelIndex({});
         }
@@ -198,24 +195,20 @@ export function useProductionDetail() {
   }, [production?.productBlueprintId]);
 
   // ======================================================
-  // production.models × modelIndex → quantityRowVMs
-  //
-  // ✅ 方針B:
-  // - backend の揺れ吸収（PascalCase 等）は normalize に分離
-  // - UI state は VM に統一
+  // production.models × modelIndex → quantityRows(VM)
   // ======================================================
   React.useEffect(() => {
-    const raw = (production as any)?.models;
+    const raw = (production as unknown as { models?: unknown })?.models;
 
-    if (!raw || !Array.isArray(raw)) {
-      setQuantityRowVMs([]);
+    if (!Array.isArray(raw)) {
+      setQuantityRows([]);
       return;
     }
 
     const normalized = normalizeProductionModels(raw);
     const vms = buildProductionQuantityRowVMs(normalized, modelIndex);
 
-    setQuantityRowVMs(vms);
+    setQuantityRows(vms);
   }, [production, modelIndex]);
 
   // ======================================================
@@ -224,7 +217,6 @@ export function useProductionDetail() {
   const onSave = React.useCallback(async () => {
     if (!productionId || !production) return;
 
-    // status が planned 以外なら保存も不可
     if (!canEdit) {
       // eslint-disable-next-line no-alert
       alert("この生産は編集できません（ステータスが planned ではありません）。");
@@ -232,9 +224,7 @@ export function useProductionDetail() {
     }
 
     try {
-      // ✅ VM → detail DTO row へ変換（分離済み）
-      const rowsForUpdate: DetailQuantityRow[] =
-        toProductionDetailUpdateRows(quantityRowVMs);
+      const rowsForUpdate = toProductionDetailUpdateRows(quantityRows);
 
       const updated = await updateProductionDetail({
         productionId,
@@ -251,17 +241,26 @@ export function useProductionDetail() {
       // eslint-disable-next-line no-alert
       alert("更新に失敗しました");
     }
-  }, [productionId, production, quantityRowVMs, canEdit]);
+  }, [productionId, production, quantityRows, canEdit]);
 
   // ======================================================
-  // 印刷時 Product 作成処理は usePrintCard に委譲
+  // 印刷（usePrintCard は QuantityRowBase: modelId を要求）
   // ======================================================
+  const rowsForPrint = React.useMemo(
+    () =>
+      (Array.isArray(quantityRows) ? quantityRows : []).map((vm, index) => ({
+        // ✅ modelId を正として渡す（VM の modelId をそのまま）
+        modelId: String(vm.modelId ?? "").trim() || String(index),
+        quantity: vm.quantity ?? 0,
+      })),
+    [quantityRows],
+  );
+
   const { onPrint } = usePrintCard({
     productionId: productionId ?? null,
     hasProduction: !!production,
-    // ✅ VM → print rows へ変換（分離済み）
-    rows: toPrintCardRows(quantityRowVMs),
-  } );
+    rows: rowsForPrint,
+  });
 
   // ======================================================
   // 戻る
@@ -278,9 +277,7 @@ export function useProductionDetail() {
     switchToEdit,
     toggleMode,
 
-    // ★ 画面側で header の編集ボタン表示可否に使う
     canEdit,
-
     adminMode,
 
     onBack: handleBack,
@@ -297,9 +294,9 @@ export function useProductionDetail() {
     pbLoading,
     pbError,
 
-    // ✅ VM 正
-    quantityRows: quantityRowVMs,
-    setQuantityRows: setQuantityRowVMs,
+    // ✅ VM 正（state / 返却ともに VM）
+    quantityRows,
+    setQuantityRows,
 
     creator,
   };

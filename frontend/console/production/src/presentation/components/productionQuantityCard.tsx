@@ -66,15 +66,15 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   );
 
   const handleChangeQuantity = React.useCallback(
-    (id: string, value: string) => {
+    (modelId: string, value: string) => {
       if (!onChangeRows) return;
 
       const n = Math.max(0, Math.floor(Number(value || "0")));
       const safe = Number.isFinite(n) ? n : 0;
 
-      // ✅ 並び替えに影響されないよう id で更新
+      // ✅ 並び替えに影響されないよう modelId で更新
       const next = sortedRows.map((row) =>
-        row.id === id ? { ...row, quantity: safe } : row,
+        row.modelId === modelId ? { ...row, quantity: safe } : row,
       );
 
       onChangeRows(next);
@@ -108,7 +108,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
               const bgColor = rgbHex ?? "#ffffff";
 
               return (
-                <TableRow key={row.id}>
+                <TableRow key={row.modelId}>
                   <TableCell>{row.modelNumber}</TableCell>
                   <TableCell className="mqc__size">{row.size}</TableCell>
 
@@ -131,7 +131,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                         step={1}
                         value={row.quantity ?? 0}
                         onChange={(e) =>
-                          handleChangeQuantity(row.id, e.target.value)
+                          handleChangeQuantity(row.modelId, e.target.value)
                         }
                         className="mqc__input"
                         aria-label={`${row.modelNumber} の生産数`}

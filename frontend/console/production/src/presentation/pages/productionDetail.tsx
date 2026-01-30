@@ -19,13 +19,14 @@ import type {
 } from "../../../../productBlueprint/src/domain/entity/catalog";
 
 // ★ usePrintCard Hook（print_log + QR 情報取得）
+// ✅ modelId を正にした版（QuantityRowBase: modelId）
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
 // ★ 分離した印刷カードコンポーネント
 import PrintCard from "../../../../product/src/presentation/component/printCard";
 
-// ✅ detail rows 型（dto/detail.go 正）
-import type { ProductionQuantityRow as DetailQuantityRow } from "../../application/detail/types";
+// ✅ Presentation 正: ProductionQuantityRowVM（キーは modelId）
+import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 
 export default function ProductionDetail() {
   const {
@@ -67,9 +68,7 @@ export default function ProductionDetail() {
   // ==========================================================
   // ✅ Debug: productionQuantity（production.models / quantityRows）確認ログ
   // - 目的: この画面が「API 取得 → hook 変換 → rows 反映」できているかを確認
-  // - 期待:
-  //   - production.models が [{modelId, quantity, ...}] で入っている
-  //   - quantityRows が modelId を持ち、行数が一致または補完されている
+  // - 正: quantityRows は VM（modelId キー）
   // ==========================================================
   React.useEffect(() => {
     // eslint-disable-next-line no-console
@@ -95,38 +94,66 @@ export default function ProductionDetail() {
 
     const rawModels = (production as any)?.models;
     // eslint-disable-next-line no-console
-    console.log("production.models type:", typeof rawModels, "isArray:", Array.isArray(rawModels));
+    console.log(
+      "production.models type:",
+      typeof rawModels,
+      "isArray:",
+      Array.isArray(rawModels),
+    );
     // eslint-disable-next-line no-console
-    console.log("production.models length:", Array.isArray(rawModels) ? rawModels.length : 0);
+    console.log(
+      "production.models length:",
+      Array.isArray(rawModels) ? rawModels.length : 0,
+    );
     // eslint-disable-next-line no-console
-    console.log("production.models (first 5):", Array.isArray(rawModels) ? rawModels.slice(0, 5) : rawModels);
+    console.log(
+      "production.models (first 5):",
+      Array.isArray(rawModels) ? rawModels.slice(0, 5) : rawModels,
+    );
 
-    const qr = Array.isArray(quantityRows) ? quantityRows : [];
+    const qr: ProductionQuantityRowVM[] = Array.isArray(quantityRows)
+      ? quantityRows
+      : [];
     // eslint-disable-next-line no-console
-    console.log("quantityRows length:", qr.length);
+    console.log("quantityRows(VM) length:", qr.length);
     // eslint-disable-next-line no-console
-    console.log("quantityRows (first 5):", qr.slice(0, 5));
+    console.log("quantityRows(VM) (first 5):", qr.slice(0, 5));
 
-    // 欠損チェック
-    const missingModelId = qr.filter((r) => !r?.modelId || String(r.modelId).trim() === "");
+    // 欠損チェック（正キー: modelId）
+    const missingModelId = qr.filter(
+      (r) => !r?.modelId || String(r.modelId).trim() === "",
+    );
     if (missingModelId.length > 0) {
       // eslint-disable-next-line no-console
-      console.warn("quantityRows: missing modelId rows:", missingModelId);
+      console.warn("quantityRows(VM): missing modelId rows:", missingModelId);
     }
 
     // quantityRows の quantity 合計
-    const total = qr.reduce((sum, r) => sum + (Number.isFinite(r.quantity) ? (r.quantity as number) : 0), 0);
+    const total = qr.reduce(
+      (sum, r) => sum + (Number.isFinite(r.quantity) ? (r.quantity as number) : 0),
+      0,
+    );
     // eslint-disable-next-line no-console
-    console.log("quantityRows totalQuantity (sum):", total);
+    console.log("quantityRows(VM) totalQuantity (sum):", total);
 
     // production.models と quantityRows の突合（modelId）
     const modelIdsFromProduction = new Set(
-      Array.isArray(rawModels) ? rawModels.map((m: any) => String(m?.modelId ?? "").trim()).filter(Boolean) : [],
+      Array.isArray(rawModels)
+        ? rawModels
+            .map((m: any) => String(m?.modelId ?? "").trim())
+            .filter(Boolean)
+        : [],
     );
-    const modelIdsFromRows = new Set(qr.map((r) => String(r?.modelId ?? "").trim()).filter(Boolean));
+    const modelIdsFromRows = new Set(
+      qr.map((r) => String(r?.modelId ?? "").trim()).filter(Boolean),
+    );
 
-    const onlyInProduction = [...modelIdsFromProduction].filter((id) => !modelIdsFromRows.has(id));
-    const onlyInRows = [...modelIdsFromRows].filter((id) => !modelIdsFromProduction.has(id));
+    const onlyInProduction = [...modelIdsFromProduction].filter(
+      (id) => !modelIdsFromRows.has(id),
+    );
+    const onlyInRows = [...modelIdsFromRows].filter(
+      (id) => !modelIdsFromProduction.has(id),
+    );
 
     if (onlyInProduction.length > 0) {
       // eslint-disable-next-line no-console
@@ -134,7 +161,7 @@ export default function ProductionDetail() {
     }
     if (onlyInRows.length > 0) {
       // eslint-disable-next-line no-console
-      console.warn("modelIds only in quantityRows:", onlyInRows);
+      console.warn("modelIds only in quantityRows(VM):", onlyInRows);
     }
 
     // eslint-disable-next-line no-console
@@ -143,21 +170,23 @@ export default function ProductionDetail() {
 
   // ==========================
   // usePrintCard: 印刷 + print_log 取得
-  // - usePrintCard は QuantityRowBase（modelVariationId 必須）を要求するため、
-  //   detail row（modelId）から変換して渡す
+  // - 正は modelId
+  // - usePrintCard も modelId を要求する（QuantityRowBase: modelId）
   // ==========================
   const rowsForPrint = React.useMemo(() => {
-    const safe = Array.isArray(quantityRows) ? quantityRows : [];
-    return safe.map((r: DetailQuantityRow) => ({
-      // usePrintCard 側の要求: modelVariationId
-      modelVariationId: r.modelId,
+    const safe: ProductionQuantityRowVM[] = Array.isArray(quantityRows)
+      ? quantityRows
+      : [];
+
+    return safe.map((r, index) => ({
+      modelId: String(r.modelId ?? "").trim() || String(index),
+      quantity: r.quantity ?? 0,
 
       // 以降は usePrintCard が参照しうる情報（無害に付与）
       modelNumber: r.modelNumber,
       size: r.size,
       color: r.color,
       rgb: r.rgb ?? null,
-      quantity: r.quantity ?? 0,
     }));
   }, [quantityRows]);
 
@@ -188,7 +217,6 @@ export default function ProductionDetail() {
 
   // ==========================
   // ★ 印刷ボタン押下時処理
-  //   - usePrintCard.onPrint を呼び出し
   // ==========================
   const handlePrint = React.useCallback(async () => {
     if (!productionId) {

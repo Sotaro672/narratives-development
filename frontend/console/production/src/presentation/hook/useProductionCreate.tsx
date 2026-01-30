@@ -44,7 +44,7 @@ import {
 // Application Port 実装（HTTP Adapter）
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 
-// ViewModel（方針B）
+// ViewModel（方針B / 以降はキー名を modelId に統一）
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
 import { normalizeProductionModels } from "../viewModels/normalizeProductionModels";
@@ -225,18 +225,17 @@ export function useProductionCreate() {
     }
 
     // builder が期待する「production.models 風」の配列に寄せる
-    // → normalizeProductionModels に渡して揺れ吸収 & shape 統一
     const pseudoModels = safeModels.map((m: any, index: number) => {
-      const id = String(m?.id ?? "").trim() || String(index);
+      const modelId = String(m?.id ?? "").trim() || String(index);
 
       return {
-        modelId: id,
+        modelId,
         quantity: 0,
         modelNumber: m?.modelNumber ?? "",
         size: m?.size ?? "",
         color: m?.color ?? "",
         rgb: m?.rgb ?? null,
-        displayOrder: orderByModelId.get(id),
+        displayOrder: orderByModelId.get(modelId),
       };
     });
 
@@ -317,13 +316,17 @@ export function useProductionCreate() {
       return;
     }
 
+    // ✅ ProductionCreateService.ts で rows: { modelId, quantity } に統一済み
     const payload = buildProductionPayload({
       productBlueprintId: selectedId,
       assigneeId,
-      rows: (Array.isArray(quantityRowVMs) ? quantityRowVMs : []).map((vm) => ({
-        modelVariationId: String(vm.id ?? "").trim(),
-        quantity: vm.quantity ?? 0,
-      })),
+      rows: (Array.isArray(quantityRowVMs) ? quantityRowVMs : []).map((vm, index) => {
+        const modelId = String(vm.modelId ?? "").trim() || String(index);
+        return {
+          modelId,
+          quantity: vm.quantity ?? 0,
+        };
+      }),
       currentMemberId,
     });
 

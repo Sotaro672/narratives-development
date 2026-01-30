@@ -86,13 +86,10 @@ export function buildAssigneeOptions(
 // ======================================================================
 // ModelVariations → ProductionQuantityRow（UI入力用の行に変換）
 // ======================================================================
-// ✅ modelId を追加し、ProductBlueprint.detail.modelRefs.modelId と join できるようにする
 export function mapModelVariationsToRows(
   list: ModelVariationResponse[],
 ): ProductionQuantityRow[] {
   return list.map((mv) => ({
-    modelVariationId: mv.id,
-
     // ✅ modelRefs の modelId と一致するキーとして使う（現状は mv.id と同値でOK）
     modelId: mv.id,
 

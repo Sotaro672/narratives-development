@@ -21,16 +21,12 @@ export type ProductBlueprintForCard = {
 // ======================================================================
 // ProductionQuantityRow（UI 専用）
 // - ProductionQuantityCard（application/detail 側）が参照する modelId/displayOrder に寄せる
-// - create flow では modelVariationId を保持し、保存payloadに利用する
 // ======================================================================
 export type ProductionQuantityRow = {
-  /** create 保存用（ProductionCreate payload の modelVariationId） */
-  modelVariationId: string;
-
   /**
-   * ✅ 表示・並び替え用
+   * ✅ 正キー
    * ProductBlueprint.detail.modelRefs の modelId と join するキー
-   * 現状のデータでは modelVariationId === modelId なので同値で持つ
+   * backend でも modelId のみを利用する
    */
   modelId: string;
 

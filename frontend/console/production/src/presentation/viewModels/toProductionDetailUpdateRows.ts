@@ -5,7 +5,7 @@ import type { ProductionQuantityRowVM } from "./productionQuantityRowVM";
 
 /**
  * VM → updateProductionDetail 用 DTO（detail row）へ変換
- * VM の正キーは id（= modelId）として扱う
+ * VM の正キーは modelId
  */
 export function toProductionDetailUpdateRows(
   vms: ProductionQuantityRowVM[],
@@ -13,7 +13,7 @@ export function toProductionDetailUpdateRows(
   const safe = Array.isArray(vms) ? vms : [];
 
   return safe.map((vm, index) => {
-    const modelId = String(vm.id ?? "").trim() || String(index);
+    const modelId = String((vm as any).modelId ?? "").trim() || String(index);
 
     return {
       modelId,

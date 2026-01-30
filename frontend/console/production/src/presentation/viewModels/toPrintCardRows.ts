@@ -3,7 +3,7 @@
 import type { ProductionQuantityRowVM } from "./productionQuantityRowVM";
 
 export type PrintCardRow = {
-  modelVariationId: string;
+  modelId: string;
   modelNumber: string;
   size: string;
   color: string;
@@ -13,16 +13,16 @@ export type PrintCardRow = {
 
 /**
  * VM → usePrintCard 用 row へ変換
- * VM の正キーは id（= modelVariationId と同一として扱う）
+ * VM の正キーは modelId
  */
 export function toPrintCardRows(vms: ProductionQuantityRowVM[]): PrintCardRow[] {
   const safe = Array.isArray(vms) ? vms : [];
 
   return safe.map((vm, index) => {
-    const id = String(vm.id ?? "").trim() || String(index);
+    const modelId = String((vm as any).modelId ?? "").trim() || String(index);
 
     return {
-      modelVariationId: id,
+      modelId,
       modelNumber: vm.modelNumber ?? "",
       size: vm.size ?? "",
       color: vm.color ?? "",
@@ -31,4 +31,3 @@ export function toPrintCardRows(vms: ProductionQuantityRowVM[]): PrintCardRow[] 
     };
   });
 }
-

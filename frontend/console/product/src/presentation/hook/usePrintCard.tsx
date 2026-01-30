@@ -1,4 +1,5 @@
 // frontend/console/product/src/presentation/hook/usePrintCard.tsx
+
 import * as React from "react";
 import {
   createProductsForPrint,
@@ -7,7 +8,7 @@ import {
 } from "../../application/printService";
 
 type QuantityRowBase = {
-  modelVariationId: string;
+  modelId: string;
   quantity?: number | null;
 };
 
@@ -47,7 +48,7 @@ export function usePrintCard<T extends QuantityRowBase>({
       }
 
       const rowsForPrint: PrintRow[] = rows.map((row) => ({
-        modelId: row.modelVariationId,
+        modelId: row.modelId,
         quantity: row.quantity ?? 0,
       }));
 

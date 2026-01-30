@@ -1,4 +1,5 @@
-//frontend\console\production\src\application\create\ProductionCreateService.ts
+// frontend/console/production/src/application/create/ProductionCreateService.ts
+
 import type { Production } from "./ProductionCreateTypes";
 import type { ProductionRepository } from "./ProductionCreateRepository";
 
@@ -7,7 +8,7 @@ import type { ProductionRepository } from "./ProductionCreateRepository";
 // ======================================================================
 
 export type ProductionQuantityInput = {
-  modelVariationId: string;
+  modelId: string;
   quantity: number;
 };
 
@@ -31,7 +32,7 @@ export function buildProductionRequest(params: {
     productBlueprintId,
     assigneeId,
     models: quantities.map((q) => ({
-      modelId: q.modelVariationId,
+      modelId: q.modelId,
       quantity: q.quantity,
     })),
     status: "planned",
