@@ -39,6 +39,9 @@ export default function ProductionDetail() {
     // AdminCard 用モード
     adminMode,
 
+    // ✅ printed:true のとき false（編集不可）
+    canEdit,
+
     // 戻る
     onBack,
     onSave,
@@ -65,10 +68,11 @@ export default function ProductionDetail() {
     ? new Date(production.createdAt).toLocaleDateString("ja-JP")
     : "-";
 
+  // ✅ 印刷済みフラグ
+  const isPrinted = production?.printed === true;
+
   // ==========================
   // usePrintCard: 印刷 + print_log 取得
-  // - 正は modelId
-  // - usePrintCard も modelId を要求する（QuantityRowBase: modelId）
   // ==========================
   const rowsForPrint = React.useMemo(() => {
     const safe: ProductionQuantityRowVM[] = Array.isArray(quantityRows)
@@ -113,11 +117,17 @@ export default function ProductionDetail() {
   }, []);
 
   // ==========================
-  // ★ 印刷ボタン押下時処理
+  // 印刷ボタン押下時処理
   // ==========================
   const handlePrint = React.useCallback(async () => {
     if (!productionId) {
       window.alert("productionId が取得できませんでした。");
+      return;
+    }
+
+    // ✅ 印刷済みの場合は「結果表示」想定のため confirm は出さない
+    if (isPrinted) {
+      await onPrint();
       return;
     }
 
@@ -127,7 +137,7 @@ export default function ProductionDetail() {
     if (!ok) return;
 
     await onPrint();
-  }, [productionId, onPrint]);
+  }, [productionId, onPrint, isPrinted]);
 
   // ==========================
   // 戻る
@@ -142,7 +152,8 @@ export default function ProductionDetail() {
         layout="grid-2"
         title="生産詳細"
         onBack={handleBack}
-        onEdit={isViewMode ? handleEnterEdit : undefined}
+        // ✅ printed:true の場合は編集ボタン（onEdit）を非表示
+        onEdit={isViewMode && canEdit ? handleEnterEdit : undefined}
         onDelete={isEditMode ? handleDelete : undefined}
         onCancel={isEditMode ? handleCancelEdit : undefined}
         onSave={isEditMode ? handleSave : undefined}
@@ -199,7 +210,13 @@ export default function ProductionDetail() {
                 onChangeRows={isEditMode ? setQuantityRows : undefined}
               />
 
-              {isViewMode && <PrintCard printing={printing} onClick={handlePrint} />}
+              {isViewMode && (
+                <PrintCard
+                  printing={printing}
+                  onClick={handlePrint}
+                  printed={isPrinted} // ✅ 追加: 文言の表示し分け
+                />
+              )}
             </>
           )}
         </div>

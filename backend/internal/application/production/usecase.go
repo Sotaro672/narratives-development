@@ -64,9 +64,16 @@ func NewProductionUsecase(
 	}
 }
 
-// SetListQuery injects the read/query service used for list endpoints.
-// This is required when list operations are delegated to the query layer.
+// ============================
+// Optional dependency injection
+// ============================
+
+// SetListQuery injects the query service that backs List/ListWithAssigneeName.
+// This is required for console endpoints that call list APIs.
 func (u *ProductionUsecase) SetListQuery(q ProductionListQuery) {
+	if u == nil {
+		return
+	}
 	u.listQuery = q
 }
 

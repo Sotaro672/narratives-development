@@ -66,6 +66,15 @@ func NewCompanyProductionQueryService(
 // Public APIs
 // ============================================================
 
+// ✅ 追加: production.ProductionListQuery を満たすための公開メソッド
+// ProductionUsecase.List() が委譲する想定の “唯一のルート”。
+// 実体は既存の listProductionsByCurrentCompany に委譲する。
+func (s *CompanyProductionQueryService) ListProductionsByCurrentCompany(
+	ctx context.Context,
+) ([]productiondom.Production, error) {
+	return s.listProductionsByCurrentCompany(ctx)
+}
+
 // ListProductionIDsByCurrentCompany returns production IDs only.
 // Useful for select options etc.
 func (s *CompanyProductionQueryService) ListProductionIDsByCurrentCompany(
