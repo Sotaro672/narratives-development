@@ -225,12 +225,21 @@ export async function createModelVariations(
  * =======================================================*/
 
 export async function getModelVariationById(
-  id: string,
+  modelId: string,
 ): Promise<ModelVariationResponse> {
   const token = await getIdTokenOrThrow();
-  const safeId = encodeURIComponent(id.trim());
+  const safeId = encodeURIComponent(modelId.trim());
 
   const url = `${API_BASE}/models/${safeId}`;
+
+  // =========================================================
+  // ✅ Debug: GET /models/{id} の response 内容を確認
+  // - 目的: modelNumber/size/color/rgb が本当に返っているかを確認
+  // =========================================================
+  // eslint-disable-next-line no-console
+  console.groupCollapsed("[ModelRepositoryHTTP] GET /models/{id} debug");
+  // eslint-disable-next-line no-console
+  console.log("request:", { method: "GET", url, modelId: modelId.trim() });
 
   const res = await fetch(url, {
     method: "GET",
@@ -243,7 +252,21 @@ export async function getModelVariationById(
 
   const text = await res.text().catch(() => "");
 
+  // eslint-disable-next-line no-console
+  console.log("response meta:", {
+    status: res.status,
+    statusText: res.statusText,
+    ok: res.ok,
+    contentType: res.headers.get("Content-Type"),
+    contentLength: res.headers.get("Content-Length"),
+  });
+
+  // eslint-disable-next-line no-console
+  console.log("response text (raw):", text);
+
   if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.groupEnd();
     throw new Error(
       `モデルバリエーションの取得に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -251,9 +274,26 @@ export async function getModelVariationById(
     );
   }
 
-  const jsonAny = (text ? JSON.parse(text) : {}) as any;
+  let jsonAny: any = {};
+  try {
+    jsonAny = text ? (JSON.parse(text) as any) : {};
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("response JSON parse failed:", e);
+    jsonAny = {};
+  }
+
+  // eslint-disable-next-line no-console
+  console.log("response json (parsed):", jsonAny);
+
   const extractedId = extractVariationId(jsonAny, res.headers.get("Location"));
   const finalId = extractedId || String(jsonAny?.id ?? "").trim();
+
+  // eslint-disable-next-line no-console
+  console.log("id resolved:", { extractedId, finalId });
+
+  // eslint-disable-next-line no-console
+  console.groupEnd();
 
   if (!finalId) {
     throw new Error(
@@ -280,6 +320,17 @@ export async function listModelVariationsByProductBlueprintId(
 
   const url = `${API_BASE}/models/by-blueprint/${safeId}/variations`;
 
+  // =========================================================
+  // ✅ Debug: GET /models/by-blueprint/{id}/variations の response 内容を確認
+  // - 目的: 一覧で modelNumber/size/color/rgb が本当に返っているかを確認
+  // =========================================================
+  // eslint-disable-next-line no-console
+  console.groupCollapsed(
+    "[ModelRepositoryHTTP] GET /models/by-blueprint/{id}/variations debug",
+  );
+  // eslint-disable-next-line no-console
+  console.log("request:", { method: "GET", url, productBlueprintId: productBlueprintId.trim() });
+
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -291,7 +342,21 @@ export async function listModelVariationsByProductBlueprintId(
 
   const text = await res.text().catch(() => "");
 
+  // eslint-disable-next-line no-console
+  console.log("response meta:", {
+    status: res.status,
+    statusText: res.statusText,
+    ok: res.ok,
+    contentType: res.headers.get("Content-Type"),
+    contentLength: res.headers.get("Content-Length"),
+  });
+
+  // eslint-disable-next-line no-console
+  console.log("response text (raw):", text);
+
   if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.groupEnd();
     throw new Error(
       `モデルバリエーション一覧の取得に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -299,15 +364,36 @@ export async function listModelVariationsByProductBlueprintId(
     );
   }
 
-  const data = (text ? JSON.parse(text) : []) as any[];
-  if (!Array.isArray(data)) return [];
+  let data: any[] = [];
+  try {
+    const parsed = text ? JSON.parse(text) : [];
+    data = Array.isArray(parsed) ? (parsed as any[]) : [];
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("response JSON parse failed:", e);
+    data = [];
+  }
+
+  // eslint-disable-next-line no-console
+  console.log("response json (parsed) count:", data.length);
+  // eslint-disable-next-line no-console
+  console.log("response json (first 3):", data.slice(0, 3));
 
   // 一覧系も id 揺れを吸収して正規化しておく（後段の型崩れ防止）
-  return data
+  const normalized = data
     .map((row) => {
       const id = extractVariationId(row, null);
       if (!id) return null;
       return { ...(row as any), id } as ModelVariationResponse;
     })
     .filter(Boolean) as ModelVariationResponse[];
+
+  // eslint-disable-next-line no-console
+  console.log("normalized count:", normalized.length);
+  // eslint-disable-next-line no-console
+  console.log("normalized (first 3):", normalized.slice(0, 3));
+  // eslint-disable-next-line no-console
+  console.groupEnd();
+
+  return normalized;
 }

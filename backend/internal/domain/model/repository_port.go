@@ -65,6 +65,12 @@ type RepositoryPort interface {
 
 	// Variations (CRUD)
 	ListVariations(ctx context.Context, filter VariationFilter, page Page) (VariationPageResult, error)
+
+	// ✅ 追加: Blueprint 単位での ModelVariation 一覧取得（ページング無しの明示 API）
+	// - usecase/handler 側で filter + paging ループを組む代わりに repo に委譲するための port
+	// - 実装側（Firestore 等）は productBlueprintID で最適にクエリして返す
+	ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]ModelVariation, error)
+
 	GetModelVariations(ctx context.Context, productID string) ([]ModelVariation, error)
 	GetModelVariationByID(ctx context.Context, variationID string) (*ModelVariation, error)
 

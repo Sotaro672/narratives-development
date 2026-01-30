@@ -71,7 +71,7 @@ export const ITEM_TYPE_MEASUREMENT_OPTIONS: Record<
 // ============================
 
 export type SizeRow = {
-  id: string;
+  modelId: string;
   sizeLabel: string;
 
   // トップス

@@ -2,7 +2,6 @@
 
 import type {
   Production,
-  ProductionStatus,
 } from "../../../../shell/src/shared/types/production";
 
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
@@ -32,7 +31,9 @@ export async function loadProductionDetail(
   // ProductionDetail が要求する shape に正規化
   const rawModels: ProductionQuantityRow[] = (rawModelsSrc as any[]).map(
     (m: any, index: number) => {
-      const modelId = asNonEmptyString(m?.modelId ?? m?.ModelID ?? m?.id ?? m?.ID ?? "") || String(index);
+      const modelId =
+        asNonEmptyString(m?.modelId ?? m?.ModelID ?? m?.id ?? m?.ID ?? "") ||
+        String(index);
 
       const quantityRaw = m?.quantity ?? m?.Quantity ?? 0;
       const qNum = Number(quantityRaw);
@@ -40,7 +41,9 @@ export async function loadProductionDetail(
 
       const displayOrderRaw = m?.displayOrder ?? m?.DisplayOrder;
       const displayOrderNum = Number(displayOrderRaw);
-      const displayOrder = Number.isFinite(displayOrderNum) ? displayOrderNum : undefined;
+      const displayOrder = Number.isFinite(displayOrderNum)
+        ? displayOrderNum
+        : undefined;
 
       return {
         modelId,
@@ -54,7 +57,10 @@ export async function loadProductionDetail(
     },
   );
 
-  const totalQuantity = rawModels.reduce((sum: number, m) => sum + (m.quantity ?? 0), 0);
+  const totalQuantity = rawModels.reduce(
+    (sum: number, m) => sum + (m.quantity ?? 0),
+    0,
+  );
 
   const blueprintId = asNonEmptyString(
     raw.productBlueprintId ?? raw.ProductBlueprintID ?? "",
@@ -82,8 +88,21 @@ export async function loadProductionDetail(
       "",
   );
 
-  const createdByNameFromRaw = asString(raw.createdByName ?? raw.CreatedByName ?? "");
-  const updatedByNameFromRaw = asString(raw.updatedByName ?? raw.UpdatedByName ?? "");
+  const createdByNameFromRaw = asString(
+    raw.createdByName ?? raw.CreatedByName ?? "",
+  );
+  const updatedByNameFromRaw = asString(
+    raw.updatedByName ?? raw.UpdatedByName ?? "",
+  );
+
+  // ✅ status 廃止 → printed:boolean へ置換
+  // - raw.printed / raw.Printed を優先
+  // - status から推定する必要があればここで吸収（互換）
+  const printedRaw = raw.printed ?? raw.Printed;
+  const printed =
+    typeof printedRaw === "boolean"
+      ? printedRaw
+      : String(printedRaw ?? "").toLowerCase() === "true";
 
   let detail: ProductionDetail = {
     // 既存の raw を流用（ただし Date 型などは下で上書き）
@@ -100,8 +119,8 @@ export async function loadProductionDetail(
     assigneeId: asString(raw.assigneeId ?? raw.AssigneeID ?? ""),
     assigneeName: asString(raw.assigneeName ?? raw.AssigneeName ?? ""),
 
-    // ✅ Status
-    status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
+    // ✅ Printed（status の代替）
+    printed,
 
     // ✅ timestamps（Date）
     printedAt: toDate(raw.printedAt ?? raw.PrintedAt ?? null),
@@ -139,12 +158,27 @@ export async function loadProductionDetail(
     });
 
     if (match) {
-      const matchBrandId = asString(match.brandId ?? match.BrandID ?? match.BrandId ?? "");
+      const matchBrandId = asString(
+        match.brandId ?? match.BrandID ?? match.BrandId ?? "",
+      );
       const matchBrandName = asString(match.brandName ?? match.BrandName ?? "");
-      const matchAssigneeName = asString(match.assigneeName ?? match.AssigneeName ?? "");
+      const matchAssigneeName = asString(
+        match.assigneeName ?? match.AssigneeName ?? "",
+      );
 
-      const matchCreatedByName = asString(match.createdByName ?? match.CreatedByName ?? "");
-      const matchUpdatedByName = asString(match.updatedByName ?? match.UpdatedByName ?? "");
+      const matchCreatedByName = asString(
+        match.createdByName ?? match.CreatedByName ?? "",
+      );
+      const matchUpdatedByName = asString(
+        match.updatedByName ?? match.UpdatedByName ?? "",
+      );
+
+      // ✅ printed も一覧側で補完できるなら補完（任意）
+      const matchPrintedRaw = match.printed ?? match.Printed;
+      const matchPrinted =
+        typeof matchPrintedRaw === "boolean"
+          ? matchPrintedRaw
+          : String(matchPrintedRaw ?? "").toLowerCase() === "true";
 
       detail = {
         ...detail,
@@ -155,14 +189,16 @@ export async function loadProductionDetail(
         assigneeName: detail.assigneeName || matchAssigneeName,
 
         createdByName:
-          (detail.createdByName && detail.createdByName !== "-")
+          detail.createdByName && detail.createdByName !== "-"
             ? detail.createdByName
-            : (matchCreatedByName || detail.createdByName || "-"),
+            : matchCreatedByName || detail.createdByName || "-",
 
         updatedByName:
-          (detail.updatedByName && detail.updatedByName !== "-")
+          detail.updatedByName && detail.updatedByName !== "-"
             ? detail.updatedByName
-            : (matchUpdatedByName || detail.updatedByName || "-"),
+            : matchUpdatedByName || detail.updatedByName || "-",
+
+        printed: typeof detail.printed === "boolean" ? detail.printed : matchPrinted,
       };
     }
   } catch (_) {

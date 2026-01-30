@@ -32,7 +32,7 @@ export interface Color {
  * Go: ModelVariation
  */
 export interface ModelVariation {
-  id: string;
+  modelId: string;
   productBlueprintId: string;
   modelNumber: string;
   size: string;
@@ -155,7 +155,7 @@ export function isColorAllowed(colorName: string): boolean {
 export function validateModelVariation(mv: ModelVariation): string[] {
   const errors: string[] = [];
 
-  if (!mv.id?.trim()) errors.push("id is required");
+  if (!mv.modelId?.trim()) errors.push("modelId is required");
   if (!mv.productBlueprintId?.trim())
     errors.push("productBlueprintId is required");
   if (!mv.modelNumber?.trim()) errors.push("modelNumber is required");
@@ -214,18 +214,18 @@ export function validateModelData(md: ModelData): string[] {
   for (const v of md.variations || []) {
     errors.push(
       ...validateModelVariation(v).map(
-        (e) => `variation(${v.id || "unknown"}): ${e}`,
+        (e) => `variation(${v.modelId || "unknown"}): ${e}`,
       ),
     );
     if (v.productBlueprintId !== md.productBlueprintId) {
       errors.push(
-        `variation(${v.id || "unknown"}): productBlueprintId mismatch`,
+        `variation(${v.modelId || "unknown"}): productBlueprintId mismatch`,
       );
     }
-    if (seen.has(v.id)) {
-      errors.push(`duplicate variation id: ${v.id}`);
+    if (seen.has(v.modelId)) {
+      errors.push(`duplicate variation modelId: ${v.modelId}`);
     }
-    seen.add(v.id);
+    seen.add(v.modelId);
   }
 
   return errors;
@@ -261,7 +261,7 @@ export function createModelVariation(
 ): ModelVariation {
   const normalized: ModelVariation = {
     ...input,
-    id: input.id.trim(),
+    modelId: input.modelId.trim(),
     productBlueprintId: input.productBlueprintId.trim(),
     modelNumber: input.modelNumber.trim(),
     size: input.size.trim(),

@@ -73,32 +73,11 @@ func (u *ModelUsecase) saveHistorySnapshot(ctx context.Context, blueprintID stri
 
 	log.Printf("[ModelUsecase] saveHistorySnapshot start: blueprintID=%s", blueprintID)
 
-	// ✅ RepositoryPort には ListModelVariationsByProductBlueprintID が無いので、
-	//   ListVariations(filter.ProductBlueprintID) で全件取得する
-	var all []modeldom.ModelVariation
-	page := modeldom.Page{Number: 1, PerPage: 500}
-	filter := modeldom.VariationFilter{ProductBlueprintID: blueprintID}
-
-	for {
-		res, err := u.repo.ListVariations(ctx, filter, page)
-		if err != nil {
-			log.Printf("[ModelUsecase] saveHistorySnapshot: list variations failed: %v", err)
-			return
-		}
-
-		all = append(all, res.Items...)
-
-		// guard: 0 件 or 最終ページ
-		if len(res.Items) == 0 || res.TotalPages <= 0 || page.Number >= res.TotalPages {
-			break
-		}
-
-		// guard: 無限ループ防止
-		page.Number++
-		if page.Number > 10000 {
-			log.Printf("[ModelUsecase] saveHistorySnapshot aborted: too many pages (blueprintID=%s)", blueprintID)
-			break
-		}
+	// ✅ RepositoryPort に追加した ListModelVariationsByProductBlueprintID を使って全件取得
+	all, err := u.repo.ListModelVariationsByProductBlueprintID(ctx, blueprintID)
+	if err != nil {
+		log.Printf("[ModelUsecase] saveHistorySnapshot: list variations failed: %v", err)
+		return
 	}
 
 	if err := u.historyRepo.SaveSnapshot(ctx, blueprintID, all); err != nil {
@@ -122,7 +101,8 @@ func (u *ModelUsecase) GetByID(ctx context.Context, id string) (*modeldom.ModelV
 	return u.GetModelVariationByID(ctx, id)
 }
 
-// ★追加：HTTP の GET /models/variations/{variationId} 用の明示メソッド
+// ★ HTTP の GET /models/variations/{variationId} 用の明示メソッド
+// ※ このメソッドは 1 箇所のみ定義（DuplicateMethod 回避）
 func (u *ModelUsecase) GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
@@ -139,7 +119,8 @@ func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, pro
 	return u.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
-// 互換：既存コードが呼んでいる可能性があるため残す
+// ✅ 新：productBlueprintID → variations 一覧（repo に委譲）
+// （旧式の ListVariations + paging ループは削除）
 func (u *ModelUsecase) ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
 	productBlueprintID = strings.TrimSpace(productBlueprintID)
 	if productBlueprintID == "" {
@@ -149,27 +130,7 @@ func (u *ModelUsecase) ListModelVariationsByProductBlueprintID(ctx context.Conte
 		return nil, modeldom.ErrNotFound
 	}
 
-	var all []modeldom.ModelVariation
-	page := modeldom.Page{Number: 1, PerPage: 500}
-	filter := modeldom.VariationFilter{ProductBlueprintID: productBlueprintID}
-
-	for {
-		res, err := u.repo.ListVariations(ctx, filter, page)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, res.Items...)
-
-		if len(res.Items) == 0 || res.TotalPages <= 0 || page.Number >= res.TotalPages {
-			break
-		}
-		page.Number++
-		if page.Number > 10000 {
-			break
-		}
-	}
-
-	return all, nil
+	return u.repo.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
 }
 
 // ------------------------------------------------------------

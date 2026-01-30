@@ -11,6 +11,11 @@ import type { NormalizedProductionModel } from "./normalizeProductionModels";
  * - VM の正キーは modelId
  * - displayOrder は production.models 側（あれば）を優先し、
  *   なければ modelIndex 側の displayOrder を使う
+ *
+ * ✅ 注意:
+ * production.models 側の modelNumber/size/color が ""（空文字）で来るケースがあるため、
+ * nullish coalescing (??) では meta にフォールバックできない。
+ * 空文字の場合も meta を優先できるように `||` で吸収する。
  */
 export function buildProductionQuantityRowVMs(
   models: NormalizedProductionModel[],
@@ -26,13 +31,31 @@ export function buildProductionQuantityRowVMs(
       ? Math.max(0, Math.floor(m.quantity))
       : 0;
 
-    const modelNumber = String(m.modelNumber ?? meta?.modelNumber ?? "").trim();
-    const size = String(m.size ?? meta?.size ?? "").trim();
-    const color = String(m.color ?? meta?.color ?? "").trim();
-    const rgb = (m.rgb ?? meta?.rgb ?? null) as any;
+    // ------------------------------------------------------
+    // ✅ 空文字は meta にフォールバックさせる
+    // ------------------------------------------------------
+    const modelNumberFromModel = String((m as any)?.modelNumber ?? "").trim();
+    const modelNumberFromMeta = String(meta?.modelNumber ?? "").trim();
+    const modelNumber = modelNumberFromModel || modelNumberFromMeta;
+
+    const sizeFromModel = String((m as any)?.size ?? "").trim();
+    const sizeFromMeta = String(meta?.size ?? "").trim();
+    const size = sizeFromModel || sizeFromMeta;
+
+    const colorFromModel = String((m as any)?.color ?? "").trim();
+    const colorFromMeta = String(meta?.color ?? "").trim();
+    const color = colorFromModel || colorFromMeta;
+
+    // rgb は 0（黒）が正なので、空判定は null/undefined のみでよい
+    const rgb =
+      (m as any)?.rgb !== undefined && (m as any)?.rgb !== null
+        ? (m as any).rgb
+        : meta?.rgb ?? null;
 
     const displayOrderNum =
-      typeof m.displayOrder === "number" ? m.displayOrder : Number(m.displayOrder);
+      typeof (m as any).displayOrder === "number"
+        ? (m as any).displayOrder
+        : Number((m as any).displayOrder);
 
     const displayOrderFromModel = Number.isFinite(displayOrderNum)
       ? displayOrderNum

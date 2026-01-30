@@ -201,8 +201,147 @@ export function useProductionDetail() {
     const normalized = normalizeProductionModels(raw);
     const vms = buildProductionQuantityRowVMs(normalized, modelIndex);
 
+    // ======================================================
+    // ✅ Debug: カード（ProductionQuantityCard）へ渡す rows に
+    // modelNumber / size / color が入っているか確認
+    // ======================================================
+    // eslint-disable-next-line no-console
+    console.groupCollapsed("[useProductionDetail] quantityRows(VM) build debug");
+
+    // eslint-disable-next-line no-console
+    console.log("productionId:", productionId);
+    // eslint-disable-next-line no-console
+    console.log("productBlueprintId:", production?.productBlueprintId ?? null);
+
+    // eslint-disable-next-line no-console
+    console.log(
+      "production.models:",
+      "isArray:",
+      Array.isArray(raw),
+      "length:",
+      raw.length,
+      "first5:",
+      raw.slice(0, 5),
+    );
+
+    // eslint-disable-next-line no-console
+    console.log(
+      "normalized models:",
+      "length:",
+      normalized.length,
+      "first5:",
+      normalized.slice(0, 5),
+    );
+
+    const modelIndexKeys = Object.keys(modelIndex ?? {});
+    // eslint-disable-next-line no-console
+    console.log("modelIndex keys length:", modelIndexKeys.length);
+    // eslint-disable-next-line no-console
+    console.log("modelIndex keys (first20):", modelIndexKeys.slice(0, 20));
+
+    // eslint-disable-next-line no-console
+    console.log("vms length:", vms.length);
+    // eslint-disable-next-line no-console
+    console.log(
+      "vms(first10) pick:",
+      vms.slice(0, 10).map((vm) => ({
+        modelId: vm.modelId,
+        modelNumber: vm.modelNumber,
+        size: vm.size,
+        color: vm.color,
+        quantity: vm.quantity,
+        rgb: vm.rgb ?? null,
+      })),
+    );
+
+    // 欠損チェック（カード表示に必要）
+    const missingModelNumber = vms.filter(
+      (vm) => !vm?.modelNumber || String(vm.modelNumber).trim() === "",
+    );
+    const missingSize = vms.filter(
+      (vm) => !vm?.size || String(vm.size).trim() === "",
+    );
+    const missingColor = vms.filter(
+      (vm) => !vm?.color || String(vm.color).trim() === "",
+    );
+
+    if (missingModelNumber.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "missing modelNumber rows (first10):",
+        missingModelNumber.slice(0, 10).map((vm) => ({
+          modelId: vm.modelId,
+          modelNumber: vm.modelNumber,
+          size: vm.size,
+          color: vm.color,
+          quantity: vm.quantity,
+        })),
+      );
+    }
+    if (missingSize.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "missing size rows (first10):",
+        missingSize.slice(0, 10).map((vm) => ({
+          modelId: vm.modelId,
+          modelNumber: vm.modelNumber,
+          size: vm.size,
+          color: vm.color,
+          quantity: vm.quantity,
+        })),
+      );
+    }
+    if (missingColor.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "missing color rows (first10):",
+        missingColor.slice(0, 10).map((vm) => ({
+          modelId: vm.modelId,
+          modelNumber: vm.modelNumber,
+          size: vm.size,
+          color: vm.color,
+          quantity: vm.quantity,
+        })),
+      );
+    }
+
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+
     setQuantityRows(vms);
-  }, [production, modelIndex]);
+  }, [production, modelIndex, productionId]);
+
+  // ======================================================
+  // ✅ Debug: state に乗った quantityRows がカードへ返却される最終形
+  // ======================================================
+  React.useEffect(() => {
+    const qr: ProductionQuantityRowVM[] = Array.isArray(quantityRows)
+      ? quantityRows
+      : [];
+
+    // eslint-disable-next-line no-console
+    console.groupCollapsed(
+      "[useProductionDetail] quantityRows(VM) state debug (for card props)",
+    );
+    // eslint-disable-next-line no-console
+    console.log("productionId:", productionId);
+    // eslint-disable-next-line no-console
+    console.log("quantityRows length:", qr.length);
+    // eslint-disable-next-line no-console
+    console.log(
+      "quantityRows(first10) pick:",
+      qr.slice(0, 10).map((vm) => ({
+        modelId: vm.modelId,
+        modelNumber: vm.modelNumber,
+        size: vm.size,
+        color: vm.color,
+        quantity: vm.quantity,
+        rgb: vm.rgb ?? null,
+      })),
+    );
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+  }, [quantityRows, productionId]);
 
   // ======================================================
   // 保存処理（quantity + assigneeId）
