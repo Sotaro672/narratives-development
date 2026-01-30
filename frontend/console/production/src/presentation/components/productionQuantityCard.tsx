@@ -31,45 +31,10 @@ type ProductionQuantityCardProps = {
   onChangeRows?: (rows: ProductionQuantityRow[]) => void;
 };
 
-// サイズ並びの優先順位（未定義は末尾へ）
-function sizeRank(size: string): number {
-  const s = (size ?? "").trim().toLowerCase();
-
-  // よくある表記ゆれを吸収
-  const normalized =
-    s === "xs" || s === "x-small" ? "xs" :
-    s === "s" || s === "small" ? "s" :
-    s === "m" || s === "medium" ? "m" :
-    s === "l" || s === "large" ? "l" :
-    s === "xl" || s === "x-large" ? "xl" :
-    s === "xxl" || s === "2xl" ? "xxl" :
-    s;
-
-  const order: Record<string, number> = {
-    xxs: 0,
-    xs: 1,
-    s: 2,
-    m: 3,
-    l: 4,
-    xl: 5,
-    xxl: 6,
-    xxxl: 7,
-    free: 99,
-    one: 99,
-    onesize: 99,
-  };
-
-  return order[normalized] ?? 1000; // 未定義は最後
-}
-
-function compareString(a: string, b: string): number {
-  const aa = (a ?? "").trim();
-  const bb = (b ?? "").trim();
-  // 空は末尾へ
-  if (!aa && !bb) return 0;
-  if (!aa) return 1;
-  if (!bb) return -1;
-  return aa.localeCompare(bb, "ja");
+function displayOrderRank(v: unknown): number {
+  return Number.isFinite(v as number)
+    ? (v as number)
+    : Number.POSITIVE_INFINITY; // 未設定は末尾
 }
 
 const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
@@ -81,37 +46,24 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
 }) => {
   const isEditable = mode === "edit";
 
-  // ✅ 表示順を「色 → サイズ」に統一（安定ソート）
-  // - 1st: color（文字列）
-  // - 2nd: size（S/M/L... の順位）
-  // - 3rd: modelNumber（安定化）
-  // - 4th: modelId（最後の安定化）
+  // ✅ displayOrder のみに従って並べる
   const sortedRows = React.useMemo(() => {
+    console.log(
+      "[ProductionQuantityCard] rows displayOrder",
+      rows.map((r) => r.displayOrder),
+    );
+    console.log(
+      "[ProductionQuantityCard] rows displayOrder types",
+      rows.map((r) => typeof r.displayOrder),
+    );
+
     const safe = Array.isArray(rows) ? rows : [];
     const copied = [...safe];
 
     copied.sort((a, b) => {
-      // 1) color
-      const c = compareString(a.color ?? "", b.color ?? "");
-      if (c !== 0) return c;
-
-      // 2) size
-      const sa = sizeRank(a.size ?? "");
-      const sb = sizeRank(b.size ?? "");
-      if (sa !== sb) return sa - sb;
-
-      // size が両方 unknown の場合は文字列で比較して安定化
-      if (sa === 1000 && sb === 1000) {
-        const s = compareString(a.size ?? "", b.size ?? "");
-        if (s !== 0) return s;
-      }
-
-      // 3) modelNumber
-      const mn = compareString(a.modelNumber ?? "", b.modelNumber ?? "");
-      if (mn !== 0) return mn;
-
-      // 4) modelId（最後の安定化）
-      return compareString(a.modelId ?? "", b.modelId ?? "");
+      const da = displayOrderRank(a.displayOrder);
+      const db = displayOrderRank(b.displayOrder);
+      return da - db;
     });
 
     return copied;
@@ -187,7 +139,9 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                         min={0}
                         step={1}
                         value={row.quantity ?? 0}
-                        onChange={(e) => handleChangeQuantity(idx, e.target.value)}
+                        onChange={(e) =>
+                          handleChangeQuantity(idx, e.target.value)
+                        }
                         className="mqc__input"
                         aria-label={`${row.modelNumber} の生産数`}
                       />
@@ -205,7 +159,9 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                   合計
                 </TableCell>
                 <TableCell className="mqc__footer-cell">
-                  <span className="mqc__pill mqc__pill--total">{totalQuantity}</span>
+                  <span className="mqc__pill mqc__pill--total">
+                    {totalQuantity}
+                  </span>
                 </TableCell>
               </TableRow>
             )}

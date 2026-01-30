@@ -111,7 +111,9 @@ export function useProductionCreate() {
   // ==========================
   React.useEffect(() => {
     loadProductBlueprints()
-      .then((rows: ProductBlueprintManagementRow[]) => setAllProductBlueprints(rows))
+      .then((rows: ProductBlueprintManagementRow[]) =>
+        setAllProductBlueprints(rows),
+      )
       .catch(() => setAllProductBlueprints([]));
   }, []);
 
@@ -156,11 +158,80 @@ export function useProductionCreate() {
     })();
   }, [selectedId]);
 
-  // models → quantityRows 初期化
+  // models → quantityRows 初期化（displayOrder を detail.modelRefs から注入）
   React.useEffect(() => {
-    const rows: ProductionQuantityRow[] = mapModelVariationsToRows(modelVariations);
-    setQuantityRows(rows);
-  }, [modelVariations]);
+    console.log(
+      "[debug] modelRefs ids",
+      (selectedDetail?.modelRefs ?? []).map((r: any) => r.modelId),
+    );
+    console.log(
+      "[debug] variation ids",
+      modelVariations.map((v) => v.id),
+    );
+
+    console.log(
+      "[debug] modelRefs displayOrder",
+      (selectedDetail?.modelRefs ?? []).map((r: any) => r.displayOrder),
+    );
+    console.log(
+      "[debug] modelRefs displayOrder types",
+      (selectedDetail?.modelRefs ?? []).map((r: any) => typeof r.displayOrder),
+    );
+console.log(
+  "[debug] rows just before card",
+  modelVariationsForCard.map((r: any) => r.displayOrder),
+);
+
+    const baseRows: ProductionQuantityRow[] =
+      mapModelVariationsToRows(modelVariations);
+
+    console.log(
+      "[debug] baseRows keys",
+      (baseRows as any[]).map((r: any) => ({
+        modelId: r.modelId,
+        modelVariationId: r.modelVariationId,
+      })),
+    );
+
+    const refs = (selectedDetail?.modelRefs ?? []) as Array<{
+      modelId: string;
+      displayOrder?: number;
+    }>;
+
+    const orderByModelId = new Map<string, number>();
+    for (const r of refs) {
+      const id = String(r?.modelId ?? "").trim();
+      if (!id) continue;
+
+      const n = Number((r as any).displayOrder);
+      if (!Number.isFinite(n)) continue;
+
+      orderByModelId.set(id, n);
+    }
+
+    console.log("[debug] orderByModelId size", orderByModelId.size);
+
+    const rowsWithOrder: ProductionQuantityRow[] = (baseRows as any[]).map(
+      (r: any) => {
+        const key = (r.modelId ?? r.modelVariationId) as string | undefined;
+        return {
+          ...r,
+          // ✅ modelId が無い実データでも join できるように fallback
+          displayOrder: key ? orderByModelId.get(String(key).trim()) : undefined,
+        } as ProductionQuantityRow;
+      },
+    );
+
+    console.log(
+      "[debug] injected displayOrder",
+      (rowsWithOrder as any[]).map((r: any) => ({
+        id: r.modelId ?? r.modelVariationId,
+        d: r.displayOrder,
+      })),
+    );
+
+    setQuantityRows(rowsWithOrder);
+  }, [modelVariations, selectedDetail]);
 
   // ==========================
   // ProductBlueprintCard 表示用データ
@@ -198,13 +269,19 @@ export function useProductionCreate() {
   }, [companyId]);
 
   const assigneeOptions = React.useMemo(
-    () => buildAssigneeOptions(assigneeCandidates) as Array<{ id: string; name: string }>,
+    () =>
+      buildAssigneeOptions(assigneeCandidates) as Array<{
+        id: string;
+        name: string;
+      }>,
     [assigneeCandidates],
   );
 
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
-      const selected = assigneeOptions.find((o: { id: string; name: string }) => o.id === id);
+      const selected = assigneeOptions.find(
+        (o: { id: string; name: string }) => o.id === id,
+      );
       const name = selected?.name ?? "未設定";
 
       setAssigneeId(id);

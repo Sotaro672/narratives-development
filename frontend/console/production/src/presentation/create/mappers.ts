@@ -1,4 +1,4 @@
-// frontend\console\production\src\presentation\create\mappers.ts
+// frontend/console/production/src/presentation/create/mappers.ts
 
 import type { Brand } from "../../../../brand/src/domain/entity/brand";
 import type { Member } from "../../../../member/src/domain/entity/member";
@@ -86,16 +86,24 @@ export function buildAssigneeOptions(
 // ======================================================================
 // ModelVariations → ProductionQuantityRow（UI入力用の行に変換）
 // ======================================================================
+// ✅ modelId を追加し、ProductBlueprint.detail.modelRefs.modelId と join できるようにする
 export function mapModelVariationsToRows(
   list: ModelVariationResponse[],
 ): ProductionQuantityRow[] {
   return list.map((mv) => ({
     modelVariationId: mv.id,
+
+    // ✅ modelRefs の modelId と一致するキーとして使う（現状は mv.id と同値でOK）
+    modelId: mv.id,
+
     modelNumber: mv.modelNumber,
     size: mv.size,
 
     color: mv.color?.name ?? "",
     rgb: mv.color?.rgb ?? null,
+
+    // displayOrder は detail.modelRefs 側が唯一のソースなので、ここでは注入しない
+    displayOrder: undefined,
 
     quantity: 0,
   }));

@@ -1,9 +1,6 @@
 // frontend/console/production/src/application/detail/buildQuantityRows.ts
 import type { ModelVariationSummary, ProductionQuantityRow } from "./types";
 
-/* ---------------------------------------------------------
- * モデル別 生産数行を生成（pure function）
- * --------------------------------------------------------- */
 export function buildQuantityRowsFromModels(
   models: {
     modelId: string;
@@ -18,25 +15,26 @@ export function buildQuantityRowsFromModels(
 ): ProductionQuantityRow[] {
   const safeModels = Array.isArray(models) ? models : [];
 
-  const rows: ProductionQuantityRow[] = safeModels.map((m, index) => {
-    // dto/detail.go を正: modelId がキー
+  return safeModels.map((m, index) => {
     const modelId = (m.modelId ?? "").trim() || String(index);
 
-    // dto を正: quantity は number 前提だが、UI 安全のため clamp のみ実施
     const quantity = Number.isFinite(m.quantity)
       ? Math.max(0, Math.floor(m.quantity))
       : 0;
 
-    // dto を正: 詳細 DTO が modelNumber/color/size/rgb/displayOrder を返す場合はそれを優先
     const modelNumberFromModel = (m.modelNumber ?? "").trim();
     const sizeFromModel = (m.size ?? "").trim();
     const colorFromModel = (m.color ?? "").trim();
-    const rgbFromModel = typeof m.rgb === "number" ? m.rgb : undefined;
 
-    const displayOrderFromModel =
-      Number.isFinite(m.displayOrder) ? (m.displayOrder as number) : undefined;
+    const rgbFromModel =
+      typeof m.rgb === "number" || typeof m.rgb === "string" ? m.rgb : undefined;
 
-    // 足りない分は modelIndex で補完する（キーは modelId）
+    const displayOrderNum =
+      typeof m.displayOrder === "number" ? m.displayOrder : Number(m.displayOrder);
+    const displayOrderFromModel = Number.isFinite(displayOrderNum)
+      ? displayOrderNum
+      : undefined;
+
     const meta = modelId ? modelIndex[modelId] : undefined;
 
     const row: ProductionQuantityRow = {
@@ -51,6 +49,4 @@ export function buildQuantityRowsFromModels(
 
     return row;
   });
-
-  return rows;
 }

@@ -76,32 +76,60 @@ export default function ProductionCreate() {
   } = useProductionCreate();
 
   // ✅ create row -> detail row 変換（ProductionQuantityCard の props に合わせる）
+  // 重要: displayOrder を絶対に潰さない（ここが今回の根本原因）
   const rowsForCard: DetailQuantityRow[] = (Array.isArray(modelVariationsForCard)
     ? modelVariationsForCard
     : []
-  ).map((r: CreateQuantityRow, index: number) => ({
-    modelId: (r.modelVariationId ?? "").trim() || String(index),
-    modelNumber: r.modelNumber ?? "",
-    size: r.size ?? "",
-    color: r.color ?? "",
-    rgb: r.rgb ?? null,
-    quantity: r.quantity ?? 0,
-    // create 側には displayOrder が無い前提
-    displayOrder: undefined,
-  }));
+  ).map((r: CreateQuantityRow, index: number) => {
+    // modelId と modelVariationId が同一IDである前提（ログでも一致）
+    const id =
+      (r as any).modelId?.trim?.() ||
+      (r.modelVariationId ?? "").trim() ||
+      String(index);
+
+    return {
+      modelId: id,
+      modelNumber: r.modelNumber ?? "",
+      size: r.size ?? "",
+      color: r.color ?? "",
+      rgb: (r as any).rgb ?? null,
+      quantity: r.quantity ?? 0,
+      // ✅ create 側に入っている displayOrder をそのまま渡す（潰さない）
+      displayOrder: (r as any).displayOrder,
+    };
+  });
+
+  // ✅ デバッグ: Card に渡す直前の displayOrder
+  console.log(
+    "[debug] rows just before card",
+    rowsForCard.map((r) => r.displayOrder),
+  );
 
   // ✅ onChangeRows: detail row -> create row に戻して state 更新
   const handleChangeRows = (rows: DetailQuantityRow[]) => {
     const next: CreateQuantityRow[] = (Array.isArray(rows) ? rows : []).map(
-      (r) => ({
-        modelVariationId: r.modelId,
-        modelNumber: r.modelNumber,
-        size: r.size,
-        color: r.color,
-        rgb: r.rgb ?? null,
-        quantity: r.quantity ?? 0,
-      }),
+      (r, index) => {
+        const id = (r.modelId ?? "").trim() || String(index);
+
+        return {
+          // ✅ TS2322 対策: create row が modelId 必須なら必ず入れる
+          ...(typeof ({} as any as CreateQuantityRow).modelId === "string"
+            ? ({ modelId: id } as any)
+            : ({} as any)),
+          modelVariationId: id,
+          modelNumber: r.modelNumber,
+          size: r.size,
+          color: r.color,
+          rgb: r.rgb ?? null,
+          quantity: r.quantity ?? 0,
+          // ✅ displayOrder を保持したいなら create row 側にも持たせる（型にあれば入る）
+          ...(typeof ({} as any as CreateQuantityRow).displayOrder === "number"
+            ? ({ displayOrder: r.displayOrder } as any)
+            : ({} as any)),
+        } as CreateQuantityRow;
+      },
     );
+
     setQuantityRows(next);
   };
 
