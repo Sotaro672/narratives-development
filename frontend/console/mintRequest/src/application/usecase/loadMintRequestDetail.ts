@@ -116,12 +116,6 @@ export function asMaybeISO(v: any): string {
   return String(v);
 }
 
-function asNumberOrNull(v: any): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 function isPassedResult(v: any): boolean {
   const s = asNonEmptyString(v).toLowerCase();
   return s === "passed";

@@ -74,7 +74,9 @@ export async function fetchModelVariationByIdForMintHTTP(
       }
 
       const json = (await res.json()) as any;
-      return normalizeModelVariationForMintDTO(json);
+      const normalized = normalizeModelVariationForMintDTO(json);
+
+      return normalized;
     } catch (_e: any) {
       // try next candidate
       continue;

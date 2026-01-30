@@ -7,9 +7,12 @@ import type { InspectionBatch } from "../../domain/entity/inspections";
 import { fetchModelVariationByIdForMintHTTP } from "../../infrastructure/repository";
 import type { ModelVariationForMintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
+// ✅ 追加：共通カラー変換ユーティリティ（rgb int -> "#RRGGBB"）
+import { rgbIntToHex as rgbIntToHexShared } from "../../../../shell/src/shared/util/color";
+
 /**
  * バックエンドの MintInspectionView に相当する型のうち、
- * InspectionBatch に modelMeta を足したものだけをここで再定義して使う。
+ * InspectionBatch に modelMeta / productBlueprintPatch を足したものだけをここで再定義して使う。
  * （TS の構造的型付けなので、API から追加で来る productName などとも両立します）
  */
 export type MintModelMetaEntry = {
@@ -24,6 +27,12 @@ export type MintModelMetaEntry = {
 export type InspectionBatchWithModelMeta = InspectionBatch & {
   // modelId → { modelNumber, size, colorName, rgb }
   modelMeta?: Record<string, MintModelMetaEntry>;
+
+  // ★ 追加：ProductBlueprintPatch（modelRefs=displayOrder の唯一のソース）
+  productBlueprintPatch?: {
+    modelRefs?: Array<{ modelId: string; displayOrder: number }> | null;
+    [k: string]: any;
+  } | null;
 };
 
 /**
@@ -43,7 +52,7 @@ export type InspectionResultRow = {
 };
 
 export type UseInspectionResultCardParams = {
-  /** MintInspectionView 相当（InspectionBatch + modelMeta） */
+  /** MintInspectionView 相当（InspectionBatch + modelMeta + productBlueprintPatch） */
   batch: InspectionBatchWithModelMeta | null | undefined;
 };
 
@@ -52,7 +61,9 @@ export type UseInspectionResultCardResult = {
   rows: InspectionResultRow[];
   totalPassed: number;
   totalQuantity: number;
-  rgbIntToHex: (rgb: number | string | null | undefined) => string | null;
+
+  // ✅ 共通 util 互換に合わせる：undefined も返しうる
+  rgbIntToHex: (rgb: number | string | null | undefined) => string | undefined;
 };
 
 /**
@@ -62,6 +73,7 @@ export type UseInspectionResultCardResult = {
  * ★ 期待値対応：
  * - inspections から取得できる modelId を使って
  *   GetModelVariationByID（HTTP）を叩き、modelNumber/size/color を補完する
+ * - 行の並び順は ProductBlueprintPatch.modelRefs.displayOrder を正とする
  */
 export function useInspectionResultCard(
   params: UseInspectionResultCardParams,
@@ -104,8 +116,28 @@ export function useInspectionResultCard(
     return modelIds.filter((id) => !mergedModelMeta[id]);
   }, [modelIds, mergedModelMeta]);
 
+  // ★ NEW: ProductBlueprintPatch.modelRefs から modelId -> displayOrder を構築
+  const displayOrderByModelId: Record<string, number> = React.useMemo(() => {
+    const refs = batch?.productBlueprintPatch?.modelRefs ?? [];
+    const out: Record<string, number> = {};
+    for (const r of refs ?? []) {
+      const mid = String((r as any)?.modelId ?? "").trim();
+      const ord = (r as any)?.displayOrder;
+      if (!mid) continue;
+      if (typeof ord !== "number" || !Number.isFinite(ord)) continue;
+      out[mid] = ord;
+    }
+    return out;
+  }, [batch?.productBlueprintPatch]);
+
   // ★ 追加：missingModelIds を GetModelVariationByID（HTTP）で解決して modelMeta を埋める
   React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[useInspectionResultCard] effect fired", {
+      hasBatch: !!batch,
+      missingModelIds,
+    });
+
     if (!batch) return;
     if (missingModelIds.length === 0) return;
 
@@ -192,7 +224,9 @@ export function useInspectionResultCard(
       map.set(modelId, entry);
     }
 
-    const result: InspectionResultRow[] = [];
+    // 並び替えに ProductBlueprintPatch.modelRefs.displayOrder を使う
+    const tmp: Array<InspectionResultRow & { __order: number }> = [];
+    const INF = Number.POSITIVE_INFINITY;
 
     for (const [modelId, agg] of map.entries()) {
       const meta = mergedModelMeta[modelId];
@@ -204,7 +238,14 @@ export function useInspectionResultCard(
         (agg.modelNumber ?? "").trim() ||
         modelId;
 
-      result.push({
+      const order =
+        typeof displayOrderByModelId[modelId] === "number" &&
+        Number.isFinite(displayOrderByModelId[modelId])
+          ? displayOrderByModelId[modelId]
+          : INF;
+
+      tmp.push({
+        __order: order,
         modelNumber: displayModelNumber,
         size: (meta?.size ?? "").trim(),
         color: (meta?.colorName ?? "").trim(),
@@ -214,8 +255,11 @@ export function useInspectionResultCard(
       });
     }
 
-    return result;
-  }, [batch, mergedModelMeta]);
+    // ✅ modelRefs.displayOrder のみに従って並べ替え（displayOrder 無しは末尾）
+    tmp.sort((a, b) => a.__order - b.__order);
+
+    return tmp.map(({ __order, ...row }) => row);
+  }, [batch, mergedModelMeta, displayOrderByModelId]);
 
   const totalPassed = React.useMemo(
     () => rows.reduce((sum, r) => sum + (r.passedQuantity || 0), 0),
@@ -227,16 +271,10 @@ export function useInspectionResultCard(
     [rows],
   );
 
-  // RGB → HEX (#RRGGBB) 変換
+  // ✅ 共通 util を使用して RGB → HEX (#RRGGBB) 変換
   const rgbIntToHex = React.useCallback(
-    (rgb: number | string | null | undefined): string | null => {
-      if (rgb === null || rgb === undefined) return null;
-      const n = typeof rgb === "string" ? Number(rgb) : rgb;
-      if (!Number.isFinite(n)) return null;
-
-      const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
-      const hex = clamped.toString(16).padStart(6, "0");
-      return `#${hex}`;
+    (rgb: number | string | null | undefined): string | undefined => {
+      return rgbIntToHexShared(rgb);
     },
     [],
   );

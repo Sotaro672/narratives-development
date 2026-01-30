@@ -18,7 +18,6 @@ import {
 } from "../../../../shell/src/shared/ui/table";
 
 import type {
-  InspectionResultRow,
   UseInspectionResultCardResult,
 } from "../hook/useInspectionResultCard";
 

@@ -126,14 +126,6 @@ export async function fetchMintsMapByInspectionIds(
     const m = await anyRepo.listMintsByInspectionIDsHTTP(ids);
     return (m ?? {}) as Record<string, MintListRowDTO>;
   }
-
-  // 互換: 旧名
-  if (typeof anyRepo.fetchMintListRowsByInspectionIdsHTTP === "function") {
-    const m = await anyRepo.fetchMintListRowsByInspectionIdsHTTP(ids);
-    return (m ?? {}) as Record<string, MintListRowDTO>;
-  }
-
-  // 未実装なら空
   return {};
 }
 

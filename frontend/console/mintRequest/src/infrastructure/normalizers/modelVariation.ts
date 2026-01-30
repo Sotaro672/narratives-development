@@ -7,21 +7,17 @@ export function normalizeModelVariationForMintDTO(
 ): ModelVariationForMintDTO | null {
   if (!v) return null;
 
-  const id = String(v?.id ?? v?.ID ?? "").trim();
+  const id = String(v.id ?? "").trim();
   if (!id) return null;
 
-  const modelNumber = String(v?.modelNumber ?? v?.ModelNumber ?? "").trim() || null;
-  const size = String(v?.size ?? v?.Size ?? "").trim() || null;
+  const modelNumber = String(v.modelNumber ?? "").trim() || null;
+  const size = String(v.size ?? "").trim() || null;
 
-  const colorObj = v?.color ?? v?.Color ?? null;
+  const colorObj = v.color ?? null;
 
-  const colorName =
-    String(
-      v?.colorName ?? v?.ColorName ?? colorObj?.name ?? colorObj?.Name ?? "",
-    ).trim() || null;
+  const colorName = String(colorObj?.name ?? "").trim() || null;
 
-  const rgbRaw = v?.rgb ?? v?.RGB ?? colorObj?.rgb ?? colorObj?.RGB ?? null;
-
+  const rgbRaw = colorObj?.rgb ?? null;
   const rgb =
     typeof rgbRaw === "number"
       ? rgbRaw

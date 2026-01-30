@@ -4,7 +4,10 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type { InspectionBatchDTO, MintDTO } from "../../infrastructure/api/mintRequestApi";
+import type {
+  InspectionBatchDTO,
+  MintDTO,
+} from "../../infrastructure/api/mintRequestApi";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
@@ -23,7 +26,10 @@ import {
   type TokenBlueprintPatchDTO,
 } from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
 
-import { safeDateLabelJa, safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import {
+  safeDateLabelJa,
+  safeDateTimeLabelJa,
+} from "../../../../shell/src/shared/util/dateJa";
 import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
 
 import {
@@ -145,8 +151,7 @@ export function useMintRequestDetail() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [pbPatch, setPbPatch] =
-    React.useState<ProductBlueprintPatchDTO | null>(null);
+  const [pbPatch, setPbPatch] = React.useState<ProductBlueprintPatchDTO | null>(null);
   const [pbPatchLoading, setPbPatchLoading] = React.useState(false);
   const [pbPatchError, setPbPatchError] = React.useState<string | null>(null);
 
@@ -250,9 +255,19 @@ export function useMintRequestDetail() {
     };
   }, [productBlueprintId]);
 
-  // ③ 検査カード用
+  // ③ 検査カード用（★ pbPatch を batch に合成して渡す：displayOrder のソース）
+  const batchForInspectionCard = React.useMemo(() => {
+    if (!inspectionBatch) return undefined;
+
+    return {
+      ...(inspectionBatch as any),
+      // useInspectionResultCard 側が参照するキー名に合わせて注入
+      productBlueprintPatch: pbPatch ?? null,
+    };
+  }, [inspectionBatch, pbPatch]);
+
   const inspectionCardData = useInspectionResultCard({
-    batch: inspectionBatch ?? undefined,
+    batch: batchForInspectionCard,
   });
 
   const totalMintQuantity = inspectionCardData.totalPassed;
@@ -492,69 +507,62 @@ export function useMintRequestDetail() {
     scheduledBurnDate,
   ]);
 
-  const handleSelectTokenBlueprint = React.useCallback(
-    (tokenBlueprintId: string) => {
-      setSelectedTokenBlueprintId(tokenBlueprintId);
-    },
-    [],
-  );
+  const handleSelectTokenBlueprint = React.useCallback((tokenBlueprintId: string) => {
+    setSelectedTokenBlueprintId(tokenBlueprintId);
+  }, []);
 
   const selectedTokenBlueprint = React.useMemo(
     () =>
-      tokenBlueprintOptions.find((tb) => tb.id === selectedTokenBlueprintId) ??
-      null,
+      tokenBlueprintOptions.find((tb) => tb.id === selectedTokenBlueprintId) ?? null,
     [tokenBlueprintOptions, selectedTokenBlueprintId],
   );
 
-  const tokenBlueprintCardVm: TokenBlueprintCardViewModel | null =
-    React.useMemo(() => {
-      const tbId =
-        asNonEmptyString(selectedTokenBlueprint?.id) ||
-        asNonEmptyString(tokenBlueprintIdForPatch);
-      if (!tbId) return null;
+  const tokenBlueprintCardVm: TokenBlueprintCardViewModel | null = React.useMemo(() => {
+    const tbId =
+      asNonEmptyString(selectedTokenBlueprint?.id) ||
+      asNonEmptyString(tokenBlueprintIdForPatch);
+    if (!tbId) return null;
 
-      const brandName =
-        selectedBrandName ||
-        asNonEmptyString((tokenBlueprintPatch as any)?.brandName) ||
-        asNonEmptyString((pbPatch as any)?.brandName) ||
-        "";
+    const brandName =
+      selectedBrandName ||
+      asNonEmptyString((tokenBlueprintPatch as any)?.brandName) ||
+      asNonEmptyString((pbPatch as any)?.brandName) ||
+      "";
 
-      const name =
-        asNonEmptyString((tokenBlueprintPatch as any)?.tokenName) ||
-        asNonEmptyString(selectedTokenBlueprint?.name);
+    const name =
+      asNonEmptyString((tokenBlueprintPatch as any)?.tokenName) ||
+      asNonEmptyString(selectedTokenBlueprint?.name);
 
-      const symbol =
-        asNonEmptyString((tokenBlueprintPatch as any)?.symbol) ||
-        asNonEmptyString(selectedTokenBlueprint?.symbol);
+    const symbol =
+      asNonEmptyString((tokenBlueprintPatch as any)?.symbol) ||
+      asNonEmptyString(selectedTokenBlueprint?.symbol);
 
-      const description = asNonEmptyString(
-        (tokenBlueprintPatch as any)?.description,
-      );
+    const description = asNonEmptyString((tokenBlueprintPatch as any)?.description);
 
-      const iconUrl =
-        asNonEmptyString((tokenBlueprintPatch as any)?.iconUrl) ||
-        asNonEmptyString(selectedTokenBlueprint?.iconUrl) ||
-        undefined;
+    const iconUrl =
+      asNonEmptyString((tokenBlueprintPatch as any)?.iconUrl) ||
+      asNonEmptyString(selectedTokenBlueprint?.iconUrl) ||
+      undefined;
 
-      return {
-        id: tbId,
-        name: name || tbId,
-        symbol: symbol || "",
-        brandId: "",
-        brandName,
-        description: description || "",
-        iconUrl,
-        isEditMode: false,
-        brandOptions: brandOptions.map((b) => ({ id: b.id, name: b.name })),
-      };
-    }, [
-      selectedTokenBlueprint,
-      tokenBlueprintIdForPatch,
-      selectedBrandName,
-      tokenBlueprintPatch,
-      pbPatch,
-      brandOptions,
-    ]);
+    return {
+      id: tbId,
+      name: name || tbId,
+      symbol: symbol || "",
+      brandId: "",
+      brandName,
+      description: description || "",
+      iconUrl,
+      isEditMode: false,
+      brandOptions: brandOptions.map((b) => ({ id: b.id, name: b.name })),
+    };
+  }, [
+    selectedTokenBlueprint,
+    tokenBlueprintIdForPatch,
+    selectedBrandName,
+    tokenBlueprintPatch,
+    pbPatch,
+    brandOptions,
+  ]);
 
   const tokenBlueprintCardHandlers: TokenBlueprintCardHandlers = React.useMemo(
     () => ({
