@@ -93,6 +93,16 @@ function extractIdTokenForLog(authValue: string): string {
   return String(m?.[1] ?? "").trim();
 }
 
+/** JSON をコンソールに出すための安全なプレビュー化 */
+function toJsonPreview(value: any, maxLen = 2000): string {
+  try {
+    const s = JSON.stringify(value);
+    return s.length > maxLen ? `${s.slice(0, maxLen)}...` : s;
+  } catch {
+    return "[unserializable json]";
+  }
+}
+
 /**
  * Raw fetch for a single view.
  * - 404/405 は「その view/ルートが無い」扱いにして上位でフォールバックさせる
@@ -171,6 +181,22 @@ async function fetchMintRequestsRowsRawOnce(
   // 200-299 OK
   if (res.ok) {
     const json = (await res.json()) as MintRequestsPayloadRaw | null | undefined;
+
+    // ✅ 追加：GET で得られた中身が分かる console log（サイズ暴発防止でプレビュー）
+    // eslint-disable-next-line no-console
+    console.log("[fetchMintRequestsRowsRawOnce] raw json:", json);
+
+    // ✅ 追加：httpLogger にもプレビューを積む（console が見づらい環境用）
+    logHttpResponse("fetchMintRequestsRowsRawOnce", {
+      method: "GET",
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      jsonPreview: toJsonPreview(json),
+      view,
+      productionIds: safeIds,
+    });
+
     return {
       rows: normalizeMintRequestsRows(json),
       usedView: view,

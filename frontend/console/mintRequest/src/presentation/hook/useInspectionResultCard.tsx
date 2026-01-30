@@ -132,12 +132,6 @@ export function useInspectionResultCard(
 
   // ★ 追加：missingModelIds を GetModelVariationByID（HTTP）で解決して modelMeta を埋める
   React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[useInspectionResultCard] effect fired", {
-      hasBatch: !!batch,
-      missingModelIds,
-    });
-
     if (!batch) return;
     if (missingModelIds.length === 0) return;
 
