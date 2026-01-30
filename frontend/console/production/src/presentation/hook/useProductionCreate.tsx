@@ -3,10 +3,9 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-// ★ currentMember.fullName, companyId, id 取得
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// ★ Infrastructure(API) から取得系を import（application からは参照しない）
+// Infrastructure(API)
 import {
   loadBrands,
   loadProductBlueprints,
@@ -14,35 +13,41 @@ import {
   loadAssigneeCandidates,
 } from "../../infrastructure/api/productionCreateApi";
 
-// ★ Presentation(UI) 変換・UI型
+// Detail 側の index loader（VM builder が要求するため）
+import {
+  loadModelVariationIndexByProductBlueprintId,
+  type ModelVariationSummary,
+} from "../../application/detail/index";
+
+// Presentation(UI) 変換（既存 mappers）
 import {
   buildBrandOptions,
   filterProductBlueprintsByBrand,
   buildProductRows,
   buildSelectedForCard,
   buildAssigneeOptions,
-  mapModelVariationsToRows,
 } from "../create/mappers";
 
-import type {
-  ProductBlueprintForCard,
-  ProductionQuantityRow,
-} from "../create/types";
-
-// ★ 型（domain / other modules）
+// 型（既存）
 import type { Brand } from "../../../../brand/src/domain/entity/brand";
 import type { Member } from "../../../../member/src/domain/entity/member";
 import type { ProductBlueprintManagementRow } from "../../../../productBlueprint/src/infrastructure/query/productBlueprintQuery";
 import type { ModelVariationResponse } from "../../../../productBlueprint/src/application/productBlueprintDetailService";
+import type { ProductBlueprintForCard } from "../create/types";
 
-// ★ Application(usecase) はコマンド生成・実行のみ
+// Application(usecase)
 import {
   buildProductionPayload,
   createProduction,
 } from "../../application/create/ProductionCreateService";
 
-// ★ Application Port 実装（HTTP Adapter）
+// Application Port 実装（HTTP Adapter）
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
+
+// ViewModel（方針B）
+import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
+import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
+import { normalizeProductionModels } from "../viewModels/normalizeProductionModels";
 
 export function useProductionCreate() {
   const navigate = useNavigate();
@@ -70,12 +75,17 @@ export function useProductionCreate() {
     ModelVariationResponse[]
   >([]);
 
+  // VM builder が要求する modelIndex
+  const [modelIndex, setModelIndex] = React.useState<
+    Record<string, ModelVariationSummary>
+  >({});
+
   // ==========================
-  // 生産数 rows（ProductionQuantityCard 編集対象）
+  // 生産数 rows（VM 正）
   // ==========================
-  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRow[]>(
-    [],
-  );
+  const [quantityRowVMs, setQuantityRowVMs] = React.useState<
+    ProductionQuantityRowVM[]
+  >([]);
 
   // ==========================
   // 管理情報（担当者など）
@@ -141,7 +151,8 @@ export function useProductionCreate() {
     if (!selectedId) {
       setSelectedDetail(null);
       setModelVariations([]);
-      setQuantityRows([]);
+      setModelIndex({});
+      setQuantityRowVMs([]);
       return;
     }
 
@@ -153,51 +164,55 @@ export function useProductionCreate() {
       } catch {
         setSelectedDetail(null);
         setModelVariations([]);
-        setQuantityRows([]);
+        setModelIndex({});
+        setQuantityRowVMs([]);
       }
     })();
   }, [selectedId]);
 
-  // models → quantityRows 初期化（displayOrder を detail.modelRefs から注入）
+  // ==========================
+  // modelIndex（productBlueprintId ベース）
+  // ==========================
   React.useEffect(() => {
-    console.log(
-      "[debug] modelRefs ids",
-      (selectedDetail?.modelRefs ?? []).map((r: any) => r.modelId),
-    );
-    console.log(
-      "[debug] variation ids",
-      modelVariations.map((v) => v.id),
-    );
+    if (!selectedId) {
+      setModelIndex({});
+      return;
+    }
 
-    console.log(
-      "[debug] modelRefs displayOrder",
-      (selectedDetail?.modelRefs ?? []).map((r: any) => r.displayOrder),
-    );
-    console.log(
-      "[debug] modelRefs displayOrder types",
-      (selectedDetail?.modelRefs ?? []).map((r: any) => typeof r.displayOrder),
-    );
-console.log(
-  "[debug] rows just before card",
-  modelVariationsForCard.map((r: any) => r.displayOrder),
-);
+    let cancelled = false;
 
-    const baseRows: ProductionQuantityRow[] =
-      mapModelVariationsToRows(modelVariations);
+    (async () => {
+      try {
+        const index = await loadModelVariationIndexByProductBlueprintId(
+          selectedId,
+        );
+        if (!cancelled) setModelIndex(index);
+      } catch {
+        if (!cancelled) setModelIndex({});
+      }
+    })();
 
-    console.log(
-      "[debug] baseRows keys",
-      (baseRows as any[]).map((r: any) => ({
-        modelId: r.modelId,
-        modelVariationId: r.modelVariationId,
-      })),
-    );
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  // ==========================
+  // modelVariations + detail.modelRefs → normalized → VM rows
+  // ==========================
+  React.useEffect(() => {
+    if (!selectedId) return;
+
+    const safeModels: ModelVariationResponse[] = Array.isArray(modelVariations)
+      ? modelVariations
+      : [];
 
     const refs = (selectedDetail?.modelRefs ?? []) as Array<{
       modelId: string;
       displayOrder?: number;
     }>;
 
+    // displayOrder を modelId で引けるように index 化
     const orderByModelId = new Map<string, number>();
     for (const r of refs) {
       const id = String(r?.modelId ?? "").trim();
@@ -209,29 +224,27 @@ console.log(
       orderByModelId.set(id, n);
     }
 
-    console.log("[debug] orderByModelId size", orderByModelId.size);
+    // builder が期待する「production.models 風」の配列に寄せる
+    // → normalizeProductionModels に渡して揺れ吸収 & shape 統一
+    const pseudoModels = safeModels.map((m: any, index: number) => {
+      const id = String(m?.id ?? "").trim() || String(index);
 
-    const rowsWithOrder: ProductionQuantityRow[] = (baseRows as any[]).map(
-      (r: any) => {
-        const key = (r.modelId ?? r.modelVariationId) as string | undefined;
-        return {
-          ...r,
-          // ✅ modelId が無い実データでも join できるように fallback
-          displayOrder: key ? orderByModelId.get(String(key).trim()) : undefined,
-        } as ProductionQuantityRow;
-      },
-    );
+      return {
+        modelId: id,
+        quantity: 0,
+        modelNumber: m?.modelNumber ?? "",
+        size: m?.size ?? "",
+        color: m?.color ?? "",
+        rgb: m?.rgb ?? null,
+        displayOrder: orderByModelId.get(id),
+      };
+    });
 
-    console.log(
-      "[debug] injected displayOrder",
-      (rowsWithOrder as any[]).map((r: any) => ({
-        id: r.modelId ?? r.modelVariationId,
-        d: r.displayOrder,
-      })),
-    );
+    const normalized = normalizeProductionModels(pseudoModels as any[]);
+    const vms = buildProductionQuantityRowVMs(normalized, modelIndex);
 
-    setQuantityRows(rowsWithOrder);
-  }, [modelVariations, selectedDetail]);
+    setQuantityRowVMs(vms);
+  }, [selectedId, modelVariations, selectedDetail, modelIndex]);
 
   // ==========================
   // ProductBlueprintCard 表示用データ
@@ -291,11 +304,6 @@ console.log(
   );
 
   // ==========================
-  // ProductionQuantityCard rows
-  // ==========================
-  const modelVariationsForCard = quantityRows;
-
-  // ==========================
   // 保存（バックエンドへ POST）
   // ==========================
   const handleSave = React.useCallback(async () => {
@@ -312,15 +320,14 @@ console.log(
     const payload = buildProductionPayload({
       productBlueprintId: selectedId,
       assigneeId,
-      rows: quantityRows.map((r) => ({
-        modelVariationId: r.modelVariationId,
-        quantity: r.quantity ?? 0,
+      rows: (Array.isArray(quantityRowVMs) ? quantityRowVMs : []).map((vm) => ({
+        modelVariationId: String(vm.id ?? "").trim(),
+        quantity: vm.quantity ?? 0,
       })),
       currentMemberId,
     });
 
     try {
-      // Application の usecase は repo 注入
       const repo = new ProductionRepositoryHTTP();
       await createProduction(repo, payload);
 
@@ -329,21 +336,18 @@ console.log(
     } catch {
       alert("生産計画の作成に失敗しました");
     }
-  }, [selectedId, assigneeId, quantityRows, currentMemberId, navigate]);
+  }, [selectedId, assigneeId, quantityRowVMs, currentMemberId, navigate]);
 
   // ==========================
-  // hook 返却値
+  // hook 返却値（productionCreate.tsx が期待）
   // ==========================
   return {
-    // PageStyle
     onBack: handleBack,
     onSave: handleSave,
 
-    // 左カラム
     hasSelectedProductBlueprint,
     selectedProductBlueprintForCard,
 
-    // 管理カード
     assignee,
     creator,
     createdAt,
@@ -351,18 +355,17 @@ console.log(
     loadingMembers,
     onSelectAssignee: handleSelectAssignee,
 
-    // ブランド選択
     selectedBrand,
     brandOptions,
     selectBrand: setSelectedBrand,
 
-    // 商品設計一覧
     productRows,
     selectedProductId: selectedId,
     selectProductById: setSelectedId,
 
-    // ProductionQuantityCard
-    modelVariationsForCard,
-    setQuantityRows,
+    modelVariationsForCard: quantityRowVMs,
+    setQuantityRows: setQuantityRowVMs,
   };
 }
+
+export default useProductionCreate;

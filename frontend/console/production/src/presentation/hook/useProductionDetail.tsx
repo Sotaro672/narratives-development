@@ -8,7 +8,6 @@ import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrent
 import {
   loadProductionDetail,
   loadModelVariationIndexByProductBlueprintId,
-  buildQuantityRowsFromModels,
   updateProductionDetail,
   type ProductionDetail,
   type ModelVariationSummary,
@@ -27,6 +26,13 @@ import { usePrintCard } from "../../../../product/src/presentation/hook/usePrint
 import type {
   ProductionStatus as DomainProductionStatus,
 } from "../../../../production/src/domain/entity/production";
+
+// ★ ViewModel
+import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
+import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
+import { normalizeProductionModels } from "../viewModels/normalizeProductionModels";
+import { toProductionDetailUpdateRows } from "../viewModels/toProductionDetailUpdateRows";
+import { toPrintCardRows } from "../viewModels/toPrintCardRows";
 
 type Mode = "view" | "edit";
 
@@ -58,28 +64,14 @@ export function useProductionDetail() {
   const switchToView = React.useCallback(() => setMode("view"), []);
 
   const switchToEdit = React.useCallback(() => {
-    if (!canEdit) {
-      // eslint-disable-next-line no-console
-      console.log(
-        "[useProductionDetail] switchToEdit called but production is not editable (status is not 'planned')",
-        { status: production?.status },
-      );
-      return;
-    }
+    if (!canEdit) return;
     setMode("edit");
-  }, [canEdit, production?.status]);
+  }, [canEdit]);
 
   const toggleMode = React.useCallback(() => {
-    if (!canEdit) {
-      // eslint-disable-next-line no-console
-      console.log(
-        "[useProductionDetail] toggleMode called but production is not editable (status is not 'planned')",
-        { status: production?.status },
-      );
-      return;
-    }
+    if (!canEdit) return;
     setMode((prev) => (prev === "view" ? "edit" : "view"));
-  }, [canEdit, production?.status]);
+  }, [canEdit]);
 
   // AdminCard 用モード
   const adminMode: "view" | "edit" = mode;
@@ -96,10 +88,10 @@ export function useProductionDetail() {
     Record<string, ModelVariationSummary>
   >({});
 
-  // ✅ rows は detail DTO（dto/detail.go 正）に統一
-  const [quantityRows, setQuantityRows] = React.useState<DetailQuantityRow[]>(
-    [],
-  );
+  // ✅ 方針B: rows は VM を正にする
+  const [quantityRowVMs, setQuantityRowVMs] = React.useState<
+    ProductionQuantityRowVM[]
+  >([]);
 
   // ======================================================
   // Production 詳細取得
@@ -117,7 +109,7 @@ export function useProductionDetail() {
         setProductBlueprint(null);
         setPbError(null);
         setModelIndex({});
-        setQuantityRows([]);
+        setQuantityRowVMs([]);
 
         const data = await loadProductionDetail(productionId);
         if (cancelled) return;
@@ -127,7 +119,7 @@ export function useProductionDetail() {
         if (!cancelled) {
           setError("生産情報の取得に失敗しました");
           setProduction(null);
-          setQuantityRows([]);
+          setQuantityRowVMs([]);
           setProductBlueprint(null);
           setModelIndex({});
         }
@@ -206,69 +198,24 @@ export function useProductionDetail() {
   }, [production?.productBlueprintId]);
 
   // ======================================================
-  // production.models × modelIndex → quantityRows
+  // production.models × modelIndex → quantityRowVMs
   //
-  // ✅ 重要:
-  // - dto/detail.go を正としたいが、現状 backend が PascalCase(ModelID/Quantity) を返している
-  // - ここで modelId/quantity に正規化して buildQuantityRowsFromModels に渡す
+  // ✅ 方針B:
+  // - backend の揺れ吸収（PascalCase 等）は normalize に分離
+  // - UI state は VM に統一
   // ======================================================
   React.useEffect(() => {
     const raw = (production as any)?.models;
 
     if (!raw || !Array.isArray(raw)) {
-      setQuantityRows([]);
+      setQuantityRowVMs([]);
       return;
     }
 
-    // ✅ backend の揺れ吸収: modelId / ModelID / ModelId など
-    const normalized = raw.map((m: any, index: number) => {
-      const modelIdRaw =
-        m?.modelId ?? m?.ModelID ?? m?.ModelId ?? m?.modelID ?? "";
-      const quantityRaw = m?.quantity ?? m?.Quantity ?? 0;
+    const normalized = normalizeProductionModels(raw);
+    const vms = buildProductionQuantityRowVMs(normalized, modelIndex);
 
-      const modelId = String(modelIdRaw ?? "").trim() || String(index);
-
-      const quantity = Number.isFinite(Number(quantityRaw))
-        ? Math.max(0, Math.floor(Number(quantityRaw)))
-        : 0;
-
-      const modelNumber =
-        typeof (m?.modelNumber ?? m?.ModelNumber) === "string"
-          ? (m?.modelNumber ?? m?.ModelNumber)
-          : undefined;
-
-      const size =
-        typeof (m?.size ?? m?.Size) === "string" ? (m?.size ?? m?.Size) : undefined;
-
-      const color =
-        typeof (m?.color ?? m?.Color) === "string" ? (m?.color ?? m?.Color) : undefined;
-
-      const rgbCandidate = m?.rgb ?? m?.RGB;
-      const rgb = typeof rgbCandidate === "number" ? rgbCandidate : undefined;
-
-      const displayOrderCandidate = m?.displayOrder ?? m?.DisplayOrder;
-      const displayOrder =
-        typeof displayOrderCandidate === "number"
-          ? displayOrderCandidate
-          : undefined;
-
-      return {
-        modelId,
-        quantity,
-        modelNumber,
-        size,
-        color,
-        rgb,
-        displayOrder,
-      };
-    });
-
-    const detailRows: DetailQuantityRow[] = buildQuantityRowsFromModels(
-      normalized,
-      modelIndex,
-    );
-
-    setQuantityRows(detailRows);
+    setQuantityRowVMs(vms);
   }, [production, modelIndex]);
 
   // ======================================================
@@ -285,16 +232,9 @@ export function useProductionDetail() {
     }
 
     try {
-      // dto/detail.go を正: rows は modelId ベース
-      const rowsForUpdate: DetailQuantityRow[] = quantityRows.map((row) => ({
-        modelId: row.modelId,
-        modelNumber: row.modelNumber,
-        size: row.size,
-        color: row.color,
-        rgb: row.rgb ?? null,
-        displayOrder: row.displayOrder,
-        quantity: row.quantity ?? 0,
-      }));
+      // ✅ VM → detail DTO row へ変換（分離済み）
+      const rowsForUpdate: DetailQuantityRow[] =
+        toProductionDetailUpdateRows(quantityRowVMs);
 
       const updated = await updateProductionDetail({
         productionId,
@@ -311,7 +251,7 @@ export function useProductionDetail() {
       // eslint-disable-next-line no-alert
       alert("更新に失敗しました");
     }
-  }, [productionId, production, quantityRows, canEdit]);
+  }, [productionId, production, quantityRowVMs, canEdit]);
 
   // ======================================================
   // 印刷時 Product 作成処理は usePrintCard に委譲
@@ -319,17 +259,9 @@ export function useProductionDetail() {
   const { onPrint } = usePrintCard({
     productionId: productionId ?? null,
     hasProduction: !!production,
-    // ✅ usePrintCard が QuantityRowBase(modelVariationId) を要求する場合があるため、
-    //   最低限ここでアダプトして渡す（productionDetail.tsx 側と同等）
-    rows: (Array.isArray(quantityRows) ? quantityRows : []).map((r) => ({
-      modelVariationId: r.modelId,
-      modelNumber: r.modelNumber,
-      size: r.size,
-      color: r.color,
-      rgb: r.rgb ?? null,
-      quantity: r.quantity ?? 0,
-    })) as any,
-  });
+    // ✅ VM → print rows へ変換（分離済み）
+    rows: toPrintCardRows(quantityRowVMs),
+  } );
 
   // ======================================================
   // 戻る
@@ -365,8 +297,9 @@ export function useProductionDetail() {
     pbLoading,
     pbError,
 
-    quantityRows,
-    setQuantityRows,
+    // ✅ VM 正
+    quantityRows: quantityRowVMs,
+    setQuantityRows: setQuantityRowVMs,
 
     creator,
   };

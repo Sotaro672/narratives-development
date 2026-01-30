@@ -20,15 +20,15 @@ import { Input } from "../../../../shell/src/shared/ui/input";
 import "../styles/production.css";
 import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
 
-// ✅ dto/detail.go を正: 表示カードは detail の行型を受け取る（create 側はアダプトして渡す）
-import type { ProductionQuantityRow } from "../../application/detail/types";
+// ✅ ViewModel を正として受け取る
+import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 
 type ProductionQuantityCardProps = {
   title?: string;
-  rows: ProductionQuantityRow[];
+  rows: ProductionQuantityRowVM[];
   className?: string;
   mode?: "view" | "edit";
-  onChangeRows?: (rows: ProductionQuantityRow[]) => void;
+  onChangeRows?: (rows: ProductionQuantityRowVM[]) => void;
 };
 
 function displayOrderRank(v: unknown): number {
@@ -48,15 +48,6 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
 
   // ✅ displayOrder のみに従って並べる
   const sortedRows = React.useMemo(() => {
-    console.log(
-      "[ProductionQuantityCard] rows displayOrder",
-      rows.map((r) => r.displayOrder),
-    );
-    console.log(
-      "[ProductionQuantityCard] rows displayOrder types",
-      rows.map((r) => typeof r.displayOrder),
-    );
-
     const safe = Array.isArray(rows) ? rows : [];
     const copied = [...safe];
 
@@ -75,15 +66,15 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   );
 
   const handleChangeQuantity = React.useCallback(
-    (index: number, value: string) => {
+    (id: string, value: string) => {
       if (!onChangeRows) return;
 
       const n = Math.max(0, Math.floor(Number(value || "0")));
       const safe = Number.isFinite(n) ? n : 0;
 
-      // ✅ 並び替え後の行に対して編集するため、sortedRows をベースに更新して返す
-      const next = sortedRows.map((row, i) =>
-        i === index ? { ...row, quantity: safe } : row,
+      // ✅ 並び替えに影響されないよう id で更新
+      const next = sortedRows.map((row) =>
+        row.id === id ? { ...row, quantity: safe } : row,
       );
 
       onChangeRows(next);
@@ -112,12 +103,12 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
           </TableHeader>
 
           <TableBody>
-            {sortedRows.map((row, idx) => {
+            {sortedRows.map((row) => {
               const rgbHex = rgbIntToHex(row.rgb) ?? null;
               const bgColor = rgbHex ?? "#ffffff";
 
               return (
-                <TableRow key={`${row.modelId}-${idx}`}>
+                <TableRow key={row.id}>
                   <TableCell>{row.modelNumber}</TableCell>
                   <TableCell className="mqc__size">{row.size}</TableCell>
 
@@ -140,7 +131,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                         step={1}
                         value={row.quantity ?? 0}
                         onChange={(e) =>
-                          handleChangeQuantity(idx, e.target.value)
+                          handleChangeQuantity(row.id, e.target.value)
                         }
                         className="mqc__input"
                         aria-label={`${row.modelNumber} の生産数`}

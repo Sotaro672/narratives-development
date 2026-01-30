@@ -1,0 +1,28 @@
+// frontend/console/production/src/presentation/viewModels/toProductionDetailUpdateRows.ts
+
+import type { ProductionQuantityRow as DetailQuantityRow } from "../../application/detail/types";
+import type { ProductionQuantityRowVM } from "./productionQuantityRowVM";
+
+/**
+ * VM → updateProductionDetail 用 DTO（detail row）へ変換
+ * VM の正キーは id（= modelId）として扱う
+ */
+export function toProductionDetailUpdateRows(
+  vms: ProductionQuantityRowVM[],
+): DetailQuantityRow[] {
+  const safe = Array.isArray(vms) ? vms : [];
+
+  return safe.map((vm, index) => {
+    const modelId = String(vm.id ?? "").trim() || String(index);
+
+    return {
+      modelId,
+      modelNumber: vm.modelNumber ?? "",
+      size: vm.size ?? "",
+      color: vm.color ?? "",
+      rgb: vm.rgb ?? null,
+      displayOrder: vm.displayOrder,
+      quantity: vm.quantity ?? 0,
+    };
+  });
+}
