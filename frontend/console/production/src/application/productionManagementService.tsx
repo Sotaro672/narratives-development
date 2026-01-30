@@ -1,9 +1,6 @@
 // frontend/console/production/src/application/productionManagementService.tsx
 
-import type {
-  Production,
-  ProductionStatus,
-} from "../../../shell/src/shared/types/production";
+import type { Production } from "../../../shell/src/shared/types/production";
 import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 
 /** ソートキー */
@@ -28,6 +25,9 @@ export type ProductionRow = Omit<
   /** UI では常に string として扱う */
   assigneeId: string;
   assigneeName: string;
+
+  /** status は廃止。printed:boolean に統一 */
+  printed: boolean;
 };
 
 /** 画面表示用の行型 */
@@ -37,7 +37,7 @@ export type ProductionRowView = {
   productName: string;
   assigneeId: string;
   assigneeName: string;
-  status: ProductionStatus;
+  printed: boolean;
   totalQuantity: number;
   printedAtLabel: string;
   createdAtLabel: string;
@@ -105,6 +105,13 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
     const assigneeName = asString(raw.assigneeName ?? raw.AssigneeName ?? "");
     const brandName = asString(raw.brandName ?? raw.BrandName ?? "");
 
+    const printed =
+      typeof raw.printed === "boolean"
+        ? raw.printed
+        : typeof raw.Printed === "boolean"
+          ? raw.Printed
+          : false;
+
     const row: ProductionRow = {
       ...(raw as Production),
 
@@ -117,7 +124,7 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
       assigneeId,
       assigneeName,
 
-      status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
+      printed,
 
       // time は backend の time.Time が ISO で来る前提（string / null）
       printedAt: (raw.printedAt ?? raw.PrintedAt ?? null) as any,
@@ -140,7 +147,7 @@ export function buildRowsView(params: {
   baseRows: ProductionRow[];
   blueprintFilter: string[];
   assigneeFilter: string[];
-  statusFilter: ProductionStatus[];
+  printedFilter: boolean[]; // [true] / [false] / [true,false] / []
   sortKey: SortKey;
   sortDir: "asc" | "desc" | null;
 }): ProductionRowView[] {
@@ -148,7 +155,7 @@ export function buildRowsView(params: {
     baseRows,
     blueprintFilter,
     assigneeFilter,
-    statusFilter,
+    printedFilter,
     sortKey,
     sortDir,
   } = params;
@@ -164,7 +171,7 @@ export function buildRowsView(params: {
     if (assigneeFilter.length > 0 && !assigneeFilter.includes(p.assigneeId)) {
       return false;
     }
-    if (statusFilter.length > 0 && !statusFilter.includes(p.status)) {
+    if (printedFilter.length > 0 && !printedFilter.includes(p.printed)) {
       return false;
     }
     return true;
@@ -191,7 +198,7 @@ export function buildRowsView(params: {
     productName: p.productName,
     assigneeId: p.assigneeId,
     assigneeName: p.assigneeName,
-    status: p.status,
+    printed: p.printed,
     totalQuantity: p.totalQuantity,
     printedAtLabel: formatDateTime((p as any).printedAt ?? null),
     createdAtLabel: formatDateTime((p as any).createdAt ?? null),

@@ -83,18 +83,12 @@ func (u *ProductionUsecase) Create(ctx context.Context, p productiondom.Producti
 	}
 
 	// Production → CreateProductionInput へ変換
-	var statusPtr *productiondom.ProductionStatus
-	if p.Status != "" {
-		s := p.Status
-		statusPtr = &s
-	}
-
 	in := productiondom.CreateProductionInput{
 		ProductBlueprintID: p.ProductBlueprintID,
 		AssigneeID:         p.AssigneeID,
 		Models:             p.Models,
-		Status:             statusPtr,
 		PrintedAt:          p.PrintedAt,
+		Printed:            &p.Printed,
 		CreatedBy:          p.CreatedBy,
 	}
 
@@ -158,13 +152,21 @@ func (u *ProductionUsecase) Update(
 		current.Models = patch.Models
 	}
 
-	if patch.Status != "" {
-		current.Status = patch.Status
-	}
+	// Printed（bool）はゼロ値判定ができないので、ここでは patch.Printed を常に反映せず
+	// 「PrintedAt が来たら printed=true」 or 「明示的に false にしたい場合は別API/DTOで受ける」等が必要。
+	// ただし、現在のシグネチャは Production を patch として使っているため、ここでは以下の方針にする：
+	// - patch.PrintedAt != nil なら current.Printed=true
+	// - patch.PrintedBy の更新があるなら current.Printed=true（担当者更新は印刷済み前提）
+	// - patch.Printed の変更を許容したい場合は、呼び出し側で patch.Printed を意図的にセットして渡す前提で常に反映する
+	//
+	// → 要件に合わせ、ここでは patch.Printed を常に反映する（PrintedAt/PrintedBy 整合も補正）
+	current.Printed = patch.Printed
 
 	if patch.PrintedAt != nil {
 		t := patch.PrintedAt.UTC()
 		current.PrintedAt = &t
+		// PrintedAt をセットするなら printed=true に寄せる
+		current.Printed = true
 	}
 
 	if patch.PrintedBy != nil {
@@ -174,7 +176,15 @@ func (u *ProductionUsecase) Update(
 		} else {
 			vCopy := v
 			current.PrintedBy = &vCopy
+			// PrintedBy をセットするなら printed=true に寄せる
+			current.Printed = true
 		}
+	}
+
+	// printed=false の場合は整合性として printedAt/printedBy を落とす
+	if !current.Printed {
+		current.PrintedAt = nil
+		current.PrintedBy = nil
 	}
 
 	current.UpdatedAt = u.now().UTC()

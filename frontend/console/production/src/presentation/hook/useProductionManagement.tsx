@@ -6,7 +6,6 @@ import {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import type { ProductionStatus } from "../../../../shell/src/shared/types/production";
 
 import {
   loadProductionRows,
@@ -37,19 +36,12 @@ function isInvalidCompanyIDError(e: unknown): boolean {
 }
 
 /**
- * ProductionStatus -> 日本語ラベル
- * - UI 表示のための formatter（presentation 層）
+ * printed(boolean) -> 日本語ラベル
+ * - true: 印刷済
+ * - false: 印刷前
  */
-function formatProductionStatusJa(status: ProductionStatus): string {
-  switch (status) {
-    case "planned":
-      return "計画中";
-    case "printed":
-      return "印刷済み";
-    default:
-      // 想定外の値はそのまま出してデバッグ可能性を残す
-      return String(status ?? "");
-  }
+function formatPrintedJa(printed: boolean): string {
+  return printed ? "印刷済" : "印刷前";
 }
 
 export function useProductionManagement() {
@@ -59,7 +51,7 @@ export function useProductionManagement() {
   const [blueprintFilter, setBlueprintFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<ProductionStatus[]>([]);
+  const [printedFilter, setPrintedFilter] = useState<boolean[]>([]);
 
   // ===== ソート状態 =====
   const [sortKey, setSortKey] = useState<SortKey>(null);
@@ -168,17 +160,14 @@ export function useProductionManagement() {
     }));
   }, [baseRows]);
 
-  // ステータスフィルタ（label を日本語に変換）
-  const statusOptions = useMemo(() => {
-    const set = new Set<ProductionStatus>();
-    for (const row of baseRows) {
-      if (row.status) set.add(row.status);
-    }
-    return Array.from(set).map((v) => ({
-      value: v,
-      label: formatProductionStatusJa(v),
-    }));
-  }, [baseRows]);
+  // 印刷状態フィルタ（true/false を固定で提供）
+  const printedOptions = useMemo(
+    () => [
+      { value: true as any, label: "印刷済" },
+      { value: false as any, label: "印刷前" },
+    ],
+    [],
+  );
 
   // ===== フィルタ＋ソート適用 → 表示用行に変換 =====
   const allRowsView: ProductionRowView[] = useMemo(
@@ -187,32 +176,20 @@ export function useProductionManagement() {
         baseRows,
         blueprintFilter,
         assigneeFilter,
-        statusFilter,
+        printedFilter,
         sortKey,
         sortDir,
       }),
-    [
-      baseRows,
-      blueprintFilter,
-      assigneeFilter,
-      statusFilter,
-      sortKey,
-      sortDir,
-    ],
+    [baseRows, blueprintFilter, assigneeFilter, printedFilter, sortKey, sortDir],
   );
 
   // ブランドフィルタは View 行に対して適用
   const rows: ProductionRowView[] = useMemo(() => {
     if (brandFilter.length === 0) return allRowsView;
 
-    return allRowsView
-      .filter((r) => brandFilter.includes((r.brandName ?? "").trim()))
-      .map((r) => ({
-        ...r,
-        // 一覧表示用に status を日本語化した値へ上書き（画面表示上のみ）
-        // ※型は ProductionStatus のままなので any 経由で付与
-        status: formatProductionStatusJa(r.status as any) as any,
-      }));
+    return allRowsView.filter((r) =>
+      brandFilter.includes((r.brandName ?? "").trim()),
+    );
   }, [allRowsView, brandFilter]);
 
   // ===== ヘッダー =====
@@ -240,11 +217,11 @@ export function useProductionManagement() {
         onChange={setAssigneeFilter}
       />,
       <FilterableTableHeader
-        key="status"
-        label="ステータス"
-        options={statusOptions}
-        selected={statusFilter as unknown as string[]}
-        onChange={(values) => setStatusFilter(values as ProductionStatus[])}
+        key="printed"
+        label="印刷状態"
+        options={printedOptions}
+        selected={printedFilter as unknown as string[]}
+        onChange={(values) => setPrintedFilter(values as unknown as boolean[])}
       />,
       <SortableTableHeader
         key="totalQuantity"
@@ -287,8 +264,8 @@ export function useProductionManagement() {
       brandFilter,
       assigneeOptions,
       assigneeFilter,
-      statusOptions,
-      statusFilter,
+      printedOptions,
+      printedFilter,
       sortKey,
       sortDir,
     ],
@@ -304,7 +281,7 @@ export function useProductionManagement() {
     setBlueprintFilter([]);
     setBrandFilter([]);
     setAssigneeFilter([]);
-    setStatusFilter([]);
+    setPrintedFilter([]);
     setSortKey(null);
     setSortDir(null);
   };

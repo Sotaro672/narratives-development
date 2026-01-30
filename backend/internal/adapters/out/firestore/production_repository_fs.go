@@ -18,7 +18,6 @@ import (
 
 // ============================================================
 // Firestore-based Production Repository
-// (Firestore implementation corresponding to PG version)
 // ============================================================
 
 type ProductionRepositoryFS struct {
@@ -84,7 +83,7 @@ func (r *ProductionRepositoryFS) Exists(ctx context.Context, id string) (bool, e
 
 // Create creates a new Production document from CreateProductionInput.
 // - ID は CreateProductionInput には含まれないため、常に Firestore の auto ID を採番
-// - Status が nil/空の場合は "manufacturing" をデフォルト設定
+// - Printed が nil の場合は false 扱い
 // - CreatedAt/UpdatedAt は省略時 now(UTC)
 func (r *ProductionRepositoryFS) Create(
 	ctx context.Context,
@@ -102,28 +101,41 @@ func (r *ProductionRepositoryFS) Create(
 		createdAt = in.CreatedAt.UTC()
 	}
 
+	// Printed の決定（nil -> false）
+	printed := false
+	if in.Printed != nil {
+		printed = *in.Printed
+	}
+
+	// PrintedAt の決定（printed=true の場合は必須扱いなので補完）
+	var printedAt *time.Time
+	if printed {
+		if in.PrintedAt != nil && !in.PrintedAt.IsZero() {
+			t := in.PrintedAt.UTC()
+			printedAt = &t
+		} else {
+			t := now
+			printedAt = &t
+		}
+	} else {
+		printedAt = nil
+	}
+
 	// Entity 組み立て
 	p := proddom.Production{
 		// ID は後で NewDoc から採番
 		ProductBlueprintID: strings.TrimSpace(in.ProductBlueprintID),
 		AssigneeID:         strings.TrimSpace(in.AssigneeID),
 		Models:             in.Models,
-		CreatedBy:          fscommon.TrimPtr(in.CreatedBy),
-		CreatedAt:          createdAt,
-		UpdatedAt:          createdAt,
-	}
 
-	// Status
-	if in.Status != nil && strings.TrimSpace(string(*in.Status)) != "" {
-		p.Status = *in.Status
-	} else {
-		p.Status = proddom.ProductionStatus("manufacturing")
-	}
+		Printed:   printed,
+		PrintedAt: printedAt,
+		PrintedBy: nil,
 
-	// PrintedAt（ある場合のみ設定）
-	if in.PrintedAt != nil && !in.PrintedAt.IsZero() {
-		t := in.PrintedAt.UTC()
-		p.PrintedAt = &t
+		CreatedBy: fscommon.TrimPtr(in.CreatedBy),
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+		UpdatedBy: nil,
 	}
 
 	// Firestore doc ref（常に新規）
@@ -167,9 +179,26 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 	if p.UpdatedAt.IsZero() {
 		p.UpdatedAt = now
 	}
-	if strings.TrimSpace(string(p.Status)) == "" {
-		p.Status = proddom.ProductionStatus("manufacturing")
+
+	// Printed 整合性補正
+	if p.Printed {
+		if p.PrintedAt == nil || p.PrintedAt.IsZero() {
+			t := now
+			p.PrintedAt = &t
+		} else {
+			t := p.PrintedAt.UTC()
+			p.PrintedAt = &t
+		}
+		// PrintedBy は空白を nil に寄せる
+		p.PrintedBy = fscommon.TrimPtr(p.PrintedBy)
+	} else {
+		// 未印刷なら printedAt/printedBy は必ず nil
+		p.PrintedAt = nil
+		p.PrintedBy = nil
 	}
+
+	// UpdatedBy の正規化
+	p.UpdatedBy = fscommon.TrimPtr(p.UpdatedBy)
 
 	var ref *firestore.DocumentRef
 	id := strings.TrimSpace(p.ID)
@@ -226,6 +255,7 @@ func (r *ProductionRepositoryFS) Delete(ctx context.Context, id string) error {
 }
 
 // ListAll returns all productions (sorted by createdAt DESC, then document ID DESC).
+// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
 func (r *ProductionRepositoryFS) ListAll(ctx context.Context) ([]proddom.Production, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -257,7 +287,8 @@ func (r *ProductionRepositoryFS) ListAll(ctx context.Context) ([]proddom.Product
 	return all, nil
 }
 
-// List implements RepositoryPort.List using in-memory filtering/paging over ListAll.
+// List implements filtering/paging over ListAll.
+// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
 func (r *ProductionRepositoryFS) List(
 	ctx context.Context,
 	filter proddom.Filter,
@@ -298,19 +329,14 @@ func (r *ProductionRepositoryFS) List(
 				continue
 			}
 		}
-		// Statuses
-		if len(filter.Statuses) > 0 {
-			match := false
-			for _, st := range filter.Statuses {
-				if p.Status == st {
-					match = true
-					break
-				}
-			}
-			if !match {
+
+		// Printed（nil の場合はフィルタしない）
+		if filter.Printed != nil {
+			if p.Printed != *filter.Printed {
 				continue
 			}
 		}
+
 		// PrintedFrom / PrintedTo
 		if filter.PrintedFrom != nil || filter.PrintedTo != nil {
 			if p.PrintedAt == nil {
@@ -324,6 +350,7 @@ func (r *ProductionRepositoryFS) List(
 				continue
 			}
 		}
+
 		// CreatedFrom / CreatedTo
 		if filter.CreatedFrom != nil && p.CreatedAt.Before(filter.CreatedFrom.UTC()) {
 			continue
@@ -331,7 +358,6 @@ func (r *ProductionRepositoryFS) List(
 		if filter.CreatedTo != nil && p.CreatedAt.After(filter.CreatedTo.UTC()) {
 			continue
 		}
-		// InspectedFrom / InspectedTo は Production にフィールドが無ければ無視
 
 		filtered = append(filtered, p)
 	}
@@ -441,7 +467,44 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 	return results, nil
 }
 
+// GetTotalQuantityByModelID は、productBlueprintIDs 配下の Production.Models を集計し、modelId ごとの totalQuantity を返す。
+func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
+	ctx context.Context,
+	productBlueprintIDs []string,
+) ([]proddom.ModelTotalQuantity, error) {
+	prods, err := r.ListByProductBlueprintID(ctx, productBlueprintIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	sum := make(map[string]int)
+
+	for _, p := range prods {
+		for _, mq := range p.Models {
+			modelID := strings.TrimSpace(mq.ModelID)
+			if modelID == "" {
+				continue
+			}
+			if mq.Quantity <= 0 {
+				continue
+			}
+			sum[modelID] += mq.Quantity
+		}
+	}
+
+	out := make([]proddom.ModelTotalQuantity, 0, len(sum))
+	for modelID, total := range sum {
+		out = append(out, proddom.ModelTotalQuantity{
+			ModelID:       modelID,
+			TotalQuantity: total,
+		})
+	}
+
+	return out, nil
+}
+
 // GetByModelID は、指定 modelId を Models に含む Production 一覧を返します。
+// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
 func (r *ProductionRepositoryFS) GetByModelID(ctx context.Context, modelID string) ([]proddom.Production, error) {
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
@@ -481,13 +544,11 @@ func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
 }
 
 // WithTx は簡易実装として、単純に fn(ctx) を呼び出します。
-// Firestore トランザクションを活用したい場合は、RunTransaction による
-// 実装に差し替え可能です。
+// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
 func (r *ProductionRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	// ここではトランザクションを張らず、そのまま実行
 	return fn(ctx)
 }
 
@@ -500,23 +561,40 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 		ProductBlueprintID string                  `firestore:"productBlueprintId"`
 		AssigneeID         string                  `firestore:"assigneeId"`
 		Models             []proddom.ModelQuantity `firestore:"models"`
-		Status             string                  `firestore:"status"`
-		PrintedAt          *time.Time              `firestore:"printedAt"`
-		CreatedBy          *string                 `firestore:"createdBy"`
-		CreatedAt          time.Time               `firestore:"createdAt"`
-		UpdatedBy          *string                 `firestore:"updatedBy"`
-		UpdatedAt          *time.Time              `firestore:"updatedAt"`
-		DeletedBy          *string                 `firestore:"deletedBy"`
-		DeletedAt          *time.Time              `firestore:"deletedAt"`
+
+		Printed   *bool      `firestore:"printed"`
+		PrintedAt *time.Time `firestore:"printedAt"`
+		PrintedBy *string    `firestore:"printedBy"`
+
+		CreatedBy *string    `firestore:"createdBy"`
+		CreatedAt time.Time  `firestore:"createdAt"`
+		UpdatedBy *string    `firestore:"updatedBy"`
+		UpdatedAt *time.Time `firestore:"updatedAt"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
 		return proddom.Production{}, err
 	}
 
-	statusStr := strings.TrimSpace(raw.Status)
-	if statusStr == "" {
-		statusStr = "manufacturing"
+	createdAt := raw.CreatedAt.UTC()
+
+	printed := false
+	if raw.Printed != nil {
+		printed = *raw.Printed
+	}
+
+	printedAt := normalizeTimePtr(raw.PrintedAt)
+	printedBy := fscommon.TrimPtr(raw.PrintedBy)
+
+	// 整合性補正（ドメインルールに合わせる）
+	if printed {
+		if printedAt == nil {
+			t := createdAt
+			printedAt = &t
+		}
+	} else {
+		printedAt = nil
+		printedBy = nil
 	}
 
 	out := proddom.Production{
@@ -524,12 +602,14 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 		ProductBlueprintID: strings.TrimSpace(raw.ProductBlueprintID),
 		AssigneeID:         strings.TrimSpace(raw.AssigneeID),
 		Models:             raw.Models,
-		Status:             proddom.ProductionStatus(statusStr),
-		PrintedAt:          normalizeTimePtr(raw.PrintedAt),
-		CreatedBy:          fscommon.TrimPtr(raw.CreatedBy),
-		CreatedAt:          raw.CreatedAt.UTC(),
-		UpdatedBy:          fscommon.TrimPtr(raw.UpdatedBy),
-		DeletedBy:          fscommon.TrimPtr(raw.DeletedBy),
+
+		Printed:   printed,
+		PrintedAt: printedAt,
+		PrintedBy: printedBy,
+
+		CreatedBy: fscommon.TrimPtr(raw.CreatedBy),
+		CreatedAt: createdAt,
+		UpdatedBy: fscommon.TrimPtr(raw.UpdatedBy),
 	}
 
 	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
@@ -537,27 +617,19 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 	} else {
 		out.UpdatedAt = out.CreatedAt
 	}
-	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
-		t := raw.DeletedAt.UTC()
-		out.DeletedAt = &t
-	}
 
 	return out, nil
 }
 
 func productionToDoc(p proddom.Production) map[string]any {
-	status := strings.TrimSpace(string(p.Status))
-	if status == "" {
-		status = "manufacturing"
-	}
-
 	m := map[string]any{
 		"productBlueprintId": strings.TrimSpace(p.ProductBlueprintID),
 		"assigneeId":         strings.TrimSpace(p.AssigneeID),
 		"models":             p.Models,
-		"status":             status,
-		"createdAt":          p.CreatedAt.UTC(),
-		"updatedAt":          p.UpdatedAt.UTC(),
+
+		"printed":   p.Printed,
+		"createdAt": p.CreatedAt.UTC(),
+		"updatedAt": p.UpdatedAt.UTC(),
 	}
 
 	if p.CreatedBy != nil {
@@ -565,20 +637,25 @@ func productionToDoc(p proddom.Production) map[string]any {
 			m["createdBy"] = s
 		}
 	}
-	if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
-		m["printedAt"] = p.PrintedAt.UTC()
+
+	// printedAt / printedBy は printed=true のときだけ格納（false の場合は null を書いて消す）
+	if p.Printed {
+		if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
+			m["printedAt"] = p.PrintedAt.UTC()
+		}
+		if p.PrintedBy != nil {
+			if s := strings.TrimSpace(*p.PrintedBy); s != "" {
+				m["printedBy"] = s
+			}
+		}
+	} else {
+		m["printedAt"] = nil
+		m["printedBy"] = nil
 	}
+
 	if p.UpdatedBy != nil {
 		if s := strings.TrimSpace(*p.UpdatedBy); s != "" {
 			m["updatedBy"] = s
-		}
-	}
-	if p.DeletedAt != nil && !p.DeletedAt.IsZero() {
-		m["deletedAt"] = p.DeletedAt.UTC()
-	}
-	if p.DeletedBy != nil {
-		if s := strings.TrimSpace(*p.DeletedBy); s != "" {
-			m["deletedBy"] = s
 		}
 	}
 

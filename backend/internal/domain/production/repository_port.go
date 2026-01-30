@@ -12,13 +12,16 @@ import (
 
 // CreateProductionInput - 作成用入力（IDは実装側で採番可）
 type CreateProductionInput struct {
-	ProductBlueprintID string            `json:"productBlueprintId"`
-	AssigneeID         string            `json:"assigneeId"`
-	Models             []ModelQuantity   `json:"models"`
-	Status             *ProductionStatus `json:"status,omitempty"`
-	PrintedAt          *time.Time        `json:"printedAt,omitempty"`
-	CreatedBy          *string           `json:"createdBy,omitempty"`
-	CreatedAt          *time.Time        `json:"createdAt,omitempty"`
+	ProductBlueprintID string          `json:"productBlueprintId"`
+	AssigneeID         string          `json:"assigneeId"`
+	Models             []ModelQuantity `json:"models"`
+
+	// Status は廃止。Printed(boolean) に統一。
+	Printed   *bool      `json:"printed,omitempty"`
+	PrintedAt *time.Time `json:"printedAt,omitempty"`
+
+	CreatedBy *string    `json:"createdBy,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
 }
 
 // ========================================
@@ -38,7 +41,9 @@ type Filter struct {
 	AssigneeID         string
 	ModelID            string
 
-	Statuses []ProductionStatus
+	// Statuses は廃止。Printed(boolean) に統一。
+	// nil の場合はフィルタしない。
+	Printed *bool
 
 	PrintedFrom   *time.Time
 	PrintedTo     *time.Time

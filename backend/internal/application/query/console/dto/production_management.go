@@ -9,11 +9,13 @@ import (
 
 type ProductionManagementRowDTO struct {
 	// --- base (Production) ---
-	ID                 string                         `json:"id"`
-	ProductBlueprintID string                         `json:"productBlueprintId"`
-	AssigneeID         string                         `json:"assigneeId"`
-	Models             []productiondom.ModelQuantity  `json:"models,omitempty"`
-	Status             productiondom.ProductionStatus `json:"status,omitempty"`
+	ID                 string                        `json:"id"`
+	ProductBlueprintID string                        `json:"productBlueprintId"`
+	AssigneeID         string                        `json:"assigneeId"`
+	Models             []productiondom.ModelQuantity `json:"models,omitempty"`
+
+	// Status は廃止。Printed(boolean) に統一。
+	Printed bool `json:"printed"`
 
 	PrintedAt *time.Time `json:"printedAt,omitempty"`
 	PrintedBy *string    `json:"printedBy,omitempty"`

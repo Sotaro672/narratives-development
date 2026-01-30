@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -223,14 +224,14 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(ctx context.Context, com
 	var ids []string
 	for {
 		snap, err := iter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
 		if err != nil {
-			// iterator.Done は google.golang.org/api/iterator に依存するため、
-			// ここでは status.Code による NotFound 判定ではなく、単純 break できない。
-			// 既存実装との整合のため iterator.Done を使っていたが、互換削除の範囲外のためそのまま維持する。
-			// ※ もし依存削減したい場合は、iterator.Done を import して従来通り判定してください。
 			return nil, err
 		}
 		if snap == nil {
+			// 念のため（通常は iterator.Done で抜ける）
 			break
 		}
 		ids = append(ids, snap.Ref.ID)

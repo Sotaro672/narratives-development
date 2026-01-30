@@ -3,17 +3,6 @@
 import { useProductionManagement } from "../hook/useProductionManagement";
 import List from "../../../../shell/src/layout/List/List";
 
-function formatProductionStatusJa(status: unknown): string {
-  switch (status) {
-    case "planned":
-      return "計画中";
-    case "printed":
-      return "印刷済み";
-    default:
-      return typeof status === "string" ? status : "";
-  }
-}
-
 export default function ProductionManagement() {
   const { headers, rows, handleCreate, handleReset, handleRowClick } =
     useProductionManagement();
@@ -36,16 +25,16 @@ export default function ProductionManagement() {
             onClick={() => handleRowClick(p.id)}
           >
             {/* ★ プロダクト名 */}
-            <td>{(p as any).productName || p.productBlueprintId}</td>
+            <td>{p.productName || p.productBlueprintId}</td>
 
             {/* ★ ブランド名 */}
-            <td>{(p as any).brandName || ""}</td>
+            <td>{p.brandName || ""}</td>
 
             {/* ★ 担当者名（あれば名前、なければID） */}
-            <td>{(p as any).assigneeName || p.assigneeId}</td>
+            <td>{p.assigneeName || p.assigneeId}</td>
 
-            {/* ステータス（日本語表示） */}
-            <td>{formatProductionStatusJa((p as any).status)}</td>
+            {/* 印刷状態（hook を正として label を生成済みの前提） */}
+            <td>{p.printed ? "印刷済" : "印刷前"}</td>
 
             {/* 合計数量 */}
             <td>{p.totalQuantity}</td>

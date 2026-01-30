@@ -52,10 +52,7 @@ func (a *productionRepoTotalQuantityAdapter) GetTotalQuantityByModelID(
 	origByKey := make(map[string]string, 64)
 
 	for _, p := range prods {
-		// deleted は集計対象外（安全側）
-		if p.Status == productiondom.StatusDeleted || p.DeletedAt != nil {
-			continue
-		}
+		// deleted/status の概念は廃止（物理削除前提）なので、全件を集計対象とする
 		for _, mq := range p.Models {
 			mid := strings.TrimSpace(mq.ModelID)
 			if mid == "" || mq.Quantity <= 0 {

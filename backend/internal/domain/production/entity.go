@@ -49,39 +49,19 @@ type ModelQuantity struct {
 	Quantity int
 }
 
-// ProductionStatus mirrors TS
-type ProductionStatus string
-
-const (
-	StatusPrinted  ProductionStatus = "printed"
-	StatusPlanning ProductionStatus = "planning"
-	StatusDeleted  ProductionStatus = "deleted"
-)
-
-func IsValidStatus(s ProductionStatus) bool {
-	switch s {
-	case StatusPrinted, StatusPlanning, StatusDeleted:
-		return true
-	default:
-		return false
-	}
-}
-
 // Production mirrors shared/types（複数モデル構成)
 type Production struct {
 	ID                 string
 	ProductBlueprintID string
 	AssigneeID         string
 	Models             []ModelQuantity // [{modelId, quantity}]
-	Status             ProductionStatus
+	Printed            bool            // printed:boolean
 	PrintedAt          *time.Time
 	PrintedBy          *string // ★ 印刷担当者
 	CreatedBy          *string
 	CreatedAt          time.Time // optional（ゼロ許容）
 	UpdatedAt          time.Time // optional（ゼロ許容）
 	UpdatedBy          *string
-	DeletedAt          *time.Time
-	DeletedBy          *string
 }
 
 // ===== Errors =====
@@ -92,37 +72,31 @@ var (
 	ErrInvalidModels             = errors.New("production: invalid models")
 	ErrInvalidModelID            = errors.New("production: invalid modelId")
 	ErrInvalidQuantity           = errors.New("production: invalid quantity")
-	ErrInvalidStatus             = errors.New("production: invalid status")
 	ErrInvalidPrintedAt          = errors.New("production: invalid printedAt")
 	ErrInvalidPrintedBy          = errors.New("production: invalid printedBy")
 	ErrInvalidCreatedAt          = errors.New("production: invalid createdAt")
 	ErrInvalidUpdatedAt          = errors.New("production: invalid updatedAt")
 	ErrInvalidUpdatedBy          = errors.New("production: invalid updatedBy")
-	ErrInvalidDeletedAt          = errors.New("production: invalid deletedAt")
-	ErrInvalidDeletedBy          = errors.New("production: invalid deletedBy")
-	ErrTransition                = errors.New("production: invalid status transition")
+	ErrTransition                = errors.New("production: invalid printed transition")
 )
 
 // ===== Constructors =====
 
-// New creates a Production. If status is empty, defaults to planning.
+// New creates a Production.
 func New(
 	id, productBlueprintID, assigneeID string,
 	models []ModelQuantity,
-	status ProductionStatus,
+	printed bool,
 	printedAt *time.Time,
 	createdBy *string,
 	createdAt time.Time,
 ) (Production, error) {
-	if status == "" {
-		status = StatusPlanning
-	}
 	p := Production{
 		ID:                 strings.TrimSpace(id),
 		ProductBlueprintID: strings.TrimSpace(productBlueprintID),
 		AssigneeID:         strings.TrimSpace(assigneeID),
 		Models:             normalizeModels(models),
-		Status:             status,
+		Printed:            printed,
 		PrintedAt:          printedAt,
 		// PrintedBy はコンストラクタでは nil 初期化（後から更新）
 		PrintedBy: nil,
@@ -139,30 +113,27 @@ func New(
 func NewNow(
 	id, productBlueprintID, assigneeID string,
 	models []ModelQuantity,
-	status ProductionStatus,
+	printed bool,
 ) (Production, error) {
 	now := time.Now().UTC()
-	return New(id, productBlueprintID, assigneeID, models, status, nil, nil, now)
+	return New(id, productBlueprintID, assigneeID, models, printed, nil, nil, now)
 }
 
-// NewFromStringTimes parses printedAt/createdAt/updatedAt/deletedAt from ISO8601 strings.
-// Pass "" for optional times. createdBy/updatedBy/deletedBy は nil または空白で未設定。
+// NewFromStringTimes parses printedAt/createdAt/updatedAt from ISO8601 strings.
+// Pass "" for optional times. createdBy/updatedBy は nil または空白で未設定。
 func NewFromStringTimes(
 	id, productBlueprintID, assigneeID string,
 	models []ModelQuantity,
-	status ProductionStatus,
+	printed bool,
 	printedAt, createdAt string,
 	createdBy *string,
 	updatedAt string,
 	updatedBy *string,
-	deletedAt string,
-	deletedBy *string,
 ) (Production, error) {
 	var (
 		printedPtr *time.Time
 		created    time.Time
 		updated    time.Time
-		deletedPtr *time.Time
 	)
 
 	if strings.TrimSpace(printedAt) != "" {
@@ -186,23 +157,14 @@ func NewFromStringTimes(
 		}
 		updated = t
 	}
-	if strings.TrimSpace(deletedAt) != "" {
-		t, err := parseTime(deletedAt)
-		if err != nil {
-			return Production{}, fmt.Errorf("%w: %v", ErrInvalidDeletedAt, err)
-		}
-		deletedPtr = &t
-	}
 
-	p, err := New(id, productBlueprintID, assigneeID, models, status, printedPtr, createdBy, created)
+	p, err := New(id, productBlueprintID, assigneeID, models, printed, printedPtr, createdBy, created)
 	if err != nil {
 		return Production{}, err
 	}
 	// 追加フィールド
 	p.UpdatedAt = updated
 	p.UpdatedBy = normalizePtr(updatedBy)
-	p.DeletedAt = deletedPtr
-	p.DeletedBy = normalizePtr(deletedBy)
 
 	if err := p.validate(); err != nil {
 		return Production{}, err
@@ -212,23 +174,23 @@ func NewFromStringTimes(
 
 // ===== Behavior (state transitions) =====
 
-// MarkPrinted: planning -> printed
+// MarkPrinted: unprinted(false) -> printed(true)
 func (p *Production) MarkPrinted(at time.Time) error {
-	if p.Status != StatusPlanning {
+	if p.Printed {
 		return ErrTransition
 	}
 	if at.IsZero() {
 		return ErrInvalidPrintedAt
 	}
 	at = at.UTC()
-	p.Status = StatusPrinted
+	p.Printed = true
 	p.PrintedAt = &at
 	return nil
 }
 
-// ResetToPlanning: any -> planning (clears timestamps)
-func (p *Production) ResetToPlanning() {
-	p.Status = StatusPlanning
+// ResetToUnprinted: printed(true) -> unprinted(false) (clears timestamps)
+func (p *Production) ResetToUnprinted() {
+	p.Printed = false
 	p.PrintedAt = nil
 	p.PrintedBy = nil
 }
@@ -256,26 +218,24 @@ func (p Production) validate() error {
 			return ErrInvalidQuantity
 		}
 	}
-	if !IsValidStatus(p.Status) {
-		return ErrInvalidStatus
-	}
 
 	// PrintedBy は nil または非空文字列のみ許容
 	if p.PrintedBy != nil && strings.TrimSpace(*p.PrintedBy) == "" {
 		return ErrInvalidPrintedBy
 	}
 
-	// Status/time coherence
-	switch p.Status {
-	case StatusPlanning:
-		// times may be nil
-	case StatusPrinted:
-		if p.PrintedAt == nil {
+	// Printed/time coherence
+	if p.Printed {
+		if p.PrintedAt == nil || p.PrintedAt.IsZero() {
 			return ErrInvalidPrintedAt
 		}
-	case StatusDeleted:
-		if p.DeletedAt == nil || p.DeletedAt.IsZero() {
-			return ErrInvalidDeletedAt
+	} else {
+		// 未印刷なら PrintedAt/PrintedBy は未設定が原則
+		if p.PrintedAt != nil {
+			return ErrInvalidPrintedAt
+		}
+		if p.PrintedBy != nil {
+			return ErrInvalidPrintedBy
 		}
 	}
 
@@ -340,104 +300,4 @@ func normalizePtr(s *string) *string {
 		return nil
 	}
 	return &v
-}
-
-func dedupTrim(in []string) []string {
-	seen := make(map[string]struct{}, len(in))
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		t := strings.TrimSpace(s)
-		if t == "" {
-			continue
-		}
-		key := strings.ToLower(t)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, t)
-	}
-	return out
-}
-
-// ===== ProductBlueprint (mirror TS) =====
-
-// ItemType: "tops" | "bottoms" | "other"
-type ItemType string
-
-const (
-	ItemTypeTops    ItemType = "tops"
-	ItemTypeBottoms ItemType = "bottoms"
-	ItemTypeOther   ItemType = "other"
-)
-
-// ProductIdTagType: "qr" | "nfc"
-type ProductIdTagType string
-
-const (
-	ProductIdTagQR  ProductIdTagType = "qr"
-	ProductIdTagNFC ProductIdTagType = "nfc"
-)
-
-// FileRef mirrors { name: string; url: string }
-type FileRef struct {
-	Name string
-	URL  string
-}
-
-// ProductIdTag mirrors TS
-type ProductIdTag struct {
-	Type           ProductIdTagType
-	LogoDesignFile *FileRef // optional
-}
-
-// ProductBlueprint mirrors TS
-type ProductBlueprint struct {
-	ID               string
-	ProductName      string
-	BrandID          string
-	ItemType         ItemType
-	ModelVariation   []string
-	Fit              string
-	Material         string
-	Weight           float64
-	QualityAssurance []string
-	ProductIdTag     ProductIdTag
-	AssigneeID       string
-	CreatedBy        *string
-	CreatedAt        time.Time
-	UpdatedBy        *string
-	UpdatedAt        time.Time
-	DeletedBy        *string
-	DeletedAt        *time.Time
-}
-
-// Optional: minimal constructor/validator (can be extended as needed)
-func NewProductBlueprint(
-	id, productName, brandID string,
-	itemType ItemType,
-	modelVariation []string,
-	fit, material string,
-	weight float64,
-	qa []string,
-	tag ProductIdTag,
-	assigneeID string,
-	createdBy *string,
-	createdAt time.Time,
-) ProductBlueprint {
-	return ProductBlueprint{
-		ID:               strings.TrimSpace(id),
-		ProductName:      strings.TrimSpace(productName),
-		BrandID:          strings.TrimSpace(brandID),
-		ItemType:         itemType,
-		ModelVariation:   dedupTrim(modelVariation),
-		Fit:              strings.TrimSpace(fit),
-		Material:         strings.TrimSpace(material),
-		Weight:           weight,
-		QualityAssurance: dedupTrim(qa),
-		ProductIdTag:     tag,
-		AssigneeID:       strings.TrimSpace(assigneeID),
-		CreatedBy:        normalizePtr(createdBy),
-		CreatedAt:        createdAt.UTC(),
-	}
 }

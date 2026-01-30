@@ -1,8 +1,6 @@
 // frontend/console/production/src/application/detail/types.ts
 
 import type {
-  // ✅ domain を正にする（ProductionStatus をここから取る）
-  ProductionStatus,
   // ✅ quantity の最小表現は domain を正にする
   ModelQuantity,
 } from "../../../../production/src/domain/entity/production";
@@ -23,8 +21,10 @@ export type ProductionDetail = {
   assigneeId: string;
   assigneeName: string;
 
-  // Status
-  status: ProductionStatus;
+  // Printed
+  // true: 印刷済
+  // false: 印刷前
+  printed: boolean;
 
   // Model breakdown
   models: ProductionQuantityRow[];
@@ -67,5 +67,3 @@ export type ProductionQuantityRow = ModelQuantity & {
   rgb?: number | string | null;
   displayOrder?: number;
 };
-
-export type { ProductionStatus };

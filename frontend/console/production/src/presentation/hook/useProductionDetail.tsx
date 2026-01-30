@@ -21,11 +21,6 @@ import {
 // ★ 印刷用ロジックを分離した hook を利用（modelId を正にした版）
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
-// ★ domain の ProductionStatus 型を import
-import type {
-  ProductionStatus as DomainProductionStatus,
-} from "../../../../production/src/domain/entity/production";
-
 // ★ ViewModel（modelId を正）
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
@@ -33,9 +28,6 @@ import { normalizeProductionModels } from "../viewModels/normalizeProductionMode
 import { toProductionDetailUpdateRows } from "../viewModels/toProductionDetailUpdateRows";
 
 type Mode = "view" | "edit";
-
-// ★ 編集可能なステータス（domain 型に基づく）
-const EDITABLE_STATUS: DomainProductionStatus = "planned";
 
 export function useProductionDetail() {
   const navigate = useNavigate();
@@ -55,8 +47,9 @@ export function useProductionDetail() {
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
 
-  // ★ status が planned のときだけ編集可能
-  const canEdit = production?.status === EDITABLE_STATUS;
+  // ★ printed=true（印刷済）のときは編集不可（ヘッダー編集ボタン非表示に利用）
+  // ※ production.status は廃止されている前提
+  const canEdit = production?.printed !== true;
 
   const switchToView = React.useCallback(() => setMode("view"), []);
 
@@ -219,7 +212,7 @@ export function useProductionDetail() {
 
     if (!canEdit) {
       // eslint-disable-next-line no-alert
-      alert("この生産は編集できません（ステータスが planned ではありません）。");
+      alert("この生産は編集できません（印刷済みです）。");
       return;
     }
 
