@@ -6,20 +6,6 @@ import type {
   TokenBlueprintPatchDTO,
 } from "../../infrastructure/http/inventoryRepositoryHTTP";
 
-// DTO 側に brandName が増えても落とさないための拡張型（UIで参照しやすくする）
-export type ProductBlueprintPatchDTOEx = ProductBlueprintPatchDTO & {
-  brandId?: string;
-  brandName?: string;
-  productName?: string;
-};
-
-// ✅ tokenBlueprint patch を ViewModel に保持できるようにする
-export type TokenBlueprintPatchDTOEx = TokenBlueprintPatchDTO & {
-  tokenName?: string;
-  brandId?: string;
-  brandName?: string;
-};
-
 export type InventoryDetailViewModel = {
   /** 画面用の一意キー（pbId + tbId） */
   inventoryKey: string;
@@ -39,10 +25,10 @@ export type InventoryDetailViewModel = {
   brandName?: string;
 
   // ✅ tokenBlueprint patch（token名など）
-  tokenBlueprintPatch?: TokenBlueprintPatchDTOEx;
+  tokenBlueprintPatch?: TokenBlueprintPatchDTO;
 
   // 元データも保持（編集フォームなどで利用する想定）
-  productBlueprintPatch: ProductBlueprintPatchDTOEx;
+  productBlueprintPatch: ProductBlueprintPatchDTO;
 
   rows: InventoryRow[];
   totalStock: number;

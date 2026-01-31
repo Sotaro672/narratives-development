@@ -17,11 +17,7 @@ import { mergeDetailDTOs } from "./inventoryDetail.mapper";
 // ------------------------------------------------------------
 // Re-export types
 // ------------------------------------------------------------
-export type {
-  ProductBlueprintPatchDTOEx,
-  TokenBlueprintPatchDTOEx,
-  InventoryDetailViewModel,
-} from "./inventoryDetail.types";
+export type { InventoryDetailViewModel } from "./inventoryDetail.types";
 
 // ============================================================
 // Query Request (Application Layer)
