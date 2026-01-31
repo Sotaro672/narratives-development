@@ -61,7 +61,7 @@ export default function InventoryManagementPage() {
 
             {/* 在庫数 */}
             <td>
-              <span className="inv__total-pill">{row.stock}</span>
+              <span className="inv__total-pill">{row.availableStock}</span>
             </td>
 
             {/* 注文数 */}

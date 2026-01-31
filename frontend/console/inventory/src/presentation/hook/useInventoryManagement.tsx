@@ -24,7 +24,7 @@ export type InventoryRow = {
   tokenBlueprintId: string; // ★追加: 集計キー
   tokenName: string;
 
-  stock: number;
+  availableStock: number;
   reservedCount: number; // ✅ 注文数
 };
 
@@ -62,7 +62,7 @@ function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
     tokenBlueprintId: x.tokenBlueprintId,
     tokenName: x.tokenName,
 
-    stock: x.stock,
+    availableStock: x.availableStock,
     reservedCount: x.reservedCount,
   }));
 }
@@ -126,7 +126,7 @@ export function useInventoryManagement(): UseInventoryManagementResult {
           return dir * as(a.productName).localeCompare(as(b.productName));
         if (sortKey === "tokenName")
           return dir * as(a.tokenName).localeCompare(as(b.tokenName));
-        if (sortKey === "stock") return dir * (an(a.stock) - an(b.stock));
+        if (sortKey === "availableStock") return dir * (an(a.availableStock) - an(b.availableStock));
         if (sortKey === "reservedCount")
           return dir * (an(a.reservedCount) - an(b.reservedCount));
 
@@ -147,7 +147,7 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       productName: r.productName,
       tokenBlueprintId: r.tokenBlueprintId,
       tokenName: r.tokenName,
-      stock: r.stock,
+      availableStock: r.availableStock,
       reservedCount: r.reservedCount, // ✅ 必須
     }));
 

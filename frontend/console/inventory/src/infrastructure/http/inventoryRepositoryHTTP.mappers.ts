@@ -45,7 +45,6 @@ export function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null 
     tokenBlueprintId,
     tokenName,
     modelNumber,
-    stock: availableStock, // ✅ type の都合で保持（= availableStock）
     availableStock,
     reservedCount,
   };

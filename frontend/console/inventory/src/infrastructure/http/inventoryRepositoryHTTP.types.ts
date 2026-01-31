@@ -24,10 +24,6 @@ export type InventoryListRowDTO = {
   tokenName: string;
 
   modelNumber: string;
-
-  // ✅ 互換: stock は (= availableStock) として扱う
-  stock: number;
-
   // ✅ NEW: 画面側が使う値を落とさず返す
   availableStock: number;
   reservedCount: number;
