@@ -425,7 +425,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Productions
 	// ================================
 	if deps.ProductionUC != nil && deps.CompanyProductionQueryService != nil {
-		// ✅ production handler は handler/production に移動したため、そちらの NewProductionHandler を使う
 		productionH := productionHandler.NewProductionHandler(
 			deps.CompanyProductionQueryService,
 			deps.ProductionUC,
@@ -458,10 +457,19 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Inspector
 	// ================================
 	if deps.ProductUC != nil && deps.InspectionUC != nil {
+		// ✅ ProductBlueprintUC が displayOrder 解決用インターフェースを満たすなら渡す（満たさない場合は nil）
+		var pbGetter inspectionHandler.ProductBlueprintModelRefGetter
+		if deps.ProductBlueprintUC != nil {
+			if g, ok := any(deps.ProductBlueprintUC).(inspectionHandler.ProductBlueprintModelRefGetter); ok {
+				pbGetter = g
+			}
+		}
+
 		inspectorH := inspectionHandler.NewInspectorHandler(
 			deps.ProductUC,
 			deps.InspectionUC,
-			deps.NameResolver, // ✅ 追加
+			deps.NameResolver,
+			pbGetter, // ✅ 追加（無ければ nil のまま）
 		)
 
 		var h http.Handler = inspectorH
@@ -473,12 +481,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/products/inspections", h)
 		mux.Handle("/products/inspections/", h)
 	}
+
 	// ================================
 	// Mint
 	// ================================
 	if deps.MintUC != nil {
-		// ✅ NewMintHandler の現行シグネチャに合わせる
-		// want: (MintUsecase, NameResolver, ProductionUsecase, MintRequestQueryService)
 		mintH := consoleHandler.NewMintHandler(
 			deps.MintUC,
 			deps.NameResolver,
@@ -500,11 +507,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// ================================
 	// ✅ Owner resolve (walletAddress/toAddress -> avatarId or brandId)
-	// - console でも使う想定なので auth を掛ける
-	//
-	// GET /owners/resolve?walletAddress=...
-	// GET /owners/resolve?toAddress=...
-	// GET /owners/resolve?address=...
 	// ================================
 	if deps.OwnerResolveQ != nil {
 		ownerResolve := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -528,7 +530,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 			res, err := deps.OwnerResolveQ.Resolve(r.Context(), addr)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				// best-effort: invalid -> 400, not found -> 404, else 500
 				switch err {
 				case sharedquery.ErrInvalidWalletAddress:
 					w.WriteHeader(http.StatusBadRequest)

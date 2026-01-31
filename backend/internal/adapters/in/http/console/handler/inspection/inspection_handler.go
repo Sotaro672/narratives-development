@@ -1,7 +1,8 @@
-// backend\internal\adapters\in\http\console\handler\inspection\inspection_handler.go
+// backend/internal/adapters/in/http/console/handler/inspection/inspection_handler.go
 package inspection
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -9,23 +10,35 @@ import (
 
 	inspectionapp "narratives/internal/application/inspection"
 	usecase "narratives/internal/application/usecase"
+
+	pbdom "narratives/internal/domain/productBlueprint"
 )
+
+// ✅ ProductBlueprint の modelRefs（displayOrder 含む）を引くための最小ポート
+type ProductBlueprintModelRefGetter interface {
+	GetModelRefsByModelID(ctx context.Context, modelID string) ([]pbdom.ModelRef, error)
+}
 
 type InspectorHandler struct {
 	productUC    *usecase.ProductUsecase
 	inspectionUC *inspectionapp.InspectionUsecase
 	nameResolver *resolver.NameResolver
+
+	// ✅ 追加：modelId -> displayOrder 解決用
+	pbModelRefGetter ProductBlueprintModelRefGetter
 }
 
 func NewInspectorHandler(
 	productUC *usecase.ProductUsecase,
 	inspectionUC *inspectionapp.InspectionUsecase,
 	nameResolver *resolver.NameResolver,
+	pbModelRefGetter ProductBlueprintModelRefGetter,
 ) http.Handler {
 	return &InspectorHandler{
-		productUC:    productUC,
-		inspectionUC: inspectionUC,
-		nameResolver: nameResolver,
+		productUC:        productUC,
+		inspectionUC:     inspectionUC,
+		nameResolver:     nameResolver,
+		pbModelRefGetter: pbModelRefGetter,
 	}
 }
 

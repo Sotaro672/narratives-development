@@ -84,14 +84,49 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
 
           final detail = snapshot.data!;
 
+          // ✅ displayOrder が入っている場合はここで並べ替える（UI表示が必ず昇順になる）
+          final sortedInspections = [...detail.inspections]
+            ..sort((a, b) {
+              final ao = a.displayOrder;
+              final bo = b.displayOrder;
+
+              // displayOrder が両方ある → 昇順
+              if (ao != null && bo != null) {
+                if (ao != bo) return ao.compareTo(bo);
+                // 同値なら productId で安定化
+                return a.productId.compareTo(b.productId);
+              }
+
+              // 片方だけある → ある方を先に
+              if (ao != null && bo == null) return -1;
+              if (ao == null && bo != null) return 1;
+
+              // 両方ない → productId で安定化
+              return a.productId.compareTo(b.productId);
+            });
+
+          final sortedDetail = InspectorProductDetail(
+            productId: detail.productId,
+            productionId: detail.productionId,
+            modelId: detail.modelId,
+            productBlueprintId: detail.productBlueprintId,
+            modelNumber: detail.modelNumber,
+            size: detail.size,
+            measurements: detail.measurements,
+            color: detail.color,
+            productBlueprint: detail.productBlueprint,
+            inspections: sortedInspections,
+            inspectionResult: detail.inspectionResult,
+          );
+
           return RefreshIndicator(
             onRefresh: _reload,
             child: ListView(
               children: [
-                ModelCard(detail: detail),
-                ProductBlueprintCard(detail: detail),
+                ModelCard(detail: sortedDetail),
+                ProductBlueprintCard(detail: sortedDetail),
                 ActionSection(
-                  detail: detail,
+                  detail: sortedDetail,
                   submitting: _submitting,
                   onContinue: _continueInspection,
                   onSubmitResult: _onSubmitResult,
