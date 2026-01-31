@@ -6,10 +6,7 @@
 export type InventoryProductSummary = {
   id: string;
   productName: string;
-  brandId: string;
   brandName?: string;
-  assigneeId: string;
-  assigneeName?: string;
 };
 
 // ---------------------------------------------------------
