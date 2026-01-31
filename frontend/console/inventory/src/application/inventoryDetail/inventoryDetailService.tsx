@@ -10,7 +10,6 @@ import {
   type TokenBlueprintPatchDTO,
 } from "../../infrastructure/http/inventoryRepositoryHTTP";
 
-import type { InventoryDetailViewModel } from "./inventoryDetail.types";
 import { asString } from "./inventoryDetail.utils";
 import { mergeDetailDTOs } from "./inventoryDetail.mapper";
 
@@ -23,7 +22,7 @@ import { mergeDetailDTOs } from "./inventoryDetail.mapper";
 export async function queryInventoryDetailByProductAndToken(
   productBlueprintId: string,
   tokenBlueprintId: string,
-): Promise<InventoryDetailViewModel> {
+): Promise<ReturnType<typeof mergeDetailDTOs>> {
   const pbId = asString(productBlueprintId);
   const tbId = asString(tokenBlueprintId);
 
@@ -72,6 +71,6 @@ export async function queryInventoryDetailByProductAndToken(
     tokenBlueprintPatch = null;
   }
 
-  // ③ マージしてViewModel化（tokenBlueprintPatch を渡す）
+  // ③ マージして返す（tokenBlueprintPatch を渡す）
   return mergeDetailDTOs(pbId, tbId, inventoryIds, ok, tokenBlueprintPatch);
 }
