@@ -36,6 +36,7 @@ import (
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
 
 	// ✅ moved handlers
+	inspectionHandler "narratives/internal/adapters/in/http/console/handler/inspection"
 	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
 	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
 	productionHandler "narratives/internal/adapters/in/http/console/handler/production"
@@ -457,7 +458,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Inspector
 	// ================================
 	if deps.ProductUC != nil && deps.InspectionUC != nil {
-		inspectorH := consoleHandler.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
+		inspectorH := inspectionHandler.NewInspectorHandler(
+			deps.ProductUC,
+			deps.InspectionUC,
+			deps.NameResolver, // ✅ 追加
+		)
 
 		var h http.Handler = inspectorH
 		if authMw != nil {
@@ -468,7 +473,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/products/inspections", h)
 		mux.Handle("/products/inspections/", h)
 	}
-
 	// ================================
 	// Mint
 	// ================================

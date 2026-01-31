@@ -4,9 +4,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'firebase_options.dart';
-import 'screens/login_screen.dart';
-import 'screens/inspection_scan_screen.dart';
-import 'screens/inspection_detail_screen.dart';
+import 'screens/login/login_screen.dart';
+
+// ✅ inspection_scan_screen を分割した後のパスに合わせて修正
+import 'screens/inspection_scan/inspection_scan_screen.dart';
+
+// ✅ 分割後のパスに合わせて修正
+import 'screens/inspection_detail/inspection_detail_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +32,7 @@ class InspectorApp extends StatelessWidget {
         useMaterial3: true,
       ),
 
-      // ★ ここを routes ではなく onGenerateRoute に変更
+      // ★ routes ではなく onGenerateRoute
       onGenerateRoute: (settings) {
         if (settings.name == '/detail') {
           final productId = settings.arguments as String;
