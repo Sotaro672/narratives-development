@@ -13,7 +13,6 @@ import InventoryListCreatePage from "../pages/listCreate";
  * - URL に productBlueprintId + tokenBlueprintId を渡す
  * - 詳細側で inventoryIds を解決して表示する
  *
- * ※ 旧URL (/inventory/detail/:productBlueprintId) の互換は削除
  */
 const routes: RouteObject[] = [
   // /inventory → 一覧

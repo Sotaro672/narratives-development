@@ -1,43 +1,17 @@
 // frontend/console/inventory/src/infrastructure/api/inventoryApi.tsx
 
-// Firebase Auth から ID トークンを取得
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+// ✅ Shared console API base (修正案A)
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 
-/**
- * Backend base URL
- * - .env の VITE_BACKEND_BASE_URL を優先
- * - 未設定時は Cloud Run の固定 URL を利用
- */
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-export const API_BASE = ENV_BASE || FALLBACK_BASE;
-
-// ---------------------------------------------------------
-// 共通: Firebase トークン取得
-// ---------------------------------------------------------
-async function getIdTokenOrThrow(): Promise<string> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("Not authenticated");
-  const token = await user.getIdToken();
-  if (!token) throw new Error("Failed to acquire ID token");
-  return token;
-}
+// ✅ Shared auth headers (shell authService を委譲)
+import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
 
 async function requestJsonOrThrow(path: string): Promise<any> {
-  const token = await getIdTokenOrThrow();
+  const headers = await getAuthHeadersOrThrow();
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
   });
 
   if (!res.ok) {
@@ -62,15 +36,19 @@ export async function getInventoryListRaw(): Promise<any> {
 }
 
 /** GET /product-blueprints/{id} */
-export async function getProductBlueprintRaw(productBlueprintId: string): Promise<any> {
+export async function getProductBlueprintRaw(
+  productBlueprintId: string,
+): Promise<any> {
   const pbId = s(productBlueprintId);
   if (!pbId) throw new Error("productBlueprintId is empty");
-  return await requestJsonOrThrow(`/product-blueprints/${encodeURIComponent(pbId)}`);
+  return await requestJsonOrThrow(
+    `/product-blueprints/${encodeURIComponent(pbId)}`,
+  );
 }
 
-/** GET /product-blueprints/printed */
+/** GET /inventory */
 export async function getPrintedProductBlueprintsRaw(): Promise<any> {
-  return await requestJsonOrThrow(`/product-blueprints/printed`);
+  return await requestJsonOrThrow(`/inventory`);
 }
 
 /** GET /inventory/ids?productBlueprintId=...&tokenBlueprintId=... */
@@ -91,7 +69,9 @@ export async function getInventoryIDsByProductAndTokenRaw(input: {
 }
 
 /** GET /token-blueprints/{tokenBlueprintId}/patch */
-export async function getTokenBlueprintPatchRaw(tokenBlueprintId: string): Promise<any> {
+export async function getTokenBlueprintPatchRaw(
+  tokenBlueprintId: string,
+): Promise<any> {
   const tbId = s(tokenBlueprintId);
   if (!tbId) throw new Error("tokenBlueprintId is empty");
   return await requestJsonOrThrow(

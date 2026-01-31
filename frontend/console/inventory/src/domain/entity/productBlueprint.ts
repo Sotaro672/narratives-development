@@ -13,19 +13,31 @@ export type ItemType = "tops" | "bottoms" | "other";
 export type ProductIDTagType = "qr" | "nfc";
 
 /**
- * printed 状態
- * backend/internal/domain/productBlueprint/entity.go の PrintedStatus に対応。
- * ""（未設定）はフロントでは扱わず、"notYet" / "printed" のみを想定。
+ * backend は Printed: bool のため、フロントでは boolean として扱う。
+ * - true  => 印刷済み
+ * - false => 未印刷
+ *
+ * ※ 旧 PrintedStatus("notYet" | "printed") は廃止
  */
-export type PrintedStatus = "notYet" | "printed";
+export type PrintedStatus = boolean;
 
 /**
  * ProductIDTag
  * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
- *
  */
 export interface ProductIDTag {
   type: ProductIDTagType;
+}
+
+/**
+ * ModelRef
+ * backend/internal/domain/productBlueprint/entity.go の ModelRef に対応。
+ * - modelId: model テーブル docId
+ * - displayOrder: 表示順 (1..N)
+ */
+export interface ModelRef {
+  modelId: string;
+  displayOrder: number;
 }
 
 /**
@@ -44,13 +56,13 @@ export interface ModelVariation {
  */
 export interface ProductBlueprint {
   id: string;
+
   productName: string;
+  companyId: string;
   brandId: string;
 
   /** backend の ItemType に対応（tops / bottoms / other） */
   itemType: ItemType;
-
-  /** variationIds 削除に伴い該当要素も削除 */
 
   fit: string;
   material: string;
@@ -58,20 +70,27 @@ export interface ProductBlueprint {
   /** 重量(kg等)。0以上 */
   weight: number;
 
-  /** 品質保証に関するメモ／タグ一覧（空文字なし） */
+  /** 品質保証に関するメモ／タグ一覧（空文字なし、重複なし） */
   qualityAssurance: string[];
 
   /** 製品IDタグ情報（必須, type は qr/nfc） */
   productIdTag: ProductIDTag;
 
-  /** 会社 ID （backend: CompanyID） */
-  companyId: string;
-
   /** 担当者 Member ID（必須） */
   assigneeId: string;
 
-  /** printed フラグ ("notYet" | "printed") */
-  printed?: PrintedStatus;
+  /**
+   * model 参照（表示順つき）
+   * backend: ModelRefs []ModelRef
+   * - 空は許容
+   */
+  modelRefs?: ModelRef[];
+
+  /**
+   * 印刷状態
+   * backend: Printed bool
+   */
+  printed: boolean;
 
   /** 作成者 Member ID（任意, backend: CreatedBy） */
   createdBy?: string | null;
@@ -90,6 +109,12 @@ export interface ProductBlueprint {
 
   /** 削除日時 (ISO8601, backend: DeletedAt, 未削除時は null/undefined) */
   deletedAt?: string | null;
+
+  /**
+   * 物理削除予定日時 (ISO8601, backend: ExpireAt, 未設定時は null/undefined)
+   * Firestore TTL 対象フィールド
+   */
+  expireAt?: string | null;
 }
 
 /* =========================================================
@@ -108,18 +133,38 @@ export function isValidProductIDTagType(
   return value === "qr" || value === "nfc";
 }
 
-/** PrintedStatus の妥当性チェック */
-export function isValidPrintedStatus(
-  value: string,
-): value is PrintedStatus {
-  return value === "notYet" || value === "printed";
+/** Printed (bool) の妥当性チェック */
+export function isValidPrintedStatus(value: unknown): value is PrintedStatus {
+  return typeof value === "boolean";
 }
 
-/** ProductIDTag の簡易バリデーション（LogoDesignFile 削除対応） */
+/** ProductIDTag の簡易バリデーション */
 export function validateProductIDTag(tag: ProductIDTag): string[] {
   const errors: string[] = [];
-  if (!isValidProductIDTagType(tag.type)) {
+  if (!tag) {
+    errors.push("productIdTag is required");
+    return errors;
+  }
+  if (!isValidProductIDTagType(String((tag as any).type ?? ""))) {
     errors.push("productIdTag.type must be 'qr' or 'nfc'");
+  }
+  return errors;
+}
+
+/** modelRefs の簡易バリデーション（空は許容） */
+export function validateModelRefs(modelRefs?: ModelRef[] | null): string[] {
+  const errors: string[] = [];
+  if (!modelRefs || modelRefs.length === 0) return errors;
+
+  for (let i = 0; i < modelRefs.length; i++) {
+    const r = modelRefs[i];
+    const id = String(r?.modelId ?? "").trim();
+    const order = Number((r as any)?.displayOrder);
+
+    if (!id) errors.push(`modelRefs[${i}].modelId is required`);
+    if (!Number.isFinite(order) || order <= 0) {
+      errors.push(`modelRefs[${i}].displayOrder must be > 0`);
+    }
   }
   return errors;
 }
@@ -129,7 +174,7 @@ export function normalizeQualityAssurance(xs: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of xs || []) {
-    const x = raw.trim();
+    const x = String(raw ?? "").trim();
     if (!x || seen.has(x)) continue;
     seen.add(x);
     out.push(x);
@@ -139,63 +184,74 @@ export function normalizeQualityAssurance(xs: string[]): string[] {
 
 /**
  * ProductBlueprint の簡易バリデーション
- * variationIds 削除済みのため関連チェックも削除。
  */
-export function validateProductBlueprint(
-  pb: ProductBlueprint,
-): string[] {
+export function validateProductBlueprint(pb: ProductBlueprint): string[] {
   const errors: string[] = [];
 
-  if (!pb.id?.trim()) errors.push("id is required");
-  if (!pb.productName?.trim()) errors.push("productName is required");
-  if (!pb.brandId?.trim()) errors.push("brandId is required");
+  if (!pb?.id?.trim()) errors.push("id is required");
+  if (!pb?.productName?.trim()) errors.push("productName is required");
+  if (!pb?.brandId?.trim()) errors.push("brandId is required");
 
-  if (!isValidItemType(pb.itemType)) {
+  if (!isValidItemType(String(pb?.itemType ?? ""))) {
     errors.push("itemType must be one of 'tops', 'bottoms', 'other'");
   }
 
-  if (pb.weight < 0) {
+  if (Number(pb?.weight ?? 0) < 0) {
     errors.push("weight must be >= 0");
   }
 
-  if (!pb.companyId?.trim()) {
+  if (!pb?.companyId?.trim()) {
     errors.push("companyId is required");
   }
 
   errors.push(...validateProductIDTag(pb.productIdTag));
 
-  if (!pb.assigneeId?.trim()) {
+  if (!pb?.assigneeId?.trim()) {
     errors.push("assigneeId is required");
   }
 
-  if (!pb.createdAt?.trim()) {
+  if (!pb?.createdAt?.trim()) {
     errors.push("createdAt is required");
   }
 
-  // printed が渡されている場合だけ妥当性チェック
-  if (pb.printed !== undefined && pb.printed !== null) {
-    if (!isValidPrintedStatus(pb.printed)) {
-      errors.push("printed must be 'notYet' or 'printed'");
-    }
+  // printed は必須（backend bool）
+  if (!isValidPrintedStatus((pb as any)?.printed)) {
+    errors.push("printed must be boolean");
   }
+
+  // modelRefs（任意）
+  errors.push(...validateModelRefs(pb.modelRefs));
 
   return errors;
 }
 
 /**
  * ファクトリ: 入力値を正規化しつつ ProductBlueprint を生成。
- * variationIds 削除に伴いロジックから除外。
+ * - qualityAssurance: dedup/trim
+ * - updatedAt: 未指定なら createdAt
+ * - updatedBy: 未指定なら createdBy (なければ null)
+ * - deletedAt/deletedBy/expireAt: 未指定なら null
+ * - printed: 未指定なら false（backend create 時は常に false）
  */
 export function createProductBlueprint(
   input: Omit<
     ProductBlueprint,
-    "qualityAssurance" | "updatedAt" | "updatedBy" | "deletedAt" | "deletedBy"
+    | "qualityAssurance"
+    | "updatedAt"
+    | "updatedBy"
+    | "deletedAt"
+    | "deletedBy"
+    | "expireAt"
+    | "printed"
   > & {
     qualityAssurance?: string[];
     updatedAt?: string;
     updatedBy?: string | null;
     deletedAt?: string | null;
     deletedBy?: string | null;
+    expireAt?: string | null;
+    printed?: boolean;
+    modelRefs?: ModelRef[] | null;
   },
 ): ProductBlueprint {
   const qualityAssurance = normalizeQualityAssurance(
@@ -208,22 +264,28 @@ export function createProductBlueprint(
       : input.createdAt;
 
   const updatedBy =
-    input.updatedBy !== undefined
-      ? input.updatedBy
-      : input.createdBy ?? null;
+    input.updatedBy !== undefined ? input.updatedBy : input.createdBy ?? null;
 
-  const deletedAt =
-    input.deletedAt !== undefined ? input.deletedAt : null;
+  const deletedAt = input.deletedAt !== undefined ? input.deletedAt : null;
+  const deletedBy = input.deletedBy !== undefined ? input.deletedBy : null;
+  const expireAt = input.expireAt !== undefined ? input.expireAt : null;
 
-  const deletedBy =
-    input.deletedBy !== undefined ? input.deletedBy : null;
+  const printed = input.printed !== undefined ? !!input.printed : false;
+
+  const modelRefs =
+    input.modelRefs !== undefined && input.modelRefs !== null
+      ? input.modelRefs
+      : undefined;
 
   return {
-    ...input,
+    ...(input as any),
     qualityAssurance,
     updatedAt,
     updatedBy,
     deletedAt,
     deletedBy,
+    expireAt,
+    printed,
+    modelRefs,
   };
 }

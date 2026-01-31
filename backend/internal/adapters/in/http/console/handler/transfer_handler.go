@@ -3,6 +3,7 @@ package consoleHandler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -353,4 +354,11 @@ func extractLastPathSegment(path string, prefix string) string {
 	// if still contains '/', take last part
 	parts := strings.Split(s, "/")
 	return strings.TrimSpace(parts[len(parts)-1])
+}
+
+// ✅ copied from inventory_handler.go
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }

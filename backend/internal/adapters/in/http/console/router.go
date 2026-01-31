@@ -37,6 +37,7 @@ import (
 
 	// ✅ moved handlers
 	inspectionHandler "narratives/internal/adapters/in/http/console/handler/inspection"
+	inventoryHandler "narratives/internal/adapters/in/http/console/handler/inventory"
 	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
 	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
 	productionHandler "narratives/internal/adapters/in/http/console/handler/production"
@@ -252,7 +253,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Inventories
 	// ================================
 	if deps.InventoryUC != nil {
-		inventoryH := consoleHandler.NewInventoryHandlerWithListCreateQuery(
+		inventoryH := inventoryHandler.NewInventoryHandlerWithListCreateQuery(
 			deps.InventoryUC,
 			deps.InventoryQuery,
 			deps.ListCreateQuery,

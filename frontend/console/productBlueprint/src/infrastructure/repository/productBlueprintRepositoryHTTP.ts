@@ -126,12 +126,12 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
 
 // -----------------------------------------------------------
 // GET: 商品設計 一覧（printed == true のみ）
-//   - backend: GET /product-blueprints/printed
+//   - backend: GET /inventory
 // -----------------------------------------------------------
 export async function listPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
   const headers = await getAuthHeadersOrThrow();
 
-  const res = await fetch(`${API_BASE}/product-blueprints/printed`, {
+  const res = await fetch(`${API_BASE}/inventory`, {
     method: "GET",
     headers,
   });

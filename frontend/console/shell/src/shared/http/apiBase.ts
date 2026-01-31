@@ -4,9 +4,9 @@
 /**
  * Shared API base resolver for module federation remotes.
  *
- * Policy (修正案A):
+ * Policy (現状のバックエンドに合わせた修正):
  * - env VITE_BACKEND_BASE_URL は「originのみ」（例: https://...run.app）を想定
- * - コード側で /console を付与して console API base を作る
+ * - console API は "現状 /console プレフィックス無し" で動いているため、console は origin を返す
  * - ただし事故防止のため、env に /console 等が入っていても除去して正規化する
  */
 
@@ -61,13 +61,21 @@ export function getBackendOrigin(): string {
   return env || FALLBACK_BACKEND_ORIGIN;
 }
 
-/** Base URL for a scope, e.g. /console */
+/**
+ * Base URL for a scope.
+ *
+ * ✅ IMPORTANT:
+ * - 現状の backend は console API を /console ではなくルート直下で提供しているため、
+ *   scope==="console" は origin を返す。
+ * - mall/sns は将来 prefix を切りたい時のために残す（必要なら backend 側も合わせる）
+ */
 export function getApiBase(scope: ApiScope): string {
   const origin = getBackendOrigin();
+  if (scope === "console") return origin; // ←ここが404解消の要点
   return join(origin, scope);
 }
 
-/** Convenience for 修正案A */
+/** Convenience */
 export function getConsoleApiBase(): string {
   return getApiBase("console");
 }
@@ -78,7 +86,7 @@ export function getConsoleApiBase(): string {
  */
 export const API_BASE = getConsoleApiBase();
 
-/** Optional: build a full URL under /console with a given path. */
+/** Optional: build a full URL under console base with a given path. */
 export function buildConsoleUrl(path: string): string {
   // allow callers to pass "/members/xxx" or "members/xxx"
   return join(getConsoleApiBase(), path);
