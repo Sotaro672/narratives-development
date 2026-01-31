@@ -14,11 +14,6 @@ import type { InventoryDetailViewModel } from "./inventoryDetail.types";
 import { asString } from "./inventoryDetail.utils";
 import { mergeDetailDTOs } from "./inventoryDetail.mapper";
 
-// ------------------------------------------------------------
-// Re-export types
-// ------------------------------------------------------------
-export type { InventoryDetailViewModel } from "./inventoryDetail.types";
-
 // ============================================================
 // Query Request (Application Layer)
 // - pbId + tbId -> inventoryIds -> details -> merge

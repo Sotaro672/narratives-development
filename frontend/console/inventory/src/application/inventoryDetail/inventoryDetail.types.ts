@@ -10,18 +10,8 @@ export type InventoryDetailViewModel = {
   /** 画面用の一意キー（pbId + tbId） */
   inventoryKey: string;
 
-  /** 方針A: 詳細が対象とする inventoryId の集合 */
-  inventoryIds: string[];
-
-  tokenBlueprintId: string;
-  productBlueprintId: string;
-
-  /** 方針Aでは原則空 */
-  modelId: string;
-
   // ✅ 画面でそのまま表示できるように ViewModel 直下にも持つ（重要）
   productName?: string;
-  brandId?: string;
   brandName?: string;
 
   // ✅ tokenBlueprint patch（token名など）
