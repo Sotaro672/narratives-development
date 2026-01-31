@@ -1,3 +1,4 @@
+//frontend\console\inventory\src\presentation\pages\inventoryManagement.tsx
 import List from "../../../../shell/src/layout/List/List";
 import "../styles/inventory.css";
 

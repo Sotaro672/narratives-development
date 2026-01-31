@@ -19,6 +19,11 @@ import {
 // ============================================================
 // Mapper (DTO row -> InventoryRow)
 // ============================================================
+//
+// ✅ 直近ログより、rows の実体はすでに camelCase で揃っている:
+// - modelNumber / size / color / rgb / stock
+// よって PascalCase 等の名揺れ吸収を削除する。
+// ============================================================
 
 export function mapDtoToRows(
   dto: InventoryDetailDTO,
@@ -31,21 +36,19 @@ export function mapDtoToRows(
   const out: InventoryRow[] = [];
 
   for (const r of rowsRaw) {
-    // row 側に tbId が入っていない実装も多いので、ある時だけフィルタする
-    const rowTbId = asString(
-      r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id,
-    );
+    // ✅ tbId は row に無いケースがあるので「ある時だけ」フィルタ
+    const rowTbId = asString(r?.tokenBlueprintId);
     if (expectedTbId && rowTbId && rowTbId !== expectedTbId) continue;
 
-    const token = asString(r?.token ?? r?.Token) || fallbackToken || "-";
+    const token = asString(r?.token) || fallbackToken || "-";
 
     out.push({
       token,
-      modelNumber: asString(r?.modelNumber ?? r?.ModelNumber ?? ""),
-      size: asString(r?.size ?? r?.Size ?? ""),
-      color: asString(r?.color ?? r?.Color ?? ""),
-      rgb: (r?.rgb ?? r?.RGB ?? null) as any,
-      stock: Number(r?.stock ?? r?.Stock ?? 0),
+      modelNumber: asString(r?.modelNumber),
+      size: asString(r?.size),
+      color: asString(r?.color),
+      rgb: (r?.rgb ?? null) as any,
+      stock: Number(r?.stock ?? 0),
     });
   }
 
@@ -74,7 +77,7 @@ export function mergeDetailDTOs(
   // ✅ tokenBlueprint patch を確定
   const tokenBlueprintPatch = pickTokenBlueprintPatch(dtos, tokenBlueprintPatchExternal);
 
-  // ✅ token 名の fallback は tokenBlueprintPatch を使う（picker縮小に合わせて）
+  // ✅ token 名の fallback は tokenBlueprintPatch を使う
   const fallbackTokenName = asString((tokenBlueprintPatch as any)?.tokenName);
 
   // rows を結合 → 同一キーで合算（表示安定）

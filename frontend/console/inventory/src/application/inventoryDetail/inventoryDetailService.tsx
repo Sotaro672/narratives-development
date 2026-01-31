@@ -1,5 +1,6 @@
 // frontend/console/inventory/src/application/inventoryDetail/inventoryDetailService.tsx
 // ✅ 統合版: query + barrel（既存 import を壊さない）
+// ※ fallback / compatible は戻さず、トークンアイコン取得に必要な tokenBlueprintPatch だけ復旧
 
 import {
   fetchInventoryIDsByProductAndTokenDTO,
@@ -10,11 +11,11 @@ import {
 } from "../../infrastructure/http/inventoryRepositoryHTTP";
 
 import type { InventoryDetailViewModel } from "./inventoryDetail.types";
-import { asString, uniqStrings } from "./inventoryDetail.utils";
+import { asString } from "./inventoryDetail.utils";
 import { mergeDetailDTOs } from "./inventoryDetail.mapper";
 
 // ------------------------------------------------------------
-// Re-export types (backward-compatible)
+// Re-export types
 // ------------------------------------------------------------
 export type {
   ProductBlueprintPatchDTOEx,
@@ -25,7 +26,7 @@ export type {
 // ============================================================
 // Query Request (Application Layer)
 // - pbId + tbId -> inventoryIds -> details -> merge
-// - tokenBlueprint patch を追加で取得して ViewModel に載せる
+// - ✅ tokenBlueprintPatch を取得して iconUrl を拾えるようにする（最小復旧）
 // ============================================================
 
 export async function queryInventoryDetailByProductAndToken(
@@ -40,11 +41,11 @@ export async function queryInventoryDetailByProductAndToken(
 
   // ① inventoryIds 解決
   const idsDto = await fetchInventoryIDsByProductAndTokenDTO(pbId, tbId);
-  const idsFromResolver = Array.isArray((idsDto as any)?.inventoryIds)
+  const inventoryIds = Array.isArray((idsDto as any)?.inventoryIds)
     ? (idsDto as any).inventoryIds.map((x: unknown) => asString(x)).filter(Boolean)
     : [];
 
-  if (idsFromResolver.length === 0) {
+  if (inventoryIds.length === 0) {
     throw new Error(
       "inventoryIds is empty (no inventory for productBlueprintId + tokenBlueprintId)",
     );
@@ -52,7 +53,7 @@ export async function queryInventoryDetailByProductAndToken(
 
   // ② 各 inventoryId の詳細を並列取得
   const results: PromiseSettledResult<InventoryDetailDTO>[] = await Promise.allSettled(
-    idsFromResolver.map(async (id: string): Promise<InventoryDetailDTO> => {
+    inventoryIds.map(async (id: string): Promise<InventoryDetailDTO> => {
       return await fetchInventoryDetailDTO(id);
     }),
   );
@@ -61,7 +62,7 @@ export async function queryInventoryDetailByProductAndToken(
   const failed: Array<{ id: string; reason: string }> = [];
 
   results.forEach((r, idx) => {
-    const id = idsFromResolver[idx];
+    const id = inventoryIds[idx];
     if (r.status === "fulfilled") ok.push(r.value);
     else failed.push({ id, reason: String((r.reason as any)?.message ?? r.reason) });
   });
@@ -72,16 +73,7 @@ export async function queryInventoryDetailByProductAndToken(
     );
   }
 
-  // ✅ backend DTO に inventoryIds が入ってくる場合は union
-  const idsFromDTO: string[] = [];
-  for (const d of ok as any[]) {
-    const xs = Array.isArray(d?.inventoryIds) ? d.inventoryIds : [];
-    for (const x of xs) idsFromDTO.push(asString(x));
-  }
-
-  const inventoryIds = uniqStrings([...idsFromResolver, ...idsFromDTO]);
-
-  // ✅ tokenBlueprint patch を追加で取得（失敗しても detail 自体は返す）
+  // ✅ ここだけ復旧: tokenBlueprintPatch を取得（主に iconUrl 用）
   let tokenBlueprintPatch: TokenBlueprintPatchDTO | null = null;
   try {
     tokenBlueprintPatch = await fetchTokenBlueprintPatchDTO(tbId);
@@ -89,6 +81,6 @@ export async function queryInventoryDetailByProductAndToken(
     tokenBlueprintPatch = null;
   }
 
-  // ③ マージしてViewModel化
+  // ③ マージしてViewModel化（tokenBlueprintPatch を渡す）
   return mergeDetailDTOs(pbId, tbId, inventoryIds, ok, tokenBlueprintPatch);
 }

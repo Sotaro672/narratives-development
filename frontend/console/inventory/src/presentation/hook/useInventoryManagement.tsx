@@ -1,3 +1,4 @@
+//frontend\console\inventory\src\presentation\hook\useInventoryManagement.tsx
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
