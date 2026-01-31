@@ -38,6 +38,12 @@ function asString(v: any): string {
   return String(v ?? "").trim();
 }
 
+function safePick(obj: any, keys: string[]): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of keys) out[k] = obj?.[k];
+  return out;
+}
+
 export function useInventoryDetail(
   productBlueprintId: string | undefined,
   tokenBlueprintId: string | undefined,
@@ -56,9 +62,23 @@ export function useInventoryDetail(
   const pbId = React.useMemo(() => asString(productBlueprintId), [productBlueprintId]);
   const tbId = React.useMemo(() => asString(tokenBlueprintId), [tokenBlueprintId]);
 
+  // ============================================================
+  // 🔎 LOG: inputs
+  // ============================================================
+  React.useEffect(() => {
+    console.log("[useInventoryDetail] inputs", {
+      productBlueprintId,
+      tokenBlueprintId,
+      pbId,
+      tbId,
+    });
+  }, [productBlueprintId, tokenBlueprintId, pbId, tbId]);
+
   React.useEffect(() => {
     // 入力不足なら reset
     if (!pbId || !tbId) {
+      console.log("[useInventoryDetail] reset (missing ids)", { pbId, tbId });
+
       setVm(null);
       setRows([]);
       setError(null);
@@ -80,14 +100,23 @@ export function useInventoryDetail(
         setTokenPatchLoading(true);
         setTokenPatchError(null);
 
+        console.log("[useInventoryDetail] start fetch", { pbId, tbId });
+
         // ✅ 並列取得（token patch は失敗しても画面を落とさない）
         const mergedPromise = queryInventoryDetailByProductAndToken(pbId, tbId);
+
         const tokenPatchPromise = fetchTokenBlueprintPatchDTO(tbId)
           .then((p) => p)
           .catch((e: any) => {
             if (cancelled) return null;
 
             const msg = String(e?.message ?? e);
+            console.warn("[useInventoryDetail] token patch fetch failed", {
+              tbId,
+              message: msg,
+              error: e,
+            });
+
             setTokenPatchError(msg);
             return null;
           });
@@ -96,7 +125,62 @@ export function useInventoryDetail(
 
         if (cancelled) return;
 
-        const nextRows = Array.isArray(merged.rows) ? merged.rows : [];
+        // ============================================================
+        // 🔎 LOG: merged result + rows (what UI actually receives)
+        // ============================================================
+        const mergedAny: any = merged as any;
+        console.log("[useInventoryDetail] merged vm (shape)", {
+          keys: Object.keys(mergedAny ?? {}),
+          inventoryId: mergedAny?.inventoryId,
+          inventoryIdsCount: Array.isArray(mergedAny?.inventoryIds)
+            ? mergedAny.inventoryIds.length
+            : 0,
+          productBlueprintId: mergedAny?.productBlueprintId,
+          tokenBlueprintId: mergedAny?.tokenBlueprintId,
+          modelId: mergedAny?.modelId,
+          totalStock: mergedAny?.totalStock,
+          rowsCount: Array.isArray(mergedAny?.rows) ? mergedAny.rows.length : 0,
+        });
+
+        const nextRows = Array.isArray(mergedAny?.rows) ? mergedAny.rows : [];
+        console.log("[useInventoryDetail] rows sample", {
+          count: nextRows.length,
+          sample: nextRows.slice(0, 5),
+          // row で本当に使っている（or 使いそうな）キーの確認
+          pickedSample: nextRows.slice(0, 5).map((r: any) =>
+            safePick(r, [
+              "tokenBlueprintId",
+              "token",
+              "modelNumber",
+              "size",
+              "color",
+              "rgb",
+              "stock",
+            ]),
+          ),
+        });
+
+        // ============================================================
+        // 🔎 LOG: token patch (what TokenBlueprintCard gets as source)
+        // ============================================================
+        const tbPatchAny: any = tbPatch as any;
+        console.log("[useInventoryDetail] token blueprint patch", {
+          exists: !!tbPatchAny,
+          keys: tbPatchAny ? Object.keys(tbPatchAny) : [],
+          picked: safePick(tbPatchAny, [
+            "tokenName",
+            "name",
+            "TokenName",
+            "symbol",
+            "brandId",
+            "brandName",
+            "description",
+            "minted",
+            "metadataUri",
+            "iconUrl",
+          ]),
+        });
+
         setVm(merged);
         setRows(nextRows);
 
@@ -106,6 +190,12 @@ export function useInventoryDetail(
         if (cancelled) return;
 
         const msg = String(e?.message ?? e);
+        console.error("[useInventoryDetail] main fetch failed", {
+          pbId,
+          tbId,
+          message: msg,
+          error: e,
+        });
 
         setError(msg);
         setVm(null);
@@ -118,6 +208,11 @@ export function useInventoryDetail(
 
         setLoading(false);
         setTokenPatchLoading(false);
+
+        console.log("[useInventoryDetail] done", {
+          pbId,
+          tbId,
+        });
       }
     })();
 
@@ -133,7 +228,7 @@ export function useInventoryDetail(
     const id = tbId;
     const p: any = tokenBlueprintPatch ?? {};
 
-    return {
+    const initial = {
       id,
       tokenName: String(p?.tokenName ?? p?.name ?? "").trim(),
       TokenName: String(p?.TokenName ?? "").trim(),
@@ -143,10 +238,39 @@ export function useInventoryDetail(
       description: String(p?.description ?? "").trim(),
       minted: typeof p?.minted === "boolean" ? p.minted : false,
     };
+
+    // ============================================================
+    // 🔎 LOG: what is passed into useTokenBlueprintCard (initials)
+    // ============================================================
+    console.log("[useInventoryDetail] tokenCard initialTokenBlueprint", {
+      tbId,
+      initial,
+      sourcePatchPicked: safePick(p, [
+        "tokenName",
+        "name",
+        "TokenName",
+        "symbol",
+        "brandId",
+        "brandName",
+        "description",
+        "minted",
+        "iconUrl",
+      ]),
+    });
+
+    return initial;
   }, [tbId, tokenBlueprintPatch]);
 
   const initialIconUrl = React.useMemo(() => {
-    return String((tokenBlueprintPatch as any)?.iconUrl ?? "").trim();
+    const url = String((tokenBlueprintPatch as any)?.iconUrl ?? "").trim();
+
+    // 🔎 LOG: icon url used by TokenBlueprintCard
+    console.log("[useInventoryDetail] tokenCard initialIconUrl", {
+      tbId,
+      iconUrl: url,
+    });
+
+    return url;
   }, [tbId, tokenBlueprintPatch]);
 
   const tokenCardHook = useTokenBlueprintCard({
@@ -155,6 +279,26 @@ export function useInventoryDetail(
     initialIconUrl,
     initialEditMode: false,
   });
+
+  // 🔎 LOG: tokenCard vm minimal surface (to shrink pickers later)
+  React.useEffect(() => {
+    if (!tbId) return;
+    console.log("[useInventoryDetail] tokenCardHook vm (keys)", {
+      tbId,
+      keys: Object.keys((tokenCardHook as any)?.vm ?? {}),
+      vmPicked: safePick((tokenCardHook as any)?.vm, [
+        "id",
+        "tokenName",
+        "symbol",
+        "brandId",
+        "brandName",
+        "description",
+        "minted",
+        "iconUrl",
+        "editMode",
+      ]),
+    });
+  }, [tbId, tokenCardHook.vm]);
 
   const tokenCard = tbId
     ? {

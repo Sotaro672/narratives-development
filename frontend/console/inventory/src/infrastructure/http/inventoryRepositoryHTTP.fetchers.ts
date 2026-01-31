@@ -23,7 +23,6 @@ import { s } from "./inventoryRepositoryHTTP.utils";
 
 import {
   normalizeInventoryListRow,
-  mapInventoryProductSummary,
   mapPrintedInventorySummaries,
   mapInventoryIDsByProductAndToken,
   mapTokenBlueprintPatch,
@@ -56,6 +55,10 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
  * ProductBlueprint ID から productName / brandId / assigneeId を取得
  *
  * GET /product-blueprints/{id}
+ *
+ * NOTE:
+ * mapper 縮小により mapInventoryProductSummary を削除したため、
+ * ここで直接最小変換する。
  */
 export async function fetchInventoryProductSummary(
   productBlueprintId: string,
@@ -64,14 +67,23 @@ export async function fetchInventoryProductSummary(
   if (!pbId) throw new Error("productBlueprintId is empty");
 
   const data = await getProductBlueprintRaw(pbId);
-  return mapInventoryProductSummary(data);
+
+  // ✅ types 的に必須の brandId / assigneeId は空文字で埋める（B案の方針）
+  return {
+    id: s(data?.id ?? pbId),
+    productName: s(data?.productName),
+    brandId: s(data?.brandId), // backend が返すなら入る、無いなら ""
+    brandName: data?.brandName ? s(data.brandName) : undefined,
+    assigneeId: s(data?.assigneeId),
+    assigneeName: data?.assigneeName ? s(data.assigneeName) : undefined,
+  };
 }
 
 /**
  * 在庫一覧（ヘッダー用）:
  * printed == "printed" の ProductBlueprint 一覧を取得
  *
- * GET /product-blueprints/printed
+ * B案: 実態は /inventory を叩いて pbId 単位で dedup した summary を作る
  */
 export async function fetchPrintedInventorySummaries(): Promise<InventoryProductSummary[]> {
   const data = await getPrintedProductBlueprintsRaw();

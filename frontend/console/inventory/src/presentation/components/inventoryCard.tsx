@@ -18,7 +18,6 @@ import {
 
 import "../styles/inventory.css";
 
-// ✅ レイヤー違反解消: Row 型は application に寄せ、presentation は参照する
 import type { InventoryRow } from "../../application/inventoryTypes";
 
 import { rgbIntToHex } from "../../../../shell/src/shared/util/color";

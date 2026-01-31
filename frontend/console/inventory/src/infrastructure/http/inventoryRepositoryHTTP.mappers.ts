@@ -12,36 +12,31 @@ import type {
   InventoryIDsByProductAndTokenDTO,
 } from "./inventoryRepositoryHTTP.types";
 
-import {
-  s,
-  n,
-  toOptionalString,
-  toRgbNumberOrNull,
-  toProductIdTagString,
-} from "./inventoryRepositoryHTTP.utils";
+import { s, n, toRgbNumberOrNull, toProductIdTagString } from "./inventoryRepositoryHTTP.utils";
 
 // =========================================================
-// ✅ B案（暫定）: /inventory だけで回す前提で縮小
-// - 返却の shape が安定している前提で「揺れ吸収」を削除
-// - ただし Detail / ListCreate は現状維持（縮小しすぎると別画面が壊れやすい）
+// ✅ B案（暫定）: /inventory だけで回す前提で縮小（実測ログ準拠）
+// - 互換（揺れ吸収 / Pascal / snake / 別名）は削除
+// - 実際に参照されているキーだけ読む
+// - ただし別画面を壊しにくいよう、"存在している機能" は残す（縮小版）
 // =========================================================
 
 // ---------------------------------------------------------
 // Inventory List Row mapper（縮小）
+// 期待 row:
+// { productBlueprintId, productName, tokenBlueprintId, tokenName, modelNumber, availableStock, reservedCount }
 // ---------------------------------------------------------
 export function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null {
   const productBlueprintId = s(raw?.productBlueprintId);
   const tokenBlueprintId = s(raw?.tokenBlueprintId);
 
-  // ✅ 必須
   if (!productBlueprintId || !tokenBlueprintId) return null;
 
   const productName = s(raw?.productName);
   const tokenName = s(raw?.tokenName);
   const modelNumber = s(raw?.modelNumber);
 
-  // ✅ 在庫数(表示)は availableStock を正（無ければ stock にフォールバック）
-  const availableStock = n(raw?.availableStock ?? raw?.stock);
+  const availableStock = n(raw?.availableStock); // 実測ログ: availableStock が来ている
   const reservedCount = n(raw?.reservedCount);
 
   return {
@@ -50,50 +45,44 @@ export function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null 
     tokenBlueprintId,
     tokenName,
     modelNumber,
-    stock: availableStock, // 互換: stock は (= availableStock)
+    stock: availableStock, // ✅ type の都合で保持（= availableStock）
     availableStock,
     reservedCount,
   };
 }
 
 // ---------------------------------------------------------
-// ProductBlueprintPatch mapper（現状維持）
+// ProductBlueprintPatch mapper（縮小）
+// 実測ログの merged vm が参照するのは productName/brandId/brandName 程度だが、
+// 既存型に合わせて最小限 + productIdTag だけ維持。
 // ---------------------------------------------------------
 export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
-  const patchRaw = (raw ?? {}) as any;
+  const p = (raw ?? {}) as any;
 
   return {
-    productName:
-      patchRaw.productName !== undefined ? (patchRaw.productName as any) : undefined,
+    productName: p.productName !== undefined ? (p.productName as any) : undefined,
 
-    brandId: patchRaw.brandId !== undefined ? (patchRaw.brandId as any) : undefined,
-    brandName:
-      patchRaw.brandName !== undefined
-        ? (patchRaw.brandName as any)
-        : patchRaw.brand !== undefined
-          ? (patchRaw.brand as any)
-          : undefined,
+    brandId: p.brandId !== undefined ? (p.brandId as any) : undefined,
+    brandName: p.brandName !== undefined ? (p.brandName as any) : undefined,
 
-    itemType: patchRaw.itemType !== undefined ? String(patchRaw.itemType) : undefined,
-    fit: patchRaw.fit !== undefined ? (patchRaw.fit as any) : undefined,
-    material: patchRaw.material !== undefined ? (patchRaw.material as any) : undefined,
-    weight:
-      patchRaw.weight !== undefined && patchRaw.weight !== null
-        ? Number(patchRaw.weight)
-        : undefined,
-    qualityAssurance: Array.isArray(patchRaw.qualityAssurance)
-      ? patchRaw.qualityAssurance.map((x: any) => String(x))
+    // 他画面で落ちやすいので最低限は残す（互換吸収はしない）
+    itemType: p.itemType !== undefined ? String(p.itemType) : undefined,
+    fit: p.fit !== undefined ? (p.fit as any) : undefined,
+    material: p.material !== undefined ? (p.material as any) : undefined,
+    weight: p.weight !== undefined && p.weight !== null ? Number(p.weight) : undefined,
+    qualityAssurance: Array.isArray(p.qualityAssurance)
+      ? p.qualityAssurance.map((x: any) => String(x))
       : undefined,
 
-    productIdTag: toProductIdTagString(patchRaw.productIdTag),
-
-    assigneeId:
-      patchRaw.assigneeId !== undefined ? (patchRaw.assigneeId as any) : undefined,
+    productIdTag: toProductIdTagString(p.productIdTag),
+    assigneeId: p.assigneeId !== undefined ? (p.assigneeId as any) : undefined,
   };
 }
 
 // ---------------------------------------------------------
-// TokenBlueprintPatch mapper（現状維持）
+// TokenBlueprintPatch mapper（縮小）
+// 実測ログで参照されるキー（8個）に限定:
+// tokenName, symbol, brandId, brandName, description, minted, metadataUri, iconUrl
 // ---------------------------------------------------------
 export function mapTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefined {
   if (raw === undefined || raw === null) return undefined;
@@ -101,7 +90,7 @@ export function mapTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undef
   const p = raw as any;
 
   const mintedRaw = p?.minted;
-  const minted =
+  const minted: boolean | null | undefined =
     mintedRaw === undefined
       ? undefined
       : mintedRaw === null
@@ -111,49 +100,25 @@ export function mapTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undef
           : String(mintedRaw).trim().toLowerCase() === "true";
 
   const iconUrl = s(p?.iconUrl);
-  const metadataUri = s(p?.metadataUri ?? p?.metadataURI);
+  const metadataUri = s(p?.metadataUri);
 
   return {
-    tokenName:
-      p?.tokenName !== undefined
-        ? (p.tokenName as any)
-        : p?.name !== undefined
-          ? (p.name as any)
-          : undefined,
+    tokenName: p?.tokenName !== undefined ? (p.tokenName as any) : undefined,
     symbol: p?.symbol !== undefined ? (p.symbol as any) : undefined,
     brandId: p?.brandId !== undefined ? (p.brandId as any) : undefined,
     brandName: p?.brandName !== undefined ? (p.brandName as any) : undefined,
     description: p?.description !== undefined ? (p.description as any) : undefined,
     minted: minted as any,
-    metadataUri: metadataUri ? metadataUri : undefined,
-    iconUrl: iconUrl ? iconUrl : undefined,
+    metadataUri: metadataUri ? (metadataUri as any) : undefined,
+    iconUrl: iconUrl ? (iconUrl as any) : undefined,
   };
 }
 
 // ---------------------------------------------------------
 // Product summary mapper（縮小）
-// - B案: /inventory の row から printed summaries を作る前提
-// - types 的に brandId / assigneeId は必須なので "" を入れる
+// B案: /inventory の row から printed summaries を作る前提
+// 期待 row: { productBlueprintId, productName }
 // ---------------------------------------------------------
-export function mapInventoryProductSummary(data: any): InventoryProductSummary {
-  // 互換用の単体mapper（今はほぼ使わない想定）
-  return {
-    id: s(data?.id ?? data?.productBlueprintId),
-    productName: s(data?.productName),
-    brandId: s(data?.brandId),
-    brandName: data?.brandName ? s(data.brandName) : undefined,
-    assigneeId: s(data?.assigneeId),
-    assigneeName: data?.assigneeName ? s(data.assigneeName) : undefined,
-  };
-}
-
-/**
- * B案: GET /inventory の配列を受け取り、
- * productBlueprintId 単位で dedup した product summaries を返す。
- *
- * 期待 row:
- * { productBlueprintId, productName, ... }
- */
 export function mapPrintedInventorySummaries(data: any): InventoryProductSummary[] {
   if (!Array.isArray(data)) return [];
 
@@ -177,14 +142,15 @@ export function mapPrintedInventorySummaries(data: any): InventoryProductSummary
 }
 
 // ---------------------------------------------------------
-// Inventory IDs mapper（現状維持）
+// Inventory IDs mapper（縮小）
+// 期待 shape: { inventoryIds: string[] }
 // ---------------------------------------------------------
 export function mapInventoryIDsByProductAndToken(
   productBlueprintId: string,
   tokenBlueprintId: string,
   data: any,
 ): InventoryIDsByProductAndTokenDTO {
-  const idsRaw = Array.isArray(data) ? data : data?.inventoryIds;
+  const idsRaw = data?.inventoryIds;
   const inventoryIds = Array.isArray(idsRaw)
     ? idsRaw.map((x: any) => s(x)).filter(Boolean)
     : [];
@@ -197,31 +163,28 @@ export function mapInventoryIDsByProductAndToken(
 }
 
 // ---------------------------------------------------------
-// ListCreate mapper（現状維持）
+// ListCreate mapper（縮小）
+// 互換吸収を削除し、想定キーのみ読む
 // ---------------------------------------------------------
 export function mapListCreateDTO(data: any): ListCreateDTO {
-  const rawRows: any[] = Array.isArray(data?.priceRows)
-    ? data.priceRows
-    : Array.isArray(data?.PriceRows)
-      ? data.PriceRows
-      : [];
+  const rawRows: any[] = Array.isArray(data?.priceRows) ? data.priceRows : [];
 
   const priceRows: ListCreatePriceRowDTO[] = rawRows.flatMap((r: any) => {
-    const modelId = s(r?.modelId ?? r?.ModelID ?? r?.modelID);
+    const modelId = s(r?.modelId);
     if (!modelId) return [];
 
-    const rgbVal = toRgbNumberOrNull(r?.rgb ?? r?.RGB);
-    const stock = n(r?.stock ?? r?.Stock);
+    const rgbVal = toRgbNumberOrNull(r?.rgb);
+    const stock = n(r?.stock);
 
-    const rawPrice = r?.price ?? r?.Price;
-    const hasPriceField = r?.price !== undefined || r?.Price !== undefined;
+    const hasPriceField = r?.price !== undefined;
+    const rawPrice = r?.price;
     const price: number | null | undefined =
       !hasPriceField ? undefined : rawPrice === null ? null : n(rawPrice);
 
     const row: ListCreatePriceRowDTO = {
       modelId,
-      size: s(r?.size ?? r?.Size) || "-",
-      color: s(r?.color ?? r?.Color) || "-",
+      size: s(r?.size) || "-",
+      color: s(r?.color) || "-",
       stock,
       ...(rgbVal === undefined ? {} : { rgb: rgbVal }),
       ...(price === undefined ? {} : { price }),
@@ -230,76 +193,60 @@ export function mapListCreateDTO(data: any): ListCreateDTO {
     return [row];
   });
 
-  const totalStockRaw = data?.totalStock ?? data?.TotalStock;
+  const totalStockRaw = data?.totalStock;
 
   return {
-    inventoryId: data?.inventoryId
-      ? s(data.inventoryId)
-      : data?.InventoryID
-        ? s(data.InventoryID)
-        : undefined,
-    productBlueprintId: data?.productBlueprintId
-      ? s(data.productBlueprintId)
-      : data?.ProductBlueprintID
-        ? s(data.ProductBlueprintID)
-        : undefined,
-    tokenBlueprintId: data?.tokenBlueprintId
-      ? s(data.tokenBlueprintId)
-      : data?.TokenBlueprintID
-        ? s(data.TokenBlueprintID)
-        : undefined,
+    inventoryId: data?.inventoryId ? s(data.inventoryId) : undefined,
+    productBlueprintId: data?.productBlueprintId ? s(data.productBlueprintId) : undefined,
+    tokenBlueprintId: data?.tokenBlueprintId ? s(data.tokenBlueprintId) : undefined,
 
-    productBrandName: s(data?.productBrandName ?? data?.ProductBrandName),
-    productName: s(data?.productName ?? data?.ProductName),
+    productBrandName: s(data?.productBrandName),
+    productName: s(data?.productName),
 
-    tokenBrandName: s(data?.tokenBrandName ?? data?.TokenBrandName),
-    tokenName: s(data?.tokenName ?? data?.TokenName),
+    tokenBrandName: s(data?.tokenBrandName),
+    tokenName: s(data?.tokenName),
 
     priceRows,
     totalStock:
-      totalStockRaw === undefined || totalStockRaw === null
-        ? undefined
-        : n(totalStockRaw),
+      totalStockRaw === undefined || totalStockRaw === null ? undefined : n(totalStockRaw),
   };
 }
 
 // ---------------------------------------------------------
-// InventoryDetail mapper（現状維持）
+// InventoryDetail mapper（縮小）
+// 実測ログで rows は { token:'-', modelNumber,size,color,rgb,stock } を参照。
+// tokenBlueprintId は undefined でもOK（実測ログで undefined）
 // ---------------------------------------------------------
-export function mapInventoryDetailDTO(
-  data: any,
-  requestedId: string,
-): InventoryDetailDTO {
+export function mapInventoryDetailDTO(data: any, requestedId: string): InventoryDetailDTO {
   const patch = mapProductBlueprintPatch(data?.productBlueprintPatch);
   const tokenBlueprintPatch = mapTokenBlueprintPatch(data?.tokenBlueprintPatch);
 
   const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
     ? data.rows.map((r: any) => ({
-        tokenBlueprintId: toOptionalString(
-          r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id,
-        ),
-        token: toOptionalString(r?.token ?? r?.Token),
-        modelNumber: s(r?.modelNumber ?? r?.ModelNumber),
-        size: s(r?.size ?? r?.Size),
-        color: s(r?.color ?? r?.Color),
-        rgb: toRgbNumberOrNull(r?.rgb ?? r?.RGB),
-        stock: Number(r?.stock ?? r?.Stock ?? 0),
+        tokenBlueprintId: r?.tokenBlueprintId ? s(r.tokenBlueprintId) : undefined,
+        token: r?.token ? s(r.token) : undefined,
+        modelNumber: s(r?.modelNumber),
+        size: s(r?.size),
+        color: s(r?.color),
+        rgb: toRgbNumberOrNull(r?.rgb),
+        stock: n(r?.stock),
       }))
     : [];
 
   return {
-    inventoryId: s(data?.inventoryId ?? data?.id ?? requestedId),
+    inventoryId: s(data?.inventoryId ?? requestedId),
     inventoryIds: Array.isArray(data?.inventoryIds)
       ? data.inventoryIds.map((x: any) => s(x)).filter(Boolean)
       : undefined,
 
-    tokenBlueprintId: s(data?.tokenBlueprintId ?? data?.TokenBlueprintID),
-    productBlueprintId: s(data?.productBlueprintId ?? data?.ProductBlueprintID),
-    modelId: s(data?.modelId ?? data?.ModelID),
+    tokenBlueprintId: s(data?.tokenBlueprintId),
+    productBlueprintId: s(data?.productBlueprintId),
+    modelId: s(data?.modelId),
 
     productBlueprintPatch: patch,
     tokenBlueprintPatch,
 
+    // ✅ この2つは実測ログ上、vm 側で必須ではないので「そのまま通す」だけ
     tokenBlueprint: data?.tokenBlueprint
       ? {
           id: s(data.tokenBlueprint.id),
@@ -316,7 +263,7 @@ export function mapInventoryDetailDTO(
       : undefined,
 
     rows,
-    totalStock: Number(data?.totalStock ?? 0),
+    totalStock: n(data?.totalStock),
     updatedAt: data?.updatedAt ? String(data.updatedAt) : undefined,
   };
 }

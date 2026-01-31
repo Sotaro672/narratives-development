@@ -10,7 +10,6 @@ import { asString } from "./inventoryDetail.utils";
 import {
   pickPatch,
   pickTokenBlueprintPatch,
-  pickTokenNameFromDTO,
   pickUpdatedAtMax,
   pickBrandId,
   pickBrandName,
@@ -75,6 +74,9 @@ export function mergeDetailDTOs(
   // ✅ tokenBlueprint patch を確定
   const tokenBlueprintPatch = pickTokenBlueprintPatch(dtos, tokenBlueprintPatchExternal);
 
+  // ✅ token 名の fallback は tokenBlueprintPatch を使う（picker縮小に合わせて）
+  const fallbackTokenName = asString((tokenBlueprintPatch as any)?.tokenName);
+
   // rows を結合 → 同一キーで合算（表示安定）
   const agg = new Map<
     string,
@@ -82,8 +84,6 @@ export function mergeDetailDTOs(
   >();
 
   for (const d of dtos as any[]) {
-    const fallbackTokenName = pickTokenNameFromDTO(d);
-
     for (const r of mapDtoToRows(d as any, { expectedTokenBlueprintId: tbId, fallbackTokenName })) {
       const token = asString(r.token) || "-";
       const modelNumber = asString(r.modelNumber) || "-";

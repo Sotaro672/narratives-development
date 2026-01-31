@@ -10,58 +10,55 @@ import type {
 } from "./inventoryDetail.types";
 import { asString } from "./inventoryDetail.utils";
 
+/**
+ * ProductBlueprintPatch:
+ * DTO 配列の中で最初に見つかった productBlueprintPatch を返す。
+ * （B案 + 互換削除: 揺れ吸収なし）
+ */
 export function pickPatch(dtos: InventoryDetailDTO[]): ProductBlueprintPatchDTOEx {
   const found =
     dtos.find(
-      (d) =>
-        d?.productBlueprintPatch && Object.keys(d.productBlueprintPatch).length > 0,
+      (d) => d?.productBlueprintPatch && Object.keys(d.productBlueprintPatch).length > 0,
     )?.productBlueprintPatch ?? {};
-
-  // brandName 等の “増えがちなフィールド” を any 経由でも保持する
-  return (found ?? {}) as any;
+  return found as any;
 }
 
-// ✅ tokenBlueprint patch を DTO群 or 外部取得結果から拾う
+/**
+ * TokenBlueprintPatch:
+ * B案では external(別取得) が実体なので external 優先。
+ * DTO に埋め込みがあれば fallback で拾う。
+ */
 export function pickTokenBlueprintPatch(
   dtos: InventoryDetailDTO[],
   external?: TokenBlueprintPatchDTO | null,
 ): TokenBlueprintPatchDTOEx | undefined {
-  // 1) DTO 内（embedded）を優先…ただし「実体が薄い / 期待キーが無い」場合があるので注意して扱う
   const embedded =
-    (dtos.find(
+    dtos.find(
       (d: any) => d?.tokenBlueprintPatch && Object.keys(d.tokenBlueprintPatch).length > 0,
-    ) as any)?.tokenBlueprintPatch ?? undefined;
+    )?.tokenBlueprintPatch ?? undefined;
 
-  const embeddedTokenName = asString((embedded as any)?.tokenName ?? (embedded as any)?.name);
-  const embeddedSymbol = asString((embedded as any)?.symbol);
-
-  // embedded が “あるが中身が空っぽ” っぽい場合は external を優先
-  const shouldPreferExternal =
-    (!!embedded && !embeddedTokenName && !embeddedSymbol) || embedded === null;
-
-  const base = (shouldPreferExternal ? (external ?? embedded) : (embedded ?? external)) as any;
+  const base = (external ?? embedded) as any;
   if (!base) return undefined;
 
   return {
     ...base,
-    tokenName: asString(base?.tokenName ?? base?.name) || undefined,
+    tokenName: asString(base?.tokenName) || undefined,
+    symbol: asString(base?.symbol) || undefined,
     brandId: asString(base?.brandId) || undefined,
     brandName: asString(base?.brandName) || undefined,
+    description: asString(base?.description) || undefined,
+    metadataUri: asString(base?.metadataUri) || undefined,
+    iconUrl: asString(base?.iconUrl) || undefined,
+    minted: typeof base?.minted === "boolean" ? base.minted : base?.minted ?? undefined,
   } as any;
 }
 
-export function pickTokenNameFromDTO(dto: any): string {
-  return (
-    asString(dto?.tokenBlueprint?.name) ||
-    asString(dto?.TokenBlueprint?.name) ||
-    asString(dto?.tokenBlueprintName) ||
-    ""
-  );
-}
-
+/**
+ * updatedAt の最大（文字列比較でOKなフォーマット前提: ISO8601）
+ */
 export function pickUpdatedAtMax(dtos: InventoryDetailDTO[]): string | undefined {
   let maxUpdated: string | undefined = undefined;
-  for (const d of dtos as any[]) {
+  for (const d of dtos) {
     const t = d?.updatedAt ? String(d.updatedAt) : "";
     if (!t) continue;
     if (!maxUpdated || t > maxUpdated) maxUpdated = t;
@@ -69,20 +66,17 @@ export function pickUpdatedAtMax(dtos: InventoryDetailDTO[]): string | undefined
   return maxUpdated;
 }
 
-// Patch から “ありがちな揺れ” を吸収して brandId/brandName/productName を抜く
+/** Patch から brandId を抜く（互換削除） */
 export function pickBrandId(patch: any): string {
-  return (
-    asString(patch?.brandId) ||
-    asString(patch?.BrandID) ||
-    asString(patch?.BrandId) ||
-    ""
-  );
+  return asString(patch?.brandId);
 }
 
+/** Patch から brandName を抜く（互換削除） */
 export function pickBrandName(patch: any): string {
-  return asString(patch?.brandName) || asString(patch?.BrandName) || "";
+  return asString(patch?.brandName);
 }
 
+/** Patch から productName を抜く（互換削除） */
 export function pickProductName(patch: any): string {
-  return asString(patch?.productName) || asString(patch?.ProductName) || "";
+  return asString(patch?.productName);
 }
