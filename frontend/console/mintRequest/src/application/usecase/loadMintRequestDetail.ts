@@ -1,29 +1,9 @@
 // frontend/console/mintRequest/src/application/usecase/loadMintRequestDetail.ts
 
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-} from "../../infrastructure/api/mintRequestApi";
-
-import {
-  fetchInspectionByProductionIdHTTP,
-  fetchMintByInspectionIdHTTP,
-  fetchProductBlueprintIdByProductionIdHTTP,
-  fetchProductBlueprintPatchHTTP,
-  fetchBrandsForMintHTTP,
-  fetchTokenBlueprintsByBrandHTTP,
-} from "../../infrastructure/repository";
-
-// ✅ tokenBlueprint patch（Inventory 側の query endpoint を利用）
-// NOTE: 3層厳密化する場合は infrastructure/adapter に隔離する想定だが、
-// まずは互換優先で直接参照（段階移行用）
-import {
-  fetchTokenBlueprintPatchDTO,
-  type TokenBlueprintPatchDTO,
-} from "../../../../inventory/src/infrastructure/http/inventoryRepositoryHTTP";
+import type { MintRequestRepository } from "../port/MintRequestRepository";
 
 // ============================================================
-// Types (Detail model / DTO-ish)
+// Types (Detail model / DTO-ish)  ※ application の「画面用 Read Model」
 // ============================================================
 
 export type ProductBlueprintPatchDTO = {
@@ -51,6 +31,14 @@ export type TokenBlueprintOption = {
   name: string;
   symbol: string;
   iconUrl?: string;
+};
+
+export type TokenBlueprintPatchDTO = {
+  tokenName?: string | null;
+  brandName?: string | null;
+  symbol?: string | null;
+  description?: string | null;
+  iconUrl?: string | null;
 };
 
 export type MintInfo = {
@@ -85,8 +73,9 @@ export type ModelInspectionRow = {
 export type MintRequestDetailModel = {
   requestId: string;
 
-  batch: InspectionBatchDTO | null;
-  mint: MintDTO | null;
+  // applicationは infra DTO を知らない。unknown を返して presentation 側で必要なら型付けする。
+  batch: unknown | null;
+  mint: unknown | null;
 
   mintInfo: MintInfo | null;
 
@@ -102,7 +91,7 @@ export type MintRequestDetailModel = {
 };
 
 // ============================================================
-// Small helpers
+// Small helpers (pure)
 // ============================================================
 
 export function asNonEmptyString(v: any): string {
@@ -132,8 +121,9 @@ export function extractProductBlueprintIdFromBatch(batch: any): string {
 }
 
 export async function resolveProductBlueprintIdByRequestId(
+  repo: MintRequestRepository,
   requestId: string,
-  batch: InspectionBatchDTO | null,
+  batch: unknown | null,
 ): Promise<string> {
   const rid = String(requestId ?? "").trim();
   if (!rid) return "";
@@ -141,7 +131,7 @@ export async function resolveProductBlueprintIdByRequestId(
   const pbFromBatch = extractProductBlueprintIdFromBatch(batch as any);
   if (pbFromBatch) return pbFromBatch;
 
-  const pbFromProduction = await fetchProductBlueprintIdByProductionIdHTTP(rid).catch(
+  const pbFromProduction = await repo.fetchProductBlueprintIdByProductionId(rid).catch(
     () => null,
   );
   return asNonEmptyString(pbFromProduction);
@@ -151,9 +141,7 @@ export async function resolveProductBlueprintIdByRequestId(
 // model rows（modelId 集計のみ）
 // -------------------------------
 
-export function buildModelRowsFromBatch(
-  batch: InspectionBatchDTO | null,
-): ModelInspectionRow[] {
+export function buildModelRowsFromBatch(batch: unknown | null): ModelInspectionRow[] {
   const inspections: any[] = Array.isArray((batch as any)?.inspections)
     ? ((batch as any).inspections as any[])
     : [];
@@ -212,10 +200,13 @@ export function extractMintInfoFromMintDTO(m: any): MintInfo | null {
   const onChainTxSignature = asNonEmptyString(m.onChainTxSignature);
   const scheduledBurnDate = asNonEmptyString(asMaybeISO(m.scheduledBurnDate));
 
+  const requestedByName = asNonEmptyString(m.requestedByName);
+
   return {
     id,
     brandId,
     tokenBlueprintId,
+    requestedByName: requestedByName ? requestedByName : null,
     createdBy,
     createdByName: createdByName ? createdByName : null,
     createdAt,
@@ -236,10 +227,11 @@ export function extractMintInfoFromBatch(batch: any): MintInfo | null {
 }
 
 // ============================================================
-// Usecase: Load MintRequest Detail
+// Usecase: Load MintRequest Detail（層準拠版）
 // ============================================================
 
 export async function loadMintRequestDetail(
+  repo: MintRequestRepository,
   requestId: string,
 ): Promise<MintRequestDetailModel> {
   const rid = String(requestId ?? "").trim();
@@ -261,57 +253,43 @@ export async function loadMintRequestDetail(
 
   // 1) inspection(batch) + mint
   const [batch, mint] = await Promise.all([
-    fetchInspectionByProductionIdHTTP(rid).catch(() => null),
-    fetchMintByInspectionIdHTTP(rid).catch(() => null),
+    repo.fetchInspectionByProductionId(rid).catch(() => null),
+    repo.fetchMintByInspectionId(rid).catch(() => null),
   ]);
 
   // 2) productBlueprintId
   const productBlueprintIdStr = await resolveProductBlueprintIdByRequestId(
+    repo,
     rid,
-    batch as any,
+    batch,
   ).catch(() => "");
   const productBlueprintId = productBlueprintIdStr ? productBlueprintIdStr : null;
 
   // 3) productBlueprintPatch
   const productBlueprintPatch: ProductBlueprintPatchDTO | null = productBlueprintId
-    ? await fetchProductBlueprintPatchHTTP(productBlueprintId).catch(() => null)
+    ? ((await repo.fetchProductBlueprintPatch(productBlueprintId).catch(() => null)) as any)
     : null;
 
   // 4) options: brands / tokenBlueprints
-  const brandsRaw = await fetchBrandsForMintHTTP().catch(() => []);
-  const brandOptions: BrandOption[] = (brandsRaw ?? [])
-    .map((b: any) => ({
-      id: asNonEmptyString(b?.id ?? b?.ID),
-      name: asNonEmptyString(b?.name ?? b?.Name),
-    }))
-    .filter((b) => b.id && b.name);
+  const brandOptions: BrandOption[] = (await repo.fetchBrandsForMint().catch(() => [])) as any;
 
   const selectedBrandId =
     asNonEmptyString((mint as any)?.brandId) ||
     asNonEmptyString((productBlueprintPatch as any)?.brandId) ||
     "";
 
-  const tokenBlueprintsRaw = selectedBrandId
-    ? await fetchTokenBlueprintsByBrandHTTP(selectedBrandId).catch(() => [])
+  const tokenBlueprintOptions: TokenBlueprintOption[] = selectedBrandId
+    ? ((await repo.fetchTokenBlueprintsByBrand(selectedBrandId).catch(() => [])) as any)
     : [];
 
-  const tokenBlueprintOptions: TokenBlueprintOption[] = (tokenBlueprintsRaw ?? [])
-    .map((tb: any) => ({
-      id: asNonEmptyString(tb?.id ?? tb?.ID),
-      name: asNonEmptyString(tb?.name ?? tb?.Name),
-      symbol: asNonEmptyString(tb?.symbol ?? tb?.Symbol),
-      iconUrl: asNonEmptyString(tb?.iconUrl ?? tb?.IconUrl) || undefined,
-    }))
-    .filter((tb) => tb.id && tb.name && tb.symbol);
-
-  // 5) inventory tokenBlueprintPatch（あれば）
+  // 5) tokenBlueprintPatch（repoが吸収：inventory呼び出しはinfrastructureの責務）
   const tokenBlueprintId =
     asNonEmptyString((mint as any)?.tokenBlueprintId) ||
     asNonEmptyString((batch as any)?.tokenBlueprintId) ||
     "";
 
   const tokenBlueprintPatch: TokenBlueprintPatchDTO | null = tokenBlueprintId
-    ? await fetchTokenBlueprintPatchDTO(tokenBlueprintId).catch(() => null)
+    ? ((await repo.fetchTokenBlueprintPatch(tokenBlueprintId).catch(() => null)) as any)
     : null;
 
   // 6) model rows
@@ -323,14 +301,14 @@ export async function loadMintRequestDetail(
 
   return {
     requestId: rid,
-    batch: (batch ?? null) as any,
-    mint: (mint ?? null) as any,
+    batch: batch ?? null,
+    mint: mint ?? null,
     mintInfo: mintInfo ?? null,
     productBlueprintId,
-    productBlueprintPatch: (productBlueprintPatch ?? null) as any,
+    productBlueprintPatch: productBlueprintPatch ?? null,
     brandOptions,
     tokenBlueprintOptions,
-    tokenBlueprintPatch: (tokenBlueprintPatch ?? null) as any,
+    tokenBlueprintPatch: tokenBlueprintPatch ?? null,
     modelRows,
   };
 }

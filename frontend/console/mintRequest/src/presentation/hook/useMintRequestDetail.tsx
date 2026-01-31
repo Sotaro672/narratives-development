@@ -4,39 +4,10 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-} from "../../infrastructure/api/mintRequestApi";
-
+import type { InspectionBatchDTO, MintDTO } from "../../infrastructure/api/mintRequestApi";
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-import {
-  fetchInspectionByProductionIdHTTP,
-  fetchMintByInspectionIdHTTP,
-  fetchProductBlueprintIdByProductionIdHTTP,
-  fetchProductBlueprintPatchHTTP,
-  fetchBrandsForMintHTTP,
-  fetchTokenBlueprintsByBrandHTTP,
-  postMintRequestHTTP,
-} from "../../infrastructure/repository";
-
-import {
-  fetchInventoryTokenBlueprintPatch,
-  type TokenBlueprintPatchDTO,
-} from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
-
-import {
-  safeDateLabelJa,
-  safeDateTimeLabelJa,
-} from "../../../../shell/src/shared/util/dateJa";
 import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
-
-import {
-  extractMintInfoFromBatch,
-  extractMintInfoFromMintDTO,
-  type MintInfo,
-} from "../../application/mapper/mintInfoMapper";
 
 import type {
   BrandOptionVM as BrandOption,
@@ -46,100 +17,34 @@ import type {
   TokenBlueprintCardHandlersVM as TokenBlueprintCardHandlers,
 } from "../viewModel/mintRequestDetail.vm";
 
-function extractProductBlueprintIdFromBatch(batch: any): string {
-  if (!batch) return "";
-  const v = batch.productBlueprintId ?? batch.productBlueprint?.id ?? "";
-  return asNonEmptyString(v);
-}
+import { useMintInfo } from "./useMintRequestDetail.mintSelectors";
+import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
+import { useTokenBlueprintPatch } from "./useMintRequestDetail.useTokenBlueprintPatch";
+import {
+  buildMintLabels,
+  buildProductBlueprintCardView,
+  buildTokenBlueprintCardHandlers,
+  buildTokenBlueprintCardVm,
+} from "./useMintRequestDetail.viewModels";
 
-async function resolveProductBlueprintIdByRequestId(
-  requestId: string,
-  batch: InspectionBatchDTO | null,
-): Promise<string> {
-  const rid = String(requestId ?? "").trim();
-  if (!rid) return "";
+// ✅ B設計: application/usecase + DI + port(repo interface)
+// NOTE: 今回は submit だけ submitMintRequestAndRefresh（HTTP直呼び）を採用する前提
+import { mintRequestContainer } from "../di/mintRequestContainer";
+import { getMintRequestDetail } from "../../application/usecase/getMintRequestDetail";
+import { getProductBlueprintPatch } from "../../application/usecase/getProductBlueprintPatch";
+import { listBrandsForMint } from "../../application/usecase/listBrandsForMint";
+import { listTokenBlueprintsByBrand } from "../../application/usecase/listTokenBlueprintsByBrand";
 
-  const pbFromBatch = extractProductBlueprintIdFromBatch(batch as any);
-  if (pbFromBatch) return pbFromBatch;
-
-  const pbFromProduction = await fetchProductBlueprintIdByProductionIdHTTP(rid).catch(
-    () => null,
-  );
-  return asNonEmptyString(pbFromProduction);
-}
-
-async function fetchProductBlueprintPatchById(
-  productBlueprintId: string,
-): Promise<ProductBlueprintPatchDTO | null> {
-  const id = String(productBlueprintId ?? "").trim();
-  if (!id) return null;
-
-  const patch = await fetchProductBlueprintPatchHTTP(id);
-  return (patch ?? null) as any;
-}
-
-async function fetchBrandOptionsForMint(): Promise<BrandOption[]> {
-  const brands = await fetchBrandsForMintHTTP();
-  return (brands ?? []).map((b: any) => ({
-    id: String(b?.id ?? "").trim(),
-    name: String(b?.name ?? "").trim(),
-  }));
-}
-
-async function fetchTokenBlueprintOptionsByBrand(
-  brandId: string,
-): Promise<TokenBlueprintOption[]> {
-  const id = String(brandId ?? "").trim();
-  if (!id) return [];
-
-  const list = await fetchTokenBlueprintsByBrandHTTP(id);
-
-  return (list ?? []).map((tb: any) => ({
-    id: String(tb?.id ?? "").trim(),
-    name: String(tb?.name ?? "").trim(),
-    symbol: String(tb?.symbol ?? "").trim(),
-    iconUrl: asNonEmptyString(tb?.iconUrl) || undefined,
-  }));
-}
-
-async function fetchTokenBlueprintPatchById(
-  tokenBlueprintId: string,
-): Promise<TokenBlueprintPatchDTO | null> {
-  const tbId = String(tokenBlueprintId ?? "").trim();
-  if (!tbId) return null;
-  return await fetchInventoryTokenBlueprintPatch(tbId);
-}
-
-async function submitMintRequestAndRefresh(
-  productionId: string,
-  tokenBlueprintId: string,
-  scheduledBurnDate?: string,
-): Promise<{
-  updatedBatch: InspectionBatchDTO | null;
-  refreshedMint: MintDTO | null;
-}> {
-  const pid = String(productionId ?? "").trim();
-  const tbId = String(tokenBlueprintId ?? "").trim();
-  if (!pid || !tbId) return { updatedBatch: null, refreshedMint: null };
-
-  const updated = await postMintRequestHTTP(pid, tbId, scheduledBurnDate);
-
-  let refreshed: MintDTO | null = null;
-  try {
-    refreshed = await fetchMintByInspectionIdHTTP(pid).catch(() => null);
-  } catch {
-    refreshed = null;
-  }
-
-  return {
-    updatedBatch: (updated ?? null) as any,
-    refreshedMint: (refreshed ?? null) as any,
-  };
-}
+// ✅ 採用する方（重複解消）：repo引数なし
+import { submitMintRequestAndRefresh } from "../../application/usecase/submitMintRequestAndRefresh";
 
 export function useMintRequestDetail() {
   const navigate = useNavigate();
   const { requestId } = useParams<{ requestId: string }>();
+
+  // DI（infra repo はここで組み立て、hook内ではusecase経由でしか触らない）
+  // ※ submitMintRequestAndRefresh は repo を使わないが、他のusecaseで必要なので残す
+  const { mintRequestRepo } = React.useMemo(() => mintRequestContainer(), []);
 
   const [inspectionBatch, setInspectionBatch] =
     React.useState<InspectionBatchDTO | null>(null);
@@ -166,10 +71,6 @@ export function useMintRequestDetail() {
 
   const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
 
-  // tokenBlueprint patch（iconUrl/description 等の “正” をここから取る）
-  const [tokenBlueprintPatch, setTokenBlueprintPatch] =
-    React.useState<TokenBlueprintPatchDTO | null>(null);
-
   const title = `ミント申請詳細`;
 
   const selectedBrandName = React.useMemo(() => {
@@ -177,7 +78,7 @@ export function useMintRequestDetail() {
     return brandOptions.find((b) => b.id === selectedBrandId)?.name ?? "";
   }, [brandOptions, selectedBrandId]);
 
-  // ① 初期化: inspection + mintDTO + productBlueprintId を解決
+  // ① 初期化: inspection + mintDTO + productBlueprintId を解決（usecase化）
   React.useEffect(() => {
     if (!requestId) return;
 
@@ -190,23 +91,12 @@ export function useMintRequestDetail() {
       try {
         const rid = String(requestId).trim();
 
-        const [batch, mint] = await Promise.all([
-          fetchInspectionByProductionIdHTTP(rid).catch(() => null),
-          fetchMintByInspectionIdHTTP(rid).catch(() => null),
-        ]);
-
+        const detail = await getMintRequestDetail(mintRequestRepo, rid);
         if (cancelled) return;
 
-        setInspectionBatch((batch ?? null) as any);
-        setMintDTO((mint ?? null) as any);
-
-        const resolvedPB = await resolveProductBlueprintIdByRequestId(
-          rid,
-          (batch ?? null) as any,
-        );
-        if (cancelled) return;
-
-        setProductBlueprintId(resolvedPB ? resolvedPB : "");
+        setInspectionBatch((detail.inspectionBatch ?? null) as any);
+        setMintDTO((detail.mintDTO ?? null) as any);
+        setProductBlueprintId(detail.productBlueprintId ? detail.productBlueprintId : "");
       } catch (e: any) {
         if (!cancelled) {
           setError(e?.message ?? "検査結果の取得に失敗しました");
@@ -222,9 +112,9 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, [requestId]);
+  }, [requestId, mintRequestRepo]);
 
-  // ② productBlueprintId が解決できたら Patch を取得
+  // ② productBlueprintId が解決できたら Patch を取得（usecase化）
   React.useEffect(() => {
     if (!productBlueprintId) return;
 
@@ -234,9 +124,9 @@ export function useMintRequestDetail() {
       setPbPatchLoading(true);
       setPbPatchError(null);
       try {
-        const patch = await fetchProductBlueprintPatchById(productBlueprintId);
+        const patch = await getProductBlueprintPatch(mintRequestRepo, productBlueprintId);
         if (!cancelled) {
-          setPbPatch(patch);
+          setPbPatch((patch ?? null) as any);
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -253,7 +143,7 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, [productBlueprintId]);
+  }, [productBlueprintId, mintRequestRepo]);
 
   // ③ 検査カード用（★ pbPatch を batch に合成して渡す：displayOrder のソース）
   const batchForInspectionCard = React.useMemo(() => {
@@ -272,38 +162,32 @@ export function useMintRequestDetail() {
 
   const totalMintQuantity = inspectionCardData.totalPassed;
 
-  // ④ ProductBlueprintCard 用 VM（brandName のみ渡す）
-  const productBlueprintCardView: ProductBlueprintCardViewModel | null =
-    React.useMemo(() => {
-      if (!pbPatch) return null;
-
-      return {
-        productName: (pbPatch as any)?.productName ?? undefined,
-        brand: (pbPatch as any)?.brandName ?? undefined,
-        itemType: (pbPatch as any)?.itemType ?? undefined,
-        fit: (pbPatch as any)?.fit ?? undefined,
-        materials: (pbPatch as any)?.material ?? undefined,
-        weight: (pbPatch as any)?.weight ?? undefined,
-        washTags: (pbPatch as any)?.qualityAssurance ?? undefined,
-        productIdTag: (pbPatch as any)?.productIdTag?.type ?? undefined,
-      };
-    }, [pbPatch]);
+  // ④ ProductBlueprintCard 用 VM
+  const productBlueprintCardView: ProductBlueprintCardViewModel | null = React.useMemo(
+    () => buildProductBlueprintCardView(pbPatch),
+    [pbPatch],
+  );
 
   const MINT_REQUEST_MANAGEMENT_PATH = "/mintRequest";
   const onBack = React.useCallback(() => {
     navigate(MINT_REQUEST_MANAGEMENT_PATH);
   }, [navigate]);
 
-  // ⑤ ブランド一覧
+  // ⑤ ブランド一覧（usecase化）
   React.useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
       try {
-        const brands = await fetchBrandOptionsForMint();
-        if (!cancelled) {
-          setBrandOptions(brands ?? []);
-        }
+        const brands = await listBrandsForMint(mintRequestRepo);
+        if (cancelled) return;
+
+        setBrandOptions(
+          (brands ?? []).map((b) => ({
+            id: String((b as any)?.id ?? "").trim(),
+            name: String((b as any)?.name ?? "").trim(),
+          })) as any,
+        );
       } catch {
         // noop
       }
@@ -313,115 +197,69 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mintRequestRepo]);
 
-  const handleSelectBrand = React.useCallback(async (brandId: string) => {
-    setSelectedBrandId(brandId);
+  const handleSelectBrand = React.useCallback(
+    async (brandId: string) => {
+      setSelectedBrandId(brandId);
 
-    if (!brandId) {
-      setTokenBlueprintOptions([]);
-      setSelectedTokenBlueprintId("");
-      // tokenBlueprintPatch は “詳細表示の正” なので消さない
-      return;
-    }
+      if (!brandId) {
+        setTokenBlueprintOptions([]);
+        setSelectedTokenBlueprintId("");
+        // tokenBlueprintPatch は “詳細表示の正” なので消さない
+        return;
+      }
 
-    try {
-      const opts = await fetchTokenBlueprintOptionsByBrand(brandId);
-      setTokenBlueprintOptions(opts ?? []);
-      setSelectedTokenBlueprintId("");
-    } catch {
-      setTokenBlueprintOptions([]);
-      setSelectedTokenBlueprintId("");
-    }
-  }, []);
+      try {
+        const opts = await listTokenBlueprintsByBrand(mintRequestRepo, brandId);
+        setTokenBlueprintOptions(
+          (opts ?? []).map((tb) => ({
+            id: String((tb as any)?.id ?? "").trim(),
+            name: String((tb as any)?.name ?? "").trim(),
+            symbol: String((tb as any)?.symbol ?? "").trim(),
+            iconUrl: asNonEmptyString((tb as any)?.iconUrl) || undefined,
+          })) as any,
+        );
+        setSelectedTokenBlueprintId("");
+      } catch {
+        setTokenBlueprintOptions([]);
+        setSelectedTokenBlueprintId("");
+      }
+    },
+    [mintRequestRepo],
+  );
 
   // ============================================================
   // mint 情報（mintDTO 優先）
   // ============================================================
 
-  const mint: MintInfo | null = React.useMemo(() => {
-    const fromDTO = extractMintInfoFromMintDTO(mintDTO as any);
-    if (fromDTO) return fromDTO;
-
-    const fromBatch = extractMintInfoFromBatch(inspectionBatch as any);
-    return fromBatch;
-  }, [mintDTO, inspectionBatch]);
-
-  const hasMint = React.useMemo(() => !!mint, [mint]);
-
-  // minted=true のときのみ非表示判定（= mint 完了扱い）
-  const isMintRequested = React.useMemo(() => {
-    return Boolean(mint?.minted === true);
-  }, [mint]);
-
-  // ✅ requestedByName（表示名）
-  // - mintInfo が requestedByName を持つ場合はそれを最優先
-  // - 次に createdByName
-  // - 最後に createdBy（id）
-  const requestedByName: string | null = React.useMemo(() => {
-    const a = asNonEmptyString((mint as any)?.requestedByName);
-    if (a) return a;
-
-    const b = asNonEmptyString((mint as any)?.createdByName);
-    if (b) return b;
-
-    const c = asNonEmptyString((mint as any)?.createdBy);
-    return c ? c : null;
-  }, [mint]);
-
-  const mintRequestedTokenBlueprintId = React.useMemo(() => {
-    const v = asNonEmptyString(mint?.tokenBlueprintId);
-    return v ? v : "";
-  }, [mint]);
-
-  const mintRequestedBrandId = React.useMemo(() => {
-    // mint.brandId を最優先。無ければ pbPatch.brandId を fallback
-    const fromMint = asNonEmptyString(mint?.brandId);
-    if (fromMint) return fromMint;
-    const fromPatch = asNonEmptyString((pbPatch as any)?.brandId);
-    return fromPatch ? fromPatch : "";
-  }, [mint, pbPatch]);
-
-  // mint が存在し、brandId が取れるなら「初回だけ」ブランド自動選択
-  React.useEffect(() => {
-    if (!hasMint) return;
-    if (!mintRequestedBrandId) return;
-    if (selectedBrandId) return; // 手動選択を尊重
-
-    (async () => {
-      try {
-        await handleSelectBrand(mintRequestedBrandId);
-      } catch {
-        // noop
-      }
-    })();
-  }, [hasMint, mintRequestedBrandId, selectedBrandId, handleSelectBrand]);
-
-  // mint が存在し、tokenBlueprintId が取れるなら「初回だけ」tokenBlueprint 自動選択
-  React.useEffect(() => {
-    if (!hasMint) return;
-    if (!mintRequestedTokenBlueprintId) return;
-    if (selectedTokenBlueprintId) return; // 手動選択を尊重
-    setSelectedTokenBlueprintId(mintRequestedTokenBlueprintId);
-  }, [hasMint, mintRequestedTokenBlueprintId, selectedTokenBlueprintId]);
-
-  // mint が存在し、scheduledBurnDate があるなら「初回だけ」入力欄へ反映（手入力を尊重）
-  React.useEffect(() => {
-    if (!hasMint) return;
-    if (scheduledBurnDate) return; // 既に入力されているなら上書きしない
-
-    const raw = mint?.scheduledBurnDate;
-    if (!raw) return;
-
-    const s = String(raw);
-    const asDate = s.length >= 10 ? s.slice(0, 10) : s;
-    if (asDate) setScheduledBurnDate(asDate);
-  }, [hasMint, mint, scheduledBurnDate]);
+  const {
+    mint,
+    hasMint,
+    isMintRequested,
+    requestedByName,
+    mintRequestedTokenBlueprintId,
+    mintRequestedBrandId,
+  } = useMintInfo({ mintDTO, inspectionBatch, pbPatch });
 
   // minted=true のときだけ非表示
   const showMintButton = !isMintRequested;
   const showBrandSelectorCard = !isMintRequested;
   const showTokenSelectorCard = !isMintRequested;
+
+  // mint 情報に基づく「初回だけ」自動選択
+  useMintAutoSelection({
+    hasMint,
+    mintRequestedBrandId,
+    selectedBrandId,
+    handleSelectBrand,
+    mintRequestedTokenBlueprintId,
+    selectedTokenBlueprintId,
+    setSelectedTokenBlueprintId,
+    mint,
+    scheduledBurnDate,
+    setScheduledBurnDate,
+  });
 
   // ============================================================
   // TokenBlueprintPatch を “正” として取得
@@ -434,31 +272,9 @@ export function useMintRequestDetail() {
     return b ? b : "";
   }, [selectedTokenBlueprintId, mintRequestedTokenBlueprintId]);
 
-  React.useEffect(() => {
-    if (!tokenBlueprintIdForPatch) {
-      setTokenBlueprintPatch(null);
-      return;
-    }
+  const { tokenBlueprintPatch } = useTokenBlueprintPatch(tokenBlueprintIdForPatch);
 
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const p = await fetchTokenBlueprintPatchById(tokenBlueprintIdForPatch);
-        if (cancelled) return;
-        setTokenBlueprintPatch((p ?? null) as any);
-      } catch {
-        if (cancelled) return;
-        setTokenBlueprintPatch(null);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [tokenBlueprintIdForPatch]);
-
-  // ミント申請（未申請時のみ）
+  // ミント申請（未申請時のみ）: submitMintRequestAndRefresh を採用（repo引数なし）
   const handleMint = React.useCallback(async () => {
     if (!inspectionBatch) {
       alert("検査バッチ情報が取得できていません。");
@@ -495,9 +311,7 @@ export function useMintRequestDetail() {
         `ミント申請を登録しました（生産ID: ${productionId} / ミント数: ${totalMintQuantity}）`,
       );
     } catch (e: any) {
-      alert(
-        `ミント申請に失敗しました: ${e?.message ?? "不明なエラーが発生しました"}`,
-      );
+      alert(`ミント申請に失敗しました: ${e?.message ?? "不明なエラーが発生しました"}`);
     }
   }, [
     inspectionBatch,
@@ -517,89 +331,40 @@ export function useMintRequestDetail() {
     [tokenBlueprintOptions, selectedTokenBlueprintId],
   );
 
-  const tokenBlueprintCardVm: TokenBlueprintCardViewModel | null = React.useMemo(() => {
-    const tbId =
-      asNonEmptyString(selectedTokenBlueprint?.id) ||
-      asNonEmptyString(tokenBlueprintIdForPatch);
-    if (!tbId) return null;
-
-    const brandName =
-      selectedBrandName ||
-      asNonEmptyString((tokenBlueprintPatch as any)?.brandName) ||
-      asNonEmptyString((pbPatch as any)?.brandName) ||
-      "";
-
-    const name =
-      asNonEmptyString((tokenBlueprintPatch as any)?.tokenName) ||
-      asNonEmptyString(selectedTokenBlueprint?.name);
-
-    const symbol =
-      asNonEmptyString((tokenBlueprintPatch as any)?.symbol) ||
-      asNonEmptyString(selectedTokenBlueprint?.symbol);
-
-    const description = asNonEmptyString((tokenBlueprintPatch as any)?.description);
-
-    const iconUrl =
-      asNonEmptyString((tokenBlueprintPatch as any)?.iconUrl) ||
-      asNonEmptyString(selectedTokenBlueprint?.iconUrl) ||
-      undefined;
-
-    return {
-      id: tbId,
-      name: name || tbId,
-      symbol: symbol || "",
-      brandId: "",
-      brandName,
-      description: description || "",
-      iconUrl,
-      isEditMode: false,
-      brandOptions: brandOptions.map((b) => ({ id: b.id, name: b.name })),
-    };
-  }, [
-    selectedTokenBlueprint,
-    tokenBlueprintIdForPatch,
-    selectedBrandName,
-    tokenBlueprintPatch,
-    pbPatch,
-    brandOptions,
-  ]);
+  const tokenBlueprintCardVm: TokenBlueprintCardViewModel | null = React.useMemo(
+    () =>
+      buildTokenBlueprintCardVm({
+        selectedTokenBlueprint,
+        tokenBlueprintIdForPatch,
+        selectedBrandName,
+        tokenBlueprintPatch: tokenBlueprintPatch as any,
+        pbPatch,
+        brandOptions,
+      }),
+    [
+      selectedTokenBlueprint,
+      tokenBlueprintIdForPatch,
+      selectedBrandName,
+      tokenBlueprintPatch,
+      pbPatch,
+      brandOptions,
+    ],
+  );
 
   const tokenBlueprintCardHandlers: TokenBlueprintCardHandlers = React.useMemo(
-    () => ({
-      onPreview: () => {
-        const url = tokenBlueprintCardVm?.iconUrl;
-        if (url) window.open(url, "_blank", "noopener,noreferrer");
-      },
-    }),
+    () => buildTokenBlueprintCardHandlers(tokenBlueprintCardVm?.iconUrl),
     [tokenBlueprintCardVm?.iconUrl],
   );
 
-  const mintCreatedAtLabel = React.useMemo(
-    () => safeDateTimeLabelJa(mint?.createdAt ?? null, "（未登録）"),
-    [mint?.createdAt],
-  );
-
-  const mintCreatedByLabel = React.useMemo(() => {
-    const name = asNonEmptyString(requestedByName);
-    if (name) return name;
-
-    const fallback = asNonEmptyString(mint?.createdBy);
-    return fallback ? fallback : "（不明）";
-  }, [requestedByName, mint?.createdBy]);
-
-  const mintScheduledBurnDateLabel = React.useMemo(
-    () => safeDateLabelJa(mint?.scheduledBurnDate ?? null, "（未設定）"),
-    [mint?.scheduledBurnDate],
-  );
-
-  const mintMintedAtLabel = React.useMemo(
-    () => safeDateTimeLabelJa(mint?.mintedAt ?? null, "（未完了）"),
-    [mint?.mintedAt],
-  );
-
-  const onChainTxSignature = React.useMemo(
-    () => asNonEmptyString(mint?.onChainTxSignature),
-    [mint?.onChainTxSignature],
+  const {
+    mintCreatedAtLabel,
+    mintCreatedByLabel,
+    mintScheduledBurnDateLabel,
+    mintMintedAtLabel,
+    onChainTxSignature,
+  } = React.useMemo(
+    () => buildMintLabels({ mint, requestedByName }),
+    [mint, requestedByName],
   );
 
   return {
