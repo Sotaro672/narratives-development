@@ -11,7 +11,7 @@ import {
   extractDisplayStrings,
   initPriceRowsFromDTO,
   type ResolvedListCreateParams,
-  type PriceRowEx,
+  type PriceRow, // ✅ PriceRowEx 削除に合わせて PriceRow を使用
 } from "../../../application/listCreate/listCreateService";
 
 import type { ListCreateDTO } from "../../../infrastructure/http/inventoryRepositoryHTTP";
@@ -21,7 +21,7 @@ export function useListCreateDTO(args: {
   inventoryId: string | undefined;
   resolvedParams: ResolvedListCreateParams;
   initializedPriceRowsRef: React.MutableRefObject<boolean>;
-  setPriceRows: React.Dispatch<React.SetStateAction<PriceRowEx[]>>;
+  setPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>; // ✅ PriceRowEx[] -> PriceRow[]
 }): {
   dto: ListCreateDTO | null;
   loadingDTO: boolean;
@@ -73,7 +73,7 @@ export function useListCreateDTO(args: {
         setDTO(data);
 
         if (!initializedPriceRowsRef.current) {
-          const nextRows = initPriceRowsFromDTO(data);
+          const nextRows = initPriceRowsFromDTO(data); // ✅ 返り値も PriceRow[] に統一されている前提
           setPriceRows(nextRows);
           initializedPriceRowsRef.current = true;
         }

@@ -1,7 +1,7 @@
 // frontend/console/inventory/src/application/listCreate/listCreate.dto.ts
 
 import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
-import type { PriceRow, PriceRowEx } from "./listCreate.types";
+import type { PriceRow } from "./listCreate.types";
 import { s } from "./listCreate.utils";
 
 export function extractDisplayStrings(dto: ListCreateDTO | null): {
@@ -51,23 +51,17 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
 }
 
 /**
- * ✅ dto.priceRows[].modelId のみを正として付与する
- * - byKey / byIndex 互換ロジックは削除
+ * ✅ dto.priceRows[].modelId を取り出す（名揺れ補完はしない）
+ * - PriceRowEx は削除したため「modelId 配列」を返す
  */
-export function attachModelIdsFromDTO(dto: any, baseRows: PriceRow[]): PriceRowEx[] {
+export function extractModelIdsFromDTO(dto: any): string[] {
   const dtoRows: any[] = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
-
-  return baseRows.map((r, idx) => {
-    const modelId = s(dtoRows[idx]?.modelId);
-
-    return {
-      ...(r as any),
-      modelId,
-    } as PriceRowEx;
-  });
+  return dtoRows.map((dr) => s(dr?.modelId));
 }
 
-export function initPriceRowsFromDTO(dto: ListCreateDTO | null): PriceRowEx[] {
-  const base = mapDTOToPriceRows(dto);
-  return attachModelIdsFromDTO(dto as any, base);
+/**
+ * ✅ 初期表示用: PriceRow[] を返す（modelId は別途 extractModelIdsFromDTO で扱う）
+ */
+export function initPriceRowsFromDTO(dto: ListCreateDTO | null): PriceRow[] {
+  return mapDTOToPriceRows(dto);
 }

@@ -5,7 +5,6 @@ export type {
   ListCreateRouteParams,
   ResolvedListCreateParams,
   PriceRow,
-  PriceRowEx,
   CreateListPriceRow,
 } from "./listCreate.types";
 
@@ -25,7 +24,6 @@ export {
 export {
   extractDisplayStrings,
   mapDTOToPriceRows,
-  attachModelIdsFromDTO,
   initPriceRowsFromDTO,
 } from "./listCreate.dto";
 
