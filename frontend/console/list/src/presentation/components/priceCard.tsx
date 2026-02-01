@@ -20,9 +20,6 @@ import { Input } from "../../../../shell/src/shared/ui/input";
 // ✅ ロジックは hook に寄せる
 import { usePriceCard, type PriceCardProps } from "../hook/usePriceCard";
 
-// ✅ 既存 import 互換のため type を re-export
-export type { PriceRow } from "../hook/usePriceCard";
-
 const PriceCard: React.FC<PriceCardProps> = (props) => {
   const { className } = props;
 

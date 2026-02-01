@@ -4,11 +4,10 @@ import * as React from "react";
 import type { InventoryRow } from "../../application/inventoryTypes";
 
 // ✅ fetcher を経由しない：Raw API を直接叩く
-import {
-  getListCreateRaw,
-  getInventoryDetailRaw,
-  getTokenBlueprintPatchRaw,
-} from "../../infrastructure/api/inventoryApi";
+import { getInventoryDetailRaw, getTokenBlueprintPatchRaw } from "../../infrastructure/api/inventoryApi";
+
+// ✅ ListCreate Raw API は分離したため別 import
+import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
 
 // ✅ DTO 型は types.ts から直接 import
 import type {
@@ -98,7 +97,15 @@ function normalizeProductIdTagToQRCodeOnly(v: any): string | null | undefined {
     if (typeof x === "number" || typeof x === "boolean") return String(x).trim();
     if (typeof x === "object") {
       const o: any = x;
-      const cand = o?.Type ?? o?.type ?? o?.label ?? o?.Label ?? o?.value ?? o?.Value ?? o?.name ?? o?.Name;
+      const cand =
+        o?.Type ??
+        o?.type ??
+        o?.label ??
+        o?.Label ??
+        o?.value ??
+        o?.Value ??
+        o?.name ??
+        o?.Name;
       return typeof cand === "string" ? cand.trim() : "";
     }
     return "";
@@ -270,8 +277,7 @@ export function useInventoryDetail(
         // - productName: list-create を正（detail側が空でも）
         // - tokenName: patch の tokenName が取れればそれ、なければ list-create
         const productName = productNameFromLC;
-        const tokenName =
-          asString((tokenBlueprintPatch as any)?.tokenName) || tokenNameFromLC || tbId;
+        const tokenName = asString((tokenBlueprintPatch as any)?.tokenName) || tokenNameFromLC || tbId;
 
         const nextVm: InventoryDetailViewModel = {
           inventoryKey: `${pbId}__${tbId}`,

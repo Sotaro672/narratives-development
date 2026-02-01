@@ -6,6 +6,9 @@ import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 // ✅ Shared auth headers (shell authService を委譲)
 import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
 
+// ---------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------
 async function requestJsonOrThrow(path: string): Promise<any> {
   const headers = await getAuthHeadersOrThrow();
 
@@ -77,35 +80,6 @@ export async function getTokenBlueprintPatchRaw(
   return await requestJsonOrThrow(
     `/token-blueprints/${encodeURIComponent(tbId)}/patch`,
   );
-}
-
-/**
- * GET
- * - /inventory/list-create/:inventoryId
- * - /inventory/list-create/:productBlueprintId/:tokenBlueprintId
- */
-export async function getListCreateRaw(input: {
-  inventoryId?: string;
-  productBlueprintId?: string;
-  tokenBlueprintId?: string;
-}): Promise<any> {
-  const inventoryId = s(input.inventoryId);
-  const productBlueprintId = s(input.productBlueprintId);
-  const tokenBlueprintId = s(input.tokenBlueprintId);
-
-  let path = "";
-  if (inventoryId) {
-    path = `/inventory/list-create/${encodeURIComponent(inventoryId)}`;
-  } else if (productBlueprintId && tokenBlueprintId) {
-    path =
-      `/inventory/list-create/${encodeURIComponent(
-        productBlueprintId,
-      )}/${encodeURIComponent(tokenBlueprintId)}`;
-  } else {
-    throw new Error("missing params");
-  }
-
-  return await requestJsonOrThrow(path);
 }
 
 /** GET /inventory/{inventoryId} */

@@ -1,0 +1,63 @@
+// frontend/console/inventory/src/infrastructure/api/listCreateApi.tsx
+
+// ✅ Shared console API base (修正案A)
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+
+// ✅ Shared auth headers (shell authService を委譲)
+import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
+
+// ---------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------
+async function requestJsonOrThrow(path: string): Promise<any> {
+  const headers = await getAuthHeadersOrThrow();
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "GET",
+    headers,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`request failed: ${res.status} ${res.statusText} ${text}`);
+  }
+
+  return await res.json();
+}
+
+function s(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+// ---------------------------------------------------------
+// ListCreate API (raw JSON)
+// ---------------------------------------------------------
+
+/**
+ * GET
+ * - /inventory/list-create/:inventoryId
+ * - /inventory/list-create/:productBlueprintId/:tokenBlueprintId
+ */
+export async function getListCreateRaw(input: {
+  inventoryId?: string;
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+}): Promise<any> {
+  const inventoryId = s(input.inventoryId);
+  const productBlueprintId = s(input.productBlueprintId);
+  const tokenBlueprintId = s(input.tokenBlueprintId);
+
+  let path = "";
+  if (inventoryId) {
+    path = `/inventory/list-create/${encodeURIComponent(inventoryId)}`;
+  } else if (productBlueprintId && tokenBlueprintId) {
+    path =
+      `/inventory/list-create/${encodeURIComponent(
+        productBlueprintId,
+      )}/${encodeURIComponent(tokenBlueprintId)}`;
+  } else {
+    throw new Error("missing params");
+  }
+
+  return await requestJsonOrThrow(path);
+}
