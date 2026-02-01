@@ -1,3 +1,5 @@
+// frontend\console\inventory\src\presentation\hook\useInventoryDetail.tsx
+
 import * as React from "react";
 import type { InventoryRow } from "../../application/inventoryTypes";
 
@@ -7,11 +9,25 @@ import {
   fetchTokenBlueprintPatchDTO,
   type InventoryDetailDTO,
   type TokenBlueprintPatchDTO,
+  type ProductBlueprintPatchDTO,
 } from "../../infrastructure/http/inventoryRepositoryHTTP";
 
-import { mergeDetailDTOs } from "../../application/inventoryDetail/inventoryDetail.mapper";
+export type InventoryDetailViewModel = {
+  inventoryKey: string;
+  inventoryId: string;
 
-export type InventoryDetailViewModel = ReturnType<typeof mergeDetailDTOs>;
+  tokenBlueprintId: string;
+  productBlueprintId: string;
+
+  productBlueprintPatch: ProductBlueprintPatchDTO;
+  tokenBlueprintPatch?: TokenBlueprintPatchDTO;
+
+  updatedAt?: string;
+  totalStock: number;
+
+  // InventoryCard に渡す最小
+  rows: InventoryRow[];
+};
 
 export type UseInventoryDetailResult = {
   vm: InventoryDetailViewModel | null;
@@ -22,6 +38,25 @@ export type UseInventoryDetailResult = {
 
 function asString(v: any): string {
   return String(v ?? "").trim();
+}
+
+function asNumber(v: any): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function dtoRowsToInventoryRows(dto: InventoryDetailDTO): InventoryRow[] {
+  const rowsRaw: any[] = Array.isArray((dto as any)?.rows) ? ((dto as any).rows as any[]) : [];
+
+  return rowsRaw.map((r: any) => ({
+    // InventoryCard は token を使わないが、InventoryRow 型都合で空文字を入れておく
+    token: asString(r?.token) || "",
+    modelNumber: asString(r?.modelNumber),
+    size: asString(r?.size),
+    color: asString(r?.color),
+    rgb: (r?.rgb ?? null) as any,
+    stock: asNumber(r?.stock),
+  }));
 }
 
 export function useInventoryDetail(
@@ -65,25 +100,42 @@ export function useInventoryDetail(
           );
         }
 
-        // ② inventory detail 取得
+        // ② inventory detail 取得（rows を直接 InventoryCard に渡すための元データ）
         const detail: InventoryDetailDTO = await fetchInventoryDetailDTO(inventoryId);
         if (cancelled) return;
 
         // ③ tokenBlueprintPatch（主に iconUrl 用）を取得（失敗しても続行）
-        let tokenBlueprintPatch: TokenBlueprintPatchDTO | null = null;
+        let tokenBlueprintPatch: TokenBlueprintPatchDTO | undefined = undefined;
         try {
           tokenBlueprintPatch = await fetchTokenBlueprintPatchDTO(tbId);
         } catch {
-          tokenBlueprintPatch = null;
+          tokenBlueprintPatch = undefined;
         }
         if (cancelled) return;
 
-        // ④ merge（従来の ViewModel 形に寄せる）
-        const merged = mergeDetailDTOs(pbId, tbId, [inventoryId], [detail], tokenBlueprintPatch);
-        if (cancelled) return;
+        // ④ DTO から InventoryCard 用 rows を直接生成（mergeDetailDTOs 不要）
+        const nextRows: InventoryRow[] = dtoRowsToInventoryRows(detail);
 
-        const nextRows = Array.isArray((merged as any)?.rows) ? (merged as any).rows : [];
-        setVm(merged);
+        // ⑤ vm も「DTOから直接」最小構成で作る
+        const totalStock = nextRows.reduce((sum, r) => sum + asNumber(r.stock), 0);
+
+        const nextVm: InventoryDetailViewModel = {
+          inventoryKey: `${pbId}__${tbId}`,
+          inventoryId,
+
+          tokenBlueprintId: asString((detail as any)?.tokenBlueprintId) || tbId,
+          productBlueprintId: asString((detail as any)?.productBlueprintId) || pbId,
+
+          productBlueprintPatch: ((detail as any)?.productBlueprintPatch ?? {}) as ProductBlueprintPatchDTO,
+          tokenBlueprintPatch,
+
+          updatedAt: (detail as any)?.updatedAt ? String((detail as any).updatedAt) : undefined,
+          totalStock,
+
+          rows: nextRows,
+        };
+
+        setVm(nextVm);
         setRows(nextRows);
       } catch (e: any) {
         if (cancelled) return;
