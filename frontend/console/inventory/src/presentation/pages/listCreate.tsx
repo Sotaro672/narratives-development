@@ -87,7 +87,6 @@ export default function InventoryListCreate() {
           - PriceCard
           ========================= */}
       <div className="space-y-4">
-        {/* ✅ 商品画像カード（ボタン廃止 / クリックでエクスプローラー） */}
         <ListImageCard
           isEdit={true}
           saving={false}

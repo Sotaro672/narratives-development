@@ -36,28 +36,18 @@ function s(v: unknown): string {
 /**
  * GET
  * - /inventory/list-create/:inventoryId
- * - /inventory/list-create/:productBlueprintId/:tokenBlueprintId
+ *
+ * ✅ pbId/tbId ルートは廃止
  */
 export async function getListCreateRaw(input: {
   inventoryId?: string;
-  productBlueprintId?: string;
-  tokenBlueprintId?: string;
 }): Promise<any> {
   const inventoryId = s(input.inventoryId);
-  const productBlueprintId = s(input.productBlueprintId);
-  const tokenBlueprintId = s(input.tokenBlueprintId);
 
-  let path = "";
-  if (inventoryId) {
-    path = `/inventory/list-create/${encodeURIComponent(inventoryId)}`;
-  } else if (productBlueprintId && tokenBlueprintId) {
-    path =
-      `/inventory/list-create/${encodeURIComponent(
-        productBlueprintId,
-      )}/${encodeURIComponent(tokenBlueprintId)}`;
-  } else {
-    throw new Error("missing params");
+  if (!inventoryId) {
+    throw new Error("missing inventoryId");
   }
 
+  const path = `/inventory/list-create/${encodeURIComponent(inventoryId)}`;
   return await requestJsonOrThrow(path);
 }

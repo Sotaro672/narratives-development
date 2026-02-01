@@ -54,23 +54,6 @@ export async function getPrintedProductBlueprintsRaw(): Promise<any> {
   return await requestJsonOrThrow(`/inventory`);
 }
 
-/** GET /inventory/ids?productBlueprintId=...&tokenBlueprintId=... */
-export async function getInventoryIDsByProductAndTokenRaw(input: {
-  productBlueprintId: string;
-  tokenBlueprintId: string;
-}): Promise<any> {
-  const pbId = s(input.productBlueprintId);
-  const tbId = s(input.tokenBlueprintId);
-  if (!pbId) throw new Error("productBlueprintId is empty");
-  if (!tbId) throw new Error("tokenBlueprintId is empty");
-
-  const path = `/inventory/ids?productBlueprintId=${encodeURIComponent(
-    pbId,
-  )}&tokenBlueprintId=${encodeURIComponent(tbId)}`;
-
-  return await requestJsonOrThrow(path);
-}
-
 /** GET /token-blueprints/{tokenBlueprintId}/patch */
 export async function getTokenBlueprintPatchRaw(
   tokenBlueprintId: string,

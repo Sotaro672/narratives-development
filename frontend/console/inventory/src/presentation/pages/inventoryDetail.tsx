@@ -18,29 +18,17 @@ function s(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-const SEP = "__";
-
-function splitInventoryId(inventoryId: string): { pbId: string; tbId: string } | null {
-  const id = s(inventoryId);
-  if (!id || !id.includes(SEP)) return null;
-
-  const parts = id.split(SEP);
-  const pbId = s(parts[0]);
-  const tbId = s(parts[1]);
-
-  if (!pbId || !tbId) return null;
-  return { pbId, tbId };
-}
-
 export default function InventoryDetail() {
   const navigate = useNavigate();
 
-  // ✅ 新方針: URL は /inventory/detail/:inventoryId （docId = pb__tb）だけ受け取る
+  // ✅ 新方針: URL は inventoryId(docId) のみ
   const { inventoryId: inventoryIdParam } = useParams<{ inventoryId?: string }>();
   const inventoryId = s(inventoryIdParam);
 
-  // ✅ inventoryId が無い（＝ /inventory/detail だけ or 旧ルートに誤マッチ）
-  //    → 一覧ページへ強制リダイレクト
+  /**
+   * ★ inventoryId が無い（＝ /inventory/detail だけ or 旧ルートに誤マッチ）
+   *    → 一覧ページへ強制リダイレクト
+   */
   React.useEffect(() => {
     if (!inventoryId) {
       navigate("/inventory", { replace: true });
@@ -52,36 +40,13 @@ export default function InventoryDetail() {
     navigate("/inventory");
   }, [navigate]);
 
-  // ✅ 互換: 既存 hook が pbId/tbId 前提のため、inventoryId(pb__tb) から split して渡す
-  const split = React.useMemo(() => splitInventoryId(inventoryId), [inventoryId]);
-  const pbId = s(split?.pbId);
-  const tbId = s(split?.tbId);
+  // ✅ hook（inventoryId 前提）
+  const { rows, loading, error, vm } = useInventoryDetail(inventoryId);
 
-  // split できない inventoryId は不正なので一覧へ戻す
-  React.useEffect(() => {
-    if (inventoryId && (!pbId || !tbId)) {
-      navigate("/inventory", { replace: true });
-    }
-  }, [inventoryId, pbId, tbId, navigate]);
+  // ✅ Header は productName/tokenName のみ
+  const title = s(vm?.headerTitle) ? `在庫詳細：${vm!.headerTitle}` : "在庫詳細";
 
-  // ✅ hook（内部 fetch は pbId/tbId を利用）
-  // NOTE: hook 側のシグネチャが (pbId, tbId) のままならこれでOK
-  const { rows, loading, error, vm } = useInventoryDetail(pbId, tbId);
-
-  const pbPatch = vm?.productBlueprintPatch;
-
-  // ✅ タイトル（ヘッダーは useInventoryDetail 側で `${productName} / ${tokenName}` を返す前提）
-  const title = s(vm?.headerTitle)
-    ? `在庫詳細：${vm!.headerTitle}`
-    : pbPatch?.productName
-      ? `在庫詳細：${pbPatch.productName}`
-      : vm
-        ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
-        : inventoryId
-          ? `在庫詳細：${inventoryId}`
-          : "在庫詳細";
-
-  // ✅ 出品ボタン: /inventory/list/create/:inventoryId へ（docId をそのまま使う）
+  // ✅ 出品ボタン: /inventory/list/create/:inventoryId
   const onList = React.useCallback(() => {
     if (!inventoryId) return;
     navigate(`/inventory/list/create/${encodeURIComponent(inventoryId)}`);
@@ -89,20 +54,24 @@ export default function InventoryDetail() {
 
   // ============================================================
   // ✅ TokenBlueprintCard (view only)
+  // - TokenBlueprintCardViewModel の minted は必須なので必ず渡す
+  // - この画面では編集しないので minted=false に固定（= view-onlyで安全）
   // ============================================================
+
+  const tbId = s(vm?.tokenBlueprintId);
   const tbPatch = vm?.tokenBlueprintPatch;
 
   const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(() => {
-    const tokenName = s(tbPatch?.tokenName);
-    const symbol = s(tbPatch?.symbol);
-    const brandName = s(tbPatch?.brandName);
-    const description = String(tbPatch?.description ?? "");
-    const iconUrl = s(tbPatch?.iconUrl) || undefined;
+    const tokenName = s((tbPatch as any)?.tokenName);
+    const symbol = s((tbPatch as any)?.symbol);
+    const brandName = s((tbPatch as any)?.brandName);
+    const description = String((tbPatch as any)?.description ?? "");
+    const iconUrl = s((tbPatch as any)?.iconUrl) || undefined;
 
-    // ✅ brandId は不要方針：TokenBlueprintCard 側が必須なら空文字で埋める
+    // ✅ TokenBlueprintCard 側が brandId 必須なら空文字で埋める
     const brandId = "";
 
-    // minted は在庫詳細では view-only に寄せる（trueにすると編集UIが出るため）
+    // ✅ minted は必須。詳細画面では編集UI不要なので false 固定。
     const minted = false;
 
     return {
