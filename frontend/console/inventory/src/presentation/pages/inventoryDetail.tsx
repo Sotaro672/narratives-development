@@ -42,8 +42,9 @@ export default function InventoryDetail() {
     navigate("/inventory");
   }, [navigate]);
 
-  // ✅ hook（方針A）: pbId + tbId -> inventoryIds -> details -> merge
-  const { rows, loading, error, vm, tokenBlueprintPatch } = useInventoryDetail(
+  // ✅ hook（方針A）
+  // NOTE: UseInventoryDetailResult に tokenBlueprintPatch は存在しないため destructure しない
+  const { rows, loading, error, vm } = useInventoryDetail(
     productBlueprintId,
     tokenBlueprintId,
   );
@@ -52,11 +53,14 @@ export default function InventoryDetail() {
   const tbId = s(vm?.tokenBlueprintId ?? tokenBlueprintId);
   const pbPatch = vm?.productBlueprintPatch;
 
-  const title = pbPatch?.productName
-    ? `在庫詳細：${pbPatch.productName}`
-    : vm
-      ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
-      : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
+  // ✅ タイトル（ヘッダーは useInventoryDetail 側で `${productName} / ${tokenName}` を返す前提）
+  const title = s(vm?.headerTitle)
+    ? `在庫詳細：${vm!.headerTitle}`
+    : pbPatch?.productName
+      ? `在庫詳細：${pbPatch.productName}`
+      : vm
+        ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
+        : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
 
   // ✅ 出品ボタン: /inventory/list/create/:productBlueprintId/:tokenBlueprintId へ
   const onList = React.useCallback(() => {
@@ -66,45 +70,28 @@ export default function InventoryDetail() {
 
   // ============================================================
   // ✅ TokenBlueprintCard (view only)
-  // - tokenBlueprintPatch を正とする
+  // - types.ts を絶対正として名揺れ排除
+  // - patch は vm.tokenBlueprintPatch のみを参照
   // ============================================================
 
-  const tbPatchAny = React.useMemo(() => {
-    return (
-      (tokenBlueprintPatch as any) ??
-      (vm as any)?.tokenBlueprintPatch ??
-      (vm as any)?.tokenBlueprint ??
-      (vm as any)?.TokenBlueprint ??
-      null
-    );
-  }, [tokenBlueprintPatch, vm]);
+  const tbPatch = vm?.tokenBlueprintPatch;
 
   const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(() => {
-    const tokenName = s(tbPatchAny?.tokenName ?? tbPatchAny?.TokenName);
-    const nameFallback = s(tbPatchAny?.name ?? tbPatchAny?.Name);
-    const nameToShow = tokenName || nameFallback;
+    const tokenName = s(tbPatch?.tokenName);
+    const symbol = s(tbPatch?.symbol);
+    const brandName = s(tbPatch?.brandName);
+    const description = String(tbPatch?.description ?? "");
+    const iconUrl = s(tbPatch?.iconUrl) || undefined;
 
-    const symbol = s(tbPatchAny?.symbol ?? tbPatchAny?.Symbol);
-    const brandId = s(
-      tbPatchAny?.brandId ?? tbPatchAny?.BrandID ?? tbPatchAny?.BrandId,
-    );
-    const brandName = s(tbPatchAny?.brandName ?? tbPatchAny?.BrandName);
-    const description = String(
-      tbPatchAny?.description ?? tbPatchAny?.Description ?? "",
-    );
-
-    const iconUrl =
-      s(tbPatchAny?.iconUrl) ||
-      s(tbPatchAny?.iconURL) ||
-      s(tbPatchAny?.IconURL) ||
-      undefined;
+    // ✅ brandId は不要方針：TokenBlueprintCard 側が必須なら空文字で埋める
+    const brandId = "";
 
     // minted は在庫詳細では view-only に寄せる（trueにすると編集UIが出るため）
     const minted = false;
 
     return {
       id: tbId,
-      name: nameToShow,
+      name: tokenName || tbId || "-",
       symbol,
       brandId,
       brandName,
@@ -116,7 +103,7 @@ export default function InventoryDetail() {
       isEditMode: false,
       brandOptions: [],
     };
-  }, [tbId, tbPatchAny]);
+  }, [tbId, tbPatch]);
 
   const tokenCardHandlers: TokenBlueprintCardHandlers = React.useMemo(
     () => ({

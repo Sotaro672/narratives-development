@@ -3,14 +3,14 @@
 import * as React from "react";
 import type { InventoryRow } from "../../application/inventoryTypes";
 
-// ✅ fetcher（inventoryRepositoryHTTP.fetchers.ts）を経由しない：Raw API を直接叩く
+// ✅ fetcher を経由しない：Raw API を直接叩く
 import {
   getListCreateRaw,
   getInventoryDetailRaw,
   getTokenBlueprintPatchRaw,
 } from "../../infrastructure/api/inventoryApi";
 
-// ✅ DTO 型は types.ts から直接 import（barrel/fetcher 依存を避ける）
+// ✅ DTO 型は types.ts から直接 import
 import type {
   InventoryDetailDTO,
   TokenBlueprintPatchDTO,
@@ -24,6 +24,11 @@ export type InventoryDetailViewModel = {
 
   tokenBlueprintId: string;
   productBlueprintId: string;
+
+  // ✅ Header 表示用（productName / tokenName）
+  productName: string;
+  tokenName: string;
+  headerTitle: string; // `${productName} / ${tokenName}`
 
   productBlueprintPatch: ProductBlueprintPatchDTO;
   tokenBlueprintPatch?: TokenBlueprintPatchDTO;
@@ -78,7 +83,71 @@ function normalizeTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefi
   };
 }
 
-function buildModelDisplayOrderMap(patch: ProductBlueprintPatchDTO | undefined): Record<string, number> {
+/**
+ * ✅ 商品IDタグを「QRコード」のみに正規化する
+ * - {"Type":"QRコード"} のような JSON文字列/オブジェクトが来ても「QRコード」だけにする
+ * - QR 以外なら null（表示しない前提）
+ */
+function normalizeProductIdTagToQRCodeOnly(v: any): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+
+  const toTag = (x: any): string => {
+    if (x === undefined || x === null) return "";
+    if (typeof x === "string") return x.trim();
+    if (typeof x === "number" || typeof x === "boolean") return String(x).trim();
+    if (typeof x === "object") {
+      const o: any = x;
+      const cand = o?.Type ?? o?.type ?? o?.label ?? o?.Label ?? o?.value ?? o?.Value ?? o?.name ?? o?.Name;
+      return typeof cand === "string" ? cand.trim() : "";
+    }
+    return "";
+  };
+
+  // 1) 文字列
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return null;
+
+    // JSONっぽい文字列なら parse して Type を取る
+    if (s.startsWith("{") && s.endsWith("}")) {
+      try {
+        const obj = JSON.parse(s);
+        const inner = toTag(obj);
+        const low = inner.toLowerCase();
+        if (inner === "QRコード" || low === "qr" || low.includes("qr")) return "QRコード";
+        return null;
+      } catch {
+        // parse できないならそのまま判定
+        const low = s.toLowerCase();
+        if (s === "QRコード" || low === "qr" || low.includes("qr")) return "QRコード";
+        return null;
+      }
+    }
+
+    const low = s.toLowerCase();
+    if (s === "QRコード" || low === "qr" || low.includes("qr")) return "QRコード";
+    return null;
+  }
+
+  // 2) オブジェクト
+  if (typeof v === "object") {
+    const t = toTag(v);
+    const low = t.toLowerCase();
+    if (t === "QRコード" || low === "qr" || low.includes("qr")) return "QRコード";
+    return null;
+  }
+
+  // 3) その他（数値/boolean等）
+  const t = toTag(v);
+  const low = t.toLowerCase();
+  if (t === "QRコード" || low === "qr" || low.includes("qr")) return "QRコード";
+  return null;
+}
+
+function buildModelDisplayOrderMap(
+  patch: ProductBlueprintPatchDTO | undefined,
+): Record<string, number> {
   const refs = (patch as any)?.modelRefs as ProductBlueprintModelRefDTO[] | null | undefined;
   if (!Array.isArray(refs)) return {};
 
@@ -92,7 +161,10 @@ function buildModelDisplayOrderMap(patch: ProductBlueprintPatchDTO | undefined):
   return out;
 }
 
-function dtoRowsToInventoryRows(dto: InventoryDetailDTO, modelOrderById: Record<string, number>): InventoryRow[] {
+function dtoRowsToInventoryRows(
+  dto: InventoryDetailDTO,
+  modelOrderById: Record<string, number>,
+): InventoryRow[] {
   const rowsRaw: any[] = Array.isArray((dto as any)?.rows) ? ((dto as any).rows as any[]) : [];
 
   return rowsRaw.map((r: any) => {
@@ -100,7 +172,6 @@ function dtoRowsToInventoryRows(dto: InventoryDetailDTO, modelOrderById: Record<
     const displayOrder = modelId ? modelOrderById[modelId] : undefined;
 
     return {
-      // InventoryCard は token を使わないが、InventoryRow 型都合で空文字を入れておく
       token: asString(r?.token) || "",
       modelNumber: asString(r?.modelNumber),
       size: asString(r?.size),
@@ -109,7 +180,6 @@ function dtoRowsToInventoryRows(dto: InventoryDetailDTO, modelOrderById: Record<
       stock: asNumber(r?.stock),
 
       // ✅ NEW: displayOrder を InventoryCard に渡せるように付与
-      // ※ InventoryRow 側に displayOrder?: number を追加して受ける前提
       displayOrder,
     } as InventoryRow;
   });
@@ -154,12 +224,16 @@ export function useInventoryDetail(
           throw new Error("inventoryId is empty (failed to resolve inventoryId from list-create)");
         }
 
+        // ✅ Header 用：list-create から productName / tokenName を拾う（最優先）
+        const productNameFromLC = asString((listCreateRaw as any)?.productName) || "-";
+        const tokenNameFromLC = asString((listCreateRaw as any)?.tokenName) || tbId;
+
         // ② inventory detail を Raw API から取得
         const detailRaw = (await getInventoryDetailRaw(inventoryId)) as any;
         const detail: InventoryDetailDTO = detailRaw as InventoryDetailDTO;
         if (cancelled) return;
 
-        // ③ tokenBlueprintPatch（主に iconUrl 用）を Raw API から取得（失敗しても続行）
+        // ③ tokenBlueprintPatch（主に iconUrl、tokenName の補強にも使える）
         let tokenBlueprintPatch: TokenBlueprintPatchDTO | undefined = undefined;
         try {
           const patchRaw = await getTokenBlueprintPatchRaw(tbId);
@@ -169,18 +243,35 @@ export function useInventoryDetail(
         }
         if (cancelled) return;
 
-        // ✅ productBlueprintPatch から modelRefs(displayOrder) を拾う
-        const productBlueprintPatch = ((detail as any)?.productBlueprintPatch ?? {}) as ProductBlueprintPatchDTO;
+        // ✅ productBlueprintPatch を取得し、商品IDタグを「QRコード」だけに正規化
+        const rawProductBlueprintPatch = ((detail as any)?.productBlueprintPatch ?? {}) as ProductBlueprintPatchDTO;
+
+        const normalizedProductIdTag =
+          normalizeProductIdTagToQRCodeOnly((rawProductBlueprintPatch as any)?.productIdTag) ?? null;
+
+        const productBlueprintPatch: ProductBlueprintPatchDTO = {
+          ...rawProductBlueprintPatch,
+          productIdTag: normalizedProductIdTag,
+        };
+
+        // ✅ modelRefs(displayOrder) を拾う
         const modelOrderById = buildModelDisplayOrderMap(productBlueprintPatch);
 
         // ④ InventoryCard 用 rows を DTO（detail.rows）から直接生成（displayOrder 付与）
         const nextRows: InventoryRow[] = dtoRowsToInventoryRows(detail, modelOrderById);
 
-        // ⑤ vm も DTO（detail）から直接、最小構成で生成
+        // ⑤ totalStock
         const totalStock =
           (detail as any)?.totalStock !== undefined && (detail as any)?.totalStock !== null
             ? asNumber((detail as any).totalStock)
             : nextRows.reduce((sum, r) => sum + asNumber((r as any).stock), 0);
+
+        // ✅ Header 表示用の productName / tokenName を確定
+        // - productName: list-create を正（detail側が空でも）
+        // - tokenName: patch の tokenName が取れればそれ、なければ list-create
+        const productName = productNameFromLC;
+        const tokenName =
+          asString((tokenBlueprintPatch as any)?.tokenName) || tokenNameFromLC || tbId;
 
         const nextVm: InventoryDetailViewModel = {
           inventoryKey: `${pbId}__${tbId}`,
@@ -188,6 +279,11 @@ export function useInventoryDetail(
 
           tokenBlueprintId: asString((detail as any)?.tokenBlueprintId) || tbId,
           productBlueprintId: asString((detail as any)?.productBlueprintId) || pbId,
+
+          // ✅ header
+          productName,
+          tokenName,
+          headerTitle: `${productName} / ${tokenName}`,
 
           productBlueprintPatch,
           tokenBlueprintPatch,
