@@ -3,14 +3,19 @@
 import * as React from "react";
 import type { InventoryRow } from "../../application/inventoryTypes";
 
+// ✅ fetcher（inventoryRepositoryHTTP.fetchers.ts）を経由しない：Raw API を直接叩く
 import {
-  fetchListCreateDTO,
-  fetchInventoryDetailDTO,
-  fetchTokenBlueprintPatchDTO,
-  type InventoryDetailDTO,
-  type TokenBlueprintPatchDTO,
-  type ProductBlueprintPatchDTO,
-} from "../../infrastructure/http/inventoryRepositoryHTTP";
+  getListCreateRaw,
+  getInventoryDetailRaw,
+  getTokenBlueprintPatchRaw,
+} from "../../infrastructure/api/inventoryApi";
+
+// ✅ DTO 型は types.ts から直接 import（barrel/fetcher 依存を避ける）
+import type {
+  InventoryDetailDTO,
+  TokenBlueprintPatchDTO,
+  ProductBlueprintPatchDTO,
+} from "../../infrastructure/http/inventoryRepositoryHTTP.types";
 
 export type InventoryDetailViewModel = {
   inventoryKey: string;
@@ -43,6 +48,39 @@ function asString(v: any): string {
 function asNumber(v: any): number {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefined {
+  if (!raw) return undefined;
+
+  const mintedRaw = raw?.minted;
+  const minted: boolean | null | undefined =
+    mintedRaw === undefined
+      ? undefined
+      : mintedRaw === null
+        ? null
+        : typeof mintedRaw === "boolean"
+          ? mintedRaw
+          : String(mintedRaw).trim().toLowerCase() === "true";
+
+  const tokenName = asString(raw?.tokenName) || undefined;
+  const symbol = asString(raw?.symbol) || undefined;
+  const brandId = asString(raw?.brandId) || undefined;
+  const brandName = asString(raw?.brandName) || undefined;
+  const description = asString(raw?.description) || undefined;
+  const metadataUri = asString(raw?.metadataUri) || undefined;
+  const iconUrl = asString(raw?.iconUrl) || undefined;
+
+  return {
+    tokenName: tokenName ?? null,
+    symbol: symbol ?? null,
+    brandId: brandId ?? null,
+    brandName: brandName ?? null,
+    description: description ?? null,
+    minted: minted ?? null,
+    metadataUri: metadataUri ?? null,
+    iconUrl: iconUrl ?? null,
+  };
 }
 
 function dtoRowsToInventoryRows(dto: InventoryDetailDTO): InventoryRow[] {
@@ -87,37 +125,42 @@ export function useInventoryDetail(
         setLoading(true);
         setError(null);
 
-        // ① pbId + tbId → inventoryId を list-create から解決
-        const listCreate = await fetchListCreateDTO({
+        // ① pbId + tbId → inventoryId を Raw API（list-create）から解決
+        const listCreateRaw = await getListCreateRaw({
           productBlueprintId: pbId,
           tokenBlueprintId: tbId,
         });
 
-        const inventoryId = asString((listCreate as any)?.inventoryId);
+        const inventoryId = asString((listCreateRaw as any)?.inventoryId);
         if (!inventoryId) {
           throw new Error(
             "inventoryId is empty (failed to resolve inventoryId from list-create)",
           );
         }
 
-        // ② inventory detail 取得（rows を直接 InventoryCard に渡すための元データ）
-        const detail: InventoryDetailDTO = await fetchInventoryDetailDTO(inventoryId);
+        // ② inventory detail を Raw API から取得
+        const detailRaw = (await getInventoryDetailRaw(inventoryId)) as any;
+        const detail: InventoryDetailDTO = detailRaw as InventoryDetailDTO;
         if (cancelled) return;
 
-        // ③ tokenBlueprintPatch（主に iconUrl 用）を取得（失敗しても続行）
+        // ③ tokenBlueprintPatch（主に iconUrl 用）を Raw API から取得（失敗しても続行）
         let tokenBlueprintPatch: TokenBlueprintPatchDTO | undefined = undefined;
         try {
-          tokenBlueprintPatch = await fetchTokenBlueprintPatchDTO(tbId);
+          const patchRaw = await getTokenBlueprintPatchRaw(tbId);
+          tokenBlueprintPatch = normalizeTokenBlueprintPatch(patchRaw);
         } catch {
           tokenBlueprintPatch = undefined;
         }
         if (cancelled) return;
 
-        // ④ DTO から InventoryCard 用 rows を直接生成（mergeDetailDTOs 不要）
+        // ④ InventoryCard 用 rows を DTO（detail.rows）から直接生成
         const nextRows: InventoryRow[] = dtoRowsToInventoryRows(detail);
 
-        // ⑤ vm も「DTOから直接」最小構成で作る
-        const totalStock = nextRows.reduce((sum, r) => sum + asNumber(r.stock), 0);
+        // ⑤ vm も DTO（detail）から直接、最小構成で生成
+        const totalStock =
+          (detail as any)?.totalStock !== undefined && (detail as any)?.totalStock !== null
+            ? asNumber((detail as any).totalStock)
+            : nextRows.reduce((sum, r) => sum + asNumber(r.stock), 0);
 
         const nextVm: InventoryDetailViewModel = {
           inventoryKey: `${pbId}__${tbId}`,
