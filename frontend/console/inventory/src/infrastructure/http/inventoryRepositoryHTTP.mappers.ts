@@ -107,8 +107,6 @@ export function mapTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undef
     brandId: p?.brandId !== undefined ? (p.brandId as any) : undefined,
     brandName: p?.brandName !== undefined ? (p.brandName as any) : undefined,
     description: p?.description !== undefined ? (p.description as any) : undefined,
-    minted: minted as any,
-    metadataUri: metadataUri ? (metadataUri as any) : undefined,
     iconUrl: iconUrl ? (iconUrl as any) : undefined,
   };
 }

@@ -53,22 +53,11 @@ function asNumber(v: any): number {
 function normalizeTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefined {
   if (!raw) return undefined;
 
-  const mintedRaw = raw?.minted;
-  const minted: boolean | null | undefined =
-    mintedRaw === undefined
-      ? undefined
-      : mintedRaw === null
-        ? null
-        : typeof mintedRaw === "boolean"
-          ? mintedRaw
-          : String(mintedRaw).trim().toLowerCase() === "true";
-
   const tokenName = asString(raw?.tokenName) || undefined;
   const symbol = asString(raw?.symbol) || undefined;
   const brandId = asString(raw?.brandId) || undefined;
   const brandName = asString(raw?.brandName) || undefined;
   const description = asString(raw?.description) || undefined;
-  const metadataUri = asString(raw?.metadataUri) || undefined;
   const iconUrl = asString(raw?.iconUrl) || undefined;
 
   return {
@@ -77,8 +66,6 @@ function normalizeTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefi
     brandId: brandId ?? null,
     brandName: brandName ?? null,
     description: description ?? null,
-    minted: minted ?? null,
-    metadataUri: metadataUri ?? null,
     iconUrl: iconUrl ?? null,
   };
 }

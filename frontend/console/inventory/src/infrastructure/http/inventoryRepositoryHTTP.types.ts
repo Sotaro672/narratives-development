@@ -75,8 +75,6 @@ export type TokenBlueprintPatchDTO = {
   brandId?: string | null;
   brandName?: string | null;
   description?: string | null;
-  minted?: boolean | null;
-  metadataUri?: string | null;
   iconUrl?: string | null;
 };
 
