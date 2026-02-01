@@ -18,7 +18,10 @@ import {
 import { Input } from "../../../../shell/src/shared/ui/input";
 
 // ✅ ロジックは hook に寄せる
-import { usePriceCard, type PriceCardProps } from "../hook/usePriceCard";
+import { usePriceCard } from "../hook/usePriceCard";
+
+// ✅ 型は inventory/application を正とする（依存方向を正す）
+import type { PriceCardProps } from "../../../../inventory/src/application/listCreate/priceCard.types";
 
 const PriceCard: React.FC<PriceCardProps> = (props) => {
   const { className } = props;
@@ -65,7 +68,8 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
             <TableBody>
               {rowsVM.map((row) => {
                 return (
-                  <TableRow key={row.displayOrder} className="prc__tr">
+                  // ✅ React key は識別子 modelId を使う（displayOrder は重複/未設定があり得る）
+                  <TableRow key={row.modelId} className="prc__tr">
                     {/* サイズ */}
                     <TableCell className="prc__size">{row.size}</TableCell>
 

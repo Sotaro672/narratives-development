@@ -1,4 +1,4 @@
-//frontend\console\inventory\src\presentation\hook\useInventoryManagement.tsx
+// frontend/console/inventory/src/presentation/hook/useInventoryManagement.tsx
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -126,7 +126,8 @@ export function useInventoryManagement(): UseInventoryManagementResult {
           return dir * as(a.productName).localeCompare(as(b.productName));
         if (sortKey === "tokenName")
           return dir * as(a.tokenName).localeCompare(as(b.tokenName));
-        if (sortKey === "availableStock") return dir * (an(a.availableStock) - an(b.availableStock));
+        if (sortKey === "availableStock")
+          return dir * (an(a.availableStock) - an(b.availableStock));
         if (sortKey === "reservedCount")
           return dir * (an(a.reservedCount) - an(b.reservedCount));
 
@@ -142,14 +143,16 @@ export function useInventoryManagement(): UseInventoryManagementResult {
    * ※ product/token は Service helper を利用
    * --------------------------------------------------------- */
   const options = useMemo(() => {
-    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map((r) => ({
-      productBlueprintId: r.productBlueprintId,
-      productName: r.productName,
-      tokenBlueprintId: r.tokenBlueprintId,
-      tokenName: r.tokenName,
-      availableStock: r.availableStock,
-      reservedCount: r.reservedCount, // ✅ 必須
-    }));
+    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map(
+      (r) => ({
+        productBlueprintId: r.productBlueprintId,
+        productName: r.productName,
+        tokenBlueprintId: r.tokenBlueprintId,
+        tokenName: r.tokenName,
+        availableStock: r.availableStock,
+        reservedCount: r.reservedCount, // ✅ 必須
+      }),
+    );
 
     const base = buildInventoryFilterOptionsFromRows(asServiceRows);
 
@@ -164,7 +167,7 @@ export function useInventoryManagement(): UseInventoryManagementResult {
    * --------------------------------------------------------- */
   const handleRowClick = useCallback(
     (row: InventoryRow) => {
-      // ✅ 方針A: 詳細は pbId + tbId の両方をURLに渡す
+      // ✅ 方針: 詳細は inventoryId（Firestore docId = pbId__tbId）で遷移する
       const pbId = normalizeId(row.productBlueprintId);
       const tbId = normalizeId(row.tokenBlueprintId);
 
@@ -172,7 +175,8 @@ export function useInventoryManagement(): UseInventoryManagementResult {
         return;
       }
 
-      navigate(`/inventory/detail/${encodeURIComponent(pbId)}/${encodeURIComponent(tbId)}`);
+      const inventoryId = `${pbId}__${tbId}`;
+      navigate(`/inventory/detail/${encodeURIComponent(inventoryId)}`);
     },
     [navigate],
   );

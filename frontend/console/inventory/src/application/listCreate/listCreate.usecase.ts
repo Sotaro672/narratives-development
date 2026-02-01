@@ -1,9 +1,7 @@
 // frontend/console/inventory/src/application/listCreate/listCreate.usecase.ts
 
-import {
-  fetchListCreateDTO,
-  type ListCreateDTO,
-} from "../../infrastructure/http/inventoryRepositoryHTTP";
+import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
+import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
 
 // ✅ Firebase Auth（uid 取得）
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
@@ -23,12 +21,16 @@ import { uploadListImagesPolicyA, _internal_getListIdFromListDTO } from "./listC
 
 /**
  * ✅ ListCreateDTO を取得する（Hook からはこれだけ呼ぶ）
+ * - API から raw を取得し、ListCreateDTO として扱う（ListCreateDTO のみを正）
  */
 export async function loadListCreateDTOFromParams(
   p: ResolvedListCreateParams,
 ): Promise<ListCreateDTO> {
   const input = buildListCreateFetchInput(p);
-  return await fetchListCreateDTO(input);
+
+  // getListCreateRaw は any を返すが、この usecase では ListCreateDTO のみを正として扱う
+  const raw = await getListCreateRaw(input);
+  return raw as ListCreateDTO;
 }
 
 /**

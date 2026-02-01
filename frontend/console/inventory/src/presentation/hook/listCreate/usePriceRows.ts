@@ -1,10 +1,8 @@
 // frontend/console/inventory/src/presentation/hook/listCreate/usePriceRows.ts
 import * as React from "react";
 
-import {
-  usePriceCard,
-  type PriceRow,
-} from "../../../../../list/src/presentation/hook/usePriceCard";
+import { usePriceCard } from "../../../../../list/src/presentation/hook/usePriceCard";
+import type { PriceRow } from "../../../application/listCreate/priceCard.types";
 
 export function usePriceRows(): {
   priceRows: PriceRow[];
@@ -30,7 +28,7 @@ export function usePriceRows(): {
     rows: priceRows,
     mode: "edit",
     currencySymbol: "¥",
-    onChangePrice: (index, price) => onChangePrice(index, price),
+    onChangePrice: (index, price, row) => onChangePrice(index, price),
   });
 
   return { priceRows, setPriceRows, initializedPriceRowsRef, onChangePrice, priceCard };

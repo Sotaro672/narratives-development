@@ -20,19 +20,13 @@ const routes: RouteObject[] = [
 
   // ✅ /inventory/detail/:productBlueprintId/:tokenBlueprintId → 詳細（方針A）
   {
-    path: "detail/:productBlueprintId/:tokenBlueprintId",
+    path: "detail/:inventoryId",
     element: <InventoryDetailPage />,
   },
 
   // ✅ /inventory/list/create/:inventoryId → 出品作成（inventoryId を直接渡す）
   {
     path: "list/create/:inventoryId",
-    element: <InventoryListCreatePage />,
-  },
-
-  // ✅ /inventory/list/create/:productBlueprintId/:tokenBlueprintId → 出品作成（pb/tb を渡す）
-  {
-    path: "list/create/:productBlueprintId/:tokenBlueprintId",
     element: <InventoryListCreatePage />,
   },
 ];

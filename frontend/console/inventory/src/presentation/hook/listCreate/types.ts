@@ -2,7 +2,8 @@
 import * as React from "react";
 
 import type { usePriceCard } from "../../../../../list/src/presentation/hook/usePriceCard";
-import type { ImageInputRef, PriceRowEx } from "../../../application/listCreate/listCreateService";
+import type { PriceRow } from "../../../application/listCreate/listCreateService";
+import type { ImageInputRef } from "../../../application/listCreate/listCreate.types";
 import type { ListCreateDTO } from "../../../infrastructure/http/inventoryRepositoryHTTP";
 
 export type ListingDecision = "list" | "hold";
@@ -24,7 +25,7 @@ export type UseListCreateResult = {
   tokenName: string;
 
   // price (PriceCard 用)
-  priceRows: PriceRowEx[];
+  priceRows: PriceRow[];
   onChangePrice: (index: number, price: number | null) => void;
 
   // ✅ PriceCard hook の結果

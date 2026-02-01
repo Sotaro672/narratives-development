@@ -64,21 +64,6 @@ export async function fetchTokenBlueprintPatchDTO(
 }
 
 /**
- * ✅ ListCreate DTO 取得
- * GET
- * - /inventory/list-create/:inventoryId
- * - /inventory/list-create/:productBlueprintId/:tokenBlueprintId
- */
-export async function fetchListCreateDTO(input: {
-  inventoryId?: string;
-  productBlueprintId?: string;
-  tokenBlueprintId?: string;
-}): Promise<ListCreateDTO> {
-  const data = await getListCreateRaw(input);
-  return mapListCreateDTO(data);
-}
-
-/**
  * ✅ Inventory Detail DTO
  * GET /inventory/{inventoryId}
  *

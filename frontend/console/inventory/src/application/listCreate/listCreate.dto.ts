@@ -20,7 +20,10 @@ export function extractDisplayStrings(dto: ListCreateDTO | null): {
 
 /**
  * ✅ backend の ListCreateDTO.priceRows を PriceCard 用 PriceRow[] に変換
- * - 名揺れは modelId のみを正とする（Size/Color/Index での補完はしない）
+ * - 期待値: inventory/application の PriceRow（priceCard.types.ts）を正とする
+ * - 識別子は modelId のみ（= PriceRow.id）を正とする
+ * - 並び順は displayOrder（未設定は null を保持）
+ * - 名揺れ補完はしない（Size/Color/Index での補完はしない）
  */
 export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
   const rowsAny: any[] = Array.isArray((dto as any)?.priceRows)
@@ -30,15 +33,27 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
       : [];
 
   return rowsAny.flatMap((r: any) => {
+    const id = s(r?.modelId ?? r?.ModelId);
+    if (!id) return []; // modelId が無い行は捨てる（識別子が正）
+
+    const displayOrderRaw = r?.displayOrder ?? r?.DisplayOrder;
+    const displayOrder =
+      displayOrderRaw === null || displayOrderRaw === undefined
+        ? null
+        : (Number(displayOrderRaw) as number);
+
     const size = s(r?.size ?? r?.Size) || "-";
     const color = s(r?.color ?? r?.Color) || "-";
-    const stock = Number(r?.stock ?? r?.Stock ?? 0);
+
+    const stock0 = Number(r?.stock ?? r?.Stock ?? 0);
+    const safeStock = Number.isFinite(stock0) ? stock0 : 0;
+
     const rgb = r?.rgb ?? r?.RGB;
     const price = r?.price ?? r?.Price;
 
-    const safeStock = Number.isFinite(stock) ? stock : 0;
-
     const row: PriceRow = {
+      id, // ✅ modelId -> id
+      displayOrder, // ✅ displayOrder を保持（未設定は null）
       size,
       color,
       stock: safeStock,
@@ -51,16 +66,7 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
 }
 
 /**
- * ✅ dto.priceRows[].modelId を取り出す（名揺れ補完はしない）
- * - PriceRowEx は削除したため「modelId 配列」を返す
- */
-export function extractModelIdsFromDTO(dto: any): string[] {
-  const dtoRows: any[] = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
-  return dtoRows.map((dr) => s(dr?.modelId));
-}
-
-/**
- * ✅ 初期表示用: PriceRow[] を返す（modelId は別途 extractModelIdsFromDTO で扱う）
+ * ✅ 初期表示用: PriceRow[] を返す
  */
 export function initPriceRowsFromDTO(dto: ListCreateDTO | null): PriceRow[] {
   return mapDTOToPriceRows(dto);

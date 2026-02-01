@@ -7,6 +7,14 @@
 // ---------------------------------------------------------
 export type ListCreatePriceRowDTO = {
   modelId: string;
+
+  /**
+   * ✅ modelRefs.displayOrder に対応（並び順はこれの昇順のみ）
+   * - backend の productBlueprintPatch.ModelRefs.DisplayOrder を詰めて渡す想定
+   * - 未設定は null を保持（＝並び順なし）
+   */
+  displayOrder?: number | null;
+
   size: string;
   color: string;
   rgb?: number | null;
@@ -25,7 +33,7 @@ export type ListCreateDTO = {
   tokenBrandName: string;
   tokenName: string;
 
-  // ✅ NEW: PriceCard 用（modelResolver の結果）
+  // ✅ PriceCard 用（modelResolver の結果）
   priceRows?: ListCreatePriceRowDTO[];
   totalStock?: number;
 };

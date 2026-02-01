@@ -24,6 +24,5 @@ export type {
 export {
   fetchInventoryListDTO,
   fetchTokenBlueprintPatchDTO,
-  fetchListCreateDTO,
   fetchInventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.fetchers";

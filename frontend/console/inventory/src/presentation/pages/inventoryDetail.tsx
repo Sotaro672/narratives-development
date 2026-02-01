@@ -18,39 +18,56 @@ function s(v: unknown): string {
   return String(v ?? "").trim();
 }
 
+const SEP = "__";
+
+function splitInventoryId(inventoryId: string): { pbId: string; tbId: string } | null {
+  const id = s(inventoryId);
+  if (!id || !id.includes(SEP)) return null;
+
+  const parts = id.split(SEP);
+  const pbId = s(parts[0]);
+  const tbId = s(parts[1]);
+
+  if (!pbId || !tbId) return null;
+  return { pbId, tbId };
+}
+
 export default function InventoryDetail() {
   const navigate = useNavigate();
 
-  // ✅ 方針A: URL で pbId + tbId を受け取る
-  const { productBlueprintId, tokenBlueprintId } = useParams<{
-    productBlueprintId?: string;
-    tokenBlueprintId?: string;
-  }>();
+  // ✅ 新方針: URL は /inventory/detail/:inventoryId （docId = pb__tb）だけ受け取る
+  const { inventoryId: inventoryIdParam } = useParams<{ inventoryId?: string }>();
+  const inventoryId = s(inventoryIdParam);
 
-  /**
-   * ★ pbId/tbId が無い（＝ /inventory/detail だけ or 旧ルートに誤マッチ）
-   *    → 一覧ページへ強制リダイレクト
-   */
+  // ✅ inventoryId が無い（＝ /inventory/detail だけ or 旧ルートに誤マッチ）
+  //    → 一覧ページへ強制リダイレクト
   React.useEffect(() => {
-    if (!productBlueprintId || !tokenBlueprintId) {
+    if (!inventoryId) {
       navigate("/inventory", { replace: true });
     }
-  }, [productBlueprintId, tokenBlueprintId, navigate]);
+  }, [inventoryId, navigate]);
 
   // ★ 戻るボタンは常に一覧へ戻す
   const onBack = React.useCallback(() => {
     navigate("/inventory");
   }, [navigate]);
 
-  // ✅ hook（方針A）
-  // NOTE: UseInventoryDetailResult に tokenBlueprintPatch は存在しないため destructure しない
-  const { rows, loading, error, vm } = useInventoryDetail(
-    productBlueprintId,
-    tokenBlueprintId,
-  );
+  // ✅ 互換: 既存 hook が pbId/tbId 前提のため、inventoryId(pb__tb) から split して渡す
+  const split = React.useMemo(() => splitInventoryId(inventoryId), [inventoryId]);
+  const pbId = s(split?.pbId);
+  const tbId = s(split?.tbId);
 
-  const pbId = s(vm?.productBlueprintId ?? productBlueprintId);
-  const tbId = s(vm?.tokenBlueprintId ?? tokenBlueprintId);
+  // split できない inventoryId は不正なので一覧へ戻す
+  React.useEffect(() => {
+    if (inventoryId && (!pbId || !tbId)) {
+      navigate("/inventory", { replace: true });
+    }
+  }, [inventoryId, pbId, tbId, navigate]);
+
+  // ✅ hook（内部 fetch は pbId/tbId を利用）
+  // NOTE: hook 側のシグネチャが (pbId, tbId) のままならこれでOK
+  const { rows, loading, error, vm } = useInventoryDetail(pbId, tbId);
+
   const pbPatch = vm?.productBlueprintPatch;
 
   // ✅ タイトル（ヘッダーは useInventoryDetail 側で `${productName} / ${tokenName}` を返す前提）
@@ -60,20 +77,19 @@ export default function InventoryDetail() {
       ? `在庫詳細：${pbPatch.productName}`
       : vm
         ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
-        : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
+        : inventoryId
+          ? `在庫詳細：${inventoryId}`
+          : "在庫詳細";
 
-  // ✅ 出品ボタン: /inventory/list/create/:productBlueprintId/:tokenBlueprintId へ
+  // ✅ 出品ボタン: /inventory/list/create/:inventoryId へ（docId をそのまま使う）
   const onList = React.useCallback(() => {
-    if (!pbId || !tbId) return;
-    navigate(`/inventory/list/create/${pbId}/${tbId}`);
-  }, [navigate, pbId, tbId]);
+    if (!inventoryId) return;
+    navigate(`/inventory/list/create/${encodeURIComponent(inventoryId)}`);
+  }, [navigate, inventoryId]);
 
   // ============================================================
   // ✅ TokenBlueprintCard (view only)
-  // - types.ts を絶対正として名揺れ排除
-  // - patch は vm.tokenBlueprintPatch のみを参照
   // ============================================================
-
   const tbPatch = vm?.tokenBlueprintPatch;
 
   const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(() => {

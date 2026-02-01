@@ -10,14 +10,21 @@ import type { RefObject } from "react";
  * - inventory/application 側に PriceRowVM を定義
  * - list/presentation は inventory/application の型を参照
  * の方向に寄せるのが推奨です。
+ *
+ * ✅ 今回の改修:
+ * - list/presentation への依存（usePriceCard の型 import）を廃止し、
+ *   inventory/application 側で priceCard.types.ts を正とする
  */
-import type { PriceRow as ListPriceRow } from "../../../../list/src/presentation/hook/usePriceCard";
+import type { PriceRow } from "./priceCard.types";
 
 // ✅ Hook 側で使う Ref 型（useRef<HTMLInputElement | null>(null) を許容）
 export type ImageInputRef = RefObject<HTMLInputElement | null>;
 
-// 依存は維持しつつ、inventory/application 側で型名を統一して扱う
-export type PriceRow = ListPriceRow;
+// ============================================================
+// ✅ PriceRow（期待値）
+// - infrastructure の ListCreatePriceRowDTO をここで PriceRow として扱い、
+//   list/presentation の usePriceCard → PriceRowVM へそのまま流す
+// ============================================================
 
 export type ListCreateRouteParams = {
   inventoryId?: string; // 期待値: "pb__tb"
@@ -40,3 +47,8 @@ export type CreateListPriceRow = {
   modelId: string;
   price: number | null;
 };
+
+// ------------------------------------------------------------
+// Re-export (optional but convenient)
+// ------------------------------------------------------------
+export type { PriceRow };
