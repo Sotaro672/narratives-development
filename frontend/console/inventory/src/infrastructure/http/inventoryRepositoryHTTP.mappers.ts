@@ -131,8 +131,6 @@ export function mapPrintedInventorySummaries(data: any): InventoryProductSummary
       byPbId.set(id, {
         id,
         productName: s(row?.productName) || "-",
-        brandId: "",
-        assigneeId: "",
       });
     }
   }

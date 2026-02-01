@@ -19,8 +19,6 @@ export type {
 export {
   fetchInventoryListDTO,
   fetchInventoryProductSummary,
-  fetchPrintedInventorySummaries,
-  fetchInventoryIDsByProductAndTokenDTO,
   fetchTokenBlueprintPatchDTO,
   fetchListCreateDTO,
   fetchInventoryDetailDTO,

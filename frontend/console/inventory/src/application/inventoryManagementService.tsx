@@ -6,11 +6,7 @@ import {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 
-import {
-  fetchPrintedInventorySummaries,
-  fetchInventoryListDTO,
-  type InventoryProductSummary,
-} from "../infrastructure/http/inventoryRepositoryHTTP";
+import { fetchInventoryListDTO } from "../infrastructure/http/inventoryRepositoryHTTP";
 
 // ============================================================
 // Types (ViewModel for Inventory Management table)
@@ -92,28 +88,13 @@ export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow
 /**
  * ✅ 一覧DTO担当:
  * 方針:
- * 1) printed の ProductBlueprint 一覧を取得（一覧の母集団）
- * 2) GET /inventory（ListByCurrentCompany の一覧DTO）を 1 回だけ取得
- * 3) inventories を (pbId, tbId) で集約して表示用 rows を返す
+ * - GET /inventory（ListByCurrentCompany の一覧DTO）を 1 回だけ取得
+ * - inventories を (pbId, tbId) で集約して表示用 rows を返す
  */
 export async function loadInventoryRowsFromBackend(): Promise<InventoryManagementRow[]> {
   console.log("[inventoryMgmt/loadInventoryRowsFromBackend] start");
 
-  // ① printed product blueprints（一覧の母集団）
-  const summaries: InventoryProductSummary[] = await fetchPrintedInventorySummaries();
-
-  console.log("[inventoryMgmt/loadInventoryRowsFromBackend] printed summaries", {
-    count: summaries.length,
-    sample: summaries.slice(0, 5),
-  });
-
-  const printedByPbId = new Map<string, InventoryProductSummary>();
-  for (const s of summaries) {
-    const pbId = asString(s.id);
-    if (pbId) printedByPbId.set(pbId, s);
-  }
-
-  // ② inventories（一覧DTO）を 1 回だけ
+  // inventories（一覧DTO）を 1 回だけ
   // 期待: [{ productBlueprintId, productName, tokenBlueprintId, tokenName, modelNumber, availableStock, reservedCount }, ...]
   const items: any[] = await fetchInventoryListDTO();
 
@@ -122,11 +103,12 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
     sample: items.slice(0, 5),
   });
 
-  // ③ (pbId, tbId) で集約
+  // (pbId, tbId) で集約
   const agg = new Map<
     string,
     {
       productBlueprintId: string;
+      productName: string;
       tokenBlueprintId: string;
       tokenName: string;
       availableStock: number;
@@ -148,9 +130,7 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
       continue;
     }
 
-    // printed に含まれない PB の在庫は一覧では出さない
-    if (!printedByPbId.has(pbId)) continue;
-
+    const productName = asString(it?.productName) || "-";
     const tokenName = asString(it?.tokenName) || tbId;
 
     // ✅ 在庫数(表示)は availableStock を正（無ければ stock）
@@ -164,6 +144,7 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
     if (!cur) {
       agg.set(key, {
         productBlueprintId: pbId,
+        productName,
         tokenBlueprintId: tbId,
         tokenName,
         availableStock,
@@ -172,24 +153,18 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
     } else {
       cur.availableStock += availableStock;
       cur.reservedCount += reservedCount;
-      // tokenName は先勝ち
+      // productName / tokenName は先勝ち
     }
   }
 
-  const out: InventoryManagementRow[] = [];
-  for (const v of agg.values()) {
-    const s = printedByPbId.get(v.productBlueprintId);
-    const productName = asString(s?.productName) || "-";
-
-    out.push({
-      productBlueprintId: v.productBlueprintId,
-      productName,
-      tokenBlueprintId: v.tokenBlueprintId,
-      tokenName: v.tokenName || "-",
-      availableStock: v.availableStock,
-      reservedCount: v.reservedCount,
-    });
-  }
+  const out: InventoryManagementRow[] = Array.from(agg.values()).map((v) => ({
+    productBlueprintId: v.productBlueprintId,
+    productName: v.productName || "-",
+    tokenBlueprintId: v.tokenBlueprintId,
+    tokenName: v.tokenName || "-",
+    availableStock: v.availableStock,
+    reservedCount: v.reservedCount,
+  }));
 
   console.log("[inventoryMgmt/loadInventoryRowsFromBackend] done", {
     rows: out.length,

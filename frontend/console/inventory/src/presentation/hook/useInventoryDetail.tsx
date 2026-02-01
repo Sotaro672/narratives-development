@@ -1,11 +1,17 @@
-// frontend/console/inventory/src/presentation/hook/useInventoryDetail.tsx
-
 import * as React from "react";
 import type { InventoryRow } from "../../application/inventoryTypes";
+
 import {
-  queryInventoryDetailByProductAndToken,
-  type InventoryDetailViewModel,
-} from "../../application/inventoryDetail/inventoryDetailService";
+  fetchListCreateDTO,
+  fetchInventoryDetailDTO,
+  fetchTokenBlueprintPatchDTO,
+  type InventoryDetailDTO,
+  type TokenBlueprintPatchDTO,
+} from "../../infrastructure/http/inventoryRepositoryHTTP";
+
+import { mergeDetailDTOs } from "../../application/inventoryDetail/inventoryDetail.mapper";
+
+export type InventoryDetailViewModel = ReturnType<typeof mergeDetailDTOs>;
 
 export type UseInventoryDetailResult = {
   vm: InventoryDetailViewModel | null;
@@ -46,7 +52,34 @@ export function useInventoryDetail(
         setLoading(true);
         setError(null);
 
-        const merged = await queryInventoryDetailByProductAndToken(pbId, tbId);
+        // ① pbId + tbId → inventoryId を list-create から解決
+        const listCreate = await fetchListCreateDTO({
+          productBlueprintId: pbId,
+          tokenBlueprintId: tbId,
+        });
+
+        const inventoryId = asString((listCreate as any)?.inventoryId);
+        if (!inventoryId) {
+          throw new Error(
+            "inventoryId is empty (failed to resolve inventoryId from list-create)",
+          );
+        }
+
+        // ② inventory detail 取得
+        const detail: InventoryDetailDTO = await fetchInventoryDetailDTO(inventoryId);
+        if (cancelled) return;
+
+        // ③ tokenBlueprintPatch（主に iconUrl 用）を取得（失敗しても続行）
+        let tokenBlueprintPatch: TokenBlueprintPatchDTO | null = null;
+        try {
+          tokenBlueprintPatch = await fetchTokenBlueprintPatchDTO(tbId);
+        } catch {
+          tokenBlueprintPatch = null;
+        }
+        if (cancelled) return;
+
+        // ④ merge（従来の ViewModel 形に寄せる）
+        const merged = mergeDetailDTOs(pbId, tbId, [inventoryId], [detail], tokenBlueprintPatch);
         if (cancelled) return;
 
         const nextRows = Array.isArray((merged as any)?.rows) ? (merged as any).rows : [];

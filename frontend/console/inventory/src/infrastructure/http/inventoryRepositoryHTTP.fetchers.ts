@@ -3,8 +3,6 @@
 import {
   getInventoryListRaw,
   getProductBlueprintRaw,
-  getPrintedProductBlueprintsRaw,
-  getInventoryIDsByProductAndTokenRaw,
   getTokenBlueprintPatchRaw,
   getListCreateRaw,
   getInventoryDetailRaw,
@@ -13,7 +11,6 @@ import {
 import type {
   InventoryListRowDTO,
   InventoryProductSummary,
-  InventoryIDsByProductAndTokenDTO,
   TokenBlueprintPatchDTO,
   ListCreateDTO,
   InventoryDetailDTO,
@@ -23,8 +20,6 @@ import { s } from "./inventoryRepositoryHTTP.utils";
 
 import {
   normalizeInventoryListRow,
-  mapPrintedInventorySummaries,
-  mapInventoryIDsByProductAndToken,
   mapTokenBlueprintPatch,
   mapListCreateDTO,
   mapInventoryDetailDTO,
@@ -72,43 +67,8 @@ export async function fetchInventoryProductSummary(
   return {
     id: s(data?.id ?? pbId),
     productName: s(data?.productName),
-    brandId: s(data?.brandId), // backend が返すなら入る、無いなら ""
     brandName: data?.brandName ? s(data.brandName) : undefined,
-    assigneeId: s(data?.assigneeId),
-    assigneeName: data?.assigneeName ? s(data.assigneeName) : undefined,
   };
-}
-
-/**
- * 在庫一覧（ヘッダー用）:
- * printed == "printed" の ProductBlueprint 一覧を取得
- *
- * B案: 実態は /inventory を叩いて pbId 単位で dedup した summary を作る
- */
-export async function fetchPrintedInventorySummaries(): Promise<InventoryProductSummary[]> {
-  const data = await getPrintedProductBlueprintsRaw();
-  return mapPrintedInventorySummaries(data);
-}
-
-/**
- * ✅ inventoryIds 解決 DTO（方針A）
- * GET /inventory/ids?productBlueprintId=...&tokenBlueprintId=...
- */
-export async function fetchInventoryIDsByProductAndTokenDTO(
-  productBlueprintId: string,
-  tokenBlueprintId: string,
-): Promise<InventoryIDsByProductAndTokenDTO> {
-  const pbId = s(productBlueprintId);
-  const tbId = s(tokenBlueprintId);
-  if (!pbId) throw new Error("productBlueprintId is empty");
-  if (!tbId) throw new Error("tokenBlueprintId is empty");
-
-  const data = await getInventoryIDsByProductAndTokenRaw({
-    productBlueprintId: pbId,
-    tokenBlueprintId: tbId,
-  });
-
-  return mapInventoryIDsByProductAndToken(pbId, tbId, data);
 }
 
 /**
