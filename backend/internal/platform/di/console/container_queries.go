@@ -41,9 +41,9 @@ func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
 		res.nameResolver,
 	)
 
-	listCreateQuery := companyquery.NewListCreateQueryWithInventoryAndModels(
+	// ✅ modelRepo(variations) を廃止したため、WithInventory のみを使用
+	listCreateQuery := companyquery.NewListCreateQueryWithInventory(
 		r.inventoryRepoForUC,
-		r.modelRepo,
 		&pbPatchByIDAdapter{repo: r.productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: r.tokenBlueprintRepo},
 		res.nameResolver,

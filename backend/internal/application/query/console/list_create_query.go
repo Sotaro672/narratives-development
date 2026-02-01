@@ -19,9 +19,10 @@ import (
 // - tbId から: tokenName / brandName
 //
 // ✅ FIX:
-// - PriceRows の母集団を「inventory.Stock」ではなく「models(variations)」にできるようにする。
+// - PriceRows の母集団を「productBlueprintPatch.ModelRefs」に統一する。
 //   -> 在庫が 0 / inventory.Stock に存在しない modelId でも、PriceRows に行を出せる。
 //   -> stock は inventory があれば反映、無ければ 0 で返す。
+//   -> ModelRefs が空の場合は PriceRows は空（後方互換フォールバック無し）
 //
 // ✅ NOTE:
 // - productBlueprintPatchReader / tokenBlueprintPatchReader / inventoryReader / getStringFieldAny / modelStockNumbers は
@@ -35,28 +36,19 @@ type ListCreateQuery struct {
 	// inventory から stock を引くため（任意）
 	invRepo inventoryReader // defined in inventory_query.go
 
-	// ✅ models(variations) から modelId 一覧を引くため（任意）
-	modelRepo modelIDsReader
-
 	pbPatchRepo  productBlueprintPatchReader // defined in inventory_query.go
 	tbPatchRepo  tokenBlueprintPatchReader   // defined in inventory_query.go
 	nameResolver *resolver.NameResolver
 }
 
-// ✅ NEW: variations の ID 一覧を引く最小ポート（Firestore 実装で提供する）
-type modelIDsReader interface {
-	ListModelIDsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]string, error)
-}
-
-// 互換: 既存 DI を壊さない（invRepo/modelRepo なしでも DTO の基本情報は返す）
+// 互換: 既存 DI を壊さない（invRepo なしでも DTO の基本情報は返す）
 func NewListCreateQuery(
 	pbPatchRepo productBlueprintPatchReader,
 	tbPatchRepo tokenBlueprintPatchReader,
 	nameResolver *resolver.NameResolver,
 ) *ListCreateQuery {
 	return &ListCreateQuery{
-		invRepo:      nil, // optional (backward compatible)
-		modelRepo:    nil, // optional (backward compatible)
+		invRepo:      nil, // optional
 		pbPatchRepo:  pbPatchRepo,
 		tbPatchRepo:  tbPatchRepo,
 		nameResolver: nameResolver,
@@ -72,24 +64,6 @@ func NewListCreateQueryWithInventory(
 ) *ListCreateQuery {
 	return &ListCreateQuery{
 		invRepo:      invRepo,
-		modelRepo:    nil, // optional
-		pbPatchRepo:  pbPatchRepo,
-		tbPatchRepo:  tbPatchRepo,
-		nameResolver: nameResolver,
-	}
-}
-
-// ✅ NEW: inventory + models を注入（PriceRows を「在庫に依存せず」作れる）
-func NewListCreateQueryWithInventoryAndModels(
-	invRepo inventoryReader,
-	modelRepo modelIDsReader,
-	pbPatchRepo productBlueprintPatchReader,
-	tbPatchRepo tokenBlueprintPatchReader,
-	nameResolver *resolver.NameResolver,
-) *ListCreateQuery {
-	return &ListCreateQuery{
-		invRepo:      invRepo,
-		modelRepo:    modelRepo,
 		pbPatchRepo:  pbPatchRepo,
 		tbPatchRepo:  tbPatchRepo,
 		nameResolver: nameResolver,
@@ -173,7 +147,7 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(
 	}
 
 	// ------------------------------------------------------------
-	// ✅ PriceRows: models を母集団にして作る（stock は inventory があれば反映）
+	// ✅ PriceRows: productBlueprintPatch.ModelRefs を母集団にして作る（stock は inventory があれば反映）
 	// ------------------------------------------------------------
 	priceRows, totalStock := q.buildPriceRowsByInventoryID(ctx, invID)
 
@@ -266,7 +240,7 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 	}
 
 	// ------------------------------------------------------------
-	// ✅ PriceRows: models を母集団にして作る
+	// ✅ PriceRows: productBlueprintPatch.ModelRefs を母集団にして作る
 	// ------------------------------------------------------------
 	priceRows, totalStock := q.buildPriceRowsByIDs(ctx, pbID, tbID)
 
@@ -313,7 +287,7 @@ func parseInventoryID(inventoryID string) (pbID string, tbID string, ok bool) {
 
 // ============================================================
 // internal: build PriceRows
-// - 母集団: modelRepo(=models/variations) があればそれを正とする
+// - 母集団: productBlueprintPatch.ModelRefs を正とする（displayOrder 順）
 // - stock: inventory が取れれば picked.Stock[modelId] を反映、無ければ 0
 // - 重要: stock==0 でも行を出す（価格入力のため）
 //
@@ -335,8 +309,11 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		return nil, 0
 	}
 
-	// 1) 母集団 modelIds（modelRepo があれば優先）
+	// 1) 母集団 modelIds（productBlueprintPatch.ModelRefs を正とする）
 	modelIDs := q.listModelIDs(ctx, pbID)
+	if len(modelIDs) == 0 {
+		return nil, 0
+	}
 
 	// 2) inventory を拾えれば stock 参照に使う（拾えなくても PriceRows は返す）
 	var picked *invdom.Mint
@@ -360,21 +337,6 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 				}
 			}
 		}
-	}
-
-	// fallback: modelRepo が無い/空で、inventory.Stock があればキーで回す
-	if len(modelIDs) == 0 && picked != nil && picked.Stock != nil {
-		for mid := range picked.Stock {
-			mid = strings.TrimSpace(mid)
-			if mid != "" {
-				modelIDs = append(modelIDs, mid)
-			}
-		}
-		sort.Strings(modelIDs)
-	}
-
-	if len(modelIDs) == 0 {
-		return nil, 0
 	}
 
 	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(modelIDs))
@@ -452,8 +414,11 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 		return nil, 0
 	}
 
-	// 1) 母集団 modelIds（modelRepo があれば優先）
+	// 1) 母集団 modelIds（productBlueprintPatch.ModelRefs を正とする）
 	modelIDs := q.listModelIDs(ctx, pbID)
+	if len(modelIDs) == 0 {
+		return nil, 0
+	}
 
 	// 2) inventory を拾えれば stock 参照に使う（拾えなくても PriceRows は返す）
 	var picked *invdom.Mint
@@ -475,21 +440,6 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 				}
 			}
 		}
-	}
-
-	// fallback: modelRepo が無い/空で、inventory.Stock があればキーで回す
-	if len(modelIDs) == 0 && picked != nil && picked.Stock != nil {
-		for mid := range picked.Stock {
-			mid = strings.TrimSpace(mid)
-			if mid != "" {
-				modelIDs = append(modelIDs, mid)
-			}
-		}
-		sort.Strings(modelIDs)
-	}
-
-	if len(modelIDs) == 0 {
-		return nil, 0
 	}
 
 	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(modelIDs))
@@ -549,8 +499,9 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 	return rows, total
 }
 
+// 母集団: productBlueprintPatch.ModelRefs（displayOrder 順）
 func (q *ListCreateQuery) listModelIDs(ctx context.Context, productBlueprintID string) []string {
-	if q == nil || q.modelRepo == nil {
+	if q == nil || q.pbPatchRepo == nil {
 		return nil
 	}
 	pbID := strings.TrimSpace(productBlueprintID)
@@ -558,24 +509,47 @@ func (q *ListCreateQuery) listModelIDs(ctx context.Context, productBlueprintID s
 		return nil
 	}
 
-	ids, err := q.modelRepo.ListModelIDsByProductBlueprintID(ctx, pbID)
-	if err != nil || len(ids) == 0 {
+	patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID)
+	if err != nil {
+		return nil
+	}
+	if patch.ModelRefs == nil || len(*patch.ModelRefs) == 0 {
 		return nil
 	}
 
+	refs := *patch.ModelRefs
+
+	// displayOrder 昇順（0 は末尾へ）
+	sort.SliceStable(refs, func(i, j int) bool {
+		oi := refs[i].DisplayOrder
+		oj := refs[j].DisplayOrder
+		if oi == 0 && oj == 0 {
+			return strings.TrimSpace(refs[i].ModelID) < strings.TrimSpace(refs[j].ModelID)
+		}
+		if oi == 0 {
+			return false
+		}
+		if oj == 0 {
+			return true
+		}
+		if oi != oj {
+			return oi < oj
+		}
+		return strings.TrimSpace(refs[i].ModelID) < strings.TrimSpace(refs[j].ModelID)
+	})
+
 	seen := map[string]struct{}{}
-	out := make([]string, 0, len(ids))
-	for _, x := range ids {
-		x = strings.TrimSpace(x)
-		if x == "" {
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		mid := strings.TrimSpace(r.ModelID)
+		if mid == "" {
 			continue
 		}
-		if _, ok := seen[x]; ok {
+		if _, ok := seen[mid]; ok {
 			continue
 		}
-		seen[x] = struct{}{}
-		out = append(out, x)
+		seen[mid] = struct{}{}
+		out = append(out, mid)
 	}
-	sort.Strings(out)
 	return out
 }
