@@ -11,10 +11,18 @@ import (
 
 // Patch（部分更新）: nil のフィールドは更新しない
 type ListPatch struct {
-	Status     *ListStatus
+	Status *ListStatus
+
 	AssigneeID *string
 	Title      *string
-	ImageID    *string // ListImage.id を指す
+
+	// ✅ 可読性のあるID（ユニークである必要はない）
+	// nil の場合は readableId を更新しない
+	ReadableID *string
+
+	// ✅ Policy: List.ImageID stores "image URL on bucket" (NOT image entity id)
+	// nil の場合は imageId を更新しない
+	ImageID *string
 
 	Description *string
 
@@ -34,11 +42,13 @@ type ListPatch struct {
 // - 旧命名互換のため ModelNumbers を残しているが、ここでの意味は「modelId の集合」。
 // - 価格条件は Prices[] の (modelId, price) に対して適用される。
 type Filter struct {
-	// フリーテキスト（id, title, description 等の部分一致などは実装側で解釈）
+	// フリーテキスト（id, readableId, title, description 等の部分一致などは実装側で解釈）
 	SearchQuery string
 
 	// 絞り込み
-	IDs        []string
+	IDs         []string
+	ReadableIDs []string
+
 	AssigneeID *string
 	Status     *ListStatus
 	Statuses   []ListStatus

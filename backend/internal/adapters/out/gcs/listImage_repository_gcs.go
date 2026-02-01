@@ -15,7 +15,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
-	usecase "narratives/internal/application/usecase"
+	listuc "narratives/internal/application/usecase/list"
 	listimagedom "narratives/internal/domain/listImage"
 )
 
@@ -62,7 +62,7 @@ func (r *ListImageRepositoryGCS) ResolveBucket() string {
 
 // ============================================================
 // ✅ (Optional) Create-time init: EnsureListBucket
-// - usecase.ListImageBucketInitializer implementation
+// - usecase/list.ListImageBucketInitializer implementation
 // - "bucket を作る" ではなく "{listId}/.keep" を作る方式（prefix 初期化）
 // ============================================================
 
@@ -103,7 +103,7 @@ func (r *ListImageRepositoryGCS) EnsureListBucket(ctx context.Context, listID st
 
 // ============================================================
 // ✅ A) signed-url: IssueSignedURL (usecase port implementation)
-// - handler → usecase → (this repo)
+// - handler → usecase/list → (this repo)
 // ============================================================
 
 // IssueSignedURL issues a signed PUT url for uploading list images.
@@ -111,30 +111,30 @@ func (r *ListImageRepositoryGCS) EnsureListBucket(ctx context.Context, listID st
 // Returns ID as objectPath (so POST /lists/{id}/images can SaveFromBucketObject using it).
 func (r *ListImageRepositoryGCS) IssueSignedURL(
 	ctx context.Context,
-	in usecase.ListImageIssueSignedURLInput,
-) (usecase.ListImageIssueSignedURLOutput, error) {
+	in listuc.ListImageIssueSignedURLInput,
+) (listuc.ListImageIssueSignedURLOutput, error) {
 	_ = ctx // SignedURL generation itself doesn't require ctx; kept for interface consistency.
 
 	if r == nil || r.Client == nil {
-		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: storage client is nil")
+		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: storage client is nil")
 	}
 
 	listID := strings.TrimSpace(in.ListID)
 	if listID == "" {
-		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: listID is empty")
+		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: listID is empty")
 	}
 
 	ct := strings.ToLower(strings.TrimSpace(in.ContentType))
 	if ct == "" {
-		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: contentType is empty")
+		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: contentType is empty")
 	}
 	if !isSupportedListImageMIME(ct) {
-		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: unsupported contentType=%q", ct)
+		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: unsupported contentType=%q", ct)
 	}
 
 	// optional: size validation (if provided)
 	if in.Size > 0 && in.Size > int64(listimagedom.DefaultMaxImageSizeBytes) {
-		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf(
+		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf(
 			"ListImageRepositoryGCS.IssueSignedURL: file too large: %d > %d",
 			in.Size,
 			listimagedom.DefaultMaxImageSizeBytes,
@@ -154,7 +154,7 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 
 	objPath, err := buildListImageObjectPath(listID, imgID, normName)
 	if err != nil {
-		return usecase.ListImageIssueSignedURLOutput{}, err
+		return listuc.ListImageIssueSignedURLOutput{}, err
 	}
 
 	bucket := r.ResolveBucket()
@@ -177,12 +177,12 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 		ContentType: ct,
 	})
 	if err != nil {
-		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: signed url failed: %w", err)
+		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: signed url failed: %w", err)
 	}
 
 	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objPath)
 
-	return usecase.ListImageIssueSignedURLOutput{
+	return listuc.ListImageIssueSignedURLOutput{
 		// ✅ 方針: ID = objectPath
 		ID:           objPath,
 		Bucket:       bucket,
@@ -211,7 +211,7 @@ func isSupportedListImageMIME(mime string) bool {
 }
 
 // ============================================================
-// usecase required methods (署名付きURL前提 / 旧互換削除後)
+// usecase required methods
 // - ListByListID(ctx, listID) ([]ListImage, error)
 // - GetByID(ctx, id) (ListImage, error)
 // - SaveFromBucketObject(ctx, id, listID, bucket, objectPath, size, displayOrder) (ListImage, error)

@@ -93,7 +93,7 @@ func (r *ListRepositoryFS) Exists(ctx context.Context, id string) (bool, error) 
 	return true, nil
 }
 
-// ✅ filter はフロントが担うため、Count は全件数のみ返す（best-effort scan）
+// filter はフロントが担うため、Count は全件数のみ返す（best-effort scan）
 func (r *ListRepositoryFS) Count(ctx context.Context, _ ldom.Filter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
@@ -116,7 +116,7 @@ func (r *ListRepositoryFS) Count(ctx context.Context, _ ldom.Filter) (int, error
 	return total, nil
 }
 
-// ✅ filter/sort/search はフロントが担うため、List は全件対象 + ページングのみ（順序は固定）
+// filter/sort/search はフロントが担うため、List は全件対象 + ページングのみ（順序は固定）
 func (r *ListRepositoryFS) List(
 	ctx context.Context,
 	_ ldom.Filter,
@@ -200,7 +200,7 @@ func (r *ListRepositoryFS) List(
 	}, nil
 }
 
-// ✅ filter/sort/search はフロントが担うため、cursor も全件対象（cursor/paging のみ）
+// filter/sort/search はフロントが担うため、cursor も全件対象（cursor/paging のみ）
 func (r *ListRepositoryFS) ListByCursor(
 	ctx context.Context,
 	_ ldom.Filter,
@@ -286,7 +286,7 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
 
-	// ✅ ABテスト前提: 同一 inventoryId に複数 List を許容するため、
+	// ABテスト前提: 同一 inventoryId に複数 List を許容するため、
 	// docId を inventoryId に固定しない。
 	// - l.ID が空なら Firestore の自動採番で docId を発行する
 	id := strings.TrimSpace(l.ID)
@@ -341,8 +341,8 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 	return r.GetByID(ctx, id)
 }
 
-// ✅ domain.Repository としての patch update（既存互換を維持）
-// ✅ main doc 更新は "map + MergeAll" に統一（既存フィールドを残し、将来の追加フィールドも壊さない）
+// domain.Repository としての patch update（既存互換を維持）
+// main doc 更新は "map + MergeAll" に統一（既存フィールドを残し、将来の追加フィールドも壊さない）
 func (r *ListRepositoryFS) Update(
 	ctx context.Context,
 	id string,
@@ -396,6 +396,12 @@ func (r *ListRepositoryFS) Update(
 		// ImageID
 		if patch.ImageID != nil {
 			cur.ImageID = strings.TrimSpace(*patch.ImageID)
+			changed = true
+		}
+
+		// ReadableID
+		if patch.ReadableID != nil {
+			cur.ReadableID = strings.TrimSpace(*patch.ReadableID)
 			changed = true
 		}
 
@@ -467,7 +473,7 @@ func (r *ListRepositoryFS) Update(
 		if changed || pricesWillChange {
 			data := encodeListDoc(cur)
 
-			// ✅ 明示的に「消す」意図があった場合だけ delete を入れる
+			// 明示的に「消す」意図があった場合だけ delete を入れる
 			if clearUpdatedBy {
 				data["updated_by"] = gfs.Delete
 			}
@@ -481,7 +487,6 @@ func (r *ListRepositoryFS) Update(
 				data["deleted_by"] = gfs.Delete
 			}
 
-			// ✅ MergeAll は map data のみに使える（ここは map なのでOK）
 			if err := tx.Set(ref, data, gfs.MergeAll); err != nil {
 				return err
 			}
@@ -555,7 +560,7 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// Save は upsert です（既存互換）。main doc は map + MergeAll に統一。
+// Save は upsert です。main doc は map + MergeAll に統一。
 func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOptions) (ldom.List, error) {
 	if r.Client == nil {
 		return ldom.List{}, errors.New("firestore client is nil")
@@ -582,7 +587,6 @@ func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOp
 	}
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		// ✅ MergeAll は map data のみに使える（encodeListDoc は map）
 		if err := tx.Set(ref, encodeListDoc(l), gfs.MergeAll); err != nil {
 			return err
 		}
@@ -614,6 +618,7 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		DeletedBy   *string    `firestore:"deleted_by"`
 
 		InventoryID string `firestore:"inventory_id"`
+		ReadableID  string `firestore:"readable_id"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -649,30 +654,14 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		deletedBy = fscommon.TrimPtr(raw.DeletedBy)
 	}
 
-	// backward compatible: camelCase で保存されている既存データも拾う
-	invID := strings.TrimSpace(raw.InventoryID)
-	if invID == "" {
-		if m := doc.Data(); m != nil {
-			for _, key := range []string{"inventoryId", "inventoryID", "inventory_id"} {
-				if v, ok := m[key]; ok {
-					if s, ok := v.(string); ok {
-						invID = strings.TrimSpace(s)
-						if invID != "" {
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
 	return ldom.List{
 		ID:          id,
 		Status:      ldom.ListStatus(strings.TrimSpace(raw.Status)),
 		AssigneeID:  strings.TrimSpace(raw.AssigneeID),
 		Title:       strings.TrimSpace(raw.Title),
 		ImageID:     strings.TrimSpace(raw.ImageID),
-		InventoryID: invID,
+		InventoryID: strings.TrimSpace(raw.InventoryID),
+		ReadableID:  strings.TrimSpace(raw.ReadableID),
 
 		Description: desc,
 		Prices:      nil, // filled later
@@ -697,9 +686,11 @@ func encodeListDoc(l ldom.List) map[string]any {
 		"created_at":  l.CreatedAt.UTC(),
 	}
 
-	// inventory_id を保存（空なら保存しない）
 	if v := strings.TrimSpace(l.InventoryID); v != "" {
 		m["inventory_id"] = v
+	}
+	if v := strings.TrimSpace(l.ReadableID); v != "" {
+		m["readable_id"] = v
 	}
 
 	if l.UpdatedBy != nil {
@@ -723,7 +714,7 @@ func encodeListDoc(l ldom.List) map[string]any {
 }
 
 // ============================================================
-// Helpers - prices (✅ subcollection)
+// Helpers - prices (subcollection)
 // ============================================================
 
 func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ldom.List) error {
@@ -738,14 +729,15 @@ func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ld
 }
 
 // loadListPricesForOne loads prices as []{modelId, price}.
-// Backward compatible:
-// - old docs might have "inventory_id" instead of "model_id" (we read both)
+// Firestore schema:
+// - docID: modelId
+// - fields: { model_id: string, price: number }
 func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) ([]ldom.ListPriceRow, error) {
 	if strings.TrimSpace(listID) == "" {
 		return nil, nil
 	}
 
-	// ✅ order by DocumentID to avoid schema-dependent OrderBy errors
+	// order by DocumentID to avoid schema-dependent OrderBy errors
 	it := r.col().
 		Doc(listID).
 		Collection(listPricesSub).
@@ -764,12 +756,9 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 			return nil, err
 		}
 
-		// ✅ new: model_id
-		// ✅ old: inventory_id (fallback)
 		var raw struct {
-			ModelID     string `firestore:"model_id"`
-			InventoryID string `firestore:"inventory_id"`
-			Price       int    `firestore:"price"`
+			ModelID string `firestore:"model_id"`
+			Price   int    `firestore:"price"`
 		}
 		if err := doc.DataTo(&raw); err != nil {
 			return nil, err
@@ -777,10 +766,8 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 
 		modelID := strings.TrimSpace(raw.ModelID)
 		if modelID == "" {
-			modelID = strings.TrimSpace(raw.InventoryID) // backward compat
-		}
-		if modelID == "" {
-			modelID = strings.TrimSpace(doc.Ref.ID) // final fallback
+			// schema invariant: docID should be modelId
+			modelID = strings.TrimSpace(doc.Ref.ID)
 		}
 		if modelID == "" {
 			continue
@@ -877,7 +864,7 @@ func normalizeListPrices(in []ldom.ListPriceRow) map[string]ldom.ListPriceRow {
 }
 
 // ============================================================
-// ✅ Adapter for application/usecase.ListUpdater (Update(ctx, item))
+// Adapter for application/usecase.ListUpdater (Update(ctx, item))
 // - ListRepositoryFS は domain.Repository の都合で Update(ctx, id, patch) を持つため、
 //   同名で Update(ctx, item) を追加できない（Go の制約）。
 // - このラッパーを DI で listReader/listCreator として渡すと、usecase 側の auto-wire が成立します。
@@ -887,7 +874,6 @@ type ListRepositoryForUsecase struct {
 	*ListRepositoryFS
 }
 
-// NewListRepositoryForUsecase creates a wrapper for application layer.
 func NewListRepositoryForUsecase(repo *ListRepositoryFS) *ListRepositoryForUsecase {
 	return &ListRepositoryForUsecase{ListRepositoryFS: repo}
 }
@@ -901,7 +887,7 @@ func strPtrIfNonEmpty(s string) *string {
 }
 
 // Update implements "usecase.ListUpdater" contract by translating full item -> patch.
-// ✅ “空文字/空配列は変更しない” を徹底（＝既存フィールド維持）
+// “空文字/空配列は変更しない” を徹底（＝既存フィールド維持）
 func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (ldom.List, error) {
 	if r == nil || r.ListRepositoryFS == nil {
 		return ldom.List{}, errors.New("list repo is nil")
@@ -930,6 +916,11 @@ func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (
 		patch.ImageID = p
 	}
 
+	// readableId: 空なら変更しない（keep）
+	if p := strPtrIfNonEmpty(item.ReadableID); p != nil {
+		patch.ReadableID = p
+	}
+
 	// title: 空なら変更しない（keep）
 	if p := strPtrIfNonEmpty(item.Title); p != nil {
 		patch.Title = p
@@ -940,8 +931,7 @@ func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (
 		patch.Description = p
 	}
 
-	// ✅ prices: nil = 未指定(keep), 空配列 = 変更しない(keep), 要素あり = replace
-	// ここが無かったため prices が更新されず、結果として price が 1 に戻っていました。
+	// prices: nil = 未指定(keep), 空配列 = 変更しない(keep), 要素あり = replace
 	if item.Prices != nil {
 		if len(item.Prices) > 0 {
 			pr := item.Prices

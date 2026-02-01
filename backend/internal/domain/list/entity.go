@@ -3,6 +3,7 @@ package list
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -34,11 +35,13 @@ type ListPriceRow struct {
 
 // List mirrors requested shape.
 // - ID: list document id (server-generated on Create; client may omit)
+// - ReadableID: human-friendly id (NOT required to be unique)
 // - InventoryID: inventory document id (ex: productBlueprintId__tokenBlueprintId)
 // - Prices: array (ONLY)
 type List struct {
-	ID     string     `json:"id,omitempty"`
-	Status ListStatus `json:"status,omitempty"`
+	ID         string     `json:"id,omitempty"`
+	ReadableID string     `json:"readableId,omitempty"`
+	Status     ListStatus `json:"status,omitempty"`
 
 	AssigneeID string `json:"assigneeId,omitempty"`
 	Title      string `json:"title,omitempty"`
@@ -74,12 +77,12 @@ var (
 	// For persisted entity
 	ErrInvalidID = errors.New("list: invalid id")
 
-	ErrInvalidStatus      = errors.New("list: invalid status")
-	ErrInvalidAssigneeID  = errors.New("list: invalid assigneeId")
-	ErrInvalidTitle       = errors.New("list: invalid title")
-	ErrInvalidInventoryID = errors.New("list: invalid inventoryId")
-	ErrInvalidDescription = errors.New("list: invalid description")
-
+	ErrInvalidReadableID   = errors.New("list: invalid readableId")
+	ErrInvalidStatus       = errors.New("list: invalid status")
+	ErrInvalidAssigneeID   = errors.New("list: invalid assigneeId")
+	ErrInvalidTitle        = errors.New("list: invalid title")
+	ErrInvalidInventoryID  = errors.New("list: invalid inventoryId")
+	ErrInvalidDescription  = errors.New("list: invalid description")
 	ErrInvalidPrices       = errors.New("list: invalid prices")
 	ErrInvalidPrice        = errors.New("list: invalid price")
 	ErrInvalidPriceModelID = errors.New("list: invalid modelId in prices")
@@ -104,6 +107,9 @@ var (
 	MinPrice             = 0
 	MaxPrice             = 10_000_000
 
+	// ✅ human-friendly id guard
+	MaxReadableIDLength = 64
+
 	// ✅ URL length guard (practical limit)
 	MaxImageURLLength = 2048
 )
@@ -115,6 +121,7 @@ var (
 // NewForCreate creates a List for Create flow.
 // - ID can be empty (server generates)
 // - CreatedAt can be zero (repo fills)
+// - ReadableID can be empty (set later)
 // - ImageID(URL) can be empty (set later)
 func NewForCreate(
 	status ListStatus,
@@ -130,6 +137,7 @@ func NewForCreate(
 	}
 	l := List{
 		ID:          "",
+		ReadableID:  "", // optional; can be set later
 		Status:      status,
 		AssigneeID:  strings.TrimSpace(assigneeID),
 		Title:       strings.TrimSpace(title),
@@ -156,6 +164,28 @@ func (l *List) UpdateTitle(title string, now time.Time) error {
 		return ErrInvalidTitle
 	}
 	l.Title = title
+	l.touch(now)
+	return nil
+}
+
+// UpdateReadableID sets human-friendly id.
+// - NOT required to be unique
+// - empty is allowed (means "unset")
+func (l *List) UpdateReadableID(readableID string, now time.Time) error {
+	if l == nil {
+		return nil
+	}
+	rid := strings.TrimSpace(readableID)
+	if rid == "" {
+		// allow clearing
+		l.ReadableID = ""
+		l.touch(now)
+		return nil
+	}
+	if !isValidReadableID(rid) {
+		return ErrInvalidReadableID
+	}
+	l.ReadableID = rid
 	l.touch(now)
 	return nil
 }
@@ -253,6 +283,7 @@ func (l List) ValidateImageLink() error {
 // ValidateForCreate validates fields required at Create time.
 // - ID can be empty
 // - CreatedAt can be zero (repo fills)
+// - ReadableID can be empty (set later)
 // - ImageID can be empty (set later)
 func (l List) ValidateForCreate() error {
 	if l.Status == "" {
@@ -278,6 +309,13 @@ func (l List) ValidateForCreate() error {
 	}
 	if strings.TrimSpace(l.CreatedBy) == "" {
 		return ErrInvalidCreatedBy
+	}
+
+	// Optional fields
+	if strings.TrimSpace(l.ReadableID) != "" {
+		if !isValidReadableID(strings.TrimSpace(l.ReadableID)) {
+			return ErrInvalidReadableID
+		}
 	}
 
 	// Optional fields
@@ -332,6 +370,13 @@ func (l List) ValidateForPersist() error {
 	}
 	if l.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
+	}
+
+	// Optional but if set must be valid (NOT unique)
+	if strings.TrimSpace(l.ReadableID) != "" {
+		if !isValidReadableID(strings.TrimSpace(l.ReadableID)) {
+			return ErrInvalidReadableID
+		}
 	}
 
 	// Optional but if set must be valid
@@ -436,4 +481,22 @@ func isValidImageURL(u string) bool {
 		return true
 	}
 	return false
+}
+
+var readableIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+
+// isValidReadableID validates a human-friendly id (NOT unique).
+// Example allowed:
+// - "LIST-001"
+// - "ab_test-A"
+// - "spring_sale_2026"
+func isValidReadableID(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if len(s) > MaxReadableIDLength {
+		return false
+	}
+	return readableIDRe.MatchString(s)
 }

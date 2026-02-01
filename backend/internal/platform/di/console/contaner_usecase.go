@@ -13,8 +13,12 @@ import (
 	pbuc "narratives/internal/application/productBlueprint/usecase"
 	productionapp "narratives/internal/application/production"
 	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
+
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
+
+	// ✅ moved: ListUsecase is now in subpackage usecase/list
+	listuc "narratives/internal/application/usecase/list"
 
 	"narratives/internal/infra/arweave"
 )
@@ -32,7 +36,7 @@ type usecases struct {
 	inquiryUC        *uc.InquiryUsecase
 	inventoryUC      *uc.InventoryUsecase
 	invoiceUC        *uc.InvoiceUsecase
-	listUC           *uc.ListUsecase
+	listUC           *listuc.ListUsecase // ✅ moved
 	memberUC         *uc.MemberUsecase
 	messageUC        *uc.MessageUsecase
 	modelUC          *uc.ModelUsecase
@@ -108,7 +112,8 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	paymentUC := uc.NewPaymentUsecase(r.paymentRepo)
 	invoiceUC := uc.NewInvoiceUsecase(r.invoiceRepo)
 
-	listUC := uc.NewListUsecaseWithCreator(
+	// ✅ moved: use listuc.NewListUsecaseWithCreator (not uc.NewListUsecaseWithCreator)
+	listUC := listuc.NewListUsecaseWithCreator(
 		r.listRepo,
 		r.listRepo,
 		r.listPatcher,

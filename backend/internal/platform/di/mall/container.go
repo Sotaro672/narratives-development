@@ -11,7 +11,12 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
+
+	// ✅ base usecases
 	usecase "narratives/internal/application/usecase"
+
+	// ✅ moved: ListUsecase is now in subpackage usecase/list
+	listuc "narratives/internal/application/usecase/list"
 
 	// ✅ tokenBlueprint usecases (package was changed to tokenBlueprint)
 	tokenbp "narratives/internal/application/tokenBlueprint"
@@ -47,7 +52,7 @@ type Container struct {
 
 	// Usecases (mall-facing)
 	AvatarUC          *usecase.AvatarUsecase // ✅ /mall/avatars 用
-	ListUC            *usecase.ListUsecase
+	ListUC            *listuc.ListUsecase    // ✅ moved to usecase/list
 	ShippingAddressUC *usecase.ShippingAddressUsecase
 	BillingAddressUC  *usecase.BillingAddressUsecase
 	UserUC            *usecase.UserUsecase
@@ -220,7 +225,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WithWalletRepo(walletRepo).
 		WithWalletService(avatarWalletSvc)
 
-	c.ListUC = usecase.NewListUsecase(
+	// ✅ moved: ListUsecase constructor is now listuc.NewListUsecase(...)
+	c.ListUC = listuc.NewListUsecase(
 		listRepoForUC,
 		listPatcher,
 		listImageRepo,

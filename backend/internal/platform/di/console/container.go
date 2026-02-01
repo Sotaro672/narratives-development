@@ -16,8 +16,12 @@ import (
 	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
 	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
+
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
+
+	// ✅ moved: ListUsecase is now in subpackage usecase/list
+	listuc "narratives/internal/application/usecase/list"
 
 	shared "narratives/internal/platform/di/shared"
 
@@ -54,7 +58,7 @@ type Container struct {
 	InquiryUC          *uc.InquiryUsecase
 	InventoryUC        *uc.InventoryUsecase
 	InvoiceUC          *uc.InvoiceUsecase
-	ListUC             *uc.ListUsecase
+	ListUC             *listuc.ListUsecase // ✅ moved
 	MemberUC           *uc.MemberUsecase
 	MessageUC          *uc.MessageUsecase
 	ModelUC            *uc.ModelUsecase
@@ -136,7 +140,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		InquiryUC:          u.inquiryUC,
 		InventoryUC:        u.inventoryUC,
 		InvoiceUC:          u.invoiceUC,
-		ListUC:             u.listUC,
+		ListUC:             u.listUC, // ✅ buildUsecases 側で *listuc.ListUsecase を返す前提
 		MemberUC:           u.memberUC,
 		MessageUC:          u.messageUC,
 		ModelUC:            u.modelUC,

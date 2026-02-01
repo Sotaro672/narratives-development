@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	usecase "narratives/internal/application/usecase"
+	listuc "narratives/internal/application/usecase/list"
 	ldom "narratives/internal/domain/list"
 )
 
@@ -17,10 +17,10 @@ import (
 // - GET /mall/lists
 // - GET /mall/lists/{id}
 type MallListHandler struct {
-	uc *usecase.ListUsecase
+	uc *listuc.ListUsecase
 }
 
-func NewMallListHandler(uc *usecase.ListUsecase) http.Handler {
+func NewMallListHandler(uc *listuc.ListUsecase) http.Handler {
 	return &MallListHandler{uc: uc}
 }
 

@@ -6,7 +6,7 @@ import {
   createListWithImages,
   buildAfterCreatePath,
   type ResolvedListCreateParams,
-  type PriceRowEx,
+  type PriceRow, // ✅ PriceRowEx 廃止（存在しない）→ PriceRow を使用
 } from "../../../application/listCreate/listCreateService";
 
 import type { ListingDecision } from "./types";
@@ -17,7 +17,7 @@ export function useCreateList(args: {
   decision: ListingDecision;
   listingTitle: string;
   description: string;
-  priceRows: PriceRowEx[];
+  priceRows: PriceRow[]; // ✅ PriceRowEx → PriceRow
   assigneeId: string | undefined;
   images: File[];
   mainImageIndex: number;
@@ -39,27 +39,11 @@ export function useCreateList(args: {
       try {
         if (images.length === 0) {
           const msg = "商品画像は1枚以上必須です。画像を追加してください。";
-
-          // eslint-disable-next-line no-console
-          console.log("[inventory/listImage] validation failed (no images)", {
-            imagesCount: images.length,
-            mainImageIndex,
-          });
-
           alert(msg);
           throw new Error(msg);
         }
 
-        // eslint-disable-next-line no-console
-        console.log("[inventory/listImage] create start", {
-          imagesCount: images.length,
-          mainImageIndex,
-          names: images.slice(0, 8).map((f) => f.name),
-          sizes: images.slice(0, 8).map((f) => f.size),
-          types: images.slice(0, 8).map((f) => f.type),
-        });
-
-        // inventoryId は "pbId__tbId" を含むため split("__") しない
+        // inventoryId は docId を正としてそのまま扱う（split しない）
         const rawInventoryId = String(resolvedParams.inventoryId ?? "");
         const safeInventoryId = rawInventoryId;
 
@@ -74,24 +58,10 @@ export function useCreateList(args: {
           mainImageIndex,
         });
 
-        // eslint-disable-next-line no-console
-        console.log("[inventory/listImage] create success", {
-          imagesCount: images.length,
-          mainImageIndex,
-        });
-
         alert("作成しました");
         navigate(buildAfterCreatePath(resolvedParams));
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);
-
-        // eslint-disable-next-line no-console
-        console.log("[inventory/listImage] create failed", {
-          msg,
-          imagesCount: images.length,
-          mainImageIndex,
-        });
-
         alert(msg);
       }
     })();

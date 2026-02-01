@@ -20,6 +20,9 @@ import (
 	// ✅ ProductBlueprint usecase 移動先
 	pbuc "narratives/internal/application/productBlueprint/usecase"
 
+	// ✅ ListUsecase moved to subpackage usecase/list
+	listuc "narratives/internal/application/usecase/list"
+
 	usecase "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
@@ -38,6 +41,7 @@ import (
 	// ✅ moved handlers
 	inspectionHandler "narratives/internal/adapters/in/http/console/handler/inspection"
 	inventoryHandler "narratives/internal/adapters/in/http/console/handler/inventory"
+	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
 	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
 	productionHandler "narratives/internal/adapters/in/http/console/handler/production"
@@ -65,7 +69,7 @@ type RouterDeps struct {
 	InquiryUC        *usecase.InquiryUsecase
 	InventoryUC      *usecase.InventoryUsecase
 	InvoiceUC        *usecase.InvoiceUsecase
-	ListUC           *usecase.ListUsecase
+	ListUC           *listuc.ListUsecase // ✅ FIX: moved
 	MemberUC         *usecase.MemberUsecase
 	MessageUC        *usecase.MessageUsecase
 	ModelUC          *usecase.ModelUsecase
@@ -107,8 +111,8 @@ type RouterDeps struct {
 	ListDetailQuery *companyquery.ListDetailQuery
 
 	// ✅ NEW: ListImage uploader/deleter
-	ListImageUploader consoleHandler.ListImageUploader
-	ListImageDeleter  consoleHandler.ListImageDeleter
+	ListImageUploader listHandler.ListImageUploader
+	ListImageDeleter  listHandler.ListImageDeleter
 
 	// ✅ walletAddress(toAddress) -> (avatarId or brandId)
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
@@ -278,7 +282,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		var listH http.Handler
 
 		if deps.ListImageUploader != nil || deps.ListImageDeleter != nil {
-			listH = consoleHandler.NewListHandlerWithQueriesAndListImage(
+			listH = listHandler.NewListHandlerWithQueriesAndListImage(
 				deps.ListUC,
 				deps.ListManagementQuery,
 				deps.ListDetailQuery,
@@ -286,13 +290,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 				deps.ListImageDeleter,
 			)
 		} else if deps.ListManagementQuery != nil || deps.ListDetailQuery != nil {
-			listH = consoleHandler.NewListHandlerWithQueries(
+			listH = listHandler.NewListHandlerWithQueries(
 				deps.ListUC,
 				deps.ListManagementQuery,
 				deps.ListDetailQuery,
 			)
 		} else {
-			listH = consoleHandler.NewListHandler(deps.ListUC)
+			listH = listHandler.NewListHandler(deps.ListUC)
 		}
 
 		var h http.Handler = listH

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func methodNotAllowed(w http.ResponseWriter) {
@@ -35,19 +34,6 @@ func parseIntDefault(s string, def int) int {
 		return def
 	}
 	return n
-}
-
-func parseRFC3339Ptr(s string) *time.Time {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return nil
-	}
-	tt := t.UTC()
-	return &tt
 }
 
 // splitCSV parses "a,b,c" / "a, b, c" into []string (empty trimmed items are removed).
