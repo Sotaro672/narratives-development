@@ -2,7 +2,6 @@
 
 import {
   getInventoryListRaw,
-  getProductBlueprintRaw,
   getTokenBlueprintPatchRaw,
   getListCreateRaw,
   getInventoryDetailRaw,
@@ -10,7 +9,6 @@ import {
 
 import type {
   InventoryListRowDTO,
-  InventoryProductSummary,
   TokenBlueprintPatchDTO,
   ListCreateDTO,
   InventoryDetailDTO,
@@ -46,33 +44,7 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
 }
 
 /**
- * 在庫詳細画面用：
- * ProductBlueprint ID から productName / brandId / assigneeId を取得
- *
- * GET /product-blueprints/{id}
- *
- * NOTE:
- * mapper 縮小により mapInventoryProductSummary を削除したため、
- * ここで直接最小変換する。
- */
-export async function fetchInventoryProductSummary(
-  productBlueprintId: string,
-): Promise<InventoryProductSummary> {
-  const pbId = s(productBlueprintId);
-  if (!pbId) throw new Error("productBlueprintId is empty");
-
-  const data = await getProductBlueprintRaw(pbId);
-
-  // ✅ types 的に必須の brandId / assigneeId は空文字で埋める（B案の方針）
-  return {
-    id: s(data?.id ?? pbId),
-    productName: s(data?.productName),
-    brandName: data?.brandName ? s(data.brandName) : undefined,
-  };
-}
-
-/**
- * ✅ NEW: TokenBlueprint Patch DTO
+ * ✅ TokenBlueprint Patch DTO
  * GET /token-blueprints/{tokenBlueprintId}/patch
  */
 export async function fetchTokenBlueprintPatchDTO(
@@ -103,6 +75,10 @@ export async function fetchListCreateDTO(input: {
 /**
  * ✅ Inventory Detail DTO
  * GET /inventory/{inventoryId}
+ *
+ * NOTE:
+ * - productName / brandName 等は detail.productBlueprintPatch に含まれる前提
+ * - brandId / assigneeId は不要のため取得しない
  */
 export async function fetchInventoryDetailDTO(
   inventoryId: string,

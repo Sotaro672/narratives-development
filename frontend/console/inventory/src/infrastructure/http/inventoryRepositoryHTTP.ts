@@ -18,7 +18,6 @@ export type {
 
 export {
   fetchInventoryListDTO,
-  fetchInventoryProductSummary,
   fetchTokenBlueprintPatchDTO,
   fetchListCreateDTO,
   fetchInventoryDetailDTO,

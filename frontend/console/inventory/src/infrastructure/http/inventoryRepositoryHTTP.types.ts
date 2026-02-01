@@ -63,21 +63,13 @@ export type ProductBlueprintModelRefDTO = {
 // ✅ ProductBlueprintCard に合わせる（productIdTag は string）
 export type ProductBlueprintPatchDTO = {
   productName?: string | null;
-
-  // ✅ 追加: brandName を保持できるようにする（view モードで表示用）
-  brandId?: string | null;
   brandName?: string | null;
-
   itemType?: string | null;
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
   qualityAssurance?: string[] | null;
   productIdTag?: string | null;
-  assigneeId?: string | null;
-
-  // ✅ NEW: modelRefs（modelId + displayOrder）
-  // - backend の productBlueprintPatch に入ってくる想定
   modelRefs?: ProductBlueprintModelRefDTO[] | null;
 };
 

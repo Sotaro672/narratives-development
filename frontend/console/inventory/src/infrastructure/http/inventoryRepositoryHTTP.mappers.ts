@@ -60,8 +60,6 @@ export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
 
   return {
     productName: p.productName !== undefined ? (p.productName as any) : undefined,
-
-    brandId: p.brandId !== undefined ? (p.brandId as any) : undefined,
     brandName: p.brandName !== undefined ? (p.brandName as any) : undefined,
 
     // 他画面で落ちやすいので最低限は残す（互換吸収はしない）
@@ -74,7 +72,6 @@ export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
       : undefined,
 
     productIdTag: toProductIdTagString(p.productIdTag),
-    assigneeId: p.assigneeId !== undefined ? (p.assigneeId as any) : undefined,
   };
 }
 
