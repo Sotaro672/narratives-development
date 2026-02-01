@@ -40,7 +40,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Query endpoints (read-only DTO)
 	// ============================================================
 
-	// ✅ NEW: GET /inventory/list-create/{pbId}/{tbId}
+	// ✅ GET /inventory/list-create/{pbId}/{tbId}
 	// ✅ also allow: GET /inventory/list-create/{inventoryId}  (inventoryId="{pbId}__{tbId}")
 	if strings.HasPrefix(path, "/inventory/list-create/") {
 		switch r.Method {
@@ -53,17 +53,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if path == "/inventory/ids" {
-		switch r.Method {
-		case http.MethodGet:
-			h.ResolveInventoryIDsByProductAndTokenQuery(w, r)
-			return
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-	}
-
+	// ✅ GET /inventory
 	if path == "/inventory" {
 		switch r.Method {
 		case http.MethodGet:
@@ -76,6 +66,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ✅ GET /inventory/{id}
+	// - /inventory/ids は廃止したため、ここで弾くだけ残す（誤ルーティング防止）
 	if strings.HasPrefix(path, "/inventory/") {
 		switch r.Method {
 		case http.MethodGet:
@@ -84,8 +75,11 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "invalid inventory id")
 				return
 			}
-			h.GetDetailByIDQueryOrFallback(w, r, id)
+
+			// ✅ fallback 削除: Query で確定
+			h.GetDetailByIDQuery(w, r, id)
 			return
+
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return

@@ -27,26 +27,12 @@ type InventoryQuery struct {
 	invRepo      inventoryReader
 	pbRepo       productBlueprintIDsByCompanyReader
 	pbPatchRepo  productBlueprintPatchReader
-	tbPatchRepo  tokenBlueprintPatchReader // ✅ NEW: tokenBlueprint patch
+	tbPatchRepo  tokenBlueprintPatchReader // ✅ 必須（NewInventoryQuery は廃止）
 	nameResolver *resolver.NameResolver
 }
 
-func NewInventoryQuery(
-	invRepo inventoryReader,
-	pbRepo productBlueprintIDsByCompanyReader,
-	pbPatchRepo productBlueprintPatchReader,
-	nameResolver *resolver.NameResolver,
-) *InventoryQuery {
-	return &InventoryQuery{
-		invRepo:      invRepo,
-		pbRepo:       pbRepo,
-		pbPatchRepo:  pbPatchRepo,
-		tbPatchRepo:  nil, // ✅ optional (backward compatible)
-		nameResolver: nameResolver,
-	}
-}
-
-// ✅ NEW: tokenBlueprint patch も注入できるコンストラクタ（DI でこちらを使う）
+// ✅ コンストラクタはこれのみ（NewInventoryQuery は削除）
+// - tokenBlueprintPatchRepo も必須注入（DI でこちらを使う）
 func NewInventoryQueryWithTokenBlueprintPatch(
 	invRepo inventoryReader,
 	pbRepo productBlueprintIDsByCompanyReader,
@@ -134,13 +120,8 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		}
 
 		for _, inv := range invs {
-			// ✅ tbId は field を正とする（推測しない）
+			// ✅ TokenBlueprintID は必ず存在する前提（空ケース削除）
 			tbID := strings.TrimSpace(inv.TokenBlueprintID)
-
-			// detail 遷移に必須なので、取れないものは出さない
-			if tbID == "" {
-				continue
-			}
 
 			if _, ok := tokenNameCache[tbID]; !ok {
 				name := q.resolveTokenName(ctx, tbID)
@@ -166,8 +147,6 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 			for modelID, ms := range inv.Stock {
 				modelID = strings.TrimSpace(modelID)
 				if modelID == "" {
-					// modelId が壊れている場合でも inventory から来た行を落としすぎないため、
-					// ここはスキップするが pb×tb 自体は上の fallback で出せる
 					continue
 				}
 
@@ -240,75 +219,21 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 }
 
 // ============================================================
-// ✅ pbId + tbId -> inventoryIds
-// ============================================================
-
-func (q *InventoryQuery) ListInventoryIDsByProductAndToken(ctx context.Context, productBlueprintID, tokenBlueprintID string) ([]string, error) {
-	if q == nil || q.invRepo == nil {
-		return nil, errors.New("inventory query repositories are not configured")
-	}
-
-	pbID := strings.TrimSpace(productBlueprintID)
-	tbID := strings.TrimSpace(tokenBlueprintID)
-	if pbID == "" || tbID == "" {
-		return nil, errors.New("productBlueprintId and tokenBlueprintId are required")
-	}
-
-	invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
-	if err != nil {
-		return nil, err
-	}
-	if len(invs) == 0 {
-		return []string{}, nil
-	}
-
-	out := make([]string, 0, len(invs))
-	seen := map[string]struct{}{}
-
-	for _, inv := range invs {
-		invID := strings.TrimSpace(inv.ID)
-		if invID == "" {
-			continue
-		}
-
-		gotTbID := strings.TrimSpace(inv.TokenBlueprintID)
-		if gotTbID == "" {
-			continue
-		}
-		if gotTbID != tbID {
-			continue
-		}
-
-		if _, ok := seen[invID]; ok {
-			continue
-		}
-		seen[invID] = struct{}{}
-		out = append(out, invID)
-	}
-
-	sort.Strings(out)
-	return out, nil
-}
-
-// ============================================================
 // ✅ TokenBlueprint Patch: tbId -> Patch
 // - Patch.BrandID -> brandName を NameResolver で解決して詰める
-// - tbPatchRepo が未注入の場合は nil を返して detail を壊さない
 // ============================================================
 
 func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBlueprintID string) (*tbdom.Patch, error) {
 	if q == nil {
 		return nil, errors.New("inventory query is nil")
 	}
+	if q.tbPatchRepo == nil {
+		return nil, errors.New("tokenBlueprint patch repository is not configured")
+	}
 
 	tbID := strings.TrimSpace(tokenBlueprintID)
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintId is required")
-	}
-
-	if q.tbPatchRepo == nil {
-		log.Printf("[inventory_query][GetTokenBlueprintPatchByID] WARN tbPatchRepo is nil tbId=%q", tbID)
-		return nil, nil
 	}
 
 	patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID) // value
@@ -336,8 +261,9 @@ func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBl
 
 // ============================================================
 // ✅ Detail: inventoryId -> DTO
-// - productBlueprintPatch の brandId -> brandName を NameResolver で解決して詰める
-// - tokenBlueprintPatch を取得して DTO に詰める（TokenBlueprintCard 用）
+// - inventory テーブルに productBlueprintId / tokenBlueprintId がある前提
+// - inventoryId を分解して pbId/tbId を推測しない
+// - modelRefs(displayOrder) を正として 0 在庫も rows に含める
 // ============================================================
 
 func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) (*querydto.InventoryDetailDTO, error) {
@@ -350,29 +276,19 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		return nil, errors.New("inventoryId is required")
 	}
 
-	// inventoryId は "{pbId}__{tbId}" 前提
-	pbID := parseProductBlueprintIDFromInventoryID(id)
-	if pbID == "" {
-		return nil, errors.New("invalid inventoryId format (expected {pbId}__{tbId})")
-	}
-
-	invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
+	// ✅ inventoryId で直接取得
+	inv, err := q.invRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	var inv *invdom.Mint
-	for i := range invs {
-		if strings.TrimSpace(invs[i].ID) == id {
-			inv = &invs[i]
-			break
-		}
-	}
-	if inv == nil {
-		return nil, invdom.ErrNotFound
-	}
-
+	// ✅ inventory テーブルのカラムを正として使う（推測しない）
+	pbID := strings.TrimSpace(inv.ProductBlueprintID)
 	tbID := strings.TrimSpace(inv.TokenBlueprintID)
+
+	if pbID == "" {
+		return nil, errors.New("productBlueprintId is empty in inventory")
+	}
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintId is empty in inventory")
 	}
@@ -415,18 +331,70 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		}
 	}
 
-	// rows: modelId ごとの productIds を count + attributes 解決
+	// ============================================================
+	// ✅ rows: modelRefs(displayOrder) を正として 0 在庫も含める
+	// ============================================================
+
 	rows := make([]querydto.InventoryDetailRowDTO, 0, len(inv.Stock))
 	total := 0
 
-	for modelID, ms := range inv.Stock {
+	// 1) modelRefs が取れればそれを正とする
+	var orderedModelIDs []string
+	if pbPatchPtr != nil && pbPatchPtr.ModelRefs != nil && len(*pbPatchPtr.ModelRefs) > 0 {
+		// Patch の実体を壊さないようにコピーしてからソート
+		refs := append([]pbdom.ModelRef(nil), (*pbPatchPtr.ModelRefs)...)
+
+		// displayOrder 昇順にソート
+		sort.Slice(refs, func(i, j int) bool {
+			return refs[i].DisplayOrder < refs[j].DisplayOrder
+		})
+
+		orderedModelIDs = make([]string, 0, len(refs))
+		seen := map[string]struct{}{}
+		for _, r := range refs {
+			mid := strings.TrimSpace(r.ModelID)
+			if mid == "" {
+				continue
+			}
+			// 念のため重複排除
+			if _, ok := seen[mid]; ok {
+				continue
+			}
+			seen[mid] = struct{}{}
+			orderedModelIDs = append(orderedModelIDs, mid)
+		}
+	}
+
+	// 2) modelRefs が無い/取れない場合だけ fallback（従来通り inv.Stock）
+	if len(orderedModelIDs) == 0 {
+		orderedModelIDs = make([]string, 0, len(inv.Stock))
+		for modelID := range inv.Stock {
+			modelID = strings.TrimSpace(modelID)
+			if modelID == "" {
+				continue
+			}
+			orderedModelIDs = append(orderedModelIDs, modelID)
+		}
+		// map iteration の非決定性を排除
+		sort.Strings(orderedModelIDs)
+	}
+
+	// 3) orderedModelIDs を回して rows を作る（Stock に無い modelId は stock=0）
+	for _, modelID := range orderedModelIDs {
 		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
 
-		// ✅ 0 でも行を落とさない（要件）
-		_, _, available := modelStockNumbers(ms)
+		ms, ok := inv.Stock[modelID]
+
+		available := 0
+		if ok {
+			// ✅ 0 でも行を落とさない
+			_, _, available = modelStockNumbers(ms)
+		} else {
+			available = 0 // ✅ これで 0 行が必ず出る
+		}
 
 		attr := q.resolveModelResolved(ctx, modelID)
 
@@ -464,28 +432,17 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			Size:        sz,
 			Color:       cl,
 			RGB:         attr.RGB,
-			Stock:       available, // availableStock（0 も返す）
+			Stock:       available, // ✅ 0 も入る
 		})
 
 		total += available
 	}
 
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].ModelNumber != rows[j].ModelNumber {
-			return rows[i].ModelNumber < rows[j].ModelNumber
-		}
-		if rows[i].Size != rows[j].Size {
-			return rows[i].Size < rows[j].Size
-		}
-		if rows[i].Color != rows[j].Color {
-			return rows[i].Color < rows[j].Color
-		}
-		return rows[i].Stock < rows[j].Stock
-	})
+	// ✅ 並び順は modelRefs(displayOrder) を尊重するため、ここでは rows をソートしない
 
-	updated := pickTimeFromStruct(*inv, "UpdatedAt")
+	updated := pickTimeFromStruct(inv, "UpdatedAt")
 	if updated.IsZero() {
-		updated = pickTimeFromStruct(*inv, "CreatedAt")
+		updated = pickTimeFromStruct(inv, "CreatedAt")
 	}
 	updatedAt := ""
 	if !updated.IsZero() {
@@ -497,27 +454,18 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		TokenBlueprintID:      tbID,
 		ProductBlueprintID:    pbID,
 		ProductBlueprintPatch: pbPatchPtr, // ✅ *Patch（nil なら omitempty で出ない）
-		TokenBlueprintPatch:   tbPatchPtr, // ✅ NEW: TokenBlueprintCard 用
+		TokenBlueprintPatch:   tbPatchPtr, // ✅ TokenBlueprintCard 用
 		Rows:                  rows,
-		TotalStock:            total, // availableStock 合計（0 行は足しこまれない）
+		TotalStock:            total, // availableStock 合計（0 行も含めるが加算は 0）
 		UpdatedAt:             updatedAt,
 	}
 
 	return dto, nil
 }
 
-// inventoryId = "{pbId}__{tbId}" から pbId を抜く
-func parseProductBlueprintIDFromInventoryID(inventoryID string) string {
-	id := strings.TrimSpace(inventoryID)
-	if id == "" {
-		return ""
-	}
-	parts := strings.Split(id, "__")
-	if len(parts) < 2 {
-		return ""
-	}
-	return strings.TrimSpace(parts[0])
-}
+// ============================================================
+// reflect helpers
+// ============================================================
 
 // reflect で time.Time フィールドを安全に抜く（無ければ zero）
 func pickTimeFromStruct(v any, fieldName string) time.Time {
@@ -603,7 +551,10 @@ func (q *InventoryQuery) resolveModelResolved(ctx context.Context, modelVariatio
 // ============================================================
 
 type inventoryReader interface {
+	// 一覧用途
 	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]invdom.Mint, error)
+	// 詳細用途（inventoryId で直接取得）
+	GetByID(ctx context.Context, inventoryID string) (invdom.Mint, error)
 }
 
 type productBlueprintIDsByCompanyReader interface {
@@ -615,7 +566,7 @@ type productBlueprintPatchReader interface {
 	GetPatchByID(ctx context.Context, id string) (pbdom.Patch, error)
 }
 
-// ✅ NEW: detail 用に TokenBlueprint Patch を引ける最小ポート
+// ✅ detail 用に TokenBlueprint Patch を引ける最小ポート
 type tokenBlueprintPatchReader interface {
 	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
 }

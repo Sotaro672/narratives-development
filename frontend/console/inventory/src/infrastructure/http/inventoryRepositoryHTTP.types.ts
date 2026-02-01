@@ -51,6 +51,15 @@ export type ProductBlueprintSummaryDTO = {
   name?: string;
 };
 
+// ---------------------------------------------------------
+// ✅ ProductBlueprint の modelRefs（displayOrder 含む）
+// domain/productBlueprint/entity.go の ModelRef に対応
+// ---------------------------------------------------------
+export type ProductBlueprintModelRefDTO = {
+  modelId: string;
+  displayOrder: number;
+};
+
 // ✅ ProductBlueprintCard に合わせる（productIdTag は string）
 export type ProductBlueprintPatchDTO = {
   productName?: string | null;
@@ -66,6 +75,10 @@ export type ProductBlueprintPatchDTO = {
   qualityAssurance?: string[] | null;
   productIdTag?: string | null;
   assigneeId?: string | null;
+
+  // ✅ NEW: modelRefs（modelId + displayOrder）
+  // - backend の productBlueprintPatch に入ってくる想定
+  modelRefs?: ProductBlueprintModelRefDTO[] | null;
 };
 
 // ✅ NEW: TokenBlueprint patch（Inventory 詳細で使用）

@@ -35,9 +35,33 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
   className,
   mode = "view",
 }) => {
+  // ✅ displayOrder のみに従って昇順ソート
+  // - displayOrder が無い行は最後
+  // - displayOrder が同じ場合は「元の順番」を維持（副基準で並べ替えない）
+  const sortedRows = React.useMemo(() => {
+    const src = rows ?? [];
+
+    const orderOf = (r: any): number => {
+      const v = (r as any)?.displayOrder;
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : Number.POSITIVE_INFINITY;
+    };
+
+    // 安定ソート（同一 displayOrder は入力順維持）
+    return src
+      .map((r, idx) => ({ r, idx }))
+      .sort((a, b) => {
+        const oa = orderOf(a.r);
+        const ob = orderOf(b.r);
+        if (oa !== ob) return oa - ob;
+        return a.idx - b.idx; // ✅ 元の順番を維持
+      })
+      .map((x) => x.r);
+  }, [rows]);
+
   const totalStock = React.useMemo(
-    () => rows.reduce((sum, r) => sum + (r.stock || 0), 0),
-    [rows],
+    () => sortedRows.reduce((sum, r) => sum + (r.stock || 0), 0),
+    [sortedRows],
   );
 
   return (
@@ -70,7 +94,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             </TableHeader>
 
             <TableBody>
-              {rows.map((row, idx) => {
+              {sortedRows.map((row, idx) => {
                 const rgbHex = rgbIntToHex(row.rgb) ?? null;
 
                 // row.rgb が "#RRGGBB" を直接持っている場合はそれを優先（互換維持）
@@ -108,7 +132,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
                 );
               })}
 
-              {rows.length === 0 && (
+              {sortedRows.length === 0 && (
                 <TableRow>
                   {/* ✅ 列数が4になったので colSpan も 4 */}
                   <TableCell colSpan={4} className="ivc__empty">
@@ -117,7 +141,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
                 </TableRow>
               )}
 
-              {rows.length > 0 && (
+              {sortedRows.length > 0 && (
                 <TableRow className="ivc__total-row">
                   {/* ✅ 先頭3列に「合計」、最後1列に数値 */}
                   <TableCell colSpan={3} className="ivc__total-label ivc__th--right">

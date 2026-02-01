@@ -15,6 +15,7 @@ import type {
   InventoryDetailDTO,
   TokenBlueprintPatchDTO,
   ProductBlueprintPatchDTO,
+  ProductBlueprintModelRefDTO,
 } from "../../infrastructure/http/inventoryRepositoryHTTP.types";
 
 export type InventoryDetailViewModel = {
@@ -50,6 +51,13 @@ function asNumber(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function asInt(v: any): number | undefined {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  const i = Math.trunc(n);
+  return i > 0 ? i : undefined;
+}
+
 function normalizeTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefined {
   if (!raw) return undefined;
 
@@ -70,18 +78,41 @@ function normalizeTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefi
   };
 }
 
-function dtoRowsToInventoryRows(dto: InventoryDetailDTO): InventoryRow[] {
+function buildModelDisplayOrderMap(patch: ProductBlueprintPatchDTO | undefined): Record<string, number> {
+  const refs = (patch as any)?.modelRefs as ProductBlueprintModelRefDTO[] | null | undefined;
+  if (!Array.isArray(refs)) return {};
+
+  const out: Record<string, number> = {};
+  for (const r of refs) {
+    const modelId = asString((r as any)?.modelId);
+    const displayOrder = asInt((r as any)?.displayOrder);
+    if (!modelId || displayOrder === undefined) continue;
+    out[modelId] = displayOrder;
+  }
+  return out;
+}
+
+function dtoRowsToInventoryRows(dto: InventoryDetailDTO, modelOrderById: Record<string, number>): InventoryRow[] {
   const rowsRaw: any[] = Array.isArray((dto as any)?.rows) ? ((dto as any).rows as any[]) : [];
 
-  return rowsRaw.map((r: any) => ({
-    // InventoryCard は token を使わないが、InventoryRow 型都合で空文字を入れておく
-    token: asString(r?.token) || "",
-    modelNumber: asString(r?.modelNumber),
-    size: asString(r?.size),
-    color: asString(r?.color),
-    rgb: (r?.rgb ?? null) as any,
-    stock: asNumber(r?.stock),
-  }));
+  return rowsRaw.map((r: any) => {
+    const modelId = asString(r?.modelId); // ✅ backend が返す想定（なければ ""）
+    const displayOrder = modelId ? modelOrderById[modelId] : undefined;
+
+    return {
+      // InventoryCard は token を使わないが、InventoryRow 型都合で空文字を入れておく
+      token: asString(r?.token) || "",
+      modelNumber: asString(r?.modelNumber),
+      size: asString(r?.size),
+      color: asString(r?.color),
+      rgb: (r?.rgb ?? null) as any,
+      stock: asNumber(r?.stock),
+
+      // ✅ NEW: displayOrder を InventoryCard に渡せるように付与
+      // ※ InventoryRow 側に displayOrder?: number を追加して受ける前提
+      displayOrder,
+    } as InventoryRow;
+  });
 }
 
 export function useInventoryDetail(
@@ -120,9 +151,7 @@ export function useInventoryDetail(
 
         const inventoryId = asString((listCreateRaw as any)?.inventoryId);
         if (!inventoryId) {
-          throw new Error(
-            "inventoryId is empty (failed to resolve inventoryId from list-create)",
-          );
+          throw new Error("inventoryId is empty (failed to resolve inventoryId from list-create)");
         }
 
         // ② inventory detail を Raw API から取得
@@ -140,14 +169,18 @@ export function useInventoryDetail(
         }
         if (cancelled) return;
 
-        // ④ InventoryCard 用 rows を DTO（detail.rows）から直接生成
-        const nextRows: InventoryRow[] = dtoRowsToInventoryRows(detail);
+        // ✅ productBlueprintPatch から modelRefs(displayOrder) を拾う
+        const productBlueprintPatch = ((detail as any)?.productBlueprintPatch ?? {}) as ProductBlueprintPatchDTO;
+        const modelOrderById = buildModelDisplayOrderMap(productBlueprintPatch);
+
+        // ④ InventoryCard 用 rows を DTO（detail.rows）から直接生成（displayOrder 付与）
+        const nextRows: InventoryRow[] = dtoRowsToInventoryRows(detail, modelOrderById);
 
         // ⑤ vm も DTO（detail）から直接、最小構成で生成
         const totalStock =
           (detail as any)?.totalStock !== undefined && (detail as any)?.totalStock !== null
             ? asNumber((detail as any).totalStock)
-            : nextRows.reduce((sum, r) => sum + asNumber(r.stock), 0);
+            : nextRows.reduce((sum, r) => sum + asNumber((r as any).stock), 0);
 
         const nextVm: InventoryDetailViewModel = {
           inventoryKey: `${pbId}__${tbId}`,
@@ -156,7 +189,7 @@ export function useInventoryDetail(
           tokenBlueprintId: asString((detail as any)?.tokenBlueprintId) || tbId,
           productBlueprintId: asString((detail as any)?.productBlueprintId) || pbId,
 
-          productBlueprintPatch: ((detail as any)?.productBlueprintPatch ?? {}) as ProductBlueprintPatchDTO,
+          productBlueprintPatch,
           tokenBlueprintPatch,
 
           updatedAt: (detail as any)?.updatedAt ? String((detail as any).updatedAt) : undefined,
