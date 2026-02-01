@@ -20,6 +20,7 @@ export function extractDisplayStrings(dto: ListCreateDTO | null): {
 
 /**
  * ✅ backend の ListCreateDTO.priceRows を PriceCard 用 PriceRow[] に変換
+ * - 名揺れは modelId のみを正とする（Size/Color/Index での補完はしない）
  */
 export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
   const rowsAny: any[] = Array.isArray((dto as any)?.priceRows)
@@ -49,24 +50,15 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
   });
 }
 
+/**
+ * ✅ dto.priceRows[].modelId のみを正として付与する
+ * - byKey / byIndex 互換ロジックは削除
+ */
 export function attachModelIdsFromDTO(dto: any, baseRows: PriceRow[]): PriceRowEx[] {
   const dtoRows: any[] = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
 
-  const keyToModelId = new Map<string, string>();
-  for (const dr of dtoRows) {
-    const size = s(dr?.size);
-    const color = s(dr?.color);
-    const modelId = s(dr?.modelId);
-    if (!size || !color || !modelId) continue;
-    keyToModelId.set(`${size}__${color}`, modelId);
-  }
-
   return baseRows.map((r, idx) => {
-    const size = s((r as any)?.size);
-    const color = s((r as any)?.color);
-    const byKey = keyToModelId.get(`${size}__${color}`) ?? "";
-    const byIndex = s(dtoRows[idx]?.modelId);
-    const modelId = byKey || byIndex;
+    const modelId = s(dtoRows[idx]?.modelId);
 
     return {
       ...(r as any),

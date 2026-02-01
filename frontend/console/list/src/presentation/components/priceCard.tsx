@@ -65,7 +65,7 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
             <TableBody>
               {rowsVM.map((row) => {
                 return (
-                  <TableRow key={row.key} className="prc__tr">
+                  <TableRow key={row.displayOrder} className="prc__tr">
                     {/* サイズ */}
                     <TableCell className="prc__size">{row.size}</TableCell>
 

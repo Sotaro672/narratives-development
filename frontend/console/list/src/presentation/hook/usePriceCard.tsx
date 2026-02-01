@@ -10,6 +10,12 @@ export type PriceRow = {
   /** ✅ optional: id (= modelId) を持てるようにする（hook 連携とデバッグのため） */
   id?: string;
 
+  /**
+   * ✅ modelRefs.displayOrder に対応（並び順はこれの昇順のみ）
+   * - backend の productBlueprintPatch.ModelRefs.DisplayOrder を詰めて渡す想定
+   */
+  displayOrder?: number | null;
+
   /** サイズ (例: "S" | "M" | "L") */
   size: string;
 
@@ -43,6 +49,9 @@ export type PriceCardProps = {
   /**
    * edit 時に価格を更新するコールバック
    * - 親が rows を state 管理している前提
+   *
+   * IMPORTANT:
+   * - hook 内で displayOrder で並べ替えても、index は「元の rows 配列の index」を返す
    */
   onChangePrice?: (index: number, price: number | null, row: PriceRow) => void;
 
@@ -92,7 +101,9 @@ function parsePriceInput(v: string): number | null {
 // ViewModel
 // ----------------------------------------------------------
 export type PriceRowVM = {
-  key: string;
+  // ✅ key ではなく displayOrder を使う
+  displayOrder: number;
+
   size: string;
   color: string;
   stock: number;
@@ -133,8 +144,66 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
   const isEdit = mode === "edit";
   const showModeBadge = mode !== "view";
 
+  // ✅ hook に渡ってきた “取得済みの全データ” を確認
+  React.useEffect(() => {
+    console.groupCollapsed("[usePriceCard] props snapshot");
+    console.log("title:", title);
+    console.log("mode:", mode);
+    console.log("currencySymbol:", currencySymbol);
+    console.log("rows (raw):", rows);
+    console.table(
+      (rows ?? []).map((r, i) => ({
+        i,
+        id: (r as any)?.id,
+        displayOrder: (r as any)?.displayOrder,
+        size: (r as any)?.size,
+        color: (r as any)?.color,
+        stock: (r as any)?.stock,
+        rgb: (r as any)?.rgb,
+        price: (r as any)?.price,
+      })),
+    );
+    console.log("hasOnChangePrice:", typeof onChangePrice === "function");
+    console.groupEnd();
+  }, [title, mode, currencySymbol, rows, onChangePrice]);
+
   const rowsVM = React.useMemo<PriceRowVM[]>(() => {
-    return rows.map((row, idx) => {
+    // ✅ modelRefs.displayOrder の昇順「のみ」に従って並べる（同値は元順＝安定）
+    const sorted = rows
+      .map((row, originalIdx) => ({ row, originalIdx }))
+      .sort((a, b) => {
+        const ao =
+          a.row.displayOrder === null || a.row.displayOrder === undefined
+            ? Number.POSITIVE_INFINITY
+            : a.row.displayOrder;
+        const bo =
+          b.row.displayOrder === null || b.row.displayOrder === undefined
+            ? Number.POSITIVE_INFINITY
+            : b.row.displayOrder;
+
+        if (ao !== bo) return ao - bo;
+        return a.originalIdx - b.originalIdx; // 安定
+      });
+
+    // ✅ 並び替え結果も確認できるようにログ
+    console.groupCollapsed("[usePriceCard] rows sort result");
+    console.log("sorted (row + originalIdx):", sorted);
+    console.table(
+      sorted.map(({ row, originalIdx }, sortedIdx) => ({
+        sortedIdx,
+        originalIdx,
+        id: (row as any)?.id,
+        displayOrder: (row as any)?.displayOrder,
+        size: row.size,
+        color: row.color,
+        stock: row.stock,
+        rgb: row.rgb,
+        price: row.price,
+      })),
+    );
+    console.groupEnd();
+
+    return sorted.map(({ row, originalIdx }, _sortedIdx) => {
       const rgbHex = rgbIntToHex(row.rgb) ?? null;
 
       const bgColor =
@@ -155,15 +224,27 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
       const onChangePriceInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value;
         const next = parsePriceInput(raw);
-        onChangePrice?.(idx, next, row);
+        // IMPORTANT: 元の rows 配列の index を返す
+        onChangePrice?.(originalIdx, next, row);
+
+        console.debug("[usePriceCard] onChangePriceInput", {
+          originalIdx,
+          id: (row as any)?.id,
+          displayOrder: (row as any)?.displayOrder,
+          raw,
+          parsed: next,
+          row,
+        });
       };
 
-      const stableId = s((row as any)?.id);
-      const keyBase =
-        stableId || `${String(row.size)}-${String(row.color)}-${idx}`;
+      // ✅ PriceRowVM の識別子は displayOrder を採用（未設定は 0）
+      const displayOrder =
+        row.displayOrder === null || row.displayOrder === undefined
+          ? 0
+          : row.displayOrder;
 
       return {
-        key: keyBase,
+        displayOrder,
         size: row.size,
         color: row.color,
         stock: row.stock,
@@ -175,6 +256,26 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
       };
     });
   }, [rows, onChangePrice, currencySymbol]);
+
+  // ✅ VM も確認できるようにログ（必要ならコメントアウト）
+  React.useEffect(() => {
+    console.groupCollapsed("[usePriceCard] rowsVM snapshot");
+    console.log("rowsVM:", rowsVM);
+    console.table(
+      (rowsVM ?? []).map((r, i) => ({
+        i,
+        displayOrder: r.displayOrder,
+        size: r.size,
+        color: r.color,
+        stock: r.stock,
+        bgColor: r.bgColor,
+        rgbTitle: r.rgbTitle,
+        priceInputValue: r.priceInputValue,
+        priceDisplayText: r.priceDisplayText,
+      })),
+    );
+    console.groupEnd();
+  }, [rowsVM]);
 
   return {
     title,
