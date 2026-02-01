@@ -26,10 +26,14 @@ type ListCreateDTO struct {
 	// - 未設定の場合は空文字
 	ListImageURL string `json:"listImageUrl,omitempty"`
 
+	// ✅ NEW: ProductBlueprintPatch.ModelRefs をそのまま返す（順序もそのまま）
+	// - displayOrder を取得するのみ（並べ替えはしない）
+	ModelRefs []ListCreateModelRefDTO `json:"modelRefs,omitempty"`
+
 	// ------------------------------------------------------------
 	// ✅ PriceCard 用（サイズ/カラー別に価格を入力するための行）
-	// - inventory_detail_dto.go の InventoryDetailRowDTO を参照しつつ、
-	//   PriceCard では「型番列を出さない」前提なので ModelNumber は持たない
+	// - ModelRefs を母集団に行を作る
+	// - displayOrder は取得してそのまま渡す（並べ替えはしない）
 	// - price は未入力を許容するため *int（null）にする
 	// ------------------------------------------------------------
 	PriceRows   []ListCreatePriceRowDTO `json:"priceRows,omitempty"`
@@ -38,10 +42,23 @@ type ListCreateDTO struct {
 	CurrencyJPY bool                    `json:"currencyJpy,omitempty"` // 任意: フロントで "¥" を固定する用途（未使用なら false）
 }
 
+// ListCreateModelRefDTO is a lightweight ModelRef for UI.
+// - displayOrder は「取得するのみ」
+// - 0/未設定は null 扱いに寄せる（互換）
+type ListCreateModelRefDTO struct {
+	ModelID      string `json:"modelId"`
+	DisplayOrder *int   `json:"displayOrder,omitempty"`
+}
+
 // ListCreatePriceRowDTO is a row DTO for PriceCard.
 // - 型番列は出さないが、更新や作成 payload で識別できるよう ModelID は保持する。
 type ListCreatePriceRowDTO struct {
 	ModelID string `json:"modelId"`
+
+	// ✅ NEW: displayOrder（ProductBlueprintPatch.ModelRefs.DisplayOrder）
+	// - 取得するのみ（サーバ側で並べ替えしない）
+	// - 0/未設定は null 扱いに寄せる（互換）
+	DisplayOrder *int `json:"displayOrder,omitempty"`
 
 	// 在庫数（まずは stock のみ通す）
 	Stock int `json:"stock"`

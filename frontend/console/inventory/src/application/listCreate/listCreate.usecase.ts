@@ -64,10 +64,6 @@ export async function createListWithImages(args: {
 
   validateCreateListInput(input);
 
-  if (images.length > 0 && !images[mainImageIndex]) {
-    throw new Error("メイン画像が選択されていません。");
-  }
-
   // 2) create list
   const created = await createListHTTP(input);
 

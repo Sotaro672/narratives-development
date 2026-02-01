@@ -4,7 +4,6 @@ package query
 import (
 	"context"
 	"errors"
-	"sort"
 	"strings"
 
 	querydto "narratives/internal/application/query/console/dto"
@@ -15,21 +14,12 @@ import (
 // ============================================================
 // ListCreateQuery
 // - listCreate 画面に必要な最小情報を組み立てる（1出品 = 1 inventory）
-// - pbId から: productName / brandName
-// - tbId から: tokenName / brandName
 //
-// ✅ FIX:
+// ✅ 方針:
 // - PriceRows の母集団を「productBlueprintPatch.ModelRefs」に統一する。
-//   -> 在庫が 0 / inventory.Stock に存在しない modelId でも、PriceRows に行を出せる。
-//   -> stock は inventory があれば反映、無ければ 0 で返す。
-//   -> ModelRefs が空の場合は PriceRows は空（後方互換フォールバック無し）
-//
-// ✅ NOTE:
-// - productBlueprintPatchReader / tokenBlueprintPatchReader / inventoryReader / getStringFieldAny / modelStockNumbers は
-//   inventory_query.go 側の定義を正として「重複定義しない」
-//
-// ✅ IMPORTANT:
-// - stock は availableStock（accumulation - reservedCount）を返す
+// - displayOrder は「取得して返すのみ」。
+// - ✅ 並べ替え（displayOrder 昇順 / size,color 等）は一切しない。
+//   -> ModelRefs の順序は patch の順序をそのまま返す。
 // ============================================================
 
 type ListCreateQuery struct {
@@ -96,7 +86,7 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(
 		return nil, errors.New("inventoryId is required")
 	}
 
-	// inventoryId = "{pbId}__{tbId}" を正として parse
+	// inventoryId = "{pbId}__{tbId}" を正として parse（※この仕様は維持）
 	pbID, tbID, ok := parseInventoryID(invID)
 	if !ok || pbID == "" || tbID == "" {
 		return nil, errors.New("invalid inventoryId format (expected {pbId}__{tbId})")
@@ -147,9 +137,10 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(
 	}
 
 	// ------------------------------------------------------------
-	// ✅ PriceRows: productBlueprintPatch.ModelRefs を母集団にして作る（stock は inventory があれば反映）
+	// ✅ ModelRefs / PriceRows（displayOrder は取得して渡すのみ。並べ替えしない）
 	// ------------------------------------------------------------
-	priceRows, totalStock := q.buildPriceRowsByInventoryID(ctx, invID)
+	modelRefs := q.listModelRefs(ctx, pbID)
+	priceRows, totalStock := q.buildPriceRowsByInventoryID(ctx, invID, modelRefs)
 
 	dto := &querydto.ListCreateDTO{
 		InventoryID:        invID,
@@ -162,6 +153,7 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(
 		TokenBrandName: tokenBrandName,
 		TokenName:      tokenName,
 
+		ModelRefs:  modelRefs,
 		PriceRows:  priceRows,
 		TotalStock: totalStock,
 	}
@@ -170,7 +162,8 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(
 	return dto, nil
 }
 
-// GetByIDs assembles ListCreateDTO from pbId/tbId.
+// GetByIDs assembles ListCreateDTO from pbId/tbId.（※残しているが、今後消すなら別途）
+// NOTE: ここも「並べ替えしない」方針に揃える
 func (q *ListCreateQuery) GetByIDs(
 	ctx context.Context,
 	productBlueprintID string,
@@ -240,9 +233,10 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 	}
 
 	// ------------------------------------------------------------
-	// ✅ PriceRows: productBlueprintPatch.ModelRefs を母集団にして作る
+	// ✅ ModelRefs / PriceRows（並べ替えしない）
 	// ------------------------------------------------------------
-	priceRows, totalStock := q.buildPriceRowsByIDs(ctx, pbID, tbID)
+	modelRefs := q.listModelRefs(ctx, pbID)
+	priceRows, totalStock := q.buildPriceRowsByIDs(ctx, pbID, tbID, modelRefs)
 
 	dto := &querydto.ListCreateDTO{
 		InventoryID:        buildInventoryID(pbID, tbID),
@@ -255,6 +249,7 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 		TokenBrandName: tokenBrandName,
 		TokenName:      tokenName,
 
+		ModelRefs:  modelRefs,
 		PriceRows:  priceRows,
 		TotalStock: totalStock,
 	}
@@ -285,19 +280,28 @@ func parseInventoryID(inventoryID string) (pbID string, tbID string, ok bool) {
 	return pb, tb, true
 }
 
+func toDisplayOrderPtr(v int) *int {
+	// 互換: 0 は未設定として null に寄せる
+	if v == 0 {
+		return nil
+	}
+	x := v
+	return &x
+}
+
 // ============================================================
 // internal: build PriceRows
-// - 母集団: productBlueprintPatch.ModelRefs を正とする（displayOrder 順）
+// - 母集団: productBlueprintPatch.ModelRefs（順序はそのまま）
 // - stock: inventory が取れれば picked.Stock[modelId] を反映、無ければ 0
 // - 重要: stock==0 でも行を出す（価格入力のため）
-//
-// ✅ stock は availableStock（accumulation - reservedCount）
+// - ✅ 並べ替えはしない（displayOrder/size/color/modelId で sort しない）
 // ============================================================
 
 func (q *ListCreateQuery) buildPriceRowsByIDs(
 	ctx context.Context,
 	productBlueprintID string,
 	tokenBlueprintID string,
+	modelRefs []querydto.ListCreateModelRefDTO,
 ) ([]querydto.ListCreatePriceRowDTO, int) {
 	if q == nil {
 		return nil, 0
@@ -309,13 +313,11 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		return nil, 0
 	}
 
-	// 1) 母集団 modelIds（productBlueprintPatch.ModelRefs を正とする）
-	modelIDs := q.listModelIDs(ctx, pbID)
-	if len(modelIDs) == 0 {
+	if len(modelRefs) == 0 {
 		return nil, 0
 	}
 
-	// 2) inventory を拾えれば stock 参照に使う（拾えなくても PriceRows は返す）
+	// inventory を拾えれば stock 参照に使う（拾えなくても PriceRows は返す）
 	var picked *invdom.Mint
 	if q.invRepo != nil {
 		invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
@@ -339,11 +341,11 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		}
 	}
 
-	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(modelIDs))
+	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(modelRefs))
 	total := 0
 
-	for _, mid0 := range modelIDs {
-		mid := strings.TrimSpace(mid0)
+	for _, ref := range modelRefs {
+		mid := strings.TrimSpace(ref.ModelID)
 		if mid == "" {
 			continue
 		}
@@ -372,26 +374,17 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		}
 
 		rows = append(rows, querydto.ListCreatePriceRowDTO{
-			ModelID: mid,
-			Stock:   stock, // ✅ 0 でも出す（availableStock）
-			Size:    sz,
-			Color:   cl,
-			RGB:     attr.RGB,
-			Price:   nil,
+			ModelID:      mid,
+			DisplayOrder: ref.DisplayOrder, // ✅ 取得して渡すのみ
+			Stock:        stock,
+			Size:         sz,
+			Color:        cl,
+			RGB:          attr.RGB,
+			Price:        nil,
 		})
 
 		total += stock
 	}
-
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Size != rows[j].Size {
-			return rows[i].Size < rows[j].Size
-		}
-		if rows[i].Color != rows[j].Color {
-			return rows[i].Color < rows[j].Color
-		}
-		return rows[i].ModelID < rows[j].ModelID
-	})
 
 	return rows, total
 }
@@ -399,6 +392,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 	ctx context.Context,
 	inventoryID string,
+	modelRefs []querydto.ListCreateModelRefDTO,
 ) ([]querydto.ListCreatePriceRowDTO, int) {
 	if q == nil {
 		return nil, 0
@@ -414,13 +408,11 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 		return nil, 0
 	}
 
-	// 1) 母集団 modelIds（productBlueprintPatch.ModelRefs を正とする）
-	modelIDs := q.listModelIDs(ctx, pbID)
-	if len(modelIDs) == 0 {
+	if len(modelRefs) == 0 {
 		return nil, 0
 	}
 
-	// 2) inventory を拾えれば stock 参照に使う（拾えなくても PriceRows は返す）
+	// inventory を拾えれば stock 参照に使う（拾えなくても PriceRows は返す）
 	var picked *invdom.Mint
 	if q.invRepo != nil {
 		invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
@@ -442,11 +434,11 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 		}
 	}
 
-	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(modelIDs))
+	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(modelRefs))
 	total := 0
 
-	for _, mid0 := range modelIDs {
-		mid := strings.TrimSpace(mid0)
+	for _, ref := range modelRefs {
+		mid := strings.TrimSpace(ref.ModelID)
 		if mid == "" {
 			continue
 		}
@@ -475,32 +467,23 @@ func (q *ListCreateQuery) buildPriceRowsByInventoryID(
 		}
 
 		rows = append(rows, querydto.ListCreatePriceRowDTO{
-			ModelID: mid,
-			Stock:   stock, // ✅ 0 でも出す（availableStock）
-			Size:    sz,
-			Color:   cl,
-			RGB:     attr.RGB,
-			Price:   nil,
+			ModelID:      mid,
+			DisplayOrder: ref.DisplayOrder, // ✅ 取得して渡すのみ
+			Stock:        stock,
+			Size:         sz,
+			Color:        cl,
+			RGB:          attr.RGB,
+			Price:        nil,
 		})
 
 		total += stock
 	}
 
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Size != rows[j].Size {
-			return rows[i].Size < rows[j].Size
-		}
-		if rows[i].Color != rows[j].Color {
-			return rows[i].Color < rows[j].Color
-		}
-		return rows[i].ModelID < rows[j].ModelID
-	})
-
 	return rows, total
 }
 
-// 母集団: productBlueprintPatch.ModelRefs（displayOrder 順）
-func (q *ListCreateQuery) listModelIDs(ctx context.Context, productBlueprintID string) []string {
+// 母集団: productBlueprintPatch.ModelRefs（順序は patch のまま）
+func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID string) []querydto.ListCreateModelRefDTO {
 	if q == nil || q.pbPatchRepo == nil {
 		return nil
 	}
@@ -519,27 +502,10 @@ func (q *ListCreateQuery) listModelIDs(ctx context.Context, productBlueprintID s
 
 	refs := *patch.ModelRefs
 
-	// displayOrder 昇順（0 は末尾へ）
-	sort.SliceStable(refs, func(i, j int) bool {
-		oi := refs[i].DisplayOrder
-		oj := refs[j].DisplayOrder
-		if oi == 0 && oj == 0 {
-			return strings.TrimSpace(refs[i].ModelID) < strings.TrimSpace(refs[j].ModelID)
-		}
-		if oi == 0 {
-			return false
-		}
-		if oj == 0 {
-			return true
-		}
-		if oi != oj {
-			return oi < oj
-		}
-		return strings.TrimSpace(refs[i].ModelID) < strings.TrimSpace(refs[j].ModelID)
-	})
-
 	seen := map[string]struct{}{}
-	out := make([]string, 0, len(refs))
+	out := make([]querydto.ListCreateModelRefDTO, 0, len(refs))
+
+	// ✅ 並べ替えしない：入力順のまま
 	for _, r := range refs {
 		mid := strings.TrimSpace(r.ModelID)
 		if mid == "" {
@@ -549,7 +515,12 @@ func (q *ListCreateQuery) listModelIDs(ctx context.Context, productBlueprintID s
 			continue
 		}
 		seen[mid] = struct{}{}
-		out = append(out, mid)
+
+		out = append(out, querydto.ListCreateModelRefDTO{
+			ModelID:      mid,
+			DisplayOrder: toDisplayOrderPtr(r.DisplayOrder),
+		})
 	}
+
 	return out
 }

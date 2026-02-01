@@ -144,14 +144,6 @@ export default function InventoryListCreate() {
             価格行データは未取得です（DTO/別APIから rows を供給する実装が必要です）。
           </div>
         )}
-
-        {/* ✅ modelId が欠けていると POST で落ちるので、UI 上でも見えるように */}
-        {priceRows.length > 0 && missingModelIdCount > 0 && (
-          <div className="text-xs text-red-600">
-            価格行に modelId が付与されていない行があります（{missingModelIdCount} 件）。
-            DTO の priceRows に modelId が含まれているか確認してください。
-          </div>
-        )}
       </div>
 
       {/* =========================

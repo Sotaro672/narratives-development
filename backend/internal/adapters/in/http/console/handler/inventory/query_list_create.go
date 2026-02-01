@@ -7,9 +7,8 @@ import (
 )
 
 // ============================================================
-// ✅ NEW: ListCreate DTO endpoint
-// - GET /inventory/list-create/{pbId}/{tbId}
-// - GET /inventory/list-create/{inventoryId}  (inventoryId="{pbId}__{tbId}")
+// ✅ ListCreate DTO endpoint
+// - GET /inventory/list-create/{inventoryId}
 // ============================================================
 
 func (h *InventoryHandler) GetListCreateByPathQuery(w http.ResponseWriter, r *http.Request, path string) {
@@ -27,37 +26,14 @@ func (h *InventoryHandler) GetListCreateByPathQuery(w http.ResponseWriter, r *ht
 		return
 	}
 
-	seg := strings.Split(rest, "/")
-
-	var pbID, tbID string
-
-	switch len(seg) {
-	case 1:
-		// inventoryId = "{pbId}__{tbId}"
-		invID := strings.TrimSpace(seg[0])
-		parts := strings.Split(invID, "__")
-		if len(parts) < 2 {
-			writeError(w, http.StatusBadRequest, "invalid inventoryId format (expected {pbId}__{tbId})")
-			return
-		}
-		pbID = strings.TrimSpace(parts[0])
-		tbID = strings.TrimSpace(parts[1])
-
-	case 2:
-		pbID = strings.TrimSpace(seg[0])
-		tbID = strings.TrimSpace(seg[1])
-
-	default:
-		writeError(w, http.StatusBadRequest, "invalid path params")
+	// ✅ inventoryId は docId をそのまま受け取る（pb/tb を path で受けない）
+	inventoryID := strings.TrimSpace(rest)
+	if inventoryID == "" {
+		writeError(w, http.StatusBadRequest, "inventoryId is required")
 		return
 	}
 
-	if pbID == "" || tbID == "" {
-		writeError(w, http.StatusBadRequest, "productBlueprintId and tokenBlueprintId are required")
-		return
-	}
-
-	dto, err := h.LQ.GetByIDs(ctx, pbID, tbID)
+	dto, err := h.LQ.GetByInventoryID(ctx, inventoryID)
 	if err != nil {
 		// validation系は 400、それ以外は 500 に寄せる
 		if isProbablyBadRequest(err) {

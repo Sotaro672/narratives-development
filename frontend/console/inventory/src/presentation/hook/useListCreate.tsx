@@ -1,8 +1,5 @@
 // frontend/console/inventory/src/presentation/hook/useListCreate.tsx
-import * as React from "react";
-
 import type { UseListCreateResult } from "./listCreate/types";
-
 import { useListCreateParamsAndTitle } from "./listCreate/useListCreateParamsAndTitle";
 import { useListingDecision } from "./listCreate/useListingDecision";
 import { useListingFields } from "./listCreate/useListingFields";
