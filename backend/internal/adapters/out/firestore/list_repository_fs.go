@@ -341,7 +341,7 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 	return r.GetByID(ctx, id)
 }
 
-// domain.Repository としての patch update（既存互換を維持）
+// domain.Repository としての patch update
 // main doc 更新は "map + MergeAll" に統一（既存フィールドを残し、将来の追加フィールドも壊さない）
 func (r *ListRepositoryFS) Update(
 	ctx context.Context,
@@ -487,6 +487,9 @@ func (r *ListRepositoryFS) Update(
 				data["deleted_by"] = gfs.Delete
 			}
 
+			// ✅ readable_id を消す要求は今の仕様ではサポートしない
+			// （必要なら ListPatch に clear 用の sentinel 設計を追加する）
+
 			if err := tx.Set(ref, data, gfs.MergeAll); err != nil {
 				return err
 			}
@@ -609,6 +612,7 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		AssigneeID  string     `firestore:"assignee_id"`
 		Title       string     `firestore:"title"`
 		ImageID     string     `firestore:"image_id"`
+		ReadableID  string     `firestore:"readable_id"`
 		Description *string    `firestore:"description"`
 		CreatedBy   string     `firestore:"created_by"`
 		CreatedAt   time.Time  `firestore:"created_at"`
@@ -618,7 +622,6 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		DeletedBy   *string    `firestore:"deleted_by"`
 
 		InventoryID string `firestore:"inventory_id"`
-		ReadableID  string `firestore:"readable_id"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {

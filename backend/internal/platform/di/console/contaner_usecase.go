@@ -5,6 +5,9 @@ import (
 	"os"
 	"strings"
 
+	// ✅ for unwrapping ListRepositoryForUsecase -> ListRepositoryFS
+	fsrepo "narratives/internal/adapters/out/firestore"
+
 	mailadp "narratives/internal/adapters/out/mail"
 	solanainfra "narratives/internal/infra/solana"
 
@@ -112,17 +115,31 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	paymentUC := uc.NewPaymentUsecase(r.paymentRepo)
 	invoiceUC := uc.NewInvoiceUsecase(r.invoiceRepo)
 
+	// =========================================================
+	// ListUsecase (✅ readableId 永続化のため、生 repo(= Update(ctx,id,patch)) を渡す)
+	// =========================================================
+	// r.listRepo が *firestore.ListRepositoryForUsecase の場合、
+	// 埋め込み元の *firestore.ListRepositoryFS を取り出して listReader/listCreator に渡す。
+	// （ListRepositoryForUsecase は同名 Update(ctx,item) を持つため Update(ctx,id,patch) が昇格せず、
+	//  getPatchUpdater() が失敗して readableId が永続化されない）
+	var listReader listuc.ListReader = r.listRepo
+	var listCreator listuc.ListCreator = r.listRepo
+
+	if w, ok := any(r.listRepo).(*fsrepo.ListRepositoryForUsecase); ok && w != nil && w.ListRepositoryFS != nil {
+		listReader = w.ListRepositoryFS
+		listCreator = w.ListRepositoryFS
+	}
+
 	// ✅ moved: use listuc.NewListUsecaseWithCreator (not uc.NewListUsecaseWithCreator)
 	listUC := listuc.NewListUsecaseWithCreator(
-		r.listRepo,
-		r.listRepo,
+		listReader,
+		listCreator,
 		r.listPatcher,
 		r.listImageRepo,
 		r.listImageRepo,
 		r.listImageRepo,
 	)
 
-	memberUC := uc.NewMemberUsecase(r.memberRepo)
 	messageUC := uc.NewMessageUsecase(r.messageRepo, nil, nil)
 	modelUC := uc.NewModelUsecase(r.modelRepo, r.modelHistoryRepo)
 	orderUC := uc.NewOrderUsecase(r.orderRepo)
@@ -238,7 +255,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		inventoryUC:      inventoryUC,
 		invoiceUC:        invoiceUC,
 		listUC:           listUC,
-		memberUC:         memberUC,
+		memberUC:         uc.NewMemberUsecase(r.memberRepo),
 		messageUC:        messageUC,
 		modelUC:          modelUC,
 		orderUC:          orderUC,
