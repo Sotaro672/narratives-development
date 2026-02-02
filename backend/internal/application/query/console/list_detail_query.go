@@ -1,4 +1,4 @@
-// backend/internal/application/query/list_detail_query.go
+// backend/internal/application/query/console/list_detail_query.go
 package query
 
 import (
@@ -50,6 +50,10 @@ type ListDetailQuery struct {
 
 	// ✅ NEW: listImage bucket の画像（= ListImage 由来のURL）を返すため
 	imgLister ListImageLister
+
+	// ✅ NEW: productBlueprintPatch から modelRef(displayOrder) を取るため（任意）
+	// inventory_query.go で定義されている productBlueprintPatchReader を使う
+	pbPatchRepo productBlueprintPatchReader
 }
 
 func NewListDetailQuery(getter ListGetter, nameResolver *resolver.NameResolver) *ListDetailQuery {
@@ -80,6 +84,7 @@ func NewListDetailQueryWithBrandAndInventoryGetters(
 		invGetter:    invGetter,
 		invRows:      nil,
 		imgLister:    nil, // optional
+		pbPatchRepo:  nil, // optional
 	}
 }
 
@@ -108,6 +113,22 @@ func NewListDetailQueryWithBrandInventoryRowsAndImages(
 ) *ListDetailQuery {
 	q := NewListDetailQueryWithBrandInventoryAndInventoryRows(getter, nameResolver, pbGetter, tbGetter, invGetter, invRows)
 	q.imgLister = imgLister
+	return q
+}
+
+// ✅ NEW: productBlueprintPatch も注入できる ctor（既存DIを壊さないため別名で追加）
+func NewListDetailQueryWithBrandInventoryRowsImagesAndPBPatch(
+	getter ListGetter,
+	nameResolver *resolver.NameResolver,
+	pbGetter ProductBlueprintGetter,
+	tbGetter TokenBlueprintGetter,
+	invGetter InventoryDetailGetter,
+	invRows InventoryRowsLister,
+	imgLister ListImageLister,
+	pbPatchRepo productBlueprintPatchReader,
+) *ListDetailQuery {
+	q := NewListDetailQueryWithBrandInventoryRowsAndImages(getter, nameResolver, pbGetter, tbGetter, invGetter, invRows, imgLister)
+	q.pbPatchRepo = pbPatchRepo
 	return q
 }
 
@@ -212,7 +233,8 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 	}
 
 	// ---- priceRows + stock(size/color/rgb) ----
-	priceRows, totalStock, metaLog := q.buildDetailPriceRows(ctx, it, invID)
+	// ✅ NEW: pbPatch から modelRef(displayOrder) を引いて、priceRows に displayOrder を載せる
+	priceRows, totalStock, metaLog := q.buildDetailPriceRows(ctx, it, invID, pbID)
 	if metaLog != "" {
 		log.Printf("[ListDetailQuery] [modelMetadata] listID=%q %s", strings.TrimSpace(it.ID), metaLog)
 	}
@@ -267,11 +289,173 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 	return dto, nil
 }
 
-func (q *ListDetailQuery) buildDetailPriceRows(ctx context.Context, it listdom.List, inventoryID string) ([]querydto.ListDetailPriceRowDTO, int, string) {
+// ============================================================
+// ✅ productBlueprintPatch.ModelRefs から displayOrder を引く
+// - Patch は値型なので nil 比較しない（err のみ見る）
+// - 0 は未設定として nil に寄せる（list_create_query.go と揃える）
+// ============================================================
+
+func (q *ListDetailQuery) buildDisplayOrderByModelID(ctx context.Context, productBlueprintID string) map[string]*int {
+	out := map[string]*int{}
+
+	if q == nil || q.pbPatchRepo == nil {
+		return out
+	}
+
+	pbID := strings.TrimSpace(productBlueprintID)
+	if pbID == "" {
+		return out
+	}
+
+	patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID)
+	if err != nil {
+		return out
+	}
+
+	refs := extractModelRefsFromPBPatchAny(patch)
+	if len(refs) == 0 {
+		return out
+	}
+
+	seen := map[string]struct{}{}
+	for _, r := range refs {
+		mid := strings.TrimSpace(r.modelID)
+		if mid == "" {
+			continue
+		}
+		if _, ok := seen[mid]; ok {
+			continue
+		}
+		seen[mid] = struct{}{}
+
+		// 互換: 0 は未設定として nil
+		var ptr *int
+		if r.displayOrder != 0 {
+			x := r.displayOrder
+			ptr = &x
+		}
+		out[mid] = ptr
+	}
+
+	return out
+}
+
+type modelRefAny struct {
+	modelID      string
+	displayOrder int
+}
+
+// reflection: patch.ModelRefs の型が何であっても拾えるようにする
+// ✅ DisplayOrder が *int の場合も拾う（ここが重要）
+func extractModelRefsFromPBPatchAny(patch any) []modelRefAny {
+	rv := reflect.ValueOf(patch)
+	if !rv.IsValid() {
+		return nil
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
+
+	f := rv.FieldByName("ModelRefs")
+	if !f.IsValid() {
+		f = rv.FieldByName("modelRefs")
+	}
+	if !f.IsValid() {
+		return nil
+	}
+
+	// ModelRefs: *[]T or []T を許容
+	if f.Kind() == reflect.Pointer {
+		if f.IsNil() {
+			return nil
+		}
+		f = f.Elem()
+	}
+	if f.Kind() != reflect.Slice {
+		return nil
+	}
+
+	out := make([]modelRefAny, 0, f.Len())
+
+	for i := 0; i < f.Len(); i++ {
+		it := f.Index(i)
+		if it.Kind() == reflect.Pointer {
+			if it.IsNil() {
+				continue
+			}
+			it = it.Elem()
+		}
+		if it.Kind() != reflect.Struct {
+			continue
+		}
+
+		// ---- modelId ----
+		mid := ""
+		if mf := it.FieldByName("ModelID"); mf.IsValid() && mf.Kind() == reflect.String {
+			mid = strings.TrimSpace(mf.String())
+		} else if mf := it.FieldByName("ModelId"); mf.IsValid() && mf.Kind() == reflect.String {
+			mid = strings.TrimSpace(mf.String())
+		} else if mf := it.FieldByName("modelId"); mf.IsValid() && mf.Kind() == reflect.String {
+			mid = strings.TrimSpace(mf.String())
+		} else if mf := it.FieldByName("modelID"); mf.IsValid() && mf.Kind() == reflect.String {
+			mid = strings.TrimSpace(mf.String())
+		}
+
+		if mid == "" {
+			continue
+		}
+
+		// ---- displayOrder (int/uint/*int/*uint) ----
+		ord := 0
+		of := it.FieldByName("DisplayOrder")
+		if !of.IsValid() {
+			of = it.FieldByName("displayOrder")
+		}
+		if of.IsValid() && of.CanInterface() {
+			// ポインタなら剥がす
+			if of.Kind() == reflect.Pointer {
+				if !of.IsNil() {
+					ev := of.Elem()
+					switch ev.Kind() {
+					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+						ord = int(ev.Int())
+					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+						ord = int(ev.Uint())
+					}
+				}
+			} else {
+				switch of.Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					ord = int(of.Int())
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					ord = int(of.Uint())
+				}
+			}
+		}
+
+		out = append(out, modelRefAny{
+			modelID:      mid,
+			displayOrder: ord,
+		})
+	}
+
+	return out
+}
+
+func (q *ListDetailQuery) buildDetailPriceRows(ctx context.Context, it listdom.List, inventoryID string, productBlueprintID string) ([]querydto.ListDetailPriceRowDTO, int, string) {
 	rowsAny := extractPriceRowsFromList(it)
 	if len(rowsAny) == 0 {
 		return []querydto.ListDetailPriceRowDTO{}, 0, "rows=0"
 	}
+
+	// ✅ pbPatch から displayOrder map を用意（取れなければ空）
+	displayOrderByModel := q.buildDisplayOrderByModelID(ctx, productBlueprintID)
 
 	stockByModel := map[string]int{}
 	attrByModel := map[string]resolver.ModelResolved{}
@@ -309,6 +493,8 @@ func (q *ListDetailQuery) buildDetailPriceRows(ctx context.Context, it listdom.L
 	stockFromInv := 0
 	stockFromList := 0
 
+	displayOrderHit := 0
+
 	for _, r := range rowsAny {
 		modelID := strings.TrimSpace(readStringField(r, "ModelID", "ModelId", "ID", "Id"))
 		if modelID == "" {
@@ -331,10 +517,25 @@ func (q *ListDetailQuery) buildDetailPriceRows(ctx context.Context, it listdom.L
 			stockFromList++
 		}
 
+		// ✅ displayOrder（pbPatch.ModelRefs）
+		var dispPtr *int
+		if displayOrderByModel != nil {
+			if v, ok := displayOrderByModel[modelID]; ok {
+				dispPtr = v
+				if v != nil {
+					displayOrderHit++
+				}
+			}
+		}
+
 		dtoRow := querydto.ListDetailPriceRowDTO{
-			ModelID: modelID,
-			Stock:   stock,
-			Price:   pricePtr,
+			ModelID:      modelID,
+			DisplayOrder: dispPtr,
+			Stock:        stock,
+			Price:        pricePtr,
+			Size:         "",
+			Color:        "",
+			RGB:          nil,
 		}
 
 		if mr, ok := attrByModel[modelID]; ok {
@@ -363,7 +564,8 @@ func (q *ListDetailQuery) buildDetailPriceRows(ctx context.Context, it listdom.L
 		" resolvedEmpty=" + itoa(resolvedEmpty) +
 		" invUsed=" + bool01(invUsed) +
 		" stockFromInv=" + itoa(stockFromInv) +
-		" stockFromList=" + itoa(stockFromList)
+		" stockFromList=" + itoa(stockFromList) +
+		" displayOrderHit=" + itoa(displayOrderHit)
 	if invErrMsg != "" {
 		meta += " " + invErrMsg
 	}
@@ -398,10 +600,7 @@ func (q *ListDetailQuery) resolveModelResolvedCached(
 }
 
 // ============================================================
-// ✅ NEW: listImage bucket の画像URLを組み立てる
-// - ListImage.PublicURL/URL があればそれを優先
-// - なければ bucket + objectPath から https://storage.googleapis.com/{bucket}/{objectPath} を組み立て
-// - primaryImageID がある場合は先頭に寄せる（取れる範囲で）
+// ✅ listImage bucket の画像URLを組み立てる
 // ============================================================
 
 type listImageURLRow struct {

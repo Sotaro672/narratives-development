@@ -74,6 +74,10 @@ type ListDetailDTO struct {
 type ListDetailPriceRowDTO struct {
 	ModelID string `json:"modelId"`
 
+	// ✅ NEW: displayOrder (from productBlueprintPatch.ModelRefs)
+	// - 0 は未設定として nil を許容
+	DisplayOrder *int `json:"displayOrder,omitempty"`
+
 	// In list detail, stock is still shown
 	Stock int `json:"stock"`
 

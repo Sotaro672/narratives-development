@@ -336,14 +336,27 @@ function toNumberOrNull(v: unknown): number | null {
   return n;
 }
 
+function toDisplayOrderOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const x = Math.trunc(n);
+  // 互換: 0 は未設定扱いに寄せる（backend 側で nil の想定でも、保険）
+  if (x === 0) return null;
+  return x;
+}
+
 /**
  * priceRows は dto.priceRows のみ採用
+ * ✅ NEW: dto.priceRows[].displayOrder を PriceRow.displayOrder に詰める
  */
 export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: any): TRow[] {
   const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
 
   return rowsRaw.map((r: any, idx: number) => {
     const modelId = s(r?.modelId);
+
+    const displayOrder = toDisplayOrderOrNull(r?.displayOrder);
 
     const size = s(r?.size);
     const color = s(r?.color);
@@ -356,6 +369,10 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: 
 
     const rowAny = {
       id: modelId || String(idx),
+
+      // ✅ NEW
+      displayOrder,
+
       size,
       color,
       rgb,
@@ -417,6 +434,7 @@ function logModelMetadataFromDetail(args: { listId: string; dto: any }) {
 
   const sample = rowsRaw.slice(0, 4).map((r: any) => ({
     modelId: s(r?.modelId),
+    displayOrder: r?.displayOrder ?? null,
     size: s(r?.size),
     color: s(r?.color),
     rgb: Number.isFinite(Number(r?.rgb)) ? Number(r?.rgb) : null,
@@ -449,7 +467,10 @@ export async function loadListDetailDTO(args: {
 
   if (!listId) throw new Error("invalid_list_id");
 
-  const [detail, row] = await Promise.all([fetchListByIdHTTP(listId), fetchRowFromListRows({ listId })]);
+  const [detail, row] = await Promise.all([
+    fetchListByIdHTTP(listId),
+    fetchRowFromListRows({ listId }),
+  ]);
 
   logModelMetadataFromDetail({ listId, dto: detail });
 

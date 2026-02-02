@@ -57,13 +57,18 @@ func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
 		inventoryQuery,
 	)
 
-	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryAndInventoryRows(
+	// ✅ FIX: ListDetailQuery に (1) listImage と (2) productBlueprintPatch を注入する
+	// - displayOrder を priceRows に載せるには pbPatchRepo の注入が必須
+	// - listImage bucket の imageUrls を返すには imgLister の注入が必須
+	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryRowsImagesAndPBPatch(
 		r.listRepo,
 		res.nameResolver,
 		r.productBlueprintRepo,
 		&tbGetterAdapter{repo: r.tokenBlueprintRepo},
 		inventoryQuery,
 		inventoryQuery,
+		r.listImageRepo,
+		&pbPatchByIDAdapter{repo: r.productBlueprintRepo},
 	)
 
 	return &queries{

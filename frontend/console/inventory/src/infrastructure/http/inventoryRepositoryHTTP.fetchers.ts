@@ -5,19 +5,11 @@ import {
   getTokenBlueprintPatchRaw,
   getInventoryDetailRaw,
 } from "../api/inventoryApi";
-
-// ✅ ListCreate は api を分離したため別 import
-import { getListCreateRaw } from "../api/listCreateApi";
-
 import type {
   InventoryListRowDTO,
   TokenBlueprintPatchDTO,
   InventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.types";
-
-// ✅ ListCreate 型は types を分離したため別 import
-import type { ListCreateDTO } from "./listCreateRepositoryHTTP.types";
-
 import { s } from "./inventoryRepositoryHTTP.utils";
 
 import {
@@ -25,10 +17,6 @@ import {
   mapTokenBlueprintPatch,
   mapInventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.mappers";
-
-// ✅ ListCreate mapper を分離したため別 import
-import { mapListCreateDTO } from "./listCreateRepositoryHTTP.mappers";
-
 /**
  * ✅ Inventory 一覧DTO
  * - 戻り値は "必ず tokenBlueprintId を含む" 正規化済み配列
