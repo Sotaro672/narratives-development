@@ -187,6 +187,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// List repo for usecase ports
 	listRepoForUC := outfs.NewListRepositoryForUsecase(listRepoFS)
 
+	// ✅ NEW: Firestore repo for list images subcollection
+	// - /lists/{listId}/images/{imageId}
+	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
+
 	// --------------------------------------------------------
 	// GCS repositories
 	// --------------------------------------------------------
@@ -225,14 +229,24 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WithWalletRepo(walletRepo).
 		WithWalletService(avatarWalletSvc)
 
-	// ✅ moved: ListUsecase constructor is now listuc.NewListUsecase(...)
+	// ✅ UPDATED: wire Firestore listImageRecordRepo into ListUsecase
+	// NewListUsecase(args):
+	// - listReader, listPatcher, imageReader, imageByIDReader, imageObjectSaver
+	// and auto-wire signed-url issuer from imageObjectSaver.
+	//
+	// After you updated listuc/types.go + listuc/constructors.go to include
+	// listImageRecordRepo / listPrimaryImageSetter:
+	// - set them via chain methods (recommended), or
+	// - pass via expanded constructor (if you chose that design).
 	c.ListUC = listuc.NewListUsecase(
 		listRepoForUC,
 		listPatcher,
 		listImageRepo,
 		listImageRepo,
 		listImageRepo,
-	)
+	).
+		WithListImageRecordRepo(listImageRecordRepo).
+		WithListPrimaryImageSetter(listPatcher)
 
 	c.ShippingAddressUC = usecase.NewShippingAddressUsecase(shippingAddressRepo)
 	c.BillingAddressUC = usecase.NewBillingAddressUsecase(billingAddressRepo)
@@ -462,7 +476,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	selfBaseURLConfigured := strings.TrimSpace(infra.SelfBaseURL) != ""
 
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenBlueprintBucketUC=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t transferUC=%t walletUC=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenBlueprintBucketUC=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t transferUC=%t walletUC=%t listImageRecordRepo=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
@@ -484,6 +498,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.OrderScanVerifyQ != nil,
 		c.TransferUC != nil,
 		c.WalletUC != nil,
+		listImageRecordRepo != nil,
 	)
 
 	return c, nil

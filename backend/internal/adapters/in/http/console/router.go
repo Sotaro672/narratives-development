@@ -279,25 +279,20 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Lists
 	// ================================
 	if deps.ListUC != nil {
-		var listH http.Handler
-
-		if deps.ListImageUploader != nil || deps.ListImageDeleter != nil {
-			listH = listHandler.NewListHandlerWithQueriesAndListImage(
-				deps.ListUC,
-				deps.ListManagementQuery,
-				deps.ListDetailQuery,
-				deps.ListImageUploader,
-				deps.ListImageDeleter,
-			)
-		} else if deps.ListManagementQuery != nil || deps.ListDetailQuery != nil {
-			listH = listHandler.NewListHandlerWithQueries(
-				deps.ListUC,
-				deps.ListManagementQuery,
-				deps.ListDetailQuery,
-			)
-		} else {
-			listH = listHandler.NewListHandler(deps.ListUC)
-		}
+		// ✅ Always use handler that includes image endpoints.
+		// uploader/deleter can be nil; handler should still support:
+		// - POST /lists/{id}/images/signed-url
+		// - POST /lists/{id}/images   (SaveImageFromGCS)
+		// - GET  /lists/{id}/images
+		// - PUT  /lists/{id}/primary-image
+		// delete/upload bytes endpoints can stay 501 if deps are nil.
+		listH := listHandler.NewListHandlerWithQueriesAndListImage(
+			deps.ListUC,
+			deps.ListManagementQuery,
+			deps.ListDetailQuery,
+			deps.ListImageUploader,
+			deps.ListImageDeleter,
+		)
 
 		var h http.Handler = listH
 		if authMw != nil {

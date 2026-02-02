@@ -14,23 +14,19 @@ import (
 )
 
 // ListPatcherRepoForMall is a Firestore-backed adapter that satisfies
-// usecase.ListPatcher (UpdateImageID etc.) for mall container.
-//
-// Motivation:
-//   - In DI, we previously used an inline adapter (listPatcherAdapter) that depended on
-//     "Update(ctx, id, patch) (listdom.List, error)" signature.
-//   - This file makes it an explicit out-adapter, so mall/adapter.go can stay lean.
+// usecase.ListPatcher (UpdateImageID etc.) AND usecase/list.ListPrimaryImageSetter
+// for mall container.
 type ListPatcherRepoForMall struct {
 	// Keep the concrete FS repo to avoid duplicating Firestore mapping logic.
+	// ✅ Added GetByID so we can implement SetPrimaryImageIfEmpty safely.
 	repo interface {
+		GetByID(ctx context.Context, id string) (listdom.List, error)
 		Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
 	}
 }
 
 func NewListPatcherRepo(fsClient *firestore.Client) *ListPatcherRepoForMall {
 	// We intentionally construct the canonical FS repo here.
-	// If your mall container already constructs ListRepositoryFS and wants to reuse it,
-	// you can also add another constructor that accepts the repo directly.
 	listRepo := outfs.NewListRepositoryFS(fsClient)
 	return &ListPatcherRepoForMall{repo: listRepo}
 }
@@ -39,6 +35,7 @@ func NewListPatcherRepo(fsClient *firestore.Client) *ListPatcherRepoForMall {
 // (useful if container.go already has listRepoFS and you want to avoid duplicate instances).
 func NewListPatcherRepoForMallWithRepo(
 	repo interface {
+		GetByID(ctx context.Context, id string) (listdom.List, error)
 		Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
 	},
 ) *ListPatcherRepoForMall {
@@ -63,12 +60,67 @@ func (r *ListPatcherRepoForMall) UpdateImageID(
 	if listID == "" {
 		return listdom.List{}, listdom.ErrNotFound
 	}
+	if imageID == "" {
+		return listdom.List{}, listdom.ErrEmptyImageID
+	}
+
+	if now.IsZero() {
+		now = time.Now().UTC()
+	} else {
+		now = now.UTC()
+	}
 
 	patch := listdom.ListPatch{
 		ImageID:   &imageID,
 		UpdatedAt: &now,
 		UpdatedBy: updatedBy,
+		// DeletedAt/DeletedBy are untouched
+		// ReadableID/Prices etc. untouched
 	}
 
 	return r.repo.Update(ctx, listID, patch)
+}
+
+// ✅ SetPrimaryImageIfEmpty implements usecase/list.ListPrimaryImageSetter.
+// It sets list.imageId only when current imageId is empty.
+// (best-effort; does not overwrite existing primary)
+func (r *ListPatcherRepoForMall) SetPrimaryImageIfEmpty(
+	ctx context.Context,
+	listID string,
+	imageURL string,
+	now time.Time,
+) error {
+	if r == nil || r.repo == nil {
+		return errors.New("firestore.mall.ListPatcherRepoForMall: repo is nil")
+	}
+
+	listID = strings.TrimSpace(listID)
+	imageURL = strings.TrimSpace(imageURL)
+
+	if listID == "" {
+		return listdom.ErrNotFound
+	}
+	if imageURL == "" {
+		return listdom.ErrEmptyImageID
+	}
+
+	cur, err := r.repo.GetByID(ctx, listID)
+	if err != nil {
+		return err
+	}
+
+	// already set -> do nothing
+	if strings.TrimSpace(cur.ImageID) != "" {
+		return nil
+	}
+
+	if now.IsZero() {
+		now = time.Now().UTC()
+	} else {
+		now = now.UTC()
+	}
+
+	// updatedBy はこのユースケースでは不要（nil）でOK
+	_, err = r.UpdateImageID(ctx, listID, imageURL, now, nil)
+	return err
 }

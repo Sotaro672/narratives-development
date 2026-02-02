@@ -31,6 +31,32 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
 
   console.log("[list/listRepositoryHTTP] createListHTTP payload", payloadArray);
 
+  // ✅ DEBUG: selected files (if any)
+  // NOTE:
+  // - This is only for debugging; backend does not receive File objects directly.
+  // - Depending on CreateListInput shape, files may not exist here. We try common keys safely.
+  try {
+    const anyInput = input as any;
+    const selectedFiles =
+      (Array.isArray(anyInput?.selectedFiles) && anyInput.selectedFiles) ||
+      (Array.isArray(anyInput?.files) && anyInput.files) ||
+      (Array.isArray(anyInput?.images) && anyInput.images) ||
+      (Array.isArray(anyInput?.imageFiles) && anyInput.imageFiles) ||
+      [];
+
+    console.log(
+      "[debug] selected files",
+      selectedFiles.map((f: any) => ({
+        name: f?.name,
+        size: f?.size,
+        lastModified: f?.lastModified,
+        type: f?.type,
+      })),
+    );
+  } catch (e) {
+    console.log("[debug] selected files (log_failed)", { err: String(e) });
+  }
+
   try {
     return await requestJSON<ListDTO>({
       method: "POST",

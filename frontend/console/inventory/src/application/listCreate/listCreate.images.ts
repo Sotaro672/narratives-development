@@ -61,6 +61,16 @@ export async function uploadListImagesPolicyA(args: {
   const files = Array.isArray(args.files) ? args.files : [];
   const mainImageIndex = Number.isFinite(Number(args.mainImageIndex)) ? Number(args.mainImageIndex) : 0;
 
+  console.log(
+    "[debug] uploadListImagesPolicyA.files",
+    files.map((f) => ({
+      name: f.name,
+      size: f.size,
+      lastModified: f.lastModified,
+      type: f.type,
+    })),
+  );
+
   if (!listId) throw new Error("invalid_list_id");
   if (files.length === 0) return { registered: [] };
 

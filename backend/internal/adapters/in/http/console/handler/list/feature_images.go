@@ -10,6 +10,7 @@
 package list
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -46,6 +47,13 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 	if listID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
+		return
+	}
+
+	// ✅ displayOrder guard
+	if req.DisplayOrder < 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "displayOrder must be >= 0"})
 		return
 	}
 
@@ -126,6 +134,14 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 // GET /lists/{id}/images
 func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
+		return
+	}
+
 	items, err := h.uc.GetImages(ctx, id)
 	if err != nil {
 		writeListErr(w, err)
@@ -149,6 +165,13 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 		return
 	}
 
+	listID = strings.TrimSpace(listID)
+	if listID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
+		return
+	}
+
 	imageID = strings.TrimSpace(imageID)
 	if imageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -156,14 +179,29 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 		return
 	}
 
-	if err := h.imgDeleter.Delete(ctx, imageID); err != nil {
-		writeListErr(w, err)
-		return
+	// ✅ Backward-compatible deletion strategy:
+	// - Prefer deleter that can delete by (listID, imageID) (Firestore record + GCS object, etc.)
+	// - Fallback to legacy deleter: Delete(ctx, imageID)
+	//
+	// This allows you to gradually replace h.imgDeleter implementation without changing handler signature.
+	if d2, ok := interface{}(h.imgDeleter).(interface {
+		Delete(ctx context.Context, listID string, imageID string) error
+	}); ok {
+		if err := d2.Delete(ctx, listID, imageID); err != nil {
+			writeListErr(w, err)
+			return
+		}
+	} else {
+		// legacy behavior
+		if err := h.imgDeleter.Delete(ctx, imageID); err != nil {
+			writeListErr(w, err)
+			return
+		}
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
-		"listId":  strings.TrimSpace(listID),
+		"listId":  listID,
 		"imageId": imageID,
 	})
 }
@@ -175,6 +213,13 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+
+	listID = strings.TrimSpace(listID)
+	if listID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
 		return
 	}
 
@@ -196,6 +241,12 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 	req.Bucket = strings.TrimSpace(req.Bucket)
 	req.ObjectPath = strings.TrimSpace(req.ObjectPath)
 
+	if req.DisplayOrder < 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "displayOrder must be >= 0"})
+		return
+	}
+
 	if req.ID == "" || req.ObjectPath == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id and objectPath are required"})
@@ -205,7 +256,7 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 	img, err := h.uc.SaveImageFromGCS(
 		ctx,
 		req.ID,
-		strings.TrimSpace(listID),
+		listID,
 		req.Bucket,
 		req.ObjectPath,
 		req.Size,
@@ -253,7 +304,7 @@ func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, li
 		}
 	}
 
-	item, err := h.uc.SetPrimaryImage(ctx, listID, imageID, now, normalizeStrPtr(req.UpdatedBy))
+	item, err := h.uc.SetPrimaryImage(ctx, strings.TrimSpace(listID), imageID, now, normalizeStrPtr(req.UpdatedBy))
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)

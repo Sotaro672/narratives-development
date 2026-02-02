@@ -140,6 +140,19 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.listImageRepo,
 	)
 
+	// ✅ NEW: listImageRecordRepo を DI で必ず配線する（複数画像の永続化 / 501(not_implemented)回避）
+	// - SaveImageFromGCS は listImageRecordRepo が nil だと ErrNotSupported を返し、
+	//   handler 側で 501(not_implemented) になってしまうため、ここで明示注入する。
+	// - r.listImageRecordRepo は buildRepos 側で /lists/{listId}/images サブコレ用 Repo を生成して入れておく前提。
+	if r != nil && r.listImageRecordRepo != nil {
+		listUC = listUC.WithListImageRecordRepo(r.listImageRecordRepo)
+	}
+
+	// （任意）primary image setter も DI で明示したい場合はここで注入
+	// if r != nil && r.listPrimaryImageSetter != nil {
+	// 	listUC = listUC.WithListPrimaryImageSetter(r.listPrimaryImageSetter)
+	// }
+
 	messageUC := uc.NewMessageUsecase(r.messageRepo, nil, nil)
 	modelUC := uc.NewModelUsecase(r.modelRepo, r.modelHistoryRepo)
 	orderUC := uc.NewOrderUsecase(r.orderRepo)

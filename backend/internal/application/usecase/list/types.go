@@ -92,6 +92,8 @@ type ListPatcher interface {
 }
 
 // ListImageReader は ListID に紐づく ListImage 一覧の取得契約です。
+// NOTE:
+// - 今後の推奨: Firestore の /lists/{listId}/images サブコレクションを source of truth とする。
 type ListImageReader interface {
 	ListByListID(ctx context.Context, listID string) ([]listimgdom.ListImage, error)
 }
@@ -136,8 +138,22 @@ type ListUsecase struct {
 	listUpdater ListUpdater // PUT/PATCH /lists/{id} (optional)
 	listPatcher ListPatcher
 
-	imageReader          ListImageReader
-	imageByIDReader      ListImageByIDReader
+	// images
+	// - imageReader / imageByIDReader は「画像一覧/単体取得」の source-of-truth 側（推奨: Firestore subcollection）
+	imageReader     ListImageReader
+	imageByIDReader ListImageByIDReader
+
+	// - imageObjectSaver / imageSignedURLIssuer は「GCS 実体ファイル」の操作
 	imageObjectSaver     ListImageObjectSaver
 	imageSignedURLIssuer ListImageSignedURLIssuer // signed-url issuer
+
+	// ✅ NEW (for multi-image persistence):
+	// Firestore subcollection (/lists/{listId}/images) へ画像レコードを永続化するための port。
+	// ※ interface 定義は feature_images.go 側で宣言済み（同一packageなので参照可能）
+	listImageRecordRepo ListImageRecordRepository
+
+	// ✅ NEW (for primary image cache update):
+	// list 本体の primary image(URL cache) を更新するための port。
+	// ※ interface 定義は feature_images.go 側で宣言済み（同一packageなので参照可能）
+	listPrimaryImageSetter ListPrimaryImageSetter
 }

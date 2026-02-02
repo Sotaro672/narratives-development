@@ -8,6 +8,7 @@
 // - isImageURL / generateReadableID
 // - getPatchUpdater / buildPatchFromItem
 // - normalizeStrPtr
+// - ✅ usecase wiring helpers (WithListImageRecordRepo / WithListPrimaryImageSetter)
 package list
 
 import (
@@ -120,4 +121,26 @@ func normalizeStrPtr(p *string) *string {
 		return nil
 	}
 	return &t
+}
+
+// ============================================================
+// ✅ Usecase wiring helpers (fluent setters)
+// ============================================================
+
+// WithListImageRecordRepo wires Firestore subcollection persistence for list images.
+func (uc *ListUsecase) WithListImageRecordRepo(repo ListImageRecordRepository) *ListUsecase {
+	if uc == nil {
+		return nil
+	}
+	uc.listImageRecordRepo = repo
+	return uc
+}
+
+// WithListPrimaryImageSetter wires primary-image cache updater (List.ImageID).
+func (uc *ListUsecase) WithListPrimaryImageSetter(setter ListPrimaryImageSetter) *ListUsecase {
+	if uc == nil {
+		return nil
+	}
+	uc.listPrimaryImageSetter = setter
+	return uc
 }

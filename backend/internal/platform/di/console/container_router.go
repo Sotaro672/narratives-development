@@ -47,6 +47,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ListManagementQuery: c.ListManagementQuery,
 		ListDetailQuery:     c.ListDetailQuery,
 
+		// ✅ NEW: ListImage endpoints wiring (upload/delete)
+		ListImageUploader: c.ListImageUploader,
+		ListImageDeleter:  c.ListImageDeleter,
+
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,
 		MintUC:       c.MintUC,

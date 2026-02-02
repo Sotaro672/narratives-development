@@ -6,6 +6,9 @@ import (
 	"errors"
 	"log"
 
+	// ✅ ListImage uploader/deleter interfaces (for console list handler)
+	listHandler "narratives/internal/adapters/in/http/console/handler/list"
+
 	fs "narratives/internal/adapters/out/firestore"
 
 	inspectionapp "narratives/internal/application/inspection"
@@ -89,6 +92,10 @@ type Container struct {
 	ListManagementQuery           *companyquery.ListManagementQuery
 	ListDetailQuery               *companyquery.ListDetailQuery
 
+	// ✅ NEW: list image endpoints wiring (used by console handler)
+	ListImageUploader listHandler.ListImageUploader
+	ListImageDeleter  listHandler.ListImageDeleter
+
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	ProductUC    *uc.ProductUsecase
@@ -169,6 +176,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ListCreateQuery:               q.listCreateQuery,
 		ListManagementQuery:           q.listManagementQuery,
 		ListDetailQuery:               q.listDetailQuery,
+
+		// ✅ NEW: pass-through from query builder
+		ListImageUploader: q.listImageUploader,
+		ListImageDeleter:  q.listImageDeleter,
 
 		OwnerResolveQ: res.ownerResolveQ,
 

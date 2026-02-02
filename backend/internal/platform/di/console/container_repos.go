@@ -27,6 +27,10 @@ type repos struct {
 	listRepoFS *fs.ListRepositoryFS
 	listRepo   *fs.ListRepositoryForUsecase
 
+	// ✅ NEW: list image records in Firestore subcollection
+	// /lists/{listId}/images/{imageId}
+	listImageRecordRepo *fs.ListImageRepositoryFS
+
 	memberRepo  *fs.MemberRepositoryFS
 	messageRepo *fs.MessageRepositoryFS
 	modelRepo   *fs.ModelRepositoryFS
@@ -98,6 +102,9 @@ func buildRepos(c *clients) *repos {
 	listRepoFS := fs.NewListRepositoryFS(fsClient)
 	listRepo := fs.NewListRepositoryForUsecase(listRepoFS)
 
+	// ✅ NEW: list images Firestore subcollection repository
+	listImageRecordRepo := fs.NewListImageRepositoryFS(fsClient)
+
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
@@ -165,6 +172,9 @@ func buildRepos(c *clients) *repos {
 
 		listRepoFS: listRepoFS,
 		listRepo:   listRepo,
+
+		// ✅ NEW
+		listImageRecordRepo: listImageRecordRepo,
 
 		memberRepo:  memberRepo,
 		messageRepo: messageRepo,

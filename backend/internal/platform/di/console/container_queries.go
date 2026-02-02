@@ -2,7 +2,12 @@
 package console
 
 import (
+	"log"
+
 	companyquery "narratives/internal/application/query/console"
+
+	// ✅ ListImage uploader/deleter interfaces (used by console list handler wiring)
+	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 )
 
 type queries struct {
@@ -12,6 +17,10 @@ type queries struct {
 	listCreateQuery               *companyquery.ListCreateQuery
 	listManagementQuery           *companyquery.ListManagementQuery
 	listDetailQuery               *companyquery.ListDetailQuery
+
+	// ✅ ListImage wiring (for /lists/{id}/images endpoints in console)
+	listImageUploader listHandler.ListImageUploader
+	listImageDeleter  listHandler.ListImageDeleter
 }
 
 func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
@@ -57,9 +66,12 @@ func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
 		inventoryQuery,
 	)
 
-	// ✅ FIX: ListDetailQuery に (1) listImage と (2) productBlueprintPatch を注入する
+	// ✅ FIX: ListDetailQuery に (1) listImageRecords(Firestore) と (2) productBlueprintPatch を注入する
 	// - displayOrder を priceRows に載せるには pbPatchRepo の注入が必須
-	// - listImage bucket の imageUrls を返すには imgLister の注入が必須
+	// - imageUrls を返すには Firestore subcollection (/lists/{listId}/images) の reader 注入が必須
+	//
+	// NOTE:
+	// - r.listImageRepo (GCS) ではなく r.listImageRecordRepo (Firestore) を注入する
 	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryRowsImagesAndPBPatch(
 		r.listRepo,
 		res.nameResolver,
@@ -67,8 +79,33 @@ func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
 		&tbGetterAdapter{repo: r.tokenBlueprintRepo},
 		inventoryQuery,
 		inventoryQuery,
-		r.listImageRepo,
+		r.listImageRecordRepo, // ✅ Firestore records
 		&pbPatchByIDAdapter{repo: r.productBlueprintRepo},
+	)
+
+	// =========================================================
+	// ✅ ListImageUploader / ListImageDeleter wiring
+	// - handler 側 interface に対して、GCS adapter を注入する
+	//   (usecase を handler interface に cast しようとしても、通常は満たさない)
+	// =========================================================
+	var uploader listHandler.ListImageUploader
+	var deleter listHandler.ListImageDeleter
+
+	if r != nil && r.listImageRepo != nil {
+		if up, ok := any(r.listImageRepo).(listHandler.ListImageUploader); ok {
+			uploader = up
+		}
+		if del, ok := any(r.listImageRepo).(listHandler.ListImageDeleter); ok {
+			deleter = del
+		}
+	}
+
+	// 期待通りに配線されているかを確認しやすいようにログ（運用デバッグ用）
+	log.Printf(
+		"[di.console] list image ports wired (uploader=%t deleter=%t recordRepo=%t)",
+		uploader != nil,
+		deleter != nil,
+		r != nil && r.listImageRecordRepo != nil,
 	)
 
 	return &queries{
@@ -78,5 +115,8 @@ func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
 		listCreateQuery:               listCreateQuery,
 		listManagementQuery:           listManagementQuery,
 		listDetailQuery:               listDetailQuery,
+
+		listImageUploader: uploader,
+		listImageDeleter:  deleter,
 	}
 }
