@@ -11,7 +11,7 @@ import {
   createListHTTP,
   type CreateListInput,
   type ListDTO,
-} from "../../../../list/src/infrastructure/http/listRepositoryHTTP";
+} from "../../../../list/src/infrastructure/http/list";
 
 import type { ResolvedListCreateParams } from "./listCreate.types";
 import { buildListCreateFetchInput } from "./listCreate.routing";

@@ -8,7 +8,7 @@ import {
   fetchListsHTTP,
   updateListByIdHTTP,
   type ListDTO,
-} from "../infrastructure/http/listRepositoryHTTP";
+} from "../infrastructure/http/list";
 
 // ---------------------------------------------------------
 // Types (presentation hook から使う)

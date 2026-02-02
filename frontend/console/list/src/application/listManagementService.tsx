@@ -8,8 +8,8 @@ import {
 
 import type { ListStatus } from "../../../shell/src/shared/types/list";
 
-// ✅ HTTP は repository へ移譲
-import { fetchListsHTTP } from "../infrastructure/http/listRepositoryHTTP";
+// ✅ 分割後のHTTP入口（index.ts 経由）
+import { fetchListsHTTP } from "../infrastructure/http/list";
 
 export type SortKey = "id" | "createdAt" | null;
 
@@ -170,8 +170,13 @@ export async function loadListManagementRows(): Promise<{
   error: string | null;
 }> {
   try {
-    const items = await fetchListsHTTP(); // ✅ repository 経由
-    const mapped = items.map(mapAnyToVMRow).filter((r) => r.id !== "(missing id)");
+    // fetchListsHTTP の返りは ListDTO[] だが、ここでは DTO 形が揺れる前提で unknown[] 扱いにする
+    const items = (await fetchListsHTTP()) as unknown[];
+
+    const mapped = items
+      .map((x) => mapAnyToVMRow(x as any))
+      // ✅ r が暗黙anyにならないよう型を明示
+      .filter((r: ListManagementRowVM) => r.id !== "(missing id)");
 
     // eslint-disable-next-line no-console
     console.log("[list/listManagementService] mapped rows", {
@@ -180,15 +185,18 @@ export async function loadListManagementRows(): Promise<{
     });
 
     return { rows: mapped, error: null };
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errMsg =
+      e instanceof Error ? String(e.message) : String(e ?? "unknown_error");
+
     // eslint-disable-next-line no-console
     console.log("[list/listManagementService] fetch lists failed", {
-      error: String(e?.message ?? e),
+      error: errMsg,
     });
 
     return {
       rows: [],
-      error: String(e?.message ?? e),
+      error: errMsg,
     };
   }
 }

@@ -8,7 +8,7 @@ import {
   issueListImageSignedUrlHTTP,
   type ListDTO,
   type SignedListImageUploadDTO,
-} from "../../../../list/src/infrastructure/http/listRepositoryHTTP";
+} from "../../../../list/src/infrastructure/http/list";
 
 import { normalizeListId, s } from "./listCreate.utils";
 

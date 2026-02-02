@@ -3,17 +3,17 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-// ✅ PriceCard hook（PriceRow 型もここから取り込む）
-import {
-  usePriceCard,
-  type PriceRow,
-} from "../../../../list/src/presentation/hook/usePriceCard";
+// ✅ PriceCard hook
+import { usePriceCard } from "../../../../list/src/presentation/hook/usePriceCard";
+
+// ✅ 型は inventory/application を正とする（依存方向を正す）
+import type { PriceRow } from "../../../../inventory/src/application/listCreate/priceCard.types";
 
 // Firebase Auth（IDトークン）
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // ✅ API_BASE は repository の定義を正とする（base URL の名揺れ防止）
-import { API_BASE } from "../../infrastructure/http/listRepositoryHTTP";
+import { API_BASE } from "../../infrastructure/http/list";
 
 // ✅ それ以外は service へ
 import {
@@ -192,7 +192,7 @@ function normalizePricesFromPriceRows(
   const out: Array<{ modelId: string; price: number }> = [];
 
   for (const r of Array.isArray(rows) ? rows : []) {
-    const modelId = s((r as any)?.id); // ✅ PriceRow は id (= modelId)
+    const modelId = s((r as any)?.id); // ✅ PriceRow.id が modelId
     const price = toNumberOrNull((r as any)?.price);
 
     if (!modelId) continue;
@@ -276,9 +276,6 @@ function formatYMDHM(v: unknown): string {
 
 // ==============================
 // ✅ NEW: listImage を扱う hook（UI-only）
-// - edit 時だけ追加/削除できる
-// - 複数ファイルをまとめて追加できる
-// - isNew(blob) は revoke 対応
 // ==============================
 
 function fileKey(f: File): string {
@@ -300,7 +297,6 @@ function useListImages(args: {
     cloneDraftImagesFromUrls(initialUrls),
   );
 
-  // 初期URLが変わったら、編集していない時だけ同期（外側でも同期するが二重でも安全）
   React.useEffect(() => {
     if (isEdit) return;
     setDraftImages(cloneDraftImagesFromUrls(initialUrls));
@@ -440,30 +436,6 @@ export function useListDetail(): UseListDetailResult {
       });
       if (cancelledRef.current) return;
 
-      // ✅ Debug: ListDetail open -> fetched DTO visibility
-      try {
-        const anyData: any = data as any;
-        const keys =
-          anyData && typeof anyData === "object" ? Object.keys(anyData) : [];
-        console.log("[console/list/useListDetail] fetched dto", {
-          listId: id,
-          inventoryIdHint: s(inventoryId),
-          keys,
-          createdBy: s(anyData?.createdBy),
-          createdByName: s(anyData?.createdByName),
-          updatedBy: s(anyData?.updatedBy),
-          updatedByName: s(anyData?.updatedByName),
-          createdAt: s(anyData?.createdAt),
-          updatedAt: s(anyData?.updatedAt),
-          assigneeId: s(anyData?.assigneeId),
-          assigneeName: s(anyData?.assigneeName),
-        });
-      } catch (e) {
-        console.log("[console/list/useListDetail] fetched dto (log_failed)", {
-          err: String(e),
-        });
-      }
-
       setDTO(data);
     } catch (e) {
       if (cancelledRef.current) return;
@@ -527,34 +499,8 @@ export function useListDetail(): UseListDetailResult {
 
   const updatedAtRaw = s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
 
-  // ✅ 表示用フォーマット
   const createdAt = React.useMemo(() => formatYMDHM(createdAtRaw), [createdAtRaw]);
   const updatedAt = React.useMemo(() => formatYMDHM(updatedAtRaw), [updatedAtRaw]);
-
-  // ✅ Debug: final values that are actually passed to UI
-  React.useEffect(() => {
-    if (!dto) return;
-    try {
-      console.log("[console/list/useListDetail] effective admin fields", {
-        listId: s((dto as any)?.id) || s(listId),
-        createdBy,
-        createdByNameFromDTO,
-        createdByNameFromDerived: s(createdByNameFromDerived),
-        effectiveCreatedByName,
-        updatedBy,
-        updatedByNameFromDTO,
-        updatedByNameFromDerived,
-        effectiveUpdatedByName,
-        createdAtRaw,
-        updatedAtRaw,
-      });
-    } catch (e) {
-      console.log("[console/list/useListDetail] effective admin fields (log_failed)", {
-        err: String(e),
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dto]);
 
   const decisionNorm = React.useMemo(() => normalizeDecision(decision), [decision]);
 
@@ -596,7 +542,6 @@ export function useListDetail(): UseListDetailResult {
     setDraftPriceRows(clonePriceRows(viewPriceRows));
     setDraftDecision(decisionNorm);
 
-    // images は hook 側 effect で同期されるが、二重でも安全
     img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
   }, [
     isEdit,
@@ -630,7 +575,15 @@ export function useListDetail(): UseListDetailResult {
     setSaveError("");
 
     setIsEdit(false);
-  }, [img.draftImages, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls, img]);
+  }, [
+    img.draftImages,
+    listingTitle,
+    description,
+    viewPriceRows,
+    decisionNorm,
+    viewImageUrls,
+    img,
+  ]);
 
   const onToggleDecision = React.useCallback(
     (next: ListingDecisionNorm) => {
@@ -687,8 +640,6 @@ export function useListDetail(): UseListDetailResult {
 
   // ============================================================
   // ✅ Save (PUT /lists/{id})
-  // - 画像は現時点では UI-only（保存payloadには含めない）
-  //   ※ backend が listImage 受け入れ可能になったらここで upload/attach を実装する
   // ============================================================
   const onSave = React.useCallback(
     async (payload?: any) => {
@@ -864,7 +815,6 @@ export function useListDetail(): UseListDetailResult {
     assigneeId,
     assigneeName,
 
-    // ✅ ここが今回の本命：DTO優先で確定した name を返す
     createdByName: effectiveCreatedByName,
     createdAt,
 
