@@ -12,6 +12,10 @@ import type { PriceRow } from "../../../../inventory/src/application/listCreate/
 // Firebase Auth（uid 取得）
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
+// ✅ internal hooks（presentation 層内で完結）
+import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
+import { useCancelledRef } from "./internal/useCancelledRef";
+
 // ✅ それ以外は service へ
 import {
   resolveListDetailParams,
@@ -19,14 +23,16 @@ import {
   updateListDetailDTO,
   deriveListDetail,
   computeListDetailPageTitle,
-  useMainImageIndexGuard,
-  useCancelledRef,
+  normalizeListingDecisionNorm,
+  toDecisionForUpdate,
+  formatYMDHM,
+  type ListingDecisionNorm,
   type ListDetailRouteParams,
   type ListDetailDTO,
   s,
 } from "../../application/listDetailService";
 
-export type ListingDecisionNorm = "listing" | "holding" | "";
+export type { ListingDecisionNorm };
 
 export type DraftImage = {
   url: string;
@@ -53,13 +59,13 @@ export type UseListDetailResult = {
   reload: () => Promise<void>;
 
   // =========================
-  // ✅ Edit mode (page header)
+  // Edit mode (page header)
   // =========================
   isEdit: boolean;
   onEdit: () => void;
   onCancel: () => void;
 
-  // ✅ listDetail.tsx が payload を渡してくるので受け取れる形にする（payload 無しでも動く）
+  // listDetail.tsx が payload を渡してくるので受け取れる形にする（payload 無しでも動く）
   onSave: (payload?: any) => Promise<void>;
 
   // =========================
@@ -68,7 +74,7 @@ export type UseListDetailResult = {
   listingTitle: string;
   description: string;
 
-  // ✅ draft (edit UI 用)
+  // draft (edit UI 用)
   draftListingTitle: string;
   setDraftListingTitle: React.Dispatch<React.SetStateAction<string>>;
   draftDescription: string;
@@ -128,15 +134,8 @@ export type UseListDetailResult = {
 };
 
 // ==============================
-// local helpers
+// local helpers（UI-only）
 // ==============================
-
-function normalizeDecision(v: unknown): ListingDecisionNorm {
-  const x = s(v).toLowerCase();
-  if (x === "listing" || x === "list") return "listing";
-  if (x === "holding" || x === "hold") return "holding";
-  return "";
-}
 
 function clonePriceRows(rows: PriceRow[]): PriceRow[] {
   return Array.isArray(rows) ? rows.map((x) => ({ ...(x as any) })) : [];
@@ -159,26 +158,6 @@ function revokeDraftBlobUrls(items: DraftImage[]) {
       }
     }
   }
-}
-
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function formatYMDHM(v: unknown): string {
-  const raw = s(v);
-  if (!raw) return "";
-
-  const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return raw;
-
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  const hh = pad2(d.getHours());
-  const mi = pad2(d.getMinutes());
-
-  return `${yyyy}/${mm}/${dd}/${hh}/${mi}`;
 }
 
 // ==============================
@@ -289,13 +268,6 @@ function useListImages(args: { isEdit: boolean; saving: boolean; initialUrls: st
   };
 }
 
-function toDecisionForUpdate(v: unknown): "list" | "hold" | undefined {
-  const x = normalizeDecision(v);
-  if (x === "listing") return "list";
-  if (x === "holding") return "hold";
-  return undefined;
-}
-
 export function useListDetail(): UseListDetailResult {
   const navigate = useNavigate();
   const params = useParams<ListDetailRouteParams>();
@@ -394,10 +366,12 @@ export function useListDetail(): UseListDetailResult {
 
   const updatedAtRaw = s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
 
+  // ✅ (1) moved to service
   const createdAt = React.useMemo(() => formatYMDHM(createdAtRaw), [createdAtRaw]);
   const updatedAt = React.useMemo(() => formatYMDHM(updatedAtRaw), [updatedAtRaw]);
 
-  const decisionNorm = React.useMemo(() => normalizeDecision(decision), [decision]);
+  // ✅ (2) moved to service
+  const decisionNorm = React.useMemo(() => normalizeListingDecisionNorm(decision), [decision]);
 
   // ============================================================
   // Edit state + drafts
@@ -517,14 +491,14 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      const nextTitle =
-        s(payload?.title) || s(payload?.listingTitle) || s(draftListingTitle) || "";
+      const nextTitle = s(payload?.title) || s(payload?.listingTitle) || s(draftListingTitle) || "";
 
       const nextDesc =
         payload && payload.description !== undefined
           ? String(payload.description ?? "")
           : String(draftDescription ?? "");
 
+      // ✅ (2) moved to service
       const nextDecision =
         toDecisionForUpdate(payload?.decision) ||
         toDecisionForUpdate(payload?.status) ||
@@ -585,7 +559,7 @@ export function useListDetail(): UseListDetailResult {
     ],
   );
 
-  // PriceCard hook（page が参照するので残すのは「互換」ではなく必須）
+  // PriceCard
   const effectiveForPriceCard = isEdit ? draftPriceRows : viewPriceRows;
 
   const priceCard = usePriceCard({

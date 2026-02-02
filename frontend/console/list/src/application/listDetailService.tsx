@@ -1,6 +1,6 @@
 // frontend/console/list/src/application/listDetailService.tsx
 
-import * as React from "react";
+import type * as React from "react";
 
 // ✅ repository（HTTP）はここから呼ぶ
 import {
@@ -21,6 +21,11 @@ export type ListDetailRouteParams = {
 
 // hook 内では必要なフィールドだけ参照するので Record<any> でOK
 export type ListDetailDTO = ListDTO;
+
+/**
+ * ✅ (2) decision normalize types (moved from hook)
+ */
+export type ListingDecisionNorm = "listing" | "holding" | "";
 
 /**
  * ✅ presentation hook が import しても落ちないように（ts2305 対策）
@@ -68,11 +73,11 @@ export type UseListDetailResult = {
   createdByName: string;
   createdAt: string;
 
-  // ✅ NEW: 更新者/更新日時（AdminCard などで表示するため）
+  // 更新者/更新日時
   updatedByName: string;
   updatedAt: string;
 
-  // ✅ NEW: edit helpers (optional)
+  // edit helpers (optional)
   listId?: string;
   inventoryId?: string;
 };
@@ -85,7 +90,7 @@ export function s(v: unknown): string {
 }
 
 export function resolveListDetailParams(params: ListDetailRouteParams | undefined) {
-  // ✅ ルートパラメータ名の違い（listId / id）は吸収（DTO の名揺れではない）
+  // ルートパラメータ名の違い（listId / id）は吸収
   const listId = s(params?.listId || params?.id);
   const inventoryId = s(params?.inventoryId);
 
@@ -112,14 +117,57 @@ export function normalizeDecision(dto: any): string {
 }
 
 // ---------------------------------------------------------
-// ✅ listImage helpers（NEW）
-// - backend が listImages (推奨) / listImage を返す or 受け取るケースに備える
-// - UI は imageUrls を使うので、ここで url 配列へも変換できるようにする
+// ✅ (2) moved from hook: ListingDecisionNorm helpers
+// ---------------------------------------------------------
+
+export function normalizeListingDecisionNorm(v: unknown): ListingDecisionNorm {
+  const x = s(v).toLowerCase();
+  if (x === "listing" || x === "list") return "listing";
+  if (x === "holding" || x === "hold") return "holding";
+  return "";
+}
+
+export function toDecisionForUpdate(v: unknown): "list" | "hold" | undefined {
+  const x = normalizeListingDecisionNorm(v);
+  if (x === "listing") return "list";
+  if (x === "holding") return "hold";
+  return undefined;
+}
+
+// ---------------------------------------------------------
+// ✅ (1) moved from hook: datetime format helper
+// ---------------------------------------------------------
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * ✅ yyyy/mm/dd/hh/mm 形式（入力が不正ならそのまま返す）
+ */
+export function formatYMDHM(v: unknown): string {
+  const raw = s(v);
+  if (!raw) return "";
+
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return raw;
+
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+
+  return `${yyyy}/${mm}/${dd}/${hh}/${mi}`;
+}
+
+// ---------------------------------------------------------
+// ✅ listImage helpers
 // ---------------------------------------------------------
 
 export type ListImage = {
   url: string;
-  objectPath?: string; // GCS 等の objectPath を持たせたい場合の拡張（無くてもOK）
+  objectPath?: string;
 };
 
 // DraftImage（presentation hook 側）互換を緩く受ける
@@ -158,9 +206,7 @@ function toListImage(x: any): ListImage | null {
 }
 
 /**
- * ✅ dto から listImages を正として読む
- * - listImages が無ければ listImage を見る（配列想定）
- * - それも無ければ []（imageUrls は別関数が fallback する）
+ * dto から listImages を正として読む
  */
 export function normalizeListImages(dto: any): ListImage[] {
   const arr =
@@ -191,9 +237,9 @@ export function normalizeListImages(dto: any): ListImage[] {
 }
 
 /**
- * ✅ UI 用の imageUrls を生成
- * - 優先: dto.listImages / dto.listImage から url を作る
- * - fallback: dto.imageUrls（旧フィールド）
+ * UI 用の imageUrls を生成
+ * - 優先: dto.listImages / dto.listImage
+ * - fallback: dto.imageUrls（旧）
  */
 export function normalizeImageUrls(dto: any): string[] {
   const listImages = normalizeListImages(dto);
@@ -207,15 +253,14 @@ export function normalizeImageUrls(dto: any): string[] {
 }
 
 /**
- * ✅ hook の draftImages から「既存URL」と「新規File」を取り出す
- * - backend 実装（署名URL発行→PUT→attach）で使える形
+ * hook の draftImages から「既存URL」と「新規File」を取り出す
  */
 export function splitDraftImages(args: {
   draftImages: DraftImageLike[] | null | undefined;
 }): {
   existingUrls: string[];
   newFiles: File[];
-  listImages: ListImage[]; // 既存URLを listImages へ正規化（objectPathは持っていれば保持）
+  listImages: ListImage[];
 } {
   const src = Array.isArray(args.draftImages) ? args.draftImages : [];
 
@@ -239,7 +284,6 @@ export function splitDraftImages(args: {
 
     if (isNew) {
       const f = (x as any)?.file;
-      // File 判定はブラウザ依存なのでゆるく
       if (f && typeof (f as any).name === "string") {
         newFiles.push(f as File);
       }
@@ -262,9 +306,7 @@ export function splitDraftImages(args: {
 }
 
 /**
- * ✅ 更新payloadへ入れる listImages を作る（UI側が string[] でも DraftImage[] でもOK）
- * - 現段階では updateListByIdHTTP が listImages を受けるか不明なので、
- *   「payload を作る関数」だけ提供する（service からの呼び出しは後で）
+ * 更新payloadへ入れる listImages を作る（UI側が string[] でも DraftImage[] でもOK）
  */
 export function buildListImagesForUpdate(input: {
   imageUrls?: string[] | null;
@@ -295,13 +337,7 @@ function toNumberOrNull(v: unknown): number | null {
 }
 
 /**
- * ✅ priceRows は dto.priceRows のみ採用（名揺れ吸収しない）
- *
- * 重要:
- * - PriceCard の PriceRow 型は "modelId" を持たないため、ここでは絶対に返さない
- * - UI 側では id を正として扱う（id = modelId）
- * - ts2353（'modelId' does not exist in type 'PriceRow'）回避のため、
- *   返却オブジェクトは any/unknown 経由でキャストして返す
+ * priceRows は dto.priceRows のみ採用
  */
 export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: any): TRow[] {
   const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
@@ -318,8 +354,6 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: 
     const rgbNum = toNumberOrNull(r?.rgb);
     const rgb = rgbNum === null ? undefined : rgbNum;
 
-    // ✅ PriceRow 互換（modelId を含めない）
-    // id が空になると行が消える実装があり得るので、最後に idx フォールバック
     const rowAny = {
       id: modelId || String(idx),
       size,
@@ -329,21 +363,12 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: 
       price,
     };
 
-    // ✅ generic を指定されても excess property check を発生させない
     return rowAny as unknown as TRow;
   });
 }
 
 /**
- * ✅ draft(priceRows) -> backend update payload の prices
- * - backend が受け取るのは prices: [{modelId, price}] を想定
- * - PriceCard row は modelId を持たないので、id を modelId として扱う
- * - price が null の行は送らない（= 変更無し扱いにしたい）
- *
- * NOTE:
- * - 現在の update は repositoryHTTP 側で priceRows -> prices 正規化するため、
- *   service で prices を作って渡す必要はありません。
- * - ただし他用途で使えるので関数自体は残しておく。
+ * draft(priceRows) -> backend update payload の prices（必要なら使う）
  */
 export function buildPricesForUpdateFromPriceRows(
   rows: any[] | null | undefined,
@@ -352,7 +377,7 @@ export function buildPricesForUpdateFromPriceRows(
   const out: Array<{ modelId: string; price: number }> = [];
 
   for (const r of rr) {
-    const modelId = s(r?.modelId) || s(r?.id); // ✅ id = modelId
+    const modelId = s(r?.modelId) || s(r?.id); // id = modelId
     if (!modelId) continue;
 
     const price = toNumberOrNull(r?.price);
@@ -365,8 +390,7 @@ export function buildPricesForUpdateFromPriceRows(
 }
 
 // ---------------------------------------------------------
-// ✅ Backend query(ListQuery.ListRows) 経由で product/token/assignee/brand を補完する
-// - GET /lists は ListQuery.ListRows を通る想定
+// Backend query(ListQuery.ListRows) 経由で補完
 // ---------------------------------------------------------
 async function fetchRowFromListRows(args: { listId: string }): Promise<any | null> {
   const id = s(args.listId);
@@ -377,14 +401,12 @@ async function fetchRowFromListRows(args: { listId: string }): Promise<any | nul
     const hit = Array.isArray(rows) ? rows.find((r: any) => s(r?.id) === id) : null;
     return hit || null;
   } catch {
-    // ✅ 失敗しても detail は返せるので静かに null
     return null;
   }
 }
 
 // ---------------------------------------------------------
-// ✅ Model metadata ログ（取得できたことが分かるログ）
-// - 取得タイミング: loadListDetailDTO の A) /lists/{id} 取得直後
+// Model metadata ログ
 // ---------------------------------------------------------
 function logModelMetadataFromDetail(args: { listId: string; dto: any }) {
   const listId = s(args.listId);
@@ -416,43 +438,37 @@ function logModelMetadataFromDetail(args: { listId: string; dto: any }) {
 }
 
 // ---------------------------------------------------------
-// Service API (hook から呼ぶ)
+// Service API
 // ---------------------------------------------------------
 export async function loadListDetailDTO(args: {
   listId: string;
-  inventoryIdHint?: string; // ✅ ルートから来る想定
+  inventoryIdHint?: string;
 }): Promise<ListDetailDTO> {
   const listId = s(args.listId);
   const inventoryIdHint = s(args.inventoryIdHint);
 
   if (!listId) throw new Error("invalid_list_id");
 
-  // A) 詳細：GET /lists/{id} （ListDetailDTO を返す想定）
-  // B) rows：GET /lists（ListQuery.ListRows）
-  const [detail, row] = await Promise.all([
-    fetchListByIdHTTP(listId),
-    fetchRowFromListRows({ listId }),
-  ]);
+  const [detail, row] = await Promise.all([fetchListByIdHTTP(listId), fetchRowFromListRows({ listId })]);
 
-  // ✅ Model metadata が取れていることが分かるログ（ここだけ残す）
   logModelMetadataFromDetail({ listId, dto: detail });
 
   const merged: any = { ...(detail as any) };
 
-  // ✅ inventoryId は detail を優先。無ければ hint、最後に row。
+  // inventoryId は detail を優先。無ければ hint、最後に row。
   if (!s(merged?.inventoryId)) merged.inventoryId = inventoryIdHint;
   if (!s(merged?.inventoryId) && row) merged.inventoryId = s(row?.inventoryId);
 
-  // ✅ assigneeId は detail を優先。無ければ row。
+  // assigneeId は detail を優先。無ければ row。
   if (!s(merged?.assigneeId) && row) merged.assigneeId = s(row?.assigneeId);
 
-  // ✅ updatedAt / updatedBy も detail を優先。無ければ row（best-effort）
+  // updatedAt / updatedBy も detail を優先。無ければ row（best-effort）
   if (!s(merged?.updatedAt) && row) merged.updatedAt = s(row?.updatedAt);
   if (!s(merged?.updatedBy) && row) {
     merged.updatedBy = s(row?.updatedBy) || s(row?.updatedByName);
   }
 
-  // ✅ 表示名/ブランド/商品名/トークン名/ステータスは row があれば補完
+  // 表示名/ブランド/商品名/トークン名/ステータスは row があれば補完
   if (row) {
     if (!s(merged?.productName)) merged.productName = s(row?.productName);
     if (!s(merged?.tokenName)) merged.tokenName = s(row?.tokenName);
@@ -465,7 +481,7 @@ export async function loadListDetailDTO(args: {
     if (!s(merged?.tokenBrandId)) merged.tokenBrandId = s(row?.tokenBrandId);
     if (!s(merged?.tokenBrandName)) merged.tokenBrandName = s(row?.tokenBrandName);
 
-    // ✅ listImages が row にある場合だけ補完（detail を正とする）
+    // listImages が row にある場合だけ補完（detail を正とする）
     if (!Array.isArray(merged?.listImages) && Array.isArray((row as any)?.listImages)) {
       merged.listImages = (row as any).listImages;
     }
@@ -474,7 +490,7 @@ export async function loadListDetailDTO(args: {
     }
   }
 
-  // ✅ 一応 id を正規化して持っておく（view 側で拾えるように）
+  // id を正規化して持っておく
   if (!s(merged?.id)) merged.id = listId;
 
   return merged as ListDetailDTO;
@@ -485,7 +501,6 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
   const description = s(dto?.description);
   const decision = normalizeDecision(dto);
 
-  // ✅ 右カラム：商品/トークン（ブランド含む）
   const productBrandId = s(dto?.productBrandId);
   const productBrandName = s(dto?.productBrandName);
   const productName = s(dto?.productName);
@@ -494,24 +509,16 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
   const tokenBrandName = s(dto?.tokenBrandName);
   const tokenName = s(dto?.tokenName);
 
-  // ✅ 担当者（ID + Name）
   const assigneeId = s(dto?.assigneeId);
   const assigneeName = s(dto?.assigneeName) || "未設定";
 
-  // ✅ createdBy は dto.createdBy をそのまま使う（名揺れ吸収しない）
   const createdByName = s(dto?.createdBy);
   const createdAt = s(dto?.createdAt);
 
-  // ✅ NEW: updatedByName / updatedAt
-  // - 基本は dto.updatedBy / dto.updatedAt
-  // - もし updatedByName が別フィールドで来ても表示できるように best-effort で拾う
   const updatedByName = s(dto?.updatedBy) || s((dto as any)?.updatedByName);
   const updatedAt = s(dto?.updatedAt);
 
-  // ✅ listImages 対応：優先して listImages/listImage から作る（無ければ imageUrls）
   const imageUrls = normalizeImageUrls(dto);
-
-  // ✅ priceRows は detail の priceRows を読む（id=modelId, size/color/rgb/stock/price）
   const priceRows = normalizePriceRows<TRow>(dto);
 
   return {
@@ -536,7 +543,6 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
     createdByName,
     createdAt,
 
-    // ✅ NEW
     updatedByName,
     updatedAt,
   };
@@ -549,79 +555,38 @@ export function computeListDetailPageTitle(args: { listId?: string; listingTitle
 }
 
 // ---------------------------------------------------------
-// ✅ Update API (hook / page から呼べる)
-// - 重要: repositoryHTTP 側が priceRows を受けて prices を正規化するので、
-//         service からは priceRows を渡す（prices を渡すと落ちる）
+// Update API
+// - repositoryHTTP 側が priceRows を受けて prices を正規化するので、service からは priceRows を渡す
 // ---------------------------------------------------------
 export async function updateListDetailDTO(args: {
   listId: string;
 
-  // editable fields
   title?: string;
   description?: string;
 
   // PriceCard rows（id = modelId）
   priceRows?: any[];
 
-  // decision (optional)
   decision?: "list" | "hold";
-
-  // assignee (optional)
   assigneeId?: string;
 
-  // audit
   updatedBy?: string;
 
-  // ✅ NEW: listImages (optional)
-  // NOTE: repositoryHTTP がまだ受けない場合があるので、必要になったら実装側で対応。
-  // listImages?: ListImage[];
+  // listImages?: ListImage[]; // 必要になったら
 }): Promise<ListDTO> {
   const listId = s(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
-  // ✅ repositoryHTTP が期待する UpdateListInput に合わせる
   return await updateListByIdHTTP({
     listId,
     title: args.title,
     description: args.description,
 
-    // ✅ ここが修正点: prices ではなく priceRows を渡す
+    // ✅ prices ではなく priceRows を渡す
     priceRows: args.priceRows,
 
     decision: args.decision,
     assigneeId: args.assigneeId,
     updatedBy: args.updatedBy,
   });
-}
-
-// ---------------------------------------------------------
-// Hook helpers (presentation hook から使う)
-// ---------------------------------------------------------
-export function useCancelledRef() {
-  const cancelledRef = React.useRef(false);
-  React.useEffect(() => {
-    cancelledRef.current = false;
-    return () => {
-      cancelledRef.current = true;
-    };
-  }, []);
-  return cancelledRef;
-}
-
-export function useMainImageIndexGuard(args: {
-  imageUrls: string[];
-  mainImageIndex: number;
-  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
-}) {
-  const { imageUrls, mainImageIndex, setMainImageIndex } = args;
-
-  React.useEffect(() => {
-    if (imageUrls.length === 0) {
-      if (mainImageIndex !== 0) setMainImageIndex(0);
-      return;
-    }
-    if (mainImageIndex < 0 || mainImageIndex > imageUrls.length - 1) {
-      setMainImageIndex(0);
-    }
-  }, [imageUrls.length, mainImageIndex, setMainImageIndex]);
 }
