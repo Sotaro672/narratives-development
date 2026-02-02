@@ -9,16 +9,14 @@ import { usePriceCard } from "../../../../list/src/presentation/hook/usePriceCar
 // ✅ 型は inventory/application を正とする（依存方向を正す）
 import type { PriceRow } from "../../../../inventory/src/application/listCreate/priceCard.types";
 
-// Firebase Auth（IDトークン）
+// Firebase Auth（uid 取得）
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
-
-// ✅ API_BASE は repository の定義を正とする（base URL の名揺れ防止）
-import { API_BASE } from "../../infrastructure/http/list";
 
 // ✅ それ以外は service へ
 import {
   resolveListDetailParams,
   loadListDetailDTO,
+  updateListDetailDTO,
   deriveListDetail,
   computeListDetailPageTitle,
   useMainImageIndexGuard,
@@ -63,7 +61,6 @@ export type UseListDetailResult = {
 
   // ✅ listDetail.tsx が payload を渡してくるので受け取れる形にする（payload 無しでも動く）
   onSave: (payload?: any) => Promise<void>;
-  onSaveEdit: (payload?: any) => Promise<void>;
 
   // =========================
   // listing (view/edit)
@@ -116,7 +113,7 @@ export type UseListDetailResult = {
   setDraftPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
   onChangePrice: (index: number, price: number | null, row: PriceRow) => void;
 
-  // 互換: 呼び出し側で使っている可能性があるため残す
+  // ✅ PriceCard result（page が参照するため）
   priceCard: ReturnType<typeof usePriceCard>;
 
   // admin (view)
@@ -126,7 +123,6 @@ export type UseListDetailResult = {
   createdByName: string;
   createdAt: string;
 
-  // ✅ NEW: 更新者/更新日時（listDetail.tsx 側で参照するため）
   updatedByName: string;
   updatedAt: string;
 };
@@ -135,99 +131,11 @@ export type UseListDetailResult = {
 // local helpers
 // ==============================
 
-async function getIdToken(): Promise<string> {
-  const u = auth.currentUser;
-  if (!u) throw new Error("not_authenticated");
-  return await u.getIdToken();
-}
-
-async function requestJSON<T>(args: {
-  method: "PUT" | "PATCH" | "POST" | "GET" | "DELETE";
-  path: string;
-  body?: unknown;
-}): Promise<T> {
-  const token = await getIdToken();
-  const url = `${API_BASE}${args.path.startsWith("/") ? "" : "/"}${args.path}`;
-
-  const bodyText = args.body === undefined ? undefined : JSON.stringify(args.body);
-
-  const res = await fetch(url, {
-    method: args.method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: bodyText,
-  });
-
-  const text = await res.text();
-
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-
-  if (!res.ok) {
-    const msg =
-      (json && typeof json === "object" && (json.error || json.message)) ||
-      `http_error_${res.status}`;
-    throw new Error(String(msg));
-  }
-
-  return json as T;
-}
-
-function toNumberOrNull(v: unknown): number | null {
-  if (v === null || v === undefined) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n;
-}
-
-function normalizePricesFromPriceRows(
-  rows: PriceRow[],
-): Array<{ modelId: string; price: number }> {
-  const out: Array<{ modelId: string; price: number }> = [];
-
-  for (const r of Array.isArray(rows) ? rows : []) {
-    const modelId = s((r as any)?.id); // ✅ PriceRow.id が modelId
-    const price = toNumberOrNull((r as any)?.price);
-
-    if (!modelId) continue;
-
-    if (price === null) {
-      throw new Error("missing_price_in_priceRows");
-    }
-
-    out.push({ modelId, price });
-  }
-
-  return out;
-}
-
-// ✅ 出品/保留の正規化（backend: listing/holding を想定、旧: list/hold も吸収）
 function normalizeDecision(v: unknown): ListingDecisionNorm {
   const x = s(v).toLowerCase();
   if (x === "listing" || x === "list") return "listing";
   if (x === "holding" || x === "hold") return "holding";
   return "";
-}
-
-// decision/status -> backend status (best-effort)
-function decisionToBackendStatus(v: unknown): string | undefined {
-  const d = s(v).toLowerCase();
-  if (!d) return undefined;
-
-  // already normalized
-  if (d === "listing" || d === "holding") return d;
-
-  // legacy
-  if (d === "list") return "listing";
-  if (d === "hold") return "holding";
-
-  return d;
 }
 
 function clonePriceRows(rows: PriceRow[]): PriceRow[] {
@@ -257,7 +165,6 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-// ✅ yyyy/mm/dd/hh/mm 形式（入力が不正ならそのまま返す）
 function formatYMDHM(v: unknown): string {
   const raw = s(v);
   if (!raw) return "";
@@ -275,7 +182,7 @@ function formatYMDHM(v: unknown): string {
 }
 
 // ==============================
-// ✅ NEW: listImage を扱う hook（UI-only）
+// listImage draft hook（UI-only）
 // ==============================
 
 function fileKey(f: File): string {
@@ -286,11 +193,7 @@ function isImageFile(f: File): boolean {
   return String((f as any)?.type ?? "").startsWith("image/");
 }
 
-function useListImages(args: {
-  isEdit: boolean;
-  saving: boolean;
-  initialUrls: string[];
-}) {
+function useListImages(args: { isEdit: boolean; saving: boolean; initialUrls: string[] }) {
   const { isEdit, saving, initialUrls } = args;
 
   const [draftImages, setDraftImages] = React.useState<DraftImage[]>(
@@ -371,16 +274,6 @@ function useListImages(args: {
     [isEdit, saving],
   );
 
-  const clearImages = React.useCallback(() => {
-    if (!isEdit) return;
-    if (saving) return;
-
-    setDraftImages((prev) => {
-      revokeDraftBlobUrls(prev);
-      return [];
-    });
-  }, [isEdit, saving]);
-
   const imageUrls = React.useMemo(() => {
     return (Array.isArray(draftImages) ? draftImages : [])
       .map((x) => s(x?.url))
@@ -393,9 +286,14 @@ function useListImages(args: {
     imageUrls,
     onAddImages,
     onRemoveImageAt,
-    clearImages,
-    addFiles,
   };
+}
+
+function toDecisionForUpdate(v: unknown): "list" | "hold" | undefined {
+  const x = normalizeDecision(v);
+  if (x === "listing") return "list";
+  if (x === "holding") return "hold";
+  return undefined;
 }
 
 export function useListDetail(): UseListDetailResult {
@@ -480,22 +378,19 @@ export function useListDetail(): UseListDetailResult {
     createdAt: createdAtRawFromDerived,
   } = derived;
 
-  // ✅ dto 側を最優先にして createdByName/createdAt を確定する
+  // dto 優先
   const dtoAny: any = dto as any;
 
   const createdBy = s(dtoAny?.createdBy);
   const createdByNameFromDTO = s(dtoAny?.createdByName);
-  const effectiveCreatedByName =
-    createdByNameFromDTO || s(createdByNameFromDerived) || createdBy;
+  const effectiveCreatedByName = createdByNameFromDTO || s(createdByNameFromDerived) || createdBy;
 
   const createdAtRaw = s(dtoAny?.createdAt) || s(createdAtRawFromDerived);
 
-  // ✅ updated も dto を最優先で拾う（deriveListDetail 側の差分吸収）
   const updatedBy = s(dtoAny?.updatedBy);
   const updatedByNameFromDTO = s(dtoAny?.updatedByName);
   const updatedByNameFromDerived = s((derived as any)?.updatedByName);
-  const effectiveUpdatedByName =
-    updatedByNameFromDTO || updatedByNameFromDerived || updatedBy;
+  const effectiveUpdatedByName = updatedByNameFromDTO || updatedByNameFromDerived || updatedBy;
 
   const updatedAtRaw = s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
 
@@ -505,7 +400,7 @@ export function useListDetail(): UseListDetailResult {
   const decisionNorm = React.useMemo(() => normalizeDecision(decision), [decision]);
 
   // ============================================================
-  // ✅ Edit state + drafts
+  // Edit state + drafts
   // ============================================================
   const [isEdit, setIsEdit] = React.useState(false);
 
@@ -516,17 +411,13 @@ export function useListDetail(): UseListDetailResult {
     clonePriceRows(viewPriceRows),
   );
 
-  const [draftDecision, setDraftDecision] = React.useState<ListingDecisionNorm>(
-    decisionNorm,
-  );
+  const [draftDecision, setDraftDecision] = React.useState<ListingDecisionNorm>(decisionNorm);
 
   // save state
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
 
-  // ============================================================
-  // ✅ NEW: listImage hook（draftImages / add / remove / clear）
-  // ============================================================
+  // images draft
   const img = useListImages({
     isEdit,
     saving,
@@ -543,15 +434,7 @@ export function useListDetail(): UseListDetailResult {
     setDraftDecision(decisionNorm);
 
     img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
-  }, [
-    isEdit,
-    listingTitle,
-    description,
-    viewPriceRows,
-    decisionNorm,
-    viewImageUrls,
-    img,
-  ]);
+  }, [isEdit, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls, img]);
 
   const onEdit = React.useCallback(() => {
     setDraftListingTitle(listingTitle);
@@ -564,7 +447,6 @@ export function useListDetail(): UseListDetailResult {
   }, [listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls, img]);
 
   const onCancel = React.useCallback(() => {
-    // blob 解放
     revokeDraftBlobUrls(img.draftImages);
 
     setDraftListingTitle(listingTitle);
@@ -575,15 +457,7 @@ export function useListDetail(): UseListDetailResult {
     setSaveError("");
 
     setIsEdit(false);
-  }, [
-    img.draftImages,
-    listingTitle,
-    description,
-    viewPriceRows,
-    decisionNorm,
-    viewImageUrls,
-    img,
-  ]);
+  }, [img.draftImages, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls, img]);
 
   const onToggleDecision = React.useCallback(
     (next: ListingDecisionNorm) => {
@@ -594,9 +468,7 @@ export function useListDetail(): UseListDetailResult {
     [isEdit, saving],
   );
 
-  // ============================================================
-  // ✅ effective image urls (view/edit)
-  // ============================================================
+  // effective urls (view/edit)
   const effectiveImageUrls = React.useMemo(() => {
     if (isEdit) return img.imageUrls;
     return (Array.isArray(viewImageUrls) ? viewImageUrls : [])
@@ -612,9 +484,7 @@ export function useListDetail(): UseListDetailResult {
     setMainImageIndex,
   });
 
-  // ============================================================
-  // ✅ Price change (PriceCard -> draftPriceRows)
-  // ============================================================
+  // Price change -> draftPriceRows
   const onChangePrice = React.useCallback(
     (index: number, price: number | null, row: PriceRow) => {
       if (!isEdit) return;
@@ -638,9 +508,7 @@ export function useListDetail(): UseListDetailResult {
     [isEdit],
   );
 
-  // ============================================================
-  // ✅ Save (PUT /lists/{id})
-  // ============================================================
+  // Save -> application service only
   const onSave = React.useCallback(
     async (payload?: any) => {
       const id = s(listId);
@@ -650,56 +518,37 @@ export function useListDetail(): UseListDetailResult {
       }
 
       const nextTitle =
-        s(payload?.title) ||
-        s(payload?.listingTitle) ||
-        s(draftListingTitle) ||
-        "";
+        s(payload?.title) || s(payload?.listingTitle) || s(draftListingTitle) || "";
 
       const nextDesc =
         payload && payload.description !== undefined
           ? String(payload.description ?? "")
           : String(draftDescription ?? "");
 
-      const nextPriceRows = Array.isArray(draftPriceRows) ? draftPriceRows : [];
-
-      let prices: Array<{ modelId: string; price: number }> = [];
-      try {
-        prices = normalizePricesFromPriceRows(nextPriceRows);
-      } catch (e) {
-        const msg = String(e instanceof Error ? e.message : e);
-        setSaveError(msg);
-        return;
-      }
-
-      const backendStatus =
-        decisionToBackendStatus(payload?.status) ||
-        decisionToBackendStatus(payload?.decision) ||
-        decisionToBackendStatus(draftDecision) ||
-        decisionToBackendStatus(decisionNorm) ||
+      const nextDecision =
+        toDecisionForUpdate(payload?.decision) ||
+        toDecisionForUpdate(payload?.status) ||
+        toDecisionForUpdate(draftDecision) ||
+        toDecisionForUpdate(decisionNorm) ||
         undefined;
 
       const uid = s(auth.currentUser?.uid) || "system";
-
-      const updatePayload: Record<string, any> = {
-        id,
-        title: nextTitle,
-        description: nextDesc,
-        prices,
-        status: backendStatus,
-        updatedBy: uid,
-      };
-
-      if (s(dto?.inventoryId)) updatePayload.inventoryId = s((dto as any)?.inventoryId);
-      if (s((dto as any)?.assigneeId)) updatePayload.assigneeId = s((dto as any)?.assigneeId);
 
       setSaving(true);
       setSaveError("");
 
       try {
-        await requestJSON<any>({
-          method: "PUT",
-          path: `/lists/${encodeURIComponent(id)}`,
-          body: updatePayload,
+        await updateListDetailDTO({
+          listId: id,
+          title: nextTitle,
+          description: nextDesc,
+
+          // ✅ prices ではなく priceRows を渡す（repository 正規化前提）
+          priceRows: Array.isArray(draftPriceRows) ? draftPriceRows : [],
+
+          decision: nextDecision,
+          assigneeId: s((dto as any)?.assigneeId) || undefined,
+          updatedBy: uid,
         });
 
         const fresh = await loadListDetailDTO({
@@ -709,7 +558,6 @@ export function useListDetail(): UseListDetailResult {
 
         if (cancelledRef.current) return;
 
-        // blob 解放（draft 由来のみ）
         revokeDraftBlobUrls(img.draftImages);
 
         setDTO(fresh);
@@ -737,11 +585,7 @@ export function useListDetail(): UseListDetailResult {
     ],
   );
 
-  const onSaveEdit = onSave;
-
-  // ============================================================
-  // ✅ PriceCard hook（互換で残す）
-  // ============================================================
+  // PriceCard hook（page が参照するので残すのは「互換」ではなく必須）
   const effectiveForPriceCard = isEdit ? draftPriceRows : viewPriceRows;
 
   const priceCard = usePriceCard({
@@ -774,7 +618,6 @@ export function useListDetail(): UseListDetailResult {
     onEdit,
     onCancel,
     onSave,
-    onSaveEdit,
 
     listingTitle,
     description,
@@ -810,6 +653,7 @@ export function useListDetail(): UseListDetailResult {
     draftPriceRows,
     setDraftPriceRows,
     onChangePrice,
+
     priceCard,
 
     assigneeId,

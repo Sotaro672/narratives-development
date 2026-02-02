@@ -4,7 +4,7 @@ import type { ResolvedListCreateParams, CreateListPriceRow } from "./listCreate.
 import { normalizeInventoryId, s, toNumberOrNull } from "./listCreate.utils";
 
 // ✅ list create (POST /lists) の input 型（list側のHTTP層）
-import type { CreateListInput } from "../../../../list/src/infrastructure/http/listRepositoryHTTP";
+import type { CreateListInput } from "../../../../list/src/infrastructure/http/list";
 
 /**
  * ✅ modelId の正規化
