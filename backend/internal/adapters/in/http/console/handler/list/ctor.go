@@ -2,8 +2,9 @@
 //
 // Responsibility:
 // - ListHandler の生成（DI）を担当する。
-// - router から渡される依存（usecase/query/uploader/deleter）を構造体へ束ねるだけ。
-// - ListUsecase が usecase/list パッケージへ移動したため、import を追従する。
+// - 入口は NewListHandler のみ（唯一の出入り口）とし、依存の束ねをここへ集中させる。
+// - ListUsecase / ListManagementQuery / ListDetailQuery / ListImageUploader を ListHandler に注入する。
+// - DELETE API 廃止により ListImageDeleter は受け取らない（常に nil）。
 package list
 
 import (
@@ -14,30 +15,28 @@ import (
 	listuc "narratives/internal/application/usecase/list"
 )
 
-func NewListHandler(uc *listuc.ListUsecase) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: nil, qDetail: nil, imgUploader: nil, imgDeleter: nil}
+// NewListHandlerParams
+// - router/DI から受け取る依存をこの struct に集約する。
+// - optional は nil を許容する（既存の endpoint を壊さないため）。
+type NewListHandlerParams struct {
+	UC *listuc.ListUsecase
+
+	QMgmt   *listmanagementquery.ListManagementQuery
+	QDetail *listdetailquery.ListDetailQuery
+
+	// NOTE:
+	// - signed-url PUT + SaveImageFromGCS 方式なら uploader は nil でもOK
+	// - DELETE API は廃止 -> deleter は受け取らない
+	ImgUploader ListImageUploader
 }
 
-func NewListHandlerWithQueries(
-	uc *listuc.ListUsecase,
-	qMgmt *listmanagementquery.ListManagementQuery,
-	qDetail *listdetailquery.ListDetailQuery,
-) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: qMgmt, qDetail: qDetail, imgUploader: nil, imgDeleter: nil}
-}
-
-func NewListHandlerWithQueriesAndListImage(
-	uc *listuc.ListUsecase,
-	qMgmt *listmanagementquery.ListManagementQuery,
-	qDetail *listdetailquery.ListDetailQuery,
-	uploader ListImageUploader,
-	deleter ListImageDeleter,
-) http.Handler {
+// ✅ SINGLE ENTRYPOINT (唯一の出入り口)
+func NewListHandler(p NewListHandlerParams) http.Handler {
 	return &ListHandler{
-		uc:          uc,
-		qMgmt:       qMgmt,
-		qDetail:     qDetail,
-		imgUploader: uploader,
-		imgDeleter:  deleter,
+		uc:          p.UC,
+		qMgmt:       p.QMgmt,
+		qDetail:     p.QDetail,
+		imgUploader: p.ImgUploader,
+		imgDeleter:  nil, // DELETE API abolished
 	}
 }

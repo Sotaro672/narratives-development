@@ -136,14 +136,16 @@ func BuildConsoleRouterDeps(c *Container) httpin.RouterDeps {
 	}
 
 	// Lists
+	// Lists（画像アップロードは uploader が nil でもOK / deleterは常にnil）
 	if c.ListUC != nil {
-		listsH = listHandler.NewListHandlerWithQueriesAndListImage(
-			c.ListUC,
-			c.ListManagementQuery,
-			c.ListDetailQuery,
-			uploader,
-			nil,
-		)
+		listsH = listHandler.NewListHandler(listHandler.NewListHandlerParams{
+			UC: c.ListUC,
+
+			QMgmt:   c.ListManagementQuery,
+			QDetail: c.ListDetailQuery,
+
+			ImgUploader: uploader,
+		})
 	}
 
 	// Products（印刷系）
