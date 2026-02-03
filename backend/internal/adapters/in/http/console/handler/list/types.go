@@ -9,7 +9,8 @@ package list
 import (
 	"context"
 
-	query "narratives/internal/application/query/console"
+	listdetailquery "narratives/internal/application/query/console/list/detail"
+	listmanagementquery "narratives/internal/application/query/console/list/management"
 	listuc "narratives/internal/application/usecase/list"
 	listimgdom "narratives/internal/domain/listImage"
 )
@@ -26,10 +27,10 @@ type ListHandler struct {
 	uc *listuc.ListUsecase
 
 	// split: listManagement.tsx / listCreate.tsx 向け
-	qMgmt *query.ListManagementQuery
+	qMgmt *listmanagementquery.ListManagementQuery
 
 	// split: listDetail.tsx 向け
-	qDetail *query.ListDetailQuery
+	qDetail *listdetailquery.ListDetailQuery
 
 	// ListImage (optional)
 	imgUploader ListImageUploader

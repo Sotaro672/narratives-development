@@ -20,8 +20,9 @@ func buildDomainServices(r *repos) *services {
 	brandSvc := branddom.NewService(r.brandRepo)
 	memberSvc := memdom.NewService(r.memberRepo)
 
-	pbDomainRepo := &productBlueprintDomainRepoAdapter{repo: r.productBlueprintRepo}
-	pbSvc := pbdom.NewService(pbDomainRepo)
+	// ✅ adapter を介さず repo を直で渡す
+	// r.productBlueprintRepo が pbdom.Service の期待する interface を満たす前提
+	pbSvc := pbdom.NewService(r.productBlueprintRepo)
 
 	return &services{
 		companySvc: companySvc,

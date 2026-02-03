@@ -9,7 +9,8 @@ package list
 import (
 	"net/http"
 
-	query "narratives/internal/application/query/console"
+	listdetailquery "narratives/internal/application/query/console/list/detail"
+	listmanagementquery "narratives/internal/application/query/console/list/management"
 	listuc "narratives/internal/application/usecase/list"
 )
 
@@ -19,16 +20,16 @@ func NewListHandler(uc *listuc.ListUsecase) http.Handler {
 
 func NewListHandlerWithQueries(
 	uc *listuc.ListUsecase,
-	qMgmt *query.ListManagementQuery,
-	qDetail *query.ListDetailQuery,
+	qMgmt *listmanagementquery.ListManagementQuery,
+	qDetail *listdetailquery.ListDetailQuery,
 ) http.Handler {
 	return &ListHandler{uc: uc, qMgmt: qMgmt, qDetail: qDetail, imgUploader: nil, imgDeleter: nil}
 }
 
 func NewListHandlerWithQueriesAndListImage(
 	uc *listuc.ListUsecase,
-	qMgmt *query.ListManagementQuery,
-	qDetail *query.ListDetailQuery,
+	qMgmt *listmanagementquery.ListManagementQuery,
+	qDetail *listdetailquery.ListDetailQuery,
 	uploader ListImageUploader,
 	deleter ListImageDeleter,
 ) http.Handler {

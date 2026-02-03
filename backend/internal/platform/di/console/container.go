@@ -15,7 +15,13 @@ import (
 	mintapp "narratives/internal/application/mint"
 	pbuc "narratives/internal/application/productBlueprint/usecase"
 	productionapp "narratives/internal/application/production"
+
 	companyquery "narratives/internal/application/query/console"
+
+	// ✅ moved: list queries are now in subpackages
+	listdetailquery "narratives/internal/application/query/console/list/detail"
+	listmanagementquery "narratives/internal/application/query/console/list/management"
+
 	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
 	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
@@ -89,8 +95,10 @@ type Container struct {
 	MintRequestQueryService       *companyquery.MintRequestQueryService
 	InventoryQuery                *companyquery.InventoryQuery
 	ListCreateQuery               *companyquery.ListCreateQuery
-	ListManagementQuery           *companyquery.ListManagementQuery
-	ListDetailQuery               *companyquery.ListDetailQuery
+
+	// ✅ moved to subpackages
+	ListManagementQuery *listmanagementquery.ListManagementQuery
+	ListDetailQuery     *listdetailquery.ListDetailQuery
 
 	// ✅ NEW: list image endpoints wiring (used by console handler)
 	// NOTE: DELETE API abolished -> no deleter in container.
@@ -174,8 +182,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		MintRequestQueryService:       q.mintRequestQueryService,
 		InventoryQuery:                q.inventoryQuery,
 		ListCreateQuery:               q.listCreateQuery,
-		ListManagementQuery:           q.listManagementQuery,
-		ListDetailQuery:               q.listDetailQuery,
+
+		// ✅ moved: use subpackage query instances
+		ListManagementQuery: q.listManagementQuery,
+		ListDetailQuery:     q.listDetailQuery,
 
 		// ✅ NEW: pass-through from query builder
 		ListImageUploader: q.listImageUploader,

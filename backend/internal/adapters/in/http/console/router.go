@@ -2,188 +2,72 @@
 package httpin
 
 import (
-	"encoding/json"
 	"net/http"
-	"strings"
-
-	firebaseauth "firebase.google.com/go/v4/auth"
-
-	// ★ MintUsecase 移動先
-	mintapp "narratives/internal/application/mint"
-
-	// ★ InspectionUsecase 移動先
-	inspectionapp "narratives/internal/application/inspection"
-
-	// ✅ TokenBlueprint usecases 移動先
-	tbapp "narratives/internal/application/tokenBlueprint"
-
-	// ✅ ProductBlueprint usecase 移動先
-	pbuc "narratives/internal/application/productBlueprint/usecase"
-
-	// ✅ ListUsecase moved to subpackage usecase/list
-	listuc "narratives/internal/application/usecase/list"
-
-	usecase "narratives/internal/application/usecase"
-	authuc "narratives/internal/application/usecase/auth"
-
-	// ★ new: Production 用の新パッケージ
-	productionapp "narratives/internal/application/production"
-
-	// ★ new: Query services
-	companyquery "narratives/internal/application/query/console"
-
-	// ✅ shared owner resolve query (wallet -> avatarId/brandId)
-	sharedquery "narratives/internal/application/query/shared"
-
-	// ✅ console handlers（正）
-	consoleHandler "narratives/internal/adapters/in/http/console/handler"
-
-	// ✅ moved handlers
-	inspectionHandler "narratives/internal/adapters/in/http/console/handler/inspection"
-	inventoryHandler "narratives/internal/adapters/in/http/console/handler/inventory"
-	listHandler "narratives/internal/adapters/in/http/console/handler/list"
-	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
-	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
-	productionHandler "narratives/internal/adapters/in/http/console/handler/production"
 
 	"narratives/internal/adapters/in/http/middleware"
-
-	resolver "narratives/internal/application/resolver"
-
-	// MessageHandler 用 Repository
-	msgrepo "narratives/internal/adapters/out/firestore"
-
-	// ドメインサービス
-	branddom "narratives/internal/domain/brand"
-	memdom "narratives/internal/domain/member"
 )
 
+// RouterDeps は「ルーティングに必要なもの」だけを受け取る。
+// ここには Usecase / Repo / 外部クライアント等の“生成材料”は持たせず、
+// 生成済みの http.Handler と Middleware だけを渡す。
 type RouterDeps struct {
-	AccountUC        *usecase.AccountUsecase
-	AnnouncementUC   *usecase.AnnouncementUsecase
-	AvatarUC         *usecase.AvatarUsecase
-	BillingAddressUC *usecase.BillingAddressUsecase
-	BrandUC          *usecase.BrandUsecase
-	CampaignUC       *usecase.CampaignUsecase
-	CompanyUC        *usecase.CompanyUsecase
-	InquiryUC        *usecase.InquiryUsecase
-	InventoryUC      *usecase.InventoryUsecase
-	InvoiceUC        *usecase.InvoiceUsecase
-	ListUC           *listuc.ListUsecase // ✅ FIX: moved
-	MemberUC         *usecase.MemberUsecase
-	MessageUC        *usecase.MessageUsecase
-	ModelUC          *usecase.ModelUsecase
-	OrderUC          *usecase.OrderUsecase
-	PaymentUC        *usecase.PaymentUsecase
-	PermissionUC     *usecase.PermissionUsecase
-	PrintUC          *usecase.PrintUsecase
-	TokenUC          *usecase.TokenUsecase
+	// Middlewares（生成はDI側）
+	AuthMw      *middleware.AuthMiddleware
+	BootstrapMw *middleware.BootstrapAuthMiddleware
 
-	// ★ここだけ型を新パッケージに変更
-	ProductionUC       *productionapp.ProductionUsecase
-	ProductBlueprintUC *pbuc.ProductBlueprintUsecase
-	ShippingAddressUC  *usecase.ShippingAddressUsecase
-
-	// ✅ moved: TokenBlueprint usecases/types
-	TokenBlueprintUC *tbapp.TokenBlueprintUsecase
-
-	TokenOperationUC *usecase.TokenOperationUsecase
-	TrackingUC       *usecase.TrackingUsecase
-	UserUC           *usecase.UserUsecase
-	WalletUC         *usecase.WalletUsecase
-
-	// ★ 追加: TokenBlueprint の read-model（名前解決含む）
-	TokenBlueprintQueryUC *tbapp.TokenBlueprintQueryUsecase
-
-	// ★ 追加: Company → ProductBlueprintIds → Productions の Query 専用（GET一覧）
-	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
-
-	// ★ NEW: Inventory detail の read-model assembler（/inventory/...）
-	InventoryQuery *companyquery.InventoryQuery
-
-	// ✅ NEW: listCreate DTO assembler
-	ListCreateQuery *companyquery.ListCreateQuery
-
-	// ✅ NEW: Lists の read-model assembler
-	ListManagementQuery *companyquery.ListManagementQuery
-
-	// ✅ NEW: List detail DTO assembler
-	ListDetailQuery *companyquery.ListDetailQuery
-
-	// ✅ NEW: ListImage uploader/deleter
-	ListImageUploader listHandler.ListImageUploader
-	ListImageDeleter  listHandler.ListImageDeleter
-
-	// ✅ walletAddress(toAddress) -> (avatarId or brandId)
-	OwnerResolveQ *sharedquery.OwnerResolveQuery
-
-	// ★ NameResolver（ID→名前/型番解決）
-	NameResolver *resolver.NameResolver
-
-	// ⭐ Inspector 用 ProductUsecase
-	ProductUC *usecase.ProductUsecase
-
-	// ⭐ 検品専用 Usecase（★ moved）
-	InspectionUC *inspectionapp.InspectionUsecase
-
-	// ⭐ Mint 用 Usecase
-	MintUC *mintapp.MintUsecase
-
-	// 認証・招待まわり
-	AuthBootstrap           *authuc.BootstrapService
-	InvitationQuery         usecase.InvitationQueryPort
-	InvitationCommand       usecase.InvitationCommandPort
-	FirebaseAuth            *firebaseauth.Client // Firebase / MemberRepo
-	MemberRepo              memdom.Repository
-	MemberService           *memdom.Service                        // ★ member.Service（表示名解決用）
-	BrandService            *branddom.Service                      // ★ brand.Service（ブランド名解決用）
-	MessageRepo             *msgrepo.MessageRepositoryFS           // Message 用の Firestore Repository
-	MintRequestQueryService consoleHandler.MintRequestQueryService // ★ MintRequest の query
+	// Handlers（生成はDI側）
+	AuthBootstrap   http.Handler
+	Accounts        http.Handler
+	Announcements   http.Handler
+	Permissions     http.Handler
+	Brands          http.Handler
+	Companies       http.Handler
+	Inquiries       http.Handler
+	Inventories     http.Handler
+	Lists           http.Handler
+	ProductsPrint   http.Handler
+	ProductBP       http.Handler
+	TokenBP         http.Handler
+	Messages        http.Handler
+	Orders          http.Handler
+	Wallets         http.Handler
+	Members         http.Handler
+	Productions     http.Handler
+	Models          http.Handler
+	Inspector       http.Handler
+	Mint            http.Handler
+	OwnerResolve    http.Handler
+	MintDebugHandle http.HandlerFunc // optional（/mint/debug）
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := http.NewServeMux()
 
-	// ================================
-	// 共通 Auth ミドルウェア
-	// ================================
-	var authMw *middleware.AuthMiddleware
-	if deps.FirebaseAuth != nil && deps.MemberRepo != nil {
-		authMw = &middleware.AuthMiddleware{
-			FirebaseAuth: deps.FirebaseAuth,
-			MemberRepo:   deps.MemberRepo,
+	withAuth := func(h http.Handler) http.Handler {
+		if deps.AuthMw == nil {
+			return h
 		}
+		return deps.AuthMw.Handler(h)
 	}
-
-	// ================================
-	// /auth/bootstrap 専用
-	// ================================
-	var bootstrapMw *middleware.BootstrapAuthMiddleware
-	if deps.FirebaseAuth != nil {
-		bootstrapMw = &middleware.BootstrapAuthMiddleware{
-			FirebaseAuth: deps.FirebaseAuth,
+	withBootstrap := func(h http.Handler) http.Handler {
+		if deps.BootstrapMw == nil {
+			return h
 		}
+		return deps.BootstrapMw.Handler(h)
 	}
 
 	// ================================
 	// /auth/bootstrap
 	// ================================
-	if deps.AuthBootstrap != nil && bootstrapMw != nil {
-		bootstrapHandler := consoleHandler.NewAuthBootstrapHandler(deps.AuthBootstrap)
-		var h http.Handler = bootstrapHandler
-		h = bootstrapMw.Handler(h)
-		mux.Handle("/auth/bootstrap", h)
+	if deps.AuthBootstrap != nil {
+		mux.Handle("/auth/bootstrap", withBootstrap(deps.AuthBootstrap))
 	}
 
 	// ================================
 	// Accounts
 	// ================================
-	if deps.AccountUC != nil {
-		accountH := consoleHandler.NewAccountHandler(deps.AccountUC)
-		var h http.Handler = accountH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Accounts != nil {
+		h := withAuth(deps.Accounts)
 		mux.Handle("/accounts", h)
 		mux.Handle("/accounts/", h)
 	}
@@ -191,12 +75,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Announcements
 	// ================================
-	if deps.AnnouncementUC != nil {
-		announcementH := consoleHandler.NewAnnouncementHandler(deps.AnnouncementUC)
-		var h http.Handler = announcementH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Announcements != nil {
+		h := withAuth(deps.Announcements)
 		mux.Handle("/announcements", h)
 		mux.Handle("/announcements/", h)
 	}
@@ -204,12 +84,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Permissions
 	// ================================
-	if deps.PermissionUC != nil {
-		permissionH := consoleHandler.NewPermissionHandler(deps.PermissionUC)
-		var h http.Handler = permissionH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Permissions != nil {
+		h := withAuth(deps.Permissions)
 		mux.Handle("/permissions", h)
 		mux.Handle("/permissions/", h)
 	}
@@ -217,12 +93,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Brands
 	// ================================
-	if deps.BrandUC != nil {
-		brandH := consoleHandler.NewBrandHandler(deps.BrandUC)
-		var h http.Handler = brandH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Brands != nil {
+		h := withAuth(deps.Brands)
 		mux.Handle("/brands", h)
 		mux.Handle("/brands/", h)
 	}
@@ -230,12 +102,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Companies
 	// ================================
-	if deps.CompanyUC != nil {
-		companyH := consoleHandler.NewCompanyHandler(deps.CompanyUC)
-		var h http.Handler = companyH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Companies != nil {
+		h := withAuth(deps.Companies)
 		mux.Handle("/companies", h)
 		mux.Handle("/companies/", h)
 	}
@@ -243,12 +111,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Inquiries
 	// ================================
-	if deps.InquiryUC != nil {
-		inquiryH := consoleHandler.NewInquiryHandler(deps.InquiryUC)
-		var h http.Handler = inquiryH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Inquiries != nil {
+		h := withAuth(deps.Inquiries)
 		mux.Handle("/inquiries", h)
 		mux.Handle("/inquiries/", h)
 	}
@@ -256,17 +120,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Inventories
 	// ================================
-	if deps.InventoryUC != nil {
-		inventoryH := inventoryHandler.NewInventoryHandlerWithListCreateQuery(
-			deps.InventoryUC,
-			deps.InventoryQuery,
-			deps.ListCreateQuery,
-		)
-
-		var h http.Handler = inventoryH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Inventories != nil {
+		h := withAuth(deps.Inventories)
 
 		mux.Handle("/inventories", h)
 		mux.Handle("/inventories/", h)
@@ -278,26 +133,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Lists
 	// ================================
-	if deps.ListUC != nil {
-		// ✅ Always use handler that includes image endpoints.
-		// uploader/deleter can be nil; handler should still support:
-		// - POST /lists/{id}/images/signed-url
-		// - POST /lists/{id}/images   (SaveImageFromGCS)
-		// - GET  /lists/{id}/images
-		// - PUT  /lists/{id}/primary-image
-		// delete/upload bytes endpoints can stay 501 if deps are nil.
-		listH := listHandler.NewListHandlerWithQueriesAndListImage(
-			deps.ListUC,
-			deps.ListManagementQuery,
-			deps.ListDetailQuery,
-			deps.ListImageUploader,
-			deps.ListImageDeleter,
-		)
-
-		var h http.Handler = listH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Lists != nil {
+		h := withAuth(deps.Lists)
 		mux.Handle("/lists", h)
 		mux.Handle("/lists/", h)
 	}
@@ -305,19 +142,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Products（印刷系）
 	// ================================
-	if deps.PrintUC != nil {
-		printH := consoleHandler.NewPrintHandler(
-			deps.PrintUC,
-			deps.ProductionUC,
-			deps.ModelUC,
-			deps.NameResolver,
-		)
-
-		var h http.Handler = printH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.ProductsPrint != nil {
+		h := withAuth(deps.ProductsPrint)
 		mux.Handle("/products", h)
 		mux.Handle("/products/", h)
 		mux.Handle("/products/print-logs", h)
@@ -326,18 +152,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Product Blueprints
 	// ================================
-	if deps.ProductBlueprintUC != nil {
-		pbH := productBlueprintHandler.NewProductBlueprintHandler(
-			deps.ProductBlueprintUC,
-			deps.BrandService,
-			deps.MemberService,
-		)
-
-		var h http.Handler = pbH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.ProductBP != nil {
+		h := withAuth(deps.ProductBP)
 		mux.Handle("/product-blueprints", h)
 		mux.Handle("/product-blueprints/", h)
 	}
@@ -345,18 +161,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Token Blueprints
 	// ================================
-	if deps.TokenBlueprintUC != nil {
-		tbH := consoleHandler.NewTokenBlueprintHandler(
-			deps.TokenBlueprintUC,
-			deps.TokenBlueprintQueryUC, // ★ 変更: MemberService ではなく QueryUsecase を渡す
-			deps.BrandService,
-		)
-
-		var h http.Handler = tbH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.TokenBP != nil {
+		h := withAuth(deps.TokenBP)
 		mux.Handle("/token-blueprints", h)
 		mux.Handle("/token-blueprints/", h)
 	}
@@ -364,14 +170,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Messages
 	// ================================
-	if deps.MessageUC != nil && deps.MessageRepo != nil {
-		messageH := consoleHandler.NewMessageHandler(deps.MessageUC, deps.MessageRepo)
-
-		var h http.Handler = messageH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.Messages != nil {
+		h := withAuth(deps.Messages)
 		mux.Handle("/messages", h)
 		mux.Handle("/messages/", h)
 	}
@@ -379,14 +179,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Orders
 	// ================================
-	if deps.OrderUC != nil {
-		orderH := consoleHandler.NewOrderHandler(deps.OrderUC)
-
-		var h http.Handler = orderH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.Orders != nil {
+		h := withAuth(deps.Orders)
 		mux.Handle("/orders", h)
 		mux.Handle("/orders/", h)
 	}
@@ -394,14 +188,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Wallets
 	// ================================
-	if deps.WalletUC != nil {
-		walletH := consoleHandler.NewWalletHandler(deps.WalletUC)
-
-		var h http.Handler = walletH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.Wallets != nil {
+		h := withAuth(deps.Wallets)
 		mux.Handle("/wallets", h)
 		mux.Handle("/wallets/", h)
 	}
@@ -409,14 +197,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Members
 	// ================================
-	if deps.MemberUC != nil && deps.MemberRepo != nil {
-		memberH := consoleHandler.NewMemberHandler(deps.MemberUC, deps.MemberRepo)
-
-		var h http.Handler = memberH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.Members != nil {
+		h := withAuth(deps.Members)
 		mux.Handle("/members", h)
 		mux.Handle("/members/", h)
 	}
@@ -424,17 +206,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Productions
 	// ================================
-	if deps.ProductionUC != nil && deps.CompanyProductionQueryService != nil {
-		productionH := productionHandler.NewProductionHandler(
-			deps.CompanyProductionQueryService,
-			deps.ProductionUC,
-		)
-
-		var h http.Handler = productionH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.Productions != nil {
+		h := withAuth(deps.Productions)
 		mux.Handle("/productions", h)
 		mux.Handle("/productions/", h)
 	}
@@ -442,13 +215,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Models
 	// ================================
-	if deps.ModelUC != nil {
-		modelH := modelHandler.NewModelHandler(deps.ModelUC)
-
-		var h http.Handler = modelH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.Models != nil {
+		h := withAuth(deps.Models)
 		mux.Handle("/models", h)
 		mux.Handle("/models/", h)
 	}
@@ -456,27 +224,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Inspector
 	// ================================
-	if deps.ProductUC != nil && deps.InspectionUC != nil {
-		// ✅ ProductBlueprintUC が displayOrder 解決用インターフェースを満たすなら渡す（満たさない場合は nil）
-		var pbGetter inspectionHandler.ProductBlueprintModelRefGetter
-		if deps.ProductBlueprintUC != nil {
-			if g, ok := any(deps.ProductBlueprintUC).(inspectionHandler.ProductBlueprintModelRefGetter); ok {
-				pbGetter = g
-			}
-		}
-
-		inspectorH := inspectionHandler.NewInspectorHandler(
-			deps.ProductUC,
-			deps.InspectionUC,
-			deps.NameResolver,
-			pbGetter, // ✅ 追加（無ければ nil のまま）
-		)
-
-		var h http.Handler = inspectorH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.Inspector != nil {
+		h := withAuth(deps.Inspector)
 		mux.Handle("/inspector/products/", h)
 		mux.Handle("/products/inspections", h)
 		mux.Handle("/products/inspections/", h)
@@ -485,77 +234,21 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Mint
 	// ================================
-	if deps.MintUC != nil {
-		mintH := consoleHandler.NewMintHandler(
-			deps.MintUC,
-			deps.NameResolver,
-			deps.ProductionUC,
-			deps.MintRequestQueryService,
-		)
-
-		if mh, ok := mintH.(*consoleHandler.MintHandler); ok {
-			mux.HandleFunc("/mint/debug", mh.HandleDebug)
-		}
-
-		var h http.Handler = mintH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
+	if deps.Mint != nil {
+		h := withAuth(deps.Mint)
 		mux.Handle("/mint/", h)
+
+		// /mint/debug（任意）
+		if deps.MintDebugHandle != nil {
+			mux.HandleFunc("/mint/debug", deps.MintDebugHandle)
+		}
 	}
 
 	// ================================
-	// ✅ Owner resolve (walletAddress/toAddress -> avatarId or brandId)
+	// Owner resolve (walletAddress/toAddress -> avatarId or brandId)
 	// ================================
-	if deps.OwnerResolveQ != nil {
-		ownerResolve := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			q := r.URL.Query()
-			addr := strings.TrimSpace(q.Get("walletAddress"))
-			if addr == "" {
-				addr = strings.TrimSpace(q.Get("toAddress"))
-			}
-			if addr == "" {
-				addr = strings.TrimSpace(q.Get("address"))
-			}
-			if addr == "" {
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": "walletAddress (or toAddress/address) is required",
-				})
-				return
-			}
-
-			res, err := deps.OwnerResolveQ.Resolve(r.Context(), addr)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				switch err {
-				case sharedquery.ErrInvalidWalletAddress:
-					w.WriteHeader(http.StatusBadRequest)
-				case sharedquery.ErrOwnerNotFound:
-					w.WriteHeader(http.StatusNotFound)
-				case sharedquery.ErrOwnerResolveNotConfigured:
-					w.WriteHeader(http.StatusServiceUnavailable)
-				default:
-					w.WriteHeader(http.StatusInternalServerError)
-				}
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": err.Error(),
-				})
-				return
-			}
-
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": res,
-			})
-		})
-
-		var h http.Handler = ownerResolve
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
+	if deps.OwnerResolve != nil {
+		h := withAuth(deps.OwnerResolve)
 		mux.Handle("/owners/resolve", h)
 		mux.Handle("/owners/resolve/", h)
 	}

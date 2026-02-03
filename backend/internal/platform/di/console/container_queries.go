@@ -2,9 +2,14 @@
 package console
 
 import (
+	"context"
 	"log"
 
 	companyquery "narratives/internal/application/query/console"
+
+	// ✅ moved queries
+	listdetail "narratives/internal/application/query/console/list/detail"
+	listmgmt "narratives/internal/application/query/console/list/management"
 
 	// ✅ Shared infra (Firestore/GCS clients, bucket names)
 	shared "narratives/internal/platform/di/shared"
@@ -13,13 +18,37 @@ import (
 	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 )
 
+// =========================================================
+// ✅ Adapter: pbPatchByIDAdapter(Patch) -> ProductBlueprintPatchReader(any)
+// - list.ProductBlueprintPatchReader は GetPatchByID(...) (any, error)
+// - pbPatchByIDAdapter は GetPatchByID(...) (productBlueprint.Patch, error)
+// - method signature を合わせるために薄いラッパを挟む
+// =========================================================
+
+type pbPatchAnyAdapter struct {
+	inner *pbPatchByIDAdapter
+}
+
+func (a *pbPatchAnyAdapter) GetPatchByID(ctx context.Context, id string) (any, error) {
+	if a == nil || a.inner == nil {
+		return nil, nil
+	}
+	patch, err := a.inner.GetPatchByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return patch, nil
+}
+
 type queries struct {
 	companyProductionQueryService *companyquery.CompanyProductionQueryService
 	mintRequestQueryService       *companyquery.MintRequestQueryService
 	inventoryQuery                *companyquery.InventoryQuery
 	listCreateQuery               *companyquery.ListCreateQuery
-	listManagementQuery           *companyquery.ListManagementQuery
-	listDetailQuery               *companyquery.ListDetailQuery
+
+	// ✅ moved
+	listManagementQuery *listmgmt.ListManagementQuery
+	listDetailQuery     *listdetail.ListDetailQuery
 
 	// ✅ ListImage wiring (for /lists/{id}/images endpoints in console)
 	// NOTE: DELETE API is abolished, so deleter wiring is removed.
@@ -61,30 +90,43 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 		res.nameResolver,
 	)
 
-	listManagementQuery := companyquery.NewListManagementQueryWithBrandInventoryAndInventoryRows(
-		r.listRepo,
-		res.nameResolver,
-		r.productBlueprintRepo,
-		&tbGetterAdapter{repo: r.tokenBlueprintRepo},
-		inventoryQuery,
-	)
+	// =========================================================
+	// ✅ moved: ListManagementQuery
+	// ✅ SINGLE ENTRYPOINT: NewListManagementQuery(params) だけ
+	// - company boundary は InvRows(ListByCurrentCompany) が必須
+	// =========================================================
+	listManagementQuery := listmgmt.NewListManagementQuery(listmgmt.NewListManagementQueryParams{
+		Lister:       r.listRepo,
+		NameResolver: res.nameResolver,
+		PBGetter:     r.productBlueprintRepo,
+		TBGetter:     &tbGetterAdapter{repo: r.tokenBlueprintRepo},
+		InvRows:      inventoryQuery, // ✅ company boundary
+	})
 
-	// ✅ FIX: ListDetailQuery に (1) listImageRecords(Firestore) と (2) productBlueprintPatch を注入する
-	// - displayOrder を priceRows に載せるには pbPatchRepo の注入が必須
-	// - imageUrls を返すには Firestore subcollection (/lists/{listId}/images) の reader 注入が必須
+	// =========================================================
+	// ✅ moved: ListDetailQuery
+	// ✅ SINGLE ENTRYPOINT: NewListDetailQuery(params) だけ
+	// - displayOrder を priceRows に載せるには pbPatchRepo 注入
+	// - imageUrls を返すには Firestore subcollection reader 注入
 	//
-	// NOTE:
-	// - r.listImageRepo (GCS) ではなく r.listImageRecordRepo (Firestore) を注入する
-	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryRowsImagesAndPBPatch(
-		r.listRepo,
-		res.nameResolver,
-		r.productBlueprintRepo,
-		&tbGetterAdapter{repo: r.tokenBlueprintRepo},
-		inventoryQuery,
-		inventoryQuery,
-		r.listImageRecordRepo, // ✅ Firestore records
-		&pbPatchByIDAdapter{repo: r.productBlueprintRepo},
-	)
+	// ✅ FIX: pbPatchByIDAdapter を any-return に合わせるため pbPatchAnyAdapter を挟む
+	// =========================================================
+	listDetailQuery := listdetail.NewListDetailQuery(listdetail.NewListDetailQueryParams{
+		Getter:       r.listRepo,
+		NameResolver: res.nameResolver,
+
+		PBGetter: r.productBlueprintRepo,
+		TBGetter: &tbGetterAdapter{repo: r.tokenBlueprintRepo},
+
+		InvGetter: inventoryQuery,
+		InvRows:   inventoryQuery,
+
+		ImgLister: r.listImageRecordRepo, // ✅ Firestore records
+
+		PBPatchRepo: &pbPatchAnyAdapter{
+			inner: &pbPatchByIDAdapter{repo: r.productBlueprintRepo},
+		},
+	})
 
 	// =========================================================
 	// ✅ ListImageUploader wiring
@@ -92,11 +134,9 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 	// NOTE:
 	// - DELETE API is abolished, so ListImageDeleter wiring is removed.
 	// - signed-url PUT + SaveImageFromGCS 方式なら uploader は不要（nil でもOK）
-	// - 将来 "bytes upload endpoint" を作るならここで inject
 	// =========================================================
 	var uploader listHandler.ListImageUploader
 
-	// 期待通りに配線されているかを確認しやすいようにログ（運用デバッグ用）
 	log.Printf(
 		"[di.console] list image ports wired (uploader=%t recordRepo=%t)",
 		uploader != nil,
@@ -112,7 +152,6 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 		listCreateQuery:               listCreateQuery,
 		listManagementQuery:           listManagementQuery,
 		listDetailQuery:               listDetailQuery,
-
-		listImageUploader: uploader,
+		listImageUploader:             uploader,
 	}
 }
