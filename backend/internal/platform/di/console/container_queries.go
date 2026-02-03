@@ -6,7 +6,10 @@ import (
 
 	companyquery "narratives/internal/application/query/console"
 
-	// ✅ ListImage uploader/deleter interfaces (used by console list handler wiring)
+	// ✅ Shared infra (Firestore/GCS clients, bucket names)
+	shared "narratives/internal/platform/di/shared"
+
+	// ✅ ListImage uploader interface (used by console list handler wiring)
 	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 )
 
@@ -19,11 +22,11 @@ type queries struct {
 	listDetailQuery               *companyquery.ListDetailQuery
 
 	// ✅ ListImage wiring (for /lists/{id}/images endpoints in console)
+	// NOTE: DELETE API is abolished, so deleter wiring is removed.
 	listImageUploader listHandler.ListImageUploader
-	listImageDeleter  listHandler.ListImageDeleter
 }
 
-func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
+func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *queries {
 	pbQueryRepo := &pbQueryRepoAdapter{repo: r.productBlueprintRepo}
 
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
@@ -84,29 +87,23 @@ func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
 	)
 
 	// =========================================================
-	// ✅ ListImageUploader / ListImageDeleter wiring
-	// - handler 側 interface に対して、GCS adapter を注入する
-	//   (usecase を handler interface に cast しようとしても、通常は満たさない)
+	// ✅ ListImageUploader wiring
+	//
+	// NOTE:
+	// - DELETE API is abolished, so ListImageDeleter wiring is removed.
+	// - signed-url PUT + SaveImageFromGCS 方式なら uploader は不要（nil でもOK）
+	// - 将来 "bytes upload endpoint" を作るならここで inject
 	// =========================================================
 	var uploader listHandler.ListImageUploader
-	var deleter listHandler.ListImageDeleter
-
-	if r != nil && r.listImageRepo != nil {
-		if up, ok := any(r.listImageRepo).(listHandler.ListImageUploader); ok {
-			uploader = up
-		}
-		if del, ok := any(r.listImageRepo).(listHandler.ListImageDeleter); ok {
-			deleter = del
-		}
-	}
 
 	// 期待通りに配線されているかを確認しやすいようにログ（運用デバッグ用）
 	log.Printf(
-		"[di.console] list image ports wired (uploader=%t deleter=%t recordRepo=%t)",
+		"[di.console] list image ports wired (uploader=%t recordRepo=%t)",
 		uploader != nil,
-		deleter != nil,
 		r != nil && r.listImageRecordRepo != nil,
 	)
+
+	_ = infra // reserved for future wiring; keeps signature stable
 
 	return &queries{
 		companyProductionQueryService: companyProductionQueryService,
@@ -117,6 +114,5 @@ func buildQueries(r *repos, res *resolvers, u *usecases) *queries {
 		listDetailQuery:               listDetailQuery,
 
 		listImageUploader: uploader,
-		listImageDeleter:  deleter,
 	}
 }

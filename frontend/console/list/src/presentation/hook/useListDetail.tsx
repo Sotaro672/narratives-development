@@ -16,6 +16,9 @@ import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseC
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
 import { useCancelledRef } from "./internal/useCancelledRef";
 
+// ✅ DELETE API（画像削除）
+import { deleteListImageHTTP } from "../../infrastructure/http/list";
+
 // ✅ それ以外は service へ
 import {
   resolveListDetailParams,
@@ -30,6 +33,8 @@ import {
   type ListDetailRouteParams,
   type ListDetailDTO,
   s,
+  // ✅ 変更：保存前後差分は「確実に存在する imageUrls」を正にする
+  normalizeImageUrls,
 } from "../../application/listDetailService";
 
 export type { ListingDecisionNorm };
@@ -189,18 +194,14 @@ function useListImages(args: { isEdit: boolean; saving: boolean; initialUrls: st
       if (!isEdit) return;
       if (saving) return;
 
-      const incoming = (Array.isArray(files) ? files : [])
-        .filter(Boolean)
-        .filter(isImageFile);
+      const incoming = (Array.isArray(files) ? files : []).filter(Boolean).filter(isImageFile);
 
       if (incoming.length === 0) return;
 
       setDraftImages((prev) => {
         const prevArr = Array.isArray(prev) ? prev : [];
         const exists = new Set(
-          prevArr
-            .filter((x) => x?.isNew && x?.file)
-            .map((x) => fileKey(x.file as File)),
+          prevArr.filter((x) => x?.isNew && x?.file).map((x) => fileKey(x.file as File)),
         );
 
         const next: DraftImage[] = [];
@@ -254,9 +255,7 @@ function useListImages(args: { isEdit: boolean; saving: boolean; initialUrls: st
   );
 
   const imageUrls = React.useMemo(() => {
-    return (Array.isArray(draftImages) ? draftImages : [])
-      .map((x) => s(x?.url))
-      .filter(Boolean);
+    return (Array.isArray(draftImages) ? draftImages : []).map((x) => s(x?.url)).filter(Boolean);
   }, [draftImages]);
 
   return {
@@ -381,9 +380,7 @@ export function useListDetail(): UseListDetailResult {
   const [draftListingTitle, setDraftListingTitle] = React.useState(listingTitle);
   const [draftDescription, setDraftDescription] = React.useState(description);
 
-  const [draftPriceRows, setDraftPriceRows] = React.useState<PriceRow[]>(
-    clonePriceRows(viewPriceRows),
-  );
+  const [draftPriceRows, setDraftPriceRows] = React.useState<PriceRow[]>(clonePriceRows(viewPriceRows));
 
   const [draftDecision, setDraftDecision] = React.useState<ListingDecisionNorm>(decisionNorm);
 
@@ -445,9 +442,7 @@ export function useListDetail(): UseListDetailResult {
   // effective urls (view/edit)
   const effectiveImageUrls = React.useMemo(() => {
     if (isEdit) return img.imageUrls;
-    return (Array.isArray(viewImageUrls) ? viewImageUrls : [])
-      .map((u) => s(u))
-      .filter(Boolean);
+    return (Array.isArray(viewImageUrls) ? viewImageUrls : []).map((u) => s(u)).filter(Boolean);
   }, [isEdit, img.imageUrls, viewImageUrls]);
 
   // images: main index
@@ -512,6 +507,37 @@ export function useListDetail(): UseListDetailResult {
       setSaveError("");
 
       try {
+        // ============================================================
+        // ✅ 画像削除の差分反映（2枚→1枚 等）
+        // - before は listImages に依存せず、確実に返る imageUrls を正とする
+        // ============================================================
+        const beforeUrls = normalizeImageUrls(dto);
+        const afterUrls = (Array.isArray(img.draftImages) ? img.draftImages : [])
+          .filter((x) => !x?.isNew) // 既存のみ
+          .map((x) => s(x?.url))
+          .filter(Boolean);
+
+        const removedUrls = beforeUrls.filter((u) => !afterUrls.includes(u));
+
+        // eslint-disable-next-line no-console
+        console.log("[listImage] diff", {
+          listId: id,
+          before: beforeUrls,
+          after: afterUrls,
+          removed: removedUrls,
+        });
+
+        for (const u of removedUrls) {
+          const imageIdOrObjOrUrl = s(u);
+          if (!imageIdOrObjOrUrl) continue;
+
+          // listApi 側が objectPath/URL から imageId 抽出して DELETE できる想定
+          await deleteListImageHTTP({ listId: id, imageId: imageIdOrObjOrUrl });
+        }
+
+        // ============================================================
+        // list 本体の更新
+        // ============================================================
         await updateListDetailDTO({
           listId: id,
           title: nextTitle,

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"log"
 
-	// ✅ ListImage uploader/deleter interfaces (for console list handler)
+	// ✅ ListImage uploader interface (for console list handler)
 	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 
 	fs "narratives/internal/adapters/out/firestore"
@@ -93,8 +93,8 @@ type Container struct {
 	ListDetailQuery               *companyquery.ListDetailQuery
 
 	// ✅ NEW: list image endpoints wiring (used by console handler)
+	// NOTE: DELETE API abolished -> no deleter in container.
 	ListImageUploader listHandler.ListImageUploader
-	ListImageDeleter  listHandler.ListImageDeleter
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
@@ -119,7 +119,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	services := buildDomainServices(repos)
 	res := buildResolvers(clients, repos, services)
 	u := buildUsecases(clients, repos, services, res)
-	q := buildQueries(repos, res, u)
+	q := buildQueries(clients.infra, repos, res, u)
 
 	if clients == nil || clients.infra == nil {
 		return nil, errors.New("clients/infra is nil")
@@ -179,7 +179,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		// ✅ NEW: pass-through from query builder
 		ListImageUploader: q.listImageUploader,
-		ListImageDeleter:  q.listImageDeleter,
 
 		OwnerResolveQ: res.ownerResolveQ,
 

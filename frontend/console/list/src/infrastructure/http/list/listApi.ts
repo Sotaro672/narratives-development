@@ -433,3 +433,67 @@ export async function setListPrimaryImageHTTP(args: {
     body: payload,
   });
 }
+
+// ==========================================================
+// ✅ NEW: delete image
+// DELETE /lists/{id}/images/{imageId}
+// ==========================================================
+
+function extractImageIdForDelete(args: { listId: string; imageIdOrObjectPathOrUrl: string }): string {
+  const listId = s(args.listId);
+  const raw = s(args.imageIdOrObjectPathOrUrl);
+  if (!listId || !raw) return "";
+
+  // 1) already imageId (no slash)
+  if (!raw.includes("/")) return raw;
+
+  // 2) objectPath: "{listId}/{imageId}/{fileName...}"
+  {
+    const p = raw.replace(/^\/+/, "");
+    const parts = p.split("/").map((x) => s(x)).filter(Boolean);
+    if (parts.length >= 2 && parts[0] === listId) {
+      return s(parts[1]);
+    }
+  }
+
+  // 3) URL: https://storage.googleapis.com/{bucket}/{listId}/{imageId}/{fileName...}
+  try {
+    const u = new URL(raw);
+    const p = s(u.pathname).replace(/^\/+/, "");
+    const parts = p.split("/").map((x) => s(x)).filter(Boolean);
+
+    // parts[0]=bucket, parts[1]=listId, parts[2]=imageId
+    if (parts.length >= 3 && parts[1] === listId) {
+      return s(parts[2]);
+    }
+  } catch {
+    // ignore
+  }
+
+  return "";
+}
+
+export async function deleteListImageHTTP(args: {
+  listId: string;
+  // ここは imageId 推奨だが、互換で objectPath/URL も受けられるようにしておく
+  imageId: string;
+}): Promise<any> {
+  const listId = normalizeListDocId(args.listId);
+  if (!listId) throw new Error("invalid_list_id");
+
+  const imageId = extractImageIdForDelete({
+    listId,
+    imageIdOrObjectPathOrUrl: s(args.imageId),
+  });
+  if (!imageId) throw new Error("invalid_image_id");
+
+  return await requestJSON<any>({
+    method: "DELETE",
+    path: `/lists/${encodeURIComponent(listId)}/images/${encodeURIComponent(imageId)}`,
+    debug: {
+      tag: `DELETE /lists/${listId}/images/${imageId}`,
+      url: `${API_BASE}/lists/${encodeURIComponent(listId)}/images/${encodeURIComponent(imageId)}`,
+      method: "DELETE",
+    },
+  });
+}

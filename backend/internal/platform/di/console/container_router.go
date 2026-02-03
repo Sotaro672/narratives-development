@@ -3,9 +3,27 @@ package console
 
 import (
 	httpin "narratives/internal/adapters/in/http/console"
+
+	// ✅ ListImage handler interfaces (ports)
+	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 )
 
 func (c *Container) RouterDeps() httpin.RouterDeps {
+	// ✅ Fallback wiring:
+	// If container fields are nil, but ListUC implements the handler ports,
+	// use ListUC directly so endpoints don't become 501 by DI omission.
+	uploader := c.ListImageUploader
+
+	// DELETE API 廃止のため、deleter は常に nil（RouterDeps にも渡さない）
+	// （handler 側は imgDeleter == nil の場合 501 を返す想定）
+	if c.ListUC != nil {
+		if uploader == nil {
+			if up, ok := any(c.ListUC).(listHandler.ListImageUploader); ok {
+				uploader = up
+			}
+		}
+	}
+
 	return httpin.RouterDeps{
 		AccountUC:          c.AccountUC,
 		AnnouncementUC:     c.AnnouncementUC,
@@ -47,9 +65,8 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ListManagementQuery: c.ListManagementQuery,
 		ListDetailQuery:     c.ListDetailQuery,
 
-		// ✅ NEW: ListImage endpoints wiring (upload/delete)
-		ListImageUploader: c.ListImageUploader,
-		ListImageDeleter:  c.ListImageDeleter,
+		// ✅ NEW: ListImage endpoints wiring (upload only)
+		ListImageUploader: uploader,
 
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,
