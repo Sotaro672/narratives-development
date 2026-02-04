@@ -9,6 +9,7 @@ import (
 
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
+	catalogQuery "narratives/internal/application/query/mall/catalog"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 
@@ -84,7 +85,7 @@ type Container struct {
 	NameResolver *appresolver.NameResolver
 
 	// Queries (mall-facing)
-	CatalogQ *mallquery.CatalogQuery
+	CatalogQ *catalogQuery.CatalogQuery
 	CartQ    *mallquery.CartQuery
 	PreviewQ *mallquery.PreviewQuery
 
@@ -348,7 +349,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
-		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, productBlueprintRepoFS, modelRepoFS)
+		c.CatalogQ = catalogQuery.NewCatalogQuery(listRepoFS, invRepo, productBlueprintRepoFS, modelRepoFS)
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
 		// ✅ PreviewQuery 用 ProductBlueprintReader

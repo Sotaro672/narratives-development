@@ -74,15 +74,18 @@ class _CatalogPageState extends State<CatalogPage> {
         }
 
         final priceText = vm?.priceText ?? '';
-        final hasImage = vm?.hasImage ?? list.image.trim().isNotEmpty;
 
-        // vm に imageUrlEncoded が無い場合でも list.image を使って出せるようにする
-        final imageUrlEncoded =
-            (vm?.imageUrlEncoded ??
-            (list.image.trim().isNotEmpty
-                ? Uri.encodeFull(list.image.trim())
-                : null));
+        // ✅ NEW: listImages carousel
+        final listImages = vm?.listImages ?? const <CatalogListImage>[];
+        final listImagesErr = (vm?.listImagesError ?? '').trim();
 
+        // ✅ fallback: list.image (legacy primary)
+        final hasPrimaryImage = list.image.trim().isNotEmpty;
+        final primaryImageUrlEncoded = hasPrimaryImage
+            ? Uri.encodeFull(list.image.trim())
+            : null;
+
+        // ✅ for old UI usage
         final pbId = vm?.productBlueprintId ?? '';
         final tbId = vm?.tokenBlueprintId ?? '';
 
@@ -112,27 +115,25 @@ class _CatalogPageState extends State<CatalogPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // ✅ NEW: 横スライド（listImages があれば優先。無ければ list.image を1枚で表示）
                     AspectRatio(
                       aspectRatio: 16 / 9,
-                      child: hasImage && imageUrlEncoded != null
-                          ? Image.network(
-                              imageUrlEncoded,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, err, st) {
-                                return _ImageFallback(
-                                  label: 'image failed',
-                                  detail: err.toString(),
-                                );
-                              },
-                              loadingBuilder: (context, child, progress) {
-                                if (progress == null) return child;
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              },
-                            )
-                          : const _ImageFallback(label: 'no image'),
+                      child: _CatalogImageCarousel(
+                        images: listImages,
+                        primaryImageUrlEncoded: primaryImageUrlEncoded,
+                      ),
                     ),
+
+                    // ✅ best-effort エラー表示（画面は壊さない）
+                    if (listImagesErr.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                        child: Text(
+                          '画像の取得に失敗しました: $listImagesErr',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+
                     Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
@@ -219,6 +220,138 @@ class _CatalogPageState extends State<CatalogPage> {
           ),
         );
       },
+    );
+  }
+}
+
+// ============================================================
+// ✅ NEW: listImages 横スライド
+// ============================================================
+
+class _CatalogImageCarousel extends StatefulWidget {
+  const _CatalogImageCarousel({
+    required this.images,
+    required this.primaryImageUrlEncoded,
+  });
+
+  final List<CatalogListImage> images;
+  final String? primaryImageUrlEncoded;
+
+  @override
+  State<_CatalogImageCarousel> createState() => _CatalogImageCarouselState();
+}
+
+class _CatalogImageCarouselState extends State<_CatalogImageCarousel> {
+  late final PageController _pc;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pc = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ✅ 優先: listImages（複数）
+    final imgs = widget.images;
+
+    // ✅ fallback: list.image（1枚）
+    final fallback = widget.primaryImageUrlEncoded;
+
+    final hasCarousel = imgs.isNotEmpty;
+    final itemCount = hasCarousel ? imgs.length : (fallback != null ? 1 : 0);
+
+    if (itemCount == 0) {
+      return const _ImageFallback(label: 'no image');
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _pc,
+          itemCount: itemCount,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (context, i) {
+            final url = hasCarousel
+                ? Uri.encodeFull(imgs[i].url.trim())
+                : fallback!;
+
+            return Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (context, err, st) {
+                return _ImageFallback(
+                  label: 'image failed',
+                  detail: err.toString(),
+                );
+              },
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return const Center(child: CircularProgressIndicator());
+              },
+            );
+          },
+        ),
+
+        // ✅ indicator (複数枚のときだけ)
+        if (itemCount > 1)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 10,
+            child: _DotsIndicator(count: itemCount, index: _index),
+          ),
+      ],
+    );
+  }
+}
+
+class _DotsIndicator extends StatelessWidget {
+  const _DotsIndicator({required this.count, required this.index});
+
+  final int count;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          // ✅ FIX: withOpacity -> withValues(alpha: ...)
+          color: cs.surface.withValues(alpha: 0.75),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(count, (i) {
+            final selected = i == index;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: selected ? 10 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                // ✅ FIX: withOpacity -> withValues(alpha: ...)
+                color: selected
+                    ? cs.onSurface
+                    : cs.onSurface.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            );
+          }),
+        ),
+      ),
     );
   }
 }

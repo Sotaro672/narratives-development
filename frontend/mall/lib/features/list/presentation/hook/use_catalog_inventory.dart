@@ -1,5 +1,9 @@
+//frontend\mall\lib\features\list\presentation\hook\use_catalog_inventory.dart
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../infrastructure/list_repository_http.dart';
+
+// ✅ NEW: modelRefs source (absolute schema)
+import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 
 class CatalogModelStockRow {
   const CatalogModelStockRow({
@@ -10,6 +14,9 @@ class CatalogModelStockRow {
     required this.rgb,
     required this.size,
     required this.colorName,
+
+    // ✅ NEW: displayOrder from productBlueprint.modelRefs
+    required this.displayOrder,
   });
 
   final String modelId;
@@ -22,6 +29,9 @@ class CatalogModelStockRow {
   final int? rgb;
   final String? size;
   final String? colorName;
+
+  /// ✅ displayOrder (1..N). 0 means "unknown/unset".
+  final int displayOrder;
 }
 
 class CatalogInventoryComputed {
@@ -35,10 +45,27 @@ class CatalogInventoryComputed {
 }
 
 class UseCatalogModelsResult {
-  const UseCatalogModelsResult({required this.models, required this.error});
+  const UseCatalogModelsResult({
+    required this.models,
+    required this.error,
+
+    // ✅ NEW: modelId -> displayOrder
+    required this.displayOrderByModelId,
+  });
 
   final List<MallModelVariationDTO>? models;
   final String? error;
+
+  /// ✅ modelId -> displayOrder (from productBlueprint.modelRefs)
+  final Map<String, int> displayOrderByModelId;
+}
+
+// ✅ NEW: derived order maps for size/color based on model displayOrder
+class DisplayOrderMaps {
+  const DisplayOrderMaps({required this.sizeOrder, required this.colorOrder});
+
+  final Map<String, int> sizeOrder; // size -> order (min displayOrder)
+  final Map<String, int> colorOrder; // colorName -> order (min displayOrder)
 }
 
 class UseCatalogInventory {
@@ -54,32 +81,68 @@ class UseCatalogInventory {
     required String productBlueprintId,
     List<MallModelVariationDTO>? initial,
     String? initialError,
+
+    // ✅ NEW: productBlueprint.modelRefs
+    List<MallProductBlueprintModelRef>? modelRefs,
   }) async {
     final pbId = productBlueprintId.trim();
 
+    // ✅ build displayOrder map (absolute schema)
+    final displayOrderByModelId = <String, int>{};
+    if (modelRefs != null) {
+      for (final r in modelRefs) {
+        final mid = r.modelId.trim();
+        if (mid.isEmpty) continue;
+        final order = r.displayOrder;
+        if (order > 0) {
+          displayOrderByModelId[mid] = order;
+        }
+      }
+    }
+
     if (initial != null) {
       final err = _asNonEmptyString(initialError);
-      _log('use initial models count=${initial.length} err="${err ?? ''}"');
-      return UseCatalogModelsResult(models: initial, error: err);
+      _log(
+        'use initial models count=${initial.length} '
+        'err="${err ?? ''}" '
+        'modelRefs=${modelRefs?.length ?? 0}',
+      );
+      return UseCatalogModelsResult(
+        models: initial,
+        error: err,
+        displayOrderByModelId: displayOrderByModelId,
+      );
     }
 
     if (pbId.isEmpty) {
       final err = 'productBlueprintId is unavailable (skip model fetch)';
       _log('skip fetch: $err');
-      return const UseCatalogModelsResult(models: null, error: null);
+      return UseCatalogModelsResult(
+        models: null,
+        error: null,
+        displayOrderByModelId: displayOrderByModelId,
+      );
     }
 
     try {
-      _log('fetch models start pbId=$pbId');
+      _log(
+        'fetch models start pbId=$pbId '
+        'modelRefs=${modelRefs?.length ?? 0}',
+      );
       final models = await invRepo.fetchModelsByProductBlueprintId(pbId);
       _log('fetch models ok count=${models.length}');
-      return UseCatalogModelsResult(models: models, error: null);
+      return UseCatalogModelsResult(
+        models: models,
+        error: null,
+        displayOrderByModelId: displayOrderByModelId,
+      );
     } catch (e) {
       final err = e.toString();
       _log('fetch models error: $err');
       return UseCatalogModelsResult(
         models: null,
         error: _asNonEmptyString(err),
+        displayOrderByModelId: displayOrderByModelId,
       );
     }
   }
@@ -90,6 +153,9 @@ class UseCatalogInventory {
 
     /// ✅ list.prices を渡して modelId -> price を結合
     required List<MallListPriceRow> prices,
+
+    // ✅ NEW: modelId -> displayOrder
+    required Map<String, int> displayOrderByModelId,
   }) {
     final inv = inventory;
 
@@ -134,7 +200,6 @@ class UseCatalogInventory {
       final price = priceMap[modelId];
 
       // ✅ FIX: ブラック(0x000000=0) を null 扱いしない
-      // ※「未設定」が 0 で来る設計だとブラックと区別できないため、DTO側で nullable 等に分離するのが理想
       final int? rgb = meta?.colorRGB;
 
       final s = (meta?.size ?? '').trim();
@@ -142,6 +207,8 @@ class UseCatalogInventory {
 
       final cn = (meta?.colorName ?? '').trim();
       final String? colorName = cn.isNotEmpty ? cn : null;
+
+      final displayOrder = displayOrderByModelId[modelId] ?? 0;
 
       rows.add(
         CatalogModelStockRow(
@@ -152,11 +219,23 @@ class UseCatalogInventory {
           rgb: rgb,
           size: size,
           colorName: colorName,
+          displayOrder: displayOrder,
         ),
       );
     }
 
-    rows.sort((a, b) => a.label.compareTo(b.label));
+    // ✅ NEW: derive size/color order from model displayOrder (min order per group)
+    final orderMaps = _buildSizeColorOrderMaps(rows);
+
+    // ✅ sort: sizeOrder asc, then colorOrder asc, then model displayOrder asc, then label asc
+    rows.sort(
+      (a, b) => _cmpBySizeColorThenOrder(
+        a,
+        b,
+        orderMaps.sizeOrder,
+        orderMaps.colorOrder,
+      ),
+    );
 
     final total = (inv == null) ? null : _totalAvailableStock(rows);
     return CatalogInventoryComputed(totalStock: total, modelStockRows: rows);
@@ -202,5 +281,71 @@ class UseCatalogInventory {
   static String? _asNonEmptyString(String? v) {
     final s = (v ?? '').trim();
     return s.isEmpty ? null : s;
+  }
+
+  // ============================================================
+  // NEW: size/color ordering derived from model displayOrder
+  // ============================================================
+
+  static DisplayOrderMaps _buildSizeColorOrderMaps(
+    List<CatalogModelStockRow> rows,
+  ) {
+    const unknown = 1 << 30;
+
+    final sizeOrder = <String, int>{};
+    final colorOrder = <String, int>{};
+
+    for (final r in rows) {
+      final order = r.displayOrder > 0 ? r.displayOrder : unknown;
+
+      final s = (r.size ?? '').trim();
+      if (s.isNotEmpty) {
+        final cur = sizeOrder[s] ?? unknown;
+        if (order < cur) sizeOrder[s] = order;
+      }
+
+      final c = (r.colorName ?? '').trim();
+      if (c.isNotEmpty) {
+        final cur = colorOrder[c] ?? unknown;
+        if (order < cur) colorOrder[c] = order;
+      }
+    }
+
+    int norm(int v) => v == unknown ? 0 : v;
+
+    return DisplayOrderMaps(
+      sizeOrder: {for (final e in sizeOrder.entries) e.key: norm(e.value)},
+      colorOrder: {for (final e in colorOrder.entries) e.key: norm(e.value)},
+    );
+  }
+
+  static int _cmpBySizeColorThenOrder(
+    CatalogModelStockRow a,
+    CatalogModelStockRow b,
+    Map<String, int> sizeOrder,
+    Map<String, int> colorOrder,
+  ) {
+    const unknown = 1 << 30;
+
+    int ord(Map<String, int> m, String? k) {
+      final key = (k ?? '').trim();
+      if (key.isEmpty) return unknown;
+      final v = m[key] ?? 0;
+      return v > 0 ? v : unknown;
+    }
+
+    final asz = ord(sizeOrder, a.size);
+    final bsz = ord(sizeOrder, b.size);
+    if (asz != bsz) return asz.compareTo(bsz);
+
+    final acol = ord(colorOrder, a.colorName);
+    final bcol = ord(colorOrder, b.colorName);
+    if (acol != bcol) return acol.compareTo(bcol);
+
+    final ao = a.displayOrder > 0 ? a.displayOrder : unknown;
+    final bo = b.displayOrder > 0 ? b.displayOrder : unknown;
+    if (ao != bo) return ao.compareTo(bo);
+
+    return a.label.compareTo(b.label);
   }
 }

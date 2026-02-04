@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	mallquery "narratives/internal/application/query/mall"
+	mallquery "narratives/internal/application/query/mall/catalog"
 	ldom "narratives/internal/domain/list"
 )
 

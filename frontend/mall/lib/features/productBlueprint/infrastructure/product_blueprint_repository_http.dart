@@ -6,7 +6,36 @@ import 'package:http/http.dart' as http;
 // ✅ API_BASE 解決ロジック（single source of truth）
 import '../../../app/config/api_base.dart';
 
-/// Mall productBlueprint response
+/// ✅ modelRefs row (ABSOLUTE schema)
+/// backend dto:
+///   modelRefs: [{ modelId: string, displayOrder: number }, ...]
+class MallProductBlueprintModelRef {
+  const MallProductBlueprintModelRef({
+    required this.modelId,
+    required this.displayOrder,
+  });
+
+  final String modelId;
+  final int displayOrder;
+
+  factory MallProductBlueprintModelRef.fromJson(Map<String, dynamic> j) {
+    String s(dynamic v) => (v ?? '').toString().trim();
+
+    int asInt(dynamic v, {int def = 0}) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v.trim()) ?? def;
+      return def;
+    }
+
+    return MallProductBlueprintModelRef(
+      modelId: s(j['modelId']),
+      displayOrder: asInt(j['displayOrder'], def: 0),
+    );
+  }
+}
+
+/// Mall productBlueprint response (ABSOLUTE schema only)
 /// backend: GET /mall/product-blueprints/{id}
 class MallProductBlueprintResponse {
   MallProductBlueprintResponse({
@@ -23,6 +52,7 @@ class MallProductBlueprintResponse {
     required this.qualityAssurance,
     required this.productIdTagType,
     required this.printed,
+    required this.modelRefs,
   });
 
   final String id;
@@ -42,44 +72,39 @@ class MallProductBlueprintResponse {
 
   final List<String> qualityAssurance;
 
-  /// productIdTag.type を取り出したもの（無ければ空文字）
+  /// ✅ ABSOLUTE: productIdTagType (already flattened in dto)
   final String productIdTagType;
 
   final bool printed;
 
+  /// ✅ ABSOLUTE: modelRefs
+  final List<MallProductBlueprintModelRef> modelRefs;
+
   factory MallProductBlueprintResponse.fromJson(Map<String, dynamic> j) {
     String s(dynamic v) => (v ?? '').toString().trim();
 
+    // ✅ ABSOLUTE: qualityAssurance must be list
     final qaRaw = j['qualityAssurance'];
     final qa = (qaRaw is List)
         ? qaRaw.map((e) => e.toString()).toList()
         : <String>[];
 
-    // --- productIdTag: best-effort ---
-    // 期待: { "productIdTag": { "type": "qr" } }
-    // 互換: { "productIdTagType": "qr" } / { "productIdTag": "qr" }
-    String tagType = '';
+    // ✅ ABSOLUTE: productIdTagType is a flat string field
+    final tagType = s(j['productIdTagType']);
 
-    // 1) 正: productIdTag.type
-    final tag = j['productIdTag'];
-    if (tag is Map<String, dynamic>) {
-      tagType = s(tag['type']);
-      if (tagType.isEmpty) tagType = s(tag['Type']);
-    } else if (tag is Map) {
-      // Map<dynamic,dynamic> 等も拾う
-      tagType = s(tag['type']);
-      if (tagType.isEmpty) tagType = s(tag['Type']);
-    } else if (tag != null) {
-      // 万一 backend が productIdTag を string で返していた場合
-      tagType = s(tag);
-    }
-
-    // 2) フラット字段 fallback
-    if (tagType.isEmpty) {
-      tagType = s(j['productIdTagType']);
-    }
-    if (tagType.isEmpty) {
-      tagType = s(j['productIdTag_type']); // 念のため
+    // ✅ ABSOLUTE: modelRefs must be list of objects
+    final rawRefs = j['modelRefs'];
+    final refs = <MallProductBlueprintModelRef>[];
+    if (rawRefs is List) {
+      for (final e in rawRefs) {
+        if (e is Map<String, dynamic>) {
+          refs.add(MallProductBlueprintModelRef.fromJson(e));
+        } else if (e is Map) {
+          refs.add(
+            MallProductBlueprintModelRef.fromJson(Map<String, dynamic>.from(e)),
+          );
+        }
+      }
     }
 
     return MallProductBlueprintResponse(
@@ -96,6 +121,7 @@ class MallProductBlueprintResponse {
       qualityAssurance: qa,
       productIdTagType: tagType,
       printed: j['printed'] == true,
+      modelRefs: refs,
     );
   }
 }

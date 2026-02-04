@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	fs "narratives/internal/adapters/out/firestore"
-	mallquery "narratives/internal/application/query/mall"
+	mallquery "narratives/internal/application/query/mall/catalog"
 	invdom "narratives/internal/domain/inventory"
 )
 

@@ -106,7 +106,14 @@ type RepositoryPort interface {
 	// NOTE: imageID は ListImage.ID（docId）
 	FindByID(ctx context.Context, imageID string) (*ListImage, error)
 
-	// listId 配下の画像一覧（displayOrder を扱う前提で利用頻度高）
+	// ✅ 重要: listId 配下の画像一覧（displayOrder を扱う前提で利用頻度高）
+	//
+	// - Console list detail など「listId をキーに画像一覧が必須」の箇所で利用する。
+	// - 実装は displayOrder を昇順で返すことを推奨（画面の並びと直結するため）。
+	ListByListID(ctx context.Context, listID string) ([]ListImage, error)
+
+	// FindByListID は旧名（または実装側に既にある名前）として残す。
+	// 新規利用は ListByListID を推奨。
 	FindByListID(ctx context.Context, listID string) ([]ListImage, error)
 
 	Exists(ctx context.Context, imageID string) (bool, error)

@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\list\presentation\hook\use_catalog.dart
+// frontend/mall/lib/features/list/presentation/hook/use_catalog.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -14,11 +14,59 @@ import 'use_catalog_token.dart';
 import 'use_catalog_measurement.dart';
 import '../../../../app/shell/presentation/state/catalog_selection_store.dart';
 
+// ============================================================
+// ✅ NEW: listImages DTO (for catalog.dart carousel)
+// ============================================================
+
+class CatalogListImage {
+  const CatalogListImage({
+    required this.id,
+    required this.url,
+    required this.objectPath,
+    required this.fileName,
+    required this.size,
+    required this.displayOrder,
+  });
+
+  final String id;
+  final String url;
+  final String objectPath;
+  final String fileName;
+  final int? size;
+
+  /// 1..N (unknown: null)
+  final int? displayOrder;
+
+  factory CatalogListImage.fromJson(Map<String, dynamic> j) {
+    String s(dynamic v) => (v ?? '').toString().trim();
+
+    int? i(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      final t = (v ?? '').toString().trim();
+      if (t.isEmpty) return null;
+      return int.tryParse(t);
+    }
+
+    return CatalogListImage(
+      id: s(j['id']),
+      url: s(j['url']),
+      objectPath: s(j['objectPath']),
+      fileName: s(j['fileName']),
+      size: (j['size'] is int)
+          ? (j['size'] as int)
+          : (j['size'] is num)
+          ? (j['size'] as num).toInt()
+          : i(j['size']),
+      displayOrder: i(j['displayOrder']),
+    );
+  }
+}
+
 /// ✅ state/logic holder for CatalogPage
 class UseCatalog {
   UseCatalog({http.Client? client})
     : _catalogRepo = CatalogRepositoryHttp(client: client),
-      _listRepo = ListRepositoryHttp(),
       _invRepo = InventoryRepositoryHttp(),
       _inventory = const UseCatalogInventory(),
       _measurement = const UseCatalogMeasurement(),
@@ -27,7 +75,7 @@ class UseCatalog {
 
   final CatalogRepositoryHttp _catalogRepo;
 
-  final ListRepositoryHttp _listRepo;
+  // legacy list/inventory repos are removed
   final InventoryRepositoryHttp _invRepo;
 
   // ✅ inventory hook（モデル取得 + 計算）
@@ -42,7 +90,6 @@ class UseCatalog {
 
   void dispose() {
     _catalogRepo.dispose();
-    _listRepo.dispose();
     _invRepo.dispose();
     _measurement.dispose();
     _product.dispose();
@@ -65,145 +112,111 @@ class UseCatalog {
     // ✅ 先に listId だけ入れておく（画面初期化）
     CatalogSelectionStore.setSelection(listId: id);
 
-    // 1) try catalog endpoint first
-    try {
-      _log('try catalog endpoint: GET /mall/catalog/$id');
-      final dto = await _catalogRepo.fetchCatalogByListId(id);
+    // ✅ ONLY: catalog endpoint
+    _log('GET /mall/catalog/$id');
+    final dto = await _catalogRepo.fetchCatalogByListId(id);
 
-      _log(
-        'catalog ok '
-        'listId=${dto.list.id} '
-        'inventoryId="${dto.list.inventoryId.trim()}" '
-        'list.tbId="${(dto.list.tokenBlueprintId).trim()}" '
-        'inv.tbId="${(dto.inventory?.tokenBlueprintId ?? '').trim()}"',
-      );
-
-      // ✅ ここが重要：inventoryId を SelectionStore に確実に流し込む
-      final invId = dto.list.inventoryId.trim();
-      if (invId.isNotEmpty) {
-        CatalogSelectionStore.setSelection(
-          listId: dto.list.id.trim().isNotEmpty ? dto.list.id.trim() : id,
-          inventoryId: invId,
-          // modelId/stockCount は触らない（未選択状態にするなら null のままでOK）
-        );
-      }
-
-      // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
-      final resolvedTbId =
-          (dto.inventory?.tokenBlueprintId ?? dto.list.tokenBlueprintId).trim();
-      _log('resolved tokenBlueprintId="$resolvedTbId"');
-
-      // ✅ token patch
-      final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
-
-      // ✅ product
-      final pbId = (dto.inventory?.productBlueprintId ?? '').trim();
-      final prod = await _product.load(
-        productBlueprintId: pbId,
-        initial: dto.productBlueprint,
-        initialError: dto.productBlueprintError,
-      );
-
-      // ✅ models（catalog DTO優先 / 無ければ /mall/models で補完）
-      final modelsRes = await _inventory.loadModels(
-        invRepo: _invRepo,
-        productBlueprintId: pbId,
-        initial: dto.modelVariations,
-        initialError: dto.modelVariationsError,
-      );
-
-      final state = _buildState(
-        list: dto.list,
-        inventory: dto.inventory,
-        inventoryError: dto.inventoryError,
-        productBlueprint: prod.productBlueprint,
-        productBlueprintError: prod.productBlueprintError,
-        modelVariations: modelsRes.models,
-        modelVariationsError: modelsRes.error,
-        tokenBlueprintPatch: token.patch,
-        tokenBlueprintError: token.error,
-        resolvedTokenBlueprintId: resolvedTbId,
-      );
-
-      return state;
-    } catch (e) {
-      _log('catalog endpoint failed -> fallback legacy. error=$e');
-      return _loadLegacy(id);
-    }
-  }
-
-  Future<CatalogState> _loadLegacy(String listId) async {
-    _log('legacy start listId=$listId');
-
-    final list = await _listRepo.fetchListById(listId);
     _log(
-      'legacy list ok '
-      'listId=${list.id} '
-      'inventoryId="${list.inventoryId.trim()}" '
-      'list.tbId="${list.tokenBlueprintId.trim()}"',
+      'catalog ok '
+      'listId=${dto.list.id} '
+      'inventoryId="${dto.list.inventoryId.trim()}" '
+      'list.tbId="${(dto.list.tokenBlueprintId).trim()}" '
+      'inv.tbId="${(dto.inventory?.tokenBlueprintId ?? '').trim()}"',
     );
 
-    // ✅ legacyでも SelectionStore に inventoryId を流し込む
-    final legacyInvId = list.inventoryId.trim();
-    CatalogSelectionStore.setSelection(
-      listId: list.id.trim().isNotEmpty ? list.id.trim() : listId.trim(),
-      inventoryId: legacyInvId,
+    // ✅ inventoryId を SelectionStore に流し込む
+    final invId = dto.list.inventoryId.trim();
+    if (invId.isNotEmpty) {
+      CatalogSelectionStore.setSelection(
+        listId: dto.list.id.trim().isNotEmpty ? dto.list.id.trim() : id,
+        inventoryId: invId,
+        // modelId/stockCount は触らない
+      );
+    }
+
+    // ✅ NEW: listImages debug logs（拾えているかの可視化）
+    _log(
+      'listImages raw '
+      'count=${dto.listImages.length} '
+      'err="${(dto.listImagesError ?? '').trim()}"',
     );
+    if (dto.listImages.isNotEmpty) {
+      final sorted = [...dto.listImages]
+        ..sort((a, b) {
+          final ao = a.displayOrder ?? 1 << 30;
+          final bo = b.displayOrder ?? 1 << 30;
+          final c = ao.compareTo(bo);
+          if (c != 0) return c;
+          return a.id.compareTo(b.id);
+        });
 
-    // inventory
-    final invId = legacyInvId;
-
-    MallInventoryResponse? inv;
-    String? invErr;
-
-    if (invId.isEmpty) {
-      invErr = 'inventoryId is empty';
-      _log('legacy inventory skip: inventoryId is empty');
-    } else {
-      try {
-        _log('legacy fetch inventory start invId=$invId');
-        inv = await _invRepo.fetchInventoryById(invId);
+      for (var idx = 0; idx < sorted.length; idx++) {
+        final it = sorted[idx];
         _log(
-          'legacy inventory ok '
-          'pbId="${inv.productBlueprintId.trim()}" '
-          'tbId="${inv.tokenBlueprintId.trim()}" '
-          'stockKeys=${inv.stock.length}',
+          'listImages[$idx] '
+          'id="${it.id}" '
+          'order=${it.displayOrder ?? 'null'} '
+          'url.len=${it.url.length} '
+          'file="${it.fileName}" '
+          'size=${it.size?.toString() ?? 'null'} '
+          'objectPath="${it.objectPath}"',
         );
-      } catch (e) {
-        invErr = e.toString();
-        _log('legacy inventory error: $invErr');
+      }
+
+      // 同一URL/同一objectPathの重複チェック（表示が1枚に見える原因切り分け用）
+      final urlSet = <String>{};
+      var dupUrl = 0;
+      for (final it in dto.listImages) {
+        final u = it.url.trim();
+        if (u.isEmpty) continue;
+        if (!urlSet.add(u)) dupUrl++;
+      }
+      if (dupUrl > 0) {
+        _log('listImages warning: duplicated url count=$dupUrl');
+      }
+
+      final pathSet = <String>{};
+      var dupPath = 0;
+      for (final it in dto.listImages) {
+        final p = it.objectPath.trim();
+        if (p.isEmpty) continue;
+        if (!pathSet.add(p)) dupPath++;
+      }
+      if (dupPath > 0) {
+        _log('listImages warning: duplicated objectPath count=$dupPath');
       }
     }
 
-    final pbId = (inv?.productBlueprintId ?? '').trim();
-
-    // ✅ tokenBlueprintId resolve
-    final resolvedTbId = (inv?.tokenBlueprintId ?? list.tokenBlueprintId)
-        .trim();
-    _log('legacy resolved tokenBlueprintId="$resolvedTbId"');
-
-    // ✅ product
-    final prod = await _product.load(
-      productBlueprintId: pbId,
-      initial: null,
-      initialError: null,
-    );
-
-    // ✅ models (/mall/models)
-    final modelsRes = await _inventory.loadModels(
-      invRepo: _invRepo,
-      productBlueprintId: pbId,
-      initial: null,
-      initialError: null,
-    );
+    // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
+    final resolvedTbId =
+        (dto.inventory?.tokenBlueprintId ?? dto.list.tokenBlueprintId).trim();
+    _log('resolved tokenBlueprintId="$resolvedTbId"');
 
     // ✅ token patch
     final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
 
+    // ✅ product
+    final pbId = (dto.inventory?.productBlueprintId ?? '').trim();
+    final prod = await _product.load(
+      productBlueprintId: pbId,
+      initial: dto.productBlueprint,
+      initialError: dto.productBlueprintError,
+    );
+
+    // ✅ models（catalog DTO優先 / 無ければ /mall/models で補完）
+    // ✅ productBlueprint.modelRefs があればそれを優先して並び替える
+    final modelsRes = await _inventory.loadModels(
+      invRepo: _invRepo,
+      productBlueprintId: pbId,
+      initial: dto.modelVariations,
+      initialError: dto.modelVariationsError,
+      modelRefs: prod.productBlueprint?.modelRefs,
+    );
+
     return _buildState(
-      list: list,
-      inventory: inv,
-      inventoryError: invErr,
+      list: dto.list,
+      inventory: dto.inventory,
+      inventoryError: dto.inventoryError,
       productBlueprint: prod.productBlueprint,
       productBlueprintError: prod.productBlueprintError,
       modelVariations: modelsRes.models,
@@ -211,6 +224,11 @@ class UseCatalog {
       tokenBlueprintPatch: token.patch,
       tokenBlueprintError: token.error,
       resolvedTokenBlueprintId: resolvedTbId,
+      displayOrderByModelId: modelsRes.displayOrderByModelId,
+
+      // ✅ NEW: listImages
+      listImages: dto.listImages,
+      listImagesError: dto.listImagesError,
     );
   }
 
@@ -225,6 +243,11 @@ class UseCatalog {
     required TokenBlueprintPatch? tokenBlueprintPatch,
     required String? tokenBlueprintError,
     required String resolvedTokenBlueprintId,
+    required Map<String, int> displayOrderByModelId,
+
+    // ✅ NEW
+    required List<CatalogListImage> listImages,
+    required String? listImagesError,
   }) {
     final imageUrl = list.image.trim();
     final hasImage = imageUrl.isNotEmpty;
@@ -242,6 +265,7 @@ class UseCatalog {
       inventory: inventory,
       modelVariations: modelVariations,
       prices: list.prices,
+      displayOrderByModelId: displayOrderByModelId,
     );
 
     // ✅ measurements table（サイズ×採寸キー）
@@ -270,7 +294,11 @@ class UseCatalog {
       tokenIconUrlEncoded: tokenIconUrl.isNotEmpty
           ? _safeUrl(tokenIconUrl)
           : null,
-      measurementTable: measTable, // ✅ NEW
+      measurementTable: measTable,
+
+      // ✅ NEW
+      listImages: listImages,
+      listImagesError: _asNonEmptyString(listImagesError),
     );
   }
 
@@ -315,7 +343,11 @@ class CatalogState {
     required this.tokenBlueprintPatch,
     required this.tokenBlueprintError,
     required this.tokenIconUrlEncoded,
-    required this.measurementTable, // ✅ NEW
+    required this.measurementTable,
+
+    // ✅ NEW
+    required this.listImages,
+    required this.listImagesError,
   });
 
   final MallListItem list;
@@ -347,6 +379,10 @@ class CatalogState {
 
   // ✅ measurements table
   final CatalogMeasurementTable measurementTable;
+
+  // ✅ NEW: list images for carousel
+  final List<CatalogListImage> listImages;
+  final String? listImagesError;
 }
 
 // ============================================================
@@ -362,6 +398,10 @@ class MallCatalogDTO {
     required this.productBlueprintError,
     required this.modelVariations,
     required this.modelVariationsError,
+
+    // ✅ NEW
+    required this.listImages,
+    required this.listImagesError,
   });
 
   final MallListItem list;
@@ -375,6 +415,10 @@ class MallCatalogDTO {
   final List<MallModelVariationDTO>? modelVariations;
   final String? modelVariationsError;
 
+  // ✅ NEW
+  final List<CatalogListImage> listImages;
+  final String? listImagesError;
+
   static String? _asNonEmptyString(dynamic v) {
     final s = (v ?? '').toString().trim();
     return s.isEmpty ? null : s;
@@ -386,6 +430,15 @@ class MallCatalogDTO {
     final invJson = (json['inventory'] as Map?)?.cast<String, dynamic>();
     final pbJson = (json['productBlueprint'] as Map?)?.cast<String, dynamic>();
     final mvJson = json['modelVariations'];
+
+    // ✅ NEW: listImages
+    final liJson = json['listImages'];
+    final listImages = (liJson is List)
+        ? liJson
+              .whereType<Map>()
+              .map((e) => CatalogListImage.fromJson(e.cast<String, dynamic>()))
+              .toList()
+        : <CatalogListImage>[];
 
     return MallCatalogDTO(
       list: MallListItem.fromJson(listJson),
@@ -407,6 +460,10 @@ class MallCatalogDTO {
                 .toList()
           : null,
       modelVariationsError: _asNonEmptyString(json['modelVariationsError']),
+
+      // ✅ NEW
+      listImages: listImages,
+      listImagesError: _asNonEmptyString(json['listImagesError']),
     );
   }
 }

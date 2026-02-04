@@ -13,6 +13,13 @@ import (
 type CatalogDTO struct {
 	List CatalogListDTO `json:"list"`
 
+	// ✅ listId 配下の画像一覧（displayOrder 付き）
+	// NOTE:
+	// - 空配列は返さない（omitempty）
+	// - 取得失敗しても画面は壊さない想定なので Error は best-effort
+	ListImages      []CatalogListImageDTO `json:"listImages,omitempty"`
+	ListImagesError string                `json:"listImagesError,omitempty"`
+
 	Inventory      *CatalogInventoryDTO `json:"inventory,omitempty"`
 	InventoryError string               `json:"inventoryError,omitempty"`
 
@@ -38,6 +45,27 @@ type CatalogListDTO struct {
 	InventoryID        string `json:"inventoryId,omitempty"`
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+}
+
+// ============================================================
+// ListImage DTOs (absolute schema)
+// ============================================================
+
+type CatalogListImageDTO struct {
+	ID         string `json:"id"`
+	ListID     string `json:"listId"`
+	URL        string `json:"url"`
+	ObjectPath string `json:"objectPath"`
+	FileName   string `json:"fileName,omitempty"`
+
+	// NOTE:
+	// - 0 は unknown/unset 扱い（domain 側が 0 を許容するならこのまま）
+	// - unset を区別したいなら *int にする
+	DisplayOrder int `json:"displayOrder"`
+
+	// NOTE:
+	// - unset を区別したいなら *int64 にする（今は 0 で返る可能性あり）
+	Size int64 `json:"size,omitempty"`
 }
 
 // ============================================================
@@ -67,20 +95,33 @@ type CatalogInventoryDTO struct {
 // ProductBlueprint DTO
 // ============================================================
 
+type CatalogProductBlueprintModelRefDTO struct {
+	ModelID      string `json:"modelId"`
+	DisplayOrder int    `json:"displayOrder"`
+}
+
 type CatalogProductBlueprintDTO struct {
-	ID               string   `json:"id"`
-	ProductName      string   `json:"productName"`
-	BrandID          string   `json:"brandId"`
-	CompanyID        string   `json:"companyId"`
-	BrandName        string   `json:"brandName,omitempty"`
-	CompanyName      string   `json:"companyName,omitempty"`
-	ItemType         string   `json:"itemType"`
-	Fit              string   `json:"fit"`
-	Material         string   `json:"material"`
-	Weight           float64  `json:"weight,omitempty"`
-	Printed          bool     `json:"printed"`
+	ID          string `json:"id"`
+	ProductName string `json:"productName"`
+	BrandID     string `json:"brandId"`
+	CompanyID   string `json:"companyId"`
+
+	BrandName   string `json:"brandName,omitempty"`
+	CompanyName string `json:"companyName,omitempty"`
+
+	ItemType string  `json:"itemType"`
+	Fit      string  `json:"fit"`
+	Material string  `json:"material"`
+	Weight   float64 `json:"weight,omitempty"`
+	Printed  bool    `json:"printed"`
+
 	QualityAssurance []string `json:"qualityAssurance"`
 	ProductIDTagType string   `json:"productIdTagType"`
+
+	// ✅ productBlueprint.entity.go の ModelRefs を返す
+	// - displayOrder を含めた参照を返す
+	// - 空なら omitempty
+	ModelRefs []CatalogProductBlueprintModelRefDTO `json:"modelRefs,omitempty"`
 }
 
 // ============================================================
