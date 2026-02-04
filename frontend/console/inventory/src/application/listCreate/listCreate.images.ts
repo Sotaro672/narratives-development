@@ -19,13 +19,7 @@ export function dedupeFiles(prev: File[], add: File[]): File[] {
 }
 
 function getListIdFromListDTO(dto: ListDTO, fallback = ""): string {
-  const raw =
-    s((dto as any)?.id) ||
-    s((dto as any)?.ID) ||
-    s((dto as any)?.listId) ||
-    s((dto as any)?.ListID) ||
-    s(fallback);
-
+  const raw = s((dto as any)?.id) || s(fallback);
   return normalizeListId(raw);
 }
 
@@ -50,6 +44,17 @@ async function putFileToSignedUrl(args: { signedUrl: string; file: File }): Prom
 
 /**
  * ✅ 複数画像を Policy A（signed-url）でアップロード→メタ登録→primary 設定
+ *
+ * backend confirmed response:
+ * - signed.id        = imageId（docId）
+ * - signed.objectPath= "lists/{listId}/images/{imageId}"
+ *
+ * save:
+ * - id        = imageId（docId）
+ * - objectPath= signed.objectPath
+ *
+ * primary:
+ * - imageId   = signed.objectPath（✅ backend が見つけられるキーに合わせる）
  */
 export async function uploadListImagesPolicyA(args: {
   listId: string;
@@ -81,6 +86,7 @@ export async function uploadListImagesPolicyA(args: {
   const uid = s(args.createdBy) || s(auth.currentUser?.uid) || "system";
   const now = new Date().toISOString();
 
+  // ✅ registered.imageId は「primary-image にそのまま渡せる値」にする（= objectPath）
   const registered: Array<{ imageId: string; displayOrder: number }> = [];
 
   for (let i = 0; i < files.length; i++) {
@@ -95,28 +101,31 @@ export async function uploadListImagesPolicyA(args: {
       displayOrder: i,
     });
 
-    const objectPath = s(signed.objectPath);
+    const imageDocId = s(signed.id);        // docId
+    const objectPath = s(signed.objectPath); // "lists/{listId}/images/{id}"
     const signedUrl = s(signed.signedUrl);
     const bucket = s(signed.bucket);
 
-    if (!objectPath || !signedUrl) {
+    if (!imageDocId || !objectPath || !signedUrl || !bucket) {
       throw new Error("signed_url_response_invalid");
     }
 
+    // 1) upload to GCS
     await putFileToSignedUrl({ signedUrl, file });
 
+    // 2) register metadata (Firestore / subcollection etc)
     await saveListImageFromGCSHTTP({
       listId,
-      id: objectPath,
-      fileName: s(file.name),
-      bucket,
-      objectPath,
+      id: imageDocId,    // ✅ docId
+      bucket,            // ✅ required
+      objectPath,        // ✅ required
       size: Number(file.size || 0),
       displayOrder: i,
       createdBy: uid,
       createdAt: now,
     });
 
+    // ✅ primary-image に渡すのは objectPath（backendが見つけられるキー）
     registered.push({ imageId: objectPath, displayOrder: i });
   }
 
@@ -125,17 +134,15 @@ export async function uploadListImagesPolicyA(args: {
   if (primary?.imageId) {
     await setListPrimaryImageHTTP({
       listId,
-      imageId: primary.imageId,
+      imageId: primary.imageId, // ✅ objectPath を渡す
       updatedBy: uid,
       now,
-    } as any);
+    });
   }
 
   return { registered, primaryImageId: primary?.imageId };
 }
 
-// （createListWithImages 側で使用するための内部ヘルパーをここに残す場合）
-// export { getListIdFromListDTO }; // ←公開したい場合のみ
 export function _internal_getListIdFromListDTO(dto: ListDTO, fallback = ""): string {
   return getListIdFromListDTO(dto, fallback);
 }

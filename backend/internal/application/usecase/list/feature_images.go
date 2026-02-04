@@ -3,69 +3,93 @@
 // Responsibility:
 // - ListImage の保存（GCS object -> domain ListImage）を提供する。
 // - 保存後に Firestore の /lists/{listId}/images サブコレクションへ永続化する（複数画像対応）。
-// - 必要に応じて list 本体の primary(imageId=URL cache) を更新する。
+// - 画像削除（Firestore record + GCS object）を usecase 経由で提供する（handler から deleter を撤去する方針）。
 // - URL 解決結果をログへ出す（運用上の検証用）。
 //
 // Features:
 // - SaveImageFromGCS
+// - DeleteImage
 package list
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
 
 	usecase "narratives/internal/application/usecase"
+	listdom "narratives/internal/domain/list"
 	listimgdom "narratives/internal/domain/listImage"
 )
 
-// ListImageRecordRepository is a persistence port for list images (Firestore subcollection).
-// Expected target:
-// - /lists/{listId}/images/{imageId}
-//
-// NOTE:
-// - This is intentionally small; implement it in adapters/out/firestore.
-// - imageId should typically be derived from objectPath "{listId}/{imageId}/{fileName}".
-type ListImageRecordRepository interface {
-	// Upsert stores the ListImage record (idempotent).
-	// Recommended behavior:
-	// - docID = imageId (or img.ID if you choose to store objectPath as ID)
-	Upsert(ctx context.Context, img listimgdom.ListImage) (listimgdom.ListImage, error)
+// --- optional capability interfaces (type-assert) ---
+
+// ListImageRecordDeleter deletes Firestore record (/lists/{listId}/images/{imageId}).
+type ListImageRecordDeleter interface {
+	Delete(ctx context.Context, listID string, imageID string) error
 }
 
-// ListPrimaryImageSetter updates list's primary image URL cache (List.ImageID).
-// Recommended behavior:
-// - If list.imageId is empty, set it to imageURL
-// - Or if displayOrder==0, set it to imageURL
-type ListPrimaryImageSetter interface {
-	// SetPrimaryImageIfEmpty sets primary image only when current primary is empty.
-	SetPrimaryImageIfEmpty(ctx context.Context, listID string, imageURL string, now time.Time) error
+// ListImageObjectDeleter deletes underlying object (GCS object).
+// Policy A: objectPath = "lists/{listId}/images/{imageId}"
+type ListImageObjectDeleter interface {
+	DeleteObject(ctx context.Context, bucket string, objectPath string) error
+}
+
+// ListReader is already your port in this package; we only need GetByID here.
+type listReaderForPrimary interface {
+	GetByID(ctx context.Context, id string) (listdom.List, error)
 }
 
 // SaveImageFromGCS finalizes an already-uploaded GCS object:
-// 1) Normalize/validate metadata on GCS and build domain ListImage via imageObjectSaver (GCS adapter).
-// 2) Persist the ListImage record into Firestore subcollection via listImageRecordRepo (new).
-// 3) Optionally set List.ImageID (primary URL cache) when empty.
+//
+// 1) Validate inputs + canonical objectPath (Policy A).
+// 2) Normalize/validate metadata on GCS and build domain ListImage via imageObjectSaver (GCS adapter).
+// 3) Persist the ListImage record into Firestore subcollection via listImageRecordRepo.
 //
 // IMPORTANT:
 // - This method assumes the actual bytes are already uploaded to GCS (signed URL PUT done).
+// - Policy A canonical objectPath MUST be: "lists/{listId}/images/{imageId}"
 func (uc *ListUsecase) SaveImageFromGCS(
 	ctx context.Context,
-	id string,
+	imageID string,
 	listID string,
 	bucket string,
 	objectPath string,
 	size int64,
 	displayOrder int,
 ) (listimgdom.ListImage, error) {
+	// required deps
 	if uc.imageObjectSaver == nil {
 		return listimgdom.ListImage{}, usecase.ErrNotSupported("List.SaveImageFromGCS")
 	}
+	if uc.listImageRecordRepo == nil {
+		return listimgdom.ListImage{}, usecase.ErrNotSupported("List.SaveImageFromGCS.RecordRepo")
+	}
 
+	// normalize inputs
 	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+	bucket = strings.TrimSpace(bucket)
+	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+
+	// required fields
 	if listID == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidListID
+	}
+	if imageID == "" {
+		return listimgdom.ListImage{}, listimgdom.ErrInvalidID
+	}
+	// imageId は docID 前提（URL/objectPath を入れない）
+	if strings.Contains(imageID, "/") {
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("invalid_image_id")
+	}
+	if bucket == "" {
+		// handler は 400 にしている想定だが、usecase でも守る
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("bucket is required")
+	}
+	if objectPath == "" {
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("objectPath is required")
 	}
 
 	// Guard: displayOrder should not be negative
@@ -73,13 +97,23 @@ func (uc *ListUsecase) SaveImageFromGCS(
 		displayOrder = 0
 	}
 
+	// Policy A canonical objectPath validation:
+	// MUST be "lists/{listId}/images/{imageId}"
+	expectedPrefix := "lists/" + listID + "/images/"
+	if !strings.HasPrefix(objectPath, expectedPrefix) {
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_not_canonical")
+	}
+	if objectPath != expectedPrefix+imageID {
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_id_mismatch")
+	}
+
 	// 1) GCS object -> domain ListImage (also updates GCS metadata best-effort)
 	img, err := uc.imageObjectSaver.SaveFromBucketObject(
 		ctx,
-		strings.TrimSpace(id),
-		listID,
-		strings.TrimSpace(bucket),
-		strings.TrimSpace(objectPath),
+		imageID,    // ✅ imageId (docID)
+		listID,     // ✅ listId
+		bucket,     // ✅ bucket (required)
+		objectPath, // ✅ canonical objectPath
 		size,
 		displayOrder,
 	)
@@ -87,44 +121,30 @@ func (uc *ListUsecase) SaveImageFromGCS(
 		return listimgdom.ListImage{}, err
 	}
 
-	// Resolve imageId (for logging / Firestore doc id decision)
-	// Prefer objectPath if provided, otherwise derive from img.ID when it's an objectPath.
-	derivedImageID := ""
-	if op := strings.TrimSpace(objectPath); op != "" {
-		derivedImageID = extractImageIDFromObjectPath(op)
-	}
-	if derivedImageID == "" {
-		derivedImageID = extractImageIDFromObjectPath(strings.TrimSpace(img.ID))
-	}
+	// Derive imageID from objectPath for logging/sanity (Policy A only)
+	derivedImageID := extractImageIDFromCanonicalObjectPath(objectPath, listID)
 
-	// 2) Persist to Firestore subcollection (recommended for multi-image feature)
-	if uc.listImageRecordRepo == nil {
-		// If you want to allow running without Firestore persistence, change this to just a log.
-		// For multi-image feature, it's better to fail fast.
-		return listimgdom.ListImage{}, usecase.ErrNotSupported("List.SaveImageFromGCS: listImageRecordRepo is nil")
-	}
-
+	// 2) Persist to Firestore subcollection (multi-image feature)
 	saved, err := uc.listImageRecordRepo.Upsert(ctx, img)
 	if err != nil {
 		return listimgdom.ListImage{}, err
 	}
 	img = saved
 
-	// 3) Optionally set list primary image cache (only if empty)
-	now := time.Now().UTC()
-	if uc.listPrimaryImageSetter != nil {
-		// Only set when empty (safe, avoids overwriting primary unintentionally)
-		_ = uc.listPrimaryImageSetter.SetPrimaryImageIfEmpty(ctx, listID, strings.TrimSpace(img.URL), now)
-	}
+	// NOTE:
+	// Policy A 方針では、primary の更新は専用 endpoint（SetPrimaryImage）でのみ行う。
+	// ここでは副作用を避けるため primary を触らない。
 
 	log.Printf(
-		"[list_usecase] listImage finalized saved=%t url=%q listID=%s imageID=%s objectPath=%s bucket=%s size=%d displayOrder=%d",
+		"[list_usecase] listImage finalized saved=%t url=%q listID=%s imageID(in)=%s imageID(derived)=%s img.ID=%s img.ObjectPath=%s bucket=%s size=%d displayOrder=%d",
 		strings.TrimSpace(img.URL) != "",
 		strings.TrimSpace(img.URL),
 		listID,
+		imageID,
 		derivedImageID,
-		strings.TrimSpace(objectPath),
-		strings.TrimSpace(bucket),
+		strings.TrimSpace(img.ID),
+		strings.TrimSpace(img.ObjectPath),
+		bucket,
 		img.Size,
 		img.DisplayOrder,
 	)
@@ -132,15 +152,114 @@ func (uc *ListUsecase) SaveImageFromGCS(
 	return img, nil
 }
 
-// extractImageIDFromObjectPath expects "{listId}/{imageId}/{fileName}" and returns imageId.
-func extractImageIDFromObjectPath(objectPath string) string {
+// DeleteImage deletes a list image by IDs (Policy A).
+//
+// ✅ Important behavior (fixes your issue):
+// 1) Delete Firestore record (/lists/{listId}/images/{imageId}) FIRST (must).
+// 2) Delete GCS object best-effort (ErrObjectNotExist is treated as success).
+// 3) If list.image_id(primaryImageID) == imageId, clear primary (or you can implement "pick next").
+//
+// - imageID は Firestore docID（"63b5..."）のみを受け付け、URL/objectPath は受け付けない。
+func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID string) error {
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+
+	if listID == "" {
+		return listimgdom.ErrInvalidListID
+	}
+	if imageID == "" {
+		return listimgdom.ErrInvalidID
+	}
+	if strings.Contains(imageID, "/") {
+		return usecase.ErrInvalidArgument("invalid_image_id")
+	}
+
+	// required deps
+	if uc.listImageRecordRepo == nil {
+		return usecase.ErrNotSupported("List.DeleteImage.RecordRepo")
+	}
+
+	// 1) Firestore record delete (MUST)
+	if deleter, ok := any(uc.listImageRecordRepo).(ListImageRecordDeleter); ok {
+		if err := deleter.Delete(ctx, listID, imageID); err != nil {
+			// if already not found, treat as success (idempotent)
+			if !errors.Is(err, listimgdom.ErrNotFound) {
+				log.Printf("[list_usecase] delete image record failed listID=%s imageID=%s err=%v", listID, imageID, err)
+				return err
+			}
+		}
+	} else {
+		return usecase.ErrNotSupported("List.DeleteImage.RecordRepo.Delete")
+	}
+
+	// 2) GCS delete (best-effort)
+	// Policy A canonical path:
+	// lists/{listId}/images/{imageId}
+	objectPath := "lists/" + listID + "/images/" + imageID
+
+	// bucket: record repo が返せないなら env/repo に依存するので、ここは object deleter 側に解決させるのもOK。
+	// ただ、いまの構造に合わせて「bucketを取れないならスキップ」でも良い（Firestoreが正）。
+	// ここは "bucket解決できないならスキップ" にして UI を確実に直す。
+	if objDel, ok := any(uc.imageObjectSaver).(ListImageObjectDeleter); ok && objDel != nil {
+		// bucket の取得は（A）画像レコードを読む、（B）env を読む、（C）DI で持つ、のいずれか。
+		// ここでは最小修正として、listimgdom.DefaultBucket を許容（あなたの環境の既定に合わせてください）。
+		bucket := strings.TrimSpace(listimgdom.DefaultBucket)
+
+		if bucket != "" {
+			if err := objDel.DeleteObject(ctx, bucket, objectPath); err != nil {
+				// object not exist is OK (idempotent)
+				if !errors.Is(err, listimgdom.ErrNotFound) {
+					log.Printf("[list_usecase] delete gcs object failed listID=%s imageID=%s bucket=%s path=%s err=%v", listID, imageID, bucket, objectPath, err)
+					// best-effort: DO NOT fail user-facing deletion because Firestore is already correct
+					// return err
+				}
+			}
+		}
+	}
+
+	// 3) primary fix (if wired)
+	// if list.image_id == deleted imageID, unset it.
+	if uc.listPrimaryImageSetter != nil && uc.listReader != nil {
+		if r, ok := any(uc.listReader).(listReaderForPrimary); ok && r != nil {
+			l, err := r.GetByID(ctx, listID)
+			if err == nil {
+				if strings.TrimSpace(l.ImageID) == imageID {
+					now := time.Now().UTC()
+					_ = uc.listPrimaryImageSetter.SetPrimaryImageID(ctx, listID, "", now)
+
+				}
+			}
+		}
+	}
+
+	log.Printf("[list_usecase] delete image done listID=%s imageID=%s", listID, imageID)
+	return nil
+}
+
+// extractImageIDFromCanonicalObjectPath returns imageId from Policy A canonical objectPath.
+//
+// Canonical:
+//
+//	lists/{listId}/images/{imageId}
+func extractImageIDFromCanonicalObjectPath(objectPath string, listID string) string {
 	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if p == "" {
 		return ""
 	}
 	parts := strings.Split(p, "/")
-	if len(parts) < 2 {
+
+	// must be: ["lists", "{listId}", "images", "{imageId}"]
+	if len(parts) != 4 {
 		return ""
 	}
-	return strings.TrimSpace(parts[1])
+	if strings.TrimSpace(parts[0]) != "lists" {
+		return ""
+	}
+	if strings.TrimSpace(parts[1]) != strings.TrimSpace(listID) {
+		return ""
+	}
+	if strings.TrimSpace(parts[2]) != "images" {
+		return ""
+	}
+	return strings.TrimSpace(parts[3])
 }

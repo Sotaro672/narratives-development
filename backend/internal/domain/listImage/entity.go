@@ -11,12 +11,19 @@ import (
 )
 
 // Default GCS bucket for ListImage files.
-// Expected layout:
+// NOTE:
+// - In production, bucket should be injected from application/httpout via env.
+// - This constant is kept only as a fallback for development or legacy data.
+const DefaultBucket = "narratives-development-list"
+
+// DefaultObjectPathPrefix is the canonical prefix for list images in a single bucket.
 //
-//	gs://narratives-development-list/{listId}/{fileName}
+// Expected layout (recommended):
+//
+//	gs://{bucket}/lists/{listId}/images/{imageId}
 //
 // (listId folder can contain multiple images)
-const DefaultBucket = "narratives-development-list"
+const DefaultObjectPathPrefix = "lists"
 
 // GCSDeleteOp represents a delete operation target in GCS.
 type GCSDeleteOp struct {
@@ -35,10 +42,15 @@ type GCSDeleteOp struct {
 //	  size: number;
 //	  displayOrder: number;
 //	}
+//
+// Domain additions:
+//   - ObjectPath is the canonical GCS object path used for upload/update/delete.
+//     This avoids relying on URL parsing or fileName-based inference.
 type ListImage struct {
 	ID           string
 	ListID       string
 	URL          string
+	ObjectPath   string // ✅ canonical: lists/{listId}/images/{imageId}
 	FileName     string
 	Size         int64
 	DisplayOrder int
@@ -65,6 +77,7 @@ var (
 	ErrInvalidID           = errors.New("listImage: invalid id")
 	ErrInvalidListID       = errors.New("listImage: invalid listId")
 	ErrInvalidURL          = errors.New("listImage: invalid url")
+	ErrInvalidObjectPath   = errors.New("listImage: invalid objectPath")
 	ErrInvalidFileName     = errors.New("listImage: invalid fileName")
 	ErrInvalidSize         = errors.New("listImage: invalid size")
 	ErrInvalidDisplayOrder = errors.New("listImage: invalid displayOrder")
@@ -154,8 +167,12 @@ var (
 // ========================================
 
 // New creates a ListImage with validation.
+//
+// NOTE:
+// - ObjectPath is required to make update/delete stable without relying on URL parsing.
+// - URL is still required because frontend consumes it (public URL).
 func New(
-	id, listID, u, fileName string,
+	id, listID, u, objectPath, fileName string,
 	size int64,
 	displayOrder int,
 ) (ListImage, error) {
@@ -163,6 +180,7 @@ func New(
 		ID:           strings.TrimSpace(id),
 		ListID:       strings.TrimSpace(listID),
 		URL:          strings.TrimSpace(u),
+		ObjectPath:   strings.TrimLeft(strings.TrimSpace(objectPath), "/"),
 		FileName:     strings.TrimSpace(fileName),
 		Size:         size,
 		DisplayOrder: displayOrder,
@@ -175,11 +193,11 @@ func New(
 
 // NewMinimal - 必須項目のみで作成（New と同義）
 func NewMinimal(
-	id, listID, u, fileName string,
+	id, listID, u, objectPath, fileName string,
 	size int64,
 	displayOrder int,
 ) (ListImage, error) {
-	return New(id, listID, u, fileName, size, displayOrder)
+	return New(id, listID, u, objectPath, fileName, size, displayOrder)
 }
 
 // NewFromGCSObject builds public URL from GCS bucket/object and constructs ListImage.
@@ -200,7 +218,7 @@ func NewFromGCSObject(
 		return ListImage{}, fmt.Errorf("listImage: empty objectPath")
 	}
 	publicURL := PublicURL(b, obj)
-	return New(id, listID, publicURL, fileName, size, displayOrder)
+	return New(id, listID, publicURL, obj, fileName, size, displayOrder)
 }
 
 // NewMinimalFromGCSObject - minimal constructor using GCS bucket/object.
@@ -214,6 +232,22 @@ func NewMinimalFromGCSObject(
 	return NewFromGCSObject(id, listID, fileName, size, displayOrder, bucket, objectPath)
 }
 
+// NewWithCanonicalPath builds objectPath as:
+//
+//	lists/{listId}/images/{imageId}
+//
+// It then builds public URL from bucket+objectPath and constructs ListImage.
+// If bucket is empty, DefaultBucket is used.
+func NewWithCanonicalPath(
+	id, listID, fileName string,
+	size int64,
+	displayOrder int,
+	bucket string,
+) (ListImage, error) {
+	obj := CanonicalObjectPath(listID, id)
+	return NewFromGCSObject(id, listID, fileName, size, displayOrder, bucket, obj)
+}
+
 // ========================================
 // Mutators
 // ========================================
@@ -224,6 +258,15 @@ func (l *ListImage) UpdateURL(u string) error {
 		return err
 	}
 	l.URL = u
+	return nil
+}
+
+func (l *ListImage) UpdateObjectPath(objectPath string) error {
+	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	if err := validateObjectPath(obj); err != nil {
+		return err
+	}
+	l.ObjectPath = obj
 	return nil
 }
 
@@ -272,6 +315,9 @@ func (l ListImage) validate() error {
 	if err := validateURL(l.URL); err != nil {
 		return err
 	}
+	if err := validateObjectPath(l.ObjectPath); err != nil {
+		return err
+	}
 	if l.FileName == "" || !extAllowed(l.FileName) {
 		return ErrInvalidFileName
 	}
@@ -305,6 +351,24 @@ func validateURL(u string) error {
 	return nil
 }
 
+// validateObjectPath validates the canonical object path stored for stable operations.
+// We keep it permissive, but must be non-empty and not contain URL scheme.
+func validateObjectPath(p string) error {
+	p = strings.TrimLeft(strings.TrimSpace(p), "/")
+	if p == "" {
+		return ErrInvalidObjectPath
+	}
+	// prevent accidentally storing URL
+	if strings.Contains(p, "://") {
+		return ErrInvalidObjectPath
+	}
+	// guard: no backslashes
+	if strings.Contains(p, `\`) {
+		return ErrInvalidObjectPath
+	}
+	return nil
+}
+
 func extAllowed(name string) bool {
 	if len(AllowedExtensions) == 0 {
 		return true
@@ -312,6 +376,15 @@ func extAllowed(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
 	_, ok := AllowedExtensions[ext]
 	return ok
+}
+
+// CanonicalObjectPath returns canonical object path for list image:
+// lists/{listId}/images/{imageId}
+func CanonicalObjectPath(listID, imageID string) string {
+	return strings.TrimLeft(
+		fmt.Sprintf("%s/%s/images/%s", DefaultObjectPathPrefix, strings.TrimSpace(listID), strings.TrimSpace(imageID)),
+		"/",
+	)
 }
 
 // PublicURL returns the HTTPS public URL for a GCS object:
@@ -351,16 +424,28 @@ func ParseGCSURL(u string) (string, string, bool) {
 	return bucket, objectPath, true
 }
 
-// ToGCSDeleteOp tries to resolve the GCS delete target from this ListImage.
+// ToGCSDeleteOp resolves the GCS delete target from this ListImage.
 // Priority:
-// 1) Parse from URL if it points to storage.googleapis.com/cloud.google.com
-// 2) Fallback to DefaultBucket + "{listId}/{fileName}"
+// 1) Use explicit ObjectPath (recommended)
+// 2) Parse from URL if it points to storage.googleapis.com/cloud.google.com (legacy)
+// 3) Fallback to DefaultBucket + canonical path (lists/{listId}/images/{imageId})
 func (l ListImage) ToGCSDeleteOp() GCSDeleteOp {
+	// 1) explicit ObjectPath
+	if obj := strings.TrimLeft(strings.TrimSpace(l.ObjectPath), "/"); obj != "" {
+		return GCSDeleteOp{
+			Bucket:     DefaultBucket,
+			ObjectPath: obj,
+		}
+	}
+
+	// 2) parse from URL (legacy)
 	if b, obj, ok := ParseGCSURL(l.URL); ok {
 		return GCSDeleteOp{Bucket: b, ObjectPath: obj}
 	}
+
+	// 3) canonical fallback
 	return GCSDeleteOp{
 		Bucket:     DefaultBucket,
-		ObjectPath: strings.TrimSpace(l.ListID) + "/" + strings.TrimSpace(l.FileName),
+		ObjectPath: CanonicalObjectPath(l.ListID, l.ID),
 	}
 }

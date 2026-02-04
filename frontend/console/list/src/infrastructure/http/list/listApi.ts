@@ -1,4 +1,4 @@
-//frontend\console\list\src\infrastructure\http\list\listApi.ts
+// frontend/console/list/src/infrastructure/http/list/listApi.ts
 import { API_BASE } from "./config";
 import type {
   CreateListInput,
@@ -20,7 +20,6 @@ import {
 import { s } from "./string";
 import { ensureDetailHasImageUrls } from "./detailFallback";
 import { normalizeListImageUrls } from "./listImage";
-import { normalizeSignedListImageUploadDTO } from "./signedUrl";
 
 /**
  * ✅ Create list
@@ -32,9 +31,6 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
   console.log("[list/listRepositoryHTTP] createListHTTP payload", payloadArray);
 
   // ✅ DEBUG: selected files (if any)
-  // NOTE:
-  // - This is only for debugging; backend does not receive File objects directly.
-  // - Depending on CreateListInput shape, files may not exist here. We try common keys safely.
   try {
     const anyInput = input as any;
     const selectedFiles =
@@ -236,15 +232,12 @@ export async function fetchListDetailHTTP(args: {
       listId,
       createdByName: s((dto as any)?.createdByName),
       updatedByName: s((dto as any)?.updatedByName),
-      imageUrlsCount: Array.isArray((dto as any)?.imageUrls)
-        ? (dto as any).imageUrls.length
-        : 0,
+      imageUrlsCount: Array.isArray((dto as any)?.imageUrls) ? (dto as any).imageUrls.length : 0,
       dto,
     });
 
     return dto;
   } catch (e1) {
-    // ✅ inventoryIdHint は pb__tb をそのまま使う（splitしない）
     const inv = s(args.inventoryIdHint) || listId;
 
     console.log("[list/listRepositoryHTTP] fetchListDetailHTTP fallback start", {
@@ -335,10 +328,10 @@ export async function fetchListImageUrlsHTTP(args: {
   return normalizeListImageUrls(imgs, args.primaryImageId);
 }
 
-/**
- * ✅ NEW: signed-url 発行（Policy A）
- * POST /lists/{id}/images/signed-url
- */
+// ==========================================================
+// ✅ Policy A: Signed URL (backend 実仕様に固定)
+// ==========================================================
+
 export async function issueListImageSignedUrlHTTP(args: {
   listId: string;
   fileName: string;
@@ -346,7 +339,6 @@ export async function issueListImageSignedUrlHTTP(args: {
   size: number;
   displayOrder: number;
 }): Promise<SignedListImageUploadDTO> {
-  // ✅ ここは list の docId なので normalize してOK（事故混入対策）
   const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
@@ -357,7 +349,6 @@ export async function issueListImageSignedUrlHTTP(args: {
     displayOrder: Number(args.displayOrder || 0),
   };
 
-  // backend の返却キー揺れ（uploadUrl / signedUrl / publicUrl など）をここで吸収する
   const raw = await requestJSON<any>({
     method: "POST",
     path: `/lists/${encodeURIComponent(listId)}/images/signed-url`,
@@ -370,36 +361,79 @@ export async function issueListImageSignedUrlHTTP(args: {
     },
   });
 
-  return normalizeSignedListImageUploadDTO(raw);
+  const out: SignedListImageUploadDTO = {
+    id: s(raw?.id),
+    bucket: s(raw?.bucket),
+    objectPath: s(raw?.objectPath),
+    signedUrl: s(raw?.uploadUrl),
+    publicUrl: s(raw?.publicUrl) || undefined,
+    expiresAt: s(raw?.expiresAt) || undefined,
+    contentType: s(raw?.contentType) || undefined,
+    size: Number.isFinite(Number(raw?.size)) ? Number(raw.size) : undefined,
+    displayOrder: Number.isFinite(Number(raw?.displayOrder)) ? Number(raw.displayOrder) : undefined,
+    fileName: s(raw?.fileName) || undefined,
+  };
+
+  if (!out.id || !out.bucket || !out.objectPath || !out.signedUrl) {
+    throw new Error("signed_url_response_invalid");
+  }
+
+  // canonical: "lists/{listId}/images/{imageId}"
+  {
+    const op = out.objectPath.replace(/^\/+/, "");
+    const parts = op.split("/").map((x) => s(x)).filter(Boolean);
+    if (
+      parts.length !== 4 ||
+      parts[0] !== "lists" ||
+      parts[1] !== listId ||
+      parts[2] !== "images" ||
+      parts[3] !== out.id
+    ) {
+      throw new Error("signed_url_object_path_not_canonical");
+    }
+  }
+
+  return out;
 }
 
-/**
- * POST /lists/{id}/images
- * - GCS objectPath を登録する（アップロード自体は別途）
- */
 export async function saveListImageFromGCSHTTP(args: {
   listId: string;
-  id: string; // ListImage.ID
-  fileName?: string;
-  bucket?: string; // optional
+  id: string;
+  bucket: string;
   objectPath: string;
-  size: number; // bytes
+  size: number;
   displayOrder: number;
   createdBy?: string;
-  createdAt?: string; // RFC3339 optional
+  createdAt?: string;
 }): Promise<ListImageDTO> {
   const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
+  const id = s(args.id);
+  const bucket = s(args.bucket);
+  const objectPath = s(args.objectPath).replace(/^\/+/, "");
+
+  if (!id || !bucket || !objectPath) throw new Error("invalid_list_image_payload");
+
+  const parts = objectPath.split("/").map((x) => s(x)).filter(Boolean);
+  if (
+    parts.length !== 4 ||
+    parts[0] !== "lists" ||
+    parts[1] !== listId ||
+    parts[2] !== "images" ||
+    parts[3] !== id
+  ) {
+    throw new Error("objectPath_id_mismatch");
+  }
+
   const payload = {
-    id: String(args.id ?? "").trim(),
-    fileName: String(args.fileName ?? "").trim(),
-    bucket: String(args.bucket ?? "").trim(),
-    objectPath: String(args.objectPath ?? "").trim(),
+    id,
+    bucket,
+    objectPath,
     size: Number(args.size ?? 0),
     displayOrder: Number(args.displayOrder ?? 0),
-    createdBy: String(args.createdBy ?? "").trim(),
-    createdAt: args.createdAt ? String(args.createdAt).trim() : undefined,
+    createdBy: args.createdBy ? s(args.createdBy) : undefined,
+    createdAt: args.createdAt ? s(args.createdAt) : undefined,
   };
 
   return await requestJSON<ListImageDTO>({
@@ -416,16 +450,20 @@ export async function setListPrimaryImageHTTP(args: {
   listId: string;
   imageId: string;
   updatedBy?: string;
-  now?: string; // RFC3339 optional
+  now?: string;
 }): Promise<ListDTO> {
   const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
-    imageId: String(args.imageId ?? "").trim(),
-    updatedBy: args.updatedBy ? String(args.updatedBy).trim() : undefined,
-    now: args.now ? String(args.now).trim() : undefined,
+    imageId: s(args.imageId),
+    updatedBy: args.updatedBy ? s(args.updatedBy) : undefined,
+    now: args.now ? s(args.now) : undefined,
   };
+
+  if (!payload.imageId) {
+    throw new Error("invalid_image_id");
+  }
 
   return await requestJSON<ListDTO>({
     method: "PUT",
@@ -435,7 +473,7 @@ export async function setListPrimaryImageHTTP(args: {
 }
 
 // ==========================================================
-// ✅ NEW: delete image
+// ✅ delete image
 // DELETE /lists/{id}/images/{imageId}
 // ==========================================================
 
@@ -447,24 +485,24 @@ function extractImageIdForDelete(args: { listId: string; imageIdOrObjectPathOrUr
   // 1) already imageId (no slash)
   if (!raw.includes("/")) return raw;
 
-  // 2) objectPath: "{listId}/{imageId}/{fileName...}"
+  // 2) objectPath: "lists/{listId}/images/{imageId}"
   {
     const p = raw.replace(/^\/+/, "");
     const parts = p.split("/").map((x) => s(x)).filter(Boolean);
-    if (parts.length >= 2 && parts[0] === listId) {
-      return s(parts[1]);
+    if (parts.length >= 4 && parts[0] === "lists" && parts[1] === listId && parts[2] === "images") {
+      return s(parts[3]);
     }
   }
 
-  // 3) URL: https://storage.googleapis.com/{bucket}/{listId}/{imageId}/{fileName...}
+  // 3) URL: https://storage.googleapis.com/{bucket}/lists/{listId}/images/{imageId}
   try {
     const u = new URL(raw);
     const p = s(u.pathname).replace(/^\/+/, "");
     const parts = p.split("/").map((x) => s(x)).filter(Boolean);
 
-    // parts[0]=bucket, parts[1]=listId, parts[2]=imageId
-    if (parts.length >= 3 && parts[1] === listId) {
-      return s(parts[2]);
+    // parts[0]=bucket, parts[1]=lists, parts[2]=listId, parts[3]=images, parts[4]=imageId
+    if (parts.length >= 5 && parts[1] === "lists" && parts[2] === listId && parts[3] === "images") {
+      return s(parts[4]);
     }
   } catch {
     // ignore
@@ -475,8 +513,7 @@ function extractImageIdForDelete(args: { listId: string; imageIdOrObjectPathOrUr
 
 export async function deleteListImageHTTP(args: {
   listId: string;
-  // ここは imageId 推奨だが、互換で objectPath/URL も受けられるようにしておく
-  imageId: string;
+  imageId: string; // UI が URL を渡してきてもOK（ここで正規化する）
 }): Promise<any> {
   const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");

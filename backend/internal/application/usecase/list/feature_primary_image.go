@@ -2,8 +2,8 @@
 //
 // Responsibility:
 //   - List の代表画像（List.ImageID）を更新する。
-//   - 入力が「URL」か「imageId（FirestoreのimagesサブコレのID）」か
-//     「GCS objectPath/URL」かを判定して URL を解決し、ListPatcher に委譲する。
+//   - 入力が「URL」か「imageId（FirestoreのimagesサブコレのDocID）」かを判定して URL を解決し、ListPatcher に委譲する。
+//   - GCS bucket は env 固定（usecase 側で DefaultBucket を使って URL を捏造しない）。
 //
 // Features:
 // - SetPrimaryImage
@@ -22,9 +22,11 @@ import (
 )
 
 // ListImageRecordByIDReader is an optional extended contract for Firestore subcollection.
-// If you already have a separate Firestore repo, implement this there.
+// NOTE:
+// - Record store is expected to be /lists/{listId}/images/{imageId} (docID = imageId).
+// - Keep signature aligned with adapters/out/firestore/list_image_repository_fs.go:GetByID(ctx, id string).
 type ListImageRecordByIDReader interface {
-	GetByID(ctx context.Context, listID string, imageID string) (listimgdom.ListImage, error)
+	GetByID(ctx context.Context, imageID string) (listimgdom.ListImage, error)
 }
 
 func (uc *ListUsecase) SetPrimaryImage(
@@ -65,11 +67,13 @@ func (uc *ListUsecase) SetPrimaryImage(
 	imageURL := ""
 	if uc.listImageRecordRepo != nil {
 		if r, ok := uc.listImageRecordRepo.(ListImageRecordByIDReader); ok {
-			img, err := r.GetByID(ctx, lid, iid)
+			img, err := r.GetByID(ctx, iid) // ✅ imageId (docID)
 			if err == nil {
+				// Safety: image must belong to the same list
 				if strings.TrimSpace(img.ListID) != "" && strings.TrimSpace(img.ListID) != lid {
 					return listdom.List{}, errors.New("list: image belongs to other list")
 				}
+
 				imageURL = strings.TrimSpace(img.URL)
 				if imageURL == "" {
 					// Firestore record should carry URL; if empty, treat as invalid
@@ -80,6 +84,9 @@ func (uc *ListUsecase) SetPrimaryImage(
 	}
 
 	// 3) fallback: GCS 側で解決（入力が objectPath/URL 互換のときのみ）
+	// NOTE:
+	// - This path is "legacy/fallback". With canonical record store, (2) should handle primary resolution.
+	// - Do NOT generate public URL using DefaultBucket here (bucket is env-fixed and should be handled by adapter).
 	if imageURL == "" {
 		if uc.imageByIDReader == nil {
 			return listdom.List{}, usecase.ErrNotSupported("List.SetPrimaryImage (imageByIDReader)")
@@ -96,14 +103,9 @@ func (uc *ListUsecase) SetPrimaryImage(
 
 		imageURL = strings.TrimSpace(img.URL)
 		if imageURL == "" {
-			// ✅ fallback を厳格化：img.ID が GCS URL なら採用、objectPath なら PublicURL 生成
-			idv := strings.TrimSpace(img.ID)
-			if isImageURL(idv) {
-				imageURL = idv
-			} else if isLikelyObjectPathForList(idv, lid) {
-				// idv is expected to be "{listId}/{imageId}/{fileName}"
-				imageURL = listimgdom.PublicURL(listimgdom.DefaultBucket, idv)
-			}
+			// ✅ strict: if adapter didn't resolve URL, treat as invalid.
+			// (Do not fabricate URL with DefaultBucket.)
+			return listdom.List{}, listdom.ErrInvalidImageID
 		}
 	}
 
@@ -121,18 +123,4 @@ func (uc *ListUsecase) SetPrimaryImage(
 		now.UTC(),
 		normalizeStrPtr(updatedBy),
 	)
-}
-
-// isLikelyObjectPathForList checks whether s looks like "{listId}/{something}/{fileName}"
-// and starts with the given listId.
-func isLikelyObjectPathForList(s string, listID string) bool {
-	s = strings.TrimLeft(strings.TrimSpace(s), "/")
-	if s == "" {
-		return false
-	}
-	parts := strings.Split(s, "/")
-	if len(parts) < 3 {
-		return false
-	}
-	return strings.TrimSpace(parts[0]) == strings.TrimSpace(listID)
 }

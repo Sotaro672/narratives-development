@@ -7,10 +7,13 @@
 //   - 画像一覧取得
 //   - 画像削除
 //   - primary image 設定
+//
+// Policy:
+// - 画像削除の実体は usecase に寄せる（handler は uc.DeleteImage(...) を呼ぶ）。
+// - handler から imgDeleter を撤去済み（types.go に追従）。
 package list
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -94,6 +97,10 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 		return
 	}
 
+	// ✅ contract checks:
+	// - out.ID is imageId (Firestore docID)
+	// - out.Bucket must be provided by issuer (env-fixed; no default)
+	// - out.ObjectPath must be canonical: lists/{listId}/images/{imageId}
 	if strings.TrimSpace(out.UploadURL) == "" ||
 		strings.TrimSpace(out.Bucket) == "" ||
 		strings.TrimSpace(out.ObjectPath) == "" ||
@@ -103,10 +110,26 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 		return
 	}
 
+	// canonical verify (defensive; usecase already checks)
+	obj := strings.TrimLeft(strings.TrimSpace(out.ObjectPath), "/")
+	imgID := strings.TrimSpace(out.ID)
+	prefix := "lists/" + listID + "/images/"
+	if !strings.HasPrefix(obj, prefix) || obj != prefix+imgID {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "signed_url_object_path_not_canonical"})
+		return
+	}
+
 	type resp struct {
-		ID           string `json:"id"`
-		Bucket       string `json:"bucket"`
-		ObjectPath   string `json:"objectPath"`
+		// ✅ id is imageId (Firestore docID)
+		ID string `json:"id"`
+
+		// ✅ bucket is env-fixed and MUST be returned by issuer
+		Bucket string `json:"bucket"`
+
+		// ✅ canonical objectPath: lists/{listId}/images/{imageId}
+		ObjectPath string `json:"objectPath"`
+
 		PublicURL    string `json:"publicUrl"`
 		UploadURL    string `json:"uploadUrl"`
 		ExpiresAt    string `json:"expiresAt"`
@@ -118,9 +141,9 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(resp{
-		ID:           strings.TrimSpace(out.ID),
+		ID:           imgID,
 		Bucket:       strings.TrimSpace(out.Bucket),
-		ObjectPath:   strings.TrimLeft(strings.TrimSpace(out.ObjectPath), "/"),
+		ObjectPath:   obj,
 		PublicURL:    strings.TrimSpace(out.PublicURL),
 		UploadURL:    strings.TrimSpace(out.UploadURL),
 		ExpiresAt:    strings.TrimSpace(out.ExpiresAt),
@@ -134,6 +157,12 @@ func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, lis
 // GET /lists/{id}/images
 func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -154,14 +183,9 @@ func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id stri
 func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID string, imageID string) {
 	ctx := r.Context()
 
-	if h == nil {
+	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "handler is nil"})
-		return
-	}
-	if h.imgDeleter == nil {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
 		return
 	}
 
@@ -179,24 +203,15 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 		return
 	}
 
-	// ✅ Backward-compatible deletion strategy:
-	// - Prefer deleter that can delete by (listID, imageID) (Firestore record + GCS object, etc.)
-	// - Fallback to legacy deleter: Delete(ctx, imageID)
-	//
-	// This allows you to gradually replace h.imgDeleter implementation without changing handler signature.
-	if d2, ok := interface{}(h.imgDeleter).(interface {
-		Delete(ctx context.Context, listID string, imageID string) error
-	}); ok {
-		if err := d2.Delete(ctx, listID, imageID); err != nil {
-			writeListErr(w, err)
+	// ✅ delete is handled by usecase (handler does not depend on adapters)
+	if err := h.uc.DeleteImage(ctx, listID, imageID); err != nil {
+		if isNotSupported(err) {
+			w.WriteHeader(http.StatusNotImplemented)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
 		}
-	} else {
-		// legacy behavior
-		if err := h.imgDeleter.Delete(ctx, imageID); err != nil {
-			writeListErr(w, err)
-			return
-		}
+		writeListErr(w, err)
+		return
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -224,12 +239,19 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 	}
 
 	var req struct {
-		ID           string `json:"id"`
-		FileName     string `json:"fileName"` // kept for request compatibility; not used by usecase
-		Bucket       string `json:"bucket"`
-		ObjectPath   string `json:"objectPath"`
-		Size         int64  `json:"size"`
-		DisplayOrder int    `json:"displayOrder"`
+		// ✅ id is imageId (Firestore docID)
+		ID string `json:"id"`
+
+		FileName string `json:"fileName"` // kept for request compatibility; not used by usecase
+
+		// ✅ bucket is env-fixed and must be provided (from signed-url response)
+		Bucket string `json:"bucket"`
+
+		// ✅ canonical objectPath: lists/{listId}/images/{imageId}
+		ObjectPath string `json:"objectPath"`
+
+		Size         int64 `json:"size"`
+		DisplayOrder int   `json:"displayOrder"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -239,7 +261,7 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 
 	req.ID = strings.TrimSpace(req.ID)
 	req.Bucket = strings.TrimSpace(req.Bucket)
-	req.ObjectPath = strings.TrimSpace(req.ObjectPath)
+	req.ObjectPath = strings.TrimLeft(strings.TrimSpace(req.ObjectPath), "/")
 
 	if req.DisplayOrder < 0 {
 		w.WriteHeader(http.StatusBadRequest)
@@ -247,15 +269,29 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 		return
 	}
 
-	if req.ID == "" || req.ObjectPath == "" {
+	// ✅ required fields
+	if req.ID == "" || req.Bucket == "" || req.ObjectPath == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id and objectPath are required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id, bucket and objectPath are required"})
+		return
+	}
+
+	// ✅ canonical objectPath validation: lists/{listId}/images/{imageId}
+	prefix := "lists/" + listID + "/images/"
+	if !strings.HasPrefix(req.ObjectPath, prefix) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "objectPath_not_canonical"})
+		return
+	}
+	if req.ObjectPath != prefix+req.ID {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "objectPath_id_mismatch"})
 		return
 	}
 
 	img, err := h.uc.SaveImageFromGCS(
 		ctx,
-		req.ID,
+		req.ID, // ✅ imageId
 		listID,
 		req.Bucket,
 		req.ObjectPath,
@@ -280,10 +316,17 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+
 	var req struct {
 		ImageID   string  `json:"imageId"`
 		UpdatedBy *string `json:"updatedBy"`
 		Now       *string `json:"now"`
+		// NOTE: client can send either a URL or an imageId (docID).
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)

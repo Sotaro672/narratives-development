@@ -37,6 +37,5 @@ func NewListHandler(p NewListHandlerParams) http.Handler {
 		qMgmt:       p.QMgmt,
 		qDetail:     p.QDetail,
 		imgUploader: p.ImgUploader,
-		imgDeleter:  nil, // DELETE API abolished
 	}
 }

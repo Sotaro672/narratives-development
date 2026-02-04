@@ -66,6 +66,22 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case "images":
+			// /lists/{id}/images/{sub}
+			sub := ""
+			if len(parts) >= 3 {
+				sub = strings.TrimSpace(parts[2])
+			}
+
+			// ✅ /lists/{id}/images/signed-url (先に判定して安全にする)
+			if strings.EqualFold(sub, "signed-url") {
+				if r.Method != http.MethodPost {
+					methodNotAllowed(w)
+					return
+				}
+				h.issueSignedURL(w, r, id)
+				return
+			}
+
 			// /lists/{id}/images
 			if len(parts) == 2 {
 				switch r.Method {
@@ -80,22 +96,6 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					methodNotAllowed(w)
 					return
 				}
-			}
-
-			// /lists/{id}/images/{sub}
-			sub := ""
-			if len(parts) >= 3 {
-				sub = strings.TrimSpace(parts[2])
-			}
-
-			// /lists/{id}/images/signed-url
-			if strings.EqualFold(sub, "signed-url") {
-				if r.Method != http.MethodPost {
-					methodNotAllowed(w)
-					return
-				}
-				h.issueSignedURL(w, r, id)
-				return
 			}
 
 			// /lists/{id}/images/{imageId} DELETE

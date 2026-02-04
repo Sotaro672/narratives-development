@@ -22,19 +22,19 @@ import (
 // Env var key (Cloud Run / local .env) for list image bucket.
 const EnvListImageBucket = "LIST_IMAGE_BUCKET"
 
-// Fallback bucket name (期待値: narratives-development-list).
-const FallbackListImageBucket = "narratives-development-list"
-
 // ListImageRepositoryGCS is a small GCS adapter for List images.
-// - 「listId/」配下に複数画像を保存できる設計
-// - objectPath: {listId}/{imageId}/{fileName}
+// - Bucket is fixed per environment (single bucket).
+// - objectPath is canonical:
+//
+//	lists/{listId}/images/{imageId}
 //
 // NOTE:
 // - ファイル名の正規化は package gcs の sanitizeFileName を再利用する。
 // - ".keep" 除外は package gcs の isKeepObject を再利用する。
+// - fileName は objectPath に含めず、metadata / Firestore レコードとして保持する。
 type ListImageRepositoryGCS struct {
 	Client *storage.Client
-	Bucket string // optional (if empty, use env or fallback)
+	Bucket string // optional override; if empty, use env (required)
 }
 
 func NewListImageRepositoryGCS(client *storage.Client, bucket string) *ListImageRepositoryGCS {
@@ -47,23 +47,26 @@ func NewListImageRepositoryGCS(client *storage.Client, bucket string) *ListImage
 // ResolveBucket decides bucket by:
 // 1) repository.Bucket
 // 2) env LIST_IMAGE_BUCKET
-// 3) FallbackListImageBucket
-func (r *ListImageRepositoryGCS) ResolveBucket() string {
+//
+// IMPORTANT:
+// - bucket is required (env-fixed). No fallback.
+func (r *ListImageRepositoryGCS) ResolveBucket() (string, error) {
 	if r != nil {
 		if b := strings.TrimSpace(r.Bucket); b != "" {
-			return b
+			return b, nil
 		}
 	}
 	if b := strings.TrimSpace(os.Getenv(EnvListImageBucket)); b != "" {
-		return b
+		return b, nil
 	}
-	return FallbackListImageBucket
+	return "", fmt.Errorf("ListImageRepositoryGCS.ResolveBucket: %s is required", EnvListImageBucket)
 }
 
 // ============================================================
 // ✅ (Optional) Create-time init: EnsureListBucket
-// - usecase/list.ListImageBucketInitializer implementation
-// - "bucket を作る" ではなく "{listId}/.keep" を作る方式（prefix 初期化）
+// - Kept only for backward compatibility / historical design.
+// - It does NOT create a bucket; it creates a "{prefix}/.keep" object.
+// - With single-bucket policy, you typically don't need this.
 // ============================================================
 
 func (r *ListImageRepositoryGCS) EnsureListBucket(ctx context.Context, listID string) error {
@@ -76,14 +79,18 @@ func (r *ListImageRepositoryGCS) EnsureListBucket(ctx context.Context, listID st
 		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: listID is empty")
 	}
 
-	bucket := r.ResolveBucket()
+	bucket, err := r.ResolveBucket()
+	if err != nil {
+		return err
+	}
 
 	prefix := sanitizePathSegment(listID)
 	if prefix == "" {
 		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: invalid listID")
 	}
 
-	keepObject := path.Join(prefix, ".keep")
+	// NOTE: This keep path is under canonical root as well.
+	keepObject := path.Join("lists", prefix, "images", ".keep")
 	obj := r.Client.Bucket(bucket).Object(keepObject)
 
 	// Only create if not exist (best-effort)
@@ -102,13 +109,72 @@ func (r *ListImageRepositoryGCS) EnsureListBucket(ctx context.Context, listID st
 }
 
 // ============================================================
+// ✅ Delete (usecase port implementation)
+// - usecase.DeleteImage(ctx, listID, imageID) → (this repo)
+// - This implementation deletes only the GCS object.
+//   (Firestore record deletion is handled by Firestore repo side if needed.)
+// ============================================================
+
+func (r *ListImageRepositoryGCS) Delete(ctx context.Context, listID string, imageID string) error {
+	if r == nil || r.Client == nil {
+		return fmt.Errorf("ListImageRepositoryGCS.Delete: storage client is nil")
+	}
+
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+
+	if listID == "" {
+		return listimagedom.ErrInvalidListID
+	}
+	if imageID == "" {
+		return listimagedom.ErrInvalidID
+	}
+	// Policy A: imageId only
+	if strings.Contains(imageID, "/") {
+		return fmt.Errorf("ListImageRepositoryGCS.Delete: invalid imageID")
+	}
+
+	bucket, err := r.ResolveBucket()
+	if err != nil {
+		return err
+	}
+
+	objPath, err := buildCanonicalListImageObjectPath(listID, imageID)
+	if err != nil {
+		return err
+	}
+
+	obj := r.Client.Bucket(bucket).Object(objPath)
+	if err := obj.Delete(ctx); err != nil {
+		// NotFound は成功扱い（idempotent）
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return nil
+		}
+		// googleapi.Error でも NotFound を吸収
+		if ge, ok := err.(*googleapi.Error); ok && ge.Code == 404 {
+			return nil
+		}
+		return fmt.Errorf("ListImageRepositoryGCS.Delete: delete failed: %w", err)
+	}
+
+	return nil
+}
+
+// ============================================================
 // ✅ A) signed-url: IssueSignedURL (usecase port implementation)
 // - handler → usecase/list → (this repo)
 // ============================================================
 
 // IssueSignedURL issues a signed PUT url for uploading list images.
-// ObjectPath policy: {listId}/{imageId}/{fileName}
-// Returns ID as objectPath (so POST /lists/{id}/images can SaveFromBucketObject using it).
+//
+// Canonical policy:
+// - out.ID is imageId (Firestore docID).
+// - out.ObjectPath is "lists/{listId}/images/{imageId}" (MUST be canonical).
+// - out.Bucket MUST be provided (env-fixed). No defaults.
+//
+// NOTE:
+// - fileName is NOT part of objectPath. It is returned and should be persisted in Firestore record / metadata.
+// - If you need to change filename later, it won't change objectPath (supports overwrite update policy).
 func (r *ListImageRepositoryGCS) IssueSignedURL(
 	ctx context.Context,
 	in listuc.ListImageIssueSignedURLInput,
@@ -141,7 +207,7 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 		)
 	}
 
-	// Normalize fileName
+	// Normalize fileName (not used for object path; for record/metadata)
 	normName := strings.TrimSpace(in.FileName)
 	if normName == "" {
 		normName = "image"
@@ -152,12 +218,16 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 	// Resolve imageID (always generate for signed-url flow)
 	imgID := newObjectID()
 
-	objPath, err := buildListImageObjectPath(listID, imgID, normName)
+	// Canonical objectPath: lists/{listId}/images/{imageId}
+	objPath, err := buildCanonicalListImageObjectPath(listID, imgID)
 	if err != nil {
 		return listuc.ListImageIssueSignedURLOutput{}, err
 	}
 
-	bucket := r.ResolveBucket()
+	bucket, err := r.ResolveBucket()
+	if err != nil {
+		return listuc.ListImageIssueSignedURLOutput{}, err
+	}
 
 	// expiry
 	sec := in.ExpiresInSeconds
@@ -183,10 +253,9 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objPath)
 
 	return listuc.ListImageIssueSignedURLOutput{
-		// ✅ 方針: ID = objectPath
-		ID:           objPath,
-		Bucket:       bucket,
-		ObjectPath:   objPath,
+		ID:           imgID,   // ✅ imageId
+		Bucket:       bucket,  // ✅ required
+		ObjectPath:   objPath, // ✅ canonical
 		UploadURL:    uploadURL,
 		PublicURL:    publicURL,
 		FileName:     normName,
@@ -217,7 +286,7 @@ func isSupportedListImageMIME(mime string) bool {
 // - SaveFromBucketObject(ctx, id, listID, bucket, objectPath, size, displayOrder) (ListImage, error)
 // ============================================================
 
-// ListByListID lists images under "{listId}/" prefix.
+// ListByListID lists images under "lists/{listId}/images/" prefix.
 // It returns domain ListImage items (best-effort).
 func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string) ([]listimagedom.ListImage, error) {
 	if r == nil || r.Client == nil {
@@ -229,13 +298,17 @@ func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string
 		return []listimagedom.ListImage{}, nil
 	}
 
-	bucket := r.ResolveBucket()
-	prefix := sanitizePathSegment(listID)
-	if prefix == "" {
+	bucket, err := r.ResolveBucket()
+	if err != nil {
+		return nil, err
+	}
+
+	lid := sanitizePathSegment(listID)
+	if lid == "" {
 		return []listimagedom.ListImage{}, nil
 	}
-	prefix = prefix + "/"
 
+	prefix := path.Join("lists", lid, "images") + "/"
 	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{Prefix: prefix})
 
 	out := make([]listimagedom.ListImage, 0, 16)
@@ -274,16 +347,30 @@ func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string
 
 // GetByID gets a ListImage by id.
 // id can be:
-// - objectPath within the bucket (e.g. "{listId}/{imageId}/{fileName}")
+// - imageId (Firestore docID)  => resolve to canonical objectPath "lists/{listId}/images/{imageId}" only when listId can be determined via metadata lookup is not possible.
+// - objectPath within the bucket (e.g. "lists/{listId}/images/{imageId}")
 // - https://storage.googleapis.com/{bucket}/{objectPath}
+//
+// NOTE:
+// - For canonical design, prefer calling GetByID with objectPath or URL when using GCS as source-of-truth.
+// - In your current system, Firestore (/lists/{listId}/images/{imageId}) should be source-of-truth for imageId lookup.
 func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, id string) (listimagedom.ListImage, error) {
 	if r == nil || r.Client == nil {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.GetByID: storage client is nil")
 	}
 
-	bucket, objectPath, err := resolveBucketObjectForListImage(strings.TrimSpace(id), r.ResolveBucket())
+	bucket, objectPath, err := resolveBucketObjectForListImage(strings.TrimSpace(id), "")
 	if err != nil {
 		return listimagedom.ListImage{}, err
+	}
+
+	// bucket must be resolved (env-fixed) when not embedded in URL
+	if bucket == "" {
+		b, berr := r.ResolveBucket()
+		if berr != nil {
+			return listimagedom.ListImage{}, berr
+		}
+		bucket = b
 	}
 
 	attrs, err := r.Client.Bucket(bucket).Object(objectPath).Attrs(ctx)
@@ -303,11 +390,15 @@ func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, id string) (listim
 
 // SaveFromBucketObject:
 // - already-uploaded object を前提に、GCS metadata を整えて domain ListImage を返す。
-// - objectPath policy は "{listId}/{imageId}/{fileName}" を推奨。
-// - id は objectPath を採用（= GetByID で一意に引ける）
+// - objectPath は canonical: "lists/{listId}/images/{imageId}" を必須。
+// - id は imageId を採用（Firestore docID と同義）
+//
+// IMPORTANT:
+// - objectPath と id(imageId) の整合性を検証する。
+// - fileName は objectPath に含めず、metadata に保持する。
 func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	ctx context.Context,
-	id string,
+	id string, // ✅ imageId
 	listID string,
 	bucket string,
 	objectPath string,
@@ -318,6 +409,11 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: storage client is nil")
 	}
 
+	imageID := strings.TrimSpace(id)
+	if imageID == "" {
+		return listimagedom.ListImage{}, listimagedom.ErrInvalidID
+	}
+
 	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return listimagedom.ListImage{}, listimagedom.ErrInvalidListID
@@ -325,27 +421,21 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 
 	b := strings.TrimSpace(bucket)
 	if b == "" {
-		b = r.ResolveBucket()
+		bk, err := r.ResolveBucket()
+		if err != nil {
+			return listimagedom.ListImage{}, err
+		}
+		b = bk
 	}
 
-	// prefer explicit objectPath; fallback to id (which is expected to be objectPath)
 	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if obj == "" {
-		obj = strings.TrimLeft(strings.TrimSpace(id), "/")
-	}
 	if obj == "" {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: objectPath is empty")
 	}
 
-	// final id: policy = objectPath
-	finalID := strings.TrimSpace(id)
-	if finalID == "" {
-		finalID = obj
-	} else {
-		// id が URL で来た場合でも、ここでは objectPath を採用（GetByID と整合）
-		if _, _, ok := listimagedom.ParseGCSURL(finalID); ok {
-			finalID = obj
-		}
+	// ✅ canonical validation: lists/{listId}/images/{imageId}
+	if err := validateCanonicalObjectPath(listID, imageID, obj); err != nil {
+		return listimagedom.ListImage{}, err
 	}
 
 	// object exists?
@@ -358,19 +448,14 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: attrs failed: %w", err)
 	}
 
-	// imageId は objectPath から推定して metadata に入れる（複数画像対応）
-	_, imageID, ok := splitListImageObjectPath(obj)
-	if !ok || strings.TrimSpace(imageID) == "" {
-		imageID = newObjectID()
-	}
-
-	// fileName: metadata 優先 → objectPath の base
+	// fileName: metadata 優先（signed-url responseの fileName を Firestore に保存する想定）
+	// fallback: use object base (imageId) - not ideal, but keeps system alive
 	fn := ""
 	if attrs.Metadata != nil {
 		fn = strings.TrimSpace(attrs.Metadata["fileName"])
 	}
 	if fn == "" {
-		fn = path.Base(obj)
+		fn = "image"
 	}
 	fn = sanitizeFileName(fn)
 	if fn == "" {
@@ -394,7 +479,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		meta[k] = v
 	}
 
-	// ✅ listId は引数を優先して正す（prefix 側 sanitize の影響を受けない）
+	// ✅ listId/imageId は引数を正とする
 	meta["listId"] = listID
 	meta["imageId"] = imageID
 	meta["fileName"] = fn
@@ -402,15 +487,15 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	meta["size"] = fmt.Sprint(finalSize)
 	meta["displayOrder"] = fmt.Sprint(displayOrder)
 
-	// metadata update
+	// metadata update (best-effort)
 	newAttrs, err := o.Update(ctx, storage.ObjectAttrsToUpdate{Metadata: meta})
 	if err != nil {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: update metadata failed: %w", err)
 	}
 
-	// domain object (id = objectPath)
+	// domain object: id is imageId, URL derived from canonical objectPath
 	li, derr := listimagedom.NewFromGCSObject(
-		strings.TrimSpace(finalID), // ✅ id
+		imageID, // ✅ id is imageId
 		listID,
 		fn,
 		finalSize,
@@ -421,7 +506,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	if derr != nil {
 		// best-effort fallback（domain validate が落ちても UI を止めない）
 		tmp := listimagedom.ListImage{
-			ID:           strings.TrimSpace(finalID),
+			ID:           imageID,
 			ListID:       listID,
 			URL:          publicURL,
 			FileName:     fn,
@@ -431,7 +516,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		return tmp, nil
 	}
 
-	// URL はメタの url を優先
+	// URL は publicURL を採用
 	if strings.TrimSpace(publicURL) != "" {
 		_ = li.UpdateURL(publicURL)
 	}
@@ -443,12 +528,12 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 // Helpers
 // ------------------------------------------------------------
 
-func buildListImageObjectPath(listID, imageID, fileName string) (string, error) {
+// buildCanonicalListImageObjectPath returns canonical objectPath:
+//
+//	lists/{listId}/images/{imageId}
+func buildCanonicalListImageObjectPath(listID, imageID string) (string, error) {
 	lid := sanitizePathSegment(listID)
 	iid := sanitizePathSegment(imageID)
-
-	// fileName は sanitizeFileName() 済みで入ってくる想定（同一 package の関数を再利用）
-	fn := strings.TrimSpace(fileName)
 
 	if lid == "" {
 		return "", fmt.Errorf("listImage: invalid listID for object path")
@@ -456,12 +541,26 @@ func buildListImageObjectPath(listID, imageID, fileName string) (string, error) 
 	if iid == "" {
 		return "", fmt.Errorf("listImage: invalid imageID for object path")
 	}
-	if fn == "" {
-		return "", fmt.Errorf("listImage: invalid fileName for object path")
+
+	return path.Join("lists", lid, "images", iid), nil
+}
+
+func validateCanonicalObjectPath(listID, imageID, objectPath string) error {
+	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	if obj == "" {
+		return fmt.Errorf("listImage: objectPath is empty")
 	}
 
-	// {listId}/{imageId}/{fileName}
-	return path.Join(lid, iid, fn), nil
+	want, err := buildCanonicalListImageObjectPath(listID, imageID)
+	if err != nil {
+		return err
+	}
+
+	// must be exact match
+	if obj != want {
+		return fmt.Errorf("listImage: objectPath not canonical: got=%q want=%q", obj, want)
+	}
+	return nil
 }
 
 func resolveBucketObjectForListImage(id string, fallbackBucket string) (bucket string, objectPath string, err error) {
@@ -474,11 +573,12 @@ func resolveBucketObjectForListImage(id string, fallbackBucket string) (bucket s
 	if b, obj, ok := listimagedom.ParseGCSURL(id); ok {
 		bucket, objectPath = strings.TrimSpace(b), strings.TrimLeft(strings.TrimSpace(obj), "/")
 	} else {
+		// if the caller passed objectPath directly, bucket may be empty here and should be resolved by caller
 		bucket = strings.TrimSpace(fallbackBucket)
 		objectPath = strings.TrimLeft(strings.TrimSpace(id), "/")
 	}
 
-	if bucket == "" || objectPath == "" {
+	if objectPath == "" {
 		return "", "", listimagedom.ErrNotFound
 	}
 	return bucket, objectPath, nil
@@ -503,21 +603,32 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		return strings.TrimSpace(meta[k])
 	}
 
-	// listID: metadata 優先（sanitize の影響を受けない）
+	// listID: metadata 優先 → fallback to canonical path
 	listID := getMeta("listId")
-	if listID == "" {
-		lid, _, ok := splitListImageObjectPath(obj)
+	imageID := getMeta("imageId")
+
+	if listID == "" || imageID == "" {
+		lid, iid, ok := splitCanonicalListImageObjectPath(obj)
 		if !ok {
 			// 期待ポリシー外の object は除外（安全側）
 			return listimagedom.ListImage{}, false
 		}
-		listID = lid
+		if listID == "" {
+			listID = lid
+		}
+		if imageID == "" {
+			imageID = iid
+		}
+	}
+
+	if strings.TrimSpace(listID) == "" || strings.TrimSpace(imageID) == "" {
+		return listimagedom.ListImage{}, false
 	}
 
 	// fileName
 	fileName := getMeta("fileName")
 	if fileName == "" {
-		fileName = path.Base(obj)
+		fileName = "image"
 	}
 	fileName = sanitizeFileName(fileName)
 	if fileName == "" {
@@ -546,8 +657,8 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		}
 	}
 
-	// id は objectPath を採用（= GetByID で一意）
-	id := obj
+	// id is imageId (Firestore docID)
+	id := strings.TrimSpace(imageID)
 
 	li, err := listimagedom.NewFromGCSObject(
 		id,
@@ -578,18 +689,25 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 	return li, true
 }
 
-// splitListImageObjectPath expects "{listId}/{imageId}/{fileName}".
-func splitListImageObjectPath(objectPath string) (listID string, imageID string, ok bool) {
+// splitCanonicalListImageObjectPath expects "lists/{listId}/images/{imageId}".
+func splitCanonicalListImageObjectPath(objectPath string) (listID string, imageID string, ok bool) {
 	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if p == "" {
 		return "", "", false
 	}
 	parts := strings.Split(p, "/")
-	if len(parts) < 3 {
+	// lists/{listId}/images/{imageId}
+	if len(parts) < 4 {
 		return "", "", false
 	}
-	listID = strings.TrimSpace(parts[0])
-	imageID = strings.TrimSpace(parts[1])
+	if strings.TrimSpace(parts[0]) != "lists" {
+		return "", "", false
+	}
+	if strings.TrimSpace(parts[2]) != "images" {
+		return "", "", false
+	}
+	listID = strings.TrimSpace(parts[1])
+	imageID = strings.TrimSpace(parts[3])
 	if listID == "" || imageID == "" {
 		return "", "", false
 	}

@@ -32,9 +32,17 @@ type ListImageIssueSignedURLInput struct {
 }
 
 type ListImageIssueSignedURLOutput struct {
-	// id は objectPath を採用（SaveFromBucketObject / GetByID で一意に引ける）
-	ID         string `json:"id"`
-	Bucket     string `json:"bucket"`
+	// ✅ ID is imageId (Firestore docID).
+	// - This MUST NOT be objectPath.
+	// - Canonical objectPath is built as: "lists/{listId}/images/{imageId}".
+	// - imageId is stable even if fileName changes (supports overwrite update policy).
+	ID string `json:"id"`
+
+	// ✅ Bucket must be provided by issuer (env-fixed). No defaults in usecase.
+	Bucket string `json:"bucket"`
+
+	// ✅ Canonical objectPath (required):
+	//   lists/{listId}/images/{imageId}
 	ObjectPath string `json:"objectPath"`
 
 	// signed url
@@ -93,12 +101,15 @@ type ListPatcher interface {
 
 // ListImageReader は ListID に紐づく ListImage 一覧の取得契約です。
 // NOTE:
-// - 今後の推奨: Firestore の /lists/{listId}/images サブコレクションを source of truth とする。
+// - 推奨: Firestore の /lists/{listId}/images サブコレクションを source of truth とする。
 type ListImageReader interface {
 	ListByListID(ctx context.Context, listID string) ([]listimgdom.ListImage, error)
 }
 
 // ListImageByIDReader は ListImage を主キーで取得する契約です。
+// NOTE:
+// - id は imageId (Firestore docID) または互換入力（URL/objectPath）を実装側で解釈して良い。
+// - 推奨: imageId を正として扱う。
 type ListImageByIDReader interface {
 	GetByID(ctx context.Context, id string) (listimgdom.ListImage, error)
 }
@@ -107,6 +118,8 @@ type ListImageByIDReader interface {
 type ListImageObjectSaver interface {
 	SaveFromBucketObject(
 		ctx context.Context,
+		// ✅ id is imageId (Firestore docID).
+		// Canonical objectPath: "lists/{listId}/images/{imageId}".
 		id string,
 		listID string,
 		bucket string,
@@ -116,7 +129,47 @@ type ListImageObjectSaver interface {
 	) (listimgdom.ListImage, error)
 }
 
-// ✅ Create 時に「listId の名前のバケット」を初期化したい場合のオプショナル契約。
+// ListImageRecordRepository is a persistence port for list images (Firestore subcollection).
+// Expected target:
+// - /lists/{listId}/images/{imageId}   (docID = imageId)
+type ListImageRecordRepository interface {
+	// Upsert stores the ListImage record (idempotent).
+	Upsert(ctx context.Context, img listimgdom.ListImage) (listimgdom.ListImage, error)
+}
+
+// ListPrimaryImageSetter updates list's primary image URL cache (List.ImageID).
+// Recommended behavior:
+// - If list.imageId is empty, set it to imageURL
+// - Or if displayOrder==0, set it to imageURL
+// ListPrimaryImageSetter updates list's primary image (docID cache) on List.ImageID.
+//
+// Policy A (recommended):
+// - List.ImageID stores "primary imageId (Firestore docID)".
+// - Empty string means "unset".
+type ListPrimaryImageSetter interface {
+	// SetPrimaryImageID sets list.image_id to imageID (Firestore docID).
+	// - imageID == "" means unset.
+	// - Implementations may validate that the image exists under /lists/{listId}/images/{imageId}.
+	SetPrimaryImageID(ctx context.Context, listID string, imageID string, now time.Time) error
+
+	// Optional helper:
+	// SetPrimaryImageIfEmpty sets primary image only when current primary is empty.
+	// (Implementations may no-op if already set.)
+	SetPrimaryImageIfEmpty(ctx context.Context, listID string, imageID string, now time.Time) error
+}
+
+// ✅ NEW: ListImageDeleter deletes list image (Firestore record + GCS object).
+// Canonical call is Delete(ctx, listID, imageID).
+// - handler から deleter を撤去し、usecase から port として呼ぶ前提。
+type ListImageDeleter interface {
+	Delete(ctx context.Context, listID string, imageID string) error
+}
+
+// NOTE:
+//   - Bucket is fixed per environment (recommended).
+//   - Therefore, bucket-initialization by listId is NOT used.
+//   - Kept only for backward compatibility / historical design.
+//     (Prefer removing once all callers are cleaned up.)
 type ListImageBucketInitializer interface {
 	EnsureListBucket(ctx context.Context, listID string) error
 }
@@ -149,11 +202,13 @@ type ListUsecase struct {
 
 	// ✅ NEW (for multi-image persistence):
 	// Firestore subcollection (/lists/{listId}/images) へ画像レコードを永続化するための port。
-	// ※ interface 定義は feature_images.go 側で宣言済み（同一packageなので参照可能）
 	listImageRecordRepo ListImageRecordRepository
 
 	// ✅ NEW (for primary image cache update):
 	// list 本体の primary image(URL cache) を更新するための port。
-	// ※ interface 定義は feature_images.go 側で宣言済み（同一packageなので参照可能）
 	listPrimaryImageSetter ListPrimaryImageSetter
+
+	// ✅ NEW (for delete):
+	// handler から deleter を撤去し、usecase が port を持って削除を実行する。
+	listImageDeleter ListImageDeleter
 }

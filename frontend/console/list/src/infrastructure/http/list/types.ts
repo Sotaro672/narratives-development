@@ -82,7 +82,6 @@ export type ListAggregateDTO = Record<string, any>;
 
 /**
  * ✅ ListImage DTO（backend 依存を避けるため Record<any> を基本にする）
- * - ただし bucket/objectPath/publicUrl 等、URL 生成に必要なキーは代表的な候補を吸収する
  */
 export type ListImageDTO = Record<string, any>;
 
@@ -90,22 +89,25 @@ export type ListImageDTO = Record<string, any>;
  * ✅ Signed URL 発行の戻り（Policy A）
  *
  * IMPORTANT:
- * - backend の返却は uploadUrl/publicUrl/objectPath/id... になりがち
- * - UI/呼び出し側は signedUrl を使いたいケースがあるため、この DTO では signedUrl を正とし、
- *   issueListImageSignedUrlHTTP 内で uploadUrl → signedUrl に正規化する
+ * - 旧式互換は削除（uploadUrl 等の別名吸収はしない）
+ * - id は Firestore の images サブコレ docId (= imageId) を必須
+ * - objectPath は "{listId}/{imageId}/{fileName}" を必須
+ * - bucket は環境固定で必須（issuer が必ず埋める）
  */
 export type SignedListImageUploadDTO = {
-  id?: string;
+  /** ✅ Firestore docId と同義の imageId（必須） */
+  id: string;
 
-  bucket?: string;
+  /** ✅ 環境固定 bucket（必須） */
+  bucket: string;
 
-  // ✅ 必須（= GCS 上の objectPath / key）
+  /** ✅ "{listId}/{imageId}/{fileName}"（必須） */
   objectPath: string;
 
-  // ✅ PUT 先（= signed URL）
+  /** ✅ PUT 先（= signed URL）（必須） */
   signedUrl: string;
 
-  // ✅ 表示用（public access を想定）
+  /** ✅ 表示用（public access を想定） */
   publicUrl?: string;
 
   // optional metadata

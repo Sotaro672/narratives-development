@@ -38,6 +38,10 @@ type ListPriceRow struct {
 // - ReadableID: human-friendly id (NOT required to be unique)
 // - InventoryID: inventory document id (ex: productBlueprintId__tokenBlueprintId)
 // - Prices: array (ONLY)
+//
+// ✅ Primary image policy (A):
+// - List.ImageID stores "primary imageId (Firestore docID)" (NOT URL).
+// - Image URLs are always built from /lists/{listId}/images subcollection in query layer.
 type List struct {
 	ID         string     `json:"id,omitempty"`
 	ReadableID string     `json:"readableId,omitempty"`
@@ -49,8 +53,8 @@ type List struct {
 	// ✅ 1 inventory can have multiple lists (A/B test)
 	InventoryID string `json:"inventoryId,omitempty"`
 
-	// ✅ Policy: List.ImageID stores "image URL on bucket" (NOT image entity id)
-	// Optional at create; can be set later via SetPrimaryImageURL
+	// ✅ Policy A: primary image ID (= /lists/{listId}/images/{imageId} docID)
+	// NOTE: json tag remains "imageId" for compatibility with existing frontend DTO shape.
 	ImageID string `json:"imageId,omitempty"`
 
 	Description string         `json:"description,omitempty"`
@@ -66,8 +70,6 @@ type List struct {
 }
 
 // ✅ NEW: GetID makes List satisfy interfaces like `interface{ GetID() string }`
-// used by generic usecase helpers (e.g. ListUsecase.Update).
-// NOTE: value receiver is important so `List` (not only `*List`) satisfies it.
 func (l List) GetID() string {
 	return strings.TrimSpace(l.ID)
 }
@@ -95,9 +97,9 @@ var (
 	ErrInvalidDeletedAt = errors.New("list: invalid deletedAt")
 	ErrInvalidDeletedBy = errors.New("list: invalid deletedBy")
 
-	// Image linkage errors (now "URL")
+	// ✅ Primary image linkage errors (now "imageId docID")
 	ErrEmptyImageID   = errors.New("list: imageId must not be empty")
-	ErrInvalidImageID = errors.New("list: invalid imageId (url)")
+	ErrInvalidImageID = errors.New("list: invalid imageId (docID)")
 )
 
 // Policy (align with listConstants.ts as needed)
@@ -110,8 +112,8 @@ var (
 	// ✅ human-friendly id guard
 	MaxReadableIDLength = 64
 
-	// ✅ URL length guard (practical limit)
-	MaxImageURLLength = 2048
+	// ✅ primary image id guard (docID)
+	MaxImageIDLength = 128
 )
 
 // =====================
@@ -122,7 +124,7 @@ var (
 // - ID can be empty (server generates)
 // - CreatedAt can be zero (repo fills)
 // - ReadableID can be empty (set later)
-// - ImageID(URL) can be empty (set later)
+// - ImageID(primary imageId) can be empty (set later)
 func NewForCreate(
 	status ListStatus,
 	assigneeID string,
@@ -137,12 +139,15 @@ func NewForCreate(
 	}
 	l := List{
 		ID:          "",
-		ReadableID:  "", // optional; can be set later
+		ReadableID:  "",
 		Status:      status,
 		AssigneeID:  strings.TrimSpace(assigneeID),
 		Title:       strings.TrimSpace(title),
 		InventoryID: strings.TrimSpace(inventoryID),
-		ImageID:     "", // optional at create
+
+		// ✅ primary imageId is optional at create
+		ImageID: "",
+
 		Description: strings.TrimSpace(description),
 		Prices:      normalizePriceRows(prices),
 		CreatedBy:   strings.TrimSpace(createdBy),
@@ -177,7 +182,6 @@ func (l *List) UpdateReadableID(readableID string, now time.Time) error {
 	}
 	rid := strings.TrimSpace(readableID)
 	if rid == "" {
-		// allow clearing
 		l.ReadableID = ""
 		l.touch(now)
 		return nil
@@ -242,35 +246,47 @@ func (l *List) Resume(now time.Time) error {
 	return nil
 }
 
-// SetPrimaryImageURL sets List.ImageID as "image URL".
-// - persisted list only (ID required) is recommended, but URL自体はセットできる
-func (l *List) SetPrimaryImageURL(imageURL string, now time.Time) error {
+// ✅ Policy A: SetPrimaryImageID sets List.ImageID as "primary imageId (docID)".
+// - empty is NOT allowed here. Use ClearPrimaryImageID to unset.
+func (l *List) SetPrimaryImageID(imageID string, now time.Time) error {
 	if l == nil {
 		return nil
 	}
-	u := strings.TrimSpace(imageURL)
-	if u == "" {
+	id := strings.TrimSpace(imageID)
+	if id == "" {
 		return ErrEmptyImageID
 	}
-	if !isValidImageURL(u) {
+	if !isValidImageID(id) {
 		return ErrInvalidImageID
 	}
-	// persisted 前提で運用するなら、ここを必須にしてもよい
 	if strings.TrimSpace(l.ID) == "" {
 		return ErrInvalidID
 	}
-	l.ImageID = u
+	l.ImageID = id
 	l.touch(now)
 	return nil
 }
 
-// ValidateImageLink checks only "if ImageID is set, it's a valid URL".
+// ✅ ClearPrimaryImageID unsets primary image id (allowed).
+func (l *List) ClearPrimaryImageID(now time.Time) error {
+	if l == nil {
+		return nil
+	}
+	if strings.TrimSpace(l.ID) == "" {
+		return ErrInvalidID
+	}
+	l.ImageID = ""
+	l.touch(now)
+	return nil
+}
+
+// ValidateImageLink checks only "if ImageID is set, it's a valid docID".
 func (l List) ValidateImageLink() error {
-	u := strings.TrimSpace(l.ImageID)
-	if u == "" {
+	id := strings.TrimSpace(l.ImageID)
+	if id == "" {
 		return ErrEmptyImageID
 	}
-	if !isValidImageURL(u) {
+	if !isValidImageID(id) {
 		return ErrInvalidImageID
 	}
 	return nil
@@ -284,7 +300,7 @@ func (l List) ValidateImageLink() error {
 // - ID can be empty
 // - CreatedAt can be zero (repo fills)
 // - ReadableID can be empty (set later)
-// - ImageID can be empty (set later)
+// - ImageID(primary imageId) can be empty (set later)
 func (l List) ValidateForCreate() error {
 	if l.Status == "" {
 		// allow default
@@ -318,9 +334,9 @@ func (l List) ValidateForCreate() error {
 		}
 	}
 
-	// Optional fields
+	// Optional fields: primary imageId
 	if strings.TrimSpace(l.ImageID) != "" {
-		if !isValidImageURL(strings.TrimSpace(l.ImageID)) {
+		if !isValidImageID(strings.TrimSpace(l.ImageID)) {
 			return ErrInvalidImageID
 		}
 	}
@@ -379,9 +395,9 @@ func (l List) ValidateForPersist() error {
 		}
 	}
 
-	// Optional but if set must be valid
+	// Optional but if set must be valid (docID)
 	if strings.TrimSpace(l.ImageID) != "" {
-		if !isValidImageURL(strings.TrimSpace(l.ImageID)) {
+		if !isValidImageID(strings.TrimSpace(l.ImageID)) {
 			return ErrInvalidImageID
 		}
 	}
@@ -403,7 +419,6 @@ func (l List) ValidateForPersist() error {
 
 func validatePriceRows(rows []ListPriceRow) error {
 	if rows == nil {
-		// allow empty
 		return nil
 	}
 	for _, r := range rows {
@@ -450,7 +465,6 @@ func normalizePriceRows(in []ListPriceRow) []ListPriceRow {
 		if !priceAllowed(v.Price) {
 			continue
 		}
-		// dedupe by modelId (keep first)
 		if _, ok := seen[mid]; ok {
 			continue
 		}
@@ -464,32 +478,9 @@ func normalizePriceRows(in []ListPriceRow) []ListPriceRow {
 	return out
 }
 
-// isValidImageURL validates bucket URL.
-// Accept:
-// - https://... (public URL or signed URL)
-// - http://...  (dev)
-// - gs://...    (GCS URL)
-func isValidImageURL(u string) bool {
-	u = strings.TrimSpace(u)
-	if u == "" {
-		return false
-	}
-	if len(u) > MaxImageURLLength {
-		return false
-	}
-	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "gs://") {
-		return true
-	}
-	return false
-}
-
 var readableIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 // isValidReadableID validates a human-friendly id (NOT unique).
-// Example allowed:
-// - "LIST-001"
-// - "ab_test-A"
-// - "spring_sale_2026"
 func isValidReadableID(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -499,4 +490,24 @@ func isValidReadableID(s string) bool {
 		return false
 	}
 	return readableIDRe.MatchString(s)
+}
+
+// ✅ isValidImageID validates Firestore docID-like primary image id.
+// - must not include "/"
+// - reasonable length guard
+// - allow hex(24) and other safe ids (base64url-ish) to avoid overfitting
+var imageIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+func isValidImageID(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	if len(id) > MaxImageIDLength {
+		return false
+	}
+	if strings.Contains(id, "/") {
+		return false
+	}
+	return imageIDRe.MatchString(id)
 }

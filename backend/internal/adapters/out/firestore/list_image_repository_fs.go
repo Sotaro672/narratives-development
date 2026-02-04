@@ -1,10 +1,9 @@
-// backend\internal\adapters\out\firestore\list_image_repository_fs.go
+// backend/internal/adapters/out/firestore/list_image_repository_fs.go
 package firestore
 
 import (
 	"context"
 	"errors"
-	"path"
 	"strings"
 	"time"
 
@@ -13,27 +12,28 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	usecase "narratives/internal/application/usecase"
 	listuc "narratives/internal/application/usecase/list"
 	listimgdom "narratives/internal/domain/listImage"
 )
 
-// Firestore schema (recommended):
-// - lists/{listId}/images/{imageId}
+// Firestore schema (canonical only):
+// - lists/{listId}/images/{imageId}   // ✅ docID is imageId
 // fields:
-// - id            : string   (recommended: objectPath "{listId}/{imageId}/{fileName}")
+// - id            : string   (optional; recommended: imageId)
 // - list_id       : string
 // - url           : string
 // - file_name     : string
 // - size          : number
 // - display_order : number
-// - bucket        : string   (optional)
-// - object_path   : string   (optional)
+// - bucket        : string   (optional; for debug/rebuild)
+// - object_path   : string   (MUST be "lists/{listId}/images/{imageId}")
 // - created_at    : timestamp
 // - updated_at    : timestamp
 //
 // NOTE:
-// - docID is "imageId" (2nd segment of objectPath).
-// - "id" field can store objectPath for easy GCS deletion & tracing.
+// - Legacy path forms are NOT supported in this file (deleted by policy).
+// - Canonical object path is: lists/{listId}/images/{imageId}
 
 type ListImageRepositoryFS struct {
 	Client *gfs.Client
@@ -52,12 +52,19 @@ var _ listuc.ListImageReader = (*ListImageRepositoryFS)(nil)
 var _ listuc.ListImageByIDReader = (*ListImageRepositoryFS)(nil)
 var _ listuc.ListImageRecordRepository = (*ListImageRepositoryFS)(nil)
 
+// Optional capability for usecase.DeleteImage (type-asserted in usecase)
+type listImageRecordDeleter interface {
+	Delete(ctx context.Context, listID string, imageID string) error
+}
+
+var _ listImageRecordDeleter = (*ListImageRepositoryFS)(nil)
+
 // ============================================================
 // Port: ListImageRecordRepository
 // ============================================================
 
 // Upsert stores list image record into Firestore subcollection.
-// docID policy: imageId (derived from objectPath "{listId}/{imageId}/{fileName}")
+// docID policy: imageId
 func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListImage) (listimgdom.ListImage, error) {
 	if r == nil || r.Client == nil {
 		return listimgdom.ListImage{}, errors.New("firestore client is nil")
@@ -68,47 +75,25 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidListID
 	}
 
-	// Determine bucket/objectPath as best-effort
-	bucket := ""
-	objectPath := ""
-
-	// Prefer img.ID when it looks like an objectPath
-	if looksLikeObjectPath(img.ID) {
-		objectPath = strings.TrimLeft(strings.TrimSpace(img.ID), "/")
-	}
-
-	// If URL is a GCS public URL, parse bucket/objectPath
-	if bucket == "" || objectPath == "" {
-		if b, obj, ok := listimgdom.ParseGCSURL(strings.TrimSpace(img.URL)); ok {
-			if bucket == "" {
-				bucket = strings.TrimSpace(b)
-			}
-			if objectPath == "" {
-				objectPath = strings.TrimLeft(strings.TrimSpace(obj), "/")
-			}
-		}
-	}
-
-	// Derive imageId (docID)
-	imageID := ""
-	if objectPath != "" {
-		imageID = extractImageIDFromObjectPath(objectPath)
-	}
-	if imageID == "" {
-		// fallback: allow "img.ID is imageId" pattern
-		if !strings.Contains(strings.TrimSpace(img.ID), "/") {
-			imageID = strings.TrimSpace(img.ID)
-		}
-	}
+	imageID := strings.TrimSpace(img.ID)
 	if imageID == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidID
 	}
-
-	// fileName
-	fileName := strings.TrimSpace(img.FileName)
-	if fileName == "" && objectPath != "" {
-		fileName = path.Base(objectPath)
+	if strings.Contains(imageID, "/") {
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("invalid_image_id")
 	}
+
+	// ✅ canonical objectPath is required (legacy removed)
+	objectPath := strings.TrimLeft(strings.TrimSpace(img.ObjectPath), "/")
+	if objectPath == "" {
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_required")
+	}
+	if !isCanonicalObjectPath(objectPath, listID, imageID) {
+		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_not_canonical")
+	}
+
+	// fileName is required by domain (cannot be inferred from canonical objectPath)
+	fileName := strings.TrimSpace(img.FileName)
 	if fileName == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidFileName
 	}
@@ -116,24 +101,26 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 	// url
 	u := strings.TrimSpace(img.URL)
 	if u == "" {
-		// best-effort: if we know bucket/objectPath, rebuild public URL
-		if bucket != "" && objectPath != "" {
-			u = listimgdom.PublicURL(bucket, objectPath)
+		// best-effort rebuild if possible
+		bucket := listimgdom.DefaultBucket
+		if strings.TrimSpace(bucket) == "" {
+			return listimgdom.ListImage{}, listimgdom.ErrInvalidURL
 		}
+		u = listimgdom.PublicURL(bucket, objectPath)
 	}
 	if strings.TrimSpace(u) == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidURL
 	}
 
-	// id field stored in firestore: recommend objectPath (stable, supports deletion/debug)
-	storedID := strings.TrimSpace(img.ID)
-	if storedID == "" && objectPath != "" {
-		storedID = objectPath
+	// bucket (optional, for debug/rebuild)
+	bucket := ""
+	if b, _, ok := listimgdom.ParseGCSURL(u); ok {
+		bucket = strings.TrimSpace(b)
 	}
-	// if storedID is a GCS URL, store objectPath instead (keeps ID compact)
-	if _, obj, ok := listimgdom.ParseGCSURL(storedID); ok {
-		storedID = strings.TrimLeft(strings.TrimSpace(obj), "/")
-	}
+
+	// stored "id" field in firestore:
+	// - keep it compact and stable; recommend imageID.
+	storedID := imageID
 
 	// times
 	now := time.Now().UTC()
@@ -167,7 +154,7 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 			"display_order": img.DisplayOrder,
 
 			"bucket":      strings.TrimSpace(bucket),
-			"object_path": strings.TrimLeft(strings.TrimSpace(objectPath), "/"),
+			"object_path": objectPath, // ✅ canonical only
 
 			"created_at": createdAt,
 			"updated_at": now,
@@ -179,26 +166,61 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 		return listimgdom.ListImage{}, err
 	}
 
-	// Return domain object (best-effort validation)
+	// Return domain object
 	out, derr := listimgdom.New(
-		storedID,
+		imageID,
 		listID,
 		u,
+		objectPath,
 		fileName,
 		img.Size,
 		img.DisplayOrder,
 	)
 	if derr != nil {
+		// best-effort fallback (do not break)
 		return listimgdom.ListImage{
-			ID:           storedID,
+			ID:           imageID,
 			ListID:       listID,
 			URL:          u,
+			ObjectPath:   objectPath,
 			FileName:     fileName,
 			Size:         img.Size,
 			DisplayOrder: img.DisplayOrder,
 		}, nil
 	}
 	return out, nil
+}
+
+// Delete deletes Firestore record: /lists/{listId}/images/{imageId}
+// (canonical only)
+func (r *ListImageRepositoryFS) Delete(ctx context.Context, listID string, imageID string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+
+	if listID == "" {
+		return listimgdom.ErrInvalidListID
+	}
+	if imageID == "" {
+		return listimgdom.ErrInvalidID
+	}
+	if strings.Contains(imageID, "/") {
+		return usecase.ErrInvalidArgument("invalid_image_id")
+	}
+
+	ref := r.listCol(listID).Doc(imageID)
+	_, err := ref.Delete(ctx)
+	if err != nil {
+		// idempotent: not found => success
+		if status.Code(err) == codes.NotFound {
+			return listimgdom.ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // ============================================================
@@ -247,9 +269,9 @@ func (r *ListImageRepositoryFS) ListByListID(ctx context.Context, listID string)
 // Port: ListImageByIDReader
 // ============================================================
 
-// GetByID supports the following id forms:
-// - objectPath: "{listId}/{imageId}/{fileName}"  => direct read
-// - URL: "https://storage.googleapis.com/{bucket}/{listId}/{imageId}/{fileName}" => direct read
+// GetByID supports the following id forms (legacy removed):
+// - canonical objectPath: "lists/{listId}/images/{imageId}"  => direct read
+// - URL: "https://storage.googleapis.com/{bucket}/{objectPath}" => direct read (if canonical)
 // - imageId only: "{imageId}" => collectionGroup query by DocumentID
 func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimgdom.ListImage, error) {
 	if r == nil || r.Client == nil {
@@ -266,9 +288,9 @@ func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimg
 		id = strings.TrimLeft(strings.TrimSpace(obj), "/")
 	}
 
-	// 2) If objectPath-like, direct read by listId + imageId
-	if looksLikeObjectPath(id) {
-		listID, imageID, ok := splitListImageObjectPath(id)
+	// 2) If canonical objectPath, direct read by listId + imageId
+	if looksLikeCanonicalObjectPath(id) {
+		listID, imageID, ok := splitCanonicalObjectPath(id)
 		if ok {
 			doc, err := r.listCol(listID).Doc(imageID).Get(ctx)
 			if err != nil {
@@ -287,6 +309,10 @@ func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimg
 
 	// 3) Fallback: treat as imageId and search by DocumentID in collection group
 	imageID := id
+	if strings.Contains(imageID, "/") {
+		return listimgdom.ListImage{}, listimgdom.ErrNotFound
+	}
+
 	q := r.Client.CollectionGroup("images").
 		Where(gfs.DocumentID, "==", imageID).
 		Limit(1)
@@ -320,7 +346,7 @@ func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimg
 // ============================================================
 
 func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listimgdom.ListImage, bool) {
-	if doc == nil {
+	if doc == nil || doc.Ref == nil {
 		return listimgdom.ListImage{}, false
 	}
 
@@ -334,7 +360,7 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 		CreatedAt    time.Time `firestore:"created_at"`
 		UpdatedAt    time.Time `firestore:"updated_at"`
 		ObjectPath   string    `firestore:"object_path"`
-		Bucket       string    `firestore:"bucket"`
+		Bucket       string    `firestore:"bucket"` // stored for debug/rebuild (not in domain)
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -349,45 +375,48 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 		return listimgdom.ListImage{}, false
 	}
 
-	// id
-	id := strings.TrimSpace(raw.ID)
-	if id == "" {
-		// prefer object_path
-		if strings.TrimSpace(raw.ObjectPath) != "" {
-			id = strings.TrimLeft(strings.TrimSpace(raw.ObjectPath), "/")
-		} else {
-			// as last resort, use docID
-			id = strings.TrimSpace(doc.Ref.ID)
-		}
+	// ✅ imageID is docID
+	imageID := strings.TrimSpace(doc.Ref.ID)
+	if imageID == "" {
+		return listimgdom.ListImage{}, false
 	}
 
-	url := strings.TrimSpace(raw.URL)
-	if url == "" {
-		// best-effort rebuild if possible
-		if strings.TrimSpace(raw.Bucket) != "" && strings.TrimSpace(raw.ObjectPath) != "" {
-			url = listimgdom.PublicURL(strings.TrimSpace(raw.Bucket), strings.TrimLeft(strings.TrimSpace(raw.ObjectPath), "/"))
+	// ✅ canonical objectPath required; if missing, rebuild canonically
+	objectPath := strings.TrimLeft(strings.TrimSpace(raw.ObjectPath), "/")
+	if objectPath == "" {
+		objectPath = listimgdom.CanonicalObjectPath(listID, imageID)
+	}
+
+	// url: best-effort rebuild
+	urlStr := strings.TrimSpace(raw.URL)
+	if urlStr == "" {
+		b := strings.TrimSpace(raw.Bucket)
+		if b == "" {
+			b = listimgdom.DefaultBucket
+		}
+		if strings.TrimSpace(b) != "" {
+			urlStr = listimgdom.PublicURL(b, objectPath)
 		}
 	}
 
 	fileName := strings.TrimSpace(raw.FileName)
-	if fileName == "" && strings.TrimSpace(raw.ObjectPath) != "" {
-		fileName = path.Base(strings.TrimLeft(strings.TrimSpace(raw.ObjectPath), "/"))
-	}
 
 	li, err := listimgdom.New(
-		id,
+		imageID,
 		listID,
-		url,
+		urlStr,
+		objectPath,
 		fileName,
 		raw.Size,
 		raw.DisplayOrder,
 	)
 	if err != nil {
-		// best-effort fallback
+		// best-effort fallback (do not break reads)
 		return listimgdom.ListImage{
-			ID:           id,
+			ID:           imageID,
 			ListID:       listID,
-			URL:          url,
+			URL:          urlStr,
+			ObjectPath:   objectPath,
 			FileName:     fileName,
 			Size:         raw.Size,
 			DisplayOrder: raw.DisplayOrder,
@@ -398,43 +427,52 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 }
 
 // ============================================================
-// Path helpers
+// Canonical path helpers (legacy removed)
 // ============================================================
 
-// looksLikeObjectPath returns true when it resembles "{listId}/{imageId}/...".
-func looksLikeObjectPath(s string) bool {
+func looksLikeCanonicalObjectPath(s string) bool {
 	p := strings.TrimLeft(strings.TrimSpace(s), "/")
+	if p == "" {
+		return false
+	}
 	parts := strings.Split(p, "/")
-	return len(parts) >= 2 && strings.TrimSpace(parts[0]) != "" && strings.TrimSpace(parts[1]) != ""
+	// must be exactly: ["lists", "{listId}", "images", "{imageId}"]
+	if len(parts) != 4 {
+		return false
+	}
+	return strings.TrimSpace(parts[0]) == "lists" &&
+		strings.TrimSpace(parts[1]) != "" &&
+		strings.TrimSpace(parts[2]) == "images" &&
+		strings.TrimSpace(parts[3]) != ""
 }
 
-// splitListImageObjectPath expects "{listId}/{imageId}/{fileName}" (at least 3 segments).
-func splitListImageObjectPath(objectPath string) (listID string, imageID string, ok bool) {
+func splitCanonicalObjectPath(objectPath string) (listID string, imageID string, ok bool) {
 	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if p == "" {
 		return "", "", false
 	}
 	parts := strings.Split(p, "/")
-	if len(parts) < 3 {
+	if len(parts) != 4 {
 		return "", "", false
 	}
-	listID = strings.TrimSpace(parts[0])
-	imageID = strings.TrimSpace(parts[1])
+	if strings.TrimSpace(parts[0]) != "lists" || strings.TrimSpace(parts[2]) != "images" {
+		return "", "", false
+	}
+	listID = strings.TrimSpace(parts[1])
+	imageID = strings.TrimSpace(parts[3])
 	if listID == "" || imageID == "" {
 		return "", "", false
 	}
 	return listID, imageID, true
 }
 
-// extractImageIDFromObjectPath expects "{listId}/{imageId}/{fileName}" and returns imageId.
-func extractImageIDFromObjectPath(objectPath string) string {
+func isCanonicalObjectPath(objectPath string, listID string, imageID string) bool {
 	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if p == "" {
-		return ""
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+	if p == "" || listID == "" || imageID == "" {
+		return false
 	}
-	parts := strings.Split(p, "/")
-	if len(parts) < 2 {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
+	want := "lists/" + listID + "/images/" + imageID
+	return p == want
 }

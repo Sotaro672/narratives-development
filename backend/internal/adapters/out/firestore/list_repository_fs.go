@@ -18,6 +18,11 @@ import (
 )
 
 // ListRepositoryFS implements list.Repository using Firestore.
+//
+// ✅ Primary image policy (A)
+// - lists/{listId}.image_id stores "primary imageId (Firestore docID)".
+// - Image URLs are derived from /lists/{listId}/images subcollection records by query layer.
+// - image_id is NOT a URL anymore.
 type ListRepositoryFS struct {
 	Client *gfs.Client
 }
@@ -393,7 +398,8 @@ func (r *ListRepositoryFS) Update(
 			changed = true
 		}
 
-		// ImageID
+		// ImageID (primary image docID)
+		// ✅ allow clearing by empty string in patch
 		if patch.ImageID != nil {
 			cur.ImageID = strings.TrimSpace(*patch.ImageID)
 			changed = true
@@ -611,7 +617,7 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		Status      string     `firestore:"status"`
 		AssigneeID  string     `firestore:"assignee_id"`
 		Title       string     `firestore:"title"`
-		ImageID     string     `firestore:"image_id"`
+		ImageID     string     `firestore:"image_id"` // ✅ primary imageId (docID)
 		ReadableID  string     `firestore:"readable_id"`
 		Description *string    `firestore:"description"`
 		CreatedBy   string     `firestore:"created_by"`
@@ -662,7 +668,7 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		Status:      ldom.ListStatus(strings.TrimSpace(raw.Status)),
 		AssigneeID:  strings.TrimSpace(raw.AssigneeID),
 		Title:       strings.TrimSpace(raw.Title),
-		ImageID:     strings.TrimSpace(raw.ImageID),
+		ImageID:     strings.TrimSpace(raw.ImageID), // ✅ primary docID
 		InventoryID: strings.TrimSpace(raw.InventoryID),
 		ReadableID:  strings.TrimSpace(raw.ReadableID),
 
@@ -683,7 +689,11 @@ func encodeListDoc(l ldom.List) map[string]any {
 		"status":      strings.TrimSpace(string(l.Status)),
 		"assignee_id": strings.TrimSpace(l.AssigneeID),
 		"title":       strings.TrimSpace(l.Title),
-		"image_id":    strings.TrimSpace(l.ImageID),
+
+		// ✅ image_id stores primary imageId (docID)
+		// - empty allowed (= unset)
+		"image_id": strings.TrimSpace(l.ImageID),
+
 		"description": strings.TrimSpace(l.Description),
 		"created_by":  strings.TrimSpace(l.CreatedBy),
 		"created_at":  l.CreatedAt.UTC(),
@@ -889,8 +899,20 @@ func strPtrIfNonEmpty(s string) *string {
 	return &t
 }
 
+// ✅ imageId は「primary docID」なので、"空文字でクリア" を許容したいケースがある。
+// - 他フィールドは従来通り「空は変更しない(keep)」
+// - imageId だけは empty string も patch に載せられるようにする
+func strPtrAllowEmptyButNonNil(s string) *string {
+	t := strings.TrimSpace(s)
+	// NOTE: 空でも「クリアしたい」ので返す
+	return &t
+}
+
 // Update implements "usecase.ListUpdater" contract by translating full item -> patch.
 // “空文字/空配列は変更しない” を徹底（＝既存フィールド維持）
+//
+// ✅ exception:
+// - imageId は空文字でのクリアを許容するため、常に patch に入れられるようにする
 func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (ldom.List, error) {
 	if r == nil || r.ListRepositoryFS == nil {
 		return ldom.List{}, errors.New("list repo is nil")
@@ -914,10 +936,8 @@ func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (
 		patch.AssigneeID = p
 	}
 
-	// imageId: 空なら変更しない（keep）
-	if p := strPtrIfNonEmpty(item.ImageID); p != nil {
-		patch.ImageID = p
-	}
+	// ✅ imageId(primary docID): empty allowed (= clear)
+	patch.ImageID = strPtrAllowEmptyButNonNil(item.ImageID)
 
 	// readableId: 空なら変更しない（keep）
 	if p := strPtrIfNonEmpty(item.ReadableID); p != nil {

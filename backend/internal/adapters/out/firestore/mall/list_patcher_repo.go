@@ -43,6 +43,9 @@ func NewListPatcherRepoForMallWithRepo(
 }
 
 // UpdateImageID updates list.imageId (and audit fields) and returns the updated List.
+//
+// Policy A:
+// - list.image_id stores "primary imageId (Firestore docID)", NOT URL.
 func (r *ListPatcherRepoForMall) UpdateImageID(
 	ctx context.Context,
 	listID string,
@@ -81,13 +84,14 @@ func (r *ListPatcherRepoForMall) UpdateImageID(
 	return r.repo.Update(ctx, listID, patch)
 }
 
-// ✅ SetPrimaryImageIfEmpty implements usecase/list.ListPrimaryImageSetter.
-// It sets list.imageId only when current imageId is empty.
-// (best-effort; does not overwrite existing primary)
-func (r *ListPatcherRepoForMall) SetPrimaryImageIfEmpty(
+// ✅ SetPrimaryImageID implements the newer usecase/list.ListPrimaryImageSetter contract.
+//
+// Policy A:
+// - list.image_id stores "primary imageId (Firestore docID)".
+func (r *ListPatcherRepoForMall) SetPrimaryImageID(
 	ctx context.Context,
 	listID string,
-	imageURL string,
+	imageID string,
 	now time.Time,
 ) error {
 	if r == nil || r.repo == nil {
@@ -95,12 +99,48 @@ func (r *ListPatcherRepoForMall) SetPrimaryImageIfEmpty(
 	}
 
 	listID = strings.TrimSpace(listID)
-	imageURL = strings.TrimSpace(imageURL)
+	imageID = strings.TrimSpace(imageID)
 
 	if listID == "" {
 		return listdom.ErrNotFound
 	}
-	if imageURL == "" {
+	if imageID == "" {
+		return listdom.ErrEmptyImageID
+	}
+
+	if now.IsZero() {
+		now = time.Now().UTC()
+	} else {
+		now = now.UTC()
+	}
+
+	_, err := r.UpdateImageID(ctx, listID, imageID, now, nil)
+	return err
+}
+
+// ✅ SetPrimaryImageIfEmpty implements usecase/list.ListPrimaryImageSetter.
+// It sets list.imageId only when current imageId is empty.
+// (best-effort; does not overwrite existing primary)
+//
+// Policy A:
+// - list.image_id stores "primary imageId (Firestore docID)".
+func (r *ListPatcherRepoForMall) SetPrimaryImageIfEmpty(
+	ctx context.Context,
+	listID string,
+	imageID string,
+	now time.Time,
+) error {
+	if r == nil || r.repo == nil {
+		return errors.New("firestore.mall.ListPatcherRepoForMall: repo is nil")
+	}
+
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+
+	if listID == "" {
+		return listdom.ErrNotFound
+	}
+	if imageID == "" {
 		return listdom.ErrEmptyImageID
 	}
 
@@ -121,6 +161,6 @@ func (r *ListPatcherRepoForMall) SetPrimaryImageIfEmpty(
 	}
 
 	// updatedBy はこのユースケースでは不要（nil）でOK
-	_, err = r.UpdateImageID(ctx, listID, imageURL, now, nil)
+	_, err = r.UpdateImageID(ctx, listID, imageID, now, nil)
 	return err
 }

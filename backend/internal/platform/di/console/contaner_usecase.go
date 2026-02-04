@@ -116,7 +116,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	invoiceUC := uc.NewInvoiceUsecase(r.invoiceRepo)
 
 	// =========================================================
-	// ListUsecase (✅ readableId 永続化のため、生 repo(= Update(ctx,id,patch)) を渡す)
+	// ListUsecase (✅ NewListUsecase だけを唯一の入口にする)
 	// =========================================================
 	// r.listRepo が *firestore.ListRepositoryForUsecase の場合、
 	// 埋め込み元の *firestore.ListRepositoryFS を取り出して listReader/listCreator に渡す。
@@ -130,28 +130,25 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		listCreator = w.ListRepositoryFS
 	}
 
-	// ✅ moved: use listuc.NewListUsecaseWithCreator (not uc.NewListUsecaseWithCreator)
-	listUC := listuc.NewListUsecaseWithCreator(
+	// ✅ ONLY ENTRYPOINT: 全配線は constructors.go(NewListUsecase) に集約
+	// 重要:
+	// - imageReader / imageByIDReader は Firestore (/lists/{listId}/images) を渡す
+	// - imageObjectSaver は GCS (signed-url / SaveFromBucketObject / DeleteObject) を渡す
+	// これにより DeleteImage が listImageRecordRepo=nil で ErrNotSupported -> 501 になるのを防ぐ
+	listUC := listuc.NewListUsecase(
 		listReader,
 		listCreator,
 		r.listPatcher,
-		r.listImageRepo,
-		r.listImageRepo,
-		r.listImageRepo,
+
+		r.listImageRecordRepo, // ✅ Firestore: record repo (list images subcollection)
+		r.listImageRecordRepo, // ✅ Firestore: record by id
+		r.listImageRepo,       // ✅ GCS: object saver + signed url issuer (and optional object deleter)
 	)
 
-	// ✅ NEW: listImageRecordRepo を DI で必ず配線する（複数画像の永続化 / 501(not_implemented)回避）
-	// - SaveImageFromGCS は listImageRecordRepo が nil だと ErrNotSupported を返し、
-	//   handler 側で 501(not_implemented) になってしまうため、ここで明示注入する。
-	// - r.listImageRecordRepo は buildRepos 側で /lists/{listId}/images サブコレ用 Repo を生成して入れておく前提。
-	if r != nil && r.listImageRecordRepo != nil {
-		listUC = listUC.WithListImageRecordRepo(r.listImageRecordRepo)
-	}
-
-	// （任意）primary image setter も DI で明示したい場合はここで注入
-	// if r != nil && r.listPrimaryImageSetter != nil {
-	// 	listUC = listUC.WithListPrimaryImageSetter(r.listPrimaryImageSetter)
-	// }
+	// ❌ 以下は禁止（入口が複数になるため撤去）
+	// - listUC.WithListImageRecordRepo(...)
+	// - listUC.WithListImageDeleter(...)
+	// - その他 WithXxx 系の後付け DI
 
 	messageUC := uc.NewMessageUsecase(r.messageRepo, nil, nil)
 	modelUC := uc.NewModelUsecase(r.modelRepo, r.modelHistoryRepo)

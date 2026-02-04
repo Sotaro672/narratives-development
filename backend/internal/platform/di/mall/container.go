@@ -187,7 +187,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// List repo for usecase ports
 	listRepoForUC := outfs.NewListRepositoryForUsecase(listRepoFS)
 
-	// ✅ NEW: Firestore repo for list images subcollection
+	// ✅ Firestore repo for list images subcollection
 	// - /lists/{listId}/images/{imageId}
 	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
 
@@ -229,24 +229,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WithWalletRepo(walletRepo).
 		WithWalletService(avatarWalletSvc)
 
-	// ✅ UPDATED: wire Firestore listImageRecordRepo into ListUsecase
-	// NewListUsecase(args):
-	// - listReader, listPatcher, imageReader, imageByIDReader, imageObjectSaver
-	// and auto-wire signed-url issuer from imageObjectSaver.
-	//
-	// After you updated listuc/types.go + listuc/constructors.go to include
-	// listImageRecordRepo / listPrimaryImageSetter:
-	// - set them via chain methods (recommended), or
-	// - pass via expanded constructor (if you chose that design).
+	// ✅ ListUsecase: NewListUsecase だけを唯一の入口にする（With系は禁止）
+	// - Firestore: imageReader / imageByIDReader（record + metadata）
+	// - GCS: imageObjectSaver（signed-url / object upload / object delete）
 	c.ListUC = listuc.NewListUsecase(
-		listRepoForUC,
-		listPatcher,
-		listImageRepo,
-		listImageRepo,
-		listImageRepo,
-	).
-		WithListImageRecordRepo(listImageRecordRepo).
-		WithListPrimaryImageSetter(listPatcher)
+		listRepoForUC,       // ListReader
+		listRepoForUC,       // ListCreator
+		listPatcher,         // ListPatcher
+		listImageRecordRepo, // ListImageReader (Firestore)
+		listImageRecordRepo, // ListImageByIDReader (Firestore)
+		listImageRepo,       // ListImageObjectSaver (GCS)
+	)
 
 	c.ShippingAddressUC = usecase.NewShippingAddressUsecase(shippingAddressRepo)
 	c.BillingAddressUC = usecase.NewBillingAddressUsecase(billingAddressRepo)

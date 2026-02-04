@@ -53,7 +53,7 @@ type ListDetailQuery struct {
 	invGetter InventoryDetailGetter
 	invRows   listq.InventoryRowsLister
 
-	// listImage bucket の画像（= ListImage 由来のURL）を返すため（任意）
+	// listImage 由来のURLを返すため（任意）
 	imgLister ListImageLister
 
 	// productBlueprintPatch から modelRef(displayOrder) を取るため（任意）
@@ -153,7 +153,10 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		if strings.TrimSpace(it.CreatedBy) != "" {
 			createdByName = strings.TrimSpace(q.nameResolver.ResolveMemberName(ctx, it.CreatedBy))
 		}
-		updatedByName = strings.TrimSpace(q.nameResolver.ResolveUpdatedByName(ctx, it.UpdatedBy))
+		// ✅ UpdatedBy は nil の可能性があるため updatedByID でガード
+		if updatedByID != "" {
+			updatedByName = strings.TrimSpace(q.nameResolver.ResolveUpdatedByName(ctx, it.UpdatedBy))
+		}
 	}
 
 	if assigneeName == "" && strings.TrimSpace(it.AssigneeID) != "" {
@@ -199,12 +202,24 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		log.Printf("[ListDetailQuery] [modelMetadata] listID=%q %s", strings.TrimSpace(it.ID), metaLog)
 	}
 
+	// ---- timestamps ----
+	createdAt := ""
+	if !it.CreatedAt.IsZero() {
+		createdAt = it.CreatedAt.Format(time.RFC3339)
+	}
+
+	updatedAt := ""
+	if it.UpdatedAt != nil && !it.UpdatedAt.IsZero() {
+		updatedAt = it.UpdatedAt.Format(time.RFC3339)
+	}
+
 	dto := querydto.ListDetailDTO{
 		ID:          strings.TrimSpace(it.ID),
 		InventoryID: invID,
 
+		// ✅ domain/list/entity.go に合わせる（Decision は List に存在しない）
 		Status:   strings.TrimSpace(string(it.Status)),
-		Decision: strings.TrimSpace(string(it.Status)),
+		Decision: strings.TrimSpace(string(it.Status)), // 互換維持（DTO側が必須なら Status を入れる）
 
 		Title:       strings.TrimSpace(it.Title),
 		Description: strings.TrimSpace(it.Description),
@@ -214,12 +229,13 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 
 		CreatedBy:     strings.TrimSpace(it.CreatedBy),
 		CreatedByName: strings.TrimSpace(createdByName),
-		CreatedAt:     it.CreatedAt.Format(time.RFC3339),
+		CreatedAt:     createdAt,
 
 		UpdatedBy:     updatedByID,
 		UpdatedByName: strings.TrimSpace(updatedByName),
-		UpdatedAt:     it.UpdatedAt.Format(time.RFC3339),
+		UpdatedAt:     updatedAt,
 
+		// ✅ Policy: List.ImageID は「URL」(domain/list/entity.go)
 		ImageID: strings.TrimSpace(it.ImageID),
 
 		ProductBlueprintID: pbID,
@@ -240,6 +256,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		CurrencyJPY: true,
 	}
 
+	// ✅ primary は URL cache (List.ImageID) を渡す（buildListImageURLs 側で URL / imageId 両対応だとより安全）
 	dto.ImageURLs = q.buildListImageURLs(ctx, strings.TrimSpace(it.ID), strings.TrimSpace(it.ImageID))
 	return dto, nil
 }
