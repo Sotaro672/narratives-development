@@ -22,17 +22,17 @@ import (
 // fields:
 // - id            : string   (optional; recommended: imageId)
 // - list_id       : string
-// - url           : string
+// - url           : string   (REQUIRED; no rebuild fallback in repo)
 // - file_name     : string
 // - size          : number
 // - display_order : number
-// - bucket        : string   (optional; for debug/rebuild)
+// - bucket        : string   (optional; debug only; may be empty)
 // - object_path   : string   (MUST be "lists/{listId}/images/{imageId}")
 // - created_at    : timestamp
 // - updated_at    : timestamp
 //
 // NOTE:
-// - Legacy path forms are NOT supported in this file (deleted by policy).
+// - Legacy URL parsing / DefaultBucket fallback are removed.
 // - Canonical object path is: lists/{listId}/images/{imageId}
 
 type ListImageRepositoryFS struct {
@@ -92,34 +92,22 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_not_canonical")
 	}
 
-	// fileName is required by domain (cannot be inferred from canonical objectPath)
+	// fileName is required
 	fileName := strings.TrimSpace(img.FileName)
 	if fileName == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidFileName
 	}
 
-	// url
+	// ✅ url is required (no DefaultBucket rebuild in repo)
 	u := strings.TrimSpace(img.URL)
 	if u == "" {
-		// best-effort rebuild if possible
-		bucket := listimgdom.DefaultBucket
-		if strings.TrimSpace(bucket) == "" {
-			return listimgdom.ListImage{}, listimgdom.ErrInvalidURL
-		}
-		u = listimgdom.PublicURL(bucket, objectPath)
-	}
-	if strings.TrimSpace(u) == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidURL
 	}
 
-	// bucket (optional, for debug/rebuild)
+	// bucket is optional/debug only. (Do NOT parse URL in repo; legacy removed.)
 	bucket := ""
-	if b, _, ok := listimgdom.ParseGCSURL(u); ok {
-		bucket = strings.TrimSpace(b)
-	}
 
 	// stored "id" field in firestore:
-	// - keep it compact and stable; recommend imageID.
 	storedID := imageID
 
 	// times
@@ -269,10 +257,11 @@ func (r *ListImageRepositoryFS) ListByListID(ctx context.Context, listID string)
 // Port: ListImageByIDReader
 // ============================================================
 
-// GetByID supports the following id forms (legacy removed):
+// GetByID supports:
 // - canonical objectPath: "lists/{listId}/images/{imageId}"  => direct read
-// - URL: "https://storage.googleapis.com/{bucket}/{objectPath}" => direct read (if canonical)
 // - imageId only: "{imageId}" => collectionGroup query by DocumentID
+//
+// ✅ Legacy removed: URL input is NOT supported.
 func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimgdom.ListImage, error) {
 	if r == nil || r.Client == nil {
 		return listimgdom.ListImage{}, errors.New("firestore client is nil")
@@ -283,12 +272,7 @@ func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimg
 		return listimgdom.ListImage{}, listimgdom.ErrNotFound
 	}
 
-	// 1) If URL, parse to objectPath
-	if _, obj, ok := listimgdom.ParseGCSURL(id); ok {
-		id = strings.TrimLeft(strings.TrimSpace(obj), "/")
-	}
-
-	// 2) If canonical objectPath, direct read by listId + imageId
+	// 1) If canonical objectPath, direct read by listId + imageId
 	if looksLikeCanonicalObjectPath(id) {
 		listID, imageID, ok := splitCanonicalObjectPath(id)
 		if ok {
@@ -307,7 +291,7 @@ func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimg
 		}
 	}
 
-	// 3) Fallback: treat as imageId and search by DocumentID in collection group
+	// 2) Fallback: treat as imageId and search by DocumentID in collection group
 	imageID := id
 	if strings.Contains(imageID, "/") {
 		return listimgdom.ListImage{}, listimgdom.ErrNotFound
@@ -360,7 +344,7 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 		CreatedAt    time.Time `firestore:"created_at"`
 		UpdatedAt    time.Time `firestore:"updated_at"`
 		ObjectPath   string    `firestore:"object_path"`
-		Bucket       string    `firestore:"bucket"` // stored for debug/rebuild (not in domain)
+		Bucket       string    `firestore:"bucket"` // debug only; may be empty
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -387,17 +371,8 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 		objectPath = listimgdom.CanonicalObjectPath(listID, imageID)
 	}
 
-	// url: best-effort rebuild
+	// ✅ url: do not rebuild from bucket (legacy removed)
 	urlStr := strings.TrimSpace(raw.URL)
-	if urlStr == "" {
-		b := strings.TrimSpace(raw.Bucket)
-		if b == "" {
-			b = listimgdom.DefaultBucket
-		}
-		if strings.TrimSpace(b) != "" {
-			urlStr = listimgdom.PublicURL(b, objectPath)
-		}
-	}
 
 	fileName := strings.TrimSpace(raw.FileName)
 

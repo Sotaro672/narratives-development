@@ -30,10 +30,10 @@ type ListImageRecordDeleter interface {
 	Delete(ctx context.Context, listID string, imageID string) error
 }
 
-// ListImageObjectDeleter deletes underlying object (GCS object).
-// Policy A: objectPath = "lists/{listId}/images/{imageId}"
+// ListImageObjectDeleter deletes underlying object (GCS object) by IDs.
+// Bucket resolution must be done inside the adapter (env/DI).
 type ListImageObjectDeleter interface {
-	DeleteObject(ctx context.Context, bucket string, objectPath string) error
+	Delete(ctx context.Context, listID string, imageID string) error
 }
 
 // ListReader is already your port in this package; we only need GetByID here.
@@ -154,7 +154,7 @@ func (uc *ListUsecase) SaveImageFromGCS(
 
 // DeleteImage deletes a list image by IDs (Policy A).
 //
-// ✅ Important behavior (fixes your issue):
+// ✅ Important behavior:
 // 1) Delete Firestore record (/lists/{listId}/images/{imageId}) FIRST (must).
 // 2) Delete GCS object best-effort (ErrObjectNotExist is treated as success).
 // 3) If list.image_id(primaryImageID) == imageId, clear primary (or you can implement "pick next").
@@ -193,27 +193,11 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 	}
 
 	// 2) GCS delete (best-effort)
-	// Policy A canonical path:
-	// lists/{listId}/images/{imageId}
-	objectPath := "lists/" + listID + "/images/" + imageID
-
-	// bucket: record repo が返せないなら env/repo に依存するので、ここは object deleter 側に解決させるのもOK。
-	// ただ、いまの構造に合わせて「bucketを取れないならスキップ」でも良い（Firestoreが正）。
-	// ここは "bucket解決できないならスキップ" にして UI を確実に直す。
+	// bucket resolution must be inside adapter (env/DI)
 	if objDel, ok := any(uc.imageObjectSaver).(ListImageObjectDeleter); ok && objDel != nil {
-		// bucket の取得は（A）画像レコードを読む、（B）env を読む、（C）DI で持つ、のいずれか。
-		// ここでは最小修正として、listimgdom.DefaultBucket を許容（あなたの環境の既定に合わせてください）。
-		bucket := strings.TrimSpace(listimgdom.DefaultBucket)
-
-		if bucket != "" {
-			if err := objDel.DeleteObject(ctx, bucket, objectPath); err != nil {
-				// object not exist is OK (idempotent)
-				if !errors.Is(err, listimgdom.ErrNotFound) {
-					log.Printf("[list_usecase] delete gcs object failed listID=%s imageID=%s bucket=%s path=%s err=%v", listID, imageID, bucket, objectPath, err)
-					// best-effort: DO NOT fail user-facing deletion because Firestore is already correct
-					// return err
-				}
-			}
+		if err := objDel.Delete(ctx, listID, imageID); err != nil {
+			// best-effort: DO NOT fail user-facing deletion because Firestore is already correct
+			log.Printf("[list_usecase] delete gcs object failed listID=%s imageID=%s err=%v", listID, imageID, err)
 		}
 	}
 
@@ -226,7 +210,6 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 				if strings.TrimSpace(l.ImageID) == imageID {
 					now := time.Now().UTC()
 					_ = uc.listPrimaryImageSetter.SetPrimaryImageID(ctx, listID, "", now)
-
 				}
 			}
 		}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -791,28 +790,6 @@ func gcsPublicURL(bucket, objectPath string) string {
 	}
 	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
-}
-
-func parseGCSURL(u string) (string, string, bool) {
-	parsed, err := url.Parse(strings.TrimSpace(u))
-	if err != nil {
-		return "", "", false
-	}
-	host := strings.ToLower(parsed.Host)
-	if host != "storage.googleapis.com" && host != "storage.cloud.google.com" {
-		return "", "", false
-	}
-	p := strings.TrimLeft(parsed.EscapedPath(), "/")
-	if p == "" {
-		return "", "", false
-	}
-	parts := strings.SplitN(p, "/", 2)
-	if len(parts) < 2 {
-		return "", "", false
-	}
-	bucket := parts[0]
-	objectPath, _ := url.PathUnescape(parts[1])
-	return bucket, objectPath, true
 }
 
 func belongsToInquiry(inquiryID string, attrs *storage.ObjectAttrs) bool {

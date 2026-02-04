@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -347,13 +348,10 @@ func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string
 
 // GetByID gets a ListImage by id.
 // id can be:
-// - imageId (Firestore docID)  => resolve to canonical objectPath "lists/{listId}/images/{imageId}" only when listId can be determined via metadata lookup is not possible.
+// - imageId (Firestore docID)
 // - objectPath within the bucket (e.g. "lists/{listId}/images/{imageId}")
 // - https://storage.googleapis.com/{bucket}/{objectPath}
-//
-// NOTE:
-// - For canonical design, prefer calling GetByID with objectPath or URL when using GCS as source-of-truth.
-// - In your current system, Firestore (/lists/{listId}/images/{imageId}) should be source-of-truth for imageId lookup.
+// - https://storage.cloud.google.com/{bucket}/{objectPath}
 func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, id string) (listimagedom.ListImage, error) {
 	if r == nil || r.Client == nil {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.GetByID: storage client is nil")
@@ -449,7 +447,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	}
 
 	// fileName: metadata 優先（signed-url responseの fileName を Firestore に保存する想定）
-	// fallback: use object base (imageId) - not ideal, but keeps system alive
+	// fallback: "image"
 	fn := ""
 	if attrs.Metadata != nil {
 		fn = strings.TrimSpace(attrs.Metadata["fileName"])
@@ -487,28 +485,28 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	meta["size"] = fmt.Sprint(finalSize)
 	meta["displayOrder"] = fmt.Sprint(displayOrder)
 
-	// metadata update (best-effort)
+	// metadata update
 	newAttrs, err := o.Update(ctx, storage.ObjectAttrsToUpdate{Metadata: meta})
 	if err != nil {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: update metadata failed: %w", err)
 	}
 
-	// domain object: id is imageId, URL derived from canonical objectPath
+	// domain object
 	li, derr := listimagedom.NewFromGCSObject(
-		imageID, // ✅ id is imageId
+		imageID,
 		listID,
 		fn,
 		finalSize,
 		displayOrder,
 		b,
-		strings.TrimSpace(newAttrs.Name), // objectPath
+		strings.TrimSpace(newAttrs.Name),
 	)
 	if derr != nil {
-		// best-effort fallback（domain validate が落ちても UI を止めない）
 		tmp := listimagedom.ListImage{
 			ID:           imageID,
 			ListID:       listID,
 			URL:          publicURL,
+			ObjectPath:   strings.TrimSpace(newAttrs.Name),
 			FileName:     fn,
 			Size:         finalSize,
 			DisplayOrder: displayOrder,
@@ -563,14 +561,44 @@ func validateCanonicalObjectPath(listID, imageID, objectPath string) error {
 	return nil
 }
 
+// parseGCSURL parses:
+// - https://storage.googleapis.com/{bucket}/{objectPath}
+// - https://storage.cloud.google.com/{bucket}/{objectPath}
+func parseGCSURL(u string) (bucket string, objectPath string, ok bool) {
+	pu, err := url.Parse(strings.TrimSpace(u))
+	if err != nil {
+		return "", "", false
+	}
+	host := strings.ToLower(strings.TrimSpace(pu.Host))
+	if host != "storage.googleapis.com" && host != "storage.cloud.google.com" {
+		return "", "", false
+	}
+	p := strings.TrimLeft(strings.TrimSpace(pu.EscapedPath()), "/")
+	if p == "" {
+		return "", "", false
+	}
+	parts := strings.SplitN(p, "/", 2)
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	bucket = strings.TrimSpace(parts[0])
+	objEsc := strings.TrimSpace(parts[1])
+	obj, _ := url.PathUnescape(objEsc)
+	objectPath = strings.TrimLeft(strings.TrimSpace(obj), "/")
+	if bucket == "" || objectPath == "" {
+		return "", "", false
+	}
+	return bucket, objectPath, true
+}
+
 func resolveBucketObjectForListImage(id string, fallbackBucket string) (bucket string, objectPath string, err error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", "", listimagedom.ErrNotFound
 	}
 
-	// domain helper: ParseGCSURL supports storage.googleapis.com / storage.cloud.google.com
-	if b, obj, ok := listimagedom.ParseGCSURL(id); ok {
+	// ✅ legacy removed in domain: parse URL here in adapter
+	if b, obj, ok := parseGCSURL(id); ok {
 		bucket, objectPath = strings.TrimSpace(b), strings.TrimLeft(strings.TrimSpace(obj), "/")
 	} else {
 		// if the caller passed objectPath directly, bucket may be empty here and should be resolved by caller
@@ -636,9 +664,9 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 	}
 
 	// url
-	url := getMeta("url")
-	if url == "" {
-		url = fmt.Sprintf("https://storage.googleapis.com/%s/%s", strings.TrimSpace(bucket), obj)
+	urlStr := getMeta("url")
+	if urlStr == "" {
+		urlStr = fmt.Sprintf("https://storage.googleapis.com/%s/%s", strings.TrimSpace(bucket), obj)
 	}
 
 	// size
@@ -674,7 +702,8 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		tmp := listimagedom.ListImage{
 			ID:           id,
 			ListID:       listID,
-			URL:          url,
+			URL:          urlStr,
+			ObjectPath:   obj,
 			FileName:     fileName,
 			Size:         size,
 			DisplayOrder: displayOrder,
@@ -683,8 +712,8 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 	}
 
 	// constructor の URL は PublicURL(bucket,obj) になるので、メタの url を優先したい場合は差し替え
-	if strings.TrimSpace(url) != "" {
-		_ = li.UpdateURL(url)
+	if strings.TrimSpace(urlStr) != "" {
+		_ = li.UpdateURL(urlStr)
 	}
 	return li, true
 }

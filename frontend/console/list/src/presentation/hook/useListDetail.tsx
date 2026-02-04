@@ -16,8 +16,12 @@ import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseC
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
 import { useCancelledRef } from "./internal/useCancelledRef";
 
-// ✅ DELETE API（画像削除）
-import { deleteListImageHTTP } from "../../infrastructure/http/list";
+// ✅ listImage APIs（削除 + 追加用）
+import {
+  deleteListImageHTTP,
+  issueListImageSignedUrlHTTP,
+  saveListImageFromGCSHTTP,
+} from "../../infrastructure/http/list";
 
 // ✅ それ以外は service へ
 import {
@@ -165,6 +169,22 @@ function revokeDraftBlobUrls(items: DraftImage[]) {
   }
 }
 
+// ✅ GCS signed-url PUT helper
+async function putToSignedUrl(url: string, file: File): Promise<void> {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": String(file.type || "application/octet-stream"),
+    },
+    body: file,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`gcs_put_failed:${res.status}:${text}`);
+  }
+}
+
 // ==============================
 // listImage draft hook（UI-only）
 // ==============================
@@ -180,9 +200,7 @@ function isImageFile(f: File): boolean {
 function useListImages(args: { isEdit: boolean; saving: boolean; initialUrls: string[] }) {
   const { isEdit, saving, initialUrls } = args;
 
-  const [draftImages, setDraftImages] = React.useState<DraftImage[]>(
-    cloneDraftImagesFromUrls(initialUrls),
-  );
+  const [draftImages, setDraftImages] = React.useState<DraftImage[]>(cloneDraftImagesFromUrls(initialUrls));
 
   React.useEffect(() => {
     if (isEdit) return;
@@ -200,9 +218,7 @@ function useListImages(args: { isEdit: boolean; saving: boolean; initialUrls: st
 
       setDraftImages((prev) => {
         const prevArr = Array.isArray(prev) ? prev : [];
-        const exists = new Set(
-          prevArr.filter((x) => x?.isNew && x?.file).map((x) => fileKey(x.file as File)),
-        );
+        const exists = new Set(prevArr.filter((x) => x?.isNew && x?.file).map((x) => fileKey(x.file as File)));
 
         const next: DraftImage[] = [];
 
@@ -493,7 +509,6 @@ export function useListDetail(): UseListDetailResult {
           ? String(payload.description ?? "")
           : String(draftDescription ?? "");
 
-      // ✅ (2) moved to service
       const nextDecision =
         toDecisionForUpdate(payload?.decision) ||
         toDecisionForUpdate(payload?.status) ||
@@ -507,6 +522,72 @@ export function useListDetail(): UseListDetailResult {
       setSaveError("");
 
       try {
+        // ============================================================
+        // ✅ 新規画像の追加（1枚→2枚など）
+        // - signed-url 発行 → GCS PUT → SaveImageFromGCS
+        // - 成功したら draftImages を publicUrl に置換して isNew=false 化する
+        // ============================================================
+        const prevUrls = normalizeImageUrls(dto);
+        const newItems = (Array.isArray(img.draftImages) ? img.draftImages : []).filter(
+          (x) => x?.isNew && x?.file,
+        );
+
+        if (newItems.length > 0) {
+          for (let i = 0; i < newItems.length; i++) {
+            const x = newItems[i]!;
+            const file = x.file as File;
+
+            const displayOrder = prevUrls.length + i;
+
+            const signed = await issueListImageSignedUrlHTTP({
+              listId: id,
+              fileName: file.name,
+              contentType: file.type || "application/octet-stream",
+              size: file.size,
+              displayOrder,
+            });
+
+            await putToSignedUrl(signed.signedUrl, file);
+
+            const saved = await saveListImageFromGCSHTTP({
+              listId: id,
+              id: signed.id,
+              bucket: signed.bucket,
+              objectPath: signed.objectPath,
+              size: file.size,
+              displayOrder: signed.displayOrder ?? displayOrder,
+              createdBy: uid,
+            });
+
+            // ✅ draft の該当要素を public URL に置換して isNew=false 化
+            img.setDraftImages((prev) => {
+              const arr = Array.isArray(prev) ? [...prev] : [];
+              const idx = arr.findIndex(
+                (y) => y?.isNew && y?.file && fileKey(y.file as File) === fileKey(file),
+              );
+              if (idx < 0) return prev;
+
+              const before = arr[idx];
+              if (before?.url?.startsWith("blob:")) {
+                try {
+                  URL.revokeObjectURL(before.url);
+                } catch {
+                  // noop
+                }
+              }
+
+              const url =
+                s((saved as any)?.url) ||
+                s((saved as any)?.URL) ||
+                s((signed as any)?.publicUrl) ||
+                "";
+
+              arr[idx] = { url, isNew: false };
+              return arr;
+            });
+          }
+        }
+
         // ============================================================
         // ✅ 画像削除の差分反映（2枚→1枚 等）
         // - before は listImages に依存せず、確実に返る imageUrls を正とする
@@ -531,7 +612,6 @@ export function useListDetail(): UseListDetailResult {
           const imageIdOrObjOrUrl = s(u);
           if (!imageIdOrObjOrUrl) continue;
 
-          // listApi 側が objectPath/URL から imageId 抽出して DELETE できる想定
           await deleteListImageHTTP({ listId: id, imageId: imageIdOrObjOrUrl });
         }
 

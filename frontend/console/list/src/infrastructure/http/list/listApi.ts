@@ -361,18 +361,42 @@ export async function issueListImageSignedUrlHTTP(args: {
     },
   });
 
+  // ✅ snake_case/camelCase 両対応
+  const rawId = s(raw?.id) || s(raw?.ID);
+  const rawBucket = s(raw?.bucket) || s(raw?.Bucket);
+  const rawObjectPath =
+    s(raw?.objectPath) ||
+    s(raw?.object_path) ||
+    s(raw?.ObjectPath) ||
+    s(raw?.object_path_str);
+
+  const rawUploadUrl =
+    s(raw?.uploadUrl) ||
+    s(raw?.upload_url) ||
+    s(raw?.signedUrl) ||
+    s(raw?.signed_url) ||
+    s(raw?.UploadURL);
+
+  const rawPublicUrl = s(raw?.publicUrl) || s(raw?.public_url) || s(raw?.PublicURL);
+
   const out: SignedListImageUploadDTO = {
-    id: s(raw?.id),
-    bucket: s(raw?.bucket),
-    objectPath: s(raw?.objectPath),
-    signedUrl: s(raw?.uploadUrl),
-    publicUrl: s(raw?.publicUrl) || undefined,
-    expiresAt: s(raw?.expiresAt) || undefined,
-    contentType: s(raw?.contentType) || undefined,
+    id: rawId,
+    bucket: rawBucket,
+    objectPath: rawObjectPath,
+    signedUrl: rawUploadUrl,
+    publicUrl: rawPublicUrl || undefined,
+    expiresAt: s(raw?.expiresAt) || s(raw?.expires_at) || undefined,
+    contentType: s(raw?.contentType) || s(raw?.content_type) || undefined,
     size: Number.isFinite(Number(raw?.size)) ? Number(raw.size) : undefined,
     displayOrder: Number.isFinite(Number(raw?.displayOrder)) ? Number(raw.displayOrder) : undefined,
-    fileName: s(raw?.fileName) || undefined,
+    fileName: s(raw?.fileName) || s(raw?.file_name) || undefined,
   };
+
+  console.log("[list/listRepositoryHTTP] signed-url response normalized", {
+    listId,
+    raw,
+    out,
+  });
 
   if (!out.id || !out.bucket || !out.objectPath || !out.signedUrl) {
     throw new Error("signed_url_response_invalid");
@@ -403,6 +427,7 @@ export async function saveListImageFromGCSHTTP(args: {
   objectPath: string;
   size: number;
   displayOrder: number;
+  fileName?: string;
   createdBy?: string;
   createdAt?: string;
 }): Promise<ListImageDTO> {
@@ -411,10 +436,26 @@ export async function saveListImageFromGCSHTTP(args: {
 
   const id = s(args.id);
   const bucket = s(args.bucket);
-  const objectPath = s(args.objectPath).replace(/^\/+/, "");
 
-  if (!id || !bucket || !objectPath) throw new Error("invalid_list_image_payload");
+  // ✅ objectPath が string で来ない事故も吸収
+  const objectPath = String(args.objectPath ?? "").replace(/^\/+/, "");
 
+  const fileName = s(args.fileName);
+
+  // ✅ objectPath が空なら POST しない（原因特定のためログを厚くする）
+  if (!id || !bucket || !objectPath) {
+    console.log("[list/listRepositoryHTTP] saveImageFromGCS invalid payload", {
+      listId,
+      id,
+      bucket,
+      objectPath,
+      keys: args && typeof args === "object" ? Object.keys(args as any) : [],
+      args,
+    });
+    throw new Error("invalid_list_image_payload");
+  }
+
+  // canonical check: lists/{listId}/images/{imageId}
   const parts = objectPath.split("/").map((x) => s(x)).filter(Boolean);
   if (
     parts.length !== 4 ||
@@ -423,23 +464,53 @@ export async function saveListImageFromGCSHTTP(args: {
     parts[2] !== "images" ||
     parts[3] !== id
   ) {
+    console.log("[list/listRepositoryHTTP] saveImageFromGCS objectPath mismatch", {
+      listId,
+      id,
+      objectPath,
+      parts,
+    });
     throw new Error("objectPath_id_mismatch");
   }
 
-  const payload = {
+  const payload: any = {
     id,
     bucket,
-    objectPath,
+
+    // ✅ backend の実装差異に備えて両方送る（どっちを読んでても通す）
+    objectPath, // camelCase
+    object_path: objectPath, // snake_case
+
     size: Number(args.size ?? 0),
     displayOrder: Number(args.displayOrder ?? 0),
+
+    // 互換用（backend 側で required になっても耐える）
+    fileName: fileName || undefined,
+
     createdBy: args.createdBy ? s(args.createdBy) : undefined,
     createdAt: args.createdAt ? s(args.createdAt) : undefined,
   };
+
+  console.log("[list/listRepositoryHTTP] saveImageFromGCS payload", {
+    listId,
+    payload,
+    bodyJSON: JSON.stringify(payload),
+    hasObjectPath: Object.prototype.hasOwnProperty.call(payload, "objectPath"),
+    hasObjectPathSnake: Object.prototype.hasOwnProperty.call(payload, "object_path"),
+    objectPath: payload.objectPath,
+    object_path: payload.object_path,
+  });
 
   return await requestJSON<ListImageDTO>({
     method: "POST",
     path: `/lists/${encodeURIComponent(listId)}/images`,
     body: payload,
+    debug: {
+      tag: `POST /lists/${listId}/images`,
+      url: `${API_BASE}/lists/${encodeURIComponent(listId)}/images`,
+      method: "POST",
+      body: payload,
+    },
   });
 }
 
@@ -513,7 +584,7 @@ function extractImageIdForDelete(args: { listId: string; imageIdOrObjectPathOrUr
 
 export async function deleteListImageHTTP(args: {
   listId: string;
-  imageId: string; // UI が URL を渡してきてもOK（ここで正規化する）
+  imageId: string;
 }): Promise<any> {
   const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");

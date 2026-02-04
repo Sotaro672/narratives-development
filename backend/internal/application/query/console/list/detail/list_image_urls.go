@@ -12,6 +12,7 @@ package detail
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -46,20 +47,31 @@ func (q *ListDetailQuery) buildListImageURLs(ctx context.Context, listID string,
 
 	rows := make([]listImageURLRow, 0, len(items))
 
+	// bucket fallback: env only (avoid domain constant dependency)
+	envBucket := strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
+
 	for _, it := range items {
 		id := strings.TrimSpace(readStringFieldAny(it, "ID", "Id", "ImageID", "ImageId"))
 		u := strings.TrimSpace(readStringFieldAny(it, "PublicURL", "PublicUrl", "URL", "Url", "SignedURL", "SignedUrl"))
 		b := strings.TrimSpace(readStringFieldAny(it, "Bucket", "bucket"))
 		op := strings.TrimLeft(strings.TrimSpace(readStringFieldAny(it, "ObjectPath", "objectPath", "Path", "path")), "/")
 
+		// If URL missing, try to build from bucket+objectPath
 		if u == "" && op != "" {
 			if b == "" {
-				b = strings.TrimSpace(listimgdom.DefaultBucket)
+				b = envBucket
 			}
 			if b != "" {
 				u = "https://storage.googleapis.com/" + b + "/" + op
 			}
 		}
+
+		// If still empty, best-effort: try domain PublicURL only when bucket exists
+		// (keeps compatibility if caller provides bucket but not url)
+		if u == "" && op != "" && b != "" {
+			u = listimgdom.PublicURL(b, op)
+		}
+
 		if u == "" {
 			continue
 		}
