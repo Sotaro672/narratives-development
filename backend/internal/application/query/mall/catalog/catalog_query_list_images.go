@@ -18,7 +18,10 @@ import (
 // ============================================================
 
 // loadListImages returns DTO-ready list images + error string (empty means OK).
-func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto.CatalogListImageDTO, string) {
+func (q *CatalogQuery) loadListImages(
+	ctx context.Context,
+	listID string,
+) ([]dto.CatalogListImageDTO, string) {
 	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return nil, "listId is empty"
@@ -30,10 +33,10 @@ func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto
 		return nil, ""
 	}
 
-	// ✅ FIX: CatalogQueryTypes の interface は FindByListID
-	imgs, err := q.ListImageRepo.FindByListID(ctx, listID)
+	// ✅ FIX: CatalogQueryTypes の interface は ListByListID
+	imgs, err := q.ListImageRepo.ListByListID(ctx, listID)
 	if err != nil {
-		log.Printf("[catalog] listImages FindByListID error listId=%q err=%q", listID, err.Error())
+		log.Printf("[catalog] listImages ListByListID error listId=%q err=%q", listID, err.Error())
 		return nil, err.Error()
 	}
 

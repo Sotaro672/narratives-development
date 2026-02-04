@@ -349,7 +349,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
-		c.CatalogQ = catalogQuery.NewCatalogQuery(listRepoFS, invRepo, productBlueprintRepoFS, modelRepoFS)
+		c.CatalogQ = catalogQuery.NewCatalogQuery(
+			listRepoFS,
+			invRepo,
+			productBlueprintRepoFS,
+			modelRepoFS,
+			catalogQuery.WithListImageRepo(listImageRecordRepo), // ✅ 追加
+		)
+
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
 		// ✅ PreviewQuery 用 ProductBlueprintReader

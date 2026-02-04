@@ -30,11 +30,8 @@ type TokenBlueprintPatchRepository interface {
 	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
 }
 
-// ✅ ListImage repository (read-only minimal for catalog)
-// catalog は listId から「全画像（displayOrder含む）」を返したい
 type ListImageRepository interface {
-	// listId 配下の画像一覧（displayOrder を含む前提）
-	FindByListID(ctx context.Context, listID string) ([]listimgdom.ListImage, error)
+	ListByListID(ctx context.Context, listID string) ([]listimgdom.ListImage, error)
 }
 
 // ============================================================
