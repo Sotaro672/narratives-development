@@ -1,4 +1,5 @@
-// frontend\mall\lib\features\auth\presentation\page\shipping_address.dart
+// frontend/mall/lib/features/auth/presentation/page/shipping_address.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -35,12 +36,18 @@ class ShippingAddressPage extends StatefulWidget {
 class _ShippingAddressPageState extends State<ShippingAddressPage> {
   late final UseShippingAddress _vm;
 
+  bool _checkedAuthOnce = false;
+
+  void _log(String msg) {
+    if (!kDebugMode) return;
+    debugPrint('[ShippingAddressPage] $msg');
+  }
+
   @override
   void initState() {
     super.initState();
 
     // ✅ DI: container から service を注入（直newをやめる）
-    // これにより API_BASE 統一・repo logger が確実に動く
     _vm = UseShippingAddress(
       mode: widget.mode,
       oobCode: widget.oobCode,
@@ -51,12 +58,62 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
       service: AppContainer.I.shippingAddressService,
     );
 
-    _vm.init();
+    // ✅ init は非同期（メールリンクなら自動サインイン→verifyEmail→/mall/sign-in）
+    () async {
+      _log(
+        'init start: mode=${widget.mode} oobCode=${(widget.oobCode ?? '').isNotEmpty} '
+        'continueUrl=${(widget.continueUrl ?? '').isNotEmpty} from=${widget.from} intent=${widget.intent}',
+      );
+
+      await _vm.init();
+
+      // ✅ ここで最終的なサインイン状態をログに出す（初回のみ）
+      _log(
+        'init done: loggedIn=${_vm.loggedIn} emailVerified=${_vm.emailVerified} '
+        'autoSignedIn=${_vm.autoSignedIn} autoSignInError=${_vm.autoSignInError} '
+        'mallUserEnsured=${_vm.mallUserEnsured} ensureMallUserError=${_vm.ensureMallUserError}',
+      );
+
+      // ✅ サインイン出来ていない場合はエラーを返す（画面内で明示）
+      if (!_vm.loggedIn) {
+        // 自動サインイン失敗 or そもそもリンクが sign-in ではないなど
+        final msg =
+            _vm.autoSignInError ??
+            'サインインできていません。認証メールのリンクが期限切れ、または無効の可能性があります。もう一度サインインしてください。';
+
+        _log('ERROR: not signed in -> $msg');
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    }();
+
     _vm.addListener(_onVmChanged);
   }
 
   void _onVmChanged() {
     if (mounted) setState(() {});
+
+    // ✅ 状態変化のログ（初回の確定チェック）
+    if (!_checkedAuthOnce &&
+        !_vm.autoSigningIn &&
+        !_vm.verifying &&
+        !_vm.ensuringMallUser) {
+      _checkedAuthOnce = true;
+
+      _log(
+        'state settled: loggedIn=${_vm.loggedIn} emailVerified=${_vm.emailVerified} '
+        'autoSignedIn=${_vm.autoSignedIn} autoSignInError=${_vm.autoSignInError} '
+        'mallUserEnsured=${_vm.mallUserEnsured} ensureMallUserError=${_vm.ensureMallUserError}',
+      );
+
+      if (!_vm.loggedIn) {
+        final msg = _vm.autoSignInError ?? 'サインインできていません。サインインが必要です。';
+        _log('ERROR: not signed in (settled) -> $msg');
+      }
+    }
   }
 
   @override
@@ -74,6 +131,11 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
     final emailVerified = _vm.emailVerified;
 
     final cameFromEmailLink = _vm.cameFromEmailLink;
+
+    // ✅ サインインできていない場合は明確にエラー表示（画面でも分かるように）
+    final signInBlockingError = (!loggedIn)
+        ? (_vm.autoSignInError ?? 'サインインできていません。住所の保存にはサインインが必要です。')
+        : null;
 
     return Scaffold(
       body: SafeArea(
@@ -101,8 +163,30 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 8),
+
+                          // ✅ 追加：メールリンクからの自動サインイン状態
+                          if (_vm.autoSigningIn) ...[
+                            const Text('サインイン処理中です…'),
+                            const SizedBox(height: 12),
+                            const LinearProgressIndicator(),
+                            const SizedBox(height: 16),
+                          ] else if (_vm.autoSignInError != null) ...[
+                            _InfoBox(
+                              kind: _InfoKind.error,
+                              text: _vm.autoSignInError!,
+                            ),
+                            const SizedBox(height: 12),
+                          ] else if (_vm.autoSignedIn) ...[
+                            const _InfoBox(
+                              kind: _InfoKind.ok,
+                              text: 'サインインが完了しました。',
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // ✅ 既存：verifyEmail の状態
                           if (_vm.verifying) ...[
-                            const Text('確認中です…'),
+                            const Text('メール認証を確認中です…'),
                             const SizedBox(height: 12),
                             const LinearProgressIndicator(),
                             const SizedBox(height: 16),
@@ -125,12 +209,41 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
                             ),
                             const SizedBox(height: 12),
                           ],
+
+                          // ✅ 追加：/mall/sign-in（user存在保証）の状態
+                          if (_vm.ensuringMallUser) ...[
+                            const Text('ユーザー情報を準備しています…'),
+                            const SizedBox(height: 12),
+                            const LinearProgressIndicator(),
+                            const SizedBox(height: 16),
+                          ] else if (_vm.ensureMallUserError != null) ...[
+                            _InfoBox(
+                              kind: _InfoKind.error,
+                              text: _vm.ensureMallUserError!,
+                            ),
+                            const SizedBox(height: 12),
+                          ] else if (_vm.mallUserEnsured) ...[
+                            const _InfoBox(
+                              kind: _InfoKind.ok,
+                              text: 'ユーザーの準備が完了しました。住所入力に進めます。',
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                         ] else ...[
                           const _InfoBox(
                             kind: _InfoKind.info,
                             text: '配送先情報を入力してください。',
                           ),
                           const SizedBox(height: 12),
+                        ],
+
+                        // ✅ 追加：サインインできていない場合は明確にエラーを表示
+                        if (signInBlockingError != null) ...[
+                          _InfoBox(
+                            kind: _InfoKind.error,
+                            text: signInBlockingError,
+                          ),
+                          const SizedBox(height: 8),
                         ],
 
                         if (!loggedIn) ...[

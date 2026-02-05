@@ -35,6 +35,9 @@ dependencies:
   # ✅ Firestore (needed to resolve avatarId -> userId / userId -> avatarId)
   cloud_firestore: ^5.4.4
 
+  # ✅ Local storage (for pending email used by email-link auto sign-in)
+  shared_preferences: ^2.2.3
+
   # ✅ Web DOM bindings (dart:html replacement)
   web: ^1.1.1
 

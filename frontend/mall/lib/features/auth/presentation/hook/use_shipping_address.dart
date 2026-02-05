@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\auth\presentation\hook\use_shipping_address.dart
+// frontend/mall/lib/features/auth/presentation/hook/use_shipping_address.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -31,6 +31,20 @@ class UseShippingAddress extends ChangeNotifier {
   bool _initialized = false;
 
   // ============================================================
+  // auto sign-in state (NEW)
+  // ============================================================
+  bool autoSigningIn = false;
+  bool autoSignedIn = false;
+  String? autoSignInError;
+
+  // ============================================================
+  // ensuring mall user state (NEW)
+  // ============================================================
+  bool ensuringMallUser = false;
+  bool mallUserEnsured = false;
+  String? ensureMallUserError;
+
+  // ============================================================
   // verifying state
   // ============================================================
   bool verifying = false;
@@ -56,13 +70,10 @@ class UseShippingAddress extends ChangeNotifier {
   bool saving = false;
   String? saveMsg;
 
-  /// Page initState から呼ぶ
-  void init() {
+  /// Page initState から呼ぶ（メールリンクなら自動サインイン→verifyEmail→/mall/sign-in）
+  Future<void> init() async {
     if (_initialized) return;
     _initialized = true;
-
-    // ✅ verifyEmail の場合は actionCode 適用
-    maybeApplyActionCode();
 
     // ✅ 郵便番号が変わったら自動で検索（7桁になったタイミング）
     zipCtrl.addListener(_onZipChanged);
@@ -77,6 +88,46 @@ class UseShippingAddress extends ChangeNotifier {
     cityCtrl.addListener(_onFormChanged);
     addr1Ctrl.addListener(_onFormChanged);
     addr2Ctrl.addListener(_onFormChanged);
+
+    // ------------------------------------------------------------
+    // 1) メールリンク起点なら「自動サインイン」を先に試みる
+    // ------------------------------------------------------------
+    if (cameFromEmailLink) {
+      autoSigningIn = true;
+      autoSignedIn = false;
+      autoSignInError = null;
+      notifyListeners();
+
+      final res = await _service.tryAutoSignInFromEmailLink(
+        continueUrl: continueUrl,
+      );
+
+      autoSigningIn = false;
+      autoSignedIn = res.ok && _service.loggedIn;
+      autoSignInError = res.error;
+      notifyListeners();
+    }
+
+    // ------------------------------------------------------------
+    // 2) verifyEmail の場合は actionCode 適用（メール認証）
+    // ------------------------------------------------------------
+    await maybeApplyActionCode();
+
+    // ------------------------------------------------------------
+    // 3) サインイン済みなら /mall/sign-in を叩いて user を存在保証
+    // ------------------------------------------------------------
+    if (_service.loggedIn) {
+      ensuringMallUser = true;
+      mallUserEnsured = false;
+      ensureMallUserError = null;
+      notifyListeners();
+
+      final r = await _service.ensureMallUser();
+      ensuringMallUser = false;
+      mallUserEnsured = r.ok;
+      ensureMallUserError = r.error;
+      notifyListeners();
+    }
   }
 
   @override

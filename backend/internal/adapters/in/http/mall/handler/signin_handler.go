@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\signin_handler.go
+// backend/internal/adapters/in/http/mall/handler/signin_handler.go
 package mallHandler
 
 import (
@@ -9,11 +9,13 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	userdom "narratives/internal/domain/user"
+
+	"narratives/internal/adapters/in/http/middleware"
 )
 
 // SignInHandler is buyer-facing onboarding entry.
 // - POST /mall/sign-in
-// - Requires BootstrapAuthMiddleware (Firebase token verified)
+// - Requires auth middleware (BootstrapAuthMiddleware or UserAuthMiddleware) to verify Firebase token
 // - Ensures user exists (id = uid), returns user.
 type SignInHandler struct {
 	uc *usecase.UserUsecase
@@ -47,13 +49,15 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	uid := getUIDFromContext(ctx)
-	if strings.TrimSpace(uid) == "" {
-		// bootstrap mw が付いていない/失敗している
+	// ✅ middleware が積んだ uid を取得（BootstrapAuthMiddleware / UserAuthMiddleware 両対応）
+	uid, ok := middleware.CurrentUserUID(r)
+	if !ok || strings.TrimSpace(uid) == "" {
+		// auth mw が付いていない/失敗している
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
+	uid = strings.TrimSpace(uid)
 
 	// 既存ユーザーなら返す
 	u, err := h.uc.GetByID(ctx, uid)
@@ -91,23 +95,4 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"created": true,
 		"user":    created,
 	})
-}
-
-// NOTE:
-// BootstrapAuthMiddleware が context に uid を載せるキーに合わせてここを調整してください。
-// 例: ctx.Value("uid") / ctx.Value(middleware.ContextKeyUID) など。
-func getUIDFromContext(ctx any) string {
-	// 一旦「文字列キー "uid"」で読む実装（最小依存）。
-	// あなたの middleware が別キーならここだけ直せばOK。
-	type vctx interface{ Value(any) any }
-	c, ok := ctx.(vctx)
-	if !ok {
-		return ""
-	}
-	if v := c.Value("uid"); v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
 }

@@ -1,9 +1,10 @@
-// frontend\mall\lib\features\auth\application\shipping_address_service.dart
+// frontend/mall/lib/features/auth/application/shipping_address_service.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/config/api_base.dart';
 
@@ -67,6 +68,15 @@ class SaveAddressResult {
   final String? error;
 }
 
+class BasicResult {
+  const BasicResult.success() : ok = true, error = null;
+
+  const BasicResult.failure(this.error) : ok = false;
+
+  final bool ok;
+  final String? error;
+}
+
 class ShippingAddressService {
   ShippingAddressService({
     FirebaseAuth? auth,
@@ -88,6 +98,9 @@ class ShippingAddressService {
     _shipRepoInst = _shipRepo ?? ShippingAddressRepositoryHttp(baseUrl: b);
   }
 
+  // SharedPreferences keys (NEW)
+  static const _kPendingEmailForLinkSignIn = 'pendingEmailForLinkSignIn';
+
   final FirebaseAuth _auth;
   final http.Client _http;
 
@@ -101,8 +114,6 @@ class ShippingAddressService {
   late final ShippingAddressRepositoryHttp _shipRepoInst;
 
   void dispose() {
-    // repo は自前で作った場合のみ dispose したいが判定が難しいので、
-    // repo 側が安全に dispose 実装されている前提で “必ず dispose” に寄せる。
     try {
       _userRepoInst.dispose();
     } catch (_) {}
@@ -150,6 +161,92 @@ class ShippingAddressService {
   bool get loggedIn => _auth.currentUser != null;
 
   bool get emailVerified => _auth.currentUser?.emailVerified ?? false;
+
+  // ------------------------------------------------------------
+  // NEW: Email link auto sign-in
+  // ------------------------------------------------------------
+
+  /// Save pending email for email-link sign-in (call this when you send the sign-in email).
+  Future<void> setPendingEmailForLinkSignIn(String email) async {
+    final e = s(email);
+    if (e.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kPendingEmailForLinkSignIn, e);
+  }
+
+  Future<String?> _getPendingEmailForLinkSignIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = s(prefs.getString(_kPendingEmailForLinkSignIn));
+    return v.isEmpty ? null : v;
+  }
+
+  Future<void> _clearPendingEmailForLinkSignIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kPendingEmailForLinkSignIn);
+  }
+
+  /// Try to auto sign-in if [continueUrl] is an email sign-in link.
+  /// - Works for "Email link sign-in (magic link)" flows.
+  /// - If this is only "verifyEmail" link, this will usually do nothing (ok=true, no-op).
+  Future<BasicResult> tryAutoSignInFromEmailLink({
+    required String? continueUrl,
+  }) async {
+    // already signed in -> no-op
+    if (_auth.currentUser != null) return const BasicResult.success();
+
+    final link = s(continueUrl);
+    if (link.isEmpty) {
+      // no link to process -> no-op
+      return const BasicResult.success();
+    }
+
+    try {
+      final isLink = _auth.isSignInWithEmailLink(link);
+      if (!isLink) {
+        // not a sign-in link -> no-op (verifyEmail link etc.)
+        return const BasicResult.success();
+      }
+
+      final email = await _getPendingEmailForLinkSignIn();
+      if (email == null || email.isEmpty) {
+        return const BasicResult.failure(
+          'サインイン用メールアドレスが見つかりませんでした。もう一度サインインメールを送信してください。',
+        );
+      }
+
+      log('[Auth] signInWithEmailLink link=$link email=$email');
+      await _auth.signInWithEmailLink(email: email, emailLink: link);
+
+      // 成功したら pending を消す（再利用防止）
+      await _clearPendingEmailForLinkSignIn();
+
+      // ensure currentUser refreshed
+      final user = _auth.currentUser;
+      if (user != null) {
+        await user.reload();
+      }
+
+      return const BasicResult.success();
+    } on FirebaseAuthException catch (e) {
+      log('[Auth] signInWithEmailLink failed code=${e.code} msg=${e.message}');
+      return BasicResult.failure(_friendlyLinkSignInError(e));
+    } catch (e) {
+      log('[Auth] signInWithEmailLink failed err=$e');
+      return BasicResult.failure(e.toString());
+    }
+  }
+
+  String _friendlyLinkSignInError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'expired-action-code':
+      case 'invalid-action-code':
+        return 'このリンクは期限切れ、または無効です。もう一度サインインメールを送信してください。';
+      case 'user-disabled':
+        return 'このアカウントは無効化されています。';
+      default:
+        return e.message ?? '自動サインインに失敗しました。';
+    }
+  }
 
   // ------------------------------------------------------------
   // verify email action code
@@ -205,6 +302,54 @@ class ShippingAddressService {
         return 'このアカウントは無効化されています。';
       default:
         return e.message ?? 'メール認証に失敗しました。';
+    }
+  }
+
+  // ------------------------------------------------------------
+  // NEW: Ensure mall user (/mall/sign-in)
+  // ------------------------------------------------------------
+
+  Future<BasicResult> ensureMallUser() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const BasicResult.failure('サインインが必要です。');
+    }
+
+    try {
+      final idToken = await user.getIdToken();
+      final uri = Uri.parse('$_baseUrl/mall/sign-in');
+
+      log('[Mall] POST /mall/sign-in base=$_baseUrl uid=${user.uid}');
+
+      final res = await _http.post(
+        uri,
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+        body: jsonEncode(<String, dynamic>{}),
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return const BasicResult.success();
+      }
+
+      // try parse backend error
+      String msg = 'ユーザー初期化に失敗しました（HTTP ${res.statusCode}）。';
+      try {
+        final j = jsonDecode(res.body);
+        if (j is Map && j['error'] != null) {
+          msg = j['error'].toString();
+        }
+      } catch (_) {}
+
+      log(
+        '[Mall] /mall/sign-in failed status=${res.statusCode} body=${res.body}',
+      );
+      return BasicResult.failure(msg);
+    } catch (e) {
+      log('[Mall] /mall/sign-in failed err=$e');
+      return BasicResult.failure(e.toString());
     }
   }
 
@@ -357,10 +502,6 @@ class ShippingAddressService {
       // ----------------------------
       // 2) upsert shipping address (required)
       // ----------------------------
-      //
-      // ✅ avatarId は未確定なので使わない。
-      // ✅ uid だけで保存できる /mall/shipping-addresses（= “mall/shippingAddress” 相当）を叩く前提。
-      //
       log('[ShippingAddress] upsert shippingAddress uid=$uid');
 
       final saved = await upsertShippingAddress(
@@ -388,10 +529,6 @@ class ShippingAddressService {
   }
 
   /// ✅ docId=uid 前提の upsert（avatarId 不要）
-  ///
-  /// 期待値:
-  /// - backend は /mall/shipping-addresses を受ける
-  /// - body に id=userId=uid を入れて docId として扱う（Upsert）
   Future<ShippingAddress> upsertShippingAddress({
     required String uid,
     required String zip7,
