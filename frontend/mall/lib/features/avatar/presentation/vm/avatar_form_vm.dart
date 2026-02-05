@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\avatar\presentation\vm\avatar_form_vm.dart
+// frontend/mall/lib/features/avatar/presentation/vm/avatar_form_vm.dart
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -61,10 +61,12 @@ class AvatarFormVm extends ChangeNotifier {
     required this.mode,
     AvatarApiClient? apiClient,
     AvatarPatchSubmitter? submitPatch,
-  })  : _apiClient = apiClient ?? AvatarApiClient(),
-        _submitPatch = submitPatch;
+  }) : _apiClient = apiClient ?? AvatarApiClient(),
+       _submitPatch = submitPatch;
 
+  /// ✅ AvatarFormVm は edit 専用として運用する（create は AvatarCreateService を使う）
   final AvatarFormMode mode;
+
   final AvatarApiClient _apiClient;
 
   /// 任意: 画面/上位層から DI される PATCH 実行処理
@@ -84,7 +86,6 @@ class AvatarFormVm extends ChangeNotifier {
   String? existingAvatarIconUrl;
 
   // ✅ 画像アップロード後に得た https://... を保持（UIプレビュー用）
-  // - 推奨B: これ自体は DB に保存しない（avatarIcon 文字列は固定 / me PATCHで送らない）
   String? uploadedAvatarIconUrl;
 
   // ✅ 最後に組み立てた PATCH（デバッグ/遷移で渡す用途）
@@ -101,7 +102,6 @@ class AvatarFormVm extends ChangeNotifier {
   String _initialExternalLink = '';
 
   // ✅ patch実行のための識別子（me contract 由来）
-  // - 直接 id を叩かない構成でも、「初期ロード済み」判定として保持しておく
   String _meAvatarId = '';
 
   String? msg;
@@ -132,9 +132,6 @@ class AvatarFormVm extends ChangeNotifier {
   bool get needsIconUpload => iconBytes != null && iconBytes!.isNotEmpty;
 
   /// edit の場合に「既存情報をフォームへ反映」する。
-  ///
-  /// - 二重ロードを防止（_initialLoaded）
-  /// - 取得できたフィールドだけをプレフィル（null/空文字なら上書きしない）
   Future<void> loadInitialIfNeeded() async {
     if (mode != AvatarFormMode.edit) return;
     if (_initialLoaded) return;
@@ -147,7 +144,6 @@ class AvatarFormVm extends ChangeNotifier {
     try {
       final dto = await _apiClient.fetchMyAvatarProfile();
 
-      // ✅ dto / avatarId が nullable 実装でも落ちないようにする
       final aid = _s(dto?.avatarId);
       if (dto == null || aid.isEmpty) {
         return;
@@ -170,7 +166,6 @@ class AvatarFormVm extends ChangeNotifier {
         linkCtrl.text = link;
       }
 
-      // ✅ 既存 avatarIcon を URL として保持（表示用途）
       final iconUrl = _s(dto.avatarIcon);
       if (iconUrl.isNotEmpty && _isHttpUrl(iconUrl)) {
         existingAvatarIconUrl = iconUrl;
@@ -178,7 +173,6 @@ class AvatarFormVm extends ChangeNotifier {
         existingAvatarIconUrl = null;
       }
 
-      // ✅ 初期値を保存（差分PATCH用）
       _initialAvatarName = _s(nameCtrl.text);
       _initialProfile = _s(profileCtrl.text);
       _initialExternalLink = _s(linkCtrl.text);
@@ -211,8 +205,6 @@ class AvatarFormVm extends ChangeNotifier {
       iconBytes = bytes;
       iconFileName = _s(f.name);
 
-      // ✅ 新規選択が入ったら、表示は bytes 優先になる（existing は残してOK）
-      // ✅ ただし URL は upload 成功後に setUploadedAvatarIconUrl() で注入する
       notifyListeners();
     } catch (e) {
       msg = '画像の選択に失敗しました: $e';
@@ -224,23 +216,13 @@ class AvatarFormVm extends ChangeNotifier {
   void clearIcon() {
     iconBytes = null;
     iconFileName = null;
-
-    // ✅ clear は「新規選択の取り消し」。既存URLは残す（=元に戻る）
-    // ✅ ただしアップロード済URLも「新規選択の結果」ならクリアしておくのが自然
     uploadedAvatarIconUrl = null;
-
     notifyListeners();
   }
 
-  /// ✅ 推奨B: 既存画像を削除する（DB の avatarIcon 文字列は変更しない）
-  ///
-  /// - backend: DELETE /mall/me/avatar/icon-object を叩いて GCS object のみ削除
-  /// - UI: 成功したら「表示上は」既存URLを消す（次回 GET では固定URLが返る想定だが、画像実体は消えている）
   Future<void> deleteExistingIconObject() async {
-    // edit 前提（create で既存削除は意味を持たない）
     if (mode != AvatarFormMode.edit) return;
 
-    // 初期ロード前なら avatarId が取れない可能性が高いので防御
     if (_meAvatarId.trim().isEmpty) {
       msg = 'アバター情報が未ロードのため、既存画像を削除できません。';
       isSuccessMessage = false;
@@ -258,11 +240,9 @@ class AvatarFormVm extends ChangeNotifier {
     try {
       await _apiClient.deleteMeAvatarIconObject();
 
-      // 表示上は既存もアップロード済みも消す（固定URLはDBに残るが、実体は消えている前提）
       existingAvatarIconUrl = null;
       uploadedAvatarIconUrl = null;
 
-      // 新規選択もリセット（削除操作後の状態を単純化）
       iconBytes = null;
       iconFileName = null;
 
@@ -278,7 +258,6 @@ class AvatarFormVm extends ChangeNotifier {
     }
   }
 
-  /// 既存アイコンも含めて「何か表示できるか」
   bool get hasAnyIconPreview {
     if (iconBytes != null && iconBytes!.isNotEmpty) return true;
     if ((uploadedAvatarIconUrl ?? '').trim().isNotEmpty) return true;
@@ -296,28 +275,17 @@ class AvatarFormVm extends ChangeNotifier {
     return null;
   }
 
-  /// ✅ 差分PATCHを組み立てる
-  ///
-  /// 推奨B:
-  /// - avatarIcon はここでは一切組み立てない（運用で担保 / API側でも拒否）
-  ///
-  /// edit:
-  /// - 初期値との差分のみを含める
-  /// - profile / externalLink は "" を送ってクリアできる（backend契約次第）
-  ///
-  /// create:
-  /// - 全項目を含める（ただし空は null にして省略）
   AvatarPatchRequest buildPatchRequest() {
     final name = nameCtrl.text.trim();
     final profile = profileCtrl.text.trim();
     final link = linkCtrl.text.trim();
 
+    // ✅ create は使わない前提だが、念のため build は残す
     if (mode == AvatarFormMode.create) {
       return AvatarPatchRequest(
         avatarName: name.isEmpty ? null : name,
         profile: profile.isEmpty ? null : profile,
         externalLink: link.isEmpty ? null : link,
-        // avatarIcon: null (never send)
       );
     }
 
@@ -327,40 +295,39 @@ class AvatarFormVm extends ChangeNotifier {
     String? patchLink;
 
     if (name != _initialAvatarName) {
-      patchName = name; // 空は canSave で弾く想定
+      patchName = name;
     }
-
     if (profile != _initialProfile) {
-      patchProfile = profile; // "" を送ることでクリアを表現
+      patchProfile = profile;
     }
-
     if (link != _initialExternalLink) {
-      patchLink = link; // "" を送ることでクリアを表現
+      patchLink = link;
     }
 
     return AvatarPatchRequest(
       avatarName: patchName,
       profile: patchProfile,
       externalLink: patchLink,
-      // avatarIcon: null (never send)
     );
   }
 
-  /// 保存（create/edit 共通）
-  ///
-  /// ✅ 本メソッドは
-  /// - lastBuiltPatch を保持し
-  /// - submitPatch（DI）を通じて実際のPATCH送信も可能
-  /// とすることで「PATCHリクエストを渡せる」ようにします。
+  /// ✅ edit専用の保存（PATCH）
   ///
   /// IMPORTANT:
-  /// - avatarIcon の更新/削除はこの save() では行わない
-  /// - 画像は別エンドポイント（signed PUT / delete object）で処理する
+  /// - create 画面では使わない（AvatarCreateService を使う）
+  /// - submitPatch 未注入でも throw せず false を返して UI を落とさない
   Future<bool> save({AvatarPatchSubmitter? submitPatch}) async {
+    // ✅ create では呼ばない契約。誤って呼ばれても落とさない。
+    if (mode == AvatarFormMode.create) {
+      msg = 'この画面の保存処理は create では使用しません。';
+      isSuccessMessage = false;
+      notifyListeners();
+      return false;
+    }
+
     if (!canSave) return false;
 
-    // edit の更新で avatarId が無いのは異常（fetch してない/壊れた状態）
-    if (mode == AvatarFormMode.edit && _meAvatarId.trim().isEmpty) {
+    if (_meAvatarId.trim().isEmpty) {
       msg = 'アバター情報が未ロードのため、更新できません。';
       isSuccessMessage = false;
       notifyListeners();
@@ -376,29 +343,28 @@ class AvatarFormVm extends ChangeNotifier {
       final patch = buildPatchRequest();
       lastBuiltPatch = patch;
 
-      final submit = submitPatch ?? _submitPatch;
-      if (submit == null) {
-        throw StateError(
-          'PATCH submitter is not configured. Provide submitPatch or inject _submitPatch.',
-        );
-      }
-
-      // patch が空なら no-op で成功扱い（編集画面のUXを優先）
-      if (mode == AvatarFormMode.edit && patch.isEmpty) {
+      // patch が空なら no-op
+      if (patch.isEmpty) {
         isSuccessMessage = true;
         msg = '変更がありません。';
         return true;
       }
 
+      final submit = submitPatch ?? _submitPatch;
+      if (submit == null) {
+        msg = '更新処理が設定されていません（submitPatch が未注入です）。';
+        isSuccessMessage = false;
+        return false;
+      }
+
       await submit(patch);
 
-      // ✅ 成功したら「初期値」を現在値に更新（次回以降の差分判定がズレないように）
       _initialAvatarName = _s(nameCtrl.text);
       _initialProfile = _s(profileCtrl.text);
       _initialExternalLink = _s(linkCtrl.text);
 
       isSuccessMessage = true;
-      msg = mode == AvatarFormMode.create ? 'アバターを保存しました。' : 'アバターを更新しました。';
+      msg = 'アバターを更新しました。';
       return true;
     } catch (e) {
       isSuccessMessage = false;

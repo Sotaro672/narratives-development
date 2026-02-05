@@ -236,6 +236,10 @@ class AvatarIdStore extends ChangeNotifier {
 /// - URLの avatarId は「信用しない」（uid が入っている事故を防ぐ）
 /// - store があればそれを使う
 /// - 最終的に /mall/me/avatar で解決
+///
+/// NOTE:
+/// - redirect から無闇に呼ぶと「未作成ユーザー」で 404 を量産するため、
+///   基本は login 遷移時（/login）など限定的なタイミングでのみ呼ぶ。
 Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
   // 1) store があればそれを採用（最優先）
   final storeId = AvatarIdStore.I.avatarId.trim();
@@ -269,19 +273,31 @@ Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
 /// セキュリティ要件:
 /// - avatarId を URL に注入しない
 /// - 代わりに store へ保存のみ行う
+///
+/// IMPORTANT:
+/// - redirect から /mall/me/avatar を “常時 best-effort” で叩くと、
+///   未作成ユーザー（avatar未作成）で 404 を量産し、不要なノイズになる。
+/// - avatarId 解決は「本当に必要な画面側（編集/マイページ等）」で行う。
 Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   final user = FirebaseAuth.instance.currentUser;
+
+  final path = state.uri.path;
+  final qp = state.uri.queryParameters;
 
   // ------------------------------------------------------------
   // 未ログイン
   // - avatarId / nav state をクリア
+  // - ✅ ただし、メール認証リンク等の「oobCode 付き /shipping-address」は通す
   if (user == null) {
     AvatarIdStore.I.clear();
     NavStore.I.clear();
+
+    if (path == AppRoutePath.shippingAddress && qp['oobCode'] != null) {
+      return null; // allow landing page even when signed-out
+    }
+
     return null;
   }
-
-  final path = state.uri.path;
 
   final isLoginRoute = path == AppRoutePath.login;
   final isCreateAccountRoute = path == AppRoutePath.createAccount;
@@ -299,6 +315,9 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   // ✅ ログイン直後（/login に居る状態でログイン状態になった瞬間）
   // - avatarId は解決して store に入れる（best-effort）
   // - Pattern B: returnTo があればそこへ復帰。無ければ home。
+  //
+  // NOTE:
+  // - ここは「ログイン直後」という限定的タイミングなので resolve を許可する。
   // ============================================================
   if (isLoginRoute) {
     final resolved = await _ensureAvatarIdResolved(state);
@@ -317,31 +336,26 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   }
 
   // ✅ create_account(/create-account) は、ログイン状態になっても強制遷移しない
+  //
+  // IMPORTANT:
+  // - ここで /mall/me/avatar を叩く必要はない（未作成ユーザーの 404 ノイズになる）。
   if (isCreateAccountRoute) {
-    final resolved = await _ensureAvatarIdResolved(state); // best-effort
-    if (resolved.isNotEmpty) {
-      AvatarIdStore.I.set(resolved);
-    }
     return null;
   }
 
-  // ✅ exempt は best-effort で解決だけ試す（あれば store に入る）
+  // ✅ exempt は “avatarId 解決を試さない”
+  //
+  // IMPORTANT:
+  // - billing-address / shipping-address / avatar-create は
+  //   「未作成ユーザーでも通る導線」なので、redirect から resolve しない。
   if (exemptForAvatarId.contains(path)) {
-    final resolved = await _ensureAvatarIdResolved(state);
-    if (resolved.isNotEmpty) {
-      AvatarIdStore.I.set(resolved);
-    }
     return null;
   }
 
-  // ✅ サインイン後：avatarId は store に確保するが、URLは改変しない
-  // ❌ avatarId 未解決でも avatar_create には飛ばさない（既存要件維持）
-  final resolved = await _ensureAvatarIdResolved(state);
-  if (resolved.isNotEmpty) {
-    AvatarIdStore.I.set(resolved);
-  }
-
-  // ✅ URL は触らない（avatarId を query に入れない / 正規化しない）
+  // ✅ それ以外の画面でも、redirect では avatarId を解決しない
+  //
+  // - avatarId が必要な画面（例: avatar edit / wallet contents 等）で、
+  //   store が空なら各 feature 側で resolveMyAvatarId() を呼ぶ。
   return null;
 }
 

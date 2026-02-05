@@ -32,7 +32,6 @@ class CreateAccountService {
   }
 
   bool isPasswordValid(String raw) {
-    // 최소 요건: 8 chars
     return raw.trim().length >= 8;
   }
 
@@ -140,8 +139,14 @@ class CreateAccountService {
       } catch (_) {}
     }
 
-    // 2) Send verification email
-    await user.sendEmailVerification();
+    // 2) Send verification email (✅ Path routing compatible)
+    await user.sendEmailVerification(
+      ActionCodeSettings(
+        // ✅ IMPORTANT: use Path URL (no "#/") so email clients don't break routing
+        url: 'https://narratives-development-mall.web.app/shipping-address',
+        handleCodeInApp: true,
+      ),
+    );
   }
 
   void _ensureNotDisposed() {

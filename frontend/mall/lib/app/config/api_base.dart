@@ -9,9 +9,6 @@ const String _fallbackBaseUrl =
 /// 3) fallback
 String resolveApiBase() => _resolveApiBase();
 
-/// ✅ Optional: Mall 側の呼び出し意図を明確にしたい場合の別名
-String resolveMallApiBase() => _resolveApiBase();
-
 String _resolveApiBase() {
   const fromDefineUrl = String.fromEnvironment('API_BASE_URL');
   const fromDefine = String.fromEnvironment('API_BASE');

@@ -1,4 +1,4 @@
-// frontend/mall/lib/features/avatar/infrastructure/avatar_repository_http.dart
+// frontend\mall\lib\features\avatar\infrastructure\repository_http.dart
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';

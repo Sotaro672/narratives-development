@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
 import '../../avatar/infrastructure/repository_http.dart';
+import '../../../di/container.dart';
 
 class PickIconResult {
   const PickIconResult({
@@ -41,7 +42,7 @@ class AvatarCreateService {
     AvatarRepositoryHttp? repo,
     FirebaseAuth? auth,
     this.logger,
-  }) : _repo = repo ?? AvatarRepositoryHttp(),
+  }) : _repo = repo ?? AppContainer.I.avatarRepositoryHttp,
        _auth = auth ?? FirebaseAuth.instance;
 
   final AvatarRepositoryHttp _repo;
@@ -49,9 +50,8 @@ class AvatarCreateService {
 
   final void Function(String s)? logger;
 
-  void dispose() {
-    _repo.dispose();
-  }
+  /// ✅ DI 管理の repo を使うため、ここで dispose しない（AppContainer に任せる）
+  void dispose() {}
 
   void _log(String s) => logger?.call(s);
 
@@ -99,17 +99,13 @@ class AvatarCreateService {
       await input.onChange.first;
 
       final files = input.files;
-
-      // ✅ web.FileList には isEmpty が無いので length で判定する
       if (files == null || files.length == 0) return null;
 
       final f = files.item(0);
       if (f == null) return null;
 
-      // ✅ ブラウザに一時URLを作らせる
       objectUrl = web.URL.createObjectURL(f);
 
-      // ✅ そのURLを HTTP GET して bytes を取得
       final res = await http.get(Uri.parse(objectUrl));
       if (res.statusCode < 200 || res.statusCode >= 300) {
         return PickIconResult(
@@ -148,9 +144,7 @@ class AvatarCreateService {
       if (objectUrl != null) {
         try {
           web.URL.revokeObjectURL(objectUrl);
-        } catch (_) {
-          // ignore
-        }
+        } catch (_) {}
       }
     }
   }
@@ -197,7 +191,6 @@ class AvatarCreateService {
     return 'application/octet-stream';
   }
 
-  /// ✅ FirebaseAuth の displayName を同期（photoURL は絶対正スキーマ外なので扱わない）
   Future<void> _syncAuthDisplayName({
     required User user,
     required String avatarName,
@@ -208,12 +201,9 @@ class AvatarCreateService {
         await user.updateDisplayName(name);
         _log('auth profile updated displayName="$name"');
       }
-
-      // ✅ userChanges() へ反映（Web でも安定させる）
       await user.reload();
       _log('auth profile reload done');
     } catch (e) {
-      // ここは致命にしない（作成は成功しているため）
       _log('auth profile sync skipped err=$e');
     }
   }
@@ -232,7 +222,6 @@ class AvatarCreateService {
         return AvatarCreateResult(ok: false, message: 'サインインが必要です。');
       }
 
-      // ✅ 認証主体 UID（= absolute schema の userId）
       final userId = user.uid.trim();
       if (userId.isEmpty) {
         return AvatarCreateResult(ok: false, message: 'userId が取得できませんでした。');
@@ -266,7 +255,6 @@ class AvatarCreateService {
         'hasIcon=$hasIcon iconBytesLen=$size file="$fileName" mime="$mimeType"',
       );
 
-      // (1) ✅ まず Avatar を作成（アイコンURLは後で PATCH）
       final created = await _repo.create(
         request: CreateAvatarRequest(
           userId: userId,
@@ -284,10 +272,8 @@ class AvatarCreateService {
 
       _log('avatar create ok avatarId=$avatarId userId=$userId');
 
-      // ✅ 表示名だけは FirebaseAuth に同期（email表示を防ぐ）
       await _syncAuthDisplayName(user: user, avatarName: avatarName);
 
-      // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→https URL を PATCH 保存（方針A）
       if (hasIcon) {
         final signed = await _repo.issueAvatarIconUploadUrl(
           avatarId: avatarId,
@@ -299,13 +285,8 @@ class AvatarCreateService {
         final uploadUrl = s(signed.uploadUrl);
         final bucket = s(signed.bucket);
         final objectPath = s(signed.objectPath);
-        final expiresAt = s(signed.expiresAt);
 
         if (uploadUrl.isEmpty || bucket.isEmpty || objectPath.isEmpty) {
-          _log(
-            'icon signed url invalid avatarId=$avatarId '
-            'uploadUrl="$uploadUrl" bucket="$bucket" objectPath="$objectPath"',
-          );
           return AvatarCreateResult(
             ok: false,
             message: 'アイコンアップロードURLの取得に失敗しました。',
@@ -313,33 +294,18 @@ class AvatarCreateService {
           );
         }
 
-        final short = uploadUrl.length > 64
-            ? '${uploadUrl.substring(0, 64)}...'
-            : uploadUrl;
-
-        _log(
-          'icon signed url ok avatarId=$avatarId bucket="$bucket" objectPath="$objectPath" '
-          'expiresAt="${expiresAt.isEmpty ? "-" : expiresAt}" uploadUrl="$short"',
-        );
-
         await _repo.uploadToSignedUrl(
           uploadUrl: uploadUrl,
           bytes: bytes,
           contentType: mimeType,
         );
 
-        _log('icon upload ok bytes=$size');
-
-        // ✅ public https URL を生成し、avatarIcon として PATCH で保存する
         final httpsUrl = _repo.publicHttpsUrlFromBucketObject(
           bucket: bucket,
           objectPath: objectPath,
         );
 
         if (httpsUrl.isEmpty) {
-          _log(
-            'icon https url build failed avatarId=$avatarId bucket="$bucket" objectPath="$objectPath"',
-          );
           return AvatarCreateResult(
             ok: false,
             message: 'アイコンURLの生成に失敗しました。',
@@ -347,16 +313,10 @@ class AvatarCreateService {
           );
         }
 
-        _log('icon https url built avatarId=$avatarId url="$httpsUrl"');
-
         await _repo.update(
           id: avatarId,
-          request: UpdateAvatarRequest(
-            avatarIcon: httpsUrl, // ✅ 方針A: https://... を保存
-          ),
+          request: UpdateAvatarRequest(avatarIcon: httpsUrl),
         );
-
-        _log('icon url patch ok avatarId=$avatarId');
       }
 
       _log('avatar save done avatarId=$avatarId userId=$userId');

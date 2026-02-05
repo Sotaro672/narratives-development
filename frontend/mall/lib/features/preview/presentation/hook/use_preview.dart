@@ -294,7 +294,7 @@ class MeAvatarRepositoryHttp {
     Map<String, String>? headers,
   }) async {
     final base = (baseUrl ?? '').trim();
-    final resolvedBase = base.isNotEmpty ? base : resolveMallApiBase();
+    final resolvedBase = base.isNotEmpty ? base : resolveApiBase();
 
     final b = normalizeBaseUrl(resolvedBase);
     final uri = Uri.parse('$b/mall/me/avatar');
