@@ -3,6 +3,7 @@ package console
 
 import (
 	fs "narratives/internal/adapters/out/firestore"
+	orderfs "narratives/internal/adapters/out/firestore/order"
 	pbfs "narratives/internal/adapters/out/firestore/productBlueprint"
 	gcso "narratives/internal/adapters/out/gcs"
 )
@@ -37,7 +38,7 @@ type repos struct {
 
 	mintRepo *fs.MintRepositoryFS
 
-	orderRepo      *fs.OrderRepositoryFS
+	orderRepo      *orderfs.OrderRepositoryFS
 	paymentRepo    *fs.PaymentRepositoryFS
 	permissionRepo *fs.PermissionRepositoryFS
 	productRepo    *fs.ProductRepositoryFS
@@ -110,7 +111,7 @@ func buildRepos(c *clients) *repos {
 
 	mintRepo := fs.NewMintRepositoryFS(fsClient)
 
-	orderRepo := fs.NewOrderRepositoryFS(fsClient)
+	orderRepo := orderfs.NewOrderRepositoryFS(fsClient)
 	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
 	permissionRepo := fs.NewPermissionRepositoryFS(fsClient)
 	productRepo := fs.NewProductRepositoryFS(fsClient)

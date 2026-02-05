@@ -28,13 +28,15 @@ type BillingSnapshot struct {
 
 // OrderItemSnapshot is stored inside Order.Items.
 // Expectation: items are NOT split by listId, and each item is
-// [modelId, inventoryId, qty, price].
+// [modelId, inventoryId, listId, qty, price].
 //
 // ✅ NEW:
+// - listId を cart から引き継いで保持する（掲載元追跡のため）
 // - transferred / transferredAt を item 単位で保持する（複数商品の部分移転に対応）
 type OrderItemSnapshot struct {
 	ModelID     string `json:"modelId"`
 	InventoryID string `json:"inventoryId"`
+	ListID      string `json:"listId"` // ✅ NEW
 	Qty         int    `json:"qty"`
 	Price       int    `json:"price"`
 
@@ -276,6 +278,9 @@ func validateItems(items []OrderItemSnapshot) error {
 		if strings.TrimSpace(it.InventoryID) == "" {
 			return ErrInvalidItemSnapshot
 		}
+		if strings.TrimSpace(it.ListID) == "" { // ✅ NEW（cart 由来 listId を必須化）
+			return ErrInvalidItemSnapshot
+		}
 		if it.Qty <= 0 {
 			return ErrInvalidItemSnapshot
 		}
@@ -283,10 +288,7 @@ func validateItems(items []OrderItemSnapshot) error {
 			return ErrInvalidItemSnapshot
 		}
 
-		// ✅ NEW: transferredAt の整合性
-		// - transferred=true なら transferredAt があるべき（ただし過去データ互換のため「必須」にはしない）
-		// - transferred=false なら transferredAt は nil が望ましい（こちらも必須にはしない）
-		// 厳密にしたい場合はここでエラーにしてOK
+		// ✅ transferredAt の整合性は「必須」にしない（既存互換）
 	}
 	return nil
 }
@@ -317,31 +319,28 @@ func normalizeItems(items []OrderItemSnapshot) []OrderItemSnapshot {
 		n := OrderItemSnapshot{
 			ModelID:     strings.TrimSpace(it.ModelID),
 			InventoryID: strings.TrimSpace(it.InventoryID),
+			ListID:      strings.TrimSpace(it.ListID), // ✅ NEW
 			Qty:         it.Qty,
 			Price:       it.Price,
 
-			// ✅ NEW: 起票時の item transfer 状態は false / nil
+			// ✅ 起票時の item transfer 状態は false / nil
 			Transferred:   false,
 			TransferredAt: nil,
 		}
 
 		// 既存入力に transferred が入っている場合は尊重（再構築やimport時）
-		// ただし transferredAt は transferred と整合するように正規化
 		if it.Transferred {
 			n.Transferred = true
 			if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
 				t := it.TransferredAt.UTC()
 				n.TransferredAt = &t
 			} else {
-				// transferred=true で時刻が無い場合は nil のまま（repository/update 側で補完してもOK）
 				n.TransferredAt = nil
 			}
 		} else {
-			// transferred=false の場合、TransferredAt は基本 nil に寄せる
 			n.TransferredAt = nil
 		}
 
-		// 空は validateItems で弾くのでここでは落とさない
 		out = append(out, n)
 	}
 	return out

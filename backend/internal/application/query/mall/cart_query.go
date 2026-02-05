@@ -1,4 +1,4 @@
-// backend\internal\application\query\mall\cart_query.go
+// backend/internal/application/query/mall/cart_query.go
 package mall
 
 import (
@@ -105,9 +105,9 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 // ============================================================
 // cart snapshot parsing (current schema only)
 // ============================================================
-
-// carts doc supported shape:
-// - items: map[itemKey] = {inventoryId, listId, modelId, qty, ...}
+//
+// carts doc supported shape (current only):
+// - items: [{inventoryId, listId, modelId, qty}, ...]
 func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartdom.Cart, error) {
 	if snap == nil {
 		return nil, errors.New("mall cart query: snapshot is nil")
@@ -118,13 +118,13 @@ func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartd
 		// empty doc is unusual but handle defensively
 		return &cartdom.Cart{
 			ID:    strings.TrimSpace(avatarID),
-			Items: map[string]cartdom.CartItem{},
+			Items: []cartdom.CartItem{},
 		}, nil
 	}
 
 	c := &cartdom.Cart{
 		ID:    strings.TrimSpace(avatarID),
-		Items: map[string]cartdom.CartItem{},
+		Items: []cartdom.CartItem{},
 	}
 
 	// times (best-effort)
@@ -144,22 +144,20 @@ func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartd
 		}
 	}
 
-	// items
 	itemsAny, _ := raw["items"]
-	m, ok := itemsAny.(map[string]any)
-	if !ok || m == nil {
+	if itemsAny == nil {
 		return c, nil
 	}
 
-	for k, v := range m {
-		itemKey := strings.TrimSpace(k)
-		if itemKey == "" {
-			continue
-		}
+	arr, ok := itemsAny.([]any)
+	if !ok {
+		// legacy removed: map 等はエラー（スキーマ違反）
+		return nil, errors.New("mall cart query: invalid items type (expected array)")
+	}
 
+	for _, v := range arr {
 		mv, ok := v.(map[string]any)
 		if !ok || mv == nil {
-			// ✅ legacy は削除：map 以外は無視
 			continue
 		}
 
@@ -167,16 +165,16 @@ func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartd
 		lid := strings.TrimSpace(stringAny(mv["listId"]))
 		mid := strings.TrimSpace(stringAny(mv["modelId"]))
 		qty := intAny(mv["qty"])
-		if qty <= 0 {
+		if inv == "" || lid == "" || mid == "" || qty <= 0 {
 			continue
 		}
 
-		c.Items[itemKey] = cartdom.CartItem{
+		c.Items = append(c.Items, cartdom.CartItem{
 			InventoryID: inv,
 			ListID:      lid,
 			ModelID:     mid,
 			Qty:         qty,
-		}
+		})
 	}
 
 	return c, nil
@@ -190,7 +188,7 @@ func timeAnyToTime(v any) (time.Time, bool) {
 		}
 		return x.UTC(), true
 	default:
-		// Firestore の Timestamp は Data() だと time.Time で来る想定だが、念のため fmt 経由はしない
+		// Firestore Timestamp は Data() だと time.Time で来る想定
 		return time.Time{}, false
 	}
 }
@@ -271,6 +269,11 @@ type modelSimple struct {
 	Color string
 }
 
+// ✅ domain と同じ構成で “表示用 itemKey” を生成する（DTO が map を要求するため）
+func makeItemKey(inventoryID, listID, modelID string) string {
+	return strings.TrimSpace(inventoryID) + "__" + strings.TrimSpace(listID) + "__" + strings.TrimSpace(modelID)
+}
+
 func toCartDTO(
 	c *cartdom.Cart,
 	priceIndex map[string]map[string]int,
@@ -287,22 +290,19 @@ func toCartDTO(
 		ExpiresAt: toRFC3339Ptr(c.ExpiresAt),
 	}
 
-	if c.Items == nil {
+	if c == nil || len(c.Items) == 0 {
 		return out
 	}
 
-	for k, it := range c.Items {
-		key := strings.TrimSpace(k)
-		if key == "" {
-			continue
-		}
-
+	for _, it := range c.Items {
 		invID := strings.TrimSpace(it.InventoryID)
 		listID := strings.TrimSpace(it.ListID)
 		modelID := strings.TrimSpace(it.ModelID)
 		if invID == "" || listID == "" || modelID == "" || it.Qty <= 0 {
 			continue
 		}
+
+		key := makeItemKey(invID, listID, modelID)
 
 		item := malldto.CartItemDTO{
 			InventoryID: invID,
@@ -361,7 +361,32 @@ func toCartDTO(
 			}
 		}
 
-		out.Items[key] = item
+		// 同一 key が複数回出たら qty を合算（安全弁）
+		if exist, ok := out.Items[key]; ok {
+			exist.Qty = exist.Qty + item.Qty
+			// 表示フィールドは既存優先、空なら埋める
+			if strings.TrimSpace(exist.Title) == "" && strings.TrimSpace(item.Title) != "" {
+				exist.Title = item.Title
+			}
+			if strings.TrimSpace(exist.Size) == "" && strings.TrimSpace(item.Size) != "" {
+				exist.Size = item.Size
+			}
+			if strings.TrimSpace(exist.Color) == "" && strings.TrimSpace(item.Color) != "" {
+				exist.Color = item.Color
+			}
+			if strings.TrimSpace(exist.ListImage) == "" && strings.TrimSpace(item.ListImage) != "" {
+				exist.ListImage = item.ListImage
+			}
+			if exist.Price == nil && item.Price != nil {
+				exist.Price = item.Price
+			}
+			if strings.TrimSpace(exist.ProductName) == "" && strings.TrimSpace(item.ProductName) != "" {
+				exist.ProductName = item.ProductName
+			}
+			out.Items[key] = exist
+		} else {
+			out.Items[key] = item
+		}
 	}
 
 	return out
@@ -380,7 +405,7 @@ func toRFC3339Ptr(t time.Time) *string {
 // ============================================================
 
 func (q *CartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart) (map[string]map[string]int, map[string]listMeta) {
-	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || c == nil || len(c.Items) == 0 {
 		return nil, nil
 	}
 
@@ -523,7 +548,11 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 
 		m := snap.Data()
 		title := pickString(m, "title", "Title")
-		image := pickString(m, "imageId", "ImageID", "imageID", "ImageId", "image", "Image", "listImage", "ListImage", "imageUrl", "ImageUrl")
+		image := pickString(m,
+			"imageId", "ImageID", "imageID", "ImageId",
+			"image", "Image", "listImage", "ListImage",
+			"imageUrl", "ImageUrl",
+		)
 
 		if strings.TrimSpace(title) != "" || strings.TrimSpace(image) != "" {
 			metaOut[lid] = listMeta{Title: strings.TrimSpace(title), ImageID: strings.TrimSpace(image)}
@@ -568,7 +597,7 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 // ============================================================
 
 func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]invParts {
-	if q == nil || q.FS == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || q.FS == nil || c == nil || len(c.Items) == 0 {
 		return nil
 	}
 
@@ -651,7 +680,7 @@ func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Ca
 // ============================================================
 
 func (q *CartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]modelSimple {
-	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || c == nil || len(c.Items) == 0 {
 		return nil
 	}
 	if q.Resolver == nil {
@@ -704,13 +733,12 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 	c *cartdom.Cart,
 	invIndex map[string]invParts,
 ) map[string]string {
-	if q == nil || q.FS == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || q.FS == nil || c == nil || len(c.Items) == 0 {
 		return nil
 	}
 
 	pbCol := strings.TrimSpace(q.ProductBlueprintsCol)
 	if pbCol == "" {
-		// ✅ repo 側と揃える
 		pbCol = "product_blueprints"
 	}
 

@@ -27,19 +27,19 @@ type CartItem struct {
 
 // Cart represents "a cart document".
 //   - docId = avatarId (Firestore)
-//   - Items: itemKey -> CartItem
-//     itemKey is a deterministic composite key from (inventoryId, listId, modelId)
+//   - Items: []CartItem (no map key / no composite id)
 //   - ExpiresAt: for Firestore TTL (auto deletion), updated on each cart mutation
 //
 // NOTE:
 // - ordered フラグは持たない
-// - order テーブル作成（注文確定）に合わせて、items から itemKey を削除（消費）する
+// - order テーブル作成（注文確定）に合わせて、items を空にする（消費）
 type Cart struct {
 	// ID is Firestore docId (= avatarId).
 	ID string `json:"id" firestore:"id"`
 
-	// Items is itemKey -> CartItem (includes qty)
-	Items map[string]CartItem `json:"items" firestore:"items"`
+	// Items is a list of line items.
+	// Uniqueness is defined by (inventoryId, listId, modelId).
+	Items []CartItem `json:"items" firestore:"items"`
 
 	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt" firestore:"updatedAt"`
@@ -52,7 +52,7 @@ type Cart struct {
 // NewCart creates a new cart doc.
 // id is the Firestore docId (avatarId).
 // items can be nil (treated as empty).
-func NewCart(id string, items map[string]CartItem, now time.Time) (*Cart, error) {
+func NewCart(id string, items []CartItem, now time.Time) (*Cart, error) {
 	docID := strings.TrimSpace(id)
 
 	c := &Cart{
@@ -83,25 +83,23 @@ func (c *Cart) Add(inventoryID, listID, modelID string, qty int, now time.Time) 
 	}
 
 	if c.Items == nil {
-		c.Items = map[string]CartItem{}
+		c.Items = []CartItem{}
 	}
 
-	key := makeItemKey(inv, lid, mid)
-
-	if it, ok := c.Items[key]; ok {
-		it.Qty = it.Qty + qty
+	idx := findItemIndex(c.Items, inv, lid, mid)
+	if idx >= 0 {
+		c.Items[idx].Qty += qty
 		// normalize fields (keep consistent)
-		it.InventoryID = inv
-		it.ListID = lid
-		it.ModelID = mid
-		c.Items[key] = it
+		c.Items[idx].InventoryID = inv
+		c.Items[idx].ListID = lid
+		c.Items[idx].ModelID = mid
 	} else {
-		c.Items[key] = CartItem{
+		c.Items = append(c.Items, CartItem{
 			InventoryID: inv,
 			ListID:      lid,
 			ModelID:     mid,
 			Qty:         qty,
-		}
+		})
 	}
 
 	c.touch(now)
@@ -123,20 +121,34 @@ func (c *Cart) SetQty(inventoryID, listID, modelID string, qty int, now time.Tim
 	}
 
 	if c.Items == nil {
-		c.Items = map[string]CartItem{}
+		c.Items = []CartItem{}
 	}
 
-	key := makeItemKey(inv, lid, mid)
+	idx := findItemIndex(c.Items, inv, lid, mid)
 
 	if qty <= 0 {
-		delete(c.Items, key)
-	} else {
-		c.Items[key] = CartItem{
+		// remove if exists
+		if idx >= 0 {
+			c.Items = removeIndex(c.Items, idx)
+		}
+		c.touch(now)
+		return c.validate()
+	}
+
+	if idx >= 0 {
+		c.Items[idx] = CartItem{
 			InventoryID: inv,
 			ListID:      lid,
 			ModelID:     mid,
 			Qty:         qty,
 		}
+	} else {
+		c.Items = append(c.Items, CartItem{
+			InventoryID: inv,
+			ListID:      lid,
+			ModelID:     mid,
+			Qty:         qty,
+		})
 	}
 
 	c.touch(now)
@@ -153,54 +165,22 @@ func (c *Cart) Remove(inventoryID, listID, modelID string, now time.Time) error 
 // 想定ユースケース:
 // 1) cart.Items を元に order を作成（order テーブルに保存）
 // 2) 同トランザクション/同リクエスト内で cart.ConsumeAll() を呼び、items を空にする
-func (c *Cart) ConsumeAll(now time.Time) (map[string]CartItem, error) {
+func (c *Cart) ConsumeAll(now time.Time) ([]CartItem, error) {
 	if c == nil {
 		return nil, ErrInvalidCart
 	}
 
-	// snapshot
+	// snapshot (already normalized)
 	snap := cloneItems(c.Items)
 
 	// clear
-	if c.Items == nil {
-		c.Items = map[string]CartItem{}
-	} else {
-		for k := range c.Items {
-			delete(c.Items, k)
-		}
-	}
+	c.Items = []CartItem{}
 
 	c.touch(now)
 	if err := c.validate(); err != nil {
 		return nil, err
 	}
 	return snap, nil
-}
-
-// Consume removes specific itemKeys from the cart (partial consumption).
-// order テーブル側が「一部の items を注文確定」する設計の場合に使う。
-func (c *Cart) Consume(itemKeys []string, now time.Time) error {
-	if c == nil {
-		return ErrInvalidCart
-	}
-	if len(itemKeys) == 0 {
-		return nil
-	}
-	if c.Items == nil {
-		c.Items = map[string]CartItem{}
-		return nil
-	}
-
-	for _, k := range itemKeys {
-		key := strings.TrimSpace(k)
-		if key == "" {
-			continue
-		}
-		delete(c.Items, key)
-	}
-
-	c.touch(now)
-	return c.validate()
 }
 
 func (c *Cart) touch(now time.Time) {
@@ -230,83 +210,58 @@ func (c *Cart) validate() error {
 	}
 
 	// Items can be empty, but if present each entry must be valid.
-	if c.Items != nil {
-		// deterministic validation order (useful for tests/debug)
-		keys := make([]string, 0, len(c.Items))
-		for k := range c.Items {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+	if len(c.Items) == 0 {
+		return nil
+	}
 
-		for _, k := range keys {
-			key := strings.TrimSpace(k)
-			it := c.Items[k]
+	// normalize + merge duplicates + stable order
+	c.Items = normalizeAndMerge(c.Items)
 
-			inv := strings.TrimSpace(it.InventoryID)
-			lid := strings.TrimSpace(it.ListID)
-			mid := strings.TrimSpace(it.ModelID)
-
-			if inv == "" || lid == "" || mid == "" || it.Qty <= 0 {
-				return ErrInvalidCart
-			}
-
-			normalizedKey := makeItemKey(inv, lid, mid)
-
-			// normalize key if it had spaces / wrong composition
-			if normalizedKey != key {
-				// remove old
-				delete(c.Items, k)
-
-				// merge if normalized key already exists
-				if exist, ok := c.Items[normalizedKey]; ok {
-					exist.Qty = exist.Qty + it.Qty
-					exist.InventoryID = inv
-					exist.ListID = lid
-					exist.ModelID = mid
-					c.Items[normalizedKey] = exist
-				} else {
-					it.InventoryID = inv
-					it.ListID = lid
-					it.ModelID = mid
-					c.Items[normalizedKey] = it
-				}
-			} else {
-				// normalize fields even when key is same
-				if it.InventoryID != inv || it.ListID != lid || it.ModelID != mid {
-					it.InventoryID = inv
-					it.ListID = lid
-					it.ModelID = mid
-					c.Items[normalizedKey] = it
-				}
-			}
+	// final validation
+	for _, it := range c.Items {
+		inv := strings.TrimSpace(it.InventoryID)
+		lid := strings.TrimSpace(it.ListID)
+		mid := strings.TrimSpace(it.ModelID)
+		if inv == "" || lid == "" || mid == "" || it.Qty <= 0 {
+			return ErrInvalidCart
 		}
 	}
 
 	return nil
 }
 
-func makeItemKey(inventoryID, listID, modelID string) string {
-	// IDs are assumed not to contain this delimiter. If that assumption changes,
-	// switch to encoding/escaping (e.g., base64 or url.PathEscape for each part).
-	return strings.TrimSpace(inventoryID) + "__" + strings.TrimSpace(listID) + "__" + strings.TrimSpace(modelID)
+// ----------------------------
+// Helpers
+// ----------------------------
+
+func findItemIndex(items []CartItem, inv, lid, mid string) int {
+	for i := range items {
+		if items[i].InventoryID == inv && items[i].ListID == lid && items[i].ModelID == mid {
+			return i
+		}
+	}
+	return -1
 }
 
-func cloneItems(src map[string]CartItem) map[string]CartItem {
-	dst := map[string]CartItem{}
-	if src == nil {
-		return dst
+func removeIndex(items []CartItem, idx int) []CartItem {
+	if idx < 0 || idx >= len(items) {
+		return items
 	}
+	// preserve order
+	return append(items[:idx], items[idx+1:]...)
+}
 
-	// stable copy with normalization
-	keys := make([]string, 0, len(src))
-	for k := range src {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+type itemKey struct {
+	inv string
+	lid string
+	mid string
+}
 
-	for _, k := range keys {
-		it := src[k]
+func normalizeAndMerge(src []CartItem) []CartItem {
+	// collect + normalize
+	m := map[itemKey]CartItem{}
 
+	for _, it := range src {
 		inv := strings.TrimSpace(it.InventoryID)
 		lid := strings.TrimSpace(it.ListID)
 		mid := strings.TrimSpace(it.ModelID)
@@ -316,16 +271,16 @@ func cloneItems(src map[string]CartItem) map[string]CartItem {
 			continue
 		}
 
-		key := makeItemKey(inv, lid, mid)
+		k := itemKey{inv: inv, lid: lid, mid: mid}
 
-		if exist, ok := dst[key]; ok {
-			exist.Qty = exist.Qty + qty
+		if exist, ok := m[k]; ok {
+			exist.Qty += qty
 			exist.InventoryID = inv
 			exist.ListID = lid
 			exist.ModelID = mid
-			dst[key] = exist
+			m[k] = exist
 		} else {
-			dst[key] = CartItem{
+			m[k] = CartItem{
 				InventoryID: inv,
 				ListID:      lid,
 				ModelID:     mid,
@@ -334,5 +289,36 @@ func cloneItems(src map[string]CartItem) map[string]CartItem {
 		}
 	}
 
-	return dst
+	// stable order
+	keys := make([]itemKey, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].inv != keys[j].inv {
+			return keys[i].inv < keys[j].inv
+		}
+		if keys[i].lid != keys[j].lid {
+			return keys[i].lid < keys[j].lid
+		}
+		return keys[i].mid < keys[j].mid
+	})
+
+	out := make([]CartItem, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, m[k])
+	}
+	return out
+}
+
+func cloneItems(src []CartItem) []CartItem {
+	if len(src) == 0 {
+		return []CartItem{}
+	}
+	// copy then normalize/merge to keep invariants
+	cp := make([]CartItem, 0, len(src))
+	for _, it := range src {
+		cp = append(cp, it)
+	}
+	return normalizeAndMerge(cp)
 }

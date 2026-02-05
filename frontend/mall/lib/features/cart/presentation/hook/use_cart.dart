@@ -87,14 +87,9 @@ class UseCartResult {
 /// ✅ This file handles ONLY CartDTO / CartItemDTO.
 /// ✅ avatarId は URL ではなく AvatarIdStore から解決する。
 class UseCartController {
-  UseCartController({required this.context, String? avatarId})
-    : _initialAvatarId = (avatarId ?? '').trim();
+  UseCartController({required this.context});
 
   final BuildContext context;
-
-  /// 任意：呼び出し側が明示的に渡したい場合のみ使用（URL由来は不可推奨）
-  /// Pattern B では基本的に未使用（移行期の互換用）。
-  final String _initialAvatarId;
 
   late final CartRepositoryHttp _repo;
 
@@ -168,7 +163,7 @@ class UseCartController {
     return true;
   }
 
-  /// ✅ AvatarIdStore から avatarId を確定する（URLは使わない）
+  /// ✅ AvatarIdStore から avatarId を確定する（URL/引数互換は使わない）
   Future<String> _ensureAvatarId() async {
     // 0) サインイン確認（ここで判定して UI にヒントを返す）
     final u = FirebaseAuth.instance.currentUser;
@@ -186,19 +181,10 @@ class UseCartController {
       return storeId;
     }
 
-    // 2) 互換：呼び出し側が明示的に渡したもの
-    // - Pattern B 的には基本禁止だが、移行期の保険として「store が空」の時だけ許可
-    final a0 = _initialAvatarId.trim();
-    if (a0.isNotEmpty && _looksLikeDocId(a0)) {
-      AvatarIdStore.I.set(a0);
-      needsAvatar = false;
-      return a0;
-    }
-
-    // 3) サーバで /mall/me/avatar を叩いて解決
+    // 2) サーバで /mall/me/avatar を叩いて解決
     final resolved = await AvatarIdStore.I.resolveMyAvatarId();
     final a1 = (resolved ?? '').trim();
-    if (a1.isNotEmpty) {
+    if (a1.isNotEmpty && _looksLikeDocId(a1)) {
       AvatarIdStore.I.set(a1);
       needsAvatar = false;
       return a1;
@@ -395,6 +381,9 @@ class UseCartController {
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
 
+      // ✅ core IDs must exist（後方互換を削除したので厳密に）
+      if (!it.hasCoreIds) return;
+
       final c = await _repo.addItem(
         avatarId: aid,
         inventoryId: it.inventoryId,
@@ -423,6 +412,9 @@ class UseCartController {
       final base = current;
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
+
+      // ✅ core IDs must exist
+      if (!it.hasCoreIds) return;
 
       final next = currentQty - 1;
 
@@ -473,6 +465,9 @@ class UseCartController {
       final base = current;
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
+
+      // ✅ core IDs must exist
+      if (!it.hasCoreIds) return;
 
       final c = await _repo.removeItem(
         avatarId: aid,

@@ -133,6 +133,7 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		n := orderdom.OrderItemSnapshot{
 			ModelID:     strings.TrimSpace(it.ModelID),
 			InventoryID: strings.TrimSpace(it.InventoryID),
+			ListID:      strings.TrimSpace(it.ListID), // ✅ NEW: cart由来 listId を保持
 			Qty:         it.Qty,
 			Price:       it.Price,
 
@@ -238,6 +239,7 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 			items = append(items, orderdom.OrderItemSnapshot{
 				ModelID:     strings.TrimSpace(it.ModelID),
 				InventoryID: strings.TrimSpace(it.InventoryID),
+				ListID:      strings.TrimSpace(it.ListID), // ✅ NEW
 				Qty:         it.Qty,
 				Price:       it.Price,
 

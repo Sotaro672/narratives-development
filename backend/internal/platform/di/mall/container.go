@@ -28,6 +28,7 @@ import (
 	// outbound
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
+	orderfs "narratives/internal/adapters/out/firestore/order"
 	pbfs "narratives/internal/adapters/out/firestore/productBlueprint"
 	gcso "narratives/internal/adapters/out/gcs"
 
@@ -157,7 +158,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	cartRepo := outfs.NewCartRepositoryFS(fsClient)
 	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
-	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
+	orderRepo := orderfs.NewOrderRepositoryFS(fsClient)
 	invoiceRepo := outfs.NewInvoiceRepositoryFS(fsClient)
 
 	// handler 側に注入できるように保持

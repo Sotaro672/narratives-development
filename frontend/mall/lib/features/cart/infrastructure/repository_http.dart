@@ -203,7 +203,6 @@ class CartDTO {
     return sum;
   }
 
-  /// ✅ “絶対に落ちない/捨てない”方針:
   factory CartDTO.fromJson(Map<String, dynamic> json) {
     final aid = (json['avatarId'] ?? json['id'] ?? '').toString().trim();
 
@@ -216,30 +215,21 @@ class CartDTO {
         final v = entry.value;
         if (key.isEmpty) continue;
 
-        // New-ish shape: itemKey -> { ... }
+        // ✅ only accept map shape
         if (v is Map) {
           final m = <String, dynamic>{};
           for (final e in v.entries) {
             m[e.key.toString()] = e.value;
           }
-          items[key] = CartItemDTO.fromJson(m, fallbackKey: key);
-          continue;
-        }
+          final dto = CartItemDTO.fromJson(m);
 
-        // Legacy-ish shape: itemKey(or modelId) -> qty
-        final n = (v is int) ? v : int.tryParse(v.toString());
-        items[key] = CartItemDTO(
-          inventoryId: '',
-          listId: '',
-          modelId: key, // ✅ fallback
-          qty: (n ?? 0),
-          title: null,
-          size: null,
-          color: null,
-          listImage: null,
-          price: null,
-          productName: null,
-        );
+          // ✅ core IDs must exist
+          if (!dto.hasCoreIds) {
+            continue;
+          }
+
+          items[key] = dto;
+        }
       }
     }
 
@@ -347,16 +337,10 @@ class CartItemDTO {
     return s.isEmpty ? null : s;
   }
 
-  factory CartItemDTO.fromJson(
-    Map<String, dynamic> json, {
-    String? fallbackKey,
-  }) {
+  factory CartItemDTO.fromJson(Map<String, dynamic> json) {
     final invId = (json['inventoryId'] ?? '').toString().trim();
     final lid = (json['listId'] ?? '').toString().trim();
-
-    final mid0 = (json['modelId'] ?? '').toString().trim();
-    final mid = mid0.isNotEmpty ? mid0 : (fallbackKey ?? '').trim();
-
+    final mid = (json['modelId'] ?? '').toString().trim();
     final qty = _toInt(json['qty']);
 
     final title = _toNullableStr(json['title']);

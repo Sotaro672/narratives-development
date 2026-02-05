@@ -1,4 +1,3 @@
-// frontend\mall\lib\app\shell\presentation\components\footer.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,17 +11,19 @@ import '../../../routing/routes.dart';
 // ✅ Pattern B stores (no URL-based navigation state)
 import '../../../routing/navigation.dart';
 
-// ✅ NEW: 3 buttons extracted
+// ✅ 既存：3 buttons extracted
 import 'footer_buttons.dart';
 
 // ✅ Cart (Pattern A stats): use_cart controller/result
 import 'package:mall/features/cart/presentation/hook/use_cart.dart';
 
-// ✅ Avatar API client (absolute schema)
-import 'package:mall/features/avatar/infrastructure/avatar_api_client.dart';
-
 // ✅ MeAvatar model (now carries avatar patch fields)
 import 'package:mall/features/avatar/presentation/model/me_avatar.dart';
+
+// ✅ NEW split parts
+import 'footer_qr_nav.dart';
+import 'footer_avatar_future.dart';
+import 'footer_cart_gate.dart';
 
 /// Minimal footer widget (layout primitive).
 class AppFooter extends StatelessWidget {
@@ -93,21 +94,9 @@ class _SignedInFooterState extends State<SignedInFooter> {
     return path.startsWith('/catalog/');
   }
 
-  bool _isCartPath(BuildContext context) {
-    final path = GoRouterState.of(context).uri.path;
-    return path == AppRoutePath.cart;
-  }
-
   bool _isPaymentPath(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
     return path == AppRoutePath.payment;
-  }
-
-  String _currentLocationForReturnTo(BuildContext context) {
-    // ✅ Pattern B: URL query を前提にしない。
-    // 戻り先は「現在の location」を store に保持するだけ（URLへは出さない）。
-    // 既に query が付いている場合でも、ここで保持するのは store 内だけなのでOK。
-    return GoRouterState.of(context).uri.toString();
   }
 
   String _catalogListIdOrEmpty(BuildContext context) {
@@ -115,96 +104,6 @@ class _SignedInFooterState extends State<SignedInFooter> {
     final parts = path.split('/');
     if (parts.length >= 3 && parts[1] == 'catalog') return parts[2];
     return '';
-  }
-
-  /// ------------------------------------------------------------
-  /// ✅ /:productId が固定パスと衝突しないように除外（scan時の安全弁）
-  bool _isReservedTopSegment(String seg) {
-    const reserved = <String>{
-      'login',
-      'create-account',
-      'shipping-address',
-      'billing-address',
-      'avatar-create',
-      'avatar-edit',
-      'avatar',
-      'user-edit',
-      'cart',
-      'preview',
-      'payment',
-      'catalog',
-      'wallet',
-    };
-    return reserved.contains(seg);
-  }
-
-  /// ------------------------------------------------------------
-  /// ✅ QRでスキャンした文字列を「アプリ内遷移先URI」に正規化して返す
-  ///
-  /// Pattern B:
-  /// - `from` / `avatarId` を query に付与しない
-  /// - 既に含まれていた場合も削除する
-  Uri? _normalizeScannedToAppUri(String raw) {
-    final s = raw.trim();
-    if (s.isEmpty) return null;
-
-    Uri? u;
-
-    // 1) まず Uri として解釈
-    try {
-      u = Uri.parse(s);
-    } catch (_) {
-      u = null;
-    }
-
-    // 2) scheme が無い & / でもない場合は「生 productId」とみなす
-    if (u == null || (u.scheme.isEmpty && !s.startsWith('/'))) {
-      final pid = s.trim();
-      if (pid.isEmpty) return null;
-      if (_isReservedTopSegment(pid)) return null;
-      return Uri(path: '/$pid');
-    }
-
-    // 3) http(s) の場合は path/query だけ抽出してアプリ内遷移にする
-    final isHttp = u.scheme == 'http' || u.scheme == 'https';
-    final extracted = Uri(
-      path: (u.path.trim().isEmpty
-          ? '/'
-          : (u.path.startsWith('/') ? u.path : '/${u.path}')),
-      queryParameters: isHttp
-          ? (u.queryParameters.isEmpty ? null : u.queryParameters)
-          : (u.queryParameters.isEmpty ? null : u.queryParameters),
-      fragment: null, // ✅ fragment は捨てる（ルーティング破壊回避）
-    );
-
-    // 4) パスがトップ1階層（= /{something}）の場合、reserved は弾く
-    final segs = extracted.pathSegments;
-    if (segs.length == 1) {
-      final top = segs.first.trim();
-      if (top.isNotEmpty && _isReservedTopSegment(top)) {
-        return null;
-      }
-    }
-
-    // 5) Pattern B: URL state を持ち込まない（from/avatarId/mintAddress 等を除去）
-    final merged = <String, String>{...extracted.queryParameters};
-
-    merged.remove(AppQueryKey.from);
-    merged.remove(AppQueryKey.avatarId);
-    merged.remove(AppQueryKey.mintAddress);
-
-    return extracted.replace(queryParameters: merged.isEmpty ? null : merged);
-  }
-
-  void _syncCartControllerIfNeeded(bool isCart) {
-    // /cart に入ったら init、離れたら dispose（このファイルで完結）
-    if (isCart && _cartUc == null) {
-      _cartUc = UseCartController(context: context);
-      _cartUc!.init();
-    } else if (!isCart && _cartUc != null) {
-      _cartUc!.dispose();
-      _cartUc = null;
-    }
   }
 
   @override
@@ -217,18 +116,27 @@ class _SignedInFooterState extends State<SignedInFooter> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      // ✅ auth state だけを見る（avatarIcon は backend の正規キーを参照する）
+      // ✅ auth state だけを見る
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snap) {
         final user = FirebaseAuth.instance.currentUser ?? snap.data;
         if (user == null) return const SizedBox.shrink();
 
         final isCatalog = _isCatalogPath(context);
-        final isCart = _isCartPath(context);
+        final isCart = isCartPath(context);
         final isPayment = _isPaymentPath(context);
 
         // ✅ /cart のときだけ cart controller を生かす
-        _syncCartControllerIfNeeded(isCart);
+        FooterCartGate.syncCartControllerIfNeeded(
+          isCart: isCart,
+          context: context,
+          current: _cartUc,
+          setController: (next) {
+            setState(() {
+              _cartUc = next;
+            });
+          },
+        );
 
         final listId = isCatalog ? _catalogListIdOrEmpty(context) : '';
 
@@ -236,22 +144,11 @@ class _SignedInFooterState extends State<SignedInFooter> {
         final avatarId = AvatarIdStore.I.avatarId.trim();
 
         // ✅ Pattern B: 戻り先は store に保持（URLへは出さない）
-        final returnTo = _currentLocationForReturnTo(context);
+        final returnTo = currentLocationForReturnTo(context);
 
-        // ✅ Absolute schema: /mall/me/avatar は MeAvatar(=patch全体) を返す前提
-        final avatarProfileFuture = Future<MeAvatar?>.microtask(() async {
-          final api = AvatarApiClient();
-          try {
-            return await api.fetchMyAvatarProfile(); // => MeAvatar?
-          } finally {
-            api.dispose();
-          }
-        });
-
-        return FutureBuilder<MeAvatar?>(
-          future: avatarProfileFuture,
-          builder: (context, profileSnap) {
-            final avatarIcon = profileSnap.data?.avatarIcon;
+        return AvatarProfileFuture(
+          builder: (context, MeAvatar? profile) {
+            final avatarIcon = profile?.avatarIcon;
 
             return Material(
               color: Theme.of(context).cardColor,
@@ -269,7 +166,6 @@ class _SignedInFooterState extends State<SignedInFooter> {
                       _FooterItem(
                         icon: Icons.storefront_outlined,
                         onTap: () {
-                          // Home は戻り先にする必要は基本無いが、念のため現在地は保持しておく
                           NavStore.I.setReturnTo(returnTo);
                           context.go(AppRoutePath.home);
                         },
@@ -297,7 +193,6 @@ class _SignedInFooterState extends State<SignedInFooter> {
                                     // ✅ backend が必須にした inventoryId/listId を揃える
                                     final invId = sel.inventoryId.trim();
 
-                                    // ✅ 在庫 0 は押下不可 + 必須IDが揃っていること
                                     final enabled =
                                         sameList &&
                                         invId.isNotEmpty &&
@@ -316,8 +211,7 @@ class _SignedInFooterState extends State<SignedInFooter> {
                                   },
                                 )
                               : isCart
-                              // ✅ /cart のときだけ cart を参照して enabled を決める
-                              ? _CartAwareGoToPaymentButton(
+                              ? CartAwareGoToPaymentButton(
                                   avatarId: avatarId,
                                   controller: _cartUc,
                                 )
@@ -342,23 +236,16 @@ class _SignedInFooterState extends State<SignedInFooter> {
                                       return;
                                     }
 
-                                    final target = _normalizeScannedToAppUri(
-                                      code,
-                                    );
+                                    final target =
+                                        FooterQrNav.normalizeScannedToAppUri(
+                                          code,
+                                        );
                                     if (target == null) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('スキャン結果が無効です（遷移できません）'),
-                                        ),
-                                      );
+                                      showInvalidScanSnackBar(context);
                                       return;
                                     }
 
-                                    // ✅ Pattern B: 戻り先は store へ
                                     NavStore.I.setReturnTo(returnTo);
-
                                     context.go(target.toString());
                                   },
                                 ),
@@ -384,44 +271,6 @@ class _SignedInFooterState extends State<SignedInFooter> {
             );
           },
         );
-      },
-    );
-  }
-}
-
-/// ✅ /cart 専用：UseCartController を参照して「購入する」押下可否を決める
-class _CartAwareGoToPaymentButton extends StatelessWidget {
-  const _CartAwareGoToPaymentButton({
-    required this.avatarId,
-    required this.controller,
-  });
-
-  final String avatarId;
-  final UseCartController? controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final aid = avatarId.trim();
-
-    // controller が無い（= /cart 以外）ケースは防御的に disabled
-    final uc = controller;
-    if (uc == null) {
-      return GoToPaymentButton(avatarId: aid, enabled: false);
-    }
-
-    // ✅ FutureBuilder で初回 fetch 完了を拾い、cart=0 のときは disabled にする
-    return FutureBuilder<CartDTO>(
-      future: uc.future,
-      builder: (context, snap) {
-        final _ = snap.data; // ignore: unused_local_variable
-
-        // Pattern A: buildResult() から派生値を取り出して押下可否を決める
-        final res = uc.buildResult((fn) {});
-        final cartNotEmpty = !res.isEmpty;
-
-        final enabled = aid.isNotEmpty && cartNotEmpty;
-
-        return GoToPaymentButton(avatarId: aid, enabled: enabled);
       },
     );
   }

@@ -9,7 +9,8 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// Filter aligns with entity fields (entity.go as source of truth).
+// Filter aligns with Order entity fields used for querying.
+// NOTE: This filter targets Order top-level fields, snapshots, and CreatedAt range.
 type Filter struct {
 	// Exact matches
 	ID       string
