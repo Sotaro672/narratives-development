@@ -263,11 +263,3 @@ func clearCartItemsBestEffort(cart any, now time.Time) bool {
 
 	return changed
 }
-
-// ✅ Ordered フィールド廃止により MarkOrdered は usecase からも削除。
-// 以後の「注文確定」は Order を作成するユースケース（例: OrderUsecase）で扱い、
-// その中で以下のいずれかを実施してください:
-// - 成功後に uc.Clear(ctx, avatarID) でカートを空にする
-// - もしくは「注文作成時に items を消す」ドメインメソッドを追加して Upsert する
-//
-// ※今回の変更ではコンパイルを通すため、MarkOrdered を実装しません。

@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -468,37 +469,68 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 }
 
 // GetTotalQuantityByModelID は、productBlueprintIDs 配下の Production.Models を集計し、modelId ごとの totalQuantity を返す。
+// 仕様（正式）:
+// - productBlueprintIDs は trim + 空除外 + 重複排除（case-insensitive）
+// - modelId は case-insensitive に合算し、最初に出現した表記（orig）を返す
+// - 戻り値は modelId（case-insensitive）で安定ソートする
 func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
 	ctx context.Context,
 	productBlueprintIDs []string,
 ) ([]proddom.ModelTotalQuantity, error) {
-	prods, err := r.ListByProductBlueprintID(ctx, productBlueprintIDs)
+	// sanitize + dedup productBlueprintIDs (case-insensitive)
+	ids := make([]string, 0, len(productBlueprintIDs))
+	seenIDs := make(map[string]struct{}, len(productBlueprintIDs))
+	for _, id := range productBlueprintIDs {
+		t := strings.TrimSpace(id)
+		if t == "" {
+			continue
+		}
+		k := strings.ToLower(t)
+		if _, ok := seenIDs[k]; ok {
+			continue
+		}
+		seenIDs[k] = struct{}{}
+		ids = append(ids, t)
+	}
+	if len(ids) == 0 {
+		return []proddom.ModelTotalQuantity{}, nil
+	}
+
+	prods, err := r.ListByProductBlueprintID(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	sum := make(map[string]int)
+	// case-insensitive sum by modelId
+	totalByKey := make(map[string]int, 64)
+	origByKey := make(map[string]string, 64)
 
 	for _, p := range prods {
 		for _, mq := range p.Models {
-			modelID := strings.TrimSpace(mq.ModelID)
-			if modelID == "" {
+			mid := strings.TrimSpace(mq.ModelID)
+			if mid == "" || mq.Quantity <= 0 {
 				continue
 			}
-			if mq.Quantity <= 0 {
-				continue
+			key := strings.ToLower(mid)
+			if _, ok := origByKey[key]; !ok {
+				origByKey[key] = mid
 			}
-			sum[modelID] += mq.Quantity
+			totalByKey[key] += mq.Quantity
 		}
 	}
 
-	out := make([]proddom.ModelTotalQuantity, 0, len(sum))
-	for modelID, total := range sum {
+	out := make([]proddom.ModelTotalQuantity, 0, len(totalByKey))
+	for k, total := range totalByKey {
 		out = append(out, proddom.ModelTotalQuantity{
-			ModelID:       modelID,
+			ModelID:       origByKey[k],
 			TotalQuantity: total,
 		})
 	}
+
+	// stable order (case-insensitive by modelId)
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].ModelID) < strings.ToLower(out[j].ModelID)
+	})
 
 	return out, nil
 }
@@ -541,15 +573,6 @@ func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
 		return "", proddom.ErrNotFound
 	}
 	return strings.TrimSpace(p.ProductBlueprintID), nil
-}
-
-// WithTx は簡易実装として、単純に fn(ctx) を呼び出します。
-// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
-func (r *ProductionRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	return fn(ctx)
 }
 
 // ============================================================

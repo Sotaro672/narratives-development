@@ -164,7 +164,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	)
 
 	productionUC := productionapp.NewProductionUsecase(
-		r.productionRepoForUC,
+		r.productionRepo,
 		s.pbSvc,
 		res.nameResolver,
 	)
@@ -211,10 +211,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
 
 	tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(r.tokenBlueprintRepo, uploader)
-	mintUC.SetTokenBlueprintMetadataEnsurer(&tbMetadataEnsurerByIDAdapter{
-		tbRepo:   r.tokenBlueprintRepo,
-		metadata: tbMetadataUC,
-	})
+	mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
 
 	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
 

@@ -33,6 +33,10 @@ func NewTokenBlueprintMetadataUsecase(tbRepo tbdom.RepositoryPort, uploader Arwe
 // EnsureMetadataURIByTokenBlueprintID loads TokenBlueprint by id and ensures metadataUri if empty.
 // Intended for mint-time usage via port adapter/DI.
 // Returns the ensured metadataUri string.
+//
+// Policy:
+// - metadataUri が空なら Irys/Arweave に metadata JSON をアップロードして uri を得る
+// - アップロード後も uri が空なら必ずエラー（空を許容しない）
 func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURIByTokenBlueprintID(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -40,6 +44,9 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURIByTokenBlueprintID(
 ) (string, error) {
 	if u == nil || u.tbRepo == nil {
 		return "", fmt.Errorf("tokenBlueprint metadata usecase/repo is nil")
+	}
+	if u.uploader == nil {
+		return "", fmt.Errorf("tokenBlueprint metadata uploader is nil")
 	}
 
 	id := strings.TrimSpace(tokenBlueprintID)
@@ -54,64 +61,29 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURIByTokenBlueprintID(
 	if tb == nil {
 		return "", fmt.Errorf("tokenBlueprint %s not found", id)
 	}
-
-	updated, err := u.EnsureMetadataURI(ctx, tb, actorID)
-	if err != nil {
-		return "", err
-	}
-	if updated == nil {
-		// best-effort fallback
-		uri := strings.TrimSpace(tb.MetadataURI)
-		if uri == "" {
-			return "", fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintID=%s)", id)
-		}
-		return uri, nil
-	}
-
-	uri := strings.TrimSpace(updated.MetadataURI)
-	if uri == "" {
-		return "", fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintID=%s)", id)
-	}
-	return uri, nil
-}
-
-// EnsureMetadataURI sets metadataUri if empty.
-// Policy:
-// - metadataUri が空なら Irys/Arweave に metadata JSON をアップロードして uri を得る
-// - アップロード後も uri が空なら必ずエラー（空を許容しない）
-func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint metadata usecase/repo is nil")
-	}
-	if u.uploader == nil {
-		return nil, fmt.Errorf("tokenBlueprint metadata uploader is nil")
-	}
-	if tb == nil {
-		return nil, fmt.Errorf("tokenBlueprint is nil")
-	}
 	if strings.TrimSpace(tb.ID) == "" {
-		return nil, fmt.Errorf("tokenBlueprint.ID is empty")
+		return "", fmt.Errorf("tokenBlueprint.ID is empty")
 	}
 
-	// 既に入っていれば何もしない
-	if strings.TrimSpace(tb.MetadataURI) != "" {
-		return tb, nil
+	// 既に入っていれば何もしない（ただし必ず non-empty を返す）
+	if uri := strings.TrimSpace(tb.MetadataURI); uri != "" {
+		return uri, nil
 	}
 
 	// 1) metadata JSON を組み立て（期待値に合わせる）
 	data, err := buildTokenBlueprintMetadataJSON(tb)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	// 2) Irys uploader 経由で Arweave にアップロード
 	uri, err := u.uploader.UploadMetadata(ctx, data)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	uri = strings.TrimSpace(uri)
 	if uri == "" {
-		return nil, fmt.Errorf("metadataUri is empty after upload")
+		return "", fmt.Errorf("metadataUri is empty after upload")
 	}
 
 	// 3) DB 更新
@@ -123,13 +95,20 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(ctx context.Context, t
 		DeletedBy:   nil,
 	})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
+
+	// best-effort fallback（repo が updated を返さない実装でも uri を返す）
 	if updated == nil {
 		tb.MetadataURI = uri
-		return tb, nil
+		return uri, nil
 	}
-	return updated, nil
+
+	ensured := strings.TrimSpace(updated.MetadataURI)
+	if ensured == "" {
+		return "", fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintID=%s)", id)
+	}
+	return ensured, nil
 }
 
 // buildTokenBlueprintMetadataJSON builds Metaplex-compatible metadata JSON.

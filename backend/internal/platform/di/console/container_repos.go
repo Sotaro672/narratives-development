@@ -44,8 +44,7 @@ type repos struct {
 
 	productBlueprintRepo *pbfs.ProductBlueprintRepositoryFS
 
-	productionRepo      *fs.ProductionRepositoryFS
-	productionRepoForUC *productionRepoTotalQuantityAdapter
+	productionRepo *fs.ProductionRepositoryFS
 
 	shippingAddressRepo *fs.ShippingAddressRepositoryFS
 	tokenBlueprintRepo  *fs.TokenBlueprintRepositoryFS
@@ -118,8 +117,8 @@ func buildRepos(c *clients) *repos {
 
 	productBlueprintRepo := pbfs.NewProductBlueprintRepositoryFS(fsClient)
 
+	// ✅ repo本体の GetTotalQuantityByModelID を正式仕様にしたので adapter は不要
 	productionRepo := fs.NewProductionRepositoryFS(fsClient)
-	productionRepoForUC := &productionRepoTotalQuantityAdapter{ProductionRepositoryFS: productionRepo}
 
 	shippingAddressRepo := fs.NewShippingAddressRepositoryFS(fsClient)
 	tokenBlueprintRepo := fs.NewTokenBlueprintRepositoryFS(fsClient)
@@ -189,8 +188,7 @@ func buildRepos(c *clients) *repos {
 
 		productBlueprintRepo: productBlueprintRepo,
 
-		productionRepo:      productionRepo,
-		productionRepoForUC: productionRepoForUC,
+		productionRepo: productionRepo,
 
 		shippingAddressRepo: shippingAddressRepo,
 		tokenBlueprintRepo:  tokenBlueprintRepo,
