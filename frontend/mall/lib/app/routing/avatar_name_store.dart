@@ -18,16 +18,45 @@ class AvatarNameStore extends ChangeNotifier {
 
   bool get hasAvatarName => _avatarName.trim().isNotEmpty;
 
+  // ----------------------------------------
+  // Logging helper (Webでも確実に出す)
+  // ----------------------------------------
+  void _log(String msg) {
+    final out = '[AvatarNameStore] $msg';
+    debugPrint(out); // Flutter logs
+    // ignore: avoid_print
+    print(out); // Web console fallback
+  }
+
   void setAvatarName(String? name) {
+    final raw = name;
     final next = (name ?? '').trim();
-    if (next == _avatarName) return;
+    final prev = _avatarName;
+
+    _log('setAvatarName called raw="${raw ?? ''}" next="$next" prev="$prev"');
+
+    if (next == prev) {
+      _log('setAvatarName noop (no change)');
+      return;
+    }
+
     _avatarName = next;
+    _log(
+      'setAvatarName updated avatarName="$_avatarName" -> notifyListeners()',
+    );
     notifyListeners();
   }
 
   void clear() {
-    if (_avatarName.isEmpty) return;
+    _log('clear called prev="$_avatarName"');
+
+    if (_avatarName.isEmpty) {
+      _log('clear noop (already empty)');
+      return;
+    }
+
     _avatarName = '';
+    _log('clear updated avatarName="" -> notifyListeners()');
     notifyListeners();
   }
 }

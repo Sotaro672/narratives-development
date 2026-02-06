@@ -18,6 +18,9 @@ import 'package:mall/features/avatar/presentation/model/me_avatar.dart';
 // ✅ Pattern B: navigation helpers are centralized here
 import 'package:mall/app/routing/navigation.dart';
 
+// ✅ ✅ Header title source (AppScaffold uses this)
+import 'package:mall/app/routing/avatar_name_store.dart';
+
 /// Pattern B:
 /// - URL の `from` を廃止
 /// - URL から avatarId を読まない / URL に avatarId を入れない
@@ -28,9 +31,7 @@ AvatarVm useAvatarVm(BuildContext context) {
   // ---------------------------
   void log(String msg) {
     final out = '[useAvatarVm] $msg';
-    // debugPrint は avoid_print に引っかからず、Web console にも出る
     debugPrint(out);
-    // Webで確実に拾いたい時の保険（Consoleに出やすい）
     // ignore: avoid_print
     print(out);
   }
@@ -64,7 +65,6 @@ AvatarVm useAvatarVm(BuildContext context) {
   );
   final user = FirebaseAuth.instance.currentUser ?? authSnap.data;
 
-  // ✅ auth が変わったらログ
   useEffect(() {
     final u = user;
     if (u == null) {
@@ -79,7 +79,7 @@ AvatarVm useAvatarVm(BuildContext context) {
     return null;
   }, [user?.uid, user?.email, user?.displayName]);
 
-  // ✅ user が変わったら apiClient を作り直す（内部で token を掴む/キャッシュする実装でも安全に）
+  // ✅ user が変わったら apiClient を作り直す
   final apiClient = useMemoized(
     () => AvatarApiClient(
       enableLogging: true,
@@ -103,13 +103,13 @@ AvatarVm useAvatarVm(BuildContext context) {
   // ---------------------------
   // Data loads
   // ---------------------------
-  // ✅ /mall/me/avatar（MeAvatar=patch全体）
-  // ✅ user が変わったら取り直す
   final meAvatarFuture = useMemoized(() async {
     if (user == null) {
       log('meAvatarFuture skipped (user=null)');
-      // ✅ header title もリセット（メール表示に落ちるのを防ぐ）
-      AvatarHeaderTitleStore.I.reset();
+
+      // ✅ ヘッダー名は backend 由来に一本化
+      AvatarNameStore.I.clear();
+
       return null;
     }
 
@@ -124,15 +124,16 @@ AvatarVm useAvatarVm(BuildContext context) {
       'walletAddress="${s(res?.walletAddress)}"',
     );
 
-    // ✅ header title を「use_avatar.dart で取得した avatarName」に確実に寄せる
-    // - 空なら Profile に戻す
-    AvatarHeaderTitleStore.I.setTitle(res?.avatarName);
+    // ✅ ヘッダー名は backend 由来に一本化
+    log(
+      'AvatarNameStore.setAvatarName("${s(res?.avatarName)}") from meAvatarFuture',
+    );
+    AvatarNameStore.I.setAvatarName(res?.avatarName);
 
     return res;
   }, [apiClient, user?.uid]);
   final meAvatarSnap = useFuture<MeAvatar?>(meAvatarFuture);
 
-  // ✅ meAvatarSnap の状態ログ（waiting/error/done）
   useEffect(
     () {
       log(
@@ -140,11 +141,12 @@ AvatarVm useAvatarVm(BuildContext context) {
         'hasData=${meAvatarSnap.data != null} '
         'hasError=${meAvatarSnap.hasError}',
       );
+
       if (meAvatarSnap.hasError) {
         log('meAvatarSnap error="${meAvatarSnap.error}"');
-        // エラー時は fallback
-        AvatarHeaderTitleStore.I.reset();
+        AvatarNameStore.I.clear();
       }
+
       final me = meAvatarSnap.data;
       if (me != null) {
         log(
@@ -155,9 +157,13 @@ AvatarVm useAvatarVm(BuildContext context) {
           'walletAddress="${s(me.walletAddress)}"',
         );
 
-        // ✅ ここでも反映（Futureの完了タイミング差を潰す）
-        AvatarHeaderTitleStore.I.setTitle(me.avatarName);
+        // ✅ Future 完了タイミング差も潰す
+        log(
+          'AvatarNameStore.setAvatarName("${s(me.avatarName)}") from meAvatarSnap',
+        );
+        AvatarNameStore.I.setAvatarName(me.avatarName);
       }
+
       return null;
     },
     [
@@ -185,15 +191,11 @@ AvatarVm useAvatarVm(BuildContext context) {
 
     log('walletFuture start syncAndFetchMeWallet() meAvatarId="$meAvatarId"');
     final w = await walletRepo.syncAndFetchMeWallet();
-    log(
-      'walletFuture done '
-      'tokensLen=${w?.tokens.length ?? 0}',
-    );
+    log('walletFuture done tokensLen=${w?.tokens.length ?? 0}');
     return w;
   }, [walletRepo, user?.uid, meAvatarId]);
   final walletSnap = useFuture<WalletDTO?>(walletFuture);
 
-  // ✅ walletSnap の状態ログ
   useEffect(
     () {
       log(
@@ -231,7 +233,6 @@ AvatarVm useAvatarVm(BuildContext context) {
   // ---------------------------
   final tokensFromWallet = walletSnap.data?.tokens ?? const <String>[];
 
-  // ✅ tokens の変化ログ（join は重いので長さ＋先頭だけ）
   useEffect(() {
     final t = tokensFromWallet
         .map((e) => e.trim())
@@ -405,14 +406,13 @@ AvatarVm useAvatarVm(BuildContext context) {
   final avatarIcon = me?.avatarIcon;
   final profile = me?.profile;
 
-  // ✅ 最終的に返すVMの要点もログ（1回だけ出したいので依存を絞る）
   useEffect(() {
     log(
       'AvatarVm summary '
       'uid="${s(user?.uid)}" '
       'meAvatarId="$meAvatarId" '
       'avatarName="${s(me?.avatarName)}" '
-      'headerTitle="${AvatarHeaderTitleStore.I.title}" '
+      'store.avatarName="${AvatarNameStore.I.avatarName}" '
       'profile="${short(s(profile))}" '
       'tokensLen=${tokens.length}',
     );

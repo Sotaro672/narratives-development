@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../app/routing/navigation.dart';
-import '../../../../app/routing/routes.dart';
+// ✅ ここを relative import から package import に統一（重要）
+import 'package:mall/app/routing/navigation.dart';
+import 'package:mall/app/routing/routes.dart';
+
 import '../../../../app/shell/presentation/components/app_fixed_extent_grid.dart';
 import '../../../wallet/infrastructure/token_metadata_dto.dart';
 import '../../../wallet/infrastructure/token_resolve_dto.dart';

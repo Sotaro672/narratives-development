@@ -2,8 +2,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
-import 'routes.dart';
-import 'avatar_name_store.dart';
+// ✅ import は package: に統一（相対 import 混在で store が二重化するのを防ぐ）
+import 'package:mall/app/routing/routes.dart';
+import 'package:mall/app/routing/avatar_name_store.dart';
 
 /// ------------------------------------------------------------
 /// AppShell に渡す「タイトル」「戻るボタン表示」を router/app_routes から分離

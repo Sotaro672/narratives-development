@@ -1,4 +1,4 @@
-//frontend\mall\lib\app\routing\app_routes.dart
+// frontend\mall\lib\app\routing\app_routes.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -71,12 +71,10 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
       pageBuilder: (context, state) {
         final qp = state.uri.queryParameters;
         final intent = qp[AppQueryKey.intent];
-        final from = qp[AppQueryKey.from];
+
+        // ✅ Pattern B: `from` は URL で受け取らない（NavStore を使う）
         return NoTransitionPage(
-          child: auth_login.LoginPage(
-            intent: intent,
-            from: from, // ✅ あるなら渡す（LoginPage 側が未対応なら無視されてもOK）
-          ),
+          child: auth_login.LoginPage(intent: intent, from: null),
         );
       },
     ),
@@ -86,13 +84,10 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
       pageBuilder: (context, state) {
         final qp = state.uri.queryParameters;
         final intent = qp[AppQueryKey.intent];
-        final from = qp[AppQueryKey.from];
 
+        // ✅ Pattern B: `from` は URL で受け取らない（NavStore を使う）
         return NoTransitionPage(
-          child: auth_create.CreateAccountPage(
-            from: from, // ✅ 追加：戻り先/導線維持
-            intent: intent,
-          ),
+          child: auth_create.CreateAccountPage(from: null, intent: intent),
         );
       },
     ),
@@ -111,7 +106,8 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
             lang: qp[AppQueryKey.lang],
 
             // ✅ app params
-            from: qp[AppQueryKey.from], // ✅ 追加：backTo の整合性
+            // Pattern B では from を URL で運ばない
+            from: null,
             intent: qp[AppQueryKey.intent],
           ),
         );
@@ -153,7 +149,12 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
     // -------------------------
     ShellRoute(
       builder: (context, state, child) {
+        // ✅ タイトルが更新されない/残る問題の保険：
+        // AppShell を location ごとに作り直して確実に rebuild させる
+        final shellKey = ValueKey('app-shell-${state.uri.path}');
+
         return AppShell(
+          key: shellKey,
           title: resolveTitleFor(state),
           showBack: resolveShowBackFor(state),
           actions: buildHeaderActionsFor(

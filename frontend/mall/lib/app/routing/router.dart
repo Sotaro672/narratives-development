@@ -8,24 +8,24 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../shell/presentation/layout/app_shell.dart';
 import '../shell/presentation/components/footer.dart';
 
-// ✅ route defs
-import 'routes.dart';
+// ✅ route defs（package: に統一）
+import 'package:mall/app/routing/routes.dart';
 
-// ✅ redirect / stores
-import 'navigation.dart';
+// ✅ redirect / stores（package: に統一）
+import 'package:mall/app/routing/navigation.dart';
 
 // ✅ app routes 분離（ShellRoute / GoRoute ツリー）
-import 'app_routes.dart';
+import 'package:mall/app/routing/app_routes.dart';
 
 // ✅ header meta/actions 分離
-import 'app_scaffold_meta.dart';
-import 'header/header_actions.dart';
+import 'package:mall/app/routing/app_scaffold_meta.dart';
+import 'package:mall/app/routing/header/header_actions.dart';
 
-// ✅ FIX: HomePage を解決するために list.dart を import
-import '../../features/list/presentation/page/list.dart';
+// ✅ FIX: HomePage を解決するために list.dart を import（package: に統一）
+import 'package:mall/features/list/presentation/page/list.dart';
 
-// ✅ NEW: avatar name store (for header title)
-import 'avatar_name_store.dart';
+// ✅ NEW: avatar name store (for header title refresh)（package: に統一）
+import 'package:mall/app/routing/avatar_name_store.dart';
 
 GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
   if (firebaseReady) return buildAppRouter();
@@ -36,7 +36,6 @@ GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
 
 GoRouter buildAppRouter() {
   // ✅ auth state changes should trigger redirect/UI refresh
-  // userChanges(): sign-in/sign-out + token refresh + profile changes
   final authRefresh = GoRouterRefreshStream(
     FirebaseAuth.instance.userChanges(),
   );
@@ -46,13 +45,12 @@ GoRouter buildAppRouter() {
     refreshListenable: Listenable.merge([
       authRefresh,
       AvatarIdStore.I,
-      AvatarNameStore.I, // ✅ NEW: backend avatarName -> header title refresh
-      // NavStore.I, // <- NavStore を Listenable にしたら有効化
+      AvatarNameStore.I, // ✅ backend avatarName -> header title refresh
+      // NavStore.I,
     ]),
     redirect: (context, state) async => appRedirect(context, state),
     debugLogDiagnostics: true,
 
-    // ✅ app_routes.dart へ分離
     routes: buildAppRoutes(firebaseReady: true),
 
     errorBuilder: (context, state) => AppShell(
@@ -134,23 +132,18 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-
-      // ✅ wallet contents（public-only時はエラーページ）
       GoRoute(
         path: AppRoutePath.walletContents,
         name: AppRouteName.walletContents,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-
       GoRoute(
         path: AppRoutePath.userEdit,
         name: AppRouteName.userEdit,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-
-      // ✅ public-only でも Shell は出す（Home だけ見せる）
       ShellRoute(
         builder: (context, state, child) {
           return AppShell(
@@ -217,7 +210,6 @@ class _PublicHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ AppShell が child として受ける前提
     return const HomePage();
   }
 }
