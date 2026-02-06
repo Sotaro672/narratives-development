@@ -3,23 +3,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
-// ✅ prefix を付けて、WalletRepositoryHttp だけを参照する
-import 'package:mall/features/wallet/infrastructure/repository_http.dart'
-    as wallet_api;
+import 'package:mall/app/routing/avatar_name_store.dart';
+import 'package:mall/app/routing/navigation.dart';
+
+import 'package:mall/features/avatar/application/avatar_service.dart';
+import 'package:mall/features/avatar/presentation/model/avatar_vm.dart';
+import 'package:mall/features/avatar/presentation/model/me_avatar.dart';
 
 import 'package:mall/features/wallet/infrastructure/token_metadata_dto.dart';
 import 'package:mall/features/wallet/infrastructure/token_resolve_dto.dart';
 import 'package:mall/features/wallet/infrastructure/wallet_dto.dart';
-
-import 'package:mall/features/avatar/infrastructure/avatar_api_client.dart';
-import 'package:mall/features/avatar/presentation/model/avatar_vm.dart';
-import 'package:mall/features/avatar/presentation/model/me_avatar.dart';
-
-// ✅ Pattern B: navigation helpers are centralized here
-import 'package:mall/app/routing/navigation.dart';
-
-// ✅ ✅ Header title source (AppScaffold uses this)
-import 'package:mall/app/routing/avatar_name_store.dart';
 
 /// Pattern B:
 /// - URL の `from` を廃止
@@ -45,25 +38,30 @@ AvatarVm useAvatarVm(BuildContext context) {
   }
 
   // ---------------------------
-  // Repository / Client lifecycle
+  // ✅ Application Service lifecycle
   // ---------------------------
-  final walletRepo = useMemoized(() => wallet_api.WalletRepositoryHttp());
+  final service = useMemoized(
+    () => AvatarService(enableLogging: true, logger: (m) => log(m)),
+  );
+
   useEffect(() {
-    log('walletRepo created');
+    log('AvatarService created');
     return () {
-      log('walletRepo dispose');
-      walletRepo.dispose();
+      log('AvatarService dispose');
+      service.dispose();
     };
-  }, [walletRepo]);
+  }, [service]);
 
   // ---------------------------
-  // Auth stream
+  // Auth stream (via FirebaseAuth directly for stream wiring)
+  // ※ Service側にも userChanges() はあるが、HookのuseStreamが取り回ししやすいので
+  //   ここでは service.userChanges() を使うだけにする
   // ---------------------------
   final authSnap = useStream<User?>(
-    FirebaseAuth.instance.userChanges(),
-    initialData: FirebaseAuth.instance.currentUser,
+    service.userChanges(),
+    initialData: service.currentUser,
   );
-  final user = FirebaseAuth.instance.currentUser ?? authSnap.data;
+  final user = service.currentUser ?? authSnap.data;
 
   useEffect(() {
     final u = user;
@@ -78,22 +76,6 @@ AvatarVm useAvatarVm(BuildContext context) {
     }
     return null;
   }, [user?.uid, user?.email, user?.displayName]);
-
-  // ✅ user が変わったら apiClient を作り直す
-  final apiClient = useMemoized(
-    () => AvatarApiClient(
-      enableLogging: true,
-      logger: (m) => log('apiClient $m'),
-    ),
-    [user?.uid],
-  );
-  useEffect(() {
-    log('AvatarApiClient created (dep uid="${s(user?.uid)}")');
-    return () {
-      log('AvatarApiClient dispose');
-      apiClient.dispose();
-    };
-  }, [apiClient]);
 
   // ---------------------------
   // Tab state
@@ -114,7 +96,7 @@ AvatarVm useAvatarVm(BuildContext context) {
     }
 
     log('meAvatarFuture start fetchMyAvatarProfile() uid="${s(user.uid)}"');
-    final res = await apiClient.fetchMyAvatarProfile();
+    final res = await service.fetchMyAvatarProfile(user: user);
 
     log(
       'meAvatarFuture done '
@@ -124,14 +106,8 @@ AvatarVm useAvatarVm(BuildContext context) {
       'walletAddress="${s(res?.walletAddress)}"',
     );
 
-    // ✅ ヘッダー名は backend 由来に一本化
-    log(
-      'AvatarNameStore.setAvatarName("${s(res?.avatarName)}") from meAvatarFuture',
-    );
-    AvatarNameStore.I.setAvatarName(res?.avatarName);
-
     return res;
-  }, [apiClient, user?.uid]);
+  }, [service, user?.uid]);
   final meAvatarSnap = useFuture<MeAvatar?>(meAvatarFuture);
 
   useEffect(
@@ -157,7 +133,7 @@ AvatarVm useAvatarVm(BuildContext context) {
           'walletAddress="${s(me.walletAddress)}"',
         );
 
-        // ✅ Future 完了タイミング差も潰す
+        // ✅ Future 完了タイミング差も潰す（Service側でも更新済みだが、念のため）
         log(
           'AvatarNameStore.setAvatarName("${s(me.avatarName)}") from meAvatarSnap',
         );
@@ -180,20 +156,14 @@ AvatarVm useAvatarVm(BuildContext context) {
   final meAvatarId = (meAvatarSnap.data?.avatarId ?? '').trim();
 
   final walletFuture = useMemoized(() async {
-    if (user == null) {
-      log('walletFuture skipped (user=null)');
-      return null;
-    }
-    if (meAvatarId.isEmpty) {
-      log('walletFuture skipped (meAvatarId empty)');
-      return null;
-    }
-
-    log('walletFuture start syncAndFetchMeWallet() meAvatarId="$meAvatarId"');
-    final w = await walletRepo.syncAndFetchMeWallet();
+    log('walletFuture start');
+    final w = await service.syncAndFetchMeWallet(
+      user: user,
+      meAvatarId: meAvatarId,
+    );
     log('walletFuture done tokensLen=${w?.tokens.length ?? 0}');
     return w;
-  }, [walletRepo, user?.uid, meAvatarId]);
+  }, [service, user?.uid, meAvatarId]);
   final walletSnap = useFuture<WalletDTO?>(walletFuture);
 
   useEffect(
@@ -254,33 +224,11 @@ AvatarVm useAvatarVm(BuildContext context) {
       return <String, TokenResolveDTO>{};
     }
 
-    final seen = <String>{};
-    final uniq = <String>[];
-    for (final m in mints) {
-      if (seen.add(m)) uniq.add(m);
-    }
-
-    log('resolveFuture start uniqLen=${uniq.length}');
-    final results = await Future.wait<TokenResolveDTO?>(
-      uniq.map((m) async {
-        try {
-          return await walletRepo.resolveTokenByMintAddress(m);
-        } catch (_) {
-          return null;
-        }
-      }),
-    );
-
-    final out = <String, TokenResolveDTO>{};
-    for (var i = 0; i < uniq.length; i++) {
-      final dto = results[i];
-      if (dto == null) continue;
-      out[uniq[i]] = dto;
-    }
-
+    log('resolveFuture start uniqMaybeLen=${mints.length}');
+    final out = await service.resolveTokensByMintAddresses(mints);
     log('resolveFuture done okLen=${out.length}');
     return out;
-  }, [walletRepo, user?.uid, tokensFromWallet.join(',')]);
+  }, [service, user?.uid, tokensFromWallet.join(',')]);
   final resolvedSnap = useFuture<Map<String, TokenResolveDTO>>(resolveFuture);
 
   useEffect(
@@ -313,37 +261,11 @@ AvatarVm useAvatarVm(BuildContext context) {
       return <String, TokenMetadataDTO>{};
     }
 
-    final entries = resolved.entries
-        .map((e) => MapEntry(e.key.trim(), e.value))
-        .where((e) => e.key.isNotEmpty && e.value.metadataUri.trim().isNotEmpty)
-        .toList();
-
-    if (entries.isEmpty) {
-      log('metadataFuture skipped (no metadataUri)');
-      return <String, TokenMetadataDTO>{};
-    }
-
-    log('metadataFuture start entriesLen=${entries.length}');
-    final results = await Future.wait<TokenMetadataDTO?>(
-      entries.map((e) async {
-        try {
-          return await walletRepo.fetchTokenMetadata(e.value.metadataUri);
-        } catch (_) {
-          return null;
-        }
-      }),
-    );
-
-    final out = <String, TokenMetadataDTO>{};
-    for (var i = 0; i < entries.length; i++) {
-      final dto = results[i];
-      if (dto == null) continue;
-      out[entries[i].key] = dto;
-    }
-
+    log('metadataFuture start resolvedLen=${resolved.length}');
+    final out = await service.fetchTokenMetadatasByResolved(resolved);
     log('metadataFuture done okLen=${out.length}');
     return out;
-  }, [walletRepo, user?.uid, resolveFuture]);
+  }, [service, user?.uid, resolveFuture]);
   final metadataSnap = useFuture<Map<String, TokenMetadataDTO>>(metadataFuture);
 
   useEffect(
