@@ -1,4 +1,4 @@
-// frontend/mall/lib/features/avatar/infrastructure/avatar_repository_http.dart
+// frontend\mall\lib\features\avatar\infrastructure\avatar_repository_http.dart
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,34 +7,19 @@ import 'api.dart';
 
 /// Simple HTTP repository for Mall avatar endpoints.
 ///
-/// Back-end handler spec (mall):
-/// - POST   /mall/avatars
-/// - PATCH  /mall/avatars/{id}
-/// - DELETE /mall/avatars/{id}
-/// - GET    /mall/avatars/{id}
-/// - GET    /mall/avatars/{id}?aggregate=1|true  (Avatar + State + Icons)
-/// - POST   /mall/avatars/{id}/wallet            (open wallet)
+/// ✅ Contract:
+/// - POST   /mall/avatars        (create only)
+/// - GET    /mall/me/avatar      (read my avatar)
+/// - PATCH  /mall/me/avatar      (update my avatar)
 ///
-/// ✅ SignedURL:
-/// - POST   /mall/avatars/{id}/icon-upload-url   (issue signed upload url)
-/// - PUT    (upload to signed url)
-///
-/// NOTE (重要):
-/// - Firestore 側は「docID = avatarId」「フィールド userId = Firebase uid」を保持する設計
-/// - Authorization: Firebase ID token (Bearer)
-///
-/// ✅ 絶対正スキーマ（Backend 正規キー）:
+/// ✅ Absolute schema (Backend 正規キー):
 /// - avatarId
 /// - userId
 /// - avatarName
-/// - avatarIcon (nullable)  ※最終的に https://... を保存する方針
+/// - avatarIcon (nullable)
 /// - profile (nullable)
 /// - externalLink (nullable)
-/// - walletAddress (nullable) ※更新は /wallet のみ（PATCHでは禁止）
-///
-/// ✅ 方針 (A):
-/// - 画像は別API（signed url 発行 + PUT）でアップロード
-/// - 戻ってきた https://... を PATCH (/mall/avatars/{id}) で保存
+/// - walletAddress (required in /mall/me/avatar.patch)
 class AvatarRepositoryHttp {
   AvatarRepositoryHttp({
     http.Client? client,
@@ -45,49 +30,157 @@ class AvatarRepositoryHttp {
   final MallAuthedApi _api;
 
   // ---------------------------------------------------------------------------
-  // Public API
+  // ✅ Pattern B: Me endpoints (read/update)
   // ---------------------------------------------------------------------------
 
-  /// GET /mall/avatars/{id}
-  Future<AvatarDTO> getById({required String id}) async {
-    final rid = id.trim();
-    if (rid.isEmpty) throw ArgumentError('id is empty');
+  /// GET /mall/me/avatar
+  Future<MeAvatarDTO> getMe() async {
+    final uri = _api.uri('/mall/me/avatar');
 
-    final uri = _api.uri('/mall/avatars/$rid');
+    if (kDebugMode) {
+      debugPrint('[AvatarRepositoryHttp] GET $uri');
+    }
+
     final res = await _api.sendAuthed('GET', uri);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] GET /mall/me/avatar status=${res.statusCode} bodyLen=${res.body.length}',
+      );
+      // body 全文は長い/機微になりがちなので、先頭だけ
+      final head = res.body.length > 240
+          ? res.body.substring(0, 240)
+          : res.body;
+      debugPrint('[AvatarRepositoryHttp] GET body head=$head');
+    }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       _api.throwHttpError(res, uri);
     }
 
+    if (res.body.trim().isEmpty) {
+      throw const FormatException('Empty response body (expected MeAvatarDTO)');
+    }
+
     final decoded = _api.unwrapData(_api.decodeObject(res.body));
-    return AvatarDTO.fromJson(decoded);
+
+    if (kDebugMode) {
+      // decode 後の形も確認したい（patch/avatarName の所在確認用）
+      debugPrint(
+        '[AvatarRepositoryHttp] decoded keys=${decoded.keys.toList()}',
+      );
+      final patch = decoded['patch'];
+      if (patch is Map) {
+        final p = Map<String, dynamic>.from(patch);
+        debugPrint('[AvatarRepositoryHttp] patch keys=${p.keys.toList()}');
+        final an = (p['avatarName'] ?? '').toString().trim();
+        final prof = (p['profile'] ?? '').toString().trim();
+        debugPrint(
+          '[AvatarRepositoryHttp] decoded patch.avatarName="${an.isEmpty ? "-" : an}" profileLen=${prof.length}',
+        );
+      } else {
+        debugPrint('[AvatarRepositoryHttp] decoded.patch is not a Map');
+      }
+    }
+
+    final dto = MeAvatarDTO.fromJson(decoded);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] MeAvatarDTO parsed avatarId="${dto.avatarId}" '
+        'avatarName="${(dto.avatarName ?? '').trim().isEmpty ? "-" : dto.avatarName}" '
+        'profileLen=${(dto.profile ?? '').trim().length} '
+        'walletAddressLen=${dto.walletAddress.trim().length}',
+      );
+    }
+
+    return dto;
   }
 
-  /// GET /mall/avatars/{id}?aggregate=1
-  Future<AvatarAggregateDTO> getAggregate({required String id}) async {
-    final rid = id.trim();
-    if (rid.isEmpty) throw ArgumentError('id is empty');
+  /// PATCH /mall/me/avatar
+  ///
+  /// Backend may return empty body -> then call getMe() to re-fetch.
+  Future<MeAvatarDTO> updateMe({required UpdateMeAvatarRequest request}) async {
+    final uri = _api.uri('/mall/me/avatar');
+    final payload = request.toJson();
 
-    final uri = _api.uri('/mall/avatars/$rid', const {'aggregate': '1'});
-    final res = await _api.sendAuthed('GET', uri);
+    if (kDebugMode) {
+      debugPrint('[AvatarRepositoryHttp] PATCH $uri payload=$payload');
+    }
+
+    final res = await _api.sendAuthed(
+      'PATCH',
+      uri,
+      jsonBody: payload,
+      allowEmptyBody: true,
+    );
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] PATCH /mall/me/avatar status=${res.statusCode} bodyLen=${res.body.length}',
+      );
+      final head = res.body.length > 240
+          ? res.body.substring(0, 240)
+          : res.body;
+      debugPrint('[AvatarRepositoryHttp] PATCH body head=$head');
+    }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       _api.throwHttpError(res, uri);
     }
 
+    if (res.body.trim().isEmpty) {
+      if (kDebugMode) {
+        debugPrint(
+          '[AvatarRepositoryHttp] PATCH returned empty body -> refetch via getMe()',
+        );
+      }
+      return getMe();
+    }
+
     final decoded = _api.unwrapData(_api.decodeObject(res.body));
-    return AvatarAggregateDTO.fromJson(decoded);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] PATCH decoded keys=${decoded.keys.toList()}',
+      );
+      final patch = decoded['patch'];
+      if (patch is Map) {
+        final p = Map<String, dynamic>.from(patch);
+        final an = (p['avatarName'] ?? '').toString().trim();
+        debugPrint(
+          '[AvatarRepositoryHttp] PATCH decoded patch.avatarName="${an.isEmpty ? "-" : an}"',
+        );
+      }
+    }
+
+    final dto = MeAvatarDTO.fromJson(decoded);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] PATCH MeAvatarDTO parsed avatarId="${dto.avatarId}" '
+        'avatarName="${(dto.avatarName ?? '').trim().isEmpty ? "-" : dto.avatarName}"',
+      );
+    }
+
+    return dto;
   }
+
+  // ---------------------------------------------------------------------------
+  // ✅ Create only
+  // ---------------------------------------------------------------------------
 
   /// POST /mall/avatars
   ///
-  /// NOTE:
-  /// - Firestore は docID を NewDoc() で採番する（avatarId が空の場合）
-  /// - userId はフィールドとして保存される（= Firebase uid を入れる想定）
+  /// ✅ 要件:
+  /// - 新規作成のみ /mall/avatars を叩く
   Future<AvatarDTO> create({required CreateAvatarRequest request}) async {
     final uri = _api.uri('/mall/avatars');
     final payload = request.toJson();
+
+    if (kDebugMode) {
+      debugPrint('[AvatarRepositoryHttp] POST $uri payload=$payload');
+    }
 
     final res = await _api.sendAuthed(
       'POST',
@@ -95,6 +188,16 @@ class AvatarRepositoryHttp {
       jsonBody: payload,
       allowEmptyBody: true,
     );
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] POST /mall/avatars status=${res.statusCode} bodyLen=${res.body.length}',
+      );
+      final head = res.body.length > 240
+          ? res.body.substring(0, 240)
+          : res.body;
+      debugPrint('[AvatarRepositoryHttp] POST body head=$head');
+    }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       _api.throwHttpError(res, uri);
@@ -105,17 +208,32 @@ class AvatarRepositoryHttp {
     }
 
     final decoded = _api.unwrapData(_api.decodeObject(res.body));
-    return AvatarDTO.fromJson(decoded);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] POST decoded keys=${decoded.keys.toList()} avatarName="${(decoded['avatarName'] ?? '').toString().trim()}"',
+      );
+    }
+
+    final dto = AvatarDTO.fromJson(decoded);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] AvatarDTO parsed avatarId="${dto.avatarId}" avatarName="${dto.avatarName}"',
+      );
+    }
+
+    return dto;
   }
 
   // ---------------------------------------------------------------------------
-  // ✅ Signed upload URL for avatar icon (A方針)
+  // ✅ Signed upload URL for avatar icon (id required by backend)
   // ---------------------------------------------------------------------------
 
   /// POST /mall/avatars/{id}/icon-upload-url
   ///
-  /// 返却される signed URL に PUT してアップロードし、
-  /// 最終的に生成できる public https URL を PATCH で avatarIcon に保存する運用。
+  /// NOTE:
+  /// - 現状バックエンドが avatarId を要求するならここは維持
   Future<AvatarIconUploadUrlDTO> issueAvatarIconUploadUrl({
     required String avatarId,
     required String fileName,
@@ -138,14 +256,39 @@ class AvatarRepositoryHttp {
       'size': size,
     };
 
+    if (kDebugMode) {
+      debugPrint('[AvatarRepositoryHttp] POST $uri payload=$payload');
+    }
+
     final res = await _api.sendAuthed('POST', uri, jsonBody: payload);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AvatarRepositoryHttp] POST icon-upload-url status=${res.statusCode} bodyLen=${res.body.length}',
+      );
+      final head = res.body.length > 240
+          ? res.body.substring(0, 240)
+          : res.body;
+      debugPrint('[AvatarRepositoryHttp] POST icon-upload-url body head=$head');
+    }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       _api.throwHttpError(res, uri);
     }
 
     final decoded = _api.unwrapData(_api.decodeObject(res.body));
-    return AvatarIconUploadUrlDTO.fromJson(decoded);
+    final dto = AvatarIconUploadUrlDTO.fromJson(decoded);
+
+    if (kDebugMode) {
+      final short = dto.uploadUrl.length > 64
+          ? '${dto.uploadUrl.substring(0, 64)}...'
+          : dto.uploadUrl;
+      debugPrint(
+        '[AvatarRepositoryHttp] icon-upload-url parsed bucket="${dto.bucket}" objectPath="${dto.objectPath}" uploadUrl="$short"',
+      );
+    }
+
+    return dto;
   }
 
   /// PUT to signed URL (upload icon bytes)
@@ -159,8 +302,7 @@ class AvatarRepositoryHttp {
     contentType: contentType,
   );
 
-  /// ✅ helper: bucket/objectPath から public https URL を生成
-  ///
+  /// helper: bucket/objectPath から public https URL を生成
   String publicHttpsUrlFromBucketObject({
     required String bucket,
     required String objectPath,
@@ -168,14 +310,11 @@ class AvatarRepositoryHttp {
     final b = bucket.trim();
     final op = objectPath.trim();
     if (b.isEmpty || op.isEmpty) return '';
-    // objectPath は "/" を含むため Uri.encodeComponent は使わずにセグメント単位でエンコード
     final encoded = op.split('/').map(Uri.encodeComponent).join('/');
     return 'https://storage.googleapis.com/$b/$encoded';
   }
 
-  /// ✅ A方針のワンストップ: 署名URL発行 → PUT → public https URL を返す
-  ///
-  /// 返ってきた URL をそのまま update(PATCH) の avatarIcon に渡して保存する。
+  /// ワンストップ: 署名URL発行 → PUT → public https URL を返す
   Future<String> uploadAvatarIconAndGetPublicUrl({
     required String avatarId,
     required String fileName,
@@ -203,88 +342,13 @@ class AvatarRepositoryHttp {
     return url.trim();
   }
 
-  /// POST /mall/avatars/{id}/wallet
-  ///
-  /// ✅ Open wallet for existing avatar (server will set walletAddress).
-  Future<AvatarDTO> openWallet({required String id}) async {
-    final rid = id.trim();
-    if (rid.isEmpty) throw ArgumentError('id is empty');
-
-    final uri = _api.uri('/mall/avatars/$rid/wallet');
-
-    final res = await _api.sendAuthed(
-      'POST',
-      uri,
-      jsonBody: const <String, dynamic>{},
-      allowEmptyBody: true,
-    );
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      _api.throwHttpError(res, uri);
-    }
-
-    if (res.body.trim().isEmpty) {
-      return getById(id: rid);
-    }
-
-    final decoded = _api.unwrapData(_api.decodeObject(res.body));
-    return AvatarDTO.fromJson(decoded);
-  }
-
-  /// PATCH /mall/avatars/{id}
-  ///
-  /// NOTE:
-  /// - walletAddress は backend 側で update 禁止（/wallet でのみ更新）
-  /// - avatarIcon は https://... を保存する方針（方針A）
-  Future<AvatarDTO> update({
-    required String id,
-    required UpdateAvatarRequest request,
-  }) async {
-    final rid = id.trim();
-    if (rid.isEmpty) throw ArgumentError('id is empty');
-
-    final uri = _api.uri('/mall/avatars/$rid');
-    final payload = request.toJson();
-
-    final res = await _api.sendAuthed(
-      'PATCH',
-      uri,
-      jsonBody: payload,
-      allowEmptyBody: true,
-    );
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      _api.throwHttpError(res, uri);
-    }
-
-    if (res.body.trim().isEmpty) {
-      return getById(id: rid);
-    }
-
-    final decoded = _api.unwrapData(_api.decodeObject(res.body));
-    return AvatarDTO.fromJson(decoded);
-  }
-
-  /// DELETE /mall/avatars/{id}
-  Future<void> delete({required String id}) async {
-    final rid = id.trim();
-    if (rid.isEmpty) throw ArgumentError('id is empty');
-
-    final uri = _api.uri('/mall/avatars/$rid');
-    final res = await _api.sendAuthed('DELETE', uri);
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      _api.throwHttpError(res, uri);
-    }
-  }
-
   void dispose() {
     _api.dispose();
   }
 }
 
 // -----------------------------------------------------------------------------
-// DTOs / Requests (絶対正スキーマ準拠)
+// DTOs / Requests
 // -----------------------------------------------------------------------------
 
 String _s(Object? v) => (v ?? '').toString().trim();
@@ -300,6 +364,101 @@ DateTime _parseDateTime(Object? v) {
   return DateTime.parse(s).toUtc();
 }
 
+DateTime? _parseOptDateTime(Object? v) {
+  final s = _s(v);
+  if (s.isEmpty) return null;
+  try {
+    return DateTime.parse(s).toUtc();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// ✅ DTO for /mall/me/avatar
+@immutable
+class MeAvatarDTO {
+  const MeAvatarDTO({
+    required this.avatarId,
+    required this.walletAddress,
+    this.userId,
+    this.avatarName,
+    this.avatarIcon,
+    this.profile,
+    this.externalLink,
+    this.deletedAt,
+  });
+
+  final String avatarId;
+  final String walletAddress;
+
+  final String? userId;
+  final String? avatarName;
+  final String? avatarIcon;
+  final String? profile;
+  final String? externalLink;
+  final DateTime? deletedAt;
+
+  factory MeAvatarDTO.fromJson(Map<String, dynamic> json) {
+    final avatarId = _s(json['avatarId']);
+
+    final p = json['patch'];
+    if (p is! Map) {
+      throw const FormatException('MeAvatarDTO: missing "patch" object');
+    }
+    final patch = Map<String, dynamic>.from(p);
+
+    final walletAddress = _s(patch['walletAddress']);
+    if (avatarId.isEmpty) {
+      throw const FormatException('MeAvatarDTO: avatarId is required');
+    }
+    if (walletAddress.isEmpty) {
+      throw const FormatException(
+        'MeAvatarDTO: patch.walletAddress is required',
+      );
+    }
+
+    return MeAvatarDTO(
+      avatarId: avatarId,
+      walletAddress: walletAddress,
+      userId: _optS(patch['userId']),
+      avatarName: _optS(patch['avatarName']),
+      avatarIcon: _optS(patch['avatarIcon']),
+      profile: _optS(patch['profile']),
+      externalLink: _optS(patch['externalLink']),
+      deletedAt: _parseOptDateTime(patch['deletedAt']),
+    );
+  }
+}
+
+/// PATCH /mall/me/avatar body
+@immutable
+class UpdateMeAvatarRequest {
+  const UpdateMeAvatarRequest({
+    this.avatarName,
+    this.avatarIcon,
+    this.profile,
+    this.externalLink,
+  });
+
+  final String? avatarName;
+  final String? avatarIcon;
+  final String? profile;
+  final String? externalLink;
+
+  Map<String, dynamic> toJson() {
+    final m = <String, dynamic>{};
+
+    if (avatarName != null) m['avatarName'] = avatarName!.trim();
+
+    // clear したい場合は "" を送る（= trim で "" になっても送る）
+    if (avatarIcon != null) m['avatarIcon'] = avatarIcon!.trim();
+    if (profile != null) m['profile'] = profile!.trim();
+    if (externalLink != null) m['externalLink'] = externalLink!.trim();
+
+    return m;
+  }
+}
+
 @immutable
 class AvatarIconUploadUrlDTO {
   const AvatarIconUploadUrlDTO({
@@ -310,19 +469,10 @@ class AvatarIconUploadUrlDTO {
     required this.expiresAt,
   });
 
-  /// PUT 先の署名付きURL
   final String uploadUrl;
-
-  /// GCS bucket
   final String bucket;
-
-  /// GCS object path
   final String objectPath;
-
-  /// gs://bucket/object
   final String gsUrl;
-
-  /// RFC3339 (UTC)
   final String expiresAt;
 
   factory AvatarIconUploadUrlDTO.fromJson(Map<String, dynamic> json) {
@@ -350,21 +500,14 @@ class AvatarDTO {
     required this.updatedAt,
   });
 
-  /// Firestore docID（= avatarId）
   final String avatarId;
-
-  /// Firestore field userId（= Firebase uid）
   final String userId;
-
   final String avatarName;
 
-  /// Optional: https://... (方針A)
   final String? avatarIcon;
-
   final String? profile;
   final String? externalLink;
 
-  /// Optional: Solana public key (base58)
   final String? walletAddress;
 
   final DateTime createdAt;
@@ -385,116 +528,6 @@ class AvatarDTO {
   }
 }
 
-@immutable
-class AvatarStateDTO {
-  const AvatarStateDTO({
-    required this.avatarId,
-    required this.lastActiveAt,
-    required this.updatedAt,
-  });
-
-  final String avatarId;
-  final DateTime? lastActiveAt;
-  final DateTime? updatedAt;
-
-  factory AvatarStateDTO.fromJson(Map<String, dynamic> json) {
-    DateTime? parseOpt(Object? v) {
-      final s = _s(v);
-      if (s.isEmpty) return null;
-      return DateTime.parse(s).toUtc();
-    }
-
-    return AvatarStateDTO(
-      avatarId: _s(json['avatarId']),
-      lastActiveAt: parseOpt(json['lastActiveAt']),
-      updatedAt: parseOpt(json['updatedAt']),
-    );
-  }
-}
-
-@immutable
-class AvatarIconDTO {
-  const AvatarIconDTO({
-    required this.id,
-    required this.avatarId,
-    required this.url,
-    required this.fileName,
-    required this.size,
-  });
-
-  final String id;
-  final String? avatarId;
-  final String url;
-  final String? fileName;
-  final int? size;
-
-  factory AvatarIconDTO.fromJson(Map<String, dynamic> json) {
-    int? parseOptInt(Object? v) {
-      if (v == null) return null;
-      if (v is int) return v;
-      if (v is double) return v.toInt();
-      final s = _s(v);
-      if (s.isEmpty) return null;
-      return int.tryParse(s);
-    }
-
-    return AvatarIconDTO(
-      id: _s(json['id']),
-      avatarId: _optS(json['avatarId']),
-      url: _s(json['url']),
-      fileName: _optS(json['fileName']),
-      size: parseOptInt(json['size']),
-    );
-  }
-}
-
-@immutable
-class AvatarAggregateDTO {
-  const AvatarAggregateDTO({
-    required this.avatar,
-    required this.state,
-    required this.icons,
-  });
-
-  final AvatarDTO avatar;
-  final AvatarStateDTO? state;
-  final List<AvatarIconDTO> icons;
-
-  factory AvatarAggregateDTO.fromJson(Map<String, dynamic> json) {
-    Map<String, dynamic> asObj(Object? v) {
-      if (v is Map<String, dynamic>) return v;
-      if (v is Map) return Map<String, dynamic>.from(v);
-      return <String, dynamic>{};
-    }
-
-    List asList(Object? v) {
-      if (v is List) return v;
-      return const [];
-    }
-
-    final avatarRaw = json['avatar'];
-    final stateRaw = json['state'];
-    final iconsRaw = json['icons'];
-
-    final avatar = AvatarDTO.fromJson(asObj(avatarRaw));
-
-    AvatarStateDTO? state;
-    if (stateRaw != null) {
-      final obj = asObj(stateRaw);
-      if (obj.isNotEmpty) state = AvatarStateDTO.fromJson(obj);
-    }
-
-    final icons = <AvatarIconDTO>[];
-    for (final it in asList(iconsRaw)) {
-      final obj = asObj(it);
-      if (obj.isEmpty) continue;
-      icons.add(AvatarIconDTO.fromJson(obj));
-    }
-
-    return AvatarAggregateDTO(avatar: avatar, state: state, icons: icons);
-  }
-}
-
 /// POST body（絶対正スキーマ）
 @immutable
 class CreateAvatarRequest {
@@ -506,14 +539,10 @@ class CreateAvatarRequest {
     this.externalLink,
   });
 
-  /// Firestore field userId（Firebase uid）
   final String userId;
-
   final String avatarName;
 
-  /// Optional: https://... (推奨)
   final String? avatarIcon;
-
   final String? profile;
   final String? externalLink;
 
@@ -531,43 +560,6 @@ class CreateAvatarRequest {
 
     final link = (externalLink ?? '').trim();
     if (link.isNotEmpty) m['externalLink'] = link;
-
-    return m;
-  }
-}
-
-/// PATCH body (partial update)
-///
-/// backend 側は trimPtrNilAware で以下のように解釈する想定:
-/// - key が無い: 更新しない
-/// - 値が "" : clear (nil 保存)
-/// - 値が "x": 更新
-///
-/// ✅ 絶対正: walletAddress は PATCH では送らない（/wallet のみ）
-/// ✅ 方針A: avatarIcon は https://... を保存する
-@immutable
-class UpdateAvatarRequest {
-  const UpdateAvatarRequest({
-    this.avatarName,
-    this.avatarIcon,
-    this.profile,
-    this.externalLink,
-  });
-
-  final String? avatarName;
-  final String? avatarIcon;
-  final String? profile;
-  final String? externalLink;
-
-  Map<String, dynamic> toJson() {
-    final m = <String, dynamic>{};
-
-    if (avatarName != null) m['avatarName'] = avatarName!.trim();
-
-    // clear したい場合は "" を送る（= trim で "" になっても送る）
-    if (avatarIcon != null) m['avatarIcon'] = avatarIcon!.trim();
-    if (profile != null) m['profile'] = profile!.trim();
-    if (externalLink != null) m['externalLink'] = externalLink!.trim();
 
     return m;
   }

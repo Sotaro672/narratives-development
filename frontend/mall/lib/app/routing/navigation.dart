@@ -211,6 +211,28 @@ class AvatarIdStore extends ChangeNotifier {
 }
 
 /// ------------------------------------------------------------
+/// ✅ Header title 用の Store
+/// - use_avatar.dart が /mall/me/avatar の avatarName をセットする
+/// - app_scaffold_meta.dart がここから title を読む
+class AvatarHeaderTitleStore extends ChangeNotifier {
+  AvatarHeaderTitleStore._();
+  static final AvatarHeaderTitleStore I = AvatarHeaderTitleStore._();
+
+  String _title = 'Profile';
+  String get title => _title;
+
+  void setTitle(String? v) {
+    final next = (v ?? '').trim();
+    final normalized = next.isEmpty ? 'Profile' : next;
+    if (_title == normalized) return;
+    _title = normalized;
+    notifyListeners();
+  }
+
+  void reset() => setTitle('Profile');
+}
+
+/// ------------------------------------------------------------
 /// ✅ サインイン後に avatarId を確実に解決する
 Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
   final storeId = AvatarIdStore.I.avatarId.trim();
@@ -247,10 +269,12 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   // ------------------------------------------------------------
   // ✅ 未ログイン
   // - AvatarId は確実にクリア
+  // - Header title もリセット（メール/表示名依存を廃止したため）
   // - NavStore は “auth 復元の一瞬null” で消えると困るのでクリアしない
   // - 保護対象ページなら login に誘導し、returnTo を保存する（Pattern B）
   if (user == null) {
     AvatarIdStore.I.clear();
+    AvatarHeaderTitleStore.I.reset();
 
     // public に許可されていないページへ行こうとしているなら login へ
     if (!allowWhenSignedOut.contains(path)) {

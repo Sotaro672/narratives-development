@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
 import 'routes.dart';
+import 'avatar_name_store.dart';
 
 /// ------------------------------------------------------------
 /// AppShell に渡す「タイトル」「戻るボタン表示」を router/app_routes から分離
@@ -61,6 +62,11 @@ bool _isReservedTopSegment(String seg) {
 }
 
 String _avatarNameForHeader() {
+  // ✅ 1) Backend (/mall/me/avatar) resolved name (highest priority)
+  final bn = AvatarNameStore.I.avatarName.trim();
+  if (bn.isNotEmpty) return bn;
+
+  // ✅ 2) Fallback: FirebaseAuth (legacy behavior)
   final u = FirebaseAuth.instance.currentUser;
   if (u == null) return 'Profile';
 

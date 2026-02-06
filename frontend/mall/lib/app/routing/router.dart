@@ -24,6 +24,9 @@ import 'header/header_actions.dart';
 // ✅ FIX: HomePage を解決するために list.dart を import
 import '../../features/list/presentation/page/list.dart';
 
+// ✅ NEW: avatar name store (for header title)
+import 'avatar_name_store.dart';
+
 GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
   if (firebaseReady) return buildAppRouter();
   return buildPublicOnlyRouter(
@@ -43,6 +46,7 @@ GoRouter buildAppRouter() {
     refreshListenable: Listenable.merge([
       authRefresh,
       AvatarIdStore.I,
+      AvatarNameStore.I, // ✅ NEW: backend avatarName -> header title refresh
       // NavStore.I, // <- NavStore を Listenable にしたら有効化
     ]),
     redirect: (context, state) async => appRedirect(context, state),

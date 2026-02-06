@@ -1,6 +1,7 @@
 // frontend\mall\lib\features\avatar\infrastructure\avatar_api_client.dart
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../presentation/model/me_avatar.dart';
@@ -31,9 +32,47 @@ class AvatarApiException implements Exception {
 }
 
 class AvatarApiClient {
-  AvatarApiClient({http.Client? client}) : _api = MallAuthedApi(client: client);
+  AvatarApiClient({
+    http.Client? client,
+    bool? enableLogging,
+    void Function(String msg)? logger,
+  }) : _api = MallAuthedApi(client: client),
+       _enableLogging = enableLogging ?? (kDebugMode || kProfileMode),
+       _logger = logger;
 
   final MallAuthedApi _api;
+
+  final bool _enableLogging;
+  final void Function(String msg)? _logger;
+
+  // ----------------------------------------------------------------------------
+  // ✅ logging helpers (確実に Chrome Console に出る)
+  // ----------------------------------------------------------------------------
+
+  void _log(String msg, {String? path}) {
+    if (!_enableLogging) return;
+
+    final p = (path ?? '').trim();
+    final prefix = p.isEmpty ? '[AvatarApiClient] ' : '[AvatarApiClient][$p] ';
+    final out = '$prefix$msg';
+
+    // 呼び出し側で logger を渡したらそっちを優先
+    if (_logger != null) {
+      _logger(out);
+      return;
+    }
+
+    // ✅ debugPrint は avoid_print に引っかからず、Web Console にも出る
+    debugPrint(out);
+  }
+
+  String _short(String s, {int max = 280}) {
+    final t = s.trim();
+    if (t.length <= max) return t;
+    return '${t.substring(0, max)}...';
+  }
+
+  // ----------------------------------------------------------------------------
 
   static String _s(Object? v) => (v ?? '').toString().trim();
 
@@ -68,10 +107,13 @@ class AvatarApiClient {
   Future<Map<String, dynamic>?> _getAuthedJson(String path) async {
     final uri = _api.uri(path);
 
+    _log('GET start uri=$uri', path: path);
+
     http.Response res;
     try {
       res = await _api.sendAuthed('GET', uri, jsonBody: null);
     } catch (e) {
+      _log('GET failed (network/auth) err=$e', path: path);
       throw AvatarApiException(
         'Network/auth request failed',
         path: path,
@@ -79,9 +121,18 @@ class AvatarApiClient {
       );
     }
 
-    if (res.statusCode == 404) return null;
+    _log(
+      'GET done status=${res.statusCode} bodyLen=${res.body.length} bodyHead="${_short(res.body)}"',
+      path: path,
+    );
+
+    if (res.statusCode == 404) {
+      _log('GET -> 404 (treat as null)', path: path);
+      return null;
+    }
 
     if (!_is2xx(res.statusCode)) {
+      _log('GET -> non-2xx, throwing', path: path);
       throw AvatarApiException(
         'Non-2xx response',
         path: path,
@@ -92,8 +143,21 @@ class AvatarApiClient {
 
     try {
       final decoded = _decodeObject(res.body);
-      return _unwrapData(decoded);
+      _log('decoded keys=${decoded.keys.toList()}', path: path);
+
+      final unwrapped = _unwrapData(decoded);
+      _log(
+        'unwrapped keys=${unwrapped.keys.toList()} '
+        'avatarId="${_s(unwrapped['avatarId'])}" '
+        'avatarName="${_s(unwrapped['avatarName'])}" '
+        'profile="${_s(unwrapped['profile'])}" '
+        'walletAddress="${_s(unwrapped['walletAddress'])}"',
+        path: path,
+      );
+
+      return unwrapped;
     } catch (e) {
+      _log('decode/unwrap failed err=$e', path: path);
       throw AvatarApiException(
         'Failed to decode/unwrap JSON',
         path: path,
@@ -112,10 +176,16 @@ class AvatarApiClient {
   }) async {
     final uri = _api.uri(path);
 
+    _log(
+      '$method start uri=$uri payloadKeys=${jsonBody.keys.toList()} payload="$jsonBody"',
+      path: path,
+    );
+
     http.Response res;
     try {
       res = await _api.sendAuthed(method, uri, jsonBody: jsonBody);
     } catch (e) {
+      _log('$method failed (network/auth) err=$e', path: path);
       throw AvatarApiException(
         'Network/auth request failed',
         path: path,
@@ -123,7 +193,13 @@ class AvatarApiClient {
       );
     }
 
+    _log(
+      '$method done status=${res.statusCode} bodyLen=${res.body.length} bodyHead="${_short(res.body)}"',
+      path: path,
+    );
+
     if (!_is2xx(res.statusCode)) {
+      _log('$method -> non-2xx, throwing', path: path);
       throw AvatarApiException(
         'Non-2xx response',
         path: path,
@@ -132,12 +208,27 @@ class AvatarApiClient {
       );
     }
 
-    if (res.body.trim().isEmpty) return null;
+    if (res.body.trim().isEmpty) {
+      _log('$method -> empty body (return null)', path: path);
+      return null;
+    }
 
     try {
       final decoded = _decodeObject(res.body);
-      return _unwrapData(decoded);
+      _log('decoded keys=${decoded.keys.toList()}', path: path);
+
+      final unwrapped = _unwrapData(decoded);
+      _log(
+        'unwrapped keys=${unwrapped.keys.toList()} '
+        'avatarId="${_s(unwrapped['avatarId'])}" '
+        'avatarName="${_s(unwrapped['avatarName'])}" '
+        'profile="${_s(unwrapped['profile'])}" '
+        'walletAddress="${_s(unwrapped['walletAddress'])}"',
+        path: path,
+      );
+      return unwrapped;
     } catch (e) {
+      _log('decode/unwrap failed err=$e', path: path);
       throw AvatarApiException(
         'Failed to decode/unwrap JSON',
         path: path,
@@ -160,6 +251,7 @@ class AvatarApiClient {
   }) {
     // legacy wrapper is explicitly rejected
     if (j.containsKey('avatar') && j['avatar'] is Map) {
+      _log('parse reject legacy wrapper key "avatar"', path: path);
       throw AvatarApiException(
         'Legacy payload is not allowed: wrapper key "avatar" detected',
         path: path,
@@ -171,6 +263,10 @@ class AvatarApiClient {
     final walletAddress = _s(j['walletAddress']);
 
     if (avatarId.isEmpty) {
+      _log(
+        'parse invalid: missing avatarId json="${_short(jsonEncode(j))}"',
+        path: path,
+      );
       throw AvatarApiException(
         'Invalid payload: missing avatarId',
         path: path,
@@ -178,6 +274,10 @@ class AvatarApiClient {
       );
     }
     if (walletAddress.isEmpty) {
+      _log(
+        'parse invalid: missing walletAddress json="${_short(jsonEncode(j))}"',
+        path: path,
+      );
       throw AvatarApiException(
         'Invalid payload: missing walletAddress',
         path: path,
@@ -187,6 +287,10 @@ class AvatarApiClient {
 
     final avatarName = _s(j['avatarName']);
     if (avatarName.isEmpty) {
+      _log(
+        'parse invalid: missing avatarName json="${_short(jsonEncode(j))}"',
+        path: path,
+      );
       throw AvatarApiException(
         'Invalid payload: missing avatarName',
         path: path,
@@ -194,13 +298,22 @@ class AvatarApiClient {
       );
     }
 
+    final icon = _opt(j, 'avatarIcon');
+    final profile = _opt(j, 'profile');
+    final link = _opt(j, 'externalLink');
+
+    _log(
+      'parse ok avatarId="$avatarId" avatarName="$avatarName" profile="${profile ?? ""}"',
+      path: path,
+    );
+
     return MeAvatar(
       avatarId: avatarId,
       walletAddress: walletAddress,
       avatarName: avatarName,
-      avatarIcon: _opt(j, 'avatarIcon'),
-      profile: _opt(j, 'profile'),
-      externalLink: _opt(j, 'externalLink'),
+      avatarIcon: icon,
+      profile: profile,
+      externalLink: link,
     );
   }
 
@@ -209,9 +322,19 @@ class AvatarApiClient {
     const p = '/mall/me/avatar';
 
     final unwrapped = await _getAuthedJson(p);
-    if (unwrapped == null) return null;
+    if (unwrapped == null) {
+      _log('fetchMeAvatar -> null (404)', path: p);
+      return null;
+    }
 
-    return _parseMeAvatarStrict(unwrapped, path: p);
+    final me = _parseMeAvatarStrict(unwrapped, path: p);
+
+    _log(
+      'fetchMeAvatar result avatarName="${me.avatarName ?? ""}" profile="${me.profile ?? ""}"',
+      path: p,
+    );
+
+    return me;
   }
 
   /// ✅ Edit プレフィルも “同じ契約” を使う
@@ -219,18 +342,7 @@ class AvatarApiClient {
     return fetchMeAvatar();
   }
 
-  // ===========================================================================
-  // ✅ CREATE (新規作成)
-  // POST /mall/avatars   <-- 正
-  //
-  // - 「未作成」の時はこっちを叩く
-  // - avatarIcon はここでも禁止（画像操作は別API）
-  //
-  // NOTE:
-  // backend AvatarHandler の body は userId/userUid を受け取る実装になっているため、
-  // 呼び出し側で必要項目を含めてください。
-  // ===========================================================================
-
+  /// ✅ CREATE (新規作成) POST /mall/avatars
   Future<MeAvatar> createAvatar(Map<String, dynamic> body) async {
     const p = '/mall/avatars';
 
@@ -242,7 +354,6 @@ class AvatarApiClient {
       );
     }
 
-    // 送信前の軽い正規化（string は trim）
     final normalized = <String, dynamic>{};
     for (final e in body.entries) {
       final k = e.key.trim();
@@ -262,14 +373,16 @@ class AvatarApiClient {
       throw AvatarApiException('Empty body (nothing to create)', path: p);
     }
 
+    _log('createAvatar normalized="$normalized"', path: p);
+
     final unwrapped = await _authedJson(
       p,
       method: 'POST',
       jsonBody: normalized,
     );
 
-    // ✅ 空ボディでも、作成後は me が取れるはずなので取り直す
     if (unwrapped == null) {
+      _log('createAvatar -> empty body, refetch me', path: p);
       final latest = await fetchMeAvatar();
       if (latest == null) {
         throw AvatarApiException(
@@ -283,11 +396,7 @@ class AvatarApiClient {
     return _parseMeAvatarStrict(unwrapped, path: p);
   }
 
-  // ===========================================================================
-  // ✅ UPDATE (編集)
-  // PATCH /mall/me/avatar
-  // ===========================================================================
-
+  /// ✅ UPDATE (編集) PATCH /mall/me/avatar
   Future<MeAvatar> patchMeAvatar(Map<String, dynamic> patch) async {
     const p = '/mall/me/avatar';
 
@@ -308,8 +417,7 @@ class AvatarApiClient {
       if (v == null) continue;
 
       if (v is String) {
-        // "" はクリアとして意味があるので残す（server契約に従う）
-        normalized[k] = v.trim();
+        normalized[k] = v.trim(); // "" は残す
       } else {
         normalized[k] = v;
       }
@@ -319,9 +427,12 @@ class AvatarApiClient {
       throw AvatarApiException('Empty patch (nothing to update)', path: p);
     }
 
+    _log('patchMeAvatar normalized="$normalized"', path: p);
+
     final unwrapped = await _authedJson(p, jsonBody: normalized);
 
     if (unwrapped == null) {
+      _log('patchMeAvatar -> empty body, refetch me', path: p);
       final latest = await fetchMeAvatar();
       if (latest == null) {
         throw AvatarApiException(
@@ -333,73 +444,6 @@ class AvatarApiClient {
     }
 
     return _parseMeAvatarStrict(unwrapped, path: p);
-  }
-
-  // ===========================================================================
-  // ✅ Icon ops (me-only)
-  // ===========================================================================
-
-  Future<Map<String, dynamic>> issueMeAvatarIconUploadUrl({
-    String? fileName,
-    String? mimeType,
-    int? size,
-  }) async {
-    const p = '/mall/me/avatar/icon-upload-url';
-
-    final body = <String, dynamic>{};
-    final fn = _s(fileName);
-    final mt = _s(mimeType);
-
-    if (fn.isNotEmpty) body['fileName'] = fn;
-    if (mt.isNotEmpty) body['mimeType'] = mt;
-    if (size != null && size >= 0) body['size'] = size;
-
-    final unwrapped = await _authedJson(p, method: 'POST', jsonBody: body);
-
-    if (unwrapped == null) {
-      throw AvatarApiException(
-        'Empty response body (expected JSON object)',
-        path: p,
-      );
-    }
-
-    final uploadUrl = _s(unwrapped['uploadUrl']);
-    final objectPath = _s(unwrapped['objectPath']);
-    if (uploadUrl.isEmpty || objectPath.isEmpty) {
-      throw AvatarApiException(
-        'Invalid payload: missing uploadUrl/objectPath',
-        path: p,
-        body: jsonEncode(unwrapped),
-      );
-    }
-
-    return unwrapped;
-  }
-
-  Future<void> deleteMeAvatarIconObject() async {
-    const p = '/mall/me/avatar/icon-object';
-
-    final uri = _api.uri(p);
-
-    http.Response res;
-    try {
-      res = await _api.sendAuthed('DELETE', uri, jsonBody: null);
-    } catch (e) {
-      throw AvatarApiException(
-        'Network/auth request failed',
-        path: p,
-        cause: e,
-      );
-    }
-
-    if (!_is2xx(res.statusCode)) {
-      throw AvatarApiException(
-        'Non-2xx response',
-        path: p,
-        statusCode: res.statusCode,
-        body: res.body,
-      );
-    }
   }
 
   void dispose() {

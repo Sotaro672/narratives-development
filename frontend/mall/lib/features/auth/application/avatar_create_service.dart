@@ -156,7 +156,7 @@ class AvatarCreateService {
   }
 
   // ============================
-  // Save (create avatar + upload icon + PATCH avatarIcon=https://...)
+  // Save (create avatar + upload icon + PATCH me avatarIcon=https://...)
   // ============================
 
   String _extFromMime(String mime) {
@@ -266,7 +266,7 @@ class AvatarCreateService {
         'hasIcon=$hasIcon iconBytesLen=$size file="$fileName" mime="$mimeType"',
       );
 
-      // (1) ✅ まず Avatar を作成（アイコンURLは後で PATCH）
+      // (1) ✅ まず Avatar を作成（アイコンURLは後で me PATCH）
       final created = await _repo.create(
         request: CreateAvatarRequest(
           userId: userId,
@@ -287,7 +287,7 @@ class AvatarCreateService {
       // ✅ 表示名だけは FirebaseAuth に同期（email表示を防ぐ）
       await _syncAuthDisplayName(user: user, avatarName: avatarName);
 
-      // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→https URL を PATCH 保存（方針A）
+      // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→https URL を me PATCH で保存
       if (hasIcon) {
         final signed = await _repo.issueAvatarIconUploadUrl(
           avatarId: avatarId,
@@ -330,7 +330,7 @@ class AvatarCreateService {
 
         _log('icon upload ok bytes=$size');
 
-        // ✅ public https URL を生成し、avatarIcon として PATCH で保存する
+        // ✅ public https URL を生成し、avatarIcon として me PATCH で保存する
         final httpsUrl = _repo.publicHttpsUrlFromBucketObject(
           bucket: bucket,
           objectPath: objectPath,
@@ -349,14 +349,12 @@ class AvatarCreateService {
 
         _log('icon https url built avatarId=$avatarId url="$httpsUrl"');
 
-        await _repo.update(
-          id: avatarId,
-          request: UpdateAvatarRequest(
-            avatarIcon: httpsUrl, // ✅ 方針A: https://... を保存
-          ),
+        // ✅ legacy(update/id指定PATCH)は使わない。常に me PATCH に寄せる。
+        await _repo.updateMe(
+          request: UpdateMeAvatarRequest(avatarIcon: httpsUrl),
         );
 
-        _log('icon url patch ok avatarId=$avatarId');
+        _log('icon url me-patch ok avatarId=$avatarId');
       }
 
       _log('avatar save done avatarId=$avatarId userId=$userId');

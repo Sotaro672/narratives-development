@@ -24,11 +24,35 @@ import 'package:mall/app/routing/navigation.dart';
 /// - 戻り先制御は NavStore 側（router.dart / 各ページのUI側）で行う
 AvatarVm useAvatarVm(BuildContext context) {
   // ---------------------------
+  // ✅ logging helpers (Webでも確実に出す)
+  // ---------------------------
+  void log(String msg) {
+    final out = '[useAvatarVm] $msg';
+    // debugPrint は avoid_print に引っかからず、Web console にも出る
+    debugPrint(out);
+    // Webで確実に拾いたい時の保険（Consoleに出やすい）
+    // ignore: avoid_print
+    print(out);
+  }
+
+  String s(Object? v) => (v ?? '').toString().trim();
+
+  String short(String v, {int max = 240}) {
+    final t = s(v);
+    if (t.length <= max) return t;
+    return '${t.substring(0, max)}...';
+  }
+
+  // ---------------------------
   // Repository / Client lifecycle
   // ---------------------------
   final walletRepo = useMemoized(() => wallet_api.WalletRepositoryHttp());
   useEffect(() {
-    return () => walletRepo.dispose();
+    log('walletRepo created');
+    return () {
+      log('walletRepo dispose');
+      walletRepo.dispose();
+    };
   }, [walletRepo]);
 
   // ---------------------------
@@ -40,10 +64,35 @@ AvatarVm useAvatarVm(BuildContext context) {
   );
   final user = FirebaseAuth.instance.currentUser ?? authSnap.data;
 
-  // ✅ user が変わったら apiClient を作り直す（内部で token を掴む/キャッシュする実装でも安全に）
-  final apiClient = useMemoized(() => AvatarApiClient(), [user?.uid]);
+  // ✅ auth が変わったらログ
   useEffect(() {
-    return () => apiClient.dispose();
+    final u = user;
+    if (u == null) {
+      log('auth user=null (signed out)');
+    } else {
+      log(
+        'auth user uid="${s(u.uid)}" '
+        'email="${s(u.email)}" '
+        'displayName="${s(u.displayName)}"',
+      );
+    }
+    return null;
+  }, [user?.uid, user?.email, user?.displayName]);
+
+  // ✅ user が変わったら apiClient を作り直す（内部で token を掴む/キャッシュする実装でも安全に）
+  final apiClient = useMemoized(
+    () => AvatarApiClient(
+      enableLogging: true,
+      logger: (m) => log('apiClient $m'),
+    ),
+    [user?.uid],
+  );
+  useEffect(() {
+    log('AvatarApiClient created (dep uid="${s(user?.uid)}")');
+    return () {
+      log('AvatarApiClient dispose');
+      apiClient.dispose();
+    };
   }, [apiClient]);
 
   // ---------------------------
@@ -57,35 +106,141 @@ AvatarVm useAvatarVm(BuildContext context) {
   // ✅ /mall/me/avatar（MeAvatar=patch全体）
   // ✅ user が変わったら取り直す
   final meAvatarFuture = useMemoized(() async {
-    // サインアウト直後などで user が null のときは叩かない（無駄なI/O/不整合回避）
-    if (user == null) return null;
-    // ✅ /mall/me/avatar は「avatar patch 全体」を返す前提に統一
-    return apiClient.fetchMyAvatarProfile();
+    if (user == null) {
+      log('meAvatarFuture skipped (user=null)');
+      // ✅ header title もリセット（メール表示に落ちるのを防ぐ）
+      AvatarHeaderTitleStore.I.reset();
+      return null;
+    }
+
+    log('meAvatarFuture start fetchMyAvatarProfile() uid="${s(user.uid)}"');
+    final res = await apiClient.fetchMyAvatarProfile();
+
+    log(
+      'meAvatarFuture done '
+      'avatarId="${s(res?.avatarId)}" '
+      'avatarName="${s(res?.avatarName)}" '
+      'profile="${short(s(res?.profile))}" '
+      'walletAddress="${s(res?.walletAddress)}"',
+    );
+
+    // ✅ header title を「use_avatar.dart で取得した avatarName」に確実に寄せる
+    // - 空なら Profile に戻す
+    AvatarHeaderTitleStore.I.setTitle(res?.avatarName);
+
+    return res;
   }, [apiClient, user?.uid]);
   final meAvatarSnap = useFuture<MeAvatar?>(meAvatarFuture);
 
-  // ✅ Wallet は「自分のウォレット」をサーバ側で解決する前提
-  // - URL avatarId は使わない
-  // - meAvatar が取れない/空のときは wallet を読まない（無駄なI/O回避）
-  //
-  // 重要: meAvatarFuture を await する形だと、初回 Future 固定の影響を受けやすい。
-  //       meAvatarSnap.data に基づいて walletFuture を作り直す。
+  // ✅ meAvatarSnap の状態ログ（waiting/error/done）
+  useEffect(
+    () {
+      log(
+        'meAvatarSnap state=${meAvatarSnap.connectionState} '
+        'hasData=${meAvatarSnap.data != null} '
+        'hasError=${meAvatarSnap.hasError}',
+      );
+      if (meAvatarSnap.hasError) {
+        log('meAvatarSnap error="${meAvatarSnap.error}"');
+        // エラー時は fallback
+        AvatarHeaderTitleStore.I.reset();
+      }
+      final me = meAvatarSnap.data;
+      if (me != null) {
+        log(
+          'meAvatarSnap data '
+          'avatarId="${s(me.avatarId)}" '
+          'avatarName="${s(me.avatarName)}" '
+          'profile="${short(s(me.profile))}" '
+          'walletAddress="${s(me.walletAddress)}"',
+        );
+
+        // ✅ ここでも反映（Futureの完了タイミング差を潰す）
+        AvatarHeaderTitleStore.I.setTitle(me.avatarName);
+      }
+      return null;
+    },
+    [
+      meAvatarSnap.connectionState,
+      meAvatarSnap.hasError,
+      meAvatarSnap.data?.avatarId,
+      meAvatarSnap.data?.avatarName,
+      meAvatarSnap.data?.profile,
+      meAvatarSnap.data?.walletAddress,
+    ],
+  );
+
+  // meAvatarSnap.data に基づいて walletFuture を作り直す。
   final meAvatarId = (meAvatarSnap.data?.avatarId ?? '').trim();
 
   final walletFuture = useMemoized(() async {
-    if (user == null) return null;
-    if (meAvatarId.isEmpty) return null;
+    if (user == null) {
+      log('walletFuture skipped (user=null)');
+      return null;
+    }
+    if (meAvatarId.isEmpty) {
+      log('walletFuture skipped (meAvatarId empty)');
+      return null;
+    }
 
-    // ✅ sync → fetch
-    return walletRepo.syncAndFetchMeWallet();
+    log('walletFuture start syncAndFetchMeWallet() meAvatarId="$meAvatarId"');
+    final w = await walletRepo.syncAndFetchMeWallet();
+    log(
+      'walletFuture done '
+      'tokensLen=${w?.tokens.length ?? 0}',
+    );
+    return w;
   }, [walletRepo, user?.uid, meAvatarId]);
   final walletSnap = useFuture<WalletDTO?>(walletFuture);
+
+  // ✅ walletSnap の状態ログ
+  useEffect(
+    () {
+      log(
+        'walletSnap state=${walletSnap.connectionState} '
+        'hasData=${walletSnap.data != null} '
+        'hasError=${walletSnap.hasError}',
+      );
+      if (walletSnap.hasError) {
+        log('walletSnap error="${walletSnap.error}"');
+      }
+      final w = walletSnap.data;
+      if (w != null) {
+        final tokens = w.tokens;
+        final head = tokens
+            .take(3)
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        log(
+          'walletSnap data tokensLen=${tokens.length} '
+          'head=${head.isEmpty ? "[]" : head}',
+        );
+      }
+      return null;
+    },
+    [
+      walletSnap.connectionState,
+      walletSnap.hasError,
+      walletSnap.data?.tokens.length,
+    ],
+  );
 
   // ---------------------------
   // ✅ Resolve tokens by mintAddress
   // ---------------------------
-  // walletSnap.data を基準に作り直す（Future の固定参照を避ける）
   final tokensFromWallet = walletSnap.data?.tokens ?? const <String>[];
+
+  // ✅ tokens の変化ログ（join は重いので長さ＋先頭だけ）
+  useEffect(() {
+    final t = tokensFromWallet
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final head = t.take(3).toList();
+    log('tokensFromWallet changed len=${t.length} head=$head');
+    return null;
+  }, [tokensFromWallet.length]);
 
   final resolveFuture = useMemoized(() async {
     final mints = tokensFromWallet
@@ -93,15 +248,18 @@ AvatarVm useAvatarVm(BuildContext context) {
         .where((e) => e.isNotEmpty)
         .toList();
 
-    if (mints.isEmpty) return <String, TokenResolveDTO>{};
+    if (mints.isEmpty) {
+      log('resolveFuture skipped (no mints)');
+      return <String, TokenResolveDTO>{};
+    }
 
-    // 重複排除（順序維持）
     final seen = <String>{};
     final uniq = <String>[];
     for (final m in mints) {
       if (seen.add(m)) uniq.add(m);
     }
 
+    log('resolveFuture start uniqLen=${uniq.length}');
     final results = await Future.wait<TokenResolveDTO?>(
       uniq.map((m) async {
         try {
@@ -118,24 +276,53 @@ AvatarVm useAvatarVm(BuildContext context) {
       if (dto == null) continue;
       out[uniq[i]] = dto;
     }
+
+    log('resolveFuture done okLen=${out.length}');
     return out;
-  }, [walletRepo, user?.uid, tokensFromWallet.join(',')]); // tokens の変化で再計算
+  }, [walletRepo, user?.uid, tokensFromWallet.join(',')]);
   final resolvedSnap = useFuture<Map<String, TokenResolveDTO>>(resolveFuture);
+
+  useEffect(
+    () {
+      log(
+        'resolvedSnap state=${resolvedSnap.connectionState} '
+        'hasData=${resolvedSnap.data != null} '
+        'len=${resolvedSnap.data?.length ?? 0} '
+        'hasError=${resolvedSnap.hasError}',
+      );
+      if (resolvedSnap.hasError) {
+        log('resolvedSnap error="${resolvedSnap.error}"');
+      }
+      return null;
+    },
+    [
+      resolvedSnap.connectionState,
+      resolvedSnap.hasError,
+      resolvedSnap.data?.length,
+    ],
+  );
 
   // ---------------------------
   // ✅ Fetch token metadata via proxy (CORS avoid)
   // ---------------------------
   final metadataFuture = useMemoized(() async {
     final resolved = await resolveFuture;
-    if (resolved.isEmpty) return <String, TokenMetadataDTO>{};
+    if (resolved.isEmpty) {
+      log('metadataFuture skipped (resolved empty)');
+      return <String, TokenMetadataDTO>{};
+    }
 
     final entries = resolved.entries
         .map((e) => MapEntry(e.key.trim(), e.value))
         .where((e) => e.key.isNotEmpty && e.value.metadataUri.trim().isNotEmpty)
         .toList();
 
-    if (entries.isEmpty) return <String, TokenMetadataDTO>{};
+    if (entries.isEmpty) {
+      log('metadataFuture skipped (no metadataUri)');
+      return <String, TokenMetadataDTO>{};
+    }
 
+    log('metadataFuture start entriesLen=${entries.length}');
     final results = await Future.wait<TokenMetadataDTO?>(
       entries.map((e) async {
         try {
@@ -150,11 +337,32 @@ AvatarVm useAvatarVm(BuildContext context) {
     for (var i = 0; i < entries.length; i++) {
       final dto = results[i];
       if (dto == null) continue;
-      out[entries[i].key] = dto; // key = mintAddress
+      out[entries[i].key] = dto;
     }
+
+    log('metadataFuture done okLen=${out.length}');
     return out;
   }, [walletRepo, user?.uid, resolveFuture]);
   final metadataSnap = useFuture<Map<String, TokenMetadataDTO>>(metadataFuture);
+
+  useEffect(
+    () {
+      log(
+        'metadataSnap state=${metadataSnap.connectionState} '
+        'len=${metadataSnap.data?.length ?? 0} '
+        'hasError=${metadataSnap.hasError}',
+      );
+      if (metadataSnap.hasError) {
+        log('metadataSnap error="${metadataSnap.error}"');
+      }
+      return null;
+    },
+    [
+      metadataSnap.connectionState,
+      metadataSnap.hasError,
+      metadataSnap.data?.length,
+    ],
+  );
 
   // ---------------------------
   // Navigation handlers
@@ -170,13 +378,11 @@ AvatarVm useAvatarVm(BuildContext context) {
   final tokenMetadatas =
       metadataSnap.data ?? const <String, TokenMetadataDTO>{};
 
-  // ✅ 全体ロード状態（tokens が空の時の skeleton 用にも使う）
   final isTokensLoading =
       walletSnap.connectionState == ConnectionState.waiting ||
       resolvedSnap.connectionState == ConnectionState.waiting ||
       metadataSnap.connectionState == ConnectionState.waiting;
 
-  // ✅ mint ごとのロード状態（案A）
   final tokenLoadingByMint = <String, bool>{};
   for (final raw in tokens) {
     final m = raw.trim();
@@ -185,7 +391,6 @@ AvatarVm useAvatarVm(BuildContext context) {
     final hasResolved = resolvedTokens.containsKey(m);
     final hasMeta = tokenMetadatas.containsKey(m);
 
-    // まだ全体が進行中、または mint 単位で未取得なら loading 扱い
     tokenLoadingByMint[m] = isTokensLoading || !hasResolved || !hasMeta;
   }
 
@@ -196,10 +401,23 @@ AvatarVm useAvatarVm(BuildContext context) {
     tokenCount: tokens.length,
   );
 
-  // ✅ 絶対正スキーマ: avatarIcon / profile / externalLink
   final me = meAvatarSnap.data;
   final avatarIcon = me?.avatarIcon;
   final profile = me?.profile;
+
+  // ✅ 最終的に返すVMの要点もログ（1回だけ出したいので依存を絞る）
+  useEffect(() {
+    log(
+      'AvatarVm summary '
+      'uid="${s(user?.uid)}" '
+      'meAvatarId="$meAvatarId" '
+      'avatarName="${s(me?.avatarName)}" '
+      'headerTitle="${AvatarHeaderTitleStore.I.title}" '
+      'profile="${short(s(profile))}" '
+      'tokensLen=${tokens.length}',
+    );
+    return null;
+  }, [user?.uid, meAvatarId, me?.avatarName, profile, tokens.length]);
 
   return AvatarVm(
     authSnap: authSnap,
