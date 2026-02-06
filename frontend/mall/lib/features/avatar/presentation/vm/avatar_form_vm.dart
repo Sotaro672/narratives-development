@@ -4,10 +4,70 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../infrastructure/avatar_api_client.dart';
 
 enum AvatarFormMode { create, edit }
+
+/// ✅ Backend POST /mall/avatars が要求する body に合わせた DTO
+///
+/// backend avatar_handler.go:
+/// POST body:
+/// - userId   : string
+/// - userUid  : string
+/// - avatarName: string
+/// - avatarIcon: *string (optional)
+/// - profile: *string (optional)
+/// - externalLink: *string (optional)
+///
+/// NOTE:
+/// - 現状フロントでは "userId" / "userUid" のどちらを使うか不明確になりやすいので、
+///   ここでは Firebase Auth uid を両方に入れる（互換・安全側）
+/// - avatarIcon は方針Bなら送らない（別API）なので build で入れない
+@immutable
+class AvatarCreateRequest {
+  const AvatarCreateRequest({
+    required this.userId,
+    required this.userUid,
+    required this.avatarName,
+    this.avatarIcon,
+    this.profile,
+    this.externalLink,
+  });
+
+  final String userId;
+  final String userUid;
+  final String avatarName;
+
+  /// optional
+  final String? avatarIcon;
+  final String? profile;
+  final String? externalLink;
+
+  Map<String, dynamic> toJson() {
+    final m = <String, dynamic>{
+      'userId': userId.trim(),
+      'userUid': userUid.trim(),
+      'avatarName': avatarName.trim(),
+    };
+
+    // 方針B: 基本入れない（必要になったらここを使う）
+    final icon = (avatarIcon ?? '').trim();
+    if (icon.isNotEmpty) m['avatarIcon'] = icon;
+
+    final p = (profile ?? '').trim();
+    if (p.isNotEmpty) m['profile'] = p;
+
+    final l = (externalLink ?? '').trim();
+    if (l.isNotEmpty) m['externalLink'] = l;
+
+    return m;
+  }
+
+  @override
+  String toString() => 'AvatarCreateRequest(${toJson()})';
+}
 
 /// 「PATCHリクエストを渡せる」ための差分DTO
 /// - null: フィールド自体を送らない（更新しない）
@@ -56,13 +116,18 @@ class AvatarPatchRequest {
 /// 画面側から「PATCHを投げる処理」を差し込めるようにするための型
 typedef AvatarPatchSubmitter = Future<void> Function(AvatarPatchRequest patch);
 
+/// ✅ 画面側から「CREATE を投げる処理」を差し込めるようにするための型
+typedef AvatarCreateSubmitter = Future<void> Function(AvatarCreateRequest body);
+
 class AvatarFormVm extends ChangeNotifier {
   AvatarFormVm({
     required this.mode,
     AvatarApiClient? apiClient,
     AvatarPatchSubmitter? submitPatch,
-  })  : _apiClient = apiClient ?? AvatarApiClient(),
-        _submitPatch = submitPatch;
+    AvatarCreateSubmitter? submitCreate,
+  }) : _apiClient = apiClient ?? AvatarApiClient(),
+       _submitPatch = submitPatch,
+       _submitCreate = submitCreate;
 
   final AvatarFormMode mode;
   final AvatarApiClient _apiClient;
@@ -70,6 +135,10 @@ class AvatarFormVm extends ChangeNotifier {
   /// 任意: 画面/上位層から DI される PATCH 実行処理
   /// - 例: apiClient.patchMeAvatar(...) など
   final AvatarPatchSubmitter? _submitPatch;
+
+  /// ✅ 任意: 画面/上位層から DI される CREATE 実行処理
+  /// - 例: apiClient.createAvatar(...) など
+  final AvatarCreateSubmitter? _submitCreate;
 
   // form controllers
   final nameCtrl = TextEditingController();
@@ -89,6 +158,9 @@ class AvatarFormVm extends ChangeNotifier {
 
   // ✅ 最後に組み立てた PATCH（デバッグ/遷移で渡す用途）
   AvatarPatchRequest? lastBuiltPatch;
+
+  // ✅ 最後に組み立てた CREATE（デバッグ/遷移で渡す用途）
+  AvatarCreateRequest? lastBuiltCreate;
 
   // ui state
   bool saving = false;
@@ -120,6 +192,9 @@ class AvatarFormVm extends ChangeNotifier {
     if (s.isEmpty) return false;
     return s.startsWith('http://') || s.startsWith('https://');
   }
+
+  /// ✅ Firebase Auth UID（userId / userUid に入れる）
+  String _currentUid() => (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
 
   /// 画像アップロード（別API）後に得た URL(https://...) を注入する（プレビュー用途）
   void setUploadedAvatarIconUrl(String? url) {
@@ -296,7 +371,28 @@ class AvatarFormVm extends ChangeNotifier {
     return null;
   }
 
-  /// ✅ 差分PATCHを組み立てる
+  /// ✅ create 用 payload を組み立てる（backend の型に一致させる）
+  ///
+  /// - userId / userUid は backend が受け取るフィールド名に合わせる
+  /// - 現状は Firebase uid を両方に入れる（互換・安全側）
+  /// - avatarIcon は方針Bなら送らない（ここでは入れない）
+  AvatarCreateRequest buildCreateRequest() {
+    final uid = _currentUid();
+    final name = nameCtrl.text.trim();
+    final profile = profileCtrl.text.trim();
+    final link = linkCtrl.text.trim();
+
+    return AvatarCreateRequest(
+      userId: uid,
+      userUid: uid,
+      avatarName: name,
+      profile: profile.isEmpty ? null : profile,
+      externalLink: link.isEmpty ? null : link,
+      // avatarIcon: null (方針B: never send)
+    );
+  }
+
+  /// ✅ 差分PATCHを組み立てる（edit 用）
   ///
   /// 推奨B:
   /// - avatarIcon はここでは一切組み立てない（運用で担保 / API側でも拒否）
@@ -304,22 +400,10 @@ class AvatarFormVm extends ChangeNotifier {
   /// edit:
   /// - 初期値との差分のみを含める
   /// - profile / externalLink は "" を送ってクリアできる（backend契約次第）
-  ///
-  /// create:
-  /// - 全項目を含める（ただし空は null にして省略）
   AvatarPatchRequest buildPatchRequest() {
     final name = nameCtrl.text.trim();
     final profile = profileCtrl.text.trim();
     final link = linkCtrl.text.trim();
-
-    if (mode == AvatarFormMode.create) {
-      return AvatarPatchRequest(
-        avatarName: name.isEmpty ? null : name,
-        profile: profile.isEmpty ? null : profile,
-        externalLink: link.isEmpty ? null : link,
-        // avatarIcon: null (never send)
-      );
-    }
 
     // edit: 差分のみ
     String? patchName;
@@ -348,16 +432,33 @@ class AvatarFormVm extends ChangeNotifier {
 
   /// 保存（create/edit 共通）
   ///
-  /// ✅ 本メソッドは
-  /// - lastBuiltPatch を保持し
-  /// - submitPatch（DI）を通じて実際のPATCH送信も可能
-  /// とすることで「PATCHリクエストを渡せる」ようにします。
-  ///
   /// IMPORTANT:
   /// - avatarIcon の更新/削除はこの save() では行わない
   /// - 画像は別エンドポイント（signed PUT / delete object）で処理する
-  Future<bool> save({AvatarPatchSubmitter? submitPatch}) async {
+  ///
+  /// ✅ create:
+  /// - submitCreate が必須
+  /// - payload は AvatarCreateRequest（userId/userUid を含む）
+  ///
+  /// ✅ edit:
+  /// - submitPatch が必須
+  /// - payload は AvatarPatchRequest（差分）
+  Future<bool> save({
+    AvatarPatchSubmitter? submitPatch,
+    AvatarCreateSubmitter? submitCreate,
+  }) async {
     if (!canSave) return false;
+
+    // create の場合: UID 必須
+    if (mode == AvatarFormMode.create) {
+      final uid = _currentUid();
+      if (uid.isEmpty) {
+        msg = 'ログイン情報（Firebase UID）が取得できないため、作成できません。';
+        isSuccessMessage = false;
+        notifyListeners();
+        return false;
+      }
+    }
 
     // edit の更新で avatarId が無いのは異常（fetch してない/壊れた状態）
     if (mode == AvatarFormMode.edit && _meAvatarId.trim().isEmpty) {
@@ -373,6 +474,27 @@ class AvatarFormVm extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (mode == AvatarFormMode.create) {
+        final body = buildCreateRequest();
+        lastBuiltCreate = body;
+
+        final submit = submitCreate ?? _submitCreate;
+        if (submit == null) {
+          throw StateError(
+            'CREATE submitter is not configured. Provide submitCreate or inject _submitCreate.',
+          );
+        }
+
+        await submit(body);
+
+        isSuccessMessage = true;
+        msg = 'アバターを保存しました。';
+        return true;
+      }
+
+      // ----------------
+      // edit
+      // ----------------
       final patch = buildPatchRequest();
       lastBuiltPatch = patch;
 
@@ -384,7 +506,7 @@ class AvatarFormVm extends ChangeNotifier {
       }
 
       // patch が空なら no-op で成功扱い（編集画面のUXを優先）
-      if (mode == AvatarFormMode.edit && patch.isEmpty) {
+      if (patch.isEmpty) {
         isSuccessMessage = true;
         msg = '変更がありません。';
         return true;
@@ -398,7 +520,7 @@ class AvatarFormVm extends ChangeNotifier {
       _initialExternalLink = _s(linkCtrl.text);
 
       isSuccessMessage = true;
-      msg = mode == AvatarFormMode.create ? 'アバターを保存しました。' : 'アバターを更新しました。';
+      msg = 'アバターを更新しました。';
       return true;
     } catch (e) {
       isSuccessMessage = false;

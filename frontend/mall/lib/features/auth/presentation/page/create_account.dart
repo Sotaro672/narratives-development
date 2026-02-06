@@ -29,7 +29,20 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   }
 
   void _onVmChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+
+    // ✅ 登録成功後は shipping-address へ（メール認証画面へは遷移しない）
+    final next = _vm.nextRoute;
+    if (next != null && next.isNotEmpty) {
+      // build 中の go を避ける
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.go(next);
+      });
+      return;
+    }
+
+    setState(() {});
   }
 
   @override

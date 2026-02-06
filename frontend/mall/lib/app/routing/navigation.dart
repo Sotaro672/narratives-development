@@ -55,14 +55,6 @@ class NavStore extends ChangeNotifier {
 
   /// ----------------------------------------------------------
   /// Helpers
-  ///
-  /// - 内部パスのみ許容:
-  ///   - "/cart", "/avatar", "/preview?x=y" のような相対パスはOK
-  ///   - "https://evil.com" や "javascript:..." は拒否
-  ///
-  /// NOTE:
-  /// - GoRouter の location には query を含む文字列が来ることがあるため、
-  ///   ここでは "Uri.tryParse" で解析し、authority/scheme があるものは弾く。
   static String _sanitizeInternalLocation(String raw) {
     final s = raw.trim();
     if (s.isEmpty) return '';
@@ -106,10 +98,6 @@ class NavStore extends ChangeNotifier {
 
 /// ------------------------------------------------------------
 /// ✅ avatarId の “現在値” をアプリ側で保持（URLに無い時の補完に使う）
-///
-/// 重要（セキュリティ要件）:
-/// - avatarId を URL に出さない方針のため、redirect で query へ注入しない。
-/// - 代わりに AvatarIdStore に保持し、必要な画面で store から参照する。
 class AvatarIdStore extends ChangeNotifier {
   AvatarIdStore._();
   static final AvatarIdStore I = AvatarIdStore._();
@@ -137,10 +125,8 @@ class AvatarIdStore extends ChangeNotifier {
 
   /// ✅ /mall/me/avatar で「自分の avatarId(docId)」を解決する（uid を query に入れない）
   Future<String?> resolveMyAvatarId() {
-    // 既に確定しているならそれを返す
     if (_avatarId.trim().isNotEmpty) return Future.value(_avatarId.trim());
 
-    // in-flight があればそれを待つ
     final running = _inflight;
     if (running != null) return running;
 
@@ -151,21 +137,18 @@ class AvatarIdStore extends ChangeNotifier {
 
   Future<String?> _resolveMe() async {
     try {
-      // ✅ single source of truth: app/config/api_base.dart
       final base = resolveApiBase().trim();
       if (base.isEmpty) return null;
 
       final b = Uri.tryParse(base);
       if (b == null || !b.hasScheme || !b.hasAuthority) return null;
 
-      // ✅ base の path を壊さず join する（replace(path:'/...') で潰さない）
       final uri = b.replace(
         path: _joinPaths(b.path, '/mall/me/avatar'),
         queryParameters: null,
         fragment: null,
       );
 
-      // ✅ Authorization を付ける（必須）
       final headers = <String, String>{
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -180,7 +163,6 @@ class AvatarIdStore extends ChangeNotifier {
         return token.isEmpty ? null : token;
       }
 
-      // まず通常取得（軽量）
       String? token = await getToken(false);
       if (token == null) return null;
 
@@ -188,7 +170,6 @@ class AvatarIdStore extends ChangeNotifier {
 
       http.Response res = await http.get(uri, headers: headers);
 
-      // ✅ 401/403 のときだけ強制更新して 1 回だけリトライ
       if (res.statusCode == 401 || res.statusCode == 403) {
         token = await getToken(true);
         if (token == null) return null;
@@ -199,7 +180,6 @@ class AvatarIdStore extends ChangeNotifier {
       if (res.statusCode == 404) return null;
       if (res.statusCode < 200 || res.statusCode >= 300) return null;
 
-      // ✅ wrapper 吸収: {data:{avatarId:"..."}} を許容
       final body = res.body.trim();
       if (body.isEmpty) return null;
 
@@ -232,59 +212,56 @@ class AvatarIdStore extends ChangeNotifier {
 
 /// ------------------------------------------------------------
 /// ✅ サインイン後に avatarId を確実に解決する
-///
-/// - URLの avatarId は「信用しない」（uid が入っている事故を防ぐ）
-/// - store があればそれを使う
-/// - 最終的に /mall/me/avatar で解決
 Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
-  // 1) store があればそれを採用（最優先）
   final storeId = AvatarIdStore.I.avatarId.trim();
   if (storeId.isNotEmpty) return storeId;
 
-  // 2) URL の avatarId は “候補” として一時的に見るが、確定はしない
   final all = state.uri.queryParametersAll;
   final list = all[AppQueryKey.avatarId] ?? const <String>[];
   final qpId = (list.isNotEmpty ? list.last : '').trim();
-
-  // qpId が入っていても set しない（uid混入を防ぐ）
-  // ただし、/mall/me/avatar が取れない時の “保険” として最後に使えるよう保持
   final qpCandidate = qpId;
 
-  // 3) サーバで確定（uid->avatarId の正規解）
   final resolved = await AvatarIdStore.I.resolveMyAvatarId();
   final id = (resolved ?? '').trim();
   if (id.isNotEmpty) return id;
 
-  // 4) どうしても取れない場合だけ URL 候補を使う
   return qpCandidate;
 }
 
 /// ------------------------------------------------------------
 /// ✅ redirect 本体（router.dart から呼ぶ）
-///
-/// Pattern B:
-/// - `from` query を使わず、NavStore に returnTo を保持する
-/// - login 完了後は NavStore の returnTo に復帰（なければ home）
-///
-/// セキュリティ要件:
-/// - avatarId を URL に注入しない
-/// - 代わりに store へ保存のみ行う
 Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   final user = FirebaseAuth.instance.currentUser;
-
-  // ------------------------------------------------------------
-  // 未ログイン
-  // - avatarId / nav state をクリア
-  if (user == null) {
-    AvatarIdStore.I.clear();
-    NavStore.I.clear();
-    return null;
-  }
-
   final path = state.uri.path;
 
   final isLoginRoute = path == AppRoutePath.login;
   final isCreateAccountRoute = path == AppRoutePath.createAccount;
+
+  // ✅ 未ログインでも入れるページ（最低限）
+  final allowWhenSignedOut = <String>{
+    AppRoutePath.home,
+    AppRoutePath.login,
+    AppRoutePath.createAccount,
+  };
+
+  // ------------------------------------------------------------
+  // ✅ 未ログイン
+  // - AvatarId は確実にクリア
+  // - NavStore は “auth 復元の一瞬null” で消えると困るのでクリアしない
+  // - 保護対象ページなら login に誘導し、returnTo を保存する（Pattern B）
+  if (user == null) {
+    AvatarIdStore.I.clear();
+
+    // public に許可されていないページへ行こうとしているなら login へ
+    if (!allowWhenSignedOut.contains(path)) {
+      final current = state.uri.toString();
+      NavStore.I.setReturnTo(current);
+      return AppRoutePath.login;
+    }
+
+    // home/login/create-account はそのまま
+    return null;
+  }
 
   // ✅ サインイン中でも avatarId を要求しないページ
   final exemptForAvatarId = <String>{
@@ -297,8 +274,6 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
 
   // ============================================================
   // ✅ ログイン直後（/login に居る状態でログイン状態になった瞬間）
-  // - avatarId は解決して store に入れる（best-effort）
-  // - Pattern B: returnTo があればそこへ復帰。無ければ home。
   // ============================================================
   if (isLoginRoute) {
     final resolved = await _ensureAvatarIdResolved(state);
@@ -306,17 +281,15 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
       AvatarIdStore.I.set(resolved);
     }
 
-    // ✅ 1) returnTo があれば復帰（consume は String を返す）
     final to = NavStore.I.consumeReturnTo().trim();
     if (to.isNotEmpty) {
       return to;
     }
 
-    // ✅ 2) なければ home
     return AppRoutePath.home;
   }
 
-  // ✅ create_account(/create-account) は、ログイン状態になっても強制遷移しない
+  // ✅ create-account はログイン状態になっても強制遷移しない
   if (isCreateAccountRoute) {
     final resolved = await _ensureAvatarIdResolved(state); // best-effort
     if (resolved.isNotEmpty) {
@@ -335,26 +308,17 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   }
 
   // ✅ サインイン後：avatarId は store に確保するが、URLは改変しない
-  // ❌ avatarId 未解決でも avatar_create には飛ばさない（既存要件維持）
   final resolved = await _ensureAvatarIdResolved(state);
   if (resolved.isNotEmpty) {
     AvatarIdStore.I.set(resolved);
   }
 
-  // ✅ URL は触らない（avatarId を query に入れない / 正規化しない）
   return null;
 }
 
 /// ------------------------------------------------------------
 /// ✅ Pattern B: 画面遷移ヘルパ
-///
-/// - URL query に `from` を載せない
-/// - 代わりに NavStore に "returnTo" を保存してから遷移する
-///
-/// これにより、feature 側（use_avatar.dart 等）は
-/// `goToAvatarEdit(context)` のみ呼べばよくなる。
 void goToAvatarEdit(BuildContext context) {
-  // 現在地（query含む）を returnTo として保存（URLには付けない）
   final current = GoRouterState.of(context).uri.toString();
   NavStore.I.setReturnTo(current);
 

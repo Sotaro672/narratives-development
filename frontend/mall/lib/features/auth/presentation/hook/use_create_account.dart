@@ -33,6 +33,9 @@ class UseCreateAccount extends ChangeNotifier {
   /// ✅ 認証メール送信後に画面内へ表示するメッセージ
   String? sentMessage;
 
+  /// ✅ 登録成功後の遷移先（UI 側で context.go(nextRoute!) する）
+  String? nextRoute;
+
   // ------------------------------------------------------------
   // computed (delegate)
   // ------------------------------------------------------------
@@ -49,18 +52,20 @@ class UseCreateAccount extends ChangeNotifier {
   String topMessage() => _service.topMessage(intent: intent);
 
   void onChanged() {
-    if (error != null || sentMessage != null) {
+    if (error != null || sentMessage != null || nextRoute != null) {
       error = null;
       sentMessage = null;
+      nextRoute = null;
     }
     _safeNotify();
   }
 
   void setAgree(bool v) {
     agree = v;
-    if (error != null || sentMessage != null) {
+    if (error != null || sentMessage != null || nextRoute != null) {
       error = null;
       sentMessage = null;
+      nextRoute = null;
     }
     _safeNotify();
   }
@@ -74,6 +79,7 @@ class UseCreateAccount extends ChangeNotifier {
 
     error = null;
     sentMessage = null;
+    nextRoute = null;
     loading = true;
     _safeNotify();
 
@@ -88,7 +94,11 @@ class UseCreateAccount extends ChangeNotifier {
       if (_disposed) return;
 
       if (res.ok) {
+        // ✅ ここで shipping-address へ進める（メール認証画面へは飛ばさない）
         sentMessage = res.sentMessage;
+
+        // CreateAccountService に追加した helper を使う想定
+        nextRoute = _service.shippingBackTo(from: from, intent: intent);
       } else {
         error = res.error ?? '不明なエラーが発生しました。';
       }

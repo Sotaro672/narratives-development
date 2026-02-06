@@ -1,4 +1,3 @@
-// frontend\mall\lib\features\auth\application\shipping_address_service.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -101,8 +100,6 @@ class ShippingAddressService {
   late final ShippingAddressRepositoryHttp _shipRepoInst;
 
   void dispose() {
-    // repo は自前で作った場合のみ dispose したいが判定が難しいので、
-    // repo 側が安全に dispose 実装されている前提で “必ず dispose” に寄せる。
     try {
       _userRepoInst.dispose();
     } catch (_) {}
@@ -270,11 +267,14 @@ class ShippingAddressService {
     final fbUser = _auth.currentUser;
     final isLoggedIn = fbUser != null;
 
+    // ✅ zip は 7 桁を要求（サービス側でも揃える）
+    final zip7 = normalizeZip(zip);
+
     return !saving &&
         isLoggedIn &&
         s(lastName).isNotEmpty &&
         s(firstName).isNotEmpty &&
-        normalizeZip(zip).isNotEmpty &&
+        zip7.length == 7 &&
         s(pref).isNotEmpty &&
         s(city).isNotEmpty &&
         s(addr1).isNotEmpty;
@@ -301,12 +301,29 @@ class ShippingAddressService {
       return const SaveAddressResult.failure('uid が取得できませんでした。');
     }
 
+    // ✅ Token が取れない状態（Web復元中など）を早期に判定できるようにする
+    try {
+      final token = (await fbUser.getIdToken(false))?.trim() ?? '';
+      if (token.isEmpty) {
+        return const SaveAddressResult.failure(
+          '認証トークンが取得できませんでした。再ログインしてください。',
+        );
+      }
+      log('[ShippingAddress] idToken(len)=${token.length}');
+    } catch (e) {
+      return SaveAddressResult.failure('認証トークン取得に失敗しました: $e');
+    }
+
     final ln = s(lastName);
     final lnk = s(lastNameKana);
     final fn = s(firstName);
     final fnk = s(firstNameKana);
 
     final zip7 = normalizeZip(zip);
+    if (zip7.length != 7) {
+      return const SaveAddressResult.failure('郵便番号は7桁で入力してください。');
+    }
+
     final st = s(pref);
     final ct = s(city);
     final a1 = s(addr1);
@@ -357,10 +374,6 @@ class ShippingAddressService {
       // ----------------------------
       // 2) upsert shipping address (required)
       // ----------------------------
-      //
-      // ✅ avatarId は未確定なので使わない。
-      // ✅ uid だけで保存できる /mall/shipping-addresses（= “mall/shippingAddress” 相当）を叩く前提。
-      //
       log('[ShippingAddress] upsert shippingAddress uid=$uid');
 
       final saved = await upsertShippingAddress(
@@ -383,7 +396,8 @@ class ShippingAddressService {
 
       return SaveAddressResult.success(sb.toString().trim());
     } catch (e) {
-      return SaveAddressResult.failure(e.toString());
+      // ✅ どこで落ちたか分かるメッセージに寄せる
+      return SaveAddressResult.failure('配送先情報の保存に失敗しました: $e');
     }
   }
 
@@ -400,6 +414,10 @@ class ShippingAddressService {
     required String addr1,
     required String addr2,
   }) async {
+    if (zip7.trim().length != 7) {
+      throw ArgumentError('zipCode must be 7 digits. got="$zip7"');
+    }
+
     log(
       '[ShippingAddress] upsertShippingAddress '
       'id(uid)=$uid zip=$zip7 state="$pref" city="$city" street="$addr1" street2="$addr2"',
@@ -427,7 +445,6 @@ class ShippingAddressService {
   static String _normalizeBaseUrl(String v) {
     final s = v.trim();
     if (s.isEmpty) return '';
-    // normalize: remove trailing slashes
     return s.replaceAll(RegExp(r'\/+$'), '');
   }
 }

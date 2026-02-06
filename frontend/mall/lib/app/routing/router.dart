@@ -14,10 +14,10 @@ import 'routes.dart';
 // ✅ redirect / stores
 import 'navigation.dart';
 
-// ✅ NEW: app routes 분離（ShellRoute / GoRoute ツリー）
+// ✅ app routes 분離（ShellRoute / GoRoute ツリー）
 import 'app_routes.dart';
 
-// ✅ NEW: header meta/actions 分離
+// ✅ header meta/actions 分離
 import 'app_scaffold_meta.dart';
 import 'header/header_actions.dart';
 
@@ -32,6 +32,8 @@ GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
 }
 
 GoRouter buildAppRouter() {
+  // ✅ auth state changes should trigger redirect/UI refresh
+  // userChanges(): sign-in/sign-out + token refresh + profile changes
   final authRefresh = GoRouterRefreshStream(
     FirebaseAuth.instance.userChanges(),
   );
@@ -159,7 +161,6 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
             child: child,
           );
         },
-        // ✅ FIX: const を外す（ShellRoute/GoRoute は const 化できないケースがある）
         routes: [
           GoRoute(
             path: AppRoutePath.home,

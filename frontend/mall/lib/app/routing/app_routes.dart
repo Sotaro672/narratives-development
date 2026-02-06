@@ -1,3 +1,4 @@
+//frontend\mall\lib\app\routing\app_routes.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -68,17 +69,30 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
       path: AppRoutePath.login,
       name: AppRouteName.login,
       pageBuilder: (context, state) {
-        final intent = state.uri.queryParameters[AppQueryKey.intent];
-        return NoTransitionPage(child: auth_login.LoginPage(intent: intent));
+        final qp = state.uri.queryParameters;
+        final intent = qp[AppQueryKey.intent];
+        final from = qp[AppQueryKey.from];
+        return NoTransitionPage(
+          child: auth_login.LoginPage(
+            intent: intent,
+            from: from, // ✅ あるなら渡す（LoginPage 側が未対応なら無視されてもOK）
+          ),
+        );
       },
     ),
     GoRoute(
       path: AppRoutePath.createAccount,
       name: AppRouteName.createAccount,
       pageBuilder: (context, state) {
-        final intent = state.uri.queryParameters[AppQueryKey.intent];
+        final qp = state.uri.queryParameters;
+        final intent = qp[AppQueryKey.intent];
+        final from = qp[AppQueryKey.from];
+
         return NoTransitionPage(
-          child: auth_create.CreateAccountPage(intent: intent),
+          child: auth_create.CreateAccountPage(
+            from: from, // ✅ 追加：戻り先/導線維持
+            intent: intent,
+          ),
         );
       },
     ),
@@ -87,12 +101,17 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
       name: AppRouteName.shippingAddress,
       pageBuilder: (context, state) {
         final qp = state.uri.queryParameters;
+
         return NoTransitionPage(
           child: auth_ship.ShippingAddressPage(
+            // ✅ メール認証リンクで来た時だけ入る（通常遷移では null のまま）
             mode: qp[AppQueryKey.mode],
             oobCode: qp[AppQueryKey.oobCode],
             continueUrl: qp[AppQueryKey.continueUrl],
             lang: qp[AppQueryKey.lang],
+
+            // ✅ app params
+            from: qp[AppQueryKey.from], // ✅ 追加：backTo の整合性
             intent: qp[AppQueryKey.intent],
           ),
         );
@@ -181,7 +200,6 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
 
             final qp = state.uri.queryParameters;
 
-            // ✅ primary: query param, fallback: state.extra(String)
             final mintFromQP = s(qp['mintAddress']);
             final mintFromExtra = s(
               state.extra is String ? state.extra as String : null,
@@ -198,22 +216,14 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
               key: ValueKey('wallet-contents-$mint'),
               child: WalletContentsPage(
                 mintAddress: mint,
-
-                // ✅ query から補完（prefill用）
                 productId: asOpt(s(qp['productId'])),
                 brandId: asOpt(s(qp['brandId'])),
                 brandName: asOpt(s(qp['brandName'])),
                 productName: asOpt(s(qp['productName'])),
                 tokenName: asOpt(s(qp['tokenName'])),
-
-                // 互換
                 imageUrl: asOpt(s(qp['imageUrl'])),
-
-                // ✅ 追加: icon/contents（prefill）
                 iconUrl: asOpt(s(qp['iconUrl'])),
                 contentsUrl: asOpt(s(qp['contentsUrl'])),
-
-                // ✅ 戻り先
                 from: asOpt(s(qp['from'])),
               ),
             );
@@ -255,7 +265,6 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
           path: AppRoutePath.payment,
           name: AppRouteName.payment,
           pageBuilder: (context, state) {
-            // ✅ avatarId は URL から取らない（store から使う）
             final avatarId = AvatarIdStore.I.avatarId;
 
             return NoTransitionPage(
@@ -276,7 +285,6 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
               return const NoTransitionPage(child: HomePage());
             }
 
-            // ✅ avatarId は URL から取らない（store から使う）
             final avatarId = AvatarIdStore.I.avatarId;
 
             return NoTransitionPage(

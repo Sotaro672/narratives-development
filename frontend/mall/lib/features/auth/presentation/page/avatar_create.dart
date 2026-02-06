@@ -1,4 +1,5 @@
-//frontend\mall\lib\features\auth\presentation\page\avatar_create.dart
+// frontend\mall\lib\features\auth\presentation\page\avatar_create.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +9,7 @@ import '../../../../app/shell/presentation/components/header.dart';
 
 import '../../../avatar/presentation/component/avatar_form.dart';
 import '../../../avatar/presentation/vm/avatar_form_vm.dart';
+import '../../../avatar/infrastructure/avatar_api_client.dart';
 
 class AvatarCreatePage extends StatefulWidget {
   const AvatarCreatePage({super.key});
@@ -17,13 +19,39 @@ class AvatarCreatePage extends StatefulWidget {
 }
 
 class _AvatarCreatePageState extends State<AvatarCreatePage> {
+  late final AvatarApiClient _api;
   late final AvatarFormVm _vm;
+
+  // ✅ dev log helper (Chrome console に出ます)
+  void _log(String msg) {
+    if (!kDebugMode) return;
+    debugPrint('[AvatarCreatePage] $msg');
+  }
 
   @override
   void initState() {
     super.initState();
-    _vm = AvatarFormVm(mode: AvatarFormMode.create);
+
+    _api = AvatarApiClient();
+
+    // ✅ create は "submitCreate" を注入する（AvatarFormVm.save は create で submitCreate を要求する）
+    _vm = AvatarFormVm(
+      mode: AvatarFormMode.create,
+      apiClient: _api,
+      submitCreate: (body) async {
+        final payload = body.toJson();
+        _log('submitCreate start payload=$payload');
+
+        // POST /mall/avatars
+        await _api.createAvatar(payload);
+
+        _log('submitCreate done');
+      },
+    );
+
     _vm.addListener(_onVmChanged);
+
+    _log('initState done (create mode)');
   }
 
   void _onVmChanged() {
@@ -35,12 +63,12 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
   void dispose() {
     _vm.removeListener(_onVmChanged);
     _vm.dispose();
+    _api.dispose();
     super.dispose();
   }
 
   String _consumeBackTo() {
     try {
-      // consumeReturnTo() が non-nullable の場合に合わせる
       final v = NavStore.I.consumeReturnTo();
       final s = v.toString().trim();
       if (s.isNotEmpty) return s;
@@ -49,12 +77,17 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
   }
 
   Future<void> _onSave() async {
+    _log('onSave tapped');
+
+    // ✅ submitCreate は VM に注入済み
     final ok = await _vm.save();
+    _log('onSave result ok=$ok msg=${_vm.msg}');
+
     if (!mounted) return;
 
     if (ok) {
-      // Pattern B: 戻り先は NavStore。無ければ avatar へ。
       final backTo = _consumeBackTo();
+      _log('navigate to backTo=$backTo');
       context.go(backTo);
     }
   }

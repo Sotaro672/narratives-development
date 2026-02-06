@@ -1,6 +1,9 @@
 // frontend\mall\lib\features\auth\presentation\hook\use_shipping_address.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../application/shipping_address_service.dart';
 
@@ -16,7 +19,7 @@ class UseShippingAddress extends ChangeNotifier {
     ShippingAddressService? service,
   }) : _service = service ?? ShippingAddressService();
 
-  // Firebase action params
+  // Firebase action params（メール認証リンクから来た場合のみ入る）
   final String? mode; // e.g. verifyEmail
   final String? oobCode;
   final String? continueUrl;
@@ -29,6 +32,9 @@ class UseShippingAddress extends ChangeNotifier {
   final ShippingAddressService _service;
 
   bool _initialized = false;
+
+  // ✅ auth state subscription (fix: web auth restore delay / tab restore)
+  StreamSubscription<User?>? _authSub;
 
   // ============================================================
   // verifying state
@@ -61,7 +67,12 @@ class UseShippingAddress extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    // ✅ verifyEmail の場合は actionCode 適用
+    // ✅ auth state changes => refresh UI (loggedIn/emailVerified/canSaveAddress)
+    _authSub = FirebaseAuth.instance.userChanges().listen((_) {
+      notifyListeners();
+    });
+
+    // ✅ verifyEmail の場合は actionCode 適用（クエリがある時だけ）
     maybeApplyActionCode();
 
     // ✅ 郵便番号が変わったら自動で検索（7桁になったタイミング）
@@ -81,6 +92,8 @@ class UseShippingAddress extends ChangeNotifier {
 
   @override
   void dispose() {
+    _authSub?.cancel();
+
     zipCtrl.removeListener(_onZipChanged);
 
     lastNameCtrl.removeListener(_onFormChanged);
@@ -177,11 +190,15 @@ class UseShippingAddress extends ChangeNotifier {
     if (zip.length == 7 && zip != _lastResolvedZip) {
       _lastResolvedZip = zip;
       lookupZipAndFill(zip);
-    } else {
-      if (zipError != null) {
-        zipError = null;
-        notifyListeners();
-      }
+      // lookupZipAndFill 内で notifyListeners() される
+      return;
+    }
+
+    // 7桁未満になった等でエラーをクリアしたい場合
+    if (zipError != null) {
+      zipError = null;
+      notifyListeners();
+      return;
     }
 
     notifyListeners();

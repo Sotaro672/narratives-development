@@ -6,7 +6,7 @@ import '../../../../app/shell/presentation/components/header.dart';
 import '../../../../di/container.dart';
 import '../hook/use_shipping_address.dart';
 
-/// ✅ 認証メールリンクの着地点 + 配送先住所入力
+/// ✅ 配送先住所入力（メール認証リンクから来た場合は、その確認も同じ画面で行う）
 class ShippingAddressPage extends StatefulWidget {
   const ShippingAddressPage({
     super.key,
@@ -18,7 +18,7 @@ class ShippingAddressPage extends StatefulWidget {
     this.intent,
   });
 
-  /// Firebase action params
+  /// Firebase action params（メール認証リンクから来た場合のみ入る）
   final String? mode; // e.g. verifyEmail
   final String? oobCode;
   final String? continueUrl;
@@ -40,7 +40,6 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
     super.initState();
 
     // ✅ DI: container から service を注入（直newをやめる）
-    // これにより API_BASE 統一・repo logger が確実に動く
     _vm = UseShippingAddress(
       mode: widget.mode,
       oobCode: widget.oobCode,
@@ -75,6 +74,9 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
 
     final cameFromEmailLink = _vm.cameFromEmailLink;
 
+    // ✅ 未ログイン時はフォームを触れないようにする（保存できないため）
+    final formEnabled = loggedIn && !_vm.saving;
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -95,10 +97,13 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // --------------------------------------------
+                        // ✅ Mail verify status (optional section)
+                        // --------------------------------------------
                         if (cameFromEmailLink) ...[
                           Text(
-                            'メール認証の確認',
-                            style: Theme.of(context).textTheme.titleLarge,
+                            'メール認証の状態',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 8),
                           if (_vm.verifying) ...[
@@ -115,7 +120,7 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
                           ] else if (_vm.verified) ...[
                             const _InfoBox(
                               kind: _InfoKind.ok,
-                              text: 'メール認証が完了しました。続けて配送先情報を入力してください。',
+                              text: 'メール認証が完了しました。',
                             ),
                             const SizedBox(height: 12),
                           ] else ...[
@@ -133,10 +138,13 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
                           const SizedBox(height: 12),
                         ],
 
+                        // --------------------------------------------
+                        // ✅ auth gate
+                        // --------------------------------------------
                         if (!loggedIn) ...[
                           const _InfoBox(
                             kind: _InfoKind.info,
-                            text: '※ 住所の保存にはサインインが必要です。',
+                            text: '住所の保存にはサインインが必要です。サインイン後に入力してください。',
                           ),
                           const SizedBox(height: 8),
                           OutlinedButton(
@@ -145,175 +153,195 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
                           ),
                           const SizedBox(height: 16),
                         ] else if (!emailVerified) ...[
+                          // ✅ 方針: 先に住所入力を許可（購入確定などで必須化する想定）
                           const _InfoBox(
                             kind: _InfoKind.info,
-                            text: '※ 現在サインイン中ですが、メール認証が未完了の可能性があります。',
+                            text:
+                                '現在サインイン中です。メール認証は後からでも完了できます（必要な操作で求められる場合があります）。',
                           ),
                           const SizedBox(height: 16),
                         ],
 
-                        Text(
-                          'お届け先氏名',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-
-                        // ✅ 並び替え：
-                        // 1行目：苗字｜苗字かな
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _vm.lastNameCtrl,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  labelText: '苗字',
-                                  border: OutlineInputBorder(),
+                        // --------------------------------------------
+                        // ✅ form
+                        // --------------------------------------------
+                        AbsorbPointer(
+                          absorbing: !formEnabled,
+                          child: Opacity(
+                            opacity: formEnabled ? 1.0 : 0.55,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  'お届け先氏名',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: _vm.lastNameKanaCtrl,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  labelText: '苗字かな',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
+                                const SizedBox(height: 8),
 
-                        // 2行目：名前｜名前かな
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _vm.firstNameCtrl,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  labelText: '名前',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: _vm.firstNameKanaCtrl,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  labelText: '名前かな',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        Text(
-                          '配送先住所',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-
-                        TextField(
-                          controller: _vm.zipCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: '郵便番号（7桁）',
-                            border: const OutlineInputBorder(),
-                            helperText: '例: 1000001（ハイフン不要）',
-                            suffixIcon: _vm.zipLoading
-                                ? const Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                                // 1行目：苗字｜苗字かな
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _vm.lastNameCtrl,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          labelText: '苗字',
+                                          border: OutlineInputBorder(),
+                                        ),
                                       ),
                                     ),
-                                  )
-                                : IconButton(
-                                    tooltip: '住所を自動入力',
-                                    onPressed: () => _vm.onZipSearchPressed(),
-                                    icon: const Icon(Icons.search),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _vm.lastNameKanaCtrl,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          labelText: '苗字かな',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+
+                                // 2行目：名前｜名前かな
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _vm.firstNameCtrl,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          labelText: '名前',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _vm.firstNameKanaCtrl,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          labelText: '名前かな',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                Text(
+                                  '配送先住所',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 8),
+
+                                TextField(
+                                  controller: _vm.zipCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: '郵便番号（7桁）',
+                                    border: const OutlineInputBorder(),
+                                    helperText: '例: 1000001（ハイフン不要）',
+                                    suffixIcon: _vm.zipLoading
+                                        ? const Padding(
+                                            padding: EdgeInsets.all(12),
+                                            child: SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          )
+                                        : IconButton(
+                                            tooltip: '住所を自動入力',
+                                            onPressed: () =>
+                                                _vm.onZipSearchPressed(),
+                                            icon: const Icon(Icons.search),
+                                          ),
+                                    errorText:
+                                        (_vm.zipError == null ||
+                                            _vm.zipError!.trim().isEmpty)
+                                        ? null
+                                        : _vm.zipError,
                                   ),
-                            errorText:
-                                (_vm.zipError == null ||
-                                    _vm.zipError!.trim().isEmpty)
-                                ? null
-                                : _vm.zipError,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
+                                ),
+                                const SizedBox(height: 12),
 
-                        TextField(
-                          controller: _vm.prefCtrl,
-                          decoration: const InputDecoration(
-                            labelText: '都道府県',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        TextField(
-                          controller: _vm.cityCtrl,
-                          decoration: const InputDecoration(
-                            labelText: '市区町村',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        TextField(
-                          controller: _vm.addr1Ctrl,
-                          decoration: const InputDecoration(
-                            labelText: '住所１（町名・番地など）',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        TextField(
-                          controller: _vm.addr2Ctrl,
-                          decoration: const InputDecoration(
-                            labelText: '住所２（建物名・部屋番号など）',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        ElevatedButton(
-                          onPressed: _vm.canSaveAddress
-                              ? () => _vm.saveAddressToBackend(context)
-                              : null,
-                          child: _vm.saving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                                TextField(
+                                  controller: _vm.prefCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: '都道府県',
+                                    border: OutlineInputBorder(),
                                   ),
-                                )
-                              : const Text('この住所を保存する'),
-                        ),
+                                ),
+                                const SizedBox(height: 12),
 
-                        if (_vm.saveMsg != null) ...[
-                          const SizedBox(height: 12),
-                          _InfoBox(
-                            kind: _vm.saveMsg!.contains('保存しました')
-                                ? _InfoKind.ok
-                                : _InfoKind.info,
-                            text: _vm.saveMsg!,
+                                TextField(
+                                  controller: _vm.cityCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: '市区町村',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                TextField(
+                                  controller: _vm.addr1Ctrl,
+                                  decoration: const InputDecoration(
+                                    labelText: '住所１（町名・番地など）',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                TextField(
+                                  controller: _vm.addr2Ctrl,
+                                  decoration: const InputDecoration(
+                                    labelText: '住所２（建物名・部屋番号など）',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                ElevatedButton(
+                                  onPressed: _vm.canSaveAddress
+                                      ? () => _vm.saveAddressToBackend(context)
+                                      : null,
+                                  child: _vm.saving
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text('この住所を保存する'),
+                                ),
+
+                                if (_vm.saveMsg != null) ...[
+                                  const SizedBox(height: 12),
+                                  _InfoBox(
+                                    kind: _vm.saveMsg!.contains('保存しました')
+                                        ? _InfoKind.ok
+                                        : _InfoKind.info,
+                                    text: _vm.saveMsg!,
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),

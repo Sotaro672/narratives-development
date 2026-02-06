@@ -1,4 +1,6 @@
 // frontend\mall\lib\features\auth\presentation\hook\use_avatar_create.dart
+import 'dart:developer' as developer;
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +40,66 @@ class UseAvatarCreate extends ChangeNotifier {
   String? createdAvatarId;
   String? successRedirectTo;
 
+  // ===========================================================================
+  // Logging (Chrome Console friendly)
+  // ===========================================================================
+  bool get _logEnabled => kDebugMode;
+
+  void _log(String message) {
+    if (!_logEnabled) return;
+
+    final line = '[UseAvatarCreate] $message';
+
+    // ✅ Flutter Web の Chrome Console に出すための保険:
+    // - print(): console に出ることが多い
+    // - developer.log(): DevTools/console に出やすい
+    // - debugPrint(): 環境によっては console に出ないことがある
+    if (kIsWeb) {
+      // ignore: avoid_print
+      print(line);
+      developer.log(line, name: 'UseAvatarCreate');
+      return;
+    }
+
+    debugPrint(line);
+    developer.log(line, name: 'UseAvatarCreate');
+  }
+
+  String _maskEmail(String? email) {
+    final e = (email ?? '').trim();
+    if (e.isEmpty) return '';
+    final at = e.indexOf('@');
+    if (at <= 1) return '***';
+    return '${e.substring(0, 2)}***${e.substring(at)}';
+  }
+
+  void _logAuthSnapshot(String stage) {
+    if (!_logEnabled) return;
+
+    final u = FirebaseAuth.instance.currentUser;
+    if (u == null) {
+      _log('$stage auth.currentUser = null (NOT signed in?)');
+      return;
+    }
+
+    final uid = (u.uid).trim();
+    final email = _maskEmail(u.email);
+    final isAnon = u.isAnonymous;
+
+    _log(
+      '$stage auth.currentUser exists uid="${uid.isEmpty ? '(EMPTY)' : uid}" '
+      'email="${email.isEmpty ? '(none)' : email}" '
+      'isAnonymous=$isAnon',
+    );
+
+    if (uid.isEmpty) {
+      _log('$stage WARN: uid is empty string after trim');
+    }
+  }
+
+  // ===========================================================================
+  // Lifecycle
+  // ===========================================================================
   @override
   void dispose() {
     nameCtrl.dispose();
@@ -67,16 +129,21 @@ class UseAvatarCreate extends ChangeNotifier {
     msg = null;
     notifyListeners();
 
+    _log('pickIcon() start');
+    _logAuthSnapshot('pickIcon()');
+
     final res = await _service.pickIconWeb();
     if (res == null) {
       // cancel
       msg = '画像選択をキャンセルしました。';
+      _log('pickIcon() cancelled by user');
       notifyListeners();
       return;
     }
 
     if (res.error != null) {
       msg = res.error;
+      _log('pickIcon() error: ${res.error}');
       notifyListeners();
       return;
     }
@@ -84,6 +151,11 @@ class UseAvatarCreate extends ChangeNotifier {
     iconBytes = res.bytes;
     iconFileName = res.fileName;
     iconMimeType = res.mimeType;
+
+    final bytesLen = iconBytes?.length ?? 0;
+    _log(
+      'pickIcon() selected fileName="$iconFileName" mimeType="$iconMimeType" bytesLen=$bytesLen',
+    );
 
     if (iconBytes == null || iconBytes!.isEmpty) {
       msg = '画像の読み込みに失敗しました（bytes が空です）。';
@@ -94,6 +166,7 @@ class UseAvatarCreate extends ChangeNotifier {
   }
 
   void clearIcon() {
+    _log('clearIcon()');
     iconBytes = null;
     iconFileName = null;
     iconMimeType = null;
@@ -120,7 +193,20 @@ class UseAvatarCreate extends ChangeNotifier {
 
     notifyListeners();
 
+    final name = _service.s(nameCtrl.text);
+    final prof = _service.s(profileCtrl.text);
+    final link = _service.s(linkCtrl.text);
+
+    _log(
+      'save() start canSave=$canSave name="$name" profileLen=${prof.length} link="$link"',
+    );
+    _logAuthSnapshot('save() start');
+
     try {
+      _log(
+        'calling _service.save(...) iconBytesLen=${iconBytes?.length ?? 0} fileName="$iconFileName" mimeType="$iconMimeType"',
+      );
+
       final res = await _service.save(
         avatarNameRaw: nameCtrl.text,
         profileRaw: profileCtrl.text,
@@ -133,15 +219,24 @@ class UseAvatarCreate extends ChangeNotifier {
       );
 
       msg = res.message;
+      _log('returned from _service.save ok=${res.ok} message="${res.message}"');
+      _logAuthSnapshot('after _service.save');
 
       if (res.ok) {
         // 暫定: avatarId = Firebase UID（AvatarPage 側の実装に合わせる）
         final uid = FirebaseAuth.instance.currentUser?.uid;
-        createdAvatarId = (uid ?? '').trim();
+        final trimmedUid = (uid ?? '').trim();
+
+        if (trimmedUid.isEmpty) {
+          _log(
+            'WARN: res.ok=true but Firebase uid is null/empty. createdAvatarId will be empty.',
+          );
+        }
+
+        createdAvatarId = trimmedUid;
+        _log('createdAvatarId="$createdAvatarId"');
 
         // ✅ AvatarPage へ遷移するための URL を作る
-        // - AvatarPage は自分でも avatarId を URL に載せ直すが、最初から付けておくと安定
-        // - from は “戻り先” として渡せる（router 側で拾う想定）
         final qp = <String, String>{};
 
         final b = backTo().trim();
@@ -154,16 +249,25 @@ class UseAvatarCreate extends ChangeNotifier {
           path: '/avatar',
           queryParameters: qp,
         ).toString();
+
+        _log('successRedirectTo="$successRedirectTo"');
       }
 
       notifyListeners();
       return res.ok;
-    } catch (e) {
+    } catch (e, st) {
       msg = e.toString();
+      _log('ERROR in save(): $e');
+      if (_logEnabled) {
+        // stacktrace も出す（webでも確認しやすい）
+        final stStr = st.toString();
+        if (stStr.isNotEmpty) _log('stacktrace: $stStr');
+      }
       notifyListeners();
       return false;
     } finally {
       saving = false;
+      _log('save() end saving=false msg="${(msg ?? '').trim()}"');
       notifyListeners();
     }
   }

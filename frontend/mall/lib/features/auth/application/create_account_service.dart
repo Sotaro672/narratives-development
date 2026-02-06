@@ -3,12 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 /// Create account flow (Mall):
-/// 1) Firebase Auth: createUserWithEmailAndPassword
-/// 2) Firebase Auth: sendEmailVerification
+/// 1) Firebase Auth: createUserWithEmailAndPassword (=> signs-in user)
+/// 2) Firebase Auth: sendEmailVerification (best-effort)
 ///
 /// ✅ IMPORTANT:
 /// - This service does NOT call backend.
-/// - It only sends verification email.
+/// - It signs-in the user via Firebase Auth (createUserWithEmailAndPassword)
+/// - It sends verification email (best-effort)
+/// - UI should navigate to /shipping-address after success.
 class CreateAccountService {
   CreateAccountService({required FirebaseAuth auth}) : _auth = auth;
 
@@ -47,6 +49,18 @@ class CreateAccountService {
     if (i.isNotEmpty) qp['intent'] = i;
     final q = Uri(queryParameters: qp).query;
     return q.isEmpty ? '/login' : '/login?$q';
+  }
+
+  /// ✅ After create account, we go to shipping-address (not email-action page).
+  String shippingBackTo({String? from, String? intent}) {
+    final f = (from ?? '').trim();
+    final i = (intent ?? '').trim();
+    if (f.isEmpty && i.isEmpty) return '/shipping-address';
+    final qp = <String, String>{};
+    if (f.isNotEmpty) qp['from'] = f;
+    if (i.isNotEmpty) qp['intent'] = i;
+    final q = Uri(queryParameters: qp).query;
+    return q.isEmpty ? '/shipping-address' : '/shipping-address?$q';
   }
 
   String topMessage({String? intent}) {
@@ -88,18 +102,23 @@ class CreateAccountService {
     }
 
     try {
-      await _createAccountAndSendEmailOnly(
+      final user = await _createAccountAndSendEmailOnly(
         email: email,
         password: pass,
         displayName: displayName?.trim(),
       );
+
+      // ✅ Ensure user is actually signed-in (should be, but keep it explicit)
+      final uid = user.uid.trim();
+      if (uid.isEmpty) {
+        return const CreateAccountResult(ok: false, error: 'uid が取得できませんでした。');
+      }
 
       return const CreateAccountResult(
         ok: true,
         sentMessage: '認証メールを送信しました。受信箱（迷惑メール含む）をご確認ください。',
       );
     } on FirebaseAuthException catch (e) {
-      // ✅ デバッグしやすいように code をログに残す
       debugPrint(
         '[CreateAccountService] FirebaseAuthException ${e.code}: ${e.message}',
       );
@@ -114,7 +133,8 @@ class CreateAccountService {
   // Internal
   // ------------------------------------------------------------
 
-  Future<void> _createAccountAndSendEmailOnly({
+  /// Returns created user (signed-in).
+  Future<User> _createAccountAndSendEmailOnly({
     required String email,
     required String password,
     String? displayName,
@@ -140,8 +160,15 @@ class CreateAccountService {
       } catch (_) {}
     }
 
-    // 2) Send verification email
-    await user.sendEmailVerification();
+    // 2) Send verification email (best-effort)
+    try {
+      await user.sendEmailVerification();
+    } catch (e) {
+      // Do not block signup flow by email sending failure.
+      debugPrint('[CreateAccountService] sendEmailVerification failed: $e');
+    }
+
+    return user;
   }
 
   void _ensureNotDisposed() {
@@ -163,7 +190,6 @@ class CreateAccountService {
       case 'network-request-failed':
         return 'ネットワークに接続できませんでした。通信状況をご確認ください。';
       default:
-        // ✅ 調査しやすいように code を表示
         return '認証エラーが発生しました（${e.code}）。';
     }
   }
