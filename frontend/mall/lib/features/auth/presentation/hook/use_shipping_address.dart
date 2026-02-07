@@ -117,7 +117,10 @@ class UseShippingAddress extends ChangeNotifier {
     addr1Ctrl.dispose();
     addr2Ctrl.dispose();
 
-    _service.dispose();
+    // ✅ DI（AppContainer等）から注入された service はここで dispose しない。
+    //   ここで dispose すると http.Client が close され、
+    //   次回以降のリクエストで "Client is already closed" が発生する。
+    // _service.dispose();
 
     super.dispose();
   }

@@ -14,11 +14,11 @@ class MeAvatar {
     this.deletedAt,
   });
 
-  /// ✅ 必須: /mall/me/avatar のサーバ解決結果
+  /// ✅ 必須: /mall/me/avatars のサーバ解決結果
   /// backend のレスポンスは原則 "avatarId" を返す想定
   final String avatarId;
 
-  /// ✅ /mall/me/avatar のレスポンス形状が
+  /// ✅ /mall/me/avatars のレスポンス形状が
   /// A) { avatarId, patch: {...} } でも
   /// B) { avatarId, walletAddress, ... } でも
   /// どちらでも読めるように optional にする

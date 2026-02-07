@@ -73,7 +73,7 @@ class _AvatarEditPageState extends State<AvatarEditPage> {
   ///
   /// 方針（me handler）:
   /// - avatarId は解決不要（サーバ側で uid -> avatarId を解決）
-  /// - PATCH /mall/me/avatar を呼ぶ
+  /// - PATCH /mall/me/avatars を呼ぶ
   /// - avatarIcon は送らない（推奨B：残しても良いがフロントが送らない運用で担保）
   Future<void> _submitPatch(AvatarPatchRequest patch) async {
     // avatarIcon は “固定URL運用” のため、me PATCH には載せない
@@ -88,7 +88,7 @@ class _AvatarEditPageState extends State<AvatarEditPage> {
     // no-op patch は送らない（UI操作上は通常ここに来ない想定だが安全側）
     if (json.isEmpty) return;
 
-    final uri = _meApi.uri('/mall/me/avatar');
+    final uri = _meApi.uri('/mall/me/avatars');
     await _meApi.sendAuthed('PATCH', uri, jsonBody: json);
   }
 

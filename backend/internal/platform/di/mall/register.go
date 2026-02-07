@@ -114,25 +114,28 @@ func (a transferHTTPAdapter) TransferByScanPurchasedByAvatarID(ctx context.Conte
 }
 
 // ------------------------------------------------------------
-// ✅ MeAvatar DI adapter (NO legacy repo)
+// ✅ MeAvatars DI adapter (NO legacy repo)
 // ------------------------------------------------------------
-
-// Only extended interface is allowed now.
-// (ResolveAvatarIDByUID is kept as optional for handler fallback wiring,
 //
-//	but we do NOT accept a legacy-only repo in DI anymore.)
+// Frontend contract adopts ONLY:
+//   - GET   /mall/me/avatars
+//   - PATCH /mall/me/avatars
+//
+// This adapter resolves uid -> avatarId(+walletAddress) and then (best-effort)
+// fetches/updates avatar entity via AvatarUsecase (anti-spoof).
 type meAvatarExtendedRepo interface {
 	ResolveAvatarByUID(ctx context.Context, uid string) (avatarId string, walletAddress string, err error)
 	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
 }
 
-// Avatar usecase port (Get + Update). Required for PATCH(/mall/me/avatar).
+// Avatar usecase port (Get + Update). Required for PATCH(/mall/me/avatars).
 type avatarUsecasePort interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 	Update(ctx context.Context, id string, patch avatardom.AvatarPatch) (avatardom.Avatar, error)
 }
 
 // adapter that always satisfies mallhandler.MeAvatarService expected by NewMeAvatarHandler
+// (handler is expected to be routed to /mall/me/avatars by mallhttp.Register)
 type meAvatarServiceAdapter struct {
 	extended meAvatarExtendedRepo
 	avatarUC avatarUsecasePort // optional for GET; required for PATCH
@@ -157,9 +160,7 @@ func strPtrTrim(s string) *string {
 	return &t
 }
 
-// ResolveAvatarPatchByUID returns avatarId + AvatarPatch (full patch payload for frontend).
-// - First resolve (avatarId, walletAddress) via extended repo
-// - Then (best-effort) fetch avatar entity to fill avatarName/avatarIcon/profile/externalLink/userId/deletedAt
+// ResolveAvatarPatchByUID returns avatarId + AvatarPatch (payload for /mall/me/avatars GET).
 func (a meAvatarServiceAdapter) ResolveAvatarPatchByUID(ctx context.Context, uid string) (string, avatardom.AvatarPatch, error) {
 	if a.extended == nil {
 		return "", avatardom.AvatarPatch{}, usecase.ErrTransferNotConfigured
@@ -173,7 +174,7 @@ func (a meAvatarServiceAdapter) ResolveAvatarPatchByUID(ctx context.Context, uid
 	avatarId = strings.TrimSpace(avatarId)
 	walletAddress = strings.TrimSpace(walletAddress)
 
-	// Base patch (at minimum walletAddress is required by current frontend policy)
+	// Base patch (walletAddress is required by current frontend policy)
 	base := avatardom.AvatarPatch{
 		UserID:        "", // filled if avatarUC is available
 		AvatarName:    nil,
@@ -197,7 +198,6 @@ func (a meAvatarServiceAdapter) ResolveAvatarPatchByUID(ctx context.Context, uid
 		return avatarId, base, nil
 	}
 
-	// Populate patch from avatar entity
 	patch := avatardom.AvatarPatch{
 		UserID:        strings.TrimSpace(av.UserID),
 		AvatarName:    strPtrTrim(av.AvatarName),
@@ -218,9 +218,7 @@ func (a meAvatarServiceAdapter) ResolveAvatarPatchByUID(ctx context.Context, uid
 }
 
 // UpdateAvatarPatchByUID applies patch to "me" avatar resolved from uid (anti-spoof).
-// - Resolve uid -> avatarId (+walletAddress)
-// - Update avatar doc (requires avatarUC.Update)
-// - Return updated patch payload (same shape as GET)
+// (used by /mall/me/avatars PATCH)
 func (a meAvatarServiceAdapter) UpdateAvatarPatchByUID(ctx context.Context, uid string, patch avatardom.AvatarPatch) (string, avatardom.AvatarPatch, error) {
 	if a.extended == nil {
 		return "", avatardom.AvatarPatch{}, usecase.ErrTransferNotConfigured
@@ -237,16 +235,14 @@ func (a meAvatarServiceAdapter) UpdateAvatarPatchByUID(ctx context.Context, uid 
 	avatarId = strings.TrimSpace(avatarId)
 	walletAddress = strings.TrimSpace(walletAddress)
 	if avatarId == "" {
-		// treat as not found-like; handler side will map if it wants
 		return "", avatardom.AvatarPatch{}, avatardom.ErrInvalidID
 	}
 
-	// Anti-spoof: client cannot update these via /mall/me/avatar
+	// Anti-spoof: client cannot update these via /mall/me/avatars
 	patch.UserID = ""
 	patch.WalletAddress = nil
 	patch.DeletedAt = nil
 
-	// Normalize
 	patch.Sanitize()
 
 	updated, uerr := a.avatarUC.Update(ctx, avatarId, patch)
@@ -254,7 +250,6 @@ func (a meAvatarServiceAdapter) UpdateAvatarPatchByUID(ctx context.Context, uid 
 		return "", avatardom.AvatarPatch{}, uerr
 	}
 
-	// Build response patch from updated entity
 	out := avatardom.AvatarPatch{
 		UserID:        strings.TrimSpace(updated.UserID),
 		AvatarName:    strPtrTrim(updated.AvatarName),
@@ -274,8 +269,6 @@ func (a meAvatarServiceAdapter) UpdateAvatarPatchByUID(ctx context.Context, uid 
 	return avatarId, out, nil
 }
 
-// ResolveAvatarByUID returns avatarId + walletAddress.
-// - Uses only extended repo. No legacy fallback at DI layer.
 func (a meAvatarServiceAdapter) ResolveAvatarByUID(ctx context.Context, uid string) (string, string, error) {
 	if a.extended == nil {
 		return "", "", usecase.ErrTransferNotConfigured
@@ -283,7 +276,6 @@ func (a meAvatarServiceAdapter) ResolveAvatarByUID(ctx context.Context, uid stri
 	return a.extended.ResolveAvatarByUID(ctx, uid)
 }
 
-// ResolveAvatarIDByUID is passthrough (used only if handler decides to fallback).
 func (a meAvatarServiceAdapter) ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error) {
 	if a.extended == nil {
 		return "", usecase.ErrTransferNotConfigured
@@ -294,10 +286,6 @@ func (a meAvatarServiceAdapter) ResolveAvatarIDByUID(ctx context.Context, uid st
 // ------------------------------------------------------------
 // ✅ AvatarResolver adapter
 // ------------------------------------------------------------
-//
-// AvatarContextMiddleware は AvatarResolver(ResolveAvatarByUID) を要求するように更新済み。
-// しかし cont.OrderQ はそれを実装していないため、ここで uid -> avatarId(+walletAddress) を提供する
-// 専用 resolver を DI から組み立てる。
 type avatarResolverAdapter struct {
 	me meAvatarExtendedRepo
 }
@@ -343,7 +331,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		if ext != nil {
 			avatarCtxMW = &middleware.AvatarContextMiddleware{
 				Resolver: avatarResolverAdapter{me: ext},
-				// NOTE: AllowExplicit は middleware 側から削除済み（anti-spoof 一本化）。
 			}
 		} else {
 			log.Printf("[mall.register] WARN: cont.MeAvatarRepo does not implement meAvatarExtendedRepo (avatar context will return 503 on endpoints requiring avatarId)")
@@ -373,7 +360,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	payH := notImplemented("Payment")
 	orderH := notImplemented("Order")
 	invoiceH := notImplemented("Invoice")
-	meAvatarH := notImplemented("MeAvatar")
+	meAvatarsH := notImplemented("MeAvatars")
 
 	previewPublicH := notImplemented("PreviewPublic")
 	previewMeH := notImplemented("PreviewMe")
@@ -432,12 +419,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarH = avatarHandler.NewAvatarHandler(cont.AvatarUC)
 	}
 
-	// ✅ Wallet（旧式互換削除: AvatarUC は渡さない）
+	// Wallet（AvatarUC は渡さない）
 	if cont.WalletUC != nil {
 		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC)
 	}
 
-	// /mall/me/avatar (uid -> avatarId + avatar patch, and PATCH update)
+	// /mall/me/avatars (uid -> avatarId + avatar patch, and PATCH update)
 	if cont.MeAvatarRepo != nil {
 		var ext meAvatarExtendedRepo
 		if v, ok := any(cont.MeAvatarRepo).(meAvatarExtendedRepo); ok {
@@ -452,17 +439,16 @@ func Register(mux *http.ServeMux, cont *Container) {
 			// NOTE:
 			// - GET は avatarUC が nil でも動く（best-effort）
 			// - PATCH は avatarUC.Update が必要
-			//   -> ここでは cont.AvatarUC が無ければ 501 のままにする
 			if avuc != nil {
-				meAvatarH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
+				meAvatarsH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
 					extended: ext,
 					avatarUC: avuc,
 				})
 			} else {
-				log.Printf("[mall.register] WARN: cont.AvatarUC is nil (MeAvatar PATCH requires AvatarUC.Update; MeAvatar will return 501)")
+				log.Printf("[mall.register] WARN: cont.AvatarUC is nil (MeAvatars PATCH requires AvatarUC.Update; MeAvatars will return 501)")
 			}
 		} else {
-			log.Printf("[mall.register] WARN: cont.MeAvatarRepo does not implement meAvatarExtendedRepo (MeAvatar will return 501)")
+			log.Printf("[mall.register] WARN: cont.MeAvatarRepo does not implement meAvatarExtendedRepo (MeAvatars will return 501)")
 		}
 	}
 
@@ -486,9 +472,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		invoiceH = mallhandler.NewInvoiceHandler(cont.InvoiceUC)
 	}
 
-	// ------------------------------------------------------------
 	// Preview handler wiring (split)
-	// ------------------------------------------------------------
 	if cont.PreviewQ != nil {
 		if cont.OwnerResolveQ != nil {
 			previewPublicH = mallhandler.NewPreviewHandlerWithOwner(cont.PreviewQ, cont.OwnerResolveQ)
@@ -501,9 +485,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	// ------------------------------------------------------------
 	// Order scan verify wiring
-	// ------------------------------------------------------------
 	if cont.OrderScanVerifyQ != nil {
 		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(cont.OrderScanVerifyQ)
 		log.Printf("[mall.register] order scan verify handler wired")
@@ -511,11 +493,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		log.Printf("[mall.register] WARN: OrderScanVerifyQ is nil (order scan verify will return 501)")
 	}
 
-	// ------------------------------------------------------------
 	// Order scan transfer wiring
-	// ------------------------------------------------------------
-	// ✅ Option A: anti-spoof は AvatarContextMiddleware に一本化済みなので
-	// handler 側の WithResolver は呼ばない。
 	if cont.TransferUC != nil {
 		httpUC := transferHTTPAdapter{uc: cont.TransferUC}
 		orderScanTransferH = mallhandler.NewTransferHandler(httpUC)
@@ -538,12 +516,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 	avatarH = requireUserAuth(userAuthMW, avatarH, "Avatar")
 	avatarStateH = requireUserAuth(userAuthMW, avatarStateH, "AvatarState")
 
-	// ✅ Wallet は同期APIで avatarId が必須なので AvatarContext を通す
+	// Wallet は同期APIで avatarId が必須なので AvatarContext を通す
 	walletH = requireAvatarContext(avatarCtxMW, walletH, "Wallet:AvatarContext")
 	walletH = requireUserAuth(userAuthMW, walletH, "Wallet")
 
-	// ✅ /mall/me/avatar は uid だけで動く想定（AvatarContext は不要）
-	meAvatarH = requireUserAuth(userAuthMW, meAvatarH, "MeAvatar")
+	// /mall/me/avatars は uid だけで動く想定（AvatarContext は不要）
+	meAvatarsH = requireUserAuth(userAuthMW, meAvatarsH, "MeAvatars")
 	cartH = requireUserAuth(userAuthMW, cartH, "Cart")
 
 	previewMeH = requireAvatarContext(avatarCtxMW, previewMeH, "Preview(me):AvatarContext")
@@ -580,10 +558,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 		ShippingAddress: shipH,
 		BillingAddress:  billH,
 		Avatar:          avatarH,
-		MeAvatar:        meAvatarH,
-		AvatarState:     avatarStateH,
-		Wallet:          walletH,
-		Cart:            cartH,
+
+		// ✅ deps のフィールド名は MeAvatar のままでもOK（ルーティング側で /mall/me/avatars に割り当てる）
+		MeAvatar: meAvatarsH,
+
+		AvatarState: avatarStateH,
+		Wallet:      walletH,
+		Cart:        cartH,
 
 		Preview:   previewPublicH,
 		PreviewMe: previewMeH,
@@ -596,6 +577,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Invoice:           invoiceH,
 	}
 
+	// ✅ ここは DI だけなので “そのまま” でOK
 	mallhttp.Register(mux, deps)
 	log.Printf("[boot] mall routes registered")
 
