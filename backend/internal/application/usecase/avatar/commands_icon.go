@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\avatar\commands_icon.go
+// backend/internal/application/usecase/avatar/commands_icon.go
 package avatar
 
 import (
@@ -23,91 +23,87 @@ type ReplaceIconInput struct {
 	Size       *int64
 }
 
-// ✅ 推奨（最小変更）:
-// - avatars.avatarIcon に gs://bucket/objectPath を保存（= objectPath を含めて保存）
-// - アイコンメタデータ（icons 側）はこれまで通り保存
-func (u *AvatarUsecase) ReplaceAvatarIcon(ctx context.Context, avatarID string, in ReplaceIconInput) (avataricon.AvatarIcon, error) {
+// 方針（固定URL / 毎回上書き）
+//   - GCS objectPath は常に "{avatarId}/icon"（フロントは署名付きPUTでここに上書き）
+//   - Firestore(avatars.avatarIcon) には公開URLを保存する
+//     例: https://storage.googleapis.com/<bucket>/<avatarId>/icon
+//   - アイコンメタデータ（avatar_icons 側）は最小限保存（ID = objectPath に統一）
+//   - 固定上書き方式のため、過去オブジェクト列挙・削除は行わない（不要 & 誤削除リスク）
+func (u *AvatarUsecase) ReplaceAvatarIcon(
+	ctx context.Context,
+	avatarID string,
+	in ReplaceIconInput,
+) (avataricon.AvatarIcon, error) {
+
+	if u == nil {
+		return avataricon.AvatarIcon{}, errors.New("avatar usecase is nil")
+	}
+
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return avataricon.AvatarIcon{}, avatardom.ErrInvalidID
 	}
 
-	var oldIcons []avataricon.AvatarIcon
-	if u.icRepo != nil {
-		if list, err := u.icRepo.GetByAvatarID(ctx, avatarID); err == nil {
-			oldIcons = list
-		}
+	// 1) 入力の正規化
+	bucket := strings.TrimSpace(in.Bucket)
+	objectPath := strings.TrimLeft(strings.TrimSpace(in.ObjectPath), "/")
+
+	if bucket == "" || objectPath == "" {
+		return avataricon.AvatarIcon{}, fmt.Errorf("bucket/objectPath is empty: bucket=%q objectPath=%q", bucket, objectPath)
 	}
 
-	now := u.now().UTC()
+	// 2) avatar の存在確認（avatars を更新するので必須）
+	if u.avRepo == nil {
+		return avataricon.AvatarIcon{}, errors.New("avatar repo not configured")
+	}
+	if _, err := u.avRepo.GetByID(ctx, avatarID); err != nil {
+		return avataricon.AvatarIcon{}, err
+	}
+
+	// 3) icon メタデータ作成（ID = objectPath に統一）
+	//    固定上書き方式なので timestamp 等は不要（むしろ不整合の原因）
 	newIcon, err := avataricon.NewFromBucketObject(
-		avatarID+"-"+now.Format("20060102T150405Z0700"),
-		in.Bucket,
-		in.ObjectPath,
+		objectPath, // ✅ ID = objectPath（方針に統一）
+		bucket,
+		objectPath,
 		in.FileName,
 		in.Size,
 	)
 	if err != nil {
 		return avataricon.AvatarIcon{}, err
 	}
+
+	// 念のため avatarId を埋める（domain が nil を許容している前提の保険）
 	if newIcon.AvatarID == nil || strings.TrimSpace(*newIcon.AvatarID) == "" {
 		aid := avatarID
 		newIcon.AvatarID = &aid
 	}
 
+	// 4) icon repo へ Save（GCS メタ更新 / URL 更新など）
 	if u.icRepo == nil {
 		return avataricon.AvatarIcon{}, errors.New("avatarIcon repo not configured")
 	}
+
 	saved, err := u.icRepo.Save(ctx, newIcon, nil)
 	if err != nil {
 		return avataricon.AvatarIcon{}, err
 	}
 
-	// ✅ avatars.avatarIcon を更新（推奨: usecase で保証）
-	// - gs://bucket/objectPath を保存（objectPath を含めて保存）
-	// - ここは best-effort（icons 保存は成功しているため）とする
-	if u.avRepo != nil {
-		b := strings.TrimSpace(in.Bucket)
-		obj := strings.TrimLeft(strings.TrimSpace(in.ObjectPath), "/")
-		if b != "" && obj != "" {
-			gs := fmt.Sprintf("gs://%s/%s", b, obj)
-			patch := avatardom.AvatarPatch{AvatarIcon: &gs}
-			if _, e := u.avRepo.Update(ctx, avatarID, patch); e != nil {
-				log.Printf("[avatar_uc] avatarIcon patch failed avatarId=%q gs=%q err=%v", avatarID, gs, e)
-			} else {
-				log.Printf("[avatar_uc] avatarIcon patched avatarId=%q gs=%q", avatarID, gs)
-			}
-		} else {
-			log.Printf("[avatar_uc] avatarIcon patch skipped (empty bucket/objectPath) avatarId=%q bucket=%q objectPath=%q", avatarID, b, obj)
-		}
+	// 5) avatars.avatarIcon を公開URLで更新（期待値）
+	//    例: https://storage.googleapis.com/narratives-development_avatar_icon/<avatarId>/icon
+	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objectPath)
+
+	patch := avatardom.AvatarPatch{AvatarIcon: &publicURL}
+	if _, err := u.avRepo.Update(ctx, avatarID, patch); err != nil {
+		// icons 側は保存済みなので best-effort とする
+		log.Printf("[avatar_uc] avatarIcon patch failed avatarId=%q publicURL=%q err=%v", avatarID, publicURL, err)
+	} else {
+		log.Printf("[avatar_uc] avatarIcon patched avatarId=%q publicURL=%q", avatarID, publicURL)
 	}
 
-	// best-effort: GCS から古いオブジェクトのみ削除（メタデータ削除はRepo機能に依存）
-	if len(oldIcons) > 0 && u.objStore != nil {
-		var ops []avataricon.GCSDeleteOp
-		for _, ic := range oldIcons {
-			ops = append(ops, toGCSDeleteOp(ic))
-		}
-		if len(ops) > 0 {
-			_ = u.objStore.DeleteObjects(ctx, ops)
-		}
-	}
+	// 6) 固定上書き方式のため削除処理は不要
+	// - objectPath が固定で毎回上書きされるため GCS 上に増えない
+	// - 誤削除リスク（旧方式のオブジェクト混在）を避けるため、ここでは実施しない
+
 	return saved, nil
-}
-
-func toGCSDeleteOp(ic avataricon.AvatarIcon) avataricon.GCSDeleteOp {
-	if b, obj, ok := avataricon.ParseGCSURL(ic.URL); ok {
-		return avataricon.GCSDeleteOp{Bucket: b, ObjectPath: obj}
-	}
-	if ic.AvatarID != nil && strings.TrimSpace(*ic.AvatarID) != "" &&
-		ic.FileName != nil && strings.TrimSpace(*ic.FileName) != "" {
-		return avataricon.GCSDeleteOp{
-			Bucket:     avataricon.DefaultBucket,
-			ObjectPath: strings.TrimSpace(*ic.AvatarID) + "/" + strings.TrimSpace(*ic.FileName),
-		}
-	}
-	return avataricon.GCSDeleteOp{
-		Bucket:     avataricon.DefaultBucket,
-		ObjectPath: "avatar_icons/" + strings.TrimSpace(ic.ID),
-	}
 }

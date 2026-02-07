@@ -44,9 +44,13 @@ func avatarIconBucketName() string {
 }
 
 // tokenBlueprint と揃える：固定パス（後から差し替えても規約が安定）
-func avatarIconObjectPath(avatarID string) string {
-	id := strings.Trim(strings.TrimSpace(avatarID), "/")
-	return id + "/icon"
+// ObjectPath: "{avatarId}/icon"
+func avatarIconObjectPath(avatarID string) (string, error) {
+	id := sanitizePathSegment(avatarID)
+	if id == "" {
+		return "", avatardom.ErrInvalidID
+	}
+	return id + "/icon", nil
 }
 
 func gcsObjectPublicURL(bucket, objectPath string) string {
@@ -76,11 +80,12 @@ type IconUploadURL struct {
 // - Cloud Run runtime SA has iam.serviceAccounts.signBlob
 //
 // Note:
-// - SignedURL includes ContentType; frontend PUT must match.
+// - SignedURL includes ContentType; frontend PUT must match exactly.
+// - "毎回上書き"（固定URL）方式のため fileName は未使用。
 func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 	ctx context.Context,
 	avatarID string,
-	_ string, // fileName: not persisted; kept only to match handler signature
+	_ string, // fileName: fixed-path overwrite policy; not used
 	contentType string,
 ) (*IconUploadURL, error) {
 
@@ -99,7 +104,7 @@ func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 	}
 
 	bucket := avatarIconBucketName()
-	if bucket == "" {
+	if strings.TrimSpace(bucket) == "" {
 		return nil, fmt.Errorf("avatar icon bucket is empty")
 	}
 
@@ -108,11 +113,18 @@ func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 		return nil, fmt.Errorf("missing %s env (signer service account email)", envAvatarIconSignerEmail)
 	}
 
-	objectPath := avatarIconObjectPath(id)
-
-	ct := strings.TrimSpace(contentType)
+	// contentType is REQUIRED (prevents signed URL mismatch issues)
+	ct := strings.ToLower(strings.TrimSpace(contentType))
 	if ct == "" {
-		ct = "application/octet-stream"
+		return nil, fmt.Errorf("contentType is required (e.g. image/png)")
+	}
+	if !isSupportedAvatarIconMIME(ct) {
+		return nil, fmt.Errorf("unsupported contentType=%q", ct)
+	}
+
+	objectPath, err := avatarIconObjectPath(id)
+	if err != nil {
+		return nil, err
 	}
 
 	iamSvc, err := iamcredentials.NewService(ctx)
@@ -155,4 +167,33 @@ func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 		ObjectPath: strings.TrimSpace(objectPath),
 		ExpiresAt:  ptr(expires),
 	}, nil
+}
+
+func isSupportedAvatarIconMIME(mime string) bool {
+	switch strings.ToLower(strings.TrimSpace(mime)) {
+	case "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif":
+		return true
+	default:
+		return false
+	}
+}
+
+// sanitizePathSegment keeps a single path segment safe for GCS object paths.
+// - trims spaces
+// - removes leading/trailing slashes
+// - rejects segments containing "/" or ".."
+// - (optional) you can tighten to allow only [A-Za-z0-9_-] etc if desired
+func sanitizePathSegment(s string) string {
+	t := strings.TrimSpace(s)
+	t = strings.Trim(t, "/")
+	if t == "" {
+		return ""
+	}
+	if strings.Contains(t, "/") {
+		return ""
+	}
+	if strings.Contains(t, "..") {
+		return ""
+	}
+	return t
 }

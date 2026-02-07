@@ -616,7 +616,7 @@ class _MissingMeAvatarView extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'サインイン状態、または /mall/me/avatar の応答（avatarId・walletAddress）を確認してください。',
+                'サインイン状態、または /mall/me/avatars の応答（avatarId・walletAddress）を確認してください。',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),

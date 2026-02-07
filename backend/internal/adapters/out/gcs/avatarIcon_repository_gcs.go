@@ -26,11 +26,11 @@ const FallbackAvatarIconBucket = "narratives-development_avatar_icon"
 
 // AvatarIconRepositoryGCS is a small GCS adapter for Avatar icons.
 //
-// ObjectPath policy (ONLY):
-// - {avatarId}/{iconId}/{fileName}  (複数アイコン/履歴保持向け)
+// ObjectPath policy (FIXED URL / overwrite):
+// - {avatarId}/icon
 //
 // NOTE:
-// - gcs/tokenIcon_repository_gcs.go に sanitizeFileName / isKeepObject / sanitizePathSegment がある前提で再利用する（同一 package gcs）。
+// - gcs/tokenIcon_repository_gcs.go に isKeepObject / sanitizePathSegment がある前提で再利用する（同一 package gcs）。
 type AvatarIconRepositoryGCS struct {
 	Client *storage.Client
 	Bucket string // optional (if empty, use env or fallback)
@@ -134,11 +134,11 @@ func (r *AvatarIconRepositoryGCS) DeleteObjects(ctx context.Context, ops []avico
 }
 
 // ============================================================
-// ✅ Signed URL
+// ✅ Signed URL (FIXED URL / overwrite)
 // ============================================================
 
 // IssueSignedURL issues a signed PUT url for uploading avatar icon images.
-// ObjectPath policy: {avatarId}/{iconId}/{fileName}
+// ObjectPath policy: {avatarId}/icon
 // Returns ID as objectPath.
 func (r *AvatarIconRepositoryGCS) IssueSignedURL(
 	ctx context.Context,
@@ -172,19 +172,8 @@ func (r *AvatarIconRepositoryGCS) IssueSignedURL(
 		)
 	}
 
-	// Normalize fileName (reuse sanitizeFileName from tokenIcon_repository_gcs.go)
-	normName := strings.TrimSpace(in.FileName)
-	if normName == "" {
-		normName = "icon"
-	}
-	normName = sanitizeFileName(normName)
-	normName = ensureExtensionByMIME(normName, ct)
-
-	// iconID (new object each time; history-friendly)
-	iconID := newObjectID()
-
-	// objectPath
-	objPath, err := buildAvatarIconObjectPath(avatarID, iconID, normName)
+	// objectPath 固定: {avatarId}/icon
+	objPath, err := buildAvatarIconObjectPath(avatarID)
 	if err != nil {
 		return avicon.IssueSignedURLOutput{}, err
 	}
@@ -219,7 +208,7 @@ func (r *AvatarIconRepositoryGCS) IssueSignedURL(
 		ObjectPath:  objPath,
 		UploadURL:   uploadURL,
 		PublicURL:   publicURL,
-		FileName:    normName,
+		FileName:    "icon", // 固定（互換のため返す）
 		ContentType: ct,
 		Size:        in.Size,
 		ExpiresAt:   expiresAt.UTC().Format(time.RFC3339),
@@ -240,7 +229,7 @@ func isSupportedAvatarIconMIME(mime string) bool {
 // ============================================================
 
 // GetByAvatarID lists objects under "{avatarId}/" prefix and returns domain AvatarIcon list.
-// NOTE: objectPath policy外の object（例: "{avatarId}/{fileName}"）は除外する。
+// NOTE: objectPath policy外の object（例: "{avatarId}/{other}"）は除外する。
 func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID string) ([]avicon.AvatarIcon, error) {
 	if r == nil || r.Client == nil {
 		return nil, fmt.Errorf("AvatarIconRepositoryGCS.GetByAvatarID: storage client is nil")
@@ -260,7 +249,7 @@ func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID st
 
 	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{Prefix: prefix})
 
-	out := make([]avicon.AvatarIcon, 0, 8)
+	out := make([]avicon.AvatarIcon, 0, 4)
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -325,8 +314,8 @@ func (r *AvatarIconRepositoryGCS) Save(
 		return avicon.AvatarIcon{}, avicon.ErrNotFound
 	}
 
-	// policy check: "{avatarId}/{iconId}/{fileName}"
-	aidFromPath, _, ok := splitAvatarIconObjectPath(objectPath)
+	// policy check: "{avatarId}/icon"
+	aidFromPath, ok := splitAvatarIconObjectPath(objectPath)
 	if !ok || strings.TrimSpace(aidFromPath) == "" {
 		return avicon.AvatarIcon{}, avicon.ErrNotFound
 	}
@@ -350,18 +339,9 @@ func (r *AvatarIconRepositoryGCS) Save(
 		aid = aidFromPath
 	}
 
-	// fileName
-	fn := ""
-	if ic.FileName != nil {
-		fn = strings.TrimSpace(*ic.FileName)
-	}
-	if fn == "" {
-		fn = path.Base(objectPath)
-	}
-	fn = sanitizeFileName(fn)
-	if fn == "" {
-		return avicon.AvatarIcon{}, avicon.ErrInvalidFileName
-	}
+	// fileName 固定
+	fn := "icon"
+	fnPtr := &fn
 
 	// size
 	var sizePtr *int64
@@ -405,7 +385,7 @@ func (r *AvatarIconRepositoryGCS) Save(
 		id,
 		bucket,
 		newAttrs.Name,
-		&fn,
+		fnPtr,
 		sizePtr,
 	)
 	if derr != nil {
@@ -413,7 +393,7 @@ func (r *AvatarIconRepositoryGCS) Save(
 		tmp := avicon.AvatarIcon{
 			ID:       id,
 			URL:      publicURL,
-			FileName: &fn,
+			FileName: fnPtr,
 			Size:     sizePtr,
 		}
 		if aid != "" {
@@ -429,7 +409,7 @@ func (r *AvatarIconRepositoryGCS) Save(
 		out.SetAvatarID(&aid2)
 	}
 
-	// url をメタ優先で差し替え
+	// url を publicURL に確定
 	_ = out.UpdateURL(publicURL)
 
 	return out, nil
@@ -439,23 +419,13 @@ func (r *AvatarIconRepositoryGCS) Save(
 // Helpers
 // ============================================================
 
-func buildAvatarIconObjectPath(avatarID, iconID, fileName string) (string, error) {
-	aid := sanitizePathSegment(avatarID)
-	iid := sanitizePathSegment(iconID)
-	fn := strings.TrimSpace(fileName) // sanitizeFileName 済み想定
-
+// buildAvatarIconObjectPath returns fixed path "{avatarId}/icon".
+func buildAvatarIconObjectPath(avatarID string) (string, error) {
+	aid := sanitizePathSegment(strings.TrimSpace(avatarID))
 	if aid == "" {
 		return "", fmt.Errorf("avatarIcon: invalid avatarID for object path")
 	}
-	if iid == "" {
-		return "", fmt.Errorf("avatarIcon: invalid iconID for object path")
-	}
-	if fn == "" {
-		return "", fmt.Errorf("avatarIcon: invalid fileName for object path")
-	}
-
-	// {avatarId}/{iconId}/{fileName}
-	return path.Join(aid, iid, fn), nil
+	return path.Join(aid, "icon"), nil
 }
 
 // buildAvatarIconFromAttrs converts GCS attrs to domain AvatarIcon (best-effort).
@@ -470,8 +440,8 @@ func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon
 		return avicon.AvatarIcon{}, false
 	}
 
-	// policy check: "{avatarId}/{iconId}/{fileName}"
-	avatarIDFromPath, _, ok := splitAvatarIconObjectPath(obj)
+	// policy check: "{avatarId}/icon"
+	avatarIDFromPath, ok := splitAvatarIconObjectPath(obj)
 	if !ok {
 		return avicon.AvatarIcon{}, false
 	}
@@ -494,14 +464,8 @@ func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon
 		aidPtr = &tmp
 	}
 
-	fileName := getMeta("fileName")
-	if fileName == "" {
-		fileName = path.Base(obj)
-	}
-	fileName = sanitizeFileName(fileName)
-	if fileName == "" {
-		return avicon.AvatarIcon{}, false
-	}
+	// fileName fixed "icon"
+	fileName := "icon"
 	fnPtr := &fileName
 
 	// url
@@ -545,22 +509,22 @@ func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon
 	return ic, true
 }
 
-// splitAvatarIconObjectPath expects "{avatarId}/{iconId}/{fileName}".
-func splitAvatarIconObjectPath(objectPath string) (avatarID string, iconID string, ok bool) {
+// splitAvatarIconObjectPath expects "{avatarId}/icon".
+func splitAvatarIconObjectPath(objectPath string) (avatarID string, ok bool) {
 	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if p == "" {
-		return "", "", false
+		return "", false
 	}
 	parts := strings.Split(p, "/")
-	if len(parts) < 3 {
-		return "", "", false
+	if len(parts) != 2 {
+		return "", false
 	}
 
 	avatarID = strings.TrimSpace(parts[0])
-	iconID = strings.TrimSpace(parts[1])
+	name := strings.TrimSpace(parts[1])
 
-	if avatarID == "" || iconID == "" {
-		return "", "", false
+	if avatarID == "" || name != "icon" {
+		return "", false
 	}
-	return avatarID, iconID, true
+	return avatarID, true
 }

@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/avatar/commands_state.go
 package avatar
 
 import (
@@ -22,6 +23,7 @@ func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (a
 	if u.stRepo == nil {
 		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
 	}
+
 	now := u.now().UTC()
 
 	// ✅ docId=avatarId
@@ -39,16 +41,27 @@ func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string
 		return avatardom.ErrInvalidID
 	}
 
-	// icons: best-effort GCS delete（メタデータ削除はRepo機能がない場合スキップ）
-	if u.icRepo != nil {
-		if list, err := u.icRepo.GetByAvatarID(ctx, avatarID); err == nil && len(list) > 0 && u.objStore != nil {
-			var ops []avataricon.GCSDeleteOp
-			for _, ic := range list {
-				ops = append(ops, toGCSDeleteOp(ic))
+	// 固定上書き方式（{avatarId}/icon）を採用しているため、
+	// アイコンの「履歴列挙→全削除」は基本不要＆誤削除リスクがある。
+	//
+	// 「アバター削除時にアイコンも消したい」場合のみ、
+	// avatars.avatarIcon に保存されている参照（https://storage.googleapis.com/...）から
+	// bucket/objectPath を復元して 1件だけ削除する。
+	if u.objStore != nil && u.avRepo != nil {
+		av, err := u.avRepo.GetByID(ctx, avatarID)
+		if err == nil {
+			// avatardom.Avatar.AvatarIcon は *string
+			var iconRef string
+			if av.AvatarIcon != nil {
+				iconRef = strings.TrimSpace(*av.AvatarIcon)
 			}
-			if len(ops) > 0 {
-				if err := u.objStore.DeleteObjects(ctx, ops); err != nil {
-					return err
+
+			if iconRef != "" {
+				// ✅ domain の ParseGCSURL は https://storage.googleapis.com/{bucket}/{objectPath} を解釈できる
+				if b, obj, ok := avataricon.ParseGCSURL(iconRef); ok {
+					_ = u.objStore.DeleteObjects(ctx, []avataricon.GCSDeleteOp{
+						{Bucket: b, ObjectPath: obj},
+					})
 				}
 			}
 		}
