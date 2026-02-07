@@ -20,6 +20,12 @@ func NewAvatarHandler(avatarUC *avataruc.AvatarUsecase) http.Handler {
 func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// ✅ CORS preflight を潰さない（ブラウザからの OPTIONS を 404 にしない）
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
@@ -50,7 +56,10 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.issueIconUploadURL(w, r, id)
 		return
 
-	case r.Method == http.MethodPost && strings.HasPrefix(path0, "/mall/avatars/") && strings.HasSuffix(path0, "/icon"):
+	// ✅ ここが重要:
+	// ブラウザ/クライアント実装によって PUT で来ても 404 にならないようにする
+	case (r.Method == http.MethodPost || r.Method == http.MethodPut) &&
+		strings.HasPrefix(path0, "/mall/avatars/") && strings.HasSuffix(path0, "/icon"):
 		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/icon")
 		if !ok {
 			notFound(w)

@@ -15,7 +15,6 @@ type repos struct {
 	avatarStateRepo    *fs.AvatarStateRepositoryFS
 	billingAddressRepo *fs.BillingAddressRepositoryFS
 	brandRepo          *fs.BrandRepositoryFS
-	campaignRepo       *fs.CampaignRepositoryFS
 	companyRepo        *fs.CompanyRepositoryFS
 	inquiryRepo        *fs.InquiryRepositoryFS
 
@@ -31,9 +30,8 @@ type repos struct {
 	// /lists/{listId}/images/{imageId}
 	listImageRecordRepo *fs.ListImageRepositoryFS
 
-	memberRepo  *fs.MemberRepositoryFS
-	messageRepo *fs.MessageRepositoryFS
-	modelRepo   *fs.ModelRepositoryFS
+	memberRepo *fs.MemberRepositoryFS
+	modelRepo  *fs.ModelRepositoryFS
 
 	mintRepo *fs.MintRepositoryFS
 
@@ -90,7 +88,6 @@ func buildRepos(c *clients) *repos {
 
 	billingAddressRepo := fs.NewBillingAddressRepositoryFS(fsClient)
 	brandRepo := fs.NewBrandRepositoryFS(fsClient)
-	campaignRepo := fs.NewCampaignRepositoryFS(fsClient)
 	companyRepo := fs.NewCompanyRepositoryFS(fsClient)
 	inquiryRepo := fs.NewInquiryRepositoryFS(fsClient)
 
@@ -106,7 +103,6 @@ func buildRepos(c *clients) *repos {
 	listImageRecordRepo := fs.NewListImageRepositoryFS(fsClient)
 
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
-	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
 
 	mintRepo := fs.NewMintRepositoryFS(fsClient)
@@ -161,7 +157,6 @@ func buildRepos(c *clients) *repos {
 		avatarStateRepo:    avatarStateRepo,
 		billingAddressRepo: billingAddressRepo,
 		brandRepo:          brandRepo,
-		campaignRepo:       campaignRepo,
 		companyRepo:        companyRepo,
 		inquiryRepo:        inquiryRepo,
 
@@ -176,9 +171,8 @@ func buildRepos(c *clients) *repos {
 		// ✅ NEW
 		listImageRecordRepo: listImageRecordRepo,
 
-		memberRepo:  memberRepo,
-		messageRepo: messageRepo,
-		modelRepo:   modelRepo,
+		memberRepo: memberRepo,
+		modelRepo:  modelRepo,
 
 		mintRepo: mintRepo,
 

@@ -37,14 +37,12 @@ type usecases struct {
 	avatarUC         *avataruc.AvatarUsecase
 	billingAddressUC *uc.BillingAddressUsecase
 	brandUC          *uc.BrandUsecase
-	campaignUC       *uc.CampaignUsecase
 	companyUC        *uc.CompanyUsecase
 	inquiryUC        *uc.InquiryUsecase
 	inventoryUC      *uc.InventoryUsecase
 	invoiceUC        *uc.InvoiceUsecase
 	listUC           *listuc.ListUsecase // ✅ moved
 	memberUC         *uc.MemberUsecase
-	messageUC        *uc.MessageUsecase
 	modelUC          *uc.ModelUsecase
 	orderUC          *uc.OrderUsecase
 	paymentUC        *uc.PaymentUsecase
@@ -110,7 +108,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	billingAddressUC := uc.NewBillingAddressUsecase(r.billingAddressRepo)
 	brandUC := uc.NewBrandUsecaseWithWallet(r.brandRepo, r.memberRepo, brandWalletSvc)
-	campaignUC := uc.NewCampaignUsecase(r.campaignRepo, nil, nil, nil)
 	companyUC := uc.NewCompanyUsecase(r.companyRepo)
 	inquiryUC := uc.NewInquiryUsecase(r.inquiryRepo, nil, nil)
 
@@ -153,7 +150,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	// - listUC.WithListImageDeleter(...)
 	// - その他 WithXxx 系の後付け DI
 
-	messageUC := uc.NewMessageUsecase(r.messageRepo, nil, nil)
 	modelUC := uc.NewModelUsecase(r.modelRepo, r.modelHistoryRepo)
 	orderUC := uc.NewOrderUsecase(r.orderRepo)
 	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
@@ -262,14 +258,12 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		avatarUC:         avatarUC,
 		billingAddressUC: billingAddressUC,
 		brandUC:          brandUC,
-		campaignUC:       campaignUC,
 		companyUC:        companyUC,
 		inquiryUC:        inquiryUC,
 		inventoryUC:      inventoryUC,
 		invoiceUC:        invoiceUC,
 		listUC:           listUC,
 		memberUC:         uc.NewMemberUsecase(r.memberRepo),
-		messageUC:        messageUC,
 		modelUC:          modelUC,
 		orderUC:          orderUC,
 		paymentUC:        paymentUC,

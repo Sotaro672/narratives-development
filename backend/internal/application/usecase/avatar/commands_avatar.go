@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\avatar\commands_avatar.go
 package avatar
 
 import (
@@ -68,10 +69,13 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 
 	now := u.now().UTC()
 
+	// NOTE:
+	// - avatarIcon は Create 時点では “固定URL方式” を採用するため、ここでは client input を保存しない。
+	// - avatarId 採番後に、server-truth の gs://bucket/objectPath を avatarIcon に入れる（後段で patch）。
 	a := avatardom.Avatar{
 		UserID:       userUID,
 		AvatarName:   name,
-		AvatarIcon:   trimPtr(in.AvatarIcon),
+		AvatarIcon:   nil, // ✅ server-truth で後で入れる
 		Profile:      trimPtr(in.Profile),
 		ExternalLink: trimPtr(in.ExternalLink),
 		CreatedAt:    now,
@@ -141,8 +145,19 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
 	}
 
-	// ✅ avatar に walletAddress を反映 (strict)
-	patch := avatardom.AvatarPatch{WalletAddress: &addr}
+	// ✅ avatar に walletAddress + avatarIcon(固定URL) を反映 (strict)
+	//
+	// 固定URL方式（推奨）:
+	// - avatars.avatarIcon は「一定の gs://bucket/objectPath」を持ち続ける
+	// - 実体の差し替えは同一 objectPath への上書き（upload）で行う
+	const iconBucket = "narratives-development_avatar_icon"
+	objPath := avatarID + "/icon" // ←固定名（必要なら "icon.png" 等に変更OK）
+	gs := "gs://" + iconBucket + "/" + objPath
+
+	patch := avatardom.AvatarPatch{
+		WalletAddress: &addr,
+		AvatarIcon:    &gs,
+	}
 	updated, uerr := u.avRepo.Update(ctx, avatarID, patch)
 	if uerr != nil {
 		rollback()
@@ -161,9 +176,9 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, err
 	}
 
-	// ✅ 画像が空でも “入れ物” を作成（best-effort）
+	// ✅ GCS prefix を作成（best-effort）
 	if u.objStore != nil {
-		_ = u.objStore.EnsurePrefix(ctx, "narratives-development_avatar_icon", avatarID+"/")
+		_ = u.objStore.EnsurePrefix(ctx, iconBucket, avatarID+"/")
 	}
 
 	return created, nil

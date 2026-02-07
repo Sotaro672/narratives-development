@@ -176,11 +176,6 @@ func BuildConsoleRouterDeps(c *Container) httpin.RouterDeps {
 		)
 	}
 
-	// Messages
-	if c.MessageUC != nil && c.MessageRepo != nil {
-		messagesH = consoleHandler.NewMessageHandler(c.MessageUC, c.MessageRepo)
-	}
-
 	// Orders
 	if c.OrderUC != nil {
 		ordersH = consoleHandler.NewOrderHandler(c.OrderUC)

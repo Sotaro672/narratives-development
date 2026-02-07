@@ -46,8 +46,7 @@ type Container struct {
 	Infra *shared.Infra
 
 	// Repositories (AuthMiddleware 用に memberRepo だけ保持)
-	MemberRepo  memdom.Repository
-	MessageRepo *fs.MessageRepositoryFS
+	MemberRepo memdom.Repository
 
 	// member.Service / brand.Service (表示名解決用)
 	MemberService *memdom.Service
@@ -63,14 +62,12 @@ type Container struct {
 	AvatarUC           *avatarUC.AvatarUsecase
 	BillingAddressUC   *uc.BillingAddressUsecase
 	BrandUC            *uc.BrandUsecase
-	CampaignUC         *uc.CampaignUsecase
 	CompanyUC          *uc.CompanyUsecase
 	InquiryUC          *uc.InquiryUsecase
 	InventoryUC        *uc.InventoryUsecase
 	InvoiceUC          *uc.InvoiceUsecase
 	ListUC             *listuc.ListUsecase // ✅ moved
 	MemberUC           *uc.MemberUsecase
-	MessageUC          *uc.MessageUsecase
 	ModelUC            *uc.ModelUsecase
 	OrderUC            *uc.OrderUsecase
 	PaymentUC          *uc.PaymentUsecase
@@ -137,8 +134,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	return &Container{
 		Infra: clients.infra,
 
-		MemberRepo:  repos.memberRepo,
-		MessageRepo: repos.messageRepo,
+		MemberRepo: repos.memberRepo,
 
 		MemberService: services.memberSvc,
 		BrandService:  services.brandSvc,
@@ -151,14 +147,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		AvatarUC:           u.avatarUC,
 		BillingAddressUC:   u.billingAddressUC,
 		BrandUC:            u.brandUC,
-		CampaignUC:         u.campaignUC,
 		CompanyUC:          u.companyUC,
 		InquiryUC:          u.inquiryUC,
 		InventoryUC:        u.inventoryUC,
 		InvoiceUC:          u.invoiceUC,
 		ListUC:             u.listUC, // ✅ buildUsecases 側で *listuc.ListUsecase を返す前提
 		MemberUC:           u.memberUC,
-		MessageUC:          u.messageUC,
 		ModelUC:            u.modelUC,
 		OrderUC:            u.orderUC,
 		PaymentUC:          u.paymentUC,
