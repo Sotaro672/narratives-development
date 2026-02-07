@@ -151,7 +151,10 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	// - その他 WithXxx 系の後付け DI
 
 	modelUC := uc.NewModelUsecase(r.modelRepo, r.modelHistoryRepo)
-	orderUC := uc.NewOrderUsecase(r.orderRepo)
+
+	// ✅ FIX: OrderUsecase needs both OrderRepo and CartRepo now (for listId lookup from cart)
+	orderUC := uc.NewOrderUsecase(r.orderRepo, r.cartRepo)
+
 	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
 
 	printUC := uc.NewPrintUsecase(

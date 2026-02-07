@@ -123,7 +123,7 @@ class AvatarIdStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ✅ /mall/me/avatar で「自分の avatarId(docId)」を解決する（uid を query に入れない）
+  /// ✅ /mall/me/avatars で「自分の avatarId(docId)」を解決する（uid を query に入れない）
   Future<String?> resolveMyAvatarId() {
     if (_avatarId.trim().isNotEmpty) return Future.value(_avatarId.trim());
 
@@ -144,7 +144,7 @@ class AvatarIdStore extends ChangeNotifier {
       if (b == null || !b.hasScheme || !b.hasAuthority) return null;
 
       final uri = b.replace(
-        path: _joinPaths(b.path, '/mall/me/avatar'),
+        path: _joinPaths(b.path, '/mall/me/avatars'),
         queryParameters: null,
         fragment: null,
       );
@@ -212,7 +212,7 @@ class AvatarIdStore extends ChangeNotifier {
 
 /// ------------------------------------------------------------
 /// ✅ Header title 用の Store
-/// - use_avatar.dart が /mall/me/avatar の avatarName をセットする
+/// - use_avatar.dart が /mall/me/avatars の avatarName をセットする
 /// - app_scaffold_meta.dart がここから title を読む
 class AvatarHeaderTitleStore extends ChangeNotifier {
   AvatarHeaderTitleStore._();

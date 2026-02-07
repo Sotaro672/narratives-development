@@ -8,11 +8,11 @@ import "context"
 // Storage recommendation (Firestore):
 // - collection: carts
 // - docId: avatarId
-// - fields: id, items(map), createdAt, updatedAt, expiresAt
+// - fields: items(map), createdAt, updatedAt, expiresAt
 //
-// Items shape (after composite item adoption):
+// Items shape:
 // - items: map[itemKey]CartItem
-// - itemKey: inventoryId__listId__modelId (deterministic composite key)
+// - itemKey: inventoryId__listId__modelId (domain内部で生成する識別キー。上位層で分解しない)
 // - CartItem: {inventoryId, listId, modelId, qty}
 //
 // TTL:

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 )
@@ -17,7 +18,6 @@ type OrderRepo interface {
 	// Queries
 	GetByID(ctx context.Context, id string) (orderdom.Order, error)
 	Exists(ctx context.Context, id string) (bool, error)
-	Count(ctx context.Context, filter OrderFilter) (int, error)
 	List(ctx context.Context, filter OrderFilter, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
 	ListByCursor(ctx context.Context, filter OrderFilter, sort common.Sort, cpage common.CursorPage) (common.CursorPageResult[orderdom.Order], error)
 
@@ -25,6 +25,11 @@ type OrderRepo interface {
 	Create(ctx context.Context, o orderdom.Order) (orderdom.Order, error)
 	Save(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
 	Delete(ctx context.Context, id string) error
+}
+
+// CartRepo is the persistence port required to read cart items (for listId lookup).
+type CartRepo interface {
+	GetByID(ctx context.Context, id string) (cartdom.Cart, error)
 }
 
 // OrderFilter provides basic filtering for listing orders.
@@ -45,14 +50,16 @@ type OrderFilter struct {
 // - Invoice 起票は /mall/me/invoices の責務
 // - Payment 起票は /mall/me/payment(s) の責務
 type OrderUsecase struct {
-	repo OrderRepo
-	now  func() time.Time
+	repo     OrderRepo
+	cartRepo CartRepo
+	now      func() time.Time
 }
 
-func NewOrderUsecase(repo OrderRepo) *OrderUsecase {
+func NewOrderUsecase(repo OrderRepo, cartRepo CartRepo) *OrderUsecase {
 	return &OrderUsecase{
-		repo: repo,
-		now:  time.Now,
+		repo:     repo,
+		cartRepo: cartRepo,
+		now:      time.Now,
 	}
 }
 
@@ -66,10 +73,6 @@ func (u *OrderUsecase) GetByID(ctx context.Context, id string) (orderdom.Order, 
 
 func (u *OrderUsecase) Exists(ctx context.Context, id string) (bool, error) {
 	return u.repo.Exists(ctx, strings.TrimSpace(id))
-}
-
-func (u *OrderUsecase) Count(ctx context.Context, f OrderFilter) (int, error) {
-	return u.repo.Count(ctx, f)
 }
 
 func (u *OrderUsecase) List(ctx context.Context, f OrderFilter, s common.Sort, p common.Page) (common.PageResult[orderdom.Order], error) {
@@ -127,12 +130,42 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		CardHolderName: strings.TrimSpace(in.BillingSnapshot.CardHolderName),
 	}
 
+	// --- fetch cart to resolve listId (if needed) ---
+	cartID := strings.TrimSpace(in.CartID)
+	var cart cartdom.Cart
+	cartLoaded := false
+	if u.cartRepo != nil && cartID != "" {
+		c, err := u.cartRepo.GetByID(ctx, cartID)
+		if err != nil {
+			log.Printf("[order_uc] Create cartRepo.GetByID failed cartId=%s err=%v", _maskID(cartID), err)
+			return orderdom.Order{}, err
+		}
+		cart = c
+		cartLoaded = true
+	}
+
 	// normalize items (trim strings) + ✅ item-level defaults
 	items := make([]orderdom.OrderItemSnapshot, 0, len(in.Items))
 	for _, it := range in.Items {
+		modelID := strings.TrimSpace(it.ModelID)
+		inventoryID := strings.TrimSpace(it.InventoryID)
+
+		listID := strings.TrimSpace(it.ListID)
+		if listID == "" && cartLoaded {
+			resolved, err := resolveListIDFromCart(cart, inventoryID, modelID)
+			if err != nil {
+				log.Printf("[order_uc] Create resolveListIDFromCart failed cartId=%s inv=%s model=%s err=%v",
+					_maskID(cartID), _maskID(inventoryID), _maskID(modelID), err,
+				)
+				return orderdom.Order{}, err
+			}
+			listID = resolved
+		}
+
 		n := orderdom.OrderItemSnapshot{
-			ModelID:     strings.TrimSpace(it.ModelID),
-			InventoryID: strings.TrimSpace(it.InventoryID),
+			ModelID:     modelID,
+			InventoryID: inventoryID,
+			ListID:      listID,
 			Qty:         it.Qty,
 			Price:       it.Price,
 
@@ -232,12 +265,42 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 	}
 
 	if in.ReplaceItems != nil {
+		// fetch cart for listId resolution (optional)
+		cartID := strings.TrimSpace(o.CartID)
+		var cart cartdom.Cart
+		cartLoaded := false
+		if u.cartRepo != nil && cartID != "" {
+			c, err := u.cartRepo.GetByID(ctx, cartID)
+			if err != nil {
+				log.Printf("[order_uc] Update cartRepo.GetByID failed cartId=%s err=%v", _maskID(cartID), err)
+				return orderdom.Order{}, err
+			}
+			cart = c
+			cartLoaded = true
+		}
+
 		// ✅ items 置換時は item-level transfer state を安全に初期化
 		items := make([]orderdom.OrderItemSnapshot, 0, len(*in.ReplaceItems))
 		for _, it := range *in.ReplaceItems {
+			modelID := strings.TrimSpace(it.ModelID)
+			inventoryID := strings.TrimSpace(it.InventoryID)
+
+			listID := strings.TrimSpace(it.ListID)
+			if listID == "" && cartLoaded {
+				resolved, err := resolveListIDFromCart(cart, inventoryID, modelID)
+				if err != nil {
+					log.Printf("[order_uc] Update resolveListIDFromCart failed cartId=%s inv=%s model=%s err=%v",
+						_maskID(cartID), _maskID(inventoryID), _maskID(modelID), err,
+					)
+					return orderdom.Order{}, err
+				}
+				listID = resolved
+			}
+
 			items = append(items, orderdom.OrderItemSnapshot{
-				ModelID:     strings.TrimSpace(it.ModelID),
-				InventoryID: strings.TrimSpace(it.InventoryID),
+				ModelID:     modelID,
+				InventoryID: inventoryID,
+				ListID:      listID,
 				Qty:         it.Qty,
 				Price:       it.Price,
 
@@ -279,6 +342,47 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 
 func (u *OrderUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
+}
+
+// ------------------------------------------------------------
+// listId resolution
+// ------------------------------------------------------------
+
+// resolveListIDFromCart finds listId for (inventoryId, modelId) from cart items.
+// If multiple listIds match, returns an error (ambiguous).
+func resolveListIDFromCart(c cartdom.Cart, inventoryID, modelID string) (string, error) {
+	inv := strings.TrimSpace(inventoryID)
+	mid := strings.TrimSpace(modelID)
+	if inv == "" || mid == "" {
+		return "", fmt.Errorf("order_uc: invalid inventoryId/modelId for listId resolution")
+	}
+
+	// ✅ S1009: len(nil map) == 0 なので nil check 不要
+	if len(c.Items) == 0 {
+		return "", fmt.Errorf("order_uc: cart has no items (cannot resolve listId)")
+	}
+
+	found := ""
+	for _, it := range c.Items {
+		if strings.TrimSpace(it.InventoryID) == inv && strings.TrimSpace(it.ModelID) == mid {
+			lid := strings.TrimSpace(it.ListID)
+			if lid == "" {
+				continue
+			}
+			if found == "" {
+				found = lid
+				continue
+			}
+			if found != lid {
+				return "", fmt.Errorf("order_uc: ambiguous listId for inv=%s model=%s", inv, mid)
+			}
+		}
+	}
+
+	if found == "" {
+		return "", fmt.Errorf("order_uc: listId not found in cart for inv=%s model=%s", inv, mid)
+	}
+	return found, nil
 }
 
 // ------------------------------------------------------------

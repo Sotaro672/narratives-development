@@ -17,7 +17,10 @@ var (
 const DefaultCartTTL = 7 * 24 * time.Hour
 
 // CartItem represents "one line item" in a cart.
-// We keep inventoryId + listId + modelId to uniquely identify the selected product context.
+//
+// ✅ 方針:
+// - itemKey（複合キー）からの抽出ロジックは廃止（上位層で key を解析しない）
+// - listId は items の中身（CartItem.ListID）を正として保持する
 type CartItem struct {
 	InventoryID string `json:"inventoryId" firestore:"inventoryId"`
 	ListID      string `json:"listId" firestore:"listId"`
@@ -26,9 +29,10 @@ type CartItem struct {
 }
 
 // Cart represents "a cart document".
+//
 //   - docId = avatarId (Firestore)
 //   - Items: itemKey -> CartItem
-//     itemKey is a deterministic composite key from (inventoryId, listId, modelId)
+//     itemKey は「識別用の任意キー」として扱い、上位層で分解しない（抽出ロジック廃止）
 //   - ExpiresAt: for Firestore TTL (auto deletion), updated on each cart mutation
 //
 // NOTE:
@@ -36,7 +40,10 @@ type CartItem struct {
 // - order テーブル作成（注文確定）に合わせて、items から itemKey を削除（消費）する
 type Cart struct {
 	// ID is Firestore docId (= avatarId).
-	ID string `json:"id" firestore:"id"`
+	//
+	// ✅ Firestore docId そのものなので、フィールドとして保存しない前提が安全。
+	// （保存していても害は少ないが、docIdと二重管理になりズレの温床になる）
+	ID string `json:"id" firestore:"-"`
 
 	// Items is itemKey -> CartItem (includes qty)
 	Items map[string]CartItem `json:"items" firestore:"items"`
@@ -86,6 +93,7 @@ func (c *Cart) Add(inventoryID, listID, modelID string, qty int, now time.Time) 
 		c.Items = map[string]CartItem{}
 	}
 
+	// ✅ itemKey は domain 内で生成するが、上位層では分解しない
 	key := makeItemKey(inv, lid, mid)
 
 	if it, ok := c.Items[key]; ok {
@@ -230,7 +238,7 @@ func (c *Cart) validate() error {
 	}
 
 	// Items can be empty, but if present each entry must be valid.
-	if c.Items != nil {
+	if len(c.Items) > 0 {
 		// deterministic validation order (useful for tests/debug)
 		keys := make([]string, 0, len(c.Items))
 		for k := range c.Items {
@@ -250,6 +258,7 @@ func (c *Cart) validate() error {
 				return ErrInvalidCart
 			}
 
+			// ✅ key の正規化は domain 内だけで行う（上位層で key を解析しない）
 			normalizedKey := makeItemKey(inv, lid, mid)
 
 			// normalize key if it had spaces / wrong composition
@@ -293,7 +302,7 @@ func makeItemKey(inventoryID, listID, modelID string) string {
 
 func cloneItems(src map[string]CartItem) map[string]CartItem {
 	dst := map[string]CartItem{}
-	if src == nil {
+	if len(src) == 0 {
 		return dst
 	}
 

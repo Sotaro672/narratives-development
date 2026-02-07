@@ -35,6 +35,21 @@ func (r *CartRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("carts")
 }
 
+// GetByID returns cart by docId (= avatarId).
+// - returns (zero, error) if repo is invalid
+// - returns (zero, nil) if not found (nil policy)
+func (r *CartRepositoryFS) GetByID(ctx context.Context, id string) (cartdom.Cart, error) {
+	c, err := r.GetByAvatarID(ctx, id)
+	if err != nil {
+		return cartdom.Cart{}, err
+	}
+	if c == nil {
+		// not found
+		return cartdom.Cart{}, nil
+	}
+	return *c, nil
+}
+
 // GetByAvatarID returns (nil, nil) if not found (nil policy).
 func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (*cartdom.Cart, error) {
 	if r == nil || r.Client == nil {

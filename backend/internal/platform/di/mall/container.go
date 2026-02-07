@@ -295,7 +295,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WithInventoryRepoForPayment(inventoryRepoForUC)
 
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
-	c.OrderUC = usecase.NewOrderUsecase(orderRepo)
+	c.OrderUC = usecase.NewOrderUsecase(orderRepo, cartRepo)
 
 	// --------------------------------------------------------
 	// ✅ Case A: PaymentFlowUsecase（payment起票 + 必要なら webhook trigger）

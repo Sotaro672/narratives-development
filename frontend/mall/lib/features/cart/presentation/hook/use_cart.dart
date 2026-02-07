@@ -53,7 +53,7 @@ class UseCartResult {
   /// ✅ ルーティング側で /login へ送るためのヒント（controller 側で強制遷移しない）
   final bool needsSignIn;
 
-  /// ✅ サインイン済みだが avatarId が解決できない（/mall/me/avatar が空など）
+  /// ✅ サインイン済みだが avatarId が解決できない（/mall/me/avatars が空など）
   final bool needsAvatar;
 
   /// Reload cart (re-fetch)
@@ -195,7 +195,7 @@ class UseCartController {
       return a0;
     }
 
-    // 3) サーバで /mall/me/avatar を叩いて解決
+    // 3) サーバで /mall/me/avatars を叩いて解決
     final resolved = await AvatarIdStore.I.resolveMyAvatarId();
     final a1 = (resolved ?? '').trim();
     if (a1.isNotEmpty) {

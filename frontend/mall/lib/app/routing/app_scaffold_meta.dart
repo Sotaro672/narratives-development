@@ -78,7 +78,7 @@ String _avatarNameForHeader() {
   // ignore: avoid_print
   print('[meta] _avatarNameForHeader() store.avatarName="$storeName"');
 
-  // ✅ 1) Backend (/mall/me/avatar) resolved name (highest priority)
+  // ✅ 1) Backend (/mall/me/avatars) resolved name (highest priority)
   final bn = storeName;
   if (bn.isNotEmpty) {
     debugPrint('[meta] _avatarNameForHeader() -> use store "$bn"');

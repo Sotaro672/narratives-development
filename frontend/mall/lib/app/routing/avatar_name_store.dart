@@ -1,7 +1,7 @@
 // frontend/mall/lib/app/routing/avatar_name_store.dart
 import 'package:flutter/foundation.dart';
 
-/// Global store for "avatarName" resolved from backend (/mall/me/avatar).
+/// Global store for "avatarName" resolved from backend (/mall/me/avatars).
 /// - App header title should prefer this over FirebaseAuth displayName/email.
 /// - Updated by use_avatar.dart after fetching MeAvatar.
 ///

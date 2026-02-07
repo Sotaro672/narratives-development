@@ -56,15 +56,10 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (Order, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
-
 	// Commands
 	Create(ctx context.Context, o Order) (Order, error)
 	Save(ctx context.Context, o Order, opts *SaveOptions) (Order, error)
 	Delete(ctx context.Context, id string) error
-
-	// Optional (testing/dev)
-	Reset(ctx context.Context) error
 }
 
 // Standard repository errors

@@ -238,7 +238,7 @@ class _SignedInFooterState extends State<SignedInFooter> {
         // ✅ Pattern B: 戻り先は store に保持（URLへは出さない）
         final returnTo = _currentLocationForReturnTo(context);
 
-        // ✅ Absolute schema: /mall/me/avatar は MeAvatar(=patch全体) を返す前提
+        // ✅ Absolute schema: /mall/me/avatars は MeAvatar(=patch全体) を返す前提
         final avatarProfileFuture = Future<MeAvatar?>.microtask(() async {
           final api = AvatarApiClient();
           try {

@@ -21,7 +21,6 @@ import (
 	outfs "narratives/internal/adapters/out/firestore"
 
 	avatarstate "narratives/internal/domain/avatarState"
-	inspectiondom "narratives/internal/domain/inspection"
 	productdom "narratives/internal/domain/product"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -91,26 +90,6 @@ func (a *productBlueprintDomainRepoAdapter) ListIDsByCompany(
 		return nil, productbpdom.ErrInternal
 	}
 	return a.repo.ListIDsByCompany(ctx, strings.TrimSpace(companyID))
-}
-
-// ========================================
-// inspection 用: products.UpdateInspectionResult アダプタ
-// ========================================
-type inspectionProductRepoAdapter struct {
-	repo interface {
-		UpdateInspectionResult(ctx context.Context, productID string, result productdom.InspectionResult) error
-	}
-}
-
-func (a *inspectionProductRepoAdapter) UpdateInspectionResult(
-	ctx context.Context,
-	productID string,
-	result inspectiondom.InspectionResult,
-) error {
-	if a == nil || a.repo == nil {
-		return errors.New("inspectionProductRepoAdapter: repo is nil")
-	}
-	return a.repo.UpdateInspectionResult(ctx, productID, productdom.InspectionResult(result))
 }
 
 // ========================================

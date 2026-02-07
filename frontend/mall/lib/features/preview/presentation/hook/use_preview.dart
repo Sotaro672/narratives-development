@@ -274,7 +274,7 @@ class UsePreviewController {
   }
 }
 
-/// /mall/me/avatar 用（このファイル内で完結させるための最小実装）
+/// /mall/me/avatars 用（このファイル内で完結させるための最小実装）
 ///
 /// NOTE:
 /// - 元の preview.dart 末尾にあった実装を hook に移設。
@@ -288,7 +288,7 @@ class MeAvatarRepositoryHttp {
     _client.close();
   }
 
-  /// GET /mall/me/avatar
+  /// GET /mall/me/avatars
   Future<MallOwnerInfo> fetchMeAvatar({
     String? baseUrl,
     Map<String, String>? headers,
@@ -297,7 +297,7 @@ class MeAvatarRepositoryHttp {
     final resolvedBase = base.isNotEmpty ? base : resolveMallApiBase();
 
     final b = normalizeBaseUrl(resolvedBase);
-    final uri = Uri.parse('$b/mall/me/avatar');
+    final uri = Uri.parse('$b/mall/me/avatars');
 
     final mergedHeaders = <String, String>{...jsonHeaders()};
     if (headers != null) {
@@ -307,7 +307,7 @@ class MeAvatarRepositoryHttp {
     final auth = (mergedHeaders['Authorization'] ?? '').trim();
     if (auth.isEmpty) {
       throw ArgumentError(
-        'Authorization header is required for /mall/me/avatar',
+        'Authorization header is required for /mall/me/avatars',
       );
     }
 

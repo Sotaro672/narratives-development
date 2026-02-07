@@ -32,9 +32,11 @@ type BillingSnapshot struct {
 //
 // ✅ NEW:
 // - transferred / transferredAt を item 単位で保持する（複数商品の部分移転に対応）
+// - listId を保持する（cart から引き継ぎ / 参照用）
 type OrderItemSnapshot struct {
 	ModelID     string `json:"modelId"`
 	InventoryID string `json:"inventoryId"`
+	ListID      string `json:"listId"` // ✅ NEW
 	Qty         int    `json:"qty"`
 	Price       int    `json:"price"`
 
@@ -276,6 +278,7 @@ func validateItems(items []OrderItemSnapshot) error {
 		if strings.TrimSpace(it.InventoryID) == "" {
 			return ErrInvalidItemSnapshot
 		}
+		// ListID は cart 由来の補助情報。過去互換/既存データを壊さないため必須にしない。
 		if it.Qty <= 0 {
 			return ErrInvalidItemSnapshot
 		}
@@ -317,6 +320,7 @@ func normalizeItems(items []OrderItemSnapshot) []OrderItemSnapshot {
 		n := OrderItemSnapshot{
 			ModelID:     strings.TrimSpace(it.ModelID),
 			InventoryID: strings.TrimSpace(it.InventoryID),
+			ListID:      strings.TrimSpace(it.ListID), // ✅ NEW
 			Qty:         it.Qty,
 			Price:       it.Price,
 
