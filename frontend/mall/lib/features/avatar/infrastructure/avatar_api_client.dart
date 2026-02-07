@@ -241,7 +241,7 @@ class AvatarApiClient {
 
   // ===========================================================================
   // ✅ Contract:
-  // - me 系: /mall/me/avatar
+  // - me 系(正): /mall/me/avatars
   // - create 系(正): POST /mall/avatars
   // ===========================================================================
 
@@ -319,7 +319,7 @@ class AvatarApiClient {
 
   /// ✅ me avatar（avatar patch 全体）
   Future<MeAvatar?> fetchMeAvatar() async {
-    const p = '/mall/me/avatar';
+    const p = '/mall/me/avatars';
 
     final unwrapped = await _getAuthedJson(p);
     if (unwrapped == null) {
@@ -396,13 +396,13 @@ class AvatarApiClient {
     return _parseMeAvatarStrict(unwrapped, path: p);
   }
 
-  /// ✅ UPDATE (編集) PATCH /mall/me/avatar
+  /// ✅ UPDATE (編集) PATCH /mall/me/avatars
   Future<MeAvatar> patchMeAvatar(Map<String, dynamic> patch) async {
-    const p = '/mall/me/avatar';
+    const p = '/mall/me/avatars';
 
     if (patch.containsKey('avatarIcon')) {
       throw AvatarApiException(
-        'avatarIcon is not allowed in PATCH /mall/me/avatar (icon ops are separate)',
+        'avatarIcon is not allowed in PATCH /mall/me/avatars (icon ops are separate)',
         path: p,
         body: jsonEncode(patch),
       );
@@ -446,7 +446,323 @@ class AvatarApiClient {
     return _parseMeAvatarStrict(unwrapped, path: p);
   }
 
+  // ===========================================================================
+  // ✅ Icon upload (A) : /mall/avatars/{id}/icon-upload-url + /mall/avatars/{id}/icon
+  // ===========================================================================
+
+  /// ✅ /mall/avatars/{avatarId}/icon-upload-url
+  /// Backend returns:
+  /// {
+  ///   "uploadUrl": "...",
+  ///   "bucket": "...",
+  ///   "objectPath": "...",
+  ///   "gsUrl": "gs://.../... ",
+  ///   "expiresAt": "....Z"
+  /// }
+  ///
+  /// ※ publicUrl は backend に無いのでクライアントで生成して返す（VMの修正最小化）
+  Future<AvatarIconUploadUrl> issueAvatarIconUploadUrl({
+    required String avatarId,
+    String? fileName,
+    required String mimeType,
+    required int size,
+  }) async {
+    final aid = avatarId.trim();
+    if (aid.isEmpty) throw ArgumentError('avatarId is empty');
+
+    final p = '/mall/avatars/$aid/icon-upload-url';
+
+    final mt = mimeType.trim();
+    final fn = (fileName ?? '').trim();
+
+    final body = <String, dynamic>{
+      if (fn.isNotEmpty) 'fileName': fn,
+      'mimeType': mt.isEmpty ? 'application/octet-stream' : mt,
+      'size': size,
+    };
+
+    _log('POST start payload=$body', path: p);
+
+    final unwrapped = await _authedJson(p, method: 'POST', jsonBody: body);
+    if (unwrapped == null) {
+      throw AvatarApiException('Empty response (expected uploadUrl)', path: p);
+    }
+
+    _log('POST done keys=${unwrapped.keys.toList()}', path: p);
+
+    final dto = AvatarIconUploadUrl.fromJson(unwrapped);
+
+    _log(
+      'issueAvatarIconUploadUrl ok '
+      'bucket="${dto.bucket}" objectPath="${dto.objectPath}" '
+      'expiresAt="${dto.expiresAt ?? ""}" publicUrl="${dto.publicUrl}"',
+      path: p,
+    );
+
+    return dto;
+  }
+
+  /// ✅ /mall/avatars/{avatarId}/icon
+  /// body:
+  /// { bucket, objectPath, fileName?, size? }
+  /// resp:
+  /// { id, avatarId?, url, fileName?, size? }
+  Future<AvatarIconResponse> registerAvatarIcon({
+    required String avatarId,
+    required String bucket,
+    required String objectPath,
+    String? fileName,
+    int? size,
+  }) async {
+    final aid = avatarId.trim();
+    if (aid.isEmpty) throw ArgumentError('avatarId is empty');
+
+    final p = '/mall/avatars/$aid/icon';
+
+    final b = bucket.trim();
+    final obj = objectPath.trim();
+
+    if (b.isEmpty) throw ArgumentError('bucket is empty');
+    if (obj.isEmpty) throw ArgumentError('objectPath is empty');
+
+    final fn = (fileName ?? '').trim();
+
+    final body = <String, dynamic>{
+      'bucket': b,
+      'objectPath': obj,
+      if (fn.isNotEmpty) 'fileName': fn,
+      if (size != null) 'size': size,
+    };
+
+    _log('POST start payload=$body', path: p);
+
+    final unwrapped = await _authedJson(p, method: 'POST', jsonBody: body);
+    if (unwrapped == null) {
+      throw AvatarApiException('Empty response (expected icon json)', path: p);
+    }
+
+    final dto = AvatarIconResponse.fromJson(unwrapped);
+
+    _log('registerAvatarIcon ok iconId="${dto.id}" url="${dto.url}"', path: p);
+
+    return dto;
+  }
+
+  // ===========================================================================
+  // ✅ Icon upload (B) : /mall/me/avatars/icon-upload-url (既存)
+  // ===========================================================================
+
+  Future<MeAvatarIconUploadUrl> issueMeAvatarIconUploadUrl({
+    required String mimeType,
+    required int size,
+  }) async {
+    const p = '/mall/me/avatars/icon-upload-url';
+
+    final mt = mimeType.trim();
+    final body = <String, dynamic>{
+      'mimeType': mt.isEmpty ? 'application/octet-stream' : mt,
+      'size': size,
+    };
+
+    _log('POST start payload=$body', path: p);
+
+    final unwrapped = await _authedJson(p, method: 'POST', jsonBody: body);
+
+    if (unwrapped == null) {
+      throw AvatarApiException('Empty response (expected uploadUrl)', path: p);
+    }
+
+    _log('POST done keys=${unwrapped.keys.toList()}', path: p);
+
+    final dto = MeAvatarIconUploadUrl.fromJson(unwrapped);
+
+    _log(
+      'issueMeAvatarIconUploadUrl ok '
+      'publicUrl="${dto.publicUrl}" '
+      'expiresAt="${dto.expiresAt ?? ""}" '
+      'contentType="${dto.contentType ?? ""}"',
+      path: p,
+    );
+
+    return dto;
+  }
+
+  Future<void> uploadToSignedUrl({
+    required String uploadUrl,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final u = uploadUrl.trim();
+    if (u.isEmpty) throw ArgumentError('uploadUrl is empty');
+    if (bytes.isEmpty) throw ArgumentError('bytes is empty');
+
+    final uri = Uri.parse(u);
+    final ct = contentType.trim().isEmpty
+        ? 'application/octet-stream'
+        : contentType.trim();
+
+    _log('PUT start signedUrl=$uri bytesLen=${bytes.length} contentType="$ct"');
+
+    http.Response res;
+    try {
+      res = await http.put(
+        uri,
+        headers: <String, String>{'Content-Type': ct},
+        body: bytes,
+      );
+    } catch (e) {
+      _log('PUT failed err=$e');
+      throw AvatarApiException('Signed URL PUT failed', cause: e);
+    }
+
+    _log(
+      'PUT done status=${res.statusCode} bodyLen=${res.body.length} bodyHead="${_short(res.body)}"',
+    );
+
+    if (!_is2xx(res.statusCode)) {
+      throw AvatarApiException(
+        'Signed URL PUT non-2xx',
+        statusCode: res.statusCode,
+        body: res.body,
+      );
+    }
+  }
+
   void dispose() {
     _api.dispose();
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// DTO: /mall/me/avatars/icon-upload-url response
+/// ※ 現状コード互換のため残しています（フィールド publicUrl は backend次第）
+/// ---------------------------------------------------------------------------
+@immutable
+class MeAvatarIconUploadUrl {
+  const MeAvatarIconUploadUrl({
+    required this.uploadUrl,
+    required this.bucket,
+    required this.objectPath,
+    required this.gsUrl,
+    required this.publicUrl,
+    this.expiresAt,
+    this.contentType,
+  });
+
+  final String uploadUrl;
+  final String bucket;
+  final String objectPath;
+  final String gsUrl;
+  final String publicUrl;
+
+  final String? expiresAt;
+  final String? contentType;
+
+  static String _s(Object? v) => (v ?? '').toString().trim();
+  static String? _optS(Object? v) {
+    final s = _s(v);
+    return s.isEmpty ? null : s;
+  }
+
+  factory MeAvatarIconUploadUrl.fromJson(Map<String, dynamic> json) {
+    return MeAvatarIconUploadUrl(
+      uploadUrl: _s(json['uploadUrl']),
+      bucket: _s(json['bucket']),
+      objectPath: _s(json['objectPath']),
+      gsUrl: _s(json['gsUrl']),
+      publicUrl: _s(json['publicUrl']),
+      expiresAt: _optS(json['expiresAt']),
+      contentType: _optS(json['contentType']),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// DTO: /mall/avatars/{id}/icon-upload-url response
+/// backendに publicUrl が無いのでクライアントで生成する
+/// ---------------------------------------------------------------------------
+@immutable
+class AvatarIconUploadUrl {
+  const AvatarIconUploadUrl({
+    required this.uploadUrl,
+    required this.bucket,
+    required this.objectPath,
+    required this.gsUrl,
+    this.expiresAt,
+  });
+
+  final String uploadUrl;
+  final String bucket;
+  final String objectPath;
+  final String gsUrl;
+  final String? expiresAt;
+
+  /// ✅ VM互換用：public URL をクライアントで合成
+  String get publicUrl {
+    final b = bucket.trim();
+    final o = objectPath.trim();
+    if (b.isEmpty || o.isEmpty) return '';
+    return 'https://storage.googleapis.com/$b/$o';
+  }
+
+  static String _s(Object? v) => (v ?? '').toString().trim();
+  static String? _optS(Object? v) {
+    final s = _s(v);
+    return s.isEmpty ? null : s;
+  }
+
+  factory AvatarIconUploadUrl.fromJson(Map<String, dynamic> json) {
+    return AvatarIconUploadUrl(
+      uploadUrl: _s(json['uploadUrl']),
+      bucket: _s(json['bucket']),
+      objectPath: _s(json['objectPath']),
+      gsUrl: _s(json['gsUrl']),
+      expiresAt: _optS(json['expiresAt']),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// DTO: /mall/avatars/{id}/icon response
+/// { id, avatarId?, url, fileName?, size? }
+/// ---------------------------------------------------------------------------
+@immutable
+class AvatarIconResponse {
+  const AvatarIconResponse({
+    required this.id,
+    required this.url,
+    this.avatarId,
+    this.fileName,
+    this.size,
+  });
+
+  final String id;
+  final String url;
+  final String? avatarId;
+  final String? fileName;
+  final int? size;
+
+  static String _s(Object? v) => (v ?? '').toString().trim();
+  static String? _optS(Object? v) {
+    final s = _s(v);
+    return s.isEmpty ? null : s;
+  }
+
+  static int? _optInt(Object? v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    final s = _s(v);
+    return int.tryParse(s);
+  }
+
+  factory AvatarIconResponse.fromJson(Map<String, dynamic> json) {
+    return AvatarIconResponse(
+      id: _s(json['id']),
+      avatarId: _optS(json['avatarId']),
+      url: _s(json['url']),
+      fileName: _optS(json['fileName']),
+      size: _optInt(json['size']),
+    );
   }
 }

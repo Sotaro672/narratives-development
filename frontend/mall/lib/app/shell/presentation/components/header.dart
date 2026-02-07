@@ -2,8 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../routing/routes.dart';
-import '../../../routing/navigation.dart';
+// ✅ import は package: に統一（相対 import 混在で store が二重化するのを防ぐ）
+import 'package:mall/app/routing/routes.dart';
+import 'package:mall/app/routing/navigation.dart';
+import 'package:mall/app/routing/avatar_name_store.dart';
 
 /// Minimal header for Mall.
 ///
@@ -11,6 +13,9 @@ import '../../../routing/navigation.dart';
 /// - URL の `from` には依存しない（decode/restore しない）
 /// - 戻り先は「履歴(pop)」を最優先し、履歴がなければ NavStore の returnTo を使う
 /// - それもなければ backTo へ
+///
+/// ✅ Solution A:
+/// - Header 自身が AvatarNameStore を listen して、/avatar のタイトルを動的に差し替える
 class AppHeader extends StatelessWidget {
   const AppHeader({
     super.key,
@@ -62,11 +67,26 @@ class AppHeader extends StatelessWidget {
     context.go(b);
   }
 
+  String _fallbackTitleText() {
+    final t = (title ?? '').trim();
+    return t.isNotEmpty ? t : 'Mall';
+  }
+
+  /// ✅ /avatar の時だけ store を最優先してタイトルを決める
+  String _resolveHeaderTitleFor(BuildContext context) {
+    final loc = GoRouterState.of(context).uri.path;
+    final fallback = _fallbackTitleText();
+
+    if (loc == AppRoutePath.avatar) {
+      final bn = AvatarNameStore.I.avatarName.trim();
+      if (bn.isNotEmpty) return bn;
+    }
+
+    return fallback;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final t = (title ?? '').trim();
-    final titleText = t.isNotEmpty ? t : 'Mall';
-
     return Material(
       color: Theme.of(context).cardColor,
       elevation: 0,
@@ -98,11 +118,20 @@ class AppHeader extends StatelessWidget {
                 onTap: onTapTitle,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    titleText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
+
+                  // ✅ store の変更でここだけ確実に rebuild する
+                  child: ListenableBuilder(
+                    listenable: AvatarNameStore.I,
+                    builder: (context, _) {
+                      final titleText = _resolveHeaderTitleFor(context);
+
+                      return Text(
+                        titleText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      );
+                    },
                   ),
                 ),
               ),

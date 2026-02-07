@@ -98,46 +98,12 @@ func parseIntDefault(s string, def int) int {
 	return n
 }
 
-// helpers (PII漏洩を避けるため短く)
-func headString(b []byte, max int) string {
-	if len(b) == 0 {
-		return ""
-	}
-	if len(b) > max {
-		b = b[:max]
-	}
-	s := string(b)
-	s = strings.ReplaceAll(s, "\n", "\\n")
-	s = strings.ReplaceAll(s, "\r", "\\r")
-	return s
-}
-
-// trimPtr: shared
-func trimPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
 // ptrStr: shared
 func ptrStr(p *string) string {
 	if p == nil {
 		return ""
 	}
 	return strings.TrimSpace(*p)
-}
-
-// ptrLen: shared (rune length)
-func ptrLen(p *string) int {
-	if p == nil {
-		return 0
-	}
-	return len([]rune(strings.TrimSpace(*p)))
 }
 
 // maskUID: shared (Firebase UID をそのまま出さない)

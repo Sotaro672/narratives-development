@@ -35,7 +35,7 @@ class AvatarRepositoryHttp {
 
   /// GET /mall/me/avatar
   Future<MeAvatarDTO> getMe() async {
-    final uri = _api.uri('/mall/me/avatar');
+    final uri = _api.uri('/mall/me/avatars');
 
     if (kDebugMode) {
       debugPrint('[AvatarRepositoryHttp] GET $uri');
@@ -45,7 +45,7 @@ class AvatarRepositoryHttp {
 
     if (kDebugMode) {
       debugPrint(
-        '[AvatarRepositoryHttp] GET /mall/me/avatar status=${res.statusCode} bodyLen=${res.body.length}',
+        '[AvatarRepositoryHttp] GET /mall/me/avatars status=${res.statusCode} bodyLen=${res.body.length}',
       );
       // body 全文は長い/機微になりがちなので、先頭だけ
       final head = res.body.length > 240
@@ -101,7 +101,7 @@ class AvatarRepositoryHttp {
   ///
   /// Backend may return empty body -> then call getMe() to re-fetch.
   Future<MeAvatarDTO> updateMe({required UpdateMeAvatarRequest request}) async {
-    final uri = _api.uri('/mall/me/avatar');
+    final uri = _api.uri('/mall/me/avatars');
     final payload = request.toJson();
 
     if (kDebugMode) {
@@ -374,7 +374,7 @@ DateTime? _parseOptDateTime(Object? v) {
   }
 }
 
-/// ✅ DTO for /mall/me/avatar
+/// ✅ DTO for /mall/me/avatars
 @immutable
 class MeAvatarDTO {
   const MeAvatarDTO({

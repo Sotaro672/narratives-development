@@ -43,9 +43,22 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
         _log('submitCreate start payload=$payload');
 
         // POST /mall/avatars
-        await _api.createAvatar(payload);
+        final created = await _api.createAvatar(payload);
 
-        _log('submitCreate done');
+        // ✅ avatarId が non-nullable なら ?? は不要
+        final avatarId = created.avatarId.trim();
+        if (avatarId.isEmpty) {
+          throw AvatarApiException(
+            'Create succeeded but avatarId is empty',
+            path: '/mall/avatars',
+            body: payload.toString(),
+          );
+        }
+
+        _log('submitCreate done avatarId=$avatarId');
+
+        // ✅ AvatarFormVm.save() の契約: FutureOr<String> を返す
+        return avatarId;
       },
     );
 

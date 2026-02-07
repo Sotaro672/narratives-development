@@ -158,12 +158,8 @@ func Register(mux *http.ServeMux, deps Deps) {
 	// avatars
 	handleSafe(mux, "/mall/avatars", deps.Avatar, "Avatar")
 	handleSafe(mux, "/mall/avatars/", deps.Avatar, "Avatar")
-	handleSafe(mux, "/mall/me/avatars", deps.Avatar, "Avatar(me)")
-	handleSafe(mux, "/mall/me/avatars/", deps.Avatar, "Avatar(me)")
-
-	// me avatar (single endpoint)
-	handleSafe(mux, "/mall/me/avatar", deps.MeAvatar, "MeAvatar")
-	handleSafe(mux, "/mall/me/avatar/", deps.MeAvatar, "MeAvatar")
+	handleSafe(mux, "/mall/me/avatars", deps.MeAvatar, "MeAvatar")
+	handleSafe(mux, "/mall/me/avatars/", deps.MeAvatar, "MeAvatar")
 
 	// avatar states
 	handleSafe(mux, "/mall/me/avatar-states", deps.AvatarState, "AvatarState(me)")

@@ -1,5 +1,6 @@
 // frontend/mall/lib/app/routing/app_scaffold_meta.dart
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
 // ✅ import は package: に統一（相対 import 混在で store が二重化するのを防ぐ）
@@ -18,6 +19,14 @@ bool resolveShowBackFor(GoRouterState state) {
 
 String? resolveTitleFor(GoRouterState state) {
   final loc = state.uri.path;
+
+  // ✅ DEBUG: resolveTitleFor が呼ばれているか確認
+  final storeName = AvatarNameStore.I.avatarName.trim();
+  debugPrint(
+    '[meta] resolveTitleFor() loc="$loc" store.avatarName="$storeName"',
+  );
+  // ignore: avoid_print
+  print('[meta] resolveTitleFor() loc="$loc" store.avatarName="$storeName"');
 
   if (loc == AppRoutePath.home) return null;
   if (loc.startsWith('/catalog/')) return 'Catalog';
@@ -63,23 +72,60 @@ bool _isReservedTopSegment(String seg) {
 }
 
 String _avatarNameForHeader() {
+  // ✅ DEBUG: _avatarNameForHeader が呼ばれているか確認
+  final storeName = AvatarNameStore.I.avatarName.trim();
+  debugPrint('[meta] _avatarNameForHeader() store.avatarName="$storeName"');
+  // ignore: avoid_print
+  print('[meta] _avatarNameForHeader() store.avatarName="$storeName"');
+
   // ✅ 1) Backend (/mall/me/avatar) resolved name (highest priority)
-  final bn = AvatarNameStore.I.avatarName.trim();
-  if (bn.isNotEmpty) return bn;
+  final bn = storeName;
+  if (bn.isNotEmpty) {
+    debugPrint('[meta] _avatarNameForHeader() -> use store "$bn"');
+    // ignore: avoid_print
+    print('[meta] _avatarNameForHeader() -> use store "$bn"');
+    return bn;
+  }
 
   // ✅ 2) Fallback: FirebaseAuth (legacy behavior)
   final u = FirebaseAuth.instance.currentUser;
-  if (u == null) return 'Profile';
+  if (u == null) {
+    debugPrint(
+      '[meta] _avatarNameForHeader() -> fallback "Profile" (user=null)',
+    );
+    // ignore: avoid_print
+    print('[meta] _avatarNameForHeader() -> fallback "Profile" (user=null)');
+    return 'Profile';
+  }
 
   final dn = (u.displayName ?? '').trim();
-  if (dn.isNotEmpty) return dn;
+  if (dn.isNotEmpty) {
+    debugPrint('[meta] _avatarNameForHeader() -> fallback displayName="$dn"');
+    // ignore: avoid_print
+    print('[meta] _avatarNameForHeader() -> fallback displayName="$dn"');
+    return dn;
+  }
 
   final email = (u.email ?? '').trim();
   if (email.isNotEmpty) {
     final i = email.indexOf('@');
-    if (i > 0) return email.substring(0, i);
-    return email;
+    final out = (i > 0) ? email.substring(0, i) : email;
+    debugPrint(
+      '[meta] _avatarNameForHeader() -> fallback email="$out" (raw="$email")',
+    );
+    // ignore: avoid_print
+    print(
+      '[meta] _avatarNameForHeader() -> fallback email="$out" (raw="$email")',
+    );
+    return out;
   }
 
+  debugPrint(
+    '[meta] _avatarNameForHeader() -> fallback "My Profile" (no displayName/email)',
+  );
+  // ignore: avoid_print
+  print(
+    '[meta] _avatarNameForHeader() -> fallback "My Profile" (no displayName/email)',
+  );
   return 'My Profile';
 }

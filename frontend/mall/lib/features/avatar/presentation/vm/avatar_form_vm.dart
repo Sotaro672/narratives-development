@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\avatar\presentation\vm\avatar_form_vm.dart
+// frontend/mall/lib/features/avatar/presentation/vm/avatar_form_vm.dart
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -87,10 +87,12 @@ class AvatarPatchRequest {
 }
 
 typedef AvatarPatchSubmitter = Future<void> Function(AvatarPatchRequest patch);
-typedef AvatarCreateSubmitter = Future<void> Function(AvatarCreateRequest body);
+
+/// ✅ create は avatarId を返す（/mall/avatars/{id}/icon-upload-url を叩くために必要）
+typedef AvatarCreateSubmitter =
+    Future<String> Function(AvatarCreateRequest body);
 
 /// ✅ 既存アイコン実体削除（GCS object delete）を差し込むための型
-/// - 例: () => apiClient.deleteMeAvatarIconObject()
 typedef AvatarDeleteIconObject = Future<void> Function();
 
 class AvatarFormVm extends ChangeNotifier {
@@ -100,7 +102,13 @@ class AvatarFormVm extends ChangeNotifier {
     AvatarPatchSubmitter? submitPatch,
     AvatarCreateSubmitter? submitCreate,
     AvatarDeleteIconObject? deleteIconObject,
-  }) : _apiClient = apiClient ?? AvatarApiClient(),
+    this.enableLogging = true,
+  }) : _apiClient =
+           apiClient ??
+           AvatarApiClient(
+             enableLogging: true,
+             logger: (m) => debugPrint('[AvatarApiClient] $m'),
+           ),
        _submitPatch = submitPatch,
        _submitCreate = submitCreate,
        _deleteIconObject = deleteIconObject;
@@ -111,9 +119,17 @@ class AvatarFormVm extends ChangeNotifier {
   final AvatarPatchSubmitter? _submitPatch;
   final AvatarCreateSubmitter? _submitCreate;
 
-  /// ✅ 任意: 画面/上位層から DI される「既存アイコン実体削除」処理
-  /// - AvatarApiClient に deleteMeAvatarIconObject() が無くても VM はコンパイルできる
   final AvatarDeleteIconObject? _deleteIconObject;
+
+  final bool enableLogging;
+
+  void _log(String msg) {
+    if (!enableLogging) return;
+    final out = '[AvatarFormVm] $msg';
+    // ignore: avoid_print
+    print(out);
+    debugPrint(out);
+  }
 
   // form controllers
   final nameCtrl = TextEditingController();
@@ -141,6 +157,8 @@ class AvatarFormVm extends ChangeNotifier {
   String _initialProfile = '';
   String _initialExternalLink = '';
 
+  /// ✅ edit: 事前ロードで確定する avatarId
+  /// ✅ create: submitCreate の戻り値で確定する avatarId
   String _meAvatarId = '';
 
   String? msg;
@@ -169,6 +187,111 @@ class AvatarFormVm extends ChangeNotifier {
 
   bool get needsIconUpload => iconBytes != null && iconBytes!.isNotEmpty;
 
+  String _guessMimeType(String? fileName) {
+    final n = (fileName ?? '').trim().toLowerCase();
+    if (n.endsWith('.png')) return 'image/png';
+    if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'image/jpeg';
+    if (n.endsWith('.webp')) return 'image/webp';
+    if (n.endsWith('.gif')) return 'image/gif';
+    return 'application/octet-stream';
+  }
+
+  /// ✅ /mall/avatars/{id}/icon-upload-url を叩くため、avatarId を必須にする
+  Future<void> _uploadIconIfNeeded({
+    required String phase,
+    required String avatarId,
+  }) async {
+    if (!needsIconUpload) {
+      _log('[$phase] icon upload skipped (no bytes)');
+      return;
+    }
+
+    final aid = _s(avatarId);
+    if (aid.isEmpty) {
+      throw StateError(
+        '[$phase] avatarId is empty; cannot issue icon upload url.',
+      );
+    }
+
+    final bytes = iconBytes!;
+    final fn = _s(iconFileName);
+    final mimeType = _guessMimeType(fn.isEmpty ? null : fn);
+
+    _log(
+      '[$phase] icon upload start avatarId="$aid" bytesLen=${bytes.length} fileName="$fn" mimeType="$mimeType"',
+    );
+
+    try {
+      // 1) 署名付きURL発行
+      final issued = await _apiClient.issueAvatarIconUploadUrl(
+        avatarId: aid,
+        mimeType: mimeType,
+        size: bytes.length,
+        fileName: fn.isEmpty ? null : fn,
+      );
+
+      _log(
+        '[$phase] icon-upload-url issued bucket="${issued.bucket}" objectPath="${issued.objectPath}" '
+        'uploadUrlHead="${issued.uploadUrl.substring(0, issued.uploadUrl.length > 48 ? 48 : issued.uploadUrl.length)}"',
+      );
+
+      // 2) GCS PUT
+      await _apiClient.uploadToSignedUrl(
+        uploadUrl: issued.uploadUrl,
+        bytes: bytes,
+        contentType: mimeType,
+      );
+
+      _log('[$phase] icon PUT done');
+
+      // 3) (任意) DB登録API
+      //    ※いま backend は /mall/avatars/{id}/icon が 404 なので、404なら「登録スキップ」で成功扱いにする
+      String finalUrl = _s(issued.publicUrl);
+
+      try {
+        _log('[$phase] registering icon (optional)');
+        final registered = await _apiClient.registerAvatarIcon(
+          avatarId: aid,
+          bucket: issued.bucket,
+          objectPath: issued.objectPath,
+          fileName: fn.isEmpty ? null : fn,
+          size: bytes.length,
+        );
+
+        final regUrl = _s(registered.url);
+        if (_isHttpUrl(regUrl)) {
+          finalUrl = regUrl;
+        }
+
+        _log('[$phase] icon register done url="$finalUrl"');
+      } on AvatarApiException catch (e) {
+        // ✅ ここが今回のポイント：404は「エンドポイント未実装」なので落とさない
+        if (e.statusCode == 404) {
+          _log(
+            '[$phase] register endpoint not found (404). skip register. use publicUrl="$finalUrl"',
+          );
+        } else {
+          rethrow;
+        }
+      }
+
+      if (_isHttpUrl(finalUrl)) {
+        existingAvatarIconUrl = finalUrl;
+        setUploadedAvatarIconUrl(finalUrl);
+      }
+
+      msg = '画像をアップロードしました。';
+      isSuccessMessage = true;
+    } catch (e) {
+      _log('[$phase] icon upload failed err="$e"');
+      isSuccessMessage = false;
+      msg = '画像アップロードに失敗しました: $e';
+      rethrow;
+    }
+  }
+
+  /// edit の初期ロード（あなたの現状だと /mall/me/avatar が 404 のため、
+  /// ここは別途 AvatarApiClient.fetchMyAvatarProfile の実装/エンドポイント整合が必要です）
   Future<void> loadInitialIfNeeded() async {
     if (mode != AvatarFormMode.edit) return;
     if (_initialLoaded) return;
@@ -179,10 +302,12 @@ class AvatarFormVm extends ChangeNotifier {
     notifyListeners();
 
     try {
+      _log('loadInitialIfNeeded start');
       final dto = await _apiClient.fetchMyAvatarProfile();
 
       final aid = _s(dto?.avatarId);
       if (dto == null || aid.isEmpty) {
+        _log('loadInitialIfNeeded: dto null or avatarId empty');
         return;
       }
 
@@ -215,7 +340,14 @@ class AvatarFormVm extends ChangeNotifier {
       _initialExternalLink = _s(linkCtrl.text);
 
       _initialLoaded = true;
-    } catch (_) {
+
+      _log(
+        'loadInitialIfNeeded done meAvatarId="$_meAvatarId" '
+        'avatarName="$_initialAvatarName" profileLen=${_initialProfile.length} '
+        'existingAvatarIconUrl="${_s(existingAvatarIconUrl)}"',
+      );
+    } catch (e) {
+      _log('loadInitialIfNeeded failed err="$e"');
       // fail-open
     } finally {
       loadingInitial = false;
@@ -241,6 +373,8 @@ class AvatarFormVm extends ChangeNotifier {
 
       iconBytes = bytes;
       iconFileName = _s(f.name);
+
+      _log('pickIcon ok fileName="$iconFileName" bytesLen=${bytes.length}');
       notifyListeners();
     } catch (e) {
       msg = '画像の選択に失敗しました: $e';
@@ -256,10 +390,6 @@ class AvatarFormVm extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ✅ 推奨B: 既存画像を削除する（DB の avatarIcon 文字列は変更しない）
-  ///
-  /// - 画面/上位層から deleteIconObject を DI して実行する
-  /// - 例: AvatarFormVm(deleteIconObject: () => apiClient.deleteMeAvatarIconObject())
   Future<void> deleteExistingIconObject() async {
     if (mode != AvatarFormMode.edit) return;
 
@@ -349,11 +479,9 @@ class AvatarFormVm extends ChangeNotifier {
     if (name != _initialAvatarName) {
       patchName = name;
     }
-
     if (profile != _initialProfile) {
       patchProfile = profile;
     }
-
     if (link != _initialExternalLink) {
       patchLink = link;
     }
@@ -405,13 +533,25 @@ class AvatarFormVm extends ChangeNotifier {
           );
         }
 
-        await submit(body);
+        _log('save(create) submit start body=$body');
+
+        final createdAvatarId = _s(await submit(body));
+        _log('save(create) submit done avatarId="$createdAvatarId"');
+
+        if (createdAvatarId.isEmpty) {
+          throw StateError('create succeeded but avatarId is empty.');
+        }
+
+        _meAvatarId = createdAvatarId;
+
+        await _uploadIconIfNeeded(phase: 'create', avatarId: createdAvatarId);
 
         isSuccessMessage = true;
         msg = 'アバターを保存しました。';
         return true;
       }
 
+      // edit
       final patch = buildPatchRequest();
       lastBuiltPatch = patch;
 
@@ -422,13 +562,25 @@ class AvatarFormVm extends ChangeNotifier {
         );
       }
 
+      if (needsIconUpload) {
+        await _uploadIconIfNeeded(phase: 'edit', avatarId: _meAvatarId);
+      }
+
       if (patch.isEmpty) {
+        if (needsIconUpload) {
+          isSuccessMessage = true;
+          msg = '画像を更新しました。';
+          return true;
+        }
+
         isSuccessMessage = true;
         msg = '変更がありません。';
         return true;
       }
 
+      _log('save(edit) submit start patch=$patch');
       await submit(patch);
+      _log('save(edit) submit done');
 
       _initialAvatarName = _s(nameCtrl.text);
       _initialProfile = _s(profileCtrl.text);

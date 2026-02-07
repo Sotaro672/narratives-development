@@ -13,6 +13,7 @@ import (
 
 	mallhttp "narratives/internal/adapters/in/http/mall"
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
+	avatarHandler "narratives/internal/adapters/in/http/mall/handler/avatar"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
 	"narratives/internal/application/usecase"
@@ -428,7 +429,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Avatar（/mall/avatars）
 	if cont.AvatarUC != nil {
-		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC)
+		avatarH = avatarHandler.NewAvatarHandler(cont.AvatarUC)
 	}
 
 	// ✅ Wallet（旧式互換削除: AvatarUC は渡さない）

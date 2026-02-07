@@ -34,8 +34,8 @@ import '../../features/auth/presentation/page/avatar_create.dart'
     as auth_avatar;
 
 // header meta/actions（router.dart から分離済み前提）
-import 'app_scaffold_meta.dart';
-import 'header/header_actions.dart';
+import 'package:mall/app/routing/app_scaffold_meta.dart';
+import 'package:mall/app/routing/header/header_actions.dart';
 
 /// ------------------------------------------------------------
 /// ✅ /:productId が “固定パス” と衝突した時の安全弁（念のため）

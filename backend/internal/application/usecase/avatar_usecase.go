@@ -4,6 +4,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -469,6 +470,9 @@ type ReplaceIconInput struct {
 	Size       *int64
 }
 
+// ✅ 推奨（最小変更）:
+// - avatars.avatarIcon に gs://bucket/objectPath を保存（= objectPath を含めて保存）
+// - アイコンメタデータ（icons 側）はこれまで通り保存
 func (u *AvatarUsecase) ReplaceAvatarIcon(ctx context.Context, avatarID string, in ReplaceIconInput) (avataricon.AvatarIcon, error) {
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
@@ -504,6 +508,25 @@ func (u *AvatarUsecase) ReplaceAvatarIcon(ctx context.Context, avatarID string, 
 	saved, err := u.icRepo.Save(ctx, newIcon, nil)
 	if err != nil {
 		return avataricon.AvatarIcon{}, err
+	}
+
+	// ✅ avatars.avatarIcon を更新（推奨: usecase で保証）
+	// - gs://bucket/objectPath を保存（objectPath を含めて保存）
+	// - ここは best-effort（icons 保存は成功しているため）とする
+	if u.avRepo != nil {
+		b := strings.TrimSpace(in.Bucket)
+		obj := strings.TrimLeft(strings.TrimSpace(in.ObjectPath), "/")
+		if b != "" && obj != "" {
+			gs := fmt.Sprintf("gs://%s/%s", b, obj)
+			patch := avatardom.AvatarPatch{AvatarIcon: &gs}
+			if _, e := u.avRepo.Update(ctx, avatarID, patch); e != nil {
+				log.Printf("[avatar_uc] avatarIcon patch failed avatarId=%q gs=%q err=%v", avatarID, gs, e)
+			} else {
+				log.Printf("[avatar_uc] avatarIcon patched avatarId=%q gs=%q", avatarID, gs)
+			}
+		} else {
+			log.Printf("[avatar_uc] avatarIcon patch skipped (empty bucket/objectPath) avatarId=%q bucket=%q objectPath=%q", avatarID, b, obj)
+		}
 	}
 
 	// best-effort: GCS から古いオブジェクトのみ削除（メタデータ削除はRepo機能に依存）

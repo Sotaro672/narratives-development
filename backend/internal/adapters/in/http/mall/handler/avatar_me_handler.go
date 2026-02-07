@@ -29,13 +29,13 @@ import (
 // IMPORTANT (avatarIcon policy: Pattern1 / Recommended B):
 // - avatarIcon の「文字列(URL)」は原則固定（変えない）
 // - 画像実体の更新/削除は GCS object の overwrite / delete で行う
-// - PATCH /mall/me/avatar は avatarIcon を受け取っても DB 更新には使わない（フロントが送らない前提だが、受けても無害に捨てる）
+// - PATCH /mall/me/avatars は avatarIcon を受け取っても DB 更新には使わない（フロントが送らない前提だが、受けても無害に捨てる）
 //
-// Endpoints:
-// - GET    /mall/me/avatar
-// - PATCH  /mall/me/avatar                 (avatarName/profile/externalLink only; avatarIcon is ignored if present)
-// - POST   /mall/me/avatar/icon-upload-url (issue signed PUT url for FIXED objectPath derived from existing avatarIcon URL)
-// - DELETE /mall/me/avatar/icon-object     (delete GCS object ONLY; avatarIcon string remains)
+// Endpoints (primary only):
+// - GET    /mall/me/avatars
+// - PATCH  /mall/me/avatars                 (avatarName/profile/externalLink only; avatarIcon is ignored if present)
+// - POST   /mall/me/avatars/icon-upload-url (issue signed PUT url for FIXED objectPath derived from existing avatarIcon URL)
+// - DELETE /mall/me/avatars/icon-object     (delete GCS object ONLY; avatarIcon string remains)
 type MeAvatarService interface {
 	ResolveAvatarPatchByUID(ctx context.Context, uid string) (avatarId string, patch avatardom.AvatarPatch, err error)
 
@@ -53,9 +53,10 @@ func NewMeAvatarHandler(svc MeAvatarService) http.Handler {
 }
 
 const (
-	meAvatarPath           = "/mall/me/avatar"
-	meAvatarIconUploadPath = "/mall/me/avatar/icon-upload-url"
-	meAvatarIconObjectPath = "/mall/me/avatar/icon-object"
+	// primary
+	meAvatarsPath           = "/mall/me/avatars"
+	meAvatarsIconUploadPath = "/mall/me/avatars/icon-upload-url"
+	meAvatarsIconObjectPath = "/mall/me/avatars/icon-object"
 )
 
 func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -104,23 +105,23 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// routing inside this handler (me avatar + me icon ops)
 	// ------------------------------------------------------------------
 	switch {
-	// GET /mall/me/avatar
-	case r.Method == http.MethodGet && path0 == meAvatarPath:
+	// GET /mall/me/avatars
+	case r.Method == http.MethodGet && path0 == meAvatarsPath:
 		h.handleGet(w, r, uid)
 		return
 
-	// PATCH /mall/me/avatar
-	case r.Method == http.MethodPatch && path0 == meAvatarPath:
+	// PATCH /mall/me/avatars
+	case r.Method == http.MethodPatch && path0 == meAvatarsPath:
 		h.handlePatch(w, r, uid)
 		return
 
-	// POST /mall/me/avatar/icon-upload-url  (issue signed PUT url for FIXED objectPath)
-	case r.Method == http.MethodPost && path0 == meAvatarIconUploadPath:
+	// POST /mall/me/avatars/icon-upload-url
+	case r.Method == http.MethodPost && path0 == meAvatarsIconUploadPath:
 		h.handleIssueIconUploadURL(w, r, uid)
 		return
 
-	// DELETE /mall/me/avatar/icon-object    (delete GCS object ONLY; avatarIcon string remains)
-	case r.Method == http.MethodDelete && path0 == meAvatarIconObjectPath:
+	// DELETE /mall/me/avatars/icon-object
+	case r.Method == http.MethodDelete && path0 == meAvatarsIconObjectPath:
 		h.handleDeleteIconObject(w, r, uid)
 		return
 
@@ -213,7 +214,7 @@ func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid 
 }
 
 func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, uid string) {
-	// PATCH /mall/me/avatar
+	// PATCH /mall/me/avatars
 	//
 	// Allowed:
 	// - avatarName
@@ -223,8 +224,8 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 	// avatarIcon:
 	// - Accepted for compatibility (Recommended B) BUT IGNORED (DB は更新しない)
 	// - Icon update/delete is done via:
-	//   - POST   /mall/me/avatar/icon-upload-url  (signed PUT for fixed objectPath)
-	//   - DELETE /mall/me/avatar/icon-object      (delete object only)
+	//   - POST   /mall/me/avatars/icon-upload-url  (signed PUT for fixed objectPath)
+	//   - DELETE /mall/me/avatars/icon-object      (delete object only)
 	type meAvatarUpdateRequest struct {
 		AvatarName   *string `json:"avatarName,omitempty"`
 		Profile      *string `json:"profile,omitempty"`
@@ -391,7 +392,7 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// POST /mall/me/avatar/icon-upload-url
+// POST /mall/me/avatars/icon-upload-url
 // - issues Signed URL (PUT) for FIXED objectPath derived from existing avatarIcon URL (DB).
 // - overwrites the same object so avatarIcon URL string can remain constant.
 func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *http.Request, uid string) {
@@ -422,7 +423,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 		iconURL = strings.TrimSpace(*patch.AvatarIcon)
 	}
 	if iconURL == "" {
-		log.Printf("[mall_me_avatar_handler] POST %s avatarIcon_not_set avatarId=%q uid=%q", meAvatarIconUploadPath, avatarId, maskUID(uid))
+		log.Printf("[mall_me_avatar_handler] POST %s avatarIcon_not_set avatarId=%q uid=%q", meAvatarsIconUploadPath, avatarId, maskUID(uid))
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_icon_not_set"})
 		return
@@ -431,7 +432,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 	// parse bucket/objectPath from existing avatarIcon url
 	bucket, objectPath, ok := parseBucketObjectFromAvatarIconURL(iconURL)
 	if !ok {
-		log.Printf("[mall_me_avatar_handler] POST %s invalid_avatarIcon_url avatarId=%q avatarIcon=%q", meAvatarIconUploadPath, avatarId, truncate(iconURL, 300))
+		log.Printf("[mall_me_avatar_handler] POST %s invalid_avatarIcon_url avatarId=%q avatarIcon=%q", meAvatarsIconUploadPath, avatarId, truncate(iconURL, 300))
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed_to_parse_avatar_icon_url"})
 		return
@@ -479,7 +480,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 	if credPath != "" {
 		email, pk, err := loadServiceAccountKey(credPath)
 		if err != nil {
-			log.Printf("[mall_me_avatar_handler] POST %s load key error=%v credPath=%q", meAvatarIconUploadPath, err, credPath)
+			log.Printf("[mall_me_avatar_handler] POST %s load key error=%v credPath=%q", meAvatarsIconUploadPath, err, credPath)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to load signer key"})
 			return
@@ -493,7 +494,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 			ContentType:    mimeType,
 		})
 		if err != nil {
-			log.Printf("[mall_me_avatar_handler] POST %s sign (keyfile) error=%v", meAvatarIconUploadPath, err)
+			log.Printf("[mall_me_avatar_handler] POST %s sign (keyfile) error=%v", meAvatarsIconUploadPath, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to sign url"})
 			return
@@ -501,7 +502,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 
 		log.Printf(
 			"[mall_me_avatar_handler] POST %s ok (keyfile) avatarId=%q bucket=%q objectPath=%q mimeType=%q size=%v",
-			meAvatarIconUploadPath, avatarId, bucket, objectPath, mimeType, body.Size,
+			meAvatarsIconUploadPath, avatarId, bucket, objectPath, mimeType, body.Size,
 		)
 
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -518,7 +519,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 
 	// B) IAM Credentials signing (Cloud Run)
 	if signerEmail == "" {
-		log.Printf("[mall_me_avatar_handler] POST %s missing signer email (set GCS_SIGNER_EMAIL)", meAvatarIconUploadPath)
+		log.Printf("[mall_me_avatar_handler] POST %s missing signer email (set GCS_SIGNER_EMAIL)", meAvatarsIconUploadPath)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing signer email (set GCS_SIGNER_EMAIL)"})
 		return
@@ -534,7 +535,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 		},
 	})
 	if err != nil {
-		log.Printf("[mall_me_avatar_handler] POST %s sign (iam) error=%v signer=%q bucket=%q objectPath=%q", meAvatarIconUploadPath, err, signerEmail, bucket, objectPath)
+		log.Printf("[mall_me_avatar_handler] POST %s sign (iam) error=%v signer=%q bucket=%q objectPath=%q", meAvatarsIconUploadPath, err, signerEmail, bucket, objectPath)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to sign url"})
 		return
@@ -542,7 +543,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 
 	log.Printf(
 		"[mall_me_avatar_handler] POST %s ok (iam) avatarId=%q signer=%q bucket=%q objectPath=%q mimeType=%q size=%v",
-		meAvatarIconUploadPath, avatarId, signerEmail, bucket, objectPath, mimeType, body.Size,
+		meAvatarsIconUploadPath, avatarId, signerEmail, bucket, objectPath, mimeType, body.Size,
 	)
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -556,7 +557,7 @@ func (h *MeAvatarHandler) handleIssueIconUploadURL(w http.ResponseWriter, r *htt
 	})
 }
 
-// DELETE /mall/me/avatar/icon-object
+// DELETE /mall/me/avatars/icon-object
 // - deletes ONLY the GCS object derived from existing avatarIcon URL (DB).
 // - does NOT update avatar.avatarIcon field (URL string remains).
 func (h *MeAvatarHandler) handleDeleteIconObject(w http.ResponseWriter, r *http.Request, uid string) {
@@ -585,14 +586,14 @@ func (h *MeAvatarHandler) handleDeleteIconObject(w http.ResponseWriter, r *http.
 		iconURL = strings.TrimSpace(*patch.AvatarIcon)
 	}
 	if iconURL == "" {
-		log.Printf("[mall_me_avatar_handler] DELETE %s avatarIcon_not_set ok avatarId=%q uid=%q", meAvatarIconObjectPath, avatarId, maskUID(uid))
+		log.Printf("[mall_me_avatar_handler] DELETE %s avatarIcon_not_set ok avatarId=%q uid=%q", meAvatarsIconObjectPath, avatarId, maskUID(uid))
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
 	bucket, objectPath, ok := parseBucketObjectFromAvatarIconURL(iconURL)
 	if !ok {
-		log.Printf("[mall_me_avatar_handler] DELETE %s invalid_avatarIcon_url avatarId=%q avatarIcon=%q", meAvatarIconObjectPath, avatarId, truncate(iconURL, 300))
+		log.Printf("[mall_me_avatar_handler] DELETE %s invalid_avatarIcon_url avatarId=%q avatarIcon=%q", meAvatarsIconObjectPath, avatarId, truncate(iconURL, 300))
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed_to_parse_avatar_icon_url"})
 		return
@@ -600,7 +601,7 @@ func (h *MeAvatarHandler) handleDeleteIconObject(w http.ResponseWriter, r *http.
 
 	c, err := storage.NewClient(ctx)
 	if err != nil {
-		log.Printf("[mall_me_avatar_handler] DELETE %s storage.NewClient failed avatarId=%q err=%v", meAvatarIconObjectPath, avatarId, err)
+		log.Printf("[mall_me_avatar_handler] DELETE %s storage.NewClient failed avatarId=%q err=%v", meAvatarsIconObjectPath, avatarId, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed_to_init_storage_client"})
 		return
@@ -611,18 +612,18 @@ func (h *MeAvatarHandler) handleDeleteIconObject(w http.ResponseWriter, r *http.
 	if err := obj.Delete(ctx); err != nil {
 		// treat "not exist" as OK (idempotent delete)
 		if errors.Is(err, storage.ErrObjectNotExist) {
-			log.Printf("[mall_me_avatar_handler] DELETE %s object_not_exist ok avatarId=%q bucket=%q objectPath=%q", meAvatarIconObjectPath, avatarId, bucket, objectPath)
+			log.Printf("[mall_me_avatar_handler] DELETE %s object_not_exist ok avatarId=%q bucket=%q objectPath=%q", meAvatarsIconObjectPath, avatarId, bucket, objectPath)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		log.Printf("[mall_me_avatar_handler] DELETE %s delete_failed avatarId=%q bucket=%q objectPath=%q err=%v", meAvatarIconObjectPath, avatarId, bucket, objectPath, err)
+		log.Printf("[mall_me_avatar_handler] DELETE %s delete_failed avatarId=%q bucket=%q objectPath=%q err=%v", meAvatarsIconObjectPath, avatarId, bucket, objectPath, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed_to_delete_object"})
 		return
 	}
 
-	log.Printf("[mall_me_avatar_handler] DELETE %s ok avatarId=%q bucket=%q objectPath=%q", meAvatarIconObjectPath, avatarId, bucket, objectPath)
+	log.Printf("[mall_me_avatar_handler] DELETE %s ok avatarId=%q bucket=%q objectPath=%q", meAvatarsIconObjectPath, avatarId, bucket, objectPath)
 	w.WriteHeader(http.StatusNoContent)
 }
 
