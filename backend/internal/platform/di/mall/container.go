@@ -16,6 +16,9 @@ import (
 	// ✅ base usecases
 	usecase "narratives/internal/application/usecase"
 
+	// ✅ moved: AvatarUsecase is now in subpackage usecase/avatar
+	avataruc "narratives/internal/application/usecase/avatar"
+
 	// ✅ moved: ListUsecase is now in subpackage usecase/list
 	listuc "narratives/internal/application/usecase/list"
 
@@ -52,8 +55,8 @@ type Container struct {
 	Infra *shared.Infra
 
 	// Usecases (mall-facing)
-	AvatarUC          *usecase.AvatarUsecase // ✅ /mall/avatars 用
-	ListUC            *listuc.ListUsecase    // ✅ moved to usecase/list
+	AvatarUC          *avataruc.AvatarUsecase // ✅ /mall/avatars 用（moved）
+	ListUC            *listuc.ListUsecase     // ✅ moved to usecase/list
 	ShippingAddressUC *usecase.ShippingAddressUsecase
 	BillingAddressUC  *usecase.BillingAddressUsecase
 	UserUC            *usecase.UserUsecase
@@ -220,7 +223,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// --------------------------------------------------------
 
 	// ✅ AvatarUsecase: cartRepo / walletRepo / walletSvc を必ず注入
-	c.AvatarUC = usecase.NewAvatarUsecase(
+	c.AvatarUC = avataruc.NewAvatarUsecase(
 		avatarRepo,
 		avatarStateRepo,
 		avatarIconRepo,

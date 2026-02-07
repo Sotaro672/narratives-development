@@ -3,19 +3,24 @@ package avatarHandler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
-	uc "narratives/internal/application/usecase"
-	avatardom "narratives/internal/domain/avatar"
+	avataruc "narratives/internal/application/usecase/avatar"
 	avataricon "narratives/internal/domain/avatarIcon"
 )
 
 // -----------------------------------------------------------------------------
 // POST /mall/avatars/{id}/icon
 // -----------------------------------------------------------------------------
+//
+// Handler responsibilities (after cleanup):
+//   - Parse/validate HTTP request body
+//   - Compatibility: accept gs://... in avatarIcon and normalize to bucket/objectPath
+//   - Call usecase.ReplaceAvatarIcon (which is responsible for persisting icon metadata,
+//     deleting old objects (best-effort), and patching avatars.avatarIcon (best-effort)
+//   - Return response
 func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	id = strings.TrimSpace(id)
@@ -60,7 +65,7 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	in := uc.ReplaceIconInput{
+	in := avataruc.ReplaceIconInput{
 		Bucket:     bucket,
 		ObjectPath: strings.TrimLeft(obj, "/"),
 		FileName:   trimPtr(body.FileName),
@@ -83,24 +88,13 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	// -----------------------------------------------------------------------------
-	// ✅ best-effort: patch avatars.avatarIcon with gs://bucket/objectPath
-	//    (store objectPath as well, minimal change policy)
-	// -----------------------------------------------------------------------------
-	updatedAvatarIcon := ""
-	gsUrl := fmt.Sprintf("gs://%s/%s", in.Bucket, strings.TrimLeft(in.ObjectPath, "/"))
-	_, _ = h.uc.Update(ctx, id, avatardom.AvatarPatch{AvatarIcon: &gsUrl})
-	updatedAvatarIcon = gsUrl
-
 	hasURL := strings.TrimSpace(ic.URL) != ""
 	log.Printf(
-		"[mall_avatar_handler] POST /mall/avatars/%s/icon ok iconId=%q url_set=%t url=%q gsUrl=%q avatar_patch_avatarIcon=%q\n",
+		"[mall_avatar_handler] POST /mall/avatars/%s/icon ok iconId=%q url_set=%t url=%q\n",
 		id,
 		ic.ID,
 		hasURL,
 		ic.URL,
-		gsUrl,
-		updatedAvatarIcon,
 	)
 
 	_ = json.NewEncoder(w).Encode(toAvatarIconResponse(ic, id))

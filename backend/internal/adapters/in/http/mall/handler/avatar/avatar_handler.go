@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"strings"
 
-	uc "narratives/internal/application/usecase"
+	avataruc "narratives/internal/application/usecase/avatar"
 )
 
 type AvatarHandler struct {
-	uc *uc.AvatarUsecase
+	uc *avataruc.AvatarUsecase
 }
 
-func NewAvatarHandler(avatarUC *uc.AvatarUsecase) http.Handler {
+func NewAvatarHandler(avatarUC *avataruc.AvatarUsecase) http.Handler {
 	return &AvatarHandler{uc: avatarUC}
 }
 

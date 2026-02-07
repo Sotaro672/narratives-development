@@ -28,6 +28,7 @@ import (
 
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
+	avatarUC "narratives/internal/application/usecase/avatar"
 
 	// ✅ moved: ListUsecase is now in subpackage usecase/list
 	listuc "narratives/internal/application/usecase/list"
@@ -59,7 +60,7 @@ type Container struct {
 	// Application-layer usecases
 	AccountUC          *uc.AccountUsecase
 	AnnouncementUC     *uc.AnnouncementUsecase
-	AvatarUC           *uc.AvatarUsecase
+	AvatarUC           *avatarUC.AvatarUsecase
 	BillingAddressUC   *uc.BillingAddressUsecase
 	BrandUC            *uc.BrandUsecase
 	CampaignUC         *uc.CampaignUsecase

@@ -246,7 +246,13 @@ class AvatarFormVm extends ChangeNotifier {
 
       // 3) (任意) DB登録API
       //    ※いま backend は /mall/avatars/{id}/icon が 404 なので、404なら「登録スキップ」で成功扱いにする
-      String finalUrl = _s(issued.publicUrl);
+      //
+      // ✅ publicUrl は AvatarIconUploadUrl から削除済み。
+      // ✅ 代わりに bucket/objectPath から public https URL を組み立てる。
+      String finalUrl = _publicHttpsUrlFromBucketObject(
+        bucket: issued.bucket,
+        objectPath: issued.objectPath,
+      );
 
       try {
         _log('[$phase] registering icon (optional)');
@@ -265,10 +271,10 @@ class AvatarFormVm extends ChangeNotifier {
 
         _log('[$phase] icon register done url="$finalUrl"');
       } on AvatarApiException catch (e) {
-        // ✅ ここが今回のポイント：404は「エンドポイント未実装」なので落とさない
+        // ✅ 404は「エンドポイント未実装」なので落とさない
         if (e.statusCode == 404) {
           _log(
-            '[$phase] register endpoint not found (404). skip register. use publicUrl="$finalUrl"',
+            '[$phase] register endpoint not found (404). skip register. use httpsUrl="$finalUrl"',
           );
         } else {
           rethrow;
@@ -290,8 +296,20 @@ class AvatarFormVm extends ChangeNotifier {
     }
   }
 
-  /// edit の初期ロード（あなたの現状だと /mall/me/avatar が 404 のため、
-  /// ここは別途 AvatarApiClient.fetchMyAvatarProfile の実装/エンドポイント整合が必要です）
+  /// helper: bucket/objectPath から public https URL を生成
+  /// NOTE: objectPath は "/" を含むので segment ごとに encode する
+  String _publicHttpsUrlFromBucketObject({
+    required String bucket,
+    required String objectPath,
+  }) {
+    final b = _s(bucket);
+    final op = _s(objectPath);
+    if (b.isEmpty || op.isEmpty) return '';
+    final encoded = op.split('/').map(Uri.encodeComponent).join('/');
+    return 'https://storage.googleapis.com/$b/$encoded';
+  }
+
+  /// edit の初期ロード
   Future<void> loadInitialIfNeeded() async {
     if (mode != AvatarFormMode.edit) return;
     if (_initialLoaded) return;

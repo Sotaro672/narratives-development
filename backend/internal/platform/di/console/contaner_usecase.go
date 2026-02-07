@@ -20,6 +20,9 @@ import (
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
+	// ✅ moved: AvatarUsecase is now in subpackage usecase/avatar
+	avataruc "narratives/internal/application/usecase/avatar"
+
 	// ✅ moved: ListUsecase is now in subpackage usecase/list
 	listuc "narratives/internal/application/usecase/list"
 
@@ -31,7 +34,7 @@ type usecases struct {
 
 	accountUC        *uc.AccountUsecase
 	announcementUC   *uc.AnnouncementUsecase
-	avatarUC         *uc.AvatarUsecase
+	avatarUC         *avataruc.AvatarUsecase
 	billingAddressUC *uc.BillingAddressUsecase
 	brandUC          *uc.BrandUsecase
 	campaignUC       *uc.CampaignUsecase
@@ -94,7 +97,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	brandWalletSvc := solanainfra.NewBrandWalletService(c.firestoreProjectID)
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(c.firestoreProjectID)
 
-	avatarUC := uc.NewAvatarUsecase(
+	avatarUC := avataruc.NewAvatarUsecase(
 		r.avatarRepo,
 		r.avatarStateRepo,
 		r.avatarIconRepo,

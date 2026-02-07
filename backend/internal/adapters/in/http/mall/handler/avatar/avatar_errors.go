@@ -4,11 +4,10 @@ package avatarHandler
 import (
 	"encoding/json"
 	"errors"
+	avataruc "narratives/internal/application/usecase/avatar"
+	avatardom "narratives/internal/domain/avatar"
 	"net/http"
 	"strings"
-
-	uc "narratives/internal/application/usecase"
-	avatardom "narratives/internal/domain/avatar"
 )
 
 func writeAvatarErr(w http.ResponseWriter, err error) {
@@ -16,7 +15,7 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 
 	if errors.Is(err, avatardom.ErrInvalidID) ||
 		errors.Is(err, avatardom.ErrInvalidUserID) ||
-		errors.Is(err, uc.ErrInvalidUserUID) ||
+		errors.Is(err, avataruc.ErrInvalidUserUID) ||
 		errors.Is(err, avatardom.ErrInvalidAvatarName) ||
 		errors.Is(err, avatardom.ErrInvalidProfile) ||
 		errors.Is(err, avatardom.ErrInvalidExternalLink) {

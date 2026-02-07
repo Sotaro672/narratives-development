@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\avatar\infrastructure\avatar_api_client.dart
+// frontend/mall/lib/features/avatar/infrastructure/avatar_api_client.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -46,7 +46,7 @@ class AvatarApiClient {
   final void Function(String msg)? _logger;
 
   // ----------------------------------------------------------------------------
-  // ✅ logging helpers (確実に Chrome Console に出る)
+  // logging helpers
   // ----------------------------------------------------------------------------
 
   void _log(String msg, {String? path}) {
@@ -56,13 +56,10 @@ class AvatarApiClient {
     final prefix = p.isEmpty ? '[AvatarApiClient] ' : '[AvatarApiClient][$p] ';
     final out = '$prefix$msg';
 
-    // 呼び出し側で logger を渡したらそっちを優先
     if (_logger != null) {
       _logger(out);
       return;
     }
-
-    // ✅ debugPrint は avoid_print に引っかからず、Web Console にも出る
     debugPrint(out);
   }
 
@@ -71,8 +68,6 @@ class AvatarApiClient {
     if (t.length <= max) return t;
     return '${t.substring(0, max)}...';
   }
-
-  // ----------------------------------------------------------------------------
 
   static String _s(Object? v) => (v ?? '').toString().trim();
 
@@ -240,7 +235,7 @@ class AvatarApiClient {
   }
 
   // ===========================================================================
-  // ✅ Contract:
+  // Contract
   // - me 系(正): /mall/me/avatars
   // - create 系(正): POST /mall/avatars
   // ===========================================================================
@@ -249,16 +244,6 @@ class AvatarApiClient {
     Map<String, dynamic> j, {
     required String path,
   }) {
-    // legacy wrapper is explicitly rejected
-    if (j.containsKey('avatar') && j['avatar'] is Map) {
-      _log('parse reject legacy wrapper key "avatar"', path: path);
-      throw AvatarApiException(
-        'Legacy payload is not allowed: wrapper key "avatar" detected',
-        path: path,
-        body: jsonEncode(j),
-      );
-    }
-
     final avatarId = _s(j['avatarId']);
     final walletAddress = _s(j['walletAddress']);
 
@@ -302,10 +287,7 @@ class AvatarApiClient {
     final profile = _opt(j, 'profile');
     final link = _opt(j, 'externalLink');
 
-    _log(
-      'parse ok avatarId="$avatarId" avatarName="$avatarName" profile="${profile ?? ""}"',
-      path: path,
-    );
+    _log('parse ok avatarId="$avatarId" avatarName="$avatarName"', path: path);
 
     return MeAvatar(
       avatarId: avatarId,
@@ -326,18 +308,9 @@ class AvatarApiClient {
       _log('fetchMeAvatar -> null (404)', path: p);
       return null;
     }
-
-    final me = _parseMeAvatarStrict(unwrapped, path: p);
-
-    _log(
-      'fetchMeAvatar result avatarName="${me.avatarName ?? ""}" profile="${me.profile ?? ""}"',
-      path: p,
-    );
-
-    return me;
+    return _parseMeAvatarStrict(unwrapped, path: p);
   }
 
-  /// ✅ Edit プレフィルも “同じ契約” を使う
   Future<MeAvatar?> fetchMyAvatarProfile() async {
     return fetchMeAvatar();
   }
@@ -346,6 +319,7 @@ class AvatarApiClient {
   Future<MeAvatar> createAvatar(Map<String, dynamic> body) async {
     const p = '/mall/avatars';
 
+    // icon ops are separate
     if (body.containsKey('avatarIcon')) {
       throw AvatarApiException(
         'avatarIcon is not allowed in POST /mall/avatars (icon ops are separate)',
@@ -382,7 +356,7 @@ class AvatarApiClient {
     );
 
     if (unwrapped == null) {
-      _log('createAvatar -> empty body, refetch me', path: p);
+      // server should return created avatar; if not, refetch
       final latest = await fetchMeAvatar();
       if (latest == null) {
         throw AvatarApiException(
@@ -432,7 +406,6 @@ class AvatarApiClient {
     final unwrapped = await _authedJson(p, jsonBody: normalized);
 
     if (unwrapped == null) {
-      _log('patchMeAvatar -> empty body, refetch me', path: p);
       final latest = await fetchMeAvatar();
       if (latest == null) {
         throw AvatarApiException(
@@ -447,7 +420,7 @@ class AvatarApiClient {
   }
 
   // ===========================================================================
-  // ✅ Icon upload (A) : /mall/avatars/{id}/icon-upload-url + /mall/avatars/{id}/icon
+  // Icon upload (A) : /mall/avatars/{id}/icon-upload-url + /mall/avatars/{id}/icon
   // ===========================================================================
 
   /// ✅ /mall/avatars/{avatarId}/icon-upload-url
@@ -456,11 +429,12 @@ class AvatarApiClient {
   ///   "uploadUrl": "...",
   ///   "bucket": "...",
   ///   "objectPath": "...",
-  ///   "gsUrl": "gs://.../... ",
+  ///   "gsUrl": "gs://.../...",
   ///   "expiresAt": "....Z"
   /// }
   ///
-  /// ※ publicUrl は backend に無いのでクライアントで生成して返す（VMの修正最小化）
+  /// NOTE:
+  /// - publicUrl は usecase 側で生成し avatarIcon として返す方針のため、このDTOからは削除。
   Future<AvatarIconUploadUrl> issueAvatarIconUploadUrl({
     required String avatarId,
     String? fileName,
@@ -488,14 +462,12 @@ class AvatarApiClient {
       throw AvatarApiException('Empty response (expected uploadUrl)', path: p);
     }
 
-    _log('POST done keys=${unwrapped.keys.toList()}', path: p);
-
     final dto = AvatarIconUploadUrl.fromJson(unwrapped);
 
     _log(
       'issueAvatarIconUploadUrl ok '
       'bucket="${dto.bucket}" objectPath="${dto.objectPath}" '
-      'expiresAt="${dto.expiresAt ?? ""}" publicUrl="${dto.publicUrl}"',
+      'expiresAt="${dto.expiresAt ?? ""}" gsUrl="${dto.gsUrl}"',
       path: p,
     );
 
@@ -548,45 +520,6 @@ class AvatarApiClient {
     return dto;
   }
 
-  // ===========================================================================
-  // ✅ Icon upload (B) : /mall/me/avatars/icon-upload-url (既存)
-  // ===========================================================================
-
-  Future<MeAvatarIconUploadUrl> issueMeAvatarIconUploadUrl({
-    required String mimeType,
-    required int size,
-  }) async {
-    const p = '/mall/me/avatars/icon-upload-url';
-
-    final mt = mimeType.trim();
-    final body = <String, dynamic>{
-      'mimeType': mt.isEmpty ? 'application/octet-stream' : mt,
-      'size': size,
-    };
-
-    _log('POST start payload=$body', path: p);
-
-    final unwrapped = await _authedJson(p, method: 'POST', jsonBody: body);
-
-    if (unwrapped == null) {
-      throw AvatarApiException('Empty response (expected uploadUrl)', path: p);
-    }
-
-    _log('POST done keys=${unwrapped.keys.toList()}', path: p);
-
-    final dto = MeAvatarIconUploadUrl.fromJson(unwrapped);
-
-    _log(
-      'issueMeAvatarIconUploadUrl ok '
-      'publicUrl="${dto.publicUrl}" '
-      'expiresAt="${dto.expiresAt ?? ""}" '
-      'contentType="${dto.contentType ?? ""}"',
-      path: p,
-    );
-
-    return dto;
-  }
-
   Future<void> uploadToSignedUrl({
     required String uploadUrl,
     required Uint8List bytes,
@@ -634,52 +567,7 @@ class AvatarApiClient {
 }
 
 /// ---------------------------------------------------------------------------
-/// DTO: /mall/me/avatars/icon-upload-url response
-/// ※ 現状コード互換のため残しています（フィールド publicUrl は backend次第）
-/// ---------------------------------------------------------------------------
-@immutable
-class MeAvatarIconUploadUrl {
-  const MeAvatarIconUploadUrl({
-    required this.uploadUrl,
-    required this.bucket,
-    required this.objectPath,
-    required this.gsUrl,
-    required this.publicUrl,
-    this.expiresAt,
-    this.contentType,
-  });
-
-  final String uploadUrl;
-  final String bucket;
-  final String objectPath;
-  final String gsUrl;
-  final String publicUrl;
-
-  final String? expiresAt;
-  final String? contentType;
-
-  static String _s(Object? v) => (v ?? '').toString().trim();
-  static String? _optS(Object? v) {
-    final s = _s(v);
-    return s.isEmpty ? null : s;
-  }
-
-  factory MeAvatarIconUploadUrl.fromJson(Map<String, dynamic> json) {
-    return MeAvatarIconUploadUrl(
-      uploadUrl: _s(json['uploadUrl']),
-      bucket: _s(json['bucket']),
-      objectPath: _s(json['objectPath']),
-      gsUrl: _s(json['gsUrl']),
-      publicUrl: _s(json['publicUrl']),
-      expiresAt: _optS(json['expiresAt']),
-      contentType: _optS(json['contentType']),
-    );
-  }
-}
-
-/// ---------------------------------------------------------------------------
 /// DTO: /mall/avatars/{id}/icon-upload-url response
-/// backendに publicUrl が無いのでクライアントで生成する
 /// ---------------------------------------------------------------------------
 @immutable
 class AvatarIconUploadUrl {
@@ -696,14 +584,6 @@ class AvatarIconUploadUrl {
   final String objectPath;
   final String gsUrl;
   final String? expiresAt;
-
-  /// ✅ VM互換用：public URL をクライアントで合成
-  String get publicUrl {
-    final b = bucket.trim();
-    final o = objectPath.trim();
-    if (b.isEmpty || o.isEmpty) return '';
-    return 'https://storage.googleapis.com/$b/$o';
-  }
 
   static String _s(Object? v) => (v ?? '').toString().trim();
   static String? _optS(Object? v) {

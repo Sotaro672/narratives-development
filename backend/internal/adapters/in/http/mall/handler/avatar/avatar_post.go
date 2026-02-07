@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	uc "narratives/internal/application/usecase"
+	avataruc "narratives/internal/application/usecase/avatar"
 )
 
 func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +27,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	in := uc.CreateAvatarInput{
+	in := avataruc.CreateAvatarInput{
 		UserID:       strings.TrimSpace(body.UserID),
 		UserUID:      strings.TrimSpace(body.UserUID),
 		AvatarName:   strings.TrimSpace(body.AvatarName),

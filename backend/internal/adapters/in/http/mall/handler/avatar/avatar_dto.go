@@ -17,25 +17,34 @@ type avatarResponse struct {
 	AvatarName string  `json:"avatarName"`
 	AvatarIcon *string `json:"avatarIcon,omitempty"`
 
-	AvatarState   avatarstate.AvatarState `json:"avatarState"`
-	WalletAddress *string                 `json:"walletAddress,omitempty"`
-	Profile       *string                 `json:"profile,omitempty"`
-	ExternalLink  *string                 `json:"externalLink,omitempty"`
-	CreatedAt     time.Time               `json:"createdAt"`
-	UpdatedAt     time.Time               `json:"updatedAt"`
-	DeletedAt     *time.Time              `json:"deletedAt,omitempty"`
+	// ✅ state は handler/join 側で付与できないケースがあるため optional にする
+	AvatarState *avatarstate.AvatarState `json:"avatarState,omitempty"`
+
+	WalletAddress *string    `json:"walletAddress,omitempty"`
+	Profile       *string    `json:"profile,omitempty"`
+	ExternalLink  *string    `json:"externalLink,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
 }
 
 func toAvatarResponse(a avatardom.Avatar) avatarResponse {
+	var stPtr *avatarstate.AvatarState
+	// 既存 struct に state が埋まっている場合のみ返す（ゼロ値回避）
+	if strings.TrimSpace(a.AvatarState.ID) != "" {
+		tmp := a.AvatarState
+		stPtr = &tmp
+	}
+
 	return avatarResponse{
 		AvatarID:      strings.TrimSpace(a.ID),
 		UserID:        strings.TrimSpace(a.UserID),
 		AvatarName:    strings.TrimSpace(a.AvatarName),
-		AvatarIcon:    a.AvatarIcon,
-		AvatarState:   a.AvatarState,
-		WalletAddress: a.WalletAddress,
-		Profile:       a.Profile,
-		ExternalLink:  a.ExternalLink,
+		AvatarIcon:    trimPtr(a.AvatarIcon), // ✅ trim して返す
+		AvatarState:   stPtr,
+		WalletAddress: trimPtr(a.WalletAddress),
+		Profile:       trimPtr(a.Profile),
+		ExternalLink:  trimPtr(a.ExternalLink),
 		CreatedAt:     a.CreatedAt,
 		UpdatedAt:     a.UpdatedAt,
 		DeletedAt:     a.DeletedAt,
@@ -66,7 +75,10 @@ func toAvatarIconResponse(icon avataricon.AvatarIcon, knownAvatarID string) avat
 }
 
 type avatarAggregateResponse struct {
-	Avatar avatarResponse       `json:"avatar"`
-	State  any                  `json:"state,omitempty"`
-	Icons  []avatarIconResponse `json:"icons"`
+	Avatar avatarResponse `json:"avatar"`
+
+	// ✅ any をやめて具体型にする（フロントの型安全性・互換性向上）
+	State *avatarstate.AvatarState `json:"state,omitempty"`
+
+	Icons []avatarIconResponse `json:"icons"`
 }
