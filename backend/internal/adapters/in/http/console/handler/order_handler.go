@@ -14,6 +14,79 @@ import (
 	orderdom "narratives/internal/domain/order"
 )
 
+// ============================================================
+// Response DTO (camelCase JSON)
+// ============================================================
+
+type orderResponseDTO struct {
+	ID       string `json:"id"`
+	UserID   string `json:"userId,omitempty"`
+	AvatarID string `json:"avatarId,omitempty"`
+	CartID   string `json:"cartId,omitempty"`
+
+	Paid      bool   `json:"paid"`
+	CreatedAt string `json:"createdAt,omitempty"` // RFC3339(UTC)
+
+	ShippingSnapshot any            `json:"shippingSnapshot,omitempty"`
+	BillingSnapshot  any            `json:"billingSnapshot,omitempty"`
+	Items            []orderItemDTO `json:"items,omitempty"`
+}
+
+type orderItemDTO struct {
+	ModelID     string `json:"modelId,omitempty"`
+	InventoryID string `json:"inventoryId,omitempty"`
+	ListID      string `json:"listId,omitempty"`
+	Qty         int    `json:"qty,omitempty"`
+	Price       int    `json:"price,omitempty"`
+
+	Transferred   bool   `json:"transferred"`
+	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
+}
+
+func toOrderResponseDTO(o orderdom.Order) orderResponseDTO {
+	dto := orderResponseDTO{
+		ID:     strings.TrimSpace(o.ID),
+		UserID: strings.TrimSpace(o.UserID),
+
+		AvatarID: strings.TrimSpace(o.AvatarID),
+		CartID:   strings.TrimSpace(o.CartID),
+
+		Paid: o.Paid,
+
+		// domainの型をそのまま返す（json tag が無い/揺れていても、DTO側のキーに寄せる）
+		ShippingSnapshot: o.ShippingSnapshot,
+		BillingSnapshot:  o.BillingSnapshot,
+	}
+
+	if !o.CreatedAt.IsZero() {
+		dto.CreatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
+	}
+
+	if len(o.Items) > 0 {
+		dto.Items = make([]orderItemDTO, 0, len(o.Items))
+		for _, it := range o.Items {
+			item := orderItemDTO{
+				ModelID:     strings.TrimSpace(it.ModelID),
+				InventoryID: strings.TrimSpace(it.InventoryID),
+				ListID:      strings.TrimSpace(it.ListID),
+				Qty:         it.Qty,
+				Price:       it.Price,
+
+				Transferred: it.Transferred,
+			}
+			if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
+				item.TransferredAt = it.TransferredAt.UTC().Format(time.RFC3339)
+			}
+			dto.Items = append(dto.Items, item)
+		}
+	} else {
+		// 常に配列で返したい場合は空sliceにする（UI側が楽）
+		dto.Items = []orderItemDTO{}
+	}
+
+	return dto
+}
+
 // OrderHandler は /orders 関連のエンドポイントを担当します。
 //
 // 追加機能:
@@ -75,7 +148,10 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		writeOrderErr(w, err)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(order)
+
+	// ✅ domain をそのまま返さず、camelCase の DTO に詰め替えて返す
+	dto := toOrderResponseDTO(order)
+	_ = json.NewEncoder(w).Encode(dto)
 }
 
 // GET /orders/items?page=1&perPage=20&id=...&userId=...&avatarId=...&cartId=...&createdFrom=...&createdTo=...
