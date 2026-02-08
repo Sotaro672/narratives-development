@@ -137,16 +137,22 @@ func orderToDoc(o orderdom.Order) map[string]any {
 		im := map[string]any{
 			"modelId":     strings.TrimSpace(it.ModelID),
 			"inventoryId": strings.TrimSpace(it.InventoryID),
-			"qty":         it.Qty,
-			"price":       it.Price,
+
+			// ✅ FIX: listId を永続化する（これが無いと必ず空になる）
+			"listId": strings.TrimSpace(it.ListID),
+
+			"qty":   it.Qty,
+			"price": it.Price,
 
 			// ✅ item-level transfer flags
 			"transferred": it.Transferred,
 		}
-		// transferred=true のときだけ timestamp を持たせる
+
+		// transferredAt: transferred=true のときだけ timestamp を持たせる
 		if it.Transferred && it.TransferredAt != nil && !it.TransferredAt.IsZero() {
 			im["transferredAt"] = it.TransferredAt.UTC()
 		}
+
 		items = append(items, im)
 	}
 

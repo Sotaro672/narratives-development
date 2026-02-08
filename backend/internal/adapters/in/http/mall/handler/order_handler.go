@@ -79,8 +79,12 @@ type billingSnapshotRequest struct {
 type orderItemSnapshotRequest struct {
 	ModelID     string `json:"modelId"`
 	InventoryID string `json:"inventoryId"`
-	Qty         int    `json:"qty"`
-	Price       int    `json:"price"`
+
+	// ✅ NEW: listId を受け取る（フロントが送っても落とさない）
+	ListID string `json:"listId"`
+
+	Qty   int `json:"qty"`
+	Price int `json:"price"`
 }
 
 type createOrderRequest struct {
@@ -126,8 +130,10 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request, requireAuth 
 	}
 	bodyUID := trim(req.UserID)
 
-	// 一時ログ（原因切り分け用）
-	log.Printf(`[order.post] requireAuth=%v authUID=%q bodyUID=%q`, requireAuth, authUID, bodyUID)
+	// ✅ DEBUG: request overview (切り分け用)
+	log.Printf(`[order.post] start requireAuth=%v path=%q authUID=%q bodyUID=%q avatarId(body)=%q cartId(body)=%q items=%d`,
+		requireAuth, r.URL.Path, authUID, bodyUID, trim(req.AvatarID), trim(req.CartID), len(req.Items),
+	)
 
 	// /mall/me/orders は auth 必須（body.userId 代替は禁止）
 	if requireAuth && authUID == "" {
@@ -207,13 +213,18 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request, requireAuth 
 
 	// ---- items validation ----
 	items := make([]orderdom.OrderItemSnapshot, 0, len(req.Items))
-	for _, it := range req.Items {
+	for idx, it := range req.Items {
 		mid := trim(it.ModelID)
 		iid := trim(it.InventoryID)
+		lid := trim(it.ListID) // ✅ NEW
 		qty := it.Qty
 		price := it.Price
 
-		if mid == "" || iid == "" || qty <= 0 || price < 0 {
+		// ✅ DEBUG: per-item dump (切り分け最優先)
+		log.Printf(`[order.post] item[%d] mid=%q iid=%q lid=%q qty=%d price=%d`, idx, mid, iid, lid, qty, price)
+
+		// ✅ listId を必須にする（今回の目的：items に listId を入れる）
+		if mid == "" || iid == "" || lid == "" || qty <= 0 || price < 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid item snapshot"})
 			return
@@ -222,6 +233,7 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request, requireAuth 
 		items = append(items, orderdom.OrderItemSnapshot{
 			ModelID:     mid,
 			InventoryID: iid,
+			ListID:      lid, // ✅ NEW
 			Qty:         qty,
 			Price:       price,
 		})
@@ -238,6 +250,11 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request, requireAuth 
 
 		Items: items,
 	}
+
+	// ✅ DEBUG: final input summary
+	log.Printf(`[order.post] calling uc.Create userId=%q avatarId=%q cartId=%q items=%d`,
+		userID, avatarID, cartID, len(items),
+	)
 
 	out, err := h.uc.Create(ctx, in)
 	if err != nil {

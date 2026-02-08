@@ -67,7 +67,7 @@ class UsePayment {
   }
 
   /// ✅ 支払確定 = Order起票（/mall/orders）
-  /// Items は snapshot: [modelId, inventoryId, qty, price]
+  /// Items は snapshot: [modelId, inventoryId, listId, qty, price]
   ///
   /// ✅ パターンA: orderId(String) を返す
   Future<String> confirmAndCreateOrder(PaymentPageVM vm) async {
@@ -94,26 +94,37 @@ class UsePayment {
       throw Exception('userId/uid is empty');
     }
 
-    final cartId = vm.cartKey.trim().isNotEmpty
-        ? vm.cartKey.trim()
-        : vm.rawCart.avatarId.trim();
+    // ✅ cartId (= carts/{avatarId}) は avatarId を正とする
+    final cartId = avatarId.trim();
     if (cartId.isEmpty) {
       throw Exception('cartId is empty');
     }
 
-    // ✅ items snapshot を作る（key は inventoryId として運用している前提）
+    // ✅ items snapshot を作る
+    // - 以前: mapキー(itemKey) を inventoryId と誤認していた
+    // - FIX: inventoryId/listId/modelId は value 側のフィールドから取得する
+    // - FIX: listId も必須として送る（空なら注文起票を止めて原因を早期に炙り出す）
     final items = <Map<String, dynamic>>[];
     for (final e in vm.rawCart.items.entries) {
-      final invId = e.key.trim();
       final it = e.value;
 
+      final invId = it.inventoryId.trim(); // ✅ FIX: keyではなくvalueから
+      final listId = it.listId.trim(); // ✅ 必須
       final modelId = it.modelId.trim();
       final qty = it.qty;
       final price = it.price;
 
+      if (invId.isEmpty || listId.isEmpty || modelId.isEmpty || qty <= 0) {
+        // ここで落とすと「なぜ listId が空か」がすぐ分かる
+        throw Exception(
+          'invalid cart item snapshot: inventoryId="$invId" listId="$listId" modelId="$modelId" qty=$qty',
+        );
+      }
+
       items.add({
         'modelId': modelId,
         'inventoryId': invId,
+        'listId': listId,
         'qty': qty,
         'price': price,
       });

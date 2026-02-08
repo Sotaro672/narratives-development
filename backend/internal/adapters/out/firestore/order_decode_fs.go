@@ -4,6 +4,9 @@ package firestore
 import (
 	"fmt"
 	"strings"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	orderdom "narratives/internal/domain/order"
 )
@@ -86,6 +89,55 @@ func mapGetBool(m map[string]any, key string) (bool, bool) {
 	}
 }
 
+// mapGetTimeBestEffort reads Firestore timestamp wobble.
+// - time.Time
+// - *timestamppb.Timestamp
+// - firestore.Timestamp-like map is not handled here (keep simple)
+func mapGetTimeBestEffort(m map[string]any, key string) (time.Time, bool) {
+	if m == nil {
+		return time.Time{}, false
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return time.Time{}, false
+	}
+
+	switch t := v.(type) {
+	case time.Time:
+		if t.IsZero() {
+			return time.Time{}, false
+		}
+		return t.UTC(), true
+	case *timestamppb.Timestamp:
+		if t == nil {
+			return time.Time{}, false
+		}
+		tt := t.AsTime()
+		if tt.IsZero() {
+			return time.Time{}, false
+		}
+		return tt.UTC(), true
+	default:
+		return time.Time{}, false
+	}
+}
+
+// getListID tries both listId and listID (wobble absorb).
+func getListID(m map[string]any) string {
+	if m == nil {
+		return ""
+	}
+	// primary
+	if s := strings.TrimSpace(mapGetStr(m, "listId")); s != "" {
+		return s
+	}
+	// wobble
+	if s := strings.TrimSpace(mapGetStr(m, "listID")); s != "" {
+		return s
+	}
+	return ""
+}
+
 func decodeShippingSnapshot(v any) (orderdom.ShippingSnapshot, bool) {
 	m := asMapAny(v)
 	if m == nil {
@@ -117,34 +169,50 @@ func decodeItems(v any) ([]orderdom.OrderItemSnapshot, bool) {
 		return nil, false
 	}
 
+	build := func(m map[string]any) orderdom.OrderItemSnapshot {
+		if m == nil {
+			return orderdom.OrderItemSnapshot{}
+		}
+
+		// ✅ listId を読む（ここが今まで欠けていた）
+		lid := getListID(m)
+
+		// ✅ item-level transfer flags も復元（paid更新でSaveしても壊れないように）
+		transferred, _ := mapGetBool(m, "transferred")
+		var transferredAt *time.Time
+		if t, ok := mapGetTimeBestEffort(m, "transferredAt"); ok {
+			tt := t.UTC()
+			transferredAt = &tt
+		}
+
+		return orderdom.OrderItemSnapshot{
+			ModelID:     strings.TrimSpace(mapGetStr(m, "modelId")),
+			InventoryID: strings.TrimSpace(mapGetStr(m, "inventoryId")),
+			ListID:      strings.TrimSpace(lid),
+
+			Qty:   mapGetInt(m, "qty"),
+			Price: mapGetInt(m, "price"),
+
+			Transferred:   transferred,
+			TransferredAt: transferredAt,
+		}
+	}
+
 	switch raw := v.(type) {
 	case []any:
 		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
 		for _, x := range raw {
-			m := asMapAny(x)
-			if m == nil {
-				out = append(out, orderdom.OrderItemSnapshot{})
-				continue
-			}
-			out = append(out, orderdom.OrderItemSnapshot{
-				ModelID:     strings.TrimSpace(mapGetStr(m, "modelId")),
-				InventoryID: strings.TrimSpace(mapGetStr(m, "inventoryId")),
-				Qty:         mapGetInt(m, "qty"),
-				Price:       mapGetInt(m, "price"),
-			})
+			out = append(out, build(asMapAny(x)))
 		}
 		return out, true
+
 	case []map[string]any:
 		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
 		for _, m := range raw {
-			out = append(out, orderdom.OrderItemSnapshot{
-				ModelID:     strings.TrimSpace(mapGetStr(m, "modelId")),
-				InventoryID: strings.TrimSpace(mapGetStr(m, "inventoryId")),
-				Qty:         mapGetInt(m, "qty"),
-				Price:       mapGetInt(m, "price"),
-			})
+			out = append(out, build(m))
 		}
 		return out, true
+
 	default:
 		return nil, false
 	}
