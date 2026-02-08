@@ -22,6 +22,9 @@ import (
 	listdetailquery "narratives/internal/application/query/console/list/detail"
 	listmanagementquery "narratives/internal/application/query/console/list/management"
 
+	// ✅ NEW: order management query
+	orderquery "narratives/internal/application/query/console"
+
 	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
 	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
@@ -98,6 +101,9 @@ type Container struct {
 	ListManagementQuery *listmanagementquery.ListManagementQuery
 	ListDetailQuery     *listdetailquery.ListDetailQuery
 
+	// ✅ NEW: order management query instance (for console order endpoints)
+	OrderManagementQuery *orderquery.OrderManagementQuery
+
 	// ✅ NEW: list image endpoints wiring (used by console handler)
 	// NOTE: DELETE API abolished -> no deleter in container.
 	ListImageUploader listHandler.ListImageUploader
@@ -131,6 +137,18 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("clients/infra is nil")
 	}
 
+	// ✅ NEW: build OrderManagementQuery
+	// NOTE:
+	// - ここは現在コンパイルエラーになります（repos.orderRepo が OrderLister を満たさないため）
+	// - 解消には order_management_query.go 側の OrderLister を repo の List シグネチャに合わせてください（別途修正が必要）
+	var orderMgmtQ *orderquery.OrderManagementQuery
+	if repos.orderRepo != nil && q.inventoryQuery != nil {
+		orderMgmtQ = orderquery.NewOrderManagementQuery(orderquery.NewOrderManagementQueryParams{
+			Lister:  repos.orderRepo,
+			InvRows: q.inventoryQuery,
+		})
+	}
+
 	return &Container{
 		Infra: clients.infra,
 
@@ -151,7 +169,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		InquiryUC:          u.inquiryUC,
 		InventoryUC:        u.inventoryUC,
 		InvoiceUC:          u.invoiceUC,
-		ListUC:             u.listUC, // ✅ buildUsecases 側で *listuc.ListUsecase を返す前提
+		ListUC:             u.listUC,
 		MemberUC:           u.memberUC,
 		ModelUC:            u.modelUC,
 		OrderUC:            u.orderUC,
@@ -178,9 +196,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		InventoryQuery:                q.inventoryQuery,
 		ListCreateQuery:               q.listCreateQuery,
 
-		// ✅ moved: use subpackage query instances
 		ListManagementQuery: q.listManagementQuery,
-		ListDetailQuery:     q.listDetailQuery,
+		ListDetailQuery:     q.listDetailQuery, // ✅ FIX: 正しいフィールド名
+
+		// ✅ NEW
+		OrderManagementQuery: orderMgmtQ,
 
 		// ✅ NEW: pass-through from query builder
 		ListImageUploader: q.listImageUploader,

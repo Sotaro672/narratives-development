@@ -35,9 +35,10 @@ type CartRepo interface {
 // OrderFilter provides basic filtering for listing orders.
 // ✅ entity.go を正として、CreatedAt のみ
 type OrderFilter struct {
-	ID     string
-	UserID *string
-	CartID *string
+	ID       string
+	UserID   *string
+	AvatarID *string // ✅ NEW: console側の /orders/items 等で必要
+	CartID   *string
 
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time

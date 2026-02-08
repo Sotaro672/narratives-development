@@ -177,8 +177,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	// Orders
-	if c.OrderUC != nil {
-		ordersH = consoleHandler.NewOrderHandler(c.OrderUC)
+	// ✅ OrderHandler は OrderManagementQuery を必要とするため、2引数で配線する
+	if c.OrderUC != nil && c.OrderManagementQuery != nil {
+		ordersH = consoleHandler.NewOrderHandler(c.OrderUC, c.OrderManagementQuery)
 	}
 
 	// Wallets

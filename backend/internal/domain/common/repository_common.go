@@ -1,3 +1,4 @@
+// backend/internal/domain/common/repository_common.go
 package common
 
 import (
@@ -7,28 +8,28 @@ import (
 
 // Timestamps は作成・更新時刻を共通で保持するための埋め込み用構造体
 type Timestamps struct {
-	CreatedAt time.Time  // 作成日時
-	UpdatedAt *time.Time // 更新日時（未更新なら nil）
+	CreatedAt time.Time  `json:"createdAt"` // 作成日時
+	UpdatedAt *time.Time `json:"updatedAt"` // 更新日時（未更新なら nil）
 }
 
 // TimeRange は期間フィルタのための共通構造体
 type TimeRange struct {
-	From *time.Time
-	To   *time.Time
+	From *time.Time `json:"from"`
+	To   *time.Time `json:"to"`
 }
 
 // FilterCommon は多くの一覧取得で使える共通フィルタ
 // 各ドメイン固有の条件は別途拡張用の Filter に追加してください。
 type FilterCommon struct {
-	SearchQuery string    // 部分一致検索など
-	Created     TimeRange // 作成日時の範囲
-	Updated     TimeRange // 更新日時の範囲
+	SearchQuery string    `json:"searchQuery"` // 部分一致検索など
+	Created     TimeRange `json:"created"`     // 作成日時の範囲
+	Updated     TimeRange `json:"updated"`     // 更新日時の範囲
 }
 
 // Sort はソート指定の共通表現
 type Sort struct {
-	Column string    // カラム名（各ドメイン側で許可カラムをバリデート）
-	Order  SortOrder // 昇順/降順
+	Column string    `json:"column"` // カラム名（各ドメイン側で許可カラムをバリデート）
+	Order  SortOrder `json:"order"`  // 昇順/降順
 }
 
 // SortOrder はソート順
@@ -41,37 +42,42 @@ const (
 
 // Page はオフセットページング指定
 type Page struct {
-	Number  int // 1-based
-	PerPage int // 0 以下は実装側デフォルト
+	Number  int `json:"page"`    // 1-based
+	PerPage int `json:"perPage"` // 0 以下は実装側デフォルト
 }
 
 // PageResult はページング結果（ジェネリクスでアイテム型を受け取る）
+//
+// ✅ フロントの期待に合わせて lowerCamelCase の JSON key を付与
+// - items / totalCount / totalPages / page / perPage
 type PageResult[T any] struct {
-	Items      []T
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
+	Items      []T `json:"items"`
+	TotalCount int `json:"totalCount"`
+	TotalPages int `json:"totalPages"`
+	Page       int `json:"page"`
+	PerPage    int `json:"perPage"`
 }
 
 // CursorPage はカーソルページング指定
 type CursorPage struct {
-	After string // 直前ページの最後のカーソル（空なら先頭）
-	Limit int
+	After string `json:"after"` // 直前ページの最後のカーソル（空なら先頭）
+	Limit int    `json:"limit"`
 }
 
 // CursorPageResult はカーソルページング結果（ジェネリクス対応）
+//
+// ✅ フロントの期待に合わせて lowerCamelCase の JSON key を付与
 type CursorPageResult[T any] struct {
-	Items      []T
-	NextCursor *string // 次ページがなければ nil
-	Limit      int
+	Items      []T     `json:"items"`
+	NextCursor *string `json:"nextCursor"` // 次ページがなければ nil
+	Limit      int     `json:"limit"`
 }
 
 // SaveOptions は保存時の前提条件（楽観ロック等）を受け取るためのオプション
 type SaveOptions struct {
 	// IfMatchVersion が指定されていれば、現在の Version と一致した場合のみ更新
 	// （一致しなければ ErrPreconditionFailed）
-	IfMatchVersion *int64
+	IfMatchVersion *int64 `json:"ifMatchVersion"`
 }
 
 // RepositoryCRUD は基本的なCRUD操作の共通インターフェース
