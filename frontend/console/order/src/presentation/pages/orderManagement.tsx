@@ -3,12 +3,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
   SortableTableHeader,
+  FilterableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/order.css";
 
 import { createOrderRepository } from "../../infrastructure/repostiroty";
+import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
 
-type SortKey = "orderId" | "createdAt" | null;
+type SortKey = "createdAt" | null;
 type SortDir = "asc" | "desc" | null;
 
 // 画面に映す値: orderId,listId,inventoryId,avatarId,createdAt,transfered:boolean
@@ -21,22 +23,24 @@ type Row = {
   transferred: boolean;
 };
 
-// 日付フォーマット (YYYY/MM/DD)
-const formatDate = (iso: string | null | undefined): string => {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}/${m}/${day}`;
-};
-
 export default function OrderManagementPage() {
   const navigate = useNavigate();
 
-  // ✅ repo生成は “infrastructure” に寄せたので、ここは純粋に利用するだけ
   const repo = useMemo(() => createOrderRepository(), []);
+
+  // ── filter (Token) ────────────────────────────────────────
+  // 表示要件: 「移譲済み列」を「トークン列」に変更
+  // filter 値: "移譲済" | "未移譲"
+  type TokenFilterValue = "移譲済" | "未移譲";
+  const [tokenFilter, setTokenFilter] = useState<TokenFilterValue[]>([]);
+
+  const tokenOptions = useMemo(
+    () => [
+      { value: "移譲済", label: "移譲済" },
+      { value: "未移譲", label: "未移譲" },
+    ],
+    [],
+  );
 
   // ── sort ─────────────────────────────────────────────────
   const [activeKey, setActiveKey] = useState<SortKey>("createdAt");
@@ -54,12 +58,12 @@ export default function OrderManagementPage() {
       const res = await repo.listItemInventoryRows({ page: 1, perPage: 200 });
 
       const mapped: Row[] = (res.items ?? []).map((x) => ({
-        orderId: String(x.orderId ?? ""),
-        listId: String(x.listId ?? ""),
-        inventoryId: String(x.inventoryId ?? ""),
-        avatarId: String(x.avatarId ?? ""),
-        createdAt: String(x.createdAt ?? ""),
-        transferred: Boolean(x.transferred),
+        orderId: String((x as any).orderId ?? ""),
+        listId: String((x as any).listId ?? ""),
+        inventoryId: String((x as any).inventoryId ?? ""),
+        avatarId: String((x as any).avatarId ?? ""),
+        createdAt: String((x as any).createdAt ?? ""),
+        transferred: Boolean((x as any).transferred),
       }));
 
       setRowsRaw(mapped);
@@ -75,17 +79,21 @@ export default function OrderManagementPage() {
     void fetchRows();
   }, []);
 
-  // ── data (sort) ───────────────────────────────────────────
+  // ── data (filter → sort) ──────────────────────────────────
   const rows = useMemo(() => {
+    // 1) filter
     let data = rowsRaw;
 
+    if (tokenFilter.length > 0) {
+      data = data.filter((r) => {
+        const label: TokenFilterValue = r.transferred ? "移譲済" : "未移譲";
+        return tokenFilter.includes(label);
+      });
+    }
+
+    // 2) sort
     if (activeKey && direction) {
       data = [...data].sort((a, b) => {
-        if (activeKey === "orderId") {
-          const cmp = a.orderId.localeCompare(b.orderId);
-          return direction === "asc" ? cmp : -cmp;
-        }
-
         const aTime = a.createdAt;
         const bTime = b.createdAt;
 
@@ -103,21 +111,12 @@ export default function OrderManagementPage() {
     }
 
     return data;
-  }, [rowsRaw, activeKey, direction]);
+  }, [rowsRaw, tokenFilter, activeKey, direction]);
 
   // ── headers ──────────────────────────────────────────────
+  // ✅ 注文ID列への SortableTableHeader は廃止（ただの文字列にする）
   const headers: React.ReactNode[] = [
-    <SortableTableHeader
-      key="orderId"
-      label="注文ID"
-      sortKey="orderId"
-      activeKey={activeKey}
-      direction={activeKey === "orderId" ? direction : null}
-      onChange={(key, dir) => {
-        setActiveKey(key as SortKey);
-        setDirection(dir as SortDir);
-      }}
-    />,
+    "注文ID",
     "リストID",
     "在庫ID",
     "アバターID",
@@ -132,12 +131,19 @@ export default function OrderManagementPage() {
         setDirection(dir as SortDir);
       }}
     />,
-    "移譲済み",
+    <FilterableTableHeader
+      key="token"
+      label="トークン"
+      options={tokenOptions}
+      selected={tokenFilter}
+      onChange={(vals) => setTokenFilter(vals as TokenFilterValue[])}
+      dialogTitle="トークンで絞り込み"
+    />,
   ];
 
   // 詳細ページへ遷移
-  const goDetail = (orderId: string) => {
-    navigate(`/order/${encodeURIComponent(orderId)}`);
+  const goDetail = (id: string) => {
+    navigate(`/order/${encodeURIComponent(id)}`);
   };
 
   return (
@@ -149,13 +155,14 @@ export default function OrderManagementPage() {
         showResetButton
         isResetting={isResetting}
         onReset={() => {
+          setTokenFilter([]);
           setActiveKey("createdAt");
           setDirection("desc");
           void fetchRows();
         }}
         showCancelButton
         onCancel={() => {
-          // 例: 戻る/閉じる用途にしたいなら navigate(-1) にしてもOK
+          setTokenFilter([]);
           setActiveKey("createdAt");
           setDirection("desc");
           void fetchRows();
@@ -192,8 +199,8 @@ export default function OrderManagementPage() {
               <td>{o.listId || "-"}</td>
               <td>{o.inventoryId || "-"}</td>
               <td>{o.avatarId || "-"}</td>
-              <td>{formatDate(o.createdAt)}</td>
-              <td>{o.transferred ? "true" : "false"}</td>
+              <td>{safeDateLabelJa(o.createdAt, "-")}</td>
+              <td>{o.transferred ? "移譲済" : "未移譲"}</td>
             </tr>
           ))
         )}

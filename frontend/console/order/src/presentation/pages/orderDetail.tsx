@@ -10,17 +10,7 @@ import {
 } from "../../../../shell/src/shared/ui/card";
 
 import { createOrderRepository } from "../../infrastructure/repostiroty";
-
-// 日付フォーマット (YYYY/MM/DD)
-const formatDate = (iso: string | null | undefined): string => {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}/${m}/${day}`;
-};
+import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
 
 // 金額フォーマット
 const formatJPY = (n: number | null | undefined): string => {
@@ -43,13 +33,10 @@ type OrderDetailDTO = {
     Street?: string;
     Street2?: string;
     Country?: string;
-    // もし将来フィールド追加されても壊れないように
     [k: string]: any;
   };
 
   billingSnapshot?: {
-    Last4?: string;
-    CardHolderName?: string;
     [k: string]: any;
   };
 
@@ -90,8 +77,6 @@ export default function OrderDetail() {
       setError(null);
 
       try {
-        // repository の Order 型は「一覧用/汎用」と差が出やすいので、
-        // ここではレスポンスを DTO として受ける（camelCase前提）
         const o = (await repo.getById(id)) as unknown as OrderDetailDTO;
         if (cancelled) return;
         setOrder(o);
@@ -110,8 +95,9 @@ export default function OrderDetail() {
     };
   }, [orderId, repo]);
 
+  // ✅ 戻るは -1 ではなく、注文一覧（本モジュールのルート絶対）へ
   const onBack = React.useCallback(() => {
-    navigate(-1);
+    navigate("/order");
   }, [navigate]);
 
   // derived
@@ -127,281 +113,289 @@ export default function OrderDetail() {
   );
 
   const anyTransferred = items.some((it) => Boolean(it?.transferred));
-  const createdAt = formatDate(order?.createdAt);
+  const createdAt = safeDateLabelJa(order?.createdAt, "-");
 
   const shipping = order?.shippingSnapshot;
-  const billing = order?.billingSnapshot;
 
-  return (
-    <PageStyle
-      layout="single"
-      title={`注文詳細：${order?.id ?? orderId ?? "不明ID"}`}
-      onBack={onBack}
-    >
-      <Card className="mt-4">
+  // right column
+  const userId = order?.userId ?? "-";
+  const avatarId = order?.avatarId ?? "-";
+
+  const left = (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>注文情報</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="text-sm text-muted-foreground text-left">読み込み中...</div>
+        ) : error ? (
+          <div className="text-sm text-red-600 whitespace-pre-wrap text-left">
+            {error}
+          </div>
+        ) : !order ? (
+          <div className="text-sm text-muted-foreground text-left">データがありません。</div>
+        ) : (
+          <div className="space-y-8 text-left">
+            {/* =======================
+                基本情報（注文ID/カートIDは削除済）
+                ======================= */}
+            <div>
+              <div className="text-sm font-semibold mb-2 text-left">基本情報</div>
+              <table className="w-full text-sm text-left">
+                <tbody>
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      支払
+                    </th>
+                    <td className="py-2 text-left">
+                      {order.paid ? (
+                        <span className="order-badge is-paid">支払済</span>
+                      ) : (
+                        <span className="order-badge is-cancelled">未払い</span>
+                      )}
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      注文日
+                    </th>
+                    <td className="py-2 text-left">{createdAt}</td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      トークン
+                    </th>
+                    <td className="py-2 text-left">
+                      {anyTransferred ? (
+                        <span className="order-badge is-transferred">移譲済み</span>
+                      ) : (
+                        <span className="order-badge is-paid">未移譲</span>
+                      )}
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      アイテム数
+                    </th>
+                    <td className="py-2 text-left">{items.length} 点</td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      数量合計
+                    </th>
+                    <td className="py-2 text-left">{quantity} 点</td>
+                  </tr>
+
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      合計金額
+                    </th>
+                    <td className="py-2 text-left">{formatJPY(totalPrice)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* =======================
+                配送先（日本語ラベル）
+                ======================= */}
+            <div>
+              <div className="text-sm font-semibold mb-2 text-left">配送先</div>
+              <table className="w-full text-sm text-left">
+                <tbody>
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      郵便番号
+                    </th>
+                    <td className="py-2 text-left">{shipping?.ZipCode ?? "-"}</td>
+                  </tr>
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      都道府県
+                    </th>
+                    <td className="py-2 text-left">{shipping?.State ?? "-"}</td>
+                  </tr>
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      市区町村
+                    </th>
+                    <td className="py-2 text-left">{shipping?.City ?? "-"}</td>
+                  </tr>
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      住所1
+                    </th>
+                    <td className="py-2 text-left">{shipping?.Street ?? "-"}</td>
+                  </tr>
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      住所2
+                    </th>
+                    <td className="py-2 text-left">{shipping?.Street2 ?? "-"}</td>
+                  </tr>
+                  <tr>
+                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                      国
+                    </th>
+                    <td className="py-2 text-left">{shipping?.Country ?? "-"}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* =======================
+                items（縦1行：1アイテム=縦に項目改行）
+                ======================= */}
+            <div>
+              <div className="text-sm font-semibold mb-2 text-left">アイテム</div>
+
+              {items.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-left">
+                  アイテムがありません。
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {items.map((it, idx) => {
+                    const transferredAt = safeDateLabelJa(it.transferredAt, "-");
+
+                    const qty = Number(it.qty ?? 0) || 0;
+                    const price = Number(it.price ?? 0) || 0;
+
+                    const tokenLabel = it.transferred ? "移譲済" : "未移譲";
+
+                    return (
+                      <Card key={idx}>
+                        <CardHeader className="py-3">
+                          <CardTitle className="text-base text-left">
+                            アイテム {idx + 1}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <table className="w-full text-sm text-left">
+                            <tbody>
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  modelId
+                                </th>
+                                <td className="py-2 text-left">{it.modelId ?? "-"}</td>
+                              </tr>
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  inventoryId
+                                </th>
+                                <td className="py-2 text-left">
+                                  {it.inventoryId ?? "-"}
+                                </td>
+                              </tr>
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  listId
+                                </th>
+                                <td className="py-2 text-left">{it.listId ?? "-"}</td>
+                              </tr>
+
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  数量
+                                </th>
+                                <td className="py-2 text-left">{qty}</td>
+                              </tr>
+
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  金額
+                                </th>
+                                <td className="py-2 text-left">{formatJPY(price)}</td>
+                              </tr>
+
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  トークン
+                                </th>
+                                <td className="py-2 text-left">
+                                  {it.transferred ? (
+                                    <span className="order-badge is-transferred">
+                                      {tokenLabel}
+                                    </span>
+                                  ) : (
+                                    <span className="order-badge is-paid">
+                                      {tokenLabel}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  移譲日
+                                </th>
+                                <td className="py-2 text-left">{transferredAt}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const right = (
+    <div className="mt-4 space-y-4 text-left">
+      <Card>
         <CardHeader>
-          <CardTitle>注文情報</CardTitle>
+          <CardTitle className="text-left">関連情報</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-sm text-muted-foreground">読み込み中...</div>
+            <div className="text-sm text-muted-foreground text-left">読み込み中...</div>
           ) : error ? (
-            <div className="text-sm text-red-600 whitespace-pre-wrap">
+            <div className="text-sm text-red-600 whitespace-pre-wrap text-left">
               {error}
             </div>
           ) : !order ? (
-            <div className="text-sm text-muted-foreground">
-              データがありません。
-            </div>
+            <div className="text-sm text-muted-foreground text-left">-</div>
           ) : (
-            <div className="space-y-8">
-              {/* =======================
-                  基本情報（レスポンス直表示）
-                  ======================= */}
-              <div>
-                <div className="text-sm font-semibold mb-2">基本情報</div>
-                <table className="w-full text-sm">
-                  <tbody>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        注文ID
-                      </th>
-                      <td className="py-2">{order.id ?? "-"}</td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        ユーザーID
-                      </th>
-                      <td className="py-2">{order.userId ?? "-"}</td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        アバターID
-                      </th>
-                      <td className="py-2">{order.avatarId ?? "-"}</td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        カートID
-                      </th>
-                      <td className="py-2">{order.cartId ?? "-"}</td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        支払
-                      </th>
-                      <td className="py-2">
-                        {order.paid ? (
-                          <span className="order-badge is-paid">支払済</span>
-                        ) : (
-                          <span className="order-badge is-cancelled">未払い</span>
-                        )}
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        注文日
-                      </th>
-                      <td className="py-2">{createdAt}</td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        移譲済み（注文内いずれか）
-                      </th>
-                      <td className="py-2">
-                        {anyTransferred ? (
-                          <span className="order-badge is-transferred">
-                            移譲済み
-                          </span>
-                        ) : (
-                          <span className="order-badge is-paid">未移譲</span>
-                        )}
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        アイテム数
-                      </th>
-                      <td className="py-2">{items.length} 点</td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        数量合計
-                      </th>
-                      <td className="py-2">{quantity} 点</td>
-                    </tr>
-
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        合計金額
-                      </th>
-                      <td className="py-2">{formatJPY(totalPrice)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* =======================
-                  住所（shippingSnapshot）
-                  ======================= */}
-              <div>
-                <div className="text-sm font-semibold mb-2">配送先</div>
-                <table className="w-full text-sm">
-                  <tbody>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        ZipCode
-                      </th>
-                      <td className="py-2">{shipping?.ZipCode ?? "-"}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        State
-                      </th>
-                      <td className="py-2">{shipping?.State ?? "-"}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        City
-                      </th>
-                      <td className="py-2">{shipping?.City ?? "-"}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        Street
-                      </th>
-                      <td className="py-2">{shipping?.Street ?? "-"}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        Street2
-                      </th>
-                      <td className="py-2">{shipping?.Street2 ?? "-"}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        Country
-                      </th>
-                      <td className="py-2">{shipping?.Country ?? "-"}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* =======================
-                  請求情報（billingSnapshot）
-                  ======================= */}
-              <div>
-                <div className="text-sm font-semibold mb-2">請求情報</div>
-                <table className="w-full text-sm">
-                  <tbody>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        Last4
-                      </th>
-                      <td className="py-2">{billing?.Last4 ?? "-"}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                        CardHolderName
-                      </th>
-                      <td className="py-2">{billing?.CardHolderName ?? "-"}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* =======================
-                  items（全表示）
-                  ======================= */}
-              <div>
-                <div className="text-sm font-semibold mb-2">アイテム</div>
-                {items.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
-                    アイテムがありません。
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left font-medium py-2 pr-4 whitespace-nowrap">
-                            modelId
-                          </th>
-                          <th className="text-left font-medium py-2 pr-4 whitespace-nowrap">
-                            inventoryId
-                          </th>
-                          <th className="text-left font-medium py-2 pr-4 whitespace-nowrap">
-                            listId
-                          </th>
-                          <th className="text-right font-medium py-2 pr-4 whitespace-nowrap">
-                            qty
-                          </th>
-                          <th className="text-right font-medium py-2 pr-4 whitespace-nowrap">
-                            price
-                          </th>
-                          <th className="text-left font-medium py-2 pr-4 whitespace-nowrap">
-                            transferred
-                          </th>
-                          <th className="text-left font-medium py-2 whitespace-nowrap">
-                            transferredAt
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((it, idx) => {
-                          const transferredAt = it.transferredAt
-                            ? formatDate(it.transferredAt)
-                            : "-";
-                          return (
-                            <tr key={idx} className="border-b">
-                              <td className="py-2 pr-4">
-                                {it.modelId ?? "-"}
-                              </td>
-                              <td className="py-2 pr-4">
-                                {it.inventoryId ?? "-"}
-                              </td>
-                              <td className="py-2 pr-4">
-                                {it.listId ?? "-"}
-                              </td>
-                              <td className="py-2 pr-4 text-right">
-                                {Number(it.qty ?? 0) || 0}
-                              </td>
-                              <td className="py-2 pr-4 text-right">
-                                {formatJPY(Number(it.price ?? 0) || 0)}
-                              </td>
-                              <td className="py-2 pr-4">
-                                {it.transferred ? (
-                                  <span className="order-badge is-transferred">
-                                    true
-                                  </span>
-                                ) : (
-                                  <span className="order-badge is-paid">
-                                    false
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2">{transferredAt}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
+            <table className="w-full text-sm text-left">
+              <tbody>
+                <tr>
+                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    ユーザーID
+                  </th>
+                  <td className="py-2 text-left">{userId}</td>
+                </tr>
+                <tr>
+                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    アバターID
+                  </th>
+                  <td className="py-2 text-left">{avatarId}</td>
+                </tr>
+              </tbody>
+            </table>
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+
+  return (
+    <PageStyle
+      layout="grid-2"
+      title={`注文詳細：${order?.id ?? orderId ?? "不明ID"}`}
+      onBack={onBack}
+    >
+      {[left, right]}
     </PageStyle>
   );
 }
