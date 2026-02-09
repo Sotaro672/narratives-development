@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"log"
 	"strings"
 	"time"
 
@@ -418,60 +417,6 @@ func (r *BrandRepositoryFS) Save(
 		return branddom.Brand{}, err
 	}
 	return r.docToDomain(snap)
-}
-
-// ========================================
-// Reset
-// ========================================
-
-func (r *BrandRepositoryFS) Reset(ctx context.Context) error {
-	iter := r.col().Documents(ctx)
-	defer iter.Stop()
-
-	var refs []*firestore.DocumentRef
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		refs = append(refs, doc.Ref)
-	}
-
-	if len(refs) == 0 {
-		log.Printf("[firestore] Reset brands: no docs to delete\n")
-		return nil
-	}
-
-	const chunkSize = 400
-
-	deletedCount := 0
-
-	for start := 0; start < len(refs); start += chunkSize {
-		end := start + chunkSize
-		if end > len(refs) {
-			end = len(refs)
-		}
-		chunk := refs[start:end]
-
-		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, ref := range chunk {
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		deletedCount += len(chunk)
-	}
-
-	log.Printf("[firestore] Reset brands (transactional): deleted %d docs\n", deletedCount)
-	return nil
 }
 
 // ========================================

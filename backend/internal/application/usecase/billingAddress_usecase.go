@@ -98,17 +98,3 @@ func (u *BillingAddressUsecase) Delete(ctx context.Context, id string) error {
 func (u *BillingAddressUsecase) SetDefault(ctx context.Context, id string) error {
 	return u.repo.SetDefault(ctx, strings.TrimSpace(id))
 }
-
-// ============================================================
-// Utilities (dev/testing)
-// ============================================================
-
-func (u *BillingAddressUsecase) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return u.repo.WithTx(ctx, fn)
-}
-
-func (u *BillingAddressUsecase) Reset(ctx context.Context) error {
-	return u.repo.Reset(ctx)
-}
-
-// Helpers は common_usecase.go に移動しました（trimPtr を使用してください）.

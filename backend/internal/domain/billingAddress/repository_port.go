@@ -102,10 +102,6 @@ type RepositoryPort interface {
 	// 互換: 旧契約に存在していたため残す（entity.go では default の概念なし）
 	// 実装側では no-op または独自規約で担保。
 	SetDefault(ctx context.Context, id string) error
-
-	// 任意: トランザクション境界/メンテ
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
-	Reset(ctx context.Context) error
 }
 
 // 共通エラー（契約）

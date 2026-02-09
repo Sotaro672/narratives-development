@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -370,56 +369,6 @@ func (r *OrderRepositoryFS) Delete(ctx context.Context, id string) error {
 		}
 		return err
 	}
-	return nil
-}
-
-// Reset deletes all orders using Transactions instead of WriteBatch.
-func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	it := r.ordersCol().Documents(ctx)
-	defer it.Stop()
-
-	var refs []*firestore.DocumentRef
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		refs = append(refs, doc.Ref)
-	}
-
-	if len(refs) == 0 {
-		return nil
-	}
-
-	const chunkSize = 400
-	for start := 0; start < len(refs); start += chunkSize {
-		end := start + chunkSize
-		if end > len(refs) {
-			end = len(refs)
-		}
-		chunk := refs[start:end]
-
-		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, ref := range chunk {
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	log.Printf("[order_repo_fs] Reset OK deleted=%d", len(refs))
 	return nil
 }
 

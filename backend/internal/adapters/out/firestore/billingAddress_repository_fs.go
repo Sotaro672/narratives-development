@@ -311,14 +311,6 @@ func (r *BillingAddressRepositoryFS) SetDefault(ctx context.Context, id string) 
 	return nil
 }
 
-// WithTx: Firestore のトランザクション境界（シンプルラッパ）
-func (r *BillingAddressRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return r.Client.RunTransaction(ctx, func(txCtx context.Context, _ *firestore.Transaction) error {
-		return fn(txCtx)
-	})
-}
-
-// Reset (development/testing):
 func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 	iter := r.col().Documents(ctx)
 	defer iter.Stop()
