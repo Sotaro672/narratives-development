@@ -39,6 +39,12 @@ type orderItemDTO struct {
 	Qty         int    `json:"qty,omitempty"`
 	Price       int    `json:"price,omitempty"`
 
+	// NOTE:
+	// - /orders/{id} は domain.Order をそのまま読むだけなので、
+	//   ここでは productBlueprintId / tokenBlueprintId を出せない。
+	// - もし /orders/{id} にも出したい場合は、inventory repo を handler に注入して
+	//   InventoryID から解決する必要がある。
+
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
 }
@@ -174,6 +180,7 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 	// sort は repo 実装に依存しやすいので、まずはゼロ値で渡す（必要なら後で拡張）
 	var sort common.Sort
 
+	// ✅ OrderManagementQuery 側で productBlueprintId/tokenBlueprintId を解決して返す前提
 	pr, err := h.q.ListItemInventoryRows(ctx, filter, sort, page)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -181,6 +188,7 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// pr.Items[] の各行に productBlueprintId/tokenBlueprintId が含まれる
 	_ = json.NewEncoder(w).Encode(pr)
 }
 

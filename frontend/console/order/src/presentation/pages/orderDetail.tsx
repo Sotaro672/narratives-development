@@ -32,7 +32,7 @@ type OrderDetailDTO = {
     City?: string;
     Street?: string;
     Street2?: string;
-    Country?: string;
+    // ✅ remove: Country
     [k: string]: any;
   };
 
@@ -42,7 +42,14 @@ type OrderDetailDTO = {
 
   items?: Array<{
     modelId?: string;
-    inventoryId?: string;
+
+    // ✅ remove: inventoryId
+    // inventoryId?: string;
+
+    // ✅ NEW: backend should return these (via inventoryId resolution)
+    productBlueprintId?: string;
+    tokenBlueprintId?: string;
+
     listId?: string;
     qty?: number;
     price?: number;
@@ -238,12 +245,8 @@ export default function OrderDetail() {
                     </th>
                     <td className="py-2 text-left">{shipping?.Street2 ?? "-"}</td>
                   </tr>
-                  <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                      国
-                    </th>
-                    <td className="py-2 text-left">{shipping?.Country ?? "-"}</td>
-                  </tr>
+
+                  {/* ✅ remove: 国 */}
                 </tbody>
               </table>
             </div>
@@ -284,14 +287,25 @@ export default function OrderDetail() {
                                 </th>
                                 <td className="py-2 text-left">{it.modelId ?? "-"}</td>
                               </tr>
+
+                              {/* ✅ NEW: inventoryId の代わりに2列 */}
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  inventoryId
+                                  productBlueprintId
                                 </th>
                                 <td className="py-2 text-left">
-                                  {it.inventoryId ?? "-"}
+                                  {it.productBlueprintId ?? "-"}
                                 </td>
                               </tr>
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  tokenBlueprintId
+                                </th>
+                                <td className="py-2 text-left">
+                                  {it.tokenBlueprintId ?? "-"}
+                                </td>
+                              </tr>
+
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                                   listId

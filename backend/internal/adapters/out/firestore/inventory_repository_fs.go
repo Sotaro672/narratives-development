@@ -111,6 +111,21 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 	return out
 }
 
+// ResolveBlueprintIDsByInventoryID implements invdom.RepositoryPort.
+// inventoryID から productBlueprintId と tokenBlueprintId を返す。
+// - not found: invdom.ErrNotFound
+// - empty id:  invdom.ErrInvalidMintID
+func (r *InventoryRepositoryFS) ResolveBlueprintIDsByInventoryID(
+	ctx context.Context,
+	inventoryID string,
+) (productBlueprintID string, tokenBlueprintID string, err error) {
+	m, err := r.GetByID(ctx, inventoryID)
+	if err != nil {
+		return "", "", err
+	}
+	return strings.TrimSpace(m.ProductBlueprintID), strings.TrimSpace(m.TokenBlueprintID), nil
+}
+
 // ============================================================
 // CRUD
 // ============================================================

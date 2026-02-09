@@ -16,14 +16,11 @@ import (
 	pbuc "narratives/internal/application/productBlueprint/usecase"
 	productionapp "narratives/internal/application/production"
 
-	companyquery "narratives/internal/application/query/console"
+	query "narratives/internal/application/query/console"
 
 	// ✅ moved: list queries are now in subpackages
 	listdetailquery "narratives/internal/application/query/console/list/detail"
 	listmanagementquery "narratives/internal/application/query/console/list/management"
-
-	// ✅ NEW: order management query
-	orderquery "narratives/internal/application/query/console"
 
 	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
@@ -92,17 +89,17 @@ type Container struct {
 	CartUC *uc.CartUsecase
 	PostUC *uc.PostUsecase
 
-	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
-	MintRequestQueryService       *companyquery.MintRequestQueryService
-	InventoryQuery                *companyquery.InventoryQuery
-	ListCreateQuery               *companyquery.ListCreateQuery
+	CompanyProductionQueryService *query.CompanyProductionQueryService
+	MintRequestQueryService       *query.MintRequestQueryService
+	InventoryQuery                *query.InventoryQuery
+	ListCreateQuery               *query.ListCreateQuery
 
 	// ✅ moved to subpackages
 	ListManagementQuery *listmanagementquery.ListManagementQuery
 	ListDetailQuery     *listdetailquery.ListDetailQuery
 
 	// ✅ NEW: order management query instance (for console order endpoints)
-	OrderManagementQuery *orderquery.OrderManagementQuery
+	OrderManagementQuery *query.OrderManagementQuery
 
 	// ✅ NEW: list image endpoints wiring (used by console handler)
 	// NOTE: DELETE API abolished -> no deleter in container.
@@ -137,15 +134,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("clients/infra is nil")
 	}
 
-	// ✅ NEW: build OrderManagementQuery
-	// NOTE:
-	// - ここは現在コンパイルエラーになります（repos.orderRepo が OrderLister を満たさないため）
-	// - 解消には order_management_query.go 側の OrderLister を repo の List シグネチャに合わせてください（別途修正が必要）
-	var orderMgmtQ *orderquery.OrderManagementQuery
-	if repos.orderRepo != nil && q.inventoryQuery != nil {
-		orderMgmtQ = orderquery.NewOrderManagementQuery(orderquery.NewOrderManagementQueryParams{
-			Lister:  repos.orderRepo,
-			InvRows: q.inventoryQuery,
+	// =========================================================
+	// ✅ NEW: build OrderManagementQuery (console)
+	//
+	// Requirements:
+	// - Lister:       order repository (List by usecase.OrderFilter/common.Sort/common.Page)
+	// - InvRows:      company boundary provider (InventoryQuery.ListByCurrentCompany)
+	// - InvBlueprint: inventoryId -> (productBlueprintId, tokenBlueprintId)
+	// =========================================================
+	var orderMgmtQ *query.OrderManagementQuery
+	if repos.orderRepo != nil && q.inventoryQuery != nil && repos.inventoryRepoForUC != nil {
+		orderMgmtQ = query.NewOrderManagementQuery(query.NewOrderManagementQueryParams{
+			Lister:       repos.orderRepo,
+			InvRows:      q.inventoryQuery,
+			InvBlueprint: repos.inventoryRepoForUC, // ✅ 必須: ResolveBlueprintIDsByInventoryID を実装していること
 		})
 	}
 
@@ -197,7 +199,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ListCreateQuery:               q.listCreateQuery,
 
 		ListManagementQuery: q.listManagementQuery,
-		ListDetailQuery:     q.listDetailQuery, // ✅ FIX: 正しいフィールド名
+		ListDetailQuery:     q.listDetailQuery,
 
 		// ✅ NEW
 		OrderManagementQuery: orderMgmtQ,

@@ -40,6 +40,11 @@ export type OrderItemInventoryRowDTO = {
   createdAt?: string; // RFC3339(UTC)
 
   inventoryId: string;
+
+  // ✅ NEW: backend OrderManagementQuery が inventoryId から解決して返す
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+
   listId?: string;
   modelId?: string;
   qty?: number;
@@ -213,6 +218,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/items${qs}`);
+      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId が含まれる
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(fetcher, url, {
         method: "GET",
       });

@@ -23,6 +23,7 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	uc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
+	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
 )
 
@@ -37,6 +38,12 @@ type OrderLister interface {
 
 type InventoryRowsLister interface {
 	ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error)
+}
+
+// ✅ NEW: inventoryId から productBlueprintId / tokenBlueprintId を引ける read-only port
+// RepositoryPort を直接要求するのではなく、必要最小のメソッドだけ切り出す。
+type InventoryBlueprintResolver interface {
+	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
 // ============================================================
@@ -59,10 +66,15 @@ type OrderItemInventoryRowDTO struct {
 
 	// item-level
 	InventoryID string `json:"inventoryId"`
-	ListID      string `json:"listId,omitempty"`
-	ModelID     string `json:"modelId,omitempty"`
-	Qty         int    `json:"qty,omitempty"`
-	Price       int    `json:"price,omitempty"`
+
+	// ✅ NEW: resolved from inventoryId via ResolveBlueprintIDsByInventoryID
+	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
+	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+
+	ListID  string `json:"listId,omitempty"`
+	ModelID string `json:"modelId,omitempty"`
+	Qty     int    `json:"qty,omitempty"`
+	Price   int    `json:"price,omitempty"`
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
@@ -78,19 +90,22 @@ type InventoryIDDTO struct {
 // ============================================================
 
 type OrderManagementQuery struct {
-	lister  OrderLister
-	invRows InventoryRowsLister // REQUIRED
+	lister       OrderLister
+	invRows      InventoryRowsLister        // REQUIRED
+	invBlueprint InventoryBlueprintResolver // REQUIRED (to return pb/tb)
 }
 
 type NewOrderManagementQueryParams struct {
-	Lister  OrderLister
-	InvRows InventoryRowsLister // REQUIRED
+	Lister       OrderLister
+	InvRows      InventoryRowsLister        // REQUIRED
+	InvBlueprint InventoryBlueprintResolver // REQUIRED
 }
 
 func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQuery {
 	return &OrderManagementQuery{
-		lister:  p.Lister,
-		invRows: p.InvRows,
+		lister:       p.Lister,
+		invRows:      p.InvRows,
+		invBlueprint: p.InvBlueprint,
 	}
 }
 
@@ -117,8 +132,8 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	page = normalizePage(page)
 
-	if q == nil || q.lister == nil || q.invRows == nil {
-		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows required)")
+	if q == nil || q.lister == nil || q.invRows == nil || q.invBlueprint == nil {
+		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
 	}
 
 	allowedSet, err := allowedInventoryIDSetFromContext(ctx, q.invRows)
@@ -137,6 +152,31 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	}
 
 	allowedAll := make([]OrderItemInventoryRowDTO, 0, page.PerPage)
+
+	// ✅ inventoryId -> (pbID,tbID) cache（同一IDを何度も引かない）
+	type bt struct {
+		pb string
+		tb string
+	}
+	blueprintCache := map[string]bt{}
+
+	resolveBlueprint := func(invID string) (string, string, error) {
+		invID = strings.TrimSpace(invID)
+		if invID == "" {
+			return "", "", invdom.ErrInvalidMintID
+		}
+		if v, ok := blueprintCache[invID]; ok {
+			return v.pb, v.tb, nil
+		}
+		pbID, tbID, e := q.invBlueprint.ResolveBlueprintIDsByInventoryID(ctx, invID)
+		if e != nil {
+			return "", "", e
+		}
+		pbID = strings.TrimSpace(pbID)
+		tbID = strings.TrimSpace(tbID)
+		blueprintCache[invID] = bt{pb: pbID, tb: tbID}
+		return pbID, tbID, nil
+	}
 
 	// スキャン上限（無限ループや巨大テーブルを避ける）
 	const maxScanPages = 500
@@ -176,6 +216,13 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					continue
 				}
 
+				// ✅ NEW: inventoryId -> pb/tb を解決して返す
+				pbID, tbID, e2 := resolveBlueprint(invID)
+				if e2 != nil {
+					log.Printf("[OrderManagementQuery] ERROR ResolveBlueprintIDsByInventoryID failed inventoryId=%q err=%v", invID, e2)
+					return common.PageResult[OrderItemInventoryRowDTO]{}, e2
+				}
+
 				transferredAt := ""
 				if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
 					transferredAt = it.TransferredAt.UTC().Format(time.RFC3339)
@@ -191,11 +238,14 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					Paid:      ord.Paid,
 					CreatedAt: createdAt,
 
-					InventoryID: invID,
-					ListID:      strings.TrimSpace(it.ListID),
-					ModelID:     strings.TrimSpace(it.ModelID),
-					Qty:         it.Qty,
-					Price:       it.Price,
+					InventoryID:        invID,
+					ProductBlueprintID: pbID,
+					TokenBlueprintID:   tbID,
+
+					ListID:  strings.TrimSpace(it.ListID),
+					ModelID: strings.TrimSpace(it.ModelID),
+					Qty:     it.Qty,
+					Price:   it.Price,
 
 					Transferred:   it.Transferred,
 					TransferredAt: transferredAt,

@@ -13,11 +13,18 @@ import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
 type SortKey = "createdAt" | null;
 type SortDir = "asc" | "desc" | null;
 
-// 画面に映す値: orderId,listId,inventoryId,avatarId,createdAt,transfered:boolean
+// 画面に映す値: orderId,listId,productBlueprintId,tokenBlueprintId,avatarId,createdAt,transfered:boolean
 type Row = {
   orderId: string;
   listId: string;
+
+  // ✅ backend が解決して返す
+  productBlueprintId: string;
+  tokenBlueprintId: string;
+
+  // 内部キー用に保持（行キー等に使う）
   inventoryId: string;
+
   avatarId: string;
   createdAt: string;
   transferred: boolean;
@@ -29,8 +36,6 @@ export default function OrderManagementPage() {
   const repo = useMemo(() => createOrderRepository(), []);
 
   // ── filter (Token) ────────────────────────────────────────
-  // 表示要件: 「移譲済み列」を「トークン列」に変更
-  // filter 値: "移譲済" | "未移譲"
   type TokenFilterValue = "移譲済" | "未移譲";
   const [tokenFilter, setTokenFilter] = useState<TokenFilterValue[]>([]);
 
@@ -60,7 +65,13 @@ export default function OrderManagementPage() {
       const mapped: Row[] = (res.items ?? []).map((x) => ({
         orderId: String((x as any).orderId ?? ""),
         listId: String((x as any).listId ?? ""),
+
         inventoryId: String((x as any).inventoryId ?? ""),
+
+        // ✅ split しない。backend の返却値をそのまま使う
+        productBlueprintId: String((x as any).productBlueprintId ?? ""),
+        tokenBlueprintId: String((x as any).tokenBlueprintId ?? ""),
+
         avatarId: String((x as any).avatarId ?? ""),
         createdAt: String((x as any).createdAt ?? ""),
         transferred: Boolean((x as any).transferred),
@@ -114,11 +125,11 @@ export default function OrderManagementPage() {
   }, [rowsRaw, tokenFilter, activeKey, direction]);
 
   // ── headers ──────────────────────────────────────────────
-  // ✅ 注文ID列への SortableTableHeader は廃止（ただの文字列にする）
   const headers: React.ReactNode[] = [
     "注文ID",
     "リストID",
-    "在庫ID",
+    "商品BP ID",
+    "トークンBP ID",
     "アバターID",
     <SortableTableHeader
       key="createdAt"
@@ -197,7 +208,11 @@ export default function OrderManagementPage() {
               </td>
 
               <td>{o.listId || "-"}</td>
-              <td>{o.inventoryId || "-"}</td>
+
+              {/* ✅ backend 返却値をそのまま表示 */}
+              <td>{o.productBlueprintId || "-"}</td>
+              <td>{o.tokenBlueprintId || "-"}</td>
+
               <td>{o.avatarId || "-"}</td>
               <td>{safeDateLabelJa(o.createdAt, "-")}</td>
               <td>{o.transferred ? "移譲済" : "未移譲"}</td>

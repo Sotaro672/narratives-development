@@ -21,6 +21,25 @@ type RepositoryPort interface {
 	ListByModelID(ctx context.Context, modelID string) ([]Mint, error)
 	ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]Mint, error)
 
+	// ------------------------------------------------------------
+	// ✅ NEW: inventoryId -> (productBlueprintId, tokenBlueprintId)
+	// ------------------------------------------------------------
+	//
+	// ResolveBlueprintIDsByInventoryID returns the pair of blueprint IDs for a given inventory document ID.
+	//
+	// Expected behavior:
+	// - If the inventory does not exist: return ErrNotFound
+	// - If inventoryID is empty/invalid: return ErrInvalidMintID
+	// - Otherwise: return (productBlueprintID, tokenBlueprintID, nil)
+	//
+	// NOTE:
+	// - Implementation may parse inventoryID if it follows BuildMintID convention (productBlueprintId__tokenBlueprintId),
+	//   but it MUST be safe and correct even if the ID format changes; therefore reading the document is acceptable.
+	ResolveBlueprintIDsByInventoryID(
+		ctx context.Context,
+		inventoryID string,
+	) (productBlueprintID string, tokenBlueprintID string, err error)
+
 	// atomic upsert (for mint -> inventory reflection)
 	// - docId = productBlueprintId__tokenBlueprintId
 	// - Stock[modelId].Products に productId を追記（UNION / add-only）
