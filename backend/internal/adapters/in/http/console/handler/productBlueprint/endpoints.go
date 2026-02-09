@@ -12,6 +12,35 @@ import (
 )
 
 // ---------------------------------------------------
+// internal normalizers (UI label -> domain enum)
+// ---------------------------------------------------
+
+func normalizeItemType(s string) pbdom.ItemType {
+	switch strings.TrimSpace(s) {
+	case "tops", "トップス":
+		return pbdom.ItemTops
+	case "bottoms", "ボトムス":
+		return pbdom.ItemBottoms
+	case "other", "その他":
+		return pbdom.ItemOther
+	default:
+		// fall back: let domain validation reject unknown values
+		return pbdom.ItemType(strings.TrimSpace(s))
+	}
+}
+
+func normalizeTagType(s string) pbdom.ProductIDTagType {
+	switch strings.TrimSpace(s) {
+	case "qr", "QRコード", "QR":
+		return pbdom.TagQR
+	case "nfc", "NFC":
+		return pbdom.TagNFC
+	default:
+		return pbdom.ProductIDTagType(strings.TrimSpace(s))
+	}
+}
+
+// ---------------------------------------------------
 // POST /product-blueprints
 // ---------------------------------------------------
 
@@ -33,18 +62,24 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 	pb := pbdom.ProductBlueprint{
 		ProductName:      strings.TrimSpace(in.ProductName),
 		BrandID:          strings.TrimSpace(in.BrandId),
-		ItemType:         pbdom.ItemType(strings.TrimSpace(in.ItemType)),
+		ItemType:         normalizeItemType(in.ItemType),
 		Fit:              strings.TrimSpace(in.Fit),
 		Material:         strings.TrimSpace(in.Material),
 		Weight:           in.Weight,
 		QualityAssurance: in.QualityAssurance,
 		AssigneeID:       strings.TrimSpace(in.AssigneeId),
-		CompanyID:        strings.TrimSpace(in.CompanyId),
-		CreatedBy:        createdBy,
+
+		// NOTE: companyId は usecase で auth context を正として上書きされる想定だが、
+		// handler でも一応セットしておく（ログ/デバッグ用）。
+		CompanyID: strings.TrimSpace(in.CompanyId),
+
+		CreatedBy: createdBy,
+
 		// printed は bool。create 時は常に false（未印刷）
 		Printed: false,
+
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: pbdom.ProductIDTagType(strings.TrimSpace(in.ProductIdTag.Type)),
+			Type: normalizeTagType(in.ProductIdTag.Type),
 		},
 	}
 
@@ -90,7 +125,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 		ID:               id,
 		ProductName:      strings.TrimSpace(in.ProductName),
 		BrandID:          strings.TrimSpace(in.BrandId),
-		ItemType:         pbdom.ItemType(strings.TrimSpace(in.ItemType)),
+		ItemType:         normalizeItemType(in.ItemType),
 		Fit:              strings.TrimSpace(in.Fit),
 		Material:         strings.TrimSpace(in.Material),
 		Weight:           in.Weight,
@@ -99,7 +134,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 		CompanyID:        strings.TrimSpace(in.CompanyId),
 		UpdatedBy:        updatedBy,
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: pbdom.ProductIDTagType(strings.TrimSpace(in.ProductIdTag.Type)),
+			Type: normalizeTagType(in.ProductIdTag.Type),
 		},
 	}
 
@@ -340,10 +375,6 @@ func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request, id string)
 
 // ---------------------------------------------------
 // POST /product-blueprints/{id}/model-refs
-//   - 起票後に modelRefs（modelId + displayOrder）を追記
-//   - 入力は modelIds（順序が displayOrder の採番元）
-//   - updatedAt / updatedBy は更新しない（usecase/repo 側で保証）
-//   - 出力は detail（既存の toDetailOutput）
 // ---------------------------------------------------
 
 func (h *Handler) appendModelRefs(w http.ResponseWriter, r *http.Request, id string) {
@@ -391,7 +422,6 @@ func (h *Handler) appendModelRefs(w http.ResponseWriter, r *http.Request, id str
 		return
 	}
 
-	// usecase: 入力 modelIds（displayOrder 採番は usecase 側）
 	updated, err := h.uc.AppendModelRefs(ctx, id, modelIds)
 	if err != nil {
 		writeProductBlueprintErr(w, err)

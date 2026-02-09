@@ -11,6 +11,9 @@ import (
 // ========================================
 
 type CreateInput struct {
+	// ★ Create時に usecase で生成して渡す
+	ID string `json:"id"`
+
 	ProductName      string       `json:"productName"`
 	BrandID          string       `json:"brandId"`
 	ItemType         ItemType     `json:"itemType"`
@@ -29,7 +32,7 @@ type CreateInput struct {
 	ModelRefs []ModelRef `json:"modelRefs,omitempty"`
 
 	CreatedBy *string    `json:"createdBy,omitempty"`
-	CreatedAt *time.Time `json:"createdAt,omitempty"` // repo may set if nil
+	CreatedAt *time.Time `json:"createdAt,omitempty"` // ★ usecase が必ず埋める（domain.validate が必須）
 }
 
 type Patch struct {
@@ -149,14 +152,6 @@ type Repository interface {
 	Delete(ctx context.Context, id string) error
 
 	// ★ 追加: ProductBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する
-	//
-	// 要件:
-	// - updatedAt / updatedBy を更新しない（touch しない部分更新）
-	// - modelRefs だけを書き換える（Firestore の Update / Set(merge) など）
-	//
-	// Contract:
-	// - refs は表示順（DisplayOrder）が埋まっていること（1..N）
-	// - 実装側で既存とマージして重複排除し、必要なら displayOrder を採番し直してよい
 	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []ModelRef) (ProductBlueprint, error)
 
 	// ★ printed: false → true への状態遷移

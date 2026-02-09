@@ -4,6 +4,7 @@ package productBlueprintUsecase
 import (
 	"context"
 	"strings"
+	"time"
 
 	usecase "narratives/internal/application/usecase"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -24,7 +25,13 @@ func (u *ProductBlueprintUsecase) Create(
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
 
+	// ★ Create時に usecase でID生成 + CreatedAtセット（domain.validate が必須）
+	id := productbpdom.NewID()
+	now := time.Now().UTC()
+	createdAt := &now
+
 	in := productbpdom.CreateInput{
+		ID:               id,
 		ProductName:      strings.TrimSpace(v.ProductName),
 		BrandID:          strings.TrimSpace(v.BrandID),
 		ItemType:         v.ItemType,
@@ -34,9 +41,17 @@ func (u *ProductBlueprintUsecase) Create(
 		QualityAssurance: v.QualityAssurance,
 		ProductIdTag:     v.ProductIdTag,
 		AssigneeID:       strings.TrimSpace(v.AssigneeID),
-		CompanyID:        cid,
-		CreatedBy:        v.CreatedBy,
-		CreatedAt:        nil, // repo may set if nil（必要なら v.CreatedAt を詰めても良い）
+
+		// NOTE: companyId は auth context を正とする（越境防止）
+		CompanyID: cid,
+
+		CreatedBy: v.CreatedBy,
+
+		// domain.validate が CreatedAt 必須なので必ず埋める
+		CreatedAt: createdAt,
+
+		// create 時点では空でも良い（後段で append）
+		ModelRefs: nil,
 	}
 
 	created, err := u.repo.Create(ctx, in)
@@ -146,10 +161,6 @@ func (u *ProductBlueprintUsecase) Update(
 		QualityAssurance: &qa,
 		ProductIdTag:     &tag,
 		AssigneeID:       &assigneeID,
-
-		// NOTE:
-		// - ModelRefs は Update API では受け取らない（変更しない）ため nil のまま
-		// - BrandName / CompanyName 等の表示専用も永続化しないため nil のまま
 	}
 
 	updated, err := u.repo.Update(ctx, id, patch)
