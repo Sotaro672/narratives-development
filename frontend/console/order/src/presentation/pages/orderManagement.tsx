@@ -16,7 +16,7 @@ type SortDir = "asc" | "desc" | null;
 // 画面に映す値: orderId,listId,productName,tokenName,avatarId,createdAt,transfered:boolean
 type Row = {
   orderId: string;
-  listId: string;
+  listId: string; // ✅ 列名はそのまま（表示は readableId を入れる）
 
   // ✅ backend が解決して返す
   productName: string;
@@ -64,7 +64,17 @@ export default function OrderManagementPage() {
 
       const mapped: Row[] = (res.items ?? []).map((x) => ({
         orderId: String((x as any).orderId ?? ""),
-        listId: String((x as any).listId ?? ""),
+
+        // ✅ 「リストID」列の値は listId ではなく readableId を入れる（列名はそのまま）
+        // - repository 側で listReadableId に正規化済み想定
+        // - 互換のため候補も拾う
+        listId: String(
+          (x as any).listReadableId ??
+            (x as any).listReadableID ??
+            (x as any).readableId ??
+            (x as any).readableID ??
+            "",
+        ),
 
         inventoryId: String((x as any).inventoryId ?? ""),
 
@@ -207,6 +217,7 @@ export default function OrderManagementPage() {
                 </a>
               </td>
 
+              {/* ✅ 列名は「リストID」のまま、値だけ readableId を表示 */}
               <td>{o.listId || "-"}</td>
 
               {/* ✅ ID ではなく name を表示 */}

@@ -17,6 +17,8 @@ package query
 // ✅ 重要:
 //   - productName/tokenName は best-effort。
 //     pbName/tbName が DI されていれば埋める、されていなければ空で返す（500にしない）。
+//   - listReadableId も best-effort。
+//     listReadable が DI されていれば listId->readableId を引いて埋める。なければ空で返す（500にしない）。
 //
 import (
 	"context"
@@ -61,6 +63,11 @@ type TokenBlueprintNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
+// ✅ listId -> readableId（best-effort）
+type ListReadableIDResolver interface {
+	GetReadableIDByID(ctx context.Context, id string) (string, error)
+}
+
 // ============================================================
 // DTO
 // ============================================================
@@ -86,11 +93,14 @@ type OrderItemInventoryRowDTO struct {
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 
-	// ✅ NEW: resolved from IDs (best-effort)
+	// ✅ resolved from IDs (best-effort)
 	ProductName string `json:"productName,omitempty"`
 	TokenName   string `json:"tokenName,omitempty"`
 
-	ListID  string `json:"listId,omitempty"`
+	// ✅ UIへは listId ではなく readableId を渡す
+	// - listId 自体が必要なら別フィールドで追加してもよいが、要件に従い置き換える
+	ListReadableID string `json:"listReadableId,omitempty"`
+
 	ModelID string `json:"modelId,omitempty"`
 	Qty     int    `json:"qty,omitempty"`
 	Price   int    `json:"price,omitempty"`
@@ -114,8 +124,9 @@ type OrderManagementQuery struct {
 	invBlueprint InventoryBlueprintResolver // REQUIRED
 
 	// ✅ optional (best-effort)
-	pbName ProductBlueprintNameResolver
-	tbName TokenBlueprintNameResolver
+	pbName       ProductBlueprintNameResolver
+	tbName       TokenBlueprintNameResolver
+	listReadable ListReadableIDResolver
 }
 
 type NewOrderManagementQueryParams struct {
@@ -124,8 +135,9 @@ type NewOrderManagementQueryParams struct {
 	InvBlueprint InventoryBlueprintResolver // REQUIRED
 
 	// ✅ optional
-	PBName ProductBlueprintNameResolver
-	TBName TokenBlueprintNameResolver
+	PBName       ProductBlueprintNameResolver
+	TBName       TokenBlueprintNameResolver
+	ListReadable ListReadableIDResolver
 }
 
 func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQuery {
@@ -135,6 +147,7 @@ func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQu
 		invBlueprint: p.InvBlueprint,
 		pbName:       p.PBName,
 		tbName:       p.TBName,
+		listReadable: p.ListReadable,
 	}
 }
 
@@ -151,7 +164,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	page = normalizePage(page)
 
-	// ✅ pbName/tbName は optional。ここで required 扱いしない。
+	// ✅ optional は required 扱いしない。
 	if q == nil || q.lister == nil || q.invRows == nil || q.invBlueprint == nil {
 		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
 	}
@@ -185,6 +198,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	// tokenBlueprintId -> tokenName cache
 	tbNameCache := map[string]string{}
+
+	// listId -> readableId cache
+	listReadableCache := map[string]string{}
 
 	resolveBlueprint := func(invID string) (string, string, error) {
 		invID = strings.TrimSpace(invID)
@@ -246,6 +262,28 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		name = strings.TrimSpace(name)
 		tbNameCache[tbID] = name
 		return name, nil
+	}
+
+	resolveListReadableID := func(listID string) (string, error) {
+		// optional
+		if q.listReadable == nil {
+			return "", nil
+		}
+
+		listID = strings.TrimSpace(listID)
+		if listID == "" {
+			return "", nil
+		}
+		if v, ok := listReadableCache[listID]; ok {
+			return v, nil
+		}
+		readable, e := q.listReadable.GetReadableIDByID(ctx, listID)
+		if e != nil {
+			return "", e
+		}
+		readable = strings.TrimSpace(readable)
+		listReadableCache[listID] = readable
+		return readable, nil
 	}
 
 	// スキャン上限
@@ -313,6 +351,17 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					tokenName = n
 				}
 
+				// ✅ listId -> readableId (best-effort)
+				listReadableID := ""
+				if strings.TrimSpace(it.ListID) != "" {
+					n, e5 := resolveListReadableID(it.ListID)
+					if e5 != nil {
+						log.Printf("[OrderManagementQuery] ERROR GetReadableIDByID failed listId=%q err=%v", strings.TrimSpace(it.ListID), e5)
+						return common.PageResult[OrderItemInventoryRowDTO]{}, e5
+					}
+					listReadableID = n
+				}
+
 				transferredAt := ""
 				if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
 					transferredAt = it.TransferredAt.UTC().Format(time.RFC3339)
@@ -334,7 +383,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					ProductName:        productName,
 					TokenName:          tokenName,
 
-					ListID:  strings.TrimSpace(it.ListID),
+					// ✅ UIへ渡すのは readableId
+					ListReadableID: strings.TrimSpace(listReadableID),
+
 					ModelID: strings.TrimSpace(it.ModelID),
 					Qty:     it.Qty,
 					Price:   it.Price,

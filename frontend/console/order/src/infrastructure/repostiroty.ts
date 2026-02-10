@@ -36,6 +36,11 @@ export type OrderItemDTO = {
   tokenName?: string;
 
   listId?: string;
+
+  // ✅ NEW: listId -> readableId（UIで表示用）
+  // backendが listReadableId もしくは互換キーで返す場合に拾えるようにする
+  listReadableId?: string;
+
   qty?: number;
   price?: number;
 
@@ -84,6 +89,10 @@ export type OrderItemInventoryRowDTO = {
   tokenName?: string;
 
   listId?: string;
+
+  // ✅ NEW: listId -> readableId（UIで表示用）
+  listReadableId?: string;
+
   modelId?: string;
   qty?: number;
   price?: number;
@@ -163,6 +172,38 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
+// ✅ best-effort: backend のキー揺れを吸収して listReadableId に寄せる
+function normalizeListReadableIdInPlace(obj: any): void {
+  if (!obj || typeof obj !== "object") return;
+
+  // PageResult<T>
+  if (Array.isArray(obj.items)) {
+    for (const it of obj.items) normalizeListReadableIdInPlace(it);
+  }
+
+  // Order
+  if (Array.isArray(obj.items)) {
+    for (const it of obj.items) normalizeListReadableIdInPlace(it);
+  }
+
+  // Order item / row
+  // backendが listReadableId 以外で返しても拾えるようにする
+  if (obj.listReadableId == null || String(obj.listReadableId).trim() === "") {
+    const candidates = [
+      obj.listReadableID, // camel with ID
+      obj.readableId, // generic readableId
+      obj.readableID, // generic readableID
+      obj.list_readable_id, // snake
+    ];
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim() !== "") {
+        obj.listReadableId = v.trim();
+        break;
+      }
+    }
+  }
+}
+
 async function requestJSON<T>(
   fetcher: typeof fetch,
   url: string,
@@ -200,7 +241,12 @@ async function requestJSON<T>(
     throw new Error(`API returned non-JSON response. url=${url} content-type=${ct}`);
   }
 
-  return (await res.json()) as T;
+  const data = (await res.json()) as any;
+
+  // ✅ listReadableId を拾えるように正規化（best-effort）
+  normalizeListReadableIdInPlace(data);
+
+  return data as T;
 }
 
 export interface OrderRepository {
@@ -258,7 +304,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/items${qs}`);
-      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName が含まれる
+      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName/listReadableId が含まれる
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(fetcher, url, {
         method: "GET",
       });

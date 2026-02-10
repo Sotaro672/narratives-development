@@ -103,6 +103,10 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (List, error)
 	Exists(ctx context.Context, id string) (bool, error)
 
+	// ✅ NEW: 軽量 getter（best-effort用途）
+	// listId から readableId のみ返す
+	GetReadableIDByID(ctx context.Context, id string) (string, error)
+
 	// 変更
 	Create(ctx context.Context, l List) (List, error)
 	Update(ctx context.Context, id string, patch ListPatch) (List, error)

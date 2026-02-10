@@ -166,6 +166,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// Optional (best-effort):
 	// - PBName: productBlueprintId -> productName
 	// - TBName: tokenBlueprintId   -> tokenName
+	// - ListReadable: listId -> readableId  ✅ NEW
 	// =========================================================
 	var orderMgmtQ *query.OrderManagementQuery
 	if repos.orderRepo != nil && q.inventoryQuery != nil && invBlueprint != nil {
@@ -174,9 +175,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			InvRows:      q.inventoryQuery,
 			InvBlueprint: invBlueprint,
 
-			// ✅ NEW: name resolvers (best-effort)
+			// ✅ name resolvers (best-effort)
 			PBName: repos.productBlueprintRepo,
 			TBName: repos.tokenBlueprintRepo,
+
+			// ✅ NEW: listId -> readableId resolver (best-effort)
+			// NOTE: repos.listRepo is expected to implement GetReadableIDByID(ctx, id)
+			ListReadable: repos.listRepo,
 		})
 	}
 

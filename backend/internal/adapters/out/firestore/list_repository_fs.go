@@ -78,6 +78,40 @@ func (r *ListRepositoryFS) GetByID(ctx context.Context, id string) (ldom.List, e
 	return l, nil
 }
 
+// ✅ NEW: GetReadableIDByID returns only readable_id (best-effort lightweight getter)
+func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (string, error) {
+	if r.Client == nil {
+		return "", errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", ldom.ErrNotFound
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return "", ldom.ErrNotFound
+		}
+		return "", err
+	}
+
+	// Prefer direct field read (cheap)
+	if data := snap.Data(); data != nil {
+		if v, ok := data["readable_id"].(string); ok {
+			return strings.TrimSpace(v), nil
+		}
+	}
+
+	// Fallback: decode (for schema drift safety)
+	l, err := decodeListDoc(snap)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(l.ReadableID), nil
+}
+
 func (r *ListRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")

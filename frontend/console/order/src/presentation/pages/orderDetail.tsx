@@ -47,14 +47,13 @@ type OrderDetailDTO = {
   items?: Array<{
     modelId?: string;
 
-    // ✅ remove: inventoryId（表示しない）
-    // inventoryId?: string;
-
-    // ✅ show these instead
+    // ✅ ID ではなく name
     productName?: string;
     tokenName?: string;
 
+    // ✅ keep field name listId, but store readableId value
     listId?: string;
+
     qty?: number;
     price?: number;
     transferred: boolean;
@@ -79,7 +78,17 @@ function buildDetailFromAllowedItems(
     productName: (r as any).productName ?? "",
     tokenName: (r as any).tokenName ?? "",
 
-    listId: r.listId ?? "",
+    // ✅ listId の値を readableId に置き換える（列名/フィールド名は listId のまま）
+    // - repository 側で listReadableId に正規化済み想定
+    // - 互換のため候補も拾う
+    listId: String(
+      (r as any).listReadableId ??
+        (r as any).listReadableID ??
+        (r as any).readableId ??
+        (r as any).readableID ??
+        "",
+    ),
+
     qty: typeof r.qty === "number" ? r.qty : Number(r.qty ?? 0) || 0,
     price: typeof r.price === "number" ? r.price : Number(r.price ?? 0) || 0,
     transferred: Boolean(r.transferred),
@@ -176,6 +185,17 @@ export default function OrderDetail() {
   // right column
   const userId = order?.userId ?? "-";
   const avatarId = order?.avatarId ?? "-";
+
+  // ✅ readableId は right column の「関連情報」直下に表示する
+  //    複数itemsがある場合は重複排除してカンマ区切り
+  const readableIds = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      const v = String(it?.listId ?? "").trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set);
+  }, [items]);
 
   const left = (
     <Card className="mt-4">
@@ -349,12 +369,7 @@ export default function OrderDetail() {
                                 <td className="py-2 text-left">{it.tokenName ?? "-"}</td>
                               </tr>
 
-                              <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  listId
-                                </th>
-                                <td className="py-2 text-left">{it.listId ?? "-"}</td>
-                              </tr>
+                              {/* ✅ 左カラムから listId は削除（readableId は右カラムへ表示） */}
 
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
@@ -431,6 +446,16 @@ export default function OrderDetail() {
                     アバターID
                   </th>
                   <td className="py-2 text-left">{avatarId}</td>
+                </tr>
+
+                {/* ✅ NEW: readableId を「関連情報」内に表示（listIdの値=readableId） */}
+                <tr>
+                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    readableId
+                  </th>
+                  <td className="py-2 text-left">
+                    {readableIds.length > 0 ? readableIds.join(", ") : "-"}
+                  </td>
                 </tr>
               </tbody>
             </table>
