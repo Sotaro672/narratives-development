@@ -19,6 +19,8 @@ package query
 //     pbName/tbName が DI されていれば埋める、されていなければ空で返す（500にしない）。
 //   - listReadableId も best-effort。
 //     listReadable が DI されていれば listId->readableId を引いて埋める。なければ空で返す（500にしない）。
+//   - avatarName も best-effort。
+//     avatarNameResolver が DI されていれば avatarId->avatarName を引いて埋める。なければ空で返す（500にしない）。
 //
 import (
 	"context"
@@ -68,6 +70,12 @@ type ListReadableIDResolver interface {
 	GetReadableIDByID(ctx context.Context, id string) (string, error)
 }
 
+// ✅ avatarId -> avatarName（best-effort）
+// avatar.RepositoryPort の GetNameByID を想定（今回追加した port）
+type AvatarNameResolver interface {
+	GetNameByID(ctx context.Context, id string) (string, error)
+}
+
 // ============================================================
 // DTO
 // ============================================================
@@ -81,6 +89,9 @@ type OrderItemInventoryRowDTO struct {
 	UserID   string `json:"userId,omitempty"`
 	AvatarID string `json:"avatarId,omitempty"`
 	CartID   string `json:"cartId,omitempty"`
+
+	// ✅ NEW: resolved from avatarId (best-effort)
+	AvatarName string `json:"avatarName,omitempty"`
 
 	// order-level
 	Paid      bool   `json:"paid"`
@@ -124,9 +135,10 @@ type OrderManagementQuery struct {
 	invBlueprint InventoryBlueprintResolver // REQUIRED
 
 	// ✅ optional (best-effort)
-	pbName       ProductBlueprintNameResolver
-	tbName       TokenBlueprintNameResolver
-	listReadable ListReadableIDResolver
+	pbName             ProductBlueprintNameResolver
+	tbName             TokenBlueprintNameResolver
+	listReadable       ListReadableIDResolver
+	avatarNameResolver AvatarNameResolver
 }
 
 type NewOrderManagementQueryParams struct {
@@ -138,16 +150,20 @@ type NewOrderManagementQueryParams struct {
 	PBName       ProductBlueprintNameResolver
 	TBName       TokenBlueprintNameResolver
 	ListReadable ListReadableIDResolver
+
+	// ✅ NEW
+	AvatarName AvatarNameResolver
 }
 
 func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQuery {
 	return &OrderManagementQuery{
-		lister:       p.Lister,
-		invRows:      p.InvRows,
-		invBlueprint: p.InvBlueprint,
-		pbName:       p.PBName,
-		tbName:       p.TBName,
-		listReadable: p.ListReadable,
+		lister:             p.Lister,
+		invRows:            p.InvRows,
+		invBlueprint:       p.InvBlueprint,
+		pbName:             p.PBName,
+		tbName:             p.TBName,
+		listReadable:       p.ListReadable,
+		avatarNameResolver: p.AvatarName,
 	}
 }
 
@@ -201,6 +217,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	// listId -> readableId cache
 	listReadableCache := map[string]string{}
+
+	// avatarId -> avatarName cache
+	avatarNameCache := map[string]string{}
 
 	resolveBlueprint := func(invID string) (string, string, error) {
 		invID = strings.TrimSpace(invID)
@@ -286,6 +305,29 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		return readable, nil
 	}
 
+	resolveAvatarName := func(avatarID string) (string, error) {
+		// optional
+		if q.avatarNameResolver == nil {
+			return "", nil
+		}
+
+		avatarID = strings.TrimSpace(avatarID)
+		if avatarID == "" {
+			return "", nil
+		}
+		if v, ok := avatarNameCache[avatarID]; ok {
+			return v, nil
+		}
+
+		name, e := q.avatarNameResolver.GetNameByID(ctx, avatarID)
+		if e != nil {
+			return "", e
+		}
+		name = strings.TrimSpace(name)
+		avatarNameCache[avatarID] = name
+		return name, nil
+	}
+
 	// スキャン上限
 	const maxScanPages = 500
 	srcPage := 1
@@ -316,6 +358,17 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			userID := strings.TrimSpace(ord.UserID)
 			avatarID := strings.TrimSpace(ord.AvatarID)
 			cartID := strings.TrimSpace(ord.CartID)
+
+			// ✅ avatarId -> avatarName (best-effort, order-level)
+			avatarName := ""
+			if avatarID != "" {
+				n, e0 := resolveAvatarName(avatarID)
+				if e0 != nil {
+					log.Printf("[OrderManagementQuery] ERROR GetNameByID failed avatarId=%q err=%v", avatarID, e0)
+					return common.PageResult[OrderItemInventoryRowDTO]{}, e0
+				}
+				avatarName = n
+			}
 
 			for _, it := range ord.Items {
 				invID := strings.TrimSpace(it.InventoryID)
@@ -373,6 +426,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					UserID:   userID,
 					AvatarID: avatarID,
 					CartID:   cartID,
+
+					// ✅ NEW
+					AvatarName: strings.TrimSpace(avatarName),
 
 					Paid:      ord.Paid,
 					CreatedAt: createdAt,

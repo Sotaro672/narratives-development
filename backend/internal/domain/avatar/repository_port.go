@@ -123,11 +123,11 @@ type Repository interface {
 	RepositoryCRUD
 	RepositoryList
 
+	// ✅ NEW: avatarId -> avatarName (best-effort lightweight getter)
+	GetNameByID(ctx context.Context, id string) (string, error)
+
 	// 追加要件（必要に応じて実装側で活用）
 	GetByWalletAddress(ctx context.Context, wallet string) (Avatar, error)
-	Search(ctx context.Context, query string) ([]Avatar, error)
 	Exists(ctx context.Context, id string) (bool, error)
-	Count(ctx context.Context, filter Filter) (int, error)
 	Save(ctx context.Context, a Avatar, opts *SaveOptions) (Avatar, error)
-	Reset(ctx context.Context) error
 }

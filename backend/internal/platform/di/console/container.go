@@ -176,9 +176,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			InvBlueprint: invBlueprint,
 
 			// ✅ name resolvers (best-effort)
-			PBName: repos.productBlueprintRepo,
-			TBName: repos.tokenBlueprintRepo,
-
+			PBName:     repos.productBlueprintRepo,
+			TBName:     repos.tokenBlueprintRepo,
+			AvatarName: repos.avatarRepo,
 			// ✅ NEW: listId -> readableId resolver (best-effort)
 			// NOTE: repos.listRepo is expected to implement GetReadableIDByID(ctx, id)
 			ListReadable: repos.listRepo,

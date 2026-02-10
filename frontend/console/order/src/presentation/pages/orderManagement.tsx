@@ -13,7 +13,7 @@ import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
 type SortKey = "createdAt" | null;
 type SortDir = "asc" | "desc" | null;
 
-// 画面に映す値: orderId,listId,productName,tokenName,avatarId,createdAt,transfered:boolean
+// 画面に映す値: orderId,listId,productName,tokenName,avatarName,createdAt,transfered:boolean
 type Row = {
   orderId: string;
   listId: string; // ✅ 列名はそのまま（表示は readableId を入れる）
@@ -25,7 +25,12 @@ type Row = {
   // 内部キー用に保持（行キー等に使う）
   inventoryId: string;
 
+  // ✅ 表示用（avatarId ではなく avatarName）
+  avatarName: string;
+
+  // 既存のフィルタ/詳細遷移などで必要なら保持してもOK（今回は表示に使わない）
   avatarId: string;
+
   createdAt: string;
   transferred: boolean;
 };
@@ -62,30 +67,42 @@ export default function OrderManagementPage() {
     try {
       const res = await repo.listItemInventoryRows({ page: 1, perPage: 200 });
 
-      const mapped: Row[] = (res.items ?? []).map((x) => ({
-        orderId: String((x as any).orderId ?? ""),
+      const mapped: Row[] = (res.items ?? []).map((x) => {
+        const avatarId = String((x as any).avatarId ?? "");
 
-        // ✅ 「リストID」列の値は listId ではなく readableId を入れる（列名はそのまま）
-        // - repository 側で listReadableId に正規化済み想定
-        // - 互換のため候補も拾う
-        listId: String(
-          (x as any).listReadableId ??
-            (x as any).listReadableID ??
-            (x as any).readableId ??
-            (x as any).readableID ??
-            "",
-        ),
+        // ✅ repository 側で avatarName に正規化済み想定（互換のため候補も拾う）
+        const avatarName =
+          String((x as any).avatarName ?? "").trim() ||
+          String((x as any).avatar_name ?? "").trim() ||
+          "-";
 
-        inventoryId: String((x as any).inventoryId ?? ""),
+        return {
+          orderId: String((x as any).orderId ?? ""),
 
-        // ✅ ID ではなく name を使う
-        productName: String((x as any).productName ?? ""),
-        tokenName: String((x as any).tokenName ?? ""),
+          // ✅ 「リストID」列の値は listId ではなく readableId を入れる（列名はそのまま）
+          // - repository 側で listReadableId に正規化済み想定
+          // - 互換のため候補も拾う
+          listId: String(
+            (x as any).listReadableId ??
+              (x as any).listReadableID ??
+              (x as any).readableId ??
+              (x as any).readableID ??
+              "",
+          ),
 
-        avatarId: String((x as any).avatarId ?? ""),
-        createdAt: String((x as any).createdAt ?? ""),
-        transferred: Boolean((x as any).transferred),
-      }));
+          inventoryId: String((x as any).inventoryId ?? ""),
+
+          // ✅ ID ではなく name を使う
+          productName: String((x as any).productName ?? ""),
+          tokenName: String((x as any).tokenName ?? ""),
+
+          avatarName,
+          avatarId,
+
+          createdAt: String((x as any).createdAt ?? ""),
+          transferred: Boolean((x as any).transferred),
+        };
+      });
 
       setRowsRaw(mapped);
     } catch (e: any) {
@@ -140,7 +157,7 @@ export default function OrderManagementPage() {
     "リストID",
     "商品名",
     "トークン名",
-    "アバターID",
+    "アバター名",
     <SortableTableHeader
       key="createdAt"
       label="注文日"
@@ -224,7 +241,9 @@ export default function OrderManagementPage() {
               <td>{o.productName || "-"}</td>
               <td>{o.tokenName || "-"}</td>
 
-              <td>{o.avatarId || "-"}</td>
+              {/* ✅ avatarId ではなく avatarName */}
+              <td>{o.avatarName || "-"}</td>
+
               <td>{safeDateLabelJa(o.createdAt, "-")}</td>
               <td>{o.transferred ? "移譲済" : "未移譲"}</td>
             </tr>

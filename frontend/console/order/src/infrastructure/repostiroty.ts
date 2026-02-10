@@ -54,6 +54,10 @@ export type Order = {
   id: string;
   userId: string;
   avatarId: string;
+
+  // ✅ NEW: avatarId -> avatarName（UI表示用）
+  avatarName?: string;
+
   cartId: string;
   paid: boolean;
   createdAt: string; // RFC3339
@@ -73,6 +77,10 @@ export type OrderItemInventoryRowDTO = {
 
   userId?: string;
   avatarId?: string;
+
+  // ✅ NEW: avatarId -> avatarName（UI表示用）
+  avatarName?: string;
+
   cartId?: string;
 
   paid: boolean;
@@ -172,25 +180,27 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
-// ✅ best-effort: backend のキー揺れを吸収して listReadableId に寄せる
-function normalizeListReadableIdInPlace(obj: any): void {
+// ✅ best-effort: backend のキー揺れを吸収して listReadableId / avatarName に寄せる
+function normalizeInPlace(obj: any): void {
   if (!obj || typeof obj !== "object") return;
 
-  // PageResult<T>
+  // PageResult<T> / Order
   if (Array.isArray(obj.items)) {
-    for (const it of obj.items) normalizeListReadableIdInPlace(it);
+    for (const it of obj.items) normalizeInPlace(it);
   }
 
-  // Order
+  // Order.items
   if (Array.isArray(obj.items)) {
-    for (const it of obj.items) normalizeListReadableIdInPlace(it);
+    for (const it of obj.items) normalizeInPlace(it);
   }
 
-  // Order item / row
-  // backendが listReadableId 以外で返しても拾えるようにする
+  // ----------------------------
+  // listReadableId
+  // ----------------------------
   if (obj.listReadableId == null || String(obj.listReadableId).trim() === "") {
     const candidates = [
       obj.listReadableID, // camel with ID
+      obj.listReadableId, // itself
       obj.readableId, // generic readableId
       obj.readableID, // generic readableID
       obj.list_readable_id, // snake
@@ -198,6 +208,23 @@ function normalizeListReadableIdInPlace(obj: any): void {
     for (const v of candidates) {
       if (typeof v === "string" && v.trim() !== "") {
         obj.listReadableId = v.trim();
+        break;
+      }
+    }
+  }
+
+  // ----------------------------
+  // avatarName
+  // ----------------------------
+  if (obj.avatarName == null || String(obj.avatarName).trim() === "") {
+    const candidates = [
+      obj.avatar_name, // snake
+      obj.avatarName, // itself
+      obj.avatar_name_jp, // if ever
+    ];
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim() !== "") {
+        obj.avatarName = v.trim();
         break;
       }
     }
@@ -243,8 +270,8 @@ async function requestJSON<T>(
 
   const data = (await res.json()) as any;
 
-  // ✅ listReadableId を拾えるように正規化（best-effort）
-  normalizeListReadableIdInPlace(data);
+  // ✅ listReadableId / avatarName を拾えるように正規化（best-effort）
+  normalizeInPlace(data);
 
   return data as T;
 }
@@ -304,7 +331,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/items${qs}`);
-      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName/listReadableId が含まれる
+      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName/listReadableId/avatarName が含まれる
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(fetcher, url, {
         method: "GET",
       });

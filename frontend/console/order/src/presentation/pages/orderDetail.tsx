@@ -25,7 +25,10 @@ const formatJPY = (n: number | null | undefined): string => {
 type OrderDetailDTO = {
   id: string;
   userId?: string;
-  avatarId?: string;
+
+  // ✅ avatarId ではなく avatarName を持つ
+  avatarName?: string;
+
   cartId?: string;
   paid: boolean;
   createdAt?: string;
@@ -62,25 +65,33 @@ type OrderDetailDTO = {
   }>;
 };
 
+// 文字列 best-effort で拾う
+function pickString(obj: any, keys: string[]): string {
+  if (!obj || typeof obj !== "object") return "";
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+  }
+  return "";
+}
+
 // Order(= /orders/{id}) をベースに、/orders/items の “許可された items” だけで items を作り直す
 function buildDetailFromAllowedItems(
   base: Order,
   allowedRows: OrderItemInventoryRowDTO[],
 ): OrderDetailDTO {
   const byOrder = allowedRows.filter(
-    (r) => String(r.orderId ?? "") === String(base.id ?? ""),
+    (r) => String((r as any).orderId ?? "") === String((base as any).id ?? ""),
   );
 
   const items = byOrder.map((r) => ({
-    modelId: r.modelId ?? "",
+    modelId: (r as any).modelId ?? "",
 
     // ✅ ID ではなく name を採用
     productName: (r as any).productName ?? "",
     tokenName: (r as any).tokenName ?? "",
 
     // ✅ listId の値を readableId に置き換える（列名/フィールド名は listId のまま）
-    // - repository 側で listReadableId に正規化済み想定
-    // - 互換のため候補も拾う
     listId: String(
       (r as any).listReadableId ??
         (r as any).listReadableID ??
@@ -89,21 +100,39 @@ function buildDetailFromAllowedItems(
         "",
     ),
 
-    qty: typeof r.qty === "number" ? r.qty : Number(r.qty ?? 0) || 0,
-    price: typeof r.price === "number" ? r.price : Number(r.price ?? 0) || 0,
-    transferred: Boolean(r.transferred),
-    transferredAt: r.transferredAt ?? "",
+    qty: typeof (r as any).qty === "number" ? (r as any).qty : Number((r as any).qty ?? 0) || 0,
+    price:
+      typeof (r as any).price === "number" ? (r as any).price : Number((r as any).price ?? 0) || 0,
+    transferred: Boolean((r as any).transferred),
+    transferredAt: (r as any).transferredAt ?? "",
   }));
 
+  // ✅ avatarName は /orders/items の行DTOから取る（最優先）
+  //    fallback: /orders/{id} が返していればそこからも拾う（将来互換）
+  const avatarNameFromRows = pickString(byOrder?.[0], [
+    "avatarName",
+    "avatar_name",
+  ]);
+
+  const avatarNameFromBase = pickString(base as any, [
+    "avatarName",
+    "avatar_name",
+  ]);
+
+  const avatarName = avatarNameFromRows || avatarNameFromBase || "";
+
   return {
-    id: base.id,
-    userId: base.userId,
-    avatarId: base.avatarId,
-    cartId: base.cartId,
-    paid: Boolean(base.paid),
-    createdAt: base.createdAt,
-    shippingSnapshot: base.shippingSnapshot,
-    billingSnapshot: base.billingSnapshot,
+    id: (base as any).id,
+    userId: (base as any).userId,
+
+    // ✅ avatarId を avatarName に置き換え
+    avatarName,
+
+    cartId: (base as any).cartId,
+    paid: Boolean((base as any).paid),
+    createdAt: (base as any).createdAt,
+    shippingSnapshot: (base as any).shippingSnapshot,
+    billingSnapshot: (base as any).billingSnapshot,
     items,
   };
 }
@@ -136,8 +165,7 @@ export default function OrderDetail() {
         // 1) /orders/{id} でベース情報（配送先や課金情報など）を取得
         const base = (await repo.getById(id)) as unknown as Order;
 
-        // 2) /orders/items?id=... で “許可された item 行” だけ取得して detail.items を組み立て
-        //    ※ perPage は十分大きく
+        // 2) /orders/items?id=... で “許可された item 行” だけ取得して detail を組み立て
         const rowsRes = await repo.listItemInventoryRows({
           id,
           page: 1,
@@ -184,7 +212,9 @@ export default function OrderDetail() {
 
   // right column
   const userId = order?.userId ?? "-";
-  const avatarId = order?.avatarId ?? "-";
+
+  // ✅ アバター名（/orders/items から拾えるようになった）
+  const avatarName = String(order?.avatarName ?? "").trim() || "-";
 
   // ✅ readableId は right column の「関連情報」直下に表示する
   //    複数itemsがある場合は重複排除してカンマ区切り
@@ -312,14 +342,12 @@ export default function OrderDetail() {
                     </th>
                     <td className="py-2 text-left">{shipping?.Street2 ?? "-"}</td>
                   </tr>
-
-                  {/* ✅ remove: 国 */}
                 </tbody>
               </table>
             </div>
 
             {/* =======================
-                items（縦1行：1アイテム=縦に項目改行）
+                items
                 ======================= */}
             <div>
               <div className="text-sm font-semibold mb-2 text-left">アイテム</div>
@@ -355,7 +383,6 @@ export default function OrderDetail() {
                                 <td className="py-2 text-left">{it.modelId ?? "-"}</td>
                               </tr>
 
-                              {/* ✅ ID ではなく name */}
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                                   productName
@@ -368,8 +395,6 @@ export default function OrderDetail() {
                                 </th>
                                 <td className="py-2 text-left">{it.tokenName ?? "-"}</td>
                               </tr>
-
-                              {/* ✅ 左カラムから listId は削除（readableId は右カラムへ表示） */}
 
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
@@ -391,7 +416,9 @@ export default function OrderDetail() {
                                 </th>
                                 <td className="py-2 text-left">
                                   {it.transferred ? (
-                                    <span className="order-badge is-transferred">{tokenLabel}</span>
+                                    <span className="order-badge is-transferred">
+                                      {tokenLabel}
+                                    </span>
                                   ) : (
                                     <span className="order-badge is-paid">{tokenLabel}</span>
                                   )}
@@ -441,14 +468,15 @@ export default function OrderDetail() {
                   </th>
                   <td className="py-2 text-left">{userId}</td>
                 </tr>
+
+                {/* ✅ avatarId → avatarName */}
                 <tr>
                   <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                    アバターID
+                    アバター名
                   </th>
-                  <td className="py-2 text-left">{avatarId}</td>
+                  <td className="py-2 text-left">{avatarName}</td>
                 </tr>
 
-                {/* ✅ NEW: readableId を「関連情報」内に表示（listIdの値=readableId） */}
                 <tr>
                   <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                     readableId

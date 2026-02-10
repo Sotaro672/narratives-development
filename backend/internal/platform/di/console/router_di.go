@@ -176,9 +176,10 @@ func BuildConsoleRouterDeps(c *Container) httpin.RouterDeps {
 	}
 
 	// Orders
-	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName) の 5引数
+	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName, avatarName) の 6引数
 	// - order_management_query.go 側で company boundary（invRows）を使って items.inventoryId をフィルタするため
 	// - /orders/{id} で item に productBlueprintId/tokenBlueprintId/productName/tokenName を載せるため resolver を渡す
+	// - avatarId -> avatarName を載せるため avatarName resolver を渡す
 	if c.OrderUC != nil && c.OrderManagementQuery != nil {
 		// inventoryId -> (productBlueprintId, tokenBlueprintId)
 		var invBlueprint consoleHandler.InventoryBlueprintResolver
@@ -204,12 +205,22 @@ func BuildConsoleRouterDeps(c *Container) httpin.RouterDeps {
 			}
 		}
 
+		// ✅ avatarId -> avatarName
+		var avatarName consoleHandler.AvatarNameResolver
+		if c.AvatarUC != nil {
+			// AvatarUsecase が handler 側の AvatarNameResolver を満たすならそれを使う
+			if r, ok := any(c.AvatarUC).(consoleHandler.AvatarNameResolver); ok {
+				avatarName = r
+			}
+		}
+
 		ordersH = consoleHandler.NewOrderHandler(
 			c.OrderUC,
 			c.OrderManagementQuery,
 			invBlueprint,
 			pbName,
 			tbName,
+			avatarName,
 		)
 	}
 
