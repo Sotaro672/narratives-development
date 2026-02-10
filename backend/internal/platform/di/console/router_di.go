@@ -177,10 +177,15 @@ func BuildConsoleRouterDeps(c *Container) httpin.RouterDeps {
 	}
 
 	// Orders
-	// ✅ OrderHandler は OrderManagementQuery を必要とするため、2引数で配線する
+	// ✅ OrderHandler は OrderManagementQuery + InventoryBlueprintResolver を必要とする（3引数）
 	// - order_management_query.go 側で company boundary（invRows）を使って items.inventoryId をフィルタするため
+	// - /orders/{id} で item に productBlueprintId/tokenBlueprintId を載せるため resolver を渡す
 	if c.OrderUC != nil && c.OrderManagementQuery != nil {
-		ordersH = consoleHandler.NewOrderHandler(c.OrderUC, c.OrderManagementQuery)
+		ordersH = consoleHandler.NewOrderHandler(
+			c.OrderUC,
+			c.OrderManagementQuery,
+			c.InventoryBlueprintResolver, // ✅ NEW
+		)
 	}
 
 	// Wallets

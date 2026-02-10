@@ -41,7 +41,7 @@ export type OrderItemInventoryRowDTO = {
 
   inventoryId: string;
 
-  // ✅ NEW: backend OrderManagementQuery が inventoryId から解決して返す
+  // ✅ backend OrderManagementQuery が inventoryId から解決して返す
   productBlueprintId?: string;
   tokenBlueprintId?: string;
 
@@ -101,7 +101,9 @@ function buildQuery(
 function isLikelyHtml(text: string): boolean {
   const t = (text ?? "").trimStart();
   return (
-    t.startsWith("<!DOCTYPE html") || t.startsWith("<html") || t.startsWith("<!--")
+    t.startsWith("<!DOCTYPE html") ||
+    t.startsWith("<html") ||
+    t.startsWith("<!--")
   );
 }
 

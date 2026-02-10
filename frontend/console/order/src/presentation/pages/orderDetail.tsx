@@ -9,7 +9,11 @@ import {
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
 
-import { createOrderRepository } from "../../infrastructure/repostiroty";
+import {
+  createOrderRepository,
+  Order,
+  OrderItemInventoryRowDTO,
+} from "../../infrastructure/repostiroty";
 import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
 
 // 金額フォーマット
@@ -43,10 +47,10 @@ type OrderDetailDTO = {
   items?: Array<{
     modelId?: string;
 
-    // ✅ remove: inventoryId
+    // ✅ remove: inventoryId（表示しない）
     // inventoryId?: string;
 
-    // ✅ NEW: backend should return these (via inventoryId resolution)
+    // ✅ show these instead
     productBlueprintId?: string;
     tokenBlueprintId?: string;
 
@@ -58,6 +62,37 @@ type OrderDetailDTO = {
     [k: string]: any;
   }>;
 };
+
+// Order(= /orders/{id}) をベースに、/orders/items の “許可された items” だけで items を作り直す
+function buildDetailFromAllowedItems(
+  base: Order,
+  allowedRows: OrderItemInventoryRowDTO[],
+): OrderDetailDTO {
+  const byOrder = allowedRows.filter((r) => String(r.orderId ?? "") === String(base.id ?? ""));
+
+  const items = byOrder.map((r) => ({
+    modelId: r.modelId ?? "",
+    productBlueprintId: r.productBlueprintId ?? "",
+    tokenBlueprintId: r.tokenBlueprintId ?? "",
+    listId: r.listId ?? "",
+    qty: typeof r.qty === "number" ? r.qty : Number(r.qty ?? 0) || 0,
+    price: typeof r.price === "number" ? r.price : Number(r.price ?? 0) || 0,
+    transferred: Boolean(r.transferred),
+    transferredAt: r.transferredAt ?? "",
+  }));
+
+  return {
+    id: base.id,
+    userId: base.userId,
+    avatarId: base.avatarId,
+    cartId: base.cartId,
+    paid: Boolean(base.paid),
+    createdAt: base.createdAt,
+    shippingSnapshot: base.shippingSnapshot,
+    billingSnapshot: base.billingSnapshot,
+    items,
+  };
+}
 
 export default function OrderDetail() {
   const navigate = useNavigate();
@@ -84,9 +119,21 @@ export default function OrderDetail() {
       setError(null);
 
       try {
-        const o = (await repo.getById(id)) as unknown as OrderDetailDTO;
+        // 1) /orders/{id} でベース情報（配送先や課金情報など）を取得
+        const base = (await repo.getById(id)) as unknown as Order;
+
+        // 2) /orders/items?id=... で “許可された item 行” だけ取得して detail.items を組み立て
+        //    ※ perPage は十分大きく
+        const rowsRes = await repo.listItemInventoryRows({
+          id,
+          page: 1,
+          perPage: 500,
+        });
+
+        const detail = buildDetailFromAllowedItems(base, rowsRes.items ?? []);
+
         if (cancelled) return;
-        setOrder(o);
+        setOrder(detail);
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -109,10 +156,7 @@ export default function OrderDetail() {
 
   // derived
   const items = order?.items ?? [];
-  const quantity = items.reduce(
-    (sum, it) => sum + (Number(it?.qty ?? 0) || 0),
-    0,
-  );
+  const quantity = items.reduce((sum, it) => sum + (Number(it?.qty ?? 0) || 0), 0);
   const totalPrice = items.reduce(
     (sum, it) =>
       sum + (Number(it?.price ?? 0) || 0) * (Number(it?.qty ?? 0) || 0),
@@ -137,9 +181,7 @@ export default function OrderDetail() {
         {loading ? (
           <div className="text-sm text-muted-foreground text-left">読み込み中...</div>
         ) : error ? (
-          <div className="text-sm text-red-600 whitespace-pre-wrap text-left">
-            {error}
-          </div>
+          <div className="text-sm text-red-600 whitespace-pre-wrap text-left">{error}</div>
         ) : !order ? (
           <div className="text-sm text-muted-foreground text-left">データがありません。</div>
         ) : (
@@ -293,17 +335,13 @@ export default function OrderDetail() {
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                                   productBlueprintId
                                 </th>
-                                <td className="py-2 text-left">
-                                  {it.productBlueprintId ?? "-"}
-                                </td>
+                                <td className="py-2 text-left">{it.productBlueprintId ?? "-"}</td>
                               </tr>
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                                   tokenBlueprintId
                                 </th>
-                                <td className="py-2 text-left">
-                                  {it.tokenBlueprintId ?? "-"}
-                                </td>
+                                <td className="py-2 text-left">{it.tokenBlueprintId ?? "-"}</td>
                               </tr>
 
                               <tr>
@@ -333,13 +371,9 @@ export default function OrderDetail() {
                                 </th>
                                 <td className="py-2 text-left">
                                   {it.transferred ? (
-                                    <span className="order-badge is-transferred">
-                                      {tokenLabel}
-                                    </span>
+                                    <span className="order-badge is-transferred">{tokenLabel}</span>
                                   ) : (
-                                    <span className="order-badge is-paid">
-                                      {tokenLabel}
-                                    </span>
+                                    <span className="order-badge is-paid">{tokenLabel}</span>
                                   )}
                                 </td>
                               </tr>
@@ -375,9 +409,7 @@ export default function OrderDetail() {
           {loading ? (
             <div className="text-sm text-muted-foreground text-left">読み込み中...</div>
           ) : error ? (
-            <div className="text-sm text-red-600 whitespace-pre-wrap text-left">
-              {error}
-            </div>
+            <div className="text-sm text-red-600 whitespace-pre-wrap text-left">{error}</div>
           ) : !order ? (
             <div className="text-sm text-muted-foreground text-left">-</div>
           ) : (

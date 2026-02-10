@@ -6,6 +6,9 @@ import (
 	"errors"
 	"log"
 
+	// ✅ OrderHandler が要求する InventoryBlueprintResolver（interface）を参照するため
+	consoleHandler "narratives/internal/adapters/in/http/console/handler"
+
 	// ✅ ListImage uploader interface (for console list handler)
 	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 
@@ -101,6 +104,9 @@ type Container struct {
 	// ✅ NEW: order management query instance (for console order endpoints)
 	OrderManagementQuery *query.OrderManagementQuery
 
+	// ✅ NEW: /orders/{id} で item に productBlueprintId/tokenBlueprintId を載せるための resolver
+	InventoryBlueprintResolver consoleHandler.InventoryBlueprintResolver
+
 	// ✅ NEW: list image endpoints wiring (used by console handler)
 	// NOTE: DELETE API abolished -> no deleter in container.
 	ListImageUploader listHandler.ListImageUploader
@@ -135,6 +141,21 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	// =========================================================
+	// ✅ InventoryBlueprintResolver (console)
+	// - handler.NewOrderHandler の第3引数に渡す
+	// - /orders/{id} の items に productBlueprintId/tokenBlueprintId を付与するため
+	//
+	// 期待:
+	// - repos.inventoryRepoForUC（inventoryRepoTransferResultAdapter）が
+	//   consoleHandler.InventoryBlueprintResolver を実装していること
+	//   (= ResolveBlueprintIDsByInventoryID(...) を持つ)
+	// =========================================================
+	var invBlueprint consoleHandler.InventoryBlueprintResolver
+	if repos.inventoryRepoForUC != nil {
+		invBlueprint = repos.inventoryRepoForUC
+	}
+
+	// =========================================================
 	// ✅ NEW: build OrderManagementQuery (console)
 	//
 	// Requirements:
@@ -143,11 +164,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// - InvBlueprint: inventoryId -> (productBlueprintId, tokenBlueprintId)
 	// =========================================================
 	var orderMgmtQ *query.OrderManagementQuery
-	if repos.orderRepo != nil && q.inventoryQuery != nil && repos.inventoryRepoForUC != nil {
+	if repos.orderRepo != nil && q.inventoryQuery != nil && invBlueprint != nil {
 		orderMgmtQ = query.NewOrderManagementQuery(query.NewOrderManagementQueryParams{
 			Lister:       repos.orderRepo,
 			InvRows:      q.inventoryQuery,
-			InvBlueprint: repos.inventoryRepoForUC, // ✅ 必須: ResolveBlueprintIDsByInventoryID を実装していること
+			InvBlueprint: invBlueprint,
 		})
 	}
 
@@ -203,6 +224,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		// ✅ NEW
 		OrderManagementQuery: orderMgmtQ,
+
+		// ✅ NEW
+		InventoryBlueprintResolver: invBlueprint,
 
 		// ✅ NEW: pass-through from query builder
 		ListImageUploader: q.listImageUploader,

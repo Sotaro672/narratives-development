@@ -177,9 +177,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	// Orders
-	// ✅ OrderHandler は OrderManagementQuery を必要とするため、2引数で配線する
+	// ✅ OrderHandler は OrderManagementQuery + InventoryBlueprintResolver を必要とする（3引数）
 	if c.OrderUC != nil && c.OrderManagementQuery != nil {
-		ordersH = consoleHandler.NewOrderHandler(c.OrderUC, c.OrderManagementQuery)
+		ordersH = consoleHandler.NewOrderHandler(
+			c.OrderUC,
+			c.OrderManagementQuery,
+			c.InventoryBlueprintResolver, // ✅ NEW: inventoryId -> (productBlueprintId, tokenBlueprintId)
+		)
 	}
 
 	// Wallets

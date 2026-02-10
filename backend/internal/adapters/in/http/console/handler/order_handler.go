@@ -2,6 +2,7 @@
 package consoleHandler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +14,15 @@ import (
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 )
+
+// ============================================================
+// Ports (for /orders/{id} enrichment)
+// ============================================================
+
+// InventoryBlueprintResolver resolves productBlueprintId/tokenBlueprintId from inventoryId.
+type InventoryBlueprintResolver interface {
+	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
+}
 
 // ============================================================
 // Response DTO (camelCase JSON)
@@ -33,23 +43,24 @@ type orderResponseDTO struct {
 }
 
 type orderItemDTO struct {
-	ModelID     string `json:"modelId,omitempty"`
-	InventoryID string `json:"inventoryId,omitempty"`
-	ListID      string `json:"listId,omitempty"`
-	Qty         int    `json:"qty,omitempty"`
-	Price       int    `json:"price,omitempty"`
+	ModelID string `json:"modelId,omitempty"`
 
-	// NOTE:
-	// - /orders/{id} は domain.Order をそのまま読むだけなので、
-	//   ここでは productBlueprintId / tokenBlueprintId を出せない。
-	// - もし /orders/{id} にも出したい場合は、inventory repo を handler に注入して
-	//   InventoryID から解決する必要がある。
+	// ✅ Keep inventoryId for backward-compat & internal use (but UI can ignore it)
+	InventoryID string `json:"inventoryId,omitempty"`
+
+	// ✅ NEW: resolve from inventoryId and return to UI
+	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
+	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+
+	ListID string `json:"listId,omitempty"`
+	Qty    int    `json:"qty,omitempty"`
+	Price  int    `json:"price,omitempty"`
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
 }
 
-func toOrderResponseDTO(o orderdom.Order) orderResponseDTO {
+func toOrderResponseDTO(ctx context.Context, o orderdom.Order, invBlueprint InventoryBlueprintResolver) orderResponseDTO {
 	dto := orderResponseDTO{
 		ID:     strings.TrimSpace(o.ID),
 		UserID: strings.TrimSpace(o.UserID),
@@ -71,12 +82,30 @@ func toOrderResponseDTO(o orderdom.Order) orderResponseDTO {
 	if len(o.Items) > 0 {
 		dto.Items = make([]orderItemDTO, 0, len(o.Items))
 		for _, it := range o.Items {
+			invID := strings.TrimSpace(it.InventoryID)
+
+			pbID := ""
+			tbID := ""
+			if invBlueprint != nil && invID != "" {
+				// best-effort: if resolve fails, keep empty fields (UI shows "-")
+				pb, tb, err := invBlueprint.ResolveBlueprintIDsByInventoryID(ctx, invID)
+				if err == nil {
+					pbID = strings.TrimSpace(pb)
+					tbID = strings.TrimSpace(tb)
+				}
+			}
+
 			item := orderItemDTO{
-				ModelID:     strings.TrimSpace(it.ModelID),
-				InventoryID: strings.TrimSpace(it.InventoryID),
-				ListID:      strings.TrimSpace(it.ListID),
-				Qty:         it.Qty,
-				Price:       it.Price,
+				ModelID: strings.TrimSpace(it.ModelID),
+
+				InventoryID: invID,
+
+				ProductBlueprintID: pbID,
+				TokenBlueprintID:   tbID,
+
+				ListID: strings.TrimSpace(it.ListID),
+				Qty:    it.Qty,
+				Price:  it.Price,
 
 				Transferred: it.Transferred,
 			}
@@ -102,12 +131,20 @@ func toOrderResponseDTO(o orderdom.Order) orderResponseDTO {
 type OrderHandler struct {
 	uc *usecase.OrderUsecase
 	q  *orderq.OrderManagementQuery
+
+	// ✅ NEW: for enriching /orders/{id} items with productBlueprintId/tokenBlueprintId
+	invBlueprint InventoryBlueprintResolver
 }
 
 // NewOrderHandler はHTTPハンドラを初期化します。
 // 既存の uc に加えて、OrderManagementQuery を DI して使えるようにします。
-func NewOrderHandler(uc *usecase.OrderUsecase, q *orderq.OrderManagementQuery) http.Handler {
-	return &OrderHandler{uc: uc, q: q}
+// さらに /orders/{id} 用に inventoryId -> (pbId,tbId) 解決ポートも注入します（nil可）。
+func NewOrderHandler(
+	uc *usecase.OrderUsecase,
+	q *orderq.OrderManagementQuery,
+	invBlueprint InventoryBlueprintResolver,
+) http.Handler {
+	return &OrderHandler{uc: uc, q: q, invBlueprint: invBlueprint}
 }
 
 // ServeHTTP はHTTPルーティングの入口です。
@@ -156,7 +193,8 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	// ✅ domain をそのまま返さず、camelCase の DTO に詰め替えて返す
-	dto := toOrderResponseDTO(order)
+	// ✅ /orders/{id} でも productBlueprintId/tokenBlueprintId を返す（invBlueprint があれば）
+	dto := toOrderResponseDTO(ctx, order, h.invBlueprint)
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
