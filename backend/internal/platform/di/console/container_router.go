@@ -177,7 +177,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	// Orders
-	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName, avatarName) の 6引数
+	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName, avatarName, userName) の 7引数
 	if c.OrderUC != nil && c.OrderManagementQuery != nil {
 		// inventoryId -> (productBlueprintId, tokenBlueprintId)
 		var invBlueprint consoleHandler.InventoryBlueprintResolver
@@ -204,12 +204,21 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			}
 		}
 
-		// ✅ avatarId -> avatarName
+		// avatarId -> avatarName
 		var avatarName consoleHandler.AvatarNameResolver
 		if c.AvatarUC != nil {
 			// AvatarUsecase が GetNameByID(ctx, avatarId) を実装していれば刺さる想定
 			if r, ok := any(c.AvatarUC).(consoleHandler.AvatarNameResolver); ok {
 				avatarName = r
+			}
+		}
+
+		// ✅ NEW: userId -> userName（lastName -> firstName の想定）
+		var userName consoleHandler.UserNameResolver
+		if c.UserUC != nil {
+			// UserUsecase が GetNameByID(ctx, userId) を実装していれば刺さる想定
+			if r, ok := any(c.UserUC).(consoleHandler.UserNameResolver); ok {
+				userName = r
 			}
 		}
 
@@ -220,6 +229,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			pbName,
 			tbName,
 			avatarName,
+			userName, // ✅ 追加
 		)
 	}
 

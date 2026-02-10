@@ -1,3 +1,4 @@
+// backend/internal/domain/user/repository_port.go
 package user
 
 import (
@@ -97,18 +98,16 @@ type RepositoryPort interface {
 	// 取得系
 	GetByID(ctx context.Context, id string) (*User, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
+
+	// ✅ NEW: 画面表示用（best-effort）: userId -> "lastName firstName"
+	// - 実装側で lastName / firstName を取得し、"姓 名" の順で返す
+	// - 見つからない場合は ErrNotFound
+	GetNameByID(ctx context.Context, id string) (string, error)
 
 	// 変更系
 	Create(ctx context.Context, in CreateUserInput) (*User, error)
 	Update(ctx context.Context, id string, in UpdateUserInput) (*User, error)
 	Delete(ctx context.Context, id string) error
-
-	// 管理（開発/テスト用）
-	Reset(ctx context.Context) error
-
-	// 任意: トランザクション境界
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // 共通エラー（契約）

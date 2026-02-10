@@ -31,13 +31,13 @@ export type OrderItemDTO = {
   productBlueprintId?: string;
   tokenBlueprintId?: string;
 
-  // ✅ NEW: resolved names
+  // ✅ resolved names
   productName?: string;
   tokenName?: string;
 
   listId?: string;
 
-  // ✅ NEW: listId -> readableId（UIで表示用）
+  // ✅ listId -> readableId（UIで表示用）
   // backendが listReadableId もしくは互換キーで返す場合に拾えるようにする
   listReadableId?: string;
 
@@ -52,10 +52,13 @@ export type OrderItemDTO = {
 
 export type Order = {
   id: string;
-  userId: string;
+
+  // ✅ userId ではなく userName（lastName→firstName）
+  userName?: string;
+
   avatarId: string;
 
-  // ✅ NEW: avatarId -> avatarName（UI表示用）
+  // ✅ avatarId -> avatarName（UI表示用）
   avatarName?: string;
 
   cartId: string;
@@ -75,10 +78,12 @@ export type Order = {
 export type OrderItemInventoryRowDTO = {
   orderId: string;
 
-  userId?: string;
+  // ✅ userId ではなく userName（lastName→firstName）
+  userName?: string;
+
   avatarId?: string;
 
-  // ✅ NEW: avatarId -> avatarName（UI表示用）
+  // ✅ avatarId -> avatarName（UI表示用）
   avatarName?: string;
 
   cartId?: string;
@@ -92,13 +97,13 @@ export type OrderItemInventoryRowDTO = {
   productBlueprintId?: string;
   tokenBlueprintId?: string;
 
-  // ✅ NEW: resolved names
+  // ✅ resolved names
   productName?: string;
   tokenName?: string;
 
   listId?: string;
 
-  // ✅ NEW: listId -> readableId（UIで表示用）
+  // ✅ listId -> readableId（UIで表示用）
   listReadableId?: string;
 
   modelId?: string;
@@ -118,7 +123,10 @@ export type OrderListParams = {
   perPage?: number;
 
   id?: string;
+
+  // ✅ フィルタは引き続き userId を使う（APIの検索条件が userId 前提のため）
   userId?: string;
+
   avatarId?: string;
   cartId?: string;
 
@@ -180,7 +188,7 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
-// ✅ best-effort: backend のキー揺れを吸収して listReadableId / avatarName に寄せる
+// ✅ best-effort: backend のキー揺れを吸収して listReadableId / avatarName / userName に寄せる
 function normalizeInPlace(obj: any): void {
   if (!obj || typeof obj !== "object") return;
 
@@ -229,6 +237,23 @@ function normalizeInPlace(obj: any): void {
       }
     }
   }
+
+  // ----------------------------
+  // userName（lastName→firstName）
+  // ----------------------------
+  if (obj.userName == null || String(obj.userName).trim() === "") {
+    const candidates = [
+      obj.user_name, // snake
+      obj.userName, // itself
+      obj.user_name_jp, // if ever
+    ];
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim() !== "") {
+        obj.userName = v.trim();
+        break;
+      }
+    }
+  }
 }
 
 async function requestJSON<T>(
@@ -270,7 +295,7 @@ async function requestJSON<T>(
 
   const data = (await res.json()) as any;
 
-  // ✅ listReadableId / avatarName を拾えるように正規化（best-effort）
+  // ✅ listReadableId / avatarName / userName を拾えるように正規化（best-effort）
   normalizeInPlace(data);
 
   return data as T;
@@ -322,7 +347,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
         perPage: params.perPage ?? 20,
 
         id: params.id,
-        userId: params.userId,
+        userId: params.userId, // ✅ フィルタ用
         avatarId: params.avatarId,
         cartId: params.cartId,
 
@@ -331,7 +356,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/items${qs}`);
-      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName/listReadableId/avatarName が含まれる
+      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName/listReadableId/avatarName/userName が含まれる
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(fetcher, url, {
         method: "GET",
       });
@@ -343,7 +368,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
         perPage: params.perPage ?? 200,
 
         id: params.id,
-        userId: params.userId,
+        userId: params.userId, // ✅ フィルタ用
         avatarId: params.avatarId,
         cartId: params.cartId,
 

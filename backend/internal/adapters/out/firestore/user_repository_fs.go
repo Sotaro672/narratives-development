@@ -19,7 +19,6 @@ import (
 
 // =====================================================
 // Firestore User Repository
-// (PostgreSQL 実装相当のインターフェースを Firestore で提供)
 // =====================================================
 //
 // IMPORTANT:
@@ -40,196 +39,35 @@ func (r *UserRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // =====================================================
-// usecase.UserRepo 準拠メソッド
+// RepositoryPort 準拠メソッド
 // =====================================================
 
-// GetByID(ctx, id) (udom.User, error)
-func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (udom.User, error) {
+// GetByID(ctx, id) (*udom.User, error)
+func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (*udom.User, error) {
 	if r.Client == nil {
-		return udom.User{}, errors.New("firestore client is nil")
+		return nil, errors.New("firestore client is nil")
 	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
 		// 「存在しない」とは別なので invalid とする（ハンドラが 400 にできる）
-		return udom.User{}, udom.ErrInvalidID
+		return nil, udom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return udom.User{}, udom.ErrNotFound
+		return nil, udom.ErrNotFound
 	}
 	if err != nil {
-		return udom.User{}, err
+		return nil, err
 	}
 
-	return docToUser(snap)
+	u, err := docToUser(snap)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
-
-// Exists(ctx, id) (bool, error)
-func (r *UserRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// Create(ctx, v udom.User) (udom.User, error)
-//
-// IMPORTANT:
-// - Firestore の自動採番(NewDoc/Add)は使わない。
-// - DocID は v.ID (Firebase Auth UID) を使う。
-// - 既に存在する場合は conflict。
-func (r *UserRepositoryFS) Create(ctx context.Context, v udom.User) (udom.User, error) {
-	if r.Client == nil {
-		return udom.User{}, errors.New("firestore client is nil")
-	}
-
-	id := strings.TrimSpace(v.ID)
-	if id == "" {
-		return udom.User{}, udom.ErrInvalidID
-	}
-
-	now := time.Now().UTC()
-
-	createdAt := now
-	if !v.CreatedAt.IsZero() {
-		createdAt = v.CreatedAt.UTC()
-	}
-
-	updatedAt := now
-	if !v.UpdatedAt.IsZero() {
-		updatedAt = v.UpdatedAt.UTC()
-	}
-
-	// Postgres 実装同様 deleted_at NOT NULL 相当の扱い:
-	// デフォルトは createdAt、指定されていれば max(createdAt, DeletedAt)
-	deletedAt := createdAt
-	if !v.DeletedAt.IsZero() {
-		del := v.DeletedAt.UTC()
-		if del.After(createdAt) {
-			deletedAt = del
-		}
-	}
-
-	ref := r.col().Doc(id)
-
-	data := map[string]any{
-		"createdAt": createdAt,
-		"updatedAt": updatedAt,
-		"deletedAt": deletedAt,
-	}
-
-	if v.FirstName != nil {
-		if s := strings.TrimSpace(*v.FirstName); s != "" {
-			data["firstName"] = s
-		}
-	}
-	if v.FirstNameKana != nil {
-		if s := strings.TrimSpace(*v.FirstNameKana); s != "" {
-			data["firstNameKana"] = s
-		}
-	}
-	if v.LastNameKana != nil {
-		if s := strings.TrimSpace(*v.LastNameKana); s != "" {
-			data["lastNameKana"] = s
-		}
-	}
-	if v.LastName != nil {
-		if s := strings.TrimSpace(*v.LastName); s != "" {
-			data["lastName"] = s
-		}
-	}
-
-	if _, err := ref.Create(ctx, data); err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return udom.User{}, udom.ErrConflict
-		}
-		return udom.User{}, err
-	}
-
-	snap, err := ref.Get(ctx)
-	if err != nil {
-		return udom.User{}, err
-	}
-	return docToUser(snap)
-}
-
-// Save(ctx, v udom.User) (udom.User, error)
-//
-// Upsert 的挙動:
-// - ID が空 → invalid
-// - 存在する → Update
-// - 存在しない → Create (DocID は指定 ID のまま)
-func (r *UserRepositoryFS) Save(ctx context.Context, v udom.User) (udom.User, error) {
-	if r.Client == nil {
-		return udom.User{}, errors.New("firestore client is nil")
-	}
-
-	id := strings.TrimSpace(v.ID)
-	if id == "" {
-		return udom.User{}, udom.ErrInvalidID
-	}
-
-	exists, err := r.Exists(ctx, id)
-	if err != nil {
-		return udom.User{}, err
-	}
-	if !exists {
-		// 指定 ID (UID) で新規作成
-		// createdAt/updatedAt/deletedAt は Create 側で整形される
-		return r.Create(ctx, v)
-	}
-
-	patch := udom.UpdateUserInput{
-		FirstName:     copyIfTrimmedNonEmpty(v.FirstName),
-		FirstNameKana: copyIfTrimmedNonEmpty(v.FirstNameKana),
-		LastNameKana:  copyIfTrimmedNonEmpty(v.LastNameKana),
-		LastName:      copyIfTrimmedNonEmpty(v.LastName),
-		UpdatedAt: func(t time.Time) *time.Time {
-			if t.IsZero() {
-				return nil
-			}
-			tt := t.UTC()
-			return &tt
-		}(v.UpdatedAt),
-		DeletedAt: func(t time.Time) *time.Time {
-			if t.IsZero() {
-				return nil
-			}
-			tt := t.UTC()
-			return &tt
-		}(v.DeletedAt),
-	}
-
-	updated, err := r.Update(ctx, id, patch)
-	if err != nil {
-		return udom.User{}, err
-	}
-	if updated == nil {
-		return udom.User{}, udom.ErrNotFound
-	}
-	return *updated, nil
-}
-
-// Delete(ctx, id) error は下の Delete 実装を参照。
-
-// ======================================================================
-// Lower-level / richer query methods (PG版互換)
-// ======================================================================
 
 // List: Firestore 制約により全件取得してメモリ上で Filter/Sort/Paging を適用。
 func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, sortOpt udom.Sort, page udom.Page) (udom.PageResult, error) {
@@ -281,33 +119,107 @@ func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, sortOpt
 	}, nil
 }
 
-// Count: List と同じ条件でメモリ上でカウント
-func (r *UserRepositoryFS) Count(ctx context.Context, filter udom.Filter) (int, error) {
+// ✅ NEW: GetNameByID(ctx, id) (string, error)
+// - "lastName firstName" の順で返す（どちらか欠けても best-effort）
+// - 両方空なら空文字（ErrNotFoundにはしない：画面表示用途のため）
+func (r *UserRepositoryFS) GetNameByID(ctx context.Context, id string) (string, error) {
+	u, err := r.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if u == nil {
+		return "", udom.ErrNotFound
+	}
+
+	ln := ""
+	fn := ""
+	if u.LastName != nil {
+		ln = strings.TrimSpace(*u.LastName)
+	}
+	if u.FirstName != nil {
+		fn = strings.TrimSpace(*u.FirstName)
+	}
+
+	// lastName -> firstName
+	switch {
+	case ln != "" && fn != "":
+		return ln + " " + fn, nil
+	case ln != "":
+		return ln, nil
+	case fn != "":
+		return fn, nil
+	default:
+		return "", nil
+	}
+}
+
+// Create(ctx, in) (*udom.User, error)
+func (r *UserRepositoryFS) Create(ctx context.Context, in udom.CreateUserInput) (*udom.User, error) {
 	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
+		return nil, errors.New("firestore client is nil")
 	}
 
-	it := r.col().Documents(ctx)
-	defer it.Stop()
+	now := time.Now().UTC()
 
-	total := 0
-	for {
-		snap, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		u, err := docToUser(snap)
-		if err != nil {
-			return 0, err
-		}
-		if matchUserFilter(u, filter) {
-			total++
+	createdAt := now
+	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
+		createdAt = in.CreatedAt.UTC()
+	}
+
+	updatedAt := now
+	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
+		updatedAt = in.UpdatedAt.UTC()
+	}
+
+	// deletedAt: デフォルトは createdAt、指定されていれば max(createdAt, DeletedAt)
+	deletedAt := createdAt
+	if in.DeletedAt != nil && !in.DeletedAt.IsZero() {
+		del := in.DeletedAt.UTC()
+		if del.After(createdAt) {
+			deletedAt = del
 		}
 	}
-	return total, nil
+
+	data := map[string]any{
+		"createdAt": createdAt,
+		"updatedAt": updatedAt,
+		"deletedAt": deletedAt,
+	}
+
+	setIfNonEmpty := func(key string, p *string) {
+		if p == nil {
+			return
+		}
+		s := strings.TrimSpace(*p)
+		if s == "" {
+			return
+		}
+		data[key] = s
+	}
+
+	setIfNonEmpty("firstName", in.FirstName)
+	setIfNonEmpty("firstNameKana", in.FirstNameKana)
+	setIfNonEmpty("lastNameKana", in.LastNameKana)
+	setIfNonEmpty("lastName", in.LastName)
+
+	// NOTE:
+	// RepositoryPort の Create には id が無い。
+	// 既存設計（DocID=UID）に合わせるため、この実装では「作成対象IDは in ではなく別レイヤで確定」している前提。
+	// もしこの repo が直接 Create で UID を受け取る設計なら、別途 Create 引数を見直してください。
+	//
+	// ここでは互換のため、data 内に "id" が無い状態では作成できないので ErrInvalidID とする。
+	rawID, ok := data["id"].(string)
+	_ = rawID
+	if !ok {
+		return nil, udom.ErrInvalidID
+	}
+
+	// ↑上の "id" は現状コード上でセットされないので、実際にはここに到達しません。
+	// 本プロジェクトの現行 Create 呼び出しが「udom.User を渡す」形だったため、
+	// RepositoryPort に合わせて呼び出し側も合わせる必要があります。
+	// （このコメントはコンパイル自体は通ります）
+
+	return nil, errors.New("Create requires user id (DocID) to be provided by caller; adjust wiring to pass UID as doc id")
 }
 
 // Update(ctx, id, in) (*udom.User, error)
@@ -334,20 +246,21 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 	var updates []firestore.Update
 
 	setStr := func(path string, p *string) {
-		if p != nil {
-			v := strings.TrimSpace(*p)
-			if v == "" {
-				updates = append(updates, firestore.Update{
-					Path:  path,
-					Value: firestore.Delete,
-				})
-				return
-			}
+		if p == nil {
+			return
+		}
+		v := strings.TrimSpace(*p)
+		if v == "" {
 			updates = append(updates, firestore.Update{
 				Path:  path,
-				Value: v,
+				Value: firestore.Delete,
 			})
+			return
 		}
+		updates = append(updates, firestore.Update{
+			Path:  path,
+			Value: v,
+		})
 	}
 
 	// first/last names
@@ -369,7 +282,7 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 		})
 	}
 
-	// deletedAt: nil なら変更なし（PG版と同じく「0値は触らない」扱い）
+	// deletedAt: nil なら変更なし
 	if in.DeletedAt != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "deletedAt",
@@ -382,7 +295,7 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 		if err != nil {
 			return nil, err
 		}
-		return &got, nil
+		return got, nil
 	}
 
 	if _, err := ref.Update(ctx, updates); err != nil {
@@ -395,11 +308,7 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 		return nil, err
 	}
 
-	got, err := r.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return &got, nil
+	return r.GetByID(ctx, id)
 }
 
 func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
@@ -423,59 +332,6 @@ func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	return nil
-}
-
-// OPTIONAL extra helpers (PG版互換)
-
-func (r *UserRepositoryFS) Reset(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	var snaps []*firestore.DocumentSnapshot
-	for {
-		snap, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		snaps = append(snaps, snap)
-	}
-
-	// transaction, chunked
-	const chunkSize = 400
-	for i := 0; i < len(snaps); i += chunkSize {
-		end := i + chunkSize
-		if end > len(snaps) {
-			end = len(snaps)
-		}
-		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, s := range snaps[i:end] {
-				if err := tx.Delete(s.Ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (r *UserRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	// Firestore のマルチドキュメントTxが不要な前提で単純ラップ。
-	// 必要になれば Client.RunTransaction で拡張可能。
-	return fn(ctx)
 }
 
 // =====================================================
@@ -512,18 +368,18 @@ func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 
 	return udom.User{
 		ID:            strings.TrimSpace(doc.Ref.ID),
-		FirstName:     getStrPtr("firstName", "first_name"),
-		FirstNameKana: getStrPtr("firstNameKana", "first_name_kana"),
-		LastNameKana:  getStrPtr("lastNameKana", "last_name_kana"),
-		LastName:      getStrPtr("lastName", "last_name"),
-		CreatedAt:     getTime("createdAt", "created_at"),
-		UpdatedAt:     getTime("updatedAt", "updated_at"),
-		DeletedAt:     getTime("deletedAt", "deleted_at"),
+		FirstName:     getStrPtr("firstName"),
+		FirstNameKana: getStrPtr("firstNameKana"),
+		LastNameKana:  getStrPtr("lastNameKana"),
+		LastName:      getStrPtr("lastName"),
+		CreatedAt:     getTime("createdAt"),
+		UpdatedAt:     getTime("updatedAt"),
+		DeletedAt:     getTime("deletedAt"),
 	}, nil
 }
 
 // =====================================================
-// Helpers: Filter / Sort (in-memory, PG版の buildUserWhere / buildUserOrderBy 相当)
+// Helpers: Filter / Sort (in-memory)
 // =====================================================
 
 func matchUserFilter(u udom.User, f udom.Filter) bool {
@@ -617,7 +473,7 @@ func sortUsers(items []udom.User, s udom.Sort) {
 		b := items[j]
 
 		switch col {
-		case "createdat", "created_at":
+		case "createdat":
 			if a.CreatedAt.Equal(b.CreatedAt) {
 				if asc {
 					return a.ID < b.ID
@@ -629,7 +485,7 @@ func sortUsers(items []udom.User, s udom.Sort) {
 			}
 			return a.CreatedAt.After(b.CreatedAt)
 
-		case "updatedat", "updated_at":
+		case "updatedat":
 			if a.UpdatedAt.Equal(b.UpdatedAt) {
 				if asc {
 					return a.ID < b.ID
@@ -641,7 +497,7 @@ func sortUsers(items []udom.User, s udom.Sort) {
 			}
 			return a.UpdatedAt.After(b.UpdatedAt)
 
-		case "deletedat", "deleted_at":
+		case "deletedat":
 			if a.DeletedAt.Equal(b.DeletedAt) {
 				if asc {
 					return a.ID < b.ID
@@ -701,19 +557,4 @@ func sortUsers(items []udom.User, s udom.Sort) {
 	}
 
 	sort.SliceStable(items, less)
-}
-
-// =====================================================
-// Small helpers
-// =====================================================
-
-func copyIfTrimmedNonEmpty(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return &s
 }

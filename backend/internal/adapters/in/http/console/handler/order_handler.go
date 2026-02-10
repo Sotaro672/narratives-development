@@ -34,8 +34,14 @@ type TokenBlueprintNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
-// ✅ NEW: AvatarNameResolver resolves avatarName from avatarId.
+// AvatarNameResolver resolves avatarName from avatarId.
 type AvatarNameResolver interface {
+	GetNameByID(ctx context.Context, id string) (string, error)
+}
+
+// ✅ NEW: UserNameResolver resolves userName from userId.
+// - userName は "lastName firstName" の順で返す想定（ex: "山田 太郎"）
+type UserNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
@@ -49,7 +55,10 @@ type orderResponseDTO struct {
 	AvatarID string `json:"avatarId,omitempty"`
 	CartID   string `json:"cartId,omitempty"`
 
-	// ✅ NEW
+	// ✅ NEW: userId -> userName（UI表示用）
+	UserName string `json:"userName,omitempty"`
+
+	// ✅ avatarId -> avatarName（UI表示用）
 	AvatarName string `json:"avatarName,omitempty"`
 
 	Paid      bool   `json:"paid"`
@@ -70,7 +79,7 @@ type orderItemDTO struct {
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 
-	// ✅ NEW: names for UI
+	// ✅ names for UI
 	ProductName string `json:"productName,omitempty"`
 	TokenName   string `json:"tokenName,omitempty"`
 
@@ -89,6 +98,7 @@ func toOrderResponseDTO(
 	pbName ProductBlueprintNameResolver,
 	tbName TokenBlueprintNameResolver,
 	avatarName AvatarNameResolver,
+	userName UserNameResolver,
 ) orderResponseDTO {
 	dto := orderResponseDTO{
 		ID:     strings.TrimSpace(o.ID),
@@ -106,6 +116,13 @@ func toOrderResponseDTO(
 
 	if !o.CreatedAt.IsZero() {
 		dto.CreatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
+	}
+
+	// ✅ userName (best-effort)
+	if userName != nil && strings.TrimSpace(o.UserID) != "" {
+		if n, err := userName.GetNameByID(ctx, strings.TrimSpace(o.UserID)); err == nil {
+			dto.UserName = strings.TrimSpace(n)
+		}
 	}
 
 	// ✅ avatarName (best-effort)
@@ -177,7 +194,7 @@ func toOrderResponseDTO(
 				ProductBlueprintID: pbID,
 				TokenBlueprintID:   tbID,
 
-				// ✅ NEW: resolve names (best-effort)
+				// ✅ resolve names (best-effort)
 				ProductName: resolveProductName(pbID),
 				TokenName:   resolveTokenName(tbID),
 
@@ -210,13 +227,14 @@ type OrderHandler struct {
 	pbName       ProductBlueprintNameResolver
 	tbName       TokenBlueprintNameResolver
 
-	// ✅ NEW
+	// ✅ enrich
 	avatarName AvatarNameResolver
+	userName   UserNameResolver
 }
 
 // NewOrderHandler はHTTPハンドラを初期化します。
 // - /orders/items は q（OrderManagementQuery）を使用
-// - /orders/{id} は invBlueprint/pbName/tbName/avatarName があれば enrich（nil可）
+// - /orders/{id} は invBlueprint/pbName/tbName/avatarName/userName があれば enrich（nil可）
 func NewOrderHandler(
 	uc *usecase.OrderUsecase,
 	q *orderq.OrderManagementQuery,
@@ -224,6 +242,7 @@ func NewOrderHandler(
 	pbName ProductBlueprintNameResolver,
 	tbName TokenBlueprintNameResolver,
 	avatarName AvatarNameResolver,
+	userName UserNameResolver,
 ) http.Handler {
 	return &OrderHandler{
 		uc:           uc,
@@ -232,6 +251,7 @@ func NewOrderHandler(
 		pbName:       pbName,
 		tbName:       tbName,
 		avatarName:   avatarName,
+		userName:     userName,
 	}
 }
 
@@ -281,9 +301,10 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	// ✅ domain をそのまま返さず、camelCase の DTO に詰め替えて返す
-	// ✅ /orders/{id} でも productBlueprintId/tokenBlueprintId/productName/tokenName を返す（ports があれば）
+	// ✅ /orders/{id} で productBlueprintId/tokenBlueprintId/productName/tokenName を返す（ports があれば）
 	// ✅ avatarId -> avatarName も返す（port があれば）
-	dto := toOrderResponseDTO(ctx, order, h.invBlueprint, h.pbName, h.tbName, h.avatarName)
+	// ✅ userId -> userName も返す（port があれば）
+	dto := toOrderResponseDTO(ctx, order, h.invBlueprint, h.pbName, h.tbName, h.avatarName, h.userName)
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
@@ -308,7 +329,7 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 	var sort common.Sort
 
 	// ✅ OrderManagementQuery 側で productBlueprintId/tokenBlueprintId/productName/tokenName を解決して返す前提
-	// ✅ avatarName も Query 側で埋めている前提（未DIなら空で返る）
+	// ✅ avatarName/userName も Query 側で埋めている前提（未DIなら空で返る）
 	pr, err := h.q.ListItemInventoryRows(ctx, filter, sort, page)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

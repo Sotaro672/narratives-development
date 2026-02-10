@@ -79,7 +79,8 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, cerr := h.uc.Create(ctx, v)
+	// ✅ FIX: Create は CreateUserInput を取るため、entity を渡す互換メソッドを使う
+	created, cerr := h.uc.CreateFromEntity(ctx, v)
 	if cerr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": cerr.Error()})

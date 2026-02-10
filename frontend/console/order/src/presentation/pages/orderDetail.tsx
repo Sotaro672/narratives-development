@@ -24,7 +24,9 @@ const formatJPY = (n: number | null | undefined): string => {
 
 type OrderDetailDTO = {
   id: string;
-  userId?: string;
+
+  // ✅ userId ではなく userName を持つ（UI表示用）
+  userName?: string;
 
   // ✅ avatarId ではなく avatarName を持つ
   avatarName?: string;
@@ -100,12 +102,29 @@ function buildDetailFromAllowedItems(
         "",
     ),
 
-    qty: typeof (r as any).qty === "number" ? (r as any).qty : Number((r as any).qty ?? 0) || 0,
+    qty:
+      typeof (r as any).qty === "number"
+        ? (r as any).qty
+        : Number((r as any).qty ?? 0) || 0,
     price:
-      typeof (r as any).price === "number" ? (r as any).price : Number((r as any).price ?? 0) || 0,
+      typeof (r as any).price === "number"
+        ? (r as any).price
+        : Number((r as any).price ?? 0) || 0,
     transferred: Boolean((r as any).transferred),
     transferredAt: (r as any).transferredAt ?? "",
   }));
+
+  // ✅ userName は /orders/items の行DTOから取る（最優先）
+  //    fallback: /orders/{id} が返していればそこからも拾う（将来互換）
+  const userNameFromRows = pickString(byOrder?.[0], [
+    "userName",
+    "user_name",
+  ]);
+  const userNameFromBase = pickString(base as any, [
+    "userName",
+    "user_name",
+  ]);
+  const userName = userNameFromRows || userNameFromBase || "";
 
   // ✅ avatarName は /orders/items の行DTOから取る（最優先）
   //    fallback: /orders/{id} が返していればそこからも拾う（将来互換）
@@ -113,17 +132,17 @@ function buildDetailFromAllowedItems(
     "avatarName",
     "avatar_name",
   ]);
-
   const avatarNameFromBase = pickString(base as any, [
     "avatarName",
     "avatar_name",
   ]);
-
   const avatarName = avatarNameFromRows || avatarNameFromBase || "";
 
   return {
     id: (base as any).id,
-    userId: (base as any).userId,
+
+    // ✅ userId を userName に置き換え
+    userName,
 
     // ✅ avatarId を avatarName に置き換え
     avatarName,
@@ -198,7 +217,10 @@ export default function OrderDetail() {
 
   // derived
   const items = order?.items ?? [];
-  const quantity = items.reduce((sum, it) => sum + (Number(it?.qty ?? 0) || 0), 0);
+  const quantity = items.reduce(
+    (sum, it) => sum + (Number(it?.qty ?? 0) || 0),
+    0,
+  );
   const totalPrice = items.reduce(
     (sum, it) =>
       sum + (Number(it?.price ?? 0) || 0) * (Number(it?.qty ?? 0) || 0),
@@ -211,7 +233,8 @@ export default function OrderDetail() {
   const shipping = order?.shippingSnapshot;
 
   // right column
-  const userId = order?.userId ?? "-";
+  // ✅ ユーザー名（/orders/items から拾えるようになった）
+  const userName = String(order?.userName ?? "").trim() || "-";
 
   // ✅ アバター名（/orders/items から拾えるようになった）
   const avatarName = String(order?.avatarName ?? "").trim() || "-";
@@ -462,11 +485,12 @@ export default function OrderDetail() {
           ) : (
             <table className="w-full text-sm text-left">
               <tbody>
+                {/* ✅ userId → userName */}
                 <tr>
                   <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                    ユーザーID
+                    ユーザー名
                   </th>
-                  <td className="py-2 text-left">{userId}</td>
+                  <td className="py-2 text-left">{userName}</td>
                 </tr>
 
                 {/* ✅ avatarId → avatarName */}
