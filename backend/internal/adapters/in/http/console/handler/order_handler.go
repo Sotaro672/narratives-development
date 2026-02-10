@@ -24,6 +24,16 @@ type InventoryBlueprintResolver interface {
 	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
+// ProductBlueprintNameResolver resolves productName from productBlueprintId.
+type ProductBlueprintNameResolver interface {
+	GetProductNameByID(ctx context.Context, id string) (string, error)
+}
+
+// TokenBlueprintNameResolver resolves tokenName from tokenBlueprintId.
+type TokenBlueprintNameResolver interface {
+	GetNameByID(ctx context.Context, id string) (string, error)
+}
+
 // ============================================================
 // Response DTO (camelCase JSON)
 // ============================================================
@@ -48,9 +58,13 @@ type orderItemDTO struct {
 	// ✅ Keep inventoryId for backward-compat & internal use (but UI can ignore it)
 	InventoryID string `json:"inventoryId,omitempty"`
 
-	// ✅ NEW: resolve from inventoryId and return to UI
+	// ✅ resolve from inventoryId and return to UI
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+
+	// ✅ NEW: names for UI
+	ProductName string `json:"productName,omitempty"`
+	TokenName   string `json:"tokenName,omitempty"`
 
 	ListID string `json:"listId,omitempty"`
 	Qty    int    `json:"qty,omitempty"`
@@ -60,7 +74,13 @@ type orderItemDTO struct {
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
 }
 
-func toOrderResponseDTO(ctx context.Context, o orderdom.Order, invBlueprint InventoryBlueprintResolver) orderResponseDTO {
+func toOrderResponseDTO(
+	ctx context.Context,
+	o orderdom.Order,
+	invBlueprint InventoryBlueprintResolver,
+	pbName ProductBlueprintNameResolver,
+	tbName TokenBlueprintNameResolver,
+) orderResponseDTO {
 	dto := orderResponseDTO{
 		ID:     strings.TrimSpace(o.ID),
 		UserID: strings.TrimSpace(o.UserID),
@@ -77,6 +97,44 @@ func toOrderResponseDTO(ctx context.Context, o orderdom.Order, invBlueprint Inve
 
 	if !o.CreatedAt.IsZero() {
 		dto.CreatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
+	}
+
+	// caches (best-effort)
+	pbNameCache := map[string]string{}
+	tbNameCache := map[string]string{}
+
+	resolveProductName := func(id string) string {
+		id = strings.TrimSpace(id)
+		if id == "" || pbName == nil {
+			return ""
+		}
+		if v, ok := pbNameCache[id]; ok {
+			return v
+		}
+		name, err := pbName.GetProductNameByID(ctx, id)
+		if err != nil {
+			return ""
+		}
+		name = strings.TrimSpace(name)
+		pbNameCache[id] = name
+		return name
+	}
+
+	resolveTokenName := func(id string) string {
+		id = strings.TrimSpace(id)
+		if id == "" || tbName == nil {
+			return ""
+		}
+		if v, ok := tbNameCache[id]; ok {
+			return v
+		}
+		name, err := tbName.GetNameByID(ctx, id)
+		if err != nil {
+			return ""
+		}
+		name = strings.TrimSpace(name)
+		tbNameCache[id] = name
+		return name
 	}
 
 	if len(o.Items) > 0 {
@@ -103,6 +161,10 @@ func toOrderResponseDTO(ctx context.Context, o orderdom.Order, invBlueprint Inve
 				ProductBlueprintID: pbID,
 				TokenBlueprintID:   tbID,
 
+				// ✅ NEW: resolve names (best-effort)
+				ProductName: resolveProductName(pbID),
+				TokenName:   resolveTokenName(tbID),
+
 				ListID: strings.TrimSpace(it.ListID),
 				Qty:    it.Qty,
 				Price:  it.Price,
@@ -123,28 +185,33 @@ func toOrderResponseDTO(ctx context.Context, o orderdom.Order, invBlueprint Inve
 }
 
 // OrderHandler は /orders 関連のエンドポイントを担当します。
-//
-// 追加機能:
-// - GET /orders/items         : OrderManagementQuery の items(flat) 結果を返す
-// - GET /orders/inventory-ids : items から distinct inventoryId を返す
-// - GET /orders/{id}          : 単一取得（既存）
 type OrderHandler struct {
 	uc *usecase.OrderUsecase
 	q  *orderq.OrderManagementQuery
 
-	// ✅ NEW: for enriching /orders/{id} items with productBlueprintId/tokenBlueprintId
+	// for enriching /orders/{id}
 	invBlueprint InventoryBlueprintResolver
+	pbName       ProductBlueprintNameResolver
+	tbName       TokenBlueprintNameResolver
 }
 
 // NewOrderHandler はHTTPハンドラを初期化します。
-// 既存の uc に加えて、OrderManagementQuery を DI して使えるようにします。
-// さらに /orders/{id} 用に inventoryId -> (pbId,tbId) 解決ポートも注入します（nil可）。
+// - /orders/items は q（OrderManagementQuery）を使用
+// - /orders/{id} は invBlueprint/pbName/tbName があれば enrich（nil可）
 func NewOrderHandler(
 	uc *usecase.OrderUsecase,
 	q *orderq.OrderManagementQuery,
 	invBlueprint InventoryBlueprintResolver,
+	pbName ProductBlueprintNameResolver,
+	tbName TokenBlueprintNameResolver,
 ) http.Handler {
-	return &OrderHandler{uc: uc, q: q, invBlueprint: invBlueprint}
+	return &OrderHandler{
+		uc:           uc,
+		q:            q,
+		invBlueprint: invBlueprint,
+		pbName:       pbName,
+		tbName:       tbName,
+	}
 }
 
 // ServeHTTP はHTTPルーティングの入口です。
@@ -193,8 +260,8 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	// ✅ domain をそのまま返さず、camelCase の DTO に詰め替えて返す
-	// ✅ /orders/{id} でも productBlueprintId/tokenBlueprintId を返す（invBlueprint があれば）
-	dto := toOrderResponseDTO(ctx, order, h.invBlueprint)
+	// ✅ /orders/{id} でも productBlueprintId/tokenBlueprintId/productName/tokenName を返す（ports があれば）
+	dto := toOrderResponseDTO(ctx, order, h.invBlueprint, h.pbName, h.tbName)
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
@@ -218,7 +285,7 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 	// sort は repo 実装に依存しやすいので、まずはゼロ値で渡す（必要なら後で拡張）
 	var sort common.Sort
 
-	// ✅ OrderManagementQuery 側で productBlueprintId/tokenBlueprintId を解決して返す前提
+	// ✅ OrderManagementQuery 側で productBlueprintId/tokenBlueprintId/productName/tokenName を解決して返す前提
 	pr, err := h.q.ListItemInventoryRows(ctx, filter, sort, page)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -226,7 +293,6 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// pr.Items[] の各行に productBlueprintId/tokenBlueprintId が含まれる
 	_ = json.NewEncoder(w).Encode(pr)
 }
 

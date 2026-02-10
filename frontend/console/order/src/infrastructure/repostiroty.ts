@@ -17,6 +17,34 @@ export type PageResult<T> = {
   perPage: number;
 };
 
+/**
+ * /orders/{id} の items 1件
+ * - backend が inventoryId -> pb/tb だけでなく name も返すようになった前提
+ */
+export type OrderItemDTO = {
+  modelId?: string;
+
+  // backward-compat (UI が使わなくても返ってくる可能性がある)
+  inventoryId?: string;
+
+  // resolved from inventoryId
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+
+  // ✅ NEW: resolved names
+  productName?: string;
+  tokenName?: string;
+
+  listId?: string;
+  qty?: number;
+  price?: number;
+
+  transferred: boolean;
+  transferredAt?: string; // RFC3339(UTC)
+
+  [k: string]: any;
+};
+
 export type Order = {
   id: string;
   userId: string;
@@ -26,9 +54,15 @@ export type Order = {
   createdAt: string; // RFC3339
   shippingSnapshot?: any;
   billingSnapshot?: any;
-  items?: any[];
+
+  // ✅ any[] ではなく DTO を持つ（画面で productName/tokenName を拾える）
+  items?: OrderItemDTO[];
 };
 
+/**
+ * /orders/items の 1行DTO（フラット）
+ * - backend OrderManagementQuery が company boundary を通した items のみ返す想定
+ */
 export type OrderItemInventoryRowDTO = {
   orderId: string;
 
@@ -41,9 +75,13 @@ export type OrderItemInventoryRowDTO = {
 
   inventoryId: string;
 
-  // ✅ backend OrderManagementQuery が inventoryId から解決して返す
+  // resolved from inventoryId
   productBlueprintId?: string;
   tokenBlueprintId?: string;
+
+  // ✅ NEW: resolved names
+  productName?: string;
+  tokenName?: string;
 
   listId?: string;
   modelId?: string;
@@ -220,7 +258,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/items${qs}`);
-      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId が含まれる
+      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName が含まれる
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(fetcher, url, {
         method: "GET",
       });

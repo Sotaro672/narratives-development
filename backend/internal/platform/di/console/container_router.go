@@ -177,12 +177,39 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	// Orders
-	// ✅ OrderHandler は OrderManagementQuery + InventoryBlueprintResolver を必要とする（3引数）
+	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName) の 5引数
 	if c.OrderUC != nil && c.OrderManagementQuery != nil {
+		// inventoryId -> (productBlueprintId, tokenBlueprintId)
+		var invBlueprint consoleHandler.InventoryBlueprintResolver
+		if c.InventoryUC != nil {
+			if r, ok := any(c.InventoryUC).(consoleHandler.InventoryBlueprintResolver); ok {
+				invBlueprint = r
+			}
+		}
+
+		// productBlueprintId -> productName
+		var pbName consoleHandler.ProductBlueprintNameResolver
+		if c.ProductBlueprintUC != nil {
+			if r, ok := any(c.ProductBlueprintUC).(consoleHandler.ProductBlueprintNameResolver); ok {
+				pbName = r
+			}
+		}
+
+		// tokenBlueprintId -> tokenName
+		var tbName consoleHandler.TokenBlueprintNameResolver
+		if c.TokenBlueprintUC != nil {
+			// TokenBlueprintUC は usecase のはずなので、GetNameByID を持っていればこれで刺さる
+			if r, ok := any(c.TokenBlueprintUC).(consoleHandler.TokenBlueprintNameResolver); ok {
+				tbName = r
+			}
+		}
+
 		ordersH = consoleHandler.NewOrderHandler(
 			c.OrderUC,
 			c.OrderManagementQuery,
-			c.InventoryBlueprintResolver, // ✅ NEW: inventoryId -> (productBlueprintId, tokenBlueprintId)
+			invBlueprint,
+			pbName,
+			tbName,
 		)
 	}
 

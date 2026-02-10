@@ -135,7 +135,6 @@ func BuildConsoleRouterDeps(c *Container) httpin.RouterDeps {
 		)
 	}
 
-	// Lists
 	// Lists（画像アップロードは uploader が nil でもOK / deleterは常にnil）
 	if c.ListUC != nil {
 		listsH = listHandler.NewListHandler(listHandler.NewListHandlerParams{
@@ -177,14 +176,40 @@ func BuildConsoleRouterDeps(c *Container) httpin.RouterDeps {
 	}
 
 	// Orders
-	// ✅ OrderHandler は OrderManagementQuery + InventoryBlueprintResolver を必要とする（3引数）
+	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName) の 5引数
 	// - order_management_query.go 側で company boundary（invRows）を使って items.inventoryId をフィルタするため
-	// - /orders/{id} で item に productBlueprintId/tokenBlueprintId を載せるため resolver を渡す
+	// - /orders/{id} で item に productBlueprintId/tokenBlueprintId/productName/tokenName を載せるため resolver を渡す
 	if c.OrderUC != nil && c.OrderManagementQuery != nil {
+		// inventoryId -> (productBlueprintId, tokenBlueprintId)
+		var invBlueprint consoleHandler.InventoryBlueprintResolver
+		if c.InventoryUC != nil {
+			if r, ok := any(c.InventoryUC).(consoleHandler.InventoryBlueprintResolver); ok {
+				invBlueprint = r
+			}
+		}
+
+		// productBlueprintId -> productName
+		var pbName consoleHandler.ProductBlueprintNameResolver
+		if c.ProductBlueprintUC != nil {
+			if r, ok := any(c.ProductBlueprintUC).(consoleHandler.ProductBlueprintNameResolver); ok {
+				pbName = r
+			}
+		}
+
+		// tokenBlueprintId -> tokenName
+		var tbName consoleHandler.TokenBlueprintNameResolver
+		if c.TokenBlueprintUC != nil {
+			if r, ok := any(c.TokenBlueprintUC).(consoleHandler.TokenBlueprintNameResolver); ok {
+				tbName = r
+			}
+		}
+
 		ordersH = consoleHandler.NewOrderHandler(
 			c.OrderUC,
 			c.OrderManagementQuery,
-			c.InventoryBlueprintResolver, // ✅ NEW
+			invBlueprint,
+			pbName,
+			tbName,
 		)
 	}
 

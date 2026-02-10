@@ -13,6 +13,11 @@ package query
 // ✅ DI整合のための方針:
 //   - Firestore OrderRepositoryFS は usecase.OrderFilter / common.Sort / common.Page を引数に取るため、
 //     Query側の port もそれに合わせる（domain/order.Filter は使わない）
+//
+// ✅ 重要:
+//   - productName/tokenName は best-effort。
+//     pbName/tbName が DI されていれば埋める、されていなければ空で返す（500にしない）。
+//
 import (
 	"context"
 	"errors"
@@ -40,10 +45,20 @@ type InventoryRowsLister interface {
 	ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error)
 }
 
-// ✅ NEW: inventoryId から productBlueprintId / tokenBlueprintId を引ける read-only port
-// RepositoryPort を直接要求するのではなく、必要最小のメソッドだけ切り出す。
+// ✅ inventoryId から productBlueprintId / tokenBlueprintId を引ける read-only port
 type InventoryBlueprintResolver interface {
 	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
+}
+
+// ✅ productBlueprintId -> productName（best-effort）
+type ProductBlueprintNameResolver interface {
+	GetProductNameByID(ctx context.Context, id string) (string, error)
+}
+
+// ✅ tokenBlueprintId -> tokenName（best-effort）
+// tokenBlueprint.RepositoryPort の GetNameByID を想定
+type TokenBlueprintNameResolver interface {
+	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
 // ============================================================
@@ -67,9 +82,13 @@ type OrderItemInventoryRowDTO struct {
 	// item-level
 	InventoryID string `json:"inventoryId"`
 
-	// ✅ NEW: resolved from inventoryId via ResolveBlueprintIDsByInventoryID
+	// resolved from inventoryId
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+
+	// ✅ NEW: resolved from IDs (best-effort)
+	ProductName string `json:"productName,omitempty"`
+	TokenName   string `json:"tokenName,omitempty"`
 
 	ListID  string `json:"listId,omitempty"`
 	ModelID string `json:"modelId,omitempty"`
@@ -92,13 +111,21 @@ type InventoryIDDTO struct {
 type OrderManagementQuery struct {
 	lister       OrderLister
 	invRows      InventoryRowsLister        // REQUIRED
-	invBlueprint InventoryBlueprintResolver // REQUIRED (to return pb/tb)
+	invBlueprint InventoryBlueprintResolver // REQUIRED
+
+	// ✅ optional (best-effort)
+	pbName ProductBlueprintNameResolver
+	tbName TokenBlueprintNameResolver
 }
 
 type NewOrderManagementQueryParams struct {
 	Lister       OrderLister
 	InvRows      InventoryRowsLister        // REQUIRED
 	InvBlueprint InventoryBlueprintResolver // REQUIRED
+
+	// ✅ optional
+	PBName ProductBlueprintNameResolver
+	TBName TokenBlueprintNameResolver
 }
 
 func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQuery {
@@ -106,6 +133,8 @@ func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQu
 		lister:       p.Lister,
 		invRows:      p.InvRows,
 		invBlueprint: p.InvBlueprint,
+		pbName:       p.PBName,
+		tbName:       p.TBName,
 	}
 }
 
@@ -113,16 +142,6 @@ func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQu
 // Public APIs
 // ============================================================
 
-// ListItemInventoryRows
-// - order をスキャンし、items をフラット化して返す
-// - company boundary により許可された inventoryId のみ返す
-//
-// ページング方針:
-// - repository.List は “order単位” でページングされるため、items単位で正しいページを作るには
-//  1. orderをスキャン
-//  2. allowed item を集約
-//  3. item単位で再ページング
-//     が必要（listManagement と同様の安全側実装）
 func (q *OrderManagementQuery) ListItemInventoryRows(
 	ctx context.Context,
 	filter uc.OrderFilter,
@@ -132,6 +151,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	page = normalizePage(page)
 
+	// ✅ pbName/tbName は optional。ここで required 扱いしない。
 	if q == nil || q.lister == nil || q.invRows == nil || q.invBlueprint == nil {
 		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
 	}
@@ -153,12 +173,18 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	allowedAll := make([]OrderItemInventoryRowDTO, 0, page.PerPage)
 
-	// ✅ inventoryId -> (pbID,tbID) cache（同一IDを何度も引かない）
+	// inventoryId -> (pbID,tbID) cache
 	type bt struct {
 		pb string
 		tb string
 	}
 	blueprintCache := map[string]bt{}
+
+	// productBlueprintId -> productName cache
+	pbNameCache := map[string]string{}
+
+	// tokenBlueprintId -> tokenName cache
+	tbNameCache := map[string]string{}
 
 	resolveBlueprint := func(invID string) (string, string, error) {
 		invID = strings.TrimSpace(invID)
@@ -178,7 +204,51 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		return pbID, tbID, nil
 	}
 
-	// スキャン上限（無限ループや巨大テーブルを避ける）
+	resolveProductName := func(pbID string) (string, error) {
+		// optional
+		if q.pbName == nil {
+			return "", nil
+		}
+
+		pbID = strings.TrimSpace(pbID)
+		if pbID == "" {
+			return "", nil
+		}
+		if v, ok := pbNameCache[pbID]; ok {
+			return v, nil
+		}
+		name, e := q.pbName.GetProductNameByID(ctx, pbID)
+		if e != nil {
+			return "", e
+		}
+		name = strings.TrimSpace(name)
+		pbNameCache[pbID] = name
+		return name, nil
+	}
+
+	resolveTokenName := func(tbID string) (string, error) {
+		// optional
+		if q.tbName == nil {
+			return "", nil
+		}
+
+		tbID = strings.TrimSpace(tbID)
+		if tbID == "" {
+			return "", nil
+		}
+		if v, ok := tbNameCache[tbID]; ok {
+			return v, nil
+		}
+		name, e := q.tbName.GetNameByID(ctx, tbID)
+		if e != nil {
+			return "", e
+		}
+		name = strings.TrimSpace(name)
+		tbNameCache[tbID] = name
+		return name, nil
+	}
+
+	// スキャン上限
 	const maxScanPages = 500
 	srcPage := 1
 
@@ -209,18 +279,38 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			avatarID := strings.TrimSpace(ord.AvatarID)
 			cartID := strings.TrimSpace(ord.CartID)
 
-			// items をフラット化
 			for _, it := range ord.Items {
 				invID := strings.TrimSpace(it.InventoryID)
 				if !inventoryAllowed(allowedSet, invID) {
 					continue
 				}
 
-				// ✅ NEW: inventoryId -> pb/tb を解決して返す
+				// inventoryId -> pb/tb
 				pbID, tbID, e2 := resolveBlueprint(invID)
 				if e2 != nil {
 					log.Printf("[OrderManagementQuery] ERROR ResolveBlueprintIDsByInventoryID failed inventoryId=%q err=%v", invID, e2)
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e2
+				}
+
+				// names (best-effort)
+				productName := ""
+				if pbID != "" {
+					n, e3 := resolveProductName(pbID)
+					if e3 != nil {
+						log.Printf("[OrderManagementQuery] ERROR GetProductNameByID failed productBlueprintId=%q err=%v", pbID, e3)
+						return common.PageResult[OrderItemInventoryRowDTO]{}, e3
+					}
+					productName = n
+				}
+
+				tokenName := ""
+				if tbID != "" {
+					n, e4 := resolveTokenName(tbID)
+					if e4 != nil {
+						log.Printf("[OrderManagementQuery] ERROR GetNameByID failed tokenBlueprintId=%q err=%v", tbID, e4)
+						return common.PageResult[OrderItemInventoryRowDTO]{}, e4
+					}
+					tokenName = n
 				}
 
 				transferredAt := ""
@@ -241,6 +331,8 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					InventoryID:        invID,
 					ProductBlueprintID: pbID,
 					TokenBlueprintID:   tbID,
+					ProductName:        productName,
+					TokenName:          tokenName,
 
 					ListID:  strings.TrimSpace(it.ListID),
 					ModelID: strings.TrimSpace(it.ModelID),
@@ -262,7 +354,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				break
 			}
 		} else {
-			// TotalPages が未設定の場合のフォールバック
 			if len(pr.Items) < page.PerPage {
 				break
 			}
@@ -300,8 +391,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 }
 
 // ListDistinctInventoryIDs
-// - 許可された inventoryId を distinct で返す（※このメソッド内では「返却ページ内でdistinct」）
-// - 画面が「inventoryId一覧」だけ欲しい場合に使用
 func (q *OrderManagementQuery) ListDistinctInventoryIDs(
 	ctx context.Context,
 	filter uc.OrderFilter,

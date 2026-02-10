@@ -51,8 +51,8 @@ type OrderDetailDTO = {
     // inventoryId?: string;
 
     // ✅ show these instead
-    productBlueprintId?: string;
-    tokenBlueprintId?: string;
+    productName?: string;
+    tokenName?: string;
 
     listId?: string;
     qty?: number;
@@ -68,12 +68,17 @@ function buildDetailFromAllowedItems(
   base: Order,
   allowedRows: OrderItemInventoryRowDTO[],
 ): OrderDetailDTO {
-  const byOrder = allowedRows.filter((r) => String(r.orderId ?? "") === String(base.id ?? ""));
+  const byOrder = allowedRows.filter(
+    (r) => String(r.orderId ?? "") === String(base.id ?? ""),
+  );
 
   const items = byOrder.map((r) => ({
     modelId: r.modelId ?? "",
-    productBlueprintId: r.productBlueprintId ?? "",
-    tokenBlueprintId: r.tokenBlueprintId ?? "",
+
+    // ✅ ID ではなく name を採用
+    productName: (r as any).productName ?? "",
+    tokenName: (r as any).tokenName ?? "",
+
     listId: r.listId ?? "",
     qty: typeof r.qty === "number" ? r.qty : Number(r.qty ?? 0) || 0,
     price: typeof r.price === "number" ? r.price : Number(r.price ?? 0) || 0,
@@ -330,18 +335,18 @@ export default function OrderDetail() {
                                 <td className="py-2 text-left">{it.modelId ?? "-"}</td>
                               </tr>
 
-                              {/* ✅ NEW: inventoryId の代わりに2列 */}
+                              {/* ✅ ID ではなく name */}
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  productBlueprintId
+                                  productName
                                 </th>
-                                <td className="py-2 text-left">{it.productBlueprintId ?? "-"}</td>
+                                <td className="py-2 text-left">{it.productName ?? "-"}</td>
                               </tr>
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  tokenBlueprintId
+                                  tokenName
                                 </th>
-                                <td className="py-2 text-left">{it.tokenBlueprintId ?? "-"}</td>
+                                <td className="py-2 text-left">{it.tokenName ?? "-"}</td>
                               </tr>
 
                               <tr>

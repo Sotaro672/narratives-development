@@ -162,6 +162,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// - Lister:       order repository (List by usecase.OrderFilter/common.Sort/common.Page)
 	// - InvRows:      company boundary provider (InventoryQuery.ListByCurrentCompany)
 	// - InvBlueprint: inventoryId -> (productBlueprintId, tokenBlueprintId)
+	//
+	// Optional (best-effort):
+	// - PBName: productBlueprintId -> productName
+	// - TBName: tokenBlueprintId   -> tokenName
 	// =========================================================
 	var orderMgmtQ *query.OrderManagementQuery
 	if repos.orderRepo != nil && q.inventoryQuery != nil && invBlueprint != nil {
@@ -169,6 +173,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			Lister:       repos.orderRepo,
 			InvRows:      q.inventoryQuery,
 			InvBlueprint: invBlueprint,
+
+			// ✅ NEW: name resolvers (best-effort)
+			PBName: repos.productBlueprintRepo,
+			TBName: repos.tokenBlueprintRepo,
 		})
 	}
 

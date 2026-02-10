@@ -13,14 +13,14 @@ import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
 type SortKey = "createdAt" | null;
 type SortDir = "asc" | "desc" | null;
 
-// 画面に映す値: orderId,listId,productBlueprintId,tokenBlueprintId,avatarId,createdAt,transfered:boolean
+// 画面に映す値: orderId,listId,productName,tokenName,avatarId,createdAt,transfered:boolean
 type Row = {
   orderId: string;
   listId: string;
 
   // ✅ backend が解決して返す
-  productBlueprintId: string;
-  tokenBlueprintId: string;
+  productName: string;
+  tokenName: string;
 
   // 内部キー用に保持（行キー等に使う）
   inventoryId: string;
@@ -68,9 +68,9 @@ export default function OrderManagementPage() {
 
         inventoryId: String((x as any).inventoryId ?? ""),
 
-        // ✅ split しない。backend の返却値をそのまま使う
-        productBlueprintId: String((x as any).productBlueprintId ?? ""),
-        tokenBlueprintId: String((x as any).tokenBlueprintId ?? ""),
+        // ✅ ID ではなく name を使う
+        productName: String((x as any).productName ?? ""),
+        tokenName: String((x as any).tokenName ?? ""),
 
         avatarId: String((x as any).avatarId ?? ""),
         createdAt: String((x as any).createdAt ?? ""),
@@ -128,8 +128,8 @@ export default function OrderManagementPage() {
   const headers: React.ReactNode[] = [
     "注文ID",
     "リストID",
-    "商品BP ID",
-    "トークンBP ID",
+    "商品名",
+    "トークン名",
     "アバターID",
     <SortableTableHeader
       key="createdAt"
@@ -209,9 +209,9 @@ export default function OrderManagementPage() {
 
               <td>{o.listId || "-"}</td>
 
-              {/* ✅ backend 返却値をそのまま表示 */}
-              <td>{o.productBlueprintId || "-"}</td>
-              <td>{o.tokenBlueprintId || "-"}</td>
+              {/* ✅ ID ではなく name を表示 */}
+              <td>{o.productName || "-"}</td>
+              <td>{o.tokenName || "-"}</td>
 
               <td>{o.avatarId || "-"}</td>
               <td>{safeDateLabelJa(o.createdAt, "-")}</td>
