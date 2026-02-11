@@ -1,4 +1,4 @@
-//frontend\mall\lib\features\billingAddress\infrastructure\repository_http.dart
+// frontend/mall/lib/features/billingAddress/infrastructure/repository_http.dart
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,11 +7,15 @@ import 'api.dart';
 
 /// Simple HTTP repository for buyer billing address endpoints.
 ///
-/// Endpoints (buyer):
-/// - POST   /mall/billing-addresses
-/// - PATCH  /mall/billing-addresses/{id}
-/// - DELETE /mall/billing-addresses/{id}
-/// - GET    /mall/billing-addresses/{id}
+/// ✅ Backend contract (buyer / mall):
+/// - GET    /mall/me/billing-addresses/{id}
+/// - POST   /mall/me/billing-addresses
+/// - PATCH  /mall/me/billing-addresses/{id}
+/// - DELETE /mall/me/billing-addresses/{id}
+///
+/// Notes:
+/// - userId は送らない（backend は middleware userAuth の uid を userId に採用）
+/// - docId は backend 側でランダム採番
 class BillingAddressRepositoryHttp {
   BillingAddressRepositoryHttp({
     http.Client? client,
@@ -26,12 +30,14 @@ class BillingAddressRepositoryHttp {
 
   final ApiClient _api;
 
-  /// GET /mall/billing-addresses/{id}
+  static const String _mePath = 'me/billing-addresses';
+
+  /// GET /mall/me/billing-addresses/{id}
   Future<BillingAddressDTO> getById({required String id}) async {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _api.uri('billing-addresses/$rid');
+    final uri = _api.uri('$_mePath/$rid');
     final res = await _api.sendAuthed('GET', uri);
 
     _api.ensureSuccess(res, uri);
@@ -41,7 +47,7 @@ class BillingAddressRepositoryHttp {
     return BillingAddressDTO.fromJson(data);
   }
 
-  /// POST /mall/billing-addresses
+  /// POST /mall/me/billing-addresses
   Future<BillingAddressDTO> create({
     required String cardNumber,
     required String cardholderName,
@@ -53,7 +59,7 @@ class BillingAddressRepositoryHttp {
       cvc: cvc,
     );
 
-    final uri = _api.uri('billing-addresses');
+    final uri = _api.uri(_mePath);
 
     final body = payload.toJson();
     final res = await _api.sendAuthed(
@@ -70,7 +76,7 @@ class BillingAddressRepositoryHttp {
     return BillingAddressDTO.fromJson(data);
   }
 
-  /// PATCH /mall/billing-addresses/{id}
+  /// PATCH /mall/me/billing-addresses/{id}
   Future<BillingAddressDTO> update({
     required String id,
     String? cardNumber,
@@ -86,7 +92,7 @@ class BillingAddressRepositoryHttp {
       cvc: cvc,
     );
 
-    final uri = _api.uri('billing-addresses/$rid');
+    final uri = _api.uri('$_mePath/$rid');
     final body = payload.toJson();
 
     final res = await _api.sendAuthed(
@@ -107,12 +113,12 @@ class BillingAddressRepositoryHttp {
     return BillingAddressDTO.fromJson(data);
   }
 
-  /// DELETE /mall/billing-addresses/{id}
+  /// DELETE /mall/me/billing-addresses/{id}
   Future<void> delete({required String id}) async {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _api.uri('billing-addresses/$rid');
+    final uri = _api.uri('$_mePath/$rid');
     final res = await _api.sendAuthed('DELETE', uri);
 
     _api.ensureSuccess(res, uri);

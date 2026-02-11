@@ -1,3 +1,4 @@
+// backend/internal/domain/shippingAddress/entity.go
 package shippingAddress
 
 import (
@@ -43,11 +44,49 @@ var (
 	ErrInvalidUpdatedAt = errors.New("shippingAddress: invalid updatedAt")
 )
 
-// Validation
+// Validation (for existing/update: ID required)
 func (a ShippingAddress) validate() error {
 	if strings.TrimSpace(a.ID) == "" {
 		return ErrInvalidID
 	}
+	if strings.TrimSpace(a.UserID) == "" {
+		return ErrInvalidUserID
+	}
+
+	if strings.TrimSpace(a.ZipCode) == "" {
+		return ErrInvalidZipCode
+	}
+	if strings.TrimSpace(a.State) == "" {
+		return ErrInvalidState
+	}
+	if strings.TrimSpace(a.City) == "" {
+		return ErrInvalidCity
+	}
+	if strings.TrimSpace(a.Street) == "" {
+		return ErrInvalidStreet
+	}
+
+	// Street2 は任意（ただし値が入るなら trim して空は不可扱いにする）
+	if a.Street2 != "" && strings.TrimSpace(a.Street2) == "" {
+		return ErrInvalidStreet2
+	}
+
+	if strings.TrimSpace(a.Country) == "" {
+		return ErrInvalidCountry
+	}
+
+	if a.CreatedAt.IsZero() {
+		return ErrInvalidCreatedAt
+	}
+	if a.UpdatedAt.IsZero() || a.UpdatedAt.Before(a.CreatedAt) {
+		return ErrInvalidUpdatedAt
+	}
+	return nil
+}
+
+// Validation for Create (ID is assigned by usecase/repository)
+func (a ShippingAddress) validateForCreate() error {
+	// ✅ IDはまだ空でOK（usecaseが採番して埋める）
 	if strings.TrimSpace(a.UserID) == "" {
 		return ErrInvalidUserID
 	}
@@ -165,6 +204,33 @@ func NewWithNow(
 ) (ShippingAddress, error) {
 	now = now.UTC()
 	return New(id, userID, zipCode, state, city, street, street2, country, now, now)
+}
+
+// ✅ Create constructor: ID is not required (assigned later)
+func NewForCreateWithNow(
+	userID string,
+	zipCode, state, city, street, street2, country string,
+	now time.Time,
+) (ShippingAddress, error) {
+	now = now.UTC()
+
+	a := ShippingAddress{
+		ID:        "", // ✅ create時は空でOK
+		UserID:    strings.TrimSpace(userID),
+		ZipCode:   strings.TrimSpace(zipCode),
+		State:     strings.TrimSpace(state),
+		City:      strings.TrimSpace(city),
+		Street:    strings.TrimSpace(street),
+		Street2:   strings.TrimSpace(street2),
+		Country:   strings.TrimSpace(country),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := a.validateForCreate(); err != nil {
+		return ShippingAddress{}, err
+	}
+	return a, nil
 }
 
 // From DTO-like strings (createdAt/updatedAt as RFC3339)

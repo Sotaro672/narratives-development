@@ -1,5 +1,4 @@
 // frontend/mall/lib/features/user/infrastructure/user_repository_http.dart
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -38,8 +37,12 @@ class UserDTO {
   }
 
   static DateTime? _parseDate(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v.toUtc();
+    if (v == null) {
+      return null;
+    }
+    if (v is DateTime) {
+      return v.toUtc();
+    }
     if (v is String) {
       final t = DateTime.tryParse(v.trim());
       return t?.toUtc();
@@ -48,40 +51,17 @@ class UserDTO {
   }
 
   factory UserDTO.fromJson(Map<String, dynamic> json) {
-    String pick(List<String> keys) {
-      for (final k in keys) {
-        final v = (json[k] ?? '').toString().trim();
-        if (v.isNotEmpty) return v;
-      }
-      return '';
-    }
-
-    dynamic pickAny(List<String> keys) {
-      for (final k in keys) {
-        if (json.containsKey(k)) return json[k];
-      }
-      return null;
-    }
+    String s(dynamic v) => (v ?? '').toString().trim();
 
     return UserDTO(
-      id: pick(const ['id', 'ID', 'userId', 'UserID']),
-      firstName: _optS(pickAny(const ['first_name', 'firstName', 'FirstName'])),
-      firstNameKana: _optS(
-        pickAny(const ['first_name_kana', 'firstNameKana', 'FirstNameKana']),
-      ),
-      lastNameKana: _optS(
-        pickAny(const ['last_name_kana', 'lastNameKana', 'LastNameKana']),
-      ),
-      lastName: _optS(pickAny(const ['last_name', 'lastName', 'LastName'])),
-      createdAt: _parseDate(
-        pickAny(const ['createdAt', 'created_at', 'CreatedAt']),
-      ),
-      updatedAt: _parseDate(
-        pickAny(const ['updatedAt', 'updated_at', 'UpdatedAt']),
-      ),
-      deletedAt: _parseDate(
-        pickAny(const ['deletedAt', 'deleted_at', 'DeletedAt']),
-      ),
+      id: s(json['id']),
+      firstName: _optS(json['first_name']),
+      firstNameKana: _optS(json['first_name_kana']),
+      lastNameKana: _optS(json['last_name_kana']),
+      lastName: _optS(json['last_name']),
+      createdAt: _parseDate(json['createdAt']),
+      updatedAt: _parseDate(json['updatedAt']),
+      deletedAt: _parseDate(json['deletedAt']),
     );
   }
 
@@ -99,24 +79,22 @@ class UserDTO {
   }
 }
 
-/// Backend へ POST する payload
+/// Backend へ POST する payload（旧式互換は削除）
+/// - id はクライアントから送らない（サーバが Authorization の uid を採用）
 class CreateUserBody {
   CreateUserBody({
-    required this.id,
     this.firstName,
     this.firstNameKana,
     this.lastNameKana,
     this.lastName,
   });
 
-  final String id;
   final String? firstName;
   final String? firstNameKana;
   final String? lastNameKana;
   final String? lastName;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'id': id.trim(),
     if (firstName != null) 'first_name': firstName!.trim(),
     if (firstNameKana != null) 'first_name_kana': firstNameKana!.trim(),
     if (lastNameKana != null) 'last_name_kana': lastNameKana!.trim(),
@@ -147,7 +125,7 @@ class UpdateUserBody {
 }
 
 /// Mall Flutter 用 UserRepository (HTTP)
-/// - API_BASE/API_BASE_URL/fallback を共通 resolver で吸収
+/// - ✅ /mall/me/users に統一（旧式互換は削除）
 /// - baseUrl が ".../mall" 注入でも動くように prefix を自動調整
 class UserRepositoryHttp {
   UserRepositoryHttp({Dio? dio, FirebaseAuth? auth, String? baseUrl})
@@ -167,7 +145,6 @@ class UserRepositoryHttp {
 
     final b = Uri.parse(normalized);
     final basePath = b.path.replaceAll(RegExp(r'\/+$'), '');
-    // ✅ baseUrl が /mall を含むなら prefix 不要。含まないなら /mall を付ける。
     _pathPrefix = (basePath == '/mall' || basePath.endsWith('/mall'))
         ? ''
         : 'mall';
@@ -260,82 +237,62 @@ class UserRepositoryHttp {
   }
 
   // ----------------------------
-  // API
+  // API (me only)
   // ----------------------------
 
-  /// GET /mall/users/{id}
-  Future<UserDTO> getById(String id) async {
-    final trimmed = id.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError('id is empty');
-    }
+  static const String _meUsersPath = 'me/users';
 
+  /// GET /mall/me/users
+  Future<UserDTO> getMe() async {
     try {
-      final res = await _dio.get(
-        _p('users/$trimmed'),
-        cancelToken: _cancelToken,
-      );
+      final res = await _dio.get(_p(_meUsersPath), cancelToken: _cancelToken);
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
-      _logFailureSummary(e, op: 'GET /users/$trimmed');
-      throw _toException(e, op: 'GET /users/$trimmed');
+      _logFailureSummary(e, op: 'GET /$_meUsersPath');
+      throw _toException(e, op: 'GET /$_meUsersPath');
     }
   }
 
-  /// POST /mall/users
+  /// POST /mall/me/users
   Future<UserDTO> create(CreateUserBody body) async {
-    if (body.id.trim().isEmpty) {
-      throw ArgumentError('id is empty');
-    }
-
     try {
       final res = await _dio.post(
-        _p('users'),
+        _p(_meUsersPath),
         data: body.toJson(),
         cancelToken: _cancelToken,
       );
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
-      _logFailureSummary(e, op: 'POST /users');
-      throw _toException(e, op: 'POST /users');
+      _logFailureSummary(e, op: 'POST /$_meUsersPath');
+      throw _toException(e, op: 'POST /$_meUsersPath');
     }
   }
 
-  /// PATCH /mall/users/{id}
-  Future<UserDTO> update(String id, UpdateUserBody body) async {
-    final trimmed = id.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError('id is empty');
-    }
-
+  /// PATCH /mall/me/users
+  Future<UserDTO> updateMe(UpdateUserBody body) async {
     try {
       final res = await _dio.patch(
-        _p('users/$trimmed'),
+        _p(_meUsersPath),
         data: body.toJson(),
         cancelToken: _cancelToken,
       );
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
-      _logFailureSummary(e, op: 'PATCH /users/$trimmed');
-      throw _toException(e, op: 'PATCH /users/$trimmed');
+      _logFailureSummary(e, op: 'PATCH /$_meUsersPath');
+      throw _toException(e, op: 'PATCH /$_meUsersPath');
     }
   }
 
-  /// DELETE /mall/users/{id}
-  Future<void> delete(String id) async {
-    final trimmed = id.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError('id is empty');
-    }
-
+  /// DELETE /mall/me/users
+  Future<void> deleteMe() async {
     try {
-      await _dio.delete(_p('users/$trimmed'), cancelToken: _cancelToken);
+      await _dio.delete(_p(_meUsersPath), cancelToken: _cancelToken);
     } on DioException catch (e) {
-      _logFailureSummary(e, op: 'DELETE /users/$trimmed');
-      throw _toException(e, op: 'DELETE /users/$trimmed');
+      _logFailureSummary(e, op: 'DELETE /$_meUsersPath');
+      throw _toException(e, op: 'DELETE /$_meUsersPath');
     }
   }
 
@@ -352,20 +309,34 @@ class UserRepositoryHttp {
 
   String _p(String path) {
     var p = path.trim();
-    if (p.startsWith('/')) p = p.substring(1);
-    if (p.isEmpty) return p;
-    if (_pathPrefix.isEmpty) return '/$p';
+    if (p.startsWith('/')) {
+      p = p.substring(1);
+    }
+    if (p.isEmpty) {
+      return p;
+    }
+    if (_pathPrefix.isEmpty) {
+      return '/$p';
+    }
     return '/$_pathPrefix/$p';
   }
 
   Map<String, dynamic> _asMap(dynamic v) {
-    if (v is Map<String, dynamic>) return v;
-    if (v is Map) return Map<String, dynamic>.from(v);
+    if (v is Map<String, dynamic>) {
+      return v;
+    }
+    if (v is Map) {
+      return Map<String, dynamic>.from(v);
+    }
     if (v is String) {
       try {
         final decoded = jsonDecode(v);
-        if (decoded is Map<String, dynamic>) return decoded;
-        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
       } catch (_) {}
     }
     throw Exception(
@@ -377,7 +348,7 @@ class UserRepositoryHttp {
     final status = e.response?.statusCode;
     final data = e.response?.data;
 
-    String msg = '$op failed';
+    var msg = '$op failed';
     if (status != null) {
       msg += ' (status=$status)';
     }
@@ -412,54 +383,56 @@ class UserRepositoryHttp {
   // ----------------------------
 
   void _log(String msg) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
     debugPrint(msg);
   }
 
   void _logRequest(RequestOptions o) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final method = o.method.toUpperCase();
     final url = o.uri.toString();
 
     final headers = <String, dynamic>{};
     o.headers.forEach((k, v) {
-      if (k.toLowerCase() == 'authorization') {
-        headers[k] = 'Bearer ***';
-      } else {
-        headers[k] = v;
-      }
+      headers[k] = (k.toLowerCase() == 'authorization') ? 'Bearer ***' : v;
     });
 
     String body = '';
     final d = o.data;
     if (d != null) {
       try {
-        if (d is String) {
-          body = d;
-        } else if (d is Map || d is List) {
-          body = jsonEncode(d);
-        } else {
-          body = d.toString();
-        }
+        body = (d is String)
+            ? d
+            : (d is Map || d is List)
+            ? jsonEncode(d)
+            : d.toString();
       } catch (e) {
         body = '(failed to encode body: $e)';
       }
     }
 
-    final b = StringBuffer();
-    b.writeln('[UserRepositoryHttp] request');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
-    b.writeln('  headers=${jsonEncode(headers)}');
+    final b = StringBuffer()
+      ..writeln('[UserRepositoryHttp] request')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url')
+      ..writeln('  headers=${jsonEncode(headers)}');
+
     if (body.isNotEmpty) {
       b.writeln('  body=${_truncate(body, 1500)}');
     }
+
     debugPrint(b.toString());
   }
 
   void _logResponse(Response r) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final method = r.requestOptions.method.toUpperCase();
     final url = r.requestOptions.uri.toString();
@@ -467,32 +440,34 @@ class UserRepositoryHttp {
     String body = '';
     try {
       final d = r.data;
-      if (d == null) {
-        body = '';
-      } else if (d is String) {
-        body = d;
-      } else if (d is Map || d is List) {
-        body = jsonEncode(d);
-      } else {
-        body = d.toString();
-      }
+      body = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (e) {
       body = '(failed to encode response body: $e)';
     }
 
-    final b = StringBuffer();
-    b.writeln('[UserRepositoryHttp] response');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
-    b.writeln('  status=${r.statusCode}');
+    final b = StringBuffer()
+      ..writeln('[UserRepositoryHttp] response')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url')
+      ..writeln('  status=${r.statusCode}');
+
     if (body.isNotEmpty) {
       b.writeln('  body=${_truncate(body, 1500)}');
     }
+
     debugPrint(b.toString());
   }
 
   void _logDioError(DioException e) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();
@@ -502,23 +477,22 @@ class UserRepositoryHttp {
     String resBody = '';
     try {
       final d = e.response?.data;
-      if (d == null) {
-        resBody = '';
-      } else if (d is String) {
-        resBody = d;
-      } else if (d is Map || d is List) {
-        resBody = jsonEncode(d);
-      } else {
-        resBody = d.toString();
-      }
+      resBody = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (_) {
       resBody = '(failed to encode error response body)';
     }
 
-    final b = StringBuffer();
-    b.writeln('[UserRepositoryHttp] error');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
+    final b = StringBuffer()
+      ..writeln('[UserRepositoryHttp] error')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url');
+
     if (status != null) {
       b.writeln('  status=$status');
     }
@@ -528,11 +502,14 @@ class UserRepositoryHttp {
     if (resBody.isNotEmpty) {
       b.writeln('  responseBody=${_truncate(resBody, 1500)}');
     }
+
     debugPrint(b.toString());
   }
 
   void _logFailureSummary(DioException e, {String? op}) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();
@@ -543,77 +520,55 @@ class UserRepositoryHttp {
 
     final reqHeaders = <String, dynamic>{};
     o.headers.forEach((k, v) {
-      if (k.toLowerCase() == 'authorization') {
-        reqHeaders[k] = 'Bearer ***';
-      } else {
-        reqHeaders[k] = v;
-      }
+      reqHeaders[k] = (k.toLowerCase() == 'authorization') ? 'Bearer ***' : v;
     });
 
     String reqBody = '';
     try {
       final d = o.data;
-      if (d == null) {
-        reqBody = '';
-      } else if (d is String) {
-        reqBody = d;
-      } else if (d is Map || d is List) {
-        reqBody = jsonEncode(d);
-      } else {
-        reqBody = d.toString();
-      }
+      reqBody = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (ex) {
       reqBody = '(failed to encode request body: $ex)';
     }
 
-    final resHeaders = <String, dynamic>{};
-    try {
-      final h = e.response?.headers.map;
-      if (h != null) {
-        h.forEach((k, v) {
-          resHeaders[k] = v;
-        });
-      }
-    } catch (_) {}
-
     String resBody = '';
     try {
       final d = e.response?.data;
-      if (d == null) {
-        resBody = '';
-      } else if (d is String) {
-        resBody = d;
-      } else if (d is Map || d is List) {
-        resBody = jsonEncode(d);
-      } else {
-        resBody = d.toString();
-      }
+      resBody = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (ex) {
       resBody = '(failed to encode response body: $ex)';
     }
 
-    final b = StringBuffer();
-    b.writeln('[UserRepositoryHttp] FAILURE');
-    if ((op ?? '').trim().isNotEmpty) {
-      b.writeln('  op=$op');
-    }
-    b.writeln('  $statusLine');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
-    b.writeln('  dioType=${e.type}');
-    if ((e.message ?? '').trim().isNotEmpty) {
-      b.writeln('  message=${e.message}');
-    }
-    b.writeln('  requestHeaders=${_truncate(jsonEncode(reqHeaders), 1500)}');
+    final safeOp = (op ?? '').trim().isEmpty ? '(n/a)' : op!.trim();
+
+    final b = StringBuffer()
+      ..writeln('[UserRepositoryHttp] FAILURE')
+      ..writeln('  op=$safeOp')
+      ..writeln('  $statusLine')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url')
+      ..writeln('  dioType=${e.type}')
+      ..writeln('  requestHeaders=${_truncate(jsonEncode(reqHeaders), 1500)}');
+
     if (reqBody.isNotEmpty) {
       b.writeln('  requestBody=${_truncate(reqBody, 1500)}');
-    }
-    if (resHeaders.isNotEmpty) {
-      b.writeln('  responseHeaders=${_truncate(jsonEncode(resHeaders), 1500)}');
     }
     if (resBody.isNotEmpty) {
       b.writeln('  responseBody=${_truncate(resBody, 2000)}');
     }
+
     debugPrint(b.toString());
   }
 

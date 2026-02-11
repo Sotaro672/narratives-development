@@ -33,19 +33,6 @@ func (u *BillingAddressUsecase) GetByUser(ctx context.Context, userID string) ([
 	return u.repo.GetByUser(ctx, strings.TrimSpace(userID))
 }
 
-// 互換: entity.go には default 概念がないが、RepositoryPort 互換のため残す
-func (u *BillingAddressUsecase) GetDefaultByUser(ctx context.Context, userID string) (*baddr.BillingAddress, error) {
-	return u.repo.GetDefaultByUser(ctx, strings.TrimSpace(userID))
-}
-
-func (u *BillingAddressUsecase) Count(ctx context.Context, f baddr.Filter) (int, error) {
-	return u.repo.Count(ctx, f)
-}
-
-func (u *BillingAddressUsecase) List(ctx context.Context, f baddr.Filter, s baddr.Sort, p baddr.Page) (baddr.PageResult, error) {
-	return u.repo.List(ctx, f, s, p)
-}
-
 // ============================================================
 // Commands
 // ============================================================
@@ -63,7 +50,7 @@ func (u *BillingAddressUsecase) Create(ctx context.Context, in baddr.CreateBilli
 		in.UpdatedAt = &t
 	}
 
-	// Normalize (entity.go 準拠)
+	// Normalize
 	in.UserID = strings.TrimSpace(in.UserID)
 	in.CardNumber = strings.TrimSpace(in.CardNumber)
 	in.CardholderName = strings.TrimSpace(in.CardholderName)
@@ -92,9 +79,4 @@ func (u *BillingAddressUsecase) Update(ctx context.Context, id string, in baddr.
 
 func (u *BillingAddressUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
-}
-
-// 互換: entity.go には default 概念がないが、RepositoryPort 互換のため残す
-func (u *BillingAddressUsecase) SetDefault(ctx context.Context, id string) error {
-	return u.repo.SetDefault(ctx, strings.TrimSpace(id))
 }

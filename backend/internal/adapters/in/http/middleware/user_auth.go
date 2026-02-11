@@ -9,9 +9,11 @@ import (
 	"strings"
 )
 
-// UserAuthMiddleware verifies Firebase ID token (buyer/user side) and stores uid/email in context.
-// - Does NOT require MemberRepo / companyId.
-// - Intended for Mall onboarding endpoints (/mall/users, /mall/shipping-addresses, /mall/billing-addresses, etc.)
+// UserAuthMiddleware verifies Firebase ID token (buyer/user side) and stores uid/email/fullName in context.
+//   - Requires Authorization: Bearer <Firebase ID Token>
+//   - CORS preflight (OPTIONS) is allowed to pass through without auth
+//   - Stores values into context using the shared keys (ctxKeyUID/ctxKeyEmail/ctxKeyFullName),
+//     so CurrentUserUID / CurrentUserUIDAndEmail / CurrentUserFullName can be used by handlers.
 type UserAuthMiddleware struct {
 	FirebaseAuth *FirebaseAuthClient
 }
@@ -42,6 +44,7 @@ func (m *UserAuthMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
+		// NOTE: keep the same slicing index ("Bearer ") and rely on trimming
 		idToken := strings.TrimSpace(authHeader[len("Bearer "):])
 		if idToken == "" {
 			writeJSONError(w, http.StatusUnauthorized, "unauthorized: empty bearer token")
@@ -71,7 +74,7 @@ func (m *UserAuthMiddleware) Handler(next http.Handler) http.Handler {
 			}
 		}
 
-		// fullName (optional)
+		// fullName (optional) - accepts "name" or "fullName"
 		fullName := ""
 		if nameRaw, ok := token.Claims["name"]; ok {
 			if s, ok2 := nameRaw.(string); ok2 {
@@ -87,11 +90,9 @@ func (m *UserAuthMiddleware) Handler(next http.Handler) http.Handler {
 		}
 
 		// ------------------------------------------------------------
-		// put into context
+		// put into context (shared keys)
 		// ------------------------------------------------------------
 		ctx := r.Context()
-
-		// ✅ share the same keys as member_auth.go (so existing helpers work)
 		ctx = context.WithValue(ctx, ctxKeyUID, uid)
 
 		if email != "" {
@@ -111,7 +112,7 @@ func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// CurrentUserUID returns Firebase UID for buyer/user side.
+// CurrentUserUID returns Firebase UID (set by UserAuthMiddleware).
 func CurrentUserUID(r *http.Request) (string, bool) {
 	vUID := r.Context().Value(ctxKeyUID)
 	u, ok := vUID.(string)
@@ -125,7 +126,7 @@ func CurrentUserUID(r *http.Request) (string, bool) {
 	return u, true
 }
 
-// CurrentUserUIDAndEmail returns uid/email (email can be empty).
+// CurrentUserUIDAndEmail returns uid and email if present (email can be empty).
 func CurrentUserUIDAndEmail(r *http.Request) (uid string, email string, ok bool) {
 	uid, ok = CurrentUserUID(r)
 	if !ok {
@@ -141,7 +142,7 @@ func CurrentUserUIDAndEmail(r *http.Request) (uid string, email string, ok bool)
 	return uid, email, true
 }
 
-// CurrentUserFullName returns fullName if present.
+// CurrentUserFullName returns fullName if present (set by UserAuthMiddleware).
 func CurrentUserFullName(r *http.Request) (string, bool) {
 	v := r.Context().Value(ctxKeyFullName)
 	if v == nil {

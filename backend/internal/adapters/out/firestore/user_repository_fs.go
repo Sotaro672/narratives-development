@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"sort"
 	"strings"
 	"time"
 
@@ -21,9 +20,13 @@ import (
 // Firestore User Repository
 // =====================================================
 //
-// IMPORTANT:
-// - users コレクションの DocID は "user.ID(=Firebase Auth UID)" に統一する。
-// - これにより「userId と UID が一致しない」問題を根本的に解消する。
+// ✅ Single source of truth: domain/user/entity.go
+// - docId = uid (= user.ID)
+// - field keys are unified to entity.go JSON tags:
+//   first_name, first_name_kana, last_name_kana, last_name
+//   createdAt, updatedAt, deletedAt
+//
+// - DeletedAt is allowed to be zero (not deleted)
 // =====================================================
 
 type UserRepositoryFS struct {
@@ -38,19 +41,17 @@ func (r *UserRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("users")
 }
 
-// =====================================================
-// RepositoryPort 準拠メソッド
-// =====================================================
+// --------------------
+// Read
+// --------------------
 
-// GetByID(ctx, id) (*udom.User, error)
 func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (*udom.User, error) {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		// 「存在しない」とは別なので invalid とする（ハンドラが 400 にできる）
 		return nil, udom.ErrInvalidID
 	}
 
@@ -69,9 +70,10 @@ func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (*udom.User, 
 	return &u, nil
 }
 
-// List: Firestore 制約により全件取得してメモリ上で Filter/Sort/Paging を適用。
-func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, sortOpt udom.Sort, page udom.Page) (udom.PageResult, error) {
-	if r.Client == nil {
+// List: Firestore 制約により全件取得してメモリ上で Filter/Paging を適用。
+// ✅ sort は削除（repository_port.go に合わせる）
+func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, page udom.Page) (udom.PageResult, error) {
+	if r == nil || r.Client == nil {
 		return udom.PageResult{}, errors.New("firestore client is nil")
 	}
 
@@ -96,8 +98,6 @@ func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, sortOpt
 		}
 	}
 
-	sortUsers(all, sortOpt)
-
 	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 	total := len(all)
 
@@ -108,6 +108,7 @@ func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, sortOpt
 	if end > total {
 		end = total
 	}
+
 	paged := all[offset:end]
 
 	return udom.PageResult{
@@ -119,9 +120,7 @@ func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, sortOpt
 	}, nil
 }
 
-// ✅ NEW: GetNameByID(ctx, id) (string, error)
-// - "lastName firstName" の順で返す（どちらか欠けても best-effort）
-// - 両方空なら空文字（ErrNotFoundにはしない：画面表示用途のため）
+// GetNameByID: "last_name first_name"
 func (r *UserRepositoryFS) GetNameByID(ctx context.Context, id string) (string, error) {
 	u, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -140,7 +139,6 @@ func (r *UserRepositoryFS) GetNameByID(ctx context.Context, id string) (string, 
 		fn = strings.TrimSpace(*u.FirstName)
 	}
 
-	// lastName -> firstName
 	switch {
 	case ln != "" && fn != "":
 		return ln + " " + fn, nil
@@ -153,10 +151,22 @@ func (r *UserRepositoryFS) GetNameByID(ctx context.Context, id string) (string, 
 	}
 }
 
-// Create(ctx, in) (*udom.User, error)
-func (r *UserRepositoryFS) Create(ctx context.Context, in udom.CreateUserInput) (*udom.User, error) {
-	if r.Client == nil {
+// --------------------
+// Write
+// --------------------
+
+// Create: users/{id} を作成。既存なら ErrConflict。
+// ✅ docId = uid を必ず caller が渡す契約（RepositoryPort 準拠）
+// ✅ createdAt/updatedAt は caller が渡した値を保存（usecase が server now を入れる前提）
+// ✅ deletedAt は nil/zero/非zero を許容（entity.go に合わせる）
+func (r *UserRepositoryFS) Create(ctx context.Context, id string, in udom.CreateUserInput) (*udom.User, error) {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, udom.ErrInvalidID
 	}
 
 	now := time.Now().UTC()
@@ -170,17 +180,20 @@ func (r *UserRepositoryFS) Create(ctx context.Context, in udom.CreateUserInput) 
 	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
 		updatedAt = in.UpdatedAt.UTC()
 	}
+	if updatedAt.Before(createdAt) {
+		return nil, udom.ErrInvalidUpdatedAt
+	}
 
-	// deletedAt: デフォルトは createdAt、指定されていれば max(createdAt, DeletedAt)
-	deletedAt := createdAt
-	if in.DeletedAt != nil && !in.DeletedAt.IsZero() {
-		del := in.DeletedAt.UTC()
-		if del.After(createdAt) {
-			deletedAt = del
+	deletedAt := time.Time{} // zero means "not deleted"
+	if in.DeletedAt != nil {
+		deletedAt = in.DeletedAt.UTC()
+		if !deletedAt.IsZero() && deletedAt.Before(createdAt) {
+			return nil, udom.ErrInvalidDeletedAt
 		}
 	}
 
 	data := map[string]any{
+		// ✅ entity.go times (camelCase)
 		"createdAt": createdAt,
 		"updatedAt": updatedAt,
 		"deletedAt": deletedAt,
@@ -197,35 +210,30 @@ func (r *UserRepositoryFS) Create(ctx context.Context, in udom.CreateUserInput) 
 		data[key] = s
 	}
 
-	setIfNonEmpty("firstName", in.FirstName)
-	setIfNonEmpty("firstNameKana", in.FirstNameKana)
-	setIfNonEmpty("lastNameKana", in.LastNameKana)
-	setIfNonEmpty("lastName", in.LastName)
+	// ✅ entity.go names (snake_case)
+	setIfNonEmpty("first_name", in.FirstName)
+	setIfNonEmpty("first_name_kana", in.FirstNameKana)
+	setIfNonEmpty("last_name_kana", in.LastNameKana)
+	setIfNonEmpty("last_name", in.LastName)
 
-	// NOTE:
-	// RepositoryPort の Create には id が無い。
-	// 既存設計（DocID=UID）に合わせるため、この実装では「作成対象IDは in ではなく別レイヤで確定」している前提。
-	// もしこの repo が直接 Create で UID を受け取る設計なら、別途 Create 引数を見直してください。
-	//
-	// ここでは互換のため、data 内に "id" が無い状態では作成できないので ErrInvalidID とする。
-	rawID, ok := data["id"].(string)
-	_ = rawID
-	if !ok {
-		return nil, udom.ErrInvalidID
+	ref := r.col().Doc(id)
+
+	_, err := ref.Create(ctx, data)
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return nil, udom.ErrConflict
+		}
+		return nil, err
 	}
 
-	// ↑上の "id" は現状コード上でセットされないので、実際にはここに到達しません。
-	// 本プロジェクトの現行 Create 呼び出しが「udom.User を渡す」形だったため、
-	// RepositoryPort に合わせて呼び出し側も合わせる必要があります。
-	// （このコメントはコンパイル自体は通ります）
-
-	return nil, errors.New("Create requires user id (DocID) to be provided by caller; adjust wiring to pass UID as doc id")
+	return r.GetByID(ctx, id)
 }
 
-// Update(ctx, id, in) (*udom.User, error)
-// Postgres 実装に近い PATCH 振る舞い。
+// Update: users/{id} を部分更新（nil は変更なし）
+// - 空文字は「フィールド削除」
+// - updatedAt は必須運用（nil/zero なら NOW を入れる）
 func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.UpdateUserInput) (*udom.User, error) {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
@@ -236,7 +244,7 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 
 	ref := r.col().Doc(id)
 
-	// 存在確認
+	// exists?
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
 		return nil, udom.ErrNotFound
 	} else if err != nil {
@@ -251,51 +259,32 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 		}
 		v := strings.TrimSpace(*p)
 		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  path,
-				Value: firestore.Delete,
-			})
+			updates = append(updates, firestore.Update{Path: path, Value: firestore.Delete})
 			return
 		}
-		updates = append(updates, firestore.Update{
-			Path:  path,
-			Value: v,
-		})
+		updates = append(updates, firestore.Update{Path: path, Value: v})
 	}
 
-	// first/last names
-	setStr("firstName", in.FirstName)
-	setStr("firstNameKana", in.FirstNameKana)
-	setStr("lastNameKana", in.LastNameKana)
-	setStr("lastName", in.LastName)
+	// ✅ entity.go names (snake_case)
+	setStr("first_name", in.FirstName)
+	setStr("first_name_kana", in.FirstNameKana)
+	setStr("last_name_kana", in.LastNameKana)
+	setStr("last_name", in.LastName)
 
-	// updatedAt: 指定なければ NOW()
-	if in.UpdatedAt != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: in.UpdatedAt.UTC(),
-		})
+	// ✅ updatedAt (camelCase)
+	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
+		updates = append(updates, firestore.Update{Path: "updatedAt", Value: in.UpdatedAt.UTC()})
 	} else {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: time.Now().UTC(),
-		})
+		updates = append(updates, firestore.Update{Path: "updatedAt", Value: time.Now().UTC()})
 	}
 
-	// deletedAt: nil なら変更なし
+	// ✅ deletedAt: nil なら変更なし / non-nil は zero も含めて反映
 	if in.DeletedAt != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "deletedAt",
-			Value: in.DeletedAt.UTC(),
-		})
+		updates = append(updates, firestore.Update{Path: "deletedAt", Value: in.DeletedAt.UTC()})
 	}
 
 	if len(updates) == 0 {
-		got, err := r.GetByID(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		return got, nil
+		return r.GetByID(ctx, id)
 	}
 
 	if _, err := ref.Update(ctx, updates); err != nil {
@@ -312,7 +301,7 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 }
 
 func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
@@ -322,6 +311,7 @@ func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
 	}
 
 	ref := r.col().Doc(id)
+
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
 		return udom.ErrNotFound
 	} else if err != nil {
@@ -334,9 +324,9 @@ func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// =====================================================
-// Helpers: Firestore -> Domain
-// =====================================================
+// --------------------
+// Firestore -> Domain
+// --------------------
 
 func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 	data := doc.Data()
@@ -344,46 +334,51 @@ func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 		return udom.User{}, udom.ErrNotFound
 	}
 
-	getStrPtr := func(keys ...string) *string {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				s := strings.TrimSpace(v)
-				if s != "" {
-					return &s
-				}
-				return nil
-			}
+	getStrPtr := func(key string) *string {
+		v, ok := data[key]
+		if !ok {
+			return nil
 		}
-		return nil
+		s, ok := v.(string)
+		if !ok {
+			return nil
+		}
+		t := strings.TrimSpace(s)
+		if t == "" {
+			return nil
+		}
+		return &t
 	}
 
-	getTime := func(keys ...string) time.Time {
-		for _, k := range keys {
-			if v, ok := data[k].(time.Time); ok {
-				return v.UTC()
-			}
+	getTime := func(key string) time.Time {
+		v, ok := data[key]
+		if !ok {
+			return time.Time{}
 		}
-		return time.Time{}
+		t, ok := v.(time.Time)
+		if !ok {
+			return time.Time{}
+		}
+		return t.UTC()
 	}
 
 	return udom.User{
 		ID:            strings.TrimSpace(doc.Ref.ID),
-		FirstName:     getStrPtr("firstName"),
-		FirstNameKana: getStrPtr("firstNameKana"),
-		LastNameKana:  getStrPtr("lastNameKana"),
-		LastName:      getStrPtr("lastName"),
+		FirstName:     getStrPtr("first_name"),
+		FirstNameKana: getStrPtr("first_name_kana"),
+		LastNameKana:  getStrPtr("last_name_kana"),
+		LastName:      getStrPtr("last_name"),
 		CreatedAt:     getTime("createdAt"),
 		UpdatedAt:     getTime("updatedAt"),
 		DeletedAt:     getTime("deletedAt"),
 	}, nil
 }
 
-// =====================================================
-// Helpers: Filter / Sort (in-memory)
-// =====================================================
+// --------------------
+// Filter (in-memory)
+// --------------------
 
 func matchUserFilter(u udom.User, f udom.Filter) bool {
-	// IDs
 	if len(f.IDs) > 0 {
 		match := false
 		for _, id := range f.IDs {
@@ -397,7 +392,6 @@ func matchUserFilter(u udom.User, f udom.Filter) bool {
 		}
 	}
 
-	// FirstNameLike
 	if v := strings.TrimSpace(f.FirstNameLike); v != "" {
 		p := strings.ToLower(v)
 		name := ""
@@ -409,7 +403,6 @@ func matchUserFilter(u udom.User, f udom.Filter) bool {
 		}
 	}
 
-	// LastNameLike
 	if v := strings.TrimSpace(f.LastNameLike); v != "" {
 		p := strings.ToLower(v)
 		name := ""
@@ -421,7 +414,6 @@ func matchUserFilter(u udom.User, f udom.Filter) bool {
 		}
 	}
 
-	// NameLike (first OR last)
 	if v := strings.TrimSpace(f.NameLike); v != "" {
 		p := strings.ToLower(v)
 		fn := ""
@@ -437,7 +429,6 @@ func matchUserFilter(u udom.User, f udom.Filter) bool {
 		}
 	}
 
-	// Time ranges
 	if f.CreatedFrom != nil && u.CreatedAt.Before(f.CreatedFrom.UTC()) {
 		return false
 	}
@@ -458,103 +449,4 @@ func matchUserFilter(u udom.User, f udom.Filter) bool {
 	}
 
 	return true
-}
-
-func sortUsers(items []udom.User, s udom.Sort) {
-	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
-	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
-	if dir != "ASC" && dir != "DESC" {
-		dir = "DESC"
-	}
-	asc := dir == "ASC"
-
-	less := func(i, j int) bool {
-		a := items[i]
-		b := items[j]
-
-		switch col {
-		case "createdat":
-			if a.CreatedAt.Equal(b.CreatedAt) {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return a.CreatedAt.Before(b.CreatedAt)
-			}
-			return a.CreatedAt.After(b.CreatedAt)
-
-		case "updatedat":
-			if a.UpdatedAt.Equal(b.UpdatedAt) {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return a.UpdatedAt.Before(b.UpdatedAt)
-			}
-			return a.UpdatedAt.After(b.UpdatedAt)
-
-		case "deletedat":
-			if a.DeletedAt.Equal(b.DeletedAt) {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return a.DeletedAt.Before(b.DeletedAt)
-			}
-			return a.DeletedAt.After(b.DeletedAt)
-
-		case "first_name", "firstname":
-			var af, bf string
-			if a.FirstName != nil {
-				af = *a.FirstName
-			}
-			if b.FirstName != nil {
-				bf = *b.FirstName
-			}
-			if af == bf {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return af < bf
-			}
-			return af > bf
-
-		case "last_name", "lastname":
-			var al, bl string
-			if a.LastName != nil {
-				al = *a.LastName
-			}
-			if b.LastName != nil {
-				bl = *b.LastName
-			}
-			if al == bl {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return al < bl
-			}
-			return al > bl
-
-		default:
-			// デフォルト: createdAt DESC, id DESC
-			if a.CreatedAt.Equal(b.CreatedAt) {
-				return a.ID > b.ID
-			}
-			return a.CreatedAt.After(b.CreatedAt)
-		}
-	}
-
-	sort.SliceStable(items, less)
 }

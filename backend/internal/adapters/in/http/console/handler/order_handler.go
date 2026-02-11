@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	orderq "narratives/internal/application/query/console" // order_management_query.go は package query
+	orderq "narratives/internal/application/query/console"
+	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
@@ -39,10 +40,15 @@ type AvatarNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
-// ✅ NEW: UserNameResolver resolves userName from userId.
-// - userName は "lastName firstName" の順で返す想定（ex: "山田 太郎"）
+// UserNameResolver resolves userName from userId.
+// - userName は "lastName firstName" の順で返す想定
 type UserNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
+}
+
+// ✅ ModelResolver: application/resolver の NameResolver を使って modelId(=variationID) を解決する
+type ModelResolver interface {
+	ResolveModelResolved(ctx context.Context, variationID string) resolver.ModelResolved
 }
 
 // ============================================================
@@ -55,7 +61,7 @@ type orderResponseDTO struct {
 	AvatarID string `json:"avatarId,omitempty"`
 	CartID   string `json:"cartId,omitempty"`
 
-	// ✅ NEW: userId -> userName（UI表示用）
+	// ✅ userId -> userName（UI表示用）
 	UserName string `json:"userName,omitempty"`
 
 	// ✅ avatarId -> avatarName（UI表示用）
@@ -72,16 +78,23 @@ type orderResponseDTO struct {
 type orderItemDTO struct {
 	ModelID string `json:"modelId,omitempty"`
 
-	// ✅ Keep inventoryId for backward-compat & internal use (but UI can ignore it)
+	// backward-compat & internal use
 	InventoryID string `json:"inventoryId,omitempty"`
 
-	// ✅ resolve from inventoryId and return to UI
+	// resolved from inventoryId
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 
-	// ✅ names for UI
+	// names for UI
 	ProductName string `json:"productName,omitempty"`
 	TokenName   string `json:"tokenName,omitempty"`
+
+	// ✅ resolved model fields (from modelId -> variation)
+	Size        string    `json:"size,omitempty"`
+	ModelNumber string    `json:"modelNumber,omitempty"`
+	Color       *ColorDTO `json:"color,omitempty"`
+	// ✅ 0(黒) も有効値なので omitempty を外す
+	RGB int `json:"rgb"`
 
 	ListID string `json:"listId,omitempty"`
 	Qty    int    `json:"qty,omitempty"`
@@ -89,6 +102,12 @@ type orderItemDTO struct {
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
+}
+
+type ColorDTO struct {
+	Name string `json:"name,omitempty"`
+	// ✅ 0(黒) も有効値なので omitempty を外す
+	RGB int `json:"rgb"`
 }
 
 func toOrderResponseDTO(
@@ -99,6 +118,7 @@ func toOrderResponseDTO(
 	tbName TokenBlueprintNameResolver,
 	avatarName AvatarNameResolver,
 	userName UserNameResolver,
+	modelResolver ModelResolver, // ✅ NameResolver 互換の interface に変更
 ) orderResponseDTO {
 	dto := orderResponseDTO{
 		ID:     strings.TrimSpace(o.ID),
@@ -109,7 +129,6 @@ func toOrderResponseDTO(
 
 		Paid: o.Paid,
 
-		// domainの型をそのまま返す（json tag が無い/揺れていても、DTO側のキーに寄せる）
 		ShippingSnapshot: o.ShippingSnapshot,
 		BillingSnapshot:  o.BillingSnapshot,
 	}
@@ -118,14 +137,14 @@ func toOrderResponseDTO(
 		dto.CreatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
 	}
 
-	// ✅ userName (best-effort)
+	// userName (best-effort)
 	if userName != nil && strings.TrimSpace(o.UserID) != "" {
 		if n, err := userName.GetNameByID(ctx, strings.TrimSpace(o.UserID)); err == nil {
 			dto.UserName = strings.TrimSpace(n)
 		}
 	}
 
-	// ✅ avatarName (best-effort)
+	// avatarName (best-effort)
 	if avatarName != nil && strings.TrimSpace(o.AvatarID) != "" {
 		if n, err := avatarName.GetNameByID(ctx, strings.TrimSpace(o.AvatarID)); err == nil {
 			dto.AvatarName = strings.TrimSpace(n)
@@ -135,6 +154,7 @@ func toOrderResponseDTO(
 	// caches (best-effort)
 	pbNameCache := map[string]string{}
 	tbNameCache := map[string]string{}
+	modelCache := map[string]resolver.ModelResolved{} // ✅ ModelResolved をキャッシュ
 
 	resolveProductName := func(id string) string {
 		id = strings.TrimSpace(id)
@@ -170,6 +190,20 @@ func toOrderResponseDTO(
 		return name
 	}
 
+	// modelId -> ModelResolved (application/resolver)
+	resolveModel := func(variationID string) resolver.ModelResolved {
+		vid := strings.TrimSpace(variationID)
+		if vid == "" || modelResolver == nil {
+			return resolver.ModelResolved{}
+		}
+		if v, ok := modelCache[vid]; ok {
+			return v
+		}
+		resolved := modelResolver.ResolveModelResolved(ctx, vid) // 取れない場合はゼロ値
+		modelCache[vid] = resolved
+		return resolved
+	}
+
 	if len(o.Items) > 0 {
 		dto.Items = make([]orderItemDTO, 0, len(o.Items))
 		for _, it := range o.Items {
@@ -178,11 +212,41 @@ func toOrderResponseDTO(
 			pbID := ""
 			tbID := ""
 			if invBlueprint != nil && invID != "" {
-				// best-effort: if resolve fails, keep empty fields (UI shows "-")
 				pb, tb, err := invBlueprint.ResolveBlueprintIDsByInventoryID(ctx, invID)
 				if err == nil {
 					pbID = strings.TrimSpace(pb)
 					tbID = strings.TrimSpace(tb)
+				}
+			}
+
+			// ✅ model resolved fields
+			var (
+				size        string
+				modelNumber string
+				colorDTO    *ColorDTO
+				rgb         int
+			)
+
+			mr := resolveModel(strings.TrimSpace(it.ModelID))
+			if mr.ModelNumber != "" || mr.Size != "" || mr.Color != "" || mr.RGB != nil {
+				size = strings.TrimSpace(mr.Size)
+				modelNumber = strings.TrimSpace(mr.ModelNumber)
+
+				// color name は string で返ってくるので DTO を組み立てる
+				if strings.TrimSpace(mr.Color) != "" || mr.RGB != nil {
+					colorDTO = &ColorDTO{
+						Name: strings.TrimSpace(mr.Color),
+						RGB:  0,
+					}
+					if mr.RGB != nil {
+						colorDTO.RGB = *mr.RGB
+						rgb = *mr.RGB
+					}
+				} else {
+					// rgb だけ取れたケース（Name が空でも rgb は返す）
+					if mr.RGB != nil {
+						rgb = *mr.RGB
+					}
 				}
 			}
 
@@ -194,9 +258,13 @@ func toOrderResponseDTO(
 				ProductBlueprintID: pbID,
 				TokenBlueprintID:   tbID,
 
-				// ✅ resolve names (best-effort)
 				ProductName: resolveProductName(pbID),
 				TokenName:   resolveTokenName(tbID),
+
+				Size:        size,
+				ModelNumber: modelNumber,
+				Color:       colorDTO,
+				RGB:         rgb,
 
 				ListID: strings.TrimSpace(it.ListID),
 				Qty:    it.Qty,
@@ -210,31 +278,31 @@ func toOrderResponseDTO(
 			dto.Items = append(dto.Items, item)
 		}
 	} else {
-		// 常に配列で返したい場合は空sliceにする（UI側が楽）
 		dto.Items = []orderItemDTO{}
 	}
 
 	return dto
 }
 
-// OrderHandler は /orders 関連のエンドポイントを担当します。
+// ============================================================
+// Handler
+// ============================================================
+
 type OrderHandler struct {
 	uc *usecase.OrderUsecase
 	q  *orderq.OrderManagementQuery
 
-	// for enriching /orders/{id}
 	invBlueprint InventoryBlueprintResolver
 	pbName       ProductBlueprintNameResolver
 	tbName       TokenBlueprintNameResolver
 
-	// ✅ enrich
 	avatarName AvatarNameResolver
 	userName   UserNameResolver
+
+	// ✅ application/resolver.NameResolver を使う
+	modelResolver ModelResolver
 }
 
-// NewOrderHandler はHTTPハンドラを初期化します。
-// - /orders/items は q（OrderManagementQuery）を使用
-// - /orders/{id} は invBlueprint/pbName/tbName/avatarName/userName があれば enrich（nil可）
 func NewOrderHandler(
 	uc *usecase.OrderUsecase,
 	q *orderq.OrderManagementQuery,
@@ -243,34 +311,32 @@ func NewOrderHandler(
 	tbName TokenBlueprintNameResolver,
 	avatarName AvatarNameResolver,
 	userName UserNameResolver,
+	modelResolver ModelResolver, // ✅ ModelVariationResolver から差し替え
 ) http.Handler {
 	return &OrderHandler{
-		uc:           uc,
-		q:            q,
-		invBlueprint: invBlueprint,
-		pbName:       pbName,
-		tbName:       tbName,
-		avatarName:   avatarName,
-		userName:     userName,
+		uc:            uc,
+		q:             q,
+		invBlueprint:  invBlueprint,
+		pbName:        pbName,
+		tbName:        tbName,
+		avatarName:    avatarName,
+		userName:      userName,
+		modelResolver: modelResolver,
 	}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
 func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
-	// ✅ 一覧（itemsをフラット化）
 	case r.Method == http.MethodGet && r.URL.Path == "/orders/items":
 		h.listItemRows(w, r)
 		return
 
-	// ✅ distinct inventoryId 一覧
 	case r.Method == http.MethodGet && r.URL.Path == "/orders/inventory-ids":
 		h.listDistinctInventoryIDs(w, r)
 		return
 
-	// ✅ 単一取得
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/orders/"):
 		id := strings.TrimPrefix(r.URL.Path, "/orders/")
 		h.get(w, r, id)
@@ -283,7 +349,6 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GET /orders/{id}
 func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -300,15 +365,19 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	// ✅ domain をそのまま返さず、camelCase の DTO に詰め替えて返す
-	// ✅ /orders/{id} で productBlueprintId/tokenBlueprintId/productName/tokenName を返す（ports があれば）
-	// ✅ avatarId -> avatarName も返す（port があれば）
-	// ✅ userId -> userName も返す（port があれば）
-	dto := toOrderResponseDTO(ctx, order, h.invBlueprint, h.pbName, h.tbName, h.avatarName, h.userName)
+	dto := toOrderResponseDTO(
+		ctx,
+		order,
+		h.invBlueprint,
+		h.pbName,
+		h.tbName,
+		h.avatarName,
+		h.userName,
+		h.modelResolver,
+	)
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
-// GET /orders/items?page=1&perPage=20&id=...&userId=...&avatarId=...&cartId=...&createdFrom=...&createdTo=...
 func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -325,11 +394,8 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// sort は repo 実装に依存しやすいので、まずはゼロ値で渡す（必要なら後で拡張）
 	var sort common.Sort
 
-	// ✅ OrderManagementQuery 側で productBlueprintId/tokenBlueprintId/productName/tokenName を解決して返す前提
-	// ✅ avatarName/userName も Query 側で埋めている前提（未DIなら空で返る）
 	pr, err := h.q.ListItemInventoryRows(ctx, filter, sort, page)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -340,7 +406,6 @@ func (h *OrderHandler) listItemRows(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(pr)
 }
 
-// GET /orders/inventory-ids?page=1&perPage=200&userId=... （filter/page は /orders/items と同じ）
 func (h *OrderHandler) listDistinctInventoryIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -373,24 +438,19 @@ func (h *OrderHandler) listDistinctInventoryIDs(w http.ResponseWriter, r *http.R
 // Query param parsing
 // ============================================================
 
-// ✅ OrderManagementQuery は usecase.OrderFilter / common.Page を使う
 func parseOrderListParams(r *http.Request) (usecase.OrderFilter, common.Page, error) {
 	q := r.URL.Query()
 
-	// page/perPage
 	pageNum := parseIntDefault(q.Get("page"), 1)
 	perPage := parseIntDefault(q.Get("perPage"), 20)
 
-	// filter（usecase.OrderFilter）
 	f := usecase.OrderFilter{
 		ID: strings.TrimSpace(q.Get("id")),
 	}
 
-	// *string fields: "" -> nil, otherwise &v
 	if v := strings.TrimSpace(q.Get("userId")); v != "" {
 		f.UserID = strPtr(v)
 	}
-	// ✅ usecase.OrderFilter に AvatarID *string を追加した前提
 	if v := strings.TrimSpace(q.Get("avatarId")); v != "" {
 		f.AvatarID = strPtr(v)
 	}
@@ -398,7 +458,6 @@ func parseOrderListParams(r *http.Request) (usecase.OrderFilter, common.Page, er
 		f.CartID = strPtr(v)
 	}
 
-	// createdFrom/createdTo: RFC3339
 	if v := strings.TrimSpace(q.Get("createdFrom")); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
@@ -424,7 +483,7 @@ func parseOrderListParams(r *http.Request) (usecase.OrderFilter, common.Page, er
 func strPtr(s string) *string { return &s }
 
 // ============================================================
-// エラーハンドリング（既存）
+// Error handling
 // ============================================================
 
 func writeOrderErr(w http.ResponseWriter, err error) {

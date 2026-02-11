@@ -1,4 +1,4 @@
-// backend\internal\domain\user\entity.go
+// backend/internal/domain/user/entity.go
 package user
 
 import (
@@ -26,7 +26,9 @@ type User struct {
 	LastName      *string   `json:"last_name,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
-	DeletedAt     time.Time `json:"deletedAt"`
+
+	// soft delete: zero means "not deleted"
+	DeletedAt time.Time `json:"deletedAt"`
 }
 
 // Errors (single source)
@@ -108,15 +110,22 @@ func (u User) validate() error {
 	if u.LastNameKana != nil && len([]rune(*u.LastNameKana)) > MaxNameLength {
 		return ErrInvalidLastNameKana
 	}
+
+	// created/updated must be set by server
 	if u.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
 	if u.UpdatedAt.IsZero() || u.UpdatedAt.Before(u.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
-	if u.DeletedAt.IsZero() || u.DeletedAt.Before(u.CreatedAt) {
+
+	// ✅ soft delete:
+	// - DeletedAt is allowed to be zero (not deleted)
+	// - If set, it must not be before CreatedAt
+	if !u.DeletedAt.IsZero() && u.DeletedAt.Before(u.CreatedAt) {
 		return ErrInvalidDeletedAt
 	}
+
 	return nil
 }
 
@@ -135,7 +144,7 @@ func New(
 		LastName:      normalizePtr(lastName),
 		CreatedAt:     createdAt.UTC(),
 		UpdatedAt:     updatedAt.UTC(),
-		DeletedAt:     deletedAt.UTC(),
+		DeletedAt:     deletedAt.UTC(), // zero stays zero
 	}
 	if err := u.validate(); err != nil {
 		return User{}, err
@@ -151,6 +160,7 @@ func NewWithNow(
 	deletedAt time.Time,
 ) (User, error) {
 	now = now.UTC()
+	// deletedAt can be zero (not deleted)
 	return New(id, firstName, firstNameKana, lastNameKana, lastName, now, now, deletedAt)
 }
 
@@ -168,10 +178,20 @@ func NewFromStringTimes(
 	if err != nil {
 		return User{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
-	dt, err := parseTime(deletedAt)
-	if err != nil {
-		return User{}, fmt.Errorf("%w: %v", ErrInvalidDeletedAt, err)
+
+	// ✅ deletedAt は空文字なら "not deleted" 扱いで zero を許容
+	deletedAt = strings.TrimSpace(deletedAt)
+	var dt time.Time
+	if deletedAt != "" {
+		parsed, derr := parseTime(deletedAt)
+		if derr != nil {
+			return User{}, fmt.Errorf("%w: %v", ErrInvalidDeletedAt, derr)
+		}
+		dt = parsed
+	} else {
+		dt = time.Time{}
 	}
+
 	return New(id, firstName, firstNameKana, lastNameKana, lastName, ct, ut, dt)
 }
 

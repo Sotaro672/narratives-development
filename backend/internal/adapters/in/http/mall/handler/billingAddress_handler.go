@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 	badom "narratives/internal/domain/billingAddress"
 )
@@ -46,32 +47,32 @@ func (h *BillingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	switch {
 	// GET /mall/billing-addresses/{id}
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/me/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/me/billing-addresses/")
 		h.get(w, r, id)
 		return
 
 	// POST /mall/billing-addresses
-	case r.Method == http.MethodPost && path == "/mall/billing-addresses":
+	case r.Method == http.MethodPost && path == "/mall/me/billing-addresses":
 		h.post(w, r)
 		return
 
 	// PATCH /mall/billing-addresses/{id}
 	// ✅ shipping_address と同様に「PATCH で Upsert」へ寄せる
-	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/mall/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/mall/me/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/me/billing-addresses/")
 		h.patch(w, r, id)
 		return
 
 	// PUT /mall/billing-addresses/{id}
-	case r.Method == http.MethodPut && strings.HasPrefix(path, "/mall/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
+	case r.Method == http.MethodPut && strings.HasPrefix(path, "/mall/me/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/me/billing-addresses/")
 		h.put(w, r, id)
 		return
 
 	// DELETE /mall/billing-addresses/{id}
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/mall/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/mall/me/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/me/billing-addresses/")
 		h.delete(w, r, id)
 		return
 
@@ -82,9 +83,29 @@ func (h *BillingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// ------------------------------------------------------------
+// auth helpers
+// ------------------------------------------------------------
+
+// ✅ UserAuthMiddleware が context に入れた uid を取得して userId として使う
+func requireUID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	uid, ok := middleware.CurrentUserUID(r)
+	if ok && strings.TrimSpace(uid) != "" {
+		return strings.TrimSpace(uid), true
+	}
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+	return "", false
+}
+
 // GET /mall/billing-addresses/{id}
 func (h *BillingAddressHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	// ✅ 認証必須（uid を context から取得できる状態であること）
+	if _, ok := requireUID(w, r); !ok {
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -105,6 +126,12 @@ func (h *BillingAddressHandler) get(w http.ResponseWriter, r *http.Request, id s
 func (h *BillingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// ✅ uid を context から取得し、必ず userId に採用（body の userId は信用しない）
+	uid, ok := requireUID(w, r)
+	if !ok {
+		return
+	}
+
 	// ✅ raw body をログしてから decode
 	raw, head, err := readBodyWithHead(r, 220)
 	if err != nil {
@@ -120,6 +147,9 @@ func (h *BillingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
+
+	// ✅ anti-spoof: userId は middleware の uid を強制
+	in.UserID = uid
 
 	log.Printf(
 		"%s post parsed userId=%q cardNumber=%q cardholderName=%q cvc=%q",
@@ -144,6 +174,12 @@ func (h *BillingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 // ✅ PATCH=Upsert（not_found のとき create）
 func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	// ✅ uid を context から取得し、upsert-create 時の userId に採用
+	uid, ok := requireUID(w, r)
+	if !ok {
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -180,8 +216,8 @@ func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id
 	if errors.Is(err, badom.ErrNotFound) {
 		log.Printf("%s patch get not_found -> upsert create id=%q", billingHandlerTag, id)
 
-		// ✅ Create 入力に変換（UpdateInput に userId が無いので id を採用）
-		userID := pickUserIDForUpsert(id, in)
+		// ✅ userId は常に uid（middleware）を採用
+		userID := uid
 
 		createIn := badom.CreateBillingAddressInput{
 			UserID:         userID,
@@ -223,6 +259,11 @@ func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id
 func (h *BillingAddressHandler) put(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
+	// ✅ 認証必須（uid を context から取得できる状態であること）
+	if _, ok := requireUID(w, r); !ok {
+		return
+	}
+
 	id = strings.TrimSpace(id)
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -259,6 +300,11 @@ func (h *BillingAddressHandler) put(w http.ResponseWriter, r *http.Request, id s
 // DELETE /mall/billing-addresses/{id}
 func (h *BillingAddressHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	// ✅ 認証必須（uid を context から取得できる状態であること）
+	if _, ok := requireUID(w, r); !ok {
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -332,10 +378,6 @@ func pickPtr(p *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*p)
-}
-
-func pickUserIDForUpsert(id string, _ badom.UpdateBillingAddressInput) string {
-	return strings.TrimSpace(id)
 }
 
 func maskCard(v string) string {

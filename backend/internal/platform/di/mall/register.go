@@ -578,7 +578,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// ✅ ここは DI だけなので “そのまま” でOK
-	mallhttp.Register(mux, deps)
+	mallhttp.Register(mux, deps, userAuthMW.Handler)
+
 	log.Printf("[boot] mall routes registered")
 
 	// ----------------------------

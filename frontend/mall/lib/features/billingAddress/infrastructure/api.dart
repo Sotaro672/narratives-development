@@ -1,4 +1,4 @@
-//frontend\mall\lib\features\billingAddress\infrastructure\api.dart
+// frontend/mall/lib/features/billingAddress/infrastructure/api.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -27,25 +27,23 @@ class ApiClient {
     }
 
     final normalized = resolvedRaw.replaceAll(RegExp(r'\/+$'), '');
-    final baseUri = Uri.parse(normalized);
+    final u = Uri.parse(normalized);
 
-    // baseUrl に /mall が含まれている注入も許容
-    // - baseUrl が ".../mall" の場合: 以降の path は "/billing-addresses/..." を渡しても /mall は二重にならない
-    // - baseUrl が domain だけの場合: ここで "/mall" を付与
-    final basePath = baseUri.path.replaceAll(RegExp(r'\/+$'), '');
-    _prefix = (basePath.endsWith('/mall') || basePath == '/mall')
-        ? ''
-        : '/mall';
+    // ✅ origin（scheme/host/port）だけをベースにする
+    _origin = u.replace(path: '', query: null, fragment: null);
 
-    _base = baseUri.replace(path: basePath);
+    // ✅ baseUrl に /mall が含まれている注入も許容
+    // - ".../mall" or ".../mall/..." なら caller 側では /mall を付けない
+    final basePath = u.path.replaceAll(RegExp(r'\/+$'), '');
+    _baseHasMall = basePath == '/mall' || basePath.endsWith('/mall');
   }
 
   final String tag;
   final http.Client _client;
   final FirebaseAuth _auth;
 
-  late final Uri _base;
-  late final String _prefix;
+  late final Uri _origin;
+  late final bool _baseHasMall;
 
   // ✅ release でもログを出したい場合: --dart-define=ENABLE_HTTP_LOG=true
   static const bool _envHttpLog = bool.fromEnvironment(
@@ -62,25 +60,28 @@ class ApiClient {
   // URI builder
   // ------------------------------------------------------------
 
-  /// Build URI under base + (optional) /mall prefix.
-  /// - Accepts: "billing-addresses/xxx", "/billing-addresses/xxx", "/mall/billing-addresses/xxx"
-  /// - Ensures: /mall is added exactly once (or not added if base already ends with /mall)
+  /// Build URI under origin + /mall prefix.
+  ///
+  /// - Accepts: "me/xxx", "/me/xxx", "mall/me/xxx", "/mall/me/xxx"
+  /// - Ensures: "/mall" is added exactly once unless apiBase already contains "/mall"
   Uri uri(String path) {
     var p = path.trim();
-    if (p.isEmpty) return _base;
+    if (p.isEmpty) return _origin;
 
-    // normalize slashes
+    // normalize leading slashes
     p = p.replaceAll(RegExp(r'^/+'), '');
 
     // if caller already passed mall prefix, don't double it
     final alreadyMall = p == 'mall' || p.startsWith('mall/');
-    final prefix = _prefix.isEmpty || alreadyMall ? '' : _prefix;
 
-    final fullPath = ('${_base.path}$prefix/$p').replaceAll(
-      RegExp(r'\/+'),
-      '/',
-    );
-    return _base.replace(path: fullPath);
+    final needsMall = !_baseHasMall && !alreadyMall;
+
+    final fullPath = needsMall ? '/mall/$p' : '/$p';
+
+    // normalize duplicate slashes
+    final normalizedPath = fullPath.replaceAll(RegExp(r'\/+'), '/');
+
+    return _origin.replace(path: normalizedPath);
   }
 
   // ------------------------------------------------------------

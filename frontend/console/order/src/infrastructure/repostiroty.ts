@@ -20,9 +20,16 @@ export type PageResult<T> = {
 /**
  * /orders/{id} の items 1件
  * - backend が inventoryId -> pb/tb だけでなく name も返すようになった前提
+ * - backend が modelId(=variationID) から size/color/rgb/modelNumber も返すようになった前提
  */
 export type OrderItemDTO = {
   modelId?: string;
+
+  // ✅ NEW: modelId(variationID) -> variation fields (UI表示用)
+  size?: string;
+  color?: string;
+  rgb?: string;
+  modelNumber?: string;
 
   // backward-compat (UI が使わなくても返ってくる可能性がある)
   inventoryId?: string;
@@ -67,13 +74,14 @@ export type Order = {
   shippingSnapshot?: any;
   billingSnapshot?: any;
 
-  // ✅ any[] ではなく DTO を持つ（画面で productName/tokenName を拾える）
+  // ✅ any[] ではなく DTO を持つ（画面で productName/tokenName/size/color/rgb/modelNumber を拾える）
   items?: OrderItemDTO[];
 };
 
 /**
  * /orders/items の 1行DTO（フラット）
  * - backend OrderManagementQuery が company boundary を通した items のみ返す想定
+ * - backend が modelId(=variationID) から size/color/rgb/modelNumber も返すようになった前提
  */
 export type OrderItemInventoryRowDTO = {
   orderId: string;
@@ -107,6 +115,13 @@ export type OrderItemInventoryRowDTO = {
   listReadableId?: string;
 
   modelId?: string;
+
+  // ✅ NEW: model fields (variation)
+  size?: string;
+  color?: string;
+  rgb?: string;
+  modelNumber?: string;
+
   qty?: number;
   price?: number;
 
@@ -188,7 +203,7 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
-// ✅ best-effort: backend のキー揺れを吸収して listReadableId / avatarName / userName に寄せる
+// ✅ best-effort: backend のキー揺れを吸収して listReadableId / avatarName / userName / model fields に寄せる
 function normalizeInPlace(obj: any): void {
   if (!obj || typeof obj !== "object") return;
 
@@ -254,6 +269,85 @@ function normalizeInPlace(obj: any): void {
       }
     }
   }
+
+  // ----------------------------
+  // model fields: size / color / rgb / modelNumber
+  // ----------------------------
+  if (obj.size == null || String(obj.size).trim() === "") {
+    const candidates = [obj.Size, obj.size, obj.model_size, obj.modelSize];
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim() !== "") {
+        obj.size = v.trim();
+        break;
+      }
+    }
+  }
+
+  if (obj.modelNumber == null || String(obj.modelNumber).trim() === "") {
+    const candidates = [
+      obj.modelNumber,
+      obj.model_number,
+      obj.modelNo,
+      obj.model_no,
+      obj.ModelNumber,
+    ];
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim() !== "") {
+        obj.modelNumber = v.trim();
+        break;
+      }
+    }
+  }
+
+  // color は "string(色名)" として受け取りたい
+  // backend が {color:{name:"..",rgb:".."}} を返す可能性もあるので吸収
+  if (obj.color == null || String(obj.color).trim() === "") {
+    const candidates: any[] = [
+      obj.color,
+      obj.color_name,
+      obj.colorName,
+      obj.Color, // sometimes
+      obj.ColorName,
+    ];
+
+    // object pattern: color: { name, rgb }
+    if (obj.color && typeof obj.color === "object") {
+      candidates.unshift(obj.color.name, obj.color.Name);
+      // rgb も同時に拾える
+      if (obj.rgb == null || String(obj.rgb).trim() === "") {
+        const rv = obj.color.rgb ?? obj.color.RGB;
+        if (typeof rv === "string" && rv.trim() !== "") obj.rgb = rv.trim();
+      }
+    }
+
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim() !== "") {
+        obj.color = v.trim();
+        break;
+      }
+    }
+  }
+
+  if (obj.rgb == null || String(obj.rgb).trim() === "") {
+    const candidates: any[] = [
+      obj.rgb,
+      obj.RGB,
+      obj.colorRgb,
+      obj.color_rgb,
+    ];
+
+    // object pattern: color: { rgb }
+    if (obj.color && typeof obj.color === "object") {
+      candidates.unshift(obj.color.rgb, obj.color.RGB);
+    }
+
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim() !== "") {
+        obj.rgb = v.trim();
+        break;
+      }
+    }
+  }
 }
 
 async function requestJSON<T>(
@@ -295,7 +389,7 @@ async function requestJSON<T>(
 
   const data = (await res.json()) as any;
 
-  // ✅ listReadableId / avatarName / userName を拾えるように正規化（best-effort）
+  // ✅ listReadableId / avatarName / userName / model fields を拾えるように正規化（best-effort）
   normalizeInPlace(data);
 
   return data as T;
@@ -356,7 +450,9 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/items${qs}`);
-      // ✅ ここで受け取る DTO に productBlueprintId/tokenBlueprintId/productName/tokenName/listReadableId/avatarName/userName が含まれる
+      // ✅ ここで受け取る DTO に
+      // productBlueprintId/tokenBlueprintId/productName/tokenName/listReadableId/avatarName/userName
+      // + size/color/rgb/modelNumber が含まれる
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(fetcher, url, {
         method: "GET",
       });

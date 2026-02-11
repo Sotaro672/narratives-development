@@ -33,38 +33,21 @@ type Deps struct {
 	AvatarState http.Handler
 
 	// ✅ mall only: /mall/me/wallets
-	// Contract (new only; legacy removed):
-	// - GET     /mall/me/wallets
-	// - POST    /mall/me/wallets/sync
-	// - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
-	// - OPTIONS /mall/me/wallets/metadata/proxy?url=...
-	// - GET     /mall/me/wallets/metadata/proxy?url=...   (CORS avoidance; inside Wallet handler)
 	Wallet http.Handler
 
 	Cart    http.Handler
 	Payment http.Handler
 
-	// ✅ Preview routes are intentionally split:
-	// - /mall/preview     : public (no auth) for pre-login scanner
-	// - /mall/me/preview  : authenticated for post-login scanner
 	Preview   http.Handler
 	PreviewMe http.Handler
 
-	// ✅ NEW: order scan verify (authenticated)
-	// - POST /mall/me/orders/scan/verify
-	OrderScanVerify http.Handler
-
-	// ✅ NEW: order scan transfer (authenticated)
-	// - POST /mall/me/orders/scan/transfer
+	OrderScanVerify   http.Handler
 	OrderScanTransfer http.Handler
 
-	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
-	// - /mall/owners/resolve : public OK (tokenの所有者表示など)
 	OwnerResolve http.Handler
 
 	Order http.Handler
 
-	// ✅ invoices (buyer-facing)
 	Invoice http.Handler
 }
 
@@ -78,143 +61,164 @@ func handleSafe(mux *http.ServeMux, pattern string, h http.Handler, name string)
 	mux.Handle(pattern, h)
 }
 
+// handleSafeAuth registers pattern with auth-wrapped handler.
+// If auth is nil, it falls back to plain handleSafe (and warns) to avoid crash.
+func handleSafeAuth(mux *http.ServeMux, pattern string, h http.Handler, name string, auth func(http.Handler) http.Handler) {
+	if auth == nil {
+		log.Printf("[mall.router] WARN: nil auth middleware: %s pattern=%s (registering WITHOUT auth)", name, pattern)
+		handleSafe(mux, pattern, h, name)
+		return
+	}
+	handleSafe(mux, pattern, auth(h), name)
+}
+
 // Register registers buyer-facing routes onto mux (mall only).
-func Register(mux *http.ServeMux, deps Deps) {
+//
+// auth:
+//   - /mall/me/** のみ auth を必須にするための middleware wrapper
+//   - 例: auth := userAuthMiddleware.Handler
+func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handler) {
 	if mux == nil {
 		return
 	}
 
-	// lists
+	// ------------------------------------------------------------
+	// Public routes (no auth)
+	// ------------------------------------------------------------
+
+	// lists (public)
 	handleSafe(mux, "/mall/lists", deps.List, "List")
 	handleSafe(mux, "/mall/lists/", deps.List, "List")
-	handleSafe(mux, "/mall/me/lists", deps.List, "List(me)")
-	handleSafe(mux, "/mall/me/lists/", deps.List, "List(me)")
 
-	// inventories
+	// inventories (public)
 	handleSafe(mux, "/mall/inventories", deps.Inventory, "Inventory")
 	handleSafe(mux, "/mall/inventories/", deps.Inventory, "Inventory")
-	handleSafe(mux, "/mall/me/inventories", deps.Inventory, "Inventory(me)")
-	handleSafe(mux, "/mall/me/inventories/", deps.Inventory, "Inventory(me)")
 
-	// product blueprints
+	// product blueprints (public)
 	handleSafe(mux, "/mall/product-blueprints", deps.ProductBlueprint, "ProductBlueprint")
 	handleSafe(mux, "/mall/product-blueprints/", deps.ProductBlueprint, "ProductBlueprint")
-	handleSafe(mux, "/mall/me/product-blueprints", deps.ProductBlueprint, "ProductBlueprint(me)")
-	handleSafe(mux, "/mall/me/product-blueprints/", deps.ProductBlueprint, "ProductBlueprint(me)")
 
-	// models
+	// models (public)
 	handleSafe(mux, "/mall/models", deps.Model, "Model")
 	handleSafe(mux, "/mall/models/", deps.Model, "Model")
-	handleSafe(mux, "/mall/me/models", deps.Model, "Model(me)")
-	handleSafe(mux, "/mall/me/models/", deps.Model, "Model(me)")
 
-	// catalog
+	// catalog (public)
 	handleSafe(mux, "/mall/catalog", deps.Catalog, "Catalog")
 	handleSafe(mux, "/mall/catalog/", deps.Catalog, "Catalog")
-	handleSafe(mux, "/mall/me/catalog", deps.Catalog, "Catalog(me)")
-	handleSafe(mux, "/mall/me/catalog/", deps.Catalog, "Catalog(me)")
 
-	// token blueprints
+	// token blueprints (public)
 	handleSafe(mux, "/mall/token-blueprints", deps.TokenBlueprint, "TokenBlueprint")
 	handleSafe(mux, "/mall/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint")
-	handleSafe(mux, "/mall/me/token-blueprints", deps.TokenBlueprint, "TokenBlueprint(me)")
-	handleSafe(mux, "/mall/me/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint(me)")
 
-	// companies / brands
+	// companies / brands (public)
 	handleSafe(mux, "/mall/companies", deps.Company, "Company")
 	handleSafe(mux, "/mall/companies/", deps.Company, "Company")
-	handleSafe(mux, "/mall/me/companies", deps.Company, "Company(me)")
-	handleSafe(mux, "/mall/me/companies/", deps.Company, "Company(me)")
 
 	handleSafe(mux, "/mall/brands", deps.Brand, "Brand")
 	handleSafe(mux, "/mall/brands/", deps.Brand, "Brand")
-	handleSafe(mux, "/mall/me/brands", deps.Brand, "Brand(me)")
-	handleSafe(mux, "/mall/me/brands/", deps.Brand, "Brand(me)")
 
-	// sign-in
+	// sign-in (public)
 	handleSafe(mux, "/mall/sign-in", deps.SignIn, "SignIn")
 	handleSafe(mux, "/mall/sign-in/", deps.SignIn, "SignIn")
-	handleSafe(mux, "/mall/me/sign-in", deps.SignIn, "SignIn(me)")
-	handleSafe(mux, "/mall/me/sign-in/", deps.SignIn, "SignIn(me)")
 
-	// users
-	handleSafe(mux, "/mall/users", deps.User, "User")
-	handleSafe(mux, "/mall/users/", deps.User, "User")
-	handleSafe(mux, "/mall/me/users", deps.User, "User(me)")
-	handleSafe(mux, "/mall/me/users/", deps.User, "User(me)")
-
-	// shipping addresses
-	handleSafe(mux, "/mall/shipping-addresses", deps.ShippingAddress, "ShippingAddress")
-	handleSafe(mux, "/mall/shipping-addresses/", deps.ShippingAddress, "ShippingAddress")
-	handleSafe(mux, "/mall/me/shipping-addresses", deps.ShippingAddress, "ShippingAddress(me)")
-	handleSafe(mux, "/mall/me/shipping-addresses/", deps.ShippingAddress, "ShippingAddress(me)")
-
-	// billing addresses
-	handleSafe(mux, "/mall/billing-addresses", deps.BillingAddress, "BillingAddress")
-	handleSafe(mux, "/mall/billing-addresses/", deps.BillingAddress, "BillingAddress")
-	handleSafe(mux, "/mall/me/billing-addresses", deps.BillingAddress, "BillingAddress(me)")
-	handleSafe(mux, "/mall/me/billing-addresses/", deps.BillingAddress, "BillingAddress(me)")
-
-	// avatars
+	// avatars (public)
 	handleSafe(mux, "/mall/avatars", deps.Avatar, "Avatar")
 	handleSafe(mux, "/mall/avatars/", deps.Avatar, "Avatar")
-	handleSafe(mux, "/mall/me/avatars", deps.MeAvatar, "MeAvatar")
-	handleSafe(mux, "/mall/me/avatars/", deps.MeAvatar, "MeAvatar")
 
-	// avatar states
-	handleSafe(mux, "/mall/me/avatar-states", deps.AvatarState, "AvatarState(me)")
-	handleSafe(mux, "/mall/me/avatar-states/", deps.AvatarState, "AvatarState(me)")
-
-	// ------------------------------------------------------------
-	// ✅ Wallet (new contract only; legacy removed)
-	// - GET     /mall/me/wallets
-	// - POST    /mall/me/wallets/sync
-	// - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
-	// - OPTIONS /mall/me/wallets/metadata/proxy?url=...
-	// - GET     /mall/me/wallets/metadata/proxy?url=...
-	//
-	// NOTE:
-	// - We intentionally register only the base path and the trailing-slash
-	//   prefix. subpaths are handled inside the Wallet handler.
-	// ------------------------------------------------------------
-	handleSafe(mux, "/mall/me/wallets", deps.Wallet, "Wallet(me)")
-	handleSafe(mux, "/mall/me/wallets/", deps.Wallet, "Wallet(me)")
-
-	// cart
-	handleSafe(mux, "/mall/cart", deps.Cart, "Cart")
-	handleSafe(mux, "/mall/cart/", deps.Cart, "Cart")
-	handleSafe(mux, "/mall/me/cart", deps.Cart, "Cart(me)")
-	handleSafe(mux, "/mall/me/cart/", deps.Cart, "Cart(me)")
-
-	// ✅ preview
-	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
-	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
-	handleSafe(mux, "/mall/me/preview", deps.PreviewMe, "Preview(me)")
-	handleSafe(mux, "/mall/me/preview/", deps.PreviewMe, "Preview(me)")
-
-	// ✅ NEW: order scan verify (authenticated)
-	handleSafe(mux, "/mall/me/orders/scan/verify", deps.OrderScanVerify, "OrderScanVerify(me)")
-	handleSafe(mux, "/mall/me/orders/scan/verify/", deps.OrderScanVerify, "OrderScanVerify(me)")
-
-	// ✅ NEW: order scan transfer (authenticated)
-	handleSafe(mux, "/mall/me/orders/scan/transfer", deps.OrderScanTransfer, "OrderScanTransfer(me)")
-	handleSafe(mux, "/mall/me/orders/scan/transfer/", deps.OrderScanTransfer, "OrderScanTransfer(me)")
-
-	// ✅ NEW: owner resolve (public OK)
+	// owner resolve (public OK)
 	handleSafe(mux, "/mall/owners/resolve", deps.OwnerResolve, "OwnerResolve")
 	handleSafe(mux, "/mall/owners/resolve/", deps.OwnerResolve, "OwnerResolve")
 
-	// payment
-	handleSafe(mux, "/mall/me/payment", deps.Payment, "Payment(me)")
-	handleSafe(mux, "/mall/me/payment/", deps.Payment, "Payment(me)")
-	handleSafe(mux, "/mall/me/payments", deps.Payment, "Payment(me)")
-	handleSafe(mux, "/mall/me/payments/", deps.Payment, "Payment(me)")
+	// preview (public)
+	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
+	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
 
-	// invoices
-	handleSafe(mux, "/mall/me/invoices", deps.Invoice, "Invoice(me)")
-	handleSafe(mux, "/mall/me/invoices/", deps.Invoice, "Invoice(me)")
+	// ------------------------------------------------------------
+	// Auth-required routes (/mall/me/**)
+	// ------------------------------------------------------------
 
-	// orders
-	handleSafe(mux, "/mall/me/orders", deps.Order, "Order(me)")
-	handleSafe(mux, "/mall/me/orders/", deps.Order, "Order(me)")
+	// lists (me)
+	handleSafeAuth(mux, "/mall/me/lists", deps.List, "List(me)", auth)
+	handleSafeAuth(mux, "/mall/me/lists/", deps.List, "List(me)", auth)
+
+	// inventories (me)
+	handleSafeAuth(mux, "/mall/me/inventories", deps.Inventory, "Inventory(me)", auth)
+	handleSafeAuth(mux, "/mall/me/inventories/", deps.Inventory, "Inventory(me)", auth)
+
+	// product blueprints (me)
+	handleSafeAuth(mux, "/mall/me/product-blueprints", deps.ProductBlueprint, "ProductBlueprint(me)", auth)
+	handleSafeAuth(mux, "/mall/me/product-blueprints/", deps.ProductBlueprint, "ProductBlueprint(me)", auth)
+
+	// models (me)
+	handleSafeAuth(mux, "/mall/me/models", deps.Model, "Model(me)", auth)
+	handleSafeAuth(mux, "/mall/me/models/", deps.Model, "Model(me)", auth)
+
+	// catalog (me)
+	handleSafeAuth(mux, "/mall/me/catalog", deps.Catalog, "Catalog(me)", auth)
+	handleSafeAuth(mux, "/mall/me/catalog/", deps.Catalog, "Catalog(me)", auth)
+
+	// token blueprints (me)
+	handleSafeAuth(mux, "/mall/me/token-blueprints", deps.TokenBlueprint, "TokenBlueprint(me)", auth)
+	handleSafeAuth(mux, "/mall/me/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint(me)", auth)
+
+	// companies / brands (me)
+	handleSafeAuth(mux, "/mall/me/companies", deps.Company, "Company(me)", auth)
+	handleSafeAuth(mux, "/mall/me/companies/", deps.Company, "Company(me)", auth)
+
+	handleSafeAuth(mux, "/mall/me/brands", deps.Brand, "Brand(me)", auth)
+	handleSafeAuth(mux, "/mall/me/brands/", deps.Brand, "Brand(me)", auth)
+
+	// users ✅ A案: "me" のみ（token uid を必須にする）
+	handleSafeAuth(mux, "/mall/me/users", deps.User, "User(me)", auth)
+	handleSafeAuth(mux, "/mall/me/users/", deps.User, "User(me)", auth)
+
+	// shipping addresses ✅ A案: "me" のみ
+	handleSafeAuth(mux, "/mall/me/shipping-addresses", deps.ShippingAddress, "ShippingAddress(me)", auth)
+	handleSafeAuth(mux, "/mall/me/shipping-addresses/", deps.ShippingAddress, "ShippingAddress(me)", auth)
+
+	// billing addresses ✅ A案: "me" のみ
+	handleSafeAuth(mux, "/mall/me/billing-addresses", deps.BillingAddress, "BillingAddress(me)", auth)
+	handleSafeAuth(mux, "/mall/me/billing-addresses/", deps.BillingAddress, "BillingAddress(me)", auth)
+
+	// me avatar
+	handleSafeAuth(mux, "/mall/me/avatars", deps.MeAvatar, "MeAvatar", auth)
+	handleSafeAuth(mux, "/mall/me/avatars/", deps.MeAvatar, "MeAvatar", auth)
+
+	// avatar states (me)
+	handleSafeAuth(mux, "/mall/me/avatar-states", deps.AvatarState, "AvatarState(me)", auth)
+	handleSafeAuth(mux, "/mall/me/avatar-states/", deps.AvatarState, "AvatarState(me)", auth)
+
+	// wallet (me)
+	handleSafeAuth(mux, "/mall/me/wallets", deps.Wallet, "Wallet(me)", auth)
+	handleSafeAuth(mux, "/mall/me/wallets/", deps.Wallet, "Wallet(me)", auth)
+
+	// cart (me)
+	handleSafeAuth(mux, "/mall/me/cart", deps.Cart, "Cart(me)", auth)
+	handleSafeAuth(mux, "/mall/me/cart/", deps.Cart, "Cart(me)", auth)
+
+	// preview (me)
+	handleSafeAuth(mux, "/mall/me/preview", deps.PreviewMe, "Preview(me)", auth)
+	handleSafeAuth(mux, "/mall/me/preview/", deps.PreviewMe, "Preview(me)", auth)
+
+	// order scan verify (me)
+	handleSafeAuth(mux, "/mall/me/orders/scan/verify", deps.OrderScanVerify, "OrderScanVerify(me)", auth)
+	handleSafeAuth(mux, "/mall/me/orders/scan/verify/", deps.OrderScanVerify, "OrderScanVerify(me)", auth)
+
+	// order scan transfer (me)
+	handleSafeAuth(mux, "/mall/me/orders/scan/transfer", deps.OrderScanTransfer, "OrderScanTransfer(me)", auth)
+	handleSafeAuth(mux, "/mall/me/orders/scan/transfer/", deps.OrderScanTransfer, "OrderScanTransfer(me)", auth)
+
+	// payment (me)
+	handleSafeAuth(mux, "/mall/me/payment", deps.Payment, "Payment(me)", auth)
+	handleSafeAuth(mux, "/mall/me/payment/", deps.Payment, "Payment(me)", auth)
+	handleSafeAuth(mux, "/mall/me/payments", deps.Payment, "Payment(me)", auth)
+	handleSafeAuth(mux, "/mall/me/payments/", deps.Payment, "Payment(me)", auth)
+
+	// invoices (me)
+	handleSafeAuth(mux, "/mall/me/invoices", deps.Invoice, "Invoice(me)", auth)
+	handleSafeAuth(mux, "/mall/me/invoices/", deps.Invoice, "Invoice(me)", auth)
+
+	// orders (me)
+	handleSafeAuth(mux, "/mall/me/orders", deps.Order, "Order(me)", auth)
+	handleSafeAuth(mux, "/mall/me/orders/", deps.Order, "Order(me)", auth)
 }

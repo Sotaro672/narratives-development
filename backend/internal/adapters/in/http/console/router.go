@@ -37,7 +37,8 @@ type RouterDeps struct {
 	Inspector       http.Handler
 	Mint            http.Handler
 	OwnerResolve    http.Handler
-	MintDebugHandle http.HandlerFunc // optional（/mint/debug）
+	Users           http.Handler // ✅ 追加: /users (user_handler)
+	MintDebugHandle http.HandlerFunc
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -251,6 +252,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.OwnerResolve)
 		mux.Handle("/owners/resolve", h)
 		mux.Handle("/owners/resolve/", h)
+	}
+
+	// ================================
+	// Users ✅追加
+	// ================================
+	if deps.Users != nil {
+		h := withAuth(deps.Users)
+		mux.Handle("/users", h)
+		mux.Handle("/users/", h)
 	}
 
 	return mux

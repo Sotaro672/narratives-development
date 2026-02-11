@@ -1,9 +1,10 @@
-//frontend\mall\lib\features\auth\application\shipping_address_service.dart
+// frontend/mall/lib/features/auth/application/shipping_address_service.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
 import '../../../app/config/api_base.dart';
 
@@ -82,7 +83,6 @@ class ShippingAddressService {
        _baseUrl = _normalizeBaseUrl((baseUrl ?? resolveApiBase()).trim()),
        _userRepo = userRepo,
        _shipRepo = shipRepo {
-    // repo が未注入なら baseUrl で作る（repo 側が /mall/... を付与する想定）
     final b = _baseUrl;
     _userRepoInst = _userRepo ?? UserRepositoryHttp(baseUrl: b);
     _shipRepoInst = _shipRepo ?? ShippingAddressRepositoryHttp(baseUrl: b);
@@ -160,7 +160,6 @@ class ShippingAddressService {
     final m = s(mode);
     final oob = s(oobCode);
 
-    // ✅ verifyEmail 以外 / oobCode なしは何もしない
     if (m != 'verifyEmail' || oob.isEmpty) {
       return VerifyEmailState.idle;
     }
@@ -268,7 +267,6 @@ class ShippingAddressService {
     final fbUser = _auth.currentUser;
     final isLoggedIn = fbUser != null;
 
-    // ✅ zip は 7 桁を要求（サービス側でも揃える）
     final zip7 = normalizeZip(zip);
 
     return !saving &&
@@ -302,9 +300,10 @@ class ShippingAddressService {
       return const SaveAddressResult.failure('uid が取得できませんでした。');
     }
 
-    // ✅ Token が取れない状態（Web復元中など）を早期に判定できるようにする
+    // token取得（デバッグ用ログ）
     try {
-      final token = (await fbUser.getIdToken(false))?.trim() ?? '';
+      final rawToken = await fbUser.getIdToken(true);
+      final token = rawToken.toString().trim();
       if (token.isEmpty) {
         return const SaveAddressResult.failure(
           '認証トークンが取得できませんでした。再ログインしてください。',
@@ -330,12 +329,10 @@ class ShippingAddressService {
     final a1 = s(addr1);
     final a2 = s(addr2);
 
-    bool userSaved = false;
-    String? userErr;
-
     try {
       // ----------------------------
-      // 1) upsert user (best-effort)
+      // 1) create/update user (REQUIRED)
+      //    ✅ me設計（idは送らない）
       // ----------------------------
       log(
         '[ShippingAddress] upsert user uid=$uid '
@@ -345,19 +342,17 @@ class ShippingAddressService {
       try {
         await _userRepoInst.create(
           CreateUserBody(
-            id: uid,
             firstName: fn,
             firstNameKana: fnk.isEmpty ? null : fnk,
             lastName: ln,
             lastNameKana: lnk.isEmpty ? null : lnk,
           ),
         );
-        userSaved = true;
+        log('[ShippingAddress] user create: OK');
       } catch (e) {
-        log('[ShippingAddress] user create failed -> try update. err=$e');
+        log('[ShippingAddress] user create failed -> try updateMe. err=$e');
         try {
-          await _userRepoInst.update(
-            uid,
+          await _userRepoInst.updateMe(
             UpdateUserBody(
               firstName: fn,
               firstNameKana: fnk.isEmpty ? null : fnk,
@@ -365,20 +360,21 @@ class ShippingAddressService {
               lastNameKana: lnk.isEmpty ? null : lnk,
             ),
           );
-          userSaved = true;
+          log('[ShippingAddress] user updateMe: OK');
         } catch (e2) {
-          userErr = e2.toString();
-          log('[ShippingAddress] user update failed. err=$e2');
+          log('[ShippingAddress] user updateMe failed. err=$e2');
+          return SaveAddressResult.failure('user保存に失敗しました: $e2');
         }
       }
 
       // ----------------------------
-      // 2) upsert shipping address (required)
+      // 2) create shipping address (REQUIRED)
+      //    ✅ POSTは必ず /mall/me/shipping-addresses（idなし）
+      //    ✅ 既存があるなら list -> patch で更新
       // ----------------------------
-      log('[ShippingAddress] upsert shippingAddress uid=$uid');
+      log('[ShippingAddress] create/upsert shippingAddress uid=$uid');
 
       final saved = await upsertShippingAddress(
-        uid: uid,
         zip7: zip7,
         pref: st,
         city: ct,
@@ -389,26 +385,17 @@ class ShippingAddressService {
       final sb = StringBuffer()
         ..writeln('配送先情報を保存しました。')
         ..writeln('shippingAddressId=${saved.id} userId=${saved.userId}');
-      if (userSaved) {
-        sb.writeln('user: saved');
-      } else if (userErr != null) {
-        sb.writeln('user: failed (non-blocking) $userErr');
-      }
 
       return SaveAddressResult.success(sb.toString().trim());
     } catch (e) {
-      // ✅ どこで落ちたか分かるメッセージに寄せる
       return SaveAddressResult.failure('配送先情報の保存に失敗しました: $e');
     }
   }
 
-  /// ✅ docId=uid 前提の upsert（avatarId 不要）
-  ///
-  /// 期待値:
-  /// - backend は /mall/shipping-addresses を受ける
-  /// - body に id=userId=uid を入れて docId として扱う（Upsert）
+  /// ✅ POSTは必ず id なし
+  /// - まず createMine()（POST /me/shipping-addresses）
+  /// - 409/CONFLICT の場合は listMine() で既存 id を取り、updateById(PATCH) する
   Future<ShippingAddress> upsertShippingAddress({
-    required String uid,
     required String zip7,
     required String pref,
     required String city,
@@ -421,22 +408,56 @@ class ShippingAddressService {
 
     log(
       '[ShippingAddress] upsertShippingAddress '
-      'id(uid)=$uid zip=$zip7 state="$pref" city="$city" street="$addr1" street2="$addr2"',
+      'zip=$zip7 state="$pref" city="$city" street="$addr1" street2="$addr2"',
     );
 
-    // ✅ UpsertShippingAddressInput を使う（id=userId=uid）
-    return await _shipRepoInst.create(
-      UpsertShippingAddressInput(
-        id: uid,
-        userId: uid,
+    try {
+      // ✅ create (idなしPOST)
+      return await _shipRepoInst.createMine(
         zipCode: zip7,
         state: pref,
         city: city,
         street: addr1,
         street2: addr2.isEmpty ? null : addr2,
         country: 'JP',
-      ),
-    );
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+
+      // 既存がある（重複）想定：409/CONFLICT を優先的に吸収
+      if (status == 409) {
+        log('[ShippingAddress] createMine conflict -> try updateById');
+      } else {
+        // backendが 400/409 以外で「すでにある」を返すケースもあるので、
+        // "conflict" が含まれるなら同様に扱う
+        final body = e.response?.data?.toString() ?? '';
+        final msg = (e.message ?? '');
+        final looksConflict =
+            body.contains('conflict') || msg.contains('conflict');
+        if (!looksConflict) {
+          rethrow;
+        }
+        log('[ShippingAddress] createMine looksConflict -> try updateById');
+      }
+
+      final list = await _shipRepoInst.listMine();
+      if (list.isEmpty) {
+        throw Exception('shippingAddress exists but listMine returned empty');
+      }
+
+      final current = list.first;
+      return await _shipRepoInst.updateById(
+        current.id,
+        UpdateShippingAddressInput(
+          zipCode: zip7,
+          state: pref,
+          city: city,
+          street: addr1,
+          street2: addr2, // "" を渡せば消える仕様
+          country: 'JP',
+        ),
+      );
+    }
   }
 
   // ------------------------------------------------------------

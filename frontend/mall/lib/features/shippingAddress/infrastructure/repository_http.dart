@@ -1,14 +1,13 @@
-// frontend\mall\lib\features\shippingAddress\infrastructure\repository_http.dart
+// frontend/mall/lib/features/shippingAddress/infrastructure/repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// ✅ 共通 resolver を使う（fallback/環境変数名のブレを防ぐ）
 import '../../../app/config/api_base.dart';
 
-/// Domain-ish model for Mall shipping address (matches backend shippingAddress.entity.go)
+/// Domain model for Mall shipping address
 class ShippingAddress {
   ShippingAddress({
     required this.id,
@@ -29,10 +28,7 @@ class ShippingAddress {
   final String state;
   final String city;
   final String street;
-
-  /// optional in UI, but backend entity currently has string (can be "")
   final String street2;
-
   final String country;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -41,9 +37,10 @@ class ShippingAddress {
     DateTime parseTime(dynamic v) {
       if (v is String) {
         final s = v.trim();
-        if (s.isNotEmpty) return DateTime.parse(s).toUtc();
+        if (s.isNotEmpty) {
+          return DateTime.parse(s).toUtc();
+        }
       }
-      // Firestore Timestamp etc are not expected on HTTP boundary; fallback
       return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
     }
 
@@ -62,28 +59,13 @@ class ShippingAddress {
       updatedAt: parseTime(json['updatedAt']),
     );
   }
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'userId': userId,
-    'zipCode': zipCode,
-    'state': state,
-    'city': city,
-    'street': street,
-    'street2': street2,
-    'country': country,
-    'createdAt': createdAt.toUtc().toIso8601String(),
-    'updatedAt': updatedAt.toUtc().toIso8601String(),
-  };
 }
 
-/// ✅ Upsert body (create/update)
-/// - docId = Firebase UID
-/// - backend: PATCH /mall/shipping-addresses/{id} does upsert
-class UpsertShippingAddressInput {
-  UpsertShippingAddressInput({
-    required this.id, // ✅ uid (docId)
-    required this.userId, // ✅ uid (redundant but needed for backend upsert-create path)
+/// ✅ Create payload (me only)
+/// - docId は usecase がランダム採番（bodyでは送らない）
+/// - userId は /me の文脈で auth から確定（bodyでは送らない）
+class CreateShippingAddressInput {
+  CreateShippingAddressInput({
     required this.zipCode,
     required this.state,
     required this.city,
@@ -92,8 +74,6 @@ class UpsertShippingAddressInput {
     this.country = 'JP',
   });
 
-  final String id;
-  final String userId;
   final String zipCode;
   final String state;
   final String city;
@@ -102,24 +82,19 @@ class UpsertShippingAddressInput {
   final String country;
 
   Map<String, dynamic> toJson() => {
-    // ✅ backend 側 upsert 用
-    'id': id.trim(),
-    'userId': userId.trim(),
     'zipCode': zipCode.trim(),
     'state': state.trim(),
     'city': city.trim(),
     'street': street.trim(),
-    // backend entity is string, so we send "" when null
+    // backend entity is string, so send "" when null
     'street2': (street2 ?? '').trim(),
     'country': country.trim(),
   };
 }
 
-/// PATCH body (only non-null fields will be sent)
-/// ✅ backend の “not_found -> upsert-create” 分岐で userId が必要なので送れるようにする
+/// ✅ Partial update payload (by docId)
 class UpdateShippingAddressInput {
   UpdateShippingAddressInput({
-    this.userId,
     this.zipCode,
     this.state,
     this.city,
@@ -128,33 +103,31 @@ class UpdateShippingAddressInput {
     this.country,
   });
 
-  final String? userId; // ✅ add
   final String? zipCode;
   final String? state;
   final String? city;
   final String? street;
+
+  /// street2 は「消す」ケースがあり得るので "" を渡せば消去扱いにできます
   final String? street2;
+
   final String? country;
 
   Map<String, dynamic> toJson() {
     final m = <String, dynamic>{};
 
     void put(String k, String? v) {
-      if (v == null) return;
+      if (v == null) {
+        return;
+      }
       m[k] = v.trim();
     }
-
-    // ✅ 初回作成 fallback のため
-    put('userId', userId);
 
     put('zipCode', zipCode);
     put('state', state);
     put('city', city);
     put('street', street);
-
-    // street2 は「消す」ケースがあり得るので、呼び出し側で "" を渡せば消去扱いにできます
     put('street2', street2);
-
     put('country', country);
 
     return m;
@@ -165,7 +138,6 @@ class ShippingAddressRepositoryHttp {
   ShippingAddressRepositoryHttp({Dio? dio, FirebaseAuth? auth, String? baseUrl})
     : _auth = auth ?? FirebaseAuth.instance,
       _dio = dio ?? Dio() {
-    // ✅ baseUrl 優先。無ければ共通 resolver を使う（fallback あり）
     final resolvedRaw = (baseUrl ?? '').trim().isNotEmpty
         ? baseUrl!.trim()
         : resolveApiBase().trim();
@@ -179,11 +151,9 @@ class ShippingAddressRepositoryHttp {
     final normalized = resolvedRaw.replaceAll(RegExp(r'\/+$'), '');
 
     // ✅ baseUrl に /mall が含まれる注入も許容
-    // - baseUrl が ".../mall" の場合: 以降の path は "/shipping-addresses/..." にする
-    // - baseUrl が domain だけの場合: 以降の path は "/mall/shipping-addresses/..." にする
     final b = Uri.parse(normalized);
     final basePath = b.path.replaceAll(RegExp(r'\/+$'), '');
-    _pathPrefix = basePath.endsWith('/mall') || basePath == '/mall'
+    _pathPrefix = (basePath.endsWith('/mall') || basePath == '/mall')
         ? ''
         : 'mall';
 
@@ -198,11 +168,9 @@ class ShippingAddressRepositoryHttp {
       },
     );
 
-    // ✅ Request/Response logger + Firebase token injector + 401 retry
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          // ✅ token inject (non-force)
           try {
             final u = _auth.currentUser;
             if (u != null) {
@@ -224,13 +192,9 @@ class ShippingAddressRepositoryHttp {
           handler.next(response);
         },
         onError: (e, handler) async {
-          // ✅ 既存のエラー詳細ログ
           _logDioError(e);
-
-          // ✅ 失敗時の “要約ログ”
           _logFailureSummary(e);
 
-          // ✅ 401 のときは 1 回だけ forceRefreshToken=true でリトライ
           final status = e.response?.statusCode;
           final alreadyRetried = e.requestOptions.extra['__retried401'] == true;
 
@@ -256,7 +220,6 @@ class ShippingAddressRepositoryHttp {
               }
             } catch (ex) {
               _log('[ShippingAddressRepositoryHttp] 401 retry failed: $ex');
-              // fallthrough
             }
           }
 
@@ -276,7 +239,6 @@ class ShippingAddressRepositoryHttp {
 
   late final String _pathPrefix;
 
-  // ✅ release でもログを出したい場合: --dart-define=ENABLE_HTTP_LOG=true
   static const bool _envHttpLog = bool.fromEnvironment(
     'ENABLE_HTTP_LOG',
     defaultValue: false,
@@ -288,48 +250,31 @@ class ShippingAddressRepositoryHttp {
     if (!_cancelToken.isCancelled) {
       _cancelToken.cancel('disposed');
     }
-    // ⚠️ Repository を短命に大量生成するなら close(force:true) は避けたいが、
-    // 現状方針を崩さず維持する（必要なら DI で singleton 化してください）
     _dio.close(force: true);
-  }
-
-  Exception _normalizeDioError(Object e) {
-    if (e is DioException) {
-      final status = e.response?.statusCode;
-      final data = e.response?.data;
-      final msg = e.message ?? 'dio_exception';
-      return Exception(
-        'HTTP error${status != null ? ' ($status)' : ''}: ${data ?? msg}',
-      );
-    }
-    return Exception(e.toString());
   }
 
   // ------------------------------------------------------------
   // auth helpers
   // ------------------------------------------------------------
 
-  String _requireUid() {
+  void _requireSignedIn() {
     final u = _auth.currentUser;
     final uid = (u?.uid ?? '').trim();
     if (uid.isEmpty) {
       throw Exception('not signed in');
     }
-    return uid;
   }
 
   // ------------------------------------------------------------
   // path helpers
   // ------------------------------------------------------------
 
-  /// ✅ IMPORTANT:
-  /// Dio の baseUrl が `https://host`（末尾スラッシュ無し）の場合でも、
-  /// ここで返す path を必ず `/...` にして URL 結合事故（hostmall...）を防ぐ。
   String _p(String path) {
     var raw = path.trim();
-    if (raw.isEmpty) return raw;
+    if (raw.isEmpty) {
+      return raw;
+    }
 
-    // remove leading slashes for safe concat
     raw = raw.replaceAll(RegExp(r'^/+'), '');
 
     if (_pathPrefix.isEmpty) {
@@ -341,146 +286,114 @@ class ShippingAddressRepositoryHttp {
   }
 
   // ------------------------------------------------------------
-  // API (ShippingAddress)
+  // API (me only)
+  // - POST は必ず id なし
+  // - docId は usecase が採番
+  // - userId は auth から確定（bodyでは送らない）
   // ------------------------------------------------------------
 
-  /// ✅ Get "my" shipping address (docId = uid)
-  Future<ShippingAddress> getMine() async {
-    final uid = _requireUid();
-    return getById(uid);
+  static const String _mePath = 'me/shipping-addresses';
+
+  /// GET /mall/me/shipping-addresses (list)
+  Future<List<ShippingAddress>> listMine() async {
+    _requireSignedIn();
+    final res = await _dio.get(_p(_mePath), cancelToken: _cancelToken);
+
+    final body = res.data;
+    if (body is List) {
+      return body
+          .map((e) => ShippingAddress.fromJson(_asMap(e)))
+          .toList(growable: false);
+    }
+    if (body is String) {
+      final decoded = jsonDecode(body);
+      if (decoded is List) {
+        return decoded
+            .map((e) => ShippingAddress.fromJson(_asMap(e)))
+            .toList(growable: false);
+      }
+    }
+
+    throw Exception(
+      'Invalid response body: expected array, got ${body.runtimeType}',
+    );
   }
 
-  /// GET /mall/shipping-addresses/{id}
+  /// GET /mall/me/shipping-addresses/{id}
   Future<ShippingAddress> getById(String id) async {
-    final s = id.trim();
-    if (s.isEmpty) {
+    _requireSignedIn();
+    final tid = id.trim();
+    if (tid.isEmpty) {
       throw Exception('invalid id');
     }
-
-    try {
-      final res = await _dio.get(
-        _p('shipping-addresses/$s'),
-        cancelToken: _cancelToken,
-      );
-      final data = _asMap(res.data);
-      return ShippingAddress.fromJson(data);
-    } on DioException catch (e) {
-      _logFailureSummary(e, op: 'GET /shipping-addresses/$s');
-      throw _normalizeDioError(e);
-    } catch (e) {
-      throw _normalizeDioError(e);
-    }
+    final res = await _dio.get(_p('$_mePath/$tid'), cancelToken: _cancelToken);
+    final data = _asMap(res.data);
+    return ShippingAddress.fromJson(data);
   }
 
-  /// ✅ UPSERT (create/update) for "my" shipping address
-  /// - backend 仕様に合わせて PATCH /mall/shipping-addresses/{uid} を基本にする
-  Future<ShippingAddress> upsertMine(UpsertShippingAddressInput inData) async {
-    final uid = _requireUid();
+  /// POST /mall/me/shipping-addresses (create)
+  /// ✅ 必ず id なしで叩く
+  Future<ShippingAddress> createMine({
+    required String zipCode,
+    required String state,
+    required String city,
+    required String street,
+    String? street2,
+    String country = 'JP',
+  }) async {
+    _requireSignedIn();
 
-    // ✅ docId=uid を強制
-    final fixed = UpsertShippingAddressInput(
-      id: uid,
-      userId: uid,
-      zipCode: inData.zipCode,
-      state: inData.state,
-      city: inData.city,
-      street: inData.street,
-      street2: inData.street2,
-      country: inData.country,
+    final payload = CreateShippingAddressInput(
+      zipCode: zipCode,
+      state: state,
+      city: city,
+      street: street,
+      street2: street2,
+      country: country,
     );
 
-    try {
-      final res = await _dio.patch(
-        _p('shipping-addresses/$uid'),
-        data: fixed.toJson(),
-        cancelToken: _cancelToken,
-      );
-      final data = _asMap(res.data);
-      return ShippingAddress.fromJson(data);
-    } on DioException catch (e) {
-      _logFailureSummary(e, op: 'PATCH /shipping-addresses/$uid (upsertMine)');
-      throw _normalizeDioError(e);
-    } catch (e) {
-      throw _normalizeDioError(e);
-    }
-  }
-
-  /// ⚠️ 互換: 旧 create API 名
-  /// - 実体は PATCH(upsert) に変更
-  Future<ShippingAddress> create(UpsertShippingAddressInput inData) async {
-    return upsertMine(inData);
-  }
-
-  /// PATCH /mall/shipping-addresses/{id}
-  Future<ShippingAddress> updateMine(UpdateShippingAddressInput inData) async {
-    final uid = _requireUid();
-
-    // ✅ not_found -> create 分岐で userId が必要になる可能性があるので、ここで補完
-    final fixed = UpdateShippingAddressInput(
-      userId: (inData.userId ?? uid),
-      zipCode: inData.zipCode,
-      state: inData.state,
-      city: inData.city,
-      street: inData.street,
-      street2: inData.street2,
-      country: inData.country,
+    final res = await _dio.post(
+      _p(_mePath), // ✅ id を付けない
+      data: payload.toJson(),
+      cancelToken: _cancelToken,
     );
-
-    return update(uid, fixed);
+    final data = _asMap(res.data);
+    return ShippingAddress.fromJson(data);
   }
 
-  /// PATCH /mall/shipping-addresses/{id}
-  Future<ShippingAddress> update(
+  /// PATCH /mall/me/shipping-addresses/{id} (partial update)
+  Future<ShippingAddress> updateById(
     String id,
     UpdateShippingAddressInput inData,
   ) async {
-    final s = id.trim();
-    if (s.isEmpty) {
+    _requireSignedIn();
+    final tid = id.trim();
+    if (tid.isEmpty) {
       throw Exception('invalid id');
     }
 
     final body = inData.toJson();
     if (body.isEmpty) {
-      return getById(s);
+      return getById(tid);
     }
 
-    try {
-      final res = await _dio.patch(
-        _p('shipping-addresses/$s'),
-        data: body,
-        cancelToken: _cancelToken,
-      );
-      final data = _asMap(res.data);
-      return ShippingAddress.fromJson(data);
-    } on DioException catch (e) {
-      _logFailureSummary(e, op: 'PATCH /shipping-addresses/$s');
-      throw _normalizeDioError(e);
-    } catch (e) {
-      throw _normalizeDioError(e);
-    }
+    final res = await _dio.patch(
+      _p('$_mePath/$tid'),
+      data: body,
+      cancelToken: _cancelToken,
+    );
+    final data = _asMap(res.data);
+    return ShippingAddress.fromJson(data);
   }
 
-  /// DELETE /mall/shipping-addresses/{id}
-  Future<void> delete(String id) async {
-    final s = id.trim();
-    if (s.isEmpty) {
+  /// DELETE /mall/me/shipping-addresses/{id}
+  Future<void> deleteById(String id) async {
+    _requireSignedIn();
+    final tid = id.trim();
+    if (tid.isEmpty) {
       throw Exception('invalid id');
     }
-
-    try {
-      await _dio.delete(_p('shipping-addresses/$s'), cancelToken: _cancelToken);
-    } on DioException catch (e) {
-      _logFailureSummary(e, op: 'DELETE /shipping-addresses/$s');
-      throw _normalizeDioError(e);
-    } catch (e) {
-      throw _normalizeDioError(e);
-    }
-  }
-
-  /// ✅ Delete "my" shipping address (docId=uid)
-  Future<void> deleteMine() async {
-    final uid = _requireUid();
-    return delete(uid);
+    await _dio.delete(_p('$_mePath/$tid'), cancelToken: _cancelToken);
   }
 
   // ------------------------------------------------------------
@@ -495,16 +408,12 @@ class ShippingAddressRepositoryHttp {
       return Map<String, dynamic>.from(v);
     }
     if (v is String) {
-      try {
-        final decoded = jsonDecode(v);
-        if (decoded is Map<String, dynamic>) {
-          return decoded;
-        }
-        if (decoded is Map) {
-          return Map<String, dynamic>.from(decoded);
-        }
-      } catch (_) {
-        // ignore
+      final decoded = jsonDecode(v);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
       }
     }
     throw Exception(
@@ -513,59 +422,60 @@ class ShippingAddressRepositoryHttp {
   }
 
   // ------------------------------------------------------------
-  // logging (debug or ENABLE_HTTP_LOG=true)
+  // logging
   // ------------------------------------------------------------
 
   void _log(String msg) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
     debugPrint(msg);
   }
 
   void _logRequest(RequestOptions o) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final method = o.method.toUpperCase();
     final url = o.uri.toString();
 
-    // Authorization は伏せる
     final headers = <String, dynamic>{};
     o.headers.forEach((k, v) {
-      if (k.toLowerCase() == 'authorization') {
-        headers[k] = 'Bearer ***';
-      } else {
-        headers[k] = v;
-      }
+      headers[k] = (k.toLowerCase() == 'authorization') ? 'Bearer ***' : v;
     });
 
     String body = '';
     final d = o.data;
     if (d != null) {
       try {
-        if (d is String) {
-          body = d;
-        } else if (d is Map || d is List) {
-          body = jsonEncode(d);
-        } else {
-          body = d.toString();
-        }
+        body = (d is String)
+            ? d
+            : (d is Map || d is List)
+            ? jsonEncode(d)
+            : d.toString();
       } catch (e) {
         body = '(failed to encode body: $e)';
       }
     }
 
-    final b = StringBuffer();
-    b.writeln('[ShippingAddressRepositoryHttp] request');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
-    b.writeln('  headers=${jsonEncode(headers)}');
+    final b = StringBuffer()
+      ..writeln('[ShippingAddressRepositoryHttp] request')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url')
+      ..writeln('  headers=${jsonEncode(headers)}');
+
     if (body.isNotEmpty) {
       b.writeln('  body=${_truncate(body, 1500)}');
     }
+
     debugPrint(b.toString());
   }
 
   void _logResponse(Response r) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final method = r.requestOptions.method.toUpperCase();
     final url = r.requestOptions.uri.toString();
@@ -573,32 +483,34 @@ class ShippingAddressRepositoryHttp {
     String body = '';
     try {
       final d = r.data;
-      if (d == null) {
-        body = '';
-      } else if (d is String) {
-        body = d;
-      } else if (d is Map || d is List) {
-        body = jsonEncode(d);
-      } else {
-        body = d.toString();
-      }
+      body = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (e) {
       body = '(failed to encode response body: $e)';
     }
 
-    final b = StringBuffer();
-    b.writeln('[ShippingAddressRepositoryHttp] response');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
-    b.writeln('  status=${r.statusCode}');
+    final b = StringBuffer()
+      ..writeln('[ShippingAddressRepositoryHttp] response')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url')
+      ..writeln('  status=${r.statusCode}');
+
     if (body.isNotEmpty) {
       b.writeln('  body=${_truncate(body, 1500)}');
     }
+
     debugPrint(b.toString());
   }
 
   void _logDioError(DioException e) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();
@@ -608,145 +520,97 @@ class ShippingAddressRepositoryHttp {
     String resBody = '';
     try {
       final d = e.response?.data;
-      if (d == null) {
-        resBody = '';
-      } else if (d is String) {
-        resBody = d;
-      } else if (d is Map || d is List) {
-        resBody = jsonEncode(d);
-      } else {
-        resBody = d.toString();
-      }
+      resBody = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (_) {
       resBody = '(failed to encode error response body)';
     }
 
-    // request body
-    String reqBody = '';
-    try {
-      final d = o.data;
-      if (d == null) {
-        reqBody = '';
-      } else if (d is String) {
-        reqBody = d;
-      } else if (d is Map || d is List) {
-        reqBody = jsonEncode(d);
-      } else {
-        reqBody = d.toString();
-      }
-    } catch (_) {
-      reqBody = '(failed to encode request body)';
-    }
+    final b = StringBuffer()
+      ..writeln('[ShippingAddressRepositoryHttp] error')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url');
 
-    final b = StringBuffer();
-    b.writeln('[ShippingAddressRepositoryHttp] error');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
     if (status != null) {
       b.writeln('  status=$status');
     }
     if ((e.message ?? '').trim().isNotEmpty) {
       b.writeln('  message=${e.message}');
     }
-    if (reqBody.isNotEmpty) {
-      b.writeln('  requestBody=${_truncate(reqBody, 1500)}');
-    }
     if (resBody.isNotEmpty) {
       b.writeln('  responseBody=${_truncate(resBody, 1500)}');
     }
+
     debugPrint(b.toString());
   }
 
-  // Failure summary logger (request headers/body + response headers/body + status)
   void _logFailureSummary(DioException e, {String? op}) {
-    if (!_logEnabled) return;
+    if (!_logEnabled) {
+      return;
+    }
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();
     final url = o.uri.toString();
-
     final status = e.response?.statusCode;
     final statusLine = status != null ? 'status=$status' : 'status=?';
 
-    // --- request headers (mask auth) ---
     final reqHeaders = <String, dynamic>{};
     o.headers.forEach((k, v) {
-      if (k.toLowerCase() == 'authorization') {
-        reqHeaders[k] = 'Bearer ***';
-      } else {
-        reqHeaders[k] = v;
-      }
+      reqHeaders[k] = (k.toLowerCase() == 'authorization') ? 'Bearer ***' : v;
     });
 
-    // --- request body ---
     String reqBody = '';
     try {
       final d = o.data;
-      if (d == null) {
-        reqBody = '';
-      } else if (d is String) {
-        reqBody = d;
-      } else if (d is Map || d is List) {
-        reqBody = jsonEncode(d);
-      } else {
-        reqBody = d.toString();
-      }
+      reqBody = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (ex) {
       reqBody = '(failed to encode request body: $ex)';
     }
 
-    // --- response headers ---
-    final resHeaders = <String, dynamic>{};
-    try {
-      final h = e.response?.headers.map;
-      if (h != null) {
-        h.forEach((k, v) {
-          resHeaders[k] = v;
-        });
-      }
-    } catch (_) {
-      // ignore
-    }
-
-    // --- response body ---
     String resBody = '';
     try {
       final d = e.response?.data;
-      if (d == null) {
-        resBody = '';
-      } else if (d is String) {
-        resBody = d;
-      } else if (d is Map || d is List) {
-        resBody = jsonEncode(d);
-      } else {
-        resBody = d.toString();
-      }
+      resBody = (d == null)
+          ? ''
+          : (d is String)
+          ? d
+          : (d is Map || d is List)
+          ? jsonEncode(d)
+          : d.toString();
     } catch (ex) {
       resBody = '(failed to encode response body: $ex)';
     }
 
-    final b = StringBuffer();
-    b.writeln('[ShippingAddressRepositoryHttp] FAILURE');
-    if ((op ?? '').trim().isNotEmpty) {
-      b.writeln('  op=$op');
-    }
-    b.writeln('  $statusLine');
-    b.writeln('  method=$method');
-    b.writeln('  url=$url');
-    b.writeln('  dioType=${e.type}');
-    if ((e.message ?? '').trim().isNotEmpty) {
-      b.writeln('  message=${e.message}');
-    }
-    b.writeln('  requestHeaders=${_truncate(jsonEncode(reqHeaders), 1500)}');
+    final safeOp = (op ?? '').trim().isEmpty ? '(n/a)' : op!.trim();
+
+    final b = StringBuffer()
+      ..writeln('[ShippingAddressRepositoryHttp] FAILURE')
+      ..writeln('  op=$safeOp')
+      ..writeln('  $statusLine')
+      ..writeln('  method=$method')
+      ..writeln('  url=$url')
+      ..writeln('  dioType=${e.type}')
+      ..writeln('  requestHeaders=${_truncate(jsonEncode(reqHeaders), 1500)}');
+
     if (reqBody.isNotEmpty) {
       b.writeln('  requestBody=${_truncate(reqBody, 1500)}');
-    }
-    if (resHeaders.isNotEmpty) {
-      b.writeln('  responseHeaders=${_truncate(jsonEncode(resHeaders), 1500)}');
     }
     if (resBody.isNotEmpty) {
       b.writeln('  responseBody=${_truncate(resBody, 2000)}');
     }
+
     debugPrint(b.toString());
   }
 

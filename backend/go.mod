@@ -9,6 +9,7 @@ require (
 	cloud.google.com/go/storage v1.57.0
 	firebase.google.com/go/v4 v4.18.0
 	github.com/blocto/solana-go-sdk v1.30.0
+	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	google.golang.org/api v0.256.0
@@ -41,7 +42,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect

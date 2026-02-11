@@ -177,7 +177,8 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	// Orders
-	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName, avatarName, userName) の 7引数
+	// ✅ NewOrderHandler は (uc, q, invBlueprint, pbName, tbName, avatarName, userName, modelResolver) の 8引数
+	// ✅ modelResolver は application/resolver の NameResolver を渡す（OrderHandler側で ResolveModelResolved を呼ぶ）
 	if c.OrderUC != nil && c.OrderManagementQuery != nil {
 		// inventoryId -> (productBlueprintId, tokenBlueprintId)
 		var invBlueprint consoleHandler.InventoryBlueprintResolver
@@ -198,7 +199,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		// tokenBlueprintId -> tokenName
 		var tbName consoleHandler.TokenBlueprintNameResolver
 		if c.TokenBlueprintUC != nil {
-			// TokenBlueprintUC は usecase のはずなので、GetNameByID を持っていればこれで刺さる
 			if r, ok := any(c.TokenBlueprintUC).(consoleHandler.TokenBlueprintNameResolver); ok {
 				tbName = r
 			}
@@ -207,19 +207,26 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		// avatarId -> avatarName
 		var avatarName consoleHandler.AvatarNameResolver
 		if c.AvatarUC != nil {
-			// AvatarUsecase が GetNameByID(ctx, avatarId) を実装していれば刺さる想定
 			if r, ok := any(c.AvatarUC).(consoleHandler.AvatarNameResolver); ok {
 				avatarName = r
 			}
 		}
 
-		// ✅ NEW: userId -> userName（lastName -> firstName の想定）
+		// userId -> userName
 		var userName consoleHandler.UserNameResolver
 		if c.UserUC != nil {
-			// UserUsecase が GetNameByID(ctx, userId) を実装していれば刺さる想定
 			if r, ok := any(c.UserUC).(consoleHandler.UserNameResolver); ok {
 				userName = r
 			}
+		}
+
+		// ✅ NEW: modelId(=variationID) -> (size,color,rgb,modelNumber)
+		// OrderHandler 側は consoleHandler.ModelResolver（ResolveModelResolved）を要求するため、
+		// ここでは c.NameResolver を渡す（nil の場合は nil でOK / best-effort）
+		var modelResolver consoleHandler.ModelResolver
+		if c.NameResolver != nil {
+			// NameResolver は ResolveModelResolved を持つので interface を満たす
+			modelResolver = c.NameResolver
 		}
 
 		ordersH = consoleHandler.NewOrderHandler(
@@ -229,7 +236,8 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			pbName,
 			tbName,
 			avatarName,
-			userName, // ✅ 追加
+			userName,
+			modelResolver, // ✅ ここが修正点（旧: ModelVariationResolver）
 		)
 	}
 

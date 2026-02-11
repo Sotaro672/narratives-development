@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\shippingAddress_handler.go
+// backend/internal/adapters/in/http/mall/handler/shippingAddress_handler.go
 package mallHandler
 
 import (
@@ -9,11 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 	shadom "narratives/internal/domain/shippingAddress"
 )
 
-// ShippingAddressHandler は /mall/shipping-addresses 関連のエンドポイントを担当します。
+// ShippingAddressHandler は /mall/me/shipping-addresses 関連のエンドポイントを担当します。
 type ShippingAddressHandler struct {
 	uc *usecase.ShippingAddressUsecase
 }
@@ -31,28 +32,33 @@ func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	// GET /mall/shipping-addresses/{id}
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/shipping-addresses/")
+	// GET /mall/me/shipping-addresses (一覧)
+	case r.Method == http.MethodGet && path == "/mall/me/shipping-addresses":
+		h.listMe(w, r)
+		return
+
+	// GET /mall/me/shipping-addresses/{id}
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/me/shipping-addresses/")
 		h.get(w, r, id)
 		return
 
-	// POST /mall/shipping-addresses
-	// ✅ docId=UID 統一方針では本来 PUT /mall/shipping-addresses/{id} が望ましいが、
-	//    互換のため POST も残す（ただし id 必須）
-	case r.Method == http.MethodPost && path == "/mall/shipping-addresses":
+	// POST /mall/me/shipping-addresses
+	// ✅ 起票は Create のみ（docId は usecase 側でランダム採番）
+	case r.Method == http.MethodPost && path == "/mall/me/shipping-addresses":
 		h.post(w, r)
 		return
 
-	// PATCH /mall/shipping-addresses/{id}
-	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/mall/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/shipping-addresses/")
+	// PATCH /mall/me/shipping-addresses/{id}
+	// ✅ 更新は Update のみ（存在しない場合は 404）
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/me/shipping-addresses/")
 		h.patch(w, r, id)
 		return
 
-	// DELETE /mall/shipping-addresses/{id}
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/mall/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/shipping-addresses/")
+	// DELETE /mall/me/shipping-addresses/{id}
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/me/shipping-addresses/")
 		h.del(w, r, id)
 		return
 
@@ -63,9 +69,54 @@ func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// GET /mall/shipping-addresses/{id}
+// --------------------
+// Helpers
+// --------------------
+
+// ✅ /me 系の uid は UserAuthMiddleware により context へ格納されている想定。
+// このハンドラではヘッダ/body から uid を受け取らない（旧式互換も削除）。
+func (h *ShippingAddressHandler) requireUID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	uid, ok := middleware.CurrentUserUID(r)
+	if ok && strings.TrimSpace(uid) != "" {
+		return strings.TrimSpace(uid), true
+	}
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+	return "", false
+}
+
+// --------------------
+// GET /mall/me/shipping-addresses (一覧)
+// --------------------
+
+func (h *ShippingAddressHandler) listMe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	uid, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
+
+	addrs, err := h.uc.ListByUserID(ctx, uid)
+	if err != nil {
+		writeShippingAddressErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(addrs)
+}
+
+// --------------------
+// GET /mall/me/shipping-addresses/{id}
+// --------------------
+
 func (h *ShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	_, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -83,9 +134,17 @@ func (h *ShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id 
 	_ = json.NewEncoder(w).Encode(addr)
 }
 
-// POST /mall/shipping-addresses
+// --------------------
+// POST /mall/me/shipping-addresses
+// --------------------
+
 func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	uid, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
 
 	raw, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
@@ -96,10 +155,9 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(bytes.NewReader(raw))
 
 	// frontend/mall の入力欄に合わせる（zipCode/state/city/street/street2）
-	// ✅ docId=UID 統一: id(=uid) を必須にする
+	// ✅ docId は usecase がランダム採番（body では受け取らない）
+	// ✅ userId は /me の文脈では受け取らない（旧式互換削除）
 	type createReq struct {
-		ID      string  `json:"id"` // ✅ docId = UID
-		UserID  string  `json:"userId"`
 		ZipCode string  `json:"zipCode"`
 		State   string  `json:"state"`
 		City    string  `json:"city"`
@@ -112,14 +170,6 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	id := strings.TrimSpace(req.ID)
-	if id == "" {
-		// ✅ docId=UID 統一方針: id が無い POST は許可しない（Firestore自動採番をさせない）
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
@@ -137,10 +187,10 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 
-	// ✅ ID を docId(=UID) で固定
-	ent, err := shadom.NewWithNow(
-		id, // ✅ id=UID
-		req.UserID,
+	// ✅ Create 時は「id なし」を許容する Create 用コンストラクタを使う
+	//    （id は usecase が採番するのでここでは不要）
+	ent, err := shadom.NewForCreateWithNow(
+		uid, // userId は auth から確定
 		req.ZipCode,
 		req.State,
 		req.City,
@@ -154,21 +204,27 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ docId=UID: 住所は “upsert” が自然なので Save に寄せる
-	saved, err := h.uc.Save(ctx, ent)
+	created, err := h.uc.Create(ctx, uid, ent)
 	if err != nil {
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	// 互換のため 201 で返す（厳密な Created/Updated 判定は Usecase 側が必要）
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(saved)
+	_ = json.NewEncoder(w).Encode(created)
 }
 
-// PATCH /mall/shipping-addresses/{id}
+// --------------------
+// PATCH /mall/me/shipping-addresses/{id}
+// --------------------
+
 func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	uid, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -193,7 +249,6 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 		Street  *string `json:"street,omitempty"`
 		Street2 *string `json:"street2,omitempty"`
 		Country *string `json:"country,omitempty"`
-		UserID  *string `json:"userId,omitempty"` // 受けても ID 連携上は信頼しない
 	}
 
 	var req patchReq
@@ -203,98 +258,14 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	// ✅ docId=UID 統一: PATCH は「存在すれば更新・無ければ作成」でもよい
+	// ✅ まず既存取得（存在しなければ 404）
 	current, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		if err == shadom.ErrNotFound {
-			// upsert-create path
-			need := func(p *string) (string, bool) {
-				if p == nil {
-					return "", false
-				}
-				s := strings.TrimSpace(*p)
-				return s, s != ""
-			}
-
-			zip, ok := need(req.ZipCode)
-			if !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid zipCode"})
-				return
-			}
-			state, ok := need(req.State)
-			if !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid state"})
-				return
-			}
-			city, ok := need(req.City)
-			if !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid city"})
-				return
-			}
-			street, ok := need(req.Street)
-			if !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid street"})
-				return
-			}
-
-			street2 := ""
-			if req.Street2 != nil {
-				street2 = strings.TrimSpace(*req.Street2)
-			}
-
-			country := "JP"
-			if req.Country != nil {
-				if c := strings.TrimSpace(*req.Country); c != "" {
-					country = c
-				}
-			}
-
-			userID := ""
-			if req.UserID != nil {
-				userID = strings.TrimSpace(*req.UserID)
-			}
-			if userID == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid userId"})
-				return
-			}
-
-			now := time.Now().UTC()
-			ent, derr := shadom.NewWithNow(
-				id,
-				userID,
-				zip,
-				state,
-				city,
-				street,
-				street2,
-				country,
-				now,
-			)
-			if derr != nil {
-				writeShippingAddressErr(w, derr)
-				return
-			}
-
-			saved, serr := h.uc.Save(ctx, ent)
-			if serr != nil {
-				writeShippingAddressErr(w, serr)
-				return
-			}
-
-			_ = json.NewEncoder(w).Encode(saved)
-			return
-		}
-
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	// マージ
+	// マージ（current は *ShippingAddress）
 	zipCode := current.ZipCode
 	state := current.State
 	city := current.City
@@ -338,18 +309,26 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	saved, err := h.uc.Save(ctx, current)
+	updated, err := h.uc.Update(ctx, id, uid, *current)
 	if err != nil {
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(saved)
+	_ = json.NewEncoder(w).Encode(updated)
 }
 
-// DELETE /mall/shipping-addresses/{id}
+// --------------------
+// DELETE /mall/me/shipping-addresses/{id}
+// --------------------
+
 func (h *ShippingAddressHandler) del(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	uid, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -358,7 +337,8 @@ func (h *ShippingAddressHandler) del(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	if err := h.uc.Delete(ctx, id); err != nil {
+	// ✅ 本人チェック付き delete（推奨）
+	if err := h.uc.DeleteByUser(ctx, id, uid); err != nil {
 		writeShippingAddressErr(w, err)
 		return
 	}

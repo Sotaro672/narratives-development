@@ -3,6 +3,8 @@ package firestore
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"log"
 	"strings"
@@ -13,7 +15,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	fscmn "narratives/internal/adapters/out/firestore/common"
 	badom "narratives/internal/domain/billingAddress"
 )
 
@@ -37,7 +38,6 @@ var _ badom.RepositoryPort = (*BillingAddressRepositoryFS)(nil)
 
 // ========== Public API ==========
 
-// docId = UID 前提
 func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*badom.BillingAddress, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -59,57 +59,19 @@ func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*b
 	return &ba, nil
 }
 
-// ✅ userId フィールドは廃止し、docId=UID で引く
+// ✅ userId フィールドで引く（1ユーザー複数レコード対応）
+// ✅ sort/filter/page などは Port から削除したため、この関数のみ残す
 func (r *BillingAddressRepositoryFS) GetByUser(ctx context.Context, userID string) ([]badom.BillingAddress, error) {
 	uid := strings.TrimSpace(userID)
 	if uid == "" {
 		return []badom.BillingAddress{}, nil
 	}
 
-	ba, err := r.GetByID(ctx, uid)
-	if err != nil {
-		if errors.Is(err, badom.ErrNotFound) {
-			return []badom.BillingAddress{}, nil
-		}
-		return nil, err
-	}
-	return []badom.BillingAddress{*ba}, nil
-}
-
-// 互換: 「最新1件」を返す（docId=UID なので実質 0 or 1）
-func (r *BillingAddressRepositoryFS) GetDefaultByUser(ctx context.Context, userID string) (*badom.BillingAddress, error) {
-	uid := strings.TrimSpace(userID)
-	if uid == "" {
-		return nil, badom.ErrNotFound
-	}
-	return r.GetByID(ctx, uid)
-}
-
-func (r *BillingAddressRepositoryFS) List(
-	ctx context.Context,
-	filter badom.Filter,
-	sort badom.Sort,
-	page badom.Page,
-) (badom.PageResult, error) {
-	q := r.col().Query
-	q = applyBillingAddressFilterToQuery(q, filter)
-
-	// Sort
-	orderField, orderDir := mapSort(sort)
-	if orderField == "" {
-		orderField = "updatedAt"
-		orderDir = firestore.Desc
-	}
-
-	// docId=UID なので id も DocumentID で安定ソート
-	q = q.OrderBy(orderField, orderDir).OrderBy(firestore.DocumentID, firestore.Desc)
-
-	// Paging (offset ベース)
-	perPage, number, offset := fscmn.NormalizePage(page.Number, page.PerPage, 50, 200)
-	if offset > 0 {
-		q = q.Offset(offset)
-	}
-	q = q.Limit(perPage)
+	// updatedAt desc, docId desc（安定化）
+	q := r.col().
+		Where("userId", "==", uid).
+		OrderBy("updatedAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc)
 
 	iter := q.Documents(ctx)
 	defer iter.Stop()
@@ -121,57 +83,27 @@ func (r *BillingAddressRepositoryFS) List(
 			break
 		}
 		if err != nil {
-			return badom.PageResult{}, err
+			return nil, err
 		}
 		ba, err := r.docToDomain(doc)
 		if err != nil {
-			return badom.PageResult{}, err
+			return nil, err
 		}
 		items = append(items, ba)
 	}
-
-	return badom.PageResult{
-		Items:      items,
-		TotalCount: len(items), // 簡易
-		TotalPages: number,     // 簡易
-		Page:       number,
-		PerPage:    perPage,
-	}, nil
-}
-
-func (r *BillingAddressRepositoryFS) Count(ctx context.Context, filter badom.Filter) (int, error) {
-	q := r.col().Query
-	q = applyBillingAddressFilterToQuery(q, filter)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	cnt := 0
-	for {
-		_, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		cnt++
-	}
-	return cnt, nil
+	return items, nil
 }
 
 // Create implements RepositoryPort.Create.
-// ✅ docId = UID 前提（userId フィールドは保存しない）
+// ✅ docId はランダム
+// ✅ userId は in.UserID（= middleware userAuth で確定した uid をハンドラがセットして渡す）
 func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.CreateBillingAddressInput) (*badom.BillingAddress, error) {
 	now := time.Now().UTC()
 
-	// ✅ 互換のため input.UserID を「docId(=UID)」として扱う
 	uid := strings.TrimSpace(in.UserID)
 	if uid == "" {
 		return nil, badom.ErrInvalidUserID
 	}
-
-	ref := r.col().Doc(uid)
 
 	createdAt := now
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
@@ -182,9 +114,16 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 		updatedAt = in.UpdatedAt.UTC()
 	}
 
+	docID, err := newRandomDocID(24)
+	if err != nil {
+		return nil, err
+	}
+
+	ref := r.col().Doc(docID)
+
 	ba := badom.BillingAddress{
-		ID:             uid, // ✅ docId=UID
-		UserID:         "",  // ✅ フィールド廃止（レスポンスにも載せたくないなら空に）
+		ID:             docID,
+		UserID:         uid,
 		CardNumber:     strings.TrimSpace(in.CardNumber),
 		CardholderName: strings.TrimSpace(in.CardholderName),
 		CVC:            strings.TrimSpace(in.CVC),
@@ -202,7 +141,7 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 	return &ba, nil
 }
 
-// Update: docId=UID 前提（userId フィールドは保存しない）
+// Update: docId はそのまま、userId は更新しない（anti-spoof）
 func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in badom.UpdateBillingAddressInput) (*badom.BillingAddress, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -272,9 +211,6 @@ func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in b
 	if err != nil {
 		return nil, err
 	}
-
-	// ✅ docId=UID なので userId は常に空
-	ba.UserID = ""
 	return &ba, nil
 }
 
@@ -293,22 +229,6 @@ func (r *BillingAddressRepositoryFS) Delete(ctx context.Context, id string) erro
 	}
 	_, err := ref.Delete(ctx)
 	return err
-}
-
-// SetDefault: 旧インターフェース互換のため残すが、現ドメインでは不要。
-func (r *BillingAddressRepositoryFS) SetDefault(ctx context.Context, id string) error {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return badom.ErrNotFound
-	}
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return badom.ErrNotFound
-		}
-		return err
-	}
-	return nil
 }
 
 func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
@@ -365,6 +285,7 @@ func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 
 func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (badom.BillingAddress, error) {
 	var raw struct {
+		UserID         string    `firestore:"userId"`
 		CardNumber     string    `firestore:"cardNumber"`
 		CardholderName string    `firestore:"cardholderName"`
 		CVC            string    `firestore:"cvc"`
@@ -377,8 +298,8 @@ func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot
 	}
 
 	return badom.BillingAddress{
-		ID:             strings.TrimSpace(doc.Ref.ID), // ✅ docId=UID
-		UserID:         "",                            // ✅ 保存しない
+		ID:             strings.TrimSpace(doc.Ref.ID),
+		UserID:         strings.TrimSpace(raw.UserID),
 		CardNumber:     strings.TrimSpace(raw.CardNumber),
 		CardholderName: strings.TrimSpace(raw.CardholderName),
 		CVC:            strings.TrimSpace(raw.CVC),
@@ -388,8 +309,8 @@ func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot
 }
 
 func (r *BillingAddressRepositoryFS) domainToDocData(ba badom.BillingAddress) map[string]any {
-	// ✅ userId は保存しない
 	return map[string]any{
+		"userId":         strings.TrimSpace(ba.UserID),
 		"cardNumber":     strings.TrimSpace(ba.CardNumber),
 		"cardholderName": strings.TrimSpace(ba.CardholderName),
 		"cvc":            strings.TrimSpace(ba.CVC),
@@ -398,31 +319,14 @@ func (r *BillingAddressRepositoryFS) domainToDocData(ba badom.BillingAddress) ma
 	}
 }
 
-// 部分的に Filter を Firestore クエリへ反映
-// ✅ userId フィールドが無いので DocumentID で絞る
-func applyBillingAddressFilterToQuery(q firestore.Query, f badom.Filter) firestore.Query {
-	if len(f.UserIDs) == 1 {
-		q = q.Where(firestore.DocumentID, "==", strings.TrimSpace(f.UserIDs[0]))
+// newRandomDocID returns URL-safe random id (no padding) with nBytes entropy.
+func newRandomDocID(nBytes int) (string, error) {
+	if nBytes <= 0 {
+		nBytes = 24
 	}
-	return q
-}
-
-func mapSort(sort badom.Sort) (field string, dir firestore.Direction) {
-	col := strings.ToLower(string(sort.Column))
-	switch col {
-	case "createdat", "created_at":
-		field = "createdAt"
-	case "updatedat", "updated_at":
-		fallthrough
-	default:
-		field = "updatedAt"
+	b := make([]byte, nBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-
-	switch strings.ToUpper(string(sort.Order)) {
-	case "ASC":
-		dir = firestore.Asc
-	default:
-		dir = firestore.Desc
-	}
-	return
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }

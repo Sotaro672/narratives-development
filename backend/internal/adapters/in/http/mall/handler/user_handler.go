@@ -1,15 +1,15 @@
-// backend\internal\adapters\in\http\mall\handler\user_handler.go
+// backend/internal/adapters/in/http/mall/handler/user_handler.go
 package mallHandler
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	// ✅ buyer auth context (uid)
 	"narratives/internal/adapters/in/http/middleware"
 
 	usecase "narratives/internal/application/usecase"
@@ -46,15 +46,31 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	// ============================================================
-	// ✅ NEW: GET /mall/me/user  (= /me/user)
-	// - uid を docID として users/{uid} を自動作成(Upsert)して返す
+	// ✅ UNIFIED: /mall/me/users (= /me/users)
 	// ============================================================
-	case r.Method == http.MethodGet && path == "/me/user":
+
+	// GET /mall/me/users
+	case r.Method == http.MethodGet && path == "/me/users":
 		h.getMe(w, r)
 		return
 
+	// POST /mall/me/users (Upsert)
+	case r.Method == http.MethodPost && path == "/me/users":
+		h.postMe(w, r)
+		return
+
+	// PATCH /mall/me/users
+	case r.Method == http.MethodPatch && path == "/me/users":
+		h.patchMe(w, r)
+		return
+
+	// DELETE /mall/me/users
+	case r.Method == http.MethodDelete && path == "/me/users":
+		h.deleteMe(w, r)
+		return
+
 	// ============================================================
-	// existing
+	// existing: /users (admin/debug etc.)
 	// ============================================================
 
 	// GET /users/{id}
@@ -88,9 +104,48 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
-// ✅ NEW: GET /mall/me/user
-// - Firebase の uid を使って users/{uid} を返す
-// - 無ければ “空の user” を作って 200 で返す（フロント安定化）
+// ✅ Single source of truth: entity.go に合わせる
+// - names: snake_case
+// - times: camelCase (createdAt/updatedAt/deletedAt)
+// ============================================================
+
+type userBody struct {
+	ID            string     `json:"id"`
+	FirstName     *string    `json:"first_name"`
+	FirstNameKana *string    `json:"first_name_kana"`
+	LastNameKana  *string    `json:"last_name_kana"`
+	LastName      *string    `json:"last_name"`
+	CreatedAt     *time.Time `json:"createdAt"`
+	UpdatedAt     *time.Time `json:"updatedAt"`
+	DeletedAt     *time.Time `json:"deletedAt"`
+}
+
+func normalizeStrPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func readJSONBody(r *http.Request, dst any) error {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	return dec.Decode(dst)
+}
+
+// ============================================================
+// ✅ UNIFIED: GET /mall/me/users
+// - uid を docID として users/{uid} を返す
+// - 無ければ “空の user” を Create して 200 で返す
 // ============================================================
 func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
@@ -106,40 +161,144 @@ func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uid = strings.TrimSpace(uid)
-
 	ctx := r.Context()
 
-	// 既存があればそれを返す
+	// exists -> return
 	if u, err := h.uc.GetByID(ctx, uid); err == nil {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(u)
 		return
 	}
+	// create empty
+	in := userdom.CreateUserInput{
+		FirstName:     nil,
+		FirstNameKana: nil,
+		LastNameKana:  nil,
+		LastName:      nil,
+		// createdAt/updatedAt は usecase 側で server now を入れる想定
+		// deletedAt は未指定(nil) = not deleted
+	}
 
-	// 無ければ “空の user” を作成して返す
-	now := time.Now().UTC()
-	createdAt := now
-	updatedAt := now
+	u, err := h.uc.Create(ctx, uid, in)
+	if err != nil {
+		// 競合（並行で作られた）なら取り直して返す
+		if err == userdom.ErrConflict {
+			got, gerr := h.uc.GetByID(ctx, uid)
+			if gerr != nil {
+				writeUserErr(w, gerr)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(got)
+			return
+		}
+		writeUserErr(w, err)
+		return
+	}
 
-	// ドメイン仕様：deletedAt は NOT NULL 相当（ゼロ禁止）なので createdAt を入れておく
-	deletedAt := createdAt
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(u)
+}
 
-	v, err := userdom.New(
-		uid,
-		nil, // firstName
-		nil, // firstNameKana
-		nil, // lastNameKana
-		nil, // lastName
-		createdAt,
-		updatedAt,
-		deletedAt,
-	)
+// ============================================================
+// ✅ UNIFIED: POST /mall/me/users (Upsert)
+// - uid を docID として強制
+// - createdAt/updatedAt はサーバが決める（入力が来ても無視）
+// - deletedAt は入力があれば採用（nil=未指定 / zero=not deleted / 非zero=soft delete）
+//
+// ✅ IMPORTANT:
+// - domain に UpsertUserInput は作らない方針なので、CreateUserInput を受けて usecase.Upsert に渡す
+// ============================================================
+func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		return
+	}
+
+	uid, ok := middleware.CurrentUserUID(r)
+	if !ok || strings.TrimSpace(uid) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+	uid = strings.TrimSpace(uid)
+	ctx := r.Context()
+
+	var b userBody
+	if err := readJSONBody(r, &b); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	in := userdom.CreateUserInput{
+		FirstName:     normalizeStrPtr(b.FirstName),
+		FirstNameKana: normalizeStrPtr(b.FirstNameKana),
+		LastNameKana:  normalizeStrPtr(b.LastNameKana),
+		LastName:      normalizeStrPtr(b.LastName),
+	}
+
+	// deletedAt: nil=未指定、指定がある場合は zero も含めて反映したい
+	if b.DeletedAt != nil {
+		t := b.DeletedAt.UTC() // zero でも OK（not deleted に戻す）
+		in.DeletedAt = &t
+	}
+
+	u, err := h.uc.Upsert(ctx, uid, in)
 	if err != nil {
 		writeUserErr(w, err)
 		return
 	}
 
-	u, err := h.uc.Save(ctx, v)
+	// Upsert は 200 固定（フロント用途）
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(u)
+}
+
+// ============================================================
+// ✅ UNIFIED: PATCH /mall/me/users
+// - uid を docID として強制
+// - nil は「未指定」、空文字は「フィールド削除」
+// - deletedAt は nil=未指定 / zero=not deleted / 非zero=soft delete
+// ============================================================
+func (h *UserHandler) patchMe(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		return
+	}
+
+	uid, ok := middleware.CurrentUserUID(r)
+	if !ok || strings.TrimSpace(uid) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+	uid = strings.TrimSpace(uid)
+	ctx := r.Context()
+
+	var b userBody
+	if err := readJSONBody(r, &b); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	in := userdom.UpdateUserInput{
+		FirstName:     b.FirstName,     // nil/""/value をそのまま渡す（repo が "" を delete 扱い）
+		FirstNameKana: b.FirstNameKana, // 同上
+		LastNameKana:  b.LastNameKana,
+		LastName:      b.LastName,
+		// UpdatedAt は usecase が差し込む
+	}
+
+	if b.DeletedAt != nil {
+		t := b.DeletedAt.UTC()
+		in.DeletedAt = &t // zero も含めて反映
+	}
+
+	u, err := h.uc.Update(ctx, uid, in)
 	if err != nil {
 		writeUserErr(w, err)
 		return
@@ -149,9 +308,40 @@ func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(u)
 }
 
+// ============================================================
+// ✅ UNIFIED: DELETE /mall/me/users
+// ============================================================
+func (h *UserHandler) deleteMe(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		return
+	}
+
+	uid, ok := middleware.CurrentUserUID(r)
+	if !ok || strings.TrimSpace(uid) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+	uid = strings.TrimSpace(uid)
+
+	if err := h.uc.Delete(r.Context(), uid); err != nil {
+		writeUserErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 // GET /users/{id}
 func (h *UserHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -160,177 +350,66 @@ func (h *UserHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	u, err := h.uc.GetByID(ctx, id)
+	u, err := h.uc.GetByID(r.Context(), id)
 	if err != nil {
 		writeUserErr(w, err)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(u)
 }
 
 // POST /users
-//
-// ✅ 方針: docID = Firebase UID を前提にする（= ID 必須）
-// - body の id を使って Upsert（存在すれば更新 / 無ければ作成）
-// - 新規なら 201 / 既存なら 200
+// - id は必須（docID）
 func (h *UserHandler) post(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	raw, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
 		return
 	}
-	r.Body = io.NopCloser(bytes.NewReader(raw))
 
-	// snake_case / camelCase 両対応の入力
-	type postBody struct {
-		ID     string `json:"id"`
-		UserID string `json:"userId"`
-
-		FirstName     *string `json:"first_name"`
-		FirstNameKana *string `json:"first_name_kana"`
-		LastNameKana  *string `json:"last_name_kana"`
-		LastName      *string `json:"last_name"`
-
-		FirstNameCC     *string `json:"firstName"`
-		FirstNameKanaCC *string `json:"firstNameKana"`
-		LastNameKanaCC  *string `json:"lastNameKana"`
-		LastNameCC      *string `json:"lastName"`
-
-		CreatedAt *time.Time `json:"created_at"`
-		UpdatedAt *time.Time `json:"updated_at"`
-		DeletedAt *time.Time `json:"deleted_at"`
-
-		CreatedAtCC *time.Time `json:"createdAt"`
-		UpdatedAtCC *time.Time `json:"updatedAt"`
-		DeletedAtCC *time.Time `json:"deletedAt"`
-	}
-
-	var b postBody
-	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+	var b userBody
+	if err := readJSONBody(r, &b); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	// ID（UID）確定
 	id := strings.TrimSpace(b.ID)
-	if id == "" {
-		id = strings.TrimSpace(b.UserID)
-	}
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
-	// フィールド coalesce
-	coalesceStrPtr := func(a, b *string) *string {
-		if a != nil {
-			s := strings.TrimSpace(*a)
-			if s == "" {
-				return nil
-			}
-			return &s
-		}
-		if b != nil {
-			s := strings.TrimSpace(*b)
-			if s == "" {
-				return nil
-			}
-			return &s
-		}
-		return nil
-	}
-	coalesceTimePtr := func(a, b *time.Time) *time.Time {
-		if a != nil && !a.IsZero() {
-			t := a.UTC()
-			return &t
-		}
-		if b != nil && !b.IsZero() {
-			t := b.UTC()
-			return &t
-		}
-		return nil
-	}
-
 	in := userdom.CreateUserInput{
-		FirstName:     coalesceStrPtr(b.FirstName, b.FirstNameCC),
-		FirstNameKana: coalesceStrPtr(b.FirstNameKana, b.FirstNameKanaCC),
-		LastNameKana:  coalesceStrPtr(b.LastNameKana, b.LastNameKanaCC),
-		LastName:      coalesceStrPtr(b.LastName, b.LastNameCC),
-		CreatedAt:     coalesceTimePtr(b.CreatedAt, b.CreatedAtCC),
-		UpdatedAt:     coalesceTimePtr(b.UpdatedAt, b.UpdatedAtCC),
-		DeletedAt:     coalesceTimePtr(b.DeletedAt, b.DeletedAtCC),
+		FirstName:     normalizeStrPtr(b.FirstName),
+		FirstNameKana: normalizeStrPtr(b.FirstNameKana),
+		LastNameKana:  normalizeStrPtr(b.LastNameKana),
+		LastName:      normalizeStrPtr(b.LastName),
+	}
+	if b.DeletedAt != nil {
+		t := b.DeletedAt.UTC()
+		in.DeletedAt = &t
 	}
 
-	now := time.Now().UTC()
-
-	createdAt := now
-	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
-		createdAt = in.CreatedAt.UTC()
-	}
-	updatedAt := now
-	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
-		updatedAt = in.UpdatedAt.UTC()
-	}
-
-	// ドメイン仕様：deletedAt は NOT NULL 相当（ゼロ禁止）なので、未指定なら createdAt
-	deletedAt := createdAt
-	if in.DeletedAt != nil && !in.DeletedAt.IsZero() {
-		d := in.DeletedAt.UTC()
-		if d.After(createdAt) {
-			deletedAt = d
-		}
-	}
-
-	// 既存判定（201/200 のため）
-	existed := true
-	if _, err := h.uc.GetByID(ctx, id); err != nil {
-		if err == userdom.ErrNotFound {
-			existed = false
-		} else {
-			writeUserErr(w, err)
-			return
-		}
-	}
-
-	// ✅ ID（UID）を必ず渡す
-	v, err := userdom.New(
-		id,
-		in.FirstName,
-		in.FirstNameKana,
-		in.LastNameKana,
-		in.LastName,
-		createdAt,
-		updatedAt,
-		deletedAt,
-	)
+	u, err := h.uc.Create(r.Context(), id, in)
 	if err != nil {
 		writeUserErr(w, err)
 		return
 	}
 
-	// ✅ Create ではなく Save（Upsert）に寄せる
-	u, err := h.uc.Save(ctx, v)
-	if err != nil {
-		writeUserErr(w, err)
-		return
-	}
-
-	if existed {
-		w.WriteHeader(http.StatusOK)
-	} else {
-		w.WriteHeader(http.StatusCreated)
-	}
+	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(u)
 }
 
 // PATCH /users/{id}
 func (h *UserHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -339,45 +418,41 @@ func (h *UserHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	raw, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
-		return
-	}
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-
-	var in userdom.UpdateUserInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	var b userBody
+	if err := readJSONBody(r, &b); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	v := userdom.User{
-		ID:            id,
-		FirstName:     in.FirstName,
-		FirstNameKana: in.FirstNameKana,
-		LastNameKana:  in.LastNameKana,
-		LastName:      in.LastName,
-		UpdatedAt:     time.Now().UTC(),
+	in := userdom.UpdateUserInput{
+		FirstName:     b.FirstName,
+		FirstNameKana: b.FirstNameKana,
+		LastNameKana:  b.LastNameKana,
+		LastName:      b.LastName,
 	}
-	if in.DeletedAt != nil && !in.DeletedAt.IsZero() {
-		v.DeletedAt = in.DeletedAt.UTC()
+	if b.DeletedAt != nil {
+		t := b.DeletedAt.UTC()
+		in.DeletedAt = &t
 	}
 
-	u, err := h.uc.Save(ctx, v)
+	u, err := h.uc.Update(r.Context(), id, in)
 	if err != nil {
 		writeUserErr(w, err)
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(u)
 }
 
 // DELETE /users/{id}
 func (h *UserHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -386,25 +461,43 @@ func (h *UserHandler) delete(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	if err := h.uc.Delete(ctx, id); err != nil {
+	if err := h.uc.Delete(r.Context(), id); err != nil {
 		writeUserErr(w, err)
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // エラーハンドリング
 func writeUserErr(w http.ResponseWriter, err error) {
+	if err == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unknown"})
+		return
+	}
+
 	code := http.StatusInternalServerError
-	switch err {
-	case userdom.ErrInvalidID:
+
+	switch {
+	case errors.Is(err, userdom.ErrInvalidID),
+		errors.Is(err, userdom.ErrInvalidFirstName),
+		errors.Is(err, userdom.ErrInvalidFirstNameKana),
+		errors.Is(err, userdom.ErrInvalidLastNameKana),
+		errors.Is(err, userdom.ErrInvalidLastName),
+		errors.Is(err, userdom.ErrInvalidCreatedAt),
+		errors.Is(err, userdom.ErrInvalidUpdatedAt),
+		errors.Is(err, userdom.ErrInvalidDeletedAt):
 		code = http.StatusBadRequest
-	case userdom.ErrNotFound:
+
+	case errors.Is(err, userdom.ErrNotFound):
 		code = http.StatusNotFound
-	case userdom.ErrConflict:
+
+	case errors.Is(err, userdom.ErrConflict):
 		code = http.StatusConflict
 	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

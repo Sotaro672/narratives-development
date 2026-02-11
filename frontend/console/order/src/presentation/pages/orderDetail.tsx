@@ -41,7 +41,6 @@ type OrderDetailDTO = {
     City?: string;
     Street?: string;
     Street2?: string;
-    // ✅ remove: Country
     [k: string]: any;
   };
 
@@ -50,9 +49,13 @@ type OrderDetailDTO = {
   };
 
   items?: Array<{
-    modelId?: string;
+    // ✅ modelId ではなく size/color/rgb/modelNumber を表示用に持つ
+    size?: string;
+    color?: string;
+    rgb?: string;
+    modelNumber?: string;
 
-    // ✅ ID ではなく name
+    // ✅ 日本語ラベルにしたいのでフィールド名は維持（表示側でラベル変更）
     productName?: string;
     tokenName?: string;
 
@@ -87,7 +90,11 @@ function buildDetailFromAllowedItems(
   );
 
   const items = byOrder.map((r) => ({
-    modelId: (r as any).modelId ?? "",
+    // ✅ modelId(variationID) の代わりに variation fields を採用
+    size: (r as any).size ?? "",
+    color: (r as any).color ?? "",
+    rgb: (r as any).rgb ?? "",
+    modelNumber: (r as any).modelNumber ?? "",
 
     // ✅ ID ではなく name を採用
     productName: (r as any).productName ?? "",
@@ -116,14 +123,8 @@ function buildDetailFromAllowedItems(
 
   // ✅ userName は /orders/items の行DTOから取る（最優先）
   //    fallback: /orders/{id} が返していればそこからも拾う（将来互換）
-  const userNameFromRows = pickString(byOrder?.[0], [
-    "userName",
-    "user_name",
-  ]);
-  const userNameFromBase = pickString(base as any, [
-    "userName",
-    "user_name",
-  ]);
+  const userNameFromRows = pickString(byOrder?.[0], ["userName", "user_name"]);
+  const userNameFromBase = pickString(base as any, ["userName", "user_name"]);
   const userName = userNameFromRows || userNameFromBase || "";
 
   // ✅ avatarName は /orders/items の行DTOから取る（最優先）
@@ -140,11 +141,7 @@ function buildDetailFromAllowedItems(
 
   return {
     id: (base as any).id,
-
-    // ✅ userId を userName に置き換え
     userName,
-
-    // ✅ avatarId を avatarName に置き換え
     avatarName,
 
     cartId: (base as any).cartId,
@@ -217,10 +214,7 @@ export default function OrderDetail() {
 
   // derived
   const items = order?.items ?? [];
-  const quantity = items.reduce(
-    (sum, it) => sum + (Number(it?.qty ?? 0) || 0),
-    0,
-  );
+  const quantity = items.reduce((sum, it) => sum + (Number(it?.qty ?? 0) || 0), 0);
   const totalPrice = items.reduce(
     (sum, it) =>
       sum + (Number(it?.price ?? 0) || 0) * (Number(it?.qty ?? 0) || 0),
@@ -232,16 +226,12 @@ export default function OrderDetail() {
 
   const shipping = order?.shippingSnapshot;
 
-  // right column
-  // ✅ ユーザー名（/orders/items から拾えるようになった）
+  // right column (購入者情報)
   const userName = String(order?.userName ?? "").trim() || "-";
-
-  // ✅ アバター名（/orders/items から拾えるようになった）
   const avatarName = String(order?.avatarName ?? "").trim() || "-";
 
-  // ✅ readableId は right column の「関連情報」直下に表示する
-  //    複数itemsがある場合は重複排除してカンマ区切り
-  const readableIds = React.useMemo(() => {
+  // ✅ リストID（旧 readableId）: 複数itemsがある場合は重複排除してカンマ区切り
+  const listIds = React.useMemo(() => {
     const set = new Set<string>();
     for (const it of items) {
       const v = String(it?.listId ?? "").trim();
@@ -265,7 +255,7 @@ export default function OrderDetail() {
         ) : (
           <div className="space-y-8 text-left">
             {/* =======================
-                基本情報（注文ID/カートIDは削除済）
+                基本情報
                 ======================= */}
             <div>
               <div className="text-sm font-semibold mb-2 text-left">基本情報</div>
@@ -329,7 +319,7 @@ export default function OrderDetail() {
             </div>
 
             {/* =======================
-                配送先（日本語ラベル）
+                配送先
                 ======================= */}
             <div>
               <div className="text-sm font-semibold mb-2 text-left">配送先</div>
@@ -399,22 +389,42 @@ export default function OrderDetail() {
                         <CardContent className="pt-0">
                           <table className="w-full text-sm text-left">
                             <tbody>
+                              {/* ✅ modelId -> size/color/rgb/modelNumber */}
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  modelId
+                                  サイズ
                                 </th>
-                                <td className="py-2 text-left">{it.modelId ?? "-"}</td>
+                                <td className="py-2 text-left">{it.size ?? "-"}</td>
+                              </tr>
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  カラー
+                                </th>
+                                <td className="py-2 text-left">{it.color ?? "-"}</td>
+                              </tr>
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  RGB
+                                </th>
+                                <td className="py-2 text-left">{it.rgb ?? "-"}</td>
+                              </tr>
+                              <tr>
+                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                  型番
+                                </th>
+                                <td className="py-2 text-left">{it.modelNumber ?? "-"}</td>
                               </tr>
 
+                              {/* ✅ ラベルを日本語に */}
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  productName
+                                  商品名
                                 </th>
                                 <td className="py-2 text-left">{it.productName ?? "-"}</td>
                               </tr>
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  tokenName
+                                  トークン名
                                 </th>
                                 <td className="py-2 text-left">{it.tokenName ?? "-"}</td>
                               </tr>
@@ -471,9 +481,10 @@ export default function OrderDetail() {
 
   const right = (
     <div className="mt-4 space-y-4 text-left">
+      {/* ✅ 旧「関連情報」カード -> 「購入者情報」 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-left">関連情報</CardTitle>
+          <CardTitle className="text-left">購入者情報</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -485,7 +496,6 @@ export default function OrderDetail() {
           ) : (
             <table className="w-full text-sm text-left">
               <tbody>
-                {/* ✅ userId → userName */}
                 <tr>
                   <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                     ユーザー名
@@ -493,20 +503,39 @@ export default function OrderDetail() {
                   <td className="py-2 text-left">{userName}</td>
                 </tr>
 
-                {/* ✅ avatarId → avatarName */}
                 <tr>
                   <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                     アバター名
                   </th>
                   <td className="py-2 text-left">{avatarName}</td>
                 </tr>
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
 
+      {/* ✅ readableId -> リストID（別カード: 出品情報） */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-left">出品情報</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-sm text-muted-foreground text-left">読み込み中...</div>
+          ) : error ? (
+            <div className="text-sm text-red-600 whitespace-pre-wrap text-left">{error}</div>
+          ) : !order ? (
+            <div className="text-sm text-muted-foreground text-left">-</div>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <tbody>
                 <tr>
                   <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                    readableId
+                    リストID
                   </th>
                   <td className="py-2 text-left">
-                    {readableIds.length > 0 ? readableIds.join(", ") : "-"}
+                    {listIds.length > 0 ? listIds.join(", ") : "-"}
                   </td>
                 </tr>
               </tbody>

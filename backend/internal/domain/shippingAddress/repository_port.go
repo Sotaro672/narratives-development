@@ -1,3 +1,4 @@
+// backend/internal/domain/shippingAddress/repository_port.go
 package shippingAddress
 
 import (
@@ -6,110 +7,30 @@ import (
 	"time"
 )
 
-// Note: ShippingAddress はドメインエンティティです（entity.go 等で定義されている想定）。
-// このファイルでは再定義しません。
-
 // ========================================
-// 外部DTO（API/ストレージとの境界）
-// ========================================
-
-type ShippingAddressDTO struct {
-	ID            string  `json:"id"`
-	UserID        string  `json:"userId"`
-	RecipientName string  `json:"recipientName"`
-	PostalCode    string  `json:"postalCode"`
-	Prefecture    string  `json:"prefecture"`
-	City          string  `json:"city"`
-	AddressLine1  string  `json:"addressLine1"`
-	AddressLine2  *string `json:"addressLine2,omitempty"`
-	Country       string  `json:"country"`
-	IsDefault     bool    `json:"isDefault"`
-	CreatedAt     string  `json:"createdAt"` // ISO8601
-	UpdatedAt     string  `json:"updatedAt"` // ISO8601
-}
-
-// ========================================
-// 入出力DTO（UseCase/Service -> Repository）
+// 入出力（契約のみ）
+// - entity.go (ShippingAddress) を single source とする
+// - docId = uid (= ShippingAddress.ID)
+// - UserID も uid 固定
 // ========================================
 
-type CreateShippingAddressInput struct {
-	UserID        string  `json:"userId"`
-	RecipientName string  `json:"recipientName"`
-	PostalCode    string  `json:"postalCode"`
-	Prefecture    string  `json:"prefecture"`
-	City          string  `json:"city"`
-	AddressLine1  string  `json:"addressLine1"`
-	AddressLine2  *string `json:"addressLine2,omitempty"`
-	Country       string  `json:"country"`
-	IsDefault     bool    `json:"isDefault"`
+type UpsertShippingAddressInput struct {
+	ZipCode string `json:"zipCode"`
+	State   string `json:"state"`
+	City    string `json:"city"`
+	Street  string `json:"street"`
+	Street2 string `json:"street2"` // optional (may be "")
+	Country string `json:"country"` // required (if UI has no input, caller sets "JP" etc.)
 }
 
 type UpdateShippingAddressInput struct {
-	RecipientName *string `json:"recipientName,omitempty"`
-	PostalCode    *string `json:"postalCode,omitempty"`
-	Prefecture    *string `json:"prefecture,omitempty"`
-	City          *string `json:"city,omitempty"`
-	AddressLine1  *string `json:"addressLine1,omitempty"`
-	AddressLine2  *string `json:"addressLine2,omitempty"`
-	Country       *string `json:"country,omitempty"`
-	IsDefault     *bool   `json:"isDefault,omitempty"`
-}
-
-// ========================================
-// 検索条件/ソート/ページング（契約のみ）
-// ========================================
-
-type Filter struct {
-	// 識別子
-	ID     string
-	UserID string
-
-	// 住所系
-	City    string
-	State   string
-	ZipCode string
-	Country string
-
-	// 期間
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
-}
-
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-
-const (
-	SortByCreatedAt SortColumn = "createdAt"
-	SortByUpdatedAt SortColumn = "updatedAt"
-	SortByCity      SortColumn = "city"
-	SortByState     SortColumn = "state"
-	SortByZipCode   SortColumn = "zipCode"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
-type Page struct {
-	Number  int
-	PerPage int
-}
-
-type PageResult struct {
-	Items      []ShippingAddress
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
+	ZipCode   *string    `json:"zipCode,omitempty"`
+	State     *string    `json:"state,omitempty"`
+	City      *string    `json:"city,omitempty"`
+	Street    *string    `json:"street,omitempty"`
+	Street2   *string    `json:"street2,omitempty"`
+	Country   *string    `json:"country,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"` // server can fill
 }
 
 // ========================================
@@ -117,21 +38,18 @@ type PageResult struct {
 // ========================================
 
 type RepositoryPort interface {
-	// 取得系
+	// Read
 	GetByID(ctx context.Context, id string) (*ShippingAddress, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
 
-	// 変更系
-	Create(ctx context.Context, in CreateShippingAddressInput) (*ShippingAddress, error)
-	Update(ctx context.Context, id string, in UpdateShippingAddressInput) (*ShippingAddress, error)
+	// Write
+	// ✅ CreateWithID: docId を caller が指定（id=uid）
+	// - 既存なら ErrConflict
+	CreateWithID(ctx context.Context, id string, a ShippingAddress) (*ShippingAddress, error)
+
+	// ✅ Update: docId を指定して上書き（必須フィールドは usecase 側で保証）
+	Update(ctx context.Context, id string, a ShippingAddress) (*ShippingAddress, error)
+
 	Delete(ctx context.Context, id string) error
-
-	// 管理（開発/テスト用）
-	Reset(ctx context.Context) error
-
-	// 任意: トランザクション境界
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // 共通エラー（契約）
