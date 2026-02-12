@@ -4,7 +4,6 @@ package user
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	domcommon "narratives/internal/domain/common"
@@ -97,7 +96,7 @@ func (u *User) TouchUpdatedAt(now time.Time) error {
 
 // Validation
 func (u User) validate() error {
-	if strings.TrimSpace(u.ID) == "" {
+	if u.ID == "" {
 		return ErrInvalidID
 	}
 	if u.FirstName != nil && len([]rune(*u.FirstName)) > MaxNameLength {
@@ -139,7 +138,7 @@ func New(
 	createdAt, updatedAt, deletedAt time.Time,
 ) (User, error) {
 	u := User{
-		ID:            strings.TrimSpace(id),
+		ID:            id,
 		FirstName:     domcommon.NormalizeStringPtr(firstName),
 		FirstNameKana: domcommon.NormalizeStringPtr(firstNameKana),
 		LastNameKana:  domcommon.NormalizeStringPtr(lastNameKana),
@@ -182,7 +181,6 @@ func NewFromStringTimes(
 	}
 
 	// ✅ deletedAt は空文字なら "not deleted" 扱いで zero を許容
-	deletedAt = strings.TrimSpace(deletedAt)
 	var dt time.Time
 	if deletedAt != "" {
 		parsed, derr := domcommon.ParseTime(deletedAt)

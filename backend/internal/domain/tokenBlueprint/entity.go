@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	branddom "narratives/internal/domain/brand"
@@ -110,13 +109,13 @@ func (f ContentFile) Validate() error {
 	if f.ID == "" {
 		return ErrInvalidContentFile
 	}
-	if strings.TrimSpace(f.Name) == "" {
+	if f.Name == "" {
 		return ErrInvalidContentFile
 	}
 	if !IsValidContentType(f.Type) {
 		return ErrInvalidContentType
 	}
-	if strings.TrimSpace(f.ObjectPath) == "" {
+	if f.ObjectPath == "" {
 		return ErrInvalidContentFile
 	}
 	if !IsValidVisibility(f.Visibility) {
@@ -203,10 +202,10 @@ func (t TokenBlueprint) validate() error {
 	if t.ID == "" {
 		return ErrInvalidID
 	}
-	if strings.TrimSpace(t.Name) == "" {
+	if t.Name == "" {
 		return ErrInvalidName
 	}
-	if !symbolRe.MatchString(strings.TrimSpace(t.Symbol)) {
+	if !symbolRe.MatchString(t.Symbol) {
 		return ErrInvalidSymbol
 	}
 	if t.BrandID == "" {
@@ -255,8 +254,8 @@ func New(
 
 	tid := id
 
-	iconPath := strings.TrimSpace(tokenIconObjectPath)
-	contentsPath := strings.TrimSpace(tokenContentsObjectPath)
+	iconPath := tokenIconObjectPath
+	contentsPath := tokenContentsObjectPath
 
 	// create 時に必ず保存されるように、空なら規約で補完する
 	if iconPath == "" {
@@ -268,11 +267,11 @@ func New(
 
 	tb := TokenBlueprint{
 		ID:           tid,
-		Name:         strings.TrimSpace(name),
-		Symbol:       strings.TrimSpace(symbol),
+		Name:         name,
+		Symbol:       symbol,
 		BrandID:      brandID,
 		CompanyID:    companyID,
-		Description:  strings.TrimSpace(description),
+		Description:  description,
 		ContentFiles: dedupContentFiles(contentFiles),
 		AssigneeID:   assigneeID,
 		Minted:       false,
@@ -339,7 +338,7 @@ func (t *TokenBlueprint) UpdateDescription(desc string) error {
 	if t == nil {
 		return nil
 	}
-	t.Description = strings.TrimSpace(desc)
+	t.Description = desc
 	return nil
 }
 
@@ -484,7 +483,7 @@ func (t *TokenBlueprint) SetMetadataURI(uri string) error {
 	if t == nil {
 		return nil
 	}
-	t.MetadataURI = strings.TrimSpace(uri)
+	t.MetadataURI = uri
 	return nil
 }
 
@@ -496,7 +495,6 @@ func (t *TokenBlueprint) SetTokenIconObjectPath(path string) error {
 	if t == nil {
 		return nil
 	}
-	path = strings.TrimSpace(path)
 	if path == "" {
 		return ErrInvalidTokenIconObjectPath
 	}
@@ -511,7 +509,6 @@ func (t *TokenBlueprint) SetTokenContentsObjectPath(path string) error {
 	if t == nil {
 		return nil
 	}
-	path = strings.TrimSpace(path)
 	if path == "" {
 		return ErrInvalidTokenContentsObjectPath
 	}
@@ -527,7 +524,7 @@ func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 	if t == nil {
 		return nil
 	}
-	if strings.TrimSpace(string(f.Visibility)) == "" {
+	if string(f.Visibility) == "" {
 		f.Visibility = VisibilityPrivate
 	}
 	if err := f.Validate(); err != nil {

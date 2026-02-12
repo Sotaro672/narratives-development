@@ -4,7 +4,6 @@ package shippingAddress
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	domcommon "narratives/internal/domain/common"
@@ -48,32 +47,32 @@ var (
 
 // Validation (for existing/update: ID required)
 func (a ShippingAddress) validate() error {
-	if strings.TrimSpace(a.ID) == "" {
+	if a.ID == "" {
 		return ErrInvalidID
 	}
-	if strings.TrimSpace(a.UserID) == "" {
+	if a.UserID == "" {
 		return ErrInvalidUserID
 	}
 
-	if strings.TrimSpace(a.ZipCode) == "" {
+	if a.ZipCode == "" {
 		return ErrInvalidZipCode
 	}
-	if strings.TrimSpace(a.State) == "" {
+	if a.State == "" {
 		return ErrInvalidState
 	}
-	if strings.TrimSpace(a.City) == "" {
+	if a.City == "" {
 		return ErrInvalidCity
 	}
-	if strings.TrimSpace(a.Street) == "" {
+	if a.Street == "" {
 		return ErrInvalidStreet
 	}
 
 	// Street2 は任意（ただし値が入るなら trim して空は不可扱いにする）
-	if a.Street2 != "" && strings.TrimSpace(a.Street2) == "" {
+	if a.Street2 != "" && a.Street2 == "" {
 		return ErrInvalidStreet2
 	}
 
-	if strings.TrimSpace(a.Country) == "" {
+	if a.Country == "" {
 		return ErrInvalidCountry
 	}
 
@@ -89,29 +88,29 @@ func (a ShippingAddress) validate() error {
 // Validation for Create (ID is assigned by usecase/repository)
 func (a ShippingAddress) validateForCreate() error {
 	// ✅ IDはまだ空でOK（usecaseが採番して埋める）
-	if strings.TrimSpace(a.UserID) == "" {
+	if a.UserID == "" {
 		return ErrInvalidUserID
 	}
 
-	if strings.TrimSpace(a.ZipCode) == "" {
+	if a.ZipCode == "" {
 		return ErrInvalidZipCode
 	}
-	if strings.TrimSpace(a.State) == "" {
+	if a.State == "" {
 		return ErrInvalidState
 	}
-	if strings.TrimSpace(a.City) == "" {
+	if a.City == "" {
 		return ErrInvalidCity
 	}
-	if strings.TrimSpace(a.Street) == "" {
+	if a.Street == "" {
 		return ErrInvalidStreet
 	}
 
 	// Street2 は任意（ただし値が入るなら trim して空は不可扱いにする）
-	if a.Street2 != "" && strings.TrimSpace(a.Street2) == "" {
+	if a.Street2 != "" && a.Street2 == "" {
 		return ErrInvalidStreet2
 	}
 
-	if strings.TrimSpace(a.Country) == "" {
+	if a.Country == "" {
 		return ErrInvalidCountry
 	}
 
@@ -131,13 +130,6 @@ func (a *ShippingAddress) UpdateFromForm(
 	zipCode, state, city, street, street2, country string,
 	now time.Time,
 ) error {
-	zipCode = strings.TrimSpace(zipCode)
-	state = strings.TrimSpace(state)
-	city = strings.TrimSpace(city)
-	street = strings.TrimSpace(street)
-	street2 = strings.TrimSpace(street2)
-	country = strings.TrimSpace(country)
-
 	if zipCode == "" {
 		return ErrInvalidZipCode
 	}
@@ -182,14 +174,14 @@ func New(
 	createdAt, updatedAt time.Time,
 ) (ShippingAddress, error) {
 	a := ShippingAddress{
-		ID:        strings.TrimSpace(id),
-		UserID:    strings.TrimSpace(userID),
-		ZipCode:   strings.TrimSpace(zipCode),
-		State:     strings.TrimSpace(state),
-		City:      strings.TrimSpace(city),
-		Street:    strings.TrimSpace(street),
-		Street2:   strings.TrimSpace(street2),
-		Country:   strings.TrimSpace(country),
+		ID:        id,
+		UserID:    userID,
+		ZipCode:   zipCode,
+		State:     state,
+		City:      city,
+		Street:    street,
+		Street2:   street2,
+		Country:   country,
 		CreatedAt: createdAt.UTC(),
 		UpdatedAt: updatedAt.UTC(),
 	}
@@ -218,13 +210,13 @@ func NewForCreateWithNow(
 
 	a := ShippingAddress{
 		ID:        "", // ✅ create時は空でOK
-		UserID:    strings.TrimSpace(userID),
-		ZipCode:   strings.TrimSpace(zipCode),
-		State:     strings.TrimSpace(state),
-		City:      strings.TrimSpace(city),
-		Street:    strings.TrimSpace(street),
-		Street2:   strings.TrimSpace(street2),
-		Country:   strings.TrimSpace(country),
+		UserID:    userID,
+		ZipCode:   zipCode,
+		State:     state,
+		City:      city,
+		Street:    street,
+		Street2:   street2,
+		Country:   country,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

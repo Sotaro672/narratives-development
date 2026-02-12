@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	fscommon "narratives/internal/adapters/out/firestore/common"
 	uc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	invoicedom "narratives/internal/domain/invoice"
@@ -43,7 +42,6 @@ func (r *InvoiceRepositoryFS) GetByOrderID(ctx context.Context, orderID string) 
 		return invoicedom.Invoice{}, errors.New("firestore client is nil")
 	}
 
-	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return invoicedom.Invoice{}, invoicedom.ErrNotFound
 	}
@@ -64,7 +62,6 @@ func (r *InvoiceRepositoryFS) Exists(ctx context.Context, orderID string) (bool,
 		return false, errors.New("firestore client is nil")
 	}
 
-	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return false, nil
 	}
@@ -77,71 +74,6 @@ func (r *InvoiceRepositoryFS) Exists(ctx context.Context, orderID string) (bool,
 		return false, err
 	}
 	return true, nil
-}
-
-func (r *InvoiceRepositoryFS) List(
-	ctx context.Context,
-	filter uc.InvoiceFilter,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[invoicedom.Invoice], error) {
-	if r.Client == nil {
-		return common.PageResult[invoicedom.Invoice]{}, errors.New("firestore client is nil")
-	}
-
-	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-
-	q := r.invoicesCol().Query
-	q = applyInvoiceSort(q, sort)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var all []invoicedom.Invoice
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.PageResult[invoicedom.Invoice]{}, err
-		}
-
-		inv, err := docToInvoice(doc)
-		if err != nil {
-			return common.PageResult[invoicedom.Invoice]{}, err
-		}
-		if matchInvoiceFilter(inv, filter) {
-			all = append(all, inv)
-		}
-	}
-
-	total := len(all)
-	if total == 0 {
-		return common.PageResult[invoicedom.Invoice]{
-			Items:      []invoicedom.Invoice{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
-	}
-
-	if offset > total {
-		offset = total
-	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-
-	return common.PageResult[invoicedom.Invoice]{
-		Items:      all[offset:end],
-		TotalCount: total,
-		TotalPages: fscommon.ComputeTotalPages(total, perPage),
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
 }
 
 func (r *InvoiceRepositoryFS) ListByCursor(
@@ -160,7 +92,7 @@ func (r *InvoiceRepositoryFS) ListByCursor(
 	}
 
 	q := r.invoicesCol().OrderBy(firestore.DocumentID, firestore.Asc)
-	if after := strings.TrimSpace(cpage.After); after != "" {
+	if after := cpage.After; after != "" {
 		q = q.StartAfter(after)
 	}
 
@@ -189,14 +121,14 @@ func (r *InvoiceRepositoryFS) ListByCursor(
 		}
 		if matchInvoiceFilter(inv, filter) {
 			items = append(items, inv)
-			last = strings.TrimSpace(doc.Ref.ID) // ✅ cursor=docId
+			last = doc.Ref.ID // ✅ cursor=docId
 		}
 	}
 
 	var next *string
 	if len(items) > limit {
 		items = items[:limit]
-		if strings.TrimSpace(last) != "" {
+		if last != "" {
 			next = &last
 		}
 	}
@@ -208,40 +140,12 @@ func (r *InvoiceRepositoryFS) ListByCursor(
 	}, nil
 }
 
-func (r *InvoiceRepositoryFS) Count(ctx context.Context, filter uc.InvoiceFilter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	it := r.invoicesCol().Documents(ctx)
-	defer it.Stop()
-
-	total := 0
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		inv, err := docToInvoice(doc)
-		if err != nil {
-			return 0, err
-		}
-		if matchInvoiceFilter(inv, filter) {
-			total++
-		}
-	}
-	return total, nil
-}
-
 func (r *InvoiceRepositoryFS) Create(ctx context.Context, inv invoicedom.Invoice) (invoicedom.Invoice, error) {
 	if r.Client == nil {
 		return invoicedom.Invoice{}, errors.New("firestore client is nil")
 	}
 
-	orderID := strings.TrimSpace(inv.OrderID)
+	orderID := inv.OrderID
 	if orderID == "" {
 		return invoicedom.Invoice{}, errors.New("invoice: invalid orderId")
 	}
@@ -270,7 +174,7 @@ func (r *InvoiceRepositoryFS) Save(ctx context.Context, inv invoicedom.Invoice, 
 		return invoicedom.Invoice{}, errors.New("firestore client is nil")
 	}
 
-	orderID := strings.TrimSpace(inv.OrderID)
+	orderID := inv.OrderID
 	if orderID == "" {
 		return invoicedom.Invoice{}, errors.New("invoice: invalid orderId")
 	}
@@ -295,7 +199,6 @@ func (r *InvoiceRepositoryFS) DeleteByOrderID(ctx context.Context, orderID strin
 		return errors.New("firestore client is nil")
 	}
 
-	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return invoicedom.ErrNotFound
 	}
@@ -306,52 +209,6 @@ func (r *InvoiceRepositoryFS) DeleteByOrderID(ctx context.Context, orderID strin
 			return invoicedom.ErrNotFound
 		}
 		return err
-	}
-	return nil
-}
-
-func (r *InvoiceRepositoryFS) Reset(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	it := r.invoicesCol().Documents(ctx)
-	defer it.Stop()
-
-	var refs []*firestore.DocumentRef
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		refs = append(refs, doc.Ref)
-	}
-	if len(refs) == 0 {
-		return nil
-	}
-
-	const chunkSize = 400
-	for start := 0; start < len(refs); start += chunkSize {
-		end := start + chunkSize
-		if end > len(refs) {
-			end = len(refs)
-		}
-		chunk := refs[start:end]
-
-		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, ref := range chunk {
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -391,7 +248,7 @@ func docToInvoice(doc *firestore.DocumentSnapshot) (invoicedom.Invoice, error) {
 		if b, ok := v.(bool); ok {
 			return b
 		}
-		s := strings.ToLower(strings.TrimSpace(fmt.Sprint(v)))
+		s := strings.ToLower(fmt.Sprint(v))
 		return s == "true" || s == "1" || s == "yes"
 	}
 
@@ -420,7 +277,7 @@ func docToInvoice(doc *firestore.DocumentSnapshot) (invoicedom.Invoice, error) {
 			}
 			return &tt
 		default:
-			s := strings.TrimSpace(fmt.Sprint(v))
+			s := fmt.Sprint(v)
 			if s == "" {
 				return nil
 			}
@@ -459,7 +316,7 @@ func docToInvoice(doc *firestore.DocumentSnapshot) (invoicedom.Invoice, error) {
 	}
 
 	// ✅ docId=orderId を正とする（invoice doc内に orderId は持たない）
-	docID := strings.TrimSpace(doc.Ref.ID)
+	docID := doc.Ref.ID
 	if docID == "" {
 		return invoicedom.Invoice{}, invoicedom.ErrNotFound
 	}
@@ -509,7 +366,7 @@ func matchInvoiceFilter(inv invoicedom.Invoice, f uc.InvoiceFilter) bool {
 
 func matchInvoiceFilterAny(inv invoicedom.Invoice, fv any) bool {
 	if orderID, ok := getFilterString(fv, "OrderID"); ok {
-		if strings.TrimSpace(orderID) != "" && strings.TrimSpace(inv.OrderID) != strings.TrimSpace(orderID) {
+		if orderID != "" && inv.OrderID != orderID {
 			return false
 		}
 	}
@@ -557,25 +414,4 @@ func getFilterBoolPtr(v any, field string) (*bool, bool) {
 		}
 	}
 	return nil, false
-}
-
-func applyInvoiceSort(q firestore.Query, sort common.Sort) firestore.Query {
-	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
-
-	dir := firestore.Asc
-	if strings.EqualFold(string(sort.Order), "desc") {
-		dir = firestore.Desc
-	}
-
-	switch col {
-	case "updatedat", "updated_at":
-		return q.OrderBy("updatedAt", dir).OrderBy(firestore.DocumentID, dir)
-
-	case "orderid", "order_id", "order":
-		// ✅ orderId フィールドは無いので docId でソート
-		return q.OrderBy(firestore.DocumentID, dir)
-
-	default:
-		return q.OrderBy(firestore.DocumentID, firestore.Desc)
-	}
 }

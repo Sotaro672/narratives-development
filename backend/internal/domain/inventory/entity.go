@@ -4,7 +4,6 @@ package inventory
 import (
 	"errors"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -46,7 +45,7 @@ type Mint struct {
 	Stock map[string]ModelStock
 
 	// クエリ用（Firestore の array-contains などで検索するための補助）
-	// 概念的契約：Stock に存在する modelId と整合する（Normalize で再生成される）
+	// 契約：Stock に存在する modelId と整合する（※このドメインでは「直さない」、不正ならエラー）
 	ModelIDs []string
 
 	CreatedAt time.Time
@@ -57,169 +56,79 @@ type Mint struct {
 // Conceptual Contracts (Domain)
 // ------------------------------
 //
-// このファイルに追加する「概念的契約」は、永続化（Firestore）や DTO ではなく、
-// ドメインの整合性（不変条件）を保証するためのものです。
+// 方針（A）:
+// - ドメインは “直さない”
+// - 不正ならエラー（Validate で弾く）
 //
-// - Normalize(): 余計な空白や重複、0以下の予約などを正規化し、整合性を揃える
-// - Validate(): 必須項目と整合性をチェックする（Normalize 後の利用を推奨）
-// - BuildMintID(): Mint の識別子規約（productBlueprintId__tokenBlueprintId）を表す
-//   ※ "/" 置換などストレージ都合の sanitize は adapter 層の責務
-//
+// したがって Normalize は存在しません。
+// 入力整形（Trim/重複排除/ソート等）をしたい場合は上位層の責務です。
+// ------------------------------
 
 // BuildMintID はドメイン上の識別子規約（productBlueprintId__tokenBlueprintId）を返します。
 // 注意：Firestore 等の制約に合わせた sanitize（"/" -> "_" 等）は adapter 層で行ってください。
 func BuildMintID(productBlueprintID, tokenBlueprintID string) string {
-	pb := strings.TrimSpace(productBlueprintID)
-	tb := strings.TrimSpace(tokenBlueprintID)
-	if pb == "" || tb == "" {
+	if productBlueprintID == "" || tokenBlueprintID == "" {
 		return ""
 	}
-	return pb + "__" + tb
-}
-
-// Normalize は Mint の整合性（不変条件）を揃えたコピーを返します。
-// - ID / BlueprintID / ModelIDs の Trim
-// - Stock の各 ModelStock を正規化
-// - 空の model を drop
-// - ModelIDs を Stock から再生成（不整合を防ぐ）
-// - UpdatedAt がゼロなら CreatedAt と合わせる（CreatedAt がゼロなら触らない）
-func (m Mint) Normalize() Mint {
-	m.ID = strings.TrimSpace(m.ID)
-	m.TokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
-	m.ProductBlueprintID = strings.TrimSpace(m.ProductBlueprintID)
-
-	// Stock 正規化
-	if m.Stock != nil {
-		out := map[string]ModelStock{}
-		for modelID, ms := range m.Stock {
-			modelID = strings.TrimSpace(modelID)
-			if modelID == "" {
-				continue
-			}
-			nms := ms.Normalize()
-
-			hasProducts := len(nms.Products) > 0
-			hasReserved := len(nms.ReservedByOrder) > 0
-			if !hasProducts && !hasReserved {
-				continue
-			}
-			out[modelID] = nms
-		}
-		if len(out) == 0 {
-			m.Stock = nil
-		} else {
-			m.Stock = out
-		}
-	}
-
-	// ModelIDs は Stock から再生成（概念的契約）
-	m.ModelIDs = modelIDsFromStock(m.Stock)
-
-	// CreatedAt/UpdatedAt の軽い整合（ドメインとしての最低限）
-	if !m.CreatedAt.IsZero() && m.UpdatedAt.IsZero() {
-		m.UpdatedAt = m.CreatedAt
-	}
-	if m.CreatedAt.IsZero() && !m.UpdatedAt.IsZero() {
-		// CreatedAt が無いのに UpdatedAt だけあるのは変なので寄せる
-		m.CreatedAt = m.UpdatedAt
-	}
-
-	return m
+	return productBlueprintID + "__" + tokenBlueprintID
 }
 
 // Validate は Mint の必須項目と整合性を検証します。
-// 推奨：保存・処理の境界で m = m.Normalize() してから Validate() を呼ぶ。
 func (m Mint) Validate() error {
-	if strings.TrimSpace(m.TokenBlueprintID) == "" {
+	if m.TokenBlueprintID == "" {
 		return ErrInvalidTokenBlueprintID
 	}
-	if strings.TrimSpace(m.ProductBlueprintID) == "" {
+	if m.ProductBlueprintID == "" {
 		return ErrInvalidProductBlueprintID
 	}
 
-	// 在庫が空はユースケース次第で許容されることもあるが、
-	// ここでは「Mint として意味がある」最低条件として Stock を必須にしない。
-	// 必須にしたい場合はユースケース側で判定する。
+	// Stock が空はユースケース次第で許容されるので、ここでは必須にしない
 	if m.Stock == nil {
+		// Stock が無いなら ModelIDs も空/nil であるべき
+		if len(m.ModelIDs) != 0 {
+			return errors.New("invalid modelIds (stock is nil but modelIds is not empty)")
+		}
 		return nil
 	}
 
+	// Stock の中身検証
 	for modelID, ms := range m.Stock {
-		if strings.TrimSpace(modelID) == "" {
+		if modelID == "" {
 			return ErrInvalidModelID
+		}
+		// products/reserved が両方空なら意味がない（以前は Normalize で drop していたが、今は不正扱い）
+		if len(ms.Products) == 0 && len(ms.ReservedByOrder) == 0 {
+			return ErrInvalidProducts
 		}
 		if err := ms.Validate(); err != nil {
 			return err
 		}
 	}
 
-	// ModelIDs は補助フィールド。整合性は Normalize で担保する想定だが、Validate でも軽く確認
-	want := modelIDsFromStock(m.Stock)
-	got := normalizeModelIDs(m.ModelIDs)
-	if !stringSliceEqual(want, got) {
-		// ここでは専用エラーを増やさず、ドメイン整合性違反として既存の ErrInvalidProducts を流用しない。
-		// 必要なら ErrInvalidModelIDs を追加してください。
-		return errors.New("invalid modelIds (not consistent with stock)")
+	// ModelIDs 整合性チェック（集合一致）
+	if err := validateModelIDsConsistency(m.Stock, m.ModelIDs); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// Normalize は ModelStock の整合性（不変条件）を揃えたコピーを返します。
-// - Products の Trim / 重複排除 / ソート
-// - Accumulation を len(Products) に一致させる
-// - ReservedByOrder の key Trim / qty>0 のみ残す
-// - ReservedCount を sum(ReservedByOrder) に一致させる
-func (ms ModelStock) Normalize() ModelStock {
-	ms.Products = normalizeIDs(ms.Products)
-	if len(ms.Products) == 0 {
-		ms.Products = nil
-	}
-	ms.Accumulation = len(ms.Products)
-
-	if ms.ReservedByOrder != nil {
-		rbo := map[string]int{}
-		var sum int
-		for oid, n := range ms.ReservedByOrder {
-			oid = strings.TrimSpace(oid)
-			if oid == "" || n <= 0 {
-				continue
-			}
-			rbo[oid] = n
-			sum += n
-		}
-		if len(rbo) == 0 {
-			ms.ReservedByOrder = nil
-			ms.ReservedCount = 0
-		} else {
-			ms.ReservedByOrder = rbo
-			ms.ReservedCount = sum
-		}
-	} else {
-		ms.ReservedCount = 0
-	}
-
-	return ms
-}
-
 // Validate は ModelStock の整合性を検証します。
-// 推奨：境界で Normalize() 後に呼ぶ（Normalize が契約の中心）。
+// ※ Normalize はしない（不正ならエラー）
 func (ms ModelStock) Validate() error {
-	// Products が空でも予約があれば意味があるケースはあり得るので、ここでは products 必須にしない。
-	// ただし Products があれば必ず Accumulation と一致する必要がある。
-	ps := normalizeIDs(ms.Products)
-	if len(ps) != len(ms.Products) {
-		// ここで厳密に弾くかは好みだが、契約違反として検知
+	// Products: 空文字なし、ソート済み、重複なし
+	if err := validateSortedUniqueNonEmptyStrings(ms.Products); err != nil {
 		return ErrInvalidProducts
 	}
+
+	// Accumulation は Products の件数と一致する必要がある
 	if ms.Accumulation != len(ms.Products) {
 		return errors.New("invalid accumulation (must equal len(products))")
 	}
 
-	// ReservedCount 整合
+	// ReservedByOrder: key は空でない、qty は正、ReservedCount は sum と一致
 	var sum int
 	for oid, n := range ms.ReservedByOrder {
-		oid = strings.TrimSpace(oid)
 		if oid == "" || n <= 0 {
 			return errors.New("invalid reservedByOrder (empty orderId or non-positive qty)")
 		}
@@ -243,23 +152,20 @@ func NewMint(
 	products []string,
 	now time.Time,
 ) (Mint, error) {
-	tbID := strings.TrimSpace(tokenBlueprintID)
-	if tbID == "" {
+	if tokenBlueprintID == "" {
 		return Mint{}, ErrInvalidTokenBlueprintID
 	}
-
-	pbID := strings.TrimSpace(productBlueprintID)
-	if pbID == "" {
+	if productBlueprintID == "" {
 		return Mint{}, ErrInvalidProductBlueprintID
 	}
-
-	mID := strings.TrimSpace(modelID)
-	if mID == "" {
+	if modelID == "" {
 		return Mint{}, ErrInvalidModelID
 	}
-
-	ps := normalizeIDs(products)
-	if len(ps) == 0 {
+	if len(products) == 0 {
+		return Mint{}, ErrInvalidProducts
+	}
+	// 「直さない」ので、ここで要件を満たしているか検証して弾く
+	if err := validateSortedUniqueNonEmptyStrings(products); err != nil {
 		return Mint{}, ErrInvalidProducts
 	}
 
@@ -268,9 +174,9 @@ func NewMint(
 	}
 
 	stock := map[string]ModelStock{
-		mID: {
-			Products:     ps,
-			Accumulation: len(ps),
+		modelID: {
+			Products:     products,
+			Accumulation: len(products),
 
 			ReservedByOrder: map[string]int{},
 			ReservedCount:   0,
@@ -278,14 +184,14 @@ func NewMint(
 	}
 
 	out := Mint{
-		ID:                 strings.TrimSpace(id),
-		TokenBlueprintID:   tbID,
-		ProductBlueprintID: pbID,
+		ID:                 id,
+		TokenBlueprintID:   tokenBlueprintID,
+		ProductBlueprintID: productBlueprintID,
 		Stock:              stock,
-		ModelIDs:           []string{mID},
+		ModelIDs:           []string{modelID},
 		CreatedAt:          now,
 		UpdatedAt:          now,
-	}.Normalize()
+	}
 
 	// コンストラクタは契約を満たすものを返したいので Validate
 	if err := out.Validate(); err != nil {
@@ -298,77 +204,58 @@ func NewMint(
 // internal helpers (domain-level)
 // ------------------------------
 
-func normalizeIDs(raw []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(raw))
-	for _, s := range raw {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			continue
-		}
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		out = append(out, s)
+func validateSortedUniqueNonEmptyStrings(xs []string) error {
+	if len(xs) == 0 {
+		return nil
 	}
-	sort.Strings(out)
-	return out
+	for _, s := range xs {
+		if s == "" {
+			return errors.New("contains empty string")
+		}
+	}
+	if !sort.StringsAreSorted(xs) {
+		return errors.New("not sorted")
+	}
+	for i := 1; i < len(xs); i++ {
+		if xs[i] == xs[i-1] {
+			return errors.New("contains duplicates")
+		}
+	}
+	return nil
 }
 
-func normalizeModelIDs(raw []string) []string {
-	if len(raw) == 0 {
-		return nil
+func validateModelIDsConsistency(stock map[string]ModelStock, modelIDs []string) error {
+	// modelIDs 側の基本検証（空・重複・未ソートを弾く）
+	if err := validateSortedUniqueNonEmptyStrings(modelIDs); err != nil {
+		return errors.New("invalid modelIds (must be sorted, unique, non-empty)")
 	}
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(raw))
-	for _, s := range raw {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			continue
-		}
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		out = append(out, s)
-	}
-	sort.Strings(out)
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
 
-func modelIDsFromStock(stock map[string]ModelStock) []string {
-	if stock == nil {
-		return nil
-	}
-	out := make([]string, 0, len(stock))
-	for modelID, ms := range stock {
-		modelID = strings.TrimSpace(modelID)
-		if modelID == "" {
-			continue
+	stockKeys := make([]string, 0, len(stock))
+	stockSet := make(map[string]struct{}, len(stock))
+	for k, ms := range stock {
+		if k == "" {
+			return errors.New("invalid stock key (empty modelId)")
 		}
-		// products/reserved が両方空なら Normalize で消える想定だが、念のため
+		// products/reserved が両方空なら不正（呼び出し元でも弾いているが二重で守る）
 		if len(ms.Products) == 0 && len(ms.ReservedByOrder) == 0 {
-			continue
+			return errors.New("invalid stock (empty model entry)")
 		}
-		out = append(out, modelID)
+		if _, ok := stockSet[k]; ok {
+			// map なので通常起きないが一応
+			return errors.New("invalid stock (duplicate modelId)")
+		}
+		stockSet[k] = struct{}{}
+		stockKeys = append(stockKeys, k)
 	}
-	return normalizeModelIDs(out)
-}
+	sort.Strings(stockKeys)
 
-func stringSliceEqual(a, b []string) bool {
-	aa := normalizeModelIDs(a)
-	bb := normalizeModelIDs(b)
-	if len(aa) != len(bb) {
-		return false
+	if len(stockKeys) != len(modelIDs) {
+		return errors.New("invalid modelIds (not consistent with stock)")
 	}
-	for i := range aa {
-		if aa[i] != bb[i] {
-			return false
+	for i := range stockKeys {
+		if stockKeys[i] != modelIDs[i] {
+			return errors.New("invalid modelIds (not consistent with stock)")
 		}
 	}
-	return true
+	return nil
 }

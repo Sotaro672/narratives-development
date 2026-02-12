@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -56,7 +55,7 @@ func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (
 		return nil, errors.New("cart_repository_fs: firestore client is nil")
 	}
 
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return nil, errors.New("cart_repository_fs: avatarID is empty")
 	}
@@ -69,10 +68,6 @@ func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (
 		return nil, err
 	}
 
-	// ✅ IMPORTANT:
-	// 過去に items を map[string]int で保存していた場合や、途中で schema が変わった場合、
-	// DataTo(&struct{ Items map[string]X }) が型不一致で 500 になり得る。
-	// そこで snap.Data() を取り、後方互換で自前パースする。
 	doc, err := cartDocFromSnapshot(snap)
 	if err != nil {
 		return nil, err
@@ -93,7 +88,7 @@ func (r *CartRepositoryFS) Upsert(ctx context.Context, c *cartdom.Cart) error {
 		return errors.New("cart_repository_fs: cart is nil")
 	}
 
-	aid := strings.TrimSpace(c.ID)
+	aid := c.ID
 	if aid == "" {
 		return errors.New("cart_repository_fs: Upsert requires cart.ID (= avatarId) as docId")
 	}
@@ -114,7 +109,7 @@ func (r *CartRepositoryFS) UpsertByAvatarID(ctx context.Context, avatarID string
 		return errors.New("cart_repository_fs: cart is nil")
 	}
 
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return errors.New("cart_repository_fs: avatarID is empty")
 	}
@@ -130,7 +125,7 @@ func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
 
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return errors.New("cart_repository_fs: avatarID is empty")
 	}
@@ -147,7 +142,7 @@ func (r *CartRepositoryFS) Clear(ctx context.Context, cartID string) error {
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
 
-	id := strings.TrimSpace(cartID)
+	id := cartID
 	if id == "" {
 		return errors.New("cart_repository_fs: cartID is empty")
 	}
@@ -187,7 +182,6 @@ func (r *CartRepositoryFS) Clear(ctx context.Context, cartID string) error {
 
 type cartDoc struct {
 	// ✅ Items: itemKey -> CartItem
-	// NOTE: domain struct を直接 firestore DTO にしない（後方互換 & 柔軟にするため）
 	Items map[string]cartItemDoc `firestore:"items"`
 
 	CreatedAt time.Time `firestore:"createdAt"`
@@ -202,12 +196,7 @@ type cartItemDoc struct {
 	Qty         int    `firestore:"qty"`
 }
 
-// cartDocFromSnapshot parses Firestore document data with backward compatibility.
-//
-// Supported shapes:
-// 1) items: map[itemKey] = {inventoryId, listId, modelId, qty}
-// 2) items: map[itemKey] = qty (legacy)
-//   - in this case we keep ModelID=itemKey and Qty=qty, other IDs empty
+// cartDocFromSnapshot parses Firestore document data.
 func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 	if snap == nil {
 		return cartDoc{}, errors.New("cart_repository_fs: snapshot is nil")
@@ -251,41 +240,31 @@ func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 	}
 
 	for k, v := range m {
-		itemKey := strings.TrimSpace(k)
+		itemKey := k
 		if itemKey == "" {
 			continue
 		}
 
-		// new shape: map[string]any
-		if mv, ok := v.(map[string]any); ok {
-			inv := strings.TrimSpace(asString(mv["inventoryId"]))
-			lid := strings.TrimSpace(asString(mv["listId"]))
-			mid := strings.TrimSpace(asString(mv["modelId"]))
-			qty := asInt(mv["qty"])
-
-			// 必須チェック（qty > 0 は必須）
-			if qty <= 0 {
-				continue
-			}
-
-			out.Items[itemKey] = cartItemDoc{
-				InventoryID: inv,
-				ListID:      lid,
-				ModelID:     mid,
-				Qty:         qty,
-			}
+		mv, ok := v.(map[string]any)
+		if !ok {
+			// unexpected shape -> skip
 			continue
 		}
 
-		// legacy shape: qty only
-		qty := asInt(v)
+		inv := asString(mv["inventoryId"])
+		lid := asString(mv["listId"])
+		mid := asString(mv["modelId"])
+		qty := asInt(mv["qty"])
+
+		// 必須チェック（qty > 0 は必須）
 		if qty <= 0 {
 			continue
 		}
+
 		out.Items[itemKey] = cartItemDoc{
-			InventoryID: "",
-			ListID:      "",
-			ModelID:     itemKey,
+			InventoryID: inv,
+			ListID:      lid,
+			ModelID:     mid,
 			Qty:         qty,
 		}
 	}
@@ -297,14 +276,13 @@ func cartDocFromDomain(c *cartdom.Cart) cartDoc {
 	items := map[string]cartItemDoc{}
 	if c != nil && c.Items != nil {
 		for k, it := range c.Items {
-			k2 := strings.TrimSpace(k)
-			if k2 == "" {
+			if k == "" {
 				continue
 			}
 
-			inv := strings.TrimSpace(it.InventoryID)
-			lid := strings.TrimSpace(it.ListID)
-			mid := strings.TrimSpace(it.ModelID)
+			inv := it.InventoryID
+			lid := it.ListID
+			mid := it.ModelID
 			qty := it.Qty
 
 			// qty は必須、ID も必須（空は捨てる）
@@ -319,22 +297,21 @@ func cartDocFromDomain(c *cartdom.Cart) cartDoc {
 				Qty:         qty,
 			}
 
-			// normalize key if it had spaces
-			if existing, ok := items[k2]; ok {
+			if existing, ok := items[k]; ok {
 				// 同一キーは qty を合算（IDs は既存優先、ただし空なら埋める）
-				if strings.TrimSpace(existing.InventoryID) == "" {
+				if existing.InventoryID == "" {
 					existing.InventoryID = inv
 				}
-				if strings.TrimSpace(existing.ListID) == "" {
+				if existing.ListID == "" {
 					existing.ListID = lid
 				}
-				if strings.TrimSpace(existing.ModelID) == "" {
+				if existing.ModelID == "" {
 					existing.ModelID = mid
 				}
 				existing.Qty = existing.Qty + qty
-				items[k2] = existing
+				items[k] = existing
 			} else {
-				items[k2] = normalized
+				items[k] = normalized
 			}
 		}
 	}
@@ -351,14 +328,13 @@ func (d cartDoc) toDomain() *cartdom.Cart {
 	items := map[string]cartdom.CartItem{}
 	if d.Items != nil {
 		for k, it := range d.Items {
-			k2 := strings.TrimSpace(k)
-			if k2 == "" {
+			if k == "" {
 				continue
 			}
 
-			inv := strings.TrimSpace(it.InventoryID)
-			lid := strings.TrimSpace(it.ListID)
-			mid := strings.TrimSpace(it.ModelID)
+			inv := it.InventoryID
+			lid := it.ListID
+			mid := it.ModelID
 			qty := it.Qty
 
 			if qty <= 0 {
@@ -372,22 +348,22 @@ func (d cartDoc) toDomain() *cartdom.Cart {
 				Qty:         qty,
 			}
 
-			if existing, ok := items[k2]; ok {
+			if existing, ok := items[k]; ok {
 				// 重複キーは qty を合算
 				existing.Qty = existing.Qty + qty
 				// IDs が空なら埋める
-				if strings.TrimSpace(existing.InventoryID) == "" {
+				if existing.InventoryID == "" {
 					existing.InventoryID = inv
 				}
-				if strings.TrimSpace(existing.ListID) == "" {
+				if existing.ListID == "" {
 					existing.ListID = lid
 				}
-				if strings.TrimSpace(existing.ModelID) == "" {
+				if existing.ModelID == "" {
 					existing.ModelID = mid
 				}
-				items[k2] = existing
+				items[k] = existing
 			} else {
-				items[k2] = normalized
+				items[k] = normalized
 			}
 		}
 	}

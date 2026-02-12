@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -13,7 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	avdom "narratives/internal/domain/avatar"
-	common "narratives/internal/domain/common"
 )
 
 // Firestore implementation of avatar.Repository.
@@ -49,7 +47,6 @@ func (r *AvatarRepositoryFS) GetNameByID(ctx context.Context, id string) (string
 		return "", errBadClient
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", errNotFound
 	}
@@ -65,7 +62,7 @@ func (r *AvatarRepositoryFS) GetNameByID(ctx context.Context, id string) (string
 	// Prefer direct field read (cheap)
 	if data := snap.Data(); data != nil {
 		if v, ok := data["avatarName"].(string); ok {
-			return strings.TrimSpace(v), nil
+			return v, nil
 		}
 	}
 
@@ -74,144 +71,7 @@ func (r *AvatarRepositoryFS) GetNameByID(ctx context.Context, id string) (string
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(a.AvatarName), nil
-}
-
-// ==============================
-// List (filter + sort + pagination)
-// ==============================
-
-func (r *AvatarRepositoryFS) List(
-	ctx context.Context,
-	filter avdom.Filter,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[avdom.Avatar], error) {
-	q := r.col().Query
-	q = applyAvatarFilterToQuery(q, filter)
-
-	field, dir := mapAvatarSort(sort)
-	q = q.OrderBy(field, dir).OrderBy("id", firestore.Asc)
-
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	if perPage > 200 {
-		perPage = 200
-	}
-	number := page.Number
-	if number <= 0 {
-		number = 1
-	}
-	offset := (number - 1) * perPage
-
-	if offset > 0 {
-		q = q.Offset(offset)
-	}
-	q = q.Limit(perPage)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	items := make([]avdom.Avatar, 0, perPage)
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return common.PageResult[avdom.Avatar]{}, err
-		}
-		a, err := r.docToDomain(doc)
-		if err != nil {
-			return common.PageResult[avdom.Avatar]{}, err
-		}
-		// SearchQuery / Deleted / CreatedFrom/To / UpdatedFrom/To は
-		// Firestore クエリで表現しきれないのでアプリ側で best-effort 絞り込み
-		if !matchFilterPostLoad(a, filter) {
-			continue
-		}
-		items = append(items, a)
-	}
-
-	// NOTE: Firestore で厳密な TotalCount を取るには別クエリ/集計が必要。
-	totalCount := len(items)
-
-	return common.PageResult[avdom.Avatar]{
-		Items:      items,
-		TotalCount: totalCount,
-		TotalPages: number, // best-effort
-		Page:       number,
-		PerPage:    perPage,
-	}, nil
-}
-
-// ==============================
-// ListByCursor (simple id-based cursor)
-// ==============================
-
-func (r *AvatarRepositoryFS) ListByCursor(
-	ctx context.Context,
-	filter avdom.Filter,
-	sort common.Sort,
-	cpage common.CursorPage,
-) (common.CursorPageResult[avdom.Avatar], error) {
-	q := r.col().Query
-	q = applyAvatarFilterToQuery(q, filter)
-
-	field, dir := mapAvatarSort(sort)
-	q = q.OrderBy(field, dir).OrderBy("id", firestore.Asc)
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	if after := strings.TrimSpace(cpage.After); after != "" {
-		// 単純に id をカーソルとする実装（厳密にやる場合は Snapshot ベースにする）
-		q = q.StartAfter(after)
-	}
-
-	q = q.Limit(limit + 1)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	var (
-		items  []avdom.Avatar
-		lastID string
-	)
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return common.CursorPageResult[avdom.Avatar]{}, err
-		}
-		a, err := r.docToDomain(doc)
-		if err != nil {
-			return common.CursorPageResult[avdom.Avatar]{}, err
-		}
-		if !matchFilterPostLoad(a, filter) {
-			continue
-		}
-		items = append(items, a)
-		lastID = a.ID
-	}
-
-	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		next = &lastID
-	}
-
-	return common.CursorPageResult[avdom.Avatar]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
-	}, nil
+	return a.AvatarName, nil
 }
 
 // ==============================
@@ -219,7 +79,6 @@ func (r *AvatarRepositoryFS) ListByCursor(
 // ==============================
 
 func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avatar, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -239,7 +98,6 @@ func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avat
 // ==============================
 
 func (r *AvatarRepositoryFS) GetByWalletAddress(ctx context.Context, wallet string) (avdom.Avatar, error) {
-	wallet = strings.TrimSpace(wallet)
 	if wallet == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -264,7 +122,6 @@ func (r *AvatarRepositoryFS) GetByWalletAddress(ctx context.Context, wallet stri
 // Avatar エンティティに FirebaseUID フィールドが無い前提のため、
 // Firestore の "userId" を Firebase UID として扱う。
 func (r *AvatarRepositoryFS) GetByFirebaseUID(ctx context.Context, uid string) (avdom.Avatar, error) {
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -288,7 +145,6 @@ func (r *AvatarRepositoryFS) GetByFirebaseUID(ctx context.Context, uid string) (
 // ==============================
 
 func (r *AvatarRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, nil
 	}
@@ -316,7 +172,7 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 	}
 
 	var ref *firestore.DocumentRef
-	if strings.TrimSpace(a.ID) == "" {
+	if a.ID == "" {
 		ref = r.col().NewDoc()
 		a.ID = ref.ID
 	} else {
@@ -349,7 +205,6 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 // - 空文字/nil で walletAddress を消すことも許可しない。
 // - 競合を避けるため walletAddress を含む更新は Transaction で行う。
 func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.AvatarPatch) (avdom.Avatar, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -357,7 +212,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 
 	// walletAddress を含む場合は transaction で「未設定ならセット」を保証
 	if patch.WalletAddress != nil {
-		want := strings.TrimSpace(*patch.WalletAddress)
+		want := *patch.WalletAddress
 		if want == "" {
 			return avdom.Avatar{}, errInvalidWalletAddr
 		}
@@ -367,9 +222,9 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 		}
 
 		// sanitize optional strings (empty -> nil)
-		sAvatarIcon := trimPtr(patch.AvatarIcon)
-		sProfile := trimPtr(patch.Profile)
-		sExternalLink := trimPtr(patch.ExternalLink)
+		sAvatarIcon := nilIfEmptyPtr(patch.AvatarIcon)
+		sProfile := nilIfEmptyPtr(patch.Profile)
+		sExternalLink := nilIfEmptyPtr(patch.ExternalLink)
 
 		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 			snap, err := tx.Get(ref)
@@ -381,7 +236,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 			}
 
 			// 既に walletAddress があるなら上書き禁止
-			existing := getStringFieldTrimmed(snap, "walletAddress")
+			existing := getStringField(snap, "walletAddress")
 			if existing != "" {
 				// 既に同じ値が入っている場合も「もう開設済み」として Conflict 扱い
 				return errWalletAlreadyBound
@@ -398,7 +253,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 			if patch.AvatarName != nil {
 				updates = append(updates, firestore.Update{
 					Path:  "avatarName",
-					Value: strings.TrimSpace(*patch.AvatarName),
+					Value: *patch.AvatarName,
 				})
 			}
 
@@ -507,7 +362,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 	if patch.AvatarName != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "avatarName",
-			Value: strings.TrimSpace(*patch.AvatarName),
+			Value: *patch.AvatarName,
 		})
 	}
 
@@ -586,7 +441,6 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 // ==============================
 
 func (r *AvatarRepositoryFS) Delete(ctx context.Context, id string) error {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return errNotFound
 	}
@@ -614,7 +468,7 @@ func (r *AvatarRepositoryFS) Save(ctx context.Context, a avdom.Avatar, _ *avdom.
 	}
 
 	var ref *firestore.DocumentRef
-	if strings.TrimSpace(a.ID) == "" {
+	if a.ID == "" {
 		ref = r.col().NewDoc()
 		a.ID = ref.ID
 	} else {
@@ -660,26 +514,26 @@ func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom
 
 	a := avdom.Avatar{
 		ID:         doc.Ref.ID,
-		UserID:     strings.TrimSpace(raw.UserID),
-		AvatarName: strings.TrimSpace(raw.AvatarName),
+		UserID:     raw.UserID,
+		AvatarName: raw.AvatarName,
 		CreatedAt:  raw.CreatedAt.UTC(),
 		UpdatedAt:  raw.UpdatedAt.UTC(),
 	}
 
-	if raw.AvatarIcon != nil && strings.TrimSpace(*raw.AvatarIcon) != "" {
-		v := strings.TrimSpace(*raw.AvatarIcon)
+	if raw.AvatarIcon != nil && *raw.AvatarIcon != "" {
+		v := *raw.AvatarIcon
 		a.AvatarIcon = &v
 	}
-	if raw.WalletAddress != nil && strings.TrimSpace(*raw.WalletAddress) != "" {
-		v := strings.TrimSpace(*raw.WalletAddress)
+	if raw.WalletAddress != nil && *raw.WalletAddress != "" {
+		v := *raw.WalletAddress
 		a.WalletAddress = &v
 	}
-	if raw.Profile != nil && strings.TrimSpace(*raw.Profile) != "" {
-		v := strings.TrimSpace(*raw.Profile)
+	if raw.Profile != nil && *raw.Profile != "" {
+		v := *raw.Profile
 		a.Profile = &v
 	}
-	if raw.ExternalLink != nil && strings.TrimSpace(*raw.ExternalLink) != "" {
-		v := strings.TrimSpace(*raw.ExternalLink)
+	if raw.ExternalLink != nil && *raw.ExternalLink != "" {
+		v := *raw.ExternalLink
 		a.ExternalLink = &v
 	}
 	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
@@ -693,23 +547,23 @@ func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom
 func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
 	data := map[string]any{
 		// ✅ userId は Firebase UID を格納している前提
-		"userId":     strings.TrimSpace(a.UserID),
-		"avatarName": strings.TrimSpace(a.AvatarName),
+		"userId":     a.UserID,
+		"avatarName": a.AvatarName,
 		"createdAt":  a.CreatedAt.UTC(),
 		"updatedAt":  a.UpdatedAt.UTC(),
 	}
 
-	if a.AvatarIcon != nil && strings.TrimSpace(*a.AvatarIcon) != "" {
-		data["avatarIcon"] = strings.TrimSpace(*a.AvatarIcon)
+	if a.AvatarIcon != nil && *a.AvatarIcon != "" {
+		data["avatarIcon"] = *a.AvatarIcon
 	}
-	if a.WalletAddress != nil && strings.TrimSpace(*a.WalletAddress) != "" {
-		data["walletAddress"] = strings.TrimSpace(*a.WalletAddress)
+	if a.WalletAddress != nil && *a.WalletAddress != "" {
+		data["walletAddress"] = *a.WalletAddress
 	}
-	if a.Profile != nil && strings.TrimSpace(*a.Profile) != "" {
-		data["profile"] = strings.TrimSpace(*a.Profile)
+	if a.Profile != nil && *a.Profile != "" {
+		data["profile"] = *a.Profile
 	}
-	if a.ExternalLink != nil && strings.TrimSpace(*a.ExternalLink) != "" {
-		data["externalLink"] = strings.TrimSpace(*a.ExternalLink)
+	if a.ExternalLink != nil && *a.ExternalLink != "" {
+		data["externalLink"] = *a.ExternalLink
 	}
 	if a.DeletedAt != nil && !a.DeletedAt.IsZero() {
 		data["deletedAt"] = a.DeletedAt.UTC()
@@ -719,161 +573,22 @@ func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
 }
 
 // ==============================
-// Query helpers
-// ==============================
-
-func applyAvatarFilterToQuery(q firestore.Query, f avdom.Filter) firestore.Query {
-	// Firestore 制約のため、代表的な条件のみをクエリに反映。
-	if f.UserID != nil && strings.TrimSpace(*f.UserID) != "" {
-		q = q.Where("userId", "==", strings.TrimSpace(*f.UserID))
-	}
-
-	// ✅ 互換: Filter.FirebaseUID が渡された場合も userId に寄せる（= Firebase UID を userId に格納している前提）
-	if f.FirebaseUID != nil && strings.TrimSpace(*f.FirebaseUID) != "" {
-		q = q.Where("userId", "==", strings.TrimSpace(*f.FirebaseUID))
-	}
-
-	if f.WalletAddress != nil && strings.TrimSpace(*f.WalletAddress) != "" {
-		q = q.Where("walletAddress", "==", strings.TrimSpace(*f.WalletAddress))
-	}
-	if f.JoinedFrom != nil {
-		q = q.Where("createdAt", ">=", f.JoinedFrom.UTC())
-	}
-	if f.JoinedTo != nil {
-		q = q.Where("createdAt", "<", f.JoinedTo.UTC())
-	}
-	// Deleted / SearchQuery / CreatedFrom/To / UpdatedFrom/To は post-load で対応
-	return q
-}
-
-// Firestoreで表現しなかった条件を post-load で絞り込み
-func matchFilterPostLoad(a avdom.Avatar, f avdom.Filter) bool {
-	// Deleted
-	if f.Deleted != nil {
-		if *f.Deleted {
-			if a.DeletedAt == nil {
-				return false
-			}
-		} else {
-			if a.DeletedAt != nil {
-				return false
-			}
-		}
-	}
-
-	// Created/Updated ranges
-	if f.CreatedFrom != nil && a.CreatedAt.Before(f.CreatedFrom.UTC()) {
-		return false
-	}
-	if f.CreatedTo != nil && a.CreatedAt.After(f.CreatedTo.UTC()) {
-		return false
-	}
-	if f.UpdatedFrom != nil && a.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
-		return false
-	}
-	if f.UpdatedTo != nil && a.UpdatedAt.After(f.UpdatedTo.UTC()) {
-		return false
-	}
-
-	// SearchQuery: post-load filtering
-	sq := strings.TrimSpace(f.SearchQuery)
-	if sq != "" {
-		q := strings.ToLower(sq)
-
-		id := strings.ToLower(strings.TrimSpace(a.ID))
-		uid := strings.ToLower(strings.TrimSpace(a.UserID))
-		name := strings.ToLower(strings.TrimSpace(a.AvatarName))
-
-		wallet := ""
-		if a.WalletAddress != nil {
-			wallet = strings.ToLower(strings.TrimSpace(*a.WalletAddress))
-		}
-		profile := ""
-		if a.Profile != nil {
-			profile = strings.ToLower(strings.TrimSpace(*a.Profile))
-		}
-		link := ""
-		if a.ExternalLink != nil {
-			link = strings.ToLower(strings.TrimSpace(*a.ExternalLink))
-		}
-		icon := ""
-		if a.AvatarIcon != nil {
-			icon = strings.ToLower(strings.TrimSpace(*a.AvatarIcon))
-		}
-
-		if !strings.Contains(id, q) &&
-			!strings.Contains(uid, q) &&
-			!strings.Contains(name, q) &&
-			!strings.Contains(wallet, q) &&
-			!strings.Contains(profile, q) &&
-			!strings.Contains(link, q) &&
-			!strings.Contains(icon, q) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func mapAvatarSort(s common.Sort) (field string, dir firestore.Direction) {
-	col := strings.ToLower(string(s.Column))
-	switch col {
-	case "avatarname":
-		field = "avatarName"
-	case "createdat":
-		field = "createdAt"
-	case "updatedat":
-		field = "updatedAt"
-	default:
-		field = "createdAt"
-	}
-
-	if strings.EqualFold(string(s.Order), "asc") {
-		dir = firestore.Asc
-	} else {
-		dir = firestore.Desc
-	}
-	return
-}
-
-// ==============================
 // small utils
 // ==============================
 
 func optionalString(v string) any {
-	s := strings.TrimSpace(v)
-	if s == "" {
+	if v == "" {
 		return nil
 	}
-	return s
+	return v
 }
 
-func trimPtr(p *string) *string {
+func nilIfEmptyPtr(p *string) *string {
 	if p == nil {
 		return nil
 	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
+	if *p == "" {
 		return nil
 	}
-	return &s
-}
-
-func getStringFieldTrimmed(snap *firestore.DocumentSnapshot, field string) string {
-	if snap == nil {
-		return ""
-	}
-	m := snap.Data()
-	if m == nil {
-		return ""
-	}
-	v, ok := m[field]
-	if !ok || v == nil {
-		return ""
-	}
-	str, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(str)
+	return p
 }

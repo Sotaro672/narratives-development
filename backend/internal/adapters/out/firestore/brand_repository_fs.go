@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -49,7 +48,7 @@ func (r *BrandRepositoryFS) Create(ctx context.Context, b branddom.Brand) (brand
 	}
 
 	var ref *firestore.DocumentRef
-	if strings.TrimSpace(b.ID) == "" {
+	if b.ID == "" {
 		ref = r.col().NewDoc()
 		b.ID = ref.ID
 	} else {
@@ -77,7 +76,6 @@ func (r *BrandRepositoryFS) Create(ctx context.Context, b branddom.Brand) (brand
 // ========================================
 
 func (r *BrandRepositoryFS) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return branddom.Brand{}, branddom.ErrNotFound
 	}
@@ -97,7 +95,6 @@ func (r *BrandRepositoryFS) GetByID(ctx context.Context, id string) (branddom.Br
 // ========================================
 
 func (r *BrandRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, nil
 	}
@@ -112,36 +109,10 @@ func (r *BrandRepositoryFS) Exists(ctx context.Context, id string) (bool, error)
 }
 
 // ========================================
-// Count（インターフェース外だが残置）
-// ========================================
-
-func (r *BrandRepositoryFS) Count(ctx context.Context, filter branddom.Filter) (int, error) {
-	q := r.col().Query
-	q = applyBrandFilterToQuery(q, filter)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	count := 0
-	for {
-		_, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		count++
-	}
-	return count, nil
-}
-
-// ========================================
 // Update (partial)
 // ========================================
 
 func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddom.BrandPatch) (branddom.Brand, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return branddom.Brand{}, branddom.ErrNotFound
 	}
@@ -158,13 +129,13 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 	if patch.CompanyID != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "companyId",
-			Value: strings.TrimSpace(*patch.CompanyID),
+			Value: *patch.CompanyID,
 		})
 	}
 	if patch.Name != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "name",
-			Value: strings.TrimSpace(*patch.Name),
+			Value: *patch.Name,
 		})
 	}
 	if patch.Description != nil {
@@ -286,7 +257,6 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 // ========================================
 
 func (r *BrandRepositoryFS) Delete(ctx context.Context, id string) error {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return branddom.ErrNotFound
 	}
@@ -398,7 +368,7 @@ func (r *BrandRepositoryFS) Save(
 	}
 
 	var ref *firestore.DocumentRef
-	if strings.TrimSpace(b.ID) == "" {
+	if b.ID == "" {
 		ref = r.col().NewDoc()
 		b.ID = ref.ID
 	} else {
@@ -446,13 +416,13 @@ func (r *BrandRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (brandd
 
 	b := branddom.Brand{
 		ID:            doc.Ref.ID,
-		CompanyID:     strings.TrimSpace(raw.CompanyID),
-		Name:          strings.TrimSpace(raw.Name),
-		Description:   strings.TrimSpace(raw.Description),
-		URL:           strings.TrimSpace(raw.WebsiteURL),
+		CompanyID:     raw.CompanyID,
+		Name:          raw.Name,
+		Description:   raw.Description,
+		URL:           raw.WebsiteURL,
 		IsActive:      raw.IsActive,
 		ManagerID:     fscommon.TrimPtr(raw.ManagerID),
-		WalletAddress: strings.TrimSpace(raw.WalletAddress),
+		WalletAddress: raw.WalletAddress,
 		CreatedAt:     raw.CreatedAt.UTC(),
 		CreatedBy:     fscommon.TrimPtr(raw.CreatedBy),
 		UpdatedBy:     fscommon.TrimPtr(raw.UpdatedBy),
@@ -473,32 +443,32 @@ func (r *BrandRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (brandd
 
 func (r *BrandRepositoryFS) domainToDocData(b branddom.Brand) map[string]any {
 	data := map[string]any{
-		"companyId":     strings.TrimSpace(b.CompanyID),
-		"name":          strings.TrimSpace(b.Name),
-		"description":   strings.TrimSpace(b.Description),
-		"websiteUrl":    strings.TrimSpace(b.URL),
+		"companyId":     b.CompanyID,
+		"name":          b.Name,
+		"description":   b.Description,
+		"websiteUrl":    b.URL,
 		"isActive":      b.IsActive,
-		"walletAddress": strings.TrimSpace(b.WalletAddress),
+		"walletAddress": b.WalletAddress,
 		"createdAt":     b.CreatedAt.UTC(),
 	}
 
-	if b.ManagerID != nil && strings.TrimSpace(*b.ManagerID) != "" {
-		data["managerId"] = strings.TrimSpace(*b.ManagerID)
+	if b.ManagerID != nil && *b.ManagerID != "" {
+		data["managerId"] = *b.ManagerID
 	}
-	if b.CreatedBy != nil && strings.TrimSpace(*b.CreatedBy) != "" {
-		data["createdBy"] = strings.TrimSpace(*b.CreatedBy)
+	if b.CreatedBy != nil && *b.CreatedBy != "" {
+		data["createdBy"] = *b.CreatedBy
 	}
 	if b.UpdatedAt != nil && !b.UpdatedAt.IsZero() {
 		data["updatedAt"] = b.UpdatedAt.UTC()
 	}
-	if b.UpdatedBy != nil && strings.TrimSpace(*b.UpdatedBy) != "" {
-		data["updatedBy"] = strings.TrimSpace(*b.UpdatedBy)
+	if b.UpdatedBy != nil && *b.UpdatedBy != "" {
+		data["updatedBy"] = *b.UpdatedBy
 	}
 	if b.DeletedAt != nil && !b.DeletedAt.IsZero() {
 		data["deletedAt"] = b.DeletedAt.UTC()
 	}
-	if b.DeletedBy != nil && strings.TrimSpace(*b.DeletedBy) != "" {
-		data["deletedBy"] = strings.TrimSpace(*b.DeletedBy)
+	if b.DeletedBy != nil && *b.DeletedBy != "" {
+		data["deletedBy"] = *b.DeletedBy
 	}
 
 	return data
@@ -510,17 +480,17 @@ func (r *BrandRepositoryFS) domainToDocData(b branddom.Brand) map[string]any {
 
 func applyBrandFilterToQuery(q firestore.Query, f branddom.Filter) firestore.Query {
 
-	if f.CompanyID != nil && strings.TrimSpace(*f.CompanyID) != "" {
-		q = q.Where("companyId", "==", strings.TrimSpace(*f.CompanyID))
+	if f.CompanyID != nil && *f.CompanyID != "" {
+		q = q.Where("companyId", "==", *f.CompanyID)
 	}
-	if f.ManagerID != nil && strings.TrimSpace(*f.ManagerID) != "" {
-		q = q.Where("managerId", "==", strings.TrimSpace(*f.ManagerID))
+	if f.ManagerID != nil && *f.ManagerID != "" {
+		q = q.Where("managerId", "==", *f.ManagerID)
 	}
 	if f.IsActive != nil {
 		q = q.Where("isActive", "==", *f.IsActive)
 	}
-	if f.WalletAddress != nil && strings.TrimSpace(*f.WalletAddress) != "" {
-		q = q.Where("walletAddress", "==", strings.TrimSpace(*f.WalletAddress))
+	if f.WalletAddress != nil && *f.WalletAddress != "" {
+		q = q.Where("walletAddress", "==", *f.WalletAddress)
 	}
 
 	return q
@@ -534,7 +504,7 @@ func optionalStringValue(p *string) any {
 	if p == nil {
 		return nil
 	}
-	s := strings.TrimSpace(*p)
+	s := *p
 	if s == "" {
 		return nil
 	}

@@ -70,12 +70,12 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 		return listimgdom.ListImage{}, errors.New("firestore client is nil")
 	}
 
-	listID := strings.TrimSpace(img.ListID)
+	listID := img.ListID
 	if listID == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidListID
 	}
 
-	imageID := strings.TrimSpace(img.ID)
+	imageID := img.ID
 	if imageID == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidID
 	}
@@ -84,7 +84,7 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 	}
 
 	// ✅ canonical objectPath is required (legacy removed)
-	objectPath := strings.TrimLeft(strings.TrimSpace(img.ObjectPath), "/")
+	objectPath := strings.TrimLeft(img.ObjectPath, "/")
 	if objectPath == "" {
 		return listimgdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_required")
 	}
@@ -93,13 +93,13 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 	}
 
 	// fileName is required
-	fileName := strings.TrimSpace(img.FileName)
+	fileName := img.FileName
 	if fileName == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidFileName
 	}
 
 	// ✅ url is required (no DefaultBucket rebuild in repo)
-	u := strings.TrimSpace(img.URL)
+	u := img.URL
 	if u == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrInvalidURL
 	}
@@ -141,7 +141,7 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 			"size":          img.Size,
 			"display_order": img.DisplayOrder,
 
-			"bucket":      strings.TrimSpace(bucket),
+			"bucket":      bucket,
 			"object_path": objectPath, // ✅ canonical only
 
 			"created_at": createdAt,
@@ -186,9 +186,6 @@ func (r *ListImageRepositoryFS) Delete(ctx context.Context, listID string, image
 		return errors.New("firestore client is nil")
 	}
 
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
-
 	if listID == "" {
 		return listimgdom.ErrInvalidListID
 	}
@@ -221,7 +218,6 @@ func (r *ListImageRepositoryFS) ListByListID(ctx context.Context, listID string)
 		return nil, errors.New("firestore client is nil")
 	}
 
-	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return []listimgdom.ListImage{}, nil
 	}
@@ -267,7 +263,6 @@ func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimg
 		return listimgdom.ListImage{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return listimgdom.ListImage{}, listimgdom.ErrNotFound
 	}
@@ -315,7 +310,7 @@ func (r *ListImageRepositoryFS) GetByID(ctx context.Context, id string) (listimg
 	// derive listID from parent path (lists/{listId}/images/{imageId})
 	listID := ""
 	if doc != nil && doc.Ref != nil && doc.Ref.Parent != nil && doc.Ref.Parent.Parent != nil {
-		listID = strings.TrimSpace(doc.Ref.Parent.Parent.ID)
+		listID = doc.Ref.Parent.Parent.ID
 	}
 
 	img, ok := decodeListImageDoc(doc, listID)
@@ -351,30 +346,30 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 		return listimgdom.ListImage{}, false
 	}
 
-	listID := strings.TrimSpace(raw.ListID)
+	listID := raw.ListID
 	if listID == "" {
-		listID = strings.TrimSpace(fallbackListID)
+		listID = fallbackListID
 	}
 	if listID == "" {
 		return listimgdom.ListImage{}, false
 	}
 
 	// ✅ imageID is docID
-	imageID := strings.TrimSpace(doc.Ref.ID)
+	imageID := doc.Ref.ID
 	if imageID == "" {
 		return listimgdom.ListImage{}, false
 	}
 
 	// ✅ canonical objectPath required; if missing, rebuild canonically
-	objectPath := strings.TrimLeft(strings.TrimSpace(raw.ObjectPath), "/")
+	objectPath := strings.TrimLeft(raw.ObjectPath, "/")
 	if objectPath == "" {
 		objectPath = listimgdom.CanonicalObjectPath(listID, imageID)
 	}
 
 	// ✅ url: do not rebuild from bucket (legacy removed)
-	urlStr := strings.TrimSpace(raw.URL)
+	urlStr := raw.URL
 
-	fileName := strings.TrimSpace(raw.FileName)
+	fileName := raw.FileName
 
 	li, err := listimgdom.New(
 		imageID,
@@ -406,7 +401,7 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 // ============================================================
 
 func looksLikeCanonicalObjectPath(s string) bool {
-	p := strings.TrimLeft(strings.TrimSpace(s), "/")
+	p := strings.TrimLeft(s, "/")
 	if p == "" {
 		return false
 	}
@@ -415,14 +410,14 @@ func looksLikeCanonicalObjectPath(s string) bool {
 	if len(parts) != 4 {
 		return false
 	}
-	return strings.TrimSpace(parts[0]) == "lists" &&
-		strings.TrimSpace(parts[1]) != "" &&
-		strings.TrimSpace(parts[2]) == "images" &&
-		strings.TrimSpace(parts[3]) != ""
+	return parts[0] == "lists" &&
+		parts[1] != "" &&
+		parts[2] == "images" &&
+		parts[3] != ""
 }
 
 func splitCanonicalObjectPath(objectPath string) (listID string, imageID string, ok bool) {
-	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	p := strings.TrimLeft(objectPath, "/")
 	if p == "" {
 		return "", "", false
 	}
@@ -430,11 +425,11 @@ func splitCanonicalObjectPath(objectPath string) (listID string, imageID string,
 	if len(parts) != 4 {
 		return "", "", false
 	}
-	if strings.TrimSpace(parts[0]) != "lists" || strings.TrimSpace(parts[2]) != "images" {
+	if parts[0] != "lists" || parts[2] != "images" {
 		return "", "", false
 	}
-	listID = strings.TrimSpace(parts[1])
-	imageID = strings.TrimSpace(parts[3])
+	listID = parts[1]
+	imageID = parts[3]
 	if listID == "" || imageID == "" {
 		return "", "", false
 	}
@@ -442,9 +437,7 @@ func splitCanonicalObjectPath(objectPath string) (listID string, imageID string,
 }
 
 func isCanonicalObjectPath(objectPath string, listID string, imageID string) bool {
-	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
+	p := strings.TrimLeft(objectPath, "/")
 	if p == "" || listID == "" || imageID == "" {
 		return false
 	}

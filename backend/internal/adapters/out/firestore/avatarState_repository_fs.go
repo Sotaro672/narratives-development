@@ -4,11 +4,9 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -46,7 +44,7 @@ func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, s avatarstate.Avat
 		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: client is nil")
 	}
 
-	avatarID := strings.TrimSpace(s.ID) // ✅ docId = avatarId
+	avatarID := s.ID // ✅ docId = avatarId
 	if avatarID == "" {
 		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: id(avatarId) is empty")
 	}
@@ -58,9 +56,6 @@ func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, s avatarstate.Avat
 	if s.LastActiveAt.IsZero() {
 		s.LastActiveAt = now
 	}
-
-	// normalize
-	s.ID = avatarID
 
 	ref := r.col().Doc(avatarID)
 
@@ -118,193 +113,10 @@ func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, s avatarstate.Avat
 }
 
 // ==============================
-// List (Filter + Sort + Paging)
-// ==============================
-
-func (r *AvatarStateRepositoryFS) List(
-	ctx context.Context,
-	filter avatarstate.Filter,
-	sortOpt avatarstate.Sort,
-	page avatarstate.Page,
-) (avatarstate.PageResult[avatarstate.AvatarState], error) {
-
-	q := r.col().Query
-
-	// ✅ docId=avatarId のため、where は DocumentID を使う
-	if filter.AvatarID != nil && strings.TrimSpace(*filter.AvatarID) != "" {
-		q = q.Where(firestore.DocumentID, "==", strings.TrimSpace(*filter.AvatarID))
-	}
-	if len(filter.AvatarIDs) > 0 {
-		ids := make([]string, 0, len(filter.AvatarIDs))
-		for _, v := range filter.AvatarIDs {
-			if s := strings.TrimSpace(v); s != "" {
-				ids = append(ids, s)
-			}
-		}
-		if len(ids) > 0 && len(ids) <= 10 {
-			q = q.Where(firestore.DocumentID, "in", ids)
-		}
-	}
-
-	// Sort
-	orderField := "lastActiveAt"
-	switch strings.ToLower(string(sortOpt.Column)) {
-	case "avatarid":
-		orderField = firestore.DocumentID
-	case "followercount":
-		orderField = "followerCount"
-	case "followingcount":
-		orderField = "followingCount"
-	case "postcount":
-		orderField = "postCount"
-	case "updatedat":
-		orderField = "updatedAt"
-	case "lastactiveat":
-		orderField = "lastActiveAt"
-	default:
-		orderField = "lastActiveAt"
-	}
-
-	dir := strings.ToUpper(string(sortOpt.Order))
-	desc := dir != "" && dir != "ASC"
-	if desc {
-		q = q.OrderBy(orderField, firestore.Desc)
-	} else {
-		q = q.OrderBy(orderField, firestore.Asc)
-	}
-
-	// Paging
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	if perPage > 200 {
-		perPage = 200
-	}
-	number := page.Number
-	if number <= 0 {
-		number = 1
-	}
-	offset := (number - 1) * perPage
-	if offset > 0 {
-		q = q.Offset(offset)
-	}
-	q = q.Limit(perPage)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	var items []avatarstate.AvatarState
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return avatarstate.PageResult[avatarstate.AvatarState]{}, err
-		}
-		st, err := r.docToDomain(doc)
-		if err != nil {
-			return avatarstate.PageResult[avatarstate.AvatarState]{}, err
-		}
-		items = append(items, st)
-	}
-
-	return avatarstate.PageResult[avatarstate.AvatarState]{
-		Items:      items,
-		TotalCount: len(items),
-		TotalPages: number,
-		Page:       number,
-		PerPage:    perPage,
-	}, nil
-}
-
-// ==============================
-// ListByCursor
-// ==============================
-
-func (r *AvatarStateRepositoryFS) ListByCursor(
-	ctx context.Context,
-	filter avatarstate.Filter,
-	sortOpt avatarstate.Sort,
-	cpage avatarstate.CursorPage,
-) (avatarstate.CursorPageResult[avatarstate.AvatarState], error) {
-
-	q := r.col().Query
-
-	// ✅ docId=avatarId のため、where は DocumentID を使う
-	if filter.AvatarID != nil && strings.TrimSpace(*filter.AvatarID) != "" {
-		q = q.Where(firestore.DocumentID, "==", strings.TrimSpace(*filter.AvatarID))
-	}
-
-	// 現状は lastActiveAt ベースで cursor を回す
-	orderField := "lastActiveAt"
-	dir := strings.ToUpper(string(sortOpt.Order))
-	desc := dir != "" && dir != "ASC"
-	if desc {
-		q = q.OrderBy(orderField, firestore.Desc)
-	} else {
-		q = q.OrderBy(orderField, firestore.Asc)
-	}
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	if after := strings.TrimSpace(cpage.After); after != "" {
-		snap, err := r.col().Doc(after).Get(ctx)
-		if err == nil {
-			if v, ok := snap.Data()[orderField]; ok {
-				q = q.StartAfter(v)
-			}
-		}
-	}
-
-	q = q.Limit(limit + 1)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	var (
-		items  []avatarstate.AvatarState
-		lastID string
-	)
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return avatarstate.CursorPageResult[avatarstate.AvatarState]{}, err
-		}
-		st, err := r.docToDomain(doc)
-		if err != nil {
-			return avatarstate.CursorPageResult[avatarstate.AvatarState]{}, err
-		}
-		items = append(items, st)
-		lastID = st.ID
-	}
-
-	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		next = &lastID
-	}
-
-	return avatarstate.CursorPageResult[avatarstate.AvatarState]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
-	}, nil
-}
-
-// ==============================
 // GetByID / GetByAvatarID
 // ==============================
 
 func (r *AvatarStateRepositoryFS) GetByID(ctx context.Context, id string) (avatarstate.AvatarState, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return avatarstate.AvatarState{}, avatarstate.ErrNotFound
 	}
@@ -325,11 +137,10 @@ func (r *AvatarStateRepositoryFS) GetByAvatarID(ctx context.Context, avatarID st
 }
 
 // ==============================
-// Exists / Count
+// Exists
 // ==============================
 
 func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, nil
 	}
@@ -343,24 +154,6 @@ func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, id string) (bool, 
 	return true, nil
 }
 
-func (r *AvatarStateRepositoryFS) Count(ctx context.Context, _ avatarstate.Filter) (int, error) {
-	iter := r.col().Documents(ctx)
-	defer iter.Stop()
-
-	count := 0
-	for {
-		_, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		count++
-	}
-	return count, nil
-}
-
 // ==============================
 // Create / Update / Delete / Save
 // ==============================
@@ -372,7 +165,7 @@ func (r *AvatarStateRepositoryFS) Create(ctx context.Context, s avatarstate.Avat
 		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: client is nil")
 	}
 
-	avatarID := strings.TrimSpace(s.ID)
+	avatarID := s.ID
 	if avatarID == "" {
 		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: id(avatarId) is empty")
 	}
@@ -384,8 +177,6 @@ func (r *AvatarStateRepositoryFS) Create(ctx context.Context, s avatarstate.Avat
 	if s.LastActiveAt.IsZero() {
 		s.LastActiveAt = now
 	}
-
-	s.ID = avatarID
 
 	ref := r.col().Doc(avatarID)
 
@@ -400,11 +191,11 @@ func (r *AvatarStateRepositoryFS) Create(ctx context.Context, s avatarstate.Avat
 }
 
 func (r *AvatarStateRepositoryFS) Update(ctx context.Context, id string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
-	return r.updateBy(ctx, r.col().Doc(strings.TrimSpace(id)), patch)
+	return r.updateBy(ctx, r.col().Doc(id), patch)
 }
 
 func (r *AvatarStateRepositoryFS) UpdateByAvatarID(ctx context.Context, avatarID string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
-	return r.updateBy(ctx, r.col().Doc(strings.TrimSpace(avatarID)), patch)
+	return r.updateBy(ctx, r.col().Doc(avatarID), patch)
 }
 
 func (r *AvatarStateRepositoryFS) updateBy(
@@ -413,7 +204,7 @@ func (r *AvatarStateRepositoryFS) updateBy(
 	patch avatarstate.AvatarStatePatch,
 ) (avatarstate.AvatarState, error) {
 
-	if ref == nil || strings.TrimSpace(ref.ID) == "" {
+	if ref == nil || ref.ID == "" {
 		return avatarstate.AvatarState{}, avatarstate.ErrNotFound
 	}
 
@@ -483,7 +274,6 @@ func (r *AvatarStateRepositoryFS) updateBy(
 }
 
 func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, id string) error {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return avatarstate.ErrNotFound
 	}
@@ -506,7 +296,7 @@ func (r *AvatarStateRepositoryFS) Save(ctx context.Context, s avatarstate.Avatar
 		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: client is nil")
 	}
 
-	avatarID := strings.TrimSpace(s.ID)
+	avatarID := s.ID
 	if avatarID == "" {
 		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: id(avatarId) is empty")
 	}
@@ -518,8 +308,6 @@ func (r *AvatarStateRepositoryFS) Save(ctx context.Context, s avatarstate.Avatar
 	if s.LastActiveAt.IsZero() {
 		s.LastActiveAt = now
 	}
-
-	s.ID = avatarID
 
 	ref := r.col().Doc(avatarID)
 
@@ -546,7 +334,7 @@ func (r *AvatarStateRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (
 		return avatarstate.AvatarState{}, err
 	}
 
-	avatarID := strings.TrimSpace(doc.Ref.ID)
+	avatarID := doc.Ref.ID
 
 	return avatarstate.New(
 		avatarID, // id (=avatarId)

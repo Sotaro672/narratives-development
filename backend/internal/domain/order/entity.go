@@ -126,13 +126,15 @@ func New(
 		AvatarID: strings.TrimSpace(avatarID), // ✅ NEW
 		CartID:   strings.TrimSpace(cartID),
 
-		ShippingSnapshot: normalizeShippingSnapshot(shippingSnapshot),
-		BillingSnapshot:  normalizeBillingSnapshot(billingSnapshot),
+		// normalizeShippingSnapshot / normalizeBillingSnapshot を使わない前提なのでそのまま保持
+		ShippingSnapshot: shippingSnapshot,
+		BillingSnapshot:  billingSnapshot,
 
 		// ✅ paid は起票時 false
 		Paid: false,
 
-		Items:     normalizeItems(items),
+		// normalizeItems を使わない前提なのでそのまま保持（必要なら caller 側で正規化）
+		Items:     items,
 		CreatedAt: createdAt.UTC(),
 	}
 	if err := o.validate(); err != nil {
@@ -146,17 +148,15 @@ func New(
 // ========================================
 
 func (o *Order) ReplaceItems(items []OrderItemSnapshot) error {
-	ns := normalizeItems(items)
-	if err := validateItems(ns); err != nil {
+	if err := validateItems(items); err != nil {
 		return err
 	}
-	o.Items = ns
+	o.Items = items
 	return nil
 }
 
 // ✅ Replace AddressID update with Snapshot update
 func (o *Order) UpdateShippingSnapshot(s ShippingSnapshot) error {
-	s = normalizeShippingSnapshot(s)
 	if err := validateShippingSnapshot(s); err != nil {
 		return err
 	}
@@ -165,7 +165,6 @@ func (o *Order) UpdateShippingSnapshot(s ShippingSnapshot) error {
 }
 
 func (o *Order) UpdateBillingSnapshot(b BillingSnapshot) error {
-	b = normalizeBillingSnapshot(b)
 	if err := validateBillingSnapshot(b); err != nil {
 		return err
 	}
@@ -292,61 +291,4 @@ func validateItems(items []OrderItemSnapshot) error {
 		// 厳密にしたい場合はここでエラーにしてOK
 	}
 	return nil
-}
-
-// ========================================
-// Helpers
-// ========================================
-
-func normalizeShippingSnapshot(s ShippingSnapshot) ShippingSnapshot {
-	s.ZipCode = strings.TrimSpace(s.ZipCode)
-	s.State = strings.TrimSpace(s.State)
-	s.City = strings.TrimSpace(s.City)
-	s.Street = strings.TrimSpace(s.Street)
-	s.Street2 = strings.TrimSpace(s.Street2)
-	s.Country = strings.TrimSpace(s.Country)
-	return s
-}
-
-func normalizeBillingSnapshot(b BillingSnapshot) BillingSnapshot {
-	b.Last4 = strings.TrimSpace(b.Last4)
-	b.CardHolderName = strings.TrimSpace(b.CardHolderName)
-	return b
-}
-
-func normalizeItems(items []OrderItemSnapshot) []OrderItemSnapshot {
-	out := make([]OrderItemSnapshot, 0, len(items))
-	for _, it := range items {
-		n := OrderItemSnapshot{
-			ModelID:     strings.TrimSpace(it.ModelID),
-			InventoryID: strings.TrimSpace(it.InventoryID),
-			ListID:      strings.TrimSpace(it.ListID), // ✅ NEW
-			Qty:         it.Qty,
-			Price:       it.Price,
-
-			// ✅ NEW: 起票時の item transfer 状態は false / nil
-			Transferred:   false,
-			TransferredAt: nil,
-		}
-
-		// 既存入力に transferred が入っている場合は尊重（再構築やimport時）
-		// ただし transferredAt は transferred と整合するように正規化
-		if it.Transferred {
-			n.Transferred = true
-			if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
-				t := it.TransferredAt.UTC()
-				n.TransferredAt = &t
-			} else {
-				// transferred=true で時刻が無い場合は nil のまま（repository/update 側で補完してもOK）
-				n.TransferredAt = nil
-			}
-		} else {
-			// transferred=false の場合、TransferredAt は基本 nil に寄せる
-			n.TransferredAt = nil
-		}
-
-		// 空は validateItems で弾くのでここでは落とさない
-		out = append(out, n)
-	}
-	return out
 }

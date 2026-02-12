@@ -41,9 +41,9 @@ func (uc *InventoryUsecase) UpsertFromMintByModel(
 		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
 	}
 
-	tbID := strings.TrimSpace(tokenBlueprintID)
-	pbID := strings.TrimSpace(productBlueprintID)
-	mID := strings.TrimSpace(modelID)
+	tbID := tokenBlueprintID
+	pbID := productBlueprintID
+	mID := modelID
 
 	if tbID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
@@ -99,7 +99,7 @@ func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, 
 		return errors.New("inventory usecase/repo is nil")
 	}
 
-	oid := strings.TrimSpace(orderID)
+	oid := orderID
 	if oid == "" {
 		return errors.New("inventory reserve: invalid orderId")
 	}
@@ -109,8 +109,8 @@ func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, 
 	}
 
 	for _, it := range items {
-		invID := strings.TrimSpace(it.InventoryID)
-		mid := strings.TrimSpace(it.ModelID)
+		invID := it.InventoryID
+		mid := it.ModelID
 		qty := it.Qty
 		if invID == "" || mid == "" || qty <= 0 {
 			return errors.New("inventory reserve: invalid item")
@@ -148,7 +148,7 @@ func (uc *InventoryUsecase) Update(ctx context.Context, m invdom.Mint) (invdom.M
 	if uc == nil || uc.repo == nil {
 		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
 	}
-	if strings.TrimSpace(getStringFieldIfExists(m, "ID")) == "" && strings.TrimSpace(getStringFieldIfExists(m, "Id")) == "" {
+	if getStringFieldIfExists(m, "ID") == "" && getStringFieldIfExists(m, "Id") == "" {
 		// 基本は ID フィールドを想定するが、念のため Id も見る
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
@@ -159,7 +159,6 @@ func (uc *InventoryUsecase) Delete(ctx context.Context, id string) error {
 	if uc == nil || uc.repo == nil {
 		return errors.New("inventory usecase/repo is nil")
 	}
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return invdom.ErrInvalidMintID
 	}
@@ -174,7 +173,6 @@ func (uc *InventoryUsecase) GetByID(ctx context.Context, id string) (invdom.Mint
 	if uc == nil || uc.repo == nil {
 		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
 	}
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
@@ -215,7 +213,6 @@ func (uc *InventoryUsecase) ListByTokenAndModelID(ctx context.Context, tokenBlue
 
 func buildInventoryID(productBlueprintID, tokenBlueprintID string) string {
 	sanitize := func(s string) string {
-		s = strings.TrimSpace(s)
 		// Firestore docId に "/" が入ると階層扱いになるので repo と揃えて潰す
 		s = strings.ReplaceAll(s, "/", "_")
 		return s
@@ -229,7 +226,6 @@ func normalizeIDs(raw []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
 	for _, s := range raw {
-		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
@@ -252,8 +248,6 @@ func reserveStockByModelOrder(m *invdom.Mint, modelID, orderID string, qty int) 
 	if m == nil {
 		return errors.New("mint is nil")
 	}
-	modelID = strings.TrimSpace(modelID)
-	orderID = strings.TrimSpace(orderID)
 	if modelID == "" {
 		return invdom.ErrInvalidModelID
 	}
@@ -431,7 +425,7 @@ func getStringFieldIfExists(target any, fieldName string) string {
 		return ""
 	}
 	if f.Kind() == reflect.String {
-		return strings.TrimSpace(f.String())
+		return f.String()
 	}
 	return ""
 }

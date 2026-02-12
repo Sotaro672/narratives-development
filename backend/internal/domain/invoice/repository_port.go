@@ -45,17 +45,12 @@ type SaveOptions = common.SaveOptions
 type Repository interface {
 	// Queries
 	GetByOrderID(ctx context.Context, orderID string) (Invoice, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
 
 	// Commands
 	Create(ctx context.Context, inv Invoice) (Invoice, error)
 	Save(ctx context.Context, inv Invoice, opts *SaveOptions) (Invoice, error)
 	DeleteByOrderID(ctx context.Context, orderID string) error
-
-	// Optional (testing/dev)
-	Reset(ctx context.Context) error
 }
 
 // Standard repository errors

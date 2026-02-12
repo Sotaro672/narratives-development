@@ -62,7 +62,7 @@ type Wallet struct {
 // It sets LastUpdatedAt to updatedAt, and Status to 'active'.
 func New(addr string, tokens []string, updatedAt time.Time) (Wallet, error) {
 	w := Wallet{
-		WalletAddress: strings.TrimSpace(addr),
+		WalletAddress: addr,
 		Tokens:        nil,
 		LastUpdatedAt: updatedAt.UTC(),
 		Status:        StatusActive,
@@ -79,7 +79,7 @@ func New(addr string, tokens []string, updatedAt time.Time) (Wallet, error) {
 // NewFull constructs a Wallet with all fields explicitly provided.
 func NewFull(addr string, tokens []string, lastUpdatedAt time.Time, status WalletStatus) (Wallet, error) {
 	w := Wallet{
-		WalletAddress: strings.TrimSpace(addr),
+		WalletAddress: addr,
 		Tokens:        nil,
 		LastUpdatedAt: lastUpdatedAt.UTC(),
 		Status:        status,
@@ -114,7 +114,7 @@ func NewFromStringTimes(addr string, tokens []string, lastUpdatedAt, status stri
 	if err != nil {
 		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidLastUpdatedAt, err)
 	}
-	ws := WalletStatus(strings.TrimSpace(status))
+	ws := WalletStatus(status)
 	if !isValidStatus(ws) {
 		return Wallet{}, ErrInvalidStatus
 	}

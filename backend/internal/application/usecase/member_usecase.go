@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -31,15 +30,6 @@ type MemberUsecase struct {
 	invitationMailer InvitationMailer
 }
 
-// 既存互換の最小構成
-func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
-	return &MemberUsecase{
-		repo: repo,
-		now:  time.Now,
-	}
-}
-
-// Mailer 付き構成
 func NewMemberUsecaseWithMailer(repo memdom.Repository, mailer InvitationMailer) *MemberUsecase {
 	return &MemberUsecase{
 		repo:             repo,
@@ -53,15 +43,15 @@ func NewMemberUsecaseWithMailer(repo memdom.Repository, mailer InvitationMailer)
 // -----------------------------------------------------------------------------
 
 func (u *MemberUsecase) GetByID(ctx context.Context, id string) (memdom.Member, error) {
-	return u.repo.GetByID(ctx, strings.TrimSpace(id))
+	return u.repo.GetByID(ctx, id)
 }
 
 func (u *MemberUsecase) GetByEmail(ctx context.Context, email string) (memdom.Member, error) {
-	return u.repo.GetByEmail(ctx, strings.TrimSpace(email))
+	return u.repo.GetByEmail(ctx, email)
 }
 
 func (u *MemberUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.repo.Exists(ctx, strings.TrimSpace(id))
+	return u.repo.Exists(ctx, id)
 }
 
 func (u *MemberUsecase) List(
@@ -104,23 +94,23 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 
 	// context から companyId を強制上書き
 	cid := companyIDFromContext(ctx)
-	companyID := strings.TrimSpace(in.CompanyID)
+	companyID := in.CompanyID
 	if cid != "" {
 		companyID = cid
 	}
 
 	m := memdom.Member{
-		ID:             strings.TrimSpace(in.ID),
-		FirstName:      strings.TrimSpace(in.FirstName),
-		LastName:       strings.TrimSpace(in.LastName),
-		FirstNameKana:  strings.TrimSpace(in.FirstNameKana),
-		LastNameKana:   strings.TrimSpace(in.LastNameKana),
-		Email:          strings.TrimSpace(in.Email),
+		ID:             in.ID,
+		FirstName:      in.FirstName,
+		LastName:       in.LastName,
+		FirstNameKana:  in.FirstNameKana,
+		LastNameKana:   in.LastNameKana,
+		Email:          in.Email,
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
 
 		CompanyID: companyID,
-		Status:    strings.TrimSpace(in.Status),
+		Status:    in.Status,
 
 		CreatedAt: *createdAt,
 		UpdatedAt: nil,
@@ -144,25 +134,25 @@ type UpdateMemberInput struct {
 }
 
 func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdom.Member, error) {
-	current, err := u.repo.GetByID(ctx, strings.TrimSpace(in.ID))
+	current, err := u.repo.GetByID(ctx, in.ID)
 	if err != nil {
 		return memdom.Member{}, err
 	}
 
 	if in.FirstName != nil {
-		current.FirstName = strings.TrimSpace(*in.FirstName)
+		current.FirstName = *in.FirstName
 	}
 	if in.LastName != nil {
-		current.LastName = strings.TrimSpace(*in.LastName)
+		current.LastName = *in.LastName
 	}
 	if in.FirstNameKana != nil {
-		current.FirstNameKana = strings.TrimSpace(*in.FirstNameKana)
+		current.FirstNameKana = *in.FirstNameKana
 	}
 	if in.LastNameKana != nil {
-		current.LastNameKana = strings.TrimSpace(*in.LastNameKana)
+		current.LastNameKana = *in.LastNameKana
 	}
 	if in.Email != nil {
-		current.Email = strings.TrimSpace(*in.Email)
+		current.Email = *in.Email
 	}
 	if in.Permissions != nil {
 		current.Permissions = dedupStrings(*in.Permissions)
@@ -176,7 +166,7 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 		current.CompanyID = cid
 	}
 	if in.Status != nil {
-		current.Status = strings.TrimSpace(*in.Status)
+		current.Status = *in.Status
 	}
 
 	return u.repo.Save(ctx, current, nil)
@@ -193,7 +183,7 @@ func (u *MemberUsecase) Save(ctx context.Context, m memdom.Member) (memdom.Membe
 }
 
 func (u *MemberUsecase) Delete(ctx context.Context, id string) error {
-	return u.repo.Delete(ctx, strings.TrimSpace(id))
+	return u.repo.Delete(ctx, id)
 }
 
 func (u *MemberUsecase) Reset(ctx context.Context) error {
@@ -209,11 +199,11 @@ func (u *MemberUsecase) SendInvitation(ctx context.Context, memberID string) err
 		return errors.New("invitation mailer is not configured")
 	}
 
-	m, err := u.repo.GetByID(ctx, strings.TrimSpace(memberID))
+	m, err := u.repo.GetByID(ctx, memberID)
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(m.Email) == "" {
+	if m.Email == "" {
 		return fmt.Errorf("member %s has no email", m.ID)
 	}
 

@@ -77,10 +77,6 @@ type Filter struct {
 	ItemTypes   []ItemType
 	TagTypes    []ProductIDTagType
 	OnlyDeleted bool
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
 }
 
 type Page struct {
@@ -94,29 +90,6 @@ type PageResult struct {
 	TotalPages int
 	Page       int
 	PerPage    int
-}
-
-// ========================================
-// History contracts
-// ========================================
-
-// HistoryRecord は ProductBlueprint のバージョン履歴 1 件分を表す。
-type HistoryRecord struct {
-	Blueprint ProductBlueprint
-	Version   int64
-	UpdatedAt time.Time
-	UpdatedBy *string
-}
-
-// ProductBlueprintHistoryRepo は Firestore の
-// product_blueprints_history/{blueprintId}/versions/{version}
-// にアクセスするための専用ポート。
-type ProductBlueprintHistoryRepo interface {
-	// ライブの ProductBlueprint スナップショットを指定 version で保存
-	SaveSnapshot(ctx context.Context, pb ProductBlueprint) error
-
-	// 特定の productBlueprintID の履歴一覧（LogCard 用）
-	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]ProductBlueprint, error)
 }
 
 // ========================================

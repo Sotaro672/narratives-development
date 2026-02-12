@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	avatarstate "narratives/internal/domain/avatarState"
+	domcommon "narratives/internal/domain/common"
 	userdom "narratives/internal/domain/user"
 	walletdom "narratives/internal/domain/wallet"
 )
@@ -85,19 +85,19 @@ func NewWithState(
 	deletedAt *time.Time,
 ) (Avatar, error) {
 	a := Avatar{
-		ID:           strings.TrimSpace(id),
-		UserID:       strings.TrimSpace(userID),
-		AvatarName:   strings.TrimSpace(avatarName),
-		AvatarIcon:   normalizePtr(avatarIcon),
-		Profile:      normalizePtr(profile),
-		ExternalLink: normalizePtr(externalLink),
+		ID:           id,
+		UserID:       userID,
+		AvatarName:   avatarName,
+		AvatarIcon:   domcommon.NormalizeStringPtr(avatarIcon),
+		Profile:      domcommon.NormalizeStringPtr(profile),
+		ExternalLink: domcommon.NormalizeStringPtr(externalLink),
 		CreatedAt:    createdAt.UTC(),
 		UpdatedAt:    updatedAt.UTC(),
 		AvatarState:  state,
 	}
 
 	// walletAddress はオプショナル
-	a.WalletAddress = normalizePtr(walletAddr)
+	a.WalletAddress = domcommon.NormalizeStringPtr(walletAddr)
 
 	// DeletedAt はオプショナル（nil 可）
 	if deletedAt != nil && !deletedAt.IsZero() {
@@ -150,18 +150,18 @@ func NewFromStringTimesWithState(
 	createdAt, updatedAt string,
 	deletedAt *string,
 ) (Avatar, error) {
-	ct, err := parseTime(createdAt)
+	ct, err := domcommon.ParseTime(createdAt)
 	if err != nil {
 		return Avatar{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
-	ut, err := parseTime(updatedAt)
+	ut, err := domcommon.ParseTime(updatedAt)
 	if err != nil {
 		return Avatar{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
 
 	var dtPtr *time.Time
-	if deletedAt != nil && strings.TrimSpace(*deletedAt) != "" {
-		dt, err := parseTime(*deletedAt)
+	if deletedAt != nil && *deletedAt != "" {
+		dt, err := domcommon.ParseTime(*deletedAt)
 		if err != nil {
 			return Avatar{}, fmt.Errorf("%w: %v", ErrInvalidDeletedAt, err)
 		}
@@ -179,7 +179,7 @@ func NewFromStringTimesWithState(
 // Mutators
 
 func (a *Avatar) SetAvatarIcon(v *string) error {
-	v = normalizePtr(v)
+	v = domcommon.NormalizeStringPtr(v)
 	if v != nil && len([]rune(*v)) > MaxIconLength {
 		return ErrInvalidAvatarIcon
 	}
@@ -188,12 +188,12 @@ func (a *Avatar) SetAvatarIcon(v *string) error {
 }
 
 func (a *Avatar) SetWalletAddress(v *string) error {
-	a.WalletAddress = normalizePtr(v)
+	a.WalletAddress = domcommon.NormalizeStringPtr(v)
 	return nil
 }
 
 func (a *Avatar) SetProfile(v *string) error {
-	v = normalizePtr(v)
+	v = domcommon.NormalizeStringPtr(v)
 	if v != nil && len([]rune(*v)) > MaxProfileLength {
 		return ErrInvalidProfile
 	}
@@ -202,7 +202,7 @@ func (a *Avatar) SetProfile(v *string) error {
 }
 
 func (a *Avatar) SetExternalLink(v *string) error {
-	v = normalizePtr(v)
+	v = domcommon.NormalizeStringPtr(v)
 	if v != nil {
 		if len([]rune(*v)) > MaxExternalLinkLength {
 			return ErrInvalidExternalLink
@@ -222,7 +222,6 @@ func (a *Avatar) SetState(state avatarstate.AvatarState) {
 
 // Mutators (name)
 func (a *Avatar) UpdateAvatarName(name string) error {
-	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > MaxAvatarNameLength {
 		return ErrInvalidAvatarName
 	}
@@ -235,7 +234,7 @@ func (a *Avatar) SetUser(u userdom.User) error {
 	if a == nil {
 		return nil
 	}
-	id := strings.TrimSpace(u.ID)
+	id := u.ID
 	if id == "" {
 		return ErrInvalidUserID
 	}
@@ -245,7 +244,7 @@ func (a *Avatar) SetUser(u userdom.User) error {
 
 // SetWallet sets the wallet link from a Wallet domain object (uses Wallet.WalletAddress).
 func (a *Avatar) SetWallet(w walletdom.Wallet) error {
-	addr := strings.TrimSpace(w.WalletAddress)
+	addr := w.WalletAddress
 	if addr == "" {
 		return ErrInvalidWalletAddressLink
 	}
@@ -261,7 +260,7 @@ func (a *Avatar) ClearWallet() {
 // ValidateUserLink は UserID が有効か（空でないか）を確認します。
 // 実在性の確認は上位レイヤー（リポジトリやユースケース）で行ってください。
 func (a Avatar) ValidateUserLink() error {
-	if strings.TrimSpace(a.UserID) == "" {
+	if a.UserID == "" {
 		return ErrInvalidUserID
 	}
 	return nil
@@ -269,23 +268,10 @@ func (a Avatar) ValidateUserLink() error {
 
 // ValidateWalletLink ensures WalletAddress is present (existence check is upper layer’s responsibility).
 func (a Avatar) ValidateWalletLink() error {
-	if a.WalletAddress == nil || strings.TrimSpace(*a.WalletAddress) == "" {
+	if a.WalletAddress == nil || *a.WalletAddress == "" {
 		return ErrInvalidWalletAddressLink
 	}
 	return nil
-}
-
-// Helpers
-
-func normalizePtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return &s
 }
 
 // Validation
@@ -328,32 +314,8 @@ func (a Avatar) validate() error {
 	return nil
 }
 
-// Time parsing helper
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, fmt.Errorf("empty time")
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
-}
-
 // External link validator (http/https only)
 func validateExternalLink(s string) error {
-	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
@@ -405,16 +367,15 @@ type ListFilter struct {
 // Sanitize normalizes fields and applies safe defaults.
 func (f *ListFilter) Sanitize() {
 	if f.UserID != nil {
-		v := strings.TrimSpace(*f.UserID)
+		v := *f.UserID
 		if v == "" {
 			f.UserID = nil
 		} else {
 			f.UserID = &v
 		}
 	}
-	f.NameContains = strings.TrimSpace(f.NameContains)
 	if f.WalletAddress != nil {
-		v := strings.TrimSpace(*f.WalletAddress)
+		v := *f.WalletAddress
 		if v == "" {
 			f.WalletAddress = nil
 		} else {

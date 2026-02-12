@@ -6,8 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"log"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -39,7 +37,6 @@ var _ badom.RepositoryPort = (*BillingAddressRepositoryFS)(nil)
 // ========== Public API ==========
 
 func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*badom.BillingAddress, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, badom.ErrNotFound
 	}
@@ -62,7 +59,7 @@ func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*b
 // ✅ userId フィールドで引く（1ユーザー複数レコード対応）
 // ✅ sort/filter/page などは Port から削除したため、この関数のみ残す
 func (r *BillingAddressRepositoryFS) GetByUser(ctx context.Context, userID string) ([]badom.BillingAddress, error) {
-	uid := strings.TrimSpace(userID)
+	uid := userID
 	if uid == "" {
 		return []badom.BillingAddress{}, nil
 	}
@@ -100,7 +97,7 @@ func (r *BillingAddressRepositoryFS) GetByUser(ctx context.Context, userID strin
 func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.CreateBillingAddressInput) (*badom.BillingAddress, error) {
 	now := time.Now().UTC()
 
-	uid := strings.TrimSpace(in.UserID)
+	uid := in.UserID
 	if uid == "" {
 		return nil, badom.ErrInvalidUserID
 	}
@@ -124,9 +121,9 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 	ba := badom.BillingAddress{
 		ID:             docID,
 		UserID:         uid,
-		CardNumber:     strings.TrimSpace(in.CardNumber),
-		CardholderName: strings.TrimSpace(in.CardholderName),
-		CVC:            strings.TrimSpace(in.CVC),
+		CardNumber:     in.CardNumber,
+		CardholderName: in.CardholderName,
+		CVC:            in.CVC,
 		CreatedAt:      createdAt,
 		UpdatedAt:      updatedAt,
 	}
@@ -143,7 +140,6 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 
 // Update: docId はそのまま、userId は更新しない（anti-spoof）
 func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in badom.UpdateBillingAddressInput) (*badom.BillingAddress, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, badom.ErrNotFound
 	}
@@ -163,19 +159,19 @@ func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in b
 	if in.CardNumber != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "cardNumber",
-			Value: strings.TrimSpace(*in.CardNumber),
+			Value: *in.CardNumber,
 		})
 	}
 	if in.CardholderName != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "cardholderName",
-			Value: strings.TrimSpace(*in.CardholderName),
+			Value: *in.CardholderName,
 		})
 	}
 	if in.CVC != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "cvc",
-			Value: strings.TrimSpace(*in.CVC),
+			Value: *in.CVC,
 		})
 	}
 
@@ -215,7 +211,6 @@ func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in b
 }
 
 func (r *BillingAddressRepositoryFS) Delete(ctx context.Context, id string) error {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return badom.ErrNotFound
 	}
@@ -229,56 +224,6 @@ func (r *BillingAddressRepositoryFS) Delete(ctx context.Context, id string) erro
 	}
 	_, err := ref.Delete(ctx)
 	return err
-}
-
-func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
-	iter := r.col().Documents(ctx)
-	defer iter.Stop()
-
-	var refs []*firestore.DocumentRef
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		refs = append(refs, doc.Ref)
-	}
-
-	if len(refs) == 0 {
-		log.Printf("[firestore] Reset billingAddresses: no docs to delete\n")
-		return nil
-	}
-
-	const chunkSize = 400
-	deletedCount := 0
-
-	for start := 0; start < len(refs); start += chunkSize {
-		end := start + chunkSize
-		if end > len(refs) {
-			end = len(refs)
-		}
-		chunk := refs[start:end]
-
-		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, ref := range chunk {
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		deletedCount += len(chunk)
-	}
-
-	log.Printf("[firestore] Reset billingAddresses (transactional): deleted %d docs\n", deletedCount)
-	return nil
 }
 
 // ========== Helpers ==========
@@ -298,11 +243,11 @@ func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot
 	}
 
 	return badom.BillingAddress{
-		ID:             strings.TrimSpace(doc.Ref.ID),
-		UserID:         strings.TrimSpace(raw.UserID),
-		CardNumber:     strings.TrimSpace(raw.CardNumber),
-		CardholderName: strings.TrimSpace(raw.CardholderName),
-		CVC:            strings.TrimSpace(raw.CVC),
+		ID:             doc.Ref.ID,
+		UserID:         raw.UserID,
+		CardNumber:     raw.CardNumber,
+		CardholderName: raw.CardholderName,
+		CVC:            raw.CVC,
 		CreatedAt:      raw.CreatedAt.UTC(),
 		UpdatedAt:      raw.UpdatedAt.UTC(),
 	}, nil
@@ -310,10 +255,10 @@ func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot
 
 func (r *BillingAddressRepositoryFS) domainToDocData(ba badom.BillingAddress) map[string]any {
 	return map[string]any{
-		"userId":         strings.TrimSpace(ba.UserID),
-		"cardNumber":     strings.TrimSpace(ba.CardNumber),
-		"cardholderName": strings.TrimSpace(ba.CardholderName),
-		"cvc":            strings.TrimSpace(ba.CVC),
+		"userId":         ba.UserID,
+		"cardNumber":     ba.CardNumber,
+		"cardholderName": ba.CardholderName,
+		"cvc":            ba.CVC,
 		"createdAt":      ba.CreatedAt.UTC(),
 		"updatedAt":      ba.UpdatedAt.UTC(),
 	}

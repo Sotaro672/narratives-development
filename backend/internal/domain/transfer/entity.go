@@ -3,7 +3,6 @@ package transfer
 
 import (
 	"errors"
-	"strings"
 	"time"
 )
 
@@ -117,13 +116,13 @@ func NewPending(
 ) (Transfer, error) {
 	t := Transfer{
 		Attempt:   attempt,
-		ProductID: strings.TrimSpace(productID),
-		OrderID:   strings.TrimSpace(orderID),
-		AvatarID:  strings.TrimSpace(avatarID),
+		ProductID: productID,
+		OrderID:   orderID,
+		AvatarID:  avatarID,
 
-		MintAddress: strings.TrimSpace(mintAddress),
+		MintAddress: mintAddress,
 
-		ToWalletAddress: strings.TrimSpace(toWalletAddress),
+		ToWalletAddress: toWalletAddress,
 
 		Status:      StatusPending,
 		ErrorType:   nil,
@@ -144,7 +143,6 @@ func (t *Transfer) MarkSucceeded(txSig string) error {
 	if t == nil {
 		return nil
 	}
-	txSig = strings.TrimSpace(txSig)
 	if txSig == "" {
 		return errors.New("transfer: txSignature is empty")
 	}
@@ -161,13 +159,13 @@ func (t *Transfer) MarkFailed(errType ErrorType, msg string) error {
 		return nil
 	}
 	et := errType
-	if strings.TrimSpace(string(et)) == "" {
+	if string(et) == "" {
 		et = ErrorTypeUnknown
 	}
 	t.Status = StatusFailed
 	t.ErrorType = &et
 
-	m := strings.TrimSpace(msg)
+	m := msg
 	if m == "" {
 		t.ErrorMsg = nil
 	} else {
@@ -189,7 +187,7 @@ func (t *Transfer) ApplyPatch(p TransferPatch) {
 		t.ErrorType = &et
 	}
 	if p.ErrorMsg != nil {
-		m := strings.TrimSpace(*p.ErrorMsg)
+		m := *p.ErrorMsg
 		if m == "" {
 			t.ErrorMsg = nil
 		} else {
@@ -197,7 +195,7 @@ func (t *Transfer) ApplyPatch(p TransferPatch) {
 		}
 	}
 	if p.TxSignature != nil {
-		s := strings.TrimSpace(*p.TxSignature)
+		s := *p.TxSignature
 		if s == "" {
 			t.TxSignature = nil
 		} else {
@@ -205,13 +203,13 @@ func (t *Transfer) ApplyPatch(p TransferPatch) {
 		}
 	}
 	if p.MintAddress != nil {
-		s := strings.TrimSpace(*p.MintAddress)
+		s := *p.MintAddress
 		if s != "" {
 			t.MintAddress = s
 		}
 	}
 	if p.ToWalletAddr != nil {
-		s := strings.TrimSpace(*p.ToWalletAddr)
+		s := *p.ToWalletAddr
 		if s != "" {
 			t.ToWalletAddress = s
 		}
@@ -220,19 +218,19 @@ func (t *Transfer) ApplyPatch(p TransferPatch) {
 
 // validate enforces domain invariants.
 func (t Transfer) validate() error {
-	if strings.TrimSpace(t.ProductID) == "" {
+	if t.ProductID == "" {
 		return ErrInvalidProductID
 	}
-	if strings.TrimSpace(t.OrderID) == "" {
+	if t.OrderID == "" {
 		return ErrInvalidOrderID
 	}
-	if strings.TrimSpace(t.AvatarID) == "" {
+	if t.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
-	if strings.TrimSpace(t.ToWalletAddress) == "" {
+	if t.ToWalletAddress == "" {
 		return ErrInvalidToWalletAddress
 	}
-	if strings.TrimSpace(t.MintAddress) == "" {
+	if t.MintAddress == "" {
 		return ErrInvalidMintAddress
 	}
 	if t.Attempt <= 0 {

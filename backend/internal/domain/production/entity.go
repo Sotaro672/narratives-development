@@ -94,9 +94,9 @@ func New(
 	createdAt time.Time,
 ) (Production, error) {
 	p := Production{
-		ID:                 strings.TrimSpace(id),
-		ProductBlueprintID: strings.TrimSpace(productBlueprintID),
-		AssigneeID:         strings.TrimSpace(assigneeID),
+		ID:                 id,
+		ProductBlueprintID: productBlueprintID,
+		AssigneeID:         assigneeID,
 		Models:             normalizeModels(models),
 		Printed:            printed,
 		PrintedAt:          printedAt,
@@ -138,21 +138,21 @@ func NewFromStringTimes(
 		updated    time.Time
 	)
 
-	if strings.TrimSpace(printedAt) != "" {
+	if printedAt != "" {
 		t, err := domcommon.ParseTime(printedAt)
 		if err != nil {
 			return Production{}, fmt.Errorf("%w: %v", ErrInvalidPrintedAt, err)
 		}
 		printedPtr = &t
 	}
-	if strings.TrimSpace(createdAt) != "" {
+	if createdAt != "" {
 		t, err := domcommon.ParseTime(createdAt)
 		if err != nil {
 			return Production{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 		}
 		created = t
 	}
-	if strings.TrimSpace(updatedAt) != "" {
+	if updatedAt != "" {
 		t, err := domcommon.ParseTime(updatedAt)
 		if err != nil {
 			return Production{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
@@ -213,7 +213,7 @@ func (p Production) validate() error {
 		return ErrInvalidModels
 	}
 	for _, mq := range p.Models {
-		if strings.TrimSpace(mq.ModelID) == "" {
+		if mq.ModelID == "" {
 			return ErrInvalidModelID
 		}
 		if mq.Quantity <= 0 {
@@ -222,7 +222,7 @@ func (p Production) validate() error {
 	}
 
 	// PrintedBy は nil または非空文字列のみ許容
-	if p.PrintedBy != nil && strings.TrimSpace(*p.PrintedBy) == "" {
+	if p.PrintedBy != nil && *p.PrintedBy == "" {
 		return ErrInvalidPrintedBy
 	}
 
@@ -254,7 +254,7 @@ func normalizeModels(in []ModelQuantity) []ModelQuantity {
 	out := make([]ModelQuantity, 0, len(in))
 	seen := make(map[string]struct{}, len(in))
 	for _, mq := range in {
-		id := strings.TrimSpace(mq.ModelID)
+		id := mq.ModelID
 		if id == "" || mq.Quantity <= 0 {
 			continue
 		}

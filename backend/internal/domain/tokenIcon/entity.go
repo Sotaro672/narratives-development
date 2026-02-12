@@ -46,16 +46,16 @@ var (
 
 // Validation
 func (ti TokenIcon) validate() error {
-	if strings.TrimSpace(ti.ID) == "" {
+	if ti.ID == "" {
 		return ErrInvalidID
 	}
-	if strings.TrimSpace(ti.URL) == "" {
+	if ti.URL == "" {
 		return ErrInvalidURL
 	}
 	if _, err := url.ParseRequestURI(ti.URL); err != nil {
 		return ErrInvalidURL
 	}
-	if strings.TrimSpace(ti.FileName) == "" {
+	if ti.FileName == "" {
 		return ErrInvalidFileName
 	}
 	if ti.Size < 0 {
@@ -73,9 +73,9 @@ func New(
 	size int64,
 ) (TokenIcon, error) {
 	ti := TokenIcon{
-		ID:       strings.TrimSpace(id),
-		URL:      strings.TrimSpace(u),
-		FileName: strings.TrimSpace(fileName),
+		ID:       id,
+		URL:      u,
+		FileName: fileName,
 		Size:     size,
 	}
 	if err := ti.validate(); err != nil {
@@ -101,11 +101,11 @@ func NewFromGCSObject(
 	bucket string,
 	objectPath string,
 ) (TokenIcon, error) {
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		b = DefaultBucket
 	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if obj == "" {
 		return TokenIcon{}, fmt.Errorf("tokenIcon: empty objectPath")
 	}
@@ -116,7 +116,6 @@ func NewFromGCSObject(
 // Mutators
 
 func (t *TokenIcon) UpdateURL(u string) error {
-	u = strings.TrimSpace(u)
 	if err := validateURL(u); err != nil {
 		return err
 	}
@@ -125,7 +124,6 @@ func (t *TokenIcon) UpdateURL(u string) error {
 }
 
 func (t *TokenIcon) UpdateFileName(name string) error {
-	name = strings.TrimSpace(name)
 	if name == "" {
 		return ErrInvalidFileName
 	}
@@ -175,11 +173,11 @@ func extAllowed(name string) bool {
 // PublicURL returns the HTTPS public URL for a GCS object:
 // https://storage.googleapis.com/{bucket}/{objectPath}
 func PublicURL(bucket, objectPath string) string {
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		b = DefaultBucket
 	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
 }
 
@@ -188,7 +186,7 @@ func PublicURL(bucket, objectPath string) string {
 // - https://storage.cloud.google.com/{bucket}/{objectPath}
 // Returns bucket, objectPath, ok.
 func ParseGCSURL(u string) (string, string, bool) {
-	parsed, err := url.Parse(strings.TrimSpace(u))
+	parsed, err := url.Parse(u)
 	if err != nil {
 		return "", "", false
 	}
@@ -219,6 +217,6 @@ func (t TokenIcon) ToGCSDeleteOp() GCSDeleteOp {
 	}
 	return GCSDeleteOp{
 		Bucket:     DefaultBucket,
-		ObjectPath: "token_icons/" + strings.TrimSpace(t.FileName),
+		ObjectPath: "token_icons/" + t.FileName,
 	}
 }

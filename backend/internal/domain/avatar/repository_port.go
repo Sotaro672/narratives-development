@@ -3,7 +3,6 @@ package avatar
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -29,65 +28,17 @@ type AvatarPatch struct {
 	DeletedAt     *time.Time `json:"deletedAt,omitempty"` // soft delete/restore 用（必要な場合のみ使用）
 }
 
-// Sanitize normalizes patch fields (trim + empty -> nil).
+// Sanitize normalizes patch fields (empty -> nil).
 func (p *AvatarPatch) Sanitize() {
 	if p == nil {
 		return
 	}
-	p.AvatarName = normalizePtr(p.AvatarName)
-	p.AvatarIcon = normalizePtr(p.AvatarIcon)
-	p.WalletAddress = normalizePtr(p.WalletAddress)
-	p.Profile = normalizePtr(p.Profile)
-	p.ExternalLink = normalizePtr(p.ExternalLink)
-
+	p.AvatarName = common.NormalizeStringPtr(p.AvatarName)
+	p.AvatarIcon = common.NormalizeStringPtr(p.AvatarIcon)
+	p.WalletAddress = common.NormalizeStringPtr(p.WalletAddress)
+	p.Profile = common.NormalizeStringPtr(p.Profile)
+	p.ExternalLink = common.NormalizeStringPtr(p.ExternalLink)
 	// DeletedAt: keep as-is (nil means "no change")
-}
-
-// ========================================
-// フィルタ/ソート/ページング
-// ========================================
-//
-// ✅ entity.go を正として検索対象も更新（bio/website → profile/externalLink）
-// ✅ avatarIconUrl/avatarIconPath → avatarIcon
-// ✅ firebaseUid を検索・絞り込み対象に追加（必要に応じて実装側で利用）
-type Filter struct {
-	// 部分一致検索対象: id, firebaseUid, avatarName, profile, externalLink, walletAddress, avatarIcon
-	SearchQuery string
-
-	// 絞り込み
-	UserID        *string
-	FirebaseUID   *string
-	WalletAddress *string
-
-	// 日付範囲（created_at ベース）
-	// 既存実装互換のため JoinedFrom/JoinedTo を使用（PG実装が参照）
-	JoinedFrom *time.Time
-	JoinedTo   *time.Time
-
-	// 追加で使いたい場合の汎用的な範囲（必要ならPG側で対応）
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
-
-	// 論理削除フィルタ
-	// nil: すべて / true: DeletedAt IS NOT NULL / false: DeletedAt IS NULL
-	Deleted *bool
-}
-
-// Sanitize normalizes filter fields (trim + empty -> nil).
-func (f *Filter) Sanitize() {
-	if f == nil {
-		return
-	}
-	f.SearchQuery = strings.TrimSpace(f.SearchQuery)
-
-	f.UserID = normalizePtr(f.UserID)
-	f.FirebaseUID = normalizePtr(f.FirebaseUID)
-	f.WalletAddress = normalizePtr(f.WalletAddress)
-
-	// time fields: keep as-is (upper layer / repository decides validation)
-	// Deleted: keep as-is
 }
 
 type Sort struct {
@@ -108,7 +59,6 @@ type Page = common.Page
 type PageResult = common.PageResult[Avatar]
 type SaveOptions = common.SaveOptions
 type RepositoryCRUD = common.RepositoryCRUD[Avatar, AvatarPatch]
-type RepositoryList = common.RepositoryList[Avatar, Filter]
 
 // カーソルページング（PG実装が使用）
 type CursorPage = common.CursorPage
@@ -119,9 +69,8 @@ type CursorPageResult = common.CursorPageResult[Avatar]
 // ========================================
 
 type Repository interface {
-	// 共通CRUD/一覧
+	// 共通CRUD
 	RepositoryCRUD
-	RepositoryList
 
 	// ✅ NEW: avatarId -> avatarName (best-effort lightweight getter)
 	GetNameByID(ctx context.Context, id string) (string, error)

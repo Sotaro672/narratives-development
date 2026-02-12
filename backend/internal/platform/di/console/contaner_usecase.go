@@ -263,7 +263,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		inventoryUC:      inventoryUC,
 		invoiceUC:        invoiceUC,
 		listUC:           listUC,
-		memberUC:         uc.NewMemberUsecase(r.memberRepo),
+		memberUC:         uc.NewMemberUsecaseWithMailer(r.memberRepo, invitationMailer),
 		modelUC:          modelUC,
 		orderUC:          orderUC,
 		paymentUC:        paymentUC,

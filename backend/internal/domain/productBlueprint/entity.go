@@ -127,7 +127,6 @@ func normalizeModelRefs(modelIDs []string) []ModelRef {
 
 	order := 1
 	for _, id := range modelIDs {
-		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
@@ -153,7 +152,7 @@ func mergeAndRenumberModelRefs(existing []ModelRef, appendIDs []string) []ModelR
 	outIDs := make([]string, 0, len(existing)+len(appendIDs))
 
 	for _, r := range existing {
-		id := strings.TrimSpace(r.ModelID)
+		id := r.ModelID
 		if id == "" {
 			continue
 		}
@@ -165,7 +164,6 @@ func mergeAndRenumberModelRefs(existing []ModelRef, appendIDs []string) []ModelR
 	}
 
 	for _, id := range appendIDs {
-		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
@@ -251,17 +249,17 @@ func New(
 ) (ProductBlueprint, error) {
 
 	pb := ProductBlueprint{
-		ID:               strings.TrimSpace(id),
-		ProductName:      strings.TrimSpace(productName),
-		BrandID:          strings.TrimSpace(brandID),
+		ID:               id,
+		ProductName:      productName,
+		BrandID:          brandID,
 		ItemType:         itemType,
-		Fit:              strings.TrimSpace(fit),
-		Material:         strings.TrimSpace(material),
+		Fit:              fit,
+		Material:         material,
 		Weight:           weight,
 		QualityAssurance: dedupTrim(qualityAssurance),
 		ProductIdTag:     productIDTag,
-		AssigneeID:       strings.TrimSpace(assigneeID),
-		CompanyID:        strings.TrimSpace(companyID),
+		AssigneeID:       assigneeID,
+		CompanyID:        companyID,
 
 		// ★ create 時点では modelRefs は空（後段で追加する運用でもOK）
 		ModelRefs: nil,
@@ -341,7 +339,6 @@ func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, upda
 		return ErrForbidden // printed のため更新不可
 	}
 
-	assigneeID = strings.TrimSpace(assigneeID)
 	if assigneeID == "" {
 		return ErrInvalidAssignee
 	}
@@ -456,7 +453,7 @@ func (p ProductBlueprint) validate() error {
 	if p.Weight < 0 {
 		return ErrInvalidWeight
 	}
-	if strings.TrimSpace(p.CompanyID) == "" {
+	if p.CompanyID == "" {
 		return ErrInvalidCompanyID
 	}
 	if err := p.ProductIdTag.validate(); err != nil {
@@ -470,7 +467,7 @@ func (p ProductBlueprint) validate() error {
 	// - 空は許容（後段で追加する運用があるため）
 	// - 入っている場合は ModelID 非空 & DisplayOrder > 0 を要求
 	for _, r := range p.ModelRefs {
-		if strings.TrimSpace(r.ModelID) == "" {
+		if r.ModelID == "" {
 			return WrapInvalid(nil, "modelRefs.modelId is empty")
 		}
 		if r.DisplayOrder <= 0 {

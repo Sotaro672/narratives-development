@@ -16,8 +16,6 @@ type InvoiceRepo interface {
 	// Queries
 	GetByOrderID(ctx context.Context, orderID string) (invoicedom.Invoice, error)
 	Exists(ctx context.Context, orderID string) (bool, error)
-	Count(ctx context.Context, filter InvoiceFilter) (int, error)
-	List(ctx context.Context, filter InvoiceFilter, sort common.Sort, page common.Page) (common.PageResult[invoicedom.Invoice], error)
 	ListByCursor(ctx context.Context, filter InvoiceFilter, sort common.Sort, cpage common.CursorPage) (common.CursorPageResult[invoicedom.Invoice], error)
 
 	// Commands
@@ -60,14 +58,6 @@ func (u *InvoiceUsecase) GetByID(ctx context.Context, id string) (invoicedom.Inv
 
 func (u *InvoiceUsecase) Exists(ctx context.Context, orderID string) (bool, error) {
 	return u.repo.Exists(ctx, strings.TrimSpace(orderID))
-}
-
-func (u *InvoiceUsecase) Count(ctx context.Context, f InvoiceFilter) (int, error) {
-	return u.repo.Count(ctx, f)
-}
-
-func (u *InvoiceUsecase) List(ctx context.Context, f InvoiceFilter, s common.Sort, p common.Page) (common.PageResult[invoicedom.Invoice], error) {
-	return u.repo.List(ctx, f, s, p)
 }
 
 func (u *InvoiceUsecase) ListByCursor(ctx context.Context, f InvoiceFilter, s common.Sort, c common.CursorPage) (common.CursorPageResult[invoicedom.Invoice], error) {

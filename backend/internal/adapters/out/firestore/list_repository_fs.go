@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strings"
 	"time"
 
 	gfs "cloud.google.com/go/firestore"
@@ -51,7 +50,6 @@ func (r *ListRepositoryFS) GetByID(ctx context.Context, id string) (ldom.List, e
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return ldom.List{}, ldom.ErrNotFound
 	}
@@ -84,7 +82,6 @@ func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (st
 		return "", errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", ldom.ErrNotFound
 	}
@@ -100,7 +97,7 @@ func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (st
 	// Prefer direct field read (cheap)
 	if data := snap.Data(); data != nil {
 		if v, ok := data["readable_id"].(string); ok {
-			return strings.TrimSpace(v), nil
+			return v, nil
 		}
 	}
 
@@ -109,7 +106,7 @@ func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (st
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(l.ReadableID), nil
+	return l.ReadableID, nil
 }
 
 func (r *ListRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
@@ -117,7 +114,6 @@ func (r *ListRepositoryFS) Exists(ctx context.Context, id string) (bool, error) 
 		return false, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, nil
 	}
@@ -130,29 +126,6 @@ func (r *ListRepositoryFS) Exists(ctx context.Context, id string) (bool, error) 
 		return false, err
 	}
 	return true, nil
-}
-
-// filter はフロントが担うため、Count は全件数のみ返す（best-effort scan）
-func (r *ListRepositoryFS) Count(ctx context.Context, _ ldom.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	total := 0
-	for {
-		_, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		total++
-	}
-	return total, nil
 }
 
 // filter/sort/search はフロントが担うため、List は全件対象 + ページングのみ（順序は固定）
@@ -174,21 +147,7 @@ func (r *ListRepositoryFS) List(
 		pageNum = 1
 	}
 
-	// total count (scan)
-	total, err := r.Count(ctx, ldom.Filter{})
-	if err != nil {
-		return ldom.PageResult[ldom.List]{}, err
-	}
-	if total == 0 {
-		return ldom.PageResult[ldom.List]{
-			Items:      []ldom.List{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
-	}
-
+	// NOTE: Count を削除したため、TotalCount/TotalPages は返さない（0）
 	offset := (pageNum - 1) * perPage
 	if offset < 0 {
 		offset = 0
@@ -228,12 +187,10 @@ func (r *ListRepositoryFS) List(
 		return ldom.PageResult[ldom.List]{}, err
 	}
 
-	totalPages := fscommon.ComputeTotalPages(total, perPage)
-
 	return ldom.PageResult[ldom.List]{
 		Items:      items,
-		TotalCount: total,
-		TotalPages: totalPages,
+		TotalCount: 0,
+		TotalPages: 0,
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
@@ -261,7 +218,7 @@ func (r *ListRepositoryFS) ListByCursor(
 	it := q.Documents(ctx)
 	defer it.Stop()
 
-	after := strings.TrimSpace(cpage.After)
+	after := cpage.After
 	skipping := after != ""
 
 	var (
@@ -328,7 +285,7 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 	// ABテスト前提: 同一 inventoryId に複数 List を許容するため、
 	// docId を inventoryId に固定しない。
 	// - l.ID が空なら Firestore の自動採番で docId を発行する
-	id := strings.TrimSpace(l.ID)
+	id := l.ID
 
 	now := time.Now().UTC()
 	if l.CreatedAt.IsZero() {
@@ -351,7 +308,7 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 	// conflict check + create main doc + prices in a transaction
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
 		// ID 指定の場合のみ conflict check
-		if strings.TrimSpace(ref.ID) != "" && strings.TrimSpace(l.ID) != "" && strings.TrimSpace(l.ID) == strings.TrimSpace(ref.ID) {
+		if ref.ID != "" && l.ID != "" && l.ID == ref.ID {
 			_, err := tx.Get(ref)
 			if err == nil {
 				return ldom.ErrConflict
@@ -391,7 +348,6 @@ func (r *ListRepositoryFS) Update(
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return ldom.List{}, ldom.ErrNotFound
 	}
@@ -428,38 +384,38 @@ func (r *ListRepositoryFS) Update(
 
 		// AssigneeID
 		if patch.AssigneeID != nil {
-			cur.AssigneeID = strings.TrimSpace(*patch.AssigneeID)
+			cur.AssigneeID = *patch.AssigneeID
 			changed = true
 		}
 
 		// ImageID (primary image docID)
 		// ✅ allow clearing by empty string in patch
 		if patch.ImageID != nil {
-			cur.ImageID = strings.TrimSpace(*patch.ImageID)
+			cur.ImageID = *patch.ImageID
 			changed = true
 		}
 
 		// ReadableID
 		if patch.ReadableID != nil {
-			cur.ReadableID = strings.TrimSpace(*patch.ReadableID)
+			cur.ReadableID = *patch.ReadableID
 			changed = true
 		}
 
 		// Title
 		if patch.Title != nil {
-			cur.Title = strings.TrimSpace(*patch.Title)
+			cur.Title = *patch.Title
 			changed = true
 		}
 
 		// Description
 		if patch.Description != nil {
-			cur.Description = strings.TrimSpace(*patch.Description)
+			cur.Description = *patch.Description
 			changed = true
 		}
 
 		// UpdatedBy
 		if patch.UpdatedBy != nil {
-			v := strings.TrimSpace(*patch.UpdatedBy)
+			v := *patch.UpdatedBy
 			if v == "" {
 				cur.UpdatedBy = nil
 				clearUpdatedBy = true
@@ -483,7 +439,7 @@ func (r *ListRepositoryFS) Update(
 
 		// DeletedBy
 		if patch.DeletedBy != nil {
-			v := strings.TrimSpace(*patch.DeletedBy)
+			v := *patch.DeletedBy
 			if v == "" {
 				cur.DeletedBy = nil
 				clearDeletedBy = true
@@ -559,7 +515,6 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 		return errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return ldom.ErrNotFound
 	}
@@ -609,7 +564,7 @@ func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOp
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
 
-	id := strings.TrimSpace(l.ID)
+	id := l.ID
 
 	now := time.Now().UTC()
 	if l.CreatedAt.IsZero() {
@@ -668,11 +623,11 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		return ldom.List{}, err
 	}
 
-	id := strings.TrimSpace(doc.Ref.ID)
+	id := doc.Ref.ID
 
 	desc := ""
 	if raw.Description != nil {
-		desc = strings.TrimSpace(*raw.Description)
+		desc = *raw.Description
 	}
 
 	var updatedBy *string
@@ -699,17 +654,17 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 
 	return ldom.List{
 		ID:          id,
-		Status:      ldom.ListStatus(strings.TrimSpace(raw.Status)),
-		AssigneeID:  strings.TrimSpace(raw.AssigneeID),
-		Title:       strings.TrimSpace(raw.Title),
-		ImageID:     strings.TrimSpace(raw.ImageID), // ✅ primary docID
-		InventoryID: strings.TrimSpace(raw.InventoryID),
-		ReadableID:  strings.TrimSpace(raw.ReadableID),
+		Status:      ldom.ListStatus(raw.Status),
+		AssigneeID:  raw.AssigneeID,
+		Title:       raw.Title,
+		ImageID:     raw.ImageID, // ✅ primary docID
+		InventoryID: raw.InventoryID,
+		ReadableID:  raw.ReadableID,
 
 		Description: desc,
 		Prices:      nil, // filled later
 
-		CreatedBy: strings.TrimSpace(raw.CreatedBy),
+		CreatedBy: raw.CreatedBy,
 		CreatedAt: raw.CreatedAt.UTC(),
 		UpdatedBy: updatedBy,
 		UpdatedAt: updatedAt,
@@ -720,28 +675,28 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 
 func encodeListDoc(l ldom.List) map[string]any {
 	m := map[string]any{
-		"status":      strings.TrimSpace(string(l.Status)),
-		"assignee_id": strings.TrimSpace(l.AssigneeID),
-		"title":       strings.TrimSpace(l.Title),
+		"status":      string(l.Status),
+		"assignee_id": l.AssigneeID,
+		"title":       l.Title,
 
 		// ✅ image_id stores primary imageId (docID)
 		// - empty allowed (= unset)
-		"image_id": strings.TrimSpace(l.ImageID),
+		"image_id": l.ImageID,
 
-		"description": strings.TrimSpace(l.Description),
-		"created_by":  strings.TrimSpace(l.CreatedBy),
+		"description": l.Description,
+		"created_by":  l.CreatedBy,
 		"created_at":  l.CreatedAt.UTC(),
 	}
 
-	if v := strings.TrimSpace(l.InventoryID); v != "" {
+	if v := l.InventoryID; v != "" {
 		m["inventory_id"] = v
 	}
-	if v := strings.TrimSpace(l.ReadableID); v != "" {
+	if v := l.ReadableID; v != "" {
 		m["readable_id"] = v
 	}
 
 	if l.UpdatedBy != nil {
-		if v := strings.TrimSpace(*l.UpdatedBy); v != "" {
+		if v := *l.UpdatedBy; v != "" {
 			m["updated_by"] = v
 		}
 	}
@@ -752,7 +707,7 @@ func encodeListDoc(l ldom.List) map[string]any {
 		m["deleted_at"] = l.DeletedAt.UTC()
 	}
 	if l.DeletedBy != nil {
-		if v := strings.TrimSpace(*l.DeletedBy); v != "" {
+		if v := *l.DeletedBy; v != "" {
 			m["deleted_by"] = v
 		}
 	}
@@ -780,7 +735,7 @@ func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ld
 // - docID: modelId
 // - fields: { model_id: string, price: number }
 func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) ([]ldom.ListPriceRow, error) {
-	if strings.TrimSpace(listID) == "" {
+	if listID == "" {
 		return nil, nil
 	}
 
@@ -811,10 +766,10 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 			return nil, err
 		}
 
-		modelID := strings.TrimSpace(raw.ModelID)
+		modelID := raw.ModelID
 		if modelID == "" {
 			// schema invariant: docID should be modelId
-			modelID = strings.TrimSpace(doc.Ref.ID)
+			modelID = doc.Ref.ID
 		}
 		if modelID == "" {
 			continue
@@ -832,7 +787,7 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 
 	// stable order
 	sort.Slice(out, func(i, j int) bool {
-		return strings.TrimSpace(out[i].ModelID) < strings.TrimSpace(out[j].ModelID)
+		return out[i].ModelID < out[j].ModelID
 	})
 
 	return out, nil
@@ -895,7 +850,7 @@ func normalizeListPrices(in []ldom.ListPriceRow) map[string]ldom.ListPriceRow {
 	}
 	out := make(map[string]ldom.ListPriceRow, len(in))
 	for _, row := range in {
-		mid := strings.TrimSpace(row.ModelID)
+		mid := row.ModelID
 		if mid == "" {
 			continue
 		}
@@ -926,20 +881,18 @@ func NewListRepositoryForUsecase(repo *ListRepositoryFS) *ListRepositoryForUseca
 }
 
 func strPtrIfNonEmpty(s string) *string {
-	t := strings.TrimSpace(s)
-	if t == "" {
+	if s == "" {
 		return nil
 	}
-	return &t
+	return &s
 }
 
 // ✅ imageId は「primary docID」なので、"空文字でクリア" を許容したいケースがある。
 // - 他フィールドは従来通り「空は変更しない(keep)」
 // - imageId だけは empty string も patch に載せられるようにする
 func strPtrAllowEmptyButNonNil(s string) *string {
-	t := strings.TrimSpace(s)
 	// NOTE: 空でも「クリアしたい」ので返す
-	return &t
+	return &s
 }
 
 // Update implements "usecase.ListUpdater" contract by translating full item -> patch.
@@ -952,7 +905,7 @@ func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (
 		return ldom.List{}, errors.New("list repo is nil")
 	}
 
-	id := strings.TrimSpace(item.ID)
+	id := item.ID
 	if id == "" {
 		return ldom.List{}, ldom.ErrNotFound
 	}
@@ -960,7 +913,7 @@ func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (
 	patch := ldom.ListPatch{}
 
 	// status: 空なら変更しない（keep）
-	if strings.TrimSpace(string(item.Status)) != "" {
+	if string(item.Status) != "" {
 		v := item.Status
 		patch.Status = &v
 	}

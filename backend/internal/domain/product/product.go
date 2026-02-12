@@ -4,8 +4,9 @@ package product
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // ===============================
@@ -73,14 +74,14 @@ func New(
 	}
 
 	p := Product{
-		ID:               strings.TrimSpace(id),
-		ModelID:          strings.TrimSpace(modelID),
-		ProductionID:     strings.TrimSpace(productionID),
+		ID:               id,
+		ModelID:          modelID,
+		ProductionID:     productionID,
 		InspectionResult: inspection,
 
 		PrintedAt:   normalizeTimePtr(printedAt),
 		InspectedAt: normalizeTimePtr(inspectedAt),
-		InspectedBy: normalizeStrPtr(inspectedBy),
+		InspectedBy: domcommon.NormalizeStringPtr(inspectedBy),
 	}
 
 	if err := p.validate(); err != nil {
@@ -98,8 +99,8 @@ func NewFromStringTimes(
 ) (Product, error) {
 
 	var printedAtPtr *time.Time
-	if strings.TrimSpace(printedAtStr) != "" {
-		t, err := parseTime(printedAtStr, ErrInvalidPrintedAt)
+	if printedAtStr != "" {
+		t, err := parseTimeWithClassifier(printedAtStr, ErrInvalidPrintedAt)
 		if err != nil {
 			return Product{}, err
 		}
@@ -107,8 +108,8 @@ func NewFromStringTimes(
 	}
 
 	var inspectedAtPtr *time.Time
-	if strings.TrimSpace(inspectedAtStr) != "" {
-		t, err := parseTime(inspectedAtStr, ErrInvalidInspectedAt)
+	if inspectedAtStr != "" {
+		t, err := parseTimeWithClassifier(inspectedAtStr, ErrInvalidInspectedAt)
 		if err != nil {
 			return Product{}, err
 		}
@@ -141,7 +142,6 @@ func (p *Product) MarkInspected(result InspectionResult, by string, at time.Time
 	if result != InspectionPassed && result != InspectionFailed {
 		return ErrInvalidInspectionResult
 	}
-	by = strings.TrimSpace(by)
 	if by == "" {
 		return ErrInvalidInspectedBy
 	}
@@ -158,7 +158,6 @@ func (p *Product) MarkInspected(result InspectionResult, by string, at time.Time
 
 // ★ 追加: notManufactured へ確定する
 func (p *Product) MarkNotManufactured(by string, at time.Time) error {
-	by = strings.TrimSpace(by)
 	if by == "" {
 		return ErrInvalidInspectedBy
 	}
@@ -208,15 +207,14 @@ func (p Product) validate() error {
 
 	// 検査が確定している状態は by/at 必須
 	case InspectionPassed, InspectionFailed, InspectionNotManufactured:
-		if p.InspectedBy == nil || strings.TrimSpace(*p.InspectedBy) == "" {
+		if p.InspectedBy == nil || *p.InspectedBy == "" {
 			return ErrInvalidInspectedBy
 		}
 		if p.InspectedAt == nil || p.InspectedAt.IsZero() {
 			return ErrInvalidInspectedAt
 		}
 
-	// まだ検査していない状態。過去データの互換性のため、
-	// inspectedBy/inspectedAt が入っていてもエラーにはしない。
+	// まだ検査していない状態。
 	case InspectionNotYet:
 		// 何もしない（coherence はチェックしない）
 
@@ -230,17 +228,6 @@ func (p Product) validate() error {
 // ===============================
 // Helpers
 // ===============================
-
-func normalizeStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	v := strings.TrimSpace(*p)
-	if v == "" {
-		return nil
-	}
-	return &v
-}
 
 func normalizeTimePtr(p *time.Time) *time.Time {
 	if p == nil {
@@ -261,7 +248,6 @@ func normalizeIDList(list []string) []string {
 	}
 	out := make([]string, 0, len(list))
 	for _, v := range list {
-		v = strings.TrimSpace(v)
 		if v != "" {
 			out = append(out, v)
 		}
@@ -272,29 +258,15 @@ func normalizeIDList(list []string) []string {
 	return out
 }
 
-func parseTime(s string, classify error) (time.Time, error) {
-	s = strings.TrimSpace(s)
+func parseTimeWithClassifier(s string, classify error) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, classify
 	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
+	t, err := domcommon.ParseTime(s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: %v", classify, err)
 	}
-
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
+	return t, nil
 }
 
 // Valid inspection result

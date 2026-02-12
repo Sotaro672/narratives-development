@@ -78,8 +78,8 @@ func toRecord(m invdom.Mint) inventoryRecord {
 	}
 
 	return inventoryRecord{
-		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
-		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
+		TokenBlueprintID:   m.TokenBlueprintID,
+		ProductBlueprintID: m.ProductBlueprintID,
 		Stock:              stock,
 		ModelIDs:           modelIDs,
 		CreatedAt:          m.CreatedAt,
@@ -96,9 +96,9 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 	}
 
 	out := invdom.Mint{
-		ID:                 strings.TrimSpace(docID),
-		TokenBlueprintID:   strings.TrimSpace(rec.TokenBlueprintID),
-		ProductBlueprintID: strings.TrimSpace(rec.ProductBlueprintID),
+		ID:                 docID,
+		TokenBlueprintID:   rec.TokenBlueprintID,
+		ProductBlueprintID: rec.ProductBlueprintID,
 		Stock:              stockDomainFromRecord(stock),
 		ModelIDs:           modelIDs,
 		CreatedAt:          rec.CreatedAt,
@@ -123,7 +123,7 @@ func (r *InventoryRepositoryFS) ResolveBlueprintIDsByInventoryID(
 	if err != nil {
 		return "", "", err
 	}
-	return strings.TrimSpace(m.ProductBlueprintID), strings.TrimSpace(m.TokenBlueprintID), nil
+	return m.ProductBlueprintID, m.TokenBlueprintID, nil
 }
 
 // ============================================================
@@ -143,9 +143,6 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 		m.UpdatedAt = m.CreatedAt
 	}
 
-	m.TokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
-	m.ProductBlueprintID = strings.TrimSpace(m.ProductBlueprintID)
-
 	if m.TokenBlueprintID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
 	}
@@ -154,7 +151,6 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 	}
 
 	// id が空なら docId = productBlueprintId__tokenBlueprintId を採用
-	m.ID = strings.TrimSpace(m.ID)
 	if m.ID == "" {
 		m.ID = buildInventoryDocIDByProduct(m.TokenBlueprintID, m.ProductBlueprintID)
 	}
@@ -172,7 +168,6 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 }
 
 func (r *InventoryRepositoryFS) GetByID(ctx context.Context, id string) (invdom.Mint, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
@@ -198,13 +193,11 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 		return invdom.Mint{}, errors.New("inventory repo is nil")
 	}
 
-	id := strings.TrimSpace(m.ID)
+	id := m.ID
 	if id == "" {
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
 
-	m.TokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
-	m.ProductBlueprintID = strings.TrimSpace(m.ProductBlueprintID)
 	if m.TokenBlueprintID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
 	}
@@ -246,7 +239,6 @@ func (r *InventoryRepositoryFS) Delete(ctx context.Context, id string) error {
 		return errors.New("inventory repo is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return invdom.ErrInvalidMintID
 	}
@@ -270,7 +262,6 @@ func (r *InventoryRepositoryFS) ListByTokenBlueprintID(ctx context.Context, toke
 		return nil, errors.New("inventory repo is nil")
 	}
 
-	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
 	if tokenBlueprintID == "" {
 		return nil, invdom.ErrInvalidTokenBlueprintID
 	}
@@ -286,7 +277,6 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, pr
 		return nil, errors.New("inventory repo is nil")
 	}
 
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
 	if productBlueprintID == "" {
 		return nil, invdom.ErrInvalidProductBlueprintID
 	}
@@ -302,7 +292,6 @@ func (r *InventoryRepositoryFS) ListByModelID(ctx context.Context, modelID strin
 		return nil, errors.New("inventory repo is nil")
 	}
 
-	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return nil, invdom.ErrInvalidModelID
 	}
@@ -328,9 +317,6 @@ func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, token
 	if r == nil || r.Client == nil {
 		return nil, errors.New("inventory repo is nil")
 	}
-
-	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
-	modelID = strings.TrimSpace(modelID)
 
 	if tokenBlueprintID == "" {
 		return nil, invdom.ErrInvalidTokenBlueprintID
@@ -395,8 +381,8 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 		return 0, errors.New("inventory repo is nil")
 	}
 
-	pid := strings.TrimSpace(productID)
-	oid := strings.TrimSpace(orderID)
+	pid := productID
+	oid := orderID
 	if pid == "" {
 		return 0, errors.New("inventory repo: productID is empty")
 	}
@@ -413,7 +399,7 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	if findErr != nil {
 		return 0, findErr
 	}
-	if docRef == nil || strings.TrimSpace(modelID) == "" {
+	if docRef == nil || modelID == "" {
 		// idempotent: 見つからないなら no-op
 		return 0, nil
 	}
@@ -452,7 +438,6 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 		if len(ms.Products) > 0 {
 			newProducts := make([]string, 0, len(ms.Products))
 			for _, x := range ms.Products {
-				x = strings.TrimSpace(x)
 				if x == "" {
 					continue
 				}
@@ -522,7 +507,7 @@ func (r *InventoryRepositoryFS) findInventoryDocByProductID(ctx context.Context,
 	if r == nil || r.Client == nil {
 		return nil, "", errors.New("inventory repo is nil")
 	}
-	pid := strings.TrimSpace(productID)
+	pid := productID
 	if pid == "" {
 		return nil, "", errors.New("inventory repo: productID is empty")
 	}
@@ -548,7 +533,6 @@ func (r *InventoryRepositoryFS) findInventoryDocByProductID(ctx context.Context,
 		}
 
 		for modelID, ms := range rec.Stock {
-			modelID = strings.TrimSpace(modelID)
 			if modelID == "" {
 				continue
 			}
@@ -577,10 +561,6 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 	if r == nil || r.Client == nil {
 		return errors.New("inventory repo is nil")
 	}
-
-	inventoryID = strings.TrimSpace(inventoryID)
-	modelID = strings.TrimSpace(modelID)
-	orderID = strings.TrimSpace(orderID)
 
 	if inventoryID == "" {
 		return invdom.ErrInvalidMintID
@@ -679,17 +659,6 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 }
 
 // ============================================================
-// Accumulation operations (deprecated)
-// ============================================================
-
-func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id string, delta int) (invdom.Mint, error) {
-	_ = ctx
-	_ = id
-	_ = delta
-	return invdom.Mint{}, errors.New("IncrementAccumulation is deprecated (use Stock accumulation per modelId/productId)")
-}
-
-// ============================================================
 // Upsert
 // - Stock[modelId].Products に productId を追記（UNION）
 // - ReservedByOrder / ReservedCount は保持
@@ -708,9 +677,9 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 		return invdom.Mint{}, errors.New("inventory repo is nil")
 	}
 
-	tbID := strings.TrimSpace(tokenBlueprintID)
-	pbID := strings.TrimSpace(productBlueprintID)
-	mID := strings.TrimSpace(modelID)
+	tbID := tokenBlueprintID
+	pbID := productBlueprintID
+	mID := modelID
 	if tbID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
 	}
@@ -857,7 +826,6 @@ func normalizeIDs(raw []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
 	for _, s := range raw {
-		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
@@ -878,7 +846,6 @@ func normalizeModelIDs(raw []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
 	for _, s := range raw {
-		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
@@ -897,7 +864,6 @@ func normalizeModelIDs(raw []string) []string {
 
 func buildInventoryDocIDByProduct(tokenBlueprintID, productBlueprintID string) string {
 	sanitize := func(s string) string {
-		s = strings.TrimSpace(s)
 		s = strings.ReplaceAll(s, "/", "_")
 		return s
 	}
@@ -919,7 +885,6 @@ func normalizeModelStockRecord(ms modelStockRecord) modelStockRecord {
 	rbo := map[string]int{}
 	var sum int
 	for oid, n := range ms.ReservedByOrder {
-		oid = strings.TrimSpace(oid)
 		if oid == "" {
 			continue
 		}
@@ -945,7 +910,6 @@ func normalizeStockRecord(raw map[string]modelStockRecord) map[string]modelStock
 	}
 	out := map[string]modelStockRecord{}
 	for modelID, ms := range raw {
-		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
@@ -971,7 +935,6 @@ func modelIDsFromStockRecord(stock map[string]modelStockRecord) []string {
 	}
 	out := make([]string, 0, len(stock))
 	for k := range stock {
-		k = strings.TrimSpace(k)
 		if k != "" {
 			out = append(out, k)
 		}
@@ -989,7 +952,6 @@ func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string]modelSto
 	}
 	out := map[string]modelStockRecord{}
 	for modelID, ms := range raw {
-		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
@@ -1008,7 +970,6 @@ func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string]modelSto
 		if ms.ReservedByOrder != nil {
 			rec.ReservedByOrder = map[string]int{}
 			for oid, n := range ms.ReservedByOrder {
-				oid = strings.TrimSpace(oid)
 				if oid == "" || n <= 0 {
 					continue
 				}
@@ -1036,7 +997,6 @@ func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.Mo
 	}
 	out := map[string]invdom.ModelStock{}
 	for modelID, msr := range raw {
-		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
@@ -1050,7 +1010,6 @@ func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.Mo
 		if msr.ReservedByOrder != nil {
 			ms.ReservedByOrder = map[string]int{}
 			for oid, n := range msr.ReservedByOrder {
-				oid = strings.TrimSpace(oid)
 				if oid == "" || n <= 0 {
 					continue
 				}
@@ -1077,7 +1036,6 @@ func hasModelStock(stock map[string]invdom.ModelStock, modelID string) bool {
 	if stock == nil {
 		return false
 	}
-	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return false
 	}
@@ -1097,14 +1055,12 @@ func hasModelStock(stock map[string]invdom.ModelStock, modelID string) bool {
 func unionStrings(a []string, b []string) []string {
 	set := map[string]struct{}{}
 	for _, s := range a {
-		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
 		set[s] = struct{}{}
 	}
 	for _, s := range b {
-		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}

@@ -103,10 +103,10 @@ func New(
 
 ) (GCSTokenContent, error) {
 	tc := GCSTokenContent{
-		ID:   strings.TrimSpace(id),
-		Name: strings.TrimSpace(name),
+		ID:   id,
+		Name: name,
 		Type: ctype,
-		URL:  strings.TrimSpace(u),
+		URL:  u,
 		Size: size,
 	}
 	if err := tc.validate(); err != nil {
@@ -137,11 +137,11 @@ func NewFromGCSObject(
 	bucket string,
 	objectPath string,
 ) (GCSTokenContent, error) {
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		b = DefaultBucket
 	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if obj == "" {
 		return GCSTokenContent{}, fmt.Errorf("tokenContents: empty objectPath")
 	}
@@ -153,7 +153,6 @@ func NewFromGCSObject(
 // Mutators
 
 func (t *GCSTokenContent) UpdateName(name string) error {
-	name = strings.TrimSpace(name)
 	if name == "" {
 		return ErrInvalidName
 	}
@@ -162,7 +161,6 @@ func (t *GCSTokenContent) UpdateName(name string) error {
 }
 
 func (t *GCSTokenContent) UpdateURL(u string) error {
-	u = strings.TrimSpace(u)
 	if _, err := url.ParseRequestURI(u); err != nil {
 		return ErrInvalidURL
 	}
@@ -208,11 +206,11 @@ func (t GCSTokenContent) validate() error {
 // PublicURL returns the HTTPS public URL for a GCS object:
 // https://storage.googleapis.com/{bucket}/{objectPath}
 func PublicURL(bucket, objectPath string) string {
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		b = DefaultBucket
 	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
 }
 
@@ -221,7 +219,7 @@ func PublicURL(bucket, objectPath string) string {
 // - https://storage.cloud.google.com/{bucket}/{objectPath}
 // Returns bucket, objectPath, ok.
 func ParseGCSURL(u string) (string, string, bool) {
-	parsed, err := url.Parse(strings.TrimSpace(u))
+	parsed, err := url.Parse(u)
 	if err != nil {
 		return "", "", false
 	}
@@ -252,6 +250,6 @@ func (t GCSTokenContent) ToGCSDeleteOp() GCSDeleteOp {
 	}
 	return GCSDeleteOp{
 		Bucket:     DefaultBucket,
-		ObjectPath: strings.TrimLeft(strings.TrimSpace(t.Name), "/"),
+		ObjectPath: strings.TrimLeft(t.Name, "/"),
 	}
 }
