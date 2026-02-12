@@ -19,14 +19,20 @@ import (
 
 type PaymentHandler struct {
 	uc     *usecase.PaymentUsecase
-	orderQ any
+	orderQ OrderQuery
+}
+
+// OrderQuery is the typed contract PaymentHandler needs.
+// ✅ ResolveByUID returns mallquery.OrderContextDTO (typed), so we can avoid best-effort.
+type OrderQuery interface {
+	ResolveByUID(ctx context.Context, uid string) (mallquery.OrderContextDTO, error)
 }
 
 func NewPaymentHandler(uc *usecase.PaymentUsecase) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: nil}
 }
 
-func NewPaymentHandlerWithOrderQuery(uc *usecase.PaymentUsecase, orderQ any) http.Handler {
+func NewPaymentHandlerWithOrderQuery(uc *usecase.PaymentUsecase, orderQ OrderQuery) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: orderQ}
 }
 
@@ -63,7 +69,7 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.postPayments(w, r)
 		return
 
-	// GET /mall/me/payments?invoiceId=... : list payments by invoiceId (optional)
+	// GET /mall/me/payments?invoiceId=... : list payments by invoiceId
 	case r.Method == http.MethodGet && path0 == "/me/payments":
 		h.getPayments(w, r)
 		return
@@ -87,13 +93,13 @@ func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Reques
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
-	if !ok || strings.TrimSpace(uid) == "" {
+	if !ok || uid == "" { // ✅ no TrimSpace for id
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	out, err := payCallResolveByUID(h.orderQ, r.Context(), uid)
+	out, err := h.orderQ.ResolveByUID(r.Context(), uid) // ✅ typed call (no reflect)
 	if err != nil {
 		if errors.Is(err, mallquery.ErrNotFound) || payIsNotFoundLike(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -103,28 +109,6 @@ func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Reques
 		log.Printf("[mall/payment] GET /me/payment failed uid=%q err=%v", payMaskUID(uid), err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "internal_error", "detail": err.Error()})
-		return
-	}
-
-	// struct -> map (lowerCamel key aliasing, frontend compatibility)
-	if m, ok := payToMap(out); ok {
-		payAlias(m, "BillingAddressID", "billingAddressId")
-		payAlias(m, "ShippingAddressID", "shippingAddressId")
-		payAlias(m, "InvoiceID", "invoiceId")
-		payAlias(m, "OrderID", "orderId")
-		payAlias(m, "AvatarID", "avatarId")
-		payAlias(m, "UserID", "userId")
-		payAlias(m, "UID", "uid")
-
-		// some intermediate camel variants (best-effort)
-		payAlias(m, "billingAddressID", "billingAddressId")
-		payAlias(m, "shippingAddressID", "shippingAddressId")
-		payAlias(m, "invoiceID", "invoiceId")
-		payAlias(m, "orderID", "orderId")
-		payAlias(m, "avatarID", "avatarId")
-		payAlias(m, "userID", "userId")
-
-		_ = json.NewEncoder(w).Encode(m)
 		return
 	}
 
@@ -150,7 +134,7 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
-	if !ok || strings.TrimSpace(uid) == "" {
+	if !ok || uid == "" { // ✅ no TrimSpace for id
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
@@ -163,22 +147,19 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ✅ canonical keys only (Firestore実データを正)
 	req := payCreateReq{
-		// invoiceId docId=orderId 前提なら orderId を受けてもよい
-		InvoiceID: payPickString(body, "invoiceId", "invoiceID", "invoice_id", "orderId", "orderID", "order_id"),
-		BillingAddressID: payPickString(
-			body,
-			"billingAddressId", "billingAddressID", "billing_address_id",
-			"billingId", "billingID",
-			"addressId", "addressID",
-			"id", // fallback
-		),
-		Amount: payPickInt(body, "amount", "total", "totalAmount", "total_amount"),
-		Status: payPickString(body, "status", "paymentStatus"),
+		InvoiceID:        payPickString(body, "invoiceId"),
+		BillingAddressID: payPickString(body, "billingAddressId"),
+		Amount:           payPickInt(body, "amount"),
+		Status:           payPickString(body, "status"),
 	}
 
-	req.InvoiceID = strings.TrimSpace(req.InvoiceID)
-	req.BillingAddressID = strings.TrimSpace(req.BillingAddressID)
+	// ✅ IDs: no TrimSpace (per requirement)
+	// req.InvoiceID = strings.TrimSpace(req.InvoiceID)
+	// req.BillingAddressID = strings.TrimSpace(req.BillingAddressID)
+
+	// status is not an id; trimming is OK
 	req.Status = strings.TrimSpace(req.Status)
 
 	if req.InvoiceID == "" {
@@ -201,19 +182,16 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 	var in paymentdom.CreatePaymentInput
 	paySetStringFieldBestEffort(&in, req.InvoiceID, "InvoiceID", "InvoiceId", "invoiceId")
 	paySetStringFieldBestEffort(&in, req.BillingAddressID, "BillingAddressID", "BillingAddressId", "billingAddressId")
-	paySetIntFieldBestEffort(&in, req.Amount, "Amount", "Total", "TotalAmount")
+	paySetIntFieldBestEffort(&in, req.Amount, "Amount")
 
-	// ✅ cartId (= avatarId) を best-effort で注入（paid 化で cart を空にするため）
-	// - carts の docId は avatarId 前提なので、avatarId をそのまま cartId として扱う。
+	// ✅ cartId (= avatarId) inject (typed orderQ; no reflect)
 	{
 		aid := ""
-		// nilness が「h はここで non-nil」と判断するため、h != nil の条件は不要
 		if h.orderQ != nil {
-			ctxAny, qerr := payCallResolveByUID(h.orderQ, r.Context(), uid)
+			ctxDTO, qerr := h.orderQ.ResolveByUID(r.Context(), uid)
 			if qerr == nil {
-				if qm, ok := payToMap(ctxAny); ok {
-					aid = strings.TrimSpace(payPickString(qm, "avatarId", "AvatarID", "AvatarId"))
-				}
+				// ✅ no TrimSpace for id
+				aid = ctxDTO.AvatarID
 			}
 		}
 		if aid != "" {
@@ -223,7 +201,6 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// dev default: if caller did not provide status, set "paid" best-effort
-	// (PaymentUsecase marks invoice paid when created payment has paid/succeeded status)
 	if req.Status == "" {
 		req.Status = "paid"
 	}
@@ -232,7 +209,7 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 	p, err := h.uc.Create(r.Context(), in)
 	if err != nil {
 		log.Printf("[mall/payment] POST /me/payments failed uid=%q invoiceId=%q billingAddressId=%q amount=%d err=%v",
-			payMaskUID(uid), payMaskUID(req.InvoiceID), payMaskUID(req.BillingAddressID), req.Amount, err)
+			payMaskUID(uid), payMaskID(req.InvoiceID), payMaskID(req.BillingAddressID), req.Amount, err)
 
 		if errors.Is(err, mallquery.ErrNotFound) || payIsNotFoundLike(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -242,20 +219,6 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "internal_error", "detail": err.Error()})
-		return
-	}
-
-	// Response (best-effort alias)
-	if m, ok := payToMap(p); ok {
-		payAlias(m, "ID", "id")
-		payAlias(m, "PaymentID", "paymentId")
-		payAlias(m, "InvoiceID", "invoiceId")
-		payAlias(m, "BillingAddressID", "billingAddressId")
-		payAlias(m, "CreatedAt", "createdAt")
-		payAlias(m, "UpdatedAt", "updatedAt")
-
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(m)
 		return
 	}
 
@@ -275,20 +238,15 @@ func (h *PaymentHandler) getPayments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
-	if !ok || strings.TrimSpace(uid) == "" {
+	if !ok || uid == "" { // ✅ no TrimSpace for id
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	invoiceID := strings.TrimSpace(r.URL.Query().Get("invoiceId"))
+	// ✅ invoiceId is id: no TrimSpace
+	invoiceID := r.URL.Query().Get("invoiceId")
 	if invoiceID == "" {
-		// accept orderId as alias
-		invoiceID = strings.TrimSpace(r.URL.Query().Get("orderId"))
-	}
-
-	if invoiceID == "" {
-		// keep it simple: caller should provide invoiceId/orderId
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invoiceId_required"})
 		return
@@ -297,7 +255,7 @@ func (h *PaymentHandler) getPayments(w http.ResponseWriter, r *http.Request) {
 	list, err := h.uc.GetByInvoiceID(r.Context(), invoiceID)
 	if err != nil {
 		log.Printf("[mall/payment] GET /me/payments failed uid=%q invoiceId=%q err=%v",
-			payMaskUID(uid), payMaskUID(invoiceID), err)
+			payMaskUID(uid), payMaskID(invoiceID), err)
 
 		if errors.Is(err, mallquery.ErrNotFound) || payIsNotFoundLike(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -314,7 +272,7 @@ func (h *PaymentHandler) getPayments(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
-// helpers (unique names to avoid collisions with other files)
+// helpers
 // ------------------------------------------------------------
 
 func payPickString(m map[string]any, keys ...string) string {
@@ -323,7 +281,8 @@ func payPickString(m map[string]any, keys ...string) string {
 		if !ok {
 			continue
 		}
-		s := strings.TrimSpace(fmt.Sprint(v))
+		// ✅ no TrimSpace (ids must not be trimmed)
+		s := fmt.Sprint(v)
 		if s != "" && s != "<nil>" {
 			return s
 		}
@@ -363,6 +322,7 @@ func payParseIntAny(v any) (int, bool) {
 		}
 		return int(i), true
 	case string:
+		// amount is not an id; trim is OK here to parse numeric
 		s := strings.TrimSpace(x)
 		if s == "" {
 			return 0, false
@@ -378,35 +338,8 @@ func payParseIntAny(v any) (int, bool) {
 	}
 }
 
-func payToMap(v any) (map[string]any, bool) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, false
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, false
-	}
-	return m, true
-}
-
-func payAlias(m map[string]any, from, to string) {
-	if m == nil {
-		return
-	}
-	// if already present and non-empty string, keep it
-	if v, ok := m[to]; ok {
-		if s, ok2 := v.(string); ok2 && strings.TrimSpace(s) != "" {
-			return
-		}
-	}
-	if v, ok := m[from]; ok {
-		m[to] = v
-	}
-}
-
 func payMaskUID(uid string) string {
-	uid = strings.TrimSpace(uid)
+	// ✅ no TrimSpace for id
 	if uid == "" {
 		return ""
 	}
@@ -414,6 +347,17 @@ func payMaskUID(uid string) string {
 		return "***"
 	}
 	return uid[:3] + "***" + uid[len(uid)-3:]
+}
+
+func payMaskID(id string) string {
+	// ✅ no TrimSpace for id
+	if id == "" {
+		return ""
+	}
+	if len(id) <= 6 {
+		return "***"
+	}
+	return id[:3] + "***" + id[len(id)-3:]
 }
 
 func payIsNotFoundLike(err error) bool {
@@ -424,10 +368,11 @@ func payIsNotFoundLike(err error) bool {
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "not_found") || strings.Contains(msg, "404")
 }
 
-// ---- reflect setters for CreatePaymentInput (compile-safe) ----
+// ---- reflect setters for CreatePaymentInput (kept) ----
+// NOTE: We removed TrimSpace for id-ish values here as well.
 
 func paySetStringFieldBestEffort(ptr any, val string, fieldNames ...string) {
-	val = strings.TrimSpace(val)
+	// ✅ no TrimSpace for ids
 	if ptr == nil || val == "" {
 		return
 	}
@@ -449,7 +394,6 @@ func paySetStringFieldBestEffort(ptr any, val string, fieldNames ...string) {
 			f.SetString(val)
 			return
 		}
-		// support alias types: type Xxx string
 		if f.Kind() == reflect.String && f.Type().ConvertibleTo(reflect.TypeOf("")) {
 			f.SetString(val)
 			return
@@ -484,6 +428,7 @@ func paySetIntFieldBestEffort(ptr any, val int, fieldNames ...string) {
 }
 
 func paySetStatusFieldBestEffort(ptr any, status string, fieldNames ...string) {
+	// status is not id; trimming OK
 	status = strings.TrimSpace(status)
 	if ptr == nil || status == "" {
 		return
@@ -503,61 +448,14 @@ func paySetStatusFieldBestEffort(ptr any, status string, fieldNames ...string) {
 			continue
 		}
 
-		// string
 		if f.Kind() == reflect.String {
 			f.SetString(status)
 			return
 		}
 
-		// alias type (e.g. type PaymentStatus string)
 		if f.Kind() == reflect.String && f.Type().ConvertibleTo(reflect.TypeOf("")) {
 			f.SetString(status)
 			return
 		}
 	}
-}
-
-// ------------------------------------------------------------
-// reflect call to OrderQuery.ResolveByUID (kept, because orderQ is any)
-// ------------------------------------------------------------
-
-func payCallResolveByUID(orderQ any, ctx context.Context, uid string) (any, error) {
-	if orderQ == nil {
-		return nil, errors.New("order_query_not_initialized")
-	}
-
-	rv := reflect.ValueOf(orderQ)
-	if !rv.IsValid() {
-		return nil, errors.New("order_query_not_initialized")
-	}
-
-	m := rv.MethodByName("ResolveByUID")
-	if !m.IsValid() {
-		if rv.Kind() != reflect.Pointer && rv.CanAddr() {
-			m = rv.Addr().MethodByName("ResolveByUID")
-		}
-	}
-	if !m.IsValid() {
-		return nil, errors.New("order_query_missing_method_ResolveByUID")
-	}
-
-	if m.Type().NumIn() != 2 || m.Type().NumOut() != 2 {
-		return nil, errors.New("order_query_invalid_signature")
-	}
-
-	outs := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(uid)})
-	if len(outs) != 2 {
-		return nil, errors.New("order_query_invalid_signature")
-	}
-
-	var err error
-	if !outs[1].IsNil() {
-		if e, ok := outs[1].Interface().(error); ok {
-			err = e
-		} else {
-			err = errors.New("order_query_returned_non_error")
-		}
-	}
-
-	return outs[0].Interface(), err
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // 汎用エラー（ドメイン共通）
@@ -295,7 +297,7 @@ func NewFromStringTime(
 	companyID string,
 ) (ProductBlueprint, error) {
 
-	t, err := parseTime(createdAt)
+	t, err := domcommon.ParseTime(createdAt)
 	if err != nil {
 		return ProductBlueprint{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
@@ -490,27 +492,6 @@ func (p *ProductBlueprint) touch(now time.Time, updatedBy *string) {
 	}
 	p.UpdatedAt = now
 	p.UpdatedBy = updatedBy
-}
-
-func parseTime(s string) (time.Time, error) {
-	if strings.TrimSpace(s) == "" {
-		return time.Time{}, ErrInvalidCreatedAt
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, layout := range layouts {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
 func dedupTrim(xs []string) []string {

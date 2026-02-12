@@ -95,25 +95,6 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if t := parseRFC3339Ptr(qp.Get("createdFrom")); t != nil {
-		f.CreatedFrom = t
-	}
-	if t := parseRFC3339Ptr(qp.Get("createdTo")); t != nil {
-		f.CreatedTo = t
-	}
-	if t := parseRFC3339Ptr(qp.Get("updatedFrom")); t != nil {
-		f.UpdatedFrom = t
-	}
-	if t := parseRFC3339Ptr(qp.Get("updatedTo")); t != nil {
-		f.UpdatedTo = t
-	}
-	if t := parseRFC3339Ptr(qp.Get("deletedFrom")); t != nil {
-		f.DeletedFrom = t
-	}
-	if t := parseRFC3339Ptr(qp.Get("deletedTo")); t != nil {
-		f.DeletedTo = t
-	}
-
 	sort := listdom.Sort{} // repo側のデフォルトに任せる
 
 	pageNum := parseIntDefault(qp.Get("page"), 1)

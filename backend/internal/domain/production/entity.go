@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // 汎用エラー（リポジトリ/サービス共通）
@@ -100,7 +102,7 @@ func New(
 		PrintedAt:          printedAt,
 		// PrintedBy はコンストラクタでは nil 初期化（後から更新）
 		PrintedBy: nil,
-		CreatedBy: normalizePtr(createdBy),
+		CreatedBy: domcommon.NormalizeStringPtr(createdBy),
 		CreatedAt: createdAt, // ゼロ許容
 	}
 	if err := p.validate(); err != nil {
@@ -137,21 +139,21 @@ func NewFromStringTimes(
 	)
 
 	if strings.TrimSpace(printedAt) != "" {
-		t, err := parseTime(printedAt)
+		t, err := domcommon.ParseTime(printedAt)
 		if err != nil {
 			return Production{}, fmt.Errorf("%w: %v", ErrInvalidPrintedAt, err)
 		}
 		printedPtr = &t
 	}
 	if strings.TrimSpace(createdAt) != "" {
-		t, err := parseTime(createdAt)
+		t, err := domcommon.ParseTime(createdAt)
 		if err != nil {
 			return Production{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 		}
 		created = t
 	}
 	if strings.TrimSpace(updatedAt) != "" {
-		t, err := parseTime(updatedAt)
+		t, err := domcommon.ParseTime(updatedAt)
 		if err != nil {
 			return Production{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 		}
@@ -164,7 +166,7 @@ func NewFromStringTimes(
 	}
 	// 追加フィールド
 	p.UpdatedAt = updated
-	p.UpdatedBy = normalizePtr(updatedBy)
+	p.UpdatedBy = domcommon.NormalizeStringPtr(updatedBy)
 
 	if err := p.validate(); err != nil {
 		return Production{}, err
@@ -265,39 +267,4 @@ func normalizeModels(in []ModelQuantity) []ModelQuantity {
 		out = append(out, ModelQuantity{ModelID: id, Quantity: mq.Quantity})
 	}
 	return out
-}
-
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, errors.New("empty time")
-	}
-	// RFC3339 first
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	// Fallback layouts
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, layout := range layouts {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
-}
-
-func normalizePtr(s *string) *string {
-	if s == nil {
-		return nil
-	}
-	v := strings.TrimSpace(*s)
-	if v == "" {
-		return nil
-	}
-	return &v
 }

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // Domain errors
@@ -99,7 +101,7 @@ func NewNow(addr string, tokens []string, status WalletStatus) (Wallet, error) {
 
 // NewFromStringTime accepts lastUpdatedAt as string (ISO8601). Status becomes 'active'.
 func NewFromStringTime(addr string, tokens []string, lastUpdatedAt string) (Wallet, error) {
-	t, err := parseTime(lastUpdatedAt)
+	t, err := domcommon.ParseTime(lastUpdatedAt)
 	if err != nil {
 		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidLastUpdatedAt, err)
 	}
@@ -108,7 +110,7 @@ func NewFromStringTime(addr string, tokens []string, lastUpdatedAt string) (Wall
 
 // NewFromStringTimes accepts ISO8601 string for lastUpdated and status.
 func NewFromStringTimes(addr string, tokens []string, lastUpdatedAt, status string) (Wallet, error) {
-	lut, err := parseTime(lastUpdatedAt)
+	lut, err := domcommon.ParseTime(lastUpdatedAt)
 	if err != nil {
 		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidLastUpdatedAt, err)
 	}
@@ -242,26 +244,4 @@ func dedup(xs []string) []string {
 		out = append(out, x)
 	}
 	return out
-}
-
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, ErrInvalidLastUpdatedAt
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, layout := range layouts {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }

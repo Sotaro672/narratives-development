@@ -13,33 +13,12 @@ import (
 	modeldom "narratives/internal/domain/model"
 )
 
-// MallCatalogQuery is the minimal contract to serve /mall/catalog/{listId}.
-// NOTE: We keep this as an interface here to avoid tight coupling.
-// The concrete implementation is:
-// - backend/internal/application/query/mall/catalog_query.go
 type MallCatalogQuery interface {
 	GetByListID(ctx context.Context, listID string) (any, error)
 }
 
-// MallModelHandler serves buyer-facing model endpoints.
-//
-// Routes (intended):
-// - GET /mall/models?productBlueprintId=xxxx
-// - GET /mall/models/{modelId}
-//
-// Additionally (to avoid new catalog_handler.go):
-// - GET /mall/catalog/{listId}
-//
-// IMPORTANT:
-// This handler can be mounted to both:
-// - mux.Handle("/mall/models", handler)
-// - mux.Handle("/mall/models/", handler)
-// - mux.Handle("/mall/catalog", handler)
-// - mux.Handle("/mall/catalog/", handler)
 type MallModelHandler struct {
-	Repo modeldom.RepositoryPort
-
-	// optional: catalog DTO builder
+	Repo    modeldom.RepositoryPort
 	Catalog MallCatalogQuery
 }
 
@@ -47,7 +26,6 @@ func NewMallModelHandler(repo modeldom.RepositoryPort) http.Handler {
 	return &MallModelHandler{Repo: repo, Catalog: nil}
 }
 
-// use this when you also want to serve /mall/catalog/{listId}
 func NewMallModelHandlerWithCatalog(repo modeldom.RepositoryPort, catalog MallCatalogQuery) http.Handler {
 	return &MallModelHandler{Repo: repo, Catalog: catalog}
 }
@@ -64,12 +42,8 @@ func (h *MallModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ============================================================
-	// catalog: /mall/catalog/{listId}
-	// ============================================================
 	if strings.HasPrefix(path, "/mall/catalog/") {
 		id := strings.TrimPrefix(path, "/mall/catalog/")
-		id = strings.TrimSpace(id)
 		if id == "" {
 			notFound(w)
 			return
@@ -78,29 +52,22 @@ func (h *MallModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/mall/catalog" {
-		// collection endpoint is not defined
 		notFound(w)
 		return
 	}
 
-	// ============================================================
-	// models: /mall/models
-	// ============================================================
 	if h.Repo == nil {
 		internalError(w, "model repo is nil")
 		return
 	}
 
-	// collection: /mall/models
 	if path == "/mall/models" {
 		h.handleListByProductBlueprintID(w, r)
 		return
 	}
 
-	// item: /mall/models/{id}
 	if strings.HasPrefix(path, "/mall/models/") {
 		id := strings.TrimPrefix(path, "/mall/models/")
-		id = strings.TrimSpace(id)
 		if id == "" {
 			notFound(w)
 			return
@@ -125,14 +92,12 @@ type mallModelListResponse struct {
 	PerPage    int             `json:"perPage"`
 }
 
-// GET /mall/models?productBlueprintId=xxxx
 func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	// accept both productBlueprintId and pb as alias
-	pbID := strings.TrimSpace(q.Get("productBlueprintId"))
+	pbID := q.Get("productBlueprintId")
 	if pbID == "" {
-		pbID = strings.TrimSpace(q.Get("pb"))
+		pbID = q.Get("pb")
 	}
 	if pbID == "" {
 		badRequest(w, "productBlueprintId is required")
@@ -147,14 +112,12 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 	if perPage <= 0 {
 		perPage = 50
 	}
-	// protect from huge payloads
 	if perPage > 200 {
 		perPage = 200
 	}
 
 	deletedFalse := false
 
-	// 1) productBlueprintId で variation 一覧を取得（= modelId 一覧の取得）
 	res, err := h.Repo.ListVariations(
 		r.Context(),
 		modeldom.VariationFilter{
@@ -171,34 +134,30 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 		return
 	}
 
-	// 2) それぞれの modelId で metadata を取得
 	items := make([]mallModelItem, 0, len(res.Items))
 
 	for _, v := range res.Items {
 		modelID := extractID(v)
 		if modelID == "" {
-			// ID が取れない場合はスキップ（異常データ対策）
 			continue
 		}
 
 		mv, err := h.Repo.GetModelVariationByID(r.Context(), modelID)
 		if err != nil {
-			// 1件でも失敗したら全体を失敗にする（必要なら「欠損許容」に変更可）
 			internalError(w, err.Error())
 			return
 		}
 
-		// buyer-facing DTO へ変換（lowerCamel）
 		dto, ok := toMallModelVariationDTOAny(mv)
 		if !ok {
 			dto = malldto.CatalogModelVariationDTO{
-				ID:                 strings.TrimSpace(modelID),
-				ProductBlueprintID: strings.TrimSpace(pbID),
+				ID:                 modelID,
+				ProductBlueprintID: pbID,
 				ModelNumber:        "",
 				Size:               "",
 				ColorName:          "",
 				ColorRGB:           0,
-				Measurements:       map[string]int{}, // 空でも出す（null回避）
+				Measurements:       map[string]int{},
 				StockKeys:          0,
 			}
 		}
@@ -221,7 +180,6 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 	})
 }
 
-// GET /mall/models/{modelId}
 func (h *MallModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request, id string) {
 	mv, err := h.Repo.GetModelVariationByID(r.Context(), id)
 	if err != nil {
@@ -232,7 +190,7 @@ func (h *MallModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request,
 	dto, ok := toMallModelVariationDTOAny(mv)
 	if !ok {
 		dto = malldto.CatalogModelVariationDTO{
-			ID:                 strings.TrimSpace(id),
+			ID:                 id,
 			ProductBlueprintID: "",
 			ModelNumber:        "",
 			Size:               "",
@@ -252,7 +210,6 @@ func (h *MallModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-// GET /mall/catalog/{listId}
 func (h *MallModelHandler) handleGetCatalogByListID(w http.ResponseWriter, r *http.Request, listID string) {
 	if h.Catalog == nil {
 		internalError(w, "catalog query is nil")
@@ -261,7 +218,6 @@ func (h *MallModelHandler) handleGetCatalogByListID(w http.ResponseWriter, r *ht
 
 	dto, err := h.Catalog.GetByListID(r.Context(), listID)
 	if err != nil {
-		// list not found / not listing -> 404
 		if errors.Is(err, ldom.ErrNotFound) {
 			notFound(w)
 			return
@@ -273,8 +229,6 @@ func (h *MallModelHandler) handleGetCatalogByListID(w http.ResponseWriter, r *ht
 	writeJSON(w, http.StatusOK, dto)
 }
 
-// extractID tries common field names (ID/Id/ModelID/ModelId) by reflection.
-// This avoids compile-time dependency on ModelVariation's concrete fields.
 func extractID(v any) string {
 	if v == nil {
 		return ""
@@ -300,17 +254,12 @@ func extractID(v any) string {
 			continue
 		}
 		if f.Kind() == reflect.String {
-			return strings.TrimSpace(f.String())
+			return f.String()
 		}
 	}
 
 	return ""
 }
-
-// ------------------------------------------------------------
-// DTO mapper (reflection) - aligned with mall/dto/catalog_dto.go
-// (Color integrated: ColorName/ColorRGB)
-// ------------------------------------------------------------
 
 func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) {
 	if v == nil {
@@ -331,9 +280,8 @@ func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) 
 		return malldto.CatalogModelVariationDTO{}, false
 	}
 
-	// strings
 	id := pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
-	if strings.TrimSpace(id) == "" {
+	if id == "" {
 		return malldto.CatalogModelVariationDTO{}, false
 	}
 
@@ -342,23 +290,16 @@ func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) 
 	size := pickStringField(rv.Interface(), "Size", "size")
 
 	dto := malldto.CatalogModelVariationDTO{
-		ID:                 strings.TrimSpace(id),
-		ProductBlueprintID: strings.TrimSpace(pbID),
+		ID:                 id,
+		ProductBlueprintID: pbID,
 		ModelNumber:        strings.TrimSpace(modelNumber),
 		Size:               strings.TrimSpace(size),
-
-		// Color integrated
-		ColorName: "",
-		ColorRGB:  0,
-
-		// always non-nil map for JSON (avoid null)
-		Measurements: map[string]int{},
-
-		// stock-related fields are not served by /mall/models, keep zero-value
-		StockKeys: 0,
+		ColorName:          "",
+		ColorRGB:           0,
+		Measurements:       map[string]int{},
+		StockKeys:          0,
 	}
 
-	// color: Color.{Name,RGB} -> ColorName/ColorRGB
 	if c := rv.FieldByName("Color"); c.IsValid() {
 		if c.Kind() == reflect.Pointer {
 			if !c.IsNil() {
@@ -377,7 +318,6 @@ func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) 
 		}
 	}
 
-	// measurements: map[string]int (or map[string]any/number)
 	if m := rv.FieldByName("Measurements"); m.IsValid() {
 		if m.Kind() == reflect.Map && m.Type().Key().Kind() == reflect.String {
 			out := make(map[string]int)
@@ -421,7 +361,7 @@ func pickStringField(v any, fieldNames ...string) string {
 			continue
 		}
 		if f.Kind() == reflect.String {
-			return strings.TrimSpace(f.String())
+			return f.String()
 		}
 	}
 	return ""

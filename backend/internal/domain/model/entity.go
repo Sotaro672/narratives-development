@@ -4,6 +4,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	domcommon "narratives/internal/domain/common"
 	"strings"
 	"time"
 )
@@ -206,7 +207,7 @@ func NewModelDataFromStringTime(
 	variations []ModelVariation,
 	updatedAt string,
 ) (ModelData, error) {
-	t, err := parseTime(updatedAt)
+	t, err := domcommon.ParseTime(updatedAt)
 	if err != nil {
 		return ModelData{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
@@ -306,28 +307,6 @@ func (md *ModelData) touch(now time.Time) {
 		now = time.Now().UTC()
 	}
 	md.UpdatedAt = now
-}
-
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, ErrInvalidUpdatedAt
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
 func sizeAllowed(size string) bool {

@@ -164,8 +164,8 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 	ctx := r.Context()
 
 	start := time.Now()
-	rawPath := strings.TrimSpace(r.URL.Path)
-	rawQuery := strings.TrimSpace(r.URL.RawQuery)
+	rawPath := r.URL.Path
+	rawQuery := r.URL.RawQuery
 
 	log.Printf(
 		"[mint_handler] POST /mint/mints/{id}/execute start path=%q rawQuery=%q mintUC_nil=%t",
@@ -182,7 +182,7 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 	// /mint/mints/{inspectionId}/execute
 	path := strings.TrimPrefix(r.URL.Path, "/mint/mints/")
 	path = strings.TrimSuffix(path, "/execute")
-	inspectionID := strings.Trim(strings.TrimSpace(path), "/")
+	inspectionID := strings.Trim(path, "/")
 
 	if inspectionID == "" {
 		log.Printf("[mint_handler] POST /mint/mints/{id}/execute bad_request reason=empty_inspectionId elapsed=%s", time.Since(start))
@@ -238,7 +238,7 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 		http.NotFound(w, r)
 		return
 	}
-	productionID := strings.TrimSpace(path)
+	productionID := path
 
 	log.Printf("[mint_handler] /mint/inspections/{productionId} start productionId=%q", productionID)
 
@@ -719,8 +719,8 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 
 	start := time.Now()
-	rawPath := strings.TrimSpace(r.URL.Path)
-	rawQuery := strings.TrimSpace(r.URL.RawQuery)
+	rawPath := r.URL.Path
+	rawQuery := r.URL.RawQuery
 
 	log.Printf(
 		"[mint_handler] POST /mint/requests/{id}/mint start path=%q rawQuery=%q mintUC_nil=%t",
@@ -802,10 +802,6 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 
 	// body を生で読む（Decode 後だと読めない）
 	raw, _ := io.ReadAll(r.Body)
-	log.Printf(
-		"[mint_handler] /mint/inspections/{productionId}/request rawBody productionId=%q body=%s",
-		productionID, string(raw),
-	)
 
 	var body struct {
 		TokenBlueprintID  string  `json:"tokenBlueprintId"`
@@ -996,61 +992,6 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 	}
 
 	_ = json.NewEncoder(w).Encode(items)
-}
-
-// ============================================================
-// Helpers (logging)
-// ============================================================
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func sampleFirst[T any](xs []T) any {
-	if len(xs) == 0 {
-		return nil
-	}
-	return xs[0]
-}
-
-func toJSONForLog(v any, max int) string {
-	if v == nil {
-		return "null"
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "<marshal_error>"
-	}
-	s := string(b)
-	if max > 0 && len(s) > max {
-		return s[:max] + "...(truncated)"
-	}
-	return s
-}
-
-func sampleFirstKey[V any](m map[string]V) string {
-	if len(m) == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys[0]
-}
-
-func sampleFirstValue[V any](m map[string]V) any {
-	if len(m) == 0 {
-		return nil
-	}
-	k := sampleFirstKey(m)
-	if k == "" {
-		return nil
-	}
-	return m[k]
 }
 
 // keep imports referenced in some builds

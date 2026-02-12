@@ -9,6 +9,7 @@ import (
 	"time"
 
 	branddom "narratives/internal/domain/brand"
+	domcommon "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
 )
 
@@ -303,11 +304,11 @@ func NewFromStrings(
 	updatedAt string,
 ) (TokenBlueprint, error) {
 
-	ca, err := parseTime(createdAt)
+	ca, err := domcommon.ParseTime(createdAt)
 	if err != nil {
 		return TokenBlueprint{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
-	ua, err := parseTime(updatedAt)
+	ua, err := domcommon.ParseTime(updatedAt)
 	if err != nil {
 		return TokenBlueprint{}, fmt.Errorf("invalid updatedAt: %v", err)
 	}
@@ -601,32 +602,6 @@ func DefaultTokenContentsObjectPath(tokenBlueprintID string) string {
 		return ""
 	}
 	return fmt.Sprintf("%s/.keep", tokenBlueprintID)
-}
-
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, errors.New("empty time")
-	}
-
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
 func dedupContentFiles(xs []ContentFile) []ContentFile {

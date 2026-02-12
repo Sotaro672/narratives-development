@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // ShippingAddress エンティティ（Mallアプリの配送先入力欄に準拠）
@@ -239,36 +241,13 @@ func NewFromStringTimes(
 	zipCode, state, city, street, street2, country string,
 	createdAt, updatedAt string,
 ) (ShippingAddress, error) {
-	ct, err := parseTime(createdAt)
+	ct, err := domcommon.ParseTime(createdAt)
 	if err != nil {
 		return ShippingAddress{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
-	ut, err := parseTime(updatedAt)
+	ut, err := domcommon.ParseTime(updatedAt)
 	if err != nil {
 		return ShippingAddress{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
 	return New(id, userID, zipCode, state, city, street, street2, country, ct, ut)
-}
-
-// parseTime is kept here for constructors that parse timestamps.
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, errors.New("empty time")
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }

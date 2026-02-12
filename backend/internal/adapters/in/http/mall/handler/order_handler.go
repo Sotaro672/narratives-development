@@ -154,7 +154,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request, requireAuth 
 			return
 		}
 
-	// ✅ legacy path removed: never accept bodyUID fallback
 	default:
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})

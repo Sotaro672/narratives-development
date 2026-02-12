@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // PaymentStatus (mirror TS)
@@ -51,8 +53,6 @@ type Payment struct {
 // Errors
 var (
 	ErrInvalidInvoiceID = errors.New("payment: invalid invoiceId")
-	// ErrInvalidBillingAddressID は「空を許可」する方針のため通常は使わない（将来、必須化する場合に復活）
-	// ErrInvalidBillingAddressID = errors.New("payment: invalid billingAddressId")
 	ErrInvalidAmount    = errors.New("payment: invalid amount")
 	ErrInvalidStatus    = errors.New("payment: invalid status")
 	ErrInvalidErrorType = errors.New("payment: invalid errorType")
@@ -88,7 +88,7 @@ func New(
 		BillingAddressID: billingAddressID, // empty allowed
 		Amount:           amount,
 		Status:           st,
-		ErrorType:        normalizePtr(errorType),
+		ErrorType:        domcommon.NormalizeStringPtr(errorType),
 		CreatedAt:        createdAt.UTC(),
 	}
 	if err := p.validate(); err != nil {
@@ -115,9 +115,9 @@ func NewFromStringTimes(
 	errorType *string,
 	createdAtStr string,
 ) (Payment, error) {
-	ct, err := parseTime(createdAtStr, ErrInvalidCreatedAt)
+	ct, err := domcommon.ParseTime(createdAtStr)
 	if err != nil {
-		return Payment{}, err
+		return Payment{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
 	return New(invoiceID, billingAddressID, amount, status, errorType, ct)
 }
@@ -146,7 +146,7 @@ func (p *Payment) SetAmount(amount int) error {
 }
 
 func (p *Payment) SetErrorType(errType *string) error {
-	et := normalizePtr(errType)
+	et := domcommon.NormalizeStringPtr(errType)
 	// if explicitly provided empty string, it becomes nil (cleared)
 	p.ErrorType = et
 	return nil
@@ -179,39 +179,4 @@ func (p Payment) validate() error {
 	}
 
 	return nil
-}
-
-// Helpers
-
-func normalizePtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	v := strings.TrimSpace(*p)
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
-func parseTime(s string, classify error) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, classify
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("%w: cannot parse %q", classify, s)
 }

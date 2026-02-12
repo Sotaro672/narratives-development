@@ -1,11 +1,10 @@
-// backend\internal\adapters\in\http\mall\handler\cart_query_handler.go
+// backend/internal/adapters/in/http/mall/handler/cart_query_handler.go
 package mallHandler
 
 import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 
 	mallquery "narratives/internal/application/query/mall"
 	malldto "narratives/internal/application/query/mall/dto"
@@ -39,11 +38,7 @@ func (h *CartQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	aid := strings.TrimSpace(r.URL.Query().Get("avatarId"))
-	if aid == "" {
-		// 互換: aid でも拾う（あっても害はない）
-		aid = strings.TrimSpace(r.URL.Query().Get("aid"))
-	}
+	aid := r.URL.Query().Get("avatarId")
 	if aid == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "avatarId is required",
@@ -53,7 +48,7 @@ func (h *CartQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	dto, err := h.Q.GetByAvatarID(r.Context(), aid)
 	if err != nil {
-		// ✅ carts/{avatarId} が無い場合でも “空カートで 200” にする（UI を白画面にしない）
+		// carts/{avatarId} が無い場合でも “空カートで 200” にする（UI を白画面にしない）
 		if errors.Is(err, mallquery.ErrNotFound) {
 			empty := malldto.CartDTO{
 				AvatarID: aid,
@@ -75,7 +70,6 @@ func (h *CartQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // ここはログ用の軽いマスク（query 側の maskUID と違ってもOK）
 func maskUIDLite(s string) string {
-	s = strings.TrimSpace(s)
 	if len(s) <= 6 {
 		return "***"
 	}

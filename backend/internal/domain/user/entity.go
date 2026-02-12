@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // User mirrors web-app/src/shared/types/user.ts
@@ -50,7 +52,7 @@ var (
 
 // Mutators
 func (u *User) SetFirstName(v *string) error {
-	v = normalizePtr(v)
+	v = domcommon.NormalizeStringPtr(v)
 	if v != nil && len([]rune(*v)) > MaxNameLength {
 		return ErrInvalidFirstName
 	}
@@ -59,7 +61,7 @@ func (u *User) SetFirstName(v *string) error {
 }
 
 func (u *User) SetFirstNameKana(v *string) error {
-	v = normalizePtr(v)
+	v = domcommon.NormalizeStringPtr(v)
 	if v != nil && len([]rune(*v)) > MaxNameLength {
 		return ErrInvalidFirstNameKana
 	}
@@ -68,7 +70,7 @@ func (u *User) SetFirstNameKana(v *string) error {
 }
 
 func (u *User) SetLastName(v *string) error {
-	v = normalizePtr(v)
+	v = domcommon.NormalizeStringPtr(v)
 	if v != nil && len([]rune(*v)) > MaxNameLength {
 		return ErrInvalidLastName
 	}
@@ -77,7 +79,7 @@ func (u *User) SetLastName(v *string) error {
 }
 
 func (u *User) SetLastNameKana(v *string) error {
-	v = normalizePtr(v)
+	v = domcommon.NormalizeStringPtr(v)
 	if v != nil && len([]rune(*v)) > MaxNameLength {
 		return ErrInvalidLastNameKana
 	}
@@ -138,10 +140,10 @@ func New(
 ) (User, error) {
 	u := User{
 		ID:            strings.TrimSpace(id),
-		FirstName:     normalizePtr(firstName),
-		FirstNameKana: normalizePtr(firstNameKana),
-		LastNameKana:  normalizePtr(lastNameKana),
-		LastName:      normalizePtr(lastName),
+		FirstName:     domcommon.NormalizeStringPtr(firstName),
+		FirstNameKana: domcommon.NormalizeStringPtr(firstNameKana),
+		LastNameKana:  domcommon.NormalizeStringPtr(lastNameKana),
+		LastName:      domcommon.NormalizeStringPtr(lastName),
 		CreatedAt:     createdAt.UTC(),
 		UpdatedAt:     updatedAt.UTC(),
 		DeletedAt:     deletedAt.UTC(), // zero stays zero
@@ -170,11 +172,11 @@ func NewFromStringTimes(
 	firstName, firstNameKana, lastNameKana, lastName *string,
 	createdAt, updatedAt, deletedAt string,
 ) (User, error) {
-	ct, err := parseTime(createdAt)
+	ct, err := domcommon.ParseTime(createdAt)
 	if err != nil {
 		return User{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
-	ut, err := parseTime(updatedAt)
+	ut, err := domcommon.ParseTime(updatedAt)
 	if err != nil {
 		return User{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
@@ -183,7 +185,7 @@ func NewFromStringTimes(
 	deletedAt = strings.TrimSpace(deletedAt)
 	var dt time.Time
 	if deletedAt != "" {
-		parsed, derr := parseTime(deletedAt)
+		parsed, derr := domcommon.ParseTime(deletedAt)
 		if derr != nil {
 			return User{}, fmt.Errorf("%w: %v", ErrInvalidDeletedAt, derr)
 		}
@@ -193,39 +195,4 @@ func NewFromStringTimes(
 	}
 
 	return New(id, firstName, firstNameKana, lastNameKana, lastName, ct, ut, dt)
-}
-
-// Helpers
-
-func normalizePtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, errors.New("empty time")
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }

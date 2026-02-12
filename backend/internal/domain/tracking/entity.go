@@ -1,4 +1,4 @@
-// backend\internal\domain\tracking\entity.go
+// backend/internal/domain/tracking/entity.go
 package tracking
 
 import (
@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // Entity (mirror web-app/src/shared/types/tracking.ts)
@@ -66,7 +68,7 @@ func New(
 		OrderID:             strings.TrimSpace(orderID),
 		TrackingNumber:      strings.TrimSpace(trackingNumber),
 		Carrier:             strings.TrimSpace(carrier),
-		SpecialInstructions: normalizePtr(specialInstructions),
+		SpecialInstructions: domcommon.NormalizeStringPtr(specialInstructions),
 		CreatedAt:           createdAt.UTC(),
 		UpdatedAt:           updatedAt.UTC(),
 	}
@@ -90,13 +92,13 @@ func NewFromStringTimes(
 	specialInstructions *string,
 	createdAt, updatedAt string,
 ) (Tracking, error) {
-	ct, err := parseTime(createdAt, ErrInvalidCreatedAt)
+	ct, err := domcommon.ParseTime(createdAt)
 	if err != nil {
-		return Tracking{}, err
+		return Tracking{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
-	ut, err := parseTime(updatedAt, ErrInvalidUpdatedAt)
+	ut, err := domcommon.ParseTime(updatedAt)
 	if err != nil {
-		return Tracking{}, err
+		return Tracking{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
 	return New(id, orderID, trackingNumber, carrier, specialInstructions, ct, ut)
 }
@@ -138,7 +140,7 @@ func (t *Tracking) SetCarrier(v string, now time.Time) error {
 }
 
 func (t *Tracking) SetSpecialInstructions(v *string, now time.Time) error {
-	n := normalizePtr(v)
+	n := domcommon.NormalizeStringPtr(v)
 	if n != nil && MaxSpecialInstructionsLength > 0 && len([]rune(*n)) > MaxSpecialInstructionsLength {
 		return ErrInvalidSpecialInstructions
 	}
@@ -204,37 +206,4 @@ func withinLen(s string, min, max int) bool {
 		return false
 	}
 	return true
-}
-
-func normalizePtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	v := strings.TrimSpace(*p)
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
-func parseTime(s string, classify error) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, classify
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("%w: cannot parse %q", classify, s)
 }

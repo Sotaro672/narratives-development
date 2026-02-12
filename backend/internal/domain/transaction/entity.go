@@ -1,4 +1,4 @@
-// backend\internal\domain\transaction\entity.go
+// backend/internal/domain/transaction/entity.go
 package transaction
 
 import (
@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // TransactionType (TS: "receive" | "send")
@@ -97,7 +99,7 @@ func NewFromStringTimestamp(
 	timestamp string, // ISO8601/RFC3339
 	description string,
 ) (Transaction, error) {
-	ts, err := parseTime(timestamp)
+	ts, err := domcommon.ParseTime(timestamp)
 	if err != nil {
 		return Transaction{}, fmt.Errorf("%w: %v", ErrInvalidTimestamp, err)
 	}
@@ -179,28 +181,4 @@ func validateType(tp TransactionType) error {
 	default:
 		return ErrInvalidType
 	}
-}
-
-// Helpers
-
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, fmt.Errorf("empty time")
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }

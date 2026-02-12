@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\cart_handler.go
+// backend/internal/adapters/in/http/mall/handler/cart_handler.go
 package mallHandler
 
 import (
@@ -42,7 +42,6 @@ func NewCartHandlerWithQueries(
 }
 
 func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// ---- request entry log (always) ----
 	start := time.Now()
 	rawPath := r.URL.Path
 	path := strings.TrimRight(rawPath, "/")
@@ -50,8 +49,8 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
-	avatarFromQ := strings.TrimSpace(r.URL.Query().Get("avatarId"))
-	avatarFromH := strings.TrimSpace(r.Header.Get("X-Avatar-Id"))
+	avatarFromQ := r.URL.Query().Get("avatarId")
+	avatarFromH := r.Header.Get("X-Avatar-Id")
 	avatarID := readAvatarID(r, "")
 
 	log.Printf(
@@ -80,7 +79,6 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	hasSuffixAny := func(p string, suffixes ...string) bool {
 		for _, s := range suffixes {
-			s = strings.TrimSpace(s)
 			if s == "" {
 				continue
 			}
@@ -162,7 +160,6 @@ func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request, s
 	log.Printf("[mall_cart_handler] GET unified cartQuery error avatarId=%q notFound=%t err=%v\n", avatarID, nf, err)
 
 	if nf {
-		// empty cart (stable UX)
 		log.Printf("[mall_cart_handler] GET unified return empty-cart status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 		writeJSON(w, http.StatusOK, map[string]any{
 			"avatarId":  avatarID,
@@ -196,7 +193,7 @@ func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	s := strings.ToLower(strings.TrimSpace(err.Error()))
+	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "not found") ||
 		strings.Contains(s, "notfound") ||
 		strings.Contains(s, "no such") ||
@@ -217,9 +214,9 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request, star
 
 	avatarID := readAvatarID(r, req.AvatarID)
 
-	invID := strings.TrimSpace(req.InventoryID)
-	listID := strings.TrimSpace(req.ListID)
-	modelID := strings.TrimSpace(req.ModelID)
+	invID := req.InventoryID
+	listID := req.ListID
+	modelID := req.ModelID
 
 	log.Printf("[mall_cart_handler] POST add-item request avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
 
@@ -254,9 +251,9 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request, s
 
 	avatarID := readAvatarID(r, req.AvatarID)
 
-	invID := strings.TrimSpace(req.InventoryID)
-	listID := strings.TrimSpace(req.ListID)
-	modelID := strings.TrimSpace(req.ModelID)
+	invID := req.InventoryID
+	listID := req.ListID
+	modelID := req.ModelID
 
 	log.Printf("[mall_cart_handler] PUT set-qty request avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
 
@@ -291,9 +288,9 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request, s
 
 	avatarID := readAvatarID(r, req.AvatarID)
 
-	invID := strings.TrimSpace(req.InventoryID)
-	listID := strings.TrimSpace(req.ListID)
-	modelID := strings.TrimSpace(req.ModelID)
+	invID := req.InventoryID
+	listID := req.ListID
+	modelID := req.ModelID
 
 	log.Printf("[mall_cart_handler] DELETE remove-item request avatarId=%q invID=%q listID=%q modelID=%q\n", avatarID, invID, listID, modelID)
 
@@ -397,13 +394,13 @@ type cartItemReq struct {
 // -------------------------
 
 func readAvatarID(r *http.Request, fallback string) string {
-	if v := strings.TrimSpace(r.URL.Query().Get("avatarId")); v != "" {
+	if v := r.URL.Query().Get("avatarId"); v != "" {
 		return v
 	}
-	if v := strings.TrimSpace(r.Header.Get("X-Avatar-Id")); v != "" {
+	if v := r.Header.Get("X-Avatar-Id"); v != "" {
 		return v
 	}
-	return strings.TrimSpace(fallback)
+	return fallback
 }
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
@@ -458,7 +455,6 @@ func callQuery2WithHit(impl any, ctx context.Context, avatarID string, methodNam
 	}
 
 	for _, name := range methodNames {
-		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
