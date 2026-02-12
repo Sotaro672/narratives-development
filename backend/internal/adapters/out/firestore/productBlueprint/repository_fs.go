@@ -21,13 +21,6 @@ func (r *ProductBlueprintRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("product_blueprints")
 }
 
-// history コレクション: product_blueprints_history/{blueprintId}/versions/{version}
-func (r *ProductBlueprintRepositoryFS) historyCol(blueprintID string) *firestore.CollectionRef {
-	return r.Client.Collection("product_blueprints_history").
-		Doc(blueprintID).
-		Collection("versions")
-}
-
 // Compile-time check: ensure this satisfies domain port
 var (
 	_ pbdom.Repository = (*ProductBlueprintRepositoryFS)(nil)

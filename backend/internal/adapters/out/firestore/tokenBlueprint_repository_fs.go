@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\tokenBlueprint_repository_fs.go
+// backend/internal/adapters/out/firestore/tokenBlueprint_repository_fs.go
 package firestore
 
 import (
@@ -270,34 +270,6 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
-}
-
-func (r *TokenBlueprintRepositoryFS) Count(ctx context.Context, filter tbdom.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	total := 0
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		tb, err := docToTokenBlueprint(doc)
-		if err != nil {
-			return 0, err
-		}
-		if matchTBFilter(tb, filter) {
-			total++
-		}
-	}
-	return total, nil
 }
 
 func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.CreateTokenBlueprintInput) (*tbdom.TokenBlueprint, error) {
@@ -643,55 +615,6 @@ func (r *TokenBlueprintRepositoryFS) UploadContentFile(ctx context.Context, file
 	return "", fmt.Errorf("UploadContentFile: not implemented in Firestore repository")
 }
 
-func (r *TokenBlueprintRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	return fn(ctx)
-}
-
-func (r *TokenBlueprintRepositoryFS) Reset(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	var snaps []*firestore.DocumentSnapshot
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		snaps = append(snaps, doc)
-	}
-
-	const chunkSize = 400
-	for i := 0; i < len(snaps); i += chunkSize {
-		end := i + chunkSize
-		if end > len(snaps) {
-			end = len(snaps)
-		}
-
-		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, s := range snaps[i:end] {
-				if err := tx.Delete(s.Ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // ========================================
 // Helpers
 // ========================================
@@ -729,16 +652,9 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 
 	docID := strings.TrimSpace(doc.Ref.ID)
 
+	// ✅ 旧データ互換を廃止: Firestore に永続化された値をそのまま使う（空は空のまま）
 	iconPath := strings.TrimSpace(raw.TokenIconObjectPath)
-	if iconPath == "" && docID != "" {
-		// 旧データ互換: フィールドが無い場合は規約で補完
-		iconPath = fmt.Sprintf("%s/icon", docID)
-	}
 	contentsPath := strings.TrimSpace(raw.TokenContentsObjectPath)
-	if contentsPath == "" && docID != "" {
-		// 旧データ互換: フィールドが無い場合は規約で補完
-		contentsPath = fmt.Sprintf("%s/.keep", docID)
-	}
 
 	tb := tbdom.TokenBlueprint{
 		ID:           docID,
@@ -756,7 +672,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		UpdatedBy:    strings.TrimSpace(raw.UpdatedBy),
 		MetadataURI:  strings.TrimSpace(raw.MetadataURI),
 
-		// ★ objectPath 永続化
+		// ★ objectPath 永続化（互換補完なし）
 		TokenIconObjectPath:     iconPath,
 		TokenContentsObjectPath: contentsPath,
 	}

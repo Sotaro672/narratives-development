@@ -155,9 +155,6 @@ type RepositoryPort interface {
 	// 一覧取得
 	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
 
-	// 一覧件数
-	Count(ctx context.Context, filter Filter) (int, error)
-
 	// ★ companyId で限定した一覧
 	ListByCompanyID(ctx context.Context, companyID string, page Page) (PageResult, error)
 

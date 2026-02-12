@@ -95,16 +95,11 @@ type PageResult struct {
 type RepositoryPort interface {
 	// 取得
 	GetByInvoiceID(ctx context.Context, invoiceID string) (*Payment, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
 
 	// 変更
 	Create(ctx context.Context, in CreatePaymentInput) (*Payment, error)
 	UpdateByInvoiceID(ctx context.Context, invoiceID string, patch UpdatePaymentInput) (*Payment, error)
 	DeleteByInvoiceID(ctx context.Context, invoiceID string) error
-
-	// 開発/テスト補助
-	Reset(ctx context.Context) error
 }
 
 const (

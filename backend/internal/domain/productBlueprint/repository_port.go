@@ -156,9 +156,4 @@ type Repository interface {
 
 	// ★ printed: false → true への状態遷移
 	MarkPrinted(ctx context.Context, id string) (ProductBlueprint, error)
-
-	// History (snapshot, versioned)
-	SaveHistorySnapshot(ctx context.Context, blueprintID string, h HistoryRecord) error
-	ListHistory(ctx context.Context, blueprintID string) ([]HistoryRecord, error)
-	GetHistoryByVersion(ctx context.Context, blueprintID string, version int64) (HistoryRecord, error)
 }

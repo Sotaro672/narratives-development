@@ -23,16 +23,11 @@ type PaymentRepo interface {
 	// Reads
 	GetByID(ctx context.Context, id string) (*paymentdom.Payment, error)
 	GetByInvoiceID(ctx context.Context, invoiceID string) ([]paymentdom.Payment, error)
-	List(ctx context.Context, filter paymentdom.Filter, sort paymentdom.Sort, page paymentdom.Page) (paymentdom.PageResult, error)
-	Count(ctx context.Context, filter paymentdom.Filter) (int, error)
 
 	// Writes
 	Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error)
 	Update(ctx context.Context, id string, patch paymentdom.UpdatePaymentInput) (*paymentdom.Payment, error)
 	Delete(ctx context.Context, id string) error
-
-	// Dev/Test
-	Reset(ctx context.Context) error
 }
 
 // ✅ Invoice paid を更新するための最小ポート（PaymentUsecase 側）
@@ -118,14 +113,6 @@ func (u *PaymentUsecase) GetByInvoiceID(ctx context.Context, invoiceID string) (
 	return u.repo.GetByInvoiceID(ctx, stringsTrimSpace(invoiceID))
 }
 
-func (u *PaymentUsecase) List(ctx context.Context, filter paymentdom.Filter, sort paymentdom.Sort, page paymentdom.Page) (paymentdom.PageResult, error) {
-	return u.repo.List(ctx, filter, sort, page)
-}
-
-func (u *PaymentUsecase) Count(ctx context.Context, filter paymentdom.Filter) (int, error) {
-	return u.repo.Count(ctx, filter)
-}
-
 // ============================================================
 // Commands
 // ============================================================
@@ -154,11 +141,6 @@ func (u *PaymentUsecase) Update(ctx context.Context, id string, patch paymentdom
 
 func (u *PaymentUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, stringsTrimSpace(id))
-}
-
-// Dev/Test helper
-func (u *PaymentUsecase) Reset(ctx context.Context) error {
-	return u.repo.Reset(ctx)
 }
 
 // local tiny helper (avoid importing strings everywhere in this file)

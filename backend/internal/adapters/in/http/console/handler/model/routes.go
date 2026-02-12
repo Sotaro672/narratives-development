@@ -27,32 +27,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	// ------------------------------------------------------------
-	// PUT /models/variations/{id}
-	//   → 既存の PUT /models/{id} と同じ処理（互換エイリアス）
-	// ------------------------------------------------------------
-	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/models/variations/"):
-		if id, ok := extractSingleID(r.URL.Path, "/models/variations/"); ok {
-			h.updateVariation(w, r, id)
-			return
-		}
-		writeNotFound(w)
-		return
-
-	// ------------------------------------------------------------
-	// DELETE /models/variations/{id}
-	//   → 既存の DELETE /models/{id} と同じ処理（互換エイリアス）
-	// ------------------------------------------------------------
-	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/models/variations/"):
-		if id, ok := extractSingleID(r.URL.Path, "/models/variations/"); ok {
-			h.deleteVariation(w, r, id)
-			return
-		}
-		writeNotFound(w)
-		return
-
-	// ------------------------------------------------------------
 	// GET /models/by-blueprint/{productBlueprintID}/variations
-	//   → ModelUsecase.ListModelVariationsByProductBlueprintID
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/by-blueprint/"):
 		if productBlueprintID, ok := extractBlueprintIDForList(r.URL.Path); ok {

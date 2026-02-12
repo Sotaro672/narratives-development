@@ -210,34 +210,6 @@ func (r *OrderRepositoryFS) ListByCursor(
 	}, nil
 }
 
-func (r *OrderRepositoryFS) Count(ctx context.Context, filter uc.OrderFilter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	it := r.ordersCol().Documents(ctx)
-	defer it.Stop()
-
-	total := 0
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		o, err := docToOrder(doc)
-		if err != nil {
-			return 0, err
-		}
-		if matchOrderFilter(o, filter) {
-			total++
-		}
-	}
-	return total, nil
-}
-
 func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (orderdom.Order, error) {
 	if r.Client == nil {
 		return orderdom.Order{}, errors.New("firestore client is nil")

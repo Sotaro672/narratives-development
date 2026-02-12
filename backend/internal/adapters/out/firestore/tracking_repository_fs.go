@@ -291,56 +291,6 @@ func (r *TrackingRepositoryFS) GetTrackingsByOrderID(ctx context.Context, orderI
 	return out, nil
 }
 
-// ResetTrackings: 全削除 (開発/テスト用途)
-func (r *TrackingRepositoryFS) ResetTrackings(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	var snaps []*firestore.DocumentSnapshot
-	for {
-		snap, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		snaps = append(snaps, snap)
-	}
-
-	const chunkSize = 400
-	for i := 0; i < len(snaps); i += chunkSize {
-		end := i + chunkSize
-		if end > len(snaps) {
-			end = len(snaps)
-		}
-		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, s := range snaps[i:end] {
-				if err := tx.Delete(s.Ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// WithTx: Firestore用の簡易トランザクションヘルパー。
-func (r *TrackingRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	return r.Client.RunTransaction(ctx, func(txCtx context.Context, _ *firestore.Transaction) error {
-		return fn(txCtx)
-	})
-}
-
 // =====================================================
 // Helpers (Firestore -> Domain)
 // =====================================================

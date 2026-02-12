@@ -1,4 +1,4 @@
-// backend\internal\application\query\console\mint_request_query.go
+// backend/internal/application/query/console/mint_request_query.go
 package query
 
 import (
@@ -21,13 +21,12 @@ import (
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
 
 // ------------------------------------------------------------
-// Optional dependency: model variations lister
-// - Firestore 実装(ModelRepositoryFS) の ListModelVariationsByProductBlueprintID を
-//   そのまま差し込めるように “最小インターフェース” を定義する
+// Optional dependency: model variations getter
+//   (このFS実装では productID を productBlueprintID として扱う設計)
 // ------------------------------------------------------------
 
-type ModelVariationsLister interface {
-	ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error)
+type ModelVariationsGetter interface {
+	GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error)
 }
 
 // MintRequestQueryService is used by /mint/requests handler.
@@ -38,7 +37,7 @@ type MintRequestQueryService struct {
 	nameResolver *resolver.NameResolver
 
 	// ★追加: productBlueprintId -> modelVariations を引くため（任意）
-	modelRepo ModelVariationsLister
+	modelRepo ModelVariationsGetter
 }
 
 func NewMintRequestQueryService(
@@ -55,7 +54,7 @@ func NewMintRequestQueryService(
 }
 
 // ★追加: DI 側で後から差し込めるようにする（既存 constructor を壊さない）
-func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsLister) {
+func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) {
 	if s == nil {
 		return
 	}
@@ -269,7 +268,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 // - production: productionUC.ListWithAssigneeName から 1件抽出
 // - inspection: mintUC.ListInspectionBatchesByProductionIDs([pid])
 // - mint: mintUC.ListMintsByInspectionIDs([pid])
-// - modelMeta: (任意) modelRepo.ListModelVariationsByProductBlueprintID
+// - modelMeta: (任意) modelRepo.GetModelVariations(productBlueprintID)
 func (s *MintRequestQueryService) GetMintRequestDetail(
 	ctx context.Context,
 	productionID string,
@@ -377,9 +376,9 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	} else if s.modelRepo == nil {
 		log.Printf("[mint_request_qs] WARN: modelRepo not configured, skip model variations (pid=%q pbId=%q)", pid, productBlueprintID)
 	} else {
-		vars, vErr := s.modelRepo.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
+		vars, vErr := s.modelRepo.GetModelVariations(ctx, productBlueprintID)
 		if vErr != nil {
-			log.Printf("[mint_request_qs] WARN: ListModelVariationsByProductBlueprintID failed pid=%q pbId=%q err=%v", pid, productBlueprintID, vErr)
+			log.Printf("[mint_request_qs] WARN: GetModelVariations failed pid=%q pbId=%q err=%v", pid, productBlueprintID, vErr)
 		} else {
 			tmp := make(map[string]querydto.MintModelMetaEntry, len(vars))
 			for _, v := range vars {

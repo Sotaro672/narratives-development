@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\model_repository_fs.go
+// backend/internal/adapters/out/firestore/model_repository_fs.go
 package firestore
 
 import (
@@ -65,13 +65,8 @@ func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productBlueprintID
 		return nil, fmt.Errorf("empty model_set document: %s", snap.Ref.ID)
 	}
 
-	// Firestore 側に productBlueprintId があればそれを正とする
-	if v, ok := data["productBlueprintId"].(string); ok {
-		productBlueprintID = strings.TrimSpace(v)
-	}
-	if productBlueprintID == "" {
-		return nil, fmt.Errorf("model_set missing productBlueprintId: %s", snap.Ref.ID)
-	}
+	// ✅ 旧式互換削除: DocID を正とし、productBlueprintId フィールドで上書きしない
+	// if v, ok := data["productBlueprintId"].(string); ok { ... } は削除
 
 	var updatedAt time.Time
 	if v, ok := data["updatedAt"].(time.Time); ok {
@@ -438,11 +433,8 @@ func (r *ModelRepositoryFS) ListVariations(
 		return modeldom.VariationPageResult{}, errors.New("firestore client is nil")
 	}
 
-	// このFS実装は「ProductBlueprintID」を主キーとして扱う（ProductID は互換として受ける）
+	// ✅ 旧式互換削除: ProductID へのフォールバックをやめ、ProductBlueprintID のみ受け付ける
 	pbID := strings.TrimSpace(filter.ProductBlueprintID)
-	if pbID == "" {
-		pbID = strings.TrimSpace(filter.ProductID)
-	}
 	if pbID == "" {
 		return modeldom.VariationPageResult{}, modeldom.ErrInvalidBlueprintID
 	}
@@ -555,22 +547,21 @@ func (r *ModelRepositoryFS) ListVariations(
 }
 
 // GetModelVariations implements model.RepositoryPort.
-// このFS実装では productID も productBlueprintID として扱う（互換）。
-func (r *ModelRepositoryFS) GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) GetModelVariations(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
-		return nil, modeldom.ErrInvalidProductID
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
 	}
-	return r.listVariationsByProductBlueprintID(ctx, productID)
+	return r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 }
 
 // GetSizeVariations implements model.RepositoryPort.
 // 型定義の差異に強いように reflect で値を詰める（struct/alias/string どれでもOK）。
-func (r *ModelRepositoryFS) GetSizeVariations(ctx context.Context, productID string) ([]modeldom.SizeVariation, error) {
-	vars, err := r.GetModelVariations(ctx, productID)
+func (r *ModelRepositoryFS) GetSizeVariations(ctx context.Context, productBlueprintID string) ([]modeldom.SizeVariation, error) {
+	vars, err := r.GetModelVariations(ctx, productBlueprintID)
 	if err != nil {
 		return nil, err
 	}
@@ -617,8 +608,8 @@ func (r *ModelRepositoryFS) GetSizeVariations(ctx context.Context, productID str
 
 // GetModelNumbers implements model.RepositoryPort.
 // 型定義の差異に強いように reflect で値を詰める（struct/alias/string どれでもOK）。
-func (r *ModelRepositoryFS) GetModelNumbers(ctx context.Context, productID string) ([]modeldom.ModelNumber, error) {
-	vars, err := r.GetModelVariations(ctx, productID)
+func (r *ModelRepositoryFS) GetModelNumbers(ctx context.Context, productBlueprintID string) ([]modeldom.ModelNumber, error) {
+	vars, err := r.GetModelVariations(ctx, productBlueprintID)
 	if err != nil {
 		return nil, err
 	}
@@ -661,21 +652,6 @@ func (r *ModelRepositoryFS) GetModelNumbers(ctx context.Context, productID strin
 		res = append(res, makeModelNumber(s))
 	}
 	return res, nil
-}
-
-// ------------------------------------------------------------
-// 互換: 以前の usecase / 旧インターフェース用
-// ------------------------------------------------------------
-
-func (r *ModelRepositoryFS) ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
-	}
-	return r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 }
 
 // ------------------------------------------------------------

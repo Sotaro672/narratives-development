@@ -393,59 +393,6 @@ func (r *TransactionRepositoryFS) DeleteTransaction(ctx context.Context, id stri
 	return nil
 }
 
-// ResetTransactions deletes all transaction documents (dev/test use).
-func (r *TransactionRepositoryFS) ResetTransactions(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	var refs []*firestore.DocumentRef
-	for {
-		snap, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		refs = append(refs, snap.Ref)
-	}
-
-	if len(refs) == 0 {
-		return nil
-	}
-
-	const chunkSize = 400
-	for i := 0; i < len(refs); i += chunkSize {
-		end := i + chunkSize
-		if end > len(refs) {
-			end = len(refs)
-		}
-		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, ref := range refs[i:end] {
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// WithTx is a simple wrapper; if multi-doc Tx is needed, use Client.RunTransaction.
-func (r *TransactionRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	return fn(ctx)
-}
-
 // =====================================================
 // Helpers: Firestore -> Domain
 // =====================================================

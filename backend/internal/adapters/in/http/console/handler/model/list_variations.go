@@ -23,8 +23,7 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productBlueprintID"})
 		return
 	}
-
-	vars, err := h.uc.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
+	vars, err := h.uc.GetModelVariations(ctx, productBlueprintID)
 	if err != nil {
 		writeModelErr(w, err)
 		return

@@ -57,19 +57,7 @@ func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, pro
 	return u.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
-// ✅ 新：productBlueprintID → variations 一覧（repo に委譲）
-// （旧式の ListVariations + paging ループは削除）
-func (u *ModelUsecase) ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
-	}
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-
-	return u.repo.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
-}
+// （呼び出し側は GetModelVariations(ctx, productBlueprintID) を利用）
 
 // ------------------------------------------------------------
 // RepositoryPort implementation (delegate to u.repo)
