@@ -106,7 +106,7 @@ type ContentFile struct {
 }
 
 func (f ContentFile) Validate() error {
-	if strings.TrimSpace(f.ID) == "" {
+	if f.ID == "" {
 		return ErrInvalidContentFile
 	}
 	if strings.TrimSpace(f.Name) == "" {
@@ -199,7 +199,7 @@ var symbolRe = regexp.MustCompile(`^[A-Z0-9]{1,10}$`)
 // ============================================================
 
 func (t TokenBlueprint) validate() error {
-	if strings.TrimSpace(t.ID) == "" {
+	if t.ID == "" {
 		return ErrInvalidID
 	}
 	if strings.TrimSpace(t.Name) == "" {
@@ -208,13 +208,13 @@ func (t TokenBlueprint) validate() error {
 	if !symbolRe.MatchString(strings.TrimSpace(t.Symbol)) {
 		return ErrInvalidSymbol
 	}
-	if strings.TrimSpace(t.BrandID) == "" {
+	if t.BrandID == "" {
 		return ErrInvalidBrandID
 	}
-	if strings.TrimSpace(t.CompanyID) == "" {
+	if t.CompanyID == "" {
 		return ErrInvalidCompanyID
 	}
-	if strings.TrimSpace(t.AssigneeID) == "" {
+	if t.AssigneeID == "" {
 		return ErrInvalidAssigneeID
 	}
 
@@ -227,7 +227,7 @@ func (t TokenBlueprint) validate() error {
 	if t.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-	if strings.TrimSpace(t.CreatedBy) == "" {
+	if t.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
 
@@ -252,7 +252,7 @@ func New(
 	updatedAt time.Time,
 ) (TokenBlueprint, error) {
 
-	tid := strings.TrimSpace(id)
+	tid := id
 
 	iconPath := strings.TrimSpace(tokenIconObjectPath)
 	contentsPath := strings.TrimSpace(tokenContentsObjectPath)
@@ -269,11 +269,11 @@ func New(
 		ID:           tid,
 		Name:         strings.TrimSpace(name),
 		Symbol:       strings.TrimSpace(symbol),
-		BrandID:      strings.TrimSpace(brandID),
-		CompanyID:    strings.TrimSpace(companyID),
+		BrandID:      brandID,
+		CompanyID:    companyID,
 		Description:  strings.TrimSpace(description),
 		ContentFiles: dedupContentFiles(contentFiles),
-		AssigneeID:   strings.TrimSpace(assigneeID),
+		AssigneeID:   assigneeID,
 		Minted:       false,
 
 		// ★ objectPath 永続化（createで必ず埋める）
@@ -281,7 +281,7 @@ func New(
 		TokenContentsObjectPath: contentsPath,
 
 		CreatedAt: createdAt.UTC(),
-		CreatedBy: strings.TrimSpace(createdBy),
+		CreatedBy: createdBy,
 		UpdatedAt: updatedAt.UTC(),
 		UpdatedBy: "",
 
@@ -346,7 +346,6 @@ func (t *TokenBlueprint) UpdateAssignee(id string) error {
 	if t == nil {
 		return nil
 	}
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return ErrInvalidAssigneeID
 	}
@@ -372,7 +371,7 @@ func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
 	if t == nil {
 		return nil
 	}
-	id := strings.TrimSpace(b.ID)
+	id := b.ID
 	if id == "" {
 		return ErrInvalidBrandID
 	}
@@ -381,7 +380,7 @@ func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
 }
 
 func (t TokenBlueprint) ValidateBrandLink() error {
-	if strings.TrimSpace(t.BrandID) == "" {
+	if t.BrandID == "" {
 		return ErrInvalidBrandID
 	}
 	return nil
@@ -391,7 +390,7 @@ func (t *TokenBlueprint) SetAssignee(m memberdom.Member) error {
 	if t == nil {
 		return nil
 	}
-	id := strings.TrimSpace(m.ID)
+	id := m.ID
 	if id == "" {
 		return ErrInvalidAssigneeID
 	}
@@ -400,7 +399,7 @@ func (t *TokenBlueprint) SetAssignee(m memberdom.Member) error {
 }
 
 func (t TokenBlueprint) ValidateAssigneeLink() error {
-	if strings.TrimSpace(t.AssigneeID) == "" {
+	if t.AssigneeID == "" {
 		return ErrInvalidAssigneeID
 	}
 	return nil
@@ -410,7 +409,7 @@ func (t *TokenBlueprint) SetCreatedBy(m memberdom.Member) error {
 	if t == nil {
 		return nil
 	}
-	id := strings.TrimSpace(m.ID)
+	id := m.ID
 	if id == "" {
 		return ErrInvalidCreatedBy
 	}
@@ -419,7 +418,7 @@ func (t *TokenBlueprint) SetCreatedBy(m memberdom.Member) error {
 }
 
 func (t TokenBlueprint) ValidateCreatedByLink() error {
-	if strings.TrimSpace(t.CreatedBy) == "" {
+	if t.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
 	return nil
@@ -429,7 +428,7 @@ func (t *TokenBlueprint) SetUpdatedBy(m memberdom.Member) error {
 	if t == nil {
 		return nil
 	}
-	id := strings.TrimSpace(m.ID)
+	id := m.ID
 	if id == "" {
 		return ErrInvalidUpdatedBy
 	}
@@ -438,7 +437,7 @@ func (t *TokenBlueprint) SetUpdatedBy(m memberdom.Member) error {
 }
 
 func (t TokenBlueprint) ValidateUpdatedByLink() error {
-	if strings.TrimSpace(t.UpdatedBy) == "" {
+	if t.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
 	return nil
@@ -451,7 +450,7 @@ func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	if t == nil {
 		return nil
 	}
-	id := strings.TrimSpace(m.ID)
+	id := m.ID
 	if id == "" {
 		return ErrInvalidDeletedBy
 	}
@@ -474,7 +473,7 @@ func (t TokenBlueprint) ValidateDeletedByLink() error {
 	if t.DeletedBy == nil {
 		return nil
 	}
-	if strings.TrimSpace(*t.DeletedBy) == "" {
+	if *t.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
 	return nil
@@ -535,7 +534,7 @@ func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 	}
 
 	for _, existing := range t.ContentFiles {
-		if strings.TrimSpace(existing.ID) == strings.TrimSpace(f.ID) {
+		if existing.ID == f.ID {
 			return WrapConflict(nil, "content file id already exists")
 		}
 	}
@@ -563,7 +562,6 @@ func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibil
 	if t == nil {
 		return nil
 	}
-	contentID = strings.TrimSpace(contentID)
 	if contentID == "" {
 		return ErrInvalidContentFile
 	}
@@ -572,13 +570,13 @@ func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibil
 	}
 
 	for i := range t.ContentFiles {
-		if strings.TrimSpace(t.ContentFiles[i].ID) == contentID {
+		if t.ContentFiles[i].ID == contentID {
 			t.ContentFiles[i].Visibility = v
 			if !now.IsZero() {
 				t.ContentFiles[i].UpdatedAt = now.UTC()
 			}
-			if strings.TrimSpace(actorID) != "" {
-				t.ContentFiles[i].UpdatedBy = strings.TrimSpace(actorID)
+			if actorID != "" {
+				t.ContentFiles[i].UpdatedBy = actorID
 			}
 			return nil
 		}
@@ -592,7 +590,6 @@ func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibil
 // ============================================================
 
 func DefaultTokenIconObjectPath(tokenBlueprintID string) string {
-	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
 	if tokenBlueprintID == "" {
 		return ""
 	}
@@ -600,7 +597,6 @@ func DefaultTokenIconObjectPath(tokenBlueprintID string) string {
 }
 
 func DefaultTokenContentsObjectPath(tokenBlueprintID string) string {
-	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
 	if tokenBlueprintID == "" {
 		return ""
 	}
@@ -638,7 +634,7 @@ func dedupContentFiles(xs []ContentFile) []ContentFile {
 	out := make([]ContentFile, 0, len(xs))
 
 	for _, x := range xs {
-		id := strings.TrimSpace(x.ID)
+		id := x.ID
 		if id == "" {
 			continue
 		}

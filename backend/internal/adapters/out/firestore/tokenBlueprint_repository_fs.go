@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
+	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -43,7 +44,6 @@ func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*t
 		return nil, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, tbdom.ErrNotFound
 	}
@@ -69,7 +69,6 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 		return tbdom.Patch{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return tbdom.Patch{}, tbdom.ErrNotFound
 	}
@@ -98,15 +97,14 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 	trim := func(s string) string { return strings.TrimSpace(s) }
 
 	patch := tbdom.Patch{
-		ID:          trim(id),
+		ID:          id,
 		TokenName:   trim(raw.Name),
 		Symbol:      trim(raw.Symbol),
-		BrandID:     trim(raw.BrandID),
-		CompanyID:   trim(raw.CompanyID),
+		BrandID:     raw.BrandID,
+		CompanyID:   raw.CompanyID,
 		Description: trim(raw.Description),
 		Minted:      raw.Minted,
 		MetadataURI: trim(raw.MetadataURI),
-		// IconURL は adapter(HTTP) が docId から生成して返す方針なので、ここでは保持しない
 	}
 
 	return patch, nil
@@ -118,7 +116,6 @@ func (r *TokenBlueprintRepositoryFS) GetNameByID(ctx context.Context, id string)
 		return "", errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", tbdom.ErrNotFound
 	}
@@ -144,13 +141,12 @@ func (r *TokenBlueprintRepositoryFS) GetNameByID(ctx context.Context, id string)
 func (r *TokenBlueprintRepositoryFS) List(
 	ctx context.Context,
 	filter tbdom.Filter,
-	page tbdom.Page,
-) (tbdom.PageResult, error) {
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
 	if r.Client == nil {
-		return tbdom.PageResult{}, errors.New("firestore client is nil")
+		return domcommon.PageResult[tbdom.TokenBlueprint]{}, errors.New("firestore client is nil")
 	}
 
-	// デフォルト: createdAt DESC, doc ID DESC
 	q := r.col().
 		OrderBy("createdAt", firestore.Desc).
 		OrderBy(firestore.DocumentID, firestore.Desc)
@@ -165,11 +161,11 @@ func (r *TokenBlueprintRepositoryFS) List(
 			break
 		}
 		if err != nil {
-			return tbdom.PageResult{}, err
+			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
 		}
 		tb, err := docToTokenBlueprint(doc)
 		if err != nil {
-			return tbdom.PageResult{}, err
+			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
 		}
 		if matchTBFilter(tb, filter) {
 			all = append(all, tb)
@@ -180,7 +176,7 @@ func (r *TokenBlueprintRepositoryFS) List(
 	total := len(all)
 
 	if total == 0 {
-		return tbdom.PageResult{
+		return domcommon.PageResult[tbdom.TokenBlueprint]{
 			Items:      []tbdom.TokenBlueprint{},
 			TotalCount: 0,
 			TotalPages: 0,
@@ -199,7 +195,7 @@ func (r *TokenBlueprintRepositoryFS) List(
 
 	items := all[offset:end]
 
-	return tbdom.PageResult{
+	return domcommon.PageResult[tbdom.TokenBlueprint]{
 		Items:      items,
 		TotalCount: total,
 		TotalPages: fscommon.ComputeTotalPages(total, perPage),
@@ -208,22 +204,20 @@ func (r *TokenBlueprintRepositoryFS) List(
 	}, nil
 }
 
-// ListByCompanyID: companyId で限定した一覧取得。
-// ★ totalCount の事前計算は削除（コスト削減のため）。TotalCount/TotalPages は 0 を返す。
 func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
-	page tbdom.Page,
-) (tbdom.PageResult, error) {
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
 	if r.Client == nil {
-		return tbdom.PageResult{}, errors.New("firestore client is nil")
+		return domcommon.PageResult[tbdom.TokenBlueprint]{}, errors.New("firestore client is nil")
 	}
 
-	cid := strings.TrimSpace(companyID)
+	cid := companyID
 	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 
 	if cid == "" {
-		return tbdom.PageResult{
+		return domcommon.PageResult[tbdom.TokenBlueprint]{
 			Items:      []tbdom.TokenBlueprint{},
 			TotalCount: 0,
 			TotalPages: 0,
@@ -249,12 +243,12 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 			break
 		}
 		if err != nil {
-			return tbdom.PageResult{}, err
+			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
 		}
 
 		tb, err := docToTokenBlueprint(doc)
 		if err != nil {
-			return tbdom.PageResult{}, err
+			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
 		}
 		if tb.DeletedAt != nil {
 			continue
@@ -263,10 +257,10 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 		items = append(items, tb)
 	}
 
-	return tbdom.PageResult{
+	return domcommon.PageResult[tbdom.TokenBlueprint]{
 		Items:      items,
-		TotalCount: 0, // ★ totalCount は返さない（0固定）
-		TotalPages: 0, // ★ totalPages は返さない（0固定）
+		TotalCount: 0,
+		TotalPages: 0,
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
@@ -293,11 +287,9 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 
 	minted := false
 
-	// docID を先に確定させ、objectPath のデフォルト生成に使う
 	docRef := r.col().NewDoc()
-	docID := strings.TrimSpace(docRef.ID)
+	docID := docRef.ID
 
-	// ★ create 時に必ず永続化する（空なら規約で補完）
 	iconPath := strings.TrimSpace(in.TokenIconObjectPath)
 	if iconPath == "" && docID != "" {
 		iconPath = fmt.Sprintf("%s/icon", docID)
@@ -310,29 +302,25 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 	data := map[string]any{
 		"name":         strings.TrimSpace(in.Name),
 		"symbol":       strings.TrimSpace(in.Symbol),
-		"brandId":      strings.TrimSpace(in.BrandID),
-		"companyId":    strings.TrimSpace(in.CompanyID),
+		"brandId":      in.BrandID,
+		"companyId":    in.CompanyID,
 		"description":  strings.TrimSpace(in.Description),
 		"contentFiles": toFSContentFiles(contentFiles),
-		"assigneeId":   strings.TrimSpace(in.AssigneeID),
+		"assigneeId":   in.AssigneeID,
 		"minted":       minted,
 		"createdAt":    createdAt,
 		"deletedAt":    nil,
 		"deletedBy":    nil,
 
-		// ★ objectPath 永続化（create で保存）
 		"tokenIconObjectPath":     iconPath,
 		"tokenContentsObjectPath": contentsPath,
-
-		// ★ create 時は metadataUri を作成しない（保存しない）
-		// "metadataUri": ... は入れない
 	}
 
-	if s := strings.TrimSpace(in.CreatedBy); s != "" {
-		data["createdBy"] = s
+	if in.CreatedBy != "" {
+		data["createdBy"] = in.CreatedBy
 	}
-	if s := strings.TrimSpace(in.UpdatedBy); s != "" {
-		data["updatedBy"] = s
+	if in.UpdatedBy != "" {
+		data["updatedBy"] = in.UpdatedBy
 	}
 	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
 		data["updatedAt"] = in.UpdatedAt.UTC()
@@ -365,14 +353,12 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, tbdom.ErrNotFound
 	}
 
 	ref := r.col().Doc(id)
 
-	// Ensure exists
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
 		return nil, tbdom.ErrNotFound
 	} else if err != nil {
@@ -381,7 +367,7 @@ func (r *TokenBlueprintRepositoryFS) Update(
 
 	var updates []firestore.Update
 
-	setStr := func(field string, p *string) {
+	setStrTrim := func(field string, p *string) {
 		if p != nil {
 			updates = append(updates, firestore.Update{
 				Path:  field,
@@ -390,15 +376,20 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		}
 	}
 
-	setStr("name", in.Name)
-	setStr("symbol", in.Symbol)
-	setStr("brandId", in.BrandID)
-	setStr("description", in.Description)
-	setStr("assigneeId", in.AssigneeID)
+	setStrNoTrim := func(field string, p *string) {
+		if p != nil {
+			updates = append(updates, firestore.Update{
+				Path:  field,
+				Value: *p,
+			})
+		}
+	}
 
-	// ★ objectPath は update で更新されない方針のため、更新処理は入れない
-	// setStr("tokenIconObjectPath", in.TokenIconObjectPath)
-	// setStr("tokenContentsObjectPath", in.TokenContentsObjectPath)
+	setStrTrim("name", in.Name)
+	setStrTrim("symbol", in.Symbol)
+	setStrNoTrim("brandId", in.BrandID)
+	setStrTrim("description", in.Description)
+	setStrNoTrim("assigneeId", in.AssigneeID)
 
 	if in.MetadataURI != nil {
 		updates = append(updates, firestore.Update{
@@ -422,7 +413,6 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		})
 	}
 
-	// updatedAt
 	if in.UpdatedAt != nil {
 		if in.UpdatedAt.IsZero() {
 			updates = append(updates, firestore.Update{
@@ -442,9 +432,8 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		})
 	}
 
-	// updatedBy
 	if in.UpdatedBy != nil {
-		v := strings.TrimSpace(*in.UpdatedBy)
+		v := *in.UpdatedBy
 		if v == "" {
 			updates = append(updates, firestore.Update{
 				Path:  "updatedBy",
@@ -458,7 +447,6 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		}
 	}
 
-	// deletedAt / deletedBy
 	if in.DeletedAt != nil {
 		if in.DeletedAt.IsZero() {
 			updates = append(updates, firestore.Update{
@@ -473,7 +461,7 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		}
 	}
 	if in.DeletedBy != nil {
-		v := strings.TrimSpace(*in.DeletedBy)
+		v := *in.DeletedBy
 		if v == "" {
 			updates = append(updates, firestore.Update{
 				Path:  "deletedBy",
@@ -528,7 +516,6 @@ func (r *TokenBlueprintRepositoryFS) Delete(ctx context.Context, id string) erro
 		return errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return tbdom.ErrNotFound
 	}
@@ -568,7 +555,7 @@ func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(ctx context.Context, symbol 
 		if err != nil {
 			return false, err
 		}
-		if strings.TrimSpace(excludeID) != "" && doc.Ref.ID == strings.TrimSpace(excludeID) {
+		if excludeID != "" && doc.Ref.ID == excludeID {
 			continue
 		}
 		return false, nil
@@ -598,7 +585,7 @@ func (r *TokenBlueprintRepositoryFS) IsNameUnique(ctx context.Context, name stri
 		if err != nil {
 			return false, err
 		}
-		if strings.TrimSpace(excludeID) != "" && doc.Ref.ID == strings.TrimSpace(excludeID) {
+		if excludeID != "" && doc.Ref.ID == excludeID {
 			continue
 		}
 		return false, nil
@@ -637,7 +624,6 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		DeletedBy    *string          `firestore:"deletedBy"`
 		MetadataURI  string           `firestore:"metadataUri"`
 
-		// ★ objectPath 永続化
 		TokenIconObjectPath     string `firestore:"tokenIconObjectPath"`
 		TokenContentsObjectPath string `firestore:"tokenContentsObjectPath"`
 	}
@@ -650,9 +636,8 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		return tbdom.TokenBlueprint{}, err
 	}
 
-	docID := strings.TrimSpace(doc.Ref.ID)
+	docID := doc.Ref.ID
 
-	// ✅ 旧データ互換を廃止: Firestore に永続化された値をそのまま使う（空は空のまま）
 	iconPath := strings.TrimSpace(raw.TokenIconObjectPath)
 	contentsPath := strings.TrimSpace(raw.TokenContentsObjectPath)
 
@@ -660,19 +645,18 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		ID:           docID,
 		Name:         strings.TrimSpace(raw.Name),
 		Symbol:       strings.TrimSpace(raw.Symbol),
-		BrandID:      strings.TrimSpace(raw.BrandID),
-		CompanyID:    strings.TrimSpace(raw.CompanyID),
+		BrandID:      raw.BrandID,
+		CompanyID:    raw.CompanyID,
 		Description:  strings.TrimSpace(raw.Description),
 		ContentFiles: files,
-		AssigneeID:   strings.TrimSpace(raw.AssigneeID),
+		AssigneeID:   raw.AssigneeID,
 		Minted:       raw.Minted,
 		CreatedAt:    raw.CreatedAt.UTC(),
-		CreatedBy:    strings.TrimSpace(raw.CreatedBy),
+		CreatedBy:    raw.CreatedBy,
 		UpdatedAt:    raw.UpdatedAt.UTC(),
-		UpdatedBy:    strings.TrimSpace(raw.UpdatedBy),
+		UpdatedBy:    raw.UpdatedBy,
 		MetadataURI:  strings.TrimSpace(raw.MetadataURI),
 
-		// ★ objectPath 永続化（互換補完なし）
 		TokenIconObjectPath:     iconPath,
 		TokenContentsObjectPath: contentsPath,
 	}
@@ -682,7 +666,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		tb.DeletedAt = &t
 	}
 	if raw.DeletedBy != nil {
-		if v := strings.TrimSpace(*raw.DeletedBy); v != "" {
+		if v := *raw.DeletedBy; v != "" {
 			tb.DeletedBy = &v
 		}
 	}
@@ -691,15 +675,12 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 }
 
 func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
-	trim := func(s string) string { return strings.TrimSpace(s) }
-
 	inList := func(v string, xs []string) bool {
 		if len(xs) == 0 {
 			return true
 		}
-		v = trim(v)
 		for _, x := range xs {
-			if trim(x) == v {
+			if x == v {
 				return true
 			}
 		}
@@ -718,8 +699,20 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	if len(f.AssigneeIDs) > 0 && !inList(tb.AssigneeID, f.AssigneeIDs) {
 		return false
 	}
-	if len(f.Symbols) > 0 && !inList(tb.Symbol, f.Symbols) {
-		return false
+
+	trim := func(s string) string { return strings.TrimSpace(s) }
+
+	if len(f.Symbols) > 0 {
+		match := false
+		for _, x := range f.Symbols {
+			if trim(x) == trim(tb.Symbol) {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return false
+		}
 	}
 
 	if v := trim(f.NameLike); v != "" {
@@ -733,16 +726,17 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 		}
 	}
 
-	if f.CreatedFrom != nil && tb.CreatedAt.Before(f.CreatedFrom.UTC()) {
+	// 共通化後: FilterCommon.Created/Updated (TimeRange) を参照
+	if f.Created.From != nil && tb.CreatedAt.Before(f.Created.From.UTC()) {
 		return false
 	}
-	if f.CreatedTo != nil && !tb.CreatedAt.Before(f.CreatedTo.UTC()) {
+	if f.Created.To != nil && !tb.CreatedAt.Before(f.Created.To.UTC()) {
 		return false
 	}
-	if f.UpdatedFrom != nil && tb.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+	if f.Updated.From != nil && tb.UpdatedAt.Before(f.Updated.From.UTC()) {
 		return false
 	}
-	if f.UpdatedTo != nil && !tb.UpdatedAt.Before(f.UpdatedTo.UTC()) {
+	if f.Updated.To != nil && !tb.UpdatedAt.Before(f.Updated.To.UTC()) {
 		return false
 	}
 
@@ -754,12 +748,9 @@ func sanitizeContentFiles(xs []tbdom.ContentFile) []tbdom.ContentFile {
 	seen := make(map[string]struct{}, len(xs))
 
 	for _, f := range xs {
-		f.ID = strings.TrimSpace(f.ID)
 		f.Name = strings.TrimSpace(f.Name)
 		f.ObjectPath = strings.TrimSpace(f.ObjectPath)
 		f.ContentType = strings.TrimSpace(f.ContentType)
-		f.CreatedBy = strings.TrimSpace(f.CreatedBy)
-		f.UpdatedBy = strings.TrimSpace(f.UpdatedBy)
 
 		if f.ID == "" {
 			continue
@@ -778,7 +769,7 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 	out := make([]map[string]any, 0, len(xs))
 	for _, f := range xs {
 		m := map[string]any{
-			"id":          strings.TrimSpace(f.ID),
+			"id":          f.ID,
 			"name":        strings.TrimSpace(f.Name),
 			"type":        string(f.Type),
 			"contentType": strings.TrimSpace(f.ContentType),
@@ -786,9 +777,9 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 			"objectPath":  strings.TrimSpace(f.ObjectPath),
 			"visibility":  string(f.Visibility),
 			"createdAt":   f.CreatedAt,
-			"createdBy":   strings.TrimSpace(f.CreatedBy),
+			"createdBy":   f.CreatedBy,
 			"updatedAt":   f.UpdatedAt,
-			"updatedBy":   strings.TrimSpace(f.UpdatedBy),
+			"updatedBy":   f.UpdatedBy,
 		}
 		out = append(out, m)
 	}
@@ -802,7 +793,7 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 		var f tbdom.ContentFile
 
 		if v, ok := m["id"].(string); ok {
-			f.ID = strings.TrimSpace(v)
+			f.ID = v
 		}
 		if v, ok := m["name"].(string); ok {
 			f.Name = strings.TrimSpace(v)
@@ -834,10 +825,10 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 		}
 
 		if v, ok := m["createdBy"].(string); ok {
-			f.CreatedBy = strings.TrimSpace(v)
+			f.CreatedBy = v
 		}
 		if v, ok := m["updatedBy"].(string); ok {
-			f.UpdatedBy = strings.TrimSpace(v)
+			f.UpdatedBy = v
 		}
 
 		if v, ok := m["createdAt"].(time.Time); ok {

@@ -16,6 +16,7 @@ import (
 	tbapp "narratives/internal/application/tokenBlueprint" // ✅ moved TokenBlueprint usecases/types here
 	usecase "narratives/internal/application/usecase"      // ✅ keep for CompanyIDFromContext etc.
 	branddom "narratives/internal/domain/brand"
+	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -830,10 +831,11 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	brandID := strings.TrimSpace(q.Get("brandId"))
 	mintedFilter := strings.TrimSpace(q.Get("minted"))
 
-	page := tbdom.Page{Number: pageNum, PerPage: perPage}
+	// ✅ tbdom.Page / tbdom.PageResult は廃止 → domain/common.Page を使う
+	page := domcommon.Page{Number: pageNum, PerPage: perPage}
 
 	var (
-		result tbdom.PageResult
+		result domcommon.PageResult[tbdom.TokenBlueprint]
 		err    error
 	)
 

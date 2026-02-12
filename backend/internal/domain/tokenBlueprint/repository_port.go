@@ -4,6 +4,8 @@ package tokenBlueprint
 import (
 	"context"
 	"time"
+
+	common "narratives/internal/domain/common"
 )
 
 // ===============================
@@ -107,7 +109,13 @@ type Patch struct {
 //
 // entity.go 正:
 // - iconId が無いので HasIcon は廃止
+//
+// 共通化方針:
+// - CreatedFrom/To, UpdatedFrom/To は common.FilterCommon の TimeRange へ寄せる
+// - SearchQuery は将来の汎用検索用（必要なら NameLike/SymbolLike と併用可能）
 type Filter struct {
+	common.FilterCommon
+
 	IDs         []string
 	BrandIDs    []string
 	CompanyIDs  []string
@@ -116,27 +124,6 @@ type Filter struct {
 
 	NameLike   string
 	SymbolLike string
-
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
-}
-
-// ===============================
-// Page / PageResult
-// ===============================
-type Page struct {
-	Number  int
-	PerPage int
-}
-
-type PageResult struct {
-	Items      []TokenBlueprint
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
 }
 
 // ===============================
@@ -146,17 +133,17 @@ type RepositoryPort interface {
 	// 単体取得
 	GetByID(ctx context.Context, id string) (*TokenBlueprint, error)
 
-	// ★ Patch 取得（read-model 用）
+	// Patch 取得（read-model 用）
 	GetPatchByID(ctx context.Context, id string) (Patch, error)
 
-	// ★ ID → Name の高速解決
+	// ID → Name の高速解決
 	GetNameByID(ctx context.Context, id string) (string, error)
 
-	// 一覧取得
-	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
+	// 一覧取得（オフセットページング）
+	List(ctx context.Context, filter Filter, page common.Page) (common.PageResult[TokenBlueprint], error)
 
-	// ★ companyId で限定した一覧
-	ListByCompanyID(ctx context.Context, companyID string, page Page) (PageResult, error)
+	// companyId で限定した一覧
+	ListByCompanyID(ctx context.Context, companyID string, page common.Page) (common.PageResult[TokenBlueprint], error)
 
 	// 作成・更新・削除
 	Create(ctx context.Context, in CreateTokenBlueprintInput) (*TokenBlueprint, error)
@@ -172,13 +159,13 @@ type RepositoryPort interface {
 // Helper Functions
 // ===============================
 
-// ★ brandId ごとに一覧取得
+// brandId ごとに一覧取得
 func ListByBrandID(
 	ctx context.Context,
 	repo RepositoryPort,
 	brandID string,
-	page Page,
-) (PageResult, error) {
+	page common.Page,
+) (common.PageResult[TokenBlueprint], error) {
 	f := Filter{
 		BrandIDs: []string{brandID},
 	}
@@ -186,17 +173,17 @@ func ListByBrandID(
 }
 
 // ==========================================================
-// ★ minted = true（minted） のみ一覧取得
+// minted = true（minted） のみ一覧取得
 // ==========================================================
 func ListMintedCompleted(
 	ctx context.Context,
 	repo RepositoryPort,
-	page Page,
-) (PageResult, error) {
+	page common.Page,
+) (common.PageResult[TokenBlueprint], error) {
 
 	result, err := repo.List(ctx, Filter{}, page)
 	if err != nil {
-		return PageResult{}, err
+		return common.PageResult[TokenBlueprint]{}, err
 	}
 
 	items := []TokenBlueprint{}

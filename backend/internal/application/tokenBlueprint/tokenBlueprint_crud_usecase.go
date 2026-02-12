@@ -1,4 +1,4 @@
-// backend/internal/application/usecase/tokenBlueprint_crud_usecase.go
+// backend/internal/application/tokenBlueprint/tokenBlueprint_crud_usecase.go
 package tokenBlueprint
 
 import (
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -91,42 +92,66 @@ func (u *TokenBlueprintCRUDUsecase) GetByID(ctx context.Context, id string) (*tb
 	return u.tbRepo.GetByID(ctx, tid)
 }
 
-func (u *TokenBlueprintCRUDUsecase) ListByCompanyID(ctx context.Context, companyID string, page tbdom.Page) (tbdom.PageResult, error) {
+func (u *TokenBlueprintCRUDUsecase) ListByCompanyID(
+	ctx context.Context,
+	companyID string,
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
+
+	var empty domcommon.PageResult[tbdom.TokenBlueprint]
+
 	if u == nil || u.tbRepo == nil {
-		return tbdom.PageResult{}, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
 
 	cid := strings.TrimSpace(companyID)
 	if cid == "" {
-		return tbdom.PageResult{}, fmt.Errorf("companyId is empty")
+		return empty, fmt.Errorf("companyId is empty")
 	}
+
 	return u.tbRepo.ListByCompanyID(ctx, cid, page)
 }
 
-func (u *TokenBlueprintCRUDUsecase) ListByBrandID(ctx context.Context, brandID string, page tbdom.Page) (tbdom.PageResult, error) {
+func (u *TokenBlueprintCRUDUsecase) ListByBrandID(
+	ctx context.Context,
+	brandID string,
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
+
+	var empty domcommon.PageResult[tbdom.TokenBlueprint]
+
 	if u == nil || u.tbRepo == nil {
-		return tbdom.PageResult{}, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
 
 	bid := strings.TrimSpace(brandID)
 	if bid == "" {
-		return tbdom.PageResult{}, fmt.Errorf("brandId is empty")
+		return empty, fmt.Errorf("brandId is empty")
 	}
+
 	return tbdom.ListByBrandID(ctx, u.tbRepo, bid, page)
 }
 
 // ★ ListMintedNotYet は domain から削除されたため、この usecase からも削除
-// func (u *TokenBlueprintCRUDUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
+// func (u *TokenBlueprintCRUDUsecase) ListMintedNotYet(ctx context.Context, page domcommon.Page) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
 // 	if u == nil || u.tbRepo == nil {
-// 		return tbdom.PageResult{}, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+// 		var empty domcommon.PageResult[tbdom.TokenBlueprint]
+// 		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 // 	}
 // 	return tbdom.ListMintedNotYet(ctx, u.tbRepo, page)
 // }
 
-func (u *TokenBlueprintCRUDUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
+func (u *TokenBlueprintCRUDUsecase) ListMintedCompleted(
+	ctx context.Context,
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
+
+	var empty domcommon.PageResult[tbdom.TokenBlueprint]
+
 	if u == nil || u.tbRepo == nil {
-		return tbdom.PageResult{}, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
+
 	return tbdom.ListMintedCompleted(ctx, u.tbRepo, page)
 }
 

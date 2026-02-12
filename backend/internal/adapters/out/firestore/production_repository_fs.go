@@ -41,7 +41,6 @@ func (r *ProductionRepositoryFS) GetByID(ctx context.Context, id string) (*prodd
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, proddom.ErrNotFound
 	}
@@ -66,7 +65,6 @@ func (r *ProductionRepositoryFS) Exists(ctx context.Context, id string) (bool, e
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")
 	}
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, nil
 	}
@@ -124,15 +122,15 @@ func (r *ProductionRepositoryFS) Create(
 	// Entity 組み立て
 	p := proddom.Production{
 		// ID は後で NewDoc から採番
-		ProductBlueprintID: strings.TrimSpace(in.ProductBlueprintID),
-		AssigneeID:         strings.TrimSpace(in.AssigneeID),
+		ProductBlueprintID: in.ProductBlueprintID,
+		AssigneeID:         in.AssigneeID,
 		Models:             in.Models,
 
 		Printed:   printed,
 		PrintedAt: printedAt,
 		PrintedBy: nil,
 
-		CreatedBy: fscommon.TrimPtr(in.CreatedBy),
+		CreatedBy: in.CreatedBy,
 		CreatedAt: createdAt,
 		UpdatedAt: createdAt,
 		UpdatedBy: nil,
@@ -201,7 +199,7 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 	p.UpdatedBy = fscommon.TrimPtr(p.UpdatedBy)
 
 	var ref *firestore.DocumentRef
-	id := strings.TrimSpace(p.ID)
+	id := p.ID
 	if id == "" {
 		ref = r.col().NewDoc()
 		p.ID = ref.ID
@@ -234,7 +232,6 @@ func (r *ProductionRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return proddom.ErrNotFound
 	}
@@ -302,25 +299,22 @@ func (r *ProductionRepositoryFS) List(
 	var filtered []proddom.Production
 	for _, p := range all {
 		// ID
-		if strings.TrimSpace(filter.ID) != "" && p.ID != strings.TrimSpace(filter.ID) {
+		if filter.ID != "" && p.ID != filter.ID {
 			continue
 		}
 		// ProductBlueprintID
-		if strings.TrimSpace(filter.ProductBlueprintID) != "" &&
-			p.ProductBlueprintID != strings.TrimSpace(filter.ProductBlueprintID) {
+		if filter.ProductBlueprintID != "" && p.ProductBlueprintID != filter.ProductBlueprintID {
 			continue
 		}
 		// AssigneeID
-		if strings.TrimSpace(filter.AssigneeID) != "" &&
-			p.AssigneeID != strings.TrimSpace(filter.AssigneeID) {
+		if filter.AssigneeID != "" && p.AssigneeID != filter.AssigneeID {
 			continue
 		}
 		// ModelID（ModelQuantity に含まれるかどうか）
-		if strings.TrimSpace(filter.ModelID) != "" {
-			target := strings.TrimSpace(filter.ModelID)
+		if filter.ModelID != "" {
 			found := false
 			for _, mq := range p.Models {
-				if strings.TrimSpace(mq.ModelID) == target {
+				if mq.ModelID == filter.ModelID {
 					found = true
 					break
 				}
@@ -337,27 +331,9 @@ func (r *ProductionRepositoryFS) List(
 			}
 		}
 
-		// PrintedFrom / PrintedTo
-		if filter.PrintedFrom != nil || filter.PrintedTo != nil {
-			if p.PrintedAt == nil {
-				// PrintedAt が必要条件になるので nil の場合は除外
-				continue
-			}
-			if filter.PrintedFrom != nil && p.PrintedAt.Before(filter.PrintedFrom.UTC()) {
-				continue
-			}
-			if filter.PrintedTo != nil && p.PrintedAt.After(filter.PrintedTo.UTC()) {
-				continue
-			}
-		}
-
-		// CreatedFrom / CreatedTo
-		if filter.CreatedFrom != nil && p.CreatedAt.Before(filter.CreatedFrom.UTC()) {
-			continue
-		}
-		if filter.CreatedTo != nil && p.CreatedAt.After(filter.CreatedTo.UTC()) {
-			continue
-		}
+		// NOTE:
+		// PrintedFrom/PrintedTo, CreatedFrom/CreatedTo などの TimeRange filter は
+		// production.Filter から削除したため、ここでは時間範囲フィルタを行わない。
 
 		filtered = append(filtered, p)
 	}
@@ -414,7 +390,7 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 		return []proddom.Production{}, nil
 	}
 
-	// 空文字を取り除きつつ trim & 重複排除
+	// 空文字を取り除きつつ trim & 重複排除（ここは productBlueprintIDs の正規化処理）
 	uniq := make(map[string]struct{}, len(productBlueprintIDs))
 	var ids []string
 	for _, id := range productBlueprintIDs {
@@ -540,7 +516,8 @@ func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
 	if p == nil {
 		return "", proddom.ErrNotFound
 	}
-	return strings.TrimSpace(p.ProductBlueprintID), nil
+	// productBlueprintId の trim は行わない
+	return p.ProductBlueprintID, nil
 }
 
 // ============================================================
@@ -590,15 +567,15 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 
 	out := proddom.Production{
 		ID:                 doc.Ref.ID,
-		ProductBlueprintID: strings.TrimSpace(raw.ProductBlueprintID),
-		AssigneeID:         strings.TrimSpace(raw.AssigneeID),
+		ProductBlueprintID: raw.ProductBlueprintID,
+		AssigneeID:         raw.AssigneeID,
 		Models:             raw.Models,
 
 		Printed:   printed,
 		PrintedAt: printedAt,
 		PrintedBy: printedBy,
 
-		CreatedBy: fscommon.TrimPtr(raw.CreatedBy),
+		CreatedBy: raw.CreatedBy,
 		CreatedAt: createdAt,
 		UpdatedBy: fscommon.TrimPtr(raw.UpdatedBy),
 	}
@@ -614,8 +591,8 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 
 func productionToDoc(p proddom.Production) map[string]any {
 	m := map[string]any{
-		"productBlueprintId": strings.TrimSpace(p.ProductBlueprintID),
-		"assigneeId":         strings.TrimSpace(p.AssigneeID),
+		"productBlueprintId": p.ProductBlueprintID,
+		"assigneeId":         p.AssigneeID,
 		"models":             p.Models,
 
 		"printed":   p.Printed,
@@ -624,9 +601,8 @@ func productionToDoc(p proddom.Production) map[string]any {
 	}
 
 	if p.CreatedBy != nil {
-		if s := strings.TrimSpace(*p.CreatedBy); s != "" {
-			m["createdBy"] = s
-		}
+		// CreatedBy の trim は行わない（空文字もそのまま保存したいならここも許容）
+		m["createdBy"] = *p.CreatedBy
 	}
 
 	// printedAt / printedBy は printed=true のときだけ格納（false の場合は null を書いて消す）

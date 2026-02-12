@@ -12,6 +12,7 @@ import (
 	dto "narratives/internal/application/mint/dto"
 	appusecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
+	domcommon "narratives/internal/domain/common"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
@@ -309,10 +310,10 @@ func (u *MintUsecase) ListBrandsForCurrentCompany(
 func (u *MintUsecase) ListTokenBlueprintsByBrand(
 	ctx context.Context,
 	brandID string,
-	page tbdom.Page,
-) (tbdom.PageResult, error) {
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
 
-	var empty tbdom.PageResult
+	var empty domcommon.PageResult[tbdom.TokenBlueprint]
 
 	if u == nil {
 		return empty, errors.New("mint usecase is nil")
@@ -326,6 +327,7 @@ func (u *MintUsecase) ListTokenBlueprintsByBrand(
 		return empty, errors.New("brandID is empty")
 	}
 
+	// ✅ tbdom.Page/tbdom.PageResult 廃止 → domain/common.Page + PageResult[T] を使用
 	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
 }
 

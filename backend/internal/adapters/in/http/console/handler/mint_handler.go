@@ -26,10 +26,10 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 
 	branddom "narratives/internal/domain/brand"
+	domcommon "narratives/internal/domain/common"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
-	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // handler が依存する最小 query IF
@@ -933,8 +933,6 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 
 // ============================================================
 // GET /mint/token_blueprints?brandId=...
-// - tokenBlueprint は iconUrl を保持しない（entity.go 正）
-// - よって iconUrl は返さない（後方互換削除）
 // ============================================================
 type tokenBlueprintForMintResponse struct {
 	ID     string `json:"id"`
@@ -975,7 +973,8 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 		}
 	}
 
-	page := tbdom.Page{
+	// ✅ tbdom.Page は廃止されたので domain/common.Page を使う
+	page := domcommon.Page{
 		Number:  pageNumber,
 		PerPage: perPage,
 	}

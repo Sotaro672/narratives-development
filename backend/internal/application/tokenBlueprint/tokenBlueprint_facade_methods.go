@@ -1,4 +1,4 @@
-// backend/internal/application/usecase/tokenBlueprint_facade_methods.go
+// backend/internal/application/tokenBlueprint/tokenBlueprint_facade_methods.go
 package tokenBlueprint
 
 import (
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -97,15 +98,26 @@ func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
 	return u.query.GetByIDWithCreatorName(ctx, id)
 }
 
-func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID string, page tbdom.Page) (tbdom.PageResult, error) {
+func (u *TokenBlueprintUsecase) ListByCompanyID(
+	ctx context.Context,
+	companyID string,
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
 	return u.crud.ListByCompanyID(ctx, companyID, page)
 }
 
-func (u *TokenBlueprintUsecase) ListByBrandID(ctx context.Context, brandID string, page tbdom.Page) (tbdom.PageResult, error) {
+func (u *TokenBlueprintUsecase) ListByBrandID(
+	ctx context.Context,
+	brandID string,
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
 	return u.crud.ListByBrandID(ctx, brandID, page)
 }
 
-func (u *TokenBlueprintUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
+func (u *TokenBlueprintUsecase) ListMintedCompleted(
+	ctx context.Context,
+	page domcommon.Page,
+) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
 	return u.crud.ListMintedCompleted(ctx, page)
 }
 

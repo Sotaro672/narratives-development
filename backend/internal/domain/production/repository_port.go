@@ -4,6 +4,8 @@ package production
 import (
 	"context"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // ========================================
@@ -44,13 +46,6 @@ type Filter struct {
 	// Statuses は廃止。Printed(boolean) に統一。
 	// nil の場合はフィルタしない。
 	Printed *bool
-
-	PrintedFrom   *time.Time
-	PrintedTo     *time.Time
-	InspectedFrom *time.Time
-	InspectedTo   *time.Time
-	CreatedFrom   *time.Time
-	CreatedTo     *time.Time
 }
 
 type Page struct {
@@ -58,13 +53,8 @@ type Page struct {
 	PerPage int
 }
 
-type PageResult struct {
-	Items      []Production
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
-}
+// PageResult は common.PageResult[Production] を利用する（互換性維持のため型エイリアス）
+type PageResult = domcommon.PageResult[Production]
 
 // ========================================
 // Aggregation contracts
