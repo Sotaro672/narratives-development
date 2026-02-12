@@ -6,6 +6,7 @@ import (
 
 	invdom "narratives/internal/domain/inventory"
 	tokendom "narratives/internal/domain/token"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -48,6 +49,6 @@ type TokenBlueprintBucketEnsurer interface {
 // ============================================================
 
 type TokenBlueprintMetadataEnsurer interface {
-	// 必要なら生成・永続化して、確定した metadataUri を返す
-	EnsureMetadataURIByTokenBlueprintID(ctx context.Context, tokenBlueprintID string, actorID string) (string, error)
+	// 必要なら生成・永続化して metadataUri を確定させる（空は許容しない）
+	EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
 }

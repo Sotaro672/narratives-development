@@ -188,6 +188,13 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			)
 			return nil, fmt.Errorf("tokenBlueprint metadata ensurer is nil")
 		}
+		if u.tbRepo == nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=tbRepo_nil mintRequestId=%q tokenBlueprintId=%q actorId=%q elapsed=%s",
+				mintRequestID, tbID, actorID, time.Since(start),
+			)
+			return nil, fmt.Errorf("tokenBlueprint repo is nil")
+		}
 
 		log.Printf(
 			"[mint_usecase] MintFromMintRequest ensure metadata start mintRequestId=%q tokenBlueprintId=%q actorId=%q",
@@ -195,7 +202,24 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		)
 
 		metaStart := time.Now()
-		uri, err := u.tbMetadataEnsurer.EnsureMetadataURIByTokenBlueprintID(ctx, tbID, actorID)
+
+		tb, err := u.tbRepo.GetByID(ctx, tbID)
+		if err != nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=tb_get_failed mintRequestId=%q tokenBlueprintId=%q actorId=%q err=%v elapsed=%s totalElapsed=%s",
+				mintRequestID, tbID, actorID, err, time.Since(metaStart), time.Since(start),
+			)
+			return nil, err
+		}
+		if tb == nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest abort reason=tb_not_found mintRequestId=%q tokenBlueprintId=%q actorId=%q elapsed=%s totalElapsed=%s",
+				mintRequestID, tbID, actorID, time.Since(metaStart), time.Since(start),
+			)
+			return nil, fmt.Errorf("tokenBlueprint not found (id=%s)", tbID)
+		}
+
+		updated, err := u.tbMetadataEnsurer.EnsureMetadataURI(ctx, tb, actorID)
 		if err != nil {
 			log.Printf(
 				"[mint_usecase] MintFromMintRequest abort reason=ensure_metadata_failed mintRequestId=%q tokenBlueprintId=%q actorId=%q err=%v elapsed=%s totalElapsed=%s",
@@ -203,7 +227,11 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			)
 			return nil, err
 		}
-		uri = strings.TrimSpace(uri)
+		if updated == nil {
+			updated = tb
+		}
+
+		uri := strings.TrimSpace(updated.MetadataURI)
 		if uri == "" {
 			log.Printf(
 				"[mint_usecase] MintFromMintRequest abort reason=ensure_metadata_empty mintRequestId=%q tokenBlueprintId=%q actorId=%q elapsed=%s totalElapsed=%s",
@@ -211,6 +239,7 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			)
 			return nil, fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintId=%s)", tbID)
 		}
+
 		log.Printf(
 			"[mint_usecase] MintFromMintRequest ensure metadata ok mintRequestId=%q tokenBlueprintId=%q uri=%q elapsed=%s",
 			mintRequestID, tbID, uri, time.Since(metaStart),

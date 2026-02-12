@@ -543,15 +543,6 @@ func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
 	return strings.TrimSpace(p.ProductBlueprintID), nil
 }
 
-// WithTx は簡易実装として、単純に fn(ctx) を呼び出します。
-// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
-func (r *ProductionRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	return fn(ctx)
-}
-
 // ============================================================
 // Mapping Helpers
 // ============================================================

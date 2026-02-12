@@ -211,11 +211,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	apiKey := strings.TrimSpace(os.Getenv("IRYS_SERVICE_API_KEY"))
 	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
 
+	// ✅ EnsureMetadataURI のみ正式採用: adapter を廃止し、Usecase を直接注入
 	tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(r.tokenBlueprintRepo, uploader)
-	mintUC.SetTokenBlueprintMetadataEnsurer(&tbMetadataEnsurerByIDAdapter{
-		tbRepo:   r.tokenBlueprintRepo,
-		metadata: tbMetadataUC,
-	})
+	mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
 
 	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
 
