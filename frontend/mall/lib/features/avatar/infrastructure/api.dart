@@ -18,9 +18,7 @@ class MallAuthedApi {
     : _client = client ?? http.Client(),
       _auth = auth ?? FirebaseAuth.instance,
       _base = _normalizeBase(
-        (baseUrl ?? '').trim().isNotEmpty
-            ? baseUrl!.trim()
-            : resolveMallApiBase(),
+        (baseUrl ?? '').trim().isNotEmpty ? baseUrl!.trim() : resolveApiBase(),
       ) {
     if (_base.trim().isEmpty) {
       throw Exception(

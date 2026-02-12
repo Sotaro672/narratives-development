@@ -25,13 +25,13 @@ class WalletRepositoryHttp {
   }
 
   Uri _uri(String path) {
-    final base = _normalizeBase(resolveMallApiBase());
+    final base = _normalizeBase(resolveApiBase());
     final p = path.startsWith('/') ? path : '/$path';
     return Uri.parse('$base$p');
   }
 
   Uri _uriWithQuery(String path, Map<String, String> queryParameters) {
-    final base = _normalizeBase(resolveMallApiBase());
+    final base = _normalizeBase(resolveApiBase());
     final p = path.startsWith('/') ? path : '/$path';
     final u = Uri.parse('$base$p');
     return u.replace(queryParameters: queryParameters);
