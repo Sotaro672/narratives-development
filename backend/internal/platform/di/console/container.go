@@ -12,8 +12,6 @@ import (
 	// ✅ ListImage uploader interface (for console list handler)
 	listHandler "narratives/internal/adapters/in/http/console/handler/list"
 
-	fs "narratives/internal/adapters/out/firestore"
-
 	inspectionapp "narratives/internal/application/inspection"
 	mintapp "narratives/internal/application/mint"
 	pbuc "narratives/internal/application/productBlueprint/usecase"
@@ -54,10 +52,6 @@ type Container struct {
 	// member.Service / brand.Service (表示名解決用)
 	MemberService *memdom.Service
 	BrandService  *branddom.Service
-
-	// History Repositories
-	ProductBlueprintHistoryRepo *fs.ProductBlueprintHistoryRepositoryFS
-	ModelHistoryRepo            *fs.ModelHistoryRepositoryFS
 
 	// Application-layer usecases
 	AccountUC          *uc.AccountUsecase
@@ -192,9 +186,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		MemberService: services.memberSvc,
 		BrandService:  services.brandSvc,
-
-		ProductBlueprintHistoryRepo: repos.productBlueprintHistoryRepo,
-		ModelHistoryRepo:            repos.modelHistoryRepo,
 
 		AccountUC:          u.accountUC,
 		AnnouncementUC:     u.announcementUC,

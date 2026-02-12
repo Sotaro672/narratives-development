@@ -57,9 +57,6 @@ type repos struct {
 	printLogRepo   *fs.PrintLogRepositoryFS
 	inspectionRepo *fs.InspectionRepositoryFS
 
-	productBlueprintHistoryRepo *fs.ProductBlueprintHistoryRepositoryFS
-	modelHistoryRepo            *fs.ModelHistoryRepositoryFS
-
 	invitationTokenFSRepo *fs.InvitationTokenRepositoryFS
 	invitationTokenUCRepo *invitationTokenRepoAdapter
 
@@ -129,9 +126,6 @@ func buildRepos(c *clients) *repos {
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
 	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
 
-	productBlueprintHistoryRepo := fs.NewProductBlueprintHistoryRepositoryFS(fsClient)
-	modelHistoryRepo := fs.NewModelHistoryRepositoryFS(fsClient)
-
 	invitationTokenFSRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
 	invitationTokenUCRepo := &invitationTokenRepoAdapter{fsRepo: invitationTokenFSRepo}
 
@@ -197,9 +191,6 @@ func buildRepos(c *clients) *repos {
 
 		printLogRepo:   printLogRepo,
 		inspectionRepo: inspectionRepo,
-
-		productBlueprintHistoryRepo: productBlueprintHistoryRepo,
-		modelHistoryRepo:            modelHistoryRepo,
 
 		invitationTokenFSRepo: invitationTokenFSRepo,
 		invitationTokenUCRepo: invitationTokenUCRepo,

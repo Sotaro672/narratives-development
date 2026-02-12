@@ -78,16 +78,3 @@ func (u *ProductBlueprintUsecase) ListDeletedByCompanyID(ctx context.Context) ([
 
 	return deleted, nil
 }
-
-// ListHistory
-// ★ 履歴一覧取得（LogCard 用）
-func (u *ProductBlueprintUsecase) ListHistory(ctx context.Context, productBlueprintID string) ([]productbpdom.ProductBlueprint, error) {
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
-	if productBlueprintID == "" {
-		return nil, productbpdom.ErrInvalidID
-	}
-	if u.historyRepo == nil {
-		return nil, productbpdom.ErrInternal
-	}
-	return u.historyRepo.ListByProductBlueprintID(ctx, productBlueprintID)
-}

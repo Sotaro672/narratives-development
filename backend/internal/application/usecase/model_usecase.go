@@ -2,33 +2,11 @@ package usecase
 
 import (
 	"context"
-	"log"
 	"strings"
 	"time"
 
 	modeldom "narratives/internal/domain/model"
 )
-
-// ------------------------------------------------------------
-// ModelHistoryRepo
-// ------------------------------------------------------------
-//   Firestore 保存パス（例）：
-//   product_blueprints_history/{blueprintID}/models/{snapshotID}/variations/{variationID}
-//   ※ここでは version を扱わず、実際のキー構成は実装側に委譲。
-// ------------------------------------------------------------
-
-type ModelHistoryRepo interface {
-	SaveSnapshot(
-		ctx context.Context,
-		blueprintID string,
-		variations []modeldom.ModelVariation,
-	) error
-
-	ListByProductBlueprintID(
-		ctx context.Context,
-		blueprintID string,
-	) ([]modeldom.ModelVariation, error)
-}
 
 // ------------------------------------------------------------
 // ModelUsecase
@@ -39,53 +17,13 @@ type ModelHistoryRepo interface {
 // ------------------------------------------------------------
 
 type ModelUsecase struct {
-	repo        modeldom.RepositoryPort
-	historyRepo ModelHistoryRepo
+	repo modeldom.RepositoryPort
 }
 
-func NewModelUsecase(repo modeldom.RepositoryPort, historyRepo ModelHistoryRepo) *ModelUsecase {
+func NewModelUsecase(repo modeldom.RepositoryPort) *ModelUsecase {
 	return &ModelUsecase{
-		repo:        repo,
-		historyRepo: historyRepo,
+		repo: repo,
 	}
-}
-
-// ------------------------------------------------------------
-// internal helpers
-// ------------------------------------------------------------
-
-// 履歴スナップショット保存（失敗してもビジネス処理は失敗させない）
-func (u *ModelUsecase) saveHistorySnapshot(ctx context.Context, blueprintID string) {
-	if u.historyRepo == nil {
-		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: historyRepo is nil (blueprintID=%s)", blueprintID)
-		return
-	}
-	if u.repo == nil {
-		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: repo is nil (blueprintID=%s)", blueprintID)
-		return
-	}
-
-	blueprintID = strings.TrimSpace(blueprintID)
-	if blueprintID == "" {
-		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: empty blueprintID")
-		return
-	}
-
-	log.Printf("[ModelUsecase] saveHistorySnapshot start: blueprintID=%s", blueprintID)
-
-	// ✅ RepositoryPort に追加した ListModelVariationsByProductBlueprintID を使って全件取得
-	all, err := u.repo.ListModelVariationsByProductBlueprintID(ctx, blueprintID)
-	if err != nil {
-		log.Printf("[ModelUsecase] saveHistorySnapshot: list variations failed: %v", err)
-		return
-	}
-
-	if err := u.historyRepo.SaveSnapshot(ctx, blueprintID, all); err != nil {
-		log.Printf("[ModelUsecase] saveHistorySnapshot: save snapshot failed: %v", err)
-		return
-	}
-
-	log.Printf("[ModelUsecase] saveHistorySnapshot done: blueprintID=%s count=%d", blueprintID, len(all))
 }
 
 // ------------------------------------------------------------
@@ -188,7 +126,7 @@ func (u *ModelUsecase) GetModelVariations(ctx context.Context, productID string)
 	return u.repo.GetModelVariations(ctx, productID)
 }
 
-// Create ModelVariation → 履歴保存のみ（version は扱わない）
+// Create ModelVariation（履歴は保存しない）
 func (u *ModelUsecase) CreateModelVariation(ctx context.Context, v modeldom.NewModelVariation) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
@@ -199,13 +137,10 @@ func (u *ModelUsecase) CreateModelVariation(ctx context.Context, v modeldom.NewM
 		return nil, err
 	}
 
-	// 履歴スナップショット保存
-	u.saveHistorySnapshot(ctx, created.ProductBlueprintID)
-
 	return created, nil
 }
 
-// Update ModelVariation → 履歴保存のみ（version は扱わない）
+// Update ModelVariation（履歴は保存しない）
 func (u *ModelUsecase) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
@@ -220,9 +155,6 @@ func (u *ModelUsecase) UpdateModelVariation(ctx context.Context, variationID str
 	if err != nil {
 		return nil, err
 	}
-
-	// 履歴スナップショット保存
-	u.saveHistorySnapshot(ctx, updated.ProductBlueprintID)
 
 	return updated, nil
 }
@@ -254,12 +186,6 @@ func (u *ModelUsecase) ReplaceModelVariations(ctx context.Context, vars []modeld
 	now := time.Now().UTC()
 	for i := range updated {
 		updated[i].UpdatedAt = now
-	}
-
-	// 代表となる blueprintID を決めて履歴を保存（全件同一前提）
-	if len(updated) > 0 {
-		blueprintID := updated[0].ProductBlueprintID
-		u.saveHistorySnapshot(ctx, blueprintID)
 	}
 
 	return updated, nil

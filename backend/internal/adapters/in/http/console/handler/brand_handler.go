@@ -4,10 +4,9 @@ package consoleHandler
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
+	shared "narratives/internal/adapters/in/http/shared"
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 )
@@ -23,8 +22,14 @@ func NewBrandHandler(uc *usecase.BrandUsecase) http.Handler {
 func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ★★★★★ 重要：末尾スラッシュを強制的に除去して正規化 ★★★★★
-	path := strings.TrimSuffix(r.URL.Path, "/")
+	// ✅ 末尾スラッシュの“吸収（TrimSuffix）”はしない
+	// - 方針: canonicalize したい場合は redirect（308）
+	// - “拒否”にしたい場合は RejectTrailingSlash を使う
+	if shared.RedirectTrailingSlash(w, r) {
+		return
+	}
+
+	path := r.URL.Path
 
 	switch {
 
@@ -37,8 +42,8 @@ func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.create(w, r)
 
 	// 単一取得（GET /brands/:id）
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/brands/"):
-		id := strings.TrimPrefix(path, "/brands/")
+	case r.Method == http.MethodGet && len(path) > len("/brands/") && path[:len("/brands/")] == "/brands/":
+		id := path[len("/brands/"):]
 		h.get(w, r, id)
 
 	// OPTIONS (CORS)
@@ -54,13 +59,16 @@ func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // GET /brands/{id}
 func (h *BrandHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-	id = strings.TrimSpace(id)
-	if id == "" {
+
+	// ✅ Trimで吸収しない。前後空白がある入力は拒否。
+	vid, err := shared.StrictID(id, "id")
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
-	brand, err := h.uc.GetByID(ctx, id)
+
+	brand, err := h.uc.GetByID(ctx, vid)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
@@ -89,10 +97,58 @@ func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(in.CompanyID) == "" || strings.TrimSpace(in.Name) == "" {
+	// ✅ Trimで吸収しない。前後空白がある入力は拒否。
+	companyID, err := shared.StrictRequired(in.CompanyID, "companyId")
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId and name are required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is required"})
 		return
+	}
+	name, err := shared.StrictRequired(in.Name, "name")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "name is required"})
+		return
+	}
+
+	// optional fields: reject if present but has outer/control whitespace
+	description := in.Description
+	if description != "" {
+		if shared.HasOuterWhitespace(description) || shared.HasControlWhitespace(description) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "description must not have leading/trailing whitespace or tab/newline"})
+			return
+		}
+	}
+	websiteURL := in.WebsiteURL
+	if websiteURL != "" {
+		if shared.HasOuterWhitespace(websiteURL) || shared.HasControlWhitespace(websiteURL) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "websiteUrl must not have leading/trailing whitespace or tab/newline"})
+			return
+		}
+	}
+
+	var managerID *string
+	if in.ManagerID != nil {
+		v, err := shared.StrictRequired(*in.ManagerID, "managerId")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid managerId"})
+			return
+		}
+		managerID = &v
+	}
+
+	var createdBy *string
+	if in.CreatedBy != nil {
+		v, err := shared.StrictRequired(*in.CreatedBy, "createdBy")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid createdBy"})
+			return
+		}
+		createdBy = &v
 	}
 
 	isActive := true
@@ -103,14 +159,14 @@ func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	b, err := branddom.New(
 		"",
-		in.CompanyID,
-		in.Name,
-		in.Description,
+		companyID,
+		name,
+		description,
 		"",
-		in.WebsiteURL,
+		websiteURL,
 		isActive,
-		in.ManagerID,
-		in.CreatedBy,
+		managerID,
+		createdBy,
 		now,
 	)
 	if err != nil {
@@ -136,40 +192,61 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	// ✅ companyId はクエリからは受け取らず、Usecase 側で
 	//    companyIDFromContext(ctx) によって必ず上書きされる前提。
-	if v := strings.TrimSpace(q.Get("managerId")); v != "" {
+
+	if raw := q.Get("managerId"); raw != "" {
+		v, err := shared.StrictRequired(raw, "managerId")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid managerId"})
+			return
+		}
 		f.ManagerID = &v
 	}
-	if v := strings.TrimSpace(q.Get("walletAddress")); v != "" {
+
+	if raw := q.Get("walletAddress"); raw != "" {
+		v, err := shared.StrictRequired(raw, "walletAddress")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid walletAddress"})
+			return
+		}
 		f.WalletAddress = &v
 	}
-	if v := strings.TrimSpace(q.Get("isActive")); v != "" {
-		switch v {
-		case "true":
-			b := true
-			f.IsActive = &b
-		case "false":
-			b := false
-			f.IsActive = &b
+
+	if raw := q.Get("isActive"); raw != "" {
+		b, ok, err := shared.StrictBoolParam(raw, "isActive")
+		if err != nil || !ok {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid isActive"})
+			return
 		}
+		f.IsActive = &b
 	}
-	if v := strings.TrimSpace(q.Get("q")); v != "" {
+
+	if raw := q.Get("q"); raw != "" {
+		v, err := shared.StrictRequired(raw, "q")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid q"})
+			return
+		}
 		f.SearchQuery = v
 	}
 
-	// ★ sort / order は廃止 → デフォルトは Repository / Usecase 側の実装に任せる
+	pageNum, err := shared.StrictPositiveIntParam(q.Get("page"), "page", 1)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid page"})
+		return
+	}
 
-	pageNum := 1
-	if v := strings.TrimSpace(q.Get("page")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			pageNum = n
-		}
+	perPage, err := shared.StrictPositiveIntParam(q.Get("perPage"), "perPage", 50)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid perPage"})
+		return
 	}
-	perPage := 50
-	if v := strings.TrimSpace(q.Get("perPage")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			perPage = n
-		}
-	}
+
 	p := branddom.Page{Number: pageNum, PerPage: perPage}
 
 	// Usecase.List(ctx, filter, page) に変更（Sort 渡しは廃止）

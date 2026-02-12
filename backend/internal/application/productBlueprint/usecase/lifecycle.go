@@ -52,11 +52,7 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(ctx context.Context, id s
 		return err
 	}
 
-	if u.historyRepo != nil {
-		if err := u.historyRepo.SaveSnapshot(ctx, saved); err != nil {
-			return err
-		}
-	}
+	_ = saved // saved は repo.Save の副作用（永続化）を目的に保持。履歴は削除方針のため利用しない。
 
 	return nil
 }
@@ -98,11 +94,7 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(ctx context.Context, id stri
 		return err
 	}
 
-	if u.historyRepo != nil {
-		if err := u.historyRepo.SaveSnapshot(ctx, saved); err != nil {
-			return err
-		}
-	}
+	_ = saved // saved は repo.Save の副作用（永続化）を目的に保持。履歴は削除方針のため利用しない。
 
 	return nil
 }

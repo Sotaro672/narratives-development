@@ -324,53 +324,18 @@ func (h *Handler) listDeleted(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------
 // GET /product-blueprints/{id}/history
 // ---------------------------------------------------
+//
+// 履歴（history）は削除方針のため、このエンドポイントは廃止。
+// 互換のためルーティングが残っている場合でも 404 を返す。
+// ---------------------------------------------------
 
 func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+	_ = r.Context()
+	_ = strings.TrimSpace(id)
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	rows, err := h.uc.ListHistory(ctx, id)
-	if err != nil {
-		writeProductBlueprintErr(w, err)
-		return
-	}
-
-	out := make([]ProductBlueprintHistoryOutput, 0, len(rows))
-	for _, pb := range rows {
-		updatedAtStr := ""
-		if !pb.UpdatedAt.IsZero() {
-			updatedAtStr = pb.UpdatedAt.Format(time.RFC3339)
-		}
-
-		deletedAtStr := ""
-		if pb.DeletedAt != nil && !pb.DeletedAt.IsZero() {
-			deletedAtStr = pb.DeletedAt.Format(time.RFC3339)
-		}
-
-		expireAtStr := ""
-		if pb.ExpireAt != nil && !pb.ExpireAt.IsZero() {
-			expireAtStr = pb.ExpireAt.Format(time.RFC3339)
-		}
-
-		out = append(out, ProductBlueprintHistoryOutput{
-			ID:          pb.ID,
-			ProductName: pb.ProductName,
-			BrandId:     strings.TrimSpace(pb.BrandID),
-			AssigneeId:  strings.TrimSpace(pb.AssigneeID),
-			UpdatedAt:   updatedAtStr,
-			UpdatedBy:   pb.UpdatedBy,
-			DeletedAt:   deletedAtStr,
-			ExpireAt:    expireAtStr,
-		})
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
+	// 履歴機能は削除したため未提供
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": "history endpoint is not supported"})
 }
 
 // ---------------------------------------------------

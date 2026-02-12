@@ -59,12 +59,6 @@ func (u *ProductBlueprintUsecase) Create(
 		return productbpdom.ProductBlueprint{}, err
 	}
 
-	if u.historyRepo != nil {
-		if err := u.historyRepo.SaveSnapshot(ctx, created); err != nil {
-			return productbpdom.ProductBlueprint{}, err
-		}
-	}
-
 	return created, nil
 }
 
@@ -79,12 +73,6 @@ func (u *ProductBlueprintUsecase) MarkPrinted(ctx context.Context, id string) (p
 	updated, err := u.repo.MarkPrinted(ctx, id)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
-	}
-
-	if u.historyRepo != nil {
-		if err := u.historyRepo.SaveSnapshot(ctx, updated); err != nil {
-			return productbpdom.ProductBlueprint{}, err
-		}
 	}
 
 	return updated, nil
@@ -168,12 +156,6 @@ func (u *ProductBlueprintUsecase) Update(
 		return productbpdom.ProductBlueprint{}, err
 	}
 
-	if u.historyRepo != nil {
-		if err := u.historyRepo.SaveSnapshot(ctx, updated); err != nil {
-			return productbpdom.ProductBlueprint{}, err
-		}
-	}
-
 	return updated, nil
 }
 
@@ -249,12 +231,6 @@ func (u *ProductBlueprintUsecase) AppendModelRefs(
 	updated, err := u.repo.AppendModelRefsWithoutTouch(ctx, id, refs)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
-	}
-
-	if u.historyRepo != nil {
-		if err := u.historyRepo.SaveSnapshot(ctx, updated); err != nil {
-			return productbpdom.ProductBlueprint{}, err
-		}
 	}
 
 	return updated, nil

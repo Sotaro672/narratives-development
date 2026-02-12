@@ -150,7 +150,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	// - listUC.WithListImageDeleter(...)
 	// - その他 WithXxx 系の後付け DI
 
-	modelUC := uc.NewModelUsecase(r.modelRepo, r.modelHistoryRepo)
+	modelUC := uc.NewModelUsecase(r.modelRepo)
 
 	// ✅ FIX: OrderUsecase needs both OrderRepo and CartRepo now (for listId lookup from cart)
 	orderUC := uc.NewOrderUsecase(r.orderRepo, r.cartRepo)
@@ -173,7 +173,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	productBlueprintUC := pbuc.NewProductBlueprintUsecase(
 		r.productBlueprintRepo,
-		r.productBlueprintHistoryRepo,
 	)
 
 	inspectionProductRepo := &inspectionProductRepoAdapter{repo: r.productRepo}
