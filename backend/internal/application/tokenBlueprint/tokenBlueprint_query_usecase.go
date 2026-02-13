@@ -4,7 +4,6 @@ package tokenBlueprint
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	appresolver "narratives/internal/application/resolver"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -51,7 +50,6 @@ func (u *TokenBlueprintQueryUsecase) ResolveMemberNames(
 	seen := make(map[string]struct{}, len(ids))
 	uniq := make([]string, 0, len(ids))
 	for _, id := range ids {
-		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
@@ -72,7 +70,7 @@ func (u *TokenBlueprintQueryUsecase) ResolveMemberNames(
 
 	// ★ memberSvc は使わず resolver のみ
 	for _, mid := range uniq {
-		out[mid] = strings.TrimSpace(u.nameResolver.ResolveMemberName(ctx, mid))
+		out[mid] = u.nameResolver.ResolveMemberName(ctx, mid)
 	}
 
 	return out, nil
@@ -88,7 +86,7 @@ func (u *TokenBlueprintQueryUsecase) GetByIDWithCreatorName(
 		return nil, "", fmt.Errorf("tokenBlueprint query usecase/repo is nil")
 	}
 
-	tid := strings.TrimSpace(id)
+	tid := id
 
 	tb, err := u.tbRepo.GetByID(ctx, tid)
 	if err != nil {
@@ -98,12 +96,12 @@ func (u *TokenBlueprintQueryUsecase) GetByIDWithCreatorName(
 		return nil, "", tbdom.ErrNotFound
 	}
 
-	memberID := strings.TrimSpace(tb.CreatedBy)
+	memberID := tb.CreatedBy
 	if memberID == "" || u.nameResolver == nil {
 		return tb, "", nil
 	}
 
-	return tb, strings.TrimSpace(u.nameResolver.ResolveMemberName(ctx, memberID)), nil
+	return tb, u.nameResolver.ResolveMemberName(ctx, memberID), nil
 }
 
 // GetByIDWithMemberNames returns tb and resolved member names for console response.
@@ -119,7 +117,7 @@ func (u *TokenBlueprintQueryUsecase) GetByIDWithMemberNames(
 		return nil, TokenBlueprintMemberNames{}, fmt.Errorf("tokenBlueprint query usecase/repo is nil")
 	}
 
-	tid := strings.TrimSpace(id)
+	tid := id
 	if tid == "" {
 		return nil, TokenBlueprintMemberNames{}, fmt.Errorf("id is empty")
 	}
@@ -133,17 +131,17 @@ func (u *TokenBlueprintQueryUsecase) GetByIDWithMemberNames(
 	}
 
 	ids := []string{
-		strings.TrimSpace(tb.AssigneeID),
-		strings.TrimSpace(tb.CreatedBy),
-		strings.TrimSpace(tb.UpdatedBy),
+		tb.AssigneeID,
+		tb.CreatedBy,
+		tb.UpdatedBy,
 	}
 
 	m, _ := u.ResolveMemberNames(ctx, ids)
 
 	return tb, TokenBlueprintMemberNames{
-		AssigneeName:  m[strings.TrimSpace(tb.AssigneeID)],
-		CreatedByName: m[strings.TrimSpace(tb.CreatedBy)],
-		UpdatedByName: m[strings.TrimSpace(tb.UpdatedBy)],
+		AssigneeName:  m[tb.AssigneeID],
+		CreatedByName: m[tb.CreatedBy],
+		UpdatedByName: m[tb.UpdatedBy],
 	}, nil
 }
 
@@ -160,7 +158,6 @@ func (u *TokenBlueprintQueryUsecase) ResolveNames(
 	result := make(map[string]string, len(ids))
 
 	for _, id := range ids {
-		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
@@ -171,7 +168,7 @@ func (u *TokenBlueprintQueryUsecase) ResolveNames(
 			continue
 		}
 
-		result[id] = strings.TrimSpace(name)
+		result[id] = name
 	}
 
 	return result, nil

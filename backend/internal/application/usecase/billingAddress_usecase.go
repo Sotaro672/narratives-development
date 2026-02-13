@@ -3,7 +3,6 @@ package usecase
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	baddr "narratives/internal/domain/billingAddress"
@@ -26,11 +25,11 @@ func NewBillingAddressUsecase(repo baddr.RepositoryPort) *BillingAddressUsecase 
 // ============================================================
 
 func (u *BillingAddressUsecase) GetByID(ctx context.Context, id string) (*baddr.BillingAddress, error) {
-	return u.repo.GetByID(ctx, strings.TrimSpace(id))
+	return u.repo.GetByID(ctx, id)
 }
 
 func (u *BillingAddressUsecase) GetByUser(ctx context.Context, userID string) ([]baddr.BillingAddress, error) {
-	return u.repo.GetByUser(ctx, strings.TrimSpace(userID))
+	return u.repo.GetByUser(ctx, userID)
 }
 
 // ============================================================
@@ -50,23 +49,11 @@ func (u *BillingAddressUsecase) Create(ctx context.Context, in baddr.CreateBilli
 		in.UpdatedAt = &t
 	}
 
-	// Normalize
-	in.UserID = strings.TrimSpace(in.UserID)
-	in.CardNumber = strings.TrimSpace(in.CardNumber)
-	in.CardholderName = strings.TrimSpace(in.CardholderName)
-	in.CVC = strings.TrimSpace(in.CVC)
-
 	return u.repo.Create(ctx, in)
 }
 
 func (u *BillingAddressUsecase) Update(ctx context.Context, id string, in baddr.UpdateBillingAddressInput) (*baddr.BillingAddress, error) {
 	now := u.now().UTC()
-
-	// Normalize
-	id = strings.TrimSpace(id)
-	in.CardNumber = trimPtr(in.CardNumber)
-	in.CardholderName = trimPtr(in.CardholderName)
-	in.CVC = trimPtr(in.CVC)
 
 	// UpdatedAt default
 	if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
@@ -78,5 +65,5 @@ func (u *BillingAddressUsecase) Update(ctx context.Context, id string, in baddr.
 }
 
 func (u *BillingAddressUsecase) Delete(ctx context.Context, id string) error {
-	return u.repo.Delete(ctx, strings.TrimSpace(id))
+	return u.repo.Delete(ctx, id)
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -34,7 +33,7 @@ const tokenContentsViewSignedURLTTL = 15 * time.Minute
 // （このファイルで再定義すると DuplicateDecl になるため禁止）
 
 func gcsSignerEmail() string {
-	return strings.TrimSpace(os.Getenv(envGCSSignerEmail))
+	return os.Getenv(envGCSSignerEmail)
 }
 
 // tokenContentsObjectPath returns stable object path.
@@ -44,8 +43,18 @@ func gcsSignerEmail() string {
 //
 // fileName はここでは contentId として扱う想定。
 func tokenContentsObjectPath(tokenBlueprintID, fileName string) string {
-	id := strings.Trim(strings.TrimSpace(tokenBlueprintID), "/")
-	fn := strings.TrimLeft(strings.TrimSpace(fileName), "/")
+	id := tokenBlueprintID
+	for len(id) > 0 && id[0] == '/' {
+		id = id[1:]
+	}
+	for len(id) > 0 && id[len(id)-1] == '/' {
+		id = id[:len(id)-1]
+	}
+
+	fn := fileName
+	for len(fn) > 0 && fn[0] == '/' {
+		fn = fn[1:]
+	}
 	if fn == "" {
 		fn = "file"
 	}
@@ -99,7 +108,7 @@ func (u *TokenBlueprintContentUsecase) IssueTokenContentsUploadURL(
 		return nil, fmt.Errorf("tokenBlueprint content usecase/repo is nil")
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
+	id := tokenBlueprintID
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
@@ -123,7 +132,7 @@ func (u *TokenBlueprintContentUsecase) IssueTokenContentsUploadURL(
 	objectPath := tokenContentsObjectPath(id, fileName)
 
 	// PUT 用 Content-Type（未指定は octet-stream）
-	ct := strings.TrimSpace(contentType)
+	ct := contentType
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
@@ -186,10 +195,10 @@ func (u *TokenBlueprintContentUsecase) IssueTokenContentsUploadURL(
 	}
 
 	return &TokenContentsUploadURL{
-		UploadURL:     strings.TrimSpace(uploadURL),
-		PublicURL:     strings.TrimSpace(publicURL),
-		ViewURL:       strings.TrimSpace(viewURL),
-		ObjectPath:    strings.TrimSpace(objectPath),
+		UploadURL:     uploadURL,
+		PublicURL:     publicURL,
+		ViewURL:       viewURL,
+		ObjectPath:    objectPath,
 		ExpiresAt:     ptr(expires),
 		ViewExpiresAt: ptr(viewExpires),
 	}, nil
@@ -211,10 +220,10 @@ func (u *TokenBlueprintContentUsecase) ReplaceContentFiles(ctx context.Context, 
 		clean = empty
 	}
 
-	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
+	tb, err := u.tbRepo.Update(ctx, blueprintID, tbdom.UpdateTokenBlueprintInput{
 		ContentFiles: &clean,
 		UpdatedAt:    nil,
-		UpdatedBy:    ptr(strings.TrimSpace(actorID)),
+		UpdatedBy:    ptr(actorID),
 		DeletedAt:    nil,
 		DeletedBy:    nil,
 	})
@@ -230,7 +239,7 @@ func (u *TokenBlueprintContentUsecase) SetContentVisibility(ctx context.Context,
 		return nil, fmt.Errorf("tokenBlueprint content usecase/repo is nil")
 	}
 
-	tb, err := u.tbRepo.GetByID(ctx, strings.TrimSpace(blueprintID))
+	tb, err := u.tbRepo.GetByID(ctx, blueprintID)
 	if err != nil {
 		return nil, err
 	}
@@ -244,10 +253,10 @@ func (u *TokenBlueprintContentUsecase) SetContentVisibility(ctx context.Context,
 	}
 
 	files := tb.ContentFiles
-	updated, err := u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
+	updated, err := u.tbRepo.Update(ctx, blueprintID, tbdom.UpdateTokenBlueprintInput{
 		ContentFiles: &files,
 		UpdatedAt:    &now,
-		UpdatedBy:    ptr(strings.TrimSpace(actorID)),
+		UpdatedBy:    ptr(actorID),
 		DeletedAt:    nil,
 		DeletedBy:    nil,
 	})
@@ -279,7 +288,7 @@ func dedupAndValidateContentFiles(files []tbdom.ContentFile) []tbdom.ContentFile
 
 	for _, f := range files {
 		// default visibility
-		if strings.TrimSpace(string(f.Visibility)) == "" {
+		if string(f.Visibility) == "" {
 			f.Visibility = tbdom.VisibilityPrivate
 		}
 		if err := f.Validate(); err != nil {
@@ -287,7 +296,7 @@ func dedupAndValidateContentFiles(files []tbdom.ContentFile) []tbdom.ContentFile
 			panic(err)
 		}
 
-		id := strings.TrimSpace(f.ID)
+		id := f.ID
 		if id == "" {
 			continue
 		}

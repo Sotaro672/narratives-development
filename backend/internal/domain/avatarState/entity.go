@@ -4,8 +4,9 @@ package avatarState
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // AvatarState mirrors web-app/src/shared/types/avatarState.ts
@@ -51,7 +52,7 @@ func New(
 	updatedAt *time.Time,
 ) (AvatarState, error) {
 	as := AvatarState{
-		ID:             strings.TrimSpace(id),
+		ID:             id,
 		FollowerCount:  followerCount,
 		FollowingCount: followingCount,
 		PostCount:      postCount,
@@ -75,16 +76,19 @@ func NewFromStringTimes(
 	if err != nil {
 		return AvatarState{}, err
 	}
+
 	var ua *time.Time
 	if updatedAtStr != nil {
-		if strings.TrimSpace(*updatedAtStr) != "" {
-			t, err := parseTimeRequired(*updatedAtStr, ErrInvalidUpdatedAt)
+		// NormalizeStringPtr により空白のみ/空文字は nil になる
+		if v := domcommon.NormalizeStringPtr(updatedAtStr); v != nil {
+			t, err := parseTimeRequired(*v, ErrInvalidUpdatedAt)
 			if err != nil {
 				return AvatarState{}, err
 			}
 			ua = &t
 		}
 	}
+
 	return New(id, followerCount, followingCount, postCount, la, ua)
 }
 
@@ -93,7 +97,7 @@ Validation
 */
 
 func (s AvatarState) validate() error {
-	if strings.TrimSpace(s.ID) == "" {
+	if s.ID == "" {
 		return ErrInvalidID
 	}
 	if s.FollowerCount != nil && *s.FollowerCount < 0 {
@@ -127,23 +131,12 @@ func normalizeTimePtr(p *time.Time) *time.Time {
 }
 
 func parseTimeRequired(s string, classify error) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
+	t, err := domcommon.ParseTime(s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: %v", classify, err)
+	}
+	if t.IsZero() {
 		return time.Time{}, classify
 	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("%w: cannot parse %q", classify, s)
+	return t.UTC(), nil
 }

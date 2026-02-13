@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -29,7 +28,8 @@ const tokenIconSignedURLTTL = 15 * time.Minute
 
 // tokenIconSignerEmail returns signer service account email.
 func tokenIconSignerEmail() string {
-	if v := strings.TrimSpace(os.Getenv(envTokenIconSignerEmail)); v != "" {
+	v := os.Getenv(envTokenIconSignerEmail)
+	if v != "" {
 		return v
 	}
 	return ""
@@ -38,7 +38,13 @@ func tokenIconSignerEmail() string {
 // tokenIconObjectPath is a stable object path under "{tokenBlueprintId}/".
 // 画像を後から差し替えても URL を固定化するため、ファイル名は常に "icon" に寄せる
 func tokenIconObjectPath(tokenBlueprintID string) string {
-	id := strings.Trim(strings.TrimSpace(tokenBlueprintID), "/")
+	id := tokenBlueprintID
+	for len(id) > 0 && id[0] == '/' {
+		id = id[1:]
+	}
+	for len(id) > 0 && id[len(id)-1] == '/' {
+		id = id[:len(id)-1]
+	}
 	return id + "/icon"
 }
 
@@ -81,7 +87,7 @@ func (u *TokenBlueprintIconUsecase) IssueTokenIconUploadURL(
 		return nil, fmt.Errorf("tokenBlueprint icon usecase/repo is nil")
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
+	id := tokenBlueprintID
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
@@ -103,7 +109,7 @@ func (u *TokenBlueprintIconUsecase) IssueTokenIconUploadURL(
 
 	objectPath := tokenIconObjectPath(id)
 
-	ct := strings.TrimSpace(contentType)
+	ct := contentType
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
@@ -141,9 +147,9 @@ func (u *TokenBlueprintIconUsecase) IssueTokenIconUploadURL(
 
 	publicURL := gcsObjectPublicURL(bucket, objectPath)
 	return &TokenIconUploadURL{
-		UploadURL:  strings.TrimSpace(uploadURL),
-		PublicURL:  strings.TrimSpace(publicURL),
-		ObjectPath: strings.TrimSpace(objectPath),
+		UploadURL:  uploadURL,
+		PublicURL:  publicURL,
+		ObjectPath: objectPath,
 		ExpiresAt:  ptr(expires),
 	}, nil
 }

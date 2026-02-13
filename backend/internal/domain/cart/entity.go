@@ -4,7 +4,6 @@ package cart
 import (
 	"errors"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -60,10 +59,8 @@ type Cart struct {
 // id is the Firestore docId (avatarId).
 // items can be nil (treated as empty).
 func NewCart(id string, items map[string]CartItem, now time.Time) (*Cart, error) {
-	docID := strings.TrimSpace(id)
-
 	c := &Cart{
-		ID:        docID,
+		ID:        id,
 		Items:     cloneItems(items),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -82,9 +79,9 @@ func (c *Cart) Add(inventoryID, listID, modelID string, qty int, now time.Time) 
 		return ErrInvalidCart
 	}
 
-	inv := strings.TrimSpace(inventoryID)
-	lid := strings.TrimSpace(listID)
-	mid := strings.TrimSpace(modelID)
+	inv := inventoryID
+	lid := listID
+	mid := modelID
 	if inv == "" || lid == "" || mid == "" || qty <= 0 {
 		return ErrInvalidCart
 	}
@@ -123,9 +120,9 @@ func (c *Cart) SetQty(inventoryID, listID, modelID string, qty int, now time.Tim
 		return ErrInvalidCart
 	}
 
-	inv := strings.TrimSpace(inventoryID)
-	lid := strings.TrimSpace(listID)
-	mid := strings.TrimSpace(modelID)
+	inv := inventoryID
+	lid := listID
+	mid := modelID
 	if inv == "" || lid == "" || mid == "" {
 		return ErrInvalidCart
 	}
@@ -200,7 +197,7 @@ func (c *Cart) Consume(itemKeys []string, now time.Time) error {
 	}
 
 	for _, k := range itemKeys {
-		key := strings.TrimSpace(k)
+		key := k
 		if key == "" {
 			continue
 		}
@@ -222,7 +219,7 @@ func (c *Cart) validate() error {
 	}
 
 	// ✅ docId (= avatarId) must exist
-	if strings.TrimSpace(c.ID) == "" {
+	if c.ID == "" {
 		return ErrInvalidCart
 	}
 
@@ -247,12 +244,12 @@ func (c *Cart) validate() error {
 		sort.Strings(keys)
 
 		for _, k := range keys {
-			key := strings.TrimSpace(k)
+			key := k
 			it := c.Items[k]
 
-			inv := strings.TrimSpace(it.InventoryID)
-			lid := strings.TrimSpace(it.ListID)
-			mid := strings.TrimSpace(it.ModelID)
+			inv := it.InventoryID
+			lid := it.ListID
+			mid := it.ModelID
 
 			if inv == "" || lid == "" || mid == "" || it.Qty <= 0 {
 				return ErrInvalidCart
@@ -297,7 +294,7 @@ func (c *Cart) validate() error {
 func makeItemKey(inventoryID, listID, modelID string) string {
 	// IDs are assumed not to contain this delimiter. If that assumption changes,
 	// switch to encoding/escaping (e.g., base64 or url.PathEscape for each part).
-	return strings.TrimSpace(inventoryID) + "__" + strings.TrimSpace(listID) + "__" + strings.TrimSpace(modelID)
+	return inventoryID + "__" + listID + "__" + modelID
 }
 
 func cloneItems(src map[string]CartItem) map[string]CartItem {
@@ -316,9 +313,9 @@ func cloneItems(src map[string]CartItem) map[string]CartItem {
 	for _, k := range keys {
 		it := src[k]
 
-		inv := strings.TrimSpace(it.InventoryID)
-		lid := strings.TrimSpace(it.ListID)
-		mid := strings.TrimSpace(it.ModelID)
+		inv := it.InventoryID
+		lid := it.ListID
+		mid := it.ModelID
 		qty := it.Qty
 
 		if inv == "" || lid == "" || mid == "" || qty <= 0 {

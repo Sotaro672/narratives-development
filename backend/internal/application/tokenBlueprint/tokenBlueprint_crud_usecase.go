@@ -4,7 +4,6 @@ package tokenBlueprint
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -50,19 +49,19 @@ func (u *TokenBlueprintCRUDUsecase) Create(ctx context.Context, in CreateBluepri
 	}
 
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
-		Name:        strings.TrimSpace(in.Name),
-		Symbol:      strings.TrimSpace(in.Symbol),
-		BrandID:     strings.TrimSpace(in.BrandID),
-		CompanyID:   strings.TrimSpace(in.CompanyID),
-		Description: strings.TrimSpace(in.Description),
+		Name:        in.Name,
+		Symbol:      in.Symbol,
+		BrandID:     in.BrandID,
+		CompanyID:   in.CompanyID,
+		Description: in.Description,
 
 		// entity.go 正: embedded contents
 		ContentFiles: nil,
 
-		AssigneeID: strings.TrimSpace(in.AssigneeID),
+		AssigneeID: in.AssigneeID,
 
 		CreatedAt: nil,
-		CreatedBy: strings.TrimSpace(in.CreatedBy),
+		CreatedBy: in.CreatedBy,
 		UpdatedAt: nil,
 		UpdatedBy: "",
 
@@ -70,8 +69,8 @@ func (u *TokenBlueprintCRUDUsecase) Create(ctx context.Context, in CreateBluepri
 		MetadataURI: "",
 
 		// ★ objectPath 永続化（create で保存）
-		TokenIconObjectPath:     strings.TrimSpace(in.TokenIconObjectPath),
-		TokenContentsObjectPath: strings.TrimSpace(in.TokenContentsObjectPath),
+		TokenIconObjectPath:     in.TokenIconObjectPath,
+		TokenContentsObjectPath: in.TokenContentsObjectPath,
 	})
 	if err != nil {
 		return nil, err
@@ -88,7 +87,7 @@ func (u *TokenBlueprintCRUDUsecase) GetByID(ctx context.Context, id string) (*tb
 	if u == nil || u.tbRepo == nil {
 		return nil, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
-	tid := strings.TrimSpace(id)
+	tid := id
 	return u.tbRepo.GetByID(ctx, tid)
 }
 
@@ -104,7 +103,7 @@ func (u *TokenBlueprintCRUDUsecase) ListByCompanyID(
 		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
 
-	cid := strings.TrimSpace(companyID)
+	cid := companyID
 	if cid == "" {
 		return empty, fmt.Errorf("companyId is empty")
 	}
@@ -124,7 +123,7 @@ func (u *TokenBlueprintCRUDUsecase) ListByBrandID(
 		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
 
-	bid := strings.TrimSpace(brandID)
+	bid := brandID
 	if bid == "" {
 		return empty, fmt.Errorf("brandId is empty")
 	}
@@ -184,7 +183,7 @@ func (u *TokenBlueprintCRUDUsecase) Update(ctx context.Context, in UpdateBluepri
 		return nil, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
 
-	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(in.ID), tbdom.UpdateTokenBlueprintInput{
+	tb, err := u.tbRepo.Update(ctx, in.ID, tbdom.UpdateTokenBlueprintInput{
 		Name:        trimPtr(in.Name),
 		Symbol:      trimPtr(in.Symbol),
 		BrandID:     trimPtr(in.BrandID),
@@ -199,7 +198,7 @@ func (u *TokenBlueprintCRUDUsecase) Update(ctx context.Context, in UpdateBluepri
 		TokenContentsObjectPath: nil,
 
 		UpdatedAt: nil,
-		UpdatedBy: ptr(strings.TrimSpace(in.ActorID)),
+		UpdatedBy: ptr(in.ActorID),
 		DeletedAt: nil,
 		DeletedBy: nil,
 	})
@@ -217,6 +216,6 @@ func (u *TokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error
 	if u == nil || u.tbRepo == nil {
 		return fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
 	}
-	tid := strings.TrimSpace(id)
+	tid := id
 	return u.tbRepo.Delete(ctx, tid)
 }

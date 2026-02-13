@@ -4,7 +4,6 @@ package tokenBlueprint
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -33,12 +32,11 @@ func (u *TokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(
 		return nil, fmt.Errorf("tokenBlueprint repo is nil")
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
+	id := tokenBlueprintID
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
 
-	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return nil, fmt.Errorf("actorID is empty")
 	}
@@ -82,14 +80,13 @@ func (u *TokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(
 // 追加: 任意型のポインタを返すユーティリティ
 func ptr[T any](v T) *T { return &v }
 
-// 共通ヘルパー: *string をトリムし、空なら nil にする
+// 共通ヘルパー: *string が空なら nil を返す
 func trimPtr(p *string) *string {
 	if p == nil {
 		return nil
 	}
-	v := strings.TrimSpace(*p)
-	if v == "" {
+	if *p == "" {
 		return nil
 	}
-	return &v
+	return p
 }

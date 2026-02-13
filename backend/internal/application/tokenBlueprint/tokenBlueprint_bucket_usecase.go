@@ -26,14 +26,14 @@ const (
 )
 
 func tokenIconBucketName() string {
-	if v := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET")); v != "" {
+	if v := os.Getenv("TOKEN_ICON_BUCKET"); v != "" {
 		return v
 	}
 	return defaultTokenIconBucket
 }
 
 func tokenContentsBucketName() string {
-	if v := strings.TrimSpace(os.Getenv("TOKEN_CONTENTS_BUCKET")); v != "" {
+	if v := os.Getenv("TOKEN_CONTENTS_BUCKET"); v != "" {
 		return v
 	}
 	return defaultTokenContentsBucket
@@ -42,14 +42,13 @@ func tokenContentsBucketName() string {
 // gcsObjectPublicURL returns public HTTPS URL for an object.
 // NOTE: tokenBlueprint_content_usecase.go から参照されているため、共通定義としてここに置く。
 func gcsObjectPublicURL(bucket, object string) string {
-	bucket = strings.TrimSpace(bucket)
-	object = strings.TrimLeft(strings.TrimSpace(object), "/")
+	object = strings.TrimLeft(object, "/")
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, object)
 }
 
 // keepObjectPath returns "{tokenBlueprintId}/.keep".
 func keepObjectPath(tokenBlueprintID string) string {
-	id := strings.Trim(strings.TrimSpace(tokenBlueprintID), "/")
+	id := strings.Trim(tokenBlueprintID, "/")
 	return id + "/.keep"
 }
 
@@ -81,7 +80,7 @@ func (u *TokenBlueprintBucketUsecase) EnsureKeepObjects(ctx context.Context, tok
 		return fmt.Errorf("tokenBlueprint bucket usecase/gcs client is nil")
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
+	id := tokenBlueprintID
 	if id == "" {
 		return fmt.Errorf("tokenBlueprintID is empty")
 	}
@@ -128,7 +127,7 @@ func (u *TokenBlueprintBucketUsecase) EnsureKeepObjects(ctx context.Context, tok
 }
 
 func (u *TokenBlueprintBucketUsecase) ensureBucketAccessible(ctx context.Context, bucket string) error {
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		return fmt.Errorf("bucket is empty")
 	}
@@ -145,8 +144,7 @@ func (u *TokenBlueprintBucketUsecase) ensureBucketAccessible(ctx context.Context
 // - Uses DoesNotExist condition to be idempotent.
 // - If object already exists, treat as success.
 func (u *TokenBlueprintBucketUsecase) ensureKeepObject(ctx context.Context, bucket, object string) error {
-	bucket = strings.TrimSpace(bucket)
-	object = strings.TrimLeft(strings.TrimSpace(object), "/")
+	object = strings.TrimLeft(object, "/")
 	if bucket == "" {
 		return fmt.Errorf("bucket is empty")
 	}

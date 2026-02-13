@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -12,7 +11,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	fscommon "narratives/internal/adapters/out/firestore/common"
 	proddom "narratives/internal/domain/production"
 )
 
@@ -187,16 +185,11 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 			t := p.PrintedAt.UTC()
 			p.PrintedAt = &t
 		}
-		// PrintedBy は空白を nil に寄せる
-		p.PrintedBy = fscommon.TrimPtr(p.PrintedBy)
 	} else {
 		// 未印刷なら printedAt/printedBy は必ず nil
 		p.PrintedAt = nil
 		p.PrintedBy = nil
 	}
-
-	// UpdatedBy の正規化
-	p.UpdatedBy = fscommon.TrimPtr(p.UpdatedBy)
 
 	var ref *firestore.DocumentRef
 	id := p.ID
@@ -390,11 +383,10 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 		return []proddom.Production{}, nil
 	}
 
-	// 空文字を取り除きつつ trim & 重複排除（ここは productBlueprintIDs の正規化処理）
+	// 空文字を取り除きつつ重複排除
 	uniq := make(map[string]struct{}, len(productBlueprintIDs))
 	var ids []string
 	for _, id := range productBlueprintIDs {
-		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
@@ -457,7 +449,7 @@ func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
 
 	for _, p := range prods {
 		for _, mq := range p.Models {
-			modelID := strings.TrimSpace(mq.ModelID)
+			modelID := mq.ModelID
 			if modelID == "" {
 				continue
 			}
@@ -482,7 +474,6 @@ func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
 // GetByModelID は、指定 modelId を Models に含む Production 一覧を返します。
 // ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
 func (r *ProductionRepositoryFS) GetByModelID(ctx context.Context, modelID string) ([]proddom.Production, error) {
-	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return []proddom.Production{}, nil
 	}
@@ -495,7 +486,7 @@ func (r *ProductionRepositoryFS) GetByModelID(ctx context.Context, modelID strin
 	var out []proddom.Production
 	for _, p := range all {
 		for _, mq := range p.Models {
-			if strings.TrimSpace(mq.ModelID) == modelID {
+			if mq.ModelID == modelID {
 				out = append(out, p)
 				break
 			}
@@ -552,7 +543,7 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 	}
 
 	printedAt := normalizeTimePtr(raw.PrintedAt)
-	printedBy := fscommon.TrimPtr(raw.PrintedBy)
+	printedBy := raw.PrintedBy
 
 	// 整合性補正（ドメインルールに合わせる）
 	if printed {
@@ -577,7 +568,7 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 
 		CreatedBy: raw.CreatedBy,
 		CreatedAt: createdAt,
-		UpdatedBy: fscommon.TrimPtr(raw.UpdatedBy),
+		UpdatedBy: raw.UpdatedBy,
 	}
 
 	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
@@ -611,8 +602,8 @@ func productionToDoc(p proddom.Production) map[string]any {
 			m["printedAt"] = p.PrintedAt.UTC()
 		}
 		if p.PrintedBy != nil {
-			if s := strings.TrimSpace(*p.PrintedBy); s != "" {
-				m["printedBy"] = s
+			if *p.PrintedBy != "" {
+				m["printedBy"] = *p.PrintedBy
 			}
 		}
 	} else {
@@ -621,8 +612,8 @@ func productionToDoc(p proddom.Production) map[string]any {
 	}
 
 	if p.UpdatedBy != nil {
-		if s := strings.TrimSpace(*p.UpdatedBy); s != "" {
-			m["updatedBy"] = s
+		if *p.UpdatedBy != "" {
+			m["updatedBy"] = *p.UpdatedBy
 		}
 	}
 

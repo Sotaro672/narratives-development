@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	domcommon "narratives/internal/domain/common"
 )
 
 // BillingAddress エンティティ（Mallアプリの billing_address.dart の入力欄に準拠）
@@ -54,10 +56,10 @@ var (
 // ============================================================
 
 func (b BillingAddress) validate() error {
-	if strings.TrimSpace(b.ID) == "" || !uuidRe.MatchString(strings.TrimSpace(b.ID)) {
+	if b.ID == "" || !uuidRe.MatchString(b.ID) {
 		return ErrInvalidID
 	}
-	if strings.TrimSpace(b.UserID) == "" {
+	if b.UserID == "" {
 		return ErrInvalidUserID
 	}
 
@@ -75,7 +77,7 @@ func (b BillingAddress) validate() error {
 		return ErrInvalidCardNumber
 	}
 
-	if strings.TrimSpace(b.CardholderName) == "" {
+	if b.CardholderName == "" {
 		return ErrInvalidCardholderName
 	}
 
@@ -99,10 +101,6 @@ func (b BillingAddress) validate() error {
 
 // UpdateFromForm は billing_address.dart の入力欄に対応する更新メソッドです。
 func (b *BillingAddress) UpdateFromForm(cardNumber, cardholderName, cvc string, now time.Time) error {
-	cardNumber = strings.TrimSpace(cardNumber)
-	cardholderName = strings.TrimSpace(cardholderName)
-	cvc = strings.TrimSpace(cvc)
-
 	// 正規化してから保持
 	n := normalizeCardNumber(cardNumber)
 	if n == "" {
@@ -144,11 +142,11 @@ func New(
 	createdAt, updatedAt time.Time,
 ) (BillingAddress, error) {
 	ba := BillingAddress{
-		ID:             strings.TrimSpace(id),
-		UserID:         strings.TrimSpace(userID),
-		CardNumber:     strings.TrimSpace(cardNumber),
-		CardholderName: strings.TrimSpace(cardholderName),
-		CVC:            strings.TrimSpace(cvc),
+		ID:             id,
+		UserID:         userID,
+		CardNumber:     cardNumber,
+		CardholderName: cardholderName,
+		CVC:            cvc,
 		CreatedAt:      createdAt.UTC(),
 		UpdatedAt:      updatedAt.UTC(),
 	}
@@ -182,11 +180,11 @@ func NewFromStringTimes(
 	cvc string,
 	createdAtStr, updatedAtStr string,
 ) (BillingAddress, error) {
-	ca, err := parseTime(createdAtStr)
+	ca, err := domcommon.ParseTime(createdAtStr)
 	if err != nil {
 		return BillingAddress{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
-	ua, err := parseTime(updatedAtStr)
+	ua, err := domcommon.ParseTime(updatedAtStr)
 	if err != nil {
 		return BillingAddress{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
@@ -205,31 +203,8 @@ func (b *BillingAddress) touch(now time.Time) error {
 	return nil
 }
 
-func parseTime(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, errors.New("empty time")
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
-}
-
 // normalizeDigits: 数字以外を除去
 func normalizeDigits(s string) string {
-	s = strings.TrimSpace(s)
 	if s == "" {
 		return ""
 	}

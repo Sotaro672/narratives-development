@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -50,7 +49,6 @@ func (r *ShippingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*
 		return nil, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, shipaddrdom.ErrInvalidID
 	}
@@ -75,7 +73,6 @@ func (r *ShippingAddressRepositoryFS) Exists(ctx context.Context, id string) (bo
 		return false, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, nil
 	}
@@ -97,7 +94,6 @@ func (r *ShippingAddressRepositoryFS) ListByUserID(ctx context.Context, userID s
 		return nil, errors.New("firestore client is nil")
 	}
 
-	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return nil, shipaddrdom.ErrInvalidUserID
 	}
@@ -135,7 +131,7 @@ func (r *ShippingAddressRepositoryFS) Create(ctx context.Context, v shipaddrdom.
 		return nil, errors.New("firestore client is nil")
 	}
 
-	id := strings.TrimSpace(v.ID)
+	id := v.ID
 	if id == "" {
 		return nil, shipaddrdom.ErrInvalidID
 	}
@@ -150,7 +146,7 @@ func (r *ShippingAddressRepositoryFS) Create(ctx context.Context, v shipaddrdom.
 
 	v.ID = id
 
-	if strings.TrimSpace(v.Country) == "" {
+	if v.Country == "" {
 		v.Country = "JP"
 	}
 
@@ -173,7 +169,7 @@ func (r *ShippingAddressRepositoryFS) Update(ctx context.Context, v shipaddrdom.
 		return nil, errors.New("firestore client is nil")
 	}
 
-	id := strings.TrimSpace(v.ID)
+	id := v.ID
 	if id == "" {
 		return nil, shipaddrdom.ErrInvalidID
 	}
@@ -203,9 +199,9 @@ func (r *ShippingAddressRepositoryFS) Update(ctx context.Context, v shipaddrdom.
 		updatedAt = v.UpdatedAt.UTC()
 	}
 
-	country := strings.TrimSpace(v.Country)
+	country := v.Country
 	if country == "" {
-		country = strings.TrimSpace(current.Country)
+		country = current.Country
 	}
 	if country == "" {
 		country = "JP"
@@ -213,12 +209,12 @@ func (r *ShippingAddressRepositoryFS) Update(ctx context.Context, v shipaddrdom.
 
 	next := shipaddrdom.ShippingAddress{
 		ID:        id,
-		UserID:    strings.TrimSpace(v.UserID),
-		ZipCode:   strings.TrimSpace(v.ZipCode),
-		State:     strings.TrimSpace(v.State),
-		City:      strings.TrimSpace(v.City),
-		Street:    strings.TrimSpace(v.Street),
-		Street2:   strings.TrimSpace(v.Street2),
+		UserID:    v.UserID,
+		ZipCode:   v.ZipCode,
+		State:     v.State,
+		City:      v.City,
+		Street:    v.Street,
+		Street2:   v.Street2,
 		Country:   country,
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
@@ -239,7 +235,6 @@ func (r *ShippingAddressRepositoryFS) Delete(ctx context.Context, id string) err
 		return errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return shipaddrdom.ErrInvalidID
 	}
@@ -277,7 +272,7 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipaddrdom.Shipping
 		if !ok {
 			return ""
 		}
-		return strings.TrimSpace(s)
+		return s
 	}
 
 	getTime := func(key string) time.Time {
@@ -293,7 +288,7 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipaddrdom.Shipping
 	}
 
 	return shipaddrdom.ShippingAddress{
-		ID:        strings.TrimSpace(doc.Ref.ID),
+		ID:        doc.Ref.ID,
 		UserID:    getStr("userId"),
 		ZipCode:   getStr("zipCode"),
 		State:     getStr("state"),
@@ -308,13 +303,13 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipaddrdom.Shipping
 
 func shippingAddressToDocData(v shipaddrdom.ShippingAddress) map[string]any {
 	data := map[string]any{
-		"userId":    strings.TrimSpace(v.UserID),
-		"zipCode":   strings.TrimSpace(v.ZipCode),
-		"state":     strings.TrimSpace(v.State),
-		"city":      strings.TrimSpace(v.City),
-		"street":    strings.TrimSpace(v.Street),
-		"street2":   strings.TrimSpace(v.Street2),
-		"country":   strings.TrimSpace(v.Country),
+		"userId":    v.UserID,
+		"zipCode":   v.ZipCode,
+		"state":     v.State,
+		"city":      v.City,
+		"street":    v.Street,
+		"street2":   v.Street2,
+		"country":   v.Country,
 		"createdAt": v.CreatedAt.UTC(),
 		"updatedAt": v.UpdatedAt.UTC(),
 	}

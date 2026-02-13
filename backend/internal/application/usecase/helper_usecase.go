@@ -48,18 +48,6 @@ func dedupStrings(xs []string) []string {
 	return out
 }
 
-// 共通ヘルパー: *string をトリムし、空なら nil にする
-func trimPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	v := strings.TrimSpace(*p)
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
 // 追加: ログ用マスク（usecase 内で共通利用）
 // NOTE: 既に transfer_usecase.go にある _mask と同一実装にしてください。
 func _mask(s string) string {

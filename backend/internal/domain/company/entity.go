@@ -3,7 +3,6 @@ package company
 import (
 	"errors"
 	"regexp"
-	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -62,14 +61,14 @@ func NewCompany(
 	deletedBy *string,
 ) (Company, error) {
 	c := Company{
-		ID:        strings.TrimSpace(id),
-		Name:      strings.TrimSpace(name),
-		Admin:     strings.TrimSpace(admin),
+		ID:        id,
+		Name:      name,
+		Admin:     admin,
 		IsActive:  isActive,
 		CreatedAt: createdAt.UTC(),
-		CreatedBy: strings.TrimSpace(createdBy),
+		CreatedBy: createdBy,
 		UpdatedAt: updatedAt.UTC(),
-		UpdatedBy: strings.TrimSpace(updatedBy),
+		UpdatedBy: updatedBy,
 		DeletedAt: normalizeTimePtr(deletedAt),
 		DeletedBy: normalizeStrPtr(deletedBy),
 	}
@@ -96,36 +95,34 @@ func NewCompanyWithNow(
 func (c *Company) Activate(now time.Time, updatedBy string) error {
 	c.IsActive = true
 	c.UpdatedAt = now.UTC()
-	c.UpdatedBy = strings.TrimSpace(updatedBy)
+	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
 
 func (c *Company) Deactivate(now time.Time, updatedBy string) error {
 	c.IsActive = false
 	c.UpdatedAt = now.UTC()
-	c.UpdatedBy = strings.TrimSpace(updatedBy)
+	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
 
 func (c *Company) UpdateName(name string, now time.Time, updatedBy string) error {
-	name = strings.TrimSpace(name)
 	if err := validateCompanyName(name); err != nil {
 		return err
 	}
 	c.Name = name
 	c.UpdatedAt = now.UTC()
-	c.UpdatedBy = strings.TrimSpace(updatedBy)
+	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
 
 func (c *Company) UpdateAdmin(admin string, now time.Time, updatedBy string) error {
-	admin = strings.TrimSpace(admin)
 	if admin == "" {
 		return ErrInvalidAdmin
 	}
 	c.Admin = admin
 	c.UpdatedAt = now.UTC()
-	c.UpdatedBy = strings.TrimSpace(updatedBy)
+	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
 
@@ -146,7 +143,7 @@ func (c *Company) SetDeleted(at *time.Time, by *string) error {
 	c.DeletedAt = at
 	c.DeletedBy = by
 
-	if c.DeletedBy != nil && strings.TrimSpace(*c.DeletedBy) == "" {
+	if c.DeletedBy != nil && *c.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
 	return nil
@@ -157,15 +154,15 @@ func (c *Company) SetDeleted(at *time.Time, by *string) error {
 // ----------------------------------------
 
 func (c Company) validate() error {
-	if strings.TrimSpace(c.ID) == "" {
+	if c.ID == "" {
 		return ErrInvalidID
 	}
 
-	if err := validateCompanyName(strings.TrimSpace(c.Name)); err != nil {
+	if err := validateCompanyName(c.Name); err != nil {
 		return err
 	}
 
-	if strings.TrimSpace(c.Admin) == "" {
+	if c.Admin == "" {
 		return ErrInvalidAdmin
 	}
 
@@ -173,7 +170,7 @@ func (c Company) validate() error {
 		return ErrInvalidCreatedAt
 	}
 
-	if strings.TrimSpace(c.CreatedBy) == "" {
+	if c.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
 
@@ -181,7 +178,7 @@ func (c Company) validate() error {
 		return ErrInvalidUpdatedAt
 	}
 
-	if strings.TrimSpace(c.UpdatedBy) == "" {
+	if c.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
 
@@ -196,7 +193,7 @@ func (c Company) validate() error {
 		if c.UpdatedAt.After(*c.DeletedAt) {
 			return ErrInvalidDeletedAt
 		}
-		if c.DeletedBy != nil && strings.TrimSpace(*c.DeletedBy) == "" {
+		if c.DeletedBy != nil && *c.DeletedBy == "" {
 			return ErrInvalidDeletedBy
 		}
 	}
@@ -205,7 +202,7 @@ func (c Company) validate() error {
 }
 
 func (c Company) validateUpdateOnly() error {
-	if strings.TrimSpace(c.UpdatedBy) == "" {
+	if c.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
 	if c.UpdatedAt.IsZero() || c.UpdatedAt.Before(c.CreatedAt) {
@@ -237,7 +234,7 @@ func normalizeStrPtr(p *string) *string {
 	if p == nil {
 		return nil
 	}
-	v := strings.TrimSpace(*p)
+	v := *p
 	if v == "" {
 		return nil
 	}

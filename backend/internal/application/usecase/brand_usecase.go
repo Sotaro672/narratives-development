@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"log"
-	"strings"
 	"time"
 
 	branddom "narratives/internal/domain/brand"
@@ -46,11 +45,11 @@ func NewBrandUsecaseWithWallet(
 // ==============================
 
 func (u *BrandUsecase) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
-	return u.brandRepo.GetByID(ctx, strings.TrimSpace(id))
+	return u.brandRepo.GetByID(ctx, id)
 }
 
 func (u *BrandUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.brandRepo.Exists(ctx, strings.TrimSpace(id))
+	return u.brandRepo.Exists(ctx, id)
 }
 
 // ★ Count はドメイン側から削除したので、Usecase からも削除済み
@@ -89,7 +88,7 @@ func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
 	page branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
 	cid := companyIDFromContext(ctx)
-	if strings.TrimSpace(cid) == "" {
+	if cid == "" {
 		// companyId が無い場合は空を返す（必要であれば ErrInvalidID にしてもよい）
 		return branddom.PageResult[branddom.Brand]{}, nil
 	}
@@ -107,11 +106,11 @@ func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
 	for i, b := range res.Items {
 		name, err := svc.GetNameByID(ctx, b.ID)
 		if err != nil {
-			// 取得に失敗した場合は、既存の Name を trim だけして使う
-			res.Items[i].Name = strings.TrimSpace(b.Name)
+			// 取得に失敗した場合は、既存の Name をそのまま使う
+			res.Items[i].Name = b.Name
 			continue
 		}
-		res.Items[i].Name = strings.TrimSpace(name)
+		res.Items[i].Name = name
 	}
 
 	return res, nil
@@ -128,7 +127,7 @@ func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
 func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
 	// context の companyId を優先して強制適用
 	if cid := companyIDFromContext(ctx); cid != "" {
-		b.CompanyID = strings.TrimSpace(cid)
+		b.CompanyID = cid
 	}
 
 	// isActive は自動的に有効化（フロントからは入力されない前提）
@@ -148,21 +147,21 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 
 	// 1.5 ブランド専用 Solana ウォレット自動開設
 	// Brand.WalletAddress が未設定（""）または "pending" の場合に実行。
-	waTrimmed := strings.TrimSpace(created.WalletAddress)
-	if u.walletSvc != nil && (waTrimmed == "" || waTrimmed == "pending") {
+	wa := created.WalletAddress
+	if u.walletSvc != nil && (wa == "" || wa == "pending") {
 		wallet, werr := u.walletSvc.OpenBrandWallet(ctx, created)
 		if werr != nil {
 			log.Printf("[BrandUsecase] WARN: failed to open Solana brand wallet (brandId=%s): %v", created.ID, werr)
 		} else {
-			wa := strings.TrimSpace(wallet.Address)
-			if wa == "" {
+			addr := wallet.Address
+			if addr == "" {
 				log.Printf("[BrandUsecase] WARN: OpenBrandWallet returned empty address (brandId=%s)", created.ID)
 			} else {
-				created.WalletAddress = wa
+				created.WalletAddress = addr
 				// 永続化しておく（失敗しても Brand 作成は成功扱いにする）
 				if saved, errSave := u.brandRepo.Save(ctx, created, nil); errSave != nil {
 					log.Printf("[BrandUsecase] WARN: failed to persist brand walletAddress (brandId=%s wallet=%s): %v",
-						created.ID, wa, errSave)
+						created.ID, addr, errSave)
 				} else {
 					created = saved
 				}
@@ -171,11 +170,11 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 	}
 
 	// 2. ManagerID が存在しない場合はここで終了
-	if created.ManagerID == nil || strings.TrimSpace(*created.ManagerID) == "" {
+	if created.ManagerID == nil || *created.ManagerID == "" {
 		return created, nil
 	}
 
-	managerID := strings.TrimSpace(*created.ManagerID)
+	managerID := *created.ManagerID
 
 	// 3. Member を取得
 	m, err := u.memberRepo.GetByID(ctx, managerID)
@@ -185,7 +184,7 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 	}
 
 	// 4. assignedBrands に brandId を追加（重複チェックあり）
-	brandID := strings.TrimSpace(created.ID)
+	brandID := created.ID
 	found := false
 	for _, bid := range m.AssignedBrands {
 		if bid == brandID {
@@ -213,7 +212,6 @@ func (u *BrandUsecase) Update(
 	id string,
 	patch branddom.BrandPatch,
 ) (branddom.Brand, error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return branddom.Brand{}, branddom.ErrInvalidID
 	}
@@ -224,7 +222,7 @@ func (u *BrandUsecase) Update(
 func (u *BrandUsecase) Save(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
 	// context の companyId を優先して強制適用
 	if cid := companyIDFromContext(ctx); cid != "" {
-		b.CompanyID = strings.TrimSpace(cid)
+		b.CompanyID = cid
 	}
 
 	if b.CreatedAt.IsZero() {
@@ -234,5 +232,5 @@ func (u *BrandUsecase) Save(ctx context.Context, b branddom.Brand) (branddom.Bra
 }
 
 func (u *BrandUsecase) Delete(ctx context.Context, id string) error {
-	return u.brandRepo.Delete(ctx, strings.TrimSpace(id))
+	return u.brandRepo.Delete(ctx, id)
 }

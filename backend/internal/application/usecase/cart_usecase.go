@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"strings"
 	"time"
 
 	cartdom "narratives/internal/domain/cart"
@@ -49,7 +48,7 @@ func NewCartUsecaseWithClock(repo cartdom.Repository, clock Clock) *CartUsecase 
 // Get returns the cart for avatarID.
 // If cart does not exist, returns (nil, ErrCartNotFound).
 func (uc *CartUsecase) Get(ctx context.Context, avatarID string) (*cartdom.Cart, error) {
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return nil, ErrCartInvalidArgument
 	}
@@ -66,7 +65,7 @@ func (uc *CartUsecase) Get(ctx context.Context, avatarID string) (*cartdom.Cart,
 
 // GetOrCreate returns an existing cart; if absent, creates an empty one and persists it.
 func (uc *CartUsecase) GetOrCreate(ctx context.Context, avatarID string) (*cartdom.Cart, error) {
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return nil, ErrCartInvalidArgument
 	}
@@ -97,10 +96,10 @@ func (uc *CartUsecase) AddItem(
 	avatarID, inventoryID, listID, modelID string,
 	qty int,
 ) (*cartdom.Cart, error) {
-	aid := strings.TrimSpace(avatarID)
-	inv := strings.TrimSpace(inventoryID)
-	lid := strings.TrimSpace(listID)
-	mid := strings.TrimSpace(modelID)
+	aid := avatarID
+	inv := inventoryID
+	lid := listID
+	mid := modelID
 	if aid == "" || inv == "" || lid == "" || mid == "" || qty <= 0 {
 		return nil, ErrCartInvalidArgument
 	}
@@ -134,10 +133,10 @@ func (uc *CartUsecase) SetItemQty(
 	avatarID, inventoryID, listID, modelID string,
 	qty int,
 ) (*cartdom.Cart, error) {
-	aid := strings.TrimSpace(avatarID)
-	inv := strings.TrimSpace(inventoryID)
-	lid := strings.TrimSpace(listID)
-	mid := strings.TrimSpace(modelID)
+	aid := avatarID
+	inv := inventoryID
+	lid := listID
+	mid := modelID
 	if aid == "" || inv == "" || lid == "" || mid == "" {
 		return nil, ErrCartInvalidArgument
 	}
@@ -176,7 +175,7 @@ func (uc *CartUsecase) RemoveItem(
 
 // Clear deletes the cart doc (useful for "empty cart" UX).
 func (uc *CartUsecase) Clear(ctx context.Context, avatarID string) error {
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return ErrCartInvalidArgument
 	}
@@ -187,7 +186,7 @@ func (uc *CartUsecase) Clear(ctx context.Context, avatarID string) error {
 // - payment 成功後など「カートは残すが中身を空にする」用途
 // - cart が存在しない場合は空のカートを作って Upsert（冪等）
 func (uc *CartUsecase) EmptyItems(ctx context.Context, avatarID string) error {
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return ErrCartInvalidArgument
 	}

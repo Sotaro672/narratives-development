@@ -66,9 +66,9 @@ func New(
 	size *int64,
 ) (AvatarIcon, error) {
 	a := AvatarIcon{
-		ID:       strings.TrimSpace(id),
+		ID:       id,
 		AvatarID: normalizeStrPtr(avatarID),
-		URL:      strings.TrimSpace(urlStr),
+		URL:      urlStr,
 		FileName: normalizeStrPtr(fileName),
 		Size:     size,
 	}
@@ -108,18 +108,18 @@ func NewFromBucketObject(
 	fileName *string,
 	size *int64,
 ) (AvatarIcon, error) {
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		b = DefaultBucket
 	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if obj == "" {
 		return AvatarIcon{}, fmt.Errorf("avatarIcon: empty objectPath")
 	}
 
 	// Derive fileName from objectPath if not provided
 	var fn *string
-	if fileName != nil && strings.TrimSpace(*fileName) != "" {
+	if fileName != nil && *fileName != "" {
 		fn = normalizeStrPtr(fileName)
 	} else {
 		base := path.Base(obj)
@@ -143,7 +143,6 @@ Mutators
 */
 
 func (a *AvatarIcon) UpdateURL(u string) error {
-	u = strings.TrimSpace(u)
 	if err := validateURL(u); err != nil {
 		return err
 	}
@@ -182,7 +181,7 @@ Validation
 */
 
 func (a AvatarIcon) validate() error {
-	if strings.TrimSpace(a.ID) == "" {
+	if a.ID == "" {
 		return ErrInvalidID
 	}
 	if err := validateURL(a.URL); err != nil {
@@ -210,11 +209,10 @@ func normalizeStrPtr(p *string) *string {
 	if p == nil {
 		return nil
 	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
+	if *p == "" {
 		return nil
 	}
-	return &s
+	return p
 }
 
 func extAllowed(name string) bool {
@@ -257,11 +255,11 @@ func validateURL(u string) error {
 // PublicURL returns the HTTPS public URL for a GCS object:
 // https://storage.googleapis.com/{bucket}/{objectPath}
 func PublicURL(bucket, objectPath string) string {
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		b = DefaultBucket
 	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
 }
 
@@ -270,7 +268,7 @@ func PublicURL(bucket, objectPath string) string {
 // - https://storage.cloud.google.com/{bucket}/{objectPath}
 // Returns bucket, objectPath, ok.
 func ParseGCSURL(u string) (string, string, bool) {
-	parsed, err := url.Parse(strings.TrimSpace(u))
+	parsed, err := url.Parse(u)
 	if err != nil {
 		return "", "", false
 	}
