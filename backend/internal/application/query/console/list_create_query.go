@@ -4,6 +4,7 @@ package query
 import (
 	"context"
 	"errors"
+	"log"
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
@@ -241,7 +242,13 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		stock := 0
 		if picked != nil && picked.Stock != nil {
 			if ms, ok := picked.Stock[mid]; ok {
-				_, _, available := modelStockNumbers(ms) // defined in inventory_query.go
+				// ✅ domain contract（ModelStock.Validate）前提の素直な計算
+				available := ms.Accumulation - ms.ReservedCount
+				if available < 0 {
+					// 契約上は起きない想定だが、画面を壊さない保険
+					log.Printf("[list_create_query][stock] WARN availableStock negative accumulation=%d reserved=%d -> clamp to 0", ms.Accumulation, ms.ReservedCount)
+					available = 0
+				}
 				stock = available
 			}
 		}

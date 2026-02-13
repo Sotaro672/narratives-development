@@ -38,7 +38,7 @@ type pbIDsByCompanyAdapter struct {
 	}
 }
 
-func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error) {
+func (a *pbIDsByCompanyAdapter) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
 	return a.repo.ListIDsByCompany(ctx, companyID)
 }
 

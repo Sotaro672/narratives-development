@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"strings"
 	"time"
 
 	fs "narratives/internal/adapters/out/firestore"
@@ -35,8 +34,8 @@ func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
 	// best-effort log (removed can be 0 on idempotent re-run)
 	log.Printf(
 		"[inventory_repo_adapter] ApplyTransferResult ok productId=%q orderId=%q removed=%d at=%s",
-		strings.TrimSpace(productID),
-		strings.TrimSpace(orderID),
+		productID,
+		orderID,
 		removed,
 		now.UTC().Format(time.RFC3339),
 	)
@@ -58,7 +57,7 @@ func (a *inventoryRepoTransferResultAdapter) ResolveBlueprintIDsByInventoryID(
 		return "", "", errors.New("inventory repo adapter is nil")
 	}
 
-	id := strings.TrimSpace(inventoryID)
+	id := inventoryID
 	if id == "" {
 		return "", "", errors.New("inventory repo adapter: inventoryID is empty")
 	}
@@ -70,5 +69,5 @@ func (a *inventoryRepoTransferResultAdapter) ResolveBlueprintIDsByInventoryID(
 		return "", "", err
 	}
 
-	return strings.TrimSpace(m.ProductBlueprintID), strings.TrimSpace(m.TokenBlueprintID), nil
+	return m.ProductBlueprintID, m.TokenBlueprintID, nil
 }

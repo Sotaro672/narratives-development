@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"reflect"
 	"sort"
 	"time"
 
@@ -32,7 +31,7 @@ type InventoryQuery struct {
 	invRepo      inventoryReader
 	pbRepo       productBlueprintIDsByCompanyReader
 	pbPatchRepo  productBlueprintPatchReader
-	tbPatchRepo  tokenBlueprintPatchReader // ✅ tokenBlueprintPatchReader のみを唯一の正とする
+	tbPatchRepo  tokenBlueprintPatchReader
 	nameResolver *resolver.NameResolver
 }
 
@@ -66,7 +65,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		return nil, errors.New("companyId is missing in context")
 	}
 
-	pbIDs, err := q.pbRepo.ListIDsByCompanyID(ctx, companyID)
+	pbIDs, err := q.pbRepo.ListIDsByCompany(ctx, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -80,13 +79,6 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		modelNum string
 	}
 
-	type modelAttr struct {
-		modelNumber string
-		size        string
-		color       string
-		rgb         *int
-	}
-
 	type agg struct {
 		available int
 		reserved  int
@@ -96,7 +88,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 
 	productNameCache := map[string]string{}
 	tokenNameCache := map[string]string{}
-	modelAttrCache := map[string]modelAttr{}
+	modelNumberCache := map[string]string{}
 
 	for _, pbID0 := range pbIDs {
 		pbID := pbID0
@@ -104,8 +96,12 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 			continue
 		}
 
+		// productName cache
 		if _, ok := productNameCache[pbID]; !ok {
-			name := q.resolveProductName(ctx, pbID)
+			name := ""
+			if q.nameResolver != nil {
+				name = q.nameResolver.ResolveProductName(ctx, pbID)
+			}
 			if name == "" {
 				name = pbID
 			}
@@ -121,11 +117,15 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		}
 
 		for _, inv := range invs {
-			// ✅ TokenBlueprintID は必ず存在する前提（空ケース削除）
+			// ✅ TokenBlueprintID は必ず存在する前提
 			tbID := inv.TokenBlueprintID
 
+			// tokenName cache
 			if _, ok := tokenNameCache[tbID]; !ok {
-				name := q.resolveTokenName(ctx, tbID)
+				name := ""
+				if q.nameResolver != nil {
+					name = q.nameResolver.ResolveTokenName(ctx, tbID)
+				}
 				if name == "" {
 					name = tbID
 				}
@@ -151,30 +151,33 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 					continue
 				}
 
-				// ✅ Resolver でまとめて解決（管理一覧は modelNumber だけ使う）
-				if _, ok := modelAttrCache[modelID]; !ok {
-					attr := q.resolveModelResolved(ctx, modelID)
-
-					mn := attr.ModelNumber
+				// ✅ 管理一覧では modelNumber だけ必要
+				if _, ok := modelNumberCache[modelID]; !ok {
+					mn := ""
+					if q.nameResolver != nil {
+						attr := q.nameResolver.ResolveModelResolved(ctx, modelID)
+						mn = attr.ModelNumber
+					}
 					if mn == "" {
 						mn = modelID
 					}
 					if mn == "" {
 						mn = "-"
 					}
-
-					modelAttrCache[modelID] = modelAttr{
-						modelNumber: mn,
-						size:        attr.Size,
-						color:       attr.Color,
-						rgb:         attr.RGB,
-					}
+					modelNumberCache[modelID] = mn
 				}
-				modelNumber := modelAttrCache[modelID].modelNumber
+				modelNumber := modelNumberCache[modelID]
+
+				// ✅ domain contract（ModelStock.Validate）前提で素直に計算
+				reserved := ms.ReservedCount
+				available := ms.Accumulation - reserved
+				if available < 0 {
+					// 契約上は起きない想定だが、表示を壊さないための保険
+					log.Printf("[inventory_query][stock] WARN availableStock negative accumulation=%d reserved=%d -> clamp to 0", ms.Accumulation, reserved)
+					available = 0
+				}
 
 				// ✅ 0 でも行を落とさない（要件）
-				_, reserved, available := modelStockNumbers(ms)
-
 				k := key{pbID: pbID, tbID: tbID, modelNum: modelNumber}
 				a := group[k]
 				a.available += available
@@ -215,7 +218,8 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 
 // ============================================================
 // ✅ TokenBlueprint Patch: tbId -> Patch
-// - Patch.BrandID -> brandName を NameResolver で解決して詰める
+// - tbdom.Patch は repository_port.go の contract 通りに BrandID/BrandName が揺れない前提
+// - BrandName は NameResolver で補完して返す（表示用）
 // ============================================================
 
 func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBlueprintID string) (*tbdom.Patch, error) {
@@ -236,18 +240,19 @@ func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBl
 		return nil, err
 	}
 
-	brandID := getStringFieldAny(patch, "BrandID", "BrandId", "brandId")
-	brandName := q.resolveBrandName(ctx, brandID)
-
+	// BrandName の補完（必要な場合のみ）
 	setOK := false
-	if brandID != "" && brandName != "" {
-		setStringFieldAny(&patch, brandName, "BrandName", "brandName")
-		setOK = true
+	if patch.BrandID != "" && patch.BrandName == "" && q.nameResolver != nil {
+		brandName := q.nameResolver.ResolveBrandName(ctx, patch.BrandID)
+		if brandName != "" {
+			patch.BrandName = brandName
+			setOK = true
+		}
 	}
 
 	log.Printf(
 		"[inventory_query][GetTokenBlueprintPatchByID] brand resolve tbId=%q brandId=%q brandName=%q setOK=%t",
-		tbID, brandID, brandName, setOK,
+		tbID, patch.BrandID, patch.BrandName, setOK,
 	)
 
 	return &patch, nil
@@ -296,18 +301,19 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		return nil, e
 	}
 
-	brandID := getStringFieldAny(pbPatch, "BrandID", "BrandId", "brandId")
-	brandName := q.resolveBrandName(ctx, brandID)
-
+	// pbdom.Patch は BrandID/BrandName が *string（repository_port.go）
 	setOK := false
-	if brandID != "" && brandName != "" {
-		setStringFieldAny(&pbPatch, brandName, "BrandName", "brandName")
-		setOK = true
+	if pbPatch.BrandID != nil && *pbPatch.BrandID != "" && (pbPatch.BrandName == nil || *pbPatch.BrandName == "") && q.nameResolver != nil {
+		brandName := q.nameResolver.ResolveBrandName(ctx, *pbPatch.BrandID)
+		if brandName != "" {
+			pbPatch.BrandName = &brandName
+			setOK = true
+		}
 	}
 
 	log.Printf(
-		"[inventory_query][GetDetailByID] patch brand resolve pbId=%q brandId=%q brandName=%q setOK=%t",
-		pbID, brandID, brandName, setOK,
+		"[inventory_query][GetDetailByID] patch brand resolve pbId=%q brandId=%v brandName=%v setOK=%t",
+		pbID, pbPatch.BrandID, pbPatch.BrandName, setOK,
 	)
 
 	pbPatchPtr := &pbPatch
@@ -365,12 +371,18 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 
 		available := 0
 		if ok {
-			_, _, available = modelStockNumbers(ms)
-		} else {
-			available = 0
+			// domain contract 前提で素直に計算
+			available = ms.Accumulation - ms.ReservedCount
+			if available < 0 {
+				log.Printf("[inventory_query][stock] WARN availableStock negative accumulation=%d reserved=%d -> clamp to 0", ms.Accumulation, ms.ReservedCount)
+				available = 0
+			}
 		}
 
-		attr := q.resolveModelResolved(ctx, modelID)
+		attr := resolver.ModelResolved{}
+		if q.nameResolver != nil {
+			attr = q.nameResolver.ResolveModelResolved(ctx, modelID)
+		}
 
 		mn := attr.ModelNumber
 		if mn == "" {
@@ -411,9 +423,10 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		total += available
 	}
 
-	updated := pickTimeFromStruct(inv, "UpdatedAt")
+	// domain: Mint は CreatedAt/UpdatedAt が time.Time（揺れなし）
+	updated := inv.UpdatedAt
 	if updated.IsZero() {
-		updated = pickTimeFromStruct(inv, "CreatedAt")
+		updated = inv.CreatedAt
 	}
 	updatedAt := ""
 	if !updated.IsZero() {
@@ -435,87 +448,6 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 }
 
 // ============================================================
-// reflect helpers
-// ============================================================
-
-func pickTimeFromStruct(v any, fieldName string) time.Time {
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return time.Time{}
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return time.Time{}
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return time.Time{}
-	}
-
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() {
-		return time.Time{}
-	}
-
-	if f.Type() == reflect.TypeOf(time.Time{}) {
-		if t, ok := f.Interface().(time.Time); ok {
-			return t
-		}
-	}
-	if f.Kind() == reflect.Pointer && f.Type().Elem() == reflect.TypeOf(time.Time{}) {
-		if f.IsNil() {
-			return time.Time{}
-		}
-		if t, ok := f.Elem().Interface().(time.Time); ok {
-			return t
-		}
-	}
-
-	return time.Time{}
-}
-
-// ============================================================
-// helpers (NameResolver)
-// ============================================================
-
-func (q *InventoryQuery) resolveTokenName(ctx context.Context, tokenBlueprintID string) string {
-	if q == nil || q.nameResolver == nil {
-		return ""
-	}
-	return q.nameResolver.ResolveTokenName(ctx, tokenBlueprintID)
-}
-
-func (q *InventoryQuery) resolveProductName(ctx context.Context, productBlueprintID string) string {
-	if q == nil || q.nameResolver == nil {
-		return ""
-	}
-	return q.nameResolver.ResolveProductName(ctx, productBlueprintID)
-}
-
-func (q *InventoryQuery) resolveBrandName(ctx context.Context, brandID string) string {
-	if q == nil || q.nameResolver == nil {
-		return ""
-	}
-	id := brandID
-	if id == "" {
-		return ""
-	}
-	return q.nameResolver.ResolveBrandName(ctx, id)
-}
-
-func (q *InventoryQuery) resolveModelResolved(ctx context.Context, modelVariationID string) resolver.ModelResolved {
-	if q == nil || q.nameResolver == nil {
-		return resolver.ModelResolved{}
-	}
-	id := modelVariationID
-	if id == "" {
-		return resolver.ModelResolved{}
-	}
-	return q.nameResolver.ResolveModelResolved(ctx, id)
-}
-
-// ============================================================
 // Minimal readers (ports)
 // ============================================================
 
@@ -524,96 +456,16 @@ type inventoryReader interface {
 	GetByID(ctx context.Context, inventoryID string) (invdom.Mint, error)
 }
 
+// productBlueprint.Repository の contract に合わせる（ListIDsByCompany）
 type productBlueprintIDsByCompanyReader interface {
-	ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error)
+	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 }
 
 type productBlueprintPatchReader interface {
 	GetPatchByID(ctx context.Context, id string) (pbdom.Patch, error)
 }
 
-// ✅ tokenBlueprintPatchReader のみを唯一の正とする（別名/互換 type は置かない）
+// tokenBlueprint.RepositoryPort の contract（GetPatchByID）
 type tokenBlueprintPatchReader interface {
 	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
-}
-
-// ============================================================
-// Stock helpers
-// ============================================================
-
-func modelStockNumbers(ms invdom.ModelStock) (accumulation int, reservedCount int, available int) {
-	accumulation = ms.Accumulation
-
-	reservedStored := ms.ReservedCount
-	sum := 0
-	for _, q := range ms.ReservedByOrder {
-		sum += q
-	}
-
-	reservedCount = reservedStored
-	if sum > reservedCount {
-		reservedCount = sum
-	}
-
-	if reservedStored != sum {
-		log.Printf(
-			"[inventory_query][stock] WARN reservedCount mismatch stored=%d sum(ReservedByOrder)=%d orders=%d accumulation=%d -> use reservedCount=%d for display",
-			reservedStored, sum, len(ms.ReservedByOrder), accumulation, reservedCount,
-		)
-	}
-
-	available = accumulation - reservedCount
-	if available < 0 {
-		log.Printf(
-			"[inventory_query][stock] WARN availableStock negative accumulation=%d reservedCount=%d (stored=%d sum=%d) -> clamp to 0",
-			accumulation, reservedCount, reservedStored, sum,
-		)
-		available = 0
-	}
-
-	return accumulation, reservedCount, available
-}
-
-// ============================================================
-// Patch field helpers (string / *string 揺れ吸収)
-// ============================================================
-
-func setStringFieldAny(target any, value string, names ...string) bool {
-	if value == "" {
-		return false
-	}
-
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return false
-	}
-	if rv.Kind() != reflect.Pointer || rv.IsNil() {
-		return false
-	}
-	rv = rv.Elem()
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
-		return false
-	}
-
-	for _, n := range names {
-		f := rv.FieldByName(n)
-		if !f.IsValid() || !f.CanSet() {
-			continue
-		}
-
-		switch f.Kind() {
-		case reflect.String:
-			f.SetString(value)
-			return true
-
-		case reflect.Pointer:
-			if f.Type().Elem().Kind() == reflect.String {
-				s := value
-				f.Set(reflect.ValueOf(&s))
-				return true
-			}
-		}
-	}
-
-	return false
 }
