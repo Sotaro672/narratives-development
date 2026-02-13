@@ -49,6 +49,9 @@ export type UseInventoryManagementResult = {
     handleRowClick: (row: InventoryRow) => void;
     handleReset: () => void;
   };
+
+  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
+  isResetting: boolean;
 };
 
 function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
@@ -86,20 +89,28 @@ export function useInventoryManagement(): UseInventoryManagementResult {
   const [sortKey, setSortKey] = useState<InventorySortKey>("productName");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
 
+  // ✅ リフレッシュボタン回転用
+  const [isResetting, setIsResetting] = useState(false);
+
   /* ---------------------------------------------------------
-   * ✅ inventory_query.go の結果をロード
+   * ✅ inventory_query.go の結果をロード（初回 & リフレッシュ共通化）
    * --------------------------------------------------------- */
-  useEffect(() => {
-    (async () => {
-      try {
-        const vmRows = await loadInventoryRowsFromBackend();
-        const mapped = mapToRows(vmRows);
-        setInventoryRows(mapped);
-      } catch (_e: any) {
-        setInventoryRows([]);
-      }
-    })();
+  const reload = useCallback(async () => {
+    setIsResetting(true);
+    try {
+      const vmRows = await loadInventoryRowsFromBackend();
+      const mapped = mapToRows(vmRows);
+      setInventoryRows(mapped);
+    } catch (_e: any) {
+      setInventoryRows([]);
+    } finally {
+      setIsResetting(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   /* ---------------------------------------------------------
    * フィルタ → ソート
@@ -186,7 +197,10 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     setTokenFilter([]);
     setSortKey("productName");
     setSortDir("asc");
-  }, []);
+
+    // ✅ リフレッシュ（再取得）
+    void reload();
+  }, [reload]);
 
   return {
     rows: filteredSortedRows,
@@ -208,5 +222,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       handleRowClick,
       handleReset,
     },
+    isResetting,
   };
 }

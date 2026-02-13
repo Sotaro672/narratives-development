@@ -64,8 +64,12 @@ export function useProductionManagement() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
+  const [isResetting, setIsResetting] = useState(false);
+
   const reload = useCallback(async () => {
     setLoading(true);
+    setIsResetting(true);
     setLoadError(null);
 
     try {
@@ -84,6 +88,7 @@ export function useProductionManagement() {
       setBaseRows([]);
     } finally {
       setLoading(false);
+      setIsResetting(false);
     }
   }, []);
 
@@ -284,6 +289,9 @@ export function useProductionManagement() {
     setPrintedFilter([]);
     setSortKey(null);
     setSortDir(null);
+
+    // ✅ リフレッシュ（再取得）も行う
+    void reload();
   };
 
   const handleRowClick = (id: string) => {
@@ -296,6 +304,7 @@ export function useProductionManagement() {
     rows,
 
     loading,
+    isResetting, // ✅ 追加：pages 側で List に渡す
     loadError,
     reload,
 

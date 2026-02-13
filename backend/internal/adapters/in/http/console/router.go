@@ -236,10 +236,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Mint
 	// ================================
 	if deps.Mint != nil {
-		h := withAuth(deps.Mint)
+		h := deps.Mint
+
+		// ✅ CORS → Auth の順（OPTIONSも通すため）
+		h = middleware.CORS(h)
+		h = withAuth(h)
+
+		// ✅ /mint と /mint/ の両方
+		mux.Handle("/mint", h)
 		mux.Handle("/mint/", h)
 
-		// /mint/debug（任意）
 		if deps.MintDebugHandle != nil {
 			mux.HandleFunc("/mint/debug", deps.MintDebugHandle)
 		}

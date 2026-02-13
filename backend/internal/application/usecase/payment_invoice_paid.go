@@ -14,7 +14,7 @@ import (
 )
 
 func (u *PaymentUsecase) markInvoicePaid(ctx context.Context, invoiceID string) error {
-	invoiceID = trimSpace(invoiceID)
+	// ✅ trimSpace を使わない（渡された値をそのまま扱う）
 	if invoiceID == "" || u == nil || u.invoiceRepo == nil {
 		return nil
 	}

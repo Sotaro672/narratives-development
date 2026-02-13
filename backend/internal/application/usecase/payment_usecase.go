@@ -104,13 +104,13 @@ func (u *PaymentUsecase) WithOrderRepoForPayment(repo any) *PaymentUsecase {
 // ============================================================
 
 func (u *PaymentUsecase) GetByID(ctx context.Context, id string) (*paymentdom.Payment, error) {
-	return u.repo.GetByID(ctx, stringsTrimSpace(id))
+	return u.repo.GetByID(ctx, id)
 }
 
 // docId=invoiceId 前提なら「invoiceID=paymentID」なので GetByID と実質同じ。
 // ただし domain port に合わせて残す。
 func (u *PaymentUsecase) GetByInvoiceID(ctx context.Context, invoiceID string) ([]paymentdom.Payment, error) {
-	return u.repo.GetByInvoiceID(ctx, stringsTrimSpace(invoiceID))
+	return u.repo.GetByInvoiceID(ctx, invoiceID)
 }
 
 // ============================================================
@@ -118,9 +118,6 @@ func (u *PaymentUsecase) GetByInvoiceID(ctx context.Context, invoiceID string) (
 // ============================================================
 
 func (u *PaymentUsecase) Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error) {
-	in.InvoiceID = stringsTrimSpace(in.InvoiceID)
-	in.BillingAddressID = stringsTrimSpace(in.BillingAddressID)
-
 	p, err := u.repo.Create(ctx, in)
 	if err != nil {
 		return nil, err
@@ -136,15 +133,9 @@ func (u *PaymentUsecase) Create(ctx context.Context, in paymentdom.CreatePayment
 }
 
 func (u *PaymentUsecase) Update(ctx context.Context, id string, patch paymentdom.UpdatePaymentInput) (*paymentdom.Payment, error) {
-	return u.repo.Update(ctx, stringsTrimSpace(id), patch)
+	return u.repo.Update(ctx, id, patch)
 }
 
 func (u *PaymentUsecase) Delete(ctx context.Context, id string) error {
-	return u.repo.Delete(ctx, stringsTrimSpace(id))
-}
-
-// local tiny helper (avoid importing strings everywhere in this file)
-func stringsTrimSpace(s string) string {
-	// implemented in payment_reflect_util.go as trimSpace(...)
-	return trimSpace(s)
+	return u.repo.Delete(ctx, id)
 }

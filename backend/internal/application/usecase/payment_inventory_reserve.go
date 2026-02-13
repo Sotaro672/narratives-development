@@ -62,8 +62,7 @@ func extractOrderItemsBestEffort(orderAny any) []reserveItem {
 			continue
 		}
 
-		invID = strings.TrimSpace(invID)
-		modelID = strings.TrimSpace(modelID)
+		// ✅ TrimSpace をしない（渡された値をそのまま扱う）
 		if qty <= 0 || invID == "" || modelID == "" {
 			continue
 		}
@@ -85,8 +84,8 @@ func aggregateReserveItems(items []reserveItem) []reserveItem {
 	}
 	m := map[key]int{}
 	for _, it := range items {
-		inv := strings.TrimSpace(it.InventoryID)
-		mdl := strings.TrimSpace(it.ModelID)
+		inv := it.InventoryID
+		mdl := it.ModelID
 		if inv == "" || mdl == "" || it.Qty <= 0 {
 			continue
 		}
@@ -118,14 +117,13 @@ func aggregateReserveItems(items []reserveItem) []reserveItem {
 //
 // のように肥大化しているケースがあるため、docId(product__token) に正規化する。
 func normalizeInventoryDocIDBestEffort(inventoryID string) string {
-	inventoryID = strings.TrimSpace(inventoryID)
 	if inventoryID == "" {
 		return ""
 	}
 
 	parts := strings.Split(inventoryID, "__")
 	if len(parts) >= 2 {
-		return strings.TrimSpace(parts[0]) + "__" + strings.TrimSpace(parts[1])
+		return parts[0] + "__" + parts[1]
 	}
 	return inventoryID
 }

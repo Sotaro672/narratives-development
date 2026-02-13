@@ -63,6 +63,9 @@ export default function BrandManagementPage() {
 
     resetFilters,
 
+    // ✅ リフレッシュ回転用（hook 側で返す必要あり）
+    isResetting,
+
     // ★ hook 側に移譲した getNameLastFirstByID をここで受け取る
     getNameLastFirstByID,
   } = useBrandManagement();
@@ -123,7 +126,8 @@ export default function BrandManagementPage() {
         createLabel="ブランド追加"
         onCreate={handleCreateBrand}
         showResetButton
-        onReset={resetFilters}
+        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
+        onReset={resetFilters} // ✅ resetFilters 内で再フェッチ（リフレッシュ）する想定
       >
         {rows.map((b) => (
           <tr

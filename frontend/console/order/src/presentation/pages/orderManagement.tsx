@@ -198,13 +198,6 @@ export default function OrderManagementPage() {
           setDirection("desc");
           void fetchRows();
         }}
-        showCancelButton
-        onCancel={() => {
-          setTokenFilter([]);
-          setActiveKey("createdAt");
-          setDirection("desc");
-          void fetchRows();
-        }}
       >
         {errorMsg ? (
           <tr>

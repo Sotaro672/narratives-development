@@ -39,6 +39,9 @@ export function useBrandManagement() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
+  const [isResetting, setIsResetting] = useState(false);
+
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue[]>([]);
 
   // ★ managerId フィルタ
@@ -67,6 +70,7 @@ export function useBrandManagement() {
     const load = async () => {
       try {
         setLoading(true);
+        setIsResetting(true);
         setError(null);
 
         if (!companyId) {
@@ -103,7 +107,10 @@ export function useBrandManagement() {
           setManagerOptions([]);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setIsResetting(false);
+        }
       }
     };
 
@@ -164,8 +171,6 @@ export function useBrandManagement() {
     }));
   }, [baseRows]);
 
-  // managerOptions は上の useEffect で state 管理しているので useMemo は不要
-
   // フィルタ＋ソート
   const rows = useMemo(() => {
     let data = baseRows.filter((b) => {
@@ -216,6 +221,9 @@ export function useBrandManagement() {
 
     loading,
     error,
+
+    // ✅ リフレッシュ回転用
+    isResetting,
 
     statusFilter,
     managerFilter,

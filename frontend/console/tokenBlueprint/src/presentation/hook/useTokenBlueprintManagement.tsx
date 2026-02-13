@@ -1,3 +1,4 @@
+// frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintManagement.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
@@ -18,6 +19,9 @@ export type UseTokenBlueprintManagementResult = {
   assigneeFilter: string[];
   sortKey: SortKey;
   sortDir: SortDir;
+
+  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
+  isResetting: boolean;
 
   handleChangeBrandFilter: (vals: string[]) => void;
   handleChangeAssigneeFilter: (vals: string[]) => void;
@@ -69,23 +73,33 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
+  // ✅ リフレッシュボタン回転用
+  const [isResetting, setIsResetting] = useState(false);
+
   // ─────────────────────────────
   // データ取得: ListByCompanyID usecase を叩く（service に委譲）
   // ─────────────────────────────
-  useEffect(() => {
+  const reload = useCallback(async () => {
     const companyId = currentMember?.companyId;
-    if (!companyId) return;
+    if (!companyId) {
+      setRows([]);
+      return;
+    }
 
-    (async () => {
-      try {
-        const result = await fetchTokenBlueprintsForCompany(companyId);
-        setRows(result);
-      } catch {
-        setRows([]);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setIsResetting(true);
+    try {
+      const result = await fetchTokenBlueprintsForCompany(companyId);
+      setRows(result);
+    } catch {
+      setRows([]);
+    } finally {
+      setIsResetting(false);
+    }
   }, [currentMember?.companyId]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   // オプション（brandId / assigneeId から算出）:
   // value は ID、label に brandName / assigneeName を渡す
@@ -142,8 +156,12 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
   const displayRows: TokenBlueprint[] = useMemo(() => {
     return filteredRows.map((tb) => ({
       ...tb,
-      createdAt: tb.createdAt ? formatDateYYYYMMDDHHmm(tb.createdAt) : tb.createdAt,
-      updatedAt: tb.updatedAt ? formatDateYYYYMMDDHHmm(tb.updatedAt) : tb.updatedAt,
+      createdAt: tb.createdAt
+        ? formatDateYYYYMMDDHHmm(tb.createdAt)
+        : tb.createdAt,
+      updatedAt: tb.updatedAt
+        ? formatDateYYYYMMDDHHmm(tb.updatedAt)
+        : tb.updatedAt,
     }));
   }, [filteredRows]);
 
@@ -164,7 +182,10 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     setAssigneeFilter([]);
     setSortKey(null);
     setSortDir(null);
-  }, []);
+
+    // ✅ リフレッシュ（再取得）
+    void reload();
+  }, [reload]);
 
   const handleChangeBrandFilter = useCallback((vals: string[]) => {
     setBrandFilter(vals);
@@ -187,6 +208,7 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     assigneeFilter,
     sortKey,
     sortDir,
+    isResetting,
     handleChangeBrandFilter,
     handleChangeAssigneeFilter,
     handleChangeSort,

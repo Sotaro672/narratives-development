@@ -4,8 +4,14 @@ import "../styles/mintRequest.css";
 import { useMintRequestManagement } from "../hook/useMintRequestManagement";
 
 export default function MintRequestManagementPage() {
-  const { headers, rows, onReset, handleRowClick, handleRowKeyDown } =
-    useMintRequestManagement();
+  const {
+    headers,
+    rows,
+    onReset,
+    isResetting, // ✅ 追加
+    handleRowClick,
+    handleRowKeyDown,
+  } = useMintRequestManagement();
 
   return (
     <div className="p-0">
@@ -14,6 +20,7 @@ export default function MintRequestManagementPage() {
         headerCells={headers}
         showCreateButton={false}
         showResetButton
+        isResetting={isResetting} // ✅ 追加：これがないと矢印は回りません
         onReset={onReset}
       >
         {rows.map((r) => {

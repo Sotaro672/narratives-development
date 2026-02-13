@@ -34,6 +34,9 @@ export interface UseProductBlueprintManagementResult {
   handleCreate: () => void;
   handleReset: () => void;
 
+  // ✅ リフレッシュボタン回転用
+  isResetting: boolean;
+
   // ゴミ箱ボタン押下時のハンドラ（削除一覧ページへ遷移）
   handleTrash: () => void;
 }
@@ -73,15 +76,21 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   const [sortedKey, setSortedKey] = useState<ProductBlueprintSortKey>(null);
   const [sortedDir, setSortedDir] = useState<SortDirection>(null);
 
+  // ✅ リフレッシュボタン回転用
+  const [isResetting, setIsResetting] = useState<boolean>(false);
+
   // ---------------------------
   // 一覧取得処理（初回 & リフレッシュ共通）
   // ---------------------------
   const load = useCallback(async () => {
+    setIsResetting(true);
     try {
       const uiRows = await fetchProductBlueprintManagementRows();
       setAllRows(uiRows);
     } catch {
       setAllRows([]);
+    } finally {
+      setIsResetting(false);
     }
   }, []);
 
@@ -181,6 +190,7 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     handleRowClick,
     handleCreate,
     handleReset,
+    isResetting,
     handleTrash,
   };
 }

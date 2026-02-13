@@ -25,6 +25,9 @@ export type UseListManagementResult = {
     onRowClick: (id: string) => void;
     onRowKeyDown: (e: React.KeyboardEvent, id: string) => void;
   };
+
+  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
+  isResetting: boolean;
 };
 
 export function useListManagement(): UseListManagementResult {
@@ -32,8 +35,24 @@ export function useListManagement(): UseListManagementResult {
 
   // ── Data state（hook要素のみ） ─────────────────────────────
   const [loading, setLoading] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [vmRowsSource, setVmRowsSource] = useState<ListManagementRowVM[]>([]);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setIsResetting(true);
+    setError(null);
+
+    try {
+      const { rows, error } = await loadListManagementRows();
+      setVmRowsSource(rows);
+      setError(error ?? null);
+    } finally {
+      setLoading(false);
+      setIsResetting(false);
+    }
+  }, []);
 
   // 初回ロード
   useEffect(() => {
@@ -41,6 +60,7 @@ export function useListManagement(): UseListManagementResult {
 
     (async () => {
       setLoading(true);
+      setIsResetting(true);
       setError(null);
 
       const { rows, error } = await loadListManagementRows();
@@ -50,6 +70,7 @@ export function useListManagement(): UseListManagementResult {
       setVmRowsSource(rows);
       setError(error ?? null);
       setLoading(false);
+      setIsResetting(false);
     })();
 
     return () => {
@@ -157,7 +178,10 @@ export function useListManagement(): UseListManagementResult {
     setStatusFilter([]);
     setActiveKey(null);
     setDirection(null);
-  }, []);
+
+    // ✅ リフレッシュ（再取得）
+    void reload();
+  }, [reload]);
 
   return {
     vm: {
@@ -172,5 +196,6 @@ export function useListManagement(): UseListManagementResult {
       onRowClick,
       onRowKeyDown,
     },
+    isResetting,
   };
 }

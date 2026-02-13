@@ -12,15 +12,10 @@ package usecase
 import (
 	"fmt"
 	"reflect"
-	"strings"
 )
 
-func trimSpace(s string) string {
-	return strings.TrimSpace(s)
-}
-
 func maskID(id string) string {
-	id = strings.TrimSpace(id)
+	// ✅ TrimSpace をしない（渡された値をそのまま扱う）
 	if id == "" {
 		return ""
 	}
@@ -56,7 +51,7 @@ func getStringFieldBestEffort(v any, fieldNames ...string) string {
 
 		// direct string or named string type
 		if f.Kind() == reflect.String {
-			s := strings.TrimSpace(f.String())
+			s := f.String()
 			if s != "" && s != "<nil>" {
 				return s
 			}
@@ -65,7 +60,7 @@ func getStringFieldBestEffort(v any, fieldNames ...string) string {
 
 		// pointer to string
 		if f.Kind() == reflect.Pointer && f.Type().Elem().Kind() == reflect.String && !f.IsNil() {
-			s := strings.TrimSpace(f.Elem().String())
+			s := f.Elem().String()
 			if s != "" && s != "<nil>" {
 				return s
 			}
@@ -74,7 +69,7 @@ func getStringFieldBestEffort(v any, fieldNames ...string) string {
 
 		// fallback: fmt.Sprint for other kinds (rare)
 		if f.CanInterface() {
-			s := strings.TrimSpace(fmt.Sprint(f.Interface()))
+			s := fmt.Sprint(f.Interface())
 			if s != "" && s != "<nil>" {
 				return s
 			}
@@ -124,13 +119,13 @@ func getStringFieldFromValueBestEffort(rv reflect.Value, fieldNames ...string) s
 			continue
 		}
 		if f.Kind() == reflect.String {
-			return strings.TrimSpace(f.String())
+			return f.String()
 		}
 		if f.Kind() == reflect.Pointer && f.Type().Elem().Kind() == reflect.String && !f.IsNil() {
-			return strings.TrimSpace(f.Elem().String())
+			return f.Elem().String()
 		}
 		if f.CanInterface() {
-			s := strings.TrimSpace(fmt.Sprint(f.Interface()))
+			s := fmt.Sprint(f.Interface())
 			if s != "" && s != "<nil>" {
 				return s
 			}
@@ -183,14 +178,14 @@ func getStringMapValueBestEffort(mv reflect.Value, keys ...string) string {
 			v = v.Elem()
 		}
 		if v.Kind() == reflect.String {
-			s := strings.TrimSpace(v.String())
+			s := v.String()
 			if s != "" && s != "<nil>" {
 				return s
 			}
 			continue
 		}
 		if v.CanInterface() {
-			s := strings.TrimSpace(fmt.Sprint(v.Interface()))
+			s := fmt.Sprint(v.Interface())
 			if s != "" && s != "<nil>" {
 				return s
 			}
@@ -243,7 +238,8 @@ func parseIntFromAny(v any) (int, bool) {
 	case float64:
 		return int(x), true
 	case string:
-		s := strings.TrimSpace(x)
+		// ✅ TrimSpace をしない（渡された値をそのまま扱う）
+		s := x
 		if s == "" {
 			return 0, false
 		}

@@ -23,6 +23,7 @@ export default function TokenBlueprintManagementPage() {
     handleReset,
     handleCreate,
     handleRowClick,
+    isResetting, // ✅ 追加（hook 側で返す必要あり）
   } = useTokenBlueprintManagement();
 
   const headers: React.ReactNode[] = [
@@ -69,8 +70,9 @@ export default function TokenBlueprintManagementPage() {
         showCreateButton
         createLabel="トークン設計を作成"
         showResetButton
+        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
         onCreate={handleCreate}
-        onReset={handleReset}
+        onReset={handleReset} // ✅ handleReset 内で再フェッチ（リフレッシュ）する想定
       >
         {rows.map((t: TokenBlueprint) => (
           <tr

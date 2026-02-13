@@ -21,6 +21,7 @@ export default function ProductBlueprintManagement() {
     handleRowClick,
     handleCreate,
     handleReset,
+    isResetting, // ✅ 追加：リフレッシュ回転アニメ用（hook 側で返す必要あり）
   } = useProductBlueprintManagement();
 
   // -----------------------------
@@ -97,7 +98,8 @@ export default function ProductBlueprintManagement() {
       createLabel="商品設計を作成"
       onCreate={handleCreate}
       showResetButton
-      onReset={handleReset}
+      isResetting={isResetting} // ✅ 追加：これで矢印が回転する
+      onReset={handleReset} // ✅ handleReset 内で再フェッチも行う想定（MintRequestと同様）
       // ★ ゴミ箱ボタン（削除済み一覧へ）
       showTrashButton
       onTrash={handleTrash}

@@ -1,15 +1,10 @@
-//frontend/console/shell/src/layout/List/List.tsx
+// frontend/console/shell/src/layout/List/List.tsx
 import { Children, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Plus, Trash2, X } from "lucide-react"; // ★ キャンセル(X) 追加
 import Pagination from "../../shared/ui/pagination";
 import RefreshButton from "../../shared/ui/refresh";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../../shared/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "../../shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -88,6 +83,9 @@ export default function List({
 
   const colSpan = Math.max(1, headerCells.length);
 
+  // ✅ 表示上の「読み込み中...」判定は loading OR isResetting
+  const isBusy = loading || isResetting;
+
   return (
     <div className="list-container">
       {/* ─────────────────────────────────────── */}
@@ -97,7 +95,6 @@ export default function List({
         <h1 className="list-title">{title}</h1>
         <div className="list-header-spacer" />
         <div className="list-actions-right">
-
           {/* ▼ 新規作成 */}
           {showCreateButton && (
             <button className="lp-btn lp-btn-primary" onClick={onCreate}>
@@ -167,7 +164,7 @@ export default function List({
             </TableHeader>
 
             <TableBody className="lp-tbody">
-              {loading ? (
+              {isBusy ? (
                 <TableRow className="lp-empty-row">
                   <td className="lp-empty-cell" colSpan={colSpan}>
                     読み込み中...

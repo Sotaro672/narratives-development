@@ -26,7 +26,8 @@ import (
 )
 
 func isPaidStatus(st paymentdom.PaymentStatus) bool {
-	s := strings.TrimSpace(string(st))
+	// ✅ TrimSpace をしない（渡された値をそのまま扱う）
+	s := string(st)
 	if s == "" {
 		return false
 	}
@@ -48,7 +49,8 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 		return
 	}
 
-	rootID := trimSpace(p.InvoiceID)
+	// ✅ trimSpace を使わない（InvoiceID をそのまま rootID として扱う）
+	rootID := p.InvoiceID
 	if rootID == "" {
 		return
 	}
@@ -86,6 +88,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 		} else {
 			agg := aggregateReserveItems(items)
 			for _, it := range agg {
+				// ✅ normalizeInventoryDocIDBestEffort はそのまま残す（TrimSpace 依存ではなく docID 規約処理の可能性があるため）
 				invID := normalizeInventoryDocIDBestEffort(it.InventoryID)
 				if invID == "" || it.ModelID == "" || it.Qty <= 0 {
 					continue
@@ -108,7 +111,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 	// 3) cart clear（best-effort）
 	if u.cartRepo != nil {
 		cartID := u.resolveCartIDBestEffort(ctx, p, rootID, orderAny)
-		if strings.TrimSpace(cartID) == "" {
+		if cartID == "" {
 			log.Printf("[payment_uc] WARN: cartId empty (skip clear) rootId=%s", maskID(rootID))
 		} else {
 			if clrErr := u.cartRepo.Clear(ctx, cartID); clrErr != nil {
@@ -132,7 +135,7 @@ func (u *PaymentUsecase) markOrderPaidTrueBestEffort(ctx context.Context, rootID
 	if u == nil || u.orderRepo == nil {
 		return nil
 	}
-	id := trimSpace(rootID)
+	id := rootID
 	if id == "" {
 		return nil
 	}
@@ -413,7 +416,8 @@ func (u *PaymentUsecase) resolveCartIDBestEffort(ctx context.Context, payment *p
 	if u.orderRepo == nil {
 		return ""
 	}
-	id := trimSpace(rootID)
+	// ✅ trimSpace を使わない
+	id := rootID
 	if id == "" {
 		return ""
 	}

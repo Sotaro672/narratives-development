@@ -1,6 +1,4 @@
 // frontend/console/member/src/presentation/pages/memberManagement.tsx
-
-import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
@@ -20,6 +18,9 @@ export default function MemberManagementPage() {
     members,
     loading,
     error,
+
+    // ✅ リフレッシュ回転用（hook 側で返す必要あり）
+    isResetting,
 
     // フィルタ用データ
     brandMap,
@@ -104,8 +105,9 @@ export default function MemberManagementPage() {
         showCreateButton
         createLabel="メンバー追加"
         showResetButton
+        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
         onCreate={() => navigate("/member/create")}
-        onReset={handleReset} // ← Reset ボタンでフィルタ＆ソート＆ページを初期化
+        onReset={handleReset} // ← Reset ボタンでフィルタ＆ソート＆ページを初期化（＋再取得する想定）
       >
         {members.map((m) => {
           const nameFromMap = resolvedNames[m.id];

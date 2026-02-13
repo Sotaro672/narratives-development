@@ -1,12 +1,6 @@
 // frontend/console/member/src/presentation/hooks/useMemberList.ts
 
-import {
-  useEffect,
-  useState,
-  useCallback,
-  useRef,
-  useMemo,
-} from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 
 import type { Member } from "../../domain/entity/member";
 import type { MemberFilter } from "../../domain/repository/memberRepository";
@@ -44,18 +38,22 @@ export function useMemberList(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
+  const [isResetting, setIsResetting] = useState(false);
+
   const nameCacheRef = useRef<Map<string, string>>(new Map());
 
   // ブランドID→名称
   const [brandMap, setBrandMap] = useState<Record<string, string>>({});
 
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
-  const [selectedPermissionCats, setSelectedPermissionCats] = useState<string[]>([]);
+  const [selectedPermissionCats, setSelectedPermissionCats] = useState<string[]>(
+    [],
+  );
 
   // ソート状態
   const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] =
-    useState<SortDirection>("desc");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // 氏名（表示用）キャッシュ
   const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
@@ -66,6 +64,7 @@ export function useMemberList(
   const load = useCallback(
     async (targetPage: Page, targetFilter: MemberFilter) => {
       setLoading(true);
+      setIsResetting(true);
       setError(null);
 
       try {
@@ -92,6 +91,7 @@ export function useMemberList(
         setError(err);
       } finally {
         setLoading(false);
+        setIsResetting(false);
       }
     },
     [], // ← 無限ループ回避：page/filter に依存しない！
@@ -126,17 +126,20 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   // ページ番号変更（バックエンド側のページ）
   // ─────────────────────────────────────────────
-  const setPageNumber = (pageNumber: number) => {
-    const safe = Math.max(1, pageNumber);
+  const setPageNumber = useCallback(
+    (pageNumber: number) => {
+      const safe = Math.max(1, pageNumber);
 
-    const nextPage = {
-      ...page,
-      number: safe,
-    };
+      const nextPage = {
+        ...page,
+        number: safe,
+      };
 
-    setPage(nextPage);
-    void load(nextPage, filter);
-  };
+      setPage(nextPage);
+      void load(nextPage, filter);
+    },
+    [page, filter, load],
+  );
 
   // ─────────────────────────────────────────────
   // MemberID → 氏名
@@ -333,8 +336,12 @@ export function useMemberList(
     setSelectedPermissionCats([]);
     setSortKey(null);
     setSortDirection("desc");
-    setPageNumber(1);
-  }, [setSelectedBrandIds, setSelectedPermissionCats, setPageNumber]);
+
+    // ✅ ページも戻しつつ再取得（＝リフレッシュ）
+    const nextPage = { ...page, number: 1 };
+    setPage(nextPage);
+    void load(nextPage, filter);
+  }, [page, filter, load]);
 
   return {
     // 一覧（フィルタ＆ソート済み）
@@ -342,6 +349,9 @@ export function useMemberList(
 
     loading,
     error,
+
+    // ✅ リフレッシュ回転用
+    isResetting,
 
     // バックエンドページング
     page,

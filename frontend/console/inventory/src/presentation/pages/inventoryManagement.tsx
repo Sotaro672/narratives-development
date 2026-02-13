@@ -1,4 +1,4 @@
-//frontend\console\inventory\src\presentation\pages\inventoryManagement.tsx
+// frontend/console/inventory/src/presentation/pages/inventoryManagement.tsx
 import List from "../../../../shell/src/layout/List/List";
 import "../styles/inventory.css";
 
@@ -19,6 +19,7 @@ export default function InventoryManagementPage() {
       handleRowClick,
       handleReset,
     },
+    isResetting, // ✅ 追加（hook 側で返す必要あり）
   } = useInventoryManagement();
 
   return (
@@ -37,7 +38,8 @@ export default function InventoryManagementPage() {
         })}
         showCreateButton={false}
         showResetButton
-        onReset={handleReset}
+        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
+        onReset={handleReset} // ✅ handleReset 内で再フェッチ（リフレッシュ）する想定
       >
         {rows.map((row) => (
           <tr

@@ -4,8 +4,14 @@ import { useProductionManagement } from "../hook/useProductionManagement";
 import List from "../../../../shell/src/layout/List/List";
 
 export default function ProductionManagement() {
-  const { headers, rows, handleCreate, handleReset, handleRowClick } =
-    useProductionManagement();
+  const {
+    headers,
+    rows,
+    handleCreate,
+    handleReset,
+    handleRowClick,
+    isResetting, // ✅ 追加（hook 側で返す必要あり）
+  } = useProductionManagement();
 
   return (
     <div className="p-0">
@@ -15,8 +21,9 @@ export default function ProductionManagement() {
         showCreateButton
         createLabel="生産計画を作成"
         showResetButton
+        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
         onCreate={handleCreate}
-        onReset={handleReset}
+        onReset={handleReset} // ✅ handleReset 内で再フェッチ（リフレッシュ）する想定
       >
         {rows.map((p) => (
           <tr

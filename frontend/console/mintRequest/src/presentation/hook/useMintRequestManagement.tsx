@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/presentation/hook/useMintRequestManagement.tsx
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FilterableTableHeader,
@@ -74,11 +74,13 @@ const asInspectionStatus = (v: string): InspectionStatus | null => {
 
 const toManagementRowVM = (r: ManagementRow): MintRequestManagementRowVM => {
   // ✅ minted のときは「ミント完了」を優先、それ以外は検査ステータス表示
-  const statusLabel = r.status === "minted" ? "ミント完了" : inspectionStatusLabel(r.inspectionStatus);
+  const statusLabel =
+    r.status === "minted" ? "ミント完了" : inspectionStatusLabel(r.inspectionStatus);
 
   return {
-    ...r, 
-requestedByName: r.requestedByName,
+    ...r,
+    requestedByName: r.requestedByName,
+
     // ✅ mintedAt 表示は "yyyy/mm/dd hh:mm:ss" に固定（dateJa.ts の確定版を利用）
     mintedAt: r.mintedAt ? safeDateTimeLabelJa(r.mintedAt, "") : null,
 
@@ -95,12 +97,32 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   const [rawRows, setRawRows] = useState<MintRequestManagementRowVM[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchRows = useCallback(async () => {
+    setIsResetting(true);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const rows = await loadMintRequestManagementRows();
+      const vms = (rows ?? []).map(toManagementRowVM);
+      setRawRows(vms);
+    } catch (e: any) {
+      setRawRows([]);
+      setError(e?.message ?? "Failed to fetch mint requests");
+    } finally {
+      setLoading(false);
+      setIsResetting(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
+      setIsResetting(true);
       setLoading(true);
       setError(null);
 
@@ -112,9 +134,15 @@ export const useMintRequestManagement = () => {
           setRawRows(vms);
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Failed to fetch mint requests");
+        if (!cancelled) {
+          setRawRows([]);
+          setError(e?.message ?? "Failed to fetch mint requests");
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setIsResetting(false);
+        }
       }
     };
 
@@ -317,13 +345,14 @@ export const useMintRequestManagement = () => {
     />,
   ];
 
-  const onReset = () => {
+  const onReset = async () => {
     setTokenFilter([]);
     setProductionFilter([]);
     setRequesterFilter([]);
     setStatusFilter([]);
     setSortKey("mintedAt");
     setSortDir("desc");
+    await fetchRows();
   };
 
   const handleRowClick = (id: string) => goDetail(id);
@@ -345,6 +374,7 @@ export const useMintRequestManagement = () => {
     handleRowClick,
     handleRowKeyDown,
     loading,
+    isResetting,
     error,
   };
 };
