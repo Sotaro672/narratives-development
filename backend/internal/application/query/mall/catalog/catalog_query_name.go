@@ -4,7 +4,6 @@ package catalogQuery
 import (
 	"context"
 	"reflect"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
@@ -16,18 +15,18 @@ func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver,
 		return
 	}
 
-	brandID := strings.TrimSpace(dtoPB.BrandID)
-	companyID := strings.TrimSpace(dtoPB.CompanyID)
+	brandID := dtoPB.BrandID
+	companyID := dtoPB.CompanyID
 
 	if brandID != "" {
-		bn := strings.TrimSpace(r.ResolveBrandName(ctx, brandID))
+		bn := r.ResolveBrandName(ctx, brandID)
 		if bn != "" {
 			setStringFieldBestEffort(dtoPB, "BrandName", bn)
 		}
 	}
 
 	if companyID != "" {
-		cn := strings.TrimSpace(r.ResolveCompanyName(ctx, companyID))
+		cn := r.ResolveCompanyName(ctx, companyID)
 		if cn != "" {
 			setStringFieldBestEffort(dtoPB, "CompanyName", cn)
 		}
@@ -40,16 +39,15 @@ func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolv
 		return
 	}
 
-	brandID := strings.TrimSpace(p.BrandID)
-	if brandID != "" && strings.TrimSpace(p.BrandName) == "" {
-		if bn := strings.TrimSpace(r.ResolveBrandName(ctx, brandID)); bn != "" {
+	brandID := p.BrandID
+	if brandID != "" && p.BrandName == "" {
+		if bn := r.ResolveBrandName(ctx, brandID); bn != "" {
 			p.BrandName = bn
 		}
 	}
 }
 
 func setStringFieldBestEffort(target any, fieldName string, value string) {
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return
 	}
@@ -109,7 +107,7 @@ func getStringFieldBestEffort(target any, fieldName string) string {
 		f = f.Elem()
 	}
 	if f.Kind() == reflect.String {
-		return strings.TrimSpace(f.String())
+		return f.String()
 	}
 	return ""
 }

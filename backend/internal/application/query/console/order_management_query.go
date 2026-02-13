@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"strings"
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
@@ -222,7 +221,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	avatarNameCache := map[string]string{}
 
 	resolveBlueprint := func(invID string) (string, string, error) {
-		invID = strings.TrimSpace(invID)
 		if invID == "" {
 			return "", "", invdom.ErrInvalidMintID
 		}
@@ -233,8 +231,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if e != nil {
 			return "", "", e
 		}
-		pbID = strings.TrimSpace(pbID)
-		tbID = strings.TrimSpace(tbID)
 		blueprintCache[invID] = bt{pb: pbID, tb: tbID}
 		return pbID, tbID, nil
 	}
@@ -245,7 +241,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			return "", nil
 		}
 
-		pbID = strings.TrimSpace(pbID)
 		if pbID == "" {
 			return "", nil
 		}
@@ -256,7 +251,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if e != nil {
 			return "", e
 		}
-		name = strings.TrimSpace(name)
 		pbNameCache[pbID] = name
 		return name, nil
 	}
@@ -267,7 +261,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			return "", nil
 		}
 
-		tbID = strings.TrimSpace(tbID)
 		if tbID == "" {
 			return "", nil
 		}
@@ -278,7 +271,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if e != nil {
 			return "", e
 		}
-		name = strings.TrimSpace(name)
 		tbNameCache[tbID] = name
 		return name, nil
 	}
@@ -289,7 +281,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			return "", nil
 		}
 
-		listID = strings.TrimSpace(listID)
 		if listID == "" {
 			return "", nil
 		}
@@ -300,7 +291,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if e != nil {
 			return "", e
 		}
-		readable = strings.TrimSpace(readable)
 		listReadableCache[listID] = readable
 		return readable, nil
 	}
@@ -311,7 +301,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			return "", nil
 		}
 
-		avatarID = strings.TrimSpace(avatarID)
 		if avatarID == "" {
 			return "", nil
 		}
@@ -323,7 +312,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if e != nil {
 			return "", e
 		}
-		name = strings.TrimSpace(name)
 		avatarNameCache[avatarID] = name
 		return name, nil
 	}
@@ -355,9 +343,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				createdAt = ord.CreatedAt.UTC().Format(time.RFC3339)
 			}
 
-			userID := strings.TrimSpace(ord.UserID)
-			avatarID := strings.TrimSpace(ord.AvatarID)
-			cartID := strings.TrimSpace(ord.CartID)
+			userID := ord.UserID
+			avatarID := ord.AvatarID
+			cartID := ord.CartID
 
 			// ✅ avatarId -> avatarName (best-effort, order-level)
 			avatarName := ""
@@ -371,7 +359,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			}
 
 			for _, it := range ord.Items {
-				invID := strings.TrimSpace(it.InventoryID)
+				invID := it.InventoryID
 				if !inventoryAllowed(allowedSet, invID) {
 					continue
 				}
@@ -406,10 +394,10 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 				// ✅ listId -> readableId (best-effort)
 				listReadableID := ""
-				if strings.TrimSpace(it.ListID) != "" {
+				if it.ListID != "" {
 					n, e5 := resolveListReadableID(it.ListID)
 					if e5 != nil {
-						log.Printf("[OrderManagementQuery] ERROR GetReadableIDByID failed listId=%q err=%v", strings.TrimSpace(it.ListID), e5)
+						log.Printf("[OrderManagementQuery] ERROR GetReadableIDByID failed listId=%q err=%v", it.ListID, e5)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, e5
 					}
 					listReadableID = n
@@ -428,7 +416,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					CartID:   cartID,
 
 					// ✅ NEW
-					AvatarName: strings.TrimSpace(avatarName),
+					AvatarName: avatarName,
 
 					Paid:      ord.Paid,
 					CreatedAt: createdAt,
@@ -440,9 +428,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					TokenName:          tokenName,
 
 					// ✅ UIへ渡すのは readableId
-					ListReadableID: strings.TrimSpace(listReadableID),
+					ListReadableID: listReadableID,
 
-					ModelID: strings.TrimSpace(it.ModelID),
+					ModelID: it.ModelID,
 					Qty:     it.Qty,
 					Price:   it.Price,
 
@@ -513,7 +501,7 @@ func (q *OrderManagementQuery) ListDistinctInventoryIDs(
 	seen := map[string]struct{}{}
 	out := make([]InventoryIDDTO, 0, len(pr.Items))
 	for _, row := range pr.Items {
-		id := strings.TrimSpace(row.InventoryID)
+		id := row.InventoryID
 		if id == "" {
 			continue
 		}
@@ -549,8 +537,8 @@ func allowedInventoryIDSetFromContext(ctx context.Context, invRows InventoryRows
 
 	set := map[string]struct{}{}
 	for _, r := range rows {
-		pbID := strings.TrimSpace(r.ProductBlueprintID)
-		tbID := strings.TrimSpace(r.TokenBlueprintID)
+		pbID := r.ProductBlueprintID
+		tbID := r.TokenBlueprintID
 		if pbID == "" || tbID == "" {
 			continue
 		}
@@ -564,7 +552,7 @@ func inventoryAllowed(set map[string]struct{}, inventoryID string) bool {
 	if len(set) == 0 {
 		return false
 	}
-	id := strings.TrimSpace(inventoryID)
+	id := inventoryID
 	if id == "" {
 		return false
 	}
@@ -597,7 +585,6 @@ func minInt(a, b int) int {
 }
 
 func nonEmpty(v string, fallback string) string {
-	v = strings.TrimSpace(v)
 	if v == "" {
 		return fallback
 	}

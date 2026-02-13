@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"strings"
 
 	sharedquery "narratives/internal/application/query/shared"
 	modeldom "narratives/internal/domain/model"
@@ -181,7 +180,7 @@ func (q *PreviewQuery) ResolveModelIDByProductID(
 		return "", ErrPreviewQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(productID)
+	id := productID
 	if id == "" {
 		return "", ErrInvalidProductID
 	}
@@ -191,7 +190,7 @@ func (q *PreviewQuery) ResolveModelIDByProductID(
 		return "", err
 	}
 
-	modelID := strings.TrimSpace(p.ModelID)
+	modelID := p.ModelID
 	if modelID == "" {
 		return "", ErrModelIDEmpty
 	}
@@ -209,7 +208,7 @@ func (q *PreviewQuery) ResolveModelMetaByModelID(
 		return "", "", "", 0, ErrPreviewQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(modelID)
+	id := modelID
 	if id == "" {
 		return "", "", "", 0, ErrInvalidModelID
 	}
@@ -222,9 +221,9 @@ func (q *PreviewQuery) ResolveModelMetaByModelID(
 		return "", "", "", 0, ErrModelVariationNotFound
 	}
 
-	modelNumber = strings.TrimSpace(v.ModelNumber)
-	size = strings.TrimSpace(v.Size)
-	colorName = strings.TrimSpace(v.Color.Name)
+	modelNumber = v.ModelNumber
+	size = v.Size
+	colorName = v.Color.Name
 	rgb = v.Color.RGB
 
 	return modelNumber, size, colorName, rgb, nil
@@ -243,7 +242,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, ErrPreviewQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(productID)
+	id := productID
 	if id == "" {
 		return nil, ErrInvalidProductID
 	}
@@ -253,7 +252,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, err
 	}
 
-	modelID := strings.TrimSpace(p.ModelID)
+	modelID := p.ModelID
 	if modelID == "" {
 		return nil, ErrModelIDEmpty
 	}
@@ -269,9 +268,9 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	out := &PreviewModelInfo{
 		ProductID:    id,
 		ModelID:      modelID,
-		ModelNumber:  strings.TrimSpace(v.ModelNumber),
-		Size:         strings.TrimSpace(v.Size),
-		Color:        strings.TrimSpace(v.Color.Name),
+		ModelNumber:  v.ModelNumber,
+		Size:         v.Size,
+		Color:        v.Color.Name,
 		RGB:          v.Color.RGB,
 		Measurements: cloneMeasurements(v.Measurements),
 	}
@@ -285,7 +284,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	if err != nil {
 		return nil, err
 	}
-	pbID = strings.TrimSpace(pbID)
 	if pbID == "" {
 		return nil, ErrProductBlueprintIDEmpty
 	}
@@ -317,7 +315,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		// - OwnerResolveQ.Resolve が avatarName / brandName を埋めて返す
 		// - preview は owner 解決失敗で壊さない（付加情報のため best-effort）
 		if q.OwnerResolveQ != nil && tok != nil {
-			addr := strings.TrimSpace(tok.ToAddress)
+			addr := tok.ToAddress
 			if addr != "" {
 				res, rerr := q.OwnerResolveQ.Resolve(ctx, addr)
 				if rerr == nil && res != nil {

@@ -95,7 +95,6 @@ func (q *OrderQuery) ResolveAvatarIDByUID(ctx context.Context, uid string) (stri
 	if q == nil || q.FS == nil {
 		return "", errors.New("mall order query: firestore client is nil")
 	}
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return "", errors.New("uid is required")
 	}
@@ -114,7 +113,6 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContext
 		return OrderContextDTO{}, errors.New("mall order query: firestore client is nil")
 	}
 
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return OrderContextDTO{}, errors.New("uid is required")
 	}
@@ -125,7 +123,7 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContext
 	}
 
 	// userId は基本 uid と一致させる（avatars の userId も尊重）
-	userID := strings.TrimSpace(avatarUserID)
+	userID := avatarUserID
 	if userID == "" {
 		userID = uid
 	}
@@ -141,7 +139,7 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContext
 	if q.NameResolver != nil {
 		// NameResolver は memberId を想定。userId と一致していればここで解決できる。
 		// 一致しない運用の場合は空のまま（決済フローを止めない）。
-		fullName = strings.TrimSpace(q.NameResolver.ResolveMemberName(ctx, userID))
+		fullName = q.NameResolver.ResolveMemberName(ctx, userID)
 	}
 
 	out := OrderContextDTO{
@@ -161,11 +159,11 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContext
 // ------------------------------------------------------------
 
 func (q *OrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (avatarID string, userID string, err error) {
-	col := strings.TrimSpace(q.AvatarsCol)
+	col := q.AvatarsCol
 	if col == "" {
 		col = "avatars"
 	}
-	userField := strings.TrimSpace(q.AvatarUserIDField)
+	userField := q.AvatarUserIDField
 	if userField == "" {
 		userField = "userId"
 	}
@@ -190,9 +188,9 @@ func (q *OrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (avat
 	m := doc.Data()
 	u := ""
 	if v, ok := m[userField]; ok {
-		u = strings.TrimSpace(fmt.Sprint(v))
+		u = fmt.Sprint(v)
 	}
-	aid := strings.TrimSpace(doc.Ref.ID)
+	aid := doc.Ref.ID
 	if aid == "" {
 		return "", "", ErrNotFound
 	}
@@ -209,7 +207,6 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 	if q == nil || q.FS == nil {
 		return nil
 	}
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return nil
 	}
@@ -250,11 +247,9 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 //   - Put doc ID into returned map as "id" and "addressId" if they don't already exist.
 //     This lets frontend pick billingAddressId/shippingAddressId deterministically.
 func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string, userID string) map[string]any {
-	colName = strings.TrimSpace(colName)
 	if colName == "" {
 		return nil
 	}
-	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return nil
 	}
@@ -272,7 +267,7 @@ func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string,
 	}
 
 	// (2) query style: where userId == ...
-	field := strings.TrimSpace(q.AddressUserIDField)
+	field := q.AddressUserIDField
 	if field == "" {
 		field = "userId"
 	}
@@ -336,7 +331,6 @@ func attachDocID(m map[string]any, docID string) map[string]any {
 	if m == nil {
 		return nil
 	}
-	docID = strings.TrimSpace(docID)
 	if docID == "" {
 		return m
 	}
@@ -352,7 +346,6 @@ func attachDocID(m map[string]any, docID string) map[string]any {
 
 // avoid logging raw uid
 func maskUID(uid string) string {
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return ""
 	}

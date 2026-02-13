@@ -4,7 +4,6 @@ package shared
 import (
 	"context"
 	"errors"
-	"strings"
 )
 
 // ------------------------------------------------------------
@@ -123,7 +122,7 @@ func (q *OwnerResolveQuery) Resolve(
 		return nil, ErrOwnerResolveNotConfigured
 	}
 
-	addr := strings.TrimSpace(walletAddress)
+	addr := walletAddress
 	if !looksLikeSolanaAddress(addr) {
 		return nil, ErrInvalidWalletAddress
 	}
@@ -134,7 +133,6 @@ func (q *OwnerResolveQuery) Resolve(
 		if err != nil {
 			return nil, err
 		}
-		avatarID = strings.TrimSpace(avatarID)
 		if avatarID != "" {
 			res := &OwnerResolveResult{
 				WalletAddress: addr,
@@ -145,7 +143,7 @@ func (q *OwnerResolveQuery) Resolve(
 			// ✅ optional: avatarId -> avatarName
 			if q.AvatarName != nil {
 				if name, err := q.AvatarName.GetNameByID(ctx, avatarID); err == nil {
-					res.AvatarName = strings.TrimSpace(name)
+					res.AvatarName = name
 				}
 			}
 
@@ -159,7 +157,6 @@ func (q *OwnerResolveQuery) Resolve(
 		if err != nil {
 			return nil, err
 		}
-		brandID = strings.TrimSpace(brandID)
 		if brandID != "" {
 			res := &OwnerResolveResult{
 				WalletAddress: addr,
@@ -170,7 +167,7 @@ func (q *OwnerResolveQuery) Resolve(
 			// ✅ optional: brandId -> brandName
 			if q.BrandName != nil {
 				if name, err := q.BrandName.GetNameByID(ctx, brandID); err == nil {
-					res.BrandName = strings.TrimSpace(name)
+					res.BrandName = name
 				}
 			}
 
@@ -203,7 +200,6 @@ func (q *OwnerResolveQuery) ResolveIDs(
 // - 長さはざっくり 32〜64
 // - base58 文字だけ許容（0,O,I,l を除外）
 func looksLikeSolanaAddress(s string) bool {
-	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
 	}

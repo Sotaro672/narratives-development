@@ -4,7 +4,6 @@ package query
 import (
 	"context"
 	"errors"
-	"strings"
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
@@ -65,7 +64,7 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(ctx context.Context, inv
 		return nil, errors.New("list create query: invRepo is not configured (GetByInventoryID requires inventory repository)")
 	}
 
-	id := strings.TrimSpace(inventoryID)
+	id := inventoryID
 	if id == "" {
 		return nil, errors.New("inventoryId is required")
 	}
@@ -76,8 +75,8 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(ctx context.Context, inv
 		return nil, err
 	}
 
-	pbID := strings.TrimSpace(inv.ProductBlueprintID)
-	tbID := strings.TrimSpace(inv.TokenBlueprintID)
+	pbID := inv.ProductBlueprintID
+	tbID := inv.TokenBlueprintID
 	if pbID == "" || tbID == "" {
 		return nil, errors.New("productBlueprintId/tokenBlueprintId is empty in inventory")
 	}
@@ -112,8 +111,8 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 		return nil, errors.New("list create query is nil")
 	}
 
-	pbID := strings.TrimSpace(productBlueprintID)
-	tbID := strings.TrimSpace(tokenBlueprintID)
+	pbID := productBlueprintID
+	tbID := tokenBlueprintID
 	if pbID == "" || tbID == "" {
 		return nil, errors.New("productBlueprintId and tokenBlueprintId are required")
 	}
@@ -125,17 +124,17 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 	productBrandName := ""
 
 	if q.nameResolver != nil {
-		productName = strings.TrimSpace(q.nameResolver.ResolveProductName(ctx, pbID))
+		productName = q.nameResolver.ResolveProductName(ctx, pbID)
 	}
 
 	if q.pbPatchRepo != nil {
 		if patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID); err == nil {
-			brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
+			brandID := getStringFieldAny(patch, "BrandID", "BrandId", "brandId")
 			if brandID != "" && q.nameResolver != nil {
-				productBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
+				productBrandName = q.nameResolver.ResolveBrandName(ctx, brandID)
 			}
 			if productBrandName == "" {
-				productBrandName = strings.TrimSpace(getStringFieldAny(patch, "BrandName", "brandName"))
+				productBrandName = getStringFieldAny(patch, "BrandName", "brandName")
 			}
 		}
 	}
@@ -147,17 +146,17 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 	tokenBrandName := ""
 
 	if q.nameResolver != nil {
-		tokenName = strings.TrimSpace(q.nameResolver.ResolveTokenName(ctx, tbID))
+		tokenName = q.nameResolver.ResolveTokenName(ctx, tbID)
 	}
 
 	if q.tbPatchRepo != nil {
 		if patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID); err == nil {
-			brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
+			brandID := getStringFieldAny(patch, "BrandID", "BrandId", "brandId")
 			if brandID != "" && q.nameResolver != nil {
-				tokenBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
+				tokenBrandName = q.nameResolver.ResolveBrandName(ctx, brandID)
 			}
 			if tokenBrandName == "" {
-				tokenBrandName = strings.TrimSpace(getStringFieldAny(patch, "BrandName", "brandName"))
+				tokenBrandName = getStringFieldAny(patch, "BrandName", "brandName")
 			}
 		}
 	}
@@ -185,7 +184,7 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 		TotalStock: totalStock,
 	}
 
-	dto.ListImageURL = strings.TrimSpace(listImageURL)
+	dto.ListImageURL = listImageURL
 	return dto, nil
 }
 
@@ -207,8 +206,8 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		return nil, 0, ""
 	}
 
-	pbID := strings.TrimSpace(productBlueprintID)
-	tbID := strings.TrimSpace(tokenBlueprintID)
+	pbID := productBlueprintID
+	tbID := tokenBlueprintID
 	if pbID == "" || tbID == "" {
 		return nil, 0, ""
 	}
@@ -222,7 +221,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
 		if err == nil && len(invs) > 0 {
 			for i := range invs {
-				if strings.TrimSpace(invs[i].TokenBlueprintID) == tbID {
+				if invs[i].TokenBlueprintID == tbID {
 					picked = &invs[i]
 					break
 				}
@@ -234,7 +233,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 	total := 0
 
 	for _, ref := range modelRefs {
-		mid := strings.TrimSpace(ref.ModelID)
+		mid := ref.ModelID
 		if mid == "" {
 			continue
 		}
@@ -252,8 +251,8 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 			attr = q.nameResolver.ResolveModelResolved(ctx, mid)
 		}
 
-		sz := strings.TrimSpace(attr.Size)
-		cl := strings.TrimSpace(attr.Color)
+		sz := attr.Size
+		cl := attr.Color
 		if sz == "" {
 			sz = "-"
 		}
@@ -276,7 +275,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 
 	invID := ""
 	if picked != nil {
-		invID = strings.TrimSpace(picked.ID)
+		invID = picked.ID
 	}
 
 	return rows, total, invID
@@ -295,7 +294,7 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 	if q == nil || q.pbPatchRepo == nil {
 		return nil
 	}
-	pbID := strings.TrimSpace(productBlueprintID)
+	pbID := productBlueprintID
 	if pbID == "" {
 		return nil
 	}
@@ -314,7 +313,7 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 
 	// ✅ 並べ替えしない：入力順のまま
 	for _, r := range refs {
-		mid := strings.TrimSpace(r.ModelID)
+		mid := r.ModelID
 		if mid == "" {
 			continue
 		}

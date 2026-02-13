@@ -7,7 +7,6 @@ import (
 	"log"
 	"reflect"
 	"sort"
-	"strings"
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
@@ -63,7 +62,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 	}
 
 	companyID := usecase.CompanyIDFromContext(ctx)
-	if strings.TrimSpace(companyID) == "" {
+	if companyID == "" {
 		return nil, errors.New("companyId is missing in context")
 	}
 
@@ -99,8 +98,8 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 	tokenNameCache := map[string]string{}
 	modelAttrCache := map[string]modelAttr{}
 
-	for _, pbID := range pbIDs {
-		pbID = strings.TrimSpace(pbID)
+	for _, pbID0 := range pbIDs {
+		pbID := pbID0
 		if pbID == "" {
 			continue
 		}
@@ -123,7 +122,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 
 		for _, inv := range invs {
 			// ✅ TokenBlueprintID は必ず存在する前提（空ケース削除）
-			tbID := strings.TrimSpace(inv.TokenBlueprintID)
+			tbID := inv.TokenBlueprintID
 
 			if _, ok := tokenNameCache[tbID]; !ok {
 				name := q.resolveTokenName(ctx, tbID)
@@ -146,8 +145,8 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 				continue
 			}
 
-			for modelID, ms := range inv.Stock {
-				modelID = strings.TrimSpace(modelID)
+			for modelID0, ms := range inv.Stock {
+				modelID := modelID0
 				if modelID == "" {
 					continue
 				}
@@ -156,7 +155,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 				if _, ok := modelAttrCache[modelID]; !ok {
 					attr := q.resolveModelResolved(ctx, modelID)
 
-					mn := strings.TrimSpace(attr.ModelNumber)
+					mn := attr.ModelNumber
 					if mn == "" {
 						mn = modelID
 					}
@@ -166,8 +165,8 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 
 					modelAttrCache[modelID] = modelAttr{
 						modelNumber: mn,
-						size:        strings.TrimSpace(attr.Size),
-						color:       strings.TrimSpace(attr.Color),
+						size:        attr.Size,
+						color:       attr.Color,
 						rgb:         attr.RGB,
 					}
 				}
@@ -227,7 +226,7 @@ func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBl
 		return nil, errors.New("tokenBlueprint patch repository is not configured")
 	}
 
-	tbID := strings.TrimSpace(tokenBlueprintID)
+	tbID := tokenBlueprintID
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintId is required")
 	}
@@ -237,8 +236,8 @@ func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBl
 		return nil, err
 	}
 
-	brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
-	brandName := strings.TrimSpace(q.resolveBrandName(ctx, brandID))
+	brandID := getStringFieldAny(patch, "BrandID", "BrandId", "brandId")
+	brandName := q.resolveBrandName(ctx, brandID)
 
 	setOK := false
 	if brandID != "" && brandName != "" {
@@ -265,7 +264,7 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		return nil, errors.New("inventory query repositories are not configured")
 	}
 
-	id := strings.TrimSpace(inventoryID)
+	id := inventoryID
 	if id == "" {
 		return nil, errors.New("inventoryId is required")
 	}
@@ -277,8 +276,8 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 	}
 
 	// ✅ inventory テーブルのカラムを正として使う（推測しない）
-	pbID := strings.TrimSpace(inv.ProductBlueprintID)
-	tbID := strings.TrimSpace(inv.TokenBlueprintID)
+	pbID := inv.ProductBlueprintID
+	tbID := inv.TokenBlueprintID
 
 	if pbID == "" {
 		return nil, errors.New("productBlueprintId is empty in inventory")
@@ -297,8 +296,8 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		return nil, e
 	}
 
-	brandID := strings.TrimSpace(getStringFieldAny(pbPatch, "BrandID", "BrandId", "brandId"))
-	brandName := strings.TrimSpace(q.resolveBrandName(ctx, brandID))
+	brandID := getStringFieldAny(pbPatch, "BrandID", "BrandId", "brandId")
+	brandName := q.resolveBrandName(ctx, brandID)
 
 	setOK := false
 	if brandID != "" && brandName != "" {
@@ -338,7 +337,7 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 	orderedModelIDs := make([]string, 0, len(refs))
 	seen := map[string]struct{}{}
 	for _, r := range refs {
-		mid := strings.TrimSpace(r.ModelID)
+		mid := r.ModelID
 		if mid == "" {
 			continue
 		}
@@ -356,8 +355,8 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 	rows := make([]querydto.InventoryDetailRowDTO, 0, len(orderedModelIDs))
 	total := 0
 
-	for _, modelID := range orderedModelIDs {
-		modelID = strings.TrimSpace(modelID)
+	for _, modelID0 := range orderedModelIDs {
+		modelID := modelID0
 		if modelID == "" {
 			continue
 		}
@@ -373,7 +372,7 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 
 		attr := q.resolveModelResolved(ctx, modelID)
 
-		mn := strings.TrimSpace(attr.ModelNumber)
+		mn := attr.ModelNumber
 		if mn == "" {
 			mn = modelID
 		}
@@ -381,8 +380,8 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			mn = "-"
 		}
 
-		sz := strings.TrimSpace(attr.Size)
-		cl := strings.TrimSpace(attr.Color)
+		sz := attr.Size
+		cl := attr.Color
 
 		if sz == "" {
 			sz = "-"
@@ -391,7 +390,7 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			cl = "-"
 		}
 
-		missingColor := strings.TrimSpace(attr.Color) == ""
+		missingColor := attr.Color == ""
 		missingRGB := attr.RGB == nil
 		if missingColor || missingRGB {
 			log.Printf(
@@ -484,32 +483,32 @@ func (q *InventoryQuery) resolveTokenName(ctx context.Context, tokenBlueprintID 
 	if q == nil || q.nameResolver == nil {
 		return ""
 	}
-	return strings.TrimSpace(q.nameResolver.ResolveTokenName(ctx, tokenBlueprintID))
+	return q.nameResolver.ResolveTokenName(ctx, tokenBlueprintID)
 }
 
 func (q *InventoryQuery) resolveProductName(ctx context.Context, productBlueprintID string) string {
 	if q == nil || q.nameResolver == nil {
 		return ""
 	}
-	return strings.TrimSpace(q.nameResolver.ResolveProductName(ctx, productBlueprintID))
+	return q.nameResolver.ResolveProductName(ctx, productBlueprintID)
 }
 
 func (q *InventoryQuery) resolveBrandName(ctx context.Context, brandID string) string {
 	if q == nil || q.nameResolver == nil {
 		return ""
 	}
-	id := strings.TrimSpace(brandID)
+	id := brandID
 	if id == "" {
 		return ""
 	}
-	return strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, id))
+	return q.nameResolver.ResolveBrandName(ctx, id)
 }
 
 func (q *InventoryQuery) resolveModelResolved(ctx context.Context, modelVariationID string) resolver.ModelResolved {
 	if q == nil || q.nameResolver == nil {
 		return resolver.ModelResolved{}
 	}
-	id := strings.TrimSpace(modelVariationID)
+	id := modelVariationID
 	if id == "" {
 		return resolver.ModelResolved{}
 	}
@@ -580,7 +579,6 @@ func modelStockNumbers(ms invdom.ModelStock) (accumulation int, reservedCount in
 // ============================================================
 
 func setStringFieldAny(target any, value string, names ...string) bool {
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return false
 	}

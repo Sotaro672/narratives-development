@@ -5,22 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 )
-
-/*
-責任と機能:
-- preview_query.go のスキャン結果（= productId から解決した modelId と tokenBlueprintId）と、
-  order_purchased_query.go の検索結果（= avatarId の購入済み(paid=true)かつ items.transfer=false の (modelId, tokenBlueprintId) 集合）を突合する。
-- 一致判定:
-  - scannedModelId と scannedTokenBlueprintId が、purchasedPairs のどれか1つと完全一致すれば OK。
-- Firestore への直接依存は持たず、既存 Query を合成して検証する（Query Orchestration）。
-
-今回の修正ポイント（あなたの要件）:
-- scannedModelId は products/{productId}.modelId（= PreviewQ が productId から解決する modelId）を使う
-- scannedTokenBlueprintId は tokens/{productId}.tokenBlueprintId（docId=productId）を使う
-- productBlueprintId への fallback は廃止（ここがズレの原因だったため）
-*/
 
 var (
 	ErrOrderScanVerifyQueryNotConfigured  = errors.New("order_scan_verify_query: not configured")
@@ -97,8 +82,8 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 		return VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
 	}
 
-	avatarID := strings.TrimSpace(in.AvatarID)
-	productID := strings.TrimSpace(in.ProductID)
+	avatarID := in.AvatarID
+	productID := in.ProductID
 
 	if avatarID == "" {
 		return VerifyResult{}, ErrOrderScanVerifyAvatarIDEmpty
@@ -116,7 +101,7 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve returned nil")
 	}
 
-	scannedModelID := strings.TrimSpace(info.ModelID)
+	scannedModelID := info.ModelID
 	if scannedModelID == "" {
 		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: scanned modelId is empty")
 	}
@@ -127,7 +112,7 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 	}
 
 	// scanned tokenBlueprintId is tokens/{productId}.tokenBlueprintId (docId=productId)
-	scannedTBID := strings.TrimSpace(info.Token.TokenBlueprintID)
+	scannedTBID := info.Token.TokenBlueprintID
 	if scannedTBID == "" {
 		return VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
 	}
@@ -142,8 +127,8 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 	seen := map[string]struct{}{}
 	outPairs := make([]ModelTokenPair, 0, len(purchased.Pairs))
 	for _, p := range purchased.Pairs {
-		mid := strings.TrimSpace(p.ModelID)
-		tbid := strings.TrimSpace(p.TokenBlueprintID)
+		mid := p.ModelID
+		tbid := p.TokenBlueprintID
 		if mid == "" || tbid == "" {
 			continue
 		}

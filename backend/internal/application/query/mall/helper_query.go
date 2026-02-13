@@ -11,7 +11,7 @@ import (
 // ============================================================
 
 func parseInventoryID(inventoryID string) (productBlueprintID string, tokenBlueprintID string, ok bool) {
-	s := strings.TrimSpace(inventoryID)
+	s := inventoryID
 	if s == "" {
 		return "", "", false
 	}
@@ -21,8 +21,8 @@ func parseInventoryID(inventoryID string) (productBlueprintID string, tokenBluep
 		return "", "", false
 	}
 
-	pb := strings.TrimSpace(parts[0])
-	tb := strings.TrimSpace(parts[1])
+	pb := parts[0]
+	tb := parts[1]
 	if pb == "" || tb == "" {
 		return "", "", false
 	}
@@ -34,12 +34,11 @@ func pickString(m map[string]any, keys ...string) string {
 		return ""
 	}
 	for _, k := range keys {
-		k = strings.TrimSpace(k)
 		if k == "" {
 			continue
 		}
 		if v, ok := m[k]; ok {
-			s := strings.TrimSpace(fmt.Sprint(v))
+			s := fmt.Sprint(v)
 			if s != "" {
 				return s
 			}
@@ -53,7 +52,6 @@ func pickAny(m map[string]any, keys ...string) any {
 		return nil
 	}
 	for _, k := range keys {
-		k = strings.TrimSpace(k)
 		if k == "" {
 			continue
 		}
@@ -94,7 +92,7 @@ func asIntAny(v any) (int, bool) {
 	case float64:
 		return int(x), true
 	case string:
-		s := strings.TrimSpace(x)
+		s := x
 		if s == "" {
 			return 0, false
 		}

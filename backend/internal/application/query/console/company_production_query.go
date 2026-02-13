@@ -3,7 +3,6 @@ package query
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	dto "narratives/internal/application/production/dto"
@@ -88,7 +87,7 @@ func (s *CompanyProductionQueryService) ListProductionIDsByCurrentCompany(
 	ids := make([]string, 0, len(rows))
 	seen := make(map[string]struct{}, len(rows))
 	for _, p := range rows {
-		id := strings.TrimSpace(p.ID)
+		id := p.ID
 		if id == "" {
 			continue
 		}
@@ -128,34 +127,30 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 
 		// assignee name / product name (NameResolver)
 		if s.nameResolver != nil {
-			assigneeName = strings.TrimSpace(
-				s.nameResolver.ResolveAssigneeName(ctx, strings.TrimSpace(p.AssigneeID)),
-			)
-			productName = strings.TrimSpace(
-				s.nameResolver.ResolveProductName(ctx, strings.TrimSpace(p.ProductBlueprintID)),
-			)
+			assigneeName = s.nameResolver.ResolveAssigneeName(ctx, p.AssigneeID)
+			productName = s.nameResolver.ResolveProductName(ctx, p.ProductBlueprintID)
 		}
 
 		// brandID (pbRepo.GetByID)
-		pbID := strings.TrimSpace(p.ProductBlueprintID)
+		pbID := p.ProductBlueprintID
 		if pbID != "" && s.pbRepo != nil {
 			if cached, ok := pbBrandCache[pbID]; ok {
 				brandID = cached
 			} else {
 				pb, err := s.pbRepo.GetByID(ctx, pbID)
 				if err == nil {
-					brandID = strings.TrimSpace(extractBrandIDFromProductBlueprint(pb))
+					brandID = extractBrandIDFromProductBlueprint(pb)
 					pbBrandCache[pbID] = brandID
 				}
 			}
 		}
 
 		// brandName (NameResolver)
-		if s.nameResolver != nil && strings.TrimSpace(brandID) != "" {
+		if s.nameResolver != nil && brandID != "" {
 			if cached, ok := brandNameCache[brandID]; ok {
 				brandName = cached
 			} else {
-				brandName = strings.TrimSpace(s.nameResolver.ResolveBrandName(ctx, brandID))
+				brandName = s.nameResolver.ResolveBrandName(ctx, brandID)
 				brandNameCache[brandID] = brandName
 			}
 		}
@@ -201,7 +196,7 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 	ctx context.Context,
 ) ([]productiondom.Production, error) {
 	// ✅ 方針A: usecase の companyId getter を唯一の真実として利用する
-	cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
+	cid := usecase.CompanyIDFromContext(ctx)
 	if cid == "" {
 		// ★ companyId 無しの list を絶対禁止（全社漏洩の根本対策）
 		return nil, productbpdom.ErrInvalidCompanyID
@@ -230,15 +225,15 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 
 	// 3) safety: pbIDs set check
 	set := make(map[string]struct{}, len(pbIDs))
-	for _, id := range pbIDs {
-		if tid := strings.TrimSpace(id); tid != "" {
-			set[tid] = struct{}{}
+	for _, id0 := range pbIDs {
+		if id0 != "" {
+			set[id0] = struct{}{}
 		}
 	}
 
 	out := make([]productiondom.Production, 0, len(rows))
 	for _, p := range rows {
-		if _, ok := set[strings.TrimSpace(p.ProductBlueprintID)]; !ok {
+		if _, ok := set[p.ProductBlueprintID]; !ok {
 			continue
 		}
 		out = append(out, p)
@@ -258,5 +253,5 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 // If later you switch the port to return *ProductBlueprint, just overload here.
 func extractBrandIDFromProductBlueprint(pb productbpdom.ProductBlueprint) string {
 	// value case
-	return strings.TrimSpace(pb.BrandID)
+	return pb.BrandID
 }

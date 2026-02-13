@@ -13,23 +13,6 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-/*
-責任と機能:
-- avatarId を起点に「購入済み(paid=true)」の orders を検索し、
-  items 内の「未transfer(transfer=false 相当)」の (modelId, tokenBlueprintId) を抽出して返す。
-
-今回の実データ前提（あなたの orders.items の形）:
-- items[*].modelId が入っている（productId は無い）
-- items[*].inventoryId が入っており、以下の shape:
-    "<productBlueprintId>__<tokenBlueprintId>__<...>__<modelId>"
-  → tokenBlueprintId は 2つめのセグメント（index=1）
-
-そのため、この Query は:
-- productId で products/tokens を引きに行かない
-- modelId は items[*].modelId をそのまま使う
-- tokenBlueprintId は inventoryId の2セグメント目から取り出す
-*/
-
 var (
 	ErrOrderPurchasedQueryNotConfigured = errors.New("order_purchased_query: not configured")
 	ErrInvalidAvatarID                  = errors.New("order_purchased_query: invalid avatarId")
@@ -80,12 +63,12 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 		return OrderPurchasedResult{}, ErrOrderPurchasedQueryNotConfigured
 	}
 
-	aid := strings.TrimSpace(avatarID)
+	aid := avatarID
 	if aid == "" {
 		return OrderPurchasedResult{}, ErrInvalidAvatarID
 	}
 
-	ordersCol := strings.TrimSpace(q.OrdersCol)
+	ordersCol := q.OrdersCol
 	if ordersCol == "" {
 		ordersCol = "orders"
 	}
@@ -127,7 +110,7 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 
 		ordersScanned++
 
-		orderID := strings.TrimSpace(doc.Ref.ID)
+		orderID := doc.Ref.ID
 		raw := doc.Data()
 		if raw == nil {
 			log.Printf("[order_purchased_query] WARN: order doc data is nil orderId=%s", mask(orderID))
@@ -165,7 +148,7 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 			}
 
 			// ✅ modelId is required (productId is NOT used in your real data)
-			modelID := strings.TrimSpace(getString(m, "modelId", "modelID", "model_id"))
+			modelID := getString(m, "modelId", "modelID", "model_id")
 			if modelID == "" {
 				itemsMissingModelID++
 				log.Printf("[order_purchased_query] WARN: eligible item missing modelId orderId=%s", mask(orderID))
@@ -173,14 +156,14 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 			}
 
 			// ✅ tokenBlueprintId is derived from inventoryId (2nd segment)
-			invID := strings.TrimSpace(getString(m, "inventoryId", "inventoryID", "inventory_id"))
+			invID := getString(m, "inventoryId", "inventoryID", "inventory_id")
 			if invID == "" {
 				itemsMissingInventoryID++
 				log.Printf("[order_purchased_query] WARN: eligible item missing inventoryId orderId=%s modelId=%s", mask(orderID), mask(modelID))
 				continue
 			}
 
-			tbID := strings.TrimSpace(tokenBlueprintIDFromInventoryID(invID))
+			tbID := tokenBlueprintIDFromInventoryID(invID)
 			if tbID == "" {
 				itemsMissingInventoryID++
 				log.Printf("[order_purchased_query] WARN: tokenBlueprintId not derivable from inventoryId orderId=%s modelId=%s inventoryId=%s",
@@ -189,7 +172,7 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 			}
 
 			// optional (compat): productId may not exist in real data
-			pid := strings.TrimSpace(getString(m, "productId", "productID", "product_id"))
+			pid := getString(m, "productId", "productID", "product_id")
 
 			itemsEligible++
 			log.Printf("[order_purchased_query] eligible item orderId=%s modelId=%s tokenBlueprintId=%s productId=%s",
@@ -237,7 +220,7 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 // tokenBlueprintIDFromInventoryID derives tokenBlueprintId from inventoryId.
 // Expected shape: "<productBlueprintId>__<tokenBlueprintId>__...__<modelId>"
 func tokenBlueprintIDFromInventoryID(inventoryID string) string {
-	s := strings.TrimSpace(inventoryID)
+	s := inventoryID
 	if s == "" {
 		return ""
 	}
@@ -246,7 +229,7 @@ func tokenBlueprintIDFromInventoryID(inventoryID string) string {
 		return ""
 	}
 	// ✅ tokenBlueprintId is the 2nd segment
-	tb := strings.TrimSpace(parts[1])
+	tb := parts[1]
 	if tb == "" {
 		return ""
 	}
@@ -278,7 +261,7 @@ func isFalse(v any) bool {
 	case bool:
 		return t == false
 	case string:
-		s := strings.ToLower(strings.TrimSpace(t))
+		s := strings.ToLower(t)
 		return s == "false" || s == "0" || s == "no"
 	case int:
 		return t == 0
@@ -297,7 +280,7 @@ func getString(m map[string]any, keys ...string) string {
 	}
 	for _, k := range keys {
 		if v, ok := m[k]; ok {
-			s := strings.TrimSpace(fmt.Sprint(v))
+			s := fmt.Sprint(v)
 			if s != "" && s != "<nil>" {
 				return s
 			}
@@ -307,7 +290,7 @@ func getString(m map[string]any, keys ...string) string {
 }
 
 func mask(s string) string {
-	t := strings.TrimSpace(s)
+	t := s
 	if t == "" {
 		return ""
 	}

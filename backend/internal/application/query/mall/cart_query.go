@@ -1,11 +1,10 @@
-// backend\internal\application\query\mall\cart_query.go
+// backend/internal/application/query/mall/cart_query.go
 package mall
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -66,12 +65,11 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 		return malldto.CartDTO{}, errors.New("mall cart query: firestore client is nil")
 	}
 
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return malldto.CartDTO{}, errors.New("avatarId is required")
 	}
 
-	cartCol := strings.TrimSpace(q.CartCol)
+	cartCol := q.CartCol
 	if cartCol == "" {
 		cartCol = "carts"
 	}
@@ -117,13 +115,13 @@ func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartd
 	if raw == nil {
 		// empty doc is unusual but handle defensively
 		return &cartdom.Cart{
-			ID:    strings.TrimSpace(avatarID),
+			ID:    avatarID,
 			Items: map[string]cartdom.CartItem{},
 		}, nil
 	}
 
 	c := &cartdom.Cart{
-		ID:    strings.TrimSpace(avatarID),
+		ID:    avatarID,
 		Items: map[string]cartdom.CartItem{},
 	}
 
@@ -152,7 +150,7 @@ func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartd
 	}
 
 	for k, v := range m {
-		itemKey := strings.TrimSpace(k)
+		itemKey := k
 		if itemKey == "" {
 			continue
 		}
@@ -163,9 +161,9 @@ func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartd
 			continue
 		}
 
-		inv := strings.TrimSpace(stringAny(mv["inventoryId"]))
-		lid := strings.TrimSpace(stringAny(mv["listId"]))
-		mid := strings.TrimSpace(stringAny(mv["modelId"]))
+		inv := stringAny(mv["inventoryId"])
+		lid := stringAny(mv["listId"])
+		mid := stringAny(mv["modelId"])
 		qty := intAny(mv["qty"])
 		if qty <= 0 {
 			continue
@@ -237,7 +235,7 @@ func intAny(v any) int {
 	case float64:
 		return int(x)
 	case string:
-		s := strings.TrimSpace(x)
+		s := x
 		if s == "" {
 			return 0
 		}
@@ -280,7 +278,7 @@ func toCartDTO(
 	productNameIndex map[string]string,
 ) malldto.CartDTO {
 	out := malldto.CartDTO{
-		AvatarID:  strings.TrimSpace(c.ID),
+		AvatarID:  c.ID,
 		Items:     map[string]malldto.CartItemDTO{},
 		CreatedAt: toRFC3339Ptr(c.CreatedAt),
 		UpdatedAt: toRFC3339Ptr(c.UpdatedAt),
@@ -292,14 +290,14 @@ func toCartDTO(
 	}
 
 	for k, it := range c.Items {
-		key := strings.TrimSpace(k)
+		key := k
 		if key == "" {
 			continue
 		}
 
-		invID := strings.TrimSpace(it.InventoryID)
-		listID := strings.TrimSpace(it.ListID)
-		modelID := strings.TrimSpace(it.ModelID)
+		invID := it.InventoryID
+		listID := it.ListID
+		modelID := it.ModelID
 		if invID == "" || listID == "" || modelID == "" || it.Qty <= 0 {
 			continue
 		}
@@ -313,10 +311,10 @@ func toCartDTO(
 
 		if listMetaIndex != nil {
 			if lm, ok := listMetaIndex[listID]; ok {
-				if s := strings.TrimSpace(lm.Title); s != "" {
+				if s := lm.Title; s != "" {
 					item.Title = s
 				}
-				if s := strings.TrimSpace(lm.ImageID); s != "" {
+				if s := lm.ImageID; s != "" {
 					item.ListImage = s
 				}
 			}
@@ -334,7 +332,7 @@ func toCartDTO(
 		pbID := ""
 		if invIndex != nil {
 			if parts, ok := invIndex[invID]; ok {
-				pbID = strings.TrimSpace(parts.ProductBlueprintID)
+				pbID = parts.ProductBlueprintID
 			}
 		}
 		if pbID == "" {
@@ -344,7 +342,7 @@ func toCartDTO(
 		}
 		if pbID != "" && productNameIndex != nil {
 			if name, ok := productNameIndex[pbID]; ok {
-				if s := strings.TrimSpace(name); s != "" {
+				if s := name; s != "" {
 					item.ProductName = s
 				}
 			}
@@ -352,10 +350,10 @@ func toCartDTO(
 
 		if modelIndex != nil {
 			if ms, ok := modelIndex[modelID]; ok {
-				if s := strings.TrimSpace(ms.Size); s != "" {
+				if s := ms.Size; s != "" {
 					item.Size = s
 				}
-				if s := strings.TrimSpace(ms.Color); s != "" {
+				if s := ms.Color; s != "" {
 					item.Color = s
 				}
 			}
@@ -388,7 +386,7 @@ func (q *CartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart)
 	listIDs := make([]string, 0, 8)
 
 	for _, it := range c.Items {
-		lid := strings.TrimSpace(it.ListID)
+		lid := it.ListID
 		if lid == "" {
 			continue
 		}
@@ -421,7 +419,7 @@ func (q *CartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs [
 	metaOut := map[string]listMeta{}
 
 	for _, lid0 := range listIDs {
-		lid := strings.TrimSpace(lid0)
+		lid := lid0
 		if lid == "" {
 			continue
 		}
@@ -432,8 +430,8 @@ func (q *CartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs [
 		}
 
 		mt := listMeta{
-			Title:   strings.TrimSpace(l.Title),
-			ImageID: strings.TrimSpace(l.ImageID),
+			Title:   l.Title,
+			ImageID: l.ImageID,
 		}
 		if mt.Title != "" || mt.ImageID != "" {
 			metaOut[lid] = mt
@@ -442,7 +440,7 @@ func (q *CartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs [
 		if len(l.Prices) > 0 {
 			m := map[string]int{}
 			for _, row := range l.Prices {
-				mid := strings.TrimSpace(row.ModelID)
+				mid := row.ModelID
 				if mid == "" {
 					continue
 				}
@@ -468,7 +466,7 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 		return nil, nil
 	}
 
-	listsCol := strings.TrimSpace(q.ListsCol)
+	listsCol := q.ListsCol
 	if listsCol == "" {
 		listsCol = "lists"
 	}
@@ -489,7 +487,7 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 	for i, snap := range snaps {
 		lid := ""
 		if i >= 0 && i < len(listIDs) {
-			lid = strings.TrimSpace(listIDs[i])
+			lid = listIDs[i]
 		}
 		if lid == "" || snap == nil || !snap.Exists() {
 			continue
@@ -498,8 +496,8 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 		var l ldom.List
 		if derr := snap.DataTo(&l); derr == nil {
 			mt := listMeta{
-				Title:   strings.TrimSpace(l.Title),
-				ImageID: strings.TrimSpace(l.ImageID),
+				Title:   l.Title,
+				ImageID: l.ImageID,
 			}
 			if mt.Title != "" || mt.ImageID != "" {
 				metaOut[lid] = mt
@@ -508,7 +506,7 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 			if len(l.Prices) > 0 {
 				m := map[string]int{}
 				for _, row := range l.Prices {
-					mid := strings.TrimSpace(row.ModelID)
+					mid := row.ModelID
 					if mid == "" {
 						continue
 					}
@@ -525,8 +523,8 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 		title := pickString(m, "title", "Title")
 		image := pickString(m, "imageId", "ImageID", "imageID", "ImageId", "image", "Image", "listImage", "ListImage", "imageUrl", "ImageUrl")
 
-		if strings.TrimSpace(title) != "" || strings.TrimSpace(image) != "" {
-			metaOut[lid] = listMeta{Title: strings.TrimSpace(title), ImageID: strings.TrimSpace(image)}
+		if title != "" || image != "" {
+			metaOut[lid] = listMeta{Title: title, ImageID: image}
 		}
 
 		if raw, ok := m["prices"]; ok {
@@ -538,7 +536,7 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 					if rm == nil {
 						continue
 					}
-					mid := strings.TrimSpace(pickString(rm, "modelId", "ModelID", "modelID", "ModelId"))
+					mid := pickString(rm, "modelId", "ModelID", "modelID", "ModelId")
 					if mid == "" {
 						continue
 					}
@@ -572,7 +570,7 @@ func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Ca
 		return nil
 	}
 
-	invCol := strings.TrimSpace(q.InventoriesCol)
+	invCol := q.InventoriesCol
 	if invCol == "" {
 		invCol = "inventories"
 	}
@@ -581,7 +579,7 @@ func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Ca
 	invIDs := make([]string, 0, 8)
 
 	for _, it := range c.Items {
-		inv := strings.TrimSpace(it.InventoryID)
+		inv := it.InventoryID
 		if inv == "" {
 			continue
 		}
@@ -610,7 +608,7 @@ func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Ca
 	for i, snap := range snaps {
 		invID := ""
 		if i >= 0 && i < len(invIDs) {
-			invID = strings.TrimSpace(invIDs[i])
+			invID = invIDs[i]
 		}
 		if invID == "" || snap == nil || !snap.Exists() {
 			continue
@@ -631,8 +629,6 @@ func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Ca
 			}
 		}
 
-		pb = strings.TrimSpace(pb)
-		tb = strings.TrimSpace(tb)
 		if pb == "" && tb == "" {
 			continue
 		}
@@ -662,7 +658,7 @@ func (q *CartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.
 	modelIDs := make([]string, 0, 16)
 
 	for _, it := range c.Items {
-		mid := strings.TrimSpace(it.ModelID)
+		mid := it.ModelID
 		if mid == "" {
 			continue
 		}
@@ -681,8 +677,8 @@ func (q *CartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.
 
 	for _, mid := range modelIDs {
 		mr := q.Resolver.ResolveModelResolved(ctx, mid)
-		sz := strings.TrimSpace(mr.Size)
-		cl := strings.TrimSpace(mr.Color)
+		sz := mr.Size
+		cl := mr.Color
 		if sz == "" && cl == "" {
 			continue
 		}
@@ -708,7 +704,7 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 		return nil
 	}
 
-	pbCol := strings.TrimSpace(q.ProductBlueprintsCol)
+	pbCol := q.ProductBlueprintsCol
 	if pbCol == "" {
 		// ✅ repo 側と揃える
 		pbCol = "product_blueprints"
@@ -718,7 +714,7 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 	pbIDs := make([]string, 0, 16)
 
 	for _, it := range c.Items {
-		invID := strings.TrimSpace(it.InventoryID)
+		invID := it.InventoryID
 		if invID == "" {
 			continue
 		}
@@ -726,12 +722,12 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 		pbID := ""
 		if invIndex != nil {
 			if parts, ok := invIndex[invID]; ok {
-				pbID = strings.TrimSpace(parts.ProductBlueprintID)
+				pbID = parts.ProductBlueprintID
 			}
 		}
 		if pbID == "" {
 			if p, _, ok := parseInventoryID(invID); ok {
-				pbID = strings.TrimSpace(p)
+				pbID = p
 			}
 		}
 
@@ -759,7 +755,7 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 		if q.Resolver != nil {
 			out := map[string]string{}
 			for _, id := range pbIDs {
-				name := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, id))
+				name := q.Resolver.ResolveProductName(ctx, id)
 				if name != "" {
 					out[id] = name
 				}
@@ -777,7 +773,7 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 	for i, snap := range snaps {
 		pbID := ""
 		if i >= 0 && i < len(pbIDs) {
-			pbID = strings.TrimSpace(pbIDs[i])
+			pbID = pbIDs[i]
 		}
 		if pbID == "" {
 			continue
@@ -786,7 +782,7 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 		exists := snap != nil && snap.Exists()
 		if !exists {
 			if q.Resolver != nil {
-				rn := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, pbID))
+				rn := q.Resolver.ResolveProductName(ctx, pbID)
 				if rn != "" {
 					out[pbID] = rn
 				}
@@ -795,14 +791,14 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 		}
 
 		m := snap.Data()
-		name := strings.TrimSpace(pickString(m, "productName", "ProductName", "name", "Name"))
+		name := pickString(m, "productName", "ProductName", "name", "Name")
 		if name != "" {
 			out[pbID] = name
 			continue
 		}
 
 		if q.Resolver != nil {
-			rn := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, pbID))
+			rn := q.Resolver.ResolveProductName(ctx, pbID)
 			if rn != "" {
 				out[pbID] = rn
 			}

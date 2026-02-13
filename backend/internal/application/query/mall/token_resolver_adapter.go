@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"strings"
 
 	usecase "narratives/internal/application/usecase"
 )
@@ -24,7 +23,7 @@ func (a *tokenResolverAdapter) ResolveTokenByProductID(ctx context.Context, prod
 		return usecase.TokenForTransfer{}, ErrTokenResolverNil
 	}
 
-	pid := strings.TrimSpace(productID)
+	pid := productID
 	if pid == "" {
 		return usecase.TokenForTransfer{}, errors.New("token_resolver_adapter: productId is empty")
 	}
@@ -43,9 +42,9 @@ func (a *tokenResolverAdapter) ResolveTokenByProductID(ctx context.Context, prod
 
 	return usecase.TokenForTransfer{
 		ProductID:        pid,
-		BrandID:          strings.TrimSpace(tok.BrandID),
-		MintAddress:      strings.TrimSpace(tok.MintAddress),
-		TokenBlueprintID: strings.TrimSpace(tok.TokenBlueprintID),
-		ToAddress:        strings.TrimSpace(tok.ToAddress),
+		BrandID:          tok.BrandID,
+		MintAddress:      tok.MintAddress,
+		TokenBlueprintID: tok.TokenBlueprintID,
+		ToAddress:        tok.ToAddress,
 	}, nil
 }

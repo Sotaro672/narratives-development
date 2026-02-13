@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log"
 	"sort"
-	"strings"
 	"time"
 
 	mintapp "narratives/internal/application/mint"
@@ -95,7 +94,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 	prodByID := make(map[string]prodLite, len(prods))
 	seen := make(map[string]struct{}, len(prods))
 	for _, p := range prods {
-		pid := strings.TrimSpace(p.ID)
+		pid := p.ID
 		if pid == "" {
 			continue
 		}
@@ -140,7 +139,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 
 	inspByPID := make(map[string]inspectionLite, len(batches))
 	for _, b := range batches {
-		pid := strings.TrimSpace(b.ProductionID)
+		pid := b.ProductionID
 		if pid == "" {
 			continue
 		}
@@ -182,15 +181,15 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 			mintPtr = &tmp
 		}
 
-		productName := strings.TrimSpace(p.ProductName)
+		productName := p.ProductName
 
 		mintQty := 0
 		prodQty := 0
 		inspStatus := "notYet"
 		if hasInsp {
 			mintQty = insp.TotalPassed
-			if strings.TrimSpace(insp.Status) != "" {
-				inspStatus = strings.TrimSpace(insp.Status)
+			if insp.Status != "" {
+				inspStatus = insp.Status
 			}
 			if insp.TotalQuantity > 0 {
 				prodQty = insp.TotalQuantity
@@ -207,12 +206,12 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 		var mintedAt *time.Time
 
 		if hasMint {
-			requestedBy = strings.TrimSpace(m.CreatedBy)
+			requestedBy = m.CreatedBy
 			mintedAt = m.MintedAt
-			tokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
+			tokenBlueprintID = m.TokenBlueprintID
 
 			if s.nameResolver != nil && tokenBlueprintID != "" {
-				tokenName = strings.TrimSpace(s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID))
+				tokenName = s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID)
 				if tokenName == "" && tokenNameMissCount < tokenNameMissLogLimit {
 					tokenNameMissCount++
 					log.Printf("[mint_request_qs] WARN: tokenName not resolved tokenBlueprintId=%q (will fallback to id)", tokenBlueprintID)
@@ -225,7 +224,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 			// ✅ requestedBy の名前解決（memberId -> "姓 名"）
 			if s.nameResolver != nil {
 				rb := requestedBy
-				requestedByName = strings.TrimSpace(s.nameResolver.ResolveRequestedByName(ctx, &rb))
+				requestedByName = s.nameResolver.ResolveRequestedByName(ctx, &rb)
 			}
 			if requestedByName == "" {
 				requestedByName = requestedBy
@@ -277,7 +276,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
-	pid := strings.TrimSpace(productionID)
+	pid := productionID
 	if pid == "" {
 		return nil, errors.New("productionId is empty")
 	}
@@ -306,7 +305,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	var prod prodLite
 	foundProd := false
 	for _, p := range prods {
-		if strings.TrimSpace(p.ID) == pid {
+		if p.ID == pid {
 			prod = p
 			foundProd = true
 			break
@@ -316,7 +315,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, errors.New("production not found")
 	}
 
-	productBlueprintID := strings.TrimSpace(prod.ProductBlueprintID)
+	productBlueprintID := prod.ProductBlueprintID
 	log.Printf("[mint_request_qs] detail pid=%q production resolved productBlueprintId=%q", pid, productBlueprintID)
 
 	// ------------------------------------------------------------
@@ -350,7 +349,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	var insp inspectionBatchLite
 	hasInsp := false
 	for _, b := range batches {
-		if strings.TrimSpace(b.ProductionID) == pid {
+		if b.ProductionID == pid {
 			insp = b
 			hasInsp = true
 			break
@@ -382,15 +381,15 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		} else {
 			tmp := make(map[string]querydto.MintModelMetaEntry, len(vars))
 			for _, v := range vars {
-				id := strings.TrimSpace(v.ID)
+				id := v.ID
 				if id == "" {
 					continue
 				}
 				rgb := v.Color.RGB
 				tmp[id] = querydto.MintModelMetaEntry{
-					ModelNumber: strings.TrimSpace(v.ModelNumber),
-					Size:        strings.TrimSpace(v.Size),
-					ColorName:   strings.TrimSpace(v.Color.Name),
+					ModelNumber: v.ModelNumber,
+					Size:        v.Size,
+					ColorName:   v.Color.Name,
 					RGB:         intPtr(rgb),
 				}
 			}
@@ -413,7 +412,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	// ------------------------------------------------------------
 	// 4) compute detail fields
 	// ------------------------------------------------------------
-	productName := strings.TrimSpace(prod.ProductName)
+	productName := prod.ProductName
 
 	mintQty := 0
 	prodQty := prod.TotalQuantity
@@ -423,8 +422,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 	if hasInsp {
 		mintQty = insp.TotalPassed
-		if strings.TrimSpace(insp.Status) != "" {
-			inspStatus = strings.TrimSpace(insp.Status)
+		if insp.Status != "" {
+			inspStatus = insp.Status
 		}
 		if insp.TotalQuantity > 0 {
 			prodQty = insp.TotalQuantity
@@ -432,8 +431,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 		// inspections[] を DTO へ（modelMeta があれば上書き）
 		for _, it := range insp.Inspections {
-			mid := strings.TrimSpace(it.ModelID)
-			ir := strings.TrimSpace(it.InspectionResult)
+			mid := it.ModelID
+			ir := it.InspectionResult
 
 			row := querydto.InspectionItemDTO{
 				ModelID:          mid,
@@ -441,22 +440,22 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			}
 
 			// backend inspection item が modelNumber/size/color/rgb を持っているなら拾う（保険）
-			row.ModelNumber = strings.TrimSpace(it.ModelNumber)
-			row.Size = strings.TrimSpace(it.Size)
-			row.Color = strings.TrimSpace(it.Color)
+			row.ModelNumber = it.ModelNumber
+			row.Size = it.Size
+			row.Color = it.Color
 			row.RGB = it.RGB
 
 			// modelMeta があればそれを最優先で埋める
 			if mid != "" && modelMeta != nil {
 				if mm, ok := modelMeta[mid]; ok {
-					if strings.TrimSpace(mm.ModelNumber) != "" {
-						row.ModelNumber = strings.TrimSpace(mm.ModelNumber)
+					if mm.ModelNumber != "" {
+						row.ModelNumber = mm.ModelNumber
 					}
-					if strings.TrimSpace(mm.Size) != "" {
-						row.Size = strings.TrimSpace(mm.Size)
+					if mm.Size != "" {
+						row.Size = mm.Size
 					}
-					if strings.TrimSpace(mm.ColorName) != "" {
-						row.Color = strings.TrimSpace(mm.ColorName)
+					if mm.ColorName != "" {
+						row.Color = mm.ColorName
 					}
 					if mm.RGB != nil {
 						row.RGB = mm.RGB
@@ -477,12 +476,12 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	var mintSummary *querydto.MintSummaryDTO
 
 	if hasMint {
-		requestedBy = strings.TrimSpace(m.CreatedBy)
+		requestedBy = m.CreatedBy
 		mintedAt = m.MintedAt
-		tokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
+		tokenBlueprintID = m.TokenBlueprintID
 
 		if s.nameResolver != nil && tokenBlueprintID != "" {
-			tokenName = strings.TrimSpace(s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID))
+			tokenName = s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID)
 		}
 		if tokenName == "" {
 			tokenName = tokenBlueprintID
@@ -491,7 +490,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		// ✅ requestedBy の名前解決（memberId -> "姓 名"）
 		if s.nameResolver != nil {
 			rb := requestedBy
-			requestedByName = strings.TrimSpace(s.nameResolver.ResolveRequestedByName(ctx, &rb))
+			requestedByName = s.nameResolver.ResolveRequestedByName(ctx, &rb)
 		}
 		if requestedByName == "" {
 			requestedByName = requestedBy
@@ -516,7 +515,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 		productIDs := make([]string, 0)
 		for k := range ml.Products {
-			id := strings.TrimSpace(k)
+			id := k
 			if id == "" {
 				continue
 			}
@@ -525,13 +524,13 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		sort.Strings(productIDs)
 
 		mintSummary = &querydto.MintSummaryDTO{
-			ID:               strings.TrimSpace(ml.ID),
-			BrandID:          strings.TrimSpace(ml.BrandID),
-			TokenBlueprintID: strings.TrimSpace(ml.TokenBlueprintID),
-			CreatedBy:        strings.TrimSpace(ml.CreatedBy),
+			ID:               ml.ID,
+			BrandID:          ml.BrandID,
+			TokenBlueprintID: ml.TokenBlueprintID,
+			CreatedBy:        ml.CreatedBy,
 
 			// ✅ 表示名は requestedByName を入れる（既存 DTO を壊さない）
-			CreatedByName: strings.TrimSpace(requestedByName),
+			CreatedByName: requestedByName,
 
 			CreatedAt:         ml.CreatedAt,
 			Minted:            ml.Minted,
@@ -543,8 +542,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 	// production summary
 	prodSummary := &querydto.ProductionSummaryDTO{
-		ID:          strings.TrimSpace(prod.ID),
-		ProductName: strings.TrimSpace(prod.ProductName),
+		ID:          prod.ID,
+		ProductName: prod.ProductName,
 		Quantity:    prodQty,
 	}
 
@@ -552,8 +551,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	var inspSummary *querydto.InspectionSummaryDTO
 	if hasInsp {
 		inspSummary = &querydto.InspectionSummaryDTO{
-			ProductionID: strings.TrimSpace(insp.ProductionID),
-			Status:       strings.TrimSpace(insp.Status),
+			ProductionID: insp.ProductionID,
+			Status:       insp.Status,
 			TotalPassed:  insp.TotalPassed,
 			Quantity:     insp.TotalQuantity,
 			ProductName:  "",
@@ -596,13 +595,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 func intPtr(n int) *int {
 	v := n
 	return &v
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func sampleFirst[T any](xs []T) any {

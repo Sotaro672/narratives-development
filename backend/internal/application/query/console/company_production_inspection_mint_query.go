@@ -113,7 +113,7 @@ func (s *CompanyProductionInspectionMintQueryService) ListInspectionAndMintsByCu
 	out := make([]qdto.ProductionInspectionMintDTO, 0, len(ids))
 
 	for _, rawID := range ids {
-		id := strings.TrimSpace(rawID)
+		id := rawID
 		if id == "" {
 			continue
 		}
