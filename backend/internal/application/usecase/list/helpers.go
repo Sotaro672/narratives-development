@@ -112,17 +112,6 @@ func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 	}
 }
 
-func normalizeStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	t := strings.TrimSpace(*p)
-	if t == "" {
-		return nil
-	}
-	return &t
-}
-
 // ============================================================
 // ✅ Usecase wiring helpers (fluent setters)
 // ============================================================

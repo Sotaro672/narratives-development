@@ -4,7 +4,6 @@ package avatar
 import (
 	"context"
 	"errors"
-	"strings"
 
 	avatardom "narratives/internal/domain/avatar"
 	avataricon "narratives/internal/domain/avatarIcon"
@@ -16,7 +15,6 @@ import (
 // =======================
 
 func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return avatarstate.AvatarState{}, avatardom.ErrInvalidID
 	}
@@ -36,7 +34,6 @@ func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (a
 }
 
 func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string) error {
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return avatardom.ErrInvalidID
 	}
@@ -53,7 +50,7 @@ func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string
 			// avatardom.Avatar.AvatarIcon は *string
 			var iconRef string
 			if av.AvatarIcon != nil {
-				iconRef = strings.TrimSpace(*av.AvatarIcon)
+				iconRef = *av.AvatarIcon
 			}
 
 			if iconRef != "" {

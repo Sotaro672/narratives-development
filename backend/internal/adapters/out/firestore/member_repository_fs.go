@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -44,7 +43,7 @@ func (r *MemberRepositoryFS) GetByID(ctx context.Context, id string) (memdom.Mem
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
+	// ✅ TrimSpace をしない（渡された値をそのまま扱う）
 	if id == "" {
 		return memdom.Member{}, memdom.ErrNotFound
 	}
@@ -72,7 +71,7 @@ func (r *MemberRepositoryFS) GetByEmail(ctx context.Context, email string) (memd
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
 
-	email = strings.TrimSpace(email)
+	// ✅ TrimSpace をしない（渡された値をそのまま扱う）
 	if email == "" {
 		return memdom.Member{}, memdom.ErrNotFound
 	}
@@ -104,7 +103,9 @@ func (r *MemberRepositoryFS) GetByFirebaseUID(ctx context.Context, firebaseUID s
 	if r.Client == nil {
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
-	uid := strings.TrimSpace(firebaseUID)
+
+	// ✅ TrimSpace をしない（渡された値をそのまま扱う）
+	uid := firebaseUID
 	if uid == "" {
 		return memdom.Member{}, memdom.ErrNotFound
 	}
@@ -120,7 +121,6 @@ func (r *MemberRepositoryFS) Exists(ctx context.Context, id string) (bool, error
 		return false, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, nil
 	}
@@ -146,8 +146,8 @@ func (r *MemberRepositoryFS) Count(ctx context.Context, f memdom.Filter) (int, e
 	}
 
 	q := r.col().Query
-	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
-		q = q.Where("companyId", "==", cid)
+	if f.CompanyID != "" {
+		q = q.Where("companyId", "==", f.CompanyID)
 	}
 
 	it := q.Documents(ctx)
@@ -182,8 +182,8 @@ func (r *MemberRepositoryFS) List(
 	pageNum, perPage, offset := fscommon.NormalizePage(p.Number, p.PerPage, 50, 200)
 
 	q := r.col().Query
-	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
-		q = q.Where("companyId", "==", cid)
+	if f.CompanyID != "" {
+		q = q.Where("companyId", "==", f.CompanyID)
 	}
 	// 固定ソート: updatedAt desc → docID desc
 	q = q.OrderBy("updatedAt", firestore.Desc).
@@ -258,8 +258,8 @@ func (r *MemberRepositoryFS) ListByCursor(
 	}
 
 	q := r.col().Query
-	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
-		q = q.Where("companyId", "==", cid)
+	if f.CompanyID != "" {
+		q = q.Where("companyId", "==", f.CompanyID)
 	}
 	// 固定ソート
 	q = q.OrderBy("updatedAt", firestore.Desc).
@@ -268,7 +268,7 @@ func (r *MemberRepositoryFS) ListByCursor(
 	it := q.Documents(ctx)
 	defer it.Stop()
 
-	after := strings.TrimSpace(cpage.After)
+	after := cpage.After
 	skipping := after != ""
 
 	var (
@@ -330,7 +330,8 @@ func (r *MemberRepositoryFS) Create(ctx context.Context, m memdom.Member) (memdo
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
 
-	ref := r.col().Doc(strings.TrimSpace(m.ID))
+	// ✅ TrimSpace をしない（渡された値をそのまま扱う）
+	ref := r.col().Doc(m.ID)
 	if m.ID == "" {
 		ref = r.col().NewDoc()
 		m.ID = ref.ID
@@ -358,7 +359,6 @@ func (r *MemberRepositoryFS) Update(ctx context.Context, id string, _ memdom.Mem
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return memdom.Member{}, memdom.ErrNotFound
 	}
@@ -372,7 +372,7 @@ func (r *MemberRepositoryFS) Save(ctx context.Context, m memdom.Member, _ *memdo
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
 
-	if strings.TrimSpace(m.ID) == "" {
+	if m.ID == "" {
 		ref := r.col().NewDoc()
 		m.ID = ref.ID
 	}
@@ -396,7 +396,6 @@ func (r *MemberRepositoryFS) Delete(ctx context.Context, id string) error {
 		return errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return memdom.ErrNotFound
 	}
@@ -412,52 +411,6 @@ func (r *MemberRepositoryFS) Delete(ctx context.Context, id string) error {
 
 	if _, err := ref.Delete(ctx); err != nil {
 		return err
-	}
-	return nil
-}
-
-func (r *MemberRepositoryFS) Reset(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	var refs []*firestore.DocumentRef
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		refs = append(refs, doc.Ref)
-	}
-
-	if len(refs) == 0 {
-		return nil
-	}
-
-	const chunkSize = 400
-	for i := 0; i < len(refs); i += chunkSize {
-		end := i + chunkSize
-		if end > len(refs) {
-			end = len(refs)
-		}
-		chunk := refs[i:end]
-
-		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, ref := range chunk {
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -497,7 +450,7 @@ func readMemberSnapshot(doc *firestore.DocumentSnapshot) (memdom.Member, error) 
 		}
 		out := make([]string, 0, len(arr))
 		for _, x := range arr {
-			if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
+			if s, ok := x.(string); ok && s != "" {
 				out = append(out, s)
 			}
 		}
@@ -515,7 +468,7 @@ func readMemberSnapshot(doc *firestore.DocumentSnapshot) (memdom.Member, error) 
 			tt := t.UTC()
 			return &tt, nil
 		case string:
-			s := strings.TrimSpace(t)
+			s := t
 			if s == "" {
 				return nil, nil
 			}

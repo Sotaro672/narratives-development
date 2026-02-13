@@ -12,7 +12,6 @@ package list
 import (
 	"context"
 	"log"
-	"strings"
 	"time"
 
 	usecase "narratives/internal/application/usecase"
@@ -44,8 +43,8 @@ func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.L
 	}
 
 	// readableId を自動付与（返却値に必ず乗せる）
-	if strings.TrimSpace(created.ReadableID) == "" {
-		rid := generateReadableID(strings.TrimSpace(created.ID), created.CreatedAt)
+	if created.ReadableID == "" {
+		rid := generateReadableID(created.ID, created.CreatedAt)
 		created.ReadableID = rid
 
 		// 永続化（可能なら）: patch update が使える場合のみ best-effort
@@ -55,14 +54,14 @@ func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.L
 				ReadableID: &rid,
 				UpdatedAt:  &now,
 			}
-			if _, e := pu.Update(ctx, strings.TrimSpace(created.ID), patch); e != nil {
-				log.Printf("[list_usecase] readableId persist failed (ignored): listID=%s err=%v", strings.TrimSpace(created.ID), e)
+			if _, e := pu.Update(ctx, created.ID, patch); e != nil {
+				log.Printf("[list_usecase] readableId persist failed (ignored): listID=%s err=%v", created.ID, e)
 			}
 		}
 	}
 
 	// listId 名のバケット（または prefix）初期化（実装があれば）
-	listID := strings.TrimSpace(created.ID)
+	listID := created.ID
 	if listID != "" && uc.imageObjectSaver != nil {
 		if init, ok := any(uc.imageObjectSaver).(ListImageBucketInitializer); ok {
 			_ = init.EnsureListBucket(ctx, listID) // 失敗しても list 作成は成立しているので握りつぶし
@@ -73,7 +72,7 @@ func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.L
 }
 
 func (uc *ListUsecase) Update(ctx context.Context, item listdom.List) (listdom.List, error) {
-	id := strings.TrimSpace(item.ID)
+	id := item.ID
 	if id == "" {
 		return listdom.List{}, listdom.ErrInvalidID
 	}

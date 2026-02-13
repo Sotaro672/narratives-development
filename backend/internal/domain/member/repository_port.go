@@ -59,7 +59,6 @@ type Repository interface {
 
 	Exists(ctx context.Context, id string) (bool, error)
 	Save(ctx context.Context, m Member, opts *SaveOptions) (Member, error)
-	Reset(ctx context.Context) error
 }
 
 var (

@@ -33,11 +33,13 @@ const defaultAvatarIconBucket = "narratives-development_avatar_icon"
 const avatarIconSignedURLTTL = 15 * time.Minute
 
 func avatarIconSignerEmail() string {
-	return strings.TrimSpace(os.Getenv(envAvatarIconSignerEmail))
+	// ✅ TrimSpace を使わない
+	return os.Getenv(envAvatarIconSignerEmail)
 }
 
 func avatarIconBucketName() string {
-	if v := strings.TrimSpace(os.Getenv(envAvatarIconBucket)); v != "" {
+	// ✅ TrimSpace を使わない
+	if v := os.Getenv(envAvatarIconBucket); v != "" {
 		return v
 	}
 	return defaultAvatarIconBucket
@@ -46,16 +48,21 @@ func avatarIconBucketName() string {
 // tokenBlueprint と揃える：固定パス（後から差し替えても規約が安定）
 // ObjectPath: "{avatarId}/icon"
 func avatarIconObjectPath(avatarID string) (string, error) {
-	id := sanitizePathSegment(avatarID)
-	if id == "" {
+	// ✅ Trim/normalize をしない方針に合わせる：sanitizePathSegment を廃止し、生値を使う
+	if avatarID == "" {
 		return "", avatardom.ErrInvalidID
 	}
-	return id + "/icon", nil
+	// ただし objectPath 規約として "/" を含む avatarID は危険なので拒否する（trim はしない）
+	if strings.Contains(avatarID, "/") || strings.Contains(avatarID, "..") {
+		return "", avatardom.ErrInvalidID
+	}
+	return avatarID + "/icon", nil
 }
 
 func gcsObjectPublicURL(bucket, objectPath string) string {
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", strings.TrimSpace(bucket), obj)
+	// ✅ TrimSpace を使わない（先頭 "/" だけ落とす）
+	obj := strings.TrimLeft(objectPath, "/")
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, obj)
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -93,7 +100,8 @@ func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 		return nil, fmt.Errorf("avatar icon usecase/repo is nil")
 	}
 
-	id := strings.TrimSpace(avatarID)
+	// ✅ TrimSpace をしない
+	id := avatarID
 	if id == "" {
 		return nil, avatardom.ErrInvalidID
 	}
@@ -104,7 +112,8 @@ func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 	}
 
 	bucket := avatarIconBucketName()
-	if strings.TrimSpace(bucket) == "" {
+	// ✅ TrimSpace をしない
+	if bucket == "" {
 		return nil, fmt.Errorf("avatar icon bucket is empty")
 	}
 
@@ -114,7 +123,8 @@ func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 	}
 
 	// contentType is REQUIRED (prevents signed URL mismatch issues)
-	ct := strings.ToLower(strings.TrimSpace(contentType))
+	// ✅ TrimSpace をしない（ただし lower は維持）
+	ct := strings.ToLower(contentType)
 	if ct == "" {
 		return nil, fmt.Errorf("contentType is required (e.g. image/png)")
 	}
@@ -161,39 +171,20 @@ func (u *AvatarUsecase) IssueAvatarIconUploadURL(
 	publicURL := gcsObjectPublicURL(bucket, objectPath)
 
 	return &IconUploadURL{
-		UploadURL:  strings.TrimSpace(uploadURL),
-		PublicURL:  strings.TrimSpace(publicURL),
-		Bucket:     strings.TrimSpace(bucket),
-		ObjectPath: strings.TrimSpace(objectPath),
+		UploadURL:  uploadURL,  // ✅ TrimSpace をしない
+		PublicURL:  publicURL,  // ✅ TrimSpace をしない
+		Bucket:     bucket,     // ✅ TrimSpace をしない
+		ObjectPath: objectPath, // ✅ TrimSpace をしない
 		ExpiresAt:  ptr(expires),
 	}, nil
 }
 
 func isSupportedAvatarIconMIME(mime string) bool {
-	switch strings.ToLower(strings.TrimSpace(mime)) {
+	// ✅ TrimSpace を使わない（ただし lower は維持）
+	switch strings.ToLower(mime) {
 	case "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif":
 		return true
 	default:
 		return false
 	}
-}
-
-// sanitizePathSegment keeps a single path segment safe for GCS object paths.
-// - trims spaces
-// - removes leading/trailing slashes
-// - rejects segments containing "/" or ".."
-// - (optional) you can tighten to allow only [A-Za-z0-9_-] etc if desired
-func sanitizePathSegment(s string) string {
-	t := strings.TrimSpace(s)
-	t = strings.Trim(t, "/")
-	if t == "" {
-		return ""
-	}
-	if strings.Contains(t, "/") {
-		return ""
-	}
-	if strings.Contains(t, "..") {
-		return ""
-	}
-	return t
 }

@@ -66,12 +66,8 @@ func (uc *ListUsecase) SaveImageFromGCS(
 	if uc.listImageRecordRepo == nil {
 		return listimgdom.ListImage{}, usecase.ErrNotSupported("List.SaveImageFromGCS.RecordRepo")
 	}
-
-	// normalize inputs
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
-	bucket = strings.TrimSpace(bucket)
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	// objectPath だけは先頭 "/" を許容しない前提のため TrimLeft で除去のみ行う
+	objectPath = strings.TrimLeft(objectPath, "/")
 
 	// required fields
 	if listID == "" {
@@ -137,13 +133,13 @@ func (uc *ListUsecase) SaveImageFromGCS(
 
 	log.Printf(
 		"[list_usecase] listImage finalized saved=%t url=%q listID=%s imageID(in)=%s imageID(derived)=%s img.ID=%s img.ObjectPath=%s bucket=%s size=%d displayOrder=%d",
-		strings.TrimSpace(img.URL) != "",
-		strings.TrimSpace(img.URL),
+		img.URL != "",
+		img.URL,
 		listID,
 		imageID,
 		derivedImageID,
-		strings.TrimSpace(img.ID),
-		strings.TrimSpace(img.ObjectPath),
+		img.ID,
+		img.ObjectPath,
 		bucket,
 		img.Size,
 		img.DisplayOrder,
@@ -161,9 +157,6 @@ func (uc *ListUsecase) SaveImageFromGCS(
 //
 // - imageID は Firestore docID（"63b5..."）のみを受け付け、URL/objectPath は受け付けない。
 func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID string) error {
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
-
 	if listID == "" {
 		return listimgdom.ErrInvalidListID
 	}
@@ -207,7 +200,8 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 		if r, ok := any(uc.listReader).(listReaderForPrimary); ok && r != nil {
 			l, err := r.GetByID(ctx, listID)
 			if err == nil {
-				if strings.TrimSpace(l.ImageID) == imageID {
+				// ✅ TrimSpace をしない
+				if l.ImageID == imageID {
 					now := time.Now().UTC()
 					_ = uc.listPrimaryImageSetter.SetPrimaryImageID(ctx, listID, "", now)
 				}
@@ -225,7 +219,7 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 //
 //	lists/{listId}/images/{imageId}
 func extractImageIDFromCanonicalObjectPath(objectPath string, listID string) string {
-	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	p := strings.TrimLeft(objectPath, "/")
 	if p == "" {
 		return ""
 	}
@@ -235,14 +229,14 @@ func extractImageIDFromCanonicalObjectPath(objectPath string, listID string) str
 	if len(parts) != 4 {
 		return ""
 	}
-	if strings.TrimSpace(parts[0]) != "lists" {
+	if parts[0] != "lists" {
 		return ""
 	}
-	if strings.TrimSpace(parts[1]) != strings.TrimSpace(listID) {
+	if parts[1] != listID {
 		return ""
 	}
-	if strings.TrimSpace(parts[2]) != "images" {
+	if parts[2] != "images" {
 		return ""
 	}
-	return strings.TrimSpace(parts[3])
+	return parts[3]
 }

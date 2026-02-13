@@ -22,34 +22,22 @@ func (uc *ListUsecase) IssueImageSignedURL(ctx context.Context, in ListImageIssu
 		return ListImageIssueSignedURLOutput{}, usecase.ErrNotSupported("List.IssueImageSignedURL")
 	}
 
-	in.ListID = strings.TrimSpace(in.ListID)
-	in.FileName = strings.TrimSpace(in.FileName)
-	in.ContentType = strings.TrimSpace(in.ContentType)
+	// ✅ TrimSpace をしない（渡された値をそのまま使う）
+	// in.ListID / in.FileName / in.ContentType はそのまま issuer に渡す
 
 	out, err := uc.imageSignedURLIssuer.IssueSignedURL(ctx, in)
 	if err != nil {
 		return ListImageIssueSignedURLOutput{}, err
 	}
 
-	// ---- normalize (trim + defaults) ----
-	out.ID = strings.TrimSpace(out.ID) // ✅ expected: imageId
-	out.Bucket = strings.TrimSpace(out.Bucket)
-	out.ObjectPath = strings.TrimLeft(strings.TrimSpace(out.ObjectPath), "/")
-	out.UploadURL = strings.TrimSpace(out.UploadURL)
-	out.PublicURL = strings.TrimSpace(out.PublicURL)
-	out.FileName = strings.TrimSpace(out.FileName)
-	out.ContentType = strings.TrimSpace(out.ContentType)
-	out.ExpiresAt = strings.TrimSpace(out.ExpiresAt)
-
-	// ✅ bucket default is NOT allowed here.
-	// Bucket must be provided by issuer (env-fixed).
-	// If empty, we treat it as invalid response.
+	// ✅ TrimSpace をしない（issuer が返した値をそのまま扱う）
+	// ただし canonical 判定で先頭 "/" が付くケースだけは仕様上許容しないため、
+	// objectPath の先頭 "/" 除去のみは維持する（TrimSpace は使わない）。
+	out.ObjectPath = strings.TrimLeft(out.ObjectPath, "/")
 
 	// ✅ public url default（空なら生成）
 	// NOTE: PublicURL depends on bucket. If issuer forgets bucket, this must fail.
 	if out.PublicURL == "" && out.Bucket != "" && out.ObjectPath != "" {
-		// public URL convention is issuer-specific; if you always use storage.googleapis.com, keep this.
-		// Otherwise, issuer should return PublicURL explicitly.
 		out.PublicURL = "https://storage.googleapis.com/" + out.Bucket + "/" + out.ObjectPath
 	}
 
@@ -72,9 +60,6 @@ func (uc *ListUsecase) IssueImageSignedURL(ctx context.Context, in ListImageIssu
 			return ListImageIssueSignedURLOutput{}, errors.New("signed_url_object_path_not_canonical")
 		}
 		if !strings.HasSuffix(out.ObjectPath, "/"+out.ID) && out.ObjectPath != prefix+out.ID {
-			// Handles both:
-			// - "lists/{listId}/images/{imageId}"
-			// (Suffix check above is defensive; second condition is the exact match)
 			return ListImageIssueSignedURLOutput{}, errors.New("signed_url_object_path_id_mismatch")
 		}
 	}

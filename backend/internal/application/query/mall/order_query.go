@@ -6,27 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // OrderQuery resolves (mall buyer flow):
 // - uid -> avatarId (avatars where userId == uid)
-// - uid -> shippingAddress / billingAddress (best-effort; multiple shapes supported)
+// - userId -> shippingAddress / billingAddress (query style only; docID is NOT userId)
 // - avatarId -> cartItems (via SNSCartQuery; best-effort)
 // - userId -> fullName (via NameResolver.ResolveMemberName; best-effort)
 type OrderQuery struct {
 	FS *firestore.Client
 
 	// optional: cart read-model
-	// - if nil, ResolveByUID will create SNSCartQuery(fs) and fetch cart items best-effort
+	// - if nil, ResolveByUID will create CartQuery(fs) and fetch cart items best-effort
 	CartQ *CartQuery
 
 	// optional: name resolver (memberId -> "Last First")
@@ -44,9 +41,6 @@ type OrderQuery struct {
 	// field name used in address collections
 	AddressUserIDField string
 }
-
-// ✅ Backward-compat: keep old exported name used by handlers/DI.
-// NOTE: type alias so methods on OrderQuery are available.
 
 func NewOrderQuery(fs *firestore.Client) *OrderQuery {
 	return &OrderQuery{
@@ -71,7 +65,6 @@ func NewOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQu
 func NewMallOrderQuery(fs *firestore.Client) *OrderQuery {
 	return NewOrderQuery(fs)
 }
-
 func NewMallOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQuery {
 	return NewOrderQueryWithCartQuery(fs, cartQ)
 }
@@ -112,7 +105,6 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContext
 	if q == nil || q.FS == nil {
 		return OrderContextDTO{}, errors.New("mall order query: firestore client is nil")
 	}
-
 	if uid == "" {
 		return OrderContextDTO{}, errors.New("uid is required")
 	}
@@ -128,8 +120,11 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContext
 		userID = uid
 	}
 
-	ship := q.fetchAddressBestEffort(ctx, q.ShippingAddressCol, userID)
-	bill := q.fetchAddressBestEffort(ctx, q.BillingAddressCol, userID)
+	// ✅ Firestore 実データ前提:
+	// - shippingAddresses / billingAddresses の docID は userId ではない
+	// - userId フィールドで検索する (query style only)
+	ship := q.fetchAddressByUserID(ctx, q.ShippingAddressCol, userID)
+	bill := q.fetchAddressByUserID(ctx, q.BillingAddressCol, userID)
 
 	// cartItems（best-effort）
 	cartItems := q.fetchCartItemsBestEffort(ctx, avatarID)
@@ -137,8 +132,6 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContext
 	// fullName（best-effort）
 	fullName := ""
 	if q.NameResolver != nil {
-		// NameResolver は memberId を想定。userId と一致していればここで解決できる。
-		// 一致しない運用の場合は空のまま（決済フローを止めない）。
 		fullName = q.NameResolver.ResolveMemberName(ctx, userID)
 	}
 
@@ -213,13 +206,11 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 
 	cq := q.CartQ
 	if cq == nil {
-		// ListRepo / Resolver は nil のまま（必要なら DI 側で CartQ を注入）
 		cq = NewCartQuery(q.FS)
 	}
 
 	cartDTO, err := cq.GetByAvatarID(ctx, avatarID)
 	if err != nil {
-		// carts/{avatarId} が無いケースは “空” 扱い（決済フローを止めない）
 		if errors.Is(err, ErrNotFound) {
 			return map[string]dto.CartItemDTO{}
 		}
@@ -233,40 +224,19 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 }
 
 // ------------------------------------------------------------
-// uid(userId) -> address (best-effort)
+// userId -> address (query style only)
 // ------------------------------------------------------------
 
-// fetchAddressBestEffort tries common patterns:
-//
-// 1) GET document by ID = userId (collection/{userId})
-// 2) Query where userId == {userId} LIMIT 1
-//
-// If not found -> nil
-//
 // ✅ Patch: return Firestore docID as well (without changing existing schema):
 //   - Put doc ID into returned map as "id" and "addressId" if they don't already exist.
-//     This lets frontend pick billingAddressId/shippingAddressId deterministically.
-func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string, userID string) map[string]any {
-	if colName == "" {
+func (q *OrderQuery) fetchAddressByUserID(ctx context.Context, colName string, userID string) map[string]any {
+	if q == nil || q.FS == nil {
 		return nil
 	}
-	if userID == "" {
+	if colName == "" || userID == "" {
 		return nil
 	}
 
-	// (1) doc style: collection/{userId}
-	docRef := q.FS.Collection(colName).Doc(userID)
-	snap, err := docRef.Get(ctx)
-	if err == nil && snap != nil && snap.Exists() {
-		out := normalizeMapAny(snap.Data())
-		// doc style: docId == userId
-		return attachDocID(out, userID)
-	}
-	if err != nil && !isFirestoreNotFound(err) {
-		log.Printf("[mall_order_query] address doc get error col=%q userId=%q err=%v", colName, maskUID(userID), err)
-	}
-
-	// (2) query style: where userId == ...
 	field := q.AddressUserIDField
 	if field == "" {
 		field = "userId"
@@ -278,12 +248,12 @@ func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string,
 		Documents(ctx)
 	defer iter.Stop()
 
-	doc, qerr := iter.Next()
-	if qerr != nil {
-		if qerr == iterator.Done {
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
 			return nil
 		}
-		log.Printf("[mall_order_query] address query error col=%q userId=%q err=%v", colName, maskUID(userID), qerr)
+		log.Printf("[mall_order_query] address query error col=%q userId=%q err=%v", colName, maskUID(userID), err)
 		return nil
 	}
 	if doc == nil {
@@ -298,20 +268,8 @@ func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string,
 }
 
 // ------------------------------------------------------------
-// Firestore helpers
+// helpers
 // ------------------------------------------------------------
-
-// isFirestoreNotFound checks Firestore NotFound safely.
-func isFirestoreNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	if status.Code(err) == codes.NotFound {
-		return true
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not found") || strings.Contains(msg, "not_found")
-}
 
 func normalizeMapAny(m map[string]any) map[string]any {
 	if m == nil {
@@ -334,7 +292,6 @@ func attachDocID(m map[string]any, docID string) map[string]any {
 	if docID == "" {
 		return m
 	}
-
 	if _, ok := m["id"]; !ok {
 		m["id"] = docID
 	}

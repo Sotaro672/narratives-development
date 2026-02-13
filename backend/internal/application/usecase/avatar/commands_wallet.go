@@ -1,10 +1,9 @@
-// backend\internal\application\usecase\avatar\commands_wallet.go
+// backend/internal/application/usecase/avatar/commands_wallet.go
 package avatar
 
 import (
 	"context"
 	"errors"
-	"strings"
 
 	avatardom "narratives/internal/domain/avatar"
 	walletdom "narratives/internal/domain/wallet"
@@ -12,7 +11,6 @@ import (
 
 // ✅ OpenWallet は既存 Avatar に対して Solana wallet を開設し、walletAddress を反映します。
 func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatardom.Avatar, error) {
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
 	}
@@ -28,7 +26,7 @@ func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatar
 		return avatardom.Avatar{}, err
 	}
 
-	if a.WalletAddress != nil && strings.TrimSpace(*a.WalletAddress) != "" {
+	if a.WalletAddress != nil && *a.WalletAddress != "" {
 		return avatardom.Avatar{}, ErrAvatarWalletAlreadyOpened
 	}
 
@@ -36,7 +34,8 @@ func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatar
 	if err != nil {
 		return avatardom.Avatar{}, err
 	}
-	addr := strings.TrimSpace(w.Address)
+
+	addr := w.Address
 	if addr == "" {
 		return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
 	}

@@ -186,10 +186,6 @@ func (u *MemberUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, id)
 }
 
-func (u *MemberUsecase) Reset(ctx context.Context) error {
-	return u.repo.Reset(ctx)
-}
-
 // -----------------------------------------------------------------------------
 // Invitation (招待メール送信)
 // -----------------------------------------------------------------------------

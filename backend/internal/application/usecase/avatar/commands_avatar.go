@@ -1,11 +1,10 @@
-// backend\internal\application\usecase\avatar\commands_avatar.go
+// backend/internal/application/usecase/avatar/commands_avatar.go
 package avatar
 
 import (
 	"context"
 	"errors"
 	"log"
-	"strings"
 
 	avatardom "narratives/internal/domain/avatar"
 	avatarstate "narratives/internal/domain/avatarState"
@@ -54,15 +53,17 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	}
 
 	// ✅ 保存する userId は userUid（期待値: userId=userUid）
-	userUID := strings.TrimSpace(in.UserUID)
+	// ※ trim/normalize はしない（渡された値をそのまま扱う）。ただし必須チェックのため空文字は弾く。
+	userUID := in.UserUID
 	if userUID == "" {
-		userUID = strings.TrimSpace(in.UserID)
+		userUID = in.UserID
 	}
 	if userUID == "" {
 		return avatardom.Avatar{}, ErrInvalidUserUID
 	}
 
-	name := strings.TrimSpace(in.AvatarName)
+	// ※ trim しない。空文字のみ弾く。
+	name := in.AvatarName
 	if name == "" {
 		return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
 	}
@@ -75,9 +76,9 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	a := avatardom.Avatar{
 		UserID:       userUID,
 		AvatarName:   name,
-		AvatarIcon:   nil, // ✅ server-truth で後で入れる
-		Profile:      trimPtr(in.Profile),
-		ExternalLink: trimPtr(in.ExternalLink),
+		AvatarIcon:   nil,             // ✅ server-truth で後で入れる
+		Profile:      in.Profile,      // ✅ そのまま
+		ExternalLink: in.ExternalLink, // ✅ そのまま
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -87,7 +88,8 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, err
 	}
 
-	avatarID := strings.TrimSpace(created.ID)
+	// ※ trim しない。空文字のみ弾く。
+	avatarID := created.ID
 	if avatarID == "" {
 		_ = u.avRepo.Delete(ctx, created.ID)
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
@@ -139,7 +141,8 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, werr
 	}
 
-	addr := strings.TrimSpace(w.Address)
+	// ※ trim しない。空文字のみ弾く。
+	addr := w.Address
 	if addr == "" {
 		rollback()
 		return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
@@ -190,32 +193,11 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 		return avatardom.Avatar{}, errors.New("avatar repo not configured")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
 	}
 
-	// 正規化（nil は「更新しない」契約）
-	if patch.AvatarName != nil {
-		v := strings.TrimSpace(*patch.AvatarName)
-		patch.AvatarName = &v
-	}
-	if patch.AvatarIcon != nil {
-		patch.AvatarIcon = trimPtr(patch.AvatarIcon)
-	}
-	if patch.Profile != nil {
-		patch.Profile = trimPtr(patch.Profile)
-	}
-	if patch.ExternalLink != nil {
-		patch.ExternalLink = trimPtr(patch.ExternalLink)
-	}
-	if patch.WalletAddress != nil {
-		v := strings.TrimSpace(*patch.WalletAddress)
-		if v == "" {
-			patch.WalletAddress = nil
-		} else {
-			patch.WalletAddress = &v
-		}
+	if patch.WalletAddress != nil && *patch.WalletAddress == "" {
 	}
 
 	return u.avRepo.Update(ctx, id, patch)

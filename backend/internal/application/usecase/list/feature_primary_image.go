@@ -13,7 +13,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"strings"
 	"time"
 
 	usecase "narratives/internal/application/usecase"
@@ -40,8 +39,10 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, usecase.ErrNotSupported("List.SetPrimaryImage")
 	}
 
-	lid := strings.TrimSpace(listID)
-	iid := strings.TrimSpace(imageID)
+	// ✅ Trim/normalize をしない（渡された値をそのまま扱う）
+	lid := listID
+	iid := imageID
+
 	if lid == "" {
 		return listdom.List{}, listdom.ErrInvalidID
 	}
@@ -58,7 +59,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 			lid,
 			iid, // URL
 			now.UTC(),
-			normalizeStrPtr(updatedBy),
+			updatedBy, // ✅ normalizeStrPtr を使わない
 		)
 	}
 
@@ -70,11 +71,12 @@ func (uc *ListUsecase) SetPrimaryImage(
 			img, err := r.GetByID(ctx, iid) // ✅ imageId (docID)
 			if err == nil {
 				// Safety: image must belong to the same list
-				if strings.TrimSpace(img.ListID) != "" && strings.TrimSpace(img.ListID) != lid {
+				// ✅ TrimSpace をしない（値をそのまま比較）
+				if img.ListID != "" && img.ListID != lid {
 					return listdom.List{}, errors.New("list: image belongs to other list")
 				}
 
-				imageURL = strings.TrimSpace(img.URL)
+				imageURL = img.URL
 				if imageURL == "" {
 					// Firestore record should carry URL; if empty, treat as invalid
 					return listdom.List{}, listdom.ErrInvalidImageID
@@ -97,11 +99,12 @@ func (uc *ListUsecase) SetPrimaryImage(
 			return listdom.List{}, err
 		}
 
-		if strings.TrimSpace(img.ListID) != "" && strings.TrimSpace(img.ListID) != lid {
+		// ✅ TrimSpace をしない（値をそのまま比較）
+		if img.ListID != "" && img.ListID != lid {
 			return listdom.List{}, errors.New("list: image belongs to other list")
 		}
 
-		imageURL = strings.TrimSpace(img.URL)
+		imageURL = img.URL
 		if imageURL == "" {
 			// ✅ strict: if adapter didn't resolve URL, treat as invalid.
 			// (Do not fabricate URL with DefaultBucket.)
@@ -109,7 +112,8 @@ func (uc *ListUsecase) SetPrimaryImage(
 		}
 	}
 
-	if strings.TrimSpace(imageURL) == "" {
+	// ✅ TrimSpace をしない
+	if imageURL == "" {
 		log.Printf("[list_usecase] primaryImage resolved=%t url=%q listID=%s input=%s", false, "", lid, iid)
 		return listdom.List{}, listdom.ErrInvalidImageID
 	}
@@ -121,6 +125,6 @@ func (uc *ListUsecase) SetPrimaryImage(
 		lid,
 		imageURL,
 		now.UTC(),
-		normalizeStrPtr(updatedBy),
+		updatedBy, // ✅ normalizeStrPtr を使わない
 	)
 }

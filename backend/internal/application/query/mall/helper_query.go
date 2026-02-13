@@ -4,6 +4,9 @@ package mall
 import (
 	"fmt"
 	"strings"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ============================================================
@@ -102,4 +105,14 @@ func asIntAny(v any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+func isFirestoreNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	if status.Code(err) == codes.NotFound {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "not_found")
 }
