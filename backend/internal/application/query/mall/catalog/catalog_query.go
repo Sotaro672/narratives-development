@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 
@@ -19,7 +18,6 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		return dto.CatalogDTO{}, errors.New("catalog query: list repo is nil")
 	}
 
-	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return dto.CatalogDTO{}, ldom.ErrNotFound
 	}
@@ -46,7 +44,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 	// NOTE: catalog_query_list_images.go の loadListImages をここで必ず呼ぶ
 	//       q.ListImagesError は best-effort で埋める（hard fail しない）
 	{
-		imgs, imgErr := q.loadListImages(ctx, strings.TrimSpace(out.List.ID))
+		imgs, imgErr := q.loadListImages(ctx, out.List.ID)
 		if imgErr != "" {
 			out.ListImagesError = imgErr
 			log.Printf("[catalog] listImages error listId=%q err=%q", listID, imgErr)
@@ -67,7 +65,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		out.InventoryError = "inventory repo is nil"
 		log.Printf("[catalog] inventory repo is nil listId=%q", listID)
 	} else {
-		invID := strings.TrimSpace(out.List.InventoryID)
+		invID := out.List.InventoryID
 
 		log.Printf(
 			"[catalog] inventory linkage listId=%q inventoryId=%q",
@@ -85,7 +83,6 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 				log.Printf("[catalog] inventory getById error listId=%q invId=%q err=%q", listID, invID, e.Error())
 			} else {
 				v := toCatalogInventoryDTOFromMint(m)
-				normalizeInventoryStock(v)
 				invDTO = v
 				out.Inventory = v
 				log.Printf("[catalog] inventory getById ok listId=%q invId=%q stockKeys=%d", listID, invID, stockKeyCount(v.Stock))
@@ -96,9 +93,9 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 	// ------------------------------------------------------------
 	// ProductBlueprint (inventory side wins)
 	// ------------------------------------------------------------
-	resolvedPBID := strings.TrimSpace(out.List.ProductBlueprintID)
+	resolvedPBID := out.List.ProductBlueprintID
 	if invDTO != nil {
-		if s := strings.TrimSpace(invDTO.ProductBlueprintID); s != "" {
+		if s := invDTO.ProductBlueprintID; s != "" {
 			resolvedPBID = s
 		}
 	}
@@ -126,8 +123,8 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 				"[catalog] product getById ok listId=%q pbId=%q brandId=%q companyId=%q brandName=%q companyName=%q",
 				listID,
 				resolvedPBID,
-				strings.TrimSpace(pbDTO.BrandID),
-				strings.TrimSpace(pbDTO.CompanyID),
+				pbDTO.BrandID,
+				pbDTO.CompanyID,
 				getStringFieldBestEffort(pbDTO, "BrandName"),
 				getStringFieldBestEffort(pbDTO, "CompanyName"),
 			)
@@ -137,9 +134,9 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 	// ------------------------------------------------------------
 	// TokenBlueprint patch (inventory side wins)
 	// ------------------------------------------------------------
-	resolvedTBID := strings.TrimSpace(out.List.TokenBlueprintID)
+	resolvedTBID := out.List.TokenBlueprintID
 	if invDTO != nil {
-		if s := strings.TrimSpace(invDTO.TokenBlueprintID); s != "" {
+		if s := invDTO.TokenBlueprintID; s != "" {
 			resolvedTBID = s
 		}
 	}
@@ -147,12 +144,12 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 	log.Printf("[catalog] tokenBlueprint resolve listId=%q resolvedTbId=%q (list.tbId=%q inv.tbId=%q)",
 		listID,
 		resolvedTBID,
-		strings.TrimSpace(out.List.TokenBlueprintID),
+		out.List.TokenBlueprintID,
 		func() string {
 			if invDTO == nil {
 				return ""
 			}
-			return strings.TrimSpace(invDTO.TokenBlueprintID)
+			return invDTO.TokenBlueprintID
 		}(),
 	)
 
@@ -185,13 +182,13 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 				"[catalog] tokenBlueprint getPatchById ok listId=%q tbId=%q name=%q symbol=%q brandId=%q brandName=%q companyId=%q minted=%s hasIconUrl=%t",
 				listID,
 				resolvedTBID,
-				strings.TrimSpace(p.TokenName),
-				strings.TrimSpace(p.Symbol),
-				strings.TrimSpace(p.BrandID),
-				strings.TrimSpace(p.BrandName),
-				strings.TrimSpace(p.CompanyID),
+				p.TokenName,
+				p.Symbol,
+				p.BrandID,
+				p.BrandName,
+				p.CompanyID,
 				boolStr(p.Minted),
-				strings.TrimSpace(p.IconURL) != "",
+				p.IconURL != "",
 			)
 		}
 	}
@@ -233,7 +230,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 
 				mv, ge := q.ModelRepo.GetModelVariationByID(ctx, modelID)
 				if ge != nil {
-					if strings.TrimSpace(out.ModelVariationsError) == "" {
+					if out.ModelVariationsError == "" {
 						out.ModelVariationsError = ge.Error()
 					}
 					continue
@@ -242,7 +239,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 				mvDTO, ok := toCatalogModelVariationDTOAny(mv)
 				if !ok {
 					mvDTO = dto.CatalogModelVariationDTO{
-						ID:           strings.TrimSpace(modelID),
+						ID:           modelID,
 						Measurements: map[string]int{},
 					}
 				}
@@ -273,11 +270,11 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 
 	log.Printf("[catalog] GetByListID done listId=%q listImgErr=%q invErr=%q pbErr=%q tbErr=%q modelErr=%q",
 		listID,
-		strings.TrimSpace(out.ListImagesError),
-		strings.TrimSpace(out.InventoryError),
-		strings.TrimSpace(out.ProductBlueprintError),
-		strings.TrimSpace(out.TokenBlueprintError),
-		strings.TrimSpace(out.ModelVariationsError),
+		out.ListImagesError,
+		out.InventoryError,
+		out.ProductBlueprintError,
+		out.TokenBlueprintError,
+		out.ModelVariationsError,
 	)
 
 	return out, nil

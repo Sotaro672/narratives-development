@@ -3,7 +3,6 @@ package catalogQuery
 
 import (
 	"reflect"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 )
@@ -17,6 +16,8 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 	if !rv.IsValid() {
 		return dto.CatalogModelVariationDTO{}, false
 	}
+
+	// pointer unwrap
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return dto.CatalogModelVariationDTO{}, false
@@ -27,20 +28,33 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 		return dto.CatalogModelVariationDTO{}, false
 	}
 
-	id := pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
-	if strings.TrimSpace(id) == "" {
+	// domain (model.ModelVariation) を正とする:
+	// ID, ProductBlueprintID, ModelNumber, Size, Color(Name, RGB), Measurements
+	idf := rv.FieldByName("ID")
+	if !idf.IsValid() || idf.Kind() != reflect.String || idf.String() == "" {
 		return dto.CatalogModelVariationDTO{}, false
 	}
 
-	pbID := pickStringField(rv.Interface(), "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
-	modelNumber := pickStringField(rv.Interface(), "ModelNumber", "modelNumber")
-	size := pickStringField(rv.Interface(), "Size", "size")
+	pbf := rv.FieldByName("ProductBlueprintID")
+	if !pbf.IsValid() || pbf.Kind() != reflect.String {
+		return dto.CatalogModelVariationDTO{}, false
+	}
+
+	mnf := rv.FieldByName("ModelNumber")
+	if !mnf.IsValid() || mnf.Kind() != reflect.String {
+		return dto.CatalogModelVariationDTO{}, false
+	}
+
+	szf := rv.FieldByName("Size")
+	if !szf.IsValid() || szf.Kind() != reflect.String {
+		return dto.CatalogModelVariationDTO{}, false
+	}
 
 	out := dto.CatalogModelVariationDTO{
-		ID:                 strings.TrimSpace(id),
-		ProductBlueprintID: strings.TrimSpace(pbID),
-		ModelNumber:        strings.TrimSpace(modelNumber),
-		Size:               strings.TrimSpace(size),
+		ID:                 idf.String(),
+		ProductBlueprintID: pbf.String(),
+		ModelNumber:        mnf.String(),
+		Size:               szf.String(),
 
 		ColorName: "",
 		ColorRGB:  0,
@@ -50,49 +64,39 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 		StockKeys: 0,
 	}
 
-	if s := pickStringField(rv.Interface(), "ColorName", "colorName"); s != "" {
-		out.ColorName = strings.TrimSpace(s)
-	}
-
-	if f := rv.FieldByName("ColorRGB"); f.IsValid() {
-		out.ColorRGB = toInt(f)
-	} else if f := rv.FieldByName("ColorRgb"); f.IsValid() {
-		out.ColorRGB = toInt(f)
-	} else if f := rv.FieldByName("RGB"); f.IsValid() {
-		out.ColorRGB = toInt(f)
-	} else if f := rv.FieldByName("Rgb"); f.IsValid() {
-		out.ColorRGB = toInt(f)
-	} else {
-		if c := rv.FieldByName("Color"); c.IsValid() {
-			if c.Kind() == reflect.Pointer {
-				if !c.IsNil() {
-					c = c.Elem()
-				}
+	// Color (domain: Color{Name string, RGB int})
+	cf := rv.FieldByName("Color")
+	if cf.IsValid() {
+		if cf.Kind() == reflect.Pointer {
+			if !cf.IsNil() {
+				cf = cf.Elem()
 			}
-			if c.IsValid() && c.Kind() == reflect.Struct {
-				nf := c.FieldByName("Name")
-				if nf.IsValid() && nf.Kind() == reflect.String {
-					out.ColorName = strings.TrimSpace(nf.String())
-				}
-				rf := c.FieldByName("RGB")
-				if rf.IsValid() {
-					out.ColorRGB = toInt(rf)
-				}
+		}
+		if cf.IsValid() && cf.Kind() == reflect.Struct {
+			nf := cf.FieldByName("Name")
+			if nf.IsValid() && nf.Kind() == reflect.String {
+				out.ColorName = nf.String()
+			}
+			rf := cf.FieldByName("RGB")
+			if rf.IsValid() {
+				out.ColorRGB = toInt(rf)
 			}
 		}
 	}
 
-	if m := rv.FieldByName("Measurements"); m.IsValid() {
-		if m.Kind() == reflect.Pointer {
-			if !m.IsNil() {
-				m = m.Elem()
+	// Measurements (domain: map[string]int)
+	mf := rv.FieldByName("Measurements")
+	if mf.IsValid() {
+		if mf.Kind() == reflect.Pointer {
+			if !mf.IsNil() {
+				mf = mf.Elem()
 			}
 		}
-		if m.IsValid() && m.Kind() == reflect.Map && m.Type().Key().Kind() == reflect.String {
-			mp := make(map[string]int)
-			iter := m.MapRange()
+		if mf.IsValid() && mf.Kind() == reflect.Map && mf.Type().Key().Kind() == reflect.String {
+			mp := make(map[string]int, mf.Len())
+			iter := mf.MapRange()
 			for iter.Next() {
-				k := strings.TrimSpace(iter.Key().String())
+				k := iter.Key().String()
 				if k == "" {
 					continue
 				}

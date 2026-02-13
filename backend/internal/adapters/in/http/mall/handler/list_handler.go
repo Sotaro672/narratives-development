@@ -2,8 +2,8 @@
 package mallHandler
 
 import (
-	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -56,7 +56,8 @@ type MallListIndexResponse struct {
 func (h *MallListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	path := strings.TrimSuffix(strings.TrimSpace(r.URL.Path), "/")
+	// TrimSpace を使わない（そのまま扱う）
+	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	// GET /mall/lists
 	if path == "/mall/lists" {
@@ -72,7 +73,7 @@ func (h *MallListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(path, "/mall/lists/") {
 		rest := strings.TrimPrefix(path, "/mall/lists/")
 		parts := strings.Split(rest, "/")
-		id := strings.TrimSpace(parts[0])
+		id := parts[0]
 		if id == "" {
 			badRequest(w, "invalid id")
 			return
@@ -127,16 +128,30 @@ func (h *MallListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
+		log.Printf("[mall][lists] uc.List error page=%d perPage=%d err=%T %v", pageNum, perPage, err, err)
 		writeListErr(w, err)
 		return
 	}
 
 	items := make([]MallListItem, 0, len(result.Items))
-	for _, l := range result.Items {
+	for i, l := range result.Items {
 		if !isPublicListing(l.Status) {
+			// 500 原因切り分け用：filter漏れや status 不整合の検知
+			log.Printf("[mall][lists] skip non-public item index=%d id=%q status=%q", i, l.ID, string(l.Status))
 			continue
 		}
-		items = append(items, toMallListItem(l))
+
+		it := toMallListItem(l)
+
+		// 500 原因切り分け用：inventoryId / 分解結果が空のケースを検知
+		if it.InventoryID == "" {
+			log.Printf("[mall][lists] WARN inventoryId empty listId=%q", it.ID)
+		} else if (it.ProductBlueprintID == "" || it.TokenBlueprintID == "") && strings.Contains(it.InventoryID, "__") {
+			log.Printf("[mall][lists] WARN inventoryId parse incomplete listId=%q inventoryId=%q pbId=%q tbId=%q",
+				it.ID, it.InventoryID, it.ProductBlueprintID, it.TokenBlueprintID)
+		}
+
+		items = append(items, it)
 	}
 
 	resp := MallListIndexResponse{
@@ -164,6 +179,7 @@ func (h *MallListHandler) get(w http.ResponseWriter, r *http.Request, id string)
 
 	l, err := h.uc.GetByID(ctx, id)
 	if err != nil {
+		log.Printf("[mall][lists] uc.GetByID error id=%q err=%T %v", id, err, err)
 		if errors.Is(err, ldom.ErrNotFound) {
 			notFound(w)
 			return
@@ -174,11 +190,21 @@ func (h *MallListHandler) get(w http.ResponseWriter, r *http.Request, id string)
 
 	// buyer-facing safety
 	if !isPublicListing(l.Status) {
+		log.Printf("[mall][lists] not public id=%q status=%q", l.ID, string(l.Status))
 		notFound(w)
 		return
 	}
 
 	dto := toMallListItem(l)
+
+	// 500 原因切り分け用：ID解決結果を出す
+	if dto.InventoryID == "" {
+		log.Printf("[mall][lists] WARN inventoryId empty listId=%q", dto.ID)
+	} else if (dto.ProductBlueprintID == "" || dto.TokenBlueprintID == "") && strings.Contains(dto.InventoryID, "__") {
+		log.Printf("[mall][lists] WARN inventoryId parse incomplete listId=%q inventoryId=%q pbId=%q tbId=%q",
+			dto.ID, dto.InventoryID, dto.ProductBlueprintID, dto.TokenBlueprintID)
+	}
+
 	writeJSON(w, http.StatusOK, dto)
 }
 
@@ -190,10 +216,10 @@ func toMallListItem(l ldom.List) MallListItem {
 	invID, pbID, tbID := extractInventoryAndBlueprintIDs(l)
 
 	return MallListItem{
-		ID:          strings.TrimSpace(l.ID),
-		Title:       strings.TrimSpace(l.Title),
-		Description: strings.TrimSpace(l.Description),
-		Image:       strings.TrimSpace(l.ImageID),
+		ID:          l.ID,
+		Title:       l.Title,
+		Description: l.Description,
+		Image:       l.ImageID,
 		Prices:      l.Prices,
 
 		InventoryID:        invID,
@@ -203,33 +229,18 @@ func toMallListItem(l ldom.List) MallListItem {
 }
 
 func extractInventoryAndBlueprintIDs(l ldom.List) (inventoryID, productBlueprintID, tokenBlueprintID string) {
-	var m map[string]any
-	{
-		b, err := json.Marshal(l)
-		if err == nil {
-			_ = json.Unmarshal(b, &m)
-		}
-	}
+	// domain/list/entity.go を正とする：InventoryID はフィールドで持っている
+	inventoryID = l.InventoryID
 
-	if m != nil {
-		if s, ok := getString(m, "inventoryId", "inventoryID", "inventory_id"); ok {
-			inventoryID = strings.TrimSpace(s)
-		}
-		if s, ok := getString(m, "productBlueprintId", "productBlueprintID", "product_blueprint_id"); ok {
-			productBlueprintID = strings.TrimSpace(s)
-		}
-		if s, ok := getString(m, "tokenBlueprintId", "tokenBlueprintID", "token_blueprint_id"); ok {
-			tokenBlueprintID = strings.TrimSpace(s)
-		}
-	}
-
-	if (productBlueprintID == "" || tokenBlueprintID == "") && inventoryID != "" && strings.Contains(inventoryID, "__") {
+	// productBlueprintId / tokenBlueprintId は list ドメインには無い前提なので、
+	// inventoryId が "pb__tb" 形式ならそこから解決する（名揺れ吸収はしない）
+	if inventoryID != "" && strings.Contains(inventoryID, "__") {
 		parts := strings.SplitN(inventoryID, "__", 2)
-		if productBlueprintID == "" {
-			productBlueprintID = strings.TrimSpace(parts[0])
+		if len(parts) >= 1 {
+			productBlueprintID = parts[0]
 		}
-		if len(parts) == 2 && tokenBlueprintID == "" {
-			tokenBlueprintID = strings.TrimSpace(parts[1])
+		if len(parts) == 2 {
+			tokenBlueprintID = parts[1]
 		}
 	}
 
@@ -237,7 +248,7 @@ func extractInventoryAndBlueprintIDs(l ldom.List) (inventoryID, productBlueprint
 }
 
 func isPublicListing(st ldom.ListStatus) bool {
-	return strings.EqualFold(strings.TrimSpace(string(st)), string(ldom.StatusListing))
+	return strings.EqualFold(string(st), string(ldom.StatusListing))
 }
 
 func writeListErr(w http.ResponseWriter, err error) {
@@ -249,13 +260,16 @@ func writeListErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, ldom.ErrConflict):
 		code = http.StatusConflict
 	default:
-		msg := strings.ToLower(strings.TrimSpace(err.Error()))
+		msg := strings.ToLower(err.Error())
 		if strings.Contains(msg, "invalid") ||
 			strings.Contains(msg, "required") ||
 			strings.Contains(msg, "must") {
 			code = http.StatusBadRequest
 		}
 	}
+
+	// 500 原因切り分け用：エラー型とメッセージを必ず出す
+	log.Printf("[mall][lists] ERROR status=%d err=%T %v", code, err, err)
 
 	writeJSON(w, code, map[string]string{"error": err.Error()})
 }

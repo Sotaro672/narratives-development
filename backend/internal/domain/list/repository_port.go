@@ -90,6 +90,11 @@ type Repository interface {
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[List], error)
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[List], error)
 
+	// ✅ NEW: 件数取得（ページング用）
+	// - filter は List と同じ解釈
+	// - sort/page は不要（Count は全件数）
+	Count(ctx context.Context, filter Filter) (int, error)
+
 	// 取得
 	GetByID(ctx context.Context, id string) (List, error)
 	Exists(ctx context.Context, id string) (bool, error)

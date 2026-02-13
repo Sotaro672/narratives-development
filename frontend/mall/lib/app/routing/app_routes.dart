@@ -173,11 +173,26 @@ List<RouteBase> buildAppRoutes({required bool firebaseReady}) {
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: HomePage()),
         ),
+
+        // ✅ NEW: /catalog で来た場合は「goNamed前提の安全な形」に寄せるため redirect
+        // - 既定listIdはあなたの実データに合わせて変更してください
         GoRoute(
-          path: AppRoutePath.catalog,
+          path: '/catalog',
+          name: 'catalogIndex',
+          redirect: (context, state) {
+            const defaultListId = 'default';
+            return context.namedLocation(
+              AppRouteName.catalog,
+              pathParameters: {'listId': defaultListId},
+            );
+          },
+        ),
+
+        GoRoute(
+          path: AppRoutePath.catalog, // /catalog/:listId
           name: AppRouteName.catalog,
           builder: (context, state) {
-            final listId = state.pathParameters['listId'] ?? '';
+            final listId = (state.pathParameters['listId'] ?? '').trim();
             final extra = state.extra;
             final initialItem = extra is MallListItem ? extra : null;
             return CatalogPage(listId: listId, initialItem: initialItem);

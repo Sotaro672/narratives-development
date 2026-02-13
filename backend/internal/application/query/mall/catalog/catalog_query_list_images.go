@@ -5,7 +5,6 @@ import (
 	"context"
 	"log"
 	"sort"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 	listimgdom "narratives/internal/domain/listImage"
@@ -19,7 +18,6 @@ import (
 
 // loadListImages returns DTO-ready list images + error string (empty means OK).
 func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto.CatalogListImageDTO, string) {
-	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return nil, "listId is empty"
 	}
@@ -41,7 +39,7 @@ func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto
 	seen := map[string]struct{}{}
 
 	for _, it := range imgs {
-		id := strings.TrimSpace(it.ID)
+		id := it.ID
 		if id == "" {
 			continue
 		}
@@ -71,7 +69,7 @@ func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto
 			return ao < bo
 		}
 		// fallback: id asc
-		return strings.TrimSpace(a.ID) < strings.TrimSpace(b.ID)
+		return a.ID < b.ID
 	})
 
 	log.Printf("[catalog] listImages ok listId=%q count=%d", listID, len(out))
@@ -85,11 +83,11 @@ func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto
 // NOTE: dto 側に CatalogListImageDTO を追加している前提（絶対正スキーマのみ）
 func toCatalogListImageDTO(img listimgdom.ListImage) dto.CatalogListImageDTO {
 	return dto.CatalogListImageDTO{
-		ID:         strings.TrimSpace(img.ID),
-		ListID:     strings.TrimSpace(img.ListID),
-		URL:        strings.TrimSpace(img.URL),
-		ObjectPath: strings.TrimSpace(img.ObjectPath),
-		FileName:   strings.TrimSpace(img.FileName),
+		ID:         img.ID,
+		ListID:     img.ListID,
+		URL:        img.URL,
+		ObjectPath: img.ObjectPath,
+		FileName:   img.FileName,
 		Size:       img.Size,
 		DisplayOrder: func() int {
 			if img.DisplayOrder <= 0 {

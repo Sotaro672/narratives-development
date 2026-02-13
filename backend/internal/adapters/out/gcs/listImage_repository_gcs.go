@@ -41,7 +41,7 @@ type ListImageRepositoryGCS struct {
 func NewListImageRepositoryGCS(client *storage.Client, bucket string) *ListImageRepositoryGCS {
 	return &ListImageRepositoryGCS{
 		Client: client,
-		Bucket: strings.TrimSpace(bucket),
+		Bucket: bucket,
 	}
 }
 
@@ -53,11 +53,11 @@ func NewListImageRepositoryGCS(client *storage.Client, bucket string) *ListImage
 // - bucket is required (env-fixed). No fallback.
 func (r *ListImageRepositoryGCS) ResolveBucket() (string, error) {
 	if r != nil {
-		if b := strings.TrimSpace(r.Bucket); b != "" {
+		if b := r.Bucket; b != "" {
 			return b, nil
 		}
 	}
-	if b := strings.TrimSpace(os.Getenv(EnvListImageBucket)); b != "" {
+	if b := os.Getenv(EnvListImageBucket); b != "" {
 		return b, nil
 	}
 	return "", fmt.Errorf("ListImageRepositoryGCS.ResolveBucket: %s is required", EnvListImageBucket)
@@ -75,7 +75,6 @@ func (r *ListImageRepositoryGCS) EnsureListBucket(ctx context.Context, listID st
 		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: storage client is nil")
 	}
 
-	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: listID is empty")
 	}
@@ -120,9 +119,6 @@ func (r *ListImageRepositoryGCS) Delete(ctx context.Context, listID string, imag
 	if r == nil || r.Client == nil {
 		return fmt.Errorf("ListImageRepositoryGCS.Delete: storage client is nil")
 	}
-
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
 
 	if listID == "" {
 		return listimagedom.ErrInvalidListID
@@ -186,12 +182,12 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: storage client is nil")
 	}
 
-	listID := strings.TrimSpace(in.ListID)
+	listID := in.ListID
 	if listID == "" {
 		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: listID is empty")
 	}
 
-	ct := strings.ToLower(strings.TrimSpace(in.ContentType))
+	ct := strings.ToLower(in.ContentType)
 	if ct == "" {
 		return listuc.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: contentType is empty")
 	}
@@ -209,7 +205,7 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 	}
 
 	// Normalize fileName (not used for object path; for record/metadata)
-	normName := strings.TrimSpace(in.FileName)
+	normName := in.FileName
 	if normName == "" {
 		normName = "image"
 	}
@@ -268,12 +264,12 @@ func (r *ListImageRepositoryGCS) IssueSignedURL(
 }
 
 func isSupportedListImageMIME(mime string) bool {
-	mime = strings.ToLower(strings.TrimSpace(mime))
+	mime = strings.ToLower(mime)
 	if mime == "" {
 		return false
 	}
 	for k := range listimagedom.SupportedImageMIMEs {
-		if strings.ToLower(strings.TrimSpace(k)) == mime {
+		if strings.ToLower(k) == mime {
 			return true
 		}
 	}
@@ -294,7 +290,6 @@ func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string
 		return nil, fmt.Errorf("ListImageRepositoryGCS.ListByListID: storage client is nil")
 	}
 
-	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return []listimagedom.ListImage{}, nil
 	}
@@ -336,7 +331,7 @@ func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string
 		}
 
 		// listID で絞り込み（メタ不正/パス不正の保険）
-		if strings.TrimSpace(li.ListID) != listID {
+		if li.ListID != listID {
 			continue
 		}
 
@@ -357,7 +352,7 @@ func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, id string) (listim
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.GetByID: storage client is nil")
 	}
 
-	bucket, objectPath, err := resolveBucketObjectForListImage(strings.TrimSpace(id), "")
+	bucket, objectPath, err := resolveBucketObjectForListImage(id, "")
 	if err != nil {
 		return listimagedom.ListImage{}, err
 	}
@@ -407,17 +402,16 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: storage client is nil")
 	}
 
-	imageID := strings.TrimSpace(id)
+	imageID := id
 	if imageID == "" {
 		return listimagedom.ListImage{}, listimagedom.ErrInvalidID
 	}
 
-	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return listimagedom.ListImage{}, listimagedom.ErrInvalidListID
 	}
 
-	b := strings.TrimSpace(bucket)
+	b := bucket
 	if b == "" {
 		bk, err := r.ResolveBucket()
 		if err != nil {
@@ -426,7 +420,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		b = bk
 	}
 
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if obj == "" {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: objectPath is empty")
 	}
@@ -450,7 +444,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	// fallback: "image"
 	fn := ""
 	if attrs.Metadata != nil {
-		fn = strings.TrimSpace(attrs.Metadata["fileName"])
+		fn = attrs.Metadata["fileName"]
 	}
 	if fn == "" {
 		fn = "image"
@@ -491,6 +485,8 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: update metadata failed: %w", err)
 	}
 
+	createdAt := attrs.Created.UTC()
+
 	// domain object
 	li, derr := listimagedom.NewFromGCSObject(
 		imageID,
@@ -498,24 +494,26 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		fn,
 		finalSize,
 		displayOrder,
+		createdAt,
 		b,
-		strings.TrimSpace(newAttrs.Name),
+		newAttrs.Name,
 	)
 	if derr != nil {
 		tmp := listimagedom.ListImage{
 			ID:           imageID,
 			ListID:       listID,
 			URL:          publicURL,
-			ObjectPath:   strings.TrimSpace(newAttrs.Name),
+			ObjectPath:   newAttrs.Name,
 			FileName:     fn,
 			Size:         finalSize,
 			DisplayOrder: displayOrder,
+			CreatedAt:    createdAt,
 		}
 		return tmp, nil
 	}
 
 	// URL は publicURL を採用
-	if strings.TrimSpace(publicURL) != "" {
+	if publicURL != "" {
 		_ = li.UpdateURL(publicURL)
 	}
 
@@ -544,7 +542,7 @@ func buildCanonicalListImageObjectPath(listID, imageID string) (string, error) {
 }
 
 func validateCanonicalObjectPath(listID, imageID, objectPath string) error {
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if obj == "" {
 		return fmt.Errorf("listImage: objectPath is empty")
 	}
@@ -565,15 +563,15 @@ func validateCanonicalObjectPath(listID, imageID, objectPath string) error {
 // - https://storage.googleapis.com/{bucket}/{objectPath}
 // - https://storage.cloud.google.com/{bucket}/{objectPath}
 func parseGCSURL(u string) (bucket string, objectPath string, ok bool) {
-	pu, err := url.Parse(strings.TrimSpace(u))
+	pu, err := url.Parse(u)
 	if err != nil {
 		return "", "", false
 	}
-	host := strings.ToLower(strings.TrimSpace(pu.Host))
+	host := strings.ToLower(pu.Host)
 	if host != "storage.googleapis.com" && host != "storage.cloud.google.com" {
 		return "", "", false
 	}
-	p := strings.TrimLeft(strings.TrimSpace(pu.EscapedPath()), "/")
+	p := strings.TrimLeft(pu.EscapedPath(), "/")
 	if p == "" {
 		return "", "", false
 	}
@@ -581,10 +579,10 @@ func parseGCSURL(u string) (bucket string, objectPath string, ok bool) {
 	if len(parts) < 2 {
 		return "", "", false
 	}
-	bucket = strings.TrimSpace(parts[0])
-	objEsc := strings.TrimSpace(parts[1])
+	bucket = parts[0]
+	objEsc := parts[1]
 	obj, _ := url.PathUnescape(objEsc)
-	objectPath = strings.TrimLeft(strings.TrimSpace(obj), "/")
+	objectPath = strings.TrimLeft(obj, "/")
 	if bucket == "" || objectPath == "" {
 		return "", "", false
 	}
@@ -592,18 +590,17 @@ func parseGCSURL(u string) (bucket string, objectPath string, ok bool) {
 }
 
 func resolveBucketObjectForListImage(id string, fallbackBucket string) (bucket string, objectPath string, err error) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", "", listimagedom.ErrNotFound
 	}
 
 	// ✅ legacy removed in domain: parse URL here in adapter
 	if b, obj, ok := parseGCSURL(id); ok {
-		bucket, objectPath = strings.TrimSpace(b), strings.TrimLeft(strings.TrimSpace(obj), "/")
+		bucket, objectPath = b, strings.TrimLeft(obj, "/")
 	} else {
 		// if the caller passed objectPath directly, bucket may be empty here and should be resolved by caller
-		bucket = strings.TrimSpace(fallbackBucket)
-		objectPath = strings.TrimLeft(strings.TrimSpace(id), "/")
+		bucket = fallbackBucket
+		objectPath = strings.TrimLeft(id, "/")
 	}
 
 	if objectPath == "" {
@@ -618,7 +615,7 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		return listimagedom.ListImage{}, false
 	}
 
-	obj := strings.TrimSpace(attrs.Name)
+	obj := attrs.Name
 	if obj == "" {
 		return listimagedom.ListImage{}, false
 	}
@@ -628,7 +625,7 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		if meta == nil {
 			return ""
 		}
-		return strings.TrimSpace(meta[k])
+		return meta[k]
 	}
 
 	// listID: metadata 優先 → fallback to canonical path
@@ -649,7 +646,7 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		}
 	}
 
-	if strings.TrimSpace(listID) == "" || strings.TrimSpace(imageID) == "" {
+	if listID == "" || imageID == "" {
 		return listimagedom.ListImage{}, false
 	}
 
@@ -666,7 +663,7 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 	// url
 	urlStr := getMeta("url")
 	if urlStr == "" {
-		urlStr = fmt.Sprintf("https://storage.googleapis.com/%s/%s", strings.TrimSpace(bucket), obj)
+		urlStr = fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, obj)
 	}
 
 	// size
@@ -685,8 +682,10 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		}
 	}
 
+	createdAt := attrs.Created.UTC()
+
 	// id is imageId (Firestore docID)
-	id := strings.TrimSpace(imageID)
+	id := imageID
 
 	li, err := listimagedom.NewFromGCSObject(
 		id,
@@ -694,7 +693,8 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		fileName,
 		size,
 		displayOrder,
-		strings.TrimSpace(bucket),
+		createdAt,
+		bucket,
 		obj,
 	)
 	if err != nil {
@@ -707,12 +707,13 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 			FileName:     fileName,
 			Size:         size,
 			DisplayOrder: displayOrder,
+			CreatedAt:    createdAt,
 		}
 		return tmp, true
 	}
 
 	// constructor の URL は PublicURL(bucket,obj) になるので、メタの url を優先したい場合は差し替え
-	if strings.TrimSpace(urlStr) != "" {
+	if urlStr != "" {
 		_ = li.UpdateURL(urlStr)
 	}
 	return li, true
@@ -720,7 +721,7 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 
 // splitCanonicalListImageObjectPath expects "lists/{listId}/images/{imageId}".
 func splitCanonicalListImageObjectPath(objectPath string) (listID string, imageID string, ok bool) {
-	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	p := strings.TrimLeft(objectPath, "/")
 	if p == "" {
 		return "", "", false
 	}
@@ -729,14 +730,14 @@ func splitCanonicalListImageObjectPath(objectPath string) (listID string, imageI
 	if len(parts) < 4 {
 		return "", "", false
 	}
-	if strings.TrimSpace(parts[0]) != "lists" {
+	if parts[0] != "lists" {
 		return "", "", false
 	}
-	if strings.TrimSpace(parts[2]) != "images" {
+	if parts[2] != "images" {
 		return "", "", false
 	}
-	listID = strings.TrimSpace(parts[1])
-	imageID = strings.TrimSpace(parts[3])
+	listID = parts[1]
+	imageID = parts[3]
 	if listID == "" || imageID == "" {
 		return "", "", false
 	}

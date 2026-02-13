@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	common "narratives/internal/domain/common"
 	transferdom "narratives/internal/domain/transfer"
 )
 
@@ -49,7 +48,7 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// - GET /console/transfers?...
 	// - GET /console/transfers/{productId}/latest
 	// - GET /console/transfers/{productId}/attempts/{attempt}
-	path := strings.TrimSpace(r.URL.Path)
+	path := r.URL.Path
 
 	// normalize trailing slash
 	if len(path) > 1 && strings.HasSuffix(path, "/") {
@@ -70,7 +69,7 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *TransferHandler) handleGetLatest(w http.ResponseWriter, r *http.Request, path string) {
 	// /console/transfers/{productId}/latest
-	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
+	productID := r.URL.Query().Get("productId")
 	if productID == "" {
 		// fallback from path
 		productID = extractBetween(path, "/console/transfers/", "/latest")
@@ -121,12 +120,12 @@ func (h *TransferHandler) handleGetLatest(w http.ResponseWriter, r *http.Request
 
 func (h *TransferHandler) handleGetAttempt(w http.ResponseWriter, r *http.Request, path string) {
 	// /console/transfers/{productId}/attempts/{attempt}
-	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
+	productID := r.URL.Query().Get("productId")
 	if productID == "" {
 		// between "/console/transfers/" and "/attempts/"
 		productID = extractBetween(path, "/console/transfers/", "/attempts/")
 	}
-	attemptStr := strings.TrimSpace(r.URL.Query().Get("attempt"))
+	attemptStr := r.URL.Query().Get("attempt")
 	if attemptStr == "" {
 		// last segment after "/attempts/"
 		attemptStr = extractLastPathSegment(path, "/attempts")
@@ -195,65 +194,18 @@ func (h *TransferHandler) handleGetAttempt(w http.ResponseWriter, r *http.Reques
 func (h *TransferHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	// filters (entity.go を正: id フィルタは廃止)
-	var f transferdom.Filter
-
-	if s := strings.TrimSpace(q.Get("productId")); s != "" {
-		f.ProductID = &s
-	}
-	if s := strings.TrimSpace(q.Get("orderId")); s != "" {
-		f.OrderID = &s
-	}
-	if s := strings.TrimSpace(q.Get("avatarId")); s != "" {
-		f.AvatarID = &s
-	}
-	if s := strings.TrimSpace(q.Get("mintAddress")); s != "" {
-		f.MintAddress = &s
+	// list endpoint は Filter/Sort を廃止したため、productId 指定があればその履歴一覧、それ以外はエラーにする
+	productID := q.Get("productId")
+	if productID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "productId is required",
+		})
+		return
 	}
 
-	if s := strings.TrimSpace(q.Get("status")); s != "" {
-		st := transferdom.Status(s)
-		f.Status = &st
-	}
-	if s := strings.TrimSpace(q.Get("errorType")); s != "" {
-		et := transferdom.ErrorType(s)
-		f.ErrorType = &et
-	}
+	log.Printf("[console.transfer] list attempts productId=%q", productID)
 
-	// sort
-	sortField := strings.TrimSpace(q.Get("sortField"))
-	if sortField == "" {
-		sortField = "createdAt"
-	}
-	desc := parseBoolLoose(q.Get("desc"))
-	s := transferdom.Sort{
-		Field: sortField,
-		Desc:  desc,
-	}
-
-	// page
-	pageNum := parseIntLoose(q.Get("page"), 1)
-	perPage := parseIntLoose(q.Get("perPage"), 50)
-	p := common.Page{Number: pageNum, PerPage: perPage}
-
-	log.Printf("[console.transfer] list productId=%q orderId=%q avatarId=%q mint=%q status=%q errorType=%q page=%d perPage=%d sort=%s desc=%t",
-		derefStr(f.ProductID), derefStr(f.OrderID), derefStr(f.AvatarID), derefStr(f.MintAddress),
-		func() string {
-			if f.Status == nil {
-				return ""
-			}
-			return string(*f.Status)
-		}(),
-		func() string {
-			if f.ErrorType == nil {
-				return ""
-			}
-			return string(*f.ErrorType)
-		}(),
-		p.Number, p.PerPage, s.Field, s.Desc,
-	)
-
-	res, err := h.repo.List(r.Context(), f, s, p)
+	res, err := h.repo.ListByProductID(r.Context(), productID)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
@@ -316,7 +268,6 @@ func isNotFound(err error) bool {
 // extractBetween returns substring between left and right markers.
 // ex: "/console/transfers/p_123/latest", left="/console/transfers/", right="/latest" => "p_123"
 func extractBetween(s, left, right string) string {
-	s = strings.TrimSpace(s)
 	i := strings.Index(s, left)
 	if i < 0 {
 		return ""
@@ -326,14 +277,13 @@ func extractBetween(s, left, right string) string {
 	if j < 0 {
 		return ""
 	}
-	return strings.Trim(strings.TrimSpace(s[:j]), "/")
+	return strings.Trim(s[:j], "/")
 }
 
 // extractLastPathSegment returns the last segment after the given prefix.
 // Example:
 // path="/console/transfers/p_123/attempts/2", prefix="/attempts" => "2"
 func extractLastPathSegment(path string, prefix string) string {
-	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""
 	}
@@ -353,7 +303,7 @@ func extractLastPathSegment(path string, prefix string) string {
 
 	// if still contains '/', take last part
 	parts := strings.Split(s, "/")
-	return strings.TrimSpace(parts[len(parts)-1])
+	return parts[len(parts)-1]
 }
 
 // ✅ copied from inventory_handler.go

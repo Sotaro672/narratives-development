@@ -251,20 +251,40 @@ Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
 }
 
 /// ------------------------------------------------------------
+/// ✅ /:productId が “固定パス” と衝突した時の安全弁（navigation 側にも持つ）
+bool _isReservedTopSegment(String seg) {
+  const reserved = <String>{
+    'login',
+    'create-account',
+    'shipping-address',
+    'billing-address',
+    'avatar-create',
+    'avatar-edit',
+    'avatar',
+    'user-edit',
+    'cart',
+    'preview',
+    'payment',
+    'catalog',
+    'wallet',
+  };
+  return reserved.contains(seg);
+}
+
+/// ------------------------------------------------------------
 /// ✅ redirect 本体（router.dart から呼ぶ）
 Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   final user = FirebaseAuth.instance.currentUser;
   final path = state.uri.path;
 
+  // ✅ DEBUG: redirect の判定をログで追えるようにする
+  debugPrint(
+    '[redirect] user=${user == null ? "null" : "in"} '
+    'name=${state.name} path=${state.uri.path} loc=${state.uri}',
+  );
+
   final isLoginRoute = path == AppRoutePath.login;
   final isCreateAccountRoute = path == AppRoutePath.createAccount;
-
-  // ✅ 未ログインでも入れるページ（最低限）
-  final allowWhenSignedOut = <String>{
-    AppRoutePath.home,
-    AppRoutePath.login,
-    AppRoutePath.createAccount,
-  };
 
   // ------------------------------------------------------------
   // ✅ 未ログイン
@@ -276,14 +296,50 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
     AvatarIdStore.I.clear();
     AvatarHeaderTitleStore.I.reset();
 
+    // ✅ 未ログインでも入れる route（動的パス対応のため name で判定）
+    final allowWhenSignedOutByName = <String>{
+      AppRouteName.home,
+      AppRouteName.login,
+      AppRouteName.createAccount,
+
+      // ✅ expectation: public
+      AppRouteName.preview,
+      AppRouteName.catalog,
+      AppRouteName.qrProduct, // ✅ /:productId (QR入口) も public
+    };
+
+    final name = state.name;
+
+    // ✅ name が取れないケースの保険（home/login/create-account/preview は path でもOK）
+    final allowWhenSignedOutByPath = <String>{
+      AppRoutePath.home,
+      AppRoutePath.login,
+      AppRoutePath.createAccount,
+      AppRoutePath.preview,
+    };
+
+    // ✅ IMPORTANT:
+    // - /catalog/:listId は state.name が null になるケースがあるため prefix でも許可
+    // - /:productId (QR入口) も name null 保険で許可（reserved は除外）
+    final segs = state.uri.pathSegments;
+
+    final isAllowed =
+        (name != null && allowWhenSignedOutByName.contains(name)) ||
+        allowWhenSignedOutByPath.contains(path) ||
+        path.startsWith('/catalog/') ||
+        path == '/catalog' ||
+        (segs.length == 1 &&
+            segs.first.isNotEmpty &&
+            !_isReservedTopSegment(segs.first));
+
     // public に許可されていないページへ行こうとしているなら login へ
-    if (!allowWhenSignedOut.contains(path)) {
+    if (!isAllowed) {
       final current = state.uri.toString();
       NavStore.I.setReturnTo(current);
       return AppRoutePath.login;
     }
 
-    // home/login/create-account はそのまま
+    // 公開ページはそのまま
     return null;
   }
 

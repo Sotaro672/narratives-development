@@ -155,6 +155,12 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 	}
 
 	// Return domain object
+	// createdAt: if caller set it, keep it; otherwise use now (best-effort)
+	createdAt := img.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = now
+	}
+
 	out, derr := listimgdom.New(
 		imageID,
 		listID,
@@ -163,6 +169,7 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 		fileName,
 		img.Size,
 		img.DisplayOrder,
+		createdAt,
 	)
 	if derr != nil {
 		// best-effort fallback (do not break)
@@ -174,6 +181,7 @@ func (r *ListImageRepositoryFS) Upsert(ctx context.Context, img listimgdom.ListI
 			FileName:     fileName,
 			Size:         img.Size,
 			DisplayOrder: img.DisplayOrder,
+			CreatedAt:    createdAt,
 		}, nil
 	}
 	return out, nil
@@ -371,6 +379,12 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 
 	fileName := raw.FileName
 
+	createdAt := raw.CreatedAt
+	if createdAt.IsZero() {
+		// best-effort default: keep deterministic value
+		createdAt = time.Now().UTC()
+	}
+
 	li, err := listimgdom.New(
 		imageID,
 		listID,
@@ -379,6 +393,7 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 		fileName,
 		raw.Size,
 		raw.DisplayOrder,
+		createdAt,
 	)
 	if err != nil {
 		// best-effort fallback (do not break reads)
@@ -390,6 +405,7 @@ func decodeListImageDoc(doc *gfs.DocumentSnapshot, fallbackListID string) (listi
 			FileName:     fileName,
 			Size:         raw.Size,
 			DisplayOrder: raw.DisplayOrder,
+			CreatedAt:    createdAt,
 		}, true
 	}
 

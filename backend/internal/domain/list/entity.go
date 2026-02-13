@@ -71,7 +71,7 @@ type List struct {
 
 // ✅ NEW: GetID makes List satisfy interfaces like `interface{ GetID() string }`
 func (l List) GetID() string {
-	return strings.TrimSpace(l.ID)
+	return l.ID
 }
 
 // Errors
@@ -141,16 +141,16 @@ func NewForCreate(
 		ID:          "",
 		ReadableID:  "",
 		Status:      status,
-		AssigneeID:  strings.TrimSpace(assigneeID),
-		Title:       strings.TrimSpace(title),
-		InventoryID: strings.TrimSpace(inventoryID),
+		AssigneeID:  assigneeID,
+		Title:       title,
+		InventoryID: inventoryID,
 
 		// ✅ primary imageId is optional at create
 		ImageID: "",
 
-		Description: strings.TrimSpace(description),
+		Description: description,
 		Prices:      normalizePriceRows(prices),
-		CreatedBy:   strings.TrimSpace(createdBy),
+		CreatedBy:   createdBy,
 		CreatedAt:   time.Time{}, // repo fills
 	}
 	if err := l.ValidateForCreate(); err != nil {
@@ -164,7 +164,6 @@ func NewForCreate(
 // =====================
 
 func (l *List) UpdateTitle(title string, now time.Time) error {
-	title = strings.TrimSpace(title)
 	if title == "" || len(title) > MaxTitleLength {
 		return ErrInvalidTitle
 	}
@@ -180,7 +179,7 @@ func (l *List) UpdateReadableID(readableID string, now time.Time) error {
 	if l == nil {
 		return nil
 	}
-	rid := strings.TrimSpace(readableID)
+	rid := readableID
 	if rid == "" {
 		l.ReadableID = ""
 		l.touch(now)
@@ -195,7 +194,6 @@ func (l *List) UpdateReadableID(readableID string, now time.Time) error {
 }
 
 func (l *List) UpdateInventoryID(inventoryID string, now time.Time) error {
-	inventoryID = strings.TrimSpace(inventoryID)
 	if inventoryID == "" {
 		return ErrInvalidInventoryID
 	}
@@ -205,7 +203,6 @@ func (l *List) UpdateInventoryID(inventoryID string, now time.Time) error {
 }
 
 func (l *List) UpdateDescription(desc string, now time.Time) error {
-	desc = strings.TrimSpace(desc)
 	if desc == "" || len(desc) > MaxDescriptionLength {
 		return ErrInvalidDescription
 	}
@@ -225,7 +222,6 @@ func (l *List) ReplacePrices(prices []ListPriceRow, now time.Time) error {
 }
 
 func (l *List) Assign(assigneeID string, now time.Time) error {
-	assigneeID = strings.TrimSpace(assigneeID)
 	if assigneeID == "" {
 		return ErrInvalidAssigneeID
 	}
@@ -252,14 +248,14 @@ func (l *List) SetPrimaryImageID(imageID string, now time.Time) error {
 	if l == nil {
 		return nil
 	}
-	id := strings.TrimSpace(imageID)
+	id := imageID
 	if id == "" {
 		return ErrEmptyImageID
 	}
 	if !isValidImageID(id) {
 		return ErrInvalidImageID
 	}
-	if strings.TrimSpace(l.ID) == "" {
+	if l.ID == "" {
 		return ErrInvalidID
 	}
 	l.ImageID = id
@@ -272,7 +268,7 @@ func (l *List) ClearPrimaryImageID(now time.Time) error {
 	if l == nil {
 		return nil
 	}
-	if strings.TrimSpace(l.ID) == "" {
+	if l.ID == "" {
 		return ErrInvalidID
 	}
 	l.ImageID = ""
@@ -282,7 +278,7 @@ func (l *List) ClearPrimaryImageID(now time.Time) error {
 
 // ValidateImageLink checks only "if ImageID is set, it's a valid docID".
 func (l List) ValidateImageLink() error {
-	id := strings.TrimSpace(l.ImageID)
+	id := l.ImageID
 	if id == "" {
 		return ErrEmptyImageID
 	}
@@ -308,35 +304,35 @@ func (l List) ValidateForCreate() error {
 		return ErrInvalidStatus
 	}
 
-	if strings.TrimSpace(l.AssigneeID) == "" {
+	if l.AssigneeID == "" {
 		return ErrInvalidAssigneeID
 	}
-	if strings.TrimSpace(l.Title) == "" || len(l.Title) > MaxTitleLength {
+	if l.Title == "" || len(l.Title) > MaxTitleLength {
 		return ErrInvalidTitle
 	}
-	if strings.TrimSpace(l.InventoryID) == "" {
+	if l.InventoryID == "" {
 		return ErrInvalidInventoryID
 	}
-	if strings.TrimSpace(l.Description) == "" || len(l.Description) > MaxDescriptionLength {
+	if l.Description == "" || len(l.Description) > MaxDescriptionLength {
 		return ErrInvalidDescription
 	}
 	if err := validatePriceRows(l.Prices); err != nil {
 		return err
 	}
-	if strings.TrimSpace(l.CreatedBy) == "" {
+	if l.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
 
 	// Optional fields
-	if strings.TrimSpace(l.ReadableID) != "" {
-		if !isValidReadableID(strings.TrimSpace(l.ReadableID)) {
+	if l.ReadableID != "" {
+		if !isValidReadableID(l.ReadableID) {
 			return ErrInvalidReadableID
 		}
 	}
 
 	// Optional fields: primary imageId
-	if strings.TrimSpace(l.ImageID) != "" {
-		if !isValidImageID(strings.TrimSpace(l.ImageID)) {
+	if l.ImageID != "" {
+		if !isValidImageID(l.ImageID) {
 			return ErrInvalidImageID
 		}
 	}
@@ -344,13 +340,13 @@ func (l List) ValidateForCreate() error {
 	if l.UpdatedAt != nil && (l.UpdatedAt.IsZero() || (!l.CreatedAt.IsZero() && l.UpdatedAt.Before(l.CreatedAt))) {
 		return ErrInvalidUpdatedAt
 	}
-	if l.UpdatedBy != nil && strings.TrimSpace(*l.UpdatedBy) == "" {
+	if l.UpdatedBy != nil && *l.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
 	if l.DeletedAt != nil && (!l.CreatedAt.IsZero() && l.DeletedAt.Before(l.CreatedAt)) {
 		return ErrInvalidDeletedAt
 	}
-	if l.DeletedBy != nil && strings.TrimSpace(*l.DeletedBy) == "" {
+	if l.DeletedBy != nil && *l.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
 	return nil
@@ -360,28 +356,28 @@ func (l List) ValidateForCreate() error {
 // - ID required
 // - CreatedAt required
 func (l List) ValidateForPersist() error {
-	if strings.TrimSpace(l.ID) == "" {
+	if l.ID == "" {
 		return ErrInvalidID
 	}
 	if !IsValidStatus(l.Status) {
 		return ErrInvalidStatus
 	}
-	if strings.TrimSpace(l.AssigneeID) == "" {
+	if l.AssigneeID == "" {
 		return ErrInvalidAssigneeID
 	}
-	if strings.TrimSpace(l.Title) == "" || len(l.Title) > MaxTitleLength {
+	if l.Title == "" || len(l.Title) > MaxTitleLength {
 		return ErrInvalidTitle
 	}
-	if strings.TrimSpace(l.InventoryID) == "" {
+	if l.InventoryID == "" {
 		return ErrInvalidInventoryID
 	}
-	if strings.TrimSpace(l.Description) == "" || len(l.Description) > MaxDescriptionLength {
+	if l.Description == "" || len(l.Description) > MaxDescriptionLength {
 		return ErrInvalidDescription
 	}
 	if err := validatePriceRows(l.Prices); err != nil {
 		return err
 	}
-	if strings.TrimSpace(l.CreatedBy) == "" {
+	if l.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
 	if l.CreatedAt.IsZero() {
@@ -389,15 +385,15 @@ func (l List) ValidateForPersist() error {
 	}
 
 	// Optional but if set must be valid (NOT unique)
-	if strings.TrimSpace(l.ReadableID) != "" {
-		if !isValidReadableID(strings.TrimSpace(l.ReadableID)) {
+	if l.ReadableID != "" {
+		if !isValidReadableID(l.ReadableID) {
 			return ErrInvalidReadableID
 		}
 	}
 
 	// Optional but if set must be valid (docID)
-	if strings.TrimSpace(l.ImageID) != "" {
-		if !isValidImageID(strings.TrimSpace(l.ImageID)) {
+	if l.ImageID != "" {
+		if !isValidImageID(l.ImageID) {
 			return ErrInvalidImageID
 		}
 	}
@@ -405,13 +401,13 @@ func (l List) ValidateForPersist() error {
 	if l.UpdatedAt != nil && (l.UpdatedAt.IsZero() || l.UpdatedAt.Before(l.CreatedAt)) {
 		return ErrInvalidUpdatedAt
 	}
-	if l.UpdatedBy != nil && strings.TrimSpace(*l.UpdatedBy) == "" {
+	if l.UpdatedBy != nil && *l.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
 	if l.DeletedAt != nil && l.DeletedAt.Before(l.CreatedAt) {
 		return ErrInvalidDeletedAt
 	}
-	if l.DeletedBy != nil && strings.TrimSpace(*l.DeletedBy) == "" {
+	if l.DeletedBy != nil && *l.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
 	return nil
@@ -422,7 +418,7 @@ func validatePriceRows(rows []ListPriceRow) error {
 		return nil
 	}
 	for _, r := range rows {
-		mid := strings.TrimSpace(r.ModelID)
+		mid := r.ModelID
 		if mid == "" {
 			return ErrInvalidPriceModelID
 		}
@@ -458,7 +454,7 @@ func normalizePriceRows(in []ListPriceRow) []ListPriceRow {
 	out := make([]ListPriceRow, 0, len(in))
 
 	for _, v := range in {
-		mid := strings.TrimSpace(v.ModelID)
+		mid := v.ModelID
 		if mid == "" {
 			continue
 		}
@@ -482,7 +478,6 @@ var readableIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 // isValidReadableID validates a human-friendly id (NOT unique).
 func isValidReadableID(s string) bool {
-	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
 	}
@@ -499,7 +494,6 @@ func isValidReadableID(s string) bool {
 var imageIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func isValidImageID(id string) bool {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false
 	}

@@ -76,6 +76,40 @@ func (r *ListRepositoryFS) GetByID(ctx context.Context, id string) (ldom.List, e
 	return l, nil
 }
 
+// ✅ NEW: Count returns total count of lists (used for paging).
+// NOTE:
+// - 現状の List() は filter/sort/search を無視しているため、Count も同様に "lists 全件" を返す。
+// - 将来 filter を実装する場合は、List() と同じ条件をここにも適用する。
+func (r *ListRepositoryFS) Count(ctx context.Context, _ ldom.Filter) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("firestore client is nil")
+	}
+
+	// Prefer Firestore count aggregation if available.
+	// If your Firestore SDK version doesn't support AggregationQuery, this will fail to compile
+	// and you should replace with manual scan count.
+	aq := r.col().Query.NewAggregationQuery().WithCount("all")
+	res, err := aq.Get(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	v, ok := res["all"]
+	if !ok {
+		return 0, nil
+	}
+
+	// Firestore returns int64
+	switch n := v.(type) {
+	case int64:
+		return int(n), nil
+	case int:
+		return n, nil
+	default:
+		return 0, nil
+	}
+}
+
 // ✅ NEW: GetReadableIDByID returns only readable_id (best-effort lightweight getter)
 func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (string, error) {
 	if r.Client == nil {
@@ -147,7 +181,7 @@ func (r *ListRepositoryFS) List(
 		pageNum = 1
 	}
 
-	// NOTE: Count を削除したため、TotalCount/TotalPages は返さない（0）
+	// Count は別メソッドで提供する（必要なら呼び出し側が使う）
 	offset := (pageNum - 1) * perPage
 	if offset < 0 {
 		offset = 0
@@ -187,6 +221,8 @@ func (r *ListRepositoryFS) List(
 		return ldom.PageResult[ldom.List]{}, err
 	}
 
+	// NOTE:
+	// - TotalCount/TotalPages はリポジトリ内で自動計算しない（Count(ctx,filter) を別途呼ぶ）
 	return ldom.PageResult[ldom.List]{
 		Items:      items,
 		TotalCount: 0,

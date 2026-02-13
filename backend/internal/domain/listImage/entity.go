@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // DefaultObjectPathPrefix is the canonical prefix for list images in a single bucket.
@@ -36,6 +37,7 @@ type GCSDeleteOp struct {
 //
 // Domain additions:
 //   - ObjectPath is the canonical GCS object path used for upload/update/delete.
+//   - CreatedAt is used for stable sorting and UX ordering.
 type ListImage struct {
 	ID           string
 	ListID       string
@@ -44,6 +46,7 @@ type ListImage struct {
 	FileName     string
 	Size         int64
 	DisplayOrder int
+	CreatedAt    time.Time
 }
 
 // ImageFileValidation - 画像ファイルのバリデーション結果
@@ -71,6 +74,7 @@ var (
 	ErrInvalidFileName     = errors.New("listImage: invalid fileName")
 	ErrInvalidSize         = errors.New("listImage: invalid size")
 	ErrInvalidDisplayOrder = errors.New("listImage: invalid displayOrder")
+	ErrInvalidCreatedAt    = errors.New("listImage: invalid createdAt")
 	ErrBucketRequired      = errors.New("listImage: bucket is required")
 )
 
@@ -92,7 +96,7 @@ var SupportedImageMIMEs = map[string]struct{}{
 
 // RequireNonEmpty - 必須文字列チェック
 func RequireNonEmpty(name, v string) error {
-	if strings.TrimSpace(v) == "" {
+	if v == "" {
 		return fmt.Errorf("%s is required", name)
 	}
 	return nil
@@ -153,15 +157,17 @@ func New(
 	id, listID, u, objectPath, fileName string,
 	size int64,
 	displayOrder int,
+	createdAt time.Time,
 ) (ListImage, error) {
 	li := ListImage{
-		ID:           strings.TrimSpace(id),
-		ListID:       strings.TrimSpace(listID),
-		URL:          strings.TrimSpace(u),
-		ObjectPath:   strings.TrimLeft(strings.TrimSpace(objectPath), "/"),
-		FileName:     strings.TrimSpace(fileName),
+		ID:           id,
+		ListID:       listID,
+		URL:          u,
+		ObjectPath:   strings.TrimLeft(objectPath, "/"),
+		FileName:     fileName,
 		Size:         size,
 		DisplayOrder: displayOrder,
+		CreatedAt:    createdAt,
 	}
 	if err := li.validate(); err != nil {
 		return ListImage{}, err
@@ -173,8 +179,9 @@ func NewMinimal(
 	id, listID, u, objectPath, fileName string,
 	size int64,
 	displayOrder int,
+	createdAt time.Time,
 ) (ListImage, error) {
-	return New(id, listID, u, objectPath, fileName, size, displayOrder)
+	return New(id, listID, u, objectPath, fileName, size, displayOrder, createdAt)
 }
 
 // NewFromGCSObject builds public URL from GCS bucket/object and constructs ListImage.
@@ -187,20 +194,20 @@ func NewFromGCSObject(
 	id, listID, fileName string,
 	size int64,
 	displayOrder int,
+	createdAt time.Time,
 	bucket string,
 	objectPath string,
 ) (ListImage, error) {
-	b := strings.TrimSpace(bucket)
-	if b == "" {
+	if bucket == "" {
 		return ListImage{}, ErrBucketRequired
 	}
 
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if obj == "" {
 		return ListImage{}, fmt.Errorf("listImage: empty objectPath")
 	}
 
-	fn := strings.TrimSpace(fileName)
+	fn := fileName
 	if fn == "" {
 		// domain-level safe default (must satisfy extAllowed)
 		fn = "image.png"
@@ -214,18 +221,19 @@ func NewFromGCSObject(
 		return ListImage{}, ErrInvalidFileName
 	}
 
-	publicURL := PublicURL(b, obj)
-	return New(id, listID, publicURL, obj, fn, size, displayOrder)
+	publicURL := PublicURL(bucket, obj)
+	return New(id, listID, publicURL, obj, fn, size, displayOrder, createdAt)
 }
 
 func NewMinimalFromGCSObject(
 	id, listID, fileName string,
 	size int64,
 	displayOrder int,
+	createdAt time.Time,
 	bucket string,
 	objectPath string,
 ) (ListImage, error) {
-	return NewFromGCSObject(id, listID, fileName, size, displayOrder, bucket, objectPath)
+	return NewFromGCSObject(id, listID, fileName, size, displayOrder, createdAt, bucket, objectPath)
 }
 
 // NewWithCanonicalPath builds objectPath as:
@@ -234,10 +242,11 @@ func NewWithCanonicalPath(
 	id, listID, fileName string,
 	size int64,
 	displayOrder int,
+	createdAt time.Time,
 	bucket string,
 ) (ListImage, error) {
 	obj := CanonicalObjectPath(listID, id)
-	return NewFromGCSObject(id, listID, fileName, size, displayOrder, bucket, obj)
+	return NewFromGCSObject(id, listID, fileName, size, displayOrder, createdAt, bucket, obj)
 }
 
 // ========================================
@@ -245,7 +254,6 @@ func NewWithCanonicalPath(
 // ========================================
 
 func (l *ListImage) UpdateURL(u string) error {
-	u = strings.TrimSpace(u)
 	if err := validateURL(u); err != nil {
 		return err
 	}
@@ -254,7 +262,7 @@ func (l *ListImage) UpdateURL(u string) error {
 }
 
 func (l *ListImage) UpdateObjectPath(objectPath string) error {
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if err := validateObjectPath(obj); err != nil {
 		return err
 	}
@@ -263,7 +271,6 @@ func (l *ListImage) UpdateObjectPath(objectPath string) error {
 }
 
 func (l *ListImage) UpdateFileName(name string) error {
-	name = strings.TrimSpace(name)
 	if name == "" {
 		return ErrInvalidFileName
 	}
@@ -297,15 +304,23 @@ func (l *ListImage) SetDisplayOrder(order int) error {
 	return nil
 }
 
+func (l *ListImage) SetCreatedAt(t time.Time) error {
+	if t.IsZero() {
+		return ErrInvalidCreatedAt
+	}
+	l.CreatedAt = t
+	return nil
+}
+
 // ========================================
 // Validation
 // ========================================
 
 func (l ListImage) validate() error {
-	if strings.TrimSpace(l.ID) == "" {
+	if l.ID == "" {
 		return ErrInvalidID
 	}
-	if strings.TrimSpace(l.ListID) == "" {
+	if l.ListID == "" {
 		return ErrInvalidListID
 	}
 	if err := validateURL(l.URL); err != nil {
@@ -325,6 +340,9 @@ func (l ListImage) validate() error {
 	}
 	if l.DisplayOrder < 0 {
 		return ErrInvalidDisplayOrder
+	}
+	if l.CreatedAt.IsZero() {
+		return ErrInvalidCreatedAt
 	}
 	return nil
 }
@@ -348,7 +366,7 @@ func validateURL(u string) error {
 }
 
 func validateObjectPath(p string) error {
-	p = strings.TrimLeft(strings.TrimSpace(p), "/")
+	p = strings.TrimLeft(p, "/")
 	if p == "" {
 		return ErrInvalidObjectPath
 	}
@@ -374,7 +392,7 @@ func extAllowed(name string) bool {
 // lists/{listId}/images/{imageId}
 func CanonicalObjectPath(listID, imageID string) string {
 	return strings.TrimLeft(
-		fmt.Sprintf("%s/%s/images/%s", DefaultObjectPathPrefix, strings.TrimSpace(listID), strings.TrimSpace(imageID)),
+		fmt.Sprintf("%s/%s/images/%s", DefaultObjectPathPrefix, listID, imageID),
 		"/",
 	)
 }
@@ -382,14 +400,13 @@ func CanonicalObjectPath(listID, imageID string) string {
 // PublicURL returns:
 // https://storage.googleapis.com/{bucket}/{objectPath}
 func PublicURL(bucket, objectPath string) string {
-	b := strings.TrimSpace(bucket)
-	if b == "" {
+	if bucket == "" {
 		// ✅ legacy removed: no DefaultBucket fallback
 		return ""
 	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := strings.TrimLeft(objectPath, "/")
 	if obj == "" {
 		return ""
 	}
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, obj)
 }

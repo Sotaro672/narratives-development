@@ -3,7 +3,6 @@ package catalogQuery
 
 import (
 	"fmt"
-	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 
@@ -14,25 +13,22 @@ import (
 
 func toCatalogListDTO(l ldom.List) dto.CatalogListDTO {
 	return dto.CatalogListDTO{
-		ID:          strings.TrimSpace(l.ID),
-		Title:       strings.TrimSpace(l.Title),
-		Description: strings.TrimSpace(l.Description),
-		Image:       strings.TrimSpace(l.ImageID),
+		ID:          l.ID,
+		Title:       l.Title,
+		Description: l.Description,
+		Image:       l.ImageID, // primary image docID (not URL)
 		Prices:      l.Prices,
 
-		InventoryID: strings.TrimSpace(l.InventoryID),
-
-		ProductBlueprintID: pickStringField(l, "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId"),
-		TokenBlueprintID:   pickStringField(l, "TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId"),
+		InventoryID: l.InventoryID,
 	}
 }
 
 func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProductBlueprintDTO {
 	out := dto.CatalogProductBlueprintDTO{
-		ID:          strings.TrimSpace(pb.ID),
-		ProductName: strings.TrimSpace(pb.ProductName),
-		BrandID:     strings.TrimSpace(pb.BrandID),
-		CompanyID:   strings.TrimSpace(pb.CompanyID),
+		ID:          pb.ID,
+		ProductName: pb.ProductName,
+		BrandID:     pb.BrandID,
+		CompanyID:   pb.CompanyID,
 
 		ItemType: fmt.Sprint(pb.ItemType),
 		Fit:      fmt.Sprint(pb.Fit),
@@ -45,19 +41,17 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 
 		ProductIDTagType: pickProductIDTagType(pb),
 
-		// ✅ modelRefs (domain: pb.ModelRefs -> dto: out.ModelRefs)
 		ModelRefs: nil,
 	}
 
 	if len(pb.ModelRefs) > 0 {
 		refs := make([]dto.CatalogProductBlueprintModelRefDTO, 0, len(pb.ModelRefs))
 		for _, r := range pb.ModelRefs {
-			mid := strings.TrimSpace(r.ModelID)
-			if mid == "" {
+			if r.ModelID == "" {
 				continue
 			}
 			refs = append(refs, dto.CatalogProductBlueprintModelRefDTO{
-				ModelID:      mid,
+				ModelID:      r.ModelID,
 				DisplayOrder: r.DisplayOrder,
 			})
 		}
@@ -69,12 +63,12 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 	return out
 }
 
-// Mint -> CatalogInventoryDTO（domain を正とする）
+// Mint -> CatalogInventoryDTO（Firestore 正: productBlueprintId / tokenBlueprintId / modelIds / stock.*.accumulation / stock.*.reservedCount）
 func toCatalogInventoryDTOFromMint(m invdom.Mint) *dto.CatalogInventoryDTO {
 	out := &dto.CatalogInventoryDTO{
-		ID:                 strings.TrimSpace(m.ID),
-		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
-		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
+		ID:                 m.ID,
+		ProductBlueprintID: m.ProductBlueprintID,
+		TokenBlueprintID:   m.TokenBlueprintID,
 		ModelIDs:           append([]string{}, m.ModelIDs...),
 		Stock:              map[string]dto.CatalogInventoryModelStockDTO{},
 	}
@@ -84,17 +78,13 @@ func toCatalogInventoryDTOFromMint(m invdom.Mint) *dto.CatalogInventoryDTO {
 	}
 
 	for modelID, ms := range m.Stock {
-		mid := strings.TrimSpace(modelID)
-		if mid == "" {
+		if modelID == "" {
 			continue
 		}
 
-		a := pickIntField(ms, "Accumulation", "accumulation", "Count", "count")
-		r := pickIntField(ms, "ReservedCount", "reservedCount", "Reserved", "reserved")
-
-		out.Stock[mid] = dto.CatalogInventoryModelStockDTO{
-			Accumulation:  a,
-			ReservedCount: r,
+		out.Stock[modelID] = dto.CatalogInventoryModelStockDTO{
+			Accumulation:  ms.Accumulation,
+			ReservedCount: ms.ReservedCount,
 		}
 	}
 

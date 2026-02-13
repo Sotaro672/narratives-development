@@ -55,36 +55,6 @@ type ListImagePatch struct {
 	DisplayOrder *int
 }
 
-// Filter - フィルタ/検索条件（実装側で解釈）
-type Filter struct {
-	SearchQuery string // fileName/url/objectPath などの部分一致は実装側で解釈
-
-	IDs    []string
-	ListID *string
-	// ListIDs は必要なら残す（Firestore だと IN 制約に注意）
-	ListIDs []string
-
-	FileNameLike  *string
-	MinSize       *int64
-	MaxSize       *int64
-	MinDisplayOrd *int
-	MaxDisplayOrd *int
-}
-
-// 共通型エイリアス（インフラ非依存）
-type Sort = common.Sort
-type SortOrder = common.SortOrder
-type Page = common.Page
-type PageResult[T any] = common.PageResult[T]
-type CursorPage = common.CursorPage
-type CursorPageResult[T any] = common.CursorPageResult[T]
-type SaveOptions = common.SaveOptions
-
-const (
-	SortAsc  = common.SortAsc
-	SortDesc = common.SortDesc
-)
-
 // 代表的なエラー（契約）
 var (
 	ErrNotFound = errors.New("listImage: not found")
@@ -98,10 +68,6 @@ var (
 // - Create/Update/Save は「メタデータ（Firestore等）」の永続化が主目的
 // - Upload は「data URL を受け取り、GCSへ保存＋メタデータ作成」まで行う convenience 契約（開発向け）
 type RepositoryPort interface {
-	// 一覧・検索
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[ListImage], error)
-	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[ListImage], error)
-
 	// 取得
 	// NOTE: imageID は ListImage.ID（docId）
 	FindByID(ctx context.Context, imageID string) (*ListImage, error)
@@ -125,7 +91,7 @@ type RepositoryPort interface {
 	Update(ctx context.Context, imageID string, patch ListImagePatch) (ListImage, error)
 
 	// Upsert（メタデータ）
-	Save(ctx context.Context, img ListImage, opts *SaveOptions) (ListImage, error)
+	Save(ctx context.Context, img ListImage, opts *common.SaveOptions) (ListImage, error)
 
 	// アップロード（data URL 等を受け取り、GCSへ保存＋メタデータ作成まで行う）
 	//
