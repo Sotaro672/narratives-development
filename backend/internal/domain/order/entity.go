@@ -3,7 +3,6 @@ package order
 
 import (
 	"errors"
-	"strings"
 	"time"
 )
 
@@ -121,10 +120,10 @@ func New(
 	createdAt time.Time,
 ) (Order, error) {
 	o := Order{
-		ID:       strings.TrimSpace(id),
-		UserID:   strings.TrimSpace(userID),
-		AvatarID: strings.TrimSpace(avatarID), // ✅ NEW
-		CartID:   strings.TrimSpace(cartID),
+		ID:       id,
+		UserID:   userID,
+		AvatarID: avatarID, // ✅ NEW
+		CartID:   cartID,
 
 		// normalizeShippingSnapshot / normalizeBillingSnapshot を使わない前提なのでそのまま保持
 		ShippingSnapshot: shippingSnapshot,
@@ -174,7 +173,6 @@ func (o *Order) UpdateBillingSnapshot(b BillingSnapshot) error {
 
 // ✅ NEW: avatarId update
 func (o *Order) UpdateAvatarID(avatarID string) error {
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return ErrInvalidAvatarID
 	}
@@ -242,23 +240,23 @@ func (o Order) validate() error {
 }
 
 func validateShippingSnapshot(s ShippingSnapshot) error {
-	if strings.TrimSpace(s.State) == "" {
+	if s.State == "" {
 		return ErrInvalidShippingAddress
 	}
-	if strings.TrimSpace(s.City) == "" {
+	if s.City == "" {
 		return ErrInvalidShippingAddress
 	}
-	if strings.TrimSpace(s.Street) == "" {
+	if s.Street == "" {
 		return ErrInvalidShippingAddress
 	}
-	if strings.TrimSpace(s.Country) == "" {
+	if s.Country == "" {
 		return ErrInvalidShippingAddress
 	}
 	return nil
 }
 
 func validateBillingSnapshot(b BillingSnapshot) error {
-	last4 := strings.TrimSpace(b.Last4)
+	last4 := b.Last4
 	if last4 == "" {
 		return ErrInvalidBillingAddress
 	}
@@ -271,10 +269,10 @@ func validateItems(items []OrderItemSnapshot) error {
 		return ErrInvalidItems
 	}
 	for _, it := range items {
-		if strings.TrimSpace(it.ModelID) == "" {
+		if it.ModelID == "" {
 			return ErrInvalidItemSnapshot
 		}
-		if strings.TrimSpace(it.InventoryID) == "" {
+		if it.InventoryID == "" {
 			return ErrInvalidItemSnapshot
 		}
 		// ListID は cart 由来の補助情報。過去互換/既存データを壊さないため必須にしない。

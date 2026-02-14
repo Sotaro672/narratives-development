@@ -188,7 +188,7 @@ func (q *OrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (avat
 		return "", "", ErrNotFound
 	}
 
-	log.Printf("[mall_order_query] resolveAvatarIDByUID ok uid=%q avatarId=%q userId=%q", maskUID(uid), aid, maskUID(u))
+	log.Printf("[mall_order_query] resolveAvatarIDByUID ok uid=%q avatarId=%q userId=%q", uid, aid, u)
 	return aid, u, nil
 }
 
@@ -253,7 +253,7 @@ func (q *OrderQuery) fetchAddressByUserID(ctx context.Context, colName string, u
 		if err == iterator.Done {
 			return nil
 		}
-		log.Printf("[mall_order_query] address query error col=%q userId=%q err=%v", colName, maskUID(userID), err)
+		log.Printf("[mall_order_query] address query error col=%q userId=%q err=%v", colName, userID, err)
 		return nil
 	}
 	if doc == nil {
@@ -299,15 +299,4 @@ func attachDocID(m map[string]any, docID string) map[string]any {
 		m["addressId"] = docID
 	}
 	return m
-}
-
-// avoid logging raw uid
-func maskUID(uid string) string {
-	if uid == "" {
-		return ""
-	}
-	if len(uid) <= 6 {
-		return "***"
-	}
-	return uid[:3] + "***" + uid[len(uid)-3:]
 }

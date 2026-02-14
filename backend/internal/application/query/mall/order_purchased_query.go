@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -54,7 +53,7 @@ type OrderPurchasedResult struct {
 // - avatarId == avatarID
 // - paid == true
 // and filters items by:
-// - transfer/transferred == false
+// - transferred == false (backend/internal/domain/order/entity.go の transferred:bool のみを正とする)
 // then derives:
 // - modelId from items[*].modelId
 // - tokenBlueprintId from items[*].inventoryId (2nd segment)
@@ -74,7 +73,7 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 	}
 
 	start := time.Now()
-	log.Printf("[order_purchased_query] start avatarId=%s ordersCol=%q", mask(aid), ordersCol)
+	log.Printf("[order_purchased_query] start avatarId=%s ordersCol=%q", aid, ordersCol)
 
 	// 1) orders where avatarId == aid AND paid == true
 	it := q.FS.Collection(ordersCol).
@@ -101,7 +100,7 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 			if err == iterator.Done {
 				break
 			}
-			log.Printf("[order_purchased_query] ERROR: orders iterate failed avatarId=%s err=%v", mask(aid), err)
+			log.Printf("[order_purchased_query] ERROR: orders iterate failed avatarId=%s err=%v", aid, err)
 			return OrderPurchasedResult{}, err
 		}
 		if doc == nil || doc.Ref == nil {
@@ -113,25 +112,25 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 		orderID := doc.Ref.ID
 		raw := doc.Data()
 		if raw == nil {
-			log.Printf("[order_purchased_query] WARN: order doc data is nil orderId=%s", mask(orderID))
+			log.Printf("[order_purchased_query] WARN: order doc data is nil orderId=%s", orderID)
 			continue
 		}
 
 		// items must exist (array)
 		itemsAny, ok := raw["items"]
 		if !ok {
-			log.Printf("[order_purchased_query] skip: items missing orderId=%s", mask(orderID))
+			log.Printf("[order_purchased_query] skip: items missing orderId=%s", orderID)
 			continue
 		}
 
 		items, ok := itemsAny.([]any)
 		if !ok || len(items) == 0 {
-			log.Printf("[order_purchased_query] skip: items empty or not array orderId=%s type=%T", mask(orderID), itemsAny)
+			log.Printf("[order_purchased_query] skip: items empty or not array orderId=%s type=%T", orderID, itemsAny)
 			continue
 		}
 		ordersWithItems++
 
-		// 2) filter items by transfer=false (or transferred=false)
+		// 2) filter items by transferred == false (bool only; fail-closed)
 		for _, one := range items {
 			itemsScanned++
 
@@ -141,42 +140,55 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 				continue
 			}
 
-			// transfer flag (compat keys)
-			if !isItemUntransferred(m) {
+			// ✅ Only trust "transferred" bool from domain order entity
+			tv, ok := m["transferred"]
+			if !ok {
+				// fail-closed
+				itemsNotEligible++
+				continue
+			}
+			transferred, ok := tv.(bool)
+			if !ok {
+				// bool only; fail-closed
+				itemsNotEligible++
+				continue
+			}
+			if transferred {
 				itemsNotEligible++
 				continue
 			}
 
-			// ✅ modelId is required (productId is NOT used in your real data)
-			modelID := getString(m, "modelId", "modelID", "model_id")
+			// ✅ modelId is required（正スキーマ: modelId）
+			modelID, _ := m["modelId"].(string)
 			if modelID == "" {
 				itemsMissingModelID++
-				log.Printf("[order_purchased_query] WARN: eligible item missing modelId orderId=%s", mask(orderID))
+				log.Printf("[order_purchased_query] WARN: eligible item missing modelId orderId=%s", orderID)
 				continue
 			}
 
 			// ✅ tokenBlueprintId is derived from inventoryId (2nd segment)
-			invID := getString(m, "inventoryId", "inventoryID", "inventory_id")
+			invID, _ := m["inventoryId"].(string)
 			if invID == "" {
 				itemsMissingInventoryID++
-				log.Printf("[order_purchased_query] WARN: eligible item missing inventoryId orderId=%s modelId=%s", mask(orderID), mask(modelID))
+				log.Printf("[order_purchased_query] WARN: eligible item missing inventoryId orderId=%s modelId=%s", orderID, modelID)
 				continue
 			}
 
-			tbID := tokenBlueprintIDFromInventoryID(invID)
-			if tbID == "" {
+			parts := strings.Split(invID, "__")
+			if len(parts) < 2 || parts[1] == "" {
 				itemsMissingInventoryID++
 				log.Printf("[order_purchased_query] WARN: tokenBlueprintId not derivable from inventoryId orderId=%s modelId=%s inventoryId=%s",
-					mask(orderID), mask(modelID), mask(invID))
+					orderID, modelID, invID)
 				continue
 			}
+			tbID := parts[1]
 
 			// optional (compat): productId may not exist in real data
-			pid := getString(m, "productId", "productID", "product_id")
+			pid, _ := m["productId"].(string)
 
 			itemsEligible++
 			log.Printf("[order_purchased_query] eligible item orderId=%s modelId=%s tokenBlueprintId=%s productId=%s",
-				mask(orderID), mask(modelID), mask(tbID), mask(pid))
+				orderID, modelID, tbID, pid)
 
 			p := PurchasedPair{
 				OrderID:          orderID,
@@ -188,14 +200,14 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 			pairsAdded++
 
 			log.Printf("[order_purchased_query] pair added orderId=%s modelId=%s tokenBlueprintId=%s productId=%s",
-				mask(orderID), mask(modelID), mask(tbID), mask(pid))
+				orderID, modelID, tbID, pid)
 		}
 	}
 
 	elapsed := time.Since(start)
 	log.Printf(
 		"[order_purchased_query] done avatarId=%s ordersScanned=%d ordersWithItems=%d itemsScanned=%d itemsEligible=%d itemsNotEligible=%d itemsMissingModelId=%d itemsMissingInventoryId=%d pairs=%d elapsed=%s",
-		mask(aid),
+		aid,
 		ordersScanned,
 		ordersWithItems,
 		itemsScanned,
@@ -211,91 +223,4 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 		AvatarID: aid,
 		Pairs:    pairs,
 	}, nil
-}
-
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-
-// tokenBlueprintIDFromInventoryID derives tokenBlueprintId from inventoryId.
-// Expected shape: "<productBlueprintId>__<tokenBlueprintId>__...__<modelId>"
-func tokenBlueprintIDFromInventoryID(inventoryID string) string {
-	s := inventoryID
-	if s == "" {
-		return ""
-	}
-	parts := strings.Split(s, "__")
-	if len(parts) < 2 {
-		return ""
-	}
-	// ✅ tokenBlueprintId is the 2nd segment
-	tb := parts[1]
-	if tb == "" {
-		return ""
-	}
-	return tb
-}
-
-// isItemUntransferred checks item transfer flag.
-// Accepts both shapes:
-// - item.transfer == false
-// - item.transferred == false
-// If no flag exists, it returns false (fail-closed).
-func isItemUntransferred(item map[string]any) bool {
-	// prefer explicit keys
-	if v, ok := item["transfer"]; ok {
-		return isFalse(v)
-	}
-	if v, ok := item["transferred"]; ok {
-		return isFalse(v)
-	}
-	if v, ok := item["isTransferred"]; ok {
-		// isTransferred=true/false
-		return isFalse(v)
-	}
-	return false
-}
-
-func isFalse(v any) bool {
-	switch t := v.(type) {
-	case bool:
-		return t == false
-	case string:
-		s := strings.ToLower(t)
-		return s == "false" || s == "0" || s == "no"
-	case int:
-		return t == 0
-	case int64:
-		return t == 0
-	case float64:
-		return t == 0
-	default:
-		return false
-	}
-}
-
-func getString(m map[string]any, keys ...string) string {
-	if m == nil {
-		return ""
-	}
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			s := fmt.Sprint(v)
-			if s != "" && s != "<nil>" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func mask(s string) string {
-	t := s
-	if t == "" {
-		return ""
-	}
-	if len(t) <= 10 {
-		return t
-	}
-	return t[:4] + "***" + t[len(t)-4:]
 }
