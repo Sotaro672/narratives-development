@@ -1,0 +1,32 @@
+/* frontend/amol/src/components/ui/section-header.css */
+
+.ui-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ui-section-header__body {
+  min-width: 0;
+}
+
+.ui-section-header__eyebrow {
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.ui-section-header__title {
+  overflow-wrap: anywhere;
+}
+
+.ui-section-header__right {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 520px) {
+  .ui-section-header {
+    gap: 8px;
+  }
+}

@@ -1,0 +1,252 @@
+// backend/internal/application/usecase/payment_usecase.go
+package usecase
+
+/*
+責任と機能:
+- PaymentUsecase の公開API（Queries/Commands）と依存注入（DI）を提供する。
+- 実装詳細（paid後の後続処理、order更新、注文確定メール送信、inventory reserve）は別ファイルに委譲し、
+  このファイルでは「ユースケースの入口」と「依存関係の保持」に集中する。
+*/
+
+import (
+	"context"
+	"time"
+
+	common "narratives/internal/domain/common"
+	orderdom "narratives/internal/domain/order"
+	paymentdom "narratives/internal/domain/payment"
+)
+
+// PaymentRepo defines the minimal persistence port needed by PaymentUsecase.
+//
+// current design:
+// - payment document ID = payment.PaymentID
+// - payment.PaymentID must be the same value as order.ID
+// - invoiceId legacy is not used
+type PaymentRepo interface {
+	// Reads
+	GetByID(ctx context.Context, id string) (*paymentdom.Payment, error)
+	GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error)
+
+	// Writes
+	Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error)
+	UpdateByPaymentID(ctx context.Context, paymentID string, patch paymentdom.UpdatePaymentInput) (*paymentdom.Payment, error)
+	DeleteByPaymentID(ctx context.Context, paymentID string) error
+
+	// Save stores the whole payment entity.
+	Save(ctx context.Context, entity paymentdom.Payment, opts *paymentdom.SaveOptions) (paymentdom.Payment, error)
+}
+
+// Cart clear の最小ポート（PaymentUsecase 側）
+// carts/{cartId} を空にする
+type CartRepoForPayment interface {
+	Clear(ctx context.Context, cartID string) error
+}
+
+// Inventory reserve の最小ポート（PaymentUsecase 側）
+type InventoryRepoForPayment interface {
+	// ReserveByOrder sets:
+	// - stock[modelId].reservedByOrder[orderId] = qty
+	// - reservedCount = sum(reservedByOrder) (repo側で正規化)
+	ReserveByOrder(ctx context.Context, inventoryID string, modelID string, orderID string, qty int) error
+}
+
+// Order 更新・参照の最小ポート（PaymentUsecase 側）
+type OrderRepoForPayment interface {
+	GetByID(ctx context.Context, id string) (orderdom.Order, error)
+	Save(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
+}
+
+// userId からメールアドレス取得の最小ポート
+type UserRepoForPayment interface {
+	GetEmailByID(ctx context.Context, userID string) (string, error)
+}
+
+// 注文確定メール送信の最小ポート
+//
+// メール件名・本文の組み立ては application/usecase では行わず、
+// adapter 側の OrderMailer に分離する。
+type MailSenderForPayment interface {
+	SendOrderConfirmation(ctx context.Context, from, to string, ord orderdom.Order) error
+}
+
+// PaymentUsecase orchestrates payment operations.
+type PaymentUsecase struct {
+	repo          PaymentRepo
+	cartRepo      CartRepoForPayment
+	inventoryRepo InventoryRepoForPayment
+	orderRepo     OrderRepoForPayment
+
+	userRepo   UserRepoForPayment
+	mailSender MailSenderForPayment
+	mailFrom   string
+
+	now func() time.Time
+}
+
+func NewPaymentUsecase(repo PaymentRepo) *PaymentUsecase {
+	return &PaymentUsecase{
+		repo: repo,
+		now:  time.Now,
+	}
+}
+
+// optional injection: paid 時に cart を空にしたい場合に注入する
+func (u *PaymentUsecase) WithCartRepoForPayment(repo CartRepoForPayment) *PaymentUsecase {
+	u.cartRepo = repo
+	return u
+}
+
+// optional injection: paid 時に inventory の reservedByOrder / reservedCount を更新したい場合に注入する
+func (u *PaymentUsecase) WithInventoryRepoForPayment(repo InventoryRepoForPayment) *PaymentUsecase {
+	u.inventoryRepo = repo
+	return u
+}
+
+// optional injection: paid 時に order を参照・更新したい場合に注入する
+func (u *PaymentUsecase) WithOrderRepoForPayment(repo OrderRepoForPayment) *PaymentUsecase {
+	u.orderRepo = repo
+	return u
+}
+
+// optional injection: paid 時に userId からメールアドレスを引きたい場合に注入する
+func (u *PaymentUsecase) WithUserRepoForPayment(repo UserRepoForPayment) *PaymentUsecase {
+	u.userRepo = repo
+	return u
+}
+
+// optional injection: paid 時に注文確定メールを送りたい場合に注入する
+func (u *PaymentUsecase) WithMailSenderForPayment(sender MailSenderForPayment, from string) *PaymentUsecase {
+	u.mailSender = sender
+	u.mailFrom = from
+	return u
+}
+
+// ============================================================
+// Queries
+// ============================================================
+
+func (u *PaymentUsecase) GetByID(ctx context.Context, id string) (*paymentdom.Payment, error) {
+	if u == nil || u.repo == nil {
+		return nil, paymentdom.ErrNotFound
+	}
+	return u.repo.GetByPaymentID(ctx, id)
+}
+
+func (u *PaymentUsecase) GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error) {
+	if u == nil || u.repo == nil {
+		return nil, paymentdom.ErrNotFound
+	}
+	return u.repo.GetByPaymentID(ctx, paymentID)
+}
+
+// ============================================================
+// Commands
+// ============================================================
+
+func (u *PaymentUsecase) Create(ctx context.Context, p paymentdom.Payment) (*paymentdom.Payment, error) {
+	if u == nil || u.repo == nil {
+		return nil, paymentdom.ErrNotFound
+	}
+
+	in := paymentdom.CreatePaymentInput{
+		PaymentID:             p.PaymentID,
+		PaymentMethodID:       p.PaymentMethodID,
+		StripeCustomerID:      p.StripeCustomerID,
+		StripePaymentMethodID: p.StripePaymentMethodID,
+		StripePaymentIntentID: p.StripePaymentIntentID,
+		Amount:                p.Amount,
+		Status:                p.Status,
+		ErrorType:             p.ErrorType,
+		ErrorCode:             p.ErrorCode,
+		ErrorMsg:              p.ErrorMsg,
+	}
+
+	created, err := u.repo.Create(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	if created == nil || !isPaidStatus(created.Status) {
+		return created, nil
+	}
+
+	u.handlePostPaidBestEffort(ctx, created)
+	return created, nil
+}
+
+// Update stores the whole payment entity.
+//
+// This method is used by PaymentFlowUsecase after Stripe PaymentIntent state changes.
+// entity.PaymentID is the payment document ID and must be the same value as order.ID.
+func (u *PaymentUsecase) Update(ctx context.Context, entity paymentdom.Payment) error {
+	if u == nil || u.repo == nil {
+		return paymentdom.ErrNotFound
+	}
+
+	before, err := u.repo.GetByPaymentID(ctx, entity.PaymentID)
+	if err != nil && !errorsIsPaymentNotFound(err) {
+		return err
+	}
+
+	saved, err := u.repo.Save(ctx, entity, nil)
+	if err != nil {
+		return err
+	}
+
+	beforePaid := before != nil && isPaidStatus(before.Status)
+	afterPaid := isPaidStatus(saved.Status)
+
+	if !beforePaid && afterPaid {
+		u.handlePostPaidBestEffort(ctx, &saved)
+	}
+
+	return nil
+}
+
+// Patch partially updates a payment document by paymentID.
+//
+// Use this for API/update paths that only need partial updates.
+func (u *PaymentUsecase) Patch(
+	ctx context.Context,
+	paymentID string,
+	patch paymentdom.UpdatePaymentInput,
+) (*paymentdom.Payment, error) {
+	if u == nil || u.repo == nil {
+		return nil, paymentdom.ErrNotFound
+	}
+
+	before, err := u.repo.GetByPaymentID(ctx, paymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	after, err := u.repo.UpdateByPaymentID(ctx, paymentID, patch)
+	if err != nil {
+		return nil, err
+	}
+
+	if after == nil {
+		return after, nil
+	}
+
+	beforePaid := before != nil && isPaidStatus(before.Status)
+	afterPaid := isPaidStatus(after.Status)
+
+	if !beforePaid && afterPaid {
+		u.handlePostPaidBestEffort(ctx, after)
+	}
+
+	return after, nil
+}
+
+func (u *PaymentUsecase) Delete(ctx context.Context, id string) error {
+	if u == nil || u.repo == nil {
+		return paymentdom.ErrNotFound
+	}
+	return u.repo.DeleteByPaymentID(ctx, id)
+}
+
+func errorsIsPaymentNotFound(err error) bool {
+	return err == paymentdom.ErrNotFound
+}

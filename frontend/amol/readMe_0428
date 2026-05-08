@@ -1,0 +1,841 @@
+以下を `README.md` または引き継ぎ用の `handoff-YYYYMMDD.md` として保存してください。
+
+````md
+# AMOL Frontend / Backend 改修引き継ぎ README
+
+最終更新: 2026-04-28
+
+このREADMEは、AMOL フロントエンドおよび一部バックエンド連携に関する直近の改修内容を、次の作業者へ引き継ぐためのメモです。
+
+---
+
+## 1. 前提プロジェクト
+
+作業対象は主に以下です。
+
+```txt
+frontend/amol
+backend
+````
+
+現在のフロントエンドは Vite + React + TypeScript 構成です。
+
+---
+
+## 2. Firebase / GCP / Backend 接続設定
+
+### frontend/amol/.env
+
+現在、AMOL フロントエンドから接続するバックエンドは `narratives-backend` 側を正としています。
+
+```env
+VITE_API_BASE_URL=https://narratives-backend-871263659099.asia-northeast1.run.app
+VITE_BACKEND_URL=https://narratives-backend-871263659099.asia-northeast1.run.app
+```
+
+既存コードの互換性のため、`VITE_API_BASE_URL` と `VITE_BACKEND_URL` の両方を設定しています。
+
+フロントエンドに置いてよい値は `VITE_` で始まるもののみです。
+`RESEND_API_KEY`、`GOOGLE_APPLICATION_CREDENTIALS`、`SENDGRID_API_KEY` などのバックエンド用秘密情報はフロントに置かないでください。
+
+### Firebase project
+
+`.firebaserc` は以下を正とします。
+
+```json
+{
+  "projects": {
+    "default": "narratives-development-26c2d"
+  }
+}
+```
+
+### gcloud project
+
+バックエンドデプロイ時は以下のプロジェクトを正とします。
+
+```bash
+gcloud config set project narratives-development-26c2d
+```
+
+確認コマンド:
+
+```bash
+gcloud config get-value project
+```
+
+---
+
+## 3. Backend deploy の注意点
+
+`backend/deploy-backend.ps1` は、現状 `gcloud config get-value project` から `$ProjectId` を解決します。
+
+そのため、`gcloud` の現在プロジェクトが `amol-99d47` になっていると、Artifact Registry の push 先も以下のように誤って `amol-99d47` になります。
+
+```txt
+asia-northeast1-docker.pkg.dev/amol-99d47/...
+```
+
+正しくは以下です。
+
+```txt
+asia-northeast1-docker.pkg.dev/narratives-development-26c2d/...
+```
+
+Podman push で以下のようなエラーが出た場合、
+
+```txt
+unable to retrieve auth token: invalid username/password: unauthorized: authentication failed
+```
+
+主な原因は以下です。
+
+* gcloud project が誤っている
+* Podman の Artifact Registry 認証が古い
+* Artifact Registry writer 権限がない
+
+認証やり直し:
+
+```bash
+gcloud auth print-access-token | podman login asia-northeast1-docker.pkg.dev --username oauth2accesstoken --password-stdin
+```
+
+---
+
+## 4. LandingPage 改修
+
+### 対象ファイル
+
+```txt
+frontend/src/pages/LandingPage.tsx
+frontend/src/styles/landing-page.css
+frontend/src/styles/landing-page/
+```
+
+### 4.1 カード内容の差し替え
+
+LandingPage の3カードは、当初の「決済手数料5% / チケット / OBS」から以下に差し替え済みです。
+
+```txt
+真贋証明
+転売対策
+営業支援
+```
+
+内容:
+
+* 真贋証明
+  商品のQRコードをスキャンするだけで、製品情報、コメント、所有履歴にアクセスでき、本物であると瞬時に分かる。
+
+* 転売対策
+  購入者同士がコメントを通じて繋がり、商品の譲渡履歴を共有することで、悪質な転売業者を特定でき、健全なコマースコミュニティの形成を促す。
+
+* 営業支援
+  商品を誰が所有しているかがリアルタイムで分かり、販売後も新商品の情報を本当に興味のある人に届けられる。
+
+### 4.2 Team section 追加
+
+3カードの下に Team section を追加済みです。
+
+表示内容:
+
+```txt
+チーム
+奥岡 曹太朗
+開発者
+```
+
+画像は以下を参照します。
+
+```txt
+/public/founder.jpg
+```
+
+つまり実ファイルは以下に配置します。
+
+```txt
+frontend/amol/public/founder.jpg
+```
+
+`src/assets/founder.jpg` import 方式は build 時にファイル解決エラーが出たため、public 配下参照に変更しました。
+
+### 4.3 Vision section 追加
+
+Team section の下に Vision section を追加済みです。
+
+Vision steps:
+
+```txt
+Step 1: ブロックチェーントークンが付与された商品のみが流通するMall
+Step 2: 本物の所有を証明できるSNS
+Step 3: ブロックチェーントークンを交換できるフリマ
+```
+
+Step 1 は `今ここ` 表示あり。
+
+### 4.4 新規登録ボタンの遷移先変更
+
+LandingPage の「新規登録」ボタンは、直接 `/signup` ではなく、選択画面へ遷移するよう変更しました。
+
+```tsx
+<Button variant="primary" onClick={() => navigate("/signup/select")}>
+  新規登録
+</Button>
+```
+
+---
+
+## 5. landing-page.css の機能分割
+
+README の既存方針に合わせて、`landing-page.css` は入口ファイル化し、機能ごとにCSSを分割しました。
+
+### 構成
+
+```txt
+frontend/src/styles/
+├─ landing-page.css
+└─ landing-page/
+   ├─ hero.css
+   ├─ section.css
+   ├─ feature.css
+   ├─ team.css
+   ├─ vision.css
+   └─ responsive.css
+```
+
+### frontend/src/styles/landing-page.css
+
+```css
+@import "./landing-page/hero.css";
+@import "./landing-page/section.css";
+@import "./landing-page/feature.css";
+@import "./landing-page/team.css";
+@import "./landing-page/vision.css";
+@import "./landing-page/responsive.css";
+```
+
+### 5.1 Feature cards の高さ調整
+
+3カードの高さと画像枠の高さが揃うように調整済みです。
+
+重要なCSS:
+
+```css
+.landing-page-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+
+.landing-page-feature-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  height: 100%;
+  min-height: 300px;
+}
+
+.landing-page-feature-card__image-placeholder {
+  height: 160px;
+  align-self: end;
+}
+```
+
+---
+
+## 6. Header の機能分割
+
+`Header.tsx` は肥大化していたため、機能ごとに分割しました。
+
+### 構成
+
+```txt
+frontend/src/components/layout/
+├─ Header.tsx
+├─ FooterNav.tsx
+├─ SettingsMenu.tsx
+├─ header.css
+├─ layout.css
+└─ header/
+   ├─ types.ts
+   ├─ useHeaderController.ts
+   ├─ HeaderMenuButton.tsx
+   ├─ HeaderMenuPanel.tsx
+   ├─ HeaderSettingsPanel.tsx
+   └─ HeaderActions.tsx
+```
+
+### 6.1 HeaderMenuPanel にメニュー追加
+
+Header hamburger menu に以下を追加しました。
+
+```txt
+使い方
+FAQ
+```
+
+ルート:
+
+```txt
+/how-to-use
+/faq
+```
+
+### 6.2 HeaderActions のログインリンク変更
+
+Header 右上の「ログイン」は、直接 `/signin` ではなくログイン選択画面へ遷移します。
+
+```tsx
+<Link to="/signin/select" className="header__login-link">
+  ログイン
+</Link>
+```
+
+---
+
+## 7. Router 追加
+
+### 対象ファイル
+
+```txt
+frontend/src/router/index.tsx
+```
+
+### 追加ページ
+
+以下を import しました。
+
+```tsx
+import SignInSelectPage from "../pages/SignInSelectPage";
+import SignUpSelectPage from "../pages/SignUpSelectPage";
+import FaqPage from "../pages/FaqPage";
+import HowToUsePage from "../pages/HowToUsePage";
+```
+
+### 追加ルート
+
+```tsx
+{ path: "/signin/select", element: <SignInSelectPage /> },
+{ path: "/signup/select", element: <SignUpSelectPage /> },
+{ path: "/how-to-use", element: <HowToUsePage /> },
+{ path: "/faq", element: <FaqPage /> },
+```
+
+既存の `/signin` と `/signup` は残しています。
+
+```tsx
+{ path: "/signin", element: <SignInPage /> },
+{ path: "/signup", element: <SignUpPage /> },
+```
+
+---
+
+## 8. SignUpSelectPage
+
+### 対象ファイル
+
+```txt
+frontend/src/pages/SignUpSelectPage.tsx
+frontend/src/styles/sign-up-select-page.css
+```
+
+### 8.1 役割
+
+LandingPage の「新規登録」押下後、どのサービスで新規登録するかを選択するページです。
+
+### 8.2 現在のカード
+
+Inspector カードは削除済みです。
+現在は以下の2カードのみです。
+
+```txt
+Console
+Mall
+```
+
+### Console
+
+```txt
+title: Console
+description: 商品を登録・管理し、ブロックチェーントークンを発行できる出品者向けのプラットフォーム。
+url: https://narratives-console-dev.web.app
+buttonLabel: Consoleで新規登録
+deviceTags: PC専用
+```
+
+Console は別ウィンドウで開きます。
+
+### Mall
+
+```txt
+title: Mall
+description: 商品を閲覧・購入し、QRコードからトークンコンテンツにアクセスできる購入者向けのモール。
+internalPath: /signup
+buttonLabel: Mallで新規登録
+deviceTags: PC対応 / モバイル対応
+```
+
+Mall は AMOL 内の `SignUpPage.tsx` に遷移します。
+
+```txt
+/signup
+```
+
+---
+
+## 9. SignInSelectPage
+
+### 対象ファイル
+
+```txt
+frontend/src/pages/SignInSelectPage.tsx
+frontend/src/styles/sign-up-select-page.css
+```
+
+### 9.1 役割
+
+Header の「ログイン」押下後、どのサービスにログインするかを選択するページです。
+
+### 9.2 現在のカード
+
+ログイン選択画面では、現状以下の3カードを表示しています。
+
+```txt
+Console
+Inspector
+Mall
+```
+
+### Console
+
+```txt
+title: Console
+description: 商品を登録・管理し、ブロックチェーントークンを発行できる出品者向けのプラットフォーム。
+url: https://narratives-console-dev.web.app
+buttonLabel: Consoleにログイン
+deviceTags: PC専用
+```
+
+### Inspector
+
+```txt
+title: Inspector
+description: QRコードをスキャンして検品結果を入力できる、Console付属の検品専用アプリ。
+url: https://narratives-development-26c2d.web.app
+buttonLabel: Inspectorにログイン
+deviceTags: モバイル専用
+```
+
+### Mall
+
+```txt
+title: Mall
+description: 商品を閲覧・購入し、QRコードからトークンコンテンツにアクセスできる購入者向けのモール。
+internalPath: /signin
+buttonLabel: Mallにログイン
+deviceTags: PC対応 / モバイル対応
+```
+
+Mall は AMOL 内の `SignInPage.tsx` に遷移します。
+
+```txt
+/signin
+```
+
+### 9.3 ログイン画面だけ3列表示
+
+`SignUpSelectPage` と `SignInSelectPage` は同じCSSを使っています。
+
+ログイン画面では横幅に余裕がある場合、3カードを1行に並べるため、`SignInSelectPage.tsx` の grid に modifier class を追加します。
+
+```tsx
+<div className="sign-up-select-page__grid sign-up-select-page__grid--three">
+```
+
+CSS 側:
+
+```css
+.sign-up-select-page__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 384px));
+  gap: 24px;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.sign-up-select-page__grid--three {
+  grid-template-columns: repeat(3, minmax(0, 340px));
+}
+
+@media (max-width: 1100px) {
+  .sign-up-select-page__grid--three {
+    grid-template-columns: repeat(2, minmax(0, 384px));
+  }
+}
+
+@media (max-width: 900px) {
+  .sign-up-select-page__grid,
+  .sign-up-select-page__grid--three {
+    grid-template-columns: 1fr;
+  }
+}
+```
+
+---
+
+## 10. FAQ Page
+
+### 対象ファイル
+
+```txt
+frontend/src/pages/FaqPage.tsx
+frontend/src/styles/faq-page.css
+```
+
+### 内容
+
+FAQ は、以下の観点で作成しました。
+
+* なぜブロックチェーンを使うのか
+* 真贋証明の確認方法
+* ブロックチェーントークンの用途
+* 導入コスト
+* 転売対策
+* 口コミの信頼性
+* 購入者メリット
+* 販売者メリット
+
+バックエンド連携はありません。静的ページです。
+
+---
+
+## 11. HowToUsePage
+
+### 対象ファイル
+
+```txt
+frontend/src/pages/HowToUsePage.tsx
+frontend/src/styles/how-to-use-page.css
+```
+
+### 内容
+
+`frontend/introduction/src/components/HowItWorksSection.tsx` の内容をAMOL側に移植しました。
+
+出品者Console:
+
+```txt
+01 ブランド登録
+02 メンバー招待
+03 商品設計
+04 トークン設計
+05 生産
+06 検品
+07 ミント
+08 出品
+09 注文・レビュー確認
+```
+
+購入者Mall:
+
+```txt
+01 アバター登録
+02 購入
+03 レビュー投稿
+04 トークン交換
+```
+
+YouTube iframe 埋め込みあり。
+
+---
+
+## 12. ContactPage 機能分割
+
+### 旧状態
+
+`ContactPage.tsx` に以下がすべて入っていました。
+
+* Firebase Auth 状態
+* PC判定
+* 添付画像管理
+* Firebase Storage upload
+* submit処理
+* form描画
+
+### 新構成
+
+```txt
+frontend/src/pages/
+└─ ContactPage.tsx
+
+frontend/src/features/contact/
+├─ types.ts
+├─ constants.ts
+├─ utils/
+│  └─ upload.ts
+├─ hooks/
+│  ├─ useContactAuth.ts
+│  ├─ useContactViewport.ts
+│  ├─ useContactAttachments.ts
+│  └─ useContactSubmit.ts
+└─ components/
+   └─ ContactForm.tsx
+```
+
+### CSS
+
+```txt
+frontend/src/styles/contact-page.css
+```
+
+```css
+.contact-form {
+  display: grid;
+  row-gap: 24px;
+}
+```
+
+---
+
+## 13. Contact backend 接続
+
+### 正しい endpoint
+
+現在のバックエンドの問い合わせAPIは以下です。
+
+```txt
+POST /introduction/contacts
+```
+
+以前 `/api/contact` に送っていたため、404 が発生していました。
+
+### 送信先
+
+```ts
+fetch(`${backendUrl}/introduction/contacts`, ...)
+```
+
+### backend が受け取る構造
+
+バックエンドの `createContactRequest` に合わせて、送信JSONは以下の5項目です。
+
+```json
+{
+  "name": "入力されたお名前",
+  "email": "入力されたメールアドレス",
+  "company": "入力された会社名",
+  "message": "入力されたお問い合わせ内容",
+  "source": "web-amol"
+}
+```
+
+`subject` と `attachments` は backend の request struct に存在しません。
+また backend 側は `DisallowUnknownFields()` を使っているため、余計なfieldを送ると400になります。
+
+### Contact form 入力欄
+
+バックエンドのメール構造に合わせて、フォームは以下になりました。
+
+```txt
+お名前
+メールアドレス
+会社名
+お問い合わせ内容
+添付ファイル画像
+```
+
+`お問い合わせの題目` は削除しました。
+
+---
+
+## 14. Contact mailer 修正
+
+### 対象ファイル
+
+```txt
+backend/internal/adapters/out/mail/contact_mailer.go
+```
+
+### 修正内容
+
+メール本文から以下を削除しました。
+
+```txt
+ID
+流入元
+受付時刻
+添付ファイルパス
+```
+
+管理者通知メールの subject も ID を含めない形に変更しました。
+
+```go
+subject := "【AMOL】新しいお問い合わせを受信しました"
+```
+
+受領メールも AMOL 表記に変更しました。
+
+```go
+subject := "【AMOL】お問い合わせを受け付けました"
+```
+
+本文末尾も `Narratives` から `AMOL` に変更しました。
+
+### 注意
+
+添付ファイルの `Storage Path` は backend mailer ではなく、frontend の `useContactSubmit.ts` 側で message に連結されていたため、frontend 側からも削除しました。
+
+修正後の添付情報:
+
+```txt
+ファイル名
+URL
+Content Type
+Size
+```
+
+削除済み:
+
+```txt
+Storage Path
+```
+
+---
+
+## 15. useContactSubmit.ts の現在方針
+
+### 対象ファイル
+
+```txt
+frontend/src/features/contact/hooks/useContactSubmit.ts
+```
+
+### 現在の主な仕様
+
+* `VITE_API_BASE_URL` を優先
+* なければ `VITE_BACKEND_URL`
+* endpoint は `/introduction/contacts`
+* ログイン時は `currentUser.email` を使用
+* 未ログイン時は入力メールアドレスを使用
+* Firebase ID token はログイン時に Authorization Bearer として付与
+* 添付ファイルは Firebase Storage にアップロード
+* メール本文には添付URLなどを追記
+* `Storage Path` は本文に含めない
+
+---
+
+## 16. 今後の注意点 / TODO
+
+### 16.1 SignInSelectPage / SignUpSelectPage の重複整理
+
+`SignInSelectPage` と `SignUpSelectPage` はほぼ同じ構造です。
+今後、共通コンポーネント化するとよいです。
+
+候補:
+
+```txt
+features/auth-select/
+├─ components/
+│  └─ AuthServiceSelect.tsx
+├─ types.ts
+└─ constants.ts
+```
+
+### 16.2 SignUpSelectPage と SignInSelectPage のCSS分離
+
+現在は `sign-up-select-page.css` を両方で使っています。
+意味的には以下のように分けてもよいです。
+
+```txt
+auth-select-page.css
+```
+
+ただし現状は流用で問題ありません。
+
+### 16.3 backend deploy script
+
+`deploy-backend.ps1` は gcloud config に依存しているため、将来的には `ProjectId` をparam化する方が安全です。
+
+推奨:
+
+```powershell
+[string]$ProjectId = "narratives-development-26c2d"
+```
+
+### 16.4 Contact attachments
+
+現在、添付ファイルはバックエンドの request struct には直接入れていません。
+URL等を message に連結しています。
+
+将来的に構造化したい場合は backend 側の `createContactRequest` に以下を追加する必要があります。
+
+```go
+Attachments []ContactAttachment `json:"attachments"`
+```
+
+ただし現状は `DisallowUnknownFields()` があるため、frontend から `attachments` を送ると400になります。
+
+### 16.5 Header login link
+
+Header のログインリンクは `/signin/select` に変更済みです。
+未ログインユーザーが直接 `/signin` を開いた場合は、従来通りMall用ログイン画面へ行けます。
+
+---
+
+## 17. 重要な現状ルートまとめ
+
+```txt
+/                       LandingPage またはログイン済みなら /rooms
+/signin                 Mallログイン
+/signin/select          ログイン先選択
+/signup                 Mall新規登録
+/signup/select          新規登録先選択
+/how-to-use             使い方
+/faq                    FAQ
+/contact                お問い合わせ
+/terms                  利用規約
+/privacy-policy         プライバシーポリシー
+/specified-commercial-transactions  特商法
+/rooms                  ログイン後トップ
+```
+
+---
+
+## 18. 動作確認項目
+
+### Landing
+
+* `/` の新規登録ボタン押下で `/signup/select` に遷移する
+* 3カードが表示される
+* Team section が表示される
+* founder画像が表示される
+* Vision section が表示される
+
+### SignUp selection
+
+* `/signup/select` で Console / Mall の2カードが中央揃え
+* Console 押下で外部URLを別ウィンドウで開く
+* Mall 押下で `/signup` に遷移する
+
+### SignIn selection
+
+* `/signin/select` で Console / Inspector / Mall の3カードが横幅に余裕がある場合1行に並ぶ
+* Console / Inspector は別ウィンドウ
+* Mall は `/signin` に遷移
+
+### Contact
+
+* 未ログイン時はメールアドレス入力欄が表示される
+* お名前 / メールアドレス / 会社名 / お問い合わせ内容を送信できる
+* API endpoint が `/introduction/contacts` になっている
+* メール本文に ID / 流入元 / 受付時刻 / Storage Path が出ない
+
+### Deploy
+
+* `gcloud config get-value project` が `narratives-development-26c2d`
+* Artifact Registry push 先が `narratives-development-26c2d`
+* Cloud Run service account が `narratives-backend-sa@narratives-development-26c2d.iam.gserviceaccount.com`
+
+```
+```

@@ -1,0 +1,28 @@
+{
+  // Tailwind構文をPostCSSとして認識
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+
+  // IntelliSenseとエラーチェックを有効化
+  "tailwindCSS.includeLanguages": {
+    "plaintext": "html",
+    "postcss": "css"
+  },
+
+  // Tailwind構文を有効化（@theme / @custom-variant など）
+  "css.customData": [
+    ".vscode/tailwindcss.json"
+  ],
+
+  // Lintエラーを無視（@apply / @theme / @custom-variant）
+  "css.lint.unknownAtRules": "ignore",
+
+  // Tailwind補完を有効化
+  "tailwindCSS.experimental.classRegex": [
+    ["tw`([^`]*)", "(?<=className=['\"])([^'\"]*)(?=['\"])"]
+  ],
+
+  // tailwindcssプラグインを利用
+  "tailwindCSS.validate": true
+}

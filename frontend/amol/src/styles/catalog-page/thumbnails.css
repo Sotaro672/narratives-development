@@ -1,0 +1,53 @@
+/* frontend/src/styles/catalog-page/thumbnails.css */
+
+/* ==============================
+   Amazon-like vertical thumbnails
+   ============================== */
+
+.catalog-page-thumbnail-list {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 16px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: var(--catalog-thumbnail-gap);
+  width: var(--catalog-thumbnail-size);
+  max-height: calc(100% - 32px);
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.catalog-page-thumbnail-list::-webkit-scrollbar {
+  display: none;
+}
+
+.catalog-page-thumbnail-button {
+  flex: 0 0 auto;
+  width: var(--catalog-thumbnail-size);
+  height: var(--catalog-thumbnail-size);
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.72;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 10%);
+}
+
+.catalog-page-thumbnail-button:hover,
+.catalog-page-thumbnail-button--active {
+  border-color: #1f1f1f;
+  opacity: 1;
+}
+
+.catalog-page-thumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

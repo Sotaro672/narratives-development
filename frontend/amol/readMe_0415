@@ -1,0 +1,253 @@
+以下、README としてそのまま使える形でまとめます。今回の改修は主に `PublicRoomDetailPage` / `RoomDetailPage` / `RoomPaymentPage` / `public-room-detail-page.css` 周辺に集約されています。 
+
+---
+
+# README: PublicRoomDetailPage / RoomDetailPage / RoomPaymentPage 改修まとめ
+
+## 概要
+
+今回の改修では、`PublicRoomDetailPage` と `RoomDetailPage` を中心に、以下の改善を行った。
+
+* メディアエリアの共通化
+* `style` 直書きの CSS 移譲
+* モバイル横向き時の左右2カラム最適化
+* `PublicRoomDetailPage` の応援導線をページ遷移から iframe シートへ変更
+* `RoomPaymentPage` の埋め込み表示対応
+* チャット / ランキング / フッター / ヘッダーのレイアウト崩れ修正
+* 募金実績 0 件時の不要エラー表示の抑止
+* `RoomDetailPage` の公開中 / 停止中ボタンおよびコピー用フッターの CSS 復旧
+
+---
+
+## 1. メディアエリアの共通化
+
+### 目的
+
+`RoomDetailPage` と `PublicRoomDetailPage` の両方で使用しているメディア表示領域を共通部品として整理し、レイアウト差異や重複実装を減らすこと。
+
+### 対応内容
+
+* メディア表示ロジックを shared component 側へ寄せた
+* 両ページでメディア表示仕様を揃えた
+* メディア有無に応じた本文開始位置の制御を導入した
+
+---
+
+## 2. CSS の外出しと責務整理
+
+### 目的
+
+コンポーネント内 `style` 直書きを減らし、表示崩れの原因切り分けをしやすくすること。
+
+### 対応内容
+
+* `shared.tsx` 内の `style` 要素を CSS ファイルへ移譲
+* `public-room-detail-page.css` にページ責務のスタイルを集約
+* 追加した主要クラス
+
+  * `.public-room-detail-page-body`
+  * `.public-room-detail-page-tabs`
+  * `.public-room-detail-page-main`
+  * `.public-room-detail-page-bottom-action`
+  * `.public-room-detail-page-bottom-summary`
+  * `.public-room-detail-page-payment-sheet*`
+  * `.public-room-detail-page-copy-bar*`
+  * `.public-room-detail-page-card__status-button` 
+
+---
+
+## 3. モバイル横向きレイアウトの最適化
+
+### 目的
+
+スマホ横向き時に、閲覧性を維持したまま情報を左右に分離すること。
+
+### 最終レイアウト
+
+#### 左半分
+
+* header
+* メディアエリア
+* 作者 / 説明 / 作成日時
+* `RoomDetailPage` の公開中 / 停止中切替
+
+#### 右半分
+
+* チャット / ランキングタブ
+* タブ内容
+* 固定フッター
+* 応援 iframe シート表示時は右半分内で完結
+
+### 実施内容
+
+* 横向きスマホ専用 media query を導入
+* `50vw` ベースの左右分割レイアウトを構築
+* タブ領域を右半分固定
+* 本文領域をタブ直下に固定し、内部スクロールへ変更
+* footer 相当領域を右半分のみに縮小
+* メディアあり / なしで本文開始位置を調整
+* `sticky-video` の幅を 50vw に制限し、右側コンテンツの背面化を防止 
+
+---
+
+## 4. `PublicRoomDetailPage` の応援導線変更
+
+### 変更前
+
+* 「応援する」押下で `/public/rooms/:roomId/payment` へページ遷移
+
+### 変更後
+
+* 「応援する」押下で下からスライドする iframe シートを表示
+* 横向きスマホ時は右半分にのみ iframe シートを表示
+
+### 実装内容
+
+* `paymentSheetOpen` state を追加
+* `postMessage` による親子 iframe 間連携を追加
+* `iframe src` は `?embedded=1` を付与
+* 背景クリックでシートを閉じる
+* 決済成功 / 閉じる操作で親ページへ通知する構成に変更 
+
+---
+
+## 5. `RoomPaymentPage` の埋め込み対応
+
+### 対応内容
+
+* `embedded=1` のときは通常ページではなく埋め込みシート前提で表示
+* `Layout` の header / back を抑制
+* 右上に × ボタンを追加
+* 下方向フリックで閉じる動作を追加
+* `window.parent.postMessage(...)` で親へ閉じる通知、成功通知を送信する構成へ変更
+
+### 埋め込み時の UX
+
+* 上部に簡易ヘッダー
+* 右上に閉じるボタン
+* 下スワイプでシートを閉じる
+* 成功時は親ページへ通知し、シートを閉じる 
+
+---
+
+## 6. チャット / ランキング表示の修正
+
+### 問題
+
+* iframe シート導入後、一時的にタブ内容が右半分に表示されなくなった
+* タブと本文が重なった
+* 本文が他要素の裏に潜ることがあった
+
+### 修正内容
+
+* `RoomDetailTabs` の位置と `main` 領域の責務を整理
+* `.public-room-detail-page-main` を横向き時に右半分固定へ統一
+* タブは右半分上部固定、本文はその直下で内部スクロール
+* 背景に隠れないよう z-index と固定範囲を見直した 
+
+---
+
+## 7. 募金実績エラー表示の抑止
+
+### 問題
+
+募金実績が 0 件のユーザーに対して、
+`あなたの募金実績の取得に失敗しました。`
+が表示されていた。
+
+### 対応内容
+
+* `roomSupporters/{roomId}_{userId}` が存在しない場合はエラーではなく `null` 扱いに変更
+* 表示上は `0円` 扱いに統一
+* エラー文言そのものを UI 表示から外した
+
+### 結果
+
+* 募金実績 0 件でも不要な赤エラーは表示されない 
+
+---
+
+## 8. `RoomDetailPage` 固有の修正
+
+### 問題
+
+* `公開中 / 停止中` 切替ボタンの CSS が外れた
+* コピー用フッターの CSS が外れた
+* メディアまわりの余白制御が崩れた
+
+### 対応内容
+
+* `RoomDetailPage.tsx` の section に
+  `public-room-detail-page-section--flush-media`
+  を復帰
+* CSS に以下を復旧
+
+  * `.public-room-detail-page-card__status-button`
+  * `.public-room-detail-page-copy-bar`
+  * `.public-room-detail-page-copy-bar__label`
+  * `.public-room-detail-page-copy-bar__message`
+
+### 結果
+
+* 公開状態切替ボタンの見た目が復旧
+* リンクコピー用フッターが復旧
+* メディア上辺 / 左辺の余白制御が `PublicRoomDetailPage` と整合
+
+---
+
+## 9. 既知の backend 課題
+
+### 内容
+
+チャットは募金成功後に自動更新されるが、ランキングが自動更新されないケースがある。
+
+### 原因整理
+
+* チャットは `roomPayments` の `SUCCEEDED` をもとに更新
+* ランキングは `roomSupporters` 集計結果を監視
+* Stripe 決済が `requires_action` / `processing` を経由して後から成功した場合、
+  backend 側で `ApplySucceededRoomPayment(...)` が走っていない可能性が高い
+
+### 必要な対応
+
+* Stripe 成功確定後に `roomPayments.status = SUCCEEDED` 更新
+* 同時に `roomAggregateService.ApplySucceededRoomPayment(ctx, paymentID)` を呼ぶ処理を追加すること 
+
+---
+
+## 10. 主な変更ファイル
+
+* `frontend/src/pages/PublicRoomDetailPage.tsx`
+* `frontend/src/pages/RoomDetailPage.tsx`
+* `frontend/src/pages/RoomPaymentPage.tsx`
+* `frontend/src/styles/public-room-detail-page.css`
+* `frontend/src/styles/room-payment-page.css`
+* `frontend/src/components/room/shared.tsx` 周辺の共通部品
+
+---
+
+## 11. 現在の仕様まとめ
+
+### PublicRoomDetailPage
+
+* 応援ボタン押下で iframe シート表示
+* 横向きスマホでは右半分のみでシート表示
+* 募金実績 0 件でもエラー表示しない
+* タブ本文は右半分固定
+
+### RoomDetailPage
+
+* 公開中 / 停止中 切替あり
+* 下部に公開リンクコピー用フッターあり
+* `PublicRoomDetailPage` と同じメディア・本文構造に寄せている
+
+### RoomPaymentPage
+
+* `embedded=1` 時はシート前提表示
+* × ボタンあり
+* 下フリックで閉じる
+* 成功時に親へ通知する
+
+---
+
+必要なら次に、これをそのままプロジェクトに置ける **`README.md` 形式のコードブロック** で整形して返します。

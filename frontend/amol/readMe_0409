@@ -1,0 +1,487 @@
+````md
+# AMOL Room / Follow / Related Rooms README
+
+## 概要
+
+この改修では、AMOL に以下の機能を追加・整理しました。
+
+1. 公開ルーム詳細画面での **ルームフォロー機能**
+2. `roomFollows` を用いた **ルーム単位のフォロー状態管理**
+3. 「募金したルーム」と「フォローしたルーム」を **区別せず統合して取得する API**
+4. ルーム一覧画面での **関連ルーム一覧表示**
+5. 各関連ルームカードでの **募金金額表示**
+6. `RoomsPage.tsx` の inline style を `page.css` へ移譲
+
+現在の一覧仕様では、**募金済みルーム** と **フォロー済みルーム** を同じリストにまとめて表示します。  
+各カードでは、フォロー状態・募金済み状態・累計募金金額を確認できます。 :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1} :contentReference[oaicite:2]{index=2}
+
+---
+
+## データ構成
+
+### 1. `roomFollows`
+ルームに対するフォロー状態を保持します。  
+ドキュメント ID は次の形式です。
+
+```txt
+{roomId}_{userUid}
+````
+
+想定フィールド:
+
+```json
+{
+  "id": "roomId_userUid",
+  "roomId": "roomId",
+  "userUid": "userUid",
+  "follow": true,
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp",
+  "deletedAt": null
+}
+```
+
+`follow == true` のときフォロー中として扱います。
+`follow == false` に戻した場合は `deletedAt` を設定します。  
+
+---
+
+### 2. `roomSupporters`
+
+募金集計済みデータです。
+既存の aggregate で使用しており、今回の関連ルーム一覧では **募金済み判定** と **募金金額表示** に使います。
+
+利用フィールド:
+
+* `roomId`
+* `supporterUid`
+* `totalSupportAmount`
+* `supportCount`
+* `lastSupportedAt`
+* `updatedAt`
+
+フォロー一覧統合時は、`supporterUid == currentUser.uid` のレコード群を読み、
+同一 room ごとの募金金額を `supportAmount` として一覧レスポンスへ入れます。  
+
+---
+
+### 3. `rooms`
+
+ルーム本体です。
+関連ルーム一覧では以下を利用します。
+
+* `id`
+* `title`
+* `description`
+* `ownerUid`
+* `ownerAvatarName`
+* `currency`
+* `isOpen`
+* `createdAt`
+* `updatedAt`
+
+一覧画面では description をカードから削除し、タイトル・作者・状態・募金金額・更新日時を表示する構成にしました。 
+
+---
+
+## backend 改修内容
+
+---
+
+### 1. `follow_service.go`
+
+#### 追加済み責務
+
+`FollowService` は以下を担当します。
+
+* 1 ルームのフォロー状態取得
+* フォロー状態更新
+* フォロー状態トグル
+* ルームごとのフォロワー数取得
+* **募金済み / フォロー済みを統合した関連ルーム一覧取得**
+
+#### 主要メソッド
+
+##### `GetRoomFollow(ctx, roomID, userUID)`
+
+現在ユーザーのルームフォロー状態を返します。
+ドキュメントが存在しない場合は `follow=false` として扱います。 
+
+##### `UpsertRoomFollow(ctx, input)`
+
+`roomFollows/{roomId}_{userUid}` を upsert します。
+Firestore の `MergeAll` 制約に合わせ、**struct ではなく map[string]any** を使って保存するよう修正済みです。 
+
+##### `ToggleRoomFollow(ctx, roomID, userUID)`
+
+既存状態を反転します。
+`GetRoomFollow` → `UpsertRoomFollow` の順で処理します。 
+
+##### `CountFollowersByRoomID(ctx, roomID)`
+
+対象ルームのフォロワー数を返します。
+`roomFollows where roomId == ? and follow == true` を使います。 
+
+##### `ListFollowedRoomsByUserUID(ctx, userUID)`
+
+今回追加した統合一覧取得です。
+以下の流れで結果を作ります。
+
+1. `roomFollows` から `userUid == currentUser.uid && follow == true` を取得
+2. `roomSupporters` から `supporterUid == currentUser.uid` を取得
+3. roomId を統合
+4. 対象 `rooms/{roomId}` を取得
+5. 自分が owner の room は除外
+6. 各 room に対して次を構築
+
+   * `follow`
+   * `supported`
+   * `supportAmount`
+   * `followedAt`
+   * `updatedAt`
+7. `updatedAt` の降順で返却
+
+これにより、**募金だけしたルーム**、**フォローだけしたルーム**、**両方したルーム** を 1 つの一覧で扱えます。 
+
+#### 返却モデル
+
+```go
+type FollowedRoomSummary struct {
+    ID              string
+    Title           string
+    Description     string
+    OwnerUID        string
+    OwnerAvatarName string
+    Currency        string
+    IsOpen          bool
+    CreatedAt       time.Time
+    UpdatedAt       time.Time
+    Follow          bool
+    Supported       bool
+    SupportAmount   int64
+    FollowedAt      time.Time
+}
+```
+
+`SupportAmount` はカード上の募金金額表示に使います。 
+
+---
+
+### 2. `follow_handler.go`
+
+`FollowHandler` は次のエンドポイントを処理します。
+
+#### `GET /api/rooms/{roomId}/follow`
+
+現在ユーザーのルームフォロー状態を返します。 
+
+#### `PUT /api/rooms/{roomId}/follow`
+
+明示的に `follow: true/false` を更新します。 
+
+#### `POST /api/rooms/{roomId}/follow/toggle`
+
+フォロー状態をトグルします。 
+
+#### `GET /api/me/followed-rooms`
+
+今回追加した、関連ルーム一覧取得 API です。
+`HandleListFollowedRooms` から `followService.ListFollowedRoomsByUserUID(...)` を呼び、
+レスポンスへ `supportAmount` を含めて返します。 
+
+#### response 変換
+
+`toFollowedRoomSummaryResponse(...)` で以下を返します。
+
+* `id`
+* `title`
+* `description`
+* `ownerUid`
+* `ownerAvatarName`
+* `currency`
+* `isOpen`
+* `createdAt`
+* `updatedAt`
+* `follow`
+* `supported`
+* `supportAmount`
+* `followedAt`
+
+
+
+---
+
+### 3. `router.go`
+
+以下のルーティングを追加済みです。
+
+```go
+mux.Handle(
+    "/api/me/followed-rooms",
+    middleware.FirebaseAuthMiddleware(firebaseAuthClient)(
+        http.HandlerFunc(followHandler.HandleListFollowedRooms),
+    ),
+)
+```
+
+これにより frontend の `GET /api/me/followed-rooms` が 404 にならず、
+関連ルーム一覧を取得できるようになります。 
+
+既存の follow ルーティングも維持しています。
+
+* `GET /api/rooms/{roomId}/follow`
+* `PUT /api/rooms/{roomId}/follow`
+* `POST /api/rooms/{roomId}/follow/toggle`
+
+
+
+---
+
+## frontend 改修内容
+
+---
+
+### 1. `PublicRoomDetailPage.tsx`
+
+公開ルーム詳細画面では、room 単位のフォロー状態を backend 経由で取得・更新するようにしました。
+
+#### 取得
+
+```txt
+GET /api/rooms/{roomId}/follow
+```
+
+#### トグル
+
+```txt
+POST /api/rooms/{roomId}/follow/toggle
+```
+
+ボタン表示は以下の状態を持ちます。
+
+* `読込中...`
+* `フォロー`
+* `フォロー中`
+* `処理中...`
+
+これにより、各公開ルーム詳細からルーム自体をフォローできます。  
+
+---
+
+### 2. `RoomsPage.tsx`
+
+ルーム一覧画面を次の 2 タブ構成に変更しました。
+
+* `マイルーム`
+* `ルーム`
+
+ここで `ルーム` タブは、**募金したルームとフォローしたルームを区別せず統合して表示**します。  
+
+#### `relatedRooms` の取得
+
+frontend は backend の統合 API を呼びます。
+
+```txt
+GET /api/me/followed-rooms
+```
+
+レスポンスには以下を期待します。
+
+* `follow`
+* `supported`
+* `supportAmount`
+
+これをもとにカード表示を行います。 
+
+#### カード表示内容
+
+関連ルームカードには次を表示します。
+
+* タイトル
+* 公開中 / 停止中
+* 作者
+* フォロー中バッジ
+* 募金済みバッジ
+* 募金金額
+* 更新日時
+
+**description はカードから削除済み**です。 
+
+#### 自分のルーム
+
+`myRooms` タブでは従来どおり ownerUid 基準で Firestore から購読します。
+ルーム作成ボタンも維持しています。  
+
+---
+
+### 3. `page.css`
+
+`RoomsPage.tsx` の inline style はすべて `page.css` に移譲済みです。
+追加した主な class は次のとおりです。
+
+* `.rooms-page`
+* `.rooms-page-tabs`
+* `.rooms-page-tabs__button`
+* `.rooms-page-tabs__button--active`
+* `.rooms-page-section`
+* `.rooms-page-section__header`
+* `.rooms-page-section__count`
+* `.rooms-page-list`
+* `.rooms-page-card`
+* `.rooms-page-card--related`
+* `.rooms-page-card__header`
+* `.rooms-page-card__title`
+* `.rooms-page-card__status`
+* `.rooms-page-card__owner`
+* `.rooms-page-card__date`
+* `.rooms-page-card__badges`
+* `.rooms-page-card__badge`
+* `.rooms-page-card__meta`
+* `.rooms-page-card__amount`
+* `.rooms-page-error`
+
+これにより、一覧画面のレイアウト管理を CSS 側へ統一しました。 
+
+---
+
+## 画面仕様
+
+### 1. PublicRoomDetailPage
+
+* ルーム詳細表示
+* フォロー / フォロー解除
+* 募金導線
+* あなたの累計募金額表示
+* ランキング表示
+
+### 2. RoomsPage
+
+#### マイルーム
+
+* 自分が owner のルーム一覧
+* 件数表示
+* 公開中件数表示
+* ルーム作成ボタン
+
+#### ルーム
+
+* 募金したルーム
+* フォローしたルーム
+* 募金もフォローもしたルーム
+
+を 1 一覧で表示します。
+
+カード表示項目:
+
+* タイトル
+* 公開状態
+* 作者
+* フォロー中バッジ
+* 募金済みバッジ
+* 募金金額
+* 更新日時
+
+description は表示しません。 
+
+---
+
+## API 一覧
+
+### Follow
+
+* `GET /api/rooms/{roomId}/follow`
+* `PUT /api/rooms/{roomId}/follow`
+* `POST /api/rooms/{roomId}/follow/toggle`
+
+### Related rooms
+
+* `GET /api/me/followed-rooms`
+
+### Payments
+
+* `POST /api/rooms/{roomId}/payment-intent`
+* `POST /api/rooms/{roomId}/paypay/create`
+* `GET /api/rooms/{roomId}/paypay/status`
+* `GET /api/me/room-payments`
+
+
+
+---
+
+## Firestore クエリ
+
+今回の一覧取得で主に利用するクエリは次のとおりです。
+
+### 1. フォロー中ルーム
+
+```txt
+roomFollows
+where userUid == currentUser.uid
+where follow == true
+```
+
+### 2. 募金済みルーム
+
+```txt
+roomSupporters
+where supporterUid == currentUser.uid
+```
+
+### 3. 自分のルーム
+
+```txt
+rooms
+where ownerUid == currentUser.uid
+```
+
+### 4. 詳細画面のランキング
+
+```txt
+roomSupporters
+where roomId == roomId
+orderBy totalSupportAmount desc
+```
+
+---
+
+## 注意点
+
+* `roomSupporterAggregateSnapshot` は `room_aggregate_service.go` にも存在するため、`follow_service.go` 側では **別名 struct** を使う必要があります。今回 `followRoomSupporterAggregateSnapshot` に変更しました。
+* `supportAmount` は `roomSupporters.totalSupportAmount` を使います。
+* フォローしていなくても募金済みなら一覧に出ます。
+* 募金していなくてもフォロー済みなら一覧に出ます。
+* 自分が owner の room は related rooms から除外します。
+* `roomFollows` の `MergeAll` 使用時は struct ではなく map を使います。
+* `/api/me/followed-rooms` を router に登録しないと frontend は 404 になります。
+
+ 
+
+---
+
+## 今後の候補
+
+* `relatedRooms` の件数を server-side pagination にする
+* `followedAt` / `supportedAt` の優先ルールを明確化する
+* ルームカードへのサムネイル追加
+* 「フォローのみ」「募金済みのみ」フィルタ追加
+* 停止中ルームの表示条件見直し
+* フォロワー数の room card 表示
+* related rooms の並び順を仕様化
+* description を詳細画面以外でどこに見せるか再設計
+
+---
+
+## ここまでで反映されたこと
+
+* ルーム単位のフォロー機能を追加
+* `roomFollows` コレクションでフォロー状態を管理
+* `PublicRoomDetailPage` からフォロー操作可能にした
+* `FollowService` に統合一覧取得を追加
+* `GET /api/me/followed-rooms` を追加
+* `RoomsPage` で募金・フォロー済みルームを統合表示
+* 各カードに募金金額を表示
+* `RoomsPage` の inline style を `page.css` に移譲
+* 関連ルームカードから description を削除
+
+```
+```

@@ -1,0 +1,69 @@
+/* frontend/src/styles/catalog-page/model.css */
+
+/* ==============================
+   Model
+   ============================== */
+
+.catalog-page-model-list {
+  display: grid;
+  gap: 14px;
+}
+
+.catalog-page-model-card {
+  padding: 16px;
+  border: 1px solid var(--color-border, #e8e8e8);
+  border-radius: 16px;
+  background: var(--color-surface-secondary, #fafafa);
+}
+
+.catalog-page-model-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.catalog-page-model-title {
+  margin: 0;
+  color: var(--color-text, #1f1f1f);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.catalog-page-model-subtitle {
+  margin: 4px 0 0;
+  color: var(--color-text-muted, #666);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.catalog-page-color-swatch {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 50%);
+}
+
+.catalog-page-measurements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.catalog-page-measurement {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--color-text-muted, #666);
+  font-size: 12px;
+  font-weight: 700;
+}

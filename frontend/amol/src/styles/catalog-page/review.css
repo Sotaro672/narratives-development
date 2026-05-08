@@ -1,0 +1,113 @@
+/* frontend/src/styles/catalog-page/review.css */
+
+/* ==============================
+   Review
+   ============================== */
+
+.catalog-page-review-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.catalog-page-review-summary strong {
+  color: var(--color-text, #1f1f1f);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.catalog-page-review-summary span {
+  color: var(--color-text-muted, #666);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.catalog-page-review-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.catalog-page-review-item {
+  padding: 16px;
+  border: 1px solid var(--color-border, #e8e8e8);
+  border-radius: 16px;
+  background: var(--color-surface-secondary, #fafafa);
+  box-sizing: border-box;
+}
+
+.catalog-page-review-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.catalog-page-review-avatar,
+.catalog-page-review-avatar-placeholder {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+}
+
+.catalog-page-review-avatar {
+  display: block;
+  object-fit: cover;
+  background: #fff;
+}
+
+.catalog-page-review-avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8e8e8;
+  color: var(--color-text-muted, #666);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.catalog-page-review-avatar-name {
+  margin: 0;
+  color: var(--color-text, #1f1f1f);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.catalog-page-review-meta {
+  margin: 3px 0 0;
+  color: var(--color-text-muted, #666);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.catalog-page-review-title {
+  margin: 12px 0 0;
+  color: var(--color-text, #1f1f1f);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.catalog-page-review-body {
+  margin: 8px 0 0;
+  color: var(--color-text-muted, #666);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.catalog-page-review-votes {
+  margin: 10px 0 0;
+  color: var(--color-text-subtle, #888);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}

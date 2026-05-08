@@ -1,0 +1,14 @@
+/*frontend\amol\src\styles\globals.css*/
+.app-shell {
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.app {
+  padding: 32px 24px;
+}
+
+.app__container {
+  max-width: 1120px;
+  margin: 0 auto;
+}

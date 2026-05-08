@@ -1,0 +1,58 @@
+/* frontend/src/styles/catalog-page/media-controls.css */
+
+/* ==============================
+   PC image controls
+   ============================== */
+
+.catalog-page-image-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 88%);
+  color: #1f1f1f;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+}
+
+.catalog-page-image-nav:hover {
+  background: rgb(255 255 255 / 96%);
+}
+
+.catalog-page-image-nav:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
+.catalog-page-image-nav--prev {
+  left: calc(
+    16px + var(--catalog-thumbnail-size) + var(--catalog-thumbnail-gap)
+  );
+}
+
+.catalog-page-image-nav--next {
+  right: 16px;
+}
+
+.catalog-page-image-counter {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 56%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}

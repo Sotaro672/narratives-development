@@ -1,0 +1,19 @@
+/* frontend/amol/src/styles/wallet-page/profile-actions.css */
+
+.wallet-page-profile-actions-bar {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 20px 16px;
+  background: #fff;
+}
+
+.wallet-page-profile-actions-bar__inner {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wallet-page-profile-actions-bar__inner .button {
+  width: 100%;
+}

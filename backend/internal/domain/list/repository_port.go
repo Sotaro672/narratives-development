@@ -1,0 +1,119 @@
+// backend/internal/domain/list/repository_port.go
+package list
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	common "narratives/internal/domain/common"
+)
+
+// Patch（部分更新）: nil のフィールドは更新しない
+type ListPatch struct {
+	Status *ListStatus
+
+	AssigneeID *string
+	Title      *string
+
+	// ✅ 可読性のあるID（ユニークである必要はない）
+	// nil の場合は readableId を更新しない
+	ReadableID *string
+
+	// ✅ Policy: List.ImageID stores "image URL on bucket" (NOT image entity id)
+	// nil の場合は imageId を更新しない
+	ImageID *string
+
+	Description *string
+
+	// ✅ prices は配列のみ（フロント標準）
+	// nil の場合は prices を更新しない
+	Prices *[]ListPriceRow
+
+	UpdatedAt *time.Time
+	UpdatedBy *string
+	DeletedAt *time.Time
+	DeletedBy *string
+}
+
+// フィルタ/検索条件（実装側で適宜解釈）
+//
+// NOTE:
+// - 旧命名互換のため ModelNumbers を残しているが、ここでの意味は「modelId の集合」。
+// - 価格条件は Prices[] の (modelId, price) に対して適用される。
+type Filter struct {
+	// フリーテキスト（id, readableId, title, description 等の部分一致などは実装側で解釈）
+	SearchQuery string
+
+	// 絞り込み
+	IDs         []string
+	ReadableIDs []string
+
+	AssigneeID *string
+	Status     *ListStatus
+	Statuses   []ListStatus
+
+	// 価格条件
+	// - ModelNumbers: 対象 modelId の集合（旧名互換）
+	// - MinPrice/MaxPrice: price の閾値
+	ModelNumbers []string
+	MinPrice     *int
+	MaxPrice     *int
+
+	// ✅ 追加: inventoryId 単位の絞り込み
+	InventoryIDs []string
+
+	// 論理削除の tri-state（nil: 全件 / true: 削除済のみ / false: 未削除のみ）
+	Deleted *bool
+}
+
+// 共通型エイリアス（インフラ非依存）
+type Sort = common.Sort
+type SortOrder = common.SortOrder
+type Page = common.Page
+type PageResult[T any] = common.PageResult[T]
+type CursorPage = common.CursorPage
+type CursorPageResult[T any] = common.CursorPageResult[T]
+type SaveOptions = common.SaveOptions
+
+const (
+	SortAsc  = common.SortAsc
+	SortDesc = common.SortDesc
+)
+
+// 契約上の代表的エラー
+var (
+	ErrNotFound = errors.New("list: not found")
+	ErrConflict = errors.New("list: conflict")
+)
+
+// Repository ポート（契約）
+type Repository interface {
+	// 一覧取得
+	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[List], error)
+	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[List], error)
+
+	// ✅ NEW: 件数取得（ページング用）
+	// - filter は List と同じ解釈
+	// - sort/page は不要（Count は全件数）
+	Count(ctx context.Context, filter Filter) (int, error)
+
+	// 取得
+	GetByID(ctx context.Context, id string) (List, error)
+	Exists(ctx context.Context, id string) (bool, error)
+
+	// ✅ NEW: 軽量 getter（best-effort用途）
+	// listId から readableId のみ返す
+	GetReadableIDByID(ctx context.Context, id string) (string, error)
+
+	// ✅ NEW: inventoryId から listId 一覧のみ返す軽量 getter
+	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)
+
+	// 変更
+	Create(ctx context.Context, l List) (List, error)
+	Update(ctx context.Context, id string, patch ListPatch) (List, error)
+	Delete(ctx context.Context, id string) error
+
+	// 任意: Upsert 等
+	Save(ctx context.Context, l List, opts *SaveOptions) (List, error)
+}

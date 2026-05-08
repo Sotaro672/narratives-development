@@ -1,0 +1,47 @@
+/* frontend/amol/src/components/ui/section-card.css */
+
+.ui-section-card {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 16px;
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #111827);
+}
+
+.ui-section-card:first-child {
+  margin-top: 16px;
+}
+
+.ui-section-card h1,
+.ui-section-card h2,
+.ui-section-card h3,
+.ui-section-card p {
+  margin-top: 0;
+}
+
+.ui-section-card h1 {
+  margin-bottom: 4px;
+  font-size: 1.35rem;
+  line-height: 1.35;
+}
+
+.ui-section-card h2 {
+  margin-bottom: 12px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.ui-section-card h3 {
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 520px) {
+  .ui-section-card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+}

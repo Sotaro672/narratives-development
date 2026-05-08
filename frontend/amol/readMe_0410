@@ -1,0 +1,350 @@
+````md
+# AMOL 改修記録: Room 支払いメッセージ表示対応
+
+## 概要
+Room への募金時に送信されたメッセージを、Public Room Detail の chat タブで一覧表示できるようにするための改修を実施した。
+
+今回の最終方針は次の通り。
+
+- `RoomPaymentPage.tsx` から `amount` と `message` を送信する
+- `roomPayments` には `supporterUid` を保存する
+- chat 一覧は backend API `GET /api/rooms/:roomId/messages` から取得する
+- chat 一覧の表示名は `roomPayments` に保持せず、`supporterUid` をもとに `avatars/{uid}.avatarName` を backend 側で解決して返す
+- chat 一覧は投稿日時の降順で表示する
+- message が空の場合は本文行を表示しない
+- chat API は認証必須とする
+
+---
+
+## 背景
+当初は `supporterAvatarName` を `roomPayments` に保存してそのまま返す設計も検討したが、最終的に以下の理由で採用しなかった。
+
+- 表示名の正は `avatars.avatarName` に一元化したい
+- `roomPayments` に表示名を重複保持すると整合が崩れやすい
+- ユーザー名変更時に最新名を反映したい
+
+そのため、backend の一覧取得時に `supporterUid` から `avatarName` を解決する方式に変更した。
+
+---
+
+## 改修対象ファイル
+
+### backend
+- `backend/internal/service/room_service.go`
+- `backend/internal/handler/room_payment_intent_handler.go`
+- `backend/internal/handler/room_message_handler.go`
+- `backend/internal/server/router.go`
+
+### frontend
+- `frontend/src/pages/RoomPaymentPage.tsx`
+- `frontend/src/pages/PublicRoomDetailPage.tsx`
+
+---
+
+## 実施内容
+
+## 1. RoomPaymentPage.tsx にメッセージ入力欄を追加
+Room 支払い画面で、金額と一緒にメッセージを送れるようにした。
+
+### 追加内容
+- `message` state を追加
+- textarea を追加
+- 文字数上限を 200 文字に設定
+- PayPay / card 両方の送信 payload に `message` を追加
+- カード未登録時に payment-method 設定画面へ遷移する際、`restoredMessage` を state に保持
+
+### 送信 payload
+```json
+{
+  "amount": 1000,
+  "message": "応援しています！"
+}
+````
+
+---
+
+## 2. card 表示の簡略化
+
+RoomPaymentPage 上のカード詳細表示を廃止した。
+
+### 変更内容
+
+* ブランド名
+* 下4桁
+* 有効期限
+
+の表示を削除し、カード未登録時のみ案内文を表示する仕様に変更した。
+
+---
+
+## 3. payment-intent API を message 対応
+
+`/api/rooms/:roomId/payment-intent` で `message` を受け取れるようにした。
+
+### 対応箇所
+
+* `CreateRoomPaymentIntentRequest`
+* `RoomPaymentIntentHandler`
+* `service.CreateRoomPaymentIntentInput`
+
+### 変更内容
+
+* request body に `message` を追加
+* handler から service に `Message` を渡すように変更
+
+---
+
+## 4. room_service.go で message 保存対応
+
+Stripe / PayPay の両決済方式で `roomPayments.message` を保存できるようにした。
+
+### 対応内容
+
+* `RoomPayment` に `Message` を保持
+* `CreatePaymentIntentForRoom()` で保存
+* `CreatePendingPayPayPaymentForRoom()` で保存
+* `validateRoomPaymentMessage()` を追加
+* 文字数上限を 200 文字に統一
+
+### 保存方針
+
+* `message` はそのまま保存
+* `message` が空でも payment 自体は成立
+* `message` が空の場合は chat 表示時に本文行を非表示
+
+---
+
+## 5. Room message API を新規追加
+
+Public Room Detail の chat タブ用に、Room ごとの募金メッセージ一覧 API を追加した。
+
+### API
+
+`GET /api/rooms/:roomId/messages`
+
+### handler
+
+* `backend/internal/handler/room_message_handler.go`
+
+### router
+
+* `backend/internal/server/router.go` に route を追加
+* `/api/rooms/` 配下で `GET .../messages` を `roomMessageHandler` に振り分けるようにした
+
+### 認証
+
+* Firebase Auth Middleware 配下に配置
+* Authorization ヘッダー必須
+
+---
+
+## 6. chat API の 401 / 405 解消
+
+### 発生した問題
+
+* 401 Unauthorized
+* 405 Method Not Allowed
+
+### 原因
+
+#### 401
+
+frontend が messages API を Authorization ヘッダーなしで呼んでいた
+
+#### 405
+
+backend に `room_message_handler.go` がなく、router でも `/messages` を処理していなかった
+
+### 対応
+
+* frontend で `currentUser.getIdToken()` を取得
+* `Authorization: Bearer ...` を付与
+* `room_message_handler.go` を新規作成
+* `router.go` に `/messages` の分岐を追加
+
+---
+
+## 7. supporter の名前解決方式を変更
+
+途中までは `supporterAvatarName` を `roomPayments` に保存して返す案を採用していたが、最終的に不採用とした。
+
+### 不採用理由
+
+* avatars の正データと二重管理になる
+* 過去データ・新規データで差異が出やすい
+* ユーザー名変更時に追従しにくい
+
+### 最終設計
+
+* `roomPayments` には `SupporterUID` だけ保存
+* chat 一覧取得時に `avatars/{supporterUid}.avatarName` を参照
+* API response には `avatarName` として返す
+
+---
+
+## 8. room_service.go の一覧取得ロジック変更
+
+`ListSucceededRoomMessages()` を以下の方針で実装した。
+
+### 取得条件
+
+* `roomId == 対象 roomId`
+* `status == SUCCEEDED`
+
+### 並び順
+
+* backend クエリは `createdAt` 昇順
+* frontend 表示は最終的に `createdAt` 降順に変更
+
+### avatarName 解決
+
+* `supporterUid` ごとに `avatars` を参照
+* `findAvatarNameByUID()` を追加
+* 一覧処理中は UID ごとにメモリキャッシュして N+1 を軽減
+
+### DTO
+
+```go
+type RoomMessage struct {
+    ID           string    `json:"id"`
+    RoomID       string    `json:"roomId"`
+    SupporterUID string    `json:"supporterUid"`
+    AvatarName   string    `json:"avatarName"`
+    Amount       int64     `json:"amount"`
+    Currency     string    `json:"currency"`
+    Message      string    `json:"message"`
+    CreatedAt    time.Time `json:"createdAt"`
+}
+```
+
+---
+
+## 9. getAvatarNameByUID の廃止
+
+設計変更後、厳格版 helper `getAvatarNameByUID()` は未使用になったため削除対象とした。
+
+### 理由
+
+* 一覧取得用には `findAvatarNameByUID()` だけで十分
+* `findAvatarNameByUID()` は表示用として軽量で扱いやすい
+* `unusedfunc` 警告が出ていた
+
+---
+
+## 10. PublicRoomDetailPage.tsx の chat タブ実装
+
+chat タブのプレースホルダ表示を廃止し、messages API から取得した一覧を表示するようにした。
+
+### 追加内容
+
+* `RoomMessageItem` 型を追加
+* `chatItems` / `loadingChat` / `chatError` を追加
+* chat タブ選択時に messages API を fetch
+* Authorization ヘッダーを付けて呼び出す
+
+### 表示内容
+
+* `avatarName`
+* `amount`
+* `message`
+* `createdAt`
+
+### message が空の場合
+
+* 本文行を非表示
+
+---
+
+## 11. chat 並び順の変更
+
+最終的に chat 一覧は投稿日時の降順とした。
+
+### frontend 側ソート
+
+```ts
+const sortedItems = [...items].sort(
+  (a, b) => toMillis(b.createdAt) - toMillis(a.createdAt)
+);
+```
+
+### 表示結果
+
+* 新しい投稿が上
+* 古い投稿が下
+
+---
+
+## 現在の最終仕様
+
+## RoomPaymentPage
+
+* 金額入力あり
+* メッセージ入力あり
+* PayPay / card の両方で送信可
+* カード詳細は表示しない
+
+## roomPayments
+
+* `supporterUid` は保存
+* `message` は保存
+* `avatarName` は保存しない
+
+## messages API
+
+* 認証必須
+* `GET /api/rooms/:roomId/messages`
+* `status == SUCCEEDED` の payment を対象
+* `supporterUid` から `avatarName` を解決して返す
+
+## PublicRoomDetailPage
+
+* chat タブで messages API を呼ぶ
+* `avatarName` を表示
+* `message` が空なら本文は出さない
+* 投稿日時の降順で表示
+
+---
+
+## 今後の確認ポイント
+
+### 1. Firestore Index
+
+`roomPayments` に対する以下の複合 index が必要になる可能性がある。
+
+* `roomId`
+* `status`
+* `createdAt`
+
+### 2. avatarName 未設定ユーザー
+
+`avatars/{uid}.avatarName` が空の場合、chat 画面では `"-"` が表示される可能性がある。必要なら UI フォールバック文言を再検討する。
+
+### 3. パフォーマンス
+
+messages 件数が多い場合、`supporterUid -> avatarName` 解決の Firestore 読み出しコストが増える。現在は 1 リクエスト内キャッシュで軽減しているが、将来的に件数が増えたら別の最適化を検討する。
+
+### 4. ranking 側との命名差
+
+ranking は依然として `supporterAvatarName` ベースの aggregate を使っている。chat は `avatarName` を使うため、将来的に命名統一を検討する余地がある。
+
+---
+
+## 変更履歴の要約
+
+1. 支払い画面に message 入力欄追加
+2. payment-intent / paypay create に message 対応
+3. roomPayments に message 保存
+4. room messages API 新設
+5. chat タブを実装
+6. Authorization 付き呼び出しに修正
+7. 405 解消のため router / handler 追加
+8. supporterAvatarName 保存案を撤回
+9. supporterUid から avatarName 解決する設計へ変更
+10. chat を投稿日時降順に変更
+
+---
+
+```
+
+必要なら次に、これを `README.md` 形式で保存しやすいように、プロジェクト向けの見出し構成に整えて返します。
+```

@@ -1,0 +1,14 @@
+/* frontend/amol/src/styles/wallet-page.css */
+
+@import "./wallet-page/base.css";
+@import "./wallet-page/layout.css";
+@import "./wallet-page/profile.css";
+@import "./wallet-page/profile-actions.css";
+@import "./wallet-page/share-qr.css";
+@import "./wallet-page/tabs.css";
+@import "./wallet-page/message.css";
+@import "./wallet-page/token-empty.css";
+@import "./wallet-page/token-list.css";
+@import "./wallet-page/token-card.css";
+@import "./wallet-page/responsive.css";
+@import "./wallet-page/history.css";

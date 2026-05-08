@@ -1,0 +1,59 @@
+// frontend/console/production/src/presentation/pages/productionManagement.tsx
+
+import { useProductionManagement } from "../hook/useProductionManagement";
+import List from "../../../../shell/src/layout/List/List";
+
+export default function ProductionManagement() {
+  const {
+    headers,
+    rows,
+    handleCreate,
+    handleReset,
+    handleRowClick,
+    isResetting, // ✅ 追加（hook 側で返す必要あり）
+  } = useProductionManagement();
+
+  return (
+    <div className="p-0">
+      <List
+        title="商品生産"
+        headerCells={headers}
+        showCreateButton
+        createLabel="生産計画を作成"
+        showResetButton
+        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
+        onCreate={handleCreate}
+        onReset={handleReset} // ✅ handleReset 内で再フェッチ（リフレッシュ）する想定
+      >
+        {rows.map((p) => (
+          <tr
+            key={p.id}
+            className="cursor-pointer hover:bg-blue-50 transition-colors"
+            onClick={() => handleRowClick(p.id)}
+          >
+            {/* ★ プロダクト名 */}
+            <td>{p.productName || p.productBlueprintId}</td>
+
+            {/* ★ ブランド名 */}
+            <td>{p.brandName || ""}</td>
+
+            {/* ★ 担当者名（あれば名前、なければID） */}
+            <td>{p.assigneeName || p.assigneeId}</td>
+
+            {/* 印刷状態（hook を正として label を生成済みの前提） */}
+            <td>{p.printed ? "印刷済" : "印刷前"}</td>
+
+            {/* 合計数量 */}
+            <td>{p.totalQuantity}</td>
+
+            {/* 印刷日時ラベル */}
+            <td>{p.printedAtLabel}</td>
+
+            {/* 作成日時ラベル */}
+            <td>{p.createdAtLabel}</td>
+          </tr>
+        ))}
+      </List>
+    </div>
+  );
+}

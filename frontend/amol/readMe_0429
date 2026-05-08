@@ -1,0 +1,1471 @@
+以下をそのまま `README.md` などに貼り付けて、次回の引き継ぎ資料として使ってください。
+
+````md
+# AMOL Frontend 改修引き継ぎ README
+
+## 目的
+
+AMOL フロントエンドの既存画面・導線を整理し、以下を中心に改修した。
+
+- RoomsPage を空化し、ListsPage へ改名
+- RoomCreatePage / RoomDetailPage の削除方針を整理
+- HistoryPage を WalletPage へ改名
+- `/histories` 系パスを `/wallet` 系へ変更
+- WalletPage に Instagram 風のプロフィール表示、タブ切替、取引履歴・トークン表示を追加
+- FooterNav の取引履歴アイコンを avatarIcon に変更
+- ShippingAddressPage を追加・改修し、配送先情報登録/更新に対応
+- Header / Layout 周辺の不要な rooms/create 依存を削除
+- CSS を page ごと・feature ごとに整理する方針へ寄せた
+
+---
+
+# 1. RoomsPage → ListsPage
+
+## 変更内容
+
+旧 `RoomsPage.tsx` は一旦空ページ化した。
+
+```tsx
+// frontend/src/pages/RoomsPage.tsx
+import Layout from "../components/layout/Layout";
+
+export default function RoomsPage() {
+  return (
+    <Layout title="AMOL" mode="mypage">
+      <section className="content-page-section rooms-page-section-root" />
+    </Layout>
+  );
+}
+````
+
+その後、`RoomsPage.tsx` を `ListsPage.tsx` に改名する方針にした。
+
+```tsx
+// frontend/src/pages/ListsPage.tsx
+import Layout from "../components/layout/Layout";
+
+export default function ListsPage() {
+  return (
+    <Layout title="AMOL" mode="mypage">
+      <section className="content-page-section rooms-page-section-root" />
+    </Layout>
+  );
+}
+```
+
+## router 修正方針
+
+`router/index.tsx` では、`RoomsPage` import を削除し、`ListsPage` に差し替える。
+
+```tsx
+import ListsPage from "../pages/ListsPage";
+```
+
+`/rooms` の route は維持してもよいが、element は `ListsPage` にする。
+
+```tsx
+{
+  path: "/rooms",
+  element: (
+    <ProtectedRoute>
+      <ListsPage />
+    </ProtectedRoute>
+  ),
+},
+```
+
+---
+
+# 2. RoomCreatePage 削除
+
+## 削除対象
+
+```txt
+frontend/src/pages/RoomCreatePage.tsx
+```
+
+## router から削除
+
+```tsx
+import RoomCreatePage from "../pages/RoomCreatePage";
+```
+
+```tsx
+{
+  path: "/rooms/create",
+  element: (
+    <ProtectedRoute>
+      <RoomCreatePage />
+    </ProtectedRoute>
+  ),
+},
+```
+
+## 関連削除候補
+
+以下は他から参照がなければ削除候補。
+
+```txt
+frontend/src/features/room-create/
+frontend/src/styles/room-create-page.css
+```
+
+## 確認コマンド
+
+```bash
+grep -R "room-create" frontend/src
+grep -R "RoomCreatePage" frontend/src
+grep -R "/rooms/create" frontend/src
+```
+
+---
+
+# 3. RoomDetailPage 削除
+
+## 削除対象
+
+```txt
+frontend/src/pages/RoomDetailPage.tsx
+```
+
+## router から削除
+
+```tsx
+import RoomDetailPage from "../pages/RoomDetailPage";
+```
+
+```tsx
+{
+  path: "/rooms/:roomId",
+  element: (
+    <ProtectedRoute>
+      <RoomDetailPage />
+    </ProtectedRoute>
+  ),
+},
+```
+
+## Header 周辺の整理
+
+`/rooms/:roomId` を詳細ページとして扱っていた判定は不要になる可能性がある。
+
+削除候補:
+
+```ts
+const isRoomDetailPage = /^\/rooms\/[^/]+$/.test(location.pathname);
+```
+
+ただし `/public/rooms/:roomId` や `/public/lists/:roomId` 用の判定は別用途なので注意。
+
+確認:
+
+```bash
+grep -R "RoomDetailPage" frontend/src
+grep -R "/rooms/:roomId" frontend/src
+grep -R "isRoomDetailPage" frontend/src
+```
+
+---
+
+# 4. Header / Layout の rooms/create 依存削除
+
+## 発生したエラー
+
+`useHeaderController.ts` で以下の TypeScript エラーが発生。
+
+```txt
+Property 'editTo' is missing ... but required in type 'HeaderActionState'.
+```
+
+原因は `/rooms/create` 削除後も `HeaderActionState` 型に `editTo` が必須で残っていたため。
+
+## 修正方針
+
+`frontend/src/components/layout/header/types.ts` から以下を削除。
+
+```ts
+editTo: string;
+```
+
+`HeaderProps` に残っていればこれも削除。
+
+```ts
+editTo?: string;
+```
+
+`HeaderActions.tsx` で `actions.editTo` を使っている場合も削除。
+
+`Layout.tsx` に残っている `editTo = "/rooms/create"` も、使わない場合は削除対象。
+
+---
+
+# 5. HistoryPage → WalletPage
+
+## 変更内容
+
+旧 `HistoryPage.tsx` を `WalletPage.tsx` に改名した。
+
+* 旧 `/histories` を `/wallet` に変更
+* 旧 `history-page.css` を `wallet-page.css` に改名
+* className も `history-page-*` から `wallet-page-*` に変更
+
+## 新 CSS ファイル
+
+```txt
+frontend/src/styles/wallet-page.css
+```
+
+旧ファイルは削除候補。
+
+```txt
+frontend/src/styles/history-page.css
+```
+
+## router 修正
+
+```tsx
+import WalletPage from "../pages/WalletPage";
+```
+
+```tsx
+{
+  path: "/wallet",
+  element: (
+    <ProtectedRoute>
+      <WalletPage />
+    </ProtectedRoute>
+  ),
+},
+```
+
+旧 route は削除。
+
+```tsx
+{
+  path: "/histories",
+  element: (
+    <ProtectedRoute>
+      <HistoryPage />
+    </ProtectedRoute>
+  ),
+},
+```
+
+詳細画面も `/wallet/:paymentId` に寄せる場合、`PaymentDetail` 側の path も変更する。
+
+---
+
+# 6. WalletPage の feature 分割
+
+`WalletPage.tsx` から取引履歴機能を `features/wallet` へ分離した。
+
+## 追加構成
+
+```txt
+frontend/amol/src/features/wallet/
+├─ api/
+│  └─ walletApi.ts
+├─ components/
+│  └─ WalletHistoryTable.tsx
+├─ hooks/
+│  └─ useWalletPage.ts
+├─ types.ts
+└─ utils/
+   ├─ format.ts
+   └─ guards.ts
+```
+
+## `features/wallet/types.ts`
+
+主な型:
+
+```ts
+export type RoomPaymentHistoryItem = {
+  id: string;
+  roomTitle?: string;
+  amount: number;
+  currency: string;
+  paidAt?: string;
+  createdAt?: string;
+};
+
+export type ListMyRoomPaymentsResponse = {
+  roomPayments: RoomPaymentHistoryItem[];
+};
+
+export type AvatarResponse = {
+  avatarId?: string;
+  userId?: string;
+  avatarName?: string;
+  avatarIcon?: string | null;
+  walletAddress?: string;
+  profile?: string | null;
+};
+
+export type AvatarStateResponse = {
+  avatarId?: string;
+  followerCount?: number | null;
+  followingCount?: number | null;
+  postCount?: number | null;
+};
+
+export type WalletAvatar = {
+  avatarName: string;
+  avatarIcon: string;
+  profile: string;
+  followerCount: number;
+  followingCount: number;
+};
+
+export type ErrorResponse = {
+  error?: string;
+};
+
+export type WalletTabKey = "history" | "tokens";
+```
+
+---
+
+# 7. WalletPage の avatar / profile / follow counts
+
+## handler 参照
+
+`GET /mall/me/avatars`
+
+取得例:
+
+```json
+{
+  "avatarId": "DlNwHSMbJWLO2HMFPodc",
+  "userId": "l52xytj6ykTspwwWhGdQPVTAxm83",
+  "avatarName": "4",
+  "avatarIcon": "https://firebasestorage.googleapis.com/...",
+  "walletAddress": "2DKQnbkpwXaLfVtaJmz7wpjpwpUzZMtS8K643DG7oCXd",
+  "profile": "テスト４"
+}
+```
+
+`GET /mall/me/avatars/state`
+
+handler 上、以下が取得できる。
+
+```json
+{
+  "avatarId": "...",
+  "followerCount": 0,
+  "followingCount": 0,
+  "postCount": 0,
+  "followers": [],
+  "following": []
+}
+```
+
+## 重要
+
+`avatarName` はページタイトルに使用。
+
+```tsx
+<Layout title={pageTitle} mode="mypage">
+```
+
+プロフィール本文には `avatarName` ではなく `profile` を表示する方針。
+
+```tsx
+{profile || "プロフィール未設定"}
+```
+
+ただし、現在のレイアウトでは profile 表示は一度外している可能性がある。必要なら `.wallet-page-profile__text` として復旧する。
+
+---
+
+# 8. WalletPage の UI 方針
+
+Instagram を参考にした構成。
+
+上から順に:
+
+1. Header title に avatarName
+2. profile area
+
+   * avatarIcon
+   * follower / following count
+3. 画面幅の action bar
+
+   * アバター編集
+   * プロフィールをシェア
+4. tabs
+
+   * 取引履歴
+   * トークン
+5. tab content
+
+## 現在の `WalletPage.tsx` の構成
+
+`Button.tsx` を導入済み。
+
+```tsx
+import Button from "../components/ui/Button";
+```
+
+`プロフィールをシェア` は `Button` を使う。
+
+```tsx
+<Button
+  type="button"
+  variant="secondary"
+  size="sm"
+  onClick={handleShareProfile}
+>
+  プロフィールをシェア
+</Button>
+```
+
+`アバター編集` も `Button` を使う。
+
+```tsx
+<Button
+  type="button"
+  variant="secondary"
+  size="sm"
+  onClick={() => navigate("/avatar")}
+>
+  アバター編集
+</Button>
+```
+
+`variant="secondary"` / `size="sm"` が `Button.tsx` で未対応なら、既存の Button 型定義に合わせて調整する。
+
+---
+
+# 9. WalletPage の CSS 修復ポイント
+
+## タブ CSS
+
+一度 `wallet-page-tabs` の CSS が外れたため、以下を必ず保持する。
+
+```css
+.wallet-page-tabs {
+  position: sticky;
+  top: 72px;
+  z-index: 35;
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.wallet-page-tabs__button {
+  appearance: none;
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: #fff;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wallet-page-tabs__button--active {
+  color: #111827;
+  border-bottom-color: #111827;
+}
+
+.wallet-page-tabs__button:hover {
+  background: #f9fafb;
+}
+```
+
+## token empty CSS
+
+一度 `wallet-page-token-empty` の CSS が外れたため、以下を必ず保持する。
+
+```css
+.wallet-page-token-empty {
+  min-height: 280px;
+  padding: 56px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.wallet-page-token-empty__icon {
+  width: 72px;
+  height: 72px;
+  border: 1px solid #d1d5db;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 36px;
+  line-height: 1;
+}
+
+.wallet-page-token-empty__title {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.wallet-page-token-empty__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+```
+
+## action bar CSS
+
+タブの上に画面幅の action bar を追加した。
+
+```css
+.wallet-page-profile-actions-bar {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 20px 16px;
+  background: #fff;
+}
+
+.wallet-page-profile-actions-bar__inner {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wallet-page-profile-actions-bar__inner .button {
+  width: 100%;
+}
+```
+
+---
+
+# 10. FooterNav の wallet 導線
+
+## 変更内容
+
+旧 `取引履歴` アイコンを avatarIcon に置き換えた。
+
+`avatarIcon` がある場合:
+
+```tsx
+<img src={avatarIcon} alt="" className="footer-nav__avatar-icon" />
+```
+
+空の場合は `🧾` ではなく胸像型の `👤` を表示。
+
+```tsx
+<span className="footer-nav__default-avatar-icon">👤</span>
+```
+
+## 遷移先
+
+旧:
+
+```tsx
+to="/histories"
+```
+
+新:
+
+```tsx
+to="/wallet"
+```
+
+ラベルは現状 `取引履歴` のままでもよいが、Wallet に統一するなら:
+
+```tsx
+<span className="footer-nav__label">ウォレット</span>
+```
+
+## CSS
+
+```css
+.footer-nav__icon {
+  width: 28px;
+  height: 28px;
+  font-size: 24px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-nav__avatar-icon {
+  width: 24px;
+  height: 24px;
+  max-width: 24px;
+  max-height: 24px;
+  border-radius: 9999px;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.footer-nav__default-avatar-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+}
+```
+
+---
+
+# 11. ShippingAddressPage 追加・改修
+
+## 目的
+
+`入金先口座` を `配送先情報` に置き換えた。
+
+SettingsMenu の項目は以下に変更。
+
+```tsx
+<Item
+  label="配送先情報"
+  onClick={() => handleNavigate("/settings/shipping-address")}
+/>
+```
+
+## 機能
+
+`ShippingAddressPage` は以下に対応。
+
+* `GET /mall/me/shipping-addresses`
+* `POST /mall/me/shipping-addresses`
+* `PATCH /mall/me/shipping-addresses/:shippingAddressId`
+* `GET /mall/me/users`
+* `PATCH /mall/me/users`
+* 郵便番号から住所自動入力
+* 登録モード / 編集モードの出し分け
+* PC では header に登録/更新ボタン
+* モバイルでは footer に登録/更新ボタン
+* `配送先情報を削除` ボタンは削除済み
+
+## 登録 / 編集判定
+
+`GET /mall/me/shipping-addresses` の結果で判定。
+
+```ts
+const firstAddress = shippingAddresses[0] || null;
+
+if (firstAddress) {
+  setShippingAddress(firstAddress);
+  setPageMode("edit");
+} else {
+  setShippingAddress(null);
+  setPageMode("create");
+}
+```
+
+## ボタン表示
+
+編集モード時は `更新`、登録モード時は `登録`。
+
+```ts
+const actionButtonLabel = isSaving
+  ? "保存中..."
+  : isEditMode
+    ? "更新"
+    : "登録";
+```
+
+## backArrow
+
+配送先ページの backArrow は `/rooms` または改名後の `/lists` に戻す必要がある。
+
+現在の指定例:
+
+```tsx
+backTo="/rooms"
+```
+
+ListsPage へ移行するなら `/lists` に変更する可能性あり。
+
+## Header タイトルリンク削除
+
+Header の title が `/` への Link になっていたため、title 部分もクリックできてしまっていた。
+期待値は backArrow のみクリック可能なので、`Header.tsx` では `Link` を削除し、title は `span` にした。
+
+---
+
+# 12. ShippingAddressPage feature 分割
+
+`ShippingAddressPage.tsx` は責務が大きいため、以下へ分割する方針。
+
+```txt
+frontend/amol/src/features/shipping-address/
+├─ api/
+│  └─ shippingAddressApi.ts
+├─ components/
+│  └─ ShippingAddressForm.tsx
+├─ hooks/
+│  ├─ useShippingAddressPage.ts
+│  └─ useZipCodeAddressLookup.ts
+├─ types.ts
+└─ utils/
+   └─ zipCode.ts
+```
+
+`ShippingAddressPage.tsx` は最終的に page shell だけに寄せる。
+
+---
+
+# 13. ShippingAddressPage 専用 CSS
+
+追加ファイル:
+
+```txt
+frontend/amol/src/styles/shipping-address-page.css
+```
+
+## 主な要件
+
+* 入力項目名を入力欄の左隣に配置
+* PC では「姓 / セイ」「名 / メイ」を横並び
+* mobile では縦一列
+* mobile 順序は `姓 → セイ → 名 → メイ`
+* 郵便番号入力後、自動で `都道府県 / 市区町村 / 住所1` を補完
+
+---
+
+# 14. Input コンポーネント導入
+
+`ShippingAddressPage` では共通 `Input.tsx` を導入した。
+
+```tsx
+import Input from "../components/ui/Input";
+```
+
+`Input.tsx` は以下の props を持つ。
+
+```ts
+type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
+  label?: string;
+  error?: string;
+  helperText?: string;
+  fullWidth?: boolean;
+};
+```
+
+---
+
+# 15. 郵便番号自動入力
+
+`zipcloud` API を使う方針。
+
+```txt
+https://zipcloud.ibsnet.co.jp/api/search?zipcode=1000001
+```
+
+実装概要:
+
+* 郵便番号から数字だけを抽出
+* 7桁になったら lookup
+* `address1` → 都道府県
+* `address2` → 市区町村
+* `address3` → 住所1
+* `1000001` は `100-0001` に整形
+
+---
+
+# 16. 直近の注意点
+
+## WalletPage の取引履歴 API エラー
+
+現在、画面上で以下が出ている。
+
+```txt
+取引履歴APIがJSON以外を返しました。
+```
+
+これは `GET /api/me/room-payments` が JSON 以外を返しているか、認証/ルーティング/エラーHTMLが返っている可能性がある。
+
+ただし、avatar は `GET /mall/me/avatars` で正常取得できている。
+
+そのため、`avatar` 取得と `history` 取得は分離している。
+履歴 API が失敗しても avatar / follower / following は表示できるようにする方針。
+
+## avatar 取得
+
+`fetchWalletAvatar()` で以下を取得。
+
+* `/mall/me/avatars`
+* `/mall/me/avatars/state`
+
+履歴取得とは別処理にしておくこと。
+
+---
+
+# 17. grep 確認リスト
+
+作業後、以下で残骸確認。
+
+```bash
+grep -R "HistoryPage" frontend/src
+grep -R "/histories" frontend/src
+grep -R "history-page" frontend/src
+grep -R "history-page-table" frontend/src
+
+grep -R "RoomsPage" frontend/src
+grep -R "RoomCreatePage" frontend/src
+grep -R "RoomDetailPage" frontend/src
+grep -R "/rooms/create" frontend/src
+grep -R "isRoomDetailPage" frontend/src
+
+grep -R "editTo" frontend/src
+```
+
+---
+
+# 18. 現在の優先作業
+
+1. `wallet-page.css` の崩れ修復
+
+   * `wallet-page-tabs`
+   * `wallet-page-token-empty`
+   * `wallet-page-profile-actions-bar`
+2. `WalletPage.tsx` の Button 導入確認
+
+   * `Button.tsx` が `variant="secondary"` / `size="sm"` に対応しているか確認
+3. `/api/me/room-payments` が JSON 以外を返す原因調査
+4. `/histories` 残参照を `/wallet` に完全移行
+5. `/rooms` と `/lists` の最終パス方針を確定
+6. `HeaderActionState` / `LayoutProps` から rooms/create 系の不要 props を完全削除
+
+```
+```
+# Narratives / AMOL Console: member.uid と Firestore docId 分離対応 README
+
+## 目的
+
+この修正は、Firebase Auth の UID と Firestore `members` コレクションの document ID を分離するためのものです。
+
+従来は一部の処理で次の前提が混在していました。
+
+```txt
+members/{firebaseAuthUid}
+```
+
+しかし、invitation 機能では招待対象 member を Firebase Auth 登録前に作成するため、Firestore の docId は自動採番され、Firebase Auth UID は後から確定します。
+
+そのため、今後の正しい設計は次の通りです。
+
+```txt
+members/{autoDocId}
+  uid: Firebase Auth UID
+  companyId: ...
+  email: ...
+  permissions: ...
+  status: ...
+```
+
+## 最終方針
+
+### 1. Firestore docId と Firebase Auth UID を分離する
+
+* `members/{docId}` は Firestore の member レコード ID として扱う
+* `member.uid` は Firebase Auth UID として扱う
+* Firebase UID から member を探す場合は docId 検索ではなく `uid` フィールド検索を使う
+
+```go
+Where("uid", "==", firebaseUID)
+```
+
+### 2. 初回会社登録 member は uid 必須
+
+会社を最初に登録する owner / 初期管理者 member は、Firebase Auth ログイン済みユーザーから作成されるため、`uid` が必ず自動保存される必要があります。
+
+```txt
+/auth/bootstrap
+→ Firebase ID token を検証
+→ context に uid / email を保存
+→ BootstrapService.Bootstrap(ctx, uid, email, profile)
+→ member.uid = uid
+→ members/{autoDocId} に保存
+```
+
+### 3. 招待前 member は uid 空を許可する
+
+管理画面から招待対象 member を作成する場合、対象ユーザーはまだ Firebase Auth 登録前のため、`uid` は空でよいです。
+
+```txt
+members/{autoDocId}
+  uid: ""
+  email: 招待先メールアドレス
+  companyId: ...
+```
+
+招待承諾時に Firebase Auth UID が確定したら、対象 member に後付けします。
+
+```txt
+members/{memberDocId}.uid = firebaseAuthUid
+```
+
+## 発生していた問題
+
+### 問題1: CORS Origin 不足
+
+管理画面が次の Origin からアクセスされていました。
+
+```txt
+https://narratives-console-dev.firebaseapp.com
+```
+
+しかし backend の CORS 許可リストには次しかありませんでした。
+
+```go
+"https://narratives-console-dev.web.app": true,
+```
+
+そのため、`Authorization` ヘッダ付き API の preflight が失敗する可能性がありました。
+
+### 対応
+
+`cors.go` の `allowedOrigins` に以下を追加しました。
+
+```go
+"https://narratives-console-dev.firebaseapp.com": true,
+"https://narratives-development-26c2d.firebaseapp.com": true,
+```
+
+---
+
+### 問題2: member docId と Firebase UID の不一致
+
+Firestore に作成された member が次のようになっていました。
+
+```txt
+members/BLu3Bu8B8ce6crFfqa6nD0wOZ892
+```
+
+一方、API は Firebase UID を使って次のように呼び出していました。
+
+```txt
+GET /members/{firebaseUid}
+```
+
+これにより backend / middleware / frontend の一部が `members/{firebaseUid}` 前提で動き、`403 Forbidden` や `404 Not Found` の原因になりました。
+
+### 対応
+
+`Member` エンティティに `UID` を追加しました。
+
+```go
+type Member struct {
+    UID string `json:"uid,omitempty" firestore:"uid"`
+    ...
+}
+```
+
+また、Firebase UID から member を取得する Repository API を `uid` フィールド検索に変更しました。
+
+```go
+GetByFirebaseUID(ctx, firebaseUID)
+GetRecordByFirebaseUID(ctx, firebaseUID)
+```
+
+---
+
+### 問題3: BootstrapService が古い docId = UID 前提だった
+
+`backend/internal/application/usecase/auth/bootstrap.go` では、古い前提として以下の処理が残っていました。
+
+```go
+s.Members.GetByID(ctx, uid)
+s.Members.Save(ctx, uid, &memberEntity)
+```
+
+また、`memberdom.New(...)` に `memberdom.WithUID(uid)` が入っていなかったため、初回会社登録 member の `uid` が空で保存されていました。
+
+### 対応
+
+`BootstrapService.MemberRepository` を次の interface に変更しました。
+
+```go
+type MemberRepository interface {
+    GetByFirebaseUID(ctx context.Context, firebaseUID string) (*memberdom.Member, error)
+    Create(ctx context.Context, m *memberdom.Member) error
+}
+```
+
+`Bootstrap` 内では次のように修正しました。
+
+```go
+s.Members.GetByFirebaseUID(ctx, uid)
+```
+
+```go
+memberdom.New(
+    now,
+    memberdom.WithUID(uid),
+    memberdom.WithName(firstName, lastName),
+    memberdom.WithNameKana(firstNameKana, lastNameKana),
+    memberdom.WithEmail(email),
+    memberdom.WithStatus("active"),
+    memberdom.WithPermissions(allPermNames),
+)
+```
+
+保存時は auto docId で作成します。
+
+```go
+s.Members.Create(ctx, &memberEntity)
+```
+
+---
+
+### 問題4: DI adapter が古い interface のままだった
+
+`backend/internal/platform/di/console/contaner_usecase.go` の `authMemberRepoAdapter` は、古い `GetByID` / `Save(ctx, docID, m)` 実装のままでした。
+
+そのため、次のコンパイルエラーが発生しました。
+
+```txt
+*authMemberRepoAdapter does not implement auth.MemberRepository
+missing method Create
+```
+
+### 対応
+
+`authMemberRepoAdapter` を次のメソッドに置き換えました。
+
+```go
+func (a *authMemberRepoAdapter) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*memdom.Member, error)
+```
+
+```go
+func (a *authMemberRepoAdapter) Create(ctx context.Context, m *memdom.Member) error
+```
+
+古い `Save(ctx, docID, m)` は削除しました。
+
+---
+
+### 問題5: shared auth adapter も古い interface のままだった
+
+`backend/internal/platform/di/shared/auth_adapter.go` も `GetByID` / `Save` 中心の実装でした。
+
+### 対応
+
+`AuthMemberRepoAdapter` に以下を追加しました。
+
+```go
+GetByFirebaseUID(ctx, firebaseUID)
+Create(ctx, m)
+```
+
+必要に応じて legacy 用の `Save` / `GetByID` は残せますが、BootstrapService では使わない方針です。
+
+---
+
+### 問題6: frontend が Firebase UID を `/members/{id}` に渡していた
+
+`frontend/console/shell/src/auth/infrastructure/repository/authRepositoryHTTP.ts` で、現在 member 取得時に次の URL を呼んでいました。
+
+```ts
+const url = `${API_BASE}/members/${encodeURIComponent(uid)}`;
+```
+
+しかし新方針では `/members/{id}` は Firestore docId 用です。
+
+### 対応
+
+Firebase UID から member を取得する場合は、専用 endpoint を使うよう修正しました。
+
+```ts
+const url = `${API_BASE}/members/by-firebase-uid/${encodeURIComponent(firebaseUid)}`;
+```
+
+更新時は、取得した response の `id`、つまり Firestore member docId を使います。
+
+```txt
+GET /members/by-firebase-uid/{firebaseUid}
+→ response.id = memberDocId
+→ PATCH /members/{memberDocId}
+```
+
+---
+
+### 問題7: `memberService.ts` の fallbackId が危険
+
+`memberService.ts` では、backend response に `raw.id` がない場合、Firebase UID を fallback として `MemberDTO.id` に入れる可能性がありました。
+
+```ts
+id: raw?.id ?? fallbackId
+```
+
+この場合、更新時に誤って次の URL を呼ぶ可能性があります。
+
+```txt
+PATCH /members/{firebaseUid}
+```
+
+### 推奨対応
+
+`raw.id` がない場合は空にする、または明示的に error にします。
+
+```ts
+if (!raw?.id) {
+  throw new Error("member response does not include document id");
+}
+```
+
+---
+
+### 問題8: TypeScript 6 系で `moduleResolution: "Node"` / `baseUrl` が deprecated
+
+`frontend/console/tsconfig.base.json` に次が残っていました。
+
+```json
+"moduleResolution": "Node",
+"baseUrl": "."
+```
+
+TypeScript 6 系では警告またはエラーになります。
+
+### 対応
+
+Vite + React 構成に合わせて以下へ変更します。
+
+```json
+"moduleResolution": "Bundler"
+```
+
+`baseUrl` は削除し、`paths` は相対パスにします。
+
+```json
+"paths": {
+  "@shell/*": ["./shell/src/*"],
+  "@shared/*": ["./shell/src/shared/*"]
+}
+```
+
+module ごとの `tsconfig.json` でも `baseUrl` を削除し、必要なら次のようにします。
+
+```json
+"paths": {
+  "@/*": ["./src/*"]
+}
+```
+
+---
+
+### 問題9: Firebase deploy が firestore.rules 空ファイルで失敗
+
+`firebase.json` に次がありました。
+
+```json
+"firestore": {
+  "indexes": "firestore.indexes.json",
+  "rules": "firestore.rules"
+}
+```
+
+しかし `firestore.rules` が空だったため、deploy 時に Firestore Rules の検証で失敗しました。
+
+```txt
+cloud.firestore: checking firestore.rules for compilation errors...
+HTTP Error: 400, Request contains an invalid argument.
+```
+
+### 対応
+
+Hosting だけ deploy する場合は Firestore rules を deploy 対象から外します。
+
+```powershell
+firebase deploy --only hosting:narratives-console-dev
+```
+
+または、`firestore.rules` に有効な rules を入れます。
+
+開発用の一時ルール例:
+
+```js
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
+本番運用では collection ごとに権限を絞る必要があります。
+
+---
+
+### 問題10: deploy コマンドの打ち間違い
+
+次のようにコマンドが連結されていました。
+
+```powershell
+firebase deployfirebase deploy --only hosting:narratives-console-dev
+```
+
+Firebase CLI が `deployfirebase` という存在しないコマンドとして解釈したため失敗しました。
+
+### 対応
+
+build と deploy は分けて実行します。
+
+```powershell
+npm run build
+firebase deploy --only hosting:narratives-console-dev
+```
+
+## 主要修正ファイル
+
+### Backend
+
+```txt
+backend/internal/domain/member/entity.go
+backend/internal/domain/member/repository_port.go
+backend/internal/adapters/out/firestore/member_repository_fs.go
+backend/internal/application/usecase/member_usecase.go
+backend/internal/application/usecase/auth/bootstrap.go
+backend/internal/adapters/in/http/console/handler/member_handler.go
+backend/internal/adapters/in/http/console/handler/auth_bootstrap_handler.go
+backend/internal/adapters/in/http/middleware/auth_bootstrap.go
+backend/internal/adapters/in/http/middleware/cors.go
+backend/internal/platform/di/console/contaner_usecase.go
+backend/internal/platform/di/shared/auth_adapter.go
+```
+
+### Frontend
+
+```txt
+frontend/console/shell/src/auth/infrastructure/repository/authRepositoryHTTP.ts
+frontend/console/shell/src/auth/application/memberService.ts
+frontend/console/tsconfig.base.json
+frontend/console/shell/tsconfig.json
+frontend/console/list/tsconfig.json
+```
+
+### Firebase
+
+```txt
+frontend/console/firebase.json
+frontend/console/firestore.rules
+frontend/console/firestore.indexes.json
+```
+
+## 現在の正しい API 使い分け
+
+### Firebase UID から現在 member を取得
+
+```txt
+GET /members/by-firebase-uid/{firebaseUid}
+```
+
+用途:
+
+```txt
+ログイン中ユーザーの member 情報取得
+```
+
+返却される `id` は Firestore member docId です。
+
+### member docId で member を取得
+
+```txt
+GET /members/{memberDocId}
+```
+
+用途:
+
+```txt
+管理画面内で member レコード ID が分かっている場合
+```
+
+### member docId で member を更新
+
+```txt
+PATCH /members/{memberDocId}
+```
+
+用途:
+
+```txt
+プロフィール更新 / member 編集
+```
+
+Firebase UID をここに渡してはいけません。
+
+## 現在の正しいデータモデル
+
+### 初回会社登録者 member
+
+```txt
+members/{autoDocId}
+  uid: "{firebaseAuthUid}"
+  email: "..."
+  companyId: "..."
+  status: "active"
+  permissions: [all permissions]
+```
+
+### 招待前 member
+
+```txt
+members/{autoDocId}
+  uid: ""
+  email: "invited@example.com"
+  companyId: "..."
+  status: "active" or "pending"
+  permissions: [...]
+```
+
+### 招待承諾後 member
+
+```txt
+members/{sameAutoDocId}
+  uid: "{invitedUserFirebaseAuthUid}"
+```
+
+## 残タスク
+
+### 1. CurrentMember middleware の確認
+
+認証 middleware 内で、まだ次のような docId 検索が残っていないか確認してください。
+
+```go
+memberRepo.GetByID(ctx, firebaseUID)
+```
+
+残っている場合は以下へ変更します。
+
+```go
+memberRepo.GetByFirebaseUID(ctx, firebaseUID)
+```
+
+### 2. frontend 全体検索
+
+以下を検索してください。
+
+```txt
+/members/${uid}
+/members/${user.uid}
+/members/
+```
+
+Firebase UID を `/members/{id}` に渡している箇所があれば、以下へ変更します。
+
+```txt
+/members/by-firebase-uid/{uid}
+```
+
+ただし、member docId を使う更新処理は `/members/{memberDocId}` のままでOKです。
+
+### 3. invitation accept 専用 API の整備
+
+招待承諾時は CurrentMember が未確立でも動く必要があります。
+
+推奨 endpoint:
+
+```txt
+POST /auth/invitation/accept
+```
+
+処理:
+
+```txt
+1. Authorization Bearer から Firebase UID / email を検証
+2. invitation token を resolve
+3. token.memberId から members/{memberId} を取得
+4. member.email と Firebase user email を照合
+5. members/{memberId}.uid = Firebase UID を保存
+6. invitation token を consume
+7. member 情報を返す
+```
+
+### 4. firestore.rules を空ファイルのままにしない
+
+`firebase deploy` 全体を使う場合、`firestore.rules` は必ず有効な内容にしてください。
+
+Hosting だけなら以下で deploy します。
+
+```powershell
+firebase deploy --only hosting:narratives-console-dev
+```
+
+## 動作確認手順
+
+### 1. Backend build
+
+```powershell
+cd C:\Users\caota\narratives-development\backend
+go test ./...
+```
+
+### 2. Frontend build
+
+```powershell
+cd C:\Users\caota\narratives-development\frontend\console\shell
+npm run build
+```
+
+### 3. Hosting deploy
+
+`firebase.json` があるディレクトリで実行します。
+
+```powershell
+firebase deploy --only hosting:narratives-console-dev
+```
+
+### 4. ブラウザ確認
+
+DevTools Network で以下を確認します。
+
+```txt
+GET /members/by-firebase-uid/{firebaseUid}
+Status: 200
+Response.id: member docId
+Response.uid: firebase UID
+```
+
+プロフィール更新時は以下を確認します。
+
+```txt
+PATCH /members/{memberDocId}
+Status: 200
+```
+
+## 判断基準
+
+修正完了と判断できる状態は以下です。
+
+```txt
+1. 初回会社登録 member の uid に Firebase Auth UID が入る
+2. GET /members/by-firebase-uid/{uid} が 200 を返す
+3. GET /members/{firebaseUid} を呼ばなくなる
+4. PATCH /members/{memberDocId} が成功する
+5. CORS preflight が 204 または正常通過する
+6. firebase deploy --only hosting:narratives-console-dev が成功する
+```
+
+## 補足
+
+`strict-origin-when-cross-origin` は今回の根本原因ではありません。これはブラウザの Referrer Policy 表示です。
+
+`vite build` の chunk size warning や `@module-federation/sdk` の eval warning も、今回の API / Firestore / deploy エラーとは別問題です。必要に応じて後で code splitting や manualChunks を検討してください。

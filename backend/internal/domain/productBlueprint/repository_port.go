@@ -1,0 +1,138 @@
+// backend/internal/domain/productBlueprint/repository_port.go
+package productBlueprint
+
+import (
+	"context"
+	"time"
+)
+
+// ========================================
+// Create/Update inputs (contract only)
+// ========================================
+
+type CreateInput struct {
+	// ★ Create時に usecase で生成して渡す
+	ID string `json:"id"`
+
+	ProductName      string       `json:"productName"`
+	BrandID          string       `json:"brandId"`
+	ItemType         ItemType     `json:"itemType"`
+	Fit              string       `json:"fit"`
+	Material         string       `json:"material"`
+	Weight           float64      `json:"weight"`
+	QualityAssurance []string     `json:"qualityAssurance"`
+	ProductIdTag     ProductIDTag `json:"productIdTag"`
+	AssigneeID       string       `json:"assigneeId"`
+	CompanyID        string       `json:"companyId"`
+
+	// ★ modelRefs（modelId + displayOrder）
+	// NOTE:
+	// - create 時点では空でもよい（後段で AppendModelRefsWithoutTouch で追記する運用を許容）
+	// - 永続化は adapter 側で modelRefs として保存する想定
+	ModelRefs []ModelRef `json:"modelRefs,omitempty"`
+
+	CreatedBy *string    `json:"createdBy,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"` // ★ usecase が必ず埋める（domain.validate が必須）
+}
+
+type Patch struct {
+	ProductName *string `json:"productName,omitempty"`
+
+	// ✅ 既存：更新に使うID
+	BrandID *string `json:"brandId,omitempty"`
+
+	// ✅ 追加：表示用（InventoryDetailなど read-model で埋める）
+	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
+	BrandName *string `json:"brandName,omitempty"`
+
+	// ✅ company (read-only display fields)
+	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
+	CompanyID   *string `json:"companyId,omitempty"`
+	CompanyName *string `json:"companyName,omitempty"`
+
+	ItemType         *ItemType     `json:"itemType,omitempty"`
+	Fit              *string       `json:"fit,omitempty"`
+	Material         *string       `json:"material,omitempty"`
+	Weight           *float64      `json:"weight,omitempty"`
+	QualityAssurance *[]string     `json:"qualityAssurance,omitempty"`
+	ProductIdTag     *ProductIDTag `json:"productIdTag,omitempty"`
+	AssigneeID       *string       `json:"assigneeId,omitempty"`
+
+	// ★ modelRefs を受ける（displayOrder 含む）
+	// NOTE:
+	// - これを永続化に使う（modelRefs を正にする）
+	// - displayOrder は 1..N の採番済みを期待（ただし実装側で正規化/再採番してよい）
+	ModelRefs *[]ModelRef `json:"modelRefs,omitempty"`
+}
+
+// ========================================
+// Query contracts (filters/sort/paging)
+// ========================================
+
+type Filter struct {
+	CompanyID   string // ★ 必須: マルチテナント境界
+	SearchTerm  string
+	BrandIDs    []string
+	AssigneeIDs []string
+	ItemTypes   []ItemType
+	TagTypes    []ProductIDTagType
+	OnlyDeleted bool
+}
+
+type Page struct {
+	Number  int
+	PerPage int
+}
+
+type PageResult struct {
+	Items      []ProductBlueprint
+	TotalCount int
+	TotalPages int
+	Page       int
+	PerPage    int
+}
+
+// ========================================
+// Repository Port (interface contracts only)
+// ========================================
+
+type Repository interface {
+	// Read (live)
+	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
+
+	// ★ 追加: productBlueprintId から brandId だけを取得するヘルパ
+	GetBrandIDByID(ctx context.Context, id string) (string, error)
+
+	// ★ 追加: brandId から productBlueprint の ID 一覧を取得するヘルパ
+	ListIDsByBrandID(ctx context.Context, brandID string) ([]string, error)
+
+	// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
+	GetProductNameByID(ctx context.Context, id string) (string, error)
+
+	// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
+	GetIDByModelID(ctx context.Context, modelID string) (string, error)
+
+	// ★ 変更: modelId(=variationId想定) から modelRefs（displayOrder 含む）を取得するヘルパ
+	GetModelRefsByModelID(ctx context.Context, modelID string) ([]ModelRef, error)
+
+	// ★ 追加: productBlueprintId から Patch 相当の情報を取得するヘルパ
+	// NOTE: Patch.ModelRefs を返せるようにしておく（displayOrder 含む）
+	GetPatchByID(ctx context.Context, id string) (Patch, error)
+
+	// companyId 単位で productBlueprint の ID 一覧を取得
+	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+
+	// 存在確認（adapter の Exists を port に昇格）
+	Exists(ctx context.Context, id string) (bool, error)
+
+	// Write (live)
+	Create(ctx context.Context, in CreateInput) (ProductBlueprint, error)
+	Update(ctx context.Context, id string, patch Patch) (ProductBlueprint, error)
+	Delete(ctx context.Context, id string) error
+
+	// ★ 追加: ProductBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する
+	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []ModelRef) (ProductBlueprint, error)
+
+	// ★ printed: false → true への状態遷移
+	MarkPrinted(ctx context.Context, id string) (ProductBlueprint, error)
+}

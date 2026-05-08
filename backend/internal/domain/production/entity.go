@@ -1,0 +1,221 @@
+// backend/internal/domain/production/entity.go
+package production
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// 汎用エラー（リポジトリ/サービス共通）
+var (
+	ErrNotFound = errors.New("production: not found")
+	ErrConflict = errors.New("production: conflict")
+	ErrInvalid  = errors.New("production: invalid")
+)
+
+// 判定ヘルパー
+func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
+func IsConflict(err error) bool { return errors.Is(err, ErrConflict) }
+func IsInvalid(err error) bool  { return errors.Is(err, ErrInvalid) }
+
+// ラップヘルパー（原因を保持）
+func WrapInvalid(err error, msg string) error {
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrInvalid, msg)
+	}
+	return fmt.Errorf("%w: %s: %v", ErrInvalid, msg, err)
+}
+
+func WrapConflict(err error, msg string) error {
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrConflict, msg)
+	}
+	return fmt.Errorf("%w: %s: %v", ErrConflict, msg, err)
+}
+
+func WrapNotFound(err error, msg string) error {
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrNotFound, msg)
+	}
+	return fmt.Errorf("%w: %s: %v", ErrNotFound, msg, err)
+}
+
+// ===== Types (mirror TS) =====
+
+type ModelQuantity struct {
+	ModelID  string
+	Quantity int
+}
+
+// Production mirrors shared/types（複数モデル構成)
+type Production struct {
+	ID                 string
+	ProductBlueprintID string
+	AssigneeID         string
+	Models             []ModelQuantity // [{modelId, quantity}]
+	Printed            bool            // printed:boolean
+	PrintedAt          *time.Time
+	PrintedBy          *string // 印刷担当者
+	CreatedBy          *string
+	CreatedAt          time.Time // optional（ゼロ許容）
+	UpdatedAt          time.Time // optional（ゼロ許容）
+	UpdatedBy          *string
+}
+
+// ===== Errors =====
+var (
+	ErrInvalidID                 = errors.New("production: invalid id")
+	ErrInvalidProductBlueprintID = errors.New("production: invalid productBlueprintId")
+	ErrInvalidAssigneeID         = errors.New("production: invalid assigneeId")
+	ErrInvalidModels             = errors.New("production: invalid models")
+	ErrInvalidModelID            = errors.New("production: invalid modelId")
+	ErrInvalidQuantity           = errors.New("production: invalid quantity")
+	ErrInvalidPrintedAt          = errors.New("production: invalid printedAt")
+	ErrInvalidPrintedBy          = errors.New("production: invalid printedBy")
+	ErrInvalidCreatedAt          = errors.New("production: invalid createdAt")
+	ErrInvalidUpdatedAt          = errors.New("production: invalid updatedAt")
+	ErrInvalidUpdatedBy          = errors.New("production: invalid updatedBy")
+	ErrTransition                = errors.New("production: invalid printed transition")
+)
+
+// ===== Constructors =====
+
+// New creates a Production.
+func New(
+	id, productBlueprintID, assigneeID string,
+	models []ModelQuantity,
+	printed bool,
+	printedAt *time.Time,
+	createdBy *string,
+	createdAt time.Time,
+) (Production, error) {
+	p := Production{
+		ID:                 id,
+		ProductBlueprintID: productBlueprintID,
+		AssigneeID:         assigneeID,
+		Models:             normalizeModels(models),
+		Printed:            printed,
+		PrintedAt:          printedAt,
+		// PrintedBy はコンストラクタでは nil 初期化（後から更新）
+		PrintedBy: nil,
+		CreatedBy: createdBy,
+		CreatedAt: createdAt, // ゼロ許容
+	}
+	if err := p.validate(); err != nil {
+		return Production{}, err
+	}
+	return p, nil
+}
+
+// NewNow is a convenience constructor with CreatedAt=now (UTC).
+func NewNow(
+	id, productBlueprintID, assigneeID string,
+	models []ModelQuantity,
+	printed bool,
+) (Production, error) {
+	now := time.Now().UTC()
+	return New(id, productBlueprintID, assigneeID, models, printed, nil, nil, now)
+}
+
+// ===== Behavior (state transitions) =====
+
+// MarkPrinted: unprinted(false) -> printed(true)
+func (p *Production) MarkPrinted(at time.Time) error {
+	if p.Printed {
+		return ErrTransition
+	}
+	if at.IsZero() {
+		return ErrInvalidPrintedAt
+	}
+	at = at.UTC()
+	p.Printed = true
+	p.PrintedAt = &at
+	return nil
+}
+
+// ResetToUnprinted: printed(true) -> unprinted(false) (clears timestamps)
+func (p *Production) ResetToUnprinted() {
+	p.Printed = false
+	p.PrintedAt = nil
+	p.PrintedBy = nil
+}
+
+// ===== Validation =====
+
+func (p Production) validate() error {
+	if p.ID == "" {
+		return ErrInvalidID
+	}
+	if p.ProductBlueprintID == "" {
+		return ErrInvalidProductBlueprintID
+	}
+	if p.AssigneeID == "" {
+		return ErrInvalidAssigneeID
+	}
+	if len(p.Models) == 0 {
+		return ErrInvalidModels
+	}
+	for _, mq := range p.Models {
+		if mq.ModelID == "" {
+			return ErrInvalidModelID
+		}
+		if mq.Quantity <= 0 {
+			return ErrInvalidQuantity
+		}
+	}
+
+	// PrintedBy は nil または非空文字列のみ許容
+	if p.PrintedBy != nil && *p.PrintedBy == "" {
+		return ErrInvalidPrintedBy
+	}
+	if p.CreatedBy != nil && *p.CreatedBy == "" {
+		return ErrInvalidCreatedAt
+	}
+	if p.UpdatedBy != nil && *p.UpdatedBy == "" {
+		return ErrInvalidUpdatedBy
+	}
+
+	// Printed/time coherence
+	if p.Printed {
+		if p.PrintedAt == nil || p.PrintedAt.IsZero() {
+			return ErrInvalidPrintedAt
+		}
+	} else {
+		// 未印刷なら PrintedAt/PrintedBy は未設定が原則
+		if p.PrintedAt != nil {
+			return ErrInvalidPrintedAt
+		}
+		if p.PrintedBy != nil {
+			return ErrInvalidPrintedBy
+		}
+	}
+
+	// CreatedAt/UpdatedAt は optional（ゼロ許容）
+	if !p.CreatedAt.IsZero() && !p.UpdatedAt.IsZero() && p.UpdatedAt.Before(p.CreatedAt) {
+		return ErrInvalidUpdatedAt
+	}
+	return nil
+}
+
+// ===== Helpers =====
+
+func normalizeModels(in []ModelQuantity) []ModelQuantity {
+	out := make([]ModelQuantity, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
+	for _, mq := range in {
+		id := mq.ModelID
+		if id == "" || mq.Quantity <= 0 {
+			continue
+		}
+		key := strings.ToLower(id)
+		if _, ok := seen[key]; ok {
+			// 既出はスキップ（必要なら数量を合算するロジックに変更可）
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, ModelQuantity{ModelID: id, Quantity: mq.Quantity})
+	}
+	return out
+}

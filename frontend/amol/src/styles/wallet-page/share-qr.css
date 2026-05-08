@@ -1,0 +1,70 @@
+/* frontend/amol/src/styles/wallet-page/share-qr.css */
+
+.wallet-page-share-qr {
+  width: min(480px, 100%);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+  text-align: center;
+}
+
+.wallet-page-share-qr__title {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.wallet-page-share-qr__qr-card {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.wallet-page-share-qr__qr-card canvas,
+.wallet-page-share-qr__qr-card svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.wallet-page-share-qr__description {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.wallet-page-share-qr__url {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+  text-align: left;
+}
+
+.wallet-page-share-qr .wallet-page-profile-actions-bar {
+  padding: 0;
+}
+
+.wallet-page-share-qr .wallet-page-profile-actions-bar__inner {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}

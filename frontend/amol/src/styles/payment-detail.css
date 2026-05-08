@@ -1,0 +1,45 @@
+/* frontend/src/styles/payment-detail.css */
+.payment-detail-card {
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fff;
+  display: grid;
+  gap: 12px;
+}
+
+.payment-detail-card__room {
+  display: grid;
+  gap: 4px;
+}
+
+.payment-detail-card__room-link {
+  color: #4fc3f7;
+  text-decoration: underline;
+}
+
+.payment-detail-card__summary {
+  display: grid;
+  gap: 8px;
+}
+
+.payment-detail-card__summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.payment-detail-card__divider {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid #ddd;
+}
+
+.payment-detail-card__copy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

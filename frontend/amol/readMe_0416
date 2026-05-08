@@ -1,0 +1,213 @@
+# AMOL Frontend / Backend 改修引き継ぎメモ
+最終更新: 2026-04-16
+
+この README は、現在の AMOL フロントエンド / バックエンド構成と、直近の `room-detail` 系の責務分割、ならびに `public-room-detail-page` 周辺のレイアウト・スタイル調整の到達点をまとめたものです。  
+既存メモ本文に古い記述が残る場合は、**最新更新（2026-04-07 / 2026-04-08）に加えて、本 README のディレクトリ構造・CSS 分離方針・`room-detail` 分割方針を優先**してください。:contentReference[oaicite:1]{index=1}
+
+---
+
+## 最新状態の要点
+
+- `RoomPaymentPage.tsx` は **保存済みカード前提** の寄付導線を採用
+- `paymentIntentId` を絶対正とし、`paymentIntentID` は使わない
+- `roomPayments.status` は `SUCCEEDED / PENDING / FAILED / CANCELED`
+- receipt NFT は `backend/mint-worker` に分離済み
+- metadata JSON は GCS に保存し、その URL を `receiptMetadataUri` として保持
+- frontend は `page.css` 集約方式をやめ、**責務別 CSS 分離**へ移行済み
+- `main.tsx` は `page.css` を読み込まず、共通 CSS のみを個別 import する構成
+- 各 page は必要な style のみを import する方針
+- `/histories` と `/histories/:paymentId` は router 上で ProtectedRoute 配下に定義済み
+- `ProtectedRoute.tsx` は `onAuthStateChanged` ベースで、未ログイン時は `/signin` に遷移する実装
+- `room-detail` まわりは、共通 UI・共通型・owner 用 hooks・public 用 hooks に分割する方針で整理済み
+- `RoomDetailPage.tsx` は `features/room-detail/owner/hooks/*` を参照する構成
+- `PublicRoomDetailPage.tsx` は `features/room-detail/public/hooks/*` を参照する構成 
+
+---
+
+## Frontend style 分離方針
+
+従来は `frontend/src/styles/page.css` にページ系スタイルを集約していたが、現在は以下の方針に変更している。
+
+### 共通 style
+- `page-layout.css`
+- `form.css`
+
+### ページ単位 style
+- `settings-page.css`
+- `scan-page.css`
+- `public-room-detail-page.css`
+- `history-page.css`
+- `rooms-page.css`
+- `landing-page.css`
+- `terms-page.css`
+
+### 機能単位 style
+- `room-create-page.css`
+- `room-payment-page.css`
+- `payment-detail.css`
+- `payment-method-page.css`
+- `payout-account-page.css`
+
+### main.tsx の現在方針
+`main.tsx` では `page.css` を読み込まない。  
+共通で必要な以下のみをグローバル読込する。
+
+- `reset.css`
+- `variables.css`
+- `globals.css`
+- `app.css`
+- `page-layout.css`
+- `form.css`
+
+ページ固有 CSS は各 `.tsx` 側で import する。:contentReference[oaicite:3]{index=3}
+
+---
+
+## room-detail 分割方針
+
+`RoomDetailPage.tsx` / `PublicRoomDetailPage.tsx` で共有していた表示ロジックと型定義は、`frontend/src/features/room-detail/` 配下へ分割する。  
+現在のページ実装では、両ページとも `RoomChatList` / `RoomDetailMediaArea` / `RoomDetailMeta` / `RoomDetailTabs` / `RoomRankingList` を `../features/room-detail` から import しており、ページ本体は compose 役に寄せる方向になっている。
+
+### 共通責務
+- 共通型: `features/room-detail/types.ts`
+- 共通 utility: `features/room-detail/utils/*`
+- 共通 UI: `features/room-detail/components/*`
+
+### owner 用責務
+- `features/room-detail/owner/hooks/useRoomOwnerAuth`
+- `features/room-detail/owner/hooks/useRoomOwnerDetail`
+- `features/room-detail/owner/hooks/useRoomOwnerRanking`
+- `features/room-detail/owner/hooks/useRoomOwnerMessages`
+- `features/room-detail/owner/hooks/useInitialChatScroll`
+
+`RoomDetailPage.tsx` は owner 向けページとして、公開/停止切替、公開リンクコピー、owner 用 room 読み込みとチャット/ランキング表示の責務を hooks 側へ分離する方針。実際に `RoomDetailPage.tsx` は owner hooks を import している。:contentReference[oaicite:5]{index=5}
+
+### public 用責務
+- `features/room-detail/public/hooks/usePublicRoomAuth`
+- `features/room-detail/public/hooks/usePublicRoomDetail`
+- `features/room-detail/public/hooks/usePublicRoomRanking`
+- `features/room-detail/public/hooks/useMySupportAggregate`
+- `features/room-detail/public/hooks/useRoomFollow`
+- `features/room-detail/public/hooks/usePublicRoomMessages`
+- `features/room-detail/public/hooks/usePaymentSheet`
+
+`PublicRoomDetailPage.tsx` は public 向けページとして、フォロー、応援導線、ランキング、自分の累計募金額、チャット取得を hooks 側へ寄せる方針。実際に `PublicRoomDetailPage.tsx` は public hooks 群を import している。:contentReference[oaicite:6]{index=6}
+
+---
+
+## room-detail UI 分離の意図
+
+### RoomDetailPage
+owner 用詳細ページ。主な責務は以下。
+- owner room 詳細表示
+- 公開/停止切替
+- 公開リンクコピー
+- chat / ranking タブ切替
+- owner 用 hooks 呼び出しと compose
+
+### PublicRoomDetailPage
+公開詳細ページ。主な責務は以下。
+- public room 詳細表示
+- chat / ranking タブ切替
+- フォロー
+- 応援導線
+- payment sheet 開閉
+- 自分の累計募金額表示
+- public 用 hooks 呼び出しと compose
+
+両ページとも `page-layout.css` と `public-room-detail-page.css` を読み込む前提で構成されている。
+
+---
+
+## public-room-detail-page.css の扱い
+
+`public-room-detail-page.css` は、今後の保守性を高めるため、最終的には責務別ファイルへ分割して扱う前提。  
+分離対象の代表例は以下。
+
+- `variables.css`
+- `layout.css`
+- `tabs.css`
+- `meta.css`
+- `chat.css`
+- `ranking.css`
+- `bottom-bar.css`
+- `payment-sheet.css`
+- `responsive.css`
+
+特に `tabs` の sticky、左カラム/右カラムの横向きレイアウト、header との重なり調整は `responsive.css` と `layout.css` の責務として整理する。  
+なお、ここは今回の改修で最も試行錯誤が多かった領域なので、**縦画面の tabs sticky と横向き 2 カラム表示は実機再確認を前提**とする。
+
+---
+
+## 推奨ディレクトリ構造（更新版）
+
+```text
+frontend/
+├─ src/
+│  ├─ components/
+│  │  ├─ auth/
+│  │  │  └─ ProtectedRoute.tsx
+│  │  ├─ layout/
+│  │  │  ├─ FooterNav.tsx
+│  │  │  ├─ Header.tsx
+│  │  │  ├─ Layout.tsx
+│  │  │  ├─ footer.css
+│  │  │  ├─ header.css
+│  │  │  └─ layout.css
+│  │  └─ ui/
+│  │     ├─ BackArrow.tsx
+│  │     ├─ Button.tsx
+│  │     ├─ Copy.tsx
+│  │     ├─ Dropdown.tsx
+│  │     ├─ Input.tsx
+│  │     ├─ Item.tsx
+│  │     ├─ button.css
+│  │     ├─ dropdown.css
+│  │     ├─ input.css
+│  │     └─ item.css
+│  ├─ features/
+│  │  └─ room-detail/
+│  │     ├─ index.ts
+│  │     ├─ types.ts
+│  │     ├─ utils/
+│  │     │  ├─ format.ts
+│  │     │  └─ youtube.ts
+│  │     ├─ components/
+│  │     │  ├─ RoomChatList.tsx
+│  │     │  ├─ RoomDetailMediaArea.tsx
+│  │     │  ├─ RoomDetailMediaCarousel.tsx
+│  │     │  ├─ RoomDetailMeta.tsx
+│  │     │  ├─ RoomDetailTabs.tsx
+│  │     │  └─ RoomRankingList.tsx
+│  │     ├─ owner/
+│  │     │  ├─ types.ts
+│  │     │  └─ hooks/
+│  │     │     ├─ useInitialChatScroll.ts
+│  │     │     ├─ useRoomOwnerAuth.ts
+│  │     │     ├─ useRoomOwnerDetail.ts
+│  │     │     ├─ useRoomOwnerMessages.ts
+│  │     │     └─ useRoomOwnerRanking.ts
+│  │     └─ public/
+│  │        ├─ types.ts
+│  │        └─ hooks/
+│  │           ├─ useMySupportAggregate.ts
+│  │           ├─ usePaymentSheet.ts
+│  │           ├─ usePublicRoomAuth.ts
+│  │           ├─ usePublicRoomDetail.ts
+│  │           ├─ usePublicRoomMessages.ts
+│  │           ├─ usePublicRoomRanking.ts
+│  │           └─ useRoomFollow.ts
+│  ├─ lib/
+│  │  ├─ firebase.ts
+│  │  └─ solana.ts
+│  ├─ pages/
+│  │  ├─ PublicRoomDetailPage.tsx
+│  │  ├─ RoomDetailPage.tsx
+│  │  └─ ...
+│  ├─ styles/
+│  │  ├─ page-layout.css
+│  │  ├─ public-room-detail-page.css
+│  │  ├─ room-payment-page.css
+│  │  ├─ room-create-page.css
+│  │  └─ ...
+│  └─ main.tsx

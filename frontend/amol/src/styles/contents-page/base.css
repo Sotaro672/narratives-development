@@ -1,0 +1,15 @@
+/* frontend/amol/src/styles/contents-page/base.css */
+
+.contents-page {
+  --split-page-header-height: calc(
+    var(--amol-header-height) + var(--amol-footer-height, 80px)
+  );
+  --split-page-left-width: 50vw;
+}
+
+.contents-page-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 16px 96px;
+}

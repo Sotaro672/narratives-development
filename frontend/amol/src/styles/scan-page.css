@@ -1,0 +1,230 @@
+/*frontend\src\styles\scan-page.css*/
+.scan-page {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  background-color: #111827;
+  overflow: hidden;
+}
+
+/* ScanPage */
+.scan-page__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.scan-page__center-guide {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.scan-page__frame {
+  width: min(72vw, 280px);
+  height: min(72vw, 280px);
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 0 0 9999px rgba(17, 24, 39, 0.18);
+}
+
+.scan-page__guide-text {
+  margin: 0;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.scan-page__bottom-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px calc(24px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.scan-page__my-qr-button {
+  pointer-events: auto;
+  min-width: 180px;
+  height: 48px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.scan-page__my-qr-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scan-page__modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(17, 24, 39, 0.72);
+  box-sizing: border-box;
+}
+
+.scan-page__modal {
+  width: 100%;
+  max-width: 360px;
+  border-radius: 20px;
+  background: #ffffff;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.scan-page__modal-title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.scan-page__qr-placeholder {
+  border-radius: 16px;
+  background: #f3f4f6;
+  padding: 16px;
+  overflow: auto;
+}
+
+.scan-page__qr-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.scan-page__modal-caption {
+  margin: 16px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+  text-align: center;
+}
+
+.scan-page__modal-close {
+  width: 100%;
+  height: 44px;
+  margin-top: 20px;
+  border: none;
+  border-radius: 9999px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scan-page__video {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  display: block;
+  background-color: #111827;
+}
+
+.scan-page__back-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+
+.scan-page__back-button {
+  pointer-events: auto;
+  background: rgba(17, 24, 39, 0.55);
+  border: none;
+  border-radius: 9999px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 28px;
+  line-height: 1;
+  backdrop-filter: blur(4px);
+}
+
+.scan-page__error-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: rgba(17, 24, 39, 0.5);
+  box-sizing: border-box;
+}
+
+.scan-page__error-box {
+  max-width: 320px;
+  padding: 16px;
+  border-radius: 12px;
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.scan-page__error-text {
+  margin: 0;
+  color: #ffffff;
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.scan-page__hidden-canvas {
+  display: none;
+}
+
+.scan-page__qr-placeholder--centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: #ffffff;
+}
+
+.scan-page__modal-caption--url {
+  word-break: break-all;
+  margin-top: 12px;
+}

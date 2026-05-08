@@ -1,0 +1,276 @@
+/* frontend/amol/src/styles/wallet-page/history.css */
+
+.wallet-page-history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wallet-page-history__item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 16px;
+  background: var(--color-surface, #ffffff);
+}
+
+.wallet-page-history__main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wallet-page-history__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wallet-page-history__date {
+  margin: 0;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.wallet-page-history__status {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-muted-surface, #f3f4f6);
+  color: var(--color-text-muted, #4b5563);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.wallet-page-history__title {
+  margin: 0;
+  color: var(--color-text, #111827);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.wallet-page-history__summary {
+  margin: 0;
+  color: var(--color-text, #111827);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.wallet-page-history__items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  list-style: none;
+}
+
+.wallet-page-history__product {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 14px;
+  background: var(--color-muted-surface, #f9fafb);
+}
+
+.wallet-page-history__product-visual {
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--color-surface, #ffffff);
+}
+
+.wallet-page-history__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wallet-page-history__image-fallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.wallet-page-history__product-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wallet-page-history__product-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wallet-page-history__product-title-area {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wallet-page-history__product-name {
+  min-width: 0;
+  color: var(--color-text, #111827);
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-page-history__product-subtitle {
+  min-width: 0;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-page-history__product-meta {
+  flex: 0 0 auto;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.wallet-page-history__brand {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 999px;
+  background: var(--color-surface, #ffffff);
+}
+
+.wallet-page-history__brand-icon {
+  flex: 0 0 auto;
+}
+
+.wallet-page-history__brand-name {
+  min-width: 0;
+  color: var(--color-text, #111827);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-page-history__meta-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wallet-page-history__meta-item {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text-muted, #4b5563);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.wallet-page-history__measurements {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.wallet-page-history__measurement {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--color-surface, #ffffff);
+}
+
+.wallet-page-history__measurement-label {
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.wallet-page-history__measurement-value {
+  margin: 0;
+  color: var(--color-text, #111827);
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+  .wallet-page-history__item {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .wallet-page-history__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .wallet-page-history__product {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .wallet-page-history__product-visual {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+
+  .wallet-page-history__product-heading {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .wallet-page-history__product-name,
+  .wallet-page-history__product-subtitle {
+    white-space: normal;
+  }
+
+  .wallet-page-history__measurements {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

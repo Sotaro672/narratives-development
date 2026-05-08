@@ -1,0 +1,120 @@
+// frontend/console/production/src/presentation/create/mappers.ts
+
+import type { Brand } from "../../../../brand/src/domain/entity/brand";
+import type { Member } from "../../../../member/src/domain/entity/member";
+import { getMemberFullName } from "../../../../member/src/domain/entity/member";
+
+import type { ProductBlueprintManagementRow } from "../../../../productBlueprint/src/infrastructure/query/productBlueprintQuery";
+import type { ModelVariationResponse } from "../../../../productBlueprint/src/application/productBlueprintDetailService";
+import type { ItemType, Fit } from "../../../../productBlueprint/src/domain/entity/catalog";
+
+import type { ProductBlueprintForCard, ProductionQuantityRow } from "./types";
+
+// ======================================================================
+// ブランド（変換）
+// ======================================================================
+export function buildBrandOptions(brands: Brand[]): string[] {
+  return brands.map((b) => b.name).filter(Boolean);
+}
+
+// ======================================================================
+// 商品設計一覧（変換）
+// ======================================================================
+export function filterProductBlueprintsByBrand(
+  rows: ProductBlueprintManagementRow[],
+  brandName: string | null,
+): ProductBlueprintManagementRow[] {
+  if (!brandName) return [];
+  return rows.filter((pb) => pb.brandName === brandName);
+}
+
+export function buildProductRows(
+  filtered: ProductBlueprintManagementRow[],
+): Array<{ id: string; name: string }> {
+  return filtered.map((pb) => ({
+    id: pb.id,
+    name: pb.productName,
+  }));
+}
+
+// ======================================================================
+// buildSelectedForCard（UIカード表示用）
+// ======================================================================
+// detail は productBlueprintDetailService 等から返る DTO を想定（現状 any を許容）
+// 型を強めたい場合は detail DTO 型を定義して差し替えてください。
+export function buildSelectedForCard(
+  detail: any,
+  row: ProductBlueprintManagementRow | null,
+): ProductBlueprintForCard {
+  if (detail) {
+    return {
+      id: detail.id,
+      productName: detail.productName,
+      brand: detail.brandName ?? "",
+      itemType: detail.itemType as ItemType | undefined,
+      fit: detail.fit as Fit | undefined,
+      materials: detail.material,
+      weight: detail.weight,
+      washTags: detail.qualityAssurance ?? [],
+      productIdTag: detail.productIdTag?.type ?? "",
+    };
+  }
+
+  if (row) {
+    return {
+      id: row.id,
+      productName: row.productName,
+      brand: row.brandName,
+    };
+  }
+
+  return { id: "", productName: "", brand: "" };
+}
+
+// ======================================================================
+// 担当者一覧（変換）
+// ======================================================================
+// production 作成時に assigneeId として保存される値は、
+// Firestore members の docId ではなく Firebase Auth UID を正とする。
+// そのため option.id には m.id ではなく m.uid を入れる。
+export function buildAssigneeOptions(
+  members: Member[],
+): Array<{ id: string; name: string }> {
+  return members
+    .map((m) => {
+      const uid = String((m as any).uid ?? "").trim();
+
+      return {
+        id: uid,
+        name: getMemberFullName(m) || m.email || uid || m.id,
+      };
+    })
+    .filter((option) => option.id);
+}
+
+// ======================================================================
+// ModelVariations → ProductionQuantityRow（UI入力用の行に変換）
+// - ✅ modelId のみを正キーとして採用
+// - displayOrder は detail.modelRefs 側が唯一のソースなので、ここでは注入しない
+// ======================================================================
+export function mapModelVariationsToRows(
+  list: ModelVariationResponse[],
+): ProductionQuantityRow[] {
+  const safe = Array.isArray(list) ? list : [];
+
+  return safe.map((mv, index) => {
+    const modelId = String(mv?.id ?? "").trim() || String(index);
+
+    return {
+      modelId,
+      modelNumber: String(mv?.modelNumber ?? "").trim(),
+      size: String(mv?.size ?? "").trim(),
+
+      color: String(mv?.color?.name ?? "").trim(),
+      rgb: (mv?.color?.rgb ?? null) as number | string | null,
+
+      displayOrder: undefined,
+      quantity: 0,
+    };
+  });
+}

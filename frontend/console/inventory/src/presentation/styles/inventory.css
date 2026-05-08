@@ -1,0 +1,277 @@
+/* frontend\console\inventory\src\presentation\styles\inventory.css
+/* モデル別在庫一覧カード */
+.ivc {
+  background-color: var(--pbp-surface, #ffffff);
+  border-radius: 18px;
+  border: 1px solid var(--pbp-border, rgba(15, 23, 42, 0.08));
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Header */
+.ivc__header {
+  padding: 16px 20px 10px;
+  border-bottom: none;
+}
+
+.ivc__header-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ivc__icon {
+  color: var(--pbp-text-soft, rgba(15, 23, 42, 0.55));
+}
+
+.ivc__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--pbp-text, #111827);
+}
+
+/* Body */
+.ivc__body {
+  padding: 0 20px 16px;
+}
+
+/* ============================================================
+   ListImageCard 専用（Tailwind から移譲）
+   ============================================================ */
+
+.lic__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lic__header-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lic__icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 1);
+  border: 1px solid rgba(226, 232, 240, 1);
+}
+
+.lic__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* アップロードエリア（empty） */
+.lic__empty {
+  border-radius: 16px;
+  border: 1px dashed rgba(203, 213, 225, 1);
+  background: rgba(248, 250, 252, 0.3);
+  width: 100%;
+  aspect-ratio: 16 / 9;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+
+  user-select: none;
+}
+
+.lic__empty--clickable {
+  cursor: pointer;
+}
+
+.lic__empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lic__empty-title {
+  font-size: 0.9rem;
+  color: rgba(51, 65, 85, 1);
+}
+
+.lic__empty-sub {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  padding: 0 12px;
+}
+
+/* メイン（大） */
+.lic__main {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 1);
+  background: #ffffff;
+}
+
+.lic__main-media {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(248, 250, 252, 1);
+}
+
+.lic__main-media--clickable {
+  cursor: pointer;
+}
+
+.lic__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lic__remove-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 1);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+}
+
+.lic__remove-btn:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.lic__remove-x {
+  color: rgba(71, 85, 105, 1);
+  line-height: 1;
+}
+
+/* footer */
+.lic__footer {
+  padding: 8px 12px;
+  border-top: 1px solid rgba(226, 232, 240, 1);
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lic__footer-left {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.lic__footer-note {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 1);
+}
+
+/* サムネ grid */
+.lic__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .lic__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.lic__thumb {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 1);
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.lic__thumb-media {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: rgba(248, 250, 252, 1);
+}
+
+.lic__thumb-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 1);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+}
+
+.lic__thumb-remove:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+/* 追加タイル（ボタン廃止の代替） */
+.lic__add-tile {
+  border-radius: 16px;
+  border: 1px dashed rgba(203, 213, 225, 1);
+  background: rgba(248, 250, 252, 0.3);
+  cursor: pointer;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  aspect-ratio: 1 / 1;
+  user-select: none;
+}
+
+.lic__add-title {
+  font-size: 0.75rem;
+  color: rgba(51, 65, 85, 1);
+}
+/* color dot (InventoryCard / ProductionQuantityCard 共通想定) */
+.ivc__color-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ivc__color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+}

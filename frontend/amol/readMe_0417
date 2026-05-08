@@ -1,0 +1,316 @@
+以下をそのまま `README.md` や引き継ぎ用 md に貼れます。
+
+````md
+# RoomCreatePage 改修メモ
+
+最終更新: 2026-04-17
+
+## 概要
+
+`RoomCreatePage` を、保守しやすい機能単位の構成へ分割しつつ、PC版・モバイル版で表示を切り替えるように改修した。  
+あわせて、ヘッダー操作、footer 非表示、メディア配置、YouTube URL のプリフィルなど、作成画面・編集画面の UX を整理した。
+
+---
+
+## 今回の主な改修内容
+
+### 1. RoomCreatePage の機能分割
+
+`pages/RoomCreatePage.tsx` に集約されていた責務を、`features/room-create/` 配下へ分離した。
+
+#### 分割後の主な責務
+
+- `pages/RoomCreatePage.tsx`
+  - 画面の入口
+  - PC / モバイルの出し分け
+  - `Layout` への props 指定
+
+- `features/room-create/hooks/useRoomCreatePage.ts`
+  - 画面状態管理
+  - 編集時の初期読込
+  - Firestore / API / submit 制御
+  - メディア配列管理
+  - YouTube URL 管理
+
+- `features/room-create/components/RoomCreateDesktopView.tsx`
+  - PC版画面構成
+
+- `features/room-create/components/RoomCreateMobileView.tsx`
+  - モバイル版画面構成
+
+- `features/room-create/components/RoomBasicFields.tsx`
+  - タイトル / 説明 / YouTube URL 入力
+
+- `features/room-create/components/RoomMediaSection.tsx`
+  - メディアアップロード UI
+  - メディアカルーセル表示
+
+- `features/room-create/api/roomCreateApi.ts`
+  - ルーム作成 API
+  - メディア追加 / 更新 API
+  - Storage upload
+
+- `features/room-create/utils/media.ts`
+  - ファイル種別判定
+  - YouTube URL 判定
+  - 表示補助関数
+  - preview URL 解放
+
+---
+
+## 2. PC版 / モバイル版の出し分け
+
+`RoomCreatePage.tsx` で `useIsMobile()` を使い、表示コンポーネントを切り替える構成にした。
+
+- PC版: `RoomCreateDesktopView`
+- モバイル版: `RoomCreateMobileView`
+
+これにより、ロジックは共通のまま、UI だけ端末別に安全に分離できるようになった。
+
+---
+
+## 3. Header の挙動変更
+
+`RoomCreatePage` では、通常の mypage ヘッダーではなく、作成 / 更新に特化したヘッダー挙動へ変更した。
+
+### 変更内容
+
+- ハンバーガーメニューを非表示
+- 設定アイコンを非表示
+- 右上にアクションボタンを表示
+  - 作成時: `ルームを作成`
+  - 編集時: `ルームを更新`
+
+### 対応内容
+
+`Header.tsx` に以下の props を追加した。
+
+- `hideHamburgerMenu?: boolean`
+- `hideSettingsButton?: boolean`
+- `actionButtonLabel?: string`
+- `onActionButtonClick?: () => void`
+
+`Layout.tsx` でも上記 props を受け取り、`Header` にそのまま渡すようにした。
+
+### RoomCreatePage 側での利用
+
+`RoomCreatePage.tsx` では `Layout` に対して以下を指定する。
+
+- `hideHamburgerMenu`
+- `hideSettingsButton`
+- `actionButtonLabel`
+- `onActionButtonClick={() => formRef.current?.requestSubmit()}`
+
+---
+
+## 4. footer の非表示整理
+
+`RoomCreatePage` では、PC版・モバイル版ともに footer を表示しない方針へ変更した。
+
+### 対応内容
+
+#### a. Layout 経由の footer を無効化
+
+`RoomCreatePage.tsx` で以下を指定する。
+
+```tsx
+showFooter={false}
+````
+
+#### b. MobileView 内の送信バーを削除
+
+モバイル版では、以前 `RoomCreateMobileView.tsx` 内に独自の下部送信ボタンが残っていたため、footer のように見えていた。
+この `room-create-page-mobile-submit` を削除し、送信操作はヘッダー右上に統一した。
+
+#### c. FooterNav 側でも `/rooms/create` をガード
+
+`FooterNav.tsx` では、`renderMode === "bottom"` かつ `location.pathname === "/rooms/create"` のときに `null` を返すようにし、万一 Layout 側の制御が漏れても表示されないようにした。
+
+---
+
+## 5. PC版レイアウトの2カラム化
+
+PC版では、左右に余白が大きかったため、レイアウトを2カラムに変更した。
+
+### 変更後の配置
+
+#### 左列
+
+* ルームタイトル
+* 説明
+* YouTube URL
+* エラー / 成功メッセージ
+
+#### 右列
+
+* メディアカードのみ
+
+### 実装方針
+
+`RoomCreateDesktopView.tsx` にて、以下のように構造を分離した。
+
+* `room-create-page-desktop-main`
+* `room-create-page-desktop-media`
+
+`room-create-page.css` では `room-create-page-desktop-grid` を追加し、PC時のみ2列レイアウトとした。
+
+---
+
+## 6. YouTube URL のプリフィル対応
+
+編集画面を開いた際、既存の YouTube URL が入力欄に表示されるように修正した。
+
+### 以前の問題
+
+編集時の初期読込で、
+
+* `title`
+* `description`
+* `medias`
+
+は復元していたが、
+
+* `youtubeUrl`
+
+は state に入れていなかったため、入力欄が空のままだった。
+
+### 修正内容
+
+`useRoomCreatePage.ts` の編集初期読込処理で、
+
+1. Firestore の既存メディアから `type === "youtube"` のメディアを探す
+2. その `youtubeUrl` を `setYoutubeUrl(...)` でセット
+3. 同時に YouTube メディアは `medias` 配列から除外
+
+### この方針にした理由
+
+送信時は `youtubeUrl` state を元に YouTube メディアを再構築して payload に入れる設計のため、
+既存 YouTube を `medias` に残したまま入力欄にも入れると、二重登録になる可能性がある。
+そのため、**YouTube は入力欄を正本とする** 方針に統一した。
+
+---
+
+## 7. ref 型の調整
+
+`RoomMediaSection.tsx` で `ref` prop の型不整合が発生したため、props 側の型を修正した。
+
+### 修正方針
+
+`useRef<HTMLInputElement | null>(null)` / `useRef<HTMLDivElement | null>(null)` で作った ref を props で受ける際は、以下で受ける。
+
+* `RefObject<HTMLInputElement>`
+* `RefObject<HTMLDivElement>`
+
+props 側に `| null` を付けないように整理した。
+
+---
+
+## 8. モバイル送信導線の整理
+
+最終的に、送信導線は PC / モバイルともに **ヘッダー右上のアクションボタンに統一** した。
+
+### 現在の送信導線
+
+* 作成時: ヘッダー右上 `ルームを作成`
+* 編集時: ヘッダー右上 `ルームを更新`
+
+フォーム送信は以下で実行する。
+
+```tsx
+onActionButtonClick={() => formRef.current?.requestSubmit()}
+```
+
+---
+
+## 現在の構成で主に更新されたファイル
+
+### pages
+
+* `frontend/src/pages/RoomCreatePage.tsx`
+
+### layout
+
+* `frontend/src/components/layout/Layout.tsx`
+* `frontend/src/components/layout/Header.tsx`
+* `frontend/src/components/layout/FooterNav.tsx`
+* `frontend/src/components/layout/header.css`
+
+### room-create feature
+
+* `frontend/src/features/room-create/hooks/useRoomCreatePage.ts`
+* `frontend/src/features/room-create/components/RoomCreateDesktopView.tsx`
+* `frontend/src/features/room-create/components/RoomCreateMobileView.tsx`
+* `frontend/src/features/room-create/components/RoomBasicFields.tsx`
+* `frontend/src/features/room-create/components/RoomMediaSection.tsx`
+* `frontend/src/features/room-create/api/roomCreateApi.ts`
+* `frontend/src/features/room-create/utils/media.ts`
+* `frontend/src/features/room-create/types.ts`
+
+### styles
+
+* `frontend/src/styles/room-create-page.css`
+* `frontend/src/components/layout/footer.css`
+
+---
+
+## 現在の RoomCreatePage の仕様
+
+### 共通
+
+* 作成 / 編集の両方に対応
+* タイトル必須
+* 説明入力可
+* YouTube URL 入力可
+* 画像 / PDF アップロード可
+* 動画アップロードは非対応
+* 動画は YouTube URL のみ対応
+
+### 編集時
+
+* 既存のタイトルを復元
+* 既存の説明を復元
+* 既存の画像 / PDF メディアを復元
+* 既存の YouTube URL を入力欄へプリフィル
+
+### ヘッダー
+
+* ハンバーガーメニューなし
+* 設定アイコンなし
+* 右上送信ボタンあり
+
+### footer
+
+* PC / モバイルとも非表示
+
+### PC版
+
+* 左右2カラム
+* 右列はメディアカード専用
+
+### モバイル版
+
+* 縦積み構成
+* 下部送信バーなし
+* ヘッダー右上で送信
+
+---
+
+## 補足
+
+今回の整理により、`RoomCreatePage` は「画面を組み立てるだけ」に近い薄い構成になり、
+状態管理・API・表示責務を `features/room-create` に寄せた。
+今後、以下の追加改修がしやすい状態になっている。
+
+* メディア並び順変更
+* YouTube 複数対応
+* DnD アップロード
+* メディア削除確認モーダル
+* PC版右列の sticky 強化
+* 編集差分検知による未保存警告
+
+---
+
+```
+
+必要なら次に、これを **AMOL 全体 README に追記しやすい「差し込み章だけ」版** に整えて返します。
+```

@@ -1,0 +1,10 @@
+/* frontend/amol/src/styles/wallet-page/layout.css */
+
+.wallet-page-layout {
+  width: 100%;
+}
+
+.wallet-page-layout__profile,
+.wallet-page-layout__main {
+  min-width: 0;
+}

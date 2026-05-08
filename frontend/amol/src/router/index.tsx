@@ -1,0 +1,227 @@
+// frontend/amol/src/router/index.tsx
+import { useEffect, useState } from "react";
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import { onAuthStateChanged, type User } from "firebase/auth";
+
+import { auth } from "../lib/firebase";
+
+import LandingPage from "../pages/LandingPage";
+import SignInPage from "../pages/SignInPage";
+import SignInSelectPage from "../pages/SignInSelectPage";
+import SignUpPage from "../pages/SignUpPage";
+import SignUpSelectPage from "../pages/SignUpSelectPage";
+import VerificationSentPage from "../pages/VerificationSentPage";
+import PasswordResetPage from "../pages/PasswordResetPage";
+import AvatarPage from "../pages/AvatarPage";
+import EmailPage from "../pages/EmailPage";
+import PasswordPage from "../pages/PasswordPage";
+import PaymentMethodPage from "../pages/PaymentMethodPage";
+import ShippingAddressPage from "../pages/ShippingAddressPage";
+import AuthActionPage from "../pages/AuthActionPage";
+import ListsPage from "../pages/ListsPage";
+import CartPage from "../pages/CartPage";
+import CatalogPage from "../pages/CatalogPage";
+import PaymentPage from "../pages/PaymentPage";
+import OrderConfirmedPage from "../pages/OrderConfirmedPage";
+import ScanPage from "../pages/ScanPage";
+import ScanResultPage from "../pages/ScanResultPage";
+import WalletPage from "../pages/WalletPage";
+import FollowPage from "../pages/FollowPage";
+import ContentsPage from "../pages/ContentsPage";
+import AvatarShareQrPage from "../pages/AvatarShareQrPage";
+import SpecifiedCommercialTransactionsPage from "../pages/SpecifiedCommercialTransactionsPage";
+import TermsPage from "../pages/TermsPage";
+import PrivacyPolicyPage from "../pages/PrivacyPolicyPage";
+import ContactPage from "../pages/ContactPage";
+import FaqPage from "../pages/FaqPage";
+import HowToUsePage from "../pages/HowToUsePage";
+import ProtectedRoute from "../components/auth/ProtectedRoute";
+
+function RootPage() {
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  if (user === undefined) {
+    return null;
+  }
+
+  if (user) {
+    return <Navigate to="/lists" replace />;
+  }
+
+  return <LandingPage />;
+}
+
+export const router = createBrowserRouter([
+  { path: "/", element: <RootPage /> },
+  { path: "/signin", element: <SignInPage /> },
+  { path: "/signin/select", element: <SignInSelectPage /> },
+  { path: "/signup", element: <SignUpPage /> },
+  { path: "/signup/select", element: <SignUpSelectPage /> },
+  { path: "/verification-sent", element: <VerificationSentPage /> },
+  { path: "/password-reset", element: <PasswordResetPage /> },
+
+  { path: "/how-to-use", element: <HowToUsePage /> },
+  { path: "/faq", element: <FaqPage /> },
+  {
+    path: "/specified-commercial-transactions",
+    element: <SpecifiedCommercialTransactionsPage />,
+  },
+  { path: "/terms", element: <TermsPage /> },
+  { path: "/privacy-policy", element: <PrivacyPolicyPage /> },
+  { path: "/contact", element: <ContactPage /> },
+
+  {
+    path: "/avatar",
+    element: (
+      <ProtectedRoute>
+        <AvatarPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/avatars/:avatarId",
+    element: (
+      <ProtectedRoute>
+        <WalletPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/avatars/:avatarId/follow",
+    element: (
+      <ProtectedRoute>
+        <FollowPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/avatars/:avatarId/share-qr",
+    element: (
+      <ProtectedRoute>
+        <AvatarShareQrPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/lists",
+    element: (
+      <ProtectedRoute>
+        <ListsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/lists/:listId",
+    element: (
+      <ProtectedRoute>
+        <CatalogPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/payments/:listId",
+    element: (
+      <ProtectedRoute>
+        <PaymentPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/order-confirmed",
+    element: (
+      <ProtectedRoute>
+        <OrderConfirmedPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/cart",
+    element: (
+      <ProtectedRoute>
+        <CartPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/scan",
+    element: (
+      <ProtectedRoute>
+        <ScanPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/scan/result",
+    element: <ScanResultPage />,
+  },
+  {
+    path: "/scan/result/:productId",
+    element: <ScanResultPage />,
+  },
+
+  {
+    path: "/wallet",
+    element: (
+      <ProtectedRoute>
+        <WalletPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/contents",
+    element: (
+      <ProtectedRoute>
+        <ContentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/settings/email",
+    element: (
+      <ProtectedRoute>
+        <EmailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/settings/password",
+    element: (
+      <ProtectedRoute>
+        <PasswordPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/settings/payment-method",
+    element: (
+      <ProtectedRoute>
+        <PaymentMethodPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/settings/shipping-address",
+    element: (
+      <ProtectedRoute>
+        <ShippingAddressPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/auth/action",
+    element: <AuthActionPage />,
+  },
+
+  {
+    path: "/:productId",
+    element: <ScanResultPage />,
+  },
+]);

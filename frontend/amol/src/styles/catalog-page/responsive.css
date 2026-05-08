@@ -1,0 +1,108 @@
+/* frontend/src/styles/catalog-page/responsive.css */
+
+/* ==============================
+   Tablet / Mobile
+   ============================== */
+
+@media (max-width: 959px) {
+  .catalog-page-section {
+    height: auto;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .catalog-page-content {
+    display: block;
+    height: auto;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .catalog-page-media {
+    position: relative;
+    width: 100%;
+    height: auto;
+    overflow: hidden;
+  }
+
+  .catalog-page-image-viewer {
+    height: auto;
+    aspect-ratio: 1 / 1.08;
+  }
+
+  .catalog-page-image {
+    object-fit: cover;
+  }
+
+  .catalog-page-image-nav {
+    display: none;
+  }
+
+  .catalog-page-image-counter {
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .catalog-page-thumbnail-list {
+    display: none;
+  }
+
+  .catalog-page-detail {
+    height: auto;
+    min-height: auto;
+    padding: 24px 16px 120px;
+    overflow: visible;
+  }
+
+  .catalog-page-title {
+    font-size: 24px;
+  }
+
+  .catalog-page-price {
+    font-size: 22px;
+  }
+
+  .catalog-page-main-image-placeholder {
+    height: auto;
+    aspect-ratio: 1 / 1.08;
+  }
+}
+
+@media (max-width: 560px) {
+  .catalog-page-detail {
+    padding: 20px 14px 120px;
+  }
+
+  .catalog-page-card {
+    margin-top: 18px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .catalog-page-definition-list > div {
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .catalog-page-title {
+    font-size: 22px;
+  }
+
+  .catalog-page-description {
+    font-size: 13px;
+  }
+
+  .catalog-page-price {
+    font-size: 20px;
+  }
+
+  .catalog-page-option-list {
+    gap: 8px;
+  }
+
+  .catalog-page-option-button {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}

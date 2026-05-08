@@ -1,0 +1,43 @@
+/* frontend/src/styles/catalog-page/token.css */
+
+/* ==============================
+   Token
+   ============================== */
+
+.catalog-page-token {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.catalog-page-token-icon {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  object-fit: cover;
+  background: var(--color-surface-secondary, #f5f5f5);
+}
+
+.catalog-page-token-name {
+  margin: 0;
+  color: var(--color-text, #1f1f1f);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.catalog-page-token-symbol {
+  margin: 4px 0 0;
+  color: var(--color-text-muted, #666);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.catalog-page-token-description {
+  margin: 8px 0 0;
+  color: var(--color-text-muted, #666);
+  font-size: 13px;
+  line-height: 1.7;
+}

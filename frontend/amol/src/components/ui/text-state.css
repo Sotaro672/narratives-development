@@ -1,0 +1,25 @@
+/* frontend/amol/src/components/ui/text-state.css */
+
+.ui-text-state {
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.ui-text-state--muted,
+.ui-text-state--empty,
+.ui-text-state--loading {
+  color: var(--color-text-muted, #6b7280);
+}
+
+.ui-text-state--error {
+  color: #b91c1c;
+}
+
+.ui-text-state--success {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: #f0fdf4;
+  color: #166534;
+}

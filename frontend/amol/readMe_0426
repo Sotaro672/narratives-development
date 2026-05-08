@@ -1,0 +1,167 @@
+backend/
+├─ cmd/
+│  └─ api/
+│     └─ main.go
+│
+├─ internal/
+│  ├─ domain/
+│  │  ├─ follow/
+│  │  │  ├─ entity.go
+│  │  │  ├─ error.go
+│  │  │  ├─ repository.go
+│  │  │  └─ summary.go
+│  │  │
+│  │  ├─ room/
+│  │  │  ├─ entity.go
+│  │  │  ├─ media.go
+│  │  │  ├─ message.go
+│  │  │  └─ repository.go
+│  │  │
+│  │  ├─ roompayment/
+│  │  │  ├─ entity.go
+│  │  │  ├─ method.go
+│  │  │  ├─ status.go
+│  │  │  └─ repository.go
+│  │  │
+│  │  └─ wallet/
+│  │     ├─ secret.go
+│  │     └─ wallet.go
+│  │
+│  ├─ application/
+│  │  ├─ port/
+│  │  │  └─ out/
+│  │  │     ├─ avatar_repository_port.go
+│  │  │     ├─ contact_mailer_port.go
+│  │  │     ├─ contact_repository_port.go
+│  │  │     ├─ contact_user_query_port.go
+│  │  │     ├─ notification_repository_port.go
+│  │  │     ├─ payment_gateway_port.go
+│  │  │     ├─ payment_user_repository_port.go
+│  │  │     ├─ payout_account_port.go
+│  │  │     ├─ room_aggregate_repository_port.go
+│  │  │     ├─ room_payment_history_repository_port.go
+│  │  │     ├─ secret_manager_port.go
+│  │  │     ├─ solana_wallet_port.go
+│  │  │     ├─ stripe_account_port.go
+│  │  │     └─ supporter_payment_user_port.go
+│  │  │
+│  │  └─ usecase/
+│  │     ├─ contact/
+│  │     │  ├─ input.go
+│  │     │  ├─ output.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ follow/
+│  │     │  ├─ input.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ notification/
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ room/
+│  │     │  ├─ input.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ roomaggregate/
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ roompayment/
+│  │     │  ├─ input.go
+│  │     │  ├─ list_my_room_payments.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ signup/
+│  │     │  ├─ input.go
+│  │     │  ├─ output.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     └─ stripe/
+│  │        └─ usecase.go
+│  │
+│  ├─ adapter/
+│  │  ├─ in/
+│  │  │  └─ http/
+│  │  │     ├─ handler/
+│  │  │     │  ├─ contact_handler.go
+│  │  │     │  ├─ follow_handler.go
+│  │  │     │  ├─ health_handler.go
+│  │  │     │  ├─ me_handler.go
+│  │  │     │  ├─ paypay_handler.go
+│  │  │     │  ├─ response.go
+│  │  │     │  ├─ room_handler.go
+│  │  │     │  ├─ room_media_handler.go
+│  │  │     │  ├─ room_message_handler.go
+│  │  │     │  ├─ room_payment_history_handler.go
+│  │  │     │  ├─ room_payment_intent_handler.go
+│  │  │     │  ├─ signup_bootstrap_handler.go
+│  │  │     │  └─ stripe_handler.go
+│  │  │     │
+│  │  │     ├─ middleware/
+│  │  │     │  ├─ cors.go
+│  │  │     │  └─ firebase_auth.go
+│  │  │     │
+│  │  │     └─ router/
+│  │  │        └─ router.go
+│  │  │
+│  │  └─ out/
+│  │     ├─ mail/
+│  │     │  └─ resend_contact_mailer_adapter.go
+│  │     │
+│  │     ├─ payment/
+│  │     │  └─ stripe/
+│  │     │     ├─ account_adapter.go
+│  │     │     ├─ client.go
+│  │     │     ├─ payment_gateway_adapter.go
+│  │     │     └─ payout_account_adapter.go
+│  │     │
+│  │     ├─ persistence/
+│  │     │  └─ firestore/
+│  │     │     ├─ avatar_query_adapter.go
+│  │     │     ├─ avatar_repository.go
+│  │     │     ├─ contact_repository.go
+│  │     │     ├─ contact_user_query_adapter.go
+│  │     │     ├─ error.go
+│  │     │     ├─ follow_repository.go
+│  │     │     ├─ notification_repository.go
+│  │     │     ├─ payment_user_repository.go
+│  │     │     ├─ room_aggregate_repository.go
+│  │     │     ├─ room_payment_history_repository.go
+│  │     │     ├─ room_payment_repository.go
+│  │     │     ├─ room_repository.go
+│  │     │     └─ supporter_payment_user_adapter.go
+│  │     │
+│  │     ├─ secret/
+│  │     │  └─ gcp_secret_manager_adapter.go
+│  │     │
+│  │     └─ wallet/
+│  │        └─ solana_wallet_adapter.go
+│  │
+│  ├─ infrastructure/
+│  │  ├─ di/
+│  │  │  └─ container.go
+│  │  │
+│  │  └─ server/
+│  │     └─ server.go
+│  │
+│  ├─ auth/
+│  │  ├─ firebase.go
+│  │  └─ resolver.go
+│  │
+│  ├─ config/
+│  │  └─ config.go
+│  │
+│  ├─ paypay/
+│  │  └─ ...
+│  │
+│  └─ stripe/
+│     ├─ type.go
+│     └─ ...
+│
+├─ mint-worker/
+│  └─ ...
+│
+├─ secrets/
+├─ .env
+├─ deploy-cloudrun.ps1
+├─ go.mod
+└─ go.sum

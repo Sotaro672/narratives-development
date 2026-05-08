@@ -1,0 +1,14 @@
+/* frontend/amol/src/styles/wallet-page/token-list.css */
+
+.wallet-page-token-list {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 16px;
+}
+
+.wallet-page-token-list__item {
+  min-width: 0;
+}

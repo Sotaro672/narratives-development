@@ -1,0 +1,24 @@
+{
+  "name": "narratives-irys-uploader",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "license": "MIT",
+  "scripts": {
+    "start": "ts-node --project tsconfig.irys.json index.ts"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "^6.1.1",
+    "@irys/upload": "^0.0.15",
+    "@irys/upload-ethereum": "^0.0.15",
+    "body-parser": "^1.20.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  },
+  "devDependencies": {
+    "@types/body-parser": "^1.19.6",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.0"
+  }
+}

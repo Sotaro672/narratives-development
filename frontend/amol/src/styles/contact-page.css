@@ -1,0 +1,5 @@
+/* frontend/src/styles/contact-page.css */
+.contact-form {
+  display: grid;
+  row-gap: 24px;
+}

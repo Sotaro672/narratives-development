@@ -1,0 +1,124 @@
+/* frontend/src/components/ui/media-uploader.css */
+
+.media-uploader {
+  display: grid;
+  gap: 8px;
+}
+
+.media-uploader__input {
+  display: none !important;
+}
+
+.media-uploader__panel {
+  display: grid;
+  gap: 12px;
+}
+
+.media-uploader__header {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.media-uploader__header-text {
+  display: grid;
+  gap: 4px;
+}
+
+.media-uploader__hint {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #666;
+}
+
+.media-uploader__header .button,
+.media-uploader__header button {
+  width: auto;
+  min-width: max-content;
+  align-self: start;
+}
+
+.media-uploader__empty {
+  border: 1px dashed #ddd;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  color: #666;
+  background: #fafafa;
+}
+
+.media-uploader__carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.media-uploader__carousel-card {
+  position: relative;
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.media-uploader__remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(17, 24, 39, 0.72);
+  color: #fff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.media-uploader__image-frame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+
+.media-uploader__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-uploader__frame {
+  width: 100%;
+  min-height: 320px;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.media-uploader__dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.media-uploader__dot {
+  width: 10px;
+  height: 10px;
+  border: none;
+  border-radius: 9999px;
+  background: #d1d5db;
+  cursor: pointer;
+}
+
+.media-uploader__dot--active {
+  background: #111827;
+}

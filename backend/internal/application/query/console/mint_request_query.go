@@ -1,0 +1,632 @@
+// backend/internal/application/query/console/mint_request_query.go
+package query
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"sort"
+	"time"
+
+	mintapp "narratives/internal/application/mint"
+	productionapp "narratives/internal/application/production"
+	querydto "narratives/internal/application/query/console/dto"
+	resolver "narratives/internal/application/resolver"
+	mintdom "narratives/internal/domain/mint"
+	modeldom "narratives/internal/domain/model"
+)
+
+var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
+
+// ------------------------------------------------------------
+// Optional dependency: model variations getter
+//   (このFS実装では productID を productBlueprintID として扱う設計)
+// ------------------------------------------------------------
+
+type ModelVariationsGetter interface {
+	GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error)
+}
+
+// MintRequestQueryService is used by /mint/requests handler.
+// It returns management rows: (productionId = docId) + inspection + mint summary.
+type MintRequestQueryService struct {
+	mintUC       *mintapp.MintUsecase
+	productionUC *productionapp.ProductionUsecase
+	nameResolver *resolver.NameResolver
+
+	// ★追加: productBlueprintId -> modelVariations を引くため（任意）
+	modelRepo ModelVariationsGetter
+}
+
+func NewMintRequestQueryService(
+	mintUC *mintapp.MintUsecase,
+	productionUC *productionapp.ProductionUsecase,
+	nameResolver *resolver.NameResolver,
+) *MintRequestQueryService {
+	return &MintRequestQueryService{
+		mintUC:       mintUC,
+		productionUC: productionUC,
+		nameResolver: nameResolver,
+		modelRepo:    nil,
+	}
+}
+
+// ★追加: DI 側で後から差し込めるようにする（既存 constructor を壊さない）
+func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) {
+	if s == nil {
+		return
+	}
+	s.modelRepo = modelRepo
+}
+
+// ListMintRequestManagementRows returns rows for current company.
+// Company boundary is expected to be enforced by UC layers (via ctx injected by AuthMiddleware).
+func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Context) ([]querydto.ProductionInspectionMintDTO, error) {
+	if s == nil || s.mintUC == nil || s.productionUC == nil {
+		return nil, ErrMintRequestQueryServiceNotConfigured
+	}
+
+	// ------------------------------------------------------------
+	// 1) productionIds: use ProductionUsecase (already company-scoped)
+	// ------------------------------------------------------------
+	start := time.Now()
+	prodsAny, err := s.productionUC.ListWithAssigneeName(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert unknown production type -> lightweight struct via JSON.
+	type prodLite struct {
+		ID            string `json:"id"`
+		TotalQuantity int    `json:"totalQuantity"`
+		ProductName   string `json:"productName"`
+
+		// ✅ ProductBlueprintID が正（ここに一本化）
+		ProductBlueprintID string `json:"ProductBlueprintID"`
+	}
+	prods := make([]prodLite, 0)
+	if b, mErr := json.Marshal(prodsAny); mErr == nil {
+		_ = json.Unmarshal(b, &prods)
+	}
+
+	ids := make([]string, 0, len(prods))
+	prodByID := make(map[string]prodLite, len(prods))
+	seen := make(map[string]struct{}, len(prods))
+	for _, p := range prods {
+		pid := p.ID
+		if pid == "" {
+			continue
+		}
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		seen[pid] = struct{}{}
+		ids = append(ids, pid)
+		prodByID[pid] = p
+	}
+	sort.Strings(ids)
+
+	log.Printf("[mint_request_qs] productions resolved len=%d elapsed=%s sample[0..4]=%v",
+		len(ids), time.Since(start), ids[:min(5, len(ids))],
+	)
+
+	if len(ids) == 0 {
+		return []querydto.ProductionInspectionMintDTO{}, nil
+	}
+
+	// ------------------------------------------------------------
+	// 2) inspections by productionIds (via mintUC)
+	// ------------------------------------------------------------
+	start = time.Now()
+	batchesAny, err := s.mintUC.ListInspectionBatchesByProductionIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	// InspectionBatch の実体(struct)に依存せず JSON 経由で吸収する（型ズレ回避）
+	type inspectionLite struct {
+		ProductionID  string `json:"productionId"`
+		Status        string `json:"status"`
+		TotalPassed   int    `json:"totalPassed"`
+		TotalQuantity int    `json:"totalQuantity"`
+		MintID        string `json:"mintId"`
+	}
+	batches := make([]inspectionLite, 0)
+	if b, mErr := json.Marshal(batchesAny); mErr == nil {
+		_ = json.Unmarshal(b, &batches)
+	}
+
+	inspByPID := make(map[string]inspectionLite, len(batches))
+	for _, b := range batches {
+		pid := b.ProductionID
+		if pid == "" {
+			continue
+		}
+		inspByPID[pid] = b
+	}
+
+	log.Printf("[mint_request_qs] inspections resolved len=%d elapsed=%s sampleKey=%q",
+		len(inspByPID), time.Since(start), firstKey(inspByPID),
+	)
+
+	// ------------------------------------------------------------
+	// 3) mints by inspectionIds (= productionIds)
+	// ------------------------------------------------------------
+	start = time.Now()
+	mintsByPID, err := s.mintUC.ListMintsByInspectionIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("[mint_request_qs] mints resolved keys=%d elapsed=%s sampleKey=%q",
+		len(mintsByPID), time.Since(start), firstKey(mintsByPID),
+	)
+
+	// ------------------------------------------------------------
+	// 4) build rows (stable order by ids)
+	// ------------------------------------------------------------
+	rows := make([]querydto.ProductionInspectionMintDTO, 0, len(ids))
+
+	const tokenNameMissLogLimit = 10
+	tokenNameMissCount := 0
+
+	for _, pid := range ids {
+		p := prodByID[pid]
+		insp, hasInsp := inspByPID[pid]
+
+		m, hasMint := mintsByPID[pid]
+		var mintPtr *mintdom.Mint
+		if hasMint {
+			tmp := m
+			mintPtr = &tmp
+		}
+
+		productName := p.ProductName
+
+		mintQty := 0
+		prodQty := 0
+		inspStatus := "notYet"
+		if hasInsp {
+			mintQty = insp.TotalPassed
+			if insp.Status != "" {
+				inspStatus = insp.Status
+			}
+			if insp.TotalQuantity > 0 {
+				prodQty = insp.TotalQuantity
+			}
+		}
+		if prodQty == 0 {
+			prodQty = p.TotalQuantity
+		}
+
+		tokenBlueprintID := ""
+		tokenName := ""
+		requestedBy := ""
+		requestedByName := ""
+		var mintedAt *time.Time
+
+		if hasMint {
+			requestedBy = m.CreatedBy
+			mintedAt = m.MintedAt
+			tokenBlueprintID = m.TokenBlueprintID
+
+			if s.nameResolver != nil && tokenBlueprintID != "" {
+				tokenName = s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID)
+				if tokenName == "" && tokenNameMissCount < tokenNameMissLogLimit {
+					tokenNameMissCount++
+					log.Printf("[mint_request_qs] WARN: tokenName not resolved tokenBlueprintId=%q (will fallback to id)", tokenBlueprintID)
+				}
+			}
+			if tokenName == "" {
+				tokenName = tokenBlueprintID
+			}
+
+			// ✅ requestedBy の名前解決（memberId -> "姓 名"）
+			if s.nameResolver != nil {
+				rb := requestedBy
+				requestedByName = s.nameResolver.ResolveRequestedByName(ctx, &rb)
+			}
+			if requestedByName == "" {
+				requestedByName = requestedBy
+			}
+		}
+
+		rows = append(rows, querydto.ProductionInspectionMintDTO{
+			ID:           pid,
+			ProductionID: pid,
+
+			TokenBlueprintID: tokenBlueprintID,
+
+			TokenName:          tokenName,
+			ProductName:        productName,
+			MintQuantity:       mintQty,
+			ProductionQuantity: prodQty,
+			InspectionStatus:   inspStatus,
+
+			// RequestedBy は「識別子（memberId）」を維持
+			RequestedBy: requestedBy,
+			// CreatedByName は「requestedBy の表示名」を格納（既存 DTO を壊さない）
+			CreatedByName: requestedByName,
+
+			MintedAt: mintedAt,
+
+			Inspection: nil,
+			Mint:       mintPtr,
+		})
+	}
+
+	log.Printf("[mint_request_qs] rows built len=%d sampleRow[0]=%s",
+		len(rows), toJSONForLog(sampleFirst(rows), 1500),
+	)
+
+	return rows, nil
+}
+
+// GetMintRequestDetail returns detail DTO for a single productionId (= inspectionId = docId).
+// detail は productionId をキーに必要データを API で取り直す backend 側実装。
+// - production: productionUC.ListWithAssigneeName から 1件抽出
+// - inspection: mintUC.ListInspectionBatchesByProductionIDs([pid])
+// - mint: mintUC.ListMintsByInspectionIDs([pid])
+// - modelMeta: (任意) modelRepo.GetModelVariations(productBlueprintID)
+func (s *MintRequestQueryService) GetMintRequestDetail(
+	ctx context.Context,
+	productionID string,
+) (*querydto.MintRequestDetailDTO, error) {
+	if s == nil || s.mintUC == nil || s.productionUC == nil {
+		return nil, ErrMintRequestQueryServiceNotConfigured
+	}
+
+	pid := productionID
+	if pid == "" {
+		return nil, errors.New("productionId is empty")
+	}
+
+	start := time.Now()
+
+	// ------------------------------------------------------------
+	// 1) production (company-scoped)
+	// ------------------------------------------------------------
+	prodsAny, err := s.productionUC.ListWithAssigneeName(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	type prodLite struct {
+		ID                 string `json:"id"`
+		TotalQuantity      int    `json:"totalQuantity"`
+		ProductName        string `json:"productName"`
+		ProductBlueprintID string `json:"ProductBlueprintID"`
+	}
+	prods := make([]prodLite, 0)
+	if b, mErr := json.Marshal(prodsAny); mErr == nil {
+		_ = json.Unmarshal(b, &prods)
+	}
+
+	var prod prodLite
+	foundProd := false
+	for _, p := range prods {
+		if p.ID == pid {
+			prod = p
+			foundProd = true
+			break
+		}
+	}
+	if !foundProd {
+		return nil, errors.New("production not found")
+	}
+
+	productBlueprintID := prod.ProductBlueprintID
+	log.Printf("[mint_request_qs] detail pid=%q production resolved productBlueprintId=%q", pid, productBlueprintID)
+
+	// ------------------------------------------------------------
+	// 2) inspection (by pid)
+	// ------------------------------------------------------------
+	batchesAny, err := s.mintUC.ListInspectionBatchesByProductionIDs(ctx, []string{pid})
+	if err != nil {
+		return nil, err
+	}
+
+	type inspectionItemLite struct {
+		ModelID          string `json:"modelId"`
+		InspectionResult string `json:"inspectionResult"`
+		RGB              *int   `json:"rgb,omitempty"`
+		Size             string `json:"size,omitempty"`
+		Color            string `json:"color,omitempty"`
+		ModelNumber      string `json:"modelNumber,omitempty"`
+	}
+	type inspectionBatchLite struct {
+		ProductionID  string               `json:"productionId"`
+		Status        string               `json:"status"`
+		TotalPassed   int                  `json:"totalPassed"`
+		TotalQuantity int                  `json:"totalQuantity"`
+		Inspections   []inspectionItemLite `json:"inspections"`
+	}
+	batches := make([]inspectionBatchLite, 0)
+	if b, mErr := json.Marshal(batchesAny); mErr == nil {
+		_ = json.Unmarshal(b, &batches)
+	}
+
+	var insp inspectionBatchLite
+	hasInsp := false
+	for _, b := range batches {
+		if b.ProductionID == pid {
+			insp = b
+			hasInsp = true
+			break
+		}
+	}
+
+	// ------------------------------------------------------------
+	// 3) mint (by pid)
+	// ------------------------------------------------------------
+	mintsByPID, err := s.mintUC.ListMintsByInspectionIDs(ctx, []string{pid})
+	if err != nil {
+		return nil, err
+	}
+	m, hasMint := mintsByPID[pid]
+
+	// ------------------------------------------------------------
+	// 3.5) model variations -> modelMeta（任意）
+	// ------------------------------------------------------------
+	modelMeta := map[string]querydto.MintModelMetaEntry(nil)
+
+	if productBlueprintID == "" {
+		log.Printf("[mint_request_qs] WARN: productBlueprintId is empty, skip model variations (pid=%q)", pid)
+	} else if s.modelRepo == nil {
+		log.Printf("[mint_request_qs] WARN: modelRepo not configured, skip model variations (pid=%q pbId=%q)", pid, productBlueprintID)
+	} else {
+		vars, vErr := s.modelRepo.GetModelVariations(ctx, productBlueprintID)
+		if vErr != nil {
+			log.Printf("[mint_request_qs] WARN: GetModelVariations failed pid=%q pbId=%q err=%v", pid, productBlueprintID, vErr)
+		} else {
+			tmp := make(map[string]querydto.MintModelMetaEntry, len(vars))
+			for _, v := range vars {
+				id := v.ID
+				if id == "" {
+					continue
+				}
+				rgb := v.Color.RGB
+				tmp[id] = querydto.MintModelMetaEntry{
+					ModelNumber: v.ModelNumber,
+					Size:        v.Size,
+					ColorName:   v.Color.Name,
+					RGB:         intPtr(rgb),
+				}
+			}
+			modelMeta = tmp
+			log.Printf("[mint_request_qs] modelMeta built pbId=%q len=%d sampleKey=%q sampleVal=%s",
+				productBlueprintID,
+				len(modelMeta),
+				firstKey(modelMeta),
+				toJSONForLog(func() any {
+					k := firstKey(modelMeta)
+					if k == "" {
+						return nil
+					}
+					return modelMeta[k]
+				}(), 500),
+			)
+		}
+	}
+
+	// ------------------------------------------------------------
+	// 4) compute detail fields
+	// ------------------------------------------------------------
+	productName := prod.ProductName
+
+	mintQty := 0
+	prodQty := prod.TotalQuantity
+	inspStatus := "notYet"
+
+	inspectionItems := make([]querydto.InspectionItemDTO, 0)
+
+	if hasInsp {
+		mintQty = insp.TotalPassed
+		if insp.Status != "" {
+			inspStatus = insp.Status
+		}
+		if insp.TotalQuantity > 0 {
+			prodQty = insp.TotalQuantity
+		}
+
+		// inspections[] を DTO へ（modelMeta があれば上書き）
+		for _, it := range insp.Inspections {
+			mid := it.ModelID
+			ir := it.InspectionResult
+
+			row := querydto.InspectionItemDTO{
+				ModelID:          mid,
+				InspectionResult: ir,
+			}
+
+			// backend inspection item が modelNumber/size/color/rgb を持っているなら拾う（保険）
+			row.ModelNumber = it.ModelNumber
+			row.Size = it.Size
+			row.Color = it.Color
+			row.RGB = it.RGB
+
+			// modelMeta があればそれを最優先で埋める
+			if mid != "" && modelMeta != nil {
+				if mm, ok := modelMeta[mid]; ok {
+					if mm.ModelNumber != "" {
+						row.ModelNumber = mm.ModelNumber
+					}
+					if mm.Size != "" {
+						row.Size = mm.Size
+					}
+					if mm.ColorName != "" {
+						row.Color = mm.ColorName
+					}
+					if mm.RGB != nil {
+						row.RGB = mm.RGB
+					}
+				}
+			}
+
+			inspectionItems = append(inspectionItems, row)
+		}
+	}
+
+	// mint fields
+	tokenBlueprintID := ""
+	tokenName := ""
+	requestedBy := ""
+	requestedByName := ""
+	var mintedAt *time.Time
+	var mintSummary *querydto.MintSummaryDTO
+
+	if hasMint {
+		requestedBy = m.CreatedBy
+		mintedAt = m.MintedAt
+		tokenBlueprintID = m.TokenBlueprintID
+
+		if s.nameResolver != nil && tokenBlueprintID != "" {
+			tokenName = s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID)
+		}
+		if tokenName == "" {
+			tokenName = tokenBlueprintID
+		}
+
+		// ✅ requestedBy の名前解決（memberId -> "姓 名"）
+		if s.nameResolver != nil {
+			rb := requestedBy
+			requestedByName = s.nameResolver.ResolveRequestedByName(ctx, &rb)
+		}
+		if requestedByName == "" {
+			requestedByName = requestedBy
+		}
+
+		// mint -> safe summary（products の shape 揺れ回避のため json 経由）
+		type mintLite struct {
+			ID                string         `json:"id"`
+			BrandID           string         `json:"brandId"`
+			TokenBlueprintID  string         `json:"tokenBlueprintId"`
+			Products          map[string]any `json:"products"`
+			CreatedAt         *time.Time     `json:"createdAt"`
+			CreatedBy         string         `json:"createdBy"`
+			Minted            bool           `json:"minted"`
+			MintedAt          *time.Time     `json:"mintedAt"`
+			ScheduledBurnDate *time.Time     `json:"scheduledBurnDate"`
+		}
+		var ml mintLite
+		if b, mErr := json.Marshal(m); mErr == nil {
+			_ = json.Unmarshal(b, &ml)
+		}
+
+		productIDs := make([]string, 0)
+		for k := range ml.Products {
+			id := k
+			if id == "" {
+				continue
+			}
+			productIDs = append(productIDs, id)
+		}
+		sort.Strings(productIDs)
+
+		mintSummary = &querydto.MintSummaryDTO{
+			ID:               ml.ID,
+			BrandID:          ml.BrandID,
+			TokenBlueprintID: ml.TokenBlueprintID,
+			CreatedBy:        ml.CreatedBy,
+
+			// ✅ 表示名は requestedByName を入れる（既存 DTO を壊さない）
+			CreatedByName: requestedByName,
+
+			CreatedAt:         ml.CreatedAt,
+			Minted:            ml.Minted,
+			MintedAt:          ml.MintedAt,
+			ScheduledBurnDate: ml.ScheduledBurnDate,
+			ProductIDs:        productIDs,
+		}
+	}
+
+	// production summary
+	prodSummary := &querydto.ProductionSummaryDTO{
+		ID:          prod.ID,
+		ProductName: prod.ProductName,
+		Quantity:    prodQty,
+	}
+
+	// inspection summary
+	var inspSummary *querydto.InspectionSummaryDTO
+	if hasInsp {
+		inspSummary = &querydto.InspectionSummaryDTO{
+			ProductionID: insp.ProductionID,
+			Status:       insp.Status,
+			TotalPassed:  insp.TotalPassed,
+			Quantity:     insp.TotalQuantity,
+			ProductName:  "",
+			Inspections:  inspectionItems,
+		}
+	}
+
+	out := &querydto.MintRequestDetailDTO{
+		ID:                 pid,
+		ProductionID:       pid,
+		ProductName:        productName,
+		TokenName:          tokenName,
+		TokenBlueprintID:   tokenBlueprintID,
+		MintQuantity:       mintQty,
+		ProductionQuantity: prodQty,
+		InspectionStatus:   inspStatus,
+
+		RequestedBy:   requestedBy,
+		CreatedByName: requestedByName,
+
+		MintedAt:       mintedAt,
+		Production:     prodSummary,
+		Inspection:     inspSummary,
+		Mint:           mintSummary,
+		ModelMeta:      modelMeta,
+		TokenBlueprint: nil,
+	}
+
+	log.Printf("[mint_request_qs] detail built pid=%q elapsed=%s dto=%s",
+		pid, time.Since(start), toJSONForLog(out, 1500),
+	)
+
+	return out, nil
+}
+
+// -----------------------
+// helpers
+// -----------------------
+
+func intPtr(n int) *int {
+	v := n
+	return &v
+}
+
+func sampleFirst[T any](xs []T) any {
+	if len(xs) == 0 {
+		return nil
+	}
+	return xs[0]
+}
+
+func toJSONForLog(v any, max int) string {
+	if v == nil {
+		return "null"
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "<marshal_error>"
+	}
+	s := string(b)
+	if max > 0 && len(s) > max {
+		return s[:max] + "...(truncated)"
+	}
+	return s
+}
+
+func firstKey[V any](m map[string]V) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys[0]
+}

@@ -1,0 +1,23 @@
+/* frontend/src/styles/catalog-page/base.css */
+
+.catalog-page-section {
+  --split-page-header-height: var(--amol-header-height);
+  --split-page-left-width: 50vw;
+
+  --catalog-thumbnail-size: 58px;
+  --catalog-thumbnail-gap: 10px;
+  --catalog-media-bg: #f6f2e8;
+}
+
+.catalog-page-state,
+.catalog-page-error {
+  margin: 0;
+  padding: 24px 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-muted, #666);
+}
+
+.catalog-page-error {
+  color: #b42318;
+}

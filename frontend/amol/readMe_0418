@@ -1,0 +1,655 @@
+以下を `README.md` のたたき台として使ってください。
+内容は、`room-detail` が `features/room-detail` 配下に分割され、owner/public それぞれの hooks と共通 components に責務が整理されている現状、ならびに `public-room-detail-page.css` を入口にした分割 CSS 方針を前提にしています。 
+また、**MediaPage 遷移は採用せず、カルーセルをページ上に重ねる方式へロールバックする**前提でまとめています。なお、現コードには `RoomDetailPage.tsx` / `PublicRoomDetailPage.tsx` の横向き分岐や `Header.tsx` の landscape 追従など、今回のロールバック方針と競合しうる記述がまだ残っているため、この README は「採用方針の最新版」として読むのが適切です。  
+
+```md
+# AMOL room-detail 改修メモ
+最終更新: 2026-04-17
+
+## このメモの前提
+
+このメモは、`RoomDetailPage` / `PublicRoomDetailPage` 周辺で進めてきた UI 改修の到達点と、今後の修正方針をまとめたものです。
+
+今回の最新方針は次のとおりです。
+
+- MediaPage 遷移方式は廃止する
+- メディア拡大は **別ページ遷移ではなく、現在のページ上にカルーセルを重ねる方式** に戻す
+- スマホ横向き時の主挙動は、ページ全体の desktop 化ではなく、**カルーセル側の拡大制御**を中心に整理する
+- `room-detail` は共通 components / owner hooks / public hooks に分割した構成を維持する
+- CSS は `public-room-detail-page.css` を入口にした責務別分割を維持する
+
+---
+
+## 現在の room-detail 構成
+
+### 共通 UI
+`frontend/src/features/room-detail/components/`
+
+- `RoomChatList.tsx`
+- `RoomDetailMediaArea.tsx`
+- `RoomDetailMediaCarousel.tsx`
+- `RoomDetailMeta.tsx`
+- `RoomDetailTabs.tsx`
+- `RoomRankingList.tsx`
+
+### 共通 utility / 型
+`frontend/src/features/room-detail/`
+
+- `types.ts`
+- `utils/format.ts`
+- `utils/youtube.ts`
+
+### owner 側 hooks
+`frontend/src/features/room-detail/owner/hooks/`
+
+- `useRoomOwnerAuth.ts`
+- `useRoomOwnerDetail.ts`
+- `useRoomOwnerRanking.ts`
+- `useRoomOwnerMessages.ts`
+- `useInitialChatScroll.ts`
+
+### public 側 hooks
+`frontend/src/features/room-detail/public/hooks/`
+
+- `usePublicRoomAuth.ts`
+- `usePublicRoomDetail.ts`
+- `usePublicRoomRanking.ts`
+- `usePublicRoomMessages.ts`
+- `useMySupportAggregate.ts`
+- `useRoomFollow.ts`
+- `usePaymentSheet.ts`
+
+---
+
+## ページ責務
+
+### RoomDetailPage
+owner 用の詳細ページ。
+
+主な責務:
+- owner room 詳細の取得
+- 公開 / 停止切替
+- 公開リンクコピー
+- chat / ranking タブ切替
+- owner hooks の compose
+
+### PublicRoomDetailPage
+公開詳細ページ。
+
+主な責務:
+- public room 詳細の取得
+- chat / ranking タブ切替
+- フォロー導線
+- 応援導線
+- payment sheet 開閉
+- 自分の累計募金額表示
+- public hooks の compose
+
+---
+
+## CSS 方針
+
+### 基本方針
+従来の `page.css` 集約はやめ、責務別 CSS 分離を維持する。
+
+### 共通 CSS
+- `page-layout.css`
+- `form.css`
+
+### ページ単位 CSS
+- `settings-page.css`
+- `scan-page.css`
+- `history-page.css`
+- `rooms-page.css`
+- `landing-page.css`
+- `terms-page.css`
+- `public-room-detail-page.css`
+
+### 機能単位 CSS
+- `room-create-page.css`
+- `room-payment-page.css`
+- `payment-detail.css`
+- `payment-method-page.css`
+- `payout-account-page.css`
+
+### PublicRoomDetailPage 系の分割 CSS
+`public-room-detail-page.css` を入口にして以下を import する構成を維持する。
+
+- `styles/public-room-detail/variables.css`
+- `styles/public-room-detail/media.css`
+- `styles/public-room-detail/layout.css`
+- `styles/public-room-detail/meta.css`
+- `styles/public-room-detail/tabs.css`
+- `styles/public-room-detail/chat.css`
+- `styles/public-room-detail/ranking.css`
+- `styles/public-room-detail/bottom-bar.css`
+- `styles/public-room-detail/payment-sheet.css`
+- `styles/public-room-detail/responsive.css`
+
+---
+
+## 今回までの主な改修内容
+
+### 1. room-detail の責務分離
+`RoomDetailPage.tsx` / `PublicRoomDetailPage.tsx` から、表示ロジックと hooks を `features/room-detail` 配下へ分割した。
+
+### 2. chat / ranking の独立スクロール
+PC 表示時に、ページ全体ではなく chat / ranking 各パネルを単独でスクロールできる方向で調整した。
+
+### 3. メディア領域の調整
+- メディア上部余白の削減
+- メディアなし時の header / tab 重なり回避
+- PC 時のメディア幅 / 右カラム幅調整
+- モバイルでの表示安定化
+
+### 4. YouTube サムネイル表示の調整
+通常表示では YouTube の見切れを抑えるため、サムネイル表示と `contain` ベースの見せ方を調整してきた。  
+拡大後は再生可能性を維持する必要があるため、**通常表示の見た目**と**拡大後の再生導線**を分けて考える。
+
+### 5. 拡大カルーセルの操作改善
+- 矢印での前後切替
+- モバイルでも切替しやすい UI
+- 拡大中の header / footer との競合回避
+- チャット導線をカルーセル下辺に追加する試行
+
+### 6. 横向き時の試行錯誤
+以下は一度試したが、最新方針では採用しない、または再整理対象とする。
+
+- 横向きで PC 版に切り替える制御
+- MediaPage へ自動遷移する制御
+- ページ全体を landscape に追従させる制御
+- landscape 時の header 特別表示
+
+---
+
+## 最新の採用方針
+
+### 採用する方針
+- **MediaPage 遷移は廃止**
+- **拡大カルーセルは overlay 方式に戻す**
+- メディア拡大中は、必要に応じて background 側 UI を抑制する
+- ただし、別ページ遷移ではなく、現在ページ上で完結させる
+- 横向き時の主制御は、ページ側ではなくカルーセル側に寄せる
+
+### 採用しない方針
+- `/rooms/:roomId/media`
+- `/public/rooms/:roomId/media`
+- 横向き時の自動 desktop 化
+- landscape をトリガーにしたページ丸ごとの描画切替
+
+---
+
+## 今後の修正優先順位
+
+### 優先度 高
+1. `RoomDetailMediaCarousel.tsx` を overlay 方式前提で整理し直す
+2. `RoomDetailMediaArea.tsx` / `PublicRoomDetailMobile.tsx` / `RoomDetailPage.tsx` / `PublicRoomDetailPage.tsx` の分岐を簡素化する
+3. 横向き時のページ全体分岐を削る
+4. `Header.tsx` の landscape 特別制御を見直す
+5. `responsive.css` の landscape 全面再構成を見直す
+
+### 優先度 中
+1. YouTube の通常表示と拡大後再生の責務分離
+2. 拡大カルーセル上の chat / ranking 導線の整理
+3. payment sheet と expanded carousel の競合回避
+4. bottom action / bottom summary の描画条件整理
+
+### 優先度 低
+1. アニメーション / 余白の微調整
+2. ボタン位置や z-index の最終調整
+3. 命名揺れの整理
+
+---
+
+## 既知の注意点
+
+### 1. landscape 関連の競合が起きやすい
+横向きで以下が同時に動くと不安定になりやすい。
+
+- ページ側の desktop/mobile 分岐
+- Header 側の landscape 分岐
+- responsive.css の landscape レイアウト切替
+- カルーセル側の expanded 制御
+
+### 2. 拡大カルーセルはページ全体と競合しやすい
+overlay を載せる場合でも、下記 UI が別ツリーで残ると競合しやすい。
+
+- bottom action
+- bottom summary
+- payment sheet
+- header / footer
+
+### 3. YouTube は通常表示と拡大表示で要件が違う
+- 通常表示: 見切れを抑えたい
+- 拡大表示: 再生できる必要がある
+
+このため、同一描画方式で両方を満たそうとすると破綻しやすい。
+
+---
+
+## 推奨ルール
+
+- ページ本体はできるだけ「薄い compose」に保つ
+- 状態管理は page → hooks → components の責務を崩さない
+- room-detail 系の共通 UI は `features/room-detail/components` に寄せる
+- landscape 専用ロジックは増やしすぎない
+- まず portrait の安定を優先し、その後 landscape を調整する
+- 別ページ遷移ではなく overlay を使う場合、競合元の固定 UI を先に整理する
+
+---
+
+## 確認対象ファイル
+
+### 画面 compose
+- `frontend/src/pages/RoomDetailPage.tsx`
+- `frontend/src/pages/PublicRoomDetailPage.tsx`
+- `frontend/src/features/room-detail/public/views/PublicRoomDetailMobile.tsx`
+- `frontend/src/features/room-detail/public/views/PublicRoomDetailDesktop.tsx`
+
+### room-detail 共通 UI
+- `frontend/src/features/room-detail/components/RoomDetailMediaArea.tsx`
+- `frontend/src/features/room-detail/components/RoomDetailMediaCarousel.tsx`
+- `frontend/src/features/room-detail/components/RoomDetailTabs.tsx`
+- `frontend/src/features/room-detail/components/RoomChatList.tsx`
+- `frontend/src/features/room-detail/components/RoomRankingList.tsx`
+- `frontend/src/features/room-detail/components/RoomDetailMeta.tsx`
+
+### layout / responsive
+- `frontend/src/components/layout/Header.tsx`
+- `frontend/src/styles/public-room-detail/layout.css`
+- `frontend/src/styles/public-room-detail/tabs.css`
+- `frontend/src/styles/public-room-detail/chat.css`
+- `frontend/src/styles/public-room-detail/ranking.css`
+- `frontend/src/styles/public-room-detail/media.css`
+- `frontend/src/styles/public-room-detail/media-carousel.css`
+- `frontend/src/styles/public-room-detail/responsive.css`
+- `frontend/src/styles/public-room-detail/bottom-bar.css`
+- `frontend/src/styles/public-room-detail/payment-sheet.css`
+
+---
+
+## 最終メッセージ
+
+この領域は、`room-detail` の責務分離、CSS 分割、portrait / landscape 差分、YouTube 表示、拡大カルーセル、payment sheet の競合が重なっているため、**一気に複数方針を入れると不安定になりやすい**。  
+今後は **MediaPage 遷移をやめ、overlay 方式に戻したうえで、競合元を1つずつ減らす**進め方を採用する。
+```
+
+いまのコード上では、`PublicRoomDetailPage.tsx` に横向き desktop 化の分岐がまだ残っており、`RoomDetailPage.tsx` にも landscape 判定の名残が見えます。`Header.tsx` も `orientation: landscape` を監視しているため、README の「既知の注意点」にこの競合を明記しておくのが適切です。  
+
+# AMOL メディア拡大カルーセル改修 README
+
+## 概要
+
+本改修では、`PublicRoomDetailPage` 系のメディア拡大カルーセルに対して、モバイル横向き表示・サイドバー表示・応援導線・成功モーダル・タブ表示制御・スクロール制御などを段階的に整理した。
+
+主な目的は以下の通り。
+
+* メディア拡大時の UX 改善
+* 横向き時のチャット / ランキング閲覧性向上
+* 応援導線をカルーセル体験の中に統合
+* 成功表示やスクロール挙動の不整合解消
+* style 直書きの CSS 分離
+* 機能単位でのコンポーネント分割
+
+---
+
+## 改修対象の主な領域
+
+### Public Room Detail / Media Lightbox
+
+* `frontend/src/features/room-detail/components/RoomDetailMediaCarousel.tsx`
+* `frontend/src/features/room-detail/components/RoomDetailMediaArea.tsx`
+* `frontend/src/features/room-detail/components/RoomDetailTabs.tsx`
+* `frontend/src/features/room-detail/components/RoomDetailPaymentSidebar.tsx`
+* `frontend/src/styles/public-room-detail/media-carousel.css`
+* `frontend/src/styles/public-room-detail/tabs.css`
+* `frontend/src/styles/public-room-detail/ranking.css`
+
+### Room Payment
+
+* `frontend/src/features/room-payment/components/EmbeddedSheetHeader.tsx`
+* `frontend/src/features/room-payment/components/RoomPaymentSuccess.tsx`
+* `frontend/src/styles/room-payment-page.css`
+
+---
+
+## 実施した主な改修内容
+
+## 1. タブ表示の制御改善
+
+### 対応内容
+
+* `isSidebarOpen === true` の間、タブを 3 列表示に変更
+* 右端に `×` の閉じるボタンを追加
+* チャット / ランキングボタンを active 状態に応じて表示制御
+* 縦横向きで sticky 挙動が崩れないように CSS を調整
+
+### 目的
+
+* 横向き sidebar 内で、チャット / ランキング / 閉じるの 3 操作を 1 行で扱えるようにするため
+
+---
+
+## 2. 拡大カルーセル横側コンテンツのスクロール分離
+
+### 対応内容
+
+* 拡大カルーセル右側のチャット / ランキング領域だけがスクロールするよう修正
+* 背面ページがスクロールしないように `overflow-y`, `overscroll-behavior`, `min-height: 0` を調整
+
+### 目的
+
+* ライトボックス表示中に、背面ページが一緒に動いてしまう問題を解消するため
+
+---
+
+## 3. RoomPayment 系の style 直書きを CSS へ移譲
+
+### 対応内容
+
+* `EmbeddedSheetHeader.tsx` の inline style を `room-payment-page.css` に移譲
+* ヘッダー、ハンドル、タイトル、閉じるボタンの責務を CSS class 化
+* RoomPayment まわりの見た目を CSS 主導に統一
+
+### 目的
+
+* コンポーネント責務の明確化
+* デザイン調整のしやすさ向上
+* README 既定方針である「責務別 CSS 分離」に合わせるため
+
+---
+
+## 4. 成功メッセージ表示の整理
+
+### 初期課題
+
+* payment-intent API は `status: succeeded` を返しているのに success 表示が出ない
+* Firestore 側でも `roomPayments.status = SUCCEEDED` が保存されているのに UI に反映されない
+* ビルドキャッシュの影響で変更が見えないケースがあった
+
+### 対応内容
+
+* success 表示をモーダル化
+* 成功モーダルが他 UI より前面に来るよう z-index を整理
+* 表示位置を上から見切れない位置に調整
+* モーダルの閉じるボタンを削除
+* 自動クローズ時間を 3 秒から 2 秒へ変更
+* 進行バーアニメーションを付与
+* 最終的に console ログも整理して削除
+
+### 関連知見
+
+* `dist` 削除後のビルドで反映されたため、表示不整合の一因として build artifact / cache 汚染があった
+
+---
+
+## 5. Room Payment CSS の機能分割
+
+### 対応方針
+
+単一の `room-payment-page.css` に集約されていたスタイルを、責務ごとに整理できる状態へ見直した。
+
+### 分離対象の観点
+
+* success modal
+* embedded header
+* card / form field
+* payment method
+* embedded section / scroll
+* animation
+
+### 目的
+
+* 今後の保守性向上
+* success 表示や embedded sheet の独立調整を容易にするため
+
+---
+
+## 6. チャット / ランキングの初期スクロール位置調整
+
+### 対応内容
+
+* 拡大カルーセルの sidebar を開いた際、チャットとランキングがデフォルトで最下部に寄るよう調整
+* `requestAnimationFrame` を使って DOM 描画後に `scrollTop = scrollHeight` を反映
+
+### 目的
+
+* 最新メッセージや最新ランキング近辺をすぐ確認できるようにするため
+
+---
+
+## 7. 応援導線の見直し
+
+### 試行した方針
+
+#### 7-1. iframe overlay / payment sheet 方式
+
+* 拡大カルーセル内から RoomPayment の iframe を開く構成を試行
+* `usePaymentSheet` による open / close 制御を実装
+* ただし、カルーセル外では動く一方、カルーセル内では期待どおり安定しないケースが継続
+
+#### 7-2. sidebar 差し替え方式へ変更
+
+最終的に以下へ変更した。
+
+* 応援ボタン押下時、チャット / ランキング sidebar を閉じる
+* 代わりに payment 専用 sidebar を開く
+* payment sidebar 内に RoomPayment を表示
+* 戻るボタンでチャット / ランキング側に戻れる構成に変更
+
+### 目的
+
+* 同一ライトボックス体験内で、閲覧と応援を切り替えられるようにするため
+* overlay / iframe の競合や親子表示の不安定性を減らすため
+
+---
+
+## 8. Payment sidebar の別ファイル化
+
+### 対応内容
+
+* `RoomDetailPaymentSidebar.tsx` を新規作成
+* Payment sidebar のヘッダー、戻る、本文領域を独立コンポーネント化
+* `RoomDetailMediaCarousel.tsx` の責務を軽量化
+
+### 目的
+
+* メディア表示ロジックと payment 表示ロジックを分離するため
+* 後続で payment 表示不具合を局所的に調査しやすくするため
+
+---
+
+## 9. Payment iframe URL 解決の安定化
+
+### 発生した問題
+
+* `public-room-detail-page-media-lightbox__payment-body` までは描画されるが中身が空
+* fallback 文言「応援画面を読み込めませんでした。」が出ることがあった
+
+### 対応内容
+
+* `roomId` から payment URL を明示的に解決
+* 必要に応じて `window.location.pathname` から roomId を補完する方式も検討 / 実施
+* 相対 URL ではなく `window.location.origin` を用いた絶対 URL 解決に変更
+
+### 目的
+
+* iframe `src` の空文字化を防ぐため
+* カルーセル内からの payment 読み込み経路を安定させるため
+
+---
+
+## 10. ランキング表示の余白調整
+
+### 対応内容
+
+* `ranking.css` の `.public-room-detail-page-ranking-table__cell--amount` に右余白を追加
+* 金額セルが右端に張り付かないよう `padding-right` を付与
+
+### 目的
+
+* 横向き sidebar 内で金額の視認性を改善するため
+
+---
+
+## 11. 縦向き / 横向きでの拡大カルーセル UI 切替
+
+### 縦向き時
+
+* チャットボタンは非表示
+* 右上に `×` ボタンを表示
+
+### 横向き時
+
+* `×` ボタンは非表示
+* チャットボタンを表示
+* チャットボタン押下で sidebar を開く
+
+### 回転時の課題と対応
+
+#### 課題
+
+* 縦で拡大 → 横回転時に、縦向き UI 状態を引きずって競合が起きた
+* 横向きにした後も `×` ボタンが残る、またはチャットボタンが出ないケースがあった
+* DevTools 端末エミュレーション環境で `innerWidth/innerHeight` と `matchMedia` の挙動差が確認された
+
+#### 対応内容
+
+* 向き判定を見直し
+* portrait / landscape ごとの表示条件を明確化
+* 横向きになった瞬間に sidebar / payment sidebar 状態を初期化
+* 「最初から横で開いた状態」と同じ見た目・状態へ合流するように調整
+
+---
+
+## 12. チャットボタン表示条件の整理
+
+### 発生した問題
+
+* 横画面でもチャットボタンが表示されない
+* 一度 sidebar を開くとチャットボタンが残る / 消えない
+* 小さい端末幅では `max-width: 1023px` が効き、横向きでも `display: none` になっていた
+
+### 対応内容
+
+* 画面幅ではなく **orientation 基準** で制御するよう変更
+* `@media (max-width: 1023px)` で `toggle-sidebar` を消さないよう修正
+* `@media (orientation: portrait)` と `@media (orientation: landscape)` に責務を分離
+* sidebar が開いている間はチャットボタンを非表示に変更
+
+### 目的
+
+* iPhone SE などの小さい端末でも、横向きなら確実にチャットボタンが表示されるようにするため
+
+---
+
+## 13. チャットボタンの中央寄せ修正
+
+### 発生した問題
+
+* チャットアイコン（💬）が丸ボタンの中央ではなく、左上寄りに描画される
+
+### 原因
+
+* 絵文字は環境依存で描画ボックスがズレやすく、button の flex 中央寄せだけでは安定しない
+
+### 対応内容
+
+* ボタン内に `span.public-room-detail-page-media-lightbox__toggle-sidebar-icon` を追加
+* `span` を `inline-flex` で中央寄せ
+* 必要な `padding`, `line-height`, `appearance`, `box-sizing` を明示
+
+### 目的
+
+* 絵文字表示の差異に影響されず、常に中央に見えるようにするため
+
+---
+
+## 14. CSS / TS の競合調査で得た知見
+
+今回の不具合の多くは、以下のような競合から発生した。
+
+* CSS は sidebar 差し替え版に更新済みだが、TS は旧 overlay 実装のままだった
+* `max-width` ベースのメディアルールが、portrait / landscape の意図を上書きしていた
+* `isSidebarOpen` を含む条件が厳しすぎて、横画面でもチャットボタンが描画されないタイミングがあった
+* ビルドキャッシュの影響で、修正後コードが UI に反映されないことがあった
+
+このため、以後の方針としては次を重視する。
+
+* portrait / landscape 制御は `orientation` 基準を優先
+* レイアウト責務と状態責務を分ける
+* sidebar / payment sidebar / close button / toggle button の表示責務を明文化する
+* style 直書きは避け、CSS class に統一する
+
+---
+
+## 現在の想定挙動
+
+### 縦向き拡大時
+
+* メディアを全画面表示
+* 右上に閉じる `×` ボタンを表示
+* チャットボタンは表示しない
+
+### 横向き拡大時
+
+* メディアを横向き全画面表示
+* チャットボタンを下部中央に表示
+* チャットボタン押下で sidebar を開く
+* sidebar が開いたらチャットボタンは非表示
+* sidebar ではチャット / ランキング / 応援導線を表示可能
+
+### 応援導線
+
+* sidebar 下部の「応援する」ボタン押下で payment sidebar に切り替え
+* payment sidebar 内で RoomPayment を表示
+* 戻るボタンで通常 sidebar へ復帰
+
+### success 表示
+
+* 決済成功後に success モーダルを前面表示
+* 2 秒後に自動で閉じる
+* progress アニメーションあり
+
+---
+
+## 今後の保守ポイント
+
+* `RoomDetailMediaCarousel.tsx` は状態責務が大きいため、必要に応じて以下の単位で更なる分割を検討する
+
+  * lightbox shell
+  * media navigation
+  * sidebar toggle
+  * orientation control hook
+  * payment sidebar launcher
+* `media-carousel.css` はさらに責務ごとに分けられる余地がある
+
+  * carousel base
+  * lightbox
+  * sidebar
+  * payment sidebar
+  * orientation override
+* emoji icon は環境差が残るため、必要に応じて SVG / icon component への置換を検討する
+
+---
+
+## まとめ
+
+今回の改修では、メディア拡大カルーセルを単なる表示機能から、
+
+* メディア閲覧
+* チャット閲覧
+* ランキング閲覧
+* 応援導線
+* 成功通知
+
+を一体で扱う UI へ段階的に整理した。
+
+特に重要だったのは、以下の 4 点である。
+
+1. 横向き時の sidebar 体験の安定化
+2. RoomPayment 導線の sidebar 差し替え方式への転換
+3. success 表示とスクロール制御の明確化
+4. portrait / landscape / small-width の競合を避ける CSS 制御の整理
+
+今後は、この README を基準に、責務別分割と UI 安定化を継続する。

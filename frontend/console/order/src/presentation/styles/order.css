@@ -1,0 +1,25 @@
+/* Order Management styles */
+
+.order-subtext {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.order-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 9999px;
+}
+
+/* ステータス別 */
+.order-badge.is-paid {
+  background: #e5e7eb;  /* 支払済 */
+  color: #111827;
+}
+
+.order-badge.is-transferred {
+  background: #0b0f1a;  /* 移譲完了 */
+  color: #fff;
+}

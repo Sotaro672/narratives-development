@@ -1,0 +1,97 @@
+/* frontend/console/tokenBlueprintReview/src/style/tokenBlueprintReview.css */
+
+/* spacing blocks */
+.tbrd-section {
+  margin-top: 16px;
+}
+
+.tbrd-reviewcard-wrapper {
+  margin-top: 16px;
+  padding: 10px; /* ✅ ReviewAggregateCard の外側余白（wrapper内） */
+}
+
+/* section header */
+.tbrd-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.tbrd-empty {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* lists */
+.tbrd-grid {
+  display: grid;
+  gap: 10px;
+}
+
+/* ✅ Reviews item card (each review) */
+.tbrd-review-item-card {
+  padding: 10px; /* ✅ カード枠と中身の間の余白 */
+}
+
+/* review item parts */
+.tbrd-author-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.tbrd-author-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+}
+
+.tbrd-body {
+  margin-top: 6px;
+  white-space: pre-wrap;
+}
+
+.tbrd-body-empty {
+  color: #94a3b8;
+}
+
+.tbrd-meta-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.tbrd-datetime {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* reaction item parts */
+.tbrd-reaction-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #475569;
+}
+
+/* ============================================================
+   Review Aggregate Card (review_aggregate_card.tsx etc.) styles
+   ============================================================ */
+
+.tbrd-aggregate-card {
+  width: 100%;
+}
+
+/* Metric block padding (was inline style padding: 10) */
+.tbrd-aggregate-metric {
+  padding: 10px;
+}

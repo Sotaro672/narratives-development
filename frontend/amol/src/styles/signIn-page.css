@@ -1,0 +1,44 @@
+.signin-page-section {
+  width: 100%;
+  padding: 64px 16px 24px;
+  box-sizing: border-box;
+}
+
+.signin-page-section__inner {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-top:32px;
+}
+
+.signin-page-description {
+  margin-top: 0;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.signin-form-block {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.signin-form-block > * + * {
+  margin-top: 16px;
+}
+
+.signin-page-actions {
+  width: 100%;
+  margin: 24px auto 0;
+  box-sizing: border-box;
+}
+
+.signin-page-actions > * {
+  width: 100%;
+}
+
+@media (orientation: landscape) and (max-width: 1024px) {
+  .signin-page-section {
+    padding-top: calc(var(--amol-header-height) + 24px);
+  }
+}

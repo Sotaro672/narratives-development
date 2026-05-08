@@ -1,0 +1,112 @@
+/* frontend/amol/src/styles/wallet-page/profile.css */
+
+.wallet-page-profile {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24px 20px 16px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+  background: #fff;
+}
+
+.wallet-page-profile--button {
+  appearance: none;
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wallet-page-profile--button:hover {
+  background: #f9fafb;
+}
+
+.wallet-page-profile--button:active {
+  background: #f3f4f6;
+}
+
+.wallet-page-profile__avatar-area {
+  width: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wallet-page-profile__avatar-wrap {
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+}
+
+.wallet-page-profile__avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 9999px;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+}
+
+.wallet-page-profile__avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.wallet-page-profile__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wallet-page-profile__stats {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 32px;
+}
+
+.wallet-page-profile__stat {
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.wallet-page-profile__stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.1;
+  text-align: center;
+}
+
+.wallet-page-profile__stat-label {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.wallet-page-profile__text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text);
+  line-height: 1.5;
+  word-break: break-word;
+}

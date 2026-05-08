@@ -1,0 +1,104 @@
+# Firebase service account (do not commit)
+credentials/firebase-service-account.json
+**/credentials/firebase-service-account.json
+*.service-account.json
+*service-account*.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+.next/
+.nuxt/
+.vite/
+.turbo/
+
+# Firebase generated / deploy cache
+.firebase/
+**/.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Backend binaries / executables
+*.exe
+*.dll
+*.so
+*.dylib
+backend/api.exe
+backend/*.exe
+
+# Go
+bin/
+vendor/
+*.test
+*.prof
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+frontend/mall/build/
+frontend/mall/.dart_tool/
+frontend/mall/.flutter-plugins
+frontend/mall/.flutter-plugins-dependencies
+
+# iOS / macOS generated
+Pods/
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Android / Gradle generated
+.gradle/
+**/.gradle/
+local.properties
+**/local.properties
+captures/
+*.keystore
+*.jks
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+**/.cache/
+
+# Large generated frontend artifacts
+frontend/**/dist/
+frontend/**/build/
+frontend/**/.firebase/
+
+# Optional: generated package manager cache
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz

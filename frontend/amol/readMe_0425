@@ -1,0 +1,204 @@
+以下が、**ここまでの改修を反映した AMOL backend の現時点のヘキサゴナルアーキテクチャー構成**です。
+
+```text
+backend/
+├─ cmd/
+│  └─ api/
+│     └─ main.go
+│
+├─ internal/
+│  ├─ domain/
+│  │  ├─ follow/
+│  │  │  ├─ entity.go
+│  │  │  ├─ error.go
+│  │  │  ├─ repository.go
+│  │  │  └─ summary.go
+│  │  │
+│  │  ├─ room/
+│  │  │  ├─ entity.go
+│  │  │  ├─ media.go
+│  │  │  ├─ message.go
+│  │  │  └─ repository.go
+│  │  │
+│  │  ├─ roompayment/
+│  │  │  ├─ entity.go
+│  │  │  ├─ method.go
+│  │  │  ├─ status.go
+│  │  │  └─ repository.go
+│  │  │
+│  │  └─ wallet/
+│  │     ├─ secret.go
+│  │     └─ wallet.go
+│  │
+│  ├─ application/
+│  │  ├─ port/
+│  │  │  └─ out/
+│  │  │     ├─ avatar_repository_port.go
+│  │  │     ├─ payment_gateway_port.go
+│  │  │     ├─ payment_user_repository_port.go
+│  │  │     ├─ payout_account_port.go
+│  │  │     ├─ room_aggregate_repository_port.go
+│  │  │     ├─ room_payment_history_repository_port.go
+│  │  │     ├─ secret_manager_port.go
+│  │  │     ├─ solana_wallet_port.go
+│  │  │     ├─ stripe_account_port.go
+│  │  │     └─ supporter_payment_user_port.go
+│  │  │
+│  │  └─ usecase/
+│  │     ├─ follow/
+│  │     │  ├─ input.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ room/
+│  │     │  ├─ input.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ roomaggregate/
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ roompayment/
+│  │     │  ├─ input.go
+│  │     │  ├─ list_my_room_payments.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     ├─ signup/
+│  │     │  ├─ input.go
+│  │     │  ├─ output.go
+│  │     │  └─ usecase.go
+│  │     │
+│  │     └─ stripe/
+│  │        └─ usecase.go
+│  │
+│  ├─ adapter/
+│  │  ├─ in/
+│  │  │  └─ http/
+│  │  │     ├─ middleware/
+│  │  │     │  ├─ cors.go
+│  │  │     │  └─ firebase_auth.go
+│  │  │     │
+│  │  │     └─ router/
+│  │  │        └─ router.go
+│  │  │
+│  │  └─ out/
+│  │     ├─ auth/
+│  │     │  └─ firebase/
+│  │     │     └─ client.go
+│  │     │
+│  │     ├─ payment/
+│  │     │  └─ stripe/
+│  │     │     ├─ account_adapter.go
+│  │     │     ├─ client.go
+│  │     │     ├─ payment_gateway_adapter.go
+│  │     │     └─ payout_account_adapter.go
+│  │     │
+│  │     ├─ persistence/
+│  │     │  └─ firestore/
+│  │     │     ├─ avatar_query_adapter.go
+│  │     │     ├─ avatar_repository.go
+│  │     │     ├─ error.go
+│  │     │     ├─ follow_repository.go
+│  │     │     ├─ payment_user_repository.go
+│  │     │     ├─ room_aggregate_repository.go
+│  │     │     ├─ room_payment_history_repository.go
+│  │     │     ├─ room_payment_repository.go
+│  │     │     ├─ room_repository.go
+│  │     │     └─ supporter_payment_user_adapter.go
+│  │     │
+│  │     ├─ secret/
+│  │     │  └─ gcp_secret_manager_adapter.go
+│  │     │
+│  │     └─ wallet/
+│  │        └─ solana_wallet_adapter.go
+│  │
+│  ├─ handler/
+│  │  ├─ contact_handler.go
+│  │  ├─ follow_handler.go
+│  │  ├─ health_handler.go
+│  │  ├─ me_handler.go
+│  │  ├─ paypay_handler.go
+│  │  ├─ response.go
+│  │  ├─ room_handler.go
+│  │  ├─ room_media_handler.go
+│  │  ├─ room_message_handler.go
+│  │  ├─ room_payment_history_handler.go
+│  │  ├─ room_payment_intent_handler.go
+│  │  ├─ signup_bootstrap_handler.go
+│  │  └─ stripe_handler.go
+│  │
+│  ├─ infrastructure/
+│  │  ├─ di/
+│  │  │  └─ container.go
+│  │  │
+│  │  └─ server/
+│  │     └─ server.go
+│  │
+│  ├─ auth/
+│  │  ├─ firebase.go
+│  │  └─ resolver.go
+│  │
+│  ├─ config/
+│  │  └─ config.go
+│  │
+│  ├─ paypay/
+│  │  └─ ...
+│  │
+│  ├─ stripe/
+│  │  ├─ type.go
+│  │  └─ ...
+│  │
+│  └─ service/
+│     ├─ contact_service.go
+│     ├─ mailer.go
+│     └─ ...
+│
+├─ mint-worker/
+│  └─ ...
+│
+├─ secrets/
+├─ .env
+├─ deploy-cloudrun.ps1
+├─ go.mod
+└─ go.sum
+```
+
+## ここまでで削除候補になった旧 service
+
+ここまでの改修で、以下は **adapter / usecase / port に移行済み** のため、コンパイル上参照がなくなったら削除できます。
+
+```text
+backend/internal/service/
+├─ follow_service.go
+├─ room_aggregate_service.go
+├─ room_payment_history_service.go
+├─ secret_manager_service.go
+├─ signup_bootstrap_service.go
+├─ solana_wallet_service.go
+└─ stripe_service.go
+```
+
+## まだ残っている移行途中の領域
+
+現時点では、以下はまだ完全にはヘキサゴナル化しきっていない可能性があります。
+
+```text
+backend/internal/handler/
+backend/internal/auth/
+backend/internal/config/
+backend/internal/paypay/
+backend/internal/stripe/
+backend/internal/service/contact_service.go
+backend/internal/service/mailer.go
+```
+
+最終形に寄せるなら、次はこの順番が自然です。
+
+```text
+1. handler/ を adapter/in/http/handler/ に移動
+2. auth/firebase.go を adapter/out/auth/firebase/client.go に移動
+3. config/ を infrastructure/config/ に移動
+4. paypay/ を adapter/out/payment/paypay/ に移動
+5. contact_service.go / mailer.go を usecase/contact + adapter/out/mail に分割
+6. internal/service/ を空にして削除
+```
+
+現時点の方向性としては、かなりヘキサゴナル構成に寄っています。次の大きな山は **handler ディレクトリの移動** と **contact / mailer / paypay の分割** です。

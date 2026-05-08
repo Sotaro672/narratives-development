@@ -1,0 +1,405 @@
+以下を `README.md` として保存してください。
+
+````md
+# AMOL Scan / QR / Scan Result 改修 README
+
+## 概要
+
+今回の改修では、`ScanPage.tsx` と `ScanResultPage.tsx` を中心に、以下を実装・整理しました。
+
+1. `ScanPage.tsx` でカメラを起動し、QR コードをスキャンできるようにした
+2. `BarcodeDetector` 非対応ブラウザでも動くように `jsQR` フォールバックを追加した
+3. `マイQRコード` ボタンから、自分用の QR コードをモーダル表示できるようにした
+4. QR の中身を JSON 文字列ではなく URL に変更し、アプリ外のスマホ標準カメラでも読み取りやすくした
+5. QR 読み取り後に `ScanResultPage.tsx` へ遷移し、**scan された avatar が scan した avatar にいくら募金したか** を確認できるようにした
+6. `ScanResultPage.tsx` で、募金したルーム一覧・各ルームへの募金金額・そのルーム内でのランキングを表示するようにした
+7. `ScanResultPage.tsx` の表示を、既存 `RoomsPage.tsx` のカード UI に寄せた
+8. `avatarUid` 表示ではなく `avatarName` 表示に変更した
+9. 未ログイン時は `ScanPage.tsx` / `ScanResultPage.tsx` から `/signin` に遷移するようにした
+
+既存の `RoomsPage.tsx` では、related room card が「タイトル・状態・作者・バッジ・募金金額・更新日時」を表示する構成で実装されていたため、`ScanResultPage.tsx` もこのカード UI を参照する方針とした。:contentReference[oaicite:0]{index=0}
+
+---
+
+## 既存仕様との整合
+
+既存メモでは、`ScanPage.tsx` は以下の構成が前提だった。
+
+- 通常の `Layout` は使わない
+- 画面全体をカメラプレビュー領域として使う
+- ヘッダー全体は非表示
+- 左上に `BackArrow` のみを重ねて表示
+- 戻る押下時は `/rooms` に戻る
+- 画面表示中は自動でカメラ起動を試行
+- 画面離脱時はカメラ停止
+- footer は非表示
+
+この方針に合わせて、今回の `ScanPage.tsx` も全画面スキャン UI として実装した。:contentReference[oaicite:1]{index=1}
+
+---
+
+## ルーティング追加
+
+`router/index.tsx` に以下の protected route を追加した。
+
+```txt
+/scan/result/:avatarUid
+````
+
+これにより、QR スキャン後に対象 avatar の結果ページへ遷移できるようにした。
+
+---
+
+## ScanPage.tsx の改修内容
+
+## 1. カメラ起動
+
+`ScanPage.tsx` は `navigator.mediaDevices.getUserMedia(...)` を使ってカメラ起動する構成とした。
+
+* 可能なら `facingMode: environment` を優先
+* 失敗した場合は `video: true` にフォールバック
+* 画面離脱時は `MediaStreamTrack.stop()` で停止
+
+これにより、端末依存差を多少吸収しながらスキャン画面を起動できるようにした。
+
+---
+
+## 2. QR スキャン方式
+
+### 初期方式
+
+当初は `BarcodeDetector` のみで QR 検出していた。
+
+### 問題
+
+一部ブラウザで以下の警告が出た。
+
+* このブラウザでは QR コードスキャンには対応していません
+
+これは `BarcodeDetector` が未対応だったことが原因。
+
+### 最終方式
+
+最終的に以下の二段構えにした。
+
+1. `BarcodeDetector` が使える場合はそれを利用
+2. 非対応の場合は `jsQR` にフォールバック
+
+これにより、対応ブラウザが広がった。
+
+---
+
+## 3. スキャンループ
+
+`requestAnimationFrame` を使い、動画フレームごとに QR 読み取りを試す構成とした。
+
+* `BarcodeDetector.detect(video)`
+* 失敗または未検出時は `canvas` に描画して `jsQR(...)`
+* 有効な QR を検出したら `scanningLocked=true`
+* 以降は二重遷移を防止
+* カメラ停止後に結果画面へ遷移
+
+---
+
+## 4. QR の中身を URL 化
+
+### 変更前
+
+当初は QR の中身に JSON 文字列を入れていた。
+
+```json
+{
+  "type": "amol-avatar",
+  "avatarUid": "..."
+}
+```
+
+### 課題
+
+これだとアプリ外のスマホ標準カメラから読み取った際に、そのまま URL として開けない。
+
+### 変更後
+
+以下形式の URL を QR に埋め込む方式へ変更した。
+
+```txt
+https://<frontend-base-url>/scan/result/<avatarUid>
+```
+
+使用値は以下の順で決定する。
+
+1. `VITE_FRONTEND_BASE_URL`
+2. `window.location.origin`
+
+これにより、iPhone / Android の標準カメラからでも URL として扱いやすくした。
+
+---
+
+## 5. マイQRコード表示
+
+`ScanPage.tsx` 下部に `マイQRコード` ボタンを追加し、押下するとモーダルが開く構成にした。
+
+### モーダル内容
+
+* タイトル: `マイQRコード`
+* 自分の scan result URL を QR 画像として表示
+* 補助文言
+* 閉じるボタン
+
+### QR 表示
+
+文字列の `pre` 表示ではなく、`qrcode.react` の `QRCodeSVG` を使って本物の QR コードを描画する構成へ変更した。
+
+---
+
+## 6. 未ログイン時制御
+
+`onAuthStateChanged(...)` の解決後、`currentUser == null` の場合は `/signin` に遷移するようにした。
+
+対象画面:
+
+* `ScanPage.tsx`
+* `ScanResultPage.tsx`
+
+これにより、アプリ外カメラ経由で直接 `scan/result/:avatarUid` に入った場合でも、未ログインならログイン画面へ送れるようにした。
+
+---
+
+## 7. CSS 側の対応
+
+`page.css` に以下の ScanPage 関連スタイルを追加・整理した。
+
+* `.scan-page__overlay`
+* `.scan-page__center-guide`
+* `.scan-page__frame`
+* `.scan-page__guide-text`
+* `.scan-page__bottom-actions`
+* `.scan-page__my-qr-button`
+* `.scan-page__modal-backdrop`
+* `.scan-page__modal`
+* `.scan-page__modal-title`
+* `.scan-page__qr-placeholder`
+* `.scan-page__qr-text`
+* `.scan-page__modal-caption`
+* `.scan-page__modal-close`
+
+既存 `page.css` には `scan-page__back-layer` や `scan-page__error-overlay` はあったが、`マイQRコード` ボタンやモーダル用の定義がなかったため、CSS 追加が必要だった。
+
+---
+
+## ScanResultPage.tsx の改修内容
+
+## 1. 目的
+
+`ScanResultPage.tsx` では、**scan された avatar が、自分のルームへどれだけ募金したか** を確認できるようにした。
+
+表示内容は以下。
+
+* 募金したルーム一覧
+* 各ルームの募金金額
+* 各ルームでのランキング
+* 最終募金日時
+* 募金回数
+
+---
+
+## 2. 初期実装で起きた問題
+
+当初は `roomSupporters` を以下のように広く引いていた。
+
+```txt
+where("supporterUid", "==", avatarUid)
+```
+
+この構成は Firestore Rules と相性が悪く、`Missing or insufficient permissions.` を起こしやすかった。実際、ログにも `FirebaseError: Missing or insufficient permissions.` が出ていた。
+
+### 原因
+
+`roomSupporters` の read 条件は room ごとの公開状態や owner 判定を含むため、`supporterUid` 単体の広いクエリだと、読めないドキュメントが混ざりクエリ全体が失敗しやすい。
+
+---
+
+## 3. 最終クエリ方式
+
+最終的には以下の順で取得する方式へ変更した。
+
+1. 自分 owner の `rooms` を取得
+2. その room ごとに、
+
+   * `where("roomId", "==", room.id)`
+   * `where("supporterUid", "==", avatarUid)`
+     で `roomSupporters` を取得
+3. 取得できた room だけを結果一覧に採用
+4. ランキングは room 単位で
+
+   * `where("roomId", "==", room.id)`
+   * `orderBy("totalSupportAmount", "desc")`
+     を使って算出
+
+この方式に変えたことで permission error を回避しやすくなった。
+
+---
+
+## 4. 表示 UI
+
+`ScanResultPage.tsx` のカードは、既存 `RoomsPage.tsx` の `RelatedRoomCard` を参照して構成した。表示順はおおむね次の通り。
+
+* ルームタイトル
+* 公開中 / 停止中
+* 作者
+* 募金済みバッジ
+* ランキングバッジ
+* 募金金額
+* 最終募金日時
+* 回数
+* 対象 avatar
+
+既存 `RoomsPage.tsx` の card 構成に寄せることで、一覧 UI の統一感を保った。
+
+---
+
+## 5. avatarUid から avatarName 表示へ変更
+
+### 変更前
+
+結果画面上では `avatarUid` をそのまま表示していた。
+
+### 変更後
+
+`avatars/{avatarUid}` を `getDoc(...)` で取得し、`avatarName` を表示するように変更した。
+
+表示ルール:
+
+* `avatarName` が取れればそれを表示
+* 取れなければ `avatarUid`
+* どちらもなければ `-`
+
+これにより、結果画面で人間に分かりやすい表示にできた。
+
+---
+
+## 6. 集計表示
+
+画面上部には以下を表示する構成とした。
+
+* 対象: `avatarName`
+* 該当ルーム数
+* 累計募金金額
+
+累計募金金額は `items.reduce(...)` によって算出する。
+
+---
+
+## Firestore Rules 見直し
+
+今回の改修に合わせて、少なくとも以下の考え方で Rules を見直す必要がある。
+
+## avatars
+
+現状 `avatars/{userId}` が本人しか読めない場合、`avatarName` 表示時に失敗しやすい。
+そのため、少なくとも認証済みユーザーは read 可能にする構成が望ましい。
+
+## roomSupporters
+
+`roomSupporters` は room 公開状態や room owner 条件を踏まえて read を許可する必要がある。
+また、scan result では supporter 単位の広いクエリを避け、**roomId を必ず含める** のが安全。
+
+---
+
+## 使用ライブラリ
+
+今回の改修で追加した主な依存は以下。
+
+```bash
+npm install jsqr
+npm install qrcode.react
+```
+
+### 用途
+
+* `jsqr`
+
+  * `BarcodeDetector` 非対応時の QR 読み取りフォールバック
+* `qrcode.react`
+
+  * マイQRコード表示用の QR 画像生成
+
+---
+
+## 環境変数
+
+フロント URL を QR に埋め込むため、以下を設定する。
+
+```env
+VITE_FRONTEND_BASE_URL=https://amol-99d47.web.app
+```
+
+未設定の場合は `window.location.origin` を使う。
+
+---
+
+## 変更対象ファイル
+
+### frontend
+
+* `frontend/src/pages/ScanPage.tsx`
+* `frontend/src/pages/ScanResultPage.tsx`
+* `frontend/src/router/index.tsx`
+* `frontend/src/styles/page.css`
+
+### firestore
+
+* Firestore Rules（必要に応じて見直し）
+
+---
+
+## 最終仕様
+
+## ScanPage.tsx
+
+* 全画面カメラ表示
+* 左上戻るボタン
+* QR 枠表示
+* `マイQRコード` ボタン
+* 自分の scan result URL を QR 表示
+* URL QR / JSON QR の両方を読めるようにしてある
+* 未ログイン時は `/signin` に遷移
+
+## ScanResultPage.tsx
+
+* 対象 avatar の `avatarName` を表示
+* 自分 owner の room に対する募金実績のみ表示
+* 各ルームの募金金額を表示
+* 各ルームでのランキングを表示
+* `RoomsPage` と揃えたカード UI
+* 未ログイン時は `/signin` に遷移
+
+---
+
+## 今後の改善候補
+
+1. `ScanResultPage.tsx` で `avatarName` だけでなく icon / profile 情報も表示する
+2. `ScanPage.tsx` のモーダル内 QR にコピーリンク機能を追加する
+3. `scan/result/:avatarUid` をアプリ外遷移時にもより自然に扱えるよう、LP または中継画面を用意する
+4. `roomSupporters` の集計取得を backend API 化して、Firestore Rules 依存を減らす
+5. ランキング算出を client-side ではなく backend 側集計に寄せる
+6. `ScanResultPage.tsx` にページネーションや並び替えを入れる
+
+---
+
+## ここまでで反映されたこと
+
+* ScanPage でカメラ起動
+* QR スキャン導線追加
+* `BarcodeDetector` + `jsQR` の二段構えに変更
+* `マイQRコード` ボタン追加
+* マイQRコードを URL ベースの QR 画像表示へ変更
+* アプリ外カメラで読み取れる QR に変更
+* `ScanResultPage.tsx` 新設
+* scan された avatar の募金実績を表示
+* 各ルームの募金金額・回数・ランキング表示
+* `avatarUid` 表示を `avatarName` 表示へ変更
+* 未ログイン時は `/signin` に遷移するように変更
+
+```
+```

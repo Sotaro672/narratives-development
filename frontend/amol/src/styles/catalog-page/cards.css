@@ -1,0 +1,73 @@
+/* frontend/amol/src/styles/catalog-page/cards.css */
+
+/* ==============================
+   Cards
+   ============================== */
+
+/*
+  Common UI migration:
+  - .catalog-page-card is now used as an override class for <SectionCard />
+  - .catalog-page-card-header is now used as an override class for <SectionHeader />
+  - .catalog-page-definition-list is now used as an override class for <InfoList />
+  - rows inside .catalog-page-definition-list are now .ui-info-row / .ui-info-row__label / .ui-info-row__value
+*/
+
+.catalog-page-card {
+  margin-top: 24px;
+  margin-bottom: 0;
+  padding: 20px;
+  border-radius: 18px;
+}
+
+.catalog-page-card-header {
+  margin-bottom: 16px;
+}
+
+.catalog-page-card-header .ui-section-header__title {
+  margin: 0;
+  color: var(--color-text, #1f1f1f);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.catalog-page-definition-list {
+  gap: 12px;
+  margin-top: 0;
+}
+
+.catalog-page-definition-list .ui-info-row {
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.catalog-page-definition-list .ui-info-row__label {
+  color: var(--color-text-subtle, #888);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.catalog-page-definition-list .ui-info-row__value {
+  color: var(--color-text, #1f1f1f);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.catalog-page-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.catalog-page-chip {
+  flex: 0 1 auto;
+}
+
+.catalog-page-chip:disabled {
+  opacity: 1;
+}

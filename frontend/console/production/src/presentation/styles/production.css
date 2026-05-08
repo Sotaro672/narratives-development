@@ -1,0 +1,421 @@
+/* frontend\console\production\src\presentation\styles\production.css
+   生産数カード（期待見た目に合わせてテーブル罫線・フッター行を調整）
+*/
+.mqc {
+  background-color: #ffffff;
+}
+
+/* Header */
+.mqc__header {
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 16px 20px;
+}
+
+.mqc__header-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mqc__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+/* Body */
+.mqc__body {
+  padding: 16px 20px;
+}
+
+/* ===== Table ===== */
+.mqc__table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 0.95rem;
+}
+
+/* ヘッダー行 */
+.mqc__table thead th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--pbp-border-soft, hsl(var(--border)));
+}
+
+.mqc__th--left {
+  text-align: left;
+}
+.mqc__th {
+  color: var(--pbp-text);
+}
+
+/* ボディ行 */
+.mqc__table tbody tr {
+  border-bottom: 1px solid var(--pbp-border-soft, hsl(var(--border)));
+}
+.mqc__table tbody td {
+  padding: 12px 8px;
+}
+
+/* 先頭列（サイズ） */
+.mqc__size {
+  font-weight: 600;
+  color: var(--pbp-text);
+}
+
+/* 数値セル・合計セル */
+.mqc__cell,
+.mqc__sum,
+.mqc__footer-cell {
+  text-align: center;
+}
+
+/* フッター合計行 */
+.mqc__footer-row {
+  background: var(--pbp-surface-soft, hsl(var(--muted) / 0.35));
+  border-top: 1px solid var(--pbp-border-soft, hsl(var(--border)));
+}
+.mqc__footer-label {
+  font-weight: 600;
+  color: var(--pbp-text-soft);
+  padding: 12px 8px;
+}
+.mqc__footer-cell {
+  padding: 12px 8px;
+}
+
+/* ピル（合計バッジ） */
+.mqc__pill {
+  display: inline-flex;
+  min-width: 1.75rem;
+  justify-content: center;
+  align-items: center;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  line-height: 1;
+  border: 1px solid var(--pbp-border, hsl(var(--border)));
+  background: var(--pbp-surface, hsl(var(--muted)));
+  color: var(--pbp-text-soft, hsl(var(--muted-foreground)));
+}
+
+/* 総合計のみ濃色ピル */
+.mqc__pill--total {
+  background: var(--pbp-text, hsl(var(--foreground)));
+  color: var(--pbp-surface, hsl(var(--card)));
+  border-color: transparent;
+}
+
+/* ===== 編集モードの入力欄（セル内ピル風） ===== */
+.mqc__input {
+  width: 100%;
+  max-width: 5.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  background-color: #f7f8fb; /* 薄いグレー */
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  text-align: center;
+  color: var(--pbp-text, hsl(var(--foreground)));
+  box-shadow: none;
+  outline: none;
+}
+
+/* フォーカス時はほんのり強調 */
+.mqc__input:focus {
+  background-color: #ffffff;
+  border-color: rgba(148, 163, 253, 0.9);
+  box-shadow: 0 0 0 1px rgba(148, 163, 253, 0.16);
+}
+
+/* 生産計画作成：商品設計選択カード */
+
+.pb-select {
+  margin-top: 0;
+  background-color: var(--pbp-surface, #ffffff);
+  border: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.08));
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
+  overflow: hidden;
+}
+
+/* Header */
+
+.pb-select__header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--pbp-border-soft, rgba(15, 23, 42, 0.06));
+}
+
+.pb-select__header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pb-select__icon-wrap {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--pbp-muted-bg, rgba(0, 0, 0, 0.04));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pb-select__icon {
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.55));
+}
+
+.pb-select__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pb-select__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--pbp-text, rgba(0, 0, 0, 0.9));
+}
+
+.pb-select__subtitle {
+  font-size: 0.78rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
+}
+
+/* Body */
+
+.pb-select__body {
+  padding: 14px 20px 18px;
+}
+
+/* Search */
+
+.pb-select__search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.pb-select__search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.4));
+}
+
+.pb-select__search-input {
+  padding-left: 28px !important;
+  height: 36px;
+  font-size: 0.85rem;
+}
+
+/* List */
+
+.pb-select__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.pb-select__row {
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: #ffffff;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 2px 12px;
+  align-items: center;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.06s ease;
+}
+
+.pb-select__row-main {
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+}
+
+.pb-select__row-side {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.pb-select__row-desc {
+  grid-column: 1 / 3;
+  grid-row: 2 / 3;
+  font-size: 0.75rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
+}
+
+.pb-select__row-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--pbp-text, rgba(0, 0, 0, 0.9));
+}
+
+.pb-select__row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 1px;
+  font-size: 0.72rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
+}
+
+.pb-select__row-id {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.03);
+}
+
+.pb-select__row-brand {
+  padding: 2px 4px;
+}
+
+/* Radio-like indicator */
+
+.pb-select__radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 253, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pb-select__radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+/* Hover / Active */
+
+.pb-select__row:hover {
+  background: #f9fafb;
+  border-color: rgba(148, 163, 253, 0.35);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
+}
+
+.pb-select__row.is-active {
+  border-color: rgba(79, 70, 229, 0.9);
+  background: #eef2ff;
+  box-shadow: 0 3px 8px rgba(79, 70, 229, 0.15);
+}
+
+.pb-select__row.is-active .pb-select__radio-dot {
+  background: #4f46e5;
+}
+
+/* Empty */
+
+.pb-select__empty {
+  margin-top: 8px;
+  padding: 10px 8px;
+  font-size: 0.78rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
+}
+.pb-select__trigger {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.12));
+  background: #f9fafb;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.pb-select__trigger:hover {
+  background: #ffffff;
+  border-color: rgba(148, 163, 253, 0.6);
+  box-shadow: 0 2px 6px rgba(148, 163, 253, 0.16);
+}
+
+.pb-select__trigger-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pbp-text, rgba(0, 0, 0, 0.9));
+}
+
+.pb-select__trigger-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
+}
+
+.pb-select__trigger-id {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.pb-select__trigger-brand {
+  padding: 2px 4px;
+}
+
+.pb-select__trigger-placeholder {
+  font-size: 0.85rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.55));
+}
+
+/* Popover内リストは既存 .pb-select__search / __list / __row を流用 */
+.pb-select__popover {
+  max-height: 360px;
+  overflow-y: auto;
+}
+/* ================================
+ * 印刷ボタンカードの中央配置用
+ * ================================ */
+.print-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;     /* 横方向中央揃え */
+  justify-content: center; /* 縦方向中央揃え（必要に応じて） */
+  text-align: center;
+}
+
+.print-card button {
+  width: 60%;              /* ボタン幅を調整（お好みで変更可） */
+  max-width: 280px;        /* 最大幅 */
+  margin-top: 12px;
+}
+.mqc__color {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mqc__color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.18);
+}

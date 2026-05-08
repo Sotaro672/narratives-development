@@ -1,0 +1,17 @@
+/*frontend\src\styles\terms-page.css*/
+.terms-page {
+  gap: 24px;
+}
+
+.terms-page__section {
+  display: grid;
+  gap: 8px;
+}
+
+.terms-page__heading {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 700;
+  color: var(--color-text);
+}

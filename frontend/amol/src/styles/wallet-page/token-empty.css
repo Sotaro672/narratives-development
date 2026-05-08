@@ -1,0 +1,39 @@
+/* frontend/amol/src/styles/wallet-page/token-empty.css */
+
+.wallet-page-token-empty {
+  min-height: 280px;
+  padding: 56px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.wallet-page-token-empty__icon {
+  width: 72px;
+  height: 72px;
+  border: 1px solid #d1d5db;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 36px;
+  line-height: 1;
+}
+
+.wallet-page-token-empty__title {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.wallet-page-token-empty__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}

@@ -1,0 +1,228 @@
+/* frontend/amol/src/styles/contents-page/transfer-sheet.css */
+
+.token-transfer-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.token-transfer-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(17, 24, 39, 0.42);
+  cursor: pointer;
+}
+
+.token-transfer-sheet__panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 720px);
+  max-height: min(82vh, 720px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px 24px 0 0;
+  background: #fff;
+  box-shadow: 0 -20px 50px rgba(15, 23, 42, 0.2);
+  animation: token-transfer-sheet-slide-up 0.22s ease-out;
+}
+
+@keyframes token-transfer-sheet-slide-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.72;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.token-transfer-sheet__handle {
+  width: 44px;
+  height: 5px;
+  margin: 10px auto 8px;
+  border-radius: 9999px;
+  background: #d1d5db;
+}
+
+.token-transfer-sheet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 20px 14px;
+}
+
+.token-transfer-sheet__eyebrow {
+  margin: 0 0 4px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+.token-transfer-sheet__title {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.token-transfer-sheet__close {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 9999px;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.token-transfer-sheet__close:hover {
+  background: #f9fafb;
+}
+
+.token-transfer-sheet__tabs {
+  position: static;
+  top: auto;
+}
+
+.token-transfer-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 76px;
+}
+
+.token-transfer-sheet__error {
+  margin: 16px;
+  padding: 12px;
+  border: 1px solid #ffd6d6;
+  border-radius: 12px;
+  background: #fff4f4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.token-transfer-sheet__error .ui-text-state {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.token-transfer-sheet__retry-button {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 9999px;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.token-transfer-sheet__retry-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.token-transfer-sheet__footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1300;
+  box-sizing: border-box;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+  box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.token-transfer-sheet__submit-button {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-radius: 9999px;
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.token-transfer-sheet__submit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* FollowPage の行スタイルを使いながら、選択状態だけ追加する */
+.token-transfer-target-item--selected {
+  position: relative;
+  background: #eff6ff;
+  box-shadow: inset 4px 0 0 #2563eb;
+}
+
+.token-transfer-target-item--selected:hover {
+  background: #dbeafe;
+}
+
+.token-transfer-target-item--selected .follow-page-user__name {
+  color: #1d4ed8;
+}
+
+.token-transfer-target-item__selected-mark {
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border-radius: 9999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.token-transfer-target-item--selected:focus-visible {
+  outline: 2px solid var(--color-focus, #93c5fd);
+  outline-offset: -2px;
+}
+
+@media (max-width: 640px) {
+  .token-transfer-sheet__panel {
+    width: 100%;
+    max-height: 86vh;
+    border-radius: 22px 22px 0 0;
+  }
+
+  .token-transfer-sheet__header {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

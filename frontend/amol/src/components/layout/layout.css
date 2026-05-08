@@ -1,0 +1,23 @@
+/* frontend/src/components/layout/layout.css */
+
+.layout-shell {
+  min-height: 100vh;
+  background: #fff;
+}
+
+.layout-main {
+  padding-top: var(--amol-header-height);
+  min-height: 100vh;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.layout-main--with-footer {
+  padding-bottom: 80px;
+}
+
+@media (max-width: 640px) {
+  .layout-main--with-footer {
+    padding-bottom: 76px;
+  }
+}

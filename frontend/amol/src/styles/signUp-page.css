@@ -1,0 +1,58 @@
+/*frontend\src\styles\signUp-page.css*/
+.signin-page-section {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(var(--amol-header-height) + 8px) 16px 24px;
+  box-sizing: border-box;
+}
+
+.signin-form-block {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.signin-form-block > * + * {
+  margin-top: 16px;
+}
+
+.signin-page-actions {
+  width: 100%;
+  max-width: 480px;
+  margin: 24px auto 0;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+.signin-page-actions > * {
+  width: 100%;
+}
+
+.signup-page-section {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(var(--amol-header-height)) 16px 8px;
+  box-sizing: border-box;
+}
+
+.signup-form-block {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.signup-form-block > * + * {
+  margin-top: 16px;
+}
+
+.signup-page-actions {
+  width: 100%;
+  max-width: 480px;
+  margin: 24px auto 0;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+.signup-page-actions > * {
+  width: 100%;
+}

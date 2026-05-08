@@ -1,0 +1,38 @@
+/* frontend/amol/src/styles/wallet-page/tabs.css */
+
+.wallet-page-tabs {
+  position: sticky;
+  top: 72px;
+  z-index: 35;
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.wallet-page-tabs__button {
+  appearance: none;
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: #fff;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wallet-page-tabs__button--active {
+  color: #111827;
+  border-bottom-color: #111827;
+}
+
+.wallet-page-tabs__button:hover {
+  background: #f9fafb;
+}

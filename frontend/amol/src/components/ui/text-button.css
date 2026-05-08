@@ -1,0 +1,38 @@
+/* frontend/amol/src/components/ui/text-button.css */
+
+.text-button {
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--color-primary, #2563eb);
+  font: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  color: var(--color-primary-hover, #1d4ed8);
+  text-decoration-thickness: 2px;
+}
+
+.text-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.text-button:active {
+  opacity: 0.75;
+}
+
+.text-button:disabled {
+  color: inherit;
+  cursor: default;
+  text-decoration: none;
+  opacity: 0.6;
+}

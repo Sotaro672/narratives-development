@@ -1,0 +1,37 @@
+/* frontend/src/styles/landing-page/hero.css */
+.landing-page-hero {
+  padding: 56px 16px 32px;
+}
+
+.landing-page-hero__inner {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+  text-align: center;
+}
+
+.landing-page-hero__eyebrow {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.04em;
+}
+
+.landing-page-hero__title {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.15;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.landing-page-hero__description {
+  margin: 0 auto;
+  max-width: 720px;
+  font-size: 16px;
+  line-height: 1.9;
+  color: var(--color-text);
+}

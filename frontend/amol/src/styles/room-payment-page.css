@@ -1,0 +1,8 @@
+/* frontend/src/styles/room-payment-page.css */
+
+@import "./room-payment/layout.css";
+@import "./room-payment/form.css";
+@import "./room-payment/success.css";
+@import "./room-payment/amount-option.css";
+@import "./room-payment/embedded-header.css";
+@import "./room-payment/responsive.css";

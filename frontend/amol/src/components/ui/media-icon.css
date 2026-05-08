@@ -1,0 +1,43 @@
+/* frontend/amol/src/components/ui/media-icon.css */
+
+.ui-media-icon {
+  flex: 0 0 auto;
+  object-fit: cover;
+  background: var(--color-surface-subtle, #f9fafb);
+}
+
+.ui-media-icon--xs {
+  width: 22px;
+  height: 22px;
+}
+
+.ui-media-icon--sm {
+  width: 36px;
+  height: 36px;
+}
+
+.ui-media-icon--md {
+  width: 56px;
+  height: 56px;
+}
+
+.ui-media-icon--lg {
+  width: 64px;
+  height: 64px;
+}
+
+.ui-media-icon--circle {
+  border-radius: 9999px;
+}
+
+.ui-media-icon--rounded {
+  border-radius: 12px;
+}
+
+.ui-media-icon--empty {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border, #e5e7eb);
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.78rem;
+}

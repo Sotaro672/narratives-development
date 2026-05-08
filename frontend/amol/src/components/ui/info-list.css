@@ -1,0 +1,32 @@
+/* frontend/amol/src/components/ui/info-list.css */
+
+.ui-info-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.ui-info-row {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ui-info-row__label {
+  color: var(--color-text-muted, #6b7280);
+}
+
+.ui-info-row__value {
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .ui-info-row {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+}

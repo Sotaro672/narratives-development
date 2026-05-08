@@ -1,0 +1,17 @@
+{
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@theme",
+      "description": "Tailwind CSS v4 design token declaration"
+    },
+    {
+      "name": "@custom-variant",
+      "description": "Tailwind CSS v4 custom variant declaration"
+    },
+    {
+      "name": "@apply",
+      "description": "Tailwind utility application"
+    }
+  ]
+}

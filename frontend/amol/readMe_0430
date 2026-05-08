@@ -1,0 +1,363 @@
+# GCS廃止・Firebase Storage移行 改修引き継ぎ README
+
+## 目的
+
+本改修では、これまで backend 側で Google Cloud Storage（GCS）へ signed URL を発行したり、GCS bucket / objectPath / publicURL を組み立てたりしていた画像・コンテンツアップロード処理を廃止し、**frontend から Firebase Storage へ直接アップロードする方式**へ移行した。
+
+今後の絶対正は以下。
+
+- backend は GCS signed URL を発行しない
+- backend は GCS bucket / object / public URL を組み立てない
+- frontend が Firebase Storage SDK で直接 upload する
+- frontend が `getDownloadURL()` で取得した `downloadURL` を backend に渡す
+- backend は Firestore に `downloadURL` / `objectPath` / `fileName` / `contentType` / `size` 等の metadata を保存する
+- 旧GCS互換は作らない
+- `domain/listImage` は削除し、`domain/list` に `ListImage` を統合した
+
+---
+
+## 対象となった主な領域
+
+今回の移行対象は以下。
+
+```txt
+brandIcon
+brandBackground / brandBackgroundImage
+tokenBlueprintIcon
+tokenBlueprintContents
+list images
+inquiry images
+token icon URL resolver
+GCS bucket initializer
+GCS signed URL endpoint
+GCS list image repository
+
+以下、今回の mint 失敗調査〜修正内容をそのまま `README.md` に貼れる形でまとめました。
+
+````md
+# Mint 失敗調査・修正まとめ
+
+## 概要
+
+GCS 廃止後、tokenBlueprint の画像・コンテンツファイル保存先を Firebase Storage へ移行した影響で、mint 実行時に必要な `metadataUri` が作成されず、Solana mint 処理まで到達しない問題が発生していた。
+
+最終的な直接原因は、`MintFromMintRequest` 内に旧 GCS 前提の `tbBucketEnsurer` 必須チェックが残っていたこと。  
+Firebase Storage 移行後は `tbBucketEnsurer` を DI していないため、metadata 作成処理より前に処理が abort していた。
+
+---
+
+## 発生していた症状
+
+- mint request は作成される
+- `mints` ドキュメントは作成される
+- `minted` は `false` のまま
+- `tokenBlueprint.metadataUri` が空文字のまま
+- Arweave/Irys uploader が呼ばれない
+- Solana mint client が呼ばれない
+- Cloud Run 上に `[arweave]` や `[narratives-mint]` のログが出ない
+
+対象例:
+
+```txt
+mintId / productionId:
+1w83FCf6JUlAE9xyPxqf
+
+tokenBlueprintId:
+9BbxNk4VyiHG9VYnPlj9
+
+minted:
+false
+
+metadataUri:
+""
+````
+
+---
+
+## 調査で確認したこと
+
+### 1. mint request / inspection / production の取得は正常
+
+ログ上では、mint request 一覧・詳細取得は正常に完了していた。
+
+* production 解決 OK
+* inspection 解決 OK
+* mint request 解決 OK
+* inspectionStatus は `completed`
+* totalPassed は `1`
+* mint request DTO も正常に構築されていた
+
+つまり、起票・検品・mint 対象解決までは正常だった。
+
+---
+
+### 2. tokenBlueprint の `metadataUri` が空だった
+
+Firebase Storage 移行後の tokenBlueprint では、画像URL自体は保存されていた。
+
+```txt
+iconUrl:
+https://firebasestorage.googleapis.com/...
+
+contentFiles[].url:
+https://firebasestorage.googleapis.com/...
+
+metadataUri:
+""
+```
+
+このため、Solana mint 時に渡すべき metadata URI が存在していなかった。
+
+---
+
+### 3. Solana mint client は `MetadataURI` 必須
+
+`MintClient.MintToken` では、`params.MetadataURI` が空の場合、Solana RPC 処理に入る前に error を返す。
+
+```go
+metadataURI := params.MetadataURI
+if metadataURI == "" {
+	return nil, fmt.Errorf("MetadataURI is empty")
+}
+```
+
+そのため、metadataUri が空のままだと `[narratives-mint] MintToken start ...` のログすら出ない。
+
+---
+
+### 4. metadataUri 作成 usecase は Firebase Storage 対応済み
+
+`TokenBlueprintMetadataUsecase` では、旧 GCS の bucket / objectPath から URL を組み立てる処理を廃止し、Firebase Storage の downloadURL を使って metadata JSON を作るように修正した。
+
+主な方針:
+
+* `image` には `tb.IconURL` を使う
+* `properties.files` には `tb.IconURL` と `tb.ContentFiles[].URL` を使う
+* GCS bucket は使わない
+* objectPath から public URL を組み立てない
+* `.keep` は metadata に入れない
+* 作成した metadata JSON は Irys/Arweave にアップロードする
+* 返却された URI を `tokenBlueprint.metadataUri` に保存する
+
+---
+
+### 5. DI 側では metadata ensurer は注入されていた
+
+`buildUsecases` では、Arweave uploader と `TokenBlueprintMetadataUsecase` を作成し、`mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)` まで呼べていた。
+
+```go
+baseURL := os.Getenv("ARWEAVE_BASE_URL")
+apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
+uploader := arweave.NewHTTPUploader(baseURL, apiKey)
+
+tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(r.tokenBlueprintRepo, uploader)
+mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
+```
+
+そのため、DI漏れではなかった。
+
+---
+
+## 直接原因
+
+`MintFromMintRequest` 内で、旧 GCS 用の `tbBucketEnsurer` が必須扱いのまま残っていた。
+
+修正前は、`tbBucketEnsurer == nil` の場合に即 return していた。
+
+```go
+if u.tbBucketEnsurer == nil {
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest abort reason=tbBucketEnsurer_nil mintRequestId=%q tokenBlueprintId=%q elapsed=%s",
+		mintRequestID, tbID, time.Since(start),
+	)
+	return nil, fmt.Errorf("tokenBlueprint bucket ensurer is nil")
+}
+```
+
+Firebase Storage 移行後は、frontend が Firebase Storage へ直接 upload するため、backend 側で GCS bucket / `.keep` object を保証する必要がない。
+
+しかし DI 側では GCS bucket ensurer を廃止していたため、以下の流れで停止していた。
+
+```txt
+MintFromMintRequest start
+↓
+mint request load OK
+↓
+tokenBlueprintId OK
+↓
+passed products OK
+↓
+minted=false のため onchain branch に入る
+↓
+tbBucketEnsurer == nil
+↓
+abort
+↓
+EnsureMetadataURI に到達しない
+↓
+Arweave/Irys uploader が呼ばれない
+↓
+metadataUri が作成されない
+↓
+Solana mint client が呼ばれない
+↓
+minted=false のまま
+```
+
+---
+
+## 修正内容
+
+`tbBucketEnsurer` を必須依存ではなく、旧 GCS 互換用の任意依存として扱うように修正した。
+
+### 修正方針
+
+Firebase Storage 移行後:
+
+* `tbBucketEnsurer == nil` は正常
+* `.keep` 作成は skip する
+* metadataUri ensure へ進む
+* `tbMetadataEnsurer` は引き続き必須
+* `EnsureMetadataURI` で metadata JSON を作成し、Irys/Arweave に upload する
+* `metadataUri` 作成後にオンチェーン mint を実行する
+
+### 修正後の処理
+
+```go
+if u.tbBucketEnsurer != nil {
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest ensure keep start mintRequestId=%q tokenBlueprintId=%q",
+		mintRequestID, tbID,
+	)
+
+	prepStart := time.Now()
+	if err := u.tbBucketEnsurer.EnsureKeepObjects(ctx, tbID); err != nil {
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest abort reason=ensure_keep_failed mintRequestId=%q tokenBlueprintId=%q err=%v elapsed=%s totalElapsed=%s",
+			mintRequestID, tbID, err, time.Since(prepStart), time.Since(start),
+		)
+		return nil, err
+	}
+
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest ensure keep ok mintRequestId=%q tokenBlueprintId=%q elapsed=%s",
+		mintRequestID, tbID, time.Since(prepStart),
+	)
+} else {
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest skip ensure keep reason=tbBucketEnsurer_nil firebase_storage_mode mintRequestId=%q tokenBlueprintId=%q",
+		mintRequestID, tbID,
+	)
+}
+```
+
+これにより、`tbBucketEnsurer` が nil でも `EnsureMetadataURI` に進めるようになった。
+
+---
+
+## 修正後の正常フロー
+
+```txt
+/mint/inspections/{id}/request
+↓
+UpdateRequestInfo
+↓
+mints ドキュメント作成
+↓
+inspection に mintId を紐付け
+↓
+MintFromMintRequest
+↓
+tbBucketEnsurer nil のため skip
+↓
+tbMetadataEnsurer.EnsureMetadataURI
+↓
+Firebase Storage downloadURL から metadata JSON 作成
+↓
+Irys/Arweave に metadata JSON upload
+↓
+tokenBlueprint.metadataUri を更新
+↓
+TokenUsecase.MintFromMintRequest
+↓
+MintClient.MintToken
+↓
+Solana devnet に mint transaction 送信
+↓
+Metaplex metadata account 作成
+↓
+MasterEdition 作成
+↓
+mints.minted = true
+↓
+tokenBlueprint.minted = true
+↓
+inventory upsert
+```
+
+---
+
+## 修正後に確認すべきログ
+
+正常に進む場合、以下のようなログが順に出る。
+
+```txt
+[mint_usecase] MintFromMintRequest start ...
+[mint_usecase] MintFromMintRequest skip ensure keep reason=tbBucketEnsurer_nil firebase_storage_mode ...
+[mint_usecase] MintFromMintRequest ensure metadata start ...
+[arweave] UploadMetadata called ...
+[arweave] UploadJSON start ...
+[arweave] UploadJSON OK uri=...
+[mint_usecase] MintFromMintRequest ensure metadata ok ...
+[mint_usecase] MintFromMintRequest onchain mint start ...
+[narratives-mint] MintToken start ...
+[narratives-mint] tx sent sig=...
+[narratives-mint] minted token ...
+[mint_usecase] MintFromMintRequest onchain mint ok ...
+[mint_usecase] MintFromMintRequest mintRepo.Update ok ... minted=true
+[mint_usecase] MintFromMintRequest inventory upsert(by-model) ok ...
+```
+
+---
+
+## 注意点
+
+### ARWEAVE_BASE_URL が必要
+
+`TokenBlueprintMetadataUsecase` は Irys/Arweave uploader を使って metadata JSON を upload する。
+
+そのため、Cloud Run 環境変数に以下が必要。
+
+```txt
+ARWEAVE_BASE_URL
+IRYS_SERVICE_API_KEY
+```
+
+`ARWEAVE_BASE_URL` が空の場合、metadata upload 時に以下のエラーになる。
+
+```txt
+baseURL is empty; arweave endpoint not configured
+```
+
+### metadataUri は Solana mint 前に必須
+
+`MintClient.MintToken` は `MetadataURI` が空の場合、Solana RPC 処理へ進まない。
+そのため、Solana mint 前に必ず `tokenBlueprint.metadataUri` を確定させる必要がある。
+
+### Firebase Storage 移行後は GCS bucket ensurer を必須にしない
+
+Firebase Storage 移行後は、画像・コンテンツファイルは frontend から Firebase Storage へ直接 upload する。
+backend は Firestore に保存された `iconUrl` / `contentFiles[].url` を使って metadata JSON を作る。
+
+したがって、旧 GCS 用の `.keep` 作成処理は任意扱いにする。
+
+---
+
+## 結論
+
+今回の mint 失敗は、Solana client や Arweave uploader 自体の不具合ではなく、Firebase Storage 移行後も `MintFromMintRequest` に旧 GCS 前提の必須チェックが残っていたことが原因。
+
+`tbBucketEnsurer` を任意依存に変更し、nil の場合は skip して `EnsureMetadataURI` に進むよう修正したことで、metadataUri が作成され、mint 処理が正常に完了した。
+
+```
+```

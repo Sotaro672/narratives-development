@@ -1,0 +1,924 @@
+以下をそのまま `README.md` / `handoff-payment-method.md` として保存してください。
+
+````md
+# AMOL 支払方法・決済画面 改修引き継ぎ README
+
+最終更新: 2026-05-02  
+対象: `frontend/amol` / `backend/internal/platform/di` / `backend/internal/adapters/out/stripe` / `backend/internal/adapters/out/firestore/paymentMethod`
+
+---
+
+## 1. 今回の改修目的
+
+AMOL の購入・決済フローにおいて、以下を成立させることが目的。
+
+1. Stripe の secret key / public key を Google Secret Manager 管理に移行する
+2. 旧 `STRIPE_SECRET_KEY` / `VITE_STRIPE_PUBLISHABLE_KEY` / `STRIPE_PUBLIC_KEY` を Cloud Run env から排除する
+3. GCS bucket 関連設定を廃止する
+4. Stripe カード登録後、`paymentMethodCustomers` だけでなく `paymentMethods` に保存されるようにする
+5. `PaymentMethodPage.tsx` で登録済みカードを表示する
+6. `PaymentPage.tsx` でも `paymentMethods` を取得し、支払方法カードとして表示する
+7. 支払方法カードでは、口座名義・番号下4桁・有効期限を行ごとに表示する
+8. Stripe カード入力では郵便番号入力を不要にする
+
+---
+
+## 2. 現在の正しい設計方針
+
+### 2.1 Stripe key 管理
+
+Stripe key は Google Secret Manager を正とする。
+
+使用する Secret Manager secret 名:
+
+```txt
+stripe-secret-key
+stripe-public-key
+````
+
+### frontend
+
+frontend `.env` には Stripe key を置かない。
+
+削除対象:
+
+```env
+VITE_STRIPE_PUBLISHABLE_KEY=...
+```
+
+frontend は backend API から Stripe public key を取得する。
+
+```txt
+GET /mall/config/stripe
+```
+
+返却形式:
+
+```json
+{
+  "publishableKey": "pk_test_..."
+}
+```
+
+### backend
+
+backend は `stripe-secret-key` を Secret Manager から取得し、Stripe API 呼び出しに使う。
+
+旧 env は使わない。
+
+削除対象:
+
+```txt
+STRIPE_SECRET_KEY
+STRIPE_PUBLIC_KEY
+STRIPE_PUBLISHABLE_KEY
+VITE_STRIPE_PUBLISHABLE_KEY
+```
+
+---
+
+## 3. Firestore の役割分担
+
+### 3.1 `paymentMethodCustomers`
+
+これは削除しない。必要。
+
+用途:
+
+```txt
+userId -> stripeCustomerId の内部対応表
+```
+
+例:
+
+```txt
+paymentMethodCustomers/{userId}
+  userId: "..."
+  stripeCustomerId: "cus_..."
+  createdAt: ...
+  updatedAt: ...
+```
+
+これは SetupIntent 作成時に Stripe Customer を再利用するための内部レコード。
+
+ただし、これは「カード情報」ではないため、画面表示には使わない。
+
+### 3.2 `paymentMethods`
+
+こちらが画面表示・支払い選択に使う本体。
+
+カード登録完了後、必ず `paymentMethods` に保存する。
+
+期待される保存例:
+
+```txt
+paymentMethods/{paymentMethodDocId}
+  userId: "..."
+  stripeCustomerId: "cus_..."
+  stripePaymentMethodId: "pm_..."
+  brand: "visa"
+  last4: "4242"
+  expMonth: 12
+  expYear: 2030
+  cardholderName: "SOTARO OKUOKA"
+  isDefault: true
+  createdAt: ...
+  updatedAt: ...
+```
+
+---
+
+## 4. 支払方法登録の正しいフロー
+
+```txt
+1. PaymentMethodPage を開く
+2. GET /mall/config/stripe
+   -> Secret Manager の stripe-public-key を backend 経由で取得
+3. GET /mall/me/payment-methods
+   -> paymentMethods の登録済みカード一覧を取得
+4. GET /mall/me/payment-methods/default
+   -> 既定カードを取得
+5. ユーザーがカード名義人を入力
+6. POST /mall/me/payment-methods/setup-intent
+   body: { cardholderName }
+   -> backend が stripe-secret-key で Stripe Customer / SetupIntent を作成
+   -> paymentMethodCustomers に stripeCustomerId を保存または再利用
+   -> clientSecret と stripeCustomerId を返す
+7. frontend が Stripe CardElement でカード番号・有効期限・CVC を入力させる
+8. stripe.createPaymentMethod()
+   -> pm_xxx / brand / last4 / expMonth / expYear を取得
+9. stripe.confirmCardSetup(clientSecret, { payment_method: pm_xxx })
+10. 成功後、frontend が POST /mall/me/payment-methods を叩く
+11. backend が paymentMethods に保存
+12. GET /mall/me/payment-methods で再取得し、画面に表示
+```
+
+---
+
+## 5. backend 改修内容
+
+### 5.1 `paymentMethod_handler.go`
+
+追加した route:
+
+```txt
+GET /mall/config/stripe
+```
+
+目的:
+
+Secret Manager の `stripe-public-key` を取得して frontend に返す。
+
+返却:
+
+```json
+{
+  "publishableKey": "pk_test_..."
+}
+```
+
+注意:
+
+`paymentMethod_handler.go` に route を追加するだけでは不十分。
+上位 router 側にも `/mall/config/stripe` を登録する必要がある。
+
+---
+
+### 5.2 `mall/router.go`
+
+Public routes に以下を追加。
+
+```go
+handleSafe(mux, "/mall/config/stripe", deps.PaymentMethod, "PaymentMethod(stripe.config)")
+handleSafe(mux, "/mall/config/stripe/", deps.PaymentMethod, "PaymentMethod(stripe.config)")
+```
+
+これを入れないと `/mall/config/stripe` が PaymentMethodHandler に届かず 404 になる。
+
+---
+
+### 5.3 `shared/infra.go`
+
+GCS 廃止に伴い、以下を削除。
+
+```go
+GCS *storage.Client
+TokenIconBucket
+TokenContentsBucket
+ListImageBucket
+AvatarIconBucket
+BrandIconBucket
+BrandBackgroundBucket
+PostImageBucket
+```
+
+`storage.NewClient()` も削除。
+
+Secret Manager は必須扱いに変更。
+
+追加・必要メソッド:
+
+```go
+AccessSecretVersion(ctx, secretID string) (string, error)
+RegisterPaymentMethodGatewayFromSecret(ctx, customerStore) error
+```
+
+`RegisterPaymentMethodGatewayFromSecret` は `stripe-secret-key` を Secret Manager から読み、`stripe.NewPaymentMethodGateway(...)` に渡す。
+
+---
+
+### 5.4 `payment_method_gateway.go`
+
+責務は「渡された secret key で Stripe API を叩く」だけ。
+
+Secret Manager はここで読まない。
+
+追加した防御:
+
+```go
+func (g *PaymentMethodGateway) validateReady() error {
+  if g == nil {
+    return errors.New("stripe payment method gateway is nil")
+  }
+  ...
+}
+```
+
+これにより、nil gateway が interface に入った場合でも panic ではなく error にできる。
+
+以前発生していた panic:
+
+```txt
+(*PaymentMethodGateway).GetOrCreateCustomer(0x0, ...)
+runtime error: invalid memory address or nil pointer dereference
+```
+
+原因:
+
+`PaymentMethodUsecase` に nil の `*PaymentMethodGateway` が渡っていた。
+
+---
+
+### 5.5 `mall/container.go`
+
+旧実装では以下を使っていた。
+
+```go
+stripeSecretKey := infra.Config.StripeSecretKey
+```
+
+これは廃止。
+
+現在の期待値:
+
+```go
+if err := infra.RegisterPaymentMethodGatewayFromSecret(ctx, customerStore); err != nil {
+  return nil, err
+}
+
+if infra.PaymentMethodGateway == nil {
+  return nil, errors.New("di.mall: stripe payment method gateway is nil after registration")
+}
+```
+
+`customerStore` は `paymentMethodRepo` を優先。
+
+```go
+if v, ok := any(paymentMethodRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+  customerStore = v
+} else if v, ok := any(userRepo).(stripeadapter.PaymentMethodCustomerStore); ok {
+  customerStore = v
+}
+```
+
+ここで warning 継続しない。
+Stripe gateway が作れない場合は DI 初期化エラーにする。
+
+---
+
+### 5.6 `config.go`
+
+GCS bucket と Stripe env を削除。
+
+削除した field:
+
+```go
+GCSBucket
+TokenIconBucket
+TokenContentsBucket
+AvatarIconBucket
+BrandIconBucket
+BrandBackgroundBucket
+StripePublishableKey
+StripeSecretKey
+```
+
+削除した getter:
+
+```go
+GetTokenIconBucket()
+GetTokenContentsBucket()
+GetAvatarIconBucket()
+GetBrandIconBucket()
+GetBrandBackgroundBucket()
+GetStripePublishableKey()
+GetStripeSecretKey()
+```
+
+Stripe key は Secret Manager から読むため、config では扱わない。
+
+---
+
+### 5.7 `runtime_settings.go`
+
+GCS bucket settings を削除。
+
+残すもの:
+
+```go
+SelfBaseURL
+BrandsCollection
+AvatarsCollection
+BrandWalletSecretPrefix
+AvatarWalletSecretPrefix
+```
+
+削除したもの:
+
+```go
+TokenIconBucket
+TokenContentsBucket
+ListImageBucket
+AvatarIconBucket
+BrandIconBucket
+BrandBackgroundBucket
+PostImageBucket
+```
+
+---
+
+### 5.8 `runtime_settings_validate.go`
+
+GCS bucket validation を削除。
+
+削除した validation 対象:
+
+```go
+s.TokenIconBucket
+s.TokenContentsBucket
+s.ListImageBucket
+s.AvatarIconBucket
+s.BrandIconBucket
+s.BrandBackgroundBucket
+s.PostImageBucket
+```
+
+---
+
+### 5.9 `console/container_infra.go`
+
+`shared.Infra` から `GCS` を削除したため、console DI 側も修正。
+
+削除したもの:
+
+```go
+"cloud.google.com/go/storage"
+gcsClient *storage.Client
+gcsClient := infra.GCS
+infra.GCS nil check
+```
+
+---
+
+### 5.10 `paymentMethod_repository_fs.go`
+
+現状の役割は正しい。
+
+```go
+col() -> paymentMethods
+customerCol() -> paymentMethodCustomers
+```
+
+`GetByUser()` は `paymentMethods` を取得する。
+
+`SaveStripeCustomerIDByUser()` は `paymentMethodCustomers` に保存する。
+
+`Create()` は `paymentMethods` に保存し、さらに `SaveStripeCustomerIDByUser()` も呼ぶ。
+
+重要:
+
+`paymentMethodCustomers` に保存されているだけではカード登録完了ではない。
+`paymentMethods` に保存されて初めて画面表示・支払方法選択に使える。
+
+---
+
+## 6. frontend 改修内容
+
+## 6.1 `PaymentMethodPage.tsx`
+
+### 目的
+
+カード登録後に `paymentMethods` へ保存されるようにした。
+
+### 主な API
+
+```txt
+GET  /mall/config/stripe
+GET  /mall/me/payment-methods
+GET  /mall/me/payment-methods/default
+POST /mall/me/payment-methods/setup-intent
+POST /mall/me/payment-methods
+```
+
+### 重要な実装
+
+SetupIntent 作成:
+
+```ts
+POST /mall/me/payment-methods/setup-intent
+body: {
+  cardholderName: normalizedCardholderName
+}
+```
+
+`clientSecret` と `stripeCustomerId` を取得する。
+
+カード入力:
+
+```tsx
+<CardElement
+  options={{
+    hidePostalCode: true,
+    ...
+  }}
+/>
+```
+
+郵便番号入力は不要にした。
+
+カード登録:
+
+```ts
+const paymentMethodResult = await stripe.createPaymentMethod({
+  type: "card",
+  card: cardElement,
+  billing_details: {
+    name: normalizedCardholderName,
+  },
+});
+```
+
+SetupIntent 確定:
+
+```ts
+await stripe.confirmCardSetup(clientSecret, {
+  payment_method: stripePaymentMethod.id,
+});
+```
+
+backend 保存:
+
+```ts
+POST /mall/me/payment-methods
+body: {
+  stripeCustomerId,
+  stripePaymentMethodId,
+  brand,
+  last4,
+  expMonth,
+  expYear,
+  cardholderName,
+  isDefault: true
+}
+```
+
+これで `paymentMethods` コレクションに保存される。
+
+---
+
+## 6.2 `PaymentPage.tsx`
+
+### 目的
+
+購入決済画面でも `paymentMethods` コレクション由来の登録済み支払方法を表示する。
+
+### 変更前
+
+`PaymentPage.tsx` は以下に依存していた。
+
+```ts
+paymentContext?.paymentMethods ?? []
+```
+
+つまり `/mall/me/payment` のレスポンスに `paymentMethods` が含まれていないと表示されなかった。
+
+### 変更後
+
+明示的に以下を叩く。
+
+```txt
+GET /mall/me/payment-methods
+GET /mall/me/payment-methods/default
+```
+
+取得した `paymentMethods` を state に入れる。
+
+```ts
+const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+```
+
+default があればそれを選択。なければ `isDefault` のもの、なければ先頭を選択。
+
+---
+
+## 6.3 PaymentPage 支払方法カード表示
+
+支払方法カードは、以下を行ごとに表示する。
+
+```txt
+口座名義
+番号下4桁
+有効期限
+```
+
+表示 formatter:
+
+```ts
+function formatCardholderName(method: PaymentMethod): string {
+  return method.cardholderName?.trim() || "-";
+}
+
+function formatCardLast4(method: PaymentMethod): string {
+  return method.last4 ? `•••• ${method.last4}` : "-";
+}
+
+function formatCardExpiry(method: PaymentMethod): string {
+  if (!method.expMonth || !method.expYear) {
+    return "-";
+  }
+
+  return `${String(method.expMonth).padStart(2, "0")}/${method.expYear}`;
+}
+```
+
+JSX:
+
+```tsx
+<span className="payment-page__payment-method-body">
+  <span className="payment-page__payment-method-row">
+    <span className="payment-page__payment-method-label">
+      口座名義
+    </span>
+    <span className="payment-page__payment-method-value">
+      {formatCardholderName(method)}
+    </span>
+  </span>
+
+  <span className="payment-page__payment-method-row">
+    <span className="payment-page__payment-method-label">
+      番号下4桁
+    </span>
+    <span className="payment-page__payment-method-value">
+      {formatCardLast4(method)}
+    </span>
+  </span>
+
+  <span className="payment-page__payment-method-row">
+    <span className="payment-page__payment-method-label">
+      有効期限
+    </span>
+    <span className="payment-page__payment-method-value">
+      {formatCardExpiry(method)}
+    </span>
+  </span>
+</span>
+```
+
+---
+
+## 6.4 `payment-page.css`
+
+支払方法カードを行ごとに改行するため、以下を追加。
+
+```css
+.payment-page__payment-method-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payment-page__payment-method-row {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.payment-page__payment-method-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.payment-page__payment-method-value {
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.5;
+  text-align: right;
+  word-break: break-word;
+}
+```
+
+既存の以下は影響範囲が広すぎるため注意。
+
+```css
+.payment-page__payment-method span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+```
+
+置き換えるなら:
+
+```css
+.payment-page__payment-method > span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+```
+
+または削除して、個別 class に任せる。
+
+---
+
+## 7. deploy-backend.ps1 の方針
+
+Cloud Run env から旧 GCS / 旧 Stripe env を削除する。
+
+削除対象:
+
+```txt
+GOOGLE_APPLICATION_CREDENTIALS
+FIRESTORE_CREDENTIALS_FILE
+
+TOKEN_ICON_BUCKET
+TOKEN_CONTENTS_BUCKET
+LIST_BUCKET
+AVATAR_ICON_BUCKET
+BRAND_ICON_BUCKET
+BRAND_BACKGROUND_BUCKET
+GCS_SIGNER_EMAIL
+
+STRIPE_SECRET_KEY
+STRIPE_PUBLIC_KEY
+STRIPE_PUBLISHABLE_KEY
+VITE_STRIPE_PUBLISHABLE_KEY
+```
+
+残す Stripe env は webhook secret のみ。
+
+```txt
+STRIPE_WEBHOOK_SECRET
+```
+
+ただし支払方法登録に必要な secret key / public key は Secret Manager から読む。
+
+---
+
+## 8. Cloud Run / IAM
+
+Cloud Run 実行サービスアカウントに Secret Manager 参照権限が必要。
+
+```txt
+roles/secretmanager.secretAccessor
+```
+
+対象 secret:
+
+```txt
+stripe-secret-key
+stripe-public-key
+```
+
+確認すべきログ:
+
+```txt
+[shared.infra] Secret Manager initialized
+[shared.infra] Stripe PaymentMethodGateway registered from Secret Manager secret="stripe-secret-key"
+[di.mall] container built (... stripePaymentMethodGateway=true ...)
+```
+
+`stripePaymentMethodGateway=true` が重要。
+
+---
+
+## 9. よく出たエラーと原因
+
+### 9.1 `/mall/config/stripe` が 404
+
+原因:
+
+router.go に `/mall/config/stripe` が未登録。
+
+修正:
+
+```go
+handleSafe(mux, "/mall/config/stripe", deps.PaymentMethod, "PaymentMethod(stripe.config)")
+handleSafe(mux, "/mall/config/stripe/", deps.PaymentMethod, "PaymentMethod(stripe.config)")
+```
+
+---
+
+### 9.2 `paymentMethod: invalid cardholderName`
+
+原因:
+
+frontend が setup-intent 作成時に空 body `{}` を送っていた。
+
+修正:
+
+カード名義人を手入力し、body に含める。
+
+```ts
+body: JSON.stringify({
+  cardholderName: normalizedCardholderName,
+})
+```
+
+---
+
+### 9.3 `Expired API Key provided: sk_test_...`
+
+原因:
+
+backend が旧 `STRIPE_SECRET_KEY` を使っていた。
+
+修正:
+
+* Cloud Run env から `STRIPE_SECRET_KEY` を削除
+* Secret Manager の `stripe-secret-key` を使う
+* mall DI で `infra.RegisterPaymentMethodGatewayFromSecret(ctx, customerStore)` を呼ぶ
+
+---
+
+### 9.4 `Failed to fetch` / 503
+
+原因:
+
+backend panic。
+`PaymentMethodGateway` が nil のまま `GetOrCreateCustomer()` が呼ばれていた。
+
+ログ例:
+
+```txt
+(*PaymentMethodGateway).GetOrCreateCustomer(0x0, ...)
+runtime error: invalid memory address or nil pointer dereference
+```
+
+修正:
+
+* mall DI で Secret Manager から gateway を必ず登録
+* gateway が nil なら DI 初期化エラーにする
+* gateway 側にも `g == nil` 防御を入れる
+
+---
+
+### 9.5 `paymentMethodCustomers` にはあるが画面に出ない
+
+原因:
+
+`paymentMethodCustomers` は Stripe Customer ID の対応表であり、カード情報ではない。
+
+画面表示に必要なのは `paymentMethods`。
+
+修正:
+
+カード登録完了後、`POST /mall/me/payment-methods` を叩き、`paymentMethods` に保存する。
+
+---
+
+### 9.6 Stripe CardElement で郵便番号が出る
+
+原因:
+
+`hidePostalCode: false` または `PaymentElement` が残っている。
+
+修正:
+
+`CardElement` にする。
+
+```tsx
+<CardElement
+  options={{
+    hidePostalCode: true,
+  }}
+/>
+```
+
+確認:
+
+```bash
+grep -R "PaymentElement\|hidePostalCode\|CardElement" frontend/amol/src
+```
+
+期待:
+
+```txt
+PaymentMethodPage.tsx: CardElement
+PaymentMethodPage.tsx: hidePostalCode: true
+PaymentElement は使わない
+```
+
+---
+
+## 10. 今後確認するべき grep
+
+backend:
+
+```bash
+grep -R "infra.GCS\|\.GCS\|gcsClient\|storage.NewClient\|cloud.google.com/go/storage" backend/internal backend/cmd
+```
+
+```bash
+grep -R "TokenIconBucket\|TokenContentsBucket\|ListImageBucket\|AvatarIconBucket\|BrandIconBucket\|BrandBackgroundBucket\|PostImageBucket\|GCSBucket\|GCS_SIGNER_EMAIL" backend/internal backend/cmd
+```
+
+```bash
+grep -R "StripeSecretKey\|StripePublishableKey\|STRIPE_SECRET_KEY\|STRIPE_PUBLISHABLE_KEY\|VITE_STRIPE_PUBLISHABLE_KEY" backend/internal backend/cmd
+```
+
+frontend:
+
+```bash
+grep -R "PaymentElement\|hidePostalCode\|CardElement" frontend/amol/src
+```
+
+```bash
+grep -R "VITE_STRIPE_PUBLISHABLE_KEY" frontend/amol/src frontend/amol/.env
+```
+
+---
+
+## 11. ビルド確認
+
+backend:
+
+```bash
+cd backend
+go build ./cmd/api
+go test ./...
+```
+
+frontend:
+
+```bash
+cd frontend/amol
+npm run build
+```
+
+---
+
+## 12. 現在の期待値
+
+### 支払方法登録
+
+* `PaymentMethodPage.tsx` でカード名義人を入力
+* `setup-intent` 成功
+* CardElement でカード番号・有効期限・CVC を入力
+* 郵便番号は表示しない
+* 登録成功後、`paymentMethods` に保存
+* `PaymentMethodPage.tsx` に登録済みカードとして表示
+
+### 購入決済画面
+
+* `PaymentPage.tsx` で `GET /mall/me/payment-methods` を叩く
+* 登録済み支払方法を表示
+* default card を自動選択
+* 支払方法カードには以下を行ごとに表示
+
+```txt
+口座名義
+番号下4桁
+有効期限
+```
+
+### Firestore
+
+* `paymentMethodCustomers` は残す
+* `paymentMethods` にカード情報を保存する
+* 画面表示・決済選択は `paymentMethods` を使う
+
+---
+
+```
+```

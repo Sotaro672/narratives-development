@@ -1,0 +1,524 @@
+以下を、そのまま README として使える形でまとめます。
+
+## AMOL フロントエンド改修 README
+
+### 概要
+
+本 README は、この会話でここまで確定した AMOL フロントエンド改修内容を整理したものです。主に対象となったのは、ルーム一覧、公開ルーム詳細、応援導線、動画エリア、フッター導線、チャット表示まわりです。関連する実装は `RoomsPage.tsx`、`PublicRoomDetailPage.tsx`、`RoomPaymentPage.tsx`、`public-room-detail-page.css` を中心に見直しています。
+
+---
+
+### 1. ルーム一覧からの遷移仕様変更
+
+#### 変更内容
+
+* RelatedRoom カード押下時に、従来の iframe モーダルではなく、`/public/rooms/:roomId` へ通常ページ遷移する仕様に変更。
+* これにより、公開ルーム詳細はモーダルではなく単独ページとして開く前提に整理。
+* マイルームカードは引き続き `/rooms/:roomId` に遷移。
+
+#### 現在の仕様
+
+* マイルームカード押下 → `RoomDetailPage`
+* RelatedRoom カード押下 → `PublicRoomDetailPage`
+
+---
+
+### 2. PublicRoomDetailPage のページ化
+
+#### 変更内容
+
+* `PublicRoomDetailPage.tsx` は iframe 埋め込み用のモーダル前提ではなく、通常ページとして利用する構成に変更。
+* `Layout` を使った通常ページ表示とし、ヘッダーにタイトルと戻るボタンを表示。
+* ルームタイトルはヘッダー側のみ表示し、動画下のタイトル表示は削除。
+
+#### 現在の仕様
+
+* `Layout` を利用
+* `showBackButton`
+* `backTo="/rooms"`
+* ヘッダーにルームタイトル表示
+* 動画下に重複タイトルは表示しない
+
+---
+
+### 3. ダミー動画エリアの追加と固定表示
+
+#### 変更内容
+
+* `PublicRoomDetailPage.tsx` 上部に YouTube のダミー動画 iframe を追加。
+* 動画エリアはヘッダー直下に配置。
+* 動画エリアは sticky 表示とし、ヘッダーの直下で固定されるよう調整。
+
+#### レイアウト方針
+
+* ヘッダー
+* 動画エリア
+* その下に作者、説明、タブ、チャット / ランキング本文
+
+#### スマホ対応
+
+* スマホ時は動画エリアを画面横幅いっぱいまで広げる
+* 左側基準で表示し、右側へのはみ出しを抑制
+* header と動画エリアの間の上辺余白のみ削除
+* 下辺側の余白は維持する方針に整理済み。
+
+---
+
+### 4. タブ表示の整理
+
+#### 変更内容
+
+* `チャット` / `ランキング` の 2 タブ構成を維持。
+* タブは sticky 表示で、動画エリア下辺に固定されるよう調整。
+* 以前は動画の上に重なっていたが、現在は「ヘッダー高さ + 動画高さ」を基準に sticky top を設定。
+
+#### 現在の仕様
+
+* タブは動画エリアの下辺に追従
+* 動画の上には重ならない
+
+---
+
+### 5. フッター導線の整理
+
+#### 変更内容
+
+* フッターのメッセージ入力欄とアイコンボタンを削除。
+* フッターは「応援する」ボタンのみ表示する仕様に変更。
+* チャットタブ時だけでなく、ランキングタブ時もフッターを表示する仕様へ変更。
+* `応援する` ボタン押下時は `/public/rooms/:roomId/payment` に遷移。これは `RoomPaymentPage.tsx` を開くための導線。
+
+#### 現在の仕様
+
+* フッターは固定表示
+* ボタン文言は `応援する`
+* 押下時に `RoomPaymentPage` へ遷移
+
+---
+
+### 6. ランキング表示時の「あなたの累計募金金額」表示
+
+#### 変更内容
+
+* ランキングタブ表示時のみ、`あなたの累計募金金額` を固定表示。
+* ただし、応援ボタンと同じ `bottom: 0` に重なっていたため、表示位置を修正。
+* 現在は **応援ボタンの上辺に固定**する形で、`bottomSummary` を `bottomAction` の上に積む構成に変更。
+
+#### 現在の仕様
+
+* ランキングタブ時:
+
+  * 最下部に `応援する` ボタン
+  * その上に `あなたの累計募金金額`
+* チャットタブ時:
+
+  * `応援する` ボタンのみ
+
+---
+
+### 7. チャット表示の軽量化
+
+#### 変更内容
+
+* チャットのカード形式をやめ、枠線を削除。
+* カード間の余白を削除し、少ないスクロールで多くのチャットを読めるように変更。
+* チャットの並び順は **作成日時の昇順** に変更。古いものが上、新しいものが下。
+
+#### 現在の仕様
+
+* `chatItems` は `createdAt` 昇順でソート
+* 表示はコンパクト化
+* 枠線なし
+* 行間のみ最低限確保
+
+---
+
+### 8. チャット更新の今後の方針
+
+#### 現状
+
+* チャット取得は `GET /api/rooms/:roomId/messages` の単発取得。
+* そのため、新規チャットが追加されても自動反映はされない。
+
+#### 今後の改修方針
+
+* チャット更新のたびにフロントのキャッシュを自動更新したい場合は、単発 fetch ではなく購読型に変える必要がある。
+* 有力な方針は以下のいずれか。
+
+  * Firestore `onSnapshot` によるリアルタイム購読
+  * polling による定期再取得
+* 本命は `onSnapshot` 方式。
+  ただし、その前提として backend / Firestore 側でチャット保存先の確認が必要。
+
+---
+
+### 9. RoomPaymentPage の位置づけ
+
+#### 現状
+
+* `RoomPaymentPage.tsx` は独立ページとして存在。
+* `PublicRoomDetailPage` のフッターにある `応援する` ボタンから遷移して開く構成。
+
+#### 仕様上の役割
+
+* 応援金額入力
+* メッセージ入力
+* 支払方法選択
+* 保存済みカード表示
+* 応援処理の実行
+* 成功表示
+
+---
+
+### 10. 主な改修対象ファイル
+
+#### ページ
+
+* `frontend/src/pages/RoomsPage.tsx`
+* `frontend/src/pages/PublicRoomDetailPage.tsx`
+* `frontend/src/pages/RoomPaymentPage.tsx`
+
+#### スタイル
+
+* `frontend/src/styles/public-room-detail-page.css` 
+
+---
+
+### 11. 現在の公開ルーム詳細ページの表示構成
+
+上から順に、現在の構成は以下です。
+
+1. ヘッダー
+2. sticky なダミー動画エリア
+3. 作者 / フォロー / 説明トグル / 作成日時
+4. チャット / ランキング タブ
+5. タブ本文
+6. 下部固定フッター
+
+   * 常時 `応援する` ボタン
+   * ランキング時のみ、その上に `あなたの累計募金金額`
+
+---
+
+### 12. 今後の追加実装候補
+
+#### チャット
+
+* 自動更新対応
+* Firestore 購読または polling 化
+* メッセージ送信後の即時反映
+
+#### UI
+
+* ダミー動画を本番動画プレイヤーへ置換
+* 右 Drawer 導線の整理
+* 応援決済導線の YouTube 風 UI 再編成
+
+---
+
+### 備考
+
+本改修では、まず iframe モーダル前提をやめ、公開ルーム詳細を通常ページとして成立させることを優先しました。あわせて、動画エリア、フッター応援導線、ランキング表示、チャット表示密度の改善を行っています。リアルタイム更新や Drawer 化などは次段階の検討事項です。
+
+# RoomCreatePage 改修README
+
+## 概要
+
+`frontend/src/pages/RoomCreatePage.tsx` において、画面内に直接記述されていたインラインスタイルを `frontend/src/styles/room-create-page.css` へ移譲し、スタイル責務を CSS ファイルへ統一しました。
+
+今回の改修は、見た目を維持しつつ、以下を目的として実施しています。
+
+- TSX から見た目の定義を分離する
+- コンポーネントの可読性を上げる
+- スタイルの再利用性と保守性を高める
+- 今後の UI 修正を CSS 側で完結しやすくする
+
+---
+
+## 対象ファイル
+
+### 変更対象
+- `frontend/src/pages/RoomCreatePage.tsx`
+- `frontend/src/styles/room-create-page.css`
+
+---
+
+## 改修内容
+
+## 1. インラインスタイルの CSS クラス化
+
+`RoomCreatePage.tsx` 内に存在していた各種 `style={{ ... }}` を削除し、`room-create-page.css` 側へ移譲しました。
+
+対象となった主な要素は以下です。
+
+- 非表示のファイル入力
+- メディアアップロード領域の外枠
+- メディアヘッダー領域
+- 補足テキスト表示
+- メディア未登録時の空状態表示
+- 横スクロールカルーセル
+- カルーセルカード
+- メディア削除ボタン
+- 画像プレビュー領域
+- 画像要素
+- PDF プレビュー iframe
+- カルーセルのドットナビゲーション
+- ドットのアクティブ状態
+
+---
+
+## 2. TSX 側で追加・変更した className
+
+以下の CSS クラスを TSX 側へ適用しました。
+
+- `room-create-page-file-input`
+- `room-create-page-media-panel`
+- `room-create-page-media-header`
+- `room-create-page-media-header-text`
+- `room-create-page-hint`
+- `room-create-page-media-empty`
+- `room-create-page-carousel`
+- `room-create-page-carousel-card`
+- `room-create-page-media-remove`
+- `room-create-page-image-frame`
+- `room-create-page-image`
+- `room-create-page-pdf`
+- `room-create-page-carousel-dots`
+- `room-create-page-carousel-dot`
+- `room-create-page-carousel-dot--active`
+
+---
+
+## 3. 既存 CSS を維持したクラス
+
+もともと `room-create-page.css` に存在していた以下のクラスはそのまま利用しています。
+
+- `room-create-page-form`
+- `room-create-page-field`
+- `room-create-page-textarea`
+- `room-create-page-actions`
+- `room-create-page-note`
+- `room-create-page-error`
+- `room-create-page-success`
+
+---
+
+## 4. UI 挙動自体は変更していない
+
+今回の改修は基本的にスタイル責務の移譲が目的であり、以下の機能ロジック自体には変更を加えていません。
+
+- ルーム作成処理
+- ルーム編集処理
+- Firebase Storage への画像 / PDF アップロード
+- YouTube URL のバリデーション
+- カルーセルスクロール制御
+- メディア削除処理
+- 作成 / 更新ボタンの送信動作
+
+つまり、**見た目の定義方法のみを整理し、挙動は従来のまま維持**しています。
+
+---
+
+## CSS へ移譲したスタイル詳細
+
+## メディア入力関連
+
+### `room-create-page-file-input`
+ファイル入力要素を非表示化しています。
+
+- `display: none;`
+
+### `room-create-page-media-panel`
+メディアエリア全体のパネル表示です。
+
+- 枠線
+- 角丸
+- パディング
+- 白背景
+- グリッドレイアウト
+- 要素間ギャップ
+
+### `room-create-page-media-header`
+メディア説明とボタンを並べるヘッダー領域です。
+
+- `display: flex`
+- `justify-content: space-between`
+- `align-items: flex-start`
+- `gap`
+- `flex-wrap`
+
+### `room-create-page-media-header-text`
+ヘッダー内テキスト群の縦並び制御です。
+
+- `display: grid`
+- `gap`
+
+### `room-create-page-hint`
+補足テキストの余白を統一しています。
+
+- `margin: 0`
+
+---
+
+## メディア未登録時の表示
+
+### `room-create-page-media-empty`
+メディアが未登録のときに表示するプレースホルダー領域です。
+
+- 最低高さ
+- 破線ボーダー
+- 角丸
+- 中央寄せ
+- パディング
+- グレー文字
+- 中央揃え
+
+---
+
+## カルーセル関連
+
+### `room-create-page-carousel`
+メディア一覧の横スクロール領域です。
+
+- 横並び
+- 要素間ギャップ
+- 横スクロール
+- `scroll-snap-type`
+- iOS スクロール最適化
+- 細いスクロールバー
+
+### `room-create-page-carousel-card`
+各メディアカードの見た目を管理します。
+
+- 横幅 100%
+- スナップ位置
+- 枠線
+- 角丸
+- パディング
+- グリッドレイアウト
+- 相対配置
+
+---
+
+## メディア削除ボタン
+
+### `room-create-page-media-remove`
+右上の × ボタンの見た目を CSS 化しました。
+
+- 絶対配置
+- サイズ固定
+- 円形
+- 枠線
+- 白背景
+- 中央寄せ
+- 文字サイズ
+- 前面表示
+
+### `room-create-page-media-remove:disabled`
+作成中の非活性時カーソルを制御しています。
+
+- `cursor: not-allowed`
+
+---
+
+## 画像プレビュー関連
+
+### `room-create-page-image-frame`
+画像プレビューの外枠です。
+
+- 幅 100%
+- `aspect-ratio: 16 / 9`
+- はみ出し隠し
+- 角丸
+- 背景色
+
+### `room-create-page-image`
+画像本体の表示制御です。
+
+- 幅 / 高さ 100%
+- `object-fit: cover`
+- `display: block`
+
+---
+
+## PDF プレビュー関連
+
+### `room-create-page-pdf`
+PDF プレビュー用 `iframe` の見た目を CSS 化しました。
+
+- 幅 100%
+- 高さ固定
+- 枠線
+- 角丸
+- 白背景
+
+---
+
+## ドットナビゲーション関連
+
+### `room-create-page-carousel-dots`
+ドット群のラッパーです。
+
+- 横並び
+- 中央寄せ
+- ギャップ
+- 縦方向中央揃え
+
+### `room-create-page-carousel-dot`
+通常時のドット見た目です。
+
+- サイズ固定
+- 円形
+- 枠線なし
+- 余白なし
+- ポインターカーソル
+- 非アクティブ背景色
+
+### `room-create-page-carousel-dot--active`
+アクティブ時のドット色です。
+
+- 濃い背景色へ変更
+
+---
+
+## 改修後のメリット
+
+## 1. TSX の可読性向上
+インラインスタイルがなくなったことで、`RoomCreatePage.tsx` は UI 構造とロジックに集中できるようになりました。
+
+## 2. スタイル修正の容易化
+見た目変更時に TSX を触らず、`room-create-page.css` のみで修正できる箇所が増えました。
+
+## 3. CSS 責務分離方針との整合
+ページ単位のスタイルを専用 CSS に集約する方針に沿った構成になりました。
+
+## 4. 再利用しやすい命名
+`room-create-page-*` プレフィックスで統一しているため、他ページへの影響を抑えつつ管理できます。
+
+---
+
+## 注意点
+
+- 今回の改修はスタイル移譲が目的であり、ビジネスロジックの変更は行っていません。
+- `room-create-page-actions` と `room-create-page-note` は現時点で CSS に残っていますが、使用状況によっては今後未使用整理の対象になります。
+- `Button` や `Input` コンポーネント自体の内部スタイルは今回の対象外です。
+
+---
+
+## 今後の整理候補
+
+必要に応じて、次の整理も可能です。
+
+- 未使用クラスの削除
+- メディア関連クラスをセクションごとにコメント整理
+- モバイル表示時の余白や高さの微調整
+- PDF / 画像プレビュー共通スタイルの抽出
+- 編集モード時の既存メディア表示機能との接続
+
+---
+
+## 結論
+
+今回の改修により、`RoomCreatePage` のスタイル定義は `room-create-page.css` に集約され、TSX 側は構造と処理に専念できる形へ整理されました。
+
+これにより、今後のデザイン修正・保守・機能追加がしやすい構成になっています。

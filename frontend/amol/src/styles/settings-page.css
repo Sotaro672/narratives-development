@@ -1,0 +1,70 @@
+/* frontend/src/styles/settings-page.css */
+
+.settings-page {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.settings-page--sidebar {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 88px;
+  list-style: none;
+  background: #fff;
+}
+
+.settings-page--sidebar .settings-list {
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-item {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 0;
+  background: #fff;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 16px;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+  gap: 16px;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.settings-item:first-child {
+  border-top: 1px solid #e5e7eb;
+}
+
+.settings-item:hover {
+  background: #f7f7f7;
+}
+
+.settings-item__arrow {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.settings-item--danger {
+  color: #c62828;
+}
+
+.settings-item--danger .settings-item__arrow {
+  color: #c62828;
+}
