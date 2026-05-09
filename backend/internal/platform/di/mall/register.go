@@ -100,7 +100,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	cartH := notImplemented("Cart")
 	payH := notImplemented("Payment")
 	orderH := notImplemented("Order")
-	invoiceH := notImplemented("Invoice")
 	meAvatarsH := notImplemented("MeAvatars")
 
 	previewPublicH := notImplemented("PreviewPublic")
@@ -392,7 +391,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		OwnerResolve:      notImplemented("OwnerResolve(endpoint_disabled)"),
 		Payment:           payH,
 		Order:             orderH,
-		Invoice:           invoiceH,
 
 		SetupStatus: setupStatusH,
 	}

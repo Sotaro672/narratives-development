@@ -11,7 +11,6 @@ require (
 	github.com/blocto/solana-go-sdk v1.30.0
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
-	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	google.golang.org/api v0.256.0
 	google.golang.org/genproto v0.0.0-20260112192933-99fd39fd28a9
 	google.golang.org/grpc v1.76.0
@@ -48,7 +47,6 @@ require (
 	github.com/near/borsh-go v0.3.2-0.20220516180422-1ff87d108454 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/resend/resend-go/v3 v3.2.0
-	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect

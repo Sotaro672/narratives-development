@@ -59,7 +59,7 @@ func NewPaymentHandlerWithPaymentFlow(
 }
 
 // NewPaymentHandlerWithOrderQueryAndPaymentFlow is the preferred constructor
-// when both GET /mall/me/payment and POST /mall/me/payments are enabled.
+// when both GET /mall/me/payments and POST /mall/me/payments are enabled.
 func NewPaymentHandlerWithOrderQueryAndPaymentFlow(
 	uc *usecase.PaymentUsecase,
 	orderQ OrderQuery,
@@ -93,8 +93,8 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case r.Method == http.MethodGet && path0 == "/me/payment":
-		h.getPaymentContext(w, r)
+	case r.Method == http.MethodGet && path0 == "/me/payments":
+		h.getPaymentsContext(w, r)
 		return
 
 	case r.Method == http.MethodPost && path0 == "/me/payments":
@@ -109,10 +109,10 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
-// GET /me/payment
+// GET /me/payments
 // ------------------------------------------------------------
 
-func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Request) {
+func (h *PaymentHandler) getPaymentsContext(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.orderQ == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "order_query_not_initialized"})
@@ -134,7 +134,7 @@ func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		log.Printf("[mall/payment] GET /me/payment failed uid=%q err=%v", uid, err)
+		log.Printf("[mall/payments] GET /me/payments failed uid=%q err=%v", uid, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error":  "internal_error",
@@ -253,7 +253,7 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		log.Printf(
-			"[mall/payment] POST /me/payments failed uid=%q paymentId=%q paymentMethodId=%q stripeCustomerId=%q stripePaymentMethodId=%q amount=%d err=%v",
+			"[mall/payments] POST /me/payments failed uid=%q paymentId=%q paymentMethodId=%q stripeCustomerId=%q stripePaymentMethodId=%q amount=%d err=%v",
 			uid,
 			req.PaymentID,
 			req.PaymentMethodID,

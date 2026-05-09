@@ -67,8 +67,6 @@ type Deps struct {
 
 	Order http.Handler
 
-	Invoice http.Handler
-
 	// ✅ /mall/me/setup-status (existence checks for redirect)
 	// NOTE: avatarId が未確定なタイミングでも呼ばれるため、
 	//       router では auth のみ必須にする（avatar middleware は付けない）。
@@ -314,14 +312,8 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	handleSafeAuthAvatar(mux, "/mall/me/contents/share/", deps.ShareTransfer, "ShareTransfer(me)", auth, avatar)
 
 	// payment (me)
-	handleSafeAuthAvatar(mux, "/mall/me/payment", deps.Payment, "Payment(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/payment/", deps.Payment, "Payment(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/payments", deps.Payment, "Payment(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/payments/", deps.Payment, "Payment(me)", auth, avatar)
-
-	// invoices (me)
-	handleSafeAuthAvatar(mux, "/mall/me/invoices", deps.Invoice, "Invoice(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/invoices/", deps.Invoice, "Invoice(me)", auth, avatar)
 
 	// orders (me)
 	handleSafeAuthAvatar(mux, "/mall/me/orders", deps.Order, "Order(me)", auth, avatar)

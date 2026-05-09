@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -12,33 +11,32 @@ import (
 	malldto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 	cartdom "narratives/internal/domain/cart"
+	invdom "narratives/internal/domain/inventory"
 	ldom "narratives/internal/domain/list"
 )
 
 type CartQuery struct {
 	FS *firestore.Client
 
-	// ✅ prefer domain repository (same as catalog_query)
+	// prefer domain repository (same as catalog_query)
 	ListRepo ldom.Repository
 
-	// ✅ optional: inject from DI
+	// optional: inject from DI
 	Resolver *appresolver.NameResolver
 
-	CartCol              string
-	ListsCol             string // fallback only (when ListRepo is nil)
-	InventoriesCol       string
-	ProductBlueprintsCol string
+	CartCol        string
+	ListsCol       string // fallback only (when ListRepo is nil)
+	InventoriesCol string
 }
 
 func NewCartQuery(fs *firestore.Client) *CartQuery {
 	return &CartQuery{
-		FS:                   fs,
-		ListRepo:             nil,
-		Resolver:             nil,
-		CartCol:              "carts",
-		ListsCol:             "lists",
-		InventoriesCol:       "inventories",
-		ProductBlueprintsCol: "product_blueprints",
+		FS:             fs,
+		ListRepo:       nil,
+		Resolver:       nil,
+		CartCol:        "carts",
+		ListsCol:       "lists",
+		InventoriesCol: "inventories",
 	}
 }
 
@@ -48,8 +46,7 @@ func NewCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *C
 	return q
 }
 
-// ✅ CartHandler 側の CartQueryService（GetCartQuery）に “明示的に” 合わせる。
-// これで reflect 探索に依存せず、GET /mall/me/cart を read-model に寄せられる。
+// CartHandler 側の CartQueryService（GetCartQuery）に明示的に合わせる。
 type cartQueryPort interface {
 	GetCartQuery(ctx context.Context, avatarID string) (any, error)
 }
@@ -85,7 +82,7 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 		return malldto.CartDTO{}, ErrNotFound
 	}
 
-	// ✅ carts.items は現行スキーマのみ対応（legacy は削除）
+	// carts doc は domain/cart.Cart の firestore tag 付き構造を正とする。
 	c, perr := cartFromSnapshot(avatarID, snap)
 	if perr != nil {
 		return malldto.CartDTO{}, perr
@@ -105,148 +102,48 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 // ============================================================
 
 // carts doc supported shape:
-// - items: map[itemKey] = {inventoryId, listId, modelId, qty, ...}
+// - docId = avatarId
+// - items: map[itemKey] = {inventoryId, listId, modelId, qty}
+// - createdAt / updatedAt / expiresAt are Firestore timestamps
 func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartdom.Cart, error) {
 	if snap == nil {
 		return nil, errors.New("mall cart query: snapshot is nil")
 	}
 
-	raw := snap.Data()
-	if raw == nil {
-		// empty doc is unusual but handle defensively
-		return &cartdom.Cart{
-			ID:    avatarID,
-			Items: map[string]cartdom.CartItem{},
-		}, nil
+	c := &cartdom.Cart{}
+	if err := snap.DataTo(c); err != nil {
+		return nil, err
 	}
 
-	c := &cartdom.Cart{
-		ID:    avatarID,
-		Items: map[string]cartdom.CartItem{},
-	}
+	// Cart.ID is firestore:"-" and must come from docId.
+	c.ID = avatarID
 
-	// times (best-effort)
-	if t, ok := raw["createdAt"]; ok {
-		if tt, ok2 := timeAnyToTime(t); ok2 {
-			c.CreatedAt = tt
-		}
-	}
-	if t, ok := raw["updatedAt"]; ok {
-		if tt, ok2 := timeAnyToTime(t); ok2 {
-			c.UpdatedAt = tt
-		}
-	}
-	if t, ok := raw["expiresAt"]; ok {
-		if tt, ok2 := timeAnyToTime(t); ok2 {
-			c.ExpiresAt = tt
-		}
-	}
-
-	// items
-	itemsAny, _ := raw["items"]
-	m, ok := itemsAny.(map[string]any)
-	if !ok || m == nil {
+	if c.Items == nil {
+		c.Items = map[string]cartdom.CartItem{}
 		return c, nil
 	}
 
-	for k, v := range m {
-		itemKey := k
+	// Query 側では itemKey を分解しない。
+	// 正規 CartItem の中身だけを見て、不正 item は read-model から除外する。
+	items := map[string]cartdom.CartItem{}
+	for itemKey, it := range c.Items {
 		if itemKey == "" {
 			continue
 		}
-
-		mv, ok := v.(map[string]any)
-		if !ok || mv == nil {
+		if it.InventoryID == "" || it.ListID == "" || it.ModelID == "" || it.Qty <= 0 {
 			continue
 		}
 
-		inv := stringAny(mv["inventoryId"])
-		lid := stringAny(mv["listId"])
-		mid := stringAny(mv["modelId"])
-		qty := intAny(mv["qty"])
-		if qty <= 0 {
-			continue
-		}
-
-		c.Items[itemKey] = cartdom.CartItem{
-			InventoryID: inv,
-			ListID:      lid,
-			ModelID:     mid,
-			Qty:         qty,
+		items[itemKey] = cartdom.CartItem{
+			InventoryID: it.InventoryID,
+			ListID:      it.ListID,
+			ModelID:     it.ModelID,
+			Qty:         it.Qty,
 		}
 	}
+	c.Items = items
 
 	return c, nil
-}
-
-func timeAnyToTime(v any) (time.Time, bool) {
-	switch x := v.(type) {
-	case time.Time:
-		if x.IsZero() {
-			return time.Time{}, false
-		}
-		return x.UTC(), true
-	default:
-		// Firestore の Timestamp は Data() だと time.Time で来る想定だが、念のため fmt 経由はしない
-		return time.Time{}, false
-	}
-}
-
-func stringAny(v any) string {
-	if v == nil {
-		return ""
-	}
-	switch x := v.(type) {
-	case string:
-		return x
-	default:
-		return fmt.Sprint(v)
-	}
-}
-
-func intAny(v any) int {
-	if v == nil {
-		return 0
-	}
-	switch x := v.(type) {
-	case int:
-		return x
-	case int8:
-		return int(x)
-	case int16:
-		return int(x)
-	case int32:
-		return int(x)
-	case int64:
-		return int(x)
-	case uint:
-		return int(x)
-	case uint8:
-		return int(x)
-	case uint16:
-		return int(x)
-	case uint32:
-		return int(x)
-	case uint64:
-		return int(x)
-	case float32:
-		return int(x)
-	case float64:
-		return int(x)
-	case string:
-		s := x
-		if s == "" {
-			return 0
-		}
-		var n int
-		_, err := fmt.Sscanf(s, "%d", &n)
-		if err != nil {
-			return 0
-		}
-		return n
-	default:
-		return 0
-	}
 }
 
 // ============================================================
@@ -334,11 +231,6 @@ func toCartDTO(
 				pbID = parts.ProductBlueprintID
 			}
 		}
-		if pbID == "" {
-			if p, _, ok := parseInventoryID(invID); ok {
-				pbID = p
-			}
-		}
 		if pbID != "" && productNameIndex != nil {
 			if name, ok := productNameIndex[pbID]; ok {
 				if s := name; s != "" {
@@ -401,12 +293,10 @@ func (q *CartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart)
 	}
 
 	if q.ListRepo != nil {
-		price, meta := q.fetchListIndicesByCartViaRepo(ctx, listIDs)
-		return price, meta
+		return q.fetchListIndicesByCartViaRepo(ctx, listIDs)
 	}
 
-	price, meta := q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
-	return price, meta
+	return q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
 }
 
 func (q *CartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
@@ -472,7 +362,14 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 
 	refs := make([]*firestore.DocumentRef, 0, len(listIDs))
 	for _, lid := range listIDs {
+		if lid == "" {
+			continue
+		}
 		refs = append(refs, q.FS.Collection(listsCol).Doc(lid))
+	}
+
+	if len(refs) == 0 {
+		return nil, nil
 	}
 
 	snaps, err := q.FS.GetAll(ctx, refs)
@@ -493,60 +390,29 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 		}
 
 		var l ldom.List
-		if derr := snap.DataTo(&l); derr == nil {
-			mt := listMeta{
-				Title:   l.Title,
-				ImageID: l.ImageID,
-			}
-			if mt.Title != "" || mt.ImageID != "" {
-				metaOut[lid] = mt
-			}
-
-			if len(l.Prices) > 0 {
-				m := map[string]int{}
-				for _, row := range l.Prices {
-					mid := row.ModelID
-					if mid == "" {
-						continue
-					}
-					m[mid] = row.Price
-				}
-				if len(m) > 0 {
-					priceOut[lid] = m
-				}
-			}
+		if err := snap.DataTo(&l); err != nil {
 			continue
 		}
 
-		m := snap.Data()
-		title := pickString(m, "title", "Title")
-		image := pickString(m, "imageId", "ImageID", "imageID", "ImageId", "image", "Image", "listImage", "ListImage", "imageUrl", "ImageUrl")
-
-		if title != "" || image != "" {
-			metaOut[lid] = listMeta{Title: title, ImageID: image}
+		mt := listMeta{
+			Title:   l.Title,
+			ImageID: l.ImageID,
+		}
+		if mt.Title != "" || mt.ImageID != "" {
+			metaOut[lid] = mt
 		}
 
-		if raw, ok := m["prices"]; ok {
-			rows, _ := raw.([]any)
-			if len(rows) > 0 {
-				pm := map[string]int{}
-				for _, row := range rows {
-					rm, _ := row.(map[string]any)
-					if rm == nil {
-						continue
-					}
-					mid := pickString(rm, "modelId", "ModelID", "modelID", "ModelId")
-					if mid == "" {
-						continue
-					}
-					pv := pickAny(rm, "price", "Price")
-					if p, ok := asIntAny(pv); ok {
-						pm[mid] = p
-					}
+		if len(l.Prices) > 0 {
+			m := map[string]int{}
+			for _, row := range l.Prices {
+				mid := row.ModelID
+				if mid == "" {
+					continue
 				}
-				if len(pm) > 0 {
-					priceOut[lid] = pm
-				}
+				m[mid] = row.Price
+			}
+			if len(m) > 0 {
+				priceOut[lid] = m
 			}
 		}
 	}
@@ -613,26 +479,21 @@ func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Ca
 			continue
 		}
 
-		m := snap.Data()
-		pb := pickString(m, "productBlueprintId", "productBlueprintID", "ProductBlueprintID", "ProductBlueprintId")
-		tb := pickString(m, "tokenBlueprintId", "tokenBlueprintID", "TokenBlueprintID", "TokenBlueprintId")
-
-		if pb == "" || tb == "" {
-			if p, t, ok := parseInventoryID(invID); ok {
-				if pb == "" {
-					pb = p
-				}
-				if tb == "" {
-					tb = t
-				}
-			}
-		}
-
-		if pb == "" && tb == "" {
+		var m invdom.Mint
+		if err := snap.DataTo(&m); err != nil {
 			continue
 		}
 
-		out[invID] = invParts{ProductBlueprintID: pb, TokenBlueprintID: tb}
+		m.ID = invID
+
+		if m.ProductBlueprintID == "" || m.TokenBlueprintID == "" {
+			continue
+		}
+
+		out[invID] = invParts{
+			ProductBlueprintID: m.ProductBlueprintID,
+			TokenBlueprintID:   m.TokenBlueprintID,
+		}
 	}
 
 	if len(out) == 0 {
@@ -699,18 +560,12 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 	c *cartdom.Cart,
 	invIndex map[string]invParts,
 ) map[string]string {
-	if q == nil || q.FS == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || q.Resolver == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil
 	}
 
-	pbCol := q.ProductBlueprintsCol
-	if pbCol == "" {
-		// ✅ repo 側と揃える
-		pbCol = "product_blueprints"
-	}
-
-	pbSeen := map[string]struct{}{}
-	pbIDs := make([]string, 0, 16)
+	out := map[string]string{}
+	seen := map[string]struct{}{}
 
 	for _, it := range c.Items {
 		invID := it.InventoryID
@@ -725,82 +580,17 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 			}
 		}
 		if pbID == "" {
-			if p, _, ok := parseInventoryID(invID); ok {
-				pbID = p
-			}
-		}
-
-		if pbID == "" {
-			continue
-		}
-		if _, ok := pbSeen[pbID]; ok {
-			continue
-		}
-		pbSeen[pbID] = struct{}{}
-		pbIDs = append(pbIDs, pbID)
-	}
-
-	if len(pbIDs) == 0 {
-		return nil
-	}
-
-	refs := make([]*firestore.DocumentRef, 0, len(pbIDs))
-	for _, id := range pbIDs {
-		refs = append(refs, q.FS.Collection(pbCol).Doc(id))
-	}
-
-	snaps, err := q.FS.GetAll(ctx, refs)
-	if err != nil {
-		if q.Resolver != nil {
-			out := map[string]string{}
-			for _, id := range pbIDs {
-				name := q.Resolver.ResolveProductName(ctx, id)
-				if name != "" {
-					out[id] = name
-				}
-			}
-			if len(out) == 0 {
-				return nil
-			}
-			return out
-		}
-		return nil
-	}
-
-	out := map[string]string{}
-
-	for i, snap := range snaps {
-		pbID := ""
-		if i >= 0 && i < len(pbIDs) {
-			pbID = pbIDs[i]
-		}
-		if pbID == "" {
 			continue
 		}
 
-		exists := snap != nil && snap.Exists()
-		if !exists {
-			if q.Resolver != nil {
-				rn := q.Resolver.ResolveProductName(ctx, pbID)
-				if rn != "" {
-					out[pbID] = rn
-				}
-			}
+		if _, ok := seen[pbID]; ok {
 			continue
 		}
+		seen[pbID] = struct{}{}
 
-		m := snap.Data()
-		name := pickString(m, "productName", "ProductName", "name", "Name")
+		name := q.Resolver.ResolveProductName(ctx, pbID)
 		if name != "" {
 			out[pbID] = name
-			continue
-		}
-
-		if q.Resolver != nil {
-			rn := q.Resolver.ResolveProductName(ctx, pbID)
-			if rn != "" {
-				out[pbID] = rn
-			}
 		}
 	}
 

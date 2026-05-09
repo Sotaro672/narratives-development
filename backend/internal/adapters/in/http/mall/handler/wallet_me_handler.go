@@ -55,13 +55,14 @@ func NewMallMeWalletHandler(walletUC *usecase.WalletUsecase, resolvedTokenRepo R
 		walletUC:          walletUC,
 		resolvedTokenRepo: resolvedTokenRepo,
 		allowedProxyHosts: map[string]struct{}{
-			"gateway.irys.xyz":       {},
-			"uploader.irys.xyz":      {},
-			"arweave.net":            {},
-			"www.arweave.net":        {},
-			"ipfs.io":                {},
-			"cloudflare-ipfs.com":    {},
-			"storage.googleapis.com": {},
+			"gateway.irys.xyz":             {},
+			"uploader.irys.xyz":            {},
+			"mainnet-1.datasprite-cdn.com": {},
+			"arweave.net":                  {},
+			"www.arweave.net":              {},
+			"ipfs.io":                      {},
+			"cloudflare-ipfs.com":          {},
+			"storage.googleapis.com":       {},
 		},
 	}
 }
@@ -451,16 +452,17 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 	allow := h.allowedProxyHosts
 	if len(allow) == 0 {
 		allow = map[string]struct{}{
-			"gateway.irys.xyz":       {},
-			"uploader.irys.xyz":      {},
-			"arweave.net":            {},
-			"www.arweave.net":        {},
-			"ipfs.io":                {},
-			"cloudflare-ipfs.com":    {},
-			"storage.googleapis.com": {},
+			"gateway.irys.xyz":             {},
+			"uploader.irys.xyz":            {},
+			"mainnet-1.datasprite-cdn.com": {},
+			"arweave.net":                  {},
+			"www.arweave.net":              {},
+			"ipfs.io":                      {},
+			"cloudflare-ipfs.com":          {},
+			"storage.googleapis.com":       {},
 		}
 	}
-	if _, ok := allow[host]; !ok {
+	if !isAllowedMetadataProxyHost(host, allow) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "host is not allowed"})
 		return
@@ -508,7 +510,7 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 			if hh == "" {
 				return errors.New("redirect host is empty")
 			}
-			if _, ok := allow[hh]; !ok {
+			if !isAllowedMetadataProxyHost(hh, allow) {
 				return errors.New("redirect host is not allowed")
 			}
 			return nil
@@ -566,6 +568,24 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
+}
+
+func isAllowedMetadataProxyHost(host string, allow map[string]struct{}) bool {
+	h := strings.ToLower(strings.TrimSpace(host))
+	if h == "" {
+		return false
+	}
+
+	if _, ok := allow[h]; ok {
+		return true
+	}
+
+	// Irys gateway may redirect to generated subdomains under datasprite CDN.
+	if h == "mainnet-1.datasprite-cdn.com" || strings.HasSuffix(h, ".mainnet-1.datasprite-cdn.com") {
+		return true
+	}
+
+	return false
 }
 
 func (h *MallMeWalletHandler) setCORSHeaders(w http.ResponseWriter) {

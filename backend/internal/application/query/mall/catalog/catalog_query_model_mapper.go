@@ -1,114 +1,50 @@
-// backend\internal\application\query\mall\catalog\catalog_query_model_mapper.go
+// backend/internal/application/query/mall/catalog/catalog_query_model_mapper.go
 package catalogQuery
 
 import (
-	"reflect"
-
 	dto "narratives/internal/application/query/mall/dto"
+
+	modeldom "narratives/internal/domain/model"
 )
 
 func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
-	if v == nil {
-		return dto.CatalogModelVariationDTO{}, false
-	}
-
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return dto.CatalogModelVariationDTO{}, false
-	}
-
-	// pointer unwrap
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
+	switch x := v.(type) {
+	case modeldom.ModelVariation:
+		return toCatalogModelVariationDTO(x)
+	case *modeldom.ModelVariation:
+		if x == nil {
 			return dto.CatalogModelVariationDTO{}, false
 		}
-		rv = rv.Elem()
+		return toCatalogModelVariationDTO(*x)
+	default:
+		return dto.CatalogModelVariationDTO{}, false
 	}
-	if rv.Kind() != reflect.Struct {
+}
+
+func toCatalogModelVariationDTO(mv modeldom.ModelVariation) (dto.CatalogModelVariationDTO, bool) {
+	if mv.ID == "" {
 		return dto.CatalogModelVariationDTO{}, false
 	}
 
-	// domain (model.ModelVariation) を正とする:
-	// ID, ProductBlueprintID, ModelNumber, Size, Color(Name, RGB), Measurements
-	idf := rv.FieldByName("ID")
-	if !idf.IsValid() || idf.Kind() != reflect.String || idf.String() == "" {
-		return dto.CatalogModelVariationDTO{}, false
+	measurements := map[string]int{}
+	for k, v := range mv.Measurements {
+		if k == "" {
+			continue
+		}
+		measurements[k] = v
 	}
 
-	pbf := rv.FieldByName("ProductBlueprintID")
-	if !pbf.IsValid() || pbf.Kind() != reflect.String {
-		return dto.CatalogModelVariationDTO{}, false
-	}
+	return dto.CatalogModelVariationDTO{
+		ID:                 mv.ID,
+		ProductBlueprintID: mv.ProductBlueprintID,
+		ModelNumber:        mv.ModelNumber,
+		Size:               mv.Size,
 
-	mnf := rv.FieldByName("ModelNumber")
-	if !mnf.IsValid() || mnf.Kind() != reflect.String {
-		return dto.CatalogModelVariationDTO{}, false
-	}
+		ColorName: mv.Color.Name,
+		ColorRGB:  mv.Color.RGB,
 
-	szf := rv.FieldByName("Size")
-	if !szf.IsValid() || szf.Kind() != reflect.String {
-		return dto.CatalogModelVariationDTO{}, false
-	}
-
-	out := dto.CatalogModelVariationDTO{
-		ID:                 idf.String(),
-		ProductBlueprintID: pbf.String(),
-		ModelNumber:        mnf.String(),
-		Size:               szf.String(),
-
-		ColorName: "",
-		ColorRGB:  0,
-
-		Measurements: map[string]int{},
+		Measurements: measurements,
 
 		StockKeys: 0,
-	}
-
-	// Color (domain: Color{Name string, RGB int})
-	cf := rv.FieldByName("Color")
-	if cf.IsValid() {
-		if cf.Kind() == reflect.Pointer {
-			if !cf.IsNil() {
-				cf = cf.Elem()
-			}
-		}
-		if cf.IsValid() && cf.Kind() == reflect.Struct {
-			nf := cf.FieldByName("Name")
-			if nf.IsValid() && nf.Kind() == reflect.String {
-				out.ColorName = nf.String()
-			}
-			rf := cf.FieldByName("RGB")
-			if rf.IsValid() {
-				out.ColorRGB = toInt(rf)
-			}
-		}
-	}
-
-	// Measurements (domain: map[string]int)
-	mf := rv.FieldByName("Measurements")
-	if mf.IsValid() {
-		if mf.Kind() == reflect.Pointer {
-			if !mf.IsNil() {
-				mf = mf.Elem()
-			}
-		}
-		if mf.IsValid() && mf.Kind() == reflect.Map && mf.Type().Key().Kind() == reflect.String {
-			mp := make(map[string]int, mf.Len())
-			iter := mf.MapRange()
-			for iter.Next() {
-				k := iter.Key().String()
-				if k == "" {
-					continue
-				}
-				mp[k] = toInt(iter.Value())
-			}
-			out.Measurements = mp
-		}
-	}
-
-	if out.Measurements == nil {
-		out.Measurements = map[string]int{}
-	}
-
-	return out, true
+	}, true
 }

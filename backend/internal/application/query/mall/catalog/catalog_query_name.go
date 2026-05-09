@@ -1,9 +1,9 @@
-// backend\internal\application\query\mall\catalog\catalog_query_name.go
+// backend/internal/application/query/mall/catalog/catalog_query_name.go
+
 package catalogQuery
 
 import (
 	"context"
-	"reflect"
 
 	dto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
@@ -15,20 +15,15 @@ func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver,
 		return
 	}
 
-	brandID := dtoPB.BrandID
-	companyID := dtoPB.CompanyID
-
-	if brandID != "" {
-		bn := r.ResolveBrandName(ctx, brandID)
-		if bn != "" {
-			setStringFieldBestEffort(dtoPB, "BrandName", bn)
+	if dtoPB.BrandID != "" {
+		if bn := r.ResolveBrandName(ctx, dtoPB.BrandID); bn != "" {
+			dtoPB.BrandName = bn
 		}
 	}
 
-	if companyID != "" {
-		cn := r.ResolveCompanyName(ctx, companyID)
-		if cn != "" {
-			setStringFieldBestEffort(dtoPB, "CompanyName", cn)
+	if dtoPB.CompanyID != "" {
+		if cn := r.ResolveCompanyName(ctx, dtoPB.CompanyID); cn != "" {
+			dtoPB.CompanyName = cn
 		}
 	}
 }
@@ -39,75 +34,9 @@ func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolv
 		return
 	}
 
-	brandID := p.BrandID
-	if brandID != "" && p.BrandName == "" {
-		if bn := r.ResolveBrandName(ctx, brandID); bn != "" {
+	if p.BrandID != "" && p.BrandName == "" {
+		if bn := r.ResolveBrandName(ctx, p.BrandID); bn != "" {
 			p.BrandName = bn
 		}
 	}
-}
-
-func setStringFieldBestEffort(target any, fieldName string, value string) {
-	if value == "" {
-		return
-	}
-
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return
-	}
-	if rv.Kind() != reflect.Pointer || rv.IsNil() {
-		return
-	}
-	rv = rv.Elem()
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
-		return
-	}
-
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() || !f.CanSet() {
-		return
-	}
-
-	switch f.Kind() {
-	case reflect.String:
-		f.SetString(value)
-	case reflect.Pointer:
-		if f.Type().Elem().Kind() == reflect.String {
-			s := value
-			f.Set(reflect.ValueOf(&s))
-		}
-	}
-}
-
-func getStringFieldBestEffort(target any, fieldName string) string {
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return ""
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return ""
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return ""
-	}
-
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() {
-		return ""
-	}
-
-	if f.Kind() == reflect.Pointer {
-		if f.IsNil() {
-			return ""
-		}
-		f = f.Elem()
-	}
-	if f.Kind() == reflect.String {
-		return f.String()
-	}
-	return ""
 }

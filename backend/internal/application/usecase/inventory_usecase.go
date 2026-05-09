@@ -1,11 +1,11 @@
 // backend/internal/application/usecase/inventory_usecase.go
+
 package usecase
 
 import (
 	"context"
 	"errors"
 	"log"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -148,8 +148,7 @@ func (uc *InventoryUsecase) Update(ctx context.Context, m invdom.Mint) (invdom.M
 	if uc == nil || uc.repo == nil {
 		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
 	}
-	if getStringFieldIfExists(m, "ID") == "" && getStringFieldIfExists(m, "Id") == "" {
-		// 基本は ID フィールドを想定するが、念のため Id も見る
+	if m.ID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
 	return uc.repo.Update(ctx, m)
@@ -178,7 +177,6 @@ func (uc *InventoryUsecase) GetByID(ctx context.Context, id string) (invdom.Mint
 	}
 	return uc.repo.GetByID(ctx, id)
 }
-
 func (uc *InventoryUsecase) ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]invdom.Mint, error) {
 	if uc == nil || uc.repo == nil {
 		return nil, errors.New("inventory usecase/repo is nil")
@@ -257,175 +255,31 @@ func reserveStockByModelOrder(m *invdom.Mint, modelID, orderID string, qty int) 
 	if qty <= 0 {
 		return errors.New("inventory reserve: invalid qty")
 	}
-
-	rv := reflect.ValueOf(m)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return errors.New("mint must be a non-nil pointer")
-	}
-	rv = rv.Elem()
-	if rv.Kind() != reflect.Struct {
-		return errors.New("mint must be a struct")
-	}
-
-	stock := rv.FieldByName("Stock")
-	if !stock.IsValid() || !stock.CanSet() {
-		return errors.New("inventory.Mint.Stock is missing or cannot be set")
-	}
-	if stock.Kind() != reflect.Map {
-		return errors.New("inventory.Mint.Stock must be a map")
-	}
-	if stock.IsNil() {
+	if m.Stock == nil {
 		return errors.New("inventory.Mint.Stock is nil (no stock to reserve)")
 	}
 
-	key := reflect.ValueOf(modelID)
-	if key.Type() != stock.Type().Key() {
-		return errors.New("inventory.Mint.Stock key type is not string")
-	}
-
-	existing := stock.MapIndex(key)
-	if !existing.IsValid() {
-		// 在庫に該当 model が無い（注文と在庫の整合が崩れている）
+	ms, ok := m.Stock[modelID]
+	if !ok {
 		return errors.New("inventory reserve: model stock not found")
 	}
 
-	valType := stock.Type().Elem()
-
-	// 変更対象を作る（map要素がstructならコピーして編集→SetMapIndex）
-	var val reflect.Value
-	switch valType.Kind() {
-	case reflect.Struct:
-		val = reflect.New(valType).Elem()
-		if existing.Type() == valType {
-			val.Set(existing)
-		} else {
-			// 型が合わない場合は触れない
-			return errors.New("inventory reserve: invalid stock value type")
-		}
-		if err := applyReserveToModelStockValue(val, orderID, qty); err != nil {
-			return err
-		}
-		stock.SetMapIndex(key, val)
-		return nil
-
-	case reflect.Pointer:
-		// *Struct を想定
-		if existing.Type() != valType {
-			return errors.New("inventory reserve: invalid stock value type")
-		}
-		val = existing
-		if val.IsNil() {
-			// nil pointer は想定外だが安全に作る
-			val = reflect.New(valType.Elem())
-		}
-		ev := val.Elem()
-		if ev.Kind() != reflect.Struct {
-			return errors.New("inventory reserve: stock value must be struct")
-		}
-		if err := applyReserveToModelStockValue(ev, orderID, qty); err != nil {
-			return err
-		}
-		stock.SetMapIndex(key, val)
-		return nil
-
-	default:
-		return errors.New("inventory reserve: stock value must be struct or *struct")
-	}
-}
-
-func applyReserveToModelStockValue(stockStruct reflect.Value, orderID string, qty int) error {
-	if !stockStruct.IsValid() || stockStruct.Kind() != reflect.Struct {
-		return errors.New("inventory reserve: invalid model stock struct")
+	if ms.ReservedByOrder == nil {
+		ms.ReservedByOrder = map[string]int{}
 	}
 
-	changed := false
+	ms.ReservedByOrder[orderID] += qty
 
-	// ReservedByOrder map[string]int (best-effort: int kinds)
-	rf := stockStruct.FieldByName("ReservedByOrder")
-	if rf.IsValid() && rf.CanSet() && rf.Kind() == reflect.Map && rf.Type().Key().Kind() == reflect.String {
-		if rf.IsNil() {
-			rf.Set(reflect.MakeMap(rf.Type()))
+	sum := 0
+	for _, n := range ms.ReservedByOrder {
+		if n <= 0 {
+			return errors.New("inventory reserve: invalid reserved qty")
 		}
-
-		okey := reflect.ValueOf(orderID)
-		if okey.Type() != rf.Type().Key() {
-			okey = okey.Convert(rf.Type().Key())
-		}
-
-		cur := 0
-		if v := rf.MapIndex(okey); v.IsValid() {
-			switch v.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				cur = int(v.Int())
-			case reflect.Float32, reflect.Float64:
-				cur = int(v.Float())
-			}
-		}
-		next := cur + qty
-
-		nv := reflect.New(rf.Type().Elem()).Elem()
-		switch nv.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			nv.SetInt(int64(next))
-		case reflect.Float32, reflect.Float64:
-			nv.SetFloat(float64(next))
-		default:
-			// elem 型が想定外なら予約は入れない
-			return errors.New("inventory reserve: ReservedByOrder value type unsupported")
-		}
-
-		rf.SetMapIndex(okey, nv)
-		changed = true
-
-		// ReservedCount = sum(ReservedByOrder)
-		sum := 0
-		iter := rf.MapRange()
-		for iter.Next() {
-			v := iter.Value()
-			switch v.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				sum += int(v.Int())
-			case reflect.Float32, reflect.Float64:
-				sum += int(v.Float())
-			}
-		}
-
-		cf := stockStruct.FieldByName("ReservedCount")
-		if cf.IsValid() && cf.CanSet() {
-			switch cf.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				cf.SetInt(int64(sum))
-				changed = true
-			}
-		}
+		sum += n
 	}
+	ms.ReservedCount = sum
 
-	if !changed {
-		return errors.New("inventory reserve: reservation fields not found on model stock")
-	}
+	m.Stock[modelID] = ms
+
 	return nil
-}
-
-func getStringFieldIfExists(target any, fieldName string) string {
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return ""
-	}
-	if rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return ""
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return ""
-	}
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() {
-		return ""
-	}
-	if f.Kind() == reflect.String {
-		return f.String()
-	}
-	return ""
 }

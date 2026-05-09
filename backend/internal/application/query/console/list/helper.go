@@ -4,7 +4,6 @@ package list
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 
 	querydto "narratives/internal/application/query/console/dto"
@@ -29,7 +28,7 @@ type InventoryRowsLister interface {
 	ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error)
 }
 
-// productBlueprintPatch reader (detail uses reflection; concrete type is intentionally opaque)
+// productBlueprintPatch reader.
 type ProductBlueprintPatchReader interface {
 	GetPatchByID(ctx context.Context, id string) (pbpdom.Patch, error)
 }
@@ -133,193 +132,26 @@ func ParseInventoryIDStrict(invID string) (pbID string, tbID string, ok bool) {
 }
 
 // ============================================================
-// PriceRows extractor (reflection) (exported)
+// PriceRows extractor (exported)
 // ============================================================
 
 func ExtractPriceRowsFromList(it listdom.List) []any {
-	rv := reflect.ValueOf(it)
-	rv = deref(rv)
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+	if len(it.Prices) == 0 {
 		return nil
 	}
 
-	// List.PriceRows
-	if f := rv.FieldByName("PriceRows"); f.IsValid() {
-		if out := sliceToAny(f); len(out) > 0 {
-			return out
-		}
-	}
-
-	// List.Prices ([]T or map[string]number)
-	if f := rv.FieldByName("Prices"); f.IsValid() {
-		if out := sliceToAny(f); len(out) > 0 {
-			return out
-		}
-		if out := mapPricesToAnyRows(f); len(out) > 0 {
-			return out
-		}
-	}
-
-	return nil
-}
-
-func mapPricesToAnyRows(v reflect.Value) []any {
-	v = deref(v)
-	if !v.IsValid() || v.Kind() != reflect.Map {
-		return nil
-	}
-	if v.Type().Key().Kind() != reflect.String {
-		return nil
-	}
-
-	out := make([]any, 0, v.Len())
-	iter := v.MapRange()
-	for iter.Next() {
-		k := iter.Key()
-		val := iter.Value()
-
-		modelID := ""
-		if k.IsValid() && k.Kind() == reflect.String {
-			modelID = k.String()
-		}
-		if modelID == "" {
+	out := make([]any, 0, len(it.Prices))
+	for _, row := range it.Prices {
+		if row.ModelID == "" {
 			continue
 		}
-
-		priceInt := 0
-		if n, ok := asInt(deref(val)); ok {
-			priceInt = n
-		}
-
-		out = append(out, map[string]any{
-			"ModelID": modelID,
-			"Price":   priceInt,
-		})
+		out = append(out, row)
 	}
 
-	return out
-}
-
-func sliceToAny(v reflect.Value) []any {
-	v = deref(v)
-	if !v.IsValid() || v.Kind() != reflect.Slice {
+	if len(out) == 0 {
 		return nil
-	}
-	out := make([]any, 0, v.Len())
-	for i := 0; i < v.Len(); i++ {
-		out = append(out, v.Index(i).Interface())
 	}
 	return out
-}
-
-// ============================================================
-// Reflection field readers (exported)
-// ============================================================
-
-func ReadStringField(v any, fieldNames ...string) string {
-	rv := reflect.ValueOf(v)
-	rv = deref(rv)
-	if !rv.IsValid() {
-		return ""
-	}
-
-	if rv.Kind() == reflect.Struct {
-		for _, fn := range fieldNames {
-			f := rv.FieldByName(fn)
-			f = deref(f)
-			if f.IsValid() && f.Kind() == reflect.String {
-				return f.String()
-			}
-		}
-		return ""
-	}
-
-	if rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
-		for _, fn := range fieldNames {
-			mv := rv.MapIndex(reflect.ValueOf(fn))
-			mv = deref(mv)
-			if mv.IsValid() && mv.Kind() == reflect.String {
-				return mv.String()
-			}
-		}
-		return ""
-	}
-
-	return ""
-}
-
-func ReadIntField(v any, fieldNames ...string) int {
-	rv := reflect.ValueOf(v)
-	rv = deref(rv)
-	if !rv.IsValid() {
-		return 0
-	}
-
-	if rv.Kind() == reflect.Struct {
-		for _, fn := range fieldNames {
-			f := rv.FieldByName(fn)
-			f = deref(f)
-			if f.IsValid() {
-				if n, ok := asInt(f); ok {
-					return n
-				}
-			}
-		}
-		return 0
-	}
-
-	if rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
-		for _, fn := range fieldNames {
-			mv := rv.MapIndex(reflect.ValueOf(fn))
-			mv = deref(mv)
-			if mv.IsValid() {
-				if n, ok := asInt(mv); ok {
-					return n
-				}
-			}
-		}
-		return 0
-	}
-
-	return 0
-}
-
-func ReadIntPtrField(v any, fieldNames ...string) *int {
-	rv := reflect.ValueOf(v)
-	rv = deref(rv)
-	if !rv.IsValid() {
-		return nil
-	}
-
-	if rv.Kind() == reflect.Struct {
-		for _, fn := range fieldNames {
-			f := rv.FieldByName(fn)
-			f = deref(f)
-			if f.IsValid() {
-				if n, ok := asInt(f); ok {
-					x := n
-					return &x
-				}
-			}
-		}
-		return nil
-	}
-
-	if rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
-		for _, fn := range fieldNames {
-			mv := rv.MapIndex(reflect.ValueOf(fn))
-			mv = deref(mv)
-			if mv.IsValid() {
-				if n, ok := asInt(mv); ok {
-					x := n
-					return &x
-				}
-			}
-		}
-		return nil
-	}
-
-	return nil
 }
 
 // ============================================================
@@ -354,37 +186,4 @@ func Itoa(n int) string {
 		b[i] = '-'
 	}
 	return string(b[i:])
-}
-
-// ============================================================
-// internal reflection helpers
-// ============================================================
-
-func deref(v reflect.Value) reflect.Value {
-	if !v.IsValid() {
-		return v
-	}
-	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
-		if v.IsNil() {
-			return reflect.Value{}
-		}
-		v = v.Elem()
-	}
-	return v
-}
-
-func asInt(v reflect.Value) (int, bool) {
-	if !v.IsValid() {
-		return 0, false
-	}
-	switch v.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(v.Int()), true
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return int(v.Uint()), true
-	case reflect.Float32, reflect.Float64:
-		return int(v.Float()), true
-	default:
-		return 0, false
-	}
 }

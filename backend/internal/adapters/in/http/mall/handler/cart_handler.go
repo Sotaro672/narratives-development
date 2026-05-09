@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"reflect"
 	"strings"
 	"time"
 
@@ -33,11 +32,11 @@ func NewCartHandler(uc *usecase.CartUsecase) http.Handler {
 
 func NewCartHandlerWithQueries(
 	uc *usecase.CartUsecase,
-	cartQuery any,
+	cartQuery CartQueryService,
 ) http.Handler {
 	return &CartHandler{
 		uc:        uc,
-		cartQuery: wrapCartQuery(cartQuery),
+		cartQuery: cartQuery,
 	}
 }
 
@@ -407,97 +406,4 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{
 		"error": msg,
 	})
-}
-
-// -------------------------
-// best-effort adapters (DI 互換)
-// -------------------------
-
-type dynamicCartQuery struct {
-	impl          any
-	lastMethodHit string
-}
-
-func wrapCartQuery(v any) CartQueryService {
-	if v == nil {
-		return nil
-	}
-	if s, ok := v.(CartQueryService); ok {
-		return s
-	}
-	return &dynamicCartQuery{impl: v}
-}
-
-func (d *dynamicCartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, error) {
-	v, hit, err := callQuery2WithHit(d.impl, ctx, avatarID,
-		"GetCartQuery",
-		"GetByAvatarID",
-		"GetCart",
-		"Get",
-		"Query",
-		"Fetch",
-	)
-	if hit != "" {
-		d.lastMethodHit = hit
-	}
-	log.Printf("[mall_cart_handler] dynamicCartQuery call avatarId=%q impl=%T hit=%q err=%v\n", avatarID, d.impl, d.lastMethodHit, err)
-	return v, err
-}
-
-func callQuery2WithHit(impl any, ctx context.Context, avatarID string, methodNames ...string) (any, string, error) {
-	if impl == nil {
-		return nil, "", errors.New("query service is nil")
-	}
-
-	rv := reflect.ValueOf(impl)
-	if !rv.IsValid() {
-		return nil, "", errors.New("query service is invalid")
-	}
-
-	for _, name := range methodNames {
-		if name == "" {
-			continue
-		}
-
-		mv := rv.MethodByName(name)
-		if !mv.IsValid() {
-			continue
-		}
-
-		mt := mv.Type()
-		if mt.NumIn() != 2 || mt.NumOut() != 2 {
-			continue
-		}
-
-		ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
-		if !mt.In(0).Implements(ctxType) && !ctxType.AssignableTo(mt.In(0)) && !reflect.TypeOf(ctx).AssignableTo(mt.In(0)) {
-			continue
-		}
-		if mt.In(1).Kind() != reflect.String {
-			continue
-		}
-
-		errType := reflect.TypeOf((*error)(nil)).Elem()
-		if !mt.Out(1).Implements(errType) {
-			continue
-		}
-
-		out := mv.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(avatarID)})
-		if len(out) != 2 {
-			continue
-		}
-
-		var e error
-		if !out[1].IsNil() {
-			if ee, ok := out[1].Interface().(error); ok {
-				e = ee
-			} else {
-				e = errors.New("unknown error")
-			}
-		}
-
-		return out[0].Interface(), name, e
-	}
-
-	return nil, "", errors.New("query service method not found")
 }

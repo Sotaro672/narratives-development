@@ -64,6 +64,16 @@ type MintProductionRepo interface {
 	// 指定された productBlueprintId 群のいずれかを持つ Production をすべて返す
 	// 実装例: ProductionRepositoryFS.ListByProductBlueprintID
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]proddom.Production, error)
+
+	// productionId から productBlueprintId を取得する。
+	// MintUsecase 側では productionID から productBlueprintID を推測・reflect 取得せず、
+	// この正規ポートを経由する。
+	//
+	// 実装例:
+	// - ProductionRepositoryFS.GetProductBlueprintIDByProductionID
+	// - 内部で GetByID(ctx, productionID) を呼び、
+	//   Production.ProductBlueprintID を返す
+	GetProductBlueprintIDByProductionID(ctx context.Context, productionID string) (string, error)
 }
 
 // MintInspectionRepo は productionId 群から inspections を取得・更新するための最小ポートです。

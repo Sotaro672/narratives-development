@@ -1,10 +1,9 @@
-// backend\internal\application\usecase\cart_usecase.go
+// backend/internal/application/usecase/cart_usecase.go
 package usecase
 
 import (
 	"context"
 	"errors"
-	"reflect"
 	"time"
 
 	cartdom "narratives/internal/domain/cart"
@@ -182,7 +181,7 @@ func (uc *CartUsecase) Clear(ctx context.Context, avatarID string) error {
 	return uc.repo.DeleteByAvatarID(ctx, aid)
 }
 
-// ✅ NEW: EmptyItems empties cart.items but keeps the cart doc.
+// EmptyItems empties cart.items but keeps the cart doc.
 // - payment 成功後など「カートは残すが中身を空にする」用途
 // - cart が存在しない場合は空のカートを作って Upsert（冪等）
 func (uc *CartUsecase) EmptyItems(ctx context.Context, avatarID string) error {
@@ -207,67 +206,17 @@ func (uc *CartUsecase) EmptyItems(ctx context.Context, avatarID string) error {
 		return uc.repo.Upsert(ctx, newCart)
 	}
 
-	// best-effort: clear Items field (map/slice), set UpdatedAt if exists
-	if ok := clearCartItemsBestEffort(c, now); !ok {
-		// fallback: recreate empty cart (schema-safe)
-		newCart, err := cartdom.NewCart(aid, nil, now)
-		if err != nil {
-			return err
-		}
-		return uc.repo.Upsert(ctx, newCart)
+	if _, err := c.ConsumeAll(now); err != nil {
+		return err
 	}
 
 	return uc.repo.Upsert(ctx, c)
 }
 
-// clearCartItemsBestEffort tries to set:
-// - cart.Items = empty (map/slice)
-// - cart.UpdatedAt = &now (if exists and settable)
-// Returns true if it changed something.
-func clearCartItemsBestEffort(cart any, now time.Time) bool {
-	if cart == nil {
-		return false
-	}
-
-	rv := reflect.ValueOf(cart)
-	if !rv.IsValid() || rv.Kind() != reflect.Pointer || rv.IsNil() {
-		return false
-	}
-	ev := rv.Elem()
-	if !ev.IsValid() || ev.Kind() != reflect.Struct {
-		return false
-	}
-
-	changed := false
-
-	// Items (map/slice)
-	if f := ev.FieldByName("Items"); f.IsValid() && f.CanSet() {
-		switch f.Kind() {
-		case reflect.Map:
-			f.Set(reflect.MakeMap(f.Type()))
-			changed = true
-		case reflect.Slice:
-			f.Set(reflect.MakeSlice(f.Type(), 0, 0))
-			changed = true
-		}
-	}
-
-	// UpdatedAt *time.Time (optional)
-	if f := ev.FieldByName("UpdatedAt"); f.IsValid() && f.CanSet() {
-		if f.Kind() == reflect.Pointer && f.Type().Elem() == reflect.TypeOf(time.Time{}) {
-			t := now.UTC()
-			f.Set(reflect.ValueOf(&t))
-			changed = true
-		}
-	}
-
-	return changed
-}
-
-// ✅ Ordered フィールド廃止により MarkOrdered は usecase からも削除。
+// Ordered フィールド廃止により MarkOrdered は usecase からも削除。
 // 以後の「注文確定」は Order を作成するユースケース（例: OrderUsecase）で扱い、
 // その中で以下のいずれかを実施してください:
 // - 成功後に uc.Clear(ctx, avatarID) でカートを空にする
-// - もしくは「注文作成時に items を消す」ドメインメソッドを追加して Upsert する
+// - もしくは EmptyItems(ctx, avatarID) で cart doc を残して items だけ空にする
 //
 // ※今回の変更ではコンパイルを通すため、MarkOrdered を実装しません。

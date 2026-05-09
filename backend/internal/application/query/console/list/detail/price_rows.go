@@ -3,7 +3,7 @@
 // 機能: ListDetailDTO の priceRows / stock / model attributes を生成する
 // 責任:
 // - listdom.List の価格行を抽出し、DTO(ListDetailPriceRowDTO)へ変換する
-// - 在庫情報は InventoryDetailGetter から優先的に取得し、なければ List の値を利用する
+// - 在庫情報は InventoryDetailGetter から優先的に取得し、なければ stock=0 とする
 // - displayOrder は productBlueprintPatch(ModelRefs) から付与する（取得できない場合は nil）
 package detail
 
@@ -22,8 +22,8 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 	inventoryID string,
 	productBlueprintID string,
 ) ([]querydto.ListDetailPriceRowDTO, int, string) {
-	rowsAny := listq.ExtractPriceRowsFromList(it)
-	if len(rowsAny) == 0 {
+	rows := it.Prices
+	if len(rows) == 0 {
 		return []querydto.ListDetailPriceRowDTO{}, 0, "rows=0"
 	}
 
@@ -57,7 +57,7 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 
 	modelResolvedCache := map[string]resolver.ModelResolved{}
 
-	out := make([]querydto.ListDetailPriceRowDTO, 0, len(rowsAny))
+	out := make([]querydto.ListDetailPriceRowDTO, 0, len(rows))
 	total := 0
 
 	resolvedNonEmpty := 0
@@ -66,13 +66,14 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 	stockFromList := 0
 	displayOrderHit := 0
 
-	for _, r := range rowsAny {
-		modelID := listq.ReadStringField(r, "ModelID", "ModelId", "ID", "Id")
+	for _, r := range rows {
+		modelID := r.ModelID
 		if modelID == "" {
 			continue
 		}
 
-		pricePtr := listq.ReadIntPtrField(r, "Price", "price")
+		price := r.Price
+		pricePtr := &price
 
 		stock := 0
 		if invUsed {
@@ -84,7 +85,9 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 				stockFromInv++
 			}
 		} else {
-			stock = listq.ReadIntField(r, "Stock", "stock")
+			// ListPriceRow の正規形は ModelID / Price のみ。
+			// Stock は list ではなく inventory 側から解決する。
+			stock = 0
 			stockFromList++
 		}
 

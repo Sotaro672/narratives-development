@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"reflect"
 	"strings"
 
 	malldto "narratives/internal/application/query/mall/dto"
@@ -137,7 +136,7 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 	items := make([]mallModelItem, 0, len(res.Items))
 
 	for _, v := range res.Items {
-		modelID := extractID(v)
+		modelID := v.ID
 		if modelID == "" {
 			continue
 		}
@@ -148,7 +147,7 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 			return
 		}
 
-		dto, ok := toMallModelVariationDTOAny(mv)
+		dto, ok := toMallModelVariationDTO(mv)
 		if !ok {
 			dto = malldto.CatalogModelVariationDTO{
 				ID:                 modelID,
@@ -187,7 +186,7 @@ func (h *MallModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	dto, ok := toMallModelVariationDTOAny(mv)
+	dto, ok := toMallModelVariationDTO(mv)
 	if !ok {
 		dto = malldto.CatalogModelVariationDTO{
 			ID:                 id,
@@ -229,140 +228,27 @@ func (h *MallModelHandler) handleGetCatalogByListID(w http.ResponseWriter, r *ht
 	writeJSON(w, http.StatusOK, dto)
 }
 
-func extractID(v any) string {
-	if v == nil {
-		return ""
+func toMallModelVariationDTO(mv *modeldom.ModelVariation) (malldto.CatalogModelVariationDTO, bool) {
+	if mv == nil || mv.ID == "" {
+		return malldto.CatalogModelVariationDTO{}, false
 	}
 
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return ""
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return ""
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return ""
-	}
-
-	for _, name := range []string{"ID", "Id", "ModelID", "ModelId"} {
-		f := rv.FieldByName(name)
-		if !f.IsValid() {
+	measurements := map[string]int{}
+	for k, v := range mv.Measurements {
+		if k == "" {
 			continue
 		}
-		if f.Kind() == reflect.String {
-			return f.String()
-		}
+		measurements[k] = v
 	}
 
-	return ""
-}
-
-func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) {
-	if v == nil {
-		return malldto.CatalogModelVariationDTO{}, false
-	}
-
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return malldto.CatalogModelVariationDTO{}, false
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return malldto.CatalogModelVariationDTO{}, false
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return malldto.CatalogModelVariationDTO{}, false
-	}
-
-	id := pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
-	if id == "" {
-		return malldto.CatalogModelVariationDTO{}, false
-	}
-
-	pbID := pickStringField(rv.Interface(), "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
-	modelNumber := pickStringField(rv.Interface(), "ModelNumber", "modelNumber")
-	size := pickStringField(rv.Interface(), "Size", "size")
-
-	dto := malldto.CatalogModelVariationDTO{
-		ID:                 id,
-		ProductBlueprintID: pbID,
-		ModelNumber:        modelNumber,
-		Size:               size,
-		ColorName:          "",
-		ColorRGB:           0,
-		Measurements:       map[string]int{},
+	return malldto.CatalogModelVariationDTO{
+		ID:                 mv.ID,
+		ProductBlueprintID: mv.ProductBlueprintID,
+		ModelNumber:        mv.ModelNumber,
+		Size:               mv.Size,
+		ColorName:          mv.Color.Name,
+		ColorRGB:           mv.Color.RGB,
+		Measurements:       measurements,
 		StockKeys:          0,
-	}
-
-	if c := rv.FieldByName("Color"); c.IsValid() {
-		if c.Kind() == reflect.Pointer {
-			if !c.IsNil() {
-				c = c.Elem()
-			}
-		}
-		if c.IsValid() && c.Kind() == reflect.Struct {
-			nf := c.FieldByName("Name")
-			if nf.IsValid() && nf.Kind() == reflect.String {
-				dto.ColorName = nf.String()
-			}
-			rf := c.FieldByName("RGB")
-			if rf.IsValid() {
-				dto.ColorRGB = toInt(rf)
-			}
-		}
-	}
-
-	if m := rv.FieldByName("Measurements"); m.IsValid() {
-		if m.Kind() == reflect.Map && m.Type().Key().Kind() == reflect.String {
-			out := make(map[string]int)
-			iter := m.MapRange()
-			for iter.Next() {
-				k := iter.Key().String()
-				if k == "" {
-					continue
-				}
-				out[k] = toInt(iter.Value())
-			}
-			dto.Measurements = out
-		}
-	}
-
-	if dto.Measurements == nil {
-		dto.Measurements = map[string]int{}
-	}
-
-	return dto, true
-}
-
-func pickStringField(v any, fieldNames ...string) string {
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return ""
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return ""
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return ""
-	}
-
-	for _, name := range fieldNames {
-		f := rv.FieldByName(name)
-		if !f.IsValid() {
-			continue
-		}
-		if f.Kind() == reflect.String {
-			return f.String()
-		}
-	}
-	return ""
+	}, true
 }

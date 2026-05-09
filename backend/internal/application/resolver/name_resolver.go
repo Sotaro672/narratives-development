@@ -3,7 +3,6 @@ package resolver
 
 import (
 	"context"
-	"reflect"
 
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
@@ -108,13 +107,14 @@ func (r *NameResolver) ResolveBrandName(ctx context.Context, brandID string) str
 	return b.Name
 }
 
-// ✅ NEW: ResolveBrandCompanyID は brandId から companyId を解決する。
+// ResolveBrandCompanyID は brandId から companyId を解決する。
 // tokenBlueprint が companyId を持っていないケースに対応する。
 // 取得できなかった場合は空文字列を返す。
 func (r *NameResolver) ResolveBrandCompanyID(ctx context.Context, brandID string) string {
 	if r == nil || r.brandRepo == nil {
 		return ""
 	}
+
 	id := brandID
 	if id == "" {
 		return ""
@@ -125,35 +125,7 @@ func (r *NameResolver) ResolveBrandCompanyID(ctx context.Context, brandID string
 		return ""
 	}
 
-	// Brand ドメインのフィールド名揺れを reflection で吸収（CompanyID / CompanyId / companyId）
-	rv := reflect.ValueOf(b)
-	if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
-		rv = rv.Elem()
-	}
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
-		return ""
-	}
-
-	for _, n := range []string{"CompanyID", "CompanyId", "companyId"} {
-		f := rv.FieldByName(n)
-		if !f.IsValid() {
-			continue
-		}
-		if f.Kind() == reflect.Pointer {
-			if f.IsNil() {
-				continue
-			}
-			f = f.Elem()
-		}
-		if f.Kind() == reflect.String {
-			s := f.String()
-			if s != "" {
-				return s
-			}
-		}
-	}
-
-	return ""
+	return b.CompanyID
 }
 
 // ------------------------------------------------------------

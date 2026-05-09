@@ -1,4 +1,4 @@
-// backend\internal\application\query\mall\catalog\catalog_query_mappers.go
+// backend/internal/application/query/mall/catalog/catalog_query_mappers.go
 package catalogQuery
 
 import (
@@ -40,7 +40,7 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 
 		QualityAssurance: append([]string{}, pb.QualityAssurance...),
 
-		ProductIDTagType: pickProductIDTagType(pb),
+		ProductIDTagType: pb.ProductIdTag.Type,
 
 		ModelRefs: nil,
 	}
