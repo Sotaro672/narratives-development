@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/mall/handler/productBlueprint_handler.go
 package mallHandler
 
 import (
@@ -55,20 +56,31 @@ func NewMallProductBlueprintHandlerWithServices(
 type MallProductBlueprintResponse struct {
 	ID string `json:"id"`
 
-	ProductName string         `json:"productName"`
-	CompanyID   string         `json:"companyId"`
-	CompanyName string         `json:"companyName"` // ✅ NEW
-	BrandID     string         `json:"brandId"`
-	BrandName   string         `json:"brandName"` // ✅ NEW
-	ItemType    pbdom.ItemType `json:"itemType"`
-	Fit         string         `json:"fit"`
-	Material    string         `json:"material"`
-	Weight      float64        `json:"weight"`
+	ProductName string `json:"productName"`
+	CompanyID   string `json:"companyId"`
+	CompanyName string `json:"companyName"`
+	BrandID     string `json:"brandId"`
+	BrandName   string `json:"brandName"`
+
+	ProductBlueprintCategory MallProductBlueprintCategoryResponse `json:"productBlueprintCategory"`
+
+	Fit      string  `json:"fit"`
+	Material string  `json:"material"`
+	Weight   float64 `json:"weight"`
 
 	QualityAssurance []string         `json:"qualityAssurance"`
 	ProductIdTag     MallProductIDTag `json:"productIdTag"`
 
 	Printed bool `json:"printed"`
+}
+
+type MallProductBlueprintCategoryResponse struct {
+	ID     string   `json:"id"`
+	Code   string   `json:"code"`
+	NameJa string   `json:"nameJa"`
+	NameEn string   `json:"nameEn"`
+	Kind   string   `json:"kind"`
+	Path   []string `json:"path"`
 }
 
 type MallProductIDTag struct {
@@ -136,13 +148,15 @@ func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Req
 
 	resp := h.toMallProductBlueprintResponse(ctx, p)
 
-	log.Printf("[mall_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q",
+	log.Printf("[mall_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q categoryId=%q categoryCode=%q",
 		resp.ID,
 		resp.ProductName,
 		resp.BrandID,
 		resp.BrandName,
 		resp.CompanyID,
 		resp.CompanyName,
+		resp.ProductBlueprintCategory.ID,
+		resp.ProductBlueprintCategory.Code,
 	)
 
 	writeJSON(w, http.StatusOK, resp)
@@ -157,6 +171,7 @@ func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context
 	productName := p.ProductName
 	companyID := p.CompanyID
 	brandID := p.BrandID
+	category := p.ProductBlueprintCategory
 
 	// ✅ name resolve (best-effort)
 	brandName := ""
@@ -175,17 +190,26 @@ func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context
 	}
 
 	return MallProductBlueprintResponse{
-		ID:               pbID,
-		ProductName:      productName,
-		CompanyID:        companyID,
-		CompanyName:      companyName,
-		BrandID:          brandID,
-		BrandName:        brandName,
-		ItemType:         p.ItemType,
+		ID:          pbID,
+		ProductName: productName,
+		CompanyID:   companyID,
+		CompanyName: companyName,
+		BrandID:     brandID,
+		BrandName:   brandName,
+
+		ProductBlueprintCategory: MallProductBlueprintCategoryResponse{
+			ID:     category.ID,
+			Code:   category.Code,
+			NameJa: category.NameJa,
+			NameEn: category.NameEn,
+			Kind:   category.Kind,
+			Path:   append([]string(nil), category.Path...),
+		},
+
 		Fit:              p.Fit,
 		Material:         p.Material,
 		Weight:           p.Weight,
-		QualityAssurance: append([]string{}, p.QualityAssurance...),
+		QualityAssurance: append([]string(nil), p.QualityAssurance...),
 		ProductIdTag: MallProductIDTag{
 			Type: p.ProductIdTag.Type,
 		},

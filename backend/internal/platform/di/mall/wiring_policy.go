@@ -25,7 +25,6 @@ var (
 
 // buildPaymentFlowUsecase wires PaymentFlowUsecase conditionally.
 //
-// Legacy webhook trigger has been removed.
 // PaymentFlowUsecase now requires a StripePaymentIntentGateway.
 // If the gateway is not available at this wiring layer, the payment flow is disabled.
 func buildPaymentFlowUsecase(

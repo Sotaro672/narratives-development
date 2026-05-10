@@ -29,6 +29,17 @@ type ModelRefDTO struct {
 	DisplayOrder int    `json:"displayOrder"`
 }
 
+// ProductBlueprintCategoryDTO は productBlueprint 側に denormalize 保存された
+// productBlueprintCategory の表示用 snapshot を返す DTO。
+type ProductBlueprintCategoryDTO struct {
+	ID     string   `json:"id"`
+	Code   string   `json:"code"`
+	NameJa string   `json:"nameJa"`
+	NameEn string   `json:"nameEn"`
+	Kind   string   `json:"kind"`
+	Path   []string `json:"path"`
+}
+
 type ProductBlueprintDTO struct {
 	ID string `json:"id"`
 
@@ -40,7 +51,8 @@ type ProductBlueprintDTO struct {
 	CompanyID   string `json:"companyId"`
 	CompanyName string `json:"companyName"` // ★ companyId → companyName を解決して詰める
 
-	ItemType         string   `json:"itemType"` // bpdom.ItemType を string 化して詰める
+	ProductBlueprintCategory ProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
+
 	Fit              string   `json:"fit"`
 	Material         string   `json:"material"`
 	Weight           float64  `json:"weight"` // domain に合わせて float64
@@ -215,15 +227,26 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		return modelRefsDTO[i].ModelID < modelRefsDTO[j].ModelID
 	})
 
+	category := bp.ProductBlueprintCategory
+
 	// 7) ProductBlueprintDTO を構築
 	pbDTO := ProductBlueprintDTO{
-		ID:               bp.ID,
-		ProductName:      bp.ProductName,
-		BrandID:          bp.BrandID,
-		BrandName:        brandName,
-		CompanyID:        bp.CompanyID,
-		CompanyName:      companyName,
-		ItemType:         string(bp.ItemType),
+		ID:          bp.ID,
+		ProductName: bp.ProductName,
+		BrandID:     bp.BrandID,
+		BrandName:   brandName,
+		CompanyID:   bp.CompanyID,
+		CompanyName: companyName,
+
+		ProductBlueprintCategory: ProductBlueprintCategoryDTO{
+			ID:     category.ID,
+			Code:   category.Code,
+			NameJa: category.NameJa,
+			NameEn: category.NameEn,
+			Kind:   category.Kind,
+			Path:   append([]string(nil), category.Path...),
+		},
+
 		Fit:              bp.Fit,
 		Material:         bp.Material,
 		Weight:           bp.Weight,

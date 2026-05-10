@@ -16,10 +16,11 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	m, err := h.uc.GetByID(ctx, id)
+	m, err := h.uc.GetModelVariationByID(ctx, id)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
 	_ = json.NewEncoder(w).Encode(m)
 }

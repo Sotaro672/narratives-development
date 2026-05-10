@@ -46,27 +46,6 @@ func WrapNotFound(err error, msg string) error {
 }
 
 // ======================================
-// Enums (ItemType)
-// ======================================
-
-type ItemType string
-
-const (
-	ItemTops    ItemType = "tops"
-	ItemBottoms ItemType = "bottoms"
-	ItemOther   ItemType = "other"
-)
-
-func IsValidItemType(v ItemType) bool {
-	switch v {
-	case ItemTops, ItemBottoms, ItemOther:
-		return true
-	default:
-		return false
-	}
-}
-
-// ======================================
 // ProductIDTagType
 // ======================================
 
@@ -97,6 +76,39 @@ type ProductIDTag struct {
 func (t ProductIDTag) validate() error {
 	if !IsValidTagType(t.Type) {
 		return ErrInvalidTagType
+	}
+	return nil
+}
+
+// ProductBlueprintCategorySnapshot は productBlueprint 側へ denormalize 保存するカテゴリ表示用情報。
+// 正のカテゴリ定義は productBlueprintCategory ドメイン / productBlueprintCategories collection 側で管理する。
+type ProductBlueprintCategorySnapshot struct {
+	ID     string
+	Code   string
+	NameJa string
+	NameEn string
+	Kind   string
+	Path   []string
+}
+
+// Validate は package 外から ProductBlueprintCategorySnapshot を検証するための公開メソッド。
+// Firestore repository / usecase / handler など productBlueprint package 外から利用する。
+func (s ProductBlueprintCategorySnapshot) Validate() error {
+	return s.validate()
+}
+
+func (s ProductBlueprintCategorySnapshot) validate() error {
+	if s.ID == "" {
+		return ErrInvalidCategoryID
+	}
+	if s.Code == "" {
+		return ErrInvalidCategoryCode
+	}
+	if s.NameJa == "" {
+		return ErrInvalidCategoryNameJa
+	}
+	if s.Kind == "" {
+		return ErrInvalidCategoryKind
 	}
 	return nil
 }
@@ -174,7 +186,7 @@ func mergeAndRenumberModelRefs(existing []ModelRef, appendIDs []string) []ModelR
 }
 
 // ======================================
-// Entity（Version なし）
+// Entity
 // ======================================
 
 type ProductBlueprint struct {
@@ -183,10 +195,12 @@ type ProductBlueprint struct {
 	ProductName string
 	CompanyID   string
 	BrandID     string
-	ItemType    ItemType
-	Fit         string
-	Material    string
-	Weight      float64
+
+	ProductBlueprintCategory ProductBlueprintCategorySnapshot
+
+	Fit      string
+	Material string
+	Weight   float64
 
 	QualityAssurance []string
 	ProductIdTag     ProductIDTag
@@ -212,12 +226,16 @@ var (
 	ErrInvalidID        = errors.New("productBlueprint: invalid id")
 	ErrInvalidProduct   = errors.New("productBlueprint: invalid productName")
 	ErrInvalidBrand     = errors.New("productBlueprint: invalid brandId")
-	ErrInvalidItemType  = errors.New("productBlueprint: invalid itemType")
 	ErrInvalidWeight    = errors.New("productBlueprint: invalid weight")
 	ErrInvalidTagType   = errors.New("productBlueprint: invalid productIdTag.type")
 	ErrInvalidCreatedAt = errors.New("productBlueprint: invalid createdAt")
 	ErrInvalidAssignee  = errors.New("productBlueprint: invalid assigneeId")
 	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
+
+	ErrInvalidCategoryID     = errors.New("productBlueprint: invalid productBlueprintCategory.id")
+	ErrInvalidCategoryCode   = errors.New("productBlueprint: invalid productBlueprintCategory.code")
+	ErrInvalidCategoryNameJa = errors.New("productBlueprint: invalid productBlueprintCategory.nameJa")
+	ErrInvalidCategoryKind   = errors.New("productBlueprint: invalid productBlueprintCategory.kind")
 )
 
 // ======================================
@@ -226,7 +244,7 @@ var (
 
 func New(
 	id, productName, brandID string,
-	itemType ItemType,
+	category ProductBlueprintCategorySnapshot,
 	fit, material string,
 	weight float64,
 	qualityAssurance []string,
@@ -238,17 +256,17 @@ func New(
 ) (ProductBlueprint, error) {
 
 	pb := ProductBlueprint{
-		ID:               id,
-		ProductName:      productName,
-		BrandID:          brandID,
-		ItemType:         itemType,
-		Fit:              fit,
-		Material:         material,
-		Weight:           weight,
-		QualityAssurance: dedupKeepOrder(qualityAssurance),
-		ProductIdTag:     productIDTag,
-		AssigneeID:       assigneeID,
-		CompanyID:        companyID,
+		ID:                       id,
+		ProductName:              productName,
+		BrandID:                  brandID,
+		ProductBlueprintCategory: category,
+		Fit:                      fit,
+		Material:                 material,
+		Weight:                   weight,
+		QualityAssurance:         dedupKeepOrder(qualityAssurance),
+		ProductIdTag:             productIDTag,
+		AssigneeID:               assigneeID,
+		CompanyID:                companyID,
 
 		// create 時点では modelRefs は空
 		ModelRefs: nil,
@@ -290,6 +308,19 @@ func (p *ProductBlueprint) MarkPrinted(now time.Time, updatedBy *string) error {
 // ======================================
 // Update Methods
 // ======================================
+
+func (p *ProductBlueprint) UpdateCategory(category ProductBlueprintCategorySnapshot, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden
+	}
+	if err := category.validate(); err != nil {
+		return err
+	}
+
+	p.ProductBlueprintCategory = category
+	p.touch(now, updatedBy)
+	return nil
+}
 
 func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, updatedBy *string) error {
 	if !p.canModify() {
@@ -364,8 +395,8 @@ func (p ProductBlueprint) validate() error {
 	if p.BrandID == "" {
 		return ErrInvalidBrand
 	}
-	if !IsValidItemType(p.ItemType) {
-		return ErrInvalidItemType
+	if err := p.ProductBlueprintCategory.validate(); err != nil {
+		return err
 	}
 	if p.Weight < 0 {
 		return ErrInvalidWeight
@@ -403,7 +434,7 @@ func (p *ProductBlueprint) touch(now time.Time, updatedBy *string) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	p.UpdatedAt = now
+	p.UpdatedAt = now.UTC()
 	p.UpdatedBy = updatedBy
 }
 

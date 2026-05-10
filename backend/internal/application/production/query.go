@@ -54,7 +54,6 @@ func (u *ProductionUsecase) Exists(ctx context.Context, id string) (bool, error)
 
 // List returns productions by enforcing the only allowed list route at the application boundary:
 // companyId -> productBlueprintIds -> productions.
-// This usecase delegates to the query service; legacy implementation is removed.
 func (u *ProductionUsecase) List(ctx context.Context) ([]productiondom.Production, error) {
 	if u.listQuery == nil {
 		return nil, errors.New("internal: ProductionUsecase.listQuery is not configured")

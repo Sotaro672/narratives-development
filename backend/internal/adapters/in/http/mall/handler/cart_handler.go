@@ -378,14 +378,12 @@ func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, ava
 // -------------------------
 
 type cartItemReq struct {
-	AvatarID     string `json:"avatarId"`
-	InventoryID  string `json:"inventoryId"`
-	ListID       string `json:"listId"`
-	ModelID      string `json:"modelId"`
-	Qty          int    `json:"qty"`
-	ItemKey      string `json:"itemKey"`
-	LegacyModel  string `json:"-"`
-	LegacyListID string `json:"-"`
+	AvatarID    string `json:"avatarId"`
+	InventoryID string `json:"inventoryId"`
+	ListID      string `json:"listId"`
+	ModelID     string `json:"modelId"`
+	Qty         int    `json:"qty"`
+	ItemKey     string `json:"itemKey"`
 }
 
 // -------------------------

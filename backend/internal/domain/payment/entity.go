@@ -292,6 +292,8 @@ func (p Payment) validate() error {
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-
+	if p.StripePaymentIntentID == "" {
+		return ErrInvalidStripePaymentIntent
+	}
 	return nil
 }

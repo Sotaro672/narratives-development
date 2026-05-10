@@ -14,9 +14,12 @@ type CreateInput struct {
 	// ★ Create時に usecase で生成して渡す
 	ID string `json:"id"`
 
-	ProductName      string       `json:"productName"`
-	BrandID          string       `json:"brandId"`
-	ItemType         ItemType     `json:"itemType"`
+	ProductName string `json:"productName"`
+	BrandID     string `json:"brandId"`
+
+	// productBlueprintCategories の正データから usecase で生成して渡す denormalized snapshot
+	ProductBlueprintCategory ProductBlueprintCategorySnapshot `json:"productBlueprintCategory"`
+
 	Fit              string       `json:"fit"`
 	Material         string       `json:"material"`
 	Weight           float64      `json:"weight"`
@@ -50,7 +53,9 @@ type Patch struct {
 	CompanyID   *string `json:"companyId,omitempty"`
 	CompanyName *string `json:"companyName,omitempty"`
 
-	ItemType         *ItemType     `json:"itemType,omitempty"`
+	// productBlueprintCategories の正データから usecase で生成して渡す denormalized snapshot
+	ProductBlueprintCategory *ProductBlueprintCategorySnapshot `json:"productBlueprintCategory,omitempty"`
+
 	Fit              *string       `json:"fit,omitempty"`
 	Material         *string       `json:"material,omitempty"`
 	Weight           *float64      `json:"weight,omitempty"`
@@ -74,7 +79,13 @@ type Filter struct {
 	SearchTerm  string
 	BrandIDs    []string
 	AssigneeIDs []string
-	ItemTypes   []ItemType
+
+	// カテゴリ検索用。
+	// productBlueprint 側では denormalized field を検索対象にする。
+	ProductBlueprintCategoryIDs   []string
+	ProductBlueprintCategoryCodes []string
+	ProductBlueprintCategoryKinds []string
+
 	TagTypes    []ProductIDTagType
 	OnlyDeleted bool
 }

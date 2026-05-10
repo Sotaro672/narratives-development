@@ -30,10 +30,13 @@ func (u *ProductBlueprintUsecase) Create(
 	createdAt := &now
 
 	in := productbpdom.CreateInput{
-		ID:               id,
-		ProductName:      v.ProductName,
-		BrandID:          v.BrandID,
-		ItemType:         v.ItemType,
+		ID:          id,
+		ProductName: v.ProductName,
+		BrandID:     v.BrandID,
+
+		// productBlueprintCategories の正データから生成済みの denormalized snapshot
+		ProductBlueprintCategory: v.ProductBlueprintCategory,
+
 		Fit:              v.Fit,
 		Material:         v.Material,
 		Weight:           v.Weight,
@@ -140,7 +143,7 @@ func (u *ProductBlueprintUsecase) Update(
 	// Patch を組み立て（Update で変更したい項目のみ）
 	name := v.ProductName
 	brandID := v.BrandID
-	itemType := v.ItemType
+	category := v.ProductBlueprintCategory
 	fit := v.Fit
 	material := v.Material
 	weight := v.Weight
@@ -154,9 +157,12 @@ func (u *ProductBlueprintUsecase) Update(
 	assigneeID := v.AssigneeID
 
 	patch := productbpdom.Patch{
-		ProductName:      &name,
-		BrandID:          &brandID,
-		ItemType:         &itemType,
+		ProductName: &name,
+		BrandID:     &brandID,
+
+		// productBlueprintCategories の正データから生成済みの denormalized snapshot
+		ProductBlueprintCategory: &category,
+
 		Fit:              &fit,
 		Material:         &material,
 		Weight:           &weight,

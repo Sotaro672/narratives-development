@@ -143,10 +143,6 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(w http.ResponseWriter, r 
 	// wallet handler と同様に middleware getter を正とする。
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
-		// fallback (legacy): もし別実装が文字列キーで入れている場合
-		avatarID = getAvatarIDFromContext(ctx)
-	}
-	if avatarID == "" {
 		writeJSONError(w, http.StatusUnauthorized, "missing avatarId")
 		return
 	}

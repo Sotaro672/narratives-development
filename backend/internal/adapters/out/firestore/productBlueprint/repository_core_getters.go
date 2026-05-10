@@ -249,7 +249,7 @@ func (r *ProductBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id stri
 
 	name := pb.ProductName
 	brandID := pb.BrandID
-	itemType := pb.ItemType
+	category := pb.ProductBlueprintCategory
 	fit := pb.Fit
 	material := pb.Material
 	weight := pb.Weight
@@ -265,9 +265,11 @@ func (r *ProductBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id stri
 	}
 
 	return pbdom.Patch{
-		ProductName:      &name,
-		BrandID:          &brandID,
-		ItemType:         &itemType,
+		ProductName: &name,
+		BrandID:     &brandID,
+
+		ProductBlueprintCategory: &category,
+
 		Fit:              &fit,
 		Material:         &material,
 		Weight:           &weight,

@@ -22,7 +22,6 @@ import (
 // current design:
 // - payment document ID = payment.PaymentID
 // - payment.PaymentID must be the same value as order.ID
-// - invoiceId legacy is not used
 type PaymentRepo interface {
 	// Reads
 	GetByID(ctx context.Context, id string) (*paymentdom.Payment, error)

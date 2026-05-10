@@ -11,22 +11,8 @@ import (
 )
 
 // ---------------------------------------------------
-// internal normalizers (UI label -> domain enum)
+// internal normalizers
 // ---------------------------------------------------
-
-func normalizeItemType(s string) pbdom.ItemType {
-	switch s {
-	case "tops", "トップス":
-		return pbdom.ItemTops
-	case "bottoms", "ボトムス":
-		return pbdom.ItemBottoms
-	case "other", "その他":
-		return pbdom.ItemOther
-	default:
-		// fall back: let domain validation reject unknown values
-		return pbdom.ItemType(s)
-	}
-}
 
 func normalizeTagType(s string) pbdom.ProductIDTagType {
 	switch s {
@@ -59,9 +45,23 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pb := pbdom.ProductBlueprint{
-		ProductName:      in.ProductName,
-		BrandID:          in.BrandId,
-		ItemType:         normalizeItemType(in.ItemType),
+		ProductName: in.ProductName,
+		BrandID:     in.BrandId,
+
+		// NOTE:
+		// ProductBlueprintCategory は productBlueprintCategory ドメインの正データから生成した
+		// denormalized snapshot を入れる想定。
+		// 現時点では CreateProductBlueprintInput 側の DTO が未改修の場合、
+		// 次の修正対象は request DTO / handler 入力になります。
+		ProductBlueprintCategory: pbdom.ProductBlueprintCategorySnapshot{
+			ID:     in.ProductBlueprintCategory.ID,
+			Code:   in.ProductBlueprintCategory.Code,
+			NameJa: in.ProductBlueprintCategory.NameJa,
+			NameEn: in.ProductBlueprintCategory.NameEn,
+			Kind:   in.ProductBlueprintCategory.Kind,
+			Path:   append([]string(nil), in.ProductBlueprintCategory.Path...),
+		},
+
 		Fit:              in.Fit,
 		Material:         in.Material,
 		Weight:           in.Weight,
@@ -120,10 +120,22 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 
 	// printed は更新させない（印刷済み化は別ユースケースが適切）
 	pb := pbdom.ProductBlueprint{
-		ID:               id,
-		ProductName:      in.ProductName,
-		BrandID:          in.BrandId,
-		ItemType:         normalizeItemType(in.ItemType),
+		ID:          id,
+		ProductName: in.ProductName,
+		BrandID:     in.BrandId,
+
+		// NOTE:
+		// ProductBlueprintCategory は productBlueprintCategory ドメインの正データから生成した
+		// denormalized snapshot を入れる想定。
+		ProductBlueprintCategory: pbdom.ProductBlueprintCategorySnapshot{
+			ID:     in.ProductBlueprintCategory.ID,
+			Code:   in.ProductBlueprintCategory.Code,
+			NameJa: in.ProductBlueprintCategory.NameJa,
+			NameEn: in.ProductBlueprintCategory.NameEn,
+			Kind:   in.ProductBlueprintCategory.Kind,
+			Path:   append([]string(nil), in.ProductBlueprintCategory.Path...),
+		},
+
 		Fit:              in.Fit,
 		Material:         in.Material,
 		Weight:           in.Weight,
@@ -163,9 +175,6 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request, id string) {
 
 // ---------------------------------------------------
 // POST /product-blueprints/{id}/restore
-// ---------------------------------------------------
-//
-// 復旧機能を廃止したため、このエンドポイントは未提供。
 // ---------------------------------------------------
 
 func (h *Handler) restore(w http.ResponseWriter, r *http.Request, id string) {
@@ -396,12 +405,16 @@ func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint)
 	}
 
 	return ProductBlueprintDetailOutput{
-		ID:               pb.ID,
-		ProductName:      pb.ProductName,
-		CompanyId:        pb.CompanyID,
-		BrandId:          brandId,
-		BrandName:        brandName,
-		ItemType:         string(pb.ItemType),
+		ID:          pb.ID,
+		ProductName: pb.ProductName,
+		CompanyId:   pb.CompanyID,
+		BrandId:     brandId,
+		BrandName:   brandName,
+
+		// NOTE:
+		// ProductBlueprintDetailOutput 側にも productBlueprintCategory 用フィールドを追加する必要があります。
+		// その修正が済むまではここでは既存フィールドのみ返します。
+
 		Fit:              pb.Fit,
 		Material:         pb.Material,
 		Weight:           pb.Weight,

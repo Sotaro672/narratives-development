@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\model_usecase.go
 package usecase
 
 import (
@@ -26,16 +27,8 @@ func NewModelUsecase(repo modeldom.RepositoryPort) *ModelUsecase {
 }
 
 // ------------------------------------------------------------
-// Queries (compat / convenience)
+// Queries
 // ------------------------------------------------------------
-
-// GetByID is a legacy-style alias: variationID を受け取り、ModelVariation を返す
-func (u *ModelUsecase) GetByID(ctx context.Context, id string) (*modeldom.ModelVariation, error) {
-	if id == "" {
-		return nil, modeldom.ErrInvalidID
-	}
-	return u.GetModelVariationByID(ctx, id)
-}
 
 // ★ HTTP の GET /models/variations/{variationId} 用の明示メソッド
 // ※ このメソッドは 1 箇所のみ定義（DuplicateMethod 回避）
@@ -47,11 +40,6 @@ func (u *ModelUsecase) GetModelVariationByID(ctx context.Context, variationID st
 		return nil, modeldom.ErrInvalidID
 	}
 	return u.repo.GetModelVariationByID(ctx, variationID)
-}
-
-// 互換：既存コードが呼んでいる可能性があるため残す
-func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
-	return u.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
 // （呼び出し側は GetModelVariations(ctx, productBlueprintID) を利用）

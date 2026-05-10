@@ -25,13 +25,16 @@ func toCatalogListDTO(l ldom.List) dto.CatalogListDTO {
 }
 
 func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProductBlueprintDTO {
+	if pb == nil {
+		return dto.CatalogProductBlueprintDTO{}
+	}
+
 	out := dto.CatalogProductBlueprintDTO{
 		ID:          pb.ID,
 		ProductName: pb.ProductName,
 		BrandID:     pb.BrandID,
 		CompanyID:   pb.CompanyID,
 
-		ItemType: fmt.Sprint(pb.ItemType),
 		Fit:      fmt.Sprint(pb.Fit),
 		Material: fmt.Sprint(pb.Material),
 

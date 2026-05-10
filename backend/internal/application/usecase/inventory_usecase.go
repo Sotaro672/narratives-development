@@ -134,7 +134,7 @@ func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, 
 }
 
 // ============================================================
-// CRUD (raw persistence access; no legacy fields assumed here)
+// CRUD
 // ============================================================
 
 func (uc *InventoryUsecase) Create(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {

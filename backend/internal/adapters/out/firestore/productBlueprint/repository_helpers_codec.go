@@ -72,6 +72,16 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		printed = v
 	}
 
+	// productBlueprintCategory denormalized snapshot
+	category := pbdom.ProductBlueprintCategorySnapshot{
+		ID:     getStr("productBlueprintCategoryId"),
+		Code:   getStr("productBlueprintCategoryCode"),
+		NameJa: getStr("productBlueprintCategoryNameJa"),
+		NameEn: getStr("productBlueprintCategoryNameEn"),
+		Kind:   getStr("productBlueprintCategoryKind"),
+		Path:   getStringSlice("productBlueprintCategoryPath"),
+	}
+
 	// modelRefs
 	var modelRefs []pbdom.ModelRef
 	if raw, ok := data["modelRefs"]; ok && raw != nil {
@@ -122,13 +132,13 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 	}
 
 	pb := pbdom.ProductBlueprint{
-		ID:          id,
-		ProductName: getStr("productName"),
-		BrandID:     getStr("brandId"),
-		ItemType:    pbdom.ItemType(getStr("itemType")),
-		Fit:         getStr("fit"),
-		Material:    getStr("material"),
-		Weight:      getFloat64(data["weight"]),
+		ID:                       id,
+		ProductName:              getStr("productName"),
+		BrandID:                  getStr("brandId"),
+		ProductBlueprintCategory: category,
+		Fit:                      getStr("fit"),
+		Material:                 getStr("material"),
+		Weight:                   getFloat64(data["weight"]),
 
 		QualityAssurance: dedupTrimStrings(getStringSlice("qualityAssurance")),
 		ProductIdTag: pbdom.ProductIDTag{
@@ -151,18 +161,27 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 }
 
 func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.Time) (map[string]any, error) {
+	category := v.ProductBlueprintCategory
+
 	m := map[string]any{
 		"productName": v.ProductName,
 		"brandId":     v.BrandID,
-		"itemType":    string(v.ItemType),
-		"fit":         v.Fit,
-		"material":    v.Material,
-		"weight":      v.Weight,
-		"assigneeId":  v.AssigneeID,
-		"companyId":   v.CompanyID,
-		"createdAt":   createdAt.UTC(),
-		"updatedAt":   updatedAt.UTC(),
-		"printed":     v.Printed,
+
+		"productBlueprintCategoryId":     category.ID,
+		"productBlueprintCategoryCode":   category.Code,
+		"productBlueprintCategoryNameJa": category.NameJa,
+		"productBlueprintCategoryNameEn": category.NameEn,
+		"productBlueprintCategoryKind":   category.Kind,
+		"productBlueprintCategoryPath":   append([]string(nil), category.Path...),
+
+		"fit":        v.Fit,
+		"material":   v.Material,
+		"weight":     v.Weight,
+		"assigneeId": v.AssigneeID,
+		"companyId":  v.CompanyID,
+		"createdAt":  createdAt.UTC(),
+		"updatedAt":  updatedAt.UTC(),
+		"printed":    v.Printed,
 	}
 
 	if len(v.QualityAssurance) > 0 {

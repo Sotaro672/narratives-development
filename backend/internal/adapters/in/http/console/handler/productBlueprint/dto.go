@@ -1,5 +1,27 @@
-// backend\internal\adapters\in\http\console\handler\productBlueprint\dto.go
+// backend/internal/adapters/in/http/console/handler/productBlueprint/dto.go
 package productBlueprint
+
+// ---------------------------------------------------
+// Common DTOs
+// ---------------------------------------------------
+
+type ProductBlueprintCategoryInput struct {
+	ID     string   `json:"id"`
+	Code   string   `json:"code"`
+	NameJa string   `json:"nameJa"`
+	NameEn string   `json:"nameEn"`
+	Kind   string   `json:"kind"`
+	Path   []string `json:"path"`
+}
+
+type ProductBlueprintCategoryOutput struct {
+	ID     string   `json:"id"`
+	Code   string   `json:"code"`
+	NameJa string   `json:"nameJa"`
+	NameEn string   `json:"nameEn"`
+	Kind   string   `json:"kind"`
+	Path   []string `json:"path"`
+}
 
 // ---------------------------------------------------
 // POST /product-blueprints
@@ -10,9 +32,11 @@ type ProductIdTagInput struct {
 }
 
 type CreateProductBlueprintInput struct {
-	ProductName      string            `json:"productName"`
-	BrandId          string            `json:"brandId"`
-	ItemType         string            `json:"itemType"`
+	ProductName string `json:"productName"`
+	BrandId     string `json:"brandId"`
+
+	ProductBlueprintCategory ProductBlueprintCategoryInput `json:"productBlueprintCategory"`
+
 	Fit              string            `json:"fit"`
 	Material         string            `json:"material"`
 	Weight           float64           `json:"weight"`
@@ -28,9 +52,11 @@ type CreateProductBlueprintInput struct {
 // ---------------------------------------------------
 
 type UpdateProductBlueprintInput struct {
-	ProductName      string            `json:"productName"`
-	BrandId          string            `json:"brandId"`
-	ItemType         string            `json:"itemType"`
+	ProductName string `json:"productName"`
+	BrandId     string `json:"brandId"`
+
+	ProductBlueprintCategory ProductBlueprintCategoryInput `json:"productBlueprintCategory"`
+
 	Fit              string            `json:"fit"`
 	Material         string            `json:"material"`
 	Weight           float64           `json:"weight"`
@@ -82,12 +108,14 @@ type ModelRefOutput struct {
 }
 
 type ProductBlueprintDetailOutput struct {
-	ID               string   `json:"id"`
-	ProductName      string   `json:"productName"`
-	CompanyId        string   `json:"companyId"`
-	BrandId          string   `json:"brandId"`
-	BrandName        string   `json:"brandName"`
-	ItemType         string   `json:"itemType"`
+	ID          string `json:"id"`
+	ProductName string `json:"productName"`
+	CompanyId   string `json:"companyId"`
+	BrandId     string `json:"brandId"`
+	BrandName   string `json:"brandName"`
+
+	ProductBlueprintCategory ProductBlueprintCategoryOutput `json:"productBlueprintCategory"`
+
 	Fit              string   `json:"fit"`
 	Material         string   `json:"material"`
 	Weight           float64  `json:"weight"`

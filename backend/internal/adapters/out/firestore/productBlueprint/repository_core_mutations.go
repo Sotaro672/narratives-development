@@ -38,7 +38,7 @@ func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, in pbdom.Crea
 		id,
 		in.ProductName,
 		in.BrandID,
-		in.ItemType,
+		in.ProductBlueprintCategory,
 		in.Fit,
 		in.Material,
 		in.Weight,
@@ -272,11 +272,11 @@ func (r *ProductBlueprintRepositoryFS) Update(ctx context.Context, id string, pa
 		}
 		pb.BrandID = v
 	}
-	if patch.ItemType != nil {
-		if !pbdom.IsValidItemType(*patch.ItemType) {
-			return pbdom.ProductBlueprint{}, pbdom.ErrInvalidItemType
+	if patch.ProductBlueprintCategory != nil {
+		if err := patch.ProductBlueprintCategory.Validate(); err != nil {
+			return pbdom.ProductBlueprint{}, err
 		}
-		pb.ItemType = *patch.ItemType
+		pb.ProductBlueprintCategory = *patch.ProductBlueprintCategory
 	}
 	if patch.Fit != nil {
 		pb.Fit = *patch.Fit

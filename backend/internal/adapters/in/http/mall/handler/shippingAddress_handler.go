@@ -74,7 +74,7 @@ func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 // --------------------
 
 // ✅ /me 系の uid は UserAuthMiddleware により context へ格納されている想定。
-// このハンドラではヘッダ/body から uid を受け取らない（旧式互換も削除）。
+// このハンドラではヘッダ/body から uid を受け取らない
 func (h *ShippingAddressHandler) requireUID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	uid, ok := middleware.CurrentUserUID(r)
 	if ok && uid != "" {
@@ -155,7 +155,7 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	// frontend/mall の入力欄に合わせる（zipCode/state/city/street/street2）
 	// ✅ docId は usecase がランダム採番（body では受け取らない）
-	// ✅ userId は /me の文脈では受け取らない（旧式互換削除）
+	// ✅ userId は /me の文脈では受け取らない
 	type createReq struct {
 		ZipCode string  `json:"zipCode"`
 		State   string  `json:"state"`
