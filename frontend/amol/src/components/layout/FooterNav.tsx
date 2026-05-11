@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { NavLink, useLocation } from "react-router-dom";
+import { ScanLine, ShoppingBag, UserRound } from "lucide-react";
 import "./footer.css";
 
 type FooterNavProps =
@@ -289,7 +290,7 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          💬
+          <ShoppingBag className="footer-nav__svg-icon" strokeWidth={2.2} />
         </span>
         <span className="footer-nav__label">ショップ</span>
       </NavLink>
@@ -302,7 +303,7 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          📷
+          <ScanLine className="footer-nav__svg-icon" strokeWidth={2.2} />
         </span>
         <span className="footer-nav__label">スキャン</span>
       </NavLink>
@@ -318,7 +319,7 @@ export default function FooterNav(props: FooterNavProps) {
           {avatarIcon ? (
             <img src={avatarIcon} alt="" className="footer-nav__avatar-icon" />
           ) : (
-            <span className="footer-nav__default-avatar-icon">👤</span>
+            <UserRound className="footer-nav__svg-icon" strokeWidth={2.2} />
           )}
         </span>
         <span className="footer-nav__label">ウォレット</span>

@@ -73,7 +73,6 @@ export function filterAndSortProductBlueprintRows(params: {
     work = work.filter((r) => assigneeFilter.includes(r.assigneeName));
   }
 
-  // ✅ tagFilter を廃止して printedFilter に置換
   if (printedFilter.length > 0) {
     work = work.filter((r) => matchPrintedFilter(Boolean((r as any).printed), printedFilter));
   }

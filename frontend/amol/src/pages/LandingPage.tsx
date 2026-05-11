@@ -47,14 +47,25 @@ export default function LandingPage() {
     <Layout title="AMOL" mode="landing">
       <section className="landing-page-hero">
         <div className="landing-page-hero__inner">
-          <p className="landing-page-hero__eyebrow">
-            ブロックチェーンで本物だけを届ける
-          </p>
-          <h1 className="landing-page-hero__title">AMOL</h1>
-          <div className="page-actions">
-            <Button variant="primary" onClick={() => navigate("/signup/select")}>
-              新規登録
-            </Button>
+          <div className="landing-page-hero__content">
+            <p className="landing-page-hero__eyebrow">
+              ブロックチェーンで本物だけを届ける
+            </p>
+
+            <h1 className="landing-page-hero__title">AMOL</h1>
+
+            <div className="page-actions">
+              <Button
+                variant="primary"
+                onClick={() => navigate("/signup/select")}
+              >
+                新規登録
+              </Button>
+            </div>
+          </div>
+
+          <div className="landing-page-hero__image-wrap" aria-hidden="true">
+            <img src="/hero.png" alt="" className="landing-page-hero__image" />
           </div>
         </div>
       </section>
