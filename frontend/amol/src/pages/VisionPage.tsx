@@ -1,6 +1,6 @@
 // frontend/amol/src/pages/VisionPage.tsx
 import "../styles/page-layout.css";
-import "../styles/landing-page.css";
+import "../styles/vision-page.css";
 
 import Layout from "../components/layout/Layout";
 
