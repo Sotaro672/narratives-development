@@ -90,9 +90,8 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.avatarStateRepo,
 	).
 		WithWalletService(avatarWalletSvc).
-		WithWalletRepo(r.walletRepo)
-
-	callOptionalMethod(avatarUC, "WithCartRepo", r.cartRepo)
+		WithWalletRepo(r.walletRepo).
+		WithCartRepo(r.cartRepo)
 
 	paymentMethodUC := uc.NewPaymentMethodUsecase(
 		r.paymentMethodRepo,

@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -308,36 +307,6 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 					e,
 				)
 			}
-		}
-	}
-
-	if !owned && h.walletUC.TokenQuery != nil {
-		base, e := h.walletUC.ResolveTokenByMintAddress(ctx, mintAddress)
-		if e == nil {
-			owned = resolvedTokenHasToAddress(base, snap.WalletAddress)
-			if owned {
-				log.Printf(
-					"[mall_me_wallet_handler] ownership ok by token.toAddress avatarId=%q walletAddress=%q mint=%q",
-					avatarID,
-					snap.WalletAddress,
-					mintAddress,
-				)
-			} else {
-				log.Printf(
-					"[mall_me_wallet_handler] ownership not matched by token.toAddress avatarId=%q walletAddress=%q mint=%q",
-					avatarID,
-					snap.WalletAddress,
-					mintAddress,
-				)
-			}
-		} else {
-			log.Printf(
-				"[mall_me_wallet_handler] WARN token ownership check failed avatarId=%q walletAddress=%q mint=%q err=%v",
-				avatarID,
-				snap.WalletAddress,
-				mintAddress,
-				e,
-			)
 		}
 	}
 
@@ -672,68 +641,7 @@ func sameStringSet(a []string, b []string) bool {
 
 // walletSnapshotHasMintPreferTokens uses only the canonical field "Tokens".
 func walletSnapshotHasMintPreferTokens(w walletdom.Wallet, mintAddress string) bool {
-	m := mintAddress
-	if m == "" {
-		return false
-	}
-
-	v := reflect.ValueOf(w)
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return false
-		}
-		v = v.Elem()
-	}
-	if !v.IsValid() || v.Kind() != reflect.Struct {
-		return false
-	}
-
-	f := v.FieldByName("Tokens")
-	if !f.IsValid() {
-		return false
-	}
-
-	if f.Kind() == reflect.Pointer {
-		if f.IsNil() {
-			return false
-		}
-		f = f.Elem()
-	}
-
-	if (f.Kind() != reflect.Slice && f.Kind() != reflect.Array) || f.Type().Elem().Kind() != reflect.String {
-		return false
-	}
-
-	for i := 0; i < f.Len(); i++ {
-		if f.Index(i).String() == m {
-			return true
-		}
-	}
-	return false
-}
-
-func resolvedTokenHasToAddress(res any, expectedWalletAddress string) bool {
-	if expectedWalletAddress == "" || res == nil {
-		return false
-	}
-
-	v := reflect.ValueOf(res)
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return false
-		}
-		v = v.Elem()
-	}
-	if !v.IsValid() || v.Kind() != reflect.Struct {
-		return false
-	}
-
-	f := v.FieldByName("ToAddress")
-	if !f.IsValid() || f.Kind() != reflect.String {
-		return false
-	}
-
-	return f.String() == expectedWalletAddress
+	return stringSliceContainsExact(w.Tokens, mintAddress)
 }
 
 func filterOutKeepFiles(in []usecase.SignedTokenContentFile) []usecase.SignedTokenContentFile {

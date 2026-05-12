@@ -217,36 +217,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 		}
 	}
 
-	if !owned && h.uc.TokenQuery != nil {
-		base, e := h.uc.ResolveTokenByMintAddress(ctx, mintAddress)
-		if e == nil {
-			owned = resolvedTokenHasToAddress(base, snap.WalletAddress)
-			if owned {
-				log.Printf(
-					"[mall_wallet_handler] ownership ok by token.toAddress avatarId=%q walletAddress=%q mint=%q",
-					avatarID,
-					snap.WalletAddress,
-					mintAddress,
-				)
-			} else {
-				log.Printf(
-					"[mall_wallet_handler] ownership not matched by token.toAddress avatarId=%q walletAddress=%q mint=%q",
-					avatarID,
-					snap.WalletAddress,
-					mintAddress,
-				)
-			}
-		} else {
-			log.Printf(
-				"[mall_wallet_handler] WARN token ownership check failed avatarId=%q walletAddress=%q mint=%q err=%v",
-				avatarID,
-				snap.WalletAddress,
-				mintAddress,
-				e,
-			)
-		}
-	}
-
 	if !owned {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintAddress is not owned by avatarId"})

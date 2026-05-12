@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"reflect"
 	"syscall"
 	"time"
 
@@ -20,47 +19,6 @@ import (
 	mallDI "narratives/internal/platform/di/mall"
 	shared "narratives/internal/platform/di/shared"
 )
-
-func logDepsFieldBestEffort(deps any, fieldName string) {
-	if deps == nil || fieldName == "" {
-		return
-	}
-
-	rv := reflect.ValueOf(deps)
-	if !rv.IsValid() {
-		return
-	}
-	if rv.Kind() == reflect.Interface && !rv.IsNil() {
-		rv = rv.Elem()
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		log.Printf("[boot] RouterDeps is not a struct: %T", deps)
-		return
-	}
-
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() {
-		log.Printf("[boot] RouterDeps.%s is MISSING", fieldName)
-		return
-	}
-	if !f.CanInterface() {
-		log.Printf("[boot] RouterDeps.%s exists but cannot interface", fieldName)
-		return
-	}
-
-	v := f.Interface()
-	if v == nil {
-		log.Printf("[boot] RouterDeps.%s is NIL", fieldName)
-		return
-	}
-	log.Printf("[boot] RouterDeps.%s: %T", fieldName, v)
-}
 
 type closer interface {
 	Close() error
@@ -127,11 +85,7 @@ func main() {
 	defer closeIfPossible("console container", consoleCont)
 
 	deps := consoleCont.RouterDeps()
-
-	logDepsFieldBestEffort(deps, "AuthMw")
-	logDepsFieldBestEffort(deps, "BootstrapMw")
-	logDepsFieldBestEffort(deps, "TokenBPReview")
-	logDepsFieldBestEffort(deps, "ProductBPReview")
+	log.Printf("[boot] console router deps built")
 
 	// ------------------------------------------------------------
 	// Build full mux BEFORE ListenAndServe
