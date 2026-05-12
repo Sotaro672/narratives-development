@@ -11,7 +11,14 @@ const team = [
   {
     name: "奥岡 曹太朗",
     role: "開発者",
-    bio: "世界で最も簡単にブロックチェーントークンを用いた真贋証明ができるECプラットフォームを開発しています。購入客には真贋証明をコストではなく、コンテンツを閲覧し、他のユーザーと共有、交換できる楽しい体験として提供できる場を構築してまいります。",
+    bio: "商流で世界を繋げることで平和を築いていくことを目標に、ブロックチェーン技術でお客様の信用と信頼を守ってまいります。",
+    career: [
+      "2020 東京農業大学 生物応用化学科（農芸化学科）卒業",
+      "2022 京都大学大学院農学研究科地域環境科学専攻 土壌学研究室 修士課程修了",
+      "2022 NTCインターナショナル株式会社 勤務（国際協力コンサルティング）",
+      "2024 株式会社 Mover & Company 勤務（IT保守開発コンサルティング）",
+      "2026 株式会社AMOL 設立",
+    ],
     image: "/founder.jpg",
   },
 ];
@@ -79,7 +86,12 @@ export default function LandingPage() {
                 商品のQRコードをスキャンするだけで、製品情報、コメント、所有履歴にアクセスでき、本物であると瞬時に分かります。
               </p>
               <div className="landing-page-feature-card__image-placeholder">
-                画像１
+                <img
+                  src="/scan.png"
+                  alt="商品QRコードをスキャンした結果画面"
+                  className="landing-page-feature-card__image"
+                  loading="lazy"
+                />
               </div>
             </article>
 
@@ -89,7 +101,12 @@ export default function LandingPage() {
                 商品を誰が所有しているかがリアルタイムで分かり、販売後も新商品の情報を本当に興味のある人に届けることができます。
               </p>
               <div className="landing-page-feature-card__image-placeholder">
-                画像２
+                <img
+                  src="/comment.png"
+                  alt="商品所有者とのコメント画面"
+                  className="landing-page-feature-card__image"
+                  loading="lazy"
+                />
               </div>
             </article>
           </div>
@@ -121,6 +138,17 @@ export default function LandingPage() {
                     <p className="landing-page-team-card__bio">
                       {member.bio}
                     </p>
+
+                    <ul className="landing-page-team-card__career">
+                      {member.career.map((item) => (
+                        <li
+                          key={item}
+                          className="landing-page-team-card__career-item"
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </article>
               ))}

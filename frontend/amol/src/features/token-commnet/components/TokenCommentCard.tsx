@@ -306,7 +306,6 @@ export default function TokenCommentCard({
   replyPosting,
   onCommentBodyChange,
   onReplyBodyChange,
-  onRefreshComments,
   onPostComment,
   onToggleExpanded,
   onLikeComment,
@@ -333,15 +332,6 @@ export default function TokenCommentCard({
           <span className="token-comment-card__icon">💬</span>
           <h2 className="token-comment-card__title">コメント</h2>
         </div>
-
-        <button
-          type="button"
-          className="token-comment-card__refresh-button"
-          disabled={!tokenBlueprintId || commentsLoading}
-          onClick={() => void onRefreshComments()}
-        >
-          {commentsLoading ? "更新中..." : "更新"}
-        </button>
       </div>
 
       {!tokenBlueprintId ? (
@@ -355,7 +345,7 @@ export default function TokenCommentCard({
               <textarea
                 className="token-comment-form__textarea"
                 value={commentBody}
-                rows={4}
+                rows={1}
                 disabled={posting || loading}
                 placeholder="コメントを書く…"
                 onChange={handleCommentBodyChange}

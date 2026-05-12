@@ -65,8 +65,42 @@
 .landing-page-team-card__bio {
   margin: 16px 0 0;
   text-align: left;
-  line-height: 1.8;
+  font-size: 15px;
+  line-height: 1.9;
+  font-weight: 500;
+  color: var(--color-text, #0f172a);
+}
+
+.landing-page-team-card__career {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.landing-page-team-card__career-item {
+  position: relative;
+  padding-left: 14px;
+  font-size: 14px;
+  line-height: 1.65;
+  font-weight: 400;
   color: var(--color-muted-text, #64748b);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.landing-page-team-card__career-item::before {
+  content: "";
+  position: absolute;
+  top: 0.75em;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.5;
 }
 
 @media (min-width: 641px) {
@@ -88,5 +122,24 @@
     justify-content: center;
     padding: 40px;
     text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-page-team-card__body {
+    padding: 28px 24px;
+  }
+
+  .landing-page-team-card__bio {
+    text-align: left;
+  }
+
+  .landing-page-team-card__career {
+    gap: 8px;
+  }
+
+  .landing-page-team-card__career-item {
+    font-size: 13px;
+    line-height: 1.7;
   }
 }

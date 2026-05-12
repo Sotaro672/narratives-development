@@ -101,6 +101,19 @@ frontend/
 │  │  │  ├─ constants.ts
 │  │  │  └─ types.ts
 │  │  │
+│  │  ├─ contents/
+│  │  │  ├─ api/
+│  │  │  │  └─ contentsApi.ts
+│  │  │  ├─ components/
+│  │  │  │  ├─ ContentsDetailPanel.tsx
+│  │  │  │  ├─ ContentsMediaPanel.tsx
+│  │  │  │  └─ ContentsTokenSummaryCard.tsx
+│  │  │  ├─ hooks/
+│  │  │  │  └─ useContentsPage.ts
+│  │  │  ├─ utils/
+│  │  │  │  └─ metadata.ts
+│  │  │  └─ types.ts
+│  │  │
 │  │  ├─ scan-result/
 │  │  │  ├─ api/
 │  │  │  │  ├─ scanResultApi.ts

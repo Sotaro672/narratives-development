@@ -37,27 +37,6 @@
   line-height: 1.4;
 }
 
-.token-comment-card__refresh-button {
-  appearance: none;
-  -webkit-appearance: none;
-  flex: 0 0 auto;
-  min-height: 32px;
-  padding: 6px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 9999px;
-  background: #fff;
-  color: #374151;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.token-comment-card__refresh-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .token-comment-card__message {
   margin: 0;
   color: #6b7280;
@@ -77,8 +56,9 @@
 }
 
 .token-comment-form {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .token-comment-form__textarea,
@@ -94,6 +74,17 @@
   font: inherit;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.token-comment-form__textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  resize: none;
+  overflow-y: hidden;
+  line-height: 20px;
 }
 
 .token-comment-form__textarea:disabled,
@@ -117,6 +108,13 @@
   font-size: 13px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.token-comment-form__button {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .token-comment-form__button:disabled,
