@@ -8,6 +8,8 @@ import type {
   InspectionBatchDTO,
   MintDTO,
 } from "../../infrastructure/api/mintRequestApi";
+import { completeInspectionByProductionId } from "../../infrastructure/api/mintRequestApi";
+
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
@@ -70,6 +72,8 @@ export function useMintRequestDetail() {
 
   const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
   const [isMinting, setIsMinting] = React.useState(false);
+  const [isCompletingInspection, setIsCompletingInspection] =
+    React.useState(false);
 
   const title = `ミント申請詳細`;
 
@@ -77,6 +81,21 @@ export function useMintRequestDetail() {
     if (!selectedBrandId) return "";
     return brandOptions.find((b) => b.id === selectedBrandId)?.name ?? "";
   }, [brandOptions, selectedBrandId]);
+
+  const reloadDetail = React.useCallback(async () => {
+    if (!requestId) return;
+
+    const rid = String(requestId).trim();
+    if (!rid) return;
+
+    const detail = await getMintRequestDetail(mintRequestRepo, rid);
+
+    setInspectionBatch((detail.inspectionBatch ?? null) as any);
+    setMintDTO((detail.mintDTO ?? null) as any);
+    setProductBlueprintId(
+      detail.productBlueprintId ? detail.productBlueprintId : "",
+    );
+  }, [requestId, mintRequestRepo]);
 
   React.useEffect(() => {
     if (!requestId) return;
@@ -239,6 +258,30 @@ export function useMintRequestDetail() {
     mintRequestedBrandId,
   } = useMintInfo({ mintDTO, inspectionBatch, pbPatch });
 
+  const inspectionStatus = React.useMemo(() => {
+    return String((inspectionBatch as any)?.status ?? "").trim();
+  }, [inspectionBatch]);
+
+  const isInspectionCompleted = React.useMemo(() => {
+    return inspectionStatus === "completed";
+  }, [inspectionStatus]);
+
+  const showCompleteInspectionButton = React.useMemo(() => {
+    return Boolean(
+      inspectionBatch &&
+        !loading &&
+        !error &&
+        !isMintRequested &&
+        !isInspectionCompleted,
+    );
+  }, [
+    inspectionBatch,
+    loading,
+    error,
+    isMintRequested,
+    isInspectionCompleted,
+  ]);
+
   const showMintButton = !isMintRequested;
   const showBrandSelectorCard = !isMintRequested;
   const showTokenSelectorCard = !isMintRequested;
@@ -266,6 +309,59 @@ export function useMintRequestDetail() {
   const { tokenBlueprintPatch } =
     useTokenBlueprintPatch(tokenBlueprintIdForPatch);
 
+  const handleCompleteInspection = React.useCallback(async () => {
+    if (isCompletingInspection || isMinting) {
+      return;
+    }
+
+    if (!inspectionBatch) {
+      alert("検査バッチ情報が取得できていません。");
+      return;
+    }
+
+    const productionId = String(
+      (inspectionBatch as any).productionId ?? requestId ?? "",
+    ).trim();
+
+    if (!productionId) {
+      alert("productionId が特定できません。");
+      return;
+    }
+
+    const ok = window.confirm(
+      "検品を完了します。未入力の検品結果は合格として確定されます。よろしいですか？",
+    );
+    if (!ok) return;
+
+    setIsCompletingInspection(true);
+
+    try {
+      const updatedBatch = await completeInspectionByProductionId(productionId);
+
+      if (updatedBatch) {
+        setInspectionBatch(updatedBatch as any);
+      }
+
+      await reloadDetail();
+
+      alert("検品を完了しました。");
+    } catch (e: any) {
+      alert(
+        `検品完了に失敗しました: ${
+          e?.message ?? "不明なエラーが発生しました"
+        }`,
+      );
+    } finally {
+      setIsCompletingInspection(false);
+    }
+  }, [
+    inspectionBatch,
+    isCompletingInspection,
+    isMinting,
+    reloadDetail,
+    requestId,
+  ]);
+
   const handleMint = React.useCallback(async () => {
     if (isMinting) {
       return;
@@ -273,6 +369,11 @@ export function useMintRequestDetail() {
 
     if (!inspectionBatch) {
       alert("検査バッチ情報が取得できていません。");
+      return;
+    }
+
+    if (!isInspectionCompleted) {
+      alert("先に検品を完了してください。");
       return;
     }
 
@@ -316,6 +417,7 @@ export function useMintRequestDetail() {
     }
   }, [
     inspectionBatch,
+    isInspectionCompleted,
     isMinting,
     navigate,
     requestId,
@@ -390,9 +492,14 @@ export function useMintRequestDetail() {
     hasMint,
 
     isMintRequested,
+    isInspectionCompleted,
     showMintButton,
     showBrandSelectorCard,
     showTokenSelectorCard,
+
+    showCompleteInspectionButton,
+    isCompletingInspection,
+    handleCompleteInspection,
 
     requestedByName,
 

@@ -184,3 +184,80 @@ export async function fetchInspectionByProductionIdHTTP(
 
   return inspection as InspectionBatchDTO;
 }
+
+// ===============================
+// complete: /products/inspections/complete
+// ===============================
+
+export async function completeInspectionHTTP(
+  productionId: string,
+): Promise<InspectionBatchDTO | null> {
+  const pid = String(productionId ?? "").trim();
+  if (!pid) throw new Error("productionId が空です");
+
+  const authHeaders = await getAuthHeadersOrThrow();
+  const authValue = getAuthValueOrThrow(authHeaders);
+  const idToken = extractIdTokenForLog(authValue);
+
+  const url = `${API_BASE}/products/inspections/complete`;
+
+  const headers = {
+    ...authHeaders,
+    "Content-Type": "application/json",
+  };
+
+  logHttpRequest("completeInspectionHTTP", {
+    method: "PATCH",
+    url,
+    headers: {
+      Authorization: idToken
+        ? `Bearer ${safeTokenHint(idToken)}`
+        : safeTokenHint(authValue),
+      "Content-Type": "application/json",
+    },
+    productionId: pid,
+  });
+
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({
+      productionId: pid,
+    }),
+  });
+
+  logHttpResponse("completeInspectionHTTP", {
+    method: "PATCH",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    logHttpError("completeInspectionHTTP", {
+      method: "PATCH",
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      bodyPreview: body ? body.slice(0, 800) : "",
+    });
+    throw new Error(
+      `Failed to complete inspection: ${res.status} ${res.statusText}${
+        body ? ` body=${body.slice(0, 400)}` : ""
+      }`,
+    );
+  }
+
+  const json = (await res.json().catch(() => null)) as any;
+
+  if (!json) return null;
+  if (looksLikeInspectionBatchDTO(json)) return json as InspectionBatchDTO;
+
+  const inspection = (json?.inspection ?? json?.data ?? null) as any;
+  if (looksLikeInspectionBatchDTO(inspection)) {
+    return inspection as InspectionBatchDTO;
+  }
+
+  return null;
+}

@@ -7,7 +7,7 @@ import {
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
-import { Coins } from "lucide-react";
+import { CheckCircle2, Coins } from "lucide-react";
 
 import {
   Popover,
@@ -84,6 +84,10 @@ export default function MintRequestDetail() {
     showBrandSelectorCard,
     showTokenSelectorCard,
 
+    showCompleteInspectionButton,
+    isCompletingInspection,
+    handleCompleteInspection,
+
     scheduledBurnDate,
     setScheduledBurnDate,
 
@@ -157,7 +161,39 @@ export default function MintRequestDetail() {
               </CardContent>
             </Card>
           ) : (
-            <InspectionResultCard data={inspectionCardData} />
+            <>
+              <InspectionResultCard data={inspectionCardData} />
+
+              {showCompleteInspectionButton && (
+                <Card className="mint-request-card">
+                  <CardContent className="mint-request-card__body">
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          検品完了
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          除外対象がない場合でも、ここで検品完了を確定できます。
+                          完了後、未入力の検品結果は合格として扱われます。
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handleCompleteInspection}
+                        disabled={isCompletingInspection || isMinting}
+                        className="mint-request-card__button flex items-center gap-2"
+                      >
+                        <CheckCircle2 size={16} />
+                        {isCompletingInspection
+                          ? "検品完了中..."
+                          : "検品を完了する"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
 
           {tokenBlueprintCardVm && (
@@ -299,7 +335,9 @@ export default function MintRequestDetail() {
                         type="button"
                         className={
                           "pb-select__row" +
-                          (selectedTokenBlueprintId === tb.id ? " is-active" : "")
+                          (selectedTokenBlueprintId === tb.id
+                            ? " is-active"
+                            : "")
                         }
                         onClick={() => handleSelectTokenBlueprint(tb.id)}
                         disabled={isMinting}

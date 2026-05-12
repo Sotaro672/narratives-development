@@ -126,6 +126,7 @@ export async function fetchMintsMapByInspectionIds(
     const m = await anyRepo.listMintsByInspectionIDsHTTP(ids);
     return (m ?? {}) as Record<string, MintListRowDTO>;
   }
+
   return {};
 }
 
@@ -159,5 +160,31 @@ export async function fetchMintsDTOMapByInspectionIds(
 export async function fetchInspectionByProductionId(
   productionId: string,
 ): Promise<InspectionBatchDTO | null> {
-  return fetchInspectionByProductionIdHTTP(productionId);
+  const id = String(productionId ?? "").trim();
+  if (!id) return null;
+
+  return fetchInspectionByProductionIdHTTP(id);
+}
+
+/**
+ * productionId に紐づく inspection を検品完了にする。
+ *
+ * ネガティブ制では、complete 時に notYet の productId が passed として確定される。
+ */
+export async function completeInspectionByProductionId(
+  productionId: string,
+): Promise<InspectionBatchDTO | null> {
+  const id = String(productionId ?? "").trim();
+
+  if (!id) {
+    throw new Error("productionId is required");
+  }
+
+  const anyRepo = repo as any;
+
+  if (typeof anyRepo.completeInspectionHTTP === "function") {
+    return (await anyRepo.completeInspectionHTTP(id)) as InspectionBatchDTO;
+  }
+
+  throw new Error("completeInspectionHTTP is not implemented");
 }
