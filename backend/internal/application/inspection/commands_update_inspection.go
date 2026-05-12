@@ -11,11 +11,9 @@ import (
 
 // inspections 内の 1 productId 分を更新する。
 //
-// ネガティブ制では、Inspector から明示的に入力できる結果は
-// failed / notManufactured のみです。
-//
-// passed は CompleteInspectionForProduction 実行時に、
-// notYet の productId が一括で確定されることで付与されます。
+// ネガティブ制では、通常は failed / notManufactured を明示的に入力します。
+// ただし、誤って failed / notManufactured にした productId を戻すため、
+// 修正操作として passed への更新も許可します。
 func (u *InspectionUsecase) UpdateInspectionForProduct(
 	ctx context.Context,
 	productionID string,
@@ -43,7 +41,8 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
 	}
 
-	if *result != inspectiondom.InspectionFailed &&
+	if *result != inspectiondom.InspectionPassed &&
+		*result != inspectiondom.InspectionFailed &&
 		*result != inspectiondom.InspectionNotManufactured {
 		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
 	}
@@ -67,6 +66,11 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	}
 
 	switch *result {
+	case inspectiondom.InspectionPassed:
+		if err := batch.MarkPassed(pdID, *inspectedBy, atUTC); err != nil {
+			return inspectiondom.InspectionBatch{}, err
+		}
+
 	case inspectiondom.InspectionFailed:
 		if err := batch.MarkFailed(pdID, *inspectedBy, atUTC); err != nil {
 			return inspectiondom.InspectionBatch{}, err
@@ -91,6 +95,5 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 			return inspectiondom.InspectionBatch{}, err
 		}
 	}
-
 	return updated, nil
 }

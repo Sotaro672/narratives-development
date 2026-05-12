@@ -40,7 +40,9 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 	}
 
 	switch *req.InspectionResult {
-	case inspectiondom.InspectionFailed, inspectiondom.InspectionNotManufactured:
+	case inspectiondom.InspectionPassed,
+		inspectiondom.InspectionFailed,
+		inspectiondom.InspectionNotManufactured:
 	default:
 		writeError(w, http.StatusBadRequest, inspectiondom.ErrInvalidInspectionResult.Error())
 		return

@@ -18,12 +18,14 @@ class InspectionDetailActions {
     required VoidCallback setSubmittingFalse,
     required Future<void> Function() reload,
     required InspectorProductDetail detail,
-    required String result, // 'failed' or 'notManufactured'
+    required String result, // 'passed', 'failed', or 'notManufactured'
     required bool submitting,
   }) async {
     if (submitting) return;
 
-    if (result != 'failed' && result != 'notManufactured') {
+    if (result != 'passed' &&
+        result != 'failed' &&
+        result != 'notManufactured') {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('送信できる検品結果ではありません')));
