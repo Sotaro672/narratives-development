@@ -2,10 +2,7 @@
 package console
 
 import (
-	"context"
-	"errors"
 	"os"
-	"strings"
 
 	fsrepo "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
@@ -18,7 +15,6 @@ import (
 	authuc "narratives/internal/application/usecase/auth"
 	avataruc "narratives/internal/application/usecase/avatar"
 	listuc "narratives/internal/application/usecase/list"
-	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
@@ -270,7 +266,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	)
 
 	authBootstrapSvc := &authuc.BootstrapService{
-		Members: &authMemberRepoAdapter{repo: r.memberRepo},
+		Members: &authMemberRepoAdapter{
+			repo: r.memberRepo,
+		},
 		Companies: &authCompanyRepoAdapter{
 			repo: r.companyRepo,
 		},
@@ -319,144 +317,4 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 		authBootstrapSvc: authBootstrapSvc,
 	}
-}
-
-// ========================================
-// invitation token repository adapter
-// ========================================
-
-type invitationTokenRepositoryAdapter struct {
-	repo memdom.InvitationTokenRepository
-}
-
-func (a *invitationTokenRepositoryAdapter) ResolveInvitationInfoByToken(
-	ctx context.Context,
-	token string,
-) (memdom.InvitationInfo, error) {
-	if a == nil || a.repo == nil {
-		return memdom.InvitationInfo{}, errors.New("invitationTokenRepositoryAdapter.ResolveInvitationInfoByToken: repo is nil")
-	}
-
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return memdom.InvitationInfo{}, memdom.ErrInvitationTokenNotFound
-	}
-
-	return a.repo.ResolveInvitationInfoByToken(ctx, token)
-}
-
-func (a *invitationTokenRepositoryAdapter) CreateInvitationToken(
-	ctx context.Context,
-	info memdom.InvitationInfo,
-) (string, error) {
-	if a == nil || a.repo == nil {
-		return "", errors.New("invitationTokenRepositoryAdapter.CreateInvitationToken: repo is nil")
-	}
-
-	info.MemberID = strings.TrimSpace(info.MemberID)
-	info.CompanyID = strings.TrimSpace(info.CompanyID)
-	info.Email = strings.TrimSpace(info.Email)
-
-	return a.repo.CreateInvitationToken(ctx, info)
-}
-
-func (a *invitationTokenRepositoryAdapter) ConsumeInvitationToken(
-	ctx context.Context,
-	token string,
-) error {
-	if a == nil || a.repo == nil {
-		return errors.New("invitationTokenRepositoryAdapter.ConsumeInvitationToken: repo is nil")
-	}
-
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return memdom.ErrInvitationTokenNotFound
-	}
-
-	return a.repo.ConsumeInvitationToken(ctx, token)
-}
-
-// ========================================
-// auth.BootstrapService 用アダプタ
-// adapter_auth.go を廃止する前提でこのファイルに集約
-// ========================================
-
-// memdom.Repository -> auth.MemberRepository
-type authMemberRepoAdapter struct {
-	repo memdom.Repository
-}
-
-func (a *authMemberRepoAdapter) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*memdom.Member, error) {
-	if a == nil || a.repo == nil {
-		return nil, errors.New("authMemberRepoAdapter.GetByFirebaseUID: repo is nil")
-	}
-
-	firebaseUID = strings.TrimSpace(firebaseUID)
-	if firebaseUID == "" {
-		return nil, memdom.ErrNotFound
-	}
-
-	v, err := a.repo.GetByFirebaseUID(ctx, firebaseUID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &v, nil
-}
-
-func (a *authMemberRepoAdapter) Create(ctx context.Context, m *memdom.Member) error {
-	if a == nil || a.repo == nil {
-		return errors.New("authMemberRepoAdapter.Create: repo is nil")
-	}
-	if m == nil {
-		return errors.New("authMemberRepoAdapter.Create: nil member")
-	}
-
-	m.UID = strings.TrimSpace(m.UID)
-	m.Email = strings.TrimSpace(m.Email)
-	m.FirstName = strings.TrimSpace(m.FirstName)
-	m.LastName = strings.TrimSpace(m.LastName)
-	m.FirstNameKana = strings.TrimSpace(m.FirstNameKana)
-	m.LastNameKana = strings.TrimSpace(m.LastNameKana)
-	m.CompanyID = strings.TrimSpace(m.CompanyID)
-	m.Status = strings.TrimSpace(m.Status)
-
-	saved, err := a.repo.Create(ctx, *m)
-	if err != nil {
-		return err
-	}
-
-	*m = saved
-	return nil
-}
-
-// CompanyRepositoryFS -> auth.CompanyRepository
-type authCompanyRepoAdapter struct {
-	repo *fsrepo.CompanyRepositoryFS
-}
-
-func (a *authCompanyRepoAdapter) NewID(ctx context.Context) (string, error) {
-	if a == nil || a.repo == nil || a.repo.Client == nil {
-		return "", errors.New("authCompanyRepoAdapter.NewID: repo or client is nil")
-	}
-
-	doc := a.repo.Client.Collection("companies").NewDoc()
-	return doc.ID, nil
-}
-
-func (a *authCompanyRepoAdapter) Save(ctx context.Context, c *companydom.Company) error {
-	if a == nil || a.repo == nil {
-		return errors.New("authCompanyRepoAdapter.Save: repo is nil")
-	}
-	if c == nil {
-		return errors.New("authCompanyRepoAdapter.Save: nil company")
-	}
-
-	saved, err := a.repo.Save(ctx, *c, nil)
-	if err != nil {
-		return err
-	}
-
-	*c = saved
-	return nil
 }

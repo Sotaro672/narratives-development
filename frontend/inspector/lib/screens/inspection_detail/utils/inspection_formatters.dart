@@ -5,6 +5,8 @@ String formatInspectionResultLabel(String? raw) {
       return '合格';
     case 'failed':
       return '不合格';
+    case 'notManufactured':
+      return '未製造';
     case 'notYet':
     case null:
     default:

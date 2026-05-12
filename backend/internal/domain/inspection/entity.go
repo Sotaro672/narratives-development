@@ -13,10 +13,18 @@ import (
 type InspectionResult string
 
 const (
-	InspectionNotYet          InspectionResult = "notYet"          // 未検査
-	InspectionPassed          InspectionResult = "passed"          // 合格
-	InspectionFailed          InspectionResult = "failed"          // 不合格
-	InspectionNotManufactured InspectionResult = "notManufactured" // 生産されていない（欠品など）
+	// InspectionNotYet は、まだ Inspector で明示的な結果が入力されていない状態です。
+	// ネガティブ制では、Complete 時に passed として確定します。
+	InspectionNotYet InspectionResult = "notYet"
+
+	// InspectionPassed は、実際に製造され、ミント対象となる productId です。
+	InspectionPassed InspectionResult = "passed"
+
+	// InspectionFailed は、不良などによりミント対象外となる productId です。
+	InspectionFailed InspectionResult = "failed"
+
+	// InspectionNotManufactured は、余ったラベルなど、実際には製造されなかった productId です。
+	InspectionNotManufactured InspectionResult = "notManufactured"
 )
 
 // ===============================
@@ -51,7 +59,7 @@ type InspectionBatch struct {
 	Status       InspectionStatus `json:"status"`
 	MintID       *string          `json:"mintId,omitempty"` // mints テーブルのID（未申請なら nil）
 	Quantity     int              `json:"quantity"`         // item の合計数
-	TotalPassed  int              `json:"totalPassed"`      // 合格数
+	TotalPassed  int              `json:"totalPassed"`      // ミント対象となる passed の数
 	Inspections  []InspectionItem `json:"inspections"`
 }
 
@@ -65,25 +73,31 @@ var (
 	ErrInvalidInspectionProductIDs   = errors.New("inspection: invalid productIds")
 	ErrInvalidInspectionMintID       = errors.New("inspection: invalid mintId")
 
-	ErrInvalidInspectionResult = errors.New("inspection: invalid inspectionResult")
-	ErrInvalidInspectedBy      = errors.New("inspection: invalid inspectedBy")
-	ErrInvalidInspectedAt      = errors.New("inspection: invalid inspectedAt")
-	ErrNotFound                = errors.New("inspection: not found")
+	ErrInvalidInspectionResult      = errors.New("inspection: invalid inspectionResult")
+	ErrInvalidInspectedBy           = errors.New("inspection: invalid inspectedBy")
+	ErrInvalidInspectedAt           = errors.New("inspection: invalid inspectedAt")
+	ErrInvalidInspectionQuantity    = errors.New("inspection: invalid quantity")
+	ErrInvalidInspectionTotalPassed = errors.New("inspection: invalid totalPassed")
+	ErrInconsistentInspectionTotals = errors.New("inspection: inconsistent totals")
+
+	ErrNotFound = errors.New("inspection: not found")
 )
 
 // ===============================
 // Constructors
 // ===============================
 
-// quantity / totalPassed / mintId はコンストラクタ内で初期化する。
+// NewInspectionBatch は、1 production に対応する InspectionBatch を作成します。
+//
+// ネガティブ制では、初期状態の各 productId は notYet です。
+// Inspector では failed / notManufactured のみを明示的に入力し、
+// Complete 時に notYet の productId を passed として確定します。
 func NewInspectionBatch(
 	productionID string,
 	status InspectionStatus,
 	productIDs []string,
 ) (InspectionBatch, error) {
-
-	pid := productionID
-	if pid == "" {
+	if productionID == "" {
 		return InspectionBatch{}, ErrInvalidInspectionProductionID
 	}
 
@@ -92,7 +106,6 @@ func NewInspectionBatch(
 	}
 
 	ids := normalizeIDList(productIDs)
-
 	if len(ids) == 0 {
 		return InspectionBatch{}, ErrInvalidInspectionProductIDs
 	}
@@ -110,13 +123,15 @@ func NewInspectionBatch(
 	}
 
 	batch := InspectionBatch{
-		ProductionID: pid,
+		ProductionID: productionID,
 		Status:       status,
 		MintID:       nil,
 		Quantity:     len(inspections),
 		TotalPassed:  0,
 		Inspections:  inspections,
 	}
+
+	batch.RecalculateTotals()
 
 	if err := batch.validate(); err != nil {
 		return InspectionBatch{}, err
@@ -133,9 +148,11 @@ func (b InspectionBatch) validate() error {
 	if b.ProductionID == "" {
 		return ErrInvalidInspectionProductionID
 	}
+
 	if !IsValidInspectionStatus(b.Status) {
 		return ErrInvalidInspectionStatus
 	}
+
 	if len(b.Inspections) == 0 {
 		return ErrInvalidInspectionProductIDs
 	}
@@ -145,21 +162,29 @@ func (b InspectionBatch) validate() error {
 	}
 
 	if b.Quantity != len(b.Inspections) || b.Quantity <= 0 {
-		return errors.New("inspection: invalid quantity")
+		return ErrInvalidInspectionQuantity
 	}
-	if b.TotalPassed < 0 {
-		return errors.New("inspection: invalid totalPassed")
+
+	if b.TotalPassed < 0 || b.TotalPassed > b.Quantity {
+		return ErrInvalidInspectionTotalPassed
 	}
+
+	productIDs := make(map[string]struct{}, len(b.Inspections))
+
+	actualPassed := 0
 
 	for _, ins := range b.Inspections {
 		if ins.ProductID == "" {
 			return ErrInvalidInspectionProductIDs
 		}
 
-		// InspectionResult が nil の場合は「まだ何も書いていない」扱いにして
-		// inspectedBy/inspectedAt が入っていてもエラーにしない。
+		if _, exists := productIDs[ins.ProductID]; exists {
+			return ErrInvalidInspectionProductIDs
+		}
+		productIDs[ins.ProductID] = struct{}{}
+
 		if ins.InspectionResult == nil {
-			continue
+			return ErrInvalidInspectionResult
 		}
 
 		if !IsValidInspectionResult(*ins.InspectionResult) {
@@ -167,9 +192,9 @@ func (b InspectionBatch) validate() error {
 		}
 
 		switch *ins.InspectionResult {
+		case InspectionPassed:
+			actualPassed++
 
-		// ★ 検査結果が確定している状態は by / at 必須
-		case InspectionPassed, InspectionFailed, InspectionNotManufactured:
 			if ins.InspectedBy == nil || *ins.InspectedBy == "" {
 				return ErrInvalidInspectedBy
 			}
@@ -177,33 +202,47 @@ func (b InspectionBatch) validate() error {
 				return ErrInvalidInspectedAt
 			}
 
-		// ★ notYet の場合は互換性のため、by/at が入っていてもエラーにしない
+		case InspectionFailed, InspectionNotManufactured:
+			if ins.InspectedBy == nil || *ins.InspectedBy == "" {
+				return ErrInvalidInspectedBy
+			}
+			if ins.InspectedAt == nil || ins.InspectedAt.IsZero() {
+				return ErrInvalidInspectedAt
+			}
+
 		case InspectionNotYet:
-			// 何もしない（coherence はチェックしない）
+			if b.Status == InspectionStatusCompleted {
+				return ErrInvalidInspectionResult
+			}
+
+			if ins.InspectedBy != nil || ins.InspectedAt != nil {
+				return ErrInvalidInspectionResult
+			}
 		}
 	}
+
+	if b.TotalPassed != actualPassed {
+		return ErrInconsistentInspectionTotals
+	}
+
 	return nil
 }
 
-// Exported wrapper
+// Validate は InspectionBatch の公開バリデーションメソッドです。
 func (b InspectionBatch) Validate() error {
 	return b.validate()
 }
 
-// ------------------------------------------------------
-// Complete: 検品完了処理（usecase から利用される）
-// ------------------------------------------------------
+// Complete は検品バッチを完了状態にします。
 //
-// - 引数 by / at が不正なら ErrInvalidInspectedBy / ErrInvalidInspectedAt を返す
-// - InspectionResult が nil or notYet の行は notManufactured にし、by/at を埋める
-// - バッチの Status を completed に変更
+// ネガティブ制では、Inspector で明示的に入力するのは failed / notManufactured です。
+// Complete 時点で notYet のまま残っている productId は、実際に製造されたものとして
+// passed に確定し、ミント対象になります。
 func (b *InspectionBatch) Complete(by string, at time.Time) error {
-	inspector := by
-	if inspector == "" {
+	if by == "" {
 		return ErrInvalidInspectedBy
 	}
 
-	// at は UTC に正規化しておく
 	atUTC := at.UTC()
 	if atUTC.IsZero() {
 		return ErrInvalidInspectedAt
@@ -212,26 +251,140 @@ func (b *InspectionBatch) Complete(by string, at time.Time) error {
 	for i := range b.Inspections {
 		item := &b.Inspections[i]
 
-		// result が nil or notYet の場合は notManufactured にする
 		if item.InspectionResult == nil || *item.InspectionResult == InspectionNotYet {
-			r := InspectionNotManufactured
+			r := InspectionPassed
 			item.InspectionResult = &r
-
-			// by/at を上書き（未設定 or 既存値に関わらず）
-			item.InspectedBy = &inspector
+			item.InspectedBy = &by
 			item.InspectedAt = &atUTC
 			continue
 		}
 
-		// 既に passed/failed/notManufactured の結果が入っている場合は、
-		// ここでは特に変更しない（usecase 側で totalPassed は再集計される）。
+		switch *item.InspectionResult {
+		case InspectionPassed, InspectionFailed, InspectionNotManufactured:
+			if item.InspectedBy == nil || *item.InspectedBy == "" {
+				return ErrInvalidInspectedBy
+			}
+			if item.InspectedAt == nil || item.InspectedAt.IsZero() {
+				return ErrInvalidInspectedAt
+			}
+
+		default:
+			return ErrInvalidInspectionResult
+		}
 	}
 
-	// ステータスを completed に変更
 	b.Status = InspectionStatusCompleted
+	b.RecalculateTotals()
 
-	// 一貫性の最終チェック
 	return b.validate()
+}
+
+// MarkFailed は指定した productId を failed として記録します。
+func (b *InspectionBatch) MarkFailed(productID string, by string, at time.Time) error {
+	return b.mark(productID, InspectionFailed, by, at)
+}
+
+// MarkNotManufactured は指定した productId を notManufactured として記録します。
+func (b *InspectionBatch) MarkNotManufactured(productID string, by string, at time.Time) error {
+	return b.mark(productID, InspectionNotManufactured, by, at)
+}
+
+// MarkPassed は指定した productId を passed として記録します。
+//
+// ネガティブ制では通常 Inspector から直接 passed を入力しません。
+// ただし、ドメイン上は Complete 後の確定状態として passed を保持します。
+func (b *InspectionBatch) MarkPassed(productID string, by string, at time.Time) error {
+	return b.mark(productID, InspectionPassed, by, at)
+}
+
+func (b *InspectionBatch) mark(
+	productID string,
+	result InspectionResult,
+	by string,
+	at time.Time,
+) error {
+	if productID == "" {
+		return ErrInvalidInspectionProductIDs
+	}
+
+	if !IsValidInspectionResult(result) || result == InspectionNotYet {
+		return ErrInvalidInspectionResult
+	}
+
+	if by == "" {
+		return ErrInvalidInspectedBy
+	}
+
+	atUTC := at.UTC()
+	if atUTC.IsZero() {
+		return ErrInvalidInspectedAt
+	}
+
+	for i := range b.Inspections {
+		item := &b.Inspections[i]
+		if item.ProductID != productID {
+			continue
+		}
+
+		item.InspectionResult = &result
+		item.InspectedBy = &by
+		item.InspectedAt = &atUTC
+
+		b.RecalculateTotals()
+
+		return b.validate()
+	}
+
+	return ErrInvalidInspectionProductIDs
+}
+
+// RecalculateTotals は Quantity と TotalPassed を inspections から再計算します。
+func (b *InspectionBatch) RecalculateTotals() {
+	b.Quantity = len(b.Inspections)
+
+	totalPassed := 0
+	for _, item := range b.Inspections {
+		if item.InspectionResult != nil && *item.InspectionResult == InspectionPassed {
+			totalPassed++
+		}
+	}
+
+	b.TotalPassed = totalPassed
+}
+
+// MintTargetProductIDs はミント対象となる productId の一覧を返します。
+//
+// ミント対象は passed の productId のみです。
+func (b InspectionBatch) MintTargetProductIDs() []string {
+	out := make([]string, 0, b.TotalPassed)
+
+	for _, item := range b.Inspections {
+		if item.InspectionResult != nil && *item.InspectionResult == InspectionPassed {
+			out = append(out, item.ProductID)
+		}
+	}
+
+	return out
+}
+
+// ExcludedProductIDs はミント対象外となる productId の一覧を返します。
+//
+// failed / notManufactured が対象外です。
+func (b InspectionBatch) ExcludedProductIDs() []string {
+	out := make([]string, 0)
+
+	for _, item := range b.Inspections {
+		if item.InspectionResult == nil {
+			continue
+		}
+
+		switch *item.InspectionResult {
+		case InspectionFailed, InspectionNotManufactured:
+			out = append(out, item.ProductID)
+		}
+	}
+
+	return out
 }
 
 // ===============================
@@ -255,7 +408,7 @@ func IsValidInspectionResult(r InspectionResult) bool {
 // Helpers
 // ===============================
 
-// normalizeIDList は ID の配列をトリムし、空文字を除外し、重複を取り除きます。
+// normalizeIDList は ID の配列から空文字を除外し、重複を取り除きます。
 func normalizeIDList(raw []string) []string {
 	seen := make(map[string]struct{}, len(raw))
 	out := make([]string, 0, len(raw))
@@ -264,9 +417,11 @@ func normalizeIDList(raw []string) []string {
 		if id == "" {
 			continue
 		}
+
 		if _, ok := seen[id]; ok {
 			continue
 		}
+
 		seen[id] = struct{}{}
 		out = append(out, id)
 	}

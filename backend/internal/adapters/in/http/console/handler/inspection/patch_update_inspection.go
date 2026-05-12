@@ -21,9 +21,7 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		ProductionID     string                          `json:"productionId"`
 		ProductID        string                          `json:"productId"`
 		InspectionResult *inspectiondom.InspectionResult `json:"inspectionResult"`
-		InspectedBy      *string                         `json:"inspectedBy"` // ← 互換のため定義だけ残す（実際には無視）
 		InspectedAt      *time.Time                      `json:"inspectedAt"`
-		Status           *inspectiondom.InspectionStatus `json:"status"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -36,7 +34,19 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// ★ inspectedBy は「表示名」ではなく memberId（認証UID）を保存する方針
+	if req.InspectionResult == nil {
+		writeError(w, http.StatusBadRequest, "inspectionResult is required")
+		return
+	}
+
+	switch *req.InspectionResult {
+	case inspectiondom.InspectionFailed, inspectiondom.InspectionNotManufactured:
+	default:
+		writeError(w, http.StatusBadRequest, inspectiondom.ErrInvalidInspectionResult.Error())
+		return
+	}
+
+	// inspectedBy は「表示名」ではなく memberId（認証UID）を保存する方針
 	uid := currentMemberUID(r)
 	if uid == "" {
 		writeError(w, http.StatusBadRequest, "inspectedBy (current member uid) could not be resolved")
@@ -44,14 +54,22 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 	}
 	inspectedByMemberID := &uid
 
+	inspectedAt := time.Now().UTC()
+	if req.InspectedAt != nil {
+		inspectedAt = req.InspectedAt.UTC()
+	}
+	if inspectedAt.IsZero() {
+		writeError(w, http.StatusBadRequest, inspectiondom.ErrInvalidInspectedAt.Error())
+		return
+	}
+
 	batch, err := h.inspectionUC.UpdateInspectionForProduct(
 		ctx,
 		req.ProductionID,
 		req.ProductID,
 		req.InspectionResult,
-		inspectedByMemberID, // ★ memberId (uid) を渡す
-		req.InspectedAt,
-		req.Status,
+		inspectedByMemberID,
+		&inspectedAt,
 	)
 	if err != nil {
 		code := http.StatusInternalServerError

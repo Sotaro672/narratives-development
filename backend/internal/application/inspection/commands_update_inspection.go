@@ -9,7 +9,13 @@ import (
 	inspectiondom "narratives/internal/domain/inspection"
 )
 
-// inspections 内の 1 productId 分を更新する
+// inspections 内の 1 productId 分を更新する。
+//
+// ネガティブ制では、Inspector から明示的に入力できる結果は
+// failed / notManufactured のみです。
+//
+// passed は CompleteInspectionForProduction 実行時に、
+// notYet の productId が一括で確定されることで付与されます。
 func (u *InspectionUsecase) UpdateInspectionForProduct(
 	ctx context.Context,
 	productionID string,
@@ -17,7 +23,6 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	result *inspectiondom.InspectionResult,
 	inspectedBy *string,
 	inspectedAt *time.Time,
-	status *inspectiondom.InspectionStatus,
 ) (inspectiondom.InspectionBatch, error) {
 
 	if u.inspectionRepo == nil {
@@ -28,9 +33,32 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	if pid == "" {
 		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
+
 	pdID := productID
 	if pdID == "" {
 		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
+	}
+
+	if result == nil {
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
+	}
+
+	if *result != inspectiondom.InspectionFailed &&
+		*result != inspectiondom.InspectionNotManufactured {
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
+	}
+
+	if inspectedBy == nil || *inspectedBy == "" {
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectedBy
+	}
+
+	if inspectedAt == nil {
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectedAt
+	}
+
+	atUTC := inspectedAt.UTC()
+	if atUTC.IsZero() {
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectedAt
 	}
 
 	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
@@ -38,67 +66,27 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	found := false
-	for i := range batch.Inspections {
-		if batch.Inspections[i].ProductID != pdID {
-			continue
-		}
-		found = true
-
-		item := &batch.Inspections[i]
-
-		if result != nil {
-			if !inspectiondom.IsValidInspectionResult(*result) {
-				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
-			}
-			r := *result
-			item.InspectionResult = &r
+	switch *result {
+	case inspectiondom.InspectionFailed:
+		if err := batch.MarkFailed(pdID, *inspectedBy, atUTC); err != nil {
+			return inspectiondom.InspectionBatch{}, err
 		}
 
-		if inspectedBy != nil {
-			v := *inspectedBy
-			if v == "" {
-				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectedBy
-			}
-			item.InspectedBy = &v
+	case inspectiondom.InspectionNotManufactured:
+		if err := batch.MarkNotManufactured(pdID, *inspectedBy, atUTC); err != nil {
+			return inspectiondom.InspectionBatch{}, err
 		}
 
-		if inspectedAt != nil {
-			atUTC := inspectedAt.UTC()
-			if atUTC.IsZero() {
-				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectedAt
-			}
-			item.InspectedAt = &atUTC
-		}
-
-		break
+	default:
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
 	}
-
-	if !found {
-		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
-	}
-
-	if status != nil {
-		if !inspectiondom.IsValidInspectionStatus(*status) {
-			return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionStatus
-		}
-		batch.Status = *status
-	}
-
-	passedCount := 0
-	for _, ins := range batch.Inspections {
-		if ins.InspectionResult != nil && *ins.InspectionResult == inspectiondom.InspectionPassed {
-			passedCount++
-		}
-	}
-	batch.TotalPassed = passedCount
 
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	if result != nil && u.productRepo != nil {
+	if u.productRepo != nil {
 		if err := u.productRepo.UpdateInspectionResult(ctx, pdID, *result); err != nil {
 			return inspectiondom.InspectionBatch{}, err
 		}

@@ -50,6 +50,15 @@ class ActionSection extends StatelessWidget {
           Row(
             children: [
               Expanded(
+                child: ElevatedButton(
+                  onPressed: submitting
+                      ? null
+                      : () => onSubmitResult(detail, 'passed'),
+                  child: const Text('合格'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
                 child: OutlinedButton(
                   onPressed: submitting
                       ? null
@@ -57,13 +66,13 @@ class ActionSection extends StatelessWidget {
                   child: const Text('不合格'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
-                child: ElevatedButton(
+                child: OutlinedButton(
                   onPressed: submitting
                       ? null
-                      : () => onSubmitResult(detail, 'passed'),
-                  child: const Text('合格'),
+                      : () => onSubmitResult(detail, 'notManufactured'),
+                  child: const Text('未製造'),
                 ),
               ),
             ],

@@ -20,9 +20,14 @@ class InspectionListCard extends StatelessWidget {
     }
 
     final int quantity = inspections.length;
-    final int totalPassed = inspections
-        .where((r) => r.inspectionResult == 'passed')
+    final int failedCount = inspections
+        .where((r) => r.inspectionResult == 'failed')
         .length;
+    final int notManufacturedCount = inspections
+        .where((r) => r.inspectionResult == 'notManufactured')
+        .length;
+    final int excludedCount = failedCount + notManufacturedCount;
+    final int mintTargetCount = quantity - excludedCount;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -42,8 +47,11 @@ class InspectionListCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('modelNumber: ${detail.modelNumber}'),
-                  Text('生産量: $quantity'),
-                  Text('合格数: $totalPassed'),
+                  Text('ラベル発行数: $quantity'),
+                  Text('不合格数: $failedCount'),
+                  Text('未製造数: $notManufacturedCount'),
+                  Text('除外数: $excludedCount'),
+                  Text('ミント予定数: $mintTargetCount'),
                 ],
               ),
             ),

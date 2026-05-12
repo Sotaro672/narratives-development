@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/inspector_product_detail.dart';
 import '../../services/product_api.dart';
+import 'utils/inspection_formatters.dart';
 
 class InspectionDetailActions {
   InspectionDetailActions();
@@ -17,30 +18,33 @@ class InspectionDetailActions {
     required VoidCallback setSubmittingFalse,
     required Future<void> Function() reload,
     required InspectorProductDetail detail,
-    required String result, // 'passed' or 'failed'
+    required String result, // 'failed' or 'notManufactured'
     required bool submitting,
   }) async {
     if (submitting) return;
+
+    if (result != 'failed' && result != 'notManufactured') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('送信できる検品結果ではありません')));
+      return;
+    }
+
     setSubmittingTrue();
 
     try {
-      // products テーブルの検品結果更新
-      await ProductApi.submitInspection(
-        productId: detail.productId,
-        result: result,
-      );
-
-      // inspections テーブルの検品結果更新
       await ProductApi.updateInspectionBatch(
         productionId: detail.productionId,
         productId: detail.productId,
-        inspectionResult: result == 'passed' ? 'passed' : 'failed',
+        inspectionResult: result,
       );
 
       if (!context.mounted) return;
+
+      final resultLabel = formatInspectionResultLabel(result);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('検品結果を送信しました（$result）')));
+      ).showSnackBar(SnackBar(content: Text('検品結果を送信しました（$resultLabel）')));
 
       await reload();
     } catch (e) {

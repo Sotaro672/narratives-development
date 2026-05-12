@@ -9,7 +9,10 @@ import (
 	inspectiondom "narratives/internal/domain/inspection"
 )
 
-// 検品完了
+// 検品完了。
+//
+// ネガティブ制では、failed / notManufactured として明示的に入力されなかった
+// notYet の productId を Complete 時に passed として確定します。
 func (u *InspectionUsecase) CompleteInspectionForProduction(
 	ctx context.Context,
 	productionID string,
@@ -35,14 +38,6 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	passedCount := 0
-	for _, ins := range batch.Inspections {
-		if ins.InspectionResult != nil && *ins.InspectionResult == inspectiondom.InspectionPassed {
-			passedCount++
-		}
-	}
-	batch.TotalPassed = passedCount
-
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
 		return inspectiondom.InspectionBatch{}, err
@@ -51,19 +46,20 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	if u.productRepo != nil {
 		for _, item := range updated.Inspections {
 			if item.InspectionResult == nil {
-				continue
+				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
 			}
+
 			result := *item.InspectionResult
 			if !inspectiondom.IsValidInspectionResult(result) {
 				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
 			}
 
-			pid := item.ProductID
-			if pid == "" {
-				continue
+			pdID := item.ProductID
+			if pdID == "" {
+				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 			}
 
-			if err := u.productRepo.UpdateInspectionResult(ctx, pid, result); err != nil {
+			if err := u.productRepo.UpdateInspectionResult(ctx, pdID, result); err != nil {
 				return inspectiondom.InspectionBatch{}, err
 			}
 		}
