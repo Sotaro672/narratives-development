@@ -33,7 +33,7 @@ import SpecifiedCommercialTransactionsPage from "../pages/SpecifiedCommercialTra
 import TermsPage from "../pages/TermsPage";
 import PrivacyPolicyPage from "../pages/PrivacyPolicyPage";
 import ContactPage from "../pages/ContactPage";
-import FaqPage from "../pages/FaqPage";
+import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 
@@ -69,7 +69,7 @@ export const router = createBrowserRouter([
   { path: "/password-reset", element: <PasswordResetPage /> },
 
   { path: "/how-to-use", element: <HowToUsePage /> },
-  { path: "/faq", element: <FaqPage /> },
+  { path: "/faq", element: <VisionPage /> },
   {
     path: "/specified-commercial-transactions",
     element: <SpecifiedCommercialTransactionsPage />,
