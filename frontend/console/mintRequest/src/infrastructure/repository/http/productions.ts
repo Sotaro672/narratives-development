@@ -3,16 +3,74 @@
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 import {
-  logHttpError,
   logHttpRequest,
   logHttpResponse,
   safeTokenHint,
 } from "../../http/httpLogger";
-import {
-  normalizeProductionsPayload,
-  normalizeProductionIdFromProductionListItem,
-  normalizeProductBlueprintIdFromProductionListItem,
-} from "../../normalizers/production";
+
+type ProductionListItemResponse = {
+  ID: string;
+  ProductBlueprintID: string;
+};
+
+type ProductionDetailResponse = {
+  ID: string;
+  ProductBlueprintID: string;
+};
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function isNonEmptyString(v: unknown): v is string {
+  return typeof v === "string" && v.trim() !== "";
+}
+
+function parseProductionListResponse(json: unknown): ProductionListItemResponse[] {
+  if (!Array.isArray(json)) {
+    throw new Error("Invalid productions response: response is not an array");
+  }
+
+  return json.map((item, index) => {
+    if (!isRecord(item)) {
+      throw new Error(`Invalid productions response: items[${index}] is not an object`);
+    }
+
+    if (!isNonEmptyString(item.ID)) {
+      throw new Error(`Invalid productions response: items[${index}].ID is missing`);
+    }
+
+    if (!isNonEmptyString(item.ProductBlueprintID)) {
+      throw new Error(
+        `Invalid productions response: items[${index}].ProductBlueprintID is missing`,
+      );
+    }
+
+    return {
+      ID: item.ID.trim(),
+      ProductBlueprintID: item.ProductBlueprintID.trim(),
+    };
+  });
+}
+
+function parseProductionDetailResponse(json: unknown): ProductionDetailResponse {
+  if (!isRecord(json)) {
+    throw new Error("Invalid production response: response is not an object");
+  }
+
+  if (!isNonEmptyString(json.ID)) {
+    throw new Error("Invalid production response: ID is missing");
+  }
+
+  if (!isNonEmptyString(json.ProductBlueprintID)) {
+    throw new Error("Invalid production response: ProductBlueprintID is missing");
+  }
+
+  return {
+    ID: json.ID.trim(),
+    ProductBlueprintID: json.ProductBlueprintID.trim(),
+  };
+}
 
 function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
   const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
@@ -29,8 +87,7 @@ function extractIdTokenForLog(authValue: string): string {
 
 /**
  * productionId から productBlueprintId を解決する
- * - primary: GET /productions/{productionId}
- * - fallback: GET /productions を取得してローカル検索
+ * - GET /productions/{productionId}
  */
 export async function fetchProductBlueprintIdByProductionIdHTTP(
   productionId: string,
@@ -42,80 +99,39 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
   const authValue = getAuthValueOrThrow(authHeaders);
   const idToken = extractIdTokenForLog(authValue);
 
-  const url1 = `${API_BASE}/productions/${encodeURIComponent(pid)}`;
+  const url = `${API_BASE}/productions/${encodeURIComponent(pid)}`;
 
-  try {
-    logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
-      method: "GET",
-      url: url1,
-      headers: {
-        Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-        "Content-Type": "application/json",
-      },
-    });
-
-    const res1 = await fetch(url1, { method: "GET", headers: authHeaders });
-
-    logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
-      method: "GET",
-      url: url1,
-      status: res1.status,
-      statusText: res1.statusText,
-    });
-
-    if (res1.ok) {
-      const j1 = (await res1.json()) as any;
-      const pb1 = normalizeProductBlueprintIdFromProductionListItem(j1);
-      return pb1 ? pb1 : null;
-    }
-  } catch (e: any) {
-    logHttpError("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
-      method: "GET",
-      url: url1,
-      error: String(e?.message ?? e),
-    });
-    // noop: fallback へ
-  }
-
-  const url2 = `${API_BASE}/productions`;
-
-  logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP(fallback)", {
+  logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP", {
     method: "GET",
-    url: url2,
+    url,
     headers: {
       Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
       "Content-Type": "application/json",
     },
   });
 
-  const res2 = await fetch(url2, { method: "GET", headers: authHeaders });
+  const res = await fetch(url, { method: "GET", headers: authHeaders });
 
-  logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP(fallback)", {
+  logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP", {
     method: "GET",
-    url: url2,
-    status: res2.status,
-    statusText: res2.statusText,
+    url,
+    status: res.status,
+    statusText: res.statusText,
   });
 
-  if (!res2.ok) {
-    const body = await res2.text().catch(() => "");
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch productions: ${res2.status} ${res2.statusText}${
+      `Failed to fetch production: ${res.status} ${res.statusText}${
         body ? ` body=${body.slice(0, 400)}` : ""
       }`,
     );
   }
 
-  const json2 = await res2.json();
-  const items = normalizeProductionsPayload(json2);
+  const json = await res.json();
+  const production = parseProductionDetailResponse(json);
 
-  const hit =
-    (items ?? []).find(
-      (it: any) => normalizeProductionIdFromProductionListItem(it) === pid,
-    ) ?? null;
-
-  const pb2 = hit ? normalizeProductBlueprintIdFromProductionListItem(hit) : "";
-  return pb2 ? pb2 : null;
+  return production.ProductBlueprintID || null;
 }
 
 /**
@@ -156,14 +172,15 @@ export async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[
   }
 
   const json = await res.json();
-  const items = normalizeProductionsPayload(json);
+  const items = parseProductionListResponse(json);
 
   const ids: string[] = [];
   const seen = new Set<string>();
 
   for (const it of items) {
-    const pid = normalizeProductionIdFromProductionListItem(it);
-    if (!pid || seen.has(pid)) continue;
+    const pid = it.ID;
+    if (seen.has(pid)) continue;
+
     seen.add(pid);
     ids.push(pid);
   }

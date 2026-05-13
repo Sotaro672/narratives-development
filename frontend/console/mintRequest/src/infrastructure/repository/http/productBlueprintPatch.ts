@@ -10,7 +10,6 @@ import {
 } from "../../http/httpLogger";
 
 import type { ProductBlueprintPatchDTO } from "../../dto/mintRequestLocal.dto";
-import { normalizeProductBlueprintPatch } from "../../normalizers/productBlueprintPatch";
 
 export async function fetchProductBlueprintPatchHTTP(
   productBlueprintId: string,
@@ -67,6 +66,6 @@ export async function fetchProductBlueprintPatchHTTP(
     );
   }
 
-  const json = (await res.json()) as any;
-  return normalizeProductBlueprintPatch(json) ?? null;
+  const json = (await res.json()) as ProductBlueprintPatchDTO | null | undefined;
+  return json ?? null;
 }

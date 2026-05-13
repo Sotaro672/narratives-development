@@ -15,17 +15,7 @@ import type {
   MintListRowDTO,
 } from "../../api/mintRequestApi";
 
-import type {
-  MintRequestRowRaw,
-  MintRequestsPayloadRaw,
-} from "../../dto/mintRequestRaw.dto";
-
-import { normalizeMintDTO } from "../../normalizers/mint";
-import { normalizeMintListRow } from "../../normalizers/mintListRow";
-import {
-  extractRowKeyAsProductionId,
-  normalizeMintRequestsRows,
-} from "../../normalizers/mintRequestsRows";
+import type { MintRequestRowRaw } from "../../dto/mintRequestRaw.dto";
 
 // ===============================
 // types
@@ -93,6 +83,10 @@ function extractIdTokenForLog(authValue: string): string {
   return String(m?.[1] ?? "").trim();
 }
 
+function getRowProductionId(row: any): string | null {
+  return row?.productionId ?? row?.id ?? null;
+}
+
 /** JSON をコンソールに出すための安全なプレビュー化 */
 function toJsonPreview(value: any, maxLen = 2000): string {
   try {
@@ -107,6 +101,7 @@ function toJsonPreview(value: any, maxLen = 2000): string {
  * Raw fetch for a single view.
  * - 404/405 は「その view/ルートが無い」扱いにして上位でフォールバックさせる
  * - それ以外の non-2xx はエラー（ログ付き）
+ * - Backend response は配列を正とする
  */
 async function fetchMintRequestsRowsRawOnce(
   ids: string[],
@@ -180,7 +175,7 @@ async function fetchMintRequestsRowsRawOnce(
 
   // 200-299 OK
   if (res.ok) {
-    const json = (await res.json()) as MintRequestsPayloadRaw | null | undefined;
+    const json = (await res.json()) as MintRequestRowRaw[] | null | undefined;
 
     // ✅ 追加：GET で得られた中身が分かる console log（サイズ暴発防止でプレビュー）
     // eslint-disable-next-line no-console
@@ -198,7 +193,7 @@ async function fetchMintRequestsRowsRawOnce(
     });
 
     return {
-      rows: normalizeMintRequestsRows(json),
+      rows: Array.isArray(json) ? json : [],
       usedView: view,
       usedUrl: url,
     };
@@ -235,8 +230,8 @@ function isViewMissingError(e: any): boolean {
 
 /**
  * Fetch with view fallbacks.
- * - list route: list -> management -> null
- * - management route: management -> null
+ * - list は list response を正とする
+ * - management は management response を正とする
  */
 async function fetchMintRequestsRowsRawWithFallback(
   ids: string[],
@@ -295,13 +290,13 @@ export async function fetchMintByInspectionIdHTTP(
   const { rows } = await fetchMintRequestsRowsRawWithFallback([iid], ["management", null]);
 
   const row =
-    (rows ?? []).find((r) => extractRowKeyAsProductionId(r) === iid) ??
+    (rows ?? []).find((r) => getRowProductionId(r) === iid) ??
     rows?.[0] ??
     null;
 
   if (!row) return null;
 
-  const mintRaw = (row as any)?.mint ?? (row as any)?.Mint ?? null;
+  const mintRaw = (row as any)?.mint ?? null;
 
   // ✅ row 側の display fields を mint 側に引き継ぐ
   const merged = {
@@ -314,7 +309,7 @@ export async function fetchMintByInspectionIdHTTP(
     requestedByName: (row as any)?.requestedByName ?? null,
   };
 
-  return normalizeMintDTO(merged);
+  return merged as MintDTO;
 }
 
 /**
@@ -331,10 +326,10 @@ export async function fetchMintsByInspectionIdsHTTP(
 
   const out: Record<string, MintDTO> = {};
   for (const r of rows ?? []) {
-    const key = extractRowKeyAsProductionId(r);
+    const key = getRowProductionId(r);
     if (!key) continue;
 
-    const mintRaw = (r as any)?.mint ?? (r as any)?.Mint ?? null;
+    const mintRaw = (r as any)?.mint ?? null;
 
     const merged = {
       ...(mintRaw ?? r ?? {}),
@@ -346,7 +341,7 @@ export async function fetchMintsByInspectionIdsHTTP(
       requestedByName: (r as any)?.requestedByName ?? null,
     };
 
-    out[key] = normalizeMintDTO(merged);
+    out[key] = merged as MintDTO;
   }
 
   return out;
@@ -354,7 +349,7 @@ export async function fetchMintsByInspectionIdsHTTP(
 
 /**
  * inspectionIds (= productionIds) で “一覧用” MintListRowDTO を map で取得。
- * 優先: view=list -> management -> null
+ * ✅ view=list response を正とし、normalizer は使用しない
  */
 export async function fetchMintListRowsByInspectionIdsHTTP(
   inspectionIds: string[],
@@ -362,36 +357,14 @@ export async function fetchMintListRowsByInspectionIdsHTTP(
   const ids = uniqTrimmedStrings(inspectionIds ?? []);
   if (ids.length === 0) return {};
 
-  const { rows } = await fetchMintRequestsRowsRawWithFallback(ids, [
-    "list",
-    "management",
-    null,
-  ]);
+  const { rows } = await fetchMintRequestsRowsRawWithFallback(ids, ["list"]);
 
   const out: Record<string, MintListRowDTO> = {};
   for (const r of rows ?? []) {
-    const key = extractRowKeyAsProductionId(r);
+    const key = getRowProductionId(r);
     if (!key) continue;
 
-    const base =
-      (r as any)?.mint ?? (r as any)?.Mint ?? null
-        ? (r as any)?.mint ?? (r as any)?.Mint
-        : (r as any);
-
-    const merged = {
-      ...(base ?? {}),
-      inspectionId: key,
-      productionId: key,
-      tokenName: (r as any)?.tokenName ?? (base as any)?.tokenName ?? null,
-      createdByName: (r as any)?.createdByName ?? (base as any)?.createdByName ?? null,
-      mintedAt: (r as any)?.mintedAt ?? (base as any)?.mintedAt ?? null,
-      minted:
-        typeof (r as any)?.minted === "boolean"
-          ? (r as any).minted
-          : (base as any)?.minted,
-    };
-
-    out[key] = normalizeMintListRow(merged);
+    out[key] = r as unknown as MintListRowDTO;
   }
 
   return out;

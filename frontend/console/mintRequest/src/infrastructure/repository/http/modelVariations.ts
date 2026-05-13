@@ -10,7 +10,6 @@ import {
 } from "../../http/httpLogger";
 
 import type { ModelVariationForMintDTO } from "../../dto/mintRequestLocal.dto";
-import { normalizeModelVariationForMintDTO } from "../../normalizers/modelVariation";
 
 export async function fetchModelVariationByIdForMintHTTP(
   variationId: string,
@@ -73,10 +72,8 @@ export async function fetchModelVariationByIdForMintHTTP(
         );
       }
 
-      const json = (await res.json()) as any;
-      const normalized = normalizeModelVariationForMintDTO(json);
-
-      return normalized;
+      const json = (await res.json()) as ModelVariationForMintDTO | null | undefined;
+      return json ?? null;
     } catch (_e: any) {
       // try next candidate
       continue;

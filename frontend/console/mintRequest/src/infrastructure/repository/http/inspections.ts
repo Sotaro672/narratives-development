@@ -13,7 +13,6 @@ import type { InspectionBatchDTO } from "../../dto/inspectionBatch.dto";
 import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
 
 import { fetchProductionIdsForCurrentCompanyHTTP } from "./productions";
-import { normalizeMintRequestDetail } from "../../normalizers/mintRequestDetail";
 
 // ===============================
 // helpers
@@ -23,11 +22,8 @@ function looksLikeInspectionBatchDTO(x: any): boolean {
   if (!x || typeof x !== "object") return false;
   return (
     Array.isArray((x as any).inspections) ||
-    Array.isArray((x as any).Inspections) ||
     Array.isArray((x as any).results) ||
-    Array.isArray((x as any).Results) ||
-    Array.isArray((x as any).items) ||
-    Array.isArray((x as any).Items)
+    Array.isArray((x as any).items)
   );
 }
 
@@ -98,8 +94,8 @@ async function fetchMintRequestDetailByProductionIdHTTP(
     );
   }
 
-  const json = (await res.json()) as any;
-  return normalizeMintRequestDetail(json) ?? null;
+  const json = (await res.json()) as MintRequestDetailDTO | null | undefined;
+  return json ?? null;
 }
 
 // ===============================
@@ -177,7 +173,7 @@ export async function fetchInspectionByProductionIdHTTP(
   if (!pid) throw new Error("productionId が空です");
 
   const detail = await fetchMintRequestDetailByProductionIdHTTP(pid);
-  const inspection = (detail?.inspection ?? null) as any;
+  const inspection = detail?.inspection ?? null;
 
   if (!inspection) return null;
   if (!looksLikeInspectionBatchDTO(inspection)) return null;
@@ -249,15 +245,10 @@ export async function completeInspectionHTTP(
     );
   }
 
-  const json = (await res.json().catch(() => null)) as any;
+  const json = (await res.json().catch(() => null)) as InspectionBatchDTO | null;
 
   if (!json) return null;
-  if (looksLikeInspectionBatchDTO(json)) return json as InspectionBatchDTO;
+  if (!looksLikeInspectionBatchDTO(json)) return null;
 
-  const inspection = (json?.inspection ?? json?.data ?? null) as any;
-  if (looksLikeInspectionBatchDTO(inspection)) {
-    return inspection as InspectionBatchDTO;
-  }
-
-  return null;
+  return json;
 }

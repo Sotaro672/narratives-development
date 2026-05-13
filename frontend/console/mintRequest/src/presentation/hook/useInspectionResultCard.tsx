@@ -66,6 +66,32 @@ export type UseInspectionResultCardResult = {
   rgbIntToHex: (rgb: number | string | null | undefined) => string | undefined;
 };
 
+function getModelVariationColorName(v: ModelVariationForMintDTO | null): string | null {
+  if (!v) return null;
+
+  const colorName =
+    (v as any)?.color?.name ??
+    (v as any)?.colorName ??
+    null;
+
+  return typeof colorName === "string" && colorName
+    ? colorName
+    : null;
+}
+
+function getModelVariationRgb(v: ModelVariationForMintDTO | null): number | null {
+  if (!v) return null;
+
+  const rgb =
+    (v as any)?.color?.rgb ??
+    (v as any)?.rgb ??
+    null;
+
+  return typeof rgb === "number" && Number.isFinite(rgb)
+    ? rgb
+    : null;
+}
+
 /**
  * InspectionBatch（+ modelMeta）から
  * InspectionResultCard 用の行データ・集計値・RGB変換関数を提供するフック。
@@ -96,7 +122,7 @@ export function useInspectionResultCard(
     const set = new Set<string>();
 
     for (const ins of batch.inspections ?? []) {
-      const mid = String((ins as any)?.modelId ?? "").trim();
+      const mid = String((ins as any)?.modelId ?? "");
       if (mid) set.add(mid);
     }
     return Array.from(set);
@@ -121,7 +147,7 @@ export function useInspectionResultCard(
     const refs = batch?.productBlueprintPatch?.modelRefs ?? [];
     const out: Record<string, number> = {};
     for (const r of refs ?? []) {
-      const mid = String((r as any)?.modelId ?? "").trim();
+      const mid = String((r as any)?.modelId ?? "");
       const ord = (r as any)?.displayOrder;
       if (!mid) continue;
       if (typeof ord !== "number" || !Number.isFinite(ord)) continue;
@@ -162,10 +188,10 @@ export function useInspectionResultCard(
           if (!v) continue;
 
           next[modelId] = {
-            modelNumber: (v.modelNumber ?? "").trim() || null,
-            size: (v.size ?? "").trim() || null,
-            colorName: (v.colorName ?? "").trim() || null,
-            rgb: typeof v.rgb === "number" ? v.rgb : null,
+            modelNumber: v.modelNumber || null,
+            size: v.size || null,
+            colorName: getModelVariationColorName(v),
+            rgb: getModelVariationRgb(v),
           };
         }
 
@@ -193,10 +219,10 @@ export function useInspectionResultCard(
     >();
 
     for (const ins of batch.inspections ?? []) {
-      const modelId = String((ins as any)?.modelId ?? "").trim();
+      const modelId = String((ins as any)?.modelId ?? "");
       if (!modelId) continue;
 
-      const modelNumberFromInspection = String((ins as any)?.modelNumber ?? "").trim();
+      const modelNumberFromInspection = String((ins as any)?.modelNumber ?? "");
 
       const entry =
         map.get(modelId) ?? {
@@ -228,8 +254,8 @@ export function useInspectionResultCard(
       // ★ 表示優先順位：
       // meta.modelNumber（GetModelVariationByIDで解決） > inspections の modelNumber > modelId
       const displayModelNumber =
-        (meta?.modelNumber ?? "").trim() ||
-        (agg.modelNumber ?? "").trim() ||
+        meta?.modelNumber ||
+        agg.modelNumber ||
         modelId;
 
       const order =
@@ -241,8 +267,8 @@ export function useInspectionResultCard(
       tmp.push({
         __order: order,
         modelNumber: displayModelNumber,
-        size: (meta?.size ?? "").trim(),
-        color: (meta?.colorName ?? "").trim(),
+        size: meta?.size ?? "",
+        color: meta?.colorName ?? "",
         rgb: meta?.rgb ?? null,
         passedQuantity: agg.passed,
         quantity: agg.total,

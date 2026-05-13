@@ -267,9 +267,3 @@ export async function fetchMintRequestManagementRowsQueryHTTP(
     }`,
   );
 }
-
-/**
- * 互換 export（命名揺れ吸収）
- * - 既存 usecase 側が fetchMintRequestManagementRowsHTTP を期待していても落ちないようにする
- */
-export const fetchMintRequestManagementRowsHTTP = fetchMintRequestManagementRowsQueryHTTP;
