@@ -136,7 +136,11 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 	items := make([]mallModelItem, 0, len(res.Items))
 
 	for _, v := range res.Items {
-		modelID := v.ID
+		if v == nil {
+			continue
+		}
+
+		modelID := v.GetID()
 		if modelID == "" {
 			continue
 		}
@@ -229,12 +233,30 @@ func (h *MallModelHandler) handleGetCatalogByListID(w http.ResponseWriter, r *ht
 }
 
 func toMallModelVariationDTO(mv *modeldom.ModelVariation) (malldto.CatalogModelVariationDTO, bool) {
-	if mv == nil || mv.ID == "" {
+	if mv == nil || *mv == nil {
+		return malldto.CatalogModelVariationDTO{}, false
+	}
+
+	var apparelMV modeldom.ApparelModelVariation
+
+	switch v := (*mv).(type) {
+	case modeldom.ApparelModelVariation:
+		apparelMV = v
+	case *modeldom.ApparelModelVariation:
+		if v == nil {
+			return malldto.CatalogModelVariationDTO{}, false
+		}
+		apparelMV = *v
+	default:
+		return malldto.CatalogModelVariationDTO{}, false
+	}
+
+	if apparelMV.ID == "" {
 		return malldto.CatalogModelVariationDTO{}, false
 	}
 
 	measurements := map[string]int{}
-	for k, v := range mv.Measurements {
+	for k, v := range apparelMV.Measurements {
 		if k == "" {
 			continue
 		}
@@ -242,12 +264,12 @@ func toMallModelVariationDTO(mv *modeldom.ModelVariation) (malldto.CatalogModelV
 	}
 
 	return malldto.CatalogModelVariationDTO{
-		ID:                 mv.ID,
-		ProductBlueprintID: mv.ProductBlueprintID,
-		ModelNumber:        mv.ModelNumber,
-		Size:               mv.Size,
-		ColorName:          mv.Color.Name,
-		ColorRGB:           mv.Color.RGB,
+		ID:                 apparelMV.ID,
+		ProductBlueprintID: apparelMV.ProductBlueprintID,
+		ModelNumber:        apparelMV.ModelNumber,
+		Size:               apparelMV.Size,
+		ColorName:          apparelMV.Color.Name,
+		ColorRGB:           apparelMV.Color.RGB,
 		Measurements:       measurements,
 		StockKeys:          0,
 	}, true

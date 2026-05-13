@@ -380,11 +380,17 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			log.Printf("[mint_request_qs] WARN: GetModelVariations failed pid=%q pbId=%q err=%v", pid, productBlueprintID, vErr)
 		} else {
 			tmp := make(map[string]querydto.MintModelMetaEntry, len(vars))
-			for _, v := range vars {
+			for _, raw := range vars {
+				v, ok := toApparelModelVariation(raw)
+				if !ok {
+					continue
+				}
+
 				id := v.ID
 				if id == "" {
 					continue
 				}
+
 				rgb := v.Color.RGB
 				tmp[id] = querydto.MintModelMetaEntry{
 					ModelNumber: v.ModelNumber,
@@ -595,6 +601,24 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 func intPtr(n int) *int {
 	v := n
 	return &v
+}
+
+func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
+	if v == nil {
+		return modeldom.ApparelModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.ApparelModelVariation:
+		return x, true
+	case *modeldom.ApparelModelVariation:
+		if x == nil {
+			return modeldom.ApparelModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.ApparelModelVariation{}, false
+	}
 }
 
 func sampleFirst[T any](xs []T) any {

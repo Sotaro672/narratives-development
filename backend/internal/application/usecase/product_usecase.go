@@ -166,10 +166,14 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 	if err != nil {
 		return ProductDetail{}, err
 	}
-	if mv == nil {
+	if mv == nil || *mv == nil {
 		return ProductDetail{}, errors.New("product: model variation not found")
 	}
-	model := *mv
+
+	model, ok := toProductUsecaseApparelModelVariation(*mv)
+	if !ok {
+		return ProductDetail{}, errors.New("product: unsupported model variation type")
+	}
 
 	// 3) ProductBlueprint を取得（ModelVariation.ProductBlueprintID 起点）
 	bp, err := u.productBlueprintRepo.GetByID(ctx, model.ProductBlueprintID)
@@ -243,7 +247,7 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 			Code:   category.Code,
 			NameJa: category.NameJa,
 			NameEn: category.NameEn,
-			Kind:   category.Kind,
+			Kind:   string(category.Kind),
 			Path:   append([]string(nil), category.Path...),
 		},
 
@@ -251,7 +255,7 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		Material:         bp.Material,
 		Weight:           bp.Weight,
 		QualityAssurance: append([]string(nil), bp.QualityAssurance...),
-		ProductIdTagType: bp.ProductIdTag.Type,
+		ProductIdTagType: string(bp.ProductIdTag.Type),
 
 		// ✅ 追加
 		ModelRefs: modelRefsDTO,
@@ -276,4 +280,22 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 	}
 
 	return detail, nil
+}
+
+func toProductUsecaseApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
+	if v == nil {
+		return modeldom.ApparelModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.ApparelModelVariation:
+		return x, true
+	case *modeldom.ApparelModelVariation:
+		if x == nil {
+			return modeldom.ApparelModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.ApparelModelVariation{}, false
+	}
 }

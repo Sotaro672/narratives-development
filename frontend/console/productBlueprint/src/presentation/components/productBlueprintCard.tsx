@@ -30,7 +30,6 @@ import {
   WASH_TAG_OPTIONS,
   type WashTagOption,
 } from "../../domain/entity/catalog";
-import "../styles/productBlueprint.css";
 
 type BrandOption = {
   id: string;

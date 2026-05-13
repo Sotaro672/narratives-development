@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\model\dto.go
+// backend/internal/adapters/in/http/console/handler/model/dto.go
 package model
 
 import (
@@ -43,7 +43,7 @@ type modelVariationDTO struct {
 	UpdatedBy          *string        `json:"updatedBy,omitempty"`
 }
 
-func toModelVariationDTO(mv modeldom.ModelVariation) modelVariationDTO {
+func toModelVariationDTO(mv modeldom.ApparelModelVariation) modelVariationDTO {
 	return modelVariationDTO{
 		ID:                 mv.ID,
 		ProductBlueprintID: mv.ProductBlueprintID,
@@ -53,7 +53,7 @@ func toModelVariationDTO(mv modeldom.ModelVariation) modelVariationDTO {
 			Name: mv.Color.Name,
 			RGB:  mv.Color.RGB, // ✅ 0 もそのまま返す（黒）
 		},
-		Measurements: mv.Measurements,
+		Measurements: cloneMeasurementsForDTO(mv.Measurements),
 		CreatedAt:    timePtrToRFC3339(&mv.CreatedAt),
 		CreatedBy:    mv.CreatedBy,
 		UpdatedAt:    timePtrToRFC3339(&mv.UpdatedAt),
@@ -61,11 +61,24 @@ func toModelVariationDTO(mv modeldom.ModelVariation) modelVariationDTO {
 	}
 }
 
-func toModelVariationDTOs(vars []modeldom.ModelVariation) []modelVariationDTO {
+func toModelVariationDTOs(vars []modeldom.ApparelModelVariation) []modelVariationDTO {
 	out := make([]modelVariationDTO, 0, len(vars))
 	for _, v := range vars {
 		out = append(out, toModelVariationDTO(v))
 	}
+	return out
+}
+
+func cloneMeasurementsForDTO(m modeldom.Measurements) map[string]int {
+	if m == nil {
+		return nil
+	}
+
+	out := make(map[string]int, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+
 	return out
 }
 

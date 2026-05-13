@@ -202,7 +202,7 @@ func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context
 			Code:   category.Code,
 			NameJa: category.NameJa,
 			NameEn: category.NameEn,
-			Kind:   category.Kind,
+			Kind:   string(category.Kind),
 			Path:   append([]string(nil), category.Path...),
 		},
 
@@ -211,7 +211,7 @@ func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context
 		Weight:           p.Weight,
 		QualityAssurance: append([]string(nil), p.QualityAssurance...),
 		ProductIdTag: MallProductIDTag{
-			Type: p.ProductIdTag.Type,
+			Type: string(p.ProductIdTag.Type),
 		},
 		Printed: p.Printed,
 	}

@@ -1,9 +1,8 @@
-// backend\internal\application\usecase\model_usecase.go
+// backend/internal/application/usecase/model_usecase.go
 package usecase
 
 import (
 	"context"
-	"time"
 
 	modeldom "narratives/internal/domain/model"
 )
@@ -39,6 +38,7 @@ func (u *ModelUsecase) GetModelVariationByID(ctx context.Context, variationID st
 	if variationID == "" {
 		return nil, modeldom.ErrInvalidID
 	}
+
 	return u.repo.GetModelVariationByID(ctx, variationID)
 }
 
@@ -55,6 +55,7 @@ func (u *ModelUsecase) GetModelData(ctx context.Context, productID string) (*mod
 	if productID == "" {
 		return nil, modeldom.ErrInvalidProductID
 	}
+
 	return u.repo.GetModelData(ctx, productID)
 }
 
@@ -65,6 +66,7 @@ func (u *ModelUsecase) GetModelDataByBlueprintID(ctx context.Context, productBlu
 	if productBlueprintID == "" {
 		return nil, modeldom.ErrInvalidBlueprintID
 	}
+
 	return u.repo.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
@@ -75,13 +77,19 @@ func (u *ModelUsecase) UpdateModelData(ctx context.Context, productID string, up
 	if productID == "" {
 		return nil, modeldom.ErrInvalidProductID
 	}
+
 	return u.repo.UpdateModelData(ctx, productID, updates)
 }
 
-func (u *ModelUsecase) ListVariations(ctx context.Context, filter modeldom.VariationFilter, page modeldom.Page) (modeldom.VariationPageResult, error) {
+func (u *ModelUsecase) ListVariations(
+	ctx context.Context,
+	filter modeldom.VariationFilter,
+	page modeldom.Page,
+) (modeldom.VariationPageResult, error) {
 	if u.repo == nil {
 		return modeldom.VariationPageResult{}, modeldom.ErrNotFound
 	}
+
 	return u.repo.ListVariations(ctx, filter, page)
 }
 
@@ -92,11 +100,19 @@ func (u *ModelUsecase) GetModelVariations(ctx context.Context, productID string)
 	if productID == "" {
 		return nil, modeldom.ErrInvalidProductID
 	}
+
 	return u.repo.GetModelVariations(ctx, productID)
 }
 
 // Create ModelVariation（履歴は保存しない）
-func (u *ModelUsecase) CreateModelVariation(ctx context.Context, v modeldom.NewModelVariation) (*modeldom.ModelVariation, error) {
+//
+// NOTE:
+//   - 現在の console model 作成は apparel 用の size/color/measurements 前提。
+//   - 旧 NewModelVariation は廃止し、NewApparelModelVariation を使う。
+func (u *ModelUsecase) CreateModelVariation(
+	ctx context.Context,
+	v modeldom.NewApparelModelVariation,
+) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -110,7 +126,11 @@ func (u *ModelUsecase) CreateModelVariation(ctx context.Context, v modeldom.NewM
 }
 
 // Update ModelVariation（履歴は保存しない）
-func (u *ModelUsecase) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error) {
+func (u *ModelUsecase) UpdateModelVariation(
+	ctx context.Context,
+	variationID string,
+	updates modeldom.ModelVariationUpdate,
+) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -139,7 +159,10 @@ func (u *ModelUsecase) DeleteModelVariation(ctx context.Context, variationID str
 	return u.repo.DeleteModelVariation(ctx, variationID)
 }
 
-func (u *ModelUsecase) ReplaceModelVariations(ctx context.Context, vars []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error) {
+func (u *ModelUsecase) ReplaceModelVariations(
+	ctx context.Context,
+	vars []modeldom.NewApparelModelVariation,
+) ([]modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -149,12 +172,8 @@ func (u *ModelUsecase) ReplaceModelVariations(ctx context.Context, vars []modeld
 		return nil, err
 	}
 
-	// ReplaceVariations 後は UpdatedAt の補正のみ（version は扱わない）
-	now := time.Now().UTC()
-	for i := range updated {
-		updated[i].UpdatedAt = now
-	}
-
+	// ModelVariation は interface になったため、ここで UpdatedAt を直接補正しない。
+	// UpdatedAt は repository / domain 側で設定された値を正とする。
 	return updated, nil
 }
 
@@ -165,6 +184,7 @@ func (u *ModelUsecase) GetSizeVariations(ctx context.Context, productID string) 
 	if productID == "" {
 		return nil, modeldom.ErrInvalidProductID
 	}
+
 	return u.repo.GetSizeVariations(ctx, productID)
 }
 
@@ -175,5 +195,6 @@ func (u *ModelUsecase) GetModelNumbers(ctx context.Context, productID string) ([
 	if productID == "" {
 		return nil, modeldom.ErrInvalidProductID
 	}
+
 	return u.repo.GetModelNumbers(ctx, productID)
 }

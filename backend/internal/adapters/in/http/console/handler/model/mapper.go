@@ -6,7 +6,11 @@ import (
 )
 
 func toMeasurements(in map[string]float64) modeldom.Measurements {
-	ms := make(modeldom.Measurements)
+	if len(in) == 0 {
+		return nil
+	}
+
+	ms := make(modeldom.Measurements, len(in))
 	for k, v := range in {
 		key := k
 		if key == "" {
@@ -14,12 +18,17 @@ func toMeasurements(in map[string]float64) modeldom.Measurements {
 		}
 		ms[key] = int(v)
 	}
+
+	if len(ms) == 0 {
+		return nil
+	}
+
 	return ms
 }
 
 // rgb 必須化方針に従い、req.RGB は常に使用する（省略分岐なし）
-func toNewModelVariation(productBlueprintID string, req createModelVariationRequest) modeldom.NewModelVariation {
-	return modeldom.NewModelVariation{
+func toNewModelVariation(productBlueprintID string, req createModelVariationRequest) modeldom.NewApparelModelVariation {
+	return modeldom.NewApparelModelVariation{
 		ProductBlueprintID: productBlueprintID,
 		ModelNumber:        req.ModelNumber,
 		Size:               req.Size,

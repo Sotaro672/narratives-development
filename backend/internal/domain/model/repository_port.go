@@ -10,9 +10,14 @@ import (
 // Domain helper types (inputs/patches)
 
 // Measurements は「各計測位置(string) → 計測値(int)」のマップ。
-// entity.go の ModelVariation.Measurements (map[string]int) に対応。
+// apparel.go の ApparelModelVariation.Measurements に対応。
 
 // ModelVariationUpdate corresponds to TS: Partial<Omit<ModelVariation, 'id'>>
+//
+// NOTE:
+//   - 現時点では apparel 用の size / color / measurements 更新に対応する。
+//   - alcohol / food などカテゴリ別 model を追加する場合は、
+//     category-specific update DTO を別途追加する。
 type ModelVariationUpdate struct {
 	Size         *string      `json:"size,omitempty"`
 	Color        *Color       `json:"color,omitempty"` // 部分更新したい場合は構造に注意
@@ -69,15 +74,16 @@ type RepositoryPort interface {
 	GetModelVariations(ctx context.Context, productID string) ([]ModelVariation, error)
 	GetModelVariationByID(ctx context.Context, variationID string) (*ModelVariation, error)
 
-	// ★ 新規作成では productID は使わず、NewModelVariation.ProductBlueprintID で紐付ける
-	CreateModelVariation(ctx context.Context, variation NewModelVariation) (*ModelVariation, error)
+	// 新規作成では productID は使わず、NewApparelModelVariation.ProductBlueprintID で紐付ける。
+	// 現時点の console model 作成は apparel 用の size/color/measurements 前提。
+	CreateModelVariation(ctx context.Context, variation NewApparelModelVariation) (*ModelVariation, error)
 
 	UpdateModelVariation(ctx context.Context, variationID string, updates ModelVariationUpdate) (*ModelVariation, error)
 	DeleteModelVariation(ctx context.Context, variationID string) (*ModelVariation, error)
 
-	// ★ 一括置き換えも NewModelVariation 側の ProductBlueprintID から解決する
-	//   （全要素が同じ ProductBlueprintID を持つ前提）
-	ReplaceModelVariations(ctx context.Context, variations []NewModelVariation) ([]ModelVariation, error)
+	// 一括置き換えも NewApparelModelVariation 側の ProductBlueprintID から解決する。
+	// 全要素が同じ ProductBlueprintID を持つ前提。
+	ReplaceModelVariations(ctx context.Context, variations []NewApparelModelVariation) ([]ModelVariation, error)
 
 	// Convenience aggregations (resolver-style)
 	GetSizeVariations(ctx context.Context, productID string) ([]SizeVariation, error)

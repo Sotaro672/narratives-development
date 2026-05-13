@@ -252,14 +252,19 @@ func (q *PreviewQuery) ResolveModelMetaByModelID(
 	if err != nil {
 		return "", "", "", 0, err
 	}
-	if v == nil {
+	if v == nil || *v == nil {
 		return "", "", "", 0, ErrModelVariationNotFound
 	}
 
-	modelNumber = v.ModelNumber
-	size = v.Size
-	colorName = v.Color.Name
-	rgb = v.Color.RGB
+	apparelVariation, ok := toPreviewApparelModelVariation(*v)
+	if !ok {
+		return "", "", "", 0, ErrModelVariationNotFound
+	}
+
+	modelNumber = apparelVariation.ModelNumber
+	size = apparelVariation.Size
+	colorName = apparelVariation.Color.Name
+	rgb = apparelVariation.Color.RGB
 
 	return modelNumber, size, colorName, rgb, nil
 }
@@ -299,18 +304,23 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	if err != nil {
 		return nil, err
 	}
-	if v == nil {
+	if v == nil || *v == nil {
+		return nil, ErrModelVariationNotFound
+	}
+
+	apparelVariation, ok := toPreviewApparelModelVariation(*v)
+	if !ok {
 		return nil, ErrModelVariationNotFound
 	}
 
 	out := &dto.PreviewModelInfo{
 		ProductID:    id,
 		ModelID:      modelID,
-		ModelNumber:  v.ModelNumber,
-		Size:         v.Size,
-		Color:        v.Color.Name,
-		RGB:          v.Color.RGB,
-		Measurements: cloneMeasurements(v.Measurements),
+		ModelNumber:  apparelVariation.ModelNumber,
+		Size:         apparelVariation.Size,
+		Color:        apparelVariation.Color.Name,
+		RGB:          apparelVariation.Color.RGB,
+		Measurements: cloneMeasurements(apparelVariation.Measurements),
 	}
 
 	// modelId -> productBlueprintId -> productBlueprint(全フィールド) + patch
@@ -453,6 +463,25 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
+
+func toPreviewApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
+	if v == nil {
+		return modeldom.ApparelModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.ApparelModelVariation:
+		return x, true
+	case *modeldom.ApparelModelVariation:
+		if x == nil {
+			return modeldom.ApparelModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.ApparelModelVariation{}, false
+	}
+}
+
 func (q *PreviewQuery) resolveTransferOwners(
 	ctx context.Context,
 	transfers []dto.PreviewTransferInfo,

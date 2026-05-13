@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 
+	"narratives/internal/domain/common"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -78,7 +79,7 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		Code:   getStr("productBlueprintCategoryCode"),
 		NameJa: getStr("productBlueprintCategoryNameJa"),
 		NameEn: getStr("productBlueprintCategoryNameEn"),
-		Kind:   getStr("productBlueprintCategoryKind"),
+		Kind:   common.ProductCategoryKind(getStr("productBlueprintCategoryKind")),
 		Path:   getStringSlice("productBlueprintCategoryPath"),
 	}
 
@@ -171,7 +172,7 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		"productBlueprintCategoryCode":   category.Code,
 		"productBlueprintCategoryNameJa": category.NameJa,
 		"productBlueprintCategoryNameEn": category.NameEn,
-		"productBlueprintCategoryKind":   category.Kind,
+		"productBlueprintCategoryKind":   string(category.Kind),
 		"productBlueprintCategoryPath":   append([]string(nil), category.Path...),
 
 		"fit":        v.Fit,

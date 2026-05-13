@@ -56,24 +56,26 @@ func (r *ProductQueryRepo) GetProductByID(ctx context.Context, productID string)
 	if productID == "" {
 		return productdom.Product{}, errors.New("firestore.mall.ProductQueryRepo: productID is empty")
 	}
+
 	return r.productRepo.GetByID(ctx, productID)
 }
 
 func (r *ProductQueryRepo) GetModelByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error) {
 	if r == nil || r.modelRepo == nil {
-		return modeldom.ModelVariation{}, errors.New("firestore.mall.ProductQueryRepo: modelRepo is nil")
+		return nil, errors.New("firestore.mall.ProductQueryRepo: modelRepo is nil")
 	}
 	if modelID == "" {
-		return modeldom.ModelVariation{}, errors.New("firestore.mall.ProductQueryRepo: modelID is empty")
+		return nil, errors.New("firestore.mall.ProductQueryRepo: modelID is empty")
 	}
 
 	mv, err := r.modelRepo.GetModelVariationByID(ctx, modelID)
 	if err != nil {
-		return modeldom.ModelVariation{}, err
+		return nil, err
 	}
-	if mv == nil {
-		return modeldom.ModelVariation{}, errors.New("firestore.mall.ProductQueryRepo: model variation not found")
+	if mv == nil || *mv == nil {
+		return nil, errors.New("firestore.mall.ProductQueryRepo: model variation not found")
 	}
+
 	return *mv, nil
 }
 
@@ -86,6 +88,7 @@ func (r *ProductQueryRepo) GetProductionByID(ctx context.Context, productionID s
 	if productionID == "" {
 		return nil, errors.New("firestore.mall.ProductQueryRepo: productionID is empty")
 	}
+
 	return r.productionRepo.GetByID(ctx, productionID)
 }
 
@@ -96,5 +99,6 @@ func (r *ProductQueryRepo) GetProductBlueprintByID(ctx context.Context, bpID str
 	if bpID == "" {
 		return productbpdom.ProductBlueprint{}, errors.New("firestore.mall.ProductQueryRepo: bpID is empty")
 	}
+
 	return r.productBlueprintRepo.GetByID(ctx, bpID)
 }

@@ -54,16 +54,39 @@ func (r *HistoryModelResolverImpl) ResolveHistoryModelByID(
 		TokenBlueprintID:   in.TokenBlueprintID,
 	}
 
-	if variation == nil {
+	if variation == nil || *variation == nil {
 		return out, nil
 	}
 
-	out.Size = variation.Size
-	out.ModelNumber = variation.ModelNumber
-	out.Measurements = cloneHistoryModelMeasurements(variation.Measurements)
-	out.Color = historyColorFromModelColor(variation.Color)
+	apparelVariation, ok := toHistoryApparelModelVariation(*variation)
+	if !ok {
+		return out, nil
+	}
+
+	out.Size = apparelVariation.Size
+	out.ModelNumber = apparelVariation.ModelNumber
+	out.Measurements = cloneHistoryModelMeasurements(apparelVariation.Measurements)
+	out.Color = historyColorFromModelColor(apparelVariation.Color)
 
 	return out, nil
+}
+
+func toHistoryApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
+	if v == nil {
+		return modeldom.ApparelModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.ApparelModelVariation:
+		return x, true
+	case *modeldom.ApparelModelVariation:
+		if x == nil {
+			return modeldom.ApparelModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.ApparelModelVariation{}, false
+	}
 }
 
 func cloneHistoryModelMeasurements(in map[string]int) map[string]int {

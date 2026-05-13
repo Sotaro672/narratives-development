@@ -272,11 +272,34 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 	}
 
 	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, id)
-	if err != nil || mv == nil {
+	if err != nil || mv == nil || *mv == nil {
 		return ""
 	}
 
-	return mv.ModelNumber
+	apparelMV, ok := toNameResolverApparelModelVariation(*mv)
+	if !ok {
+		return ""
+	}
+
+	return apparelMV.ModelNumber
+}
+
+func toNameResolverApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
+	if v == nil {
+		return modeldom.ApparelModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.ApparelModelVariation:
+		return x, true
+	case *modeldom.ApparelModelVariation:
+		if x == nil {
+			return modeldom.ApparelModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.ApparelModelVariation{}, false
+	}
 }
 
 // ------------------------------------------------------------

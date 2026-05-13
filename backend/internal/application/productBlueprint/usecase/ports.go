@@ -11,8 +11,6 @@ import (
 // ProductBlueprintRepo defines the minimal persistence port needed by ProductBlueprintUsecase.
 //
 // 方針:
-// - companyId を伴わない List は廃止（全件取得を防止）
-// - ListPrinted は廃止（不要）
 // - ListDeleted は ListDeletedByCompanyID に改名し、companyId を必須化
 type ProductBlueprintRepo interface {
 	// Read (single)

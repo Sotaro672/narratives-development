@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"narratives/internal/domain/common"
 )
 
 // 汎用エラー（ドメイン共通）
@@ -87,7 +89,7 @@ type ProductBlueprintCategorySnapshot struct {
 	Code   string
 	NameJa string
 	NameEn string
-	Kind   string
+	Kind   common.ProductCategoryKind
 	Path   []string
 }
 
@@ -107,7 +109,7 @@ func (s ProductBlueprintCategorySnapshot) validate() error {
 	if s.NameJa == "" {
 		return ErrInvalidCategoryNameJa
 	}
-	if s.Kind == "" {
+	if !common.IsValidProductCategoryKind(s.Kind) {
 		return ErrInvalidCategoryKind
 	}
 	return nil

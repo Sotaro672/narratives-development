@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/firestore v1.20.0
 	cloud.google.com/go/iam v1.5.3// indirect
 	cloud.google.com/go/secretmanager v1.16.0
-	cloud.google.com/go/storage v1.57.0
+	cloud.google.com/go/storage v1.57.0// indirect
 	firebase.google.com/go/v4 v4.18.0
 	github.com/blocto/solana-go-sdk v1.30.0
 	github.com/google/uuid v1.6.0

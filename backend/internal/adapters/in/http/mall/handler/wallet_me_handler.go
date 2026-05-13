@@ -87,6 +87,7 @@ func (h *MallMeWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	case r.Method == http.MethodOptions && path0 == "/mall/me/wallets/metadata/proxy":
 		h.preflightMeWalletMetadataProxy(w)
 		return
+
 	case r.Method == http.MethodGet && path0 == "/mall/me/wallets/metadata/proxy":
 		h.meWalletMetadataProxy(w, r)
 		return
@@ -644,12 +645,12 @@ func walletSnapshotHasMintPreferTokens(w walletdom.Wallet, mintAddress string) b
 	return stringSliceContainsExact(w.Tokens, mintAddress)
 }
 
-func filterOutKeepFiles(in []usecase.SignedTokenContentFile) []usecase.SignedTokenContentFile {
+func filterOutKeepFiles(in []usecase.TokenContentFile) []usecase.TokenContentFile {
 	if len(in) == 0 {
 		return in
 	}
 
-	out := make([]usecase.SignedTokenContentFile, 0, len(in))
+	out := make([]usecase.TokenContentFile, 0, len(in))
 	for _, f := range in {
 		if isKeepTokenContentFile(f) {
 			continue
@@ -659,7 +660,7 @@ func filterOutKeepFiles(in []usecase.SignedTokenContentFile) []usecase.SignedTok
 	return out
 }
 
-func isKeepTokenContentFile(f usecase.SignedTokenContentFile) bool {
+func isKeepTokenContentFile(f usecase.TokenContentFile) bool {
 	if f.FileName == ".keep" {
 		return true
 	}
@@ -669,7 +670,7 @@ func isKeepTokenContentFile(f usecase.SignedTokenContentFile) bool {
 			return true
 		}
 	}
-	return isKeepObjectURI(f.PublicURI) || isKeepObjectURI(f.ViewURI)
+	return isKeepObjectURI(f.PublicURI) || isKeepObjectURI(f.ViewURI) || isKeepObjectURI(f.URI)
 }
 
 func isKeepObjectURI(raw string) bool {
@@ -692,30 +693,35 @@ func isKeepObjectURI(raw string) bool {
 }
 
 func isResolvedTokenSignedURLStale(res usecase.ResolveTokenByMintAddressWithBrandNameResult, now time.Time, minTTL time.Duration) bool {
-	at := now
-	if at.IsZero() {
-		at = time.Now().UTC()
-	} else {
-		at = at.UTC()
-	}
-
 	files := res.TokenContentsFiles
 	if len(files) == 0 {
 		return false
 	}
 
+	// GCS Signed URL 廃止後は metadata.properties.files[].uri をそのまま ViewURI/URI として返す。
+	// そのため ViewExpiresAt が nil でも stale 扱いしない。
 	for _, f := range files {
-		if f.ViewURI == "" {
+		if f.ViewURI == "" && f.URI == "" {
 			return true
 		}
-		if f.ViewExpiresAt == nil || f.ViewExpiresAt.IsZero() {
-			return true
-		}
-		exp := f.ViewExpiresAt.UTC()
-		if exp.Before(at.Add(minTTL)) {
-			return true
+
+		// 旧キャッシュにだけ ViewExpiresAt が入っている可能性があるため、
+		// 値が存在する場合のみ期限を見て stale 判定する。
+		if f.ViewExpiresAt != nil && !f.ViewExpiresAt.IsZero() {
+			at := now
+			if at.IsZero() {
+				at = time.Now().UTC()
+			} else {
+				at = at.UTC()
+			}
+
+			exp := f.ViewExpiresAt.UTC()
+			if exp.Before(at.Add(minTTL)) {
+				return true
+			}
 		}
 	}
+
 	return false
 }
 

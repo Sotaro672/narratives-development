@@ -4,6 +4,8 @@ package model
 import (
 	"encoding/json"
 	"net/http"
+
+	modeldom "narratives/internal/domain/model"
 )
 
 // ------------------------------------------------------------
@@ -18,13 +20,35 @@ func (h *ModelHandler) getVariationByID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// ★ 期待値: modelId (= variationId) から modelNumber/size/color を解決する
+	// 期待値: modelId (= variationId) から modelNumber/size/color を解決する
 	mv, err := h.uc.GetModelVariationByID(ctx, id)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+	if mv == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "variation not found"})
+		return
+	}
 
-	// mv は *modeldom.ModelVariation なので、DTO 変換関数へは値で渡す
-	_ = json.NewEncoder(w).Encode(toModelVariationDTO(*mv))
+	var apparelMV modeldom.ApparelModelVariation
+
+	switch v := (*mv).(type) {
+	case modeldom.ApparelModelVariation:
+		apparelMV = v
+	case *modeldom.ApparelModelVariation:
+		if v == nil {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "variation not found"})
+			return
+		}
+		apparelMV = *v
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unsupported model variation type"})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(toModelVariationDTO(apparelMV))
 }

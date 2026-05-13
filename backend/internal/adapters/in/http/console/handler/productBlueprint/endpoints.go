@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"narratives/internal/domain/common"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -58,7 +59,7 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 			Code:   in.ProductBlueprintCategory.Code,
 			NameJa: in.ProductBlueprintCategory.NameJa,
 			NameEn: in.ProductBlueprintCategory.NameEn,
-			Kind:   in.ProductBlueprintCategory.Kind,
+			Kind:   common.ProductCategoryKind(in.ProductBlueprintCategory.Kind),
 			Path:   append([]string(nil), in.ProductBlueprintCategory.Path...),
 		},
 
@@ -132,7 +133,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 			Code:   in.ProductBlueprintCategory.Code,
 			NameJa: in.ProductBlueprintCategory.NameJa,
 			NameEn: in.ProductBlueprintCategory.NameEn,
-			Kind:   in.ProductBlueprintCategory.Kind,
+			Kind:   common.ProductCategoryKind(in.ProductBlueprintCategory.Kind),
 			Path:   append([]string(nil), in.ProductBlueprintCategory.Path...),
 		},
 

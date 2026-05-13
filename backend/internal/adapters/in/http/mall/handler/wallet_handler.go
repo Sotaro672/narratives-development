@@ -164,7 +164,7 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 			"metadataUri":        res.MetadataURI,
 			"mintAddress":        res.MintAddress,
 			"tokenBlueprintId":   res.TokenBlueprintID,
-			"tokenContentsFiles": []usecase.SignedTokenContentFile{},
+			"tokenContentsFiles": []usecase.TokenContentFile{},
 		})
 		return
 	}
@@ -340,7 +340,7 @@ func (h *WalletHandler) resolvePublicTokenSummary(
 		ProductBlueprintID: pbID,
 		ProductName:        pb.ProductName,
 		TokenBlueprintID:   "",
-		TokenContentsFiles: []usecase.SignedTokenContentFile{},
+		TokenContentsFiles: []usecase.TokenContentFile{},
 	}, nil
 }
 

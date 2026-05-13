@@ -4,6 +4,7 @@ package productBlueprintCategory
 import (
 	"errors"
 	"fmt"
+	"narratives/internal/domain/common"
 	"strings"
 	"time"
 )
@@ -55,31 +56,20 @@ func WrapNotFound(err error, msg string) error {
 
 type CategoryID string
 type CategoryCode string
-type CategoryKind string
+type CategoryKind = common.ProductCategoryKind
 
 const (
-	CategoryKindApparel    CategoryKind = "apparel"
-	CategoryKindFood       CategoryKind = "food"
-	CategoryKindAlcohol    CategoryKind = "alcohol"
-	CategoryKindCosmetics  CategoryKind = "cosmetics"
-	CategoryKindGoods      CategoryKind = "goods"
-	CategoryKindHealthcare CategoryKind = "healthcare"
-	CategoryKindOther      CategoryKind = "other"
+	CategoryKindApparel    = common.ProductCategoryKindApparel
+	CategoryKindFood       = common.ProductCategoryKindFood
+	CategoryKindAlcohol    = common.ProductCategoryKindAlcohol
+	CategoryKindCosmetics  = common.ProductCategoryKindCosmetics
+	CategoryKindGoods      = common.ProductCategoryKindGoods
+	CategoryKindHealthcare = common.ProductCategoryKindHealthcare
+	CategoryKindOther      = common.ProductCategoryKindOther
 )
 
 func IsValidCategoryKind(v CategoryKind) bool {
-	switch v {
-	case CategoryKindApparel,
-		CategoryKindFood,
-		CategoryKindAlcohol,
-		CategoryKindCosmetics,
-		CategoryKindGoods,
-		CategoryKindHealthcare,
-		CategoryKindOther:
-		return true
-	default:
-		return false
-	}
+	return common.IsValidProductCategoryKind(v)
 }
 
 // ======================================

@@ -65,15 +65,20 @@ type resolvedTokenDoc struct {
 }
 
 type resolvedTokenContentDoc struct {
-	// ✅ stable keys（推奨：Firestoreに保存してOK）
-	FileName   string `firestore:"fileName"`
-	Bucket     string `firestore:"bucket"`
-	ObjectPath string `firestore:"objectPath"`
-	Type       string `firestore:"type"`
-	PublicURI  string `firestore:"publicUri"`
+	// metadata.properties.files 由来
+	FileName string `firestore:"fileName"`
+	Type     string `firestore:"type"`
+	URI      string `firestore:"uri"`
 
-	// ✅ 期限付き（原則 Firestore には保存しない想定だが、互換のため許容）
-	ViewURI       string    `firestore:"viewUri"`
+	// 互換用。
+	// 旧実装では signed URL を viewUri として返していたが、
+	// GCS 廃止後は署名せず metadata.properties.files[].uri をそのまま返す。
+	ViewURI string `firestore:"viewUri"`
+
+	// 旧 GCS 実装との互換用。
+	Bucket        string    `firestore:"bucket"`
+	ObjectPath    string    `firestore:"objectPath"`
+	PublicURI     string    `firestore:"publicUri"`
 	ViewExpiresAt time.Time `firestore:"viewExpiresAt"`
 }
 
@@ -92,13 +97,19 @@ func toResolvedTokenDoc(src appusecase.ResolveTokenByMintAddressWithBrandNameRes
 			exp = f.ViewExpiresAt.UTC()
 		}
 
+		viewURI := f.ViewURI
+		if viewURI == "" {
+			viewURI = f.URI
+		}
+
 		files = append(files, resolvedTokenContentDoc{
 			FileName:      f.FileName,
+			Type:          f.Type,
+			URI:           f.URI,
+			ViewURI:       viewURI,
 			Bucket:        f.Bucket,
 			ObjectPath:    f.ObjectPath,
-			Type:          f.Type,
 			PublicURI:     f.PublicURI,
-			ViewURI:       f.ViewURI,
 			ViewExpiresAt: exp,
 		})
 	}
@@ -116,12 +127,12 @@ func toResolvedTokenDoc(src appusecase.ResolveTokenByMintAddressWithBrandNameRes
 		TokenContents:    files,
 
 		ResolvedAt:    at,
-		SourceVersion: 1,
+		SourceVersion: 2,
 	}
 }
 
 func fromResolvedTokenDoc(d resolvedTokenDoc) appusecase.ResolveTokenByMintAddressWithBrandNameResult {
-	files := make([]appusecase.SignedTokenContentFile, 0, len(d.TokenContents))
+	files := make([]appusecase.TokenContentFile, 0, len(d.TokenContents))
 	for _, f := range d.TokenContents {
 		var exp *time.Time
 		if !f.ViewExpiresAt.IsZero() {
@@ -129,14 +140,27 @@ func fromResolvedTokenDoc(d resolvedTokenDoc) appusecase.ResolveTokenByMintAddre
 			exp = &t
 		}
 
-		files = append(files, appusecase.SignedTokenContentFile{
-			FileName:   f.FileName,
-			Bucket:     f.Bucket,
-			ObjectPath: f.ObjectPath,
-			Type:       f.Type,
-			PublicURI:  f.PublicURI,
-			ViewURI:    f.ViewURI,
-			// nil の場合は省略
+		uri := f.URI
+		if uri == "" {
+			uri = f.ViewURI
+		}
+		if uri == "" {
+			uri = f.PublicURI
+		}
+
+		viewURI := f.ViewURI
+		if viewURI == "" {
+			viewURI = uri
+		}
+
+		files = append(files, appusecase.TokenContentFile{
+			FileName:      f.FileName,
+			Type:          f.Type,
+			URI:           uri,
+			ViewURI:       viewURI,
+			Bucket:        f.Bucket,
+			ObjectPath:    f.ObjectPath,
+			PublicURI:     f.PublicURI,
 			ViewExpiresAt: exp,
 		})
 	}
@@ -160,7 +184,6 @@ func (r *ResolvedTokenRepositoryFS) GetByAvatarIDAndMint(
 	avatarID string,
 	mintAddress string,
 ) (appusecase.ResolveTokenByMintAddressWithBrandNameResult, error) {
-
 	if r == nil || r.Client == nil {
 		return appusecase.ResolveTokenByMintAddressWithBrandNameResult{}, ErrResolvedTokenRepoClientNil
 	}
@@ -197,7 +220,6 @@ func (r *ResolvedTokenRepositoryFS) ListByAvatarID(
 	ctx context.Context,
 	avatarID string,
 ) ([]appusecase.ResolveTokenByMintAddressWithBrandNameResult, error) {
-
 	if r == nil || r.Client == nil {
 		return nil, ErrResolvedTokenRepoClientNil
 	}
@@ -242,7 +264,6 @@ func (r *ResolvedTokenRepositoryFS) Upsert(
 	res appusecase.ResolveTokenByMintAddressWithBrandNameResult,
 	now time.Time,
 ) error {
-
 	if r == nil || r.Client == nil {
 		return ErrResolvedTokenRepoClientNil
 	}
@@ -267,7 +288,6 @@ func (r *ResolvedTokenRepositoryFS) DeleteByAvatarIDAndMint(
 	avatarID string,
 	mintAddress string,
 ) error {
-
 	if r == nil || r.Client == nil {
 		return ErrResolvedTokenRepoClientNil
 	}
@@ -315,5 +335,6 @@ func (r *ResolvedTokenRepositoryFS) DeleteAllByAvatarID(ctx context.Context, ava
 			return err
 		}
 	}
+
 	return nil
 }

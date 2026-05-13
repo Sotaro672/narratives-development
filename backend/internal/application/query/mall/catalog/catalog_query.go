@@ -207,7 +207,12 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 
 	items := make([]dto.CatalogModelVariationDTO, 0, len(res.Items))
 	for _, it := range res.Items {
-		modelID := it.ID
+		if it == nil {
+			log.Printf("[catalog][error] model variation is nil listId=%q pbId=%q", listID, resolvedPBID)
+			return dto.CatalogDTO{}, errors.New("model variation is nil")
+		}
+
+		modelID := it.GetID()
 		if modelID == "" {
 			log.Printf("[catalog][error] model variation id is empty listId=%q pbId=%q", listID, resolvedPBID)
 			return dto.CatalogDTO{}, errors.New("model variation id is empty")
