@@ -95,7 +95,9 @@ export function useVariationsEditor(
   const patchModelNumberState = React.useCallback(
     (sizeLabel: string, color: string, nextCode: string) => {
       setModelNumbers((prev) => {
-        const idx = prev.findIndex((m) => m.size === sizeLabel && m.color === color);
+        const idx = prev.findIndex(
+          (m) => m.size === sizeLabel && m.color === color,
+        );
         const trimmed = nextCode.trim();
 
         // empty => remove
@@ -232,12 +234,6 @@ export function useVariationsEditor(
       clampField("thighWidth");
       clampField("hemWidth");
       clampField("totalLength");
-
-      clampField("heelHeight");
-
-      clampField("width");
-      clampField("height");
-      clampField("depth");
 
       setSizes((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),

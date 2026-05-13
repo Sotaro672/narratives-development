@@ -47,33 +47,115 @@ export function isApparelCategoryCode(
 }
 
 // ============================
+// Apparel productBlueprint category fields
+// ============================
+//
+// ProductBlueprint の共通 field:
+// - brandId
+// - productName
+// - productIdTagType
+// - description
+//
+// 上記は categoryFields には入れない。
+// 以下は productBlueprint.categoryFields に入る apparel 専用 field。
+
+export type ApparelCategoryFieldKey = "weight" | "fit" | "material";
+
+export type ApparelCategoryFields = Partial<
+  Record<ApparelCategoryFieldKey, string | number | null>
+>;
+
+export const APPAREL_CATEGORY_FIELD_KEYS: Record<
+  ApparelCategoryCode,
+  ApparelCategoryFieldKey[]
+> = {
+  "apparel.tops": ["weight", "fit", "material"],
+  "apparel.bottoms": ["weight", "fit", "material"],
+  "apparel.outerwear": ["material"],
+  "apparel.dress": ["weight", "fit", "material"],
+  "apparel.shoes": ["material"],
+  "apparel.bag": ["material"],
+  "apparel.accessory": ["material"],
+};
+
+export function getApparelCategoryFieldKeys(
+  categoryCode: string,
+): ApparelCategoryFieldKey[] {
+  if (!isApparelCategoryCode(categoryCode)) {
+    return [];
+  }
+
+  return APPAREL_CATEGORY_FIELD_KEYS[categoryCode] ?? [];
+}
+
+// ============================
+// Apparel model fields
+// ============================
+//
+// color / size / measurements は ProductBlueprint.categoryFields ではなく、
+// model variation 側に保存する。
+
+export type ApparelModelFieldKey = "color" | "size" | "measurements";
+
+export const APPAREL_MODEL_FIELD_KEYS: Record<
+  ApparelCategoryCode,
+  ApparelModelFieldKey[]
+> = {
+  "apparel.tops": ["color", "size", "measurements"],
+  "apparel.bottoms": ["color", "size", "measurements"],
+  "apparel.outerwear": ["color", "size"],
+  "apparel.dress": ["color", "size", "measurements"],
+  "apparel.shoes": ["color", "size"],
+  "apparel.bag": [],
+  "apparel.accessory": [],
+};
+
+export function getApparelModelFieldKeys(
+  categoryCode: string,
+): ApparelModelFieldKey[] {
+  if (!isApparelCategoryCode(categoryCode)) {
+    return [];
+  }
+
+  return APPAREL_MODEL_FIELD_KEYS[categoryCode] ?? [];
+}
+
+export function hasApparelModelFields(categoryCode: string): boolean {
+  return getApparelModelFieldKeys(categoryCode).length > 0;
+}
+
+export function hasApparelMeasurements(categoryCode: string): boolean {
+  return getApparelModelFieldKeys(categoryCode).includes("measurements");
+}
+
+// ============================
 // Apparel measurement definitions
 // ============================
+//
+// 入力表では measurements は以下のみ:
+// - apparel.tops
+// - apparel.bottoms
+// - apparel.dress
+//
+// outerwear / shoes は color / size のみ。
+// bag / accessory は model variation を作らない。
 
 export type ApparelMeasurementKey =
-  // tops / outerwear / dress
+  // tops / dress
   | "shoulderWidth"
   | "bodyWidth"
   | "bodyLength"
   | "sleeveLength"
   | "neckWidth"
 
-  // bottoms
+  // bottoms / dress
   | "waist"
   | "hip"
   | "rise"
   | "inseam"
   | "thighWidth"
   | "hemWidth"
-  | "totalLength"
-
-  // shoes
-  | "heelHeight"
-
-  // generic
-  | "width"
-  | "height"
-  | "depth";
+  | "totalLength";
 
 export type ApparelMeasurementOption = {
   key: ApparelMeasurementKey;
@@ -82,14 +164,14 @@ export type ApparelMeasurementOption = {
 };
 
 export const APPAREL_MEASUREMENT_OPTIONS: ApparelMeasurementOption[] = [
-  // tops / outerwear / dress
+  // tops / dress
   { key: "shoulderWidth", label: "肩幅", unit: "cm" },
   { key: "bodyWidth", label: "身幅", unit: "cm" },
   { key: "bodyLength", label: "着丈", unit: "cm" },
   { key: "sleeveLength", label: "袖丈", unit: "cm" },
   { key: "neckWidth", label: "首回り", unit: "cm" },
 
-  // bottoms
+  // bottoms / dress
   { key: "waist", label: "ウエスト", unit: "cm" },
   { key: "hip", label: "ヒップ", unit: "cm" },
   { key: "rise", label: "股上", unit: "cm" },
@@ -97,14 +179,6 @@ export const APPAREL_MEASUREMENT_OPTIONS: ApparelMeasurementOption[] = [
   { key: "thighWidth", label: "わたり幅", unit: "cm" },
   { key: "hemWidth", label: "裾幅", unit: "cm" },
   { key: "totalLength", label: "総丈", unit: "cm" },
-
-  // shoes
-  { key: "heelHeight", label: "ヒール高", unit: "cm" },
-
-  // generic
-  { key: "width", label: "幅", unit: "cm" },
-  { key: "height", label: "高さ", unit: "cm" },
-  { key: "depth", label: "奥行き", unit: "cm" },
 ];
 
 export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
@@ -127,12 +201,7 @@ export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
     "hemWidth",
     "totalLength",
   ],
-  "apparel.outerwear": [
-    "shoulderWidth",
-    "bodyWidth",
-    "bodyLength",
-    "sleeveLength",
-  ],
+  "apparel.outerwear": [],
   "apparel.dress": [
     "shoulderWidth",
     "bodyWidth",
@@ -142,9 +211,9 @@ export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
     "hip",
     "totalLength",
   ],
-  "apparel.shoes": ["heelHeight"],
-  "apparel.bag": ["width", "height", "depth"],
-  "apparel.accessory": ["width", "height"],
+  "apparel.shoes": [],
+  "apparel.bag": [],
+  "apparel.accessory": [],
 };
 
 export const APPAREL_CATEGORY_MEASUREMENT_OPTIONS: Record<
@@ -191,7 +260,7 @@ export type ApparelModelNumberRow = {
 export type ApparelSizeInput = {
   sizeLabel: string;
 
-  // tops / outerwear / dress
+  // tops / dress
   shoulderWidth?: number;
   bodyWidth?: number;
   bodyLength?: number;
@@ -206,14 +275,6 @@ export type ApparelSizeInput = {
   thighWidth?: number;
   hemWidth?: number;
   totalLength?: number;
-
-  // shoes
-  heelHeight?: number;
-
-  // bag / accessory / generic
-  width?: number;
-  height?: number;
-  depth?: number;
 };
 
 /**
@@ -354,12 +415,7 @@ export function getApparelMeasurementOptions(
 export function isApparelMeasurementRequiredCategory(
   categoryCode: string,
 ): boolean {
-  return (
-    categoryCode === "apparel.tops" ||
-    categoryCode === "apparel.bottoms" ||
-    categoryCode === "apparel.outerwear" ||
-    categoryCode === "apparel.dress"
-  );
+  return hasApparelMeasurements(categoryCode);
 }
 
 export function normalizeApparelMeasurements(

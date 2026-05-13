@@ -44,6 +44,19 @@ function resolveApparelCategoryCode(
  *
  * itemType は廃止。
  * productBlueprintCategory.code を正として利用する。
+ *
+ * 入力表ベースでは measurements を持つのは以下のみ:
+ * - apparel.tops
+ * - apparel.bottoms
+ * - apparel.dress
+ *
+ * 以下は model variation 自体は作るが measurements は持たない:
+ * - apparel.outerwear
+ * - apparel.shoes
+ *
+ * 以下は model variation を作らない想定:
+ * - apparel.bag
+ * - apparel.accessory
  */
 function buildApparelMeasurements(
   categoryCode: ApparelCategoryCode,
@@ -63,14 +76,6 @@ function buildApparelMeasurements(
       return result;
     }
 
-    case "apparel.outerwear": {
-      result.shoulderWidth = size.shoulderWidth ?? null;
-      result.bodyWidth = size.bodyWidth ?? null;
-      result.bodyLength = size.bodyLength ?? null;
-      result.sleeveLength = size.sleeveLength ?? null;
-      return result;
-    }
-
     case "apparel.dress": {
       result.shoulderWidth = size.shoulderWidth ?? null;
       result.bodyWidth = size.bodyWidth ?? null;
@@ -82,31 +87,20 @@ function buildApparelMeasurements(
       return result;
     }
 
-    case "apparel.shoes": {
-      result.heelHeight = size.heelHeight ?? null;
-      return result;
-    }
-
-    case "apparel.bag": {
-      result.width = size.width ?? null;
-      result.height = size.height ?? null;
-      result.depth = size.depth ?? null;
-      return result;
-    }
-
-    case "apparel.accessory": {
-      result.width = size.width ?? null;
-      result.height = size.height ?? null;
-      return result;
-    }
-
-    case "apparel.tops":
-    default: {
+    case "apparel.tops": {
       result.shoulderWidth = size.shoulderWidth ?? null;
       result.bodyWidth = size.bodyWidth ?? null;
       result.bodyLength = size.bodyLength ?? null;
       result.sleeveLength = size.sleeveLength ?? null;
       result.neckWidth = size.neckWidth ?? null;
+      return result;
+    }
+
+    case "apparel.outerwear":
+    case "apparel.shoes":
+    case "apparel.bag":
+    case "apparel.accessory":
+    default: {
       return result;
     }
   }
@@ -170,6 +164,18 @@ function buildModelNumberMap(
   return m;
 }
 
+function shouldCreateApparelModelVariations(
+  categoryCode: ApparelCategoryCode,
+): boolean {
+  return (
+    categoryCode === "apparel.tops" ||
+    categoryCode === "apparel.bottoms" ||
+    categoryCode === "apparel.dress" ||
+    categoryCode === "apparel.outerwear" ||
+    categoryCode === "apparel.shoes"
+  );
+}
+
 // ------------------------------
 // Service 本体（アプリケーション層）
 // ------------------------------
@@ -184,6 +190,14 @@ export async function createProductBlueprint(
    * productBlueprint 本体のみ作成する。
    */
   if (!categoryCode) {
+    return await createProductBlueprintApi(params, []);
+  }
+
+  /**
+   * apparel.bag / apparel.accessory は入力表上 model field が無いため、
+   * ModelVariation は作成しない。
+   */
+  if (!shouldCreateApparelModelVariations(categoryCode)) {
     return await createProductBlueprintApi(params, []);
   }
 
@@ -204,11 +218,13 @@ export async function createProductBlueprint(
   for (const color of colors) {
     for (const sizeRow of sizes) {
       const sizeLabel = String(sizeRow.sizeLabel ?? "").trim();
+
       if (!sizeLabel) {
         continue;
       }
 
       const code = modelNumberMap.get(`${sizeLabel}__${color}`)?.trim();
+
       if (!code) {
         continue;
       }

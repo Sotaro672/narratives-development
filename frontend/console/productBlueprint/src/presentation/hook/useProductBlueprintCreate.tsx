@@ -19,15 +19,11 @@ import {
   type Fit,
 } from "../../domain/entity/apparel";
 
-import type {
-  ProductBlueprintCategorySnapshot,
-} from "../../domain/entity/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../domain/entity/productBlueprintCategory";
 
 import { createProductBlueprint } from "../../application/productBlueprintCreateService";
 
-import type {
-  ProductBlueprintSizeRow as SizeRow,
-} from "../../infrastructure/api/productBlueprintApi";
+import type { ProductBlueprintSizeRow as SizeRow } from "../../infrastructure/api/productBlueprintApi";
 
 export {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
@@ -110,7 +106,7 @@ function newSizeRow(): SizeRow {
         : `size-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     sizeLabel: "",
 
-    // tops / outerwear / dress
+    // tops / dress
     shoulderWidth: undefined,
     bodyWidth: undefined,
     bodyLength: undefined,
@@ -125,14 +121,6 @@ function newSizeRow(): SizeRow {
     thighWidth: undefined,
     hemWidth: undefined,
     totalLength: undefined,
-
-    // shoes
-    heelHeight: undefined,
-
-    // bag / accessory / generic
-    width: undefined,
-    height: undefined,
-    depth: undefined,
   };
 }
 
@@ -546,12 +534,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       clampField("thighWidth");
       clampField("hemWidth");
       clampField("totalLength");
-
-      clampField("heelHeight");
-
-      clampField("width");
-      clampField("height");
-      clampField("depth");
 
       const prevRow = sizes.find((s) => s.id === id);
       const prevLabelRaw = prevRow?.sizeLabel;

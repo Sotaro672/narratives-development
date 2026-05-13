@@ -62,14 +62,6 @@ function buildApparelMeasurements(
       return result;
     }
 
-    case "apparel.outerwear": {
-      result.shoulderWidth = size.shoulderWidth ?? null;
-      result.bodyWidth = size.bodyWidth ?? null;
-      result.bodyLength = size.bodyLength ?? null;
-      result.sleeveLength = size.sleeveLength ?? null;
-      return result;
-    }
-
     case "apparel.dress": {
       result.shoulderWidth = size.shoulderWidth ?? null;
       result.bodyWidth = size.bodyWidth ?? null;
@@ -81,31 +73,20 @@ function buildApparelMeasurements(
       return result;
     }
 
-    case "apparel.shoes": {
-      result.heelHeight = size.heelHeight ?? null;
-      return result;
-    }
-
-    case "apparel.bag": {
-      result.width = size.width ?? null;
-      result.height = size.height ?? null;
-      result.depth = size.depth ?? null;
-      return result;
-    }
-
-    case "apparel.accessory": {
-      result.width = size.width ?? null;
-      result.height = size.height ?? null;
-      return result;
-    }
-
-    case "apparel.tops":
-    default: {
+    case "apparel.tops": {
       result.shoulderWidth = size.shoulderWidth ?? null;
       result.bodyWidth = size.bodyWidth ?? null;
       result.bodyLength = size.bodyLength ?? null;
       result.sleeveLength = size.sleeveLength ?? null;
       result.neckWidth = size.neckWidth ?? null;
+      return result;
+    }
+
+    case "apparel.outerwear":
+    case "apparel.shoes":
+    case "apparel.bag":
+    case "apparel.accessory":
+    default: {
       return result;
     }
   }
@@ -150,6 +131,7 @@ function resolveRgbInt(args: {
 
   const rgbHex = String(colorRgbMap[colorName] ?? "").trim();
   const fromHex = rgbHex ? hexToRgbInt(rgbHex) : undefined;
+
   if (typeof fromHex === "number" && Number.isFinite(fromHex)) {
     return fromHex;
   }
@@ -171,6 +153,7 @@ export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
   const trimmed = String(id ?? "").trim();
+
   if (!trimmed) {
     throw new Error("getProductBlueprintDetail: id が空です");
   }
@@ -257,37 +240,60 @@ export async function updateProductBlueprint(
   const variations = await listModelVariationsByProductBlueprintId(id);
 
   const existingMap = new Map<string, ModelVariationResponse>();
+
   variations.forEach((v) => {
     const sizeLabel = (v.size ?? "").trim();
     const colorName = (v.color?.name ?? "").trim();
-    if (!sizeLabel || !colorName) return;
+
+    if (!sizeLabel || !colorName) {
+      return;
+    }
 
     existingMap.set(makeKey(sizeLabel, colorName), v);
   });
 
   const selectedKeys = new Set<string>();
+
   modelNumbers.forEach((m) => {
-    if (!m.size || !m.color) return;
-    selectedKeys.add(makeKey(m.size, m.color));
+    const sizeLabel = String(m.size ?? "").trim();
+    const colorName = String(m.color ?? "").trim();
+
+    if (!sizeLabel || !colorName) {
+      return;
+    }
+
+    selectedKeys.add(makeKey(sizeLabel, colorName));
   });
 
   const measurementsMap = new Map<string, Record<string, number>>();
+
   sizes.forEach((s) => {
     const ms = buildMeasurementsFromSizeRowForUpdate(apparelCategoryCode, s);
-    if (ms) measurementsMap.set(s.sizeLabel, ms);
+
+    if (ms) {
+      measurementsMap.set(s.sizeLabel, ms);
+    }
   });
 
   const updateTasks: Promise<void>[] = [];
 
   existingMap.forEach((v, key) => {
-    if (!selectedKeys.has(key)) return;
+    if (!selectedKeys.has(key)) {
+      return;
+    }
 
     const variationId = v.id;
-    if (!variationId) return;
+
+    if (!variationId) {
+      return;
+    }
 
     const sizeLabel = (v.size ?? "").trim();
     const colorName = (v.color?.name ?? "").trim();
-    if (!sizeLabel || !colorName) return;
+
+    if (!sizeLabel || !colorName) {
+      return;
+    }
 
     const rgb = resolveRgbInt({
       colorName,
@@ -305,7 +311,9 @@ export async function updateProductBlueprint(
       ...(measurements ? { measurements } : {}),
     };
 
-    updateTasks.push(updateModelVariation(variationId, payload).then(() => undefined));
+    updateTasks.push(
+      updateModelVariation(variationId, payload).then(() => undefined),
+    );
   });
 
   await Promise.all(updateTasks);
@@ -313,13 +321,21 @@ export async function updateProductBlueprint(
   const createPayloads: CreateModelVariationRequest[] = [];
 
   selectedKeys.forEach((key) => {
-    if (existingMap.has(key)) return;
+    if (existingMap.has(key)) {
+      return;
+    }
 
     const [sizeLabel, colorName] = key.split("__");
-    if (!sizeLabel || !colorName) return;
+
+    if (!sizeLabel || !colorName) {
+      return;
+    }
 
     const sizeRow = sizes.find((s) => s.sizeLabel === sizeLabel);
-    if (!sizeRow) return;
+
+    if (!sizeRow) {
+      return;
+    }
 
     const rgb = resolveRgbInt({
       colorName,
@@ -327,7 +343,10 @@ export async function updateProductBlueprint(
       fallbackRgb: null,
     });
 
-    const measurements = buildMeasurementsForCreate(apparelCategoryCode, sizeRow) ?? {};
+    const measurements = buildMeasurementsForCreate(
+      apparelCategoryCode,
+      sizeRow,
+    );
 
     const createReq: CreateModelVariationRequest = {
       productBlueprintId: id,
@@ -335,7 +354,7 @@ export async function updateProductBlueprint(
       size: sizeLabel,
       color: colorName,
       rgb,
-      measurements,
+      measurements: measurements ?? {},
     };
 
     createPayloads.push(createReq);
@@ -381,6 +400,7 @@ export async function listModelVariationsByProductBlueprintId(
   productBlueprintId: string,
 ): Promise<ModelVariationResponse[]> {
   const id = productBlueprintId.trim();
+
   if (!id) {
     throw new Error("productBlueprintId が空です");
   }
@@ -401,6 +421,7 @@ export async function listModelVariationsByProductBlueprintId(
   }
 
   const raw = (await res.json()) as ModelVariationResponse[] | null;
+
   return raw ?? [];
 }
 
@@ -423,6 +444,7 @@ export async function getProductBlueprintHistory(
   productBlueprintId: string,
 ): Promise<ProductBlueprintHistoryItem[]> {
   const id = productBlueprintId.trim();
+
   if (!id) {
     throw new Error("getProductBlueprintHistory: productBlueprintId が空です");
   }
@@ -443,7 +465,10 @@ export async function getProductBlueprintHistory(
   }
 
   const raw = (await res.json()) as any[] | null;
-  if (!raw) return [];
+
+  if (!raw) {
+    return [];
+  }
 
   return raw.map((v: any): ProductBlueprintHistoryItem => ({
     id: v.id ?? "",
