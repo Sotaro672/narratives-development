@@ -31,140 +31,8 @@ func NewModelRepositoryFS(client *firestore.Client) *ModelRepositoryFS {
 	return &ModelRepositoryFS{Client: client}
 }
 
-func (r *ModelRepositoryFS) modelSetsCol() *firestore.CollectionRef {
-	return r.Client.Collection("model_sets")
-}
-
 func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
 	return r.Client.Collection("models")
-}
-
-// ------------------------------------------------------------
-// model_sets 取得（ライブ）
-// ------------------------------------------------------------
-
-func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrNotFound
-	}
-
-	snap, err := r.modelSetsCol().Doc(productBlueprintID).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, modeldom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	data := snap.Data()
-	if data == nil {
-		return nil, fmt.Errorf("empty model_set document: %s", snap.Ref.ID)
-	}
-
-	var updatedAt time.Time
-	if v, ok := data["updatedAt"].(time.Time); ok {
-		updatedAt = v.UTC()
-	}
-
-	vars, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &modeldom.ModelData{
-		ProductBlueprintID: productBlueprintID,
-		Variations:         vars,
-		UpdatedAt:          updatedAt,
-	}, nil
-}
-
-func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrNotFound
-	}
-
-	q := r.modelSetsCol().Where("productBlueprintId", "==", productBlueprintID).Limit(1)
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	snap, err := it.Next()
-	if err != nil {
-		if err == iterator.Done {
-			return nil, modeldom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	data := snap.Data()
-	if data == nil {
-		return nil, fmt.Errorf("empty model_set: %s", snap.Ref.ID)
-	}
-
-	var updatedAt time.Time
-	if v, ok := data["updatedAt"].(time.Time); ok {
-		updatedAt = v.UTC()
-	}
-
-	vars, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &modeldom.ModelData{
-		ProductBlueprintID: productBlueprintID,
-		Variations:         vars,
-		UpdatedAt:          updatedAt,
-	}, nil
-}
-
-// ------------------------------------------------------------
-// model_sets 更新（ライブ）
-// ------------------------------------------------------------
-
-func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productBlueprintID string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrNotFound
-	}
-
-	docRef := r.modelSetsCol().Doc(productBlueprintID)
-	var fsUpdates []firestore.Update
-
-	if v, ok := updates["productBlueprintID"]; ok {
-		if s, ok2 := v.(string); ok2 {
-			fsUpdates = append(fsUpdates, firestore.Update{
-				Path:  "productBlueprintId",
-				Value: s,
-			})
-		}
-	}
-
-	fsUpdates = append(fsUpdates, firestore.Update{
-		Path:  "updatedAt",
-		Value: time.Now().UTC(),
-	})
-
-	if len(fsUpdates) == 0 {
-		return r.GetModelData(ctx, productBlueprintID)
-	}
-
-	if _, err := docRef.Update(ctx, fsUpdates); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, modeldom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	return r.GetModelData(ctx, productBlueprintID)
 }
 
 // ------------------------------------------------------------
@@ -415,7 +283,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, vars []m
 }
 
 // ------------------------------------------------------------
-// RepositoryPort 追加（不足メソッド）
+// RepositoryPort implementation
 // ------------------------------------------------------------
 
 func (r *ModelRepositoryFS) ListVariations(
@@ -759,10 +627,12 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		return out
 	}
 
-	var createdAt, updatedAt time.Time
+	var createdAt time.Time
 	if v, ok := data["createdAt"].(time.Time); ok {
 		createdAt = v.UTC()
 	}
+
+	var updatedAt time.Time
 	if v, ok := data["updatedAt"].(time.Time); ok {
 		updatedAt = v.UTC()
 	}

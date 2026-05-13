@@ -11,22 +11,10 @@ import LogCard from "../../../../log/src/presentation/LogCard";
 
 import { useProductBlueprintDetail } from "../hook/useProductBlueprintDetail";
 
-import type { ItemType } from "../../domain/entity/catalog";
-import { ITEM_TYPE_MEASUREMENT_OPTIONS } from "../../domain/entity/catalog";
-
-function toCatalogItemType(value: string | undefined): ItemType | undefined {
-  const normalized = String(value ?? "").trim().toLowerCase();
-
-  if (normalized === "bottoms" || normalized === "ボトムス") {
-    return "ボトムス" as ItemType;
-  }
-
-  if (normalized === "tops" || normalized === "トップス") {
-    return "トップス" as ItemType;
-  }
-
-  return undefined;
-}
+import {
+  APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
+  isApparelCategoryCode,
+} from "../../domain/entity/apparel";
 
 export default function ProductBlueprintDetail() {
   const {
@@ -39,12 +27,15 @@ export default function ProductBlueprintDetail() {
     brandError,
     onChangeBrandId,
 
-    itemType,
+    productBlueprintCategoryId,
+    productBlueprintCategory,
+    productBlueprintCategoryLabel,
+    isApparelCategory,
+
     fit,
     materials,
     weight,
     washTags,
-    productIdTag,
 
     colors,
     colorInput,
@@ -64,12 +55,11 @@ export default function ProductBlueprintDetail() {
     onSave,
     onDelete,
     onChangeProductName,
-    onChangeItemType,
+    onChangeProductBlueprintCategory,
     onChangeFit,
     onChangeMaterials,
     onChangeWeight,
     onChangeWashTags,
-    onChangeProductIdTag,
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
@@ -86,11 +76,11 @@ export default function ProductBlueprintDetail() {
     getCode,
   } = useProductBlueprintDetail();
 
-  const catalogItemType = toCatalogItemType(itemType || undefined);
+  const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
 
   const measurementOptions =
-    catalogItemType != null
-      ? ITEM_TYPE_MEASUREMENT_OPTIONS[catalogItemType]
+    isApparelCategoryCode(categoryCode)
+      ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode]
       : undefined;
 
   const [editMode, setEditMode] = React.useState(false);
@@ -136,48 +126,59 @@ export default function ProductBlueprintDetail() {
           brandLoading={brandLoading}
           brandError={brandError}
           onChangeBrandId={editMode ? onChangeBrandId : undefined}
-          itemType={catalogItemType}
+          productBlueprintCategoryId={productBlueprintCategoryId}
+          productBlueprintCategory={productBlueprintCategory}
+          onChangeProductBlueprintCategory={
+            editMode ? onChangeProductBlueprintCategory : undefined
+          }
           fit={fit}
           materials={materials}
           weight={weight}
           washTags={washTags}
-          productIdTag={productIdTag}
           onChangeProductName={editMode ? onChangeProductName : undefined}
-          onChangeItemType={editMode ? onChangeItemType : undefined}
           onChangeFit={editMode ? onChangeFit : undefined}
           onChangeMaterials={editMode ? onChangeMaterials : undefined}
           onChangeWeight={editMode ? onChangeWeight : undefined}
           onChangeWashTags={editMode ? onChangeWashTags : undefined}
-          onChangeProductIdTag={editMode ? onChangeProductIdTag : undefined}
         />
 
-        <ColorVariationCard
-          mode={editMode ? "edit" : "view"}
-          colors={colors}
-          colorInput={colorInput}
-          colorRgbMap={colorRgbMap}
-          onChangeColorInput={editMode ? onChangeColorInput : noopStr}
-          onAddColor={editMode ? onAddColor : noop}
-          onRemoveColor={editMode ? onRemoveColor : noopColor}
-          onChangeColorRgb={editMode ? onChangeColorRgb : undefined}
-        />
+        {productBlueprintCategory && !isApparelCategory && (
+          <p className="mt-2 text-xs text-slate-500">
+            選択中の商品カテゴリ: {productBlueprintCategoryLabel}
+          </p>
+        )}
 
-        <SizeVariationCard
-          mode={editMode ? "edit" : "view"}
-          sizes={sizes}
-          measurementOptions={measurementOptions}
-          onAddSize={editMode ? onAddSize : undefined}
-          onRemove={editMode ? onRemoveSize : noop}
-          onChangeSize={editMode ? onChangeSize : undefined}
-        />
+        {isApparelCategory && (
+          <>
+            <ColorVariationCard
+              mode={editMode ? "edit" : "view"}
+              colors={colors}
+              colorInput={colorInput}
+              colorRgbMap={colorRgbMap}
+              onChangeColorInput={editMode ? onChangeColorInput : noopStr}
+              onAddColor={editMode ? onAddColor : noop}
+              onRemoveColor={editMode ? onRemoveColor : noopColor}
+              onChangeColorRgb={editMode ? onChangeColorRgb : undefined}
+            />
 
-        <ModelNumberCard
-          mode={editMode ? "edit" : "view"}
-          sizes={sizes}
-          colors={colors}
-          getCode={getCode}
-          onChangeModelNumber={editMode ? onChangeModelNumber : undefined}
-        />
+            <SizeVariationCard
+              mode={editMode ? "edit" : "view"}
+              sizes={sizes}
+              measurementOptions={measurementOptions}
+              onAddSize={editMode ? onAddSize : undefined}
+              onRemove={editMode ? onRemoveSize : noop}
+              onChangeSize={editMode ? onChangeSize : undefined}
+            />
+
+            <ModelNumberCard
+              mode={editMode ? "edit" : "view"}
+              sizes={sizes}
+              colors={colors}
+              getCode={getCode}
+              onChangeModelNumber={editMode ? onChangeModelNumber : undefined}
+            />
+          </>
+        )}
       </div>
 
       <div>

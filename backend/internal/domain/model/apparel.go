@@ -1,10 +1,15 @@
 // backend/internal/domain/model/apparel.go
 // Responsibility: apparel category model variation definitions.
+//
 // NOTE:
 //   - common.go 側に ModelVariation / ModelData / Model の共通定義があるため、
 //     このファイルでは再定義しない。
 //   - apparel 専用の variation は ApparelModelVariation として定義する。
-//   - Size / Color / Measurements を必須とする apparel 系カテゴリ用。
+//   - apparel.tops / apparel.bottoms / apparel.dress は Color / Size / Measurements を使う。
+//   - apparel.outerwear / apparel.shoes は Color / Size を使い、Measurements は空でもよい。
+//   - apparel.accessory / apparel.bag は原則 model variation を作成しない。
+//   - どのカテゴリで Measurements を必須にするかは、
+//     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
 package model
 
 import (
@@ -45,11 +50,36 @@ type Color struct {
 // - hip
 // - inseam
 //
+// NOTE:
+// apparel.tops / apparel.bottoms / apparel.dress では measurements を使う。
+// apparel.outerwear / apparel.shoes では measurements は空でもよい。
+// apparel.accessory / apparel.bag は原則 model variation 自体を作成しない。
+//
 // Firestore アダプタなどから model.Measurements 型として利用する。
 type Measurements = map[string]int
 
 // ApparelModelVariation は apparel 用の model variation。
-// apparel.tops / apparel.bottoms など、Size / Color / Measurements が必要なカテゴリで使う。
+//
+// category ごとの扱い:
+//   - apparel.tops:
+//     Color / Size / Measurements を使う
+//   - apparel.bottoms:
+//     Color / Size / Measurements を使う
+//   - apparel.dress:
+//     Color / Size / Measurements を使う
+//   - apparel.outerwear:
+//     Color / Size を使う。Measurements は空でもよい
+//   - apparel.shoes:
+//     Color / Size を使う。Measurements は空でもよい
+//   - apparel.accessory:
+//     原則 model variation を作成しない
+//   - apparel.bag:
+//     原則 model variation を作成しない
+//
+// NOTE:
+// ModelNumber は現行実装で必須として扱う。
+// 画面上の入力仕様から外す場合でも、既存の model 参照・表示・在庫連携が
+// ModelNumber を前提にしている可能性があるため、現時点では必須を維持する。
 type ApparelModelVariation struct {
 	ID                 string
 	ProductBlueprintID string
@@ -65,6 +95,11 @@ type ApparelModelVariation struct {
 
 // NewApparelModelVariation は apparel model variation の新規作成時に使う入力モデル。
 // 既存の ApparelModelVariation から ID や監査情報だけを省いた形。
+//
+// NOTE:
+// Measurements は nil / 空 map を許容する。
+// measurements 必須カテゴリかどうかは、この domain ではなく
+// application/usecase 側で productBlueprintCategory schema を参照して判定する。
 type NewApparelModelVariation struct {
 	ProductBlueprintID string
 	ModelNumber        string
@@ -73,6 +108,9 @@ type NewApparelModelVariation struct {
 	Measurements       Measurements
 }
 
+// ApparelItemSpec は apparel model variation を商品個体・表示用途向けに
+// 簡易化した read model 的な値。
+// Measurements はカテゴリによって nil / 空 map の場合がある。
 type ApparelItemSpec struct {
 	ModelNumber  string
 	Size         string
@@ -150,6 +188,9 @@ func (mv ApparelModelVariation) validate() error {
 		return ErrInvalidColor
 	}
 
+	// Measurements は nil / 空 map を許容する。
+	// measurements 必須カテゴリかどうかは productBlueprintCategory schema を
+	// application/usecase 側で参照して判定する。
 	for k, v := range mv.Measurements {
 		if k == "" {
 			return ErrInvalidMeasurements

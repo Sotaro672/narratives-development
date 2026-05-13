@@ -1,53 +1,55 @@
 // frontend/console/productBlueprint/src/infrastructure/api/productBlueprintDetailApi.ts
 
-/// <reference types="vite/client" />
-
 import { getAuthHeaders } from "../../../../shell/src/auth/application/authService";
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import { fetchJSON } from "../../../../shell/src/shared/http/fetchJSON";
-import type { SizeRow } from "../../../../model/src/domain/entity/catalog";
+
+import type {
+  ApparelModelNumberRow,
+  ApparelSizeInput,
+} from "../../domain/entity/apparel";
+
+import type {
+  CategoryFieldValues,
+  ProductBlueprintCategoryKind,
+  ProductBlueprintCategorySnapshot,
+} from "../../domain/entity/productBlueprintCategory";
 
 // ------------------------------------------------------
-// BASE URL（ファイル冒頭に移動して shadowing を防止）
-// ------------------------------------------------------
-export const API_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
-    ?.replace(/\/+$/g, "") ?? "";
-
-// ------------------------------------------------------
-// 型定義
+// apparel model variation 共通型
 // ------------------------------------------------------
 
-// 採寸キー → 数値 or null
-export type NewModelVariationMeasurements = Record<string, number | null>;
-
-// モデルバリエーション 1 行分
-export type NewModelVariationPayload = {
-  sizeLabel: string;
-  color: string;
-  modelNumber: string;
-  createdBy: string;
-  rgb?: number;
-  measurements: NewModelVariationMeasurements;
+export type ApparelModelVariationResponse = {
+  id?: string;
+  size?: string;
+  color?: string;
+  modelNumber?: string;
+  rgb?: number | null;
+  measurements?: Record<string, number | null>;
+  productBlueprintId?: string;
+  version?: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
-export type ModelNumberRow = {
-  size: string;
-  color: string;
-};
-
-// ✅ ProductBlueprint の modelRefs（displayOrder の唯一のソース）
 export type ProductBlueprintModelRef = {
   modelId: string;
   displayOrder: number;
 };
 
+// ------------------------------------------------------
 // ProductBlueprint 詳細レスポンス
+// ------------------------------------------------------
+
 export type ProductBlueprintDetailResponse = {
   id: string;
   productName: string;
 
   brandId: string;
-  itemType: string;
+
+  productBlueprintCategoryId: string;
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+
   fit: string;
   material: string;
   weight: number;
@@ -60,10 +62,8 @@ export type ProductBlueprintDetailResponse = {
   companyId?: string;
   assigneeId?: string;
 
-  /** ✅ printed を backend 正として受け取る（bool） */
   printed?: boolean | null;
 
-  /** ✅ name 解決済み（backend 正） */
   brandName?: string | null;
   assigneeName?: string | null;
   createdByName?: string | null;
@@ -73,61 +73,52 @@ export type ProductBlueprintDetailResponse = {
   updatedAt?: string | null;
   deletedAt?: string | null;
 
-  /**
-   * ✅ displayOrder に従って並べ替えるために必須
-   * backend: toDetailOutput が返す modelRefs をそのまま受ける
-   */
   modelRefs?: ProductBlueprintModelRef[];
 
-  /**
-   * 互換のため残して良いが、並び順の正は modelRefs 側に寄せる。
-   * （modelVariations は別 API で取得して join する設計の方が堅い）
-   */
-  modelVariations?: Array<{
-    id?: string;
-    size?: string;
-    color?: string;
-    modelNumber?: string;
-    rgb?: number | null;
-    measurements?: Record<string, number | null>;
-    productBlueprintId?: string;
-    /** 現在のバージョン番号 */
-    version?: number;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  }>;
+  modelVariations?: ApparelModelVariationResponse[];
+
+  categoryFields?: CategoryFieldValues | null;
 };
 
-// 更新用パラメータ（application/service が利用する型）
+// ------------------------------------------------------
+// 更新用パラメータ
+// ------------------------------------------------------
+
 export type UpdateProductBlueprintParams = {
   id: string;
 
   productName: string;
   brandId: string;
-  itemType: string;
+
+  productBlueprintCategoryId: string;
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+
   fit: string;
   material: string;
   weight: number;
   qualityAssurance: string[];
 
-  /** ✅ backend DTO に合わせ、repository 側で productIdTag に変換して送る */
   productIdTagType: string | null;
 
   companyId: string;
   assigneeId: string;
 
-  /** variations / colors は ProductBlueprint 更新 endpoint に送らない（別系で更新） */
   colors: string[];
   colorRgbMap?: Record<string, string>;
 
-  sizes?: SizeRow[];
-  modelNumbers?: ModelNumberRow[];
+  sizes?: ApparelSizeInput[];
+  modelNumbers?: ApparelModelNumberRow[];
   updatedBy?: string | null;
+
+  categoryFields?: CategoryFieldValues | null;
 };
 
+export type { ProductBlueprintCategoryKind, ProductBlueprintCategorySnapshot };
+
 // ------------------------------------------------------
-// GET /product-blueprints/{id}  詳細取得
+// GET /product-blueprints/{id} 詳細取得
 // ------------------------------------------------------
+
 export async function getProductBlueprintDetailApi(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
@@ -147,9 +138,3 @@ export async function getProductBlueprintDetailApi(
 
   return json;
 }
-
-/**
- * ✅ UPDATE は repository に集約する方針のため、
- * updateProductBlueprintApi は削除しました。
- * - update は productBlueprintRepositoryHTTP.updateProductBlueprintHTTP を利用してください。
- */

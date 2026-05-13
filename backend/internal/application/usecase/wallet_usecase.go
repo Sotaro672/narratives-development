@@ -3,11 +3,9 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"time"
 
@@ -55,7 +53,7 @@ type ModelProductBlueprintIDResolver interface {
 	GetIDByModelID(ctx context.Context, modelID string) (string, error)
 }
 
-// ProductBlueprintReader (productBlueprintId -> productBlueprint(productName/contentFiles取得))
+// ProductBlueprintReader (productBlueprintId -> productBlueprint(productName取得))
 type ProductBlueprintReader interface {
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
 }
@@ -69,7 +67,7 @@ type WalletUsecase struct {
 	// brandId -> brandName（UI期待値）
 	BrandNameResolver BrandNameResolver
 
-	// productName / token content files 逆引き（UI期待値）
+	// productName 逆引き（UI期待値）
 	ProductReader           ProductReader
 	ModelProductBlueprintID ModelProductBlueprintIDResolver
 	ProductBlueprintReader  ProductBlueprintReader
@@ -150,7 +148,7 @@ var (
 	// BrandNameResolver
 	ErrWalletBrandNameNotConfigured = errors.New("wallet usecase: brand name resolver not configured")
 
-	// ProductName / ProductBlueprint chain
+	// ProductName chain
 	ErrWalletProductReaderNotConfigured          = errors.New("wallet usecase: product reader not configured")
 	ErrWalletModelProductBlueprintNotConfigured  = errors.New("wallet usecase: model->productBlueprint resolver not configured")
 	ErrWalletProductBlueprintReaderNotConfigured = errors.New("wallet usecase: productBlueprint reader not configured")
@@ -161,6 +159,11 @@ var (
 // SyncWalletTokens:
 // - on-chain の最新保有一覧で wallet.tokens を完全同期する
 // - 既存 tokens との merge はしない
+//
+// IMPORTANT:
+// この同期処理は必ず残す。
+// WalletPage を開いた時や /mall/me/wallets/sync から呼ばれ、
+// Solana network 上の保有 mint 一覧を Firestore wallet.tokens に反映する。
 func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) (walletdom.Wallet, error) {
 	log.Printf("[SyncWalletTokens] start avatarID_raw=%q", avatarID)
 
@@ -282,18 +285,17 @@ func (uc *WalletUsecase) ResolveBrandNameByID(
 // ============================================================
 
 type TokenContentFile struct {
-	// Firebase Storage / metadata properties files 由来
+	// metadata.properties.files 由来の互換フィールド。
+	// 現在の正では、この usecase では中身を生成しない。
+	// frontend は metadataUri を backend metadata proxy に渡し、
+	// blockchain token metadata の properties.files[] を parse する。
 	FileName string `json:"fileName"`
 	Type     string `json:"type"`
 	URI      string `json:"uri"`
+	ViewURI  string `json:"viewUri"`
 
-	// 互換用。
-	// 旧実装では signed URL を viewUri として返していた。
-	// GCS 廃止後は Firebase Storage downloadURL を viewUri として返す。
-	ViewURI string `json:"viewUri"`
-
-	// 旧 GCS 実装との互換用。
-	// Firebase Storage 前提では Bucket/PublicURI/ViewExpiresAt は基本的に空。
+	// 旧 GCS 実装とのレスポンス互換用。
+	// GCS 廃止後は基本的に空。
 	ObjectPath    string     `json:"objectPath,omitempty"`
 	Bucket        string     `json:"bucket,omitempty"`
 	PublicURI     string     `json:"publicUri,omitempty"`
@@ -309,10 +311,12 @@ type ResolveTokenByMintAddressWithBrandNameResult struct {
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ProductName        string `json:"productName"`
 
-	// productBlueprintId と同一値を基本とする
+	// metadata 側の TokenBlueprintID は frontend が metadata proxy 取得後に parse する。
+	// ここでは productBlueprintId を設定して、既存 UI の識別子として使えるようにする。
 	TokenBlueprintID string `json:"tokenBlueprintId"`
 
-	// Firestore productBlueprint.contentFiles[] から抽出した Firebase Storage downloadURL 群
+	// GCS signed URL / Firebase Storage contentFiles はここでは返さない。
+	// token content 表示は metadataUri -> metadata proxy -> properties.files[] を正とする。
 	TokenContentsFiles []TokenContentFile `json:"tokenContentsFiles"`
 }
 
@@ -320,14 +324,18 @@ type ResolveTokenByMintAddressWithBrandNameResult struct {
 // ResolveTokenByMintAddressWithBrandName
 //
 //	mintAddress -> (productId, brandId, brandName, metadataUri, productName)
-//	+ productBlueprint.contentFiles[] から tokenContentsFiles を返す
 //
 // GCS 廃止後:
 //   - token-contents bucket は列挙しない
 //   - GCS Signed URL は発行しない
 //   - GCS_SIGNER_EMAIL は使わない
-//   - metadata.properties.files[] ではなく Firestore productBlueprint.contentFiles[] を表示用ファイルの正とする
-//   - contentFiles[].url は Firebase Storage downloadURL として ViewURI / URI に入れて返す
+//
+// IMPORTANT:
+//   - metadata proxy は廃止しない
+//   - frontend は metadataUri を /mall/me/wallets/metadata/proxy に渡して
+//     blockchain token metadata を取得する
+//   - 画像・ファイル表示は metadata.properties.files[] を正とする
+//   - Firestore productBlueprint.contentFiles / Firebase Storage URL は表示元として使わない
 //
 // ============================================================
 
@@ -386,7 +394,7 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 		return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletResolvedProductBlueprintIDEmpty
 	}
 
-	// 5) productBlueprintId -> productName + contentFiles
+	// 5) productBlueprintId -> productName
 	if uc.ProductBlueprintReader == nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletProductBlueprintReaderNotConfigured
 	}
@@ -394,14 +402,7 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 	if err != nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, err
 	}
-
 	productName := pb.ProductName
-
-	// 6) Firestore productBlueprint.contentFiles[] から Firebase Storage downloadURL を抽出する
-	files, err := resolveTokenContentsFromProductBlueprint(pb)
-	if err != nil {
-		return ResolveTokenByMintAddressWithBrandNameResult{}, err
-	}
 
 	return ResolveTokenByMintAddressWithBrandNameResult{
 		ProductID:          productID,
@@ -413,7 +414,7 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 		ProductName:        productName,
 
 		TokenBlueprintID:   pbID,
-		TokenContentsFiles: files,
+		TokenContentsFiles: []TokenContentFile{},
 	}, nil
 }
 
@@ -452,138 +453,4 @@ func summarizeStringsAbbrev(ss []string, max int) string {
 
 func walletTokensCountSummary(w walletdom.Wallet) string {
 	return fmt.Sprintf("Tokens=%d", len(w.Tokens))
-}
-
-// ---------------------------
-// productBlueprint.contentFiles -> token content urls
-// ---------------------------
-
-// productBlueprintContentFilesJSON は productBlueprint.ProductBlueprint を JSON 化して
-// contentFiles を抽出するための中間 DTO。
-// domain 側の ContentFile 型名に直接依存しないようにする。
-type productBlueprintContentFilesJSON struct {
-	ContentFiles []productBlueprintContentFileJSON `json:"contentFiles"`
-}
-
-type productBlueprintContentFileJSON struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	FileName    string `json:"fileName"`
-	ContentType string `json:"contentType"`
-	Type        string `json:"type"`
-	URL         string `json:"url"`
-	URI         string `json:"uri"`
-	ViewURI     string `json:"viewUri"`
-	ObjectPath  string `json:"objectPath"`
-	Visibility  string `json:"visibility"`
-}
-
-// resolveTokenContentsFromProductBlueprint converts Firestore productBlueprint.contentFiles[]
-// to TokenContentFile[].
-//
-// Expected Firestore shape:
-//
-//	contentFiles[].name
-//	contentFiles[].contentType
-//	contentFiles[].url
-//	contentFiles[].objectPath
-//	contentFiles[].type
-//
-// url is expected to be Firebase Storage downloadURL.
-func resolveTokenContentsFromProductBlueprint(pb productbpdom.ProductBlueprint) ([]TokenContentFile, error) {
-	raw, err := json.Marshal(pb)
-	if err != nil {
-		return nil, fmt.Errorf("marshal productBlueprint for contentFiles: %w", err)
-	}
-
-	var dto productBlueprintContentFilesJSON
-	if err := json.Unmarshal(raw, &dto); err != nil {
-		return nil, fmt.Errorf("unmarshal productBlueprint contentFiles: %w", err)
-	}
-
-	out := make([]TokenContentFile, 0, len(dto.ContentFiles))
-	for _, f := range dto.ContentFiles {
-		uri := firstNonEmptyString(f.URL, f.URI, f.ViewURI)
-		if uri == "" {
-			continue
-		}
-
-		fileName := firstNonEmptyString(f.Name, f.FileName)
-		if fileName == "" {
-			fileName = "file"
-		}
-
-		if isKeepFileNameOrPath(fileName) || isKeepFileNameOrPath(f.ObjectPath) || isKeepURI(uri) {
-			continue
-		}
-
-		ct := f.ContentType
-		if ct == "" {
-			ct = f.Type
-		}
-		if ct == "" {
-			ct = "application/octet-stream"
-		}
-
-		out = append(out, TokenContentFile{
-			FileName:   fileName,
-			Type:       ct,
-			URI:        uri,
-			ViewURI:    uri,
-			ObjectPath: f.ObjectPath,
-		})
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].FileName == out[j].FileName {
-			return out[i].URI < out[j].URI
-		}
-		return out[i].FileName < out[j].FileName
-	})
-
-	return out, nil
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, v := range values {
-		s := strings.TrimSpace(v)
-		if s != "" {
-			return s
-		}
-	}
-	return ""
-}
-
-func isKeepFileNameOrPath(s string) bool {
-	if s == "" {
-		return false
-	}
-
-	p := strings.TrimSpace(s)
-	p = strings.TrimSuffix(p, "/")
-
-	return p == ".keep" ||
-		strings.HasSuffix(p, "/.keep") ||
-		strings.HasSuffix(p, ".keep")
-}
-
-func isKeepURI(raw string) bool {
-	if raw == "" {
-		return false
-	}
-
-	s := strings.TrimSpace(raw)
-	if s == "" {
-		return false
-	}
-
-	// query / fragment は .keep 判定には不要なので除去
-	if idx := strings.Index(s, "#"); idx >= 0 {
-		s = s[:idx]
-	}
-	if idx := strings.Index(s, "?"); idx >= 0 {
-		s = s[:idx]
-	}
-
-	return isKeepFileNameOrPath(s)
 }

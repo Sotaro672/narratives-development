@@ -1,4 +1,5 @@
-// frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx 
+// frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import { AdminCard } from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../components/productBlueprintCard";
@@ -23,14 +24,16 @@ export default function ProductBlueprintCreate() {
 
     // 商品設計フィールド
     productName,
-    itemType,
+    productBlueprintCategoryId,
+    productBlueprintCategory,
+    productBlueprintCategoryLabel,
+    isApparelCategory,
     fit,
     material,
     weight,
     qualityAssurance,
-    productIdTagType,
 
-    // アイテム種別から導出された採寸項目
+    // 商品カテゴリから導出された採寸項目
     measurementOptions,
 
     // バリエーション
@@ -40,12 +43,11 @@ export default function ProductBlueprintCreate() {
     sizes,
     modelNumbers,
     onChangeProductName,
-    onChangeItemType,
+    onChangeProductBlueprintCategory,
     onChangeFit,
     onChangeMaterial,
     onChangeWeight,
     onChangeQualityAssurance,
-    onChangeProductIdTagType,
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
@@ -109,46 +111,61 @@ export default function ProductBlueprintCreate() {
           brandLoading={brandLoading}
           brandError={brandError}
           onChangeBrandId={onChangeBrandId}
-          itemType={itemType}
+          productBlueprintCategoryId={productBlueprintCategoryId}
+          productBlueprintCategory={productBlueprintCategory}
+          onChangeProductBlueprintCategory={onChangeProductBlueprintCategory}
           fit={fit}
           materials={material}
           weight={weight}
           washTags={qualityAssurance}
-          productIdTag={productIdTagType}
           onChangeProductName={onChangeProductName}
-          onChangeItemType={onChangeItemType}
           onChangeFit={onChangeFit}
           onChangeMaterials={onChangeMaterial}
           onChangeWeight={onChangeWeight}
           onChangeWashTags={onChangeQualityAssurance}
-          onChangeProductIdTag={(v) => onChangeProductIdTagType(v as any)}
         />
 
-        <ColorVariationCard
-          colors={colors}
-          colorInput={colorInput}
-          onChangeColorInput={onChangeColorInput}
-          onAddColor={onAddColor}
-          onRemoveColor={onRemoveColor}
-          colorRgbMap={colorRgbMap}
-          onChangeColorRgb={onChangeColorRgb}
-        />
+        {!productBlueprintCategory && (
+          <p className="mt-2 text-xs text-slate-500">
+            商品カテゴリを選択すると、カテゴリに応じた入力欄が表示されます。
+          </p>
+        )}
 
-        <SizeVariationCard
-          sizes={sizes}
-          onRemove={onRemoveSize}
-          onChangeSize={onChangeSize}
-          measurementOptions={measurementOptions}
-          mode="edit"
-          onAddSize={onAddSize}
-        />
+        {productBlueprintCategory && !isApparelCategory && (
+          <p className="mt-2 text-xs text-slate-500">
+            選択中の商品カテゴリ: {productBlueprintCategoryLabel}
+          </p>
+        )}
 
-        <ModelNumberCard
-          sizes={sizes}
-          colors={colors}
-          getCode={getCode}
-          onChangeModelNumber={handleChangeModelNumber}
-        />
+        {isApparelCategory && (
+          <>
+            <ColorVariationCard
+              colors={colors}
+              colorInput={colorInput}
+              onChangeColorInput={onChangeColorInput}
+              onAddColor={onAddColor}
+              onRemoveColor={onRemoveColor}
+              colorRgbMap={colorRgbMap}
+              onChangeColorRgb={onChangeColorRgb}
+            />
+
+            <SizeVariationCard
+              sizes={sizes}
+              onRemove={onRemoveSize}
+              onChangeSize={onChangeSize}
+              measurementOptions={measurementOptions}
+              mode="edit"
+              onAddSize={onAddSize}
+            />
+
+            <ModelNumberCard
+              sizes={sizes}
+              colors={colors}
+              getCode={getCode}
+              onChangeModelNumber={handleChangeModelNumber}
+            />
+          </>
+        )}
       </div>
 
       <AdminCard

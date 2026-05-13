@@ -15,18 +15,30 @@ type CreateInput struct {
 	ID string `json:"id"`
 
 	ProductName string `json:"productName"`
-	BrandID     string `json:"brandId"`
+	Description string `json:"description"`
+
+	BrandID   string `json:"brandId"`
+	CompanyID string `json:"companyId"`
 
 	// productBlueprintCategories の正データから usecase で生成して渡す denormalized snapshot
 	ProductBlueprintCategory ProductBlueprintCategorySnapshot `json:"productBlueprintCategory"`
 
-	Fit              string       `json:"fit"`
-	Material         string       `json:"material"`
-	Weight           float64      `json:"weight"`
-	QualityAssurance []string     `json:"qualityAssurance"`
-	ProductIdTag     ProductIDTag `json:"productIdTag"`
-	AssigneeID       string       `json:"assigneeId"`
-	CompanyID        string       `json:"companyId"`
+	// CategoryFields はカテゴリ別の productBlueprint 入力値を保持する。
+	//
+	// 例:
+	// - alcohol.sake:
+	//   vintage, region, material, alcoholContent, volume
+	// - apparel.tops:
+	//   weight, fit, material
+	// - cosmetics.skincare:
+	//   material, volume
+	//
+	// brandId / productName / productIdTagType / description など、
+	// ProductBlueprint の共通 field はここには入れない。
+	CategoryFields CategoryFields `json:"categoryFields,omitempty"`
+
+	ProductIdTag ProductIDTag `json:"productIdTag"`
+	AssigneeID   string       `json:"assigneeId"`
 
 	// ★ modelRefs（modelId + displayOrder）
 	// NOTE:
@@ -40,6 +52,7 @@ type CreateInput struct {
 
 type Patch struct {
 	ProductName *string `json:"productName,omitempty"`
+	Description *string `json:"description,omitempty"`
 
 	// ✅ 既存：更新に使うID
 	BrandID *string `json:"brandId,omitempty"`
@@ -56,12 +69,22 @@ type Patch struct {
 	// productBlueprintCategories の正データから usecase で生成して渡す denormalized snapshot
 	ProductBlueprintCategory *ProductBlueprintCategorySnapshot `json:"productBlueprintCategory,omitempty"`
 
-	Fit              *string       `json:"fit,omitempty"`
-	Material         *string       `json:"material,omitempty"`
-	Weight           *float64      `json:"weight,omitempty"`
-	QualityAssurance *[]string     `json:"qualityAssurance,omitempty"`
-	ProductIdTag     *ProductIDTag `json:"productIdTag,omitempty"`
-	AssigneeID       *string       `json:"assigneeId,omitempty"`
+	// CategoryFields はカテゴリ別の productBlueprint 入力値を保持する。
+	//
+	// 例:
+	// - alcohol.sake:
+	//   vintage, region, material, alcoholContent, volume
+	// - apparel.tops:
+	//   weight, fit, material
+	// - cosmetics.skincare:
+	//   material, volume
+	//
+	// nil の場合は更新しない。
+	// 空 map の場合は categoryFields を空に更新する想定。
+	CategoryFields *CategoryFields `json:"categoryFields,omitempty"`
+
+	ProductIdTag *ProductIDTag `json:"productIdTag,omitempty"`
+	AssigneeID   *string       `json:"assigneeId,omitempty"`
 
 	// ★ modelRefs を受ける（displayOrder 含む）
 	// NOTE:

@@ -175,6 +175,7 @@ func (r *ProductBlueprintRepositoryFS) GetIDByModelID(ctx context.Context, model
 				return s, nil
 			}
 		}
+
 		// allow schema drift (rare): productBlueprintID
 		if v, ok := data["productBlueprintID"]; ok && v != nil {
 			if s, ok := v.(string); ok && s != "" {
@@ -227,6 +228,18 @@ func (r *ProductBlueprintRepositoryFS) GetModelRefsByModelID(ctx context.Context
 				return cloneModelRefs(pb.ModelRefs), nil
 			}
 		}
+
+		// allow schema drift (rare): productBlueprintID
+		if v, ok := data["productBlueprintID"]; ok && v != nil {
+			if s, ok := v.(string); ok && s != "" {
+				blueprintID := s
+				pb, err := r.GetByID(ctx, blueprintID)
+				if err != nil {
+					return nil, err
+				}
+				return cloneModelRefs(pb.ModelRefs), nil
+			}
+		}
 	}
 
 	return nil, pbdom.ErrNotFound
@@ -248,15 +261,18 @@ func (r *ProductBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id stri
 	}
 
 	name := pb.ProductName
+	description := pb.Description
 	brandID := pb.BrandID
+	companyID := pb.CompanyID
 	category := pb.ProductBlueprintCategory
-	fit := pb.Fit
-	material := pb.Material
-	weight := pb.Weight
-	qa := make([]string, len(pb.QualityAssurance))
-	copy(qa, pb.QualityAssurance)
-	productIdTag := pb.ProductIdTag
+	categoryFields := cloneCategoryFields(pb.CategoryFields)
+	productIDTag := pb.ProductIdTag
 	assigneeID := pb.AssigneeID
+
+	var categoryFieldsPtr *pbdom.CategoryFields
+	if categoryFields != nil {
+		categoryFieldsPtr = &categoryFields
+	}
 
 	var refsPtr *[]pbdom.ModelRef
 	if pb.ModelRefs != nil {
@@ -266,17 +282,17 @@ func (r *ProductBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id stri
 
 	return pbdom.Patch{
 		ProductName: &name,
-		BrandID:     &brandID,
+		Description: &description,
+
+		BrandID:   &brandID,
+		CompanyID: &companyID,
 
 		ProductBlueprintCategory: &category,
+		CategoryFields:           categoryFieldsPtr,
 
-		Fit:              &fit,
-		Material:         &material,
-		Weight:           &weight,
-		QualityAssurance: &qa,
-		ProductIdTag:     &productIdTag,
-		AssigneeID:       &assigneeID,
-		ModelRefs:        refsPtr,
+		ProductIdTag: &productIDTag,
+		AssigneeID:   &assigneeID,
+		ModelRefs:    refsPtr,
 	}, nil
 }
 
@@ -331,4 +347,24 @@ func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (b
 		return false, err
 	}
 	return true, nil
+}
+
+func cloneCategoryFields(in pbdom.CategoryFields) pbdom.CategoryFields {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make(pbdom.CategoryFields, len(in))
+	for key, value := range in {
+		if key == "" {
+			continue
+		}
+		out[key] = value
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }

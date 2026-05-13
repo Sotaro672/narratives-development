@@ -63,7 +63,11 @@ func main() {
 
 	for _, category := range categories {
 		ref := client.Collection(collectionName).Doc(category.ID)
-		batch.Set(ref, category, firestore.MergeAll)
+
+		// NOTE:
+		// firestore.MergeAll は map data 専用。
+		// CategorySeed は struct なので MergeAll を付けずに Set する。
+		batch.Set(ref, category)
 	}
 
 	if _, err := batch.Commit(ctx); err != nil {
@@ -304,110 +308,6 @@ func buildCategories(now time.Time) []CategorySeed {
 		),
 
 		// ------------------------------------------------------------
-		// food
-		// ------------------------------------------------------------
-		category(
-			"food",
-			"food",
-			"食品",
-			"Food",
-			nil,
-			[]string{"food"},
-			"food",
-			300,
-			CategoryAttributes{
-				RequiresExpirationDate: true,
-				RequiresIngredients:    true,
-				RequiresStorageMethod:  true,
-			},
-			now,
-		),
-		category(
-			"food.processed",
-			"food.processed",
-			"加工食品",
-			"Processed Food",
-			strPtr("food"),
-			[]string{"food", "processed"},
-			"food",
-			310,
-			CategoryAttributes{
-				RequiresExpirationDate: true,
-				RequiresLotNumber:      true,
-				RequiresIngredients:    true,
-				RequiresStorageMethod:  true,
-			},
-			now,
-		),
-		category(
-			"food.snack",
-			"food.snack",
-			"菓子",
-			"Snacks",
-			strPtr("food"),
-			[]string{"food", "snack"},
-			"food",
-			320,
-			CategoryAttributes{
-				RequiresExpirationDate: true,
-				RequiresLotNumber:      true,
-				RequiresIngredients:    true,
-				RequiresStorageMethod:  true,
-			},
-			now,
-		),
-		category(
-			"food.condiment",
-			"food.condiment",
-			"調味料",
-			"Condiments",
-			strPtr("food"),
-			[]string{"food", "condiment"},
-			"food",
-			330,
-			CategoryAttributes{
-				RequiresExpirationDate: true,
-				RequiresLotNumber:      true,
-				RequiresIngredients:    true,
-				RequiresStorageMethod:  true,
-			},
-			now,
-		),
-		category(
-			"food.beverage",
-			"food.beverage",
-			"飲料",
-			"Beverages",
-			strPtr("food"),
-			[]string{"food", "beverage"},
-			"food",
-			340,
-			CategoryAttributes{
-				RequiresExpirationDate: true,
-				RequiresLotNumber:      true,
-				RequiresIngredients:    true,
-				RequiresStorageMethod:  true,
-			},
-			now,
-		),
-		category(
-			"food.fresh",
-			"food.fresh",
-			"生鮮食品",
-			"Fresh Food",
-			strPtr("food"),
-			[]string{"food", "fresh"},
-			"food",
-			350,
-			CategoryAttributes{
-				RequiresExpirationDate: true,
-				RequiresIngredients:    true,
-				RequiresStorageMethod:  true,
-			},
-			now,
-		),
-
-		// ------------------------------------------------------------
 		// cosmetics
 		// ------------------------------------------------------------
 		category(
@@ -512,82 +412,6 @@ func buildCategories(now time.Time) []CategorySeed {
 				RequiresCosmeticNotice: true,
 				RequiresStorageMethod:  true,
 			},
-			now,
-		),
-
-		// ------------------------------------------------------------
-		// goods
-		// ------------------------------------------------------------
-		category(
-			"goods",
-			"goods",
-			"雑貨",
-			"Goods",
-			nil,
-			[]string{"goods"},
-			"goods",
-			500,
-			CategoryAttributes{},
-			now,
-		),
-		category(
-			"goods.lifestyle",
-			"goods.lifestyle",
-			"生活雑貨",
-			"Lifestyle Goods",
-			strPtr("goods"),
-			[]string{"goods", "lifestyle"},
-			"goods",
-			510,
-			CategoryAttributes{},
-			now,
-		),
-		category(
-			"goods.interior",
-			"goods.interior",
-			"インテリア",
-			"Interior Goods",
-			strPtr("goods"),
-			[]string{"goods", "interior"},
-			"goods",
-			520,
-			CategoryAttributes{},
-			now,
-		),
-		category(
-			"goods.stationery",
-			"goods.stationery",
-			"文具",
-			"Stationery",
-			strPtr("goods"),
-			[]string{"goods", "stationery"},
-			"goods",
-			530,
-			CategoryAttributes{},
-			now,
-		),
-		category(
-			"goods.toy",
-			"goods.toy",
-			"玩具",
-			"Toys",
-			strPtr("goods"),
-			[]string{"goods", "toy"},
-			"goods",
-			540,
-			CategoryAttributes{},
-			now,
-		),
-		category(
-			"goods.art",
-			"goods.art",
-			"アート・工芸品",
-			"Art & Crafts",
-			strPtr("goods"),
-			[]string{"goods", "art"},
-			"goods",
-			550,
-			CategoryAttributes{},
 			now,
 		),
 

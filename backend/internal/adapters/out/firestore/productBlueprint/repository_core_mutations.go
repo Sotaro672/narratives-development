@@ -20,7 +20,7 @@ func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, in pbdom.Crea
 		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
 	}
 
-	// ★ 修正案A前提: usecase が ID を生成して渡す
+	// usecase が ID を生成して渡す
 	id := in.ID
 	if id == "" {
 		return pbdom.ProductBlueprint{}, pbdom.ErrInvalidID
@@ -33,16 +33,16 @@ func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, in pbdom.Crea
 		createdAt = in.CreatedAt.UTC()
 	}
 
-	// ★ domain.New は ID 必須。Firestore採番は使わない。
+	// domain.New は ID 必須。Firestore採番は使わない。
+	// fit / material / weight / qualityAssurance などカテゴリ依存項目は
+	// ProductBlueprint 直下ではなく CategoryFields に集約する。
 	pb, err := pbdom.New(
 		id,
 		in.ProductName,
+		in.Description,
 		in.BrandID,
 		in.ProductBlueprintCategory,
-		in.Fit,
-		in.Material,
-		in.Weight,
-		in.QualityAssurance,
+		in.CategoryFields,
 		in.ProductIdTag,
 		in.AssigneeID,
 		in.CreatedBy,
@@ -62,7 +62,7 @@ func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, in pbdom.Crea
 		pb.ModelRefs = refs
 	}
 
-	// ★ docId も pb.ID と一致させる（衝突時は AlreadyExists を返せる）
+	// docId も pb.ID と一致させる（衝突時は AlreadyExists を返せる）
 	docRef := r.col().Doc(pb.ID)
 
 	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
@@ -167,7 +167,6 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) er
 	}
 
 	if id == "" {
-		// contract次第だが、InvalidID の方が自然
 		return pbdom.ErrInvalidID
 	}
 
@@ -265,6 +264,11 @@ func (r *ProductBlueprintRepositoryFS) Update(ctx context.Context, id string, pa
 		}
 		pb.ProductName = v
 	}
+
+	if patch.Description != nil {
+		pb.Description = *patch.Description
+	}
+
 	if patch.BrandID != nil {
 		v := *patch.BrandID
 		if v == "" {
@@ -272,33 +276,33 @@ func (r *ProductBlueprintRepositoryFS) Update(ctx context.Context, id string, pa
 		}
 		pb.BrandID = v
 	}
+
+	if patch.CompanyID != nil {
+		v := *patch.CompanyID
+		if v == "" {
+			return pbdom.ProductBlueprint{}, pbdom.ErrInvalidCompanyID
+		}
+		pb.CompanyID = v
+	}
+
 	if patch.ProductBlueprintCategory != nil {
 		if err := patch.ProductBlueprintCategory.Validate(); err != nil {
 			return pbdom.ProductBlueprint{}, err
 		}
 		pb.ProductBlueprintCategory = *patch.ProductBlueprintCategory
 	}
-	if patch.Fit != nil {
-		pb.Fit = *patch.Fit
+
+	if patch.CategoryFields != nil {
+		pb.CategoryFields = cloneCategoryFields(*patch.CategoryFields)
 	}
-	if patch.Material != nil {
-		pb.Material = *patch.Material
-	}
-	if patch.Weight != nil {
-		if *patch.Weight < 0 {
-			return pbdom.ProductBlueprint{}, pbdom.ErrInvalidWeight
-		}
-		pb.Weight = *patch.Weight
-	}
-	if patch.QualityAssurance != nil {
-		pb.QualityAssurance = dedupTrimStrings(*patch.QualityAssurance)
-	}
+
 	if patch.ProductIdTag != nil {
 		if !pbdom.IsValidTagType(patch.ProductIdTag.Type) {
 			return pbdom.ProductBlueprint{}, pbdom.ErrInvalidTagType
 		}
 		pb.ProductIdTag = *patch.ProductIdTag
 	}
+
 	if patch.AssigneeID != nil {
 		v := *patch.AssigneeID
 		if v == "" {
@@ -306,6 +310,7 @@ func (r *ProductBlueprintRepositoryFS) Update(ctx context.Context, id string, pa
 		}
 		pb.AssigneeID = v
 	}
+
 	if patch.ModelRefs != nil {
 		refs, err := sanitizeModelRefs(*patch.ModelRefs)
 		if err != nil {

@@ -26,6 +26,37 @@ func normalizeTagType(s string) pbdom.ProductIDTagType {
 	}
 }
 
+func toCategorySnapshot(in ProductBlueprintCategoryInput) pbdom.ProductBlueprintCategorySnapshot {
+	return pbdom.ProductBlueprintCategorySnapshot{
+		ID:     in.ID,
+		Code:   in.Code,
+		NameJa: in.NameJa,
+		NameEn: in.NameEn,
+		Kind:   common.ProductCategoryKind(in.Kind),
+		Path:   append([]string(nil), in.Path...),
+	}
+}
+
+func normalizeCategoryFields(in map[string]any) pbdom.CategoryFields {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make(pbdom.CategoryFields, len(in))
+	for key, value := range in {
+		if key == "" {
+			continue
+		}
+		out[key] = value
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
+}
+
 // ---------------------------------------------------
 // POST /product-blueprints
 // ---------------------------------------------------
@@ -47,31 +78,20 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 
 	pb := pbdom.ProductBlueprint{
 		ProductName: in.ProductName,
-		BrandID:     in.BrandId,
+		Description: in.Description,
 
-		// NOTE:
+		BrandID:   in.BrandId,
+		CompanyID: in.CompanyId,
+
 		// ProductBlueprintCategory は productBlueprintCategory ドメインの正データから生成した
 		// denormalized snapshot を入れる想定。
-		// 現時点では CreateProductBlueprintInput 側の DTO が未改修の場合、
-		// 次の修正対象は request DTO / handler 入力になります。
-		ProductBlueprintCategory: pbdom.ProductBlueprintCategorySnapshot{
-			ID:     in.ProductBlueprintCategory.ID,
-			Code:   in.ProductBlueprintCategory.Code,
-			NameJa: in.ProductBlueprintCategory.NameJa,
-			NameEn: in.ProductBlueprintCategory.NameEn,
-			Kind:   common.ProductCategoryKind(in.ProductBlueprintCategory.Kind),
-			Path:   append([]string(nil), in.ProductBlueprintCategory.Path...),
-		},
+		ProductBlueprintCategory: toCategorySnapshot(in.ProductBlueprintCategory),
 
-		Fit:              in.Fit,
-		Material:         in.Material,
-		Weight:           in.Weight,
-		QualityAssurance: in.QualityAssurance,
-		AssigneeID:       in.AssigneeId,
+		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
+		// ProductBlueprint 直下ではなく CategoryFields に集約する。
+		CategoryFields: normalizeCategoryFields(in.CategoryFields),
 
-		// NOTE: companyId は usecase で auth context を正として上書きされる想定だが、
-		// handler でも一応セットしておく（ログ/デバッグ用）。
-		CompanyID: in.CompanyId,
+		AssigneeID: in.AssigneeId,
 
 		CreatedBy: createdBy,
 
@@ -123,27 +143,22 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 	pb := pbdom.ProductBlueprint{
 		ID:          id,
 		ProductName: in.ProductName,
-		BrandID:     in.BrandId,
+		Description: in.Description,
 
-		// NOTE:
+		BrandID:   in.BrandId,
+		CompanyID: in.CompanyId,
+
 		// ProductBlueprintCategory は productBlueprintCategory ドメインの正データから生成した
 		// denormalized snapshot を入れる想定。
-		ProductBlueprintCategory: pbdom.ProductBlueprintCategorySnapshot{
-			ID:     in.ProductBlueprintCategory.ID,
-			Code:   in.ProductBlueprintCategory.Code,
-			NameJa: in.ProductBlueprintCategory.NameJa,
-			NameEn: in.ProductBlueprintCategory.NameEn,
-			Kind:   common.ProductCategoryKind(in.ProductBlueprintCategory.Kind),
-			Path:   append([]string(nil), in.ProductBlueprintCategory.Path...),
-		},
+		ProductBlueprintCategory: toCategorySnapshot(in.ProductBlueprintCategory),
 
-		Fit:              in.Fit,
-		Material:         in.Material,
-		Weight:           in.Weight,
-		QualityAssurance: in.QualityAssurance,
-		AssigneeID:       in.AssigneeId,
-		CompanyID:        in.CompanyId,
-		UpdatedBy:        updatedBy,
+		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
+		// ProductBlueprint 直下ではなく CategoryFields に集約する。
+		CategoryFields: normalizeCategoryFields(in.CategoryFields),
+
+		AssigneeID: in.AssigneeId,
+		UpdatedBy:  updatedBy,
+
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: normalizeTagType(in.ProductIdTag.Type),
 		},
@@ -389,6 +404,15 @@ func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint)
 		}
 	}
 
+	category := ProductBlueprintCategoryOutput{
+		ID:     pb.ProductBlueprintCategory.ID,
+		Code:   pb.ProductBlueprintCategory.Code,
+		NameJa: pb.ProductBlueprintCategory.NameJa,
+		NameEn: pb.ProductBlueprintCategory.NameEn,
+		Kind:   string(pb.ProductBlueprintCategory.Kind),
+		Path:   append([]string(nil), pb.ProductBlueprintCategory.Path...),
+	}
+
 	// modelRefs
 	var modelRefs []ModelRefOutput
 	if len(pb.ModelRefs) > 0 {
@@ -408,18 +432,16 @@ func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint)
 	return ProductBlueprintDetailOutput{
 		ID:          pb.ID,
 		ProductName: pb.ProductName,
-		CompanyId:   pb.CompanyID,
-		BrandId:     brandId,
-		BrandName:   brandName,
+		Description: pb.Description,
 
-		// NOTE:
-		// ProductBlueprintDetailOutput 側にも productBlueprintCategory 用フィールドを追加する必要があります。
-		// その修正が済むまではここでは既存フィールドのみ返します。
+		CompanyId: pb.CompanyID,
+		BrandId:   brandId,
+		BrandName: brandName,
 
-		Fit:              pb.Fit,
-		Material:         pb.Material,
-		Weight:           pb.Weight,
-		QualityAssurance: pb.QualityAssurance,
+		ProductBlueprintCategoryId: pb.ProductBlueprintCategory.ID,
+		ProductBlueprintCategory:   category,
+
+		CategoryFields: map[string]any(pb.CategoryFields),
 
 		ProductIdTag: tag,
 

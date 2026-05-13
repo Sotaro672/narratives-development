@@ -45,7 +45,11 @@ export type UseVariationsEditorResult = {
   onChangeSize: (id: string, patch: Partial<Omit<SizeRow, "id">>) => void;
 
   // model number
-  onChangeModelNumber: (sizeLabel: string, color: string, nextCode: string) => void;
+  onChangeModelNumber: (
+    sizeLabel: string,
+    color: string,
+    nextCode: string,
+  ) => void;
 };
 
 /**
@@ -97,6 +101,7 @@ export function useVariationsEditor(
         // empty => remove
         if (!trimmed) {
           if (idx === -1) return prev;
+
           const copy = [...prev];
           copy.splice(idx, 1);
           return copy;
@@ -129,6 +134,7 @@ export function useVariationsEditor(
   const onAddColor = React.useCallback(() => {
     const v = colorInput.trim();
     if (!v || colors.includes(v)) return;
+
     setColors((prev) => [...prev, v]);
     setColorInput("");
   }, [colorInput, colors]);
@@ -172,7 +178,9 @@ export function useVariationsEditor(
       if (target) {
         const sizeLabel = (target.sizeLabel ?? "").trim();
         if (sizeLabel) {
-          setModelNumbers((prevMN) => prevMN.filter((m) => m.size !== sizeLabel));
+          setModelNumbers((prevMN) =>
+            prevMN.filter((m) => m.size !== sizeLabel),
+          );
         }
       }
 
@@ -192,7 +200,7 @@ export function useVariationsEditor(
       const next: SizeRow = {
         id: String(nextNum),
         sizeLabel: "",
-      } as SizeRow;
+      };
 
       return [...prev, next];
     });
@@ -204,18 +212,36 @@ export function useVariationsEditor(
 
       const clampField = (key: keyof Omit<SizeRow, "id">) => {
         const v = safePatch[key];
+
         if (typeof v === "number") {
-          safePatch[key] = (v < 0 ? 0 : v) as any;
+          safePatch[key] = (v < 0 ? 0 : v) as never;
         }
       };
 
-      // minimum set (matches existing behavior)
-      clampField("chest");
-      clampField("waist");
-      clampField("length");
-      clampField("shoulder");
+      // apparel measurement fields
+      clampField("shoulderWidth");
+      clampField("bodyWidth");
+      clampField("bodyLength");
+      clampField("sleeveLength");
+      clampField("neckWidth");
 
-      setSizes((prev) => prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)));
+      clampField("waist");
+      clampField("hip");
+      clampField("rise");
+      clampField("inseam");
+      clampField("thighWidth");
+      clampField("hemWidth");
+      clampField("totalLength");
+
+      clampField("heelHeight");
+
+      clampField("width");
+      clampField("height");
+      clampField("depth");
+
+      setSizes((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),
+      );
     },
     [],
   );

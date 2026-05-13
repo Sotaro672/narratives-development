@@ -1,14 +1,18 @@
 // frontend/console/productBlueprint/src/application/productBlueprintDetailService.ts
 
-import type { ItemType } from "../domain/entity/catalog";
-import type { SizeRow } from "../../../model/src/domain/entity/catalog";
+import {
+  isApparelCategoryCode,
+  type ApparelCategoryCode,
+  type ApparelMeasurements,
+  type ApparelSizeInput,
+} from "../domain/entity/apparel";
+
 import { updateProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
 import {
   getProductBlueprintDetailApi,
   type ProductBlueprintDetailResponse,
   type UpdateProductBlueprintParams,
-  type NewModelVariationMeasurements,
 } from "../infrastructure/api/productBlueprintDetailApi";
 
 import { authorizedFetch } from "../infrastructure/httpClient/authorizedFetch";
@@ -28,63 +32,115 @@ import {
 
 const makeKey = (sizeLabel: string, color: string) => `${sizeLabel}__${color}`;
 
-function isBottomsLike(itemType: ItemType): boolean {
-  const normalized = String(itemType ?? "").trim().toLowerCase();
-  return normalized === "bottoms" || normalized === "ボトムス";
-}
+function resolveApparelCategoryCode(
+  params: Pick<UpdateProductBlueprintParams, "productBlueprintCategory">,
+): ApparelCategoryCode | null {
+  const code = String(params.productBlueprintCategory?.code ?? "").trim();
 
-function buildMeasurements(
-  itemType: ItemType,
-  size: SizeRow,
-): NewModelVariationMeasurements {
-  const result: NewModelVariationMeasurements = {};
-
-  if (isBottomsLike(itemType)) {
-    result["ウエスト"] = size.waist ?? null;
-    result["ヒップ"] = size.hip ?? null;
-    result["股上"] = size.rise ?? null;
-    result["股下"] = size.inseam ?? null;
-    result["わたり幅"] = size.thigh ?? null;
-    result["裾幅"] = size.hemWidth ?? null;
-    return result;
+  if (!isApparelCategoryCode(code)) {
+    return null;
   }
 
-  result["着丈"] = size.length ?? null;
-  result["身幅"] = size.width ?? null;
-  result["胸囲"] = size.chest ?? null;
-  result["肩幅"] = size.shoulder ?? null;
-  result["袖丈"] = size.sleeveLength ?? null;
-
-  return result;
+  return code;
 }
 
-function buildMeasurementsFromSizeRowForUpdate(
-  itemType: ItemType,
-  size: SizeRow,
+function buildApparelMeasurements(
+  categoryCode: ApparelCategoryCode,
+  size: ApparelSizeInput,
+): ApparelMeasurements {
+  const result: ApparelMeasurements = {};
+
+  switch (categoryCode) {
+    case "apparel.bottoms": {
+      result.waist = size.waist ?? null;
+      result.hip = size.hip ?? null;
+      result.rise = size.rise ?? null;
+      result.inseam = size.inseam ?? null;
+      result.thighWidth = size.thighWidth ?? null;
+      result.hemWidth = size.hemWidth ?? null;
+      result.totalLength = size.totalLength ?? null;
+      return result;
+    }
+
+    case "apparel.outerwear": {
+      result.shoulderWidth = size.shoulderWidth ?? null;
+      result.bodyWidth = size.bodyWidth ?? null;
+      result.bodyLength = size.bodyLength ?? null;
+      result.sleeveLength = size.sleeveLength ?? null;
+      return result;
+    }
+
+    case "apparel.dress": {
+      result.shoulderWidth = size.shoulderWidth ?? null;
+      result.bodyWidth = size.bodyWidth ?? null;
+      result.bodyLength = size.bodyLength ?? null;
+      result.sleeveLength = size.sleeveLength ?? null;
+      result.waist = size.waist ?? null;
+      result.hip = size.hip ?? null;
+      result.totalLength = size.totalLength ?? null;
+      return result;
+    }
+
+    case "apparel.shoes": {
+      result.heelHeight = size.heelHeight ?? null;
+      return result;
+    }
+
+    case "apparel.bag": {
+      result.width = size.width ?? null;
+      result.height = size.height ?? null;
+      result.depth = size.depth ?? null;
+      return result;
+    }
+
+    case "apparel.accessory": {
+      result.width = size.width ?? null;
+      result.height = size.height ?? null;
+      return result;
+    }
+
+    case "apparel.tops":
+    default: {
+      result.shoulderWidth = size.shoulderWidth ?? null;
+      result.bodyWidth = size.bodyWidth ?? null;
+      result.bodyLength = size.bodyLength ?? null;
+      result.sleeveLength = size.sleeveLength ?? null;
+      result.neckWidth = size.neckWidth ?? null;
+      return result;
+    }
+  }
+}
+
+function normalizeMeasurementsForRequest(
+  measurements: ApparelMeasurements,
 ): Record<string, number> | undefined {
-  const base = buildMeasurements(itemType, size);
   const result: Record<string, number> = {};
 
-  Object.entries(base).forEach(([k, v]) => {
-    if (typeof v === "number" && !Number.isNaN(v)) {
-      result[k] = v;
+  Object.entries(measurements).forEach(([key, value]) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      result[key] = value;
     }
   });
 
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function buildMeasurementsForCreate(
-  itemType: ItemType,
-  size: SizeRow,
+function buildMeasurementsFromSizeRowForUpdate(
+  categoryCode: ApparelCategoryCode,
+  size: ApparelSizeInput,
 ): Record<string, number> | undefined {
-  return buildMeasurementsFromSizeRowForUpdate(itemType, size);
+  return normalizeMeasurementsForRequest(
+    buildApparelMeasurements(categoryCode, size),
+  );
 }
 
-/**
- * UI 側の colorRgbMap(hex) → int を優先し、
- * 無ければ既存 variation の rgb を使う。
- */
+function buildMeasurementsForCreate(
+  categoryCode: ApparelCategoryCode,
+  size: ApparelSizeInput,
+): Record<string, number> | undefined {
+  return buildMeasurementsFromSizeRowForUpdate(categoryCode, size);
+}
+
 function resolveRgbInt(args: {
   colorName: string;
   colorRgbMap?: Record<string, string>;
@@ -110,29 +166,32 @@ function resolveRgbInt(args: {
 // -----------------------------------------
 // GET: 商品設計 詳細
 // -----------------------------------------
+
 export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
   const trimmed = String(id ?? "").trim();
-  if (!trimmed) throw new Error("getProductBlueprintDetail: id が空です");
+  if (!trimmed) {
+    throw new Error("getProductBlueprintDetail: id が空です");
+  }
 
   return await getProductBlueprintDetailApi(trimmed);
 }
 
 // -----------------------------------------
-// UPDATE（Blueprint メタ情報 + ModelVariation）
+// UPDATE（Blueprint メタ情報 + apparel ModelVariation）
 // -----------------------------------------
+
 export async function updateProductBlueprint(
   params: UpdateProductBlueprintParams & {
-    sizes?: SizeRow[];
-    modelNumbers?: { size: string; color: string }[];
+    sizes?: ApparelSizeInput[];
+    modelNumbers?: { size: string; color: string; code?: string }[];
     colorRgbMap?: Record<string, string>;
   },
 ): Promise<ProductBlueprintDetailResponse> {
   const {
     id,
     productName,
-    itemType,
     fit,
     material,
     weight,
@@ -146,10 +205,21 @@ export async function updateProductBlueprint(
     colorRgbMap = {},
     sizes = [],
     modelNumbers = [],
+    productBlueprintCategoryId,
+    productBlueprintCategory,
+    categoryFields,
   } = params;
 
   if (!id) {
     throw new Error("updateProductBlueprint: id が空です");
+  }
+
+  if (!productBlueprintCategoryId?.trim()) {
+    throw new Error("updateProductBlueprint: productBlueprintCategoryId が空です");
+  }
+
+  if (!productBlueprintCategory?.id?.trim()) {
+    throw new Error("updateProductBlueprint: productBlueprintCategory が空です");
   }
 
   const updated = await updateProductBlueprintHTTP(
@@ -158,7 +228,9 @@ export async function updateProductBlueprint(
       id,
       productName,
       brandId,
-      itemType,
+      productBlueprintCategoryId,
+      productBlueprintCategory,
+      categoryFields: categoryFields ?? null,
       fit,
       material,
       weight,
@@ -168,15 +240,19 @@ export async function updateProductBlueprint(
       assigneeId,
       colors: colors ?? [],
       colorRgbMap: colorRgbMap ?? {},
+      sizes,
+      modelNumbers,
       updatedBy: updatedBy ?? null,
     } satisfies UpdateProductBlueprintParams,
   );
 
-  if (!itemType) {
+  const apparelCategoryCode = resolveApparelCategoryCode({
+    productBlueprintCategory,
+  });
+
+  if (!apparelCategoryCode) {
     return updated;
   }
-
-  const itemTypeValue = itemType as ItemType;
 
   const variations = await listModelVariationsByProductBlueprintId(id);
 
@@ -197,7 +273,7 @@ export async function updateProductBlueprint(
 
   const measurementsMap = new Map<string, Record<string, number>>();
   sizes.forEach((s) => {
-    const ms = buildMeasurementsFromSizeRowForUpdate(itemTypeValue, s);
+    const ms = buildMeasurementsFromSizeRowForUpdate(apparelCategoryCode, s);
     if (ms) measurementsMap.set(s.sizeLabel, ms);
   });
 
@@ -251,7 +327,7 @@ export async function updateProductBlueprint(
       fallbackRgb: null,
     });
 
-    const measurements = buildMeasurementsForCreate(itemTypeValue, sizeRow) ?? {};
+    const measurements = buildMeasurementsForCreate(apparelCategoryCode, sizeRow) ?? {};
 
     const createReq: CreateModelVariationRequest = {
       productBlueprintId: id,
@@ -287,6 +363,7 @@ export async function updateProductBlueprint(
 // -----------------------------------------
 // ModelVariation list
 // -----------------------------------------
+
 export type ModelVariationResponse = {
   id: string;
   productBlueprintId: string;
@@ -304,7 +381,9 @@ export async function listModelVariationsByProductBlueprintId(
   productBlueprintId: string,
 ): Promise<ModelVariationResponse[]> {
   const id = productBlueprintId.trim();
-  if (!id) throw new Error("productBlueprintId が空です");
+  if (!id) {
+    throw new Error("productBlueprintId が空です");
+  }
 
   const res = await authorizedFetch(
     `/models/by-blueprint/${encodeURIComponent(id)}/variations`,
@@ -328,6 +407,7 @@ export async function listModelVariationsByProductBlueprintId(
 // -----------------------------------------
 // 商品設計の履歴一覧取得
 // -----------------------------------------
+
 export type ProductBlueprintHistoryItem = {
   id: string;
   productName: string;

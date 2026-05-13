@@ -11,8 +11,16 @@ import (
 // ModelUsecase
 // ------------------------------------------------------------
 //
-// ✅ Mall handler から model.RepositoryPort として渡したいので、
-//   ModelUsecase 自体が modeldom.RepositoryPort を実装する（= repo に委譲する）
+// Mall handler から model.RepositoryPort として渡したいので、
+// ModelUsecase 自体が modeldom.RepositoryPort を実装する（= repo に委譲する）。
+//
+// NOTE:
+// Product-level metadata は productBlueprint.CategoryFields に集約する方針。
+// そのため旧 GetModelData / GetModelDataByBlueprintID / UpdateModelData は廃止済み。
+//
+// この usecase は apparel 系 model variation の操作を担当する。
+// どの category で model variation を作成するかは、
+// productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
 // ------------------------------------------------------------
 
 type ModelUsecase struct {
@@ -29,9 +37,12 @@ func NewModelUsecase(repo modeldom.RepositoryPort) *ModelUsecase {
 // Queries
 // ------------------------------------------------------------
 
-// ★ HTTP の GET /models/variations/{variationId} 用の明示メソッド
-// ※ このメソッドは 1 箇所のみ定義（DuplicateMethod 回避）
-func (u *ModelUsecase) GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
+// HTTP の GET /models/variations/{variationId} 用の明示メソッド。
+// このメソッドは 1 箇所のみ定義（DuplicateMethod 回避）。
+func (u *ModelUsecase) GetModelVariationByID(
+	ctx context.Context,
+	variationID string,
+) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -42,44 +53,9 @@ func (u *ModelUsecase) GetModelVariationByID(ctx context.Context, variationID st
 	return u.repo.GetModelVariationByID(ctx, variationID)
 }
 
-// （呼び出し側は GetModelVariations(ctx, productBlueprintID) を利用）
-
 // ------------------------------------------------------------
 // RepositoryPort implementation (delegate to u.repo)
 // ------------------------------------------------------------
-
-func (u *ModelUsecase) GetModelData(ctx context.Context, productID string) (*modeldom.ModelData, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-	if productID == "" {
-		return nil, modeldom.ErrInvalidProductID
-	}
-
-	return u.repo.GetModelData(ctx, productID)
-}
-
-func (u *ModelUsecase) GetModelDataByBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
-	}
-
-	return u.repo.GetModelDataByBlueprintID(ctx, productBlueprintID)
-}
-
-func (u *ModelUsecase) UpdateModelData(ctx context.Context, productID string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-	if productID == "" {
-		return nil, modeldom.ErrInvalidProductID
-	}
-
-	return u.repo.UpdateModelData(ctx, productID, updates)
-}
 
 func (u *ModelUsecase) ListVariations(
 	ctx context.Context,
@@ -93,15 +69,18 @@ func (u *ModelUsecase) ListVariations(
 	return u.repo.ListVariations(ctx, filter, page)
 }
 
-func (u *ModelUsecase) GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error) {
+func (u *ModelUsecase) GetModelVariations(
+	ctx context.Context,
+	productBlueprintID string,
+) ([]modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
-	if productID == "" {
-		return nil, modeldom.ErrInvalidProductID
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
-	return u.repo.GetModelVariations(ctx, productID)
+	return u.repo.GetModelVariations(ctx, productBlueprintID)
 }
 
 // Create ModelVariation（履歴は保存しない）
@@ -109,6 +88,8 @@ func (u *ModelUsecase) GetModelVariations(ctx context.Context, productID string)
 // NOTE:
 //   - 現在の console model 作成は apparel 用の size/color/measurements 前提。
 //   - 旧 NewModelVariation は廃止し、NewApparelModelVariation を使う。
+//   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
+//   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
 func (u *ModelUsecase) CreateModelVariation(
 	ctx context.Context,
 	v modeldom.NewApparelModelVariation,
@@ -147,7 +128,10 @@ func (u *ModelUsecase) UpdateModelVariation(
 	return updated, nil
 }
 
-func (u *ModelUsecase) DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
+func (u *ModelUsecase) DeleteModelVariation(
+	ctx context.Context,
+	variationID string,
+) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -177,24 +161,30 @@ func (u *ModelUsecase) ReplaceModelVariations(
 	return updated, nil
 }
 
-func (u *ModelUsecase) GetSizeVariations(ctx context.Context, productID string) ([]modeldom.SizeVariation, error) {
+func (u *ModelUsecase) GetSizeVariations(
+	ctx context.Context,
+	productBlueprintID string,
+) ([]modeldom.SizeVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
-	if productID == "" {
-		return nil, modeldom.ErrInvalidProductID
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
-	return u.repo.GetSizeVariations(ctx, productID)
+	return u.repo.GetSizeVariations(ctx, productBlueprintID)
 }
 
-func (u *ModelUsecase) GetModelNumbers(ctx context.Context, productID string) ([]modeldom.ModelNumber, error) {
+func (u *ModelUsecase) GetModelNumbers(
+	ctx context.Context,
+	productBlueprintID string,
+) ([]modeldom.ModelNumber, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
-	if productID == "" {
-		return nil, modeldom.ErrInvalidProductID
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
-	return u.repo.GetModelNumbers(ctx, productID)
+	return u.repo.GetModelNumbers(ctx, productBlueprintID)
 }

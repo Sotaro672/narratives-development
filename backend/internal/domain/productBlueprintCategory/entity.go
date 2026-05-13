@@ -4,9 +4,10 @@ package productBlueprintCategory
 import (
 	"errors"
 	"fmt"
-	"narratives/internal/domain/common"
 	"strings"
 	"time"
+
+	"narratives/internal/domain/common"
 )
 
 // ======================================
@@ -79,6 +80,10 @@ func IsValidCategoryKind(v CategoryKind) bool {
 // ProductBlueprintCategory は productBlueprint が参照する商品カテゴリマスタ。
 // productBlueprint 側には categoryId と denormalized 表示用フィールドを保存し、
 // カテゴリ定義の正はこのドメインで管理する。
+//
+// NOTE:
+// カテゴリごとの入力項目定義は、この entity.go には持たせない。
+// 入力項目定義は input_schema.go 側で CategoryInputSchema として管理する。
 type ProductBlueprintCategory struct {
 	ID CategoryID
 
@@ -86,7 +91,6 @@ type ProductBlueprintCategory struct {
 	// - apparel
 	// - apparel.tops
 	// - apparel.bottoms
-	// - food
 	// - alcohol
 	// - alcohol.sake
 	// - alcohol.wine
@@ -111,7 +115,7 @@ type ProductBlueprintCategory struct {
 	DisplayOrder int
 
 	// カテゴリごとの追加要件。
-	// 飲食品、酒類、化粧品などのカテゴリ差分を productBlueprint 本体へ直書きしないために持つ。
+	// これは入力欄一覧ではなく、法務・運用・表示上の要件フラグとして扱う。
 	Attributes CategoryAttributes
 
 	CreatedAt time.Time

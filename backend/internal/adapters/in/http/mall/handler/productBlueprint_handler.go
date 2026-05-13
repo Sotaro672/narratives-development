@@ -15,17 +15,19 @@ import (
 
 // MallProductBlueprintHandler serves buyer-facing productBlueprint endpoints (read-only).
 //
-// ✅ Routes (read-only):
+// Routes (read-only):
 // - GET /mall/product-blueprints/{id}
 //
 // NOTE:
-// - buyer に不要/秘匿したいフィールド（assigneeId, created/updated/deleted/expire 系）は返さない。
-// - 論理削除（DeletedAt != nil）の場合は 404 扱いにする。
-// - deletedAt / deletedBy は “拾わない” (= 返さない)。ただし DeletedAt による公開遮断はする。
+//   - buyer に不要/秘匿したいフィールド（assigneeId, created/updated/deleted/expire 系）は返さない。
+//   - 論理削除（DeletedAt != nil）の場合は 404 扱いにする。
+//   - deletedAt / deletedBy は “拾わない” (= 返さない)。ただし DeletedAt による公開遮断はする。
+//   - fit / material / weight / qualityAssurance などのカテゴリ依存項目は
+//     ProductBlueprint 直下ではなく categoryFields から返す。
 type MallProductBlueprintHandler struct {
 	uc productBlueprintGetter
 
-	// ✅ Name resolvers (type-safe)
+	// Name resolvers (type-safe)
 	brandSvc   *branddom.Service
 	companySvc *companydom.Service
 }
@@ -52,11 +54,13 @@ func NewMallProductBlueprintHandlerWithServices(
 // Response DTOs (Mall)
 // ------------------------------
 
-// ✅ buyer 向け: assignee / created / updated / deleted / expire は返さない
+// buyer 向け: assignee / created / updated / deleted / expire は返さない
 type MallProductBlueprintResponse struct {
 	ID string `json:"id"`
 
 	ProductName string `json:"productName"`
+	Description string `json:"description"`
+
 	CompanyID   string `json:"companyId"`
 	CompanyName string `json:"companyName"`
 	BrandID     string `json:"brandId"`
@@ -64,12 +68,18 @@ type MallProductBlueprintResponse struct {
 
 	ProductBlueprintCategory MallProductBlueprintCategoryResponse `json:"productBlueprintCategory"`
 
-	Fit      string  `json:"fit"`
-	Material string  `json:"material"`
-	Weight   float64 `json:"weight"`
+	// CategoryFields はカテゴリ別の productBlueprint 入力値。
+	//
+	// 例:
+	// - alcohol.sake:
+	//   vintage, region, material, alcoholContent, volume
+	// - apparel.tops:
+	//   weight, fit, material
+	// - cosmetics.skincare:
+	//   material, volume
+	CategoryFields map[string]any `json:"categoryFields,omitempty"`
 
-	QualityAssurance []string         `json:"qualityAssurance"`
-	ProductIdTag     MallProductIDTag `json:"productIdTag"`
+	ProductIdTag MallProductIDTag `json:"productIdTag"`
 
 	Printed bool `json:"printed"`
 }
@@ -107,7 +117,7 @@ func (h *MallProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// ✅ mall only: GET /mall/product-blueprints/{id}
+	// mall only: GET /mall/product-blueprints/{id}
 	if strings.HasPrefix(path, "/mall/product-blueprints/") {
 		rest := strings.TrimPrefix(path, "/mall/product-blueprints/")
 		parts := strings.Split(rest, "/")
@@ -169,11 +179,12 @@ func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Req
 func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context.Context, p pbdom.ProductBlueprint) MallProductBlueprintResponse {
 	pbID := p.ID
 	productName := p.ProductName
+	description := p.Description
 	companyID := p.CompanyID
 	brandID := p.BrandID
 	category := p.ProductBlueprintCategory
 
-	// ✅ name resolve (best-effort)
+	// name resolve (best-effort)
 	brandName := ""
 	companyName := ""
 
@@ -192,6 +203,8 @@ func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context
 	return MallProductBlueprintResponse{
 		ID:          pbID,
 		ProductName: productName,
+		Description: description,
+
 		CompanyID:   companyID,
 		CompanyName: companyName,
 		BrandID:     brandID,
@@ -206,15 +219,33 @@ func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context
 			Path:   append([]string(nil), category.Path...),
 		},
 
-		Fit:              p.Fit,
-		Material:         p.Material,
-		Weight:           p.Weight,
-		QualityAssurance: append([]string(nil), p.QualityAssurance...),
+		CategoryFields: cloneMallCategoryFields(p.CategoryFields),
+
 		ProductIdTag: MallProductIDTag{
 			Type: string(p.ProductIdTag.Type),
 		},
 		Printed: p.Printed,
 	}
+}
+
+func cloneMallCategoryFields(in pbdom.CategoryFields) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		if key == "" {
+			continue
+		}
+		out[key] = value
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }
 
 // ------------------------------

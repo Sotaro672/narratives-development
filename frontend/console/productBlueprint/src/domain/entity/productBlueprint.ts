@@ -1,229 +1,110 @@
-// frontend/productBlueprint/src/domain/entity/productBlueprint.ts
+// frontend/productBlueprint/src/domain/entity/productBlueprintCategory.ts
 
 /**
- * ItemType
- * backend/internal/domain/productBlueprint/entity.go の ItemType に対応。
+ * backend/internal/domain/common.ProductCategoryKind に対応。
  */
-export type ItemType = "tops" | "bottoms" | "other";
+export type ProductBlueprintCategoryKind =
+  | "apparel"
+  | "food"
+  | "alcohol"
+  | "cosmetics"
+  | "goods"
+  | "healthcare"
+  | "other";
 
 /**
- * ProductIDTagType
- * backend/internal/domain/productBlueprint/entity.go の ProductIDTagType (= string alias) に対応。
+ * productBlueprintCategory の属性フラグ。
+ * backend/internal/domain/productBlueprintCategory.CategoryAttributes に対応。
  */
-export type ProductIDTagType = "qr" | "nfc";
-
-/**
- * printed 状態
- * backend/internal/domain/productBlueprint/entity.go の PrintedStatus に対応。
- * ""（未設定）はフロントでは扱わず、"notYet" / "printed" のみを想定。
- */
-export type PrintedStatus = "notYet" | "printed";
-
-/**
- * ProductIDTag
- * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
- *
- */
-export interface ProductIDTag {
-  type: ProductIDTagType;
+export interface ProductBlueprintCategoryAttributes {
+  requiresExpirationDate: boolean;
+  requiresLotNumber: boolean;
+  requiresIngredients: boolean;
+  requiresAlcoholNotice: boolean;
+  requiresCosmeticNotice: boolean;
+  requiresStorageMethod: boolean;
 }
 
 /**
- * ModelVariation
- * backend/internal/domain/model/ModelVariation に対応するフロント側定義。
+ * Firestore の productBlueprintCategories に保存されるカテゴリマスタ。
  */
-export interface ModelVariation {
+export interface ProductBlueprintCategory {
   id: string;
-  name?: string;
-  [key: string]: unknown;
+  code: string;
+  nameJa: string;
+  nameEn: string;
+  parentId?: string | null;
+  path: string[];
+  kind: ProductBlueprintCategoryKind;
+  displayOrder: number;
+  attributes: ProductBlueprintCategoryAttributes;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 /**
- * ProductBlueprint
- * backend/internal/domain/productBlueprint/entity.go の ProductBlueprint に対応。
+ * ProductBlueprint 側に denormalize 保存されるカテゴリ snapshot。
  */
-export interface ProductBlueprint {
+export interface ProductBlueprintCategorySnapshot {
   id: string;
-  productName: string;
-  brandId: string;
-
-  /** backend の ItemType に対応（tops / bottoms / other） */
-  itemType: ItemType;
-
-  /** variationIds 削除に伴い該当要素も削除 */
-
-  fit: string;
-  material: string;
-
-  /** 重量(kg等)。0以上 */
-  weight: number;
-
-  /** 品質保証に関するメモ／タグ一覧（空文字なし） */
-  qualityAssurance: string[];
-
-  /** 製品IDタグ情報（必須, type は qr/nfc） */
-  productIdTag: ProductIDTag;
-
-  /** 会社 ID （backend: CompanyID） */
-  companyId: string;
-
-  /** 担当者 Member ID（必須） */
-  assigneeId: string;
-
-  /** printed フラグ ("notYet" | "printed") */
-  printed?: PrintedStatus;
-
-  /** 作成者 Member ID（任意, backend: CreatedBy） */
-  createdBy?: string | null;
-
-  /** 作成日時 (ISO8601, backend: CreatedAt) */
-  createdAt: string;
-
-  /** 最終更新者 Member ID（任意, backend: UpdatedBy） */
-  updatedBy?: string | null;
-
-  /** 最終更新日時 (ISO8601, backend: UpdatedAt) */
-  updatedAt: string;
-
-  /** 削除者 Member ID（任意, backend: DeletedBy, 未削除時は null/undefined） */
-  deletedBy?: string | null;
-
-  /** 削除日時 (ISO8601, backend: DeletedAt, 未削除時は null/undefined) */
-  deletedAt?: string | null;
+  code: string;
+  nameJa: string;
+  nameEn: string;
+  kind: ProductBlueprintCategoryKind;
+  path: string[];
 }
 
-/* =========================================================
- * ユーティリティ / バリデーション
- * =======================================================*/
+export type CategoryFieldValue = string | number | boolean | null;
 
-/** ItemType の妥当性チェック */
-export function isValidItemType(value: string): value is ItemType {
-  return value === "tops" || value === "bottoms" || value === "other";
-}
+export type CategoryFieldValues = Record<string, CategoryFieldValue>;
 
-/** ProductIDTagType の妥当性チェック */
-export function isValidProductIDTagType(
+export function isValidProductBlueprintCategoryKind(
   value: string,
-): value is ProductIDTagType {
-  return value === "qr" || value === "nfc";
+): value is ProductBlueprintCategoryKind {
+  return (
+    value === "apparel" ||
+    value === "food" ||
+    value === "alcohol" ||
+    value === "cosmetics" ||
+    value === "goods" ||
+    value === "healthcare" ||
+    value === "other"
+  );
 }
 
-/** PrintedStatus の妥当性チェック */
-export function isValidPrintedStatus(
-  value: string,
-): value is PrintedStatus {
-  return value === "notYet" || value === "printed";
-}
-
-/** ProductIDTag の簡易バリデーション（LogoDesignFile 削除対応） */
-export function validateProductIDTag(tag: ProductIDTag): string[] {
-  const errors: string[] = [];
-  if (!isValidProductIDTagType(tag.type)) {
-    errors.push("productIdTag.type must be 'qr' or 'nfc'");
-  }
-  return errors;
-}
-
-/** qualityAssurance の重複/空文字を排除 */
-export function normalizeQualityAssurance(xs: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of xs || []) {
-    const x = raw.trim();
-    if (!x || seen.has(x)) continue;
-    seen.add(x);
-    out.push(x);
-  }
-  return out;
-}
-
-/**
- * ProductBlueprint の簡易バリデーション
- * variationIds 削除済みのため関連チェックも削除。
- */
-export function validateProductBlueprint(
-  pb: ProductBlueprint,
+export function validateProductBlueprintCategorySnapshot(
+  category: ProductBlueprintCategorySnapshot,
 ): string[] {
   const errors: string[] = [];
 
-  if (!pb.id?.trim()) errors.push("id is required");
-  if (!pb.productName?.trim()) errors.push("productName is required");
-  if (!pb.brandId?.trim()) errors.push("brandId is required");
-
-  if (!isValidItemType(pb.itemType)) {
-    errors.push("itemType must be one of 'tops', 'bottoms', 'other'");
+  if (!category.id?.trim()) {
+    errors.push("productBlueprintCategory.id is required");
   }
-
-  if (pb.weight < 0) {
-    errors.push("weight must be >= 0");
+  if (!category.code?.trim()) {
+    errors.push("productBlueprintCategory.code is required");
   }
-
-  if (!pb.companyId?.trim()) {
-    errors.push("companyId is required");
+  if (!category.nameJa?.trim()) {
+    errors.push("productBlueprintCategory.nameJa is required");
   }
-
-  errors.push(...validateProductIDTag(pb.productIdTag));
-
-  if (!pb.assigneeId?.trim()) {
-    errors.push("assigneeId is required");
+  if (!isValidProductBlueprintCategoryKind(category.kind)) {
+    errors.push("productBlueprintCategory.kind is invalid");
   }
-
-  if (!pb.createdAt?.trim()) {
-    errors.push("createdAt is required");
-  }
-
-  // printed が渡されている場合だけ妥当性チェック
-  if (pb.printed !== undefined && pb.printed !== null) {
-    if (!isValidPrintedStatus(pb.printed)) {
-      errors.push("printed must be 'notYet' or 'printed'");
-    }
+  if (!Array.isArray(category.path) || category.path.length === 0) {
+    errors.push("productBlueprintCategory.path is required");
   }
 
   return errors;
 }
 
-/**
- * ファクトリ: 入力値を正規化しつつ ProductBlueprint を生成。
- * variationIds 削除に伴いロジックから除外。
- */
-export function createProductBlueprint(
-  input: Omit<
-    ProductBlueprint,
-    "qualityAssurance" | "updatedAt" | "updatedBy" | "deletedAt" | "deletedBy"
-  > & {
-    qualityAssurance?: string[];
-    updatedAt?: string;
-    updatedBy?: string | null;
-    deletedAt?: string | null;
-    deletedBy?: string | null;
-  },
-): ProductBlueprint {
-  const qualityAssurance = normalizeQualityAssurance(
-    input.qualityAssurance ?? [],
-  );
-
-  const updatedAt =
-    input.updatedAt && input.updatedAt.trim()
-      ? input.updatedAt
-      : input.createdAt;
-
-  const updatedBy =
-    input.updatedBy !== undefined
-      ? input.updatedBy
-      : input.createdBy ?? null;
-
-  const deletedAt =
-    input.deletedAt !== undefined ? input.deletedAt : null;
-
-  const deletedBy =
-    input.deletedBy !== undefined ? input.deletedBy : null;
-
+export function toProductBlueprintCategorySnapshot(
+  category: ProductBlueprintCategory,
+): ProductBlueprintCategorySnapshot {
   return {
-    ...input,
-    qualityAssurance,
-    updatedAt,
-    updatedBy,
-    deletedAt,
-    deletedBy,
+    id: category.id,
+    code: category.code,
+    nameJa: category.nameJa,
+    nameEn: category.nameEn,
+    kind: category.kind,
+    path: [...category.path],
   };
 }

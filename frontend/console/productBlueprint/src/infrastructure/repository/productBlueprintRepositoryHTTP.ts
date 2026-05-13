@@ -15,17 +15,67 @@ import type {
 } from "../api/productBlueprintDetailApi";
 
 // -----------------------------------------------------------
+// internal helpers
+// -----------------------------------------------------------
+
+function assertProductBlueprintCategoryPayload(params: {
+  productBlueprintCategoryId: string;
+  productBlueprintCategory: unknown;
+}) {
+  const productBlueprintCategoryId = String(
+    params.productBlueprintCategoryId ?? "",
+  ).trim();
+
+  if (!productBlueprintCategoryId) {
+    throw new Error(
+      "productBlueprintRepositoryHTTP: productBlueprintCategoryId が空です",
+    );
+  }
+
+  if (!params.productBlueprintCategory) {
+    throw new Error(
+      "productBlueprintRepositoryHTTP: productBlueprintCategory が空です",
+    );
+  }
+}
+
+function buildProductBlueprintCategoryPayload(params: {
+  productBlueprintCategoryId: string;
+  productBlueprintCategory: unknown;
+  categoryFields?: unknown;
+}) {
+  assertProductBlueprintCategoryPayload(params);
+
+  return {
+    productBlueprintCategoryId: params.productBlueprintCategoryId.trim(),
+    productBlueprintCategory: params.productBlueprintCategory,
+    categoryFields: params.categoryFields ?? null,
+  };
+}
+
+// -----------------------------------------------------------
 // POST: 商品設計 作成
 // -----------------------------------------------------------
+
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
   const headers = await getAuthJsonHeadersOrThrow();
 
+  const categoryPayload = buildProductBlueprintCategoryPayload({
+    productBlueprintCategoryId: params.productBlueprintCategoryId,
+    productBlueprintCategory: params.productBlueprintCategory,
+    categoryFields: params.categoryFields,
+  });
+
   const payload = {
     productName: params.productName,
     brandId: params.brandId,
-    itemType: params.itemType,
+
+    // itemType は廃止。
+    // productBlueprintCategoryId / productBlueprintCategory を正として送る。
+    ...categoryPayload,
+
     fit: params.fit,
     material: params.material,
     weight: params.weight,
@@ -34,6 +84,7 @@ export async function createProductBlueprintHTTP(
     companyId: params.companyId,
     assigneeId: params.assigneeId ?? null,
     createdBy: params.createdBy ?? null,
+
     // printed は backend 側で false を設定する想定なので送らない
   };
 
@@ -44,8 +95,9 @@ export async function createProductBlueprintHTTP(
   });
 
   if (!res.ok) {
+    const detail = await res.text().catch(() => "");
     throw new Error(
-      `商品設計の作成に失敗しました（${res.status} ${res.statusText}）`,
+      `商品設計の作成に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
     );
   }
 
@@ -58,6 +110,7 @@ export async function createProductBlueprintHTTP(
 //   - body: { modelIds: string[] }
 //   - resp: detail（toDetailOutput）
 // -----------------------------------------------------------
+
 export async function appendModelRefsHTTP(
   productBlueprintId: string,
   modelIds: string[],
@@ -106,7 +159,10 @@ export async function appendModelRefsHTTP(
 // -----------------------------------------------------------
 // GET: 商品設計 一覧
 // -----------------------------------------------------------
-export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
+
+export async function listProductBlueprintsHTTP(): Promise<
+  ProductBlueprintDetailResponse[]
+> {
   const headers = await getAuthHeadersOrThrow();
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
@@ -115,8 +171,9 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
   });
 
   if (!res.ok) {
+    const detail = await res.text().catch(() => "");
     throw new Error(
-      `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）`,
+      `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
     );
   }
 
@@ -126,6 +183,7 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
 // -----------------------------------------------------------
 // PATCH: 商品設計 更新
 // -----------------------------------------------------------
+
 export async function updateProductBlueprintHTTP(
   id: string,
   params: UpdateProductBlueprintParams,
@@ -138,10 +196,20 @@ export async function updateProductBlueprintHTTP(
   const headers = await getAuthJsonHeadersOrThrow();
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(trimmedId)}`;
 
+  const categoryPayload = buildProductBlueprintCategoryPayload({
+    productBlueprintCategoryId: params.productBlueprintCategoryId,
+    productBlueprintCategory: params.productBlueprintCategory,
+    categoryFields: params.categoryFields,
+  });
+
   const payload = {
     productName: params.productName,
     brandId: params.brandId,
-    itemType: params.itemType,
+
+    // itemType は廃止。
+    // productBlueprintCategoryId / productBlueprintCategory を正として送る。
+    ...categoryPayload,
+
     fit: params.fit,
     material: params.material,
     weight: params.weight,
@@ -174,6 +242,7 @@ export async function updateProductBlueprintHTTP(
 // POST: 商品設計 printed フラグ更新（false → true）
 //   - backend: POST /product-blueprints/{id}/mark-printed
 // -----------------------------------------------------------
+
 export async function markProductBlueprintPrintedHTTP(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {

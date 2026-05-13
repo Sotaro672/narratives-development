@@ -23,28 +23,42 @@ type ProductBlueprintCategoryOutput struct {
 	Path   []string `json:"path"`
 }
 
-// ---------------------------------------------------
-// POST /product-blueprints
-// ---------------------------------------------------
-
 type ProductIdTagInput struct {
 	Type string `json:"type"`
 }
 
+// ---------------------------------------------------
+// POST /product-blueprints
+// ---------------------------------------------------
+
 type CreateProductBlueprintInput struct {
 	ProductName string `json:"productName"`
-	BrandId     string `json:"brandId"`
+	Description string `json:"description"`
+
+	BrandId   string `json:"brandId"`
+	CompanyId string `json:"companyId"`
 
 	ProductBlueprintCategory ProductBlueprintCategoryInput `json:"productBlueprintCategory"`
 
-	Fit              string            `json:"fit"`
-	Material         string            `json:"material"`
-	Weight           float64           `json:"weight"`
-	QualityAssurance []string          `json:"qualityAssurance"`
-	ProductIdTag     ProductIdTagInput `json:"productIdTag"`
-	AssigneeId       string            `json:"assigneeId"`
-	CompanyId        string            `json:"companyId"`
-	CreatedBy        string            `json:"createdBy,omitempty"`
+	// CategoryFields はカテゴリ別の productBlueprint 入力値を受け取る。
+	//
+	// 例:
+	// - alcohol.sake:
+	//   vintage, region, material, alcoholContent, volume
+	// - apparel.tops:
+	//   weight, fit, material
+	// - cosmetics.skincare:
+	//   material, volume
+	//
+	// brandId / productName / productIdTagType / description などの共通 field はここには入れない。
+	CategoryFields map[string]any `json:"categoryFields,omitempty"`
+
+	// 当面 frontend では qr 固定。
+	// DTO としては既存互換のため productIdTag.type を受ける。
+	ProductIdTag ProductIdTagInput `json:"productIdTag"`
+
+	AssigneeId string `json:"assigneeId"`
+	CreatedBy  string `json:"createdBy,omitempty"`
 }
 
 // ---------------------------------------------------
@@ -53,18 +67,23 @@ type CreateProductBlueprintInput struct {
 
 type UpdateProductBlueprintInput struct {
 	ProductName string `json:"productName"`
-	BrandId     string `json:"brandId"`
+	Description string `json:"description"`
+
+	BrandId   string `json:"brandId"`
+	CompanyId string `json:"companyId"`
 
 	ProductBlueprintCategory ProductBlueprintCategoryInput `json:"productBlueprintCategory"`
 
-	Fit              string            `json:"fit"`
-	Material         string            `json:"material"`
-	Weight           float64           `json:"weight"`
-	QualityAssurance []string          `json:"qualityAssurance"`
-	ProductIdTag     ProductIdTagInput `json:"productIdTag"`
-	AssigneeId       string            `json:"assigneeId"`
-	CompanyId        string            `json:"companyId"`
-	UpdatedBy        string            `json:"updatedBy,omitempty"`
+	// nil / empty の扱いは handler / usecase / repository 側の方針に従う。
+	// 今回の endpoint 実装では nil または空 map は nil として domain へ渡す。
+	CategoryFields map[string]any `json:"categoryFields,omitempty"`
+
+	// 当面 frontend では qr 固定。
+	// DTO としては既存互換のため productIdTag.type を受ける。
+	ProductIdTag ProductIdTagInput `json:"productIdTag"`
+
+	AssigneeId string `json:"assigneeId"`
+	UpdatedBy  string `json:"updatedBy,omitempty"`
 }
 
 // ---------------------------------------------------
@@ -72,7 +91,7 @@ type UpdateProductBlueprintInput struct {
 // - productBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する
 // - updatedAt / updatedBy は更新しない（repo 側で touch しない更新を行う）
 //
-// ★ 採用方針（案1）
+// 採用方針
 //   - 入力: modelIds（順序は「色登録順→サイズ登録順」に並んだもの）
 //   - 出力: detail（既存の toDetailOutput）
 // ---------------------------------------------------
@@ -110,16 +129,25 @@ type ModelRefOutput struct {
 type ProductBlueprintDetailOutput struct {
 	ID          string `json:"id"`
 	ProductName string `json:"productName"`
-	CompanyId   string `json:"companyId"`
-	BrandId     string `json:"brandId"`
-	BrandName   string `json:"brandName"`
+	Description string `json:"description"`
 
-	ProductBlueprintCategory ProductBlueprintCategoryOutput `json:"productBlueprintCategory"`
+	CompanyId string `json:"companyId"`
+	BrandId   string `json:"brandId"`
+	BrandName string `json:"brandName"`
 
-	Fit              string   `json:"fit"`
-	Material         string   `json:"material"`
-	Weight           float64  `json:"weight"`
-	QualityAssurance []string `json:"qualityAssurance"`
+	ProductBlueprintCategoryId string                         `json:"productBlueprintCategoryId"`
+	ProductBlueprintCategory   ProductBlueprintCategoryOutput `json:"productBlueprintCategory"`
+
+	// CategoryFields はカテゴリ別の productBlueprint 入力値。
+	//
+	// 例:
+	// - alcohol.sake:
+	//   vintage, region, material, alcoholContent, volume
+	// - apparel.tops:
+	//   weight, fit, material
+	// - cosmetics.skincare:
+	//   material, volume
+	CategoryFields map[string]any `json:"categoryFields,omitempty"`
 
 	ProductIdTag *struct {
 		Type string `json:"type"`
@@ -135,14 +163,19 @@ type ProductBlueprintDetailOutput struct {
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 
+	// 論理削除は廃止済みだが、旧レスポンス互換が必要な箇所がある場合に備えて残す。
 	DeletedAt string `json:"deletedAt,omitempty"`
 
-	// ★ 追加: modelRefs（model docId + displayOrder）
+	// modelRefs（model docId + displayOrder）
 	ModelRefs []ModelRefOutput `json:"modelRefs,omitempty"`
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints/deleted`
+// GET /product-blueprints/deleted
+// ---------------------------------------------------
+//
+// 論理削除一覧は廃止済み。
+// 型だけ残す場合は旧ハンドラ互換用。
 // ---------------------------------------------------
 
 type ProductBlueprintDeletedListOutput struct {

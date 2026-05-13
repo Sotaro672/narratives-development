@@ -16,8 +16,13 @@ import (
 //
 // NOTE:
 //   - 現時点では apparel 用の size / color / measurements 更新に対応する。
-//   - alcohol / food などカテゴリ別 model を追加する場合は、
+//   - 現時点では apparel 系カテゴリのうち modelFields を持つカテゴリだけで使う。
+//   - 将来、apparel 以外で model が必要になった場合は、
 //     category-specific update DTO を別途追加する。
+//   - Measurements は nil なら更新スキップ。
+//   - apparel.outerwear / apparel.shoes では Measurements は空でもよい。
+//   - measurements 必須判定は productBlueprintCategory schema を
+//     application/usecase 側で参照して行う。
 type ModelVariationUpdate struct {
 	Size         *string      `json:"size,omitempty"`
 	Color        *Color       `json:"color,omitempty"` // 部分更新したい場合は構造に注意
@@ -25,13 +30,9 @@ type ModelVariationUpdate struct {
 	Measurements Measurements `json:"measurements,omitempty"` // nil なら更新スキップ
 }
 
-// ModelDataUpdate is free-form for product-level metadata updates
-type ModelDataUpdate map[string]any
-
 // Listing contracts (filters/sort/page)
 
 type VariationFilter struct {
-	ProductID          string
 	ProductBlueprintID string
 
 	Sizes        []string
@@ -61,21 +62,26 @@ type VariationPageResult struct {
 	PerPage    int
 }
 
-// RepositoryPort abstracts model data access (contracts only)
+// RepositoryPort abstracts model variation data access.
+//
+// NOTE:
+//   - Product-level metadata は productBlueprint.CategoryFields に集約する。
+//   - この port は apparel 系 model variation の永続化境界として扱う。
+//   - どの category で model variation を作成するかは、
+//     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
 type RepositoryPort interface {
-	// Product-scoped model data
-	GetModelData(ctx context.Context, productID string) (*ModelData, error)
-	GetModelDataByBlueprintID(ctx context.Context, productBlueprintID string) (*ModelData, error)
-	UpdateModelData(ctx context.Context, productID string, updates ModelDataUpdate) (*ModelData, error)
-
 	// Variations (CRUD)
 	ListVariations(ctx context.Context, filter VariationFilter, page Page) (VariationPageResult, error)
 
-	GetModelVariations(ctx context.Context, productID string) ([]ModelVariation, error)
+	GetModelVariations(ctx context.Context, productBlueprintID string) ([]ModelVariation, error)
 	GetModelVariationByID(ctx context.Context, variationID string) (*ModelVariation, error)
 
 	// 新規作成では productID は使わず、NewApparelModelVariation.ProductBlueprintID で紐付ける。
 	// 現時点の console model 作成は apparel 用の size/color/measurements 前提。
+	//
+	// NOTE:
+	// apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
+	// measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
 	CreateModelVariation(ctx context.Context, variation NewApparelModelVariation) (*ModelVariation, error)
 
 	UpdateModelVariation(ctx context.Context, variationID string, updates ModelVariationUpdate) (*ModelVariation, error)
@@ -86,8 +92,8 @@ type RepositoryPort interface {
 	ReplaceModelVariations(ctx context.Context, variations []NewApparelModelVariation) ([]ModelVariation, error)
 
 	// Convenience aggregations (resolver-style)
-	GetSizeVariations(ctx context.Context, productID string) ([]SizeVariation, error)
-	GetModelNumbers(ctx context.Context, productID string) ([]ModelNumber, error)
+	GetSizeVariations(ctx context.Context, productBlueprintID string) ([]SizeVariation, error)
+	GetModelNumbers(ctx context.Context, productBlueprintID string) ([]ModelNumber, error)
 }
 
 // Common repository errors

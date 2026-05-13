@@ -23,7 +23,7 @@ type ProductColorDTO struct {
 	Name string `json:"name,omitempty"`
 }
 
-// ✅ 追加: modelRefs（displayOrder含む）
+// 追加: modelRefs（displayOrder含む）
 type ModelRefDTO struct {
 	ModelID      string `json:"modelId"`
 	DisplayOrder int    `json:"displayOrder"`
@@ -46,20 +46,25 @@ type ProductBlueprintDTO struct {
 	ProductName string `json:"productName"`
 
 	BrandID   string `json:"brandId"`
-	BrandName string `json:"brandName"` // ★ brandId → brandName を解決して詰める
+	BrandName string `json:"brandName"` // brandId → brandName を解決して詰める
 
 	CompanyID   string `json:"companyId"`
-	CompanyName string `json:"companyName"` // ★ companyId → companyName を解決して詰める
+	CompanyName string `json:"companyName"` // companyId → companyName を解決して詰める
 
 	ProductBlueprintCategory ProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
 
+	// NOTE:
+	// fit / material / weight / qualityAssurance は ProductBlueprint 直下ではなく
+	// CategoryFields に集約済み。
+	// Inspector 既存レスポンス互換のため DTO field は残し、CategoryFields から詰める。
 	Fit              string   `json:"fit"`
 	Material         string   `json:"material"`
-	Weight           float64  `json:"weight"` // domain に合わせて float64
+	Weight           float64  `json:"weight"`
 	QualityAssurance []string `json:"qualityAssurance"`
-	ProductIdTagType string   `json:"productIdTagType"`
 
-	// ✅ 追加: modelRefs（displayOrder含む）
+	ProductIdTagType string `json:"productIdTagType"`
+
+	// 追加: modelRefs（displayOrder含む）
 	ModelRefs []ModelRefDTO `json:"modelRefs"`
 }
 
@@ -76,7 +81,7 @@ type ProductDetail struct {
 	ProductionID     string `json:"productionId"`
 	InspectionResult string `json:"inspectionResult"`
 
-	// ★ 追加: connectedToken をそのままフロントに返す
+	// 追加: connectedToken をそのままフロントに返す
 	ConnectedToken *string `json:"connectedToken,omitempty"`
 
 	ModelNumber string          `json:"modelNumber"`
@@ -203,7 +208,7 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		Name: model.Color.Name,
 	}
 
-	// ✅ modelRefs を DTO 化（displayOrder 含む）
+	// modelRefs を DTO 化（displayOrder 含む）
 	modelRefsDTO := make([]ModelRefDTO, 0, len(bp.ModelRefs))
 	for _, r := range bp.ModelRefs {
 		if r.ModelID == "" {
@@ -215,7 +220,7 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		})
 	}
 
-	// ✅ displayOrder 昇順（0は末尾）
+	// displayOrder 昇順（0は末尾）
 	sort.SliceStable(modelRefsDTO, func(i, j int) bool {
 		ai := modelRefsDTO[i].DisplayOrder
 		aj := modelRefsDTO[j].DisplayOrder
@@ -251,13 +256,14 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 			Path:   append([]string(nil), category.Path...),
 		},
 
-		Fit:              bp.Fit,
-		Material:         bp.Material,
-		Weight:           bp.Weight,
-		QualityAssurance: append([]string(nil), bp.QualityAssurance...),
+		// fit / material / weight / qualityAssurance は CategoryFields から復元する。
+		Fit:              categoryFieldString(bp.CategoryFields, "fit"),
+		Material:         categoryFieldString(bp.CategoryFields, "material"),
+		Weight:           categoryFieldFloat64(bp.CategoryFields, "weight"),
+		QualityAssurance: categoryFieldStringSlice(bp.CategoryFields, "qualityAssurance"),
+
 		ProductIdTagType: string(bp.ProductIdTag.Type),
 
-		// ✅ 追加
 		ModelRefs: modelRefsDTO,
 	}
 
@@ -297,5 +303,96 @@ func toProductUsecaseApparelModelVariation(v modeldom.ModelVariation) (modeldom.
 		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
+	}
+}
+
+func categoryFieldString(fields bpdom.CategoryFields, key string) string {
+	if len(fields) == 0 || key == "" {
+		return ""
+	}
+
+	v, ok := fields[key]
+	if !ok || v == nil {
+		return ""
+	}
+
+	switch x := v.(type) {
+	case string:
+		return x
+	default:
+		return ""
+	}
+}
+
+func categoryFieldFloat64(fields bpdom.CategoryFields, key string) float64 {
+	if len(fields) == 0 || key == "" {
+		return 0
+	}
+
+	v, ok := fields[key]
+	if !ok || v == nil {
+		return 0
+	}
+
+	switch x := v.(type) {
+	case float64:
+		return x
+	case float32:
+		return float64(x)
+	case int:
+		return float64(x)
+	case int8:
+		return float64(x)
+	case int16:
+		return float64(x)
+	case int32:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case uint:
+		return float64(x)
+	case uint8:
+		return float64(x)
+	case uint16:
+		return float64(x)
+	case uint32:
+		return float64(x)
+	case uint64:
+		return float64(x)
+	default:
+		return 0
+	}
+}
+
+func categoryFieldStringSlice(fields bpdom.CategoryFields, key string) []string {
+	if len(fields) == 0 || key == "" {
+		return nil
+	}
+
+	v, ok := fields[key]
+	if !ok || v == nil {
+		return nil
+	}
+
+	switch x := v.(type) {
+	case []string:
+		return append([]string(nil), x...)
+
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, item := range x {
+			s, ok := item.(string)
+			if !ok || s == "" {
+				continue
+			}
+			out = append(out, s)
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+
+	default:
+		return nil
 	}
 }

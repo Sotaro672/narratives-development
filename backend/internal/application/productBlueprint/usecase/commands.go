@@ -24,7 +24,7 @@ func (u *ProductBlueprintUsecase) Create(
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
 
-	// ★ Create時に usecase でID生成 + CreatedAtセット（domain.validate が必須）
+	// Create時に usecase でID生成 + CreatedAtセット（domain.validate が必須）
 	id := productbpdom.NewID()
 	now := time.Now().UTC()
 	createdAt := &now
@@ -32,17 +32,19 @@ func (u *ProductBlueprintUsecase) Create(
 	in := productbpdom.CreateInput{
 		ID:          id,
 		ProductName: v.ProductName,
-		BrandID:     v.BrandID,
+		Description: v.Description,
+
+		BrandID: v.BrandID,
 
 		// productBlueprintCategories の正データから生成済みの denormalized snapshot
 		ProductBlueprintCategory: v.ProductBlueprintCategory,
 
-		Fit:              v.Fit,
-		Material:         v.Material,
-		Weight:           v.Weight,
-		QualityAssurance: v.QualityAssurance,
-		ProductIdTag:     v.ProductIdTag,
-		AssigneeID:       v.AssigneeID,
+		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
+		// ProductBlueprint 直下ではなく CategoryFields に集約する。
+		CategoryFields: cloneCategoryFields(v.CategoryFields),
+
+		ProductIdTag: v.ProductIdTag,
+		AssigneeID:   v.AssigneeID,
 
 		// NOTE: companyId は auth context を正とする（越境防止）
 		CompanyID: cid,
@@ -62,7 +64,7 @@ func (u *ProductBlueprintUsecase) Create(
 	}
 
 	// ------------------------------------------------------------
-	// ✅ 追加: productBlueprintReview 側の初期化（起票）
+	// productBlueprintReview 側の初期化（起票）
 	// ------------------------------------------------------------
 	if u.reviewInit != nil {
 		if err := u.reviewInit.InitForProductBlueprint(
@@ -80,7 +82,7 @@ func (u *ProductBlueprintUsecase) Create(
 	return created, nil
 }
 
-// ★ printed フラグを true（印刷済み）に更新するユースケース
+// printed フラグを true（印刷済み）に更新するユースケース
 // Handler から /product-blueprints/{id}/mark-printed などで呼ばれる想定。
 func (u *ProductBlueprintUsecase) MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
 	if id == "" {
@@ -142,33 +144,33 @@ func (u *ProductBlueprintUsecase) Update(
 
 	// Patch を組み立て（Update で変更したい項目のみ）
 	name := v.ProductName
+	description := v.Description
 	brandID := v.BrandID
 	category := v.ProductBlueprintCategory
-	fit := v.Fit
-	material := v.Material
-	weight := v.Weight
-
-	qa := make([]string, 0, len(v.QualityAssurance))
-	if v.QualityAssurance != nil {
-		qa = append(qa, v.QualityAssurance...)
-	}
-
+	categoryFields := cloneCategoryFields(v.CategoryFields)
 	tag := v.ProductIdTag
 	assigneeID := v.AssigneeID
 
+	var categoryFieldsPtr *productbpdom.CategoryFields
+	if categoryFields != nil {
+		categoryFieldsPtr = &categoryFields
+	}
+
 	patch := productbpdom.Patch{
 		ProductName: &name,
-		BrandID:     &brandID,
+		Description: &description,
+
+		BrandID: &brandID,
 
 		// productBlueprintCategories の正データから生成済みの denormalized snapshot
 		ProductBlueprintCategory: &category,
 
-		Fit:              &fit,
-		Material:         &material,
-		Weight:           &weight,
-		QualityAssurance: &qa,
-		ProductIdTag:     &tag,
-		AssigneeID:       &assigneeID,
+		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
+		// ProductBlueprint 直下ではなく CategoryFields に集約する。
+		CategoryFields: categoryFieldsPtr,
+
+		ProductIdTag: &tag,
+		AssigneeID:   &assigneeID,
 	}
 
 	updated, err := u.repo.Update(ctx, id, patch)
@@ -245,11 +247,31 @@ func (u *ProductBlueprintUsecase) AppendModelRefs(
 		})
 	}
 
-	// ★ updatedAt/updatedBy を触らない repository API を呼ぶ（repo 側で担保）
+	// updatedAt/updatedBy を触らない repository API を呼ぶ（repo 側で担保）
 	updated, err := u.repo.AppendModelRefsWithoutTouch(ctx, id, refs)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
 
 	return updated, nil
+}
+
+func cloneCategoryFields(in productbpdom.CategoryFields) productbpdom.CategoryFields {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make(productbpdom.CategoryFields, len(in))
+	for key, value := range in {
+		if key == "" {
+			continue
+		}
+		out[key] = value
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }

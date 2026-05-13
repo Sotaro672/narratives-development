@@ -29,6 +29,7 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		}
 		return ""
 	}
+
 	getStrPtr := func(key string) *string {
 		if v, ok := data[key].(string); ok {
 			s := v
@@ -38,30 +39,33 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		}
 		return nil
 	}
+
 	getTimeVal := func(key string) time.Time {
 		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
 			return v.UTC()
 		}
 		return time.Time{}
 	}
+
 	getStringSlice := func(key string) []string {
 		raw, ok := data[key]
 		if !ok || raw == nil {
 			return nil
 		}
+
 		switch vv := raw.(type) {
 		case []interface{}:
 			out := make([]string, 0, len(vv))
 			for _, x := range vv {
-				if s, ok := x.(string); ok {
-					if s != "" {
-						out = append(out, s)
-					}
+				if s, ok := x.(string); ok && s != "" {
+					out = append(out, s)
 				}
 			}
 			return dedupTrimStrings(out)
+
 		case []string:
 			return dedupTrimStrings(vv)
+
 		default:
 			return nil
 		}
@@ -83,6 +87,9 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		Path:   getStringSlice("productBlueprintCategoryPath"),
 	}
 
+	// categoryFields
+	categoryFields := docValueToCategoryFields(data["categoryFields"])
+
 	// modelRefs
 	var modelRefs []pbdom.ModelRef
 	if raw, ok := data["modelRefs"]; ok && raw != nil {
@@ -94,6 +101,7 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 				if !ok || m == nil {
 					continue
 				}
+
 				mid, _ := m["modelId"].(string)
 
 				order := 0
@@ -111,11 +119,13 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 				if mid == "" || order <= 0 {
 					continue
 				}
+
 				tmp = append(tmp, pbdom.ModelRef{
 					ModelID:      mid,
 					DisplayOrder: order,
 				})
 			}
+
 			if len(tmp) > 0 {
 				sort.SliceStable(tmp, func(i, j int) bool {
 					return tmp[i].DisplayOrder < tmp[j].DisplayOrder
@@ -133,19 +143,20 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 	}
 
 	pb := pbdom.ProductBlueprint{
-		ID:                       id,
-		ProductName:              getStr("productName"),
-		BrandID:                  getStr("brandId"),
-		ProductBlueprintCategory: category,
-		Fit:                      getStr("fit"),
-		Material:                 getStr("material"),
-		Weight:                   getFloat64(data["weight"]),
+		ID:          id,
+		ProductName: getStr("productName"),
+		Description: getStr("description"),
 
-		QualityAssurance: dedupTrimStrings(getStringSlice("qualityAssurance")),
+		BrandID:   getStr("brandId"),
+		CompanyID: getStr("companyId"),
+
+		ProductBlueprintCategory: category,
+		CategoryFields:           categoryFields,
+
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(getStr("productIdTagType")),
 		},
-		CompanyID:  getStr("companyId"),
+
 		AssigneeID: getStr("assigneeId"),
 
 		ModelRefs: modelRefs,
@@ -166,7 +177,10 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 
 	m := map[string]any{
 		"productName": v.ProductName,
-		"brandId":     v.BrandID,
+		"description": v.Description,
+
+		"brandId":   v.BrandID,
+		"companyId": v.CompanyID,
 
 		"productBlueprintCategoryId":     category.ID,
 		"productBlueprintCategoryCode":   category.Code,
@@ -175,18 +189,15 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		"productBlueprintCategoryKind":   string(category.Kind),
 		"productBlueprintCategoryPath":   append([]string(nil), category.Path...),
 
-		"fit":        v.Fit,
-		"material":   v.Material,
-		"weight":     v.Weight,
 		"assigneeId": v.AssigneeID,
-		"companyId":  v.CompanyID,
-		"createdAt":  createdAt.UTC(),
-		"updatedAt":  updatedAt.UTC(),
-		"printed":    v.Printed,
+
+		"createdAt": createdAt.UTC(),
+		"updatedAt": updatedAt.UTC(),
+		"printed":   v.Printed,
 	}
 
-	if len(v.QualityAssurance) > 0 {
-		m["qualityAssurance"] = dedupTrimStrings(v.QualityAssurance)
+	if len(v.CategoryFields) > 0 {
+		m["categoryFields"] = categoryFieldsToDoc(v.CategoryFields)
 	}
 
 	if v.ProductIdTag.Type != "" {
@@ -201,6 +212,7 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 			if mid == "" || mr.DisplayOrder <= 0 {
 				continue
 			}
+
 			arr = append(arr, map[string]any{
 				"modelId":      mid,
 				"displayOrder": mr.DisplayOrder,
@@ -214,6 +226,7 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 			m["createdBy"] = s
 		}
 	}
+
 	if v.UpdatedBy != nil {
 		if s := *v.UpdatedBy; s != "" {
 			m["updatedBy"] = s
@@ -221,4 +234,51 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 	}
 
 	return m, nil
+}
+
+func docValueToCategoryFields(raw any) pbdom.CategoryFields {
+	if raw == nil {
+		return nil
+	}
+
+	out := pbdom.CategoryFields{}
+
+	switch m := raw.(type) {
+	case map[string]any:
+		for key, value := range m {
+			if key == "" {
+				continue
+			}
+			out[key] = value
+		}
+
+	default:
+		return nil
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
+}
+
+func categoryFieldsToDoc(in pbdom.CategoryFields) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		if key == "" {
+			continue
+		}
+		out[key] = value
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }

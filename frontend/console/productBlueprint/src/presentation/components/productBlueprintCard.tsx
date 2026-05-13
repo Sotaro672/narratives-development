@@ -20,32 +20,34 @@ import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
 
 import {
   FIT_OPTIONS,
-  PRODUCT_ID_TAG_OPTIONS,
-  ITEM_TYPE_OPTIONS,
-  type Fit,
-  type ItemType,
-} from "../../domain/entity/catalog";
-
-import {
   WASH_TAG_OPTIONS,
+  type Fit,
   type WashTagOption,
-} from "../../domain/entity/catalog";
+} from "../../domain/entity/apparel";
+
+import type {
+  ProductBlueprintCategorySnapshot,
+} from "../../domain/entity/productBlueprintCategory";
 
 type BrandOption = {
   id: string;
   name: string;
 };
 
+type CategoryOption = ProductBlueprintCategorySnapshot;
+
 export type ProductBlueprintPatchInput = {
   productName?: string | null;
   brandId?: string | null;
   brandName?: string | null;
-  itemType?: string | null;
+
+  productBlueprintCategoryId?: string | null;
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
   qualityAssurance?: string[] | null;
-  productIdTag?: any;
   assigneeId?: string | null;
 };
 
@@ -61,20 +63,25 @@ type ProductBlueprintCardProps = {
   brandError?: Error | null;
   onChangeBrandId?: (id: string) => void;
 
-  itemType?: ItemType;
+  productBlueprintCategoryId?: string;
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryOptions?: CategoryOption[];
+  productBlueprintCategoryLoading?: boolean;
+  productBlueprintCategoryError?: Error | null;
+  onChangeProductBlueprintCategory?: (
+    category: ProductBlueprintCategorySnapshot | null,
+  ) => void;
+
   fit?: Fit;
   materials?: string;
   weight?: number;
   washTags?: string[];
-  productIdTag?: string;
 
   onChangeProductName?: (v: string) => void;
-  onChangeItemType?: (v: ItemType) => void;
   onChangeFit?: (v: Fit) => void;
   onChangeMaterials?: (v: string) => void;
   onChangeWeight?: (v: number) => void;
   onChangeWashTags?: (nextTags: string[]) => void;
-  onChangeProductIdTag?: (v: string) => void;
 
   mode?: "edit" | "view";
 };
@@ -83,70 +90,21 @@ function asTrimmedString(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-function normalizeProductIdTagToString(v: any): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "string") return v;
+function resolveCategoryLabel(
+  category: ProductBlueprintCategorySnapshot | null | undefined,
+): string {
+  if (!category) return "";
 
-  const value = (v as any)?.value;
-  if (typeof value === "string") return value;
-
-  const type = (v as any)?.type;
-  if (typeof type === "string") return type;
-
-  const Type = (v as any)?.Type;
-  if (typeof Type === "string") return Type;
-
-  const tagType = (v as any)?.tagType;
-  if (typeof tagType === "string") return tagType;
-
-  const TagType = (v as any)?.TagType;
-  if (typeof TagType === "string") return TagType;
-
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
+  return (
+    asTrimmedString(category.nameJa) ||
+    asTrimmedString(category.nameEn) ||
+    asTrimmedString(category.code) ||
+    asTrimmedString(category.id)
+  );
 }
 
-function resolveOptionLabel(
-  rawValue: string,
-  options: Array<{ value: string; label: string }>,
-): string {
-  const normalized = asTrimmedString(rawValue);
-  if (!normalized) return "";
-
-  const exact = options.find((opt) => asTrimmedString(opt.value) === normalized);
-  if (exact) return exact.label;
-
-  const lower = normalized.toLowerCase();
-
-  const lowerMatched = options.find(
-    (opt) => asTrimmedString(opt.value).toLowerCase() === lower,
-  );
-  if (lowerMatched) return lowerMatched.label;
-
-  if (lower === "qr" || lower === "qrcode" || lower === "qrコード") {
-    const qrOpt = options.find(
-      (opt) =>
-        asTrimmedString(opt.value).toLowerCase() === "qrコード" ||
-        asTrimmedString(opt.label).toLowerCase() === "qrコード",
-    );
-    if (qrOpt) return qrOpt.label;
-    return "QRコード";
-  }
-
-  if (lower === "nfc") {
-    const nfcOpt = options.find(
-      (opt) =>
-        asTrimmedString(opt.value).toLowerCase() === "nfc" ||
-        asTrimmedString(opt.label).toLowerCase() === "nfc",
-    );
-    if (nfcOpt) return nfcOpt.label;
-    return "NFC";
-  }
-
-  return normalized;
+function resolveCategoryOptionLabel(opt: ProductBlueprintCategorySnapshot): string {
+  return resolveCategoryLabel(opt);
 }
 
 const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
@@ -159,19 +117,23 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   brandLoading,
   brandError,
   onChangeBrandId,
-  itemType,
+
+  productBlueprintCategoryId,
+  productBlueprintCategory,
+  productBlueprintCategoryOptions,
+  productBlueprintCategoryLoading,
+  productBlueprintCategoryError,
+  onChangeProductBlueprintCategory,
+
   fit,
   materials,
   weight,
   washTags,
-  productIdTag,
   onChangeProductName,
-  onChangeItemType,
   onChangeFit,
   onChangeMaterials,
   onChangeWeight,
   onChangeWashTags,
-  onChangeProductIdTag,
   mode = "edit",
 }) => {
   const isEdit = mode === "edit";
@@ -180,12 +142,16 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   const mergedBrandId = brandId ?? productBlueprintPatch?.brandId ?? "";
   const mergedBrandName = brand ?? productBlueprintPatch?.brandName ?? "";
 
-  const mergedItemType =
-    itemType ??
-    ((typeof productBlueprintPatch?.itemType === "string"
-      ? (productBlueprintPatch.itemType as ItemType)
-      : undefined) as ItemType | undefined) ??
-    ("" as ItemType);
+  const mergedCategory =
+    productBlueprintCategory ??
+    productBlueprintPatch?.productBlueprintCategory ??
+    null;
+
+  const mergedCategoryId =
+    productBlueprintCategoryId ??
+    productBlueprintPatch?.productBlueprintCategoryId ??
+    mergedCategory?.id ??
+    "";
 
   const mergedFit =
     fit ??
@@ -210,37 +176,27 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         )
       : [];
 
-  const mergedProductIdTag =
-    productIdTag ?? normalizeProductIdTagToString(productBlueprintPatch?.productIdTag);
-
   const safeProductName = mergedProductName ?? "";
   const safeMaterials = mergedMaterials ?? "";
   const safeWeight =
     typeof mergedWeight === "number" && !Number.isNaN(mergedWeight) ? mergedWeight : 0;
   const safeWashTags = Array.isArray(mergedWashTags) ? mergedWashTags : [];
-  const safeProductIdTag = mergedProductIdTag ?? "";
   const safeFit = mergedFit ?? ("" as Fit);
-  const safeItemType = mergedItemType ?? ("" as ItemType);
 
-  const displayItemType = React.useMemo(() => {
-    return resolveOptionLabel(
-      asTrimmedString(safeItemType),
-      ITEM_TYPE_OPTIONS.map((opt) => ({
-        value: asTrimmedString(opt.value),
-        label: asTrimmedString(opt.label),
-      })),
-    );
-  }, [safeItemType]);
+  const displayCategory = React.useMemo(() => {
+    if (mergedCategory) {
+      return resolveCategoryLabel(mergedCategory);
+    }
 
-  const displayProductIdTag = React.useMemo(() => {
-    return resolveOptionLabel(
-      asTrimmedString(safeProductIdTag),
-      PRODUCT_ID_TAG_OPTIONS.map((opt) => ({
-        value: asTrimmedString(opt.value),
-        label: asTrimmedString(opt.label),
-      })),
-    );
-  }, [safeProductIdTag]);
+    if (mergedCategoryId) {
+      const found = productBlueprintCategoryOptions?.find(
+        (opt) => opt.id === mergedCategoryId,
+      );
+      return resolveCategoryLabel(found) || mergedCategoryId;
+    }
+
+    return "";
+  }, [mergedCategory, mergedCategoryId, productBlueprintCategoryOptions]);
 
   const selectedBrandName =
     brandOptions?.find((b) => b.id === mergedBrandId)?.name ?? "";
@@ -252,18 +208,21 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
 
   const washTagGroups = React.useMemo(() => {
     const map = new Map<string, WashTagOption[]>();
+
     for (const opt of WASH_TAG_OPTIONS) {
       const cat = opt.category;
       const list = map.get(cat) ?? [];
       list.push(opt);
       map.set(cat, list);
     }
+
     return Array.from(map.entries());
   }, []);
 
   const handleToggleWashTag = React.useCallback(
     (value: string) => {
       if (!onChangeWashTags) return;
+
       if (safeWashTags.includes(value)) {
         onChangeWashTags(safeWashTags.filter((t) => t !== value));
       } else {
@@ -347,31 +306,31 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
 
         <div className="pbc-fit-row">
           <div className="flex-1">
-            <div className="label">アイテム種別</div>
-            {isEdit ? (
+            <div className="label">商品カテゴリ</div>
+            {isEdit && productBlueprintCategoryOptions && onChangeProductBlueprintCategory ? (
               <Popover>
                 <PopoverTrigger>
                   <Button
                     variant="outline"
                     className="w-full justify-between pbc-select-trigger"
-                    aria-label="アイテム種別を選択"
+                    aria-label="商品カテゴリを選択"
                   >
-                    {displayItemType || "アイテム種別を選択してください。"}
+                    {displayCategory || "商品カテゴリを選択してください。"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="p-1">
-                  {ITEM_TYPE_OPTIONS.map(
-                    (opt: { value: ItemType; label: string }) => (
+                  {productBlueprintCategoryOptions.map(
+                    (opt: ProductBlueprintCategorySnapshot) => (
                       <div
-                        key={opt.value}
+                        key={opt.id}
                         className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                          safeItemType === opt.value
+                          mergedCategoryId === opt.id
                             ? "bg-blue-100 text-blue-700 font-medium"
                             : ""
                         }`}
-                        onClick={() => onChangeItemType?.(opt.value)}
+                        onClick={() => onChangeProductBlueprintCategory(opt)}
                       >
-                        {opt.label}
+                        {resolveCategoryOptionLabel(opt)}
                       </div>
                     ),
                   )}
@@ -379,11 +338,20 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
               </Popover>
             ) : (
               <Input
-                value={displayItemType}
+                value={displayCategory}
                 variant="readonly"
                 readOnly
-                aria-label="アイテム種別"
+                aria-label="商品カテゴリ"
               />
+            )}
+
+            {isEdit && productBlueprintCategoryLoading && (
+              <p className="text-xs text-slate-400">商品カテゴリを取得中…</p>
+            )}
+            {isEdit && productBlueprintCategoryError && (
+              <p className="text-xs text-red-500">
+                商品カテゴリ一覧の取得に失敗しました。
+              </p>
             )}
           </div>
 
@@ -401,7 +369,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="p-1">
-                  {FIT_OPTIONS.map((opt) => (
+                  {FIT_OPTIONS.map((opt: { value: Fit; label: string }) => (
                     <div
                       key={opt.value}
                       className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
@@ -417,45 +385,11 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                 </PopoverContent>
               </Popover>
             ) : (
-              <Input value={safeFit} variant="readonly" readOnly aria-label="フィット" />
-            )}
-          </div>
-
-          <div className="flex-1">
-            <div className="label">商品IDタグ</div>
-            {isEdit ? (
-              <Popover>
-                <PopoverTrigger>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between pbc-select-trigger"
-                    aria-label="商品IDタグを選択"
-                  >
-                    {displayProductIdTag || "商品タグを選択してください。"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="p-1">
-                  {PRODUCT_ID_TAG_OPTIONS.map((opt) => (
-                    <div
-                      key={opt.value}
-                      className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                        safeProductIdTag === opt.value
-                          ? "bg-blue-100 text-blue-700 font-medium"
-                          : ""
-                      }`}
-                      onClick={() => onChangeProductIdTag?.(opt.value)}
-                    >
-                      {opt.label}
-                    </div>
-                  ))}
-                </PopoverContent>
-              </Popover>
-            ) : (
               <Input
-                value={displayProductIdTag}
+                value={safeFit}
                 variant="readonly"
                 readOnly
-                aria-label="商品IDタグ"
+                aria-label="フィット"
               />
             )}
           </div>
@@ -469,7 +403,12 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             aria-label="素材"
           />
         ) : (
-          <Input value={safeMaterials} variant="readonly" readOnly aria-label="素材" />
+          <Input
+            value={safeMaterials}
+            variant="readonly"
+            readOnly
+            aria-label="素材"
+          />
         )}
 
         <div className="label">重さ</div>
@@ -531,9 +470,10 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="p-2 space-y-1 w-64">
-                  {options.map((opt) => {
+                  {options.map((opt: WashTagOption) => {
                     const checked = safeWashTags.includes(opt.value);
                     const checkboxId = `wash-tag-${opt.value}`;
+
                     return (
                       <label
                         key={opt.value}

@@ -22,6 +22,12 @@ var (
 
 // Filter は ProductBlueprintCategory 一覧取得用フィルタ。
 // 共通の検索・作成日時・更新日時フィルタは common.FilterCommon を埋め込む。
+//
+// NOTE:
+// この repository は productBlueprintCategories collection に保存される
+// カテゴリマスタそのものを扱う。
+// category ごとの入力項目定義は input_schema.go の静的 schema registry 側で管理し、
+// repository の永続化対象にはしない。
 type Filter struct {
 	common.FilterCommon
 
@@ -39,6 +45,11 @@ type Filter struct {
 
 // Patch は ProductBlueprintCategory の部分更新用。
 // common.RepositoryCRUD の Update(ctx, id, patch) で使う。
+//
+// NOTE:
+// Patch はカテゴリマスタの更新だけを扱う。
+// 入力項目 schema は code に紐づく domain 定義として input_schema.go で管理するため、
+// Patch には含めない。
 type Patch struct {
 	Code *CategoryCode
 
@@ -88,6 +99,11 @@ func IsAllowedSortColumn(column string) bool {
 
 // RepositoryPort は ProductBlueprintCategory の永続化境界。
 // Firestore などの具体的な保存先は adapter/out 側で実装する。
+//
+// NOTE:
+// この port はカテゴリマスタのみを扱う。
+// カテゴリごとの入力項目定義は repository から取得せず、
+// domain の input_schema.go に定義する GetCategoryInputSchema / HasModelFields 等を利用する。
 type RepositoryPort interface {
 	common.Repository[ProductBlueprintCategory, Filter, Patch]
 

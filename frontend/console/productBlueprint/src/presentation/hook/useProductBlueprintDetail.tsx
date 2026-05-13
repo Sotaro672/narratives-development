@@ -2,7 +2,6 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import type { ProductIDTagType } from "../../../../shell/src/shared/types/productBlueprint";
 import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
 
 import type {
@@ -16,7 +15,16 @@ import {
   updateProductBlueprint,
 } from "../../application/productBlueprintDetailService";
 
-import type { Fit, ItemType } from "../../domain/entity/catalog";
+import {
+  FIT_OPTIONS,
+  WASH_TAG_OPTIONS,
+  isApparelCategoryCode,
+  type Fit,
+} from "../../domain/entity/apparel";
+
+import type {
+  ProductBlueprintCategorySnapshot,
+} from "../../domain/entity/productBlueprintCategory";
 
 import { mapVariationsToUiState } from "../util/variationMapper";
 import { useBrandOptions, type BrandOption } from "./useBrandOptions";
@@ -27,21 +35,17 @@ import {
 
 export {
   FIT_OPTIONS,
-  PRODUCT_ID_TAG_OPTIONS,
   WASH_TAG_OPTIONS,
-} from "../../domain/entity/catalog";
-export type { Fit, WashTagOption } from "../../domain/entity/catalog";
+} from "../../domain/entity/apparel";
+
+export type { Fit, WashTagOption } from "../../domain/entity/apparel";
 
 // ------------------------------
 // displayOrder で variations を並べ替えるユーティリティ
 // ------------------------------
+
 type ModelRefLike = { modelId?: string; displayOrder?: number };
 
-/**
- * modelRefs(displayOrder) に従い variations を並べ替える。
- * - refs に存在する id は displayOrder 昇順で先頭に並べる
- * - refs に無い variations は “元の順” のまま末尾に回す
- */
 function orderVariationsByModelRefs(
   variations: any[],
   modelRefs: ModelRefLike[] | undefined,
@@ -96,17 +100,35 @@ function formatDateTimeYYYYMMDDHHmm(v: string | null | undefined): string {
   return label;
 }
 
+function getCategoryLabel(
+  category: ProductBlueprintCategorySnapshot | null,
+): string {
+  if (!category) return "";
+
+  return (
+    category.nameJa ||
+    category.nameEn ||
+    category.code ||
+    category.id ||
+    ""
+  );
+}
+
 export interface UseProductBlueprintDetailResult {
   pageTitle: string;
 
   productName: string;
   brand: string;
-  itemType: ItemType | "";
+
+  productBlueprintCategoryId: string;
+  productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+  productBlueprintCategoryLabel: string;
+  isApparelCategory: boolean;
+
   fit: Fit;
   materials: string;
   weight: number;
   washTags: string[];
-  productIdTag: ProductIDTagType | "";
 
   brandId: string;
   brandOptions: BrandOption[];
@@ -137,12 +159,13 @@ export interface UseProductBlueprintDetailResult {
   onDelete: () => void;
 
   onChangeProductName: (v: string) => void;
-  onChangeItemType: (v: ItemType) => void;
+  onChangeProductBlueprintCategory: (
+    category: ProductBlueprintCategorySnapshot | null,
+  ) => void;
   onChangeFit: (v: Fit) => void;
   onChangeMaterials: (v: string) => void;
   onChangeWeight: (v: number) => void;
   onChangeWashTags: (v: string[]) => void;
-  onChangeProductIdTag: (v: string) => void;
 
   onChangeColorInput: (v: string) => void;
   onAddColor: () => void;
@@ -171,15 +194,29 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [productName, setProductName] = React.useState<string>("");
   const [brand, setBrand] = React.useState<string>("");
 
-  const [itemType, setItemType] = React.useState<ItemType | "">("");
+  const [productBlueprintCategory, setProductBlueprintCategory] =
+    React.useState<ProductBlueprintCategorySnapshot | null>(null);
+
+  const productBlueprintCategoryId = React.useMemo(
+    () => productBlueprintCategory?.id ?? "",
+    [productBlueprintCategory],
+  );
+
+  const productBlueprintCategoryLabel = React.useMemo(
+    () => getCategoryLabel(productBlueprintCategory),
+    [productBlueprintCategory],
+  );
+
+  const isApparelCategory = React.useMemo(() => {
+    const code = String(productBlueprintCategory?.code ?? "").trim();
+    return isApparelCategoryCode(code);
+  }, [productBlueprintCategory]);
+
   const [fit, setFit] = React.useState<Fit>("" as Fit);
 
   const [materials, setMaterials] = React.useState<string>("");
   const [weight, setWeight] = React.useState<number>(0);
   const [washTags, setWashTags] = React.useState<string[]>([]);
-
-  const [productIdTagType, setProductIdTagType] =
-    React.useState<ProductIDTagType | "">("");
 
   const [assignee, setAssignee] = React.useState("担当者未設定");
 
@@ -248,7 +285,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           | undefined;
 
         const productBlueprintIdResolved = detail.id ?? blueprintId;
-        const itemTypeFromDetail = detail.itemType as ItemType;
+        const categoryFromDetail = detail.productBlueprintCategory ?? null;
 
         setPageTitle(detail.productName ?? productBlueprintIdResolved);
         setProductName(detail.productName ?? "");
@@ -261,38 +298,45 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setCompanyId(detail.companyId ?? "");
         setBrandNameFromService(brandNameSvc);
 
-        setItemType(itemTypeFromDetail ?? "");
+        setProductBlueprintCategory(categoryFromDetail);
         setFit((detail.fit as Fit) ?? ("" as Fit));
 
         setMaterials(detail.material ?? "");
         setWeight(detail.weight ?? 0);
         setWashTags(detail.qualityAssurance ?? []);
 
-        const tagType =
-          (detail.productIdTag?.type as ProductIDTagType | undefined) ?? "";
-        setProductIdTagType(tagType);
-
         const modelRefs = (detail as any).modelRefs as
           | ModelRefLike[]
           | undefined;
 
-        try {
-          const variations = await listModelVariationsByProductBlueprintId(
-            productBlueprintIdResolved,
-          );
+        const categoryCode = String(categoryFromDetail?.code ?? "").trim();
 
-          const ordered = orderVariationsByModelRefs(
-            variations as any[],
-            modelRefs,
-          );
+        if (isApparelCategoryCode(categoryCode)) {
+          try {
+            const variations = await listModelVariationsByProductBlueprintId(
+              productBlueprintIdResolved,
+            );
 
-          const uiState = mapVariationsToUiState({
-            varsAny: ordered as any[],
-            itemType: itemTypeFromDetail,
-          });
+            const ordered = orderVariationsByModelRefs(
+              variations as any[],
+              modelRefs,
+            );
 
-          setFromUiState(uiState as VariationsUiState);
-        } catch {
+            const uiState = mapVariationsToUiState({
+              varsAny: ordered as any[],
+              categoryCode,
+            } as any);
+
+            setFromUiState(uiState as VariationsUiState);
+          } catch {
+            setFromUiState({
+              colors: [],
+              sizes: [],
+              modelNumbers: [],
+              colorRgbMap: {},
+            });
+          }
+        } else {
           setFromUiState({
             colors: [],
             sizes: [],
@@ -342,27 +386,29 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       return;
     }
 
-    if (!itemType) {
-      alert("アイテム種別を選択してください");
+    if (!productBlueprintCategoryId || !productBlueprintCategory) {
+      alert("商品カテゴリを選択してください");
       return;
     }
 
-    const hasEmptyModelNumber = sizes.some((s) => {
-      const sizeLabel = (s.sizeLabel ?? "").trim();
-      if (!sizeLabel) return false;
+    if (isApparelCategory) {
+      const hasEmptyModelNumber = sizes.some((s) => {
+        const sizeLabel = (s.sizeLabel ?? "").trim();
+        if (!sizeLabel) return false;
 
-      return colors.some((c) => {
-        const color = (c ?? "").trim();
-        if (!color) return false;
+        return colors.some((c) => {
+          const color = (c ?? "").trim();
+          if (!color) return false;
 
-        const code = getCode(sizeLabel, color);
-        return !code || !code.trim();
+          const code = getCode(sizeLabel, color);
+          return !code || !code.trim();
+        });
       });
-    });
 
-    if (hasEmptyModelNumber) {
-      alert("モデルナンバーが空欄です");
-      return;
+      if (hasEmptyModelNumber) {
+        alert("モデルナンバーが空欄です");
+        return;
+      }
     }
 
     (async () => {
@@ -370,18 +416,22 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         await updateProductBlueprint({
           id: blueprintId,
           productName,
-          itemType: itemType as ItemType,
+          productBlueprintCategoryId,
+          productBlueprintCategory,
           fit,
           material: materials,
           weight,
           qualityAssurance: washTags,
-          productIdTagType: productIdTagType || null,
-          sizes,
-          modelNumbers,
-          colorRgbMap,
+          productIdTagType: "qr",
+          sizes: isApparelCategory ? sizes : [],
+          modelNumbers: isApparelCategory ? modelNumbers : [],
+          colorRgbMap: isApparelCategory ? colorRgbMap : {},
+          colors: isApparelCategory ? colors : [],
           brandId,
           assigneeId,
-        } as any);
+          companyId,
+          categoryFields: null,
+        });
 
         alert("保存しました");
       } catch {
@@ -391,18 +441,20 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   }, [
     blueprintId,
     productName,
-    itemType,
+    productBlueprintCategoryId,
+    productBlueprintCategory,
     fit,
     materials,
     weight,
     washTags,
-    productIdTagType,
     sizes,
     modelNumbers,
     colorRgbMap,
+    colors,
     brandId,
     assigneeId,
-    colors,
+    companyId,
+    isApparelCategory,
     getCode,
   ]);
 
@@ -431,17 +483,38 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     [getBrandNameById, brandNameFromService],
   );
 
+  const onChangeProductBlueprintCategory = React.useCallback(
+    (category: ProductBlueprintCategorySnapshot | null) => {
+      setProductBlueprintCategory(category);
+
+      const code = String(category?.code ?? "").trim();
+      const nextIsApparel = isApparelCategoryCode(code);
+
+      if (!nextIsApparel) {
+        setFromUiState({
+          colors: [],
+          sizes: [],
+          modelNumbers: [],
+          colorRgbMap: {},
+        });
+      }
+    },
+    [setFromUiState],
+  );
+
   return {
     pageTitle,
 
     productName,
     brand,
-    itemType,
+    productBlueprintCategoryId,
+    productBlueprintCategory,
+    productBlueprintCategoryLabel,
+    isApparelCategory,
     fit,
     materials,
     weight,
     washTags,
-    productIdTag: productIdTagType || "",
 
     brandId,
     brandOptions,
@@ -471,13 +544,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onDelete,
 
     onChangeProductName: setProductName,
-    onChangeItemType: (v: ItemType) => setItemType(v),
+    onChangeProductBlueprintCategory,
     onChangeFit: setFit,
     onChangeMaterials: setMaterials,
     onChangeWeight: setWeight,
     onChangeWashTags: setWashTags,
-    onChangeProductIdTag: (v: string) =>
-      setProductIdTagType(v as ProductIDTagType),
 
     onChangeColorInput,
     onAddColor,

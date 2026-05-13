@@ -2,8 +2,6 @@
 package catalogQuery
 
 import (
-	"fmt"
-
 	dto "narratives/internal/application/query/mall/dto"
 
 	invdom "narratives/internal/domain/inventory"
@@ -35,13 +33,14 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 		BrandID:     pb.BrandID,
 		CompanyID:   pb.CompanyID,
 
-		Fit:      fmt.Sprint(pb.Fit),
-		Material: fmt.Sprint(pb.Material),
+		// fit / material / weight / qualityAssurance は ProductBlueprint 直下ではなく
+		// CategoryFields に集約する。
+		Fit:              categoryFieldString(pb.CategoryFields, "fit"),
+		Material:         categoryFieldString(pb.CategoryFields, "material"),
+		Weight:           categoryFieldFloat64(pb.CategoryFields, "weight"),
+		QualityAssurance: categoryFieldStringSlice(pb.CategoryFields, "qualityAssurance"),
 
-		Weight:  pb.Weight,
 		Printed: pb.Printed,
-
-		QualityAssurance: append([]string{}, pb.QualityAssurance...),
 
 		ProductIDTagType: pb.ProductIdTag.Type,
 
@@ -65,6 +64,97 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 	}
 
 	return out
+}
+
+func categoryFieldString(fields pbdom.CategoryFields, key string) string {
+	if len(fields) == 0 || key == "" {
+		return ""
+	}
+
+	v, ok := fields[key]
+	if !ok || v == nil {
+		return ""
+	}
+
+	switch x := v.(type) {
+	case string:
+		return x
+	default:
+		return ""
+	}
+}
+
+func categoryFieldFloat64(fields pbdom.CategoryFields, key string) float64 {
+	if len(fields) == 0 || key == "" {
+		return 0
+	}
+
+	v, ok := fields[key]
+	if !ok || v == nil {
+		return 0
+	}
+
+	switch x := v.(type) {
+	case float64:
+		return x
+	case float32:
+		return float64(x)
+	case int:
+		return float64(x)
+	case int8:
+		return float64(x)
+	case int16:
+		return float64(x)
+	case int32:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case uint:
+		return float64(x)
+	case uint8:
+		return float64(x)
+	case uint16:
+		return float64(x)
+	case uint32:
+		return float64(x)
+	case uint64:
+		return float64(x)
+	default:
+		return 0
+	}
+}
+
+func categoryFieldStringSlice(fields pbdom.CategoryFields, key string) []string {
+	if len(fields) == 0 || key == "" {
+		return nil
+	}
+
+	v, ok := fields[key]
+	if !ok || v == nil {
+		return nil
+	}
+
+	switch x := v.(type) {
+	case []string:
+		return append([]string(nil), x...)
+
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, item := range x {
+			s, ok := item.(string)
+			if !ok || s == "" {
+				continue
+			}
+			out = append(out, s)
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+
+	default:
+		return nil
+	}
 }
 
 // Mint -> CatalogInventoryDTO（Firestore 正: productBlueprintId / tokenBlueprintId / modelIds / stock.*.accumulation / stock.*.reservedCount）

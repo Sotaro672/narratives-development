@@ -116,6 +116,20 @@ func (s ProductBlueprintCategorySnapshot) validate() error {
 }
 
 // ======================================
+// CategoryFields
+// ======================================
+
+// CategoryFields はカテゴリ別の productBlueprint 入力値を保持する。
+// 例:
+//   - alcohol.sake: vintage, region, material, alcoholContent, volume
+//   - apparel.tops: weight, fit, material
+//   - cosmetics.skincare: material, volume
+//
+// brandId / productName / productIdTagType / description など、
+// ProductBlueprint の共通 field はここには入れない。
+type CategoryFields map[string]any
+
+// ======================================
 // Model references (modelIds + displayOrder)
 // ======================================
 
@@ -195,18 +209,20 @@ type ProductBlueprint struct {
 	ID string
 
 	ProductName string
-	CompanyID   string
-	BrandID     string
+	Description string
+
+	CompanyID string
+	BrandID   string
 
 	ProductBlueprintCategory ProductBlueprintCategorySnapshot
 
-	Fit      string
-	Material string
-	Weight   float64
+	// CategoryFields はカテゴリ別の productBlueprint 入力値を保持する。
+	// color / size / measurements など model 側の値はここには入れず、
+	// model domain / ModelVariation 側で管理する。
+	CategoryFields CategoryFields
 
-	QualityAssurance []string
-	ProductIdTag     ProductIDTag
-	AssigneeID       string
+	ProductIdTag ProductIDTag
+	AssigneeID   string
 
 	// modelIds（model テーブルの docId）と displayOrder を保持
 	ModelRefs []ModelRef
@@ -225,19 +241,20 @@ type ProductBlueprint struct {
 // ======================================
 
 var (
-	ErrInvalidID        = errors.New("productBlueprint: invalid id")
-	ErrInvalidProduct   = errors.New("productBlueprint: invalid productName")
-	ErrInvalidBrand     = errors.New("productBlueprint: invalid brandId")
-	ErrInvalidWeight    = errors.New("productBlueprint: invalid weight")
-	ErrInvalidTagType   = errors.New("productBlueprint: invalid productIdTag.type")
-	ErrInvalidCreatedAt = errors.New("productBlueprint: invalid createdAt")
-	ErrInvalidAssignee  = errors.New("productBlueprint: invalid assigneeId")
-	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
+	ErrInvalidID          = errors.New("productBlueprint: invalid id")
+	ErrInvalidProduct     = errors.New("productBlueprint: invalid productName")
+	ErrInvalidDescription = errors.New("productBlueprint: invalid description")
+	ErrInvalidBrand       = errors.New("productBlueprint: invalid brandId")
+	ErrInvalidTagType     = errors.New("productBlueprint: invalid productIdTag.type")
+	ErrInvalidCreatedAt   = errors.New("productBlueprint: invalid createdAt")
+	ErrInvalidAssignee    = errors.New("productBlueprint: invalid assigneeId")
+	ErrInvalidCompanyID   = errors.New("productBlueprint: invalid companyId")
 
 	ErrInvalidCategoryID     = errors.New("productBlueprint: invalid productBlueprintCategory.id")
 	ErrInvalidCategoryCode   = errors.New("productBlueprint: invalid productBlueprintCategory.code")
 	ErrInvalidCategoryNameJa = errors.New("productBlueprint: invalid productBlueprintCategory.nameJa")
 	ErrInvalidCategoryKind   = errors.New("productBlueprint: invalid productBlueprintCategory.kind")
+	ErrInvalidCategoryFields = errors.New("productBlueprint: invalid categoryFields")
 )
 
 // ======================================
@@ -245,27 +262,25 @@ var (
 // ======================================
 
 func New(
-	id, productName, brandID string,
+	id string,
+	productName string,
+	description string,
+	brandID string,
 	category ProductBlueprintCategorySnapshot,
-	fit, material string,
-	weight float64,
-	qualityAssurance []string,
+	categoryFields CategoryFields,
 	productIDTag ProductIDTag,
 	assigneeID string,
 	createdBy *string,
 	createdAt time.Time,
 	companyID string,
 ) (ProductBlueprint, error) {
-
 	pb := ProductBlueprint{
 		ID:                       id,
 		ProductName:              productName,
+		Description:              description,
 		BrandID:                  brandID,
 		ProductBlueprintCategory: category,
-		Fit:                      fit,
-		Material:                 material,
-		Weight:                   weight,
-		QualityAssurance:         dedupKeepOrder(qualityAssurance),
+		CategoryFields:           normalizeCategoryFields(categoryFields),
 		ProductIdTag:             productIDTag,
 		AssigneeID:               assigneeID,
 		CompanyID:                companyID,
@@ -311,6 +326,42 @@ func (p *ProductBlueprint) MarkPrinted(now time.Time, updatedBy *string) error {
 // Update Methods
 // ======================================
 
+func (p *ProductBlueprint) UpdateProductName(productName string, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden
+	}
+	if productName == "" {
+		return ErrInvalidProduct
+	}
+
+	p.ProductName = productName
+	p.touch(now, updatedBy)
+	return nil
+}
+
+func (p *ProductBlueprint) UpdateDescription(description string, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden
+	}
+
+	p.Description = description
+	p.touch(now, updatedBy)
+	return nil
+}
+
+func (p *ProductBlueprint) UpdateBrand(brandID string, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden
+	}
+	if brandID == "" {
+		return ErrInvalidBrand
+	}
+
+	p.BrandID = brandID
+	p.touch(now, updatedBy)
+	return nil
+}
+
 func (p *ProductBlueprint) UpdateCategory(category ProductBlueprintCategorySnapshot, now time.Time, updatedBy *string) error {
 	if !p.canModify() {
 		return ErrForbidden
@@ -324,24 +375,25 @@ func (p *ProductBlueprint) UpdateCategory(category ProductBlueprintCategorySnaps
 	return nil
 }
 
-func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, updatedBy *string) error {
+func (p *ProductBlueprint) UpdateCategoryFields(fields CategoryFields, now time.Time, updatedBy *string) error {
 	if !p.canModify() {
 		return ErrForbidden
 	}
 
-	if assigneeID == "" {
-		return ErrInvalidAssignee
-	}
-	p.AssigneeID = assigneeID
+	p.CategoryFields = normalizeCategoryFields(fields)
 	p.touch(now, updatedBy)
 	return nil
 }
 
-func (p *ProductBlueprint) UpdateQualityAssurance(items []string, now time.Time, updatedBy *string) error {
+func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, updatedBy *string) error {
 	if !p.canModify() {
 		return ErrForbidden
 	}
-	p.QualityAssurance = dedupKeepOrder(items)
+	if assigneeID == "" {
+		return ErrInvalidAssignee
+	}
+
+	p.AssigneeID = assigneeID
 	p.touch(now, updatedBy)
 	return nil
 }
@@ -353,6 +405,7 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 	if err := tag.validate(); err != nil {
 		return err
 	}
+
 	p.ProductIdTag = tag
 	p.touch(now, updatedBy)
 	return nil
@@ -400,9 +453,6 @@ func (p ProductBlueprint) validate() error {
 	if err := p.ProductBlueprintCategory.validate(); err != nil {
 		return err
 	}
-	if p.Weight < 0 {
-		return ErrInvalidWeight
-	}
 	if p.CompanyID == "" {
 		return ErrInvalidCompanyID
 	}
@@ -414,6 +464,12 @@ func (p ProductBlueprint) validate() error {
 	}
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
+	}
+
+	for key := range p.CategoryFields {
+		if key == "" {
+			return WrapInvalid(ErrInvalidCategoryFields, "categoryFields key is empty")
+		}
 	}
 
 	for _, r := range p.ModelRefs {
@@ -440,18 +496,22 @@ func (p *ProductBlueprint) touch(now time.Time, updatedBy *string) {
 	p.UpdatedBy = updatedBy
 }
 
-func dedupKeepOrder(xs []string) []string {
-	seen := make(map[string]struct{}, len(xs))
-	out := make([]string, 0, len(xs))
-	for _, x := range xs {
-		if x == "" {
-			continue
-		}
-		if _, ok := seen[x]; ok {
-			continue
-		}
-		seen[x] = struct{}{}
-		out = append(out, x)
+func normalizeCategoryFields(in CategoryFields) CategoryFields {
+	if len(in) == 0 {
+		return nil
 	}
+
+	out := make(CategoryFields, len(in))
+	for key, value := range in {
+		if key == "" {
+			continue
+		}
+		out[key] = value
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
 	return out
 }
