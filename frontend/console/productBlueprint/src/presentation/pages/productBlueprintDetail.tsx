@@ -1,20 +1,29 @@
 // frontend/console/productBlueprint/src/presentation/pages/productBlueprintDetail.tsx
+
 import * as React from "react";
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
-import ProductBlueprintCard from "../components/productBlueprintCard";
+import ProductBlueprintCard from "../cards/productBlueprintForm";
+import ProductBlueprintClassificationCard from "../cards/classification/ProductBlueprintClassificationCard";
+import CategoryFieldsCard from "../cards/categoryFields";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
 import LogCard from "../../../../log/src/presentation/LogCard";
 
-import { useProductBlueprintDetail } from "../hook/useProductBlueprintDetail";
+import { useProductBlueprintDetail } from "../hooks/detail/useProductBlueprintDetail";
 
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
+  type Fit,
 } from "../../domain/entity/apparel";
+
+import type {
+  CategoryFieldValue,
+  CategoryFieldValues,
+} from "../../domain/entity/productBlueprintCategory";
 
 function shouldShowModelVariationCards(categoryCode: string): boolean {
   return (
@@ -24,6 +33,26 @@ function shouldShowModelVariationCards(categoryCode: string): boolean {
     categoryCode === "apparel.outerwear" ||
     categoryCode === "apparel.shoes"
   );
+}
+
+function toSafeNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && !Number.isNaN(value) ? value : fallback;
+}
+
+function toSafeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim() !== "",
+  );
+}
+
+function toNullableString(value: CategoryFieldValue): string {
+  return typeof value === "string" ? value : "";
+}
+
+function toNumber(value: CategoryFieldValue): number {
+  return typeof value === "number" && !Number.isNaN(value) ? value : 0;
 }
 
 export default function ProductBlueprintDetail() {
@@ -97,6 +126,15 @@ export default function ProductBlueprintDetail() {
     [isApparelCategory, categoryCode],
   );
 
+  const mergedCategoryFields = React.useMemo<CategoryFieldValues>(() => {
+    return {
+      fit,
+      material: String(materials ?? ""),
+      weight: toSafeNumber(weight, 0),
+      washTags: toSafeStringArray(washTags),
+    };
+  }, [fit, materials, weight, washTags]);
+
   const [editMode, setEditMode] = React.useState(false);
 
   const noop = React.useCallback(() => {}, []);
@@ -111,6 +149,38 @@ export default function ProductBlueprintDetail() {
   const handleDelete = React.useCallback(() => {
     onDelete();
   }, [onDelete]);
+
+  const handleChangeCategoryField = React.useCallback(
+    (key: string, value: CategoryFieldValue) => {
+      if (!editMode) return;
+
+      if (key === "fit") {
+        onChangeFit(value as Fit);
+        return;
+      }
+
+      if (key === "material") {
+        onChangeMaterials(toNullableString(value));
+        return;
+      }
+
+      if (key === "weight") {
+        onChangeWeight(toNumber(value));
+        return;
+      }
+
+      if (key === "washTags" || key === "qualityAssurance") {
+        onChangeWashTags(toSafeStringArray(value));
+      }
+    },
+    [
+      editMode,
+      onChangeFit,
+      onChangeMaterials,
+      onChangeWeight,
+      onChangeWashTags,
+    ],
+  );
 
   React.useEffect(() => {
     if (printed && editMode) {
@@ -134,32 +204,26 @@ export default function ProductBlueprintDetail() {
         <ProductBlueprintCard
           mode={editMode ? "edit" : "view"}
           productName={productName}
-          brand={brand}
-          brandId={brandId}
-          brandOptions={brandOptions}
-          brandLoading={brandLoading}
-          brandError={brandError}
-          onChangeBrandId={editMode ? onChangeBrandId : undefined}
-          productBlueprintCategoryId={productBlueprintCategoryId}
+          brandName={brand}
           productBlueprintCategory={productBlueprintCategory}
-          onChangeProductBlueprintCategory={
-            editMode ? onChangeProductBlueprintCategory : undefined
-          }
-          fit={fit}
-          materials={materials}
-          weight={weight}
-          washTags={washTags}
           onChangeProductName={editMode ? onChangeProductName : undefined}
-          onChangeFit={editMode ? onChangeFit : undefined}
-          onChangeMaterials={editMode ? onChangeMaterials : undefined}
-          onChangeWeight={editMode ? onChangeWeight : undefined}
-          onChangeWashTags={editMode ? onChangeWashTags : undefined}
         />
 
         {!productBlueprintCategory && (
           <p className="mt-2 text-xs text-slate-500">
             商品カテゴリが未設定です。
           </p>
+        )}
+
+        {productBlueprintCategory && (
+          <CategoryFieldsCard
+            categoryCode={categoryCode}
+            categoryFields={mergedCategoryFields}
+            mode={editMode ? "edit" : "view"}
+            onChangeCategoryField={
+              editMode ? handleChangeCategoryField : undefined
+            }
+          />
         )}
 
         {productBlueprintCategory && !showModelVariationCards && (
@@ -201,7 +265,7 @@ export default function ProductBlueprintDetail() {
         )}
       </div>
 
-      <div>
+      <div className="space-y-4">
         <AdminCard
           title="管理情報"
           assigneeName={assignee}
@@ -213,9 +277,22 @@ export default function ProductBlueprintDetail() {
           onClickAssignee={editMode ? onClickAssignee : noop}
         />
 
-        <div className="section-gap">
-          <LogCard />
-        </div>
+        {editMode && (
+          <ProductBlueprintClassificationCard
+            mode="edit"
+            brandId={brandId}
+            brandName={brand}
+            brandOptions={brandOptions}
+            brandLoading={brandLoading}
+            brandError={brandError}
+            onChangeBrandId={onChangeBrandId}
+            productBlueprintCategoryId={productBlueprintCategoryId}
+            productBlueprintCategory={productBlueprintCategory}
+            onChangeProductBlueprintCategory={onChangeProductBlueprintCategory}
+          />
+        )}
+
+        <LogCard />
       </div>
     </PageStyle>
   );

@@ -2,8 +2,8 @@
 
 import * as React from "react";
 
-import type { Brand } from "../../../../brand/src/domain/entity/brand";
-import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
+import type { Brand } from "../../../../../brand/src/domain/entity/brand";
+import { fetchAllBrandsForCompany } from "../../../../../brand/src/infrastructure/query/brandQuery";
 
 export type UseProductBlueprintCreateBrandResult = {
   brandId: string;

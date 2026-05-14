@@ -4,19 +4,13 @@ import React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
-import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
+import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/cards/productBlueprintForm";
 import ProductionQuantityCard from "../components/productionQuantityCard";
 
 import { useProductionDetail } from "../hook/useProductionDetail";
 import "../styles/production.css";
 
 import LogCard from "../../../../log/src/presentation/LogCard";
-
-// ProductBlueprintCard の型用
-import type {
-  ItemType,
-  Fit,
-} from "../../../../productBlueprint/src/domain/entity/catalog";
 
 // ★ usePrintCard Hook（print_log + QR 情報取得）
 // ✅ modelId を正にした版（QuantityRowBase: modelId）
@@ -192,14 +186,7 @@ export default function ProductionDetail() {
                 <ProductBlueprintCard
                   mode="view"
                   productName={productBlueprint.productName}
-                  brand={production.brandName ?? ""}
-                  brandId={productBlueprint.brandId}
-                  itemType={productBlueprint.itemType as ItemType}
-                  fit={productBlueprint.fit as Fit}
-                  materials={productBlueprint.material}
-                  weight={productBlueprint.weight}
-                  washTags={productBlueprint.qualityAssurance}
-                  productIdTag={productBlueprint.productIdTag}
+                  brandName={production.brandName ?? ""}
                 />
               )}
 
@@ -214,7 +201,7 @@ export default function ProductionDetail() {
                 <PrintCard
                   printing={printing}
                   onClick={handlePrint}
-                  printed={isPrinted} // ✅ 追加: 文言の表示し分け
+                  printed={isPrinted}
                 />
               )}
             </>
@@ -234,7 +221,11 @@ export default function ProductionDetail() {
             onSelectAssignee={() => {}}
           />
 
-          <LogCard title="更新履歴" logs={[]} emptyText="更新履歴はまだありません。" />
+          <LogCard
+            title="更新履歴"
+            logs={[]}
+            emptyText="更新履歴はまだありません。"
+          />
         </div>
       </PageStyle>
     </>

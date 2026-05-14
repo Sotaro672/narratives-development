@@ -16,7 +16,7 @@ import {
   PopoverContent,
 } from "../../../../shell/src/shared/ui/popover";
 
-import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
+import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/cards/productBlueprintForm";
 
 // Table UI
 import {

@@ -1,4 +1,4 @@
-// frontend/productBlueprint/src/domain/entity/productBlueprintCategory.ts
+// frontend/console/productBlueprint/src/domain/entity/productBlueprintCategory.ts
 
 /**
  * backend/internal/domain/common.ProductCategoryKind に対応。
@@ -42,14 +42,20 @@ export interface ProductBlueprintCategory {
 
 /**
  * ProductBlueprint 側に denormalize 保存されるカテゴリ snapshot。
+ *
+ * NOTE:
+ * - parentId は category 選択 UI の親子階層判定で使う。
+ * - displayOrder は category 選択 UI の並び順制御で使う。
  */
 export interface ProductBlueprintCategorySnapshot {
   id: string;
   code: string;
   nameJa: string;
   nameEn: string;
+  parentId?: string | null;
   kind: ProductBlueprintCategoryKind;
   path: string[];
+  displayOrder?: number;
 }
 
 /**
@@ -134,12 +140,15 @@ export function validateProductBlueprintCategorySnapshot(
   if (!category.id?.trim()) {
     errors.push("productBlueprintCategory.id is required");
   }
+
   if (!category.code?.trim()) {
     errors.push("productBlueprintCategory.code is required");
   }
+
   if (!category.nameJa?.trim()) {
     errors.push("productBlueprintCategory.nameJa is required");
   }
+
   if (!isValidProductBlueprintCategoryKind(category.kind)) {
     errors.push("productBlueprintCategory.kind is invalid");
   }
@@ -155,8 +164,10 @@ export function toProductBlueprintCategorySnapshot(
     code: category.code,
     nameJa: category.nameJa,
     nameEn: category.nameEn,
+    parentId: category.parentId ?? null,
     kind: category.kind,
     path: [...category.path],
+    displayOrder: category.displayOrder,
   };
 }
 
@@ -167,31 +178,51 @@ export function getProductBlueprintCategoryDisplayName(
 }
 
 export function isApparelProductBlueprintCategory(
-  category: ProductBlueprintCategory | ProductBlueprintCategorySnapshot | null | undefined,
+  category:
+    | ProductBlueprintCategory
+    | ProductBlueprintCategorySnapshot
+    | null
+    | undefined,
 ): boolean {
   return category?.kind === "apparel";
 }
 
 export function isAlcoholProductBlueprintCategory(
-  category: ProductBlueprintCategory | ProductBlueprintCategorySnapshot | null | undefined,
+  category:
+    | ProductBlueprintCategory
+    | ProductBlueprintCategorySnapshot
+    | null
+    | undefined,
 ): boolean {
   return category?.kind === "alcohol";
 }
 
 export function isCosmeticsProductBlueprintCategory(
-  category: ProductBlueprintCategory | ProductBlueprintCategorySnapshot | null | undefined,
+  category:
+    | ProductBlueprintCategory
+    | ProductBlueprintCategorySnapshot
+    | null
+    | undefined,
 ): boolean {
   return category?.kind === "cosmetics";
 }
 
 export function isHealthcareProductBlueprintCategory(
-  category: ProductBlueprintCategory | ProductBlueprintCategorySnapshot | null | undefined,
+  category:
+    | ProductBlueprintCategory
+    | ProductBlueprintCategorySnapshot
+    | null
+    | undefined,
 ): boolean {
   return category?.kind === "healthcare";
 }
 
 export function isOtherProductBlueprintCategory(
-  category: ProductBlueprintCategory | ProductBlueprintCategorySnapshot | null | undefined,
+  category:
+    | ProductBlueprintCategory
+    | ProductBlueprintCategorySnapshot
+    | null
+    | undefined,
 ): boolean {
   return category?.kind === "other";
 }

@@ -4,12 +4,12 @@ import * as React from "react";
 
 import {
   listProductBlueprintCategoriesApi,
-} from "../../infrastructure/api/productBlueprintCategoryApi";
+} from "../../../infrastructure/api/productBlueprintCategoryApi";
 
 import type {
   ProductBlueprintCategory,
   ProductBlueprintCategorySnapshot,
-} from "../../domain/entity/productBlueprintCategory";
+} from "../../../domain/entity/productBlueprintCategory";
 
 function toProductBlueprintCategorySnapshot(
   category: ProductBlueprintCategory,

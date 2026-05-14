@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
+import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/cards/productBlueprintForm";
 import InventoryCard from "../components/inventoryCard";
 
 // ✅ TokenBlueprintCard（view-only）

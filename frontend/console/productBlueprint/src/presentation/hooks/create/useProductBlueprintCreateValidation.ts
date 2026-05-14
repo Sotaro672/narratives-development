@@ -2,9 +2,9 @@
 
 import * as React from "react";
 
-import type { ModelNumber } from "../../../../model/src/application/modelCreateService";
-import type { ApparelSizeRow } from "../../domain/entity/apparel";
-import type { ProductBlueprintCategorySnapshot } from "../../domain/entity/productBlueprintCategory";
+import type { ModelNumber } from "../../../../../model/src/application/modelCreateService";
+import type { ApparelSizeRow } from "../../../domain/entity/apparel";
+import type { ProductBlueprintCategorySnapshot } from "../../../domain/entity/productBlueprintCategory";
 
 export type UseProductBlueprintCreateValidationParams = {
   companyId: string;

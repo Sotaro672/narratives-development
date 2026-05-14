@@ -2,19 +2,19 @@
 
 import * as React from "react";
 import { ShieldCheck, X } from "lucide-react";
-import { Badge } from "../../../../shell/src/shared/ui/badge";
-import { Button } from "../../../../shell/src/shared/ui/button";
+import { Badge } from "../../../../../shell/src/shared/ui/badge";
+import { Button } from "../../../../../shell/src/shared/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "../../../../shell/src/shared/ui/popover";
-import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
+} from "../../../../../shell/src/shared/ui/popover";
+import { Checkbox } from "../../../../../shell/src/shared/ui/checkbox";
 
 import {
   WASH_TAG_OPTIONS,
   type WashTagOption,
-} from "../../domain/entity/apparel";
+} from "../../../domain/entity/apparel";
 
 type WashTagFieldProps = {
   value: string[];

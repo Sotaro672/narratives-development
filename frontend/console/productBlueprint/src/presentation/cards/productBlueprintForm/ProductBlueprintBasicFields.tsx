@@ -1,7 +1,7 @@
-// frontend/console/productBlueprint/src/presentation/components/ProductBlueprintBasicFields.tsx
+// frontend/console/productBlueprint/src/presentation/cards/productBlueprintForm/ProductBlueprintBasicFields.tsx
 
 import * as React from "react";
-import { Input } from "../../../../shell/src/shared/ui/input";
+import { Input } from "../../../../../shell/src/shared/ui/input";
 
 type ProductBlueprintBasicFieldsProps = {
   productName: string;

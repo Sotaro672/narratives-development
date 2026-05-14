@@ -1,4 +1,5 @@
 // frontend/console/mintRequest/src/presentation/pages/mintRequestDetail.tsx
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
@@ -15,7 +16,7 @@ import {
   PopoverContent,
 } from "../../../../shell/src/shared/ui/popover";
 
-import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
+import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/cards/productBlueprintForm";
 import InspectionResultCard from "../components/inspectionResultCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import { useMintRequestDetail } from "../hook/useMintRequestDetail";
@@ -132,13 +133,7 @@ export default function MintRequestDetail() {
             <ProductBlueprintCard
               mode="view"
               productName={productBlueprintCardView.productName}
-              brand={productBlueprintCardView.brand}
-              itemType={productBlueprintCardView.itemType as any}
-              fit={productBlueprintCardView.fit as any}
-              materials={productBlueprintCardView.materials}
-              weight={productBlueprintCardView.weight}
-              washTags={productBlueprintCardView.washTags}
-              productIdTag={productBlueprintCardView.productIdTag as any}
+              brandName={productBlueprintCardView.brand}
             />
           ) : (
             <Card className="mint-request-card">

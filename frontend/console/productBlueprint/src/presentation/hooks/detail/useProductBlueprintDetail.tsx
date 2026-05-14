@@ -2,13 +2,13 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import { safeDateTimeLabelJa } from "../../../../../shell/src/shared/util/dateJa";
 
 import {
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
   updateProductBlueprint,
-} from "../../application/productBlueprintDetailService";
+} from "../../../application/productBlueprintDetailService";
 
 import {
   FIT_OPTIONS,
@@ -17,12 +17,12 @@ import {
   type ApparelModelNumberRow as ModelNumberRow,
   type ApparelSizeRow as SizeRow,
   type Fit,
-} from "../../domain/entity/apparel";
+} from "../../../domain/entity/apparel";
 
-import type { ProductBlueprintCategorySnapshot } from "../../domain/entity/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../../domain/entity/productBlueprintCategory";
 
-import { mapVariationsToUiState } from "../util/variationMapper";
-import { useBrandOptions, type BrandOption } from "./useBrandOptions";
+import { mapVariationsToUiState } from "../../util/variationMapper";
+import { useBrandOptions, type BrandOption } from "../shared/useBrandOptions";
 import {
   useVariationsEditor,
   type VariationsUiState,
@@ -31,9 +31,9 @@ import {
 export {
   FIT_OPTIONS,
   WASH_TAG_OPTIONS,
-} from "../../domain/entity/apparel";
+} from "../../../domain/entity/apparel";
 
-export type { Fit, WashTagOption } from "../../domain/entity/apparel";
+export type { Fit, WashTagOption } from "../../../domain/entity/apparel";
 
 // ------------------------------
 // displayOrder で variations を並べ替えるユーティリティ

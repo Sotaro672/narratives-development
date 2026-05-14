@@ -1,6 +1,6 @@
 // frontend/console/productBlueprint/src/presentation/hook/useBrandOptions.ts
 import * as React from "react";
-import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
+import { fetchAllBrandsForCompany } from "../../../../../brand/src/infrastructure/query/brandQuery";
 
 export type BrandOption = {
   id: string;

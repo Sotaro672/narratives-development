@@ -2,16 +2,16 @@
 
 import * as React from "react";
 
-import type { ModelNumber } from "../../../../model/src/application/modelCreateService";
+import type { ModelNumber } from "../../../../../model/src/application/modelCreateService";
 
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
   type ApparelMeasurementOption,
   type ApparelSizeRow as SizeRow,
-} from "../../domain/entity/apparel";
+} from "../../../domain/entity/apparel";
 
-import type { ProductBlueprintCategorySnapshot } from "../../domain/entity/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../../domain/entity/productBlueprintCategory";
 
 function newSizeRow(): SizeRow {
   return {

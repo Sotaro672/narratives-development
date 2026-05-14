@@ -4,9 +4,9 @@ import * as React from "react";
 import type {
   ApparelModelNumberRow as ModelNumberRow,
   ApparelSizeRow as SizeRow,
-} from "../../domain/entity/apparel";
+} from "../../../domain/entity/apparel";
 
-import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
+import { useModelCard } from "../../../../../model/src/presentation/hook/useModelCard";
 
 /**
  * UI state derived from ModelVariation list (already mapped by variationMapper, etc.)
