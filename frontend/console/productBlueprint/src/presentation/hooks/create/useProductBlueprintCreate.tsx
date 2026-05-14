@@ -12,7 +12,7 @@ import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   FIT_OPTIONS,
   WASH_TAG_OPTIONS,
-  type ApparelMeasurementOption,
+  type MeasurementOption,
   type ApparelSizeRow as SizeRow,
   type Fit,
 } from "../../../domain/entity/apparel";
@@ -63,7 +63,7 @@ export interface UseProductBlueprintCreateResult {
   qualityAssurance: string[];
   categoryFields: CategoryFieldValues;
 
-  measurementOptions: ApparelMeasurementOption[];
+  measurementOptions: MeasurementOption[];
 
   colors: string[];
   colorInput: string;

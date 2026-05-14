@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreateCategoryFields.ts
+// frontend/console/productBlueprint/src/presentation/hooks/create/useProductBlueprintCreateCategoryFields.ts
 
 import * as React from "react";
 
@@ -8,9 +8,7 @@ import type {
   ProductBlueprintCategorySnapshot,
 } from "../../../domain/entity/productBlueprintCategory";
 
-import {
-  getProductBlueprintCategoryFieldKeys,
-} from "../../../domain/entity/categoryFieldRegistry";
+import { getProductBlueprintCategoryFieldKeys } from "../../../domain/entity/categoryFieldRegistry";
 
 import type { Fit } from "../../../domain/entity/apparel";
 
@@ -34,6 +32,16 @@ function normalizeNumberValue(value: number): number {
   }
 
   return value < 0 ? 0 : value;
+}
+
+function normalizeStringArrayValue(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim() !== "",
+  );
 }
 
 function normalizeCategoryFieldsForCategory(
@@ -99,11 +107,23 @@ export function useProductBlueprintCreateCategoryFields(
 
   const onChangeWeight = React.useCallback((value: number) => {
     const next = normalizeNumberValue(value);
+
     setWeight(next);
 
     setCategoryFields((prev) => ({
       ...prev,
       weight: next,
+    }));
+  }, []);
+
+  const onChangeQualityAssurance = React.useCallback((value: string[]) => {
+    const next = normalizeStringArrayValue(value);
+
+    setQualityAssurance(next);
+
+    setCategoryFields((prev) => ({
+      ...prev,
+      washTags: next,
     }));
   }, []);
 
@@ -116,14 +136,21 @@ export function useProductBlueprintCreateCategoryFields(
 
       if (key === "fit" && typeof value === "string") {
         setFit(value as Fit);
+        return;
       }
 
-      if (key === "material" && typeof value === "string") {
-        setMaterial(value);
+      if (key === "material") {
+        setMaterial(typeof value === "string" ? value : "");
+        return;
       }
 
-      if (key === "weight" && typeof value === "number") {
-        setWeight(normalizeNumberValue(value));
+      if (key === "weight") {
+        setWeight(typeof value === "number" ? normalizeNumberValue(value) : 0);
+        return;
+      }
+
+      if (key === "washTags" || key === "qualityAssurance") {
+        setQualityAssurance(normalizeStringArrayValue(value));
       }
     },
     [],
@@ -146,7 +173,7 @@ export function useProductBlueprintCreateCategoryFields(
     onChangeFit,
     onChangeMaterial,
     onChangeWeight,
-    onChangeQualityAssurance: setQualityAssurance,
+    onChangeQualityAssurance,
     onChangeCategoryField,
     resetCategoryFields,
   };

@@ -42,13 +42,13 @@ export type ProductBlueprintCardProps = {
 
   /**
    * 閲覧モードでは左カラムの基本情報カードに表示する。
-   * 編集モードでは右カラムの ProductBlueprintClassificationCard 側で表示する。
+   * 編集モードでは右カラム/ブランドカード側で表示する。
    */
   brandName?: string;
 
   /**
-   * 閲覧モードでは左カラムの基本情報カードに表示する。
-   * 編集モードでは右カラムの ProductBlueprintClassificationCard 側で表示する。
+   * 編集モードでは、子カテゴリまで選択された場合のみこのカードを表示する。
+   * 閲覧モードでは既存画面への影響を避けるため、未設定でもカード表示する。
    */
   productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
 
@@ -56,6 +56,60 @@ export type ProductBlueprintCardProps = {
 
   mode?: "edit" | "view";
 };
+
+function hasText(value: unknown): boolean {
+  return String(value ?? "").trim() !== "";
+}
+
+function getCategoryPath(
+  category: ProductBlueprintCategorySnapshot | null | undefined,
+): string[] {
+  return Array.isArray(category?.path)
+    ? category.path.map((item) => String(item ?? "").trim()).filter(Boolean)
+    : [];
+}
+
+function isChildCategory(
+  category: ProductBlueprintCategorySnapshot | null | undefined,
+): boolean {
+  if (!category) {
+    return false;
+  }
+
+  if (hasText(category.parentId)) {
+    return true;
+  }
+
+  return getCategoryPath(category).length > 1;
+}
+
+function resolveCardTitle(
+  category: ProductBlueprintCategorySnapshot | null | undefined,
+): string {
+  const kind = String(category?.kind ?? "").trim();
+
+  if (kind === "apparel") {
+    return "基本情報（衣類）";
+  }
+
+  if (kind === "alcohol") {
+    return "基本情報（酒類）";
+  }
+
+  if (kind === "cosmetics") {
+    return "基本情報（化粧品）";
+  }
+
+  if (kind === "healthcare") {
+    return "基本情報（ヘルスケア）";
+  }
+
+  if (kind === "other") {
+    return "基本情報（その他）";
+  }
+
+  return "基本情報";
+}
 
 const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   productBlueprintPatch,
@@ -81,14 +135,27 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
     productBlueprintPatch?.productBlueprintCategory ??
     null;
 
+  /**
+   * 編集モードでは、親カテゴリだけ選択された状態では基本情報カードを出さない。
+   * 子カテゴリまで確定したら表示する。
+   *
+   * 閲覧モードは既存の detail / inventory / production / mintRequest 画面への影響を避けるため、
+   * category が無くても表示する。
+   */
+  if (isEdit && !isChildCategory(mergedCategory)) {
+    return null;
+  }
+
   const mergedCategoryLabel =
     resolveProductBlueprintCategoryLabel(mergedCategory);
+
+  const cardTitle = resolveCardTitle(mergedCategory);
 
   return (
     <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
         <Package2 size={16} />
-        <CardTitle className="box__title">基本情報</CardTitle>
+        <CardTitle className="box__title">{cardTitle}</CardTitle>
       </CardHeader>
 
       <CardContent className="box__body">

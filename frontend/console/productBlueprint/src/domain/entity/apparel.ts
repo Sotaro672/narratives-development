@@ -132,6 +132,9 @@ export function hasApparelMeasurements(categoryCode: string): boolean {
 // Apparel measurement definitions
 // ============================
 //
+// model/src/domain/entity/catalog.ts の MeasurementKey / MeasurementOption を正とする。
+// そのため、productBlueprint 側でも option は key ではなく value を持つ。
+//
 // 入力表では measurements は以下のみ:
 // - apparel.tops
 // - apparel.bottoms
@@ -141,75 +144,65 @@ export function hasApparelMeasurements(categoryCode: string): boolean {
 // bag / accessory は model variation を作らない。
 
 export type ApparelMeasurementKey =
-  // tops / dress
-  | "shoulderWidth"
-  | "bodyWidth"
-  | "bodyLength"
-  | "sleeveLength"
-  | "neckWidth"
+  // トップス
+  | "着丈"
+  | "身幅"
+  | "胸囲"
+  | "肩幅"
+  | "袖丈"
 
-  // bottoms / dress
-  | "waist"
-  | "hip"
-  | "rise"
-  | "inseam"
-  | "thighWidth"
-  | "hemWidth"
-  | "totalLength";
+  // ボトムス
+  | "ウエスト"
+  | "ヒップ"
+  | "股上"
+  | "股下"
+  | "わたり幅"
+  | "裾幅";
 
-export type ApparelMeasurementOption = {
-  key: ApparelMeasurementKey;
+export type MeasurementOption = {
+  value: ApparelMeasurementKey;
   label: string;
-  unit: "cm";
 };
 
-export const APPAREL_MEASUREMENT_OPTIONS: ApparelMeasurementOption[] = [
-  // tops / dress
-  { key: "shoulderWidth", label: "肩幅", unit: "cm" },
-  { key: "bodyWidth", label: "身幅", unit: "cm" },
-  { key: "bodyLength", label: "着丈", unit: "cm" },
-  { key: "sleeveLength", label: "袖丈", unit: "cm" },
-  { key: "neckWidth", label: "首回り", unit: "cm" },
+export const APPAREL_MEASUREMENT_OPTIONS: MeasurementOption[] = [
+  // トップス
+  { value: "着丈", label: "着丈" },
+  { value: "身幅", label: "身幅" },
+  { value: "胸囲", label: "胸囲" },
+  { value: "肩幅", label: "肩幅" },
+  { value: "袖丈", label: "袖丈" },
 
-  // bottoms / dress
-  { key: "waist", label: "ウエスト", unit: "cm" },
-  { key: "hip", label: "ヒップ", unit: "cm" },
-  { key: "rise", label: "股上", unit: "cm" },
-  { key: "inseam", label: "股下", unit: "cm" },
-  { key: "thighWidth", label: "わたり幅", unit: "cm" },
-  { key: "hemWidth", label: "裾幅", unit: "cm" },
-  { key: "totalLength", label: "総丈", unit: "cm" },
+  // ボトムス
+  { value: "ウエスト", label: "ウエスト" },
+  { value: "ヒップ", label: "ヒップ" },
+  { value: "股上", label: "股上" },
+  { value: "股下", label: "股下" },
+  { value: "わたり幅", label: "わたり幅" },
+  { value: "裾幅", label: "裾幅" },
 ];
 
 export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
   ApparelCategoryCode,
   ApparelMeasurementKey[]
 > = {
-  "apparel.tops": [
-    "shoulderWidth",
-    "bodyWidth",
-    "bodyLength",
-    "sleeveLength",
-    "neckWidth",
-  ],
+  "apparel.tops": ["着丈", "身幅", "胸囲", "肩幅", "袖丈"],
   "apparel.bottoms": [
-    "waist",
-    "hip",
-    "rise",
-    "inseam",
-    "thighWidth",
-    "hemWidth",
-    "totalLength",
+    "ウエスト",
+    "ヒップ",
+    "股上",
+    "股下",
+    "わたり幅",
+    "裾幅",
   ],
   "apparel.outerwear": [],
   "apparel.dress": [
-    "shoulderWidth",
-    "bodyWidth",
-    "bodyLength",
-    "sleeveLength",
-    "waist",
-    "hip",
-    "totalLength",
+    "着丈",
+    "身幅",
+    "胸囲",
+    "肩幅",
+    "袖丈",
+    "ウエスト",
+    "ヒップ",
   ],
   "apparel.shoes": [],
   "apparel.bag": [],
@@ -218,17 +211,17 @@ export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
 
 export const APPAREL_CATEGORY_MEASUREMENT_OPTIONS: Record<
   ApparelCategoryCode,
-  ApparelMeasurementOption[]
+  MeasurementOption[]
 > = Object.fromEntries(
   Object.entries(APPAREL_CATEGORY_MEASUREMENT_KEYS).map(
-    ([categoryCode, keys]) => [
+    ([categoryCode, values]) => [
       categoryCode,
       APPAREL_MEASUREMENT_OPTIONS.filter((option) =>
-        keys.includes(option.key),
+        values.includes(option.value),
       ),
     ],
   ),
-) as Record<ApparelCategoryCode, ApparelMeasurementOption[]>;
+) as Record<ApparelCategoryCode, MeasurementOption[]>;
 
 export type ApparelMeasurements = Partial<
   Record<ApparelMeasurementKey, number | null>
@@ -256,25 +249,26 @@ export type ApparelModelNumberRow = {
 /**
  * Service / API 入力用。
  * 更新処理では row id を使わないため、id は持たせない。
+ *
+ * model/src/domain/entity/catalog.ts の SizeRow に合わせた field 名にする。
  */
 export type ApparelSizeInput = {
   sizeLabel: string;
 
-  // tops / dress
-  shoulderWidth?: number;
-  bodyWidth?: number;
-  bodyLength?: number;
+  // トップス
+  length?: number;
+  width?: number;
+  chest?: number;
+  shoulder?: number;
   sleeveLength?: number;
-  neckWidth?: number;
 
-  // bottoms / dress
+  // ボトムス
   waist?: number;
   hip?: number;
   rise?: number;
   inseam?: number;
-  thighWidth?: number;
+  thigh?: number;
   hemWidth?: number;
-  totalLength?: number;
 };
 
 /**
@@ -404,7 +398,7 @@ export const WASH_TAG_OPTIONS: WashTagOption[] = [
 
 export function getApparelMeasurementOptions(
   categoryCode: string,
-): ApparelMeasurementOption[] {
+): MeasurementOption[] {
   if (!isApparelCategoryCode(categoryCode)) {
     return [];
   }
@@ -418,15 +412,46 @@ export function isApparelMeasurementRequiredCategory(
   return hasApparelMeasurements(categoryCode);
 }
 
+function toMeasurementKeyFromSizeField(key: string): ApparelMeasurementKey | null {
+  switch (key) {
+    case "length":
+      return "着丈";
+    case "width":
+      return "身幅";
+    case "chest":
+      return "胸囲";
+    case "shoulder":
+      return "肩幅";
+    case "sleeveLength":
+      return "袖丈";
+    case "waist":
+      return "ウエスト";
+    case "hip":
+      return "ヒップ";
+    case "rise":
+      return "股上";
+    case "inseam":
+      return "股下";
+    case "thigh":
+      return "わたり幅";
+    case "hemWidth":
+      return "裾幅";
+    default:
+      return null;
+  }
+}
+
 export function normalizeApparelMeasurements(
-  measurements: ApparelMeasurements | undefined | null,
+  measurements: Record<string, number | null | undefined> | undefined | null,
 ): Record<string, number> {
   const out: Record<string, number> = {};
 
   for (const [key, value] of Object.entries(measurements ?? {})) {
     if (value == null) continue;
     if (Number.isNaN(value)) continue;
-    out[key] = value;
+
+    const measurementKey = toMeasurementKeyFromSizeField(key) ?? key;
+    out[measurementKey] = value;
   }
 
   return out;

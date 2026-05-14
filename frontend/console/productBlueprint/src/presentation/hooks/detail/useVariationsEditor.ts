@@ -1,4 +1,5 @@
-// frontend/console/productBlueprint/src/presentation/hook/useVariationsEditor.ts
+// frontend/console/productBlueprint/src/presentation/hooks/detail/useVariationsEditor.ts
+
 import * as React from "react";
 
 import type {
@@ -72,9 +73,9 @@ export function useVariationsEditor(
   );
 
   const setFromUiState = React.useCallback((next: VariationsUiState) => {
-    setColors(next.colors ?? []);
-    setSizes(next.sizes ?? []);
-    setModelNumbers(next.modelNumbers ?? []);
+    setColors(Array.isArray(next.colors) ? next.colors : []);
+    setSizes(Array.isArray(next.sizes) ? next.sizes : []);
+    setModelNumbers(Array.isArray(next.modelNumbers) ? next.modelNumbers : []);
     setColorRgbMap(next.colorRgbMap ?? {});
     setColorInput("");
   }, []);
@@ -83,10 +84,10 @@ export function useVariationsEditor(
   // ModelNumberCard 用ロジックは useModelCard に委譲
   // ---------------------------------
   const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
-    sizes,
-    colors,
-    modelNumbers: modelNumbers as any,
-    colorRgbMap,
+    sizes: Array.isArray(sizes) ? sizes : [],
+    colors: Array.isArray(colors) ? colors : [],
+    modelNumbers: Array.isArray(modelNumbers) ? (modelNumbers as any) : [],
+    colorRgbMap: colorRgbMap ?? {},
   });
 
   // ---------------------------------
@@ -220,6 +221,21 @@ export function useVariationsEditor(
       const next: SizeRow = {
         id: String(nextNum),
         sizeLabel: "",
+
+        // トップス
+        length: undefined,
+        width: undefined,
+        chest: undefined,
+        shoulder: undefined,
+        sleeveLength: undefined,
+
+        // ボトムス
+        waist: undefined,
+        hip: undefined,
+        rise: undefined,
+        inseam: undefined,
+        thigh: undefined,
+        hemWidth: undefined,
       };
 
       return [...prev, next];
@@ -238,20 +254,21 @@ export function useVariationsEditor(
         }
       };
 
-      // apparel measurement fields
-      clampField("shoulderWidth");
-      clampField("bodyWidth");
-      clampField("bodyLength");
+      // model/src/domain/entity/catalog.ts の SizeRow 正規 field に合わせる
+      // トップス
+      clampField("length");
+      clampField("width");
+      clampField("chest");
+      clampField("shoulder");
       clampField("sleeveLength");
-      clampField("neckWidth");
 
+      // ボトムス
       clampField("waist");
       clampField("hip");
       clampField("rise");
       clampField("inseam");
-      clampField("thighWidth");
+      clampField("thigh");
       clampField("hemWidth");
-      clampField("totalLength");
 
       setSizes((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),

@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreateVariations.ts
+// frontend/console/productBlueprint/src/presentation/hooks/create/useProductBlueprintCreateVariations.ts
 
 import * as React from "react";
 
@@ -7,7 +7,7 @@ import type { ModelNumber } from "../../../../../model/src/application/modelCrea
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
-  type ApparelMeasurementOption,
+  type MeasurementOption,
   type ApparelSizeRow as SizeRow,
 } from "../../../domain/entity/apparel";
 
@@ -21,27 +21,26 @@ function newSizeRow(): SizeRow {
         : `size-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     sizeLabel: "",
 
-    // tops / dress
-    shoulderWidth: undefined,
-    bodyWidth: undefined,
-    bodyLength: undefined,
+    // トップス
+    length: undefined,
+    width: undefined,
+    chest: undefined,
+    shoulder: undefined,
     sleeveLength: undefined,
-    neckWidth: undefined,
 
-    // bottoms / dress
+    // ボトムス
     waist: undefined,
     hip: undefined,
     rise: undefined,
     inseam: undefined,
-    thighWidth: undefined,
+    thigh: undefined,
     hemWidth: undefined,
-    totalLength: undefined,
   };
 }
 
 export type UseProductBlueprintCreateVariationsResult = {
   isApparelCategory: boolean;
-  measurementOptions: ApparelMeasurementOption[];
+  measurementOptions: MeasurementOption[];
 
   colors: string[];
   colorInput: string;
@@ -89,7 +88,7 @@ export function useProductBlueprintCreateVariations(
     [categoryCode],
   );
 
-  const measurementOptions: ApparelMeasurementOption[] = React.useMemo(() => {
+  const measurementOptions: MeasurementOption[] = React.useMemo(() => {
     if (!isApparelCategoryCode(categoryCode)) {
       return [];
     }
@@ -202,19 +201,20 @@ export function useProductBlueprintCreateVariations(
         }
       };
 
-      clampField("shoulderWidth");
-      clampField("bodyWidth");
-      clampField("bodyLength");
+      // トップス
+      clampField("length");
+      clampField("width");
+      clampField("chest");
+      clampField("shoulder");
       clampField("sleeveLength");
-      clampField("neckWidth");
 
+      // ボトムス
       clampField("waist");
       clampField("hip");
       clampField("rise");
       clampField("inseam");
-      clampField("thighWidth");
+      clampField("thigh");
       clampField("hemWidth");
-      clampField("totalLength");
 
       const prevRow = sizes.find((size) => size.id === id);
       const prevLabelRaw = prevRow?.sizeLabel;
@@ -295,7 +295,9 @@ export function useProductBlueprintCreateVariations(
   );
 
   React.useEffect(() => {
-    const validColors = new Set(colors.map((color) => color.trim()).filter(Boolean));
+    const validColors = new Set(
+      colors.map((color) => color.trim()).filter(Boolean),
+    );
 
     const validSizes = new Set(
       sizes

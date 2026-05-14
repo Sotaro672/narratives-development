@@ -24,7 +24,7 @@ import "../../../../shell/src/shared/ui/card.css";
 // ★ productBlueprint 側の catalog を import
 import type {
   MeasurementOption,
-} from "../../../../productBlueprint/src/domain/entity/catalog";
+} from "../../../../productBlueprint/src/domain/entity/apparel";
 
 // ロジックは hook 側に集約
 import {

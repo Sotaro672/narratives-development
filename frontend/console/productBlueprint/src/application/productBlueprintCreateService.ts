@@ -186,21 +186,25 @@ function resolveApparelCategoryCode(
 /**
  * apparel category code に応じて measurements を組み立てる。
  *
- * itemType は廃止。
- * productBlueprintCategory.code を正として利用する。
+ * model/src/domain/entity/catalog.ts の MeasurementKey / SizeRow を正とする。
  *
- * 入力表ベースでは measurements を持つのは以下のみ:
+ * category code:
  * - apparel.tops
  * - apparel.bottoms
  * - apparel.dress
  *
- * 以下は model variation 自体は作るが measurements は持たない:
- * - apparel.outerwear
- * - apparel.shoes
- *
- * 以下は model variation を作らない想定:
- * - apparel.bag
- * - apparel.accessory
+ * measurement key:
+ * - 着丈
+ * - 身幅
+ * - 胸囲
+ * - 肩幅
+ * - 袖丈
+ * - ウエスト
+ * - ヒップ
+ * - 股上
+ * - 股下
+ * - わたり幅
+ * - 裾幅
  */
 function buildApparelMeasurements(
   categoryCode: ApparelCategoryCode,
@@ -210,33 +214,32 @@ function buildApparelMeasurements(
 
   switch (categoryCode) {
     case "apparel.bottoms": {
-      result.waist = size.waist ?? null;
-      result.hip = size.hip ?? null;
-      result.rise = size.rise ?? null;
-      result.inseam = size.inseam ?? null;
-      result.thighWidth = size.thighWidth ?? null;
-      result.hemWidth = size.hemWidth ?? null;
-      result.totalLength = size.totalLength ?? null;
+      result["ウエスト"] = size.waist ?? null;
+      result["ヒップ"] = size.hip ?? null;
+      result["股上"] = size.rise ?? null;
+      result["股下"] = size.inseam ?? null;
+      result["わたり幅"] = size.thigh ?? null;
+      result["裾幅"] = size.hemWidth ?? null;
       return result;
     }
 
     case "apparel.dress": {
-      result.shoulderWidth = size.shoulderWidth ?? null;
-      result.bodyWidth = size.bodyWidth ?? null;
-      result.bodyLength = size.bodyLength ?? null;
-      result.sleeveLength = size.sleeveLength ?? null;
-      result.waist = size.waist ?? null;
-      result.hip = size.hip ?? null;
-      result.totalLength = size.totalLength ?? null;
+      result["着丈"] = size.length ?? null;
+      result["身幅"] = size.width ?? null;
+      result["胸囲"] = size.chest ?? null;
+      result["肩幅"] = size.shoulder ?? null;
+      result["袖丈"] = size.sleeveLength ?? null;
+      result["ウエスト"] = size.waist ?? null;
+      result["ヒップ"] = size.hip ?? null;
       return result;
     }
 
     case "apparel.tops": {
-      result.shoulderWidth = size.shoulderWidth ?? null;
-      result.bodyWidth = size.bodyWidth ?? null;
-      result.bodyLength = size.bodyLength ?? null;
-      result.sleeveLength = size.sleeveLength ?? null;
-      result.neckWidth = size.neckWidth ?? null;
+      result["着丈"] = size.length ?? null;
+      result["身幅"] = size.width ?? null;
+      result["胸囲"] = size.chest ?? null;
+      result["肩幅"] = size.shoulder ?? null;
+      result["袖丈"] = size.sleeveLength ?? null;
       return result;
     }
 
