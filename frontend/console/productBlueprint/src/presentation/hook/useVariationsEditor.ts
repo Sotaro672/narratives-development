@@ -2,9 +2,9 @@
 import * as React from "react";
 
 import type {
-  ProductBlueprintSizeRow as SizeRow,
-  ModelNumberRow,
-} from "../../infrastructure/api/productBlueprintApi";
+  ApparelModelNumberRow as ModelNumberRow,
+  ApparelSizeRow as SizeRow,
+} from "../../domain/entity/apparel";
 
 import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
 
@@ -111,7 +111,9 @@ export function useVariationsEditor(
 
         const next: ModelNumberRow = { size: sizeLabel, color, code: trimmed };
 
-        if (idx === -1) return [...prev, next];
+        if (idx === -1) {
+          return [...prev, next];
+        }
 
         const copy = [...prev];
         copy[idx] = next;
@@ -135,7 +137,10 @@ export function useVariationsEditor(
   // ---------------------------------
   const onAddColor = React.useCallback(() => {
     const v = colorInput.trim();
-    if (!v || colors.includes(v)) return;
+
+    if (!v || colors.includes(v)) {
+      return;
+    }
 
     setColors((prev) => [...prev, v]);
     setColorInput("");
@@ -143,7 +148,10 @@ export function useVariationsEditor(
 
   const onRemoveColor = React.useCallback((name: string) => {
     const key = name.trim();
-    if (!key) return;
+
+    if (!key) {
+      return;
+    }
 
     setColors((prev) => prev.filter((c) => c !== key));
 
@@ -159,9 +167,14 @@ export function useVariationsEditor(
   const onChangeColorRgb = React.useCallback((name: string, hex: string) => {
     const colorName = name.trim();
     let value = String(hex ?? "").trim();
-    if (!colorName || !value) return;
 
-    if (!value.startsWith("#")) value = `#${value}`;
+    if (!colorName || !value) {
+      return;
+    }
+
+    if (!value.startsWith("#")) {
+      value = `#${value}`;
+    }
 
     setColorRgbMap((prev) => ({
       ...prev,
@@ -179,6 +192,7 @@ export function useVariationsEditor(
 
       if (target) {
         const sizeLabel = (target.sizeLabel ?? "").trim();
+
         if (sizeLabel) {
           setModelNumbers((prevMN) =>
             prevMN.filter((m) => m.size !== sizeLabel),
@@ -195,7 +209,11 @@ export function useVariationsEditor(
       const nextNum =
         prev.reduce((max, row) => {
           const n = Number(row.id);
-          if (Number.isNaN(n)) return max;
+
+          if (Number.isNaN(n)) {
+            return max;
+          }
+
           return n > max ? n : max;
         }, 0) + 1;
 

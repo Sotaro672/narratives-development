@@ -39,8 +39,9 @@ type usecases struct {
 	permissionUC    *uc.PermissionUsecase
 	printUC         *uc.PrintUsecase
 
-	productionUC       *productionapp.ProductionUsecase
-	productBlueprintUC *pbuc.ProductBlueprintUsecase
+	productionUC               *productionapp.ProductionUsecase
+	productBlueprintUC         *pbuc.ProductBlueprintUsecase
+	productBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
 
 	inspectionUC *inspectionapp.InspectionUsecase
 	productUC    *uc.ProductUsecase
@@ -153,6 +154,10 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.productBlueprintReviewRepo,
 	)
 
+	productBlueprintCategoryUC := uc.NewProductBlueprintCategoryUsecase(
+		r.productBlueprintCategoryRepo,
+	)
+
 	inspectionUC := inspectionapp.NewInspectionUsecase(
 		r.inspectionRepo,
 		r.productRepo,
@@ -191,7 +196,10 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
 	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
 
-	tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(r.tokenBlueprintRepo, uploader)
+	tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(
+		r.tokenBlueprintRepo,
+		uploader,
+	)
 	mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
 
 	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
@@ -293,8 +301,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		permissionUC:    permissionUC,
 		printUC:         printUC,
 
-		productionUC:       productionUC,
-		productBlueprintUC: productBlueprintUC,
+		productionUC:               productionUC,
+		productBlueprintUC:         productBlueprintUC,
+		productBlueprintCategoryUC: productBlueprintCategoryUC,
 
 		inspectionUC: inspectionUC,
 		productUC:    productUC,

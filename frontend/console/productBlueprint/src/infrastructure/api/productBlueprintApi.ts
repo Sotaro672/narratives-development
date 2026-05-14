@@ -1,214 +1,202 @@
-// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts
+// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintCategoryApi.ts
+
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
 
 import type {
-  ApparelMeasurements,
-  ApparelModelNumberRow,
-  ApparelModelVariationPayload,
-  ApparelSizeRow,
-  Fit,
-} from "../../domain/entity/apparel";
-
-import type {
-  CategoryFieldValues,
-  ProductBlueprintCategorySnapshot,
+  ProductBlueprintCategory,
+  ProductBlueprintCategoryKind,
 } from "../../domain/entity/productBlueprintCategory";
 
-import type { ModelNumber } from "../../../../model/src/application/modelCreateService";
-
-import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
-
-import {
-  createProductBlueprintHTTP,
-  appendModelRefsHTTP,
-} from "../repository/productBlueprintRepositoryHTTP";
-
-import {
-  createModelVariations,
-  type CreateModelVariationRequest,
-} from "../../../../model/src/infrastructure/repository/modelRepositoryHTTP";
-
-import type { ProductBlueprintDetailResponse } from "./productBlueprintDetailApi";
-
-// 日付表示は shared util に統一
-export const formatProductBlueprintDate = (iso?: string | null): string =>
-  safeDateLabelJa(iso, "");
-
-// ------------------------------------------------------
-// Product ID Tag
-// ------------------------------------------------------
-
-export type ProductIDTagType = "qr" | "nfc";
-
-export type ProductIDTag = {
-  type: ProductIDTagType;
+type ProductBlueprintCategoryListResponse = {
+  items?: ProductBlueprintCategory[];
+  totalCount?: number;
+  totalPages?: number;
+  page?: number;
+  perPage?: number;
 };
 
-// ------------------------------------------------------
-// 一覧表示用のUI行モデル
-// ------------------------------------------------------
-
-export type ProductBlueprintListRow = {
-  id: string;
-  productName: string;
-  brandLabel: string;
-  assigneeLabel: string;
-  tagLabel: string;
-  createdAt: string;
-  lastModifiedAt: string;
+type ProductBlueprintCategoryTreeResponse = {
+  items?: ProductBlueprintCategory[];
 };
 
-// ProductBlueprint 作成用：apparel サイズ行モデル
-export type ProductBlueprintSizeRow = ApparelSizeRow;
-
-// 詳細画面用：apparel モデルナンバー行モデル
-export type ModelNumberRow = ApparelModelNumberRow;
-
-/* =========================================================
- * 作成系 API（createProductBlueprint + variations 作成 + modelRefs append）
- * =======================================================*/
-
-export type CreateProductBlueprintParams = {
-  productName: string;
-  brandId: string;
-
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
-
-  fit: Fit;
-  material: string;
-  weight: number;
-  qualityAssurance: string[];
-
-  productIdTag: ProductIDTag;
-
-  companyId: string;
-  assigneeId?: string;
-  createdBy?: string;
-
-  colors: string[];
-  sizes: ProductBlueprintSizeRow[];
-  modelNumbers: ModelNumber[];
-  colorRgbMap?: Record<string, string>;
-
-  categoryFields?: CategoryFieldValues | null;
+export type ListProductBlueprintCategoriesParams = {
+  kind?: ProductBlueprintCategoryKind;
+  code?: string;
+  parentId?: string;
+  rootOnly?: boolean;
+  search?: string;
+  page?: number;
+  perPage?: number;
+  sort?: string;
+  order?: "asc" | "desc";
 };
 
-export type ProductBlueprintResponse = ProductBlueprintDetailResponse;
+function sortProductBlueprintCategories(
+  categories: ProductBlueprintCategory[],
+): ProductBlueprintCategory[] {
+  return [...categories].sort((a, b) => {
+    const ao = Number(a.displayOrder ?? 0);
+    const bo = Number(b.displayOrder ?? 0);
 
-export type NewModelVariationPayload = ApparelModelVariationPayload;
+    if (ao !== bo) {
+      return ao - bo;
+    }
 
-function assertProductBlueprintCategory(params: CreateProductBlueprintParams): void {
-  if (!params.productBlueprintCategoryId?.trim()) {
-    throw new Error("createProductBlueprintApi: productBlueprintCategoryId が空です");
-  }
-
-  if (!params.productBlueprintCategory?.id?.trim()) {
-    throw new Error("createProductBlueprintApi: productBlueprintCategory.id が空です");
-  }
-
-  if (params.productBlueprintCategoryId !== params.productBlueprintCategory.id) {
-    throw new Error(
-      "createProductBlueprintApi: productBlueprintCategoryId と productBlueprintCategory.id が一致しません",
-    );
-  }
+    return String(a.code ?? "").localeCompare(String(b.code ?? ""));
+  });
 }
 
-/**
- * ProductBlueprint の ID 抽出
- * backend 正: id
- */
-function extractProductBlueprintId(json: ProductBlueprintDetailResponse): string {
-  return typeof json.id === "string" ? json.id : "";
-}
-
-function dedupKeepOrder(xs: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-
-  for (const raw of xs ?? []) {
-    const v = String(raw ?? "").trim();
-    if (!v) continue;
-    if (seen.has(v)) continue;
-    seen.add(v);
-    out.push(v);
+function appendSearchParam(
+  params: URLSearchParams,
+  key: string,
+  value: string | number | boolean | null | undefined,
+): void {
+  if (value === null || value === undefined || value === "") {
+    return;
   }
 
-  return out;
+  params.set(key, String(value));
 }
 
-function normalizeMeasurements(
-  measurements: ApparelMeasurements | undefined,
-): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(measurements ?? {}).filter(([, value]) => value != null),
-  ) as Record<string, number>;
+function buildProductBlueprintCategoriesUrl(
+  params?: ListProductBlueprintCategoriesParams,
+): string {
+  const searchParams = new URLSearchParams();
+
+  appendSearchParam(searchParams, "kind", params?.kind);
+  appendSearchParam(searchParams, "code", params?.code);
+  appendSearchParam(searchParams, "parentId", params?.parentId);
+  appendSearchParam(searchParams, "rootOnly", params?.rootOnly);
+  appendSearchParam(searchParams, "search", params?.search);
+  appendSearchParam(searchParams, "page", params?.page ?? 1);
+  appendSearchParam(searchParams, "perPage", params?.perPage ?? 100);
+  appendSearchParam(searchParams, "sort", params?.sort ?? "displayOrder");
+  appendSearchParam(searchParams, "order", params?.order ?? "asc");
+
+  const query = searchParams.toString();
+
+  return `${API_BASE}/console/product-blueprint-categories${
+    query ? `?${query}` : ""
+  }`;
 }
 
-function toCreateModelVariationRequests(args: {
-  productBlueprintId: string;
-  variations: NewModelVariationPayload[];
-}): CreateModelVariationRequest[] {
-  const { productBlueprintId, variations } = args;
+async function fetchJsonOrThrow<T>(url: string, errorMessage: string): Promise<T> {
+  const headers = await getAuthHeadersOrThrow();
 
-  return variations.map((v) => ({
-    productBlueprintId,
-    modelNumber: String(v.modelNumber ?? ""),
-    size: String(v.sizeLabel ?? ""),
-    color: String(v.color ?? ""),
-    rgb: typeof v.rgb === "number" ? v.rgb : 0,
-    measurements: normalizeMeasurements(v.measurements),
-  }));
-}
-
-function shouldCreateApparelModelVariations(
-  params: CreateProductBlueprintParams,
-  variations: NewModelVariationPayload[],
-): boolean {
-  if (params.productBlueprintCategory.kind !== "apparel") {
-    return false;
-  }
-
-  return variations.length > 0;
-}
-
-/**
- * ProductBlueprint + apparel ModelVariations をまとめて作成し、
- * さらに modelRefs（modelIds）を append する API 呼び出し。
- *
- * - ProductBlueprint 自体の作成は createProductBlueprintHTTP に委譲
- * - apparel category の場合だけ variations を作成
- * - variations 作成で得られた modelIds を順序付きで append
- * - append の返り値（detail）を最終結果として返す
- */
-export async function createProductBlueprintApi(
-  params: CreateProductBlueprintParams,
-  variations: NewModelVariationPayload[],
-): Promise<ProductBlueprintResponse> {
-  assertProductBlueprintCategory(params);
-
-  const created = await createProductBlueprintHTTP(params);
-  const productBlueprintId = extractProductBlueprintId(created);
-
-  if (!productBlueprintId) {
-    throw new Error("createProductBlueprintApi: 作成後の id が空です");
-  }
-
-  if (!shouldCreateApparelModelVariations(params, variations)) {
-    return created;
-  }
-
-  const requests = toCreateModelVariationRequests({
-    productBlueprintId,
-    variations,
+  const res = await fetch(url, {
+    method: "GET",
+    headers,
   });
 
-  const modelIds = await createModelVariations(productBlueprintId, requests);
-  const cleaned = dedupKeepOrder(modelIds);
-
-  if (cleaned.length === 0) {
-    throw new Error("createProductBlueprintApi: modelIds が空です");
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `${errorMessage}（${res.status} ${res.statusText}）\n${detail}`,
+    );
   }
 
-  const detail = await appendModelRefsHTTP(productBlueprintId, cleaned);
-  return detail;
+  return (await res.json()) as T;
+}
+
+/**
+ * GET /console/product-blueprint-categories
+ *
+ * backend response:
+ * {
+ *   items: ProductBlueprintCategory[],
+ *   totalCount: number,
+ *   totalPages: number,
+ *   page: number,
+ *   perPage: number
+ * }
+ */
+export async function listProductBlueprintCategoriesApi(
+  params?: ListProductBlueprintCategoriesParams,
+): Promise<ProductBlueprintCategory[]> {
+  const url = buildProductBlueprintCategoriesUrl(params);
+
+  const json = await fetchJsonOrThrow<ProductBlueprintCategoryListResponse>(
+    url,
+    "商品カテゴリ一覧の取得に失敗しました",
+  );
+
+  return sortProductBlueprintCategories(json.items ?? []);
+}
+
+/**
+ * GET /console/product-blueprint-categories?kind={kind}
+ */
+export async function listProductBlueprintCategoriesByKindApi(
+  kind: ProductBlueprintCategoryKind,
+): Promise<ProductBlueprintCategory[]> {
+  return await listProductBlueprintCategoriesApi({
+    kind,
+    page: 1,
+    perPage: 100,
+    sort: "displayOrder",
+    order: "asc",
+  });
+}
+
+/**
+ * code 指定でカテゴリを1件取得する。
+ *
+ * backend handler は GetByCode 専用 route ではなく、
+ * List の query param code で絞り込む。
+ */
+export async function getProductBlueprintCategoryByCodeApi(
+  code: string,
+): Promise<ProductBlueprintCategory | null> {
+  const trimmed = String(code ?? "").trim();
+
+  if (!trimmed) {
+    throw new Error("商品カテゴリコードが空です。");
+  }
+
+  const items = await listProductBlueprintCategoriesApi({
+    code: trimmed,
+    page: 1,
+    perPage: 1,
+  });
+
+  return items[0] ?? null;
+}
+
+/**
+ * GET /console/product-blueprint-categories/tree
+ */
+export async function listProductBlueprintCategoryTreeApi(): Promise<
+  ProductBlueprintCategory[]
+> {
+  const url = `${API_BASE}/console/product-blueprint-categories/tree`;
+
+  const json = await fetchJsonOrThrow<ProductBlueprintCategoryTreeResponse>(
+    url,
+    "商品カテゴリツリーの取得に失敗しました",
+  );
+
+  return sortProductBlueprintCategories(json.items ?? []);
+}
+
+/**
+ * GET /console/product-blueprint-categories/{id}
+ */
+export async function getProductBlueprintCategoryByIdApi(
+  id: string,
+): Promise<ProductBlueprintCategory> {
+  const trimmed = String(id ?? "").trim();
+
+  if (!trimmed) {
+    throw new Error("商品カテゴリIDが空です。");
+  }
+
+  const url = `${API_BASE}/console/product-blueprint-categories/${encodeURIComponent(
+    trimmed,
+  )}`;
+
+  return await fetchJsonOrThrow<ProductBlueprintCategory>(
+    url,
+    "商品カテゴリの取得に失敗しました",
+  );
 }

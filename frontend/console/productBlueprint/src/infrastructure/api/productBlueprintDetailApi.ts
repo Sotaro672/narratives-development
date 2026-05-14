@@ -50,10 +50,16 @@ export type ProductBlueprintDetailResponse = {
   productBlueprintCategoryId: string;
   productBlueprintCategory: ProductBlueprintCategorySnapshot;
 
-  fit: string;
-  material: string;
-  weight: number;
-  qualityAssurance: string[];
+  /**
+   * 旧固定 field。
+   *
+   * backend 新仕様では categoryFields 側へ寄せていくが、
+   * 既存画面・既存データ互換のため response 型としては残す。
+   */
+  fit?: string | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null;
 
   productIdTag?: {
     type?: string | null;
@@ -77,6 +83,12 @@ export type ProductBlueprintDetailResponse = {
 
   modelVariations?: ApparelModelVariationResponse[];
 
+  /**
+   * backend ProductBlueprint.CategoryFields。
+   *
+   * brandId / productName / productIdTagType / description は含めない。
+   * color / size / measurements も model variation 側なので含めない。
+   */
   categoryFields?: CategoryFieldValues | null;
 };
 
@@ -93,10 +105,16 @@ export type UpdateProductBlueprintParams = {
   productBlueprintCategoryId: string;
   productBlueprintCategory: ProductBlueprintCategorySnapshot;
 
-  fit: string;
-  material: string;
-  weight: number;
-  qualityAssurance: string[];
+  /**
+   * 旧固定 field。
+   *
+   * 新仕様では categoryFields に寄せるが、
+   * 既存 UI / repository の段階移行のため optional として残す。
+   */
+  fit?: string | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null;
 
   productIdTagType: string | null;
 
@@ -114,6 +132,46 @@ export type UpdateProductBlueprintParams = {
 };
 
 export type { ProductBlueprintCategoryKind, ProductBlueprintCategorySnapshot };
+
+// ------------------------------------------------------
+// category kind helpers
+// ------------------------------------------------------
+
+export function getProductBlueprintDetailCategoryKind(
+  detail: ProductBlueprintDetailResponse | null | undefined,
+): ProductBlueprintCategoryKind | null {
+  return detail?.productBlueprintCategory?.kind ?? null;
+}
+
+export function isApparelProductBlueprintDetail(
+  detail: ProductBlueprintDetailResponse | null | undefined,
+): boolean {
+  return getProductBlueprintDetailCategoryKind(detail) === "apparel";
+}
+
+export function isAlcoholProductBlueprintDetail(
+  detail: ProductBlueprintDetailResponse | null | undefined,
+): boolean {
+  return getProductBlueprintDetailCategoryKind(detail) === "alcohol";
+}
+
+export function isCosmeticsProductBlueprintDetail(
+  detail: ProductBlueprintDetailResponse | null | undefined,
+): boolean {
+  return getProductBlueprintDetailCategoryKind(detail) === "cosmetics";
+}
+
+export function isHealthcareProductBlueprintDetail(
+  detail: ProductBlueprintDetailResponse | null | undefined,
+): boolean {
+  return getProductBlueprintDetailCategoryKind(detail) === "healthcare";
+}
+
+export function isOtherProductBlueprintDetail(
+  detail: ProductBlueprintDetailResponse | null | undefined,
+): boolean {
+  return getProductBlueprintDetailCategoryKind(detail) === "other";
+}
 
 // ------------------------------------------------------
 // GET /product-blueprints/{id} 詳細取得
@@ -136,5 +194,14 @@ export async function getProductBlueprintDetailApi(
     headers,
   });
 
-  return json;
+  return {
+    ...json,
+    fit: json.fit ?? null,
+    material: json.material ?? null,
+    weight: json.weight ?? null,
+    qualityAssurance: json.qualityAssurance ?? [],
+    categoryFields: json.categoryFields ?? null,
+    modelRefs: json.modelRefs ?? [],
+    modelVariations: json.modelVariations ?? [],
+  };
 }

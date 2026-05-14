@@ -41,7 +41,8 @@ type repos struct {
 	permissionRepo *fs.PermissionRepositoryFS
 	productRepo    *fs.ProductRepositoryFS
 
-	productBlueprintRepo *pbfs.ProductBlueprintRepositoryFS
+	productBlueprintRepo         *pbfs.ProductBlueprintRepositoryFS
+	productBlueprintCategoryRepo *fs.ProductBlueprintCategoryRepositoryFS
 
 	productBlueprintReviewRepo *fs.ProductBlueprintReviewRepositoryFS
 
@@ -101,6 +102,7 @@ func buildRepos(c *clients) *repos {
 	productRepo := fs.NewProductRepositoryFS(fsClient)
 
 	productBlueprintRepo := pbfs.NewProductBlueprintRepositoryFS(fsClient)
+	productBlueprintCategoryRepo := fs.NewProductBlueprintCategoryRepositoryFS(fsClient)
 
 	productBlueprintReviewRepo := fs.NewProductBlueprintReviewRepositoryFS(fsClient)
 
@@ -156,7 +158,8 @@ func buildRepos(c *clients) *repos {
 		permissionRepo: permissionRepo,
 		productRepo:    productRepo,
 
-		productBlueprintRepo: productBlueprintRepo,
+		productBlueprintRepo:         productBlueprintRepo,
+		productBlueprintCategoryRepo: productBlueprintCategoryRepo,
 
 		productBlueprintReviewRepo: productBlueprintReviewRepo,
 

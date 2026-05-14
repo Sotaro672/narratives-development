@@ -64,25 +64,26 @@ type Container struct {
 	BrandService   *branddom.Service
 
 	// Application-layer usecases
-	AccountUC          *uc.AccountUsecase
-	AnnouncementUC     *uc.AnnouncementUsecase
-	AvatarUC           *avatarUC.AvatarUsecase
-	PaymentMethodUC    *uc.PaymentMethodUsecase
-	BrandUC            *uc.BrandUsecase
-	CompanyUC          *uc.CompanyUsecase
-	InquiryUC          *uc.InquiryUsecase
-	InventoryUC        *uc.InventoryUsecase
-	ListUC             *listuc.ListUsecase
-	MemberUC           *uc.MemberUsecase
-	ModelUC            *uc.ModelUsecase
-	OrderUC            *uc.OrderUsecase
-	PaymentUC          *uc.PaymentUsecase
-	PermissionUC       *uc.PermissionUsecase
-	PrintUC            *uc.PrintUsecase
-	ProductionUC       *productionapp.ProductionUsecase
-	ProductBlueprintUC *pbuc.ProductBlueprintUsecase
-	ShippingAddressUC  *uc.ShippingAddressUsecase
-	TokenUC            *uc.TokenUsecase
+	AccountUC                  *uc.AccountUsecase
+	AnnouncementUC             *uc.AnnouncementUsecase
+	AvatarUC                   *avatarUC.AvatarUsecase
+	PaymentMethodUC            *uc.PaymentMethodUsecase
+	BrandUC                    *uc.BrandUsecase
+	CompanyUC                  *uc.CompanyUsecase
+	InquiryUC                  *uc.InquiryUsecase
+	InventoryUC                *uc.InventoryUsecase
+	ListUC                     *listuc.ListUsecase
+	MemberUC                   *uc.MemberUsecase
+	ModelUC                    *uc.ModelUsecase
+	OrderUC                    *uc.OrderUsecase
+	PaymentUC                  *uc.PaymentUsecase
+	PermissionUC               *uc.PermissionUsecase
+	PrintUC                    *uc.PrintUsecase
+	ProductionUC               *productionapp.ProductionUsecase
+	ProductBlueprintUC         *pbuc.ProductBlueprintUsecase
+	ProductBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
+	ShippingAddressUC          *uc.ShippingAddressUsecase
+	TokenUC                    *uc.TokenUsecase
 
 	TokenBlueprintUC      *tokenblueprintapp.TokenBlueprintUsecase
 	TokenBlueprintQueryUC *tokenblueprintapp.TokenBlueprintQueryUsecase
@@ -176,25 +177,26 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		CompanyService: services.companySvc,
 		BrandService:   services.brandSvc,
 
-		AccountUC:          u.accountUC,
-		AnnouncementUC:     u.announcementUC,
-		AvatarUC:           u.avatarUC,
-		PaymentMethodUC:    u.paymentMethodUC,
-		BrandUC:            u.brandUC,
-		CompanyUC:          u.companyUC,
-		InquiryUC:          u.inquiryUC,
-		InventoryUC:        u.inventoryUC,
-		ListUC:             u.listUC,
-		MemberUC:           u.memberUC,
-		ModelUC:            u.modelUC,
-		OrderUC:            u.orderUC,
-		PaymentUC:          u.paymentUC,
-		PermissionUC:       u.permissionUC,
-		PrintUC:            u.printUC,
-		ProductionUC:       u.productionUC,
-		ProductBlueprintUC: u.productBlueprintUC,
-		ShippingAddressUC:  u.shippingAddressUC,
-		TokenUC:            u.tokenUC,
+		AccountUC:                  u.accountUC,
+		AnnouncementUC:             u.announcementUC,
+		AvatarUC:                   u.avatarUC,
+		PaymentMethodUC:            u.paymentMethodUC,
+		BrandUC:                    u.brandUC,
+		CompanyUC:                  u.companyUC,
+		InquiryUC:                  u.inquiryUC,
+		InventoryUC:                u.inventoryUC,
+		ListUC:                     u.listUC,
+		MemberUC:                   u.memberUC,
+		ModelUC:                    u.modelUC,
+		OrderUC:                    u.orderUC,
+		PaymentUC:                  u.paymentUC,
+		PermissionUC:               u.permissionUC,
+		PrintUC:                    u.printUC,
+		ProductionUC:               u.productionUC,
+		ProductBlueprintUC:         u.productBlueprintUC,
+		ProductBlueprintCategoryUC: u.productBlueprintCategoryUC,
+		ShippingAddressUC:          u.shippingAddressUC,
+		TokenUC:                    u.tokenUC,
 
 		TokenBlueprintUC:      u.tokenBlueprintUC,
 		TokenBlueprintQueryUC: u.tokenBlueprintQueryUC,

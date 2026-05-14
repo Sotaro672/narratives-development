@@ -9,19 +9,163 @@ import {
   type ApparelSizeRow,
 } from "../domain/entity/apparel";
 
-import { createProductBlueprintApi } from "../infrastructure/api/productBlueprintApi";
-
 import type {
-  CreateProductBlueprintParams,
-  ProductBlueprintResponse,
-} from "../infrastructure/api/productBlueprintApi";
+  CategoryFieldValues,
+  ProductBlueprintCategorySnapshot,
+} from "../domain/entity/productBlueprintCategory";
 
 import { hexToRgbInt } from "../../../shell/src/shared/util/color";
 
-export type {
-  CreateProductBlueprintParams,
-  ProductBlueprintResponse,
-} from "../infrastructure/api/productBlueprintApi";
+import type { ProductBlueprintDetailResponse } from "../infrastructure/api/productBlueprintDetailApi";
+
+import {
+  appendModelRefsHTTP,
+  createProductBlueprintHTTP,
+} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
+
+import {
+  createModelVariations,
+  type CreateModelVariationRequest,
+} from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
+
+// ------------------------------------------------------
+// Product ID Tag
+// ------------------------------------------------------
+
+export type ProductIDTagType = "qr" | "nfc";
+
+export type ProductIDTag = {
+  type: ProductIDTagType;
+};
+
+// ------------------------------------------------------
+// 作成用型
+// ------------------------------------------------------
+
+export type CreateProductBlueprintModelNumber = {
+  size: string;
+  color: string;
+  code: string;
+};
+
+export type CreateProductBlueprintParams = {
+  productName: string;
+  brandId: string;
+
+  productBlueprintCategoryId: string;
+  productBlueprintCategory: ProductBlueprintCategorySnapshot;
+
+  fit?: string | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null;
+
+  productIdTag: ProductIDTag;
+
+  companyId: string;
+  assigneeId?: string;
+  createdBy?: string;
+
+  colors?: string[];
+  sizes?: ApparelSizeRow[];
+  modelNumbers?: CreateProductBlueprintModelNumber[];
+  colorRgbMap?: Record<string, string>;
+
+  categoryFields?: CategoryFieldValues | null;
+};
+
+export type ProductBlueprintResponse = ProductBlueprintDetailResponse;
+
+export type NewModelVariationPayload = ApparelModelVariationPayload;
+
+// ------------------------------
+// validation helpers
+// ------------------------------
+
+function assertProductBlueprintCategory(
+  params: CreateProductBlueprintParams,
+): void {
+  if (!params.productBlueprintCategoryId?.trim()) {
+    throw new Error("createProductBlueprint: productBlueprintCategoryId が空です");
+  }
+
+  if (!params.productBlueprintCategory?.id?.trim()) {
+    throw new Error("createProductBlueprint: productBlueprintCategory.id が空です");
+  }
+
+  if (params.productBlueprintCategoryId !== params.productBlueprintCategory.id) {
+    throw new Error(
+      "createProductBlueprint: productBlueprintCategoryId と productBlueprintCategory.id が一致しません",
+    );
+  }
+}
+
+function extractProductBlueprintId(json: ProductBlueprintDetailResponse): string {
+  return typeof json.id === "string" ? json.id : "";
+}
+
+function dedupKeepOrder(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const raw of values) {
+    const value = String(raw ?? "").trim();
+
+    if (!value) {
+      continue;
+    }
+
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    out.push(value);
+  }
+
+  return out;
+}
+
+function normalizeMeasurementsForRequest(
+  measurements: ApparelMeasurements | undefined,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+
+  for (const [key, value] of Object.entries(measurements ?? {})) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      out[key] = value;
+    }
+  }
+
+  return out;
+}
+
+function toCreateModelVariationRequests(args: {
+  productBlueprintId: string;
+  variations: NewModelVariationPayload[];
+}): CreateModelVariationRequest[] {
+  const { productBlueprintId, variations } = args;
+
+  return variations.map((variation): CreateModelVariationRequest => ({
+    productBlueprintId,
+    modelNumber: String(variation.modelNumber ?? ""),
+    size: String(variation.sizeLabel ?? ""),
+    color: String(variation.color ?? ""),
+    rgb: typeof variation.rgb === "number" ? variation.rgb : 0,
+    measurements: normalizeMeasurementsForRequest(variation.measurements),
+  }));
+}
+
+function shouldAppendModelRefs(
+  params: CreateProductBlueprintParams,
+  variations: NewModelVariationPayload[],
+): boolean {
+  if (params.productBlueprintCategory.kind !== "apparel") {
+    return false;
+  }
+
+  return variations.length > 0;
+}
 
 // ------------------------------
 // apparel measurements builder
@@ -141,27 +285,27 @@ function toApparelModelVariationPayload(
  * - 重複キーは後勝ち
  */
 function buildModelNumberMap(
-  modelNumbers: Array<{ size: string; color: string; code: string }> | undefined,
+  modelNumbers: CreateProductBlueprintModelNumber[] | undefined,
 ): Map<string, string> {
-  const m = new Map<string, string>();
+  const map = new Map<string, string>();
 
   if (!modelNumbers || modelNumbers.length === 0) {
-    return m;
+    return map;
   }
 
-  for (const mn of modelNumbers) {
-    const size = String(mn.size ?? "").trim();
-    const color = String(mn.color ?? "").trim();
-    const code = String(mn.code ?? "").trim();
+  for (const modelNumber of modelNumbers) {
+    const size = String(modelNumber.size ?? "").trim();
+    const color = String(modelNumber.color ?? "").trim();
+    const code = String(modelNumber.code ?? "").trim();
 
     if (!size || !color || !code) {
       continue;
     }
 
-    m.set(`${size}__${color}`, code);
+    map.set(`${size}__${color}`, code);
   }
 
-  return m;
+  return map;
 }
 
 function shouldCreateApparelModelVariations(
@@ -174,6 +318,38 @@ function shouldCreateApparelModelVariations(
     categoryCode === "apparel.outerwear" ||
     categoryCode === "apparel.shoes"
   );
+}
+
+async function createProductBlueprintWithVariations(
+  params: CreateProductBlueprintParams,
+  variations: NewModelVariationPayload[],
+): Promise<ProductBlueprintResponse> {
+  assertProductBlueprintCategory(params);
+
+  const created = await createProductBlueprintHTTP(params);
+  const productBlueprintId = extractProductBlueprintId(created);
+
+  if (!productBlueprintId) {
+    throw new Error("createProductBlueprint: 作成後の id が空です");
+  }
+
+  if (!shouldAppendModelRefs(params, variations)) {
+    return created;
+  }
+
+  const requests = toCreateModelVariationRequests({
+    productBlueprintId,
+    variations,
+  });
+
+  const modelIds = await createModelVariations(productBlueprintId, requests);
+  const cleanedModelIds = dedupKeepOrder(modelIds);
+
+  if (cleanedModelIds.length === 0) {
+    throw new Error("createProductBlueprint: modelIds が空です");
+  }
+
+  return await appendModelRefsHTTP(productBlueprintId, cleanedModelIds);
 }
 
 // ------------------------------
@@ -190,7 +366,7 @@ export async function createProductBlueprint(
    * productBlueprint 本体のみ作成する。
    */
   if (!categoryCode) {
-    return await createProductBlueprintApi(params, []);
+    return await createProductBlueprintWithVariations(params, []);
   }
 
   /**
@@ -198,18 +374,18 @@ export async function createProductBlueprint(
    * ModelVariation は作成しない。
    */
   if (!shouldCreateApparelModelVariations(categoryCode)) {
-    return await createProductBlueprintApi(params, []);
+    return await createProductBlueprintWithVariations(params, []);
   }
 
   const variations: ApparelModelVariationPayload[] = [];
 
   // displayOrder の採番元を「色登録順 → サイズ登録順」に固定
-  const colors = (params.colors ?? [])
-    .map((c) => String(c).trim())
-    .filter(Boolean);
+  const colors: string[] = (params.colors ?? [])
+    .map((color: string) => String(color).trim())
+    .filter((color: string) => color.length > 0);
 
-  const sizes = (params.sizes ?? []).filter(
-    (s) => String(s.sizeLabel ?? "").trim() !== "",
+  const sizes: ApparelSizeRow[] = (params.sizes ?? []).filter(
+    (size: ApparelSizeRow) => String(size.sizeLabel ?? "").trim() !== "",
   );
 
   const colorRgbMap = params.colorRgbMap ?? {};
@@ -247,5 +423,5 @@ export async function createProductBlueprint(
     }
   }
 
-  return await createProductBlueprintApi(params, variations);
+  return await createProductBlueprintWithVariations(params, variations);
 }

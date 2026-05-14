@@ -1,40 +1,35 @@
 // frontend/console/productBlueprint/src/presentation/components/productBlueprintCard.tsx
 
 import * as React from "react";
-import { ShieldCheck, X, Package2 } from "lucide-react";
+import { Package2 } from "lucide-react";
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "../../../../shell/src/shared/ui";
-import { Badge } from "../../../../shell/src/shared/ui/badge";
-import { Button } from "../../../../shell/src/shared/ui/button";
-import { Input } from "../../../../shell/src/shared/ui/input";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "../../../../shell/src/shared/ui/popover";
-import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
-
-import {
-  FIT_OPTIONS,
-  WASH_TAG_OPTIONS,
-  type Fit,
-  type WashTagOption,
-} from "../../domain/entity/apparel";
 
 import type {
+  CategoryFieldValue,
+  CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
 } from "../../domain/entity/productBlueprintCategory";
 
-type BrandOption = {
-  id: string;
-  name: string;
-};
+import type { Fit } from "../../domain/entity/apparel";
 
-type CategoryOption = ProductBlueprintCategorySnapshot;
+import {
+  getCategoryCardVisibility,
+} from "../../domain/entity/categoryCardVisibility";
+
+import ProductBlueprintBasicFields from "./ProductBlueprintBasicFields";
+import ProductBlueprintBrandField, {
+  type BrandOption,
+} from "./ProductBlueprintBrandField";
+import ProductBlueprintCategoryField, {
+  type ProductBlueprintCategoryOption,
+} from "./ProductBlueprintCategoryField";
+import CategoryFieldsCard from "./CategoryFieldsCard";
+import WashTagField from "./WashTagField";
 
 export type ProductBlueprintPatchInput = {
   productName?: string | null;
@@ -48,6 +43,8 @@ export type ProductBlueprintPatchInput = {
   material?: string | null;
   weight?: number | null;
   qualityAssurance?: string[] | null;
+  categoryFields?: CategoryFieldValues | null;
+
   assigneeId?: string | null;
 };
 
@@ -65,7 +62,7 @@ type ProductBlueprintCardProps = {
 
   productBlueprintCategoryId?: string;
   productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
-  productBlueprintCategoryOptions?: CategoryOption[];
+  productBlueprintCategoryOptions?: ProductBlueprintCategoryOption[];
   productBlueprintCategoryLoading?: boolean;
   productBlueprintCategoryError?: Error | null;
   onChangeProductBlueprintCategory?: (
@@ -77,6 +74,9 @@ type ProductBlueprintCardProps = {
   weight?: number;
   washTags?: string[];
 
+  categoryFields?: CategoryFieldValues | null;
+  onChangeCategoryField?: (key: string, value: CategoryFieldValue) => void;
+
   onChangeProductName?: (v: string) => void;
   onChangeFit?: (v: Fit) => void;
   onChangeMaterials?: (v: string) => void;
@@ -86,25 +86,10 @@ type ProductBlueprintCardProps = {
   mode?: "edit" | "view";
 };
 
-function asTrimmedString(v: unknown): string {
-  return String(v ?? "").trim();
-}
-
-function resolveCategoryLabel(
+function getCategoryCode(
   category: ProductBlueprintCategorySnapshot | null | undefined,
 ): string {
-  if (!category) return "";
-
-  return (
-    asTrimmedString(category.nameJa) ||
-    asTrimmedString(category.nameEn) ||
-    asTrimmedString(category.code) ||
-    asTrimmedString(category.id)
-  );
-}
-
-function resolveCategoryOptionLabel(opt: ProductBlueprintCategorySnapshot): string {
-  return resolveCategoryLabel(opt);
+  return String(category?.code ?? "").trim();
 }
 
 const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
@@ -129,16 +114,23 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   materials,
   weight,
   washTags,
+
+  categoryFields,
+  onChangeCategoryField,
+
   onChangeProductName,
   onChangeFit,
   onChangeMaterials,
   onChangeWeight,
   onChangeWashTags,
+
   mode = "edit",
 }) => {
   const isEdit = mode === "edit";
 
-  const mergedProductName = productName ?? productBlueprintPatch?.productName ?? "";
+  const mergedProductName =
+    productName ?? productBlueprintPatch?.productName ?? "";
+
   const mergedBrandId = brandId ?? productBlueprintPatch?.brandId ?? "";
   const mergedBrandName = brand ?? productBlueprintPatch?.brandName ?? "";
 
@@ -153,6 +145,16 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
     mergedCategory?.id ??
     "";
 
+  const mergedCategoryFields =
+    categoryFields ?? productBlueprintPatch?.categoryFields ?? null;
+
+  const categoryCode = getCategoryCode(mergedCategory);
+
+  const visibility = React.useMemo(
+    () => getCategoryCardVisibility(categoryCode),
+    [categoryCode],
+  );
+
   const mergedFit =
     fit ??
     ((typeof productBlueprintPatch?.fit === "string"
@@ -160,13 +162,22 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
       : undefined) as Fit | undefined) ??
     ("" as Fit);
 
-  const mergedMaterials = materials ?? productBlueprintPatch?.material ?? "";
+  const mergedMaterials =
+    materials ??
+    (typeof mergedCategoryFields?.material === "string"
+      ? mergedCategoryFields.material
+      : undefined) ??
+    productBlueprintPatch?.material ??
+    "";
+
   const mergedWeight =
     typeof weight === "number"
       ? weight
-      : typeof productBlueprintPatch?.weight === "number"
-        ? productBlueprintPatch.weight
-        : 0;
+      : typeof mergedCategoryFields?.weight === "number"
+        ? mergedCategoryFields.weight
+        : typeof productBlueprintPatch?.weight === "number"
+          ? productBlueprintPatch.weight
+          : 0;
 
   const mergedWashTags = Array.isArray(washTags)
     ? washTags
@@ -176,62 +187,6 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         )
       : [];
 
-  const safeProductName = mergedProductName ?? "";
-  const safeMaterials = mergedMaterials ?? "";
-  const safeWeight =
-    typeof mergedWeight === "number" && !Number.isNaN(mergedWeight) ? mergedWeight : 0;
-  const safeWashTags = Array.isArray(mergedWashTags) ? mergedWashTags : [];
-  const safeFit = mergedFit ?? ("" as Fit);
-
-  const displayCategory = React.useMemo(() => {
-    if (mergedCategory) {
-      return resolveCategoryLabel(mergedCategory);
-    }
-
-    if (mergedCategoryId) {
-      const found = productBlueprintCategoryOptions?.find(
-        (opt) => opt.id === mergedCategoryId,
-      );
-      return resolveCategoryLabel(found) || mergedCategoryId;
-    }
-
-    return "";
-  }, [mergedCategory, mergedCategoryId, productBlueprintCategoryOptions]);
-
-  const selectedBrandName =
-    brandOptions?.find((b) => b.id === mergedBrandId)?.name ?? "";
-
-  const displayBrandName =
-    String(mergedBrandName ?? "").trim() ||
-    String(selectedBrandName ?? "").trim() ||
-    (mergedBrandId ? `(${mergedBrandId})` : "");
-
-  const washTagGroups = React.useMemo(() => {
-    const map = new Map<string, WashTagOption[]>();
-
-    for (const opt of WASH_TAG_OPTIONS) {
-      const cat = opt.category;
-      const list = map.get(cat) ?? [];
-      list.push(opt);
-      map.set(cat, list);
-    }
-
-    return Array.from(map.entries());
-  }, []);
-
-  const handleToggleWashTag = React.useCallback(
-    (value: string) => {
-      if (!onChangeWashTags) return;
-
-      if (safeWashTags.includes(value)) {
-        onChangeWashTags(safeWashTags.filter((t) => t !== value));
-      } else {
-        onChangeWashTags([...safeWashTags, value]);
-      }
-    },
-    [onChangeWashTags, safeWashTags],
-  );
-
   return (
     <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
@@ -240,259 +195,55 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
       </CardHeader>
 
       <CardContent className="box__body">
-        <div className="label">プロダクト名</div>
-        {isEdit ? (
-          <Input
-            value={safeProductName}
-            onChange={(e) => onChangeProductName?.(e.target.value)}
-            aria-label="プロダクト名"
+        <ProductBlueprintBasicFields
+          productName={mergedProductName}
+          mode={mode}
+          onChangeProductName={onChangeProductName}
+        />
+
+        <ProductBlueprintBrandField
+          brandId={mergedBrandId}
+          brandName={mergedBrandName}
+          brandOptions={brandOptions}
+          brandLoading={brandLoading}
+          brandError={brandError}
+          mode={mode}
+          onChangeBrandId={onChangeBrandId}
+        />
+
+        <ProductBlueprintCategoryField
+          categoryId={mergedCategoryId}
+          category={mergedCategory}
+          categoryOptions={productBlueprintCategoryOptions}
+          categoryLoading={productBlueprintCategoryLoading}
+          categoryError={productBlueprintCategoryError}
+          mode={mode}
+          onChangeCategory={onChangeProductBlueprintCategory}
+        />
+
+        <CategoryFieldsCard
+          categoryCode={categoryCode}
+          fit={mergedFit}
+          material={String(mergedMaterials ?? "")}
+          weight={
+            typeof mergedWeight === "number" && !Number.isNaN(mergedWeight)
+              ? mergedWeight
+              : 0
+          }
+          categoryFields={mergedCategoryFields}
+          mode={mode}
+          onChangeFit={onChangeFit}
+          onChangeMaterials={onChangeMaterials}
+          onChangeWeight={onChangeWeight}
+          onChangeCategoryField={onChangeCategoryField}
+        />
+
+        {visibility.showWashTags && (
+          <WashTagField
+            value={mergedWashTags}
+            mode={mode}
+            onChange={onChangeWashTags}
           />
-        ) : (
-          <Input
-            value={safeProductName}
-            variant="readonly"
-            readOnly
-            aria-label="プロダクト名"
-          />
-        )}
-
-        <div className="label">ブランド</div>
-        {isEdit && brandOptions && onChangeBrandId ? (
-          <div className="mb-2 space-y-1">
-            <Popover>
-              <PopoverTrigger>
-                <Button
-                  variant="outline"
-                  className="w-full justify-between pbc-select-trigger"
-                  aria-label="ブランドを選択"
-                >
-                  {selectedBrandName || "ブランドを選択してください。"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="p-1">
-                {brandOptions.map((b) => (
-                  <div
-                    key={b.id}
-                    className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                      mergedBrandId === b.id
-                        ? "bg-blue-100 text-blue-700 font-medium"
-                        : ""
-                    }`}
-                    onClick={() => onChangeBrandId(b.id)}
-                  >
-                    {b.name}
-                  </div>
-                ))}
-              </PopoverContent>
-            </Popover>
-
-            {brandLoading && (
-              <p className="text-xs text-slate-400">ブランドを取得中…</p>
-            )}
-            {brandError && (
-              <p className="text-xs text-red-500">
-                ブランド一覧の取得に失敗しました。
-              </p>
-            )}
-          </div>
-        ) : (
-          <Input
-            value={displayBrandName}
-            variant="readonly"
-            readOnly
-            aria-label="ブランド"
-          />
-        )}
-
-        <div className="pbc-fit-row">
-          <div className="flex-1">
-            <div className="label">商品カテゴリ</div>
-            {isEdit && productBlueprintCategoryOptions && onChangeProductBlueprintCategory ? (
-              <Popover>
-                <PopoverTrigger>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between pbc-select-trigger"
-                    aria-label="商品カテゴリを選択"
-                  >
-                    {displayCategory || "商品カテゴリを選択してください。"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="p-1">
-                  {productBlueprintCategoryOptions.map(
-                    (opt: ProductBlueprintCategorySnapshot) => (
-                      <div
-                        key={opt.id}
-                        className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                          mergedCategoryId === opt.id
-                            ? "bg-blue-100 text-blue-700 font-medium"
-                            : ""
-                        }`}
-                        onClick={() => onChangeProductBlueprintCategory(opt)}
-                      >
-                        {resolveCategoryOptionLabel(opt)}
-                      </div>
-                    ),
-                  )}
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <Input
-                value={displayCategory}
-                variant="readonly"
-                readOnly
-                aria-label="商品カテゴリ"
-              />
-            )}
-
-            {isEdit && productBlueprintCategoryLoading && (
-              <p className="text-xs text-slate-400">商品カテゴリを取得中…</p>
-            )}
-            {isEdit && productBlueprintCategoryError && (
-              <p className="text-xs text-red-500">
-                商品カテゴリ一覧の取得に失敗しました。
-              </p>
-            )}
-          </div>
-
-          <div className="flex-1">
-            <div className="label">フィット</div>
-            {isEdit ? (
-              <Popover>
-                <PopoverTrigger>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between pbc-select-trigger"
-                    aria-label="フィットを選択"
-                  >
-                    {safeFit || "フィットを選択してください。"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="p-1">
-                  {FIT_OPTIONS.map((opt: { value: Fit; label: string }) => (
-                    <div
-                      key={opt.value}
-                      className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                        safeFit === opt.value
-                          ? "bg-blue-100 text-blue-700 font-medium"
-                          : ""
-                      }`}
-                      onClick={() => onChangeFit?.(opt.value)}
-                    >
-                      {opt.label}
-                    </div>
-                  ))}
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <Input
-                value={safeFit}
-                variant="readonly"
-                readOnly
-                aria-label="フィット"
-              />
-            )}
-          </div>
-        </div>
-
-        <div className="label">素材</div>
-        {isEdit ? (
-          <Input
-            value={safeMaterials}
-            onChange={(e) => onChangeMaterials?.(e.target.value)}
-            aria-label="素材"
-          />
-        ) : (
-          <Input
-            value={safeMaterials}
-            variant="readonly"
-            readOnly
-            aria-label="素材"
-          />
-        )}
-
-        <div className="label">重さ</div>
-        <div className="flex gap-8 items-center">
-          {isEdit ? (
-            <>
-              <Input
-                type="number"
-                value={safeWeight}
-                onChange={(e) => onChangeWeight?.(Number(e.target.value) || 0)}
-                aria-label="重さ"
-              />
-              <span className="suffix">g</span>
-            </>
-          ) : (
-            <>
-              <Input
-                value={safeWeight ? `${safeWeight}` : ""}
-                variant="readonly"
-                readOnly
-                aria-label="重さ"
-              />
-              <span className="suffix">g</span>
-            </>
-          )}
-        </div>
-
-        <div className="label">品質保証（洗濯方法タグ）</div>
-        <div className="chips flex flex-wrap gap-2">
-          {safeWashTags.map((t) => (
-            <Badge key={t} className="chip inline-flex items-center gap-1.5 px-2 py-1">
-              <ShieldCheck size={14} />
-              {t}
-              {isEdit && onChangeWashTags && (
-                <button
-                  onClick={() => onChangeWashTags(safeWashTags.filter((x) => x !== t))}
-                  className="chip-remove"
-                  aria-label={`${t} を削除`}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </Badge>
-          ))}
-        </div>
-
-        {isEdit && onChangeWashTags && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {washTagGroups.map(([category, options]) => (
-              <Popover key={category}>
-                <PopoverTrigger>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="btn"
-                    aria-label={`${category} のタグを追加`}
-                  >
-                    {category}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="p-2 space-y-1 w-64">
-                  {options.map((opt: WashTagOption) => {
-                    const checked = safeWashTags.includes(opt.value);
-                    const checkboxId = `wash-tag-${opt.value}`;
-
-                    return (
-                      <label
-                        key={opt.value}
-                        htmlFor={checkboxId}
-                        className="flex items-center gap-2 text-sm cursor-pointer py-0.5"
-                      >
-                        <Checkbox
-                          id={checkboxId}
-                          checked={checked}
-                          onCheckedChange={() => handleToggleWashTag(opt.value)}
-                        />
-                        <span>{opt.label}</span>
-                      </label>
-                    );
-                  })}
-                </PopoverContent>
-              </Popover>
-            ))}
-          </div>
         )}
       </CardContent>
     </Card>

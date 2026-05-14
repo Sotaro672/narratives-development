@@ -1,5 +1,7 @@
 // frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx
 
+import * as React from "react";
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import { AdminCard } from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../components/productBlueprintCard";
@@ -7,10 +9,20 @@ import ColorVariationCard from "../../../../model/src/presentation/components/Co
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
 
-// ★ モデルナンバー用のロジックは model 側の hook を利用
+// モデルナンバー用のロジックは model 側の hook を利用
 import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
 
 import { useProductBlueprintCreate } from "../hook/useProductBlueprintCreate";
+
+function shouldShowModelVariationCards(categoryCode: string): boolean {
+  return (
+    categoryCode === "apparel.tops" ||
+    categoryCode === "apparel.bottoms" ||
+    categoryCode === "apparel.dress" ||
+    categoryCode === "apparel.outerwear" ||
+    categoryCode === "apparel.shoes"
+  );
+}
 
 export default function ProductBlueprintCreate() {
   const {
@@ -27,11 +39,15 @@ export default function ProductBlueprintCreate() {
     productBlueprintCategoryId,
     productBlueprintCategory,
     productBlueprintCategoryLabel,
+    productBlueprintCategoryOptions,
+    productBlueprintCategoryLoading,
+    productBlueprintCategoryError,
     isApparelCategory,
     fit,
     material,
     weight,
     qualityAssurance,
+    categoryFields,
 
     // 商品カテゴリから導出された採寸項目
     measurementOptions,
@@ -42,12 +58,15 @@ export default function ProductBlueprintCreate() {
     colorRgbMap,
     sizes,
     modelNumbers,
+
     onChangeProductName,
     onChangeProductBlueprintCategory,
     onChangeFit,
     onChangeMaterial,
     onChangeWeight,
     onChangeQualityAssurance,
+    onChangeCategoryField,
+
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
@@ -73,9 +92,16 @@ export default function ProductBlueprintCreate() {
     onBack,
   } = useProductBlueprintCreate();
 
+  const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
+
+  const showModelVariationCards = React.useMemo(
+    () => isApparelCategory && shouldShowModelVariationCards(categoryCode),
+    [isApparelCategory, categoryCode],
+  );
+
   // -----------------------------
   // モデルナンバー表示用の hook（model 側）
-  //   ※ rgb を hook 経由で渡す場合は、ここで colorRgbMap を useModelCard に渡す
+  // rgb を hook 経由で渡すため colorRgbMap も渡す
   // -----------------------------
   const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
     sizes,
@@ -85,14 +111,13 @@ export default function ProductBlueprintCreate() {
   });
 
   // UI 変更時に「model 側の内部状態」と「productBlueprintCreate の状態」の両方を更新
-  const handleChangeModelNumber = (
-    sizeLabel: string,
-    color: string,
-    nextCode: string,
-  ) => {
-    uiOnChangeModelNumber(sizeLabel, color, nextCode);
-    onChangeModelNumber(sizeLabel, color, nextCode);
-  };
+  const handleChangeModelNumber = React.useCallback(
+    (sizeLabel: string, color: string, nextCode: string) => {
+      uiOnChangeModelNumber(sizeLabel, color, nextCode);
+      onChangeModelNumber(sizeLabel, color, nextCode);
+    },
+    [uiOnChangeModelNumber, onChangeModelNumber],
+  );
 
   return (
     <PageStyle
@@ -113,16 +138,21 @@ export default function ProductBlueprintCreate() {
           onChangeBrandId={onChangeBrandId}
           productBlueprintCategoryId={productBlueprintCategoryId}
           productBlueprintCategory={productBlueprintCategory}
+          productBlueprintCategoryOptions={productBlueprintCategoryOptions}
+          productBlueprintCategoryLoading={productBlueprintCategoryLoading}
+          productBlueprintCategoryError={productBlueprintCategoryError}
           onChangeProductBlueprintCategory={onChangeProductBlueprintCategory}
           fit={fit}
           materials={material}
           weight={weight}
           washTags={qualityAssurance}
+          categoryFields={categoryFields}
           onChangeProductName={onChangeProductName}
           onChangeFit={onChangeFit}
           onChangeMaterials={onChangeMaterial}
           onChangeWeight={onChangeWeight}
           onChangeWashTags={onChangeQualityAssurance}
+          onChangeCategoryField={onChangeCategoryField}
         />
 
         {!productBlueprintCategory && (
@@ -131,13 +161,13 @@ export default function ProductBlueprintCreate() {
           </p>
         )}
 
-        {productBlueprintCategory && !isApparelCategory && (
+        {productBlueprintCategory && !showModelVariationCards && (
           <p className="mt-2 text-xs text-slate-500">
             選択中の商品カテゴリ: {productBlueprintCategoryLabel}
           </p>
         )}
 
-        {isApparelCategory && (
+        {showModelVariationCards && (
           <>
             <ColorVariationCard
               colors={colors}

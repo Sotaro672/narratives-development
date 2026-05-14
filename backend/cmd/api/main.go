@@ -131,7 +131,7 @@ func main() {
 	// ------------------------------------------------------------
 	router := httpin.NewRouter(deps)
 
-	fullMux.Handle("/console/", http.StripPrefix("/console", router))
+	fullMux.Handle("/console/", router)
 	fullMux.Handle("/console", http.RedirectHandler("/console/", http.StatusPermanentRedirect))
 	fullMux.Handle("/", router)
 

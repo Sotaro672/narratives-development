@@ -17,31 +17,32 @@ type RouterDeps struct {
 	BootstrapMw *middleware.BootstrapAuthMiddleware
 
 	// Handlers（生成はDI側）
-	AuthBootstrap    http.Handler
-	Accounts         http.Handler
-	Announcements    http.Handler
-	Permissions      http.Handler
-	Brands           http.Handler
-	Companies        http.Handler
-	Inquiries        http.Handler
-	Inventories      http.Handler
-	Lists            http.Handler
-	ProductsPrint    http.Handler
-	ProductBP        http.Handler
-	TokenBP          http.Handler
-	Messages         http.Handler
-	Orders           http.Handler
-	Wallets          http.Handler
-	Members          http.Handler
-	MemberInvitation http.Handler
-	Productions      http.Handler
-	Models           http.Handler
-	Inspector        http.Handler
-	Mint             http.Handler
-	OwnerResolve     http.Handler
-	Users            http.Handler
-	Invitation       http.Handler
-	Sales            http.Handler
+	AuthBootstrap       http.Handler
+	Accounts            http.Handler
+	Announcements       http.Handler
+	Permissions         http.Handler
+	Brands              http.Handler
+	Companies           http.Handler
+	Inquiries           http.Handler
+	Inventories         http.Handler
+	Lists               http.Handler
+	ProductsPrint       http.Handler
+	ProductBP           http.Handler
+	ProductBPCategories http.Handler
+	TokenBP             http.Handler
+	Messages            http.Handler
+	Orders              http.Handler
+	Wallets             http.Handler
+	Members             http.Handler
+	MemberInvitation    http.Handler
+	Productions         http.Handler
+	Models              http.Handler
+	Inspector           http.Handler
+	Mint                http.Handler
+	OwnerResolve        http.Handler
+	Users               http.Handler
+	Invitation          http.Handler
+	Sales               http.Handler
 
 	TokenBPReview   http.Handler
 	ProductBPReview http.Handler
@@ -143,6 +144,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.ProductBP)
 		mux.Handle("/product-blueprints", h)
 		mux.Handle("/product-blueprints/", h)
+	}
+
+	if deps.ProductBPCategories != nil {
+		h := withAuth(deps.ProductBPCategories)
+		mux.Handle("/console/product-blueprint-categories", h)
+		mux.Handle("/console/product-blueprint-categories/", h)
 	}
 
 	if deps.TokenBP != nil {

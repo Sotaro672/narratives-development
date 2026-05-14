@@ -17,17 +17,18 @@ var (
 )
 
 // ======================================
-// Filter / Patch
+// Filter
 // ======================================
 
 // Filter は ProductBlueprintCategory 一覧取得用フィルタ。
-// 共通の検索・作成日時・更新日時フィルタは common.FilterCommon を埋め込む。
 //
 // NOTE:
-// この repository は productBlueprintCategories collection に保存される
-// カテゴリマスタそのものを扱う。
+// productBlueprintCategories collection は seed_category によって投入される
+// 読み取り専用のカテゴリマスタとして扱う。
+// Console API からカテゴリを作成・更新・削除しない。
+//
 // category ごとの入力項目定義は input_schema.go の静的 schema registry 側で管理し、
-// repository の永続化対象にはしない。
+// repository / Firestore の永続化対象にはしない。
 type Filter struct {
 	common.FilterCommon
 
@@ -41,29 +42,6 @@ type Filter struct {
 	// ParentID が nil のトップ階層だけを取得したい場合に true。
 	// ParentID と RootOnly が両方指定された場合は repository 実装側で ErrRepositoryInvalidInput を返す想定。
 	RootOnly bool
-}
-
-// Patch は ProductBlueprintCategory の部分更新用。
-// common.RepositoryCRUD の Update(ctx, id, patch) で使う。
-//
-// NOTE:
-// Patch はカテゴリマスタの更新だけを扱う。
-// 入力項目 schema は code に紐づく domain 定義として input_schema.go で管理するため、
-// Patch には含めない。
-type Patch struct {
-	Code *CategoryCode
-
-	NameJa *string
-	NameEn *string
-
-	ParentID *CategoryID
-	Path     []string
-
-	Kind *CategoryKind
-
-	DisplayOrder *int
-
-	Attributes *CategoryAttributes
 }
 
 // ======================================
@@ -94,20 +72,28 @@ func IsAllowedSortColumn(column string) bool {
 }
 
 // ======================================
-// RepositoryPort
+// ReadOnlyRepositoryPort
 // ======================================
 
-// RepositoryPort は ProductBlueprintCategory の永続化境界。
-// Firestore などの具体的な保存先は adapter/out 側で実装する。
+// ReadOnlyRepositoryPort は ProductBlueprintCategory の読み取り専用境界。
 //
 // NOTE:
-// この port はカテゴリマスタのみを扱う。
+// productBlueprintCategories collection は seed_category で投入する。
+// Console API では読み取りのみ行い、Create / Update / Delete は提供しない。
+//
 // カテゴリごとの入力項目定義は repository から取得せず、
 // domain の input_schema.go に定義する GetCategoryInputSchema / HasModelFields 等を利用する。
-type RepositoryPort interface {
-	common.Repository[ProductBlueprintCategory, Filter, Patch]
+type ReadOnlyRepositoryPort interface {
+	GetByID(ctx context.Context, id string) (ProductBlueprintCategory, error)
 
 	GetByCode(ctx context.Context, code CategoryCode) (ProductBlueprintCategory, error)
+
+	List(
+		ctx context.Context,
+		filter Filter,
+		sort common.Sort,
+		page common.Page,
+	) (common.PageResult[ProductBlueprintCategory], error)
 
 	// ListTree はフロントのカテゴリ選択 UI 向け。
 	// displayOrder 昇順で返す想定。
@@ -120,5 +106,14 @@ type RepositoryPort interface {
 	) (common.CursorPageResult[ProductBlueprintCategory], error)
 
 	ExistsByID(ctx context.Context, id string) (bool, error)
+
 	ExistsByCode(ctx context.Context, code CategoryCode) (bool, error)
 }
+
+// RepositoryPort は後方互換用 alias。
+//
+// NOTE:
+// 新規実装では ReadOnlyRepositoryPort を優先する。
+// 将来的に管理画面からカテゴリを編集する場合のみ、
+// write 用 port を別途定義する。
+type RepositoryPort = ReadOnlyRepositoryPort

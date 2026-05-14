@@ -16,6 +16,16 @@ import {
   isApparelCategoryCode,
 } from "../../domain/entity/apparel";
 
+function shouldShowModelVariationCards(categoryCode: string): boolean {
+  return (
+    categoryCode === "apparel.tops" ||
+    categoryCode === "apparel.bottoms" ||
+    categoryCode === "apparel.dress" ||
+    categoryCode === "apparel.outerwear" ||
+    categoryCode === "apparel.shoes"
+  );
+}
+
 export default function ProductBlueprintDetail() {
   const {
     pageTitle,
@@ -78,25 +88,29 @@ export default function ProductBlueprintDetail() {
 
   const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
 
-  const measurementOptions =
-    isApparelCategoryCode(categoryCode)
-      ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode]
-      : undefined;
+  const measurementOptions = isApparelCategoryCode(categoryCode)
+    ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode]
+    : undefined;
+
+  const showModelVariationCards = React.useMemo(
+    () => isApparelCategory && shouldShowModelVariationCards(categoryCode),
+    [isApparelCategory, categoryCode],
+  );
 
   const [editMode, setEditMode] = React.useState(false);
-  const noop = () => {};
-  const noopStr = (_: string) => {};
-  const noopColor = (_: string) => {};
 
-  const handleSave = () => {
-    if (onSave) onSave();
+  const noop = React.useCallback(() => {}, []);
+  const noopStr = React.useCallback((_: string) => {}, []);
+  const noopColor = React.useCallback((_: string) => {}, []);
+
+  const handleSave = React.useCallback(() => {
+    onSave();
     setEditMode(false);
-  };
+  }, [onSave]);
 
-  const handleDelete = () => {
-    if (!onDelete) return;
+  const handleDelete = React.useCallback(() => {
     onDelete();
-  };
+  }, [onDelete]);
 
   React.useEffect(() => {
     if (printed && editMode) {
@@ -142,13 +156,19 @@ export default function ProductBlueprintDetail() {
           onChangeWashTags={editMode ? onChangeWashTags : undefined}
         />
 
-        {productBlueprintCategory && !isApparelCategory && (
+        {!productBlueprintCategory && (
+          <p className="mt-2 text-xs text-slate-500">
+            商品カテゴリが未設定です。
+          </p>
+        )}
+
+        {productBlueprintCategory && !showModelVariationCards && (
           <p className="mt-2 text-xs text-slate-500">
             選択中の商品カテゴリ: {productBlueprintCategoryLabel}
           </p>
         )}
 
-        {isApparelCategory && (
+        {showModelVariationCards && (
           <>
             <ColorVariationCard
               mode={editMode ? "edit" : "view"}

@@ -4,11 +4,6 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
 
-import type {
-  ProductBlueprintSizeRow as SizeRow,
-  ModelNumberRow,
-} from "../../infrastructure/api/productBlueprintApi";
-
 import {
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
@@ -19,12 +14,12 @@ import {
   FIT_OPTIONS,
   WASH_TAG_OPTIONS,
   isApparelCategoryCode,
+  type ApparelModelNumberRow as ModelNumberRow,
+  type ApparelSizeRow as SizeRow,
   type Fit,
 } from "../../domain/entity/apparel";
 
-import type {
-  ProductBlueprintCategorySnapshot,
-} from "../../domain/entity/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../domain/entity/productBlueprintCategory";
 
 import { mapVariationsToUiState } from "../util/variationMapper";
 import { useBrandOptions, type BrandOption } from "./useBrandOptions";

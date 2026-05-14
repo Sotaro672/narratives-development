@@ -3,7 +3,6 @@ package consoleHandler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -19,28 +18,24 @@ import (
 // ------------------------------------------------------------
 
 type ProductBlueprintCategoryUsecase interface {
-	GetByID(ctx context.Context, id string) (categorydom.ProductBlueprintCategory, error)
-	GetByCode(ctx context.Context, code string) (categorydom.ProductBlueprintCategory, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (categorydom.ProductBlueprintCategory, error)
+
+	GetByCode(
+		ctx context.Context,
+		code string,
+	) (categorydom.ProductBlueprintCategory, error)
 
 	List(
 		ctx context.Context,
 		q usecase.ListProductBlueprintCategoriesQuery,
 	) (common.PageResult[categorydom.ProductBlueprintCategory], error)
 
-	ListTree(ctx context.Context) ([]categorydom.ProductBlueprintCategory, error)
-
-	Create(
+	ListTree(
 		ctx context.Context,
-		cmd usecase.CreateProductBlueprintCategoryCommand,
-	) (categorydom.ProductBlueprintCategory, error)
-
-	Update(
-		ctx context.Context,
-		id string,
-		cmd usecase.UpdateProductBlueprintCategoryCommand,
-	) (categorydom.ProductBlueprintCategory, error)
-
-	Delete(ctx context.Context, id string) error
+	) ([]categorydom.ProductBlueprintCategory, error)
 }
 
 // ------------------------------------------------------------
@@ -52,14 +47,18 @@ type Handler struct {
 }
 
 func NewHandler(uc ProductBlueprintCategoryUsecase) *Handler {
-	return &Handler{uc: uc}
+	return &Handler{
+		uc: uc,
+	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if h == nil || h.uc == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "productBlueprintCategory usecase is nil"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "productBlueprintCategory usecase is nil",
+		})
 		return
 	}
 
@@ -67,14 +66,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case path == "/console/product-blueprint-categories":
-		switch r.Method {
-		case http.MethodGet:
-			h.list(w, r)
-		case http.MethodPost:
-			h.create(w, r)
-		default:
+		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
+			return
 		}
+
+		h.list(w, r)
 		return
 
 	case path == "/console/product-blueprint-categories/tree":
@@ -82,6 +79,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w)
 			return
 		}
+
 		h.listTree(w, r)
 		return
 
@@ -92,68 +90,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		switch r.Method {
-		case http.MethodGet:
-			h.getByID(w, r, id)
-		case http.MethodPatch, http.MethodPut:
-			h.update(w, r, id)
-		case http.MethodDelete:
-			h.delete(w, r, id)
-		default:
+		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
+			return
 		}
+
+		h.getByID(w, r, id)
 		return
 
 	default:
 		notFound(w)
 		return
 	}
-}
-
-// ------------------------------------------------------------
-// Request DTOs
-// ------------------------------------------------------------
-
-type CreateProductBlueprintCategoryRequest struct {
-	ID string `json:"id"`
-
-	Code   string `json:"code"`
-	NameJa string `json:"nameJa"`
-	NameEn string `json:"nameEn"`
-
-	ParentID *string  `json:"parentId,omitempty"`
-	Path     []string `json:"path"`
-
-	Kind string `json:"kind"`
-
-	DisplayOrder int `json:"displayOrder"`
-
-	Attributes CategoryAttributesRequest `json:"attributes"`
-}
-
-type UpdateProductBlueprintCategoryRequest struct {
-	Code *string `json:"code,omitempty"`
-
-	NameJa *string `json:"nameJa,omitempty"`
-	NameEn *string `json:"nameEn,omitempty"`
-
-	ParentID *string  `json:"parentId,omitempty"`
-	Path     []string `json:"path,omitempty"`
-
-	Kind *string `json:"kind,omitempty"`
-
-	DisplayOrder *int `json:"displayOrder,omitempty"`
-
-	Attributes *CategoryAttributesRequest `json:"attributes,omitempty"`
-}
-
-type CategoryAttributesRequest struct {
-	RequiresExpirationDate bool `json:"requiresExpirationDate"`
-	RequiresLotNumber      bool `json:"requiresLotNumber"`
-	RequiresIngredients    bool `json:"requiresIngredients"`
-	RequiresAlcoholNotice  bool `json:"requiresAlcoholNotice"`
-	RequiresCosmeticNotice bool `json:"requiresCosmeticNotice"`
-	RequiresStorageMethod  bool `json:"requiresStorageMethod"`
 }
 
 // ------------------------------------------------------------
@@ -205,73 +153,8 @@ type ProductBlueprintCategoryTreeResponse struct {
 // Endpoints
 // ------------------------------------------------------------
 
-func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var in CreateProductBlueprintCategoryRequest
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-		return
-	}
-
-	cmd := usecase.CreateProductBlueprintCategoryCommand{
-		ID:           in.ID,
-		Code:         in.Code,
-		NameJa:       in.NameJa,
-		NameEn:       in.NameEn,
-		ParentID:     in.ParentID,
-		Path:         append([]string(nil), in.Path...),
-		Kind:         in.Kind,
-		DisplayOrder: in.DisplayOrder,
-		Attributes:   attributesRequestToDomain(in.Attributes),
-	}
-
-	created, err := h.uc.Create(ctx, cmd)
-	if err != nil {
-		writeProductBlueprintCategoryErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, toResponse(created))
-}
-
-func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	var in UpdateProductBlueprintCategoryRequest
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-		return
-	}
-
-	cmd := usecase.UpdateProductBlueprintCategoryCommand{
-		Code:         in.Code,
-		NameJa:       in.NameJa,
-		NameEn:       in.NameEn,
-		ParentID:     in.ParentID,
-		Path:         append([]string(nil), in.Path...),
-		Kind:         in.Kind,
-		DisplayOrder: in.DisplayOrder,
-	}
-
-	if in.Attributes != nil {
-		attrs := attributesRequestToDomain(*in.Attributes)
-		cmd.Attributes = &attrs
-	}
-
-	updated, err := h.uc.Update(ctx, id, cmd)
-	if err != nil {
-		writeProductBlueprintCategoryErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, toResponse(updated))
-}
-
 func (h *Handler) getByID(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	category, err := h.uc.GetByID(ctx, id)
+	category, err := h.uc.GetByID(r.Context(), id)
 	if err != nil {
 		writeProductBlueprintCategoryErr(w, err)
 		return
@@ -281,7 +164,6 @@ func (h *Handler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	qp := r.URL.Query()
 
 	query := usecase.ListProductBlueprintCategoriesQuery{
@@ -301,9 +183,11 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(qp.Get("code")); v != "" {
 		query.Code = &v
 	}
+
 	if v := strings.TrimSpace(qp.Get("kind")); v != "" {
 		query.Kind = &v
 	}
+
 	if v := strings.TrimSpace(qp.Get("parentId")); v != "" {
 		query.ParentID = &v
 	}
@@ -311,17 +195,20 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if t := parseTimePtr(qp.Get("createdFrom")); t != nil {
 		query.CreatedFrom = t
 	}
+
 	if t := parseTimePtr(qp.Get("createdTo")); t != nil {
 		query.CreatedTo = t
 	}
+
 	if t := parseTimePtr(qp.Get("updatedFrom")); t != nil {
 		query.UpdatedFrom = t
 	}
+
 	if t := parseTimePtr(qp.Get("updatedTo")); t != nil {
 		query.UpdatedTo = t
 	}
 
-	result, err := h.uc.List(ctx, query)
+	result, err := h.uc.List(r.Context(), query)
 	if err != nil {
 		writeProductBlueprintCategoryErr(w, err)
 		return
@@ -342,9 +229,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listTree(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	items, err := h.uc.ListTree(ctx)
+	items, err := h.uc.ListTree(r.Context())
 	if err != nil {
 		writeProductBlueprintCategoryErr(w, err)
 		return
@@ -360,22 +245,13 @@ func (h *Handler) listTree(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) delete(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if err := h.uc.Delete(ctx, id); err != nil {
-		writeProductBlueprintCategoryErr(w, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // ------------------------------------------------------------
 // Mapping
 // ------------------------------------------------------------
 
-func toResponse(category categorydom.ProductBlueprintCategory) ProductBlueprintCategoryResponse {
+func toResponse(
+	category categorydom.ProductBlueprintCategory,
+) ProductBlueprintCategoryResponse {
 	var parentID *string
 	if category.ParentID != nil {
 		v := string(*category.ParentID)
@@ -383,14 +259,16 @@ func toResponse(category categorydom.ProductBlueprintCategory) ProductBlueprintC
 	}
 
 	return ProductBlueprintCategoryResponse{
-		ID:           string(category.ID),
-		Code:         string(category.Code),
-		NameJa:       category.NameJa,
-		NameEn:       category.NameEn,
-		ParentID:     parentID,
-		Path:         append([]string(nil), category.Path...),
+		ID:       string(category.ID),
+		Code:     string(category.Code),
+		NameJa:   category.NameJa,
+		NameEn:   category.NameEn,
+		ParentID: parentID,
+		Path:     append([]string(nil), category.Path...),
+
 		Kind:         string(category.Kind),
 		DisplayOrder: category.DisplayOrder,
+
 		Attributes: CategoryAttributesResponse{
 			RequiresExpirationDate: category.Attributes.RequiresExpirationDate,
 			RequiresLotNumber:      category.Attributes.RequiresLotNumber,
@@ -399,19 +277,9 @@ func toResponse(category categorydom.ProductBlueprintCategory) ProductBlueprintC
 			RequiresCosmeticNotice: category.Attributes.RequiresCosmeticNotice,
 			RequiresStorageMethod:  category.Attributes.RequiresStorageMethod,
 		},
+
 		CreatedAt: formatTime(category.CreatedAt),
 		UpdatedAt: formatTime(category.UpdatedAt),
-	}
-}
-
-func attributesRequestToDomain(in CategoryAttributesRequest) categorydom.CategoryAttributes {
-	return categorydom.CategoryAttributes{
-		RequiresExpirationDate: in.RequiresExpirationDate,
-		RequiresLotNumber:      in.RequiresLotNumber,
-		RequiresIngredients:    in.RequiresIngredients,
-		RequiresAlcoholNotice:  in.RequiresAlcoholNotice,
-		RequiresCosmeticNotice: in.RequiresCosmeticNotice,
-		RequiresStorageMethod:  in.RequiresStorageMethod,
 	}
 }
 
@@ -453,7 +321,9 @@ func writeProductBlueprintCategoryErr(w http.ResponseWriter, err error) {
 		}
 	}
 
-	writeJSON(w, code, map[string]string{"error": err.Error()})
+	writeJSON(w, code, map[string]string{
+		"error": err.Error(),
+	})
 }
 
 func isCategoryValidationErr(err error) bool {
@@ -473,7 +343,9 @@ func isCategoryValidationErr(err error) bool {
 }
 
 func notFound(w http.ResponseWriter) {
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	writeJSON(w, http.StatusNotFound, map[string]string{
+		"error": "not found",
+	})
 }
 
 func parseCSV(s string) []string {
@@ -491,9 +363,11 @@ func parseCSV(s string) []string {
 		if v == "" {
 			continue
 		}
+
 		if _, ok := seen[v]; ok {
 			continue
 		}
+
 		seen[v] = struct{}{}
 		out = append(out, v)
 	}
@@ -545,5 +419,6 @@ func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
+
 	return t.UTC().Format(time.RFC3339)
 }

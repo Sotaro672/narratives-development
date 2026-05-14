@@ -10,11 +10,23 @@ import (
 	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
-// ProductBlueprintCategoryRepository は application 層が利用する
-// productBlueprintCategory 永続化ポートです。
-type ProductBlueprintCategoryRepository interface {
-	GetByID(ctx context.Context, id string) (categorydom.ProductBlueprintCategory, error)
-	GetByCode(ctx context.Context, code categorydom.CategoryCode) (categorydom.ProductBlueprintCategory, error)
+// ProductBlueprintCategoryReadRepository は、
+// seed 済み productBlueprintCategories collection を読み取るための repository port です。
+//
+// NOTE:
+// - productBlueprintCategories は backend/cmd/seed_category で投入する
+// - Console API から category master の作成・更新・削除は行わない
+// - category ごとの入力項目定義は Firestore ではなく domain/input_schema.go 側で管理する
+type ProductBlueprintCategoryReadRepository interface {
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (categorydom.ProductBlueprintCategory, error)
+
+	GetByCode(
+		ctx context.Context,
+		code categorydom.CategoryCode,
+	) (categorydom.ProductBlueprintCategory, error)
 
 	List(
 		ctx context.Context,
@@ -23,32 +35,29 @@ type ProductBlueprintCategoryRepository interface {
 		page common.Page,
 	) (common.PageResult[categorydom.ProductBlueprintCategory], error)
 
-	ListTree(ctx context.Context) ([]categorydom.ProductBlueprintCategory, error)
-
-	Create(
+	ListTree(
 		ctx context.Context,
-		entity categorydom.ProductBlueprintCategory,
-	) (categorydom.ProductBlueprintCategory, error)
+	) ([]categorydom.ProductBlueprintCategory, error)
 
-	Update(
+	ExistsByID(
 		ctx context.Context,
 		id string,
-		patch categorydom.Patch,
-	) (categorydom.ProductBlueprintCategory, error)
+	) (bool, error)
 
-	Delete(ctx context.Context, id string) error
-
-	ExistsByID(ctx context.Context, id string) (bool, error)
-	ExistsByCode(ctx context.Context, code categorydom.CategoryCode) (bool, error)
+	ExistsByCode(
+		ctx context.Context,
+		code categorydom.CategoryCode,
+	) (bool, error)
 }
 
-// ProductBlueprintCategoryUsecase は商品設計書カテゴリの application service です。
+// ProductBlueprintCategoryUsecase は、
+// 商品設計カテゴリマスタを読み取り専用で扱う application service です。
 type ProductBlueprintCategoryUsecase struct {
-	repo ProductBlueprintCategoryRepository
+	repo ProductBlueprintCategoryReadRepository
 }
 
 func NewProductBlueprintCategoryUsecase(
-	repo ProductBlueprintCategoryRepository,
+	repo ProductBlueprintCategoryReadRepository,
 ) *ProductBlueprintCategoryUsecase {
 	return &ProductBlueprintCategoryUsecase{
 		repo: repo,
@@ -58,41 +67,6 @@ func NewProductBlueprintCategoryUsecase(
 // ------------------------------------------------------------
 // Input DTOs
 // ------------------------------------------------------------
-
-type CreateProductBlueprintCategoryCommand struct {
-	ID string
-
-	Code   string
-	NameJa string
-	NameEn string
-
-	ParentID *string
-	Path     []string
-
-	Kind string
-
-	DisplayOrder int
-
-	Attributes categorydom.CategoryAttributes
-
-	Now *time.Time
-}
-
-type UpdateProductBlueprintCategoryCommand struct {
-	Code *string
-
-	NameJa *string
-	NameEn *string
-
-	ParentID *string
-	Path     []string
-
-	Kind *string
-
-	DisplayOrder *int
-
-	Attributes *categorydom.CategoryAttributes
-}
 
 type ListProductBlueprintCategoriesQuery struct {
 	SearchQuery string
@@ -125,7 +99,12 @@ func (u *ProductBlueprintCategoryUsecase) GetByID(
 	ctx context.Context,
 	id string,
 ) (categorydom.ProductBlueprintCategory, error) {
-	if strings.TrimSpace(id) == "" {
+	if u == nil || u.repo == nil {
+		return categorydom.ProductBlueprintCategory{}, categorydom.ErrRepositoryInvalidInput
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidID
 	}
 
@@ -136,6 +115,10 @@ func (u *ProductBlueprintCategoryUsecase) GetByCode(
 	ctx context.Context,
 	code string,
 ) (categorydom.ProductBlueprintCategory, error) {
+	if u == nil || u.repo == nil {
+		return categorydom.ProductBlueprintCategory{}, categorydom.ErrRepositoryInvalidInput
+	}
+
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidCode
@@ -148,22 +131,29 @@ func (u *ProductBlueprintCategoryUsecase) List(
 	ctx context.Context,
 	q ListProductBlueprintCategoriesQuery,
 ) (common.PageResult[categorydom.ProductBlueprintCategory], error) {
+	if u == nil || u.repo == nil {
+		return common.PageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
+	}
+
 	filter, err := buildProductBlueprintCategoryFilter(q)
 	if err != nil {
 		return common.PageResult[categorydom.ProductBlueprintCategory]{}, err
 	}
 
-	sort := common.Sort{
-		Column: q.SortColumn,
+	sortSpec := common.Sort{
+		Column: strings.TrimSpace(q.SortColumn),
 		Order:  q.SortOrder,
 	}
-	if sort.Column == "" {
-		sort.Column = categorydom.SortColumnDisplayOrder
+
+	if sortSpec.Column == "" {
+		sortSpec.Column = categorydom.SortColumnDisplayOrder
 	}
-	if sort.Order == "" {
-		sort.Order = common.SortAsc
+
+	if sortSpec.Order == "" {
+		sortSpec.Order = common.SortAsc
 	}
-	if !categorydom.IsAllowedSortColumn(sort.Column) {
+
+	if !categorydom.IsAllowedSortColumn(sortSpec.Column) {
 		return common.PageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
 	}
 
@@ -171,177 +161,61 @@ func (u *ProductBlueprintCategoryUsecase) List(
 		Number:  q.Page,
 		PerPage: q.PerPage,
 	}
+
 	if page.Number <= 0 {
 		page.Number = 1
 	}
 
-	return u.repo.List(ctx, filter, sort, page)
+	if page.PerPage <= 0 {
+		page.PerPage = 20
+	}
+
+	return u.repo.List(ctx, filter, sortSpec, page)
 }
 
-// ListTree はフロントのカテゴリ選択 UI 用に、
-// カテゴリ一覧を displayOrder 順で返します。
-// tree への整形は handler/response mapper 側で行ってもよいです。
+// ListTree はフロントのカテゴリ選択 UI 向けに、
+// displayOrder 昇順のカテゴリ一覧を返します。
 func (u *ProductBlueprintCategoryUsecase) ListTree(
 	ctx context.Context,
 ) ([]categorydom.ProductBlueprintCategory, error) {
+	if u == nil || u.repo == nil {
+		return nil, categorydom.ErrRepositoryInvalidInput
+	}
+
 	return u.repo.ListTree(ctx)
 }
 
-// ------------------------------------------------------------
-// Write methods
-// ------------------------------------------------------------
-
-func (u *ProductBlueprintCategoryUsecase) Create(
-	ctx context.Context,
-	cmd CreateProductBlueprintCategoryCommand,
-) (categorydom.ProductBlueprintCategory, error) {
-	id := categorydom.CategoryID(strings.TrimSpace(cmd.ID))
-	code := categorydom.CategoryCode(strings.TrimSpace(cmd.Code))
-	nameJa := strings.TrimSpace(cmd.NameJa)
-	nameEn := strings.TrimSpace(cmd.NameEn)
-	kind := categorydom.CategoryKind(strings.TrimSpace(cmd.Kind))
-
-	var parentID *categorydom.CategoryID
-	if cmd.ParentID != nil && strings.TrimSpace(*cmd.ParentID) != "" {
-		v := categorydom.CategoryID(strings.TrimSpace(*cmd.ParentID))
-		parentID = &v
-	}
-
-	now := time.Now().UTC()
-	if cmd.Now != nil && !cmd.Now.IsZero() {
-		now = cmd.Now.UTC()
-	}
-
-	if exists, err := u.repo.ExistsByID(ctx, string(id)); err != nil {
-		return categorydom.ProductBlueprintCategory{}, err
-	} else if exists {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrConflict
-	}
-
-	if exists, err := u.repo.ExistsByCode(ctx, code); err != nil {
-		return categorydom.ProductBlueprintCategory{}, err
-	} else if exists {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrConflict
-	}
-
-	category, err := categorydom.New(
-		id,
-		code,
-		nameJa,
-		nameEn,
-		parentID,
-		cmd.Path,
-		kind,
-		cmd.DisplayOrder,
-		cmd.Attributes,
-		now,
-	)
-	if err != nil {
-		return categorydom.ProductBlueprintCategory{}, err
-	}
-
-	return u.repo.Create(ctx, category)
-}
-
-func (u *ProductBlueprintCategoryUsecase) Update(
+func (u *ProductBlueprintCategoryUsecase) ExistsByID(
 	ctx context.Context,
 	id string,
-	cmd UpdateProductBlueprintCategoryCommand,
-) (categorydom.ProductBlueprintCategory, error) {
+) (bool, error) {
+	if u == nil || u.repo == nil {
+		return false, categorydom.ErrRepositoryInvalidInput
+	}
+
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidID
+		return false, categorydom.ErrInvalidID
 	}
 
-	current, err := u.repo.GetByID(ctx, id)
-	if err != nil {
-		return categorydom.ProductBlueprintCategory{}, err
-	}
-
-	patch := categorydom.Patch{}
-
-	if cmd.Code != nil {
-		code := categorydom.CategoryCode(strings.TrimSpace(*cmd.Code))
-		if code == "" {
-			return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidCode
-		}
-
-		if code != current.Code {
-			if exists, err := u.repo.ExistsByCode(ctx, code); err != nil {
-				return categorydom.ProductBlueprintCategory{}, err
-			} else if exists {
-				return categorydom.ProductBlueprintCategory{}, categorydom.ErrConflict
-			}
-		}
-
-		patch.Code = &code
-	}
-
-	if cmd.NameJa != nil {
-		nameJa := strings.TrimSpace(*cmd.NameJa)
-		if nameJa == "" {
-			return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidNameJa
-		}
-		patch.NameJa = &nameJa
-	}
-
-	if cmd.NameEn != nil {
-		nameEn := strings.TrimSpace(*cmd.NameEn)
-		patch.NameEn = &nameEn
-	}
-
-	if cmd.ParentID != nil {
-		parentIDValue := strings.TrimSpace(*cmd.ParentID)
-		if parentIDValue == "" {
-			patch.ParentID = nil
-		} else {
-			parentID := categorydom.CategoryID(parentIDValue)
-			patch.ParentID = &parentID
-		}
-	}
-
-	if cmd.Path != nil {
-		patch.Path = normalizeStringList(cmd.Path)
-	}
-
-	if cmd.Kind != nil {
-		kind := categorydom.CategoryKind(strings.TrimSpace(*cmd.Kind))
-		if !categorydom.IsValidCategoryKind(kind) {
-			return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidKind
-		}
-		patch.Kind = &kind
-	}
-
-	if cmd.DisplayOrder != nil {
-		if *cmd.DisplayOrder <= 0 {
-			return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidDisplayOrder
-		}
-		displayOrder := *cmd.DisplayOrder
-		patch.DisplayOrder = &displayOrder
-	}
-
-	if cmd.Attributes != nil {
-		attrs := *cmd.Attributes
-		patch.Attributes = &attrs
-	}
-
-	return u.repo.Update(ctx, id, patch)
+	return u.repo.ExistsByID(ctx, id)
 }
 
-func (u *ProductBlueprintCategoryUsecase) Delete(
+func (u *ProductBlueprintCategoryUsecase) ExistsByCode(
 	ctx context.Context,
-	id string,
-) error {
-	if strings.TrimSpace(id) == "" {
-		return categorydom.ErrInvalidID
+	code string,
+) (bool, error) {
+	if u == nil || u.repo == nil {
+		return false, categorydom.ErrRepositoryInvalidInput
 	}
 
-	return u.repo.Delete(ctx, id)
-}
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false, categorydom.ErrInvalidCode
+	}
 
-// ------------------------------------------------------------
-// Snapshot helper
-// ------------------------------------------------------------
+	return u.repo.ExistsByCode(ctx, categorydom.CategoryCode(code))
+}
 
 // BuildProductBlueprintCategorySnapshot は productBlueprint 作成/更新時に使う
 // denormalized snapshot を作るための helper です。
@@ -354,7 +228,7 @@ func (u *ProductBlueprintCategoryUsecase) BuildProductBlueprintCategorySnapshot(
 		return categorydom.Snapshot{}, categorydom.ErrInvalidID
 	}
 
-	category, err := u.repo.GetByID(ctx, categoryID)
+	category, err := u.GetByID(ctx, categoryID)
 	if err != nil {
 		return categorydom.Snapshot{}, err
 	}
@@ -375,6 +249,7 @@ func buildProductBlueprintCategoryFilter(
 		if raw == "" {
 			continue
 		}
+
 		ids = append(ids, categorydom.CategoryID(raw))
 	}
 
@@ -403,7 +278,7 @@ func buildProductBlueprintCategoryFilter(
 		return categorydom.Filter{}, categorydom.ErrRepositoryInvalidInput
 	}
 
-	filter := categorydom.Filter{
+	return categorydom.Filter{
 		FilterCommon: common.FilterCommon{
 			SearchQuery: strings.TrimSpace(q.SearchQuery),
 			Created: common.TimeRange{
@@ -420,26 +295,5 @@ func buildProductBlueprintCategoryFilter(
 		Kind:     kind,
 		ParentID: parentID,
 		RootOnly: q.RootOnly,
-	}
-
-	return filter, nil
-}
-
-func normalizeStringList(in []string) []string {
-	out := make([]string, 0, len(in))
-	seen := make(map[string]struct{}, len(in))
-
-	for _, raw := range in {
-		v := strings.TrimSpace(raw)
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-
-	return out
+	}, nil
 }

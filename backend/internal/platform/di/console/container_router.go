@@ -62,9 +62,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		listsH         http.Handler
 		salesH         http.Handler
 
-		productsPrintH http.Handler
-		productBPH     http.Handler
-		tokenBPH       http.Handler
+		productsPrintH       http.Handler
+		productBPH           http.Handler
+		productBPCategoriesH http.Handler
+		tokenBPH             http.Handler
 
 		tokenBPReviewH   http.Handler
 		productBPReviewH http.Handler
@@ -152,6 +153,12 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.ProductBlueprintUC,
 			c.BrandService,
 			c.MemberService,
+		)
+	}
+
+	if c.ProductBlueprintCategoryUC != nil {
+		productBPCategoriesH = consoleHandler.NewHandler(
+			c.ProductBlueprintCategoryUC,
 		)
 	}
 
@@ -329,9 +336,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		Lists:         listsH,
 		Sales:         salesH,
 
-		ProductsPrint: productsPrintH,
-		ProductBP:     productBPH,
-		TokenBP:       tokenBPH,
+		ProductsPrint:       productsPrintH,
+		ProductBP:           productBPH,
+		ProductBPCategories: productBPCategoriesH,
+		TokenBP:             tokenBPH,
 
 		TokenBPReview:   tokenBPReviewH,
 		ProductBPReview: productBPReviewH,
