@@ -1,4 +1,5 @@
-// frontend\console\model\src\infrastructure\api\modelCreateApi.ts
+// frontend/console/model/src/infrastructure/api/modelCreateApi.ts
+
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,
@@ -103,7 +104,7 @@ function cleanMeasurements(
 
 function parseModelVariationResponse(json: unknown): ModelVariationResponse {
   if (!isRecord(json)) {
-    throw new Error("modelRepositoryHTTP: model variation response is not an object");
+    throw new Error("modelCreateApi: model variation response is not an object");
   }
 
   if (
@@ -112,7 +113,7 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
     typeof json.kind !== "string" ||
     typeof json.modelNumber !== "string"
   ) {
-    throw new Error("modelRepositoryHTTP: model variation response has invalid base fields");
+    throw new Error("modelCreateApi: model variation response has invalid base fields");
   }
 
   const base = {
@@ -125,7 +126,7 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
 
   if (json.kind === "alcohol") {
     if (!isRecord(json.volume)) {
-      throw new Error("modelRepositoryHTTP: alcohol model variation response has invalid volume");
+      throw new Error("modelCreateApi: alcohol model variation response has invalid volume");
     }
 
     if (
@@ -134,7 +135,7 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
       typeof json.volume.unit !== "string"
     ) {
       throw new Error(
-        "modelRepositoryHTTP: alcohol model variation response has invalid volume fields",
+        "modelCreateApi: alcohol model variation response has invalid volume fields",
       );
     }
 
@@ -150,11 +151,11 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
 
   if (json.kind === "apparel") {
     if (typeof json.size !== "string") {
-      throw new Error("modelRepositoryHTTP: apparel model variation response has invalid size");
+      throw new Error("modelCreateApi: apparel model variation response has invalid size");
     }
 
     if (!isRecord(json.color)) {
-      throw new Error("modelRepositoryHTTP: apparel model variation response has invalid color");
+      throw new Error("modelCreateApi: apparel model variation response has invalid color");
     }
 
     if (
@@ -163,7 +164,7 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
       !Number.isFinite(json.color.rgb)
     ) {
       throw new Error(
-        "modelRepositoryHTTP: apparel model variation response has invalid color fields",
+        "modelCreateApi: apparel model variation response has invalid color fields",
       );
     }
 
@@ -172,7 +173,7 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
     if (json.measurements !== undefined) {
       if (!isRecord(json.measurements)) {
         throw new Error(
-          "modelRepositoryHTTP: apparel model variation response has invalid measurements",
+          "modelCreateApi: apparel model variation response has invalid measurements",
         );
       }
 
@@ -181,7 +182,7 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
 
         if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
           throw new Error(
-            "modelRepositoryHTTP: apparel model variation response has invalid measurement value",
+            "modelCreateApi: apparel model variation response has invalid measurement value",
           );
         }
 
@@ -202,15 +203,156 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
     };
   }
 
-  throw new Error(`modelRepositoryHTTP: unsupported model variation kind: ${json.kind}`);
+  throw new Error(`modelCreateApi: unsupported model variation kind: ${json.kind}`);
 }
 
-function resolveCreatedVariationId(json: unknown): string {
-  if (!isRecord(json) || typeof json.id !== "string" || !json.id.trim()) {
+function resolveCreatedVariationId(
+  json: unknown,
+  locationHeader: string | null,
+): string {
+  if (isRecord(json)) {
+    if (typeof json.id === "string" && json.id.trim()) {
+      return json.id.trim();
+    }
+
+    if (
+      isRecord(json.data) &&
+      typeof json.data.id === "string" &&
+      json.data.id.trim()
+    ) {
+      return json.data.id.trim();
+    }
+
+    if (
+      isRecord(json.modelVariation) &&
+      typeof json.modelVariation.id === "string" &&
+      json.modelVariation.id.trim()
+    ) {
+      return json.modelVariation.id.trim();
+    }
+  }
+
+  const location = String(locationHeader ?? "").trim();
+  if (!location) {
     return "";
   }
 
-  return json.id.trim();
+  const match = location.match(/\/models\/([^/?#]+)(?:[/?#]|$)/);
+  if (!match?.[1]) {
+    return "";
+  }
+
+  return decodeURIComponent(match[1]).trim();
+}
+
+function normalizeVolume(volume: Volume): Volume {
+  return {
+    value:
+      typeof volume.value === "number" && Number.isFinite(volume.value)
+        ? volume.value
+        : 0,
+    unit: String(volume.unit ?? "").trim() || "ml",
+  };
+}
+
+function volumeKey(volume: Volume): string {
+  const normalized = normalizeVolume(volume);
+
+  if (normalized.value <= 0) {
+    return "";
+  }
+
+  return `${normalized.value}${normalized.unit}`;
+}
+
+function sameCreatePayload(
+  payload: CreateModelVariationRequest,
+  variation: ModelVariationResponse,
+): boolean {
+  if (payload.kind !== variation.kind) {
+    return false;
+  }
+
+  if (payload.modelNumber.trim() !== variation.modelNumber.trim()) {
+    return false;
+  }
+
+  if (payload.kind === "alcohol" && variation.kind === "alcohol") {
+    return volumeKey(payload.volume) === volumeKey(variation.volume);
+  }
+
+  if (payload.kind === "apparel" && variation.kind === "apparel") {
+    return (
+      payload.size.trim() === variation.size.trim() &&
+      payload.color.trim() === variation.color.name.trim()
+    );
+  }
+
+  return false;
+}
+
+function withResolvedId(
+  json: unknown,
+  id: string,
+  payload: CreateModelVariationRequest,
+  productBlueprintId: string,
+): unknown {
+  if (isRecord(json)) {
+    const base = {
+      ...json,
+      id,
+      productBlueprintId,
+      kind: payload.kind,
+      modelNumber:
+        typeof json.modelNumber === "string"
+          ? json.modelNumber
+          : payload.modelNumber,
+    };
+
+    if (payload.kind === "alcohol") {
+      return {
+        ...base,
+        volume: isRecord(json.volume) ? json.volume : payload.volume,
+      };
+    }
+
+    return {
+      ...base,
+      size: typeof json.size === "string" ? json.size : payload.size,
+      color: isRecord(json.color)
+        ? json.color
+        : {
+            name: payload.color,
+            rgb: payload.rgb,
+          },
+      measurements: isRecord(json.measurements)
+        ? json.measurements
+        : cleanMeasurements(payload.measurements),
+    };
+  }
+
+  if (payload.kind === "alcohol") {
+    return {
+      id,
+      productBlueprintId,
+      kind: "alcohol",
+      modelNumber: payload.modelNumber,
+      volume: payload.volume,
+    };
+  }
+
+  return {
+    id,
+    productBlueprintId,
+    kind: "apparel",
+    modelNumber: payload.modelNumber,
+    size: payload.size,
+    color: {
+      name: payload.color,
+      rgb: payload.rgb,
+    },
+    measurements: cleanMeasurements(payload.measurements),
+  };
 }
 
 function toCreateRequestBody(
@@ -222,7 +364,7 @@ function toCreateRequestBody(
       kind: "alcohol",
       productBlueprintId,
       modelNumber: payload.modelNumber,
-      volume: payload.volume,
+      volume: normalizeVolume(payload.volume),
     };
   }
 
@@ -251,10 +393,15 @@ export async function createModelVariation(
     normalizedProductBlueprintId,
   )}/variations`;
 
-  const body = toCreateRequestBody(normalizedProductBlueprintId, {
+  const normalizedPayload = {
     ...payload,
     productBlueprintId: normalizedProductBlueprintId,
-  } as CreateModelVariationRequest);
+  } as CreateModelVariationRequest;
+
+  const body = toCreateRequestBody(
+    normalizedProductBlueprintId,
+    normalizedPayload,
+  );
 
   const res = await fetch(url, {
     method: "POST",
@@ -287,13 +434,35 @@ export async function createModelVariation(
   }
 
   const json = text ? JSON.parse(text) : {};
-  const id = resolveCreatedVariationId(json);
+  let id = resolveCreatedVariationId(json, res.headers.get("Location"));
 
+  /**
+   * backend が作成成功時に id を body / Location で返さない場合の最終 fallback。
+   * 作成後 list から、今回作成した payload と一致する最新 variation を探す。
+   */
   if (!id) {
-    throw new Error("modelRepositoryHTTP: 作成成功後の model id を取得できませんでした");
+    const list = await listModelVariationsByProductBlueprintId(
+      normalizedProductBlueprintId,
+    );
+
+    const matched = [...list].reverse().find((variation) =>
+      sameCreatePayload(normalizedPayload, variation),
+    );
+
+    id = matched?.id?.trim() ?? "";
+
+    if (matched && id) {
+      return matched;
+    }
   }
 
-  return parseModelVariationResponse(json);
+  if (!id) {
+    throw new Error("modelCreateApi: 作成成功後の model id を取得できませんでした");
+  }
+
+  return parseModelVariationResponse(
+    withResolvedId(json, id, normalizedPayload, normalizedProductBlueprintId),
+  );
 }
 
 /* =========================================================
@@ -315,7 +484,7 @@ export async function createModelVariations(
 
     const id = created.id.trim();
     if (!id) {
-      throw new Error("modelRepositoryHTTP: 作成済み variation の id が空です");
+      throw new Error("modelCreateApi: 作成済み variation の id が空です");
     }
 
     ids.push(id);
@@ -386,7 +555,7 @@ export async function listModelVariationsByProductBlueprintId(
   const json = text ? JSON.parse(text) : [];
 
   if (!Array.isArray(json)) {
-    throw new Error("modelRepositoryHTTP: model variation list response is not an array");
+    throw new Error("modelCreateApi: model variation list response is not an array");
   }
 
   return json.map(parseModelVariationResponse);

@@ -9,6 +9,14 @@ import {
   type ApparelSizeRow,
 } from "../domain/entity/apparel";
 
+import { isAlcoholCategoryCode } from "../domain/entity/alcohol";
+
+import type {
+  AlcoholModelNumber,
+  Volume,
+  VolumeRow,
+} from "../../../model/src/application/modelCreateService";
+
 import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
@@ -26,7 +34,7 @@ import {
 import {
   createModelVariations,
   type CreateModelVariationRequest,
-} from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
+} from "../../../model/src/infrastructure/api/modelCreateApi";
 
 // ------------------------------------------------------
 // Product ID Tag
@@ -70,6 +78,13 @@ export type CreateProductBlueprintParams = {
   sizes?: ApparelSizeRow[];
   modelNumbers?: CreateProductBlueprintModelNumber[];
   colorRgbMap?: Record<string, string>;
+
+  /**
+   * alcohol model variation 用。
+   * volume は ProductBlueprint.categoryFields ではなく model domain 側で扱う。
+   */
+  volumes?: VolumeRow[];
+  alcoholModelNumbers?: AlcoholModelNumber[];
 
   categoryFields?: CategoryFieldValues | null;
 };
@@ -140,31 +155,123 @@ function normalizeMeasurementsForRequest(
   return out;
 }
 
-function toCreateModelVariationRequests(args: {
+function toCreateApparelModelVariationRequests(args: {
   productBlueprintId: string;
   variations: NewModelVariationPayload[];
 }): CreateModelVariationRequest[] {
   const { productBlueprintId, variations } = args;
 
-  return variations.map((variation): CreateModelVariationRequest => ({
-    productBlueprintId,
-    modelNumber: String(variation.modelNumber ?? ""),
-    size: String(variation.sizeLabel ?? ""),
-    color: String(variation.color ?? ""),
-    rgb: typeof variation.rgb === "number" ? variation.rgb : 0,
-    measurements: normalizeMeasurementsForRequest(variation.measurements),
-  }));
+  return variations.map(
+    (variation): CreateModelVariationRequest => ({
+      kind: "apparel",
+      productBlueprintId,
+      modelNumber: String(variation.modelNumber ?? ""),
+      size: String(variation.sizeLabel ?? ""),
+      color: String(variation.color ?? ""),
+      rgb: typeof variation.rgb === "number" ? variation.rgb : 0,
+      measurements: normalizeMeasurementsForRequest(variation.measurements),
+    }),
+  );
+}
+
+function makeVolumeKey(volume: Volume): string {
+  const value =
+    typeof volume.value === "number" && Number.isFinite(volume.value)
+      ? volume.value
+      : 0;
+
+  const unit = String(volume.unit ?? "").trim() || "ml";
+
+  if (value <= 0) {
+    return "";
+  }
+
+  return `${value}${unit}`;
+}
+
+function volumeRowToVolume(row: VolumeRow): Volume {
+  return {
+    value: row.volumeValue,
+    unit: String(row.volumeUnit ?? "").trim() || "ml",
+  };
+}
+
+function buildAlcoholModelNumberMap(
+  modelNumbers: AlcoholModelNumber[] | undefined,
+): Map<string, AlcoholModelNumber> {
+  const map = new Map<string, AlcoholModelNumber>();
+
+  if (!modelNumbers || modelNumbers.length === 0) {
+    return map;
+  }
+
+  for (const modelNumber of modelNumbers) {
+    const key = makeVolumeKey(modelNumber.volume);
+    const code = String(modelNumber.code ?? "").trim();
+
+    if (!key || !code) {
+      continue;
+    }
+
+    map.set(key, {
+      ...modelNumber,
+      code,
+    });
+  }
+
+  return map;
+}
+
+function toCreateAlcoholModelVariationRequests(args: {
+  productBlueprintId: string;
+  volumes: VolumeRow[];
+  alcoholModelNumbers: AlcoholModelNumber[];
+}): CreateModelVariationRequest[] {
+  const { productBlueprintId, volumes, alcoholModelNumbers } = args;
+
+  const modelNumberMap = buildAlcoholModelNumberMap(alcoholModelNumbers);
+  const requests: CreateModelVariationRequest[] = [];
+  const seen = new Set<string>();
+
+  for (const row of volumes) {
+    const volume = volumeRowToVolume(row);
+    const key = makeVolumeKey(volume);
+
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    const modelNumber = modelNumberMap.get(key);
+
+    if (!modelNumber) {
+      continue;
+    }
+
+    requests.push({
+      kind: "alcohol",
+      productBlueprintId,
+      modelNumber: modelNumber.code,
+      volume,
+    });
+  }
+
+  return requests;
 }
 
 function shouldAppendModelRefs(
   params: CreateProductBlueprintParams,
-  variations: NewModelVariationPayload[],
+  requests: CreateModelVariationRequest[],
 ): boolean {
-  if (params.productBlueprintCategory.kind !== "apparel") {
+  const kind = String(params.productBlueprintCategory.kind ?? "").trim();
+  const code = String(params.productBlueprintCategory.code ?? "").trim();
+
+  if (requests.length === 0) {
     return false;
   }
 
-  return variations.length > 0;
+  return kind === "apparel" || isApparelCategoryCode(code) || isAlcoholCategoryCode(code);
 }
 
 // ------------------------------
@@ -183,10 +290,15 @@ function resolveApparelCategoryCode(
   return code;
 }
 
+function isAlcoholProductBlueprintCategory(
+  params: CreateProductBlueprintParams,
+): boolean {
+  const code = String(params.productBlueprintCategory?.code ?? "").trim();
+  return isAlcoholCategoryCode(code);
+}
+
 /**
  * apparel category code に応じて measurements を組み立てる。
- *
- * model/src/domain/entity/catalog.ts の MeasurementKey / SizeRow を正とする。
  *
  * category code:
  * - apparel.tops
@@ -323,9 +435,9 @@ function shouldCreateApparelModelVariations(
   );
 }
 
-async function createProductBlueprintWithVariations(
+async function createProductBlueprintWithModelRequests(
   params: CreateProductBlueprintParams,
-  variations: NewModelVariationPayload[],
+  requests: CreateModelVariationRequest[],
 ): Promise<ProductBlueprintResponse> {
   assertProductBlueprintCategory(params);
 
@@ -336,16 +448,20 @@ async function createProductBlueprintWithVariations(
     throw new Error("createProductBlueprint: 作成後の id が空です");
   }
 
-  if (!shouldAppendModelRefs(params, variations)) {
+  if (!shouldAppendModelRefs(params, requests)) {
     return created;
   }
 
-  const requests = toCreateModelVariationRequests({
+  const normalizedRequests = requests.map((request) => ({
+    ...request,
     productBlueprintId,
-    variations,
-  });
+  })) as CreateModelVariationRequest[];
 
-  const modelIds = await createModelVariations(productBlueprintId, requests);
+  const modelIds = await createModelVariations(
+    productBlueprintId,
+    normalizedRequests,
+  );
+
   const cleanedModelIds = dedupKeepOrder(modelIds);
 
   if (cleanedModelIds.length === 0) {
@@ -362,69 +478,75 @@ async function createProductBlueprintWithVariations(
 export async function createProductBlueprint(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintResponse> {
-  const categoryCode = resolveApparelCategoryCode(params);
+  const apparelCategoryCode = resolveApparelCategoryCode(params);
 
-  /**
-   * apparel 以外は size/color/measurements 前提の ModelVariation を作成しない。
-   * productBlueprint 本体のみ作成する。
-   */
-  if (!categoryCode) {
-    return await createProductBlueprintWithVariations(params, []);
-  }
+  if (apparelCategoryCode && shouldCreateApparelModelVariations(apparelCategoryCode)) {
+    const variations: ApparelModelVariationPayload[] = [];
 
-  /**
-   * apparel.bag / apparel.accessory は入力表上 model field が無いため、
-   * ModelVariation は作成しない。
-   */
-  if (!shouldCreateApparelModelVariations(categoryCode)) {
-    return await createProductBlueprintWithVariations(params, []);
-  }
+    // displayOrder の採番元を「色登録順 → サイズ登録順」に固定
+    const colors: string[] = (params.colors ?? [])
+      .map((color: string) => String(color).trim())
+      .filter((color: string) => color.length > 0);
 
-  const variations: ApparelModelVariationPayload[] = [];
+    const sizes: ApparelSizeRow[] = (params.sizes ?? []).filter(
+      (size: ApparelSizeRow) => String(size.sizeLabel ?? "").trim() !== "",
+    );
 
-  // displayOrder の採番元を「色登録順 → サイズ登録順」に固定
-  const colors: string[] = (params.colors ?? [])
-    .map((color: string) => String(color).trim())
-    .filter((color: string) => color.length > 0);
+    const colorRgbMap = params.colorRgbMap ?? {};
+    const modelNumberMap = buildModelNumberMap(params.modelNumbers);
 
-  const sizes: ApparelSizeRow[] = (params.sizes ?? []).filter(
-    (size: ApparelSizeRow) => String(size.sizeLabel ?? "").trim() !== "",
-  );
+    for (const color of colors) {
+      for (const sizeRow of sizes) {
+        const sizeLabel = String(sizeRow.sizeLabel ?? "").trim();
 
-  const colorRgbMap = params.colorRgbMap ?? {};
-  const modelNumberMap = buildModelNumberMap(params.modelNumbers);
+        if (!sizeLabel) {
+          continue;
+        }
 
-  for (const color of colors) {
-    for (const sizeRow of sizes) {
-      const sizeLabel = String(sizeRow.sizeLabel ?? "").trim();
+        const code = modelNumberMap.get(`${sizeLabel}__${color}`)?.trim();
 
-      if (!sizeLabel) {
-        continue;
+        if (!code) {
+          continue;
+        }
+
+        const hex = colorRgbMap[color];
+        const rgbInt = hexToRgbInt(hex);
+
+        const payload = toApparelModelVariationPayload(apparelCategoryCode, sizeRow, {
+          sizeLabel,
+          color,
+          modelNumber: code,
+          createdBy: params.createdBy ?? "",
+          rgb: rgbInt,
+        });
+
+        variations.push({
+          ...payload,
+          measurements: normalizeApparelMeasurements(payload.measurements),
+        });
       }
-
-      const code = modelNumberMap.get(`${sizeLabel}__${color}`)?.trim();
-
-      if (!code) {
-        continue;
-      }
-
-      const hex = colorRgbMap[color];
-      const rgbInt = hexToRgbInt(hex);
-
-      const payload = toApparelModelVariationPayload(categoryCode, sizeRow, {
-        sizeLabel,
-        color,
-        modelNumber: code,
-        createdBy: params.createdBy ?? "",
-        rgb: rgbInt,
-      });
-
-      variations.push({
-        ...payload,
-        measurements: normalizeApparelMeasurements(payload.measurements),
-      });
     }
+
+    const requests = toCreateApparelModelVariationRequests({
+      productBlueprintId: "",
+      variations,
+    });
+
+    return await createProductBlueprintWithModelRequests(params, requests);
   }
 
-  return await createProductBlueprintWithVariations(params, variations);
+  if (isAlcoholProductBlueprintCategory(params)) {
+    const requests = toCreateAlcoholModelVariationRequests({
+      productBlueprintId: "",
+      volumes: params.volumes ?? [],
+      alcoholModelNumbers: params.alcoholModelNumbers ?? [],
+    });
+
+    return await createProductBlueprintWithModelRequests(params, requests);
+  }
+
+  /**
+   * modelFields を持たないカテゴリでは ModelVariation を作成しない。
+   */
+  return await createProductBlueprintWithModelRequests(params, []);
 }

@@ -28,10 +28,10 @@ import {
   TableRow,
 } from "../../../../shell/src/shared/ui/table";
 
-// ✅ named import に戻す（TS1192 対策）
+// named import に戻す（TS1192 対策）
 import { useProductionCreate } from "../hook/useProductionCreate";
 
-// ★ ProductionQuantityCard（InventoryCard互換デザイン）
+// ProductionQuantityCard（InventoryCard互換デザイン）
 import ProductionQuantityCard from "../components/productionQuantityCard";
 
 import "../styles/production.css";
@@ -70,7 +70,10 @@ export default function ProductionCreate() {
     setQuantityRows,
   } = useProductionCreate();
 
-  // ✅ onChangeRows: VM をそのまま受け取り state 更新
+  const productBlueprintCategoryCode =
+    selectedProductBlueprintForCard.productBlueprintCategory?.code ?? "";
+
+  // onChangeRows: VM をそのまま受け取り state 更新
   const handleChangeRows = (rows: typeof modelVariationsForCard) => {
     setQuantityRows(Array.isArray(rows) ? rows : []);
   };
@@ -93,11 +96,12 @@ export default function ProductionCreate() {
           </div>
         )}
 
-        {/* ★★★ ProductionQuantityCard（編集モード） ★★★ */}
+        {/* ProductionQuantityCard（編集モード） */}
         {hasSelectedProductBlueprint && (
           <ProductionQuantityCard
             title="モデル別 生産数一覧"
             rows={modelVariationsForCard}
+            productBlueprintCategory={productBlueprintCategoryCode}
             mode="edit"
             onChangeRows={handleChangeRows}
           />

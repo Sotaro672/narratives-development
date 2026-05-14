@@ -13,17 +13,60 @@ export function buildModelIndexFromVariations(
 ): Record<string, ModelVariationSummary> {
   const index: Record<string, ModelVariationSummary> = {};
 
-  (Array.isArray(variations) ? variations : []).forEach((v) => {
-    const modelId = String(v.id);
+  (Array.isArray(variations) ? variations : []).forEach((variation) => {
+    const v = variation as any;
 
-    index[modelId] = {
+    const modelId = String(v?.id ?? "").trim();
+    if (!modelId) return;
+
+    const kind = String(v?.kind ?? "").trim();
+    const modelNumber = String(v?.modelNumber ?? "").trim();
+
+    const base: ModelVariationSummary = {
       modelId,
-      modelNumber: v.modelNumber,
-      size: v.size,
-      color: v.color?.name ?? "",
-      rgb: v.color?.rgb ?? null,
-      // displayOrder は variations 側に無い想定なので注入しない（必要なら別途 join）
+      productBlueprintId: String(v?.productBlueprintId ?? "").trim() || undefined,
+      kind,
+      modelNumber,
     };
+
+    if (kind === "apparel") {
+      index[modelId] = {
+        ...base,
+        size: String(v?.size ?? "").trim(),
+        color: String(v?.color?.name ?? "").trim(),
+        rgb:
+          typeof v?.color?.rgb === "number" || typeof v?.color?.rgb === "string"
+            ? v.color.rgb
+            : null,
+      };
+      return;
+    }
+
+    if (kind === "alcohol") {
+      const volumeValueRaw = v?.volume?.value;
+      const volumeValue =
+        typeof volumeValueRaw === "number" && Number.isFinite(volumeValueRaw)
+          ? volumeValueRaw
+          : undefined;
+
+      const volumeUnit = String(v?.volume?.unit ?? "").trim();
+
+      index[modelId] = {
+        ...base,
+        volumeValue,
+        volumeUnit,
+        volume:
+          volumeValue !== undefined && volumeUnit
+            ? {
+                value: volumeValue,
+                unit: volumeUnit,
+              }
+            : undefined,
+      };
+      return;
+    }
+
+    index[modelId] = base;
   });
 
   return index;

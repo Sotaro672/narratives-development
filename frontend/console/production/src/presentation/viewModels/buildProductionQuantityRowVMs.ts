@@ -8,8 +8,10 @@ import type { ProductionQuantityRowVM } from "./productionQuantityRowVM";
  * modelIndex（variations）を join して、UI が使う ProductionQuantityRowVM を生成する。
  *
  * - 正: modelId は production.Models[].ModelID
- * - 表示メタ（modelNumber/size/color/rgb）は modelIndex を正として使う
- * - 表示順ロジックは displayOrder のみを利用（無ければ undefined のまま）
+ * - 表示メタは modelIndex を正として使う
+ * - apparel: modelNumber / size / color / rgb
+ * - alcohol: modelNumber / volumeValue / volumeUnit
+ * - 表示順ロジックは displayOrder のみを利用（無ければ undefined）
  *
  * NOTE:
  * ProductionQuantityRowVM の rgb は number | undefined なので、
@@ -28,27 +30,76 @@ export function buildProductionQuantityRowVMs(
     const qNum = Number(m?.Quantity);
     const quantity = Number.isFinite(qNum) ? Math.max(0, Math.floor(qNum)) : 0;
 
-    // ✅ 表示メタは variations を正にする（production 側は持たない想定）
+    const kind = String(meta?.kind ?? "").trim() || undefined;
+
+    // 表示メタは variations を正にする（production 側は持たない想定）
     const modelNumber = String(meta?.modelNumber ?? "").trim();
+
+    // apparel 用
     const size = String(meta?.size ?? "").trim();
     const color = String(meta?.color ?? "").trim();
 
-    // ✅ rgb: ProductionQuantityRowVM は number | undefined
-    // - meta.rgb が number のときだけ採用
+    // rgb: ProductionQuantityRowVM は number | undefined
+    // meta.rgb が number のときだけ採用
     const rgbRaw = meta?.rgb;
     const rgb = typeof rgbRaw === "number" ? rgbRaw : undefined;
 
-    // ✅ displayOrder のみを表示順ロジックとして扱う
+    // alcohol 用
+    const volumeValueFromFlat =
+      typeof meta?.volumeValue === "number" && Number.isFinite(meta.volumeValue)
+        ? meta.volumeValue
+        : undefined;
+
+    const volumeValueFromNested =
+      typeof meta?.volume?.value === "number" &&
+      Number.isFinite(meta.volume.value)
+        ? meta.volume.value
+        : undefined;
+
+    const volumeValue = volumeValueFromFlat ?? volumeValueFromNested;
+
+    const volumeUnit =
+      String(meta?.volumeUnit ?? "").trim() ||
+      String(meta?.volume?.unit ?? "").trim() ||
+      undefined;
+
+    const apparelVariationLabel = [size, color].filter(Boolean).join(" / ");
+
+    const alcoholVariationLabel =
+      typeof volumeValue === "number" && Number.isFinite(volumeValue) && volumeUnit
+        ? `${volumeValue}${volumeUnit}`
+        : "";
+
+    const variationLabel =
+      kind === "alcohol"
+        ? alcoholVariationLabel
+        : kind === "apparel"
+          ? apparelVariationLabel
+          : alcoholVariationLabel || apparelVariationLabel;
+
+    // displayOrder のみを表示順ロジックとして扱う
     const displayOrderNum =
       typeof m?.DisplayOrder === "number" ? m.DisplayOrder : Number(m?.DisplayOrder);
-    const displayOrder = Number.isFinite(displayOrderNum) ? displayOrderNum : undefined;
+
+    const displayOrder = Number.isFinite(displayOrderNum)
+      ? displayOrderNum
+      : undefined;
 
     const vm: ProductionQuantityRowVM = {
       modelId,
+      kind,
+
       modelNumber,
+
       size,
       color,
       rgb,
+
+      volumeValue,
+      volumeUnit,
+
+      variationLabel,
+
       displayOrder,
       quantity,
     };

@@ -13,20 +13,21 @@ import {
   type ModelVariationSummary,
 } from "../../application/detail/index";
 
-import {
-  loadProductBlueprintDetail,
-  type ProductBlueprintDetail,
-} from "../../application/productBlueprint/index";
+import { getProductBlueprintDetail } from "../../../../productBlueprint/src/application/productBlueprintDetailService";
 
-// ★ 印刷用ロジックを分離した hook を利用（modelId を正にした版）
+// 印刷用ロジックを分離した hook を利用（modelId を正にした版）
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
-// ★ ViewModel（modelId を正）
+// ViewModel（modelId を正）
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
 import { toProductionDetailUpdateRows } from "../viewModels/toProductionDetailUpdateRows";
 
 type Mode = "view" | "edit";
+
+type ProductBlueprintDetailForProduction = Awaited<
+  ReturnType<typeof getProductBlueprintDetail>
+>;
 
 export function useProductionDetail() {
   const navigate = useNavigate();
@@ -35,7 +36,9 @@ export function useProductionDetail() {
   const { currentMember } = useAuth();
   const creator = currentMember?.fullName ?? "-";
 
-  const [production, setProduction] = React.useState<ProductionDetail | null>(null);
+  const [production, setProduction] = React.useState<ProductionDetail | null>(
+    null,
+  );
 
   // ======================================================
   // 画面全体のモード（view / edit）
@@ -44,7 +47,7 @@ export function useProductionDetail() {
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
 
-  // ★ printed=true（印刷済）のときは編集不可（ヘッダー編集ボタン非表示に利用）
+  // printed=true（印刷済）のときは編集不可（ヘッダー編集ボタン非表示に利用）
   const canEdit = production?.printed !== true;
 
   const switchToView = React.useCallback(() => setMode("view"), []);
@@ -66,16 +69,18 @@ export function useProductionDetail() {
   const [error, setError] = React.useState<string | null>(null);
 
   const [productBlueprint, setProductBlueprint] =
-    React.useState<ProductBlueprintDetail | null>(null);
+    React.useState<ProductBlueprintDetailForProduction | null>(null);
   const [pbLoading, setPbLoading] = React.useState(false);
   const [pbError, setPbError] = React.useState<string | null>(null);
 
-  const [modelIndex, setModelIndex] = React.useState<Record<string, ModelVariationSummary>>(
-    {},
-  );
+  const [modelIndex, setModelIndex] = React.useState<
+    Record<string, ModelVariationSummary>
+  >({});
 
-  // ✅ 画面 state / 返却は VM を正にする（modelId をキー）
-  const [quantityRows, setQuantityRows] = React.useState<ProductionQuantityRowVM[]>([]);
+  // 画面 state / 返却は VM を正にする（modelId をキー）
+  const [quantityRows, setQuantityRows] = React.useState<
+    ProductionQuantityRowVM[]
+  >([]);
 
   // ======================================================
   // Production 詳細取得
@@ -122,6 +127,7 @@ export function useProductionDetail() {
   // ======================================================
   React.useEffect(() => {
     const productBlueprintId = production?.productBlueprintId;
+
     if (!productBlueprintId) {
       setProductBlueprint(null);
       setPbError(null);
@@ -129,12 +135,13 @@ export function useProductionDetail() {
     }
 
     let cancelled = false;
+
     (async () => {
       try {
         setPbLoading(true);
         setPbError(null);
 
-        const pb = await loadProductBlueprintDetail(productBlueprintId);
+        const pb = await getProductBlueprintDetail(productBlueprintId);
         if (cancelled) return;
 
         setProductBlueprint(pb);
@@ -158,15 +165,20 @@ export function useProductionDetail() {
   // ======================================================
   React.useEffect(() => {
     const productBlueprintId = production?.productBlueprintId;
+
     if (!productBlueprintId) {
       setModelIndex({});
       return;
     }
 
     let cancelled = false;
+
     (async () => {
       try {
-        const index = await loadModelVariationIndexByProductBlueprintId(productBlueprintId);
+        const index = await loadModelVariationIndexByProductBlueprintId(
+          productBlueprintId,
+        );
+
         if (cancelled) return;
 
         setModelIndex(index);
@@ -182,10 +194,10 @@ export function useProductionDetail() {
 
   // ======================================================
   // production.Models（backend DTO）× modelIndex → quantityRows(VM)
-  // ✅ normalizeProductionModels を廃止し、レスポンス直通
+  // normalizeProductionModels を廃止し、レスポンス直通
   // ======================================================
   React.useEffect(() => {
-    // ✅ backend response を正として直通（PascalCase）
+    // backend response を正として直通（PascalCase）
     const raw = (production as any)?.Models;
 
     if (!Array.isArray(raw)) {
@@ -204,7 +216,6 @@ export function useProductionDetail() {
     if (!productionId || !production) return;
 
     if (!canEdit) {
-      // eslint-disable-next-line no-alert
       alert("この生産は編集できません（印刷済みです）。");
       return;
     }
@@ -224,7 +235,6 @@ export function useProductionDetail() {
 
       setMode("view");
     } catch {
-      // eslint-disable-next-line no-alert
       alert("更新に失敗しました");
     }
   }, [productionId, production, quantityRows, canEdit]);
@@ -245,6 +255,7 @@ export function useProductionDetail() {
         typeof (b as any).displayOrder === "number"
           ? (b as any).displayOrder
           : Number.POSITIVE_INFINITY;
+
       return ao - bo;
     });
 
@@ -292,10 +303,12 @@ export function useProductionDetail() {
     pbLoading,
     pbError,
 
-    // ✅ VM 正（state / 返却ともに VM）
+    // VM 正（state / 返却ともに VM）
     quantityRows,
     setQuantityRows,
 
     creator,
   };
 }
+
+export default useProductionDetail;
