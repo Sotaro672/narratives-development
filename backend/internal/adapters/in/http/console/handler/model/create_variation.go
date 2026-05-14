@@ -26,6 +26,10 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 	}
 
 	newVar := toNewModelVariation(productBlueprintID, req)
+	if err := newVar.Validate(); err != nil {
+		writeModelErr(w, err)
+		return
+	}
 
 	mv, err := h.uc.CreateModelVariation(ctx, newVar)
 	if err != nil {

@@ -26,6 +26,16 @@ export type UseProductBlueprintCreateCategoryFieldsResult = {
   resetCategoryFields: () => void;
 };
 
+/**
+ * model domain 管轄の field。
+ * ProductBlueprint.categoryFields には保存しない。
+ */
+const MODEL_OWNED_CATEGORY_FIELD_KEYS = new Set<string>(["volume"]);
+
+function isModelOwnedCategoryFieldKey(key: string): boolean {
+  return MODEL_OWNED_CATEGORY_FIELD_KEYS.has(key);
+}
+
 function normalizeNumberValue(value: number): number {
   if (Number.isNaN(value)) {
     return 0;
@@ -61,6 +71,10 @@ function normalizeCategoryFieldsForCategory(
   const next: CategoryFieldValues = {};
 
   for (const [key, value] of Object.entries(fields)) {
+    if (isModelOwnedCategoryFieldKey(key)) {
+      continue;
+    }
+
     if (!allowedKeys.has(key)) {
       continue;
     }
@@ -129,6 +143,15 @@ export function useProductBlueprintCreateCategoryFields(
 
   const onChangeCategoryField = React.useCallback(
     (key: string, value: CategoryFieldValue) => {
+      if (isModelOwnedCategoryFieldKey(key)) {
+        setCategoryFields((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        return;
+      }
+
       setCategoryFields((prev) => ({
         ...prev,
         [key]: value,

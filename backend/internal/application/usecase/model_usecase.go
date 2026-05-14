@@ -18,7 +18,9 @@ import (
 // Product-level metadata は productBlueprint.CategoryFields に集約する方針。
 // そのため旧 GetModelData / GetModelDataByBlueprintID / UpdateModelData は廃止済み。
 //
-// この usecase は apparel 系 model variation の操作を担当する。
+// この usecase は category-specific model variation の操作を担当する。
+// apparel では size / color / measurements を扱う。
+// alcohol では volume のみを扱う。
 // どの category で model variation を作成するかは、
 // productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
 // ------------------------------------------------------------
@@ -83,19 +85,23 @@ func (u *ModelUsecase) GetModelVariations(
 	return u.repo.GetModelVariations(ctx, productBlueprintID)
 }
 
-// Create ModelVariation（履歴は保存しない）
+// CreateModelVariation creates a category-specific ModelVariation.
 //
 // NOTE:
-//   - 現在の console model 作成は apparel 用の size/color/measurements 前提。
-//   - 旧 NewModelVariation は廃止し、NewApparelModelVariation を使う。
+//   - apparel では NewModelVariation.Apparel を使う。
+//   - alcohol では NewModelVariation.Alcohol を使う。
 //   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
+//   - alcohol では Volume のみを variation field として扱う。
 //   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
 func (u *ModelUsecase) CreateModelVariation(
 	ctx context.Context,
-	v modeldom.NewApparelModelVariation,
+	v modeldom.NewModelVariation,
 ) (*modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
+	}
+	if err := v.Validate(); err != nil {
+		return nil, err
 	}
 
 	created, err := u.repo.CreateModelVariation(ctx, v)
@@ -106,7 +112,12 @@ func (u *ModelUsecase) CreateModelVariation(
 	return created, nil
 }
 
-// Update ModelVariation（履歴は保存しない）
+// UpdateModelVariation updates a category-specific ModelVariation.
+//
+// NOTE:
+//   - apparel では size / color / measurements 更新に対応する。
+//   - alcohol では volume 更新に対応する。
+//   - 履歴は保存しない。
 func (u *ModelUsecase) UpdateModelVariation(
 	ctx context.Context,
 	variationID string,
@@ -143,12 +154,39 @@ func (u *ModelUsecase) DeleteModelVariation(
 	return u.repo.DeleteModelVariation(ctx, variationID)
 }
 
+// ReplaceModelVariations replaces category-specific ModelVariations.
+//
+// NOTE:
+//   - 全要素が同じ ProductBlueprintID を持つ前提。
+//   - ProductBlueprintID は NewModelVariation.ProductBlueprintID() から解決する。
+//   - apparel では size / color / measurements を扱う。
+//   - alcohol では volume のみを扱う。
+//   - ModelVariation は interface なので、UpdatedAt はここで直接補正しない。
+//     UpdatedAt は repository / domain 側で設定された値を正とする。
 func (u *ModelUsecase) ReplaceModelVariations(
 	ctx context.Context,
-	vars []modeldom.NewApparelModelVariation,
+	vars []modeldom.NewModelVariation,
 ) ([]modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
+	}
+
+	if len(vars) == 0 {
+		return u.repo.ReplaceModelVariations(ctx, vars)
+	}
+
+	productBlueprintID := vars[0].ProductBlueprintID()
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+
+	for _, v := range vars {
+		if err := v.Validate(); err != nil {
+			return nil, err
+		}
+		if v.ProductBlueprintID() != productBlueprintID {
+			return nil, modeldom.ErrProductMismatch
+		}
 	}
 
 	updated, err := u.repo.ReplaceModelVariations(ctx, vars)
@@ -156,8 +194,6 @@ func (u *ModelUsecase) ReplaceModelVariations(
 		return nil, err
 	}
 
-	// ModelVariation は interface になったため、ここで UpdatedAt を直接補正しない。
-	// UpdatedAt は repository / domain 側で設定された値を正とする。
 	return updated, nil
 }
 

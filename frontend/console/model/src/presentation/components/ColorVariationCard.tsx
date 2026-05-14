@@ -1,4 +1,5 @@
-// frontend/model/src/pages/ColorVariationCard.tsx
+// frontend/console/model/src/presentation/components/ColorVariationCard.tsx
+
 import * as React from "react";
 import { Palette, Plus, X } from "lucide-react";
 import {
@@ -35,6 +36,20 @@ type ColorVariationCardProps = {
   onChangeColorRgb?: (color: string, rgbHex: string) => void;
 };
 
+function normalizeColorName(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeHex(value: unknown): string {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) {
+    return "#ffffff";
+  }
+
+  return raw.startsWith("#") ? raw : `#${raw}`;
+}
+
 const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   colors,
   colorInput,
@@ -47,19 +62,44 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
 }) => {
   const isEdit = mode === "edit";
 
-  const [pickerColor, setPickerColor] = React.useState<string>(
-    colorInput || "#ffffff",
+  const safeColors = React.useMemo(
+    () =>
+      Array.isArray(colors)
+        ? colors.map(normalizeColorName).filter(Boolean)
+        : [],
+    [colors],
   );
 
-  // 追加ボタン押下
+  const safeColorRgbMap = colorRgbMap ?? {};
+
+  const [pickerColor, setPickerColor] = React.useState<string>("#ffffff");
+
   const handleAddColor = React.useCallback(() => {
-    const name = colorInput.trim();
-    if (name) {
-      // 追加する色名に対して現在の pickerColor を RGB として保存
-      onChangeColorRgb?.(name, pickerColor);
+    const name = normalizeColorName(colorInput);
+
+    if (!name) {
+      return;
     }
+
+    if (safeColors.includes(name)) {
+      return;
+    }
+
+    const hex = normalizeHex(pickerColor);
+
+    /**
+     * 先に色名 -> hex を保存してから、親の colors 配列へ追加する。
+     * #000000 は falsy 判定に巻き込まないため、文字列としてそのまま扱う。
+     */
+    onChangeColorRgb?.(name, hex);
     onAddColor();
-  }, [colorInput, pickerColor, onAddColor, onChangeColorRgb]);
+  }, [
+    colorInput,
+    pickerColor,
+    safeColors,
+    onAddColor,
+    onChangeColorRgb,
+  ]);
 
   return (
     <Card className="vc">
@@ -94,7 +134,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                   <SketchPicker
                     color={pickerColor}
                     onChange={(color: any) => {
-                      const hex = color?.hex ?? "#ffffff";
+                      const hex = normalizeHex(color?.hex);
                       setPickerColor(hex);
                     }}
                   />
@@ -107,15 +147,23 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                     value={colorInput}
                     onChange={(e) => onChangeColorInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") handleAddColor();
+                      if (e.key !== "Enter") {
+                        return;
+                      }
+
+                      e.preventDefault();
+                      handleAddColor();
                     }}
                   />
+
                   <Button
+                    type="button"
                     variant="secondary"
                     size="icon"
                     onClick={handleAddColor}
                     aria-label="カラーを追加"
                     className="vc__add"
+                    disabled={!normalizeColorName(colorInput)}
                   >
                     <Plus size={18} />
                   </Button>
@@ -127,7 +175,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
           {/* 右カラム: 色一覧テーブル */}
           <div className="vc__right">
             <div className="vc__chips">
-              {colors.length > 0 ? (
+              {safeColors.length > 0 ? (
                 <Table className="vc__table">
                   <TableHeader>
                     <TableRow>
@@ -138,33 +186,31 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                   </TableHeader>
 
                   <TableBody>
-                    {colors.map((c) => {
-                      // ★ 既存 / 保存済みの colorRgbMap を優先し、
-                      //    無い場合のみデフォルト色(#ffffff)を使う
-                      const hexFromMap = colorRgbMap?.[c];
-                      const hex = hexFromMap ?? "#ffffff";
+                    {safeColors.map((colorName) => {
+                      const hexFromMap = safeColorRgbMap[colorName];
+                      const hex = normalizeHex(hexFromMap);
 
                       return (
-                        <TableRow key={c}>
+                        <TableRow key={colorName}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span
                                 className="inline-block w-4 h-4 rounded border"
                                 style={{ backgroundColor: hex }}
                               />
-                              {hexFromMap ?? "-"}
+                              {hexFromMap ? hex : "-"}
                             </div>
                           </TableCell>
 
-                          {/* ✅ Badge(pill) を廃止して文字列表示に変更 */}
-                          <TableCell>{c}</TableCell>
+                          <TableCell>{colorName}</TableCell>
 
                           {isEdit && (
                             <TableCell className="text-right">
                               <button
+                                type="button"
                                 className="vc__chip-close"
-                                onClick={() => onRemoveColor(c)}
-                                aria-label={`${c} を削除`}
+                                onClick={() => onRemoveColor(colorName)}
+                                aria-label={`${colorName} を削除`}
                                 style={{
                                   background: "transparent",
                                   border: "none",

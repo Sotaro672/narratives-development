@@ -180,7 +180,6 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
     visibility.showFit ||
     visibility.showMaterial ||
     visibility.showAlcoholContent ||
-    visibility.showVolume ||
     visibility.showWashTags;
 
   /**
@@ -389,41 +388,6 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                     aria-label="アルコール度数"
                   />
                   <span className="suffix">%</span>
-                </>
-              )}
-            </div>
-          </>
-        )}
-
-        {visibility.showVolume && (
-          <>
-            <div className="label">容量</div>
-            <div className="flex gap-8 items-center">
-              {isEdit ? (
-                <>
-                  <Input
-                    type="number"
-                    value={toCategoryInputValue(
-                      getCategoryFieldValue(categoryFields, "volume"),
-                    )}
-                    onChange={(e) =>
-                      handleChangeCategoryField("volume", e.target.value)
-                    }
-                    aria-label="容量"
-                  />
-                  <span className="suffix">ml</span>
-                </>
-              ) : (
-                <>
-                  <Input
-                    value={toCategoryInputValue(
-                      getCategoryFieldValue(categoryFields, "volume"),
-                    )}
-                    variant="readonly"
-                    readOnly
-                    aria-label="容量"
-                  />
-                  <span className="suffix">ml</span>
                 </>
               )}
             </div>

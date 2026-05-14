@@ -4,14 +4,15 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { Brand } from "../../../../../brand/src/domain/entity/brand";
-import type { ModelNumber } from "../../../../../model/src/application/modelCreateService";
+import type {
+  ModelNumber,
+  VolumeRow,
+  AlcoholModelNumber,
+} from "../../../../../model/src/application/modelCreateService";
 
 import { useAuth } from "../../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
 import {
-  APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
-  FIT_OPTIONS,
-  WASH_TAG_OPTIONS,
   type MeasurementOption,
   type ApparelSizeRow as SizeRow,
   type Fit,
@@ -56,6 +57,7 @@ export interface UseProductBlueprintCreateResult {
   productBlueprintCategoryLoading: boolean;
   productBlueprintCategoryError: Error | null;
   isApparelCategory: boolean;
+  isAlcoholCategory: boolean;
 
   fit: Fit;
   material: string;
@@ -70,6 +72,13 @@ export interface UseProductBlueprintCreateResult {
   colorRgbMap: Record<string, string>;
   sizes: SizeRow[];
   modelNumbers: ModelNumber[];
+
+  /**
+   * alcohol model variation 用。
+   * volume は productBlueprint.categoryFields ではなく model domain 側で扱う。
+   */
+  volumes: VolumeRow[];
+  alcoholModelNumbers: AlcoholModelNumber[];
 
   assigneeId: string;
   assigneeName: string;
@@ -105,9 +114,34 @@ export interface UseProductBlueprintCreateResult {
     nextCode: string,
   ) => void;
 
+  /**
+   * alcohol volume variation 操作用。
+   */
+  onAddVolume: () => void;
+  onRemoveVolume: (id: string) => void;
+  onChangeVolume: (id: string, patch: Partial<Omit<VolumeRow, "id">>) => void;
+  onChangeAlcoholModelNumber: (
+    volumeLabel: string,
+    nextCode: string,
+  ) => void;
+
   onSelectAssignee: (id: string) => void;
   onEditAssignee: () => void;
   onClickAssignee: () => void;
+}
+
+function removeModelOwnedCategoryFields(
+  fields: CategoryFieldValues,
+): CategoryFieldValues {
+  const next: CategoryFieldValues = { ...fields };
+
+  /**
+   * alcohol volume は model domain 管轄。
+   * ProductBlueprint.categoryFields へ保存しない。
+   */
+  delete next.volume;
+
+  return next;
 }
 
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
@@ -154,6 +188,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     setAssigneeName(label);
   }, [currentMember, assigneeId]);
 
+  const sanitizedCategoryFields = React.useMemo(
+    () => removeModelOwnedCategoryFields(categoryFields.categoryFields),
+    [categoryFields.categoryFields],
+  );
+
   const validate = useProductBlueprintCreateValidation({
     companyId: effectiveCompanyId,
     productName,
@@ -162,19 +201,19 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     productBlueprintCategory: category.productBlueprintCategory,
     weight: categoryFields.weight,
     isApparelCategory: variations.isApparelCategory,
+    isAlcoholCategory: variations.isAlcoholCategory,
     colors: variations.colors,
     sizes: variations.sizes,
     modelNumbers: variations.modelNumbers,
+    volumes: variations.volumes,
+    alcoholModelNumbers: variations.alcoholModelNumbers,
   });
 
   const onChangeProductBlueprintCategory = React.useCallback(
     (nextCategory: ProductBlueprintCategorySnapshot | null) => {
       category.onChangeProductBlueprintCategory(nextCategory);
       categoryFields.resetCategoryFields();
-
-      if (!nextCategory || nextCategory.kind !== "apparel") {
-        variations.resetVariations();
-      }
+      variations.resetVariations();
     },
     [category, categoryFields, variations],
   );
@@ -216,9 +255,18 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       sizes: variations.isApparelCategory ? variations.sizes : [],
       modelNumbers: variations.isApparelCategory ? variations.modelNumbers : [],
 
+      /**
+       * alcohol の容量は ProductBlueprint.categoryFields ではなく、
+       * model variation として作成する。
+       */
+      volumes: variations.isAlcoholCategory ? variations.volumes : [],
+      alcoholModelNumbers: variations.isAlcoholCategory
+        ? variations.alcoholModelNumbers
+        : [],
+
       assigneeId,
       createdBy: currentMember?.id ?? "",
-      categoryFields: categoryFields.categoryFields,
+      categoryFields: sanitizedCategoryFields,
     };
 
     try {
@@ -252,12 +300,15 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     categoryFields.material,
     categoryFields.weight,
     categoryFields.qualityAssurance,
-    categoryFields.categoryFields,
+    sanitizedCategoryFields,
     variations.isApparelCategory,
+    variations.isAlcoholCategory,
     variations.colors,
     variations.colorRgbMap,
     variations.sizes,
     variations.modelNumbers,
+    variations.volumes,
+    variations.alcoholModelNumbers,
     assigneeId,
     currentMember?.id,
     navigate,
@@ -317,12 +368,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     productBlueprintCategoryLoading: category.productBlueprintCategoryLoading,
     productBlueprintCategoryError: category.productBlueprintCategoryError,
     isApparelCategory: variations.isApparelCategory,
+    isAlcoholCategory: variations.isAlcoholCategory,
 
     fit: categoryFields.fit,
     material: categoryFields.material,
     weight: categoryFields.weight,
     qualityAssurance: categoryFields.qualityAssurance,
-    categoryFields: categoryFields.categoryFields,
+    categoryFields: sanitizedCategoryFields,
 
     measurementOptions: variations.measurementOptions,
 
@@ -331,6 +383,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     colorRgbMap: variations.colorRgbMap,
     sizes: variations.sizes,
     modelNumbers: variations.modelNumbers,
+
+    volumes: variations.volumes,
+    alcoholModelNumbers: variations.alcoholModelNumbers,
 
     assigneeId,
     assigneeName,
@@ -358,6 +413,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onRemoveSize: variations.onRemoveSize,
     onChangeSize: variations.onChangeSize,
     onChangeModelNumber: variations.onChangeModelNumber,
+
+    onAddVolume: variations.onAddVolume,
+    onRemoveVolume: variations.onRemoveVolume,
+    onChangeVolume: variations.onChangeVolume,
+    onChangeAlcoholModelNumber: variations.onChangeAlcoholModelNumber,
 
     onSelectAssignee,
     onEditAssignee,

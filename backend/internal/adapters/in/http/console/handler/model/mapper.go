@@ -26,27 +26,60 @@ func toMeasurements(in map[string]float64) modeldom.Measurements {
 	return ms
 }
 
-// rgb 必須化方針に従い、req.RGB は常に使用する（省略分岐なし）
-func toNewModelVariation(productBlueprintID string, req createModelVariationRequest) modeldom.NewApparelModelVariation {
-	return modeldom.NewApparelModelVariation{
+// toNewModelVariation は request を category-specific な domain input に変換する。
+//
+// NOTE:
+//   - req.Kind == "alcohol" の場合は alcohol variation を作る。
+//   - それ以外、または kind 未指定の場合は既存互換として apparel variation を作る。
+//   - rgb 必須化方針に従い、apparel では req.RGB を常に使用する。
+//   - req.RGB == 0 は黒として正なので falsy 扱いしない。
+func toNewModelVariation(
+	productBlueprintID string,
+	req createModelVariationRequest,
+) modeldom.NewModelVariation {
+	if req.Kind == string(modeldom.ModelVariationKindAlcohol) {
+		return modeldom.NewModelVariationFromAlcohol(modeldom.NewAlcoholModelVariation{
+			ProductBlueprintID: productBlueprintID,
+			ModelNumber:        req.ModelNumber,
+			Volume:             req.Volume,
+		})
+	}
+
+	return modeldom.NewModelVariationFromApparel(modeldom.NewApparelModelVariation{
 		ProductBlueprintID: productBlueprintID,
 		ModelNumber:        req.ModelNumber,
 		Size:               req.Size,
 		Color: modeldom.Color{
 			Name: req.Color,
-			RGB:  req.RGB, // ✅ 必須（0=黒も正）
+			RGB:  req.RGB,
 		},
 		Measurements: toMeasurements(req.Measurements),
-	}
+	})
 }
 
-// rgb 必須化方針に従い、Update でも Color.RGB は常に設定する（省略分岐なし）
+// toModelVariationUpdate は request を category-specific な update DTO に変換する。
+//
+// NOTE:
+//   - req.Kind == "alcohol" の場合は volume 更新を返す。
+//   - それ以外、または kind 未指定の場合は既存互換として apparel 更新を返す。
+//   - rgb 必須化方針に従い、apparel では req.RGB を常に使用する。
+//   - req.RGB == 0 は黒として正なので falsy 扱いしない。
 func toModelVariationUpdate(req createModelVariationRequest) modeldom.ModelVariationUpdate {
 	modelNumber := req.ModelNumber
+
+	if req.Kind == string(modeldom.ModelVariationKindAlcohol) {
+		volume := req.Volume
+
+		return modeldom.ModelVariationUpdate{
+			ModelNumber: &modelNumber,
+			Volume:      &volume,
+		}
+	}
+
 	size := req.Size
 	color := modeldom.Color{
 		Name: req.Color,
-		RGB:  req.RGB, // ✅ 必須（0=黒も正）
+		RGB:  req.RGB,
 	}
 
 	return modeldom.ModelVariationUpdate{

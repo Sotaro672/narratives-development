@@ -7,6 +7,11 @@ import type {
   ApparelSizeRow as SizeRow,
 } from "../../../domain/entity/apparel";
 
+import type {
+  AlcoholModelNumber,
+  VolumeRow,
+} from "../../../../../model/src/application/modelCreateService";
+
 import { useModelCard } from "../../../../../model/src/presentation/hook/useModelCard";
 
 /**
@@ -18,6 +23,13 @@ export type VariationsUiState = {
   modelNumbers: ModelNumberRow[];
   /** color 名 → rgb hex (#rrggbb) */
   colorRgbMap: Record<string, string>;
+
+  /**
+   * alcohol model variation 用。
+   * volume は ProductBlueprint.categoryFields ではなく model domain 側で扱う。
+   */
+  volumes?: VolumeRow[];
+  alcoholModelNumbers?: AlcoholModelNumber[];
 };
 
 export type UseVariationsEditorResult = {
@@ -27,6 +39,10 @@ export type UseVariationsEditorResult = {
   sizes: SizeRow[];
   modelNumbers: ModelNumberRow[];
   colorRgbMap: Record<string, string>;
+
+  // alcohol state
+  volumes: VolumeRow[];
+  alcoholModelNumbers: AlcoholModelNumber[];
 
   // model card helper
   getCode: (sizeLabel: string, color: string) => string;
@@ -45,16 +61,91 @@ export type UseVariationsEditorResult = {
   onAddSize: () => void;
   onChangeSize: (id: string, patch: Partial<Omit<SizeRow, "id">>) => void;
 
-  // model number
+  // apparel model number
   onChangeModelNumber: (
     sizeLabel: string,
     color: string,
     nextCode: string,
   ) => void;
+
+  // alcohol volume
+  onAddVolume: () => void;
+  onRemoveVolume: (id: string) => void;
+  onChangeVolume: (id: string, patch: Partial<Omit<VolumeRow, "id">>) => void;
+
+  // alcohol model number
+  onChangeAlcoholModelNumber: (
+    volumeLabel: string,
+    nextCode: string,
+  ) => void;
 };
 
+function createId(prefix: string): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function newSizeRow(): SizeRow {
+  return {
+    id: createId("size"),
+    sizeLabel: "",
+
+    // トップス
+    length: undefined,
+    width: undefined,
+    chest: undefined,
+    shoulder: undefined,
+    sleeveLength: undefined,
+
+    // ボトムス
+    waist: undefined,
+    hip: undefined,
+    rise: undefined,
+    inseam: undefined,
+    thigh: undefined,
+    hemWidth: undefined,
+  };
+}
+
+function newVolumeRow(): VolumeRow {
+  return {
+    id: createId("volume"),
+    volumeValue: 0,
+    volumeUnit: "ml",
+  };
+}
+
+function normalizeVolumeValue(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return value < 0 ? 0 : value;
+}
+
+function normalizeVolumeUnit(value: unknown): string {
+  const unit = String(value ?? "").trim();
+  return unit || "ml";
+}
+
+function toVolumeLabel(
+  row: Pick<VolumeRow, "volumeValue" | "volumeUnit">,
+): string {
+  const value = normalizeVolumeValue(row.volumeValue);
+  const unit = normalizeVolumeUnit(row.volumeUnit);
+
+  if (value <= 0) {
+    return "";
+  }
+
+  return `${value}${unit}`;
+}
+
 /**
- * Presentation-level editor state for variations (colors/sizes/modelNumbers/colorRgbMap).
+ * Presentation-level editor state for variations
+ * (colors/sizes/modelNumbers/colorRgbMap/volumes/alcoholModelNumbers).
+ *
  * - Keeps editor logic out of useProductBlueprintDetail.tsx
  * - Designed to accept state produced by variationMapper (mapVariationsToUiState)
  */
@@ -72,11 +163,24 @@ export function useVariationsEditor(
     initial?.colorRgbMap ?? {},
   );
 
+  const [volumes, setVolumes] = React.useState<VolumeRow[]>(
+    initial?.volumes ?? [],
+  );
+  const [alcoholModelNumbers, setAlcoholModelNumbers] = React.useState<
+    AlcoholModelNumber[]
+  >(initial?.alcoholModelNumbers ?? []);
+
   const setFromUiState = React.useCallback((next: VariationsUiState) => {
     setColors(Array.isArray(next.colors) ? next.colors : []);
     setSizes(Array.isArray(next.sizes) ? next.sizes : []);
     setModelNumbers(Array.isArray(next.modelNumbers) ? next.modelNumbers : []);
     setColorRgbMap(next.colorRgbMap ?? {});
+    setVolumes(Array.isArray(next.volumes) ? next.volumes : []);
+    setAlcoholModelNumbers(
+      Array.isArray(next.alcoholModelNumbers)
+        ? next.alcoholModelNumbers
+        : [],
+    );
     setColorInput("");
   }, []);
 
@@ -91,7 +195,7 @@ export function useVariationsEditor(
   });
 
   // ---------------------------------
-  // Internal: modelNumbers state update
+  // Internal: apparel modelNumbers state update
   // ---------------------------------
   const patchModelNumberState = React.useCallback(
     (sizeLabel: string, color: string, nextCode: string) => {
@@ -126,7 +230,6 @@ export function useVariationsEditor(
 
   const onChangeModelNumber = React.useCallback(
     (sizeLabel: string, color: string, nextCode: string) => {
-      // keep existing behavior: call UI helper, then update local state
       uiOnChangeModelNumber(sizeLabel, color, nextCode);
       patchModelNumberState(sizeLabel, color, nextCode);
     },
@@ -206,40 +309,7 @@ export function useVariationsEditor(
   }, []);
 
   const onAddSize = React.useCallback(() => {
-    setSizes((prev) => {
-      const nextNum =
-        prev.reduce((max, row) => {
-          const n = Number(row.id);
-
-          if (Number.isNaN(n)) {
-            return max;
-          }
-
-          return n > max ? n : max;
-        }, 0) + 1;
-
-      const next: SizeRow = {
-        id: String(nextNum),
-        sizeLabel: "",
-
-        // トップス
-        length: undefined,
-        width: undefined,
-        chest: undefined,
-        shoulder: undefined,
-        sleeveLength: undefined,
-
-        // ボトムス
-        waist: undefined,
-        hip: undefined,
-        rise: undefined,
-        inseam: undefined,
-        thigh: undefined,
-        hemWidth: undefined,
-      };
-
-      return [...prev, next];
-    });
+    setSizes((prev) => [...prev, newSizeRow()]);
   }, []);
 
   const onChangeSize = React.useCallback(
@@ -270,12 +340,207 @@ export function useVariationsEditor(
       clampField("thigh");
       clampField("hemWidth");
 
+      const prevRow = sizes.find((size) => size.id === id);
+      const prevLabel = String(prevRow?.sizeLabel ?? "").trim();
+
+      const nextLabelRaw = safePatch.sizeLabel;
+      const nextLabel =
+        typeof nextLabelRaw === "string"
+          ? nextLabelRaw.trim()
+          : nextLabelRaw == null
+            ? null
+            : String(nextLabelRaw).trim();
+
+      if (nextLabel !== null && nextLabel !== prevLabel) {
+        if (!nextLabel) {
+          if (prevLabel) {
+            setModelNumbers((prev) =>
+              prev.filter((modelNumber) => modelNumber.size !== prevLabel),
+            );
+          }
+        } else if (prevLabel) {
+          setModelNumbers((prev) =>
+            prev.map((modelNumber) =>
+              modelNumber.size === prevLabel
+                ? { ...modelNumber, size: nextLabel }
+                : modelNumber,
+            ),
+          );
+        }
+      }
+
       setSizes((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),
       );
     },
-    [],
+    [sizes],
   );
+
+  // ---------------------------------
+  // Alcohol volume handlers
+  // ---------------------------------
+  const onAddVolume = React.useCallback(() => {
+    setVolumes((prev) => [...prev, newVolumeRow()]);
+  }, []);
+
+  const onRemoveVolume = React.useCallback(
+    (id: string) => {
+      const target = volumes.find((volume) => volume.id === id);
+      const targetLabel = target ? toVolumeLabel(target) : "";
+
+      setVolumes((prev) => prev.filter((volume) => volume.id !== id));
+
+      if (targetLabel) {
+        setAlcoholModelNumbers((prev) =>
+          prev.filter((modelNumber) => modelNumber.volumeLabel !== targetLabel),
+        );
+      }
+    },
+    [volumes],
+  );
+
+  const onChangeVolume = React.useCallback(
+    (id: string, patch: Partial<Omit<VolumeRow, "id">>) => {
+      const safePatch: Partial<Omit<VolumeRow, "id">> = { ...patch };
+
+      if (safePatch.volumeValue !== undefined) {
+        safePatch.volumeValue = normalizeVolumeValue(safePatch.volumeValue);
+      }
+
+      if (safePatch.volumeUnit !== undefined) {
+        safePatch.volumeUnit = normalizeVolumeUnit(safePatch.volumeUnit);
+      }
+
+      const prevRow = volumes.find((volume) => volume.id === id);
+      const prevLabel = prevRow ? toVolumeLabel(prevRow) : "";
+
+      const nextRow: VolumeRow | null = prevRow
+        ? { ...prevRow, ...safePatch }
+        : null;
+
+      const nextLabel = nextRow ? toVolumeLabel(nextRow) : "";
+
+      if (prevLabel && nextRow && nextLabel && prevLabel !== nextLabel) {
+        setAlcoholModelNumbers((prev) =>
+          prev.map((modelNumber) =>
+            modelNumber.volumeLabel === prevLabel
+              ? {
+                  ...modelNumber,
+                  volume: {
+                    value: nextRow.volumeValue,
+                    unit: nextRow.volumeUnit,
+                  },
+                  volumeLabel: nextLabel,
+                }
+              : modelNumber,
+          ),
+        );
+      }
+
+      if (prevLabel && !nextLabel) {
+        setAlcoholModelNumbers((prev) =>
+          prev.filter((modelNumber) => modelNumber.volumeLabel !== prevLabel),
+        );
+      }
+
+      setVolumes((prev) =>
+        prev.map((volume) =>
+          volume.id === id ? { ...volume, ...safePatch } : volume,
+        ),
+      );
+    },
+    [volumes],
+  );
+
+  const onChangeAlcoholModelNumber = React.useCallback(
+    (volumeLabel: string, nextCode: string) => {
+      const label = volumeLabel.trim();
+
+      if (!label) {
+        return;
+      }
+
+      const volumeRow = volumes.find((volume) => toVolumeLabel(volume) === label);
+
+      if (!volumeRow) {
+        return;
+      }
+
+      setAlcoholModelNumbers((prev) => {
+        const index = prev.findIndex(
+          (modelNumber) => modelNumber.volumeLabel === label,
+        );
+
+        const trimmed = nextCode.trim();
+
+        if (!trimmed) {
+          if (index === -1) {
+            return prev;
+          }
+
+          const copy = [...prev];
+          copy.splice(index, 1);
+          return copy;
+        }
+
+        const next: AlcoholModelNumber = {
+          kind: "alcohol",
+          volume: {
+            value: volumeRow.volumeValue,
+            unit: volumeRow.volumeUnit,
+          },
+          volumeLabel: label,
+          code: trimmed,
+        };
+
+        if (index === -1) {
+          return [...prev, next];
+        }
+
+        const copy = [...prev];
+        copy[index] = next;
+        return copy;
+      });
+    },
+    [volumes],
+  );
+
+  // ---------------------------------
+  // Cleanup invalid model numbers
+  // ---------------------------------
+  React.useEffect(() => {
+    const validColors = new Set(
+      colors.map((color) => color.trim()).filter(Boolean),
+    );
+
+    const validSizes = new Set(
+      sizes
+        .map((size) => size.sizeLabel)
+        .map((value) =>
+          typeof value === "string" ? value.trim() : String(value ?? "").trim(),
+        )
+        .filter(Boolean),
+    );
+
+    setModelNumbers((prev) =>
+      prev.filter(
+        (modelNumber) =>
+          validColors.has(modelNumber.color) && validSizes.has(modelNumber.size),
+      ),
+    );
+  }, [colors, sizes]);
+
+  React.useEffect(() => {
+    const validVolumeLabels = new Set(
+      volumes.map(toVolumeLabel).filter(Boolean),
+    );
+
+    setAlcoholModelNumbers((prev) =>
+      prev.filter((modelNumber) =>
+        validVolumeLabels.has(modelNumber.volumeLabel),
+      ),
+    );
+  }, [volumes]);
 
   return {
     colors,
@@ -283,6 +548,9 @@ export function useVariationsEditor(
     sizes,
     modelNumbers,
     colorRgbMap,
+
+    volumes,
+    alcoholModelNumbers,
 
     getCode,
 
@@ -298,5 +566,10 @@ export function useVariationsEditor(
     onChangeSize,
 
     onChangeModelNumber,
+
+    onAddVolume,
+    onRemoveVolume,
+    onChangeVolume,
+    onChangeAlcoholModelNumber,
   };
 }

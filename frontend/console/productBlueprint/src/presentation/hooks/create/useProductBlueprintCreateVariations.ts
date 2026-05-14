@@ -2,7 +2,11 @@
 
 import * as React from "react";
 
-import type { ModelNumber } from "../../../../../model/src/application/modelCreateService";
+import type {
+  AlcoholModelNumber,
+  ModelNumber,
+  VolumeRow,
+} from "../../../../../model/src/application/modelCreateService";
 
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
@@ -11,14 +15,19 @@ import {
   type ApparelSizeRow as SizeRow,
 } from "../../../domain/entity/apparel";
 
+import { isAlcoholCategoryCode } from "../../../domain/entity/alcohol";
+
 import type { ProductBlueprintCategorySnapshot } from "../../../domain/entity/productBlueprintCategory";
+
+function createId(prefix: string): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function newSizeRow(): SizeRow {
   return {
-    id:
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `size-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: createId("size"),
     sizeLabel: "",
 
     // トップス
@@ -38,8 +47,32 @@ function newSizeRow(): SizeRow {
   };
 }
 
+function newVolumeRow(): VolumeRow {
+  return {
+    id: createId("volume"),
+    volumeValue: 0,
+    volumeUnit: "ml",
+  };
+}
+
+function toVolumeLabel(row: Pick<VolumeRow, "volumeValue" | "volumeUnit">): string {
+  const value =
+    typeof row.volumeValue === "number" && Number.isFinite(row.volumeValue)
+      ? row.volumeValue
+      : 0;
+
+  const unit = String(row.volumeUnit ?? "").trim() || "ml";
+
+  if (value <= 0) {
+    return "";
+  }
+
+  return `${value}${unit}`;
+}
+
 export type UseProductBlueprintCreateVariationsResult = {
   isApparelCategory: boolean;
+  isAlcoholCategory: boolean;
   measurementOptions: MeasurementOption[];
 
   colors: string[];
@@ -47,6 +80,13 @@ export type UseProductBlueprintCreateVariationsResult = {
   colorRgbMap: Record<string, string>;
   sizes: SizeRow[];
   modelNumbers: ModelNumber[];
+
+  /**
+   * alcohol model variation 用。
+   * volume は productBlueprint.categoryFields ではなく model domain 側で扱う。
+   */
+  volumes: VolumeRow[];
+  alcoholModelNumbers: AlcoholModelNumber[];
 
   onChangeColorInput: (value: string) => void;
   onAddColor: () => void;
@@ -60,6 +100,14 @@ export type UseProductBlueprintCreateVariationsResult = {
   onChangeModelNumber: (
     sizeLabel: string,
     color: string,
+    nextCode: string,
+  ) => void;
+
+  onAddVolume: () => void;
+  onRemoveVolume: (id: string) => void;
+  onChangeVolume: (id: string, patch: Partial<Omit<VolumeRow, "id">>) => void;
+  onChangeAlcoholModelNumber: (
+    volumeLabel: string,
     nextCode: string,
   ) => void;
 
@@ -78,6 +126,11 @@ export function useProductBlueprintCreateVariations(
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers, setModelNumbers] = React.useState<ModelNumber[]>([]);
 
+  const [volumes, setVolumes] = React.useState<VolumeRow[]>([]);
+  const [alcoholModelNumbers, setAlcoholModelNumbers] = React.useState<
+    AlcoholModelNumber[]
+  >([]);
+
   const categoryCode = React.useMemo(
     () => String(productBlueprintCategory?.code ?? "").trim(),
     [productBlueprintCategory],
@@ -85,6 +138,11 @@ export function useProductBlueprintCreateVariations(
 
   const isApparelCategory = React.useMemo(
     () => isApparelCategoryCode(categoryCode),
+    [categoryCode],
+  );
+
+  const isAlcoholCategory = React.useMemo(
+    () => isAlcoholCategoryCode(categoryCode),
     [categoryCode],
   );
 
@@ -102,13 +160,29 @@ export function useProductBlueprintCreateVariations(
     setColorRgbMap({});
     setSizes([]);
     setModelNumbers([]);
+    setVolumes([]);
+    setAlcoholModelNumbers([]);
   }, []);
 
   React.useEffect(() => {
-    if (!isApparelCategory) {
+    if (!isApparelCategory && !isAlcoholCategory) {
       resetVariations();
+      return;
     }
-  }, [isApparelCategory, resetVariations]);
+
+    if (!isApparelCategory) {
+      setColors([]);
+      setColorInput("");
+      setColorRgbMap({});
+      setSizes([]);
+      setModelNumbers([]);
+    }
+
+    if (!isAlcoholCategory) {
+      setVolumes([]);
+      setAlcoholModelNumbers([]);
+    }
+  }, [isApparelCategory, isAlcoholCategory, resetVariations]);
 
   const onAddColor = React.useCallback(() => {
     if (!isApparelCategory) {
@@ -277,6 +351,7 @@ export function useProductBlueprintCreateVariations(
         }
 
         const next: ModelNumber = {
+          kind: "apparel",
           size: sizeLabel,
           color,
           code: trimmed,
@@ -292,6 +367,138 @@ export function useProductBlueprintCreateVariations(
       });
     },
     [],
+  );
+
+  const onAddVolume = React.useCallback(() => {
+    if (!isAlcoholCategory) {
+      return;
+    }
+
+    setVolumes((prev) => [...prev, newVolumeRow()]);
+  }, [isAlcoholCategory]);
+
+  const onRemoveVolume = React.useCallback(
+    (id: string) => {
+      const target = volumes.find((volume) => volume.id === id);
+      const targetLabel = target ? toVolumeLabel(target) : "";
+
+      setVolumes((prev) => prev.filter((volume) => volume.id !== id));
+
+      if (targetLabel) {
+        setAlcoholModelNumbers((prev) =>
+          prev.filter(
+            (modelNumber) => modelNumber.volumeLabel !== targetLabel,
+          ),
+        );
+      }
+    },
+    [volumes],
+  );
+
+  const onChangeVolume = React.useCallback(
+    (id: string, patch: Partial<Omit<VolumeRow, "id">>) => {
+      const safePatch: Partial<Omit<VolumeRow, "id">> = { ...patch };
+
+      if (
+        typeof safePatch.volumeValue === "number" &&
+        safePatch.volumeValue < 0
+      ) {
+        safePatch.volumeValue = 0;
+      }
+
+      if (typeof safePatch.volumeUnit === "string") {
+        safePatch.volumeUnit = safePatch.volumeUnit.trim() || "ml";
+      }
+
+      const prevRow = volumes.find((volume) => volume.id === id);
+      const prevLabel = prevRow ? toVolumeLabel(prevRow) : "";
+
+      const nextRow = prevRow ? { ...prevRow, ...safePatch } : null;
+      const nextLabel = nextRow ? toVolumeLabel(nextRow) : "";
+
+      if (prevLabel && nextLabel && prevLabel !== nextLabel) {
+        setAlcoholModelNumbers((prev) =>
+          prev.map((modelNumber) =>
+            modelNumber.volumeLabel === prevLabel
+              ? {
+                  ...modelNumber,
+                  volume: {
+                    value: nextRow?.volumeValue ?? 0,
+                    unit: nextRow?.volumeUnit ?? "ml",
+                  },
+                  volumeLabel: nextLabel,
+                }
+              : modelNumber,
+          ),
+        );
+      }
+
+      if (prevLabel && !nextLabel) {
+        setAlcoholModelNumbers((prev) =>
+          prev.filter((modelNumber) => modelNumber.volumeLabel !== prevLabel),
+        );
+      }
+
+      setVolumes((prev) =>
+        prev.map((volume) =>
+          volume.id === id ? { ...volume, ...safePatch } : volume,
+        ),
+      );
+    },
+    [volumes],
+  );
+
+  const onChangeAlcoholModelNumber = React.useCallback(
+    (volumeLabel: string, nextCode: string) => {
+      const label = volumeLabel.trim();
+
+      if (!label) {
+        return;
+      }
+
+      const volumeRow = volumes.find((volume) => toVolumeLabel(volume) === label);
+
+      if (!volumeRow) {
+        return;
+      }
+
+      setAlcoholModelNumbers((prev) => {
+        const index = prev.findIndex(
+          (modelNumber) => modelNumber.volumeLabel === label,
+        );
+
+        const trimmed = nextCode.trim();
+
+        if (!trimmed) {
+          if (index === -1) {
+            return prev;
+          }
+
+          const copy = [...prev];
+          copy.splice(index, 1);
+          return copy;
+        }
+
+        const next: AlcoholModelNumber = {
+          kind: "alcohol",
+          volume: {
+            value: volumeRow.volumeValue,
+            unit: volumeRow.volumeUnit,
+          },
+          volumeLabel: label,
+          code: trimmed,
+        };
+
+        if (index === -1) {
+          return [...prev, next];
+        }
+
+        const copy = [...prev];
+        copy[index] = next;
+        return copy;
+      });
+    },
+    [volumes],
   );
 
   React.useEffect(() => {
@@ -316,8 +523,21 @@ export function useProductBlueprintCreateVariations(
     );
   }, [colors, sizes]);
 
+  React.useEffect(() => {
+    const validVolumeLabels = new Set(
+      volumes.map(toVolumeLabel).filter(Boolean),
+    );
+
+    setAlcoholModelNumbers((prev) =>
+      prev.filter((modelNumber) =>
+        validVolumeLabels.has(modelNumber.volumeLabel),
+      ),
+    );
+  }, [volumes]);
+
   return {
     isApparelCategory,
+    isAlcoholCategory,
     measurementOptions,
 
     colors,
@@ -325,6 +545,9 @@ export function useProductBlueprintCreateVariations(
     colorRgbMap,
     sizes,
     modelNumbers,
+
+    volumes,
+    alcoholModelNumbers,
 
     onChangeColorInput: setColorInput,
     onAddColor,
@@ -335,6 +558,11 @@ export function useProductBlueprintCreateVariations(
     onRemoveSize,
     onChangeSize,
     onChangeModelNumber,
+
+    onAddVolume,
+    onRemoveVolume,
+    onChangeVolume,
+    onChangeAlcoholModelNumber,
 
     resetVariations,
   };

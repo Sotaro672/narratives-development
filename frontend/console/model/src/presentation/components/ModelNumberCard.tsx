@@ -17,13 +17,14 @@ import {
   TableRow,
   TableCell,
 } from "../../../../shell/src/shared/ui/table";
-import "../styles/model.css";
-import "../../../../shell/src/shared/ui/card.css";
 
 /**
  * サイズ行の見た目用の最小情報
  */
-type SizeLike = { id: string; sizeLabel: string };
+type SizeLike = {
+  id: string;
+  sizeLabel: string;
+};
 
 type ModelNumberCardProps = {
   /** 行方向：サイズ一覧 */
@@ -60,16 +61,15 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
     (sizeLabel: string, color: string) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!isEdit) return;
+
       const nextCode = e.target.value;
-      if (onChangeModelNumber) {
-        onChangeModelNumber(sizeLabel, color, nextCode);
-      }
+      onChangeModelNumber?.(sizeLabel, color, nextCode);
     };
 
   return (
     <Card
-      className={`mnc ${className ?? ""} ${
-        mode === "view" ? "view-mode" : ""
+      className={`mnc ${mode === "view" ? "view-mode" : ""} ${
+        className ?? ""
       }`}
     >
       <CardHeader className="box__header">
@@ -89,27 +89,30 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead>サイズ / カラー</TableHead>
-              {colors.map((c) => (
-                <TableHead key={c}>{c}</TableHead>
+              {colors.map((color) => (
+                <TableHead key={color}>{color}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
 
           <TableBody>
-            {sizes.map((s) => (
-              <TableRow key={s.id}>
-                <TableCell className="mnc__size">{s.sizeLabel}</TableCell>
+            {sizes.map((size) => (
+              <TableRow key={size.id}>
+                <TableCell className="mnc__size">
+                  {size.sizeLabel}
+                </TableCell>
 
-                {colors.map((c) => {
-                  const code = getCode(s.sizeLabel, c);
+                {colors.map((color) => {
+                  const code = getCode(size.sizeLabel, color);
+
                   return (
-                    <TableCell key={c}>
+                    <TableCell key={color}>
                       {isEdit ? (
                         <Input
                           value={code}
-                          onChange={handleChange(s.sizeLabel, c)}
+                          onChange={handleChange(size.sizeLabel, color)}
                           placeholder="例: LM-SB-S-WHT"
-                          aria-label={`${s.sizeLabel} / ${c} のモデルナンバー`}
+                          aria-label={`${size.sizeLabel} / ${color} のモデルナンバー`}
                         />
                       ) : (
                         <span>{code}</span>

@@ -24,7 +24,7 @@ const (
 )
 
 // CategoryInputFieldDefinition は category ごとの入力項目定義。
-// Key は frontend / backend / Firestore の categoryFields key として使う。
+// Key は frontend / backend / Firestore の categoryFields key または model variation key として使う。
 type CategoryInputFieldDefinition struct {
 	Scope    InputFieldScope `json:"scope"`
 	Key      string          `json:"key"`
@@ -90,6 +90,10 @@ func withCommonProductBlueprintFields(extra ...CategoryInputFieldDefinition) []C
 // ------------------------------------------------------------
 // Reusable productBlueprint fields
 // ------------------------------------------------------------
+//
+// NOTE:
+// model variation 側の値は model domain を正とする。
+// そのため、酒類の volume は productBlueprint field ではなく model field として扱う。
 
 var (
 	fieldWeight = CategoryInputFieldDefinition{
@@ -141,20 +145,18 @@ var (
 		Required: false,
 		Unit:     "%",
 	}
-
-	fieldVolume = CategoryInputFieldDefinition{
-		Scope:    InputFieldScopeProductBlueprint,
-		Key:      "volume",
-		Label:    "容量",
-		Type:     InputFieldTypeNumber,
-		Required: false,
-		Unit:     "ml",
-	}
 )
 
 // ------------------------------------------------------------
 // Reusable model fields
 // ------------------------------------------------------------
+//
+// NOTE:
+// ここにある定義は model domain の値オブジェクト定義ではなく、
+// category ごとの入力 schema metadata。
+// 実際の保存構造・validation の正は model domain 側。
+// - apparel: Color / Size / Measurements
+// - alcohol: Volume
 
 var (
 	modelFieldColor = CategoryInputFieldDefinition{
@@ -180,6 +182,15 @@ var (
 		Type:     InputFieldTypeTextarea,
 		Required: false,
 	}
+
+	modelFieldVolume = CategoryInputFieldDefinition{
+		Scope:    InputFieldScopeModel,
+		Key:      "volume",
+		Label:    "容量",
+		Type:     InputFieldTypeNumber,
+		Required: true,
+		Unit:     "ml",
+	}
 )
 
 var modelFieldsColorSize = []CategoryInputFieldDefinition{
@@ -191,6 +202,10 @@ var modelFieldsColorSizeMeasurements = []CategoryInputFieldDefinition{
 	modelFieldColor,
 	modelFieldSize,
 	modelFieldMeasurements,
+}
+
+var modelFieldsVolume = []CategoryInputFieldDefinition{
+	modelFieldVolume,
 }
 
 // ------------------------------------------------------------
@@ -240,8 +255,9 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 	// alcohol
 	// productBlueprint:
 	// brandId, productName, productIdTagType, description,
-	// vintage, region, material, alcoholContent, volume
-	// model: none
+	// vintage, region, material, alcoholContent
+	// model:
+	// volume
 	// ------------------------------------------------------------
 	CategoryCodeAlcoholBeer:    alcoholSchema(CategoryCodeAlcoholBeer, "ビール"),
 	CategoryCodeAlcoholSake:    alcoholSchema(CategoryCodeAlcoholSake, "日本酒"),
@@ -327,7 +343,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 	// cosmetics
 	// productBlueprint:
 	// brandId, productName, productIdTagType, description,
-	// material, volume
+	// material
 	// model: none
 	// ------------------------------------------------------------
 	CategoryCodeCosmeticsBodycare:  cosmeticsSchema(CategoryCodeCosmeticsBodycare, "ボディケア"),
@@ -365,9 +381,8 @@ func alcoholSchema(categoryCode string, nameJa string) CategoryInputSchema {
 			fieldRegion,
 			fieldMaterial,
 			fieldAlcoholContent,
-			fieldVolume,
 		),
-		ModelFields: nil,
+		ModelFields: modelFieldsVolume,
 	}
 }
 
@@ -378,7 +393,6 @@ func cosmeticsSchema(categoryCode string, nameJa string) CategoryInputSchema {
 		CategoryNameJa: nameJa,
 		ProductBlueprintFields: withCommonProductBlueprintFields(
 			fieldMaterial,
-			fieldVolume,
 		),
 		ModelFields: nil,
 	}

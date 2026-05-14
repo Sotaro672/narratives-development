@@ -7,6 +7,14 @@ import {
   type ApparelSizeInput,
 } from "../domain/entity/apparel";
 
+import { isAlcoholCategoryCode } from "../domain/entity/alcohol";
+
+import type {
+  AlcoholModelNumber,
+  Volume,
+  VolumeRow,
+} from "../../../model/src/application/modelCreateService";
+
 import { updateProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
 import {
@@ -30,7 +38,30 @@ import {
   type CreateModelVariationRequest,
 } from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
 
-const makeKey = (sizeLabel: string, color: string) => `${sizeLabel}__${color}`;
+const makeApparelKey = (sizeLabel: string, color: string) =>
+  `${sizeLabel}__${color}`;
+
+const makeVolumeKey = (volume: Volume): string => {
+  const value =
+    typeof volume.value === "number" && Number.isFinite(volume.value)
+      ? volume.value
+      : 0;
+
+  const unit = String(volume.unit ?? "").trim() || "ml";
+
+  if (value <= 0) {
+    return "";
+  }
+
+  return `${value}${unit}`;
+};
+
+function volumeRowToVolume(row: VolumeRow): Volume {
+  return {
+    value: row.volumeValue,
+    unit: row.volumeUnit,
+  };
+}
 
 function resolveApparelCategoryCode(
   params: Pick<UpdateProductBlueprintParams, "productBlueprintCategory">,
@@ -44,6 +75,25 @@ function resolveApparelCategoryCode(
   return code;
 }
 
+function isAlcoholCategory(
+  params: Pick<UpdateProductBlueprintParams, "productBlueprintCategory">,
+): boolean {
+  const code = String(params.productBlueprintCategory?.code ?? "").trim();
+  return isAlcoholCategoryCode(code);
+}
+
+function isApparelVariation(
+  variation: ModelVariationResponse,
+): variation is Extract<ModelVariationResponse, { kind: "apparel" }> {
+  return variation.kind === "apparel";
+}
+
+function isAlcoholVariation(
+  variation: ModelVariationResponse,
+): variation is Extract<ModelVariationResponse, { kind: "alcohol" }> {
+  return variation.kind === "alcohol";
+}
+
 function buildApparelMeasurements(
   categoryCode: ApparelCategoryCode,
   size: ApparelSizeInput,
@@ -52,33 +102,32 @@ function buildApparelMeasurements(
 
   switch (categoryCode) {
     case "apparel.bottoms": {
-      result.waist = size.waist ?? null;
-      result.hip = size.hip ?? null;
-      result.rise = size.rise ?? null;
-      result.inseam = size.inseam ?? null;
-      result.thighWidth = size.thighWidth ?? null;
-      result.hemWidth = size.hemWidth ?? null;
-      result.totalLength = size.totalLength ?? null;
+      result["ウエスト"] = size.waist ?? null;
+      result["ヒップ"] = size.hip ?? null;
+      result["股上"] = size.rise ?? null;
+      result["股下"] = size.inseam ?? null;
+      result["わたり幅"] = size.thigh ?? null;
+      result["裾幅"] = size.hemWidth ?? null;
       return result;
     }
 
     case "apparel.dress": {
-      result.shoulderWidth = size.shoulderWidth ?? null;
-      result.bodyWidth = size.bodyWidth ?? null;
-      result.bodyLength = size.bodyLength ?? null;
-      result.sleeveLength = size.sleeveLength ?? null;
-      result.waist = size.waist ?? null;
-      result.hip = size.hip ?? null;
-      result.totalLength = size.totalLength ?? null;
+      result["着丈"] = size.length ?? null;
+      result["身幅"] = size.width ?? null;
+      result["胸囲"] = size.chest ?? null;
+      result["肩幅"] = size.shoulder ?? null;
+      result["袖丈"] = size.sleeveLength ?? null;
+      result["ウエスト"] = size.waist ?? null;
+      result["ヒップ"] = size.hip ?? null;
       return result;
     }
 
     case "apparel.tops": {
-      result.shoulderWidth = size.shoulderWidth ?? null;
-      result.bodyWidth = size.bodyWidth ?? null;
-      result.bodyLength = size.bodyLength ?? null;
-      result.sleeveLength = size.sleeveLength ?? null;
-      result.neckWidth = size.neckWidth ?? null;
+      result["着丈"] = size.length ?? null;
+      result["身幅"] = size.width ?? null;
+      result["胸囲"] = size.chest ?? null;
+      result["肩幅"] = size.shoulder ?? null;
+      result["袖丈"] = size.sleeveLength ?? null;
       return result;
     }
 
@@ -162,7 +211,7 @@ export async function getProductBlueprintDetail(
 }
 
 // -----------------------------------------
-// UPDATE（Blueprint メタ情報 + apparel ModelVariation）
+// UPDATE（Blueprint メタ情報 + ModelVariation）
 // -----------------------------------------
 
 export async function updateProductBlueprint(
@@ -170,6 +219,8 @@ export async function updateProductBlueprint(
     sizes?: ApparelSizeInput[];
     modelNumbers?: { size: string; color: string; code?: string }[];
     colorRgbMap?: Record<string, string>;
+    volumes?: VolumeRow[];
+    alcoholModelNumbers?: AlcoholModelNumber[];
   },
 ): Promise<ProductBlueprintDetailResponse> {
   const {
@@ -188,6 +239,8 @@ export async function updateProductBlueprint(
     colorRgbMap = {},
     sizes = [],
     modelNumbers = [],
+    volumes = [],
+    alcoholModelNumbers = [],
     productBlueprintCategoryId,
     productBlueprintCategory,
     categoryFields,
@@ -233,63 +286,115 @@ export async function updateProductBlueprint(
     productBlueprintCategory,
   });
 
-  if (!apparelCategoryCode) {
-    return updated;
+  const shouldUpdateAlcoholVariations = isAlcoholCategory({
+    productBlueprintCategory,
+  });
+
+  if (apparelCategoryCode) {
+    await updateApparelModelVariations({
+      productBlueprintId: id,
+      apparelCategoryCode,
+      sizes,
+      modelNumbers,
+      colorRgbMap,
+    });
   }
 
-  const variations = await listModelVariationsByProductBlueprintId(id);
+  if (shouldUpdateAlcoholVariations) {
+    await updateAlcoholModelVariations({
+      productBlueprintId: id,
+      volumes,
+      alcoholModelNumbers,
+    });
+  }
 
-  const existingMap = new Map<string, ModelVariationResponse>();
+  return updated;
+}
 
-  variations.forEach((v) => {
-    const sizeLabel = (v.size ?? "").trim();
-    const colorName = (v.color?.name ?? "").trim();
+async function updateApparelModelVariations(args: {
+  productBlueprintId: string;
+  apparelCategoryCode: ApparelCategoryCode;
+  sizes: ApparelSizeInput[];
+  modelNumbers: { size: string; color: string; code?: string }[];
+  colorRgbMap: Record<string, string>;
+}): Promise<void> {
+  const {
+    productBlueprintId,
+    apparelCategoryCode,
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+  } = args;
+
+  const variations = await listModelVariationsByProductBlueprintId(
+    productBlueprintId,
+  );
+
+  const apparelVariations = variations.filter(isApparelVariation);
+
+  const existingMap = new Map<
+    string,
+    Extract<ModelVariationResponse, { kind: "apparel" }>
+  >();
+
+  apparelVariations.forEach((variation) => {
+    const sizeLabel = String(variation.size ?? "").trim();
+    const colorName = String(variation.color?.name ?? "").trim();
 
     if (!sizeLabel || !colorName) {
       return;
     }
 
-    existingMap.set(makeKey(sizeLabel, colorName), v);
+    existingMap.set(makeApparelKey(sizeLabel, colorName), variation);
   });
 
   const selectedKeys = new Set<string>();
 
-  modelNumbers.forEach((m) => {
-    const sizeLabel = String(m.size ?? "").trim();
-    const colorName = String(m.color ?? "").trim();
+  modelNumbers.forEach((modelNumber) => {
+    const sizeLabel = String(modelNumber.size ?? "").trim();
+    const colorName = String(modelNumber.color ?? "").trim();
 
     if (!sizeLabel || !colorName) {
       return;
     }
 
-    selectedKeys.add(makeKey(sizeLabel, colorName));
+    selectedKeys.add(makeApparelKey(sizeLabel, colorName));
   });
 
   const measurementsMap = new Map<string, Record<string, number>>();
 
-  sizes.forEach((s) => {
-    const ms = buildMeasurementsFromSizeRowForUpdate(apparelCategoryCode, s);
+  sizes.forEach((size) => {
+    const sizeLabel = String(size.sizeLabel ?? "").trim();
 
-    if (ms) {
-      measurementsMap.set(s.sizeLabel, ms);
+    if (!sizeLabel) {
+      return;
+    }
+
+    const measurements = buildMeasurementsFromSizeRowForUpdate(
+      apparelCategoryCode,
+      size,
+    );
+
+    if (measurements) {
+      measurementsMap.set(sizeLabel, measurements);
     }
   });
 
   const updateTasks: Promise<void>[] = [];
 
-  existingMap.forEach((v, key) => {
+  existingMap.forEach((variation, key) => {
     if (!selectedKeys.has(key)) {
       return;
     }
 
-    const variationId = v.id;
+    const variationId = variation.id;
 
     if (!variationId) {
       return;
     }
 
-    const sizeLabel = (v.size ?? "").trim();
-    const colorName = (v.color?.name ?? "").trim();
+    const sizeLabel = String(variation.size ?? "").trim();
+    const colorName = String(variation.color?.name ?? "").trim();
 
     if (!sizeLabel || !colorName) {
       return;
@@ -298,13 +403,21 @@ export async function updateProductBlueprint(
     const rgb = resolveRgbInt({
       colorName,
       colorRgbMap,
-      fallbackRgb: v.color?.rgb ?? null,
+      fallbackRgb: variation.color?.rgb ?? null,
     });
 
     const measurements = measurementsMap.get(sizeLabel);
 
+    const modelNumber =
+      modelNumbers.find(
+        (candidate) =>
+          String(candidate.size ?? "").trim() === sizeLabel &&
+          String(candidate.color ?? "").trim() === colorName,
+      )?.code ?? "";
+
     const payload: ModelVariationUpdateRequest = {
-      modelNumber: v.modelNumber ?? "",
+      kind: "apparel",
+      modelNumber,
       size: sizeLabel,
       color: colorName,
       rgb,
@@ -331,7 +444,7 @@ export async function updateProductBlueprint(
       return;
     }
 
-    const sizeRow = sizes.find((s) => s.sizeLabel === sizeLabel);
+    const sizeRow = sizes.find((size) => size.sizeLabel === sizeLabel);
 
     if (!sizeRow) {
       return;
@@ -348,9 +461,17 @@ export async function updateProductBlueprint(
       sizeRow,
     );
 
+    const modelNumber =
+      modelNumbers.find(
+        (candidate) =>
+          String(candidate.size ?? "").trim() === sizeLabel &&
+          String(candidate.color ?? "").trim() === colorName,
+      )?.code ?? "";
+
     const createReq: CreateModelVariationRequest = {
-      productBlueprintId: id,
-      modelNumber: "",
+      kind: "apparel",
+      productBlueprintId,
+      modelNumber,
       size: sizeLabel,
       color: colorName,
       rgb,
@@ -361,31 +482,156 @@ export async function updateProductBlueprint(
   });
 
   if (createPayloads.length > 0) {
-    await createModelVariations(id, createPayloads);
+    await createModelVariations(productBlueprintId, createPayloads);
   }
 
-  const remainingIds = (variations as ModelUpdateServiceVariationResponse[])
-    .filter((v) => {
-      const key = makeKey(v.size, v.color?.name ?? "");
+  const remainingIds = apparelVariations
+    .filter((variation) => {
+      const key = makeApparelKey(variation.size, variation.color?.name ?? "");
       return selectedKeys.has(key);
     })
-    .map((v) => v.id);
+    .map((variation) => variation.id);
 
   await deleteRemovedModelVariations(
-    variations as ModelUpdateServiceVariationResponse[],
+    apparelVariations as ModelUpdateServiceVariationResponse[],
     remainingIds,
   );
+}
 
-  return updated;
+async function updateAlcoholModelVariations(args: {
+  productBlueprintId: string;
+  volumes: VolumeRow[];
+  alcoholModelNumbers: AlcoholModelNumber[];
+}): Promise<void> {
+  const { productBlueprintId, volumes, alcoholModelNumbers } = args;
+
+  const variations = await listModelVariationsByProductBlueprintId(
+    productBlueprintId,
+  );
+
+  const alcoholVariations = variations.filter(isAlcoholVariation);
+
+  const existingMap = new Map<
+    string,
+    Extract<ModelVariationResponse, { kind: "alcohol" }>
+  >();
+
+  alcoholVariations.forEach((variation) => {
+    const key = makeVolumeKey(variation.volume);
+
+    if (!key) {
+      return;
+    }
+
+    existingMap.set(key, variation);
+  });
+
+  const selectedKeys = new Set<string>();
+
+  volumes.forEach((row) => {
+    const volume = volumeRowToVolume(row);
+    const key = makeVolumeKey(volume);
+
+    if (!key) {
+      return;
+    }
+
+    selectedKeys.add(key);
+  });
+
+  const modelNumberMap = new Map<string, AlcoholModelNumber>();
+
+  alcoholModelNumbers.forEach((modelNumber) => {
+    const key = makeVolumeKey(modelNumber.volume);
+
+    if (!key) {
+      return;
+    }
+
+    modelNumberMap.set(key, modelNumber);
+    selectedKeys.add(key);
+  });
+
+  const updateTasks: Promise<void>[] = [];
+
+  existingMap.forEach((variation, key) => {
+    if (!selectedKeys.has(key)) {
+      return;
+    }
+
+    const variationId = variation.id;
+
+    if (!variationId) {
+      return;
+    }
+
+    const modelNumber = modelNumberMap.get(key);
+
+    if (!modelNumber) {
+      return;
+    }
+
+    const payload: ModelVariationUpdateRequest = {
+      kind: "alcohol",
+      modelNumber: modelNumber.code,
+      volume: modelNumber.volume,
+    };
+
+    updateTasks.push(
+      updateModelVariation(variationId, payload).then(() => undefined),
+    );
+  });
+
+  await Promise.all(updateTasks);
+
+  const createPayloads: CreateModelVariationRequest[] = [];
+
+  selectedKeys.forEach((key) => {
+    if (existingMap.has(key)) {
+      return;
+    }
+
+    const modelNumber = modelNumberMap.get(key);
+
+    if (!modelNumber) {
+      return;
+    }
+
+    const createReq: CreateModelVariationRequest = {
+      kind: "alcohol",
+      productBlueprintId,
+      modelNumber: modelNumber.code,
+      volume: modelNumber.volume,
+    };
+
+    createPayloads.push(createReq);
+  });
+
+  if (createPayloads.length > 0) {
+    await createModelVariations(productBlueprintId, createPayloads);
+  }
+
+  const remainingIds = alcoholVariations
+    .filter((variation) => {
+      const key = makeVolumeKey(variation.volume);
+      return selectedKeys.has(key);
+    })
+    .map((variation) => variation.id);
+
+  await deleteRemovedModelVariations(
+    alcoholVariations as ModelUpdateServiceVariationResponse[],
+    remainingIds,
+  );
 }
 
 // -----------------------------------------
 // ModelVariation list
 // -----------------------------------------
 
-export type ModelVariationResponse = {
+export type ApparelModelVariationResponse = {
   id: string;
   productBlueprintId: string;
+  kind: "apparel";
   modelNumber: string;
   size: string;
   color: { name: string; rgb: number };
@@ -395,6 +641,22 @@ export type ModelVariationResponse = {
   updatedAt?: string | null;
   updatedBy?: string | null;
 };
+
+export type AlcoholModelVariationResponse = {
+  id: string;
+  productBlueprintId: string;
+  kind: "alcohol";
+  modelNumber: string;
+  volume: Volume;
+  createdAt?: string | null;
+  createdBy?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+};
+
+export type ModelVariationResponse =
+  | ApparelModelVariationResponse
+  | AlcoholModelVariationResponse;
 
 export async function listModelVariationsByProductBlueprintId(
   productBlueprintId: string,
@@ -423,61 +685,4 @@ export async function listModelVariationsByProductBlueprintId(
   const raw = (await res.json()) as ModelVariationResponse[] | null;
 
   return raw ?? [];
-}
-
-// -----------------------------------------
-// 商品設計の履歴一覧取得
-// -----------------------------------------
-
-export type ProductBlueprintHistoryItem = {
-  id: string;
-  productName: string;
-  brandId: string;
-  assigneeId: string;
-  updatedAt: string;
-  updatedBy?: string;
-  deletedAt?: string;
-  expireAt?: string;
-};
-
-export async function getProductBlueprintHistory(
-  productBlueprintId: string,
-): Promise<ProductBlueprintHistoryItem[]> {
-  const id = productBlueprintId.trim();
-
-  if (!id) {
-    throw new Error("getProductBlueprintHistory: productBlueprintId が空です");
-  }
-
-  const res = await authorizedFetch(
-    `/product-blueprints/${encodeURIComponent(id)}/history`,
-    {
-      method: "GET",
-      throwOnError: false,
-      acceptJson: true,
-    },
-  );
-
-  if (!res.ok) {
-    throw new Error(
-      `商品設計履歴の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
-    );
-  }
-
-  const raw = (await res.json()) as any[] | null;
-
-  if (!raw) {
-    return [];
-  }
-
-  return raw.map((v: any): ProductBlueprintHistoryItem => ({
-    id: v.id ?? "",
-    productName: v.productName ?? "",
-    brandId: v.brandId ?? "",
-    assigneeId: v.assigneeId ?? "",
-    updatedAt: v.updatedAt ?? "",
-    updatedBy: v.updatedBy ?? undefined,
-    deletedAt: v.deletedAt ?? undefined,
-    expireAt: v.expireAt ?? undefined,
-  }));
 }

@@ -10,6 +10,8 @@ import CategoryFieldsCard from "../cards/categoryFields";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
+import VolumeCard from "../../../../model/src/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../../../../model/src/presentation/components/AlcoholModelNumberCard";
 import LogCard from "../../../../log/src/presentation/LogCard";
 
 import { useProductBlueprintDetail } from "../hooks/detail/useProductBlueprintDetail";
@@ -17,15 +19,9 @@ import { useProductBlueprintDetail } from "../hooks/detail/useProductBlueprintDe
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
-  type Fit,
 } from "../../domain/entity/apparel";
 
-import type {
-  CategoryFieldValue,
-  CategoryFieldValues,
-} from "../../domain/entity/productBlueprintCategory";
-
-function shouldShowModelVariationCards(categoryCode: string): boolean {
+function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (
     categoryCode === "apparel.tops" ||
     categoryCode === "apparel.bottoms" ||
@@ -35,24 +31,15 @@ function shouldShowModelVariationCards(categoryCode: string): boolean {
   );
 }
 
-function toSafeNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" && !Number.isNaN(value) ? value : fallback;
-}
-
-function toSafeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-
-  return value.filter(
-    (item): item is string => typeof item === "string" && item.trim() !== "",
+function shouldShowAlcoholVariationCards(categoryCode: string): boolean {
+  return (
+    categoryCode === "alcohol.beer" ||
+    categoryCode === "alcohol.sake" ||
+    categoryCode === "alcohol.shochu" ||
+    categoryCode === "alcohol.spirits" ||
+    categoryCode === "alcohol.whisky" ||
+    categoryCode === "alcohol.wine"
   );
-}
-
-function toNullableString(value: CategoryFieldValue): string {
-  return typeof value === "string" ? value : "";
-}
-
-function toNumber(value: CategoryFieldValue): number {
-  return typeof value === "number" && !Number.isNaN(value) ? value : 0;
 }
 
 export default function ProductBlueprintDetail() {
@@ -70,16 +57,20 @@ export default function ProductBlueprintDetail() {
     productBlueprintCategory,
     productBlueprintCategoryLabel,
     isApparelCategory,
+    isAlcoholCategory,
 
-    fit,
-    materials,
-    weight,
-    washTags,
+    categoryFields,
+    onChangeCategoryField,
 
+    // apparel variations
     colors,
     colorInput,
     sizes,
     colorRgbMap,
+
+    // alcohol variations
+    volumes,
+    alcoholModelNumbers,
 
     assignee,
     creator,
@@ -95,10 +86,6 @@ export default function ProductBlueprintDetail() {
     onDelete,
     onChangeProductName,
     onChangeProductBlueprintCategory,
-    onChangeFit,
-    onChangeMaterials,
-    onChangeWeight,
-    onChangeWashTags,
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
@@ -109,6 +96,11 @@ export default function ProductBlueprintDetail() {
     onChangeSize,
 
     onChangeModelNumber,
+
+    onAddVolume,
+    onRemoveVolume,
+    onChangeVolume,
+    onChangeAlcoholModelNumber,
 
     onClickAssignee,
 
@@ -121,25 +113,34 @@ export default function ProductBlueprintDetail() {
     ? APPAREL_CATEGORY_MEASUREMENT_OPTIONS[categoryCode]
     : undefined;
 
-  const showModelVariationCards = React.useMemo(
-    () => isApparelCategory && shouldShowModelVariationCards(categoryCode),
+  const showApparelVariationCards = React.useMemo(
+    () => isApparelCategory && shouldShowApparelVariationCards(categoryCode),
     [isApparelCategory, categoryCode],
   );
 
-  const mergedCategoryFields = React.useMemo<CategoryFieldValues>(() => {
-    return {
-      fit,
-      material: String(materials ?? ""),
-      weight: toSafeNumber(weight, 0),
-      washTags: toSafeStringArray(washTags),
-    };
-  }, [fit, materials, weight, washTags]);
+  const showAlcoholVariationCards = React.useMemo(
+    () => isAlcoholCategory && shouldShowAlcoholVariationCards(categoryCode),
+    [isAlcoholCategory, categoryCode],
+  );
+
+  const showCategoryOnlyMessage =
+    !!productBlueprintCategory &&
+    !showApparelVariationCards &&
+    !showAlcoholVariationCards;
 
   const [editMode, setEditMode] = React.useState(false);
 
   const noop = React.useCallback(() => {}, []);
   const noopStr = React.useCallback((_: string) => {}, []);
   const noopColor = React.useCallback((_: string) => {}, []);
+  const noopVolumePatch = React.useCallback(
+    (_id: string, _patch: Parameters<typeof onChangeVolume>[1]) => {},
+    [],
+  );
+  const noopAlcoholModelNumber = React.useCallback(
+    (_volumeLabel: string, _nextCode: string) => {},
+    [],
+  );
 
   const handleSave = React.useCallback(() => {
     onSave();
@@ -149,38 +150,6 @@ export default function ProductBlueprintDetail() {
   const handleDelete = React.useCallback(() => {
     onDelete();
   }, [onDelete]);
-
-  const handleChangeCategoryField = React.useCallback(
-    (key: string, value: CategoryFieldValue) => {
-      if (!editMode) return;
-
-      if (key === "fit") {
-        onChangeFit(value as Fit);
-        return;
-      }
-
-      if (key === "material") {
-        onChangeMaterials(toNullableString(value));
-        return;
-      }
-
-      if (key === "weight") {
-        onChangeWeight(toNumber(value));
-        return;
-      }
-
-      if (key === "washTags" || key === "qualityAssurance") {
-        onChangeWashTags(toSafeStringArray(value));
-      }
-    },
-    [
-      editMode,
-      onChangeFit,
-      onChangeMaterials,
-      onChangeWeight,
-      onChangeWashTags,
-    ],
-  );
 
   React.useEffect(() => {
     if (printed && editMode) {
@@ -218,21 +187,19 @@ export default function ProductBlueprintDetail() {
         {productBlueprintCategory && (
           <CategoryFieldsCard
             categoryCode={categoryCode}
-            categoryFields={mergedCategoryFields}
+            categoryFields={categoryFields}
             mode={editMode ? "edit" : "view"}
-            onChangeCategoryField={
-              editMode ? handleChangeCategoryField : undefined
-            }
+            onChangeCategoryField={editMode ? onChangeCategoryField : undefined}
           />
         )}
 
-        {productBlueprintCategory && !showModelVariationCards && (
+        {showCategoryOnlyMessage && (
           <p className="mt-2 text-xs text-slate-500">
             選択中の商品カテゴリ: {productBlueprintCategoryLabel}
           </p>
         )}
 
-        {showModelVariationCards && (
+        {showApparelVariationCards && (
           <>
             <ColorVariationCard
               mode={editMode ? "edit" : "view"}
@@ -260,6 +227,27 @@ export default function ProductBlueprintDetail() {
               colors={colors}
               getCode={getCode}
               onChangeModelNumber={editMode ? onChangeModelNumber : undefined}
+            />
+          </>
+        )}
+
+        {showAlcoholVariationCards && (
+          <>
+            <VolumeCard
+              mode={editMode ? "edit" : "view"}
+              volumes={volumes}
+              onAddVolume={editMode ? onAddVolume : undefined}
+              onRemoveVolume={editMode ? onRemoveVolume : undefined}
+              onChangeVolume={editMode ? onChangeVolume : noopVolumePatch}
+            />
+
+            <AlcoholModelNumberCard
+              mode={editMode ? "edit" : "view"}
+              volumes={volumes}
+              modelNumbers={alcoholModelNumbers}
+              onChangeModelNumber={
+                editMode ? onChangeAlcoholModelNumber : noopAlcoholModelNumber
+              }
             />
           </>
         )}

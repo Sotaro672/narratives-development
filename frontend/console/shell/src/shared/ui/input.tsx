@@ -1,5 +1,7 @@
-// frontend/shared/ui/input.tsx
+// frontend/console/shell/src/shared/ui/input.tsx
+
 import * as React from "react";
+import "./input.css";
 
 /** className 結合ヘルパー */
 function cn(...classes: Array<string | undefined | false | null>) {
@@ -8,9 +10,9 @@ function cn(...classes: Array<string | undefined | false | null>) {
 
 /**
  * Input
- * - productBlueprintCard.css の .pbc .input / .pbc .readonly にフックするため
- *   既定で "input" クラスを付与。readonly では "readonly" を追加。
- * - 他画面でも使えるように追加 className で上書き可能。
+ * - 既定で "input" クラスを付与
+ * - readonly では "readonly" を追加
+ * - 他画面でも使えるように追加 className で上書き可能
  */
 export interface InputProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -22,7 +24,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const classes = cn(
       "input",
       variant === "readonly" && "readonly",
-      className
+      className,
     );
 
     return (
@@ -33,6 +35,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {...props}
       />
     );
-  }
+  },
 );
+
 Input.displayName = "Input";

@@ -26,8 +26,7 @@ export type AlcoholCategoryFieldKey =
   | "vintage"
   | "region"
   | "material"
-  | "alcoholContent"
-  | "volume";
+  | "alcoholContent";
 
 export type AlcoholCategoryFields = Partial<
   Record<AlcoholCategoryFieldKey, string | number | null>
@@ -37,48 +36,12 @@ export const ALCOHOL_CATEGORY_FIELD_KEYS: Record<
   AlcoholCategoryCode,
   AlcoholCategoryFieldKey[]
 > = {
-  "alcohol.beer": [
-    "vintage",
-    "region",
-    "material",
-    "alcoholContent",
-    "volume",
-  ],
-  "alcohol.sake": [
-    "vintage",
-    "region",
-    "material",
-    "alcoholContent",
-    "volume",
-  ],
-  "alcohol.shochu": [
-    "vintage",
-    "region",
-    "material",
-    "alcoholContent",
-    "volume",
-  ],
-  "alcohol.spirits": [
-    "vintage",
-    "region",
-    "material",
-    "alcoholContent",
-    "volume",
-  ],
-  "alcohol.whisky": [
-    "vintage",
-    "region",
-    "material",
-    "alcoholContent",
-    "volume",
-  ],
-  "alcohol.wine": [
-    "vintage",
-    "region",
-    "material",
-    "alcoholContent",
-    "volume",
-  ],
+  "alcohol.beer": ["vintage", "region", "material", "alcoholContent"],
+  "alcohol.sake": ["vintage", "region", "material", "alcoholContent"],
+  "alcohol.shochu": ["vintage", "region", "material", "alcoholContent"],
+  "alcohol.spirits": ["vintage", "region", "material", "alcoholContent"],
+  "alcohol.whisky": ["vintage", "region", "material", "alcoholContent"],
+  "alcohol.wine": ["vintage", "region", "material", "alcoholContent"],
 };
 
 export function isAlcoholCategoryCode(

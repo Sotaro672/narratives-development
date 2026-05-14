@@ -13,6 +13,8 @@ import CategoryFieldsCard from "../cards/categoryFields";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
+import VolumeCard from "../../../../model/src/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../../../../model/src/presentation/components/AlcoholModelNumberCard";
 
 // モデルナンバー用のロジックは model 側の hook を利用
 import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
@@ -21,13 +23,24 @@ import { useProductBlueprintCreate } from "../hooks/create/useProductBlueprintCr
 
 import type { CategoryFieldValues } from "../../domain/entity/productBlueprintCategory";
 
-function shouldShowModelVariationCards(categoryCode: string): boolean {
+function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (
     categoryCode === "apparel.tops" ||
     categoryCode === "apparel.bottoms" ||
     categoryCode === "apparel.dress" ||
     categoryCode === "apparel.outerwear" ||
     categoryCode === "apparel.shoes"
+  );
+}
+
+function shouldShowAlcoholVariationCards(categoryCode: string): boolean {
+  return (
+    categoryCode === "alcohol.beer" ||
+    categoryCode === "alcohol.sake" ||
+    categoryCode === "alcohol.shochu" ||
+    categoryCode === "alcohol.spirits" ||
+    categoryCode === "alcohol.whisky" ||
+    categoryCode === "alcohol.wine"
   );
 }
 
@@ -41,6 +54,17 @@ function toSafeStringArray(value: unknown): string[] {
   return value.filter(
     (item): item is string => typeof item === "string" && item.trim() !== "",
   );
+}
+
+function removeModelOwnedCategoryFields(
+  fields: CategoryFieldValues,
+): CategoryFieldValues {
+  const next: CategoryFieldValues = { ...fields };
+
+  // alcohol volume は model domain 管轄。
+  delete next.volume;
+
+  return next;
 }
 
 export default function ProductBlueprintCreate() {
@@ -62,6 +86,7 @@ export default function ProductBlueprintCreate() {
     productBlueprintCategoryLoading,
     productBlueprintCategoryError,
     isApparelCategory,
+    isAlcoholCategory,
     fit,
     material,
     weight,
@@ -71,12 +96,16 @@ export default function ProductBlueprintCreate() {
     // 商品カテゴリから導出された採寸項目
     measurementOptions,
 
-    // バリエーション
+    // apparel バリエーション
     colorInput,
     colors,
     colorRgbMap,
     sizes,
     modelNumbers,
+
+    // alcohol バリエーション
+    volumes,
+    alcoholModelNumbers,
 
     onChangeProductName,
     onChangeProductBlueprintCategory,
@@ -96,8 +125,16 @@ export default function ProductBlueprintCreate() {
     onRemoveSize,
     onChangeSize,
 
-    // モデルナンバー操作（アプリケーション層）
+    // apparel モデルナンバー操作
     onChangeModelNumber,
+
+    // alcohol 容量操作
+    onAddVolume,
+    onRemoveVolume,
+    onChangeVolume,
+
+    // alcohol モデルナンバー操作
+    onChangeAlcoholModelNumber,
 
     // 管理情報
     assigneeId,
@@ -114,22 +151,32 @@ export default function ProductBlueprintCreate() {
   const categoryCode = String(productBlueprintCategory?.code ?? "").trim();
 
   const mergedCategoryFields = React.useMemo<CategoryFieldValues>(() => {
-    return {
+    return removeModelOwnedCategoryFields({
       ...(categoryFields ?? {}),
       fit,
       material: String(material ?? ""),
       weight: toSafeNumber(weight, 0),
       washTags: toSafeStringArray(qualityAssurance),
-    };
+    });
   }, [categoryFields, fit, material, weight, qualityAssurance]);
 
-  const showModelVariationCards = React.useMemo(
-    () => isApparelCategory && shouldShowModelVariationCards(categoryCode),
+  const showApparelVariationCards = React.useMemo(
+    () => isApparelCategory && shouldShowApparelVariationCards(categoryCode),
     [isApparelCategory, categoryCode],
   );
 
+  const showAlcoholVariationCards = React.useMemo(
+    () => isAlcoholCategory && shouldShowAlcoholVariationCards(categoryCode),
+    [isAlcoholCategory, categoryCode],
+  );
+
+  const showCategoryOnlyMessage =
+    !!productBlueprintCategory &&
+    !showApparelVariationCards &&
+    !showAlcoholVariationCards;
+
   // -----------------------------
-  // モデルナンバー表示用の hook（model 側）
+  // apparel モデルナンバー表示用の hook（model 側）
   // rgb を hook 経由で渡すため colorRgbMap も渡す
   // -----------------------------
   const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
@@ -188,13 +235,13 @@ export default function ProductBlueprintCreate() {
           />
         )}
 
-        {productBlueprintCategory && !showModelVariationCards && (
+        {showCategoryOnlyMessage && (
           <p className="mt-2 text-xs text-slate-500">
             選択中の商品カテゴリ: {productBlueprintCategoryLabel}
           </p>
         )}
 
-        {showModelVariationCards && (
+        {showApparelVariationCards && (
           <>
             <ColorVariationCard
               colors={colors}
@@ -220,6 +267,25 @@ export default function ProductBlueprintCreate() {
               colors={colors}
               getCode={getCode}
               onChangeModelNumber={handleChangeModelNumber}
+            />
+          </>
+        )}
+
+        {showAlcoholVariationCards && (
+          <>
+            <VolumeCard
+              volumes={volumes}
+              mode="edit"
+              onAddVolume={onAddVolume}
+              onRemoveVolume={onRemoveVolume}
+              onChangeVolume={onChangeVolume}
+            />
+
+            <AlcoholModelNumberCard
+              volumes={volumes}
+              modelNumbers={alcoholModelNumbers}
+              mode="edit"
+              onChangeModelNumber={onChangeAlcoholModelNumber}
             />
           </>
         )}

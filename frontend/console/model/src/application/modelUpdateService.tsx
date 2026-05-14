@@ -1,4 +1,5 @@
-//frontend\console\model\src\application\modelUpdateService.tsx
+// frontend/console/model/src/application/modelUpdateService.tsx
+
 import {
   updateModelVariation as updateModelVariationApi,
   deleteModelVariation as deleteModelVariationApi,
@@ -6,7 +7,13 @@ import {
 } from "../infrastructure/api/modelUpdateApi";
 
 export type {
+  ModelVariationKind,
+  Volume,
+  ApparelModelVariationUpdateRequest,
+  AlcoholModelVariationUpdateRequest,
   ModelVariationUpdateRequest,
+  ApparelModelVariationResponse,
+  AlcoholModelVariationResponse,
   ModelVariationResponse,
 } from "../infrastructure/api/modelUpdateApi";
 
@@ -19,44 +26,24 @@ export {
  * list 結果と「更新後に残る id」一覧を比較し、
  * 減った差分（= list にはあるが remainingIds には存在しないもの）を物理削除する。
  *
- * ★ 差分ログを分かりやすく出力
+ * NOTE:
+ * - ModelVariationResponse は apparel / alcohol の union 型。
+ * - 差分削除では kind に依存せず、id のみを正として扱う。
  */
 export async function deleteRemovedModelVariations(
   listed: ModelVariationResponse[],
   remainingIds: string[],
 ): Promise<void> {
-  const trimmedRemaining = remainingIds.map((id) => id.trim()).filter(Boolean);
-  const remainingSet = new Set(trimmedRemaining);
-
-  // 削除対象: list に存在するが remainingIds にない variation
-  const removed = listed.filter((v) => v.id && !remainingSet.has(v.id));
-
-  // =======================================================
-  // 🔍 差分ログ（非常にわかりやすく）
-  // =======================================================
-  console.group(
-    "%c[ModelUpdateService] ModelVariation 差分チェック",
-    "color:#0a84ff; font-weight:bold;"
+  const remainingSet = new Set(
+    remainingIds.map((id) => id.trim()).filter(Boolean),
   );
 
-  console.log("📌 既存(listed) IDs:", listed.map((v) => v.id));
-  console.log("📌 残す(remaining) IDs:", trimmedRemaining);
+  const removed = listed.filter((variation) => {
+    const id = variation.id.trim();
+    return id && !remainingSet.has(id);
+  });
 
-  console.log(
-    "%c🗑 削除対象 IDs:",
-    "color:#ff3b30; font-weight:bold;",
-    removed.map((v) => v.id)
-  );
-
-  console.groupEnd();
-  // =======================================================
-
-  // DELETE /models/{id} を実行
-  for (const v of removed) {
-    console.log(
-      `%c[ModelUpdateService] DELETE /models/${v.id}`,
-      "color:#ff3b30;"
-    );
-    await deleteModelVariationApi(v.id);
+  for (const variation of removed) {
+    await deleteModelVariationApi(variation.id);
   }
 }

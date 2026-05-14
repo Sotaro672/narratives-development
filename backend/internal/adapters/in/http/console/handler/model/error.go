@@ -17,10 +17,19 @@ func writeModelErr(w http.ResponseWriter, err error) {
 
 	if errors.Is(err, modeldom.ErrInvalidID) ||
 		errors.Is(err, modeldom.ErrInvalidProductID) ||
-		errors.Is(err, modeldom.ErrInvalidBlueprintID) {
+		errors.Is(err, modeldom.ErrInvalidBlueprintID) ||
+		errors.Is(err, modeldom.ErrInvalidModelNumber) ||
+		errors.Is(err, modeldom.ErrInvalidSize) ||
+		errors.Is(err, modeldom.ErrInvalidColor) ||
+		errors.Is(err, modeldom.ErrInvalidMeasurements) ||
+		errors.Is(err, modeldom.ErrInvalidVolume) ||
+		errors.Is(err, modeldom.ErrInvalidVolumeUnit) ||
+		errors.Is(err, modeldom.ErrInvalid) {
 		code = http.StatusBadRequest
 	} else if errors.Is(err, modeldom.ErrNotFound) {
 		code = http.StatusNotFound
+	} else if errors.Is(err, modeldom.ErrConflict) {
+		code = http.StatusConflict
 	}
 
 	w.WriteHeader(code)

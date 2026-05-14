@@ -1,0 +1,108 @@
+/* frontend/console/shell/src/shared/ui/input.css */
+
+/* =========================
+ * Shared Input
+ * ========================= */
+
+.input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+
+  background-color: #ffffff;
+  color: #0f172a;
+
+  font-size: 14px;
+  line-height: 1.4;
+
+  outline: none;
+  box-sizing: border-box;
+
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.input::placeholder {
+  color: #94a3b8;
+}
+
+.input:hover {
+  border-color: #cbd5e1;
+}
+
+.input:focus {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.18);
+}
+
+.input:disabled {
+  cursor: not-allowed;
+  background-color: #f8fafc;
+  color: #94a3b8;
+}
+
+.input.readonly {
+  background-color: #f8fafc;
+  color: #475569;
+  cursor: default;
+}
+
+.input.readonly:focus {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
+/* number input のスピンボタン抑制 */
+.input[type="number"]::-webkit-outer-spin-button,
+.input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* dark mode */
+@media (prefers-color-scheme: dark) {
+  .input {
+    border-color: rgba(255, 255, 255, 0.16);
+    background-color: #161616;
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  .input::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .input:hover {
+    border-color: rgba(255, 255, 255, 0.24);
+  }
+
+  .input:focus {
+    border-color: rgba(255, 255, 255, 0.36);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+  }
+
+  .input:disabled {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.38);
+  }
+
+  .input.readonly {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .input.readonly:focus {
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: none;
+  }
+}
