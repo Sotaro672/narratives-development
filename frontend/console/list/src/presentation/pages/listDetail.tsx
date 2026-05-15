@@ -17,7 +17,6 @@ export default function ListDetail() {
   const navigate = useNavigate();
 
   const vm = useListDetail();
-  const anyVm = vm as any;
 
   const isEdit = vm.isEdit;
 
@@ -32,17 +31,11 @@ export default function ListDetail() {
 
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
-      if (typeof anyVm.setDraftAssigneeId === "function") {
-        anyVm.setDraftAssigneeId(id);
-      }
-      if (typeof anyVm.onSelectAssignee === "function") {
-        anyVm.onSelectAssignee(id);
-      }
-      if (typeof anyVm.onChangeAssignee === "function") {
-        anyVm.onChangeAssignee(id);
-      }
+      vm.setDraftAssigneeId?.(id);
+      vm.onSelectAssignee?.(id);
+      vm.onChangeAssignee?.(id);
     },
-    [anyVm],
+    [vm],
   );
 
   return (
@@ -86,9 +79,7 @@ export default function ListDetail() {
           setMainImageIndex={vm.setMainImageIndex}
           onAddImages={(files) => vm.onAddImages?.(files)}
           onRemoveImageAt={(idx) => vm.onRemoveImageAt?.(idx)}
-          onClearImages={
-            typeof anyVm.onClearImages === "function" ? anyVm.onClearImages : undefined
-          }
+          onClearImages={vm.onClearImages}
         />
 
         <Card>
@@ -155,8 +146,8 @@ export default function ListDetail() {
           mode={isEdit ? "edit" : "view"}
           assigneeName={vm.assigneeName}
           onSelectAssignee={isEdit ? handleSelectAssignee : undefined}
-          onEditAssignee={isEdit ? anyVm.onEditAssignee : undefined}
-          onClickAssignee={isEdit ? anyVm.onClickAssignee : undefined}
+          onEditAssignee={isEdit ? vm.onEditAssignee : undefined}
+          onClickAssignee={isEdit ? vm.onClickAssignee : undefined}
           createdByName={vm.createdByName}
           createdAt={vm.createdAt}
           updatedByName={vm.updatedByName}
