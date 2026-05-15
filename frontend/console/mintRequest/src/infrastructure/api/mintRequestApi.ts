@@ -4,8 +4,8 @@ import {
   fetchInspectionBatchesHTTP,
   fetchInspectionByProductionIdHTTP,
   fetchInspectionBatchesByProductionIdsHTTP,
-  fetchMintListRowsByInspectionIdsHTTP,
-  fetchMintsByInspectionIdsHTTP,
+  fetchMintListRowsByProductionIdsHTTP,
+  fetchMintsByProductionIdsHTTP,
   completeInspectionHTTP,
 } from "../repository";
 
@@ -15,6 +15,12 @@ import type { MintDTO, MintListRowDTO } from "../dto/mint.dto";
 // ===============================
 // API 層：Repository 呼び出しラッパ
 // ===============================
+
+function normalizeIds(ids: string[]): string[] {
+  return (ids ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+}
 
 /**
  * inspections の一覧を取得する。
@@ -30,9 +36,7 @@ export async function fetchInspectionBatches(): Promise<InspectionBatchDTO[]> {
 export async function fetchInspectionBatchesByProductionIds(
   productionIds: string[],
 ): Promise<InspectionBatchDTO[]> {
-  const ids = (productionIds ?? [])
-    .map((s) => String(s ?? "").trim())
-    .filter((s) => !!s);
+  const ids = normalizeIds(productionIds);
 
   if (ids.length === 0) return [];
 
@@ -45,13 +49,11 @@ export async function fetchInspectionBatchesByProductionIds(
 export async function fetchMintsMapByProductionIds(
   productionIds: string[],
 ): Promise<Record<string, MintListRowDTO>> {
-  const ids = (productionIds ?? [])
-    .map((s) => String(s ?? "").trim())
-    .filter((s) => !!s);
+  const ids = normalizeIds(productionIds);
 
   if (ids.length === 0) return {};
 
-  const m = await fetchMintListRowsByInspectionIdsHTTP(ids);
+  const m = await fetchMintListRowsByProductionIdsHTTP(ids);
   return (m ?? {}) as Record<string, MintListRowDTO>;
 }
 
@@ -61,13 +63,11 @@ export async function fetchMintsMapByProductionIds(
 export async function fetchMintsDTOMapByProductionIds(
   productionIds: string[],
 ): Promise<Record<string, MintDTO>> {
-  const ids = (productionIds ?? [])
-    .map((s) => String(s ?? "").trim())
-    .filter((s) => !!s);
+  const ids = normalizeIds(productionIds);
 
   if (ids.length === 0) return {};
 
-  const m = await fetchMintsByInspectionIdsHTTP(ids);
+  const m = await fetchMintsByProductionIdsHTTP(ids);
   return (m ?? {}) as Record<string, MintDTO>;
 }
 

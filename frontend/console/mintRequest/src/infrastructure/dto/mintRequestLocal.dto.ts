@@ -73,7 +73,17 @@ export type MintModelMetaEntryDTO = {
   size?: string | null;
   colorName?: string | null;
   rgb?: number | null;
+
+  /**
+   * alcohol 対応:
+   * model variation 側で容量と単位を扱う。
+   *
+   * 表示例:
+   * - volume: 720
+   * - volumeUnit: "ml"
+   */
   volume?: string | number | null;
+  volumeUnit?: string | null;
 };
 
 /**
@@ -110,7 +120,11 @@ export type ModelVariationForMintDTO = {
 
   /**
    * alcohol 対応:
-   * model variation 側で容量も扱う。
+   * model variation 側で容量と単位を扱う。
+   *
+   * backend / mapper 側では volumeUnit に正規化する。
+   * 例: "ml", "L"
    */
   volume?: string | number | null;
+  volumeUnit?: string | null;
 };

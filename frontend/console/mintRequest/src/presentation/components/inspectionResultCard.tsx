@@ -17,9 +17,7 @@ import {
   TableCell,
 } from "../../../../shell/src/shared/ui/table";
 
-import type {
-  UseInspectionResultCardResult,
-} from "../hook/useInspectionResultCard";
+import type { UseInspectionResultCardResult } from "../hook/useInspectionResultCard";
 
 type InspectionResultCardProps = {
   /** useInspectionResultCard の戻り値をそのまま受け取る想定 */
@@ -31,7 +29,24 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
   data,
   className,
 }) => {
-  const { title, rows, totalPassed, totalQuantity, rgbIntToHex } = data;
+  const {
+    title,
+    rows,
+    totalPassed,
+    totalQuantity,
+    showVolumeColumn,
+    rgbIntToHex,
+  } = data;
+
+  /**
+   * 通常カテゴリ:
+   *   型番 / サイズ / カラー / 合格数 / 生産数 = 5列
+   *
+   * alcohol:
+   *   型番 / 容量 / 合格数 / 生産数 = 4列
+   */
+  const emptyColSpan = showVolumeColumn ? 4 : 5;
+  const totalLabelColSpan = showVolumeColumn ? 2 : 3;
 
   return (
     <Card className={`ivc ${className ?? ""}`}>
@@ -50,8 +65,16 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
             <TableHeader>
               <TableRow>
                 <TableHead className="ivc__th ivc__th--left">型番</TableHead>
-                <TableHead className="ivc__th">サイズ</TableHead>
-                <TableHead className="ivc__th">カラー</TableHead>
+
+                {showVolumeColumn ? (
+                  <TableHead className="ivc__th">容量</TableHead>
+                ) : (
+                  <>
+                    <TableHead className="ivc__th">サイズ</TableHead>
+                    <TableHead className="ivc__th">カラー</TableHead>
+                  </>
+                )}
+
                 {/* 合格数（生産数の左隣） */}
                 <TableHead className="ivc__th ivc__th--right">
                   合格数
@@ -74,28 +97,36 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
                   >
                     {/* 型番 */}
                     <TableCell className="ivc__model">
-                      {row.modelNumber}
+                      {row.modelNumber || "-"}
                     </TableCell>
 
-                    {/* サイズ */}
-                    <TableCell className="ivc__size">
-                      {row.size || "-"}
-                    </TableCell>
+                    {showVolumeColumn ? (
+                      <TableCell className="ivc__size">
+                        {row.volumeLabel || "-"}
+                      </TableCell>
+                    ) : (
+                      <>
+                        {/* サイズ */}
+                        <TableCell className="ivc__size">
+                          {row.size || "-"}
+                        </TableCell>
 
-                    {/* カラー */}
-                    <TableCell className="ivc__color-cell">
-                      <span
-                        className="ivc__color-dot"
-                        style={{
-                          backgroundColor: bgColor,
-                          boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
-                        }}
-                        title={rgbHex ?? ""}
-                      />
-                      <span className="ivc__color-label">
-                        {row.color || "-"}
-                      </span>
-                    </TableCell>
+                        {/* カラー */}
+                        <TableCell className="ivc__color-cell">
+                          <span
+                            className="ivc__color-dot"
+                            style={{
+                              backgroundColor: bgColor,
+                              boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                            }}
+                            title={rgbHex ?? ""}
+                          />
+                          <span className="ivc__color-label">
+                            {row.color || "-"}
+                          </span>
+                        </TableCell>
+                      </>
+                    )}
 
                     {/* 合格数 */}
                     <TableCell className="ivc__quantity">
@@ -116,7 +147,7 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
 
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="ivc__empty">
+                  <TableCell colSpan={emptyColSpan} className="ivc__empty">
                     表示できる検査結果データがありません。
                   </TableCell>
                 </TableRow>
@@ -124,17 +155,18 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
 
               {rows.length > 0 && (
                 <TableRow className="ivc__total-row">
-                  {/* 「合計」ラベルを 3 列分にまたがせる */}
                   <TableCell
-                    colSpan={3}
+                    colSpan={totalLabelColSpan}
                     className="ivc__total-label ivc__th--right"
                   >
                     合計
                   </TableCell>
+
                   {/* 合格数合計 */}
                   <TableCell className="ivc__total-value">
                     <strong>{totalPassed}</strong>
                   </TableCell>
+
                   {/* 生産数合計 */}
                   <TableCell className="ivc__total-value">
                     <strong>{totalQuantity}</strong>

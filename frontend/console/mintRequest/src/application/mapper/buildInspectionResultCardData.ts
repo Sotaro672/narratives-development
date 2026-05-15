@@ -2,27 +2,58 @@
 
 import type { InspectionBatch } from "../../domain/entity/inspections";
 import type {
-  InspectionResultRow,
-  MintModelMetaEntry,
-} from "../../presentation/hook/useInspectionResultCard";
+  MintModelMetaEntryDTO,
+  ProductBlueprintPatchDTO,
+} from "../../infrastructure/dto/mintRequestLocal.dto";
 
 export type ProductBlueprintModelRefLike = {
   modelId?: string | null;
   displayOrder?: number | null;
 };
 
+export type InspectionResultRow = {
+  modelNumber: string;
+  size: string;
+  color: string;
+  rgb?: number | string | null;
+
+  /**
+   * alcohol 対応:
+   * showVolumeColumn=true の場合、InspectionResultCard 側で volumeLabel を表示する。
+   */
+  volume?: string | number | null;
+  volumeUnit?: string | null;
+  volumeLabel?: string;
+
+  passedQuantity: number;
+  quantity: number;
+};
+
 export type InspectionBatchForCard = InspectionBatch & {
   productName?: string | null;
-  modelMeta?: Record<string, MintModelMetaEntry> | null;
-  productBlueprintPatch?: {
-    modelRefs?: ProductBlueprintModelRefLike[] | null;
-    [k: string]: any;
-  } | null;
+
+  /**
+   * modelId -> model meta
+   *
+   * API から来る modelMeta と、hook 側で補完した modelMeta を merge して使う。
+   */
+  modelMeta?: Record<string, MintModelMetaEntryDTO> | null;
+
+  /**
+   * ProductBlueprintPatch。
+   *
+   * - modelRefs は displayOrder の唯一のソース
+   * - productBlueprintCategory.kind で alcohol などの表示切替を行う
+   */
+  productBlueprintPatch?: Pick<
+    ProductBlueprintPatchDTO,
+    "modelRefs" | "productBlueprintCategory"
+  > | null;
 };
 
 export type BuildInspectionResultCardDataInput = {
   batch: InspectionBatchForCard | null | undefined;
-  resolvedMeta?: Record<string, MintModelMetaEntry> | null;
+  resolvedMeta?: Record<string, MintModelMetaEntryDTO> | null;
 };
 
 export type InspectionResultCardData = {
@@ -30,7 +61,32 @@ export type InspectionResultCardData = {
   rows: InspectionResultRow[];
   totalPassed: number;
   totalQuantity: number;
+
+  /**
+   * productBlueprintCategory.kind。
+   * 現状は alcohol の場合に検品結果カードで容量列を表示する。
+   */
+  categoryKind: string;
+
+  /**
+   * true の場合、InspectionResultCard 側で サイズ/カラー ではなく 容量 を表示する。
+   */
+  showVolumeColumn: boolean;
 };
+
+function toText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return "";
+}
 
 function buildDisplayOrderByModelId(
   modelRefs: ProductBlueprintModelRefLike[] | null | undefined,
@@ -38,7 +94,7 @@ function buildDisplayOrderByModelId(
   const out: Record<string, number> = {};
 
   for (const ref of modelRefs ?? []) {
-    const modelId = String(ref?.modelId ?? "").trim();
+    const modelId = toText(ref?.modelId);
     const displayOrder = ref?.displayOrder;
 
     if (!modelId) continue;
@@ -52,13 +108,36 @@ function buildDisplayOrderByModelId(
 }
 
 function buildMergedModelMeta(
-  batchMeta: Record<string, MintModelMetaEntry> | null | undefined,
-  resolvedMeta: Record<string, MintModelMetaEntry> | null | undefined,
-): Record<string, MintModelMetaEntry> {
+  batchMeta: Record<string, MintModelMetaEntryDTO> | null | undefined,
+  resolvedMeta: Record<string, MintModelMetaEntryDTO> | null | undefined,
+): Record<string, MintModelMetaEntryDTO> {
   return {
     ...(batchMeta ?? {}),
     ...(resolvedMeta ?? {}),
   };
+}
+
+function resolveCategoryKind(
+  batch: InspectionBatchForCard | null | undefined,
+): string {
+  return toText(batch?.productBlueprintPatch?.productBlueprintCategory?.kind);
+}
+
+function buildVolumeLabel(params: {
+  volume: string | number | null | undefined;
+  volumeUnit: string | null | undefined;
+  isAlcohol: boolean;
+}): string {
+  const { volume, volumeUnit, isAlcohol } = params;
+
+  if (!isAlcohol) return "";
+
+  const volumeText = toText(volume);
+  if (!volumeText) return "";
+
+  const unitText = toText(volumeUnit) || "ml";
+
+  return `${volumeText}${unitText}`;
 }
 
 export function getInspectionModelIds(
@@ -69,7 +148,7 @@ export function getInspectionModelIds(
   const set = new Set<string>();
 
   for (const inspection of batch.inspections ?? []) {
-    const modelId = String((inspection as any)?.modelId ?? "").trim();
+    const modelId = toText((inspection as any)?.modelId);
     if (modelId) set.add(modelId);
   }
 
@@ -78,7 +157,7 @@ export function getInspectionModelIds(
 
 export function getMissingModelIds(input: {
   modelIds: string[];
-  modelMeta: Record<string, MintModelMetaEntry>;
+  modelMeta: Record<string, MintModelMetaEntryDTO>;
 }): string[] {
   const modelIds = input.modelIds ?? [];
   const modelMeta = input.modelMeta ?? {};
@@ -97,8 +176,14 @@ export function buildInspectionResultCardData(
       rows: [],
       totalPassed: 0,
       totalQuantity: 0,
+      categoryKind: "",
+      showVolumeColumn: false,
     };
   }
+
+  const categoryKind = resolveCategoryKind(batch);
+  const isAlcohol = categoryKind === "alcohol";
+  const showVolumeColumn = isAlcohol;
 
   const mergedModelMeta = buildMergedModelMeta(
     batch.modelMeta,
@@ -119,12 +204,12 @@ export function buildInspectionResultCardData(
   >();
 
   for (const inspection of batch.inspections ?? []) {
-    const modelId = String((inspection as any)?.modelId ?? "").trim();
+    const modelId = toText((inspection as any)?.modelId);
     if (!modelId) continue;
 
-    const modelNumberFromInspection = String(
-      (inspection as any)?.modelNumber ?? "",
-    ).trim();
+    const modelNumberFromInspection = toText(
+      (inspection as any)?.modelNumber,
+    );
 
     const entry =
       aggregation.get(modelId) ?? {
@@ -160,18 +245,39 @@ export function buildInspectionResultCardData(
         ? displayOrderByModelId[modelId]
         : INF;
 
+    const volume = meta?.volume ?? null;
+    const volumeUnit = meta?.volumeUnit ?? null;
+    const volumeLabel = buildVolumeLabel({
+      volume,
+      volumeUnit,
+      isAlcohol,
+    });
+
     rowsWithOrder.push({
       __order: order,
       modelNumber: displayModelNumber,
       size: meta?.size ?? "",
       color: meta?.colorName ?? "",
       rgb: meta?.rgb ?? null,
+
+      volume,
+      volumeUnit,
+      volumeLabel,
+
       passedQuantity: agg.passed,
       quantity: agg.total,
     });
   }
 
-  rowsWithOrder.sort((a, b) => a.__order - b.__order);
+  rowsWithOrder.sort((a, b) => {
+    if (a.__order !== b.__order) {
+      return a.__order - b.__order;
+    }
+
+    return String(a.modelNumber ?? "").localeCompare(
+      String(b.modelNumber ?? ""),
+    );
+  });
 
   const rows = rowsWithOrder.map(({ __order, ...row }) => row);
 
@@ -185,12 +291,14 @@ export function buildInspectionResultCardData(
     0,
   );
 
-  const productName = String((batch as any)?.productName ?? "").trim();
+  const productName = toText((batch as any)?.productName);
 
   return {
     title: productName ? `検査結果：${productName}` : "モデル別検査結果",
     rows,
     totalPassed,
     totalQuantity,
+    categoryKind,
+    showVolumeColumn,
   };
 }

@@ -4,7 +4,7 @@ import type { MintRequestRepository } from "../../application/port/MintRequestRe
 
 import {
   fetchInspectionByProductionIdHTTP,
-  fetchMintByInspectionIdHTTP,
+  fetchMintByProductionIdHTTP,
   fetchProductBlueprintIdByProductionIdHTTP,
   fetchProductBlueprintPatchHTTP,
   fetchBrandsForMintHTTP,
@@ -16,24 +16,39 @@ import {
 import { fetchInventoryTokenBlueprintPatch } from "../adapter/inventoryTokenBlueprintPatch";
 
 export class HttpMintRequestRepository implements MintRequestRepository {
-  async fetchInspectionByProductionId(productionId: string): Promise<unknown | null> {
-    return await fetchInspectionByProductionIdHTTP(productionId).catch(() => null);
+  async fetchInspectionByProductionId(
+    productionId: string,
+  ): Promise<unknown | null> {
+    return await fetchInspectionByProductionIdHTTP(productionId).catch(
+      () => null,
+    );
   }
 
-  async fetchMintByInspectionId(inspectionId: string): Promise<unknown | null> {
-    return await fetchMintByInspectionIdHTTP(inspectionId).catch(() => null);
+  async fetchMintByProductionId(
+    productionId: string,
+  ): Promise<unknown | null> {
+    return await fetchMintByProductionIdHTTP(productionId).catch(() => null);
   }
 
-  async fetchProductBlueprintIdByProductionId(productionId: string): Promise<string | null> {
-    return await fetchProductBlueprintIdByProductionIdHTTP(productionId).catch(() => null);
+  async fetchProductBlueprintIdByProductionId(
+    productionId: string,
+  ): Promise<string | null> {
+    return await fetchProductBlueprintIdByProductionIdHTTP(productionId).catch(
+      () => null,
+    );
   }
 
-  async fetchProductBlueprintPatch(productBlueprintId: string): Promise<unknown | null> {
-    return await fetchProductBlueprintPatchHTTP(productBlueprintId).catch(() => null);
+  async fetchProductBlueprintPatch(
+    productBlueprintId: string,
+  ): Promise<unknown | null> {
+    return await fetchProductBlueprintPatchHTTP(productBlueprintId).catch(
+      () => null,
+    );
   }
 
   async fetchBrandsForMint(): Promise<{ id: string; name: string }[]> {
     const brands = await fetchBrandsForMintHTTP().catch(() => []);
+
     return (brands ?? [])
       .map((b: any) => ({
         id: String(b?.id ?? "").trim(),
@@ -45,7 +60,10 @@ export class HttpMintRequestRepository implements MintRequestRepository {
   async fetchTokenBlueprintsByBrand(
     brandId: string,
   ): Promise<{ id: string; name: string; symbol: string; iconUrl?: string }[]> {
-    const list = await fetchTokenBlueprintsByBrandHTTP(brandId).catch(() => []);
+    const list = await fetchTokenBlueprintsByBrandHTTP(brandId).catch(
+      () => [],
+    );
+
     return (list ?? [])
       .map((tb: any) => ({
         id: String(tb?.id ?? "").trim(),
@@ -56,9 +74,13 @@ export class HttpMintRequestRepository implements MintRequestRepository {
       .filter((tb: any) => tb.id && tb.name && tb.symbol);
   }
 
-  async fetchTokenBlueprintPatch(tokenBlueprintId: string): Promise<unknown | null> {
+  async fetchTokenBlueprintPatch(
+    tokenBlueprintId: string,
+  ): Promise<unknown | null> {
     // ここで inventory 側 endpoint を吸収（application は知らない）
-    return await fetchInventoryTokenBlueprintPatch(tokenBlueprintId).catch(() => null);
+    return await fetchInventoryTokenBlueprintPatch(tokenBlueprintId).catch(
+      () => null,
+    );
   }
 
   async postMintRequest(
@@ -66,8 +88,10 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     tokenBlueprintId: string,
     scheduledBurnDate?: string,
   ): Promise<unknown | null> {
-    return await postMintRequestHTTP(productionId, tokenBlueprintId, scheduledBurnDate).catch(
-      () => null,
-    );
+    return await postMintRequestHTTP(
+      productionId,
+      tokenBlueprintId,
+      scheduledBurnDate,
+    ).catch(() => null);
   }
 }

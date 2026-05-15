@@ -5,7 +5,7 @@ import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
 
 import {
   postMintRequestHTTP,
-  fetchMintByInspectionIdHTTP,
+  fetchMintByProductionIdHTTP,
 } from "../../infrastructure/repository";
 
 /**
@@ -32,7 +32,7 @@ export async function submitMintRequestAndRefresh(
     scheduledBurnDate,
   ).catch(() => null);
 
-  const refreshedMint = await fetchMintByInspectionIdHTTP(pid).catch(
+  const refreshedMint = await fetchMintByProductionIdHTTP(pid).catch(
     () => null,
   );
 

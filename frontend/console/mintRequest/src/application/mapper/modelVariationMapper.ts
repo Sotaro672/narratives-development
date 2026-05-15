@@ -1,18 +1,52 @@
 // frontend/console/mintRequest/src/application/mapper/modelVariationMapper.ts
 
-import type { ModelVariationForMintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
-import type { MintModelMetaEntry } from "../../presentation/hook/useInspectionResultCard";
+import type {
+  MintModelMetaEntryDTO,
+  ModelVariationForMintDTO,
+} from "../../infrastructure/dto/mintRequestLocal.dto";
+
+function toText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function toVolume(value: unknown): string | number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  return null;
+}
 
 export function getModelVariationModelNumber(
   variation: ModelVariationForMintDTO | null | undefined,
 ): string | null {
   if (!variation) return null;
 
-  const modelNumber = (variation as any)?.modelNumber ?? null;
-
-  return typeof modelNumber === "string" && modelNumber.trim()
-    ? modelNumber.trim()
-    : null;
+  return toText((variation as any)?.modelNumber);
 }
 
 export function getModelVariationSize(
@@ -20,9 +54,7 @@ export function getModelVariationSize(
 ): string | null {
   if (!variation) return null;
 
-  const size = (variation as any)?.size ?? null;
-
-  return typeof size === "string" && size.trim() ? size.trim() : null;
+  return toText((variation as any)?.size);
 }
 
 export function getModelVariationColorName(
@@ -30,12 +62,10 @@ export function getModelVariationColorName(
 ): string | null {
   if (!variation) return null;
 
-  const colorName =
-    (variation as any)?.color?.name ?? (variation as any)?.colorName ?? null;
-
-  return typeof colorName === "string" && colorName.trim()
-    ? colorName.trim()
-    : null;
+  return (
+    toText((variation as any)?.color?.name) ??
+    toText((variation as any)?.colorName)
+  );
 }
 
 export function getModelVariationRgb(
@@ -43,14 +73,34 @@ export function getModelVariationRgb(
 ): number | null {
   if (!variation) return null;
 
-  const rgb = (variation as any)?.color?.rgb ?? (variation as any)?.rgb ?? null;
+  return (
+    toNumberOrNull((variation as any)?.color?.rgb) ??
+    toNumberOrNull((variation as any)?.rgb)
+  );
+}
 
-  return typeof rgb === "number" && Number.isFinite(rgb) ? rgb : null;
+export function getModelVariationVolume(
+  variation: ModelVariationForMintDTO | null | undefined,
+): string | number | null {
+  if (!variation) return null;
+
+  return toVolume((variation as any)?.volume);
+}
+
+export function getModelVariationVolumeUnit(
+  variation: ModelVariationForMintDTO | null | undefined,
+): string | null {
+  if (!variation) return null;
+
+  return (
+    toText((variation as any)?.volumeUnit) ??
+    toText((variation as any)?.unit)
+  );
 }
 
 export function toMintModelMetaEntry(
   variation: ModelVariationForMintDTO | null | undefined,
-): MintModelMetaEntry | null {
+): MintModelMetaEntryDTO | null {
   if (!variation) return null;
 
   return {
@@ -58,5 +108,7 @@ export function toMintModelMetaEntry(
     size: getModelVariationSize(variation),
     colorName: getModelVariationColorName(variation),
     rgb: getModelVariationRgb(variation),
+    volume: getModelVariationVolume(variation),
+    volumeUnit: getModelVariationVolumeUnit(variation),
   };
 }

@@ -8,7 +8,7 @@ import type {
 
 import {
   fetchInspectionByProductionIdHTTP,
-  fetchMintByInspectionIdHTTP,
+  fetchMintByProductionIdHTTP,
   fetchProductBlueprintIdByProductionIdHTTP,
   fetchProductBlueprintPatchHTTP,
   fetchBrandsForMintHTTP,
@@ -28,15 +28,11 @@ class HttpMintRequestRepository implements MintRequestRepository {
   /**
    * productions / inspections / mints の docId はすべて同一。
    * フロントでは productionId を正として扱う。
-   *
-   * NOTE:
-   * HTTP 実装名がまだ fetchMintByInspectionIdHTTP の場合でも、
-   * 渡している値は productionId。
    */
   async fetchMintByProductionId(
     productionId: string,
   ): Promise<unknown | null> {
-    return fetchMintByInspectionIdHTTP(productionId);
+    return fetchMintByProductionIdHTTP(productionId);
   }
 
   async fetchProductBlueprintIdByProductionId(

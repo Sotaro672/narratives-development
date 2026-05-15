@@ -1,64 +1,39 @@
 // frontend/console/mintRequest/src/presentation/hook/useInspectionResultCard.tsx
 
 import * as React from "react";
-import type { InspectionBatch } from "../../domain/entity/inspections";
 
 import {
   buildInspectionResultCardData,
   getInspectionModelIds,
   getMissingModelIds,
 } from "../../application/mapper/buildInspectionResultCardData";
+
+import type {
+  InspectionBatchForCard,
+  InspectionResultRow,
+} from "../../application/mapper/buildInspectionResultCardData";
+
 import { toMintModelMetaEntry } from "../../application/mapper/modelVariationMapper";
 
-// ★ modelId -> ModelVariation を引く（modelNumber/size/color を解決する）
+// ★ modelId -> ModelVariation を引く（modelNumber/size/color/volume を解決する）
 import { fetchModelVariationByIdForMintHTTP } from "../../infrastructure/repository";
-import type { ModelVariationForMintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
+
+import type {
+  MintModelMetaEntryDTO,
+  ModelVariationForMintDTO,
+} from "../../infrastructure/dto/mintRequestLocal.dto";
 
 // ✅ 共通カラー変換ユーティリティ（rgb int -> "#RRGGBB"）
 import { rgbIntToHex as rgbIntToHexShared } from "../../../../shell/src/shared/util/color";
 
-/**
- * バックエンドの MintInspectionView に相当する型のうち、
- * InspectionBatch に modelMeta / productBlueprintPatch を足したものだけをここで再定義して使う。
- * （TS の構造的型付けなので、API から追加で来る productName などとも両立します）
- */
-export type MintModelMetaEntry = {
-  modelNumber?: string | null;
-  size?: string | null;
-  colorName?: string | null;
-  rgb?: number | null;
-};
-
-export type InspectionBatchWithModelMeta = InspectionBatch & {
-  // modelId → { modelNumber, size, colorName, rgb }
-  modelMeta?: Record<string, MintModelMetaEntry>;
-
-  // ProductBlueprintPatch（modelRefs=displayOrder の唯一のソース）
-  productBlueprintPatch?: {
-    modelRefs?: Array<{ modelId: string; displayOrder: number }> | null;
-    [k: string]: any;
-  } | null;
-};
-
-/**
- * 検査結果カード 1 行分
- * - modelNumber: 型番
- * - size / color / rgb: modelId → ModelMeta から取得
- * - passedQuantity: 合格数
- * - quantity      : 生産数（＝該当モデルの検査件数）
- */
-export type InspectionResultRow = {
-  modelNumber: string;
-  size: string;
-  color: string;
-  rgb?: number | string | null;
-  passedQuantity: number;
-  quantity: number;
-};
-
 export type UseInspectionResultCardParams = {
-  /** MintInspectionView 相当（InspectionBatch + modelMeta + productBlueprintPatch） */
-  batch: InspectionBatchWithModelMeta | null | undefined;
+  /**
+   * MintInspectionView 相当。
+   *
+   * InspectionBatch + modelMeta + productBlueprintPatch を含む、
+   * 検品結果カード構築用の application input 型。
+   */
+  batch: InspectionBatchForCard | null | undefined;
 };
 
 export type UseInspectionResultCardResult = {
@@ -67,18 +42,31 @@ export type UseInspectionResultCardResult = {
   totalPassed: number;
   totalQuantity: number;
 
+  /**
+   * productBlueprintCategory.kind。
+   * 現状は alcohol の場合に検品結果カードで容量列を表示する。
+   */
+  categoryKind: string;
+
+  /**
+   * true の場合、InspectionResultCard 側で サイズ/カラー ではなく 容量 を表示する。
+   */
+  showVolumeColumn: boolean;
+
   // ✅ 共通 util 互換に合わせる：undefined も返しうる
   rgbIntToHex: (rgb: number | string | null | undefined) => string | undefined;
 };
 
 /**
- * InspectionBatch（+ modelMeta）から
+ * InspectionBatch（+ modelMeta + productBlueprintPatch）から
  * InspectionResultCard 用の行データ・集計値・RGB変換関数を提供するフック。
  *
- * application 分離後:
- * - rows / totalPassed / totalQuantity / title の構築は buildInspectionResultCardData に移譲
- * - ModelVariationForMintDTO -> MintModelMetaEntry の変換は modelVariationMapper に移譲
+ * 責務:
  * - hook 側は不足 modelMeta の HTTP 補完と React 状態管理のみ担当
+ * - rows / totalPassed / totalQuantity / title / categoryKind / showVolumeColumn の構築は
+ *   buildInspectionResultCardData に移譲
+ * - ModelVariationForMintDTO -> MintModelMetaEntryDTO の変換は
+ *   modelVariationMapper に移譲
  */
 export function useInspectionResultCard(
   params: UseInspectionResultCardParams,
@@ -87,7 +75,7 @@ export function useInspectionResultCard(
 
   // API から来ない/不足している modelMeta をここで補完する
   const [resolvedMeta, setResolvedMeta] = React.useState<
-    Record<string, MintModelMetaEntry>
+    Record<string, MintModelMetaEntryDTO>
   >({});
 
   // batch が変わったら補完キャッシュもリセット（production 切替時など）
@@ -100,8 +88,10 @@ export function useInspectionResultCard(
     return getInspectionModelIds(batch);
   }, [batch]);
 
-  // 既存 meta（APIから来た分 + こちらで解決した分）をマージ
-  const mergedModelMeta = React.useMemo<Record<string, MintModelMetaEntry>>(() => {
+  // 既存 meta（API から来た分 + こちらで解決した分）をマージ
+  const mergedModelMeta = React.useMemo<
+    Record<string, MintModelMetaEntryDTO>
+  >(() => {
     return {
       ...(batch?.modelMeta ?? {}),
       ...(resolvedMeta ?? {}),
@@ -141,7 +131,9 @@ export function useInspectionResultCard(
       if (cancelled) return;
 
       setResolvedMeta((prev) => {
-        const next = { ...(prev ?? {}) };
+        const next: Record<string, MintModelMetaEntryDTO> = {
+          ...(prev ?? {}),
+        };
 
         for (const item of settled) {
           const meta = toMintModelMetaEntry(item.variation);
@@ -157,6 +149,7 @@ export function useInspectionResultCard(
     return () => {
       cancelled = true;
     };
+
     // missingModelIds は配列なので、内容変化を見るため string 化する
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch, JSON.stringify(missingModelIds)]);
@@ -181,6 +174,8 @@ export function useInspectionResultCard(
     rows: cardData.rows,
     totalPassed: cardData.totalPassed,
     totalQuantity: cardData.totalQuantity,
+    categoryKind: cardData.categoryKind,
+    showVolumeColumn: cardData.showVolumeColumn,
     rgbIntToHex,
   };
 }

@@ -4,10 +4,7 @@ import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 
 import type { InspectionBatchDTO } from "../../../domain/entity/inspections";
-import type {
-  MintDTO,
-  MintListRowDTO,
-} from "../../api/mintRequestApi";
+import type { MintDTO, MintListRowDTO } from "../../api/mintRequestApi";
 
 import type { MintRequestManagementRowDTO } from "../../../application/dto/mintRequestManagementRow";
 
@@ -43,9 +40,12 @@ function uniqTrimmedStrings(xs: string[]): string[] {
   return out;
 }
 
-function buildMintRequestsUrl(ids: string[], view: MintRequestsView): string {
+function buildMintRequestsUrl(
+  productionIds: string[],
+  view: MintRequestsView,
+): string {
   const base = `${API_BASE}/mint/requests?productionIds=${encodeURIComponent(
-    ids.join(","),
+    productionIds.join(","),
   )}`;
 
   return `${base}&view=${encodeURIComponent(view)}`;
@@ -75,29 +75,32 @@ function getProductionId(row: any): string | null {
  * - Backend response は配列を正とする
  */
 async function fetchMintRequestsRowsRawOnce(
-  ids: string[],
+  productionIds: string[],
   view: MintRequestsView,
 ): Promise<FetchMintRequestsResult> {
-  const safeIds = uniqTrimmedStrings(ids ?? []);
+  const safeProductionIds = uniqTrimmedStrings(productionIds ?? []);
 
-  if (safeIds.length === 0) {
+  if (safeProductionIds.length === 0) {
     return { rows: [], usedView: view, usedUrl: "" };
   }
 
   const authHeaders = await getAuthJsonHeadersOrThrow();
 
-  const url = buildMintRequestsUrl(safeIds, view);
+  const url = buildMintRequestsUrl(safeProductionIds, view);
 
   let res: Response;
 
   try {
     res = await fetch(url, { method: "GET", headers: authHeaders });
   } catch (e: any) {
-    throw new Error(`Failed to fetch mint requests (network): ${String(e?.message ?? e)}`);
+    throw new Error(
+      `Failed to fetch mint requests (network): ${String(e?.message ?? e)}`,
+    );
   }
 
   if (res.ok) {
-    const json = (await res.json()) as MintRequestManagementRowDTO[] | null | undefined;
+    const json =
+      (await res.json()) as MintRequestManagementRowDTO[] | null | undefined;
 
     return {
       rows: Array.isArray(json) ? json : [],
@@ -108,7 +111,9 @@ async function fetchMintRequestsRowsRawOnce(
 
   const body = await readTextSafe(res);
 
-  const hint = isServiceUnavailableStatus(res.status) ? " (service unavailable)" : "";
+  const hint = isServiceUnavailableStatus(res.status)
+    ? " (service unavailable)"
+    : "";
 
   throw new Error(
     `Failed to fetch mint requests${hint}: ${res.status} ${res.statusText}${
@@ -125,7 +130,7 @@ async function fetchMintRequestsRowsRawOnce(
  * productionId で 1 件の MintDTO を取得。
  * ✅ productionId を正とし、id / inspectionId fallback は使わない。
  */
-export async function fetchMintByInspectionIdHTTP(
+export async function fetchMintByProductionIdHTTP(
   productionId: string,
 ): Promise<MintDTO | null> {
   const pid = String(productionId ?? "").trim();
@@ -162,7 +167,7 @@ export async function fetchMintByInspectionIdHTTP(
  * productionIds で MintDTO を map 取得。
  * ✅ key は productionId のみ。
  */
-export async function fetchMintsByInspectionIdsHTTP(
+export async function fetchMintsByProductionIdsHTTP(
   productionIds: string[],
 ): Promise<Record<string, MintDTO>> {
   const ids = uniqTrimmedStrings(productionIds ?? []);
@@ -199,7 +204,7 @@ export async function fetchMintsByInspectionIdsHTTP(
  * productionIds で “一覧用” MintListRowDTO を map 取得。
  * ✅ key は productionId のみ。
  */
-export async function fetchMintListRowsByInspectionIdsHTTP(
+export async function fetchMintListRowsByProductionIdsHTTP(
   productionIds: string[],
 ): Promise<Record<string, MintListRowDTO>> {
   const ids = uniqTrimmedStrings(productionIds ?? []);
