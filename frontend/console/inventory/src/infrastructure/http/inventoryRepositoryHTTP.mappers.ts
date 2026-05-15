@@ -99,8 +99,6 @@ export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
       p.productBlueprintCategory,
     ),
     categoryFields: p.categoryFields ?? null,
-
-    itemType: p.itemType,
     fit: p.fit,
     material: p.material,
     weight: p.weight,

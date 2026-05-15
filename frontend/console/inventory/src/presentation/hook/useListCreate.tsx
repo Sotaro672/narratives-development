@@ -57,12 +57,7 @@ function normalizeAssigneeCandidates(
       const nameParts = [c?.lastName, c?.firstName].filter(Boolean);
       const joinedName = nameParts.join(" ");
 
-      const name =
-        c?.name ||
-        c?.fullName ||
-        joinedName ||
-        c?.email ||
-        id;
+      const name = c?.name || c?.fullName || joinedName || c?.email || id;
 
       return {
         id,
@@ -70,6 +65,41 @@ function normalizeAssigneeCandidates(
       };
     })
     .filter(Boolean) as AssigneeCandidate[];
+}
+
+function resolveProductBlueprintCategory(dto: unknown): string | undefined {
+  const d = dto as any;
+
+  const categoryCode =
+    d?.productBlueprintCategory ||
+    d?.productBlueprintCategoryCode ||
+    d?.productBlueprintPatch?.productBlueprintCategory?.code;
+
+  if (categoryCode) {
+    return String(categoryCode);
+  }
+
+  const categoryKind =
+    d?.productBlueprintCategoryKind ||
+    d?.productBlueprintPatch?.productBlueprintCategory?.kind;
+
+  if (categoryKind) {
+    return String(categoryKind);
+  }
+
+  const priceRows = Array.isArray(d?.priceRows) ? d.priceRows : [];
+
+  const hasAlcoholRow = priceRows.some((row: any) => row?.kind === "alcohol");
+  if (hasAlcoholRow) {
+    return "alcohol";
+  }
+
+  const hasApparelRow = priceRows.some((row: any) => row?.kind === "apparel");
+  if (hasApparelRow) {
+    return "apparel";
+  }
+
+  return undefined;
 }
 
 export function useListCreate(): UseListCreateResult {
@@ -97,6 +127,7 @@ export function useListCreate(): UseListCreateResult {
     priceRows,
     setPriceRows,
     initializedPriceRowsRef,
+    setProductBlueprintCategory,
     onChangePrice,
     priceCard,
   } = usePriceRows();
@@ -164,6 +195,11 @@ export function useListCreate(): UseListCreateResult {
     initializedPriceRowsRef,
     setPriceRows,
   });
+
+  React.useEffect(() => {
+    const nextCategory = resolveProductBlueprintCategory(dto);
+    setProductBlueprintCategory(nextCategory);
+  }, [dto, setProductBlueprintCategory]);
 
   const { onCreate } = useCreateList({
     navigate,

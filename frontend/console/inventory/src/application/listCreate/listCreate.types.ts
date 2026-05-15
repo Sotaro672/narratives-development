@@ -38,6 +38,8 @@ export type CreateListPriceRow = {
 
 export type PriceCardMode = "view" | "edit";
 
+export type PriceRowKind = "apparel" | "alcohol" | string;
+
 /**
  * PriceCard 用 row
  *
@@ -49,9 +51,22 @@ export type PriceCardMode = "view" | "edit";
  * - displayOrder は重複/未設定があり得る
  * - 並び順は displayOrder 昇順のみ
  * - 未設定は null を保持し、UI 側で末尾扱いにする
+ *
+ * category ごとの表示:
+ * - apparel: size / color / rgb
+ * - alcohol: volumeValue / volumeUnit
  */
 export type PriceRow = {
   modelId: string;
+
+  /**
+   * モデル種別。
+   *
+   * model domain の variation.kind 由来。
+   * - apparel
+   * - alcohol
+   */
+  kind?: PriceRowKind | null;
 
   /**
    * 並び順。
@@ -59,8 +74,15 @@ export type PriceRow = {
    */
   displayOrder?: number | null;
 
-  size: string;
-  color: string;
+  /**
+   * apparel category 用。
+   */
+  size?: string | null;
+
+  /**
+   * apparel category 用。
+   */
+  color?: string | null;
 
   /**
    * RGB。
@@ -68,6 +90,20 @@ export type PriceRow = {
    * 既存 UI 互換として "#RRGGBB" string も許容する。
    */
   rgb?: number | string | null;
+
+  /**
+   * alcohol category 用。
+   *
+   * 例: 720, 1000
+   */
+  volumeValue?: number | null;
+
+  /**
+   * alcohol category 用。
+   *
+   * 例: "ml", "L"
+   */
+  volumeUnit?: string | null;
 
   stock: number;
 
@@ -84,6 +120,15 @@ export type PriceCardProps = {
   className?: string;
 
   mode?: PriceCardMode;
+
+  /**
+   * ProductBlueprintCategory.code を渡す想定。
+   *
+   * 例:
+   * - "apparel.tops"
+   * - "alcohol.sake"
+   */
+  productBlueprintCategory?: string;
 
   /**
    * edit 時に価格を更新するコールバック。
@@ -103,13 +148,38 @@ export type PriceRowVM = {
   modelId: string;
 
   /**
+   * モデル種別。
+   *
+   * PriceCard の category 表示分岐で使う。
+   */
+  kind?: PriceRowKind | null;
+
+  /**
    * 並び順。
    * 未設定は null。
    */
   displayOrder: number | null;
 
-  size: string;
-  color: string;
+  /**
+   * apparel category 用。
+   */
+  size?: string | null;
+
+  /**
+   * apparel category 用。
+   */
+  color?: string | null;
+
+  /**
+   * alcohol category 用。
+   */
+  volumeValue?: number | null;
+
+  /**
+   * alcohol category 用。
+   */
+  volumeUnit?: string | null;
+
   stock: number;
 
   bgColor: string;

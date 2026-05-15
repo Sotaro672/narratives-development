@@ -23,16 +23,72 @@ import type { InventoryRow } from "../../application/inventoryTypes";
 
 import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
 
+type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
+
 type InventoryCardProps = {
   title?: string;
   rows: InventoryRow[];
+
+  /**
+   * ProductBlueprintCategory.code を渡す想定。
+   *
+   * 例:
+   * - "apparel.tops"
+   * - "alcohol.sake"
+   */
+  productBlueprintCategory?: string;
+
   className?: string;
   mode?: "view"; // 現状は閲覧専用
 };
 
+function resolveProductBlueprintCategoryKind(args: {
+  productBlueprintCategory?: string;
+  rows: InventoryRow[];
+}): ProductBlueprintCategoryKind {
+  const category = String(args.productBlueprintCategory ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (category.startsWith("alcohol")) {
+    return "alcohol";
+  }
+
+  if (category.startsWith("apparel")) {
+    return "apparel";
+  }
+
+  const hasAlcoholRow = args.rows.some((row) => row.kind === "alcohol");
+  if (hasAlcoholRow) {
+    return "alcohol";
+  }
+
+  const hasApparelRow = args.rows.some((row) => row.kind === "apparel");
+  if (hasApparelRow) {
+    return "apparel";
+  }
+
+  return "unknown";
+}
+
+function getVolumeValueLabel(row: InventoryRow): string {
+  const value = row.volumeValue;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return "";
+}
+
+function getVolumeUnitLabel(row: InventoryRow): string {
+  return String(row.volumeUnit ?? "").trim();
+}
+
 const InventoryCard: React.FC<InventoryCardProps> = ({
   title = "モデル別在庫一覧",
   rows,
+  productBlueprintCategory,
   className,
   mode = "view",
 }) => {
@@ -59,10 +115,23 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
       .map((x) => x.r);
   }, [rows]);
 
+  const categoryKind = React.useMemo(
+    () =>
+      resolveProductBlueprintCategoryKind({
+        productBlueprintCategory,
+        rows: sortedRows,
+      }),
+    [productBlueprintCategory, sortedRows],
+  );
+
+  const isAlcoholCategory = categoryKind === "alcohol";
+
   const totalStock = React.useMemo(
     () => sortedRows.reduce((sum, r) => sum + (r.stock || 0), 0),
     [sortedRows],
   );
+
+  const footerColSpan = 3;
 
   return (
     <Card className={`ivc ${className ?? ""}`}>
@@ -86,9 +155,22 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             <TableHeader>
               <TableRow>
                 <TableHead className="ivc__th ivc__th--left">型番</TableHead>
-                <TableHead className="ivc__th">サイズ</TableHead>
-                <TableHead className="ivc__th">カラー</TableHead>
-                <TableHead className="ivc__th ivc__th--right">在庫数</TableHead>
+
+                {isAlcoholCategory ? (
+                  <>
+                    <TableHead className="ivc__th">容量</TableHead>
+                    <TableHead className="ivc__th">単位</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="ivc__th">サイズ</TableHead>
+                    <TableHead className="ivc__th">カラー</TableHead>
+                  </>
+                )}
+
+                <TableHead className="ivc__th ivc__th--right">
+                  在庫数
+                </TableHead>
               </TableRow>
             </TableHeader>
 
@@ -98,22 +180,45 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
                 const bgColor = rgbHex ?? "#ffffff";
 
                 return (
-                  <TableRow key={`${row.modelNumber}-${idx}`} className="ivc__tr">
-                    <TableCell className="ivc__model">{row.modelNumber}</TableCell>
-
-                    <TableCell className="ivc__size">{row.size}</TableCell>
-
-                    <TableCell className="ivc__color-cell">
-                      <span
-                        className="ivc__color-dot"
-                        style={{
-                          backgroundColor: bgColor,
-                          boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
-                        }}
-                        title={rgbHex ?? ""}
-                      />
-                      <span className="ivc__color-label">{row.color}</span>
+                  <TableRow
+                    key={`${row.modelNumber}-${idx}`}
+                    className="ivc__tr"
+                  >
+                    <TableCell className="ivc__model">
+                      {row.modelNumber}
                     </TableCell>
+
+                    {isAlcoholCategory ? (
+                      <>
+                        <TableCell className="ivc__size">
+                          {getVolumeValueLabel(row) || "-"}
+                        </TableCell>
+
+                        <TableCell className="ivc__size">
+                          {getVolumeUnitLabel(row) || "-"}
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell className="ivc__size">
+                          {row.size || "-"}
+                        </TableCell>
+
+                        <TableCell className="ivc__color-cell">
+                          <span
+                            className="ivc__color-dot"
+                            style={{
+                              backgroundColor: bgColor,
+                              boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                            }}
+                            title={rgbHex ?? ""}
+                          />
+                          <span className="ivc__color-label">
+                            {row.color || "-"}
+                          </span>
+                        </TableCell>
+                      </>
+                    )}
 
                     <TableCell className="ivc__stock">
                       <span className="ivc__stock-number">{row.stock}</span>
@@ -132,7 +237,10 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
 
               {sortedRows.length > 0 && (
                 <TableRow className="ivc__total-row">
-                  <TableCell colSpan={3} className="ivc__total-label ivc__th--right">
+                  <TableCell
+                    colSpan={footerColSpan}
+                    className="ivc__total-label ivc__th--right"
+                  >
                     合計
                   </TableCell>
                   <TableCell className="ivc__total-value">

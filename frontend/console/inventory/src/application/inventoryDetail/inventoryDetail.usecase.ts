@@ -9,6 +9,9 @@ import {
   mapInventoryDetailDTO,
   mapTokenBlueprintPatch,
 } from "../../infrastructure/http/inventoryRepositoryHTTP.mappers";
+import { listModelVariationsByProductBlueprintId } from "../../../../model/src/infrastructure/repository/modelRepositoryHTTP";
+import type { ModelVariationResponse } from "../../../../model/src/infrastructure/repository/modelRepositoryHTTP";
+
 import type { InventoryDetailViewModel } from "./inventoryDetail.types";
 import { buildInventoryDetailViewModel } from "./inventoryDetail.mapper";
 
@@ -18,13 +21,15 @@ export async function loadInventoryDetailViewModel(
   const detailRaw = await getInventoryDetailRaw(inventoryId);
   const detail = mapInventoryDetailDTO(detailRaw, inventoryId);
 
+  const productBlueprintId = detail.productBlueprintId;
   const tokenBlueprintId = detail.tokenBlueprintId;
 
-  if (!tokenBlueprintId) {
+  if (!productBlueprintId || !tokenBlueprintId) {
     throw new Error("inventory_detail_missing_product_or_token_blueprint_id");
   }
 
   let tokenBlueprintPatch: TokenBlueprintPatchDTO | undefined = undefined;
+  let modelVariations: ModelVariationResponse[] = [];
 
   try {
     const patchRaw = await getTokenBlueprintPatchRaw(tokenBlueprintId);
@@ -33,9 +38,17 @@ export async function loadInventoryDetailViewModel(
     tokenBlueprintPatch = undefined;
   }
 
+  try {
+    modelVariations =
+      await listModelVariationsByProductBlueprintId(productBlueprintId);
+  } catch {
+    modelVariations = [];
+  }
+
   return buildInventoryDetailViewModel({
     inventoryId,
     detail,
     tokenBlueprintPatch,
+    modelVariations,
   });
 }

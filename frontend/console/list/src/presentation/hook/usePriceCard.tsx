@@ -47,6 +47,75 @@ function parsePriceInput(v: string): number | null {
   return int < 0 ? 0 : int;
 }
 
+function toDisplayOrder(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toStock(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getBgColor(rgb: unknown): string {
+  const rgbHex = rgbIntToHex(rgb as number | string | null | undefined) ?? null;
+
+  if (typeof rgb === "string" && rgb.trim().startsWith("#")) {
+    return rgb.trim();
+  }
+
+  return rgbHex ?? "#ffffff";
+}
+
+function getRgbTitle(rgb: unknown): string {
+  const rgbHex = rgbIntToHex(rgb as number | string | null | undefined) ?? null;
+
+  if (rgbHex) {
+    return rgbHex;
+  }
+
+  if (typeof rgb === "string") {
+    return rgb;
+  }
+
+  return "";
+}
+
+function getPriceInputValue(price: unknown): string {
+  if (price === null || price === undefined) return "";
+  return String(price);
+}
+
+function getPriceDisplayText(args: {
+  price: unknown;
+  currencySymbol: string;
+}): string {
+  const { price, currencySymbol } = args;
+
+  if (price === null || price === undefined) {
+    return "-";
+  }
+
+  return `${currencySymbol ?? ""}${price}`;
+}
+
+function getVolumeValue(row: { volumeValue?: number | null }): number | null {
+  const value = row.volumeValue;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  return null;
+}
+
+function getVolumeUnit(row: { volumeUnit?: string | null }): string | null {
+  const unit = s(row.volumeUnit);
+  return unit || null;
+}
+
 // ----------------------------------------------------------
 // Hook
 // ----------------------------------------------------------
@@ -69,37 +138,28 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
         const ao =
           a.row.displayOrder === null || a.row.displayOrder === undefined
             ? Number.POSITIVE_INFINITY
-            : a.row.displayOrder;
+            : Number(a.row.displayOrder);
 
         const bo =
           b.row.displayOrder === null || b.row.displayOrder === undefined
             ? Number.POSITIVE_INFINITY
-            : b.row.displayOrder;
+            : Number(b.row.displayOrder);
 
         if (ao !== bo) return ao - bo;
-        return 0;
+
+        // displayOrder が同じ場合は、元の rows 配列の順序を維持する
+        return a.originalIdx - b.originalIdx;
       });
 
     return sorted.map(({ row, originalIdx }) => {
       const modelId = s(row.modelId);
 
-      const rgbHex = rgbIntToHex(row.rgb) ?? null;
+      const priceInputValue = getPriceInputValue(row.price);
 
-      const bgColor =
-        typeof row.rgb === "string" && String(row.rgb).trim().startsWith("#")
-          ? String(row.rgb).trim()
-          : rgbHex ?? "#ffffff";
-
-      const rgbTitle =
-        rgbHex ?? (typeof row.rgb === "string" ? String(row.rgb) : "");
-
-      const priceInputValue =
-        row.price === null || row.price === undefined ? "" : String(row.price);
-
-      const priceDisplayText =
-        row.price === null || row.price === undefined
-          ? "-"
-          : `${currencySymbol ?? ""}${row.price}`;
+      const priceDisplayText = getPriceDisplayText({
+        price: row.price,
+        currencySymbol,
+      });
 
       const onChangePriceInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value;
@@ -109,23 +169,31 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
         onChangePrice?.(originalIdx, next, row);
       };
 
-      const displayOrder =
-        row.displayOrder === null || row.displayOrder === undefined
-          ? null
-          : row.displayOrder;
-
       return {
         modelId,
-        displayOrder,
-        size: row.size,
-        color: row.color,
-        stock: Number(row.stock ?? 0),
-        bgColor,
-        rgbTitle,
+
+        kind: row.kind ?? null,
+
+        displayOrder: toDisplayOrder(row.displayOrder),
+
+        // apparel category 用
+        size: row.size ?? null,
+        color: row.color ?? null,
+
+        // alcohol category 用
+        volumeValue: getVolumeValue(row),
+        volumeUnit: getVolumeUnit(row),
+
+        stock: toStock(row.stock),
+
+        bgColor: getBgColor(row.rgb),
+        rgbTitle: getRgbTitle(row.rgb),
+
         priceInputValue,
         priceDisplayText,
+
         onChangePriceInput,
-      } as PriceRowVM;
+      };
     });
   }, [rows, onChangePrice, currencySymbol]);
 

@@ -84,8 +84,6 @@ export type ProductBlueprintPatchDTO = {
 
   productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
   categoryFields?: CategoryFieldValues | null;
-
-  itemType?: string | null;
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
@@ -108,14 +106,62 @@ export type TokenBlueprintPatchDTO = {
   iconUrl?: string | null;
 };
 
+// ---------------------------------------------------------
+// ModelVariation DTO
+//
+// GET /models/by-blueprint/{productBlueprintId}/variations の response を
+// infrastructure mapper でこの形へ寄せる。
+// alcohol の容量は volume.value / volume.unit として保持し、
+// application mapper で InventoryRow.volumeValue / volumeUnit へ移す。
+// ---------------------------------------------------------
+export type ModelVariationVolumeDTO = {
+  value?: number | null;
+  unit?: string | null;
+};
+
+export type ModelVariationDTO = {
+  id: string;
+  productBlueprintId?: string;
+  kind?: string | null;
+
+  modelNumber?: string | null;
+
+  // apparel
+  size?: string | null;
+  color?: string | null;
+  rgb?: number | null;
+
+  // alcohol
+  volume?: ModelVariationVolumeDTO | null;
+
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type InventoryDetailRowDTO = {
   modelId?: string;
   tokenBlueprintId?: string;
   token?: string;
+
+  /**
+   * モデル種別。
+   *
+   * Inventory detail row 自体に kind が入る場合はここで受ける。
+   * 入らない場合は /models/by-blueprint/.../variations の kind を正として
+   * application mapper 側で補完する。
+   */
+  kind?: string | null;
+
   modelNumber: string;
-  size: string;
-  color: string;
+
+  // apparel
+  size?: string | null;
+  color?: string | null;
   rgb?: number | null;
+
+  // alcohol
+  volume?: ModelVariationVolumeDTO | null;
+
   stock: number;
 };
 

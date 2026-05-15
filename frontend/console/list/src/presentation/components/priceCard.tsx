@@ -24,6 +24,82 @@ import { usePriceCard } from "../hook/usePriceCard";
 // 型は inventory/application を正とする
 import type { PriceCardProps } from "../../../../inventory/src/application/listCreate/listCreate.types";
 
+type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
+
+type PriceCardRowVMWithCategory = {
+  modelId: string;
+
+  kind?: string | null;
+
+  size?: string | null;
+  color?: string | null;
+  bgColor?: string;
+  rgbTitle?: string;
+
+  volumeValue?: number | null;
+  volumeUnit?: string | null;
+
+  stock: number;
+
+  priceInputValue: string;
+  priceDisplayText: string;
+  onChangePriceInput: React.ChangeEventHandler<HTMLInputElement>;
+};
+
+type PriceCardPropsWithCategory = PriceCardProps & {
+  /**
+   * ProductBlueprintCategory.code を渡す想定。
+   *
+   * 例:
+   * - "apparel.tops"
+   * - "alcohol.sake"
+   */
+  productBlueprintCategory?: string;
+};
+
+function resolveProductBlueprintCategoryKind(args: {
+  productBlueprintCategory?: string;
+  rows: PriceCardRowVMWithCategory[];
+}): ProductBlueprintCategoryKind {
+  const category = String(args.productBlueprintCategory ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (category.startsWith("alcohol")) {
+    return "alcohol";
+  }
+
+  if (category.startsWith("apparel")) {
+    return "apparel";
+  }
+
+  const hasAlcoholRow = args.rows.some((row) => row.kind === "alcohol");
+  if (hasAlcoholRow) {
+    return "alcohol";
+  }
+
+  const hasApparelRow = args.rows.some((row) => row.kind === "apparel");
+  if (hasApparelRow) {
+    return "apparel";
+  }
+
+  return "unknown";
+}
+
+function getVolumeValueLabel(row: PriceCardRowVMWithCategory): string {
+  const value = row.volumeValue;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return "";
+}
+
+function getVolumeUnitLabel(row: PriceCardRowVMWithCategory): string {
+  return String(row.volumeUnit ?? "").trim();
+}
+
 const PriceCard: React.FC<PriceCardProps> = (props) => {
   const { className } = props;
 
@@ -36,6 +112,25 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
     rowsVM,
     isEmpty,
   } = usePriceCard(props);
+
+  const rowsWithCategory = React.useMemo(
+    () => rowsVM as PriceCardRowVMWithCategory[],
+    [rowsVM],
+  );
+
+  const productBlueprintCategory = (props as PriceCardPropsWithCategory)
+    .productBlueprintCategory;
+
+  const categoryKind = React.useMemo(
+    () =>
+      resolveProductBlueprintCategoryKind({
+        productBlueprintCategory,
+        rows: rowsWithCategory,
+      }),
+    [productBlueprintCategory, rowsWithCategory],
+  );
+
+  const isAlcoholCategory = categoryKind === "alcohol";
 
   return (
     <Card className={`prc ${className ?? ""}`}>
@@ -59,36 +154,66 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
             <TableHeader>
               <TableRow>
                 {/* 型番列は無し */}
-                <TableHead className="prc__th">サイズ</TableHead>
-                <TableHead className="prc__th">カラー</TableHead>
-                <TableHead className="prc__th prc__th--right">在庫数</TableHead>
+                {isAlcoholCategory ? (
+                  <>
+                    <TableHead className="prc__th">容量</TableHead>
+                    <TableHead className="prc__th">単位</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="prc__th">サイズ</TableHead>
+                    <TableHead className="prc__th">カラー</TableHead>
+                  </>
+                )}
+
+                <TableHead className="prc__th prc__th--right">
+                  在庫数
+                </TableHead>
                 <TableHead className="prc__th prc__th--right">価格</TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
-              {rowsVM.map((row) => {
+              {rowsWithCategory.map((row) => {
                 return (
                   // React key は識別子 modelId を使う（displayOrder は重複/未設定があり得る）
                   <TableRow key={row.modelId} className="prc__tr">
-                    {/* サイズ */}
-                    <TableCell className="prc__size">{row.size}</TableCell>
+                    {isAlcoholCategory ? (
+                      <>
+                        <TableCell className="prc__size">
+                          {getVolumeValueLabel(row) || "-"}
+                        </TableCell>
 
-                    {/* カラー */}
-                    <TableCell className="prc__color-cell">
-                      <span
-                        className="prc__color-dot inline-block align-middle mr-2"
-                        style={{
-                          width: 12,
-                          height: 12,
-                          borderRadius: 9999,
-                          backgroundColor: row.bgColor,
-                          boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
-                        }}
-                        title={row.rgbTitle}
-                      />
-                      <span className="prc__color-label">{row.color}</span>
-                    </TableCell>
+                        <TableCell className="prc__size">
+                          {getVolumeUnitLabel(row) || "-"}
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        {/* サイズ */}
+                        <TableCell className="prc__size">
+                          {row.size || "-"}
+                        </TableCell>
+
+                        {/* カラー */}
+                        <TableCell className="prc__color-cell">
+                          <span
+                            className="prc__color-dot inline-block align-middle mr-2"
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: 9999,
+                              backgroundColor: row.bgColor ?? "#ffffff",
+                              boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                            }}
+                            title={row.rgbTitle ?? ""}
+                          />
+                          <span className="prc__color-label">
+                            {row.color || "-"}
+                          </span>
+                        </TableCell>
+                      </>
+                    )}
 
                     {/* 在庫数 */}
                     <TableCell className="prc__stock text-right">
