@@ -4,15 +4,16 @@ import type { InspectionStatus } from "../../domain/entity/inspections";
 
 /**
  * MintRequestQueryService が返す “一覧用 Raw DTO” をそのまま表現。
- * - フィールド名の揺れ（top-level / subdoc / casing）を許容する
- * - この型は「受信データの受け皿」であり、画面で使う型（VM）ではない
+ *
+ * 前提:
+ * - productionId と inspectionId の docId は同一
+ * - フロントでは productionId を正とする
+ * - id / inspectionId / casing fallback / old DTO 名は扱わない
  */
 export type MintRequestManagementRawDTO = {
-  id?: string;
-  productionId?: string;
-  inspectionId?: string;
+  productionId: string;
 
-  // list fields (preferred)
+  // list fields
   tokenName?: string | null;
   productName?: string | null;
 
@@ -29,15 +30,15 @@ export type MintRequestManagementRawDTO = {
 
   tokenBlueprintId?: string | null;
 
-  // raw sub docs (optional)
+  productBlueprintId?: string | null;
+  scheduledBurnDate?: string | null;
+  minted?: boolean | null;
+
+  // raw sub docs
   mint?: {
     tokenBlueprintId?: string | null;
-    tokenBlueprintID?: string | null; // casing fallback
-    tokenBlueprint?: string | null; // older list DTO name
-
     tokenName?: string | null;
     mintedAt?: string | null;
-
     createdBy?: string | null;
   } | null;
 

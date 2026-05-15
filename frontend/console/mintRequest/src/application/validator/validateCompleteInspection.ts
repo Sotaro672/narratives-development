@@ -1,10 +1,15 @@
 // frontend/console/mintRequest/src/application/validator/validateCompleteInspection.ts
 
-import type { InspectionBatchDTO } from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
 
 export type ValidateCompleteInspectionInput = {
   inspectionBatch: InspectionBatchDTO | null | undefined;
-  requestId?: string | null;
+
+  /**
+   * URL param 由来の productionId。
+   * route 名が requestId のままでも、application では productionId として扱う。
+   */
+  productionId?: string | null;
 };
 
 export type ValidateCompleteInspectionResult =
@@ -30,7 +35,7 @@ export function validateCompleteInspection(
   }
 
   const productionId = String(
-    (inspectionBatch as any).productionId ?? input.requestId ?? "",
+    (inspectionBatch as any).productionId ?? input.productionId ?? "",
   ).trim();
 
   if (!productionId) {

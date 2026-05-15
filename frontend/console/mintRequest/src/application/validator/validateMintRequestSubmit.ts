@@ -1,12 +1,17 @@
 // frontend/console/mintRequest/src/application/validator/validateMintRequestSubmit.ts
 
-import type { InspectionBatchDTO } from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
 
 export type ValidateMintRequestSubmitInput = {
   inspectionBatch: InspectionBatchDTO | null | undefined;
   isInspectionCompleted: boolean;
   selectedTokenBlueprintId: string | null | undefined;
-  requestId?: string | null;
+
+  /**
+   * URL param 由来の productionId。
+   * route 名が requestId のままでも、application では productionId として扱う。
+   */
+  productionId?: string | null;
 };
 
 export type ValidateMintRequestSubmitResult =
@@ -49,7 +54,7 @@ export function validateMintRequestSubmit(
   }
 
   const productionId = String(
-    (inspectionBatch as any).productionId ?? input.requestId ?? "",
+    (inspectionBatch as any).productionId ?? input.productionId ?? "",
   ).trim();
 
   if (!productionId) {

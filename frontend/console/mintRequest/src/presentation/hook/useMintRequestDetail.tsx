@@ -45,7 +45,15 @@ import { submitMintRequestAndRefresh } from "../../application/usecase/submitMin
 
 export function useMintRequestDetail() {
   const navigate = useNavigate();
+
+  /**
+   * route 名は requestId のままでも、実体は productionId。
+   */
   const { requestId } = useParams<{ requestId: string }>();
+
+  const productionId = React.useMemo(() => {
+    return String(requestId ?? "").trim();
+  }, [requestId]);
 
   const { mintRequestRepo } = React.useMemo(() => mintRequestContainer(), []);
 
@@ -87,22 +95,19 @@ export function useMintRequestDetail() {
   }, [brandOptions, selectedBrandId]);
 
   const reloadDetail = React.useCallback(async () => {
-    if (!requestId) return;
+    if (!productionId) return;
 
-    const rid = String(requestId).trim();
-    if (!rid) return;
-
-    const detail = await getMintRequestDetail(mintRequestRepo, rid);
+    const detail = await getMintRequestDetail(mintRequestRepo, productionId);
 
     setInspectionBatch((detail.inspectionBatch ?? null) as any);
     setMintDTO((detail.mintDTO ?? null) as any);
     setProductBlueprintId(
       detail.productBlueprintId ? detail.productBlueprintId : "",
     );
-  }, [requestId, mintRequestRepo]);
+  }, [productionId, mintRequestRepo]);
 
   React.useEffect(() => {
-    if (!requestId) return;
+    if (!productionId) return;
 
     let cancelled = false;
 
@@ -111,9 +116,11 @@ export function useMintRequestDetail() {
       setError(null);
 
       try {
-        const rid = String(requestId).trim();
+        const detail = await getMintRequestDetail(
+          mintRequestRepo,
+          productionId,
+        );
 
-        const detail = await getMintRequestDetail(mintRequestRepo, rid);
         if (cancelled) return;
 
         setInspectionBatch((detail.inspectionBatch ?? null) as any);
@@ -137,7 +144,7 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, [requestId, mintRequestRepo]);
+  }, [productionId, mintRequestRepo]);
 
   React.useEffect(() => {
     if (!productBlueprintId) return;
@@ -316,7 +323,7 @@ export function useMintRequestDetail() {
 
     const validation = validateCompleteInspection({
       inspectionBatch,
-      requestId,
+      productionId,
     });
 
     if (!validation.ok) {
@@ -357,8 +364,8 @@ export function useMintRequestDetail() {
     inspectionBatch,
     isCompletingInspection,
     isMinting,
+    productionId,
     reloadDetail,
-    requestId,
   ]);
 
   const handleMint = React.useCallback(async () => {
@@ -370,7 +377,7 @@ export function useMintRequestDetail() {
       inspectionBatch,
       isInspectionCompleted,
       selectedTokenBlueprintId,
-      requestId,
+      productionId,
     });
 
     if (!validation.ok) {
@@ -414,7 +421,7 @@ export function useMintRequestDetail() {
     isInspectionCompleted,
     isMinting,
     navigate,
-    requestId,
+    productionId,
     scheduledBurnDate,
     selectedTokenBlueprintId,
     totalMintQuantity,

@@ -4,29 +4,12 @@ import {
   fetchInspectionBatchesHTTP,
   fetchInspectionByProductionIdHTTP,
   fetchInspectionBatchesByProductionIdsHTTP,
+  fetchMintListRowsByInspectionIdsHTTP,
+  fetchMintsByInspectionIdsHTTP,
+  completeInspectionHTTP,
 } from "../repository";
 
-// ※ 段階移行・型ガードのため、repo 名前空間でも参照しておく
-import * as repo from "../repository";
-
-import type {
-  InspectionItem,
-  InspectionStatus as DomainInspectionStatus,
-  InspectionBatchDTO as DomainInspectionBatchDTO,
-} from "../../domain/entity/inspections";
-
-// ===============================
-// DTO (backend → frontend)
-// ===============================
-
-// frontend/console/mintRequest/src/domain/entity/inspections.ts を正とする。
-export type InspectionStatus = DomainInspectionStatus;
-
-// backend/internal/domain/inspection/entity.go に対応
-export type InspectionItemDTO = InspectionItem;
-
-// MintUsecase が返す MintInspectionView を、そのまま 1 行分 DTO として扱う
-export type InspectionBatchDTO = DomainInspectionBatchDTO;
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
 
 // ===============================
 // mints テーブル（LIST 用の最小 DTO）
@@ -92,23 +75,11 @@ export async function fetchInspectionBatchesByProductionIds(
 
   if (ids.length === 0) return [];
 
-  // repository に実装がある場合のみ使う（段階移行に強くする）
-  const anyRepo = repo as any;
-  if (typeof anyRepo.fetchInspectionBatchesByProductionIdsHTTP === "function") {
-    return (await anyRepo.fetchInspectionBatchesByProductionIdsHTTP(ids)) as
-      | InspectionBatchDTO[]
-      | [];
-  }
-
-  // 直接 export しているので基本ここに来ないが、念のため
   return fetchInspectionBatchesByProductionIdsHTTP(ids);
 }
 
 /**
  * ✅ mints(list row) を inspectionIds (= productionIds) でまとめて取得する。
- *
- * 推奨: repository の listMintsByInspectionIDsHTTP を優先して呼ぶ
- * （内部で view=list を試し、ダメならフォールバックする実装にしてある）※想定
  */
 export async function fetchMintsMapByInspectionIds(
   inspectionIds: string[],
@@ -119,20 +90,12 @@ export async function fetchMintsMapByInspectionIds(
 
   if (ids.length === 0) return {};
 
-  const anyRepo = repo as any;
-
-  // ✅ 推奨: list row 取得（フォールバック付き）
-  if (typeof anyRepo.listMintsByInspectionIDsHTTP === "function") {
-    const m = await anyRepo.listMintsByInspectionIDsHTTP(ids);
-    return (m ?? {}) as Record<string, MintListRowDTO>;
-  }
-
-  return {};
+  const m = await fetchMintListRowsByInspectionIdsHTTP(ids);
+  return (m ?? {}) as Record<string, MintListRowDTO>;
 }
 
 /**
  * ✅ MintDTO を inspectionIds (= productionIds) でまとめて取得する（肉付け用途）。
- * repository 側に実装が無い場合は {} を返す。
  */
 export async function fetchMintsDTOMapByInspectionIds(
   inspectionIds: string[],
@@ -143,14 +106,8 @@ export async function fetchMintsDTOMapByInspectionIds(
 
   if (ids.length === 0) return {};
 
-  const anyRepo = repo as any;
-
-  if (typeof anyRepo.fetchMintsByInspectionIdsHTTP === "function") {
-    const m = await anyRepo.fetchMintsByInspectionIdsHTTP(ids);
-    return (m ?? {}) as Record<string, MintDTO>;
-  }
-
-  return {};
+  const m = await fetchMintsByInspectionIdsHTTP(ids);
+  return (m ?? {}) as Record<string, MintDTO>;
 }
 
 /**
@@ -180,11 +137,5 @@ export async function completeInspectionByProductionId(
     throw new Error("productionId is required");
   }
 
-  const anyRepo = repo as any;
-
-  if (typeof anyRepo.completeInspectionHTTP === "function") {
-    return (await anyRepo.completeInspectionHTTP(id)) as InspectionBatchDTO;
-  }
-
-  throw new Error("completeInspectionHTTP is not implemented");
+  return completeInspectionHTTP(id);
 }

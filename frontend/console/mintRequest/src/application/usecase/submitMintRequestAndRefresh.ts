@@ -1,9 +1,7 @@
 // frontend/console/mintRequest/src/application/usecase/submitMintRequestAndRefresh.ts
 
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-} from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
 
 import {
   postMintRequestHTTP,
@@ -28,14 +26,18 @@ export async function submitMintRequestAndRefresh(
     return { updatedBatch: null, refreshedMint: null };
   }
 
-  const updatedBatch = await postMintRequestHTTP(pid, tbId, scheduledBurnDate).catch(
+  const updatedBatch = await postMintRequestHTTP(
+    pid,
+    tbId,
+    scheduledBurnDate,
+  ).catch(() => null);
+
+  const refreshedMint = await fetchMintByInspectionIdHTTP(pid).catch(
     () => null,
   );
 
-  const refreshedMint = await fetchMintByInspectionIdHTTP(pid).catch(() => null);
-
   return {
-    updatedBatch: (updatedBatch ?? null) as any,
-    refreshedMint: (refreshedMint ?? null) as any,
+    updatedBatch: updatedBatch ?? null,
+    refreshedMint: refreshedMint ?? null,
   };
 }

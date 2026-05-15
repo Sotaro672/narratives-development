@@ -2,7 +2,8 @@
 
 import * as React from "react";
 
-import type { InspectionBatchDTO, MintDTO } from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
 import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
 
 import {
@@ -59,6 +60,7 @@ export function useMintInfo(params: {
     // mint.brandId を最優先。無ければ pbPatch.brandId を fallback
     const fromMint = asNonEmptyString(mint?.brandId);
     if (fromMint) return fromMint;
+
     const fromPatch = asNonEmptyString((pbPatch as any)?.brandId);
     return fromPatch ? fromPatch : "";
   }, [mint, pbPatch]);

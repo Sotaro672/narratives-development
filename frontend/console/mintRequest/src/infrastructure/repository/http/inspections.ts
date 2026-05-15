@@ -9,19 +9,6 @@ import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
 import { fetchProductionIdsForCurrentCompanyHTTP } from "./productions";
 
 // ===============================
-// helpers
-// ===============================
-
-function looksLikeInspectionBatchDTO(x: any): boolean {
-  if (!x || typeof x !== "object") return false;
-  return (
-    Array.isArray((x as any).inspections) ||
-    Array.isArray((x as any).results) ||
-    Array.isArray((x as any).items)
-  );
-}
-
-// ===============================
 // private: detail fetch (/mint/inspections/{productionId})
 // - public API からは export しない
 // ===============================
@@ -60,7 +47,8 @@ async function fetchMintRequestDetailByProductionIdHTTP(
 export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]> {
   const productionIds = await fetchProductionIdsForCurrentCompanyHTTP();
   if (productionIds.length === 0) return [];
-  return await fetchInspectionBatchesByProductionIdsHTTP(productionIds);
+
+  return fetchInspectionBatchesByProductionIdsHTTP(productionIds);
 }
 
 export async function fetchInspectionBatchesByProductionIdsHTTP(
@@ -104,12 +92,14 @@ export async function fetchInspectionByProductionIdHTTP(
   if (!pid) throw new Error("productionId が空です");
 
   const detail = await fetchMintRequestDetailByProductionIdHTTP(pid);
-  const inspection = detail?.inspection ?? null;
+  if (!detail?.inspection) return null;
 
-  if (!inspection) return null;
-  if (!looksLikeInspectionBatchDTO(inspection)) return null;
-
-  return inspection as InspectionBatchDTO;
+  return {
+    ...detail.inspection,
+    productName: detail.productName ?? "",
+    productBlueprintId: detail.productBlueprintId ?? "",
+    modelMeta: detail.modelMeta ?? {},
+  } as InspectionBatchDTO;
 }
 
 // ===============================
@@ -148,10 +138,9 @@ export async function completeInspectionHTTP(
     );
   }
 
-  const json = (await res.json().catch(() => null)) as InspectionBatchDTO | null;
+  const json = (await res.json().catch(() => null)) as
+    | InspectionBatchDTO
+    | null;
 
-  if (!json) return null;
-  if (!looksLikeInspectionBatchDTO(json)) return null;
-
-  return json;
+  return json ?? null;
 }
