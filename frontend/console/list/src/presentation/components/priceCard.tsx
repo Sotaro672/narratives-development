@@ -1,4 +1,5 @@
 // frontend/console/list/src/presentation/components/priceCard.tsx
+
 import * as React from "react";
 import { Tag } from "lucide-react";
 import {
@@ -17,11 +18,11 @@ import {
 } from "../../../../shell/src/shared/ui/table";
 import { Input } from "../../../../shell/src/shared/ui/input";
 
-// ✅ ロジックは hook に寄せる
+// ロジックは hook に寄せる
 import { usePriceCard } from "../hook/usePriceCard";
 
-// ✅ 型は inventory/application を正とする（依存方向を正す）
-import type { PriceCardProps } from "../../../../inventory/src/application/listCreate/priceCard.types";
+// 型は inventory/application を正とする
+import type { PriceCardProps } from "../../../../inventory/src/application/listCreate/listCreate.types";
 
 const PriceCard: React.FC<PriceCardProps> = (props) => {
   const { className } = props;
@@ -57,7 +58,7 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
           <Table className="prc__table">
             <TableHeader>
               <TableRow>
-                {/* ✅ 型番列は無し */}
+                {/* 型番列は無し */}
                 <TableHead className="prc__th">サイズ</TableHead>
                 <TableHead className="prc__th">カラー</TableHead>
                 <TableHead className="prc__th prc__th--right">在庫数</TableHead>
@@ -68,7 +69,7 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
             <TableBody>
               {rowsVM.map((row) => {
                 return (
-                  // ✅ React key は識別子 modelId を使う（displayOrder は重複/未設定があり得る）
+                  // React key は識別子 modelId を使う（displayOrder は重複/未設定があり得る）
                   <TableRow key={row.modelId} className="prc__tr">
                     {/* サイズ */}
                     <TableCell className="prc__size">{row.size}</TableCell>
@@ -115,7 +116,9 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
                           />
                         </div>
                       ) : (
-                        <span className="prc__price-value">{row.priceDisplayText}</span>
+                        <span className="prc__price-value">
+                          {row.priceDisplayText}
+                        </span>
                       )}
                     </TableCell>
                   </TableRow>

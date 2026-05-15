@@ -1,4 +1,5 @@
 // frontend/console/list/src/presentation/hook/usePriceCard.tsx
+
 import * as React from "react";
 
 import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
@@ -8,7 +9,7 @@ import type {
   PriceCardProps,
   PriceRowVM,
   UsePriceCardResult,
-} from "../../../../inventory/src/application/listCreate/priceCard.types";
+} from "../../../../inventory/src/application/listCreate/listCreate.types";
 
 // ----------------------------------------------------------
 // Helpers

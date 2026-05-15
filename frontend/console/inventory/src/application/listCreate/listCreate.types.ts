@@ -1,54 +1,134 @@
 // frontend/console/inventory/src/application/listCreate/listCreate.types.ts
+
+import type * as React from "react";
 import type { RefObject } from "react";
 
 /**
- * ⚠ Layering note:
- * 本来、inventory の application 層が list の presentation 層（hook）型に依存するのは依存方向として望ましくありません。
- * ただし今回は既存実装・移行コストを優先し、この依存を「コメントで注意喚起した上で」維持します。
- *
- * 将来的には:
- * - inventory/application 側に PriceRowVM を定義
- * - list/presentation は inventory/application の型を参照
- * の方向に寄せるのが推奨です。
- *
- * ✅ 今回の改修:
- * - list/presentation への依存（usePriceCard の型 import）を廃止し、
- *   inventory/application 側で priceCard.types.ts を正とする
+ * Hook 側で使う Ref 型（useRef<HTMLInputElement | null>(null) を許容）
  */
-import type { PriceRow } from "./priceCard.types";
-
-// ✅ Hook 側で使う Ref 型（useRef<HTMLInputElement | null>(null) を許容）
 export type ImageInputRef = RefObject<HTMLInputElement | null>;
 
-// ============================================================
-// ✅ PriceRow（期待値）
-// - infrastructure の ListCreatePriceRowDTO をここで PriceRow として扱い、
-//   list/presentation の usePriceCard → PriceRowVM へそのまま流す
-// ============================================================
-
+/**
+ * List create route params
+ *
+ * UI ルートは inventoryId（= inventoryKey: "pb__tb"）のみを正とする。
+ * productBlueprintId / tokenBlueprintId は互換用途では扱わない。
+ */
 export type ListCreateRouteParams = {
-  inventoryId?: string; // 期待値: "pb__tb"
-  productBlueprintId?: string; // optional
-  tokenBlueprintId?: string; // optional
+  inventoryId?: string;
 };
 
 export type ResolvedListCreateParams = {
-  inventoryId: string; // ✅ 常に "pb__tb" を保持
-  productBlueprintId: string;
-  tokenBlueprintId: string;
+  inventoryId: string;
   raw: ListCreateRouteParams;
 };
 
-// ============================================================
-// ✅ POST /lists: 期待値どおり「modelId + price のみ」
-// ============================================================
-
+/**
+ * POST /lists の priceRows
+ *
+ * - modelId を識別子として使う
+ * - 未入力 price は undefined のまま素通りさせる
+ * - 明示的な未設定は null
+ * - 入力済み価格は number
+ */
 export type CreateListPriceRow = {
   modelId: string;
-  price: number | null;
+  price?: number | null;
 };
 
-// ------------------------------------------------------------
-// Re-export (optional but convenient)
-// ------------------------------------------------------------
-export type { PriceRow };
+export type PriceCardMode = "view" | "edit";
+
+/**
+ * PriceCard 用 row
+ *
+ * backend response を正とする。
+ *
+ * - modelId を識別子として使う
+ * - id / modelID / model_id などの名揺れは持たない
+ * - React key は displayOrder ではなく modelId を使う
+ * - displayOrder は重複/未設定があり得る
+ * - 並び順は displayOrder 昇順のみ
+ * - 未設定は null を保持し、UI 側で末尾扱いにする
+ */
+export type PriceRow = {
+  modelId: string;
+
+  /**
+   * 並び順。
+   * 未設定は null のまま保持する。
+   */
+  displayOrder?: number | null;
+
+  size: string;
+  color: string;
+
+  /**
+   * RGB。
+   * backend response では number が基本。
+   * 既存 UI 互換として "#RRGGBB" string も許容する。
+   */
+  rgb?: number | string | null;
+
+  stock: number;
+
+  /**
+   * 価格。
+   * 未入力は undefined、明示的な未設定は null。
+   */
+  price?: number | null;
+};
+
+export type PriceCardProps = {
+  title?: string;
+  rows: PriceRow[];
+  className?: string;
+
+  mode?: PriceCardMode;
+
+  /**
+   * edit 時に価格を更新するコールバック。
+   *
+   * hook 内で displayOrder で並べ替えても、
+   * index は「元の rows 配列の index」を返す。
+   */
+  onChangePrice?: (index: number, price: number | null, row: PriceRow) => void;
+
+  currencySymbol?: string;
+};
+
+export type PriceRowVM = {
+  /**
+   * React key 用の識別子。
+   */
+  modelId: string;
+
+  /**
+   * 並び順。
+   * 未設定は null。
+   */
+  displayOrder: number | null;
+
+  size: string;
+  color: string;
+  stock: number;
+
+  bgColor: string;
+  rgbTitle: string;
+
+  priceInputValue: string;
+  priceDisplayText: string;
+
+  onChangePriceInput: (e: React.ChangeEvent<HTMLInputElement>) => void;
+};
+
+export type UsePriceCardResult = {
+  title: string;
+  mode: PriceCardMode;
+  isEdit: boolean;
+  showModeBadge: boolean;
+
+  currencySymbol: string;
+
+  rowsVM: PriceRowVM[];
+  isEmpty: boolean;
+};

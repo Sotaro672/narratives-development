@@ -4,7 +4,6 @@ import type {
   ResolvedListCreateParams,
   CreateListPriceRow,
 } from "./listCreate.types";
-import { toNumberOrNull } from "./listCreate.utils";
 
 // list create (POST /lists) の input 型（list側のHTTP層）
 import type { CreateListInput } from "../../../../list/src/infrastructure/http/list";
@@ -17,14 +16,12 @@ export function normalizeCreateListPriceRows(
   return arr.map((r) => {
     const row = r as {
       modelId: string;
-      price?: unknown;
+      price?: number | null;
     };
-
-    const price = toNumberOrNull(row.price);
 
     return {
       modelId: row.modelId,
-      price,
+      price: row.price,
     };
   });
 }
@@ -70,25 +67,5 @@ export function validateCreateListInput(input: CreateListInput): void {
 
   if (missingModelId) {
     throw new Error("価格行に modelId が含まれていません。");
-  }
-
-  const hasPositivePrice = rows.some((r) => {
-    const row = r as { price?: unknown };
-    const n = toNumberOrNull(row.price);
-    return n !== null && n > 0;
-  });
-
-  if (!hasPositivePrice) {
-    throw new Error("価格を入力してください。（0 円は指定できません）");
-  }
-
-  const hasZeroPrice = rows.some((r) => {
-    const row = r as { price?: unknown };
-    const n = toNumberOrNull(row.price);
-    return n !== null && n === 0;
-  });
-
-  if (hasZeroPrice) {
-    throw new Error("価格に 0 円が含まれています。0 円は指定できません。");
   }
 }
