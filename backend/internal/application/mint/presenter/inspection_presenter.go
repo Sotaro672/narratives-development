@@ -13,20 +13,20 @@ import (
 func PresentInspectionViews(
 	ctx context.Context,
 	r *resolver.NameResolver,
-	in []dto.MintInspectionView,
-) []dto.MintInspectionView {
+	in []dto.InspectionBatchDTO,
+) []dto.InspectionBatchDTO {
 	if len(in) == 0 {
-		return []dto.MintInspectionView{}
+		return []dto.InspectionBatchDTO{}
 	}
 
 	// resolver が無ければそのまま返す（productName 空のまま）
 	if r == nil {
-		out := make([]dto.MintInspectionView, len(in))
+		out := make([]dto.InspectionBatchDTO, len(in))
 		copy(out, in)
 		return out
 	}
 
-	out := make([]dto.MintInspectionView, 0, len(in))
+	out := make([]dto.InspectionBatchDTO, 0, len(in))
 	for _, v := range in {
 		pbID := v.ProductBlueprintID
 		if pbID != "" {

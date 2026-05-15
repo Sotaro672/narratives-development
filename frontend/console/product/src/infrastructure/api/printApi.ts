@@ -11,6 +11,14 @@ import {
 export type PrintRow = {
   modelId?: string;
   quantity: number | null | undefined;
+
+  /**
+   * QR ラベル表示用。
+   *
+   * products response の modelNumber が空の場合でも、
+   * frontend が保持している modelNumber を PDF ラベル生成に使う。
+   */
+  modelNumber?: string;
 };
 
 /** products 一覧の簡易型（ダイアログ表示用 + QR ラベル用） */
@@ -18,7 +26,7 @@ export type ProductSummaryForPrint = {
   id: string;
   modelId: string;
   productionId: string;
-  modelNumber?: string;
+  modelNumber: string;
 };
 
 /** print_log の items 要素 */
@@ -27,15 +35,11 @@ export type PrintedItemForPrint = {
   displayOrder: number;
 };
 
-/** print_log 一覧の型（QR ペイロードを含めてフロントで扱う想定） */
+/** print_log 一覧の型（QR ペイロードを含めてフロントで扱う） */
 export type PrintLogForPrint = {
   id: string;
   productionId: string;
-
-  // ✅ 正: items（displayOrder を保持）
   items: PrintedItemForPrint[];
-
-  // ✅ usecase が付与して返す想定（Firestoreには保存しない）
   qrPayloads: string[];
 };
 
@@ -49,37 +53,41 @@ export async function listPrintLogsByProductionId(
   if (!id) return [];
 
   const raw = await fetchPrintLogsByProductionId(id);
-  if (!raw || !Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) return [];
 
-  return (raw as any[])
-    .map((log: any) => {
+  return raw
+    .map((log: any): PrintLogForPrint => {
       const rawItems = Array.isArray(log.items) ? log.items : [];
 
       const items: PrintedItemForPrint[] = rawItems
-        .map((it: any) => {
-          const productId = String(it?.productId ?? "");
-          const displayOrderNum = Number(it?.displayOrder);
+        .map((item: any): PrintedItemForPrint => {
+          const productId = String(item?.productId ?? "").trim();
+          const displayOrderNum = Number(item?.displayOrder);
           const displayOrder = Number.isFinite(displayOrderNum)
             ? displayOrderNum
             : 0;
-          return { productId, displayOrder };
+
+          return {
+            productId,
+            displayOrder,
+          };
         })
-        .filter((it: PrintedItemForPrint) => it.productId !== "");
+        .filter((item: PrintedItemForPrint) => item.productId !== "");
 
       const qrPayloads: string[] = Array.isArray(log.qrPayloads)
-        ? log.qrPayloads.map((v: unknown) => String(v)).filter((v: string) => !!v)
+        ? log.qrPayloads
+            .map((value: unknown) => String(value).trim())
+            .filter((value: string) => value !== "")
         : [];
 
-      const mapped: PrintLogForPrint = {
-        id: log.id ?? log.ID ?? "",
-        productionId: log.productionId ?? log.ProductionID ?? "",
+      return {
+        id: String(log.id ?? "").trim(),
+        productionId: String(log.productionId ?? "").trim(),
         items,
         qrPayloads,
       };
-
-      return mapped;
     })
-    .filter((log) => log.id && log.productionId === id);
+    .filter((log) => log.id !== "" && log.productionId === id);
 }
 
 /* ---------------------------------------------------------
@@ -87,6 +95,11 @@ export async function listPrintLogsByProductionId(
  *   1. Product を rows の順で逐次作成
  *   2. print_log を作成
  *   3. listPrintLogsByProductionId で結果を取得
+ *
+ * NOTE:
+ * modelNumber は createProductHTTP には送らない。
+ * Product 作成 API は modelId / productionId / printedAt を正として受ける。
+ * modelNumber は printService 層で PDF ラベル生成用に使う。
  * --------------------------------------------------------- */
 export async function createProductsForPrint(params: {
   productionId: string;
@@ -94,22 +107,25 @@ export async function createProductsForPrint(params: {
 }): Promise<PrintLogForPrint[]> {
   const { productionId, rows } = params;
   const id = productionId.trim();
-  if (!id) throw new Error("productionId is required");
+
+  if (!id) {
+    throw new Error("productionId is required");
+  }
 
   const printedAtISO = new Date().toISOString();
 
-  // rows の並び順を壊さないため、逐次作成する
-  for (const row of rows) {
-    const q = Number.isFinite(Number(row.quantity))
-      ? Math.max(0, Math.floor(Number(row.quantity as number)))
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const quantity = Number.isFinite(Number(row.quantity))
+      ? Math.max(0, Math.floor(Number(row.quantity)))
       : 0;
 
-    const rawModelId = row.modelId ?? "";
-    const modelId = rawModelId.trim();
+    const modelId = String(row.modelId ?? "").trim();
 
-    if (!modelId || q <= 0) continue;
+    if (!modelId || quantity <= 0) {
+      continue;
+    }
 
-    for (let i = 0; i < q; i += 1) {
+    for (let i = 0; i < quantity; i += 1) {
       await createProductHTTP({
         modelId,
         productionId: id,
@@ -120,8 +136,7 @@ export async function createProductsForPrint(params: {
 
   await createPrintLogsHTTP(id);
 
-  const logs = await listPrintLogsByProductionId(id);
-  return logs;
+  return listPrintLogsByProductionId(id);
 }
 
 /* ---------------------------------------------------------
@@ -134,16 +149,14 @@ export async function listProductsByProductionId(
   if (!id) return [];
 
   const raw = await fetchProductsByProductionId(id);
-  if (!raw || !Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) return [];
 
-  const mapped = (raw as any[])
-    .map((p) => ({
-      id: p.id ?? p.ID ?? "",
-      modelId: p.modelId ?? p.ModelID ?? "",
-      productionId: p.productionId ?? p.ProductionID ?? "",
-      modelNumber: p.modelNumber ?? p.ModelNumber ?? "",
+  return raw
+    .map((product: any): ProductSummaryForPrint => ({
+      id: String(product.id ?? "").trim(),
+      modelId: String(product.modelId ?? "").trim(),
+      productionId: String(product.productionId ?? "").trim(),
+      modelNumber: String(product.modelNumber ?? "").trim(),
     }))
-    .filter((p) => p.id && p.productionId === id);
-
-  return mapped;
+    .filter((product) => product.id !== "" && product.productionId === id);
 }

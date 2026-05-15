@@ -9,7 +9,7 @@ import {
   safeTokenHint,
 } from "../../http/httpLogger";
 
-import type { InspectionBatchDTO } from "../../dto/inspectionBatch.dto";
+import type { InspectionBatchDTO } from "../../../domain/entity/inspections";
 import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
 
 import { fetchProductionIdsForCurrentCompanyHTTP } from "./productions";

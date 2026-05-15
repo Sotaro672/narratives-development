@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/application/mapper/modelInspectionMapper.ts
 
-import type { InspectionBatchDTO } from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
 
 // ============================================================
 // Types
@@ -37,7 +37,7 @@ function isPassedResult(v: any): boolean {
 // ============================================================
 
 /**
- * InspectionBatchDTO（MintInspectionView）から modelId 単位の集計行を作る。
+ * InspectionBatchDTOから modelId 単位の集計行を作る。
  * - modelNumber/size/color は後段で meta 解決して埋める想定のため null 初期化
  */
 export function buildModelRowsFromBatch(

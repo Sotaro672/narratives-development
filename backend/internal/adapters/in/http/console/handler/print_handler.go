@@ -1,8 +1,10 @@
-// backend\internal\adapters\in\http\console\handler\print_handler.go
+// backend/internal/adapters/in/http/console/handler/print_handler.go
+
 package consoleHandler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -17,13 +19,13 @@ import (
 type PrintHandler struct {
 	uc *usecase.PrintUsecase
 
-	// ★ 生産情報を参照する場合用（現状未使用だが将来拡張向けに保持）
+	// 生産情報を参照する場合用（現状未使用だが将来拡張向けに保持）
 	productionUC *productionapp.ProductionUsecase
 
-	// ★ モデル情報を参照する場合用（現状未使用だが将来拡張向けに保持）
+	// モデル情報を参照する場合用（現状未使用だが将来拡張向けに保持）
 	modelUC *usecase.ModelUsecase
 
-	// ★ 追加: modelId → modelNumber 解決用 NameResolver
+	// modelId → modelNumber 解決用
 	nameResolver *resolver.NameResolver
 }
 
@@ -32,13 +34,13 @@ func NewPrintHandler(
 	uc *usecase.PrintUsecase,
 	productionUC *productionapp.ProductionUsecase,
 	modelUC *usecase.ModelUsecase,
-	nameResolver *resolver.NameResolver, // ★ 追加
+	nameResolver *resolver.NameResolver,
 ) http.Handler {
 	return &PrintHandler{
 		uc:           uc,
 		productionUC: productionUC,
 		modelUC:      modelUC,
-		nameResolver: nameResolver, // ★ 追加
+		nameResolver: nameResolver,
 	}
 }
 
@@ -46,10 +48,11 @@ func NewPrintHandler(
 func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	switch {
+	log.Printf("[PrintHandler] method=%s path=%s rawQuery=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 
+	switch {
 	// ------------------------------------------------------------
-	// ★ 追加: GET /inspector/products/{id}
+	// GET /inspector/products/{id}
 	//   ※ 現在は InspectorHandler に移譲済みなので PrintHandler 側では扱わない想定だが、
 	//     一旦既存の get を流用している
 	// ------------------------------------------------------------
@@ -63,6 +66,7 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products/print-logs":
 		h.createPrintLog(w, r)
+		return
 
 	// ------------------------------------------------------------
 	// GET /products/print-logs?productionId=xxx
@@ -76,7 +80,9 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+
 		h.listPrintLogsByProductionID(w, r, productionID)
+		return
 
 	// ------------------------------------------------------------
 	// POST /products/inspections
@@ -84,6 +90,7 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products/inspections":
 		h.createInspectionBatch(w, r)
+		return
 
 	// ------------------------------------------------------------
 	// GET /products?productionId=xxx
@@ -97,7 +104,9 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+
 		h.listByProductionID(w, r, productionID)
+		return
 
 	// ------------------------------------------------------------
 	// GET /products/{id}
@@ -105,6 +114,7 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
 		h.get(w, r, id)
+		return
 
 	// ------------------------------------------------------------
 	// PATCH /products/{id}
@@ -113,16 +123,19 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
 		h.update(w, r, id)
+		return
 
 	// ------------------------------------------------------------
 	// POST /products
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products":
 		h.create(w, r)
+		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
 	}
 }
 
@@ -144,15 +157,15 @@ func (h *PrintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		writeProductErr(w, err)
 		return
 	}
+
 	_ = json.NewEncoder(w).Encode(p)
 }
 
 // ------------------------------------------------------------
 // GET /products?productionId={productionId}
 //
-//	同一 productionId を持つ Product 一覧を返す
-//	レスポンスには name_resolver を用いて modelNumber を付与する
-//
+// 同一 productionId を持つ Product 一覧を返す。
+// レスポンスには name_resolver を用いて modelNumber を付与する。
 // ------------------------------------------------------------
 func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
 	ctx := r.Context()
@@ -170,11 +183,12 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// ★ NameResolver が未注入の場合は従来どおり Product 生データを返す
-	if h.nameResolver == nil {
-		_ = json.NewEncoder(w).Encode(list)
-		return
-	}
+	log.Printf(
+		"[PrintHandler] listByProductionID productionID=%s products=%d nameResolverNil=%v",
+		productionID,
+		len(list),
+		h.nameResolver == nil,
+	)
 
 	type productWithModelNumber struct {
 		ID           string `json:"id"`
@@ -189,10 +203,34 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 		modelID := strings.Trim(p.ModelID, " \t\r\n/")
 		modelNumber := ""
 
-		if modelID != "" {
-			// ★ name_resolver 経由で modelId → modelNumber を解決（1 戻り値版）
+		if modelID != "" && h.nameResolver != nil {
 			mn := h.nameResolver.ResolveModelNumber(ctx, modelID)
 			modelNumber = strings.Trim(mn, " \t\r\n/")
+		}
+
+		if modelID != "" && h.nameResolver == nil {
+			log.Printf(
+				"[PrintHandler] modelNumber resolve skipped: nameResolver is nil productID=%s modelID=%s",
+				p.ID,
+				modelID,
+			)
+		}
+
+		if modelID != "" && h.nameResolver != nil && modelNumber == "" {
+			log.Printf(
+				"[PrintHandler] modelNumber resolved empty productID=%s modelID=%s",
+				p.ID,
+				modelID,
+			)
+		}
+
+		if modelID != "" && modelNumber != "" {
+			log.Printf(
+				"[PrintHandler] modelNumber resolved productID=%s modelID=%s modelNumber=%s",
+				p.ID,
+				modelID,
+				modelNumber,
+			)
 		}
 
 		out = append(out, productWithModelNumber{
@@ -211,8 +249,8 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 // ------------------------------------------------------------
 func (h *PrintHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
 	ctx := r.Context()
-	productionID = strings.Trim(productionID, " \t\r\n/")
 
+	productionID = strings.Trim(productionID, " \t\r\n/")
 	if productionID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productionId"})
@@ -322,6 +360,7 @@ func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelId and productionId are required"})
 		return
 	}
+
 	if req.PrintedAt.IsZero() {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "printedAt is required"})
@@ -390,12 +429,14 @@ func (h *PrintHandler) update(w http.ResponseWriter, r *http.Request, id string)
 // ------------------------------------------------------------
 func writeProductErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
+
 	switch err {
 	case productdom.ErrInvalidID:
 		code = http.StatusBadRequest
 	case productdom.ErrNotFound:
 		code = http.StatusNotFound
 	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

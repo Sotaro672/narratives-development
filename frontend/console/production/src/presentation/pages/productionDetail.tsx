@@ -12,14 +12,14 @@ import "../styles/production.css";
 
 import LogCard from "../../../../log/src/presentation/LogCard";
 
-// ★ usePrintCard Hook（print_log + QR 情報取得）
-// ✅ modelId を正にした版（QuantityRowBase: modelId）
+// usePrintCard Hook（print_log + QR 情報取得）
+// modelId を正にした版（QuantityRowBase: modelId）
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
-// ★ 分離した印刷カードコンポーネント
+// 分離した印刷カードコンポーネント
 import PrintCard from "../../../../product/src/presentation/component/printCard";
 
-// ✅ Presentation 正: ProductionQuantityRowVM（キーは modelId）
+// Presentation 正: ProductionQuantityRowVM（キーは modelId）
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 
 export default function ProductionDetail() {
@@ -33,7 +33,7 @@ export default function ProductionDetail() {
     // AdminCard 用モード
     adminMode,
 
-    // ✅ printed:true のとき false（編集不可）
+    // printed:true のとき false（編集不可）
     canEdit,
 
     // 戻る
@@ -62,8 +62,10 @@ export default function ProductionDetail() {
     ? new Date(production.createdAt).toLocaleDateString("ja-JP")
     : "-";
 
-  // ✅ 印刷済みフラグ
   const isPrinted = production?.printed === true;
+
+  const productBlueprintCategoryCode =
+    productBlueprint?.productBlueprintCategory?.code ?? "";
 
   // ==========================
   // usePrintCard: 印刷 + print_log 取得
@@ -73,15 +75,19 @@ export default function ProductionDetail() {
       ? quantityRows
       : [];
 
-    return safe.map((r, index) => ({
-      modelId: String(r.modelId ?? "").trim() || String(index),
-      quantity: r.quantity ?? 0,
+    return safe.map((row, index) => ({
+      modelId: String(row.modelId ?? "").trim() || String(index),
+      quantity: row.quantity ?? 0,
 
-      // 以降は usePrintCard が参照しうる情報（無害に付与）
-      modelNumber: r.modelNumber,
-      size: r.size,
-      color: r.color,
-      rgb: r.rgb ?? null,
+      // usePrintCard が参照しうる情報（無害に付与）
+      modelNumber: row.modelNumber,
+      size: row.size,
+      color: row.color,
+      rgb: row.rgb ?? null,
+      volumeValue: row.volumeValue,
+      volumeUnit: row.volumeUnit,
+      variationLabel: row.variationLabel,
+      kind: row.kind,
     }));
   }, [quantityRows]);
 
@@ -119,7 +125,7 @@ export default function ProductionDetail() {
       return;
     }
 
-    // ✅ 印刷済みの場合は「結果表示」想定のため confirm は出さない
+    // 印刷済みの場合は「結果表示」想定のため confirm は出さない
     if (isPrinted) {
       await onPrint();
       return;
@@ -128,6 +134,7 @@ export default function ProductionDetail() {
     const ok = window.confirm(
       "印刷後は生産数を更新できません。\n印刷後に追加生産が必要になった場合は生産計画を新規作成してください。",
     );
+
     if (!ok) return;
 
     await onPrint();
@@ -146,7 +153,7 @@ export default function ProductionDetail() {
         layout="grid-2"
         title="生産詳細"
         onBack={handleBack}
-        // ✅ printed:true の場合は編集ボタン（onEdit）を非表示
+        // printed:true の場合は編集ボタン（onEdit）を非表示
         onEdit={isViewMode && canEdit ? handleEnterEdit : undefined}
         onDelete={isEditMode ? handleDelete : undefined}
         onCancel={isEditMode ? handleCancelEdit : undefined}
@@ -187,12 +194,16 @@ export default function ProductionDetail() {
                   mode="view"
                   productName={productBlueprint.productName}
                   brandName={production.brandName ?? ""}
+                  productBlueprintCategory={
+                    productBlueprint.productBlueprintCategory ?? null
+                  }
                 />
               )}
 
               <ProductionQuantityCard
                 title="モデル別 生産数一覧"
                 rows={quantityRows}
+                productBlueprintCategory={productBlueprintCategoryCode}
                 mode={isEditMode ? "edit" : "view"}
                 onChangeRows={isEditMode ? setQuantityRows : undefined}
               />

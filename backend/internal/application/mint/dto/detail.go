@@ -24,10 +24,10 @@ type MintModelMeta struct {
 	RGB       int    `json:"rgb"`
 }
 
-// MintInspectionView は Mint 管理画面向けの Inspection 表現。
+// InspectionBatchDTO は Mint 管理画面向けの Inspection 表現。
 // 元の InspectionBatch に加えて、productBlueprintId / productName、
 // そして modelId → size/color/rgb のマップを付与して返す。
-type MintInspectionView struct {
+type InspectionBatchDTO struct {
 	inspectiondom.InspectionBatch
 
 	// Production → ProductBlueprint の join 結果

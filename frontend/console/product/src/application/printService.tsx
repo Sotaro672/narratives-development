@@ -25,8 +25,7 @@ export async function listPrintLogsByProductionId(
   const id = productionId.trim();
   if (!id) return [];
 
-  const logs = await listPrintLogsByProductionIdApi(id);
-  return logs;
+  return listPrintLogsByProductionIdApi(id);
 }
 
 export async function listProductsByProductionId(
@@ -35,33 +34,55 @@ export async function listProductsByProductionId(
   const id = productionId.trim();
   if (!id) return [];
 
-  const products = await listProductsByProductionIdApi(id);
-  return products;
+  return listProductsByProductionIdApi(id);
+}
+
+function buildModelNumberByModelIdMap(rows: PrintRow[] | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const modelId = String(row.modelId ?? "").trim();
+    const modelNumber = String(row.modelNumber ?? "").trim();
+
+    if (!modelId || !modelNumber) {
+      continue;
+    }
+
+    map.set(modelId, modelNumber);
+  }
+
+  return map;
 }
 
 function buildProductLabelMap(
   products: ProductSummaryForPrint[] | undefined,
+  rows: PrintRow[] | undefined,
 ): Map<string, string> {
   const map = new Map<string, string>();
-  if (!products || products.length === 0) return map;
+  const modelNumberByModelId = buildModelNumberByModelIdMap(rows);
 
-  for (const p of products) {
-    const productId = p.id;
-    if (!productId) continue;
+  for (const product of Array.isArray(products) ? products : []) {
+    const productId = String(product.id ?? "").trim();
+    const modelId = String(product.modelId ?? "").trim();
 
-    const modelNumber = (p.modelNumber ?? "").trim();
-    if (!modelNumber) continue;
+    if (!productId) {
+      continue;
+    }
+
+    const modelNumber =
+      String(product.modelNumber ?? "").trim() ||
+      modelNumberByModelId.get(modelId) ||
+      "";
+
+    if (!modelNumber) {
+      continue;
+    }
 
     map.set(productId, modelNumber);
   }
 
   return map;
 }
-
-type PrintLogItem = {
-  productId: string;
-  displayOrder: number;
-};
 
 type SortedPrintTarget = {
   productId: string;
@@ -71,18 +92,20 @@ type SortedPrintTarget = {
 };
 
 // items と qrPayloads をペアで保持したまま displayOrder 順に並べる
-function getSortedPrintTargets(log: any): SortedPrintTarget[] {
-  const items: any[] = Array.isArray(log?.items) ? log.items : [];
-  const payloads: any[] = Array.isArray(log?.qrPayloads) ? log.qrPayloads : [];
+function getSortedPrintTargets(log: PrintLogForPrint): SortedPrintTarget[] {
+  const items = Array.isArray(log.items) ? log.items : [];
+  const payloads = Array.isArray(log.qrPayloads) ? log.qrPayloads : [];
 
   const paired: SortedPrintTarget[] = items
-    .map((raw: any, index: number) => {
-      const productId = String(raw?.productId ?? "");
-      const displayOrderNum = Number(raw?.displayOrder);
+    .map((item, index) => {
+      const productId = String(item.productId ?? "").trim();
+
+      const displayOrderNum = Number(item.displayOrder);
       const displayOrder = Number.isFinite(displayOrderNum)
         ? displayOrderNum
         : Number.MAX_SAFE_INTEGER;
-      const payload = String(payloads[index] ?? "");
+
+      const payload = String(payloads[index] ?? "").trim();
 
       return {
         productId,
@@ -91,39 +114,42 @@ function getSortedPrintTargets(log: any): SortedPrintTarget[] {
         originalIndex: index,
       };
     })
-    .filter((x) => x.productId !== "" && x.payload !== "");
+    .filter((target) => target.productId !== "" && target.payload !== "");
 
   // displayOrder のみでソートし、同値なら Firestore 配列順を維持
   paired.sort((a, b) => {
     if (a.displayOrder !== b.displayOrder) {
       return a.displayOrder - b.displayOrder;
     }
+
     return a.originalIndex - b.originalIndex;
   });
 
   return paired;
 }
 
-async function buildAndOpenQrPdfFromLogs(
-  logs: PrintLogForPrint[],
-  productionId: string,
-  products?: ProductSummaryForPrint[],
-): Promise<number> {
-  const qrItems: QrPdfItem[] = [];
-  const productLabelMap = buildProductLabelMap(products);
+async function buildAndOpenQrPdfFromLogs(args: {
+  logs: PrintLogForPrint[];
+  products?: ProductSummaryForPrint[];
+  rows?: PrintRow[];
+}): Promise<number> {
+  const { logs, products, rows } = args;
 
-  (Array.isArray(logs) ? logs : []).forEach((log: any) => {
+  const qrItems: QrPdfItem[] = [];
+  const productLabelMap = buildProductLabelMap(products, rows);
+
+  for (const log of Array.isArray(logs) ? logs : []) {
     const sortedTargets = getSortedPrintTargets(log);
 
-    sortedTargets.forEach((target) => {
-      const label = productLabelMap.get(target.productId);
+    for (const target of sortedTargets) {
+      const label = productLabelMap.get(target.productId) ?? "";
 
       qrItems.push({
         payload: target.payload,
         label,
       });
-    });
-  });
+    }
+  }
 
   if (qrItems.length === 0) {
     return 0;
@@ -145,18 +171,23 @@ export async function createProductsForPrint(params: {
 }): Promise<PrintLogForPrint[]> {
   const { productionId, rows } = params;
   const id = productionId.trim();
-  if (!id) throw new Error("productionId is required");
+
+  if (!id) {
+    throw new Error("productionId is required");
+  }
+
+  const safeRows = Array.isArray(rows) ? rows : [];
 
   const existingLogs = await listPrintLogsByProductionIdApi(id);
 
   if (existingLogs.length > 0) {
     const products = await listProductsByProductionId(id);
 
-    const totalQrCount = await buildAndOpenQrPdfFromLogs(
-      existingLogs,
-      id,
+    const totalQrCount = await buildAndOpenQrPdfFromLogs({
+      logs: existingLogs,
       products,
-    );
+      rows: safeRows,
+    });
 
     await notifyPrintLogCompleted({
       productionId: id,
@@ -170,7 +201,7 @@ export async function createProductsForPrint(params: {
 
   const logs = await createProductsForPrintApi({
     productionId: id,
-    rows,
+    rows: safeRows,
   });
 
   if (logs.length === 0) {
@@ -180,12 +211,17 @@ export async function createProductsForPrint(params: {
       totalQrCount: 0,
       reusedExistingLogs: false,
     });
+
     return logs;
   }
 
   const products = await listProductsByProductionId(id);
 
-  const totalQrCount = await buildAndOpenQrPdfFromLogs(logs, id, products);
+  const totalQrCount = await buildAndOpenQrPdfFromLogs({
+    logs,
+    products,
+    rows: safeRows,
+  });
 
   await notifyPrintLogCompleted({
     productionId: id,

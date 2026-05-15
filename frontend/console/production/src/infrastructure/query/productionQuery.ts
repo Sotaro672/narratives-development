@@ -26,7 +26,6 @@ export type CreateProductionInput = {
   assigneeId: string;
   models: ModelQuantity[];
 
-  // Status は廃止。Printed(boolean) に統一。
   printed?: boolean | null;
   printedAt?: string | null;
 
@@ -40,8 +39,6 @@ export type ProductionFilter = {
   productBlueprintId?: string;
   assigneeId?: string;
   modelId?: string;
-
-  // Statuses は廃止。Printed(boolean) に統一。
   printed?: boolean | null;
 };
 

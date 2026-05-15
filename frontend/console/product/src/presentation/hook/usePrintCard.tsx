@@ -10,6 +10,12 @@ import {
 type QuantityRowBase = {
   modelId: string;
   quantity?: number | null;
+
+  /**
+   * QR 下ラベル用。
+   * 印刷時点で画面側が保持している modelNumber を printService まで渡す。
+   */
+  modelNumber?: string;
 };
 
 type UsePrintCardParams<T extends QuantityRowBase> = {
@@ -17,7 +23,7 @@ type UsePrintCardParams<T extends QuantityRowBase> = {
   hasProduction: boolean;
   rows: T[];
 
-  // ✅ 追加: 印刷完了（printLogs取得）後に呼ぶ
+  // 印刷完了後に呼ぶ
   onCompleted?: (logs: PrintLogForPrint[]) => void;
 };
 
@@ -52,8 +58,9 @@ export function usePrintCard<T extends QuantityRowBase>({
       }
 
       const rowsForPrint: PrintRow[] = rows.map((row) => ({
-        modelId: row.modelId,
+        modelId: String(row.modelId ?? "").trim(),
         quantity: row.quantity ?? 0,
+        modelNumber: String(row.modelNumber ?? "").trim(),
       }));
 
       const logs = await createProductsForPrint({
@@ -65,15 +72,14 @@ export function usePrintCard<T extends QuantityRowBase>({
 
       setPrintLogs(safeLogs);
 
-      // ✅ 遷移や次処理は呼び出し側に委譲
       try {
         onCompleted?.(safeLogs);
       } catch {
-        // noop（遷移失敗などで印刷自体を失敗扱いにしない）
+        // noop
       }
 
       return safeLogs;
-    } catch (_) {
+    } catch {
       setError("印刷用のデータ作成に失敗しました");
       alert("印刷用のデータ作成に失敗しました");
       return [];

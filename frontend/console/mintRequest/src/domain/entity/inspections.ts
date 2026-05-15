@@ -83,7 +83,7 @@ export interface MintModelMeta {
  * - productName
  * - modelMeta: modelId → { size, colorName, rgb }
  */
-export interface MintInspectionView extends InspectionBatch {
+export interface InspectionBatchDTO extends InspectionBatch {
   productBlueprintId: string;
   productName: string;
   modelMeta: Record<string, MintModelMeta>;
@@ -145,6 +145,7 @@ export function validateInspectionBatch(batch: InspectionBatch): string[] {
   if (batch.quantity !== batch.inspections.length || batch.quantity <= 0) {
     errors.push("quantity must equal inspections.length and be > 0");
   }
+
   if (batch.totalPassed < 0) {
     errors.push("totalPassed must be >= 0");
   }
@@ -188,6 +189,7 @@ export function validateInspectionBatch(batch: InspectionBatch): string[] {
         `inspectedBy is required when inspectionResult is '${ins.inspectionResult}' (productId=${ins.productId})`,
       );
     }
+
     if (!hasAt) {
       errors.push(
         `inspectedAt is required when inspectionResult is '${ins.inspectionResult}' (productId=${ins.productId})`,
@@ -200,47 +202,4 @@ export function validateInspectionBatch(batch: InspectionBatch): string[] {
   }
 
   return errors;
-}
-
-/**
- * InspectionBatch の正規化用ヘルパ
- * - 文字列を trim
- * - 空文字の任意フィールドは null に丸める
- * - バリデーションエラー時は例外を投げる
- */
-export function normalizeInspectionBatch(
-  input: InspectionBatch,
-): InspectionBatch {
-  const normalizeOpt = (v: string | null | undefined): string | null => {
-    const t = v?.trim() ?? "";
-    return t ? t : null;
-  };
-
-  const normalized: InspectionBatch = {
-    ...input,
-    productionId: input.productionId.trim(),
-    status: input.status,
-    quantity: input.quantity,
-    totalPassed: input.totalPassed,
-    requested: !!input.requested,
-    inspections: (input.inspections ?? []).map((ins) => ({
-      ...ins,
-      productId: ins.productId.trim(),
-      modelId: ins.modelId.trim(),
-      // ★追加: 文字列なら trim、空なら null
-      modelNumber: normalizeOpt((ins as any).modelNumber),
-      inspectionResult: (ins.inspectionResult ?? null) as
-        | InspectionResult
-        | null,
-      inspectedBy: normalizeOpt(ins.inspectedBy),
-      inspectedAt: normalizeOpt(ins.inspectedAt),
-    })),
-  };
-
-  const errors = validateInspectionBatch(normalized);
-  if (errors.length > 0) {
-    throw new Error(`Invalid InspectionBatch: ${errors.join(", ")}`);
-  }
-
-  return normalized;
 }

@@ -181,6 +181,8 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) er
 }
 
 // MarkPrinted sets printed=true and returns updated blueprint.
+// - すでに printed=true の場合は成功扱いで現在の ProductBlueprint を返す。
+// - 印刷済みの再表示 / 既存 print_log 再利用時に 500 にしないため、この操作は冪等にする。
 func (r *ProductBlueprintRepositoryFS) MarkPrinted(ctx context.Context, id string) (pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
@@ -200,9 +202,11 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(ctx context.Context, id strin
 		return pbdom.ProductBlueprint{}, err
 	}
 
-	// printed=true は更新不可（運用次第で idempotent にしても良いが現状は forbidden）
+	// printed=true 済みの場合は冪等に成功扱いにする。
+	// ここで ErrForbidden を返すと、再印刷・既存 print_log 表示時に
+	// POST /products/print-logs が 500 になってしまう。
 	if v, ok := snap.Data()["printed"].(bool); ok && v {
-		return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
+		return docToProductBlueprint(snap)
 	}
 
 	now := time.Now().UTC()

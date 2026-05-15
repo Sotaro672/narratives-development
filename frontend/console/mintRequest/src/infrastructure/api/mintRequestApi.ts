@@ -12,7 +12,7 @@ import * as repo from "../repository";
 import type {
   InspectionItem,
   InspectionStatus as DomainInspectionStatus,
-  MintInspectionView,
+  InspectionBatchDTO as DomainInspectionBatchDTO,
 } from "../../domain/entity/inspections";
 
 // ===============================
@@ -26,7 +26,7 @@ export type InspectionStatus = DomainInspectionStatus;
 export type InspectionItemDTO = InspectionItem;
 
 // MintUsecase が返す MintInspectionView を、そのまま 1 行分 DTO として扱う
-export type InspectionBatchDTO = MintInspectionView;
+export type InspectionBatchDTO = DomainInspectionBatchDTO;
 
 // ===============================
 // mints テーブル（LIST 用の最小 DTO）
