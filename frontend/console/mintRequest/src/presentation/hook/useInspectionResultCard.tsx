@@ -3,11 +3,18 @@
 import * as React from "react";
 import type { InspectionBatch } from "../../domain/entity/inspections";
 
-// ★ 追加：modelId -> ModelVariation を引く（modelNumber/size/color を解決する）
+import {
+  buildInspectionResultCardData,
+  getInspectionModelIds,
+  getMissingModelIds,
+} from "../../application/mapper/buildInspectionResultCardData";
+import { toMintModelMetaEntry } from "../../application/mapper/modelVariationMapper";
+
+// ★ modelId -> ModelVariation を引く（modelNumber/size/color を解決する）
 import { fetchModelVariationByIdForMintHTTP } from "../../infrastructure/repository";
 import type { ModelVariationForMintDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-// ✅ 追加：共通カラー変換ユーティリティ（rgb int -> "#RRGGBB"）
+// ✅ 共通カラー変換ユーティリティ（rgb int -> "#RRGGBB"）
 import { rgbIntToHex as rgbIntToHexShared } from "../../../../shell/src/shared/util/color";
 
 /**
@@ -16,9 +23,7 @@ import { rgbIntToHex as rgbIntToHexShared } from "../../../../shell/src/shared/u
  * （TS の構造的型付けなので、API から追加で来る productName などとも両立します）
  */
 export type MintModelMetaEntry = {
-  // ★ 追加：modelNumber もここで解決できるようにする
   modelNumber?: string | null;
-
   size?: string | null;
   colorName?: string | null;
   rgb?: number | null;
@@ -28,7 +33,7 @@ export type InspectionBatchWithModelMeta = InspectionBatch & {
   // modelId → { modelNumber, size, colorName, rgb }
   modelMeta?: Record<string, MintModelMetaEntry>;
 
-  // ★ 追加：ProductBlueprintPatch（modelRefs=displayOrder の唯一のソース）
+  // ProductBlueprintPatch（modelRefs=displayOrder の唯一のソース）
   productBlueprintPatch?: {
     modelRefs?: Array<{ modelId: string; displayOrder: number }> | null;
     [k: string]: any;
@@ -66,47 +71,21 @@ export type UseInspectionResultCardResult = {
   rgbIntToHex: (rgb: number | string | null | undefined) => string | undefined;
 };
 
-function getModelVariationColorName(v: ModelVariationForMintDTO | null): string | null {
-  if (!v) return null;
-
-  const colorName =
-    (v as any)?.color?.name ??
-    (v as any)?.colorName ??
-    null;
-
-  return typeof colorName === "string" && colorName
-    ? colorName
-    : null;
-}
-
-function getModelVariationRgb(v: ModelVariationForMintDTO | null): number | null {
-  if (!v) return null;
-
-  const rgb =
-    (v as any)?.color?.rgb ??
-    (v as any)?.rgb ??
-    null;
-
-  return typeof rgb === "number" && Number.isFinite(rgb)
-    ? rgb
-    : null;
-}
-
 /**
  * InspectionBatch（+ modelMeta）から
  * InspectionResultCard 用の行データ・集計値・RGB変換関数を提供するフック。
  *
- * ★ 期待値対応：
- * - inspections から取得できる modelId を使って
- *   GetModelVariationByID（HTTP）を叩き、modelNumber/size/color を補完する
- * - 行の並び順は ProductBlueprintPatch.modelRefs.displayOrder を正とする
+ * application 分離後:
+ * - rows / totalPassed / totalQuantity / title の構築は buildInspectionResultCardData に移譲
+ * - ModelVariationForMintDTO -> MintModelMetaEntry の変換は modelVariationMapper に移譲
+ * - hook 側は不足 modelMeta の HTTP 補完と React 状態管理のみ担当
  */
 export function useInspectionResultCard(
   params: UseInspectionResultCardParams,
 ): UseInspectionResultCardResult {
   const { batch } = params;
 
-  // ★ 追加：API から来ない/不足している modelMeta をここで補完する
+  // API から来ない/不足している modelMeta をここで補完する
   const [resolvedMeta, setResolvedMeta] = React.useState<
     Record<string, MintModelMetaEntry>
   >({});
@@ -117,46 +96,27 @@ export function useInspectionResultCard(
   }, [batch?.productionId, (batch as any)?.id, (batch as any)?.inspectionId]);
 
   // inspections からユニークな modelId を抽出
-  const modelIds: string[] = React.useMemo(() => {
-    if (!batch?.inspections) return [];
-    const set = new Set<string>();
-
-    for (const ins of batch.inspections ?? []) {
-      const mid = String((ins as any)?.modelId ?? "");
-      if (mid) set.add(mid);
-    }
-    return Array.from(set);
+  const modelIds = React.useMemo(() => {
+    return getInspectionModelIds(batch);
   }, [batch]);
 
   // 既存 meta（APIから来た分 + こちらで解決した分）をマージ
-  const mergedModelMeta: Record<string, MintModelMetaEntry> = React.useMemo(() => {
+  const mergedModelMeta = React.useMemo<Record<string, MintModelMetaEntry>>(() => {
     return {
       ...(batch?.modelMeta ?? {}),
       ...(resolvedMeta ?? {}),
     };
-  }, [batch, resolvedMeta]);
+  }, [batch?.modelMeta, resolvedMeta]);
 
   // まだ meta が無い modelId だけを抽出
-  const missingModelIds: string[] = React.useMemo(() => {
-    if (modelIds.length === 0) return [];
-    return modelIds.filter((id) => !mergedModelMeta[id]);
+  const missingModelIds = React.useMemo(() => {
+    return getMissingModelIds({
+      modelIds,
+      modelMeta: mergedModelMeta,
+    });
   }, [modelIds, mergedModelMeta]);
 
-  // ★ NEW: ProductBlueprintPatch.modelRefs から modelId -> displayOrder を構築
-  const displayOrderByModelId: Record<string, number> = React.useMemo(() => {
-    const refs = batch?.productBlueprintPatch?.modelRefs ?? [];
-    const out: Record<string, number> = {};
-    for (const r of refs ?? []) {
-      const mid = String((r as any)?.modelId ?? "");
-      const ord = (r as any)?.displayOrder;
-      if (!mid) continue;
-      if (typeof ord !== "number" || !Number.isFinite(ord)) continue;
-      out[mid] = ord;
-    }
-    return out;
-  }, [batch?.productBlueprintPatch]);
-
-  // ★ 追加：missingModelIds を GetModelVariationByID（HTTP）で解決して modelMeta を埋める
+  // missingModelIds を GetModelVariationByID（HTTP）で解決して modelMeta を埋める
   React.useEffect(() => {
     if (!batch) return;
     if (missingModelIds.length === 0) return;
@@ -164,14 +124,16 @@ export function useInspectionResultCard(
     let cancelled = false;
 
     (async () => {
-      // まとめて叩く（N件でも Promise.all で並列）
       const settled = await Promise.all(
         missingModelIds.map(async (modelId) => {
           try {
-            const v = await fetchModelVariationByIdForMintHTTP(modelId);
-            return { modelId, v };
+            const variation = await fetchModelVariationByIdForMintHTTP(modelId);
+            return { modelId, variation };
           } catch {
-            return { modelId, v: null as ModelVariationForMintDTO | null };
+            return {
+              modelId,
+              variation: null as ModelVariationForMintDTO | null,
+            };
           }
         }),
       );
@@ -181,18 +143,11 @@ export function useInspectionResultCard(
       setResolvedMeta((prev) => {
         const next = { ...(prev ?? {}) };
 
-        for (const it of settled) {
-          const modelId = it.modelId;
-          const v = it.v;
+        for (const item of settled) {
+          const meta = toMintModelMetaEntry(item.variation);
+          if (!meta) continue;
 
-          if (!v) continue;
-
-          next[modelId] = {
-            modelNumber: v.modelNumber || null,
-            size: v.size || null,
-            colorName: getModelVariationColorName(v),
-            rgb: getModelVariationRgb(v),
-          };
+          next[item.modelId] = meta;
         }
 
         return next;
@@ -202,94 +157,16 @@ export function useInspectionResultCard(
     return () => {
       cancelled = true;
     };
+    // missingModelIds は配列なので、内容変化を見るため string 化する
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch, JSON.stringify(missingModelIds)]);
 
-  const rows: InspectionResultRow[] = React.useMemo(() => {
-    if (!batch) return [];
-
-    // modelId 単位で集計（同じ modelId の inspection をまとめる）
-    const map = new Map<
-      string,
-      {
-        modelNumber: string;
-        passed: number;
-        total: number;
-      }
-    >();
-
-    for (const ins of batch.inspections ?? []) {
-      const modelId = String((ins as any)?.modelId ?? "");
-      if (!modelId) continue;
-
-      const modelNumberFromInspection = String((ins as any)?.modelNumber ?? "");
-
-      const entry =
-        map.get(modelId) ?? {
-          modelNumber: modelNumberFromInspection,
-          passed: 0,
-          total: 0,
-        };
-
-      entry.total += 1;
-      if ((ins as any)?.inspectionResult === "passed") {
-        entry.passed += 1;
-      }
-
-      // 途中で modelNumber が空だった場合でも、どこかで値が入れば更新
-      if (!entry.modelNumber && modelNumberFromInspection) {
-        entry.modelNumber = modelNumberFromInspection;
-      }
-
-      map.set(modelId, entry);
-    }
-
-    // 並び替えに ProductBlueprintPatch.modelRefs.displayOrder を使う
-    const tmp: Array<InspectionResultRow & { __order: number }> = [];
-    const INF = Number.POSITIVE_INFINITY;
-
-    for (const [modelId, agg] of map.entries()) {
-      const meta = mergedModelMeta[modelId];
-
-      // ★ 表示優先順位：
-      // meta.modelNumber（GetModelVariationByIDで解決） > inspections の modelNumber > modelId
-      const displayModelNumber =
-        meta?.modelNumber ||
-        agg.modelNumber ||
-        modelId;
-
-      const order =
-        typeof displayOrderByModelId[modelId] === "number" &&
-        Number.isFinite(displayOrderByModelId[modelId])
-          ? displayOrderByModelId[modelId]
-          : INF;
-
-      tmp.push({
-        __order: order,
-        modelNumber: displayModelNumber,
-        size: meta?.size ?? "",
-        color: meta?.colorName ?? "",
-        rgb: meta?.rgb ?? null,
-        passedQuantity: agg.passed,
-        quantity: agg.total,
-      });
-    }
-
-    // ✅ modelRefs.displayOrder のみに従って並べ替え（displayOrder 無しは末尾）
-    tmp.sort((a, b) => a.__order - b.__order);
-
-    return tmp.map(({ __order, ...row }) => row);
-  }, [batch, mergedModelMeta, displayOrderByModelId]);
-
-  const totalPassed = React.useMemo(
-    () => rows.reduce((sum, r) => sum + (r.passedQuantity || 0), 0),
-    [rows],
-  );
-
-  const totalQuantity = React.useMemo(
-    () => rows.reduce((sum, r) => sum + (r.quantity || 0), 0),
-    [rows],
-  );
+  const cardData = React.useMemo(() => {
+    return buildInspectionResultCardData({
+      batch,
+      resolvedMeta,
+    });
+  }, [batch, resolvedMeta]);
 
   // ✅ 共通 util を使用して RGB → HEX (#RRGGBB) 変換
   const rgbIntToHex = React.useCallback(
@@ -299,17 +176,11 @@ export function useInspectionResultCard(
     [],
   );
 
-  // タイトルに productName があれば補足として付けてもよい
-  const title =
-    (batch as any)?.productName && typeof (batch as any).productName === "string"
-      ? `検査結果：${(batch as any).productName}`
-      : "モデル別検査結果";
-
   return {
-    title,
-    rows,
-    totalPassed,
-    totalQuantity,
+    title: cardData.title,
+    rows: cardData.rows,
+    totalPassed: cardData.totalPassed,
+    totalQuantity: cardData.totalQuantity,
     rgbIntToHex,
   };
 }

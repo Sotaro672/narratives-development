@@ -4,15 +4,19 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-} from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
 import { completeInspectionByProductionId } from "../../infrastructure/api/mintRequestApi";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
+import {
+  toBrandOptionVMs,
+  toTokenBlueprintOptionVMs,
+} from "../../application/mapper/mintRequestOptionsMapper";
+import { validateCompleteInspection } from "../../application/validator/validateCompleteInspection";
+import { validateMintRequestSubmit } from "../../application/validator/validateMintRequestSubmit";
 
 import type {
   BrandOptionVM as BrandOption,
@@ -129,6 +133,7 @@ export function useMintRequestDetail() {
     };
 
     run();
+
     return () => {
       cancelled = true;
     };
@@ -142,11 +147,13 @@ export function useMintRequestDetail() {
     const run = async () => {
       setPbPatchLoading(true);
       setPbPatchError(null);
+
       try {
         const patch = await getProductBlueprintPatch(
           mintRequestRepo,
           productBlueprintId,
         );
+
         if (!cancelled) {
           setPbPatch((patch ?? null) as any);
         }
@@ -164,6 +171,7 @@ export function useMintRequestDetail() {
     };
 
     run();
+
     return () => {
       cancelled = true;
     };
@@ -188,6 +196,7 @@ export function useMintRequestDetail() {
     React.useMemo(() => buildProductBlueprintCardView(pbPatch), [pbPatch]);
 
   const MINT_REQUEST_MANAGEMENT_PATH = "/mintRequest";
+
   const onBack = React.useCallback(() => {
     navigate(MINT_REQUEST_MANAGEMENT_PATH);
   }, [navigate]);
@@ -200,18 +209,14 @@ export function useMintRequestDetail() {
         const brands = await listBrandsForMint(mintRequestRepo);
         if (cancelled) return;
 
-        setBrandOptions(
-          (brands ?? []).map((b) => ({
-            id: String((b as any)?.id ?? "").trim(),
-            name: String((b as any)?.name ?? "").trim(),
-          })) as any,
-        );
+        setBrandOptions(toBrandOptionVMs(brands));
       } catch {
         // noop
       }
     };
 
     run();
+
     return () => {
       cancelled = true;
     };
@@ -232,14 +237,8 @@ export function useMintRequestDetail() {
           mintRequestRepo,
           brandId,
         );
-        setTokenBlueprintOptions(
-          (opts ?? []).map((tb) => ({
-            id: String((tb as any)?.id ?? "").trim(),
-            name: String((tb as any)?.name ?? "").trim(),
-            symbol: String((tb as any)?.symbol ?? "").trim(),
-            iconUrl: asNonEmptyString((tb as any)?.iconUrl) || undefined,
-          })) as any,
-        );
+
+        setTokenBlueprintOptions(toTokenBlueprintOptionVMs(opts));
         setSelectedTokenBlueprintId("");
       } catch {
         setTokenBlueprintOptions([]);
@@ -302,6 +301,7 @@ export function useMintRequestDetail() {
   const tokenBlueprintIdForPatch = React.useMemo(() => {
     const a = asNonEmptyString(selectedTokenBlueprintId);
     if (a) return a;
+
     const b = asNonEmptyString(mintRequestedTokenBlueprintId);
     return b ? b : "";
   }, [selectedTokenBlueprintId, mintRequestedTokenBlueprintId]);
@@ -314,29 +314,28 @@ export function useMintRequestDetail() {
       return;
     }
 
-    if (!inspectionBatch) {
-      alert("検査バッチ情報が取得できていません。");
-      return;
-    }
+    const validation = validateCompleteInspection({
+      inspectionBatch,
+      requestId,
+    });
 
-    const productionId = String(
-      (inspectionBatch as any).productionId ?? requestId ?? "",
-    ).trim();
-
-    if (!productionId) {
-      alert("productionId が特定できません。");
+    if (!validation.ok) {
+      alert(validation.message);
       return;
     }
 
     const ok = window.confirm(
       "検品を完了します。未入力の検品結果は合格として確定されます。よろしいですか？",
     );
+
     if (!ok) return;
 
     setIsCompletingInspection(true);
 
     try {
-      const updatedBatch = await completeInspectionByProductionId(productionId);
+      const updatedBatch = await completeInspectionByProductionId(
+        validation.productionId,
+      );
 
       if (updatedBatch) {
         setInspectionBatch(updatedBatch as any);
@@ -367,24 +366,15 @@ export function useMintRequestDetail() {
       return;
     }
 
-    if (!inspectionBatch) {
-      alert("検査バッチ情報が取得できていません。");
-      return;
-    }
+    const validation = validateMintRequestSubmit({
+      inspectionBatch,
+      isInspectionCompleted,
+      selectedTokenBlueprintId,
+      requestId,
+    });
 
-    if (!isInspectionCompleted) {
-      alert("先に検品を完了してください。");
-      return;
-    }
-
-    if (!selectedTokenBlueprintId) {
-      alert("トークン設計を選択してください。");
-      return;
-    }
-
-    const productionId = (inspectionBatch as any).productionId ?? requestId ?? "";
-    if (!productionId) {
-      alert("productionId が特定できません。");
+    if (!validation.ok) {
+      alert(validation.message);
       return;
     }
 
@@ -392,8 +382,8 @@ export function useMintRequestDetail() {
 
     try {
       const { updatedBatch, refreshedMint } = await submitMintRequestAndRefresh(
-        productionId,
-        selectedTokenBlueprintId,
+        validation.productionId,
+        validation.tokenBlueprintId,
         scheduledBurnDate || undefined,
       );
 
@@ -406,12 +396,16 @@ export function useMintRequestDetail() {
       }
 
       alert(
-        `ミントが完了しました（生産ID: ${productionId} / ミント数: ${totalMintQuantity}）`,
+        `ミントが完了しました（生産ID: ${validation.productionId} / ミント数: ${totalMintQuantity}）`,
       );
 
       navigate(0);
     } catch (e: any) {
-      alert(`ミント申請に失敗しました: ${e?.message ?? "不明なエラーが発生しました"}`);
+      alert(
+        `ミント申請に失敗しました: ${
+          e?.message ?? "不明なエラーが発生しました"
+        }`,
+      );
     } finally {
       setIsMinting(false);
     }

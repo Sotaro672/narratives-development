@@ -3,6 +3,11 @@
 import type { InspectionStatus } from "../../domain/entity/inspections";
 import { fetchMintRequestManagementRowsQueryHTTP } from "../../infrastructure/repository/http/mintRequestManagementQuery";
 import type { MintRequestManagementRowDTO } from "../dto/mintRequestManagementRow";
+import {
+  asNonEmptyString,
+  asNumber0,
+  asStringOrNull,
+} from "../util/primitive";
 
 // ============================================================
 // Types (list row; kept for current screen expectations)
@@ -39,24 +44,12 @@ export type ViewRow = {
 // Strict helpers (NO legacy / old-compat fields)
 // ============================================================
 
-function asNonEmptyString(v: any): string {
-  return typeof v === "string" && v.trim() ? v.trim() : "";
-}
-
-function asStringOrNull(v: any): string | null {
-  const s = typeof v === "string" ? v.trim() : "";
-  return s ? s : null;
-}
-
-function asNumber0(v: any): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function normalizeInspectionStatus(v: any): InspectionStatus {
+function normalizeInspectionStatus(v: unknown): InspectionStatus {
   const s = String(v ?? "").trim();
+
   if (s === "completed") return "completed";
   if (s === "inspecting") return "inspecting";
+
   return "notYet" as any;
 }
 
@@ -80,6 +73,7 @@ function deriveRowStatus(args: {
 function mapDTOToRow(dto: MintRequestManagementRowDTO): ViewRow {
   // ✅ strict: productionId must exist (旧互換の id / inspectionId は使わない)
   const productionId = asNonEmptyString((dto as any)?.productionId);
+
   if (!productionId) {
     throw new Error("MintRequestManagementRowDTO.productionId is required");
   }
@@ -90,7 +84,9 @@ function mapDTOToRow(dto: MintRequestManagementRowDTO): ViewRow {
   const mintQuantity = asNumber0((dto as any)?.mintQuantity);
   const productionQuantity = asNumber0((dto as any)?.productionQuantity);
 
-  const inspectionStatus = normalizeInspectionStatus((dto as any)?.inspectionStatus);
+  const inspectionStatus = normalizeInspectionStatus(
+    (dto as any)?.inspectionStatus,
+  );
 
   const requestedBy = asStringOrNull((dto as any)?.requestedBy);
 
@@ -104,6 +100,7 @@ function mapDTOToRow(dto: MintRequestManagementRowDTO): ViewRow {
   const createdByName = requestedByName;
 
   const mintedAt = asStringOrNull((dto as any)?.mintedAt);
+
   const minted =
     typeof (dto as any)?.minted === "boolean"
       ? Boolean((dto as any)?.minted)
@@ -111,8 +108,13 @@ function mapDTOToRow(dto: MintRequestManagementRowDTO): ViewRow {
 
   const tokenBlueprintId = asStringOrNull((dto as any)?.tokenBlueprintId);
 
-  const productBlueprintId = asStringOrNull((dto as any)?.productBlueprintId);
-  const scheduledBurnDate = asStringOrNull((dto as any)?.scheduledBurnDate);
+  const productBlueprintId = asStringOrNull(
+    (dto as any)?.productBlueprintId,
+  );
+
+  const scheduledBurnDate = asStringOrNull(
+    (dto as any)?.scheduledBurnDate,
+  );
 
   const status = deriveRowStatus({
     tokenBlueprintId,
@@ -154,5 +156,6 @@ function mapDTOToRow(dto: MintRequestManagementRowDTO): ViewRow {
 export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
   const res = await fetchMintRequestManagementRowsQueryHTTP();
   const items = Array.isArray(res?.items) ? res.items : [];
+
   return items.map(mapDTOToRow);
 }

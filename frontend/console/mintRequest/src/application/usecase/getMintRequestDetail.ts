@@ -1,23 +1,24 @@
-//frontend\console\mintRequest\src\application\usecase\getMintRequestDetail.ts
-import type { MintRequestRepository } from "../port/MintRequestRepository";
-import { asNonEmptyString } from "../mapper/modelInspectionMapper"; // ここがapplicationにある前提ならOK。presentationにあるなら移動推奨。
+// frontend/console/mintRequest/src/application/usecase/getMintRequestDetail.ts
 
-function extractProductBlueprintIdFromBatch(batch: any): string {
-  if (!batch) return "";
-  const v = batch.productBlueprintId ?? batch.productBlueprint?.id ?? "";
-  return asNonEmptyString(v);
-}
+import type { MintRequestRepository } from "../port/MintRequestRepository";
+import { asNonEmptyString } from "../mapper/modelInspectionMapper";
+import { extractProductBlueprintIdFromBatch } from "../mapper/productBlueprintIdMapper";
 
 async function resolveProductBlueprintId(
   repo: MintRequestRepository,
   productionId: string,
-  batch: any,
+  batch: unknown,
 ): Promise<string> {
-  const pbFromBatch = extractProductBlueprintIdFromBatch(batch);
-  if (pbFromBatch) return pbFromBatch;
+  const productBlueprintIdFromBatch = extractProductBlueprintIdFromBatch(batch);
 
-  const pbFromProduction = await repo.fetchProductBlueprintIdByProductionId(productionId);
-  return asNonEmptyString(pbFromProduction);
+  if (productBlueprintIdFromBatch) {
+    return productBlueprintIdFromBatch;
+  }
+
+  const productBlueprintIdFromProduction =
+    await repo.fetchProductBlueprintIdByProductionId(productionId);
+
+  return asNonEmptyString(productBlueprintIdFromProduction);
 }
 
 export async function getMintRequestDetail(
@@ -25,6 +26,7 @@ export async function getMintRequestDetail(
   requestId: string,
 ) {
   const rid = String(requestId ?? "").trim();
+
   if (!rid) {
     return {
       inspectionBatch: null,
@@ -38,7 +40,11 @@ export async function getMintRequestDetail(
     repo.fetchMintByInspectionId(rid),
   ]);
 
-  const productBlueprintId = await resolveProductBlueprintId(repo, rid, inspectionBatch);
+  const productBlueprintId = await resolveProductBlueprintId(
+    repo,
+    rid,
+    inspectionBatch,
+  );
 
   return {
     inspectionBatch,
