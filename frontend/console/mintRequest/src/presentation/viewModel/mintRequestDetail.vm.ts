@@ -4,6 +4,12 @@
 // ViewModel Types for MintRequestDetail (Detail Screen)
 // ============================================================
 
+import type {
+  CategoryFieldValues,
+  ProductBlueprintCategoryKind,
+  ProductBlueprintCategorySnapshot,
+} from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+
 export type BrandOptionVM = {
   id: string;
   name: string;
@@ -16,14 +22,52 @@ export type TokenBlueprintOptionVM = {
   iconUrl?: string;
 };
 
+export type ProductBlueprintCategoryFieldRowVM = {
+  label: string;
+  value: string;
+};
+
 export type ProductBlueprintCardVM = {
   productName?: string;
   brand?: string; // 表示用（brandName のみ）
-  itemType?: string;
-  fit?: string;
-  materials?: string;
-  weight?: number;
-  washTags?: string[];
+
+  /**
+   * 商品カテゴリ snapshot。
+   *
+   * ProductBlueprintCard は categoryName ではなく
+   * productBlueprintCategory / productBlueprintPatch.productBlueprintCategory を参照して
+   * 商品カテゴリを表示するため、ここで保持して page 側から渡す。
+   */
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+
+  /**
+   * 旧 itemType は廃止。
+   * 表示本体は productBlueprintCategory を正とする。
+   *
+   * categoryName / categoryCode / categoryKind は、
+   * mintRequest 側で補助表示・条件分岐が必要な場合の派生値。
+   */
+  categoryName?: string;
+  categoryCode?: string;
+  categoryKind?: ProductBlueprintCategoryKind | string;
+
+  /**
+   * categoryFields の raw 値。
+   * 表示用には categoryFieldRows を優先する。
+   */
+  categoryFields?: CategoryFieldValues | null;
+
+  /**
+   * categoryFields を UI 表示しやすい label/value に変換したもの。
+   *
+   * alcohol の例:
+   * - ヴィンテージ: 2020
+   * - 地域: 福島
+   * - 原材料: 山田錦
+   * - アルコール度数: 78%
+   */
+  categoryFieldRows?: ProductBlueprintCategoryFieldRowVM[];
+
   productIdTag?: string;
 };
 
@@ -71,6 +115,12 @@ export type MintModelMetaEntryVM = {
   size?: string | null;
   colorName?: string | null;
   rgb?: number | null;
+
+  /**
+   * alcohol 対応:
+   * model variation 側で容量も扱う。
+   */
+  volume?: string | number | null;
 };
 
 export type ModelInspectionRowVM = {
@@ -80,6 +130,12 @@ export type ModelInspectionRowVM = {
   size: string | null;
   colorName: string | null;
   rgb: number | null;
+
+  /**
+   * alcohol 対応:
+   * model variation 側で容量も扱う。
+   */
+  volume?: string | number | null;
 
   passedCount: number;
   totalCount: number;

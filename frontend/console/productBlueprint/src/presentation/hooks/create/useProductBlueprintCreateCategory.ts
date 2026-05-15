@@ -4,7 +4,7 @@ import * as React from "react";
 
 import {
   listProductBlueprintCategoriesApi,
-} from "../../../infrastructure/api/productBlueprintCategoryApi";
+} from "../../../infrastructure/api/productBlueprintApi";
 
 import type {
   ProductBlueprintCategory,

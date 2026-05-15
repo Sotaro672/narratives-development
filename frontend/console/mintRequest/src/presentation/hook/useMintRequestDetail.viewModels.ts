@@ -19,20 +19,125 @@ import type {
 
 import type { TokenBlueprintPatchDTO } from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
 
+const toDisplayText = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return "";
+};
+
+const toProductIdTagLabel = (
+  productIdTag: ProductBlueprintPatchDTO["productIdTag"],
+): string | undefined => {
+  if (!productIdTag) return undefined;
+
+  const value =
+    asNonEmptyString(productIdTag.type) ||
+    asNonEmptyString(productIdTag.Type);
+
+  return value || undefined;
+};
+
+const buildCategoryFieldRows = (
+  pbPatch: ProductBlueprintPatchDTO,
+): { label: string; value: string }[] => {
+  const fields = pbPatch.categoryFields;
+  if (!fields) return [];
+
+  const rows: { label: string; value: string }[] = [];
+
+  const addRow = (key: string, label: string, suffix = "") => {
+    const value = toDisplayText(fields[key]);
+    if (!value) return;
+
+    rows.push({
+      label,
+      value: suffix ? `${value}${suffix}` : value,
+    });
+  };
+
+  /**
+   * alcohol category fields
+   */
+  addRow("vintage", "ヴィンテージ");
+  addRow("region", "地域");
+  addRow("material", "原材料");
+  addRow("alcoholContent", "アルコール度数", "%");
+
+  /**
+   * 未定義カテゴリや今後追加される categoryFields 用。
+   * 既知 key は上で表示済みなので除外する。
+   */
+  const knownKeys = new Set([
+    "vintage",
+    "region",
+    "material",
+    "alcoholContent",
+  ]);
+
+  Object.entries(fields).forEach(([key, value]) => {
+    if (knownKeys.has(key)) return;
+
+    const displayValue = toDisplayText(value);
+    if (!displayValue) return;
+
+    rows.push({
+      label: key,
+      value: displayValue,
+    });
+  });
+
+  return rows;
+};
+
 export function buildProductBlueprintCardView(
   pbPatch: ProductBlueprintPatchDTO | null,
 ): ProductBlueprintCardViewModel | null {
   if (!pbPatch) return null;
 
+  const category = pbPatch.productBlueprintCategory ?? null;
+
+  const productName = asNonEmptyString(pbPatch.productName) || "";
+  const brand = asNonEmptyString(pbPatch.brandName) || "";
+
+  const categoryName =
+    asNonEmptyString(category?.nameJa) ||
+    asNonEmptyString(category?.nameEn) ||
+    asNonEmptyString(category?.code) ||
+    "";
+
+  const categoryCode = asNonEmptyString(category?.code) || "";
+  const categoryKind = asNonEmptyString(category?.kind) || "";
+
   return {
-    productName: (pbPatch as any)?.productName ?? undefined,
-    brand: (pbPatch as any)?.brandName ?? undefined,
-    itemType: (pbPatch as any)?.itemType ?? undefined,
-    fit: (pbPatch as any)?.fit ?? undefined,
-    materials: (pbPatch as any)?.material ?? undefined,
-    weight: (pbPatch as any)?.weight ?? undefined,
-    washTags: (pbPatch as any)?.qualityAssurance ?? undefined,
-    productIdTag: (pbPatch as any)?.productIdTag?.type ?? undefined,
+    productName,
+    brand,
+
+    /**
+     * ProductBlueprintCard は categoryName ではなく
+     * productBlueprintCategory / productBlueprintPatch.productBlueprintCategory を見て
+     * 商品カテゴリを表示する。
+     */
+    productBlueprintCategory: category,
+
+    /**
+     * mintRequest 側で補助表示・条件分岐に使う派生値。
+     */
+    categoryName,
+    categoryCode,
+    categoryKind,
+
+    categoryFields: pbPatch.categoryFields ?? null,
+    categoryFieldRows: buildCategoryFieldRows(pbPatch),
+
+    productIdTag: toProductIdTagLabel(pbPatch.productIdTag),
   };
 }
 
@@ -62,7 +167,7 @@ export function buildTokenBlueprintCardVm(params: {
   const brandName =
     selectedBrandName ||
     asNonEmptyString((tokenBlueprintPatch as any)?.brandName) ||
-    asNonEmptyString((pbPatch as any)?.brandName) ||
+    asNonEmptyString(pbPatch?.brandName) ||
     "";
 
   const name =

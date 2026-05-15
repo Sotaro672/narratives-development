@@ -3,6 +3,11 @@
 import type { InspectionBatchDTO } from "../../domain/entity/inspections";
 import type { MintDTO } from "../api/mintRequestApi";
 
+import type {
+  ProductBlueprintCategorySnapshot,
+  CategoryFieldValues,
+} from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+
 /**
  * ProductBlueprint.modelRefs 取得用 DTO
  * displayOrder は ProductBlueprint 側にのみ存在する前提のため、UI はこれを正として扱う。
@@ -14,14 +19,32 @@ export type ProductBlueprintModelRefDTO = {
 
 export type ProductBlueprintPatchDTO = {
   productName?: string | null;
+  description?: string | null;
+
   brandId?: string | null;
   brandName?: string | null;
+  companyId?: string | null;
 
-  itemType?: string | null;
-  fit?: string | null;
-  material?: string | null;
-  weight?: number | null;
-  qualityAssurance?: string[] | null;
+  /**
+   * 商品カテゴリ。
+   *
+   * ProductBlueprint 側に denormalize 保存されるカテゴリ snapshot を正とする。
+   * itemType は廃止し、カテゴリ判定はこの productBlueprintCategory を使う。
+   */
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+
+  /**
+   * カテゴリ別入力値。
+   *
+   * alcohol の例:
+   * {
+   *   vintage,
+   *   region,
+   *   material,
+   *   alcoholContent
+   * }
+   */
+  categoryFields?: CategoryFieldValues | null;
 
   productIdTag?: { type?: string | null; Type?: string | null } | null;
 

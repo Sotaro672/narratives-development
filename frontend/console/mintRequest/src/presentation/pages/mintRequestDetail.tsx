@@ -134,6 +134,9 @@ export default function MintRequestDetail() {
               mode="view"
               productName={productBlueprintCardView.productName}
               brandName={productBlueprintCardView.brand}
+              productBlueprintCategory={
+                productBlueprintCardView.productBlueprintCategory ?? null
+              }
             />
           ) : (
             <Card className="mint-request-card">
