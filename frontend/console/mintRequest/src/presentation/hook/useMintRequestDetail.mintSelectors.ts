@@ -4,7 +4,7 @@ import * as React from "react";
 
 import type { InspectionBatchDTO } from "../../domain/entity/inspections";
 import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
-import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
+import { asNonEmptyString } from "../../application/util/primitive";
 
 import {
   extractMintInfoFromBatch,

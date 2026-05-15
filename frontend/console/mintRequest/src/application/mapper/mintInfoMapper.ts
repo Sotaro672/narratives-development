@@ -1,9 +1,11 @@
 // frontend/console/mintRequest/src/application/mapper/mintInfoMapper.ts
 
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-} from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
+import {
+  asNonEmptyString,
+  asMaybeISO,
+} from "../util/primitive";
 
 // ============================================================
 // Types
@@ -26,21 +28,6 @@ export type MintInfo = {
 };
 
 // ============================================================
-// helpers
-// ============================================================
-
-export function asNonEmptyString(v: any): string {
-  return typeof v === "string" && v.trim() ? v.trim() : "";
-}
-
-export function asMaybeISO(v: any): string {
-  if (!v) return "";
-  if (typeof v === "string") return v;
-  if (v instanceof Date) return v.toISOString();
-  return String(v);
-}
-
-// ============================================================
 // mapper
 // ============================================================
 
@@ -50,11 +37,13 @@ export function asMaybeISO(v: any): string {
 export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
   if (!m) return null;
 
-  const id = asNonEmptyString((m as any).id ?? (m as any).mintId);
+  const id = asNonEmptyString((m as any).id);
   if (!id) return null;
 
   const tokenBlueprintId = asNonEmptyString((m as any).tokenBlueprintId);
   const brandId = asNonEmptyString((m as any).brandId);
+
+  const requestedByName = asNonEmptyString((m as any).requestedByName);
 
   const createdBy = asNonEmptyString((m as any).createdBy);
   const createdByName = asNonEmptyString((m as any).createdByName);
@@ -63,16 +52,22 @@ export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
   const createdAt = createdAtStr ? createdAtStr : null;
 
   const mintedAtStr = asNonEmptyString(asMaybeISO((m as any).mintedAt));
+
   const minted =
-    typeof (m as any).minted === "boolean" ? (m as any).minted : Boolean(mintedAtStr);
+    typeof (m as any).minted === "boolean"
+      ? (m as any).minted
+      : Boolean(mintedAtStr);
 
   const onChainTxSignature = asNonEmptyString((m as any).onChainTxSignature);
-  const scheduledBurnDate = asNonEmptyString(asMaybeISO((m as any).scheduledBurnDate));
+  const scheduledBurnDate = asNonEmptyString(
+    asMaybeISO((m as any).scheduledBurnDate),
+  );
 
   return {
     id,
     brandId,
     tokenBlueprintId,
+    requestedByName: requestedByName ? requestedByName : null,
     createdBy,
     createdByName: createdByName ? createdByName : null,
     createdAt,
@@ -84,15 +79,14 @@ export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
 }
 
 /**
- * InspectionBatchDTO 内に埋め込まれている mint 互換フィールドから MintInfo を抽出。
- * - batch.mint / batch.mintRequest などの揺れを吸収
+ * InspectionBatchDTO 内に埋め込まれている mint から MintInfo を抽出。
  */
 export function extractMintInfoFromBatch(
   batch: InspectionBatchDTO | any,
 ): MintInfo | null {
   if (!batch) return null;
 
-  const mintObj = (batch as any).mint ?? (batch as any).mintRequest ?? null;
+  const mintObj = (batch as any).mint ?? null;
   if (!mintObj) return null;
 
   return extractMintInfoFromMintDTO(mintObj as any);

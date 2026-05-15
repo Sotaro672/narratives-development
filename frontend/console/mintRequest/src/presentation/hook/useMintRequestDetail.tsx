@@ -10,7 +10,7 @@ import { completeInspectionByProductionId } from "../../infrastructure/api/mintR
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
+import { asNonEmptyString } from "../../application/util/primitive";
 import {
   toBrandOptionVMs,
   toTokenBlueprintOptionVMs,

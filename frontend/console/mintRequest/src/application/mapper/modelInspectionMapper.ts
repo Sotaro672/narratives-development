@@ -1,6 +1,7 @@
 // frontend/console/mintRequest/src/application/mapper/modelInspectionMapper.ts
 
 import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import { asNonEmptyString } from "../util/primitive";
 
 // ============================================================
 // Types
@@ -23,11 +24,7 @@ export type ModelInspectionRow = {
 // helpers
 // ============================================================
 
-export function asNonEmptyString(v: any): string {
-  return typeof v === "string" && v.trim() ? v.trim() : "";
-}
-
-function isPassedResult(v: any): boolean {
+function isPassedResult(v: unknown): boolean {
   const s = asNonEmptyString(v).toLowerCase();
   return s === "passed";
 }

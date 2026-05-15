@@ -1,33 +1,25 @@
 // frontend/console/mintRequest/src/application/usecase/getMintRequestDetail.ts
 
 import type { MintRequestRepository } from "../port/MintRequestRepository";
-import { asNonEmptyString } from "../mapper/modelInspectionMapper";
-import { extractProductBlueprintIdFromBatch } from "../mapper/productBlueprintIdMapper";
+import { asNonEmptyString } from "../util/primitive";
 
 async function resolveProductBlueprintId(
   repo: MintRequestRepository,
   productionId: string,
-  batch: unknown,
 ): Promise<string> {
-  const productBlueprintIdFromBatch = extractProductBlueprintIdFromBatch(batch);
-
-  if (productBlueprintIdFromBatch) {
-    return productBlueprintIdFromBatch;
-  }
-
-  const productBlueprintIdFromProduction =
+  const productBlueprintId =
     await repo.fetchProductBlueprintIdByProductionId(productionId);
 
-  return asNonEmptyString(productBlueprintIdFromProduction);
+  return asNonEmptyString(productBlueprintId);
 }
 
 export async function getMintRequestDetail(
   repo: MintRequestRepository,
-  requestId: string,
+  productionId: string,
 ) {
-  const rid = String(requestId ?? "").trim();
+  const pid = String(productionId ?? "").trim();
 
-  if (!rid) {
+  if (!pid) {
     return {
       inspectionBatch: null,
       mintDTO: null,
@@ -35,16 +27,11 @@ export async function getMintRequestDetail(
     };
   }
 
-  const [inspectionBatch, mintDTO] = await Promise.all([
-    repo.fetchInspectionByProductionId(rid),
-    repo.fetchMintByInspectionId(rid),
+  const [inspectionBatch, mintDTO, productBlueprintId] = await Promise.all([
+    repo.fetchInspectionByProductionId(pid),
+    repo.fetchMintByProductionId(pid),
+    resolveProductBlueprintId(repo, pid),
   ]);
-
-  const productBlueprintId = await resolveProductBlueprintId(
-    repo,
-    rid,
-    inspectionBatch,
-  );
 
   return {
     inspectionBatch,

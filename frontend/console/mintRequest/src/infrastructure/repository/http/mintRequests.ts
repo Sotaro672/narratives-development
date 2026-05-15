@@ -9,7 +9,7 @@ import type {
   MintListRowDTO,
 } from "../../api/mintRequestApi";
 
-import type { MintRequestRowRaw } from "../../dto/mintRequestRaw.dto";
+import type { MintRequestManagementRowDTO } from "../../../application/dto/mintRequestManagementRow";
 
 // ===============================
 // types
@@ -18,7 +18,7 @@ import type { MintRequestRowRaw } from "../../dto/mintRequestRaw.dto";
 type MintRequestsView = "management" | "list";
 
 type FetchMintRequestsResult = {
-  rows: MintRequestRowRaw[];
+  rows: MintRequestManagementRowDTO[];
   usedView: MintRequestsView;
   usedUrl: string;
 };
@@ -97,7 +97,7 @@ async function fetchMintRequestsRowsRawOnce(
   }
 
   if (res.ok) {
-    const json = (await res.json()) as MintRequestRowRaw[] | null | undefined;
+    const json = (await res.json()) as MintRequestManagementRowDTO[] | null | undefined;
 
     return {
       rows: Array.isArray(json) ? json : [],

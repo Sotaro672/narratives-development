@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/application/mapper/mintRequestOptionsMapper.ts
 
-import { asNonEmptyString } from "./modelInspectionMapper";
+import { asNonEmptyString } from "../util/primitive";
 
 import type {
   BrandOptionVM,
@@ -8,8 +8,8 @@ import type {
 } from "../../presentation/viewModel/mintRequestDetail.vm";
 
 export function toBrandOptionVM(input: unknown): BrandOptionVM | null {
-  const id = String((input as any)?.id ?? "").trim();
-  const name = String((input as any)?.name ?? "").trim();
+  const id = asNonEmptyString((input as any)?.id);
+  const name = asNonEmptyString((input as any)?.name);
 
   if (!id || !name) return null;
 
@@ -19,7 +19,9 @@ export function toBrandOptionVM(input: unknown): BrandOptionVM | null {
   };
 }
 
-export function toBrandOptionVMs(inputs: unknown[] | null | undefined): BrandOptionVM[] {
+export function toBrandOptionVMs(
+  inputs: unknown[] | null | undefined,
+): BrandOptionVM[] {
   return (inputs ?? [])
     .map((item) => toBrandOptionVM(item))
     .filter((item): item is BrandOptionVM => item !== null);
@@ -28,9 +30,9 @@ export function toBrandOptionVMs(inputs: unknown[] | null | undefined): BrandOpt
 export function toTokenBlueprintOptionVM(
   input: unknown,
 ): TokenBlueprintOptionVM | null {
-  const id = String((input as any)?.id ?? "").trim();
-  const name = String((input as any)?.name ?? "").trim();
-  const symbol = String((input as any)?.symbol ?? "").trim();
+  const id = asNonEmptyString((input as any)?.id);
+  const name = asNonEmptyString((input as any)?.name);
+  const symbol = asNonEmptyString((input as any)?.symbol);
   const iconUrl = asNonEmptyString((input as any)?.iconUrl) || undefined;
 
   if (!id || !name || !symbol) return null;

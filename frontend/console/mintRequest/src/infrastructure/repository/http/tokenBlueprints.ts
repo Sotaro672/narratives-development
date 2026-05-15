@@ -4,10 +4,17 @@ import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 
 import type { TokenBlueprintForMintDTO } from "../../dto/mintRequestLocal.dto";
-import type {
-  TokenBlueprintPageResultDTO,
-  TokenBlueprintRecordRaw,
-} from "../../dto/mintRequestRaw.dto";
+
+type TokenBlueprintRaw = {
+  id?: unknown;
+  name?: unknown;
+  symbol?: unknown;
+  iconUrl?: unknown;
+};
+
+const toText = (value: unknown): string => {
+  return typeof value === "string" ? value.trim() : "";
+};
 
 export async function fetchTokenBlueprintsByBrandHTTP(
   brandId: string,
@@ -17,7 +24,9 @@ export async function fetchTokenBlueprintsByBrandHTTP(
 
   const authHeaders = await getAuthHeadersOrThrow();
 
-  const url = `${API_BASE}/mint/token_blueprints?brandId=${encodeURIComponent(trimmed)}`;
+  const url = `${API_BASE}/mint/token_blueprints?brandId=${encodeURIComponent(
+    trimmed,
+  )}`;
 
   const res = await fetch(url, { method: "GET", headers: authHeaders });
 
@@ -32,22 +41,20 @@ export async function fetchTokenBlueprintsByBrandHTTP(
     );
   }
 
-  const json = (await res.json()) as
-    | TokenBlueprintPageResultDTO
-    | TokenBlueprintRecordRaw[]
-    | null
-    | undefined;
+  const json = (await res.json()) as unknown;
 
-  const rawItems: TokenBlueprintRecordRaw[] = Array.isArray(json)
-    ? json
-    : (json as any)?.items ?? (json as any)?.Items ?? [];
+  const rawItems: TokenBlueprintRaw[] = Array.isArray(json)
+    ? (json as TokenBlueprintRaw[])
+    : [];
 
   return rawItems
-    .map((tb) => ({
-      id: String((tb as any).id ?? (tb as any).ID ?? "").trim(),
-      name: String((tb as any).name ?? (tb as any).Name ?? "").trim(),
-      symbol: String((tb as any).symbol ?? (tb as any).Symbol ?? "").trim(),
-      iconUrl: String((tb as any).iconUrl ?? (tb as any).IconUrl ?? "").trim() || undefined,
+    .map((tb: TokenBlueprintRaw): TokenBlueprintForMintDTO => ({
+      id: toText(tb.id),
+      name: toText(tb.name),
+      symbol: toText(tb.symbol),
+      iconUrl: toText(tb.iconUrl) || undefined,
     }))
-    .filter((tb) => tb.id && tb.name && tb.symbol);
+    .filter((tb: TokenBlueprintForMintDTO) => {
+      return Boolean(tb.id && tb.name && tb.symbol);
+    });
 }

@@ -1,7 +1,88 @@
-//frontend\console\mintRequest\src\presentation\di\mintRequestContainer.ts
-import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
+// frontend/console/mintRequest/src/presentation/di/mintRequestContainer.ts
 
-export function mintRequestContainer() {
+import type {
+  BrandSummary,
+  MintRequestRepository,
+  TokenBlueprintSummary,
+} from "../../application/port/MintRequestRepository";
+
+import {
+  fetchInspectionByProductionIdHTTP,
+  fetchMintByInspectionIdHTTP,
+  fetchProductBlueprintIdByProductionIdHTTP,
+  fetchProductBlueprintPatchHTTP,
+  fetchBrandsForMintHTTP,
+  fetchTokenBlueprintsByBrandHTTP,
+  postMintRequestHTTP,
+} from "../../infrastructure/repository";
+
+import { fetchInventoryTokenBlueprintPatch } from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
+
+class HttpMintRequestRepository implements MintRequestRepository {
+  async fetchInspectionByProductionId(
+    productionId: string,
+  ): Promise<unknown | null> {
+    return fetchInspectionByProductionIdHTTP(productionId);
+  }
+
+  /**
+   * productions / inspections / mints の docId はすべて同一。
+   * フロントでは productionId を正として扱う。
+   *
+   * NOTE:
+   * HTTP 実装名がまだ fetchMintByInspectionIdHTTP の場合でも、
+   * 渡している値は productionId。
+   */
+  async fetchMintByProductionId(
+    productionId: string,
+  ): Promise<unknown | null> {
+    return fetchMintByInspectionIdHTTP(productionId);
+  }
+
+  async fetchProductBlueprintIdByProductionId(
+    productionId: string,
+  ): Promise<string | null> {
+    return fetchProductBlueprintIdByProductionIdHTTP(productionId);
+  }
+
+  async fetchProductBlueprintPatch(
+    productBlueprintId: string,
+  ): Promise<unknown | null> {
+    return fetchProductBlueprintPatchHTTP(productBlueprintId);
+  }
+
+  async fetchBrandsForMint(): Promise<BrandSummary[]> {
+    return fetchBrandsForMintHTTP();
+  }
+
+  async fetchTokenBlueprintsByBrand(
+    brandId: string,
+  ): Promise<TokenBlueprintSummary[]> {
+    return fetchTokenBlueprintsByBrandHTTP(brandId);
+  }
+
+  async fetchTokenBlueprintPatch(
+    tokenBlueprintId: string,
+  ): Promise<unknown | null> {
+    return fetchInventoryTokenBlueprintPatch(tokenBlueprintId);
+  }
+
+  async postMintRequest(
+    productionId: string,
+    tokenBlueprintId: string,
+    scheduledBurnDate?: string,
+  ): Promise<unknown | null> {
+    return postMintRequestHTTP(
+      productionId,
+      tokenBlueprintId,
+      scheduledBurnDate,
+    );
+  }
+}
+
+export function mintRequestContainer(): {
+  mintRequestRepo: MintRequestRepository;
+} {
   return {
     mintRequestRepo: new HttpMintRequestRepository(),
   };

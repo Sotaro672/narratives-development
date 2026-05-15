@@ -1,7 +1,10 @@
 // frontend/console/mintRequest/src/presentation/hook/useMintRequestDetail.viewModels.ts
 
-import { safeDateLabelJa, safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
-import { asNonEmptyString } from "../../application/mapper/modelInspectionMapper";
+import {
+  safeDateLabelJa,
+  safeDateTimeLabelJa,
+} from "../../../../shell/src/shared/util/dateJa";
+import { asNonEmptyString } from "../../application/util/primitive";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 import type { MintInfo } from "../../application/mapper/mintInfoMapper";
@@ -51,7 +54,9 @@ export function buildTokenBlueprintCardVm(params: {
   } = params;
 
   const tbId =
-    asNonEmptyString(selectedTokenBlueprint?.id) || asNonEmptyString(tokenBlueprintIdForPatch);
+    asNonEmptyString(selectedTokenBlueprint?.id) ||
+    asNonEmptyString(tokenBlueprintIdForPatch);
+
   if (!tbId) return null;
 
   const brandName =
@@ -68,7 +73,9 @@ export function buildTokenBlueprintCardVm(params: {
     asNonEmptyString((tokenBlueprintPatch as any)?.symbol) ||
     asNonEmptyString(selectedTokenBlueprint?.symbol);
 
-  const description = asNonEmptyString((tokenBlueprintPatch as any)?.description);
+  const description = asNonEmptyString(
+    (tokenBlueprintPatch as any)?.description,
+  );
 
   const iconUrl =
     asNonEmptyString((tokenBlueprintPatch as any)?.iconUrl) ||
@@ -88,7 +95,9 @@ export function buildTokenBlueprintCardVm(params: {
   };
 }
 
-export function buildTokenBlueprintCardHandlers(iconUrl?: string): TokenBlueprintCardHandlers {
+export function buildTokenBlueprintCardHandlers(
+  iconUrl?: string,
+): TokenBlueprintCardHandlers {
   return {
     onPreview: () => {
       const url = iconUrl;
@@ -103,7 +112,10 @@ export function buildMintLabels(params: {
 }) {
   const { mint, requestedByName } = params;
 
-  const mintCreatedAtLabel = safeDateTimeLabelJa(mint?.createdAt ?? null, "（未登録）");
+  const mintCreatedAtLabel = safeDateTimeLabelJa(
+    mint?.createdAt ?? null,
+    "（未登録）",
+  );
 
   const mintCreatedByLabel = (() => {
     const name = asNonEmptyString(requestedByName);
@@ -113,9 +125,15 @@ export function buildMintLabels(params: {
     return fallback ? fallback : "（不明）";
   })();
 
-  const mintScheduledBurnDateLabel = safeDateLabelJa(mint?.scheduledBurnDate ?? null, "（未設定）");
+  const mintScheduledBurnDateLabel = safeDateLabelJa(
+    mint?.scheduledBurnDate ?? null,
+    "（未設定）",
+  );
 
-  const mintMintedAtLabel = safeDateTimeLabelJa(mint?.mintedAt ?? null, "（未完了）");
+  const mintMintedAtLabel = safeDateTimeLabelJa(
+    mint?.mintedAt ?? null,
+    "（未完了）",
+  );
 
   const onChainTxSignature = asNonEmptyString(mint?.onChainTxSignature);
 
