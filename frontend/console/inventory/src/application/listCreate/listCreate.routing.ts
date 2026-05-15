@@ -5,7 +5,6 @@ import type {
   ListCreateRouteParams,
   ResolvedListCreateParams,
 } from "./listCreate.types";
-import { s } from "./listCreate.utils";
 
 /**
  * - UI ルートは inventoryId（= inventoryKey: "pb__tb"）のみを正とする
@@ -16,32 +15,32 @@ import { s } from "./listCreate.utils";
 export function resolveListCreateParams(
   raw: ListCreateRouteParams,
 ): ResolvedListCreateParams {
-  const inventoryId = s(raw?.inventoryId);
-
   return {
-    inventoryId: inventoryId || "",
+    inventoryId: raw.inventoryId,
     raw,
   } as ResolvedListCreateParams;
 }
 
 export function canFetchListCreate(p: ResolvedListCreateParams): boolean {
-  return Boolean(s((p as any)?.inventoryId));
+  return Boolean(p.inventoryId);
 }
 
 export function buildListCreateFetchInput(p: ResolvedListCreateParams): {
   inventoryId?: string;
 } {
-  const inventoryId = s((p as any)?.inventoryId);
-  if (!inventoryId) {
+  if (!p.inventoryId) {
     return { inventoryId: undefined };
   }
-  return { inventoryId };
+
+  return {
+    inventoryId: p.inventoryId,
+  };
 }
 
 export function getInventoryIdFromDTO(
   dto: ListCreateDTO | null | undefined,
 ): string {
-  return s((dto as any)?.inventoryId ?? (dto as any)?.InventoryID);
+  return dto?.inventoryId ?? "";
 }
 
 /**
@@ -56,25 +55,21 @@ export function shouldRedirectToInventoryIdRoute(_: {
 }
 
 export function buildInventoryDetailPath(inventoryId: string): string {
-  const id = s(inventoryId);
-  if (!id) return "/inventory";
-  return `/inventory/detail/${encodeURIComponent(id)}`;
+  if (!inventoryId) return "/inventory";
+  return `/inventory/detail/${encodeURIComponent(inventoryId)}`;
 }
 
 export function buildInventoryListCreatePath(inventoryId: string): string {
-  const id = s(inventoryId);
-  if (!id) return "/inventory/list/create";
-  return `/inventory/list/create/${encodeURIComponent(id)}`;
+  if (!inventoryId) return "/inventory/list/create";
+  return `/inventory/list/create/${encodeURIComponent(inventoryId)}`;
 }
 
 export function buildBackPath(p: ResolvedListCreateParams): string {
-  const inventoryId = s((p as any)?.inventoryId);
-  if (inventoryId) return buildInventoryDetailPath(inventoryId);
+  if (p.inventoryId) return buildInventoryDetailPath(p.inventoryId);
   return "/inventory";
 }
 
 export function buildAfterCreatePath(p: ResolvedListCreateParams): string {
-  const inventoryId = s((p as any)?.inventoryId);
-  if (inventoryId) return buildInventoryDetailPath(inventoryId);
+  if (p.inventoryId) return buildInventoryDetailPath(p.inventoryId);
   return "/inventory";
 }

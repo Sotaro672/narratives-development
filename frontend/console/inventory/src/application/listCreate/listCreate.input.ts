@@ -4,7 +4,7 @@ import type {
   ResolvedListCreateParams,
   CreateListPriceRow,
 } from "./listCreate.types";
-import { s, toNumberOrNull } from "./listCreate.utils";
+import { toNumberOrNull } from "./listCreate.utils";
 
 // list create (POST /lists) の input 型（list側のHTTP層）
 import type { CreateListInput } from "../../../../list/src/infrastructure/http/list";
@@ -16,14 +16,16 @@ export function normalizeCreateListPriceRows(
 
   return arr.map((r) => {
     const row = r as {
-      modelId?: unknown;
+      modelId: string;
       price?: unknown;
     };
 
-    const modelId = s(row.modelId);
     const price = toNumberOrNull(row.price);
 
-    return { modelId, price };
+    return {
+      modelId: row.modelId,
+      price,
+    };
   });
 }
 
@@ -35,25 +37,21 @@ export function buildCreateListInput(args: {
   decision: "list" | "hold";
   assigneeId?: string;
 }): CreateListInput {
-  const title = s(args.listingTitle);
-  const desc = s(args.description);
-
   const priceRows = normalizeCreateListPriceRows(args.priceRows);
 
   return {
     // inventoryId(pb__tb) をそのまま送る
-    inventoryId: s(args.params.inventoryId) || undefined,
-    title,
-    description: desc,
+    inventoryId: args.params.inventoryId,
+    title: args.listingTitle,
+    description: args.description,
     decision: args.decision,
-    assigneeId: s(args.assigneeId) || undefined,
+    assigneeId: args.assigneeId,
     priceRows: priceRows as any,
   } as CreateListInput;
 }
 
 export function validateCreateListInput(input: CreateListInput): void {
-  const title = s((input as { title?: unknown })?.title);
-  if (!title) {
+  if (!(input as any).title) {
     throw new Error("タイトルを入力してください。");
   }
 
@@ -66,8 +64,8 @@ export function validateCreateListInput(input: CreateListInput): void {
   }
 
   const missingModelId = rows.find((r) => {
-    const row = r as { modelId?: unknown };
-    return !s(row.modelId);
+    const row = r as { modelId?: string };
+    return !row.modelId;
   });
 
   if (missingModelId) {

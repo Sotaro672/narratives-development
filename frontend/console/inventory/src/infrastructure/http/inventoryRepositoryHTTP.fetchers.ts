@@ -10,22 +10,22 @@ import type {
   TokenBlueprintPatchDTO,
   InventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.types";
-import { s } from "./inventoryRepositoryHTTP.utils";
 
 import {
   normalizeInventoryListRow,
   mapTokenBlueprintPatch,
   mapInventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.mappers";
+
 /**
- * ✅ Inventory 一覧DTO
+ * Inventory 一覧DTO
  * - 戻り値は "必ず tokenBlueprintId を含む" 正規化済み配列
  * - reservedCount / availableStock を落とさず返す
  */
 export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
   const data = (await getInventoryListRaw()) as any;
 
-  // ✅ 互換吸収を減らす：基本は配列を期待。どうしても違う場合のみ items を許容。
+  // 互換吸収を減らす：基本は配列を期待。どうしても違う場合のみ items を許容。
   const rawItems: any[] = Array.isArray(data)
     ? data
     : Array.isArray(data?.items)
@@ -38,21 +38,22 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
 }
 
 /**
- * ✅ TokenBlueprint Patch DTO
+ * TokenBlueprint Patch DTO
  * GET /token-blueprints/{tokenBlueprintId}/patch
  */
 export async function fetchTokenBlueprintPatchDTO(
   tokenBlueprintId: string,
 ): Promise<TokenBlueprintPatchDTO> {
-  const tbId = s(tokenBlueprintId);
-  if (!tbId) throw new Error("tokenBlueprintId is empty");
+  if (!tokenBlueprintId) {
+    throw new Error("tokenBlueprintId is empty");
+  }
 
-  const data = await getTokenBlueprintPatchRaw(tbId);
+  const data = await getTokenBlueprintPatchRaw(tokenBlueprintId);
   return mapTokenBlueprintPatch(data) ?? {};
 }
 
 /**
- * ✅ Inventory Detail DTO
+ * Inventory Detail DTO
  * GET /inventory/{inventoryId}
  *
  * NOTE:
@@ -62,9 +63,10 @@ export async function fetchTokenBlueprintPatchDTO(
 export async function fetchInventoryDetailDTO(
   inventoryId: string,
 ): Promise<InventoryDetailDTO> {
-  const id = s(inventoryId);
-  if (!id) throw new Error("inventoryId is empty");
+  if (!inventoryId) {
+    throw new Error("inventoryId is empty");
+  }
 
-  const data = await getInventoryDetailRaw(id);
-  return mapInventoryDetailDTO(data, id);
+  const data = await getInventoryDetailRaw(inventoryId);
+  return mapInventoryDetailDTO(data, inventoryId);
 }

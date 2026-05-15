@@ -3,10 +3,10 @@
 import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
 import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
 
-// ✅ Firebase Auth（uid 取得）
+// Firebase Auth（uid 取得）
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-// ✅ list create (POST /lists)
+// list create (POST /lists)
 import {
   createListHTTP,
   type CreateListInput,
@@ -19,14 +19,13 @@ import {
   buildCreateListInput,
   validateCreateListInput,
 } from "./listCreate.input";
-import { s } from "./listCreate.utils";
 import {
   uploadListImagesPolicyB,
   _internal_getListIdFromListDTO,
 } from "./listCreate.images";
 
 /**
- * ✅ ListCreateDTO を取得する（Hook からはこれだけ呼ぶ）
+ * ListCreateDTO を取得する（Hook からはこれだけ呼ぶ）
  * - API から raw を取得し、ListCreateDTO として扱う（ListCreateDTO のみを正）
  */
 export async function loadListCreateDTOFromParams(
@@ -40,7 +39,7 @@ export async function loadListCreateDTOFromParams(
 }
 
 /**
- * ✅ list 作成（POST /lists） + 画像（Policy B）
+ * list 作成（POST /lists） + 画像（Policy B）
  */
 export async function createListWithImages(args: {
   params: ResolvedListCreateParams;
@@ -60,7 +59,7 @@ export async function createListWithImages(args: {
 
   // 1) build + validate
   const input: CreateListInput = buildCreateListInput({
-    params: args.params, // ✅ inventoryId(pb__tb) を保持
+    params: args.params, // inventoryId(pb__tb) を保持
     listingTitle: args.listingTitle,
     description: args.description,
     priceRows: args.priceRows,
@@ -73,11 +72,9 @@ export async function createListWithImages(args: {
   // 2) create list
   const created = await createListHTTP(input);
 
-  const listId = s(
-    _internal_getListIdFromListDTO(
-      created,
-      s((input as any)?.id) || s((input as any)?.inventoryId),
-    ),
+  const listId = _internal_getListIdFromListDTO(
+    created,
+    (input as any).id || (input as any).inventoryId,
   );
 
   if (!listId) {
@@ -90,7 +87,7 @@ export async function createListWithImages(args: {
       listId,
       files: images,
       mainImageIndex,
-      createdBy: s(auth.currentUser?.uid) || undefined,
+      createdBy: auth.currentUser?.uid,
     });
   }
 

@@ -13,8 +13,6 @@ import {
   type ListDTO,
 } from "../../../../list/src/infrastructure/http/list";
 
-import { s } from "./listCreate.utils";
-
 export function dedupeFiles(prev: File[], add: File[]): File[] {
   const exists = new Set(
     prev.map((f) => `${f.name}__${f.size}__${f.lastModified}`),
@@ -28,7 +26,7 @@ export function dedupeFiles(prev: File[], add: File[]): File[] {
 }
 
 function getListIdFromListDTO(dto: ListDTO, fallback = ""): string {
-  return s((dto as any)?.id) || s(fallback);
+  return (dto as any).id || fallback;
 }
 
 function createImageId(): string {
@@ -43,9 +41,7 @@ function createImageId(): string {
 }
 
 function safeFileName(file: File): string {
-  const raw = s(file.name) || "image";
-
-  return raw
+  return file.name
     .replace(/[\\/:*?"<>|#%{}^~[\]`]/g, "_")
     .replace(/\s+/g, "_")
     .slice(0, 160);
@@ -56,8 +52,8 @@ function buildListImageObjectPath(args: {
   imageId: string;
   file: File;
 }): string {
-  const listId = s(args.listId);
-  const imageId = s(args.imageId);
+  const listId = args.listId;
+  const imageId = args.imageId;
   const name = safeFileName(args.file);
 
   if (!listId) throw new Error("invalid_list_id");
@@ -75,8 +71,8 @@ async function uploadFileToFirebaseStorage(args: {
   objectPath: string;
   downloadURL: string;
 }> {
-  const listId = s(args.listId);
-  const imageId = s(args.imageId);
+  const listId = args.listId;
+  const imageId = args.imageId;
   const file = args.file;
 
   if (!listId) throw new Error("invalid_list_id");
@@ -136,7 +132,7 @@ export async function uploadListImagesPolicyB(args: {
   registered: Array<{ imageId: string; displayOrder: number }>;
   primaryImageId?: string;
 }> {
-  const listId = s(args.listId);
+  const listId = args.listId;
   const files = Array.isArray(args.files) ? args.files : [];
   const mainImageIndex = Number.isFinite(Number(args.mainImageIndex))
     ? Number(args.mainImageIndex)
@@ -159,7 +155,7 @@ export async function uploadListImagesPolicyB(args: {
     throw new Error("メイン画像が選択されていません。");
   }
 
-  const uid = s(args.createdBy) || s(auth.currentUser?.uid) || "system";
+  const uid = args.createdBy || auth.currentUser?.uid || "system";
   const now = new Date().toISOString();
 
   const registered: Array<{ imageId: string; displayOrder: number }> = [];

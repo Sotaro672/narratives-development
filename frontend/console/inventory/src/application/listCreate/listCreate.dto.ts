@@ -2,7 +2,6 @@
 
 import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
 import type { PriceRow } from "./listCreate.types";
-import { s } from "./listCreate.utils";
 
 export function extractDisplayStrings(dto: ListCreateDTO | null): {
   productBrandName: string;
@@ -11,10 +10,10 @@ export function extractDisplayStrings(dto: ListCreateDTO | null): {
   tokenName: string;
 } {
   return {
-    productBrandName: s(dto?.productBrandName),
-    productName: s(dto?.productName),
-    tokenBrandName: s(dto?.tokenBrandName),
-    tokenName: s(dto?.tokenName),
+    productBrandName: dto?.productBrandName ?? "",
+    productName: dto?.productName ?? "",
+    tokenBrandName: dto?.tokenBrandName ?? "",
+    tokenName: dto?.tokenName ?? "",
   };
 }
 
@@ -23,45 +22,32 @@ export function extractDisplayStrings(dto: ListCreateDTO | null): {
  * - 期待値: inventory/application の PriceRow（listCreate.types.ts）を正とする
  * - 識別子は modelId を正とする
  * - 並び順は displayOrder（未設定は null を保持）
- * - 名揺れ補完はしない（Size/Color/Index での補完はしない）
+ * - 名揺れ補完はしない
  */
 export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
-  const rowsAny: any[] = Array.isArray((dto as any)?.priceRows)
-    ? ((dto as any).priceRows as any[])
-    : Array.isArray((dto as any)?.PriceRows)
-      ? ((dto as any).PriceRows as any[])
-      : [];
+  const rows = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
 
-  return rowsAny.flatMap((r: any) => {
-    const modelId = s(r?.modelId ?? r?.ModelId);
-    if (!modelId) return [];
-
-    const displayOrderRaw = r?.displayOrder ?? r?.DisplayOrder;
+  return rows.map((r: any) => {
+    const displayOrderRaw = r.displayOrder;
     const displayOrder =
       displayOrderRaw === null || displayOrderRaw === undefined
         ? null
         : Number(displayOrderRaw);
 
-    const size = s(r?.size ?? r?.Size) || "-";
-    const color = s(r?.color ?? r?.Color) || "-";
-
-    const stockRaw = Number(r?.stock ?? r?.Stock ?? 0);
+    const stockRaw = Number(r.stock ?? 0);
     const stock = Number.isFinite(stockRaw) ? stockRaw : 0;
 
-    const rgb = r?.rgb ?? r?.RGB;
-    const price = r?.price ?? r?.Price;
-
     const row: PriceRow = {
-      modelId,
+      modelId: r.modelId,
       displayOrder,
-      size,
-      color,
+      size: r.size,
+      color: r.color,
       stock,
-      rgb: rgb as any,
-      price: price === undefined ? null : (price as any),
+      rgb: r.rgb as any,
+      price: r.price === undefined ? null : (r.price as any),
     };
 
-    return [row];
+    return row;
   });
 }
 

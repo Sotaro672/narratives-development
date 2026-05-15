@@ -1,9 +1,5 @@
 // frontend/console/inventory/src/application/listCreate/listCreate.utils.ts
 
-export function s(v: unknown): string {
-  return String(v ?? "").trim();
-}
-
 export function toNumberOrNull(v: unknown): number | null {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(String(v).trim());
