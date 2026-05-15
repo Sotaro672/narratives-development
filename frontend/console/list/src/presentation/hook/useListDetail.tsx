@@ -2,35 +2,26 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 // ✅ PriceCard hook
 import { usePriceCard } from "../../../../list/src/presentation/hook/usePriceCard";
 
 // ✅ 型は inventory/application を正とする（依存方向を正す）
-import type { PriceRow } from "../../../../inventory/src/application/listCreate/priceCard.types";
+import type { PriceRow } from "../../../../inventory/src/application/listCreate/listCreate.types";
 
-// Firebase Auth / Storage
-import {
-  auth,
-  storage,
-} from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+// Firebase Auth
+import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // ✅ internal hooks（presentation 層内で完結）
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
 import { useCancelledRef } from "./internal/useCancelledRef";
 
-// ✅ listImage APIs（削除 + 追加用）
-import {
-  deleteListImageHTTP,
-  saveListImageFromFirebaseStorageHTTP,
-} from "../../infrastructure/http/list";
+import { saveListDetailChanges } from "../../application/listDetail/listDetailSave.usecase";
 
 // ✅ それ以外は service へ
 import {
   resolveListDetailParams,
   loadListDetailDTO,
-  updateListDetailDTO,
   deriveListDetail,
   computeListDetailPageTitle,
   normalizeListingDecisionNorm,
@@ -40,8 +31,6 @@ import {
   type ListDetailRouteParams,
   type ListDetailDTO,
   s,
-  // ✅ 変更：保存前後差分は「確実に存在する imageUrls」を正にする
-  normalizeImageUrls,
 } from "../../application/listDetailService";
 
 export type { ListingDecisionNorm };
@@ -95,9 +84,9 @@ export type UseListDetailResult = {
   // =========================
   // decision/status (view/edit)
   // =========================
-  decision: "list" | "hold" | "" | string; // raw(view)
-  decisionNorm: ListingDecisionNorm; // normalized(view)
-  draftDecision: ListingDecisionNorm; // normalized(edit)
+  decision: "list" | "hold" | "" | string;
+  decisionNorm: ListingDecisionNorm;
+  draftDecision: ListingDecisionNorm;
   setDraftDecision: React.Dispatch<React.SetStateAction<ListingDecisionNorm>>;
   onToggleDecision: (next: ListingDecisionNorm) => void;
 
@@ -115,8 +104,8 @@ export type UseListDetailResult = {
   // =========================
   // images (view/edit)
   // =========================
-  imageUrls: string[]; // effective (view or edit)
-  draftImages: DraftImage[]; // edit 用（UI-only）
+  imageUrls: string[];
+  draftImages: DraftImage[];
   onAddImages: (files: FileList | null) => void;
   onRemoveImageAt: (idx: number) => void;
 
@@ -126,8 +115,8 @@ export type UseListDetailResult = {
   // =========================
   // price (PriceCard 用)
   // =========================
-  priceRows: PriceRow[]; // view
-  draftPriceRows: PriceRow[]; // edit
+  priceRows: PriceRow[];
+  draftPriceRows: PriceRow[];
   setDraftPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
   onChangePrice: (index: number, price: number | null, row: PriceRow) => void;
 
@@ -170,139 +159,6 @@ function revokeDraftBlobUrls(items: DraftImage[]) {
       }
     }
   }
-}
-
-function createImageId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function safeFileName(file: File): string {
-  const raw = s(file?.name) || "image";
-  return raw
-    .replace(/[\\/:*?"<>|#%{}^~[\]`]/g, "_")
-    .replace(/\s+/g, "_")
-    .slice(0, 160);
-}
-
-function buildListImageObjectPath(args: {
-  listId: string;
-  imageId: string;
-  file: File;
-}): string {
-  const listId = s(args.listId);
-  const imageId = s(args.imageId);
-  const name = safeFileName(args.file);
-
-  if (!listId) throw new Error("invalid_list_id");
-  if (!imageId) throw new Error("invalid_image_id");
-
-  return `lists/${listId}/images/${imageId}/${name}`;
-}
-
-async function uploadFileToFirebaseStorage(args: {
-  listId: string;
-  imageId: string;
-  file: File;
-}): Promise<{
-  imageId: string;
-  objectPath: string;
-  downloadURL: string;
-}> {
-  const listId = s(args.listId);
-  const imageId = s(args.imageId);
-  const file = args.file;
-
-  if (!listId) throw new Error("invalid_list_id");
-  if (!imageId) throw new Error("invalid_image_id");
-  if (!file) throw new Error("invalid_file");
-
-  const objectPath = buildListImageObjectPath({
-    listId,
-    imageId,
-    file,
-  });
-
-  const storageRef = ref(storage, objectPath);
-
-  const snapshot = await uploadBytes(storageRef, file, {
-    contentType: file.type || "application/octet-stream",
-  });
-
-  const downloadURL = await getDownloadURL(snapshot.ref);
-
-  if (!downloadURL) {
-    throw new Error("firebase_storage_download_url_empty");
-  }
-
-  return {
-    imageId,
-    objectPath,
-    downloadURL,
-  };
-}
-
-function extractImageIdFromUrlOrObjectPath(args: {
-  listId: string;
-  raw: string;
-}): string {
-  const listId = s(args.listId);
-  const raw = s(args.raw);
-  if (!listId || !raw) return "";
-
-  if (!raw.includes("/")) return raw;
-
-  const tryExtractFromPath = (pathLike: string): string => {
-    const path = s(pathLike).replace(/^\/+/, "");
-    if (!path) return "";
-
-    const parts = path.split("/").map((x) => s(x)).filter(Boolean);
-
-    const i = parts.findIndex(
-      (x, idx) =>
-        x === "lists" &&
-        parts[idx + 1] === listId &&
-        parts[idx + 2] === "images" &&
-        Boolean(parts[idx + 3]),
-    );
-
-    if (i >= 0) {
-      return s(parts[i + 3]);
-    }
-
-    return "";
-  };
-
-  const direct = tryExtractFromPath(raw);
-  if (direct) return direct;
-
-  try {
-    const u = new URL(raw);
-
-    const objectPathParam = s(u.searchParams.get("name"));
-    const fromNameParam = tryExtractFromPath(objectPathParam);
-    if (fromNameParam) return fromNameParam;
-
-    const pathname = decodeURIComponent(s(u.pathname));
-    const fromPathname = tryExtractFromPath(pathname);
-    if (fromPathname) return fromPathname;
-
-    const marker = "/o/";
-    const markerIndex = pathname.indexOf(marker);
-    if (markerIndex >= 0) {
-      const encodedObjectPath = pathname.slice(markerIndex + marker.length);
-      const objectPath = decodeURIComponent(encodedObjectPath);
-      const fromObjectPath = tryExtractFromPath(objectPath);
-      if (fromObjectPath) return fromObjectPath;
-    }
-  } catch {
-    // noop
-  }
-
-  return "";
 }
 
 // ==============================
@@ -517,17 +373,16 @@ export function useListDetail(): UseListDetailResult {
 
   const updatedAtRaw = s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
 
-  // ✅ (1) moved to service
   const createdAt = React.useMemo(
     () => formatYMDHM(createdAtRaw),
     [createdAtRaw],
   );
+
   const updatedAt = React.useMemo(
     () => formatYMDHM(updatedAtRaw),
     [updatedAtRaw],
   );
 
-  // ✅ (2) moved to service
   const decisionNorm = React.useMemo(
     () => normalizeListingDecisionNorm(decision),
     [decision],
@@ -631,6 +486,7 @@ export function useListDetail(): UseListDetailResult {
   // effective urls (view/edit)
   const effectiveImageUrls = React.useMemo(() => {
     if (isEdit) return img.imageUrls;
+
     return (Array.isArray(viewImageUrls) ? viewImageUrls : [])
       .map((u) => s(u))
       .filter(Boolean);
@@ -650,25 +506,22 @@ export function useListDetail(): UseListDetailResult {
       if (!isEdit) return;
 
       setDraftPriceRows((prev) => {
-        const next = Array.isArray(prev) ? [...prev] : [];
-        if (!next[index]) return prev;
+        const src = Array.isArray(prev) ? prev : [];
 
-        next[index] = {
-          ...next[index],
-          price,
-          size: next[index].size,
-          color: next[index].color,
-          rgb: (next[index] as any).rgb,
-          stock: (next[index] as any).stock,
-        };
+        return src.map((item, i) => {
+          if (i !== index) return item;
 
-        return next;
+          return {
+            ...(item as any),
+            price,
+          } as PriceRow;
+        });
       });
     },
     [isEdit],
   );
 
-  // Save -> application service only
+  // Save -> application usecase
   const onSave = React.useCallback(
     async (payload?: any) => {
       const id = s(listId);
@@ -698,195 +551,29 @@ export function useListDetail(): UseListDetailResult {
       setSaveError("");
 
       try {
-        // ============================================================
-        // ✅ 新規画像の追加
-        // - Firebase Storage へ直接 uploadBytes
-        // - getDownloadURL() を downloadURL として保存
-        // - /lists/{listId}/images/{imageId} record に downloadURL / objectPath を登録
-        // ============================================================
-        const prevUrls = normalizeImageUrls(dto);
-        const newItems = (Array.isArray(img.draftImages) ? img.draftImages : []).filter(
-          (x) => x?.isNew && x?.file,
-        );
-
-        const uploadedItems: Array<{
-          imageId: string;
-          downloadURL: string;
-          objectPath: string;
-          displayOrder: number;
-        }> = [];
-
-        if (newItems.length > 0) {
-          for (let i = 0; i < newItems.length; i++) {
-            const x = newItems[i]!;
-            const file = x.file as File;
-            const displayOrder = prevUrls.length + i;
-            const imageId = createImageId();
-
-            const uploaded = await uploadFileToFirebaseStorage({
-              listId: id,
-              imageId,
-              file,
-            });
-
-            const saved = await saveListImageFromFirebaseStorageHTTP({
-              listId: id,
-              id: uploaded.imageId,
-              downloadURL: uploaded.downloadURL,
-              objectPath: uploaded.objectPath,
-              size: file.size,
-              displayOrder,
-              fileName: file.name,
-              contentType: file.type || "application/octet-stream",
-              createdBy: uid,
-              createdAt: new Date().toISOString(),
-            });
-
-            const savedDownloadURL =
-              s((saved as any)?.downloadURL) ||
-              s((saved as any)?.downloadUrl) ||
-              s((saved as any)?.download_url) ||
-              s((saved as any)?.url) ||
-              s((saved as any)?.imageUrl) ||
-              uploaded.downloadURL;
-
-            uploadedItems.push({
-              imageId: uploaded.imageId,
-              downloadURL: savedDownloadURL,
-              objectPath: uploaded.objectPath,
-              displayOrder,
-            });
-
-            // ✅ draft の該当要素を downloadURL に置換して isNew=false 化
-            img.setDraftImages((prev) => {
-              const arr = Array.isArray(prev) ? [...prev] : [];
-              const idx = arr.findIndex(
-                (y) =>
-                  y?.isNew &&
-                  y?.file &&
-                  fileKey(y.file as File) === fileKey(file),
-              );
-              if (idx < 0) return prev;
-
-              const before = arr[idx];
-              if (before?.url?.startsWith("blob:")) {
-                try {
-                  URL.revokeObjectURL(before.url);
-                } catch {
-                  // noop
-                }
-              }
-
-              arr[idx] = { url: savedDownloadURL, isNew: false };
-              return arr;
-            });
-          }
-        }
-
-        // ============================================================
-        // ✅ 画像削除の差分反映（2枚→1枚 等）
-        // - before は listImages に依存せず、確実に返る imageUrls を正とする
-        // - Firebase Storage URL の場合は objectPath から imageId を抽出して削除する
-        // ============================================================
-        const beforeUrls = normalizeImageUrls(dto);
-        const uploadedUrls = uploadedItems
-          .map((x) => s(x.downloadURL))
-          .filter(Boolean);
-
-        const afterUrls = (Array.isArray(img.draftImages) ? img.draftImages : [])
-          .filter((x) => !x?.isNew)
-          .map((x) => s(x?.url))
-          .filter(Boolean)
-          .concat(uploadedUrls);
-
-        const removedUrls = beforeUrls.filter((u) => !afterUrls.includes(u));
-
-        // eslint-disable-next-line no-console
-        console.log("[listImage] diff", {
-          listId: id,
-          before: beforeUrls,
-          after: afterUrls,
-          removed: removedUrls,
-        });
-
-        for (const u of removedUrls) {
-          const imageId =
-            extractImageIdFromUrlOrObjectPath({ listId: id, raw: u }) || s(u);
-          if (!imageId) continue;
-
-          await deleteListImageHTTP({ listId: id, imageId });
-        }
-
-        // ============================================================
-        // ✅ primary image 設定
-        // - backend の List.ImageID は primary imageId
-        // - objectPath ではなく images subcollection docID を渡す
-        // ============================================================
-        const effectiveAfterUrls = afterUrls;
-        const selectedUrl = s(effectiveAfterUrls[mainImageIndex]);
-        const uploadedPrimary = uploadedItems.find(
-          (x) => s(x.downloadURL) === selectedUrl,
-        );
-
-        if (uploadedPrimary?.imageId) {
-          await saveListImageFromFirebaseStorageHTTP;
-        }
-
-        if (uploadedPrimary?.imageId) {
-          // 新規アップロード画像が primary の場合のみここで確実に設定できる。
-          // 既存画像の primary 変更は、URL から imageId を復元できる場合のみ設定する。
-          await import("../../infrastructure/http/list").then((mod) =>
-            mod.setListPrimaryImageHTTP({
-              listId: id,
-              imageId: uploadedPrimary.imageId,
-              updatedBy: uid,
-              now: new Date().toISOString(),
-            }),
-          );
-        } else if (selectedUrl) {
-          const imageId = extractImageIdFromUrlOrObjectPath({
-            listId: id,
-            raw: selectedUrl,
-          });
-
-          if (imageId) {
-            await import("../../infrastructure/http/list").then((mod) =>
-              mod.setListPrimaryImageHTTP({
-                listId: id,
-                imageId,
-                updatedBy: uid,
-                now: new Date().toISOString(),
-              }),
-            );
-          }
-        }
-
-        // ============================================================
-        // list 本体の更新
-        // ============================================================
-        await updateListDetailDTO({
-          listId: id,
-          title: nextTitle,
-          description: nextDesc,
-
-          // ✅ prices ではなく priceRows を渡す（repository 正規化前提）
-          priceRows: Array.isArray(draftPriceRows) ? draftPriceRows : [],
-
-          decision: nextDecision,
-          assigneeId: s((dto as any)?.assigneeId) || undefined,
-          updatedBy: uid,
-        });
-
-        const fresh = await loadListDetailDTO({
+        const result = await saveListDetailChanges({
           listId: id,
           inventoryIdHint: inventoryId,
+          currentDTO: dto,
+
+          title: nextTitle,
+          description: nextDesc,
+          decision: nextDecision,
+
+          assigneeId: s((dto as any)?.assigneeId) || undefined,
+          updatedBy: uid,
+
+          draftPriceRows: Array.isArray(draftPriceRows) ? draftPriceRows : [],
+          draftImages: Array.isArray(img.draftImages) ? img.draftImages : [],
+
+          mainImageIndex,
         });
 
         if (cancelledRef.current) return;
 
         revokeDraftBlobUrls(img.draftImages);
 
-        setDTO(fresh);
+        setDTO(result.dto);
         setIsEdit(false);
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);
@@ -907,7 +594,6 @@ export function useListDetail(): UseListDetailResult {
       draftDescription,
       draftPriceRows,
       img.draftImages,
-      img.setDraftImages,
       mainImageIndex,
       cancelledRef,
     ],

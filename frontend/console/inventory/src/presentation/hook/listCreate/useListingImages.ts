@@ -53,13 +53,6 @@ export function useListingImages(): {
 
       const next = dedupeFiles(images, files);
       setImages(next);
-
-      // eslint-disable-next-line no-console
-      console.log("[inventory/listImage] dropped", {
-        addedCount: files.length,
-        totalCount: next.length,
-        names: next.slice(0, 6).map((f) => f.name),
-      });
     },
     [images],
   );
@@ -92,10 +85,6 @@ export function useListingImages(): {
 
   const clearImages = React.useCallback(() => {
     setImages([]);
-
-    // eslint-disable-next-line no-console
-    console.log("[inventory/listImage] cleared", { totalCount: 0 });
-
     setMainImageIndex(0);
   }, []);
 

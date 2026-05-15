@@ -1,6 +1,11 @@
-//frontend\console\list\src\infrastructure\http\list\authToken.ts
+// frontend\console\list\src\infrastructure\http\list\authToken.ts
+
 import { auth } from "../../../../../shell/src/auth/infrastructure/config/firebaseClient";
-import { s } from "./string";
+
+function toText(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  return typeof v === "string" ? v.trim() : String(v).trim();
+}
 
 export async function getIdToken(): Promise<string> {
   const u = auth.currentUser;
@@ -13,5 +18,5 @@ export async function getIdToken(): Promise<string> {
  */
 export function getCurrentUserUid(): string {
   const u = auth.currentUser;
-  return s(u?.uid);
+  return toText(u?.uid);
 }

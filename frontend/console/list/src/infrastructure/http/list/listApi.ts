@@ -1,4 +1,5 @@
 // frontend/console/list/src/infrastructure/http/list/listApi.ts
+
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import type {
   CreateListInput,
@@ -8,18 +9,26 @@ import type {
   UpdateListInput,
 } from "./types";
 import { requestJSON } from "./httpClient";
-import { normalizeListDocId } from "./ids";
-import { extractItemsArrayFromAny } from "./extractors";
 import {
   buildCreateListPayloadArray,
   buildUpdateListPayloadArray,
 } from "./payloads";
-import { normalizeListImageUrls } from "./listImage";
 
 const toStringSafe = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
   if (value == null) return "";
   return String(value).trim();
+};
+
+const toListId = (value: unknown): string => toStringSafe(value);
+
+const normalizeImageUrlsFromListDTO = (dto: ListDTO): string[] => {
+  const imageUrls = (dto as any)?.imageUrls;
+  if (!Array.isArray(imageUrls)) return [];
+
+  return imageUrls
+    .map((url) => toStringSafe(url))
+    .filter(Boolean);
 };
 
 /**
@@ -47,7 +56,7 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
  * PUT /lists/{id}
  */
 export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDTO> {
-  const listId = normalizeListDocId(input?.listId);
+  const listId = toListId(input?.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payloadArray = buildUpdateListPayloadArray(input);
@@ -68,27 +77,36 @@ export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDT
 /**
  * ✅ List lists
  * GET /lists
+ *
+ * 正:
+ * - GET /lists は ListDTO[] を返す
+ * - items / Items / data の名揺れ吸収は廃止
  */
 export async function fetchListsHTTP(): Promise<ListDTO[]> {
-  const json = await requestJSON<any>({
+  const json = await requestJSON<ListDTO[]>({
     method: "GET",
     path: "/lists",
   });
 
-  const items = extractItemsArrayFromAny(json);
-  return items as ListDTO[];
+  return Array.isArray(json) ? json : [];
 }
 
 /**
+ * ✅ Get list detail
  * GET /lists/{id}
+ *
+ * 正:
+ * - backend の GET /lists/{id} response を正とする
+ * - imageUrls: string[] を表示用画像URLの正とする
+ * - GCS / signed URL / bucket / storagePath 前提の補正はしない
  */
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
-  const id = normalizeListDocId(listId);
+  const id = toListId(listId);
   if (!id) {
     throw new Error("invalid_list_id");
   }
 
-  const dto = await requestJSON<ListDTO>({
+  return await requestJSON<ListDTO>({
     method: "GET",
     path: `/lists/${encodeURIComponent(id)}`,
     debug: {
@@ -97,8 +115,6 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
       method: "GET",
     },
   });
-
-  return dto;
 }
 
 /**
@@ -108,14 +124,12 @@ export async function fetchListDetailHTTP(args: {
   listId: string;
   inventoryIdHint?: string;
 }): Promise<ListDTO> {
-  const listId = normalizeListDocId(args.listId);
+  const listId = toListId(args.listId);
   if (!listId) {
     throw new Error("invalid_list_id");
   }
 
-  const dto = await fetchListByIdHTTP(listId);
-
-  return dto;
+  return await fetchListByIdHTTP(listId);
 }
 
 /**
@@ -124,7 +138,7 @@ export async function fetchListDetailHTTP(args: {
 export async function fetchListAggregateHTTP(
   listId: string,
 ): Promise<ListAggregateDTO> {
-  const id = normalizeListDocId(listId);
+  const id = toListId(listId);
   if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListAggregateDTO>({
@@ -135,11 +149,15 @@ export async function fetchListAggregateHTTP(
 
 /**
  * GET /lists/{id}/images
+ *
+ * 補足:
+ * - 画像表示は GET /lists/{id} の imageUrls を正とする
+ * - この関数は画像レコード操作が必要な場合だけ使う
  */
 export async function fetchListImagesHTTP(
   listId: string,
 ): Promise<ListImageDTO[]> {
-  const id = normalizeListDocId(listId);
+  const id = toListId(listId);
   if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListImageDTO[]>({
@@ -149,21 +167,21 @@ export async function fetchListImagesHTTP(
 }
 
 /**
- * ✅ listImage の「表示用URL配列」を取得
+ * ✅ list detail 表示用URL配列を取得
  *
- * Firebase Storage 直接アップロード後は、
- * ListImageDTO 側の downloadURL / url / imageUrl などを
- * normalizeListImageUrls 側で吸収して表示用URLへ正規化する。
+ * 正:
+ * - GET /lists/{id} response の imageUrls: string[] をそのまま使う
+ * - GCS / signed URL / bucket / storagePath 由来の組み立てはしない
  */
 export async function fetchListImageUrlsHTTP(args: {
   listId: string;
   primaryImageId?: string;
 }): Promise<string[]> {
-  const listId = normalizeListDocId(args.listId);
+  const listId = toListId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
-  const imgs = await fetchListImagesHTTP(listId);
-  return normalizeListImageUrls(imgs, args.primaryImageId);
+  const dto = await fetchListByIdHTTP(listId);
+  return normalizeImageUrlsFromListDTO(dto);
 }
 
 // ==========================================================
@@ -173,20 +191,16 @@ export async function fetchListImageUrlsHTTP(args: {
 /**
  * Firebase Storage へ frontend から直接アップロード済みの listImage を backend に登録する。
  *
- * 旧方式:
- * - POST /lists/{listId}/images/signed-url
- * - signedUrl へ PUT
- * - bucket/objectPath を POST /lists/{listId}/images
- *
- * 新方式:
+ * 正:
  * - frontend で Firebase Storage へ直接 uploadBytes / uploadBytesResumable
- * - getDownloadURL で downloadURL を取得
- * - downloadURL / objectPath を POST /lists/{listId}/images に登録
+ * - getDownloadURL で取得した URL を url として送る
+ * - Firebase Storage object path を objectPath として送る
+ * - GCS / signed URL / bucket / storagePath / downloadURL alias は使わない
  */
 export async function saveListImageFromFirebaseStorageHTTP(args: {
   listId: string;
   id: string;
-  downloadURL: string;
+  url: string;
   objectPath: string;
   size: number;
   displayOrder: number;
@@ -195,52 +209,36 @@ export async function saveListImageFromFirebaseStorageHTTP(args: {
   createdBy?: string;
   createdAt?: string;
 }): Promise<ListImageDTO> {
-  const listId = normalizeListDocId(args.listId);
+  const listId = toListId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const id = toStringSafe(args.id);
-  const downloadURL = toStringSafe(args.downloadURL);
-  const objectPath = String(args.objectPath ?? "").replace(/^\/+/, "");
+  const url = toStringSafe(args.url);
+  const objectPath = toStringSafe(args.objectPath).replace(/^\/+/, "");
   const fileName = toStringSafe(args.fileName);
   const contentType = toStringSafe(args.contentType);
+  const createdBy = toStringSafe(args.createdBy);
+  const createdAt = toStringSafe(args.createdAt);
 
-  if (!id || !downloadURL || !objectPath) {
+  if (!id || !url || !objectPath) {
     throw new Error("invalid_list_image_payload");
   }
 
-  const payload: any = {
+  const payload: Record<string, any> = {
     id,
-
-    // Firebase Storage getDownloadURL() の戻り値
-    downloadURL,
-    downloadUrl: downloadURL,
-    download_url: downloadURL,
-
-    // 移行期間・表示側互換用
-    url: downloadURL,
-    imageUrl: downloadURL,
-    image_url: downloadURL,
-
-    // Firebase Storage object path
+    url,
     objectPath,
-    object_path: objectPath,
-
     size: Number(args.size ?? 0),
     displayOrder: Number(args.displayOrder ?? 0),
-    display_order: Number(args.displayOrder ?? 0),
-
     fileName: fileName || undefined,
-    file_name: fileName || undefined,
-
     contentType: contentType || undefined,
-    content_type: contentType || undefined,
-
-    createdBy: args.createdBy ? toStringSafe(args.createdBy) : undefined,
-    created_by: args.createdBy ? toStringSafe(args.createdBy) : undefined,
-
-    createdAt: args.createdAt ? toStringSafe(args.createdAt) : undefined,
-    created_at: args.createdAt ? toStringSafe(args.createdAt) : undefined,
+    createdBy: createdBy || undefined,
+    createdAt: createdAt || undefined,
   };
+
+  for (const key of Object.keys(payload)) {
+    if (payload[key] === undefined) delete payload[key];
+  }
 
   return await requestJSON<ListImageDTO>({
     method: "POST",
@@ -264,7 +262,7 @@ export async function setListPrimaryImageHTTP(args: {
   updatedBy?: string;
   now?: string;
 }): Promise<ListDTO> {
-  const listId = normalizeListDocId(args.listId);
+  const listId = toListId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
@@ -303,11 +301,15 @@ function extractImageIdForDelete(args: {
   const raw = toStringSafe(args.imageIdOrObjectPathOrUrl);
   if (!listId || !raw) return "";
 
-  if (!raw.includes("/")) return raw;
+  if (!raw.includes("/") && !raw.includes("?")) return raw;
 
   {
-    const p = raw.replace(/^\/+/, "");
-    const parts = p.split("/").map((x) => toStringSafe(x)).filter(Boolean);
+    const objectPath = raw.replace(/^\/+/, "");
+    const parts = objectPath
+      .split("/")
+      .map((x) => toStringSafe(x))
+      .filter(Boolean);
+
     if (
       parts.length >= 4 &&
       parts[0] === "lists" &&
@@ -319,27 +321,9 @@ function extractImageIdForDelete(args: {
   }
 
   try {
-    const u = new URL(raw);
+    const url = new URL(raw);
+    const decodedPathname = decodeURIComponent(toStringSafe(url.pathname));
 
-    const fromNameParam = toStringSafe(u.searchParams.get("name"));
-    if (fromNameParam) {
-      const parts = fromNameParam
-        .replace(/^\/+/, "")
-        .split("/")
-        .map((x) => toStringSafe(x))
-        .filter(Boolean);
-
-      if (
-        parts.length >= 4 &&
-        parts[0] === "lists" &&
-        parts[1] === listId &&
-        parts[2] === "images"
-      ) {
-        return toStringSafe(parts[3]);
-      }
-    }
-
-    const decodedPathname = decodeURIComponent(toStringSafe(u.pathname));
     const marker = "/o/";
     const markerIndex = decodedPathname.indexOf(marker);
 
@@ -361,16 +345,19 @@ function extractImageIdForDelete(args: {
       }
     }
 
-    const p = decodedPathname.replace(/^\/+/, "");
-    const parts = p.split("/").map((x) => toStringSafe(x)).filter(Boolean);
+    const pathParts = decodedPathname
+      .replace(/^\/+/, "")
+      .split("/")
+      .map((x) => toStringSafe(x))
+      .filter(Boolean);
 
+    const listsIndex = pathParts.indexOf("lists");
     if (
-      parts.length >= 5 &&
-      parts[1] === "lists" &&
-      parts[2] === listId &&
-      parts[3] === "images"
+      listsIndex >= 0 &&
+      pathParts[listsIndex + 1] === listId &&
+      pathParts[listsIndex + 2] === "images"
     ) {
-      return toStringSafe(parts[4]);
+      return toStringSafe(pathParts[listsIndex + 3]);
     }
   } catch {
     // noop
@@ -383,7 +370,7 @@ export async function deleteListImageHTTP(args: {
   listId: string;
   imageId: string;
 }): Promise<any> {
-  const listId = normalizeListDocId(args.listId);
+  const listId = toListId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const imageId = extractImageIdForDelete({

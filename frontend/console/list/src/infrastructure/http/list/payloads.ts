@@ -1,9 +1,7 @@
-//frontend\console\list\src\infrastructure\http\list\payloads.ts
+// frontend\console\list\src\infrastructure\http\list\payloads.ts
+
 import type { CreateListInput, UpdateListInput } from "./types";
 import { getCurrentUserUid } from "./authToken";
-import { normalizeListDocId } from "./ids";
-import { s } from "./string";
-import { toNumberOrNull } from "./number";
 
 /**
  * ✅ create 用の prices を正規化する（modelId + price ONLY）
@@ -17,18 +15,18 @@ export function normalizePricesForBackend(
   if (!Array.isArray(rows)) return [];
 
   return rows.map((r) => {
-    const modelId = s((r as any)?.modelId);
-    const priceMaybe = toNumberOrNull((r as any)?.price);
+    const modelId = String((r as any)?.modelId ?? "");
+    const priceMaybe = (r as any)?.price;
 
     if (!modelId) {
       throw new Error("missing_modelId_in_priceRows");
     }
 
-    if (priceMaybe === null) {
+    if (priceMaybe === null || priceMaybe === undefined || priceMaybe === "") {
       throw new Error("missing_price_in_priceRows");
     }
 
-    return { modelId, price: priceMaybe };
+    return { modelId, price: Number(priceMaybe) };
   });
 }
 
@@ -41,36 +39,38 @@ export function normalizePricesForBackendUpdate(
   if (!Array.isArray(rows)) return [];
 
   return rows.map((r, idx) => {
-    const modelId = s((r as any)?.modelId);
-    const priceMaybe = toNumberOrNull((r as any)?.price);
+    const modelId = String((r as any)?.modelId ?? "");
+    const priceMaybe = (r as any)?.price;
 
     if (!modelId) {
       throw new Error(`missing_modelId_in_priceRows_at_${idx}`);
     }
-    if (priceMaybe === null) {
+
+    if (priceMaybe === null || priceMaybe === undefined || priceMaybe === "") {
       throw new Error(`missing_price_in_priceRows_at_${idx}`);
     }
 
-    return { modelId, price: priceMaybe };
+    return { modelId, price: Number(priceMaybe) };
   });
 }
 
 /**
  * ✅ CreateList payload（最小）
  * - 「create時に送るのは modelId と price」の方針を厳守
- * - ✅ 方針A: inventoryId は pb__tb をそのまま送る
+ * - inventoryId は pb__tb をそのまま送る
+ * - ids.ts / normalizeListDocId は廃止
  */
 export function buildCreateListPayloadArray(input: CreateListInput): Record<string, any> {
   const uid = getCurrentUserUid();
 
-  const inventoryId = s(input?.inventoryId);
-  const id = normalizeListDocId(input?.id) || inventoryId;
+  const inventoryId = String(input?.inventoryId ?? "");
+  const id = String(input?.id ?? "") || inventoryId;
 
   if (!id) {
     throw new Error("missing_id");
   }
 
-  const title = s(input?.title);
+  const title = String(input?.title ?? "");
   if (!title) {
     throw new Error("missing_title");
   }
@@ -82,8 +82,8 @@ export function buildCreateListPayloadArray(input: CreateListInput): Record<stri
     inventoryId,
     title,
     description: String(input?.description ?? ""),
-    assigneeId: s(input?.assigneeId) || undefined,
-    createdBy: s(input?.createdBy) || uid || "system",
+    assigneeId: String(input?.assigneeId ?? "") || undefined,
+    createdBy: String(input?.createdBy ?? "") || uid || "system",
     prices,
   };
 }
@@ -94,7 +94,7 @@ export function buildCreateListPayloadArray(input: CreateListInput): Record<stri
 export function buildUpdateListPayloadArray(input: UpdateListInput): Record<string, any> {
   const uid = getCurrentUserUid();
 
-  const title = s(input?.title);
+  const title = String(input?.title ?? "");
   const description =
     input?.description === undefined ? undefined : String(input?.description ?? "");
 
@@ -107,11 +107,11 @@ export function buildUpdateListPayloadArray(input: UpdateListInput): Record<stri
   const payload: Record<string, any> = {
     title: title || undefined,
     description,
-    assigneeId: s(input?.assigneeId) || undefined,
+    assigneeId: String(input?.assigneeId ?? "") || undefined,
     prices,
     status,
     decision: undefined,
-    updatedBy: s(input?.updatedBy) || uid || undefined,
+    updatedBy: String(input?.updatedBy ?? "") || uid || undefined,
   };
 
   for (const k of Object.keys(payload)) {
