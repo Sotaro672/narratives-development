@@ -2,12 +2,6 @@
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
-import {
-  logHttpRequest,
-  logHttpResponse,
-  logHttpError,
-  safeTokenHint,
-} from "../../http/httpLogger";
 
 import type { TokenBlueprintForMintDTO } from "../../dto/mintRequestLocal.dto";
 import type {
@@ -22,47 +16,15 @@ export async function fetchTokenBlueprintsByBrandHTTP(
   if (!trimmed) return [];
 
   const authHeaders = await getAuthHeadersOrThrow();
-  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
-  if (!authValue) {
-    throw new Error("Authorization header is missing (not logged in or token unavailable)");
-  }
-
-  // For logging only
-  const m = authValue.match(/^Bearer\s+(.+)$/i);
-  const idToken = (m?.[1] ?? "").trim();
 
   const url = `${API_BASE}/mint/token_blueprints?brandId=${encodeURIComponent(trimmed)}`;
 
-  logHttpRequest("fetchTokenBlueprintsByBrandHTTP", {
-    method: "GET",
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-    brandId: trimmed,
-  });
-
   const res = await fetch(url, { method: "GET", headers: authHeaders });
-
-  logHttpResponse("fetchTokenBlueprintsByBrandHTTP", {
-    method: "GET",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
 
   if (res.status === 404) return [];
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    logHttpError("fetchTokenBlueprintsByBrandHTTP", {
-      method: "GET",
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      bodyPreview: body ? body.slice(0, 800) : "",
-    });
     throw new Error(
       `Failed to fetch tokenBlueprints (mint): ${res.status} ${res.statusText}${
         body ? ` body=${body.slice(0, 400)}` : ""

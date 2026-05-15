@@ -2,12 +2,6 @@
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
-import {
-  logHttpRequest,
-  logHttpResponse,
-  logHttpError,
-  safeTokenHint,
-} from "../../http/httpLogger";
 
 import type { InspectionBatchDTO } from "../../../domain/entity/inspections";
 import type { MintRequestDetailDTO } from "../../dto/mintRequestLocal.dto";
@@ -27,19 +21,6 @@ function looksLikeInspectionBatchDTO(x: any): boolean {
   );
 }
 
-function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
-  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
-  if (!authValue) {
-    throw new Error("Authorization header is missing (not logged in or token unavailable)");
-  }
-  return authValue;
-}
-
-function extractIdTokenForLog(authValue: string): string {
-  const m = String(authValue ?? "").match(/^Bearer\s+(.+)$/i);
-  return String(m?.[1] ?? "").trim();
-}
-
 // ===============================
 // private: detail fetch (/mint/inspections/{productionId})
 // - public API からは export しない
@@ -52,41 +33,15 @@ async function fetchMintRequestDetailByProductionIdHTTP(
   if (!pid) throw new Error("productionId が空です");
 
   const authHeaders = await getAuthHeadersOrThrow();
-  const authValue = getAuthValueOrThrow(authHeaders);
-  const idToken = extractIdTokenForLog(authValue);
 
   const url = `${API_BASE}/mint/inspections/${encodeURIComponent(pid)}`;
 
-  logHttpRequest("fetchMintRequestDetailByProductionIdHTTP", {
-    method: "GET",
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-    productionId: pid,
-  });
-
   const res = await fetch(url, { method: "GET", headers: authHeaders });
-
-  logHttpResponse("fetchMintRequestDetailByProductionIdHTTP", {
-    method: "GET",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
 
   if (res.status === 404) return null;
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    logHttpError("fetchMintRequestDetailByProductionIdHTTP", {
-      method: "GET",
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      bodyPreview: body ? body.slice(0, 800) : "",
-    });
     throw new Error(
       `Failed to fetch mint request detail: ${res.status} ${res.statusText}${
         body ? ` body=${body.slice(0, 400)}` : ""
@@ -118,39 +73,15 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
   if (ids.length === 0) return [];
 
   const authHeaders = await getAuthHeadersOrThrow();
-  const authValue = getAuthValueOrThrow(authHeaders);
-  const idToken = extractIdTokenForLog(authValue);
 
-  const url = `${API_BASE}/mint/inspections?productionIds=${encodeURIComponent(ids.join(","))}`;
-
-  logHttpRequest("fetchInspectionBatchesByProductionIdsHTTP", {
-    method: "GET",
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-    productionIds: ids,
-  });
+  const url = `${API_BASE}/mint/inspections?productionIds=${encodeURIComponent(
+    ids.join(","),
+  )}`;
 
   const res = await fetch(url, { method: "GET", headers: authHeaders });
 
-  logHttpResponse("fetchInspectionBatchesByProductionIdsHTTP", {
-    method: "GET",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
-
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    logHttpError("fetchInspectionBatchesByProductionIdsHTTP", {
-      method: "GET",
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      bodyPreview: body ? body.slice(0, 800) : "",
-    });
     throw new Error(
       `Failed to fetch inspections (mint): ${res.status} ${res.statusText}${
         body ? ` body=${body.slice(0, 400)}` : ""
@@ -192,8 +123,6 @@ export async function completeInspectionHTTP(
   if (!pid) throw new Error("productionId が空です");
 
   const authHeaders = await getAuthHeadersOrThrow();
-  const authValue = getAuthValueOrThrow(authHeaders);
-  const idToken = extractIdTokenForLog(authValue);
 
   const url = `${API_BASE}/products/inspections/complete`;
 
@@ -201,18 +130,6 @@ export async function completeInspectionHTTP(
     ...authHeaders,
     "Content-Type": "application/json",
   };
-
-  logHttpRequest("completeInspectionHTTP", {
-    method: "PATCH",
-    url,
-    headers: {
-      Authorization: idToken
-        ? `Bearer ${safeTokenHint(idToken)}`
-        : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-    productionId: pid,
-  });
 
   const res = await fetch(url, {
     method: "PATCH",
@@ -222,22 +139,8 @@ export async function completeInspectionHTTP(
     }),
   });
 
-  logHttpResponse("completeInspectionHTTP", {
-    method: "PATCH",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
-
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    logHttpError("completeInspectionHTTP", {
-      method: "PATCH",
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      bodyPreview: body ? body.slice(0, 800) : "",
-    });
     throw new Error(
       `Failed to complete inspection: ${res.status} ${res.statusText}${
         body ? ` body=${body.slice(0, 400)}` : ""

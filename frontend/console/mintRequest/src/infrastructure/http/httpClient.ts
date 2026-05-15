@@ -2,23 +2,6 @@
 
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
-import {
-  logHttpError,
-  logHttpRequest,
-  logHttpResponse,
-  safeTokenHint,
-} from "./httpLogger";
-
-/**
- * 共通: Authorization / Content-Type 付与
- * ※ 既存互換のため残す
- */
-export function buildHeaders(idToken: string): HeadersInit {
-  return {
-    Authorization: `Bearer ${idToken}`,
-    "Content-Type": "application/json",
-  };
-}
 
 export type HttpJsonResult<T> = {
   url: string;
@@ -55,20 +38,10 @@ function mergeHeaders(a: HeadersInit | undefined, b: HeadersInit | undefined): H
   return { ...(a as any), ...(b as any) };
 }
 
-function toBodyString(body: any): string | undefined {
-  if (body == null) return undefined;
-  if (typeof body === "string") return body;
-  if (body instanceof FormData) return undefined; // JSON ログ対象外
-  try {
-    return JSON.stringify(body);
-  } catch {
-    return undefined;
-  }
-}
-
 function parseJsonOrThrow<T>(text: string, url: string): T {
   const trimmed = String(text ?? "").trim();
   if (!trimmed) return null as any;
+
   try {
     return JSON.parse(trimmed) as T;
   } catch (e: any) {
@@ -79,9 +52,8 @@ function parseJsonOrThrow<T>(text: string, url: string): T {
 /**
  * Authorization 付きで JSON を取得する薄いユーティリティ（GET/POST 等共通）
  *
- * - consoleApiBase(API_BASE), firebaseAuth(getAuthHeadersOrThrow), httpLogger と整合
  * - 404 を null 扱いにしたい場合は treat404AsNull を true
- * - 返却は「data + text + status」を含め、フォールバック戦略の実装を呼び出し側に委ねる
+ * - 返却は「data + text + status」を含め、呼び出し側で分岐できるようにする
  */
 export async function requestJsonWithAuth<T>(
   opName: string,
@@ -91,14 +63,6 @@ export async function requestJsonWithAuth<T>(
   const effectiveInit = (init ?? {}) as RequestInit & { treat404AsNull?: boolean };
 
   const authHeaders = await getAuthHeadersOrThrow();
-  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
-  if (!authValue) {
-    throw new Error("Authorization header is missing (not logged in or token unavailable)");
-  }
-
-  // For logging and FormData handling, extract token if possible
-  const m = authValue.match(/^Bearer\s+(.+)$/i);
-  const idToken = (m?.[1] ?? "").trim();
 
   const url = buildUrl(path);
   const method = String(effectiveInit.method ?? "GET").toUpperCase();
@@ -106,9 +70,8 @@ export async function requestJsonWithAuth<T>(
   // FormData のときは Content-Type を固定しない（ブラウザが boundary を付与する）
   const isForm = effectiveInit.body instanceof FormData;
 
-  // headers: 必ず Authorization を付与しつつ、呼び出し側の追加ヘッダも許容
   const baseHeaders: HeadersInit = isForm
-    ? { Authorization: authValue }
+    ? authHeaders
     : { ...authHeaders, "Content-Type": "application/json" };
 
   const headers = mergeHeaders(baseHeaders, effectiveInit.headers);
@@ -119,17 +82,8 @@ export async function requestJsonWithAuth<T>(
     body = JSON.stringify(body);
   }
 
-  logHttpRequest(opName, {
-    method,
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": isForm ? "(form)" : "application/json",
-    },
-    bodyPreview: toBodyString(effectiveInit.body)?.slice?.(0, 800) ?? "",
-  });
-
   let res: Response;
+
   try {
     res = await fetch(url, {
       ...effectiveInit,
@@ -138,20 +92,8 @@ export async function requestJsonWithAuth<T>(
       body,
     });
   } catch (e: any) {
-    logHttpError(opName, {
-      method,
-      url,
-      error: e?.message ?? String(e),
-    });
     throw new Error(`Failed to fetch: ${method} ${url} err=${e?.message ?? String(e)}`);
   }
-
-  logHttpResponse(opName, {
-    method,
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
 
   const text = await res.text().catch(() => "");
 
@@ -168,14 +110,6 @@ export async function requestJsonWithAuth<T>(
   }
 
   if (!res.ok) {
-    logHttpError(opName, {
-      method,
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      bodyPreview: text ? text.slice(0, 1200) : "",
-    });
-
     throw new Error(
       `${opName} error: ${res.status} ${res.statusText}${text ? `\n${text}` : ""}`,
     );
@@ -207,5 +141,6 @@ export async function getJsonWithAuth<T>(
     method: "GET",
     treat404AsNull: opts?.treat404AsNull ?? false,
   });
+
   return (r.data ?? null) as T | null;
 }

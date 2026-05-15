@@ -2,11 +2,6 @@
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
-import {
-  logHttpRequest,
-  logHttpResponse,
-  safeTokenHint,
-} from "../../http/httpLogger";
 
 type ProductionListItemResponse = {
   ID: string;
@@ -72,19 +67,6 @@ function parseProductionDetailResponse(json: unknown): ProductionDetailResponse 
   };
 }
 
-function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
-  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
-  if (!authValue) {
-    throw new Error("Authorization header is missing (not logged in or token unavailable)");
-  }
-  return authValue;
-}
-
-function extractIdTokenForLog(authValue: string): string {
-  const m = String(authValue ?? "").match(/^Bearer\s+(.+)$/i);
-  return String(m?.[1] ?? "").trim();
-}
-
 /**
  * productionId から productBlueprintId を解決する
  * - GET /productions/{productionId}
@@ -96,28 +78,10 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
   if (!pid) throw new Error("productionId が空です");
 
   const authHeaders = await getAuthHeadersOrThrow();
-  const authValue = getAuthValueOrThrow(authHeaders);
-  const idToken = extractIdTokenForLog(authValue);
 
   const url = `${API_BASE}/productions/${encodeURIComponent(pid)}`;
 
-  logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP", {
-    method: "GET",
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-  });
-
   const res = await fetch(url, { method: "GET", headers: authHeaders });
-
-  logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP", {
-    method: "GET",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -139,28 +103,10 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
  */
 export async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
   const authHeaders = await getAuthHeadersOrThrow();
-  const authValue = getAuthValueOrThrow(authHeaders);
-  const idToken = extractIdTokenForLog(authValue);
 
   const url = `${API_BASE}/productions`;
 
-  logHttpRequest("fetchProductionIdsForCurrentCompanyHTTP", {
-    method: "GET",
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-  });
-
   const res = await fetch(url, { method: "GET", headers: authHeaders });
-
-  logHttpResponse("fetchProductionIdsForCurrentCompanyHTTP", {
-    method: "GET",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");

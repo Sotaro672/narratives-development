@@ -2,12 +2,6 @@
 
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
-import {
-  logHttpError,
-  logHttpRequest,
-  logHttpResponse,
-  safeTokenHint,
-} from "../../http/httpLogger";
 
 import type {
   InspectionBatchDTO,
@@ -23,11 +17,10 @@ import type { MintRequestRowRaw } from "../../dto/mintRequestRaw.dto";
 
 // ✅ "dto" view は今回の不具合原因になりうるため、フロント側からは使用しない前提
 type MintRequestsView = "management" | "list";
-type MintRequestsViewOrNull = MintRequestsView | null;
 
 type FetchMintRequestsResult = {
   rows: MintRequestRowRaw[];
-  usedView: MintRequestsViewOrNull;
+  usedView: MintRequestsView;
   usedUrl: string;
 };
 
@@ -38,24 +31,25 @@ type FetchMintRequestsResult = {
 function uniqTrimmedStrings(xs: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
+
   for (const x of xs ?? []) {
     const s = String(x ?? "").trim();
     if (!s) continue;
     if (seen.has(s)) continue;
+
     seen.add(s);
     out.push(s);
   }
+
   return out;
 }
 
-function buildMintRequestsUrl(ids: string[], view: MintRequestsViewOrNull): string {
-  const base = `${API_BASE}/mint/requests?productionIds=${encodeURIComponent(ids.join(","))}`;
-  return view ? `${base}&view=${encodeURIComponent(view)}` : base;
-}
+function buildMintRequestsUrl(ids: string[], view: MintRequestsView): string {
+  const base = `${API_BASE}/mint/requests?productionIds=${encodeURIComponent(
+    ids.join(","),
+  )}`;
 
-function isLikelyMissingRouteStatus(status: number): boolean {
-  // view 未対応などの「ルート/パラメータ非対応」を “候補切替” のトリガにする
-  return status === 404 || status === 405;
+  return `${base}&view=${encodeURIComponent(view)}`;
 }
 
 function isServiceUnavailableStatus(status: number): boolean {
@@ -70,127 +64,41 @@ async function readTextSafe(res: Response): Promise<string> {
   }
 }
 
-function getAuthValueOrThrow(authHeaders: Record<string, string>): string {
-  const authValue = String((authHeaders as any)?.Authorization ?? "").trim();
-  if (!authValue) {
-    throw new Error("Authorization header is missing (not logged in or token unavailable)");
-  }
-  return authValue;
-}
-
-function extractIdTokenForLog(authValue: string): string {
-  const m = String(authValue ?? "").match(/^Bearer\s+(.+)$/i);
-  return String(m?.[1] ?? "").trim();
-}
-
 function getRowProductionId(row: any): string | null {
   return row?.productionId ?? row?.id ?? null;
 }
 
-/** JSON をコンソールに出すための安全なプレビュー化 */
-function toJsonPreview(value: any, maxLen = 2000): string {
-  try {
-    const s = JSON.stringify(value);
-    return s.length > maxLen ? `${s.slice(0, maxLen)}...` : s;
-  } catch {
-    return "[unserializable json]";
-  }
-}
-
 /**
  * Raw fetch for a single view.
- * - 404/405 は「その view/ルートが無い」扱いにして上位でフォールバックさせる
- * - それ以外の non-2xx はエラー（ログ付き）
+ * - fallback は行わない
+ * - 404/405 もそのままエラーにする
  * - Backend response は配列を正とする
  */
 async function fetchMintRequestsRowsRawOnce(
   ids: string[],
-  view: MintRequestsViewOrNull,
+  view: MintRequestsView,
 ): Promise<FetchMintRequestsResult> {
   const safeIds = uniqTrimmedStrings(ids ?? []);
+
   if (safeIds.length === 0) {
     return { rows: [], usedView: view, usedUrl: "" };
   }
 
   const authHeaders = await getAuthJsonHeadersOrThrow();
-  const authValue = getAuthValueOrThrow(authHeaders);
-  const idToken = extractIdTokenForLog(authValue);
 
   const url = buildMintRequestsUrl(safeIds, view);
 
-  logHttpRequest("fetchMintRequestsRowsRawOnce", {
-    method: "GET",
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-    productionIds: safeIds,
-    view,
-  });
-
   let res: Response;
+
   try {
     res = await fetch(url, { method: "GET", headers: authHeaders });
   } catch (e: any) {
     // fetch 自体が落ちる (CORS / network / DNS etc.)
-    logHttpError("fetchMintRequestsRowsRawOnce(fetch)", {
-      method: "GET",
-      url,
-      view,
-      productionIds: safeIds,
-      error: String(e?.message ?? e),
-    });
     throw new Error(`Failed to fetch mint requests (network): ${String(e?.message ?? e)}`);
   }
 
-  logHttpResponse("fetchMintRequestsRowsRawOnce", {
-    method: "GET",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
-
-  // view/route missing -> caller should fallback to next view
-  if (isLikelyMissingRouteStatus(res.status)) {
-    const body = await readTextSafe(res);
-    logHttpError("fetchMintRequestsRowsRawOnce(view missing -> fallback)", {
-      method: "GET",
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      view,
-      bodyPreview: body ? body.slice(0, 300) : "",
-    });
-
-    const err: any = new Error(
-      `Mint requests view not supported: ${view ?? "null"} (${res.status})`,
-    );
-    err.__mint_requests_view_missing__ = true;
-    err.status = res.status;
-    err.view = view;
-    err.url = url;
-    throw err;
-  }
-
-  // 200-299 OK
   if (res.ok) {
     const json = (await res.json()) as MintRequestRowRaw[] | null | undefined;
-
-    // ✅ 追加：GET で得られた中身が分かる console log（サイズ暴発防止でプレビュー）
-    // eslint-disable-next-line no-console
-    console.log("[fetchMintRequestsRowsRawOnce] raw json:", json);
-
-    // ✅ 追加：httpLogger にもプレビューを積む（console が見づらい環境用）
-    logHttpResponse("fetchMintRequestsRowsRawOnce", {
-      method: "GET",
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      jsonPreview: toJsonPreview(json),
-      view,
-      productionIds: safeIds,
-    });
 
     return {
       rows: Array.isArray(json) ? json : [],
@@ -199,16 +107,7 @@ async function fetchMintRequestsRowsRawOnce(
     };
   }
 
-  // non-ok (not route-missing)
   const body = await readTextSafe(res);
-  logHttpError("fetchMintRequestsRowsRawOnce(non-ok)", {
-    method: "GET",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-    view,
-    bodyPreview: body ? body.slice(0, 800) : "",
-  });
 
   const hint = isServiceUnavailableStatus(res.status) ? " (service unavailable)" : "";
 
@@ -219,75 +118,24 @@ async function fetchMintRequestsRowsRawOnce(
   );
 }
 
-function isViewMissingError(e: any): boolean {
-  return Boolean(
-    e &&
-      (e.__mint_requests_view_missing__ === true ||
-        e.status === 404 ||
-        e.status === 405),
-  );
-}
-
-/**
- * Fetch with view fallbacks.
- * - list は list response を正とする
- * - management は management response を正とする
- */
-async function fetchMintRequestsRowsRawWithFallback(
-  ids: string[],
-  views: MintRequestsViewOrNull[],
-): Promise<FetchMintRequestsResult> {
-  const safeIds = uniqTrimmedStrings(ids ?? []);
-  if (safeIds.length === 0) {
-    return { rows: [], usedView: null, usedUrl: "" };
-  }
-
-  const candidates: MintRequestsViewOrNull[] = (views ?? []).filter((v, i, arr) => {
-    // dedupe incl. null
-    return arr.indexOf(v) === i;
-  });
-
-  let lastErr: any = null;
-
-  for (const view of candidates) {
-    try {
-      return await fetchMintRequestsRowsRawOnce(safeIds, view);
-    } catch (e: any) {
-      lastErr = e;
-
-      // view missing -> try next
-      if (isViewMissingError(e)) continue;
-
-      // network / 5xx etc. -> propagate (do not hide)
-      throw e;
-    }
-  }
-
-  // only reaches when all candidates were "view missing"
-  throw new Error(
-    `Mint requests endpoint does not support requested views. tried=${candidates
-      .map((v) => (v === null ? "null" : v))
-      .join(",")} lastError=${String(lastErr?.message ?? lastErr ?? "")}`,
-  );
-}
-
 // ===============================
 // Public exports (一覧/参照系)
 // ===============================
 
 /**
  * inspectionId (= productionId) で 1 件の MintDTO を取得。
- * ✅ 優先: view=management -> null
- * - management は createdByName/requestedByName 等の “表示名” を持つ可能性が高い
+ * ✅ view=management のみ使用する
  */
 export async function fetchMintByInspectionIdHTTP(
   inspectionId: string,
 ): Promise<MintDTO | null> {
   const iid = String(inspectionId ?? "").trim();
-  if (!iid) throw new Error("inspectionId が空です");
 
-  // ✅ view fallback（management 優先）
-  const { rows } = await fetchMintRequestsRowsRawWithFallback([iid], ["management", null]);
+  if (!iid) {
+    throw new Error("inspectionId が空です");
+  }
+
+  const { rows } = await fetchMintRequestsRowsRawOnce([iid], "management");
 
   const row =
     (rows ?? []).find((r) => getRowProductionId(r) === iid) ??
@@ -314,17 +162,19 @@ export async function fetchMintByInspectionIdHTTP(
 
 /**
  * inspectionIds (= productionIds) で MintDTO を map で取得。
- * ✅ 優先: view=management -> null
+ * ✅ view=management のみ使用する
  */
 export async function fetchMintsByInspectionIdsHTTP(
   inspectionIds: string[],
 ): Promise<Record<string, MintDTO>> {
   const ids = uniqTrimmedStrings(inspectionIds ?? []);
+
   if (ids.length === 0) return {};
 
-  const { rows } = await fetchMintRequestsRowsRawWithFallback(ids, ["management", null]);
+  const { rows } = await fetchMintRequestsRowsRawOnce(ids, "management");
 
   const out: Record<string, MintDTO> = {};
+
   for (const r of rows ?? []) {
     const key = getRowProductionId(r);
     if (!key) continue;
@@ -355,11 +205,13 @@ export async function fetchMintListRowsByInspectionIdsHTTP(
   inspectionIds: string[],
 ): Promise<Record<string, MintListRowDTO>> {
   const ids = uniqTrimmedStrings(inspectionIds ?? []);
+
   if (ids.length === 0) return {};
 
-  const { rows } = await fetchMintRequestsRowsRawWithFallback(ids, ["list"]);
+  const { rows } = await fetchMintRequestsRowsRawOnce(ids, "list");
 
   const out: Record<string, MintListRowDTO> = {};
+
   for (const r of rows ?? []) {
     const key = getRowProductionId(r);
     if (!key) continue;
@@ -380,11 +232,12 @@ export async function postMintRequestHTTP(
   scheduledBurnDate?: string,
 ): Promise<InspectionBatchDTO | null> {
   const trimmed = String(productionId ?? "").trim();
-  if (!trimmed) throw new Error("productionId が空です");
+
+  if (!trimmed) {
+    throw new Error("productionId が空です");
+  }
 
   const authHeaders = await getAuthJsonHeadersOrThrow();
-  const authValue = getAuthValueOrThrow(authHeaders);
-  const idToken = extractIdTokenForLog(authValue);
 
   const url = `${API_BASE}/mint/inspections/${encodeURIComponent(trimmed)}/request`;
 
@@ -396,42 +249,17 @@ export async function postMintRequestHTTP(
     payload.scheduledBurnDate = String(scheduledBurnDate).trim();
   }
 
-  logHttpRequest("postMintRequestHTTP", {
-    method: "POST",
-    url,
-    headers: {
-      Authorization: idToken ? `Bearer ${safeTokenHint(idToken)}` : safeTokenHint(authValue),
-      "Content-Type": "application/json",
-    },
-    productionId: trimmed,
-    payload,
-  });
-
   const res = await fetch(url, {
     method: "POST",
     headers: authHeaders,
     body: JSON.stringify(payload),
   });
 
-  logHttpResponse("postMintRequestHTTP", {
-    method: "POST",
-    url,
-    status: res.status,
-    statusText: res.statusText,
-  });
-
   if (res.status === 404) return null;
 
   if (!res.ok) {
     const body = await readTextSafe(res);
-    logHttpError("postMintRequestHTTP", {
-      method: "POST",
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      payload,
-      bodyPreview: body ? body.slice(0, 1200) : "",
-    });
+
     throw new Error(
       `Failed to post mint request: ${res.status} ${res.statusText}${
         body ? ` body=${body.slice(0, 400)}` : ""
@@ -440,17 +268,13 @@ export async function postMintRequestHTTP(
   }
 
   const text = await readTextSafe(res);
+
   if (!text.trim()) return null;
 
   try {
     const json = JSON.parse(text) as InspectionBatchDTO | null | undefined;
     return json ?? null;
-  } catch (e: any) {
-    logHttpError("postMintRequestHTTP(parse)", {
-      url,
-      error: String(e?.message ?? e),
-      bodyPreview: text.slice(0, 800),
-    });
+  } catch {
     return null;
   }
 }
