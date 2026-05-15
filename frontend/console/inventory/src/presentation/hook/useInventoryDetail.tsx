@@ -16,7 +16,6 @@ export function useInventoryDetail(
   inventoryId: string | undefined,
 ): UseInventoryDetailResult {
   const [vm, setVm] = React.useState<InventoryDetailViewModel | null>(null);
-  const [rows, setRows] = React.useState<InventoryRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -25,7 +24,6 @@ export function useInventoryDetail(
   React.useEffect(() => {
     if (!invId) {
       setVm(null);
-      setRows([]);
       setError(null);
       setLoading(false);
       return;
@@ -43,13 +41,11 @@ export function useInventoryDetail(
         if (cancelled) return;
 
         setVm(nextVm);
-        setRows(nextVm.rows);
       } catch (e: any) {
         if (cancelled) return;
 
         setError(String(e?.message ?? e));
         setVm(null);
-        setRows([]);
       } finally {
         if (cancelled) return;
         setLoading(false);
@@ -60,6 +56,8 @@ export function useInventoryDetail(
       cancelled = true;
     };
   }, [invId]);
+
+  const rows = React.useMemo<InventoryRow[]>(() => vm?.rows ?? [], [vm]);
 
   return {
     vm,

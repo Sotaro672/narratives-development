@@ -4,23 +4,21 @@ import {
   getInventoryDetailRaw,
   getTokenBlueprintPatchRaw,
 } from "../../infrastructure/api/inventoryApi";
-import type {
-  InventoryDetailDTO,
-  TokenBlueprintPatchDTO,
-} from "../../infrastructure/http/inventoryRepositoryHTTP.types";
-import type { InventoryDetailViewModel } from "./inventoryDetail.types";
+import type { TokenBlueprintPatchDTO } from "../../infrastructure/http/inventoryRepositoryHTTP.types";
 import {
-  buildInventoryDetailViewModel,
+  mapInventoryDetailDTO,
   mapTokenBlueprintPatch,
-} from "./inventoryDetail.mapper";
+} from "../../infrastructure/http/inventoryRepositoryHTTP.mappers";
+import type { InventoryDetailViewModel } from "./inventoryDetail.types";
+import { buildInventoryDetailViewModel } from "./inventoryDetail.mapper";
 
 export async function loadInventoryDetailViewModel(
   inventoryId: string,
 ): Promise<InventoryDetailViewModel> {
-  const detailRaw = (await getInventoryDetailRaw(inventoryId)) as any;
-  const detail = detailRaw as InventoryDetailDTO;
+  const detailRaw = await getInventoryDetailRaw(inventoryId);
+  const detail = mapInventoryDetailDTO(detailRaw, inventoryId);
 
-  const tokenBlueprintId = (detail as any)?.tokenBlueprintId;
+  const tokenBlueprintId = detail.tokenBlueprintId;
 
   if (!tokenBlueprintId) {
     throw new Error("inventory_detail_missing_product_or_token_blueprint_id");

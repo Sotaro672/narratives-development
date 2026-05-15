@@ -19,6 +19,12 @@ export type InventoryDetailViewModel = {
   tokenName: string;
   headerTitle: string;
 
+  // ProductBlueprint category 表示用
+  productBlueprintCategoryName: string;
+  productBlueprintCategoryCode?: string;
+  productBlueprintCategoryKind?: string;
+  categoryFields?: Record<string, unknown> | null;
+
   productBlueprintPatch: ProductBlueprintPatchDTO;
   tokenBlueprintPatch?: TokenBlueprintPatchDTO;
 

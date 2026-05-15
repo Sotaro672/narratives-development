@@ -1,4 +1,5 @@
 // frontend/console/inventory/src/presentation/hook/useListCreate.tsx
+
 import * as React from "react";
 import type { UseListCreateResult } from "./listCreate/types";
 import { useListCreateParamsAndTitle } from "./listCreate/useListCreateParamsAndTitle";
@@ -17,44 +18,51 @@ type AssigneeCandidate = {
   name: string;
 };
 
-function s(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
 function getMemberUid(member: unknown): string {
   const m = member as any;
 
-  return s(m?.uid);
+  return m?.uid ?? "";
 }
 
 function getMemberDisplayName(member: unknown): string {
   const m = member as any;
 
-  return (
-    s(m?.fullName) ||
-    [s(m?.lastName), s(m?.firstName)].filter(Boolean).join(" ") ||
-    s(m?.email) ||
-    getMemberUid(member) ||
-    s(m?.id)
-  );
+  const fullName = m?.fullName;
+  if (fullName) return fullName;
+
+  const nameParts = [m?.lastName, m?.firstName].filter(Boolean);
+  const joinedName = nameParts.join(" ");
+  if (joinedName) return joinedName;
+
+  if (m?.email) return m.email;
+
+  const uid = getMemberUid(member);
+  if (uid) return uid;
+
+  return m?.id ?? "";
 }
 
-function normalizeAssigneeCandidates(rawCandidates: unknown): AssigneeCandidate[] {
+function normalizeAssigneeCandidates(
+  rawCandidates: unknown,
+): AssigneeCandidate[] {
   const rows = Array.isArray(rawCandidates) ? rawCandidates : [];
 
   return rows
     .map((raw) => {
       const c = raw as any;
 
-      const id = s(c?.uid) || s(c?.id);
-      const name =
-        s(c?.name) ||
-        s(c?.fullName) ||
-        [s(c?.lastName), s(c?.firstName)].filter(Boolean).join(" ") ||
-        s(c?.email) ||
-        id;
-
+      const id = c?.uid || c?.id;
       if (!id) return null;
+
+      const nameParts = [c?.lastName, c?.firstName].filter(Boolean);
+      const joinedName = nameParts.join(" ");
+
+      const name =
+        c?.name ||
+        c?.fullName ||
+        joinedName ||
+        c?.email ||
+        id;
 
       return {
         id,
@@ -121,7 +129,7 @@ export function useListCreate(): UseListCreateResult {
 
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
-      const nextId = s(id);
+      const nextId = id;
       if (!nextId) return;
 
       const matched = assigneeCandidates.find((c) => c.id === nextId);

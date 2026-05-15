@@ -9,13 +9,41 @@ import type {
   InventoryProductSummary,
   InventoryIDsByProductAndTokenDTO,
 } from "./inventoryRepositoryHTTP.types";
+import type {
+  ProductBlueprintCategoryKind,
+  ProductBlueprintCategorySnapshot,
+} from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
 
 // =========================================================
 // B案: /inventory だけで回す前提で縮小（実測ログ準拠）
-// - 互換（揺れ吸収 / Pascal / snake / 別名）は削除
-// - 実際に参照されている lower camel case のキーだけ読む
+// - 互換（揺れ吸収 / snake / 別名）は削除
+// - 実際に参照されているキーだけ読む
 // - inventoryRepositoryHTTP.utils.ts への依存は廃止
 // =========================================================
+
+function mapProductBlueprintCategory(
+  raw: any,
+): ProductBlueprintCategorySnapshot | null {
+  if (!raw) return null;
+
+  return {
+    id: raw.ID,
+    code: raw.Code,
+    nameJa: raw.NameJa,
+    nameEn: raw.NameEn,
+    kind: raw.Kind as ProductBlueprintCategoryKind,
+    path: Array.isArray(raw.Path) ? raw.Path : [],
+    parentId: raw.ParentID ?? raw.ParentId ?? raw.parentId ?? null,
+  };
+}
+
+function mapProductIdTag(raw: any): { type?: string } | null {
+  if (!raw) return null;
+
+  return {
+    type: raw.Type,
+  };
+}
 
 // ---------------------------------------------------------
 // Inventory List Row mapper（縮小）
@@ -49,24 +77,43 @@ export function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null 
 
 // ---------------------------------------------------------
 // ProductBlueprintPatch mapper（縮小）
-// 実測ログの merged vm が参照するのは productName/brandId/brandName 程度だが、
-// 既存型に合わせて最小限 + productIdTag だけ維持。
+// - productBlueprintCategory / categoryFields を落とさず保持する
+// - productBlueprintCategory は backend raw の ID / Code / NameJa...
+//   から frontend 側の id / code / nameJa... に変換する
+// - productIdTag は backend raw の Type から frontend 側の type に変換する
+// - modelRefs は backend raw の ModelID / DisplayOrder を
+//   frontend DTO の modelId / displayOrder に変換する
 // ---------------------------------------------------------
 export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
   const p = (raw ?? {}) as any;
 
   return {
     productName: p.productName,
-    brandName: p.brandName,
+    description: p.description,
 
-    // 他画面で落ちやすいので最低限は残す（互換吸収はしない）
+    brandId: p.brandId,
+    brandName: p.brandName,
+    companyId: p.companyId,
+
+    productBlueprintCategory: mapProductBlueprintCategory(
+      p.productBlueprintCategory,
+    ),
+    categoryFields: p.categoryFields ?? null,
+
     itemType: p.itemType,
     fit: p.fit,
     material: p.material,
     weight: p.weight,
     qualityAssurance: p.qualityAssurance,
 
-    productIdTag: p.productIdTag,
+    productIdTag: mapProductIdTag(p.productIdTag),
+
+    modelRefs: Array.isArray(p.modelRefs)
+      ? p.modelRefs.map((r: any) => ({
+          modelId: r.ModelID,
+          displayOrder: r.DisplayOrder,
+        }))
+      : undefined,
   };
 }
 
@@ -129,9 +176,7 @@ export function mapInventoryIDsByProductAndToken(
   data: any,
 ): InventoryIDsByProductAndTokenDTO {
   const idsRaw = data?.inventoryIds;
-  const inventoryIds = Array.isArray(idsRaw)
-    ? idsRaw.filter(Boolean)
-    : [];
+  const inventoryIds = Array.isArray(idsRaw) ? idsRaw.filter(Boolean) : [];
 
   return {
     productBlueprintId,
@@ -142,8 +187,7 @@ export function mapInventoryIDsByProductAndToken(
 
 // ---------------------------------------------------------
 // InventoryDetail mapper（縮小）
-// 実測ログで rows は { token:'-', modelNumber, size, color, rgb, stock } を参照。
-// tokenBlueprintId は undefined でもOK（実測ログで undefined）
+// 実測ログで rows は { modelId, token, modelNumber, size, color, rgb, stock } を参照。
 // ---------------------------------------------------------
 export function mapInventoryDetailDTO(
   data: any,
@@ -154,6 +198,7 @@ export function mapInventoryDetailDTO(
 
   const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
     ? data.rows.map((r: any) => ({
+        modelId: r?.modelId,
         tokenBlueprintId: r?.tokenBlueprintId,
         token: r?.token,
         modelNumber: r?.modelNumber,

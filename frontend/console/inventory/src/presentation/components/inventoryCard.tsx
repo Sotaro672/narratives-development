@@ -1,4 +1,5 @@
 // frontend/console/inventory/src/presentation/components/inventoryCard.tsx
+
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {
@@ -35,15 +36,14 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
   className,
   mode = "view",
 }) => {
-  // ✅ displayOrder のみに従って昇順ソート
+  // displayOrder のみに従って昇順ソート
   // - displayOrder が無い行は最後
   // - displayOrder が同じ場合は「元の順番」を維持（副基準で並べ替えない）
   const sortedRows = React.useMemo(() => {
     const src = rows ?? [];
 
-    const orderOf = (r: any): number => {
-      const v = (r as any)?.displayOrder;
-      const n = Number(v);
+    const orderOf = (r: InventoryRow): number => {
+      const n = Number(r.displayOrder);
       return Number.isFinite(n) && n > 0 ? n : Number.POSITIVE_INFINITY;
     };
 
@@ -54,7 +54,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
         const oa = orderOf(a.r);
         const ob = orderOf(b.r);
         if (oa !== ob) return oa - ob;
-        return a.idx - b.idx; // ✅ 元の順番を維持
+        return a.idx - b.idx;
       })
       .map((x) => x.r);
   }, [rows]);
@@ -85,7 +85,6 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           <Table className="ivc__table">
             <TableHeader>
               <TableRow>
-                {/* ✅ トークン列を削除 */}
                 <TableHead className="ivc__th ivc__th--left">型番</TableHead>
                 <TableHead className="ivc__th">サイズ</TableHead>
                 <TableHead className="ivc__th">カラー</TableHead>
@@ -96,22 +95,14 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             <TableBody>
               {sortedRows.map((row, idx) => {
                 const rgbHex = rgbIntToHex(row.rgb) ?? null;
-
-                // row.rgb が "#RRGGBB" を直接持っている場合はそれを優先（互換維持）
-                const bgColor =
-                  typeof row.rgb === "string" && row.rgb.trim().startsWith("#")
-                    ? row.rgb.trim()
-                    : rgbHex ?? "#ffffff";
+                const bgColor = rgbHex ?? "#ffffff";
 
                 return (
                   <TableRow key={`${row.modelNumber}-${idx}`} className="ivc__tr">
-                    {/* 型番 */}
                     <TableCell className="ivc__model">{row.modelNumber}</TableCell>
 
-                    {/* サイズ */}
                     <TableCell className="ivc__size">{row.size}</TableCell>
 
-                    {/* カラー */}
                     <TableCell className="ivc__color-cell">
                       <span
                         className="ivc__color-dot"
@@ -119,12 +110,11 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
                           backgroundColor: bgColor,
                           boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
                         }}
-                        title={rgbHex ?? (typeof row.rgb === "string" ? row.rgb : "")}
+                        title={rgbHex ?? ""}
                       />
                       <span className="ivc__color-label">{row.color}</span>
                     </TableCell>
 
-                    {/* 在庫数 */}
                     <TableCell className="ivc__stock">
                       <span className="ivc__stock-number">{row.stock}</span>
                     </TableCell>
@@ -134,7 +124,6 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
 
               {sortedRows.length === 0 && (
                 <TableRow>
-                  {/* ✅ 列数が4になったので colSpan も 4 */}
                   <TableCell colSpan={4} className="ivc__empty">
                     表示できる在庫データがありません。
                   </TableCell>
@@ -143,7 +132,6 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
 
               {sortedRows.length > 0 && (
                 <TableRow className="ivc__total-row">
-                  {/* ✅ 先頭3列に「合計」、最後1列に数値 */}
                   <TableCell colSpan={3} className="ivc__total-label ivc__th--right">
                     合計
                   </TableCell>

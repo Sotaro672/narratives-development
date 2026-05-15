@@ -6,28 +6,53 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/cards/productBlueprintForm";
 import InventoryCard from "../components/inventoryCard";
 
-// ✅ TokenBlueprintCard（view-only）
+// TokenBlueprintCard（view-only）
 import TokenBlueprintCard, {
   type TokenBlueprintCardViewModel,
   type TokenBlueprintCardHandlers,
 } from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 
 import { useInventoryDetail } from "../hook/useInventoryDetail";
+import type { InventoryDetailViewModel } from "../../application/inventoryDetail/inventoryDetail.types";
 
-function s(v: unknown): string {
-  return String(v ?? "").trim();
+type ProductBlueprintCardPatch = React.ComponentProps<
+  typeof ProductBlueprintCard
+>["productBlueprintPatch"];
+
+type ProductBlueprintCardCategory = NonNullable<
+  NonNullable<ProductBlueprintCardPatch>["productBlueprintCategory"]
+>;
+
+function toProductBlueprintCardPatch(
+  patch: InventoryDetailViewModel["productBlueprintPatch"] | undefined,
+): ProductBlueprintCardPatch {
+  if (!patch) return undefined;
+
+  const category = patch.productBlueprintCategory;
+
+  return {
+    ...patch,
+    productBlueprintCategory: category
+      ? ({
+          ...category,
+          kind: category.kind,
+        } as ProductBlueprintCardCategory)
+      : category,
+  } as ProductBlueprintCardPatch;
 }
 
 export default function InventoryDetail() {
   const navigate = useNavigate();
 
-  // ✅ 新方針: URL は inventoryId(docId) のみ
-  const { inventoryId: inventoryIdParam } = useParams<{ inventoryId?: string }>();
-  const inventoryId = s(inventoryIdParam);
+  // 新方針: URL は inventoryId(docId) のみ
+  const { inventoryId: inventoryIdParam } = useParams<{
+    inventoryId?: string;
+  }>();
+  const inventoryId = inventoryIdParam ?? "";
 
   /**
-   * ★ inventoryId が無い（＝ /inventory/detail だけ or 旧ルートに誤マッチ）
-   *    → 一覧ページへ強制リダイレクト
+   * inventoryId が無い（= /inventory/detail だけ or 旧ルートに誤マッチ）
+   * → 一覧ページへ強制リダイレクト
    */
   React.useEffect(() => {
     if (!inventoryId) {
@@ -35,43 +60,48 @@ export default function InventoryDetail() {
     }
   }, [inventoryId, navigate]);
 
-  // ★ 戻るボタンは常に一覧へ戻す
+  // 戻るボタンは常に一覧へ戻す
   const onBack = React.useCallback(() => {
     navigate("/inventory");
   }, [navigate]);
 
-  // ✅ hook（inventoryId 前提）
+  // hook（inventoryId 前提）
   const { rows, loading, error, vm } = useInventoryDetail(inventoryId);
 
-  // ✅ Header は productName/tokenName のみ
-  const title = s(vm?.headerTitle) ? `在庫詳細：${vm!.headerTitle}` : "在庫詳細";
+  // Header は productName/tokenName のみ
+  const title = vm?.headerTitle ? `在庫詳細：${vm.headerTitle}` : "在庫詳細";
 
-  // ✅ 出品ボタン: /inventory/list/create/:inventoryId
+  // 出品ボタン: /inventory/list/create/:inventoryId
   const onList = React.useCallback(() => {
     if (!inventoryId) return;
     navigate(`/inventory/list/create/${encodeURIComponent(inventoryId)}`);
   }, [navigate, inventoryId]);
 
+  const productBlueprintPatchForCard = React.useMemo(
+    () => toProductBlueprintCardPatch(vm?.productBlueprintPatch),
+    [vm?.productBlueprintPatch],
+  );
+
   // ============================================================
-  // ✅ TokenBlueprintCard (view only)
+  // TokenBlueprintCard (view only)
   // - TokenBlueprintCardViewModel の minted は必須なので必ず渡す
-  // - この画面では編集しないので minted=false に固定（= view-onlyで安全）
+  // - この画面では編集しないので minted=false に固定
   // ============================================================
 
-  const tbId = s(vm?.tokenBlueprintId);
+  const tbId = vm?.tokenBlueprintId ?? "";
   const tbPatch = vm?.tokenBlueprintPatch;
 
   const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(() => {
-    const tokenName = s((tbPatch as any)?.tokenName);
-    const symbol = s((tbPatch as any)?.symbol);
-    const brandName = s((tbPatch as any)?.brandName);
-    const description = String((tbPatch as any)?.description ?? "");
-    const iconUrl = s((tbPatch as any)?.iconUrl) || undefined;
+    const tokenName = tbPatch?.tokenName ?? "";
+    const symbol = tbPatch?.symbol ?? "";
+    const brandName = tbPatch?.brandName ?? "";
+    const description = tbPatch?.description ?? "";
+    const iconUrl = tbPatch?.iconUrl ?? undefined;
 
-    // ✅ TokenBlueprintCard 側が brandId 必須なら空文字で埋める
+    // TokenBlueprintCard 側が brandId 必須なら空文字で埋める
     const brandId = "";
 
-    // ✅ minted は必須。詳細画面では編集UI不要なので false 固定。
+    // minted は必須。詳細画面では編集UI不要なので false 固定。
     const minted = false;
 
     return {
@@ -112,7 +142,7 @@ export default function InventoryDetail() {
       <div>
         <ProductBlueprintCard
           mode="view"
-          productBlueprintPatch={vm?.productBlueprintPatch}
+          productBlueprintPatch={productBlueprintPatchForCard}
         />
 
         {/* TokenBlueprintCard */}

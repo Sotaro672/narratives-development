@@ -1,5 +1,10 @@
 // frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.types.ts
 
+import type {
+  CategoryFieldValues,
+  ProductBlueprintCategorySnapshot,
+} from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+
 // ---------------------------------------------------------
 // Inventory 用：商品情報ヘッダー DTO
 // ---------------------------------------------------------
@@ -10,24 +15,23 @@ export type InventoryProductSummary = {
 };
 
 // ---------------------------------------------------------
-// ✅ Inventory 一覧DTO（管理一覧）
+// Inventory 一覧DTO（管理一覧）
 // GET /inventory
 // ---------------------------------------------------------
 export type InventoryListRowDTO = {
   productBlueprintId: string;
   productName: string;
 
-  tokenBlueprintId: string; // ✅ 必須（detail遷移のキー）
+  tokenBlueprintId: string; // detail遷移のキー
   tokenName: string;
 
   modelNumber: string;
-  // ✅ NEW: 画面側が使う値を落とさず返す
   availableStock: number;
   reservedCount: number;
 };
 
 // ---------------------------------------------------------
-// ✅ inventoryIds 解決 DTO（方針A）
+// inventoryIds 解決 DTO
 // GET /inventory/ids?productBlueprintId=...&tokenBlueprintId=...
 // ---------------------------------------------------------
 export type InventoryIDsByProductAndTokenDTO = {
@@ -37,7 +41,7 @@ export type InventoryIDsByProductAndTokenDTO = {
 };
 
 // ---------------------------------------------------------
-// ✅ Inventory Detail DTOs (exported)
+// Inventory Detail DTOs
 // GET /inventory/{inventoryId}
 // ---------------------------------------------------------
 export type TokenBlueprintSummaryDTO = {
@@ -52,28 +56,49 @@ export type ProductBlueprintSummaryDTO = {
 };
 
 // ---------------------------------------------------------
-// ✅ ProductBlueprint の modelRefs（displayOrder 含む）
-// domain/productBlueprint/entity.go の ModelRef に対応
+// ProductBlueprint の modelRefs（displayOrder 含む）
+// infrastructure mapper で backend raw の ModelID / DisplayOrder を
+// modelId / displayOrder に変換してから保持する。
 // ---------------------------------------------------------
 export type ProductBlueprintModelRefDTO = {
   modelId: string;
   displayOrder: number;
 };
 
-// ✅ ProductBlueprintCard に合わせる（productIdTag は string）
+// ---------------------------------------------------------
+// ProductBlueprint patch
+//
+// productBlueprintCategory は ProductBlueprintCard が期待する
+// ProductBlueprintCategorySnapshot と同じ型を使う。
+// backend raw の ID / Code / NameJa / NameEn / Kind / Path は
+// inventoryRepositoryHTTP.mappers.ts で
+// id / code / nameJa / nameEn / kind / path へ変換する。
+// ---------------------------------------------------------
 export type ProductBlueprintPatchDTO = {
   productName?: string | null;
+  description?: string | null;
+
+  brandId?: string | null;
   brandName?: string | null;
+  companyId?: string | null;
+
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  categoryFields?: CategoryFieldValues | null;
+
   itemType?: string | null;
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
   qualityAssurance?: string[] | null;
-  productIdTag?: string | null;
+
+  productIdTag?: string | { type?: string } | null;
+
   modelRefs?: ProductBlueprintModelRefDTO[] | null;
 };
 
-// ✅ NEW: TokenBlueprint patch（Inventory 詳細で使用）
+// ---------------------------------------------------------
+// TokenBlueprint patch（Inventory 詳細で使用）
+// ---------------------------------------------------------
 export type TokenBlueprintPatchDTO = {
   tokenName?: string | null;
   symbol?: string | null;
@@ -84,6 +109,7 @@ export type TokenBlueprintPatchDTO = {
 };
 
 export type InventoryDetailRowDTO = {
+  modelId?: string;
   tokenBlueprintId?: string;
   token?: string;
   modelNumber: string;
@@ -96,16 +122,14 @@ export type InventoryDetailRowDTO = {
 export type InventoryDetailDTO = {
   inventoryId: string;
 
-  // ✅ NEW: backend DTO が返す場合がある（方針A）
   inventoryIds?: string[];
 
   tokenBlueprintId: string;
   productBlueprintId: string;
-  modelId: string;
+  modelId?: string;
 
   productBlueprintPatch: ProductBlueprintPatchDTO;
 
-  // ✅ NEW: tokenBlueprint patch を保持できるようにする
   tokenBlueprintPatch?: TokenBlueprintPatchDTO;
 
   tokenBlueprint?: TokenBlueprintSummaryDTO;
