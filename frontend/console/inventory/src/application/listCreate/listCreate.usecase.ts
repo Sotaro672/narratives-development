@@ -15,9 +15,15 @@ import {
 
 import type { ResolvedListCreateParams } from "./listCreate.types";
 import { buildListCreateFetchInput } from "./listCreate.routing";
-import { buildCreateListInput, validateCreateListInput } from "./listCreate.input";
-import { s, normalizeListId } from "./listCreate.utils";
-import { uploadListImagesPolicyA, _internal_getListIdFromListDTO } from "./listCreate.images";
+import {
+  buildCreateListInput,
+  validateCreateListInput,
+} from "./listCreate.input";
+import { s } from "./listCreate.utils";
+import {
+  uploadListImagesPolicyB,
+  _internal_getListIdFromListDTO,
+} from "./listCreate.images";
 
 /**
  * ✅ ListCreateDTO を取得する（Hook からはこれだけ呼ぶ）
@@ -34,7 +40,7 @@ export async function loadListCreateDTOFromParams(
 }
 
 /**
- * ✅ list 作成（POST /lists） + 画像（Policy A）
+ * ✅ list 作成（POST /lists） + 画像（Policy B）
  */
 export async function createListWithImages(args: {
   params: ResolvedListCreateParams;
@@ -67,19 +73,20 @@ export async function createListWithImages(args: {
   // 2) create list
   const created = await createListHTTP(input);
 
-  const listIdRaw = _internal_getListIdFromListDTO(
-    created,
-    s((input as any)?.id) || s((input as any)?.inventoryId),
+  const listId = s(
+    _internal_getListIdFromListDTO(
+      created,
+      s((input as any)?.id) || s((input as any)?.inventoryId),
+    ),
   );
-  const listId = normalizeListId(listIdRaw);
 
   if (!listId) {
     throw new Error("created_list_missing_id");
   }
 
-  // 3) images (Policy A)
+  // 3) images (Policy B)
   if (images.length > 0) {
-    await uploadListImagesPolicyA({
+    await uploadListImagesPolicyB({
       listId,
       files: images,
       mainImageIndex,

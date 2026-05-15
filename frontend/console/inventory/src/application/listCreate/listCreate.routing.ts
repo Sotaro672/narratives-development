@@ -5,10 +5,9 @@ import type {
   ListCreateRouteParams,
   ResolvedListCreateParams,
 } from "./listCreate.types";
-import { normalizeInventoryId, s } from "./listCreate.utils";
+import { s } from "./listCreate.utils";
 
 /**
- *
  * - UI ルートは inventoryId（= inventoryKey: "pb__tb"）のみを正とする
  * - backend fetch も inventoryId のみを使う（/inventory/list-create/:inventoryId）
  * - productBlueprintId / tokenBlueprintId は一切扱わない（互換も廃止）
@@ -17,7 +16,7 @@ import { normalizeInventoryId, s } from "./listCreate.utils";
 export function resolveListCreateParams(
   raw: ListCreateRouteParams,
 ): ResolvedListCreateParams {
-  const inventoryId = normalizeInventoryId(raw?.inventoryId);
+  const inventoryId = s(raw?.inventoryId);
 
   return {
     inventoryId: inventoryId || "",
@@ -42,7 +41,7 @@ export function buildListCreateFetchInput(p: ResolvedListCreateParams): {
 export function getInventoryIdFromDTO(
   dto: ListCreateDTO | null | undefined,
 ): string {
-  return normalizeInventoryId((dto as any)?.inventoryId ?? (dto as any)?.InventoryID);
+  return s((dto as any)?.inventoryId ?? (dto as any)?.InventoryID);
 }
 
 /**
@@ -57,13 +56,13 @@ export function shouldRedirectToInventoryIdRoute(_: {
 }
 
 export function buildInventoryDetailPath(inventoryId: string): string {
-  const id = normalizeInventoryId(inventoryId);
+  const id = s(inventoryId);
   if (!id) return "/inventory";
   return `/inventory/detail/${encodeURIComponent(id)}`;
 }
 
 export function buildInventoryListCreatePath(inventoryId: string): string {
-  const id = normalizeInventoryId(inventoryId);
+  const id = s(inventoryId);
   if (!id) return "/inventory/list/create";
   return `/inventory/list/create/${encodeURIComponent(id)}`;
 }

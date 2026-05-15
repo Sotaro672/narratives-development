@@ -13,7 +13,7 @@ import {
   type ListDTO,
 } from "../../../../list/src/infrastructure/http/list";
 
-import { normalizeListId, s } from "./listCreate.utils";
+import { s } from "./listCreate.utils";
 
 export function dedupeFiles(prev: File[], add: File[]): File[] {
   const exists = new Set(
@@ -28,12 +28,14 @@ export function dedupeFiles(prev: File[], add: File[]): File[] {
 }
 
 function getListIdFromListDTO(dto: ListDTO, fallback = ""): string {
-  const raw = s((dto as any)?.id) || s(fallback);
-  return normalizeListId(raw);
+  return s((dto as any)?.id) || s(fallback);
 }
 
 function createImageId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
@@ -54,7 +56,7 @@ function buildListImageObjectPath(args: {
   imageId: string;
   file: File;
 }): string {
-  const listId = normalizeListId(args.listId);
+  const listId = s(args.listId);
   const imageId = s(args.imageId);
   const name = safeFileName(args.file);
 
@@ -73,7 +75,7 @@ async function uploadFileToFirebaseStorage(args: {
   objectPath: string;
   downloadURL: string;
 }> {
-  const listId = normalizeListId(args.listId);
+  const listId = s(args.listId);
   const imageId = s(args.imageId);
   const file = args.file;
 
@@ -107,7 +109,7 @@ async function uploadFileToFirebaseStorage(args: {
 }
 
 /**
- * ✅ 複数画像を Firebase Storage へ直接アップロード
+ * 複数画像を Firebase Storage へ直接アップロード
  * → backend にメタ情報登録
  * → primary image 設定
  *
@@ -125,7 +127,7 @@ async function uploadFileToFirebaseStorage(args: {
  * - backend の List.ImageID は images subcollection docID
  * - objectPath ではなく imageId を渡す
  */
-export async function uploadListImagesPolicyA(args: {
+export async function uploadListImagesPolicyB(args: {
   listId: string;
   files: File[];
   mainImageIndex: number;
@@ -134,14 +136,14 @@ export async function uploadListImagesPolicyA(args: {
   registered: Array<{ imageId: string; displayOrder: number }>;
   primaryImageId?: string;
 }> {
-  const listId = normalizeListId(args.listId);
+  const listId = s(args.listId);
   const files = Array.isArray(args.files) ? args.files : [];
   const mainImageIndex = Number.isFinite(Number(args.mainImageIndex))
     ? Number(args.mainImageIndex)
     : 0;
 
   console.log(
-    "[debug] uploadListImagesPolicyA.files",
+    "[debug] uploadListImagesPolicyB.files",
     files.map((f) => ({
       name: f.name,
       size: f.size,

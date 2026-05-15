@@ -19,9 +19,9 @@ export function extractDisplayStrings(dto: ListCreateDTO | null): {
 }
 
 /**
- * ✅ backend の ListCreateDTO.priceRows を PriceCard 用 PriceRow[] に変換
- * - 期待値: inventory/application の PriceRow（priceCard.types.ts）を正とする
- * - 識別子は modelId のみ（= PriceRow.id）を正とする
+ * backend の ListCreateDTO.priceRows を PriceCard 用 PriceRow[] に変換
+ * - 期待値: inventory/application の PriceRow（listCreate.types.ts）を正とする
+ * - 識別子は modelId を正とする
  * - 並び順は displayOrder（未設定は null を保持）
  * - 名揺れ補完はしない（Size/Color/Index での補完はしない）
  */
@@ -33,30 +33,30 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
       : [];
 
   return rowsAny.flatMap((r: any) => {
-    const id = s(r?.modelId ?? r?.ModelId);
-    if (!id) return []; // modelId が無い行は捨てる（識別子が正）
+    const modelId = s(r?.modelId ?? r?.ModelId);
+    if (!modelId) return [];
 
     const displayOrderRaw = r?.displayOrder ?? r?.DisplayOrder;
     const displayOrder =
       displayOrderRaw === null || displayOrderRaw === undefined
         ? null
-        : (Number(displayOrderRaw) as number);
+        : Number(displayOrderRaw);
 
     const size = s(r?.size ?? r?.Size) || "-";
     const color = s(r?.color ?? r?.Color) || "-";
 
-    const stock0 = Number(r?.stock ?? r?.Stock ?? 0);
-    const safeStock = Number.isFinite(stock0) ? stock0 : 0;
+    const stockRaw = Number(r?.stock ?? r?.Stock ?? 0);
+    const stock = Number.isFinite(stockRaw) ? stockRaw : 0;
 
     const rgb = r?.rgb ?? r?.RGB;
     const price = r?.price ?? r?.Price;
 
     const row: PriceRow = {
-      id, // ✅ modelId -> id
-      displayOrder, // ✅ displayOrder を保持（未設定は null）
+      modelId,
+      displayOrder,
       size,
       color,
-      stock: safeStock,
+      stock,
       rgb: rgb as any,
       price: price === undefined ? null : (price as any),
     };
@@ -66,7 +66,7 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
 }
 
 /**
- * ✅ 初期表示用: PriceRow[] を返す
+ * 初期表示用: PriceRow[] を返す
  */
 export function initPriceRowsFromDTO(dto: ListCreateDTO | null): PriceRow[] {
   return mapDTOToPriceRows(dto);

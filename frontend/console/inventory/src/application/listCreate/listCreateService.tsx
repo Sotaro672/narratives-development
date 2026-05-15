@@ -32,6 +32,6 @@ export {
   validateCreateListInput,
 } from "./listCreate.input";
 
-export { dedupeFiles, uploadListImagesPolicyA } from "./listCreate.images";
+export { dedupeFiles, uploadListImagesPolicyB } from "./listCreate.images";
 
 export { loadListCreateDTOFromParams, createListWithImages } from "./listCreate.usecase";
