@@ -5,8 +5,8 @@ import type {
   CreateListPriceRow,
 } from "./listCreate.types";
 
-// list create (POST /lists) の input 型（list側のHTTP層）
-import type { CreateListInput } from "../../../../list/src/infrastructure/http/list";
+// list create (POST /lists) の input 型（list側のDTO層）
+import type { CreateListInput } from "../../../../list/src/infrastructure/dto";
 
 export function normalizeCreateListPriceRows(
   rows: unknown[],

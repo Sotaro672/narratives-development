@@ -1,52 +1,18 @@
-//frontend\console\list\src\infrastructure\repository\listImageHttpRepository.ts
+// frontend\console\list\src\infrastructure\repository\listImageHttpRepository.ts
 
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import type { ListDTO } from "../dto/listDto";
-import type { ListImageDTO } from "../dto/listImageDto";
+import type { SaveListImageFromFirebaseStorageInput } from "../dto/listImageDto";
 import { requestJSON } from "../http/httpClient";
-import { fetchListByIdHTTP } from "./listHttpRepository";
 
-const normalizeImageUrlsFromListDTO = (dto: ListDTO): string[] => {
-  const imageUrls = (dto as any)?.imageUrls;
-  if (!Array.isArray(imageUrls)) return [];
-
-  return imageUrls.filter(Boolean);
-};
-
-export async function fetchListImagesHTTP(
-  listId: string,
-): Promise<ListImageDTO[]> {
-  if (!listId) throw new Error("invalid_list_id");
-
-  return await requestJSON<ListImageDTO[]>({
-    method: "GET",
-    path: `/lists/${encodeURIComponent(listId)}/images`,
-  });
-}
-
-export async function fetchListImageUrlsHTTP(args: {
-  listId: string;
-  primaryImageId?: string;
-}): Promise<string[]> {
-  const listId = args.listId;
-  if (!listId) throw new Error("invalid_list_id");
-
-  const dto = await fetchListByIdHTTP(listId);
-  return normalizeImageUrlsFromListDTO(dto);
-}
-
-export async function saveListImageFromFirebaseStorageHTTP(args: {
-  listId: string;
+export type SavedListImageDTO = {
   id: string;
   url: string;
-  objectPath: string;
-  size: number;
-  displayOrder: number;
-  fileName?: string;
-  contentType?: string;
-  createdBy?: string;
-  createdAt?: string;
-}): Promise<ListImageDTO> {
+};
+
+export async function saveListImageFromFirebaseStorageHTTP(
+  args: SaveListImageFromFirebaseStorageInput,
+): Promise<SavedListImageDTO> {
   const listId = args.listId;
   if (!listId) throw new Error("invalid_list_id");
 
@@ -78,7 +44,7 @@ export async function saveListImageFromFirebaseStorageHTTP(args: {
     if (payload[key] === undefined) delete payload[key];
   }
 
-  return await requestJSON<ListImageDTO>({
+  return await requestJSON<SavedListImageDTO>({
     method: "POST",
     path: `/lists/${encodeURIComponent(listId)}/images`,
     body: payload,
@@ -123,68 +89,6 @@ export async function setListPrimaryImageHTTP(args: {
   });
 }
 
-function extractImageIdForDelete(args: {
-  listId: string;
-  imageIdOrObjectPathOrUrl: string;
-}): string {
-  const listId = args.listId;
-  const raw = args.imageIdOrObjectPathOrUrl;
-  if (!listId || !raw) return "";
-
-  if (!raw.includes("/") && !raw.includes("?")) return raw;
-
-  {
-    const objectPath = raw.replace(/^\/+/, "");
-    const parts = objectPath.split("/").filter(Boolean);
-
-    if (
-      parts.length >= 4 &&
-      parts[0] === "lists" &&
-      parts[1] === listId &&
-      parts[2] === "images"
-    ) {
-      return parts[3] || "";
-    }
-  }
-
-  try {
-    const url = new URL(raw);
-    const decodedPathname = decodeURIComponent(url.pathname);
-
-    const marker = "/o/";
-    const markerIndex = decodedPathname.indexOf(marker);
-
-    if (markerIndex >= 0) {
-      const objectPath = decodedPathname.slice(markerIndex + marker.length);
-      const parts = objectPath.replace(/^\/+/, "").split("/").filter(Boolean);
-
-      if (
-        parts.length >= 4 &&
-        parts[0] === "lists" &&
-        parts[1] === listId &&
-        parts[2] === "images"
-      ) {
-        return parts[3] || "";
-      }
-    }
-
-    const pathParts = decodedPathname.replace(/^\/+/, "").split("/").filter(Boolean);
-
-    const listsIndex = pathParts.indexOf("lists");
-    if (
-      listsIndex >= 0 &&
-      pathParts[listsIndex + 1] === listId &&
-      pathParts[listsIndex + 2] === "images"
-    ) {
-      return pathParts[listsIndex + 3] || "";
-    }
-  } catch {
-    // noop
-  }
-
-  return "";
-}
-
 export async function deleteListImageHTTP(args: {
   listId: string;
   imageId: string;
@@ -192,10 +96,7 @@ export async function deleteListImageHTTP(args: {
   const listId = args.listId;
   if (!listId) throw new Error("invalid_list_id");
 
-  const imageId = extractImageIdForDelete({
-    listId,
-    imageIdOrObjectPathOrUrl: args.imageId,
-  });
+  const imageId = args.imageId;
   if (!imageId) throw new Error("invalid_image_id");
 
   return await requestJSON<any>({

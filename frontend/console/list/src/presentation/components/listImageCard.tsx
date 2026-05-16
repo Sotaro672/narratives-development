@@ -46,11 +46,6 @@ export type ListImageCardProps = {
   mainImageIndex: number;
   setMainImageIndex: (idx: number) => void;
 
-  imageInputRef?: React.RefObject<HTMLInputElement | null>;
-  onSelectImages?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onDropImages?: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragOverImages?: (e: React.DragEvent<HTMLDivElement>) => void;
-
   onAddImages?: (files: FileList | null) => void;
 
   onRemoveImageAt?: (idx: number) => void;
@@ -60,15 +55,9 @@ export type ListImageCardProps = {
 export default function ListImageCard(props: ListImageCardProps) {
   const vm = useListImageCard({
     isEdit: props.isEdit,
-    saving: props.saving,
     imageUrls: props.imageUrls,
     mainImageIndex: props.mainImageIndex,
     setMainImageIndex: props.setMainImageIndex,
-
-    imageInputRef: props.imageInputRef,
-    onSelectImages: props.onSelectImages,
-    onDropImages: props.onDropImages,
-    onDragOverImages: props.onDragOverImages,
 
     onAddImages: props.onAddImages,
 
@@ -117,8 +106,6 @@ export default function ListImageCard(props: ListImageCardProps) {
           <div
             className={["lic__empty", props.isEdit ? "lic__empty--clickable" : ""].join(" ")}
             onClick={vm.openPicker}
-            onDrop={vm.onDropImages}
-            onDragOver={vm.onDragOverImages}
             role="button"
             tabIndex={0}
             title={props.isEdit ? "クリックで画像を追加" : undefined}
@@ -129,7 +116,7 @@ export default function ListImageCard(props: ListImageCardProps) {
             <div className="lic__empty-title">画像を追加</div>
             <div className="lic__empty-sub">
               {props.isEdit
-                ? "クリックで選択（複数可） / ドロップでも追加できます"
+                ? "クリックで選択（複数可）"
                 : "編集モードで追加できます"}
             </div>
           </div>
@@ -139,8 +126,6 @@ export default function ListImageCard(props: ListImageCardProps) {
           <>
             <div
               className="lic__main"
-              onDrop={vm.onDropImages}
-              onDragOver={vm.onDragOverImages}
               title={props.isEdit ? "クリックで画像追加（複数可）" : undefined}
             >
               <div
@@ -220,8 +205,6 @@ export default function ListImageCard(props: ListImageCardProps) {
                 <div
                   className="lic__add-tile"
                   onClick={vm.openPicker}
-                  onDrop={vm.onDropImages}
-                  onDragOver={vm.onDragOverImages}
                   role="button"
                   tabIndex={0}
                   title="クリックで画像を追加（複数可）"

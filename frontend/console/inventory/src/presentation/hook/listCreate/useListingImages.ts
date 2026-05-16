@@ -1,7 +1,20 @@
 // frontend/console/inventory/src/presentation/hook/listCreate/useListingImages.ts
+
 import * as React from "react";
 
-import { dedupeFiles, type ImageInputRef } from "../../../application/listCreate/listCreateService";
+type ImageInputRef = React.RefObject<HTMLInputElement | null>;
+
+function dedupeFiles(prev: File[], add: File[]): File[] {
+  const exists = new Set(
+    prev.map((file: File) => `${file.name}__${file.size}__${file.lastModified}`),
+  );
+
+  const filtered = add.filter(
+    (file: File) => !exists.has(`${file.name}__${file.size}__${file.lastModified}`),
+  );
+
+  return [...prev, ...filtered];
+}
 
 export function useListingImages(): {
   images: File[];
@@ -32,7 +45,7 @@ export function useListingImages(): {
       console.log("[inventory/listImage] selected", {
         addedCount: files.length,
         totalCount: next.length,
-        names: next.slice(0, 6).map((f) => f.name),
+        names: next.slice(0, 6).map((file: File) => file.name),
       });
 
       e.currentTarget.value = "";
@@ -47,7 +60,7 @@ export function useListingImages(): {
 
       const files = Array.from(e.dataTransfer.files ?? [])
         .filter(Boolean)
-        .filter((f) => String(f.type || "").startsWith("image/")) as File[];
+        .filter((file: File) => String(file.type || "").startsWith("image/")) as File[];
 
       if (files.length === 0) return;
 
@@ -70,7 +83,7 @@ export function useListingImages(): {
       console.log("[inventory/listImage] removed", {
         removedIndex: idx,
         totalCount: next.length,
-        names: next.slice(0, 6).map((f) => f.name),
+        names: next.slice(0, 6).map((file: File) => file.name),
       });
 
       return next;
@@ -89,19 +102,20 @@ export function useListingImages(): {
   }, []);
 
   const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
+
   React.useEffect(() => {
     if (images.length === 0) {
       setImagePreviewUrls([]);
       return;
     }
 
-    const urls = images.map((f) => URL.createObjectURL(f));
+    const urls = images.map((file: File) => URL.createObjectURL(file));
     setImagePreviewUrls(urls);
 
     return () => {
-      urls.forEach((u) => {
+      urls.forEach((url: string) => {
         try {
-          URL.revokeObjectURL(u);
+          URL.revokeObjectURL(url);
         } catch {
           // noop
         }
@@ -114,6 +128,7 @@ export function useListingImages(): {
       if (mainImageIndex !== 0) setMainImageIndex(0);
       return;
     }
+
     if (mainImageIndex < 0 || mainImageIndex > images.length - 1) {
       setMainImageIndex(0);
     }
@@ -124,7 +139,7 @@ export function useListingImages(): {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
-    imageInputRef: imageInputRef as unknown as ImageInputRef,
+    imageInputRef,
     onSelectImages,
     onDropImages,
     onDragOverImages,

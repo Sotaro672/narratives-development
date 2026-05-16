@@ -1,7 +1,6 @@
 // frontend/console/list/src/application/listDetail/listDetailSave.usecase.ts
 
 import {
-  deleteListImageHTTP,
   saveListImageFromFirebaseStorageHTTP,
   setListPrimaryImageHTTP,
 } from "../../infrastructure/repository";
@@ -10,13 +9,11 @@ import type { ListDTO } from "../../infrastructure/dto";
 
 import {
   loadListDetailDTO,
-  normalizeImageUrls,
   updateListDetailDTO,
   type ListDetailDTO,
 } from "../listDetailService";
 
 import { uploadListImageToFirebaseStorage } from "../../infrastructure/firebase/listImageStorage";
-import { extractListImageIdFromUrlOrObjectPath } from "./listImageId";
 
 export type SaveListDetailDraftImage = {
   url: string;
@@ -101,14 +98,14 @@ function buildAfterUrls(args: {
 }
 
 function resolvePrimaryImageId(args: {
-  listId: string;
+  currentImageId?: string;
   selectedUrl: string;
+  currentImageUrls: string[];
   uploadedItems: SavedDraftImageItem[];
 }): string {
-  const listId = String(args.listId ?? "").trim();
   const selectedUrl = String(args.selectedUrl ?? "").trim();
 
-  if (!listId || !selectedUrl) return "";
+  if (!selectedUrl) return "";
 
   const uploadedPrimary = args.uploadedItems.find(
     (item) => String(item.url ?? "").trim() === selectedUrl,
@@ -118,10 +115,19 @@ function resolvePrimaryImageId(args: {
     return String(uploadedPrimary.imageId ?? "").trim();
   }
 
-  return extractListImageIdFromUrlOrObjectPath({
-    listId,
-    raw: selectedUrl,
-  });
+  const currentImageId = String(args.currentImageId ?? "").trim();
+  const currentImageUrls = Array.isArray(args.currentImageUrls)
+    ? args.currentImageUrls
+    : [];
+
+  if (
+    currentImageId &&
+    currentImageUrls.some((url) => String(url ?? "").trim() === selectedUrl)
+  ) {
+    return currentImageId;
+  }
+
+  return "";
 }
 
 export async function saveListDetailChanges(
@@ -133,7 +139,14 @@ export async function saveListDetailChanges(
   const updatedBy = String(input.updatedBy ?? "").trim() || "system";
   const draftImages = normalizeDraftImages(input.draftImages);
 
-  const beforeUrls = normalizeImageUrls(input.currentDTO);
+  const currentDTO: any = input.currentDTO;
+  const currentImageId = String(currentDTO?.imageId ?? "").trim();
+  const currentImageUrls = Array.isArray(currentDTO?.imageUrls)
+    ? currentDTO.imageUrls
+        .map((url: unknown) => String(url ?? "").trim())
+        .filter(Boolean)
+    : [];
+
   const uploadedItems: SavedDraftImageItem[] = [];
 
   for (let index = 0; index < draftImages.length; index++) {
@@ -142,7 +155,7 @@ export async function saveListDetailChanges(
     if (!isNewDraftImageWithFile(image)) continue;
 
     const file = image.file;
-    const displayOrder = beforeUrls.length + uploadedItems.length;
+    const displayOrder = currentImageUrls.length + uploadedItems.length;
 
     const uploaded = await uploadListImageToFirebaseStorage({
       listId,
@@ -178,28 +191,12 @@ export async function saveListDetailChanges(
     uploadedItems,
   });
 
-  const removedUrls = beforeUrls.filter((url) => !afterUrls.includes(url));
-
-  for (const removedUrl of removedUrls) {
-    const imageId =
-      extractListImageIdFromUrlOrObjectPath({
-        listId,
-        raw: removedUrl,
-      }) || String(removedUrl ?? "").trim();
-
-    if (!imageId) continue;
-
-    await deleteListImageHTTP({
-      listId,
-      imageId,
-    });
-  }
-
   const selectedUrl = String(afterUrls[input.mainImageIndex] ?? "").trim();
 
   if (selectedUrl) {
     const primaryImageId = resolvePrimaryImageId({
-      listId,
+      currentImageId,
+      currentImageUrls,
       selectedUrl,
       uploadedItems,
     });

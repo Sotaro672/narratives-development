@@ -1,4 +1,5 @@
 // frontend\console\list\src\infrastructure\repository\listHttpRepository.ts
+
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import type { CreateListInput } from "../dto/createListInput";
 import type { UpdateListInput } from "../dto/updateListInput";
@@ -6,6 +7,14 @@ import type { ListDTO } from "../dto/listDto";
 import { requestJSON } from "../http/httpClient";
 import { buildCreateListPayloadArray } from "../payload/createListPayload";
 import { buildUpdateListPayloadArray } from "../payload/updateListPayload";
+
+type ListPageResponseDTO = {
+  items: ListDTO[];
+  page: number;
+  perPage: number;
+  totalCount: number;
+  totalPages: number;
+};
 
 export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
   const payloadArray = buildCreateListPayloadArray(input);
@@ -43,12 +52,12 @@ export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDT
 }
 
 export async function fetchListsHTTP(): Promise<ListDTO[]> {
-  const json = await requestJSON<ListDTO[]>({
+  const json = await requestJSON<ListPageResponseDTO>({
     method: "GET",
     path: "/lists",
   });
 
-  return Array.isArray(json) ? json : [];
+  return Array.isArray(json.items) ? json.items : [];
 }
 
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {

@@ -215,10 +215,7 @@ export async function createListWithImages(args: {
   // 2) create list
   const created = await createListHTTP(input);
 
-  const listId = _internal_getListIdFromListDTO(
-    created,
-    (input as any).id || (input as any).inventoryId,
-  );
+  const listId = _internal_getListIdFromListDTO(created);
 
   if (!listId) {
     throw new Error("created_list_missing_id");

@@ -3,11 +3,6 @@
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { storage } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-function toText(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  return typeof v === "string" ? v.trim() : String(v).trim();
-}
-
 export type UploadListImageToFirebaseStorageInput = {
   listId: string;
   file: File;
@@ -29,7 +24,7 @@ export function createListImageId(): string {
 }
 
 export function safeListImageFileName(file: File): string {
-  const raw = toText(file?.name) || "image";
+  const raw = String(file?.name ?? "").trim() || "image";
 
   return raw
     .replace(/[\\/:*?"<>|#%{}^~[\]`]/g, "_")
@@ -42,8 +37,8 @@ export function buildListImageObjectPath(args: {
   imageId: string;
   file: File;
 }): string {
-  const listId = toText(args.listId);
-  const imageId = toText(args.imageId);
+  const listId = String(args.listId ?? "").trim();
+  const imageId = String(args.imageId ?? "").trim();
   const name = safeListImageFileName(args.file);
 
   if (!listId) throw new Error("invalid_list_id");
@@ -55,8 +50,8 @@ export function buildListImageObjectPath(args: {
 export async function uploadListImageToFirebaseStorage(
   input: UploadListImageToFirebaseStorageInput,
 ): Promise<UploadedListImageFromFirebaseStorage> {
-  const listId = toText(input.listId);
-  const imageId = toText(input.imageId) || createListImageId();
+  const listId = String(input.listId ?? "").trim();
+  const imageId = String(input.imageId ?? "").trim() || createListImageId();
   const file = input.file;
 
   if (!listId) throw new Error("invalid_list_id");
