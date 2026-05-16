@@ -14,9 +14,6 @@ import type {
 // ----------------------------------------------------------
 // Helpers
 // ----------------------------------------------------------
-function s(v: unknown): string {
-  return String(v ?? "").trim();
-}
 
 /**
  * 数値入力の正規化
@@ -25,7 +22,7 @@ function s(v: unknown): string {
  * - 空白除去
  */
 function normalizeNumericString(raw: string): string {
-  const t = s(raw);
+  const t = String(raw ?? "").trim();
   if (!t) return "";
 
   const half = t.replace(/[０-９]/g, (ch) => {
@@ -112,7 +109,7 @@ function getVolumeValue(row: { volumeValue?: number | null }): number | null {
 }
 
 function getVolumeUnit(row: { volumeUnit?: string | null }): string | null {
-  const unit = s(row.volumeUnit);
+  const unit = String(row.volumeUnit ?? "").trim();
   return unit || null;
 }
 
@@ -152,7 +149,7 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
       });
 
     return sorted.map(({ row, originalIdx }) => {
-      const modelId = s(row.modelId);
+      const modelId = String(row.modelId ?? "").trim();
 
       const priceInputValue = getPriceInputValue(row.price);
 

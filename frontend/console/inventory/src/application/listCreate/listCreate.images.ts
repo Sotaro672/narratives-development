@@ -10,8 +10,9 @@ import {
 import {
   saveListImageFromFirebaseStorageHTTP,
   setListPrimaryImageHTTP,
-  type ListDTO,
-} from "../../../../list/src/infrastructure/http/list";
+} from "../../../../list/src/infrastructure/repository";
+
+import type { ListDTO } from "../../../../list/src/infrastructure/dto";
 
 export function dedupeFiles(prev: File[], add: File[]): File[] {
   const exists = new Set(
@@ -175,7 +176,7 @@ export async function uploadListImagesPolicyB(args: {
     await saveListImageFromFirebaseStorageHTTP({
       listId,
       id: uploaded.imageId,
-      downloadURL: uploaded.downloadURL,
+      url: uploaded.downloadURL,
       objectPath: uploaded.objectPath,
       size: Number(file.size || 0),
       displayOrder: i,

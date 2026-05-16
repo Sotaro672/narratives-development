@@ -17,11 +17,11 @@ import {
 } from "../../../../model/src/infrastructure/repository/modelRepositoryHTTP";
 
 // list create (POST /lists)
-import {
-  createListHTTP,
-  type CreateListInput,
-  type ListDTO,
-} from "../../../../list/src/infrastructure/http/list";
+import { createListHTTP } from "../../../../list/src/infrastructure/repository";
+import type {
+  CreateListInput,
+  ListDTO,
+} from "../../../../list/src/infrastructure/dto";
 
 import type { ResolvedListCreateParams } from "./listCreate.types";
 import { buildListCreateFetchInput } from "./listCreate.routing";

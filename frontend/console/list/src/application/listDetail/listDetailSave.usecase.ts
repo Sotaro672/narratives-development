@@ -4,8 +4,9 @@ import {
   deleteListImageHTTP,
   saveListImageFromFirebaseStorageHTTP,
   setListPrimaryImageHTTP,
-  type ListDTO,
-} from "../../infrastructure/http/list";
+} from "../../infrastructure/repository";
+
+import type { ListDTO } from "../../infrastructure/dto";
 
 import {
   loadListDetailDTO,

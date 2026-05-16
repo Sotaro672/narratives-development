@@ -1,18 +1,9 @@
-// frontend/console/list/src/infrastructure/http/list/listApi.ts
-
-import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import type {
-  CreateListInput,
-  ListAggregateDTO,
-  ListDTO,
-  ListImageDTO,
-  UpdateListInput,
-} from "./types";
-import { requestJSON } from "./httpClient";
-import {
-  buildCreateListPayloadArray,
-  buildUpdateListPayloadArray,
-} from "./payloads";
+//frontend\console\list\src\infrastructure\repository\listImageHttpRepository.ts
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import type { ListDTO } from "../dto/listDto";
+import type { ListImageDTO } from "../dto/listImageDto";
+import { requestJSON } from "../http/httpClient";
+import { fetchListByIdHTTP } from "./listHttpRepository";
 
 const toStringSafe = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
@@ -31,129 +22,6 @@ const normalizeImageUrlsFromListDTO = (dto: ListDTO): string[] => {
     .filter(Boolean);
 };
 
-/**
- * ✅ Create list
- * POST /lists
- */
-export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
-  const payloadArray = buildCreateListPayloadArray(input);
-
-  return await requestJSON<ListDTO>({
-    method: "POST",
-    path: "/lists",
-    body: payloadArray,
-    debug: {
-      tag: "POST /lists",
-      url: `${API_BASE}/lists`,
-      method: "POST",
-      body: payloadArray,
-    },
-  });
-}
-
-/**
- * ✅ Update list
- * PUT /lists/{id}
- */
-export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDTO> {
-  const listId = toListId(input?.listId);
-  if (!listId) throw new Error("invalid_list_id");
-
-  const payloadArray = buildUpdateListPayloadArray(input);
-
-  return await requestJSON<ListDTO>({
-    method: "PUT",
-    path: `/lists/${encodeURIComponent(listId)}`,
-    body: payloadArray,
-    debug: {
-      tag: `PUT /lists/${listId}`,
-      url: `${API_BASE}/lists/${encodeURIComponent(listId)}`,
-      method: "PUT",
-      body: payloadArray,
-    },
-  });
-}
-
-/**
- * ✅ List lists
- * GET /lists
- *
- * 正:
- * - GET /lists は ListDTO[] を返す
- * - items / Items / data の名揺れ吸収は廃止
- */
-export async function fetchListsHTTP(): Promise<ListDTO[]> {
-  const json = await requestJSON<ListDTO[]>({
-    method: "GET",
-    path: "/lists",
-  });
-
-  return Array.isArray(json) ? json : [];
-}
-
-/**
- * ✅ Get list detail
- * GET /lists/{id}
- *
- * 正:
- * - backend の GET /lists/{id} response を正とする
- * - imageUrls: string[] を表示用画像URLの正とする
- * - GCS / signed URL / bucket / storagePath 前提の補正はしない
- */
-export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
-  const id = toListId(listId);
-  if (!id) {
-    throw new Error("invalid_list_id");
-  }
-
-  return await requestJSON<ListDTO>({
-    method: "GET",
-    path: `/lists/${encodeURIComponent(id)}`,
-    debug: {
-      tag: `GET /lists/${id}`,
-      url: `${API_BASE}/lists/${encodeURIComponent(id)}`,
-      method: "GET",
-    },
-  });
-}
-
-/**
- * ✅ ListDetail 用
- */
-export async function fetchListDetailHTTP(args: {
-  listId: string;
-  inventoryIdHint?: string;
-}): Promise<ListDTO> {
-  const listId = toListId(args.listId);
-  if (!listId) {
-    throw new Error("invalid_list_id");
-  }
-
-  return await fetchListByIdHTTP(listId);
-}
-
-/**
- * GET /lists/{id}/aggregate
- */
-export async function fetchListAggregateHTTP(
-  listId: string,
-): Promise<ListAggregateDTO> {
-  const id = toListId(listId);
-  if (!id) throw new Error("invalid_list_id");
-
-  return await requestJSON<ListAggregateDTO>({
-    method: "GET",
-    path: `/lists/${encodeURIComponent(id)}/aggregate`,
-  });
-}
-
-/**
- * GET /lists/{id}/images
- *
- * 補足:
- * - 画像表示は GET /lists/{id} の imageUrls を正とする
- * - この関数は画像レコード操作が必要な場合だけ使う
- */
 export async function fetchListImagesHTTP(
   listId: string,
 ): Promise<ListImageDTO[]> {
@@ -166,13 +34,6 @@ export async function fetchListImagesHTTP(
   });
 }
 
-/**
- * ✅ list detail 表示用URL配列を取得
- *
- * 正:
- * - GET /lists/{id} response の imageUrls: string[] をそのまま使う
- * - GCS / signed URL / bucket / storagePath 由来の組み立てはしない
- */
 export async function fetchListImageUrlsHTTP(args: {
   listId: string;
   primaryImageId?: string;
@@ -184,19 +45,6 @@ export async function fetchListImageUrlsHTTP(args: {
   return normalizeImageUrlsFromListDTO(dto);
 }
 
-// ==========================================================
-// ✅ Firebase Storage direct upload registration
-// ==========================================================
-
-/**
- * Firebase Storage へ frontend から直接アップロード済みの listImage を backend に登録する。
- *
- * 正:
- * - frontend で Firebase Storage へ直接 uploadBytes / uploadBytesResumable
- * - getDownloadURL で取得した URL を url として送る
- * - Firebase Storage object path を objectPath として送る
- * - GCS / signed URL / bucket / storagePath / downloadURL alias は使わない
- */
 export async function saveListImageFromFirebaseStorageHTTP(args: {
   listId: string;
   id: string;
@@ -253,9 +101,6 @@ export async function saveListImageFromFirebaseStorageHTTP(args: {
   });
 }
 
-/**
- * PUT /lists/{id}/primary-image
- */
 export async function setListPrimaryImageHTTP(args: {
   listId: string;
   imageId: string;
@@ -287,11 +132,6 @@ export async function setListPrimaryImageHTTP(args: {
     },
   });
 }
-
-// ==========================================================
-// ✅ delete image
-// DELETE /lists/{id}/images/{imageId}
-// ==========================================================
 
 function extractImageIdForDelete(args: {
   listId: string;

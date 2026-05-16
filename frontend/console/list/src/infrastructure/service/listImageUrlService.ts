@@ -1,21 +1,11 @@
-// frontend\console\list\src\infrastructure\http\list\listImage.ts
-
-import type { ListImageDTO } from "./types";
+//frontend\console\list\src\infrastructure\service\listImageUrlService.ts
+import type { ListImageDTO } from "../dto/listImageDto";
 
 function toText(v: unknown): string {
   if (v === null || v === undefined) return "";
   return typeof v === "string" ? v.trim() : String(v).trim();
 }
 
-/**
- * ✅ ListImage から表示用URLを解決
- *
- * 正:
- * - GCS は廃止
- * - Firebase Storage の download URL を正とする
- * - backend が返す list detail では imageUrls: string[] を正とする
- * - ListImageDTO 単体では url のみを見る
- */
 export function resolveListImageUrl(img: ListImageDTO): string {
   return toText((img as any)?.url);
 }

@@ -153,7 +153,6 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
           <Table className="prc__table">
             <TableHeader>
               <TableRow>
-                {/* 型番列は無し */}
                 {isAlcoholCategory ? (
                   <>
                     <TableHead className="prc__th">容量</TableHead>
@@ -176,7 +175,6 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
             <TableBody>
               {rowsWithCategory.map((row) => {
                 return (
-                  // React key は識別子 modelId を使う（displayOrder は重複/未設定があり得る）
                   <TableRow key={row.modelId} className="prc__tr">
                     {isAlcoholCategory ? (
                       <>
@@ -190,21 +188,15 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
                       </>
                     ) : (
                       <>
-                        {/* サイズ */}
                         <TableCell className="prc__size">
                           {row.size || "-"}
                         </TableCell>
 
-                        {/* カラー */}
                         <TableCell className="prc__color-cell">
                           <span
-                            className="prc__color-dot inline-block align-middle mr-2"
+                            className="prc__color-dot"
                             style={{
-                              width: 12,
-                              height: 12,
-                              borderRadius: 9999,
                               backgroundColor: row.bgColor ?? "#ffffff",
-                              boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
                             }}
                             title={row.rgbTitle ?? ""}
                           />
@@ -215,12 +207,10 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
                       </>
                     )}
 
-                    {/* 在庫数 */}
                     <TableCell className="prc__stock text-right">
                       <span className="prc__stock-number">{row.stock}</span>
                     </TableCell>
 
-                    {/* 価格 */}
                     <TableCell className="prc__price text-right">
                       {isEdit ? (
                         <div className="flex items-center gap-2 justify-end">

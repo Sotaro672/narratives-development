@@ -108,6 +108,7 @@ export type UseListDetailResult = {
   draftImages: DraftImage[];
   onAddImages: (files: FileList | null) => void;
   onRemoveImageAt: (idx: number) => void;
+  onClearImages: () => void;
 
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
@@ -123,9 +124,17 @@ export type UseListDetailResult = {
   // ✅ PriceCard result（page が参照するため）
   priceCard: ReturnType<typeof usePriceCard>;
 
-  // admin (view)
+  // =========================
+  // admin (view/edit)
+  // =========================
   assigneeId: string;
   assigneeName: string;
+  draftAssigneeId: string;
+  setDraftAssigneeId: React.Dispatch<React.SetStateAction<string>>;
+  onSelectAssignee: (id: string) => void;
+  onChangeAssignee: (id: string) => void;
+  onEditAssignee: () => void;
+  onClickAssignee: () => void;
 
   createdByName: string;
   createdAt: string;
@@ -258,6 +267,27 @@ function useListImages(args: {
     [isEdit, saving],
   );
 
+  const onClearImages = React.useCallback(() => {
+    if (!isEdit) return;
+    if (saving) return;
+
+    setDraftImages((prev) => {
+      const arr = Array.isArray(prev) ? prev : [];
+
+      for (const x of arr) {
+        if (x?.isNew && typeof x?.url === "string" && x.url.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(x.url);
+          } catch {
+            // noop
+          }
+        }
+      }
+
+      return [];
+    });
+  }, [isEdit, saving]);
+
   const imageUrls = React.useMemo(() => {
     return (Array.isArray(draftImages) ? draftImages : [])
       .map((x) => s(x?.url))
@@ -270,6 +300,7 @@ function useListImages(args: {
     imageUrls,
     onAddImages,
     onRemoveImageAt,
+    onClearImages,
   };
 }
 
@@ -405,6 +436,9 @@ export function useListDetail(): UseListDetailResult {
   const [draftDecision, setDraftDecision] =
     React.useState<ListingDecisionNorm>(decisionNorm);
 
+  const [draftAssigneeId, setDraftAssigneeId] =
+    React.useState(assigneeId);
+
   // save state
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
@@ -424,6 +458,7 @@ export function useListDetail(): UseListDetailResult {
     setDraftDescription(description);
     setDraftPriceRows(clonePriceRows(viewPriceRows));
     setDraftDecision(decisionNorm);
+    setDraftAssigneeId(assigneeId);
 
     img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
   }, [
@@ -432,6 +467,7 @@ export function useListDetail(): UseListDetailResult {
     description,
     viewPriceRows,
     decisionNorm,
+    assigneeId,
     viewImageUrls,
     img,
   ]);
@@ -441,6 +477,7 @@ export function useListDetail(): UseListDetailResult {
     setDraftDescription(description);
     setDraftPriceRows(clonePriceRows(viewPriceRows));
     setDraftDecision(decisionNorm);
+    setDraftAssigneeId(assigneeId);
     img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
     setSaveError("");
     setIsEdit(true);
@@ -449,6 +486,7 @@ export function useListDetail(): UseListDetailResult {
     description,
     viewPriceRows,
     decisionNorm,
+    assigneeId,
     viewImageUrls,
     img,
   ]);
@@ -460,6 +498,7 @@ export function useListDetail(): UseListDetailResult {
     setDraftDescription(description);
     setDraftPriceRows(clonePriceRows(viewPriceRows));
     setDraftDecision(decisionNorm);
+    setDraftAssigneeId(assigneeId);
     img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
     setSaveError("");
 
@@ -470,6 +509,7 @@ export function useListDetail(): UseListDetailResult {
     description,
     viewPriceRows,
     decisionNorm,
+    assigneeId,
     viewImageUrls,
     img,
   ]);
@@ -482,6 +522,36 @@ export function useListDetail(): UseListDetailResult {
     },
     [isEdit, saving],
   );
+
+  const onSelectAssignee = React.useCallback(
+    (id: string) => {
+      if (!isEdit) return;
+      if (saving) return;
+
+      setDraftAssigneeId(s(id));
+    },
+    [isEdit, saving],
+  );
+
+  const onChangeAssignee = React.useCallback(
+    (id: string) => {
+      if (!isEdit) return;
+      if (saving) return;
+
+      setDraftAssigneeId(s(id));
+    },
+    [isEdit, saving],
+  );
+
+  const onEditAssignee = React.useCallback(() => {
+    // AdminCard 側の編集導線用。
+    // ListDetail 全体の edit mode で制御しているため、現状は no-op。
+  }, []);
+
+  const onClickAssignee = React.useCallback(() => {
+    // 担当者クリック時の導線用。
+    // 遷移先やモーダルが決まったらここに処理を追加する。
+  }, []);
 
   // effective urls (view/edit)
   const effectiveImageUrls = React.useMemo(() => {
@@ -560,7 +630,11 @@ export function useListDetail(): UseListDetailResult {
           description: nextDesc,
           decision: nextDecision,
 
-          assigneeId: s((dto as any)?.assigneeId) || undefined,
+          assigneeId:
+            s(payload?.assigneeId) ||
+            s(draftAssigneeId) ||
+            s((dto as any)?.assigneeId) ||
+            undefined,
           updatedBy: uid,
 
           draftPriceRows: Array.isArray(draftPriceRows) ? draftPriceRows : [],
@@ -592,6 +666,7 @@ export function useListDetail(): UseListDetailResult {
       draftDecision,
       draftListingTitle,
       draftDescription,
+      draftAssigneeId,
       draftPriceRows,
       img.draftImages,
       mainImageIndex,
@@ -659,6 +734,7 @@ export function useListDetail(): UseListDetailResult {
     draftImages: img.draftImages,
     onAddImages: img.onAddImages,
     onRemoveImageAt: img.onRemoveImageAt,
+    onClearImages: img.onClearImages,
 
     mainImageIndex,
     setMainImageIndex,
@@ -672,6 +748,12 @@ export function useListDetail(): UseListDetailResult {
 
     assigneeId,
     assigneeName,
+    draftAssigneeId,
+    setDraftAssigneeId,
+    onSelectAssignee,
+    onChangeAssignee,
+    onEditAssignee,
+    onClickAssignee,
 
     createdByName: effectiveCreatedByName,
     createdAt,

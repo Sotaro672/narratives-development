@@ -1,7 +1,7 @@
 // frontend/console/list/src/infrastructure/http/list/httpClient.ts
-import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
-import { getAuthJsonHeaders } from "../../../../../shell/src/shared/http/authHeaders";
-import { fetchJSON, HttpError } from "../../../../../shell/src/shared/http/fetchJSON";
+import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { getAuthJsonHeaders } from "../../../../shell/src/shared/http/authHeaders";
+import { fetchJSON, HttpError } from "../../../../shell/src/shared/http/fetchJSON";
 
 export async function requestJSON<T>(args: {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
