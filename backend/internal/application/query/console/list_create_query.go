@@ -20,6 +20,9 @@ import (
 // - displayOrder は「取得して返すのみ」。
 // - 並べ替え（displayOrder 昇順 / size,color 等）は一切しない。
 // - inventoryId の build/split は廃止（inventoryId は inventory テーブルから拾う）
+// - PriceRows には productBlueprintCategory / model kind に応じた model 情報を含める。
+//   - apparel: modelNumber / size / color / rgb
+//   - alcohol: modelNumber / volumeValue / volumeUnit
 // ============================================================
 
 type ListCreateQuery struct {
@@ -32,7 +35,7 @@ type ListCreateQuery struct {
 	nameResolver *resolver.NameResolver
 }
 
-// 互換を残すなら残してOKだが、GetByInventoryID を使うなら invRepo が必要になる
+// GetByInventoryID を使うなら invRepo が必要になる
 func NewListCreateQueryWithInventory(
 	invRepo inventoryReader,
 	pbPatchRepo productBlueprintPatchReader,
@@ -48,7 +51,7 @@ func NewListCreateQueryWithInventory(
 }
 
 // ============================================================
-// ✅ inventoryId -> ListCreateDTO
+// inventoryId -> ListCreateDTO
 // - inventoryId を split しない
 // - pbId/tbId は inventory テーブルから拾うのみ
 // ============================================================
@@ -70,7 +73,7 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(ctx context.Context, inv
 		return nil, errors.New("inventoryId is required")
 	}
 
-	// ✅ inventory テーブルから pbId/tbId を拾う（split禁止）
+	// inventory テーブルから pbId/tbId を拾う（split禁止）
 	inv, err := q.invRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -87,13 +90,13 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(ctx context.Context, inv
 		return nil, err
 	}
 
-	// ✅ inventoryId は「組み立てず」取得した docId をそのまま返す
+	// inventoryId は「組み立てず」取得した docId をそのまま返す
 	dto.InventoryID = id
 	return dto, nil
 }
 
 // ============================================================
-// ✅ pbId/tbId -> ListCreateDTO
+// pbId/tbId -> ListCreateDTO
 // - inventoryId は build しない
 // - invRepo があれば「inventory テーブルから拾った ID」を返す
 // ============================================================
@@ -163,13 +166,13 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 	}
 
 	// ------------------------------------------------------------
-	// ✅ ModelRefs / PriceRows（並べ替えしない）
+	// ModelRefs / PriceRows（並べ替えしない）
 	// ------------------------------------------------------------
 	modelRefs := q.listModelRefs(ctx, pbID)
 	priceRows, totalStock, invID := q.buildPriceRowsByIDs(ctx, pbID, tbID, modelRefs)
 
 	dto := &querydto.ListCreateDTO{
-		// ✅ inventoryId は build しない。拾えた場合のみ入る。
+		// inventoryId は build しない。拾えた場合のみ入る。
 		InventoryID:        invID,
 		ProductBlueprintID: pbID,
 		TokenBlueprintID:   tbID,
@@ -195,6 +198,9 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 // - stock: inventory が取れれば picked.Stock[modelId] を反映、無ければ 0
 // - stock==0 でも行を出す（価格入力のため）
 // - 並べ替えはしない
+// - model 情報は resolver.ModelResolved を正として詰める
+//   - apparel: kind / modelNumber / size / color / rgb
+//   - alcohol: kind / modelNumber / volumeValue / volumeUnit
 // ============================================================
 
 func (q *ListCreateQuery) buildPriceRowsByIDs(
@@ -216,7 +222,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		return nil, 0, ""
 	}
 
-	// ✅ inventoryId を build しない。invRepo から「該当Mint」を拾い、その ID を使う。
+	// inventoryId を build しない。invRepo から「該当Mint」を拾い、その ID を使う。
 	var picked *invdom.Mint
 	if q.invRepo != nil {
 		invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
@@ -242,7 +248,7 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		stock := 0
 		if picked != nil && picked.Stock != nil {
 			if ms, ok := picked.Stock[mid]; ok {
-				// ✅ domain contract（ModelStock.Validate）前提の素直な計算
+				// domain contract（ModelStock.Validate）前提の素直な計算
 				available := ms.Accumulation - ms.ReservedCount
 				if available < 0 {
 					// 契約上は起きない想定だが、画面を壊さない保険
@@ -258,25 +264,50 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 			attr = q.nameResolver.ResolveModelResolved(ctx, mid)
 		}
 
-		sz := attr.Size
-		cl := attr.Color
-		if sz == "" {
-			sz = "-"
+		mn := attr.ModelNumber
+		if mn == "" {
+			mn = mid
 		}
-		if cl == "" {
-			cl = "-"
+		if mn == "" {
+			mn = "-"
 		}
 
-		rows = append(rows, querydto.ListCreatePriceRowDTO{
+		row := querydto.ListCreatePriceRowDTO{
 			ModelID:      mid,
+			Kind:         attr.Kind,
+			ModelNumber:  mn,
 			DisplayOrder: ref.DisplayOrder,
 			Stock:        stock,
-			Size:         sz,
-			Color:        cl,
-			RGB:          attr.RGB,
 			Price:        nil,
-		})
+		}
 
+		if attr.Kind == "alcohol" {
+			row.VolumeValue = attr.VolumeValue
+			row.VolumeUnit = attr.VolumeUnit
+
+			if row.VolumeValue == nil || row.VolumeUnit == "" {
+				log.Printf(
+					"[list_create_query][modelResolved] alcohol model missing volume pbId=%q tbId=%q modelId=%q kind=%q modelNumber=%q volumeValue=%v volumeUnit=%q stock=%d",
+					pbID, tbID, mid, attr.Kind, mn, row.VolumeValue, row.VolumeUnit, stock,
+				)
+			}
+		} else {
+			sz := attr.Size
+			cl := attr.Color
+
+			if sz == "" {
+				sz = "-"
+			}
+			if cl == "" {
+				cl = "-"
+			}
+
+			row.Size = sz
+			row.Color = cl
+			row.RGB = attr.RGB
+		}
+
+		rows = append(rows, row)
 		total += stock
 	}
 
@@ -318,7 +349,7 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 	seen := map[string]struct{}{}
 	out := make([]querydto.ListCreateModelRefDTO, 0, len(refs))
 
-	// ✅ 並べ替えしない：入力順のまま
+	// 並べ替えしない：入力順のまま
 	for _, r := range refs {
 		mid := r.ModelID
 		if mid == "" {

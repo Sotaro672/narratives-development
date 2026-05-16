@@ -5,6 +5,9 @@
 // - listdom.List の価格行を抽出し、DTO(ListDetailPriceRowDTO)へ変換する
 // - 在庫情報は InventoryDetailGetter から優先的に取得し、なければ stock=0 とする
 // - displayOrder は productBlueprintPatch(ModelRefs) から付与する（取得できない場合は nil）
+// - model 情報は resolver.ModelResolved を使って解決する
+//   - apparel: kind / modelNumber / size / color / rgb
+//   - alcohol: kind / modelNumber / volumeValue / volumeUnit
 package detail
 
 import (
@@ -45,11 +48,18 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 				if mid == "" {
 					continue
 				}
+
 				stockByModel[mid] = r.Stock
 				attrByModel[mid] = resolver.ModelResolved{
+					Kind:        r.Kind,
+					ModelNumber: r.ModelNumber,
+
 					Size:  r.Size,
 					Color: r.Color,
 					RGB:   r.RGB,
+
+					VolumeValue: r.VolumeValue,
+					VolumeUnit:  r.VolumeUnit,
 				}
 			}
 		}
@@ -106,23 +116,21 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 			DisplayOrder: dispPtr,
 			Stock:        stock,
 			Price:        pricePtr,
-			Size:         "",
-			Color:        "",
-			RGB:          nil,
 		}
 
-		if mr, ok := attrByModel[modelID]; ok {
-			dtoRow.Size = mr.Size
-			dtoRow.Color = mr.Color
-			dtoRow.RGB = mr.RGB
-		} else {
-			mr := q.resolveModelResolvedCached(ctx, modelID, modelResolvedCache)
-			dtoRow.Size = mr.Size
-			dtoRow.Color = mr.Color
-			dtoRow.RGB = mr.RGB
+		mr, ok := attrByModel[modelID]
+		if !ok {
+			mr = q.resolveModelResolvedCached(ctx, modelID, modelResolvedCache)
 		}
 
-		if dtoRow.Size != "" || dtoRow.Color != "" || dtoRow.RGB != nil {
+		applyModelResolvedToListDetailPriceRow(&dtoRow, modelID, mr)
+
+		if dtoRow.ModelNumber != "" ||
+			dtoRow.Size != "" ||
+			dtoRow.Color != "" ||
+			dtoRow.RGB != nil ||
+			dtoRow.VolumeValue != nil ||
+			dtoRow.VolumeUnit != "" {
 			resolvedNonEmpty++
 		} else {
 			resolvedEmpty++
@@ -144,6 +152,47 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 	}
 
 	return out, total, meta
+}
+
+func applyModelResolvedToListDetailPriceRow(
+	row *querydto.ListDetailPriceRowDTO,
+	modelID string,
+	mr resolver.ModelResolved,
+) {
+	if row == nil {
+		return
+	}
+
+	mn := mr.ModelNumber
+	if mn == "" {
+		mn = modelID
+	}
+	if mn == "" {
+		mn = "-"
+	}
+
+	row.Kind = mr.Kind
+	row.ModelNumber = mn
+
+	if mr.Kind == "alcohol" {
+		row.VolumeValue = mr.VolumeValue
+		row.VolumeUnit = mr.VolumeUnit
+		return
+	}
+
+	sz := mr.Size
+	cl := mr.Color
+
+	if sz == "" {
+		sz = "-"
+	}
+	if cl == "" {
+		cl = "-"
+	}
+
+	row.Size = sz
+	row.Color = cl
+	row.RGB = mr.RGB
 }
 
 func (q *ListDetailQuery) resolveModelResolvedCached(

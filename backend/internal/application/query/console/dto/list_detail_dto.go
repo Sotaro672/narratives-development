@@ -30,10 +30,10 @@ type ListDetailDTO struct {
 
 	// audit
 	CreatedBy     string `json:"createdBy,omitempty"`
-	CreatedByName string `json:"createdByName,omitempty"` // ✅ createdBy の表示名
+	CreatedByName string `json:"createdByName,omitempty"`
 	CreatedAt     string `json:"createdAt,omitempty"`
 
-	// ✅ NEW: 更新者（UID）と表示名
+	// updater
 	UpdatedBy     string `json:"updatedBy,omitempty"`
 	UpdatedByName string `json:"updatedByName,omitempty"`
 
@@ -42,7 +42,7 @@ type ListDetailDTO struct {
 	// primary image
 	ImageID string `json:"imageId,omitempty"`
 
-	// ✅ NEW: primary list image url (representative image)
+	// primary list image url (representative image)
 	// - ImageID に対応する URL を返す（なければ空文字）
 	ListImageURL string `json:"listImageUrl,omitempty"`
 
@@ -71,21 +71,36 @@ type ListDetailDTO struct {
 }
 
 // ListDetailPriceRowDTO is a row DTO for PriceCard in listDetail.
+// productBlueprintCategory / model kind に応じた model 情報を含める。
+// - apparel: modelNumber / size / color / rgb
+// - alcohol: modelNumber / volumeValue / volumeUnit
 type ListDetailPriceRowDTO struct {
 	ModelID string `json:"modelId"`
 
-	// ✅ NEW: displayOrder (from productBlueprintPatch.ModelRefs)
+	// model kind
+	// - apparel
+	// - alcohol
+	Kind string `json:"kind,omitempty"`
+
+	// 型番
+	ModelNumber string `json:"modelNumber,omitempty"`
+
+	// displayOrder from productBlueprintPatch.ModelRefs
 	// - 0 は未設定として nil を許容
 	DisplayOrder *int `json:"displayOrder,omitempty"`
 
 	// In list detail, stock is still shown
 	Stock int `json:"stock"`
 
-	// Display
-	Size  string `json:"size"`
-	Color string `json:"color"`
+	// apparel 系表示用
+	Size  string `json:"size,omitempty"`
+	Color string `json:"color,omitempty"`
 	RGB   *int   `json:"rgb,omitempty"`
 
-	// Price (nullable)
+	// alcohol 系表示用
+	VolumeValue *int   `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
+
+	// Price nullable
 	Price *int `json:"price,omitempty"`
 }

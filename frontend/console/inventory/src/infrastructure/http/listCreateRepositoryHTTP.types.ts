@@ -1,12 +1,18 @@
 // frontend/console/inventory/src/infrastructure/http/listCreateRepositoryHTTP.types.ts
 
 // ---------------------------------------------------------
-// ✅ ListCreate DTO（出品作成画面）
+// ListCreate DTO（出品作成画面）
 // - backend/internal/application/query/dto/list_create_dto.go と対応
-// - modelResolver 結果を PriceCard に渡すため priceRows/totalStock を追加
+// - GET /inventory/list-create/{inventoryId} の response を唯一の正とする
+// - priceRows は backend 側で productCategory / model kind に応じた完成形になっている
 // ---------------------------------------------------------
 
 export type ListCreateModelKind = "apparel" | "alcohol" | string;
+
+export type ListCreateModelRefDTO = {
+  modelId: string;
+  displayOrder?: number | null;
+};
 
 export type ListCreatePriceRowDTO = {
   modelId: string;
@@ -20,11 +26,22 @@ export type ListCreatePriceRowDTO = {
   kind?: ListCreateModelKind | null;
 
   /**
-   * ✅ modelRefs.displayOrder に対応（並び順はこれの昇順のみ）
-   * - backend の productBlueprintPatch.ModelRefs.DisplayOrder を詰めて渡す想定
-   * - 未設定は null を保持（＝並び順なし）
+   * modelNumber。
+   *
+   * apparel / alcohol 共通で表示に使う。
+   * 例:
+   * - apparel: "M-001"
+   * - alcohol: "s", "m"
+   */
+  modelNumber?: string | null;
+
+  /**
+   * modelRefs.displayOrder に対応。
+   * backend の productBlueprintPatch.ModelRefs.DisplayOrder を詰めて渡す。
    */
   displayOrder?: number | null;
+
+  stock: number;
 
   /**
    * apparel category 用。
@@ -55,7 +72,6 @@ export type ListCreatePriceRowDTO = {
    */
   volumeUnit?: string | null;
 
-  stock: number;
   price?: number | null;
 };
 
@@ -70,27 +86,17 @@ export type ListCreateDTO = {
   tokenBrandName: string;
   tokenName: string;
 
-  /**
-   * ProductBlueprintCategory.code。
-   *
-   * PriceCard の category 表示分岐で使用する。
-   * 例:
-   * - "apparel.tops"
-   * - "alcohol.sake"
-   */
-  productBlueprintCategory?: string | null;
+  listImageUrl?: string | null;
+
+  modelRefs?: ListCreateModelRefDTO[];
 
   /**
-   * ProductBlueprintCategory.kind。
-   *
-   * 必須ではないが、呼び出し側で code がない場合の補助情報として使用できる。
-   * 例:
-   * - "apparel"
-   * - "alcohol"
+   * PriceCard 用。
+   * GET /inventory/list-create/{inventoryId} の priceRows を正とする。
    */
-  productBlueprintCategoryKind?: string | null;
-
-  // ✅ PriceCard 用（modelResolver の結果）
   priceRows?: ListCreatePriceRowDTO[];
+
   totalStock?: number;
+  priceNote?: string | null;
+  currencyJpy?: boolean;
 };
