@@ -1,36 +1,26 @@
 //frontend\console\list\src\infrastructure\repository\listImageHttpRepository.ts
+
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import type { ListDTO } from "../dto/listDto";
 import type { ListImageDTO } from "../dto/listImageDto";
 import { requestJSON } from "../http/httpClient";
 import { fetchListByIdHTTP } from "./listHttpRepository";
 
-const toStringSafe = (value: unknown): string => {
-  if (typeof value === "string") return value.trim();
-  if (value == null) return "";
-  return String(value).trim();
-};
-
-const toListId = (value: unknown): string => toStringSafe(value);
-
 const normalizeImageUrlsFromListDTO = (dto: ListDTO): string[] => {
   const imageUrls = (dto as any)?.imageUrls;
   if (!Array.isArray(imageUrls)) return [];
 
-  return imageUrls
-    .map((url) => toStringSafe(url))
-    .filter(Boolean);
+  return imageUrls.filter(Boolean);
 };
 
 export async function fetchListImagesHTTP(
   listId: string,
 ): Promise<ListImageDTO[]> {
-  const id = toListId(listId);
-  if (!id) throw new Error("invalid_list_id");
+  if (!listId) throw new Error("invalid_list_id");
 
   return await requestJSON<ListImageDTO[]>({
     method: "GET",
-    path: `/lists/${encodeURIComponent(id)}/images`,
+    path: `/lists/${encodeURIComponent(listId)}/images`,
   });
 }
 
@@ -38,7 +28,7 @@ export async function fetchListImageUrlsHTTP(args: {
   listId: string;
   primaryImageId?: string;
 }): Promise<string[]> {
-  const listId = toListId(args.listId);
+  const listId = args.listId;
   if (!listId) throw new Error("invalid_list_id");
 
   const dto = await fetchListByIdHTTP(listId);
@@ -57,16 +47,16 @@ export async function saveListImageFromFirebaseStorageHTTP(args: {
   createdBy?: string;
   createdAt?: string;
 }): Promise<ListImageDTO> {
-  const listId = toListId(args.listId);
+  const listId = args.listId;
   if (!listId) throw new Error("invalid_list_id");
 
-  const id = toStringSafe(args.id);
-  const url = toStringSafe(args.url);
-  const objectPath = toStringSafe(args.objectPath).replace(/^\/+/, "");
-  const fileName = toStringSafe(args.fileName);
-  const contentType = toStringSafe(args.contentType);
-  const createdBy = toStringSafe(args.createdBy);
-  const createdAt = toStringSafe(args.createdAt);
+  const id = args.id;
+  const url = args.url;
+  const objectPath = args.objectPath.replace(/^\/+/, "");
+  const fileName = args.fileName;
+  const contentType = args.contentType;
+  const createdBy = args.createdBy;
+  const createdAt = args.createdAt;
 
   if (!id || !url || !objectPath) {
     throw new Error("invalid_list_image_payload");
@@ -107,13 +97,13 @@ export async function setListPrimaryImageHTTP(args: {
   updatedBy?: string;
   now?: string;
 }): Promise<ListDTO> {
-  const listId = toListId(args.listId);
+  const listId = args.listId;
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
-    imageId: toStringSafe(args.imageId),
-    updatedBy: args.updatedBy ? toStringSafe(args.updatedBy) : undefined,
-    now: args.now ? toStringSafe(args.now) : undefined,
+    imageId: args.imageId,
+    updatedBy: args.updatedBy || undefined,
+    now: args.now || undefined,
   };
 
   if (!payload.imageId) {
@@ -137,18 +127,15 @@ function extractImageIdForDelete(args: {
   listId: string;
   imageIdOrObjectPathOrUrl: string;
 }): string {
-  const listId = toStringSafe(args.listId);
-  const raw = toStringSafe(args.imageIdOrObjectPathOrUrl);
+  const listId = args.listId;
+  const raw = args.imageIdOrObjectPathOrUrl;
   if (!listId || !raw) return "";
 
   if (!raw.includes("/") && !raw.includes("?")) return raw;
 
   {
     const objectPath = raw.replace(/^\/+/, "");
-    const parts = objectPath
-      .split("/")
-      .map((x) => toStringSafe(x))
-      .filter(Boolean);
+    const parts = objectPath.split("/").filter(Boolean);
 
     if (
       parts.length >= 4 &&
@@ -156,24 +143,20 @@ function extractImageIdForDelete(args: {
       parts[1] === listId &&
       parts[2] === "images"
     ) {
-      return toStringSafe(parts[3]);
+      return parts[3] || "";
     }
   }
 
   try {
     const url = new URL(raw);
-    const decodedPathname = decodeURIComponent(toStringSafe(url.pathname));
+    const decodedPathname = decodeURIComponent(url.pathname);
 
     const marker = "/o/";
     const markerIndex = decodedPathname.indexOf(marker);
 
     if (markerIndex >= 0) {
       const objectPath = decodedPathname.slice(markerIndex + marker.length);
-      const parts = objectPath
-        .replace(/^\/+/, "")
-        .split("/")
-        .map((x) => toStringSafe(x))
-        .filter(Boolean);
+      const parts = objectPath.replace(/^\/+/, "").split("/").filter(Boolean);
 
       if (
         parts.length >= 4 &&
@@ -181,15 +164,11 @@ function extractImageIdForDelete(args: {
         parts[1] === listId &&
         parts[2] === "images"
       ) {
-        return toStringSafe(parts[3]);
+        return parts[3] || "";
       }
     }
 
-    const pathParts = decodedPathname
-      .replace(/^\/+/, "")
-      .split("/")
-      .map((x) => toStringSafe(x))
-      .filter(Boolean);
+    const pathParts = decodedPathname.replace(/^\/+/, "").split("/").filter(Boolean);
 
     const listsIndex = pathParts.indexOf("lists");
     if (
@@ -197,7 +176,7 @@ function extractImageIdForDelete(args: {
       pathParts[listsIndex + 1] === listId &&
       pathParts[listsIndex + 2] === "images"
     ) {
-      return toStringSafe(pathParts[listsIndex + 3]);
+      return pathParts[listsIndex + 3] || "";
     }
   } catch {
     // noop
@@ -210,12 +189,12 @@ export async function deleteListImageHTTP(args: {
   listId: string;
   imageId: string;
 }): Promise<any> {
-  const listId = toListId(args.listId);
+  const listId = args.listId;
   if (!listId) throw new Error("invalid_list_id");
 
   const imageId = extractImageIdForDelete({
     listId,
-    imageIdOrObjectPathOrUrl: toStringSafe(args.imageId),
+    imageIdOrObjectPathOrUrl: args.imageId,
   });
   if (!imageId) throw new Error("invalid_image_id");
 

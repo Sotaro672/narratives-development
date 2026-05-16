@@ -1,28 +1,24 @@
-//frontend\console\list\src\infrastructure\service\listImageUrlService.ts
+// frontend\console\list\src\infrastructure\service\listImageUrlService.ts
+
 import type { ListImageDTO } from "../dto/listImageDto";
 
-function toText(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  return typeof v === "string" ? v.trim() : String(v).trim();
-}
-
 export function resolveListImageUrl(img: ListImageDTO): string {
-  return toText((img as any)?.url);
+  return img.url;
 }
 
 export function normalizeListImageUrls(
   listImages: ListImageDTO[],
   primaryImageId?: string,
 ): string[] {
-  const pid = toText(primaryImageId);
+  const pid = primaryImageId ?? "";
 
   const rows = (Array.isArray(listImages) ? listImages : [])
     .map((img, index) => {
-      const id = toText((img as any)?.id);
+      const id = img.id;
       const url = resolveListImageUrl(img);
-      const displayOrderRaw = (img as any)?.displayOrder;
+      const displayOrderRaw = img.displayOrder;
       const displayOrder =
-        displayOrderRaw === null || displayOrderRaw === undefined || displayOrderRaw === ""
+        displayOrderRaw === null || displayOrderRaw === undefined
           ? index
           : Number(displayOrderRaw);
 
@@ -48,7 +44,7 @@ export function normalizeListImageUrls(
   let primaryUrl = "";
 
   for (const r of rows) {
-    const url = toText(r.url);
+    const url = r.url;
     if (!url || seen.has(url)) continue;
 
     seen.add(url);

@@ -11,7 +11,6 @@ import type { ListDTO } from "../../infrastructure/dto";
 import {
   loadListDetailDTO,
   normalizeImageUrls,
-  s,
   updateListDetailDTO,
   type ListDetailDTO,
 } from "../listDetailService";
@@ -87,9 +86,9 @@ function buildAfterUrls(args: {
 
     const uploaded = uploadedByDraftIndex.get(index);
     if (uploaded) {
-      url = s(uploaded.url);
+      url = String(uploaded.url ?? "").trim();
     } else if (!image?.isNew) {
-      url = s(image?.url);
+      url = String(image?.url ?? "").trim();
     }
 
     if (!url || seen.has(url)) return;
@@ -106,17 +105,17 @@ function resolvePrimaryImageId(args: {
   selectedUrl: string;
   uploadedItems: SavedDraftImageItem[];
 }): string {
-  const listId = s(args.listId);
-  const selectedUrl = s(args.selectedUrl);
+  const listId = String(args.listId ?? "").trim();
+  const selectedUrl = String(args.selectedUrl ?? "").trim();
 
   if (!listId || !selectedUrl) return "";
 
   const uploadedPrimary = args.uploadedItems.find(
-    (item) => s(item.url) === selectedUrl,
+    (item) => String(item.url ?? "").trim() === selectedUrl,
   );
 
   if (uploadedPrimary?.imageId) {
-    return s(uploadedPrimary.imageId);
+    return String(uploadedPrimary.imageId ?? "").trim();
   }
 
   return extractListImageIdFromUrlOrObjectPath({
@@ -128,10 +127,10 @@ function resolvePrimaryImageId(args: {
 export async function saveListDetailChanges(
   input: SaveListDetailChangesInput,
 ): Promise<SaveListDetailChangesResult> {
-  const listId = s(input.listId);
+  const listId = String(input.listId ?? "").trim();
   if (!listId) throw new Error("invalid_list_id");
 
-  const updatedBy = s(input.updatedBy) || "system";
+  const updatedBy = String(input.updatedBy ?? "").trim() || "system";
   const draftImages = normalizeDraftImages(input.draftImages);
 
   const beforeUrls = normalizeImageUrls(input.currentDTO);
@@ -163,7 +162,7 @@ export async function saveListDetailChanges(
       createdAt: new Date().toISOString(),
     });
 
-    const savedUrl = s((saved as any)?.url) || uploaded.url;
+    const savedUrl = String((saved as any)?.url ?? "").trim() || uploaded.url;
 
     uploadedItems.push({
       draftIndex: index,
@@ -186,7 +185,7 @@ export async function saveListDetailChanges(
       extractListImageIdFromUrlOrObjectPath({
         listId,
         raw: removedUrl,
-      }) || s(removedUrl);
+      }) || String(removedUrl ?? "").trim();
 
     if (!imageId) continue;
 
@@ -196,7 +195,7 @@ export async function saveListDetailChanges(
     });
   }
 
-  const selectedUrl = s(afterUrls[input.mainImageIndex]);
+  const selectedUrl = String(afterUrls[input.mainImageIndex] ?? "").trim();
 
   if (selectedUrl) {
     const primaryImageId = resolvePrimaryImageId({

@@ -30,7 +30,6 @@ import {
   type ListingDecisionNorm,
   type ListDetailRouteParams,
   type ListDetailDTO,
-  s,
 } from "../../application/listDetailService";
 
 export type { ListingDecisionNorm };
@@ -153,9 +152,9 @@ function clonePriceRows(rows: PriceRow[]): PriceRow[] {
 
 function cloneDraftImagesFromUrls(urls: string[]): DraftImage[] {
   return (Array.isArray(urls) ? urls : [])
-    .map((u) => s(u))
+    .map((url) => String(url ?? "").trim())
     .filter(Boolean)
-    .map((u) => ({ url: u, isNew: false as const }));
+    .map((url) => ({ url, isNew: false as const }));
 }
 
 function revokeDraftBlobUrls(items: DraftImage[]) {
@@ -290,7 +289,7 @@ function useListImages(args: {
 
   const imageUrls = React.useMemo(() => {
     return (Array.isArray(draftImages) ? draftImages : [])
-      .map((x) => s(x?.url))
+      .map((x) => String(x?.url ?? "").trim())
       .filter(Boolean);
   }, [draftImages]);
 
@@ -325,7 +324,7 @@ export function useListDetail(): UseListDetailResult {
   const cancelledRef = useCancelledRef();
 
   const reload = React.useCallback(async () => {
-    const id = s(listId);
+    const id = String(listId ?? "").trim();
     if (!id) {
       setDTO(null);
       setError("listId がありません（ルートパラメータを確認してください）。");
@@ -389,20 +388,26 @@ export function useListDetail(): UseListDetailResult {
   // dto 優先
   const dtoAny: any = dto as any;
 
-  const createdBy = s(dtoAny?.createdBy);
-  const createdByNameFromDTO = s(dtoAny?.createdByName);
+  const createdBy = String(dtoAny?.createdBy ?? "").trim();
+  const createdByNameFromDTO = String(dtoAny?.createdByName ?? "").trim();
   const effectiveCreatedByName =
-    createdByNameFromDTO || s(createdByNameFromDerived) || createdBy;
+    createdByNameFromDTO ||
+    String(createdByNameFromDerived ?? "").trim() ||
+    createdBy;
 
-  const createdAtRaw = s(dtoAny?.createdAt) || s(createdAtRawFromDerived);
+  const createdAtRaw =
+    String(dtoAny?.createdAt ?? "").trim() ||
+    String(createdAtRawFromDerived ?? "").trim();
 
-  const updatedBy = s(dtoAny?.updatedBy);
-  const updatedByNameFromDTO = s(dtoAny?.updatedByName);
-  const updatedByNameFromDerived = s((derived as any)?.updatedByName);
+  const updatedBy = String(dtoAny?.updatedBy ?? "").trim();
+  const updatedByNameFromDTO = String(dtoAny?.updatedByName ?? "").trim();
+  const updatedByNameFromDerived = String((derived as any)?.updatedByName ?? "").trim();
   const effectiveUpdatedByName =
     updatedByNameFromDTO || updatedByNameFromDerived || updatedBy;
 
-  const updatedAtRaw = s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
+  const updatedAtRaw =
+    String(dtoAny?.updatedAt ?? "").trim() ||
+    String((derived as any)?.updatedAt ?? "").trim();
 
   const createdAt = React.useMemo(
     () => formatYMDHM(createdAtRaw),
@@ -528,7 +533,7 @@ export function useListDetail(): UseListDetailResult {
       if (!isEdit) return;
       if (saving) return;
 
-      setDraftAssigneeId(s(id));
+      setDraftAssigneeId(String(id ?? "").trim());
     },
     [isEdit, saving],
   );
@@ -538,7 +543,7 @@ export function useListDetail(): UseListDetailResult {
       if (!isEdit) return;
       if (saving) return;
 
-      setDraftAssigneeId(s(id));
+      setDraftAssigneeId(String(id ?? "").trim());
     },
     [isEdit, saving],
   );
@@ -558,7 +563,7 @@ export function useListDetail(): UseListDetailResult {
     if (isEdit) return img.imageUrls;
 
     return (Array.isArray(viewImageUrls) ? viewImageUrls : [])
-      .map((u) => s(u))
+      .map((url) => String(url ?? "").trim())
       .filter(Boolean);
   }, [isEdit, img.imageUrls, viewImageUrls]);
 
@@ -594,14 +599,17 @@ export function useListDetail(): UseListDetailResult {
   // Save -> application usecase
   const onSave = React.useCallback(
     async (payload?: any) => {
-      const id = s(listId);
+      const id = String(listId ?? "").trim();
       if (!id) {
         setSaveError("invalid_list_id");
         return;
       }
 
       const nextTitle =
-        s(payload?.title) || s(payload?.listingTitle) || s(draftListingTitle) || "";
+        String(payload?.title ?? "").trim() ||
+        String(payload?.listingTitle ?? "").trim() ||
+        String(draftListingTitle ?? "").trim() ||
+        "";
 
       const nextDesc =
         payload && payload.description !== undefined
@@ -615,7 +623,7 @@ export function useListDetail(): UseListDetailResult {
         toDecisionForUpdate(decisionNorm) ||
         undefined;
 
-      const uid = s(auth.currentUser?.uid) || "system";
+      const uid = String(auth.currentUser?.uid ?? "").trim() || "system";
 
       setSaving(true);
       setSaveError("");
@@ -631,9 +639,9 @@ export function useListDetail(): UseListDetailResult {
           decision: nextDecision,
 
           assigneeId:
-            s(payload?.assigneeId) ||
-            s(draftAssigneeId) ||
-            s((dto as any)?.assigneeId) ||
+            String(payload?.assigneeId ?? "").trim() ||
+            String(draftAssigneeId ?? "").trim() ||
+            String((dto as any)?.assigneeId ?? "").trim() ||
             undefined,
           updatedBy: uid,
 

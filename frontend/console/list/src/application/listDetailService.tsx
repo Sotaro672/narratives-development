@@ -12,39 +12,28 @@ import {
 import type { ListDTO } from "../infrastructure/dto";
 
 import {
-  buildListImagesForUpdate,
-  buildPricesForUpdateFromPriceRows,
   computeListDetailPageTitle,
   deriveListDetail,
   formatYMDHM,
   normalizeDecision,
   normalizeImageUrls,
-  normalizeListImages,
   normalizeListingDecisionNorm,
   normalizePriceRows,
-  s,
-  splitDraftImages,
   toDecisionForUpdate,
   updatePriceRowPrice,
   type ListingDecisionNorm,
-  type ListImage,
 } from "./listDetail/listDetailMapper";
 
-export type { ListingDecisionNorm, ListImage };
+export type { ListingDecisionNorm };
 
 export {
-  buildListImagesForUpdate,
-  buildPricesForUpdateFromPriceRows,
   computeListDetailPageTitle,
   deriveListDetail,
   formatYMDHM,
   normalizeDecision,
   normalizeImageUrls,
-  normalizeListImages,
   normalizeListingDecisionNorm,
   normalizePriceRows,
-  s,
-  splitDraftImages,
   toDecisionForUpdate,
   updatePriceRowPrice,
 };
@@ -123,8 +112,8 @@ export type UseListDetailResult = {
 
 export function resolveListDetailParams(params: ListDetailRouteParams | undefined) {
   // ルートパラメータ名の違い（listId / id）は吸収
-  const listId = s(params?.listId || params?.id);
-  const inventoryId = s(params?.inventoryId);
+  const listId = String(params?.listId || params?.id || "").trim();
+  const inventoryId = String(params?.inventoryId ?? "").trim();
 
   return {
     listId,
@@ -138,12 +127,14 @@ export function resolveListDetailParams(params: ListDetailRouteParams | undefine
 // ---------------------------------------------------------
 
 async function fetchRowFromListRows(args: { listId: string }): Promise<any | null> {
-  const id = s(args.listId);
+  const id = String(args.listId ?? "").trim();
   if (!id) return null;
 
   try {
     const rows = await fetchListsHTTP();
-    const hit = Array.isArray(rows) ? rows.find((r: any) => s(r?.id) === id) : null;
+    const hit = Array.isArray(rows)
+      ? rows.find((r: any) => String(r?.id ?? "").trim() === id)
+      : null;
 
     return hit || null;
   } catch {
@@ -156,33 +147,24 @@ async function fetchRowFromListRows(args: { listId: string }): Promise<any | nul
 // ---------------------------------------------------------
 
 function logModelMetadataFromDetail(args: { listId: string; dto: any }) {
-  const listId = s(args.listId);
+  const listId = String(args.listId ?? "").trim();
   const dto = args.dto;
 
   const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
   const count = rowsRaw.length;
 
   const sample = rowsRaw.slice(0, 4).map((r: any) => ({
-    modelId: s(r?.modelId),
+    modelId: String(r?.modelId ?? "").trim(),
     displayOrder: r?.displayOrder ?? null,
-    size: s(r?.size),
-    color: s(r?.color),
-    kind: s(r?.kind),
-    volumeValue:
-      r?.volumeValue === null || r?.volumeValue === undefined
-        ? null
-        : Number.isFinite(Number(r?.volumeValue))
-          ? Number(r?.volumeValue)
-          : null,
-    volumeUnit: s(r?.volumeUnit),
-    rgb: Number.isFinite(Number(r?.rgb)) ? Number(r?.rgb) : null,
-    stock: Number.isFinite(Number(r?.stock)) ? Number(r?.stock) : 0,
+    size: String(r?.size ?? "").trim(),
+    color: String(r?.color ?? "").trim(),
     price:
       r?.price === null || r?.price === undefined
         ? null
         : Number.isFinite(Number(r?.price))
           ? Number(r?.price)
           : null,
+    stock: Number.isFinite(Number(r?.stock)) ? Number(r?.stock) : 0,
   }));
 
   // eslint-disable-next-line no-console
@@ -201,7 +183,7 @@ export async function loadListDetailDTO(args: {
   listId: string;
   inventoryIdHint?: string;
 }): Promise<ListDetailDTO> {
-  const listId = s(args.listId);
+  const listId = String(args.listId ?? "").trim();
 
   if (!listId) throw new Error("invalid_list_id");
 
@@ -215,65 +197,61 @@ export async function loadListDetailDTO(args: {
   const merged: any = { ...(detail as any) };
 
   // assigneeId は detail を優先。無ければ row。
-  if (!s(merged?.assigneeId) && row) {
-    merged.assigneeId = s(row?.assigneeId);
+  if (!String(merged?.assigneeId ?? "").trim() && row) {
+    merged.assigneeId = String(row?.assigneeId ?? "").trim();
   }
 
   // updatedAt / updatedBy も detail を優先。無ければ row（best-effort）
-  if (!s(merged?.updatedAt) && row) {
-    merged.updatedAt = s(row?.updatedAt);
+  if (!String(merged?.updatedAt ?? "").trim() && row) {
+    merged.updatedAt = String(row?.updatedAt ?? "").trim();
   }
 
-  if (!s(merged?.updatedBy) && row) {
-    merged.updatedBy = s(row?.updatedBy) || s(row?.updatedByName);
+  if (!String(merged?.updatedBy ?? "").trim() && row) {
+    merged.updatedBy =
+      String(row?.updatedBy ?? "").trim() ||
+      String(row?.updatedByName ?? "").trim();
   }
 
   // 表示名/ブランド/商品名/トークン名/ステータスは row があれば補完
   if (row) {
-    if (!s(merged?.productName)) {
-      merged.productName = s(row?.productName);
+    if (!String(merged?.productName ?? "").trim()) {
+      merged.productName = String(row?.productName ?? "").trim();
     }
 
-    if (!s(merged?.tokenName)) {
-      merged.tokenName = s(row?.tokenName);
+    if (!String(merged?.tokenName ?? "").trim()) {
+      merged.tokenName = String(row?.tokenName ?? "").trim();
     }
 
-    if (!s(merged?.assigneeName)) {
-      merged.assigneeName = s(row?.assigneeName);
+    if (!String(merged?.assigneeName ?? "").trim()) {
+      merged.assigneeName = String(row?.assigneeName ?? "").trim();
     }
 
-    if (!s(merged?.status) && s(row?.status)) {
-      merged.status = s(row?.status);
+    if (
+      !String(merged?.status ?? "").trim() &&
+      String(row?.status ?? "").trim()
+    ) {
+      merged.status = String(row?.status ?? "").trim();
     }
 
-    if (!s(merged?.productBrandId)) {
-      merged.productBrandId = s(row?.productBrandId);
+    if (!String(merged?.productBrandId ?? "").trim()) {
+      merged.productBrandId = String(row?.productBrandId ?? "").trim();
     }
 
-    if (!s(merged?.productBrandName)) {
-      merged.productBrandName = s(row?.productBrandName);
+    if (!String(merged?.productBrandName ?? "").trim()) {
+      merged.productBrandName = String(row?.productBrandName ?? "").trim();
     }
 
-    if (!s(merged?.tokenBrandId)) {
-      merged.tokenBrandId = s(row?.tokenBrandId);
+    if (!String(merged?.tokenBrandId ?? "").trim()) {
+      merged.tokenBrandId = String(row?.tokenBrandId ?? "").trim();
     }
 
-    if (!s(merged?.tokenBrandName)) {
-      merged.tokenBrandName = s(row?.tokenBrandName);
-    }
-
-    // listImages が row にある場合だけ補完（detail を正とする）
-    if (!Array.isArray(merged?.listImages) && Array.isArray((row as any)?.listImages)) {
-      merged.listImages = (row as any).listImages;
-    }
-
-    if (!Array.isArray(merged?.listImage) && Array.isArray((row as any)?.listImage)) {
-      merged.listImage = (row as any).listImage;
+    if (!String(merged?.tokenBrandName ?? "").trim()) {
+      merged.tokenBrandName = String(row?.tokenBrandName ?? "").trim();
     }
   }
 
   // id を正規化して持っておく
-  if (!s(merged?.id)) {
+  if (!String(merged?.id ?? "").trim()) {
     merged.id = listId;
   }
 
@@ -298,10 +276,8 @@ export async function updateListDetailDTO(args: {
   assigneeId?: string;
 
   updatedBy?: string;
-
-  // listImages?: ListImage[]; // 必要になったら
 }): Promise<ListDTO> {
-  const listId = s(args.listId);
+  const listId = String(args.listId ?? "").trim();
   if (!listId) throw new Error("invalid_list_id");
 
   return await updateListByIdHTTP({

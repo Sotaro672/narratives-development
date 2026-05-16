@@ -1,4 +1,4 @@
-//frontend\console\list\src\infrastructure\repository\listHttpRepository.ts
+// frontend\console\list\src\infrastructure\repository\listHttpRepository.ts
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import type { CreateListInput } from "../dto/createListInput";
 import type { UpdateListInput } from "../dto/updateListInput";
@@ -6,14 +6,6 @@ import type { ListDTO } from "../dto/listDto";
 import { requestJSON } from "../http/httpClient";
 import { buildCreateListPayloadArray } from "../payload/createListPayload";
 import { buildUpdateListPayloadArray } from "../payload/updateListPayload";
-
-const toStringSafe = (value: unknown): string => {
-  if (typeof value === "string") return value.trim();
-  if (value == null) return "";
-  return String(value).trim();
-};
-
-const toListId = (value: unknown): string => toStringSafe(value);
 
 export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
   const payloadArray = buildCreateListPayloadArray(input);
@@ -32,7 +24,7 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
 }
 
 export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDTO> {
-  const listId = toListId(input?.listId);
+  const listId = input?.listId;
   if (!listId) throw new Error("invalid_list_id");
 
   const payloadArray = buildUpdateListPayloadArray(input);
@@ -60,17 +52,16 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
 }
 
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
-  const id = toListId(listId);
-  if (!id) {
+  if (!listId) {
     throw new Error("invalid_list_id");
   }
 
   return await requestJSON<ListDTO>({
     method: "GET",
-    path: `/lists/${encodeURIComponent(id)}`,
+    path: `/lists/${encodeURIComponent(listId)}`,
     debug: {
-      tag: `GET /lists/${id}`,
-      url: `${API_BASE}/lists/${encodeURIComponent(id)}`,
+      tag: `GET /lists/${listId}`,
+      url: `${API_BASE}/lists/${encodeURIComponent(listId)}`,
       method: "GET",
     },
   });
@@ -80,7 +71,7 @@ export async function fetchListDetailHTTP(args: {
   listId: string;
   inventoryIdHint?: string;
 }): Promise<ListDTO> {
-  const listId = toListId(args.listId);
+  const listId = args.listId;
   if (!listId) {
     throw new Error("invalid_list_id");
   }
