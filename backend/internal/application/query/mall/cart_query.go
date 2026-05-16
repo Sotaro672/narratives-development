@@ -4,6 +4,7 @@ package mall
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -93,7 +94,15 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 	modelIndex := q.fetchModelSimpleIndexByCart(ctx, c)
 	productNameIndex := q.fetchProductNameIndexByCart(ctx, c, invIndex)
 
-	out := toCartDTO(c, priceIndex, listMetaIndex, invIndex, modelIndex, productNameIndex)
+	out := toCartDTO(
+		c,
+		priceIndex,
+		listMetaIndex,
+		invIndex,
+		modelIndex,
+		productNameIndex,
+	)
+
 	return out, nil
 }
 
@@ -161,8 +170,17 @@ type listMeta struct {
 }
 
 type modelSimple struct {
+	Kind        string
+	ModelNumber string
+	ModelLabel  string
+
+	// apparel
 	Size  string
 	Color string
+
+	// alcohol
+	VolumeValue *int
+	VolumeUnit  string
 }
 
 func toCartDTO(
@@ -207,11 +225,11 @@ func toCartDTO(
 
 		if listMetaIndex != nil {
 			if lm, ok := listMetaIndex[listID]; ok {
-				if s := lm.Title; s != "" {
-					item.Title = s
+				if lm.Title != "" {
+					item.Title = lm.Title
 				}
-				if s := lm.ImageID; s != "" {
-					item.ListImage = s
+				if lm.ImageID != "" {
+					item.ListImage = lm.ImageID
 				}
 			}
 		}
@@ -231,21 +249,37 @@ func toCartDTO(
 				pbID = parts.ProductBlueprintID
 			}
 		}
+
 		if pbID != "" && productNameIndex != nil {
-			if name, ok := productNameIndex[pbID]; ok {
-				if s := name; s != "" {
-					item.ProductName = s
-				}
+			if name, ok := productNameIndex[pbID]; ok && name != "" {
+				item.ProductName = name
 			}
 		}
 
 		if modelIndex != nil {
 			if ms, ok := modelIndex[modelID]; ok {
-				if s := ms.Size; s != "" {
-					item.Size = s
+				if ms.Kind != "" {
+					item.ModelKind = ms.Kind
 				}
-				if s := ms.Color; s != "" {
-					item.Color = s
+				if ms.ModelNumber != "" {
+					item.ModelNumber = ms.ModelNumber
+				}
+				if ms.ModelLabel != "" {
+					item.ModelLabel = ms.ModelLabel
+				}
+
+				if ms.Size != "" {
+					item.Size = ms.Size
+				}
+				if ms.Color != "" {
+					item.Color = ms.Color
+				}
+
+				if ms.VolumeValue != nil {
+					item.VolumeValue = ms.VolumeValue
+				}
+				if ms.VolumeUnit != "" {
+					item.VolumeUnit = ms.VolumeUnit
 				}
 			}
 		}
@@ -268,7 +302,10 @@ func toRFC3339Ptr(t time.Time) *string {
 // list lookup
 // ============================================================
 
-func (q *CartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart) (map[string]map[string]int, map[string]listMeta) {
+func (q *CartQuery) fetchListIndicesByCart(
+	ctx context.Context,
+	c *cartdom.Cart,
+) (map[string]map[string]int, map[string]listMeta) {
 	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil, nil
 	}
@@ -299,7 +336,10 @@ func (q *CartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart)
 	return q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
 }
 
-func (q *CartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
+func (q *CartQuery) fetchListIndicesByCartViaRepo(
+	ctx context.Context,
+	listIDs []string,
+) (map[string]map[string]int, map[string]listMeta) {
 	if q == nil || q.ListRepo == nil || len(listIDs) == 0 {
 		return nil, nil
 	}
@@ -350,7 +390,10 @@ func (q *CartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs [
 	return priceOut, metaOut
 }
 
-func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
+func (q *CartQuery) fetchListIndicesByCartViaFirestore(
+	ctx context.Context,
+	listIDs []string,
+) (map[string]map[string]int, map[string]listMeta) {
 	if q == nil || q.FS == nil || len(listIDs) == 0 {
 		return nil, nil
 	}
@@ -430,7 +473,10 @@ func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, list
 // inventory lookup
 // ============================================================
 
-func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]invParts {
+func (q *CartQuery) fetchInventoryIndexByCart(
+	ctx context.Context,
+	c *cartdom.Cart,
+) map[string]invParts {
 	if q == nil || q.FS == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil
 	}
@@ -506,7 +552,10 @@ func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Ca
 // model resolver lookup
 // ============================================================
 
-func (q *CartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]modelSimple {
+func (q *CartQuery) fetchModelSimpleIndexByCart(
+	ctx context.Context,
+	c *cartdom.Cart,
+) map[string]modelSimple {
 	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil
 	}
@@ -537,18 +586,79 @@ func (q *CartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.
 
 	for _, mid := range modelIDs {
 		mr := q.Resolver.ResolveModelResolved(ctx, mid)
-		sz := mr.Size
-		cl := mr.Color
-		if sz == "" && cl == "" {
+
+		ms := modelSimple{
+			Kind:        mr.Kind,
+			ModelNumber: mr.ModelNumber,
+
+			Size:  mr.Size,
+			Color: mr.Color,
+
+			VolumeValue: mr.VolumeValue,
+			VolumeUnit:  mr.VolumeUnit,
+		}
+
+		ms.ModelLabel = buildCartModelLabel(ms)
+
+		if isEmptyModelSimple(ms) {
 			continue
 		}
-		out[mid] = modelSimple{Size: sz, Color: cl}
+
+		out[mid] = ms
 	}
 
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+func isEmptyModelSimple(ms modelSimple) bool {
+	return ms.Kind == "" &&
+		ms.ModelNumber == "" &&
+		ms.ModelLabel == "" &&
+		ms.Size == "" &&
+		ms.Color == "" &&
+		ms.VolumeValue == nil &&
+		ms.VolumeUnit == ""
+}
+
+func buildCartModelLabel(ms modelSimple) string {
+	if ms.Kind == "alcohol" {
+		if ms.ModelNumber != "" && ms.VolumeValue != nil && ms.VolumeUnit != "" {
+			return fmt.Sprintf("%s / %d%s", ms.ModelNumber, *ms.VolumeValue, ms.VolumeUnit)
+		}
+
+		if ms.VolumeValue != nil && ms.VolumeUnit != "" {
+			return fmt.Sprintf("%d%s", *ms.VolumeValue, ms.VolumeUnit)
+		}
+
+		if ms.ModelNumber != "" {
+			return ms.ModelNumber
+		}
+
+		return ""
+	}
+
+	if ms.Kind == "apparel" || ms.Kind == "" {
+		if ms.Size != "" && ms.Color != "" {
+			return fmt.Sprintf("%s / %s", ms.Size, ms.Color)
+		}
+
+		if ms.Size != "" {
+			return ms.Size
+		}
+
+		if ms.Color != "" {
+			return ms.Color
+		}
+	}
+
+	if ms.ModelNumber != "" {
+		return ms.ModelNumber
+	}
+
+	return ""
 }
 
 // ============================================================

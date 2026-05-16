@@ -6,15 +6,14 @@ import (
 )
 
 // ============================================================
-// DTOs (for catalog.dart)
+// DTOs for catalog response
 // ============================================================
 
 type CatalogDTO struct {
 	List CatalogListDTO `json:"list"`
 
 	// listId 配下の画像一覧（displayOrder 付き）
-	// - 空配列は返さない（omitempty）
-	// - 取得失敗しても画面は壊さない想定なので Error は best-effort
+	// 取得失敗しても画面は壊さない想定なので Error は best-effort
 	ListImages      []CatalogListImageDTO `json:"listImages,omitempty"`
 	ListImagesError string                `json:"listImagesError,omitempty"`
 
@@ -24,14 +23,12 @@ type CatalogDTO struct {
 	ProductBlueprint      *CatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
 	ProductBlueprintError string                      `json:"productBlueprintError,omitempty"`
 
-	// catalog 専用の tokenBlueprint DTO（Patch を直接返さない）
 	TokenBlueprint      *CatalogTokenBlueprintDTO `json:"tokenBlueprint,omitempty"`
 	TokenBlueprintError string                    `json:"tokenBlueprintError,omitempty"`
 
 	ModelVariations      []CatalogModelVariationDTO `json:"modelVariations,omitempty"`
 	ModelVariationsError string                     `json:"modelVariationsError,omitempty"`
 
-	// productBlueprintReview（商品単位の口コミ集計）
 	ProductReviewSummary      *CatalogProductReviewSummaryDTO `json:"productReviewSummary,omitempty"`
 	ProductReviewSummaryError string                          `json:"productReviewSummaryError,omitempty"`
 }
@@ -40,7 +37,7 @@ type CatalogListDTO struct {
 	ID          string              `json:"id"`
 	Title       string              `json:"title"`
 	Description string              `json:"description"`
-	Image       string              `json:"image"` // URL
+	Image       string              `json:"image"`
 	Prices      []ldom.ListPriceRow `json:"prices"`
 
 	InventoryID        string `json:"inventoryId,omitempty"`
@@ -49,10 +46,7 @@ type CatalogListDTO struct {
 }
 
 // ============================================================
-// TokenBlueprint DTO (catalog response)
-// 要件：minted/brandId/companyId/metadataUri は不要
-// 追加：companyName/tokenIcon/description
-// - description/tokenIcon は空でもキーを返すため omitempty を付けない
+// TokenBlueprint DTO
 // ============================================================
 
 type CatalogTokenBlueprintDTO struct {
@@ -67,7 +61,7 @@ type CatalogTokenBlueprintDTO struct {
 }
 
 // ============================================================
-// ListImage DTOs (absolute schema)
+// ListImage DTOs
 // ============================================================
 
 type CatalogListImageDTO struct {
@@ -117,21 +111,23 @@ type CatalogProductBlueprintDTO struct {
 	BrandName   string `json:"brandName,omitempty"`
 	CompanyName string `json:"companyName,omitempty"`
 
-	ItemType string  `json:"itemType"`
-	Fit      string  `json:"fit"`
-	Material string  `json:"material"`
-	Weight   float64 `json:"weight,omitempty"`
-	Printed  bool    `json:"printed"`
+	Printed          bool   `json:"printed"`
+	ProductIDTagType string `json:"productIdTagType"`
 
-	QualityAssurance []string `json:"qualityAssurance"`
-	ProductIDTagType string   `json:"productIdTagType"`
+	ProductBlueprintCategoryID     string   `json:"productBlueprintCategoryId,omitempty"`
+	ProductBlueprintCategoryCode   string   `json:"productBlueprintCategoryCode,omitempty"`
+	ProductBlueprintCategoryKind   string   `json:"productBlueprintCategoryKind,omitempty"`
+	ProductBlueprintCategoryNameEn string   `json:"productBlueprintCategoryNameEn,omitempty"`
+	ProductBlueprintCategoryNameJa string   `json:"productBlueprintCategoryNameJa,omitempty"`
+	ProductBlueprintCategoryPath   []string `json:"productBlueprintCategoryPath,omitempty"`
+
+	CategoryFields map[string]any `json:"categoryFields,omitempty"`
 
 	ModelRefs []CatalogProductBlueprintModelRefDTO `json:"modelRefs,omitempty"`
 }
 
 // ============================================================
 // ModelVariation DTO
-// - apparel / alcohol の両方に対応する
 // ============================================================
 
 type CatalogModelVariationDTO struct {
@@ -154,17 +150,14 @@ type CatalogModelVariationDTO struct {
 	Measurements map[string]int `json:"measurements,omitempty"`
 
 	// alcohol
-	VolumeValue *int   `json:"volumeValue,omitempty"`
-	VolumeUnit  string `json:"volumeUnit,omitempty"`
+	VolumeValue *float64 `json:"volumeValue,omitempty"`
+	VolumeUnit  string   `json:"volumeUnit,omitempty"`
 
 	StockKeys int `json:"stockKeys,omitempty"`
 }
 
 // ============================================================
 // ProductBlueprintReview Summary DTO
-// - 平均評価
-// - 件数
-// - 星別分布（5..1）
 // ============================================================
 
 type CatalogProductReviewSummaryDTO struct {

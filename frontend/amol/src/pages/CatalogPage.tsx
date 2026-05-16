@@ -15,6 +15,7 @@ import { formatPrice } from "../features/catalog/utils/format";
 export default function CatalogPage() {
   const {
     catalog,
+    catalogKind,
     isLoadingCatalog,
     isLoadingReviews,
     isAddingToCart,
@@ -120,7 +121,10 @@ export default function CatalogPage() {
                 </p>
               </div>
 
-              <ProductInfoCard productBlueprint={catalog.productBlueprint} />
+              <ProductInfoCard
+                productBlueprint={catalog.productBlueprint}
+                categoryKind={catalogKind}
+              />
 
               {shouldShowMeasurementTable ? (
                 <MeasurementTable

@@ -22,10 +22,14 @@ func toCatalogListDTO(l ldom.List) dto.CatalogListDTO {
 	}
 }
 
-func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProductBlueprintDTO {
+func toCatalogProductBlueprintDTO(
+	pb *pbdom.ProductBlueprint,
+) dto.CatalogProductBlueprintDTO {
 	if pb == nil {
 		return dto.CatalogProductBlueprintDTO{}
 	}
+
+	category := pb.ProductBlueprintCategory
 
 	out := dto.CatalogProductBlueprintDTO{
 		ID:          pb.ID,
@@ -33,31 +37,39 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 		BrandID:     pb.BrandID,
 		CompanyID:   pb.CompanyID,
 
-		// fit / material / weight / qualityAssurance は ProductBlueprint 直下ではなく
-		// CategoryFields に集約する。
-		Fit:              categoryFieldString(pb.CategoryFields, "fit"),
-		Material:         categoryFieldString(pb.CategoryFields, "material"),
-		Weight:           categoryFieldFloat64(pb.CategoryFields, "weight"),
-		QualityAssurance: categoryFieldStringSlice(pb.CategoryFields, "qualityAssurance"),
-
-		Printed: pb.Printed,
-
+		Printed:          pb.Printed,
 		ProductIDTagType: pb.ProductIdTag.Type,
+
+		ProductBlueprintCategoryID:     category.ID,
+		ProductBlueprintCategoryCode:   category.Code,
+		ProductBlueprintCategoryKind:   string(category.Kind),
+		ProductBlueprintCategoryNameEn: category.NameEn,
+		ProductBlueprintCategoryNameJa: category.NameJa,
+		ProductBlueprintCategoryPath:   append([]string(nil), category.Path...),
+
+		CategoryFields: cloneCatalogCategoryFields(pb.CategoryFields),
 
 		ModelRefs: nil,
 	}
 
 	if len(pb.ModelRefs) > 0 {
-		refs := make([]dto.CatalogProductBlueprintModelRefDTO, 0, len(pb.ModelRefs))
+		refs := make(
+			[]dto.CatalogProductBlueprintModelRefDTO,
+			0,
+			len(pb.ModelRefs),
+		)
+
 		for _, r := range pb.ModelRefs {
 			if r.ModelID == "" {
 				continue
 			}
+
 			refs = append(refs, dto.CatalogProductBlueprintModelRefDTO{
 				ModelID:      r.ModelID,
 				DisplayOrder: r.DisplayOrder,
 			})
 		}
+
 		if len(refs) > 0 {
 			out.ModelRefs = refs
 		}
@@ -66,98 +78,31 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 	return out
 }
 
-func categoryFieldString(fields pbdom.CategoryFields, key string) string {
-	if len(fields) == 0 || key == "" {
-		return ""
-	}
-
-	v, ok := fields[key]
-	if !ok || v == nil {
-		return ""
-	}
-
-	switch x := v.(type) {
-	case string:
-		return x
-	default:
-		return ""
-	}
-}
-
-func categoryFieldFloat64(fields pbdom.CategoryFields, key string) float64 {
-	if len(fields) == 0 || key == "" {
-		return 0
-	}
-
-	v, ok := fields[key]
-	if !ok || v == nil {
-		return 0
-	}
-
-	switch x := v.(type) {
-	case float64:
-		return x
-	case float32:
-		return float64(x)
-	case int:
-		return float64(x)
-	case int8:
-		return float64(x)
-	case int16:
-		return float64(x)
-	case int32:
-		return float64(x)
-	case int64:
-		return float64(x)
-	case uint:
-		return float64(x)
-	case uint8:
-		return float64(x)
-	case uint16:
-		return float64(x)
-	case uint32:
-		return float64(x)
-	case uint64:
-		return float64(x)
-	default:
-		return 0
-	}
-}
-
-func categoryFieldStringSlice(fields pbdom.CategoryFields, key string) []string {
-	if len(fields) == 0 || key == "" {
+func cloneCatalogCategoryFields(fields pbdom.CategoryFields) map[string]any {
+	if len(fields) == 0 {
 		return nil
 	}
 
-	v, ok := fields[key]
-	if !ok || v == nil {
-		return nil
-	}
+	out := make(map[string]any, len(fields))
 
-	switch x := v.(type) {
-	case []string:
-		return append([]string(nil), x...)
-
-	case []any:
-		out := make([]string, 0, len(x))
-		for _, item := range x {
-			s, ok := item.(string)
-			if !ok || s == "" {
-				continue
-			}
-			out = append(out, s)
+	for key, value := range fields {
+		if key == "" || value == nil {
+			continue
 		}
-		if len(out) == 0 {
-			return nil
-		}
-		return out
 
-	default:
+		out[key] = value
+	}
+
+	if len(out) == 0 {
 		return nil
 	}
+
+	return out
 }
 
-// Mint -> CatalogInventoryDTO（Firestore 正: productBlueprintId / tokenBlueprintId / modelIds / stock.*.accumulation / stock.*.reservedCount）
+// Mint -> CatalogInventoryDTO
+// Firestore 正:
+// productBlueprintId / tokenBlueprintId / modelIds / stock.*.accumulation / stock.*.reservedCount
 func toCatalogInventoryDTOFromMint(m invdom.Mint) *dto.CatalogInventoryDTO {
 	out := &dto.CatalogInventoryDTO{
 		ID:                 m.ID,

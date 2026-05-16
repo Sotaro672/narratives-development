@@ -17,7 +17,7 @@ import (
 // OrderQuery resolves (mall buyer flow):
 // - uid -> avatarId (avatars where userId == uid)
 // - userId -> shippingAddress / paymentMethod (query style only; docID is NOT userId)
-// - avatarId -> cartItems (via SNSCartQuery; best-effort)
+// - avatarId -> cartItems (via CartQuery; best-effort)
 // - userId -> fullName (via NameResolver.ResolveMemberName; best-effort)
 type OrderQuery struct {
 	FS *firestore.Client
@@ -30,7 +30,7 @@ type OrderQuery struct {
 	// - if nil, FullName will be empty
 	NameResolver *appresolver.NameResolver
 
-	// collection names (override if your firestore schema differs)
+	// collection names
 	AvatarsCol         string
 	ShippingAddressCol string
 	PaymentMethodCol   string
@@ -59,15 +59,6 @@ func NewOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQu
 	q := NewOrderQuery(fs)
 	q.CartQ = cartQ
 	return q
-}
-
-// Backward-compat constructors
-func NewMallOrderQuery(fs *firestore.Client) *OrderQuery {
-	return NewOrderQuery(fs)
-}
-
-func NewMallOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQuery {
-	return NewOrderQueryWithCartQuery(fs, cartQ)
 }
 
 // ResolveAvatarIDByUID resolves uid -> avatarId only.

@@ -42,12 +42,7 @@ export type CatalogProductBlueprintModelRef = {
   displayOrder: number;
 };
 
-export type CatalogQualityAssuranceItem = {
-  label?: string;
-  title?: string;
-  value?: string;
-  [key: string]: unknown;
-};
+export type CatalogCategoryFields = Record<string, unknown>;
 
 export type CatalogProductBlueprint = {
   id: string;
@@ -57,57 +52,28 @@ export type CatalogProductBlueprint = {
   brandName: string;
   companyName: string;
 
-  /**
-   * apparel では category / itemType 的に使う。
-   * alcohol では空文字の場合がある。
-   */
-  itemType: string;
-
-  /**
-   * apparel 用。
-   * alcohol では空文字または未使用。
-   */
-  fit: string;
-
-  /**
-   * apparel では素材、alcohol では原材料として扱う。
-   */
-  material: string;
-
-  /**
-   * apparel 用。
-   * alcohol では返らない可能性があるため optional / nullable。
-   */
-  weight?: number | null;
-
   printed: boolean;
-
-  /**
-   * backend から null が返るケースがある。
-   */
-  qualityAssurance:
-    | string[]
-    | string
-    | CatalogQualityAssuranceItem[]
-    | null;
-
   productIdTagType: string;
+
+  productBlueprintCategoryId?: string | null;
+  productBlueprintCategoryCode?: string | null;
+  productBlueprintCategoryKind?: string | null;
+  productBlueprintCategoryNameEn?: string | null;
+  productBlueprintCategoryNameJa?: string | null;
+  productBlueprintCategoryPath?: string[] | null;
+
+  /**
+   * category ごとの productBlueprint 入力値。
+   *
+   * 例:
+   * - alcohol.sake: material / region / vintage / alcoholContent
+   * - apparel.tops: material / fit / weight
+   *
+   * category ごとに項目が変わるため、固定 field ではなく map として扱う。
+   */
+  categoryFields?: CatalogCategoryFields | null;
+
   modelRefs: CatalogProductBlueprintModelRef[];
-
-  /**
-   * category / classification 系。
-   * backend の返却揺れを許容する。
-   */
-  category?: string | null;
-  categoryCode?: string | null;
-  classification?: string | null;
-
-  /**
-   * alcohol 用。
-   */
-  region?: string | null;
-  vintage?: string | number | null;
-  alcoholContent?: string | number | null;
 };
 
 export type CatalogTokenBlueprint = {

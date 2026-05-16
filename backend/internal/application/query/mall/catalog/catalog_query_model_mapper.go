@@ -38,7 +38,9 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 	}
 }
 
-func toCatalogModelVariationDTO(mv modeldom.ModelVariation) (dto.CatalogModelVariationDTO, bool) {
+func toCatalogModelVariationDTO(
+	mv modeldom.ModelVariation,
+) (dto.CatalogModelVariationDTO, bool) {
 	if mv == nil {
 		return dto.CatalogModelVariationDTO{}, false
 	}
@@ -54,7 +56,9 @@ func toCatalogModelVariationDTO(mv modeldom.ModelVariation) (dto.CatalogModelVar
 	return dto.CatalogModelVariationDTO{}, false
 }
 
-func toCatalogApparelModelVariationDTO(mv modeldom.ApparelModelVariation) (dto.CatalogModelVariationDTO, bool) {
+func toCatalogApparelModelVariationDTO(
+	mv modeldom.ApparelModelVariation,
+) (dto.CatalogModelVariationDTO, bool) {
 	if mv.ID == "" {
 		return dto.CatalogModelVariationDTO{}, false
 	}
@@ -84,12 +88,14 @@ func toCatalogApparelModelVariationDTO(mv modeldom.ApparelModelVariation) (dto.C
 	}, true
 }
 
-func toCatalogAlcoholModelVariationDTO(mv modeldom.AlcoholModelVariation) (dto.CatalogModelVariationDTO, bool) {
+func toCatalogAlcoholModelVariationDTO(
+	mv modeldom.AlcoholModelVariation,
+) (dto.CatalogModelVariationDTO, bool) {
 	if mv.ID == "" {
 		return dto.CatalogModelVariationDTO{}, false
 	}
 
-	value := mv.Volume.Value
+	value := float64(mv.Volume.Value)
 
 	return dto.CatalogModelVariationDTO{
 		ID:                 mv.ID,
@@ -106,7 +112,9 @@ func toCatalogAlcoholModelVariationDTO(mv modeldom.AlcoholModelVariation) (dto.C
 	}, true
 }
 
-func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
+func toApparelModelVariation(
+	v modeldom.ModelVariation,
+) (modeldom.ApparelModelVariation, bool) {
 	if v == nil {
 		return modeldom.ApparelModelVariation{}, false
 	}
@@ -124,7 +132,9 @@ func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVa
 	}
 }
 
-func toAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
+func toAlcoholModelVariation(
+	v modeldom.ModelVariation,
+) (modeldom.AlcoholModelVariation, bool) {
 	if v == nil {
 		return modeldom.AlcoholModelVariation{}, false
 	}
