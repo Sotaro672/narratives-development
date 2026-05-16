@@ -6,18 +6,25 @@ import (
 	tokenbpdom "narratives/internal/domain/tokenBlueprint"
 )
 
-// 画面（detail）向けの最小 DTO（まずは count を通す）
+// InventoryDetailRowDTO は InventoryDetail 画面向けの在庫行 DTO。
+// GET /inventory/{inventoryId} の rows として返す。
+// frontend 側で /models/by-blueprint/{productBlueprintId}/variations を追加取得しなくてよいように、
+// productBlueprintCategory.Kind に応じた model 情報をここへ含める。
 type InventoryDetailRowDTO struct {
 	ModelID     string `json:"modelId"`
+	Kind        string `json:"kind,omitempty"`
 	ModelNumber string `json:"modelNumber"`
 
-	// まずは count を stock に入れる
 	Stock int `json:"stock"`
 
-	// あとで拡張（取れない間は "-" / "" / null でOK）
-	Size  string `json:"size"`
-	Color string `json:"color"`
+	// apparel 系 model 用
+	Size  string `json:"size,omitempty"`
+	Color string `json:"color,omitempty"`
 	RGB   *int   `json:"rgb,omitempty"`
+
+	// alcohol 系 model 用
+	VolumeValue *int   `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
 }
 
 type InventoryDetailDTO struct {
@@ -26,12 +33,12 @@ type InventoryDetailDTO struct {
 	TokenBlueprintID   string `json:"tokenBlueprintId"`
 	ProductBlueprintID string `json:"productBlueprintId"`
 
-	// ✅ ProductBlueprintCard へ渡すための Patch
-	// nil の場合は返さない（omitempty）
+	// ProductBlueprintCard へ渡すための Patch
+	// nil の場合は返さない
 	ProductBlueprintPatch *productbpdom.Patch `json:"productBlueprintPatch,omitempty"`
 
-	// ✅ NEW: TokenBlueprintCard へ渡すための Patch
-	// nil の場合は返さない（omitempty）
+	// TokenBlueprintCard へ渡すための Patch
+	// nil の場合は返さない
 	TokenBlueprintPatch *tokenbpdom.Patch `json:"tokenBlueprintPatch,omitempty"`
 
 	Rows       []InventoryDetailRowDTO `json:"rows"`

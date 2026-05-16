@@ -22,7 +22,7 @@ export type InventoryListRowDTO = {
   productBlueprintId: string;
   productName: string;
 
-  tokenBlueprintId: string; // detail遷移のキー
+  tokenBlueprintId: string;
   tokenName: string;
 
   modelNumber: string;
@@ -32,7 +32,9 @@ export type InventoryListRowDTO = {
 
 // ---------------------------------------------------------
 // inventoryIds 解決 DTO
-// GET /inventory/ids?productBlueprintId=...&tokenBlueprintId=...
+// NOTE:
+// 後方互換削除後、Inventory Detail では使用しない。
+// 他画面で未使用なら、この型も削除可能。
 // ---------------------------------------------------------
 export type InventoryIDsByProductAndTokenDTO = {
   productBlueprintId: string;
@@ -56,9 +58,15 @@ export type ProductBlueprintSummaryDTO = {
 };
 
 // ---------------------------------------------------------
-// ProductBlueprint の modelRefs（displayOrder 含む）
-// infrastructure mapper で backend raw の ModelID / DisplayOrder を
-// modelId / displayOrder に変換してから保持する。
+// ProductBlueprint の modelRefs
+//
+// backend raw:
+// - ModelID
+// - DisplayOrder
+//
+// frontend DTO:
+// - modelId
+// - displayOrder
 // ---------------------------------------------------------
 export type ProductBlueprintModelRefDTO = {
   modelId: string;
@@ -84,6 +92,7 @@ export type ProductBlueprintPatchDTO = {
 
   productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
   categoryFields?: CategoryFieldValues | null;
+
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
@@ -107,52 +116,34 @@ export type TokenBlueprintPatchDTO = {
 };
 
 // ---------------------------------------------------------
-// ModelVariation DTO
+// Inventory Detail Row
 //
-// GET /models/by-blueprint/{productBlueprintId}/variations の response を
-// infrastructure mapper でこの形へ寄せる。
-// alcohol の容量は volume.value / volume.unit として保持し、
-// application mapper で InventoryRow.volumeValue / volumeUnit へ移す。
+// GET /inventory/{inventoryId} の rows を唯一の正とする。
+// /models/by-blueprint/{productBlueprintId}/variations の response は使わない。
+//
+// apparel:
+// - modelId
+// - kind
+// - modelNumber
+// - size
+// - color
+// - rgb
+// - stock
+//
+// alcohol:
+// - modelId
+// - kind
+// - modelNumber
+// - volumeValue
+// - volumeUnit
+// - stock
 // ---------------------------------------------------------
-export type ModelVariationVolumeDTO = {
-  value?: number | null;
-  unit?: string | null;
-};
-
-export type ModelVariationDTO = {
-  id: string;
-  productBlueprintId?: string;
-  kind?: string | null;
-
-  modelNumber?: string | null;
-
-  // apparel
-  size?: string | null;
-  color?: string | null;
-  rgb?: number | null;
-
-  // alcohol
-  volume?: ModelVariationVolumeDTO | null;
-
-  createdAt?: string;
-  updatedAt?: string;
-};
-
 export type InventoryDetailRowDTO = {
-  modelId?: string;
-  tokenBlueprintId?: string;
-  token?: string;
-
-  /**
-   * モデル種別。
-   *
-   * Inventory detail row 自体に kind が入る場合はここで受ける。
-   * 入らない場合は /models/by-blueprint/.../variations の kind を正として
-   * application mapper 側で補完する。
-   */
+  modelId: string;
   kind?: string | null;
 
   modelNumber: string;
+  stock: number;
 
   // apparel
   size?: string | null;
@@ -160,22 +151,17 @@ export type InventoryDetailRowDTO = {
   rgb?: number | null;
 
   // alcohol
-  volume?: ModelVariationVolumeDTO | null;
-
-  stock: number;
+  volumeValue?: number | null;
+  volumeUnit?: string | null;
 };
 
 export type InventoryDetailDTO = {
   inventoryId: string;
 
-  inventoryIds?: string[];
-
   tokenBlueprintId: string;
   productBlueprintId: string;
-  modelId?: string;
 
   productBlueprintPatch: ProductBlueprintPatchDTO;
-
   tokenBlueprintPatch?: TokenBlueprintPatchDTO;
 
   tokenBlueprint?: TokenBlueprintSummaryDTO;

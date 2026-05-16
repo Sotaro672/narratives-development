@@ -9,16 +9,11 @@ package dto
 type InventoryManagementRowDTO struct {
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ProductName        string `json:"productName"`
-	TokenBlueprintID   string `json:"tokenBlueprintId"` // ✅ 必須
+	TokenBlueprintID   string `json:"tokenBlueprintId"`
 	TokenName          string `json:"tokenName"`
 	ModelNumber        string `json:"modelNumber"`
-
-	// 互換: 従来の stock は availableStock と同義にする
-	Stock int `json:"stock"`
-
-	// ✅ NEW: 画面で必要な内訳
-	AvailableStock int `json:"availableStock"`
-	ReservedCount  int `json:"reservedCount"`
+	AvailableStock     int    `json:"availableStock"`
+	ReservedCount      int    `json:"reservedCount"`
 }
 
 // ============================================================

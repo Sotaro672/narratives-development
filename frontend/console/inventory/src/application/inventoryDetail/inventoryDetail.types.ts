@@ -10,11 +10,12 @@ export type InventoryDetailViewModel = {
   // inventory docId を正とする
   inventoryId: string;
 
-  // inventory テーブルに両方記載されている前提で、そこから取得する（split/合成しない）
+  // GET /inventory/{inventoryId} の response に含まれる値を正とする
+  // split / 合成 / 追加取得はしない
   productBlueprintId: string;
   tokenBlueprintId: string;
 
-  // Header 表示用（productName / tokenName のみ）
+  // Header 表示用
   productName: string;
   tokenName: string;
   headerTitle: string;
@@ -25,12 +26,14 @@ export type InventoryDetailViewModel = {
   productBlueprintCategoryKind?: string;
   categoryFields?: Record<string, unknown> | null;
 
+  // GET /inventory/{inventoryId} の response に含まれる patch を正とする
   productBlueprintPatch: ProductBlueprintPatchDTO;
   tokenBlueprintPatch?: TokenBlueprintPatchDTO;
 
   updatedAt?: string;
   totalStock: number;
 
-  // InventoryCard に渡す最小
+  // InventoryCard に渡す行
+  // rows は GET /inventory/{inventoryId} の rows を正とする
   rows: InventoryRow[];
 };

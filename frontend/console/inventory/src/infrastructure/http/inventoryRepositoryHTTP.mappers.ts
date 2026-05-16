@@ -15,10 +15,13 @@ import type {
 } from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
 
 // =========================================================
-// B案: /inventory だけで回す前提で縮小（実測ログ準拠）
-// - 互換（揺れ吸収 / snake / 別名）は削除
-// - 実際に参照されているキーだけ読む
-// - inventoryRepositoryHTTP.utils.ts への依存は廃止
+// /inventory を正とする mapper
+//
+// 方針:
+// - 後方互換の揺れ吸収はしない。
+// - snake_case / 旧別名 / 旧 variation merge 前提は扱わない。
+// - Inventory Detail は GET /inventory/{inventoryId} の response を唯一の正とする。
+// - /models/by-blueprint/{productBlueprintId}/variations は呼ばない。
 // =========================================================
 
 function mapProductBlueprintCategory(
@@ -33,7 +36,7 @@ function mapProductBlueprintCategory(
     nameEn: raw.NameEn,
     kind: raw.Kind as ProductBlueprintCategoryKind,
     path: Array.isArray(raw.Path) ? raw.Path : [],
-    parentId: raw.ParentID ?? raw.ParentId ?? raw.parentId ?? null,
+    parentId: raw.ParentID ?? null,
   };
 }
 
@@ -46,7 +49,8 @@ function mapProductIdTag(raw: any): { type?: string } | null {
 }
 
 // ---------------------------------------------------------
-// Inventory List Row mapper（縮小）
+// Inventory List Row mapper
+//
 // 期待 row:
 // {
 //   productBlueprintId,
@@ -59,33 +63,37 @@ function mapProductIdTag(raw: any): { type?: string } | null {
 // }
 // ---------------------------------------------------------
 export function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null {
-  const productBlueprintId = raw?.productBlueprintId;
-  const tokenBlueprintId = raw?.tokenBlueprintId;
+  const productBlueprintId = raw.productBlueprintId;
+  const tokenBlueprintId = raw.tokenBlueprintId;
 
   if (!productBlueprintId || !tokenBlueprintId) return null;
 
   return {
     productBlueprintId,
-    productName: raw?.productName,
+    productName: raw.productName,
     tokenBlueprintId,
-    tokenName: raw?.tokenName,
-    modelNumber: raw?.modelNumber,
-    availableStock: raw?.availableStock,
-    reservedCount: raw?.reservedCount,
+    tokenName: raw.tokenName,
+    modelNumber: raw.modelNumber,
+    availableStock: raw.availableStock,
+    reservedCount: raw.reservedCount,
   };
 }
 
 // ---------------------------------------------------------
-// ProductBlueprintPatch mapper（縮小）
-// - productBlueprintCategory / categoryFields を落とさず保持する
-// - productBlueprintCategory は backend raw の ID / Code / NameJa...
-//   から frontend 側の id / code / nameJa... に変換する
-// - productIdTag は backend raw の Type から frontend 側の type に変換する
-// - modelRefs は backend raw の ModelID / DisplayOrder を
-//   frontend DTO の modelId / displayOrder に変換する
+// ProductBlueprintPatch mapper
+//
+// backend raw:
+// - productBlueprintCategory: ID / Code / NameJa / NameEn / Kind / Path
+// - productIdTag: Type
+// - modelRefs: ModelID / DisplayOrder
+//
+// frontend DTO:
+// - productBlueprintCategory: id / code / nameJa / nameEn / kind / path
+// - productIdTag: type
+// - modelRefs: modelId / displayOrder
 // ---------------------------------------------------------
 export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
-  const p = (raw ?? {}) as any;
+  const p = raw ?? {};
 
   return {
     productName: p.productName,
@@ -99,6 +107,7 @@ export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
       p.productBlueprintCategory,
     ),
     categoryFields: p.categoryFields ?? null,
+
     fit: p.fit,
     material: p.material,
     weight: p.weight,
@@ -111,36 +120,46 @@ export function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
           modelId: r.ModelID,
           displayOrder: r.DisplayOrder,
         }))
-      : undefined,
+      : null,
   };
 }
 
 // ---------------------------------------------------------
-// TokenBlueprintPatch mapper（縮小）
-// 実測ログで参照されるキーに限定:
-// tokenName, symbol, brandId, brandName, description, minted, metadataUri, iconUrl
+// TokenBlueprintPatch mapper
+//
+// 期待 raw:
+// {
+//   tokenName,
+//   symbol,
+//   brandId,
+//   brandName,
+//   description,
+//   iconUrl
+// }
 // ---------------------------------------------------------
 export function mapTokenBlueprintPatch(
   raw: any,
 ): TokenBlueprintPatchDTO | undefined {
   if (raw === undefined || raw === null) return undefined;
 
-  const p = raw as any;
-
   return {
-    tokenName: p.tokenName,
-    symbol: p.symbol,
-    brandId: p.brandId,
-    brandName: p.brandName,
-    description: p.description,
-    iconUrl: p.iconUrl,
+    tokenName: raw.tokenName,
+    symbol: raw.symbol,
+    brandId: raw.brandId,
+    brandName: raw.brandName,
+    description: raw.description,
+    iconUrl: raw.iconUrl,
   };
 }
 
 // ---------------------------------------------------------
-// Product summary mapper（縮小）
-// B案: /inventory の row から printed summaries を作る前提
-// 期待 row: { productBlueprintId, productName }
+// Product summary mapper
+//
+// 期待 row:
+// {
+//   productBlueprintId,
+//   productName
+// }
 // ---------------------------------------------------------
 export function mapPrintedInventorySummaries(
   data: any,
@@ -150,13 +169,13 @@ export function mapPrintedInventorySummaries(
   const byPbId = new Map<string, InventoryProductSummary>();
 
   for (const row of data) {
-    const id = row?.productBlueprintId;
+    const id = row.productBlueprintId;
     if (!id) continue;
 
     if (!byPbId.has(id)) {
       byPbId.set(id, {
         id,
-        productName: row?.productName || "-",
+        productName: row.productName || "-",
       });
     }
   }
@@ -165,63 +184,95 @@ export function mapPrintedInventorySummaries(
 }
 
 // ---------------------------------------------------------
-// Inventory IDs mapper（縮小）
-// 期待 shape: { inventoryIds: string[] }
+// Inventory IDs mapper
+//
+// NOTE:
+// 後方互換削除後、Inventory Detail では使用しない。
+// 他画面で未使用なら、この mapper も削除可能。
 // ---------------------------------------------------------
 export function mapInventoryIDsByProductAndToken(
   productBlueprintId: string,
   tokenBlueprintId: string,
   data: any,
 ): InventoryIDsByProductAndTokenDTO {
-  const idsRaw = data?.inventoryIds;
-  const inventoryIds = Array.isArray(idsRaw) ? idsRaw.filter(Boolean) : [];
+  if (!Array.isArray(data.inventoryIds)) {
+    throw new Error("inventoryIds response must contain inventoryIds array");
+  }
 
   return {
     productBlueprintId,
     tokenBlueprintId,
-    inventoryIds,
+    inventoryIds: data.inventoryIds,
   };
 }
 
 // ---------------------------------------------------------
-// InventoryDetail mapper（縮小）
-// 実測ログで rows は { modelId, token, modelNumber, size, color, rgb, stock } を参照。
+// InventoryDetail mapper
+//
+// GET /inventory/{inventoryId} の response を唯一の正とする。
+// rows は backend 側で productBlueprintCategory.Kind に応じて完成済み。
+//
+// apparel row:
+// {
+//   modelId,
+//   kind,
+//   modelNumber,
+//   stock,
+//   size,
+//   color,
+//   rgb
+// }
+//
+// alcohol row:
+// {
+//   modelId,
+//   kind,
+//   modelNumber,
+//   stock,
+//   volumeValue,
+//   volumeUnit
+// }
 // ---------------------------------------------------------
 export function mapInventoryDetailDTO(
   data: any,
   requestedId: string,
 ): InventoryDetailDTO {
-  const patch = mapProductBlueprintPatch(data?.productBlueprintPatch);
-  const tokenBlueprintPatch = mapTokenBlueprintPatch(data?.tokenBlueprintPatch);
+  if (!data) {
+    throw new Error("inventory detail response is empty");
+  }
 
-  const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
-    ? data.rows.map((r: any) => ({
-        modelId: r?.modelId,
-        tokenBlueprintId: r?.tokenBlueprintId,
-        token: r?.token,
-        modelNumber: r?.modelNumber,
-        size: r?.size,
-        color: r?.color,
-        rgb: r?.rgb ?? null,
-        stock: r?.stock,
-      }))
-    : [];
+  if (!Array.isArray(data.rows)) {
+    throw new Error("inventory detail rows must be an array");
+  }
+
+  const patch = mapProductBlueprintPatch(data.productBlueprintPatch);
+  const tokenBlueprintPatch = mapTokenBlueprintPatch(data.tokenBlueprintPatch);
+
+  const rows: InventoryDetailRowDTO[] = data.rows.map((r: any) => ({
+    modelId: r.modelId,
+    kind: r.kind ?? null,
+
+    modelNumber: r.modelNumber,
+    stock: r.stock,
+
+    size: r.size ?? null,
+    color: r.color ?? null,
+    rgb: r.rgb ?? null,
+
+    volumeValue: r.volumeValue ?? null,
+    volumeUnit: r.volumeUnit ?? null,
+  }));
 
   return {
-    inventoryId: data?.inventoryId ?? requestedId,
-    inventoryIds: Array.isArray(data?.inventoryIds)
-      ? data.inventoryIds.filter(Boolean)
-      : undefined,
+    inventoryId: data.inventoryId ?? requestedId,
 
-    tokenBlueprintId: data?.tokenBlueprintId,
-    productBlueprintId: data?.productBlueprintId,
-    modelId: data?.modelId,
+    tokenBlueprintId: data.tokenBlueprintId,
+    productBlueprintId: data.productBlueprintId,
 
     productBlueprintPatch: patch,
     tokenBlueprintPatch,
 
-    // この2つは実測ログ上、vm 側で必須ではないので「そのまま通す」だけ
-    tokenBlueprint: data?.tokenBlueprint
+    tokenBlueprint: data.tokenBlueprint
       ? {
           id: data.tokenBlueprint.id,
           name: data.tokenBlueprint.name,
@@ -229,7 +280,7 @@ export function mapInventoryDetailDTO(
         }
       : undefined,
 
-    productBlueprint: data?.productBlueprint
+    productBlueprint: data.productBlueprint
       ? {
           id: data.productBlueprint.id,
           name: data.productBlueprint.name,
@@ -237,7 +288,7 @@ export function mapInventoryDetailDTO(
       : undefined,
 
     rows,
-    totalStock: data?.totalStock,
-    updatedAt: data?.updatedAt,
+    totalStock: data.totalStock,
+    updatedAt: data.updatedAt,
   };
 }

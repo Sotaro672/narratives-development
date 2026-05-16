@@ -262,6 +262,9 @@ func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBl
 // ✅ Detail: inventoryId -> DTO
 // - pbId/tbId は inventory テーブルから拾うのみ（推測・split・build なし）
 // - modelRefs(displayOrder) を正として 0 在庫も rows に含める
+// - rows には productBlueprintCategory / model kind に応じた表示用 model 情報を含める
+//   - apparel: size / color / rgb
+//   - alcohol: volumeValue / volumeUnit
 // ============================================================
 
 func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) (*querydto.InventoryDetailDTO, error) {
@@ -392,34 +395,49 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			mn = "-"
 		}
 
-		sz := attr.Size
-		cl := attr.Color
-
-		if sz == "" {
-			sz = "-"
-		}
-		if cl == "" {
-			cl = "-"
-		}
-
-		missingColor := attr.Color == ""
-		missingRGB := attr.RGB == nil
-		if missingColor || missingRGB {
-			log.Printf(
-				"[inventory_query][GetDetailByID] modelResolved inventoryId=%q pbId=%q tbId=%q modelId=%q mn=%q size=%q color=%q rgb=%v rgbType=%T stock=%d missing={color:%t,rgb:%t}",
-				id, pbID, tbID, modelID, mn, sz, cl, attr.RGB, attr.RGB, available, missingColor, missingRGB,
-			)
-		}
-
-		rows = append(rows, querydto.InventoryDetailRowDTO{
+		row := querydto.InventoryDetailRowDTO{
 			ModelID:     modelID,
+			Kind:        attr.Kind,
 			ModelNumber: mn,
-			Size:        sz,
-			Color:       cl,
-			RGB:         attr.RGB,
 			Stock:       available,
-		})
+		}
 
+		if attr.Kind == "alcohol" {
+			row.VolumeValue = attr.VolumeValue
+			row.VolumeUnit = attr.VolumeUnit
+
+			if row.VolumeValue == nil || row.VolumeUnit == "" {
+				log.Printf(
+					"[inventory_query][GetDetailByID] alcohol modelResolved missing volume inventoryId=%q pbId=%q tbId=%q modelId=%q kind=%q mn=%q volumeValue=%v volumeUnit=%q stock=%d",
+					id, pbID, tbID, modelID, attr.Kind, mn, row.VolumeValue, row.VolumeUnit, available,
+				)
+			}
+		} else {
+			sz := attr.Size
+			cl := attr.Color
+
+			if sz == "" {
+				sz = "-"
+			}
+			if cl == "" {
+				cl = "-"
+			}
+
+			missingColor := attr.Color == ""
+			missingRGB := attr.RGB == nil
+			if missingColor || missingRGB {
+				log.Printf(
+					"[inventory_query][GetDetailByID] modelResolved inventoryId=%q pbId=%q tbId=%q modelId=%q kind=%q mn=%q size=%q color=%q rgb=%v rgbType=%T stock=%d missing={color:%t,rgb:%t}",
+					id, pbID, tbID, modelID, attr.Kind, mn, sz, cl, attr.RGB, attr.RGB, available, missingColor, missingRGB,
+				)
+			}
+
+			row.Size = sz
+			row.Color = cl
+			row.RGB = attr.RGB
+		}
+
+		rows = append(rows, row)
 		total += available
 	}
 

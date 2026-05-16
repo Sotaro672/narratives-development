@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/infrastructure/adapter/inventoryTokenBlueprintPatch.ts
 
-import { fetchTokenBlueprintPatchDTOByInventoryId } from "../../../../inventory/src/infrastructure/http/inventoryRepositoryHTTP.fetchers";
+import { fetchInventoryDetailDTO } from "../../../../inventory/src/infrastructure/http/inventoryRepositoryHTTP.fetchers";
 import type { TokenBlueprintPatchDTO } from "../../../../inventory/src/infrastructure/http/inventoryRepositoryHTTP";
 
 /**
@@ -11,6 +11,7 @@ import type { TokenBlueprintPatchDTO } from "../../../../inventory/src/infrastru
  *
  * NOTE:
  * - inventoryId は `${productBlueprintId}__${tokenBlueprintId}` 形式を想定
+ * - tokenBlueprintPatch は GET /inventory/{inventoryId} の response に含まれるものを正とする
  */
 export async function fetchInventoryTokenBlueprintPatch(
   inventoryId: string,
@@ -18,8 +19,8 @@ export async function fetchInventoryTokenBlueprintPatch(
   const id = String(inventoryId ?? "").trim();
   if (!id) return null;
 
-  const patch = await fetchTokenBlueprintPatchDTOByInventoryId(id);
-  return (patch ?? null) as TokenBlueprintPatchDTO | null;
+  const detail = await fetchInventoryDetailDTO(id);
+  return detail.tokenBlueprintPatch ?? null;
 }
 
 export type { TokenBlueprintPatchDTO };

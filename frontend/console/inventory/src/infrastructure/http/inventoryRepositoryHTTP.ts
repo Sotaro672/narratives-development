@@ -12,7 +12,7 @@ export type {
   InventoryDetailDTO,
 } from "./inventoryRepositoryHTTP.types";
 
-// ✅ ListCreate は別ファイルに分離したため、こちらから re-export する
+// ListCreate は別ファイルに分離しているため、こちらから re-export する
 export type {
   ListCreatePriceRowDTO,
   ListCreateDTO,
@@ -21,5 +21,4 @@ export type {
 export {
   fetchInventoryListDTO,
   fetchInventoryDetailDTO,
-  fetchTokenBlueprintPatchDTOFromInventoryDetailRaw,
 } from "./inventoryRepositoryHTTP.fetchers";

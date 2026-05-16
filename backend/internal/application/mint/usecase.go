@@ -111,22 +111,6 @@ func (u *MintUsecase) SetInventoryUsecase(uc *appusecase.InventoryUsecase) {
 	u.inventoryUC = uc
 }
 
-// 互換: interface 注入したいケース用
-func (u *MintUsecase) SetInventoryUpserter(up InventoryUpserter) {
-	if u == nil {
-		return
-	}
-	u.inventoryUC = up
-}
-
-// ★ 追加: tokenBlueprint bucket ensurer を後注入
-func (u *MintUsecase) SetTokenBlueprintBucketEnsurer(e TokenBlueprintBucketEnsurer) {
-	if u == nil {
-		return
-	}
-	u.tbBucketEnsurer = e
-}
-
 // ★ 追加: tokenBlueprint metadata ensurer を後注入
 func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
 	if u == nil {
