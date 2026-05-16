@@ -12,7 +12,7 @@ import (
 type CatalogDTO struct {
 	List CatalogListDTO `json:"list"`
 
-	// ✅ listId 配下の画像一覧（displayOrder 付き）
+	// listId 配下の画像一覧（displayOrder 付き）
 	// - 空配列は返さない（omitempty）
 	// - 取得失敗しても画面は壊さない想定なので Error は best-effort
 	ListImages      []CatalogListImageDTO `json:"listImages,omitempty"`
@@ -24,14 +24,14 @@ type CatalogDTO struct {
 	ProductBlueprint      *CatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
 	ProductBlueprintError string                      `json:"productBlueprintError,omitempty"`
 
-	// ✅ catalog 専用の tokenBlueprint DTO（Patch を直接返さない）
+	// catalog 専用の tokenBlueprint DTO（Patch を直接返さない）
 	TokenBlueprint      *CatalogTokenBlueprintDTO `json:"tokenBlueprint,omitempty"`
 	TokenBlueprintError string                    `json:"tokenBlueprintError,omitempty"`
 
 	ModelVariations      []CatalogModelVariationDTO `json:"modelVariations,omitempty"`
 	ModelVariationsError string                     `json:"modelVariationsError,omitempty"`
 
-	// ✅ productBlueprintReview（商品単位の口コミ集計）
+	// productBlueprintReview（商品単位の口コミ集計）
 	ProductReviewSummary      *CatalogProductReviewSummaryDTO `json:"productReviewSummary,omitempty"`
 	ProductReviewSummaryError string                          `json:"productReviewSummaryError,omitempty"`
 }
@@ -49,7 +49,7 @@ type CatalogListDTO struct {
 }
 
 // ============================================================
-// ✅ TokenBlueprint DTO (catalog response)
+// TokenBlueprint DTO (catalog response)
 // 要件：minted/brandId/companyId/metadataUri は不要
 // 追加：companyName/tokenIcon/description
 // - description/tokenIcon は空でもキーを返すため omitempty を付けない
@@ -131,19 +131,33 @@ type CatalogProductBlueprintDTO struct {
 
 // ============================================================
 // ModelVariation DTO
+// - apparel / alcohol の両方に対応する
 // ============================================================
 
 type CatalogModelVariationDTO struct {
 	ID                 string `json:"id"`
 	ProductBlueprintID string `json:"productBlueprintId"`
-	ModelNumber        string `json:"modelNumber"`
-	Size               string `json:"size"`
 
-	ColorName string `json:"colorName"`
-	ColorRGB  int    `json:"colorRGB"`
+	// model kind
+	// - apparel
+	// - alcohol
+	Kind string `json:"kind,omitempty"`
 
-	Measurements map[string]int `json:"measurements"`
-	StockKeys    int            `json:"stockKeys,omitempty"`
+	ModelNumber string `json:"modelNumber"`
+
+	// apparel
+	Size string `json:"size,omitempty"`
+
+	ColorName string `json:"colorName,omitempty"`
+	ColorRGB  int    `json:"colorRGB,omitempty"`
+
+	Measurements map[string]int `json:"measurements,omitempty"`
+
+	// alcohol
+	VolumeValue *int   `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
+
+	StockKeys int `json:"stockKeys,omitempty"`
 }
 
 // ============================================================

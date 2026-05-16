@@ -70,21 +70,43 @@ frontend/
 │  │  │     └─ avatarCreateTypes.ts
 │  │  │
 │  │  ├─ catalog/
-│  │  │  ├─ api/
-│  │  │  │  └─ catalogApi.ts
-│  │  │  ├─ components/
-│  │  │  │  ├─ CatalogImageGallery.tsx
-│  │  │  │  ├─ MeasurementTable.tsx
-│  │  │  │  ├─ ModelSelector.tsx
-│  │  │  │  ├─ ProductInfoCard.tsx
-│  │  │  │  ├─ ReviewSection.tsx
-│  │  │  │  └─ TokenInfoCard.tsx
-│  │  │  ├─ hooks/
-│  │  │  │  ├─ useCatalogPage.ts
-│  │  │  │  └─ useMobilePortrait.ts
+│  │  │  ├─ presentation/
+│  │  │  │  ├─ components/
+│  │  │  │  │  ├─ CatalogImageGallery.tsx
+│  │  │  │  │  ├─ MeasurementTable.tsx
+│  │  │  │  │  ├─ ModelSelector.tsx
+│  │  │  │  │  ├─ ProductInfoCard.tsx
+│  │  │  │  │  ├─ ReviewSection.tsx
+│  │  │  │  │  └─ TokenInfoCard.tsx
+│  │  │  │  │
+│  │  │  │  └─ hooks/
+│  │  │  │     ├─ useCatalogPage.ts
+│  │  │  │     └─ useMobilePortrait.ts
+│  │  │  │
+│  │  │  ├─ application/
+│  │  │  │  ├─ catalogCartUsecase.ts
+│  │  │  │  ├─ catalogImageFactory.ts
+│  │  │  │  ├─ catalogMeasurementFactory.ts
+│  │  │  │  ├─ catalogModelMapper.ts
+│  │  │  │  ├─ catalogPageLoader.ts
+│  │  │  │  ├─ catalogPageViewModelFactory.ts
+│  │  │  │  ├─ catalogSelectionFactory.ts
+│  │  │  │  └─ catalogSwipeUsecase.ts
+│  │  │  │
+│  │  │  ├─ infrastructure/
+│  │  │  │  ├─ apiBaseUrlProvider.ts
+│  │  │  │  ├─ authTokenProvider.ts
+│  │  │  │  ├─ avatarStateRepository.ts
+│  │  │  │  ├─ catalogCartRepository.ts
+│  │  │  │  ├─ catalogRepository.ts
+│  │  │  │  ├─ catalogResponseMapper.ts
+│  │  │  │  ├─ catalogReviewRepository.ts
+│  │  │  │  └─ httpErrorReader.ts
+│  │  │  │
 │  │  │  ├─ utils/
 │  │  │  │  ├─ format.ts
 │  │  │  │  └─ model.ts
+│  │  │  │
 │  │  │  ├─ constants.ts
 │  │  │  └─ types.ts
 │  │  │

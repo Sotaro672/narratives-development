@@ -16,6 +16,15 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 			return dto.CatalogModelVariationDTO{}, false
 		}
 		return toCatalogApparelModelVariationDTO(*x)
+
+	case modeldom.AlcoholModelVariation:
+		return toCatalogAlcoholModelVariationDTO(x)
+	case *modeldom.AlcoholModelVariation:
+		if x == nil {
+			return dto.CatalogModelVariationDTO{}, false
+		}
+		return toCatalogAlcoholModelVariationDTO(*x)
+
 	case modeldom.ModelVariation:
 		return toCatalogModelVariationDTO(x)
 	case *modeldom.ModelVariation:
@@ -23,18 +32,26 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 			return dto.CatalogModelVariationDTO{}, false
 		}
 		return toCatalogModelVariationDTO(*x)
+
 	default:
 		return dto.CatalogModelVariationDTO{}, false
 	}
 }
 
 func toCatalogModelVariationDTO(mv modeldom.ModelVariation) (dto.CatalogModelVariationDTO, bool) {
-	apparel, ok := toApparelModelVariation(mv)
-	if !ok {
+	if mv == nil {
 		return dto.CatalogModelVariationDTO{}, false
 	}
 
-	return toCatalogApparelModelVariationDTO(apparel)
+	if apparel, ok := toApparelModelVariation(mv); ok {
+		return toCatalogApparelModelVariationDTO(apparel)
+	}
+
+	if alcohol, ok := toAlcoholModelVariation(mv); ok {
+		return toCatalogAlcoholModelVariationDTO(alcohol)
+	}
+
+	return dto.CatalogModelVariationDTO{}, false
 }
 
 func toCatalogApparelModelVariationDTO(mv modeldom.ApparelModelVariation) (dto.CatalogModelVariationDTO, bool) {
@@ -53,13 +70,37 @@ func toCatalogApparelModelVariationDTO(mv modeldom.ApparelModelVariation) (dto.C
 	return dto.CatalogModelVariationDTO{
 		ID:                 mv.ID,
 		ProductBlueprintID: mv.ProductBlueprintID,
+		Kind:               "apparel",
 		ModelNumber:        mv.ModelNumber,
-		Size:               mv.Size,
+
+		Size: mv.Size,
 
 		ColorName: mv.Color.Name,
 		ColorRGB:  mv.Color.RGB,
 
 		Measurements: measurements,
+
+		StockKeys: 0,
+	}, true
+}
+
+func toCatalogAlcoholModelVariationDTO(mv modeldom.AlcoholModelVariation) (dto.CatalogModelVariationDTO, bool) {
+	if mv.ID == "" {
+		return dto.CatalogModelVariationDTO{}, false
+	}
+
+	value := mv.Volume.Value
+
+	return dto.CatalogModelVariationDTO{
+		ID:                 mv.ID,
+		ProductBlueprintID: mv.ProductBlueprintID,
+		Kind:               "alcohol",
+		ModelNumber:        mv.ModelNumber,
+
+		VolumeValue: &value,
+		VolumeUnit:  mv.Volume.Unit,
+
+		Measurements: map[string]int{},
 
 		StockKeys: 0,
 	}, true
@@ -80,5 +121,23 @@ func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVa
 		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
+	}
+}
+
+func toAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
+	if v == nil {
+		return modeldom.AlcoholModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.AlcoholModelVariation:
+		return x, true
+	case *modeldom.AlcoholModelVariation:
+		if x == nil {
+			return modeldom.AlcoholModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.AlcoholModelVariation{}, false
 	}
 }

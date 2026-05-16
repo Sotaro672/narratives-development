@@ -1,4 +1,5 @@
-//frontend\amol\src\features\catalog\types.ts
+// frontend/amol/src/features/catalog/types.ts
+
 export type CatalogListPrice = {
   modelId: string;
   price: number;
@@ -41,6 +42,13 @@ export type CatalogProductBlueprintModelRef = {
   displayOrder: number;
 };
 
+export type CatalogQualityAssuranceItem = {
+  label?: string;
+  title?: string;
+  value?: string;
+  [key: string]: unknown;
+};
+
 export type CatalogProductBlueprint = {
   id: string;
   productName: string;
@@ -48,14 +56,58 @@ export type CatalogProductBlueprint = {
   companyId: string;
   brandName: string;
   companyName: string;
+
+  /**
+   * apparel では category / itemType 的に使う。
+   * alcohol では空文字の場合がある。
+   */
   itemType: string;
+
+  /**
+   * apparel 用。
+   * alcohol では空文字または未使用。
+   */
   fit: string;
+
+  /**
+   * apparel では素材、alcohol では原材料として扱う。
+   */
   material: string;
-  weight: number;
+
+  /**
+   * apparel 用。
+   * alcohol では返らない可能性があるため optional / nullable。
+   */
+  weight?: number | null;
+
   printed: boolean;
-  qualityAssurance: string[];
+
+  /**
+   * backend から null が返るケースがある。
+   */
+  qualityAssurance:
+    | string[]
+    | string
+    | CatalogQualityAssuranceItem[]
+    | null;
+
   productIdTagType: string;
   modelRefs: CatalogProductBlueprintModelRef[];
+
+  /**
+   * category / classification 系。
+   * backend の返却揺れを許容する。
+   */
+  category?: string | null;
+  categoryCode?: string | null;
+  classification?: string | null;
+
+  /**
+   * alcohol 用。
+   */
+  region?: string | null;
+  vintage?: string | number | null;
+  alcoholContent?: string | number | null;
 };
 
 export type CatalogTokenBlueprint = {
@@ -69,14 +121,35 @@ export type CatalogTokenBlueprint = {
   tokenIcon: string;
 };
 
+export type CatalogModelVariationKind =
+  | "apparel"
+  | "alcohol"
+  | (string & {});
+
 export type CatalogModelVariation = {
   id: string;
   productBlueprintId: string;
+
+  /**
+   * model variation kind.
+   *
+   * - apparel: size / colorName / colorRGB / measurements を使う
+   * - alcohol: volumeValue / volumeUnit を使う
+   */
+  kind?: CatalogModelVariationKind | null;
+
   modelNumber: string;
-  size: string;
-  colorName: string;
-  colorRGB: number;
-  measurements: Record<string, number>;
+
+  // apparel
+  size?: string | null;
+  colorName?: string | null;
+  colorRGB?: number | null;
+  measurements?: Record<string, number>;
+
+  // alcohol
+  volumeValue?: number | null;
+  volumeUnit?: string | null;
+
   stockKeys: number;
 };
 

@@ -48,6 +48,13 @@ function toDisplayOrderOrNull(v: unknown): number | null {
   return Math.trunc(n);
 }
 
+function toStringOrNull(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+
+  const s = String(v).trim();
+  return s || null;
+}
+
 // ---------------------------------------------------------
 // Decision helpers
 // ---------------------------------------------------------
@@ -121,15 +128,24 @@ export function normalizeImageUrls(dto: any): string[] {
 // ---------------------------------------------------------
 
 /**
- * priceRows は dto.priceRows のみ採用
+ * priceRows は dto.priceRows のみ採用する。
  *
  * 正:
- * - modelId
- * - displayOrder
- * - stock
+ * - GET /lists/{listId} response の priceRows をそのまま画面用に正規化する
+ * - model resolver 済みの model 情報を落とさない
+ *
+ * apparel:
+ * - kind
+ * - modelNumber
  * - size
  * - color
- * - price
+ * - rgb
+ *
+ * alcohol:
+ * - kind
+ * - modelNumber
+ * - volumeValue
+ * - volumeUnit
  */
 export function normalizePriceRows<TRow extends Record<string, any> = any>(
   dto: any,
@@ -140,20 +156,28 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(
     const modelId = String(r?.modelId ?? "").trim();
     const displayOrder = toDisplayOrderOrNull(r?.displayOrder);
 
-    const size = String(r?.size ?? "").trim();
-    const color = String(r?.color ?? "").trim();
-
     const stock = toInt(r?.stock);
     const price = toNumberOrNull(r?.price);
 
     const rowAny = {
       id: modelId || String(idx),
       modelId,
+
+      kind: toStringOrNull(r?.kind),
+      modelNumber: toStringOrNull(r?.modelNumber),
+
       displayOrder,
       stock,
-      size,
-      color,
       price,
+
+      // apparel
+      size: toStringOrNull(r?.size),
+      color: toStringOrNull(r?.color),
+      rgb: toNumberOrNull(r?.rgb),
+
+      // alcohol
+      volumeValue: toNumberOrNull(r?.volumeValue),
+      volumeUnit: toStringOrNull(r?.volumeUnit),
     };
 
     return rowAny as unknown as TRow;
@@ -162,7 +186,7 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(
 
 /**
  * PriceCard 編集時、price だけ更新する。
- * size / color / stock は row spread で保持する。
+ * kind / modelNumber / size / color / rgb / volumeValue / volumeUnit / stock は row spread で保持する。
  */
 export function updatePriceRowPrice<TRow extends Record<string, any>>(
   rows: TRow[] | null | undefined,

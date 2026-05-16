@@ -6,3 +6,8 @@ export function rgbToCssColor(rgb: number): string {
 
   return `#${normalized.toString(16).padStart(6, "0")}`;
 }
+
+export function toSafeColorRGB(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}

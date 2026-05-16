@@ -3,13 +3,13 @@ import "../styles/catalog-page.css";
 
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
-import CatalogImageGallery from "../features/catalog/components/CatalogImageGallery";
-import MeasurementTable from "../features/catalog/components/MeasurementTable";
-import ModelSelector from "../features/catalog/components/ModelSelector";
-import ProductInfoCard from "../features/catalog/components/ProductInfoCard";
-import ReviewSection from "../features/catalog/components/ReviewSection";
-import TokenInfoCard from "../features/catalog/components/TokenInfoCard";
-import { useCatalogPage } from "../features/catalog/hooks/useCatalogPage";
+import CatalogImageGallery from "../features/catalog/presentation/components/CatalogImageGallery";
+import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
+import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
+import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
+import ReviewSection from "../features/catalog/presentation/components/ReviewSection";
+import TokenInfoCard from "../features/catalog/presentation/components/TokenInfoCard";
+import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
 import { formatPrice } from "../features/catalog/utils/format";
 
 export default function CatalogPage() {

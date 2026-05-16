@@ -71,6 +71,14 @@ export type CatalogProductBlueprintModelRef = {
   displayOrder: number;
 };
 
+export type CatalogQualityAssurance = {
+  title?: string;
+  body?: string;
+  label?: string;
+  value?: string;
+  [key: string]: unknown;
+};
+
 export type CatalogProductBlueprint = {
   id: string;
   productName: string;
@@ -81,9 +89,9 @@ export type CatalogProductBlueprint = {
   itemType: string;
   fit: string;
   material: string;
-  weight: number;
+  weight?: number | null;
   printed: boolean;
-  qualityAssurance: string[];
+  qualityAssurance: CatalogQualityAssurance[] | string[] | string | null;
   productIdTagType: string;
   modelRefs: CatalogProductBlueprintModelRef[];
 };
@@ -99,15 +107,51 @@ export type CatalogTokenBlueprint = {
   tokenIcon: string;
 };
 
+export type CatalogModelKind = "apparel" | "alcohol" | "unknown";
+
 export type CatalogModelVariation = {
   id: string;
   productBlueprintId: string;
+
+  /**
+   * apparel / alcohol を判定するための種別。
+   * backend から未返却の古いデータもあり得るため optional にする。
+   */
+  kind?: CatalogModelKind | string;
+
+  /**
+   * apparel / alcohol 共通で使える型番。
+   */
   modelNumber: string;
-  size: string;
-  colorName: string;
-  colorRGB: number;
-  measurements: Record<string, number>;
+
+  /**
+   * apparel 用。
+   * alcohol では返らないため optional。
+   */
+  size?: string;
+  colorName?: string;
+  colorRGB?: number;
+  measurements?: Record<string, number>;
+
+  /**
+   * alcohol 用。
+   */
+  volumeValue?: number;
+  volumeUnit?: string;
+
   stockKeys: number;
+};
+
+export type CatalogProductReviewSummary = {
+  productBlueprintId: string;
+  status: string;
+  totalCount: number;
+  averageRating: number;
+  rating5Count: number;
+  rating4Count: number;
+  rating3Count: number;
+  rating2Count: number;
+  rating1Count: number;
 };
 
 export type CatalogResponse = {
@@ -117,6 +161,7 @@ export type CatalogResponse = {
   productBlueprint: CatalogProductBlueprint;
   tokenBlueprint: CatalogTokenBlueprint;
   modelVariations: CatalogModelVariation[];
+  productReviewSummary?: CatalogProductReviewSummary;
 };
 
 export type MeAvatarStateResponse = {

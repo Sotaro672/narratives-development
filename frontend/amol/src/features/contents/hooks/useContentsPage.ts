@@ -1,13 +1,12 @@
-//frontend\amol\src\features\contents\hooks\useContentsPage.ts
+// frontend/amol/src/features/contents/hooks/useContentsPage.ts
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
-import {
-  fetchCurrentAvatarId,
-  getApiBaseUrl,
-} from "../../catalog/api/catalogApi";
-import { useMobilePortrait } from "../../catalog/hooks/useMobilePortrait";
+import { getApiBaseUrl } from "../../catalog/infrastructure/apiBaseUrlProvider";
+import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
+import { useMobilePortrait } from "../../catalog/presentation/hooks/useMobilePortrait";
 import { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";
 import { fetchContentsMetadata } from "../api/contentsApi";
 import type {
@@ -16,7 +15,7 @@ import type {
 } from "../types";
 
 function buildContentsSearchParams(
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
 ): ContentsSearchParams {
   return {
     mintAddress: searchParams.get("mintAddress") || "",
@@ -40,7 +39,7 @@ export function useContentsPage() {
 
   const contents = useMemo(
     () => buildContentsSearchParams(searchParams),
-    [searchParams]
+    [searchParams],
   );
 
   const commentCard = useTokenCommentCard({
@@ -128,7 +127,7 @@ export function useContentsPage() {
         setError(
           err instanceof Error
             ? err.message
-            : "トークンコンテンツの取得に失敗しました。"
+            : "トークンコンテンツの取得に失敗しました。",
         );
       } finally {
         if (isMounted) {
@@ -185,7 +184,7 @@ export function useContentsPage() {
     }
 
     setActiveFileIndex((current) =>
-      current === 0 ? mediaItems.length - 1 : current - 1
+      current === 0 ? mediaItems.length - 1 : current - 1,
     );
   };
 
@@ -195,7 +194,7 @@ export function useContentsPage() {
     }
 
     setActiveFileIndex((current) =>
-      current === mediaItems.length - 1 ? 0 : current + 1
+      current === mediaItems.length - 1 ? 0 : current + 1,
     );
   };
 
