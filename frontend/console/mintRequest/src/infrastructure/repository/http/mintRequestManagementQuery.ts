@@ -1,13 +1,4 @@
 // frontend/console/mintRequest/src/infrastructure/repository/http/mintRequestManagementQuery.ts
-//
-// ✅ productionIds 前提
-// ✅ view fallback なし（view=list 固定）
-// ✅ 既存HTTPユーティリティ整合
-//
-// NOTE:
-// - CORS を避けるには、API_BASE が「同一オリジンの rewrite 経由」になっている必要があります。
-//   このファイルでは API_BASE を consoleApiBase の値に統一します。
-
 import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 

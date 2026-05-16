@@ -1,10 +1,6 @@
 // frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.fetchers.ts
 
-import {
-  getInventoryListRaw,
-  getTokenBlueprintPatchRaw,
-  getInventoryDetailRaw,
-} from "../api/inventoryApi";
+import { getInventoryListRaw, getInventoryDetailRaw } from "../api/inventoryApi";
 import type {
   InventoryListRowDTO,
   TokenBlueprintPatchDTO,
@@ -39,17 +35,36 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
 
 /**
  * TokenBlueprint Patch DTO
- * GET /token-blueprints/{tokenBlueprintId}/patch
+ *
+ * NOTE:
+ * - Inventory Detail では GET /inventory/{inventoryId} の tokenBlueprintPatch を正とする
+ * - ここでは追加で GET /token-blueprints/{tokenBlueprintId}/patch を呼ばない
+ * - 後方互換用に raw detail から tokenBlueprintPatch を取り出す fetcher として扱う
  */
-export async function fetchTokenBlueprintPatchDTO(
-  tokenBlueprintId: string,
+export function fetchTokenBlueprintPatchDTOFromInventoryDetailRaw(
+  detailRaw: any,
+): TokenBlueprintPatchDTO {
+  return mapTokenBlueprintPatch(detailRaw?.tokenBlueprintPatch) ?? {};
+}
+
+/**
+ * Inventory Detail に含まれる TokenBlueprint Patch DTO
+ * GET /inventory/{inventoryId}
+ *
+ * NOTE:
+ * - GET /token-blueprints/{tokenBlueprintId}/patch は呼ばない
+ * - inventoryId は `${productBlueprintId}__${tokenBlueprintId}` 形式を想定
+ */
+export async function fetchTokenBlueprintPatchDTOByInventoryId(
+  inventoryId: string,
 ): Promise<TokenBlueprintPatchDTO> {
-  if (!tokenBlueprintId) {
-    throw new Error("tokenBlueprintId is empty");
+  const id = String(inventoryId ?? "").trim();
+  if (!id) {
+    throw new Error("inventoryId is empty");
   }
 
-  const data = await getTokenBlueprintPatchRaw(tokenBlueprintId);
-  return mapTokenBlueprintPatch(data) ?? {};
+  const data = await getInventoryDetailRaw(id);
+  return mapTokenBlueprintPatch(data?.tokenBlueprintPatch) ?? {};
 }
 
 /**
@@ -58,15 +73,17 @@ export async function fetchTokenBlueprintPatchDTO(
  *
  * NOTE:
  * - productName / brandName 等は detail.productBlueprintPatch に含まれる前提
- * - brandId / assigneeId は不要のため取得しない
+ * - tokenBlueprintPatch も detail.tokenBlueprintPatch に含まれる前提
+ * - brandId / assigneeId は不要のため追加取得しない
  */
 export async function fetchInventoryDetailDTO(
   inventoryId: string,
 ): Promise<InventoryDetailDTO> {
-  if (!inventoryId) {
+  const id = String(inventoryId ?? "").trim();
+  if (!id) {
     throw new Error("inventoryId is empty");
   }
 
-  const data = await getInventoryDetailRaw(inventoryId);
-  return mapInventoryDetailDTO(data, inventoryId);
+  const data = await getInventoryDetailRaw(id);
+  return mapInventoryDetailDTO(data, id);
 }

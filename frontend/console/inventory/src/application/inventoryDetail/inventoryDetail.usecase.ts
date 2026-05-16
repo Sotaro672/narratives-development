@@ -1,9 +1,6 @@
 // frontend/console/inventory/src/application/inventoryDetail/inventoryDetail.usecase.ts
 
-import {
-  getInventoryDetailRaw,
-  getTokenBlueprintPatchRaw,
-} from "../../infrastructure/api/inventoryApi";
+import { getInventoryDetailRaw } from "../../infrastructure/api/inventoryApi";
 import type { TokenBlueprintPatchDTO } from "../../infrastructure/http/inventoryRepositoryHTTP.types";
 import {
   mapInventoryDetailDTO,
@@ -32,8 +29,9 @@ export async function loadInventoryDetailViewModel(
   let modelVariations: ModelVariationResponse[] = [];
 
   try {
-    const patchRaw = await getTokenBlueprintPatchRaw(tokenBlueprintId);
-    tokenBlueprintPatch = mapTokenBlueprintPatch(patchRaw);
+    if (detailRaw?.tokenBlueprintPatch) {
+      tokenBlueprintPatch = mapTokenBlueprintPatch(detailRaw.tokenBlueprintPatch);
+    }
   } catch {
     tokenBlueprintPatch = undefined;
   }

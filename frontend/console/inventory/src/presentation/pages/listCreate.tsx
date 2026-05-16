@@ -1,4 +1,5 @@
 // frontend/console/inventory/src/presentation/pages/listCreate.tsx
+
 import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
@@ -37,10 +38,6 @@ export default function InventoryListCreate() {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
-    imageInputRef,
-    onSelectImages,
-    onDropImages,
-    onDragOverImages,
     removeImageAt,
     clearImages,
 
@@ -107,10 +104,6 @@ export default function InventoryListCreate() {
           imageUrls={Array.isArray(imagePreviewUrls) ? imagePreviewUrls : []}
           mainImageIndex={mainImageIndex}
           setMainImageIndex={setMainImageIndex}
-          imageInputRef={imageInputRef}
-          onSelectImages={onSelectImages}
-          onDropImages={onDropImages}
-          onDragOverImages={onDragOverImages}
           onRemoveImageAt={removeImageAt}
           onClearImages={clearImages}
         />
@@ -153,6 +146,12 @@ export default function InventoryListCreate() {
         {priceRows.length === 0 && (
           <div className="text-xs text-[hsl(var(--muted-foreground))]">
             価格行データは未取得です（DTO/別APIから rows を供給する実装が必要です）。
+          </div>
+        )}
+
+        {missingModelIdCount > 0 && (
+          <div className="text-xs text-red-600">
+            modelId が未設定の価格行があります: {missingModelIdCount} 件
           </div>
         )}
       </div>

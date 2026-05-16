@@ -4,7 +4,19 @@ import { API_BASE } from "../../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../../shell/src/shared/http/authHeaders";
 
 import type { BrandForMintDTO } from "../../dto/mintRequestLocal.dto";
-import type { BrandPageResultDTO, BrandRecordRaw } from "../../dto/mintRequestRaw.dto";
+
+type BrandRecordRaw = {
+  id?: unknown;
+  name?: unknown;
+};
+
+type BrandPageResultRaw = {
+  items?: BrandRecordRaw[] | null;
+};
+
+function toText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
   const authHeaders = await getAuthHeadersOrThrow();
@@ -22,14 +34,14 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
     );
   }
 
-  const json = (await res.json()) as BrandPageResultDTO | null | undefined;
+  const json = (await res.json()) as BrandPageResultRaw | null | undefined;
 
-  const rawItems: BrandRecordRaw[] = json?.items ?? (json as any)?.Items ?? [];
+  const rawItems = Array.isArray(json?.items) ? json.items : [];
 
   return rawItems
-    .map((b) => ({
-      id: String((b as any).id ?? (b as any).ID ?? "").trim(),
-      name: String((b as any).name ?? (b as any).Name ?? "").trim(),
+    .map((b): BrandForMintDTO => ({
+      id: toText(b.id),
+      name: toText(b.name),
     }))
     .filter((b) => b.id && b.name);
 }
