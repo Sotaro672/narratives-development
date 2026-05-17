@@ -7,6 +7,9 @@ import type { Page } from "../../../shell/src/shared/types/common/common";
 // 認証（IDトークン取得用）
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
+// Shared API base
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+
 // Permission 型
 import type {
   Permission,
@@ -27,16 +30,6 @@ export type MemberListResult = {
   members: Member[];
   totalPages: number;
 };
-
-// Base URL
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
-    ?.replace(/\/+$/g, "") ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 // Singletons
 const permissionRepo = new PermissionRepositoryHTTP();
@@ -153,3 +146,5 @@ export async function fetchMemberList(
     totalPages: pageResult.totalPages ?? 1,
   };
 }
+
+export { API_BASE };

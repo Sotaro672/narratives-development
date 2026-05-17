@@ -25,7 +25,7 @@ export function useMemberList(
   initialPage?: Page,
 ) {
   const [members, setMembers] = useState<Member[]>([]);
-  const [filter, setFilter] = useState<MemberFilter>(initialFilter);
+  const [filter] = useState<MemberFilter>(initialFilter);
 
   // Page に totalPages を含めた構造
   const [page, setPage] = useState<Page>({

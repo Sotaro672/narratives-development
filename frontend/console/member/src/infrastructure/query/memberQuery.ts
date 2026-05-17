@@ -5,24 +5,13 @@ import type { Member } from "../../domain/entity/member";
 import type { MemberFilter } from "../../domain/repository/memberRepository";
 import type { Page } from "../../../../shell/src/shared/types/common/common";
 import { DEFAULT_PAGE_LIMIT } from "../../../../shell/src/shared/types/common/common";
-
-// ─────────────────────────────────────────────
-// Backend base URL（Query 層では参照のみ）
-// ─────────────────────────────────────────────
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
-    ?.replace(/\/+$/g, "") ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-export const API_BASE = (ENV_BASE || FALLBACK_BASE).replace(/\/+$/g, "");
+import { buildConsoleUrl } from "../../../../shell/src/shared/http/apiBase";
 
 // ─────────────────────────────────────────────
 // URL builder（HTTP は叩かない）
 // ─────────────────────────────────────────────
-export function apiUrl(path: string, qs?: string) {
-  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+export function apiUrl(path: string, qs?: string): string {
+  const url = buildConsoleUrl(path);
   return qs ? `${url}?${qs}` : url;
 }
 
@@ -50,9 +39,15 @@ export function buildMemberQuery(
   if (useFilter.searchQuery?.trim()) {
     params.set("q", useFilter.searchQuery.trim());
   }
+
+  if (useFilter.uid?.trim()) {
+    params.set("uid", useFilter.uid.trim());
+  }
+
   if (useFilter.brandIds?.length) {
     params.set("brandIds", useFilter.brandIds.join(","));
   }
+
   if (useFilter.status?.trim()) {
     params.set("status", useFilter.status.trim());
   }
@@ -69,9 +64,11 @@ export function formatLastFirst(
 ): string {
   const ln = String(lastName ?? "").trim();
   const fn = String(firstName ?? "").trim();
+
   if (ln && fn) return `${ln} ${fn}`;
   if (ln) return ln;
   if (fn) return fn;
+
   return "";
 }
 
@@ -79,37 +76,35 @@ export function formatLastFirst(
 // データ整形（HTTP なし）
 // ─────────────────────────────────────────────
 export function normalizeMemberWire(w: any): Member {
-  const id = String(w.id ?? w.ID ?? "").trim();
-  const firstName = w.firstName ?? w.FirstName ?? null;
-  const lastName = w.lastName ?? w.LastName ?? null;
-  const firstNameKana = w.firstNameKana ?? w.FirstNameKana ?? null;
-  const lastNameKana = w.lastNameKana ?? w.LastNameKana ?? null;
-  const email = w.email ?? w.Email ?? null;
-  const companyId = w.companyId ?? w.CompanyID ?? "";
-  const permissions = Array.isArray(w.permissions ?? w.Permissions)
-    ? w.permissions ?? w.Permissions
-    : [];
-  const assignedBrands =
-    Array.isArray(w.assignedBrands ?? w.AssignedBrands)
-      ? w.assignedBrands ?? w.AssignedBrands
-      : null;
-
   return {
-    id,
-    firstName,
-    lastName,
-    firstNameKana,
-    lastNameKana,
-    email,
-    companyId,
-    permissions,
-    assignedBrands,
-    createdAt: w.createdAt ?? w.CreatedAt ?? null,
-    updatedAt: w.updatedAt ?? w.UpdatedAt ?? null,
-    deletedAt: w.deletedAt ?? w.DeletedAt ?? null,
-    deletedBy: w.deletedBy ?? w.DeletedBy ?? null,
-    updatedBy: w.updatedBy ?? w.UpdatedBy ?? null,
-  } as Member;
+    id: String(w?.id ?? "").trim(),
+    uid:
+      w?.uid !== undefined && w?.uid !== null
+        ? String(w.uid).trim()
+        : null,
+
+    firstName: w?.firstName ?? null,
+    lastName: w?.lastName ?? null,
+    firstNameKana: w?.firstNameKana ?? null,
+    lastNameKana: w?.lastNameKana ?? null,
+
+    displayName: w?.displayName ?? null,
+    email: w?.email ?? null,
+
+    permissions: Array.isArray(w?.permissions) ? w.permissions : [],
+    assignedBrands: Array.isArray(w?.assignedBrands)
+      ? w.assignedBrands
+      : null,
+
+    companyId: w?.companyId ?? null,
+    status: w?.status ?? null,
+
+    createdAt: w?.createdAt ?? "",
+    updatedAt: w?.updatedAt ?? null,
+    deletedAt: w?.deletedAt ?? null,
+    deletedBy: w?.deletedBy ?? null,
+    updatedBy: w?.updatedBy ?? null,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -143,12 +138,11 @@ export async function fetchMemberListWithToken(
 
   const raw = await res.json();
 
-  // backend が { items: [...] } を返す場合と、配列そのものを返す場合の両対応
   const rawItems: any[] = Array.isArray(raw)
     ? raw
     : Array.isArray(raw?.items)
-    ? raw.items
-    : [];
+      ? raw.items
+      : [];
 
   const items: Member[] = rawItems.map((w: any) => normalizeMemberWire(w));
 

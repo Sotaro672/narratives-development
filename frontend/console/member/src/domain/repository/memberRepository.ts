@@ -64,18 +64,6 @@ export function scopedFilterByCompanyId(
 }
 
 /**
- * SortColumn
- * backend の SortColumn に対応
- */
-export type MemberSortColumn =
-  | "joinedAt"
-  | "permissions"
-  | "assigneeCount"
-  | "name"
-  | "email"
-  | "updatedAt";
-
-/**
  * SortOrder
  * backend の SortOrder に対応
  */
@@ -86,7 +74,7 @@ export type MemberSortOrder = "asc" | "desc";
  * backend の Sort に対応
  */
 export interface MemberSort {
-  column: MemberSortColumn;
+  column: string;
   order: MemberSortOrder;
 }
 
@@ -178,11 +166,4 @@ export interface MemberRepository {
    * 現状 backend API では create のみ対応。
    */
   save(member: Member, opts?: SaveOptions): Promise<Member>;
-
-  /**
-   * Reset。
-   *
-   * 開発・テスト用。
-   */
-  reset(): Promise<void>;
 }

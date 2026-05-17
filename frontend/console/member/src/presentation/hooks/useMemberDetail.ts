@@ -1,4 +1,4 @@
-// frontend/member/src/hooks/useMemberDetail.ts
+// frontend/console/member/src/presentation/hooks/useMemberDetail.ts
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Member } from "../../domain/entity/member";
@@ -100,14 +100,14 @@ export function useMemberDetail(memberUid?: string) {
   }, [member?.companyId]);
 
   // PageHeader 用の表示名
+  // backend response の displayName を正として扱う
   const memberName = useMemo(() => {
     if (!member) return "不明なメンバー";
 
-    const full = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
     const displayName = String(member.displayName ?? "").trim();
-    const fullName = String(member.fullName ?? "").trim();
+    const nameFromParts = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
 
-    return full || displayName || fullName || "招待中";
+    return displayName || nameFromParts || member.email || "招待中";
   }, [member]);
 
   // 所属ブランドID一覧（存在しない場合は空配列）
