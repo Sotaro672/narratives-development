@@ -140,6 +140,20 @@ frontend/
 │  │  │  │  └─ metadata.ts
 │  │  │  └─ types.ts
 │  │  │
+│  │  ├─ order-confirmed/
+│  │  │  ├─ components/
+│  │  │  │  ├─ OrderConfirmedActions.tsx
+│  │  │  │  ├─ OrderConfirmedHero.tsx
+│  │  │  │  ├─ OrderConfirmedItemsCard.tsx
+│  │  │  │  ├─ OrderConfirmedPaymentCard.tsx
+│  │  │  │  └─ OrderConfirmedShippingCard.tsx
+│  │  │  ├─ hooks/
+│  │  │  │  └─ useOrderConfirmedPage.ts
+│  │  │  ├─ types.ts
+│  │  │  └─ utils/
+│  │  │     ├─ format.ts
+│  │  │     └─ item.ts
+│  │  │
 │  │  ├─ payment/
 │  │  │  ├─ api/
 │  │  │  │  ├─ paymentApi.ts
@@ -328,6 +342,7 @@ frontend/
 │  │  ├─ how-to-use-page.css
 │  │  ├─ landing-page.css
 │  │  ├─ lists-page.css
+│  │  ├─ order-confirmed-page.css
 │  │  ├─ page-layout.css
 │  │  ├─ page-split-layout.css
 │  │  ├─ payment-detail.css

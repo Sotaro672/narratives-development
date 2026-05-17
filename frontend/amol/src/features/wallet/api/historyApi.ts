@@ -3,6 +3,7 @@ import type {
   FetchWalletOrdersInput,
   WalletOrder,
   WalletOrderColor,
+  WalletOrderItemKind,
   WalletOrderItemSnapshot,
   WalletOrderMeasurements,
   WalletOrdersPage,
@@ -39,7 +40,7 @@ function getString(record: Record<string, unknown>, key: string): string {
 
 function getOptionalString(
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | undefined {
   const value = record[key];
 
@@ -54,7 +55,7 @@ function getNumber(record: Record<string, unknown>, key: string): number {
 
 function getOptionalNumber(
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): number | undefined {
   const value = record[key];
 
@@ -69,11 +70,20 @@ function getBoolean(record: Record<string, unknown>, key: string): boolean {
 
 function getOptionalBoolean(
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): boolean | undefined {
   const value = record[key];
 
   return typeof value === "boolean" ? value : undefined;
+}
+
+function getOptionalWalletOrderItemKind(
+  record: Record<string, unknown>,
+  key: string,
+): WalletOrderItemKind | undefined {
+  const value = record[key];
+
+  return typeof value === "string" ? value : undefined;
 }
 
 function toWalletOrderColor(value: unknown): WalletOrderColor | undefined {
@@ -86,9 +96,10 @@ function toWalletOrderColor(value: unknown): WalletOrderColor | undefined {
   const color: WalletOrderColor = {
     name: getOptionalString(record, "name"),
     hex: getOptionalString(record, "hex"),
+    rgb: getOptionalNumber(record, "rgb"),
   };
 
-  if (!color.name && !color.hex) {
+  if (!color.name && !color.hex && typeof color.rgb !== "number") {
     return undefined;
   }
 
@@ -96,7 +107,7 @@ function toWalletOrderColor(value: unknown): WalletOrderColor | undefined {
 }
 
 function toWalletOrderMeasurements(
-  value: unknown
+  value: unknown,
 ): WalletOrderMeasurements | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -122,7 +133,9 @@ function toWalletOrderMeasurements(
   return Object.keys(measurements).length > 0 ? measurements : undefined;
 }
 
-function toWalletOrderItemSnapshot(value: unknown): WalletOrderItemSnapshot | null {
+function toWalletOrderItemSnapshot(
+  value: unknown,
+): WalletOrderItemSnapshot | null {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -143,10 +156,15 @@ function toWalletOrderItemSnapshot(value: unknown): WalletOrderItemSnapshot | nu
     brandName: getOptionalString(record, "brandName"),
     brandIcon: getOptionalString(record, "brandIcon"),
 
+    kind: getOptionalWalletOrderItemKind(record, "kind"),
+    modelNumber: getOptionalString(record, "modelNumber"),
+
     size: getOptionalString(record, "size"),
     color: toWalletOrderColor(record.color),
-    modelNumber: getOptionalString(record, "modelNumber"),
     measurements: toWalletOrderMeasurements(record.measurements),
+
+    volumeValue: getOptionalNumber(record, "volumeValue"),
+    volumeUnit: getOptionalString(record, "volumeUnit"),
 
     tokenName: getOptionalString(record, "tokenName"),
     tokenIcon: getOptionalString(record, "tokenIcon"),

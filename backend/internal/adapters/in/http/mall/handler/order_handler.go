@@ -6,13 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
-	mallQuery "narratives/internal/application/query/mall"
+	historydto "narratives/internal/application/query/mall/dto"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
@@ -30,8 +29,8 @@ type OrderHandler struct {
 type OrderHistoryQuery interface {
 	EnrichOrderPage(
 		ctx context.Context,
-		in mallQuery.EnrichHistoryOrderPageInput,
-	) (mallQuery.HistoryOrderPage, error)
+		in historydto.EnrichHistoryOrderPageInput,
+	) (historydto.HistoryOrderPage, error)
 }
 
 func NewOrderHandler(uc *usecase.OrderUsecase) http.Handler {
@@ -138,8 +137,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trim := strings.TrimSpace
-
 	authUID, ok := middleware.CurrentUserUID(r)
 	if !ok || authUID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -147,7 +144,7 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bodyUID := trim(req.UserID)
+	bodyUID := req.UserID
 	if bodyUID != "" && bodyUID != authUID {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "userId_mismatch"})
@@ -156,19 +153,9 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	userID := authUID
 
-	log.Printf(
-		`[order.post] start path=%q authUID=%q bodyUID=%q avatarId(body)=%q cartId(body)=%q items=%d`,
-		r.URL.Path,
-		authUID,
-		bodyUID,
-		trim(req.AvatarID),
-		trim(req.CartID),
-		len(req.Items),
-	)
-
-	avatarID := trim(req.AvatarID)
+	avatarID := req.AvatarID
 	if avatarID == "" {
-		avatarID = trim(r.URL.Query().Get("avatarId"))
+		avatarID = r.URL.Query().Get("avatarId")
 	}
 	if avatarID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -176,7 +163,7 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cartID := trim(req.CartID)
+	cartID := req.CartID
 	if cartID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "cartId is required"})
@@ -190,12 +177,12 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ship := orderdom.ShippingSnapshot{
-		ZipCode: trim(req.ShippingSnapshot.ZipCode),
-		State:   trim(req.ShippingSnapshot.State),
-		City:    trim(req.ShippingSnapshot.City),
-		Street:  trim(req.ShippingSnapshot.Street),
-		Street2: trim(req.ShippingSnapshot.Street2),
-		Country: trim(req.ShippingSnapshot.Country),
+		ZipCode: req.ShippingSnapshot.ZipCode,
+		State:   req.ShippingSnapshot.State,
+		City:    req.ShippingSnapshot.City,
+		Street:  req.ShippingSnapshot.Street,
+		Street2: req.ShippingSnapshot.Street2,
+		Country: req.ShippingSnapshot.Country,
 	}
 	if ship.State == "" || ship.City == "" || ship.Street == "" || ship.Country == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -204,12 +191,12 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	paymentMethod := orderdom.PaymentMethodSnapshot{
-		CustomerID:     trim(req.PaymentMethodSnapshot.CustomerID),
-		Brand:          trim(req.PaymentMethodSnapshot.Brand),
-		Last4:          trim(req.PaymentMethodSnapshot.Last4),
+		CustomerID:     req.PaymentMethodSnapshot.CustomerID,
+		Brand:          req.PaymentMethodSnapshot.Brand,
+		Last4:          req.PaymentMethodSnapshot.Last4,
 		ExpMonth:       req.PaymentMethodSnapshot.ExpMonth,
 		ExpYear:        req.PaymentMethodSnapshot.ExpYear,
-		CardholderName: trim(req.PaymentMethodSnapshot.CardholderName),
+		CardholderName: req.PaymentMethodSnapshot.CardholderName,
 		IsDefault:      req.PaymentMethodSnapshot.IsDefault,
 	}
 	if paymentMethod.CustomerID == "" ||
@@ -226,24 +213,12 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	items := make([]orderdom.OrderItemSnapshot, 0, len(req.Items))
-	for idx, it := range req.Items {
-		mid := trim(it.ModelID)
-		iid := trim(it.InventoryID)
-		lid := trim(it.ListID)
+	for _, it := range req.Items {
+		mid := it.ModelID
+		iid := it.InventoryID
+		lid := it.ListID
 		qty := it.Qty
 		price := it.Price
-
-		log.Printf(
-			`[order.post] item[%d] mid=%q iid=%q lid=%q qty=%d price=%d isCanceled=%v isDispatched=%v`,
-			idx,
-			mid,
-			iid,
-			lid,
-			qty,
-			price,
-			it.IsCanceled,
-			it.IsDispatched,
-		)
 
 		if mid == "" || iid == "" || lid == "" || qty <= 0 || price < 0 {
 			w.WriteHeader(http.StatusBadRequest)
@@ -263,7 +238,7 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := usecase.CreateOrderInput{
-		ID:       trim(req.ID),
+		ID:       req.ID,
 		UserID:   userID,
 		AvatarID: avatarID,
 		CartID:   cartID,
@@ -273,14 +248,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 
 		Items: items,
 	}
-
-	log.Printf(
-		`[order.post] calling uc.Create userId=%q avatarId=%q cartId=%q items=%d`,
-		userID,
-		avatarID,
-		cartID,
-		len(items),
-	)
 
 	out, err := h.uc.Create(ctx, in)
 	if err != nil {
@@ -332,19 +299,19 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 func (h *OrderHandler) enrichOrderHistoryPage(
 	ctx context.Context,
 	out any,
-) (mallQuery.HistoryOrderPage, error) {
+) (historydto.HistoryOrderPage, error) {
 	if h == nil || h.historyQuery == nil {
-		return mallQuery.HistoryOrderPage{}, errors.New("order handler: history query not configured")
+		return historydto.HistoryOrderPage{}, errors.New("order handler: history query not configured")
 	}
 
 	body, err := json.Marshal(out)
 	if err != nil {
-		return mallQuery.HistoryOrderPage{}, err
+		return historydto.HistoryOrderPage{}, err
 	}
 
-	var in mallQuery.EnrichHistoryOrderPageInput
+	var in historydto.EnrichHistoryOrderPageInput
 	if err := json.Unmarshal(body, &in); err != nil {
-		return mallQuery.HistoryOrderPage{}, err
+		return historydto.HistoryOrderPage{}, err
 	}
 
 	return h.historyQuery.EnrichOrderPage(ctx, in)
@@ -387,12 +354,12 @@ func parseOrderPage(r *http.Request) common.Page {
 func parseOrderSort(r *http.Request) common.Sort {
 	q := r.URL.Query()
 
-	column := strings.TrimSpace(q.Get("sort"))
+	column := q.Get("sort")
 	if column == "" {
 		column = "createdAt"
 	}
 
-	order := strings.ToLower(strings.TrimSpace(q.Get("order")))
+	order := strings.ToLower(q.Get("order"))
 	if order == "" {
 		order = string(common.SortDesc)
 	}
@@ -409,7 +376,6 @@ func parseOrderSort(r *http.Request) common.Sort {
 }
 
 func parsePositiveInt(raw string, fallback int) int {
-	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return fallback
 	}

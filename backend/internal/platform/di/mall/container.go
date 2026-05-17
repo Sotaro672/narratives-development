@@ -65,10 +65,7 @@ type Container struct {
 	PaymentUC         *usecase.PaymentUsecase
 	OrderUC           *usecase.OrderUsecase
 
-	// handler等に直接注入できるように Avatar repo を保持
-	AvatarRepo avatardom.Repository
-
-	// mall handler で brandName / brandIcon 解決に利用
+	AvatarRepo   avatardom.Repository
 	BrandService *branddom.Service
 
 	// ProductBlueprintReview Usecase（/mall/catalog + /mall/me/catalog）
@@ -157,7 +154,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	avatarRepo := outfs.NewAvatarRepositoryFS(fsClient)
 	avatarStateRepo := outfs.NewAvatarStateRepositoryFS(fsClient)
 
-	// TokenBlueprintReviewUsecase / mall handlers から avatarName/avatarIcon を解決できるように保持する。
 	c.AvatarRepo = avatarRepo
 
 	shippingAddressRepo := outfs.NewShippingAddressRepositoryFS(fsClient)
@@ -197,7 +193,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// resolvedTokens repo (wallets/{avatarId}/resolvedTokens/{mint})
 	c.ResolvedTokenRepo = outfs.NewResolvedTokenRepositoryFS(fsClient)
 
-	// reuse across WalletUsecase / NameResolver / BrandQuery
 	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 	brandSvc := branddom.NewService(brandRepo)
 	c.BrandService = brandSvc
@@ -323,11 +318,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
 
-	// payment 起票後に invoice.paid=true を立てるため invoiceRepo を注入
 	c.PaymentUC = usecase.NewPaymentUsecase(paymentRepo).
 		WithCartRepoForPayment(cartRepo).
 		WithOrderRepoForPayment(orderRepo).
-		WithInventoryRepoForPayment(inventoryRepo)
+		WithInventoryRepoForPayment(inventoryRepo).
+		WithUserRepoForPayment(userRepo)
 
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo, cartRepo)
 

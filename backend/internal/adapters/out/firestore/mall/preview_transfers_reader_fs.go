@@ -79,32 +79,33 @@ func decodePreviewTransferInfo(doc *firestore.DocumentSnapshot) dto.PreviewTrans
 
 	data := doc.Data()
 
+	fromWalletAddress, _ := data["fromWalletAddress"].(string)
+	fromAddress, _ := data["fromAddress"].(string)
+	toWalletAddress, _ := data["toWalletAddress"].(string)
+	toAddress, _ := data["toAddress"].(string)
+
 	out.FromWalletAddress = firstNonEmptyString(
-		asString(data["fromWalletAddress"]),
-		asString(data["fromAddress"]),
+		fromWalletAddress,
+		fromAddress,
 	)
 	out.ToWalletAddress = firstNonEmptyString(
-		asString(data["toWalletAddress"]),
-		asString(data["toAddress"]),
+		toWalletAddress,
+		toAddress,
 	)
-	out.FromAvatarID = asString(data["fromAvatarId"])
-	out.ToAvatarID = asString(data["toAvatarId"])
-	out.FromBrandID = asString(data["fromBrandId"])
-	out.ToBrandID = asString(data["toBrandId"])
-	out.FromAvatarName = asString(data["fromAvatarName"])
-	out.ToAvatarName = asString(data["toAvatarName"])
-	out.FromBrandName = asString(data["fromBrandName"])
-	out.ToBrandName = asString(data["toBrandName"])
-	out.FromAvatarIcon = asString(data["fromAvatarIcon"])
-	out.ToAvatarIcon = asString(data["toAvatarIcon"])
-	out.FromBrandIcon = asString(data["fromBrandIcon"])
-	out.ToBrandIcon = asString(data["toBrandIcon"])
-	return out
-}
+	out.FromAvatarID, _ = data["fromAvatarId"].(string)
+	out.ToAvatarID, _ = data["toAvatarId"].(string)
+	out.FromBrandID, _ = data["fromBrandId"].(string)
+	out.ToBrandID, _ = data["toBrandId"].(string)
+	out.FromAvatarName, _ = data["fromAvatarName"].(string)
+	out.ToAvatarName, _ = data["toAvatarName"].(string)
+	out.FromBrandName, _ = data["fromBrandName"].(string)
+	out.ToBrandName, _ = data["toBrandName"].(string)
+	out.FromAvatarIcon, _ = data["fromAvatarIcon"].(string)
+	out.ToAvatarIcon, _ = data["toAvatarIcon"].(string)
+	out.FromBrandIcon, _ = data["fromBrandIcon"].(string)
+	out.ToBrandIcon, _ = data["toBrandIcon"].(string)
 
-func asString(v any) string {
-	s, _ := v.(string)
-	return s
+	return out
 }
 
 func asTime(v any) time.Time {

@@ -1,3 +1,4 @@
+// backend\internal\adapters\out\firestore\mall\setup_status_repo.go
 package mall
 
 import (
@@ -11,9 +12,9 @@ import (
 // SetupStatusRepoFirestore implements mall.SetupStatusRepo backed by Firestore.
 //
 // Strategy:
-// - First try "document id == uid" (fast path)
-// - If not found, fallback to query where field "userId" == uid (limit 1)
-// - For payment method readiness, also check paymentMethodCustomers
+// - One-to-one setup documents are checked by document id == uid.
+// - Avatar is checked by owner field because avatar document id is avatarId.
+// - For payment method readiness, also check paymentMethodCustomers.
 type SetupStatusRepoFirestore struct {
 	Client *firestore.Client
 
@@ -24,8 +25,8 @@ type SetupStatusRepoFirestore struct {
 	PaymentMethodCustomerCollection string
 	AvatarCollection                string
 
-	// Field name used in fallback query
-	UIDField string
+	// Field name used to identify avatar owner.
+	AvatarOwnerField string
 }
 
 const (
@@ -35,8 +36,7 @@ const (
 	defaultPaymentMethodCustomerCollection = "paymentMethodCustomers"
 	defaultAvatarCollection                = "avatars"
 
-	// uid field is "userId"
-	defaultUIDField = "userId"
+	defaultAvatarOwnerField = "userId"
 )
 
 func NewSetupStatusRepoFirestore(client *firestore.Client) *SetupStatusRepoFirestore {
@@ -47,16 +47,16 @@ func NewSetupStatusRepoFirestore(client *firestore.Client) *SetupStatusRepoFires
 		PaymentMethodCollection:         defaultPaymentMethodCollection,
 		PaymentMethodCustomerCollection: defaultPaymentMethodCustomerCollection,
 		AvatarCollection:                defaultAvatarCollection,
-		UIDField:                        defaultUIDField,
+		AvatarOwnerField:                defaultAvatarOwnerField,
 	}
 }
 
 func (r *SetupStatusRepoFirestore) HasUser(ctx context.Context, uid string) (bool, error) {
-	return r.existsByDocIDOrUIDField(ctx, r.UserCollection, uid)
+	return r.existsByDocID(ctx, r.UserCollection, uid)
 }
 
 func (r *SetupStatusRepoFirestore) HasShippingAddress(ctx context.Context, uid string) (bool, error) {
-	return r.existsByDocIDOrUIDField(ctx, r.ShippingAddressCollection, uid)
+	return r.existsByDocID(ctx, r.ShippingAddressCollection, uid)
 }
 
 func (r *SetupStatusRepoFirestore) HasPaymentMethod(ctx context.Context, uid string) (bool, error) {
@@ -67,8 +67,7 @@ func (r *SetupStatusRepoFirestore) HasPaymentMethod(ctx context.Context, uid str
 		return false, nil
 	}
 
-	// 1) actual saved payment method docs
-	hasPaymentMethodDoc, err := r.existsByDocIDOrUIDField(ctx, r.PaymentMethodCollection, uid)
+	hasPaymentMethodDoc, err := r.existsByDocID(ctx, r.PaymentMethodCollection, uid)
 	if err != nil {
 		return false, err
 	}
@@ -76,8 +75,7 @@ func (r *SetupStatusRepoFirestore) HasPaymentMethod(ctx context.Context, uid str
 		return true, nil
 	}
 
-	// 2) stripe customer mapping for setup-intent flow
-	hasPaymentMethodCustomer, err := r.existsByDocIDOrUIDField(ctx, r.PaymentMethodCustomerCollection, uid)
+	hasPaymentMethodCustomer, err := r.existsByDocID(ctx, r.PaymentMethodCustomerCollection, uid)
 	if err != nil {
 		return false, err
 	}
@@ -89,13 +87,13 @@ func (r *SetupStatusRepoFirestore) HasPaymentMethod(ctx context.Context, uid str
 }
 
 func (r *SetupStatusRepoFirestore) HasAvatar(ctx context.Context, uid string) (bool, error) {
-	return r.existsByDocIDOrUIDField(ctx, r.AvatarCollection, uid)
+	return r.existsAvatarByOwner(ctx, uid)
 }
 
 // ------------------------------------------------------------
 // Helpers
 
-func (r *SetupStatusRepoFirestore) existsByDocIDOrUIDField(
+func (r *SetupStatusRepoFirestore) existsByDocID(
 	ctx context.Context,
 	collection string,
 	uid string,
@@ -107,33 +105,44 @@ func (r *SetupStatusRepoFirestore) existsByDocIDOrUIDField(
 		return false, nil
 	}
 
-	// 1) Fast path: doc ID == uid
 	_, err := r.Client.Collection(collection).Doc(uid).Get(ctx)
 	if err == nil {
 		return true, nil
 	}
 	if isNotFound(err) {
-		// fallthrough to query
-	} else {
-		// other errors (permission, unavailable, etc.)
-		return false, err
+		return false, nil
 	}
 
-	// 2) Fallback: query where userId field matches
-	uidField := r.UIDField
-	if uidField == "" {
-		uidField = defaultUIDField
+	return false, err
+}
+
+func (r *SetupStatusRepoFirestore) existsAvatarByOwner(
+	ctx context.Context,
+	uid string,
+) (bool, error) {
+	if r == nil || r.Client == nil {
+		return false, nil
+	}
+	if r.AvatarCollection == "" || uid == "" {
+		return false, nil
 	}
 
-	it := r.Client.Collection(collection).
-		Where(uidField, "==", uid).
+	ownerField := r.AvatarOwnerField
+	if ownerField == "" {
+		ownerField = defaultAvatarOwnerField
+	}
+
+	iter := r.Client.Collection(r.AvatarCollection).
+		Where(ownerField, "==", uid).
 		Limit(1).
 		Documents(ctx)
+	defer iter.Stop()
 
-	docs, err := it.GetAll()
+	docs, err := iter.GetAll()
 	if err != nil {
 		return false, err
 	}
+
 	return len(docs) > 0, nil
 }
 

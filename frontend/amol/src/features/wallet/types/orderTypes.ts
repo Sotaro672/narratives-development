@@ -3,9 +3,12 @@
 export type WalletOrderColor = {
   name?: string;
   hex?: string;
+  rgb?: number;
 };
 
 export type WalletOrderMeasurements = Record<string, number>;
+
+export type WalletOrderItemKind = "apparel" | "alcohol" | "unknown" | string;
 
 export type WalletOrderItemSnapshot = {
   modelId: string;
@@ -21,10 +24,21 @@ export type WalletOrderItemSnapshot = {
   brandName?: string;
   brandIcon?: string;
 
+  kind?: WalletOrderItemKind;
+  modelNumber?: string;
+
+  /**
+   * apparel 用
+   */
   size?: string;
   color?: WalletOrderColor;
-  modelNumber?: string;
   measurements?: WalletOrderMeasurements;
+
+  /**
+   * alcohol 用
+   */
+  volumeValue?: number;
+  volumeUnit?: string;
 
   tokenName?: string;
   tokenIcon?: string;

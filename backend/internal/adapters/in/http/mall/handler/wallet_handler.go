@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -38,13 +37,12 @@ func NewWalletHandler(
 		uc:                walletUC,
 		resolvedTokenRepo: resolvedTokenRepo,
 		allowedProxyHosts: map[string]struct{}{
-			"gateway.irys.xyz":       {},
-			"uploader.irys.xyz":      {},
-			"arweave.net":            {},
-			"www.arweave.net":        {},
-			"ipfs.io":                {},
-			"cloudflare-ipfs.com":    {},
-			"storage.googleapis.com": {},
+			"gateway.irys.xyz":    {},
+			"uploader.irys.xyz":   {},
+			"arweave.net":         {},
+			"www.arweave.net":     {},
+			"ipfs.io":             {},
+			"cloudflare-ipfs.com": {},
 		},
 	}
 }
@@ -101,8 +99,6 @@ func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[mall_wallet_handler] GET /mall/wallets avatarId=%q", avatarID)
-
 	wallet, err := h.uc.WalletRepo.GetByAvatarID(ctx, avatarID)
 	if err != nil {
 		writeWalletErr(w, err)
@@ -142,12 +138,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 
 	avatarID := r.URL.Query().Get("avatarId")
 
-	log.Printf(
-		"[mall_wallet_handler] GET /mall/wallets/tokens/resolve avatarId=%q mint=%q",
-		avatarID,
-		mintAddress,
-	)
-
 	if avatarID == "" {
 		res, err := h.resolvePublicTokenSummary(ctx, mintAddress)
 		if err != nil {
@@ -182,14 +172,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 	}
 
 	owned := walletSnapshotHasMintPreferTokens(snap, mintAddress)
-	if owned {
-		log.Printf(
-			"[mall_wallet_handler] ownership ok by wallet snapshot avatarId=%q walletAddress=%q mint=%q",
-			avatarID,
-			snap.WalletAddress,
-			mintAddress,
-		)
-	}
 
 	if !owned && h.uc.OnchainReader != nil {
 		addr := snap.WalletAddress
@@ -197,22 +179,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 			mints, e := h.uc.OnchainReader.ListOwnedTokenMints(ctx, addr)
 			if e == nil {
 				owned = stringSliceContainsExact(mints, mintAddress)
-				if owned {
-					log.Printf(
-						"[mall_wallet_handler] ownership ok by onchain avatarId=%q walletAddress=%q mint=%q",
-						avatarID,
-						addr,
-						mintAddress,
-					)
-				}
-			} else {
-				log.Printf(
-					"[mall_wallet_handler] WARN onchain ownership check failed avatarId=%q walletAddress=%q mint=%q err=%v",
-					avatarID,
-					addr,
-					mintAddress,
-					e,
-				)
 			}
 		}
 	}
@@ -229,7 +195,7 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 	if h.resolvedTokenRepo != nil {
 		cached, e := h.resolvedTokenRepo.GetByAvatarIDAndMint(ctx, avatarID, mintAddress)
 		if e == nil {
-			if !isResolvedTokenSignedURLStale(cached, time.Now().UTC(), 60*time.Second) {
+			if !isResolvedTokenCacheStale(cached) {
 				res = cached
 				fromCache = true
 			}
@@ -245,14 +211,7 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 		res = rr
 
 		if h.resolvedTokenRepo != nil {
-			if e2 := h.resolvedTokenRepo.Upsert(ctx, avatarID, mintAddress, res, time.Now().UTC()); e2 != nil {
-				log.Printf(
-					"[mall_wallet_handler] WARN resolved token cache upsert failed avatarId=%q mint=%q err=%v",
-					avatarID,
-					mintAddress,
-					e2,
-				)
-			}
+			_ = h.resolvedTokenRepo.Upsert(ctx, avatarID, mintAddress, res, time.Now().UTC())
 		}
 	}
 
@@ -351,7 +310,6 @@ func (h *WalletHandler) preflightWalletMetadataProxy(w http.ResponseWriter) {
 }
 
 // GET /mall/wallets/metadata/proxy?url=https://...
-// GET /mall/wallets/metadata/proxy?avatarId=...&url=https://...
 //
 // metadata 自体は公開情報取得用途でも使うため avatarId 必須にしない。
 func (h *WalletHandler) walletMetadataProxy(w http.ResponseWriter, r *http.Request) {
@@ -363,7 +321,6 @@ func (h *WalletHandler) walletMetadataProxy(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	avatarID := r.URL.Query().Get("avatarId")
 	rawURL := r.URL.Query().Get("url")
 	if rawURL == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -398,13 +355,12 @@ func (h *WalletHandler) walletMetadataProxy(w http.ResponseWriter, r *http.Reque
 	allow := h.allowedProxyHosts
 	if len(allow) == 0 {
 		allow = map[string]struct{}{
-			"gateway.irys.xyz":       {},
-			"uploader.irys.xyz":      {},
-			"arweave.net":            {},
-			"www.arweave.net":        {},
-			"ipfs.io":                {},
-			"cloudflare-ipfs.com":    {},
-			"storage.googleapis.com": {},
+			"gateway.irys.xyz":    {},
+			"uploader.irys.xyz":   {},
+			"arweave.net":         {},
+			"www.arweave.net":     {},
+			"ipfs.io":             {},
+			"cloudflare-ipfs.com": {},
 		}
 	}
 	if _, ok := allow[host]; !ok {
@@ -412,12 +368,6 @@ func (h *WalletHandler) walletMetadataProxy(w http.ResponseWriter, r *http.Reque
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "host is not allowed"})
 		return
 	}
-
-	log.Printf(
-		"[mall_wallet_handler] GET /mall/wallets/metadata/proxy avatarId=%q url=%q",
-		avatarID,
-		rawURL,
-	)
 
 	h.setCORSHeaders(w)
 
@@ -470,7 +420,6 @@ func (h *WalletHandler) walletMetadataProxy(w http.ResponseWriter, r *http.Reque
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.Printf("[mall_wallet_handler] ERROR metadata proxy upstream fetch failed url=%q err=%v", u.String(), err)
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "upstream fetch failed"})
 		return
@@ -498,8 +447,6 @@ func (h *WalletHandler) walletMetadataProxy(w http.ResponseWriter, r *http.Reque
 
 	if filtered, ok, e := filterMetadataJSON(body); e == nil && ok {
 		body = filtered
-	} else if e != nil {
-		log.Printf("[mall_wallet_handler] WARN metadata proxy filter failed: %v", e)
 	}
 
 	ct := res.Header.Get("Content-Type")

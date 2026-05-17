@@ -85,6 +85,41 @@ function getFallbackInitial(value?: string): string {
   return trimmed.slice(0, 1).toUpperCase();
 }
 
+function getAlcoholVolumeLabel(item: WalletOrderItemSnapshot): string {
+  if (
+    typeof item.volumeValue === "number" &&
+    Number.isFinite(item.volumeValue) &&
+    item.volumeUnit
+  ) {
+    return `${item.volumeValue}${item.volumeUnit}`;
+  }
+
+  return "";
+}
+
+function getItemMetaItems(item: WalletOrderItemSnapshot): string[] {
+  const transferredAtLabel = item.transferredAt
+    ? `受取日時: ${formatDateTime(item.transferredAt)}`
+    : "";
+
+  if (item.kind === "alcohol") {
+    const volumeLabel = getAlcoholVolumeLabel(item);
+
+    return [
+      item.modelNumber ? `品番: ${item.modelNumber}` : "",
+      volumeLabel ? `容量: ${volumeLabel}` : "",
+      transferredAtLabel,
+    ].filter(Boolean);
+  }
+
+  return [
+    item.modelNumber ? `品番: ${item.modelNumber}` : "",
+    item.size ? `サイズ: ${item.size}` : "",
+    item.color?.name ? `色: ${item.color.name}` : "",
+    transferredAtLabel,
+  ].filter(Boolean);
+}
+
 function renderImage(src: string | undefined, alt: string, fallbackText: string) {
   if (!src) {
     return (
@@ -104,7 +139,13 @@ function renderImage(src: string | undefined, alt: string, fallbackText: string)
   );
 }
 
-function renderMeasurements(measurements?: WalletOrderMeasurements) {
+function renderMeasurements(item: WalletOrderItemSnapshot) {
+  if (item.kind === "alcohol") {
+    return null;
+  }
+
+  const measurements = item.measurements;
+
   if (!measurements || Object.keys(measurements).length === 0) {
     return null;
   }
@@ -122,12 +163,7 @@ function renderMeasurements(measurements?: WalletOrderMeasurements) {
 }
 
 function renderItemMeta(item: WalletOrderItemSnapshot) {
-  const metaItems = [
-    item.modelNumber ? `品番: ${item.modelNumber}` : "",
-    item.size ? `サイズ: ${item.size}` : "",
-    item.color?.name ? `色: ${item.color.name}` : "",
-    item.transferredAt ? `受取日時: ${formatDateTime(item.transferredAt)}` : "",
-  ].filter(Boolean);
+  const metaItems = getItemMetaItems(item);
 
   if (metaItems.length === 0) {
     return null;
@@ -204,7 +240,7 @@ export default function WalletHistoryPanel({
                       {renderImage(
                         item.tokenIcon,
                         item.tokenName || productTitle,
-                        getFallbackInitial(item.tokenName || productTitle)
+                        getFallbackInitial(item.tokenName || productTitle),
                       )}
                     </div>
 
@@ -243,7 +279,7 @@ export default function WalletHistoryPanel({
                       </div>
 
                       {renderItemMeta(item)}
-                      {renderMeasurements(item.measurements)}
+                      {renderMeasurements(item)}
                     </div>
                   </li>
                 );

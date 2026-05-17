@@ -65,47 +65,6 @@ func pickAny(m map[string]any, keys ...string) any {
 	return nil
 }
 
-func asIntAny(v any) (int, bool) {
-	if v == nil {
-		return 0, false
-	}
-	switch x := v.(type) {
-	case int:
-		return x, true
-	case int8:
-		return int(x), true
-	case int16:
-		return int(x), true
-	case int32:
-		return int(x), true
-	case int64:
-		return int(x), true
-	case uint:
-		return int(x), true
-	case uint8:
-		return int(x), true
-	case uint16:
-		return int(x), true
-	case uint32:
-		return int(x), true
-	case uint64:
-		return int(x), true
-	case float32:
-		return int(x), true
-	case float64:
-		return int(x), true
-	case string:
-		s := x
-		if s == "" {
-			return 0, false
-		}
-		var n int
-		_, err := fmt.Sscanf(s, "%d", &n)
-		return n, err == nil
-	default:
-		return 0, false
-	}
-}
 func isFirestoreNotFound(err error) bool {
 	if err == nil {
 		return false

@@ -68,6 +68,45 @@ func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (*udom.User, 
 	return &u, nil
 }
 
+// GetEmailByID returns users/{userID}.email for payment post-paid mail.
+//
+// PaymentUsecase.UserRepoForPayment が要求する最小 contract。
+// userID は order.UserID を想定する。
+func (r *UserRepositoryFS) GetEmailByID(ctx context.Context, userID string) (string, error) {
+	if r == nil || r.Client == nil {
+		return "", errors.New("firestore client is nil")
+	}
+
+	if userID == "" {
+		return "", udom.ErrInvalidID
+	}
+
+	snap, err := r.col().Doc(userID).Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return "", udom.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+
+	data := snap.Data()
+	if data == nil {
+		return "", udom.ErrNotFound
+	}
+
+	emailValue, ok := data["email"]
+	if !ok {
+		return "", nil
+	}
+
+	email, ok := emailValue.(string)
+	if !ok {
+		return "", nil
+	}
+
+	return email, nil
+}
+
 // List: Firestore 制約により全件取得してメモリ上で Filter/Paging を適用。
 // ✅ sort は削除（repository_port.go に合わせる）
 func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, page udom.Page) (udom.PageResult, error) {

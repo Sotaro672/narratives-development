@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -118,9 +117,6 @@ func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	uid, _ := middleware.CurrentUserUID(r)
-	log.Printf("[mall_me_wallet_handler] GET /mall/me/wallets uid=%q avatarId=%q", uid, avatarID)
-
 	wallet, err := h.walletUC.WalletRepo.GetByAvatarID(ctx, avatarID)
 	if err != nil {
 		writeMallMeWalletErr(w, err)
@@ -128,75 +124,29 @@ func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Reques
 	}
 
 	if h.walletUC.OnchainReader == nil {
-		log.Printf(
-			"[mall_me_wallet_handler] read-through sync skipped: onchain reader not configured uid=%q avatarId=%q walletAddress=%q",
-			uid,
-			avatarID,
-			wallet.WalletAddress,
-		)
-
 		_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 		return
 	}
 
 	if wallet.WalletAddress == "" {
-		log.Printf(
-			"[mall_me_wallet_handler] read-through sync skipped: walletAddress is empty uid=%q avatarId=%q",
-			uid,
-			avatarID,
-		)
-
 		_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 		return
 	}
 
 	onchainMints, err := h.walletUC.OnchainReader.ListOwnedTokenMints(ctx, wallet.WalletAddress)
 	if err != nil {
-		log.Printf(
-			"[mall_me_wallet_handler] WARN read-through sync onchain check failed uid=%q avatarId=%q walletAddress=%q err=%v",
-			uid,
-			avatarID,
-			wallet.WalletAddress,
-			err,
-		)
-
 		_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 		return
 	}
 
 	if !sameStringSet(wallet.Tokens, onchainMints) {
-		log.Printf(
-			"[mall_me_wallet_handler] read-through sync needed uid=%q avatarId=%q walletAddress=%q stored_count=%d onchain_count=%d",
-			uid,
-			avatarID,
-			wallet.WalletAddress,
-			len(wallet.Tokens),
-			len(onchainMints),
-		)
-
 		synced, syncErr := h.walletUC.SyncWalletTokens(ctx, avatarID)
 		if syncErr != nil {
-			log.Printf(
-				"[mall_me_wallet_handler] WARN read-through sync failed uid=%q avatarId=%q walletAddress=%q err=%v",
-				uid,
-				avatarID,
-				wallet.WalletAddress,
-				syncErr,
-			)
-
 			_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 			return
 		}
 
 		wallet = synced
-
-		log.Printf(
-			"[mall_me_wallet_handler] read-through sync ok uid=%q avatarId=%q walletAddress=%q tokens_count=%d",
-			uid,
-			avatarID,
-			wallet.WalletAddress,
-			len(wallet.Tokens),
-		)
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
@@ -218,9 +168,6 @@ func (h *MallMeWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Reque
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
-
-	uid, _ := middleware.CurrentUserUID(r)
-	log.Printf("[mall_me_wallet_handler] POST /mall/me/wallets/sync uid=%q avatarId=%q", uid, avatarID)
 
 	wallet, err := h.walletUC.SyncWalletTokens(ctx, avatarID)
 	if err != nil {
@@ -255,14 +202,6 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 		return
 	}
 
-	uid, _ := middleware.CurrentUserUID(r)
-	log.Printf(
-		"[mall_me_wallet_handler] GET /mall/me/wallets/tokens/resolve uid=%q avatarId=%q mint=%q",
-		uid,
-		avatarID,
-		mintAddress,
-	)
-
 	if h.walletUC.WalletRepo == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet repository not configured"})
@@ -276,14 +215,6 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 	}
 
 	owned := walletSnapshotHasMintPreferTokens(snap, mintAddress)
-	if owned {
-		log.Printf(
-			"[mall_me_wallet_handler] ownership ok by wallet snapshot avatarId=%q walletAddress=%q mint=%q",
-			avatarID,
-			snap.WalletAddress,
-			mintAddress,
-		)
-	}
 
 	if !owned && h.walletUC.OnchainReader != nil {
 		addr := snap.WalletAddress
@@ -291,22 +222,6 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 			mints, e := h.walletUC.OnchainReader.ListOwnedTokenMints(ctx, addr)
 			if e == nil {
 				owned = stringSliceContainsExact(mints, mintAddress)
-				if owned {
-					log.Printf(
-						"[mall_me_wallet_handler] ownership ok by onchain avatarId=%q walletAddress=%q mint=%q",
-						avatarID,
-						addr,
-						mintAddress,
-					)
-				}
-			} else {
-				log.Printf(
-					"[mall_me_wallet_handler] WARN onchain ownership check failed avatarId=%q walletAddress=%q mint=%q err=%v",
-					avatarID,
-					addr,
-					mintAddress,
-					e,
-				)
 			}
 		}
 	}
@@ -323,7 +238,7 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 	if h.resolvedTokenRepo != nil {
 		cached, e := h.resolvedTokenRepo.GetByAvatarIDAndMint(ctx, avatarID, mintAddress)
 		if e == nil {
-			if !isResolvedTokenSignedURLStale(cached, time.Now().UTC(), 60*time.Second) {
+			if !isResolvedTokenCacheStale(cached) {
 				res = cached
 				fromCache = true
 			}
@@ -339,14 +254,7 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 		res = rr
 
 		if h.resolvedTokenRepo != nil {
-			if e2 := h.resolvedTokenRepo.Upsert(ctx, avatarID, mintAddress, res, time.Now().UTC()); e2 != nil {
-				log.Printf(
-					"[mall_me_wallet_handler] WARN resolved token cache upsert failed avatarId=%q mint=%q err=%v",
-					avatarID,
-					mintAddress,
-					e2,
-				)
-			}
+			_ = h.resolvedTokenRepo.Upsert(ctx, avatarID, mintAddress, res, time.Now().UTC())
 		}
 	}
 
@@ -438,14 +346,6 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 		return
 	}
 
-	uid, _ := middleware.CurrentUserUID(r)
-	log.Printf(
-		"[mall_me_wallet_handler] GET /mall/me/wallets/metadata/proxy uid=%q avatarId=%q url=%q",
-		uid,
-		avatarID,
-		rawURL,
-	)
-
 	h.setCORSHeaders(w)
 
 	client := &http.Client{
@@ -497,7 +397,6 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.Printf("[mall_me_wallet_handler] ERROR metadata proxy upstream fetch failed url=%q err=%v", u.String(), err)
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "upstream fetch failed"})
 		return
@@ -525,8 +424,6 @@ func (h *MallMeWalletHandler) meWalletMetadataProxy(w http.ResponseWriter, r *ht
 
 	if filtered, ok, e := filterMetadataJSON(body); e == nil && ok {
 		body = filtered
-	} else if e != nil {
-		log.Printf("[mall_me_wallet_handler] WARN metadata proxy filter failed: %v", e)
 	}
 
 	ct := res.Header.Get("Content-Type")
@@ -692,33 +589,15 @@ func isKeepObjectURI(raw string) bool {
 	return strings.HasSuffix(p, "/.keep") || strings.HasSuffix(p, ".keep")
 }
 
-func isResolvedTokenSignedURLStale(res usecase.ResolveTokenByMintAddressWithBrandNameResult, now time.Time, minTTL time.Duration) bool {
+func isResolvedTokenCacheStale(res usecase.ResolveTokenByMintAddressWithBrandNameResult) bool {
 	files := res.TokenContentsFiles
 	if len(files) == 0 {
 		return false
 	}
 
-	// GCS Signed URL 廃止後は metadata.properties.files[].uri をそのまま ViewURI/URI として返す。
-	// そのため ViewExpiresAt が nil でも stale 扱いしない。
 	for _, f := range files {
 		if f.ViewURI == "" && f.URI == "" {
 			return true
-		}
-
-		// 旧キャッシュにだけ ViewExpiresAt が入っている可能性があるため、
-		// 値が存在する場合のみ期限を見て stale 判定する。
-		if f.ViewExpiresAt != nil && !f.ViewExpiresAt.IsZero() {
-			at := now
-			if at.IsZero() {
-				at = time.Now().UTC()
-			} else {
-				at = at.UTC()
-			}
-
-			exp := f.ViewExpiresAt.UTC()
-			if exp.Before(at.Add(minTTL)) {
-				return true
-			}
 		}
 	}
 

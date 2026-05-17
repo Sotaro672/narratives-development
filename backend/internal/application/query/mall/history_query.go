@@ -1,10 +1,11 @@
-// backend/internal/application/query/mall/history_query.go
 package mall
 
 import (
 	"context"
 	"errors"
 	"strings"
+
+	historydto "narratives/internal/application/query/mall/dto"
 
 	branddom "narratives/internal/domain/brand"
 	tokenbpdom "narratives/internal/domain/tokenBlueprint"
@@ -81,8 +82,8 @@ type HistoryBrandResolver interface {
 type HistoryModelResolver interface {
 	ResolveHistoryModelByID(
 		ctx context.Context,
-		in HistoryResolveModelInput,
-	) (HistoryResolvedModel, error)
+		in historydto.HistoryResolveModelInput,
+	) (historydto.HistoryResolvedModel, error)
 }
 
 type HistoryQuery struct {
@@ -109,136 +110,6 @@ func NewHistoryQuery(
 	}
 }
 
-type HistoryResolveModelInput struct {
-	ModelID            string
-	InventoryID        string
-	ProductBlueprintID string
-	TokenBlueprintID   string
-}
-
-type HistoryResolvedModel struct {
-	ModelID     string `json:"modelId"`
-	InventoryID string `json:"inventoryId"`
-
-	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
-	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
-
-	// productBlueprintId から解決
-	ProductName string `json:"productName,omitempty"`
-
-	// productBlueprintId または tokenBlueprintId から解決
-	BrandID string `json:"brandId,omitempty"`
-
-	// modelId から解決
-	Size         string         `json:"size,omitempty"`
-	Color        *HistoryColor  `json:"color,omitempty"`
-	ModelNumber  string         `json:"modelNumber,omitempty"`
-	Measurements map[string]int `json:"measurements,omitempty"`
-
-	// tokenBlueprintId から解決
-	TokenName string `json:"tokenName,omitempty"`
-	TokenIcon string `json:"tokenIcon,omitempty"`
-
-	// brandId から解決
-	BrandName string `json:"brandName,omitempty"`
-	BrandIcon string `json:"brandIcon,omitempty"`
-}
-
-type HistoryColor struct {
-	Name string `json:"name,omitempty"`
-	Hex  string `json:"hex,omitempty"`
-}
-
-type EnrichHistoryOrderPageInput struct {
-	Items      []HistoryOrder `json:"items"`
-	TotalCount int            `json:"totalCount"`
-	TotalPages int            `json:"totalPages"`
-	Page       int            `json:"page"`
-	PerPage    int            `json:"perPage"`
-}
-
-type HistoryOrderPage struct {
-	Items      []HistoryOrder `json:"items"`
-	TotalCount int            `json:"totalCount"`
-	TotalPages int            `json:"totalPages"`
-	Page       int            `json:"page"`
-	PerPage    int            `json:"perPage"`
-}
-
-type HistoryOrder struct {
-	ID       string `json:"id"`
-	UserID   string `json:"userId"`
-	AvatarID string `json:"avatarId"`
-	CartID   string `json:"cartId"`
-
-	ShippingSnapshot      HistoryShippingSnapshot      `json:"shippingSnapshot"`
-	PaymentMethodSnapshot HistoryPaymentMethodSnapshot `json:"paymentMethodSnapshot"`
-
-	Paid  bool               `json:"paid"`
-	Items []HistoryOrderItem `json:"items"`
-
-	CreatedAt string `json:"createdAt,omitempty"`
-	UpdatedAt string `json:"updatedAt,omitempty"`
-}
-
-type HistoryShippingSnapshot struct {
-	ZipCode string `json:"zipCode"`
-	State   string `json:"state"`
-	City    string `json:"city"`
-	Street  string `json:"street"`
-	Street2 string `json:"street2"`
-	Country string `json:"country"`
-}
-
-type HistoryPaymentMethodSnapshot struct {
-	CustomerID     string `json:"customerId"`
-	Brand          string `json:"brand"`
-	Last4          string `json:"last4"`
-	ExpMonth       int    `json:"expMonth"`
-	ExpYear        int    `json:"expYear"`
-	CardholderName string `json:"cardholderName"`
-	IsDefault      bool   `json:"isDefault"`
-}
-
-type HistoryOrderItem struct {
-	ModelID     string `json:"modelId"`
-	InventoryID string `json:"inventoryId"`
-	ListID      string `json:"listId"`
-
-	// inventoryId から解決
-	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
-	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
-
-	// productBlueprintId から解決
-	ProductName string `json:"productName,omitempty"`
-
-	// productBlueprintId または tokenBlueprintId から解決
-	BrandID string `json:"brandId,omitempty"`
-
-	// modelId から解決
-	Size         string         `json:"size,omitempty"`
-	Color        *HistoryColor  `json:"color,omitempty"`
-	ModelNumber  string         `json:"modelNumber,omitempty"`
-	Measurements map[string]int `json:"measurements,omitempty"`
-
-	// tokenBlueprintId から解決
-	TokenName string `json:"tokenName,omitempty"`
-	TokenIcon string `json:"tokenIcon,omitempty"`
-
-	// brandId から解決
-	BrandName string `json:"brandName,omitempty"`
-	BrandIcon string `json:"brandIcon,omitempty"`
-
-	Qty   int `json:"qty"`
-	Price int `json:"price"`
-
-	IsCanceled   bool `json:"isCanceled"`
-	IsDispatched bool `json:"isDispatched"`
-
-	Transferred   bool   `json:"transferred"`
-	TransferredAt string `json:"transferredAt,omitempty"`
-}
-
 // EnrichOrderPage enriches an already fetched order page for Wallet history.
 //
 // This query does not fetch orders by itself.
@@ -252,18 +123,18 @@ type HistoryOrderItem struct {
 //  5. modelId -> size / color / modelNumber / measurements
 func (q *HistoryQuery) EnrichOrderPage(
 	ctx context.Context,
-	in EnrichHistoryOrderPageInput,
-) (HistoryOrderPage, error) {
+	in historydto.EnrichHistoryOrderPageInput,
+) (historydto.HistoryOrderPage, error) {
 	if q == nil ||
 		q.inventoryBlueprintResolver == nil ||
 		q.productBlueprintResolver == nil ||
 		q.tokenBlueprintResolver == nil ||
 		q.brandResolver == nil ||
 		q.modelResolver == nil {
-		return HistoryOrderPage{}, ErrHistoryQueryNotConfigured
+		return historydto.HistoryOrderPage{}, ErrHistoryQueryNotConfigured
 	}
 
-	out := HistoryOrderPage{
+	out := historydto.HistoryOrderPage{
 		Items:      cloneHistoryOrders(in.Items),
 		TotalCount: in.TotalCount,
 		TotalPages: in.TotalPages,
@@ -275,7 +146,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 	productBlueprintCache := make(map[string]historyProductBlueprintInfo)
 	tokenBlueprintCache := make(map[string]historyTokenBlueprintInfo)
 	brandCache := make(map[string]historyBrandInfo)
-	modelCache := make(map[string]HistoryResolvedModel)
+	modelCache := make(map[string]historydto.HistoryResolvedModel)
 
 	for orderIndex := range out.Items {
 		for itemIndex := range out.Items[orderIndex].Items {
@@ -374,7 +245,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 
 			resolved, ok := modelCache[cacheKey]
 			if !ok {
-				nextResolved, err := q.modelResolver.ResolveHistoryModelByID(ctx, HistoryResolveModelInput{
+				nextResolved, err := q.modelResolver.ResolveHistoryModelByID(ctx, historydto.HistoryResolveModelInput{
 					ModelID:            modelID,
 					InventoryID:        inventoryID,
 					ProductBlueprintID: blueprintIDs.ProductBlueprintID,
@@ -390,8 +261,6 @@ func (q *HistoryQuery) EnrichOrderPage(
 
 			applyResolvedModelToItem(item, resolved)
 
-			// productBlueprint.Service / tokenBlueprint.Patch / brand.Service で解決した値を保持。
-			// modelResolver 側が空を返した場合でも表示情報が落ちないようにする。
 			if blueprintIDs.ProductBlueprintID != "" {
 				pbInfo := productBlueprintCache[blueprintIDs.ProductBlueprintID]
 				if item.ProductName == "" {
@@ -524,13 +393,13 @@ func (q *HistoryQuery) ResolveBrandInfo(
 
 func (q *HistoryQuery) ResolveModel(
 	ctx context.Context,
-	in HistoryResolveModelInput,
-) (HistoryResolvedModel, error) {
+	in historydto.HistoryResolveModelInput,
+) (historydto.HistoryResolvedModel, error) {
 	if q == nil || q.modelResolver == nil {
-		return HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
+		return historydto.HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
 	}
 
-	nextInput := HistoryResolveModelInput{
+	nextInput := historydto.HistoryResolveModelInput{
 		ModelID:            strings.TrimSpace(in.ModelID),
 		InventoryID:        strings.TrimSpace(in.InventoryID),
 		ProductBlueprintID: strings.TrimSpace(in.ProductBlueprintID),
@@ -538,7 +407,7 @@ func (q *HistoryQuery) ResolveModel(
 	}
 
 	if nextInput.ModelID == "" {
-		return HistoryResolvedModel{}, ErrHistoryModelIDEmpty
+		return historydto.HistoryResolvedModel{}, ErrHistoryModelIDEmpty
 	}
 
 	if nextInput.InventoryID != "" &&
@@ -558,7 +427,7 @@ func (q *HistoryQuery) ResolveModel(
 
 	resolved, err := q.modelResolver.ResolveHistoryModelByID(ctx, nextInput)
 	if err != nil {
-		return HistoryResolvedModel{}, err
+		return historydto.HistoryResolvedModel{}, err
 	}
 
 	if resolved.ProductBlueprintID == "" {
@@ -686,6 +555,7 @@ type historyTokenBlueprintInfo struct {
 
 type historyBrandInfo struct {
 	BrandName string
+	BrandID   string
 	BrandIcon string
 }
 
@@ -703,9 +573,29 @@ func buildHistoryModelCacheKey(
 	}, "|")
 }
 
+func cloneHistoryOrders(in []historydto.HistoryOrder) []historydto.HistoryOrder {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]historydto.HistoryOrder, 0, len(in))
+
+	for _, order := range in {
+		next := order
+
+		if len(order.Items) > 0 {
+			next.Items = make([]historydto.HistoryOrderItem, len(order.Items))
+			copy(next.Items, order.Items)
+		}
+
+		out = append(out, next)
+	}
+
+	return out
+}
 func applyResolvedModelToItem(
-	item *HistoryOrderItem,
-	resolved HistoryResolvedModel,
+	item *historydto.HistoryOrderItem,
+	resolved historydto.HistoryResolvedModel,
 ) {
 	if item == nil {
 		return
@@ -727,6 +617,14 @@ func applyResolvedModelToItem(
 		item.BrandID = resolved.BrandID
 	}
 
+	if resolved.Kind != "" {
+		item.Kind = resolved.Kind
+	}
+
+	if resolved.ModelNumber != "" {
+		item.ModelNumber = resolved.ModelNumber
+	}
+
 	if resolved.Size != "" {
 		item.Size = resolved.Size
 	}
@@ -735,12 +633,16 @@ func applyResolvedModelToItem(
 		item.Color = resolved.Color
 	}
 
-	if resolved.ModelNumber != "" {
-		item.ModelNumber = resolved.ModelNumber
-	}
-
 	if len(resolved.Measurements) > 0 {
 		item.Measurements = cloneMeasurements(resolved.Measurements)
+	}
+
+	if resolved.VolumeValue != nil {
+		item.VolumeValue = resolved.VolumeValue
+	}
+
+	if resolved.VolumeUnit != "" {
+		item.VolumeUnit = resolved.VolumeUnit
 	}
 
 	if resolved.TokenName != "" {
@@ -758,25 +660,4 @@ func applyResolvedModelToItem(
 	if resolved.BrandIcon != "" {
 		item.BrandIcon = resolved.BrandIcon
 	}
-}
-
-func cloneHistoryOrders(in []HistoryOrder) []HistoryOrder {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make([]HistoryOrder, 0, len(in))
-
-	for _, order := range in {
-		next := order
-
-		if len(order.Items) > 0 {
-			next.Items = make([]HistoryOrderItem, len(order.Items))
-			copy(next.Items, order.Items)
-		}
-
-		out = append(out, next)
-	}
-
-	return out
 }
