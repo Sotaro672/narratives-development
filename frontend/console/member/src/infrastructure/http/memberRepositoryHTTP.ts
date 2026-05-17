@@ -15,7 +15,6 @@ import type {
 } from "../../../../shell/src/shared/types/common/common";
 import type { Member, MemberPatch } from "../../domain/entity/member";
 
-// ✅ shared http (shell)
 import { buildConsoleUrl } from "../../../../shell/src/shared/http/apiBase";
 import {
   getAuthHeaders,
@@ -25,9 +24,18 @@ import { fetchJSON } from "../../../../shell/src/shared/http/fetchJSON";
 import { withQuery } from "../../../../shell/src/shared/http/queryString";
 
 export class MemberRepositoryHTTP implements MemberRepository {
-  async getById(id: string): Promise<Member | null> {
+  /**
+   * Firebase UID で member を取得する。
+   *
+   * backend:
+   * GET /members/{uid}
+   */
+  async getByUid(uid: string): Promise<Member | null> {
+    const trimmed = uid.trim();
+    if (!trimmed) return null;
+
     const headers = await getAuthHeaders();
-    const url = buildConsoleUrl(`/members/${encodeURIComponent(id)}`);
+    const url = buildConsoleUrl(`/members/${encodeURIComponent(trimmed)}`);
 
     const res = await fetch(url, { headers });
     if (res.status === 404) return null;
@@ -37,7 +45,10 @@ export class MemberRepositoryHTTP implements MemberRepository {
       const text = await res.text().catch(() => "");
       throw new Error(`Unexpected content-type: ${ct}\n${text.slice(0, 200)}`);
     }
-    if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
+
+    if (!res.ok) {
+      throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
+    }
 
     return (await res.json()) as Member;
   }
@@ -50,6 +61,7 @@ export class MemberRepositoryHTTP implements MemberRepository {
 
     const url = withQuery(buildConsoleUrl("/members"), {
       q: filter?.searchQuery,
+      uid: filter?.uid,
       brandIds: filter?.brandIds,
       status: filter?.status,
       page: pageNumber,
@@ -60,7 +72,6 @@ export class MemberRepositoryHTTP implements MemberRepository {
 
     const data = await fetchJSON<unknown>(url, { headers });
 
-    // backend が配列だけ返すケースにも対応
     if (Array.isArray(data)) {
       return {
         items: data as Member[],
@@ -81,15 +92,30 @@ export class MemberRepositoryHTTP implements MemberRepository {
     return await fetchJSON<Member>(url, {
       method: "POST",
       headers,
-      body: JSON.stringify(member),
+      body: JSON.stringify({
+        firstName: member.firstName ?? "",
+        lastName: member.lastName ?? "",
+        firstNameKana: member.firstNameKana ?? "",
+        lastNameKana: member.lastNameKana ?? "",
+        email: member.email ?? "",
+        permissions: member.permissions ?? [],
+        assignedBrands: member.assignedBrands ?? [],
+        status: member.status ?? "",
+      }),
     });
   }
 
-  async update(id: string, patch: MemberPatch, _opts?: SaveOptions): Promise<Member> {
+  async update(
+    docId: string,
+    _patch: MemberPatch,
+    _opts?: SaveOptions,
+  ): Promise<Member> {
+    void docId;
     throw new Error("MemberRepositoryHTTP.update: not supported by current backend API");
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(docId: string): Promise<void> {
+    void docId;
     throw new Error("MemberRepositoryHTTP.delete: not supported by current backend API");
   }
 
@@ -113,23 +139,31 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async getByEmail(email: string): Promise<Member | null> {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return null;
+
     const res = await this.list(
       { number: 1, perPage: 50, totalPages: 1 },
-      { searchQuery: email },
+      { searchQuery: trimmed },
     );
 
     const hit = res.items.find(
-      (m) => (m.email ?? "").toLowerCase() === email.trim().toLowerCase(),
+      (m) => (m.email ?? "").trim().toLowerCase() === trimmed,
     );
+
     return hit ?? null;
   }
 
-  async exists(id: string): Promise<boolean> {
-    return (await this.getById(id)) != null;
+  async existsByUid(uid: string): Promise<boolean> {
+    return (await this.getByUid(uid)) != null;
   }
 
   async count(filter: MemberFilter): Promise<number> {
-    const res = await this.list({ number: 1, perPage: 100, totalPages: 1 }, filter);
+    const res = await this.list(
+      { number: 1, perPage: 100, totalPages: 1 },
+      filter,
+    );
+
     return res.totalCount ?? res.items.length;
   }
 
@@ -137,42 +171,11 @@ export class MemberRepositoryHTTP implements MemberRepository {
     if (opts?.mode === "update" || opts?.ifExists) {
       throw new Error("MemberRepositoryHTTP.save(update): not supported by current backend API");
     }
+
     return this.create(member);
   }
 
   async reset(): Promise<void> {
     throw new Error("MemberRepositoryHTTP.reset: not supported by current backend API");
-  }
-}
-
-/**
- * ID → 担当者名 解決
- */
-export async function fetchMemberDisplayNameById(memberId: string): Promise<string> {
-  const trimmed = memberId.trim();
-  if (!trimmed) return "-";
-
-  try {
-    const headers = await getAuthHeaders();
-    const url = buildConsoleUrl(`/members/${encodeURIComponent(trimmed)}`);
-
-    const res = await fetch(url, { headers });
-    if (res.status === 404) return trimmed;
-
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("application/json")) return trimmed;
-
-    const m = (await res.json()) as Member;
-    const lastName = (m as any).lastName?.trim?.() ?? "";
-    const firstName = (m as any).firstName?.trim?.() ?? "";
-    const fullNameField = (m as any).fullName?.trim?.() ?? "";
-    const email = (m as any).email?.trim?.() ?? "";
-
-    const nameParts = [lastName, firstName].filter(Boolean);
-    const nameFromLF = nameParts.join(" ");
-
-    return nameFromLF || fullNameField || email || trimmed;
-  } catch {
-    return trimmed;
   }
 }

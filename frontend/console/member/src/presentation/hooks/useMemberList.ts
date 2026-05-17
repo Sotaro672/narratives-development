@@ -1,6 +1,6 @@
 // frontend/console/member/src/presentation/hooks/useMemberList.ts
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 
 import type { Member } from "../../domain/entity/member";
 import type { MemberFilter } from "../../domain/repository/memberRepository";
@@ -12,7 +12,6 @@ import {
 
 import {
   fetchMemberList,
-  fetchMemberNameLastFirstById,
   fetchBrandsForCurrentMember,
 } from "../../application/memberListService";
 
@@ -41,8 +40,6 @@ export function useMemberList(
   // ✅ リフレッシュボタン回転用（List の isResetting に渡す）
   const [isResetting, setIsResetting] = useState(false);
 
-  const nameCacheRef = useRef<Map<string, string>>(new Map());
-
   // ブランドID→名称
   const [brandMap, setBrandMap] = useState<Record<string, string>>({});
 
@@ -54,9 +51,6 @@ export function useMemberList(
   // ソート状態
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-
-  // 氏名（表示用）キャッシュ
-  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
 
   // ─────────────────────────────────────────────
   // メンバー一覧ロード（無限ループを防ぐため、依存は空配列）
@@ -71,12 +65,6 @@ export function useMemberList(
         const result = await fetchMemberList(targetPage, targetFilter);
 
         setMembers(result.members ?? []);
-
-        // 氏名キャッシュ
-        const cache = nameCacheRef.current;
-        for (const [id, disp] of Object.entries(result.nameMap ?? {})) {
-          cache.set(id, disp);
-        }
 
         // ページング更新
         setPage((prev) => ({
@@ -94,14 +82,14 @@ export function useMemberList(
         setIsResetting(false);
       }
     },
-    [], // ← 無限ループ回避：page/filter に依存しない！
+    [],
   );
 
   // 初回ロード（1回だけ）
   useEffect(() => {
     void load(page, filter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // ← load を依存に入れる必要なし（安定関数なので）
+  }, []);
 
   // ─────────────────────────────────────────────
   // ブランド一覧（初回のみ読込） — アプリケーションサービス経由
@@ -121,7 +109,7 @@ export function useMemberList(
         setBrandMap({});
       }
     })();
-  }, []); // ← 依存なし：初回一回だけ
+  }, []);
 
   // ─────────────────────────────────────────────
   // ページ番号変更（バックエンド側のページ）
@@ -142,28 +130,11 @@ export function useMemberList(
   );
 
   // ─────────────────────────────────────────────
-  // MemberID → 氏名
-  // ─────────────────────────────────────────────
-  const getNameLastFirstByID = useCallback(
-    async (memberId: string): Promise<string> => {
-      const id = memberId.trim();
-      if (!id) return "";
-
-      const cache = nameCacheRef.current;
-      if (cache.has(id)) return cache.get(id)!;
-
-      const disp = await fetchMemberNameLastFirstById(id);
-      if (disp) cache.set(id, disp);
-      return disp;
-    },
-    [],
-  );
-
-  // ─────────────────────────────────────────────
   // 権限カテゴリ抽出
   // ─────────────────────────────────────────────
   const extractPermissionCategories = (perms?: string[]): string[] => {
     if (!perms || perms.length === 0) return [];
+
     const set = new Set<string>();
 
     for (const p of perms) {
@@ -171,6 +142,7 @@ export function useMemberList(
       const cat = dot > 0 ? p.slice(0, dot) : p;
       if (cat) set.add(cat);
     }
+
     return Array.from(set);
   };
 
@@ -205,6 +177,7 @@ export function useMemberList(
   // ─────────────────────────────────────────────
   const formatYmd = (date: any): string => {
     if (!date) return "";
+
     if (typeof date === "object" && date !== null) {
       if (typeof (date as any).toDate === "function") {
         return (date as any)
@@ -213,6 +186,7 @@ export function useMemberList(
           .slice(0, 10)
           .replace(/-/g, "/");
       }
+
       if (typeof (date as any).seconds === "number") {
         return new Date((date as any).seconds * 1000)
           .toISOString()
@@ -220,9 +194,11 @@ export function useMemberList(
           .replace(/-/g, "/");
       }
     }
+
     if (typeof date === "string") {
       return date.slice(0, 10).replace(/-/g, "/");
     }
+
     return "";
   };
 
@@ -231,16 +207,19 @@ export function useMemberList(
     (m: any): number => {
       const raw =
         sortKey === "updatedAt" ? (m as any).updatedAt : (m as any).createdAt;
+
       if (!raw) return 0;
 
       if (typeof raw === "object" && raw !== null) {
         if (typeof raw.toDate === "function") return raw.toDate().getTime();
         if (typeof raw.seconds === "number") return raw.seconds * 1000;
       }
+
       if (typeof raw === "string") {
         const t = new Date(raw).getTime();
         return Number.isNaN(t) ? 0 : t;
       }
+
       return 0;
     },
     [sortKey],
@@ -282,37 +261,6 @@ export function useMemberList(
   }, [filteredMembers, sortKey, sortDirection, getDateValue]);
 
   // ─────────────────────────────────────────────
-  // 氏名補完（表示用名前の解決）
-  // ─────────────────────────────────────────────
-  useEffect(() => {
-    let disposed = false;
-
-    (async () => {
-      const entries = await Promise.all(
-        members.map(async (m) => {
-          const inline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
-          if (inline) return [m.id, inline] as const;
-
-          const resolved = await getNameLastFirstByID(m.id);
-          return [m.id, resolved] as const;
-        }),
-      );
-
-      if (!disposed) {
-        const next: Record<string, string> = {};
-        for (const [id, name] of entries) {
-          if (name) next[id] = name;
-        }
-        setResolvedNames(next);
-      }
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, [members, getNameLastFirstByID]);
-
-  // ─────────────────────────────────────────────
   // ソート変更ハンドラ（ヘッダから呼ばれる）
   // ─────────────────────────────────────────────
   const handleSortChange = useCallback(
@@ -322,6 +270,7 @@ export function useMemberList(
         setSortDirection("desc");
         return;
       }
+
       setSortKey(key);
       setSortDirection(nextDirection);
     },
@@ -337,7 +286,6 @@ export function useMemberList(
     setSortKey(null);
     setSortDirection("desc");
 
-    // ✅ ページも戻しつつ再取得（＝リフレッシュ）
     const nextPage = { ...page, number: 1 };
     setPage(nextPage);
     void load(nextPage, filter);
@@ -365,10 +313,6 @@ export function useMemberList(
 
     // リセット
     handleReset,
-
-    // 氏名
-    resolvedNames,
-    getNameLastFirstByID, // 他の用途向けに残しておく
 
     // フィルタ関連
     brandMap,

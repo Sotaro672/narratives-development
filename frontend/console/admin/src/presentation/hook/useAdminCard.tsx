@@ -1,9 +1,7 @@
 // frontend/console/admin/src/presentation/hook/useAdminCard.tsx
+
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
-
-// uid → displayName 取得
-import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
 
 // AdminService
 import {
@@ -16,10 +14,13 @@ export type UseAdminCardResult = {
   loadingMembers: boolean;
 
   /**
-   * 互換のため名前は ById のまま残す。
-   * ただし現在の正は uid。
+   * assigneeId から表示名を取得する。
+   *
+   * NOTE:
+   * フロント側で /members/{uid} を叩く名前解決は行わない。
+   * backend response の assigneeName / createdByName / displayName / name を正とする。
    */
-  getAssigneeNameById: (uid: string | null | undefined) => Promise<string>;
+  getAssigneeNameById: (assigneeId: string | null | undefined) => Promise<string>;
 
   getDefaultAssigneeName: () => string;
 };
@@ -28,28 +29,41 @@ function s(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function getCandidateUid(candidate: unknown): string {
+/**
+ * Candidate 側の ID 正規化。
+ *
+ * ProductBlueprint response の正:
+ * - assigneeId
+ * - assigneeName
+ * - createdBy
+ * - createdByName
+ *
+ * AssigneeCandidate 側は AdminService の response に合わせて id/name を正とする。
+ */
+function getCandidateId(candidate: unknown): string {
   const c = candidate as any;
 
   return (
-    s(c?.uid) ||
-    s(c?.firebaseUid) ||
-    s(c?.firebaseUID) ||
-    s(c?.authUid) ||
-    s(c?.authUID) ||
-    s(c?.userUid) ||
-    s(c?.userUID) ||
+    s(c?.id) ||
+    s(c?.assigneeId) ||
+    s(c?.createdBy) ||
     ""
   );
 }
 
+/**
+ * Candidate 側の表示名。
+ *
+ * backend response の name 系を正として使う。
+ */
 function getCandidateName(candidate: unknown, fallback = ""): string {
   const c = candidate as any;
 
   return (
-    s(c?.name) ||
+    s(c?.assigneeName) ||
+    s(c?.createdByName) ||
     s(c?.displayName) ||
-    s(c?.fullName) ||
+    s(c?.name) ||
     s(c?.email) ||
     s(fallback)
   );
@@ -62,29 +76,21 @@ function normalizeAssigneeCandidates(
     .map((candidate) => {
       const c = candidate as any;
 
-      const uid = getCandidateUid(c);
+      const id = getCandidateId(c);
+      if (!id) return null;
 
-      /**
-       * 重要:
-       * - assigneeId には uid を保存したい
-       * - id が docId の可能性があるため、uid が取れる場合は id を uid に上書きする
-       */
-      const normalizedId = uid || s(c?.id);
-      if (!normalizedId) return null;
-
-      const name = getCandidateName(c, normalizedId);
+      const name = getCandidateName(c, id);
 
       return {
         ...c,
-        id: normalizedId,
-        uid: uid || normalizedId,
+        id,
         name,
       } as AssigneeCandidate;
     })
     .filter(Boolean) as AssigneeCandidate[];
 }
 
-function normalizeNameMapByUid(args: {
+function normalizeNameMapById(args: {
   candidates: AssigneeCandidate[];
   nameMap: Record<string, string>;
 }): Record<string, string> {
@@ -99,15 +105,13 @@ function normalizeNameMapByUid(args: {
   }
 
   for (const candidate of Array.isArray(args.candidates) ? args.candidates : []) {
-    const c = candidate as any;
+    const id = getCandidateId(candidate);
+    if (!id) continue;
 
-    const uid = getCandidateUid(c) || s(c?.id);
-    if (!uid) continue;
-
-    const name = getCandidateName(c);
+    const name = getCandidateName(candidate);
     if (!name) continue;
 
-    out[uid] = name;
+    out[id] = name;
   }
 
   return out;
@@ -115,15 +119,6 @@ function normalizeNameMapByUid(args: {
 
 export function useAdminCard(): UseAdminCardResult {
   const { currentMember } = useAuth();
-
-  /**
-   * 現在の方針:
-   * - GET /members/{uid} で取得する
-   * - assigneeId には uid を保存する
-   *
-   * そのため、この関数も uid を渡す前提で使う。
-   */
-  const { getNameLastFirstByID } = useMemberList();
 
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [assigneeCandidates, setAssigneeCandidates] = useState<
@@ -146,7 +141,7 @@ export function useAdminCard(): UseAdminCardResult {
 
         const normalizedCandidates = normalizeAssigneeCandidates(candidates);
 
-        const normalizedNameMap = normalizeNameMapByUid({
+        const normalizedNameMap = normalizeNameMapById({
           candidates: normalizedCandidates,
           nameMap: nameMap ?? {},
         });
@@ -165,45 +160,48 @@ export function useAdminCard(): UseAdminCardResult {
     };
   }, []);
 
-  const currentMemberUid = useMemo(() => {
-    const m = currentMember as any;
-
-    return (
-      s(m?.uid) ||
-      s(m?.firebaseUid) ||
-      s(m?.firebaseUID) ||
-      s(m?.authUid) ||
-      s(m?.authUID) ||
-      ""
-    );
+  /**
+   * currentMember は GET /members/{uid} の response を正とする。
+   *
+   * 正:
+   * - id
+   * - uid
+   * - firstName
+   * - lastName
+   * - email
+   * - displayName
+   */
+  const currentMemberId = useMemo(() => {
+    return s(currentMember?.id);
   }, [currentMember]);
 
   const defaultAssigneeName = useMemo(() => {
-    return (
-      `${currentMember?.lastName ?? ""} ${currentMember?.firstName ?? ""}`.trim() ||
-      currentMember?.fullName ||
-      currentMember?.email ||
-      currentMemberUid ||
-      "未設定"
-    );
-  }, [currentMember, currentMemberUid]);
+    const displayName = s(currentMember?.displayName);
+    if (displayName) return displayName;
+
+    const fullName = `${currentMember?.lastName ?? ""} ${
+      currentMember?.firstName ?? ""
+    }`.trim();
+    if (fullName) return fullName;
+
+    return s(currentMember?.email) || currentMemberId || "未設定";
+  }, [currentMember, currentMemberId]);
 
   const getDefaultAssigneeName = useCallback(() => {
     return defaultAssigneeName;
   }, [defaultAssigneeName]);
 
   const getAssigneeNameById = useCallback(
-    async (uid: string | null | undefined): Promise<string> => {
-      const normalizedUid = s(uid);
+    async (assigneeId: string | null | undefined): Promise<string> => {
+      const normalizedId = s(assigneeId);
 
-      if (!normalizedUid) {
+      if (!normalizedId) {
         return "未設定";
       }
 
-      // 1. まず候補一覧から uid / id で解決する
-      const matched = assigneeCandidates.find((candidate: any) => {
-        const candidateUid = getCandidateUid(candidate) || s(candidate?.id);
-        return candidateUid === normalizedUid;
+      const matched = assigneeCandidates.find((candidate) => {
+        const candidateId = getCandidateId(candidate);
+        return candidateId === normalizedId;
       });
 
       const candidateName = getCandidateName(matched);
@@ -211,29 +209,14 @@ export function useAdminCard(): UseAdminCardResult {
         return candidateName;
       }
 
-      // 2. AdminService の nameMap も uid key 前提で解決する
-      if (assigneeNameMap[normalizedUid]) {
-        return assigneeNameMap[normalizedUid];
-      }
-
-      // 3. 最後に GET /members/{uid} 経由で解決する
-      try {
-        const resolved = await getNameLastFirstByID(normalizedUid);
-        if (resolved) {
-          return resolved;
-        }
-      } catch {
-        // ignore
+      const mappedName = assigneeNameMap[normalizedId];
+      if (mappedName) {
+        return mappedName;
       }
 
       return defaultAssigneeName;
     },
-    [
-      assigneeCandidates,
-      assigneeNameMap,
-      defaultAssigneeName,
-      getNameLastFirstByID,
-    ],
+    [assigneeCandidates, assigneeNameMap, defaultAssigneeName],
   );
 
   return {

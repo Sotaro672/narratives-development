@@ -1,4 +1,5 @@
 // frontend/member/src/presentation/routes/routes.tsx
+
 import type { RouteObject } from "react-router-dom";
 import MemberManagement from "../pages/memberManagement";
 import MemberDetail from "../pages/memberDetail";
@@ -10,8 +11,15 @@ const routes: RouteObject[] = [
     element: <MemberManagement />,
   },
   {
-    // Member.id を URL パラメータとして利用
-    path: ":memberId",
+    /**
+     * IMPORTANT:
+     * この URL パラメータは Firestore member docId ではなく Firebase Auth UID。
+     *
+     * backend:
+     * - GET /members/{uid} は Firebase UID 専用
+     * - PATCH /members/{docId} は Firestore member docId 専用
+     */
+    path: ":memberUid",
     element: <MemberDetail />,
   },
   {

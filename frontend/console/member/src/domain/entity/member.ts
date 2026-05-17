@@ -7,12 +7,20 @@ const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Member
  * backend/internal/domain/member/entity.go の Member に対応。
  *
+ * - id は Firestore member document ID
+ * - uid は Firebase Auth UID
+ * - GET /members/{uid} には uid を使う
+ * - PATCH /members/{docId} には id を使う
  * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）を想定
  * - Firestore/GraphQL とのやり取りを考慮し、文字列系フィールドは string | null を許容
  * - 役割（role）は廃止。権限は permissions で表現。
  */
 export interface Member {
+  /** Firestore member document ID */
   id: string;
+
+  /** Firebase Auth UID */
+  uid?: string | null;
 
   firstName?: string | null;
   lastName?: string | null;
@@ -22,10 +30,13 @@ export interface Member {
   /** 姓＋名を結合したフルネーム（lastName → firstName） */
   fullName?: string | null;
 
+  /** backend の displayName（lastName + firstName） */
+  displayName?: string | null;
+
   /** 空文字 or undefined の場合は「未設定」扱い（backend と同様の解釈） */
   email?: string | null;
 
-  /** Permission.Name の配列（backend: Permissions）*/
+  /** Permission.Name の配列（backend: Permissions） */
   permissions: string[];
 
   /** 割当ブランドIDの配列（backend: AssignedBrands） */
@@ -34,25 +45,43 @@ export interface Member {
   /** 所属会社ID（backend と同期：存在しない/未設定なら null） */
   companyId?: string | null;
 
+  /** member status（例: active / invited など） */
+  status?: string | null;
+
   createdAt: string; // ISO8601
   updatedAt?: string | null;
   updatedBy?: string | null;
   deletedAt?: string | null;
   deletedBy?: string | null;
+
+  /**
+   * Detail UI 用の権限グルーピング。
+   * application 層で groupPermissionsByCategory から付与される。
+   */
+  permissionGroups?: Record<string, string[]>;
+
+  /**
+   * Detail UI 用の権限カテゴリ一覧。
+   * application 層で groupPermissionsByCategory から付与される。
+   */
+  permissionCategories?: string[];
 }
 
 /**
  * Member から表示用フルネームを取得
  * - lastName + firstName を優先
- * - 無ければ fullName フィールド
+ * - 無ければ displayName
+ * - 無ければ fullName
  * - どちらも無ければ空文字
  */
 export function getMemberFullName(member: Member): string {
   const ln = (member.lastName ?? "").trim();
   const fn = (member.firstName ?? "").trim();
   const composed = `${ln} ${fn}`.trim();
+  const displayName = (member.displayName ?? "").trim();
   const fullField = (member.fullName ?? "").trim();
-  return composed || fullField || "";
+
+  return composed || displayName || fullField || "";
 }
 
 /**
@@ -61,6 +90,10 @@ export function getMemberFullName(member: Member): string {
  * - usecase / repository レイヤで部分更新時に利用
  * - undefined は「この項目は更新しない」、null は「null に更新する」意図
  * - 役割（role）は廃止済み
+ *
+ * NOTE:
+ * - uid は PATCH /members/{docId} では更新しない
+ * - uid bind は /members/{docId}/bind-firebase-uid 側で扱う
  */
 export interface MemberPatch {
   firstName?: string | null;
@@ -73,6 +106,9 @@ export interface MemberPatch {
 
   /** 所属会社IDの部分更新 */
   companyId?: string | null;
+
+  /** member status の部分更新 */
+  status?: string | null;
 
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -110,6 +146,10 @@ export interface PermissionCatalogItem {
  */
 export function createMember(params: {
   id: string;
+
+  /** Firebase Auth UID。招待前 member では null / 空の可能性あり */
+  uid?: string | null;
+
   createdAt: string;
   firstName?: string | null;
   lastName?: string | null;
@@ -118,15 +158,25 @@ export function createMember(params: {
   email?: string | null;
   permissions?: string[];
   assignedBrands?: string[] | null;
+
   /** 所属会社ID（未設定は null） */
   companyId?: string | null;
+
+  /** member status */
+  status?: string | null;
+
   updatedAt?: string | null;
   updatedBy?: string | null;
   deletedAt?: string | null;
   deletedBy?: string | null;
+  displayName?: string | null;
 }): Member {
   const member: Member = {
     id: params.id,
+    uid:
+      params.uid !== undefined && params.uid !== null && params.uid !== ""
+        ? params.uid
+        : null,
     createdAt: params.createdAt,
     permissions: dedup(params.permissions ?? []),
     updatedAt: params.updatedAt ?? null,
@@ -137,24 +187,32 @@ export function createMember(params: {
       params.companyId !== undefined && params.companyId !== null
         ? params.companyId
         : null,
+    status:
+      params.status !== undefined && params.status !== null
+        ? params.status
+        : null,
   };
 
   member.firstName =
     params.firstName !== undefined && params.firstName !== null
       ? params.firstName
       : null;
+
   member.lastName =
     params.lastName !== undefined && params.lastName !== null
       ? params.lastName
       : null;
+
   member.firstNameKana =
     params.firstNameKana !== undefined && params.firstNameKana !== null
       ? params.firstNameKana
       : null;
+
   member.lastNameKana =
     params.lastNameKana !== undefined && params.lastNameKana !== null
       ? params.lastNameKana
       : null;
+
   member.email =
     params.email !== undefined && params.email !== null ? params.email : null;
 
@@ -164,12 +222,18 @@ export function createMember(params: {
     member.assignedBrands = null;
   }
 
-  // ★ fullName を lastName → firstName で組み立てる
+  // fullName / displayName を lastName → firstName で組み立てる
   {
     const ln = (member.lastName ?? "").trim();
     const fn = (member.firstName ?? "").trim();
     const full = `${ln} ${fn}`.trim();
+
     member.fullName = full !== "" ? full : null;
+
+    member.displayName =
+      params.displayName !== undefined && params.displayName !== null
+        ? params.displayName
+        : member.fullName;
   }
 
   const error = validateMember(member);
@@ -190,9 +254,11 @@ export function validateMember(member: Member): MemberErrorCode | null {
   if (!member.id) {
     return MemberError.InvalidID;
   }
+
   if (member.email && !emailRe.test(member.email)) {
     return MemberError.InvalidEmail;
   }
+
   if (!member.createdAt) {
     return MemberError.InvalidCreatedAt;
   }
@@ -201,6 +267,7 @@ export function validateMember(member: Member): MemberErrorCode | null {
   if (member.updatedBy !== undefined && member.updatedBy === "") {
     return MemberError.InvalidUpdatedBy;
   }
+
   if (member.deletedBy !== undefined && member.deletedBy === "") {
     return MemberError.InvalidDeletedBy;
   }
@@ -235,6 +302,7 @@ export function setPermissionsByName(
   }
 
   out.sort();
+
   return {
     ...member,
     permissions: out,
@@ -259,6 +327,7 @@ export function validatePermissionsWithCatalog(
 export function hasPermission(member: Member, name: string): boolean {
   const target = name.trim().toLowerCase();
   if (!target) return false;
+
   return member.permissions.some(
     (p) => p.trim().toLowerCase() === target,
   );
@@ -268,11 +337,13 @@ export function hasPermission(member: Member, name: string): boolean {
 function dedup(xs: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
+
   for (const raw of xs) {
     const v = raw.trim();
     if (!v || seen.has(v)) continue;
     seen.add(v);
     out.push(v);
   }
+
   return out;
 }

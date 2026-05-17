@@ -7,22 +7,16 @@ import List, {
 import "../styles/member.css";
 import { useMemberList } from "../hooks/useMemberList";
 
-// ★ ページネーション（バックエンドページング表示用）
 import Pagination from "../../../../shell/src/shared/ui/pagination";
 
 export default function MemberManagementPage() {
   const navigate = useNavigate();
 
   const {
-    // 一覧（フィルタ＆ソート済み）
     members,
     loading,
     error,
-
-    // ✅ リフレッシュ回転用（hook 側で返す必要あり）
     isResetting,
-
-    // フィルタ用データ
     brandMap,
     brandFilterOptions,
     permissionFilterOptions,
@@ -31,35 +25,31 @@ export default function MemberManagementPage() {
     selectedPermissionCats,
     setSelectedPermissionCats,
     extractPermissionCategories,
-
-    // ソート状態
     sortKey,
     sortDirection,
     handleSortChange,
-
-    // Reset ボタン
     handleReset,
-
-    // ページング（バックエンド）
     page,
     setPageNumber,
-
-    // 表示用氏名
-    resolvedNames,
-
-    // 日付フォーマッタ
     formatYmd,
   } = useMemberList();
 
   if (loading) return <div className="p-4">読み込み中...</div>;
-  if (error)
+
+  if (error) {
     return (
       <div className="p-4 text-red-500">データ取得エラー: {error.message}</div>
     );
+  }
 
-  const goDetail = (id: string) => {
-    if (!id) return;
-    navigate(`/member/${encodeURIComponent(id)}`);
+  const goDetail = (uid?: string | null) => {
+    const trimmedUid = String(uid ?? "").trim();
+    if (!trimmedUid) {
+      console.warn("[MemberManagementPage] member uid is empty");
+      return;
+    }
+
+    navigate(`/member/${encodeURIComponent(trimmedUid)}`);
   };
 
   return (
@@ -105,38 +95,48 @@ export default function MemberManagementPage() {
         showCreateButton
         createLabel="メンバー追加"
         showResetButton
-        isResetting={isResetting} // ✅ 追加：これで矢印が回転する
+        isResetting={isResetting}
         onCreate={() => navigate("/member/create")}
-        onReset={handleReset} // ← Reset ボタンでフィルタ＆ソート＆ページを初期化（＋再取得する想定）
+        onReset={handleReset}
       >
         {members.map((m) => {
-          const nameFromMap = resolvedNames[m.id];
           const fallbackInline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
-          const name = nameFromMap || fallbackInline || m.email || m.id;
+
+          const name =
+            String(m.displayName ?? "").trim() ||
+            fallbackInline ||
+            m.email ||
+            "招待中";
 
           const assigned = m.assignedBrands ?? [];
           const categories = extractPermissionCategories(
             (m.permissions ?? []) as string[],
           );
 
+          const memberUid = String(m.uid ?? "").trim();
+          const canOpenDetail = memberUid.length > 0;
+
           return (
             <tr
               key={m.id}
               role="button"
               tabIndex={0}
-              className="cursor-pointer"
-              onClick={() => goDetail(m.id)}
+              className={
+                canOpenDetail
+                  ? "cursor-pointer"
+                  : "cursor-not-allowed opacity-60"
+              }
+              onClick={() => goDetail(memberUid)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  goDetail(m.id);
+                  goDetail(memberUid);
                 }
               }}
             >
-              <td>{name || "招待中"}</td>
+              <td>{name}</td>
               <td>{m.email ?? ""}</td>
 
-              {/* 所属ブランド */}
               <td>
                 {assigned.map((brandId) => {
                   const label = brandMap[brandId] ?? brandId;
@@ -148,7 +148,6 @@ export default function MemberManagementPage() {
                 })}
               </td>
 
-              {/* 権限 */}
               <td className="mm-permission-col">
                 {categories.length === 0 ? (
                   <span className="text-sm text-[hsl(var(--muted-foreground))]">
@@ -163,17 +162,13 @@ export default function MemberManagementPage() {
                 )}
               </td>
 
-              {/* 登録日 */}
               <td>{formatYmd((m as any).createdAt)}</td>
-
-              {/* 更新日 */}
               <td>{formatYmd((m as any).updatedAt)}</td>
             </tr>
           );
         })}
       </List>
 
-      {/* ★ バックエンドページング用の UI（今後 totalPages を活用可能） */}
       <Pagination
         currentPage={page.number}
         totalPages={page.totalPages ?? 1}

@@ -1,4 +1,4 @@
-// frontend/member/src/domain/repository/memberRepository.ts
+// frontend/console/member/src/domain/repository/memberRepository.ts
 
 import type { Member, MemberPatch } from "../entity/member";
 import type {
@@ -15,48 +15,51 @@ import type {
  *
  * - 日付は ISO8601 文字列
  * - undefined は「条件指定なし」
- * - 本アプリケーションでは **同一 companyId のメンバーのみ** を一覧表示する運用のため、
- *   list()/count()/listByCursor() を呼ぶ際は必ず companyId を付与してください。
- *   付与を簡単にするユーティリティ: scopedFilterByCompanyId()
+ * - backend 側で CurrentMember の companyId にスコープされる。
  */
 export interface MemberFilter {
   /** 名前 / フリガナ / メール等の部分一致検索 */
   searchQuery?: string;
 
-  /** 割当ブランドID（後方互換の Brands と同義） */
+  /**
+   * Firebase Auth UID。
+   * backend の GET /members?uid=... や内部 filter と対応。
+   */
+  uid?: string;
+
+  /** 割当ブランドID */
   brandIds?: string[];
 
-  /** 所属企業IDフィルタ（※運用上は必須。ユーティリティで補完推奨） */
+  /** 所属企業IDフィルタ */
   companyId?: string;
 
-  /** "active" | "inactive" など論理ステータス */
+  /** active / inactive など */
   status?: string;
 
-  /** 作成日時範囲 (from/to) */
-  createdFrom?: string; // ISO8601
-  createdTo?: string;   // ISO8601
+  /** 作成日時範囲 */
+  createdFrom?: string;
+  createdTo?: string;
 
-  /** 更新日時範囲 (from/to) */
-  updatedFrom?: string; // ISO8601
-  updatedTo?: string;   // ISO8601
+  /** 更新日時範囲 */
+  updatedFrom?: string;
+  updatedTo?: string;
 
-  /** 権限名（Member.permissions と対応） */
+  /** 権限名 */
   permissions?: string[];
 }
 
 /**
  * 呼び出し側で companyId を強制付与するためのユーティリティ。
- * - base に companyId が未設定でも、必ず引数 companyId を上書きします。
- * - 一覧を **同一 companyId にスコープ** させるために使用してください。
  */
 export function scopedFilterByCompanyId(
   companyId: string,
-  base: MemberFilter = {}
+  base: MemberFilter = {},
 ): MemberFilter {
   const id = (companyId ?? "").trim();
   if (!id) {
     throw new Error("scopedFilterByCompanyId: companyId is required");
   }
+
   return { ...base, companyId: id };
 }
 
@@ -89,84 +92,97 @@ export interface MemberSort {
 
 /**
  * MemberRepository
- * backend/internal/domain/member/repository_port.go の Repository に対応する
- * フロントエンド側ポートインターフェース。
  *
- * - context.Context は持たず、Promise ベースで表現。
- * - infrastructure 層（Firestore / GraphQL / REST など）が実装する。
- * - 実装側は **companyId フィルタを厳密に適用** してください。
+ * IMPORTANT:
+ * - Member.id は Firestore member document ID
+ * - Member.uid は Firebase Auth UID
+ * - backend の GET /members/{uid} は Firebase UID 専用
+ * - backend の PATCH /members/{docId} は Firestore docId 専用
+ *
+ * 後方互換用の getById / exists は廃止。
  */
 export interface MemberRepository {
-  // ===== 共通 CRUD / List（RepositoryCRUD, RepositoryList 相当）=====
-
-  /** ID 取得（存在しない場合は null） */
-  getById(id: string): Promise<Member | null>;
+  // ===== 取得 =====
 
   /**
-   * 一覧取得（ページング版）
-   * - page: limit/offset 等を含む共通ページ情報
-   * - filter: MemberFilter（※同一 companyId のみを返すようスコープ必須）
+   * Firebase UID で member を取得する。
+   *
+   * backend:
+   * GET /members/{uid}
+   */
+  getByUid(uid: string): Promise<Member | null>;
+
+  /**
+   * Email から member を取得する。
+   */
+  getByEmail(email: string): Promise<Member | null>;
+
+  // ===== 一覧 =====
+
+  /**
+   * 一覧取得。
    */
   list(page: Page, filter?: MemberFilter): Promise<PageResult<Member>>;
 
   /**
-   * 作成
-   * - SaveOptions は楽観ロック / upsert など実装側で利用
-   */
-  create(member: Member, opts?: SaveOptions): Promise<Member>;
-
-  /**
-   * 更新（部分更新）
-   * - patch の undefined は「変更なし」
-   */
-  update(id: string, patch: MemberPatch, opts?: SaveOptions): Promise<Member>;
-
-  /**
-   * 論理削除 or 物理削除（実装依存）
-   * - backend の RepositoryCRUD.Delete 相当
-   */
-  delete(id: string): Promise<void>;
-
-  // ===== 追加要件 (backend Repository 独自メソッド) =====
-
-  /**
-   * カーソルベース一覧取得
-   * - filter + sort + cursorPage を指定
-   * - 実装側で companyId によるスコープを必ず適用
+   * カーソルベース一覧取得。
    */
   listByCursor(
     filter: MemberFilter,
     sort: MemberSort,
-    cursorPage: CursorPage
+    cursorPage: CursorPage,
   ): Promise<CursorPageResult<Member>>;
 
-  /**
-   * Email からの取得
-   * - 見つからない場合は null
-   */
-  getByEmail(email: string): Promise<Member | null>;
+  // ===== 作成 / 更新 / 削除 =====
 
   /**
-   * 存在確認
+   * 作成。
+   *
+   * 通常の console member 作成では uid / id を request body から送らない。
+   * backend 側で招待前 member として uid 空で作成される。
    */
-  exists(id: string): Promise<boolean>;
+  create(member: Member, opts?: SaveOptions): Promise<Member>;
 
   /**
-   * 件数カウント
-   * - 実装側で companyId によるスコープを必ず適用
+   * Firestore member docId による更新。
+   *
+   * backend:
+   * PATCH /members/{docId}
+   */
+  update(
+    docId: string,
+    patch: MemberPatch,
+    opts?: SaveOptions,
+  ): Promise<Member>;
+
+  /**
+   * 削除。
+   */
+  delete(docId: string): Promise<void>;
+
+  // ===== 補助 =====
+
+  /**
+   * Firebase UID による存在確認。
+   */
+  existsByUid(uid: string): Promise<boolean>;
+
+  /**
+   * 件数カウント。
    */
   count(filter: MemberFilter): Promise<number>;
 
   /**
-   * Save
-   * - 新規/更新の双方を内包可能な high-level API
-   * - infrastructure 側で upsert 的に扱う実装も可
+   * Save。
+   *
+   * 現状 backend API では create のみ対応。
    */
   save(member: Member, opts?: SaveOptions): Promise<Member>;
 
   /**
-   * Reset
-   * - 開発・テスト用。実サービス環境では no-op 実装も可。
+   * Reset。
+   *
+   * 開発・テスト用。
    */
   reset(): Promise<void>;
 }

@@ -21,13 +21,25 @@ const IconCalendar = Calendar as unknown as React.ComponentType<
 >;
 
 type MemberDetailCardProps = {
+  /**
+   * 互換のため prop 名は memberId のままにする。
+   *
+   * IMPORTANT:
+   * この値には Firestore member docId ではなく Firebase Auth UID を渡す。
+   *
+   * backend:
+   * - GET /members/{uid} は Firebase UID 専用
+   * - PATCH /members/{docId} は Firestore member docId 専用
+   */
   memberId: string;
 };
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "-";
+
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
+
   return d.toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
@@ -36,7 +48,9 @@ function formatDate(iso?: string | null): string {
 }
 
 export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
-  const { member, loading, error } = useMemberDetail(memberId);
+  const memberUid = String(memberId ?? "").trim();
+
+  const { member, loading, error } = useMemberDetail(memberUid);
 
   if (loading) {
     return (
@@ -86,24 +100,19 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
     );
   }
 
-  const rawFullName = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
-  const fullName = rawFullName || "";
-  const rawFullKana = `${member.lastNameKana ?? ""} ${member.firstNameKana ?? ""}`.trim();
-  const fullKana = rawFullKana || "";
+  const fullName = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
+  const fullKana = `${member.lastNameKana ?? ""} ${member.firstNameKana ?? ""}`.trim();
 
   const email = member.email || "-";
   const joinedAt = formatDate(member.createdAt);
   const updatedAt = formatDate(member.updatedAt || member.createdAt);
-
-  // ★ ID 非表示のため headerTitle を固定
-  const headerTitle = "基本情報";
 
   return (
     <Card className="member-card w-full">
       <CardHeader className="member-card__header">
         <CardTitle className="member-card__title flex items-center gap-2">
           <IconUser className="member-card__icon w-4 h-4" />
-          {headerTitle}
+          基本情報
         </CardTitle>
       </CardHeader>
 
@@ -114,7 +123,7 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
             <div className="member-card__label">氏名</div>
             <div className="member-card__value">
               <IconUser className="icon-inline w-4 h-4" />
-              <span className="font-medium">{fullName}</span>
+              <span className="font-medium">{fullName || "-"}</span>
             </div>
           </div>
 
@@ -122,7 +131,7 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
             <div className="member-card__label">読み仮名</div>
             <div className="member-card__value">
               <IconUser className="icon-inline w-4 h-4" />
-              <span>{fullKana}</span>
+              <span>{fullKana || "-"}</span>
             </div>
           </div>
         </div>

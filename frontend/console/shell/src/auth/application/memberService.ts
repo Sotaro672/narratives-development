@@ -1,5 +1,6 @@
-//frontend\console\shell\src\auth\application\memberService.ts
+// frontend/console/shell/src/auth/application/memberService.ts
 /// <reference types="vite/client" />
+
 import type { MemberDTO } from "../domain/entity/member";
 import {
   fetchCurrentMemberRaw,
@@ -16,32 +17,37 @@ function mapRawToMemberDTO(
 ): MemberDTO {
   const firstName =
     raw?.firstName && String(raw.firstName).trim() !== ""
-      ? String(raw.firstName)
+      ? String(raw.firstName).trim()
       : null;
 
   const lastName =
     raw?.lastName && String(raw.lastName).trim() !== ""
-      ? String(raw.lastName)
+      ? String(raw.lastName).trim()
       : null;
 
   const firstNameKana =
     raw?.firstNameKana && String(raw.firstNameKana).trim() !== ""
-      ? String(raw.firstNameKana)
+      ? String(raw.firstNameKana).trim()
       : null;
 
   const lastNameKana =
     raw?.lastNameKana && String(raw.lastNameKana).trim() !== ""
-      ? String(raw.lastNameKana)
+      ? String(raw.lastNameKana).trim()
       : null;
 
-  const full = `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
+  const displayNameFromResponse =
+    raw?.displayName && String(raw.displayName).trim() !== ""
+      ? String(raw.displayName).trim()
+      : null;
+
+  const displayNameFromNameParts =
+    `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
 
   return {
     // backend response の id は Firestore members の docId
     id: String(raw?.id ?? "").trim(),
 
     // Firebase Auth UID
-    // backend が uid を返していればそれを使い、無ければ fetchCurrentMember(uid) の uid で補完する
     uid: String(raw?.uid ?? fallbackUid ?? "").trim(),
 
     firstName,
@@ -50,14 +56,15 @@ function mapRawToMemberDTO(
     lastNameKana,
     email: raw?.email ?? fallbackEmail ?? null,
     companyId: raw?.companyId ?? "",
-    fullName: full,
+
+    // backend response の displayName を正とする
+    displayName: displayNameFromResponse ?? displayNameFromNameParts,
   };
 }
 
 // -------------------------------
 // 現在メンバー取得
 // -------------------------------
-
 export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null> {
   const firebaseUid = String(uid ?? "").trim();
   if (!firebaseUid) return null;
@@ -71,7 +78,6 @@ export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null>
 // -------------------------------
 // プロファイル更新
 // -------------------------------
-
 export type UpdateMemberProfileInput = {
   // PATCH /members/{docId} 用
   id: string;

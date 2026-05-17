@@ -23,12 +23,8 @@ import { BrandRepositoryHTTP } from "../../../brand/src/infrastructure/http/bran
 // Member Repository（HTTP 層）
 import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";
 
-// Query utilities（HTTP 呼び出しは含まない）
-import { formatLastFirst } from "../infrastructure/query/memberQuery";
-
 export type MemberListResult = {
   members: Member[];
-  nameMap: Record<string, string>;
   totalPages: number;
 };
 
@@ -76,10 +72,11 @@ export async function fetchCurrentMember(): Promise<Member | null> {
   const currentUser = auth.currentUser;
   if (!currentUser) return null;
 
-  const uid = currentUser.uid;
+  const uid = currentUser.uid.trim();
+  if (!uid) return null;
 
   try {
-    const member = await memberRepo.getById(uid);
+    const member = await memberRepo.getByUid(uid);
     return member ?? null;
   } catch {
     return null;
@@ -132,54 +129,27 @@ export async function fetchMemberList(
     throw new Error("未認証のためメンバー一覧を取得できません。");
   }
 
-  // MemberRepositoryHTTP へ移譲
   const pageResult = await memberRepo.list(page, filter);
 
   const normalized: Member[] = pageResult.items.map((m: Member): Member => {
-    const noFirst = !String(m.firstName ?? "").trim();
-    const noLast = !String(m.lastName ?? "").trim();
-
     let assignedBrandIds: string[] | null = null;
+
     if (Array.isArray(m.assignedBrands) && m.assignedBrands.length > 0) {
       const ids = m.assignedBrands
         .map((id) => String(id ?? "").trim())
         .filter((id) => id.length > 0);
+
       assignedBrandIds = ids.length > 0 ? ids : null;
     }
 
-    const base: Member =
-      noFirst && noLast
-        ? ({ ...m, firstName: "招待中" } as Member)
-        : m;
-
-    return { ...base, assignedBrands: assignedBrandIds };
+    return {
+      ...m,
+      assignedBrands: assignedBrandIds,
+    };
   });
-
-  const nameMap: Record<string, string> = {};
-  for (const m of normalized) {
-    const disp = formatLastFirst(m.lastName ?? "", m.firstName ?? "");
-    if (disp) nameMap[m.id] = disp;
-  }
 
   return {
     members: normalized,
-    nameMap,
     totalPages: pageResult.totalPages ?? 1,
   };
-}
-
-// ─────────────────────────────────────────────
-// 単一メンバーの表示名取得
-// ─────────────────────────────────────────────
-export async function fetchMemberNameLastFirstById(
-  memberId: string,
-): Promise<string> {
-  const id = memberId.trim();
-  if (!id) return "";
-
-  const member = await memberRepo.getById(id);
-  if (!member) return "";
-
-  const disp = formatLastFirst(member.lastName ?? "", member.firstName ?? "");
-  return disp ?? "";
 }

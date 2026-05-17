@@ -15,7 +15,16 @@ import { BrandCard } from "../components/BrandCard";
 
 export default function MemberDetail() {
   const navigate = useNavigate();
-  const { memberId } = useParams<{ memberId: string }>();
+
+  /**
+   * IMPORTANT:
+   * この route param は Firestore member docId ではなく Firebase Auth UID。
+   *
+   * backend:
+   * - GET /members/{uid} は Firebase UID 専用
+   * - PATCH /members/{docId} は Firestore member docId 専用
+   */
+  const { memberUid } = useParams<{ memberUid: string }>();
 
   const {
     memberName,
@@ -24,21 +33,21 @@ export default function MemberDetail() {
     permissions,
     groupedPermissionsByCategory,
     hasGroupedPermissions,
-  } = useMemberDetail(memberId);
+  } = useMemberDetail(memberUid);
 
   const handleBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={`${memberName}`}
-      onBack={handleBack}
-    >
+    <PageStyle layout="grid-2" title={`${memberName}`} onBack={handleBack}>
       {/* 左カラム：基本情報カード */}
       <div>
-        <MemberDetailCard memberId={memberId ?? ""} />
+        {/*
+          MemberDetailCard は memberId prop だけを受け取る。
+          ただし現状方針では、この memberId には Firebase Auth UID を渡す。
+        */}
+        <MemberDetailCard memberId={memberUid ?? ""} />
       </div>
 
       {/* 右カラム：所属ブランドカード + 権限カード */}
@@ -75,7 +84,7 @@ export default function MemberDetail() {
                         ))}
                       </ul>
                     </div>
-                  )
+                  ),
                 )}
               </div>
             )}
