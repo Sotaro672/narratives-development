@@ -49,7 +49,7 @@ type CreateAndConfirmPaymentIntentResult struct {
 // PaymentFlowUsecase orchestrates:
 // 1. payment record 作成
 // 2. Stripe PaymentIntent 作成/confirm
-// 3. succeeded の場合、paid 後処理
+// 3. PaymentUsecase.Update により paid 後処理を実行
 //
 // 責務分離:
 // - /mall/me/orders   : OrderHandler   -> OrderUsecase
@@ -147,7 +147,7 @@ type CreatePaymentAndStartResult struct {
 // 1. create payment record as PENDING
 // 2. execute Stripe PaymentIntent create + confirm
 // 3. persist latest payment status
-// 4. if succeeded, run post-paid side effects
+// 4. PaymentUsecase.Update runs post-paid side effects when status changes to paid
 // 5. if requires_action, return clientSecret to frontend
 func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 	ctx context.Context,
@@ -340,8 +340,6 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 			stripePaymentIntentID,
 			succeeded.Amount,
 		)
-
-		u.paymentUC.handlePostPaidBestEffort(ctx, &succeeded)
 
 		return &CreatePaymentAndStartResult{
 			Payment:               succeeded,

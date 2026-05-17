@@ -1,3 +1,4 @@
+//frontend\amol\src\pages\PaymentPage.tsx
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";

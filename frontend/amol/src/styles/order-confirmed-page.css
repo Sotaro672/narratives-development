@@ -211,6 +211,13 @@
   transform: translateY(0);
 }
 
+/* Mobile: 注文完了画面では「ウォレットへ」「商品一覧へ」ボタンを非表示 */
+@media (max-width: 959px) {
+  .order-confirmed-page__actions {
+    display: none;
+  }
+}
+
 @media (min-width: 960px) {
   .order-confirmed-page__section {
     padding: 32px 24px 96px;
@@ -234,6 +241,7 @@
   }
 
   .order-confirmed-page__actions {
+    display: grid;
     grid-template-columns: 1fr 1fr;
   }
 }

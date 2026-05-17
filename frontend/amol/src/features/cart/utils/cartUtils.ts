@@ -1,5 +1,4 @@
-// frontend/amol/src/features/cart/utils/cartUtils.ts
-
+//frontend\amol\src\features\cart\utils\cartUtils.ts
 import type {
   CartDTO,
   CartDisplayItem,
@@ -8,201 +7,195 @@ import type {
   CatalogResponse,
 } from "../types";
 
-export function formatPrice(price: number): string {
-  if (!Number.isFinite(price)) {
-    return "価格未設定";
+function normalizeQty(item: CartItemDTO): number {
+  if (typeof item.qty === "number" && !Number.isNaN(item.qty)) {
+    return item.qty;
   }
 
-  return `${price.toLocaleString("ja-JP")}円`;
-}
-
-export function formatYen(amount: number): string {
-  return new Intl.NumberFormat("ja-JP", {
-    style: "currency",
-    currency: "JPY",
-  }).format(amount);
-}
-
-export function getCartItemQty(item: CartItemDTO): number {
-  const rawQty = item.qty ?? item.quantity;
-
-  if (typeof rawQty === "number" && Number.isFinite(rawQty)) {
-    return rawQty;
+  if (typeof item.quantity === "number" && !Number.isNaN(item.quantity)) {
+    return item.quantity;
   }
 
-  if (typeof rawQty === "string") {
-    const parsed = Number(rawQty);
-
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return 1;
+  return 0;
 }
 
-function getStringValue(value: unknown): string | undefined {
+function normalizePrice(value: unknown): number | undefined {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function normalizeVolumeValue(value: unknown): number | undefined {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function normalizeColorRGB(value: unknown): number | undefined {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function normalizeString(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
 
-  const normalized = value.trim();
-
-  if (normalized === "") {
-    return undefined;
-  }
-
-  return normalized;
-}
-
-function getNumberValue(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
+  return value;
 }
 
 function normalizeCartItem(args: {
-  cart: CartDTO;
+  avatarId: string;
+  itemKey: string;
   item: CartItemDTO;
-  fallbackItemKey: string;
-}): CartDisplayItem | null {
-  const { cart, item, fallbackItemKey } = args;
+}): CartDisplayItem {
+  const { avatarId, itemKey, item } = args;
 
-  const listId = getStringValue(item.listId) ?? "";
-  const modelId = getStringValue(item.modelId) ?? "";
-  const inventoryId = getStringValue(item.inventoryId) ?? "";
-  const itemKey = getStringValue(item.itemKey) ?? fallbackItemKey;
-
-  if (listId === "" || modelId === "") {
-    return null;
-  }
+  const inventoryId = normalizeString(item.inventoryId) ?? "";
+  const listId = normalizeString(item.listId) ?? "";
+  const modelId = normalizeString(item.modelId) ?? "";
 
   return {
-    itemKey,
-    avatarId: getStringValue(item.avatarId) ?? cart.avatarId,
+    itemKey: normalizeString(item.itemKey) ?? itemKey,
+    avatarId: normalizeString(item.avatarId) ?? avatarId,
     inventoryId,
     listId,
     modelId,
-    qty: getCartItemQty(item),
+    qty: normalizeQty(item),
 
-    title: getStringValue(item.title),
-    listImage: getStringValue(item.listImage),
-    price: getNumberValue(item.price),
-    productName: getStringValue(item.productName),
+    title: normalizeString(item.title),
+    listImage: normalizeString(item.listImage),
+    price: normalizePrice(item.price),
+    productName: normalizeString(item.productName),
 
-    modelKind:
-      getStringValue(item.modelKind) ??
-      getStringValue(item.kind) ??
-      undefined,
-    modelNumber: getStringValue(item.modelNumber),
-    modelLabel: getStringValue(item.modelLabel),
+    modelKind: item.modelKind ?? item.kind ?? "unknown",
+    modelNumber: normalizeString(item.modelNumber),
+    modelLabel: normalizeString(item.modelLabel),
 
-    size: getStringValue(item.size),
-    colorName: getStringValue(item.colorName),
-    colorRGB: getNumberValue(item.colorRGB),
+    size: normalizeString(item.size),
+    colorName: normalizeString(item.colorName),
+    colorRGB: normalizeColorRGB(item.colorRGB),
 
-    volumeValue: getNumberValue(item.volumeValue),
-    volumeUnit: getStringValue(item.volumeUnit),
+    volumeValue: normalizeVolumeValue(item.volumeValue),
+    volumeUnit: normalizeString(item.volumeUnit),
 
     catalog: null,
   };
 }
 
 export function normalizeCartItems(cart: CartDTO): CartDisplayItem[] {
-  if (Array.isArray(cart.items)) {
-    return cart.items
-      .map((item: CartItemDTO, index: number) => {
-        const inventoryId = getStringValue(item.inventoryId) ?? "";
-        const listId = getStringValue(item.listId) ?? "";
-        const modelId = getStringValue(item.modelId) ?? "";
-        const fallbackItemKey = `${inventoryId}__${listId}__${modelId}__${index}`;
+  const avatarId = cart.avatarId;
 
-        return normalizeCartItem({
-          cart,
-          item,
-          fallbackItemKey,
-        });
-      })
-      .filter((item): item is CartDisplayItem => item !== null);
+  if (Array.isArray(cart.items)) {
+    return cart.items.map((item, index) => {
+      const itemKey = normalizeString(item.itemKey) ?? `${avatarId}__${index}`;
+
+      return normalizeCartItem({
+        avatarId,
+        itemKey,
+        item,
+      });
+    });
   }
 
-  return Object.entries(cart.items ?? {})
-    .map(([key, item]: [string, CartItemDTO]) => {
-      return normalizeCartItem({
-        cart,
-        item,
-        fallbackItemKey: key,
-      });
-    })
-    .filter((item): item is CartDisplayItem => item !== null);
+  return Object.entries(cart.items).map(([itemKey, item]) => {
+    return normalizeCartItem({
+      avatarId,
+      itemKey,
+      item,
+    });
+  });
 }
 
-export function getPrimaryCatalogImage(catalog: CatalogResponse | null): string {
-  const images = [...(catalog?.listImages ?? [])]
-    .filter((image) => image.url)
-    .sort((a, b) => {
-      if (a.displayOrder !== b.displayOrder) {
-        return a.displayOrder - b.displayOrder;
-      }
-
-      return a.id.localeCompare(b.id);
-    });
-
-  return images[0]?.url ?? "";
+export function getModelVariations(
+  catalog: CatalogResponse | null | undefined,
+): CatalogModelVariation[] {
+  return catalog?.modelVariations ?? [];
 }
 
 export function getModelVariation(
-  catalog: CatalogResponse | null,
+  catalog: CatalogResponse | null | undefined,
   modelId: string,
 ): CatalogModelVariation | null {
-  return catalog?.modelVariations.find((model) => model.id === modelId) ?? null;
+  const models = getModelVariations(catalog);
+
+  return (
+    models.find((model) => {
+      return model.id === modelId;
+    }) ?? null
+  );
 }
 
 export function getModelPrice(
-  catalog: CatalogResponse | null,
+  catalog: CatalogResponse | null | undefined,
   modelId: string,
 ): number | null {
-  const price = catalog?.list.prices.find((row) => row.modelId === modelId);
+  const model = getModelVariation(catalog, modelId);
 
-  if (!price || !Number.isFinite(price.price)) {
-    return null;
+  if (model && "price" in model && typeof model.price === "number") {
+    return model.price;
   }
 
-  return price.price;
-}
+  const price = catalog?.list.prices.find((item) => item.modelId === modelId);
 
-export function getCartDisplayItemPrice(item: CartDisplayItem): number | null {
-  const catalogPrice = getModelPrice(item.catalog, item.modelId);
-
-  if (catalogPrice !== null) {
-    return catalogPrice;
-  }
-
-  if (typeof item.price === "number" && Number.isFinite(item.price)) {
-    return item.price;
+  if (typeof price?.price === "number") {
+    return price.price;
   }
 
   return null;
 }
 
+export function getCartItemPrice(item: CartDisplayItem): number | null {
+  if (typeof item.price === "number") {
+    return item.price;
+  }
+
+  return getModelPrice(item.catalog, item.modelId);
+}
+
 export function calculateCartTotalAmount(items: CartDisplayItem[]): number {
-  return items.reduce((sum, item) => {
-    const price = getCartDisplayItemPrice(item);
+  return items.reduce((total, item) => {
+    const price = getCartItemPrice(item);
 
     if (price === null) {
-      return sum;
+      return total;
     }
 
-    return sum + price * item.qty;
+    return total + price * item.qty;
   }, 0);
+}
+
+export function getPrimaryCatalogImage(
+  catalog: CatalogResponse | null | undefined,
+): string {
+  const primaryImage = catalog?.listImages?.[0];
+
+  if (typeof primaryImage?.url === "string" && primaryImage.url !== "") {
+    return primaryImage.url;
+  }
+
+  if (typeof catalog?.list.image === "string" && catalog.list.image !== "") {
+    return catalog.list.image;
+  }
+
+  return "";
+}
+
+export function formatYen(amount: number): string {
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: "JPY",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function formatPrice(amount: number): string {
+  return formatYen(amount);
 }

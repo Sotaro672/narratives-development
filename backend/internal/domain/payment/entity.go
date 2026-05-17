@@ -292,8 +292,12 @@ func (p Payment) validate() error {
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-	if p.StripePaymentIntentID == "" {
+
+	// PaymentIntent は backend が Stripe で作成・confirm した後に入る server-managed value。
+	// 初回 pending record 作成時点ではまだ PaymentIntent が存在しないため空を許可する。
+	if p.StripePaymentIntentID == "" && p.Status != StatusPending {
 		return ErrInvalidStripePaymentIntent
 	}
+
 	return nil
 }
