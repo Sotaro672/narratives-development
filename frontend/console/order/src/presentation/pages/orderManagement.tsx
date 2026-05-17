@@ -1,188 +1,13 @@
 // frontend/console/order/src/presentation/pages/orderManagement.tsx
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import List, {
-  SortableTableHeader,
-  FilterableTableHeader,
-} from "../../../../shell/src/layout/List/List";
+import List from "../../../../shell/src/layout/List/List";
 import "../styles/order.css";
 
-import { createOrderRepository } from "../../infrastructure/repostiroty";
 import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
-
-type SortKey = "createdAt" | null;
-type SortDir = "asc" | "desc" | null;
-
-// 画面に映す値: orderId,listId,productName,tokenName,avatarName,createdAt,transfered:boolean
-type Row = {
-  orderId: string;
-  listId: string; // ✅ 列名はそのまま（表示は readableId を入れる）
-
-  // ✅ backend が解決して返す
-  productName: string;
-  tokenName: string;
-
-  // 内部キー用に保持（行キー等に使う）
-  inventoryId: string;
-
-  // ✅ 表示用（avatarId ではなく avatarName）
-  avatarName: string;
-
-  // 既存のフィルタ/詳細遷移などで必要なら保持してもOK（今回は表示に使わない）
-  avatarId: string;
-
-  createdAt: string;
-  transferred: boolean;
-};
+import { useOrderManagement } from "../hooks/useOrderManagement";
 
 export default function OrderManagementPage() {
-  const navigate = useNavigate();
-
-  const repo = useMemo(() => createOrderRepository(), []);
-
-  // ── filter (Token) ────────────────────────────────────────
-  type TokenFilterValue = "移譲済" | "未移譲";
-  const [tokenFilter, setTokenFilter] = useState<TokenFilterValue[]>([]);
-
-  const tokenOptions = useMemo(
-    () => [
-      { value: "移譲済", label: "移譲済" },
-      { value: "未移譲", label: "未移譲" },
-    ],
-    [],
-  );
-
-  // ── sort ─────────────────────────────────────────────────
-  const [activeKey, setActiveKey] = useState<SortKey>("createdAt");
-  const [direction, setDirection] = useState<SortDir>("desc");
-
-  // ── data fetch ────────────────────────────────────────────
-  const [rowsRaw, setRowsRaw] = useState<Row[]>([]);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isResetting, setIsResetting] = useState(false);
-
-  const fetchRows = async () => {
-    setIsResetting(true);
-    setErrorMsg(null);
-    try {
-      const res = await repo.listItemInventoryRows({ page: 1, perPage: 200 });
-
-      const mapped: Row[] = (res.items ?? []).map((x) => {
-        const avatarId = String((x as any).avatarId ?? "");
-
-        // ✅ repository 側で avatarName に正規化済み想定（互換のため候補も拾う）
-        const avatarName =
-          String((x as any).avatarName ?? "").trim() ||
-          String((x as any).avatar_name ?? "").trim() ||
-          "-";
-
-        return {
-          orderId: String((x as any).orderId ?? ""),
-
-          // ✅ 「リストID」列の値は listId ではなく readableId を入れる（列名はそのまま）
-          // - repository 側で listReadableId に正規化済み想定
-          // - 互換のため候補も拾う
-          listId: String(
-            (x as any).listReadableId ??
-              (x as any).listReadableID ??
-              (x as any).readableId ??
-              (x as any).readableID ??
-              "",
-          ),
-
-          inventoryId: String((x as any).inventoryId ?? ""),
-
-          // ✅ ID ではなく name を使う
-          productName: String((x as any).productName ?? ""),
-          tokenName: String((x as any).tokenName ?? ""),
-
-          avatarName,
-          avatarId,
-
-          createdAt: String((x as any).createdAt ?? ""),
-          transferred: Boolean((x as any).transferred),
-        };
-      });
-
-      setRowsRaw(mapped);
-    } catch (e: any) {
-      setRowsRaw([]);
-      setErrorMsg(e?.message ? String(e.message) : "failed_to_fetch_orders");
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchRows();
-  }, []);
-
-  // ── data (filter → sort) ──────────────────────────────────
-  const rows = useMemo(() => {
-    // 1) filter
-    let data = rowsRaw;
-
-    if (tokenFilter.length > 0) {
-      data = data.filter((r) => {
-        const label: TokenFilterValue = r.transferred ? "移譲済" : "未移譲";
-        return tokenFilter.includes(label);
-      });
-    }
-
-    // 2) sort
-    if (activeKey && direction) {
-      data = [...data].sort((a, b) => {
-        const aTime = a.createdAt;
-        const bTime = b.createdAt;
-
-        const aTs =
-          aTime && !Number.isNaN(Date.parse(aTime)) ? Date.parse(aTime) : null;
-        const bTs =
-          bTime && !Number.isNaN(Date.parse(bTime)) ? Date.parse(bTime) : null;
-
-        if (aTs === null && bTs === null) return 0;
-        if (aTs === null) return direction === "asc" ? 1 : -1;
-        if (bTs === null) return direction === "asc" ? -1 : 1;
-
-        return direction === "asc" ? aTs - bTs : bTs - aTs;
-      });
-    }
-
-    return data;
-  }, [rowsRaw, tokenFilter, activeKey, direction]);
-
-  // ── headers ──────────────────────────────────────────────
-  const headers: React.ReactNode[] = [
-    "注文ID",
-    "リストID",
-    "商品名",
-    "トークン名",
-    "アバター名",
-    <SortableTableHeader
-      key="createdAt"
-      label="注文日"
-      sortKey="createdAt"
-      activeKey={activeKey}
-      direction={activeKey === "createdAt" ? direction : null}
-      onChange={(key, dir) => {
-        setActiveKey(key as SortKey);
-        setDirection(dir as SortDir);
-      }}
-    />,
-    <FilterableTableHeader
-      key="token"
-      label="トークン"
-      options={tokenOptions}
-      selected={tokenFilter}
-      onChange={(vals) => setTokenFilter(vals as TokenFilterValue[])}
-      dialogTitle="トークンで絞り込み"
-    />,
-  ];
-
-  // 詳細ページへ遷移
-  const goDetail = (id: string) => {
-    navigate(`/order/${encodeURIComponent(id)}`);
-  };
+  const { rows, headers, errorMsg, isResetting, goDetail, reset } =
+    useOrderManagement();
 
   return (
     <div className="p-0">
@@ -192,12 +17,7 @@ export default function OrderManagementPage() {
         showCreateButton={false}
         showResetButton
         isResetting={isResetting}
-        onReset={() => {
-          setTokenFilter([]);
-          setActiveKey("createdAt");
-          setDirection("desc");
-          void fetchRows();
-        }}
+        onReset={reset}
       >
         {errorMsg ? (
           <tr>
@@ -227,14 +47,11 @@ export default function OrderManagementPage() {
                 </a>
               </td>
 
-              {/* ✅ 列名は「リストID」のまま、値だけ readableId を表示 */}
               <td>{o.listId || "-"}</td>
 
-              {/* ✅ ID ではなく name を表示 */}
               <td>{o.productName || "-"}</td>
               <td>{o.tokenName || "-"}</td>
 
-              {/* ✅ avatarId ではなく avatarName */}
               <td>{o.avatarName || "-"}</td>
 
               <td>{safeDateLabelJa(o.createdAt, "-")}</td>

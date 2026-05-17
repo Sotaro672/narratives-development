@@ -204,7 +204,6 @@ func (r *NameResolver) ResolveMemberName(ctx context.Context, uid string) string
 		return ""
 	}
 
-	uid = stringTrim(uid)
 	if uid == "" {
 		return ""
 	}
@@ -322,30 +321,4 @@ func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID st
 		return ""
 	}
 	return name
-}
-
-func stringTrim(s string) string {
-	start := 0
-	end := len(s)
-
-	for start < end {
-		switch s[start] {
-		case ' ', '\t', '\r', '\n':
-			start++
-		default:
-			goto trimEnd
-		}
-	}
-
-trimEnd:
-	for end > start {
-		switch s[end-1] {
-		case ' ', '\t', '\r', '\n':
-			end--
-		default:
-			return s[start:end]
-		}
-	}
-
-	return s[start:end]
 }

@@ -18,76 +18,131 @@ export type PageResult<T> = {
 };
 
 export type ShippingSnapshot = {
-  ZipCode: string;
-  State: string;
-  City: string;
-  Street: string;
-  Street2: string;
-  Country: string;
-};
-
-export type BillingSnapshot = {
-  Last4: string;
-  CardHolderName: string;
-};
-
-export type OrderItemColor = {
-  name: string;
-  rgb: number;
+  zipCode?: string;
+  state?: string;
+  city?: string;
+  street?: string;
+  street2?: string;
+  country?: string;
 };
 
 /**
  * /orders/{id} の items 1件
- * 正とするレスポンス構造に厳密に合わせる
+ *
+ * NOTE:
+ * 注文詳細画面では /orders/{id} は配送先などの order-level 情報取得に使い、
+ * item 表示は /orders/items のレスポンスを正として組み立てる。
  */
 export type OrderItemDTO = {
-  modelId: string;
-  inventoryId: string;
-  size: string;
-  modelNumber: string;
-  color: OrderItemColor;
-  rgb: number;
-  listId: string;
-  qty: number;
-  price: number;
-  transferred: boolean;
+  modelId?: string;
+  inventoryId?: string;
+
+  kind?: string;
+  size?: string;
+  color?: string;
+  rgb?: string | number;
+  modelNumber?: string;
+
+  volumeValue?: number;
+  volumeUnit?: string;
+
+  listId?: string;
+  qty?: number;
+  price?: number;
+  transferred?: boolean;
+  transferredAt?: string;
 };
 
 export type Order = {
   id: string;
-  userId: string;
-  avatarId: string;
-  cartId: string;
-  userName: string;
+  userId?: string;
+  avatarId?: string;
+  cartId?: string;
+  userName?: string;
+  avatarName?: string;
   paid: boolean;
-  createdAt: string; // RFC3339
-  shippingSnapshot: ShippingSnapshot;
-  billingSnapshot: BillingSnapshot;
-  items: OrderItemDTO[];
+  createdAt?: string; // RFC3339
+  shippingSnapshot?: ShippingSnapshot;
+  items?: OrderItemDTO[];
 };
 
 /**
  * /orders/items の 1行DTO（フラット）
- * 名揺れを持たず、/orders/{id} の正スキーマに揃える
+ *
+ * 正とするレスポンス:
+ * {
+ *   orderId,
+ *   userId,
+ *   avatarId,
+ *   cartId,
+ *   avatarName,
+ *   paid,
+ *   createdAt,
+ *   inventoryId,
+ *   productBlueprintId,
+ *   tokenBlueprintId,
+ *   productName,
+ *   tokenName,
+ *   listReadableId,
+ *   modelId,
+ *   kind,
+ *   modelNumber,
+ *   size?,
+ *   color?,
+ *   rgb?,
+ *   volumeValue?,
+ *   volumeUnit?,
+ *   qty,
+ *   price,
+ *   transferred,
+ *   transferredAt?
+ * }
  */
 export type OrderItemInventoryRowDTO = {
   orderId: string;
-  userId: string;
-  avatarId: string;
-  cartId: string;
-  userName: string;
+
+  userId?: string;
+  avatarId?: string;
+  cartId?: string;
+  avatarName?: string;
+
   paid: boolean;
-  createdAt: string; // RFC3339(UTC)
-  modelId: string;
+  createdAt?: string; // RFC3339(UTC)
+
   inventoryId: string;
-  size: string;
-  modelNumber: string;
-  color: OrderItemColor;
-  rgb: number;
-  listId: string;
-  qty: number;
-  price: number;
+
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+
+  productName?: string;
+  tokenName?: string;
+
+  listReadableId?: string;
+
+  modelId?: string;
+
+  kind?: string;
+  size?: string;
+  color?: string;
+  rgb?: string | number;
+  modelNumber?: string;
+
+  volumeValue?: number;
+  volumeUnit?: string;
+
+  categoryId?: string;
+  categoryCode?: string;
+  categoryNameJa?: string;
+  categoryNameEn?: string;
+  categoryKind?: string;
+  categoryPath?: string[];
+  categoryFields?: Record<string, any>;
+
+  qty?: number;
+  price?: number;
+
   transferred: boolean;
+  transferredAt?: string;
 };
 
 export type InventoryIDDTO = {
@@ -121,18 +176,23 @@ function buildQuery(
   params: Record<string, string | number | boolean | undefined>,
 ): string {
   const sp = new URLSearchParams();
+
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined) continue;
+
     const s = String(v);
     if (s === "") continue;
+
     sp.set(k, s);
   }
+
   const qs = sp.toString();
   return qs ? `?${qs}` : "";
 }
 
 function isLikelyHtml(text: string): boolean {
   const t = text.trimStart();
+
   return (
     t.startsWith("<!DOCTYPE html") ||
     t.startsWith("<html") ||
@@ -142,16 +202,20 @@ function isLikelyHtml(text: string): boolean {
 
 async function readErrorMessage(res: Response): Promise<string> {
   const ct = res.headers.get("content-type") ?? "";
+
   try {
     if (ct.includes("application/json")) {
       const j: any = await res.json();
       if (j?.error) return String(j.error);
       return `${res.status} ${res.statusText}`;
     }
+
     const t = await res.text();
+
     if (isLikelyHtml(t)) {
       return `API returned HTML (not JSON). Check API_BASE/rewrite/auth. status=${res.status}`;
     }
+
     return t ? t.slice(0, 200) : `${res.status} ${res.statusText}`;
   } catch {
     return `${res.status} ${res.statusText}`;
@@ -167,10 +231,15 @@ async function requestJSON<T>(
 
   const headers = new Headers(init?.headers ?? {});
   headers.set("Accept", "application/json");
-  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
 
   for (const [k, v] of Object.entries(auth)) {
-    if (!headers.has(k)) headers.set(k, v);
+    if (!headers.has(k)) {
+      headers.set(k, v);
+    }
   }
 
   const res = await fetcher(url, { ...init, headers });
@@ -181,14 +250,19 @@ async function requestJSON<T>(
   }
 
   const ct = res.headers.get("content-type") ?? "";
+
   if (!ct.includes("application/json")) {
     const t = await res.text();
+
     if (isLikelyHtml(t)) {
       throw new Error(
         `API returned HTML (not JSON). Most likely wrong API_BASE or hosting rewrite. url=${url}`,
       );
     }
-    throw new Error(`API returned non-JSON response. url=${url} content-type=${ct}`);
+
+    throw new Error(
+      `API returned non-JSON response. url=${url} content-type=${ct}`,
+    );
   }
 
   return (await res.json()) as T;
@@ -212,7 +286,9 @@ export interface OrderRepository {
  * - cfg.baseUrl が指定された場合のみ例外的に上書きする
  * - 認証ヘッダ付与は requestJSON 内で getAuthHeaders() に集約
  */
-export function createOrderRepository(cfg: RepositoryConfig = {}): OrderRepository {
+export function createOrderRepository(
+  cfg: RepositoryConfig = {},
+): OrderRepository {
   const fetcher = cfg.fetcher ?? fetch;
   const resolvedBaseUrl = (cfg.baseUrl ?? API_BASE).replace(/\/+$/g, "");
 
@@ -243,6 +319,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/items${qs}`);
+
       return requestJSON<PageResult<OrderItemInventoryRowDTO>>(fetcher, url, {
         method: "GET",
       });
@@ -261,6 +338,7 @@ export function createOrderRepository(cfg: RepositoryConfig = {}): OrderReposito
       });
 
       const url = buildUrl(`/orders/inventory-ids${qs}`);
+
       return requestJSON<PageResult<InventoryIDDTO>>(fetcher, url, {
         method: "GET",
       });

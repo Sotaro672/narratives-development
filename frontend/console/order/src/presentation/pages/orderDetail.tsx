@@ -1,6 +1,4 @@
-// frontend/order/src/pages/orderDetail.tsx
-import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+// frontend/console/order/src/presentation/pages/orderDetail.tsx
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
@@ -9,11 +7,6 @@ import {
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
 
-import {
-  createOrderRepository,
-  Order,
-  OrderItemInventoryRowDTO,
-} from "../../infrastructure/repostiroty";
 import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
 
 // RGB utility
@@ -22,227 +15,95 @@ import {
   rgbIntToHex,
 } from "../../../../shell/src/shared/util/color";
 
-// 金額フォーマット
-const formatJPY = (n: number | null | undefined): string => {
-  const v = typeof n === "number" && Number.isFinite(n) ? n : 0;
-  return `¥${v.toLocaleString()}`;
-};
+import {
+  formatJPY,
+  useOrderDetail,
+  OrderDetailItemDTO,
+} from "../hooks/useOrderDetail";
 
-type OrderDetailDTO = {
-  id: string;
-
-  userName?: string;
-  avatarName?: string;
-
-  cartId?: string;
-  paid: boolean;
-  createdAt?: string;
-
-  shippingSnapshot?: {
-    zipCode?: string;
-    state?: string;
-    city?: string;
-    street?: string;
-    street2?: string;
-    country?: string;
-    [k: string]: any;
-  };
-
-  billingSnapshot?: {
-    [k: string]: any;
-  };
-
-  items?: Array<{
-    size?: string;
-    color?: string;
-    rgb?: string;
-    modelNumber?: string;
-
-    productName?: string;
-    tokenName?: string;
-
-    listId?: string;
-
-    qty?: number;
-    price?: number;
-    transferred: boolean;
-    transferredAt?: string;
-    [k: string]: any;
-  }>;
-};
-
-// 文字列 best-effort で拾う
-function pickString(obj: any, keys: string[]): string {
-  if (!obj || typeof obj !== "object") return "";
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (typeof v === "string" && v.trim() !== "") return v.trim();
-  }
-  return "";
+function isAlcoholItem(it: OrderDetailItemDTO): boolean {
+  return (
+    String(it.kind ?? "").trim() === "alcohol" ||
+    String(it.categoryKind ?? "").trim() === "alcohol" ||
+    String(it.categoryCode ?? "").trim().startsWith("alcohol.")
+  );
 }
 
-// Order(= /orders/{id}) をベースに、/orders/items の “許可された items” だけで items を作り直す
-function buildDetailFromAllowedItems(
-  base: Order,
-  allowedRows: OrderItemInventoryRowDTO[],
-): OrderDetailDTO {
-  const byOrder = allowedRows.filter(
-    (r) => String((r as any).orderId ?? "") === String((base as any).id ?? ""),
-  );
+function getCategoryFieldValue(
+  it: OrderDetailItemDTO,
+  key: string,
+): unknown {
+  const fields = it.categoryFields;
 
-  const items = byOrder.map((r) => ({
-    size: (r as any).size ?? "",
-    color: (r as any).color ?? "",
-    rgb: (r as any).rgb ?? "",
-    modelNumber: (r as any).modelNumber ?? "",
+  if (!fields || typeof fields !== "object") {
+    return undefined;
+  }
 
-    productName: (r as any).productName ?? "",
-    tokenName: (r as any).tokenName ?? "",
+  return fields[key];
+}
 
-    listId: String(
-      (r as any).listReadableId ??
-        (r as any).listReadableID ??
-        (r as any).readableId ??
-        (r as any).readableID ??
-        "",
-    ),
+function hasDisplayValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  return true;
+}
 
-    qty:
-      typeof (r as any).qty === "number"
-        ? (r as any).qty
-        : Number((r as any).qty ?? 0) || 0,
-    price:
-      typeof (r as any).price === "number"
-        ? (r as any).price
-        : Number((r as any).price ?? 0) || 0,
-    transferred: Boolean((r as any).transferred),
-    transferredAt: (r as any).transferredAt ?? "",
-  }));
+function formatDisplayValue(value: unknown, unit?: string): string {
+  if (!hasDisplayValue(value)) {
+    return "-";
+  }
 
-  const userNameFromRows = pickString(byOrder?.[0], ["userName", "user_name"]);
-  const userNameFromBase = pickString(base as any, ["userName", "user_name"]);
-  const userName = userNameFromRows || userNameFromBase || "";
+  if (Array.isArray(value)) {
+    const joined = value
+      .map((v) => String(v ?? "").trim())
+      .filter((v) => v !== "")
+      .join(", ");
 
-  const avatarNameFromRows = pickString(byOrder?.[0], [
-    "avatarName",
-    "avatar_name",
-  ]);
-  const avatarNameFromBase = pickString(base as any, [
-    "avatarName",
-    "avatar_name",
-  ]);
-  const avatarName = avatarNameFromRows || avatarNameFromBase || "";
+    return joined || "-";
+  }
 
-  return {
-    id: (base as any).id,
-    userName,
-    avatarName,
+  if (typeof value === "boolean") {
+    return value ? "あり" : "なし";
+  }
 
-    cartId: (base as any).cartId,
-    paid: Boolean((base as any).paid),
-    createdAt: (base as any).createdAt,
-    shippingSnapshot: {
-      zipCode: (base as any)?.shippingSnapshot?.zipCode ?? "",
-      state: (base as any)?.shippingSnapshot?.state ?? "",
-      city: (base as any)?.shippingSnapshot?.city ?? "",
-      street: (base as any)?.shippingSnapshot?.street ?? "",
-      street2: (base as any)?.shippingSnapshot?.street2 ?? "",
-      country: (base as any)?.shippingSnapshot?.country ?? "",
-    },
-    billingSnapshot: (base as any).billingSnapshot,
-    items,
-  };
+  const text = String(value);
+
+  if (unit && text.trim() !== "") {
+    return `${text}${unit}`;
+  }
+
+  return text;
+}
+
+function formatVolume(it: OrderDetailItemDTO): string {
+  if (it.volumeValue === null || it.volumeValue === undefined) {
+    return "-";
+  }
+
+  const unit = String(it.volumeUnit ?? "").trim();
+
+  return unit ? `${it.volumeValue}${unit}` : String(it.volumeValue);
 }
 
 export default function OrderDetail() {
-  const navigate = useNavigate();
-  const { orderId } = useParams<{ orderId: string }>();
+  const {
+    order,
+    loading,
+    error,
 
-  const repo = React.useMemo(() => createOrderRepository(), []);
+    items,
+    quantity,
+    totalPrice,
+    anyTransferred,
+    createdAt,
+    shipping,
+    userName,
+    avatarName,
+    listIds,
+    pageTitle,
 
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [order, setOrder] = React.useState<OrderDetailDTO | null>(null);
-
-  // fetch order
-  React.useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      const id = String(orderId ?? "").trim();
-      if (!id) {
-        setError("orderId is missing");
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        // 1) /orders/{id} でベース情報（配送先や課金情報など）を取得
-        const base = (await repo.getById(id)) as unknown as Order;
-
-        // 2) /orders/items?id=... で “許可された item 行” だけ取得して detail を組み立て
-        const rowsRes = await repo.listItemInventoryRows({
-          id,
-          page: 1,
-          perPage: 500,
-        });
-
-        const detail = buildDetailFromAllowedItems(base, rowsRes.items ?? []);
-
-        if (cancelled) return;
-        setOrder(detail);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (cancelled) return;
-        setLoading(false);
-      }
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [orderId, repo]);
-
-  // 戻るは -1 ではなく、注文一覧（本モジュールのルート絶対）へ
-  const onBack = React.useCallback(() => {
-    navigate("/order");
-  }, [navigate]);
-
-  // derived
-  const items = order?.items ?? [];
-  const quantity = items.reduce(
-    (sum, it) => sum + (Number(it?.qty ?? 0) || 0),
-    0,
-  );
-  const totalPrice = items.reduce(
-    (sum, it) =>
-      sum + (Number(it?.price ?? 0) || 0) * (Number(it?.qty ?? 0) || 0),
-    0,
-  );
-
-  const anyTransferred = items.some((it) => Boolean(it?.transferred));
-  const createdAt = safeDateLabelJa(order?.createdAt, "-");
-
-  const shipping = order?.shippingSnapshot;
-
-  // right column (購入者情報)
-  const userName = String(order?.userName ?? "").trim() || "-";
-  const avatarName = String(order?.avatarName ?? "").trim() || "-";
-
-  // リストID（旧 readableId）: 複数itemsがある場合は重複排除してカンマ区切り
-  const listIds = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) {
-      const v = String(it?.listId ?? "").trim();
-      if (v) set.add(v);
-    }
-    return Array.from(set);
-  }, [items]);
+    onBack,
+  } = useOrderDetail();
 
   const left = (
     <Card className="mt-4">
@@ -385,13 +246,22 @@ export default function OrderDetail() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {items.map((it, idx) => {
+                  {items.map((it: OrderDetailItemDTO, idx: number) => {
                     const transferredAt = safeDateLabelJa(it.transferredAt, "-");
 
                     const qty = Number(it.qty ?? 0) || 0;
                     const price = Number(it.price ?? 0) || 0;
 
                     const tokenLabel = it.transferred ? "移譲済" : "未移譲";
+                    const alcohol = isAlcoholItem(it);
+
+                    const vintage = getCategoryFieldValue(it, "vintage");
+                    const region = getCategoryFieldValue(it, "region");
+                    const material = getCategoryFieldValue(it, "material");
+                    const alcoholContent = getCategoryFieldValue(
+                      it,
+                      "alcoholContent",
+                    );
 
                     return (
                       <Card key={idx}>
@@ -403,41 +273,96 @@ export default function OrderDetail() {
                         <CardContent className="pt-0">
                           <table className="w-full text-sm text-left">
                             <tbody>
-                              <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  サイズ
-                                </th>
-                                <td className="py-2 text-left">{it.size ?? "-"}</td>
-                              </tr>
+                              {alcohol ? (
+                                <>
+                                  <tr>
+                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                      容量
+                                    </th>
+                                    <td className="py-2 text-left">
+                                      {formatVolume(it)}
+                                    </td>
+                                  </tr>
 
-                              <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
-                                  カラー
-                                </th>
-                                <td className="py-2 text-left">
-                                  {(() => {
-                                    const name = String(it.color ?? "").trim();
-                                    const rgbInt = coerceRgbInt(it.rgb);
-                                    const hex = rgbIntToHex(rgbInt);
+                                  <tr>
+                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                      ヴィンテージ
+                                    </th>
+                                    <td className="py-2 text-left">
+                                      {formatDisplayValue(vintage)}
+                                    </td>
+                                  </tr>
 
-                                    if (!name && !hex) return "-";
+                                  <tr>
+                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                      地域・産地
+                                    </th>
+                                    <td className="py-2 text-left">
+                                      {formatDisplayValue(region)}
+                                    </td>
+                                  </tr>
 
-                                    return (
-                                      <div className="flex items-center gap-2">
-                                        {hex ? (
-                                          <span
-                                            className="inline-block h-4 w-4 rounded border"
-                                            style={{ backgroundColor: hex }}
-                                            aria-label={`color ${hex}`}
-                                            title={hex}
-                                          />
-                                        ) : null}
-                                        <span>{name || "-"}</span>
-                                      </div>
-                                    );
-                                  })()}
-                                </td>
-                              </tr>
+                                  <tr>
+                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                      素材
+                                    </th>
+                                    <td className="py-2 text-left">
+                                      {formatDisplayValue(material)}
+                                    </td>
+                                  </tr>
+
+                                  <tr>
+                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                      アルコール度数
+                                    </th>
+                                    <td className="py-2 text-left">
+                                      {formatDisplayValue(alcoholContent, "%")}
+                                    </td>
+                                  </tr>
+                                </>
+                              ) : (
+                                <>
+                                  <tr>
+                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                      サイズ
+                                    </th>
+                                    <td className="py-2 text-left">
+                                      {it.size ?? "-"}
+                                    </td>
+                                  </tr>
+
+                                  <tr>
+                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                      カラー
+                                    </th>
+                                    <td className="py-2 text-left">
+                                      {(() => {
+                                        const name = String(
+                                          it.color ?? "",
+                                        ).trim();
+                                        const rgbInt = coerceRgbInt(it.rgb);
+                                        const hex = rgbIntToHex(rgbInt);
+
+                                        if (!name && !hex) return "-";
+
+                                        return (
+                                          <div className="flex items-center gap-2">
+                                            {hex ? (
+                                              <span
+                                                className="inline-block h-4 w-4 rounded border"
+                                                style={{ backgroundColor: hex }}
+                                                aria-label={`color ${hex}`}
+                                                title={hex}
+                                              />
+                                            ) : null}
+                                            <span>{name || "-"}</span>
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  </tr>
+                                </>
+                              )}
 
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
@@ -456,6 +381,7 @@ export default function OrderDetail() {
                                   {it.productName ?? "-"}
                                 </td>
                               </tr>
+
                               <tr>
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                                   トークン名
@@ -593,11 +519,7 @@ export default function OrderDetail() {
   );
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={`注文詳細：${order?.id ?? orderId ?? "不明ID"}`}
-      onBack={onBack}
-    >
+    <PageStyle layout="grid-2" title={pageTitle} onBack={onBack}>
       {[left, right]}
     </PageStyle>
   );

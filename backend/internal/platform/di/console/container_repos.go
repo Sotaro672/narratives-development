@@ -22,12 +22,6 @@ type repos struct {
 
 	listRepoFS *fs.ListRepositoryFS
 
-	// /lists/{listId}/images/{imageId}
-	//
-	// Firebase Storage migration policy:
-	// - frontend が Firebase Storage へ直接 upload する
-	// - backend は GCS signed URL / GCS object / bucket を扱わない
-	// - backend は Firestore の list image record のみ保存・取得・削除する
 	listImageRecordRepo *fs.ListImageRepositoryFS
 
 	memberRepo *fs.MemberRepositoryFS

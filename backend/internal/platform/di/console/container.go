@@ -152,9 +152,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			InvRows:      q.inventoryQuery,
 			InvBlueprint: invBlueprint,
 
-			PBName:     repos.productBlueprintRepo,
-			TBName:     repos.tokenBlueprintRepo,
-			AvatarName: repos.avatarRepo,
+			PBName:           repos.productBlueprintRepo,
+			ProductBlueprint: repos.productBlueprintRepo,
+			TBName:           repos.tokenBlueprintRepo,
+			AvatarName:       repos.avatarRepo,
 
 			ListReadable:  repos.listRepoFS,
 			ModelResolver: res.nameResolver,
