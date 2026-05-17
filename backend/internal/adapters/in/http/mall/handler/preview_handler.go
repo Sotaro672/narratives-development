@@ -201,21 +201,40 @@ func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 期待値：productBlueprint は返さず patch のみ
 	data := map[string]any{
-		"productId":             info.ProductID,
-		"modelId":               info.ModelID,
-		"modelNumber":           info.ModelNumber,
-		"size":                  info.Size,
-		"color":                 info.Color,
-		"rgb":                   info.RGB,
-		"measurements":          info.Measurements,
-		"brandName":             info.BrandName,
-		"companyName":           info.CompanyName,
-		"productBlueprintId":    info.ProductBlueprintID,
-		"productBlueprintPatch": info.ProductBlueprintPatch,
-		"token":                 info.Token,
-		"owner":                 info.Owner,
-		"transfers":             info.Transfers,
-		"tokenBlueprintPatch":   tbDTO,
+		"productId":   info.ProductID,
+		"modelId":     info.ModelID,
+		"modelKind":   info.ModelKind,
+		"modelNumber": info.ModelNumber,
+		"modelLabel":  info.ModelLabel,
+
+		// apparel
+		"size":         info.Size,
+		"color":        info.Color,
+		"rgb":          info.RGB,
+		"measurements": info.Measurements,
+
+		// alcohol
+		"volumeValue": info.VolumeValue,
+		"volumeUnit":  info.VolumeUnit,
+
+		// category / productBlueprint
+		"productBlueprintId":           info.ProductBlueprintID,
+		"productBlueprintCategoryCode": info.ProductBlueprintCategoryCode,
+		"productBlueprintCategoryKind": info.ProductBlueprintCategoryKind,
+		"productBlueprintCategoryName": info.ProductBlueprintCategoryName,
+		"productBlueprintCategory":     info.ProductBlueprintCategory,
+		"productBlueprintPatch":        info.ProductBlueprintPatch,
+		"categoryInputSchema":          info.CategoryInputSchema,
+
+		// display
+		"brandName":   info.BrandName,
+		"companyName": info.CompanyName,
+
+		// token / owner / transfer
+		"token":               info.Token,
+		"owner":               info.Owner,
+		"transfers":           info.Transfers,
+		"tokenBlueprintPatch": tbDTO,
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})

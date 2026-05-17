@@ -2,9 +2,9 @@
 import { useCallback, useState } from "react";
 
 import Layout from "../components/layout/Layout";
-import ScanResultCard from "../features/scan-result/components/ScanResultCard";
+import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
 import { useMobilePortrait } from "../features/catalog/presentation/hooks/useMobilePortrait";
-import { useScanResultPage } from "../features/scan-result/hooks/useScanResultPage";
+import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
 
 import "../styles/scan-result-page.css";
 

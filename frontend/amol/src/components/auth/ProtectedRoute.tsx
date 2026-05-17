@@ -148,10 +148,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const location = useLocation();
 
   const backendUrl = useMemo(() => {
-    return (
-      import.meta.env.VITE_API_BASE_URL ||
-      ""
-    );
+    return import.meta.env.VITE_API_BASE_URL || "";
   }, []);
 
   const [authState, setAuthState] = useState<AuthState>({
@@ -166,6 +163,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   });
 
   const isAvatarPage = location.pathname === "/avatar";
+  const isListsPage = location.pathname === "/lists" || location.pathname === "/rooms";
 
   useEffect(() => {
     const auth = getAuth();
@@ -196,7 +194,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
-      if (isAvatarPage) {
+      if (isAvatarPage || isListsPage) {
         setAvatarStatus({
           status: {
             hasAvatar: true,
@@ -233,7 +231,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return () => {
       cancelled = true;
     };
-  }, [authState.loading, authState.user, backendUrl, isAvatarPage]);
+  }, [authState.loading, authState.user, backendUrl, isAvatarPage, isListsPage]);
 
   if (authState.loading) {
     return null;
@@ -247,12 +245,8 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return null;
   }
 
-  if (!isAvatarPage && !avatarStatus.status?.hasAvatar) {
-    const params = new URLSearchParams();
-
-    params.set("from", `${location.pathname}${location.search}`);
-
-    return <Navigate to={`/avatar?${params.toString()}`} replace />;
+  if (!isListsPage && !avatarStatus.status?.hasAvatar) {
+    return <Navigate to="/lists" replace />;
   }
 
   return <>{children}</>;

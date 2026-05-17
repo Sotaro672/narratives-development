@@ -226,7 +226,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// /mall/me/avatar 用 Repo（uid -> avatarId）
 	c.MeAvatarRepo = mallfs.NewMeAvatarRepo(fsClient)
 
-	// /mall/me/setup-status 用 Repo（existence checks）
+	// /mall/me/setup-status 用 Repo（Firestore existence checks）
 	c.SetupStatusRepo = mallfs.NewSetupStatusRepoFirestore(fsClient)
 
 	// List repo
@@ -402,7 +402,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
-		// PreviewQuery: NewPreviewQuery を唯一の出入り口にして全配線を集中
+		// PreviewQuery: model 表示情報は NameResolver.ResolveModelResolved に統一する。
 		pbReader := mallfs.NewPreviewProductBlueprintReaderFS(fsClient, productBlueprintRepoFS)
 		productReader := mallfs.NewPreviewProductReaderFS(fsClient)
 
@@ -415,6 +415,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			productReader,
 			modelRepoFS,
 			pbReader,
+			mallquery.WithNameResolver(c.NameResolver),
 			mallquery.WithTokenRepo(tokenReader),
 			mallquery.WithTokenBlueprintRepo(tokenBlueprintRepo),
 			mallquery.WithOwnerResolveQuery(c.OwnerResolveQ),

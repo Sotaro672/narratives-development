@@ -1,16 +1,20 @@
-// backend\internal\application\query\mall\preview_query.go
+// backend/internal/application/query/mall/preview_query.go
 package mall
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
+	appresolver "narratives/internal/application/resolver"
+	commondom "narratives/internal/domain/common"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 	pbdom "narratives/internal/domain/productBlueprint"
+	pbcatdom "narratives/internal/domain/productBlueprintCategory"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -39,7 +43,19 @@ type ProductReader interface {
 }
 
 // ModelVariationReader is a minimal read port for model variation.
-// We need: modelId(=variationId想定) -> variation -> modelNumber/size/color/rgb/measurements.
+// We need: modelId(=variationId想定) -> variation -> model display fields.
+//
+// apparel:
+//   - modelNumber
+//   - size
+//   - color
+//   - rgb
+//   - measurements
+//
+// alcohol:
+//   - modelNumber
+//   - volumeValue
+//   - volumeUnit
 type ModelVariationReader interface {
 	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 }
@@ -102,6 +118,9 @@ type PreviewQuery struct {
 	ModelRepo            ModelVariationReader
 	ProductBlueprintRepo ProductBlueprintReader
 
+	// Optional: modelId -> apparel/alcohol display fields
+	NameResolver *appresolver.NameResolver
+
 	// Optional: tokens/{productId} を読む（nil なら token は返さない）
 	TokenRepo TokenReader
 
@@ -126,6 +145,12 @@ type PreviewQuery struct {
 // ------------------------------------------------------------
 
 type PreviewQueryOption func(q *PreviewQuery)
+
+func WithNameResolver(r *appresolver.NameResolver) PreviewQueryOption {
+	return func(q *PreviewQuery) {
+		q.NameResolver = r
+	}
+}
 
 func WithTokenRepo(r TokenReader) PreviewQueryOption {
 	return func(q *PreviewQuery) {
@@ -187,6 +212,7 @@ func NewPreviewQuery(
 		ProductRepo:          productRepo,
 		ModelRepo:            modelRepo,
 		ProductBlueprintRepo: pbRepo,
+		NameResolver:         nil,
 		TokenRepo:            nil,
 		TokenBlueprintRepo:   nil,
 		OwnerResolveQ:        nil,
@@ -233,50 +259,11 @@ func (q *PreviewQuery) ResolveModelIDByProductID(
 	return modelID, nil
 }
 
-// ResolveModelMetaByModelID resolves model metadata from modelId.
-// model.Color.RGB は int が正なので、戻り値も int で返します。
-func (q *PreviewQuery) ResolveModelMetaByModelID(
-	ctx context.Context,
-	modelID string,
-) (modelNumber string, size string, colorName string, rgb int, err error) {
-	if q == nil || q.ModelRepo == nil {
-		return "", "", "", 0, ErrPreviewQueryNotConfigured
-	}
-
-	id := modelID
-	if id == "" {
-		return "", "", "", 0, ErrInvalidModelID
-	}
-
-	v, err := q.ModelRepo.GetModelVariationByID(ctx, id)
-	if err != nil {
-		return "", "", "", 0, err
-	}
-	if v == nil || *v == nil {
-		return "", "", "", 0, ErrModelVariationNotFound
-	}
-
-	apparelVariation, ok := toPreviewApparelModelVariation(*v)
-	if !ok {
-		return "", "", "", 0, ErrModelVariationNotFound
-	}
-
-	modelNumber = apparelVariation.ModelNumber
-	size = apparelVariation.Size
-	colorName = apparelVariation.Color.Name
-	rgb = apparelVariation.Color.RGB
-
-	return modelNumber, size, colorName, rgb, nil
-}
-
 // ResolveModelInfoByProductID resolves modelId AND variation fields
-// (modelNumber/size/color/rgb/measurements) from productId,
-// and additionally resolves productBlueprintId + (productBlueprint entity + patch) by modelId.
-// and optionally resolves tokens/{productId} if TokenRepo is configured.
-// and optionally resolves tokenBlueprint patch if TokenBlueprintRepo is configured and tokenBlueprintId exists.
-// and optionally resolves owner (tokens.toAddress -> avatarId/brandId + (avatarName/brandName)) if OwnerResolveQ is configured.
-// and optionally resolves brandId->brandName, companyId->companyName (display-only enrichment) if BrandNameRepo/CompanyNameRepo are configured.
-// and optionally resolves transfers (mintAddress -> []transfer) if TransferRepo is configured.
+// from productId.
+// It supports both apparel and alcohol:
+// - apparel: modelNumber / size / color / rgb / measurements
+// - alcohol: modelNumber / volumeValue / volumeUnit
 func (q *PreviewQuery) ResolveModelInfoByProductID(
 	ctx context.Context,
 	productID string,
@@ -308,21 +295,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, ErrModelVariationNotFound
 	}
 
-	apparelVariation, ok := toPreviewApparelModelVariation(*v)
-	if !ok {
-		return nil, ErrModelVariationNotFound
-	}
-
-	out := &dto.PreviewModelInfo{
-		ProductID:    id,
-		ModelID:      modelID,
-		ModelNumber:  apparelVariation.ModelNumber,
-		Size:         apparelVariation.Size,
-		Color:        apparelVariation.Color.Name,
-		RGB:          apparelVariation.Color.RGB,
-		Measurements: cloneMeasurements(apparelVariation.Measurements),
-	}
-
 	// modelId -> productBlueprintId -> productBlueprint(全フィールド) + patch
 	if q.ProductBlueprintRepo == nil {
 		return nil, ErrProductBlueprintRepoNotConfigured
@@ -346,9 +318,29 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, err
 	}
 
-	out.ProductBlueprintID = pbID
-	out.ProductBlueprint = &pb
-	out.ProductBlueprintPatch = &patch
+	category := pb.ProductBlueprintCategory
+
+	out := &dto.PreviewModelInfo{
+		ProductID: productID,
+		ModelID:   modelID,
+
+		ProductBlueprintCategoryCode: category.Code,
+		ProductBlueprintCategoryKind: category.Kind,
+		ProductBlueprintCategoryName: category.NameJa,
+		ProductBlueprintCategory:     &category,
+
+		ProductBlueprintID:    pbID,
+		ProductBlueprint:      &pb,
+		ProductBlueprintPatch: &patch,
+	}
+
+	if schema, ok := pbcatdom.GetCategoryInputSchema(category.Code); ok {
+		out.CategoryInputSchema = &schema
+	}
+
+	if err := q.fillResolvedModelInfo(ctx, out, modelID, *v, category.Kind); err != nil {
+		return nil, err
+	}
 
 	// tokens/{productId}（存在すれば付与）
 	if q.TokenRepo != nil {
@@ -464,6 +456,142 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 // Helpers
 // ------------------------------------------------------------
 
+func (q *PreviewQuery) fillResolvedModelInfo(
+	ctx context.Context,
+	out *dto.PreviewModelInfo,
+	modelID string,
+	mv modeldom.ModelVariation,
+	categoryKind commondom.ProductCategoryKind,
+) error {
+	if out == nil {
+		return ErrPreviewQueryNotConfigured
+	}
+
+	if q != nil && q.NameResolver != nil {
+		resolved := q.NameResolver.ResolveModelResolved(ctx, modelID)
+		if resolved.Kind != "" || resolved.ModelNumber != "" {
+			out.ModelKind = commondom.ProductCategoryKind(resolved.Kind)
+			out.ModelNumber = resolved.ModelNumber
+			out.ModelLabel = buildPreviewModelLabel(
+				resolved.Kind,
+				resolved.ModelNumber,
+				resolved.Size,
+				resolved.Color,
+				resolved.VolumeValue,
+				resolved.VolumeUnit,
+			)
+
+			out.Size = resolved.Size
+			out.Color = resolved.Color
+			if resolved.RGB != nil {
+				out.RGB = *resolved.RGB
+			}
+
+			out.VolumeValue = resolved.VolumeValue
+			out.VolumeUnit = resolved.VolumeUnit
+
+			if resolved.Kind == "apparel" {
+				if apparelVariation, ok := toPreviewApparelModelVariation(mv); ok {
+					out.Measurements = cloneMeasurements(apparelVariation.Measurements)
+				}
+			}
+
+			return nil
+		}
+	}
+
+	switch string(categoryKind) {
+	case "alcohol":
+		alcoholVariation, ok := toPreviewAlcoholModelVariation(mv)
+		if !ok {
+			return ErrModelVariationNotFound
+		}
+
+		value := alcoholVariation.Volume.Value
+
+		out.ModelKind = categoryKind
+		out.ModelNumber = alcoholVariation.ModelNumber
+		out.VolumeValue = &value
+		out.VolumeUnit = alcoholVariation.Volume.Unit
+		out.ModelLabel = buildPreviewModelLabel(
+			"alcohol",
+			alcoholVariation.ModelNumber,
+			"",
+			"",
+			&value,
+			alcoholVariation.Volume.Unit,
+		)
+
+		return nil
+
+	default:
+		apparelVariation, ok := toPreviewApparelModelVariation(mv)
+		if !ok {
+			return ErrModelVariationNotFound
+		}
+
+		rgb := apparelVariation.Color.RGB
+
+		out.ModelKind = categoryKind
+		out.ModelNumber = apparelVariation.ModelNumber
+		out.Size = apparelVariation.Size
+		out.Color = apparelVariation.Color.Name
+		out.RGB = rgb
+		out.Measurements = cloneMeasurements(apparelVariation.Measurements)
+		out.ModelLabel = buildPreviewModelLabel(
+			"apparel",
+			apparelVariation.ModelNumber,
+			apparelVariation.Size,
+			apparelVariation.Color.Name,
+			nil,
+			"",
+		)
+
+		return nil
+	}
+}
+
+func buildPreviewModelLabel(
+	kind string,
+	modelNumber string,
+	size string,
+	color string,
+	volumeValue *int,
+	volumeUnit string,
+) string {
+	switch kind {
+	case "alcohol":
+		if volumeValue != nil && volumeUnit != "" {
+			if modelNumber != "" {
+				return fmt.Sprintf("%s / %d%s", modelNumber, *volumeValue, volumeUnit)
+			}
+			return fmt.Sprintf("%d%s", *volumeValue, volumeUnit)
+		}
+		return modelNumber
+
+	default:
+		if modelNumber != "" && size != "" && color != "" {
+			return fmt.Sprintf("%s / %s / %s", modelNumber, size, color)
+		}
+		if modelNumber != "" && size != "" {
+			return fmt.Sprintf("%s / %s", modelNumber, size)
+		}
+		if modelNumber != "" && color != "" {
+			return fmt.Sprintf("%s / %s", modelNumber, color)
+		}
+		if size != "" && color != "" {
+			return fmt.Sprintf("%s / %s", size, color)
+		}
+		if modelNumber != "" {
+			return modelNumber
+		}
+		if size != "" {
+			return size
+		}
+		return color
+	}
+}
+
 func toPreviewApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
 	if v == nil {
 		return modeldom.ApparelModelVariation{}, false
@@ -479,6 +607,24 @@ func toPreviewApparelModelVariation(v modeldom.ModelVariation) (modeldom.Apparel
 		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
+	}
+}
+
+func toPreviewAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
+	if v == nil {
+		return modeldom.AlcoholModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.AlcoholModelVariation:
+		return x, true
+	case *modeldom.AlcoholModelVariation:
+		if x == nil {
+			return modeldom.AlcoholModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.AlcoholModelVariation{}, false
 	}
 }
 

@@ -1,4 +1,5 @@
-//frontend\amol\src\features\scan-result\types.ts
+// frontend/amol/src/features/scan-result/types.ts
+
 export type MallOwnerInfo = {
   brandId: string;
   avatarId: string;
@@ -54,25 +55,79 @@ export type MallTokenInfo = {
   mintedAt: string;
 };
 
-export type MallPreviewResponse = {
-  productId: string;
-  productBlueprintId: string;
-  modelId: string;
-  modelNumber: string;
-  size: string;
-  color: string;
-  rgb: number;
-  measurements: Record<string, number> | null;
-  productBlueprintPatch: Record<string, unknown> | null;
-  token: MallTokenInfo | null;
-  owner: MallOwnerInfo | null;
-  transfers: MallPreviewTransferInfo[];
+export type ProductCategoryKind =
+  | "apparel"
+  | "alcohol"
+  | "cosmetics"
+  | "healthcare"
+  | "other"
+  | "unknown"
+  | string;
+
+export type ProductBlueprintCategorySnapshot = {
+  ID?: string;
+  Code?: string;
+  NameJa?: string;
+  NameEn?: string;
+  Kind?: ProductCategoryKind;
+  Path?: string[];
 };
 
-export type ProductBlueprintPatchItem = {
+export type ProductBlueprintCategoryFields = Record<string, unknown>;
+
+export type ProductBlueprintPatch = {
+  productName?: string;
+  description?: string;
+  brandId?: string;
+  companyId?: string;
+
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot;
+  categoryFields?: ProductBlueprintCategoryFields;
+
+  productIdTag?: {
+    Type?: string;
+    type?: string;
+  };
+
+  assigneeId?: string;
+
+  modelRefs?: Array<{
+    ModelID?: string;
+    modelId?: string;
+    DisplayOrder?: number;
+    displayOrder?: number;
+  }>;
+
+  [key: string]: unknown;
+};
+
+export type CategoryInputFieldScope = "productBlueprint" | "model" | string;
+
+export type CategoryInputFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "select"
+  | "multiSelect"
+  | "boolean"
+  | "date"
+  | string;
+
+export type CategoryInputFieldDefinition = {
+  scope: CategoryInputFieldScope;
   key: string;
   label: string;
-  value: string;
+  type: CategoryInputFieldType;
+  required: boolean;
+  unit?: string;
+};
+
+export type CategoryInputSchema = {
+  categoryCode: string;
+  categoryKind: ProductCategoryKind;
+  categoryNameJa: string;
+  productBlueprintFields: CategoryInputFieldDefinition[];
+  modelFields: CategoryInputFieldDefinition[];
 };
 
 export type TokenBlueprintPatchVM = {
@@ -83,6 +138,65 @@ export type TokenBlueprintPatchVM = {
   companyName: string;
   description: string;
   tokenIcon: string;
+};
+
+export type MallPreviewResponse = {
+  productId: string;
+  productBlueprintId: string;
+
+  modelId: string;
+
+  /**
+   * apparel / alcohol などの model 表示種別。
+   * backend の model resolver が返す値。
+   */
+  modelKind?: ProductCategoryKind;
+
+  modelNumber: string;
+  modelLabel?: string;
+
+  /**
+   * apparel 用。
+   */
+  size: string;
+  color: string;
+  rgb: number;
+  measurements: Record<string, number> | null;
+
+  /**
+   * alcohol 用。
+   */
+  volumeValue?: number;
+  volumeUnit?: string;
+
+  /**
+   * productBlueprint category 情報。
+   */
+  productBlueprintCategoryCode?: string;
+  productBlueprintCategoryKind?: ProductCategoryKind;
+  productBlueprintCategoryName?: string;
+  productBlueprintCategory?: ProductBlueprintCategorySnapshot | null;
+  categoryInputSchema?: CategoryInputSchema | null;
+
+  /**
+   * productBlueprintPatch.categoryFields を alcohol 判定・表示に使う。
+   */
+  productBlueprintPatch: ProductBlueprintPatch | null;
+
+  brandName?: string;
+  companyName?: string;
+
+  token: MallTokenInfo | null;
+  owner: MallOwnerInfo | null;
+  transfers: MallPreviewTransferInfo[];
+
+  tokenBlueprintPatch?: TokenBlueprintPatchVM | null;
+};
+
+export type ProductBlueprintPatchItem = {
+  key: string;
+  label: string;
+  value: string;
 };
 
 export type PreviewState = {

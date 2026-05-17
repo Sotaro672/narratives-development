@@ -1,10 +1,13 @@
+// backend/internal/application/query/mall/dto/preview_dto.go
 package dto
 
 import (
 	"time"
 
 	sharedquery "narratives/internal/application/query/shared"
+	commondom "narratives/internal/domain/common"
 	pbdom "narratives/internal/domain/productBlueprint"
+	pbcatdom "narratives/internal/domain/productBlueprintCategory"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -33,6 +36,11 @@ type PreviewDTO struct {
 	ProductBrandName   string `json:"productBrandName,omitempty"`
 	ProductCompanyName string `json:"productCompanyName,omitempty"`
 
+	// product category
+	ProductBlueprintCategoryCode string                        `json:"productBlueprintCategoryCode,omitempty"`
+	ProductBlueprintCategoryKind commondom.ProductCategoryKind `json:"productBlueprintCategoryKind,omitempty"`
+	ProductBlueprintCategoryName string                        `json:"productBlueprintCategoryName,omitempty"`
+
 	// token
 	TokenName   string `json:"tokenName,omitempty"`
 	BrandName   string `json:"brandName,omitempty"`
@@ -40,11 +48,19 @@ type PreviewDTO struct {
 	Description string `json:"description,omitempty"`
 	IconURL     string `json:"iconUrl,omitempty"`
 
-	// model
-	ModelNumber string `json:"modelNumber,omitempty"`
-	Size        string `json:"size,omitempty"`
-	Color       string `json:"color,omitempty"`
-	RGB         *int   `json:"rgb,omitempty"`
+	// model common
+	ModelKind   commondom.ProductCategoryKind `json:"modelKind,omitempty"`
+	ModelNumber string                        `json:"modelNumber,omitempty"`
+	ModelLabel  string                        `json:"modelLabel,omitempty"`
+
+	// apparel model
+	Size  string `json:"size,omitempty"`
+	Color string `json:"color,omitempty"`
+	RGB   *int   `json:"rgb,omitempty"`
+
+	// alcohol model
+	VolumeValue *int   `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
 }
 
 // TokenInfo is a minimal view for token doc (tokens/{productId}) used by preview.
@@ -89,13 +105,30 @@ type PreviewTransferInfo struct {
 
 // PreviewModelInfo is what preview.dart eventually wants to display.
 type PreviewModelInfo struct {
-	ProductID    string         `json:"productId"`
-	ModelID      string         `json:"modelId"`
-	ModelNumber  string         `json:"modelNumber"`
-	Size         string         `json:"size"`
-	Color        string         `json:"color"`
-	RGB          int            `json:"rgb"`
+	ProductID string `json:"productId"`
+	ModelID   string `json:"modelId"`
+
+	// category
+	ProductBlueprintCategoryCode string                                  `json:"productBlueprintCategoryCode,omitempty"`
+	ProductBlueprintCategoryKind commondom.ProductCategoryKind           `json:"productBlueprintCategoryKind,omitempty"`
+	ProductBlueprintCategoryName string                                  `json:"productBlueprintCategoryName,omitempty"`
+	ProductBlueprintCategory     *pbdom.ProductBlueprintCategorySnapshot `json:"productBlueprintCategory,omitempty"`
+	CategoryInputSchema          *pbcatdom.CategoryInputSchema           `json:"categoryInputSchema,omitempty"`
+
+	// model common
+	ModelKind   commondom.ProductCategoryKind `json:"modelKind,omitempty"`
+	ModelNumber string                        `json:"modelNumber"`
+	ModelLabel  string                        `json:"modelLabel,omitempty"`
+
+	// apparel model
+	Size         string         `json:"size,omitempty"`
+	Color        string         `json:"color,omitempty"`
+	RGB          int            `json:"rgb,omitempty"`
 	Measurements map[string]int `json:"measurements,omitempty"`
+
+	// alcohol model
+	VolumeValue *int   `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
 
 	BrandName   string `json:"brandName,omitempty"`
 	CompanyName string `json:"companyName,omitempty"`
