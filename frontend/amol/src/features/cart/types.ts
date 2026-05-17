@@ -1,5 +1,7 @@
 // frontend/amol/src/features/cart/types/types.ts
 
+export type CartModelKind = "apparel" | "alcohol" | "unknown" | string;
+
 export type CartItemDTO = {
   avatarId?: string;
   inventoryId?: string;
@@ -8,6 +10,37 @@ export type CartItemDTO = {
   qty?: number;
   quantity?: number;
   itemKey?: string;
+
+  /**
+   * cart response から直接表示に使う商品情報。
+   * catalog が取得できない場合も cart response だけで表示できるように保持する。
+   */
+  title?: string;
+  listImage?: string;
+  price?: number;
+  productName?: string;
+
+  /**
+   * apparel / alcohol 共通の model 情報。
+   */
+  modelKind?: CartModelKind;
+  kind?: CartModelKind;
+  modelNumber?: string;
+  modelLabel?: string;
+
+  /**
+   * apparel 用。
+   */
+  size?: string;
+  colorName?: string;
+  colorRGB?: number;
+
+  /**
+   * alcohol 用。
+   */
+  volumeValue?: number;
+  volumeUnit?: string;
+
   [key: string]: unknown;
 };
 
@@ -26,6 +59,36 @@ export type CartDisplayItem = {
   listId: string;
   modelId: string;
   qty: number;
+
+  /**
+   * cart response 由来の表示用情報。
+   * catalog が null の場合でも CartPage で表示できるようにする。
+   */
+  title?: string;
+  listImage?: string;
+  price?: number;
+  productName?: string;
+
+  /**
+   * apparel / alcohol の表示切り替え用。
+   */
+  modelKind?: CartModelKind;
+  modelNumber?: string;
+  modelLabel?: string;
+
+  /**
+   * apparel 用。
+   */
+  size?: string;
+  colorName?: string;
+  colorRGB?: number;
+
+  /**
+   * alcohol 用。
+   */
+  volumeValue?: number;
+  volumeUnit?: string;
+
   catalog: CatalogResponse | null;
 };
 

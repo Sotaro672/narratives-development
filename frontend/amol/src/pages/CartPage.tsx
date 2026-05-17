@@ -31,6 +31,22 @@ function getApiBaseUrl(): string {
   return "";
 }
 
+function formatAlcoholVolume(item: CartDisplayItem): string {
+  if (
+    typeof item.volumeValue === "number" &&
+    Number.isFinite(item.volumeValue) &&
+    item.volumeUnit
+  ) {
+    return `${item.volumeValue}${item.volumeUnit}`;
+  }
+
+  if (item.modelLabel) {
+    return item.modelLabel;
+  }
+
+  return "-";
+}
+
 export default function CartPage() {
   const navigate = useNavigate();
 
@@ -238,9 +254,23 @@ export default function CartPage() {
                 const catalog = item.catalog;
                 const model = getModelVariation(catalog, item.modelId);
                 const imageUrl = getPrimaryCatalogImage(catalog);
-                const price = getModelPrice(catalog, item.modelId);
+                const catalogPrice = getModelPrice(catalog, item.modelId);
+                const price = catalogPrice ?? item.price ?? null;
                 const lineAmount = price === null ? null : price * item.qty;
                 const isRemoving = removingItemKey === item.itemKey;
+                const isAlcohol = item.modelKind === "alcohol";
+
+                const brandName =
+                  catalog?.productBlueprint.brandName || "ブランド未設定";
+
+                const productName =
+                  catalog?.productBlueprint.productName ||
+                  item.productName ||
+                  catalog?.list.title ||
+                  item.title ||
+                  "商品名未設定";
+
+                const listTitle = catalog?.list.title || item.title || "";
 
                 return (
                   <article key={item.itemKey} className="cart-page-item">
@@ -269,11 +299,7 @@ export default function CartPage() {
                       {imageUrl ? (
                         <img
                           src={imageUrl}
-                          alt={
-                            catalog?.productBlueprint.productName ||
-                            catalog?.list.title ||
-                            "商品画像"
-                          }
+                          alt={productName}
                           className="cart-page-item__image"
                         />
                       ) : (
@@ -284,31 +310,41 @@ export default function CartPage() {
                     </button>
 
                     <div className="cart-page-item__body">
-                      <p className="cart-page-item__brand">
-                        {catalog?.productBlueprint.brandName || "ブランド未設定"}
-                      </p>
+                      <p className="cart-page-item__brand">{brandName}</p>
 
-                      <h2 className="cart-page-item__title">
-                        {catalog?.productBlueprint.productName ||
-                          catalog?.list.title ||
-                          "商品名未設定"}
-                      </h2>
+                      <h2 className="cart-page-item__title">{productName}</h2>
 
-                      {catalog?.list.title ? (
+                      {listTitle ? (
                         <p className="cart-page-item__list-title">
-                          {catalog.list.title}
+                          {listTitle}
                         </p>
                       ) : null}
 
                       <dl className="cart-page-item__meta">
-                        <div>
-                          <dt>カラー</dt>
-                          <dd>{model?.colorName || "-"}</dd>
-                        </div>
-                        <div>
-                          <dt>サイズ</dt>
-                          <dd>{model?.size || "-"}</dd>
-                        </div>
+                        {isAlcohol ? (
+                          <>
+                            <div>
+                              <dt>品番</dt>
+                              <dd>{item.modelNumber || "-"}</dd>
+                            </div>
+                            <div>
+                              <dt>容量</dt>
+                              <dd>{formatAlcoholVolume(item)}</dd>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <dt>カラー</dt>
+                              <dd>{model?.colorName || item.colorName || "-"}</dd>
+                            </div>
+                            <div>
+                              <dt>サイズ</dt>
+                              <dd>{model?.size || item.size || "-"}</dd>
+                            </div>
+                          </>
+                        )}
+
                         <div>
                           <dt>数量</dt>
                           <dd>{item.qty}</dd>

@@ -112,31 +112,22 @@ export async function fetchCart(
 ): Promise<CartDTO> {
   const idToken = await getFirebaseIdToken();
 
-  let response = await fetchCartFromPath({
+  const response = await fetchCartFromPath({
     apiBaseUrl,
     avatarId,
     idToken,
-    path: "/mall/me/cart/query",
+    path: "/mall/me/cart",
   });
 
-  if (response.status === 404) {
-    response = await fetchCartFromPath({
-      apiBaseUrl,
-      avatarId,
-      idToken,
-      path: "/mall/me/cart",
-    });
+  if (!response.ok) {
+    const message = await readResponseErrorMessage(response);
+    throw new Error(message || "カートの取得に失敗しました。");
   }
 
   const contentType = response.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
     throw new Error("カート取得APIがJSON以外を返しました。");
-  }
-
-  if (!response.ok) {
-    const message = await readResponseErrorMessage(response);
-    throw new Error(message || "カートの取得に失敗しました。");
   }
 
   const data = (await response.json()) as Partial<CartDTO>;
@@ -179,15 +170,15 @@ export async function removeCartItem(args: {
     }),
   });
 
+  if (!response.ok) {
+    const message = await readResponseErrorMessage(response);
+    throw new Error(message || "カート商品の削除に失敗しました。");
+  }
+
   const contentType = response.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
     throw new Error("カート商品削除APIがJSON以外を返しました。");
-  }
-
-  if (!response.ok) {
-    const message = await readResponseErrorMessage(response);
-    throw new Error(message || "カート商品の削除に失敗しました。");
   }
 
   const data = (await response.json()) as Partial<CartDTO>;
@@ -225,13 +216,13 @@ export async function fetchCatalog(
     },
   );
 
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (!contentType.includes("application/json")) {
+  if (!response.ok) {
     return null;
   }
 
-  if (!response.ok) {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
     return null;
   }
 
@@ -249,12 +240,21 @@ export async function fetchCartItemsWithCatalog(args: {
 
   return Promise.all(
     baseItems.map(async (item) => {
-      const catalog = await fetchCatalog(apiBaseUrl, item.listId);
+      try {
+        const catalog = item.listId
+          ? await fetchCatalog(apiBaseUrl, item.listId)
+          : null;
 
-      return {
-        ...item,
-        catalog,
-      };
+        return {
+          ...item,
+          catalog,
+        };
+      } catch {
+        return {
+          ...item,
+          catalog: null,
+        };
+      }
     }),
   );
 }

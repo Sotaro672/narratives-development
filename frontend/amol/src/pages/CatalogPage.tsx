@@ -16,6 +16,7 @@ export default function CatalogPage() {
   const {
     catalog,
     catalogKind,
+    isAlcoholCatalog,
     isLoadingCatalog,
     isLoadingReviews,
     isAddingToCart,
@@ -143,6 +144,7 @@ export default function CatalogPage() {
                 selectedModelStock={selectedModelStock}
                 cartMessage={cartMessage}
                 cartErrorMessage={cartErrorMessage}
+                isAlcoholCatalog={isAlcoholCatalog}
                 onSelectColor={handleSelectColor}
                 onSelectSize={handleSelectSize}
               />
