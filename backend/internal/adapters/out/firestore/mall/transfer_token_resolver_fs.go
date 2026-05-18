@@ -31,52 +31,45 @@ func (r *tokenResolverFS) ResolveTokenByProductID(ctx context.Context, productID
 	if r == nil || r.fs == nil {
 		return usecase.TokenForTransfer{}, errTokenResolverNotConfigured
 	}
-	pid := productID
-	if pid == "" {
+	if productID == "" {
 		return usecase.TokenForTransfer{}, errors.New("tokenResolverFS: productId is empty")
 	}
+
 	col := r.col
 	if col == "" {
 		col = "tokens"
 	}
 
-	snap, err := r.fs.Collection(col).Doc(pid).Get(ctx)
+	snap, err := r.fs.Collection(col).Doc(productID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return usecase.TokenForTransfer{}, errTokenDocNotFound
 		}
 		return usecase.TokenForTransfer{}, err
 	}
+
 	raw := snap.Data()
 	if raw == nil {
 		return usecase.TokenForTransfer{}, errTokenDocNotFound
 	}
 
-	getStr := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := raw[k]; ok {
-				if s, ok := v.(string); ok {
-					if s != "" {
-						return s
-					}
-				}
-			}
+	getStr := func(key string) string {
+		v, ok := raw[key]
+		if !ok {
+			return ""
 		}
-		return ""
+		s, ok := v.(string)
+		if !ok {
+			return ""
+		}
+		return s
 	}
 
 	return usecase.TokenForTransfer{
-		ProductID: pid,
-		BrandID:   getStr("brandId", "brandID"),
-		MintAddress: getStr(
-			"mintAddress",
-			"mint_address",
-		),
-		TokenBlueprintID: getStr(
-			"tokenBlueprintId",
-			"tokenBlueprintID",
-			"token_blueprint_id",
-		),
-		ToAddress: getStr("toAddress", "to_address"),
+		ProductID:        productID,
+		BrandID:          getStr("brandId"),
+		MintAddress:      getStr("mintAddress"),
+		TokenBlueprintID: getStr("tokenBlueprintId"),
+		ToAddress:        getStr("toAddress"),
 	}, nil
 }

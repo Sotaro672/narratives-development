@@ -37,27 +37,6 @@ func (s *Service) GetCompanyNameByID(ctx context.Context, id string) (string, er
 		// 名称未設定の場合は NotFound 等、上位で同じ扱いにできるように揃える
 		return "", ErrNotFound
 	}
+
 	return name, nil
-}
-
-// TryGetCompanyName is a convenience wrapper that does not treat empty name as error.
-// It returns (name, ok, err), where ok indicates existence.
-//
-// Example use:
-//
-//	if name, ok, err := svc.TryGetCompanyName(ctx, id); err != nil { ... }
-func (s *Service) TryGetCompanyName(ctx context.Context, id string) (string, bool, error) {
-	if id == "" {
-		return "", false, ErrNotFound
-	}
-
-	c, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		if err == ErrNotFound {
-			return "", false, nil
-		}
-		return "", false, err
-	}
-
-	return c.Name, true, nil
 }

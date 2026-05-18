@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
+	branddom "narratives/internal/domain/brand"
 	commondom "narratives/internal/domain/common"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
@@ -80,26 +80,14 @@ type TokenBlueprintPatchReader interface {
 	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
 }
 
-// BrandNameReader resolves brandId -> brandName (display-only enrichment).
-// 返り値の ok=false は「存在しない/名前が空などで表示できない」を想定。
-type BrandNameReader interface {
-	TryGetBrandName(ctx context.Context, brandID string) (name string, ok bool, err error)
-}
-
 // BrandNameIconReader resolves brandId -> brandName + brandIcon.
 type BrandNameIconReader interface {
-	TryGetBrandNameIcon(ctx context.Context, brandID string) (name string, brandIcon string, ok bool, err error)
+	GetNameIconByID(ctx context.Context, brandID string) (branddom.NameIcon, error)
 }
 
 // AvatarNameIconReader resolves avatarId -> avatarName + avatarIcon.
 type AvatarNameIconReader interface {
-	TryGetAvatarNameIcon(ctx context.Context, avatarID string) (name string, avatarIcon string, ok bool, err error)
-}
-
-// CompanyNameReader resolves companyId -> companyName (display-only enrichment).
-// 返り値の ok=false は「存在しない/名前が空などで表示できない」を想定。
-type CompanyNameReader interface {
-	TryGetCompanyName(ctx context.Context, companyID string) (name string, ok bool, err error)
+	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
 }
 
 // TransferReader resolves mintAddress -> transfer records.
@@ -131,10 +119,8 @@ type PreviewQuery struct {
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	// Optional: display-only name resolvers
-	BrandNameRepo      BrandNameReader
 	BrandNameIconRepo  BrandNameIconReader
 	AvatarNameIconRepo AvatarNameIconReader
-	CompanyNameRepo    CompanyNameReader
 
 	// Optional: mintAddress -> transfers を解決（nil なら transfers は返さない）
 	TransferRepo TransferReader
@@ -170,12 +156,6 @@ func WithOwnerResolveQuery(qry *sharedquery.OwnerResolveQuery) PreviewQueryOptio
 	}
 }
 
-func WithBrandNameRepo(r BrandNameReader) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.BrandNameRepo = r
-	}
-}
-
 func WithBrandNameIconRepo(r BrandNameIconReader) PreviewQueryOption {
 	return func(q *PreviewQuery) {
 		q.BrandNameIconRepo = r
@@ -185,12 +165,6 @@ func WithBrandNameIconRepo(r BrandNameIconReader) PreviewQueryOption {
 func WithAvatarNameIconRepo(r AvatarNameIconReader) PreviewQueryOption {
 	return func(q *PreviewQuery) {
 		q.AvatarNameIconRepo = r
-	}
-}
-
-func WithCompanyNameRepo(r CompanyNameReader) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.CompanyNameRepo = r
 	}
 }
 
@@ -216,10 +190,6 @@ func NewPreviewQuery(
 		TokenRepo:            nil,
 		TokenBlueprintRepo:   nil,
 		OwnerResolveQ:        nil,
-		BrandNameRepo:        nil,
-		BrandNameIconRepo:    nil,
-		AvatarNameIconRepo:   nil,
-		CompanyNameRepo:      nil,
 		TransferRepo:         nil,
 	}
 
@@ -351,14 +321,12 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		out.Token = tok
 
 		// brandId -> brandName（tokens側）
-		if tok != nil && tok.BrandID != "" && q.BrandNameRepo != nil {
-			name, ok, nerr := q.BrandNameRepo.TryGetBrandName(ctx, tok.BrandID)
-			if nerr != nil {
-				log.Printf(`[mall.preview] brandName resolve failed: brandId=%q err=%v`, tok.BrandID, nerr)
-			} else if ok {
-				tok.BrandName = name
+		if tok != nil && tok.BrandID != "" && q.BrandNameIconRepo != nil {
+			ni, nerr := q.BrandNameIconRepo.GetNameIconByID(ctx, tok.BrandID)
+			if nerr == nil && ni.Name != "" {
+				tok.BrandName = ni.Name
 				if out.BrandName == "" {
-					out.BrandName = name
+					out.BrandName = ni.Name
 				}
 			}
 		}
@@ -368,53 +336,21 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		if tok != nil {
 			tbID = tok.TokenBlueprintID
 		}
-		log.Printf(
-			`[mall.preview] tokenBlueprintPatch check repoNil=%t hasToken=%t tokenBlueprintId=%q`,
-			repoNil,
-			tok != nil,
-			tbID,
-		)
 
-		if tok != nil && !repoNil {
-			if tbID == "" {
-				log.Printf(`[mall.preview] tokenBlueprintPatch skipped: tokenBlueprintId is empty`)
-			} else {
-				log.Printf(`[mall.preview] tokenBlueprintPatch fetching: tokenBlueprintId=%q`, tbID)
-
-				tbPatch, perr := q.TokenBlueprintRepo.GetPatchByID(ctx, tbID)
-				if perr != nil {
-					log.Printf(
-						`[mall.preview] tokenBlueprintPatch fetch failed: tokenBlueprintId=%q err=%v`,
-						tbID,
-						perr,
-					)
-				} else {
-					if tbPatch.BrandID != "" && tbPatch.BrandName == "" && q.BrandNameRepo != nil {
-						name, ok, nerr := q.BrandNameRepo.TryGetBrandName(ctx, tbPatch.BrandID)
-						if nerr != nil {
-							log.Printf(`[mall.preview] brandName resolve failed: brandId=%q err=%v`, tbPatch.BrandID, nerr)
-						} else if ok {
-							tbPatch.BrandName = name
-							if out.BrandName == "" {
-								out.BrandName = name
-							}
+		if tok != nil && !repoNil && tbID != "" {
+			tbPatch, perr := q.TokenBlueprintRepo.GetPatchByID(ctx, tbID)
+			if perr == nil {
+				if tbPatch.BrandID != "" && tbPatch.BrandName == "" && q.BrandNameIconRepo != nil {
+					ni, nerr := q.BrandNameIconRepo.GetNameIconByID(ctx, tbPatch.BrandID)
+					if nerr == nil && ni.Name != "" {
+						tbPatch.BrandName = ni.Name
+						if out.BrandName == "" {
+							out.BrandName = ni.Name
 						}
 					}
-					if tbPatch.CompanyID != "" && q.CompanyNameRepo != nil {
-						cn, ok, cerr := q.CompanyNameRepo.TryGetCompanyName(ctx, tbPatch.CompanyID)
-						if cerr != nil {
-							log.Printf(`[mall.preview] companyName resolve failed: companyId=%q err=%v`, tbPatch.CompanyID, cerr)
-						} else if ok {
-							out.CompanyName = cn
-						}
-					}
-
-					out.TokenBlueprintPatch = &tbPatch
-					log.Printf(
-						`[mall.preview] tokenBlueprintPatch attached: tokenBlueprintId=%q`,
-						tbID,
-					)
 				}
+
+				out.TokenBlueprintPatch = &tbPatch
 			}
 		}
 
@@ -441,9 +377,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		// transfer 解決（token が無い / mintAddress が無い / TransferRepo が無い場合は何もしない）
 		if q.TransferRepo != nil && tok != nil && tok.MintAddress != "" {
 			transfers, terr := q.TransferRepo.ListByMintAddress(ctx, tok.MintAddress)
-			if terr != nil {
-				log.Printf(`[mall.preview] transfer resolve failed: mintAddress=%q err=%v`, tok.MintAddress, terr)
-			} else {
+			if terr == nil {
 				out.Transfers = q.resolveTransferOwners(ctx, transfers)
 			}
 		}
@@ -710,28 +644,16 @@ func (q *PreviewQuery) fillBrandTransferDisplay(
 	}
 
 	if q.BrandNameIconRepo != nil {
-		name, icon, ok, err := q.BrandNameIconRepo.TryGetBrandNameIcon(ctx, brandID)
-		if err != nil {
-			log.Printf(`[mall.preview] brandNameIcon resolve failed: brandId=%q err=%v`, brandID, err)
-		} else if ok {
-			*nameOut = name
-			*iconOut = icon
+		ni, err := q.BrandNameIconRepo.GetNameIconByID(ctx, brandID)
+		if err == nil && ni.Name != "" {
+			*nameOut = ni.Name
+			*iconOut = ni.BrandIcon
 			return
 		}
 	}
 
 	if fallbackName != "" {
 		*nameOut = fallbackName
-		return
-	}
-
-	if q.BrandNameRepo != nil {
-		name, ok, err := q.BrandNameRepo.TryGetBrandName(ctx, brandID)
-		if err != nil {
-			log.Printf(`[mall.preview] brandName resolve failed: brandId=%q err=%v`, brandID, err)
-		} else if ok {
-			*nameOut = name
-		}
 	}
 }
 
@@ -757,10 +679,8 @@ func (q *PreviewQuery) fillAvatarTransferDisplay(
 	}
 
 	if q.AvatarNameIconRepo != nil {
-		name, icon, ok, err := q.AvatarNameIconRepo.TryGetAvatarNameIcon(ctx, avatarID)
-		if err != nil {
-			log.Printf(`[mall.preview] avatarNameIcon resolve failed: avatarId=%q err=%v`, avatarID, err)
-		} else if ok {
+		name, icon, err := q.AvatarNameIconRepo.GetNameAndIconByID(ctx, avatarID)
+		if err == nil && name != "" {
 			*nameOut = name
 			*iconOut = icon
 			return

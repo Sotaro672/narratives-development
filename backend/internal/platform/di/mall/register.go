@@ -11,6 +11,7 @@ import (
 	avatarHandler "narratives/internal/adapters/in/http/mall/handler/avatar"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
+	mallquery "narratives/internal/application/query/mall"
 	"narratives/internal/application/usecase"
 	tokenBlueprint "narratives/internal/domain/tokenBlueprint"
 
@@ -238,14 +239,24 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// /mall/me/avatars
-	if cont.MeAvatarRepo != nil && cont.AvatarUC != nil {
-		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarRepo, cont.AvatarUC, cont.AvatarRepo)
-		log.Printf("[mall.register] me avatars handler wired (repo+avatarUC+avatarRepo)")
+	if cont.MeAvatarRepo != nil &&
+		cont.AvatarUC != nil &&
+		cont.AvatarRepo != nil &&
+		cont.Infra != nil &&
+		cont.Infra.Firestore != nil {
+
+		avatarStateRepo := firestoreOut.NewAvatarStateRepositoryFS(cont.Infra.Firestore)
+		avatarStateQuery := mallquery.NewAvatarStateQuery(cont.AvatarRepo, avatarStateRepo)
+
+		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarRepo, cont.AvatarUC, avatarStateQuery)
+		log.Printf("[mall.register] me avatars handler wired (repo+avatarUC+avatarStateQuery)")
 	} else {
 		log.Printf(
-			"[mall.register] WARN: MeAvatars not wired (meAvatarRepo=%t avatarUC=%t) (MeAvatars will return 501)",
+			"[mall.register] WARN: MeAvatars not wired (meAvatarRepo=%t avatarUC=%t avatarRepo=%t firestore=%t) (MeAvatars will return 501)",
 			cont.MeAvatarRepo != nil,
 			cont.AvatarUC != nil,
+			cont.AvatarRepo != nil,
+			cont.Infra != nil && cont.Infra.Firestore != nil,
 		)
 	}
 

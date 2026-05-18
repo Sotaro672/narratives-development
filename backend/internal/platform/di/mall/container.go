@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"log"
 
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
@@ -160,6 +159,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	paymentMethodRepo := outfs.NewPaymentMethodRepositoryFS(fsClient)
 	userRepo := outfs.NewUserRepositoryFS(fsClient)
 	walletRepo := outfs.NewWalletRepositoryFS(fsClient)
+	productRepo := outfs.NewProductRepositoryFS(fsClient)
 
 	// --------------------------------------------------------
 	// Stripe adapter registration
@@ -289,15 +289,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
 	tokenQuery := outfs.NewTokenReaderFS(fsClient)
 
-	// productId -> product(modelId)
-	prodReader := mallfs.NewPreviewProductReaderFS(fsClient)
-
 	// productBlueprintId -> productName
 	c.WalletUC = usecase.NewWalletUsecase(walletRepo).
 		WithOnchainReader(onchainReader).
 		WithTokenQuery(tokenQuery).
 		WithBrandNameResolver(brandSvc).
-		WithProductReader(prodReader).
+		WithProductReader(productRepo).
 		WithModelProductBlueprintIDResolver(productBlueprintRepoFS).
 		WithProductBlueprintReader(productBlueprintRepoFS)
 
@@ -312,7 +309,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	).
 		WithOnchainReader(onchainReader).
 		WithTokenQuery(tokenQuery).
-		WithProductReader(prodReader).
+		WithProductReader(productRepo).
 		WithModelProductBlueprintIDResolver(productBlueprintRepoFS).
 		WithAvatarRepo(avatarRepo)
 
@@ -402,27 +399,21 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
-		// PreviewQuery: model 表示情報は NameResolver.ResolveModelResolved に統一する。
-		pbReader := mallfs.NewPreviewProductBlueprintReaderFS(fsClient, productBlueprintRepoFS)
-		productReader := mallfs.NewPreviewProductReaderFS(fsClient)
-
 		tokenReader := outfs.NewTokenReaderFS(fsClient)
 
 		solanaTransferReader := solanainfra.NewTokenTransferReaderSolana("")
 		previewTransferReader := outsolana.NewPreviewTransferReader(solanaTransferReader)
 
 		c.PreviewQ = mallquery.NewPreviewQuery(
-			productReader,
+			productRepo,
 			modelRepoFS,
-			pbReader,
+			productBlueprintRepoFS,
 			mallquery.WithNameResolver(c.NameResolver),
 			mallquery.WithTokenRepo(tokenReader),
 			mallquery.WithTokenBlueprintRepo(tokenBlueprintRepo),
 			mallquery.WithOwnerResolveQuery(c.OwnerResolveQ),
-			mallquery.WithBrandNameRepo(mallfs.NewBrandNameReaderFS(fsClient)),
-			mallquery.WithBrandNameIconRepo(mallfs.NewBrandNameIconReaderFS(fsClient)),
-			mallquery.WithAvatarNameIconRepo(mallfs.NewAvatarNameIconReaderFS(fsClient)),
-			mallquery.WithCompanyNameRepo(mallfs.NewCompanyNameReaderFS(fsClient)),
+			mallquery.WithBrandNameIconRepo(brandSvc),
+			mallquery.WithAvatarNameIconRepo(avatarRepo),
 			mallquery.WithTransferRepo(previewTransferReader),
 		)
 
@@ -515,13 +506,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		switch {
 		case !walletOK:
-			log.Printf("[di.mall] WARN: walletRepo does not implement AvatarWalletItemTransferUpdater (share transfer disabled)")
 			c.ShareTransferUC = nil
 		case !secretOK:
-			log.Printf("[di.mall] WARN: wallet secret provider does not implement AvatarSecretProvider (share transfer disabled)")
 			c.ShareTransferUC = nil
 		case !syncOK:
-			log.Printf("[di.mall] WARN: wallet usecase does not implement AvatarWalletSyncer (share transfer disabled)")
 			c.ShareTransferUC = nil
 		default:
 			c.ShareTransferUC = usecase.NewShareTransferUsecase(
@@ -536,41 +524,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			)
 		}
 	}
-
-	selfBaseURLConfigured := infra.SelfBaseURL != ""
-	stripePaymentMethodGatewayConfigured := infra.PaymentMethodGateway != nil
-
-	log.Printf(
-		"[di.mall] container built (firestore=%t firebaseAuth=%t stripePaymentMethodGateway=%t avatarUC=%t avatarRepo=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenBlueprintReviewRepo=%t brandService=%t brandQ=%t productBlueprintReviewUC=%t resolvedTokenRepo=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderQ=%t historyQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t transferUC=%t shareTransferUC=%t walletUC=%t listImageRecordRepo=%t)",
-		c.Infra.Firestore != nil,
-		c.Infra.FirebaseAuth != nil,
-		stripePaymentMethodGatewayConfigured,
-		c.AvatarUC != nil,
-		c.AvatarRepo != nil,
-		c.CartUC != nil,
-		cartRepo != nil,
-		c.PaymentUC != nil,
-		c.PaymentFlowUC != nil,
-		c.MeAvatarRepo != nil,
-		c.InventoryUC != nil,
-		tokenBlueprintRepo != nil,
-		c.TokenBlueprintReviewRepo != nil,
-		c.BrandService != nil,
-		c.BrandQ != nil,
-		c.ProductBlueprintReviewUC != nil,
-		c.ResolvedTokenRepo != nil,
-		selfBaseURLConfigured,
-		c.PreviewQ != nil,
-		c.OwnerResolveQ != nil,
-		c.OrderQ != nil,
-		c.HistoryQ != nil,
-		c.OrderPurchasedQ != nil,
-		c.OrderScanVerifyQ != nil,
-		c.TransferUC != nil,
-		c.ShareTransferUC != nil,
-		c.WalletUC != nil,
-		listImageRecordRepo != nil,
-	)
 
 	return c, nil
 }

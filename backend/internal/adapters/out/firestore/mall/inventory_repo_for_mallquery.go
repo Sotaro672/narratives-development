@@ -24,7 +24,7 @@ import (
 //     GetByProductAndTokenBlueprintID(...), returning inventory.Mint.
 //   - The domain InventoryRepositoryFS is domain-oriented and does not necessarily
 //     match mallquery's interface.
-//   - This adapter performs "Firestore read" for query usecases, with best-effort fallback.
+//   - This adapter performs Firestore reads for query usecases.
 type InventoryRepoForMallQuery struct {
 	Client *firestore.Client
 
@@ -49,27 +49,12 @@ func (r *InventoryRepoForMallQuery) GetByID(ctx context.Context, id string) (inv
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
 
-	// 1) inventories/{id} (canonical)
 	m, err := r.invRepo.GetByID(ctx, id)
-	if err == nil {
-		return m, nil
-	}
-	if !errors.Is(err, invdom.ErrNotFound) {
+	if err != nil {
 		return invdom.Mint{}, err
 	}
 
-	// 2) best-effort fallback: mints/{id}
-	// NOTE: Only used if some environments stored inventory-like docs under "mints".
-	//       If the record shape differs, DataTo may fail and we surface the error.
-	if m2, err2 := r.getMintDocAsDomain(ctx, "mints", id); err2 == nil {
-		return m2, nil
-	} else {
-		// If it's NotFound, keep NotFound. Otherwise return the error to reveal mismatch early.
-		if isFirestoreNotFound(err2) {
-			return invdom.Mint{}, invdom.ErrNotFound
-		}
-		return invdom.Mint{}, err2
-	}
+	return m, nil
 }
 
 func (r *InventoryRepoForMallQuery) GetByProductAndTokenBlueprintID(
@@ -100,22 +85,16 @@ func (r *InventoryRepoForMallQuery) GetByProductAndTokenBlueprintID(
 		return invdom.Mint{}, err
 	}
 
-	// 2) Fallback query in inventories by fields, then re-hydrate via invRepo.GetByID for proper mapping
-	if docID, err := r.queryDocIDByFields(ctx, "inventories", pbID, tbID); err == nil {
-		return r.invRepo.GetByID(ctx, docID)
-	} else if !isFirestoreNotFound(err) {
+	// 2) Query inventories by fields, then re-hydrate via invRepo.GetByID for proper mapping.
+	docID, err := r.queryDocIDByFields(ctx, "inventories", pbID, tbID)
+	if err != nil {
+		if isFirestoreNotFound(err) {
+			return invdom.Mint{}, invdom.ErrNotFound
+		}
 		return invdom.Mint{}, err
 	}
 
-	// 3) Best-effort fallback: mints collection
-	if docID, err := r.queryDocIDByFields(ctx, "mints", pbID, tbID); err == nil {
-		// attempt to read as domain directly (since InventoryRepositoryFS is inventories-only)
-		return r.getMintDocAsDomain(ctx, "mints", docID)
-	} else if isFirestoreNotFound(err) {
-		return invdom.Mint{}, invdom.ErrNotFound
-	} else {
-		return invdom.Mint{}, err
-	}
+	return r.invRepo.GetByID(ctx, docID)
 }
 
 // ------------------------------------------------------------
@@ -155,27 +134,6 @@ func (r *InventoryRepoForMallQuery) queryDocIDByFields(
 		)
 	}
 	return snaps[0].Ref.ID, nil
-}
-
-func (r *InventoryRepoForMallQuery) getMintDocAsDomain(ctx context.Context, collection string, id string) (invdom.Mint, error) {
-	snap, err := r.Client.Collection(collection).Doc(id).Get(ctx)
-	if err != nil {
-		if isFirestoreNotFound(err) {
-			return invdom.Mint{}, invdom.ErrNotFound
-		}
-		return invdom.Mint{}, err
-	}
-
-	var m invdom.Mint
-	if err := snap.DataTo(&m); err != nil {
-		return invdom.Mint{}, err
-	}
-
-	// best-effort: ensure ID populated
-	if m.ID == "" {
-		m.ID = snap.Ref.ID
-	}
-	return m, nil
 }
 
 func isFirestoreNotFound(err error) bool {

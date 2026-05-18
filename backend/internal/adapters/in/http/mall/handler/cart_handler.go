@@ -4,10 +4,8 @@ package mallHandler
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	usecase "narratives/internal/application/usecase"
 	cartdom "narratives/internal/domain/cart"
@@ -41,32 +39,12 @@ func NewCartHandlerWithQueries(
 }
 
 func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-	rawPath := r.URL.Path
-	path := strings.TrimRight(rawPath, "/")
+	path := strings.TrimRight(r.URL.Path, "/")
 	if path == "" {
 		path = "/"
 	}
 
-	avatarFromQ := r.URL.Query().Get("avatarId")
-	avatarFromH := r.Header.Get("X-Avatar-Id")
-	avatarID := readAvatarID(r, "")
-
-	log.Printf(
-		"[mall_cart_handler] enter method=%s rawPath=%q path=%q query=%q avatarId(q)=%q avatarId(h)=%q avatarId(resolved)=%q configured(uc=%t cartQuery=%t)\n",
-		r.Method,
-		rawPath,
-		path,
-		r.URL.RawQuery,
-		avatarFromQ,
-		avatarFromH,
-		avatarID,
-		h.uc != nil,
-		h.cartQuery != nil,
-	)
-
 	if h.uc == nil {
-		log.Printf("[mall_cart_handler] exit status=500 reason=cart handler uc is nil elapsed=%s\n", time.Since(start))
 		writeErr(w, http.StatusInternalServerError, "cart handler is not configured")
 		return
 	}
@@ -100,31 +78,30 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	// Unified GET
 	case isGET && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
-		h.handleGetUnified(w, r, start)
+		h.handleGetUnified(w, r)
 		return
 
 	// Clear
 	case isDEL && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
-		h.handleClear(w, r, start)
+		h.handleClear(w, r)
 		return
 
 	// Add item
 	case isPOST && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
-		h.handleAddItem(w, r, start)
+		h.handleAddItem(w, r)
 		return
 
 	// Set qty
 	case isPUT && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
-		h.handleSetItemQty(w, r, start)
+		h.handleSetItemQty(w, r)
 		return
 
 	// Remove item
 	case isDEL && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
-		h.handleRemoveItem(w, r, start)
+		h.handleRemoveItem(w, r)
 		return
 	}
 
-	log.Printf("[mall_cart_handler] exit status=404 reason=not found method=%s path=%q elapsed=%s\n", r.Method, path, time.Since(start))
 	writeErr(w, http.StatusNotFound, "not found")
 }
 
@@ -132,34 +109,25 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handlers (Unified GET)
 // -------------------------
 
-func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request, start time.Time) {
+func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
 	avatarID := readAvatarID(r, "")
 	if avatarID == "" {
-		log.Printf("[mall_cart_handler] GET unified exit status=400 reason=avatarId missing rawQuery=%q\n", r.URL.RawQuery)
 		writeErr(w, http.StatusBadRequest, "avatarId is required")
 		return
 	}
 
 	if h.cartQuery == nil {
-		log.Printf("[mall_cart_handler] GET unified exit status=500 reason=cartQuery nil avatarId=%q\n", avatarID)
 		writeErr(w, http.StatusInternalServerError, "cart_query is not configured")
 		return
 	}
 
-	log.Printf("[mall_cart_handler] GET unified call cartQuery avatarId=%q queryImpl=%T\n", avatarID, h.cartQuery)
-
 	v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
 	if err == nil {
-		log.Printf("[mall_cart_handler] GET unified ok status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 		writeJSON(w, http.StatusOK, v)
 		return
 	}
 
-	nf := isNotFoundErr(err)
-	log.Printf("[mall_cart_handler] GET unified cartQuery error avatarId=%q notFound=%t err=%v\n", avatarID, nf, err)
-
-	if nf {
-		log.Printf("[mall_cart_handler] GET unified return empty-cart status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
+	if isNotFoundErr(err) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"avatarId":  avatarID,
 			"items":     map[string]any{},
@@ -170,7 +138,6 @@ func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	log.Printf("[mall_cart_handler] GET unified exit status=500 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 	h.writeQueryErr(w, err)
 }
 
@@ -203,10 +170,9 @@ func isNotFoundErr(err error) bool {
 // handlers (mutations)
 // -------------------------
 
-func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request, start time.Time) {
+func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 	var req cartItemReq
 	if err := readJSON(r, &req); err != nil {
-		log.Printf("[mall_cart_handler] POST add-item exit status=400 reason=invalid json err=%v\n", err)
 		writeErr(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -217,17 +183,13 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request, star
 	listID := req.ListID
 	modelID := req.ModelID
 
-	log.Printf("[mall_cart_handler] POST add-item request avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
-
 	if avatarID == "" || invID == "" || listID == "" || modelID == "" || req.Qty <= 0 {
-		log.Printf("[mall_cart_handler] POST add-item exit status=400 reason=missing fields avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
 		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId, qty(>=1) are required")
 		return
 	}
 
 	_, err := h.uc.AddItem(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
-		log.Printf("[mall_cart_handler] POST add-item uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -236,14 +198,12 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request, star
 		return
 	}
 
-	log.Printf("[mall_cart_handler] POST add-item uc ok avatarId=%q -> respond cartDTO\n", avatarID)
-	h.respondCartDTO(w, r, avatarID, start)
+	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request, start time.Time) {
+func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 	var req cartItemReq
 	if err := readJSON(r, &req); err != nil {
-		log.Printf("[mall_cart_handler] PUT set-qty exit status=400 reason=invalid json err=%v\n", err)
 		writeErr(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -254,17 +214,13 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request, s
 	listID := req.ListID
 	modelID := req.ModelID
 
-	log.Printf("[mall_cart_handler] PUT set-qty request avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
-
 	if avatarID == "" || invID == "" || listID == "" || modelID == "" {
-		log.Printf("[mall_cart_handler] PUT set-qty exit status=400 reason=missing fields avatarId=%q invID=%q listID=%q modelID=%q\n", avatarID, invID, listID, modelID)
 		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId are required")
 		return
 	}
 
 	_, err := h.uc.SetItemQty(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
-		log.Printf("[mall_cart_handler] PUT set-qty uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -273,14 +229,12 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	log.Printf("[mall_cart_handler] PUT set-qty uc ok avatarId=%q -> respond cartDTO\n", avatarID)
-	h.respondCartDTO(w, r, avatarID, start)
+	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request, start time.Time) {
+func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	var req cartItemReq
 	if err := readJSON(r, &req); err != nil {
-		log.Printf("[mall_cart_handler] DELETE remove-item exit status=400 reason=invalid json err=%v\n", err)
 		writeErr(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -291,17 +245,13 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request, s
 	listID := req.ListID
 	modelID := req.ModelID
 
-	log.Printf("[mall_cart_handler] DELETE remove-item request avatarId=%q invID=%q listID=%q modelID=%q\n", avatarID, invID, listID, modelID)
-
 	if avatarID == "" || invID == "" || listID == "" || modelID == "" {
-		log.Printf("[mall_cart_handler] DELETE remove-item exit status=400 reason=missing fields avatarId=%q invID=%q listID=%q modelID=%q\n", avatarID, invID, listID, modelID)
 		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId are required")
 		return
 	}
 
 	_, err := h.uc.RemoveItem(r.Context(), avatarID, invID, listID, modelID)
 	if err != nil {
-		log.Printf("[mall_cart_handler] DELETE remove-item uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -310,22 +260,17 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	log.Printf("[mall_cart_handler] DELETE remove-item uc ok avatarId=%q -> respond cartDTO\n", avatarID)
-	h.respondCartDTO(w, r, avatarID, start)
+	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request, start time.Time) {
+func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 	avatarID := readAvatarID(r, "")
 	if avatarID == "" {
-		log.Printf("[mall_cart_handler] DELETE clear exit status=400 reason=avatarId missing rawQuery=%q\n", r.URL.RawQuery)
 		writeErr(w, http.StatusBadRequest, "avatarId is required")
 		return
 	}
 
-	log.Printf("[mall_cart_handler] DELETE clear request avatarId=%q\n", avatarID)
-
 	if err := h.uc.Clear(r.Context(), avatarID); err != nil {
-		log.Printf("[mall_cart_handler] DELETE clear uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -334,31 +279,22 @@ func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request, start 
 		return
 	}
 
-	log.Printf("[mall_cart_handler] DELETE clear uc ok avatarId=%q -> respond cartDTO\n", avatarID)
-	h.respondCartDTO(w, r, avatarID, start)
+	h.respondCartDTO(w, r, avatarID)
 }
 
-func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, avatarID string, start time.Time) {
+func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, avatarID string) {
 	if h.cartQuery == nil {
-		log.Printf("[mall_cart_handler] respondCartDTO exit status=500 reason=cartQuery nil avatarId=%q\n", avatarID)
 		writeErr(w, http.StatusInternalServerError, "cart_query is not configured")
 		return
 	}
 
-	log.Printf("[mall_cart_handler] respondCartDTO call cartQuery avatarId=%q queryImpl=%T\n", avatarID, h.cartQuery)
-
 	v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
 	if err == nil {
-		log.Printf("[mall_cart_handler] respondCartDTO ok status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 		writeJSON(w, http.StatusOK, v)
 		return
 	}
 
-	nf := isNotFoundErr(err)
-	log.Printf("[mall_cart_handler] respondCartDTO cartQuery error avatarId=%q notFound=%t err=%v\n", avatarID, nf, err)
-
-	if nf {
-		log.Printf("[mall_cart_handler] respondCartDTO return empty-cart status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
+	if isNotFoundErr(err) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"avatarId":  avatarID,
 			"items":     map[string]any{},
@@ -369,7 +305,6 @@ func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, ava
 		return
 	}
 
-	log.Printf("[mall_cart_handler] respondCartDTO exit status=500 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 	h.writeQueryErr(w, err)
 }
 

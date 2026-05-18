@@ -1,13 +1,16 @@
-// backend\internal\application\query\mall\follow_query.go
+// backend/internal/application/query/mall/follow_query.go
 package mall
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	avatardom "narratives/internal/domain/avatar"
 	avatarstate "narratives/internal/domain/avatarState"
 )
+
+var ErrAvatarStateQueryNotConfigured = errors.New("avatar state query not configured")
 
 type AvatarStateQuery struct {
 	avatarRepo      AvatarQueryAvatarRepository
@@ -34,8 +37,8 @@ func NewAvatarStateQuery(
 
 type AvatarResolvedFollowRef struct {
 	AvatarID   string     `json:"avatarId"`
-	AvatarName string     `json:"avatarName"`
-	AvatarIcon string     `json:"avatarIcon"`
+	AvatarName string     `json:"avatarName,omitempty"`
+	AvatarIcon string     `json:"avatarIcon,omitempty"`
 	FollowedAt *time.Time `json:"followedAt,omitempty"`
 }
 
@@ -57,11 +60,8 @@ func (q *AvatarStateQuery) GetResolvedByAvatarID(
 	if avatarID == "" {
 		return AvatarStateResolvedView{}, avatardom.ErrInvalidID
 	}
-	if q == nil || q.avatarStateRepo == nil {
-		return AvatarStateResolvedView{}, avatardom.ErrInvalidID
-	}
-	if q.avatarRepo == nil {
-		return AvatarStateResolvedView{}, avatardom.ErrInvalidID
+	if q == nil || q.avatarStateRepo == nil || q.avatarRepo == nil {
+		return AvatarStateResolvedView{}, ErrAvatarStateQueryNotConfigured
 	}
 
 	st, err := q.avatarStateRepo.GetByAvatarID(ctx, avatarID)
@@ -69,14 +69,20 @@ func (q *AvatarStateQuery) GetResolvedByAvatarID(
 		return AvatarStateResolvedView{}, err
 	}
 
-	followers := make([]AvatarResolvedFollowRef, 0, len(st.Followers))
-	for _, ref := range st.Followers {
-		followers = append(followers, q.resolveFollowRef(ctx, ref))
-	}
+	return q.BuildResolvedView(ctx, avatarID, &st), nil
+}
 
-	following := make([]AvatarResolvedFollowRef, 0, len(st.Following))
-	for _, ref := range st.Following {
-		following = append(following, q.resolveFollowRef(ctx, ref))
+func (q *AvatarStateQuery) BuildResolvedView(
+	ctx context.Context,
+	avatarID string,
+	st *avatarstate.AvatarState,
+) AvatarStateResolvedView {
+	if st == nil {
+		return AvatarStateResolvedView{
+			AvatarID:  avatarID,
+			Followers: []AvatarResolvedFollowRef{},
+			Following: []AvatarResolvedFollowRef{},
+		}
 	}
 
 	return AvatarStateResolvedView{
@@ -84,14 +90,30 @@ func (q *AvatarStateQuery) GetResolvedByAvatarID(
 		FollowerCount:  st.FollowerCount,
 		FollowingCount: st.FollowingCount,
 		PostCount:      st.PostCount,
-		Followers:      followers,
-		Following:      following,
+		Followers:      q.ResolveFollowRefs(ctx, st.Followers),
+		Following:      q.ResolveFollowRefs(ctx, st.Following),
 		LastActiveAt:   st.LastActiveAt,
 		UpdatedAt:      st.UpdatedAt,
-	}, nil
+	}
 }
 
-func (q *AvatarStateQuery) resolveFollowRef(
+func (q *AvatarStateQuery) ResolveFollowRefs(
+	ctx context.Context,
+	refs []avatarstate.AvatarFollowRef,
+) []AvatarResolvedFollowRef {
+	if len(refs) == 0 {
+		return []AvatarResolvedFollowRef{}
+	}
+
+	out := make([]AvatarResolvedFollowRef, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, q.ResolveFollowRef(ctx, ref))
+	}
+
+	return out
+}
+
+func (q *AvatarStateQuery) ResolveFollowRef(
 	ctx context.Context,
 	ref avatarstate.AvatarFollowRef,
 ) AvatarResolvedFollowRef {

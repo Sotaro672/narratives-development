@@ -176,8 +176,7 @@ func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context
 		}
 	}
 	if companyID != "" && h != nil && h.companySvc != nil {
-		// best-effort: not-found は握りつぶして空にする
-		if s, ok, err := h.companySvc.TryGetCompanyName(ctx, companyID); err == nil && ok {
+		if s, err := h.companySvc.GetCompanyNameByID(ctx, companyID); err == nil {
 			companyName = s
 		}
 	}

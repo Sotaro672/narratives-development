@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -24,7 +23,7 @@ import (
 // OrderRepoForTransfer (Firestore)
 // - implements usecase.OrderRepoForTransfer
 // - This file is for order item transfer lock/mark repository.
-// - Adjusted to match your actual Firestore orders schema.
+// - Adjusted to match actual Firestore orders schema.
 // ============================================================
 
 var (
@@ -77,14 +76,16 @@ func (r *OrderRepoForTransferFS) orderDoc(orderID string) *firestore.DocumentRef
 // usecase.OrderRepoForTransfer
 // ------------------------------------------------------------
 
-// ListPaidByAvatarID returns "paid" orders for avatar.
+// ListPaidByAvatarID returns paid orders for avatar.
 //
-// Your actual schema does NOT have `paid`.
-// Shortest practical approach:
-//   - query by avatarId only
-//   - infer Paid:
-//   - if `paid` exists -> use it
-//   - else if `billingSnapshot` exists and is non-empty -> treat as paid
+// Current Firestore order schema:
+// - avatarId: string
+// - paid: bool
+// - items: []map
+// - shippingSnapshot: map
+// - paymentMethodSnapshot: map
+//
+// billingSnapshot / billingAddress are deprecated and are not used here.
 func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarID string) ([]orderdom.Order, error) {
 	if r == nil || r.Client == nil {
 		return nil, ErrOrderRepoNotConfigured
@@ -117,8 +118,15 @@ func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarI
 			continue
 		}
 
-		o := orderdom.Order{}
-		o.ID = doc.Ref.ID
+		paid, _ := raw["paid"].(bool)
+		if !paid {
+			continue
+		}
+
+		o := orderdom.Order{
+			ID:   doc.Ref.ID,
+			Paid: paid,
+		}
 
 		if v, ok := raw["userId"].(string); ok {
 			o.UserID = v
@@ -131,12 +139,6 @@ func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarI
 		}
 		if t, ok := raw["createdAt"].(time.Time); ok && !t.IsZero() {
 			o.CreatedAt = t.UTC()
-		}
-
-		if p, ok := raw["paid"].(bool); ok {
-			o.Paid = p
-		} else {
-			o.Paid = inferPaidFromOrder(raw)
 		}
 
 		items, err := parseOrderItems(raw["items"])
@@ -154,8 +156,6 @@ func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarI
 // LockTransferItem acquires an item-level lock within an order.
 // - fails if already transferred
 // - fails if locked and not expired
-//
-// Your current item schema lacks `transferred`, so we treat missing as false.
 func (r *OrderRepoForTransferFS) LockTransferItem(ctx context.Context, orderID string, itemModelID string, now time.Time) error {
 	if r == nil || r.Client == nil {
 		return ErrOrderRepoNotConfigured
@@ -191,7 +191,7 @@ func (r *OrderRepoForTransferFS) LockTransferItem(ctx context.Context, orderID s
 			return ErrOrderNotFound
 		}
 
-		if p, ok := raw["paid"].(bool); ok && !p {
+		if p, ok := raw["paid"].(bool); !ok || !p {
 			return ErrOrderNotPaid
 		}
 
@@ -231,15 +231,11 @@ func (r *OrderRepoForTransferFS) LockTransferItem(ctx context.Context, orderID s
 			return err
 		}
 
-		log.Printf(
-			"[order_repo_for_transfer_fs] lock acquired orderId=%s modelId=%s lockedAt=%s expiresAt=%s",
-			orderID, itemModelID, now.Format(time.RFC3339), lockUntil.Format(time.RFC3339),
-		)
 		return nil
 	})
 }
 
-// UnlockTransferItem releases an item-level lock (best-effort).
+// UnlockTransferItem releases an item-level lock.
 func (r *OrderRepoForTransferFS) UnlockTransferItem(ctx context.Context, orderID string, itemModelID string) error {
 	if r == nil || r.Client == nil {
 		return ErrOrderRepoNotConfigured
@@ -292,7 +288,6 @@ func (r *OrderRepoForTransferFS) UnlockTransferItem(ctx context.Context, orderID
 			return err
 		}
 
-		log.Printf("[order_repo_for_transfer_fs] lock released orderId=%s modelId=%s", orderID, itemModelID)
 		return nil
 	})
 }
@@ -332,7 +327,7 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderI
 			return ErrOrderNotFound
 		}
 
-		if p, ok := raw["paid"].(bool); ok && !p {
+		if p, ok := raw["paid"].(bool); !ok || !p {
 			return ErrOrderNotPaid
 		}
 
@@ -366,10 +361,6 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderI
 			return err
 		}
 
-		log.Printf(
-			"[order_repo_for_transfer_fs] marked transferred orderId=%s modelId=%s transferredAt=%s",
-			orderID, itemModelID, at.Format(time.RFC3339),
-		)
 		return nil
 	})
 }
@@ -377,13 +368,6 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderI
 // ------------------------------------------------------------
 // Helpers (OrderRepoForTransferFS)
 // ------------------------------------------------------------
-
-func inferPaidFromOrder(raw map[string]any) bool {
-	if bs, ok := raw["billingSnapshot"].(map[string]any); ok && bs != nil && len(bs) > 0 {
-		return true
-	}
-	return false
-}
 
 func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 	if v == nil {
@@ -415,6 +399,12 @@ func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 			it.InventoryID = s
 		}
 
+		if s, ok := m["listId"].(string); ok {
+			it.ListID = s
+		} else if s, ok := m["listID"].(string); ok {
+			it.ListID = s
+		}
+
 		switch n := m["qty"].(type) {
 		case int:
 			it.Qty = n
@@ -435,8 +425,6 @@ func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 
 		if b, ok := m["transferred"].(bool); ok {
 			it.Transferred = b
-		} else {
-			it.Transferred = false
 		}
 
 		if t, ok := m["transferredAt"].(time.Time); ok && !t.IsZero() {
@@ -479,8 +467,8 @@ func findItemMapByModelID(items []any, modelID string) (int, map[string]any, err
 // TransferRepo (Firestore)
 // - implements usecase.TransferRepo
 //
-// このUsecaseは「transfer テーブルの起票・更新」が必須。
-// ここで transfers を永続化する。
+// This usecase requires transfer table creation/update.
+// Transfers are persisted here.
 // ============================================================
 
 var (
@@ -542,7 +530,7 @@ func (r *TransferRepositoryFS) counterDoc(productID string) *firestore.DocumentR
 }
 
 // NextAttempt returns the next monotonically increasing attempt number for a productId.
-// 実装: transferAttemptCounters/{productId}.nextAttempt をトランザクションで採番する。
+// Implementation: transferAttemptCounters/{productId}.nextAttempt is incremented in a transaction.
 func (r *TransferRepositoryFS) NextAttempt(ctx context.Context, productID string) (int, error) {
 	if r == nil || r.Client == nil {
 		return 0, ErrTransferRepoNotConfigured
@@ -602,16 +590,15 @@ func (r *TransferRepositoryFS) NextAttempt(ctx context.Context, productID string
 	return out, nil
 }
 
-// Create creates a new transfer attempt record (typically pending).
+// Create creates a new transfer attempt record.
 //
-// 正規保存キーは lowerCamelCase に統一する。
-// これにより Create と Update のキー名揺れを防ぐ。
+// Save keys are normalized to lowerCamelCase.
+// This prevents key-name drift between Create and Update.
 //
-// 共有 transfer 対応:
-//   - orderId が "share:<fromAvatarId>:<toAvatarId>:<productId>" の形式なら
-//     transferKind/shareRef/fromAvatarId/toAvatarId を追加保存する。
-//   - これにより既存の transferdom.Transfer を壊さず、share_transfer_usecase の結果も
-//     Firestore 上で区別できるようにする。
+// Share transfer support:
+//   - if orderId is "share:<fromAvatarId>:<toAvatarId>:<productId>",
+//     transferKind/shareRef/fromAvatarId/toAvatarId are also saved.
+//   - this keeps transferdom.Transfer unchanged while making share transfers distinguishable in Firestore.
 func (r *TransferRepositoryFS) Create(ctx context.Context, t transferdom.Transfer) error {
 	if r == nil || r.Client == nil {
 		return ErrTransferRepoNotConfigured
@@ -653,8 +640,7 @@ func (r *TransferRepositoryFS) Create(ctx context.Context, t transferdom.Transfe
 		doc["fromAvatarId"] = share.FromAvatarID
 		doc["toAvatarId"] = share.ToAvatarID
 
-		// 既存 create の avatarId は receiver として使われているので、
-		// share では意味が分かるように receiver 側も明示保存しておく。
+		// Existing Create stores avatarId as receiver, so share transfer also stores receiver explicitly.
 		doc["receiverAvatarId"] = t.AvatarID
 	} else if t.OrderID != "" {
 		doc["transferKind"] = "order"
@@ -665,7 +651,7 @@ func (r *TransferRepositoryFS) Create(ctx context.Context, t transferdom.Transfe
 }
 
 // Update updates an existing transfer attempt record by (productId, attempt).
-// Update は patch 指定フィールドのみ merge 更新する。
+// Update only merges patch-specified fields.
 func (r *TransferRepositoryFS) Update(ctx context.Context, productID string, attempt int, p transferdom.TransferPatch) error {
 	if r == nil || r.Client == nil {
 		return ErrTransferRepoNotConfigured

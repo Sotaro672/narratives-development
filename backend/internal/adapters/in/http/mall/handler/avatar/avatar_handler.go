@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -202,17 +201,13 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
-	log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet request\n", id)
-
 	a, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet get error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 
 	if a.WalletAddress != nil && *a.WalletAddress != "" {
-		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet conflict walletAddress=%q\n", id, ptrStr(a.WalletAddress))
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet already opened"})
 		return
@@ -220,12 +215,10 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 
 	updated, err := h.uc.OpenWallet(ctx, id)
 	if err != nil {
-		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 
-	log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet ok walletAddress=%q\n", id, ptrStr(updated.WalletAddress))
 	_ = json.NewEncoder(w).Encode(toAvatarResponse(updated))
 }
 
@@ -274,31 +267,11 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 		ExternalLink: body.ExternalLink,
 	}
 
-	log.Printf(
-		"[mall_avatar_handler] POST /mall/avatars request userId=%q userUid=%q avatarName=%q avatarIcon=%q profile_len=%d externalLink=%q\n",
-		in.UserID,
-		in.UserUID,
-		in.AvatarName,
-		ptrStr(in.AvatarIcon),
-		ptrLen(in.Profile),
-		ptrStr(in.ExternalLink),
-	)
-
 	created, err := h.uc.Create(ctx, in)
 	if err != nil {
-		log.Printf("[mall_avatar_handler] POST /mall/avatars error=%v\n", err)
 		writeAvatarErr(w, err)
 		return
 	}
-
-	hasAvatarIconField := created.AvatarIcon != nil && *created.AvatarIcon != ""
-	log.Printf(
-		"[mall_avatar_handler] POST /mall/avatars ok avatarId=%q walletAddress=%q avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
-		created.ID,
-		ptrStr(created.WalletAddress),
-		hasAvatarIconField,
-		ptrStr(created.AvatarIcon),
-	)
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toAvatarResponse(created))
@@ -397,11 +370,8 @@ func (h *AvatarHandler) getState(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	log.Printf("[mall_avatar_handler] GET /mall/avatars/%s/state request\n", id)
-
 	data, err := h.uc.GetAggregate(ctx, id)
 	if err != nil {
-		log.Printf("[mall_avatar_handler] GET /mall/avatars/%s/state error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
@@ -450,20 +420,8 @@ func (h *AvatarHandler) upsertState(w http.ResponseWriter, r *http.Request, id s
 		UpdatedAt:      body.UpdatedAt,
 	}
 
-	log.Printf(
-		"[mall_avatar_handler] %s /mall/avatars/%s/state followerCount=%v followingCount=%v postCount=%v followers_set=%t following_set=%t\n",
-		r.Method,
-		id,
-		body.FollowerCount,
-		body.FollowingCount,
-		body.PostCount,
-		body.Followers != nil,
-		body.Following != nil,
-	)
-
 	updated, err := h.uc.UpdateAvatarState(ctx, id, patch)
 	if err != nil {
-		log.Printf("[mall_avatar_handler] %s /mall/avatars/%s/state error=%v\n", r.Method, id, err)
 		writeAvatarErr(w, err)
 		return
 	}
@@ -530,8 +488,6 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	log.Printf("[mall_avatar_handler] GET /mall/avatars/%s aggregate=%q\n", id, r.URL.Query().Get("aggregate"))
-
 	q := r.URL.Query()
 	agg := strings.EqualFold(q.Get("aggregate"), "1") || strings.EqualFold(q.Get("aggregate"), "true")
 
@@ -556,14 +512,6 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		writeAvatarErr(w, err)
 		return
 	}
-
-	hasAvatarIconField := avatar.AvatarIcon != nil && *avatar.AvatarIcon != ""
-	log.Printf(
-		"[mall_avatar_handler] GET /mall/avatars/%s ok avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
-		id,
-		hasAvatarIconField,
-		ptrStr(avatar.AvatarIcon),
-	)
 
 	_ = json.NewEncoder(w).Encode(toAvatarResponse(avatar))
 }

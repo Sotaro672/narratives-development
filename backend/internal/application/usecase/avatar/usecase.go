@@ -4,7 +4,6 @@ package avatar
 import (
 	"context"
 	"errors"
-	"log"
 	"strings"
 	"time"
 
@@ -284,6 +283,181 @@ func (u *AvatarUsecase) UpdateAvatarState(
 	return u.stRepo.Upsert(ctx, next)
 }
 
+type FollowAvatarOutput struct {
+	MeAvatarID     string
+	TargetAvatarID string
+	Following      bool
+	MeState        avatarstate.AvatarState
+	TargetState    avatarstate.AvatarState
+}
+
+func (u *AvatarUsecase) FollowAvatar(
+	ctx context.Context,
+	meAvatarID string,
+	targetAvatarID string,
+) (FollowAvatarOutput, error) {
+	if meAvatarID == "" || targetAvatarID == "" {
+		return FollowAvatarOutput{}, avatardom.ErrInvalidID
+	}
+	if meAvatarID == targetAvatarID {
+		return FollowAvatarOutput{}, avatarstate.ErrSelfFollowingRelation
+	}
+	if u.avRepo == nil {
+		return FollowAvatarOutput{}, errors.New("avatar repo not configured")
+	}
+	if u.stRepo == nil {
+		return FollowAvatarOutput{}, errors.New("avatarState repo not configured")
+	}
+
+	if _, err := u.avRepo.GetByID(ctx, meAvatarID); err != nil {
+		return FollowAvatarOutput{}, err
+	}
+	if _, err := u.avRepo.GetByID(ctx, targetAvatarID); err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	now := u.now().UTC()
+
+	meState, err := u.getAvatarStateForMutation(ctx, meAvatarID, now)
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	targetState, err := u.getAvatarStateForMutation(ctx, targetAvatarID, now)
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	myFollowing := upsertFollowRef(meState.Following, avatarstate.AvatarFollowRef{
+		AvatarID:   targetAvatarID,
+		FollowedAt: now,
+	})
+
+	targetFollowers := upsertFollowRef(targetState.Followers, avatarstate.AvatarFollowRef{
+		AvatarID:   meAvatarID,
+		FollowedAt: now,
+	})
+
+	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, avatarstate.AvatarStatePatch{
+		Following:    &myFollowing,
+		LastActiveAt: &now,
+		UpdatedAt:    &now,
+	})
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, avatarstate.AvatarStatePatch{
+		Followers:    &targetFollowers,
+		LastActiveAt: &now,
+		UpdatedAt:    &now,
+	})
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	return FollowAvatarOutput{
+		MeAvatarID:     meAvatarID,
+		TargetAvatarID: targetAvatarID,
+		Following:      true,
+		MeState:        updatedMeState,
+		TargetState:    updatedTargetState,
+	}, nil
+}
+
+func (u *AvatarUsecase) UnfollowAvatar(
+	ctx context.Context,
+	meAvatarID string,
+	targetAvatarID string,
+) (FollowAvatarOutput, error) {
+	if meAvatarID == "" || targetAvatarID == "" {
+		return FollowAvatarOutput{}, avatardom.ErrInvalidID
+	}
+	if meAvatarID == targetAvatarID {
+		return FollowAvatarOutput{}, avatarstate.ErrSelfFollowingRelation
+	}
+	if u.avRepo == nil {
+		return FollowAvatarOutput{}, errors.New("avatar repo not configured")
+	}
+	if u.stRepo == nil {
+		return FollowAvatarOutput{}, errors.New("avatarState repo not configured")
+	}
+
+	if _, err := u.avRepo.GetByID(ctx, meAvatarID); err != nil {
+		return FollowAvatarOutput{}, err
+	}
+	if _, err := u.avRepo.GetByID(ctx, targetAvatarID); err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	now := u.now().UTC()
+
+	meState, err := u.getAvatarStateForMutation(ctx, meAvatarID, now)
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	targetState, err := u.getAvatarStateForMutation(ctx, targetAvatarID, now)
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	myFollowing := removeFollowRef(meState.Following, targetAvatarID)
+	targetFollowers := removeFollowRef(targetState.Followers, meAvatarID)
+
+	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, avatarstate.AvatarStatePatch{
+		Following:    &myFollowing,
+		LastActiveAt: &now,
+		UpdatedAt:    &now,
+	})
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, avatarstate.AvatarStatePatch{
+		Followers:    &targetFollowers,
+		LastActiveAt: &now,
+		UpdatedAt:    &now,
+	})
+	if err != nil {
+		return FollowAvatarOutput{}, err
+	}
+
+	return FollowAvatarOutput{
+		MeAvatarID:     meAvatarID,
+		TargetAvatarID: targetAvatarID,
+		Following:      false,
+		MeState:        updatedMeState,
+		TargetState:    updatedTargetState,
+	}, nil
+}
+
+func (u *AvatarUsecase) getAvatarStateForMutation(
+	ctx context.Context,
+	avatarID string,
+	now time.Time,
+) (avatarstate.AvatarState, error) {
+	st, err := u.stRepo.GetByAvatarID(ctx, avatarID)
+	if err == nil {
+		if st.ID == "" {
+			st.ID = avatarID
+		}
+		return st, nil
+	}
+
+	if !isAvatarStateNotFound(err) {
+		return avatarstate.AvatarState{}, err
+	}
+
+	return avatarstate.AvatarState{
+		ID:           avatarID,
+		Followers:    []avatarstate.AvatarFollowRef{},
+		Following:    []avatarstate.AvatarFollowRef{},
+		LastActiveAt: now.UTC(),
+		UpdatedAt:    &now,
+	}, nil
+}
+
 func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string) error {
 	if avatarID == "" {
 		return avatardom.ErrInvalidID
@@ -351,14 +525,17 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		}
 	}
 
+	profile := normalizeOptionalString(in.Profile)
+	externalLink := normalizeOptionalString(in.ExternalLink)
+
 	now := u.now().UTC()
 
 	a := avatardom.Avatar{
 		UserID:       userUID,
 		AvatarName:   name,
 		AvatarIcon:   avatarIcon,
-		Profile:      in.Profile,
-		ExternalLink: in.ExternalLink,
+		Profile:      profile,
+		ExternalLink: externalLink,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -408,13 +585,10 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, cerr
 	}
 
-	log.Printf(`[avatar_uc] cart upsert start avatarId=%q`, avatarID)
 	if err := u.cartRepo.Upsert(ctx, cart); err != nil {
-		log.Printf(`[avatar_uc] cart upsert fail avatarId=%q err=%v`, avatarID, err)
 		rollback()
 		return avatardom.Avatar{}, err
 	}
-	log.Printf(`[avatar_uc] cart upsert ok avatarId=%q`, avatarID)
 
 	w, werr := u.walletSvc.OpenAvatarWallet(ctx, avatarID)
 	if werr != nil {
@@ -463,6 +637,14 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
 	}
 
+	if patch.AvatarName != nil {
+		s := strings.TrimSpace(*patch.AvatarName)
+		if s == "" {
+			return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
+		}
+		patch.AvatarName = &s
+	}
+
 	if patch.AvatarIcon != nil {
 		s := strings.TrimSpace(*patch.AvatarIcon)
 		if s != "" &&
@@ -472,6 +654,9 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 		}
 		patch.AvatarIcon = &s
 	}
+
+	patch.Profile = normalizeOptionalString(patch.Profile)
+	patch.ExternalLink = normalizeOptionalString(patch.ExternalLink)
 
 	return u.avRepo.Update(ctx, id, patch)
 }
@@ -506,4 +691,64 @@ func cloneAvatarFollowRefs(in []avatarstate.AvatarFollowRef) []avatarstate.Avata
 	}
 
 	return out
+}
+
+func upsertFollowRef(items []avatarstate.AvatarFollowRef, ref avatarstate.AvatarFollowRef) []avatarstate.AvatarFollowRef {
+	out := make([]avatarstate.AvatarFollowRef, 0, len(items)+1)
+	found := false
+
+	for _, item := range items {
+		if item.AvatarID == ref.AvatarID {
+			out = append(out, avatarstate.AvatarFollowRef{
+				AvatarID:   item.AvatarID,
+				FollowedAt: ref.FollowedAt.UTC(),
+			})
+			found = true
+			continue
+		}
+
+		out = append(out, avatarstate.AvatarFollowRef{
+			AvatarID:   item.AvatarID,
+			FollowedAt: item.FollowedAt.UTC(),
+		})
+	}
+
+	if !found {
+		out = append(out, avatarstate.AvatarFollowRef{
+			AvatarID:   ref.AvatarID,
+			FollowedAt: ref.FollowedAt.UTC(),
+		})
+	}
+
+	return out
+}
+
+func removeFollowRef(items []avatarstate.AvatarFollowRef, avatarID string) []avatarstate.AvatarFollowRef {
+	if len(items) == 0 {
+		return []avatarstate.AvatarFollowRef{}
+	}
+
+	out := make([]avatarstate.AvatarFollowRef, 0, len(items))
+
+	for _, item := range items {
+		if item.AvatarID == avatarID {
+			continue
+		}
+
+		out = append(out, avatarstate.AvatarFollowRef{
+			AvatarID:   item.AvatarID,
+			FollowedAt: item.FollowedAt.UTC(),
+		})
+	}
+
+	return out
+}
+
+func normalizeOptionalString(p *string) *string {
+	if p == nil {
+		return nil
+	}
+
+	s := strings.TrimSpace(*p)
+	return &s
 }
