@@ -5,12 +5,10 @@ package usecase
 責任と機能:
 - paid 後に inventory reserve を行うために、order から items を抽出し、
   inventoryId/modelId 単位で qty を集計して安定順に並べる。
-- inventoryId が肥大化しているケースに備え、docId(product__token) に正規化する。
 */
 
 import (
 	"sort"
-	"strings"
 
 	orderdom "narratives/internal/domain/order"
 )
@@ -89,23 +87,4 @@ func aggregateReserveItems(items []reserveItem) []reserveItem {
 	})
 
 	return out
-}
-
-// cart/order/items で使っている inventoryId が
-//
-//	product__token__list__model
-//
-// のように肥大化しているケースがあるため、docId(product__token) に正規化する。
-func normalizeInventoryDocIDBestEffort(inventoryID string) string {
-	inventoryID = strings.TrimSpace(inventoryID)
-	if inventoryID == "" {
-		return ""
-	}
-
-	parts := strings.Split(inventoryID, "__")
-	if len(parts) >= 2 {
-		return parts[0] + "__" + parts[1]
-	}
-
-	return inventoryID
 }

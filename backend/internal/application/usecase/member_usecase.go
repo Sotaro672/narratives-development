@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -62,11 +61,11 @@ func NewMemberUsecaseWithInvitationCommand(
 // -----------------------------------------------------------------------------
 
 func (u *MemberUsecase) GetByID(ctx context.Context, id string) (memdom.Member, error) {
-	return u.repo.GetByID(ctx, strings.TrimSpace(id))
+	return u.repo.GetByID(ctx, id)
 }
 
 func (u *MemberUsecase) GetByDocID(ctx context.Context, docID string) (MemberRecord, error) {
-	rec, err := u.repo.GetByDocID(ctx, strings.TrimSpace(docID))
+	rec, err := u.repo.GetByDocID(ctx, docID)
 	if err != nil {
 		return MemberRecord{}, err
 	}
@@ -77,11 +76,11 @@ func (u *MemberUsecase) GetByDocID(ctx context.Context, docID string) (MemberRec
 }
 
 func (u *MemberUsecase) GetByFirebaseUID(ctx context.Context, firebaseUID string) (memdom.Member, error) {
-	return u.repo.GetByFirebaseUID(ctx, strings.TrimSpace(firebaseUID))
+	return u.repo.GetByFirebaseUID(ctx, firebaseUID)
 }
 
 func (u *MemberUsecase) GetRecordByFirebaseUID(ctx context.Context, firebaseUID string) (MemberRecord, error) {
-	rec, err := u.repo.GetRecordByFirebaseUID(ctx, strings.TrimSpace(firebaseUID))
+	rec, err := u.repo.GetRecordByFirebaseUID(ctx, firebaseUID)
 	if err != nil {
 		return MemberRecord{}, err
 	}
@@ -92,11 +91,11 @@ func (u *MemberUsecase) GetRecordByFirebaseUID(ctx context.Context, firebaseUID 
 }
 
 func (u *MemberUsecase) GetByEmail(ctx context.Context, email string) (memdom.Member, error) {
-	return u.repo.GetByEmail(ctx, strings.TrimSpace(email))
+	return u.repo.GetByEmail(ctx, email)
 }
 
 func (u *MemberUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.repo.Exists(ctx, strings.TrimSpace(id))
+	return u.repo.Exists(ctx, id)
 }
 
 func (u *MemberUsecase) List(
@@ -105,11 +104,6 @@ func (u *MemberUsecase) List(
 	s common.Sort,
 	p common.Page,
 ) (common.PageResult[memdom.Member], error) {
-	f.UID = strings.TrimSpace(f.UID)
-	f.SearchQuery = strings.TrimSpace(f.SearchQuery)
-	f.CompanyID = strings.TrimSpace(f.CompanyID)
-	f.Status = strings.TrimSpace(f.Status)
-
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		f.CompanyID = cid
 	}
@@ -123,11 +117,6 @@ func (u *MemberUsecase) ListWithDocID(
 	s common.Sort,
 	p common.Page,
 ) (MemberRecordPageResult, error) {
-	f.UID = strings.TrimSpace(f.UID)
-	f.SearchQuery = strings.TrimSpace(f.SearchQuery)
-	f.CompanyID = strings.TrimSpace(f.CompanyID)
-	f.Status = strings.TrimSpace(f.Status)
-
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		f.CompanyID = cid
 	}
@@ -186,22 +175,22 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 	}
 
 	cid := CompanyIDFromContext(ctx)
-	companyID := strings.TrimSpace(in.CompanyID)
+	companyID := in.CompanyID
 	if cid != "" {
 		companyID = cid
 	}
 
 	m := memdom.Member{
-		UID:            strings.TrimSpace(in.UID),
-		FirstName:      strings.TrimSpace(in.FirstName),
-		LastName:       strings.TrimSpace(in.LastName),
-		FirstNameKana:  strings.TrimSpace(in.FirstNameKana),
-		LastNameKana:   strings.TrimSpace(in.LastNameKana),
-		Email:          strings.TrimSpace(in.Email),
+		UID:            in.UID,
+		FirstName:      in.FirstName,
+		LastName:       in.LastName,
+		FirstNameKana:  in.FirstNameKana,
+		LastNameKana:   in.LastNameKana,
+		Email:          in.Email,
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
 		CompanyID:      companyID,
-		Status:         strings.TrimSpace(in.Status),
+		Status:         in.Status,
 		CreatedAt:      *createdAt,
 		UpdatedAt:      nil,
 	}
@@ -217,22 +206,22 @@ func (u *MemberUsecase) CreateWithDocID(ctx context.Context, in CreateMemberInpu
 	}
 
 	cid := CompanyIDFromContext(ctx)
-	companyID := strings.TrimSpace(in.CompanyID)
+	companyID := in.CompanyID
 	if cid != "" {
 		companyID = cid
 	}
 
 	m := memdom.Member{
-		UID:            strings.TrimSpace(in.UID),
-		FirstName:      strings.TrimSpace(in.FirstName),
-		LastName:       strings.TrimSpace(in.LastName),
-		FirstNameKana:  strings.TrimSpace(in.FirstNameKana),
-		LastNameKana:   strings.TrimSpace(in.LastNameKana),
-		Email:          strings.TrimSpace(in.Email),
+		UID:            in.UID,
+		FirstName:      in.FirstName,
+		LastName:       in.LastName,
+		FirstNameKana:  in.FirstNameKana,
+		LastNameKana:   in.LastNameKana,
+		Email:          in.Email,
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
 		CompanyID:      companyID,
-		Status:         strings.TrimSpace(in.Status),
+		Status:         in.Status,
 		CreatedAt:      *createdAt,
 		UpdatedAt:      nil,
 	}
@@ -264,7 +253,7 @@ type UpdateMemberInput struct {
 }
 
 func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdom.Member, error) {
-	id := strings.TrimSpace(in.ID)
+	id := in.ID
 	if id == "" {
 		return memdom.Member{}, memdom.ErrNotFound
 	}
@@ -277,19 +266,19 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 	current := currentRec.Member
 
 	if in.FirstName != nil {
-		current.FirstName = strings.TrimSpace(*in.FirstName)
+		current.FirstName = *in.FirstName
 	}
 	if in.LastName != nil {
-		current.LastName = strings.TrimSpace(*in.LastName)
+		current.LastName = *in.LastName
 	}
 	if in.FirstNameKana != nil {
-		current.FirstNameKana = strings.TrimSpace(*in.FirstNameKana)
+		current.FirstNameKana = *in.FirstNameKana
 	}
 	if in.LastNameKana != nil {
-		current.LastNameKana = strings.TrimSpace(*in.LastNameKana)
+		current.LastNameKana = *in.LastNameKana
 	}
 	if in.Email != nil {
-		current.Email = strings.TrimSpace(*in.Email)
+		current.Email = *in.Email
 	}
 	if in.Permissions != nil {
 		current.Permissions = dedupStrings(*in.Permissions)
@@ -301,11 +290,11 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		current.CompanyID = cid
 	} else if in.CompanyID != nil {
-		current.CompanyID = strings.TrimSpace(*in.CompanyID)
+		current.CompanyID = *in.CompanyID
 	}
 
 	if in.Status != nil {
-		current.Status = strings.TrimSpace(*in.Status)
+		current.Status = *in.Status
 	}
 
 	now := u.now().UTC()
@@ -320,8 +309,8 @@ type BindFirebaseUIDInput struct {
 }
 
 func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDInput) (MemberRecord, error) {
-	docID := strings.TrimSpace(in.DocID)
-	uid := strings.TrimSpace(in.UID)
+	docID := in.DocID
+	uid := in.UID
 
 	if docID == "" {
 		return MemberRecord{}, fmt.Errorf("member docID is empty")
@@ -335,7 +324,7 @@ func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDI
 		return MemberRecord{}, err
 	}
 
-	currentUID := strings.TrimSpace(rec.Member.UID)
+	currentUID := rec.Member.UID
 	if currentUID != "" && currentUID != uid {
 		return MemberRecord{}, memdom.ErrConflict
 	}
@@ -360,15 +349,6 @@ func (u *MemberUsecase) Save(ctx context.Context, m memdom.Member) (memdom.Membe
 		m.CreatedAt = u.now().UTC()
 	}
 
-	m.UID = strings.TrimSpace(m.UID)
-	m.FirstName = strings.TrimSpace(m.FirstName)
-	m.LastName = strings.TrimSpace(m.LastName)
-	m.FirstNameKana = strings.TrimSpace(m.FirstNameKana)
-	m.LastNameKana = strings.TrimSpace(m.LastNameKana)
-	m.Email = strings.TrimSpace(m.Email)
-	m.CompanyID = strings.TrimSpace(m.CompanyID)
-	m.Status = strings.TrimSpace(m.Status)
-
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		m.CompanyID = cid
 	}
@@ -377,7 +357,6 @@ func (u *MemberUsecase) Save(ctx context.Context, m memdom.Member) (memdom.Membe
 }
 
 func (u *MemberUsecase) SaveByDocID(ctx context.Context, docID string, m memdom.Member) (memdom.Member, error) {
-	docID = strings.TrimSpace(docID)
 	if docID == "" {
 		return memdom.Member{}, fmt.Errorf("member docID is empty")
 	}
@@ -385,15 +364,6 @@ func (u *MemberUsecase) SaveByDocID(ctx context.Context, docID string, m memdom.
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = u.now().UTC()
 	}
-
-	m.UID = strings.TrimSpace(m.UID)
-	m.FirstName = strings.TrimSpace(m.FirstName)
-	m.LastName = strings.TrimSpace(m.LastName)
-	m.FirstNameKana = strings.TrimSpace(m.FirstNameKana)
-	m.LastNameKana = strings.TrimSpace(m.LastNameKana)
-	m.Email = strings.TrimSpace(m.Email)
-	m.CompanyID = strings.TrimSpace(m.CompanyID)
-	m.Status = strings.TrimSpace(m.Status)
 
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		m.CompanyID = cid
@@ -403,7 +373,7 @@ func (u *MemberUsecase) SaveByDocID(ctx context.Context, docID string, m memdom.
 }
 
 func (u *MemberUsecase) Delete(ctx context.Context, id string) error {
-	return u.repo.Delete(ctx, strings.TrimSpace(id))
+	return u.repo.Delete(ctx, id)
 }
 
 // -----------------------------------------------------------------------------
@@ -415,7 +385,6 @@ func (u *MemberUsecase) SendInvitation(ctx context.Context, memberID string) err
 		return errors.New("invitation command is not configured")
 	}
 
-	memberID = strings.TrimSpace(memberID)
 	if memberID == "" {
 		return fmt.Errorf("memberID is empty")
 	}

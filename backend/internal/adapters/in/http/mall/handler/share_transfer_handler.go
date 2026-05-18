@@ -4,7 +4,6 @@ package mallHandler
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -74,8 +73,7 @@ func (h *ShareTransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	uid, ok := middleware.CurrentUserUID(r)
-	if !ok {
+	if _, ok := middleware.CurrentUserUID(r); !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "unauthorized: missing uid",
 		})
@@ -111,14 +109,6 @@ func (h *ShareTransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	log.Printf(
-		`[mall.contents.share] incoming uid=%q avatarId=%q targetAvatarId=%q productId=%q`,
-		uid,
-		avatarID,
-		targetAvatarID,
-		productID,
-	)
-
 	ucOut, err := h.uc.ShareToAvatar(
 		r.Context(),
 		usecase.ShareTransferInput{
@@ -128,15 +118,6 @@ func (h *ShareTransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		},
 	)
 	if err != nil {
-		log.Printf(
-			"[mall.contents.share] ERROR uid=%q avatarId=%q targetAvatarId=%q productId=%q err=%T %v",
-			uid,
-			avatarID,
-			targetAvatarID,
-			productID,
-			err, err,
-		)
-
 		switch {
 		case errors.Is(err, usecase.ErrShareTransferProductIDEmpty):
 			badRequest(w, "productId is required")
@@ -190,18 +171,6 @@ func (h *ShareTransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		MintAddress:      ucOut.MintAddress,
 		TokenBlueprintID: ucOut.TokenBlueprintID,
 	}
-
-	log.Printf(
-		`[mall.contents.share] ok uid=%q avatarId=%q targetAvatarId=%q productId=%q tx=%q updatedToAddress=%t mint=%q tokenBlueprintId=%q`,
-		uid,
-		out.AvatarID,
-		out.TargetAvatarID,
-		out.ProductID,
-		out.TxSignature,
-		out.UpdatedToAddress,
-		out.MintAddress,
-		out.TokenBlueprintID,
-	)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": out,

@@ -3,7 +3,6 @@ package usecase
 
 import (
 	"context"
-	"log"
 	"time"
 
 	branddom "narratives/internal/domain/brand"
@@ -151,20 +150,10 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 	wa := created.WalletAddress
 	if u.walletSvc != nil && (wa == "" || wa == "pending") {
 		wallet, werr := u.walletSvc.OpenBrandWallet(ctx, created)
-		if werr != nil {
-			log.Printf("[BrandUsecase] WARN: failed to open Solana brand wallet (brandId=%s): %v", created.ID, werr)
-		} else {
-			addr := wallet.Address
-			if addr == "" {
-				log.Printf("[BrandUsecase] WARN: OpenBrandWallet returned empty address (brandId=%s)", created.ID)
-			} else {
-				created.WalletAddress = addr
-				if saved, errSave := u.brandRepo.Save(ctx, created, nil); errSave != nil {
-					log.Printf("[BrandUsecase] WARN: failed to persist brand walletAddress (brandId=%s wallet=%s): %v",
-						created.ID, addr, errSave)
-				} else {
-					created = saved
-				}
+		if werr == nil && wallet.Address != "" {
+			created.WalletAddress = wallet.Address
+			if saved, errSave := u.brandRepo.Save(ctx, created, nil); errSave == nil {
+				created = saved
 			}
 		}
 	}
@@ -177,7 +166,6 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 
 	m, err := u.memberRepo.GetByID(ctx, managerID)
 	if err != nil {
-		log.Printf("[BrandUsecase] WARN: managerId=%s の Member 取得失敗: %v", managerID, err)
 		return created, nil
 	}
 
@@ -193,10 +181,7 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 		m.AssignedBrands = append(m.AssignedBrands, brandID)
 	}
 
-	if _, err := u.memberRepo.Save(ctx, m, nil); err != nil {
-		log.Printf("[BrandUsecase] WARN: Member.assignedBrands 更新失敗 (memberId=%s brandId=%s): %v",
-			managerID, brandID, err)
-	}
+	_, _ = u.memberRepo.Save(ctx, m, nil)
 
 	return created, nil
 }

@@ -16,7 +16,7 @@ import (
 
 // ResolvedTokenRepositoryFS は ResolveTokenByMintAddressWithBrandNameResult の Firestore キャッシュ実装です。
 //
-// ✅ Collection design:
+// Collection design:
 // - collection: wallets
 // - docId: avatarId
 // - subcollection: resolvedTokens
@@ -55,31 +55,10 @@ type resolvedTokenDoc struct {
 	ProductBlueprintID string `firestore:"productBlueprintId"`
 	ProductName        string `firestore:"productName"`
 
-	TokenBlueprintID string                    `firestore:"tokenBlueprintId"`
-	TokenContents    []resolvedTokenContentDoc `firestore:"tokenContentsFiles"`
-
 	// キャッシュ更新時刻（任意）
 	ResolvedAt time.Time `firestore:"resolvedAt"`
 	// スキーマ互換のためのバージョン（任意）
 	SourceVersion int `firestore:"sourceVersion"`
-}
-
-type resolvedTokenContentDoc struct {
-	// metadata.properties.files 由来
-	FileName string `firestore:"fileName"`
-	Type     string `firestore:"type"`
-	URI      string `firestore:"uri"`
-
-	// 互換用。
-	// 旧実装では signed URL を viewUri として返していたが、
-	// GCS 廃止後は署名せず metadata.properties.files[].uri をそのまま返す。
-	ViewURI string `firestore:"viewUri"`
-
-	// 旧 GCS 実装との互換用。
-	Bucket        string    `firestore:"bucket"`
-	ObjectPath    string    `firestore:"objectPath"`
-	PublicURI     string    `firestore:"publicUri"`
-	ViewExpiresAt time.Time `firestore:"viewExpiresAt"`
 }
 
 func toResolvedTokenDoc(src appusecase.ResolveTokenByMintAddressWithBrandNameResult, now time.Time) resolvedTokenDoc {
@@ -90,30 +69,6 @@ func toResolvedTokenDoc(src appusecase.ResolveTokenByMintAddressWithBrandNameRes
 		at = at.UTC()
 	}
 
-	files := make([]resolvedTokenContentDoc, 0, len(src.TokenContentsFiles))
-	for _, f := range src.TokenContentsFiles {
-		var exp time.Time
-		if f.ViewExpiresAt != nil {
-			exp = f.ViewExpiresAt.UTC()
-		}
-
-		viewURI := f.ViewURI
-		if viewURI == "" {
-			viewURI = f.URI
-		}
-
-		files = append(files, resolvedTokenContentDoc{
-			FileName:      f.FileName,
-			Type:          f.Type,
-			URI:           f.URI,
-			ViewURI:       viewURI,
-			Bucket:        f.Bucket,
-			ObjectPath:    f.ObjectPath,
-			PublicURI:     f.PublicURI,
-			ViewExpiresAt: exp,
-		})
-	}
-
 	return resolvedTokenDoc{
 		ProductID:          src.ProductID,
 		BrandID:            src.BrandID,
@@ -122,49 +77,12 @@ func toResolvedTokenDoc(src appusecase.ResolveTokenByMintAddressWithBrandNameRes
 		MintAddress:        src.MintAddress,
 		ProductBlueprintID: src.ProductBlueprintID,
 		ProductName:        src.ProductName,
-
-		TokenBlueprintID: src.TokenBlueprintID,
-		TokenContents:    files,
-
-		ResolvedAt:    at,
-		SourceVersion: 2,
+		ResolvedAt:         at,
+		SourceVersion:      3,
 	}
 }
 
 func fromResolvedTokenDoc(d resolvedTokenDoc) appusecase.ResolveTokenByMintAddressWithBrandNameResult {
-	files := make([]appusecase.TokenContentFile, 0, len(d.TokenContents))
-	for _, f := range d.TokenContents {
-		var exp *time.Time
-		if !f.ViewExpiresAt.IsZero() {
-			t := f.ViewExpiresAt.UTC()
-			exp = &t
-		}
-
-		uri := f.URI
-		if uri == "" {
-			uri = f.ViewURI
-		}
-		if uri == "" {
-			uri = f.PublicURI
-		}
-
-		viewURI := f.ViewURI
-		if viewURI == "" {
-			viewURI = uri
-		}
-
-		files = append(files, appusecase.TokenContentFile{
-			FileName:      f.FileName,
-			Type:          f.Type,
-			URI:           uri,
-			ViewURI:       viewURI,
-			Bucket:        f.Bucket,
-			ObjectPath:    f.ObjectPath,
-			PublicURI:     f.PublicURI,
-			ViewExpiresAt: exp,
-		})
-	}
-
 	return appusecase.ResolveTokenByMintAddressWithBrandNameResult{
 		ProductID:          d.ProductID,
 		BrandID:            d.BrandID,
@@ -173,8 +91,6 @@ func fromResolvedTokenDoc(d resolvedTokenDoc) appusecase.ResolveTokenByMintAddre
 		MintAddress:        d.MintAddress,
 		ProductBlueprintID: d.ProductBlueprintID,
 		ProductName:        d.ProductName,
-		TokenBlueprintID:   d.TokenBlueprintID,
-		TokenContentsFiles: files,
 	}
 }
 

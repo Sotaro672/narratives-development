@@ -5,9 +5,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"log"
-	"sort"
-	"strings"
 
 	invdom "narratives/internal/domain/inventory"
 )
@@ -27,7 +24,7 @@ func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 // - mint から在庫へ反映する唯一の入口
 // - 在庫の蓄積は Stock（modelId -> {Products: ...}）で表現する前提
 //
-// ✅ 修正方針:
+// 修正方針:
 //   - 既存 model の追加反映が反射経由の Get->merge->Update で失敗し得るため、
 //     repo の atomic upsert（transaction + UNION）に委譲する。
 func (uc *InventoryUsecase) UpsertFromMintByModel(
@@ -54,36 +51,20 @@ func (uc *InventoryUsecase) UpsertFromMintByModel(
 	if mID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidModelID
 	}
-
-	ids := normalizeIDs(productIDs)
-	if len(ids) == 0 {
+	if len(productIDs) == 0 {
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
-
-	// docId をここで確定（repo 側の sanitize と揃える）
-	inventoryID := buildInventoryID(pbID, tbID)
-
-	log.Printf(
-		"[inventory_uc] UpsertFromMintByModel start inventoryId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q products=%d",
-		inventoryID, tbID, pbID, mID, len(ids),
-	)
-
-	// ✅ repo の atomic upsert に委譲（既存 model でも UNION で確実に追記される）
-	updated, err := uc.repo.UpsertByProductBlueprintAndToken(ctx, tbID, pbID, mID, ids)
-	if err != nil {
-		log.Printf(
-			"[inventory_uc] UpsertFromMintByModel upsert error inventoryId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q err=%v",
-			inventoryID, tbID, pbID, mID, err,
-		)
-		return invdom.Mint{}, err
+	for _, productID := range productIDs {
+		if productID == "" {
+			return invdom.Mint{}, invdom.ErrInvalidProducts
+		}
 	}
 
-	log.Printf("[inventory_uc] UpsertFromMintByModel upsert ok inventoryId=%q", inventoryID)
-	return updated, nil
+	return uc.repo.UpsertByProductBlueprintAndToken(ctx, tbID, pbID, mID, productIDs)
 }
 
 // ============================================================
-// ✅ NEW: Reserve by Order (payment success -> invoice.paid=true と同時に呼ぶ想定)
+// Reserve by Order (payment success -> invoice.paid=true と同時に呼ぶ想定)
 // ============================================================
 
 type ReserveByOrderItem struct {
@@ -177,6 +158,7 @@ func (uc *InventoryUsecase) GetByID(ctx context.Context, id string) (invdom.Mint
 	}
 	return uc.repo.GetByID(ctx, id)
 }
+
 func (uc *InventoryUsecase) ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]invdom.Mint, error) {
 	if uc == nil || uc.repo == nil {
 		return nil, errors.New("inventory usecase/repo is nil")
@@ -208,34 +190,6 @@ func (uc *InventoryUsecase) ListByTokenAndModelID(ctx context.Context, tokenBlue
 // ============================================================
 // Helpers
 // ============================================================
-
-func buildInventoryID(productBlueprintID, tokenBlueprintID string) string {
-	sanitize := func(s string) string {
-		// Firestore docId に "/" が入ると階層扱いになるので repo と揃えて潰す
-		s = strings.ReplaceAll(s, "/", "_")
-		return s
-	}
-	pb := sanitize(productBlueprintID)
-	tb := sanitize(tokenBlueprintID)
-	return pb + "__" + tb
-}
-
-func normalizeIDs(raw []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(raw))
-	for _, s := range raw {
-		if s == "" {
-			continue
-		}
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		out = append(out, s)
-	}
-	sort.Strings(out)
-	return out
-}
 
 // reserveStockByModelOrder updates reservation fields on Stock[modelID]:
 // - ReservedByOrder[orderID] += qty

@@ -3,19 +3,16 @@ package inquiryimage
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 )
 
-// Default GCS bucket for InquiryImage files.
-const DefaultBucket = "narratives_development_inquiry_image"
-
-// GCSDeleteOp represents a delete operation target in GCS.
-type GCSDeleteOp struct {
-	Bucket     string
+// FirebaseStorageDeleteOp represents a delete operation target in Firebase Storage.
+// ObjectPath is the Firebase Storage object path, for example:
+// inquiry-images/{inquiryId}/{imageId}/{fileName}
+type FirebaseStorageDeleteOp struct {
 	ObjectPath string
 }
 
@@ -30,6 +27,7 @@ type GCSDeleteOp struct {
 //	  inquiryId: string;
 //	  fileName: string;
 //	  fileUrl: string;
+//	  objectPath?: string;
 //	  fileSize: number;
 //	  mimeType: string;
 //	  width?: number;
@@ -42,19 +40,20 @@ type GCSDeleteOp struct {
 //	  deletedBy?: string;
 //	}
 type ImageFile struct {
-	InquiryID string     `json:"inquiryId"`
-	FileName  string     `json:"fileName"`
-	FileURL   string     `json:"fileUrl"`
-	FileSize  int64      `json:"fileSize"`
-	MimeType  string     `json:"mimeType"`
-	Width     *int       `json:"width,omitempty"`
-	Height    *int       `json:"height,omitempty"`
-	CreatedAt time.Time  `json:"createdAt"`
-	CreatedBy string     `json:"createdBy"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy *string    `json:"updatedBy,omitempty"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy *string    `json:"deletedBy,omitempty"`
+	InquiryID  string     `json:"inquiryId"`
+	FileName   string     `json:"fileName"`
+	FileURL    string     `json:"fileUrl"`
+	ObjectPath *string    `json:"objectPath,omitempty"`
+	FileSize   int64      `json:"fileSize"`
+	MimeType   string     `json:"mimeType"`
+	Width      *int       `json:"width,omitempty"`
+	Height     *int       `json:"height,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	CreatedBy  string     `json:"createdBy"`
+	UpdatedAt  *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy  *string    `json:"updatedBy,omitempty"`
+	DeletedAt  *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy  *string    `json:"deletedBy,omitempty"`
 }
 
 // 集約（問い合わせIDと画像一覧）
@@ -66,9 +65,10 @@ type InquiryImage struct {
 // InquiryImagePatch: 部分更新用（nilは未変更）
 type InquiryImagePatch struct {
 	// 任意: 必要に応じて他の更新可能フィールドを追加
-	// FileURL  *string
-	// Caption  *string
-	// MimeType *string
+	// FileURL    *string
+	// ObjectPath *string
+	// Caption    *string
+	// MimeType   *string
 
 	UpdatedBy *string
 	DeletedAt *time.Time
@@ -81,6 +81,7 @@ var (
 	ErrInvalidInquiryID    = errors.New("invalid image inquiryId")
 	ErrInvalidFileName     = errors.New("invalid fileName")
 	ErrInvalidFileURL      = errors.New("invalid fileUrl")
+	ErrInvalidObjectPath   = errors.New("invalid objectPath")
 	ErrInvalidFileSize     = errors.New("invalid fileSize")
 	ErrInvalidMIMEType     = errors.New("invalid mimeType")
 	ErrInvalidDimensions   = errors.New("invalid dimensions")
@@ -122,9 +123,12 @@ var (
 // Constructors
 // ========================================
 
-// NewImageFile creates a new ImageFile with full set of fields (optional fields can be nil).
+// NewImageFile creates a new ImageFile with full set of fields.
+// fileURL is expected to be the Firebase Storage download URL.
+// objectPath is expected to be the Firebase Storage object path.
 func NewImageFile(
 	inquiryID, fileName, fileURL string,
+	objectPath *string,
 	fileSize int64,
 	mimeType string,
 	width, height *int,
@@ -136,21 +140,20 @@ func NewImageFile(
 	deletedBy *string,
 ) (ImageFile, error) {
 	img := ImageFile{
-		InquiryID: inquiryID,
-		FileName:  fileName,
-		FileURL:   fileURL,
-		FileSize:  fileSize,
-		MimeType:  mimeType,
-		Width:     normalizeIntPtr(width),
-		Height:    normalizeIntPtr(height),
-
-		CreatedAt: createdAt.UTC(),
-		CreatedBy: createdBy,
-
-		UpdatedAt: normalizeTimePtr(updatedAt),
-		UpdatedBy: normalizeStrPtr(updatedBy),
-		DeletedAt: normalizeTimePtr(deletedAt),
-		DeletedBy: normalizeStrPtr(deletedBy),
+		InquiryID:  inquiryID,
+		FileName:   fileName,
+		FileURL:    fileURL,
+		ObjectPath: objectPath,
+		FileSize:   fileSize,
+		MimeType:   mimeType,
+		Width:      width,
+		Height:     height,
+		CreatedAt:  createdAt,
+		CreatedBy:  createdBy,
+		UpdatedAt:  updatedAt,
+		UpdatedBy:  updatedBy,
+		DeletedAt:  deletedAt,
+		DeletedBy:  deletedBy,
 	}
 	if err := validateImageFile(img); err != nil {
 		return ImageFile{}, err
@@ -161,52 +164,35 @@ func NewImageFile(
 // NewImageFileMinimal creates ImageFile with required fields only.
 func NewImageFileMinimal(
 	inquiryID, fileName, fileURL string,
+	objectPath *string,
 	fileSize int64,
 	mimeType string,
 	width, height *int,
 	createdAt time.Time,
 	createdBy string,
 ) (ImageFile, error) {
-	return NewImageFile(inquiryID, fileName, fileURL, fileSize, mimeType, width, height, createdAt, createdBy, nil, nil, nil, nil)
-}
-
-// NewImageFileFromStringTimes parses createdAt/updatedAt/deletedAt from string (RFC3339 preferred).
-func NewImageFileFromStringTimes(
-	inquiryID, fileName, fileURL string,
-	fileSize int64,
-	mimeType string,
-	width, height *int,
-	createdAtStr, createdBy string,
-	updatedAtStr, deletedAtStr *string,
-	updatedBy, deletedBy *string,
-) (ImageFile, error) {
-	ct, err := parseTime(createdAtStr, ErrInvalidCreatedAt)
-	if err != nil {
-		return ImageFile{}, err
-	}
-	var ut *time.Time
-	if updatedAtStr != nil {
-		if t, err := parseTime(*updatedAtStr, ErrInvalidUpdatedAt); err == nil {
-			ut = &t
-		} else {
-			return ImageFile{}, err
-		}
-	}
-	var dt *time.Time
-	if deletedAtStr != nil {
-		if t, err := parseTime(*deletedAtStr, ErrInvalidDeletedAt); err == nil {
-			dt = &t
-		} else {
-			return ImageFile{}, err
-		}
-	}
-	return NewImageFile(inquiryID, fileName, fileURL, fileSize, mimeType, width, height, ct, createdBy, ut, updatedBy, dt, deletedBy)
+	return NewImageFile(
+		inquiryID,
+		fileName,
+		fileURL,
+		objectPath,
+		fileSize,
+		mimeType,
+		width,
+		height,
+		createdAt,
+		createdBy,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
 }
 
 func NewInquiryImage(id string, images []ImageFile) (InquiryImage, error) {
 	ii := InquiryImage{
 		ID:     id,
-		Images: dedupByURL(images),
+		Images: images,
 	}
 	if err := validateInquiryImage(ii); err != nil {
 		return InquiryImage{}, err
@@ -222,15 +208,12 @@ func (i *InquiryImage) AddImage(img ImageFile) error {
 	if err := validateImageFile(img); err != nil {
 		return err
 	}
-	// enforce inquiry id consistency if aggregate has an id set
 	if i.ID != "" && img.InquiryID != i.ID {
 		return ErrInconsistentInquiry
 	}
-	// duplicate check by URL
 	if containsURL(i.Images, img.FileURL) {
 		return ErrDuplicateImage
 	}
-	// capacity check
 	if MaxImages > 0 && len(i.Images) >= MaxImages {
 		return ErrTooManyImages
 	}
@@ -239,9 +222,9 @@ func (i *InquiryImage) AddImage(img ImageFile) error {
 }
 
 func (i *InquiryImage) ReplaceImages(images []ImageFile) error {
-	// validate each, dedup by URL, and enforce inquiry id consistency
-	dedup := make([]ImageFile, 0, len(images))
+	out := make([]ImageFile, 0, len(images))
 	seen := map[string]struct{}{}
+
 	for _, im := range images {
 		if err := validateImageFile(im); err != nil {
 			return err
@@ -249,17 +232,19 @@ func (i *InquiryImage) ReplaceImages(images []ImageFile) error {
 		if i.ID != "" && im.InquiryID != i.ID {
 			return ErrInconsistentInquiry
 		}
+
 		u := normURL(im.FileURL)
 		if _, ok := seen[u]; ok {
 			return ErrDuplicateImage
 		}
 		seen[u] = struct{}{}
-		dedup = append(dedup, im)
+		out = append(out, im)
 	}
-	if MaxImages > 0 && len(dedup) > MaxImages {
+
+	if MaxImages > 0 && len(out) > MaxImages {
 		return ErrTooManyImages
 	}
-	i.Images = dedup
+	i.Images = out
 	return nil
 }
 
@@ -267,6 +252,7 @@ func (i *InquiryImage) RemoveImageByURL(u string) bool {
 	u = normURL(u)
 	out := i.Images[:0]
 	removed := false
+
 	for _, im := range i.Images {
 		if normURL(im.FileURL) == u {
 			removed = true
@@ -274,8 +260,24 @@ func (i *InquiryImage) RemoveImageByURL(u string) bool {
 		}
 		out = append(out, im)
 	}
+
 	i.Images = out
 	return removed
+}
+
+func (i InquiryImage) FirebaseStorageDeleteOps() []FirebaseStorageDeleteOp {
+	out := make([]FirebaseStorageDeleteOp, 0, len(i.Images))
+
+	for _, img := range i.Images {
+		if img.ObjectPath == nil || *img.ObjectPath == "" {
+			continue
+		}
+		out = append(out, FirebaseStorageDeleteOp{
+			ObjectPath: *img.ObjectPath,
+		})
+	}
+
+	return out
 }
 
 // ========================================
@@ -289,42 +291,47 @@ func validateInquiryImage(i InquiryImage) error {
 	if MaxImages > 0 && len(i.Images) > MaxImages {
 		return ErrTooManyImages
 	}
+
 	seen := map[string]struct{}{}
 	for _, im := range i.Images {
 		if err := validateImageFile(im); err != nil {
 			return err
 		}
-		// enforce consistency
 		if im.InquiryID != i.ID {
 			return ErrInconsistentInquiry
 		}
+
 		u := normURL(im.FileURL)
 		if _, ok := seen[u]; ok {
 			return ErrDuplicateImage
 		}
 		seen[u] = struct{}{}
 	}
+
 	return nil
 }
 
 func validateImageFile(im ImageFile) error {
-	// inquiryId
 	if im.InquiryID == "" {
 		return ErrInvalidInquiryID
 	}
-	// fileName
+
 	if im.FileName == "" || (MaxFileNameLength > 0 && len([]rune(im.FileName)) > MaxFileNameLength) {
 		return ErrInvalidFileName
 	}
-	// URL
+
 	if !urlOK(im.FileURL) {
 		return ErrInvalidFileURL
 	}
-	// fileSize
+
+	if im.ObjectPath != nil && *im.ObjectPath == "" {
+		return ErrInvalidObjectPath
+	}
+
 	if im.FileSize < MinFileSizeBytes || (MaxFileSizeBytes > 0 && im.FileSize > MaxFileSizeBytes) {
 		return ErrInvalidFileSize
 	}
-	// mime
+
 	if im.MimeType == "" || (mimeRe != nil && !mimeRe.MatchString(im.MimeType)) {
 		return ErrInvalidMIMEType
 	}
@@ -333,21 +340,21 @@ func validateImageFile(im ImageFile) error {
 			return ErrInvalidMIMEType
 		}
 	}
-	// dimensions
+
 	if im.Width != nil && *im.Width <= 0 {
 		return ErrInvalidDimensions
 	}
 	if im.Height != nil && *im.Height <= 0 {
 		return ErrInvalidDimensions
 	}
-	// createdAt/createdBy
+
 	if im.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
 	if im.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
-	// updated
+
 	if im.UpdatedAt != nil {
 		if im.UpdatedAt.IsZero() || im.UpdatedAt.Before(im.CreatedAt) {
 			return ErrInvalidUpdatedAt
@@ -356,13 +363,16 @@ func validateImageFile(im ImageFile) error {
 	if im.UpdatedBy != nil && *im.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
-	// deleted
-	if im.DeletedAt != nil && im.DeletedAt.Before(im.CreatedAt) {
-		return ErrInvalidDeletedAt
+
+	if im.DeletedAt != nil {
+		if im.DeletedAt.IsZero() || im.DeletedAt.Before(im.CreatedAt) {
+			return ErrInvalidDeletedAt
+		}
 	}
 	if im.DeletedBy != nil && *im.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
+
 	return nil
 }
 
@@ -378,90 +388,30 @@ func urlOK(raw string) bool {
 	if raw == "" {
 		return false
 	}
+
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return false
 	}
+
 	if len(AllowedURLHosts) > 0 {
 		host := strings.ToLower(u.Hostname())
 		if _, ok := AllowedURLHosts[host]; !ok {
 			return false
 		}
 	}
+
 	return true
-}
-
-func normalizeIntPtr(p *int) *int {
-	if p == nil {
-		return nil
-	}
-	if *p <= 0 {
-		return nil
-	}
-	v := *p
-	return &v
-}
-
-func normalizeStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := *p
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func normalizeTimePtr(p *time.Time) *time.Time {
-	if p == nil || p.IsZero() {
-		return nil
-	}
-	t := p.UTC()
-	return &t
 }
 
 func containsURL(xs []ImageFile, u string) bool {
 	u = normURL(u)
+
 	for _, x := range xs {
 		if normURL(x.FileURL) == u {
 			return true
 		}
 	}
+
 	return false
-}
-
-func dedupByURL(xs []ImageFile) []ImageFile {
-	seen := make(map[string]struct{}, len(xs))
-	out := make([]ImageFile, 0, len(xs))
-	for _, x := range xs {
-		u := normURL(x.FileURL)
-		if _, ok := seen[u]; ok {
-			continue
-		}
-		seen[u] = struct{}{}
-		out = append(out, x)
-	}
-	return out
-}
-
-func parseTime(s string, classify error) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, classify
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("%w: cannot parse %q", classify, s)
 }

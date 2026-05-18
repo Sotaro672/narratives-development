@@ -88,38 +88,20 @@ func NewWithOptional(
 		Content:            content,
 		Status:             status,
 		InquiryType:        inquiryType,
-		ProductBlueprintID: normalizeStrPtr(productBlueprintID),
-		TokenBlueprintID:   normalizeStrPtr(tokenBlueprintID),
-		AssigneeID:         normalizeStrPtr(assigneeID),
-		ImageID:            normalizeStrPtr(imageID),
+		ProductBlueprintID: productBlueprintID,
+		TokenBlueprintID:   tokenBlueprintID,
+		AssigneeID:         assigneeID,
+		ImageID:            imageID,
 		CreatedAt:          createdAt.UTC(),
 		UpdatedAt:          updatedAt.UTC(),
-		UpdatedBy:          normalizeStrPtr(updatedBy),
+		UpdatedBy:          updatedBy,
 		DeletedAt:          normalizeTimePtr(deletedAt),
-		DeletedBy:          normalizeStrPtr(deletedBy),
+		DeletedBy:          deletedBy,
 	}
 	if err := in.validate(); err != nil {
 		return Inquiry{}, err
 	}
 	return in, nil
-}
-
-// NewFromStringTimes builds with string times for createdAt/updatedAt (RFC3339 preferred).
-func NewFromStringTimes(
-	id, avatarID, subject, content string,
-	status InquiryStatus,
-	inquiryType InquiryType,
-	createdAtStr, updatedAtStr string,
-) (Inquiry, error) {
-	ct, err := parseTime(createdAtStr, ErrInvalidCreatedAt)
-	if err != nil {
-		return Inquiry{}, err
-	}
-	ut, err := parseTime(updatedAtStr, ErrInvalidUpdatedAt)
-	if err != nil {
-		return Inquiry{}, err
-	}
-	return New(id, avatarID, subject, content, status, inquiryType, ct, ut)
 }
 
 // Behavior
@@ -173,42 +155,10 @@ func (i Inquiry) validate() error {
 
 // Helpers
 
-func normalizeStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	v := *p
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
 func normalizeTimePtr(p *time.Time) *time.Time {
 	if p == nil || p.IsZero() {
 		return nil
 	}
 	t := p.UTC()
 	return &t
-}
-
-func parseTime(s string, classify error) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, classify
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, classify
 }

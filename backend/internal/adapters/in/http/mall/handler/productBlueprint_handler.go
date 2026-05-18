@@ -4,7 +4,6 @@ package mallHandler
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -140,12 +139,6 @@ func (h *MallProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	log.Printf("[mall_productBlueprint] getById start id=%q brandSvc=%t companySvc=%t",
-		id,
-		h.brandSvc != nil,
-		h.companySvc != nil,
-	)
-
 	p, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		if isPBNotFound(err) {
@@ -157,17 +150,6 @@ func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Req
 	}
 
 	resp := h.toMallProductBlueprintResponse(ctx, p)
-
-	log.Printf("[mall_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q categoryId=%q categoryCode=%q",
-		resp.ID,
-		resp.ProductName,
-		resp.BrandID,
-		resp.BrandName,
-		resp.CompanyID,
-		resp.CompanyName,
-		resp.ProductBlueprintCategory.ID,
-		resp.ProductBlueprintCategory.Code,
-	)
 
 	writeJSON(w, http.StatusOK, resp)
 }

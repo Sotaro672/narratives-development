@@ -26,7 +26,7 @@ type ModelVariationsGetter interface {
 	GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error)
 }
 
-// MintRequestQueryService is used by /mint/requests handler.
+// MintRequestQueryService is used by console mint handlers.
 // It returns console BFF rows: productionId = inspectionId = mintId.
 type MintRequestQueryService struct {
 	mintUC       *mintapp.MintUsecase
@@ -59,13 +59,16 @@ func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) 
 }
 
 // ListMintRequestManagementRows returns rows for current company.
-// Company boundary is expected to be enforced by UC layers via ctx.
+// productionId = inspectionId = mintId として扱う。
 func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	ctx context.Context,
+	input querydto.ListMintRequestManagementRowsInput,
 ) ([]querydto.ProductionInspectionMintDTO, error) {
 	if s == nil || s.mintUC == nil || s.productionUC == nil {
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
+
+	filterSet := makeIDSet(input.ProductionIDs)
 
 	// ------------------------------------------------------------
 	// 1) productionIds: use ProductionUsecase already company-scoped
@@ -96,6 +99,13 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		if pid == "" {
 			continue
 		}
+
+		if len(filterSet) > 0 {
+			if _, ok := filterSet[pid]; !ok {
+				continue
+			}
+		}
+
 		if _, ok := seen[pid]; ok {
 			continue
 		}
@@ -165,8 +175,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 			mintPtr = &tmp
 		}
 
-		productName := p.ProductName
-
 		mintQty := 0
 		prodQty := 0
 		inspStatus := "notYet"
@@ -206,7 +214,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 
 			TokenBlueprintID: tokenBlueprintID,
 			TokenName:        tokenName,
-			ProductName:      productName,
+			ProductName:      p.ProductName,
 
 			MintQuantity:       mintQty,
 			ProductionQuantity: prodQty,
@@ -274,6 +282,83 @@ func (s *MintRequestQueryService) ListMintListRowsByProductionIDs(
 	}
 
 	return out, nil
+}
+
+// ListMintDTOsByProductionIDs returns DTO rows for /mint/mints?view=dto.
+func (s *MintRequestQueryService) ListMintDTOsByProductionIDs(
+	ctx context.Context,
+	productionIDs []string,
+) (map[string]querydto.MintDTO, error) {
+	if s == nil || s.mintUC == nil {
+		return nil, ErrMintRequestQueryServiceNotConfigured
+	}
+
+	mintsByProductionID, err := s.mintUC.ListMintsByProductionIDs(ctx, productionIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(mintsByProductionID) == 0 {
+		return map[string]querydto.MintDTO{}, nil
+	}
+
+	listRows, _ := s.ListMintListRowsByProductionIDs(ctx, productionIDs)
+
+	keys := make([]string, 0, len(mintsByProductionID))
+	for k := range mintsByProductionID {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	out := make(map[string]querydto.MintDTO, len(mintsByProductionID))
+
+	for _, productionID := range keys {
+		m := mintsByProductionID[productionID]
+
+		createdByName := m.CreatedBy
+		tokenName := m.TokenBlueprintID
+		if row, ok := listRows[productionID]; ok {
+			if row.CreatedByName != "" {
+				createdByName = row.CreatedByName
+			}
+			if row.TokenName != "" {
+				tokenName = row.TokenName
+			}
+		}
+
+		out[productionID] = buildMintDTO(productionID, m, tokenName, createdByName)
+	}
+
+	return out, nil
+}
+
+// GetMintByProductionID returns a single mint DTO for /mint/mints/{id}.
+func (s *MintRequestQueryService) GetMintByProductionID(
+	ctx context.Context,
+	productionID string,
+) (*querydto.MintDTO, error) {
+	if s == nil || s.mintUC == nil {
+		return nil, ErrMintRequestQueryServiceNotConfigured
+	}
+	if productionID == "" {
+		return nil, errors.New("productionId is empty")
+	}
+
+	mintsByProductionID, err := s.mintUC.ListMintsByProductionIDs(ctx, []string{productionID})
+	if err != nil {
+		return nil, err
+	}
+
+	m, ok := mintsByProductionID[productionID]
+	if !ok {
+		return nil, mintdom.ErrNotFound
+	}
+
+	tokenName := resolveTokenName(ctx, s.nameResolver, m.TokenBlueprintID)
+	createdByName := resolveMemberName(ctx, s.nameResolver, m.CreatedBy)
+
+	out := buildMintDTO(productionID, m, tokenName, createdByName)
+	return &out, nil
 }
 
 // GetMintRequestDetail returns detail DTO for a single productionId.
@@ -546,6 +631,61 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 // -----------------------
 // helpers
 // -----------------------
+
+func buildMintDTO(
+	productionID string,
+	m mintdom.Mint,
+	tokenName string,
+	createdByName string,
+) querydto.MintDTO {
+	products := make([]string, 0, len(m.Products))
+	products = append(products, m.Products...)
+
+	var createdAt *string
+	if !m.CreatedAt.IsZero() {
+		v := m.CreatedAt.UTC().Format(time.RFC3339)
+		createdAt = &v
+	}
+
+	var mintedAt *string
+	if m.MintedAt != nil && !m.MintedAt.IsZero() {
+		v := m.MintedAt.UTC().Format(time.RFC3339)
+		mintedAt = &v
+	}
+
+	var scheduledBurnDate *string
+	if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
+		v := m.ScheduledBurnDate.UTC().Format(time.RFC3339)
+		scheduledBurnDate = &v
+	}
+
+	return querydto.MintDTO{
+		ID:                 m.ID,
+		InspectionID:       productionID,
+		BrandID:            m.BrandID,
+		TokenBlueprintID:   m.TokenBlueprintID,
+		TokenName:          tokenName,
+		Products:           products,
+		CreatedBy:          m.CreatedBy,
+		CreatedByName:      createdByName,
+		CreatedAt:          createdAt,
+		Minted:             m.Minted,
+		MintedAt:           mintedAt,
+		ScheduledBurnDate:  scheduledBurnDate,
+		OnChainTxSignature: m.OnChainTxSignature,
+	}
+}
+
+func makeIDSet(ids []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		out[id] = struct{}{}
+	}
+	return out
+}
 
 func resolveTokenName(
 	ctx context.Context,

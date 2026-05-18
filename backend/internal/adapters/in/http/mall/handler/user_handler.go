@@ -120,17 +120,6 @@ type userBody struct {
 	DeletedAt     *time.Time `json:"deletedAt"`
 }
 
-func normalizeStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := *p
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
 func readJSONBody(r *http.Request, dst any) error {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -168,6 +157,7 @@ func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(u)
 		return
 	}
+
 	// create empty
 	in := userdom.CreateUserInput{
 		FirstName:     nil,
@@ -231,10 +221,10 @@ func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := userdom.CreateUserInput{
-		FirstName:     normalizeStrPtr(b.FirstName),
-		FirstNameKana: normalizeStrPtr(b.FirstNameKana),
-		LastNameKana:  normalizeStrPtr(b.LastNameKana),
-		LastName:      normalizeStrPtr(b.LastName),
+		FirstName:     b.FirstName,
+		FirstNameKana: b.FirstNameKana,
+		LastNameKana:  b.LastNameKana,
+		LastName:      b.LastName,
 	}
 
 	// deletedAt: nil=未指定、指定がある場合は zero も含めて反映したい
@@ -378,10 +368,10 @@ func (h *UserHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := userdom.CreateUserInput{
-		FirstName:     normalizeStrPtr(b.FirstName),
-		FirstNameKana: normalizeStrPtr(b.FirstNameKana),
-		LastNameKana:  normalizeStrPtr(b.LastNameKana),
-		LastName:      normalizeStrPtr(b.LastName),
+		FirstName:     b.FirstName,
+		FirstNameKana: b.FirstNameKana,
+		LastNameKana:  b.LastNameKana,
+		LastName:      b.LastName,
 	}
 	if b.DeletedAt != nil {
 		t := b.DeletedAt.UTC()

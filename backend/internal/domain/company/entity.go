@@ -65,12 +65,12 @@ func NewCompany(
 		Name:      name,
 		Admin:     admin,
 		IsActive:  isActive,
-		CreatedAt: createdAt.UTC(),
+		CreatedAt: createdAt,
 		CreatedBy: createdBy,
-		UpdatedAt: updatedAt.UTC(),
+		UpdatedAt: updatedAt,
 		UpdatedBy: updatedBy,
-		DeletedAt: normalizeTimePtr(deletedAt),
-		DeletedBy: normalizeStrPtr(deletedBy),
+		DeletedAt: deletedAt,
+		DeletedBy: deletedBy,
 	}
 
 	if err := c.validate(); err != nil {
@@ -84,7 +84,6 @@ func NewCompanyWithNow(
 	isActive bool,
 	now time.Time,
 ) (Company, error) {
-	now = now.UTC()
 	return NewCompany(id, name, admin, createdBy, updatedBy, now, now, isActive, nil, nil)
 }
 
@@ -94,14 +93,14 @@ func NewCompanyWithNow(
 
 func (c *Company) Activate(now time.Time, updatedBy string) error {
 	c.IsActive = true
-	c.UpdatedAt = now.UTC()
+	c.UpdatedAt = now
 	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
 
 func (c *Company) Deactivate(now time.Time, updatedBy string) error {
 	c.IsActive = false
-	c.UpdatedAt = now.UTC()
+	c.UpdatedAt = now
 	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
@@ -111,7 +110,7 @@ func (c *Company) UpdateName(name string, now time.Time, updatedBy string) error
 		return err
 	}
 	c.Name = name
-	c.UpdatedAt = now.UTC()
+	c.UpdatedAt = now
 	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
@@ -121,15 +120,12 @@ func (c *Company) UpdateAdmin(admin string, now time.Time, updatedBy string) err
 		return ErrInvalidAdmin
 	}
 	c.Admin = admin
-	c.UpdatedAt = now.UTC()
+	c.UpdatedAt = now
 	c.UpdatedBy = updatedBy
 	return c.validateUpdateOnly()
 }
 
 func (c *Company) SetDeleted(at *time.Time, by *string) error {
-	at = normalizeTimePtr(at)
-	by = normalizeStrPtr(by)
-
 	if at == nil {
 		c.DeletedAt = nil
 		c.DeletedBy = nil
@@ -187,15 +183,19 @@ func (c Company) validate() error {
 	}
 
 	if c.DeletedAt != nil {
+		if c.DeletedAt.IsZero() {
+			return ErrInvalidDeletedAt
+		}
 		if c.DeletedAt.Before(c.CreatedAt) {
 			return ErrInvalidDeletedAt
 		}
 		if c.UpdatedAt.After(*c.DeletedAt) {
 			return ErrInvalidDeletedAt
 		}
-		if c.DeletedBy != nil && *c.DeletedBy == "" {
-			return ErrInvalidDeletedBy
-		}
+	}
+
+	if c.DeletedBy != nil && *c.DeletedBy == "" {
+		return ErrInvalidDeletedBy
 	}
 
 	return nil
@@ -228,23 +228,4 @@ func validateCompanyName(name string) error {
 		return ErrInvalidName
 	}
 	return nil
-}
-
-func normalizeStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	v := *p
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
-func normalizeTimePtr(p *time.Time) *time.Time {
-	if p == nil || p.IsZero() {
-		return nil
-	}
-	t := p.UTC()
-	return &t
 }

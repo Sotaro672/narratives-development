@@ -43,13 +43,13 @@ type Filter struct {
 	SearchQuery string // fileName, fileUrl などに対する部分一致等は実装側で解釈
 
 	// 絞り込み
-	InquiryID   *string
-	InquiryIDs  []string
-	FileName    *string
-	MimeType    *string
-	CreatedBy   *string
-	UpdatedBy   *string
-	DeletedBy   *string
+	InquiryID  *string
+	InquiryIDs []string
+	FileName   *string
+	MimeType   *string
+	CreatedBy  *string
+	UpdatedBy  *string
+	DeletedBy  *string
 
 	// 日付レンジ
 	CreatedFrom *time.Time
@@ -137,15 +137,4 @@ type GCSObjectSaver interface {
 		createdAt time.Time,
 		createdBy string,
 	) (*ImageFile, error)
-}
-
-// GCSDeleteOpsProvider は削除対象オブジェクトの解決を一括で提供する拡張契約です。
-// entity.ImageFile の ToGCSDeleteOp で呼び出し側が組み立てることも可能ですが、
-// 大量件数で効率化したい場合に実装してください。
-type GCSDeleteOpsProvider interface {
-	// 指定キー群に対応する GCS の削除ターゲットを返します。
-	BuildDeleteOps(ctx context.Context, keys []ImageKey) ([]GCSDeleteOp, error)
-
-	// 問い合わせID配下の全画像に対する GCS 削除ターゲットを返します。
-	BuildDeleteOpsByInquiryID(ctx context.Context, inquiryID string) ([]GCSDeleteOp, error)
 }

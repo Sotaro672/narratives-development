@@ -235,16 +235,6 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 	var res usecase.ResolveTokenByMintAddressWithBrandNameResult
 	var fromCache bool
 
-	if h.resolvedTokenRepo != nil {
-		cached, e := h.resolvedTokenRepo.GetByAvatarIDAndMint(ctx, avatarID, mintAddress)
-		if e == nil {
-			if !isResolvedTokenCacheStale(cached) {
-				res = cached
-				fromCache = true
-			}
-		}
-	}
-
 	if !fromCache {
 		rr, e := h.walletUC.ResolveTokenByMintAddressWithBrandName(ctx, mintAddress)
 		if e != nil {
@@ -258,8 +248,6 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 		}
 	}
 
-	files := filterOutKeepFiles(res.TokenContentsFiles)
-
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"productId":          res.ProductID,
 		"brandId":            res.BrandID,
@@ -268,8 +256,6 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 		"productName":        res.ProductName,
 		"metadataUri":        res.MetadataURI,
 		"mintAddress":        res.MintAddress,
-		"tokenBlueprintId":   res.TokenBlueprintID,
-		"tokenContentsFiles": files,
 	})
 }
 
@@ -542,34 +528,6 @@ func walletSnapshotHasMintPreferTokens(w walletdom.Wallet, mintAddress string) b
 	return stringSliceContainsExact(w.Tokens, mintAddress)
 }
 
-func filterOutKeepFiles(in []usecase.TokenContentFile) []usecase.TokenContentFile {
-	if len(in) == 0 {
-		return in
-	}
-
-	out := make([]usecase.TokenContentFile, 0, len(in))
-	for _, f := range in {
-		if isKeepTokenContentFile(f) {
-			continue
-		}
-		out = append(out, f)
-	}
-	return out
-}
-
-func isKeepTokenContentFile(f usecase.TokenContentFile) bool {
-	if f.FileName == ".keep" {
-		return true
-	}
-	if f.ObjectPath != "" {
-		p := strings.TrimSuffix(f.ObjectPath, "/")
-		if strings.HasSuffix(p, "/.keep") || strings.HasSuffix(p, ".keep") {
-			return true
-		}
-	}
-	return isKeepObjectURI(f.PublicURI) || isKeepObjectURI(f.ViewURI) || isKeepObjectURI(f.URI)
-}
-
 func isKeepObjectURI(raw string) bool {
 	s := raw
 	if s == "" {
@@ -587,21 +545,6 @@ func isKeepObjectURI(raw string) bool {
 	}
 	p = strings.TrimSuffix(p, "/")
 	return strings.HasSuffix(p, "/.keep") || strings.HasSuffix(p, ".keep")
-}
-
-func isResolvedTokenCacheStale(res usecase.ResolveTokenByMintAddressWithBrandNameResult) bool {
-	files := res.TokenContentsFiles
-	if len(files) == 0 {
-		return false
-	}
-
-	for _, f := range files {
-		if f.ViewURI == "" && f.URI == "" {
-			return true
-		}
-	}
-
-	return false
 }
 
 func filterMetadataJSON(body []byte) ([]byte, bool, error) {

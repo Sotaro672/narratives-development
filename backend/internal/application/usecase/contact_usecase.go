@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -91,22 +90,16 @@ func (u *ContactUsecase) Create(ctx context.Context, in CreateInput) (contact.Co
 		entity.Message,
 		entity.Source,
 	); err != nil {
-		log.Printf("[contact] receipt mail send failed: email=%s err=%v", entity.Email, err)
 		return contact.Contact{}, err
 	}
-
-	log.Printf("[contact] receipt mail sent: email=%s", entity.Email)
 
 	created, err := u.repo.Create(ctx, *entity)
 	if err != nil {
-		log.Printf("[contact] firestore create failed after receipt mail sent: email=%s err=%v", entity.Email, err)
 		return contact.Contact{}, err
 	}
 
-	log.Printf("[contact] firestore create succeeded: id=%s email=%s", created.ID, created.Email)
-
 	if u.adminNotifier != nil {
-		if err := u.adminNotifier.SendContactAdminNotification(
+		_ = u.adminNotifier.SendContactAdminNotification(
 			ctx,
 			created.ID,
 			created.Name,
@@ -115,11 +108,7 @@ func (u *ContactUsecase) Create(ctx context.Context, in CreateInput) (contact.Co
 			created.Message,
 			created.Source,
 			created.CreatedAt,
-		); err != nil {
-			log.Printf("[contact] admin notification mail send failed: id=%s email=%s err=%v", created.ID, created.Email, err)
-		} else {
-			log.Printf("[contact] admin notification mail sent: id=%s email=%s", created.ID, created.Email)
-		}
+		)
 	}
 
 	return created, nil

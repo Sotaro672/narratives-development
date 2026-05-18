@@ -7,7 +7,6 @@
 // Features:
 // - isImageURL / generateReadableID
 // - getPatchUpdater / buildPatchFromItem
-// - normalizeStrPtr
 // - ✅ usecase wiring helpers (WithListImageRecordRepo / WithListPrimaryImageSetter)
 package list
 

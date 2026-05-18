@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -161,10 +160,10 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		return nil, ErrPaymentFlowStripeGatewayMissing
 	}
 
-	paymentID := strings.TrimSpace(in.PaymentID)
-	paymentMethodID := strings.TrimSpace(in.PaymentMethodID)
-	stripeCustomerID := strings.TrimSpace(in.StripeCustomerID)
-	stripePaymentMethodID := strings.TrimSpace(in.StripePaymentMethodID)
+	paymentID := in.PaymentID
+	paymentMethodID := in.PaymentMethodID
+	stripeCustomerID := in.StripeCustomerID
+	stripePaymentMethodID := in.StripePaymentMethodID
 
 	if paymentID == "" {
 		return nil, ErrPaymentFlowPaymentIDEmpty
@@ -207,37 +206,17 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		createdAt,
 	)
 	if err != nil {
-		log.Printf(
-			"[payment_flow_uc] domain.New failed paymentId=%s paymentMethodId=%s err=%v",
-			paymentID,
-			paymentMethodID,
-			err,
-		)
 		return nil, err
 	}
 
 	created, err := u.paymentUC.Create(ctx, p)
 	if err != nil {
-		log.Printf(
-			"[payment_flow_uc] paymentUC.Create failed paymentId=%s paymentMethodId=%s err=%v",
-			paymentID,
-			paymentMethodID,
-			err,
-		)
 		return nil, err
 	}
 
 	if created == nil {
 		return nil, errors.New("payment_flow: created payment is nil")
 	}
-
-	log.Printf(
-		"[payment_flow_uc] Create OK paymentId=%s paymentMethodId=%s amount=%d status=%s",
-		created.PaymentID,
-		created.PaymentMethodID,
-		created.Amount,
-		created.Status,
-	)
 
 	return u.startStripePaymentIntent(ctx, *created)
 }
@@ -250,10 +229,10 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		return nil, ErrPaymentFlowStripeGatewayMissing
 	}
 
-	paymentID := strings.TrimSpace(created.PaymentID)
-	paymentMethodID := strings.TrimSpace(created.PaymentMethodID)
-	stripeCustomerID := strings.TrimSpace(created.StripeCustomerID)
-	stripePaymentMethodID := strings.TrimSpace(created.StripePaymentMethodID)
+	paymentID := created.PaymentID
+	paymentMethodID := created.PaymentMethodID
+	stripeCustomerID := created.StripeCustomerID
+	stripePaymentMethodID := created.StripePaymentMethodID
 
 	if paymentID == "" {
 		return nil, ErrPaymentFlowPaymentIDEmpty
@@ -295,8 +274,6 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		},
 	)
 	if err != nil {
-		log.Printf("[payment_flow_uc] Stripe PaymentIntent failed paymentId=%s err=%v", paymentID, err)
-
 		failed := created
 		failed.Status = paymentdom.StatusFailed
 
@@ -317,12 +294,12 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		return nil, errors.New("payment_flow: stripe payment intent result is nil")
 	}
 
-	stripePaymentIntentID := strings.TrimSpace(pi.StripePaymentIntentID)
+	stripePaymentIntentID := pi.StripePaymentIntentID
 	if stripePaymentIntentID == "" {
 		return nil, ErrPaymentFlowStripePaymentIntentIDEmpty
 	}
 
-	stripeStatus := strings.TrimSpace(strings.ToLower(pi.Status))
+	stripeStatus := strings.ToLower(pi.Status)
 
 	switch stripeStatus {
 	case "succeeded":
@@ -334,19 +311,12 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 			return nil, err
 		}
 
-		log.Printf(
-			"[payment_flow_uc] Stripe PaymentIntent succeeded paymentId=%s paymentIntentId=%s amount=%d",
-			succeeded.PaymentID,
-			stripePaymentIntentID,
-			succeeded.Amount,
-		)
-
 		return &CreatePaymentAndStartResult{
 			Payment:               succeeded,
 			PaymentID:             succeeded.PaymentID,
 			Status:                succeeded.Status,
 			StripePaymentIntentID: stripePaymentIntentID,
-			ClientSecret:          strings.TrimSpace(pi.ClientSecret),
+			ClientSecret:          pi.ClientSecret,
 			RequiresAction:        false,
 		}, nil
 
@@ -359,18 +329,12 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 			return nil, err
 		}
 
-		log.Printf(
-			"[payment_flow_uc] Stripe PaymentIntent requires_action paymentId=%s paymentIntentId=%s",
-			pending.PaymentID,
-			stripePaymentIntentID,
-		)
-
 		return &CreatePaymentAndStartResult{
 			Payment:               pending,
 			PaymentID:             pending.PaymentID,
 			Status:                pending.Status,
 			StripePaymentIntentID: stripePaymentIntentID,
-			ClientSecret:          strings.TrimSpace(pi.ClientSecret),
+			ClientSecret:          pi.ClientSecret,
 			RequiresAction:        true,
 		}, nil
 
@@ -388,7 +352,7 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 			PaymentID:             processing.PaymentID,
 			Status:                processing.Status,
 			StripePaymentIntentID: stripePaymentIntentID,
-			ClientSecret:          strings.TrimSpace(pi.ClientSecret),
+			ClientSecret:          pi.ClientSecret,
 			RequiresAction:        pi.RequiresAction,
 		}, nil
 
@@ -406,7 +370,7 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 			PaymentID:             pending.PaymentID,
 			Status:                pending.Status,
 			StripePaymentIntentID: stripePaymentIntentID,
-			ClientSecret:          strings.TrimSpace(pi.ClientSecret),
+			ClientSecret:          pi.ClientSecret,
 			RequiresAction:        pi.RequiresAction,
 		}, nil
 

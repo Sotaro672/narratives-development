@@ -17,7 +17,6 @@ package usecase
 
 import (
 	"context"
-	"log"
 
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
@@ -45,9 +44,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 	var ord *orderdom.Order
 	if u.orderRepo != nil {
 		o, getErr := u.orderRepo.GetByID(ctx, rootID)
-		if getErr != nil {
-			log.Printf("[payment_uc] WARN: order fetch failed orderId=%s err=%v", rootID, getErr)
-		} else {
+		if getErr == nil {
 			ord = &o
 		}
 	}
@@ -55,20 +52,14 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 	// 0) order.Paid=true
 	if u.orderRepo != nil {
 		updatedOrder, mkErr := u.markOrderPaidTrue(ctx, rootID, ord)
-		if mkErr != nil {
-			log.Printf("[payment_uc] WARN: order mark paid failed orderId=%s err=%v", rootID, mkErr)
-		} else if updatedOrder != nil {
+		if mkErr == nil && updatedOrder != nil {
 			ord = updatedOrder
 		}
 	}
 
 	// 1) 注文確定メール送信
 	if ord != nil && u.userRepo != nil && u.mailSender != nil && u.mailFrom != "" {
-		if mailErr := u.sendOrderConfirmationMail(ctx, *ord); mailErr != nil {
-			log.Printf("[payment_uc] WARN: order confirmation mail failed orderId=%s userId=%s err=%v", ord.ID, ord.UserID, mailErr)
-		} else {
-			log.Printf("[payment_uc] order confirmation mail sent orderId=%s userId=%s", ord.ID, ord.UserID)
-		}
+		_ = u.sendOrderConfirmationMail(ctx, *ord)
 	}
 
 	// 2) inventory reserve
@@ -77,43 +68,20 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 		agg := aggregateReserveItems(rawItems)
 
 		for _, it := range agg {
-			invID := normalizeInventoryDocIDBestEffort(it.InventoryID)
+			invID := it.InventoryID
 			if invID == "" || it.ModelID == "" || it.Qty <= 0 {
 				continue
 			}
 
-			if rErr := u.inventoryRepo.ReserveByOrder(ctx, invID, it.ModelID, rootID, it.Qty); rErr != nil {
-				log.Printf(
-					"[payment_uc] WARN: inventory reserve failed inventoryId=%s modelId=%s orderId=%s qty=%d err=%v",
-					invID,
-					it.ModelID,
-					rootID,
-					it.Qty,
-					rErr,
-				)
-			} else {
-				log.Printf(
-					"[payment_uc] inventory reserved inventoryId=%s modelId=%s orderId=%s qty=%d",
-					invID,
-					it.ModelID,
-					rootID,
-					it.Qty,
-				)
-			}
+			_ = u.inventoryRepo.ReserveByOrder(ctx, invID, it.ModelID, rootID, it.Qty)
 		}
 	}
 
 	// 3) cart clear
 	if u.cartRepo != nil && ord != nil {
 		cartID := ord.CartID
-		if cartID == "" {
-			log.Printf("[payment_uc] WARN: cartId empty (skip clear) rootId=%s", rootID)
-		} else {
-			if clrErr := u.cartRepo.Clear(ctx, cartID); clrErr != nil {
-				log.Printf("[payment_uc] WARN: cart clear failed cartId=%s rootId=%s err=%v", cartID, rootID, clrErr)
-			} else {
-				log.Printf("[payment_uc] cart cleared cartId=%s rootId=%s", cartID, rootID)
-			}
+		if cartID != "" {
+			_ = u.cartRepo.Clear(ctx, cartID)
 		}
 	}
 }

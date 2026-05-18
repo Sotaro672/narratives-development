@@ -115,11 +115,9 @@ func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request) {
 //
 // avatarId がある場合:
 // - 所有確認あり
-// - tokenContentsFiles も返す
 //
 // avatarId がない場合:
 // - 公開情報のみ返す
-// - tokenContentsFiles は返さない
 func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -153,8 +151,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 			"productName":        res.ProductName,
 			"metadataUri":        res.MetadataURI,
 			"mintAddress":        res.MintAddress,
-			"tokenBlueprintId":   res.TokenBlueprintID,
-			"tokenContentsFiles": []usecase.TokenContentFile{},
 		})
 		return
 	}
@@ -192,16 +188,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 	var res usecase.ResolveTokenByMintAddressWithBrandNameResult
 	var fromCache bool
 
-	if h.resolvedTokenRepo != nil {
-		cached, e := h.resolvedTokenRepo.GetByAvatarIDAndMint(ctx, avatarID, mintAddress)
-		if e == nil {
-			if !isResolvedTokenCacheStale(cached) {
-				res = cached
-				fromCache = true
-			}
-		}
-	}
-
 	if !fromCache {
 		rr, e := h.uc.ResolveTokenByMintAddressWithBrandName(ctx, mintAddress)
 		if e != nil {
@@ -215,8 +201,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 		}
 	}
 
-	files := filterOutKeepFiles(res.TokenContentsFiles)
-
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"productId":          res.ProductID,
 		"brandId":            res.BrandID,
@@ -225,8 +209,6 @@ func (h *WalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http
 		"productName":        res.ProductName,
 		"metadataUri":        res.MetadataURI,
 		"mintAddress":        res.MintAddress,
-		"tokenBlueprintId":   res.TokenBlueprintID,
-		"tokenContentsFiles": files,
 	})
 }
 
@@ -298,8 +280,6 @@ func (h *WalletHandler) resolvePublicTokenSummary(
 		MintAddress:        base.MintAddress,
 		ProductBlueprintID: pbID,
 		ProductName:        pb.ProductName,
-		TokenBlueprintID:   "",
-		TokenContentsFiles: []usecase.TokenContentFile{},
 	}, nil
 }
 

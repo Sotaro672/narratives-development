@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -162,7 +161,7 @@ type TransferUsecase struct {
 	secrets  WalletSecretProvider
 	executor TokenTransferExecutor
 
-	// ✅ NEW: resolve warmup after successful transfer
+	// resolve warmup after successful transfer
 	resolveWarmer PostTransferResolveWarmer
 
 	// optional injection
@@ -267,7 +266,7 @@ type TransferByVerifiedScanResult struct {
 // 10) orders item を transferred=true で確定更新
 // 11) tokens/{productId}.toAddress を avatar wallet に更新
 // 12) wallet テーブル（avatar wallet）の tokens に mintAddress を追加
-// 13) ✅ resolve warmup を実行（期待値: resolve まで完了）
+// 13) resolve warmup を実行（期待値: resolve まで完了）
 // 14) inventory cleanup（best-effort）
 // 15) 失敗時は transfer(FAILED) 更新 + unlock（best-effort）
 func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in TransferByVerifiedScanInput) (res TransferByVerifiedScanResult, retErr error) {
@@ -389,15 +388,11 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 				ErrorType: &et,
 				ErrorMsg:  &msg,
 			}
-			if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
-				log.Printf("[transfer_uc] WARN: transfer update failed (defer) productId=%s attempt=%d err=%v", productID, transferAttempt, uerr)
-			}
+			_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
 		}
 
 		if locked {
-			if uerr := u.orderRepo.UnlockTransferItem(context.Background(), targetOrderID, targetModelID); uerr != nil {
-				log.Printf("[transfer_uc] WARN: unlock failed orderId=%s modelId=%s err=%v", targetOrderID, targetModelID, uerr)
-			}
+			_ = u.orderRepo.UnlockTransferItem(context.Background(), targetOrderID, targetModelID)
 		}
 	}()
 
@@ -457,9 +452,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 			s := *txSig
 			p.TxSignature = &s
 		}
-		if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
-			log.Printf("[transfer_uc] WARN: transfer markFailed update failed productId=%s attempt=%d err=%v", productID, transferAttempt, uerr)
-		}
+		_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
 	}
 
 	markSucceeded := func(txSig string) {
@@ -472,9 +465,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 			Status:      &st,
 			TxSignature: &s,
 		}
-		if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
-			log.Printf("[transfer_uc] WARN: transfer markSucceeded update failed productId=%s attempt=%d err=%v", productID, transferAttempt, uerr)
-		}
+		_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
 	}
 
 	// 5) safety: token current owner check
@@ -565,7 +556,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: %s", msg)
 	}
 
-	// 11) ✅ resolve warmup (期待値: resolve までセットでやりきる)
+	// 11) resolve warmup (期待値: resolve までセットでやりきる)
 	if u.resolveWarmer != nil {
 		if err := u.resolveWarmer.ResolveAfterTransfer(ctx, avatarID, mint); err != nil {
 			msg := fmt.Sprintf("post-transfer resolve failed avatarId=%s mint=%s tx=%s: %v",
@@ -578,35 +569,10 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 
 	// 12) inventory cleanup (best-effort)
 	if u.inv != nil {
-		if err := u.inv.ApplyTransferResult(ctx, productID, targetOrderID, now); err != nil {
-			log.Printf(
-				"[transfer_uc] WARN inventory cleanup failed productId=%s orderId=%s modelId=%s err=%v",
-				productID, targetOrderID, targetModelID, err,
-			)
-		} else {
-			log.Printf(
-				"[transfer_uc] OK inventory cleanup productId=%s orderId=%s modelId=%s",
-				productID, targetOrderID, targetModelID,
-			)
-		}
+		_ = u.inv.ApplyTransferResult(ctx, productID, targetOrderID, now)
 	}
 
 	locked = false
-
-	log.Printf(
-		"[transfer_uc] OK productId=%s orderId=%s avatarId=%s brandId=%s modelId=%s tokenBlueprintId=%s mint=%s fromWallet=%s toWallet=%s tx=%s attempt=%d",
-		productID,
-		targetOrderID,
-		avatarID,
-		brandID,
-		targetModelID,
-		scannedTBID,
-		mint,
-		fromWallet,
-		toWallet,
-		tx,
-		transferAttempt,
-	)
 
 	return TransferByVerifiedScanResult{
 		MatchedOrderID: targetOrderID,

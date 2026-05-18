@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	transferdom "narratives/internal/domain/transfer"
@@ -20,7 +19,7 @@ type AvatarSecretProvider interface {
 // AvatarWalletItemTransferUpdater updates sender / receiver wallet token caches.
 type AvatarWalletItemTransferUpdater interface {
 	RemoveMintFromAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error
-	AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error
+	AddMintToAvatarWalletItems(ctx context.Context, mintAddress string, now time.Time, txSignature string) error
 }
 
 // AvatarWalletSyncer fully syncs wallet tokens from on-chain after transfer.
@@ -238,12 +237,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 				ErrorType: &et,
 				ErrorMsg:  &msg,
 			}
-			if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
-				log.Printf(
-					"[share_transfer_uc] WARN: transfer update failed (defer) productId=%s attempt=%d err=%v",
-					productID, transferAttempt, uerr,
-				)
-			}
+			_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
 		}
 	}()
 
@@ -262,12 +256,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 			s := *txSig
 			p.TxSignature = &s
 		}
-		if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
-			log.Printf(
-				"[share_transfer_uc] WARN: transfer markFailed update failed productId=%s attempt=%d err=%v",
-				productID, transferAttempt, uerr,
-			)
-		}
+		_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
 	}
 
 	markSucceeded := func(txSig string) {
@@ -280,12 +269,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 			Status:      &st,
 			TxSignature: &s,
 		}
-		if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
-			log.Printf(
-				"[share_transfer_uc] WARN: transfer markSucceeded update failed productId=%s attempt=%d err=%v",
-				productID, transferAttempt, uerr,
-			)
-		}
+		_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
 	}
 
 	if currentOwner != "" && currentOwner != fromWallet {
@@ -356,7 +340,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: %s", msg)
 	}
 
-	if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, toAvatarID, mint, now, tx); err != nil {
+	if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, mint, now, tx); err != nil {
 		msg := fmt.Sprintf("add receiver wallet item failed avatarId=%s mint=%s tx=%s: %v", toAvatarID, mint, tx, err)
 		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
 		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: %s", msg)
@@ -381,19 +365,6 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 			return ShareTransferResult{}, fmt.Errorf("%w: %s", ErrShareTransferResolveAfterFailed, msg)
 		}
 	}
-
-	log.Printf(
-		"[share_transfer_uc] OK productId=%s fromAvatarId=%s toAvatarId=%s tokenBlueprintId=%s mint=%s fromWallet=%s toWallet=%s tx=%s attempt=%d",
-		productID,
-		fromAvatarID,
-		toAvatarID,
-		tokenTBID,
-		mint,
-		fromWallet,
-		toWallet,
-		tx,
-		transferAttempt,
-	)
 
 	return ShareTransferResult{
 		ProductID:        productID,

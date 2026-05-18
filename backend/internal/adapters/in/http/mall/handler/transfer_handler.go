@@ -4,7 +4,6 @@ package mallHandler
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -37,14 +36,14 @@ type ScanTransferResult struct {
 	// tokens/{productId}.toAddress updated?
 	UpdatedToAddress bool `json:"updatedToAddress,omitempty"`
 
-	// ✅ NEW: moved mintAddress
+	// moved mintAddress
 	MintAddress string `json:"mintAddress,omitempty"`
 }
 
 // TransferHandler handles:
 // POST /mall/me/orders/scan/transfer
 //
-// ✅ Option A: anti-spoof を AvatarContextMiddleware に一本化する。
+// Option A: anti-spoof を AvatarContextMiddleware に一本化する。
 // - handler は uid->avatarId resolver を持たない
 // - avatarId は request context からのみ取得する（body の avatarId は使わない）
 type TransferHandler struct {
@@ -85,7 +84,7 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uid, ok := middleware.CurrentUserUID(r)
+	_, ok := middleware.CurrentUserUID(r)
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "unauthorized: missing uid",
@@ -108,7 +107,7 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ avatarId is resolved and stored by AvatarContextMiddleware (required)
+	// avatarId is resolved and stored by AvatarContextMiddleware (required)
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		// This should not happen if requireAvatarContext is wired.
@@ -119,13 +118,6 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf(
-		`[mall.order.scan.transfer] incoming uid=%q avatarId=%q productId=%q`,
-		uid,
-		avatarID,
-		productID,
-	)
-
 	ucOut, err := h.uc.TransferToAvatarByVerifiedScan(
 		r.Context(),
 		usecase.TransferByVerifiedScanInput{
@@ -134,32 +126,13 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		// ✅ Added: log concrete error type/value to pinpoint failing step
-		log.Printf(
-			"[mall.order.scan.transfer] ERROR uid=%q avatarId=%q productId=%q err=%T %v",
-			uid,
-			avatarID,
-			productID,
-			err, err,
-		)
-
-		// ✅ NotMatched は 200 + matched=false を返す（従来のアダプタ挙動を維持）
+		// NotMatched は 200 + matched=false を返す（従来のアダプタ挙動を維持）
 		if errors.Is(err, usecase.ErrTransferNotMatched) {
 			out := &ScanTransferResult{
 				AvatarID:  avatarID,
 				ProductID: productID,
 				Matched:   false,
 			}
-			log.Printf(
-				`[mall.order.scan.transfer] ok uid=%q avatarId=%q productId=%q matched=%t tx=%q updatedToAddress=%t mint=%q`,
-				uid,
-				out.AvatarID,
-				out.ProductID,
-				out.Matched,
-				out.TxSignature,
-				out.UpdatedToAddress,
-				out.MintAddress,
-			)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"data": out,
 			})
@@ -200,17 +173,6 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		UpdatedToAddress: true, // TransferUsecase 内で UpdateToAddressByProductID を実行済み（fail-fast）
 		MintAddress:      ucOut.MintAddress,
 	}
-
-	log.Printf(
-		`[mall.order.scan.transfer] ok uid=%q avatarId=%q productId=%q matched=%t tx=%q updatedToAddress=%t mint=%q`,
-		uid,
-		out.AvatarID,
-		out.ProductID,
-		out.Matched,
-		out.TxSignature,
-		out.UpdatedToAddress,
-		out.MintAddress,
-	)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": out,

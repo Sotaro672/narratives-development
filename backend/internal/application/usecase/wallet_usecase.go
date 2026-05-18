@@ -4,9 +4,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log"
-	"strings"
 	"time"
 
 	branddom "narratives/internal/domain/brand"
@@ -165,8 +162,6 @@ var (
 // WalletPage を開いた時や /mall/me/wallets/sync から呼ばれ、
 // Solana network 上の保有 mint 一覧を Firestore wallet.tokens に反映する。
 func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) (walletdom.Wallet, error) {
-	log.Printf("[SyncWalletTokens] start avatarID_raw=%q", avatarID)
-
 	if uc == nil || uc.WalletRepo == nil {
 		return walletdom.Wallet{}, ErrWalletUsecaseNotConfigured
 	}
@@ -178,7 +173,6 @@ func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) 
 	if aid == "" {
 		return walletdom.Wallet{}, ErrWalletSyncAvatarIDEmpty
 	}
-	log.Printf("[SyncWalletTokens] avatarID=%q", aid)
 
 	// 1) docId=avatarId で wallet を取得（存在が前提）
 	w, err := uc.WalletRepo.GetByAvatarID(ctx, aid)
@@ -190,40 +184,22 @@ func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) 
 	if addr == "" {
 		return walletdom.Wallet{}, ErrWalletSyncWalletAddressEmpty
 	}
-	log.Printf("[SyncWalletTokens] wallet loaded avatarID=%q walletAddress=%q tokens_before=%s", aid, addr, walletTokensCountSummary(w))
 
 	// 2) on-chain から現在の保有 mint 一覧を取得
 	mints, err := uc.OnchainReader.ListOwnedTokenMints(ctx, addr)
 	if err != nil {
 		return walletdom.Wallet{}, err
 	}
-	log.Printf("[SyncWalletTokens] onchain mints fetched walletAddress=%q mints_count=%d mints_sample=%s", addr, len(mints), summarizeStringsAbbrev(mints, 10))
 
 	// 3) on-chain の最新一覧で完全置換
 	now := time.Now().UTC()
-	log.Printf(
-		"[SyncWalletTokens] ReplaceTokens input avatarID=%q walletAddress=%q now=%s existing_count=%d existing_sample=%s onchain_count=%d onchain_sample=%s tokens_before=%s",
-		aid,
-		addr,
-		now.Format(time.RFC3339Nano),
-		len(w.Tokens),
-		summarizeStringsAbbrev(w.Tokens, 10),
-		len(mints),
-		summarizeStringsAbbrev(mints, 10),
-		walletTokensCountSummary(w),
-	)
-
 	if err := w.ReplaceTokens(mints, now); err != nil {
-		log.Printf("[SyncWalletTokens] ReplaceTokens error avatarID=%q walletAddress=%q err=%v", aid, addr, err)
 		return walletdom.Wallet{}, err
 	}
-
-	log.Printf("[SyncWalletTokens] ReplaceTokens ok avatarID=%q walletAddress=%q tokens_after=%s", aid, addr, walletTokensCountSummary(w))
 
 	if err := uc.WalletRepo.Save(ctx, aid, w); err != nil {
 		return walletdom.Wallet{}, err
 	}
-	log.Printf("[SyncWalletTokens] saved avatarID=%q walletAddress=%q", aid, addr)
 
 	return w, nil
 }
@@ -284,24 +260,6 @@ func (uc *WalletUsecase) ResolveBrandNameByID(
 // Result for mall resolve
 // ============================================================
 
-type TokenContentFile struct {
-	// metadata.properties.files 由来の互換フィールド。
-	// 現在の正では、この usecase では中身を生成しない。
-	// frontend は metadataUri を backend metadata proxy に渡し、
-	// blockchain token metadata の properties.files[] を parse する。
-	FileName string `json:"fileName"`
-	Type     string `json:"type"`
-	URI      string `json:"uri"`
-	ViewURI  string `json:"viewUri"`
-
-	// 旧 GCS 実装とのレスポンス互換用。
-	// GCS 廃止後は基本的に空。
-	ObjectPath    string     `json:"objectPath,omitempty"`
-	Bucket        string     `json:"bucket,omitempty"`
-	PublicURI     string     `json:"publicUri,omitempty"`
-	ViewExpiresAt *time.Time `json:"viewExpiresAt,omitempty"`
-}
-
 type ResolveTokenByMintAddressWithBrandNameResult struct {
 	ProductID          string `json:"productId"`
 	BrandID            string `json:"brandId"`
@@ -310,25 +268,12 @@ type ResolveTokenByMintAddressWithBrandNameResult struct {
 	MintAddress        string `json:"mintAddress"`
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ProductName        string `json:"productName"`
-
-	// metadata 側の TokenBlueprintID は frontend が metadata proxy 取得後に parse する。
-	// ここでは productBlueprintId を設定して、既存 UI の識別子として使えるようにする。
-	TokenBlueprintID string `json:"tokenBlueprintId"`
-
-	// GCS signed URL / Firebase Storage contentFiles はここでは返さない。
-	// token content 表示は metadataUri -> metadata proxy -> properties.files[] を正とする。
-	TokenContentsFiles []TokenContentFile `json:"tokenContentsFiles"`
 }
 
 // ============================================================
 // ResolveTokenByMintAddressWithBrandName
 //
 //	mintAddress -> (productId, brandId, brandName, metadataUri, productName)
-//
-// GCS 廃止後:
-//   - token-contents bucket は列挙しない
-//   - GCS Signed URL は発行しない
-//   - GCS_SIGNER_EMAIL は使わない
 //
 // IMPORTANT:
 //   - metadata proxy は廃止しない
@@ -412,45 +357,5 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 		MintAddress:        base.MintAddress,
 		ProductBlueprintID: pbID,
 		ProductName:        productName,
-
-		TokenBlueprintID:   pbID,
-		TokenContentsFiles: []TokenContentFile{},
 	}, nil
-}
-
-// ---------------------------
-// log helpers
-// ---------------------------
-
-func abbrev(s string) string {
-	if len(s) <= 14 {
-		return s
-	}
-	return s[:6] + "..." + s[len(s)-6:]
-}
-
-func summarizeStringsAbbrev(ss []string, max int) string {
-	if len(ss) == 0 {
-		return "[]"
-	}
-	if max <= 0 {
-		max = 10
-	}
-	n := len(ss)
-	limit := n
-	if n > max {
-		limit = max
-	}
-	out := make([]string, 0, limit)
-	for i := 0; i < limit; i++ {
-		out = append(out, abbrev(ss[i]))
-	}
-	if n <= max {
-		return "[" + strings.Join(out, ",") + "]"
-	}
-	return "[" + strings.Join(out, ",") + fmt.Sprintf(",...(+%d)", n-max) + "]"
-}
-
-func walletTokensCountSummary(w walletdom.Wallet) string {
-	return fmt.Sprintf("Tokens=%d", len(w.Tokens))
 }
