@@ -14,22 +14,11 @@ import (
 // ============================================================
 //
 // Firebase Storage 移行後の責務:
-// - backend は GCS signed URL を発行しない
+// - backend は upload URL を発行しない
 // - frontend が Firebase Storage へ直接 upload する
 // - frontend が getDownloadURL() で取得した downloadURL を contentFiles[].url に入れる
 // - frontend が Firebase Storage object path を contentFiles[].objectPath に入れる
 // - backend は contentFiles を TokenBlueprint に保存・置換する
-//
-// 旧GCS責務として削除したもの:
-// - GCS_SIGNER_EMAIL
-// - TOKEN_CONTENTS_BUCKET
-// - storage.SignedURL
-// - iamcredentials.SignBlob
-// - TokenContentsUploadURL
-// - IssueTokenContentsUploadURL
-// - tokenContentsObjectPath
-// - gcsObjectPublicURL
-// - signed GET viewURL 発行
 
 type TokenBlueprintContentUsecase struct {
 	tbRepo tbdom.RepositoryPort
@@ -71,7 +60,7 @@ func (u *TokenBlueprintContentUsecase) ReplaceContentFiles(
 		return nil, fmt.Errorf("actorID is empty")
 	}
 
-	clean, err := dedupAndValidateContentFiles(files)
+	validFiles, err := validateAndCopyContentFiles(files)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +68,7 @@ func (u *TokenBlueprintContentUsecase) ReplaceContentFiles(
 	now := time.Now().UTC()
 
 	tb, err := u.tbRepo.Update(ctx, blueprintID, tbdom.UpdateTokenBlueprintInput{
-		ContentFiles: &clean,
+		ContentFiles: &validFiles,
 		UpdatedAt:    &now,
 		UpdatedBy:    ptr(actorID),
 		DeletedAt:    nil,
@@ -123,7 +112,7 @@ func (u *TokenBlueprintContentUsecase) AddContentFiles(
 	next = append(next, tb.ContentFiles...)
 	next = append(next, files...)
 
-	clean, err := dedupAndValidateContentFiles(next)
+	validFiles, err := validateAndCopyContentFiles(next)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +120,7 @@ func (u *TokenBlueprintContentUsecase) AddContentFiles(
 	now := time.Now().UTC()
 
 	updated, err := u.tbRepo.Update(ctx, blueprintID, tbdom.UpdateTokenBlueprintInput{
-		ContentFiles: &clean,
+		ContentFiles: &validFiles,
 		UpdatedAt:    &now,
 		UpdatedBy:    ptr(actorID),
 		DeletedAt:    nil,
@@ -175,15 +164,21 @@ func (u *TokenBlueprintContentUsecase) RemoveContentFile(
 		return nil, tbdom.ErrNotFound
 	}
 
+	found := false
 	next := make([]tbdom.ContentFile, 0, len(tb.ContentFiles))
 	for _, f := range tb.ContentFiles {
 		if f.ID == contentID {
+			found = true
 			continue
 		}
 		next = append(next, f)
 	}
 
-	clean, err := dedupAndValidateContentFiles(next)
+	if !found {
+		return nil, tbdom.WrapNotFound(nil, "content file not found")
+	}
+
+	validFiles, err := validateAndCopyContentFiles(next)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +186,7 @@ func (u *TokenBlueprintContentUsecase) RemoveContentFile(
 	now := time.Now().UTC()
 
 	updated, err := u.tbRepo.Update(ctx, blueprintID, tbdom.UpdateTokenBlueprintInput{
-		ContentFiles: &clean,
+		ContentFiles: &validFiles,
 		UpdatedAt:    &now,
 		UpdatedBy:    ptr(actorID),
 		DeletedAt:    nil,
@@ -242,9 +237,13 @@ func (u *TokenBlueprintContentUsecase) SetContentVisibility(
 	}
 
 	files := tb.ContentFiles
+	validFiles, err := validateAndCopyContentFiles(files)
+	if err != nil {
+		return nil, err
+	}
 
 	updated, err := u.tbRepo.Update(ctx, blueprintID, tbdom.UpdateTokenBlueprintInput{
-		ContentFiles: &files,
+		ContentFiles: &validFiles,
 		UpdatedAt:    &now,
 		UpdatedBy:    ptr(actorID),
 		DeletedAt:    nil,
@@ -268,15 +267,15 @@ func normalizeContentFilesPtr(
 		return nil, nil
 	}
 
-	clean, err := dedupAndValidateContentFiles(*p)
+	validFiles, err := validateAndCopyContentFiles(*p)
 	if err != nil {
 		return nil, err
 	}
 
-	return &clean, nil
+	return &validFiles, nil
 }
 
-func dedupAndValidateContentFiles(
+func validateAndCopyContentFiles(
 	files []tbdom.ContentFile,
 ) ([]tbdom.ContentFile, error) {
 	if len(files) == 0 {
@@ -286,25 +285,19 @@ func dedupAndValidateContentFiles(
 	seen := make(map[string]struct{}, len(files))
 	out := make([]tbdom.ContentFile, 0, len(files))
 
-	for _, f := range files {
-		if string(f.Visibility) == "" {
-			f.Visibility = tbdom.VisibilityPrivate
-		}
-
+	for i, f := range files {
 		if err := f.Validate(); err != nil {
 			return nil, err
 		}
 
-		id := f.ID
-		if id == "" {
-			continue
+		if _, ok := seen[f.ID]; ok {
+			return nil, tbdom.WrapConflict(
+				nil,
+				fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID),
+			)
 		}
 
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
+		seen[f.ID] = struct{}{}
 		out = append(out, f)
 	}
 

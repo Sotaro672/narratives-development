@@ -4,17 +4,15 @@ package mint
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 
 	appusecase "narratives/internal/application/usecase"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
-	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
-// ★ 修復: /mint/inspections/{id}/request を「従来どおりミントまで実行」に戻す
+// /mint/inspections/{id}/request を「従来どおりミントまで実行」に戻す
 // ============================================================
 
 func (u *MintUsecase) UpdateRequestInfo(
@@ -23,7 +21,6 @@ func (u *MintUsecase) UpdateRequestInfo(
 	tokenBlueprintID string,
 	scheduledBurnDate *string,
 ) (inspectiondom.InspectionBatch, error) {
-
 	var empty inspectiondom.InspectionBatch
 
 	if u == nil {
@@ -63,6 +60,10 @@ func (u *MintUsecase) UpdateRequestInfo(
 	if err != nil {
 		return empty, err
 	}
+	if tb == nil {
+		return empty, errors.New("tokenBlueprint not found")
+	}
+
 	brandID := tb.BrandID
 	if brandID == "" {
 		return empty, errors.New("brandID is empty on tokenBlueprint")
@@ -89,12 +90,10 @@ func (u *MintUsecase) UpdateRequestInfo(
 		return empty, err
 	}
 
-	// ★ Policy A: docId = productionId（必ず揃える）
+	// Policy A: production / inspection / mint の docId は同一値として扱う。
 	mintEntity.ID = pid
-	// setIfExistsString は mint_result_mapper.go 側の共通関数を利用（DuplicateDecl 回避）
-	setIfExistsString(&mintEntity, "InspectionID", pid)
 
-	// minted は request 作成時は必ず false（念のため）
+	// minted は request 作成時は必ず false
 	mintEntity.Minted = false
 	mintEntity.MintedAt = nil
 
@@ -126,24 +125,15 @@ func (u *MintUsecase) UpdateRequestInfo(
 		return empty, err
 	}
 
-	log.Printf("[mint_usecase] UpdateRequestInfo done (request created) productionId=%q mintId=%q tokenBlueprintId=%q passedProducts=%d",
-		pid, mid, tbID, len(passedProductIDs),
-	)
-
-	// ✅ 自動 mint は best-effort（失敗しても request 作成は成功扱いで返す）
+	// 自動 mint は best-effort（失敗しても request 作成は成功扱いで返す）
 	if u.tokenMinter == nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo auto MintFromMintRequest skipped reason=token_minter_nil productionId=%q", pid)
 		return batch, nil
 	}
 
 	if _, err := u.MintFromMintRequest(ctx, pid); err != nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo auto MintFromMintRequest failed productionId=%q err=%v", pid, err)
-		// ★ ここで return err しない（500 を止める）
+		// ここで return err しない（500 を止める）
+		return batch, nil
 	}
 
 	return batch, nil
 }
-
-// 参照を明示（未使用import回避のため）
-// ※ 上の処理では tbdom は tbRepo.Update 入力型でのみ参照される可能性があるため残す
-var _ = tbdom.UpdateTokenBlueprintInput{}

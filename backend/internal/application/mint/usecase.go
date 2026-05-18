@@ -20,11 +20,11 @@ type MintUsecase struct {
 	inspRepo  mintdom.MintInspectionRepo
 	modelRepo mintdom.MintModelRepo
 
-	// ★ 追加: mint パッケージ側の Port 経由で tokenBlueprint を操作する（直 import しない）
+	// mint パッケージ側の Port 経由で tokenBlueprint を操作する
 	tbBucketEnsurer   TokenBlueprintBucketEnsurer
 	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
 
-	// TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ（既存）
+	// TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ
 	tbRepo tbdom.RepositoryPort
 
 	// Brand 一覧取得用
@@ -32,9 +32,6 @@ type MintUsecase struct {
 
 	// mints テーブル用リポジトリ
 	mintRepo mintdom.MintRepository
-
-	// mintRepo の互換吸収（GetByID/Get）を隔離する Adapter
-	mintRepoAdapter *MintRequestRepositoryAdapter
 
 	// 署名/アドレス等のフィールド揺れ吸収を隔離する Mapper
 	mintResultMapper *MintResultMapper
@@ -74,12 +71,11 @@ func NewMintUsecase(
 		tbRepo:              tbRepo,
 		brandSvc:            brandSvc,
 		mintRepo:            mintRepo,
-		mintRepoAdapter:     NewMintRequestRepositoryAdapter(mintRepo),
 		mintResultMapper:    NewMintResultMapper(),
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
 
-		// ★ 後注入（任意依存）
+		// 後注入（任意依存）
 		tbBucketEnsurer:   nil,
 		tbMetadataEnsurer: nil,
 
@@ -100,18 +96,19 @@ func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
 	u.nameResolver = r
 }
 
-// ★ DI 側で InventoryUsecase（または互換の Upserter）を後から注入できるようにする
+// DI 側で InventoryUsecase（または互換の Upserter）を後から注入できるようにする
 // ※ *usecase.InventoryUsecase が UpsertFromMintByModel を実装している前提
 func (u *MintUsecase) SetInventoryUsecase(uc *appusecase.InventoryUsecase) {
 	if u == nil {
 		return
 	}
+
 	// コンパイル時に interface 実装を保証したいので代入時点でチェック
 	var _ InventoryUpserter = uc
 	u.inventoryUC = uc
 }
 
-// ★ 追加: tokenBlueprint metadata ensurer を後注入
+// tokenBlueprint metadata ensurer を後注入
 func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
 	if u == nil {
 		return

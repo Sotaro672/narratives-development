@@ -3,7 +3,6 @@ package tokenBlueprint
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	domcommon "narratives/internal/domain/common"
@@ -56,10 +55,14 @@ func (u *TokenBlueprintCRUDUsecase) Create(
 	in CreateBlueprintRequest,
 ) (*tbdom.TokenBlueprint, error) {
 	if u == nil || u.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return nil, tbdom.ErrInvalid
 	}
 
-	cleanContentFiles, err := dedupAndValidateContentFiles(in.ContentFiles)
+	if in.CreatedBy == "" {
+		return nil, tbdom.ErrInvalidCreatedBy
+	}
+
+	contentFiles, err := validateAndCopyContentFiles(in.ContentFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +75,14 @@ func (u *TokenBlueprintCRUDUsecase) Create(
 		Description: in.Description,
 
 		IconURL:      in.IconURL,
-		ContentFiles: cleanContentFiles,
+		ContentFiles: contentFiles,
 
 		AssigneeID: in.AssigneeID,
 
 		CreatedAt: nil,
 		CreatedBy: in.CreatedBy,
 		UpdatedAt: nil,
-		UpdatedBy: "",
+		UpdatedBy: in.CreatedBy,
 
 		MetadataURI: "",
 	})
@@ -111,7 +114,11 @@ func (u *TokenBlueprintCRUDUsecase) GetByID(
 	id string,
 ) (*tbdom.TokenBlueprint, error) {
 	if u == nil || u.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return nil, tbdom.ErrInvalid
+	}
+
+	if id == "" {
+		return nil, tbdom.ErrInvalidID
 	}
 
 	return u.tbRepo.GetByID(ctx, id)
@@ -125,11 +132,11 @@ func (u *TokenBlueprintCRUDUsecase) ListByCompanyID(
 	var empty domcommon.PageResult[tbdom.TokenBlueprint]
 
 	if u == nil || u.tbRepo == nil {
-		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return empty, tbdom.ErrInvalid
 	}
 
 	if companyID == "" {
-		return empty, fmt.Errorf("companyId is empty")
+		return empty, tbdom.ErrInvalidCompanyID
 	}
 
 	return u.tbRepo.ListByCompanyID(ctx, companyID, page)
@@ -143,11 +150,11 @@ func (u *TokenBlueprintCRUDUsecase) ListByBrandID(
 	var empty domcommon.PageResult[tbdom.TokenBlueprint]
 
 	if u == nil || u.tbRepo == nil {
-		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return empty, tbdom.ErrInvalid
 	}
 
 	if brandID == "" {
-		return empty, fmt.Errorf("brandId is empty")
+		return empty, tbdom.ErrInvalidBrandID
 	}
 
 	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
@@ -160,7 +167,7 @@ func (u *TokenBlueprintCRUDUsecase) ListMintedCompleted(
 	var empty domcommon.PageResult[tbdom.TokenBlueprint]
 
 	if u == nil || u.tbRepo == nil {
-		return empty, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return empty, tbdom.ErrInvalid
 	}
 
 	return tbdom.ListMintedCompleted(ctx, u.tbRepo, page)
@@ -195,13 +202,23 @@ func (u *TokenBlueprintCRUDUsecase) Update(
 	in UpdateBlueprintRequest,
 ) (*tbdom.TokenBlueprint, error) {
 	if u == nil || u.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return nil, tbdom.ErrInvalid
+	}
+
+	if in.ID == "" {
+		return nil, tbdom.ErrInvalidID
+	}
+
+	if in.ActorID == "" {
+		return nil, tbdom.ErrInvalidUpdatedBy
 	}
 
 	contentFiles, err := normalizeContentFilesPtr(in.ContentFiles)
 	if err != nil {
 		return nil, err
 	}
+
+	now := time.Now().UTC()
 
 	tb, err := u.tbRepo.Update(ctx, in.ID, tbdom.UpdateTokenBlueprintInput{
 		Name:        in.Name,
@@ -216,7 +233,7 @@ func (u *TokenBlueprintCRUDUsecase) Update(
 		MetadataURI: in.MetadataURI,
 		Minted:      in.Minted,
 
-		UpdatedAt: nil,
+		UpdatedAt: &now,
 		UpdatedBy: ptr(in.ActorID),
 		DeletedAt: nil,
 		DeletedBy: nil,
@@ -234,7 +251,11 @@ func (u *TokenBlueprintCRUDUsecase) Update(
 
 func (u *TokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error {
 	if u == nil || u.tbRepo == nil {
-		return fmt.Errorf("tokenBlueprint CRUD usecase/repo is nil")
+		return tbdom.ErrInvalid
+	}
+
+	if id == "" {
+		return tbdom.ErrInvalidID
 	}
 
 	return u.tbRepo.Delete(ctx, id)

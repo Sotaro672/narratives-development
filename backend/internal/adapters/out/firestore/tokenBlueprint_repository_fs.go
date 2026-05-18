@@ -47,7 +47,7 @@ func (r *TokenBlueprintRepositoryFS) GetByID(
 	}
 
 	if id == "" {
-		return nil, tbdom.ErrNotFound
+		return nil, tbdom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
@@ -76,7 +76,7 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(
 	}
 
 	if id == "" {
-		return tbdom.Patch{}, tbdom.ErrNotFound
+		return tbdom.Patch{}, tbdom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
@@ -127,7 +127,7 @@ func (r *TokenBlueprintRepositoryFS) GetNameByID(
 	}
 
 	if id == "" {
-		return "", tbdom.ErrNotFound
+		return "", tbdom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
@@ -353,20 +353,34 @@ func (r *TokenBlueprintRepositoryFS) Create(
 		return nil, errors.New("firestore client is nil")
 	}
 
+	if in.CreatedBy == "" {
+		return nil, tbdom.ErrInvalidCreatedBy
+	}
+	if in.UpdatedBy == "" {
+		return nil, tbdom.ErrInvalidUpdatedBy
+	}
+
 	now := time.Now().UTC()
 
 	createdAt := now
-	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
+	if in.CreatedAt != nil {
+		if in.CreatedAt.IsZero() {
+			return nil, tbdom.ErrInvalidCreatedAt
+		}
 		createdAt = in.CreatedAt.UTC()
 	}
 
 	updatedAt := now
-	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
+	if in.UpdatedAt != nil {
+		if in.UpdatedAt.IsZero() {
+			return nil, tbdom.ErrInvalidUpdatedAt
+		}
 		updatedAt = in.UpdatedAt.UTC()
 	}
 
-	contentFiles := sanitizeContentFiles(in.ContentFiles)
-	minted := false
+	if err := validateContentFilesForFS(in.ContentFiles); err != nil {
+		return nil, err
+	}
 
 	docRef := r.col().NewDoc()
 
@@ -376,23 +390,17 @@ func (r *TokenBlueprintRepositoryFS) Create(
 		"brandId":      in.BrandID,
 		"companyId":    in.CompanyID,
 		"description":  in.Description,
-		"iconUrl":      strings.TrimSpace(in.IconURL),
-		"contentFiles": toFSContentFiles(contentFiles),
+		"iconUrl":      in.IconURL,
+		"contentFiles": toFSContentFiles(in.ContentFiles),
 		"assigneeId":   in.AssigneeID,
-		"minted":       minted,
+		"minted":       false,
 		"createdAt":    createdAt,
+		"createdBy":    in.CreatedBy,
 		"updatedAt":    updatedAt,
+		"updatedBy":    in.UpdatedBy,
 		"deletedAt":    nil,
 		"deletedBy":    nil,
-		"metadataUri":  strings.TrimSpace(in.MetadataURI),
-	}
-
-	if in.CreatedBy != "" {
-		data["createdBy"] = in.CreatedBy
-	}
-
-	if in.UpdatedBy != "" {
-		data["updatedBy"] = in.UpdatedBy
+		"metadataUri":  in.MetadataURI,
 	}
 
 	if _, err := docRef.Create(ctx, data); err != nil {
@@ -425,7 +433,15 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	}
 
 	if id == "" {
-		return nil, tbdom.ErrNotFound
+		return nil, tbdom.ErrInvalidID
+	}
+
+	if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
+		return nil, tbdom.ErrInvalidUpdatedAt
+	}
+
+	if in.UpdatedBy == nil || *in.UpdatedBy == "" {
+		return nil, tbdom.ErrInvalidUpdatedBy
 	}
 
 	ref := r.col().Doc(id)
@@ -487,74 +503,45 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	}
 
 	if in.ContentFiles != nil {
-		files := sanitizeContentFiles(*in.ContentFiles)
+		if err := validateContentFilesForFS(*in.ContentFiles); err != nil {
+			return nil, err
+		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "contentFiles",
-			Value: toFSContentFiles(files),
+			Value: toFSContentFiles(*in.ContentFiles),
 		})
 	}
 
-	if in.UpdatedAt != nil {
-		if in.UpdatedAt.IsZero() {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: nil,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: in.UpdatedAt.UTC(),
-			})
-		}
-	} else {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: time.Now().UTC(),
-		})
-	}
-
-	if in.UpdatedBy != nil {
-		v := *in.UpdatedBy
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedBy",
-				Value: nil,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedBy",
-				Value: v,
-			})
-		}
-	}
+	updates = append(updates, firestore.Update{
+		Path:  "updatedAt",
+		Value: in.UpdatedAt.UTC(),
+	})
+	updates = append(updates, firestore.Update{
+		Path:  "updatedBy",
+		Value: *in.UpdatedBy,
+	})
 
 	if in.DeletedAt != nil {
 		if in.DeletedAt.IsZero() {
-			updates = append(updates, firestore.Update{
-				Path:  "deletedAt",
-				Value: nil,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "deletedAt",
-				Value: in.DeletedAt.UTC(),
-			})
+			return nil, tbdom.ErrInvalid
 		}
+
+		updates = append(updates, firestore.Update{
+			Path:  "deletedAt",
+			Value: in.DeletedAt.UTC(),
+		})
 	}
 
 	if in.DeletedBy != nil {
-		v := *in.DeletedBy
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "deletedBy",
-				Value: nil,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "deletedBy",
-				Value: v,
-			})
+		if *in.DeletedBy == "" {
+			return nil, tbdom.ErrInvalidDeletedBy
 		}
+
+		updates = append(updates, firestore.Update{
+			Path:  "deletedBy",
+			Value: *in.DeletedBy,
+		})
 	}
 
 	if len(updates) == 0 {
@@ -606,7 +593,7 @@ func (r *TokenBlueprintRepositoryFS) Delete(
 	}
 
 	if id == "" {
-		return tbdom.ErrNotFound
+		return tbdom.ErrInvalidID
 	}
 
 	ref := r.col().Doc(id)
@@ -634,7 +621,7 @@ func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(
 	}
 
 	if symbol == "" {
-		return false, nil
+		return false, tbdom.ErrInvalidSymbol
 	}
 
 	q := r.col().Where("symbol", "==", symbol)
@@ -668,7 +655,7 @@ func (r *TokenBlueprintRepositoryFS) IsNameUnique(
 	}
 
 	if name == "" {
-		return false, nil
+		return false, tbdom.ErrInvalidName
 	}
 
 	q := r.col().Where("name", "==", name)
@@ -722,6 +709,19 @@ func docToTokenBlueprint(
 		return tbdom.TokenBlueprint{}, err
 	}
 
+	if raw.CreatedAt.IsZero() {
+		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidCreatedAt
+	}
+	if raw.CreatedBy == "" {
+		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidCreatedBy
+	}
+	if raw.UpdatedAt.IsZero() {
+		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidUpdatedAt
+	}
+	if raw.UpdatedBy == "" {
+		return tbdom.TokenBlueprint{}, tbdom.ErrInvalidUpdatedBy
+	}
+
 	files, err := fromFSContentFiles(raw.ContentFiles)
 	if err != nil {
 		return tbdom.TokenBlueprint{}, err
@@ -745,15 +745,22 @@ func docToTokenBlueprint(
 		MetadataURI:  raw.MetadataURI,
 	}
 
-	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
+	if raw.DeletedAt != nil {
+		if raw.DeletedAt.IsZero() {
+			return tbdom.TokenBlueprint{}, tbdom.ErrInvalid
+		}
+
 		t := raw.DeletedAt.UTC()
 		tb.DeletedAt = &t
 	}
 
 	if raw.DeletedBy != nil {
-		if v := *raw.DeletedBy; v != "" {
-			tb.DeletedBy = &v
+		if *raw.DeletedBy == "" {
+			return tbdom.TokenBlueprint{}, tbdom.ErrInvalidDeletedBy
 		}
+
+		v := *raw.DeletedBy
+		tb.DeletedBy = &v
 	}
 
 	return tb, nil
@@ -835,24 +842,25 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	return true
 }
 
-func sanitizeContentFiles(xs []tbdom.ContentFile) []tbdom.ContentFile {
-	out := make([]tbdom.ContentFile, 0, len(xs))
+func validateContentFilesForFS(xs []tbdom.ContentFile) error {
 	seen := make(map[string]struct{}, len(xs))
 
-	for _, f := range xs {
-		if f.ID == "" {
-			continue
+	for i, f := range xs {
+		if err := f.Validate(); err != nil {
+			return err
 		}
 
 		if _, ok := seen[f.ID]; ok {
-			continue
+			return tbdom.WrapConflict(
+				nil,
+				fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID),
+			)
 		}
 
 		seen[f.ID] = struct{}{}
-		out = append(out, f)
 	}
 
-	return out
+	return nil
 }
 
 func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
@@ -882,52 +890,54 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 
 func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 	out := make([]tbdom.ContentFile, 0, len(xs))
+	seen := make(map[string]struct{}, len(xs))
 
-	for _, m := range xs {
+	for i, m := range xs {
 		var f tbdom.ContentFile
 
-		if v, ok := m["id"].(string); ok {
-			f.ID = v
+		v, ok := m["id"].(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: contentFiles[%d].id", tbdom.ErrInvalidContentFile, i)
 		}
+		f.ID = v
 
-		if v, ok := m["name"].(string); ok {
-			f.Name = v
+		v, ok = m["name"].(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: contentFiles[%d].name", tbdom.ErrInvalidContentFile, i)
 		}
+		f.Name = v
 
-		if v, ok := m["type"].(string); ok {
-			f.Type = tbdom.ContentFileType(v)
+		tv, ok := m["type"].(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: contentFiles[%d].type", tbdom.ErrInvalidContentType, i)
 		}
+		f.Type = tbdom.ContentFileType(tv)
 
 		if v, ok := m["contentType"].(string); ok {
 			f.ContentType = v
 		}
 
-		if v, ok := m["objectPath"].(string); ok {
-			f.ObjectPath = v
+		v, ok = m["objectPath"].(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: contentFiles[%d].objectPath", tbdom.ErrInvalidContentFile, i)
 		}
+		f.ObjectPath = v
 
 		if v, ok := m["url"].(string); ok {
 			f.URL = v
 		}
 
-		if v, ok := m["visibility"].(string); ok {
-			f.Visibility = tbdom.ContentVisibility(v)
+		vv, ok := m["visibility"].(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: contentFiles[%d].visibility", tbdom.ErrInvalidContentVisibility, i)
 		}
+		f.Visibility = tbdom.ContentVisibility(vv)
 
-		switch v := m["size"].(type) {
-		case int64:
-			f.Size = v
-		case int:
-			f.Size = int64(v)
-		case int32:
-			f.Size = int64(v)
-		case float64:
-			f.Size = int64(v)
-		case nil:
-			f.Size = 0
-		default:
-			return nil, fmt.Errorf("contentFiles.size: unexpected type %T", m["size"])
+		size, ok := m["size"].(int64)
+		if !ok {
+			return nil, fmt.Errorf("contentFiles[%d].size must be int64: got %T", i, m["size"])
 		}
+		f.Size = size
 
 		if v, ok := m["createdBy"].(string); ok {
 			f.CreatedBy = v
@@ -945,16 +955,20 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 			f.UpdatedAt = v.UTC()
 		}
 
-		if string(f.Visibility) == "" {
-			f.Visibility = tbdom.VisibilityPrivate
-		}
-
 		if err := f.Validate(); err != nil {
 			return nil, err
 		}
 
+		if _, ok := seen[f.ID]; ok {
+			return nil, tbdom.WrapConflict(
+				nil,
+				fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID),
+			)
+		}
+
+		seen[f.ID] = struct{}{}
 		out = append(out, f)
 	}
 
-	return sanitizeContentFiles(out), nil
+	return out, nil
 }

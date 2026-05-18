@@ -136,7 +136,7 @@ func (f ContentFile) Validate() error {
 //
 // Firebase Storage 移行後:
 // - tokenBlueprintIcon / tokenBlueprintContents は frontend から Firebase Storage へ直接 upload する
-// - backend は GCS signed URL endpoint を持たない
+// - backend は upload URL を発行しない
 // - iconUrl には Firebase Storage の downloadURL を保存する
 // - contentFiles[].url にも Firebase Storage の downloadURL を保存する
 // - objectPath は Firebase Storage 上の参照パスとして保持する
@@ -156,10 +156,6 @@ type TokenBlueprint struct {
 	IconURL string `json:"iconUrl,omitempty"`
 
 	// Firebase Storage object paths.
-	// TokenIconObjectPath:
-	//   旧GCS用途ではなく、Firebase Storage 上の icon objectPath として扱う。
-	// TokenContentsObjectPath:
-	//   旧GCS用途ではなく、Firebase Storage 上の contents root/reference path として扱う。
 	TokenIconObjectPath     string `json:"tokenIconObjectPath"`
 	TokenContentsObjectPath string `json:"tokenContentsObjectPath"`
 
@@ -179,6 +175,8 @@ type TokenBlueprint struct {
 
 // Errors
 var (
+	ErrNilTokenBlueprint = errors.New("tokenBlueprint: nil receiver")
+
 	ErrInvalidID         = errors.New("tokenBlueprint: invalid id")
 	ErrInvalidName       = errors.New("tokenBlueprint: invalid name")
 	ErrInvalidSymbol     = errors.New("tokenBlueprint: invalid symbol")
@@ -188,6 +186,7 @@ var (
 
 	ErrInvalidCreatedAt = errors.New("tokenBlueprint: invalid createdAt")
 	ErrInvalidCreatedBy = errors.New("tokenBlueprint: invalid createdBy")
+	ErrInvalidUpdatedAt = errors.New("tokenBlueprint: invalid updatedAt")
 	ErrInvalidUpdatedBy = errors.New("tokenBlueprint: invalid updatedBy")
 	ErrInvalidDeletedBy = errors.New("tokenBlueprint: invalid deletedBy")
 
@@ -227,11 +226,15 @@ func (t TokenBlueprint) validate() error {
 	if t.AssigneeID == "" {
 		return ErrInvalidAssigneeID
 	}
+	if t.TokenIconObjectPath == "" {
+		return ErrInvalidTokenIconObjectPath
+	}
+	if t.TokenContentsObjectPath == "" {
+		return ErrInvalidTokenContentsObjectPath
+	}
 
-	for _, f := range t.ContentFiles {
-		if err := f.Validate(); err != nil {
-			return err
-		}
+	if err := validateContentFiles(t.ContentFiles); err != nil {
+		return err
 	}
 
 	if t.CreatedAt.IsZero() {
@@ -240,9 +243,38 @@ func (t TokenBlueprint) validate() error {
 	if t.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
+	if t.UpdatedAt.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+	if t.UpdatedBy == "" {
+		return ErrInvalidUpdatedBy
+	}
+	if t.DeletedBy != nil && *t.DeletedBy == "" {
+		return ErrInvalidDeletedBy
+	}
 
-	// IconURL / tokenIconObjectPath / tokenContentsObjectPath / MetadataURI は、
-	// 作成直後・既存データ移行・画像未登録状態を考慮し必須にしない。
+	// IconURL / MetadataURI は、作成直後・既存データ移行・画像未登録状態を考慮し必須にしない。
+	return nil
+}
+
+func validateContentFiles(files []ContentFile) error {
+	seen := make(map[string]struct{}, len(files))
+
+	for i, f := range files {
+		if f.ID == "" {
+			return fmt.Errorf("%w: contentFiles[%d].id", ErrInvalidContentFile, i)
+		}
+
+		if _, ok := seen[f.ID]; ok {
+			return WrapConflict(nil, fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID))
+		}
+		seen[f.ID] = struct{}{}
+
+		if err := f.Validate(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -260,37 +292,25 @@ func New(
 	createdBy string,
 	updatedAt time.Time,
 ) (TokenBlueprint, error) {
-	tid := id
-
-	iconPath := tokenIconObjectPath
-	contentsPath := tokenContentsObjectPath
-
-	if iconPath == "" {
-		iconPath = DefaultTokenIconObjectPath(tid)
-	}
-	if contentsPath == "" {
-		contentsPath = DefaultTokenContentsObjectPath(tid)
-	}
-
 	tb := TokenBlueprint{
-		ID:           tid,
+		ID:           id,
 		Name:         name,
 		Symbol:       symbol,
 		BrandID:      brandID,
 		CompanyID:    companyID,
 		Description:  description,
 		IconURL:      "",
-		ContentFiles: dedupContentFiles(contentFiles),
+		ContentFiles: contentFiles,
 		AssigneeID:   assigneeID,
 		Minted:       false,
 
-		TokenIconObjectPath:     iconPath,
-		TokenContentsObjectPath: contentsPath,
+		TokenIconObjectPath:     tokenIconObjectPath,
+		TokenContentsObjectPath: tokenContentsObjectPath,
 
 		CreatedAt: createdAt.UTC(),
 		CreatedBy: createdBy,
 		UpdatedAt: updatedAt.UTC(),
-		UpdatedBy: "",
+		UpdatedBy: createdBy,
 
 		MetadataURI: "",
 	}
@@ -307,7 +327,7 @@ func New(
 
 func (t *TokenBlueprint) ensureMutableCoreOrDeletable() error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	if t.Minted {
 		return ErrAlreadyMinted
@@ -321,7 +341,7 @@ func (t *TokenBlueprint) ensureMutableCoreOrDeletable() error {
 
 func (t *TokenBlueprint) UpdateDescription(desc string) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	t.Description = desc
 	return nil
@@ -329,7 +349,7 @@ func (t *TokenBlueprint) UpdateDescription(desc string) error {
 
 func (t *TokenBlueprint) UpdateAssigneeID(id string) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	if id == "" {
 		return ErrInvalidAssigneeID
@@ -340,7 +360,7 @@ func (t *TokenBlueprint) UpdateAssigneeID(id string) error {
 
 func (t *TokenBlueprint) SetMinted(status bool) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	if t.Minted && !status {
 		return ErrAlreadyMinted
@@ -353,13 +373,12 @@ func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
 	}
-	if t == nil {
-		return nil
-	}
+
 	id := b.ID
 	if id == "" {
 		return ErrInvalidBrandID
 	}
+
 	t.BrandID = id
 	return nil
 }
@@ -373,7 +392,7 @@ func (t TokenBlueprint) ValidateBrandLink() error {
 
 func (t *TokenBlueprint) SetAssigneeID(id string) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	if id == "" {
 		return ErrInvalidAssigneeID
@@ -391,7 +410,7 @@ func (t TokenBlueprint) ValidateAssigneeLink() error {
 
 func (t *TokenBlueprint) SetCreatedBy(createdBy string) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	if createdBy == "" {
 		return ErrInvalidCreatedBy
@@ -409,7 +428,7 @@ func (t TokenBlueprint) ValidateCreatedByLink() error {
 
 func (t *TokenBlueprint) SetUpdatedBy(updatedBy string) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	if updatedBy == "" {
 		return ErrInvalidUpdatedBy
@@ -429,9 +448,6 @@ func (t *TokenBlueprint) SetDeletedBy(deletedBy string) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
 	}
-	if t == nil {
-		return nil
-	}
 	if deletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
@@ -442,9 +458,6 @@ func (t *TokenBlueprint) SetDeletedBy(deletedBy string) error {
 func (t *TokenBlueprint) ClearDeletedBy() error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
-	}
-	if t == nil {
-		return nil
 	}
 	t.DeletedBy = nil
 	return nil
@@ -462,7 +475,7 @@ func (t TokenBlueprint) ValidateDeletedByLink() error {
 
 func (t *TokenBlueprint) SetMetadataURI(uri string) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	t.MetadataURI = uri
 	return nil
@@ -470,7 +483,7 @@ func (t *TokenBlueprint) SetMetadataURI(uri string) error {
 
 func (t *TokenBlueprint) SetIconURL(url string) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	t.IconURL = url
 	return nil
@@ -479,9 +492,6 @@ func (t *TokenBlueprint) SetIconURL(url string) error {
 func (t *TokenBlueprint) SetTokenIconObjectPath(path string) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
-	}
-	if t == nil {
-		return nil
 	}
 	if path == "" {
 		return ErrInvalidTokenIconObjectPath
@@ -493,9 +503,6 @@ func (t *TokenBlueprint) SetTokenIconObjectPath(path string) error {
 func (t *TokenBlueprint) SetTokenContentsObjectPath(path string) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
-	}
-	if t == nil {
-		return nil
 	}
 	if path == "" {
 		return ErrInvalidTokenContentsObjectPath
@@ -510,10 +517,7 @@ func (t *TokenBlueprint) SetTokenContentsObjectPath(path string) error {
 
 func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 	if t == nil {
-		return nil
-	}
-	if string(f.Visibility) == "" {
-		f.Visibility = VisibilityPrivate
+		return ErrNilTokenBlueprint
 	}
 	if err := f.Validate(); err != nil {
 		return err
@@ -526,27 +530,23 @@ func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 	}
 
 	t.ContentFiles = append(t.ContentFiles, f)
-	t.ContentFiles = dedupContentFiles(t.ContentFiles)
 	return nil
 }
 
 func (t *TokenBlueprint) ReplaceContentFiles(files []ContentFile) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
-	clean := dedupContentFiles(files)
-	for _, f := range clean {
-		if err := f.Validate(); err != nil {
-			return err
-		}
+	if err := validateContentFiles(files); err != nil {
+		return err
 	}
-	t.ContentFiles = clean
+	t.ContentFiles = files
 	return nil
 }
 
 func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibility, actorID string, now time.Time) error {
 	if t == nil {
-		return nil
+		return ErrNilTokenBlueprint
 	}
 	if contentID == "" {
 		return ErrInvalidContentFile
@@ -569,41 +569,4 @@ func (t *TokenBlueprint) SetContentVisibility(contentID string, v ContentVisibil
 	}
 
 	return WrapNotFound(nil, "content file not found")
-}
-
-// ============================================================
-// Helpers
-// ============================================================
-
-func DefaultTokenIconObjectPath(tokenBlueprintID string) string {
-	if tokenBlueprintID == "" {
-		return ""
-	}
-	return fmt.Sprintf("%s/icon", tokenBlueprintID)
-}
-
-func DefaultTokenContentsObjectPath(tokenBlueprintID string) string {
-	if tokenBlueprintID == "" {
-		return ""
-	}
-	return fmt.Sprintf("%s/.keep", tokenBlueprintID)
-}
-
-func dedupContentFiles(xs []ContentFile) []ContentFile {
-	seen := make(map[string]struct{}, len(xs))
-	out := make([]ContentFile, 0, len(xs))
-
-	for _, x := range xs {
-		id := x.ID
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, x)
-	}
-
-	return out
 }

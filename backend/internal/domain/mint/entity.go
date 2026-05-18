@@ -78,10 +78,11 @@ func NewMint(
 		return Mint{}, ErrInvalidTokenBlueprintID
 	}
 
-	products := normalizeIDList(productIDs)
-
-	// ここでは「0件だとエラー」はチェックしない。
-	// Usecase 側で passedProductIDs が 0件ならエラーを返す責務にする。
+	// ここでは productIDs を補正しない。
+	// 空文字や不正値は validate() で ErrInvalidProducts として検出する。
+	//
+	// 0件をエラーにするかどうかは Usecase 側の責務。
+	products := productIDs
 
 	if createdBy == "" {
 		return Mint{}, ErrInvalidCreatedBy
@@ -147,29 +148,4 @@ func (m Mint) validate() error {
 	}
 
 	return nil
-}
-
-// ------------------------------------------------------
-// Helpers
-// ------------------------------------------------------
-
-// normalizeIDList は raw な productId 配列から重複と空文字を除外した []string を作る。
-// Firestore 実データの products は array なので map には変換しない。
-func normalizeIDList(raw []string) []string {
-	out := make([]string, 0, len(raw))
-	seen := make(map[string]struct{}, len(raw))
-
-	for _, id := range raw {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-
-	return out
 }

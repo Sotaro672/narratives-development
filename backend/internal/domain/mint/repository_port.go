@@ -76,15 +76,22 @@ type MintProductionRepo interface {
 	GetProductBlueprintIDByProductionID(ctx context.Context, productionID string) (string, error)
 }
 
-// MintInspectionRepo は productionId 群から inspections を取得・更新するための最小ポートです。
+// MintInspectionRepo は productionId から inspection を取得・更新するための最小ポートです。
 type MintInspectionRepo interface {
-	// 指定された productionId 群に紐づく InspectionBatch をすべて返す
-	// 実装例: InspectionRepositoryFS.ListByProductionID
+	// GetByProductionID:
+	// - production / inspection / mint の docId は同一値として扱う。
+	// - MintUsecase で単一 productionID から InspectionBatch を1件取得する正規ルート。
+	GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
+
+	// ListByProductionID:
+	// - 複数 productionID に対応する InspectionBatch をまとめて取得する。
+	// - query.go の一覧取得で使用する。
+	// - 見つからない ID があってもエラーにせず、存在するものだけを返す想定。
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
 
-	// mintId を更新するための専用メソッド
-	// - ミント申請が実行された productionID に紐づく InspectionBatch.mintId を設定する用途を想定
-	// - mintID == nil の場合は mintId を未設定（削除）として扱う想定
+	// UpdateMintID:
+	// - ミント申請が実行された productionID に紐づく InspectionBatch.mintId を設定する用途を想定。
+	// - mintID == nil の場合は mintId を未設定（削除）として扱う想定。
 	UpdateMintID(
 		ctx context.Context,
 		productionID string,
