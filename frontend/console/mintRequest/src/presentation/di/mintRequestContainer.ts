@@ -16,8 +16,6 @@ import {
   postMintRequestHTTP,
 } from "../../infrastructure/repository";
 
-import { fetchInventoryTokenBlueprintPatch } from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
-
 class HttpMintRequestRepository implements MintRequestRepository {
   async fetchInspectionByProductionId(
     productionId: string,
@@ -55,12 +53,6 @@ class HttpMintRequestRepository implements MintRequestRepository {
     brandId: string,
   ): Promise<TokenBlueprintSummary[]> {
     return fetchTokenBlueprintsByBrandHTTP(brandId);
-  }
-
-  async fetchTokenBlueprintPatch(
-    tokenBlueprintId: string,
-  ): Promise<unknown | null> {
-    return fetchInventoryTokenBlueprintPatch(tokenBlueprintId);
   }
 
   async postMintRequest(

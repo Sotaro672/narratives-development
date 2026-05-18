@@ -14,13 +14,13 @@ import (
 // ============================================================
 
 type MintUsecase struct {
-	// 互換のため残しているが、company -> pb -> production の探索にはもう使わない方針
+	// productBlueprint / production / inspection / model 参照用リポジトリ
 	pbRepo    mintdom.MintProductBlueprintRepo
 	prodRepo  mintdom.MintProductionRepo
 	inspRepo  mintdom.MintInspectionRepo
 	modelRepo mintdom.MintModelRepo
 
-	// mint パッケージ側の Port 経由で tokenBlueprint を操作する
+	// tokenBlueprint の bucket / metadata URI 操作用ポート
 	tbBucketEnsurer   TokenBlueprintBucketEnsurer
 	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
 
@@ -33,25 +33,23 @@ type MintUsecase struct {
 	// mints テーブル用リポジトリ
 	mintRepo mintdom.MintRepository
 
-	// 署名/アドレス等のフィールド揺れ吸収を隔離する Mapper
+	// mint 結果を Mint entity へ反映する Mapper
 	mintResultMapper *MintResultMapper
 
 	// inspections → passed productId 一覧を取得するためのポート
 	passedProductLister mintdom.PassedProductLister
 
-	// チェーンミント実行用ポート（TokenUsecase を想定）
+	// チェーンミント実行用ポート
 	tokenMinter TokenMintPort
 
 	// inventories への反映（modelId 単位）
 	inventoryUC InventoryUpserter
 
 	// createdBy(memberId) → 氏名 を解決するため
-	// 既存DIを壊さないため、Setterで後から差し込む
 	nameResolver *resolver.NameResolver
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
-// NameResolver / InventoryUC / TokenBlueprint Ensurers は任意依存（Setterで後から差し込む）とする。
 func NewMintUsecase(
 	pbRepo mintdom.MintProductBlueprintRepo,
 	prodRepo mintdom.MintProductionRepo,
@@ -75,7 +73,6 @@ func NewMintUsecase(
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
 
-		// 後注入（任意依存）
 		tbBucketEnsurer:   nil,
 		tbMetadataEnsurer: nil,
 
@@ -88,7 +85,6 @@ func NewMintUsecase(
 // Setters (DI 後注入用)
 // ============================================================
 
-// DI 側で NameResolver を後から注入できるようにする
 func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
 	if u == nil {
 		return
@@ -96,19 +92,15 @@ func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
 	u.nameResolver = r
 }
 
-// DI 側で InventoryUsecase（または互換の Upserter）を後から注入できるようにする
-// ※ *usecase.InventoryUsecase が UpsertFromMintByModel を実装している前提
 func (u *MintUsecase) SetInventoryUsecase(uc *appusecase.InventoryUsecase) {
 	if u == nil {
 		return
 	}
 
-	// コンパイル時に interface 実装を保証したいので代入時点でチェック
 	var _ InventoryUpserter = uc
 	u.inventoryUC = uc
 }
 
-// tokenBlueprint metadata ensurer を後注入
 func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
 	if u == nil {
 		return

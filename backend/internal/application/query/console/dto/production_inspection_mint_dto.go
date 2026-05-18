@@ -1,4 +1,4 @@
-// backend/internal/application/query/dto/production_inspection_mint_dto.go
+// backend/internal/application/query/console/dto/production_inspection_mint_dto.go
 package dto
 
 import (

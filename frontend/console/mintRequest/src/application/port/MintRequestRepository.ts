@@ -32,9 +32,6 @@ export interface MintRequestRepository {
     brandId: string,
   ): Promise<TokenBlueprintSummary[]>;
 
-  // token blueprint patch（inventory等の別コンテキスト呼び出しは実装側に閉じ込める）
-  fetchTokenBlueprintPatch(tokenBlueprintId: string): Promise<unknown | null>;
-
   // submit
   postMintRequest(
     productionId: string,

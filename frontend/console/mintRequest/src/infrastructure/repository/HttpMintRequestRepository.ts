@@ -12,9 +12,6 @@ import {
   postMintRequestHTTP,
 } from "../repository";
 
-// inventory tokenBlueprintPatch（この “別コンテキストHTTP” は infra に閉じ込める）
-import { fetchInventoryTokenBlueprintPatch } from "../adapter/inventoryTokenBlueprintPatch";
-
 export class HttpMintRequestRepository implements MintRequestRepository {
   async fetchInspectionByProductionId(
     productionId: string,
@@ -72,15 +69,6 @@ export class HttpMintRequestRepository implements MintRequestRepository {
         iconUrl: String(tb?.iconUrl ?? "").trim() || undefined,
       }))
       .filter((tb: any) => tb.id && tb.name && tb.symbol);
-  }
-
-  async fetchTokenBlueprintPatch(
-    tokenBlueprintId: string,
-  ): Promise<unknown | null> {
-    // ここで inventory 側 endpoint を吸収（application は知らない）
-    return await fetchInventoryTokenBlueprintPatch(tokenBlueprintId).catch(
-      () => null,
-    );
   }
 
   async postMintRequest(

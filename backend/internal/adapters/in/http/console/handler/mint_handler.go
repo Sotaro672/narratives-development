@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,7 +15,6 @@ import (
 	resolver "narratives/internal/application/resolver"
 
 	mintapp "narratives/internal/application/mint"
-	mintdto "narratives/internal/application/mint/dto"
 
 	// productionIds 自動解決用
 	productionapp "narratives/internal/application/production"
@@ -40,6 +37,12 @@ type MintRequestQueryService interface {
 
 	// detail 用（/mint/inspections/{productionId}）
 	GetMintRequestDetail(ctx context.Context, productionID string) (*querydto.MintRequestDetailDTO, error)
+
+	// list 用（productionId = inspectionId = mintId）
+	ListMintListRowsByProductionIDs(
+		ctx context.Context,
+		productionIDs []string,
+	) (map[string]querydto.MintListRowDTO, error)
 }
 
 type MintHandler struct {
@@ -79,8 +82,6 @@ func (h *MintHandler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 
 func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	log.Printf("[mint_handler] request method=%s path=%s rawQuery=%q", r.Method, r.URL.Path, r.URL.RawQuery)
 
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/debug":
@@ -163,17 +164,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	start := time.Now()
-	rawPath := r.URL.Path
-	rawQuery := r.URL.RawQuery
-
-	log.Printf(
-		"[mint_handler] POST /mint/mints/{id}/execute start path=%q rawQuery=%q mintUC_nil=%t",
-		rawPath, rawQuery, h.mintUC == nil,
-	)
-
 	if h.mintUC == nil {
-		log.Printf("[mint_handler] POST /mint/mints/{id}/execute abort reason=mintUC_nil elapsed=%s", time.Since(start))
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
 		return
@@ -185,30 +176,18 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 	inspectionID := strings.Trim(path, "/")
 
 	if inspectionID == "" {
-		log.Printf("[mint_handler] POST /mint/mints/{id}/execute bad_request reason=empty_inspectionId elapsed=%s", time.Since(start))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inspectionId is empty"})
 		return
 	}
 
-	log.Printf("[mint_handler] POST /mint/mints/{id}/execute parsed inspectionId=%q", inspectionID)
-
 	// 現状は mintRequestId と inspectionId が同一ID（docId）なので流用
 	result, err := h.mintUC.MintFromMintRequest(ctx, inspectionID)
 	if err != nil {
-		log.Printf(
-			"[mint_handler] POST /mint/mints/{id}/execute error inspectionId=%q err=%v elapsed=%s",
-			inspectionID, err, time.Since(start),
-		)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-
-	log.Printf(
-		"[mint_handler] POST /mint/mints/{id}/execute ok inspectionId=%q elapsed=%s result=%s",
-		inspectionID, time.Since(start), toJSONForLog(result, 1500),
-	)
 
 	_ = json.NewEncoder(w).Encode(result)
 }
@@ -240,12 +219,7 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 	}
 	productionID := path
 
-	log.Printf("[mint_handler] /mint/inspections/{productionId} start productionId=%q", productionID)
-
-	start := time.Now()
 	detail, err := h.mintRequestQS.GetMintRequestDetail(ctx, productionID)
-	elapsed := time.Since(start)
-
 	if err != nil {
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
 			w.WriteHeader(http.StatusBadRequest)
@@ -260,17 +234,10 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 			return
 		}
 
-		log.Printf("[mint_handler] /mint/inspections/{productionId} error=%v elapsed=%s", err, elapsed)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-
-	log.Printf(
-		"[mint_handler] /mint/inspections/{productionId} ok elapsed=%s detail=%s",
-		elapsed,
-		toJSONForLog(detail, 2000),
-	)
 
 	_ = json.NewEncoder(w).Encode(detail)
 }
@@ -305,15 +272,7 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 		}
 	}
 
-	log.Printf(
-		"[mint_handler] /mint/requests query view=%q rawProductionIds=%q filterCount=%d",
-		view, rawProductionIDs, len(filterSet),
-	)
-
-	start := time.Now()
 	rows, err := h.mintRequestQS.ListMintRequestManagementRows(ctx)
-	elapsed := time.Since(start)
-
 	if err != nil {
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
 			w.WriteHeader(http.StatusBadRequest)
@@ -321,7 +280,6 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 			return
 		}
 
-		log.Printf("[mint_handler] /mint/requests query error=%v elapsed=%s", err, elapsed)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -345,13 +303,7 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 		rows = filtered
 	}
 
-	log.Printf(
-		"[mint_handler] /mint/requests result rows len=%d elapsed=%s sampleRow[0]=%s",
-		len(rows),
-		elapsed,
-		toJSONForLog(sampleFirst(rows), 1500),
-	)
-
+	_ = view
 	_ = json.NewEncoder(w).Encode(rows)
 }
 
@@ -375,23 +327,16 @@ func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *h
 		raw = rawInspectionIDs
 	}
 
-	log.Printf(
-		"[mint_handler] /mint/inspections query rawProductionIds=%q rawInspectionIds=%q chosenRaw=%q",
-		rawProductionIDs, rawInspectionIDs, raw,
-	)
-
 	var ids []string
 
 	if raw == "" {
 		if h.productionUC == nil {
-			log.Printf("[mint_handler] /mint/inspections productionIds is empty AND productionUC is nil -> return []")
 			_ = json.NewEncoder(w).Encode([]any{})
 			return
 		}
 
 		prods, err := h.productionUC.ListWithAssigneeName(ctx)
 		if err != nil {
-			log.Printf("[mint_handler] /mint/inspections auto productionIds resolve error (ListWithAssigneeName) err=%v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
@@ -412,15 +357,7 @@ func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *h
 		}
 		sort.Strings(ids)
 
-		log.Printf(
-			"[mint_handler] /mint/inspections auto productionIds from /productions len=%d sample[0..4]=%v sampleProd[0]=%s",
-			len(ids),
-			ids[:min(5, len(ids))],
-			toJSONForLog(sampleFirst(prods), 1500),
-		)
-
 		if len(ids) == 0 {
-			log.Printf("[mint_handler] /mint/inspections auto productionIds resolved but EMPTY -> return []")
 			_ = json.NewEncoder(w).Encode([]any{})
 			return
 		}
@@ -442,36 +379,19 @@ func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *h
 		}
 
 		if len(ids) == 0 {
-			log.Printf("[mint_handler] /mint/inspections productionIds parsed empty (raw=%q) -> return []", raw)
 			_ = json.NewEncoder(w).Encode([]any{})
 			return
 		}
 
 		sort.Strings(ids)
-
-		log.Printf(
-			"[mint_handler] /mint/inspections productionIds parsed len=%d sample[0..4]=%v",
-			len(ids), ids[:min(5, len(ids))],
-		)
 	}
 
-	start := time.Now()
 	batches, err := h.mintUC.ListInspectionBatchesByProductionIDs(ctx, ids)
-	elapsed := time.Since(start)
-
 	if err != nil {
-		log.Printf("[mint_handler] /mint/inspections ListInspectionBatchesByProductionIDs error=%v elapsed=%s", err, elapsed)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-
-	log.Printf(
-		"[mint_handler] /mint/inspections result batches len=%d elapsed=%s sampleBatch[0]=%s",
-		len(batches),
-		elapsed,
-		toJSONForLog(sampleFirst(batches), 1500),
-	)
 
 	_ = json.NewEncoder(w).Encode(batches)
 }
@@ -519,53 +439,36 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 	}
 	sort.Strings(ids)
 
-	log.Printf("[mint_handler] /mint/mints inspectionIds len=%d sample[0..4]=%v view=%s", len(ids), ids[:min(5, len(ids))], view)
-
-	// view=list: Usecase 側で tokenName/createdByName を解決した DTO を返す
+	// view=list: Console BFF 側で tokenName/createdByName を解決した DTO を返す
 	if view != "dto" {
-		start := time.Now()
-		out, err := h.mintUC.ListMintListRowsByInspectionIDs(ctx, ids)
-		elapsed := time.Since(start)
+		if h.mintRequestQS == nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
+			return
+		}
 
+		out, err := h.mintRequestQS.ListMintListRowsByProductionIDs(ctx, ids)
 		if err != nil {
-			log.Printf("[mint_handler] /mint/mints ListMintListRowsByInspectionIDs error=%v elapsed=%s", err, elapsed)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 
-		log.Printf(
-			"[mint_handler] /mint/mints(list) ok keys=%d elapsed=%s sampleKey=%q sampleVal=%s",
-			len(out),
-			elapsed,
-			sampleFirstKey(out),
-			toJSONForLog(sampleFirstValue(out), 1500),
-		)
-
 		_ = json.NewEncoder(w).Encode(out)
 		return
 	}
 
-	start := time.Now()
 	mintsByInspectionID, err := h.mintUC.ListMintsByInspectionIDs(ctx, ids)
-	elapsed := time.Since(start)
-
 	if err != nil {
-		log.Printf("[mint_handler] /mint/mints ListMintsByInspectionIDs error=%v elapsed=%s", err, elapsed)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
-	listRows, _ := h.mintUC.ListMintListRowsByInspectionIDs(ctx, ids)
-
-	log.Printf(
-		"[mint_handler] /mint/mints(dto) ok keys=%d elapsed=%s sampleKey=%q sampleVal=%s",
-		len(mintsByInspectionID),
-		elapsed,
-		sampleFirstKey(mintsByInspectionID),
-		toJSONForLog(sampleFirstValue(mintsByInspectionID), 1500),
-	)
+	listRows := map[string]querydto.MintListRowDTO{}
+	if h.mintRequestQS != nil {
+		listRows, _ = h.mintRequestQS.ListMintListRowsByProductionIDs(ctx, ids)
+	}
 
 	out := make(map[string]any, len(mintsByInspectionID))
 	for inspectionID, m := range mintsByInspectionID {
@@ -662,13 +565,15 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 	createdByName := createdBy
 	tokenName := mintEntity.TokenBlueprintID
 
-	if rows, err := h.mintUC.ListMintListRowsByInspectionIDs(ctx, []string{id}); err == nil {
-		if row, ok := rows[id]; ok {
-			if row.CreatedByName != "" {
-				createdByName = row.CreatedByName
-			}
-			if row.TokenName != "" {
-				tokenName = row.TokenName
+	if h.mintRequestQS != nil {
+		if rows, err := h.mintRequestQS.ListMintListRowsByProductionIDs(ctx, []string{id}); err == nil {
+			if row, ok := rows[id]; ok {
+				if row.CreatedByName != "" {
+					createdByName = row.CreatedByName
+				}
+				if row.TokenName != "" {
+					tokenName = row.TokenName
+				}
 			}
 		}
 	}
@@ -715,17 +620,7 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	start := time.Now()
-	rawPath := r.URL.Path
-	rawQuery := r.URL.RawQuery
-
-	log.Printf(
-		"[mint_handler] POST /mint/requests/{id}/mint start path=%q rawQuery=%q mintUC_nil=%t",
-		rawPath, rawQuery, h.mintUC == nil,
-	)
-
 	if h.mintUC == nil {
-		log.Printf("[mint_handler] POST /mint/requests/{id}/mint abort reason=mintUC_nil elapsed=%s", time.Since(start))
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
 		return
@@ -736,29 +631,17 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 	mintRequestID := strings.Trim(path, "/")
 
 	if mintRequestID == "" {
-		log.Printf("[mint_handler] POST /mint/requests/{id}/mint bad_request reason=empty_mintRequestId elapsed=%s", time.Since(start))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequestId is empty"})
 		return
 	}
 
-	log.Printf("[mint_handler] POST /mint/requests/{id}/mint parsed mintRequestId=%q", mintRequestID)
-
 	result, err := h.mintUC.MintFromMintRequest(ctx, mintRequestID)
 	if err != nil {
-		log.Printf(
-			"[mint_handler] POST /mint/requests/{id}/mint error mintRequestId=%q err=%v elapsed=%s",
-			mintRequestID, err, time.Since(start),
-		)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-
-	log.Printf(
-		"[mint_handler] POST /mint/requests/{id}/mint ok mintRequestId=%q elapsed=%s result=%s",
-		mintRequestID, time.Since(start), toJSONForLog(result, 1500),
-	)
 
 	_ = json.NewEncoder(w).Encode(result)
 }
@@ -787,10 +670,6 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.Printf(
-				"[mint_handler] updateRequestInfo PANIC productionId=%q rec=%v stack=%s",
-				productionID, rec, string(debug.Stack()),
-			)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})
 		}
@@ -803,7 +682,6 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
-		log.Printf("[mint_handler] updateRequestInfo bad_request json_unmarshal_err=%v raw=%s", err, string(raw))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
 		return
@@ -816,22 +694,8 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	sbd := "<nil>"
-	if body.ScheduledBurnDate != nil {
-		sbd = *body.ScheduledBurnDate
-	}
-
-	log.Printf(
-		"[mint_handler] /mint/inspections/{productionId}/request parsed productionId=%q tokenBlueprintId=%q scheduledBurnDate=%q",
-		productionID, tokenBlueprintID, sbd,
-	)
-
 	updated, err := h.mintUC.UpdateRequestInfo(ctx, productionID, tokenBlueprintID, body.ScheduledBurnDate)
 	if err != nil {
-		log.Printf(
-			"[mint_handler] updateRequestInfo ERROR productionId=%q tokenBlueprintId=%q scheduledBurnDate=%q err=%T %v",
-			productionID, tokenBlueprintID, sbd, err, err,
-		)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -988,5 +852,4 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 }
 
 // keep imports referenced in some builds
-var _ = mintdto.MintListRowDTO{}
 var _ = context.Canceled
