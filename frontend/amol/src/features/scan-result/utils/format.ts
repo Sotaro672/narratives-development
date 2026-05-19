@@ -225,3 +225,11 @@ export function transferIconUrl(
   const brandIcon = transfer[`${prefix}BrandIcon`].trim();
   return safeUrl(avatarIcon || brandIcon);
 }
+
+export function transferBrandId(
+  transfer: MallPreviewTransferInfo,
+  side: "from" | "to"
+): string {
+  const prefix = side === "from" ? "from" : "to";
+  return transfer[`${prefix}BrandId`].trim();
+}

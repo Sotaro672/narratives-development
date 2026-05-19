@@ -8,6 +8,8 @@ export type HeaderProps = {
   hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
 
+  onBackButtonClick?: () => void | Promise<void>;
+
   actionButtonLabel?: string;
   onActionButtonClick?: () => void | Promise<void>;
   actionButtonDisabled?: boolean;

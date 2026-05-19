@@ -87,6 +87,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     getRecord(preview, "tokenBlueprintPatch") ??
     getRecord(previewStateRecord, "tokenBlueprintPatch");
 
+  const brandId = getString(preview, "brandId");
   const brandName = getString(preview, "brandName");
   const brandIcon = getString(preview, "brandIcon");
 
@@ -189,6 +190,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
           owned={owned}
           ownedError={ownedError}
           owner={owner}
+          brandId={brandId}
           brandName={brandName}
           brandIcon={brandIcon}
           hasBrandInfo={hasBrandInfo}

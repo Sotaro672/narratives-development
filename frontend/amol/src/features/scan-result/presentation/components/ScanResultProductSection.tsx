@@ -1,4 +1,6 @@
 // frontend/amol/src/features/scan-result/components/ScanResultProductSection.tsx
+import { useNavigate } from "react-router-dom";
+
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
 import MediaIcon from "../../../../components/ui/MediaIcon";
 import SectionCard from "../../../../components/ui/SectionCard";
@@ -15,6 +17,7 @@ type ScanResultProductSectionProps = {
   owned: boolean | null;
   ownedError: string;
   owner: MallOwnerInfo | null;
+  brandId: string;
   brandName: string;
   brandIcon: string;
   hasBrandInfo: boolean;
@@ -50,11 +53,14 @@ function hasAlcoholDisplayInfo(alcoholInfo?: ScanAlcoholInfo | null): boolean {
 export default function ScanResultProductSection(
   props: ScanResultProductSectionProps,
 ) {
+  const navigate = useNavigate();
+
   const {
     title,
     owned,
     ownedError,
     owner,
+    brandId,
     brandName,
     brandIcon,
     hasBrandInfo,
@@ -70,6 +76,15 @@ export default function ScanResultProductSection(
 
   const isAlcohol = alcoholInfo?.isAlcohol === true;
   const shouldShowAlcoholInfo = hasAlcoholDisplayInfo(alcoholInfo);
+  const normalizedBrandId = brandId.trim();
+
+  const handleOpenBrand = () => {
+    if (!normalizedBrandId) {
+      return;
+    }
+
+    navigate(`/brands/${encodeURIComponent(normalizedBrandId)}`);
+  };
 
   return (
     <SectionCard>
@@ -95,7 +110,12 @@ export default function ScanResultProductSection(
         <InfoList>
           {hasBrandInfo ? (
             <InfoRow label="ブランド">
-              <span className="scan-result-brand-value">
+              <button
+                type="button"
+                className="scan-result-brand-value scan-result-brand-value--button"
+                onClick={handleOpenBrand}
+                disabled={!normalizedBrandId}
+              >
                 <MediaIcon
                   src={brandIcon}
                   fallback=""
@@ -104,7 +124,7 @@ export default function ScanResultProductSection(
                   className="scan-result-brand-icon"
                 />
                 <span>{brandName || "-"}</span>
-              </span>
+              </button>
             </InfoRow>
           ) : null}
 

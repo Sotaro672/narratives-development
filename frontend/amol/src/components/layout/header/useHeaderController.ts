@@ -199,6 +199,7 @@ export function useHeaderController({
   showEditButton = false,
   hideHamburgerMenu = false,
   hideSettingsButton = false,
+  onBackButtonClick,
   actionButtonLabel,
   onActionButtonClick,
   actionButtonDisabled = false,
@@ -413,6 +414,11 @@ export function useHeaderController({
   };
 
   const handleBack = () => {
+    if (onBackButtonClick) {
+      void onBackButtonClick();
+      return;
+    }
+
     const normalizedBackTo = backTo.trim();
 
     navigate(normalizedBackTo || WALLET_PATH);

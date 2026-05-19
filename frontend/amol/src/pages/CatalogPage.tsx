@@ -1,4 +1,8 @@
-// frontend/src/pages/CatalogPage.tsx
+// frontend/amol/src/pages/CatalogPage.tsx
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { onAuthStateChanged, type User } from "firebase/auth";
+
 import "../styles/catalog-page.css";
 
 import Layout from "../components/layout/Layout";
@@ -11,8 +15,22 @@ import ReviewSection from "../features/catalog/presentation/components/ReviewSec
 import TokenInfoCard from "../features/catalog/presentation/components/TokenInfoCard";
 import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
 import { formatPrice } from "../features/catalog/utils/format";
+import { auth } from "../lib/firebase";
 
 export default function CatalogPage() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const isLoggedIn = Boolean(user);
+
   const {
     catalog,
     catalogKind,
@@ -54,30 +72,42 @@ export default function CatalogPage() {
     handleCartButtonClick,
   } = useCatalogPage();
 
+  const handleBackButtonClick = () => {
+    if (isLoggedIn) {
+      navigate("/lists");
+      return;
+    }
+
+    navigate(-1);
+  };
+
   return (
     <Layout
       title={
         catalog?.productBlueprint.productName ||
         (isLoadingCatalog ? "" : "カタログ詳細")
       }
-      mode="mypage"
+      mode={isLoggedIn ? "mypage" : "landing"}
       showBackButton
       backTo="/lists"
+      onBackButtonClick={handleBackButtonClick}
       showFooter={false}
       showHeader
       hideSettingsButton
-      showCartButton
+      showCartButton={isLoggedIn}
       cartButtonLabel="カート"
-      onCartButtonClick={handleCartButtonClick}
+      onCartButtonClick={isLoggedIn ? handleCartButtonClick : undefined}
       actionButtonLabel={
-        isMobilePortrait
+        !isLoggedIn || isMobilePortrait
           ? undefined
           : isAddingToCart
             ? "追加中"
             : "カートに入れる"
       }
-      onActionButtonClick={isMobilePortrait ? undefined : handleAddToCart}
-      actionButtonDisabled={!canAddToCart}
+      onActionButtonClick={
+        !isLoggedIn || isMobilePortrait ? undefined : handleAddToCart
+      }
+      actionButtonDisabled={!isLoggedIn || !canAddToCart}
     >
       <section className="split-page catalog-page-section">
         {isLoadingCatalog ? (
@@ -142,8 +172,8 @@ export default function CatalogPage() {
                 selectedModel={selectedModel}
                 selectedModelPrice={selectedModelPrice}
                 selectedModelStock={selectedModelStock}
-                cartMessage={cartMessage}
-                cartErrorMessage={cartErrorMessage}
+                cartMessage={isLoggedIn ? cartMessage : ""}
+                cartErrorMessage={isLoggedIn ? cartErrorMessage : ""}
                 isAlcoholCatalog={isAlcoholCatalog}
                 onSelectColor={handleSelectColor}
                 onSelectSize={handleSelectSize}
@@ -162,7 +192,7 @@ export default function CatalogPage() {
         ) : null}
       </section>
 
-      {isMobilePortrait ? (
+      {isLoggedIn && isMobilePortrait ? (
         <FooterNav
           variant="action"
           buttonLabel={isAddingToCart ? "追加中" : "カートに入れる"}

@@ -21,6 +21,7 @@ import AuthActionPage from "../pages/AuthActionPage";
 import ListsPage from "../pages/ListsPage";
 import CartPage from "../pages/CartPage";
 import CatalogPage from "../pages/CatalogPage";
+import BrandPage from "../pages/BrandPage";
 import PaymentPage from "../pages/PaymentPage";
 import OrderConfirmedPage from "../pages/OrderConfirmedPage";
 import ScanPage from "../pages/ScanPage";
@@ -120,11 +121,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/lists/:listId",
-    element: (
-      <ProtectedRoute>
-        <CatalogPage />
-      </ProtectedRoute>
-    ),
+    element: <CatalogPage />,
+  },
+  {
+    path: "/brands/:brandId",
+    element: <BrandPage />,
   },
   {
     path: "/payments/:listId",

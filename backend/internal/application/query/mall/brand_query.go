@@ -76,7 +76,7 @@ func (q *BrandQuery) GetBrandDetailByID(ctx context.Context, brandID string) (Br
 		return BrandDetailDTO{}, err
 	}
 
-	listIDs, err := q.listListIDsByInventoryIDs(ctx, inventoryIDs)
+	listIDs, err := q.listListingListIDsByInventoryIDs(ctx, inventoryIDs)
 	if err != nil {
 		return BrandDetailDTO{}, err
 	}
@@ -125,14 +125,21 @@ func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID stri
 		if pbID == "" {
 			continue
 		}
+
 		for _, tb := range tokenBlueprints {
 			if tb.ID == "" {
 				continue
 			}
+
 			inventoryID := buildInventoryID(pbID, tb.ID)
+			if inventoryID == "" {
+				continue
+			}
+
 			if _, ok := seen[inventoryID]; ok {
 				continue
 			}
+
 			seen[inventoryID] = struct{}{}
 			inventoryIDs = append(inventoryIDs, inventoryID)
 		}
@@ -141,10 +148,15 @@ func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID stri
 	return inventoryIDs, nil
 }
 
-func (q *BrandQuery) listListIDsByInventoryIDs(ctx context.Context, inventoryIDs []string) ([]string, error) {
+func (q *BrandQuery) listListingListIDsByInventoryIDs(ctx context.Context, inventoryIDs []string) ([]string, error) {
 	if q.listRepo == nil || len(inventoryIDs) == 0 {
 		return []string{}, nil
 	}
+
+	const perPage = 200
+
+	listing := listdom.StatusListing
+	notDeleted := false
 
 	seen := make(map[string]struct{})
 	listIDs := make([]string, 0)
@@ -154,20 +166,60 @@ func (q *BrandQuery) listListIDsByInventoryIDs(ctx context.Context, inventoryIDs
 			continue
 		}
 
-		ids, err := q.listRepo.ListIDsByInventoryID(ctx, inventoryID)
-		if err != nil {
-			return nil, err
-		}
+		pageNumber := 1
 
-		for _, id := range ids {
-			if id == "" {
-				continue
+		for {
+			result, err := q.listRepo.List(
+				ctx,
+				listdom.Filter{
+					InventoryIDs: []string{inventoryID},
+					Status:       &listing,
+					Deleted:      &notDeleted,
+				},
+				listdom.Sort{},
+				listdom.Page{
+					Number:  pageNumber,
+					PerPage: perPage,
+				},
+			)
+			if err != nil {
+				return nil, err
 			}
-			if _, ok := seen[id]; ok {
-				continue
+
+			if len(result.Items) == 0 {
+				break
 			}
-			seen[id] = struct{}{}
-			listIDs = append(listIDs, id)
+
+			for _, l := range result.Items {
+				if l.ID == "" {
+					continue
+				}
+
+				// Repository 実装差分への防御。
+				// 本来は filter.Status で status=listing のみ返る想定。
+				if l.Status != listdom.StatusListing {
+					continue
+				}
+
+				// Repository 実装差分への防御。
+				// 本来は filter.InventoryIDs で該当 inventoryId のみ返る想定。
+				if l.InventoryID != inventoryID {
+					continue
+				}
+
+				if _, ok := seen[l.ID]; ok {
+					continue
+				}
+
+				seen[l.ID] = struct{}{}
+				listIDs = append(listIDs, l.ID)
+			}
+
+			if len(result.Items) < perPage {
+				break
+			}
+
+			pageNumber++
 		}
 	}
 
@@ -213,6 +265,10 @@ func (q *BrandQuery) listAllTokenBlueprintsByBrandID(
 }
 
 func buildInventoryID(productBlueprintID, tokenBlueprintID string) string {
+	if productBlueprintID == "" || tokenBlueprintID == "" {
+		return ""
+	}
+
 	sanitize := func(s string) string {
 		return strings.ReplaceAll(s, "/", "_")
 	}

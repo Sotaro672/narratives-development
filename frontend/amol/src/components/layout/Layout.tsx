@@ -50,6 +50,7 @@ type LayoutProps = {
   showBackButton?: boolean;
   mode?: LayoutMode;
   backTo?: string;
+  onBackButtonClick?: () => void | Promise<void>;
   showFooter?: boolean;
   showHeader?: boolean;
   showEditButton?: boolean;
@@ -80,6 +81,7 @@ export default function Layout({
   showBackButton = false,
   mode = "default",
   backTo = WALLET_PATH,
+  onBackButtonClick,
   showFooter,
   showHeader = true,
   showEditButton = false,
@@ -115,6 +117,7 @@ export default function Layout({
           showBackButton={showBackButton}
           mode={headerMode}
           backTo={backTo}
+          onBackButtonClick={onBackButtonClick}
           showEditButton={showEditButton}
           hideHamburgerMenu={hideHamburgerMenu}
           hideSettingsButton={hideSettingsButton}
