@@ -109,11 +109,3 @@ type ReadOnlyRepositoryPort interface {
 
 	ExistsByCode(ctx context.Context, code CategoryCode) (bool, error)
 }
-
-// RepositoryPort は後方互換用 alias。
-//
-// NOTE:
-// 新規実装では ReadOnlyRepositoryPort を優先する。
-// 将来的に管理画面からカテゴリを編集する場合のみ、
-// write 用 port を別途定義する。
-type RepositoryPort = ReadOnlyRepositoryPort

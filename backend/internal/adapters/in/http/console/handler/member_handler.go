@@ -3,7 +3,6 @@ package consoleHandler
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -137,7 +136,7 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// GET は Firebase UID 専用。
 		// PATCH は member docId 専用。
 		if len(parts) == 1 {
-			id := strings.TrimSpace(parts[0])
+			id := parts[0]
 			if id == "" {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
@@ -160,7 +159,7 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// /members/{docId}/display-name
 		if len(parts) == 2 && parts[1] == "display-name" {
-			id := strings.TrimSpace(parts[0])
+			id := parts[0]
 			if id == "" {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
@@ -183,7 +182,7 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// CurrentMember の UID を使って bind する。
 		// 招待承諾時の uid bind は CurrentMember が未確立でも動く専用APIで扱うこと。
 		if len(parts) == 2 && parts[1] == "bind-firebase-uid" {
-			id := strings.TrimSpace(parts[0])
+			id := parts[0]
 			if id == "" {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
@@ -254,7 +253,7 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		LastName:       req.LastName,
 		FirstNameKana:  req.FirstNameKana,
 		LastNameKana:   req.LastNameKana,
-		Email:          strings.TrimSpace(req.Email),
+		Email:          req.Email,
 		Permissions:    dedupStrings(req.Permissions),
 		AssignedBrands: dedupStrings(req.AssignedBrands),
 		CompanyID:      me.CompanyID,
@@ -289,7 +288,6 @@ type memberUpdateRequest struct {
 func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
@@ -346,7 +344,6 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 func (h *MemberHandler) bindFirebaseUID(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
@@ -360,7 +357,7 @@ func (h *MemberHandler) bindFirebaseUID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	uid := strings.TrimSpace(me.UID)
+	uid := me.UID
 	if uid == "" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: current member uid is empty"})
@@ -388,7 +385,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	var f memberdom.Filter
 	f.SearchQuery = qv.Get("q")
-	f.UID = strings.TrimSpace(qv.Get("uid"))
+	f.UID = qv.Get("uid")
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || me.CompanyID == "" {
@@ -398,7 +395,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f.CompanyID = me.CompanyID
-	f.Status = strings.TrimSpace(qv.Get("status"))
+	f.Status = qv.Get("status")
 
 	if v := qv.Get("brandIds"); v != "" {
 		f.BrandIDs = splitCSV(v)
@@ -458,8 +455,6 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 
 	companyID := me.CompanyID
 
-	log.Printf("[memberHandler.listByCompanyID] ENTER companyID=%q", companyID)
-
 	res, err := h.repo.ListWithDocID(ctx, memberdom.Filter{
 		CompanyID: companyID,
 	}, common.Sort{}, common.Page{
@@ -467,7 +462,6 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 		PerPage: 200,
 	})
 	if err != nil {
-		log.Printf("[memberHandler.listByCompanyID] ListWithDocID error: %v", err)
 		writeMemberErr(w, err)
 		return
 	}
@@ -476,8 +470,6 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 	for _, rec := range res.Items {
 		items = append(items, toMemberResponse(rec.DocID, rec.Member))
 	}
-
-	log.Printf("[memberHandler.listByCompanyID] OK items=%d", len(items))
 
 	_ = json.NewEncoder(w).Encode(items)
 }
@@ -492,7 +484,6 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, uid string) {
 	ctx := r.Context()
 
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid uid"})
@@ -529,7 +520,6 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, uid string) 
 func (h *MemberHandler) getDisplayName(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
@@ -589,7 +579,6 @@ func dedupStrings(in []string) []string {
 	seen := make(map[string]struct{}, len(in))
 	out := make([]string, 0, len(in))
 	for _, v := range in {
-		v = strings.TrimSpace(v)
 		if v == "" {
 			continue
 		}

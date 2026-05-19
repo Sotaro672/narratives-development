@@ -24,7 +24,6 @@ import (
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
-	pbpdom "narratives/internal/domain/productBlueprint"
 )
 
 // handler が依存する最小 query IF
@@ -56,12 +55,6 @@ type MintRequestQueryService interface {
 		ctx context.Context,
 		productionID string,
 	) (*querydto.MintDTO, error)
-
-	// productBlueprint patch + brandName
-	GetProductBlueprintPatchForMint(
-		ctx context.Context,
-		productBlueprintID string,
-	) (*querydto.MintProductBlueprintPatchDTO, error)
 
 	// tokenBlueprint options for mint screen
 	ListTokenBlueprintsForMint(
@@ -157,13 +150,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
 		strings.HasSuffix(r.URL.Path, "/request"):
 		h.updateRequestInfo(w, r)
-		return
-
-	// GET /mint/product_blueprints/{id}/patch
-	case r.Method == http.MethodGet &&
-		strings.HasPrefix(r.URL.Path, "/mint/product_blueprints/") &&
-		strings.HasSuffix(r.URL.Path, "/patch"):
-		h.getProductBlueprintPatchByID(w, r)
 		return
 
 	// GET /mint/brands
@@ -565,43 +551,6 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	}
 
 	_ = json.NewEncoder(w).Encode(updated)
-}
-
-// ============================================================
-// GET /mint/product_blueprints/{id}/patch
-// ============================================================
-
-func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
-		return
-	}
-
-	path := strings.TrimPrefix(r.URL.Path, "/mint/product_blueprints/")
-	path = strings.TrimSuffix(path, "/patch")
-	id := strings.Trim(path, "/")
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productBlueprintID is empty"})
-		return
-	}
-
-	resp, err := h.mintRequestQS.GetProductBlueprintPatchForMint(ctx, id)
-	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, pbpdom.ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // ============================================================

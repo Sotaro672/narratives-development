@@ -40,7 +40,6 @@ func NewTokenBlueprintHandler(
 // path helpers -------------------------------------------------------------
 
 func trimSlashSuffix(p string) string {
-	p = strings.Trim(p, " \t\r\n")
 	if p == "" {
 		return ""
 	}
@@ -61,7 +60,7 @@ func extractFirstSegmentAfterPrefix(path, prefix string) string {
 	}
 
 	parts := strings.SplitN(rest, "/", 2)
-	return strings.Trim(parts[0], " \t\r\n")
+	return parts[0]
 }
 
 // DTO --------------------------------------------------------------------
@@ -162,7 +161,7 @@ func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string)
 		return ""
 	}
 
-	name, _ := h.brandSvc.GetNameByID(ctx, strings.Trim(id, " \t\r\n"))
+	name, _ := h.brandSvc.GetNameByID(ctx, id)
 	return name
 }
 
@@ -171,11 +170,11 @@ func resolveStoredIconURL(tb *tbdom.TokenBlueprint) string {
 		return ""
 	}
 
-	return strings.Trim(tb.IconURL, " \t\r\n")
+	return tb.IconURL
 }
 
 func resolveStoredContentFileURL(f tbdom.ContentFile) string {
-	return strings.Trim(f.URL, " \t\r\n")
+	return f.URL
 }
 
 func (h *TokenBlueprintHandler) toContentFilesResponse(
@@ -214,27 +213,27 @@ func (h *TokenBlueprintHandler) toResponse(
 		updPtr = &t
 	}
 
-	assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
-	createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
-	updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
+	assigneeID := tb.AssigneeID
+	createdBy := tb.CreatedBy
+	updatedBy := tb.UpdatedBy
 
 	assigneeName := ""
 	createdByName := ""
 	updatedByName := ""
 	if names != nil {
-		assigneeName = strings.Trim(names.AssigneeName, " \t\r\n")
-		createdByName = strings.Trim(names.CreatedByName, " \t\r\n")
-		updatedByName = strings.Trim(names.UpdatedByName, " \t\r\n")
+		assigneeName = names.AssigneeName
+		createdByName = names.CreatedByName
+		updatedByName = names.UpdatedByName
 	}
 
 	return tokenBlueprintResponse{
-		ID:           strings.Trim(tb.ID, " \t\r\n"),
-		Name:         strings.Trim(tb.Name, " \t\r\n"),
-		Symbol:       strings.Trim(tb.Symbol, " \t\r\n"),
-		BrandID:      strings.Trim(tb.BrandID, " \t\r\n"),
+		ID:           tb.ID,
+		Name:         tb.Name,
+		Symbol:       tb.Symbol,
+		BrandID:      tb.BrandID,
 		BrandName:    h.resolveBrandName(ctx, tb.BrandID),
-		CompanyID:    strings.Trim(tb.CompanyID, " \t\r\n"),
-		Description:  strings.Trim(tb.Description, " \t\r\n"),
+		CompanyID:    tb.CompanyID,
+		Description:  tb.Description,
 		Minted:       tb.Minted,
 		ContentFiles: h.toContentFilesResponse(ctx, tb, includeContentViewURL),
 
@@ -250,7 +249,7 @@ func (h *TokenBlueprintHandler) toResponse(
 		UpdatedBy:     updatedBy,
 		UpdatedByName: updatedByName,
 
-		MetadataURI: strings.Trim(tb.MetadataURI, " \t\r\n"),
+		MetadataURI: tb.MetadataURI,
 
 		IconURL:     resolveStoredIconURL(tb),
 		ContentsURL: "",
@@ -263,14 +262,14 @@ func (h *TokenBlueprintHandler) toPatchResponse(ctx context.Context, tb *tbdom.T
 	}
 
 	return tokenBlueprintPatchResponse{
-		ID:          strings.Trim(tb.ID, " \t\r\n"),
-		TokenName:   strings.Trim(tb.Name, " \t\r\n"),
-		Symbol:      strings.Trim(tb.Symbol, " \t\r\n"),
-		BrandID:     strings.Trim(tb.BrandID, " \t\r\n"),
+		ID:          tb.ID,
+		TokenName:   tb.Name,
+		Symbol:      tb.Symbol,
+		BrandID:     tb.BrandID,
 		BrandName:   h.resolveBrandName(ctx, tb.BrandID),
-		Description: strings.Trim(tb.Description, " \t\r\n"),
+		Description: tb.Description,
 		Minted:      tb.Minted,
-		MetadataURI: strings.Trim(tb.MetadataURI, " \t\r\n"),
+		MetadataURI: tb.MetadataURI,
 
 		IconURL:     resolveStoredIconURL(tb),
 		ContentsURL: "",
@@ -329,8 +328,8 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
-	actorID := strings.Trim(r.Header.Get("X-Actor-Id"), " \t\r\n")
+	companyID := usecase.CompanyIDFromContext(ctx)
+	actorID := r.Header.Get("X-Actor-Id")
 
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
@@ -352,25 +351,25 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.Trim(req.Name, " \t\r\n") == "" ||
-		strings.Trim(req.Symbol, " \t\r\n") == "" ||
-		strings.Trim(req.BrandID, " \t\r\n") == "" ||
-		strings.Trim(req.AssigneeID, " \t\r\n") == "" {
+	if req.Name == "" ||
+		req.Symbol == "" ||
+		req.BrandID == "" ||
+		req.AssigneeID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing required fields"})
 		return
 	}
 
-	iconURL := strings.Trim(req.IconURL, " \t\r\n")
+	iconURL := req.IconURL
 	contentFiles := normalizeContentFilesFromRequest(req.ContentFiles, actorID)
 
 	tb, err := h.uc.Create(ctx, tbapp.CreateBlueprintRequest{
-		Name:         strings.Trim(req.Name, " \t\r\n"),
-		Symbol:       strings.Trim(req.Symbol, " \t\r\n"),
-		BrandID:      strings.Trim(req.BrandID, " \t\r\n"),
+		Name:         req.Name,
+		Symbol:       req.Symbol,
+		BrandID:      req.BrandID,
 		CompanyID:    companyID,
-		Description:  strings.Trim(req.Description, " \t\r\n"),
-		AssigneeID:   strings.Trim(req.AssigneeID, " \t\r\n"),
+		Description:  req.Description,
+		AssigneeID:   req.AssigneeID,
 		CreatedBy:    actorID,
 		ActorID:      actorID,
 		IconURL:      iconURL,
@@ -400,8 +399,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
-	id = strings.Trim(id, " \t\r\n")
+	companyID := usecase.CompanyIDFromContext(ctx)
 
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
@@ -421,7 +419,7 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
+	if tb.CompanyID != companyID {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
@@ -435,7 +433,7 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := usecase.CompanyIDFromContext(ctx)
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -448,13 +446,13 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	tb, names, err := h.queryUc.GetByIDWithMemberNames(ctx, strings.Trim(id, " \t\r\n"))
+	tb, names, err := h.queryUc.GetByIDWithMemberNames(ctx, id)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
+	if tb.CompanyID != companyID {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
@@ -468,7 +466,7 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := usecase.CompanyIDFromContext(ctx)
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -491,8 +489,8 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	brandID := strings.Trim(q.Get("brandId"), " \t\r\n")
-	mintedFilter := strings.Trim(q.Get("minted"), " \t\r\n")
+	brandID := q.Get("brandId")
+	mintedFilter := q.Get("minted")
 
 	page := domcommon.Page{Number: pageNum, PerPage: perPage}
 
@@ -520,9 +518,9 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		ids := make([]string, 0, len(result.Items)*3)
 		for i := range result.Items {
 			ids = append(ids,
-				strings.Trim(result.Items[i].AssigneeID, " \t\r\n"),
-				strings.Trim(result.Items[i].CreatedBy, " \t\r\n"),
-				strings.Trim(result.Items[i].UpdatedBy, " \t\r\n"),
+				result.Items[i].AssigneeID,
+				result.Items[i].CreatedBy,
+				result.Items[i].UpdatedBy,
 			)
 		}
 
@@ -534,14 +532,14 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	for i := range result.Items {
 		tb := &result.Items[i]
 
-		assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
-		createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
-		updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
+		assigneeID := tb.AssigneeID
+		createdBy := tb.CreatedBy
+		updatedBy := tb.UpdatedBy
 
 		names := &tbapp.TokenBlueprintMemberNames{
-			AssigneeName:  strings.Trim(nameByMemberID[assigneeID], " \t\r\n"),
-			CreatedByName: strings.Trim(nameByMemberID[createdBy], " \t\r\n"),
-			UpdatedByName: strings.Trim(nameByMemberID[updatedBy], " \t\r\n"),
+			AssigneeName:  nameByMemberID[assigneeID],
+			CreatedByName: nameByMemberID[createdBy],
+			UpdatedByName: nameByMemberID[updatedBy],
 		}
 
 		items = append(items, h.toResponse(ctx, tb, false, names))
@@ -560,10 +558,9 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-	id = strings.Trim(id, " \t\r\n")
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
-	actorID := strings.Trim(r.Header.Get("X-Actor-Id"), " \t\r\n")
+	companyID := usecase.CompanyIDFromContext(ctx)
+	actorID := r.Header.Get("X-Actor-Id")
 
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
@@ -590,7 +587,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
+	if tb.CompanyID != companyID {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
@@ -637,9 +634,8 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 
 func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-	id = strings.Trim(id, " \t\r\n")
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := usecase.CompanyIDFromContext(ctx)
 
 	tb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
@@ -647,7 +643,7 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
+	if tb.CompanyID != companyID {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
@@ -672,14 +668,6 @@ func normalizeContentFilesFromRequest(files []tbdom.ContentFile, actorID string)
 	out := make([]tbdom.ContentFile, 0, len(files))
 
 	for _, f := range files {
-		f.ID = strings.Trim(f.ID, " \t\r\n")
-		f.Name = strings.Trim(f.Name, " \t\r\n")
-		f.Type = tbdom.ContentFileType(strings.Trim(string(f.Type), " \t\r\n"))
-		f.ContentType = strings.Trim(f.ContentType, " \t\r\n")
-		f.ObjectPath = strings.Trim(f.ObjectPath, " \t\r\n")
-		f.URL = strings.Trim(f.URL, " \t\r\n")
-		f.Visibility = tbdom.ContentVisibility(strings.Trim(string(f.Visibility), " \t\r\n"))
-
 		if f.ContentType == "" {
 			f.ContentType = "application/octet-stream"
 		}
@@ -692,7 +680,7 @@ func normalizeContentFilesFromRequest(files []tbdom.ContentFile, actorID string)
 			f.CreatedAt = now
 		}
 
-		if strings.Trim(f.CreatedBy, " \t\r\n") == "" {
+		if f.CreatedBy == "" {
 			f.CreatedBy = actorID
 		}
 
@@ -700,7 +688,7 @@ func normalizeContentFilesFromRequest(files []tbdom.ContentFile, actorID string)
 			f.UpdatedAt = now
 		}
 
-		if strings.Trim(f.UpdatedBy, " \t\r\n") == "" {
+		if f.UpdatedBy == "" {
 			f.UpdatedBy = actorID
 		}
 

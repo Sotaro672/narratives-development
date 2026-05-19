@@ -15,9 +15,6 @@ import (
 // - POST /mall/sign-in
 // - Requires BootstrapAuthMiddleware (Firebase token verified)
 // - Ensures user exists (docId = uid), returns user.
-//
-// NOTE:
-// - 旧互換(CreateFromEntity/Save)は廃止したので、ここは uc.Create を使う。
 type SignInHandler struct {
 	uc *usecase.UserUsecase
 }
@@ -34,7 +31,6 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ mall のみ受付（/mall/sign-in のみ。末尾スラッシュは吸収）
 	path := strings.TrimSuffix(r.URL.Path, "/")
 	if path != "/mall/sign-in" {
 		w.WriteHeader(http.StatusNotFound)
@@ -58,13 +54,11 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	uid := getUIDFromContext(ctx)
 	if uid == "" {
-		// bootstrap mw が付いていない/失敗している
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	// 既存ユーザーなら返す
 	u, err := h.uc.GetByID(ctx, uid)
 	if err == nil {
 		w.WriteHeader(http.StatusOK)
@@ -76,19 +70,15 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 無ければ作る（name 系は nil でOK。id は uid を使う）
 	in := userdom.CreateUserInput{
 		FirstName:     nil,
 		FirstNameKana: nil,
 		LastNameKana:  nil,
 		LastName:      nil,
-		// createdAt/updatedAt は usecase が server now を差し込む
-		// deletedAt は nil(未指定) = not deleted
 	}
 
 	created, cerr := h.uc.Create(ctx, uid, in)
 	if cerr != nil {
-		// 競合（並行で作成された）なら取り直して返す
 		if errors.Is(cerr, userdom.ErrConflict) {
 			got, gerr := h.uc.GetByID(ctx, uid)
 			if gerr != nil {
@@ -131,12 +121,7 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// NOTE:
-// BootstrapAuthMiddleware が context に uid を載せるキーに合わせてここを調整してください。
-// 例: ctx.Value("uid") / ctx.Value(middleware.ContextKeyUID) など。
 func getUIDFromContext(ctx any) string {
-	// "ctx any" に対して nil チェックを入れると static analyzer が
-	// 「non-nil != nil」扱いにしやすいので、nil 判定はしない。
 	type vctx interface{ Value(any) any }
 	c, ok := ctx.(vctx)
 	if !ok {

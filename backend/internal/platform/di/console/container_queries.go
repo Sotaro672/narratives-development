@@ -42,6 +42,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 		res.nameResolver,
 	)
 	mintRequestQueryService.SetModelRepo(r.modelRepo)
+	mintRequestQueryService.SetTokenBlueprintRepo(r.tokenBlueprintRepo)
 
 	// ProductBlueprintPatchReader を typed(Patch) に寄せたため、
 	// pbPatchByIDAdapter は不要になり repo を直で渡せる

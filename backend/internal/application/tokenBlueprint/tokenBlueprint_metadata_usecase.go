@@ -37,8 +37,6 @@ func NewTokenBlueprintMetadataUsecase(
 // Firebase Storage migration policy:
 // - metadataUri が空なら Irys/Arweave に metadata JSON をアップロードして uri を得る
 // - metadata JSON の image/files は Firebase Storage downloadURL を使う
-// - GCS bucket / objectPath から public URL を組み立てない
-// - 旧GCS互換 fallback は作らない
 func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(
 	ctx context.Context,
 	tb *tbdom.TokenBlueprint,

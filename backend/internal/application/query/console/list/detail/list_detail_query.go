@@ -15,7 +15,6 @@ package detail
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
@@ -115,7 +114,6 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 
 	allowedSet, err := listq.AllowedInventoryIDSetFromContext(ctx, q.invRows)
 	if err != nil {
-		log.Printf("[ListDetailQuery] ERROR company boundary (inventory_query) failed (detail): %v", err)
 		return querydto.ListDetailDTO{}, err
 	}
 
@@ -232,17 +230,14 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	// list の price rows を DTO に復元する。
 	// stock は inventory detail が取れる場合は inventory を優先し、
 	// なければ list 側の値を使う。
-	priceRows, totalStock, priceRowsMeta := q.buildDetailPriceRows(ctx, it, invID, pbID)
-	if priceRowsMeta != "" {
-		log.Printf("[ListDetailQuery] priceRows listID=%q %s", listID, priceRowsMeta)
-	}
+	priceRows, totalStock, _ := q.buildDetailPriceRows(ctx, it, invID, pbID)
 
 	dto := querydto.ListDetailDTO{
 		ID:          it.ID,
 		InventoryID: invID,
 
 		Status:   string(it.Status),
-		Decision: string(it.Status), // DTO互換維持
+		Decision: string(it.Status),
 
 		Title:       it.Title,
 		Description: it.Description,
@@ -304,7 +299,6 @@ func (q *ListDetailQuery) buildListImageURLs(
 
 	items, err := q.imgLister.ListByListID(ctx, listID)
 	if err != nil {
-		log.Printf("[ListDetailQuery] WARN list images failed listID=%q err=%v", listID, err)
 		return []string{}
 	}
 
@@ -312,13 +306,10 @@ func (q *ListDetailQuery) buildListImageURLs(
 		return []string{}
 	}
 
-	primaryImageID = trimSpace(primaryImageID)
-
 	urls := make([]string, 0, len(items))
 	seen := map[string]struct{}{}
 
 	appendURL := func(u string) {
-		u = trimSpace(u)
 		if u == "" {
 			return
 		}
@@ -343,36 +334,4 @@ func (q *ListDetailQuery) buildListImageURLs(
 	}
 
 	return urls
-}
-
-func trimSpace(s string) string {
-	if s == "" {
-		return ""
-	}
-
-	start := 0
-	for start < len(s) {
-		switch s[start] {
-		case ' ', '\t', '\n', '\r':
-			start++
-		default:
-			goto foundStart
-		}
-	}
-
-	return ""
-
-foundStart:
-	end := len(s)
-	for end > start {
-		switch s[end-1] {
-		case ' ', '\t', '\n', '\r':
-			end--
-		default:
-			goto foundEnd
-		}
-	}
-
-foundEnd:
-	return s[start:end]
 }

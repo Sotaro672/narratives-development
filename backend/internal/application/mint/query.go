@@ -22,15 +22,6 @@ var ErrCompanyIDMissing = errors.New("companyId not found in context")
 // Query: mints を productionIds(docId) で取得
 // ============================================================
 
-// ListMintsByInspectionIDs は互換名として残す。
-// inspectionIDs は productionIds と同一 docId として扱う。
-func (u *MintUsecase) ListMintsByInspectionIDs(
-	ctx context.Context,
-	inspectionIDs []string,
-) (map[string]mintdom.Mint, error) {
-	return u.ListMintsByProductionIDs(ctx, inspectionIDs)
-}
-
 // ListMintsByProductionIDs は、productionIds（= mint docIds）に紐づく mints を
 // productionId をキーにした map で返します。
 func (u *MintUsecase) ListMintsByProductionIDs(

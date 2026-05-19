@@ -14,6 +14,7 @@ import (
 	resolver "narratives/internal/application/resolver"
 	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
+	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
@@ -35,6 +36,9 @@ type MintRequestQueryService struct {
 
 	// productBlueprintId -> modelVariations を引くための任意依存
 	modelRepo ModelVariationsGetter
+
+	// tokenBlueprintId -> tokenBlueprint patch を引くための任意依存
+	tokenBlueprintRepo tokenblueprintdom.RepositoryPort
 }
 
 func NewMintRequestQueryService(
@@ -43,10 +47,11 @@ func NewMintRequestQueryService(
 	nameResolver *resolver.NameResolver,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
-		mintUC:       mintUC,
-		productionUC: productionUC,
-		nameResolver: nameResolver,
-		modelRepo:    nil,
+		mintUC:             mintUC,
+		productionUC:       productionUC,
+		nameResolver:       nameResolver,
+		modelRepo:          nil,
+		tokenBlueprintRepo: nil,
 	}
 }
 
@@ -56,6 +61,14 @@ func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) 
 		return
 	}
 	s.modelRepo = modelRepo
+}
+
+// DI 側で後から差し込めるようにする。
+func (s *MintRequestQueryService) SetTokenBlueprintRepo(repo tokenblueprintdom.RepositoryPort) {
+	if s == nil {
+		return
+	}
+	s.tokenBlueprintRepo = repo
 }
 
 // ListMintRequestManagementRows returns rows for current company.
@@ -168,6 +181,8 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		p := prodByID[pid]
 		insp, hasInsp := inspByPID[pid]
 
+		productBlueprintID := p.ProductBlueprintID
+
 		m, hasMint := mintsByPID[pid]
 		var mintPtr *mintdom.Mint
 		if hasMint {
@@ -208,13 +223,53 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 			requestedByName = resolveRequestedByName(ctx, s.nameResolver, requestedBy)
 		}
 
+		var productBlueprintPatch *querydto.MintProductBlueprintPatchDTO
+		var tokenBlueprintPatch *querydto.TokenBlueprintPatchDTO
+		modelRows := []querydto.MintRequestModelRowDTO{}
+		totalStock := 0
+		var updatedAt *time.Time
+
+		if productBlueprintID != "" {
+			pbPatch, pbErr := s.GetProductBlueprintPatchForMint(ctx, productBlueprintID)
+			if pbErr != nil {
+				return nil, pbErr
+			}
+			productBlueprintPatch = pbPatch
+
+			if s.modelRepo != nil {
+				variations, vErr := s.modelRepo.GetModelVariations(ctx, productBlueprintID)
+				if vErr != nil {
+					return nil, vErr
+				}
+
+				modelRows = buildMintRequestModelRows(variations)
+				for _, row := range modelRows {
+					totalStock += row.Stock
+				}
+			}
+		}
+
+		if tokenBlueprintID != "" {
+			tbPatch, tbErr := s.getTokenBlueprintPatchForMint(ctx, tokenBlueprintID)
+			if tbErr != nil {
+				return nil, tbErr
+			}
+			tokenBlueprintPatch = tbPatch
+
+			if tokenBlueprintPatch != nil && tokenName == "" {
+				tokenName = tokenBlueprintPatch.TokenName
+			}
+		}
+
 		rows = append(rows, querydto.ProductionInspectionMintDTO{
 			ID:           pid,
 			ProductionID: pid,
 
-			TokenBlueprintID: tokenBlueprintID,
-			TokenName:        tokenName,
-			ProductName:      p.ProductName,
+			ProductBlueprintID: productBlueprintID,
+			TokenBlueprintID:   tokenBlueprintID,
+
+			TokenName:   tokenName,
+			ProductName: p.ProductName,
 
 			MintQuantity:       mintQty,
 			ProductionQuantity: prodQty,
@@ -223,6 +278,12 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 			RequestedBy:   requestedBy,
 			CreatedByName: requestedByName,
 			MintedAt:      mintedAt,
+
+			ProductBlueprintPatch: productBlueprintPatch,
+			TokenBlueprintPatch:   tokenBlueprintPatch,
+			Rows:                  modelRows,
+			TotalStock:            totalStock,
+			UpdatedAt:             updatedAt,
 
 			Inspection: nil,
 			Mint:       mintPtr,
@@ -632,6 +693,36 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 // helpers
 // -----------------------
 
+func (s *MintRequestQueryService) getTokenBlueprintPatchForMint(
+	ctx context.Context,
+	tokenBlueprintID string,
+) (*querydto.TokenBlueprintPatchDTO, error) {
+	if s == nil || s.tokenBlueprintRepo == nil {
+		return nil, nil
+	}
+	if tokenBlueprintID == "" {
+		return nil, nil
+	}
+
+	patch, err := s.tokenBlueprintRepo.GetPatchByID(ctx, tokenBlueprintID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &querydto.TokenBlueprintPatchDTO{
+		ID:          patch.ID,
+		TokenName:   patch.TokenName,
+		Symbol:      patch.Symbol,
+		BrandID:     patch.BrandID,
+		BrandName:   patch.BrandName,
+		CompanyID:   patch.CompanyID,
+		Description: patch.Description,
+		Minted:      patch.Minted,
+		MetadataURI: patch.MetadataURI,
+		IconURL:     patch.IconURL,
+	}, nil
+}
+
 func buildMintDTO(
 	productionID string,
 	m mintdom.Mint,
@@ -674,6 +765,57 @@ func buildMintDTO(
 		ScheduledBurnDate:  scheduledBurnDate,
 		OnChainTxSignature: m.OnChainTxSignature,
 	}
+}
+
+func buildMintRequestModelRows(
+	variations []modeldom.ModelVariation,
+) []querydto.MintRequestModelRowDTO {
+	out := make([]querydto.MintRequestModelRowDTO, 0, len(variations))
+
+	for _, raw := range variations {
+		if raw == nil {
+			continue
+		}
+
+		if apparel, ok := toApparelModelVariation(raw); ok {
+			if apparel.ID == "" {
+				continue
+			}
+
+			rgb := apparel.Color.RGB
+
+			out = append(out, querydto.MintRequestModelRowDTO{
+				ModelID:     apparel.ID,
+				Kind:        "apparel",
+				ModelNumber: apparel.ModelNumber,
+				Stock:       0,
+				Size:        apparel.Size,
+				ColorName:   apparel.Color.Name,
+				RGB:         intPtr(rgb),
+			})
+			continue
+		}
+
+		if alcohol, ok := toAlcoholModelVariation(raw); ok {
+			if alcohol.ID == "" {
+				continue
+			}
+
+			volumeValue := alcohol.Volume.Value
+
+			out = append(out, querydto.MintRequestModelRowDTO{
+				ModelID:     alcohol.ID,
+				Kind:        "alcohol",
+				ModelNumber: alcohol.ModelNumber,
+				Stock:       0,
+				VolumeValue: &volumeValue,
+				VolumeUnit:  alcohol.Volume.Unit,
+			})
+			continue
+		}
+	}
+
+	return out
 }
 
 func makeIDSet(ids []string) map[string]struct{} {
@@ -768,5 +910,23 @@ func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVa
 		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
+	}
+}
+
+func toAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
+	if v == nil {
+		return modeldom.AlcoholModelVariation{}, false
+	}
+
+	switch x := v.(type) {
+	case modeldom.AlcoholModelVariation:
+		return x, true
+	case *modeldom.AlcoholModelVariation:
+		if x == nil {
+			return modeldom.AlcoholModelVariation{}, false
+		}
+		return *x, true
+	default:
+		return modeldom.AlcoholModelVariation{}, false
 	}
 }

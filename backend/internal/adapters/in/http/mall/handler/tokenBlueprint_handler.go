@@ -41,20 +41,6 @@ func NewMallTokenBlueprintHandlerWithNameResolver(
 	}
 }
 
-// 互換用 constructor。
-// Firebase Storage 移行後は icon URL resolver を使わず、TokenBlueprint.IconURL をそのまま返す。
-// 第3引数は呼び出し元互換のため受け取るだけで未使用。
-func NewMallTokenBlueprintHandlerWithNameAndImageResolver(
-	repo tokenBlueprintPatchGetter,
-	nameResolver tokenBlueprintNameResolver,
-	_ any,
-) http.Handler {
-	return &MallTokenBlueprintHandler{
-		Repo:         repo,
-		NameResolver: nameResolver,
-	}
-}
-
 func (h *MallTokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil {
 		internalError(w, "mall tokenBlueprint handler is nil")
@@ -107,11 +93,6 @@ func (h *MallTokenBlueprintHandler) getPatchByID(ctx context.Context, id string)
 	if patch.ID == "" {
 		patch.ID = id
 	}
-
-	// Firebase Storage 移行後:
-	// - iconUrl は Firestore に保存済みの Firebase Storage downloadURL を使う
-	// - GCS objectPath から URL 補完しない
-	// - ImageURLResolver / TokenIconObjectPath は使わない
 
 	if h.NameResolver != nil {
 		if patch.CompanyID == "" && patch.BrandID != "" {
