@@ -81,13 +81,13 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	if vv := qp["modelIds"]; len(vv) > 0 {
 		for _, x := range vv {
 			if x != "" {
-				f.ModelIDs = append(f.ModelIDs, x)
+				f.ModelNumbers = append(f.ModelNumbers, x)
 			}
 		}
 	} else if vv := qp["model_ids"]; len(vv) > 0 {
 		for _, x := range vv {
 			if x != "" {
-				f.ModelIDs = append(f.ModelIDs, x)
+				f.ModelNumbers = append(f.ModelNumbers, x)
 			}
 		}
 	}

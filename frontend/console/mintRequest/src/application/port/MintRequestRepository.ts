@@ -9,17 +9,15 @@ export type TokenBlueprintSummary = {
   id: string;
 
   /**
-   * selector 表示用。
+   * 右側の「トークン設計一覧」表示用。
    *
    * backend response の正は tokenName だが、
-   * 既存 UI は name を表示用 field として使うため保持する。
+   * 既存 UI では name を表示用 field として使う。
    */
   name: string;
 
   /**
    * TokenBlueprintCard 表示用。
-   *
-   * GET /mint/token_blueprints?brandId=... の tokenName を保持する。
    */
   tokenName?: string;
 

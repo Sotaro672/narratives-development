@@ -1,6 +1,9 @@
 // frontend/console/mintRequest/src/infrastructure/repository/HttpMintRequestRepository.ts
 
-import type { MintRequestRepository } from "../../application/port/MintRequestRepository";
+import type {
+  MintRequestRepository,
+  TokenBlueprintSummary,
+} from "../../application/port/MintRequestRepository";
 
 import {
   fetchInspectionByProductionIdHTTP,
@@ -12,27 +15,6 @@ import {
   fetchTokenBlueprintPatchHTTP,
   postMintRequestHTTP,
 } from "../repository";
-
-const toText = (value: unknown): string => {
-  return typeof value === "string" ? value.trim() : "";
-};
-
-const toOptionalText = (value: unknown): string | undefined => {
-  const text = toText(value);
-  return text || undefined;
-};
-
-const toBool = (value: unknown): boolean | undefined => {
-  if (typeof value === "boolean") return value;
-
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === "true") return true;
-    if (normalized === "false") return false;
-  }
-
-  return undefined;
-};
 
 export class HttpMintRequestRepository implements MintRequestRepository {
   async fetchInspectionByProductionId(
@@ -78,39 +60,25 @@ export class HttpMintRequestRepository implements MintRequestRepository {
 
     return (brands ?? [])
       .map((b: any) => ({
-        id: toText(b?.id),
-        name: toText(b?.name),
+        id: String(b?.id ?? "").trim(),
+        name: String(b?.name ?? "").trim(),
       }))
       .filter((b: any) => b.id && b.name);
   }
 
   async fetchTokenBlueprintsByBrand(
     brandId: string,
-  ): Promise<
-    {
-      id: string;
-      name: string;
-      tokenName?: string;
-      symbol: string;
-      brandId?: string;
-      brandName?: string;
-      companyId?: string;
-      description?: string;
-      minted?: boolean;
-      metadataUri?: string;
-      iconUrl?: string;
-    }[]
-  > {
+  ): Promise<TokenBlueprintSummary[]> {
     const list = await fetchTokenBlueprintsByBrandHTTP(brandId).catch(
       () => [],
     );
 
     return (list ?? [])
       .map((tb: any) => {
-        const tokenName = toText(tb?.tokenName) || toText(tb?.name);
+        const tokenName = String(tb?.tokenName ?? tb?.name ?? "").trim();
 
         return {
-          id: toText(tb?.id),
+          id: String(tb?.id ?? "").trim(),
 
           // selector 表示用
           name: tokenName,
@@ -118,19 +86,25 @@ export class HttpMintRequestRepository implements MintRequestRepository {
           // TokenBlueprintCard 表示用
           tokenName,
 
-          symbol: toText(tb?.symbol),
+          symbol: String(tb?.symbol ?? "").trim(),
 
-          brandId: toOptionalText(tb?.brandId),
-          brandName: toOptionalText(tb?.brandName),
-          companyId: toOptionalText(tb?.companyId),
-          description: toOptionalText(tb?.description),
-          minted: toBool(tb?.minted),
-          metadataUri: toOptionalText(tb?.metadataUri),
+          brandId: String(tb?.brandId ?? "").trim() || undefined,
+          brandName: String(tb?.brandName ?? "").trim() || undefined,
+          companyId: String(tb?.companyId ?? "").trim() || undefined,
 
-          iconUrl: toOptionalText(tb?.iconUrl),
+          description: String(tb?.description ?? "").trim() || undefined,
+          minted:
+            typeof tb?.minted === "boolean"
+              ? tb.minted
+              : String(tb?.minted ?? "").trim().toLowerCase() === "true",
+          metadataUri: String(tb?.metadataUri ?? "").trim() || undefined,
+
+          iconUrl: String(tb?.iconUrl ?? "").trim() || undefined,
         };
       })
-      .filter((tb: any) => tb.id && tb.name && tb.symbol);
+      .filter((tb: TokenBlueprintSummary) =>
+        Boolean(tb.id && tb.name && tb.symbol),
+      );
   }
 
   async postMintRequest(

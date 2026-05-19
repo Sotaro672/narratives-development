@@ -16,17 +16,17 @@ type ListPatch struct {
 	AssigneeID *string
 	Title      *string
 
-	// 可読性のあるID（ユニークである必要はない）
+	// ✅ 可読性のあるID（ユニークである必要はない）
 	// nil の場合は readableId を更新しない
 	ReadableID *string
 
-	// List.ImageID は primary image record の docID を保持する。
+	// ✅ Policy: List.ImageID stores "image URL on bucket" (NOT image entity id)
 	// nil の場合は imageId を更新しない
 	ImageID *string
 
 	Description *string
 
-	// prices は配列のみ（フロント標準）
+	// ✅ prices は配列のみ（フロント標準）
 	// nil の場合は prices を更新しない
 	Prices *[]ListPriceRow
 
@@ -38,7 +38,9 @@ type ListPatch struct {
 
 // フィルタ/検索条件（実装側で適宜解釈）
 //
-// 価格条件は Prices[] の (modelId, price) に対して適用される。
+// NOTE:
+// - 旧命名互換のため ModelNumbers を残しているが、ここでの意味は「modelId の集合」。
+// - 価格条件は Prices[] の (modelId, price) に対して適用される。
 type Filter struct {
 	// フリーテキスト（id, readableId, title, description 等の部分一致などは実装側で解釈）
 	SearchQuery string
@@ -52,13 +54,13 @@ type Filter struct {
 	Statuses   []ListStatus
 
 	// 価格条件
-	// - ModelIDs: 対象 modelId の集合
+	// - ModelNumbers: 対象 modelId の集合（旧名互換）
 	// - MinPrice/MaxPrice: price の閾値
-	ModelIDs []string
-	MinPrice *int
-	MaxPrice *int
+	ModelNumbers []string
+	MinPrice     *int
+	MaxPrice     *int
 
-	// inventoryId 単位の絞り込み
+	// ✅ 追加: inventoryId 単位の絞り込み
 	InventoryIDs []string
 
 	// 論理削除の tri-state（nil: 全件 / true: 削除済のみ / false: 未削除のみ）
@@ -91,7 +93,7 @@ type Repository interface {
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[List], error)
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[List], error)
 
-	// 件数取得（ページング用）
+	// ✅ NEW: 件数取得（ページング用）
 	// - filter は List と同じ解釈
 	// - sort/page は不要（Count は全件数）
 	Count(ctx context.Context, filter Filter) (int, error)
@@ -100,11 +102,11 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (List, error)
 	Exists(ctx context.Context, id string) (bool, error)
 
-	// 軽量 getter（best-effort用途）
+	// ✅ NEW: 軽量 getter（best-effort用途）
 	// listId から readableId のみ返す
 	GetReadableIDByID(ctx context.Context, id string) (string, error)
 
-	// inventoryId から listId 一覧のみ返す軽量 getter
+	// ✅ NEW: inventoryId から listId 一覧のみ返す軽量 getter
 	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)
 
 	// 変更

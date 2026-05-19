@@ -15,6 +15,17 @@ import (
 // internal normalizers
 // ---------------------------------------------------
 
+func normalizeTagType(s string) pbdom.ProductIDTagType {
+	switch s {
+	case "qr", "QRコード", "QR":
+		return pbdom.TagQR
+	case "nfc", "NFC":
+		return pbdom.TagNFC
+	default:
+		return pbdom.ProductIDTagType(s)
+	}
+}
+
 func toCategorySnapshot(in ProductBlueprintCategoryInput) pbdom.ProductBlueprintCategorySnapshot {
 	return pbdom.ProductBlueprintCategorySnapshot{
 		ID:     in.ID,
@@ -86,6 +97,10 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 
 		// printed は bool。create 時は常に false（未印刷）
 		Printed: false,
+
+		ProductIdTag: pbdom.ProductIDTag{
+			Type: normalizeTagType(in.ProductIdTag.Type),
+		},
 	}
 
 	created, err := h.uc.Create(ctx, pb)
@@ -143,6 +158,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, id string) {
 
 		AssigneeID: in.AssigneeId,
 		UpdatedBy:  updatedBy,
+
+		ProductIdTag: pbdom.ProductIDTag{
+			Type: normalizeTagType(in.ProductIdTag.Type),
+		},
 	}
 
 	updated, err := h.uc.Update(ctx, pb)
@@ -374,6 +393,17 @@ func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint)
 		updatedAt = pb.UpdatedAt.Format(time.RFC3339)
 	}
 
+	var tag *struct {
+		Type string `json:"type"`
+	}
+	if string(pb.ProductIdTag.Type) != "" {
+		tag = &struct {
+			Type string `json:"type"`
+		}{
+			Type: string(pb.ProductIdTag.Type),
+		}
+	}
+
 	category := ProductBlueprintCategoryOutput{
 		ID:     pb.ProductBlueprintCategory.ID,
 		Code:   pb.ProductBlueprintCategory.Code,
@@ -412,6 +442,8 @@ func (h *Handler) toDetailOutput(ctx context.Context, pb pbdom.ProductBlueprint)
 		ProductBlueprintCategory:   category,
 
 		CategoryFields: map[string]any(pb.CategoryFields),
+
+		ProductIdTag: tag,
 
 		AssigneeId:   assigneeId,
 		AssigneeName: assigneeName,

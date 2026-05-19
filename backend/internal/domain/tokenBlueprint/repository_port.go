@@ -83,6 +83,7 @@ type UpdateTokenBlueprintInput struct {
 // Firebase Storage 移行後の正:
 // - Patch は read-model 用の最小情報
 // - iconUrl は Firebase Storage downloadURL
+// - tokenIconObjectPath / tokenContentsObjectPath は GCS 互換不要のため保持しない
 // - metadataUri を含める
 type Patch struct {
 	ID          string `json:"id"`
@@ -100,6 +101,10 @@ type Patch struct {
 // ===============================
 // Filter（検索条件）
 // ===============================
+//
+// entity.go 正:
+// - iconId が無いので HasIcon は廃止
+//
 // 共通化方針:
 // - CreatedFrom/To, UpdatedFrom/To は common.FilterCommon の TimeRange へ寄せる
 // - SearchQuery は将来の汎用検索用（必要なら NameLike/SymbolLike と併用可能）

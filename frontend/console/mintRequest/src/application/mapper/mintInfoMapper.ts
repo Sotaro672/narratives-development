@@ -21,7 +21,7 @@ export type MintInfo = {
   createdByName?: string | null;
   createdAt: string | null;
 
-  mint: boolean;
+  minted: boolean;
   mintedAt?: string | null;
   onChainTxSignature?: string | null;
   scheduledBurnDate?: string | null;
@@ -33,21 +33,11 @@ export type MintInfo = {
 
 /**
  * MintDTO（優先）から MintInfo を抽出。
- *
- * NOTE:
- * backend domain mint は minted:boolean、
- * /mint/requests?view=management の軽量 BFF row は mint:boolean を返す。
- * Frontend 内部では minted:boolean を正として扱うため、
- * mint:true も minted:true として正規化する。
  */
 export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
   if (!m) return null;
 
-  const id =
-    asNonEmptyString((m as any).id) ||
-    asNonEmptyString((m as any).productionId) ||
-    asNonEmptyString((m as any).inspectionId);
-
+  const id = asNonEmptyString((m as any).id);
   if (!id) return null;
 
   const tokenBlueprintId = asNonEmptyString((m as any).tokenBlueprintId);
@@ -55,10 +45,7 @@ export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
 
   const requestedByName = asNonEmptyString((m as any).requestedByName);
 
-  const createdBy =
-    asNonEmptyString((m as any).createdBy) ||
-    asNonEmptyString((m as any).requestedBy);
-
+  const createdBy = asNonEmptyString((m as any).createdBy);
   const createdByName = asNonEmptyString((m as any).createdByName);
 
   const createdAtStr = asNonEmptyString(asMaybeISO((m as any).createdAt));
@@ -66,12 +53,10 @@ export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
 
   const mintedAtStr = asNonEmptyString(asMaybeISO((m as any).mintedAt));
 
-  const mint =
+  const minted =
     typeof (m as any).minted === "boolean"
       ? (m as any).minted
-      : typeof (m as any).mint === "boolean"
-        ? (m as any).mint
-        : Boolean(mintedAtStr);
+      : Boolean(mintedAtStr);
 
   const onChainTxSignature = asNonEmptyString((m as any).onChainTxSignature);
   const scheduledBurnDate = asNonEmptyString(
@@ -86,7 +71,7 @@ export function extractMintInfoFromMintDTO(m: MintDTO | any): MintInfo | null {
     createdBy,
     createdByName: createdByName ? createdByName : null,
     createdAt,
-    mint,
+    minted,
     mintedAt: mintedAtStr ? mintedAtStr : null,
     onChainTxSignature: onChainTxSignature ? onChainTxSignature : null,
     scheduledBurnDate: scheduledBurnDate ? scheduledBurnDate : null,

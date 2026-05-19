@@ -15,12 +15,6 @@
  * - mintedAt           : string | null
  * - minted             : boolean
  * - scheduledBurnDate  : string | null
- *
- * NOTE:
- * /mint/requests?view=management の軽量 BFF response では、
- * minted ではなく mint:boolean として返る場合がある。
- * Frontend 内部では minted:boolean を正として扱うため、
- * toMint() で mint -> minted に正規化する。
  */
 
 /**
@@ -31,23 +25,13 @@ export type Mint = {
   /** ドキュメント ID */
   id: string;
 
-  /**
-   * BFF 互換:
-   * /mint/requests?view=management では mint:boolean が返る。
-   * UI 判定では minted を正とするため、基本的には minted を使う。
-   */
-  mint?: boolean | null;
-
-  /** 紐づくブランド ID */
+  /** 紐づくブランド ID（必須） */
   brandId: string;
 
-  /** 紐づくトークン設計 ID */
+  /** 紐づくトークン設計 ID（必須） */
   tokenBlueprintId: string;
 
-  /** 表示用トークン名 */
-  tokenName?: string | null;
-
-  /** inspectionResults: passed の productId 一覧 */
+  /** inspectionResults: passed の productId 一覧（必須 / 空配列不可） */
   products: string[];
 
   /** 作成日時（ISO8601 文字列） */
@@ -55,15 +39,6 @@ export type Mint = {
 
   /** 作成者（memberId 等） */
   createdBy: string;
-
-  /** 作成者表示名 */
-  createdByName?: string | null;
-
-  /** リクエスト者 ID */
-  requestedBy?: string | null;
-
-  /** リクエスト者表示名 */
-  requestedByName?: string | null;
 
   /** ミント完了日時（未ミントの場合は null / undefined） */
   mintedAt?: string | null;
@@ -73,94 +48,33 @@ export type Mint = {
 
   /** 焼却予定日時（未設定の場合は null / undefined） */
   scheduledBurnDate?: string | null;
-
-  /** on-chain tx signature */
-  onChainTxSignature?: string | null;
 };
-
-function toText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function toNullableText(value: unknown): string | null {
-  const text = toText(value);
-  return text ? text : null;
-}
-
-function toBool(value: unknown): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value.trim().toLowerCase() === "true";
-  if (typeof value === "number") return value !== 0;
-  return false;
-}
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => String(item ?? "").trim())
-    .filter((item) => item.length > 0);
-}
 
 /**
  * backend から受け取った素の JSON っぽいオブジェクトを
  * Mint 型に「なじませる」ための軽量ヘルパー。
- *
- * 重要:
- * - backend domain mint は minted:boolean
- * - management BFF row は mint:boolean
- * のため、どちらでも minted に正規化する。
+ * （必要になったら利用。現状は単純にフィールドを写しているだけ）
  */
 export function toMint(raw: any): Mint {
-  const id = toText(raw?.id ?? raw?.ID ?? raw?.productionId ?? raw?.ProductionID);
-
-  const tokenBlueprintId = toText(
-    raw?.tokenBlueprintId ?? raw?.TokenBlueprintID,
-  );
-
-  const minted = Boolean(
-    toBool(raw?.minted ?? raw?.Minted) ||
-      toBool(raw?.mint ?? raw?.Mint),
-  );
-
   return {
-    id,
-
-    mint:
-      raw?.mint !== undefined || raw?.Mint !== undefined
-        ? toBool(raw?.mint ?? raw?.Mint)
+    id: String(raw.id ?? raw.ID ?? ""),
+    brandId: String(raw.brandId ?? raw.BrandID ?? ""),
+    tokenBlueprintId: String(
+      raw.tokenBlueprintId ?? raw.TokenBlueprintID ?? "",
+    ),
+    products: Array.isArray(raw.products)
+      ? raw.products.map((p: any) => String(p))
+      : [],
+    createdAt: String(raw.createdAt ?? raw.CreatedAt ?? ""),
+    createdBy: String(raw.createdBy ?? raw.CreatedBy ?? ""),
+    mintedAt:
+      raw.mintedAt ?? raw.MintedAt
+        ? String(raw.mintedAt ?? raw.MintedAt)
         : null,
-
-    brandId: toText(raw?.brandId ?? raw?.BrandID),
-
-    tokenBlueprintId,
-
-    tokenName: toNullableText(raw?.tokenName ?? raw?.TokenName),
-
-    products: toStringArray(raw?.products ?? raw?.Products),
-
-    createdAt: toText(raw?.createdAt ?? raw?.CreatedAt),
-
-    createdBy: toText(raw?.createdBy ?? raw?.CreatedBy ?? raw?.requestedBy),
-
-    createdByName: toNullableText(raw?.createdByName ?? raw?.CreatedByName),
-
-    requestedBy: toNullableText(raw?.requestedBy ?? raw?.RequestedBy),
-
-    requestedByName: toNullableText(
-      raw?.requestedByName ?? raw?.RequestedByName,
-    ),
-
-    mintedAt: toNullableText(raw?.mintedAt ?? raw?.MintedAt),
-
-    minted,
-
-    scheduledBurnDate: toNullableText(
-      raw?.scheduledBurnDate ?? raw?.ScheduledBurnDate,
-    ),
-
-    onChainTxSignature: toNullableText(
-      raw?.onChainTxSignature ?? raw?.OnChainTxSignature,
-    ),
+    minted: Boolean(raw.minted ?? raw.Minted),
+    scheduledBurnDate:
+      raw.scheduledBurnDate ?? raw.ScheduledBurnDate
+        ? String(raw.scheduledBurnDate ?? raw.ScheduledBurnDate)
+        : null,
   };
 }

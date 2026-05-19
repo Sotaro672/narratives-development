@@ -68,66 +68,6 @@ function getProductionId(row: any): string | null {
   return productionId || null;
 }
 
-function normalizeMinted(row: any, mintRaw: any): boolean {
-  return Boolean(
-    mintRaw?.minted === true ||
-      row?.minted === true ||
-      row?.mint === true,
-  );
-}
-
-function mergeMintRow(row: any): MintDTO {
-  const mintRaw = row?.mint ?? null;
-
-  const productionId = String(row?.productionId ?? row?.id ?? "").trim();
-
-  const tokenBlueprintId = String(
-    row?.tokenBlueprintId ?? mintRaw?.tokenBlueprintId ?? "",
-  ).trim();
-
-  const tokenName = String(
-    row?.tokenName ?? mintRaw?.tokenName ?? tokenBlueprintId,
-  ).trim();
-
-  const requestedByName =
-    row?.requestedByName ??
-    row?.createdByName ??
-    mintRaw?.requestedByName ??
-    mintRaw?.createdByName ??
-    null;
-
-  const merged = {
-    ...(mintRaw ?? row ?? {}),
-
-    id: mintRaw?.id ?? row?.id ?? productionId,
-    inspectionId: mintRaw?.inspectionId ?? row?.inspectionId ?? productionId,
-    productionId,
-
-    brandId: mintRaw?.brandId ?? row?.brandId ?? "",
-    tokenBlueprintId,
-    tokenName,
-
-    createdBy: mintRaw?.createdBy ?? row?.requestedBy ?? "",
-    createdByName: requestedByName,
-    requestedByName,
-
-    createdAt: row?.createdAt ?? mintRaw?.createdAt ?? null,
-
-    minted: normalizeMinted(row, mintRaw),
-    mintedAt: row?.mintedAt ?? mintRaw?.mintedAt ?? null,
-
-    scheduledBurnDate:
-      row?.scheduledBurnDate ?? mintRaw?.scheduledBurnDate ?? null,
-
-    onChainTxSignature:
-      row?.onChainTxSignature ?? mintRaw?.onChainTxSignature ?? null,
-
-    products: mintRaw?.products ?? row?.products ?? [],
-  };
-
-  return merged as MintDTO;
-}
-
 /**
  * Raw fetch for a single view.
  * - fallback は行わない
@@ -189,7 +129,6 @@ async function fetchMintRequestsRowsRawOnce(
 /**
  * productionId で 1 件の MintDTO を取得。
  * ✅ productionId を正とし、id / inspectionId fallback は使わない。
- * ✅ backend row の mint:boolean は frontend 内部用の minted:boolean に正規化する。
  */
 export async function fetchMintByProductionIdHTTP(
   productionId: string,
@@ -209,13 +148,24 @@ export async function fetchMintByProductionIdHTTP(
 
   if (!row) return null;
 
-  return mergeMintRow(row);
+  const mintRaw = (row as any)?.mint ?? null;
+
+  const merged = {
+    ...(mintRaw ?? row ?? {}),
+    createdByName:
+      (row as any)?.requestedByName ??
+      (row as any)?.createdByName ??
+      (mintRaw as any)?.createdByName ??
+      null,
+    requestedByName: (row as any)?.requestedByName ?? null,
+  };
+
+  return merged as MintDTO;
 }
 
 /**
  * productionIds で MintDTO を map 取得。
  * ✅ key は productionId のみ。
- * ✅ backend row の mint:boolean は frontend 内部用の minted:boolean に正規化する。
  */
 export async function fetchMintsByProductionIdsHTTP(
   productionIds: string[],
@@ -232,7 +182,19 @@ export async function fetchMintsByProductionIdsHTTP(
     const key = getProductionId(row);
     if (!key) continue;
 
-    out[key] = mergeMintRow(row);
+    const mintRaw = (row as any)?.mint ?? null;
+
+    const merged = {
+      ...(mintRaw ?? row ?? {}),
+      createdByName:
+        (row as any)?.requestedByName ??
+        (row as any)?.createdByName ??
+        (mintRaw as any)?.createdByName ??
+        null,
+      requestedByName: (row as any)?.requestedByName ?? null,
+    };
+
+    out[key] = merged as MintDTO;
   }
 
   return out;

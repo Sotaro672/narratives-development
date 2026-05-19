@@ -104,13 +104,13 @@ func (uc *ListUsecase) Update(
 	patch := buildPatchFromItem(item)
 
 	if uc != nil && uc.listReader != nil {
-		if pu, ok := any(uc.listReader).(ListPatcher); ok {
+		if pu, ok := any(uc.listReader).(ListPatchUpdater); ok {
 			return pu.Update(ctx, id, patch)
 		}
 	}
 
 	if uc != nil && uc.listCreator != nil {
-		if pu, ok := any(uc.listCreator).(ListPatcher); ok {
+		if pu, ok := any(uc.listCreator).(ListPatchUpdater); ok {
 			return pu.Update(ctx, id, patch)
 		}
 	}

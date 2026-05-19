@@ -65,17 +65,15 @@ export type TokenBlueprintForMintDTO = {
   id: string;
 
   /**
-   * 右側の「トークン設計一覧」表示用。
+   * selector 表示用。
    *
    * backend response の正は tokenName だが、
-   * selector 側では name を表示用 field として使う。
+   * 既存 UI は name を表示用 field として使う。
    */
   name: string;
 
   /**
    * TokenBlueprintCard 表示用。
-   *
-   * GET /mint/token_blueprints?brandId=... の tokenName を保持する。
    */
   tokenName?: string;
 

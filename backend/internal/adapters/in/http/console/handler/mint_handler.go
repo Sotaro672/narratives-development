@@ -63,11 +63,11 @@ type MintRequestQueryService interface {
 		productBlueprintID string,
 	) (*querydto.MintProductBlueprintPatchDTO, error)
 
-	// tokenBlueprint patch-shaped options for mint screen
+	// tokenBlueprint options for mint screen
 	ListTokenBlueprintsForMint(
 		ctx context.Context,
 		input querydto.ListTokenBlueprintsForMintInput,
-	) ([]querydto.TokenBlueprintPatchDTO, error)
+	) ([]querydto.TokenBlueprintForMintDTO, error)
 }
 
 type MintHandler struct {

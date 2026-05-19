@@ -22,6 +22,7 @@ type TokenBlueprintRaw = {
 export type TokenBlueprintPatchDTO = {
   id: string;
   tokenName: string;
+  name?: string;
   symbol: string;
   brandId: string;
   brandName: string;
@@ -34,6 +35,7 @@ export type TokenBlueprintPatchDTO = {
 
 type TokenBlueprintPatchRaw = {
   id?: unknown;
+  name?: unknown;
   tokenName?: unknown;
   symbol?: unknown;
   brandId?: unknown;
@@ -49,9 +51,19 @@ const toText = (value: unknown): string => {
   return typeof value === "string" ? value.trim() : "";
 };
 
+const toOptionalText = (value: unknown): string | undefined => {
+  const text = toText(value);
+  return text || undefined;
+};
+
 const toBool = (value: unknown): boolean => {
   if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true";
+  }
+
   return false;
 };
 
@@ -63,19 +75,46 @@ const mapTokenBlueprintRaw = (
   return {
     id: toText(tb.id),
 
-    // 右側の一覧表示用
+    // selector 表示用
     name: tokenName,
 
     // TokenBlueprintCard 表示用
     tokenName,
+
     symbol: toText(tb.symbol),
-    brandId: toText(tb.brandId),
-    brandName: toText(tb.brandName),
-    companyId: toText(tb.companyId),
-    description: toText(tb.description),
+
+    brandId: toOptionalText(tb.brandId),
+    brandName: toOptionalText(tb.brandName),
+    companyId: toOptionalText(tb.companyId),
+
+    description: toOptionalText(tb.description),
     minted: toBool(tb.minted),
-    metadataUri: toText(tb.metadataUri),
-    iconUrl: toText(tb.iconUrl) || undefined,
+    metadataUri: toOptionalText(tb.metadataUri),
+
+    iconUrl: toOptionalText(tb.iconUrl),
+  };
+};
+
+const mapTokenBlueprintPatchRaw = (
+  raw: TokenBlueprintPatchRaw,
+): TokenBlueprintPatchDTO | null => {
+  const id = toText(raw.id);
+  if (!id) return null;
+
+  const tokenName = toText(raw.tokenName) || toText(raw.name);
+
+  return {
+    id,
+    tokenName,
+    name: tokenName || undefined,
+    symbol: toText(raw.symbol),
+    brandId: toText(raw.brandId),
+    brandName: toText(raw.brandName),
+    companyId: toText(raw.companyId),
+    description: toText(raw.description),
+    minted: toBool(raw.minted),
+    metadataUri: toText(raw.metadataUri),
+    iconUrl: toOptionalText(raw.iconUrl),
   };
 };
 
@@ -144,19 +183,5 @@ export async function fetchTokenBlueprintPatchHTTP(
 
   const raw = (await res.json()) as TokenBlueprintPatchRaw;
 
-  const id = toText(raw.id);
-  if (!id) return null;
-
-  return {
-    id,
-    tokenName: toText(raw.tokenName),
-    symbol: toText(raw.symbol),
-    brandId: toText(raw.brandId),
-    brandName: toText(raw.brandName),
-    companyId: toText(raw.companyId),
-    description: toText(raw.description),
-    minted: toBool(raw.minted),
-    metadataUri: toText(raw.metadataUri),
-    iconUrl: toText(raw.iconUrl) || undefined,
-  };
+  return mapTokenBlueprintPatchRaw(raw);
 }

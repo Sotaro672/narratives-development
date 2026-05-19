@@ -14,7 +14,6 @@ import (
 	resolver "narratives/internal/application/resolver"
 	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
-	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
@@ -28,17 +27,14 @@ type ModelVariationsGetter interface {
 }
 
 // MintRequestQueryService is used by console mint handlers.
-// It returns console rows: productionId = inspectionId = mintId.
+// It returns console BFF rows: productionId = inspectionId = mintId.
 type MintRequestQueryService struct {
 	mintUC       *mintapp.MintUsecase
 	productionUC *productionapp.ProductionUsecase
 	nameResolver *resolver.NameResolver
 
-	// detail 用などで productBlueprintId -> modelVariations を引くための任意依存
+	// productBlueprintId -> modelVariations を引くための任意依存
 	modelRepo ModelVariationsGetter
-
-	// tokenBlueprint patch 取得は mint_token_blueprint_query.go 側の責務
-	tokenBlueprintRepo tokenblueprintdom.RepositoryPort
 }
 
 func NewMintRequestQueryService(
@@ -47,11 +43,10 @@ func NewMintRequestQueryService(
 	nameResolver *resolver.NameResolver,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
-		mintUC:             mintUC,
-		productionUC:       productionUC,
-		nameResolver:       nameResolver,
-		modelRepo:          nil,
-		tokenBlueprintRepo: nil,
+		mintUC:       mintUC,
+		productionUC: productionUC,
+		nameResolver: nameResolver,
+		modelRepo:    nil,
 	}
 }
 
@@ -63,30 +58,8 @@ func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) 
 	s.modelRepo = modelRepo
 }
 
-// DI 側で後から差し込めるようにする。
-// patch取得ロジック自体は mint_token_blueprint_query.go に置く。
-func (s *MintRequestQueryService) SetTokenBlueprintRepo(repo tokenblueprintdom.RepositoryPort) {
-	if s == nil {
-		return
-	}
-	s.tokenBlueprintRepo = repo
-}
-
-// ListMintRequestManagementRows returns lightweight rows for ManagementPage.
+// ListMintRequestManagementRows returns rows for current company.
 // productionId = inspectionId = mintId として扱う。
-//
-// ManagementPage で必要な項目だけ返す:
-// - mint:boolean
-// - productBlueprintId
-// - tokenBlueprintId
-// - productName
-// - tokenName
-// - mintQuantity
-// - productionQuantity
-// - requestedByName
-// - mintedAt
-// - createdAt
-// - inspectionStatus
 func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	ctx context.Context,
 	input querydto.ListMintRequestManagementRowsInput,
@@ -187,14 +160,20 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	}
 
 	// ------------------------------------------------------------
-	// 4) build lightweight rows
+	// 4) build rows
 	// ------------------------------------------------------------
 	rows := make([]querydto.ProductionInspectionMintDTO, 0, len(ids))
 
 	for _, pid := range ids {
 		p := prodByID[pid]
 		insp, hasInsp := inspByPID[pid]
+
 		m, hasMint := mintsByPID[pid]
+		var mintPtr *mintdom.Mint
+		if hasMint {
+			tmp := m
+			mintPtr = &tmp
+		}
 
 		mintQty := 0
 		prodQty := 0
@@ -214,49 +193,36 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 			prodQty = p.TotalQuantity
 		}
 
-		productBlueprintID := p.ProductBlueprintID
 		tokenBlueprintID := ""
 		tokenName := ""
+		requestedBy := ""
 		requestedByName := ""
 		var mintedAt *time.Time
-		var createdAt *time.Time
-		var mintPtr *mintdom.Mint
 
 		if hasMint {
-			tmp := m
-			mintPtr = &tmp
-
-			tokenBlueprintID = m.TokenBlueprintID
-			tokenName = resolveTokenName(ctx, s.nameResolver, tokenBlueprintID)
-			requestedByName = resolveRequestedByName(ctx, s.nameResolver, m.CreatedBy)
+			requestedBy = m.CreatedBy
 			mintedAt = m.MintedAt
+			tokenBlueprintID = m.TokenBlueprintID
 
-			if !m.CreatedAt.IsZero() {
-				createdAt = &m.CreatedAt
-			}
+			tokenName = resolveTokenName(ctx, s.nameResolver, tokenBlueprintID)
+			requestedByName = resolveRequestedByName(ctx, s.nameResolver, requestedBy)
 		}
 
 		rows = append(rows, querydto.ProductionInspectionMintDTO{
 			ID:           pid,
 			ProductionID: pid,
 
-			Minted: hasMint,
-
-			ProductBlueprintID: productBlueprintID,
-			TokenBlueprintID:   tokenBlueprintID,
-
-			ProductName: p.ProductName,
-			TokenName:   tokenName,
+			TokenBlueprintID: tokenBlueprintID,
+			TokenName:        tokenName,
+			ProductName:      p.ProductName,
 
 			MintQuantity:       mintQty,
 			ProductionQuantity: prodQty,
+			InspectionStatus:   inspStatus,
 
-			RequestedByName: requestedByName,
-
-			MintedAt:  mintedAt,
-			CreatedAt: createdAt,
-
-			InspectionStatus: inspStatus,
+			RequestedBy:   requestedBy,
+			CreatedByName: requestedByName,
+			MintedAt:      mintedAt,
 
 			Inspection: nil,
 			Mint:       mintPtr,

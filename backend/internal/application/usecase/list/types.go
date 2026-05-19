@@ -54,10 +54,14 @@ type ListUpdater interface {
 	Update(ctx context.Context, item listdom.List) (listdom.List, error)
 }
 
-// ListPatcher は List を patch で部分更新する契約です。
-type ListPatcher interface {
+// ListPatchUpdater は domain.Repository 互換の patch Update 契約です。
+type ListPatchUpdater interface {
 	Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
 }
+
+// ListPatcher は「List を patch で部分更新できる」契約です。
+// 型ズレ吸収 adapter は使わず、domain.Repository 互換の Update(ctx,id,patch) を正とします。
+type ListPatcher = ListPatchUpdater
 
 // ListPrimaryImageSetter updates list's primary image docID.
 //
@@ -129,6 +133,16 @@ type ListUsecase struct {
 	listUpdater ListUpdater
 	listPatcher ListPatcher
 
+	// images
+	//
+	// Source of truth:
+	// - Firestore subcollection: /lists/{listId}/images/{imageId}
+	//
+	// No GCS compatibility:
+	// - no imageSignedURLIssuer
+	// - no imageObjectSaver
+	// - no bucket initializer
+	// - no GCS object deleter
 	imageReader     ListImageReader
 	imageByIDReader ListImageByIDReader
 

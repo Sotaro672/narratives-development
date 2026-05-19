@@ -60,6 +60,10 @@ const toTs = (s: string | null | undefined): number | null => {
 // Sorting key
 type SortKey = "mintedAt" | "mintQuantity" | "productionQuantity" | null;
 
+const normalizeText = (v: string | null | undefined): string => {
+  return typeof v === "string" ? v.trim() : "";
+};
+
 const asInspectionStatus = (v: string): InspectionStatus | null => {
   const s = String(v ?? "").trim();
   if (s === "inspecting" || s === "completed" || s === "notYet") {
@@ -165,41 +169,33 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   const tokenOptions = useMemo(() => {
     const s = new Set<string>();
-
     rawRows.forEach((r) => {
-      const v = typeof r.tokenName === "string" ? r.tokenName.trim() : "";
+      const v = normalizeText(r.tokenName ?? null);
       if (v) s.add(v);
     });
-
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
   const productionOptions = useMemo(() => {
     const s = new Set<string>();
-
     rawRows.forEach((r) => {
-      const v = typeof r.productName === "string" ? r.productName.trim() : "";
+      const v = normalizeText(r.productName ?? null);
       if (v) s.add(v);
     });
-
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
   const requesterOptions = useMemo(() => {
     const s = new Set<string>();
-
     rawRows.forEach((r) => {
-      const v =
-        typeof r.requestedByName === "string" ? r.requestedByName.trim() : "";
+      const v = normalizeText(r.requestedByName ?? null);
       if (v) s.add(v);
     });
-
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
   const statusOptions = useMemo(() => {
     const s = new Set<InspectionStatus>();
-
     rawRows.forEach((r) => {
       if (r.inspectionStatus) s.add(r.inspectionStatus);
     });
@@ -215,11 +211,9 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   const rows = useMemo(() => {
     let data = rawRows.filter((r) => {
-      const token = typeof r.tokenName === "string" ? r.tokenName.trim() : "";
-      const product =
-        typeof r.productName === "string" ? r.productName.trim() : "";
-      const requester =
-        typeof r.requestedByName === "string" ? r.requestedByName.trim() : "";
+      const token = normalizeText(r.tokenName ?? null);
+      const product = normalizeText(r.productName ?? null);
+      const requester = normalizeText(r.requestedByName ?? null);
 
       const tokenOk =
         tokenFilter.length === 0 || (token && tokenFilter.includes(token));

@@ -1,11 +1,13 @@
 // frontend/console/mintRequest/src/presentation/hook/useMintRequestDetail.useTokenBlueprintPatch.ts
 
 import * as React from "react";
-import type { MintRequestRepository } from "../../application/port/MintRequestRepository";
 
+// ✅ ロールバック後に ../../infrastructure/adapter/inventoryTokenBlueprintPatch は存在しないため、
+// この hook 内で必要最小限の型を定義する。
 export type TokenBlueprintPatchDTO = {
   id?: string | null;
   tokenName?: string | null;
+  name?: string | null;
   symbol?: string | null;
   brandId?: string | null;
   brandName?: string | null;
@@ -16,76 +18,45 @@ export type TokenBlueprintPatchDTO = {
   iconUrl?: string | null;
 };
 
-function toTokenBlueprintPatchDTO(input: unknown): TokenBlueprintPatchDTO | null {
-  if (!input || typeof input !== "object") return null;
+// ✅ B設計: application/usecase + DI
+import { mintRequestContainer } from "../di/mintRequestContainer";
+import { getTokenBlueprintPatch } from "../../application/usecase/getTokenBlueprintPatch";
 
-  const raw = input as any;
+export function useTokenBlueprintPatch(tokenBlueprintIdForPatch: string) {
+  // DI（infra repo はここで組み立て、hook内ではusecase経由でしか触らない）
+  const { mintRequestRepo } = React.useMemo(() => mintRequestContainer(), []);
 
-  const id = String(raw.id ?? "").trim();
-  if (!id) return null;
-
-  return {
-    id,
-    tokenName: String(raw.tokenName ?? raw.name ?? "").trim() || null,
-    symbol: String(raw.symbol ?? "").trim() || null,
-    brandId: String(raw.brandId ?? "").trim() || null,
-    brandName: String(raw.brandName ?? "").trim() || null,
-    companyId: String(raw.companyId ?? "").trim() || null,
-    description:
-      typeof raw.description === "string" ? raw.description : null,
-    minted:
-      typeof raw.minted === "boolean"
-        ? raw.minted
-        : typeof raw.mint === "boolean"
-          ? raw.mint
-          : null,
-    metadataUri: String(raw.metadataUri ?? "").trim() || null,
-    iconUrl: String(raw.iconUrl ?? "").trim() || null,
-  };
-}
-
-export function useTokenBlueprintPatch(
-  repo: MintRequestRepository,
-  tokenBlueprintId: string,
-  initialPatch?: TokenBlueprintPatchDTO | null,
-) {
   const [tokenBlueprintPatch, setTokenBlueprintPatch] =
-    React.useState<TokenBlueprintPatchDTO | null>(initialPatch ?? null);
+    React.useState<TokenBlueprintPatchDTO | null>(null);
 
   React.useEffect(() => {
-    const id = String(tokenBlueprintId ?? "").trim();
-
-    if (!id) {
-      setTokenBlueprintPatch(initialPatch ?? null);
-      return;
-    }
-
-    if (initialPatch?.id && String(initialPatch.id).trim() === id) {
-      setTokenBlueprintPatch(initialPatch);
+    if (!tokenBlueprintIdForPatch) {
+      setTokenBlueprintPatch(null);
       return;
     }
 
     let cancelled = false;
 
-    setTokenBlueprintPatch(initialPatch ?? null);
-
     (async () => {
       try {
-        const patch = await repo.fetchTokenBlueprintPatch(id);
+        const p = await getTokenBlueprintPatch(
+          mintRequestRepo,
+          tokenBlueprintIdForPatch,
+        );
+
         if (cancelled) return;
 
-        setTokenBlueprintPatch(toTokenBlueprintPatchDTO(patch));
+        setTokenBlueprintPatch((p ?? null) as TokenBlueprintPatchDTO | null);
       } catch {
         if (cancelled) return;
-
-        setTokenBlueprintPatch(initialPatch ?? null);
+        setTokenBlueprintPatch(null);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [repo, tokenBlueprintId, initialPatch]);
+  }, [tokenBlueprintIdForPatch, mintRequestRepo]);
 
   return { tokenBlueprintPatch, setTokenBlueprintPatch };
 }

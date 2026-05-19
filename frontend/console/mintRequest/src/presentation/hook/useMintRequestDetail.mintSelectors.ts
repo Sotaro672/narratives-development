@@ -33,7 +33,7 @@ export function useMintInfo(params: {
 
   // minted=true のときのみ非表示判定（= mint 完了扱い）
   const isMintRequested = React.useMemo(() => {
-    return Boolean(mint?.mint === true);
+    return Boolean(mint?.minted === true);
   }, [mint]);
 
   // ✅ requestedByName（表示名）

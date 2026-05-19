@@ -4,6 +4,7 @@ package consoleHandler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -46,6 +47,8 @@ func NewPrintHandler(
 // ServeHTTP はHTTPルーティングの入口です。
 func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	log.Printf("[PrintHandler] method=%s path=%s rawQuery=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 
 	switch {
 	// ------------------------------------------------------------
@@ -180,6 +183,13 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	log.Printf(
+		"[PrintHandler] listByProductionID productionID=%s products=%d nameResolverNil=%v",
+		productionID,
+		len(list),
+		h.nameResolver == nil,
+	)
+
 	type productWithModelNumber struct {
 		ID           string `json:"id"`
 		ModelID      string `json:"modelId"`
@@ -196,6 +206,31 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 		if modelID != "" && h.nameResolver != nil {
 			mn := h.nameResolver.ResolveModelNumber(ctx, modelID)
 			modelNumber = strings.Trim(mn, " \t\r\n/")
+		}
+
+		if modelID != "" && h.nameResolver == nil {
+			log.Printf(
+				"[PrintHandler] modelNumber resolve skipped: nameResolver is nil productID=%s modelID=%s",
+				p.ID,
+				modelID,
+			)
+		}
+
+		if modelID != "" && h.nameResolver != nil && modelNumber == "" {
+			log.Printf(
+				"[PrintHandler] modelNumber resolved empty productID=%s modelID=%s",
+				p.ID,
+				modelID,
+			)
+		}
+
+		if modelID != "" && modelNumber != "" {
+			log.Printf(
+				"[PrintHandler] modelNumber resolved productID=%s modelID=%s modelNumber=%s",
+				p.ID,
+				modelID,
+				modelNumber,
+			)
 		}
 
 		out = append(out, productWithModelNumber{

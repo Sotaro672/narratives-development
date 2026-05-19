@@ -7,7 +7,7 @@
 // Features:
 // - isImageURL / generateReadableID
 // - getPatchUpdater / buildPatchFromItem
-// - usecase wiring helpers (WithListImageRecordRepo / WithListPrimaryImageSetter)
+// - ✅ usecase wiring helpers (WithListImageRecordRepo / WithListPrimaryImageSetter)
 package list
 
 import (
@@ -25,6 +25,7 @@ func isImageURL(v string) bool {
 	return strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "gs://")
 }
 
+// ✅ readableId を生成（衝突してもOKな可読ID）
 func generateReadableID(listID string, createdAt time.Time) string {
 	t := createdAt
 	if t.IsZero() {
@@ -45,17 +46,17 @@ func generateReadableID(listID string, createdAt time.Time) string {
 	return fmt.Sprintf("L-%s-%s", date, hex6)
 }
 
-func (uc *ListUsecase) getPatchUpdater() ListPatcher {
+func (uc *ListUsecase) getPatchUpdater() ListPatchUpdater {
 	if uc == nil {
 		return nil
 	}
 	if uc.listReader != nil {
-		if pu, ok := any(uc.listReader).(ListPatcher); ok {
+		if pu, ok := any(uc.listReader).(ListPatchUpdater); ok {
 			return pu
 		}
 	}
 	if uc.listCreator != nil {
-		if pu, ok := any(uc.listCreator).(ListPatcher); ok {
+		if pu, ok := any(uc.listCreator).(ListPatchUpdater); ok {
 			return pu
 		}
 	}
@@ -65,7 +66,7 @@ func (uc *ListUsecase) getPatchUpdater() ListPatcher {
 func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 	statusV := item.Status
 	assigneeV := item.AssigneeID
-	imageV := item.ImageID
+	imageV := item.ImageID // URL格納方針
 	titleV := item.Title
 	descV := item.Description
 
@@ -83,12 +84,14 @@ func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 		updatedAtV = item.UpdatedAt.UTC()
 	}
 
+	// prices: nil(未指定)なら patch に入れない（意図せず全削除を防ぐ）
 	var pricesPtr *[]listdom.ListPriceRow
 	if item.Prices != nil {
 		pv := item.Prices
 		pricesPtr = &pv
 	}
 
+	// readableId: 変更対象として渡された場合のみ patch に入れる
 	var readableIDPtr *string
 	if item.ReadableID != "" {
 		v := item.ReadableID
@@ -109,7 +112,7 @@ func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 }
 
 // ============================================================
-// Usecase wiring helpers (fluent setters)
+// ✅ Usecase wiring helpers (fluent setters)
 // ============================================================
 
 // WithListImageRecordRepo wires Firestore subcollection persistence for list images.

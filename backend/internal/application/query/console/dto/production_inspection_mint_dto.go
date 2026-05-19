@@ -9,30 +9,17 @@ import (
 )
 
 type ProductionInspectionMintDTO struct {
-	ID           string `json:"id,omitempty"`
-	ProductionID string `json:"productionId"`
-
-	// ManagementPage / DetailPage 用: Firestore mints と同じく JSON では minted:boolean として返す
-	Minted bool `json:"minted"`
-
-	// Detail 側で patch を取得するための ID
-	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
-	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
-
-	ProductName string `json:"productName,omitempty"`
-	TokenName   string `json:"tokenName,omitempty"`
-
-	MintQuantity       int `json:"mintQuantity"`
-	ProductionQuantity int `json:"productionQuantity"`
-
-	RequestedByName string `json:"requestedByName,omitempty"`
-
-	MintedAt  *time.Time `json:"mintedAt,omitempty"`
-	CreatedAt *time.Time `json:"createdAt,omitempty"`
-
-	InspectionStatus string `json:"inspectionStatus,omitempty"`
-
-	// 互換用。ManagementPage には返さない。
-	Inspection *inspectiondom.InspectionBatch `json:"-"`
-	Mint       *mintdom.Mint                  `json:"-"`
+	ID                 string                         `json:"id"`
+	ProductionID       string                         `json:"productionId"`
+	TokenBlueprintID   string                         `json:"tokenBlueprintId,omitempty"`
+	TokenName          string                         `json:"tokenName,omitempty"`
+	ProductName        string                         `json:"productName,omitempty"`
+	MintQuantity       int                            `json:"mintQuantity"`
+	ProductionQuantity int                            `json:"productionQuantity"`
+	InspectionStatus   string                         `json:"inspectionStatus,omitempty"`
+	RequestedBy        string                         `json:"requestedBy,omitempty"`
+	CreatedByName      string                         `json:"createdByName,omitempty"`
+	MintedAt           *time.Time                     `json:"mintedAt,omitempty"`
+	Inspection         *inspectiondom.InspectionBatch `json:"inspection,omitempty"`
+	Mint               *mintdom.Mint                  `json:"mint,omitempty"`
 }

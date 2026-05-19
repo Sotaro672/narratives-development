@@ -30,6 +30,7 @@ package query
 import (
 	"context"
 	"errors"
+	"log"
 	"strconv"
 	"time"
 
@@ -228,8 +229,13 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
 	}
 
+	// 原因特定用: listReadable の実体型をログ出力（interface の中身確認）
+	// - Cloud Run で意図しない実装が DI されている場合、ここで即判別できる。
+	log.Printf("[OrderManagementQuery] DEBUG listReadable resolver type=%T", q.listReadable)
+
 	allowedSet, err := allowedInventoryIDSetFromContext(ctx, q.invRows)
 	if err != nil {
+		log.Printf("[OrderManagementQuery] ERROR company boundary (inventory_query) failed: %v", err)
 		return common.PageResult[OrderItemInventoryRowDTO]{}, err
 	}
 	if len(allowedSet) == 0 {
@@ -406,11 +412,13 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	for {
 		if srcPage > maxScanPages {
+			log.Printf("[OrderManagementQuery] WARN scan page limit reached (max=%d). results may be truncated.", maxScanPages)
 			break
 		}
 
 		pr, e := q.lister.List(ctx, filter, sort, common.Page{Number: srcPage, PerPage: page.PerPage})
 		if e != nil {
+			log.Printf("[OrderManagementQuery] ERROR lister.List failed (scan page=%d): %v", srcPage, e)
 			return common.PageResult[OrderItemInventoryRowDTO]{}, e
 		}
 		if pr.Items == nil {
@@ -434,6 +442,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			if avatarID != "" {
 				n, e0 := resolveAvatarName(avatarID)
 				if e0 != nil {
+					log.Printf("[OrderManagementQuery] ERROR GetNameByID failed avatarId=%q err=%v", avatarID, e0)
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e0
 				}
 				avatarName = n
@@ -448,6 +457,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				// inventoryId -> pb/tb
 				pbID, tbID, e2 := resolveBlueprint(invID)
 				if e2 != nil {
+					log.Printf("[OrderManagementQuery] ERROR ResolveBlueprintIDsByInventoryID failed inventoryId=%q err=%v", invID, e2)
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e2
 				}
 
@@ -463,6 +473,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				if pbID != "" {
 					pb, ePB := resolveProductBlueprint(pbID)
 					if ePB != nil {
+						log.Printf("[OrderManagementQuery] ERROR ProductBlueprint.GetByID failed productBlueprintId=%q err=%v", pbID, ePB)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, ePB
 					}
 
@@ -492,6 +503,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				if pbID != "" {
 					n, e3 := resolveProductName(pbID)
 					if e3 != nil {
+						log.Printf("[OrderManagementQuery] ERROR GetProductNameByID failed productBlueprintId=%q err=%v", pbID, e3)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, e3
 					}
 					productName = n
@@ -501,6 +513,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				if tbID != "" {
 					n, e4 := resolveTokenName(tbID)
 					if e4 != nil {
+						log.Printf("[OrderManagementQuery] ERROR GetNameByID failed tokenBlueprintId=%q err=%v", tbID, e4)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, e4
 					}
 					tokenName = n
@@ -511,7 +524,9 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				listReadableID := ""
 				if it.ListID != "" {
 					n, e5 := resolveListReadableID(it.ListID)
-					if e5 == nil {
+					if e5 != nil {
+						log.Printf("[OrderManagementQuery] WARN GetReadableIDByID failed listId=%q err=%v", it.ListID, e5)
+					} else {
 						listReadableID = n
 					}
 				}
