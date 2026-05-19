@@ -11,7 +11,6 @@ import (
 // ProductBlueprintRepo defines the minimal persistence port needed by ProductBlueprintUsecase.
 //
 // 方針:
-// - ListDeleted は ListDeletedByCompanyID に改名し、companyId を必須化
 type ProductBlueprintRepo interface {
 	// Read (single)
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
@@ -19,9 +18,6 @@ type ProductBlueprintRepo interface {
 
 	// Read (multi) - company スコープ必須
 	ListByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
-
-	// Read (deleted only) - company スコープ必須
-	ListDeletedByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
 
 	// companyId 単位で productBlueprint の ID 一覧を取得（MintRequest chain 等）
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)

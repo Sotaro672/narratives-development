@@ -11,23 +11,6 @@ import (
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
-func getFloat64(v any) float64 {
-	switch x := v.(type) {
-	case int:
-		return float64(x)
-	case int32:
-		return float64(x)
-	case int64:
-		return float64(x)
-	case float32:
-		return float64(x)
-	case float64:
-		return x
-	default:
-		return 0
-	}
-}
-
 func dedupTrimStrings(xs []string) []string {
 	seen := make(map[string]struct{}, len(xs))
 	out := make([]string, 0, len(xs))
@@ -81,21 +64,4 @@ func (r *ProductBlueprintRepositoryFS) ListByCompanyID(
 	}
 
 	return out, nil
-}
-
-// ListDeletedByCompanyID returns deleted ProductBlueprints for the given companyID.
-// 論理削除を廃止したため常に空配列を返す。
-func (r *ProductBlueprintRepositoryFS) ListDeletedByCompanyID(
-	ctx context.Context,
-	companyID string,
-) ([]pbdom.ProductBlueprint, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	if companyID == "" {
-		return nil, pbdom.ErrInvalidCompanyID
-	}
-
-	return []pbdom.ProductBlueprint{}, nil
 }
