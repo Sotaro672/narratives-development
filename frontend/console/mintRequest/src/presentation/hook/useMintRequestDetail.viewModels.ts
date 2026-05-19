@@ -17,7 +17,19 @@ import type {
   TokenBlueprintOptionVM as TokenBlueprintOption,
 } from "../viewModel/mintRequestDetail.vm";
 
-import type { TokenBlueprintPatchDTO } from "../../infrastructure/adapter/inventoryTokenBlueprintPatch";
+type TokenBlueprintPatchDTO = {
+  id?: string | null;
+  tokenName?: string | null;
+  name?: string | null;
+  symbol?: string | null;
+  brandId?: string | null;
+  brandName?: string | null;
+  companyId?: string | null;
+  description?: string | null;
+  minted?: boolean | null;
+  metadataUri?: string | null;
+  iconUrl?: string | null;
+};
 
 const toDisplayText = (value: unknown): string => {
   if (value === null || value === undefined) return "";
@@ -31,6 +43,16 @@ const toDisplayText = (value: unknown): string => {
   }
 
   return "";
+};
+
+const toBool = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+
+  if (typeof value === "string") {
+    return value.trim().toLowerCase() === "true";
+  }
+
+  return false;
 };
 
 const toProductIdTagLabel = (
@@ -158,42 +180,86 @@ export function buildTokenBlueprintCardVm(params: {
     brandOptions,
   } = params;
 
+  const selected = selectedTokenBlueprint as
+    | (TokenBlueprintOption & {
+        tokenName?: string | null;
+        brandId?: string | null;
+        brandName?: string | null;
+        companyId?: string | null;
+        description?: string | null;
+        minted?: boolean | string | null;
+        metadataUri?: string | null;
+      })
+    | null;
+
   const tbId =
-    asNonEmptyString(selectedTokenBlueprint?.id) ||
+    asNonEmptyString(selected?.id) ||
+    asNonEmptyString(tokenBlueprintPatch?.id) ||
     asNonEmptyString(tokenBlueprintIdForPatch);
 
   if (!tbId) return null;
 
+  const name =
+    asNonEmptyString(selected?.tokenName) ||
+    asNonEmptyString(selected?.name) ||
+    asNonEmptyString(tokenBlueprintPatch?.tokenName) ||
+    asNonEmptyString(tokenBlueprintPatch?.name);
+
+  const symbol =
+    asNonEmptyString(selected?.symbol) ||
+    asNonEmptyString(tokenBlueprintPatch?.symbol);
+
+  const brandId =
+    asNonEmptyString(selected?.brandId) ||
+    asNonEmptyString(tokenBlueprintPatch?.brandId) ||
+    asNonEmptyString(pbPatch?.brandId) ||
+    "";
+
   const brandName =
-    selectedBrandName ||
-    asNonEmptyString((tokenBlueprintPatch as any)?.brandName) ||
+    asNonEmptyString(selected?.brandName) ||
+    asNonEmptyString(selectedBrandName) ||
+    asNonEmptyString(tokenBlueprintPatch?.brandName) ||
     asNonEmptyString(pbPatch?.brandName) ||
     "";
 
-  const name =
-    asNonEmptyString((tokenBlueprintPatch as any)?.tokenName) ||
-    asNonEmptyString(selectedTokenBlueprint?.name);
-
-  const symbol =
-    asNonEmptyString((tokenBlueprintPatch as any)?.symbol) ||
-    asNonEmptyString(selectedTokenBlueprint?.symbol);
-
-  const description = asNonEmptyString(
-    (tokenBlueprintPatch as any)?.description,
-  );
+  const description =
+    asNonEmptyString(selected?.description) ||
+    asNonEmptyString(tokenBlueprintPatch?.description);
 
   const iconUrl =
-    asNonEmptyString((tokenBlueprintPatch as any)?.iconUrl) ||
-    asNonEmptyString(selectedTokenBlueprint?.iconUrl) ||
+    asNonEmptyString(selected?.iconUrl) ||
+    asNonEmptyString(tokenBlueprintPatch?.iconUrl) ||
     undefined;
+
+  const minted =
+    selected?.minted !== undefined && selected?.minted !== null
+      ? toBool(selected.minted)
+      : toBool(tokenBlueprintPatch?.minted);
 
   return {
     id: tbId,
-    name: name || tbId,
+
+    /**
+     * ここで tbId を fallback にしない。
+     * tokenName/name が取れていない場合は空表示にして、ID がトークン名として見える事故を防ぐ。
+     */
+    name,
+
+    tokenName: name,
+
     symbol: symbol || "",
-    brandId: "",
+    brandId,
     brandName,
+    companyId:
+      asNonEmptyString(selected?.companyId) ||
+      asNonEmptyString(tokenBlueprintPatch?.companyId) ||
+      undefined,
     description: description || "",
+    minted,
+    metadataUri:
+      asNonEmptyString(selected?.metadataUri) ||
+      asNonEmptyString(tokenBlueprintPatch?.metadataUri) ||
+      undefined,
     iconUrl,
     isEditMode: false,
     brandOptions: brandOptions.map((b) => ({ id: b.id, name: b.name })),

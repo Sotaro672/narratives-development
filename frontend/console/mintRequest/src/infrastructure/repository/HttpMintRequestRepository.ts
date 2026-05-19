@@ -9,8 +9,30 @@ import {
   fetchProductBlueprintPatchHTTP,
   fetchBrandsForMintHTTP,
   fetchTokenBlueprintsByBrandHTTP,
+  fetchTokenBlueprintPatchHTTP,
   postMintRequestHTTP,
 } from "../repository";
+
+const toText = (value: unknown): string => {
+  return typeof value === "string" ? value.trim() : "";
+};
+
+const toOptionalText = (value: unknown): string | undefined => {
+  const text = toText(value);
+  return text || undefined;
+};
+
+const toBool = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  return undefined;
+};
 
 export class HttpMintRequestRepository implements MintRequestRepository {
   async fetchInspectionByProductionId(
@@ -43,31 +65,71 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     );
   }
 
+  async fetchTokenBlueprintPatch(
+    tokenBlueprintId: string,
+  ): Promise<unknown | null> {
+    return await fetchTokenBlueprintPatchHTTP(tokenBlueprintId).catch(
+      () => null,
+    );
+  }
+
   async fetchBrandsForMint(): Promise<{ id: string; name: string }[]> {
     const brands = await fetchBrandsForMintHTTP().catch(() => []);
 
     return (brands ?? [])
       .map((b: any) => ({
-        id: String(b?.id ?? "").trim(),
-        name: String(b?.name ?? "").trim(),
+        id: toText(b?.id),
+        name: toText(b?.name),
       }))
       .filter((b: any) => b.id && b.name);
   }
 
   async fetchTokenBlueprintsByBrand(
     brandId: string,
-  ): Promise<{ id: string; name: string; symbol: string; iconUrl?: string }[]> {
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      tokenName?: string;
+      symbol: string;
+      brandId?: string;
+      brandName?: string;
+      companyId?: string;
+      description?: string;
+      minted?: boolean;
+      metadataUri?: string;
+      iconUrl?: string;
+    }[]
+  > {
     const list = await fetchTokenBlueprintsByBrandHTTP(brandId).catch(
       () => [],
     );
 
     return (list ?? [])
-      .map((tb: any) => ({
-        id: String(tb?.id ?? "").trim(),
-        name: String(tb?.name ?? "").trim(),
-        symbol: String(tb?.symbol ?? "").trim(),
-        iconUrl: String(tb?.iconUrl ?? "").trim() || undefined,
-      }))
+      .map((tb: any) => {
+        const tokenName = toText(tb?.tokenName) || toText(tb?.name);
+
+        return {
+          id: toText(tb?.id),
+
+          // selector 表示用
+          name: tokenName,
+
+          // TokenBlueprintCard 表示用
+          tokenName,
+
+          symbol: toText(tb?.symbol),
+
+          brandId: toOptionalText(tb?.brandId),
+          brandName: toOptionalText(tb?.brandName),
+          companyId: toOptionalText(tb?.companyId),
+          description: toOptionalText(tb?.description),
+          minted: toBool(tb?.minted),
+          metadataUri: toOptionalText(tb?.metadataUri),
+
+          iconUrl: toOptionalText(tb?.iconUrl),
+        };
+      })
       .filter((tb: any) => tb.id && tb.name && tb.symbol);
   }
 

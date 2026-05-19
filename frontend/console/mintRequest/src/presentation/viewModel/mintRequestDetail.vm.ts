@@ -17,8 +17,32 @@ export type BrandOptionVM = {
 
 export type TokenBlueprintOptionVM = {
   id: string;
+
+  /**
+   * 右側の「トークン設計一覧」表示用。
+   *
+   * backend response の正は tokenName だが、
+   * selector 側では name を表示用 field として使う。
+   */
   name: string;
+
+  /**
+   * TokenBlueprintCard 表示用。
+   *
+   * GET /mint/token_blueprints?brandId=... の tokenName を保持する。
+   */
+  tokenName?: string;
+
   symbol: string;
+
+  brandId?: string;
+  brandName?: string;
+  companyId?: string;
+
+  description?: string;
+  minted?: boolean;
+  metadataUri?: string;
+
   iconUrl?: string;
 };
 
@@ -73,7 +97,21 @@ export type ProductBlueprintCardVM = {
 
 export type TokenBlueprintCardVM = {
   id: string;
+
+  /**
+   * TokenBlueprintCard の表示名。
+   *
+   * backend response の tokenName を優先し、
+   * fallback として name を使う。
+   * id は表示名 fallback に使わない。
+   */
   name: string;
+
+  /**
+   * backend response の正フィールド。
+   */
+  tokenName?: string;
+
   symbol: string;
 
   // brandId は UI 表示に使わせない（揺れ防止）
@@ -82,7 +120,13 @@ export type TokenBlueprintCardVM = {
   // UI 表示は brandName のみに統一
   brandName: string;
 
+  companyId?: string;
+
   description: string;
+
+  minted?: boolean;
+  metadataUri?: string;
+
   iconUrl?: string;
 
   isEditMode: boolean;

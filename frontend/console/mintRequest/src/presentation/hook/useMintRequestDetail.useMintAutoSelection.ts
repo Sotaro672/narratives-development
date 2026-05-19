@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { MintInfo } from "../../application/mapper/mintInfoMapper";
+import type { TokenBlueprintOptionVM } from "../viewModel/mintRequestDetail.vm";
 
 export function useMintAutoSelection(params: {
   hasMint: boolean;
@@ -12,6 +13,7 @@ export function useMintAutoSelection(params: {
   mintRequestedTokenBlueprintId: string;
   selectedTokenBlueprintId: string;
   setSelectedTokenBlueprintId: React.Dispatch<React.SetStateAction<string>>;
+  tokenBlueprintOptions: TokenBlueprintOptionVM[];
 
   mint: MintInfo | null;
 
@@ -26,6 +28,7 @@ export function useMintAutoSelection(params: {
     mintRequestedTokenBlueprintId,
     selectedTokenBlueprintId,
     setSelectedTokenBlueprintId,
+    tokenBlueprintOptions,
     mint,
     scheduledBurnDate,
     setScheduledBurnDate,
@@ -51,8 +54,41 @@ export function useMintAutoSelection(params: {
     if (!hasMint) return;
     if (!mintRequestedTokenBlueprintId) return;
     if (selectedTokenBlueprintId) return; // 手動選択を尊重
+
     setSelectedTokenBlueprintId(mintRequestedTokenBlueprintId);
-  }, [hasMint, mintRequestedTokenBlueprintId, selectedTokenBlueprintId, setSelectedTokenBlueprintId]);
+  }, [
+    hasMint,
+    mintRequestedTokenBlueprintId,
+    selectedTokenBlueprintId,
+    setSelectedTokenBlueprintId,
+  ]);
+
+  /**
+   * tokenBlueprintOptions 取得後の補完。
+   *
+   * handleSelectBrand() 内で一度 selectedTokenBlueprintId が空に戻ることがあるため、
+   * 一覧取得後に mintRequestedTokenBlueprintId が存在するなら再選択する。
+   */
+  React.useEffect(() => {
+    if (!hasMint) return;
+    if (!mintRequestedTokenBlueprintId) return;
+    if (selectedTokenBlueprintId) return;
+    if (tokenBlueprintOptions.length === 0) return;
+
+    const exists = tokenBlueprintOptions.some(
+      (tb) => tb.id === mintRequestedTokenBlueprintId,
+    );
+
+    if (!exists) return;
+
+    setSelectedTokenBlueprintId(mintRequestedTokenBlueprintId);
+  }, [
+    hasMint,
+    mintRequestedTokenBlueprintId,
+    selectedTokenBlueprintId,
+    tokenBlueprintOptions,
+    setSelectedTokenBlueprintId,
+  ]);
 
   // mint が存在し、scheduledBurnDate があるなら「初回だけ」入力欄へ反映（手入力を尊重）
   React.useEffect(() => {

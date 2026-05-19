@@ -28,16 +28,16 @@ type ModelVariationsGetter interface {
 }
 
 // MintRequestQueryService is used by console mint handlers.
-// It returns console BFF rows: productionId = inspectionId = mintId.
+// It returns console rows: productionId = inspectionId = mintId.
 type MintRequestQueryService struct {
 	mintUC       *mintapp.MintUsecase
 	productionUC *productionapp.ProductionUsecase
 	nameResolver *resolver.NameResolver
 
-	// productBlueprintId -> modelVariations を引くための任意依存
+	// detail 用などで productBlueprintId -> modelVariations を引くための任意依存
 	modelRepo ModelVariationsGetter
 
-	// tokenBlueprintId -> tokenBlueprint patch を引くための任意依存
+	// tokenBlueprint patch 取得は mint_token_blueprint_query.go 側の責務
 	tokenBlueprintRepo tokenblueprintdom.RepositoryPort
 }
 
@@ -64,6 +64,7 @@ func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) 
 }
 
 // DI 側で後から差し込めるようにする。
+// patch取得ロジック自体は mint_token_blueprint_query.go に置く。
 func (s *MintRequestQueryService) SetTokenBlueprintRepo(repo tokenblueprintdom.RepositoryPort) {
 	if s == nil {
 		return
@@ -71,8 +72,21 @@ func (s *MintRequestQueryService) SetTokenBlueprintRepo(repo tokenblueprintdom.R
 	s.tokenBlueprintRepo = repo
 }
 
-// ListMintRequestManagementRows returns rows for current company.
+// ListMintRequestManagementRows returns lightweight rows for ManagementPage.
 // productionId = inspectionId = mintId として扱う。
+//
+// ManagementPage で必要な項目だけ返す:
+// - mint:boolean
+// - productBlueprintId
+// - tokenBlueprintId
+// - productName
+// - tokenName
+// - mintQuantity
+// - productionQuantity
+// - requestedByName
+// - mintedAt
+// - createdAt
+// - inspectionStatus
 func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	ctx context.Context,
 	input querydto.ListMintRequestManagementRowsInput,
@@ -173,22 +187,14 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	}
 
 	// ------------------------------------------------------------
-	// 4) build rows
+	// 4) build lightweight rows
 	// ------------------------------------------------------------
 	rows := make([]querydto.ProductionInspectionMintDTO, 0, len(ids))
 
 	for _, pid := range ids {
 		p := prodByID[pid]
 		insp, hasInsp := inspByPID[pid]
-
-		productBlueprintID := p.ProductBlueprintID
-
 		m, hasMint := mintsByPID[pid]
-		var mintPtr *mintdom.Mint
-		if hasMint {
-			tmp := m
-			mintPtr = &tmp
-		}
 
 		mintQty := 0
 		prodQty := 0
@@ -208,56 +214,25 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 			prodQty = p.TotalQuantity
 		}
 
+		productBlueprintID := p.ProductBlueprintID
 		tokenBlueprintID := ""
 		tokenName := ""
-		requestedBy := ""
 		requestedByName := ""
 		var mintedAt *time.Time
+		var createdAt *time.Time
+		var mintPtr *mintdom.Mint
 
 		if hasMint {
-			requestedBy = m.CreatedBy
-			mintedAt = m.MintedAt
+			tmp := m
+			mintPtr = &tmp
+
 			tokenBlueprintID = m.TokenBlueprintID
-
 			tokenName = resolveTokenName(ctx, s.nameResolver, tokenBlueprintID)
-			requestedByName = resolveRequestedByName(ctx, s.nameResolver, requestedBy)
-		}
+			requestedByName = resolveRequestedByName(ctx, s.nameResolver, m.CreatedBy)
+			mintedAt = m.MintedAt
 
-		var productBlueprintPatch *querydto.MintProductBlueprintPatchDTO
-		var tokenBlueprintPatch *querydto.TokenBlueprintPatchDTO
-		modelRows := []querydto.MintRequestModelRowDTO{}
-		totalStock := 0
-		var updatedAt *time.Time
-
-		if productBlueprintID != "" {
-			pbPatch, pbErr := s.GetProductBlueprintPatchForMint(ctx, productBlueprintID)
-			if pbErr != nil {
-				return nil, pbErr
-			}
-			productBlueprintPatch = pbPatch
-
-			if s.modelRepo != nil {
-				variations, vErr := s.modelRepo.GetModelVariations(ctx, productBlueprintID)
-				if vErr != nil {
-					return nil, vErr
-				}
-
-				modelRows = buildMintRequestModelRows(variations)
-				for _, row := range modelRows {
-					totalStock += row.Stock
-				}
-			}
-		}
-
-		if tokenBlueprintID != "" {
-			tbPatch, tbErr := s.getTokenBlueprintPatchForMint(ctx, tokenBlueprintID)
-			if tbErr != nil {
-				return nil, tbErr
-			}
-			tokenBlueprintPatch = tbPatch
-
-			if tokenBlueprintPatch != nil && tokenName == "" {
-				tokenName = tokenBlueprintPatch.TokenName
+			if !m.CreatedAt.IsZero() {
+				createdAt = &m.CreatedAt
 			}
 		}
 
@@ -265,25 +240,23 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 			ID:           pid,
 			ProductionID: pid,
 
+			Minted: hasMint,
+
 			ProductBlueprintID: productBlueprintID,
 			TokenBlueprintID:   tokenBlueprintID,
 
-			TokenName:   tokenName,
 			ProductName: p.ProductName,
+			TokenName:   tokenName,
 
 			MintQuantity:       mintQty,
 			ProductionQuantity: prodQty,
-			InspectionStatus:   inspStatus,
 
-			RequestedBy:   requestedBy,
-			CreatedByName: requestedByName,
-			MintedAt:      mintedAt,
+			RequestedByName: requestedByName,
 
-			ProductBlueprintPatch: productBlueprintPatch,
-			TokenBlueprintPatch:   tokenBlueprintPatch,
-			Rows:                  modelRows,
-			TotalStock:            totalStock,
-			UpdatedAt:             updatedAt,
+			MintedAt:  mintedAt,
+			CreatedAt: createdAt,
+
+			InspectionStatus: inspStatus,
 
 			Inspection: nil,
 			Mint:       mintPtr,
@@ -693,36 +666,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 // helpers
 // -----------------------
 
-func (s *MintRequestQueryService) getTokenBlueprintPatchForMint(
-	ctx context.Context,
-	tokenBlueprintID string,
-) (*querydto.TokenBlueprintPatchDTO, error) {
-	if s == nil || s.tokenBlueprintRepo == nil {
-		return nil, nil
-	}
-	if tokenBlueprintID == "" {
-		return nil, nil
-	}
-
-	patch, err := s.tokenBlueprintRepo.GetPatchByID(ctx, tokenBlueprintID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &querydto.TokenBlueprintPatchDTO{
-		ID:          patch.ID,
-		TokenName:   patch.TokenName,
-		Symbol:      patch.Symbol,
-		BrandID:     patch.BrandID,
-		BrandName:   patch.BrandName,
-		CompanyID:   patch.CompanyID,
-		Description: patch.Description,
-		Minted:      patch.Minted,
-		MetadataURI: patch.MetadataURI,
-		IconURL:     patch.IconURL,
-	}, nil
-}
-
 func buildMintDTO(
 	productionID string,
 	m mintdom.Mint,
@@ -765,57 +708,6 @@ func buildMintDTO(
 		ScheduledBurnDate:  scheduledBurnDate,
 		OnChainTxSignature: m.OnChainTxSignature,
 	}
-}
-
-func buildMintRequestModelRows(
-	variations []modeldom.ModelVariation,
-) []querydto.MintRequestModelRowDTO {
-	out := make([]querydto.MintRequestModelRowDTO, 0, len(variations))
-
-	for _, raw := range variations {
-		if raw == nil {
-			continue
-		}
-
-		if apparel, ok := toApparelModelVariation(raw); ok {
-			if apparel.ID == "" {
-				continue
-			}
-
-			rgb := apparel.Color.RGB
-
-			out = append(out, querydto.MintRequestModelRowDTO{
-				ModelID:     apparel.ID,
-				Kind:        "apparel",
-				ModelNumber: apparel.ModelNumber,
-				Stock:       0,
-				Size:        apparel.Size,
-				ColorName:   apparel.Color.Name,
-				RGB:         intPtr(rgb),
-			})
-			continue
-		}
-
-		if alcohol, ok := toAlcoholModelVariation(raw); ok {
-			if alcohol.ID == "" {
-				continue
-			}
-
-			volumeValue := alcohol.Volume.Value
-
-			out = append(out, querydto.MintRequestModelRowDTO{
-				ModelID:     alcohol.ID,
-				Kind:        "alcohol",
-				ModelNumber: alcohol.ModelNumber,
-				Stock:       0,
-				VolumeValue: &volumeValue,
-				VolumeUnit:  alcohol.Volume.Unit,
-			})
-			continue
-		}
-	}
-
-	return out
 }
 
 func makeIDSet(ids []string) map[string]struct{} {
@@ -910,23 +802,5 @@ func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVa
 		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
-	}
-}
-
-func toAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
-	if v == nil {
-		return modeldom.AlcoholModelVariation{}, false
-	}
-
-	switch x := v.(type) {
-	case modeldom.AlcoholModelVariation:
-		return x, true
-	case *modeldom.AlcoholModelVariation:
-		if x == nil {
-			return modeldom.AlcoholModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.AlcoholModelVariation{}, false
 	}
 }

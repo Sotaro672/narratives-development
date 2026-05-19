@@ -7,6 +7,23 @@ import type {
   TokenBlueprintOptionVM,
 } from "../../presentation/viewModel/mintRequestDetail.vm";
 
+const asOptionalString = (value: unknown): string | undefined => {
+  const text = asNonEmptyString(value);
+  return text || undefined;
+};
+
+const asBool = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  return undefined;
+};
+
 export function toBrandOptionVM(input: unknown): BrandOptionVM | null {
   const id = asNonEmptyString((input as any)?.id);
   const name = asNonEmptyString((input as any)?.name);
@@ -30,17 +47,37 @@ export function toBrandOptionVMs(
 export function toTokenBlueprintOptionVM(
   input: unknown,
 ): TokenBlueprintOptionVM | null {
-  const id = asNonEmptyString((input as any)?.id);
-  const name = asNonEmptyString((input as any)?.name);
-  const symbol = asNonEmptyString((input as any)?.symbol);
-  const iconUrl = asNonEmptyString((input as any)?.iconUrl) || undefined;
+  const raw = input as any;
+
+  const id = asNonEmptyString(raw?.id);
+
+  const tokenName =
+    asNonEmptyString(raw?.tokenName) || asNonEmptyString(raw?.name);
+
+  const name = tokenName;
+
+  const symbol = asNonEmptyString(raw?.symbol);
+  const iconUrl = asOptionalString(raw?.iconUrl);
 
   if (!id || !name || !symbol) return null;
 
   return {
     id,
+
+    // selector 表示用
     name,
+
+    // TokenBlueprintCard 表示用
+    tokenName,
     symbol,
+
+    brandId: asOptionalString(raw?.brandId),
+    brandName: asOptionalString(raw?.brandName),
+    companyId: asOptionalString(raw?.companyId),
+    description: asOptionalString(raw?.description),
+    minted: asBool(raw?.minted),
+    metadataUri: asOptionalString(raw?.metadataUri),
+
     iconUrl,
   };
 }
