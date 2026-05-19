@@ -43,9 +43,25 @@ func (s *MintRequestQueryService) ListTokenBlueprintsForMint(
 	items := make([]querydto.TokenBlueprintForMintDTO, 0, len(result.Items))
 	for _, tb := range result.Items {
 		items = append(items, querydto.TokenBlueprintForMintDTO{
-			ID:     tb.ID,
-			Name:   tb.Name,
+			ID: tb.ID,
+
+			// 既存 UI 互換: selector 表示用
+			Name: tb.Name,
+
+			// TokenBlueprintCard 表示用
+			TokenName: tb.Name,
+
 			Symbol: tb.Symbol,
+
+			BrandID:   tb.BrandID,
+			BrandName: "",
+			CompanyID: tb.CompanyID,
+
+			Description: tb.Description,
+			Minted:      tb.Minted,
+
+			MetadataURI: tb.MetadataURI,
+			IconURL:     tb.IconURL,
 		})
 	}
 
