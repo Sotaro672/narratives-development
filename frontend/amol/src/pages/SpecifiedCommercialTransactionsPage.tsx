@@ -52,113 +52,33 @@ export default function SpecifiedCommercialTransactionsPage() {
               <div className="landing-page-definition-list__row">
                 <dt className="landing-page-definition-list__term">販売価格</dt>
                 <dd className="landing-page-definition-list__description">
-                  以下の「本サービスの利用にかかる手数料」のみがかかります。
+                  各商品の購入ページまたは決済画面に表示される金額
                 </dd>
               </div>
 
               <div className="landing-page-definition-list__row">
                 <dt className="landing-page-definition-list__term">
-                  本サービスの利用にかかる手数料等
+                  販売価格以外の必要料金
                 </dt>
                 <dd className="landing-page-definition-list__description">
-                  支援金額の5%を決済手数料としていただきます。
+                  商品の配送が発生する場合、送料が別途発生する場合があります。
                   <br />
-                  当社が代理受領した支援金をユーザーに支払うまでに生じる振込手数料、決済代行会社所定の手数料、出金時の銀行振込手数料等が発生する場合があります。
+                  送料、手数料その他の必要料金が発生する場合は、各商品の購入ページまたは決済画面に表示します。
                   <br />
-                  デジタルサービスのため、送料は発生しません。
+                  インターネット接続料金、通信料金その他AMOLの利用に必要な費用は、お客様の負担となります。
                 </dd>
               </div>
 
               <div className="landing-page-definition-list__row">
                 <dt className="landing-page-definition-list__term">
-                  サービスの提供時期
+                  商品の引渡時期・サービスの提供時期
                 </dt>
                 <dd className="landing-page-definition-list__description">
-                  利用規約に基づいて登録いただくことで本サービスをご利用いただけます。
-                </dd>
-              </div>
-
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">
-                  お支払い方法
-                </dt>
-                <dd className="landing-page-definition-list__description">
-                  当社が代理受領した支援金から控除する形でお支払いいただきます。
-                </dd>
-              </div>
-
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">
-                  お支払い時期
-                </dt>
-                <dd className="landing-page-definition-list__description">
-                  決済日
-                </dd>
-              </div>
-
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">動作環境</dt>
-                <dd className="landing-page-definition-list__description">
-                  AMOLの推奨動作環境は以下の通りです。
+                  実物商品は、決済完了後、各商品の購入ページまたは当社が別途表示する条件に従い発送します。
                   <br />
-                  ■ブラウザ Chrome、Safari、それぞれの最新版
+                  商品に付随するトークン、デジタル証明、保有情報その他AMOL上の機能は、決済完了後または当社所定の処理完了後に利用可能となります。
                   <br />
-                  ■OS iOS、Android、Windows、macOS、それぞれの最新版
-                </dd>
-              </div>
-
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">
-                  キャンセル等
-                </dt>
-                <dd className="landing-page-definition-list__description">
-                  一度確定した取引は、サービスの性質上、原則としてキャンセル・返金できません。
-                  <br />
-                  ただし、法令上必要な場合または当社が別途認める場合はこの限りではありません。
-                  <br />
-                  また、本サービスについて契約内容への不適合がある場合は、利用規約の定めに従って対応いたします。
-                </dd>
-              </div>
-
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">その他</dt>
-                <dd className="landing-page-definition-list__description">
-                  表示を省略した事項については、お客様からの開示の請求があった場合、法律の定めに従って遅滞なく開示するものとします。
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <h2 className="landing-page-section__title landing-page-section__title--legal">
-            ユーザーが提供する有償サービスに関して
-          </h2>
-
-          <div className="landing-page-card">
-            <dl className="landing-page-definition-list">
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">
-                  有償サービスの利用料金
-                </dt>
-                <dd className="landing-page-definition-list__description">
-                  決済時に表示される金額
-                </dd>
-              </div>
-
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">
-                  利用料金以外の必要料金
-                </dt>
-                <dd className="landing-page-definition-list__description">
-                  デジタルサービスのため、送料は発生しません。
-                </dd>
-              </div>
-
-              <div className="landing-page-definition-list__row">
-                <dt className="landing-page-definition-list__term">
-                  有償サービスの利用時期
-                </dt>
-                <dd className="landing-page-definition-list__description">
-                  決済完了後、即時
+                  予約販売、受注生産、検品、ミント処理その他特別な条件がある場合は、各商品の購入ページに表示します。
                 </dd>
               </div>
 
@@ -193,16 +113,119 @@ export default function SpecifiedCommercialTransactionsPage() {
 
               <div className="landing-page-definition-list__row">
                 <dt className="landing-page-definition-list__term">
-                  キャンセル等
+                  キャンセル・返品・交換等
                 </dt>
                 <dd className="landing-page-definition-list__description">
-                  一度確定した取引は、サービスの性質上、原則としてキャンセル・返金できません。
+                  お客様都合による注文確定後のキャンセル、返品、交換は、原則としてお受けできません。
                   <br />
-                  ただし、法令上必要な場合または当社が別途認める場合はこの限りではありません。
+                  ただし、商品に不良、破損、誤配送その他契約内容への不適合がある場合、または法令上必要な場合は、当社所定の方法により対応いたします。
                   <br />
-                  申込の有効期限や特別な提供条件がある有償サービスについては、各有償サービスの購入ページにおいて条件を表示します。
+                  返品・交換の可否、条件、送料負担その他特別な条件がある場合は、各商品の購入ページに表示します。
                   <br />
-                  また、有償サービスにかかる契約内容への不適合がある場合は、民法その他の法令の定めに従って対応いたします。
+                  商品に付随するトークン、デジタル証明、保有情報その他AMOL上の機能については、サービスの性質上、提供後のキャンセル・返金は原則としてお受けできません。
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">その他</dt>
+                <dd className="landing-page-definition-list__description">
+                  表示を省略した事項については、お客様からの開示の請求があった場合、法律の定めに従って遅滞なく開示するものとします。
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <h2 className="landing-page-section__title landing-page-section__title--legal">
+            AMOL上で販売される商品に関して
+          </h2>
+
+          <div className="landing-page-card">
+            <dl className="landing-page-definition-list">
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">
+                  商品の販売価格
+                </dt>
+                <dd className="landing-page-definition-list__description">
+                  各商品の購入ページまたは決済画面に表示される金額
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">
+                  販売価格以外の必要料金
+                </dt>
+                <dd className="landing-page-definition-list__description">
+                  商品の配送が発生する場合、送料が別途発生する場合があります。
+                  <br />
+                  送料、手数料その他の必要料金が発生する場合は、各商品の購入ページまたは決済画面に表示します。
+                  <br />
+                  インターネット接続料金、通信料金その他AMOLの利用に必要な費用は、お客様の負担となります。
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">
+                  商品の引渡時期
+                </dt>
+                <dd className="landing-page-definition-list__description">
+                  決済完了後、各商品の購入ページまたは当社が別途表示する条件に従い発送します。
+                  <br />
+                  予約販売、受注生産、検品、ミント処理その他特別な条件がある商品については、各商品の購入ページに表示します。
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">
+                  トークン・デジタル証明等の提供時期
+                </dt>
+                <dd className="landing-page-definition-list__description">
+                  商品に付随するトークン、デジタル証明、保有情報その他AMOL上の機能は、決済完了後または当社所定の処理完了後に利用可能となります。
+                  <br />
+                  ブロックチェーン、外部ネットワーク、ウォレットその他外部サービスの状況により、反映まで時間を要する場合があります。
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">
+                  お支払い方法
+                </dt>
+                <dd className="landing-page-definition-list__description">
+                  クレジットカード、その他購入に係る決済を代行する会社が提供するお支払い方法
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">
+                  お支払い時期
+                </dt>
+                <dd className="landing-page-definition-list__description">
+                  決済日
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">動作環境</dt>
+                <dd className="landing-page-definition-list__description">
+                  AMOLの推奨動作環境は以下の通りです。
+                  <br />
+                  ■ブラウザ Chrome、Safari、それぞれの最新版
+                  <br />
+                  ■OS iOS、Android、Windows、macOS、それぞれの最新版
+                </dd>
+              </div>
+
+              <div className="landing-page-definition-list__row">
+                <dt className="landing-page-definition-list__term">
+                  キャンセル・返品・交換等
+                </dt>
+                <dd className="landing-page-definition-list__description">
+                  お客様都合による注文確定後のキャンセル、返品、交換は、原則としてお受けできません。
+                  <br />
+                  ただし、商品に不良、破損、誤配送その他契約内容への不適合がある場合、または法令上必要な場合は、当社所定の方法により対応いたします。
+                  <br />
+                  返品・交換の可否、条件、送料負担その他特別な条件がある場合は、各商品の購入ページに表示します。
+                  <br />
+                  商品に付随するトークン、デジタル証明、保有情報その他AMOL上の機能については、サービスの性質上、提供後のキャンセル・返金は原則としてお受けできません。
                 </dd>
               </div>
 

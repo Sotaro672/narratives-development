@@ -4,7 +4,6 @@ package productBlueprintCategory
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"narratives/internal/domain/common"
@@ -173,17 +172,13 @@ func New(
 	attributes CategoryAttributes,
 	now time.Time,
 ) (ProductBlueprintCategory, error) {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-
 	category := ProductBlueprintCategory{
 		ID:           id,
 		Code:         code,
 		NameJa:       nameJa,
 		NameEn:       nameEn,
 		ParentID:     parentID,
-		Path:         normalizePath(path),
+		Path:         path,
 		Kind:         kind,
 		DisplayOrder: displayOrder,
 		Attributes:   attributes,
@@ -219,7 +214,7 @@ func Reconstruct(
 		NameJa:       nameJa,
 		NameEn:       nameEn,
 		ParentID:     parentID,
-		Path:         normalizePath(path),
+		Path:         path,
 		Kind:         kind,
 		DisplayOrder: displayOrder,
 		Attributes:   attributes,
@@ -239,41 +234,33 @@ func Reconstruct(
 // ======================================
 
 func (c *ProductBlueprintCategory) Rename(nameJa string, nameEn string, now time.Time) error {
-	if strings.TrimSpace(nameJa) == "" {
-		return ErrInvalidNameJa
-	}
-
 	c.NameJa = nameJa
 	c.NameEn = nameEn
-	c.touch(now)
+	c.UpdatedAt = now.UTC()
 
 	return c.validate()
 }
 
 func (c *ProductBlueprintCategory) ChangeParent(parentID *CategoryID, path []string, now time.Time) error {
 	c.ParentID = parentID
-	c.Path = normalizePath(path)
-	c.touch(now)
+	c.Path = path
+	c.UpdatedAt = now.UTC()
 
 	return c.validate()
 }
 
 func (c *ProductBlueprintCategory) ChangeDisplayOrder(displayOrder int, now time.Time) error {
-	if displayOrder <= 0 {
-		return ErrInvalidDisplayOrder
-	}
-
 	c.DisplayOrder = displayOrder
-	c.touch(now)
+	c.UpdatedAt = now.UTC()
 
-	return nil
+	return c.validate()
 }
 
 func (c *ProductBlueprintCategory) ChangeAttributes(attributes CategoryAttributes, now time.Time) error {
 	c.Attributes = attributes
-	c.touch(now)
+	c.UpdatedAt = now.UTC()
 
-	return nil
+	return c.validate()
 }
 
 // ToSnapshot は productBlueprint へ denormalize 保存するための表示用スナップショットを返す。
@@ -293,15 +280,15 @@ func (c ProductBlueprintCategory) ToSnapshot() Snapshot {
 // ======================================
 
 func (c ProductBlueprintCategory) validate() error {
-	if strings.TrimSpace(string(c.ID)) == "" {
+	if string(c.ID) == "" {
 		return ErrInvalidID
 	}
 
-	if strings.TrimSpace(string(c.Code)) == "" {
+	if string(c.Code) == "" {
 		return ErrInvalidCode
 	}
 
-	if strings.TrimSpace(c.NameJa) == "" {
+	if c.NameJa == "" {
 		return ErrInvalidNameJa
 	}
 
@@ -314,7 +301,7 @@ func (c ProductBlueprintCategory) validate() error {
 	}
 
 	for _, p := range c.Path {
-		if strings.TrimSpace(p) == "" {
+		if p == "" {
 			return ErrInvalidPath
 		}
 	}
@@ -332,27 +319,4 @@ func (c ProductBlueprintCategory) validate() error {
 	}
 
 	return nil
-}
-
-// ======================================
-// Helpers
-// ======================================
-
-func (c *ProductBlueprintCategory) touch(now time.Time) {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	c.UpdatedAt = now.UTC()
-}
-
-func normalizePath(path []string) []string {
-	out := make([]string, 0, len(path))
-	for _, p := range path {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
 }

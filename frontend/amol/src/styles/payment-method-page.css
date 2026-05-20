@@ -106,3 +106,39 @@
 .payment-method-page-card-element:focus-within {
   border-color: #111827;
 }
+
+.payment-method-page-test-warning-card {
+  border: 1px solid #facc15;
+  border-radius: 12px;
+  padding: 16px;
+  background-color: #fffbeb;
+  color: #713f12;
+}
+
+.payment-method-page-test-warning-card__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.payment-method-page-test-warning-card__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.payment-method-page-test-warning-card__example {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background-color: #ffffff;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.payment-method-page-test-warning-card__example p {
+  margin: 0;
+}
