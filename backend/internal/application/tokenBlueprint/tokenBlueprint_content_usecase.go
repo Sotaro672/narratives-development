@@ -60,10 +60,11 @@ func (u *TokenBlueprintContentUsecase) ReplaceContentFiles(
 		return nil, fmt.Errorf("actorID is empty")
 	}
 
-	validFiles, err := validateAndCopyContentFiles(files)
-	if err != nil {
+	if err := tbdom.ValidateContentFiles(files); err != nil {
 		return nil, err
 	}
+
+	validFiles := copyContentFiles(files)
 
 	now := time.Now().UTC()
 
@@ -112,10 +113,11 @@ func (u *TokenBlueprintContentUsecase) AddContentFiles(
 	next = append(next, tb.ContentFiles...)
 	next = append(next, files...)
 
-	validFiles, err := validateAndCopyContentFiles(next)
-	if err != nil {
+	if err := tbdom.ValidateContentFiles(next); err != nil {
 		return nil, err
 	}
+
+	validFiles := copyContentFiles(next)
 
 	now := time.Now().UTC()
 
@@ -166,11 +168,13 @@ func (u *TokenBlueprintContentUsecase) RemoveContentFile(
 
 	found := false
 	next := make([]tbdom.ContentFile, 0, len(tb.ContentFiles))
+
 	for _, f := range tb.ContentFiles {
 		if f.ID == contentID {
 			found = true
 			continue
 		}
+
 		next = append(next, f)
 	}
 
@@ -178,10 +182,11 @@ func (u *TokenBlueprintContentUsecase) RemoveContentFile(
 		return nil, tbdom.WrapNotFound(nil, "content file not found")
 	}
 
-	validFiles, err := validateAndCopyContentFiles(next)
-	if err != nil {
+	if err := tbdom.ValidateContentFiles(next); err != nil {
 		return nil, err
 	}
+
+	validFiles := copyContentFiles(next)
 
 	now := time.Now().UTC()
 
@@ -232,15 +237,16 @@ func (u *TokenBlueprintContentUsecase) SetContentVisibility(
 	}
 
 	now := time.Now().UTC()
+
 	if err := tb.SetContentVisibility(contentID, v, actorID, now); err != nil {
 		return nil, err
 	}
 
-	files := tb.ContentFiles
-	validFiles, err := validateAndCopyContentFiles(files)
-	if err != nil {
+	if err := tbdom.ValidateContentFiles(tb.ContentFiles); err != nil {
 		return nil, err
 	}
+
+	validFiles := copyContentFiles(tb.ContentFiles)
 
 	updated, err := u.tbRepo.Update(ctx, blueprintID, tbdom.UpdateTokenBlueprintInput{
 		ContentFiles: &validFiles,
@@ -260,46 +266,13 @@ func (u *TokenBlueprintContentUsecase) SetContentVisibility(
 // internal helpers
 // ============================================================
 
-func normalizeContentFilesPtr(
-	p *[]tbdom.ContentFile,
-) (*[]tbdom.ContentFile, error) {
-	if p == nil {
-		return nil, nil
-	}
-
-	validFiles, err := validateAndCopyContentFiles(*p)
-	if err != nil {
-		return nil, err
-	}
-
-	return &validFiles, nil
-}
-
-func validateAndCopyContentFiles(
-	files []tbdom.ContentFile,
-) ([]tbdom.ContentFile, error) {
+func copyContentFiles(files []tbdom.ContentFile) []tbdom.ContentFile {
 	if len(files) == 0 {
-		return []tbdom.ContentFile{}, nil
+		return []tbdom.ContentFile{}
 	}
 
-	seen := make(map[string]struct{}, len(files))
-	out := make([]tbdom.ContentFile, 0, len(files))
+	out := make([]tbdom.ContentFile, len(files))
+	copy(out, files)
 
-	for i, f := range files {
-		if err := f.Validate(); err != nil {
-			return nil, err
-		}
-
-		if _, ok := seen[f.ID]; ok {
-			return nil, tbdom.WrapConflict(
-				nil,
-				fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID),
-			)
-		}
-
-		seen[f.ID] = struct{}{}
-		out = append(out, f)
-	}
-
-	return out, nil
+	return out
 }

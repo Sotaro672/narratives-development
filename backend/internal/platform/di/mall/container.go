@@ -376,8 +376,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// Queries (mall-facing)
 	// --------------------------------------------------------
 	{
-		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
-
 		c.BrandQ = mallquery.NewBrandQuery(
 			brandRepo,
 			companySvc,
@@ -388,7 +386,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		c.CatalogQ = catalogQuery.NewCatalogQuery(
 			listRepoFS,
-			invRepo,
+			inventoryRepo,
 			productBlueprintRepoFS,
 			modelRepoFS,
 			catalogQuery.WithListImageRepo(listImageRecordRepo),

@@ -378,7 +378,7 @@ func (r *TokenBlueprintRepositoryFS) Create(
 		updatedAt = in.UpdatedAt.UTC()
 	}
 
-	if err := validateContentFilesForFS(in.ContentFiles); err != nil {
+	if err := tbdom.ValidateContentFiles(in.ContentFiles); err != nil {
 		return nil, err
 	}
 
@@ -503,7 +503,7 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	}
 
 	if in.ContentFiles != nil {
-		if err := validateContentFilesForFS(*in.ContentFiles); err != nil {
+		if err := tbdom.ValidateContentFiles(*in.ContentFiles); err != nil {
 			return nil, err
 		}
 
@@ -842,27 +842,6 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	return true
 }
 
-func validateContentFilesForFS(xs []tbdom.ContentFile) error {
-	seen := make(map[string]struct{}, len(xs))
-
-	for i, f := range xs {
-		if err := f.Validate(); err != nil {
-			return err
-		}
-
-		if _, ok := seen[f.ID]; ok {
-			return tbdom.WrapConflict(
-				nil,
-				fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID),
-			)
-		}
-
-		seen[f.ID] = struct{}{}
-	}
-
-	return nil
-}
-
 func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 	out := make([]map[string]any, 0, len(xs))
 
@@ -890,7 +869,6 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 
 func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 	out := make([]tbdom.ContentFile, 0, len(xs))
-	seen := make(map[string]struct{}, len(xs))
 
 	for i, m := range xs {
 		var f tbdom.ContentFile
@@ -955,19 +933,11 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 			f.UpdatedAt = v.UTC()
 		}
 
-		if err := f.Validate(); err != nil {
-			return nil, err
-		}
-
-		if _, ok := seen[f.ID]; ok {
-			return nil, tbdom.WrapConflict(
-				nil,
-				fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID),
-			)
-		}
-
-		seen[f.ID] = struct{}{}
 		out = append(out, f)
+	}
+
+	if err := tbdom.ValidateContentFiles(out); err != nil {
+		return nil, err
 	}
 
 	return out, nil

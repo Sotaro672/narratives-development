@@ -1,10 +1,9 @@
-// backend/internal/application/usecase/tokenBlueprint_icon_usecase.go
+// backend/internal/application/tokenBlueprint/tokenBlueprint_icon_usecase.go
 package tokenBlueprint
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -28,7 +27,7 @@ import (
 // - TokenIconUploadURL
 // - IssueTokenIconUploadURL
 // - gcsObjectPublicURL
-// - tokenIconObjectPath
+// - backend 側での GCS object path 生成
 
 type TokenBlueprintIconUsecase struct {
 	tbRepo tbdom.RepositoryPort
@@ -53,17 +52,17 @@ func (u *TokenBlueprintIconUsecase) AttachTokenIconURL(
 		return nil, fmt.Errorf("tokenBlueprint icon usecase/repo is nil")
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
+	id := tokenBlueprintID
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
 
-	url := strings.TrimSpace(iconURL)
+	url := iconURL
 	if url == "" {
 		return nil, fmt.Errorf("iconURL is empty")
 	}
 
-	actor := strings.TrimSpace(actorID)
+	actor := actorID
 	if actor == "" {
 		return nil, fmt.Errorf("actorID is empty")
 	}
@@ -92,12 +91,12 @@ func (u *TokenBlueprintIconUsecase) ClearTokenIconURL(
 		return nil, fmt.Errorf("tokenBlueprint icon usecase/repo is nil")
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
+	id := tokenBlueprintID
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
 
-	actor := strings.TrimSpace(actorID)
+	actor := actorID
 	if actor == "" {
 		return nil, fmt.Errorf("actorID is empty")
 	}
@@ -126,7 +125,7 @@ func (u *TokenBlueprintIconUsecase) GetTokenIconURL(
 		return "", fmt.Errorf("tokenBlueprint icon usecase/repo is nil")
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
+	id := tokenBlueprintID
 	if id == "" {
 		return "", fmt.Errorf("tokenBlueprintID is empty")
 	}
@@ -139,5 +138,5 @@ func (u *TokenBlueprintIconUsecase) GetTokenIconURL(
 		return "", tbdom.ErrNotFound
 	}
 
-	return strings.TrimSpace(tb.IconURL), nil
+	return tb.IconURL, nil
 }

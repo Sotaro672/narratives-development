@@ -1,25 +1,140 @@
-// backend/internal/application/productBlueprint/usecase/commands.go
-package productBlueprintUsecase
+// backend/internal/application/usecase/productBlueprint_usecase.go
+package usecase
 
 import (
 	"context"
 	"time"
 
-	usecase "narratives/internal/application/usecase"
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
+
+// ------------------------------------------------------------
+// Usecase
+// ------------------------------------------------------------
+
+// ProductBlueprintUsecase is the application service for productBlueprint.
+type ProductBlueprintUsecase struct {
+	repo ProductBlueprintRepo
+
+	// ProductBlueprint 起票時に productBlueprintReview 側も初期化するためのポート
+	// NOTE: NewProductBlueprintUsecase が唯一の入口となるよう、外から With で差し込まない。
+	reviewInit ProductBlueprintReviewInitializer
+}
+
+// NewProductBlueprintUsecase を唯一の出入り口にするため、reviewInit をコンストラクタ引数にする。
+// - reviewInit が nil の場合は初期化をスキップ（既存互換）
+// - 「必ず作りたい」場合は DI 側で non-nil を渡す
+func NewProductBlueprintUsecase(
+	repo ProductBlueprintRepo,
+	reviewInit ProductBlueprintReviewInitializer,
+) *ProductBlueprintUsecase {
+	return &ProductBlueprintUsecase{
+		repo:       repo,
+		reviewInit: reviewInit,
+	}
+}
+
+// ------------------------------------------------------------
+// Ports
+// ------------------------------------------------------------
+
+// ProductBlueprintRepo defines the minimal persistence port needed by ProductBlueprintUsecase.
+type ProductBlueprintRepo interface {
+	// Read (single)
+	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+	Exists(ctx context.Context, id string) (bool, error)
+
+	// Read (multi) - company スコープ必須
+	ListByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
+
+	// companyId 単位で productBlueprint の ID 一覧を取得（MintRequest chain 等）
+	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+
+	// printed フラグを true（印刷済み）に更新する
+	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+
+	// Write
+	Create(ctx context.Context, in productbpdom.CreateInput) (productbpdom.ProductBlueprint, error)
+	Update(ctx context.Context, id string, patch productbpdom.Patch) (productbpdom.ProductBlueprint, error)
+
+	// Delete (physical)
+	Delete(ctx context.Context, id string) error
+
+	// 起票後に modelRefs を追記（updatedAt / updatedBy を更新しない）
+	// - refs は displayOrder を含む（usecase 側で採番して渡す）
+	// - repo 実装側で modelRefs フィールドのみ部分更新し、updatedAt/updatedBy を触らないこと
+	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []productbpdom.ModelRef) (productbpdom.ProductBlueprint, error)
+}
+
+// ProductBlueprintReviewInitializer は ProductBlueprint 起票時に、
+// レビュー側の「商品単位初期化ドキュメント」等を作成するためのポート。
+type ProductBlueprintReviewInitializer interface {
+	InitForProductBlueprint(
+		ctx context.Context,
+		productBlueprintID string,
+		companyID string,
+		createdAt time.Time,
+		createdBy *string,
+	) error
+}
+
+// ------------------------------------------------------------
+// Queries
+// ------------------------------------------------------------
+
+func (u *ProductBlueprintUsecase) GetByID(
+	ctx context.Context,
+	id string,
+) (productbpdom.ProductBlueprint, error) {
+	return u.repo.GetByID(ctx, id)
+}
+
+func (u *ProductBlueprintUsecase) Exists(
+	ctx context.Context,
+	id string,
+) (bool, error) {
+	return u.repo.Exists(ctx, id)
+}
+
+// ListByCompanyID は handler 側の GET /product-blueprints から利用される一覧取得。
+// companyId を必須にする（companyId なしの List は廃止済み）。
+// テナント境界は repo 側のクエリに委譲しつつ、usecase 側でも二重ガードする。
+func (u *ProductBlueprintUsecase) ListByCompanyID(
+	ctx context.Context,
+) ([]productbpdom.ProductBlueprint, error) {
+	cid := CompanyIDFromContext(ctx)
+	if cid == "" {
+		return nil, productbpdom.ErrInvalidCompanyID
+	}
+
+	rows, err := u.repo.ListByCompanyID(ctx, cid)
+	if err != nil {
+		return nil, err
+	}
+
+	// 念のため usecase 側でも companyId をガード
+	filtered := make([]productbpdom.ProductBlueprint, 0, len(rows))
+	for _, pb := range rows {
+		if pb.CompanyID != cid {
+			continue
+		}
+		filtered = append(filtered, pb)
+	}
+
+	return filtered, nil
+}
 
 // ------------------------------------------------------------
 // Commands
 // ------------------------------------------------------------
 
 // Create creates a ProductBlueprint.
-// NOTE: usecase の公開APIは引き続き ProductBlueprint を受け取るが、repo には CreateInput を渡す。
+// NOTE: usecase の公開APIは ProductBlueprint を受け取り、repo には CreateInput を渡す。
 func (u *ProductBlueprintUsecase) Create(
 	ctx context.Context,
 	v productbpdom.ProductBlueprint,
 ) (productbpdom.ProductBlueprint, error) {
-	cid := usecase.CompanyIDFromContext(ctx)
+	cid := CompanyIDFromContext(ctx)
 	if cid == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
@@ -82,9 +197,12 @@ func (u *ProductBlueprintUsecase) Create(
 	return created, nil
 }
 
-// printed フラグを true（印刷済み）に更新するユースケース
+// MarkPrinted は printed フラグを true（印刷済み）に更新するユースケース。
 // Handler から /product-blueprints/{id}/mark-printed などで呼ばれる想定。
-func (u *ProductBlueprintUsecase) MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
+func (u *ProductBlueprintUsecase) MarkPrinted(
+	ctx context.Context,
+	id string,
+) (productbpdom.ProductBlueprint, error) {
 	if id == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
 	}
@@ -97,27 +215,9 @@ func (u *ProductBlueprintUsecase) MarkPrinted(ctx context.Context, id string) (p
 	return updated, nil
 }
 
-// Save is kept for backward compatibility at the usecase layer.
-// - id が空なら Create として扱う
-// - id があれば Update(Patch) に委譲する
-//
-// NOTE: repo port から Save が消えたため、ここでは repo.Save は呼ばない。
-func (u *ProductBlueprintUsecase) Save(
-	ctx context.Context,
-	v productbpdom.ProductBlueprint,
-) (productbpdom.ProductBlueprint, error) {
-	id := v.ID
-	if id == "" {
-		return u.Create(ctx, v)
-	}
-	return u.Update(ctx, v)
-}
-
 // Update updates a ProductBlueprint using Patch.
 // - companyId 境界は usecase でチェック（id が漏れても越境更新しない）
 // - Update API では modelRefs を受け取らない方針のため、Patch には modelRefs を入れない（= 変更しない）
-//
-// NOTE: repo port から Save が消えたため、repo.Update を呼ぶ。
 func (u *ProductBlueprintUsecase) Update(
 	ctx context.Context,
 	v productbpdom.ProductBlueprint,
@@ -127,7 +227,7 @@ func (u *ProductBlueprintUsecase) Update(
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
 	}
 
-	cid := usecase.CompanyIDFromContext(ctx)
+	cid := CompanyIDFromContext(ctx)
 	if cid == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
@@ -185,26 +285,6 @@ func (u *ProductBlueprintUsecase) Update(
 // Append model refs (no touch updatedAt/updatedBy)
 // ------------------------------------------------------------
 
-// sanitizeModelIDs は入力 modelIds を正規化する。
-// - trim
-// - 空は除外
-// - 重複は除外（順序は保持）
-func sanitizeModelIDs(in []string) []string {
-	seen := make(map[string]struct{}, len(in))
-	out := make([]string, 0, len(in))
-	for _, v := range in {
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-	return out
-}
-
 // AppendModelRefs は productBlueprint 起票後に modelRefs を追記する。
 // 要件:
 // - 入力: modelIds（順序が displayOrder の採番元）
@@ -219,7 +299,7 @@ func (u *ProductBlueprintUsecase) AppendModelRefs(
 	}
 
 	// 境界チェック（companyId が取れないなら弾く）
-	cid := usecase.CompanyIDFromContext(ctx)
+	cid := CompanyIDFromContext(ctx)
 	if cid == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
@@ -254,6 +334,31 @@ func (u *ProductBlueprintUsecase) AppendModelRefs(
 	}
 
 	return updated, nil
+}
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+// sanitizeModelIDs は入力 modelIds を正規化する。
+// - 空は除外
+// - 重複は除外（順序は保持）
+func sanitizeModelIDs(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+
+	for _, v := range in {
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+
+	return out
 }
 
 func cloneCategoryFields(in productbpdom.CategoryFields) productbpdom.CategoryFields {

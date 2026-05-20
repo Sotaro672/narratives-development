@@ -128,6 +128,33 @@ func (f ContentFile) Validate() error {
 	return nil
 }
 
+// ValidateContentFiles validates embedded content files as a domain rule.
+//
+// This belongs to the domain layer because:
+// - ContentFile validation is not Firestore-specific.
+// - Duplicate content file IDs are an aggregate consistency rule.
+// - Repository implementations should only persist already-valid domain data.
+func ValidateContentFiles(files []ContentFile) error {
+	seen := make(map[string]struct{}, len(files))
+
+	for i, f := range files {
+		if f.ID == "" {
+			return fmt.Errorf("%w: contentFiles[%d].id", ErrInvalidContentFile, i)
+		}
+
+		if _, ok := seen[f.ID]; ok {
+			return WrapConflict(nil, fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID))
+		}
+		seen[f.ID] = struct{}{}
+
+		if err := f.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // ============================================================
 // TokenBlueprint
 // ============================================================
@@ -233,7 +260,7 @@ func (t TokenBlueprint) validate() error {
 		return ErrInvalidTokenContentsObjectPath
 	}
 
-	if err := validateContentFiles(t.ContentFiles); err != nil {
+	if err := ValidateContentFiles(t.ContentFiles); err != nil {
 		return err
 	}
 
@@ -254,27 +281,6 @@ func (t TokenBlueprint) validate() error {
 	}
 
 	// IconURL / MetadataURI は、作成直後・既存データ移行・画像未登録状態を考慮し必須にしない。
-	return nil
-}
-
-func validateContentFiles(files []ContentFile) error {
-	seen := make(map[string]struct{}, len(files))
-
-	for i, f := range files {
-		if f.ID == "" {
-			return fmt.Errorf("%w: contentFiles[%d].id", ErrInvalidContentFile, i)
-		}
-
-		if _, ok := seen[f.ID]; ok {
-			return WrapConflict(nil, fmt.Sprintf("contentFiles[%d].id duplicated: %s", i, f.ID))
-		}
-		seen[f.ID] = struct{}{}
-
-		if err := f.Validate(); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -519,17 +525,15 @@ func (t *TokenBlueprint) AddContentFile(f ContentFile) error {
 	if t == nil {
 		return ErrNilTokenBlueprint
 	}
-	if err := f.Validate(); err != nil {
+
+	files := append([]ContentFile{}, t.ContentFiles...)
+	files = append(files, f)
+
+	if err := ValidateContentFiles(files); err != nil {
 		return err
 	}
 
-	for _, existing := range t.ContentFiles {
-		if existing.ID == f.ID {
-			return WrapConflict(nil, "content file id already exists")
-		}
-	}
-
-	t.ContentFiles = append(t.ContentFiles, f)
+	t.ContentFiles = files
 	return nil
 }
 
@@ -537,7 +541,7 @@ func (t *TokenBlueprint) ReplaceContentFiles(files []ContentFile) error {
 	if t == nil {
 		return ErrNilTokenBlueprint
 	}
-	if err := validateContentFiles(files); err != nil {
+	if err := ValidateContentFiles(files); err != nil {
 		return err
 	}
 	t.ContentFiles = files

@@ -8,7 +8,6 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	inspectionapp "narratives/internal/application/inspection"
 	mintapp "narratives/internal/application/mint"
-	pbuc "narratives/internal/application/productBlueprint/usecase"
 	productionapp "narratives/internal/application/production"
 	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
 	uc "narratives/internal/application/usecase"
@@ -40,7 +39,7 @@ type usecases struct {
 	printUC         *uc.PrintUsecase
 
 	productionUC               *productionapp.ProductionUsecase
-	productBlueprintUC         *pbuc.ProductBlueprintUsecase
+	productBlueprintUC         *uc.ProductBlueprintUsecase
 	productBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
 
 	inspectionUC *inspectionapp.InspectionUsecase
@@ -149,7 +148,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		res.nameResolver,
 	)
 
-	productBlueprintUC := pbuc.NewProductBlueprintUsecase(
+	productBlueprintUC := uc.NewProductBlueprintUsecase(
 		r.productBlueprintRepo,
 		r.productBlueprintReviewRepo,
 	)

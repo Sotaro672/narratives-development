@@ -14,17 +14,33 @@ import (
 	avatarstate "narratives/internal/domain/avatarState"
 )
 
-// Firestore implementation of avatarState.Repository
+// Firestore implementation of avatarstate.Repository.
 //
-// Collection design:
-// - collection: avatar_states
-// - docId: avatarId
-// - fields: followerCount, followingCount, postCount, lastActiveAt, updatedAt
-// - subcollections:
-//   - followers/{followerAvatarId}
-//   - following/{followingAvatarId}
+// Firestore schema:
 //
-// - avatarId field is NOT stored in parent document (docId is source of truth).
+// Collection:
+//   - avatar_states/{avatarId}
+//
+// Parent document fields:
+//   - followerCount  int64
+//   - followingCount int64
+//   - postCount      int64
+//   - lastActiveAt   timestamp
+//   - updatedAt      timestamp
+//
+// Parent document does not store avatarId as a field.
+// The parent document ID is the avatarId.
+//
+// Subcollections:
+//   - avatar_states/{avatarId}/followers/{followerAvatarId}
+//   - avatar_states/{avatarId}/following/{followingAvatarId}
+//
+// Follow document fields:
+//   - avatarId    string
+//   - followedAt  timestamp
+//
+// followerCount/followingCount are cached counts.
+// followers/following subcollections are the source of truth when synced.
 type AvatarStateRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -49,53 +65,19 @@ func (r *AvatarStateRepositoryFS) followingCol(avatarID string) *firestore.Colle
 // Upsert
 // ==============================
 
-// Upsert upserts avatar_state for the given AvatarState (docId=avatarId).
-func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error) {
+// Upsert upserts avatar state.
+// The avatar state document ID is avatarID.
+func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, state avatarstate.AvatarState) (avatarstate.AvatarState, error) {
 	if r == nil || r.Client == nil {
-		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: client is nil")
+		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: client is nil")
 	}
 
-	avatarID := s.ID
+	avatarID := state.ID
 	if avatarID == "" {
-		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: id(avatarId) is empty")
+		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: avatarID is empty")
 	}
 
-	now := time.Now().UTC()
-
-	lastActiveAt := s.LastActiveAt
-	if lastActiveAt.IsZero() {
-		lastActiveAt = now
-	}
-
-	updatedAt := now
-	if s.UpdatedAt != nil {
-		updatedAt = s.UpdatedAt.UTC()
-	}
-
-	followerCountValue := s.FollowerCount
-	if s.Followers != nil {
-		followerCountValue = int64Ptr(int64(len(s.Followers)))
-	}
-
-	followingCountValue := s.FollowingCount
-	if s.Following != nil {
-		followingCountValue = int64Ptr(int64(len(s.Following)))
-	}
-
-	data := map[string]any{
-		"lastActiveAt": lastActiveAt.UTC(),
-		"updatedAt":    updatedAt.UTC(),
-	}
-
-	if followerCountValue != nil {
-		data["followerCount"] = *followerCountValue
-	}
-	if followingCountValue != nil {
-		data["followingCount"] = *followingCountValue
-	}
-	if s.PostCount != nil {
-		data["postCount"] = *s.PostCount
-	}
+	data := avatarStateParentData(state)
 
 	if _, err := r.col().Doc(avatarID).Set(ctx, data, firestore.MergeAll); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
@@ -104,63 +86,66 @@ func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, s avatarstate.Avat
 		return avatarstate.AvatarState{}, err
 	}
 
-	if shouldSyncFollowersOnState(s) {
-		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(s.Followers)); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-	}
-	if shouldSyncFollowingOnState(s) {
-		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(s.Following)); err != nil {
+	if shouldReplaceFollowers(state) {
+		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(state.Followers)); err != nil {
 			return avatarstate.AvatarState{}, err
 		}
 	}
 
-	latest, err := r.GetByID(ctx, avatarID)
-	if err != nil {
-		return avatarstate.AvatarState{}, err
+	if shouldReplaceFollowing(state) {
+		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(state.Following)); err != nil {
+			return avatarstate.AvatarState{}, err
+		}
 	}
-	return latest, nil
+
+	return r.GetByAvatarID(ctx, avatarID)
 }
 
 // ==============================
-// GetByID / GetByAvatarID
+// Get
 // ==============================
 
-func (r *AvatarStateRepositoryFS) GetByID(ctx context.Context, id string) (avatarstate.AvatarState, error) {
-	if id == "" {
+// GetByID gets avatar state by avatarID.
+// This method exists for common repository compatibility.
+func (r *AvatarStateRepositoryFS) GetByID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
+	return r.GetByAvatarID(ctx, avatarID)
+}
+
+// GetByAvatarID gets avatar state by avatarID.
+// The avatarID is the parent document ID.
+func (r *AvatarStateRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
+	if avatarID == "" {
 		return avatarstate.AvatarState{}, avatarstate.ErrNotFound
 	}
 
-	doc, err := r.col().Doc(id).Get(ctx)
+	doc, err := r.col().Doc(avatarID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return avatarstate.AvatarState{}, avatarstate.ErrNotFound
 		}
 		return avatarstate.AvatarState{}, err
 	}
-	return r.docToDomain(ctx, doc)
-}
 
-// GetByAvatarID is identical to GetByID (docId=avatarId).
-func (r *AvatarStateRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
-	return r.GetByID(ctx, avatarID)
+	return r.docToDomain(ctx, doc)
 }
 
 // ==============================
 // Exists
 // ==============================
 
-func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if id == "" {
+func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, avatarID string) (bool, error) {
+	if avatarID == "" {
 		return false, nil
 	}
-	_, err := r.col().Doc(id).Get(ctx)
+
+	_, err := r.col().Doc(avatarID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return false, nil
 		}
 		return false, err
 	}
+
 	return true, nil
 }
 
@@ -168,53 +153,19 @@ func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, id string) (bool, 
 // Create / Update / Delete / Save
 // ==============================
 
-// Create creates a document with docId=avatarId.
-// If the document already exists, returns ErrConflict.
-func (r *AvatarStateRepositoryFS) Create(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error) {
+// Create creates avatar state.
+// The avatar state document ID is avatarID.
+func (r *AvatarStateRepositoryFS) Create(ctx context.Context, state avatarstate.AvatarState) (avatarstate.AvatarState, error) {
 	if r == nil || r.Client == nil {
-		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: client is nil")
+		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: client is nil")
 	}
 
-	avatarID := s.ID
+	avatarID := state.ID
 	if avatarID == "" {
-		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: id(avatarId) is empty")
+		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: avatarID is empty")
 	}
 
-	now := time.Now().UTC()
-
-	lastActiveAt := s.LastActiveAt
-	if lastActiveAt.IsZero() {
-		lastActiveAt = now
-	}
-
-	updatedAt := now
-	if s.UpdatedAt != nil {
-		updatedAt = s.UpdatedAt.UTC()
-	}
-
-	followerCountValue := s.FollowerCount
-	if s.Followers != nil {
-		followerCountValue = int64Ptr(int64(len(s.Followers)))
-	}
-
-	followingCountValue := s.FollowingCount
-	if s.Following != nil {
-		followingCountValue = int64Ptr(int64(len(s.Following)))
-	}
-
-	data := map[string]any{
-		"lastActiveAt": lastActiveAt.UTC(),
-		"updatedAt":    updatedAt.UTC(),
-	}
-	if followerCountValue != nil {
-		data["followerCount"] = *followerCountValue
-	}
-	if followingCountValue != nil {
-		data["followingCount"] = *followingCountValue
-	}
-	if s.PostCount != nil {
-		data["postCount"] = *s.PostCount
-	}
+	data := avatarStateParentData(state)
 
 	_, err := r.col().Doc(avatarID).Create(ctx, data)
 	if err != nil {
@@ -224,36 +175,43 @@ func (r *AvatarStateRepositoryFS) Create(ctx context.Context, s avatarstate.Avat
 		return avatarstate.AvatarState{}, err
 	}
 
-	if shouldSyncFollowersOnState(s) {
-		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(s.Followers)); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-	}
-	if shouldSyncFollowingOnState(s) {
-		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(s.Following)); err != nil {
+	if shouldReplaceFollowers(state) {
+		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(state.Followers)); err != nil {
 			return avatarstate.AvatarState{}, err
 		}
 	}
 
-	return r.GetByID(ctx, avatarID)
+	if shouldReplaceFollowing(state) {
+		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(state.Following)); err != nil {
+			return avatarstate.AvatarState{}, err
+		}
+	}
+
+	return r.GetByAvatarID(ctx, avatarID)
 }
 
-func (r *AvatarStateRepositoryFS) Update(ctx context.Context, id string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
-	return r.updateBy(ctx, r.col().Doc(id), patch)
+// Update updates avatar state by avatarID.
+// This method exists for common repository compatibility.
+func (r *AvatarStateRepositoryFS) Update(ctx context.Context, avatarID string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
+	return r.UpdateByAvatarID(ctx, avatarID, patch)
 }
 
+// UpdateByAvatarID updates avatar state by avatarID.
+// The avatarID is the parent document ID.
 func (r *AvatarStateRepositoryFS) UpdateByAvatarID(ctx context.Context, avatarID string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
-	return r.updateBy(ctx, r.col().Doc(avatarID), patch)
-}
-
-func (r *AvatarStateRepositoryFS) updateBy(
-	ctx context.Context,
-	ref *firestore.DocumentRef,
-	patch avatarstate.AvatarStatePatch,
-) (avatarstate.AvatarState, error) {
-	if ref == nil || ref.ID == "" {
+	if avatarID == "" {
 		return avatarstate.AvatarState{}, avatarstate.ErrNotFound
 	}
+
+	return r.updateByAvatarID(ctx, avatarID, patch)
+}
+
+func (r *AvatarStateRepositoryFS) updateByAvatarID(
+	ctx context.Context,
+	avatarID string,
+	patch avatarstate.AvatarStatePatch,
+) (avatarstate.AvatarState, error) {
+	ref := r.col().Doc(avatarID)
 
 	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -262,7 +220,7 @@ func (r *AvatarStateRepositoryFS) updateBy(
 		return avatarstate.AvatarState{}, err
 	}
 
-	var updates []firestore.Update
+	updates := make([]firestore.Update, 0)
 
 	if patch.FollowerCount != nil {
 		updates = append(updates, firestore.Update{
@@ -270,12 +228,14 @@ func (r *AvatarStateRepositoryFS) updateBy(
 			Value: *patch.FollowerCount,
 		})
 	}
+
 	if patch.FollowingCount != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "followingCount",
 			Value: *patch.FollowingCount,
 		})
 	}
+
 	if patch.PostCount != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "postCount",
@@ -285,9 +245,11 @@ func (r *AvatarStateRepositoryFS) updateBy(
 
 	if patch.Followers != nil {
 		followers := cloneFollowRefs(*patch.Followers)
+
 		if err := r.replaceFollowRefs(ctx, ref.Collection("followers"), followers); err != nil {
 			return avatarstate.AvatarState{}, err
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "followerCount",
 			Value: int64(len(followers)),
@@ -296,9 +258,11 @@ func (r *AvatarStateRepositoryFS) updateBy(
 
 	if patch.Following != nil {
 		following := cloneFollowRefs(*patch.Following)
+
 		if err := r.replaceFollowRefs(ctx, ref.Collection("following"), following); err != nil {
 			return avatarstate.AvatarState{}, err
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "followingCount",
 			Value: int64(len(following)),
@@ -312,44 +276,41 @@ func (r *AvatarStateRepositoryFS) updateBy(
 		})
 	}
 
-	now := time.Now().UTC()
+	updatedAt := time.Now().UTC()
 	if patch.UpdatedAt != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: patch.UpdatedAt.UTC(),
-		})
-	} else {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: now,
-		})
+		updatedAt = patch.UpdatedAt.UTC()
 	}
 
-	if len(updates) > 0 {
-		if _, err := ref.Update(ctx, updates); err != nil {
-			if status.Code(err) == codes.NotFound {
-				return avatarstate.AvatarState{}, avatarstate.ErrNotFound
-			}
-			return avatarstate.AvatarState{}, err
-		}
-	}
+	updates = append(updates, firestore.Update{
+		Path:  "updatedAt",
+		Value: updatedAt,
+	})
 
-	snap, err := ref.Get(ctx)
-	if err != nil {
+	if _, err := ref.Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return avatarstate.AvatarState{}, avatarstate.ErrNotFound
 		}
 		return avatarstate.AvatarState{}, err
 	}
-	return r.docToDomain(ctx, snap)
+
+	return r.GetByAvatarID(ctx, avatarID)
 }
 
-func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, id string) error {
-	if id == "" {
+// Delete deletes avatar state by avatarID.
+// This method exists for common repository compatibility.
+func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, avatarID string) error {
+	return r.DeleteByAvatarID(ctx, avatarID)
+}
+
+// DeleteByAvatarID deletes avatar state by avatarID.
+// The avatarID is the parent document ID.
+func (r *AvatarStateRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string) error {
+	if avatarID == "" {
 		return avatarstate.ErrNotFound
 	}
 
-	ref := r.col().Doc(id)
+	ref := r.col().Doc(avatarID)
+
 	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return avatarstate.ErrNotFound
@@ -360,6 +321,7 @@ func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, id string) error {
 	if err := r.deleteAllDocs(ctx, ref.Collection("followers")); err != nil {
 		return err
 	}
+
 	if err := r.deleteAllDocs(ctx, ref.Collection("following")); err != nil {
 		return err
 	}
@@ -368,78 +330,41 @@ func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-// DeleteByAvatarID is identical to Delete (docId=avatarId).
-func (r *AvatarStateRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string) error {
-	return r.Delete(ctx, avatarID)
-}
-
-// Save overwrites full document with docId=avatarId.
-func (r *AvatarStateRepositoryFS) Save(ctx context.Context, s avatarstate.AvatarState, _ *avatarstate.SaveOptions) (avatarstate.AvatarState, error) {
+// Save overwrites the avatar state parent document.
+// The avatar state document ID is avatarID.
+func (r *AvatarStateRepositoryFS) Save(ctx context.Context, state avatarstate.AvatarState, _ *avatarstate.SaveOptions) (avatarstate.AvatarState, error) {
 	if r == nil || r.Client == nil {
-		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: client is nil")
+		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: client is nil")
 	}
 
-	avatarID := s.ID
+	avatarID := state.ID
 	if avatarID == "" {
-		return avatarstate.AvatarState{}, errors.New("avatarState_repository_fs: id(avatarId) is empty")
+		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: avatarID is empty")
 	}
 
-	now := time.Now().UTC()
-
-	lastActiveAt := s.LastActiveAt
-	if lastActiveAt.IsZero() {
-		lastActiveAt = now
-	}
-
-	updatedAt := now
-	if s.UpdatedAt != nil {
-		updatedAt = s.UpdatedAt.UTC()
-	}
-
-	followerCountValue := s.FollowerCount
-	if s.Followers != nil {
-		followerCountValue = int64Ptr(int64(len(s.Followers)))
-	}
-
-	followingCountValue := s.FollowingCount
-	if s.Following != nil {
-		followingCountValue = int64Ptr(int64(len(s.Following)))
-	}
-
-	data := map[string]any{
-		"lastActiveAt": lastActiveAt.UTC(),
-		"updatedAt":    updatedAt.UTC(),
-	}
-	if followerCountValue != nil {
-		data["followerCount"] = *followerCountValue
-	}
-	if followingCountValue != nil {
-		data["followingCount"] = *followingCountValue
-	}
-	if s.PostCount != nil {
-		data["postCount"] = *s.PostCount
-	}
+	data := avatarStateParentData(state)
 
 	if _, err := r.col().Doc(avatarID).Set(ctx, data); err != nil {
 		return avatarstate.AvatarState{}, err
 	}
 
-	if shouldSyncFollowersOnState(s) {
-		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(s.Followers)); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-	}
-	if shouldSyncFollowingOnState(s) {
-		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(s.Following)); err != nil {
+	if shouldReplaceFollowers(state) {
+		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(state.Followers)); err != nil {
 			return avatarstate.AvatarState{}, err
 		}
 	}
 
-	return r.GetByID(ctx, avatarID)
+	if shouldReplaceFollowing(state) {
+		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(state.Following)); err != nil {
+			return avatarstate.AvatarState{}, err
+		}
+	}
+
+	return r.GetByAvatarID(ctx, avatarID)
 }
 
 // ==============================
-// Helpers
+// Mapping
 // ==============================
 
 func (r *AvatarStateRepositoryFS) docToDomain(ctx context.Context, doc *firestore.DocumentSnapshot) (avatarstate.AvatarState, error) {
@@ -450,6 +375,7 @@ func (r *AvatarStateRepositoryFS) docToDomain(ctx context.Context, doc *firestor
 		LastActiveAt   time.Time  `firestore:"lastActiveAt"`
 		UpdatedAt      *time.Time `firestore:"updatedAt"`
 	}
+
 	if err := doc.DataTo(&raw); err != nil {
 		return avatarstate.AvatarState{}, err
 	}
@@ -466,27 +392,20 @@ func (r *AvatarStateRepositoryFS) docToDomain(ctx context.Context, doc *firestor
 		return avatarstate.AvatarState{}, err
 	}
 
-	effectiveFollowerCount := raw.FollowerCount
+	followerCount := raw.FollowerCount
 	if followers != nil {
-		effectiveFollowerCount = int64Ptr(int64(len(followers)))
+		followerCount = int64Ptr(int64(len(followers)))
 	}
 
-	effectiveFollowingCount := raw.FollowingCount
+	followingCount := raw.FollowingCount
 	if following != nil {
-		effectiveFollowingCount = int64Ptr(int64(len(following)))
-	}
-
-	if effectiveFollowerCount == nil && raw.FollowerCount != nil {
-		effectiveFollowerCount = raw.FollowerCount
-	}
-	if effectiveFollowingCount == nil && raw.FollowingCount != nil {
-		effectiveFollowingCount = raw.FollowingCount
+		followingCount = int64Ptr(int64(len(following)))
 	}
 
 	return avatarstate.New(
 		avatarID,
-		effectiveFollowerCount,
-		effectiveFollowingCount,
+		followerCount,
+		followingCount,
 		raw.PostCount,
 		sliceOrEmpty(followers),
 		sliceOrEmpty(following),
@@ -494,6 +413,53 @@ func (r *AvatarStateRepositoryFS) docToDomain(ctx context.Context, doc *firestor
 		raw.UpdatedAt,
 	)
 }
+
+func avatarStateParentData(state avatarstate.AvatarState) map[string]any {
+	now := time.Now().UTC()
+
+	lastActiveAt := state.LastActiveAt
+	if lastActiveAt.IsZero() {
+		lastActiveAt = now
+	}
+
+	updatedAt := now
+	if state.UpdatedAt != nil {
+		updatedAt = state.UpdatedAt.UTC()
+	}
+
+	followerCount := state.FollowerCount
+	if state.Followers != nil {
+		followerCount = int64Ptr(int64(len(state.Followers)))
+	}
+
+	followingCount := state.FollowingCount
+	if state.Following != nil {
+		followingCount = int64Ptr(int64(len(state.Following)))
+	}
+
+	data := map[string]any{
+		"lastActiveAt": lastActiveAt.UTC(),
+		"updatedAt":    updatedAt.UTC(),
+	}
+
+	if followerCount != nil {
+		data["followerCount"] = *followerCount
+	}
+
+	if followingCount != nil {
+		data["followingCount"] = *followingCount
+	}
+
+	if state.PostCount != nil {
+		data["postCount"] = *state.PostCount
+	}
+
+	return data
+}
+
+// ==============================
+// Follow refs
+// ==============================
 
 func (r *AvatarStateRepositoryFS) listFollowRefs(ctx context.Context, col *firestore.CollectionRef) ([]avatarstate.AvatarFollowRef, error) {
 	if col == nil {
@@ -503,7 +469,8 @@ func (r *AvatarStateRepositoryFS) listFollowRefs(ctx context.Context, col *fires
 	iter := col.Documents(ctx)
 	defer iter.Stop()
 
-	out := make([]avatarstate.AvatarFollowRef, 0)
+	refs := make([]avatarstate.AvatarFollowRef, 0)
+
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -517,22 +484,23 @@ func (r *AvatarStateRepositoryFS) listFollowRefs(ctx context.Context, col *fires
 			AvatarID   string    `firestore:"avatarId"`
 			FollowedAt time.Time `firestore:"followedAt"`
 		}
+
 		if err := doc.DataTo(&raw); err != nil {
 			return nil, err
 		}
 
-		avatarID := raw.AvatarID
-		if avatarID == "" {
-			avatarID = doc.Ref.ID
+		followAvatarID := raw.AvatarID
+		if followAvatarID == "" {
+			followAvatarID = doc.Ref.ID
 		}
 
-		out = append(out, avatarstate.AvatarFollowRef{
-			AvatarID:   avatarID,
+		refs = append(refs, avatarstate.AvatarFollowRef{
+			AvatarID:   followAvatarID,
 			FollowedAt: raw.FollowedAt.UTC(),
 		})
 	}
 
-	return out, nil
+	return refs, nil
 }
 
 func (r *AvatarStateRepositoryFS) replaceFollowRefs(
@@ -541,7 +509,7 @@ func (r *AvatarStateRepositoryFS) replaceFollowRefs(
 	refs []avatarstate.AvatarFollowRef,
 ) error {
 	if col == nil {
-		return errors.New("avatarState_repository_fs: subcollection is nil")
+		return errors.New("avatar_state_repository_fs: follow subcollection is nil")
 	}
 
 	if err := r.deleteAllDocs(ctx, col); err != nil {
@@ -553,14 +521,21 @@ func (r *AvatarStateRepositoryFS) replaceFollowRefs(
 	}
 
 	batch := r.Client.Batch()
+
 	for _, ref := range refs {
-		docID := ref.AvatarID
-		if docID == "" {
-			return avatarstate.ErrInvalidFollowingAvatarID
+		followAvatarID := ref.AvatarID
+		if followAvatarID == "" {
+			return errors.New("avatar_state_repository_fs: follow avatarID is empty")
 		}
-		batch.Set(col.Doc(docID), map[string]any{
-			"avatarId":   ref.AvatarID,
-			"followedAt": ref.FollowedAt.UTC(),
+
+		followedAt := ref.FollowedAt
+		if followedAt.IsZero() {
+			followedAt = time.Now().UTC()
+		}
+
+		batch.Set(col.Doc(followAvatarID), map[string]any{
+			"avatarId":   followAvatarID,
+			"followedAt": followedAt.UTC(),
 		})
 	}
 
@@ -583,11 +558,14 @@ func (r *AvatarStateRepositoryFS) deleteAllDocs(ctx context.Context, col *firest
 		if count == 0 {
 			return nil
 		}
+
 		if _, err := batch.Commit(ctx); err != nil {
 			return err
 		}
+
 		batch = r.Client.Batch()
 		count = 0
+
 		return nil
 	}
 
@@ -613,24 +591,31 @@ func (r *AvatarStateRepositoryFS) deleteAllDocs(ctx context.Context, col *firest
 	return commit()
 }
 
-func shouldSyncFollowersOnState(s avatarstate.AvatarState) bool {
-	if s.Followers != nil {
+// ==============================
+// Helpers
+// ==============================
+
+func shouldReplaceFollowers(state avatarstate.AvatarState) bool {
+	if state.Followers != nil {
 		return true
 	}
-	return s.FollowerCount != nil && *s.FollowerCount == 0
+
+	return state.FollowerCount != nil && *state.FollowerCount == 0
 }
 
-func shouldSyncFollowingOnState(s avatarstate.AvatarState) bool {
-	if s.Following != nil {
+func shouldReplaceFollowing(state avatarstate.AvatarState) bool {
+	if state.Following != nil {
 		return true
 	}
-	return s.FollowingCount != nil && *s.FollowingCount == 0
+
+	return state.FollowingCount != nil && *state.FollowingCount == 0
 }
 
 func sliceOrEmpty(in []avatarstate.AvatarFollowRef) []avatarstate.AvatarFollowRef {
 	if len(in) == 0 {
 		return []avatarstate.AvatarFollowRef{}
 	}
+
 	return cloneFollowRefs(in)
 }
 
@@ -640,12 +625,19 @@ func cloneFollowRefs(in []avatarstate.AvatarFollowRef) []avatarstate.AvatarFollo
 	}
 
 	out := make([]avatarstate.AvatarFollowRef, 0, len(in))
+
 	for _, item := range in {
+		followedAt := item.FollowedAt
+		if followedAt.IsZero() {
+			followedAt = time.Now().UTC()
+		}
+
 		out = append(out, avatarstate.AvatarFollowRef{
 			AvatarID:   item.AvatarID,
-			FollowedAt: item.FollowedAt.UTC(),
+			FollowedAt: followedAt.UTC(),
 		})
 	}
+
 	return out
 }
 

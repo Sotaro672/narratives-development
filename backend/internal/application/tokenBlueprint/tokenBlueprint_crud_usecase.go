@@ -62,10 +62,11 @@ func (u *TokenBlueprintCRUDUsecase) Create(
 		return nil, tbdom.ErrInvalidCreatedBy
 	}
 
-	contentFiles, err := validateAndCopyContentFiles(in.ContentFiles)
-	if err != nil {
+	if err := tbdom.ValidateContentFiles(in.ContentFiles); err != nil {
 		return nil, err
 	}
+
+	contentFiles := copyContentFiles(in.ContentFiles)
 
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
 		Name:        in.Name,
@@ -213,9 +214,14 @@ func (u *TokenBlueprintCRUDUsecase) Update(
 		return nil, tbdom.ErrInvalidUpdatedBy
 	}
 
-	contentFiles, err := normalizeContentFilesPtr(in.ContentFiles)
-	if err != nil {
-		return nil, err
+	var contentFiles *[]tbdom.ContentFile
+	if in.ContentFiles != nil {
+		if err := tbdom.ValidateContentFiles(*in.ContentFiles); err != nil {
+			return nil, err
+		}
+
+		copied := copyContentFiles(*in.ContentFiles)
+		contentFiles = &copied
 	}
 
 	now := time.Now().UTC()

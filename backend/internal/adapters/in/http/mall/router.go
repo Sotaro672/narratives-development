@@ -11,7 +11,6 @@ type Deps struct {
 	List             http.Handler
 	Inventory        http.Handler
 	ProductBlueprint http.Handler
-	Model            http.Handler
 	Catalog          http.Handler
 	TokenBlueprint   http.Handler // patch
 
@@ -168,10 +167,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	handleSafe(mux, "/mall/product-blueprints", deps.ProductBlueprint, "ProductBlueprint")
 	handleSafe(mux, "/mall/product-blueprints/", deps.ProductBlueprint, "ProductBlueprint")
 
-	// models (public)
-	handleSafe(mux, "/mall/models", deps.Model, "Model")
-	handleSafe(mux, "/mall/models/", deps.Model, "Model")
-
 	// catalog (public)
 	handleSafe(mux, "/mall/catalog", deps.Catalog, "Catalog")
 	handleSafe(mux, "/mall/catalog/", deps.Catalog, "Catalog")
@@ -228,10 +223,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	handleSafeAuth(mux, "/mall/me/setup-status", deps.SetupStatus, "SetupStatus(me)", auth)
 	handleSafeAuth(mux, "/mall/me/setup-status/", deps.SetupStatus, "SetupStatus(me)", auth)
 
-	// ✅ users (me) - auth only (NO avatar middleware)
-	handleSafeAuth(mux, "/mall/me/users", deps.User, "User(me)", auth)
-	handleSafeAuth(mux, "/mall/me/users/", deps.User, "User(me)", auth)
-
 	// ✅ shipping addresses (me) - auth only (NO avatar middleware)
 	handleSafeAuth(mux, "/mall/me/shipping-addresses", deps.ShippingAddress, "ShippingAddress(me)", auth)
 	handleSafeAuth(mux, "/mall/me/shipping-addresses/", deps.ShippingAddress, "ShippingAddress(me)", auth)
@@ -244,22 +235,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// Auth+Avatar-required routes (/mall/me/**)  ✅ almost all must have avatarId
 	// ------------------------------------------------------------
 
-	// lists (me)
-	handleSafeAuthAvatar(mux, "/mall/me/lists", deps.List, "List(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/lists/", deps.List, "List(me)", auth, avatar)
-
-	// inventories (me)
-	handleSafeAuthAvatar(mux, "/mall/me/inventories", deps.Inventory, "Inventory(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/inventories/", deps.Inventory, "Inventory(me)", auth, avatar)
-
-	// product blueprints (me)
-	handleSafeAuthAvatar(mux, "/mall/me/product-blueprints", deps.ProductBlueprint, "ProductBlueprint(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/product-blueprints/", deps.ProductBlueprint, "ProductBlueprint(me)", auth, avatar)
-
-	// models (me)
-	handleSafeAuthAvatar(mux, "/mall/me/models", deps.Model, "Model(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/models/", deps.Model, "Model(me)", auth, avatar)
-
 	// catalog (me)
 	handleSafeAuthAvatar(mux, "/mall/me/catalog", deps.Catalog, "Catalog(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/catalog/", deps.Catalog, "Catalog(me)", auth, avatar)
@@ -271,10 +246,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// token blueprints (me)
 	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
-
-	// companies / brands (me)
-	handleSafeAuthAvatar(mux, "/mall/me/companies", deps.Company, "Company(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/companies/", deps.Company, "Company(me)", auth, avatar)
 
 	handleSafeAuthAvatar(mux, "/mall/me/brands", deps.Brand, "Brand(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/brands/", deps.Brand, "Brand(me)", auth, avatar)

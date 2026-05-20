@@ -4,7 +4,7 @@ package productBlueprint
 import (
 	"net/http"
 
-	pbuc "narratives/internal/application/productBlueprint/usecase"
+	pbuc "narratives/internal/application/usecase"
 	brand "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
 )

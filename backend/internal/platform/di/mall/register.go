@@ -2,7 +2,6 @@
 package mall
 
 import (
-	"log"
 	"net/http"
 	"os"
 
@@ -37,7 +36,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 			FirebaseAuth: cont.Infra.FirebaseAuth,
 		}
 	} else {
-		log.Printf("[mall.register] WARN: cont.Infra or cont.Infra.FirebaseAuth is nil (user auth will return 503 on protected endpoints)")
 		userAuthMW = &middleware.UserAuthMiddleware{FirebaseAuth: nil}
 	}
 
@@ -51,7 +49,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 				Resolver: cont.MeAvatarRepo,
 			}
 		} else {
-			log.Printf("[mall.register] WARN: cont.MeAvatarRepo is nil (avatar context will return 503 on endpoints requiring avatarId)")
 			avatarCtxMW = &middleware.AvatarContextMiddleware{Resolver: nil}
 		}
 	}
@@ -68,10 +65,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 			tokenBlueprintRepo = repo
 			tokenBlueprintPatchRepo = repo
-
-			log.Printf("[mall.register] tokenBlueprint repo wired (Firestore)")
-		} else {
-			log.Printf("[mall.register] WARN: Firestore client is nil (tokenBlueprint repo unavailable)")
 		}
 	}
 
@@ -81,7 +74,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	listH := notImplemented("List")
 	invH := notImplemented("Inventory")
 	pbH := notImplemented("ProductBlueprint")
-	modelH := notImplemented("Model")
 	catalogH := notImplemented("Catalog")
 	tbH := notImplemented("TokenBlueprint")
 
@@ -126,9 +118,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if cont.ProductBlueprintReviewUC != nil {
 		pbReviewH = mallhandler.NewProductBlueprintReviewHandler(cont.ProductBlueprintReviewUC)
 		catalogH = newCatalogCompositeHandler(catalogH, pbReviewH)
-		log.Printf("[mall.register] productBlueprint review handler wired (catalog composite enabled)")
-	} else {
-		log.Printf("[mall.register] WARN: ProductBlueprintReviewUC is nil (productBlueprint review will return 501)")
 	}
 
 	// Inventory (public read-only)
@@ -156,9 +145,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Brand（/mall/brands/{id}）
 	if cont.BrandQ != nil {
 		brandH = mallhandler.NewMallBrandHandler(cont.BrandQ)
-		log.Printf("[mall.register] brand handler wired")
-	} else {
-		log.Printf("[mall.register] WARN: BrandQ is nil (brand endpoint will return 501)")
 	}
 
 	// Avatar（/mall/avatars）
@@ -173,10 +159,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// - usecase は application service
 	// - repository / avatar / tokenBlueprintRepo / brand service は usecase に注入する
 	if cont.TokenBlueprintReviewRepo != nil {
-		if tokenBlueprintRepo == nil {
-			log.Printf("[mall.register] WARN: tokenBlueprint repo is nil (tokenBlueprint review usecase will have nil tokenBlueprintRepo)")
-		}
-
 		tbReviewUC := usecase.NewTokenBlueprintReviewUsecase(
 			cont.TokenBlueprintReviewRepo,
 			cont.AvatarRepo,
@@ -185,23 +167,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 
 		tbReviewH = mallhandler.NewTokenBlueprintReviewHandler(tbReviewUC)
-
-		log.Printf(
-			"[mall.register] tokenBlueprint review handler wired via usecase (avatarRepo=%t tokenBlueprintRepo=%t brandService=%t)",
-			cont.AvatarRepo != nil,
-			tokenBlueprintRepo != nil,
-			cont.BrandService != nil,
-		)
-	} else {
-		log.Printf("[mall.register] WARN: TokenBlueprintReviewRepo is nil (tokenBlueprint review will return 501)")
 	}
 
 	// 方法A: TokenBlueprint handler 1つだけ登録し、内部で reviews へ振り分ける
 	if tbReviewH != nil && tbReviewH != http.NotFoundHandler() {
 		tbH = mallhandler.NewTokenBlueprintCompositeHandler(tbH, tbReviewH)
-		log.Printf("[mall.register] tokenBlueprint composite handler enabled (tb + reviews)")
-	} else {
-		log.Printf("[mall.register] tokenBlueprint composite handler NOT enabled (reviews handler is nil)")
 	}
 
 	// Core resources
@@ -220,22 +190,17 @@ func Register(mux *http.ServeMux, cont *Container) {
 		hasFS := cont.Infra != nil && cont.Infra.Firestore != nil
 		if hasFS {
 			resolvedRepo = firestoreOut.NewResolvedTokenRepositoryFS(cont.Infra.Firestore)
-			log.Printf("[mall.register] resolvedTokens repo wired (Firestore)")
-		} else {
-			log.Printf("[mall.register] WARN: Firestore client is nil (resolvedTokens cache disabled)")
 		}
 	}
 
 	// Wallet (public)
 	if cont.WalletUC != nil {
 		walletH = mallhandler.NewWalletHandler(cont.WalletUC, resolvedRepo)
-		log.Printf("[mall.register] public wallet handler wired")
 	}
 
 	// Wallet (me)
 	if cont.WalletUC != nil {
 		meWalletH = mallhandler.NewMallMeWalletHandler(cont.WalletUC, resolvedRepo)
-		log.Printf("[mall.register] me wallet handler wired")
 	}
 
 	// /mall/me/avatars
@@ -249,15 +214,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarStateQuery := mallquery.NewAvatarStateQuery(cont.AvatarRepo, avatarStateRepo)
 
 		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarRepo, cont.AvatarUC, avatarStateQuery)
-		log.Printf("[mall.register] me avatars handler wired (repo+avatarUC+avatarStateQuery)")
-	} else {
-		log.Printf(
-			"[mall.register] WARN: MeAvatars not wired (meAvatarRepo=%t avatarUC=%t avatarRepo=%t firestore=%t) (MeAvatars will return 501)",
-			cont.MeAvatarRepo != nil,
-			cont.AvatarUC != nil,
-			cont.AvatarRepo != nil,
-			cont.Infra != nil && cont.Infra.Firestore != nil,
-		)
 	}
 
 	// ------------------------------------------------------------
@@ -265,14 +221,10 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ------------------------------------------------------------
 	{
 		hasFS := cont.Infra != nil && cont.Infra.Firestore != nil
-		log.Printf("[mall.register] setup-status wiring start firestore=%t", hasFS)
 
 		if hasFS {
 			repo := firestoreMall.NewSetupStatusRepoFirestore(cont.Infra.Firestore)
 			setupStatusH = mallhandler.NewSetupStatusHandler(repo)
-			log.Printf("[mall.register] setup-status handler wired (Firestore)")
-		} else {
-			log.Printf("[mall.register] WARN: Firestore client is nil (setup-status will return 501)")
 		}
 	}
 
@@ -291,20 +243,16 @@ func Register(mux *http.ServeMux, cont *Container) {
 				cont.OrderQ,
 				cont.PaymentFlowUC,
 			)
-			log.Printf("[mall.register] payment handler wired with PaymentFlowUC")
 		} else {
 			payH = mallhandler.NewPaymentHandlerWithOrderQuery(cont.PaymentUC, cont.OrderQ)
-			log.Printf("[mall.register] WARN: PaymentFlowUC is nil; payment handler uses legacy PaymentUsecase.Create path")
 		}
 	}
 
 	if cont.OrderUC != nil {
 		if cont.HistoryQ != nil {
 			orderH = mallhandler.NewOrderHandlerWithHistoryQuery(cont.OrderUC, cont.HistoryQ)
-			log.Printf("[mall.register] order handler wired with HistoryQ")
 		} else {
 			orderH = mallhandler.NewOrderHandler(cont.OrderUC)
-			log.Printf("[mall.register] WARN: HistoryQ is nil; order handler uses plain OrderUsecase.List response")
 		}
 	}
 
@@ -323,37 +271,21 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		previewPublicH = mallhandler.NewPreviewHandler(cont.PreviewQ, opts...)
 		previewMeH = mallhandler.NewPreviewMeHandler(cont.PreviewQ, opts...)
-
-		log.Printf(
-			"[mall.register] preview handlers wired (public+me) ownerQ=%t tbRepo=%t nameResolver=%t",
-			cont.OwnerResolveQ != nil,
-			tokenBlueprintPatchRepo != nil,
-			cont.NameResolver != nil,
-		)
 	}
 
 	// Order scan verify
 	if cont.OrderScanVerifyQ != nil {
 		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(cont.OrderScanVerifyQ)
-		log.Printf("[mall.register] order scan verify handler wired")
-	} else {
-		log.Printf("[mall.register] WARN: OrderScanVerifyQ is nil (order scan verify will return 501)")
 	}
 
 	// Order scan transfer
 	if cont.TransferUC != nil {
 		orderScanTransferH = mallhandler.NewTransferHandler(cont.TransferUC)
-		log.Printf("[mall.register] order scan transfer handler wired (TransferUC=%t)", cont.TransferUC != nil)
-	} else {
-		log.Printf("[mall.register] WARN: TransferUC is nil (order scan transfer will return 501)")
 	}
 
 	// Share transfer
 	if cont.ShareTransferUC != nil {
 		shareTransferH = mallhandler.NewShareTransferHandler(cont.ShareTransferUC)
-		log.Printf("[mall.register] share transfer handler wired (ShareTransferUC=%t)", cont.ShareTransferUC != nil)
-	} else {
-		log.Printf("[mall.register] WARN: ShareTransferUC is nil (share transfer will return 501)")
 	}
 
 	// SignIn: keep a stable no-op endpoint
@@ -369,7 +301,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		Inventory:        invH,
 		ProductBlueprint: pbH,
-		Model:            modelH,
 		Catalog:          catalogH,
 		TokenBlueprint:   tbH,
 
@@ -413,21 +344,17 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarCtxMW.Handler,
 	)
 
-	log.Printf("[boot] mall routes registered")
-
 	// ----------------------------
 	// Webhooks (no auth)
 	// ----------------------------
 	if cont.PaymentUC != nil {
 		secret := os.Getenv("STRIPE_WEBHOOK_SECRET")
 		if secret == "" {
-			log.Printf("[boot] mall stripe webhook NOT registered: STRIPE_WEBHOOK_SECRET is empty")
 			return
 		}
 
 		stripeWH := mallwebhook.NewStripeWebhookHandler(cont.PaymentUC, secret)
 		mux.Handle(StripeWebhookPath, stripeWH)
 		mux.Handle(StripeWebhookPath+"/", stripeWH)
-		log.Printf("[boot] mall stripe webhook registered path=%s", StripeWebhookPath)
 	}
 }

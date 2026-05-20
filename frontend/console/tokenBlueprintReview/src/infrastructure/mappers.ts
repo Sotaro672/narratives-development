@@ -12,14 +12,9 @@ import type {
 } from "../domain/entity";
 
 import {
-  ReactionComment,
   validateReactionType,
   validateAuthorType,
   validateActorType,
-  AuthorTypeAvatar,
-  AuthorTypeBrand,
-  ActorTypeAvatar,
-  ActorTypeBrand,
 } from "../domain/entity";
 
 import type {
@@ -29,139 +24,88 @@ import type {
   ApiTokenBlueprintReviewAggregate,
 } from "./apiTypes";
 
-function toOptionalString(v: unknown): string | undefined {
-  return v != null && String(v) !== "" ? String(v) : undefined;
+function resolveCommentAuthorType(authorType: AuthorType): AuthorType {
+  validateAuthorType(authorType);
+  return authorType;
 }
 
-function resolveCommentAuthorType(a: ApiComment): AuthorType {
-  const raw = toOptionalString(a?.AuthorType);
-
-  if (raw === AuthorTypeAvatar || raw === AuthorTypeBrand) {
-    validateAuthorType(raw);
-    return raw;
-  }
-
-  return AuthorTypeAvatar;
+function resolveActorType(actorType: ActorType): ActorType {
+  validateActorType(actorType);
+  return actorType;
 }
 
-function resolveActorType(raw: unknown): ActorType {
-  const v = toOptionalString(raw);
-
-  if (v === ActorTypeAvatar || v === ActorTypeBrand) {
-    validateActorType(v);
-    return v;
-  }
-
-  return ActorTypeAvatar;
+function resolveReactionType(type: ReactionType): ReactionType {
+  validateReactionType(type);
+  return type;
 }
 
 export function fromApiTokenBlueprintReviewAggregate(
   a: ApiTokenBlueprintReviewAggregate,
 ): TokenBlueprintReviewAggregate {
-  const raw = a as ApiTokenBlueprintReviewAggregate & {
-    PinnedCommentID?: string;
-    pinnedCommentId?: string;
-  };
-
   return {
-    tokenBlueprintId: String(a?.TokenBlueprintID ?? ""),
-    tokenBlueprintName:
-      a?.tokenBlueprintName != null && String(a.tokenBlueprintName) !== ""
-        ? String(a.tokenBlueprintName)
-        : undefined,
-    brandName:
-      a?.brandName != null && String(a.brandName) !== ""
-        ? String(a.brandName)
-        : undefined,
-    likeCount: Number(a?.LikeCount ?? 0),
-    dislikeCount: Number(a?.DislikeCount ?? 0),
-    topLevelCommentCount: Number(a?.TopLevelCommentCount ?? 0),
-    totalCommentCount: Number(a?.TotalCommentCount ?? 0),
-    pinnedCommentId: String(raw?.PinnedCommentID ?? raw?.pinnedCommentId ?? ""),
-    createdAt: String(a?.CreatedAt ?? ""),
-    updatedAt: String(a?.UpdatedAt ?? ""),
+    tokenBlueprintId: a.TokenBlueprintID,
+    tokenBlueprintName: a.tokenBlueprintName,
+    brandName: a.brandName,
+    likeCount: a.LikeCount,
+    dislikeCount: a.DislikeCount,
+    topLevelCommentCount: a.TopLevelCommentCount,
+    totalCommentCount: a.TotalCommentCount,
+    pinnedCommentId: a.PinnedCommentID,
+    createdAt: a.CreatedAt,
+    updatedAt: a.UpdatedAt,
   };
 }
 
 export function fromApiTokenBlueprintReaction(
   a: ApiTokenBlueprintReaction,
 ): TokenBlueprintReaction {
-  const type = (a?.Type ?? ReactionComment) as ReactionType;
-  validateReactionType(type);
-
-  const raw = a as ApiTokenBlueprintReaction & {
-    ActorID?: string;
-    ActorType?: string;
-    actorId?: string;
-    actorType?: string;
-    AvatarID?: string;
-  };
-
   return {
-    tokenBlueprintId: String(a?.TokenBlueprintID ?? ""),
-    actorId: String(raw?.ActorID ?? raw?.actorId ?? raw?.AvatarID ?? ""),
-    actorType: resolveActorType(raw?.ActorType ?? raw?.actorType),
-    type,
-    createdAt: String(a?.CreatedAt ?? ""),
-    updatedAt: String(a?.UpdatedAt ?? ""),
+    tokenBlueprintId: a.TokenBlueprintID,
+    actorId: a.ActorID,
+    actorType: resolveActorType(a.ActorType),
+    type: resolveReactionType(a.Type),
+    createdAt: a.CreatedAt,
+    updatedAt: a.UpdatedAt,
   };
 }
 
 export function fromApiComment(a: ApiComment): Comment {
-  const authorType = resolveCommentAuthorType(a);
-
-  const raw = a as ApiComment & {
-    IsOwnerComment?: boolean;
-    isOwnerComment?: boolean;
-  };
-
   return {
-    commentId: String(a?.CommentID ?? ""),
-    tokenBlueprintId: String(a?.TokenBlueprintID ?? ""),
-    parentCommentId: String(a?.ParentCommentID ?? ""),
-    rootCommentId: String(a?.RootCommentID ?? ""),
-    depth: Number(a?.Depth ?? 0),
+    commentId: a.CommentID,
+    tokenBlueprintId: a.TokenBlueprintID,
+    parentCommentId: a.ParentCommentID,
+    rootCommentId: a.RootCommentID,
+    depth: a.Depth,
 
-    authorId: String(a?.AuthorID ?? ""),
-    authorType,
-    isOwnerComment: Boolean(raw?.IsOwnerComment ?? raw?.isOwnerComment ?? false),
+    authorId: a.AuthorID,
+    authorType: resolveCommentAuthorType(a.AuthorType),
+    isOwnerComment: a.IsOwnerComment,
 
-    body: String(a?.Body ?? ""),
-    likeCount: Number(a?.LikeCount ?? 0),
-    dislikeCount: Number(a?.DislikeCount ?? 0),
-    childCount: Number(a?.ChildCount ?? 0),
-    deleted: Boolean(a?.Deleted ?? false),
+    body: a.Body,
+    likeCount: a.LikeCount,
+    dislikeCount: a.DislikeCount,
+    childCount: a.ChildCount,
+    deleted: a.Deleted,
 
-    createdAt: String(a?.CreatedAt ?? ""),
-    updatedAt: String(a?.UpdatedAt ?? ""),
+    createdAt: a.CreatedAt,
+    updatedAt: a.UpdatedAt,
 
-    authorAvatarName: toOptionalString(a?.AuthorAvatarName),
-    authorAvatarIcon: toOptionalString(a?.AuthorAvatarIcon),
+    authorAvatarName: a.AuthorAvatarName,
+    authorAvatarIcon: a.AuthorAvatarIcon,
 
-    brandName: toOptionalString(a?.BrandName),
-    brandIcon: toOptionalString(a?.BrandIcon),
+    brandName: a.BrandName,
+    brandIcon: a.BrandIcon,
   };
 }
 
 export function fromApiCommentReaction(a: ApiCommentReaction): CommentReaction {
-  const type = (a?.Type ?? ReactionComment) as ReactionType;
-  validateReactionType(type);
-
-  const raw = a as ApiCommentReaction & {
-    ActorID?: string;
-    ActorType?: string;
-    actorId?: string;
-    actorType?: string;
-    AvatarID?: string;
-  };
-
   return {
-    tokenBlueprintId: String(a?.TokenBlueprintID ?? ""),
-    commentId: String(a?.CommentID ?? ""),
-    actorId: String(raw?.ActorID ?? raw?.actorId ?? raw?.AvatarID ?? ""),
-    actorType: resolveActorType(raw?.ActorType ?? raw?.actorType),
-    type,
-    createdAt: String(a?.CreatedAt ?? ""),
-    updatedAt: String(a?.UpdatedAt ?? ""),
+    tokenBlueprintId: a.TokenBlueprintID,
+    commentId: a.CommentID,
+    actorId: a.ActorID,
+    actorType: resolveActorType(a.ActorType),
+    type: resolveReactionType(a.Type),
+    createdAt: a.CreatedAt,
+    updatedAt: a.UpdatedAt,
   };
 }

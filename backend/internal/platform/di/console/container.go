@@ -10,7 +10,6 @@ import (
 
 	inspectionapp "narratives/internal/application/inspection"
 	mintapp "narratives/internal/application/mint"
-	pbuc "narratives/internal/application/productBlueprint/usecase"
 	productionapp "narratives/internal/application/production"
 
 	query "narratives/internal/application/query/console"
@@ -80,7 +79,7 @@ type Container struct {
 	PermissionUC               *uc.PermissionUsecase
 	PrintUC                    *uc.PrintUsecase
 	ProductionUC               *productionapp.ProductionUsecase
-	ProductBlueprintUC         *pbuc.ProductBlueprintUsecase
+	ProductBlueprintUC         *uc.ProductBlueprintUsecase
 	ProductBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
 	ShippingAddressUC          *uc.ShippingAddressUsecase
 	TokenUC                    *uc.TokenUsecase

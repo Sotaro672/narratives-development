@@ -38,12 +38,27 @@ export function mapCatalogResponse(raw: Partial<CatalogResponse>): CatalogRespon
       companyId: raw.productBlueprint.companyId ?? "",
       brandName: raw.productBlueprint.brandName ?? "",
       companyName: raw.productBlueprint.companyName ?? "",
-      itemType: raw.productBlueprint.itemType ?? "",
-      fit: raw.productBlueprint.fit ?? "",
-      material: raw.productBlueprint.material ?? "",
       printed: Boolean(raw.productBlueprint.printed),
-      qualityAssurance: raw.productBlueprint.qualityAssurance ?? null,
       productIdTagType: raw.productBlueprint.productIdTagType ?? "",
+
+      productBlueprintCategoryId:
+        raw.productBlueprint.productBlueprintCategoryId ?? null,
+      productBlueprintCategoryCode:
+        raw.productBlueprint.productBlueprintCategoryCode ?? null,
+      productBlueprintCategoryKind:
+        raw.productBlueprint.productBlueprintCategoryKind ?? null,
+      productBlueprintCategoryNameEn:
+        raw.productBlueprint.productBlueprintCategoryNameEn ?? null,
+      productBlueprintCategoryNameJa:
+        raw.productBlueprint.productBlueprintCategoryNameJa ?? null,
+      productBlueprintCategoryPath: Array.isArray(
+        raw.productBlueprint.productBlueprintCategoryPath,
+      )
+        ? raw.productBlueprint.productBlueprintCategoryPath
+        : null,
+
+      categoryFields: raw.productBlueprint.categoryFields ?? null,
+
       modelRefs: Array.isArray(raw.productBlueprint.modelRefs)
         ? raw.productBlueprint.modelRefs
         : [],

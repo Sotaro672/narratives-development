@@ -2,8 +2,13 @@
 // Raw API DTOs returned by backend.
 //
 // These represent backend JSON as-is.
+// Firestore / backend response field names are treated as the source of truth.
 
-import type { ReactionType, ActorType } from "../domain/entity";
+import type {
+  ReactionType,
+  ActorType,
+  AuthorType,
+} from "../domain/entity";
 
 export type ApiTokenBlueprintReviewAggregate = {
   TokenBlueprintID: string;
@@ -11,21 +16,19 @@ export type ApiTokenBlueprintReviewAggregate = {
   DislikeCount: number;
   TopLevelCommentCount: number;
   TotalCommentCount: number;
-  PinnedCommentID?: string;
+  PinnedCommentID: string;
   CreatedAt: string;
   UpdatedAt: string;
 
-  // backend may attach these in camelCase
-  tokenBlueprintName?: string;
-  brandName?: string;
-  pinnedCommentId?: string;
+  // GET /token-blueprint-reviews returns resolved display names in camelCase.
+  tokenBlueprintName: string;
+  brandName: string;
 };
 
 export type ApiTokenBlueprintReaction = {
   TokenBlueprintID: string;
-  ActorID?: string;
-  ActorType?: ActorType;
-  AvatarID?: string;
+  ActorID: string;
+  ActorType: ActorType;
   Type: ReactionType;
   CreatedAt: string;
   UpdatedAt: string;
@@ -39,9 +42,8 @@ export type ApiComment = {
   Depth: number;
 
   AuthorID: string;
-  AuthorType: "avatar" | "brand";
-  IsOwnerComment?: boolean;
-  isOwnerComment?: boolean;
+  AuthorType: AuthorType;
+  IsOwnerComment: boolean;
 
   AuthorAvatarName?: string;
   AuthorAvatarIcon?: string;
@@ -62,9 +64,8 @@ export type ApiComment = {
 export type ApiCommentReaction = {
   TokenBlueprintID: string;
   CommentID: string;
-  ActorID?: string;
-  ActorType?: ActorType;
-  AvatarID?: string;
+  ActorID: string;
+  ActorType: ActorType;
   Type: ReactionType;
   CreatedAt: string;
   UpdatedAt: string;
