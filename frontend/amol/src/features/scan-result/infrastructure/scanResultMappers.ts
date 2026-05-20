@@ -541,6 +541,8 @@ export function mallScanTransferResponseFromJson(
           .map(mallTransferFlowStepFromJson)
           .filter((v): v is MallTransferFlowStep => Boolean(v))
       : [],
+    fromDisplayName: trimText(j.fromDisplayName),
+    toDisplayName: trimText(j.toDisplayName),
   };
 }
 

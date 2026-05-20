@@ -184,25 +184,41 @@ frontend/
 │  │  │  └─ types.ts
 │  │  │
 │  │  ├─ scan-result/
-│  │  │  ├─ api/
+│  │  │  ├─ application/
+│  │  │  │  ├─ index.ts
+│  │  │  │  ├─ scanAlcoholInfoFactory.ts
+│  │  │  │  ├─ scanNavigationFactory.ts
+│  │  │  │  ├─ scanOwnedWalletUsecase.ts
+│  │  │  │  ├─ scanPageViewModelFactory.ts
+│  │  │  │  ├─ scanProductInfoFactory.ts
+│  │  │  │  ├─ scanReviewUsecase.ts
+│  │  │  │  ├─ scanTokenResolveUsecase.ts
+│  │  │  │  ├─ scanTransferUsecase.ts
+│  │  │  │  └─ scanTransferViewModelFactory.ts
+│  │  │  │
+│  │  │  ├─ infrastructure/
 │  │  │  │  ├─ scanResultApi.ts
 │  │  │  │  ├─ scanResultHttp.ts
 │  │  │  │  ├─ scanResultMappers.ts
 │  │  │  │  └─ scanResultSolanaApi.ts
-│  │  │  ├─ components/
-│  │  │  │  ├─ ScanResultCard.tsx
-│  │  │  │  ├─ ScanResultProductSection.tsx
-│  │  │  │  ├─ ScanResultTokenSection.tsx
-│  │  │  │  ├─ ScanResultTransferHistory.tsx
-│  │  │  │  ├─ ScanResultReviewForm.tsx
-│  │  │  │  └─ ScanResultReviewList.tsx
-│  │  │  ├─ hooks/
-│  │  │  │  └─ useScanResultPage.ts
+│  │  │  │
+│  │  │  ├─ presentation/
+│  │  │  │  ├─ components/
+│  │  │  │  │  ├─ ScanResultCard.tsx
+│  │  │  │  │  ├─ ScanResultProductSection.tsx
+│  │  │  │  │  ├─ ScanResultReviewForm.tsx
+│  │  │  │  │  ├─ ScanResultReviewList.tsx
+│  │  │  │  │  ├─ ScanResultTokenSection.tsx
+│  │  │  │  │  └─ ScanResultTransferHistory.tsx
+│  │  │  │  └─ hooks/
+│  │  │  │     └─ useScanResultPage.ts
+│  │  │  │
 │  │  │  ├─ utils/
 │  │  │  │  ├─ format.ts
-│  │  │  │  ├─ media.ts
 │  │  │  │  ├─ guards.ts
+│  │  │  │  ├─ media.ts
 │  │  │  │  └─ productBlueprint.ts
+│  │  │  │
 │  │  │  └─ types.ts
 │  │  │
 │  │  ├─ token-commnet/

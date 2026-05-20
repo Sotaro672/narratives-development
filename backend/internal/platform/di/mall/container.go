@@ -474,7 +474,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 				avatarWalletResolver,
 				secrets,
 				executor,
-			).WithInventoryRepo(inventoryRepo)
+			).
+				WithInventoryRepo(inventoryRepo).
+				WithTransferDisplayResolvers(brandSvc, avatarRepo)
 		} else {
 			c.TransferUC = nil
 		}

@@ -1,10 +1,10 @@
 // frontend/amol/src/features/catalog/infrastructure/catalogCartRepository.ts
 
+import { getFirebaseIdToken } from "../../../lib/authToken";
 import type {
   CatalogModelVariation,
   CatalogResponse,
 } from "../types";
-import { getFirebaseIdToken } from "./authTokenProvider";
 import { readResponseErrorMessage } from "./httpErrorReader";
 
 export async function addCatalogItemToCart(args: {
@@ -17,13 +17,14 @@ export async function addCatalogItemToCart(args: {
 
   const inventoryId = catalog.inventory.id || catalog.list.inventoryId;
   const idToken = await getFirebaseIdToken();
+  const base = apiBaseUrl.replace(/\/+$/, "");
 
   const searchParams = new URLSearchParams({
     avatarId,
   });
 
   const response = await fetch(
-    `${apiBaseUrl}/mall/me/cart/items?${searchParams.toString()}`,
+    `${base}/mall/me/cart/items?${searchParams.toString()}`,
     {
       method: "POST",
       headers: {

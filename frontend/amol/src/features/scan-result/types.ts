@@ -221,6 +221,13 @@ export type MallScanTransferResponse = {
   updatedToAddress: boolean;
   mintAddress: string;
   flow: MallTransferFlowStep[];
+
+  /**
+   * Backend-resolved display names for transfer result.
+   * Frontend should display these instead of wallet addresses.
+   */
+  fromDisplayName: string;
+  toDisplayName: string;
 };
 
 export type CatalogReview = {

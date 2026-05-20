@@ -5,8 +5,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   createOwnedTokenContentsPath,
   createScanResultPageViewModel,
-  createTransferredTokenContentsPath,
-  findFirstPreviewableTokenFile,
+  createScanTransferSuccessModalViewModel,
   loadScanReviews,
   resolveScanOwnedWalletState,
   resolveTransferredTokenWithRetry,
@@ -138,6 +137,11 @@ export function useScanResultPage() {
   const [authAvailable, setAuthAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferModalError, setTransferModalError] = useState<string | null>(
+    null,
+  );
+
   const autoTransferTriggeredRef = useRef(false);
   const mountedRef = useRef(true);
   const loadingProductIdRef = useRef("");
@@ -196,6 +200,25 @@ export function useScanResultPage() {
     });
   }, [chainTransfers, previewState, state]);
 
+  const transferSuccessModalViewModel = useMemo(() => {
+    return createScanTransferSuccessModalViewModel({
+      result: transferResult,
+      transferredMintAddress,
+      token: previewState?.raw.token ?? null,
+      tokenBlueprintPatch: previewState?.tokenBlueprintPatch ?? null,
+    });
+  }, [
+    previewState?.raw.token,
+    previewState?.tokenBlueprintPatch,
+    transferResult,
+    transferredMintAddress,
+  ]);
+
+  const closeTransferModal = useCallback(() => {
+    setTransferModalOpen(false);
+    setTransferModalError(null);
+  }, []);
+
   const runAutoTransferIfNeeded = useCallback(
     async (pid: string, headers?: HeadersInit) => {
       const normalizedProductId = pid.trim();
@@ -238,6 +261,11 @@ export function useScanResultPage() {
 
         setTransferResult(result.transferResult);
         setVerifyResult(verifyResultFromTransferResult(result.transferResult));
+
+        if (result.transferResult.matched) {
+          setTransferModalError(null);
+          setTransferModalOpen(true);
+        }
       } catch {
         // Auto transfer is best-effort.
         // Backend owns verification / ownership / purchase checks.
@@ -302,6 +330,8 @@ export function useScanResultPage() {
     setTransferResult(null);
     setTransferredMintOverride("");
     setResolvedTransferredToken(null);
+    setTransferModalOpen(false);
+    setTransferModalError(null);
     setReviews(null);
     setReviewsError(null);
     setOwnedByWallet(null);
@@ -500,32 +530,25 @@ export function useScanResultPage() {
   }, [resolvingTransferredToken, transferredMintAddress]);
 
   const openContentsAfterResolve = useCallback(async () => {
-    const mintAddress = transferredMintAddress.trim();
-
-    if (!mintAddress) {
+    if (!transferSuccessModalViewModel) {
       return;
     }
 
-    const resolved = await resolveTransferredTokenWithoutSync();
-    const file = findFirstPreviewableTokenFile(resolved);
+    const searchParams = new URLSearchParams({
+      mintAddress: transferSuccessModalViewModel.mintAddress,
+      productId: transferSuccessModalViewModel.productId,
+      brandId: transferSuccessModalViewModel.brandId,
+      brandName: transferSuccessModalViewModel.brandName,
+      metadataUri: transferSuccessModalViewModel.metadataUri,
+      tokenBlueprintId: transferSuccessModalViewModel.tokenBlueprintId,
+      tokenName: transferSuccessModalViewModel.tokenName,
+      tokenIconUrl: transferSuccessModalViewModel.tokenIconUrl,
+    });
 
-    if (file?.viewUri) {
-      window.open(file.viewUri, "_blank", "noopener,noreferrer");
-      return;
-    }
+    closeTransferModal();
 
-    navigate(
-      createTransferredTokenContentsPath({
-        mintAddress,
-        productId,
-      }),
-    );
-  }, [
-    navigate,
-    productId,
-    resolveTransferredTokenWithoutSync,
-    transferredMintAddress,
-  ]);
+    navigate(`/contents?${searchParams.toString()}`);
+  }, [closeTransferModal, navigate, transferSuccessModalViewModel]);
 
   const openTokenContentsByMintAddress = useCallback(
     async (mintAddress: string) => {
@@ -615,6 +638,7 @@ export function useScanResultPage() {
 
     setBusyTransfer(true);
     setError(null);
+    setTransferModalError(null);
 
     try {
       const headers = await getAuthHeadersOrUndefined();
@@ -624,21 +648,39 @@ export function useScanResultPage() {
         return;
       }
 
-      const result = await transferScanPurchased({
-        productId: pid,
-        headers,
-      });
+      const result = await runScanAutoTransfer(
+        {
+          fetchMeWallet,
+          transferScanPurchased,
+        },
+        {
+          productId: pid,
+          headers,
+        },
+      );
 
-      const transferMint = result.mintAddress.trim();
-
-      if (transferMint) {
-        setTransferredMintOverride(transferMint);
+      if (result.transferredMintAddress) {
+        setTransferredMintOverride(result.transferredMintAddress);
       }
 
-      setTransferResult(result);
-      setVerifyResult(verifyResultFromTransferResult(result));
+      setTransferResult(result.transferResult);
+      setVerifyResult(verifyResultFromTransferResult(result.transferResult));
+
+      if (result.transferResult.matched) {
+        setTransferModalError(null);
+        setTransferModalOpen(true);
+      } else {
+        setTransferModalError(
+          "この商品は現在のアバターに紐づく受け取り対象ではありません。",
+        );
+        setTransferModalOpen(true);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+
+      setError(message);
+      setTransferModalError(message);
+      setTransferModalOpen(true);
     } finally {
       if (mountedRef.current) {
         setBusyTransfer(false);
@@ -707,6 +749,7 @@ export function useScanResultPage() {
   return {
     state,
     viewModel,
+    transferSuccessModalViewModel,
     displayTransfers,
     load,
     loadReviews,
@@ -717,5 +760,8 @@ export function useScanResultPage() {
     prevReviewsPage,
     openContentsAfterResolve,
     openTokenContentsByMintAddress,
+    transferModalOpen,
+    transferModalError,
+    closeTransferModal,
   };
 }

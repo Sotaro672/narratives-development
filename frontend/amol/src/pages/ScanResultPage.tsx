@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 
 import Layout from "../components/layout/Layout";
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
+import ScanTransferSuccessModal from "../features/scan-result/presentation/components/ScanTransferSuccessModal";
 import { useMobilePortrait } from "../features/catalog/presentation/hooks/useMobilePortrait";
 import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
 
@@ -21,7 +22,12 @@ export default function ScanResultPage() {
     submitReview,
     nextReviewsPage,
     prevReviewsPage,
+    openContentsAfterResolve,
     openTokenContentsByMintAddress,
+    transferModalOpen,
+    transferModalError,
+    closeTransferModal,
+    transferSuccessModalViewModel,
   } = useScanResultPage();
 
   const handleSubmitReview = useCallback(async () => {
@@ -82,6 +88,16 @@ export default function ScanResultPage() {
         onReviewRatingChange={setReviewRating}
         onSubmitReviewForm={handleSubmitReview}
         hideReviewForm={isMobilePortrait}
+      />
+
+      <ScanTransferSuccessModal
+        open={transferModalOpen}
+        loading={state.busyTransfer || state.resolvingTransferredToken}
+        error={transferModalError}
+        viewModel={transferSuccessModalViewModel}
+        resolvedContentsReady={Boolean(state.resolvedTransferredToken)}
+        onClose={closeTransferModal}
+        onOpenContents={openContentsAfterResolve}
       />
     </Layout>
   );

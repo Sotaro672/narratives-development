@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	mallquery "narratives/internal/application/query/mall"
+	branddom "narratives/internal/domain/brand"
 	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
@@ -18,19 +20,10 @@ import (
 // ============================================================
 
 // ScanVerifier verifies whether scan(productId) matches purchased(untransferred) items for avatar.
-// application/query/mall の OrderScanVerifyQuery を DI で差し込む想定。
+// 案A: application/query/mall の OrderScanVerifyQuery を直接 DI する。
+// OrderScanVerifyQuery は VerifyScanPurchasedByAvatarID を実装しているため、adapter は不要。
 type ScanVerifier interface {
-	Verify(ctx context.Context, avatarID, productID string) (ScanVerifyResult, error)
-}
-
-type ScanVerifyResult struct {
-	AvatarID  string
-	ProductID string
-
-	ScannedModelID          string
-	ScannedTokenBlueprintID string
-
-	Matched bool
+	VerifyScanPurchasedByAvatarID(ctx context.Context, avatarID, productID string) (mallquery.VerifyResult, error)
 }
 
 // OrderRepoForTransfer is the minimal port needed for transfer orchestration.
@@ -99,6 +92,16 @@ type AvatarWalletResolver interface {
 	ResolveAvatarWalletAddress(ctx context.Context, avatarID string) (string, error)
 }
 
+// BrandDisplayResolver resolves brand display info for transfer result.
+type BrandDisplayResolver interface {
+	GetNameIconByID(ctx context.Context, brandID string) (branddom.NameIcon, error)
+}
+
+// AvatarDisplayResolver resolves avatar display info for transfer result.
+type AvatarDisplayResolver interface {
+	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+}
+
 // WalletSecretProvider provides a signing capability for a brand.
 type WalletSecretProvider interface {
 	GetBrandSigner(ctx context.Context, brandID string) (any, error)
@@ -158,6 +161,9 @@ type TransferUsecase struct {
 	brandWallet  BrandWalletResolver
 	avatarWallet AvatarWalletResolver
 
+	brandDisplay  BrandDisplayResolver
+	avatarDisplay AvatarDisplayResolver
+
 	secrets  WalletSecretProvider
 	executor TokenTransferExecutor
 
@@ -191,6 +197,8 @@ func NewTransferUsecase(
 		transferRepo:  transferRepo,
 		brandWallet:   brandWallet,
 		avatarWallet:  avatarWallet,
+		brandDisplay:  nil,
+		avatarDisplay: nil,
 		secrets:       secrets,
 		executor:      executor,
 		resolveWarmer: nil,
@@ -202,6 +210,19 @@ func NewTransferUsecase(
 func (u *TransferUsecase) WithInventoryRepo(inv invdom.RepositoryPort) *TransferUsecase {
 	if u != nil {
 		u.inv = inv
+	}
+	return u
+}
+
+// WithTransferDisplayResolvers injects display resolvers for transfer response.
+// These are used only for response display values.
+func (u *TransferUsecase) WithTransferDisplayResolvers(
+	brandDisplay BrandDisplayResolver,
+	avatarDisplay AvatarDisplayResolver,
+) *TransferUsecase {
+	if u != nil {
+		u.brandDisplay = brandDisplay
+		u.avatarDisplay = avatarDisplay
 	}
 	return u
 }
@@ -250,6 +271,9 @@ type TransferByVerifiedScanResult struct {
 	FromWallet  string // brand wallet
 	ToWallet    string // avatar wallet
 	TxSignature string
+
+	FromDisplayName string
+	ToDisplayName   string
 }
 
 // TransferToAvatarByVerifiedScan does:
@@ -295,7 +319,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	}
 
 	// 0) verify
-	vres, err := u.verifier.Verify(ctx, avatarID, productID)
+	vres, err := u.verifier.VerifyScanPurchasedByAvatarID(ctx, avatarID, productID)
 	if err != nil {
 		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: verify failed: %w", err)
 	}
@@ -572,6 +596,9 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		_ = u.inv.ApplyTransferResult(ctx, productID, targetOrderID, now)
 	}
 
+	fromDisplayName := u.resolveBrandDisplayName(ctx, brandID)
+	toDisplayName := u.resolveAvatarDisplayName(ctx, avatarID)
+
 	locked = false
 
 	return TransferByVerifiedScanResult{
@@ -585,12 +612,41 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		FromWallet:  fromWallet,
 		ToWallet:    toWallet,
 		TxSignature: tx,
+
+		FromDisplayName: fromDisplayName,
+		ToDisplayName:   toDisplayName,
 	}, nil
 }
 
 // ============================================================
 // Local helpers
 // ============================================================
+
+func (u *TransferUsecase) resolveBrandDisplayName(ctx context.Context, brandID string) string {
+	if u == nil || u.brandDisplay == nil || brandID == "" {
+		return ""
+	}
+
+	ni, err := u.brandDisplay.GetNameIconByID(ctx, brandID)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(ni.Name)
+}
+
+func (u *TransferUsecase) resolveAvatarDisplayName(ctx context.Context, avatarID string) string {
+	if u == nil || u.avatarDisplay == nil || avatarID == "" {
+		return ""
+	}
+
+	name, _, err := u.avatarDisplay.GetNameAndIconByID(ctx, avatarID)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(name)
+}
 
 // findUntransferredItemByModelAndTB returns (modelId, true) if order has an item where:
 // - item.ModelID == scannedModelID

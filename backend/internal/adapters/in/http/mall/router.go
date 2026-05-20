@@ -223,6 +223,10 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	handleSafeAuth(mux, "/mall/me/setup-status", deps.SetupStatus, "SetupStatus(me)", auth)
 	handleSafeAuth(mux, "/mall/me/setup-status/", deps.SetupStatus, "SetupStatus(me)", auth)
 
+	// ✅ users (me) - auth only (NO avatar middleware)
+	handleSafeAuth(mux, "/mall/me/users", deps.User, "User(me)", auth)
+	handleSafeAuth(mux, "/mall/me/users/", deps.User, "User(me)", auth)
+
 	// ✅ shipping addresses (me) - auth only (NO avatar middleware)
 	handleSafeAuth(mux, "/mall/me/shipping-addresses", deps.ShippingAddress, "ShippingAddress(me)", auth)
 	handleSafeAuth(mux, "/mall/me/shipping-addresses/", deps.ShippingAddress, "ShippingAddress(me)", auth)

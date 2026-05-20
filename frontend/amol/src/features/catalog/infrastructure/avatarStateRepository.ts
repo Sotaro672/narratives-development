@@ -1,15 +1,17 @@
 // frontend/amol/src/features/catalog/infrastructure/avatarStateRepository.ts
 
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
+import { getFirebaseIdToken } from "../../../lib/authToken";
 import type { MeAvatarStateResponse } from "../types";
-import { getFirebaseIdToken } from "./authTokenProvider";
 import { readResponseErrorMessage } from "./httpErrorReader";
 
 export async function fetchCurrentAvatarId(
-  apiBaseUrl: string,
+  apiBaseUrl = getApiBaseUrl(),
 ): Promise<string> {
   const idToken = await getFirebaseIdToken();
+  const base = apiBaseUrl.replace(/\/+$/, "");
 
-  const response = await fetch(`${apiBaseUrl}/mall/me/avatars/state`, {
+  const response = await fetch(`${base}/mall/me/avatars/state`, {
     method: "GET",
     headers: {
       Accept: "application/json",

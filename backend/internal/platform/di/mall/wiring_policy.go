@@ -56,13 +56,19 @@ func buildStripePaymentIntentGateway(infra *shared.Infra) usecase.StripePaymentI
 
 // buildScanVerifier wires ScanVerifier conditionally.
 // Policy:
-// - If OrderScanVerifyQ exists, expose it as usecase.ScanVerifier via adapter.
+// - If OrderScanVerifyQ exists, expose it directly as usecase.ScanVerifier.
 // - Otherwise, return nil (feature disabled).
+//
+// NOTE:
+//   - Adapter was removed.
+//   - usecase.ScanVerifier now expects VerifyScanPurchasedByAvatarID,
+//     which *mallquery.OrderScanVerifyQuery already implements.
 func buildScanVerifier(orderScanVerifyQ *mallquery.OrderScanVerifyQuery) usecase.ScanVerifier {
 	if orderScanVerifyQ == nil {
 		return nil
 	}
-	return mallquery.NewScanVerifierAdapter(orderScanVerifyQ)
+
+	return orderScanVerifyQ
 }
 
 // buildWalletSecretProvider wires WalletSecretProvider / AvatarSecretProvider conditionally.

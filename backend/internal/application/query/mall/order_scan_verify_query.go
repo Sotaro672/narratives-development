@@ -1,3 +1,4 @@
+// backend\internal\application\query\mall\order_scan_verify_query.go
 package mall
 
 import (
