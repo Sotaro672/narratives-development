@@ -2,19 +2,12 @@
 
 /**
  * Token Contents Type Definitions (Shared)
- * Mirrors frontend/tokenContents/src/domain/entity/tokenContents.ts
- * and backend/internal/domain/tokenContents/entity.go
+ *
+ * Firebase Storage 移行後の正仕様:
+ * - url: Firebase Storage downloadURL
+ * - objectPath: Firebase Storage object path
+ * - GCS bucket / public GCS URL / signed URL は扱わない
  */
-
-/** Default GCS bucket name for token contents */
-export const DEFAULT_TOKEN_CONTENTS_BUCKET =
-  "narratives_development_token_contents";
-
-/** Delete operation target in GCS */
-export interface GCSDeleteOp {
-  bucket: string;
-  objectPath: string;
-}
 
 /** ContentType definition */
 export type ContentType = "image" | "video" | "pdf" | "document";
@@ -32,103 +25,91 @@ export const ALL_CONTENT_TYPES: ContentType[] = [
   "document",
 ];
 
-/** GCS Token Content metadata */
-export interface GCSTokenContent {
+/** Firebase Storage token content metadata */
+export interface FirebaseStorageTokenContent {
   id: string;
   name: string;
   type: ContentType;
-  url: string;
-  /** File size in bytes (must be >= 0) */
+  contentType: string;
   size: number;
+  objectPath: string;
+  url: string;
+}
+
+/** Delete operation target in Firebase Storage */
+export interface FirebaseStorageDeleteOp {
+  objectPath: string;
 }
 
 /** Upload policy */
 export const MAX_TOKEN_CONTENT_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-/** Validation logic for GCSTokenContent */
-export function validateGCSTokenContent(c: GCSTokenContent): string[] {
+/** Validation logic for FirebaseStorageTokenContent */
+export function validateFirebaseStorageTokenContent(
+  c: FirebaseStorageTokenContent,
+): string[] {
   const errors: string[] = [];
 
-  if (!c.id?.trim()) errors.push("id is required");
-  if (!c.name?.trim()) errors.push("name is required");
+  if (!c.id.trim()) errors.push("id is required");
+  if (!c.name.trim()) errors.push("name is required");
 
   if (!isValidContentType(c.type)) {
     errors.push("type must be one of 'image' | 'video' | 'pdf' | 'document'");
   }
 
-  if (!c.url?.trim()) {
+  if (!c.contentType.trim()) {
+    errors.push("contentType is required");
+  }
+
+  if (c.size < 0) {
+    errors.push("size must be >= 0");
+  } else if (
+    MAX_TOKEN_CONTENT_FILE_SIZE > 0 &&
+    c.size > MAX_TOKEN_CONTENT_FILE_SIZE
+  ) {
+    errors.push(`size must be <= ${MAX_TOKEN_CONTENT_FILE_SIZE} bytes`);
+  }
+
+  if (!c.objectPath.trim()) {
+    errors.push("objectPath is required");
+  }
+
+  if (!c.url.trim()) {
     errors.push("url is required");
   } else {
     try {
       const u = new URL(c.url);
-      if (!/^https?:$/i.test(u.protocol)) errors.push("url must be http(s)");
+      if (!/^https?:$/i.test(u.protocol)) {
+        errors.push("url must be http(s)");
+      }
     } catch {
       errors.push("url must be a valid URL");
     }
   }
 
-  if (c.size == null || Number.isNaN(c.size)) {
-    errors.push("size is required");
-  } else if (c.size < 0) {
-    errors.push("size must be >= 0");
-  } else if (MAX_TOKEN_CONTENT_FILE_SIZE > 0 && c.size > MAX_TOKEN_CONTENT_FILE_SIZE) {
-    errors.push(`size must be <= ${MAX_TOKEN_CONTENT_FILE_SIZE} bytes`);
-  }
-
   return errors;
 }
 
-/** Factory with normalization and validation */
-export function createGCSTokenContent(input: GCSTokenContent): GCSTokenContent {
-  const normalized: GCSTokenContent = {
-    ...input,
-    id: input.id.trim(),
-    name: input.name.trim(),
-    url: input.url.trim(),
-  };
+/** Factory with validation */
+export function createFirebaseStorageTokenContent(
+  input: FirebaseStorageTokenContent,
+): FirebaseStorageTokenContent {
+  const errors = validateFirebaseStorageTokenContent(input);
 
-  const errors = validateGCSTokenContent(normalized);
-  if (errors.length > 0) throw new Error(`Invalid GCSTokenContent: ${errors.join(", ")}`);
-  return normalized;
-}
-
-/** Construct public GCS URL */
-export function publicURL(bucket: string, objectPath: string): string {
-  const b = (bucket || "").trim() || DEFAULT_TOKEN_CONTENTS_BUCKET;
-  const obj = (objectPath || "").trim().replace(/^\/+/, "");
-  return `https://storage.googleapis.com/${b}/${obj}`;
-}
-
-/** Parse GCS URL into bucket/objectPath */
-export function parseGCSURL(u: string): { bucket: string; objectPath: string; ok: boolean } {
-  let parsed: URL;
-  try {
-    parsed = new URL((u || "").trim());
-  } catch {
-    return { bucket: "", objectPath: "", ok: false };
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid FirebaseStorageTokenContent: ${errors.join(", ")}`,
+    );
   }
 
-  const host = parsed.host.toLowerCase();
-  if (host !== "storage.googleapis.com" && host !== "storage.cloud.google.com") {
-    return { bucket: "", objectPath: "", ok: false };
-  }
-
-  const path = parsed.pathname.replace(/^\/+/, "");
-  if (!path) return { bucket: "", objectPath: "", ok: false };
-
-  const [bucket, ...rest] = path.split("/");
-  if (!bucket || rest.length === 0) return { bucket: "", objectPath: "", ok: false };
-
-  const objectPath = decodeURIComponent(rest.join("/"));
-  return { bucket, objectPath, ok: true };
+  return input;
 }
 
-/** Convert GCSTokenContent to GCSDeleteOp */
-export function toGCSDeleteOp(content: GCSTokenContent): GCSDeleteOp {
-  const { bucket, objectPath, ok } = parseGCSURL(content.url);
-  if (ok) return { bucket, objectPath };
+/** Convert FirebaseStorageTokenContent to FirebaseStorageDeleteOp */
+export function toFirebaseStorageDeleteOp(
+  content: FirebaseStorageTokenContent,
+): FirebaseStorageDeleteOp {
   return {
-    bucket: DEFAULT_TOKEN_CONTENTS_BUCKET,
-    objectPath: (content.name || "").trim().replace(/^\/+/, ""),
+    objectPath: content.objectPath,
   };
 }

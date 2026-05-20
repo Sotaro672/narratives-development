@@ -12,13 +12,13 @@ import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
 import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
-import type { GCSTokenContent } from "../../../../shell/src/shared/types/tokenContents";
+import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
 
 import { patchTokenBlueprintContentFiles } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructure/storage/tokenBlueprintAssetStorage";
 
-function guessContentType(file: File): GCSTokenContent["type"] {
-  const mime = String(file.type || "").toLowerCase();
+function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
+  const mime = file.type.toLowerCase();
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
   if (mime === "application/pdf") return "pdf";
@@ -29,9 +29,9 @@ function uuidLike(): string {
   if (
     typeof crypto !== "undefined" &&
     "randomUUID" in crypto &&
-    typeof (crypto as any).randomUUID === "function"
+    typeof crypto.randomUUID === "function"
   ) {
-    return (crypto as any).randomUUID();
+    return crypto.randomUUID();
   }
 
   return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -41,7 +41,7 @@ type PendingContent = {
   id: string;
   file: File;
   previewUrl: string;
-  type: GCSTokenContent["type"];
+  type: FirebaseStorageTokenContent["type"];
 };
 
 type AssigneeCandidateLike = {
@@ -82,19 +82,19 @@ export default function TokenBlueprintCreate() {
 
   const getCandidateUidByIdOrUid = useCallback(
     (idOrUid: string): string => {
-      const key = String(idOrUid ?? "").trim();
+      const key = idOrUid.trim();
       if (!key) return "";
 
       const matched = (assigneeCandidates as AssigneeCandidateLike[]).find(
         (candidate) => {
-          const candidateUid = String(candidate?.uid ?? "").trim();
-          const candidateId = String(candidate?.id ?? "").trim();
+          const candidateUid = candidate.uid?.trim() ?? "";
+          const candidateId = candidate.id?.trim() ?? "";
 
           return candidateUid === key || candidateId === key;
         },
       );
 
-      const uid = String(matched?.uid ?? "").trim();
+      const uid = matched?.uid?.trim() ?? "";
 
       // uid が候補に存在する場合は必ず uid を使う。
       // 候補に uid が無い場合は、既に uid が渡っている可能性を考慮して key を返す。
@@ -105,47 +105,38 @@ export default function TokenBlueprintCreate() {
 
   const getCandidateNameByIdOrUid = useCallback(
     (idOrUid: string): string => {
-      const key = String(idOrUid ?? "").trim();
+      const key = idOrUid.trim();
       if (!key) return "";
 
       const matched = (assigneeCandidates as AssigneeCandidateLike[]).find(
         (candidate) => {
-          const candidateUid = String(candidate?.uid ?? "").trim();
-          const candidateId = String(candidate?.id ?? "").trim();
+          const candidateUid = candidate.uid?.trim() ?? "";
+          const candidateId = candidate.id?.trim() ?? "";
 
           return candidateUid === key || candidateId === key;
         },
       );
 
-      return String(
-        matched?.name ??
-          matched?.displayName ??
-          matched?.fullName ??
-          matched?.email ??
-          "",
-      ).trim();
+      return (
+        matched?.name?.trim() ||
+        matched?.displayName?.trim() ||
+        matched?.fullName?.trim() ||
+        matched?.email?.trim() ||
+        ""
+      );
     },
     [assigneeCandidates],
   );
 
   const initialAssigneeId = useMemo(() => {
-    const candidate =
-      (initialTokenBlueprint as any)?.assigneeId ??
-      (initialTokenBlueprint as any)?.assigneeMemberId ??
-      null;
-
-    const raw = String(candidate ?? "").trim();
+    const raw = initialTokenBlueprint.assigneeId?.trim() ?? "";
     if (!raw) return null;
 
     return getCandidateUidByIdOrUid(raw) || raw;
   }, [initialTokenBlueprint, getCandidateUidByIdOrUid]);
 
-  const actorId = useMemo(() => {
-    return String((initialTokenBlueprint as any)?.createdBy ?? "").trim();
-  }, [initialTokenBlueprint]);
-
   const companyId = useMemo(() => {
-    return String((initialTokenBlueprint as any)?.companyId ?? "").trim();
+    return initialTokenBlueprint.companyId?.trim() ?? "";
   }, [initialTokenBlueprint]);
 
   const [assigneeId, setAssigneeId] = useState<string | null>(
@@ -218,7 +209,7 @@ export default function TokenBlueprintCreate() {
 
   const handleSelectAssignee = useCallback(
     async (idOrUid: string) => {
-      const normalized = String(idOrUid ?? "").trim();
+      const normalized = idOrUid.trim();
       if (!normalized) return;
 
       const uid = getCandidateUidByIdOrUid(normalized);
@@ -239,7 +230,7 @@ export default function TokenBlueprintCreate() {
   );
 
   const handleTokenContentsFilesSelected = useCallback(async (files: File[]) => {
-    if (!files || files.length === 0) return;
+    if (files.length === 0) return;
 
     setPending((prev) => {
       const next = [...prev];
@@ -261,9 +252,10 @@ export default function TokenBlueprintCreate() {
   }, []);
 
   const handleDeleteTokenContent = useCallback(
-    async (_item: GCSTokenContent, index: number) => {
+    async (_item: FirebaseStorageTokenContent, index: number) => {
       setPending((prev) => {
         const target = prev[index];
+
         if (target?.previewUrl) {
           URL.revokeObjectURL(target.previewUrl);
         }
@@ -274,13 +266,15 @@ export default function TokenBlueprintCreate() {
     [],
   );
 
-  const pendingContents: GCSTokenContent[] = useMemo(() => {
+  const pendingContents: FirebaseStorageTokenContent[] = useMemo(() => {
     return pending.map((p) => ({
       id: p.id,
       name: p.file.name || p.id,
       type: p.type,
+      contentType: p.file.type || "application/octet-stream",
       url: p.previewUrl,
-      size: typeof p.file.size === "number" ? p.file.size : 0,
+      objectPath: "",
+      size: p.file.size,
     }));
   }, [pending]);
 
@@ -288,17 +282,11 @@ export default function TokenBlueprintCreate() {
     async (tokenBlueprintId: string, pendingItems: PendingContent[]) => {
       if (!tokenBlueprintId || pendingItems.length === 0) return;
 
-      if (!actorId) {
-        throw new Error(
-          "actorId is missing (currentMember.uid / initialTokenBlueprint.createdBy)",
-        );
-      }
-
       if (!companyId) {
         throw new Error("companyId is missing");
       }
 
-      const newOnes: any[] = [];
+      const newOnes = [];
 
       for (const pendingItem of pendingItems) {
         const contentId = uuidLike();
@@ -315,24 +303,22 @@ export default function TokenBlueprintCreate() {
           id: contentId,
           name: file.name || contentId,
           type: pendingItem.type,
-          contentType:
-            String(file.type || "").trim() || "application/octet-stream",
+          contentType: file.type || "application/octet-stream",
           objectPath: uploaded.objectPath,
           url: uploaded.downloadUrl,
-          size: typeof file.size === "number" ? file.size : 0,
+          size: file.size,
           visibility: "private",
-          createdBy: actorId,
-          updatedBy: actorId,
+          createdBy: initialTokenBlueprint.createdBy,
+          updatedBy: initialTokenBlueprint.createdBy,
         });
       }
 
       await patchTokenBlueprintContentFiles({
         tokenBlueprintId,
-        actorId,
         contentFiles: newOnes,
       });
     },
-    [actorId, companyId],
+    [companyId, initialTokenBlueprint.createdBy],
   );
 
   const handleSave = useCallback(async () => {
@@ -353,13 +339,13 @@ export default function TokenBlueprintCreate() {
         symbol: vm.symbol,
         brandId: vm.brandId,
         description: vm.description,
-        contentFiles: [] as any,
+        contentFiles: [],
         iconFile: selectedIconFile ?? null,
         assigneeId: assigneeUid || undefined,
       };
 
       const created = await onSave(input);
-      const createdId = String((created as any)?.id ?? "").trim();
+      const createdId = created.id;
 
       if (!createdId) {
         throw new Error(

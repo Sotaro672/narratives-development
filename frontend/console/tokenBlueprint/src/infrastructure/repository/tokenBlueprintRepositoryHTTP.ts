@@ -23,9 +23,11 @@ export interface TokenBlueprintPageResult {
 
 // ---------------------------------------------------------
 // Send payload types
-// - entity.go を正として contentFiles は object 配列（ContentFileDTO）
 // - tokenBlueprintIcon / tokenBlueprintContents は Firebase Storage に
-//   frontend から直接アップロードし、downloadURL を iconUrl / contentFiles[].url に保存する
+//   frontend から直接アップロードする
+// - iconUrl は Firebase Storage downloadURL
+// - contentFiles[].url は Firebase Storage downloadURL
+// - contentFiles[].objectPath は Firebase Storage object path
 // ---------------------------------------------------------
 export type CreateTokenBlueprintPayload = {
   name: string;
@@ -43,14 +45,10 @@ export type CreateTokenBlueprintPayload = {
 export type UpdateTokenBlueprintPayload = Partial<{
   name: string;
   symbol: string;
-  brandId: string;
-  /** entity.go 正: companyId は必須だが update では変更不可/不要の運用が多いのでここでは送らない */
   description: string;
   assigneeId: string;
   iconUrl: string | null;
   contentFiles: ContentFileDTO[];
-  metadataUri: string;
-  minted: boolean;
 }>;
 
 // ---------------------------------------------------------
@@ -147,10 +145,6 @@ export async function updateTokenBlueprint(
     body.symbol = payload.symbol.trim();
   }
 
-  if (payload.brandId !== undefined) {
-    body.brandId = payload.brandId.trim();
-  }
-
   if (payload.description !== undefined) {
     body.description = payload.description.trim();
   }
@@ -167,14 +161,6 @@ export async function updateTokenBlueprint(
     body.contentFiles = (payload.contentFiles ?? []).map(
       normalizeContentFileForSend,
     );
-  }
-
-  if (payload.metadataUri !== undefined) {
-    body.metadataUri = String(payload.metadataUri).trim();
-  }
-
-  if (payload.minted !== undefined) {
-    body.minted = !!payload.minted;
   }
 
   const res = await apiPutJson(
@@ -208,23 +194,18 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
  */
 export async function patchTokenBlueprintContentFiles(params: {
   tokenBlueprintId: string;
-  actorId?: string;
-  contentFiles: any[];
+  contentFiles: ContentFileDTO[];
 }): Promise<TokenBlueprint> {
   const id = params.tokenBlueprintId.trim();
   if (!id) throw new Error("tokenBlueprintId is empty");
 
-  const headers: Record<string, string> = {};
-  const actorId = String(params.actorId ?? "").trim();
-
-  if (actorId) {
-    headers["X-Actor-Id"] = actorId;
-  }
+  const contentFiles = (params.contentFiles ?? []).map(
+    normalizeContentFileForSend,
+  );
 
   const res = await apiPutJson(
     `/token-blueprints/${encodeURIComponent(id)}`,
-    { contentFiles: params.contentFiles } as any,
-    headers as any,
+    { contentFiles },
   );
 
   const raw = await handleJsonResponse<any>(res);
@@ -266,7 +247,6 @@ function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
   const safeSize = Number.isFinite(size) && size > 0 ? size : 0;
 
   return {
-    ...obj,
     id: String(obj.id ?? "").trim(),
     name: String(obj.name ?? "").trim(),
     type: String(obj.type ?? "").trim(),
@@ -279,7 +259,6 @@ function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
       obj.createdBy != null ? String(obj.createdBy).trim() : obj.createdBy,
     updatedBy:
       obj.updatedBy != null ? String(obj.updatedBy).trim() : obj.updatedBy,
-
     createdAt: obj.createdAt != null ? String(obj.createdAt) : obj.createdAt,
     updatedAt: obj.updatedAt != null ? String(obj.updatedAt) : obj.updatedAt,
   } as ContentFileDTO;

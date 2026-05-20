@@ -1,4 +1,4 @@
-//frontend\console\tokenBlueprint\src\presentation\components\tokenContentsCard.tsx
+// frontend/console/tokenBlueprint/src/presentation/components/tokenContentsCard.tsx
 import * as React from "react";
 import { FileText, Upload, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
@@ -10,7 +10,7 @@ import {
 } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 
-import type { GCSTokenContent } from "../../../../shell/src/shared/types/tokenContents";
+import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
 import "../styles/tokenBlueprint.css";
 
 type Mode = "edit" | "view";
@@ -20,46 +20,55 @@ type TokenContentsCardProps = {
    * 表示するコンテンツ一覧。
    * 未指定の場合は空表示。
    */
-  contents?: GCSTokenContent[];
+  contents?: FirebaseStorageTokenContent[];
 
   /** 表示モード（edit: 追加/削除可, view: 閲覧専用）。既定: "edit" */
   mode?: Mode;
 
   /**
-   * file picker でファイルが選択されたときに呼ばれる（必須級）。
-   * 実際のアップロード（署名付きURL取得→PUT→contentFiles更新）に接続するための口。
+   * file picker でファイルが選択されたときに呼ばれる。
+   * 呼び出し側で Firebase Storage へ直接アップロードし、
+   * downloadURL / objectPath を contentFiles として保存する。
    */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
 
   /**
-   * edit モードで削除したい時のハンドラ（任意）。
-   * サーバ反映は呼び出し側で実装。
+   * edit モードで削除したい時のハンドラ。
+   * Firebase Storage / backend への反映は呼び出し側で実装する。
    */
-  onDelete?: (item: GCSTokenContent, index: number) => void | Promise<void>;
+  onDelete?: (
+    item: FirebaseStorageTokenContent,
+    index: number,
+  ) => void | Promise<void>;
 };
 
-function guessContentType(file: File): GCSTokenContent["type"] {
-  const mime = String(file.type || "").toLowerCase();
+function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
+  const mime = file.type.toLowerCase();
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
   if (mime === "application/pdf") return "pdf";
   return "document";
 }
 
-function getVideoMimeType(item: GCSTokenContent): string {
-  const name = String(item.name || "").toLowerCase();
-  const url = String(item.url || "").toLowerCase();
+function getVideoMimeType(item: FirebaseStorageTokenContent): string {
+  const name = item.name.toLowerCase();
+  const url = item.url.toLowerCase();
 
   if (name.endsWith(".webm") || url.includes(".webm")) return "video/webm";
-  if (name.endsWith(".ogg") || name.endsWith(".ogv") || url.includes(".ogg") || url.includes(".ogv")) {
+
+  if (
+    name.endsWith(".ogg") ||
+    name.endsWith(".ogv") ||
+    url.includes(".ogg") ||
+    url.includes(".ogv")
+  ) {
     return "video/ogg";
   }
+
   return "video/mp4";
 }
 
-function renderMain(item: GCSTokenContent) {
-  if (!item) return null;
-
+function renderMain(item: FirebaseStorageTokenContent) {
   switch (item.type) {
     case "image":
       return (
@@ -70,7 +79,7 @@ function renderMain(item: GCSTokenContent) {
           onError={(e) => {
             // eslint-disable-next-line no-console
             console.warn("[TokenContentsCard] image load failed:", item.url);
-            (e.currentTarget as HTMLImageElement).style.display = "none";
+            e.currentTarget.style.display = "none";
           }}
         />
       );
@@ -124,18 +133,17 @@ export default function TokenContentsCard({
 }: TokenContentsCardProps) {
   const isEditMode = mode === "edit";
 
-  const derivedItems = React.useMemo<GCSTokenContent[]>(() => {
-    if (contents && contents.length > 0) return contents;
-    return [];
+  const derivedItems = React.useMemo<FirebaseStorageTokenContent[]>(() => {
+    return contents ?? [];
   }, [contents]);
 
-  const [localItems, setLocalItems] = React.useState<GCSTokenContent[]>([]);
+  const [localItems, setLocalItems] = React.useState<FirebaseStorageTokenContent[]>([]);
   const [index, setIndex] = React.useState(0);
 
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = React.useRef<Set<string>>(new Set());
 
-  const items = React.useMemo<GCSTokenContent[]>(() => {
+  const items = React.useMemo<FirebaseStorageTokenContent[]>(() => {
     return derivedItems.length > 0 ? derivedItems : localItems;
   }, [derivedItems, localItems]);
 
@@ -144,12 +152,9 @@ export default function TokenContentsCard({
   React.useEffect(() => {
     if (derivedItems.length > 0) {
       for (const u of objectUrlsRef.current) {
-        try {
-          URL.revokeObjectURL(u);
-        } catch {
-          // noop
-        }
+        URL.revokeObjectURL(u);
       }
+
       objectUrlsRef.current.clear();
       setLocalItems([]);
       setIndex(0);
@@ -167,12 +172,9 @@ export default function TokenContentsCard({
   React.useEffect(() => {
     return () => {
       for (const u of objectUrlsRef.current) {
-        try {
-          URL.revokeObjectURL(u);
-        } catch {
-          // noop
-        }
+        URL.revokeObjectURL(u);
       }
+
       objectUrlsRef.current.clear();
     };
   }, []);
@@ -207,7 +209,7 @@ export default function TokenContentsCard({
     if (!onFilesSelected) {
       // eslint-disable-next-line no-console
       console.warn(
-        "[TokenContentsCard] onFilesSelected is not provided. No request will be sent to backend."
+        "[TokenContentsCard] onFilesSelected is not provided. No request will be sent to backend.",
       );
       e.target.value = "";
       return;
@@ -223,7 +225,7 @@ export default function TokenContentsCard({
     }
 
     const now = Date.now();
-    const newItems: GCSTokenContent[] = files.map((f, i) => {
+    const newItems: FirebaseStorageTokenContent[] = files.map((f, i) => {
       const url = URL.createObjectURL(f);
       objectUrlsRef.current.add(url);
 
@@ -234,16 +236,20 @@ export default function TokenContentsCard({
         id,
         name,
         type: guessContentType(f),
+        contentType: f.type || "application/octet-stream",
+        size: f.size,
+        objectPath: "",
         url,
-        size: typeof f.size === "number" ? f.size : 0,
       };
     });
 
     setLocalItems((prevItems) => {
       const merged = [...prevItems, ...newItems];
+
       if (merged.length > 0) {
         setIndex(Math.max(0, merged.length - newItems.length));
       }
+
       return merged;
     });
 
@@ -266,19 +272,14 @@ export default function TokenContentsCard({
       }
     }
 
-    if (String(target.id || "").startsWith("local_")) {
-      if (typeof target.url === "string" && target.url.startsWith("blob:")) {
-        try {
-          URL.revokeObjectURL(target.url);
-        } catch {
-          // noop
-        }
+    if (target.id.startsWith("local_")) {
+      if (target.url.startsWith("blob:")) {
+        URL.revokeObjectURL(target.url);
         objectUrlsRef.current.delete(target.url);
       }
 
       setLocalItems((prevItems) => {
-        const nextItems = prevItems.filter((x) => x.id !== target.id);
-        return nextItems;
+        return prevItems.filter((x) => x.id !== target.id);
       });
 
       setIndex((i) => {
@@ -370,7 +371,9 @@ export default function TokenContentsCard({
             {items.map((item, i) => (
               <div
                 key={`${item.id}-${i}`}
-                className={`token-contents-card__thumb-wrap${i === index ? " is-active" : ""}`}
+                className={`token-contents-card__thumb-wrap${
+                  i === index ? " is-active" : ""
+                }`}
               >
                 <button
                   type="button"
@@ -386,7 +389,7 @@ export default function TokenContentsCard({
                     />
                   ) : (
                     <span className="token-contents-card__thumb-nonimage">
-                      {String(item.type || "").toUpperCase()}
+                      {item.type.toUpperCase()}
                     </span>
                   )}
                 </button>

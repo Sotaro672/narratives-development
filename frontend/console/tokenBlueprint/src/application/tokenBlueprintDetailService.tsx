@@ -15,83 +15,74 @@ import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/sto
 /**
  * 詳細取得（リポジトリのラッパー）
  */
-export async function fetchTokenBlueprintDetail(id: string): Promise<TokenBlueprint> {
-  if (!id) {
+export async function fetchTokenBlueprintDetail(
+  id: string,
+): Promise<TokenBlueprint> {
+  const tokenBlueprintId = id.trim();
+  if (!tokenBlueprintId) {
     throw new Error("id is empty");
   }
 
-  return fetchTokenBlueprintById(id);
+  return fetchTokenBlueprintById(tokenBlueprintId);
 }
 
 /**
  * createdAt を yyyy/mm/dd にフォーマット
+ *
+ * API レスポンスの日時は ISO string を正とする。
  */
-export function formatCreatedAt(raw: unknown): string {
-  return safeDateLabelJa(
-    typeof raw === "string" ? raw : raw instanceof Date ? raw.toISOString() : "",
-    "",
-  );
+export function formatCreatedAt(raw: string): string {
+  return safeDateLabelJa(raw, "");
 }
 
 /**
  * TokenBlueprintCard の VM から UpdateTokenBlueprintPayload を組み立てる
  *
- * レスポンスを正として扱う:
- * - icon は iconUrl を更新対象とする
- * - contentFiles は ContentFileDTO[] として更新する
- * - createdById / updatedBy / *_Name などレスポンスの名に寄せる
+ * 正レスポンス:
+ * - iconUrl は Firebase Storage downloadURL
+ * - contentFiles[].url は Firebase Storage downloadURL
+ * - contentFiles[].objectPath は Firebase Storage object path
+ *
+ * update 対象:
+ * - name
+ * - symbol
+ * - assigneeId
+ * - iconUrl
+ * - contentFiles
+ *
+ * update 対象外:
+ * - brandId / brandName
+ * - companyId
+ * - minted
+ * - metadataUri
+ * - createdAt / createdBy / createdByName
+ * - updatedAt / updatedBy / updatedByName
  */
 export function buildUpdatePayloadFromCardVm(
   blueprint: TokenBlueprint,
   cardVm: any,
 ): Record<string, any> {
-  const vmAny: any = cardVm || {};
-  const fields: any = vmAny.fields ?? vmAny ?? {};
+  const fields = getCardFields(cardVm);
 
-  const stringOrUndefined = (v: unknown): string | undefined =>
-    typeof v === "string" ? v : undefined;
+  const iconUrlRaw = fields.iconUrl ?? blueprint.iconUrl;
+  const iconUrl =
+    typeof iconUrlRaw === "string" && iconUrlRaw.startsWith("blob:")
+      ? undefined
+      : iconUrlRaw;
 
-  const iconUrlRaw =
-    typeof fields.iconUrl === "string"
-      ? fields.iconUrl
-      : typeof (blueprint as any)?.iconUrl === "string"
-        ? String((blueprint as any).iconUrl)
-        : undefined;
-
-  const iconUrl = iconUrlRaw && iconUrlRaw.startsWith("blob:") ? undefined : iconUrlRaw;
-
-  const payload: Record<string, any> = {
-    name: stringOrUndefined(fields.name ?? blueprint.name),
-    symbol: stringOrUndefined(fields.symbol ?? blueprint.symbol),
-    brandId: stringOrUndefined(fields.brandId ?? blueprint.brandId),
-    description: stringOrUndefined(fields.description ?? blueprint.description),
-    assigneeId: stringOrUndefined(fields.assigneeId ?? blueprint.assigneeId),
+  return {
+    name: fields.name ?? blueprint.name,
+    symbol: fields.symbol ?? blueprint.symbol,
+    assigneeId: fields.assigneeId ?? blueprint.assigneeId,
     iconUrl,
     contentFiles: normalizeContentFilesForSend(
-      fields.contentFiles ?? (blueprint as any)?.contentFiles ?? [],
+      fields.contentFiles ?? blueprint.contentFiles ?? [],
     ),
   };
-
-  if (fields.metadataUri !== undefined) {
-    payload.metadataUri = String(fields.metadataUri ?? "");
-  }
-
-  if (fields.minted !== undefined) {
-    payload.minted = Boolean(fields.minted);
-  }
-
-  return payload;
 }
 
 type UpdateFromCardOptions = {
   iconFile?: File | null;
-
-  /**
-   * GCS signed URL 時代の互換オプション。
-   * Firebase Storage 移行後は iconFile がある場合のみ upload するため、
-   * この値単体では upload flow を起動しない。
-   */
-  forceIconUploadFlow?: boolean;
 };
 
 /**
@@ -100,7 +91,7 @@ type UpdateFromCardOptions = {
  * 方針:
  * - iconFile がある場合:
  *    1) iconUrl を除外して通常 update
- *    2) update 後の tokenBlueprintId を使って Firebase Storage へ iconFile を直接 upload
+ *    2) update 後の tokenBlueprintId / companyId を使って Firebase Storage へ iconFile を直接 upload
  *    3) downloadURL を iconUrl として再 update
  * - iconFile が無い場合:
  *    通常 update のみ
@@ -119,31 +110,21 @@ export async function updateTokenBlueprintFromCard(
   const payload = buildUpdatePayloadFromCardVm(blueprint, cardVm);
 
   if (iconFile) {
-    delete (payload as any).iconUrl;
+    delete payload.iconUrl;
   }
 
-  const updated = await updateTokenBlueprint(
-    blueprint.id,
-    payload as any,
-  );
+  const updated = await updateTokenBlueprint(blueprint.id, payload as any);
 
   if (!iconFile) {
     return updated;
   }
 
-  const tokenBlueprintId = String((updated as any)?.id ?? blueprint.id ?? "").trim();
+  const tokenBlueprintId = updated.id || blueprint.id;
   if (!tokenBlueprintId) {
     throw new Error("tokenBlueprint.id is empty after update.");
   }
 
-  const companyId = String(
-    (updated as any)?.companyId ??
-      (blueprint as any)?.companyId ??
-      (cardVm as any)?.companyId ??
-      (cardVm as any)?.fields?.companyId ??
-      "",
-  ).trim();
-
+  const companyId = updated.companyId || blueprint.companyId;
   if (!companyId) {
     throw new Error("companyId is required before uploading token blueprint icon.");
   }
@@ -154,40 +135,50 @@ export async function updateTokenBlueprintFromCard(
     file: iconFile,
   });
 
-  const attached = await updateTokenBlueprint(
-    tokenBlueprintId,
-    {
-      iconUrl: uploaded.downloadUrl,
-    } as any,
-  );
-
-  return attached;
+  return updateTokenBlueprint(tokenBlueprintId, {
+    iconUrl: uploaded.downloadUrl,
+  } as any);
 }
 
 /**
- * レスポンスを正として contentFiles は object[] のみ扱う
+ * レスポンスを正として contentFiles は ContentFileDTO[] として扱う。
+ *
+ * 正レスポンス:
+ * - id: string
+ * - name: string
+ * - type: string
+ * - contentType: string
+ * - size: number
+ * - objectPath: string
+ * - visibility: string
+ * - createdAt: ISO string
+ * - createdBy: string
+ * - updatedAt: ISO string
+ * - updatedBy: string
+ * - url: Firebase Storage downloadURL
  */
-function normalizeContentFilesForSend(input: unknown): ContentFileDTO[] {
-  const arr = Array.isArray(input) ? input : [];
+function normalizeContentFilesForSend(input: ContentFileDTO[]): ContentFileDTO[] {
+  return input
+    .map((x) => ({
+      id: x.id,
+      name: x.name,
+      type: x.type,
+      contentType: x.contentType,
+      size: x.size,
+      objectPath: x.objectPath,
+      visibility: x.visibility,
+      createdAt: x.createdAt,
+      createdBy: x.createdBy,
+      updatedAt: x.updatedAt,
+      updatedBy: x.updatedBy,
+      url: x.url,
+    }))
+    .filter((x) => Boolean(x.id && x.objectPath && x.url));
+}
 
-  return (arr as any[])
-    .filter((x) => x && typeof x === "object")
-    .map(
-      (x): ContentFileDTO =>
-        ({
-          id: String(x.id ?? ""),
-          name: String(x.name ?? ""),
-          type: String(x.type ?? ""),
-          contentType: String(x.contentType ?? ""),
-          size: Number(x.size ?? 0) || 0,
-          objectPath: String(x.objectPath ?? ""),
-          visibility: String(x.visibility ?? "") || "private",
-          createdAt: x.createdAt != null ? String(x.createdAt) : x.createdAt,
-          createdBy: x.createdBy != null ? String(x.createdBy) : x.createdBy,
-          updatedAt: x.updatedAt != null ? String(x.updatedAt) : x.updatedAt,
-          updatedBy: x.updatedBy != null ? String(x.updatedBy) : x.updatedBy,
-          url: x.url != null ? String(x.url) : x.url,
-        } as any),
-    )
-    .filter((x) => Boolean((x as any).id));
+function getCardFields(cardVm: any): Partial<TokenBlueprint> & {
+  iconFile?: File | null;
+  contentFiles?: ContentFileDTO[];
+} {
+  return cardVm?.fields ?? cardVm ?? {};
 }

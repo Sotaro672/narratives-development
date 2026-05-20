@@ -3,14 +3,15 @@
 /**
  * TokenBlueprint 作成カードのアプリケーションサービス
  * - Brand 一覧取得
- * - brandId → brandName 解析
  * - TokenBlueprint 作成
  * - iconFile がある場合は create 後に Firebase Storage へ frontend から直接アップロード
  * - Firebase Storage の downloadURL を iconUrl として TokenBlueprint に保存
  *
- * NOTE:
- * - tokenBlueprintIcon は GCS signed URL を廃止し、Firebase Storage へ移行。
- * - entity.go 正: icon の永続化は iconId(objectPath) ではなく iconUrl を保存。
+ * 方針:
+ * - ブランド名は /brands の一覧レスポンス items[].name を正とする
+ * - brandId → brandName の個別名前解決は行わない
+ * - tokenBlueprintIcon は GCS signed URL を廃止し、Firebase Storage へ移行済み
+ * - icon の永続化は iconId / GCS object ではなく iconUrl を保存する
  */
 
 import type { TokenBlueprint } from "../domain/entity/tokenBlueprint";
@@ -22,7 +23,6 @@ import {
 
 import {
   fetchBrandsForCurrentCompany,
-  fetchBrandNameById,
 } from "../../../brand/src/infrastructure/http/brandRepositoryHTTP";
 
 import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
@@ -32,26 +32,31 @@ import type { CreateTokenBlueprintPayload } from "../infrastructure/repository/t
 // ---------------------------
 // Brand 一覧取得
 // ---------------------------
-export async function loadBrandsForCompany(): Promise<{ id: string; name: string }[]> {
+
+/**
+ * /brands の一覧レスポンスを正とする。
+ *
+ * 正レスポンス:
+ * {
+ *   items: [
+ *     {
+ *       id: string,
+ *       name: string,
+ *       brandIcon?: Firebase Storage downloadURL,
+ *       brandBackgroundImage?: Firebase Storage downloadURL,
+ *       memberName?: string
+ *     }
+ *   ]
+ * }
+ */
+export async function loadBrandsForCompany(): Promise<
+  { id: string; name: string }[]
+> {
   try {
-    const brands = await fetchBrandsForCurrentCompany();
-    return brands;
+    return await fetchBrandsForCurrentCompany();
   } catch (e) {
     console.error("[tokenBlueprintCreateService] loadBrandsForCompany error:", e);
     return [];
-  }
-}
-
-// ---------------------------
-// brandId → brandName 解決
-// ---------------------------
-export async function resolveBrandName(brandId: string): Promise<string> {
-  try {
-    const name = await fetchBrandNameById(brandId);
-    return name ?? "";
-  } catch (e) {
-    console.error("[tokenBlueprintCreateService] resolveBrandName error:", e);
-    return "";
   }
 }
 
@@ -102,7 +107,7 @@ export async function createTokenBlueprintWithOptionalIcon(
   // iconFile がある場合、blob URL 等を create payload で保存しない。
   // Firebase Storage upload 後に downloadURL で確定させる。
   if (iconFile) {
-    delete (payload as any).iconUrl;
+    delete payload.iconUrl;
   }
 
   console.log("[tokenBlueprintCreateService] create start", {
@@ -119,19 +124,19 @@ export async function createTokenBlueprintWithOptionalIcon(
   const created = await createTokenBlueprint(payload);
 
   console.log("[tokenBlueprintCreateService] create success", {
-    id: (created as any)?.id,
+    id: created.id,
   });
 
   if (!iconFile) {
     return created;
   }
 
-  const tokenBlueprintId = String((created as any)?.id ?? "").trim();
+  const tokenBlueprintId = created.id;
   if (!tokenBlueprintId) {
     throw new Error("tokenBlueprint.id is empty after create.");
   }
 
-  const companyId = String(input.companyId ?? "").trim();
+  const companyId = input.companyId;
   if (!companyId) {
     throw new Error("companyId is required before uploading token blueprint icon.");
   }
@@ -163,9 +168,8 @@ export async function createTokenBlueprintWithOptionalIcon(
   });
 
   console.log("[tokenBlueprintCreateService] icon attach success", {
-    id: (updated as any)?.id,
-    iconUrl: (updated as any)?.iconUrl,
-    iconId: (updated as any)?.iconId,
+    id: updated.id,
+    iconUrl: updated.iconUrl,
     objectPath: uploaded.objectPath,
   });
 

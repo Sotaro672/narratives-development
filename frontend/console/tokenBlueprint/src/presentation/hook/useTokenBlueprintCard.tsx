@@ -10,18 +10,19 @@ import type {
 // Service（アプリケーションロジック）
 import {
   loadBrandsForCompany,
-  resolveBrandName,
 } from "../../application/tokenBlueprintCreateService";
 
 /**
  * TokenBlueprintCard 用のロジックフック
- * - UI 状態管理 +（★移譲）アイコンアップロードの UI ロジック（file input / preview / click）
+ * - UI 状態管理 + アイコンアップロードの UI ロジック（file input / preview / click）
  *
- * ★仕様:
+ * 仕様:
  * - minted は boolean（notYet/minted は使わない）
  * - minted:true でも「トークンアイコンは編集できる」(=アイコンだけアップロード可能)
  * - minted:true の場合、トークン名 / シンボル / ブランドは変更不可
  * - API スキーマは name / brandName を正とする
+ * - ブランド名は /brands 一覧レスポンスの items[].name または TokenBlueprint.brandName を正とする
+ * - brandId からの個別名前解決は行わない
  */
 export function useTokenBlueprintCard(params: {
   initialTokenBlueprint?: Partial<TokenBlueprint> & {
@@ -31,7 +32,7 @@ export function useTokenBlueprintCard(params: {
   initialIconUrl?: string;
   initialEditMode?: boolean;
 
-  // ★ 将来：実アップロードを hook 外から注入したい場合に使う（任意）
+  // 将来：実アップロードを hook 外から注入したい場合に使う（任意）
   // onUploadIcon?: (file: File, tokenBlueprintId: string) => Promise<void> | void;
 }) {
   const tb = params.initialTokenBlueprint ?? {};
@@ -52,41 +53,50 @@ export function useTokenBlueprintCard(params: {
   const [brandId, setBrandId] = React.useState(pickString((tb as any).brandId));
   const [brandName, setBrandName] = React.useState(pickBrandName(tb as any));
 
-  const [description, setDescription] = React.useState(pickString((tb as any).description));
+  const [description, setDescription] = React.useState(
+    pickString((tb as any).description),
+  );
   const [burnAt, setBurnAt] = React.useState(params.initialBurnAt ?? "");
 
-  // ★ minted は boolean（未設定は false 扱い）
+  // minted は boolean（未設定は false 扱い）
   const [minted, setMinted] = React.useState<boolean>(
     typeof (tb as any).minted === "boolean" ? (tb as any).minted : false,
   );
 
-  // ★ backend 反映済み iconUrl（初期値）
-  const [remoteIconUrl, setRemoteIconUrl] = React.useState(params.initialIconUrl ?? "");
+  // backend 反映済み iconUrl（初期値）
+  const [remoteIconUrl, setRemoteIconUrl] = React.useState(
+    params.initialIconUrl ?? "",
+  );
 
-  // ★ ローカルプレビュー（アップロード前に表示したい場合）
+  // ローカルプレビュー（アップロード前に表示したい場合）
   const [localPreviewUrl, setLocalPreviewUrl] = React.useState<string>("");
 
-  // ★ 選択したアイコンファイル（service に渡すために保持）
-  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(null);
+  // 選択したアイコンファイル（service に渡すために保持）
+  const [selectedIconFile, setSelectedIconFile] =
+    React.useState<File | null>(null);
 
-  // ⭐ 編集モード切り替え可能に変更
-  const [isEditMode, setIsEditMode] = React.useState(params.initialEditMode ?? false);
+  // 編集モード切り替え可能
+  const [isEditMode, setIsEditMode] = React.useState(
+    params.initialEditMode ?? false,
+  );
 
-  const [brandOptions, setBrandOptions] = React.useState<{ id: string; name: string }[]>([]);
+  const [brandOptions, setBrandOptions] = React.useState<
+    { id: string; name: string }[]
+  >([]);
 
   // リセット用に「バックエンドからもらった元データ」を保持
   const initialRef = React.useRef<
     (Partial<TokenBlueprint> & { brandName?: string }) | null
   >(tb);
 
-  // ★ UI refs（component からはスタイルだけにするため、ここで管理）
+  // UI refs（component からはスタイルだけにするため、ここで管理）
   const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const iconInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  // ★ アイコンは minted:true でも編集可能（編集モード OR minted）
+  // アイコンは minted:true でも編集可能（編集モード OR minted）
   const canEditIcon = Boolean(isEditMode || minted);
 
-  // ★ minted:true の場合は、トークン名 / シンボル / ブランドをロック
+  // minted:true の場合は、トークン名 / シンボル / ブランドをロック
   const isIdentityLocked = Boolean(minted);
 
   // -------------------------
@@ -95,7 +105,7 @@ export function useTokenBlueprintCard(params: {
   React.useEffect(() => {
     let cancelled = false;
 
-    loadBrandsForCompany().then((brands) => {
+    loadBrandsForCompany().then((brands: { id: string; name: string }[]) => {
       if (!cancelled) setBrandOptions(brands);
     });
 
@@ -122,13 +132,13 @@ export function useTokenBlueprintCard(params: {
     setBrandName(pickBrandName(src));
     setDescription(src.description ?? "");
 
-    // ★ minted(boolean) を反映（未設定は false）
+    // minted(boolean) を反映（未設定は false）
     setMinted(typeof src.minted === "boolean" ? src.minted : false);
 
     // burnAt は呼び出し元初期値を維持
     setBurnAt(params.initialBurnAt ?? "");
 
-    // ★ 詳細取得で状態が置き換わったタイミングでは「未アップロードの選択ファイル」は消して安全側に倒す
+    // 詳細取得で状態が置き換わったタイミングでは「未アップロードの選択ファイル」は消して安全側に倒す
     setSelectedIconFile(null);
     if (localPreviewUrl) {
       try {
@@ -142,7 +152,7 @@ export function useTokenBlueprintCard(params: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.initialTokenBlueprint, params.initialBurnAt, isEditMode, pickBrandName]);
 
-  // ★ 初期 iconUrl が更新された場合（詳細取得後など）
+  // 初期 iconUrl が更新された場合（詳細取得後など）
   React.useEffect(() => {
     if (isEditMode) return;
 
@@ -151,29 +161,14 @@ export function useTokenBlueprintCard(params: {
     // ローカルプレビューは「ユーザーが選択した時だけ」なのでここでは触らない
   }, [params.initialIconUrl, isEditMode]);
 
-  // brandId しか無い場合、brandName を backend から解決
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (!brandId || brandName) return;
-
-    resolveBrandName(brandId).then((name) => {
-      if (!cancelled && name) setBrandName(name);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId, brandName]);
-
-  // ★ textarea auto-resize（スタイル/見た目の調整なので hook 側に移譲）
+  // textarea auto-resize（スタイル/見た目の調整なので hook 側に移譲）
   React.useEffect(() => {
     if (!descriptionRef.current) return;
     descriptionRef.current.style.height = "auto";
     descriptionRef.current.style.height = `${descriptionRef.current.scrollHeight}px`;
   }, [description]);
 
-  // ★ ローカルプレビューのメモリ解放（unmount）
+  // ローカルプレビューのメモリ解放（unmount）
   React.useEffect(() => {
     return () => {
       if (localPreviewUrl) {
@@ -190,14 +185,14 @@ export function useTokenBlueprintCard(params: {
   // Icon upload UI logic
   // -------------------------
   const requestPickIconFile = React.useCallback(() => {
-    // ★ minted:true でも開ける
+    // minted:true でも開ける
     if (!canEditIcon) return;
     iconInputRef.current?.click();
   }, [canEditIcon]);
 
   const onIconInputChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      // ★ minted:true でも許可
+      // minted:true でも許可
       if (!canEditIcon) {
         e.target.value = "";
         return;
@@ -249,23 +244,23 @@ export function useTokenBlueprintCard(params: {
   // Handlers（UI のみ）
   // -------------------------
   const handlers: TokenBlueprintCardHandlers = {
-    onChangeName: (v) => {
+    onChangeName: (v: string) => {
       if (isIdentityLocked) return;
       setName(v);
     },
 
-    onChangeSymbol: (v) => {
+    onChangeSymbol: (v: string) => {
       if (isIdentityLocked) return;
       setSymbol(v.toUpperCase());
     },
 
-    onChangeBrand: (id, name) => {
+    onChangeBrand: (id: string, name: string) => {
       if (isIdentityLocked) return;
       setBrandId(id);
       setBrandName(name);
     },
 
-    onChangeDescription: (v) => setDescription(v),
+    onChangeDescription: (v: string) => setDescription(v),
 
     iconInputRef,
     descriptionRef,

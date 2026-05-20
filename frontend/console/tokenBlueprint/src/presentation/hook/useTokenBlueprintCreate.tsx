@@ -3,8 +3,11 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
-import type { GCSTokenContent } from "../../../../shell/src/shared/types/tokenContents";
+import type {
+  TokenBlueprint,
+  ContentFile,
+} from "../../domain/entity/tokenBlueprint";
+import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
 
 import {
   createTokenBlueprintWithOptionalIcon,
@@ -24,10 +27,6 @@ import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructu
  * - tokenBlueprintIcon は create service 側で Firebase Storage へ upload
  * - tokenBlueprintContents は Firebase Storage へ frontend から直接 upload
  * - downloadURL / objectPath を contentFiles として backend に保存
- *
- * IMPORTANT:
- * - assigneeId / createdBy / updatedBy / actorId は Firebase UID を送信する
- * - currentMember.id は Firestore member docId のため、この hook では使わない
  */
 export function useTokenBlueprintCreate() {
   const navigate = useNavigate();
@@ -51,7 +50,7 @@ export function useTokenBlueprintCreate() {
     React.useState<boolean>(false);
 
   const createdBlueprintId = React.useMemo(() => {
-    return String((createdBlueprint as any)?.id ?? "").trim();
+    return createdBlueprint?.id ?? "";
   }, [createdBlueprint]);
 
   const displayAssigneeName = React.useMemo(() => {
@@ -66,11 +65,10 @@ export function useTokenBlueprintCreate() {
     navigate("/tokenBlueprint", { replace: true });
   }, [navigate]);
 
-  function guessContentType(file: File): GCSTokenContent["type"] {
-    const mime = String(file.type || "").toLowerCase();
-    if (mime.startsWith("image/")) return "image";
-    if (mime.startsWith("video/")) return "video";
-    if (mime === "application/pdf") return "pdf";
+  function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("video/")) return "video";
+    if (file.type === "application/pdf") return "pdf";
     return "document";
   }
 
@@ -78,113 +76,28 @@ export function useTokenBlueprintCreate() {
     if (
       typeof crypto !== "undefined" &&
       "randomUUID" in crypto &&
-      typeof (crypto as any).randomUUID === "function"
+      typeof crypto.randomUUID === "function"
     ) {
-      return (crypto as any).randomUUID();
+      return crypto.randomUUID();
     }
 
     return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
 
-  function cacheBusterSafe(url: string, t?: Date | number | string): string {
-    const u = String(url || "").trim();
-    if (!u) return "";
-
-    const lower = u.toLowerCase();
-    const looksSigned =
-      lower.includes("x-goog-algorithm=") ||
-      lower.includes("x-goog-signature=") ||
-      lower.includes("x-goog-credential=") ||
-      lower.includes("x-amz-algorithm=") ||
-      lower.includes("x-amz-signature=");
-
-    if (looksSigned) return u;
-
-    let ts: number | null = null;
-    if (t instanceof Date) ts = t.getTime();
-    else if (typeof t === "number") ts = t;
-    else if (typeof t === "string") {
-      const d = Date.parse(t);
-      if (!Number.isNaN(d)) ts = d;
-    }
-    if (!ts) return u;
-
-    try {
-      const asUrl = new URL(u);
-      asUrl.searchParams.set("v", String(ts));
-      return asUrl.toString();
-    } catch {
-      const sep = u.includes("?") ? "&" : "?";
-      return `${u}${sep}v=${ts}`;
-    }
-  }
-
   function toTokenContents(
-    contents: unknown,
-    contentsBaseUrl?: string,
-    blueprintVer?: unknown,
-  ): GCSTokenContent[] {
-    if (!Array.isArray(contents)) return [];
-
-    const base = String(contentsBaseUrl || "").trim().replace(/\/+$/, "");
-    const out: GCSTokenContent[] = [];
-
-    for (let i = 0; i < contents.length; i++) {
-      const x: any = contents[i];
-
-      if (typeof x === "string") {
-        const url = x.trim();
-        if (!url) continue;
-
-        out.push({
-          id: `legacy_${i + 1}`,
-          name: `legacy_${i + 1}`,
-          type: "document",
-          url,
-          size: 0,
-        });
-
-        continue;
-      }
-
-      if (x && typeof x === "object") {
-        const id = String(x.id ?? "").trim() || `content_${i + 1}`;
-        const name = String(x.name ?? "").trim() || id;
-        const type = String(x.type ?? "").trim();
-        const size = Number(x.size ?? 0) || 0;
-
-        let url = String(x.url ?? "").trim();
-
-        if (!url && base && id) {
-          url = `${base}/${encodeURIComponent(id)}`;
-        }
-        if (!url) continue;
-
-        const normalizedType: GCSTokenContent["type"] =
-          type === "image" ||
-          type === "video" ||
-          type === "pdf" ||
-          type === "document"
-            ? type
-            : "document";
-
-        const ver = x.updatedAt ?? x.createdAt ?? blueprintVer;
-
-        out.push({
-          id,
-          name,
-          type: normalizedType,
-          url: cacheBusterSafe(url, ver),
-          size,
-        });
-      }
-    }
-
-    return out;
-  }
-
-  function actorId(): string {
-    return String(memberUid || "").trim();
+    contentFiles: ContentFile[],
+  ): FirebaseStorageTokenContent[] {
+    return contentFiles
+      .filter((file) => Boolean(file.url))
+      .map((file) => ({
+        id: file.id,
+        name: file.name,
+        type: file.type,
+        contentType: file.contentType,
+        size: file.size,
+        objectPath: file.objectPath,
+        url: file.url as string,
+      }));
   }
 
   type SaveInput = Partial<TokenBlueprint> & {
@@ -203,9 +116,6 @@ export function useTokenBlueprintCreate() {
       }
 
       const iconFile = input.iconFile ?? null;
-
-      // input.assigneeId が渡ってきた場合はそれを優先。
-      // ただし、呼び出し元も uid を渡す必要がある。
       const effectiveAssigneeId =
         input.assigneeId?.trim() || assignee || memberUid;
 
@@ -217,70 +127,55 @@ export function useTokenBlueprintCreate() {
         assigneeId: effectiveAssigneeId,
         companyId,
         createdBy: memberUid,
-        contentFiles: Array.isArray(input.contentFiles)
-          ? (input.contentFiles as any)
-          : [],
+        contentFiles: input.contentFiles ?? [],
         iconFile,
       };
 
       const created = await createTokenBlueprintWithOptionalIcon(payload);
 
-      const createdId = String((created as any)?.id ?? "").trim();
-      if (!createdId) {
+      if (!created.id) {
         throw new Error("create result missing id");
       }
 
       setAssignee(effectiveAssigneeId);
-      setCreatedBlueprint(created as TokenBlueprint);
+      setCreatedBlueprint(created);
 
-      return created as TokenBlueprint;
+      return created;
     },
     [companyId, memberUid, assignee],
   );
 
-  const contentsBaseUrl = React.useMemo(() => {
-    const url = String((createdBlueprint as any)?.contentsUrl ?? "").trim();
-    return url || undefined;
+  const tokenContents: FirebaseStorageTokenContent[] = React.useMemo(() => {
+    return toTokenContents(createdBlueprint?.contentFiles ?? []);
   }, [createdBlueprint]);
-
-  const blueprintVer = React.useMemo(() => {
-    return (createdBlueprint as any)?.updatedAt ?? (createdBlueprint as any)?.createdAt;
-  }, [createdBlueprint]);
-
-  const tokenContents: GCSTokenContent[] = React.useMemo(() => {
-    return toTokenContents(
-      (createdBlueprint as any)?.contentFiles,
-      contentsBaseUrl,
-      blueprintVer,
-    );
-  }, [createdBlueprint, contentsBaseUrl, blueprintVer]);
 
   const onTokenContentsFilesSelected = React.useCallback(
     async (files: File[]) => {
-      const id = String((createdBlueprint as any)?.id ?? "").trim();
+      const blueprint = createdBlueprint;
+      if (!blueprint) {
+        throw new Error("tokenBlueprint is not created yet. Please save first.");
+      }
+
+      const id = blueprint.id;
       if (!id) {
         throw new Error("tokenBlueprint is not created yet. Please save first.");
       }
 
-      if (!files || files.length === 0) return;
+      if (files.length === 0) return;
 
       if (!companyId) {
         throw new Error("companyId is missing");
       }
 
-      const actor = actorId();
-      if (!actor) {
-        throw new Error("actorId is missing (currentMember.uid)");
+      if (!memberUid) {
+        throw new Error("memberUid is missing");
       }
 
       setIsUploadingContents(true);
 
       try {
-        const existing = Array.isArray((createdBlueprint as any)?.contentFiles)
-          ? ([...(createdBlueprint as any).contentFiles] as any[])
-          : [];
-
-        const newOnes: any[] = [];
+        const existing = [...blueprint.contentFiles];
+        const newOnes: ContentFile[] = [];
 
         for (const file of files) {
           const contentId = newContentId();
@@ -296,42 +191,38 @@ export function useTokenBlueprintCreate() {
             id: contentId,
             name: file.name || contentId,
             type: guessContentType(file),
-            contentType:
-              String(file.type || "").trim() || "application/octet-stream",
+            contentType: file.type || "application/octet-stream",
             objectPath: uploaded.objectPath,
             url: uploaded.downloadUrl,
-            size: typeof file.size === "number" ? file.size : 0,
+            size: file.size,
             visibility: "private",
-            createdBy: actor,
-            updatedBy: actor,
+            createdAt: "",
+            createdBy: memberUid,
+            updatedAt: "",
+            updatedBy: memberUid,
           });
         }
 
-        const mergedMap = new Map<string, any>();
+        const mergedMap = new Map<string, ContentFile>();
 
         for (const x of existing) {
-          const xid = String(x?.id ?? "").trim();
-          if (xid) mergedMap.set(xid, x);
+          mergedMap.set(x.id, x);
         }
 
         for (const x of newOnes) {
-          const xid = String(x?.id ?? "").trim();
-          if (xid) mergedMap.set(xid, x);
+          mergedMap.set(x.id, x);
         }
-
-        const merged = Array.from(mergedMap.values());
 
         const updated = await patchTokenBlueprintContentFiles({
           tokenBlueprintId: id,
-          actorId: actor,
-          contentFiles: merged,
+          contentFiles: Array.from(mergedMap.values()),
         });
 
-        setCreatedBlueprint(updated as any);
+        setCreatedBlueprint(updated);
 
         try {
           const refreshed = await fetchTokenBlueprintById(id);
-          setCreatedBlueprint(refreshed as any);
+          setCreatedBlueprint(refreshed);
         } catch {
           // ignore
         }
@@ -343,46 +234,37 @@ export function useTokenBlueprintCreate() {
   );
 
   const onDeleteTokenContent = React.useCallback(
-    async (item: GCSTokenContent, _index: number) => {
-      const id = String((createdBlueprint as any)?.id ?? "").trim();
+    async (item: FirebaseStorageTokenContent, _index: number) => {
+      const blueprint = createdBlueprint;
+      if (!blueprint) {
+        throw new Error("tokenBlueprint is not created yet. Please save first.");
+      }
+
+      const id = blueprint.id;
       if (!id) {
         throw new Error("tokenBlueprint is not created yet. Please save first.");
       }
 
-      const actor = actorId();
-      if (!actor) {
-        throw new Error("actorId is missing (currentMember.uid)");
-      }
+      if (item.id.startsWith("local_")) return;
 
-      const contentId = String(item?.id ?? "").trim();
-      if (!contentId) return;
-
-      if (contentId.startsWith("local_")) return;
-
-      const existing = Array.isArray((createdBlueprint as any)?.contentFiles)
-        ? ([...(createdBlueprint as any).contentFiles] as any[])
-        : [];
-
-      const next = existing.filter((x: any) => {
-        return String(x?.id ?? "").trim() !== contentId;
-      });
+      const existing = [...blueprint.contentFiles];
+      const next = existing.filter((x) => x.id !== item.id);
 
       const updated = await patchTokenBlueprintContentFiles({
         tokenBlueprintId: id,
-        actorId: actor,
         contentFiles: next,
       });
 
-      setCreatedBlueprint(updated as any);
+      setCreatedBlueprint(updated);
 
       try {
         const refreshed = await fetchTokenBlueprintById(id);
-        setCreatedBlueprint(refreshed as any);
+        setCreatedBlueprint(refreshed);
       } catch {
         // ignore
       }
     },
-    [createdBlueprint, memberUid],
+    [createdBlueprint],
   );
 
   const initialTokenBlueprint: Partial<TokenBlueprint> = React.useMemo(

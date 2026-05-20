@@ -2,7 +2,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
+import type {
+  TokenBlueprint,
+  ContentFile,
+} from "../../domain/entity/tokenBlueprint";
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
@@ -12,7 +15,7 @@ import {
   updateTokenBlueprintFromCard,
 } from "../../application/tokenBlueprintDetailService";
 
-import type { GCSTokenContent } from "../../../../shell/src/shared/types/tokenContents";
+import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
 
 import { patchTokenBlueprintContentFiles } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructure/storage/tokenBlueprintAssetStorage";
@@ -29,7 +32,7 @@ type UseTokenBlueprintDetailVM = {
   updatedByName: string;
   updatedAt: string;
 
-  tokenContents: GCSTokenContent[];
+  tokenContents: FirebaseStorageTokenContent[];
 
   cardVm: any;
   isEditMode: boolean;
@@ -48,7 +51,10 @@ type UseTokenBlueprintDetailHandlers = {
   cardHandlers: any;
 
   onTokenContentsFilesSelected: (files: File[]) => Promise<void>;
-  onDeleteTokenContent: (item: GCSTokenContent, index: number) => Promise<void>;
+  onDeleteTokenContent: (
+    item: FirebaseStorageTokenContent,
+    index: number,
+  ) => Promise<void>;
 };
 
 export type UseTokenBlueprintDetailResult = {
@@ -56,11 +62,10 @@ export type UseTokenBlueprintDetailResult = {
   handlers: UseTokenBlueprintDetailHandlers;
 };
 
-function guessContentType(file: File): GCSTokenContent["type"] {
-  const mime = String(file.type || "").toLowerCase();
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  if (mime === "application/pdf") return "pdf";
+function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type === "application/pdf") return "pdf";
   return "document";
 }
 
@@ -68,100 +73,28 @@ function uuidLike(): string {
   if (
     typeof crypto !== "undefined" &&
     "randomUUID" in crypto &&
-    typeof (crypto as any).randomUUID === "function"
+    typeof crypto.randomUUID === "function"
   ) {
-    return (crypto as any).randomUUID();
+    return crypto.randomUUID();
   }
 
   return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-function cacheBuster(url: string, t?: Date | number | string): string {
-  const u = String(url || "").trim();
-  if (!u) return "";
-
-  const lower = u.toLowerCase();
-  const isSignedUrl =
-    lower.includes("x-goog-signature=") ||
-    lower.includes("x-goog-credential=") ||
-    lower.includes("x-goog-algorithm=") ||
-    lower.includes("x-goog-date=") ||
-    lower.includes("x-amz-signature=") ||
-    lower.includes("x-amz-credential=") ||
-    lower.includes("x-amz-algorithm=") ||
-    lower.includes("x-amz-date=") ||
-    lower.includes("signature=") ||
-    lower.includes("googleaccessid=");
-
-  if (isSignedUrl) return u;
-
-  try {
-    const parsed = new URL(
-      u,
-      typeof window !== "undefined" ? window.location.origin : "http://local",
-    );
-    if (parsed.searchParams.has("v")) return u;
-  } catch {
-    // noop
-  }
-
-  let ts: number | null = null;
-
-  if (t instanceof Date) ts = t.getTime();
-  else if (typeof t === "number") ts = t;
-  else if (typeof t === "string") {
-    const d = Date.parse(t);
-    if (!Number.isNaN(d)) ts = d;
-  }
-
-  if (!ts) return u;
-
-  const sep = u.includes("?") ? "&" : "?";
-  return `${u}${sep}v=${ts}`;
-}
-
 function toTokenContents(
-  contents: unknown,
-  contentsBaseUrl?: string,
-  blueprintVer?: unknown,
-): GCSTokenContent[] {
-  if (!Array.isArray(contents)) return [];
-
-  const base = String(contentsBaseUrl || "").trim().replace(/\/+$/, "");
-  const out: GCSTokenContent[] = [];
-
-  for (let i = 0; i < contents.length; i++) {
-    const x: any = contents[i];
-    if (!x || typeof x !== "object") continue;
-
-    const id = String(x.id ?? "").trim() || `content_${i + 1}`;
-    const name = String(x.name ?? "").trim() || id;
-    const type = String(x.type ?? "").trim();
-    const size = Number(x.size ?? 0) || 0;
-
-    let url = String(x.url ?? "").trim();
-    if (!url && base && id) {
-      url = `${base}/${encodeURIComponent(id)}`;
-    }
-    if (!url) continue;
-
-    const normalizedType: GCSTokenContent["type"] =
-      type === "image" || type === "video" || type === "pdf" || type === "document"
-        ? type
-        : "document";
-
-    const ver = x.updatedAt ?? x.createdAt ?? blueprintVer;
-
-    out.push({
-      id,
-      name,
-      type: normalizedType,
-      url: cacheBuster(url, ver),
-      size,
-    });
-  }
-
-  return out;
+  contentFiles: ContentFile[],
+): FirebaseStorageTokenContent[] {
+  return contentFiles
+    .filter((file) => Boolean(file.url))
+    .map((file) => ({
+      id: file.id,
+      name: file.name,
+      type: file.type,
+      contentType: file.contentType,
+      size: file.size,
+      objectPath: file.objectPath,
+      url: file.url as string,
+    }));
 }
 
 export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
@@ -169,8 +102,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const { tokenBlueprintId } = useParams<{ tokenBlueprintId: string }>();
   const { currentMember } = useAuth();
 
-  const memberId = String(currentMember?.id ?? "").trim();
-  const currentCompanyId = String(currentMember?.companyId ?? "").trim();
+  const memberId = currentMember?.id ?? "";
+  const currentCompanyId = currentMember?.companyId ?? "";
 
   const [blueprint, setBlueprint] = useState<TokenBlueprint | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -192,12 +125,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         if (cancelled) return;
 
         setBlueprint(tb);
-
-        const nextAssigneeId = String((tb as any)?.assigneeId ?? "").trim();
-        const nextAssigneeName = String((tb as any)?.assigneeName ?? "").trim();
-
-        setAssigneeId(nextAssigneeId);
-        setAssigneeName(nextAssigneeName || nextAssigneeId);
+        setAssigneeId(tb.assigneeId);
+        setAssigneeName(tb.assigneeName || tb.assigneeId);
       } catch (_e) {
         if (!cancelled) navigate("/tokenBlueprint", { replace: true });
       } finally {
@@ -211,41 +140,27 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   }, [tokenBlueprintId, navigate]);
 
   const minted = useMemo(() => {
-    return Boolean((blueprint as any)?.minted);
+    return blueprint?.minted ?? false;
   }, [blueprint]);
 
   const createdByName = useMemo(() => {
-    const name = String((blueprint as any)?.createdByName ?? "").trim();
-    if (name) return name;
-    return String((blueprint as any)?.createdBy ?? "").trim();
+    return blueprint?.createdByName || blueprint?.createdBy || "";
   }, [blueprint]);
 
   const updatedByName = useMemo(() => {
-    const name = String((blueprint as any)?.updatedByName ?? "").trim();
-    if (name) return name;
-    return String((blueprint as any)?.updatedBy ?? "").trim();
+    return blueprint?.updatedByName || blueprint?.updatedBy || "";
   }, [blueprint]);
 
   const createdAt = useMemo(() => {
-    return safeDateTimeLabelJa((blueprint as any)?.createdAt, "");
+    return safeDateTimeLabelJa(blueprint?.createdAt ?? "", "");
   }, [blueprint]);
 
   const updatedAt = useMemo(() => {
-    return safeDateTimeLabelJa((blueprint as any)?.updatedAt, "");
+    return safeDateTimeLabelJa(blueprint?.updatedAt ?? "", "");
   }, [blueprint]);
 
   const initialIconUrl = useMemo(() => {
-    const url = String((blueprint as any)?.iconUrl ?? "").trim();
-    return url || undefined;
-  }, [blueprint]);
-
-  const contentsBaseUrl = useMemo(() => {
-    const url = String((blueprint as any)?.contentsUrl ?? "").trim();
-    return url || undefined;
-  }, [blueprint]);
-
-  const blueprintVer = useMemo(() => {
-    return (blueprint as any)?.updatedAt ?? (blueprint as any)?.createdAt;
+    return blueprint?.iconUrl || undefined;
   }, [blueprint]);
 
   const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
@@ -257,9 +172,9 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const isEditMode: boolean = cardVm?.isEditMode ?? false;
 
-  const tokenContents: GCSTokenContent[] = useMemo(() => {
-    return toTokenContents((blueprint as any)?.contentFiles, contentsBaseUrl, blueprintVer);
-  }, [blueprint, contentsBaseUrl, blueprintVer]);
+  const tokenContents: FirebaseStorageTokenContent[] = useMemo(() => {
+    return toTokenContents(blueprint?.contentFiles ?? []);
+  }, [blueprint]);
 
   const handleBack = useCallback(() => {
     navigate("/tokenBlueprint", { replace: true });
@@ -273,11 +188,14 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     cardHandlers?.reset?.();
     cardHandlers?.setEditMode?.(false);
 
-    const initialAssigneeId = String((blueprint as any)?.assigneeId ?? "").trim();
-    const initialAssigneeName = String((blueprint as any)?.assigneeName ?? "").trim();
+    if (!blueprint) {
+      setAssigneeId("");
+      setAssigneeName("");
+      return;
+    }
 
-    setAssigneeId(initialAssigneeId);
-    setAssigneeName(initialAssigneeName || initialAssigneeId);
+    setAssigneeId(blueprint.assigneeId);
+    setAssigneeName(blueprint.assigneeName || blueprint.assigneeId);
   }, [cardHandlers, blueprint]);
 
   const handleSave = useCallback(async () => {
@@ -288,7 +206,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       setLoading(true);
 
       const sourceBlueprint = {
-        ...(blueprint as any),
+        ...blueprint,
         assigneeId,
         assigneeName,
       } as TokenBlueprint;
@@ -296,14 +214,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       const updated = await updateTokenBlueprintFromCard(sourceBlueprint, cardVm);
 
       setBlueprint(updated);
-
-      const nextAssigneeId = String((updated as any)?.assigneeId ?? assigneeId ?? "").trim();
-      const nextAssigneeName = String(
-        (updated as any)?.assigneeName ?? assigneeName ?? nextAssigneeId,
-      ).trim();
-
-      setAssigneeId(nextAssigneeId);
-      setAssigneeName(nextAssigneeName || nextAssigneeId);
+      setAssigneeId(updated.assigneeId);
+      setAssigneeName(updated.assigneeName || updated.assigneeId);
 
       cardHandlers?.setEditMode?.(false);
       window.alert("編集が完了しました。");
@@ -321,17 +233,12 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const handleSelectAssignee = useCallback(
     (id: string) => {
-      const nextId = String(id ?? "").trim();
-      if (!nextId) return;
+      if (!id) return;
 
-      let nextName = "";
-      if (currentMember?.id === nextId) {
-        nextName = currentMember.fullName || currentMember.email || currentMember.id;
-      } else {
-        nextName = nextId;
-      }
+      const nextName =
+        currentMember?.id === id ? currentMember.email || currentMember.id : id;
 
-      setAssigneeId(nextId);
+      setAssigneeId(id);
       setAssigneeName(nextName);
     },
     [currentMember],
@@ -350,16 +257,9 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       const id = tokenBlueprintId?.trim();
       if (!id) return;
       if (!blueprint) return;
-      if (!files || files.length === 0) return;
+      if (files.length === 0) return;
 
-      if (!memberId) {
-        throw new Error("actorId is missing (currentMember.id)");
-      }
-
-      const companyId = String(
-        (blueprint as any)?.companyId ?? currentCompanyId ?? "",
-      ).trim();
-
+      const companyId = blueprint.companyId || currentCompanyId;
       if (!companyId) {
         throw new Error("companyId is missing");
       }
@@ -367,11 +267,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       setIsUploadingContents(true);
 
       try {
-        const existing = Array.isArray((blueprint as any)?.contentFiles)
-          ? ([...(blueprint as any).contentFiles] as any[])
-          : [];
-
-        const newOnes: any[] = [];
+        const existing = [...blueprint.contentFiles];
+        const newOnes: ContentFile[] = [];
 
         for (const file of files) {
           const contentId = uuidLike();
@@ -387,34 +284,31 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
             id: contentId,
             name: file.name || contentId,
             type: guessContentType(file),
-            contentType: String(file.type || "").trim() || "application/octet-stream",
-            size: typeof file.size === "number" ? file.size : 0,
+            contentType: file.type || "application/octet-stream",
+            size: file.size,
             objectPath: uploaded.objectPath,
             url: uploaded.downloadUrl,
             visibility: "private",
+            createdAt: "",
             createdBy: memberId,
+            updatedAt: "",
             updatedBy: memberId,
           });
         }
 
-        const mergedMap = new Map<string, any>();
+        const mergedMap = new Map<string, ContentFile>();
 
         for (const x of existing) {
-          const xid = String(x?.id ?? "").trim();
-          if (xid) mergedMap.set(xid, x);
+          mergedMap.set(x.id, x);
         }
 
         for (const x of newOnes) {
-          const xid = String(x?.id ?? "").trim();
-          if (xid) mergedMap.set(xid, x);
+          mergedMap.set(x.id, x);
         }
-
-        const merged = Array.from(mergedMap.values());
 
         const updated = await patchTokenBlueprintContentFiles({
           tokenBlueprintId: id,
-          actorId: memberId,
-          contentFiles: merged,
+          contentFiles: Array.from(mergedMap.values()),
         });
 
         setBlueprint(updated);
@@ -433,28 +327,16 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   );
 
   const onDeleteTokenContent = useCallback(
-    async (item: GCSTokenContent, _index: number) => {
+    async (item: FirebaseStorageTokenContent, _index: number) => {
       const id = tokenBlueprintId?.trim();
       if (!id) return;
       if (!blueprint) return;
-      if (!memberId) {
-        throw new Error("actorId is missing (currentMember.id)");
-      }
 
-      const contentId = String(item?.id ?? "").trim();
-      if (!contentId) return;
-
-      if (contentId.startsWith("local_")) return;
-
-      const existing = Array.isArray((blueprint as any)?.contentFiles)
-        ? ([...(blueprint as any).contentFiles] as any[])
-        : [];
-
-      const next = existing.filter((x: any) => String(x?.id ?? "").trim() !== contentId);
+      const existing = [...blueprint.contentFiles];
+      const next = existing.filter((x) => x.id !== item.id);
 
       const updated = await patchTokenBlueprintContentFiles({
         tokenBlueprintId: id,
-        actorId: memberId,
         contentFiles: next,
       });
 
@@ -467,17 +349,15 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         // ignore
       }
     },
-    [tokenBlueprintId, blueprint, memberId],
+    [tokenBlueprintId, blueprint],
   );
 
   const vm: UseTokenBlueprintDetailVM = {
     blueprint,
     title: "トークン設計",
-    assigneeId: assigneeId || String((blueprint as any)?.assigneeId ?? "").trim(),
+    assigneeId: assigneeId || blueprint?.assigneeId || "",
     assigneeName:
-      assigneeName ||
-      String((blueprint as any)?.assigneeName ?? "").trim() ||
-      String((blueprint as any)?.assigneeId ?? "").trim(),
+      assigneeName || blueprint?.assigneeName || blueprint?.assigneeId || "",
     minted,
     createdByName,
     createdAt,
