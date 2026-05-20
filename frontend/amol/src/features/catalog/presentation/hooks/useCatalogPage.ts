@@ -13,7 +13,7 @@ import { loadCatalogPage } from "../../application/catalogPageLoader";
 import { createCatalogPageViewModel } from "../../application/catalogPageViewModelFactory";
 import { resolveCatalogSwipeDirection } from "../../application/catalogSwipeUsecase";
 import { SWIPE_THRESHOLD_PX } from "../../constants";
-import { getApiBaseUrl } from "../../infrastructure/apiBaseUrlProvider";
+import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
 import type {
   CatalogProductBlueprintReviewPage,
   CatalogResponse,

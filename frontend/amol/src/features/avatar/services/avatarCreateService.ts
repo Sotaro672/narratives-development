@@ -15,7 +15,6 @@ import type {
 type AvatarCreateServiceParams = {
   auth: Auth;
   backendUrl: string;
-  logger?: (message: string) => void;
 };
 
 type SaveAvatarParams = {
@@ -32,16 +31,10 @@ type UpdateAvatarParams = SaveAvatarParams & {
 export class AvatarCreateService {
   private readonly auth: Auth;
   private readonly backendUrl: string;
-  private readonly logger?: (message: string) => void;
 
-  constructor({ auth, backendUrl, logger }: AvatarCreateServiceParams) {
+  constructor({ auth, backendUrl }: AvatarCreateServiceParams) {
     this.auth = auth;
     this.backendUrl = backendUrl;
-    this.logger = logger;
-  }
-
-  log(message: string) {
-    this.logger?.(message);
   }
 
   s(value: string | null | undefined): string {
@@ -114,7 +107,9 @@ export class AvatarCreateService {
       case "image/gif":
         return mimeType;
       default:
-        throw new Error("対応していない画像形式です。png, jpg, webp, gif を選択してください。");
+        throw new Error(
+          "対応していない画像形式です。png, jpg, webp, gif を選択してください。",
+        );
     }
   }
 
@@ -155,10 +150,6 @@ export class AvatarCreateService {
     const objectPath = this.avatarIconStoragePath(avatarId);
     const storageRef = ref(storage, objectPath);
 
-    this.log(
-      `firebase storage upload start avatarId=${avatarId} path=${objectPath} contentType=${mimeType} size=${iconFile.size}`
-    );
-
     await uploadBytes(storageRef, iconFile, {
       contentType: mimeType,
       customMetadata: {
@@ -167,13 +158,7 @@ export class AvatarCreateService {
       },
     });
 
-    const downloadUrl = await getDownloadURL(storageRef);
-
-    this.log(
-      `firebase storage upload done avatarId=${avatarId} path=${objectPath} url="${downloadUrl}"`
-    );
-
-    return downloadUrl;
+    return getDownloadURL(storageRef);
   }
 
   async fetchMine(): Promise<MyAvatarResponse | null> {
@@ -231,10 +216,6 @@ export class AvatarCreateService {
       const profile = this.s(profileRaw);
       const idToken = await this.getIdToken();
 
-      this.log(
-        `avatar create start userId=${userId} avatarName="${avatarName}" profileLen=${profile.length} externalLink="${externalLink || "-"}" hasIcon=${!!iconFile}`
-      );
-
       const created = await createAvatar({
         backendUrl: this.backendUrl,
         idToken,
@@ -256,8 +237,6 @@ export class AvatarCreateService {
         };
       }
 
-      this.log(`avatar create ok avatarId=${avatarId} userId=${userId}`);
-
       if (iconFile) {
         const avatarIcon = await this.uploadAvatarIconToFirebaseStorage({
           avatarId,
@@ -275,8 +254,6 @@ export class AvatarCreateService {
             avatarIcon,
           },
         });
-
-        this.log(`avatar icon url patched avatarId=${avatarId}`);
       }
 
       return {
@@ -286,8 +263,6 @@ export class AvatarCreateService {
         createdAvatarId: avatarId,
       };
     } catch (error) {
-      this.log(`avatar create failed err=${String(error)}`);
-
       return {
         ok: false,
         message: error instanceof Error ? error.message : String(error),
@@ -333,10 +308,6 @@ export class AvatarCreateService {
       const profile = this.s(profileRaw);
       const idToken = await this.getIdToken();
 
-      this.log(
-        `avatar update start avatarId=${id} avatarName="${avatarName}" profileLen=${profile.length} externalLink="${externalLink || "-"}" hasIcon=${!!iconFile}`
-      );
-
       let avatarIcon: string | undefined;
 
       if (iconFile) {
@@ -364,8 +335,6 @@ export class AvatarCreateService {
         avatarId: id,
       };
     } catch (error) {
-      this.log(`avatar update failed err=${String(error)}`);
-
       return {
         ok: false,
         message: error instanceof Error ? error.message : String(error),

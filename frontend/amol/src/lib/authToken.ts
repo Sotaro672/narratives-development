@@ -1,5 +1,4 @@
-// frontend/amol/src/features/catalog/infrastructure/authTokenProvider.ts
-
+//frontend\amol\src\lib\authToken.ts
 import { getAuth } from "firebase/auth";
 
 export async function getFirebaseIdToken(): Promise<string> {

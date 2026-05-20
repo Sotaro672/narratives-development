@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
-import { getApiBaseUrl } from "../../catalog/infrastructure/apiBaseUrlProvider";
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
 import { useMobilePortrait } from "../../catalog/presentation/hooks/useMobilePortrait";
 import { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";

@@ -100,8 +100,6 @@ frontend/
 │  │  │  │  ├─ catalogSelectionFactory.ts
 │  │  │  │  └─ catalogSwipeUsecase.ts
 │  │  │  ├─ infrastructure/
-│  │  │  │  ├─ apiBaseUrlProvider.ts
-│  │  │  │  ├─ authTokenProvider.ts
 │  │  │  │  ├─ avatarStateRepository.ts
 │  │  │  │  ├─ catalogCartRepository.ts
 │  │  │  │  ├─ catalogRepository.ts
@@ -171,6 +169,19 @@ frontend/
 │  │  │     ├─ format.ts
 │  │  │     ├─ guards.ts
 │  │  │     └─ order.ts
+│  │  │
+│  │  ├─ payment-method/
+│  │  │  ├─ api/
+│  │  │  │  └─ paymentMethodApi.ts
+│  │  │  ├─ components/
+│  │  │  │  ├─ PaymentMethodCardholderCard.tsx
+│  │  │  │  ├─ PaymentMethodForm.tsx
+│  │  │  │  └─ PaymentMethodStatusCard.tsx
+│  │  │  ├─ hooks/
+│  │  │  │  └─ usePaymentMethodPage.ts
+│  │  │  ├─ utils/
+│  │  │  │  └─ paymentMethodUtils.ts
+│  │  │  └─ types.ts
 │  │  │
 │  │  ├─ scan-result/
 │  │  │  ├─ api/
@@ -242,6 +253,8 @@ frontend/
 │  │     └─ types.ts
 │  │
 │  ├─ lib/
+│  │  ├─ apiBaseUrl.ts
+│  │  ├─ authToken.ts
 │  │  ├─ firebase.ts
 │  │  ├─ navigation.ts
 │  │  └─ solana.ts
