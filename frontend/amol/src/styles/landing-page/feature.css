@@ -227,13 +227,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  width: calc(100% + 40px);
   min-width: 0;
-  height: 190px;
-  margin-top: 12px;
-  padding: 12px;
-  border-radius: 12px;
-  background: #f8fafc;
+  height: auto;
+  margin: 12px -20px -20px;
+  padding: 0;
+  border-radius: 0;
+  background: #ffffff;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -241,8 +241,8 @@
 .landing-page-sales-support-benefit__image {
   display: block;
   width: 100%;
-  height: 100%;
-  max-width: 100%;
+  height: auto;
+  max-width: none;
   max-height: none;
   object-fit: contain;
 }

@@ -106,86 +106,84 @@ export default function LandingPage() {
               購入後も、お客様とつながる
             </h2>
             <p className="landing-page-card__text landing-page-sales-support__lead">
-              AMOLの電子名札を通じて、購入者は商品の感想や質問を投稿できます。
-              生産者はお客様の声を直接受け取り、酒造りやファンづくりに活かすことができます。
+              電子名札を通じて、生産者は販売した商品の現在の所有者がと繋がることができます。
             </p>
-          </div>
-
-          <div className="landing-page-sales-support__grid">
-            <article className="landing-page-sales-support-card">
-              <p className="landing-page-sales-support-card__label">
-                これまでの課題
-              </p>
-              <h3 className="landing-page-sales-support-card__title">
-                お客様の声が届きにくい
-              </h3>
-              <p className="landing-page-sales-support-card__text">
-                美味しかったお酒でも、銘柄や蔵元の名前を思い出せず、
-                購入後の感想や質問が生産者まで届きにくいことがあります。
-              </p>
-            </article>
-
-            <div className="landing-page-sales-support-phone">
-              <img
-                src="/comment.png"
-                alt="電子名札を通じて購入者とやり取りする画面"
-                className="landing-page-sales-support-phone__image"
-                loading="lazy"
-              />
-            </div>
-
-            <article className="landing-page-sales-support-card">
-              <p className="landing-page-sales-support-card__label">
-                AMOLでできること
-              </p>
-              <h3 className="landing-page-sales-support-card__title">
-                販売後も関係が続く
-              </h3>
-              <p className="landing-page-sales-support-card__text">
-                購入者は飲んだ感想や質問を投稿でき、生産者は直接返信できます。
-                商品をきっかけに、継続的なファンとの接点を作れます。
-              </p>
-            </article>
           </div>
 
           <div className="landing-page-sales-support__benefits">
             <article className="landing-page-sales-support-benefit landing-page-sales-support-benefit--with-image">
               <div className="landing-page-sales-support-benefit__content">
+                <p className="landing-page-sales-support-card__label">
+                  これまでの課題
+                </p>
                 <h3 className="landing-page-sales-support-benefit__title">
-                  従来のSNSを用いてのお客様との繋がり
+                  従来のSNSではお客様からフォローしてもらう必要があった。
                 </h3>
                 <p className="landing-page-sales-support-benefit__text">
-                  お客様からフォローをしていただく必要があり、再度購入したいと思っても商品名を思い出してもらえない場合があります。
+                  従来のSNSでは折角商品を気に入ってもらっても、お客様からフォローをして頂かないと商品を忘れてしまう可能性があります。
                 </p>
-              </div>
+
+
 
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/BeforeConnection.png"
+                  src="/BeforeConnection1.png"
                   alt="従来のSNSを用いたお客様との繋がり"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"
                 />
               </div>
+              <h3 className="landing-page-sales-support-benefit__title">
+                  二次流通を追跡できない
+                </h3>
+                <p className="landing-page-sales-support-benefit__text">
+                  従来のSNSでは販売した商品が年々拡大する二次流通市場でどの様なお客様に購入されているのかを追跡することができません。
+                </p>
+                              <div className="landing-page-sales-support-benefit__image-wrap">
+                <img
+                  src="/BeforeConnection2.png"
+                  alt="従来のSNSを用いたお客様との繋がり"
+                  className="landing-page-sales-support-benefit__image"
+                  loading="lazy"
+                />
+              </div>
+              </div>
             </article>
 
             <article className="landing-page-sales-support-benefit landing-page-sales-support-benefit--with-image">
               <div className="landing-page-sales-support-benefit__content">
+                <p className="landing-page-sales-support-card__label">
+                  AMOLでできること
+                </p>
                 <h3 className="landing-page-sales-support-benefit__title">
                   電子名札を介したお客様との繋がり
                 </h3>
                 <p className="landing-page-sales-support-benefit__text">
                   商品を購入していただき、オプトイン操作をしていただいた全てのお客様にお知らせを送ることができます。
                 </p>
-              </div>
-
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/AfterConnection.png"
+                  src="/AfterConnection1.png"
                   alt="電子名札を介したお客様との繋がり"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"
                 />
+              </div>
+                
+                <h3 className="landing-page-sales-support-benefit__title">
+                  二次流通市場でも現在の所有者と繋がれる
+                </h3>
+                <p className="landing-page-sales-support-benefit__text">
+                  お客様間で電子名札を譲渡することも可能です。二次流通市場で購入されたお客様にもお知らせをお届けすることができます。
+                </p>
+              <div className="landing-page-sales-support-benefit__image-wrap">
+                <img
+                  src="/AfterConnection2.png"
+                  alt="電子名札を介したお客様との繋がり"
+                  className="landing-page-sales-support-benefit__image"
+                  loading="lazy"
+                />
+              </div>
               </div>
             </article>
           </div>
