@@ -206,8 +206,10 @@ export function useScanResultPage() {
       transferredMintAddress,
       token: previewState?.raw.token ?? null,
       tokenBlueprintPatch: previewState?.tokenBlueprintPatch ?? null,
+      productName: previewState?.raw.productBlueprintPatch?.productName ?? "",
     });
   }, [
+    previewState?.raw.productBlueprintPatch?.productName,
     previewState?.raw.token,
     previewState?.tokenBlueprintPatch,
     transferResult,
@@ -539,6 +541,7 @@ export function useScanResultPage() {
       productId: transferSuccessModalViewModel.productId,
       brandId: transferSuccessModalViewModel.brandId,
       brandName: transferSuccessModalViewModel.brandName,
+      productName: transferSuccessModalViewModel.productName,
       metadataUri: transferSuccessModalViewModel.metadataUri,
       tokenBlueprintId: transferSuccessModalViewModel.tokenBlueprintId,
       tokenName: transferSuccessModalViewModel.tokenName,

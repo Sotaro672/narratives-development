@@ -13,6 +13,7 @@ export type ScanTransferHistoryViewModel = {
 
 export type ScanTransferSuccessModalViewModel = {
   productId: string;
+  productName: string;
   mintAddress: string;
 
   /**
@@ -55,6 +56,7 @@ export function createScanTransferSuccessModalViewModel(input: {
   transferredMintAddress: string;
   token: MallTokenInfo | null;
   tokenBlueprintPatch: TokenBlueprintPatchVM | null;
+  productName: string;
 }): ScanTransferSuccessModalViewModel | null {
   const result = input.result;
 
@@ -79,6 +81,7 @@ export function createScanTransferSuccessModalViewModel(input: {
   const token = input.token;
   const tokenBlueprintPatch = input.tokenBlueprintPatch;
 
+  const productName = normalize(input.productName);
   const metadataUri = normalize(token?.metadataUri);
   const tokenBlueprintId = normalize(token?.tokenBlueprintId);
   const tokenName = normalize(tokenBlueprintPatch?.tokenName);
@@ -88,6 +91,7 @@ export function createScanTransferSuccessModalViewModel(input: {
 
   return {
     productId: result.productId,
+    productName,
     mintAddress,
     metadataUri,
     tokenBlueprintId,

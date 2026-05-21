@@ -11,6 +11,10 @@ type Props = {
   onOpenContents: () => void;
 };
 
+function displayText(value: string): string {
+  return value.trim() || "-";
+}
+
 export default function ScanTransferSuccessModal({
   open,
   loading,
@@ -57,23 +61,23 @@ export default function ScanTransferSuccessModal({
 
             <dl className="scan-transfer-modal__list">
               <div>
-                <dt>Product ID</dt>
-                <dd>{viewModel.productId}</dd>
+                <dt>商品名</dt>
+                <dd>{displayText(viewModel.productName)}</dd>
               </div>
 
               <div>
-                <dt>Mint Address</dt>
-                <dd>{viewModel.mintAddress}</dd>
+                <dt>トークン名</dt>
+                <dd>{displayText(viewModel.tokenName)}</dd>
               </div>
 
               <div>
                 <dt>移譲元</dt>
-                <dd>{viewModel.fromName}</dd>
+                <dd>{displayText(viewModel.fromName)}</dd>
               </div>
 
               <div>
                 <dt>移譲先</dt>
-                <dd>{viewModel.toName}</dd>
+                <dd>{displayText(viewModel.toName)}</dd>
               </div>
 
               {viewModel.walletUpdated ? (
