@@ -10,13 +10,36 @@ import Button from "../components/ui/Button";
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const salesSupportSectionRef = useRef<HTMLElement | null>(null);
+  const authenticationEyebrowRef = useRef<HTMLParagraphElement | null>(null);
+  const salesSupportEyebrowRef = useRef<HTMLParagraphElement | null>(null);
+
+  const scrollToElement = (element: HTMLElement | null) => {
+    if (!element) return;
+
+    if (typeof window === "undefined") {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
+
+    const isMobile = window.matchMedia("(max-width: 767px)").matches;
+    const rect = element.getBoundingClientRect();
+    const mobileOffset = isMobile ? element.offsetHeight + 56 : 0;
+
+    window.scrollTo({
+      top: window.scrollY + rect.top - mobileOffset,
+      behavior: "smooth",
+    });
+  };
+
+  const scrollToAuthentication = () => {
+    scrollToElement(authenticationEyebrowRef.current);
+  };
 
   const scrollToSalesSupport = () => {
-    salesSupportSectionRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    scrollToElement(salesSupportEyebrowRef.current);
   };
 
   return (
@@ -25,7 +48,7 @@ export default function LandingPage() {
         <div className="landing-page-hero__inner">
           <div className="landing-page-hero__content">
             <p className="landing-page-hero__eyebrow">
-              ブロックチェーンで本物だけを届ける
+              本物だけを届ける
             </p>
 
             <h1 className="landing-page-hero__title">AMOL</h1>
@@ -49,7 +72,19 @@ export default function LandingPage() {
       <section className="landing-page-section">
         <div className="landing-page-section__inner">
           <div className="landing-page-feature-grid">
-            <article className="landing-page-feature-card">
+            <article
+              className="landing-page-feature-card landing-page-feature-card--clickable"
+              role="button"
+              tabIndex={0}
+              aria-label="真贋証明の詳細へ移動"
+              onClick={scrollToAuthentication}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  scrollToAuthentication();
+                }
+              }}
+            >
               <h2 className="landing-page-feature-card__title">真贋証明</h2>
               <p className="landing-page-feature-card__text">
                 商品のQRコードをスキャンするだけで、製品情報、コメント、所有履歴にアクセスでき、本物であると瞬時に分かります。
@@ -94,37 +129,40 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="landing-page-section landing-page-service-case">
+      <section
+        id="authentication"
+        className="landing-page-section landing-page-service-case"
+      >
         <div className="landing-page-section__inner">
           <div className="landing-page-service-case__header">
-            <p className="landing-page-service-case__eyebrow">
-              AMOLサービス 導入事例：日本酒
+            <p
+              ref={authenticationEyebrowRef}
+              className="landing-page-sales-support__eyebrow"
+            >
+              真贋証明
             </p>
             <h2 className="landing-page-section__title landing-page-service-case__title">
-              “日本酒”のラベルにQRコードを貼ることから始める電子名札
+              電子名札で見える商品の変遷
             </h2>
             <p className="landing-page-card__text landing-page-service-case__lead">
-              日本酒ボトルに貼られたQRコード付きの電子名札。所有者の名前を書き込むと、その情報が世界中のサーバーに記録され、あなたがその日本酒を持っていることが世界中で証明されます。
+              届いた商品のQRコードをスキャンするだけで貴方の商品の所有権を閲覧、記録することができます。
             </p>
           </div>
 
           <div className="landing-page-service-case__top-grid">
             <article className="landing-page-service-case-card landing-page-service-case-card--proof">
               <div className="landing-page-service-case-card__content">
-                <p className="landing-page-service-case-card__label">
-                  真贋証明
-                </p>
                 <h3 className="landing-page-service-case-card__title">
-                  QRコードを読み取るだけで、本物であることを確認
+                  QRコードを読み取るだけで、現在の所有者を確認できる
                 </h3>
                 <p className="landing-page-service-case-card__text">
-                  購入した商品のQRコードを読み取ると、製品情報、コメント、所有履歴にアクセスできます。偽物ではなく、本物の商品であることをその場で確認できます。
+                  購入した商品のQRコードを読み取るだけで所有者が購入されたお客様のアバター名に自動的に更新されます。
                 </p>
               </div>
 
               <div className="landing-page-service-case-card__image-wrap">
                 <img
-                  src="/sake-authentication.png"
+                  src="/Scaning.png"
                   alt="日本酒ラベルのQRコードを読み取り、所有者情報が更新される流れ"
                   className="landing-page-service-case-card__image"
                   loading="lazy"
@@ -134,20 +172,17 @@ export default function LandingPage() {
 
             <article className="landing-page-service-case-card landing-page-service-case-card--sales">
               <div className="landing-page-service-case-card__content">
-                <p className="landing-page-service-case-card__label">
-                  営業支援
-                </p>
                 <h3 className="landing-page-service-case-card__title">
-                  商品の現在の所有者と、販売後もつながる
+                  貴方の所有権を堅牢に守る仕組み
                 </h3>
                 <p className="landing-page-service-case-card__text">
-                  書き込まれた情報は世界中のサーバーに記録されます。これにより、どの国の誰がアクセスしても、所有者情報を確認できます。
+                  商品の所有権記録はSolanaネットワークで記録され、外部からの改ざん攻撃から貴方の所有権を堅牢に守ります。
                 </p>
               </div>
 
               <div className="landing-page-service-case-card__image-wrap">
                 <img
-                  src="/sake-global-proof.png"
+                  src="/BlockchainNetwork.png"
                   alt="世界中のサーバーに所有者情報が記録される図"
                   className="landing-page-service-case-card__image"
                   loading="lazy"
@@ -165,18 +200,18 @@ export default function LandingPage() {
           <div className="landing-page-service-case__bottom-grid">
             <article className="landing-page-service-case-card landing-page-service-case-card--brewery">
               <div className="landing-page-service-case-card__content">
-                <p className="landing-page-service-case-card__label">蔵元</p>
+                <p className="landing-page-service-case-card__label">生産者</p>
                 <h3 className="landing-page-service-case-card__title">
-                  最初の所有者として名札に名前を書き込む
+                  生産者・ブランド名を記入する
                 </h3>
                 <p className="landing-page-service-case-card__text">
-                  日本酒を醸造し、最初の所有者として電子名札に名前を書き込みます。
+                  生産したブランド名を最初の所有者として電子名札に名前を書き込みます。
                 </p>
               </div>
 
               <div className="landing-page-service-case-card__image-wrap">
                 <img
-                  src="/sake-brewery-owner.png"
+                  src="/Crafter.png"
                   alt="蔵元が日本酒の最初の所有者として登録される図"
                   className="landing-page-service-case-card__image"
                   loading="lazy"
@@ -190,16 +225,16 @@ export default function LandingPage() {
                   AMOL MALL
                 </p>
                 <h3 className="landing-page-service-case-card__title">
-                  販売後、新しい所有者の名前に書き換える
+                  ブランド名で出品
                 </h3>
                 <p className="landing-page-service-case-card__text">
-                  蔵元から仕入れた後、AMOL MALL上で購入が行われると、新たに購入者の名前へ所有者情報が書き換わります。
+                  電子名札が発行された商品のみが出品できるようになります。
                 </p>
               </div>
 
               <div className="landing-page-service-case-card__image-wrap">
                 <img
-                  src="/sake-amol-mall.png"
+                  src="/Mall.png"
                   alt="AMOL MALLで日本酒が販売され、所有者が書き換わる図"
                   className="landing-page-service-case-card__image"
                   loading="lazy"
@@ -213,16 +248,16 @@ export default function LandingPage() {
                   個人のお客様
                 </p>
                 <h3 className="landing-page-service-case-card__title">
-                  購入後、ご自身の名前が自動で記録される
+                  購入後、名前が自動で更新される
                 </h3>
                 <p className="landing-page-service-case-card__text">
-                  お客様が購入後、電子名札の所有者情報が自動で記録され、現在の所有者として証明されます。
+                  お客様が購入後、配送された商品のQRコードをお客様がスキャンした時点で所有者がお客様のアバター名義に更新されます。
                 </p>
               </div>
 
               <div className="landing-page-service-case-card__image-wrap">
                 <img
-                  src="/sake-customer-owner.png"
+                  src="/Customer.png"
                   alt="個人のお客様が日本酒の所有者として記録される図"
                   className="landing-page-service-case-card__image"
                   loading="lazy"
@@ -234,13 +269,17 @@ export default function LandingPage() {
       </section>
 
       <section
-        ref={salesSupportSectionRef}
         id="sales-support"
         className="landing-page-section landing-page-sales-support"
       >
         <div className="landing-page-section__inner">
           <div className="landing-page-sales-support__header">
-            <p className="landing-page-sales-support__eyebrow">営業支援</p>
+            <p
+              ref={salesSupportEyebrowRef}
+              className="landing-page-sales-support__eyebrow"
+            >
+              営業支援
+            </p>
             <h2 className="landing-page-section__title landing-page-sales-support__title">
               購入後も、お客様とつながる
             </h2>

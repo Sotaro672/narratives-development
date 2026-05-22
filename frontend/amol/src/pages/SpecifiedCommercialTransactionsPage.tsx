@@ -21,7 +21,7 @@ export default function SpecifiedCommercialTransactionsPage() {
                   販売事業の名称
                 </dt>
                 <dd className="landing-page-definition-list__description">
-                  AMOL
+                  株式会社AMOL
                 </dd>
               </div>
 
