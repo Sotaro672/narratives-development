@@ -46,7 +46,7 @@ const visionSteps = [
 
 export default function VisionPage() {
   return (
-    <Layout title="AMOL" mode="landing">
+    <Layout title="チーム" mode="landing">
       <section className="landing-page-section">
         <div className="landing-page-section__inner">
           <section id="team" className="landing-page-team">

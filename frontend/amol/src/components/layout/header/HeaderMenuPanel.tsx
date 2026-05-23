@@ -58,7 +58,7 @@ export default function HeaderMenuPanel({
               className="header__menu-link"
               onClick={closeMenu}
             >
-              開発者
+              チーム
             </Link>
 
             <Link
