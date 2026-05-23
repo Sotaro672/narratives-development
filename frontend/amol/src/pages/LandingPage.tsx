@@ -373,32 +373,32 @@ export default function LandingPage() {
           <div className="landing-page-sales-support__header">
             <p className="landing-page-sales-support__eyebrow">利用料金</p>
             <h2 className="landing-page-section__title landing-page-sales-support__title">
-              シンプルな料金プラン
+              予定料金プラン
             </h2>
             <p className="landing-page-card__text landing-page-sales-support__lead">
-              AMOLは、月額の基本利用料金に加えて、利用量や販売額に応じた手数料でご利用いただけます。
+              現在試作品段階です。本番運用リリース時の料金体系を以下に予定しております。
             </p>
           </div>
 
           <div className="landing-page-pricing-grid">
-            <article className="landing-page-pricing-card landing-page-pricing-card--primary">
+            <article className="landing-page-pricing-card">
               <p className="landing-page-pricing-card__label">基本利用料金</p>
               <h3 className="landing-page-pricing-card__price">3,990円/月</h3>
               <p className="landing-page-pricing-card__badge">
                 最初の1か月は無料
               </p>
               <p className="landing-page-pricing-card__text">
-                AMOLの基本機能をご利用いただける月額料金です。電子名札の管理、AMOL MALLへの出品、QRコードを使った所有者確認、購入後のお客様へのお知らせ機能を利用できます。
+                出品者Consoleの月額使用料です。月毎の契約です。
               </p>
             </article>
 
             <article className="landing-page-pricing-card">
               <p className="landing-page-pricing-card__label">
-                トークン発行手数料
+                電子名札発行手数料
               </p>
               <h3 className="landing-page-pricing-card__price">10円/点</h3>
               <p className="landing-page-pricing-card__text">
-                商品ごとに電子名札を発行する際に発生する手数料です。発行した点数に応じて課金されます。
+                発行した点数に応じて課金されます。
               </p>
             </article>
 
@@ -408,7 +408,8 @@ export default function LandingPage() {
               </p>
               <h3 className="landing-page-pricing-card__price">売上の10%</h3>
               <p className="landing-page-pricing-card__text">
-                AMOL MALLで商品が販売された際に、売上金額に対して発生する販売手数料です。
+                テナント様所有EC経由での販売は対象外です。
+                <br/>接続工事費は別途相談させてください。
               </p>
             </article>
           </div>

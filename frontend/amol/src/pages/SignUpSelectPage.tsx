@@ -21,7 +21,7 @@ const signUpTargets: SignUpTarget[] = [
   {
     title: "出品者Console",
     description:
-      "業務管理画面です。商品を登録・管理し、ブロックチェーントークンを発行ができます。",
+      "業務管理画面です。商品を登録・管理し、ブロックチェーントークン発行ができます。",
     url: "https://narratives-console-dev.web.app",
     buttonLabel: "Consoleで新規登録",
     variant: "primary",

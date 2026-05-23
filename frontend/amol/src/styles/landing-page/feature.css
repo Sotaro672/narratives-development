@@ -464,11 +464,6 @@
   box-sizing: border-box;
 }
 
-.landing-page-pricing-card--primary {
-  border-color: #2563eb;
-  box-shadow: 0 16px 36px rgba(37, 99, 235, 0.12);
-}
-
 .landing-page-pricing-card__label {
   margin: 0;
   font-size: 13px;
