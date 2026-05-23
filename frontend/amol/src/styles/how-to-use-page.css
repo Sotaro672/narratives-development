@@ -11,7 +11,7 @@
 
 .how-to-use-page__header {
   max-width: 760px;
-  margin: 0 auto 64px;
+  margin: 0 auto 40px;
   text-align: center;
 }
 
@@ -37,6 +37,20 @@
   font-size: 16px;
   line-height: 1.9;
   color: #64748b;
+}
+
+.how-to-use-page__hero-image-wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto 64px;
+}
+
+.how-to-use-page__hero-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
 }
 
 .how-to-use-flow {
@@ -113,6 +127,34 @@
   color: #64748b;
 }
 
+.how-to-use-step__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.how-to-use-step__link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #eef6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.how-to-use-step__link:hover {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 .how-to-use-step__media {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -146,11 +188,19 @@
   }
 
   .how-to-use-page__header {
-    margin-bottom: 48px;
+    margin-bottom: 32px;
   }
 
   .how-to-use-page__title {
     font-size: 32px;
+  }
+
+  .how-to-use-page__hero-image-wrap {
+    margin-bottom: 48px;
+  }
+
+  .how-to-use-page__hero-image {
+    border-radius: 18px;
   }
 
   .how-to-use-flow {

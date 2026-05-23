@@ -23,7 +23,7 @@ type ProductColorDTO struct {
 	Name string `json:"name,omitempty"`
 }
 
-// 追加: modelRefs（displayOrder含む）
+// modelRefs（displayOrder含む）
 type ModelRefDTO struct {
 	ModelID      string `json:"modelId"`
 	DisplayOrder int    `json:"displayOrder"`
@@ -64,7 +64,7 @@ type ProductBlueprintDTO struct {
 
 	ProductIdTagType string `json:"productIdTagType"`
 
-	// 追加: modelRefs（displayOrder含む）
+	// modelRefs（displayOrder含む）
 	ModelRefs []ModelRefDTO `json:"modelRefs"`
 }
 
@@ -81,7 +81,7 @@ type ProductDetail struct {
 	ProductionID     string `json:"productionId"`
 	InspectionResult string `json:"inspectionResult"`
 
-	// 追加: connectedToken をそのままフロントに返す
+	// connectedToken をそのままフロントに返す
 	ConnectedToken *string `json:"connectedToken,omitempty"`
 
 	ModelNumber string          `json:"modelNumber"`
@@ -96,7 +96,7 @@ type ProductDetail struct {
 }
 
 // ------------------------------------------------------------
-// Usecase / Repository インターフェース（型ズレ吸収を廃止）
+// Usecase / Repository インターフェース
 // ------------------------------------------------------------
 
 // ProductGetter は product を取得する最小ポート
@@ -208,37 +208,29 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		Name: model.Color.Name,
 	}
 
-	// modelRefs を DTO 化（displayOrder 含む）
+	// 7) modelRefs を DTO 化する。
+	// ModelRefs の空ID除外・重複除外・displayOrder 採番は productBlueprint domain 側の責務。
+	// usecase では補正せず、表示用 DTO へ詰め替えるだけにする。
 	modelRefsDTO := make([]ModelRefDTO, 0, len(bp.ModelRefs))
 	for _, r := range bp.ModelRefs {
-		if r.ModelID == "" {
-			continue
-		}
 		modelRefsDTO = append(modelRefsDTO, ModelRefDTO{
 			ModelID:      r.ModelID,
 			DisplayOrder: r.DisplayOrder,
 		})
 	}
 
-	// displayOrder 昇順（0は末尾）
+	// 念のため response の表示順は displayOrder 昇順に揃える。
+	// displayOrder <= 0 の補正は行わない。domain validation 側で invalid として扱う前提。
 	sort.SliceStable(modelRefsDTO, func(i, j int) bool {
-		ai := modelRefsDTO[i].DisplayOrder
-		aj := modelRefsDTO[j].DisplayOrder
-		if ai == 0 {
-			ai = 1 << 30
-		}
-		if aj == 0 {
-			aj = 1 << 30
-		}
-		if ai != aj {
-			return ai < aj
+		if modelRefsDTO[i].DisplayOrder != modelRefsDTO[j].DisplayOrder {
+			return modelRefsDTO[i].DisplayOrder < modelRefsDTO[j].DisplayOrder
 		}
 		return modelRefsDTO[i].ModelID < modelRefsDTO[j].ModelID
 	})
 
 	category := bp.ProductBlueprintCategory
 
-	// 7) ProductBlueprintDTO を構築
+	// 8) ProductBlueprintDTO を構築
 	pbDTO := ProductBlueprintDTO{
 		ID:          bp.ID,
 		ProductName: bp.ProductName,
@@ -257,6 +249,7 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		},
 
 		// fit / material / weight / qualityAssurance は CategoryFields から復元する。
+		// CategoryFields 自体の空 key 除外などの正規化は productBlueprint domain 側の責務。
 		Fit:              categoryFieldString(bp.CategoryFields, "fit"),
 		Material:         categoryFieldString(bp.CategoryFields, "material"),
 		Weight:           categoryFieldFloat64(bp.CategoryFields, "weight"),
@@ -267,10 +260,10 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		ModelRefs: modelRefsDTO,
 	}
 
-	// 8) InspectionResult は domain の型 (productdom.InspectionResult) を string にして詰める
+	// 9) InspectionResult は domain の型 (productdom.InspectionResult) を string にして詰める
 	inspectionResult := string(product.InspectionResult)
 
-	// 9) 最終的な DTO を組み立てて返す
+	// 10) 最終的な DTO を組み立てて返す
 	detail := ProductDetail{
 		ProductID:        product.ID,
 		ModelID:          product.ModelID,

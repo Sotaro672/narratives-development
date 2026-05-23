@@ -3,7 +3,6 @@ package consoleHandler
 import (
 	"encoding/json"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -54,50 +53,6 @@ func splitCSV(s string) []string {
 // log helpers
 // ------------------------------------------------------------
 
-func sampleFirst[T any](xs []T) any {
-	if len(xs) == 0 {
-		return nil
-	}
-	return xs[0]
-}
-
-func toJSONForLog(v any, max int) string {
-	if v == nil {
-		return "null"
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "<marshal_error>"
-	}
-	s := string(b)
-	if max > 0 && len(s) > max {
-		return s[:max] + "...(truncated)"
-	}
-	return s
-}
-
-func sampleFirstKey[V any](m map[string]V) string {
-	if len(m) == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys[0]
-}
-
-func sampleFirstValue[V any](m map[string]V) any {
-	if len(m) == 0 {
-		return nil
-	}
-	k := sampleFirstKey(m)
-	if k == "" {
-		return nil
-	}
-	return m[k]
-}
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

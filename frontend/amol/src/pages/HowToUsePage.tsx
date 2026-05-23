@@ -1,4 +1,3 @@
-// frontend/src/pages/HowToUsePage.tsx
 import Layout from "../components/layout/Layout";
 
 import "../styles/page-layout.css";
@@ -9,6 +8,10 @@ type Step = {
   title: string;
   description: string;
   youtubeUrl: string;
+  links?: {
+    label: string;
+    url: string;
+  }[];
 };
 
 const sellerSteps: Step[] = [
@@ -53,6 +56,12 @@ const sellerSteps: Step[] = [
     description:
       "検品スキャナーでQRコードをスキャンして検品結果を入力します。",
     youtubeUrl: "https://www.youtube.com/embed/a9d31Goh_4I",
+    links: [
+      {
+        label: "Inspectorへログイン",
+        url: "https://amol-inspector.web.app/",
+      },
+    ],
   },
   {
     number: "07",
@@ -137,9 +146,26 @@ function StepFlow({
                   </div>
 
                   <h3 className="how-to-use-step__title">{step.title}</h3>
+
                   <p className="how-to-use-step__description">
                     {step.description}
                   </p>
+
+                  {step.links && step.links.length > 0 && (
+                    <div className="how-to-use-step__links">
+                      {step.links.map((link) => (
+                        <a
+                          key={link.url}
+                          className="how-to-use-step__link"
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="how-to-use-step__media">
@@ -153,9 +179,7 @@ function StepFlow({
                 </div>
               </article>
 
-              {!isLastStep && (
-                <div className="how-to-use-step__connector" />
-              )}
+              {!isLastStep && <div className="how-to-use-step__connector" />}
             </div>
           );
         })}
@@ -177,6 +201,14 @@ export default function HowToUsePage() {
               ステップごとに確認できます。
             </p>
           </header>
+
+          <div className="how-to-use-page__hero-image-wrap">
+            <img
+              className="how-to-use-page__hero-image"
+              src="/HowToUse.png"
+              alt="AMOLのConsoleとMallの使い方"
+            />
+          </div>
 
           <StepFlow
             title="出品者Consoleの使い方"

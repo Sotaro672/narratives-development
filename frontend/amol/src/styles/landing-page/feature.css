@@ -439,6 +439,72 @@
   object-fit: contain;
 }
 
+/* 利用料金 section */
+
+.landing-page-pricing {
+  background: #ffffff;
+}
+
+.landing-page-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.landing-page-pricing-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  height: 100%;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.landing-page-pricing-card--primary {
+  border-color: #2563eb;
+  box-shadow: 0 16px 36px rgba(37, 99, 235, 0.12);
+}
+
+.landing-page-pricing-card__label {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 800;
+  color: #1d4ed8;
+  letter-spacing: 0.08em;
+}
+
+.landing-page-pricing-card__price {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.landing-page-pricing-card__badge {
+  justify-self: start;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.landing-page-pricing-card__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--color-text);
+}
+
 @media (max-width: 1024px) {
   .landing-page-service-case__top-grid {
     grid-template-columns: 1fr;
@@ -450,6 +516,10 @@
 
   .landing-page-service-case-card {
     min-height: auto;
+  }
+
+  .landing-page-pricing-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -599,9 +669,10 @@
   }
 
   .landing-page-sales-support-benefit__image-wrap {
+    width: calc(100% + 32px);
     height: 160px;
     min-height: 160px;
-    margin-top: 10px;
+    margin: 10px -16px -18px;
     padding: 10px;
   }
 
@@ -610,5 +681,19 @@
     height: 100%;
     max-height: none;
     object-fit: contain;
+  }
+
+  .landing-page-pricing-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .landing-page-pricing-card {
+    padding: 20px 16px;
+    border-radius: 16px;
+  }
+
+  .landing-page-pricing-card__price {
+    font-size: 26px;
   }
 }

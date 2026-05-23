@@ -19,18 +19,18 @@ type SignUpTarget = {
 
 const signUpTargets: SignUpTarget[] = [
   {
-    title: "Console",
+    title: "出品者Console",
     description:
-      "商品を登録・管理し、ブロックチェーントークンを発行できる出品者向けのプラットフォーム。",
+      "業務管理画面です。商品を登録・管理し、ブロックチェーントークンを発行ができます。",
     url: "https://narratives-console-dev.web.app",
     buttonLabel: "Consoleで新規登録",
     variant: "primary",
     deviceTags: ["PC専用"],
   },
   {
-    title: "Mall",
+    title: "購入者Mall",
     description:
-      "商品を閲覧・購入し、QRコードからトークンコンテンツにアクセスできる購入者向けのモール。",
+      "購入されるお客様向け画面です。商品を閲覧・購入し、QRコードからトークンコンテンツにアクセスできます。",
     internalPath: "/signup",
     buttonLabel: "Mallで新規登録",
     variant: "primary",
