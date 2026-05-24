@@ -1,3 +1,4 @@
+//frontend\amol\src\pages\HowToUsePage.tsx
 import Layout from "../components/layout/Layout";
 
 import "../styles/page-layout.css";
@@ -197,8 +198,8 @@ export default function HowToUsePage() {
             <p className="how-to-use-page__eyebrow">How to use</p>
             <h1 className="how-to-use-page__title">使い方</h1>
             <p className="how-to-use-page__lead">
-              出品者Consoleと購入者Mallの基本的な使い方を、
-              ステップごとに確認できます。
+              出品者Consoleと購入者Mallの使い方を解説します。
+              <br/>一連の操作には出品するテナント役と購入するお客様役が必要です。
             </p>
           </header>
 

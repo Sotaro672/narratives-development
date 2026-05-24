@@ -4,7 +4,6 @@ package console
 import (
 	fs "narratives/internal/adapters/out/firestore"
 	pbfs "narratives/internal/adapters/out/firestore/productBlueprint"
-	memdom "narratives/internal/domain/member"
 )
 
 type repos struct {
@@ -55,8 +54,7 @@ type repos struct {
 	printLogRepo   *fs.PrintLogRepositoryFS
 	inspectionRepo *fs.InspectionRepositoryFS
 
-	invitationTokenFSRepo *fs.InvitationTokenRepositoryFS
-	invitationTokenUCRepo memdom.InvitationTokenRepository
+	invitationTokenRepo *fs.InvitationTokenRepositoryFS
 
 	// ports
 	mintRequestPort *fs.MintRequestPortFS
@@ -115,8 +113,7 @@ func buildRepos(c *clients) *repos {
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
 	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
 
-	invitationTokenFSRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
-	var invitationTokenUCRepo memdom.InvitationTokenRepository = invitationTokenFSRepo
+	invitationTokenRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
 
 	mintRequestPort := fs.NewMintRequestPortFS(
 		fsClient,
@@ -172,8 +169,7 @@ func buildRepos(c *clients) *repos {
 		printLogRepo:   printLogRepo,
 		inspectionRepo: inspectionRepo,
 
-		invitationTokenFSRepo: invitationTokenFSRepo,
-		invitationTokenUCRepo: invitationTokenUCRepo,
+		invitationTokenRepo: invitationTokenRepo,
 
 		mintRequestPort: mintRequestPort,
 	}

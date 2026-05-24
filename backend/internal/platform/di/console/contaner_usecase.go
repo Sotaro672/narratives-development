@@ -242,28 +242,19 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	invitationMailer := mailadp.NewInvitationMailerWithResend(s.companySvc, s.brandSvc)
 
-	var invitationTokenRepo uc.InvitationTokenRepository
-	if repo, ok := r.invitationTokenUCRepo.(uc.InvitationTokenRepository); ok {
-		invitationTokenRepo = repo
-	} else {
-		invitationTokenRepo = &invitationTokenRepositoryAdapter{
-			repo: r.invitationTokenUCRepo,
-		}
-	}
-
 	invitationQueryUC := uc.NewInvitationService(
-		invitationTokenRepo,
+		r.invitationTokenRepo,
 		r.memberRepo,
 	)
 
 	invitationCommandUC := uc.NewInvitationCommandService(
-		invitationTokenRepo,
+		r.invitationTokenRepo,
 		r.memberRepo,
 		invitationMailer,
 	)
 
 	invitationCompleteUC := uc.NewInvitationCompleteService(
-		invitationTokenRepo,
+		r.invitationTokenRepo,
 		r.memberRepo,
 	)
 

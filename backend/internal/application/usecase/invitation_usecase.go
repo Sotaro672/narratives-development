@@ -35,15 +35,8 @@ type InvitationCompletePort interface {
 }
 
 // ==============================
-// Outbound Ports（Query / Command 共通）
+// Outbound Ports
 // ==============================
-
-// InvitationTokenRepository は、招待トークンと InvitationInfo の対応を扱うアウトバウンドポート。
-type InvitationTokenRepository interface {
-	ResolveInvitationInfoByToken(ctx context.Context, token string) (memdom.InvitationInfo, error)
-	CreateInvitationToken(ctx context.Context, info memdom.InvitationInfo) (string, error)
-	ConsumeInvitationToken(ctx context.Context, token string) error
-}
 
 // 招待メール送信用ポート
 type InvitationMailerPort interface {
@@ -55,11 +48,11 @@ type InvitationMailerPort interface {
 // ==============================
 
 type InvitationService struct {
-	invitationTokenRepo InvitationTokenRepository
+	invitationTokenRepo memdom.InvitationTokenRepository
 }
 
 func NewInvitationService(
-	invitationTokenRepo InvitationTokenRepository,
+	invitationTokenRepo memdom.InvitationTokenRepository,
 	_ memdom.Repository,
 ) InvitationQueryPort {
 	return &InvitationService{
@@ -94,13 +87,13 @@ func (s *InvitationService) GetInvitationInfo(
 // ==============================
 
 type InvitationCommandService struct {
-	invitationTokenRepo InvitationTokenRepository
+	invitationTokenRepo memdom.InvitationTokenRepository
 	memberRepo          memdom.Repository
 	mailer              InvitationMailerPort
 }
 
 func NewInvitationCommandService(
-	invitationTokenRepo InvitationTokenRepository,
+	invitationTokenRepo memdom.InvitationTokenRepository,
 	memberRepo memdom.Repository,
 	mailer InvitationMailerPort,
 ) InvitationCommandPort {
@@ -181,12 +174,12 @@ type CompleteInvitationInput struct {
 }
 
 type InvitationCompleteService struct {
-	invitationTokenRepo InvitationTokenRepository
+	invitationTokenRepo memdom.InvitationTokenRepository
 	memberRepo          memdom.Repository
 }
 
 func NewInvitationCompleteService(
-	invitationTokenRepo InvitationTokenRepository,
+	invitationTokenRepo memdom.InvitationTokenRepository,
 	memberRepo memdom.Repository,
 ) InvitationCompletePort {
 	return &InvitationCompleteService{
