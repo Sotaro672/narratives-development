@@ -3,6 +3,7 @@ package firestore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,6 +27,19 @@ func NewCompanyRepositoryFS(client *firestore.Client) *CompanyRepositoryFS {
 
 func (r *CompanyRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("companies")
+}
+
+// ==============================
+// ID
+// ==============================
+
+func (r *CompanyRepositoryFS) NewID(ctx context.Context) (string, error) {
+	if r == nil || r.Client == nil {
+		return "", errors.New("company repository: client is nil")
+	}
+
+	doc := r.Client.Collection("companies").NewDoc()
+	return doc.ID, nil
 }
 
 // ==============================
@@ -313,7 +327,13 @@ func docToCompany(doc *firestore.DocumentSnapshot) (compdom.Company, error) {
 }
 
 // ==============================
-// (optional) iterator import usage guard
+// compile-time interface checks
+// ==============================
+
+var _ compdom.Repository = (*CompanyRepositoryFS)(nil)
+
+// ==============================
+// optional iterator import usage guard
 // ==============================
 
 var _ = iterator.Done

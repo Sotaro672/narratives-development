@@ -1,11 +1,9 @@
-// backend/internal/application/query/console/company_production_query.go
 package query
 
 import (
 	"context"
 	"time"
 
-	dto "narratives/internal/application/production/dto"
 	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 
@@ -13,34 +11,16 @@ import (
 	productiondom "narratives/internal/domain/production"
 )
 
-// ============================================================
-// Ports (query service needs minimal read ports)
-// ============================================================
-
 type ProductBlueprintQueryRepo interface {
-	// companyId → productBlueprintIds
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 
-	// productBlueprintId → BrandID 解決（brandName を引くため）
-	// ※ 実装側が値返却 / ポインタ返却で揺れる場合があるため、
-	//    ここは一旦「値返却」に寄せています（必要なら合わせて実装側を修正してください）。
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
 }
 
 type ProductionQueryRepo interface {
-	// productBlueprintIds → productions
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]productiondom.Production, error)
 }
 
-// ============================================================
-// Service
-// ============================================================
-
-// CompanyProductionQueryService enforces the ONLY list route:
-// companyId -> productBlueprintIds -> productions.
-//
-// This service is meant for "query/read" usecases (list pages).
-// It prevents any "list without companyId" leakage at the application boundary.
 type CompanyProductionQueryService struct {
 	pbRepo       ProductBlueprintQueryRepo
 	prodRepo     ProductionQueryRepo
@@ -61,20 +41,12 @@ func NewCompanyProductionQueryService(
 	}
 }
 
-// ============================================================
-// Public APIs
-// ============================================================
-
-// ProductionUsecase.List() が委譲する想定の “唯一のルート”。
-// 実体は既存の listProductionsByCurrentCompany に委譲する。
 func (s *CompanyProductionQueryService) ListProductionsByCurrentCompany(
 	ctx context.Context,
 ) ([]productiondom.Production, error) {
 	return s.listProductionsByCurrentCompany(ctx)
 }
 
-// ListProductionIDsByCurrentCompany returns production IDs only.
-// Useful for select options etc.
 func (s *CompanyProductionQueryService) ListProductionIDsByCurrentCompany(
 	ctx context.Context,
 ) ([]string, error) {
@@ -102,24 +74,21 @@ func (s *CompanyProductionQueryService) ListProductionIDsByCurrentCompany(
 	return ids, nil
 }
 
-// ListProductionsWithAssigneeName is for GET /productions list page.
-// It returns dto.ProductionListItemDTO.
 func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 	ctx context.Context,
-) ([]dto.ProductionListItemDTO, error) {
+) ([]usecase.ProductionListItemDTO, error) {
 	list, err := s.listProductionsByCurrentCompany(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if len(list) == 0 {
-		return []dto.ProductionListItemDTO{}, nil
+		return []usecase.ProductionListItemDTO{}, nil
 	}
 
-	// cache: pbID -> brandID, brandID -> brandName
 	pbBrandCache := map[string]string{}
 	brandNameCache := map[string]string{}
 
-	out := make([]dto.ProductionListItemDTO, 0, len(list))
+	out := make([]usecase.ProductionListItemDTO, 0, len(list))
 
 	for _, p := range list {
 		assigneeName := ""
@@ -132,16 +101,12 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 
 		if s.nameResolver != nil {
 			productName = s.nameResolver.ResolveProductName(ctx, p.ProductBlueprintID)
-
-			// Production の assigneeId / createdBy / updatedBy / printedBy は
-			// Firebase Auth UID 保存を正とするため、NameResolver の uid 解決を使う。
 			assigneeName = s.nameResolver.ResolveMemberName(ctx, p.AssigneeID)
 			createdByName = s.nameResolver.ResolveCreatedByName(ctx, p.CreatedBy)
 			updatedByName = s.nameResolver.ResolveUpdatedByName(ctx, p.UpdatedBy)
 			printedByName = s.nameResolver.ResolvePrintedByName(ctx, p.PrintedBy)
 		}
 
-		// brandID (pbRepo.GetByID)
 		pbID := p.ProductBlueprintID
 		if pbID != "" && s.pbRepo != nil {
 			if cached, ok := pbBrandCache[pbID]; ok {
@@ -155,7 +120,6 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 			}
 		}
 
-		// brandName (NameResolver)
 		if s.nameResolver != nil && brandID != "" {
 			if cached, ok := brandNameCache[brandID]; ok {
 				brandName = cached
@@ -165,7 +129,6 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 			}
 		}
 
-		// total quantity
 		totalQty := 0
 		for _, mq := range p.Models {
 			if mq.Quantity > 0 {
@@ -173,7 +136,7 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 			}
 		}
 
-		out = append(out, dto.ProductionListItemDTO{
+		out = append(out, usecase.ProductionListItemDTO{
 			Production: p,
 
 			TotalQuantity: totalQty,
@@ -190,24 +153,17 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 	return out, nil
 }
 
-// ============================================================
-// Core (single allowed route)
-// ============================================================
-
 func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 	ctx context.Context,
 ) ([]productiondom.Production, error) {
-	// 方針A: usecase の companyId getter を唯一の真実として利用する
 	cid := usecase.CompanyIDFromContext(ctx)
 	if cid == "" {
-		// companyId 無しの list を絶対禁止（全社漏洩の根本対策）
 		return nil, productbpdom.ErrInvalidCompanyID
 	}
 	if s.pbRepo == nil || s.prodRepo == nil {
 		return nil, productbpdom.ErrInternal
 	}
 
-	// 1) companyId → productBlueprintIds
 	pbIDs, err := s.pbRepo.ListIDsByCompany(ctx, cid)
 	if err != nil {
 		return nil, err
@@ -216,7 +172,6 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 		return []productiondom.Production{}, nil
 	}
 
-	// 2) productBlueprintIds → productions
 	rows, err := s.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
 	if err != nil {
 		return nil, err
@@ -225,7 +180,6 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 		return []productiondom.Production{}, nil
 	}
 
-	// 3) safety: pbIDs set check
 	set := make(map[string]struct{}, len(pbIDs))
 	for _, id0 := range pbIDs {
 		if id0 != "" {
@@ -244,16 +198,6 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 	return out, nil
 }
 
-// ============================================================
-// Helpers
-// ============================================================
-
-// extractBrandIDFromProductBlueprint absorbs possible "value vs pointer" drifts
-// by keeping extraction in one place.
-//
-// If your productbpdom.ProductBlueprint is always a value type, this is trivial.
-// If later you switch the port to return *ProductBlueprint, just overload here.
 func extractBrandIDFromProductBlueprint(pb productbpdom.ProductBlueprint) string {
-	// value case
 	return pb.BrandID
 }

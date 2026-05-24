@@ -1,24 +1,20 @@
-// backend/internal/adapters/in/http/console/handler/tokenBlueprint_handler.go
 package consoleHandler
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	tbapp "narratives/internal/application/tokenBlueprint"
-	usecase "narratives/internal/application/usecase"
+	tbapp "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-// TokenBlueprintHandler handles /token-blueprints endpoints.
 type TokenBlueprintHandler struct {
 	uc       *tbapp.TokenBlueprintUsecase
 	queryUc  *tbapp.TokenBlueprintQueryUsecase
@@ -37,8 +33,6 @@ func NewTokenBlueprintHandler(
 	}
 }
 
-// path helpers -------------------------------------------------------------
-
 func trimSlashSuffix(p string) string {
 	p = strings.Trim(p, " \t\r\n")
 	if p == "" {
@@ -47,7 +41,6 @@ func trimSlashSuffix(p string) string {
 	return strings.TrimSuffix(p, "/")
 }
 
-// extractFirstSegmentAfterPrefix returns "{id}" from "/token-blueprints/{id}/xxx".
 func extractFirstSegmentAfterPrefix(path, prefix string) string {
 	path = trimSlashSuffix(path)
 	if !strings.HasPrefix(path, prefix) {
@@ -64,37 +57,28 @@ func extractFirstSegmentAfterPrefix(path, prefix string) string {
 	return strings.Trim(parts[0], " \t\r\n")
 }
 
-// DTO --------------------------------------------------------------------
-
 type createTokenBlueprintRequest struct {
-	Name        string `json:"name"`
-	Symbol      string `json:"symbol"`
-	BrandID     string `json:"brandId"`
-	CompanyID   string `json:"companyId,omitempty"`
-	Description string `json:"description,omitempty"`
-	AssigneeID  string `json:"assigneeId"`
-	CreatedBy   string `json:"createdBy,omitempty"`
-
-	// Firebase Storage へ frontend から直接 upload した downloadURL を保存する。
-	IconURL string `json:"iconUrl,omitempty"`
-
+	Name         string              `json:"name"`
+	Symbol       string              `json:"symbol"`
+	BrandID      string              `json:"brandId"`
+	CompanyID    string              `json:"companyId,omitempty"`
+	Description  string              `json:"description,omitempty"`
+	AssigneeID   string              `json:"assigneeId"`
+	CreatedBy    string              `json:"createdBy,omitempty"`
+	IconURL      string              `json:"iconUrl,omitempty"`
 	ContentFiles []tbdom.ContentFile `json:"contentFiles,omitempty"`
 }
 
 type updateTokenBlueprintRequest struct {
-	Name        *string `json:"name,omitempty"`
-	Symbol      *string `json:"symbol,omitempty"`
-	BrandID     *string `json:"brandId,omitempty"`
-	Description *string `json:"description,omitempty"`
-	AssigneeID  *string `json:"assigneeId,omitempty"`
-
-	// Firebase Storage へ frontend から直接 upload した downloadURL を保存する。
-	IconURL *string `json:"iconUrl,omitempty"`
-
+	Name         *string              `json:"name,omitempty"`
+	Symbol       *string              `json:"symbol,omitempty"`
+	BrandID      *string              `json:"brandId,omitempty"`
+	Description  *string              `json:"description,omitempty"`
+	AssigneeID   *string              `json:"assigneeId,omitempty"`
+	IconURL      *string              `json:"iconUrl,omitempty"`
 	ContentFiles *[]tbdom.ContentFile `json:"contentFiles,omitempty"`
-
-	MetadataURI *string `json:"metadataUri,omitempty"`
-	Minted      *bool   `json:"minted,omitempty"`
+	MetadataURI  *string              `json:"metadataUri,omitempty"`
+	Minted       *bool                `json:"minted,omitempty"`
 }
 
 type contentFileResponse struct {
@@ -147,15 +131,11 @@ type tokenBlueprintPatchResponse struct {
 	BrandID     string `json:"brandId"`
 	BrandName   string `json:"brandName"`
 	Description string `json:"description,omitempty"`
-
 	Minted      bool   `json:"minted"`
 	MetadataURI string `json:"metadataUri"`
-
 	IconURL     string `json:"iconUrl,omitempty"`
 	ContentsURL string `json:"contentsUrl,omitempty"`
 }
-
-// name resolver helpers ----------------------------------------------------
 
 func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string) string {
 	if h == nil || h.brandSvc == nil {
@@ -271,13 +251,10 @@ func (h *TokenBlueprintHandler) toPatchResponse(ctx context.Context, tb *tbdom.T
 		Description: strings.Trim(tb.Description, " \t\r\n"),
 		Minted:      tb.Minted,
 		MetadataURI: strings.Trim(tb.MetadataURI, " \t\r\n"),
-
 		IconURL:     resolveStoredIconURL(tb),
 		ContentsURL: "",
 	}
 }
-
-// ServeHTTP ---------------------------------------------------------------
 
 func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -324,12 +301,10 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// create ------------------------------------------------------------------
-
 func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
 	actorID := strings.Trim(r.Header.Get("X-Actor-Id"), " \t\r\n")
 
 	if companyID == "" {
@@ -346,7 +321,6 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	var req createTokenBlueprintRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("[tokenBlueprint_handler] create decode failed err=%v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
@@ -377,7 +351,6 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		ContentFiles: contentFiles,
 	})
 	if err != nil {
-		log.Printf("[tokenBlueprint_handler] create failed err=%v", err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
@@ -395,12 +368,10 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// getPatch -----------------------------------------------------------------
-
 func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
 	id = strings.Trim(id, " \t\r\n")
 
 	if companyID == "" {
@@ -430,12 +401,10 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 	_ = json.NewEncoder(w).Encode(h.toPatchResponse(ctx, tb))
 }
 
-// get ---------------------------------------------------------------------
-
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -463,12 +432,10 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb, true, &names))
 }
 
-// list --------------------------------------------------------------------
-
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -556,13 +523,11 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// update ------------------------------------------------------------------
-
 func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	id = strings.Trim(id, " \t\r\n")
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
 	actorID := strings.Trim(r.Header.Get("X-Actor-Id"), " \t\r\n")
 
 	if companyID == "" {
@@ -633,13 +598,11 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// delete ------------------------------------------------------------------
-
 func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	id = strings.Trim(id, " \t\r\n")
 
-	companyID := strings.Trim(usecase.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
 
 	tb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
@@ -660,8 +623,6 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 
 	w.WriteHeader(http.StatusNoContent)
 }
-
-// normalization ------------------------------------------------------------
 
 func normalizeContentFilesFromRequest(files []tbdom.ContentFile, actorID string) []tbdom.ContentFile {
 	if len(files) == 0 {
@@ -713,8 +674,6 @@ func normalizeContentFilesFromRequest(files []tbdom.ContentFile, actorID string)
 
 	return out
 }
-
-// error utility ------------------------------------------------------------
 
 func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
 	switch {

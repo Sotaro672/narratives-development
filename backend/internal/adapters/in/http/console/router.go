@@ -46,8 +46,6 @@ type RouterDeps struct {
 
 	TokenBPReview   http.Handler
 	ProductBPReview http.Handler
-
-	MintDebugHandle http.HandlerFunc
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -234,9 +232,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.Mint)
 		mux.Handle("/mint", h)
 		mux.Handle("/mint/", h)
-		if deps.MintDebugHandle != nil {
-			mux.HandleFunc("/mint/debug", deps.MintDebugHandle)
-		}
 	}
 
 	if deps.OwnerResolve != nil {

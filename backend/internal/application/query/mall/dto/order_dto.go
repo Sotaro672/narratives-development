@@ -9,5 +9,4 @@ type OrderContextDTO struct {
 	ShippingAddress map[string]any         `json:"shippingAddress,omitempty"`
 	PaymentMethod   map[string]any         `json:"paymentMethod,omitempty"`
 	CartItems       map[string]CartItemDTO `json:"cartItems,omitempty"`
-	Debug           map[string]string      `json:"debug,omitempty"`
 }

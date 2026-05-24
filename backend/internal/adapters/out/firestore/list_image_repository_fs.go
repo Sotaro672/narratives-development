@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/list_image_repository_fs.go
 package firestore
 
 import (
@@ -13,38 +12,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	usecase "narratives/internal/application/usecase"
-	listuc "narratives/internal/application/usecase/list"
 	listdom "narratives/internal/domain/list"
 )
-
-// Firestore schema:
-//
-//	lists/{listId}/images/{imageId}
-//
-// fields:
-// - id            : string
-// - list_id       : string
-// - url           : string   Firebase Storage downloadURL
-// - file_name     : string
-// - content_type  : string
-// - size          : number
-// - display_order : number
-// - object_path   : string   Firebase Storage object path
-// - created_at    : timestamp
-// - created_by    : string
-// - updated_at    : timestamp
-// - updated_by    : string
-//
-// Firebase Storage migration policy:
-// - backend does not issue signed URLs
-// - backend does not use GCS bucket / public URL fallback
-// - frontend uploads directly to Firebase Storage
-// - frontend sends downloadURL / objectPath / fileName / contentType / size
-// - repository persists only Firestore image records
-//
-// Canonical Firebase Storage objectPath:
-//
-//	lists/{listId}/images/{imageId}/{fileName}
 
 type ListImageRepositoryFS struct {
 	Client *gfs.Client
@@ -58,18 +27,11 @@ func (r *ListImageRepositoryFS) listCol(listID string) *gfs.CollectionRef {
 	return r.Client.Collection("lists").Doc(listID).Collection("images")
 }
 
-// compile-time checks
-var _ listuc.ListImageReader = (*ListImageRepositoryFS)(nil)
-var _ listuc.ListImageByIDReader = (*ListImageRepositoryFS)(nil)
-var _ listuc.ListImageRecordRepository = (*ListImageRepositoryFS)(nil)
-var _ listuc.ListImageRecordByIDReader = (*ListImageRepositoryFS)(nil)
+var _ usecase.ListImageReader = (*ListImageRepositoryFS)(nil)
+var _ usecase.ListImageByIDReader = (*ListImageRepositoryFS)(nil)
+var _ usecase.ListImageRecordRepository = (*ListImageRepositoryFS)(nil)
+var _ usecase.ListImageRecordByIDReader = (*ListImageRepositoryFS)(nil)
 
-// ============================================================
-// Port: CatalogQuery ListImageRepository compatibility
-// ============================================================
-
-// FindByListID is for mall catalog query layer.
-// It returns all images for a list ordered by displayOrder asc.
 func (r *ListImageRepositoryFS) FindByListID(
 	ctx context.Context,
 	listID string,
@@ -77,19 +39,6 @@ func (r *ListImageRepositoryFS) FindByListID(
 	return r.ListByListID(ctx, listID)
 }
 
-// ============================================================
-// Port: ListImageRecordRepository
-// ============================================================
-
-// Upsert stores list image record into Firestore subcollection.
-//
-// docID policy:
-// - imageId is Firestore docID
-//
-// Firebase Storage policy:
-// - URL is Firebase Storage downloadURL
-// - ObjectPath is Firebase Storage objectPath
-// - ObjectPath must be: lists/{listId}/images/{imageId}/{fileName}
 func (r *ListImageRepositoryFS) Upsert(
 	ctx context.Context,
 	img listdom.ListImage,
@@ -107,6 +56,7 @@ func (r *ListImageRepositoryFS) Upsert(
 	if imageID == "" {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageID
 	}
+
 	if strings.Contains(imageID, "/") {
 		return listdom.ListImage{}, usecase.ErrInvalidArgument("invalid_image_id")
 	}
@@ -115,6 +65,7 @@ func (r *ListImageRepositoryFS) Upsert(
 	if objectPath == "" {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageObjectPath
 	}
+
 	if !isCanonicalFirebaseStorageObjectPath(objectPath, listID, imageID) {
 		return listdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_not_canonical")
 	}
@@ -228,11 +179,6 @@ func (r *ListImageRepositoryFS) Upsert(
 	return out, nil
 }
 
-// Delete deletes Firestore record:
-//
-//	lists/{listId}/images/{imageId}
-//
-// Firebase Storage object deletion is intentionally not handled here.
 func (r *ListImageRepositoryFS) Delete(
 	ctx context.Context,
 	listID string,
@@ -248,9 +194,11 @@ func (r *ListImageRepositoryFS) Delete(
 	if listID == "" {
 		return listdom.ErrInvalidListImageListID
 	}
+
 	if imageID == "" {
 		return listdom.ErrInvalidListImageID
 	}
+
 	if strings.Contains(imageID, "/") {
 		return usecase.ErrInvalidArgument("invalid_image_id")
 	}
@@ -268,11 +216,6 @@ func (r *ListImageRepositoryFS) Delete(
 	return nil
 }
 
-// ============================================================
-// Port: ListImageReader
-// ============================================================
-
-// ListByListID returns images for a list ordered by displayOrder asc.
 func (r *ListImageRepositoryFS) ListByListID(
 	ctx context.Context,
 	listID string,
@@ -299,6 +242,7 @@ func (r *ListImageRepositoryFS) ListByListID(
 		if errors.Is(err, iterator.Done) {
 			break
 		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -314,18 +258,6 @@ func (r *ListImageRepositoryFS) ListByListID(
 	return out, nil
 }
 
-// ============================================================
-// Port: ListImageByIDReader / ListImageRecordByIDReader
-// ============================================================
-
-// GetByListIDAndID gets a ListImage by listId + imageId.
-//
-// This is the preferred method for primary image update because the caller
-// already knows listID. It directly reads:
-//
-//	lists/{listId}/images/{imageId}
-//
-// No CollectionGroup query is needed.
 func (r *ListImageRepositoryFS) GetByListIDAndID(
 	ctx context.Context,
 	listID string,
@@ -366,18 +298,6 @@ func (r *ListImageRepositoryFS) GetByListIDAndID(
 	return img, nil
 }
 
-// GetByID gets a ListImage by imageId only.
-//
-// Compatibility method for older callers.
-//
-// - URL input is not supported
-// - objectPath input is not supported
-// - id must be Firestore image docID
-//
-// Note:
-//   - This intentionally avoids Where(gfs.DocumentID, "==", imageID)
-//     because that can produce "__key__ filter value must be a Key".
-//   - Prefer GetByListIDAndID when listID is known.
 func (r *ListImageRepositoryFS) GetByID(
 	ctx context.Context,
 	imageID string,
@@ -390,6 +310,7 @@ func (r *ListImageRepositoryFS) GetByID(
 	if imageID == "" {
 		return listdom.ListImage{}, listdom.ErrListImageNotFound
 	}
+
 	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
 		return listdom.ListImage{}, listdom.ErrListImageNotFound
 	}
@@ -425,10 +346,6 @@ func (r *ListImageRepositoryFS) GetByID(
 	return img, nil
 }
 
-// ============================================================
-// Decode helpers
-// ============================================================
-
 func decodeListImageDoc(
 	doc *gfs.DocumentSnapshot,
 	fallbackListID string,
@@ -460,6 +377,7 @@ func decodeListImageDoc(
 	if listID == "" {
 		listID = strings.TrimSpace(fallbackListID)
 	}
+
 	if listID == "" {
 		return listdom.ListImage{}, false
 	}
@@ -468,6 +386,7 @@ func decodeListImageDoc(
 	if imageID == "" {
 		imageID = strings.TrimSpace(raw.ID)
 	}
+
 	if imageID == "" {
 		return listdom.ListImage{}, false
 	}
@@ -525,14 +444,11 @@ func decodeListImageDoc(
 	if !raw.UpdatedAt.IsZero() {
 		img.UpdatedAt = raw.UpdatedAt.UTC()
 	}
+
 	img.UpdatedBy = strings.TrimSpace(raw.UpdatedBy)
 
 	return img, true
 }
-
-// ============================================================
-// Firebase Storage path helpers
-// ============================================================
 
 func isCanonicalFirebaseStorageObjectPath(
 	objectPath string,
@@ -545,9 +461,6 @@ func isCanonicalFirebaseStorageObjectPath(
 	}
 
 	parts := strings.Split(p, "/")
-
-	// Expected:
-	// lists/{listId}/images/{imageId}/{fileName}
 	if len(parts) != 5 {
 		return false
 	}
@@ -555,15 +468,19 @@ func isCanonicalFirebaseStorageObjectPath(
 	if parts[0] != "lists" {
 		return false
 	}
+
 	if parts[1] != listID {
 		return false
 	}
+
 	if parts[2] != "images" {
 		return false
 	}
+
 	if parts[3] != imageID {
 		return false
 	}
+
 	if parts[4] == "" {
 		return false
 	}

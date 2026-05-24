@@ -212,11 +212,3 @@ func (uc *CartUsecase) EmptyItems(ctx context.Context, avatarID string) error {
 
 	return uc.repo.Upsert(ctx, c)
 }
-
-// Ordered フィールド廃止により MarkOrdered は usecase からも削除。
-// 以後の「注文確定」は Order を作成するユースケース（例: OrderUsecase）で扱い、
-// その中で以下のいずれかを実施してください:
-// - 成功後に uc.Clear(ctx, avatarID) でカートを空にする
-// - もしくは EmptyItems(ctx, avatarID) で cart doc を残して items だけ空にする
-//
-// ※今回の変更ではコンパイルを通すため、MarkOrdered を実装しません。

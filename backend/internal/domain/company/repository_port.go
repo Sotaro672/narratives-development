@@ -31,6 +31,9 @@ var (
 
 // Repository ポート（契約）
 type Repository interface {
+	// ID
+	NewID(ctx context.Context) (string, error)
+
 	// 取得
 	GetByID(ctx context.Context, id string) (Company, error)
 	Exists(ctx context.Context, id string) (bool, error)

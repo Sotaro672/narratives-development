@@ -1,18 +1,15 @@
-// backend/internal/application/query/console/mint_product_blueprint_query.go
 package query
 
 import (
 	"context"
 	"errors"
 
-	mintapp "narratives/internal/application/mint"
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
+	mintapp "narratives/internal/application/usecase"
 	pbpdom "narratives/internal/domain/productBlueprint"
 )
 
-// GetProductBlueprintPatchForMint returns productBlueprint patch with display fields
-// required by console mint screens.
 func (s *MintRequestQueryService) GetProductBlueprintPatchForMint(
 	ctx context.Context,
 	productBlueprintID string,
@@ -54,5 +51,4 @@ func buildMintProductBlueprintPatchDTO(
 	}
 }
 
-// compile-time check: keep dependency direction explicit.
 var _ = (*mintapp.MintUsecase)(nil)

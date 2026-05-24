@@ -1,4 +1,3 @@
-// backend/internal/platform/di/console/container_http.go
 package console
 
 import (
@@ -7,30 +6,16 @@ import (
 
 	httpin "narratives/internal/adapters/in/http/console"
 
-	// handlers
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
-	inspectionHandler "narratives/internal/adapters/in/http/console/handler/inspection"
-	inventoryHandler "narratives/internal/adapters/in/http/console/handler/inventory"
-	listHandler "narratives/internal/adapters/in/http/console/handler/list"
-	modelHandler "narratives/internal/adapters/in/http/console/handler/model"
-	productBlueprintHandler "narratives/internal/adapters/in/http/console/handler/productBlueprint"
-	productionHandler "narratives/internal/adapters/in/http/console/handler/production"
 
-	// usecases
 	usecase "narratives/internal/application/usecase"
 
-	// middlewares
 	"narratives/internal/adapters/in/http/middleware"
 
-	// queries
 	sharedquery "narratives/internal/application/query/shared"
 )
 
-// RouterDeps は console の RouterDeps（handler束）を組み立てて返す。
 func (c *Container) RouterDeps() httpin.RouterDeps {
-	// =========================================
-	// Middlewares (built in DI)
-	// =========================================
 	var authMw *middleware.AuthMiddleware
 	if c.Infra.FirebaseAuth != nil && c.MemberRepo != nil {
 		authMw = &middleware.AuthMiddleware{
@@ -46,9 +31,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		}
 	}
 
-	// =========================================
-	// Handlers (built in DI)
-	// =========================================
 	var (
 		authBootstrapH http.Handler
 
@@ -84,8 +66,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		invitationH http.Handler
 
 		ownerResolveH http.Handler
-
-		mintDebug http.HandlerFunc
 	)
 
 	if c.AuthBootstrap != nil && bootstrapMw != nil {
@@ -117,7 +97,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.InventoryUC != nil {
-		inventoriesH = inventoryHandler.NewInventoryHandlerWithListCreateQuery(
+		inventoriesH = consoleHandler.NewInventoryHandlerWithListCreateQuery(
 			c.InventoryUC,
 			c.InventoryQuery,
 			c.ListCreateQuery,
@@ -125,7 +105,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.ListUC != nil {
-		listsH = listHandler.NewListHandler(listHandler.NewListHandlerParams{
+		listsH = consoleHandler.NewListHandler(consoleHandler.NewListHandlerParams{
 			UC: c.ListUC,
 
 			QMgmt:   c.ListManagementQuery,
@@ -149,7 +129,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.ProductBlueprintUC != nil {
-		productBPH = productBlueprintHandler.NewProductBlueprintHandler(
+		productBPH = consoleHandler.NewProductBlueprintHandler(
 			c.ProductBlueprintUC,
 			c.BrandService,
 			c.MemberService,
@@ -170,7 +150,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	// TokenBlueprint review handler
 	if c.TokenBlueprintRepo != nil && c.TokenBlueprintReviewRepo != nil {
 		tbReviewUC := usecase.NewTokenBlueprintReviewUsecase(
 			c.TokenBlueprintReviewRepo,
@@ -181,7 +160,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		tokenBPReviewH = consoleHandler.NewTokenBlueprintReviewHandler(tbReviewUC)
 	}
 
-	// ProductBlueprint review handler
 	if c.ProductBlueprintRepo != nil && c.ProductBlueprintReviewRepo != nil {
 		var walletRepo usecase.WalletRepository = nil
 
@@ -266,25 +244,25 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.ProductionUC != nil && c.CompanyProductionQueryService != nil {
-		productionsH = productionHandler.NewProductionHandler(
+		productionsH = consoleHandler.NewProductionHandler(
 			c.CompanyProductionQueryService,
 			c.ProductionUC,
 		)
 	}
 
 	if c.ModelUC != nil {
-		modelsH = modelHandler.NewModelHandler(c.ModelUC)
+		modelsH = consoleHandler.NewModelHandler(c.ModelUC)
 	}
 
 	if c.ProductUC != nil && c.InspectionUC != nil {
-		var pbGetter inspectionHandler.ProductBlueprintModelRefGetter
+		var pbGetter consoleHandler.ProductBlueprintModelRefGetter
 		if c.ProductBlueprintRepo != nil {
-			if g, ok := any(c.ProductBlueprintRepo).(inspectionHandler.ProductBlueprintModelRefGetter); ok {
+			if g, ok := any(c.ProductBlueprintRepo).(consoleHandler.ProductBlueprintModelRefGetter); ok {
 				pbGetter = g
 			}
 		}
 
-		inspectorH = inspectionHandler.NewInspectorHandler(
+		inspectorH = consoleHandler.NewInspectorHandler(
 			c.ProductUC,
 			c.InspectionUC,
 			c.NameResolver,
@@ -293,24 +271,18 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.MintUC != nil {
-		mintHandler := consoleHandler.NewMintHandler(
+		mintH = consoleHandler.NewMintHandler(
 			c.MintUC,
 			c.NameResolver,
 			c.ProductionUC,
 			c.MintRequestQueryService,
 		)
-		mintH = mintHandler
-
-		if mh, ok := mintHandler.(*consoleHandler.MintHandler); ok {
-			mintDebug = mh.HandleDebug
-		}
 	}
 
 	if c.OwnerResolveQ != nil {
 		ownerResolveH = &ownerResolveHandler{q: c.OwnerResolveQ}
 	}
 
-	// public invitation handler
 	if c.InvitationQuery != nil && c.InvitationComplete != nil {
 		invitationH = consoleHandler.NewInvitationHandler(
 			c.InvitationQuery,
@@ -359,12 +331,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		Mint:      mintH,
 
 		OwnerResolve: ownerResolveH,
-
-		MintDebugHandle: mintDebug,
 	}
 }
 
-// ownerResolveHandler は router.go から分離した小さなHTTPハンドラ実装。
 type ownerResolveHandler struct {
 	q *sharedquery.OwnerResolveQuery
 }

@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/console/handler/mint_handler.go
 package consoleHandler
 
 import (
@@ -11,15 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	resolver "narratives/internal/application/resolver"
-
-	mintapp "narratives/internal/application/mint"
-
-	// productionIds 自動解決用
-	productionapp "narratives/internal/application/production"
-
-	// mintRequest 一覧の Query（productionId -> inspection + mint）
 	querydto "narratives/internal/application/query/console/dto"
+	resolver "narratives/internal/application/resolver"
+	mintapp "narratives/internal/application/usecase"
 
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
@@ -27,43 +20,34 @@ import (
 	pbpdom "narratives/internal/domain/productBlueprint"
 )
 
-// handler が依存する最小 query IF
 type MintRequestQueryService interface {
-	// company 境界付きで、productionId と同 docId の inspection/mint を束ねた DTO を返す
-	// NOTE: requestedBy は mint.CreatedBy に合わせる（DTO 側で担保）
 	ListMintRequestManagementRows(
 		ctx context.Context,
 		input querydto.ListMintRequestManagementRowsInput,
 	) ([]querydto.ProductionInspectionMintDTO, error)
 
-	// detail 用（/mint/inspections/{productionId}）
 	GetMintRequestDetail(ctx context.Context, productionID string) (*querydto.MintRequestDetailDTO, error)
 
-	// list 用（productionId = inspectionId = mintId）
 	ListMintListRowsByProductionIDs(
 		ctx context.Context,
 		productionIDs []string,
 	) (map[string]querydto.MintListRowDTO, error)
 
-	// dto 用（productionId = inspectionId = mintId）
 	ListMintDTOsByProductionIDs(
 		ctx context.Context,
 		productionIDs []string,
 	) (map[string]querydto.MintDTO, error)
 
-	// single dto 用（productionId = inspectionId = mintId）
 	GetMintByProductionID(
 		ctx context.Context,
 		productionID string,
 	) (*querydto.MintDTO, error)
 
-	// productBlueprint patch + brandName
 	GetProductBlueprintPatchForMint(
 		ctx context.Context,
 		productBlueprintID string,
 	) (*querydto.MintProductBlueprintPatchDTO, error)
 
-	// tokenBlueprint options for mint screen
 	ListTokenBlueprintsForMint(
 		ctx context.Context,
 		input querydto.ListTokenBlueprintsForMintInput,
@@ -73,20 +57,17 @@ type MintRequestQueryService interface {
 type MintHandler struct {
 	mintUC *mintapp.MintUsecase
 
-	// /mint/inspections に productionIds が来ない場合に productions から自動生成する
-	productionUC *productionapp.ProductionUsecase
+	productionUC *mintapp.ProductionUsecase
 
-	// /mint/requests 用 Query
 	mintRequestQS MintRequestQueryService
 }
 
 func NewMintHandler(
 	mintUC *mintapp.MintUsecase,
 	nameResolver *resolver.NameResolver,
-	productionUC *productionapp.ProductionUsecase,
+	productionUC *mintapp.ProductionUsecase,
 	mintRequestQS MintRequestQueryService,
 ) http.Handler {
-	// NameResolver は MintUsecase 側に保持
 	if mintUC != nil {
 		mintUC.SetNameResolver(nameResolver)
 	}
@@ -98,80 +79,60 @@ func NewMintHandler(
 	}
 }
 
-func (h *MintHandler) HandleDebug(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"ok": true, "msg": "Mint API alive"}`))
-}
-
 func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/mint/debug":
-		h.HandleDebug(w, r)
-		return
-
-	// GET /mint/requests（mintRequest 管理一覧を 1shot で返す）
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/requests":
 		h.listMintRequestsByCurrentCompany(w, r)
 		return
 
-	// GET /mint/inspections?productionIds=a,b,c
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/inspections":
 		h.listInspectionsByProductionIDs(w, r)
 		return
 
-	// GET /mint/inspections/{productionId} (detail)
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
 		!strings.HasSuffix(r.URL.Path, "/request"):
 		h.getMintRequestDetailByProductionID(w, r)
 		return
 
-	// GET /mint/mints?inspectionIds=a,b,c(&view=list|dto)
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/mints":
 		h.listMintsByInspectionIDs(w, r)
 		return
 
-	// POST /mint/mints/{inspectionId}/execute
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/mints/") &&
 		strings.HasSuffix(r.URL.Path, "/execute"):
 		h.executeMintByInspectionID(w, r)
 		return
 
-	// GET /mint/mints/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/mint/mints/"):
 		h.getMintByID(w, r)
 		return
 
-	// POST /mint/requests/{mintRequestId}/mint
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
 		strings.HasSuffix(r.URL.Path, "/mint"):
 		h.mintFromMintRequest(w, r)
 		return
 
-	// POST /mint/inspections/{productionId}/request
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
 		strings.HasSuffix(r.URL.Path, "/request"):
 		h.updateRequestInfo(w, r)
 		return
 
-	// GET /mint/product_blueprints/{id}/patch
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/mint/product_blueprints/") &&
 		strings.HasSuffix(r.URL.Path, "/patch"):
 		h.getProductBlueprintPatchByID(w, r)
 		return
 
-	// GET /mint/brands
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/brands":
 		h.listBrandsForCurrentCompany(w, r)
 		return
 
-	// GET /mint/token_blueprints?brandId=...
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/token_blueprints":
 		h.listTokenBlueprintsByBrand(w, r)
 		return
@@ -180,10 +141,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 }
-
-// ============================================================
-// POST /mint/mints/{inspectionId}/execute
-// ============================================================
 
 func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -194,7 +151,6 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// /mint/mints/{inspectionId}/execute
 	path := strings.TrimPrefix(r.URL.Path, "/mint/mints/")
 	path = strings.TrimSuffix(path, "/execute")
 	inspectionID := strings.Trim(path, "/")
@@ -205,7 +161,6 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 現状は mintRequestId と inspectionId が同一ID（docId）なので流用
 	result, err := h.mintUC.MintFromMintRequest(ctx, inspectionID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -216,10 +171,6 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-// ============================================================
-// GET /mint/inspections/{productionId}
-// ============================================================
-
 func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -229,7 +180,6 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 		return
 	}
 
-	// /mint/inspections/{productionId}
 	path := strings.TrimPrefix(r.URL.Path, "/mint/inspections/")
 	path = strings.Trim(path, "/")
 	if path == "" {
@@ -238,7 +188,6 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 		return
 	}
 
-	// 余計なセグメントを弾く（/mint/inspections/{id}/xxx など）
 	if strings.Contains(path, "/") {
 		http.NotFound(w, r)
 		return
@@ -269,10 +218,6 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 
 	_ = json.NewEncoder(w).Encode(detail)
 }
-
-// ============================================================
-// GET /mint/requests
-// ============================================================
 
 func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -311,10 +256,6 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 
 	_ = json.NewEncoder(w).Encode(rows)
 }
-
-// ============================================================
-// GET /mint/inspections?productionIds=a,b,c
-// ============================================================
 
 func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -385,10 +326,6 @@ func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *h
 	_ = json.NewEncoder(w).Encode(batches)
 }
 
-// ============================================================
-// GET /mint/mints?inspectionIds=a,b,c
-// ============================================================
-
 func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -437,10 +374,6 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// ============================================================
-// GET /mint/mints/{id}
-// ============================================================
-
 func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -475,10 +408,6 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// ============================================================
-// POST /mint/requests/{mintRequestId}/mint
-// ============================================================
-
 func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -507,10 +436,6 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 
 	_ = json.NewEncoder(w).Encode(result)
 }
-
-// ============================================================
-// POST /mint/inspections/{productionId}/request
-// ============================================================
 
 func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -567,10 +492,6 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-// ============================================================
-// GET /mint/product_blueprints/{id}/patch
-// ============================================================
-
 func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -604,10 +525,6 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// ============================================================
-// GET /mint/brands
-// ============================================================
-
 func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -632,10 +549,6 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 
 	_ = json.NewEncoder(w).Encode(result)
 }
-
-// ============================================================
-// GET /mint/token_blueprints?brandId=...
-// ============================================================
 
 func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -709,6 +622,3 @@ func parseCommaSeparatedIDs(raw string) []string {
 	sort.Strings(out)
 	return out
 }
-
-// keep imports referenced in some builds
-var _ = context.Canceled

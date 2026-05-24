@@ -1,16 +1,10 @@
-// backend/internal/platform/di/console/container.go
 package console
 
 import (
 	"context"
 	"errors"
-	"log"
 
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
-
-	inspectionapp "narratives/internal/application/inspection"
-	mintapp "narratives/internal/application/mint"
-	productionapp "narratives/internal/application/production"
 
 	query "narratives/internal/application/query/console"
 
@@ -19,13 +13,8 @@ import (
 
 	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
-	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
 
 	uc "narratives/internal/application/usecase"
-	authuc "narratives/internal/application/usecase/auth"
-	avatarUC "narratives/internal/application/usecase/avatar"
-
-	listuc "narratives/internal/application/usecase/list"
 
 	shared "narratives/internal/platform/di/shared"
 
@@ -39,53 +28,45 @@ import (
 	tbReview "narratives/internal/domain/tokenBlueprint_review"
 )
 
-// ========================================
-// Container (Console DI)
-// ========================================
 type Container struct {
 	Infra *shared.Infra
 
-	// Repositories (AuthMiddleware 用に memberRepo だけ保持)
 	MemberRepo memdom.Repository
 
-	// review handler wiring に必要な repo を Container が保持
 	TokenBlueprintRepo         tokenBlueprint.RepositoryPort
 	TokenBlueprintReviewRepo   tbReview.RepositoryPort
 	ProductBlueprintRepo       pbdomain.Repository
 	ProductBlueprintReviewRepo pbReview.Repository
 
-	// TokenBlueprintReviewUsecase に渡すため
 	AvatarRepo avatar.Repository
 
-	// member.Service / company.Service / brand.Service (表示名解決用)
 	MemberService  *memdom.Service
 	CompanyService *companydom.Service
 	BrandService   *branddom.Service
 
-	// Application-layer usecases
 	AccountUC                  *uc.AccountUsecase
 	AnnouncementUC             *uc.AnnouncementUsecase
-	AvatarUC                   *avatarUC.AvatarUsecase
+	AvatarUC                   *uc.AvatarUsecase
 	PaymentMethodUC            *uc.PaymentMethodUsecase
 	BrandUC                    *uc.BrandUsecase
 	CompanyUC                  *uc.CompanyUsecase
 	InquiryUC                  *uc.InquiryUsecase
 	InventoryUC                *uc.InventoryUsecase
-	ListUC                     *listuc.ListUsecase
+	ListUC                     *uc.ListUsecase
 	MemberUC                   *uc.MemberUsecase
 	ModelUC                    *uc.ModelUsecase
 	OrderUC                    *uc.OrderUsecase
 	PaymentUC                  *uc.PaymentUsecase
 	PermissionUC               *uc.PermissionUsecase
 	PrintUC                    *uc.PrintUsecase
-	ProductionUC               *productionapp.ProductionUsecase
+	ProductionUC               *uc.ProductionUsecase
 	ProductBlueprintUC         *uc.ProductBlueprintUsecase
 	ProductBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
 	ShippingAddressUC          *uc.ShippingAddressUsecase
 	TokenUC                    *uc.TokenUsecase
 
-	TokenBlueprintUC      *tokenblueprintapp.TokenBlueprintUsecase
-	TokenBlueprintQueryUC *tokenblueprintapp.TokenBlueprintQueryUsecase
+	TokenBlueprintUC      *uc.TokenBlueprintUsecase
+	TokenBlueprintQueryUC *uc.TokenBlueprintQueryUsecase
 
 	UserUC   *uc.UserUsecase
 	WalletUC *uc.WalletUsecase
@@ -101,23 +82,21 @@ type Container struct {
 	ListManagementQuery *listmanagementquery.ListManagementQuery
 	ListDetailQuery     *listdetailquery.ListDetailQuery
 
-	// order management query instance (for console order endpoints)
 	OrderManagementQuery *query.OrderManagementQuery
 
-	// /orders/{id} で item に productBlueprintId/tokenBlueprintId を載せるための resolver
 	InventoryBlueprintResolver consoleHandler.InventoryBlueprintResolver
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	ProductUC    *uc.ProductUsecase
-	InspectionUC *inspectionapp.InspectionUsecase
-	MintUC       *mintapp.MintUsecase
+	InspectionUC *uc.InspectionUsecase
+	MintUC       *uc.MintUsecase
 
 	InvitationQuery    uc.InvitationQueryPort
 	InvitationCommand  uc.InvitationCommandPort
 	InvitationComplete uc.InvitationCompletePort
 
-	AuthBootstrap *authuc.BootstrapService
+	AuthBootstrap *uc.BootstrapService
 	NameResolver  *resolver.NameResolver
 }
 
@@ -136,8 +115,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	if clients == nil || clients.infra == nil {
 		return nil, errors.New("clients/infra is nil")
 	}
-
-	log.Printf("[di.console] productBlueprint review initializer skipped (initializer not implemented)")
 
 	var invBlueprint consoleHandler.InventoryBlueprintResolver
 	if repos.inventoryRepo != nil {
@@ -239,8 +216,4 @@ func (c *Container) Close() error {
 		return c.Infra.Close()
 	}
 	return nil
-}
-
-func init() {
-	log.Printf("[di.console] container package loaded")
 }

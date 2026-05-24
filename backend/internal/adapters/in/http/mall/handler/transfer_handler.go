@@ -29,11 +29,6 @@ type ScanTransferResult struct {
 	// Transfer result
 	TxSignature string `json:"txSignature,omitempty"`
 
-	// Optional debug/info.
-	// Frontend 表示では使わず、必要に応じた debug / 後方互換用として残す。
-	FromWallet string `json:"fromWallet,omitempty"`
-	ToWallet   string `json:"toWallet,omitempty"`
-
 	// Display names resolved by backend.
 	// Frontend modal should use these instead of wallet address fallback.
 	FromDisplayName string `json:"fromDisplayName,omitempty"`
@@ -174,8 +169,6 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ProductID:        productID,
 		Matched:          true,
 		TxSignature:      ucOut.TxSignature,
-		FromWallet:       ucOut.FromWallet,
-		ToWallet:         ucOut.ToWallet,
 		FromDisplayName:  ucOut.FromDisplayName,
 		ToDisplayName:    ucOut.ToDisplayName,
 		UpdatedToAddress: true, // TransferUsecase 内で UpdateToAddressByProductID を実行済み（fail-fast）

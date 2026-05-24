@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\auth_bootstrap_handler.go
+// backend/internal/adapters/in/http/console/handler/auth_bootstrap_handler.go
 package consoleHandler
 
 import (
@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	httpmw "narratives/internal/adapters/in/http/middleware"
-	authuc "narratives/internal/application/usecase/auth"
+	authuc "narratives/internal/application/usecase"
 )
 
 type AuthBootstrapHandler struct {
@@ -34,7 +34,7 @@ func (h *AuthBootstrapHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// ★ SignUpProfile をルート JSON としてそのまま受け取る
+	// SignUpProfile をルート JSON としてそのまま受け取る
 	var profile authuc.SignUpProfile
 	if err := json.NewDecoder(r.Body).Decode(&profile); err != nil {
 		w.WriteHeader(http.StatusBadRequest)

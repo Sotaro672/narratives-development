@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -282,81 +281,6 @@ func toOrderResponseDTO(
 }
 
 // ============================================================
-// Console logging (debug)
-// ============================================================
-
-// logOrderModelFields logs what model-resolved fields are being passed to the UI.
-func logOrderModelFields(dto orderResponseDTO) {
-	type itemLog struct {
-		Index int `json:"index"`
-
-		ModelID string `json:"modelId,omitempty"`
-
-		InventoryID string `json:"inventoryId,omitempty"`
-
-		ProductBlueprintID string `json:"productBlueprintId,omitempty"`
-		TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
-
-		ProductName string `json:"productName,omitempty"`
-		TokenName   string `json:"tokenName,omitempty"`
-
-		Size        string    `json:"size,omitempty"`
-		ModelNumber string    `json:"modelNumber,omitempty"`
-		Color       *ColorDTO `json:"color,omitempty"`
-		RGB         int       `json:"rgb"`
-	}
-
-	payload := struct {
-		OrderID    string    `json:"orderId"`
-		UserID     string    `json:"userId,omitempty"`
-		UserName   string    `json:"userName,omitempty"`
-		AvatarID   string    `json:"avatarId,omitempty"`
-		AvatarName string    `json:"avatarName,omitempty"`
-		CreatedAt  string    `json:"createdAt,omitempty"`
-		Paid       bool      `json:"paid"`
-		Items      []itemLog `json:"items"`
-	}{
-		OrderID:    dto.ID,
-		UserID:     dto.UserID,
-		UserName:   dto.UserName,
-		AvatarID:   dto.AvatarID,
-		AvatarName: dto.AvatarName,
-		CreatedAt:  dto.CreatedAt,
-		Paid:       dto.Paid,
-		Items:      make([]itemLog, 0, len(dto.Items)),
-	}
-
-	for i, it := range dto.Items {
-		payload.Items = append(payload.Items, itemLog{
-			Index: i,
-
-			ModelID: it.ModelID,
-
-			InventoryID: it.InventoryID,
-
-			ProductBlueprintID: it.ProductBlueprintID,
-			TokenBlueprintID:   it.TokenBlueprintID,
-
-			ProductName: it.ProductName,
-			TokenName:   it.TokenName,
-
-			Size:        it.Size,
-			ModelNumber: it.ModelNumber,
-			Color:       it.Color,
-			RGB:         it.RGB,
-		})
-	}
-
-	b, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("[console][/orders/%s] model_fields_log_marshal_error: %v", dto.ID, err)
-		return
-	}
-
-	log.Printf("[console][/orders/%s] model_fields_for_ui=%s", dto.ID, string(b))
-}
-
-// ============================================================
 // Handler
 // ============================================================
 
@@ -447,9 +371,6 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		h.userName,
 		h.modelResolver,
 	)
-
-	// ✅ console log: what model fields are being passed to the UI
-	logOrderModelFields(dto)
 
 	_ = json.NewEncoder(w).Encode(dto)
 }

@@ -7,7 +7,6 @@ import (
 
 	mallhttp "narratives/internal/adapters/in/http/mall"
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
-	avatarHandler "narratives/internal/adapters/in/http/mall/handler/avatar"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
 	mallquery "narratives/internal/application/query/mall"
@@ -149,7 +148,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Avatar（/mall/avatars）
 	if cont.AvatarUC != nil {
-		avatarH = avatarHandler.NewAvatarHandler(cont.AvatarUC, cont.AvatarRepo)
+		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC, cont.AvatarRepo)
 	}
 
 	// TokenBlueprintReview wiring

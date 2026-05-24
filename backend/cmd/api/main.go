@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -34,7 +33,6 @@ func closeIfPossible(name string, value any) {
 		return
 	}
 
-	log.Printf("[boot] closing %s resources...", name)
 	if err := c.Close(); err != nil {
 		log.Printf("[boot] %s close error: %v", name, err)
 	}
@@ -42,21 +40,6 @@ func closeIfPossible(name string, value any) {
 
 func main() {
 	ctx := context.Background()
-
-	{
-		logPath := "debug-idtoken.log"
-		if _, ok := os.LookupEnv("K_SERVICE"); ok {
-			logPath = "/tmp/debug-idtoken.log"
-		}
-
-		if f, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644); err == nil {
-			mw := io.MultiWriter(os.Stdout, f)
-			log.SetOutput(mw)
-			log.Printf("[boot] log output = stdout + %s", logPath)
-		} else {
-			log.Printf("[boot] WARN: could not open %s: %v (stdout only)", logPath, err)
-		}
-	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -85,7 +68,6 @@ func main() {
 	defer closeIfPossible("console container", consoleCont)
 
 	deps := consoleCont.RouterDeps()
-	log.Printf("[boot] console router deps built")
 
 	// ------------------------------------------------------------
 	// Build full mux BEFORE ListenAndServe
@@ -104,7 +86,6 @@ func main() {
 		log.Printf("[boot] WARN: mall di init failed: %v (mall routes disabled)", err)
 	} else {
 		mallDI.Register(fullMux, mallCont)
-		log.Printf("[boot] mall routes registered")
 	}
 
 	// ------------------------------------------------------------
@@ -121,7 +102,6 @@ func main() {
 		} else {
 			introCont = c
 			introCont.Register(fullMux)
-			log.Printf("[boot] introduction routes registered")
 		}
 	}
 	defer closeIfPossible("introduction container", introCont)
@@ -134,8 +114,6 @@ func main() {
 	fullMux.Handle("/console/", router)
 	fullMux.Handle("/console", http.RedirectHandler("/console/", http.StatusPermanentRedirect))
 	fullMux.Handle("/", router)
-
-	log.Printf("[boot] full router built")
 
 	srv := &http.Server{
 		Addr:         ":" + port,
@@ -150,9 +128,7 @@ func main() {
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		sig := <-c
-
-		log.Printf("[boot] received signal: %v; shutting down...", sig)
+		<-c
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
@@ -164,12 +140,9 @@ func main() {
 		close(idleConnsClosed)
 	}()
 
-	log.Printf("[boot] listening on :%s", port)
-
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("[boot] server error: %v", err)
 	}
 
 	<-idleConnsClosed
-	log.Printf("[boot] server stopped")
 }

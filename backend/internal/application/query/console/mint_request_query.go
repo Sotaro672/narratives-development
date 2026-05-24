@@ -1,4 +1,3 @@
-// backend/internal/application/query/console/mint_request_query.go
 package query
 
 import (
@@ -8,38 +7,29 @@ import (
 	"sort"
 	"time"
 
-	mintapp "narratives/internal/application/mint"
-	productionapp "narratives/internal/application/production"
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
+	mintapp "narratives/internal/application/usecase"
 	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
 )
 
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
 
-// ------------------------------------------------------------
-// Optional dependency: model variations getter
-// ------------------------------------------------------------
-
 type ModelVariationsGetter interface {
 	GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error)
 }
 
-// MintRequestQueryService is used by console mint handlers.
-// It returns console BFF rows: productionId = inspectionId = mintId.
 type MintRequestQueryService struct {
 	mintUC       *mintapp.MintUsecase
-	productionUC *productionapp.ProductionUsecase
+	productionUC *mintapp.ProductionUsecase
 	nameResolver *resolver.NameResolver
-
-	// productBlueprintId -> modelVariations を引くための任意依存
-	modelRepo ModelVariationsGetter
+	modelRepo    ModelVariationsGetter
 }
 
 func NewMintRequestQueryService(
 	mintUC *mintapp.MintUsecase,
-	productionUC *productionapp.ProductionUsecase,
+	productionUC *mintapp.ProductionUsecase,
 	nameResolver *resolver.NameResolver,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
@@ -50,7 +40,6 @@ func NewMintRequestQueryService(
 	}
 }
 
-// DI 側で後から差し込めるようにする。
 func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) {
 	if s == nil {
 		return
@@ -58,8 +47,6 @@ func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsGetter) 
 	s.modelRepo = modelRepo
 }
 
-// ListMintRequestManagementRows returns rows for current company.
-// productionId = inspectionId = mintId として扱う。
 func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	ctx context.Context,
 	input querydto.ListMintRequestManagementRowsInput,
@@ -70,9 +57,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 
 	filterSet := makeIDSet(input.ProductionIDs)
 
-	// ------------------------------------------------------------
-	// 1) productionIds: use ProductionUsecase already company-scoped
-	// ------------------------------------------------------------
 	prodsAny, err := s.productionUC.ListWithAssigneeName(ctx)
 	if err != nil {
 		return nil, err
@@ -121,9 +105,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		return []querydto.ProductionInspectionMintDTO{}, nil
 	}
 
-	// ------------------------------------------------------------
-	// 2) inspections by productionIds
-	// ------------------------------------------------------------
 	batchesAny, err := s.mintUC.ListInspectionBatchesByProductionIDs(ctx, ids)
 	if err != nil {
 		return nil, err
@@ -151,17 +132,11 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		inspByPID[pid] = b
 	}
 
-	// ------------------------------------------------------------
-	// 3) mints by productionIds
-	// ------------------------------------------------------------
 	mintsByPID, err := s.mintUC.ListMintsByProductionIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	// ------------------------------------------------------------
-	// 4) build rows
-	// ------------------------------------------------------------
 	rows := make([]querydto.ProductionInspectionMintDTO, 0, len(ids))
 
 	for _, pid := range ids {
@@ -232,8 +207,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	return rows, nil
 }
 
-// ListMintListRowsByProductionIDs returns list rows for /mint/mints?view=list.
-// productionId = inspectionId = mintId として扱う。
 func (s *MintRequestQueryService) ListMintListRowsByProductionIDs(
 	ctx context.Context,
 	productionIDs []string,
@@ -284,7 +257,6 @@ func (s *MintRequestQueryService) ListMintListRowsByProductionIDs(
 	return out, nil
 }
 
-// ListMintDTOsByProductionIDs returns DTO rows for /mint/mints?view=dto.
 func (s *MintRequestQueryService) ListMintDTOsByProductionIDs(
 	ctx context.Context,
 	productionIDs []string,
@@ -332,7 +304,6 @@ func (s *MintRequestQueryService) ListMintDTOsByProductionIDs(
 	return out, nil
 }
 
-// GetMintByProductionID returns a single mint DTO for /mint/mints/{id}.
 func (s *MintRequestQueryService) GetMintByProductionID(
 	ctx context.Context,
 	productionID string,
@@ -361,8 +332,6 @@ func (s *MintRequestQueryService) GetMintByProductionID(
 	return &out, nil
 }
 
-// GetMintRequestDetail returns detail DTO for a single productionId.
-// productionId = inspectionId = mintId として扱う。
 func (s *MintRequestQueryService) GetMintRequestDetail(
 	ctx context.Context,
 	productionID string,
@@ -376,9 +345,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, errors.New("productionId is empty")
 	}
 
-	// ------------------------------------------------------------
-	// 1) production
-	// ------------------------------------------------------------
 	prodsAny, err := s.productionUC.ListWithAssigneeName(ctx)
 	if err != nil {
 		return nil, err
@@ -411,9 +377,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 	productBlueprintID := prod.ProductBlueprintID
 
-	// ------------------------------------------------------------
-	// 2) inspection
-	// ------------------------------------------------------------
 	batchesAny, err := s.mintUC.ListInspectionBatchesByProductionIDs(ctx, []string{pid})
 	if err != nil {
 		return nil, err
@@ -454,18 +417,12 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 	}
 
-	// ------------------------------------------------------------
-	// 3) mint
-	// ------------------------------------------------------------
 	mintsByPID, err := s.mintUC.ListMintsByProductionIDs(ctx, []string{pid})
 	if err != nil {
 		return nil, err
 	}
 	m, hasMint := mintsByPID[pid]
 
-	// ------------------------------------------------------------
-	// 3.5) model variations -> modelMeta
-	// ------------------------------------------------------------
 	modelMeta := map[string]querydto.MintModelMetaEntry(nil)
 
 	if productBlueprintID != "" && s.modelRepo != nil {
@@ -496,9 +453,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 	}
 
-	// ------------------------------------------------------------
-	// 4) compute detail fields
-	// ------------------------------------------------------------
 	productName := prod.ProductName
 
 	mintQty := 0
@@ -627,10 +581,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 	return out, nil
 }
-
-// -----------------------
-// helpers
-// -----------------------
 
 func buildMintDTO(
 	productionID string,

@@ -13,7 +13,7 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	mallquery "narratives/internal/application/query/mall"
-	avataruc "narratives/internal/application/usecase/avatar"
+	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
 	avatarstate "narratives/internal/domain/avatarState"
 )

@@ -1,4 +1,3 @@
-// backend/internal/platform/di/console/contaner_usecase.go
 package console
 
 import (
@@ -6,14 +5,7 @@ import (
 
 	fsrepo "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
-	inspectionapp "narratives/internal/application/inspection"
-	mintapp "narratives/internal/application/mint"
-	productionapp "narratives/internal/application/production"
-	tokenblueprintapp "narratives/internal/application/tokenBlueprint"
 	uc "narratives/internal/application/usecase"
-	authuc "narratives/internal/application/usecase/auth"
-	avataruc "narratives/internal/application/usecase/avatar"
-	listuc "narratives/internal/application/usecase/list"
 	memdom "narratives/internal/domain/member"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
@@ -24,13 +16,13 @@ type usecases struct {
 
 	accountUC       *uc.AccountUsecase
 	announcementUC  *uc.AnnouncementUsecase
-	avatarUC        *avataruc.AvatarUsecase
+	avatarUC        *uc.AvatarUsecase
 	paymentMethodUC *uc.PaymentMethodUsecase
 	brandUC         *uc.BrandUsecase
 	companyUC       *uc.CompanyUsecase
 	inquiryUC       *uc.InquiryUsecase
 	inventoryUC     *uc.InventoryUsecase
-	listUC          *listuc.ListUsecase
+	listUC          *uc.ListUsecase
 	memberUC        *uc.MemberUsecase
 	modelUC         *uc.ModelUsecase
 	orderUC         *uc.OrderUsecase
@@ -38,18 +30,18 @@ type usecases struct {
 	permissionUC    *uc.PermissionUsecase
 	printUC         *uc.PrintUsecase
 
-	productionUC               *productionapp.ProductionUsecase
+	productionUC               *uc.ProductionUsecase
 	productBlueprintUC         *uc.ProductBlueprintUsecase
 	productBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
 
-	inspectionUC *inspectionapp.InspectionUsecase
+	inspectionUC *uc.InspectionUsecase
 	productUC    *uc.ProductUsecase
-	mintUC       *mintapp.MintUsecase
+	mintUC       *uc.MintUsecase
 
 	shippingAddressUC *uc.ShippingAddressUsecase
 
-	tokenBlueprintUC      *tokenblueprintapp.TokenBlueprintUsecase
-	tokenBlueprintQueryUC *tokenblueprintapp.TokenBlueprintQueryUsecase
+	tokenBlueprintUC      *uc.TokenBlueprintUsecase
+	tokenBlueprintQueryUC *uc.TokenBlueprintQueryUsecase
 
 	tokenBlueprintReviewUC *uc.TokenBlueprintReviewUsecase
 
@@ -63,7 +55,7 @@ type usecases struct {
 	invitationCommandUC  uc.InvitationCommandPort
 	invitationCompleteUC uc.InvitationCompletePort
 
-	authBootstrapSvc *authuc.BootstrapService
+	authBootstrapSvc *uc.BootstrapService
 }
 
 func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases {
@@ -81,7 +73,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	brandWalletSvc := solanainfra.NewBrandWalletService(c.firestoreProjectID)
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(c.firestoreProjectID)
 
-	avatarUC := avataruc.NewAvatarUsecase(
+	avatarUC := uc.NewAvatarUsecase(
 		r.avatarRepo,
 		r.avatarStateRepo,
 	).
@@ -106,23 +98,14 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	inventoryUC := uc.NewInventoryUsecase(r.inventoryRepo)
 	paymentUC := uc.NewPaymentUsecase(r.paymentRepo)
 
-	var listReader listuc.ListReader = r.listRepoFS
-	var listCreator listuc.ListCreator = r.listRepoFS
-
-	var listPatcher listuc.ListPatcher
+	var listPatcher uc.ListPatcher
 	if r.listRepoFS != nil {
 		listPatcher = r.listRepoFS
-	} else {
-		listPatcher = nil
 	}
 
-	// Firebase Storage 移行後:
-	// - frontend が Firebase Storage へ直接 upload する
-	// - backend は GCS signed URL / GCS object / bucket を扱わない
-	// - list image は Firestore record repository のみを usecase に渡す
-	listUC := listuc.NewListUsecase(
-		listReader,
-		listCreator,
+	listUC := uc.NewListUsecase(
+		r.listRepoFS,
+		r.listRepoFS,
 		listPatcher,
 		r.listImageRecordRepo,
 		r.listImageRecordRepo,
@@ -142,7 +125,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.productBlueprintRepo,
 	)
 
-	productionUC := productionapp.NewProductionUsecase(
+	productionUC := uc.NewProductionUsecase(
 		r.productionRepo,
 		s.pbSvc,
 		res.nameResolver,
@@ -157,7 +140,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.productBlueprintCategoryRepo,
 	)
 
-	inspectionUC := inspectionapp.NewInspectionUsecase(
+	inspectionUC := uc.NewInspectionUsecase(
 		r.inspectionRepo,
 		r.productRepo,
 		r.mintRepo,
@@ -173,7 +156,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		s.companySvc,
 	)
 
-	mintUC := mintapp.NewMintUsecase(
+	mintUC := uc.NewMintUsecase(
 		r.productBlueprintRepo,
 		r.productionRepo,
 		r.inspectionRepo,
@@ -187,15 +170,11 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	mintUC.SetNameResolver(res.nameResolver)
 	mintUC.SetInventoryUsecase(inventoryUC)
 
-	// GCS bucket ensurer は廃止。
-	// tokenBlueprint icon / contents は frontend が Firebase Storage へ直接 upload し、
-	// backend は Firestore に保存された downloadURL / objectPath を扱う。
-
 	baseURL := os.Getenv("ARWEAVE_BASE_URL")
 	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
 	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
 
-	tbMetadataUC := tokenblueprintapp.NewTokenBlueprintMetadataUsecase(
+	tbMetadataUC := uc.NewTokenBlueprintMetadataUsecase(
 		r.tokenBlueprintRepo,
 		uploader,
 	)
@@ -205,13 +184,13 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	tbReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(c.fsClient)
 
-	tokenBlueprintUC := tokenblueprintapp.NewTokenBlueprintUsecase(
+	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		r.tokenBlueprintRepo,
 		tbReviewRepo,
 		res.nameResolver,
 	)
 
-	tokenBlueprintQueryUC := tokenblueprintapp.NewTokenBlueprintQueryUsecase(
+	tokenBlueprintQueryUC := uc.NewTokenBlueprintQueryUsecase(
 		r.tokenBlueprintRepo,
 		res.nameResolver,
 	)
@@ -222,19 +201,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.tokenBlueprintRepo,
 		s.brandSvc,
 	)
-
-	var productBlueprintReviewUC *uc.ProductBlueprintReviewUsecase
-	if r.productBlueprintReviewRepo != nil && r.productBlueprintRepo != nil && r.walletRepo != nil {
-		memberSvc := memdom.NewService(r.memberRepo)
-
-		productBlueprintReviewUC = uc.NewProductBlueprintReviewUsecase(
-			r.productBlueprintReviewRepo,
-			r.walletRepo,
-		).
-			WithProductBlueprintRepo(r.productBlueprintRepo).
-			WithBrandService(s.brandSvc).
-			WithMemberService(memberSvc)
-	}
 
 	userUC := uc.NewUserUsecase(r.userRepo)
 	walletUC := uc.NewWalletUsecase(r.walletRepo)
@@ -263,13 +229,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		invitationCommandUC,
 	)
 
-	authBootstrapSvc := &authuc.BootstrapService{
-		Members: &authMemberRepoAdapter{
-			repo: r.memberRepo,
-		},
-		Companies: &authCompanyRepoAdapter{
-			repo: r.companyRepo,
-		},
+	authBootstrapSvc := &uc.BootstrapService{
+		Members:   r.memberRepo,
+		Companies: r.companyRepo,
 	}
 
 	return &usecases{
@@ -301,10 +263,27 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 		shippingAddressUC: shippingAddressUC,
 
-		tokenBlueprintUC:         tokenBlueprintUC,
-		tokenBlueprintQueryUC:    tokenBlueprintQueryUC,
-		tokenBlueprintReviewUC:   tokenBlueprintReviewUC,
-		productBlueprintReviewUC: productBlueprintReviewUC,
+		tokenBlueprintUC:       tokenBlueprintUC,
+		tokenBlueprintQueryUC:  tokenBlueprintQueryUC,
+		tokenBlueprintReviewUC: tokenBlueprintReviewUC,
+
+		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {
+			if r.productBlueprintReviewRepo == nil ||
+				r.productBlueprintRepo == nil ||
+				r.walletRepo == nil {
+				return nil
+			}
+
+			memberSvc := memdom.NewService(r.memberRepo)
+
+			return uc.NewProductBlueprintReviewUsecase(
+				r.productBlueprintReviewRepo,
+				r.walletRepo,
+			).
+				WithProductBlueprintRepo(r.productBlueprintRepo).
+				WithBrandService(s.brandSvc).
+				WithMemberService(memberSvc)
+		}(),
 
 		userUC:   userUC,
 		walletUC: walletUC,
