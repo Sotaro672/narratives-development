@@ -183,19 +183,6 @@ func (u *TokenBlueprintCRUDUsecase) ListByBrandID(
 	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
 }
 
-func (u *TokenBlueprintCRUDUsecase) ListMintedCompleted(
-	ctx context.Context,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	var empty domcommon.PageResult[tbdom.TokenBlueprint]
-
-	if u == nil || u.tbRepo == nil {
-		return empty, tbdom.ErrInvalid
-	}
-
-	return tbdom.ListMintedCompleted(ctx, u.tbRepo, page)
-}
-
 type UpdateBlueprintRequest struct {
 	ID           string
 	Name         *string
@@ -722,17 +709,6 @@ func (u *TokenBlueprintUsecase) ListByBrandID(
 	}
 
 	return u.crud.ListByBrandID(ctx, brandID, page)
-}
-
-func (u *TokenBlueprintUsecase) ListMintedCompleted(
-	ctx context.Context,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	if u == nil || u.crud == nil {
-		return domcommon.PageResult[tbdom.TokenBlueprint]{}, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.ListMintedCompleted(ctx, page)
 }
 
 func (u *TokenBlueprintUsecase) ResolveNames(

@@ -120,23 +120,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		invH = mallhandler.NewMallInventoryHandler(cont.InventoryUC)
 	}
 
-	// TokenBlueprint (public patch)
-	//
-	// Firebase Storage migration policy:
-	// - backend は GCS objectPath -> public URL resolver を使わない
-	// - tokenBlueprint iconUrl / Patch.IconURL には Firebase Storage downloadURL が入る
-	// - handler には NameResolver のみ渡す
-	if tokenBlueprintRepo != nil {
-		if cont.NameResolver != nil {
-			tbH = mallhandler.NewMallTokenBlueprintHandlerWithNameResolver(
-				tokenBlueprintRepo,
-				cont.NameResolver,
-			)
-		} else {
-			tbH = mallhandler.NewMallTokenBlueprintHandler(tokenBlueprintRepo)
-		}
-	}
-
 	// Brand（/mall/brands/{id}）
 	if cont.BrandQ != nil {
 		brandH = mallhandler.NewMallBrandHandler(cont.BrandQ)

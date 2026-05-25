@@ -462,6 +462,14 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	brandID := strings.Trim(q.Get("brandId"), " \t\r\n")
 	mintedFilter := strings.Trim(q.Get("minted"), " \t\r\n")
 
+	if mintedFilter != "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "minted filter is no longer supported",
+		})
+		return
+	}
+
 	page := domcommon.Page{Number: pageNum, PerPage: perPage}
 
 	var (
@@ -469,12 +477,9 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		err    error
 	)
 
-	switch {
-	case brandID != "" && mintedFilter == "":
+	if brandID != "" {
 		result, err = h.uc.ListByBrandID(ctx, brandID, page)
-	case mintedFilter == "minted":
-		result, err = h.uc.ListMintedCompleted(ctx, page)
-	default:
+	} else {
 		result, err = h.uc.ListByCompanyID(ctx, companyID, page)
 	}
 

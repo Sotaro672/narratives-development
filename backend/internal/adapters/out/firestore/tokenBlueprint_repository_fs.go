@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -147,76 +146,6 @@ func (r *TokenBlueprintRepositoryFS) GetNameByID(
 	}
 
 	return raw.Name, nil
-}
-
-func (r *TokenBlueprintRepositoryFS) List(
-	ctx context.Context,
-	filter tbdom.Filter,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	if r.Client == nil {
-		return domcommon.PageResult[tbdom.TokenBlueprint]{}, errors.New("firestore client is nil")
-	}
-
-	q := r.col().
-		OrderBy("createdAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var all []tbdom.TokenBlueprint
-
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
-		}
-
-		tb, err := docToTokenBlueprint(doc)
-		if err != nil {
-			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
-		}
-
-		if matchTBFilter(tb, filter) {
-			all = append(all, tb)
-		}
-	}
-
-	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-	total := len(all)
-
-	if total == 0 {
-		return domcommon.PageResult[tbdom.TokenBlueprint]{
-			Items:      []tbdom.TokenBlueprint{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
-	}
-
-	if offset > total {
-		offset = total
-	}
-
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-
-	items := all[offset:end]
-
-	return domcommon.PageResult[tbdom.TokenBlueprint]{
-		Items:      items,
-		TotalCount: total,
-		TotalPages: fscommon.ComputeTotalPages(total, perPage),
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
 }
 
 func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
@@ -764,82 +693,6 @@ func docToTokenBlueprint(
 	}
 
 	return tb, nil
-}
-
-func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
-	inList := func(v string, xs []string) bool {
-		if len(xs) == 0 {
-			return true
-		}
-
-		for _, x := range xs {
-			if x == v {
-				return true
-			}
-		}
-
-		return false
-	}
-
-	if len(f.IDs) > 0 && !inList(tb.ID, f.IDs) {
-		return false
-	}
-
-	if len(f.BrandIDs) > 0 && !inList(tb.BrandID, f.BrandIDs) {
-		return false
-	}
-
-	if len(f.CompanyIDs) > 0 && !inList(tb.CompanyID, f.CompanyIDs) {
-		return false
-	}
-
-	if len(f.AssigneeIDs) > 0 && !inList(tb.AssigneeID, f.AssigneeIDs) {
-		return false
-	}
-
-	if len(f.Symbols) > 0 {
-		match := false
-		for _, x := range f.Symbols {
-			if x == tb.Symbol {
-				match = true
-				break
-			}
-		}
-
-		if !match {
-			return false
-		}
-	}
-
-	if f.NameLike != "" {
-		if !strings.Contains(strings.ToLower(tb.Name), strings.ToLower(f.NameLike)) {
-			return false
-		}
-	}
-
-	if f.SymbolLike != "" {
-		if !strings.Contains(strings.ToLower(tb.Symbol), strings.ToLower(f.SymbolLike)) {
-			return false
-		}
-	}
-
-	if f.Created.From != nil && tb.CreatedAt.Before(f.Created.From.UTC()) {
-		return false
-	}
-
-	if f.Created.To != nil && !tb.CreatedAt.Before(f.Created.To.UTC()) {
-		return false
-	}
-
-	if f.Updated.From != nil && tb.UpdatedAt.Before(f.Updated.From.UTC()) {
-		return false
-	}
-
-	if f.Updated.To != nil && !tb.UpdatedAt.Before(f.Updated.To.UTC()) {
-		return false
-	}
-
-	return true
 }
 
 func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {

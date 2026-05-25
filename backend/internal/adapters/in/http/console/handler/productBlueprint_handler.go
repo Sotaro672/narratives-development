@@ -42,9 +42,6 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	case r.Method == http.MethodGet && path == "/product-blueprints":
 		h.list(w, r)
 
-	case r.Method == http.MethodGet && path == "/product-blueprints/deleted":
-		h.listDeleted(w, r)
-
 	case r.Method == http.MethodPost && path == "/product-blueprints":
 		h.post(w, r)
 
@@ -56,22 +53,6 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		trimmed = strings.TrimSuffix(trimmed, "/model-refs")
 		id := strings.Trim(trimmed, "/")
 		h.appendModelRefs(w, r, id)
-
-	case r.Method == http.MethodGet &&
-		strings.HasPrefix(path, "/product-blueprints/") &&
-		strings.HasSuffix(path, "/history"):
-		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
-		trimmed = strings.TrimSuffix(trimmed, "/history")
-		id := strings.Trim(trimmed, "/")
-		h.history(w, r, id)
-
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(path, "/product-blueprints/") &&
-		strings.HasSuffix(path, "/restore"):
-		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
-		trimmed = strings.TrimSuffix(trimmed, "/restore")
-		id := strings.Trim(trimmed, "/")
-		h.restore(w, r, id)
 
 	// 重要：suffix 付きルート（/history /restore /model-refs）より後に置く
 	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
@@ -474,30 +455,6 @@ func (h *ProductBlueprintHandler) delete(w http.ResponseWriter, r *http.Request,
 }
 
 // ---------------------------------------------------
-// POST /product-blueprints/{id}/restore
-// ---------------------------------------------------
-
-func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
-	_ = r
-	_ = id
-
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "restore endpoint is not supported"})
-}
-
-// ---------------------------------------------------
-// GET /product-blueprints/{id}/history
-// ---------------------------------------------------
-
-func (h *ProductBlueprintHandler) history(w http.ResponseWriter, r *http.Request, id string) {
-	_ = r
-	_ = id
-
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "history endpoint is not supported"})
-}
-
-// ---------------------------------------------------
 // GET /product-blueprints/{id}
 // ---------------------------------------------------
 
@@ -572,20 +529,6 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(out)
-}
-
-// ---------------------------------------------------
-// GET /product-blueprints/deleted
-// ---------------------------------------------------
-//
-// 論理削除一覧を廃止したため、このエンドポイントは未提供。
-// ---------------------------------------------------
-
-func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Request) {
-	_ = r
-
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "deleted list endpoint is not supported"})
 }
 
 // ---------------------------------------------------

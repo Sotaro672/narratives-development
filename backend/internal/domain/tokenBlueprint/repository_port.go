@@ -99,29 +99,6 @@ type Patch struct {
 }
 
 // ===============================
-// Filter（検索条件）
-// ===============================
-//
-// entity.go 正:
-// - iconId が無いので HasIcon は廃止
-//
-// 共通化方針:
-// - CreatedFrom/To, UpdatedFrom/To は common.FilterCommon の TimeRange へ寄せる
-// - SearchQuery は将来の汎用検索用（必要なら NameLike/SymbolLike と併用可能）
-type Filter struct {
-	common.FilterCommon
-
-	IDs         []string
-	BrandIDs    []string
-	CompanyIDs  []string
-	AssigneeIDs []string
-	Symbols     []string
-
-	NameLike   string
-	SymbolLike string
-}
-
-// ===============================
 // RepositoryPort（リポジトリ境界）
 // ===============================
 type RepositoryPort interface {
@@ -133,9 +110,6 @@ type RepositoryPort interface {
 
 	// ID → Name の高速解決
 	GetNameByID(ctx context.Context, id string) (string, error)
-
-	// 一覧取得（オフセットページング）
-	List(ctx context.Context, filter Filter, page common.Page) (common.PageResult[TokenBlueprint], error)
 
 	// companyId で限定した一覧
 	ListByCompanyID(ctx context.Context, companyID string, page common.Page) (common.PageResult[TokenBlueprint], error)
@@ -165,31 +139,4 @@ func ListByBrandID(
 	page common.Page,
 ) (common.PageResult[TokenBlueprint], error) {
 	return repo.ListByBrandID(ctx, brandID, page)
-}
-
-// ==========================================================
-// minted = true（minted） のみ一覧取得
-// ==========================================================
-func ListMintedCompleted(
-	ctx context.Context,
-	repo RepositoryPort,
-	page common.Page,
-) (common.PageResult[TokenBlueprint], error) {
-	result, err := repo.List(ctx, Filter{}, page)
-	if err != nil {
-		return common.PageResult[TokenBlueprint]{}, err
-	}
-
-	items := []TokenBlueprint{}
-	for _, tb := range result.Items {
-		if tb.Minted {
-			items = append(items, tb)
-		}
-	}
-
-	result.Items = items
-	result.TotalCount = len(items)
-	result.TotalPages = 1
-
-	return result, nil
 }
