@@ -1,4 +1,3 @@
-// backend/internal/platform/di/mall/register.go
 package mall
 
 import (
@@ -12,9 +11,6 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	"narratives/internal/application/usecase"
 	tokenBlueprint "narratives/internal/domain/tokenBlueprint"
-
-	// setup-status repo (Firestore)
-	firestoreMall "narratives/internal/adapters/out/firestore/mall"
 
 	// resolvedTokens repo (Firestore)
 	firestoreOut "narratives/internal/adapters/out/firestore"
@@ -43,9 +39,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ------------------------------------------------------------
 	var avatarCtxMW *middleware.AvatarContextMiddleware
 	{
-		if cont.MeAvatarRepo != nil {
+		if cont.MeAvatarResolver != nil {
 			avatarCtxMW = &middleware.AvatarContextMiddleware{
-				Resolver: cont.MeAvatarRepo,
+				Resolver: cont.MeAvatarResolver,
 			}
 		} else {
 			avatarCtxMW = &middleware.AvatarContextMiddleware{Resolver: nil}
@@ -203,7 +199,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// /mall/me/avatars
-	if cont.MeAvatarRepo != nil &&
+	if cont.MeAvatarResolver != nil &&
 		cont.AvatarUC != nil &&
 		cont.AvatarRepo != nil &&
 		cont.Infra != nil &&
@@ -212,26 +208,19 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarStateRepo := firestoreOut.NewAvatarStateRepositoryFS(cont.Infra.Firestore)
 		avatarStateQuery := mallquery.NewAvatarStateQuery(cont.AvatarRepo, avatarStateRepo)
 
-		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarRepo, cont.AvatarUC, avatarStateQuery)
+		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarResolver, cont.AvatarUC, avatarStateQuery)
 	}
 
 	// ------------------------------------------------------------
-	// setup-status wiring (Firestore)
+	// setup-status wiring
 	// ------------------------------------------------------------
-	{
-		hasFS := cont.Infra != nil && cont.Infra.Firestore != nil
-
-		if hasFS {
-			repo := firestoreMall.NewSetupStatusRepoFirestore(cont.Infra.Firestore)
-			setupStatusH = mallhandler.NewSetupStatusHandler(repo)
-		}
+	if cont.SetupUC != nil {
+		setupStatusH = mallhandler.NewSetupStatusHandler(cont.SetupUC)
 	}
 
 	// Cart
 	if cont.CartUC != nil {
 		cartH = mallhandler.NewCartHandlerWithQueries(cont.CartUC, cont.CartQ)
-	} else if cont.CartQ != nil {
-		cartH = mallhandler.NewCartQueryHandler(cont.CartQ)
 	}
 
 	// Payment / Order

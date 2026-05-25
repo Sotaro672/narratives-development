@@ -26,7 +26,6 @@ type queries struct {
 }
 
 func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *queries {
-	// pbQueryRepoAdapter 廃止: repo を直で渡す
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
 		r.productBlueprintRepo,
 		r.productionRepo,
@@ -42,14 +41,10 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 		res.nameResolver,
 	)
 	mintRequestQueryService.SetModelRepo(r.modelRepo)
-
-	// ProductBlueprintPatchReader を typed(Patch) に寄せたため、
-	// pbPatchByIDAdapter は不要になり repo を直で渡せる
-	// pbIDsByCompanyAdapter も廃止: repo を直で渡す（ListIDsByCompany）
 	inventoryQuery := companyquery.NewInventoryQueryWithTokenBlueprintPatch(
 		r.inventoryRepo,
 		r.productBlueprintRepo,
-		r.productBlueprintRepo, // adapter廃止: repo直渡し（GetPatchByID）
+		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
 		res.nameResolver,
 	)
@@ -57,7 +52,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 	// modelRepo(variations) を廃止したため、WithInventory のみを使用
 	listCreateQuery := companyquery.NewListCreateQueryWithInventory(
 		r.inventoryRepo,
-		r.productBlueprintRepo, // adapter廃止: repo直渡し（GetPatchByID）
+		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
 		res.nameResolver,
 	)
@@ -97,7 +92,6 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 	// - imageUrls を返すには Firestore subcollection reader 注入
 	//
 	// ProductBlueprintPatchReader を typed(Patch) に寄せたため、
-	// pbPatchByIDAdapter は不要になり repo を直で渡せる
 	// =========================================================
 	listDetailQuery := listdetail.NewListDetailQuery(listdetail.NewListDetailQueryParams{
 		Getter:       r.listRepoFS,

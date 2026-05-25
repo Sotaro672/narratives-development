@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\setup_status_handler.go
+// backend/internal/adapters/in/http/mall/handler/setup_status_handler.go
 package mallHandler
 
 import (
@@ -8,18 +8,21 @@ import (
 	"net/http"
 
 	"narratives/internal/adapters/in/http/middleware"
+	"narratives/internal/application/usecase"
 )
 
-type SetupStatusRepo interface {
-	HasAvatar(ctx context.Context, uid string) (bool, error)
+type SetupStatusUsecase interface {
+	GetSetupStatus(ctx context.Context, uid string) (usecase.SetupStatusOutput, error)
 }
 
 type SetupStatusHandler struct {
-	Repo SetupStatusRepo
+	Usecase SetupStatusUsecase
 }
 
-func NewSetupStatusHandler(repo SetupStatusRepo) http.Handler {
-	return &SetupStatusHandler{Repo: repo}
+func NewSetupStatusHandler(setupUsecase SetupStatusUsecase) http.Handler {
+	return &SetupStatusHandler{
+		Usecase: setupUsecase,
+	}
 }
 
 func (h *SetupStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -28,8 +31,8 @@ func (h *SetupStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h == nil || h.Repo == nil {
-		http.Error(w, "setup-status repo is not configured", http.StatusInternalServerError)
+	if h == nil || h.Usecase == nil {
+		http.Error(w, "setup-status usecase is not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -39,18 +42,18 @@ func (h *SetupStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hasAvatar, err := h.Repo.HasAvatar(r.Context(), uid)
+	status, err := h.Usecase.GetSetupStatus(r.Context(), uid)
 	if err != nil {
-		http.Error(w, "failed to check avatar", http.StatusInternalServerError)
+		http.Error(w, "failed to get setup status", http.StatusInternalServerError)
 		return
 	}
 
 	resp := map[string]any{
 		"data": map[string]any{
-			"hasAvatar":      hasAvatar,
-			"setupCompleted": hasAvatar,
+			"hasAvatar":      status.HasAvatar,
+			"setupCompleted": status.SetupCompleted,
 			"required": map[string]bool{
-				"avatar": true,
+				"avatar": status.Required.Avatar,
 			},
 		},
 	}
@@ -58,8 +61,8 @@ func (h *SetupStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf(
 		"[mall_setup_status_handler] uid=%q requiredAvatarOnly=true hasAvatar=%t setupCompleted=%t",
 		uid,
-		hasAvatar,
-		hasAvatar,
+		status.HasAvatar,
+		status.SetupCompleted,
 	)
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

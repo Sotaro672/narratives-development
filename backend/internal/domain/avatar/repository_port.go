@@ -75,6 +75,11 @@ type Repository interface {
 	// - 見つからない場合は error を返す（実装側で NotFound を返却）
 	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
 
+	// owner / user lookup
+	// - avatar document id は avatarId であり userId ではない
+	// - setup status や mall/me/avatar 判定では userId で存在確認する
+	ExistsByUserID(ctx context.Context, userID string) (bool, error)
+
 	// 追加要件（必要に応じて実装側で活用）
 	GetByWalletAddress(ctx context.Context, wallet string) (Avatar, error)
 	Exists(ctx context.Context, id string) (bool, error)

@@ -1,7 +1,6 @@
 package console
 
 import (
-	"encoding/json"
 	"net/http"
 
 	httpin "narratives/internal/adapters/in/http/console"
@@ -11,8 +10,6 @@ import (
 	usecase "narratives/internal/application/usecase"
 
 	"narratives/internal/adapters/in/http/middleware"
-
-	sharedquery "narratives/internal/application/query/shared"
 )
 
 func (c *Container) RouterDeps() httpin.RouterDeps {
@@ -280,7 +277,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.OwnerResolveQ != nil {
-		ownerResolveH = &ownerResolveHandler{q: c.OwnerResolveQ}
+		ownerResolveH = consoleHandler.NewOwnerResolveHandler(c.OwnerResolveQ)
 	}
 
 	if c.InvitationQuery != nil && c.InvitationComplete != nil {
@@ -332,52 +329,4 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 		OwnerResolve: ownerResolveH,
 	}
-}
-
-type ownerResolveHandler struct {
-	q *sharedquery.OwnerResolveQuery
-}
-
-func (h *ownerResolveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-
-	addr := q.Get("walletAddress")
-	if addr == "" {
-		addr = q.Get("toAddress")
-	}
-	if addr == "" {
-		addr = q.Get("address")
-	}
-	if addr == "" {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error": "walletAddress (or toAddress/address) is required",
-		})
-		return
-	}
-
-	res, err := h.q.Resolve(r.Context(), addr)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		switch err {
-		case sharedquery.ErrInvalidWalletAddress:
-			w.WriteHeader(http.StatusBadRequest)
-		case sharedquery.ErrOwnerNotFound:
-			w.WriteHeader(http.StatusNotFound)
-		case sharedquery.ErrOwnerResolveNotConfigured:
-			w.WriteHeader(http.StatusServiceUnavailable)
-		default:
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": res,
-	})
 }

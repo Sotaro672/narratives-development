@@ -3,7 +3,6 @@ package console
 
 import (
 	fs "narratives/internal/adapters/out/firestore"
-	pbfs "narratives/internal/adapters/out/firestore/productBlueprint"
 )
 
 type repos struct {
@@ -34,7 +33,7 @@ type repos struct {
 	permissionRepo *fs.PermissionRepositoryFS
 	productRepo    *fs.ProductRepositoryFS
 
-	productBlueprintRepo         *pbfs.ProductBlueprintRepositoryFS
+	productBlueprintRepo         *fs.ProductBlueprintRepositoryFS
 	productBlueprintCategoryRepo *fs.ProductBlueprintCategoryRepositoryFS
 
 	productBlueprintReviewRepo *fs.ProductBlueprintReviewRepositoryFS
@@ -93,7 +92,7 @@ func buildRepos(c *clients) *repos {
 	permissionRepo := fs.NewPermissionRepositoryFS(fsClient)
 	productRepo := fs.NewProductRepositoryFS(fsClient)
 
-	productBlueprintRepo := pbfs.NewProductBlueprintRepositoryFS(fsClient)
+	productBlueprintRepo := fs.NewProductBlueprintRepositoryFS(fsClient)
 	productBlueprintCategoryRepo := fs.NewProductBlueprintCategoryRepositoryFS(fsClient)
 
 	productBlueprintReviewRepo := fs.NewProductBlueprintReviewRepositoryFS(fsClient)

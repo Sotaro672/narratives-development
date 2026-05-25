@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
 	uc "narratives/internal/application/usecase"
@@ -510,4 +512,413 @@ func (r *OrderRepositoryFS) UnlockTransferItem(ctx context.Context, orderID stri
 		}
 		return tx.Update(docRef, updates)
 	})
+}
+
+// ========================
+// Mapper
+// ========================
+
+// docToOrder converts a Firestore document snapshot to orderdom.Order (NEW schema only).
+// NEW schema:
+// - paid is on order root
+// - transferred/transferredAt are on each item (items[].transferred / items[].transferredAt)
+func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
+	data := doc.Data()
+	if data == nil {
+		return orderdom.Order{}, fmt.Errorf("empty order document: %s", doc.Ref.ID)
+	}
+
+	getStr := func(key string) string {
+		if v, ok := data[key].(string); ok {
+			return v
+		}
+		return ""
+	}
+
+	getTime := func(key string) time.Time {
+		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
+			return v.UTC()
+		}
+		return time.Time{}
+	}
+
+	getBool := func(key string) bool {
+		if v, ok := data[key].(bool); ok {
+			return v
+		}
+		return false
+	}
+
+	var ship orderdom.ShippingSnapshot
+	if v, ok := data["shippingSnapshot"]; ok {
+		if s, ok2 := decodeShippingSnapshot(v); ok2 {
+			ship = s
+		}
+	}
+
+	var paymentMethod orderdom.PaymentMethodSnapshot
+	if v, ok := data["paymentMethodSnapshot"]; ok {
+		if p, ok2 := decodePaymentMethodSnapshot(v); ok2 {
+			paymentMethod = p
+		}
+	}
+
+	items, ok := decodeItems(data["items"])
+	if !ok {
+		items = nil
+	}
+
+	createdAt := getTime("createdAt")
+	paid := getBool("paid")
+	avatarID := getStr("avatarId")
+
+	if avatarID == "" {
+		return orderdom.Order{}, fmt.Errorf("order %s: missing avatarId", doc.Ref.ID)
+	}
+	if ship.State == "" ||
+		ship.City == "" ||
+		ship.Street == "" ||
+		ship.Country == "" {
+		return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot", doc.Ref.ID)
+	}
+	if paymentMethod.CustomerID == "" ||
+		paymentMethod.Brand == "" ||
+		paymentMethod.Last4 == "" ||
+		paymentMethod.ExpMonth < 1 ||
+		paymentMethod.ExpMonth > 12 ||
+		paymentMethod.ExpYear < 2000 ||
+		paymentMethod.ExpYear > 9999 ||
+		paymentMethod.CardholderName == "" {
+		return orderdom.Order{}, fmt.Errorf("order %s: missing paymentMethodSnapshot", doc.Ref.ID)
+	}
+	if len(items) == 0 {
+		return orderdom.Order{}, fmt.Errorf("order %s: missing items", doc.Ref.ID)
+	}
+
+	return orderdom.Order{
+		ID:       doc.Ref.ID,
+		UserID:   getStr("userId"),
+		AvatarID: avatarID,
+		CartID:   getStr("cartId"),
+
+		ShippingSnapshot:      ship,
+		PaymentMethodSnapshot: paymentMethod,
+
+		Paid: paid,
+
+		Items:     items,
+		CreatedAt: createdAt,
+	}, nil
+}
+
+// orderToDoc converts orderdom.Order into a Firestore-storable map (NEW schema only).
+// NEW schema:
+// - paid is on order root
+// - transferred/transferredAt are on each item (items[].transferred / items[].transferredAt)
+func orderToDoc(o orderdom.Order) map[string]any {
+	ship := map[string]any{
+		"zipCode": o.ShippingSnapshot.ZipCode,
+		"state":   o.ShippingSnapshot.State,
+		"city":    o.ShippingSnapshot.City,
+		"street":  o.ShippingSnapshot.Street,
+		"street2": o.ShippingSnapshot.Street2,
+		"country": o.ShippingSnapshot.Country,
+	}
+	paymentMethod := map[string]any{
+		"customerId":     o.PaymentMethodSnapshot.CustomerID,
+		"brand":          o.PaymentMethodSnapshot.Brand,
+		"last4":          o.PaymentMethodSnapshot.Last4,
+		"expMonth":       o.PaymentMethodSnapshot.ExpMonth,
+		"expYear":        o.PaymentMethodSnapshot.ExpYear,
+		"cardholderName": o.PaymentMethodSnapshot.CardholderName,
+		"isDefault":      o.PaymentMethodSnapshot.IsDefault,
+	}
+
+	items := make([]map[string]any, 0, len(o.Items))
+	for _, it := range o.Items {
+		im := map[string]any{
+			"modelId":      it.ModelID,
+			"inventoryId":  it.InventoryID,
+			"listId":       it.ListID,
+			"qty":          it.Qty,
+			"price":        it.Price,
+			"isCanceled":   it.IsCanceled,
+			"isDispatched": it.IsDispatched,
+			"transferred":  it.Transferred,
+		}
+
+		if it.Transferred && it.TransferredAt != nil && !it.TransferredAt.IsZero() {
+			im["transferredAt"] = it.TransferredAt.UTC()
+		}
+
+		items = append(items, im)
+	}
+
+	m := map[string]any{
+		"userId":   o.UserID,
+		"avatarId": o.AvatarID,
+		"cartId":   o.CartID,
+
+		"shippingSnapshot":      ship,
+		"paymentMethodSnapshot": paymentMethod,
+
+		"paid": o.Paid,
+
+		"items": items,
+	}
+
+	if !o.CreatedAt.IsZero() {
+		m["createdAt"] = o.CreatedAt.UTC()
+	}
+
+	return m
+}
+
+// ========================
+// Decode helpers
+// ========================
+
+func asMapAny(v any) map[string]any {
+	if v == nil {
+		return nil
+	}
+	if m, ok := v.(map[string]any); ok {
+		return m
+	}
+	return nil
+}
+
+func mapGetStr(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprint(v)
+}
+
+func mapGetInt(m map[string]any, key string) int {
+	if m == nil {
+		return 0
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch t := v.(type) {
+	case int:
+		return t
+	case int64:
+		return int(t)
+	case int32:
+		return int(t)
+	case float64:
+		return int(t)
+	case float32:
+		return int(t)
+	default:
+		return 0
+	}
+}
+
+func mapGetBool(m map[string]any, key string) (bool, bool) {
+	if m == nil {
+		return false, false
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return false, false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t, true
+	case string:
+		s := strings.ToLower(strings.TrimSpace(t))
+		if s == "true" {
+			return true, true
+		}
+		if s == "false" {
+			return false, true
+		}
+		return false, false
+	default:
+		return false, false
+	}
+}
+
+// mapGetTimeBestEffort reads Firestore timestamp wobble.
+// - time.Time
+// - *timestamppb.Timestamp
+func mapGetTimeBestEffort(m map[string]any, key string) (time.Time, bool) {
+	if m == nil {
+		return time.Time{}, false
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return time.Time{}, false
+	}
+
+	switch t := v.(type) {
+	case time.Time:
+		if t.IsZero() {
+			return time.Time{}, false
+		}
+		return t.UTC(), true
+	case *timestamppb.Timestamp:
+		if t == nil {
+			return time.Time{}, false
+		}
+		tt := t.AsTime()
+		if tt.IsZero() {
+			return time.Time{}, false
+		}
+		return tt.UTC(), true
+	default:
+		return time.Time{}, false
+	}
+}
+
+func decodeShippingSnapshot(v any) (orderdom.ShippingSnapshot, bool) {
+	m := asMapAny(v)
+	if m == nil {
+		return orderdom.ShippingSnapshot{}, false
+	}
+	return orderdom.ShippingSnapshot{
+		ZipCode: mapGetStr(m, "zipCode"),
+		State:   mapGetStr(m, "state"),
+		City:    mapGetStr(m, "city"),
+		Street:  mapGetStr(m, "street"),
+		Street2: mapGetStr(m, "street2"),
+		Country: mapGetStr(m, "country"),
+	}, true
+}
+
+func decodePaymentMethodSnapshot(v any) (orderdom.PaymentMethodSnapshot, bool) {
+	m := asMapAny(v)
+	if m == nil {
+		return orderdom.PaymentMethodSnapshot{}, false
+	}
+
+	isDefault, _ := mapGetBool(m, "isDefault")
+
+	return orderdom.PaymentMethodSnapshot{
+		CustomerID:     mapGetStr(m, "customerId"),
+		Brand:          mapGetStr(m, "brand"),
+		Last4:          mapGetStr(m, "last4"),
+		ExpMonth:       mapGetInt(m, "expMonth"),
+		ExpYear:        mapGetInt(m, "expYear"),
+		CardholderName: mapGetStr(m, "cardholderName"),
+		IsDefault:      isDefault,
+	}, true
+}
+
+func decodeItems(v any) ([]orderdom.OrderItemSnapshot, bool) {
+	if v == nil {
+		return nil, false
+	}
+
+	build := func(m map[string]any) orderdom.OrderItemSnapshot {
+		if m == nil {
+			return orderdom.OrderItemSnapshot{}
+		}
+
+		transferred, _ := mapGetBool(m, "transferred")
+		isCanceled, _ := mapGetBool(m, "isCanceled")
+		isDispatched, _ := mapGetBool(m, "isDispatched")
+
+		var transferredAt *time.Time
+		if t, ok := mapGetTimeBestEffort(m, "transferredAt"); ok {
+			tt := t.UTC()
+			transferredAt = &tt
+		}
+
+		return orderdom.OrderItemSnapshot{
+			ModelID:       mapGetStr(m, "modelId"),
+			InventoryID:   mapGetStr(m, "inventoryId"),
+			ListID:        mapGetStr(m, "listId"),
+			Qty:           mapGetInt(m, "qty"),
+			Price:         mapGetInt(m, "price"),
+			IsCanceled:    isCanceled,
+			IsDispatched:  isDispatched,
+			Transferred:   transferred,
+			TransferredAt: transferredAt,
+		}
+	}
+
+	switch raw := v.(type) {
+	case []any:
+		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
+		for _, x := range raw {
+			out = append(out, build(asMapAny(x)))
+		}
+		return out, true
+
+	case []map[string]any:
+		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
+		for _, m := range raw {
+			out = append(out, build(m))
+		}
+		return out, true
+
+	default:
+		return nil, false
+	}
+}
+
+// ========================
+// Query helpers
+// ========================
+
+func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
+	dir := firestore.Desc
+	if sort.Order == common.SortAsc {
+		dir = firestore.Asc
+	}
+
+	// absolute source of truth: createdAt only
+	if sort.Column != "" && sort.Column != "createdAt" {
+		return q.OrderBy("createdAt", firestore.Desc).
+			OrderBy(firestore.DocumentID, firestore.Desc)
+	}
+
+	return q.OrderBy("createdAt", dir).
+		OrderBy(firestore.DocumentID, dir)
+}
+
+func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
+	if f.ID != "" && o.ID != f.ID {
+		return false
+	}
+
+	if f.UserID != nil && *f.UserID != "" && o.UserID != *f.UserID {
+		return false
+	}
+
+	if f.AvatarID != nil && *f.AvatarID != "" && o.AvatarID != *f.AvatarID {
+		return false
+	}
+
+	if f.CartID != nil && *f.CartID != "" && o.CartID != *f.CartID {
+		return false
+	}
+
+	if f.CreatedFrom != nil {
+		if o.CreatedAt.IsZero() || o.CreatedAt.Before(f.CreatedFrom.UTC()) {
+			return false
+		}
+	}
+
+	if f.CreatedTo != nil {
+		// upper bound exclusive
+		if o.CreatedAt.IsZero() || !o.CreatedAt.Before(f.CreatedTo.UTC()) {
+			return false
+		}
+	}
+
+	return true
 }

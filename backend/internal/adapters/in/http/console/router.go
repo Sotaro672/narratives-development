@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\router.go
+// backend/internal/adapters/in/http/console/router.go
 package httpin
 
 import (
@@ -188,10 +188,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// Members / MemberInvitation
 	if deps.Members != nil || deps.MemberInvitation != nil {
-		var membersRoot http.Handler
 		if deps.Members != nil {
-			membersRoot = withAuth(deps.Members)
-			mux.Handle("/members", membersRoot)
+			mux.Handle("/members", withAuth(deps.Members))
 		}
 
 		membersSubtree := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -199,10 +197,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 				withAuth(deps.MemberInvitation).ServeHTTP(w, r)
 				return
 			}
+
 			if deps.Members != nil {
 				withAuth(deps.Members).ServeHTTP(w, r)
 				return
 			}
+
 			http.NotFound(w, r)
 		})
 

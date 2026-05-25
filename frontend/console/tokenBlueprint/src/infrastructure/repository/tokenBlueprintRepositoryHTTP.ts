@@ -234,6 +234,28 @@ export async function attachTokenBlueprintIcon(params: {
 // Internal helpers
 // ---------------------------------------------------------
 
+function toIsoStringOrNow(value: unknown): string {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return new Date().toISOString();
+    }
+
+    return value.toISOString();
+  }
+
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return new Date().toISOString();
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString();
+  }
+
+  return parsed.toISOString();
+}
+
 function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
   const obj: any = x && typeof x === "object" ? (x as any) : {};
 
@@ -246,20 +268,23 @@ function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
   const size = Number(obj.size ?? 0);
   const safeSize = Number.isFinite(size) && size > 0 ? size : 0;
 
+  const nowIso = new Date().toISOString();
+
   return {
     id: String(obj.id ?? "").trim(),
     name: String(obj.name ?? "").trim(),
     type: String(obj.type ?? "").trim(),
-    contentType: String(obj.contentType ?? "").trim(),
+    contentType:
+      String(obj.contentType ?? "").trim() || "application/octet-stream",
     objectPath: String(obj.objectPath ?? "").trim(),
     url: String(obj.url ?? "").trim(),
     visibility,
     size: safeSize,
     createdBy:
-      obj.createdBy != null ? String(obj.createdBy).trim() : obj.createdBy,
+      obj.createdBy != null ? String(obj.createdBy).trim() : "",
     updatedBy:
-      obj.updatedBy != null ? String(obj.updatedBy).trim() : obj.updatedBy,
-    createdAt: obj.createdAt != null ? String(obj.createdAt) : obj.createdAt,
-    updatedAt: obj.updatedAt != null ? String(obj.updatedAt) : obj.updatedAt,
+      obj.updatedBy != null ? String(obj.updatedBy).trim() : "",
+    createdAt: toIsoStringOrNow(obj.createdAt || nowIso),
+    updatedAt: toIsoStringOrNow(obj.updatedAt || nowIso),
   } as ContentFileDTO;
 }

@@ -15,7 +15,6 @@ import (
 
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
-	pbfs "narratives/internal/adapters/out/firestore/productBlueprint"
 	outsolana "narratives/internal/adapters/out/solana"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 
@@ -39,6 +38,7 @@ type Container struct {
 	Infra *shared.Infra
 
 	AvatarUC          *usecase.AvatarUsecase
+	SetupUC           *usecase.SetupUsecase
 	ListUC            *usecase.ListUsecase
 	ShippingAddressUC *usecase.ShippingAddressUsecase
 	PaymentMethodUC   *usecase.PaymentMethodUsecase
@@ -48,7 +48,12 @@ type Container struct {
 	PaymentUC         *usecase.PaymentUsecase
 	OrderUC           *usecase.OrderUsecase
 
-	AvatarRepo   avatardom.Repository
+	AvatarRepo avatardom.Repository
+
+	// MeAvatarResolver resolves Firebase UID -> avatarId + walletAddress.
+	// AvatarRepositoryFS implements this via ResolveAvatarByUID.
+	MeAvatarResolver mallhandler.MeAvatarResolver
+
 	BrandService *branddom.Service
 
 	ProductBlueprintReviewUC *usecase.ProductBlueprintReviewUsecase
@@ -81,10 +86,6 @@ type Container struct {
 	OrderScanVerifyQ *mallquery.OrderScanVerifyQuery
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
-
-	MeAvatarRepo *mallfs.MeAvatarRepo
-
-	SetupStatusRepo *mallfs.SetupStatusRepoFirestore
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -115,6 +116,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	avatarStateRepo := outfs.NewAvatarStateRepositoryFS(fsClient)
 
 	c.AvatarRepo = avatarRepo
+	c.MeAvatarResolver = avatarRepo
+	c.SetupUC = usecase.NewSetupUsecase(avatarRepo)
 
 	shippingAddressRepo := outfs.NewShippingAddressRepositoryFS(fsClient)
 	paymentMethodRepo := outfs.NewPaymentMethodRepositoryFS(fsClient)
@@ -164,14 +167,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	productBlueprintReviewRepo := outfs.NewProductBlueprintReviewRepositoryFS(fsClient)
 
-	productBlueprintRepoFS := pbfs.NewProductBlueprintRepositoryFS(fsClient)
+	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
 	productBlueprintSvc := productbpdom.NewService(productBlueprintRepoFS)
 
 	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
-
-	c.MeAvatarRepo = mallfs.NewMeAvatarRepo(fsClient)
-
-	c.SetupStatusRepo = mallfs.NewSetupStatusRepoFirestore(fsClient)
 
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
 
@@ -342,7 +341,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var orderRepoForTransfer usecase.OrderRepoForTransfer = outfs.NewOrderRepoForTransferFS(fsClient)
 
 		var tokenResolver usecase.TokenResolver = mallfs.NewTokenResolverFS(fsClient, "tokens")
-		var tokenOwnerUpdater usecase.TokenOwnerUpdater = mallfs.NewTokenOwnerUpdaterFS(fsClient, "tokens")
+		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
 
 		var walletItemUpdater usecase.WalletItemUpdater = walletRepo
 		var transferRepo usecase.TransferRepo = outfs.NewTransferRepositoryFS(fsClient)
@@ -379,7 +378,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	{
 		var tokenResolver usecase.TokenResolver = mallfs.NewTokenResolverFS(fsClient, "tokens")
-		var tokenOwnerUpdater usecase.TokenOwnerUpdater = mallfs.NewTokenOwnerUpdaterFS(fsClient, "tokens")
+		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
 		var transferRepo usecase.TransferRepo = outfs.NewTransferRepositoryFS(fsClient)
 
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(brandRepo, walletRepo)

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
-	mallfs "narratives/internal/adapters/out/firestore/mall"
 	mallquery "narratives/internal/application/query/mall"
 	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
@@ -38,14 +37,18 @@ type AvatarStateResolvedQuery interface {
 	GetResolvedByAvatarID(ctx context.Context, avatarID string) (mallquery.AvatarStateResolvedView, error)
 }
 
+type MeAvatarResolver interface {
+	ResolveAvatarByUID(ctx context.Context, uid string) (avatarID string, walletAddress string, err error)
+}
+
 type MeAvatarHandler struct {
-	Repo             *mallfs.MeAvatarRepo
+	Repo             MeAvatarResolver
 	AvatarUC         *avataruc.AvatarUsecase
 	AvatarStateQuery AvatarStateResolvedQuery
 }
 
 func NewMeAvatarHandler(
-	repo *mallfs.MeAvatarRepo,
+	repo MeAvatarResolver,
 	avatarUC *avataruc.AvatarUsecase,
 	avatarStateQuery AvatarStateResolvedQuery,
 ) http.Handler {

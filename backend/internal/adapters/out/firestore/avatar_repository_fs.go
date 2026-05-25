@@ -31,11 +31,12 @@ func (r *AvatarRepositoryFS) col() *firestore.CollectionRef {
 var _ avdom.Repository = (*AvatarRepositoryFS)(nil)
 
 var (
-	errNotFound           = errors.New("avatar: not found")
-	errConflict           = errors.New("avatar: conflict")
-	errBadClient          = errors.New("firestore client is nil")
-	errInvalidWalletAddr  = errors.New("avatar: invalid walletAddress")
-	errWalletAlreadyBound = errors.New("avatar: walletAddress already set")
+	errNotFound             = errors.New("avatar: not found")
+	errAvatarNotFoundForUID = errors.New("avatar_not_found_for_uid")
+	errConflict             = errors.New("avatar: conflict")
+	errBadClient            = errors.New("firestore client is nil")
+	errInvalidWalletAddr    = errors.New("avatar: invalid walletAddress")
+	errWalletAlreadyBound   = errors.New("avatar: walletAddress already set")
 )
 
 // ==============================
@@ -188,6 +189,47 @@ func (r *AvatarRepositoryFS) GetByFirebaseUID(ctx context.Context, uid string) (
 }
 
 // ==============================
+// ResolveAvatarByUID
+// ==============================
+//
+// Avatar document id は avatarId であり userId ではないため、
+// Firebase UID から現在の avatarId と walletAddress を解決する。
+// AvatarContextMiddleware / /mall/me/avatars 系の uid -> avatar 解決で使用する。
+func (r *AvatarRepositoryFS) ResolveAvatarByUID(ctx context.Context, uid string) (avatarID string, walletAddress string, err error) {
+	if r == nil || r.Client == nil {
+		return "", "", errBadClient
+	}
+	if uid == "" {
+		return "", "", errAvatarNotFoundForUID
+	}
+
+	q := r.col().Where("userId", "==", uid).Limit(1)
+	iter := q.Documents(ctx)
+	defer iter.Stop()
+
+	doc, err := iter.Next()
+	if errors.Is(err, iterator.Done) {
+		return "", "", errAvatarNotFoundForUID
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+		return "", "", errAvatarNotFoundForUID
+	}
+
+	avatarID = doc.Ref.ID
+
+	if v, err := doc.DataAt("walletAddress"); err == nil {
+		if s, ok := v.(string); ok {
+			walletAddress = s
+		}
+	}
+
+	return avatarID, walletAddress, nil
+}
+
+// ==============================
 // Exists
 // ==============================
 
@@ -202,6 +244,35 @@ func (r *AvatarRepositoryFS) Exists(ctx context.Context, id string) (bool, error
 	if err != nil {
 		return false, err
 	}
+	return true, nil
+}
+
+// ==============================
+// ExistsByUserID
+// ==============================
+//
+// Avatar document id は avatarId であり userId ではないため、
+// setup status などの owner 判定では userId field を検索する。
+func (r *AvatarRepositoryFS) ExistsByUserID(ctx context.Context, userID string) (bool, error) {
+	if r == nil || r.Client == nil {
+		return false, errBadClient
+	}
+	if userID == "" {
+		return false, nil
+	}
+
+	q := r.col().Where("userId", "==", userID).Limit(1)
+	iter := q.Documents(ctx)
+	defer iter.Stop()
+
+	_, err := iter.Next()
+	if errors.Is(err, iterator.Done) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
 	return true, nil
 }
 

@@ -151,16 +151,6 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if out.ProductID == "" {
 		out.ProductID = productID
 	}
-
-	log.Printf(
-		`[mall.order.scan.verify] ok uid=%q avatarId=%q productId=%q matched=%t purchasedPairs=%d`,
-		uid,
-		out.AvatarID,
-		out.ProductID,
-		out.Matched,
-		len(out.PurchasedPairs),
-	)
-
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": out,
 	})

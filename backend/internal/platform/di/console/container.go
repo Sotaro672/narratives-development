@@ -1,3 +1,4 @@
+// backend\internal\platform\di\console\container.go
 package console
 
 import (
