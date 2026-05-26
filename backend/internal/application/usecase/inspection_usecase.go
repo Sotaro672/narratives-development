@@ -27,9 +27,12 @@ type ProductInspectionRepo interface {
 	) error
 }
 
-// InspectionMintGetter は inspectionId から mint を 1 件取得するための最小ポートです。
+// InspectionMintGetter は productionId / mintId 共通IDから mint を 1 件取得するための最小ポートです。
+//
+// AMOL/Narratives では production / inspection / mint の docId は同一値として扱うため、
+// GetByInspectionID ではなく GetByID に統一します。
 type InspectionMintGetter interface {
-	GetByInspectionID(ctx context.Context, inspectionID string) (mintdom.Mint, error)
+	GetByID(ctx context.Context, id string) (mintdom.Mint, error)
 }
 
 // ------------------------------------------------------------
@@ -237,6 +240,9 @@ func (u *InspectionUsecase) GetBatchByProductionID(
 }
 
 // GetMintByInspectionID は inspectionId に紐づく mint を 1 件取得します。
+//
+// 現在の設計では inspectionId / productionId / mintId は同一値として扱うため、
+// 実際の取得は mintRepo.GetByID に統一します。
 func (u *InspectionUsecase) GetMintByInspectionID(
 	ctx context.Context,
 	inspectionID string,
@@ -250,7 +256,7 @@ func (u *InspectionUsecase) GetMintByInspectionID(
 		return mintdom.Mint{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
-	return u.mintRepo.GetByInspectionID(ctx, iid)
+	return u.mintRepo.GetByID(ctx, iid)
 }
 
 // GetModelVariationByID は ModelVariation を 1 件取得します。
@@ -286,7 +292,7 @@ func (u *InspectionUsecase) GetBatchForScreenByProductionID(
 	if u.mintRepo != nil && batch.MintID != nil {
 		mintID := *batch.MintID
 		if mintID != "" {
-			m, err := u.mintRepo.GetByInspectionID(ctx, mintID)
+			m, err := u.mintRepo.GetByID(ctx, mintID)
 			if err == nil {
 				dto := NewMintDTO(m, batch.ProductionID)
 				mintDTO = &dto

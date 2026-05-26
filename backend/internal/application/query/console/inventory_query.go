@@ -4,7 +4,6 @@ package query
 import (
 	"context"
 	"errors"
-	"log"
 	"sort"
 	"time"
 
@@ -173,7 +172,6 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 				available := ms.Accumulation - reserved
 				if available < 0 {
 					// 契約上は起きない想定だが、表示を壊さないための保険
-					log.Printf("[inventory_query][stock] WARN availableStock negative accumulation=%d reserved=%d -> clamp to 0", ms.Accumulation, reserved)
 					available = 0
 				}
 
@@ -235,25 +233,17 @@ func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBl
 		return nil, errors.New("tokenBlueprintId is required")
 	}
 
-	patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID) // value
+	patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID)
 	if err != nil {
 		return nil, err
 	}
 
-	// BrandName の補完（必要な場合のみ）
-	setOK := false
 	if patch.BrandID != "" && patch.BrandName == "" && q.nameResolver != nil {
 		brandName := q.nameResolver.ResolveBrandName(ctx, patch.BrandID)
 		if brandName != "" {
 			patch.BrandName = brandName
-			setOK = true
 		}
 	}
-
-	log.Printf(
-		"[inventory_query][GetTokenBlueprintPatchByID] brand resolve tbId=%q brandId=%q brandName=%q setOK=%t",
-		tbID, patch.BrandID, patch.BrandName, setOK,
-	)
 
 	return &patch, nil
 }
@@ -299,25 +289,18 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		return nil, errors.New("productBlueprint patch repository is not configured")
 	}
 
-	pbPatch, e := q.pbPatchRepo.GetPatchByID(ctx, pbID) // value
+	pbPatch, e := q.pbPatchRepo.GetPatchByID(ctx, pbID)
 	if e != nil {
 		return nil, e
 	}
 
 	// pbdom.Patch は BrandID/BrandName が *string（repository_port.go）
-	setOK := false
 	if pbPatch.BrandID != nil && *pbPatch.BrandID != "" && (pbPatch.BrandName == nil || *pbPatch.BrandName == "") && q.nameResolver != nil {
 		brandName := q.nameResolver.ResolveBrandName(ctx, *pbPatch.BrandID)
 		if brandName != "" {
 			pbPatch.BrandName = &brandName
-			setOK = true
 		}
 	}
-
-	log.Printf(
-		"[inventory_query][GetDetailByID] patch brand resolve pbId=%q brandId=%v brandName=%v setOK=%t",
-		pbID, pbPatch.BrandID, pbPatch.BrandName, setOK,
-	)
 
 	pbPatchPtr := &pbPatch
 
@@ -326,7 +309,6 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 	{
 		p, ee := q.GetTokenBlueprintPatchByID(ctx, tbID)
 		if ee != nil {
-			log.Printf("[inventory_query][GetDetailByID] WARN GetTokenBlueprintPatchByID failed tbId=%q err=%v", tbID, ee)
 			tbPatchPtr = nil
 		} else {
 			tbPatchPtr = p
@@ -377,7 +359,6 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			// domain contract 前提で素直に計算
 			available = ms.Accumulation - ms.ReservedCount
 			if available < 0 {
-				log.Printf("[inventory_query][stock] WARN availableStock negative accumulation=%d reserved=%d -> clamp to 0", ms.Accumulation, ms.ReservedCount)
 				available = 0
 			}
 		}
@@ -405,13 +386,6 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		if attr.Kind == "alcohol" {
 			row.VolumeValue = attr.VolumeValue
 			row.VolumeUnit = attr.VolumeUnit
-
-			if row.VolumeValue == nil || row.VolumeUnit == "" {
-				log.Printf(
-					"[inventory_query][GetDetailByID] alcohol modelResolved missing volume inventoryId=%q pbId=%q tbId=%q modelId=%q kind=%q mn=%q volumeValue=%v volumeUnit=%q stock=%d",
-					id, pbID, tbID, modelID, attr.Kind, mn, row.VolumeValue, row.VolumeUnit, available,
-				)
-			}
 		} else {
 			sz := attr.Size
 			cl := attr.Color
@@ -421,15 +395,6 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 			}
 			if cl == "" {
 				cl = "-"
-			}
-
-			missingColor := attr.Color == ""
-			missingRGB := attr.RGB == nil
-			if missingColor || missingRGB {
-				log.Printf(
-					"[inventory_query][GetDetailByID] modelResolved inventoryId=%q pbId=%q tbId=%q modelId=%q kind=%q mn=%q size=%q color=%q rgb=%v rgbType=%T stock=%d missing={color:%t,rgb:%t}",
-					id, pbID, tbID, modelID, attr.Kind, mn, sz, cl, attr.RGB, attr.RGB, available, missingColor, missingRGB,
-				)
 			}
 
 			row.Size = sz

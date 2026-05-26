@@ -95,7 +95,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 	if c.InventoryUC != nil {
 		inventoriesH = consoleHandler.NewInventoryHandlerWithListCreateQuery(
-			c.InventoryUC,
 			c.InventoryQuery,
 			c.ListCreateQuery,
 		)

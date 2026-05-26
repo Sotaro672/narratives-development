@@ -141,65 +141,6 @@ func (ms ModelStock) Validate() error {
 	return nil
 }
 
-// NewMint は「1つの modelId の在庫」を起点に inventories ドキュメントを作るコンストラクタです。
-// docId（ID）は repo 側で productBlueprintId__tokenBlueprintId を採用して設定する想定のため、
-// ここでは id をそのまま受け取ります（空でも可）。
-func NewMint(
-	id string,
-	tokenBlueprintID string,
-	productBlueprintID string,
-	modelID string,
-	products []string,
-	now time.Time,
-) (Mint, error) {
-	if tokenBlueprintID == "" {
-		return Mint{}, ErrInvalidTokenBlueprintID
-	}
-	if productBlueprintID == "" {
-		return Mint{}, ErrInvalidProductBlueprintID
-	}
-	if modelID == "" {
-		return Mint{}, ErrInvalidModelID
-	}
-	if len(products) == 0 {
-		return Mint{}, ErrInvalidProducts
-	}
-	// 「直さない」ので、ここで要件を満たしているか検証して弾く
-	if err := validateSortedUniqueNonEmptyStrings(products); err != nil {
-		return Mint{}, ErrInvalidProducts
-	}
-
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-
-	stock := map[string]ModelStock{
-		modelID: {
-			Products:     products,
-			Accumulation: len(products),
-
-			ReservedByOrder: map[string]int{},
-			ReservedCount:   0,
-		},
-	}
-
-	out := Mint{
-		ID:                 id,
-		TokenBlueprintID:   tokenBlueprintID,
-		ProductBlueprintID: productBlueprintID,
-		Stock:              stock,
-		ModelIDs:           []string{modelID},
-		CreatedAt:          now,
-		UpdatedAt:          now,
-	}
-
-	// コンストラクタは契約を満たすものを返したいので Validate
-	if err := out.Validate(); err != nil {
-		return Mint{}, err
-	}
-	return out, nil
-}
-
 // ------------------------------
 // internal helpers (domain-level)
 // ------------------------------

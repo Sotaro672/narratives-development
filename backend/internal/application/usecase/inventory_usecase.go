@@ -5,6 +5,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	invdom "narratives/internal/domain/inventory"
 )
@@ -64,7 +65,7 @@ func (uc *InventoryUsecase) UpsertFromMintByModel(
 }
 
 // ============================================================
-// Reserve by Order (payment success -> invoice.paid=true と同時に呼ぶ想定)
+// Reserve by Order
 // ============================================================
 
 type ReserveByOrderItem struct {
@@ -73,8 +74,8 @@ type ReserveByOrderItem struct {
 	Qty         int
 }
 
-// ReserveByOrder adds (orderID -> qty) into Stock[modelId].ReservedByOrder
-// and updates ReservedCount accordingly.
+// ReserveByOrder adds or overwrites reservation quantity for each model.
+// Actual stock mutation is delegated to repository because it must be transactional.
 func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, items []ReserveByOrderItem) error {
 	if uc == nil || uc.repo == nil {
 		return errors.New("inventory usecase/repo is nil")
@@ -93,20 +94,12 @@ func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, 
 		invID := it.InventoryID
 		mid := it.ModelID
 		qty := it.Qty
+
 		if invID == "" || mid == "" || qty <= 0 {
 			return errors.New("inventory reserve: invalid item")
 		}
 
-		m, err := uc.repo.GetByID(ctx, invID)
-		if err != nil {
-			return err
-		}
-
-		if err := reserveStockByModelOrder(&m, mid, oid, qty); err != nil {
-			return err
-		}
-
-		if _, err := uc.repo.Update(ctx, m); err != nil {
+		if err := uc.repo.ReserveByOrder(ctx, invID, mid, oid, qty); err != nil {
 			return err
 		}
 	}
@@ -115,34 +108,36 @@ func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, 
 }
 
 // ============================================================
-// CRUD
+// Release after transfer
 // ============================================================
 
-func (uc *InventoryUsecase) Create(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
-	if uc == nil || uc.repo == nil {
-		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
-	}
-	return uc.repo.Create(ctx, m)
-}
-
-func (uc *InventoryUsecase) Update(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
-	if uc == nil || uc.repo == nil {
-		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
-	}
-	if m.ID == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
-	}
-	return uc.repo.Update(ctx, m)
-}
-
-func (uc *InventoryUsecase) Delete(ctx context.Context, id string) error {
+// ReleaseAfterTransfer removes the transferred product from inventory stock and releases its reservation.
+// The usecase owns the application-level operation name, while the repository owns the transaction-safe mutation.
+func (uc *InventoryUsecase) ReleaseAfterTransfer(
+	ctx context.Context,
+	productID string,
+	orderID string,
+	now time.Time,
+) error {
 	if uc == nil || uc.repo == nil {
 		return errors.New("inventory usecase/repo is nil")
 	}
-	if id == "" {
-		return invdom.ErrInvalidMintID
+
+	pid := productID
+	oid := orderID
+
+	if pid == "" {
+		return errors.New("inventory transfer result: invalid productId")
 	}
-	return uc.repo.Delete(ctx, id)
+	if oid == "" {
+		return errors.New("inventory transfer result: invalid orderId")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	_, err := uc.repo.ReleaseReservationAfterTransfer(ctx, pid, oid, now)
+	return err
 }
 
 // ============================================================
@@ -159,81 +154,9 @@ func (uc *InventoryUsecase) GetByID(ctx context.Context, id string) (invdom.Mint
 	return uc.repo.GetByID(ctx, id)
 }
 
-func (uc *InventoryUsecase) ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]invdom.Mint, error) {
-	if uc == nil || uc.repo == nil {
-		return nil, errors.New("inventory usecase/repo is nil")
-	}
-	return uc.repo.ListByTokenBlueprintID(ctx, tokenBlueprintID)
-}
-
 func (uc *InventoryUsecase) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]invdom.Mint, error) {
 	if uc == nil || uc.repo == nil {
 		return nil, errors.New("inventory usecase/repo is nil")
 	}
 	return uc.repo.ListByProductBlueprintID(ctx, productBlueprintID)
-}
-
-func (uc *InventoryUsecase) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
-	if uc == nil || uc.repo == nil {
-		return nil, errors.New("inventory usecase/repo is nil")
-	}
-	return uc.repo.ListByModelID(ctx, modelID)
-}
-
-func (uc *InventoryUsecase) ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]invdom.Mint, error) {
-	if uc == nil || uc.repo == nil {
-		return nil, errors.New("inventory usecase/repo is nil")
-	}
-	return uc.repo.ListByTokenAndModelID(ctx, tokenBlueprintID, modelID)
-}
-
-// ============================================================
-// Helpers
-// ============================================================
-
-// reserveStockByModelOrder updates reservation fields on Stock[modelID]:
-// - ReservedByOrder[orderID] += qty
-// - ReservedCount = sum(ReservedByOrder)
-//
-// It does NOT change Products / Accumulation.
-func reserveStockByModelOrder(m *invdom.Mint, modelID, orderID string, qty int) error {
-	if m == nil {
-		return errors.New("mint is nil")
-	}
-	if modelID == "" {
-		return invdom.ErrInvalidModelID
-	}
-	if orderID == "" {
-		return errors.New("inventory reserve: invalid orderId")
-	}
-	if qty <= 0 {
-		return errors.New("inventory reserve: invalid qty")
-	}
-	if m.Stock == nil {
-		return errors.New("inventory.Mint.Stock is nil (no stock to reserve)")
-	}
-
-	ms, ok := m.Stock[modelID]
-	if !ok {
-		return errors.New("inventory reserve: model stock not found")
-	}
-
-	if ms.ReservedByOrder == nil {
-		ms.ReservedByOrder = map[string]int{}
-	}
-
-	ms.ReservedByOrder[orderID] += qty
-
-	sum := 0
-	for _, n := range ms.ReservedByOrder {
-		if n <= 0 {
-			return errors.New("inventory reserve: invalid reserved qty")
-		}
-		sum += n
-	}
-	ms.ReservedCount = sum
-
-	m.Stock[modelID] = ms
-
-	return nil
 }

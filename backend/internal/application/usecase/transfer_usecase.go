@@ -10,7 +10,6 @@ import (
 
 	mallquery "narratives/internal/application/query/mall"
 	branddom "narratives/internal/domain/brand"
-	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
 )
@@ -171,7 +170,7 @@ type TransferUsecase struct {
 	resolveWarmer PostTransferResolveWarmer
 
 	// optional injection
-	inv invdom.RepositoryPort
+	inventoryUC *InventoryUsecase
 
 	now func() time.Time
 }
@@ -202,14 +201,15 @@ func NewTransferUsecase(
 		secrets:       secrets,
 		executor:      executor,
 		resolveWarmer: nil,
+		inventoryUC:   nil,
 		now:           time.Now,
 	}
 }
 
-// WithInventoryRepo injects inventory.RepositoryPort for post-transfer cleanup.
-func (u *TransferUsecase) WithInventoryRepo(inv invdom.RepositoryPort) *TransferUsecase {
+// WithInventoryUsecase injects InventoryUsecase for post-transfer cleanup.
+func (u *TransferUsecase) WithInventoryUsecase(inventoryUC *InventoryUsecase) *TransferUsecase {
 	if u != nil {
-		u.inv = inv
+		u.inventoryUC = inventoryUC
 	}
 	return u
 }
@@ -240,18 +240,19 @@ func (u *TransferUsecase) WithPostTransferResolveWarmer(w PostTransferResolveWar
 }
 
 var (
-	ErrTransferNotConfigured      = errors.New("transfer_uc: not configured")
-	ErrTransferAvatarIDEmpty      = errors.New("transfer_uc: avatarId is empty")
-	ErrTransferProductIDEmpty     = errors.New("transfer_uc: productId is empty")
-	ErrTransferNotMatched         = errors.New("transfer_uc: scan is not matched")
-	ErrTransferNoEligibleOrder    = errors.New("transfer_uc: no eligible order/item found")
-	ErrTransferMintEmpty          = errors.New("transfer_uc: mintAddress is empty")
-	ErrTransferBrandIDEmpty       = errors.New("transfer_uc: brandId is empty")
-	ErrTransferFromWalletEmpty    = errors.New("transfer_uc: brand walletAddress is empty")
-	ErrTransferToWalletEmpty      = errors.New("transfer_uc: avatar walletAddress is empty")
-	ErrTransferOwnerMismatch      = errors.New("transfer_uc: token current owner mismatch")
-	ErrTransferTokenDocNotReady   = errors.New("transfer_uc: token doc is not ready")
-	ErrTransferResolveAfterFailed = errors.New("transfer_uc: post-transfer resolve failed")
+	ErrTransferNotConfigured          = errors.New("transfer_uc: not configured")
+	ErrTransferAvatarIDEmpty          = errors.New("transfer_uc: avatarId is empty")
+	ErrTransferProductIDEmpty         = errors.New("transfer_uc: productId is empty")
+	ErrTransferNotMatched             = errors.New("transfer_uc: scan is not matched")
+	ErrTransferNoEligibleOrder        = errors.New("transfer_uc: no eligible order/item found")
+	ErrTransferMintEmpty              = errors.New("transfer_uc: mintAddress is empty")
+	ErrTransferBrandIDEmpty           = errors.New("transfer_uc: brandId is empty")
+	ErrTransferFromWalletEmpty        = errors.New("transfer_uc: brand walletAddress is empty")
+	ErrTransferToWalletEmpty          = errors.New("transfer_uc: avatar walletAddress is empty")
+	ErrTransferOwnerMismatch          = errors.New("transfer_uc: token current owner mismatch")
+	ErrTransferTokenDocNotReady       = errors.New("transfer_uc: token doc is not ready")
+	ErrTransferResolveAfterFailed     = errors.New("transfer_uc: post-transfer resolve failed")
+	ErrTransferInventoryCleanupFailed = errors.New("transfer_uc: inventory cleanup failed")
 )
 
 // TransferByVerifiedScanInput is the entry point input.
@@ -291,7 +292,7 @@ type TransferByVerifiedScanResult struct {
 // 11) tokens/{productId}.toAddress を avatar wallet に更新
 // 12) wallet テーブル（avatar wallet）の tokens に mintAddress を追加
 // 13) resolve warmup を実行（期待値: resolve まで完了）
-// 14) inventory cleanup（best-effort）
+// 14) inventory cleanup
 // 15) 失敗時は transfer(FAILED) 更新 + unlock（best-effort）
 func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in TransferByVerifiedScanInput) (res TransferByVerifiedScanResult, retErr error) {
 	if u == nil ||
@@ -591,9 +592,15 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		}
 	}
 
-	// 12) inventory cleanup (best-effort)
-	if u.inv != nil {
-		_ = u.inv.ApplyTransferResult(ctx, productID, targetOrderID, now)
+	// 12) inventory cleanup
+	if u.inventoryUC != nil {
+		if err := u.inventoryUC.ReleaseAfterTransfer(ctx, productID, targetOrderID, now); err != nil {
+			msg := fmt.Sprintf("inventory cleanup failed productId=%s orderId=%s tx=%s: %v",
+				productID, targetOrderID, tx, err,
+			)
+			markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
+			return TransferByVerifiedScanResult{}, fmt.Errorf("%w: %s", ErrTransferInventoryCleanupFailed, msg)
+		}
 	}
 
 	fromDisplayName := u.resolveBrandDisplayName(ctx, brandID)

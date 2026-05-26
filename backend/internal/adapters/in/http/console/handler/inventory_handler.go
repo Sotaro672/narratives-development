@@ -7,14 +7,10 @@ import (
 	"strings"
 
 	invquery "narratives/internal/application/query/console"
-	querydto "narratives/internal/application/query/console/dto"
-	usecase "narratives/internal/application/usecase"
 	invdom "narratives/internal/domain/inventory"
 )
 
 type InventoryHandler struct {
-	UC *usecase.InventoryUsecase
-
 	// Read-model(Query) for management list (view-only)
 	// only: currentMember.companyId -> productBlueprintIds -> inventories(docId)
 	Q *invquery.InventoryQuery
@@ -23,17 +19,16 @@ type InventoryHandler struct {
 	LQ *invquery.ListCreateQuery
 }
 
-func NewInventoryHandler(uc *usecase.InventoryUsecase, q *invquery.InventoryQuery) *InventoryHandler {
-	return &InventoryHandler{UC: uc, Q: q, LQ: nil}
+func NewInventoryHandler(q *invquery.InventoryQuery) *InventoryHandler {
+	return &InventoryHandler{Q: q, LQ: nil}
 }
 
 // ListCreateQuery も注入できるコンストラクタ
 func NewInventoryHandlerWithListCreateQuery(
-	uc *usecase.InventoryUsecase,
 	q *invquery.InventoryQuery,
 	lq *invquery.ListCreateQuery,
 ) *InventoryHandler {
-	return &InventoryHandler{UC: uc, Q: q, LQ: lq}
+	return &InventoryHandler{Q: q, LQ: lq}
 }
 
 func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -88,58 +83,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ============================================================
-	// CRUD endpoints (domain/usecase)
-	// ============================================================
-
-	if path == "/inventories" {
-		switch r.Method {
-		case http.MethodPost:
-			h.Create(w, r)
-			return
-		case http.MethodGet:
-			h.List(w, r)
-			return
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-	}
-
-	if strings.HasPrefix(path, "/inventories/") {
-		switch r.Method {
-		case http.MethodGet:
-			h.GetByID(w, r)
-			return
-		case http.MethodPatch:
-			h.Update(w, r)
-			return
-		case http.MethodDelete:
-			h.Delete(w, r)
-			return
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-	}
-
 	w.WriteHeader(http.StatusNotFound)
-}
-
-// ============================================================
-// DTOs
-// ============================================================
-
-type createInventoryMintRequest struct {
-	TokenBlueprintID   string   `json:"tokenBlueprintId"`
-	ProductBlueprintID string   `json:"productBlueprintId"`
-	ModelID            string   `json:"modelId"`
-	ProductIDs         []string `json:"productIds"`
-}
-
-type updateInventoryMintRequest struct {
-	ModelID    string   `json:"modelId"`
-	ProductIDs []string `json:"productIds"`
 }
 
 // ============================================================
@@ -159,9 +103,6 @@ func (h *InventoryHandler) ListByCurrentCompanyQuery(w http.ResponseWriter, r *h
 		writeInventoryError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	// 参照だけして import を維持（返却型が interface の場合などに備える）
-	_ = querydto.InventoryManagementRowDTO{}
 
 	writeInventoryJSON(w, http.StatusOK, rows)
 }
@@ -249,195 +190,6 @@ func (h *InventoryHandler) GetDetailByIDQuery(w http.ResponseWriter, r *http.Req
 }
 
 // ============================================================
-// CRUD endpoints
-// ============================================================
-
-func (h *InventoryHandler) Create(w http.ResponseWriter, r *http.Request) {
-	if h.UC == nil {
-		writeInventoryError(w, http.StatusNotImplemented, "inventory usecase is not configured")
-		return
-	}
-
-	ctx := r.Context()
-
-	var req createInventoryMintRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeInventoryError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-
-	m, err := h.UC.UpsertFromMintByModel(
-		ctx,
-		req.TokenBlueprintID,
-		req.ProductBlueprintID,
-		req.ModelID,
-		req.ProductIDs,
-	)
-	if err != nil {
-		writeInventoryDomainError(w, err)
-		return
-	}
-
-	writeInventoryJSON(w, http.StatusCreated, m)
-}
-
-func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
-	if h.UC == nil {
-		writeInventoryError(w, http.StatusNotImplemented, "inventory usecase is not configured")
-		return
-	}
-
-	ctx := r.Context()
-
-	q := r.URL.Query()
-	tbID := q.Get("tokenBlueprintId")
-	pbID := q.Get("productBlueprintId")
-	modelID := q.Get("modelId")
-
-	if tbID == "" && pbID == "" && modelID == "" {
-		writeInventoryError(w, http.StatusBadRequest, "tokenBlueprintId or productBlueprintId or modelId is required")
-		return
-	}
-
-	var (
-		list []invdom.Mint
-		err  error
-	)
-
-	switch {
-	case tbID != "" && modelID != "":
-		list, err = h.UC.ListByTokenAndModelID(ctx, tbID, modelID)
-
-	case tbID != "" && pbID != "":
-		// RepositoryPort に「TB+PB」直クエリが無いので PB で絞ってからフィルタ
-		all, e := h.UC.ListByProductBlueprintID(ctx, pbID)
-		if e != nil {
-			err = e
-			break
-		}
-
-		tmp := make([]invdom.Mint, 0, len(all))
-		for _, m := range all {
-			if m.TokenBlueprintID == tbID {
-				tmp = append(tmp, m)
-			}
-		}
-		list = tmp
-
-	case tbID != "":
-		list, err = h.UC.ListByTokenBlueprintID(ctx, tbID)
-
-	case modelID != "":
-		list, err = h.UC.ListByModelID(ctx, modelID)
-
-	default:
-		list, err = h.UC.ListByProductBlueprintID(ctx, pbID)
-	}
-
-	if err != nil {
-		writeInventoryDomainError(w, err)
-		return
-	}
-
-	writeInventoryJSON(w, http.StatusOK, list)
-}
-
-func (h *InventoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	if h.UC == nil {
-		writeInventoryError(w, http.StatusNotImplemented, "inventory usecase is not configured")
-		return
-	}
-
-	ctx := r.Context()
-
-	id := inventoryPathParamLast(r.URL.Path)
-	if id == "" {
-		writeInventoryError(w, http.StatusBadRequest, "missing id")
-		return
-	}
-
-	m, err := h.UC.GetByID(ctx, id)
-	if err != nil {
-		writeInventoryDomainError(w, err)
-		return
-	}
-
-	writeInventoryJSON(w, http.StatusOK, m)
-}
-
-func (h *InventoryHandler) Update(w http.ResponseWriter, r *http.Request) {
-	if h.UC == nil {
-		writeInventoryError(w, http.StatusNotImplemented, "inventory usecase is not configured")
-		return
-	}
-
-	ctx := r.Context()
-
-	id := inventoryPathParamLast(r.URL.Path)
-	if id == "" {
-		writeInventoryError(w, http.StatusBadRequest, "missing id")
-		return
-	}
-
-	var req updateInventoryMintRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeInventoryError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-
-	if req.ModelID == "" {
-		writeInventoryError(w, http.StatusBadRequest, "modelId is required")
-		return
-	}
-	if len(req.ProductIDs) == 0 {
-		writeInventoryError(w, http.StatusBadRequest, "productIds is required")
-		return
-	}
-
-	current, err := h.UC.GetByID(ctx, id)
-	if err != nil {
-		writeInventoryDomainError(w, err)
-		return
-	}
-
-	updated, err := h.UC.UpsertFromMintByModel(
-		ctx,
-		current.TokenBlueprintID,
-		current.ProductBlueprintID,
-		req.ModelID,
-		req.ProductIDs,
-	)
-	if err != nil {
-		writeInventoryDomainError(w, err)
-		return
-	}
-
-	writeInventoryJSON(w, http.StatusOK, updated)
-}
-
-func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	if h.UC == nil {
-		writeInventoryError(w, http.StatusNotImplemented, "inventory usecase is not configured")
-		return
-	}
-
-	ctx := r.Context()
-
-	id := inventoryPathParamLast(r.URL.Path)
-	if id == "" {
-		writeInventoryError(w, http.StatusBadRequest, "missing id")
-		return
-	}
-
-	if err := h.UC.Delete(ctx, id); err != nil {
-		writeInventoryDomainError(w, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// ============================================================
 // HTTP helpers
 // ============================================================
 
@@ -450,37 +202,3 @@ func writeInventoryJSON(w http.ResponseWriter, status int, v any) {
 func writeInventoryError(w http.ResponseWriter, status int, msg string) {
 	writeInventoryJSON(w, status, map[string]any{"error": msg})
 }
-
-func writeInventoryDomainError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, invdom.ErrNotFound):
-		writeInventoryError(w, http.StatusNotFound, err.Error())
-
-	case errors.Is(err, invdom.ErrInvalidMintID),
-		errors.Is(err, invdom.ErrInvalidTokenBlueprintID),
-		errors.Is(err, invdom.ErrInvalidProductBlueprintID),
-		errors.Is(err, invdom.ErrInvalidModelID),
-		errors.Is(err, invdom.ErrInvalidProducts):
-		writeInventoryError(w, http.StatusBadRequest, err.Error())
-
-	default:
-		writeInventoryError(w, http.StatusInternalServerError, err.Error())
-	}
-}
-
-func inventoryPathParamLast(path string) string {
-	if path == "" {
-		return ""
-	}
-
-	path = strings.TrimSuffix(path, "/")
-	i := strings.LastIndex(path, "/")
-	if i < 0 || i == len(path)-1 {
-		return ""
-	}
-
-	return path[i+1:]
-}
-
-// compile guard
-var _ = usecase.InventoryUsecase{}

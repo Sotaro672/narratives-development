@@ -71,30 +71,6 @@ func asTimePtr(v any) *time.Time {
 	}
 }
 
-func normalizeProductIDs(raw []string) []string {
-	if len(raw) == 0 {
-		return []string{}
-	}
-
-	seen := make(map[string]struct{}, len(raw))
-	out := make([]string, 0, len(raw))
-
-	for _, id := range raw {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-
-	sort.Strings(out)
-	return out
-}
-
 func decodeStringSlice(v any) []string {
 	if v == nil {
 		return []string{}
@@ -102,16 +78,18 @@ func decodeStringSlice(v any) []string {
 
 	switch vv := v.(type) {
 	case []string:
-		return normalizeProductIDs(vv)
+		out := make([]string, len(vv))
+		copy(out, vv)
+		return out
 
 	case []any:
 		out := make([]string, 0, len(vv))
 		for _, elem := range vv {
-			if sv, ok := elem.(string); ok && sv != "" {
+			if sv, ok := elem.(string); ok {
 				out = append(out, sv)
 			}
 		}
-		return normalizeProductIDs(out)
+		return out
 
 	default:
 		return []string{}
@@ -163,8 +141,6 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now().UTC()
 	}
-
-	m.Products = normalizeProductIDs(m.Products)
 
 	if err := m.Validate(); err != nil {
 		return mintdom.Mint{}, err
@@ -263,8 +239,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		m.CreatedAt = existing.CreatedAt
 	}
 
-	m.Products = normalizeProductIDs(m.Products)
-
 	if err := m.Validate(); err != nil {
 		return mintdom.Mint{}, err
 	}
@@ -300,26 +274,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 	return m, nil
 }
 
-func (r *MintRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r == nil || r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return errors.New("id is empty")
-	}
-
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return mintdom.ErrNotFound
-		}
-		return err
-	}
-
-	return nil
-}
-
 // ============================================================
 // Queries
 // ============================================================
@@ -344,12 +298,6 @@ func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint
 	}
 
 	return decodeMintFromDoc(doc)
-}
-
-// GetByInspectionID returns a Mint by inspectionId.
-// Current policy treats inspectionId and mint docId as the same value.
-func (r *MintRepositoryFS) GetByInspectionID(ctx context.Context, inspectionID string) (mintdom.Mint, error) {
-	return r.GetByID(ctx, inspectionID)
 }
 
 // ListByProductionID lists mints by production docIds.

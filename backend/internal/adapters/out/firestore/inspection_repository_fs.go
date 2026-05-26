@@ -174,57 +174,7 @@ func (r *InspectionRepositoryFS) Save(
 }
 
 // ------------------------------------------------------------
-// ★ 追加: UpdateMintID
-// ------------------------------------------------------------
-//
-// Mint 申請/作成後に inspections ドキュメントへ mintId を記録する。
-// - mintID != nil : mintId を保存
-// - mintID == nil : mintId フィールドを削除（未申請状態へ戻すなど）
-// 保存後は最新の InspectionBatch を返す。
-// ------------------------------------------------------------
-func (r *InspectionRepositoryFS) UpdateMintID(
-	ctx context.Context,
-	productionID string,
-	mintID *string,
-) (inspectiondom.InspectionBatch, error) {
-
-	if r == nil || r.Client == nil {
-		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
-	}
-
-	pid := productionID
-	if pid == "" {
-		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
-	}
-
-	docRef := r.col().Doc(pid)
-
-	update := map[string]any{}
-	if mintID == nil {
-		// フィールドごと削除（null を残さない）
-		update["mintId"] = firestore.Delete
-	} else {
-		mid := *mintID
-		if mid == "" {
-			return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionMintID
-		}
-		update["mintId"] = mid
-	}
-
-	if _, err := docRef.Set(ctx, update, firestore.MergeAll); err != nil {
-		return inspectiondom.InspectionBatch{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return inspectiondom.InspectionBatch{}, err
-	}
-
-	return docToInspectionBatch(snap)
-}
-
-// ------------------------------------------------------------
-// ★ 追加: ListPassedProductIDsByProductionID
+// ListPassedProductIDsByProductionID
 // ------------------------------------------------------------
 //
 // mint.PassedProductLister を満たすための実装。
@@ -245,7 +195,6 @@ func (r *InspectionRepositoryFS) ListPassedProductIDsByProductionID(
 		return nil, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
-	// 単一バッチ取得を再利用
 	batch, err := r.GetByProductionID(ctx, pid)
 	if err != nil {
 		return nil, err
@@ -327,19 +276,6 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 		"totalPassed":  v.TotalPassed,
 	}
 
-	// mintId（任意）
-	if v.MintID != nil {
-		mid := *v.MintID
-		if mid != "" {
-			data["mintId"] = mid
-		} else {
-			// 空文字は保存しない（ドメイン側の validate でも弾く想定）
-			data["mintId"] = nil
-		}
-	} else {
-		data["mintId"] = nil
-	}
-
 	return data
 }
 
@@ -356,16 +292,6 @@ func docToInspectionBatch(
 		ProductionID: fscommon.AsString(data["productionId"]),
 		Status:       inspectiondom.InspectionStatus(fscommon.AsString(data["status"])),
 		MintID:       nil,
-	}
-
-	// mintId（任意）
-	if v, ok := data["mintId"]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			mid := s
-			if mid != "" {
-				batch.MintID = &mid
-			}
-		}
 	}
 
 	// quantity / totalPassed は helper_repository_fs.go の asInt(v any) int を利用

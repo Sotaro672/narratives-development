@@ -8,21 +8,13 @@ import (
 
 // RepositoryPort is output port for inventories persistence.
 type RepositoryPort interface {
-	Create(ctx context.Context, m Mint) (Mint, error)
 	GetByID(ctx context.Context, id string) (Mint, error)
-	Update(ctx context.Context, m Mint) (Mint, error)
-	Delete(ctx context.Context, id string) error
 
 	// Queries
-	ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]Mint, error)
 	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]Mint, error)
 
-	// stock の modelIds 補助フィールドで検索する想定
-	ListByModelID(ctx context.Context, modelID string) ([]Mint, error)
-	ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]Mint, error)
-
 	// ------------------------------------------------------------
-	// ✅ NEW: inventoryId -> (productBlueprintId, tokenBlueprintId)
+	// inventoryId -> (productBlueprintId, tokenBlueprintId)
 	// ------------------------------------------------------------
 	//
 	// ResolveBlueprintIDsByInventoryID returns the pair of blueprint IDs for a given inventory document ID.
@@ -48,7 +40,7 @@ type RepositoryPort interface {
 	//
 	// NOTE:
 	// - reserved 系の更新は、競合を避けるためトランザクションで行う専用操作
-	//   （例: ReserveByOrder / UnreserveByOrder）に寄せること。
+	//   （例: ReserveByOrder / ReleaseReservationAfterTransfer）に寄せること。
 	UpsertByProductBlueprintAndToken(
 		ctx context.Context,
 		tokenBlueprintID string,
@@ -72,25 +64,17 @@ type RepositoryPort interface {
 	) error
 
 	// ------------------------------------------------------------
-	// ✅ NEW: Transfer settlement (FireStore transfers data aligned)
+	// Transfer settlement persistence operation
 	// ------------------------------------------------------------
 
-	// ApplyTransferResult atomically updates inventory stock after a successful transfer.
-	//
-	// Firestore transfer doc (example):
-	//   docId: "<productId>__<attempt>"
-	//   fields:
-	//     - ProductID (string)
-	//     - OrderID (string)
-	//     - Status (string "pending"/"succeeded"/"failed")  ※ または patch で "status"
-	//     - txSignature (string)                             ※ patch で "txSignature"
-	//     - updatedAt (timestamp)
+	// ReleaseReservationAfterTransfer atomically removes productID from inventory stock
+	// and releases the reservation for orderID.
 	//
 	// Inventory update goal:
-	// - Find the inventory document that contains the productId in Stock[*].Products
-	// - Remove productId from Stock[modelId].Products
-	// - Decrement reservation for orderId:
-	//   - If ReservedByOrder[orderId] exists:
+	// - Find the inventory document that contains the productID in Stock[*].Products
+	// - Remove productID from Stock[modelId].Products
+	// - Decrement reservation for orderID:
+	//   - If ReservedByOrder[orderID] exists:
 	//       - subtract removedCount (usually 1)
 	//       - if result <= 0, delete the key
 	// - Normalize:
@@ -98,20 +82,20 @@ type RepositoryPort interface {
 	//   - Stock[modelId].ReservedCount = SUM(ReservedByOrder)
 	//
 	// Contract:
-	// - Must be transactional (Firestore transaction recommended).
+	// - Must be transactional.
 	// - Must be idempotent:
-	//   - If productId is not present, do nothing and return nil.
+	//   - If productID is not present, do nothing and return removedCount=0, nil.
 	// - The repository can resolve inventoryID by scanning inventories,
 	//   or you may implement a stronger index later.
 	//
 	// Params:
-	// - productID: transfer.ProductID
-	// - orderID:   transfer.OrderID
-	// - now:       use transfer.updatedAt (or time.Now().UTC()) for audit/updatedAt
-	ApplyTransferResult(
+	// - productID: product ID to remove from stock
+	// - orderID:   order ID whose reservation should be decremented
+	// - now:       timestamp for audit/updatedAt
+	ReleaseReservationAfterTransfer(
 		ctx context.Context,
 		productID string,
 		orderID string,
 		now time.Time,
-	) error
+	) (removedCount int, err error)
 }

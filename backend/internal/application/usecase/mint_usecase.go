@@ -43,6 +43,14 @@ type TokenBlueprintMetadataEnsurer interface {
 	EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
 }
 
+type TokenBlueprintMintMarker interface {
+	MarkTokenBlueprintMinted(
+		ctx context.Context,
+		tokenBlueprintID string,
+		actorID string,
+	) (*tbdom.TokenBlueprint, error)
+}
+
 type MintResultMapper struct{}
 
 func NewMintResultMapper() *MintResultMapper {
@@ -80,6 +88,7 @@ type MintUsecase struct {
 
 	tbBucketEnsurer   TokenBlueprintBucketEnsurer
 	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
+	tbMintMarker      TokenBlueprintMintMarker
 
 	tbRepo tbdom.RepositoryPort
 
@@ -122,6 +131,7 @@ func NewMintUsecase(
 		tokenMinter:         tokenMinter,
 		tbBucketEnsurer:     nil,
 		tbMetadataEnsurer:   nil,
+		tbMintMarker:        nil,
 		inventoryUC:         nil,
 		nameResolver:        nil,
 	}
@@ -148,6 +158,13 @@ func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataE
 		return
 	}
 	u.tbMetadataEnsurer = e
+}
+
+func (u *MintUsecase) SetTokenBlueprintMintMarker(marker TokenBlueprintMintMarker) {
+	if u == nil {
+		return
+	}
+	u.tbMintMarker = marker
 }
 
 func (u *MintUsecase) UpdateRequestInfo(
@@ -239,17 +256,11 @@ func (u *MintUsecase) UpdateRequestInfo(
 		}
 	}
 
-	savedMint, err := u.mintRepo.Create(ctx, mintEntity)
-	if err != nil {
+	if _, err := u.mintRepo.Create(ctx, mintEntity); err != nil {
 		return empty, err
 	}
 
-	mid := savedMint.ID
-	if mid == "" {
-		return empty, errors.New("saved mintID is empty")
-	}
-
-	batch, err := u.inspRepo.UpdateMintID(ctx, pid, &mid)
+	batch, err := u.inspRepo.GetByProductionID(ctx, pid)
 	if err != nil {
 		return empty, err
 	}
@@ -263,54 +274,6 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	return batch, nil
-}
-
-func (u *MintUsecase) markTokenBlueprintMinted(ctx context.Context, tokenBlueprintID string, actorID string) error {
-	if u == nil {
-		return errors.New("mint usecase is nil")
-	}
-	if u.tbRepo == nil {
-		return errors.New("tokenBlueprint repo is nil")
-	}
-
-	id := tokenBlueprintID
-	if id == "" {
-		return errors.New("tokenBlueprintID is empty")
-	}
-
-	if actorID == "" {
-		return errors.New("actorID is empty")
-	}
-
-	tb, err := u.tbRepo.GetByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if tb == nil {
-		return errors.New("tokenBlueprint not found")
-	}
-
-	if tb.Minted {
-		return nil
-	}
-
-	now := time.Now().UTC()
-	minted := true
-	updatedBy := actorID
-
-	_, err = u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
-		Minted:    &minted,
-		UpdatedAt: &now,
-		UpdatedBy: &updatedBy,
-	})
-	return err
-}
-
-func (u *MintUsecase) ListMintsByInspectionIDs(
-	ctx context.Context,
-	inspectionIDs []string,
-) (map[string]mintdom.Mint, error) {
-	return u.ListMintsByProductionIDs(ctx, inspectionIDs)
 }
 
 func (u *MintUsecase) ListMintsByProductionIDs(
@@ -590,7 +553,9 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			return nil, fmt.Errorf("onchain mint succeeded but result is nil (mintRequestId=%s)", mintRequestID)
 		}
 
-		_ = u.markTokenBlueprintMinted(ctx, tbID, actorID)
+		if u.tbMintMarker != nil {
+			_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(ctx, tbID, actorID)
+		}
 
 		if u.mintRepo != nil {
 			if updater, ok := any(u.mintRepo).(interface {

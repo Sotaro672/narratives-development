@@ -369,7 +369,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 				secrets,
 				executor,
 			).
-				WithInventoryRepo(inventoryRepo).
+				WithInventoryUsecase(c.InventoryUC).
 				WithTransferDisplayResolvers(brandSvc, avatarRepo)
 		} else {
 			c.TransferUC = nil

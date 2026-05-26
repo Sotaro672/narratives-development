@@ -37,8 +37,8 @@ type MintRepository interface {
 
 	// ListByProductionID:
 	// - production の docId 群（= mint の docId 群）から mint を取得します。
-	// - mint が存在しない productionID はスキップしてよい（一覧用途）
-	// - 戻り値は join しやすいよう productionID をキーにした map を推奨
+	// - mint が存在しない productionID はスキップしてよい（一覧用途）。
+	// - 戻り値は join しやすいよう productionID をキーにした map を推奨します。
 	ListByProductionID(ctx context.Context, productionIDs []string) (map[string]Mint, error)
 }
 
@@ -47,61 +47,63 @@ type MintRepository interface {
 // （MintUsecase から利用される最小限のインターフェース群）
 // ============================================================
 
-// MintProductBlueprintRepo は companyId から productBlueprintId の一覧を取得したり、
-// productBlueprintId から productName / Patch を解決するための最小ポートです。
+// MintProductBlueprintRepo は productBlueprintId から productName / Patch を解決するための最小ポートです。
 type MintProductBlueprintRepo interface {
-	// productBlueprintId から productName だけを取得するヘルパ
-	// 実装例: ProductBlueprintRepositoryFS.GetProductNameByID
+	// GetProductNameByID:
+	// - productBlueprintId から productName だけを取得します。
+	// - 実装例: ProductBlueprintRepositoryFS.GetProductNameByID
 	GetProductNameByID(ctx context.Context, id string) (string, error)
 
-	// productBlueprintId から Patch 全体を取得するヘルパ
-	// mintRequestDetail 画面の ProductBlueprintCard 表示用
+	// GetPatchByID:
+	// - productBlueprintId から Patch 全体を取得します。
+	// - mintRequestDetail 画面の ProductBlueprintCard 表示用です。
 	GetPatchByID(ctx context.Context, id string) (pbpdom.Patch, error)
 }
 
-// MintProductionRepo は productBlueprintId 群から productions を取得するための最小ポートです。
+// MintProductionRepo は production / productBlueprint の関連情報を取得するための最小ポートです。
 type MintProductionRepo interface {
-	// 指定された productBlueprintId 群のいずれかを持つ Production をすべて返す
-	// 実装例: ProductionRepositoryFS.ListByProductBlueprintID
+	// ListByProductBlueprintID:
+	// - 指定された productBlueprintId 群のいずれかを持つ Production をすべて返します。
+	// - 実装例: ProductionRepositoryFS.ListByProductBlueprintID
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]proddom.Production, error)
 
-	// productionId から productBlueprintId を取得する。
-	// MintUsecase 側では productionID から productBlueprintID を推測・reflect 取得せず、
-	// この正規ポートを経由する。
+	// GetProductBlueprintIDByProductionID:
+	// - productionId から productBlueprintId を取得します。
+	// - MintUsecase 側では productionID から productBlueprintID を推測・reflect 取得せず、
+	//   この正規ポートを経由します。
 	//
 	// 実装例:
 	// - ProductionRepositoryFS.GetProductBlueprintIDByProductionID
 	// - 内部で GetByID(ctx, productionID) を呼び、
-	//   Production.ProductBlueprintID を返す
+	//   Production.ProductBlueprintID を返します。
 	GetProductBlueprintIDByProductionID(ctx context.Context, productionID string) (string, error)
 }
 
-// MintInspectionRepo は productionId から inspection を取得・更新するための最小ポートです。
+// MintInspectionRepo は、mint 処理で必要な InspectionBatch を productionID キーで取得するための最小ポートです。
+//
+// AMOL/Narratives では production / inspection / mint の docId は同一値として扱います。
+// そのため、MintUsecase から inspection を参照する場合も inspectionID ではなく productionID に統一します。
+// 取得対象は InspectionBatch ですが、呼び出し側のキー名は productionID を正とします。
+//
+// mint は申請後に即時実行されるため、InspectionBatch.mintId を別途更新する通常フローは持ちません。
 type MintInspectionRepo interface {
 	// GetByProductionID:
-	// - production / inspection / mint の docId は同一値として扱う。
-	// - MintUsecase で単一 productionID から InspectionBatch を1件取得する正規ルート。
+	// - productionID と同一 docId の InspectionBatch を1件取得します。
+	// - MintUsecase で単一 productionID から検品結果を参照する正規ルートです。
 	GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
 
 	// ListByProductionID:
-	// - 複数 productionID に対応する InspectionBatch をまとめて取得する。
-	// - query.go の一覧取得で使用する。
-	// - 見つからない ID があってもエラーにせず、存在するものだけを返す想定。
+	// - 複数 productionID に対応する InspectionBatch をまとめて取得します。
+	// - query.go の一覧取得で使用します。
+	// - 見つからない ID があってもエラーにせず、存在するものだけを返す想定です。
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
-
-	// UpdateMintID:
-	// - ミント申請が実行された productionID に紐づく InspectionBatch.mintId を設定する用途を想定。
-	// - mintID == nil の場合は mintId を未設定（削除）として扱う想定。
-	UpdateMintID(
-		ctx context.Context,
-		productionID string,
-		mintID *string,
-	) (inspectiondom.InspectionBatch, error)
 }
 
 // MintModelRepo は modelId(variationID) から size / color / rgb などの情報を解決するための最小ポートです。
 type MintModelRepo interface {
-	// 実装例: ModelRepositoryFS.GetModelVariationByID
+	// GetModelVariationByID:
+	// - variationID から ModelVariation を取得します。
+	// - 実装例: ModelRepositoryFS.GetModelVariationByID
 	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 }
 
@@ -111,12 +113,12 @@ type MintModelRepo interface {
 //
 // inspections テーブルから、inspectionResult: "passed" の productId 一覧を
 // ミント処理用に取得するためのポートです。
-// （実装は inspection モジュール側の Firestore リポジトリなどが担当）
+// 実装は inspection モジュール側の Firestore リポジトリなどが担当します。
 
 // PassedProductLister は、検査結果が "passed" の productId 一覧を取得するためのポートです。
 type PassedProductLister interface {
 	// ListPassedProductIDsByProductionID:
-	// - productionId を受け取り、
+	// - productionID を受け取り、
 	//   inspectionResult == "passed" の InspectionItem の productId を全件返します。
 	// - 対象が存在しない場合は ErrNotFound を返すのが望ましいです。
 	ListPassedProductIDsByProductionID(
@@ -141,12 +143,6 @@ func (m *Mint) MarkMinted(at time.Time) error {
 	m.MintedAt = &atUTC
 
 	return m.validate()
-}
-
-// ResetMinted はミント状態を未ミントへ戻します（再ミントなどのケース想定）。
-func (m *Mint) ResetMinted() {
-	m.Minted = false
-	m.MintedAt = nil
 }
 
 // Validate はエンティティの一貫性チェックを公開します。

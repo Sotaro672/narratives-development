@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -48,9 +47,6 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 // }
 // modelIds: ["{modelId}", ...]
 //
-// NOTE:
-// - 旧式（products を map で持つ）との互換は削除。
-// - docId と同値の冗長フィールド "id" は廃止（持たない）。
 // ============================================================
 
 type modelStockRecord struct {
@@ -67,24 +63,6 @@ type inventoryRecord struct {
 	ModelIDs           []string                    `firestore:"modelIds"`
 	CreatedAt          time.Time                   `firestore:"createdAt"`
 	UpdatedAt          time.Time                   `firestore:"updatedAt"`
-}
-
-func toRecord(m invdom.Mint) inventoryRecord {
-	stock := normalizeStockRecord(stockRecordFromDomain(m.Stock))
-
-	modelIDs := normalizeModelIDs(m.ModelIDs)
-	if len(modelIDs) == 0 {
-		modelIDs = modelIDsFromStockRecord(stock)
-	}
-
-	return inventoryRecord{
-		TokenBlueprintID:   m.TokenBlueprintID,
-		ProductBlueprintID: m.ProductBlueprintID,
-		Stock:              stock,
-		ModelIDs:           modelIDs,
-		CreatedAt:          m.CreatedAt,
-		UpdatedAt:          m.UpdatedAt,
-	}
 }
 
 func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
@@ -127,45 +105,8 @@ func (r *InventoryRepositoryFS) ResolveBlueprintIDsByInventoryID(
 }
 
 // ============================================================
-// CRUD
+// Read
 // ============================================================
-
-func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return invdom.Mint{}, errors.New("inventory repo is nil")
-	}
-
-	now := time.Now().UTC()
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = now
-	}
-	if m.UpdatedAt.IsZero() {
-		m.UpdatedAt = m.CreatedAt
-	}
-
-	if m.TokenBlueprintID == "" {
-		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
-	}
-	if m.ProductBlueprintID == "" {
-		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
-	}
-
-	// id が空なら docId = productBlueprintId__tokenBlueprintId を採用
-	if m.ID == "" {
-		m.ID = buildInventoryDocIDByProduct(m.TokenBlueprintID, m.ProductBlueprintID)
-	}
-
-	doc := r.col().Doc(m.ID)
-
-	rec := toRecord(m)
-	m.ID = doc.ID
-
-	if _, err := doc.Set(ctx, rec); err != nil {
-		return invdom.Mint{}, err
-	}
-
-	return r.GetByID(ctx, doc.ID)
-}
 
 func (r *InventoryRepositoryFS) GetByID(ctx context.Context, id string) (invdom.Mint, error) {
 	if id == "" {
@@ -188,89 +129,9 @@ func (r *InventoryRepositoryFS) GetByID(ctx context.Context, id string) (invdom.
 	return fromRecord(snap.Ref.ID, rec), nil
 }
 
-func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return invdom.Mint{}, errors.New("inventory repo is nil")
-	}
-
-	id := m.ID
-	if id == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
-	}
-
-	if m.TokenBlueprintID == "" {
-		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
-	}
-	if m.ProductBlueprintID == "" {
-		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
-	}
-
-	if _, err := r.col().Doc(id).Get(ctx); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return invdom.Mint{}, invdom.ErrNotFound
-		}
-		return invdom.Mint{}, err
-	}
-
-	m.UpdatedAt = time.Now().UTC()
-
-	if m.CreatedAt.IsZero() {
-		existing, err := r.GetByID(ctx, id)
-		if err != nil {
-			return invdom.Mint{}, err
-		}
-		m.CreatedAt = existing.CreatedAt
-		if m.CreatedAt.IsZero() {
-			m.CreatedAt = m.UpdatedAt
-		}
-	}
-
-	rec := toRecord(m)
-
-	if _, err := r.col().Doc(id).Set(ctx, rec); err != nil {
-		return invdom.Mint{}, err
-	}
-
-	return r.GetByID(ctx, id)
-}
-
-func (r *InventoryRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r == nil || r.Client == nil {
-		return errors.New("inventory repo is nil")
-	}
-
-	if id == "" {
-		return invdom.ErrInvalidMintID
-	}
-
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return invdom.ErrNotFound
-		}
-		return err
-	}
-	return nil
-}
-
 // ============================================================
 // Queries
 // ============================================================
-
-func (r *InventoryRepositoryFS) ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]invdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return nil, errors.New("inventory repo is nil")
-	}
-
-	if tokenBlueprintID == "" {
-		return nil, invdom.ErrInvalidTokenBlueprintID
-	}
-
-	iter := r.col().Where("tokenBlueprintId", "==", tokenBlueprintID).Documents(ctx)
-	defer iter.Stop()
-
-	return readAllInventoryDocs(iter)
-}
 
 func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]invdom.Mint, error) {
 	if r == nil || r.Client == nil {
@@ -287,63 +148,8 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, pr
 	return readAllInventoryDocs(iter)
 }
 
-func (r *InventoryRepositoryFS) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return nil, errors.New("inventory repo is nil")
-	}
-
-	if modelID == "" {
-		return nil, invdom.ErrInvalidModelID
-	}
-
-	iter := r.col().Documents(ctx)
-	defer iter.Stop()
-
-	all, err := readAllInventoryDocs(iter)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]invdom.Mint, 0, len(all))
-	for _, m := range all {
-		if hasModelStock(m.Stock, modelID) {
-			out = append(out, m)
-		}
-	}
-	return out, nil
-}
-
-func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]invdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return nil, errors.New("inventory repo is nil")
-	}
-
-	if tokenBlueprintID == "" {
-		return nil, invdom.ErrInvalidTokenBlueprintID
-	}
-	if modelID == "" {
-		return nil, invdom.ErrInvalidModelID
-	}
-
-	iter := r.col().Where("tokenBlueprintId", "==", tokenBlueprintID).Documents(ctx)
-	defer iter.Stop()
-
-	all, err := readAllInventoryDocs(iter)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]invdom.Mint, 0, len(all))
-	for _, m := range all {
-		if hasModelStock(m.Stock, modelID) {
-			out = append(out, m)
-		}
-	}
-	return out, nil
-}
-
 // ============================================================
-// ✅ Transfer後の解放（追加）
+// Transfer後の予約解放
 // - stock[modelId].products から productId を削除
 // - reservedByOrder[orderId] を削除件数分だけ減算（<=0はキー削除）
 // - accumulation/reservedCount を正規化
@@ -354,29 +160,12 @@ func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, token
 // - removedCount は通常 1 だが、重複等に備えて int を返す
 // ============================================================
 
-// ApplyTransferResult implements invdom.RepositoryPort.
-// TransferUsecase 内から「on-chain 成功後の inventory 解放」を呼び出すための統一エントリです。
-func (r *InventoryRepositoryFS) ApplyTransferResult(
-	ctx context.Context,
-	productID string,
-	orderID string,
-	now time.Time,
-) error {
-	if r == nil || r.Client == nil {
-		return errors.New("inventory repo is nil")
-	}
-	_, err := r.ReleaseReservationAfterTransfer(ctx, productID, orderID, now)
-	return err
-}
-
 func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	ctx context.Context,
 	productID string,
 	orderID string,
 	now time.Time,
 ) (removedCount int, err error) {
-	start := time.Now()
-
 	if r == nil || r.Client == nil {
 		return 0, errors.New("inventory repo is nil")
 	}
@@ -394,20 +183,13 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	}
 	now = now.UTC()
 
-	// 1) productId を含む inventory doc + modelId を探索（現スキーマ上、逆引きインデックスが無いため）
 	docRef, modelID, findErr := r.findInventoryDocByProductID(ctx, pid)
 	if findErr != nil {
 		return 0, findErr
 	}
 	if docRef == nil || modelID == "" {
-		// idempotent: 見つからないなら no-op
 		return 0, nil
 	}
-
-	log.Printf(
-		"[inventory_repo_fs] ReleaseReservationAfterTransfer start inventoryId=%q modelId=%q productId=%q orderId=%q",
-		docRef.ID, modelID, pid, oid,
-	)
 
 	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(docRef)
@@ -425,15 +207,14 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 
 		stock := rec.Stock
 		if stock == nil {
-			return nil // no-op
+			return nil
 		}
 
 		ms, ok := stock[modelID]
 		if !ok {
-			return nil // no-op
+			return nil
 		}
 
-		// products から pid を削除
 		removed := 0
 		if len(ms.Products) > 0 {
 			newProducts := make([]string, 0, len(ms.Products))
@@ -450,15 +231,14 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 			ms.Products = newProducts
 		}
 
-		// idempotent: 既に無いなら no-op
 		if removed == 0 {
 			return nil
 		}
 
-		// reservedByOrder[orderId] を removed 分減算
 		if ms.ReservedByOrder == nil {
 			ms.ReservedByOrder = map[string]int{}
 		}
+
 		cur := ms.ReservedByOrder[oid]
 		cur = cur - removed
 		if cur <= 0 {
@@ -467,14 +247,10 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 			ms.ReservedByOrder[oid] = cur
 		}
 
-		// 正規化（accumulation / reservedCount / 空map等）
 		ms = normalizeModelStockRecord(ms)
 		stock[modelID] = ms
 
-		// 空になった model を drop
 		stock = normalizeStockRecord(stock)
-
-		// modelIds も stock から再生成（不整合を防ぐ）
 		modelIDs := modelIDsFromStockRecord(stock)
 
 		updates := []firestore.Update{
@@ -488,17 +264,8 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	})
 
 	if err != nil {
-		log.Printf(
-			"[inventory_repo_fs] ReleaseReservationAfterTransfer error productId=%q orderId=%q err=%v elapsed=%s",
-			pid, oid, err, time.Since(start),
-		)
 		return 0, err
 	}
-
-	log.Printf(
-		"[inventory_repo_fs] ReleaseReservationAfterTransfer done productId=%q orderId=%q removed=%d elapsed=%s",
-		pid, oid, removedCount, time.Since(start),
-	)
 
 	return removedCount, nil
 }
@@ -507,6 +274,7 @@ func (r *InventoryRepositoryFS) findInventoryDocByProductID(ctx context.Context,
 	if r == nil || r.Client == nil {
 		return nil, "", errors.New("inventory repo is nil")
 	}
+
 	pid := productID
 	if pid == "" {
 		return nil, "", errors.New("inventory repo: productID is empty")
@@ -556,8 +324,6 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 	orderID string,
 	qty int,
 ) error {
-	start := time.Now()
-
 	if r == nil || r.Client == nil {
 		return errors.New("inventory repo is nil")
 	}
@@ -577,11 +343,6 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 
 	doc := r.col().Doc(inventoryID)
 	now := time.Now().UTC()
-
-	log.Printf(
-		"[inventory_repo_fs] ReserveByOrder start inventoryId=%q modelId=%q orderId=%q qty=%d",
-		inventoryID, modelID, orderID, qty,
-	)
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(doc)
@@ -643,17 +404,8 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 		return tx.Update(doc, updates)
 	})
 	if err != nil {
-		log.Printf(
-			"[inventory_repo_fs] ReserveByOrder error inventoryId=%q modelId=%q orderId=%q qty=%d err=%v elapsed=%s",
-			inventoryID, modelID, orderID, qty, err, time.Since(start),
-		)
 		return err
 	}
-
-	log.Printf(
-		"[inventory_repo_fs] ReserveByOrder done inventoryId=%q modelId=%q orderId=%q qty=%d elapsed=%s",
-		inventoryID, modelID, orderID, qty, time.Since(start),
-	)
 
 	return nil
 }
@@ -671,8 +423,6 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	modelID string,
 	productIDs []string,
 ) (invdom.Mint, error) {
-	start := time.Now()
-
 	if r == nil || r.Client == nil {
 		return invdom.Mint{}, errors.New("inventory repo is nil")
 	}
@@ -698,11 +448,6 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	docID := buildInventoryDocIDByProduct(tbID, pbID)
 	doc := r.col().Doc(docID)
 	now := time.Now().UTC()
-
-	log.Printf(
-		"[inventory_repo_fs] UpsertByModelAndToken start docId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q productIds=%d",
-		docID, tbID, pbID, mID, len(ids),
-	)
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(doc)
@@ -768,20 +513,13 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 		return tx.Update(doc, updates)
 	})
 	if err != nil {
-		log.Printf("[inventory_repo_fs] UpsertByModelAndToken error docId=%q err=%v elapsed=%s", docID, err, time.Since(start))
 		return invdom.Mint{}, err
 	}
 
 	out, err := r.GetByID(ctx, docID)
 	if err != nil {
-		log.Printf("[inventory_repo_fs] UpsertByModelAndToken GetByID error docId=%q err=%v elapsed=%s", docID, err, time.Since(start))
 		return invdom.Mint{}, err
 	}
-
-	log.Printf(
-		"[inventory_repo_fs] UpsertByModelAndToken done docId=%q models=%d elapsed=%s",
-		docID, len(out.Stock), time.Since(start),
-	)
 
 	return out, nil
 }
@@ -940,55 +678,6 @@ func modelIDsFromStockRecord(stock map[string]modelStockRecord) []string {
 		}
 	}
 	return normalizeModelIDs(out)
-}
-
-// ------------------------------------------------------------
-// domain <-> record stock conversion
-// ------------------------------------------------------------
-
-func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string]modelStockRecord {
-	if raw == nil {
-		return nil
-	}
-	out := map[string]modelStockRecord{}
-	for modelID, ms := range raw {
-		if modelID == "" {
-			continue
-		}
-
-		rec := modelStockRecord{
-			Products:        nil,
-			Accumulation:    0,
-			ReservedByOrder: nil,
-			ReservedCount:   0,
-		}
-
-		if len(ms.Products) > 0 {
-			rec.Products = normalizeIDs(ms.Products)
-		}
-
-		if ms.ReservedByOrder != nil {
-			rec.ReservedByOrder = map[string]int{}
-			for oid, n := range ms.ReservedByOrder {
-				if oid == "" || n <= 0 {
-					continue
-				}
-				rec.ReservedByOrder[oid] = n
-			}
-		}
-
-		rec = normalizeModelStockRecord(rec)
-
-		hasProducts := len(rec.Products) > 0
-		hasReserved := len(rec.ReservedByOrder) > 0
-		if !hasProducts && !hasReserved {
-			continue
-		}
-
-		out[modelID] = rec
-	}
-
-	return normalizeStockRecord(out)
 }
 
 func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.ModelStock {
