@@ -11,8 +11,7 @@ package query
 // - order テーブルの items に記載された inventoryId を、company 境界に従って安全に一覧できるようにする
 //
 // ✅ DI整合のための方針:
-//   - Firestore OrderRepositoryFS は usecase.OrderFilter / common.Sort / common.Page を引数に取るため、
-//     Query側の port もそれに合わせる（domain/order.Filter は使わない）
+//   - Query側の port は domain/order.Filter / common.Sort / common.Page を引数に取る。
 //
 // ✅ 重要:
 //   - productName/tokenName は best-effort。
@@ -36,7 +35,6 @@ import (
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
-	uc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
@@ -47,9 +45,9 @@ import (
 // Ports (read-only)
 // ============================================================
 
-// ✅ Firestore repo (usecase.OrderRepo) の List シグネチャに合わせる
+// OrderLister lists orders for console query processing.
 type OrderLister interface {
-	List(ctx context.Context, filter uc.OrderFilter, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
+	List(ctx context.Context, filter orderdom.Filter, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
 }
 
 type InventoryRowsLister interface {
@@ -217,11 +215,10 @@ func NewOrderManagementQuery(p NewOrderManagementQueryParams) *OrderManagementQu
 
 func (q *OrderManagementQuery) ListItemInventoryRows(
 	ctx context.Context,
-	filter uc.OrderFilter,
+	filter orderdom.Filter,
 	sort common.Sort,
 	page common.Page,
 ) (common.PageResult[OrderItemInventoryRowDTO], error) {
-
 	page = normalizePage(page)
 
 	// optional は required 扱いしない。
@@ -662,11 +659,10 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 // ListDistinctInventoryIDs
 func (q *OrderManagementQuery) ListDistinctInventoryIDs(
 	ctx context.Context,
-	filter uc.OrderFilter,
+	filter orderdom.Filter,
 	sort common.Sort,
 	page common.Page,
 ) (common.PageResult[InventoryIDDTO], error) {
-
 	pr, err := q.ListItemInventoryRows(ctx, filter, sort, page)
 	if err != nil {
 		return common.PageResult[InventoryIDDTO]{}, err

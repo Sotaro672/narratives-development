@@ -272,11 +272,7 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	page := parseOrderPage(r)
 	sort := parseOrderSort(r)
 
-	filter := usecase.OrderFilter{
-		AvatarID: &avatarID,
-	}
-
-	out, err := h.uc.List(ctx, filter, sort, page)
+	out, err := h.uc.ListByAvatarID(ctx, avatarID, sort, page)
 	if err != nil {
 		writeOrderErr(w, err)
 		return

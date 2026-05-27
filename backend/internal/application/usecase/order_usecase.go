@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	cartdom "narratives/internal/domain/cart"
@@ -17,30 +18,16 @@ type OrderRepo interface {
 	// Queries
 	GetByID(ctx context.Context, id string) (orderdom.Order, error)
 	Exists(ctx context.Context, id string) (bool, error)
-	List(ctx context.Context, filter OrderFilter, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
-	ListByUserID(ctx context.Context, userID string, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
-	ListByCursor(ctx context.Context, filter OrderFilter, sort common.Sort, cpage common.CursorPage) (common.CursorPageResult[orderdom.Order], error)
+	ListByAvatarID(ctx context.Context, avatarID string, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
 
 	// Commands
 	Create(ctx context.Context, o orderdom.Order) (orderdom.Order, error)
 	Save(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
-	Delete(ctx context.Context, id string) error
 }
 
 // CartRepo is the persistence port required to read cart items (for listId lookup).
 type CartRepo interface {
 	GetByID(ctx context.Context, id string) (cartdom.Cart, error)
-}
-
-// OrderFilter provides basic filtering for listing orders.
-type OrderFilter struct {
-	ID       string
-	UserID   *string
-	AvatarID *string
-	CartID   *string
-
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
 }
 
 // OrderUsecase orchestrates order operations.
@@ -74,16 +61,18 @@ func (u *OrderUsecase) Exists(ctx context.Context, id string) (bool, error) {
 	return u.repo.Exists(ctx, id)
 }
 
-func (u *OrderUsecase) List(ctx context.Context, f OrderFilter, s common.Sort, p common.Page) (common.PageResult[orderdom.Order], error) {
-	return u.repo.List(ctx, f, s, p)
-}
+func (u *OrderUsecase) ListByAvatarID(
+	ctx context.Context,
+	avatarID string,
+	s common.Sort,
+	p common.Page,
+) (common.PageResult[orderdom.Order], error) {
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return common.PageResult[orderdom.Order]{}, fmt.Errorf("order usecase: avatarId is required")
+	}
 
-func (u *OrderUsecase) ListByUserID(ctx context.Context, userID string, s common.Sort, p common.Page) (common.PageResult[orderdom.Order], error) {
-	return u.repo.ListByUserID(ctx, userID, s, p)
-}
-
-func (u *OrderUsecase) ListByCursor(ctx context.Context, f OrderFilter, s common.Sort, c common.CursorPage) (common.CursorPageResult[orderdom.Order], error) {
-	return u.repo.ListByCursor(ctx, f, s, c)
+	return u.repo.ListByAvatarID(ctx, avatarID, s, p)
 }
 
 // =======================
@@ -342,10 +331,6 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 	}
 
 	return u.repo.Save(ctx, checked, nil)
-}
-
-func (u *OrderUsecase) Delete(ctx context.Context, id string) error {
-	return u.repo.Delete(ctx, id)
 }
 
 // ------------------------------------------------------------

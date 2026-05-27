@@ -15,7 +15,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
-	uc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 )
@@ -81,9 +80,9 @@ func (r *OrderRepositoryFS) Exists(ctx context.Context, id string) (bool, error)
 	return true, nil
 }
 
-func (r *OrderRepositoryFS) List(
+func (r *OrderRepositoryFS) ListByAvatarID(
 	ctx context.Context,
-	filter uc.OrderFilter,
+	avatarID string,
 	sort common.Sort,
 	page common.Page,
 ) (common.PageResult[orderdom.Order], error) {
@@ -93,33 +92,8 @@ func (r *OrderRepositoryFS) List(
 
 	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 
-	q := r.ordersCol().Query
-	q = applyOrderSort(q, sort)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var all []orderdom.Order
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.PageResult[orderdom.Order]{}, err
-		}
-
-		o, err := docToOrder(doc)
-		if err != nil {
-			return common.PageResult[orderdom.Order]{}, err
-		}
-		if matchOrderFilter(o, filter) {
-			all = append(all, o)
-		}
-	}
-
-	total := len(all)
-	if total == 0 {
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
 		return common.PageResult[orderdom.Order]{
 			Items:      []orderdom.Order{},
 			TotalCount: 0,
@@ -129,14 +103,37 @@ func (r *OrderRepositoryFS) List(
 		}, nil
 	}
 
-	if offset > total {
-		offset = total
+	q := r.ordersCol().
+		Where("avatarId", "==", avatarID)
+
+	q = applyOrderSort(q, sort)
+	q = q.Offset(offset).Limit(perPage)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	items := make([]orderdom.Order, 0, perPage)
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return common.PageResult[orderdom.Order]{}, err
+		}
+
+		o, err := docToOrder(doc)
+		if err != nil {
+			return common.PageResult[orderdom.Order]{}, err
+		}
+
+		// Firestore query already filters avatarId, but keep this as a defensive check.
+		if o.AvatarID == avatarID {
+			items = append(items, o)
+		}
 	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-	items := all[offset:end]
+
+	total := len(items)
 
 	return common.PageResult[orderdom.Order]{
 		Items:      items,
@@ -144,85 +141,6 @@ func (r *OrderRepositoryFS) List(
 		TotalPages: fscommon.ComputeTotalPages(total, perPage),
 		Page:       pageNum,
 		PerPage:    perPage,
-	}, nil
-}
-
-func (r *OrderRepositoryFS) ListByUserID(
-	ctx context.Context,
-	userID string,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[orderdom.Order], error) {
-	if r.Client == nil {
-		return common.PageResult[orderdom.Order]{}, errors.New("firestore client is nil")
-	}
-
-	filter := uc.OrderFilter{
-		UserID: &userID,
-	}
-	return r.List(ctx, filter, sort, page)
-}
-
-// ListByCursor currently paginates by Firestore document ID ascending only.
-// The sort argument is ignored.
-func (r *OrderRepositoryFS) ListByCursor(
-	ctx context.Context,
-	filter uc.OrderFilter,
-	_ common.Sort,
-	cpage common.CursorPage,
-) (common.CursorPageResult[orderdom.Order], error) {
-	if r.Client == nil {
-		return common.CursorPageResult[orderdom.Order]{}, errors.New("firestore client is nil")
-	}
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	q := r.ordersCol().OrderBy(firestore.DocumentID, firestore.Asc)
-	if after := cpage.After; after != "" {
-		q = q.StartAfter(after)
-	}
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var (
-		items []orderdom.Order
-		last  string
-	)
-	for {
-		if len(items) >= limit {
-			break
-		}
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.CursorPageResult[orderdom.Order]{}, err
-		}
-
-		o, err := docToOrder(doc)
-		if err != nil {
-			return common.CursorPageResult[orderdom.Order]{}, err
-		}
-		if matchOrderFilter(o, filter) {
-			items = append(items, o)
-			last = o.ID
-		}
-	}
-
-	var next *string
-	if last != "" && len(items) == limit {
-		next = &last
-	}
-
-	return common.CursorPageResult[orderdom.Order]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
 	}, nil
 }
 
@@ -320,30 +238,6 @@ func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *commo
 	return docToOrder(snap)
 }
 
-func (r *OrderRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return orderdom.ErrNotFound
-	}
-
-	exists, err := r.Exists(ctx, id)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return orderdom.ErrNotFound
-	}
-
-	_, err = r.ordersCol().Doc(id).Delete(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // ============================================================
 // Transfer flow helpers (item-level transferred)
 // ============================================================
@@ -360,6 +254,7 @@ func (r *OrderRepositoryFS) ListPaidUntransferredByAvatarID(ctx context.Context,
 		return nil, errors.New("firestore client is nil")
 	}
 
+	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return []orderdom.Order{}, nil
 	}
@@ -888,37 +783,4 @@ func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
 
 	return q.OrderBy("createdAt", dir).
 		OrderBy(firestore.DocumentID, dir)
-}
-
-func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
-	if f.ID != "" && o.ID != f.ID {
-		return false
-	}
-
-	if f.UserID != nil && *f.UserID != "" && o.UserID != *f.UserID {
-		return false
-	}
-
-	if f.AvatarID != nil && *f.AvatarID != "" && o.AvatarID != *f.AvatarID {
-		return false
-	}
-
-	if f.CartID != nil && *f.CartID != "" && o.CartID != *f.CartID {
-		return false
-	}
-
-	if f.CreatedFrom != nil {
-		if o.CreatedAt.IsZero() || o.CreatedAt.Before(f.CreatedFrom.UTC()) {
-			return false
-		}
-	}
-
-	if f.CreatedTo != nil {
-		// upper bound exclusive
-		if o.CreatedAt.IsZero() || !o.CreatedAt.Before(f.CreatedTo.UTC()) {
-			return false
-		}
-	}
-
-	return true
 }

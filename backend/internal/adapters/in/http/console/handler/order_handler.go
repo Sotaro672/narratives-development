@@ -435,37 +435,46 @@ func (h *OrderHandler) listDistinctInventoryIDs(w http.ResponseWriter, r *http.R
 // Query param parsing
 // ============================================================
 
-func parseOrderListParams(r *http.Request) (usecase.OrderFilter, common.Page, error) {
+func parseOrderListParams(r *http.Request) (orderdom.Filter, common.Page, error) {
 	q := r.URL.Query()
 
 	pageNum := parseIntDefault(q.Get("page"), 1)
 	perPage := parseIntDefault(q.Get("perPage"), 20)
 
-	f := usecase.OrderFilter{
-		ID: q.Get("id"),
+	f := orderdom.Filter{
+		ID: strings.TrimSpace(q.Get("id")),
 	}
 
-	if v := q.Get("userId"); v != "" {
-		f.UserID = strPtr(v)
+	if v := strings.TrimSpace(q.Get("userId")); v != "" {
+		f.UserID = v
 	}
-	if v := q.Get("avatarId"); v != "" {
-		f.AvatarID = strPtr(v)
+	if v := strings.TrimSpace(q.Get("avatarId")); v != "" {
+		f.AvatarID = v
 	}
-	if v := q.Get("cartId"); v != "" {
-		f.CartID = strPtr(v)
+	if v := strings.TrimSpace(q.Get("cartId")); v != "" {
+		f.CartID = v
+	}
+	if v := strings.TrimSpace(q.Get("modelId")); v != "" {
+		f.ModelID = v
+	}
+	if v := strings.TrimSpace(q.Get("inventoryId")); v != "" {
+		f.InventoryID = v
+	}
+	if v := strings.TrimSpace(q.Get("listId")); v != "" {
+		f.ListID = v
 	}
 
-	if v := q.Get("createdFrom"); v != "" {
+	if v := strings.TrimSpace(q.Get("createdFrom")); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
-			return usecase.OrderFilter{}, common.Page{}, errors.New("invalid createdFrom (expected RFC3339)")
+			return orderdom.Filter{}, common.Page{}, errors.New("invalid createdFrom (expected RFC3339)")
 		}
 		f.CreatedFrom = &t
 	}
-	if v := q.Get("createdTo"); v != "" {
+	if v := strings.TrimSpace(q.Get("createdTo")); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
-			return usecase.OrderFilter{}, common.Page{}, errors.New("invalid createdTo (expected RFC3339)")
+			return orderdom.Filter{}, common.Page{}, errors.New("invalid createdTo (expected RFC3339)")
 		}
 		f.CreatedTo = &t
 	}
@@ -476,8 +485,6 @@ func parseOrderListParams(r *http.Request) (usecase.OrderFilter, common.Page, er
 	}
 	return f, p, nil
 }
-
-func strPtr(s string) *string { return &s }
 
 // ============================================================
 // Error handling

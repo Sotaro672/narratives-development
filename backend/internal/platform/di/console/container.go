@@ -123,9 +123,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	var orderMgmtQ *query.OrderManagementQuery
-	if repos.orderRepo != nil && q.inventoryQuery != nil && invBlueprint != nil {
+	if repos.orderConsoleLister != nil && q.inventoryQuery != nil && invBlueprint != nil {
 		orderMgmtQ = query.NewOrderManagementQuery(query.NewOrderManagementQueryParams{
-			Lister:       repos.orderRepo,
+			Lister:       repos.orderConsoleLister,
 			InvRows:      q.inventoryQuery,
 			InvBlueprint: invBlueprint,
 

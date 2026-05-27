@@ -10,6 +10,11 @@ import (
 )
 
 // Filter aligns with entity fields (entity.go as source of truth).
+//
+// NOTE:
+// This filter is used by console/query-side read models.
+// The main Order repository port intentionally does not expose a generic List method.
+// Mall order history must use ListByAvatarID to avoid scanning all orders.
 type Filter struct {
 	// Exact matches
 	ID       string
@@ -55,8 +60,6 @@ const (
 // Paging aliases
 type Page = common.Page
 type PageResult = common.PageResult[Order]
-type CursorPage = common.CursorPage
-type CursorPageResult = common.CursorPageResult[Order]
 
 // Save options (optional for adapters)
 type SaveOptions = common.SaveOptions
@@ -65,14 +68,11 @@ type SaveOptions = common.SaveOptions
 type Repository interface {
 	// Queries
 	GetByID(ctx context.Context, id string) (Order, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
-	ListByUserID(ctx context.Context, userID string, sort Sort, page Page) (PageResult, error)
-	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult, error)
+	ListByAvatarID(ctx context.Context, avatarID string, sort Sort, page Page) (PageResult, error)
 
 	// Commands
 	Create(ctx context.Context, o Order) (Order, error)
 	Save(ctx context.Context, o Order, opts *SaveOptions) (Order, error)
-	Delete(ctx context.Context, id string) error
 }
 
 // Standard repository errors
