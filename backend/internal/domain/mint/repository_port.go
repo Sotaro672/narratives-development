@@ -3,7 +3,6 @@ package mint
 
 import (
 	"context"
-	"time"
 
 	inspectiondom "narratives/internal/domain/inspection"
 	modeldom "narratives/internal/domain/model"
@@ -130,20 +129,6 @@ type PassedProductLister interface {
 // ------------------------------------------------------
 // Behavior (Mint のドメイン振る舞い)
 // ------------------------------------------------------
-
-// MarkMinted はミント完了を表現するドメイン操作です。
-// - at がゼロ時刻の場合は ErrInvalidMintedAt を返します。
-func (m *Mint) MarkMinted(at time.Time) error {
-	if at.IsZero() {
-		return ErrInvalidMintedAt
-	}
-	atUTC := at.UTC()
-
-	m.Minted = true
-	m.MintedAt = &atUTC
-
-	return m.validate()
-}
 
 // Validate はエンティティの一貫性チェックを公開します。
 // 実体は entity.go 側の m.validate() に委譲します。

@@ -57,10 +57,6 @@ func NewListCreateQueryWithInventory(
 // ============================================================
 
 func (q *ListCreateQuery) GetByInventoryID(ctx context.Context, inventoryID string) (*querydto.ListCreateDTO, error) {
-	return q.GetByInventoryIDWithListImage(ctx, inventoryID, "")
-}
-
-func (q *ListCreateQuery) GetByInventoryIDWithListImage(ctx context.Context, inventoryID string, listImageURL string) (*querydto.ListCreateDTO, error) {
 	if q == nil {
 		return nil, errors.New("list create query is nil")
 	}
@@ -85,7 +81,7 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(ctx context.Context, inv
 		return nil, errors.New("productBlueprintId/tokenBlueprintId is empty in inventory")
 	}
 
-	dto, err := q.GetByIDsWithListImage(ctx, pbID, tbID, listImageURL)
+	dto, err := q.buildByIDs(ctx, pbID, tbID)
 	if err != nil {
 		return nil, err
 	}
@@ -96,20 +92,15 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(ctx context.Context, inv
 }
 
 // ============================================================
-// pbId/tbId -> ListCreateDTO
+// internal: pbId/tbId -> ListCreateDTO
 // - inventoryId は build しない
 // - invRepo があれば「inventory テーブルから拾った ID」を返す
 // ============================================================
 
-func (q *ListCreateQuery) GetByIDs(ctx context.Context, productBlueprintID string, tokenBlueprintID string) (*querydto.ListCreateDTO, error) {
-	return q.GetByIDsWithListImage(ctx, productBlueprintID, tokenBlueprintID, "")
-}
-
-func (q *ListCreateQuery) GetByIDsWithListImage(
+func (q *ListCreateQuery) buildByIDs(
 	ctx context.Context,
 	productBlueprintID string,
 	tokenBlueprintID string,
-	listImageURL string,
 ) (*querydto.ListCreateDTO, error) {
 	if q == nil {
 		return nil, errors.New("list create query is nil")
@@ -188,7 +179,6 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 		TotalStock: totalStock,
 	}
 
-	dto.ListImageURL = listImageURL
 	return dto, nil
 }
 

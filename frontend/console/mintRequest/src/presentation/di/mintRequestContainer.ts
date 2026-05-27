@@ -13,7 +13,6 @@ import {
   fetchProductBlueprintPatchHTTP,
   fetchBrandsForMintHTTP,
   fetchTokenBlueprintsByBrandHTTP,
-  fetchTokenBlueprintPatchHTTP,
   postMintRequestHTTP,
 } from "../../infrastructure/repository";
 
@@ -44,12 +43,6 @@ class HttpMintRequestRepository implements MintRequestRepository {
     productBlueprintId: string,
   ): Promise<unknown | null> {
     return fetchProductBlueprintPatchHTTP(productBlueprintId);
-  }
-
-  async fetchTokenBlueprintPatch(
-    tokenBlueprintId: string,
-  ): Promise<unknown | null> {
-    return fetchTokenBlueprintPatchHTTP(tokenBlueprintId);
   }
 
   async fetchBrandsForMint(): Promise<BrandSummary[]> {

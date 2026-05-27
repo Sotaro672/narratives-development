@@ -44,17 +44,14 @@ export interface MintRequestRepository {
   fetchProductBlueprintIdByProductionId(
     productionId: string,
   ): Promise<string | null>;
+
   fetchProductBlueprintPatch(
     productBlueprintId: string,
   ): Promise<unknown | null>;
 
-  // token blueprint
-  fetchTokenBlueprintPatch(
-    tokenBlueprintId: string,
-  ): Promise<unknown | null>;
-
   // options
   fetchBrandsForMint(): Promise<BrandSummary[]>;
+
   fetchTokenBlueprintsByBrand(
     brandId: string,
   ): Promise<TokenBlueprintSummary[]>;

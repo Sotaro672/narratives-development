@@ -25,6 +25,31 @@ export type ValidateMintRequestSubmitResult =
       message: string;
     };
 
+export type ValidateMintExecutionResultInput = {
+  refreshedMint: unknown;
+};
+
+export type ValidateMintExecutionResultResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getBoolean(value: unknown): boolean {
+  return value === true;
+}
+
 export function validateMintRequestSubmit(
   input: ValidateMintRequestSubmitInput,
 ): ValidateMintRequestSubmitResult {
@@ -68,5 +93,42 @@ export function validateMintRequestSubmit(
     ok: true,
     productionId,
     tokenBlueprintId,
+  };
+}
+
+export function validateMintExecutionResult(
+  input: ValidateMintExecutionResultInput,
+): ValidateMintExecutionResultResult {
+  const mint = input.refreshedMint;
+
+  if (!isRecord(mint)) {
+    return {
+      ok: false,
+      message:
+        "ミント申請は作成されましたが、ミント結果を取得できませんでした。画面を更新してミント状態を確認してください。",
+    };
+  }
+
+  const minted = getBoolean(mint.minted);
+  const txSignature = getString(mint.onChainTxSignature);
+
+  if (!minted) {
+    return {
+      ok: false,
+      message:
+        "ミント申請は作成されましたが、オンチェーンのミント完了を確認できませんでした。minted が false のため、バックエンドログを確認してください。",
+    };
+  }
+
+  if (!txSignature) {
+    return {
+      ok: false,
+      message:
+        "ミント申請は作成されましたが、トランザクション署名を確認できませんでした。onChainTxSignature が空のため、ミント結果を確認してください。",
+    };
+  }
+
+  return {
+    ok: true,
   };
 }

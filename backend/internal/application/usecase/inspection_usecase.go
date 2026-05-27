@@ -287,10 +287,14 @@ func (u *InspectionUsecase) GetBatchForScreenByProductionID(
 		return InspectionBatchForScreenDTO{}, err
 	}
 
-	// batch.MintID は *string なので nil 安全に扱う
 	var mintDTO *MintDTO
-	if u.mintRepo != nil && batch.MintID != nil {
-		mintID := *batch.MintID
+	if u.mintRepo != nil {
+		mintID := batch.ProductionID
+
+		if batch.MintID != nil && *batch.MintID != "" {
+			mintID = *batch.MintID
+		}
+
 		if mintID != "" {
 			m, err := u.mintRepo.GetByID(ctx, mintID)
 			if err == nil {

@@ -500,6 +500,9 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(
 	if strings.TrimSpace(tb.ID) == "" {
 		return nil, fmt.Errorf("tokenBlueprint.ID is empty")
 	}
+	if strings.TrimSpace(actorID) == "" {
+		return nil, tbdom.ErrInvalidUpdatedBy
+	}
 
 	if strings.TrimSpace(tb.MetadataURI) != "" {
 		return tb, nil
@@ -520,9 +523,11 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(
 		return nil, fmt.Errorf("metadataUri is empty after upload")
 	}
 
+	now := time.Now().UTC()
+
 	updated, err := u.tbRepo.Update(ctx, tb.ID, tbdom.UpdateTokenBlueprintInput{
 		MetadataURI: &uri,
-		UpdatedAt:   nil,
+		UpdatedAt:   &now,
 		UpdatedBy:   ptr(actorID),
 		DeletedAt:   nil,
 		DeletedBy:   nil,
@@ -533,6 +538,8 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(
 
 	if updated == nil {
 		tb.MetadataURI = uri
+		tb.UpdatedAt = now
+		tb.UpdatedBy = actorID
 		return tb, nil
 	}
 

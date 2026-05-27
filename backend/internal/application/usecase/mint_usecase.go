@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -266,12 +267,44 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	if u.tokenMinter == nil {
-		return batch, nil
+		log.Printf(
+			"[mint][UpdateRequestInfo] tokenMinter is nil; mint record created but onchain mint was skipped productionID=%s tokenBlueprintID=%s",
+			pid,
+			tbID,
+		)
+
+		return batch, errors.New("token minter is not configured")
 	}
 
-	if _, err := u.MintFromMintRequest(ctx, pid); err != nil {
-		return batch, nil
+	result, err := u.MintFromMintRequest(ctx, pid)
+	if err != nil {
+		log.Printf(
+			"[mint][UpdateRequestInfo] onchain mint failed after mint record created productionID=%s tokenBlueprintID=%s err=%v",
+			pid,
+			tbID,
+			err,
+		)
+
+		return batch, fmt.Errorf("onchain mint failed after mint request was created: %w", err)
 	}
+
+	if result == nil {
+		log.Printf(
+			"[mint][UpdateRequestInfo] onchain mint returned nil result productionID=%s tokenBlueprintID=%s",
+			pid,
+			tbID,
+		)
+
+		return batch, errors.New("onchain mint returned nil result")
+	}
+
+	log.Printf(
+		"[mint][UpdateRequestInfo] onchain mint succeeded productionID=%s tokenBlueprintID=%s signature=%s mintAddress=%s",
+		pid,
+		tbID,
+		result.Signature,
+		result.MintAddress,
+	)
 
 	return batch, nil
 }

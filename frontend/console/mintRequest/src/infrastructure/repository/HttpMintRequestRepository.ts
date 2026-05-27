@@ -12,7 +12,6 @@ import {
   fetchProductBlueprintPatchHTTP,
   fetchBrandsForMintHTTP,
   fetchTokenBlueprintsByBrandHTTP,
-  fetchTokenBlueprintPatchHTTP,
   postMintRequestHTTP,
 } from "../repository";
 
@@ -43,14 +42,6 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     productBlueprintId: string,
   ): Promise<unknown | null> {
     return await fetchProductBlueprintPatchHTTP(productBlueprintId).catch(
-      () => null,
-    );
-  }
-
-  async fetchTokenBlueprintPatch(
-    tokenBlueprintId: string,
-  ): Promise<unknown | null> {
-    return await fetchTokenBlueprintPatchHTTP(tokenBlueprintId).catch(
       () => null,
     );
   }

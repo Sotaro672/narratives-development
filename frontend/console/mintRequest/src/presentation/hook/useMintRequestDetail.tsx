@@ -16,7 +16,10 @@ import {
   toTokenBlueprintOptionVMs,
 } from "../../application/mapper/mintRequestOptionsMapper";
 import { validateCompleteInspection } from "../../application/validator/validateCompleteInspection";
-import { validateMintRequestSubmit } from "../../application/validator/validateMintRequestSubmit";
+import {
+  validateMintExecutionResult,
+  validateMintRequestSubmit,
+} from "../../application/validator/validateMintRequestSubmit";
 
 import type {
   BrandOptionVM as BrandOption,
@@ -28,7 +31,6 @@ import type {
 
 import { useMintInfo } from "./useMintRequestDetail.mintSelectors";
 import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
-import { useTokenBlueprintPatch } from "./useMintRequestDetail.useTokenBlueprintPatch";
 import {
   buildMintLabels,
   buildProductBlueprintCardView,
@@ -313,9 +315,6 @@ export function useMintRequestDetail() {
     return b ? b : "";
   }, [selectedTokenBlueprintId, mintRequestedTokenBlueprintId]);
 
-  const { tokenBlueprintPatch } =
-    useTokenBlueprintPatch(tokenBlueprintIdForPatch);
-
   const handleCompleteInspection = React.useCallback(async () => {
     if (isCompletingInspection || isMinting) {
       return;
@@ -386,6 +385,7 @@ export function useMintRequestDetail() {
     }
 
     setIsMinting(true);
+    setError(null);
 
     try {
       const { updatedBatch, refreshedMint } = await submitMintRequestAndRefresh(
@@ -402,17 +402,41 @@ export function useMintRequestDetail() {
         setMintDTO(refreshedMint as any);
       }
 
+      const mintResultValidation = validateMintExecutionResult({
+        refreshedMint,
+      });
+
+      if (!mintResultValidation.ok) {
+        setError(mintResultValidation.message);
+
+        alert(`ミント申請に失敗しました: ${mintResultValidation.message}`);
+
+        try {
+          await reloadDetail();
+        } catch {
+          // エラー表示を優先するため、再取得失敗は握りつぶす
+        }
+
+        return;
+      }
+
       alert(
         `ミントが完了しました（生産ID: ${validation.productionId} / ミント数: ${totalMintQuantity}）`,
       );
 
       navigate(0);
     } catch (e: any) {
-      alert(
-        `ミント申請に失敗しました: ${
-          e?.message ?? "不明なエラーが発生しました"
-        }`,
-      );
+      const message = e?.message ?? "不明なエラーが発生しました";
+
+      setError(message);
+
+      alert(`ミント申請に失敗しました: ${message}`);
+
+      try {
+        await reloadDetail();
+      } catch {
+        // エラー表示を優先するため、再取得失敗は握りつぶす
+      }
     } finally {
       setIsMinting(false);
     }
@@ -422,6 +446,7 @@ export function useMintRequestDetail() {
     isMinting,
     navigate,
     productionId,
+    reloadDetail,
     scheduledBurnDate,
     selectedTokenBlueprintId,
     totalMintQuantity,
@@ -448,7 +473,7 @@ export function useMintRequestDetail() {
           selectedTokenBlueprint,
           tokenBlueprintIdForPatch,
           selectedBrandName,
-          tokenBlueprintPatch: tokenBlueprintPatch as any,
+          tokenBlueprintPatch: null as any,
           pbPatch,
           brandOptions,
         }),
@@ -456,7 +481,6 @@ export function useMintRequestDetail() {
         selectedTokenBlueprint,
         tokenBlueprintIdForPatch,
         selectedBrandName,
-        tokenBlueprintPatch,
         pbPatch,
         brandOptions,
       ],
