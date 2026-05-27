@@ -1,4 +1,3 @@
-// backend\internal\application\usecase\list_usecase.go
 package usecase
 
 import (
@@ -40,7 +39,9 @@ type ListPatchUpdater interface {
 	Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
 }
 
-type ListPatcher = ListPatchUpdater
+type ListDeleter interface {
+	Delete(ctx context.Context, id string) error
+}
 
 type ListPrimaryImageSetter interface {
 	SetPrimaryImageID(ctx context.Context, listID string, imageID string, now time.Time) error
@@ -51,14 +52,10 @@ type ListImageReader interface {
 	ListByListID(ctx context.Context, listID string) ([]listdom.ListImage, error)
 }
 
-type ListImageByIDReader interface {
-	GetByID(ctx context.Context, imageID string) (listdom.ListImage, error)
-}
-
 type ListImageRecordRepository interface {
 	Upsert(ctx context.Context, img listdom.ListImage) (listdom.ListImage, error)
 	ListByListID(ctx context.Context, listID string) ([]listdom.ListImage, error)
-	GetByID(ctx context.Context, imageID string) (listdom.ListImage, error)
+	GetByListIDAndID(ctx context.Context, listID string, imageID string) (listdom.ListImage, error)
 	Delete(ctx context.Context, listID string, imageID string) error
 }
 
@@ -76,14 +73,14 @@ type ListAggregate struct {
 }
 
 type ListUsecase struct {
-	listReader  ListReader
-	listLister  ListLister
-	listCreator ListCreator
-	listUpdater ListUpdater
-	listPatcher ListPatcher
+	listReader       ListReader
+	listLister       ListLister
+	listCreator      ListCreator
+	listUpdater      ListUpdater
+	listPatchUpdater ListPatchUpdater
+	listDeleter      ListDeleter
 
-	imageReader     ListImageReader
-	imageByIDReader ListImageByIDReader
+	imageReader ListImageReader
 
 	listImageRecordRepo    ListImageRecordRepository
 	listPrimaryImageSetter ListPrimaryImageSetter
@@ -92,19 +89,20 @@ type ListUsecase struct {
 func NewListUsecase(
 	listReader ListReader,
 	listCreator ListCreator,
-	listPatcher ListPatcher,
+	listPatchUpdater ListPatchUpdater,
 	imageReader ListImageReader,
-	imageByIDReader ListImageByIDReader,
+	imageByIDReader ListImageRecordByIDReader,
 ) *ListUsecase {
 	uc := &ListUsecase{
-		listReader:          listReader,
-		listLister:          nil,
-		listCreator:         listCreator,
-		listUpdater:         nil,
-		listPatcher:         listPatcher,
-		imageReader:         imageReader,
-		imageByIDReader:     imageByIDReader,
-		listImageRecordRepo: nil,
+		listReader:             listReader,
+		listLister:             nil,
+		listCreator:            listCreator,
+		listUpdater:            nil,
+		listPatchUpdater:       listPatchUpdater,
+		listDeleter:            nil,
+		imageReader:            imageReader,
+		listImageRecordRepo:    nil,
+		listPrimaryImageSetter: nil,
 	}
 
 	if listReader != nil {
@@ -114,6 +112,10 @@ func NewListUsecase(
 
 		if updater, ok := any(listReader).(ListUpdater); ok {
 			uc.listUpdater = updater
+		}
+
+		if deleter, ok := any(listReader).(ListDeleter); ok {
+			uc.listDeleter = deleter
 		}
 
 		if setter, ok := any(listReader).(ListPrimaryImageSetter); ok {
@@ -133,9 +135,21 @@ func NewListUsecase(
 		}
 	}
 
-	if uc.listPrimaryImageSetter == nil && listPatcher != nil {
-		if setter, ok := any(listPatcher).(ListPrimaryImageSetter); ok {
+	if uc.listDeleter == nil && listCreator != nil {
+		if deleter, ok := any(listCreator).(ListDeleter); ok {
+			uc.listDeleter = deleter
+		}
+	}
+
+	if uc.listPrimaryImageSetter == nil && listPatchUpdater != nil {
+		if setter, ok := any(listPatchUpdater).(ListPrimaryImageSetter); ok {
 			uc.listPrimaryImageSetter = setter
+		}
+	}
+
+	if uc.listDeleter == nil && listPatchUpdater != nil {
+		if deleter, ok := any(listPatchUpdater).(ListDeleter); ok {
+			uc.listDeleter = deleter
 		}
 	}
 
@@ -158,6 +172,7 @@ func (uc *ListUsecase) WithListImageRecordRepo(repo ListImageRecordRepository) *
 	if uc == nil {
 		return nil
 	}
+
 	uc.listImageRecordRepo = repo
 	return uc
 }
@@ -166,13 +181,24 @@ func (uc *ListUsecase) WithListPrimaryImageSetter(setter ListPrimaryImageSetter)
 	if uc == nil {
 		return nil
 	}
+
 	uc.listPrimaryImageSetter = setter
 	return uc
 }
 
+func (uc *ListUsecase) WithListDeleter(deleter ListDeleter) *ListUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.listDeleter = deleter
+	return uc
+}
+
 func isImageURL(v string) bool {
-	s := v
-	return strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "gs://")
+	return strings.HasPrefix(v, "https://") ||
+		strings.HasPrefix(v, "http://") ||
+		strings.HasPrefix(v, "gs://")
 }
 
 func generateReadableID(listID string, createdAt time.Time) string {
@@ -180,6 +206,7 @@ func generateReadableID(listID string, createdAt time.Time) string {
 	if t.IsZero() {
 		t = time.Now().UTC()
 	}
+
 	date := t.UTC().Format("20060102")
 
 	base := listID
@@ -352,6 +379,19 @@ func (uc *ListUsecase) Update(
 	return uc.listUpdater.Update(ctx, item)
 }
 
+func (uc *ListUsecase) Delete(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return listdom.ErrInvalidID
+	}
+
+	if uc == nil || uc.listDeleter == nil {
+		return ErrNotSupported("List.Delete")
+	}
+
+	return uc.listDeleter.Delete(ctx, id)
+}
+
 func (uc *ListUsecase) GetByID(
 	ctx context.Context,
 	id string,
@@ -430,9 +470,6 @@ func (uc *ListUsecase) SaveImage(
 	img.ID = strings.TrimSpace(img.ID)
 	img.ListID = strings.TrimSpace(img.ListID)
 	img.URL = strings.TrimSpace(img.URL)
-	img.ObjectPath = strings.TrimLeft(strings.TrimSpace(img.ObjectPath), "/")
-	img.FileName = strings.TrimSpace(img.FileName)
-	img.ContentType = strings.ToLower(strings.TrimSpace(img.ContentType))
 	img.CreatedBy = strings.TrimSpace(img.CreatedBy)
 
 	if img.ListID == "" {
@@ -443,7 +480,7 @@ func (uc *ListUsecase) SaveImage(
 		return listdom.ListImage{}, listdom.ErrInvalidListImageID
 	}
 
-	if strings.Contains(img.ID, "/") {
+	if strings.Contains(img.ID, "/") || strings.Contains(img.ID, "://") {
 		return listdom.ListImage{}, ErrInvalidArgument("invalid_image_id")
 	}
 
@@ -455,11 +492,6 @@ func (uc *ListUsecase) SaveImage(
 		img.CreatedAt = time.Now().UTC()
 	} else {
 		img.CreatedAt = img.CreatedAt.UTC()
-	}
-
-	expectedPrefix := "lists/" + img.ListID + "/images/" + img.ID + "/"
-	if !strings.HasPrefix(img.ObjectPath, expectedPrefix) {
-		return listdom.ListImage{}, ErrInvalidArgument("objectPath_not_canonical")
 	}
 
 	if err := img.Validate(); err != nil {
@@ -486,7 +518,7 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 		return listdom.ErrInvalidListImageID
 	}
 
-	if strings.Contains(imageID, "/") {
+	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
 		return ErrInvalidArgument("invalid_image_id")
 	}
 
@@ -508,11 +540,18 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 		return ErrNotSupported("List.DeleteImage.RecordRepo.Delete")
 	}
 
-	if uc.listPrimaryImageSetter != nil && uc.listReader != nil {
+	if uc.listReader != nil && uc.listPatchUpdater != nil {
 		l, err := uc.listReader.GetByID(ctx, listID)
 		if err == nil && l.ImageID == imageID {
 			now := time.Now().UTC()
-			_ = uc.listPrimaryImageSetter.SetPrimaryImageID(ctx, listID, "", now)
+			empty := ""
+
+			patch := listdom.ListPatch{
+				ImageID:   &empty,
+				UpdatedAt: &now,
+			}
+
+			_, _ = uc.listPatchUpdater.Update(ctx, listID, patch)
 		}
 	}
 
@@ -530,7 +569,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, ErrNotSupported("List.SetPrimaryImage")
 	}
 
-	if uc.listPatcher == nil {
+	if uc.listPatchUpdater == nil {
 		return listdom.List{}, ErrNotSupported("List.SetPrimaryImage")
 	}
 
@@ -553,7 +592,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, ErrNotSupported("List.SetPrimaryImage.RecordRepo")
 	}
 
-	reader, ok := uc.listImageRecordRepo.(ListImageRecordByIDReader)
+	reader, ok := any(uc.listImageRecordRepo).(ListImageRecordByIDReader)
 	if !ok || reader == nil {
 		return listdom.List{}, ErrNotSupported("List.SetPrimaryImage.RecordRepo.GetByListIDAndID")
 	}
@@ -575,10 +614,6 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, listdom.ErrInvalidListImageURL
 	}
 
-	if strings.TrimSpace(img.ObjectPath) == "" {
-		return listdom.List{}, listdom.ErrInvalidListImageObjectPath
-	}
-
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -589,7 +624,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 		UpdatedBy: updatedBy,
 	}
 
-	updated, err := uc.listPatcher.Update(ctx, lid, patch)
+	updated, err := uc.listPatchUpdater.Update(ctx, lid, patch)
 	if err != nil {
 		return listdom.List{}, err
 	}

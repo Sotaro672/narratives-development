@@ -1,26 +1,102 @@
-// backend/internal/domain/list/entity.go
 package list
 
 import (
+	"errors"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
 
-// ListPriceRow is the ONLY supported JSON shape from frontend.
+// ListStatus mirrors frontend: 'listing' | 'suspended'
+type ListStatus string
+
+const (
+	StatusListing   ListStatus = "listing"
+	StatusSuspended ListStatus = "suspended"
+)
+
+func IsValidStatus(s ListStatus) bool {
+	switch s {
+	case StatusListing, StatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Errors
+var (
+	// List errors
+	ErrInvalidID = errors.New("list: invalid id")
+
+	ErrInvalidReadableID   = errors.New("list: invalid readableId")
+	ErrInvalidStatus       = errors.New("list: invalid status")
+	ErrInvalidAssigneeID   = errors.New("list: invalid assigneeId")
+	ErrInvalidTitle        = errors.New("list: invalid title")
+	ErrInvalidInventoryID  = errors.New("list: invalid inventoryId")
+	ErrInvalidDescription  = errors.New("list: invalid description")
+	ErrInvalidPrices       = errors.New("list: invalid prices")
+	ErrInvalidPrice        = errors.New("list: invalid price")
+	ErrInvalidPriceModelID = errors.New("list: invalid modelId in prices")
+
+	ErrInvalidCreatedBy = errors.New("list: invalid createdBy")
+	ErrInvalidCreatedAt = errors.New("list: invalid createdAt")
+
+	ErrInvalidUpdatedAt = errors.New("list: invalid updatedAt")
+	ErrInvalidUpdatedBy = errors.New("list: invalid updatedBy")
+
+	// Primary image linkage errors
+	ErrEmptyImageID   = errors.New("list: imageId must not be empty")
+	ErrInvalidImageID = errors.New("list: invalid imageId")
+
+	// ListImage errors
+	ErrInvalidListImageID           = errors.New("list: invalid listImage id")
+	ErrInvalidListImageListID       = errors.New("list: invalid listImage listId")
+	ErrInvalidListImageURL          = errors.New("list: invalid listImage url")
+	ErrInvalidListImageDisplayOrder = errors.New("list: invalid listImage displayOrder")
+	ErrInvalidListImageCreatedAt    = errors.New("list: invalid listImage createdAt")
+	ErrInvalidListImageCreatedBy    = errors.New("list: invalid listImage createdBy")
+	ErrInvalidListImageUpdatedAt    = errors.New("list: invalid listImage updatedAt")
+	ErrInvalidListImageUpdatedBy    = errors.New("list: invalid listImage updatedBy")
+	ErrListImageNotFound            = errors.New("list: listImage not found")
+	ErrListImageConflict            = errors.New("list: listImage conflict")
+)
+
+// Policy
+var (
+	MaxTitleLength       = 200
+	MaxDescriptionLength = 2000
+	MinPrice             = 0
+	MaxPrice             = 10_000_000
+
+	// human-friendly id guard
+	MaxReadableIDLength = 64
+
+	// primary image id guard
+	MaxImageIDLength = 128
+)
+
+// ListPriceRow is the only supported price row shape from frontend.
+//
 // prices: [{ modelId: string, price: number }, ...]
 type ListPriceRow struct {
 	ModelID string `json:"modelId"`
-	Price   int    `json:"price"` // JPY
+	Price   int    `json:"price"`
 }
 
-// List mirrors requested shape.
+// List is the list aggregate root.
 //
-// Firebase Storage 移行後の画像方針:
-// - frontend が Firebase Storage へ直接 upload する
-// - backend は signed URL / GCS bucket / GCS object を扱わない
-// - /lists/{listId}/images/{imageId} の Firestore record に downloadURL / objectPath を保存する
-// - List.ImageID は primary imageId、つまり /lists/{listId}/images/{imageId} の docID
-// - Image URL は query 層で list image record から組み立てる
+// Delete policy:
+// - List deletion is physical deletion.
+// - Backend does not keep DeletedAt / DeletedBy.
+// - Deleted lists are removed from Firestore.
+//
+// Image policy:
+// - Frontend uploads list images directly to Firebase Storage.
+// - Backend does not manage Storage object path, file name, content type, or size.
+// - List.ImageID stores the primary image record id.
+// - Display URL is resolved from ListImage.URL in query / mapper / handler layer.
 type List struct {
 	ID         string     `json:"id,omitempty"`
 	ReadableID string     `json:"readableId,omitempty"`
@@ -29,11 +105,11 @@ type List struct {
 	AssigneeID string `json:"assigneeId,omitempty"`
 	Title      string `json:"title,omitempty"`
 
-	// 1 inventory can have multiple lists (A/B test)
+	// 1 inventory can have multiple lists.
 	InventoryID string `json:"inventoryId,omitempty"`
 
-	// Primary image ID (= /lists/{listId}/images/{imageId} docID)
-	// json tag remains "imageId" for compatibility with existing frontend DTO shape.
+	// Primary image record id.
+	// This is not a URL.
 	ImageID string `json:"imageId,omitempty"`
 
 	Description string         `json:"description,omitempty"`
@@ -44,16 +120,13 @@ type List struct {
 
 	UpdatedBy *string    `json:"updatedBy,omitempty"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy *string    `json:"deletedBy,omitempty"`
 }
 
-// GetID makes List satisfy interfaces like interface{ GetID() string }.
 func (l List) GetID() string {
 	return l.ID
 }
 
-// NewForCreate creates a List for Create flow.
+// NewForCreate creates a List for create flow.
 // - ID can be empty because repository generates it.
 // - CreatedAt can be zero because repository fills it.
 // - ReadableID can be empty.
@@ -75,13 +148,13 @@ func NewForCreate(
 		ID:          "",
 		ReadableID:  "",
 		Status:      status,
-		AssigneeID:  strings.TrimSpace(assigneeID),
-		Title:       strings.TrimSpace(title),
-		InventoryID: strings.TrimSpace(inventoryID),
+		AssigneeID:  assigneeID,
+		Title:       title,
+		InventoryID: inventoryID,
 		ImageID:     "",
-		Description: strings.TrimSpace(description),
+		Description: description,
 		Prices:      normalizePriceRows(prices),
-		CreatedBy:   strings.TrimSpace(createdBy),
+		CreatedBy:   createdBy,
 		CreatedAt:   time.Time{},
 	}
 
@@ -93,7 +166,6 @@ func NewForCreate(
 }
 
 func (l *List) UpdateTitle(title string, now time.Time) error {
-	title = strings.TrimSpace(title)
 	if title == "" || len(title) > MaxTitleLength {
 		return ErrInvalidTitle
 	}
@@ -104,31 +176,29 @@ func (l *List) UpdateTitle(title string, now time.Time) error {
 }
 
 // UpdateReadableID sets human-friendly id.
-// - NOT required to be unique
-// - empty is allowed and means unset
+// - It does not need to be globally unique.
+// - Empty value is allowed and means unset.
 func (l *List) UpdateReadableID(readableID string, now time.Time) error {
 	if l == nil {
 		return nil
 	}
 
-	rid := strings.TrimSpace(readableID)
-	if rid == "" {
+	if readableID == "" {
 		l.ReadableID = ""
 		l.touch(now)
 		return nil
 	}
 
-	if !isValidReadableID(rid) {
+	if !isValidReadableID(readableID) {
 		return ErrInvalidReadableID
 	}
 
-	l.ReadableID = rid
+	l.ReadableID = readableID
 	l.touch(now)
 	return nil
 }
 
 func (l *List) UpdateInventoryID(inventoryID string, now time.Time) error {
-	inventoryID = strings.TrimSpace(inventoryID)
 	if inventoryID == "" {
 		return ErrInvalidInventoryID
 	}
@@ -139,7 +209,6 @@ func (l *List) UpdateInventoryID(inventoryID string, now time.Time) error {
 }
 
 func (l *List) UpdateDescription(desc string, now time.Time) error {
-	desc = strings.TrimSpace(desc)
 	if desc == "" || len(desc) > MaxDescriptionLength {
 		return ErrInvalidDescription
 	}
@@ -161,7 +230,6 @@ func (l *List) ReplacePrices(prices []ListPriceRow, now time.Time) error {
 }
 
 func (l *List) Assign(assigneeID string, now time.Time) error {
-	assigneeID = strings.TrimSpace(assigneeID)
 	if assigneeID == "" {
 		return ErrInvalidAssigneeID
 	}
@@ -183,19 +251,18 @@ func (l *List) Resume(now time.Time) error {
 	return nil
 }
 
-// SetPrimaryImageID sets List.ImageID as primary imageId.
-// - empty is NOT allowed here. Use ClearPrimaryImageID to unset.
+// SetPrimaryImageID sets List.ImageID as primary image record id.
+// Empty value is not allowed here. Use ClearPrimaryImageID to unset.
 func (l *List) SetPrimaryImageID(imageID string, now time.Time) error {
 	if l == nil {
 		return nil
 	}
 
-	id := strings.TrimSpace(imageID)
-	if id == "" {
+	if imageID == "" {
 		return ErrEmptyImageID
 	}
 
-	if !isValidImageID(id) {
+	if !isValidImageID(imageID) {
 		return ErrInvalidImageID
 	}
 
@@ -203,12 +270,11 @@ func (l *List) SetPrimaryImageID(imageID string, now time.Time) error {
 		return ErrInvalidID
 	}
 
-	l.ImageID = id
+	l.ImageID = imageID
 	l.touch(now)
 	return nil
 }
 
-// ClearPrimaryImageID unsets primary image id.
 func (l *List) ClearPrimaryImageID(now time.Time) error {
 	if l == nil {
 		return nil
@@ -225,27 +291,24 @@ func (l *List) ClearPrimaryImageID(now time.Time) error {
 
 // ValidateImageLink checks only if ImageID is set and valid.
 func (l List) ValidateImageLink() error {
-	id := strings.TrimSpace(l.ImageID)
-	if id == "" {
+	if l.ImageID == "" {
 		return ErrEmptyImageID
 	}
 
-	if !isValidImageID(id) {
+	if !isValidImageID(l.ImageID) {
 		return ErrInvalidImageID
 	}
 
 	return nil
 }
 
-// ValidateForCreate validates fields required at Create time.
+// ValidateForCreate validates fields required at create time.
 // - ID can be empty.
 // - CreatedAt can be zero.
 // - ReadableID can be empty.
 // - ImageID can be empty.
 func (l List) ValidateForCreate() error {
-	if l.Status == "" {
-		// allow default
-	} else if !IsValidStatus(l.Status) {
+	if l.Status != "" && !IsValidStatus(l.Status) {
 		return ErrInvalidStatus
 	}
 
@@ -287,14 +350,6 @@ func (l List) ValidateForCreate() error {
 
 	if l.UpdatedBy != nil && *l.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
-	}
-
-	if l.DeletedAt != nil && (!l.CreatedAt.IsZero() && l.DeletedAt.Before(l.CreatedAt)) {
-		return ErrInvalidDeletedAt
-	}
-
-	if l.DeletedBy != nil && *l.DeletedBy == "" {
-		return ErrInvalidDeletedBy
 	}
 
 	return nil
@@ -354,12 +409,233 @@ func (l List) ValidateForPersist() error {
 		return ErrInvalidUpdatedBy
 	}
 
-	if l.DeletedAt != nil && l.DeletedAt.Before(l.CreatedAt) {
-		return ErrInvalidDeletedAt
+	return nil
+}
+
+// ListImage is an image record under:
+//
+// /lists/{listId}/images/{imageId}
+//
+// Image policy:
+// - URL is Firebase Storage getDownloadURL().
+// - Backend persists only the display URL and ordering metadata.
+// - Backend does not manage objectPath, fileName, contentType, or size.
+type ListImage struct {
+	ID           string     `json:"id"`
+	ListID       string     `json:"listId"`
+	URL          string     `json:"url"`
+	DisplayOrder int        `json:"displayOrder"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	CreatedBy    string     `json:"createdBy,omitempty"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy    *string    `json:"updatedBy,omitempty"`
+}
+
+func NewListImage(
+	id string,
+	listID string,
+	u string,
+	displayOrder int,
+	createdAt time.Time,
+	createdBy string,
+) (ListImage, error) {
+	li := ListImage{
+		ID:           id,
+		ListID:       listID,
+		URL:          u,
+		DisplayOrder: displayOrder,
+		CreatedAt:    createdAt.UTC(),
+		CreatedBy:    createdBy,
 	}
 
-	if l.DeletedBy != nil && *l.DeletedBy == "" {
-		return ErrInvalidDeletedBy
+	if err := li.Validate(); err != nil {
+		return ListImage{}, err
+	}
+
+	return li, nil
+}
+
+func (li *ListImage) UpdateURL(u string) error {
+	if err := validateURL(u); err != nil {
+		return err
+	}
+
+	li.URL = u
+	return nil
+}
+
+func (li *ListImage) SetDisplayOrder(order int) error {
+	if order < 0 {
+		return ErrInvalidListImageDisplayOrder
+	}
+
+	li.DisplayOrder = order
+	return nil
+}
+
+func (li *ListImage) Touch(now time.Time, actor string) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	t := now.UTC()
+	li.UpdatedAt = &t
+
+	if actor != "" {
+		li.UpdatedBy = &actor
+	}
+}
+
+func (li ListImage) Validate() error {
+	if li.ID == "" {
+		return ErrInvalidListImageID
+	}
+
+	if strings.Contains(li.ID, "/") || strings.Contains(li.ID, "://") {
+		return ErrInvalidListImageID
+	}
+
+	if li.ListID == "" {
+		return ErrInvalidListImageListID
+	}
+
+	if err := validateURL(li.URL); err != nil {
+		return err
+	}
+
+	if li.DisplayOrder < 0 {
+		return ErrInvalidListImageDisplayOrder
+	}
+
+	if li.CreatedAt.IsZero() {
+		return ErrInvalidListImageCreatedAt
+	}
+
+	if li.CreatedBy == "" {
+		return ErrInvalidListImageCreatedBy
+	}
+
+	if li.UpdatedAt != nil && (li.UpdatedAt.IsZero() || li.UpdatedAt.Before(li.CreatedAt)) {
+		return ErrInvalidListImageUpdatedAt
+	}
+
+	if li.UpdatedBy != nil && *li.UpdatedBy == "" {
+		return ErrInvalidListImageUpdatedBy
+	}
+
+	return nil
+}
+
+func (l *List) touch(now time.Time) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	t := now.UTC()
+	l.UpdatedAt = &t
+}
+
+func normalizePriceRows(in []ListPriceRow) []ListPriceRow {
+	if in == nil {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	out := make([]ListPriceRow, 0, len(in))
+
+	for _, v := range in {
+		if v.ModelID == "" {
+			continue
+		}
+
+		if !priceAllowed(v.Price) {
+			continue
+		}
+
+		if _, ok := seen[v.ModelID]; ok {
+			continue
+		}
+
+		seen[v.ModelID] = struct{}{}
+		out = append(out, ListPriceRow{
+			ModelID: v.ModelID,
+			Price:   v.Price,
+		})
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
+}
+
+func validatePriceRows(rows []ListPriceRow) error {
+	if rows == nil {
+		return nil
+	}
+
+	for _, r := range rows {
+		if r.ModelID == "" {
+			return ErrInvalidPriceModelID
+		}
+
+		if !priceAllowed(r.Price) {
+			return ErrInvalidPrice
+		}
+	}
+
+	return nil
+}
+
+func priceAllowed(v int) bool {
+	return v >= MinPrice && v <= MaxPrice
+}
+
+var readableIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+
+func isValidReadableID(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	if len(s) > MaxReadableIDLength {
+		return false
+	}
+
+	return readableIDRe.MatchString(s)
+}
+
+var imageIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+func isValidImageID(id string) bool {
+	if id == "" {
+		return false
+	}
+
+	if len(id) > MaxImageIDLength {
+		return false
+	}
+
+	if strings.Contains(id, "/") || strings.Contains(id, "://") {
+		return false
+	}
+
+	return imageIDRe.MatchString(id)
+}
+
+func validateURL(u string) error {
+	if u == "" {
+		return ErrInvalidListImageURL
+	}
+
+	pu, err := url.ParseRequestURI(u)
+	if err != nil {
+		return ErrInvalidListImageURL
+	}
+
+	if pu.Scheme == "" || pu.Host == "" {
+		return ErrInvalidListImageURL
 	}
 
 	return nil

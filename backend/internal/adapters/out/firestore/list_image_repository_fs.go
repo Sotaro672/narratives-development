@@ -28,7 +28,6 @@ func (r *ListImageRepositoryFS) listCol(listID string) *gfs.CollectionRef {
 }
 
 var _ usecase.ListImageReader = (*ListImageRepositoryFS)(nil)
-var _ usecase.ListImageByIDReader = (*ListImageRepositoryFS)(nil)
 var _ usecase.ListImageRecordRepository = (*ListImageRepositoryFS)(nil)
 var _ usecase.ListImageRecordByIDReader = (*ListImageRepositoryFS)(nil)
 
@@ -57,32 +56,13 @@ func (r *ListImageRepositoryFS) Upsert(
 		return listdom.ListImage{}, listdom.ErrInvalidListImageID
 	}
 
-	if strings.Contains(imageID, "/") {
+	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
 		return listdom.ListImage{}, usecase.ErrInvalidArgument("invalid_image_id")
-	}
-
-	objectPath := strings.TrimLeft(strings.TrimSpace(img.ObjectPath), "/")
-	if objectPath == "" {
-		return listdom.ListImage{}, listdom.ErrInvalidListImageObjectPath
-	}
-
-	if !isCanonicalFirebaseStorageObjectPath(objectPath, listID, imageID) {
-		return listdom.ListImage{}, usecase.ErrInvalidArgument("objectPath_not_canonical")
-	}
-
-	fileName := strings.TrimSpace(img.FileName)
-	if fileName == "" {
-		return listdom.ListImage{}, listdom.ErrInvalidListImageFileName
 	}
 
 	urlStr := strings.TrimSpace(img.URL)
 	if urlStr == "" {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageURL
-	}
-
-	contentType := strings.ToLower(strings.TrimSpace(img.ContentType))
-	if contentType == "" {
-		contentType = inferImageContentTypeFromFileName(fileName)
 	}
 
 	createdBy := strings.TrimSpace(img.CreatedBy)
@@ -104,14 +84,15 @@ func (r *ListImageRepositoryFS) Upsert(
 		createdAt = createdAt.UTC()
 	}
 
-	updatedAt := img.UpdatedAt
-	if updatedAt.IsZero() {
-		updatedAt = now
-	} else {
-		updatedAt = updatedAt.UTC()
+	updatedAt := now
+	if img.UpdatedAt != nil && !img.UpdatedAt.IsZero() {
+		updatedAt = img.UpdatedAt.UTC()
 	}
 
-	updatedBy := strings.TrimSpace(img.UpdatedBy)
+	updatedBy := ""
+	if img.UpdatedBy != nil {
+		updatedBy = strings.TrimSpace(*img.UpdatedBy)
+	}
 
 	ref := r.listCol(listID).Doc(imageID)
 
@@ -140,11 +121,7 @@ func (r *ListImageRepositoryFS) Upsert(
 			"id":            imageID,
 			"list_id":       listID,
 			"url":           urlStr,
-			"file_name":     fileName,
-			"content_type":  contentType,
-			"size":          img.Size,
 			"display_order": displayOrder,
-			"object_path":   objectPath,
 			"created_at":    finalCreatedAt,
 			"created_by":    finalCreatedBy,
 			"updated_at":    updatedAt,
@@ -161,10 +138,6 @@ func (r *ListImageRepositoryFS) Upsert(
 		imageID,
 		listID,
 		urlStr,
-		objectPath,
-		fileName,
-		contentType,
-		img.Size,
 		displayOrder,
 		createdAt,
 		createdBy,
@@ -173,8 +146,10 @@ func (r *ListImageRepositoryFS) Upsert(
 		return listdom.ListImage{}, err
 	}
 
-	out.UpdatedAt = updatedAt
-	out.UpdatedBy = updatedBy
+	out.UpdatedAt = &updatedAt
+	if updatedBy != "" {
+		out.UpdatedBy = &updatedBy
+	}
 
 	return out, nil
 }
@@ -199,7 +174,7 @@ func (r *ListImageRepositoryFS) Delete(
 		return listdom.ErrInvalidListImageID
 	}
 
-	if strings.Contains(imageID, "/") {
+	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
 		return usecase.ErrInvalidArgument("invalid_image_id")
 	}
 
@@ -298,6 +273,8 @@ func (r *ListImageRepositoryFS) GetByListIDAndID(
 	return img, nil
 }
 
+// GetByID is kept as a best-effort legacy helper.
+// New code should prefer GetByListIDAndID because image records are scoped by listId.
 func (r *ListImageRepositoryFS) GetByID(
 	ctx context.Context,
 	imageID string,
@@ -358,11 +335,7 @@ func decodeListImageDoc(
 		ID           string    `firestore:"id"`
 		ListID       string    `firestore:"list_id"`
 		URL          string    `firestore:"url"`
-		FileName     string    `firestore:"file_name"`
-		ContentType  string    `firestore:"content_type"`
-		Size         int64     `firestore:"size"`
 		DisplayOrder int       `firestore:"display_order"`
-		ObjectPath   string    `firestore:"object_path"`
 		CreatedAt    time.Time `firestore:"created_at"`
 		CreatedBy    string    `firestore:"created_by"`
 		UpdatedAt    time.Time `firestore:"updated_at"`
@@ -391,33 +364,20 @@ func decodeListImageDoc(
 		return listdom.ListImage{}, false
 	}
 
+	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
+		return listdom.ListImage{}, false
+	}
+
 	urlStr := strings.TrimSpace(raw.URL)
 	if urlStr == "" {
-		return listdom.ListImage{}, false
-	}
-
-	fileName := strings.TrimSpace(raw.FileName)
-	if fileName == "" {
-		return listdom.ListImage{}, false
-	}
-
-	contentType := strings.ToLower(strings.TrimSpace(raw.ContentType))
-	if contentType == "" {
-		contentType = inferImageContentTypeFromFileName(fileName)
-	}
-
-	objectPath := strings.TrimLeft(strings.TrimSpace(raw.ObjectPath), "/")
-	if objectPath == "" {
-		objectPath = listdom.CanonicalListImageObjectPath(listID, imageID, fileName)
-	}
-
-	if !isCanonicalFirebaseStorageObjectPath(objectPath, listID, imageID) {
 		return listdom.ListImage{}, false
 	}
 
 	createdAt := raw.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
+	} else {
+		createdAt = createdAt.UTC()
 	}
 
 	createdBy := strings.TrimSpace(raw.CreatedBy)
@@ -425,15 +385,16 @@ func decodeListImageDoc(
 		return listdom.ListImage{}, false
 	}
 
+	displayOrder := raw.DisplayOrder
+	if displayOrder < 0 {
+		displayOrder = 0
+	}
+
 	img, err := listdom.NewListImage(
 		imageID,
 		listID,
 		urlStr,
-		objectPath,
-		fileName,
-		contentType,
-		raw.Size,
-		raw.DisplayOrder,
+		displayOrder,
 		createdAt,
 		createdBy,
 	)
@@ -442,63 +403,14 @@ func decodeListImageDoc(
 	}
 
 	if !raw.UpdatedAt.IsZero() {
-		img.UpdatedAt = raw.UpdatedAt.UTC()
+		updatedAt := raw.UpdatedAt.UTC()
+		img.UpdatedAt = &updatedAt
 	}
 
-	img.UpdatedBy = strings.TrimSpace(raw.UpdatedBy)
+	updatedBy := strings.TrimSpace(raw.UpdatedBy)
+	if updatedBy != "" {
+		img.UpdatedBy = &updatedBy
+	}
 
 	return img, true
-}
-
-func isCanonicalFirebaseStorageObjectPath(
-	objectPath string,
-	listID string,
-	imageID string,
-) bool {
-	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if p == "" || listID == "" || imageID == "" {
-		return false
-	}
-
-	parts := strings.Split(p, "/")
-	if len(parts) != 5 {
-		return false
-	}
-
-	if parts[0] != "lists" {
-		return false
-	}
-
-	if parts[1] != listID {
-		return false
-	}
-
-	if parts[2] != "images" {
-		return false
-	}
-
-	if parts[3] != imageID {
-		return false
-	}
-
-	if parts[4] == "" {
-		return false
-	}
-
-	return true
-}
-
-func inferImageContentTypeFromFileName(fileName string) string {
-	name := strings.ToLower(strings.TrimSpace(fileName))
-
-	switch {
-	case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
-		return "image/jpeg"
-	case strings.HasSuffix(name, ".png"):
-		return "image/png"
-	case strings.HasSuffix(name, ".webp"):
-		return "image/webp"
-	default:
-		return ""
-	}
 }

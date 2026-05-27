@@ -145,6 +145,9 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut, http.MethodPatch:
 		h.update(w, r, id)
 		return
+	case http.MethodDelete:
+		h.delete(w, r, id)
+		return
 	default:
 		listMethodNotAllowed(w)
 		return
@@ -160,7 +163,9 @@ func listIsNotSupported(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	msg := strings.ToLower(err.Error())
+
 	return strings.Contains(msg, "not supported") ||
 		strings.Contains(msg, "not_supported") ||
 		strings.Contains(msg, "notsupported")
@@ -170,10 +175,12 @@ func listParseIntDefault(s string, def int) int {
 	if s == "" {
 		return def
 	}
+
 	n, err := strconv.Atoi(s)
 	if err != nil || n <= 0 {
 		return def
 	}
+
 	return n
 }
 
@@ -333,15 +340,13 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if string(item.Status) == "" {
-		item.Status = listdom.ListStatus("listing")
+		item.Status = listdom.StatusListing
 	}
 
 	now := time.Now().UTC()
 	item.CreatedAt = now
 	item.UpdatedAt = &now
 	item.UpdatedBy = nil
-	item.DeletedAt = nil
-	item.DeletedBy = nil
 
 	created, err := h.uc.Create(ctx, item)
 	if err != nil {
@@ -441,6 +446,39 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
+func (h *ListHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
+		return
+	}
+
+	if err := h.uc.Delete(ctx, id); err != nil {
+		if listIsNotSupported(err) {
+			w.WriteHeader(http.StatusNotImplemented)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			return
+		}
+
+		writeConsoleListErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok": true,
+		"id": id,
+	})
+}
+
 func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -487,12 +525,6 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			f.Statuses = out
-		}
-	}
-
-	if dv := qp.Get("deleted"); dv != "" {
-		if b, err := strconv.ParseBool(dv); err == nil {
-			f.Deleted = &b
 		}
 	}
 
@@ -670,6 +702,11 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 	})
 }
 
+// saveImageFromGCS keeps the historical function name for routing compatibility.
+// Current policy:
+// - frontend uploads images directly to Firebase Storage.
+// - backend receives and stores only the Firebase Storage download URL.
+// - backend does not validate or persist objectPath, fileName, contentType, or size.
 func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
@@ -688,10 +725,6 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 	var req struct {
 		ID           string `json:"id"`
 		URL          string `json:"url"`
-		ObjectPath   string `json:"objectPath"`
-		FileName     string `json:"fileName"`
-		ContentType  string `json:"contentType"`
-		Size         int64  `json:"size"`
 		DisplayOrder int    `json:"displayOrder"`
 		CreatedBy    string `json:"createdBy,omitempty"`
 	}
@@ -704,14 +737,17 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 
 	req.ID = strings.TrimSpace(req.ID)
 	req.URL = strings.TrimSpace(req.URL)
-	req.ObjectPath = strings.TrimLeft(strings.TrimSpace(req.ObjectPath), "/")
-	req.FileName = strings.TrimSpace(req.FileName)
-	req.ContentType = strings.ToLower(strings.TrimSpace(req.ContentType))
 	req.CreatedBy = strings.TrimSpace(req.CreatedBy)
 
 	if req.ID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
+		return
+	}
+
+	if strings.Contains(req.ID, "/") || strings.Contains(req.ID, "://") {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid image id"})
 		return
 	}
 
@@ -721,46 +757,9 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 		return
 	}
 
-	if req.ObjectPath == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "objectPath is required"})
-		return
-	}
-
-	if req.FileName == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "fileName is required"})
-		return
-	}
-
 	if req.DisplayOrder < 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "displayOrder must be >= 0"})
-		return
-	}
-
-	if req.ContentType == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "contentType is required"})
-		return
-	}
-
-	if _, ok := listdom.SupportedImageMIMEs[req.ContentType]; !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unsupported contentType"})
-		return
-	}
-
-	if req.Size > 0 && req.Size > listdom.DefaultMaxImageSizeBytes {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "file too large"})
-		return
-	}
-
-	prefix := "lists/" + listID + "/images/" + req.ID + "/"
-	if !strings.HasPrefix(req.ObjectPath, prefix) {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "objectPath_not_canonical"})
 		return
 	}
 
@@ -772,10 +771,6 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 			ID:           req.ID,
 			ListID:       listID,
 			URL:          req.URL,
-			ObjectPath:   req.ObjectPath,
-			FileName:     req.FileName,
-			ContentType:  req.ContentType,
-			Size:         req.Size,
 			DisplayOrder: req.DisplayOrder,
 			CreatedAt:    now,
 			CreatedBy:    req.CreatedBy,

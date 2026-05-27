@@ -1,4 +1,3 @@
-// backend\internal\application\query\mall\brand_query.go
 package mall
 
 import (
@@ -156,7 +155,6 @@ func (q *BrandQuery) listListingListIDsByInventoryIDs(ctx context.Context, inven
 	const perPage = 200
 
 	listing := listdom.StatusListing
-	notDeleted := false
 
 	seen := make(map[string]struct{})
 	listIDs := make([]string, 0)
@@ -174,7 +172,6 @@ func (q *BrandQuery) listListingListIDsByInventoryIDs(ctx context.Context, inven
 				listdom.Filter{
 					InventoryIDs: []string{inventoryID},
 					Status:       &listing,
-					Deleted:      &notDeleted,
 				},
 				listdom.Sort{},
 				listdom.Page{

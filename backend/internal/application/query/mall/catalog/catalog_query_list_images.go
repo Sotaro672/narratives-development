@@ -16,10 +16,10 @@ import (
 // - sort: displayOrder asc (known first), then id asc
 //
 // Firebase Storage migration policy:
-// - domain/listImage は削除済み
 // - ListImage は domain/list.ListImage を使う
 // - ListImage.URL は Firebase Storage downloadURL
 // - backend は GCS bucket / public URL を組み立てない
+// - backend は objectPath / fileName / size を扱わない
 // ============================================================
 
 // loadListImages returns DTO-ready list images + error string (empty means OK).
@@ -89,12 +89,9 @@ func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto
 
 func toCatalogListImageDTO(img listdom.ListImage) dto.CatalogListImageDTO {
 	return dto.CatalogListImageDTO{
-		ID:         img.ID,
-		ListID:     img.ListID,
-		URL:        img.URL,
-		ObjectPath: img.ObjectPath,
-		FileName:   img.FileName,
-		Size:       img.Size,
+		ID:     img.ID,
+		ListID: img.ListID,
+		URL:    img.URL,
 		DisplayOrder: func() int {
 			if img.DisplayOrder <= 0 {
 				return 0

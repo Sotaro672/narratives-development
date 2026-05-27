@@ -100,8 +100,6 @@ func (h *MallListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	var f ldom.Filter
 	st := ldom.StatusListing
 	f.Status = &st
-	deleted := false
-	f.Deleted = &deleted
 
 	sortCond := ldom.Sort{}
 

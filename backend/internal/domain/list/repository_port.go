@@ -1,4 +1,3 @@
-// backend/internal/domain/list/repository_port.go
 package list
 
 import (
@@ -9,43 +8,57 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// Patch（部分更新）: nil のフィールドは更新しない
+// ListPatch is a partial update input.
+// nil fields are not updated.
 type ListPatch struct {
 	Status *ListStatus
 
 	AssigneeID *string
 	Title      *string
 
-	// ✅ 可読性のあるID（ユニークである必要はない）
-	// nil の場合は readableId を更新しない
+	// Human-friendly id.
+	// It does not need to be globally unique.
+	// nil means readableId is not updated.
 	ReadableID *string
 
-	// ✅ Policy: List.ImageID stores "image URL on bucket" (NOT image entity id)
-	// nil の場合は imageId を更新しない
+	// Primary image record id.
+	// This is not a URL.
+	// nil means imageId is not updated.
 	ImageID *string
 
 	Description *string
 
-	// ✅ prices は配列のみ（フロント標準）
-	// nil の場合は prices を更新しない
+	// prices is the only supported frontend shape:
+	// [{ modelId: string, price: number }, ...]
+	// nil means prices is not updated.
 	Prices *[]ListPriceRow
 
 	UpdatedAt *time.Time
 	UpdatedBy *string
-	DeletedAt *time.Time
-	DeletedBy *string
 }
 
-// フィルタ/検索条件（実装側で適宜解釈）
+// ListImagePatch is a partial update input for list image records.
+// nil fields are not updated.
+type ListImagePatch struct {
+	URL          *string
+	DisplayOrder *int
+
+	UpdatedAt *time.Time
+	UpdatedBy *string
+}
+
+// Filter is the query condition for List repository.
 //
 // NOTE:
-// - 旧命名互換のため ModelNumbers を残しているが、ここでの意味は「modelId の集合」。
-// - 価格条件は Prices[] の (modelId, price) に対して適用される。
+// - ModelNumbers remains for backward compatibility.
+// - Its actual meaning is modelId collection.
+// - Price conditions are applied to Prices[] rows.
 type Filter struct {
-	// フリーテキスト（id, readableId, title, description 等の部分一致などは実装側で解釈）
+	// Free text search.
+	// Implementation may interpret this as partial match against id,
+	// readableId, title, description, etc.
 	SearchQuery string
 
-	// 絞り込み
 	IDs         []string
 	ReadableIDs []string
 
@@ -53,67 +66,89 @@ type Filter struct {
 	Status     *ListStatus
 	Statuses   []ListStatus
 
-	// 価格条件
-	// - ModelNumbers: 対象 modelId の集合（旧名互換）
-	// - MinPrice/MaxPrice: price の閾値
+	// Price conditions.
 	ModelNumbers []string
 	MinPrice     *int
 	MaxPrice     *int
 
-	// ✅ 追加: inventoryId 単位の絞り込み
+	// Filter by inventory ids.
 	InventoryIDs []string
-
-	// 論理削除の tri-state（nil: 全件 / true: 削除済のみ / false: 未削除のみ）
-	Deleted *bool
 }
 
-// 共通型エイリアス（インフラ非依存）
+// ListImageFilter is the query condition for ListImage repository.
+type ListImageFilter struct {
+	ListID  *string
+	ListIDs []string
+
+	IDs []string
+	URL *string
+}
+
+// Common type aliases.
 type Sort = common.Sort
 type SortOrder = common.SortOrder
 type Page = common.Page
 type PageResult[T any] = common.PageResult[T]
 type CursorPage = common.CursorPage
 type CursorPageResult[T any] = common.CursorPageResult[T]
-type SaveOptions = common.SaveOptions
 
 const (
 	SortAsc  = common.SortAsc
 	SortDesc = common.SortDesc
 )
 
-// 契約上の代表的エラー
+// Contract errors.
 var (
 	ErrNotFound = errors.New("list: not found")
 	ErrConflict = errors.New("list: conflict")
 )
 
-// Repository ポート（契約）
+// Repository is the repository port for List aggregate root.
 type Repository interface {
-	// 一覧取得
+	// List query.
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[List], error)
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[List], error)
 
-	// ✅ NEW: 件数取得（ページング用）
-	// - filter は List と同じ解釈
-	// - sort/page は不要（Count は全件数）
+	// Count for pagination.
+	// The filter interpretation must be same as List.
 	Count(ctx context.Context, filter Filter) (int, error)
 
-	// 取得
+	// Read.
 	GetByID(ctx context.Context, id string) (List, error)
-	Exists(ctx context.Context, id string) (bool, error)
 
-	// ✅ NEW: 軽量 getter（best-effort用途）
-	// listId から readableId のみ返す
+	// Lightweight getters.
 	GetReadableIDByID(ctx context.Context, id string) (string, error)
-
-	// ✅ NEW: inventoryId から listId 一覧のみ返す軽量 getter
 	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)
 
-	// 変更
+	// Write.
 	Create(ctx context.Context, l List) (List, error)
 	Update(ctx context.Context, id string, patch ListPatch) (List, error)
-	Delete(ctx context.Context, id string) error
 
-	// 任意: Upsert 等
-	Save(ctx context.Context, l List, opts *SaveOptions) (List, error)
+	// Delete physically deletes a list document.
+	// Implementations may also delete child image records if the storage supports subcollections.
+	Delete(ctx context.Context, id string) error
+}
+
+// ImageRepository is the repository port for list image records.
+//
+// Image policy:
+// - Backend stores only Firebase Storage download URL.
+// - Backend does not manage objectPath, fileName, contentType, or size.
+// - Image record is scoped by listId.
+// - imageID alone should not be used as a global lookup key.
+type ImageRepository interface {
+	// Query.
+	ListByListID(ctx context.Context, listID string) ([]ListImage, error)
+	List(ctx context.Context, filter ListImageFilter, sort Sort, page Page) (PageResult[ListImage], error)
+	Count(ctx context.Context, filter ListImageFilter) (int, error)
+
+	// Read.
+	GetByListIDAndID(ctx context.Context, listID string, imageID string) (ListImage, error)
+
+	// Write.
+	Create(ctx context.Context, img ListImage) (ListImage, error)
+	Update(ctx context.Context, listID string, imageID string, patch ListImagePatch) (ListImage, error)
+
+	// Delete physically deletes a list image record.
+	Delete(ctx context.Context, listID string, imageID string) error
 }
