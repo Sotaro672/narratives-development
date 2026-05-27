@@ -317,32 +317,6 @@ func (u *TokenBlueprintQueryUsecase) ResolveMemberNames(
 	return out, nil
 }
 
-func (u *TokenBlueprintQueryUsecase) GetByIDWithCreatorName(
-	ctx context.Context,
-	id string,
-) (*tbdom.TokenBlueprint, string, error) {
-	if u == nil || u.tbRepo == nil {
-		return nil, "", fmt.Errorf("tokenBlueprint query usecase/repo is nil")
-	}
-
-	tid := id
-
-	tb, err := u.tbRepo.GetByID(ctx, tid)
-	if err != nil {
-		return nil, "", err
-	}
-	if tb == nil {
-		return nil, "", tbdom.ErrNotFound
-	}
-
-	memberID := tb.CreatedBy
-	if memberID == "" || u.nameResolver == nil {
-		return tb, "", nil
-	}
-
-	return tb, u.nameResolver.ResolveMemberName(ctx, memberID), nil
-}
-
 func (u *TokenBlueprintQueryUsecase) GetByIDWithMemberNames(
 	ctx context.Context,
 	id string,
@@ -670,17 +644,6 @@ func (u *TokenBlueprintUsecase) GetByID(
 	}
 
 	return u.crud.GetByID(ctx, id)
-}
-
-func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
-	ctx context.Context,
-	id string,
-) (*tbdom.TokenBlueprint, string, error) {
-	if u == nil || u.query == nil {
-		return nil, "", fmt.Errorf("tokenBlueprint usecase/query is nil")
-	}
-
-	return u.query.GetByIDWithCreatorName(ctx, id)
 }
 
 func (u *TokenBlueprintUsecase) GetByIDWithMemberNames(
