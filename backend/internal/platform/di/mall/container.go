@@ -24,7 +24,6 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
-	productbpdom "narratives/internal/domain/productBlueprint"
 	tokenBlueprint_review "narratives/internal/domain/tokenBlueprint_review"
 
 	shared "narratives/internal/platform/di/shared"
@@ -168,7 +167,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	productBlueprintReviewRepo := outfs.NewProductBlueprintReviewRepositoryFS(fsClient)
 
 	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
-	productBlueprintSvc := productbpdom.NewService(productBlueprintRepoFS)
 
 	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
 
@@ -317,7 +315,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		historyModelResolver := mallquery.NewHistoryModelResolver(modelRepoFS)
 		c.HistoryQ = mallquery.NewHistoryQuery(
 			inventoryRepo,
-			productBlueprintSvc,
+			productBlueprintRepoFS,
 			tokenBlueprintRepo,
 			brandSvc,
 			historyModelResolver,

@@ -8,6 +8,7 @@ import (
 	historydto "narratives/internal/application/query/mall/dto"
 
 	branddom "narratives/internal/domain/brand"
+	pbdom "narratives/internal/domain/productBlueprint"
 	tokenbpdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -36,13 +37,15 @@ type HistoryInventoryBlueprintResolver interface {
 // HistoryProductBlueprintResolver resolves product display base data
 // from productBlueprintId.
 //
-// Concrete implementation can be productBlueprint.Service because it has:
+// Concrete implementation can be productBlueprint.Repository because it has:
 //
-//	GetProductNameByID(ctx, productBlueprintID)
-//	GetBrandIDByID(ctx, productBlueprintID)
+//	GetByID(ctx, productBlueprintID)
+//
+// ProductBlueprint provides:
+// - ProductName
+// - BrandID
 type HistoryProductBlueprintResolver interface {
-	GetProductNameByID(ctx context.Context, id string) (string, error)
-	GetBrandIDByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
 // HistoryTokenBlueprintResolver resolves token display base data
@@ -333,17 +336,12 @@ func (q *HistoryQuery) ResolveProductBlueprintInfo(
 		return "", "", nil
 	}
 
-	name, nameErr := q.productBlueprintResolver.GetProductNameByID(ctx, id)
-	if nameErr != nil {
-		return "", "", nameErr
+	pb, pbErr := q.productBlueprintResolver.GetByID(ctx, id)
+	if pbErr != nil {
+		return "", "", pbErr
 	}
 
-	bid, brandErr := q.productBlueprintResolver.GetBrandIDByID(ctx, id)
-	if brandErr != nil {
-		return "", "", brandErr
-	}
-
-	return strings.TrimSpace(name), strings.TrimSpace(bid), nil
+	return strings.TrimSpace(pb.ProductName), strings.TrimSpace(pb.BrandID), nil
 }
 
 func (q *HistoryQuery) ResolveTokenBlueprintInfo(
@@ -593,6 +591,7 @@ func cloneHistoryOrders(in []historydto.HistoryOrder) []historydto.HistoryOrder 
 
 	return out
 }
+
 func applyResolvedModelToItem(
 	item *historydto.HistoryOrderItem,
 	resolved historydto.HistoryResolvedModel,

@@ -8,6 +8,7 @@ import (
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 	modeldom "narratives/internal/domain/model"
+	pbdom "narratives/internal/domain/productBlueprint"
 )
 
 // ------------------------------------------------------------
@@ -24,9 +25,9 @@ type CompanyNameRepository interface {
 	GetByID(ctx context.Context, id string) (companydom.Company, error)
 }
 
-// ProductBlueprint → productName だけ取得できればよい
+// ProductBlueprint の取得に必要な最小限のインターフェース
 type ProductBlueprintNameRepository interface {
-	GetProductNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
 // Member → Firebase UID から氏名取得できればよい
@@ -166,11 +167,11 @@ func (r *NameResolver) ResolveProductName(ctx context.Context, productBlueprintI
 		return ""
 	}
 
-	name, err := r.productBlueprintRepo.GetProductNameByID(ctx, id)
+	pb, err := r.productBlueprintRepo.GetByID(ctx, id)
 	if err != nil {
 		return ""
 	}
-	return name
+	return pb.ProductName
 }
 
 // ------------------------------------------------------------

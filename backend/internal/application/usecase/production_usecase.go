@@ -7,6 +7,7 @@ import (
 	"time"
 
 	resolver "narratives/internal/application/resolver"
+	pbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
 
@@ -85,7 +86,7 @@ type ProductionRepo interface {
 }
 
 type ProductBlueprintService interface {
-	GetBrandIDByID(ctx context.Context, blueprintID string) (string, error)
+	GetByID(ctx context.Context, blueprintID string) (pbpdom.ProductBlueprint, error)
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 }
 

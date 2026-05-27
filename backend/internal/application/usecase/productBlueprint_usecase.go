@@ -42,7 +42,6 @@ func NewProductBlueprintUsecase(
 type ProductBlueprintRepo interface {
 	// Read (single)
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
-	Exists(ctx context.Context, id string) (bool, error)
 
 	// Read (multi) - company スコープ必須
 	ListByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
@@ -87,13 +86,6 @@ func (u *ProductBlueprintUsecase) GetByID(
 	id string,
 ) (productbpdom.ProductBlueprint, error) {
 	return u.repo.GetByID(ctx, id)
-}
-
-func (u *ProductBlueprintUsecase) Exists(
-	ctx context.Context,
-	id string,
-) (bool, error) {
-	return u.repo.Exists(ctx, id)
 }
 
 // ListByCompanyID は handler 側の GET /product-blueprints から利用される一覧取得。
@@ -279,6 +271,32 @@ func (u *ProductBlueprintUsecase) Update(
 	}
 
 	return updated, nil
+}
+
+// Delete physically deletes a ProductBlueprint.
+func (u *ProductBlueprintUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
+	if id == "" {
+		return productbpdom.ErrInvalidID
+	}
+
+	cid := CompanyIDFromContext(ctx)
+	if cid == "" {
+		return productbpdom.ErrInvalidCompanyID
+	}
+
+	current, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if current.CompanyID == "" || current.CompanyID != cid {
+		return productbpdom.ErrForbidden
+	}
+
+	return u.repo.Delete(ctx, id)
 }
 
 // ------------------------------------------------------------

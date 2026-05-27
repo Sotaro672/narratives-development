@@ -1,7 +1,6 @@
 // frontend/console/mintRequest/src/application/mapper/mintRequestRowMapper.ts
 //
 // Query DTO（MintRequestQueryService /mint/requests）専用版
-// - legacy/join（inspections + mints + productions）を廃止
 // - productionId = inspectionId の前提で productionId を正とする
 // - id / inspectionId / subdoc fallback は扱わない
 // - presentation 専用の statusLabel は作らない

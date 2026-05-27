@@ -59,9 +59,10 @@ type InventoryBlueprintResolver interface {
 	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
-// ✅ productBlueprintId -> productName（best-effort）
+// ✅ productBlueprintId -> ProductBlueprint（best-effort）
+// productName を取得するために使う。
 type ProductBlueprintNameResolver interface {
-	GetProductNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
 // ✅ productBlueprintId -> ProductBlueprint（best-effort）
@@ -299,10 +300,13 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if v, ok := pbNameCache[pbID]; ok {
 			return v, nil
 		}
-		name, e := q.pbName.GetProductNameByID(ctx, pbID)
+
+		pb, e := q.pbName.GetByID(ctx, pbID)
 		if e != nil {
 			return "", e
 		}
+
+		name := pb.ProductName
 		pbNameCache[pbID] = name
 		return name, nil
 	}
@@ -500,7 +504,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				if pbID != "" {
 					n, e3 := resolveProductName(pbID)
 					if e3 != nil {
-						log.Printf("[OrderManagementQuery] ERROR GetProductNameByID failed productBlueprintId=%q err=%v", pbID, e3)
+						log.Printf("[OrderManagementQuery] ERROR ProductBlueprint.GetByID failed productBlueprintId=%q err=%v", pbID, e3)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, e3
 					}
 					productName = n

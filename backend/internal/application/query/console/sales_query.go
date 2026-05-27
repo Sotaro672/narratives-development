@@ -10,6 +10,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	common "narratives/internal/domain/common"
 	productdom "narratives/internal/domain/product"
+	pbdom "narratives/internal/domain/productBlueprint"
 	tokendom "narratives/internal/domain/token"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 	walletdom "narratives/internal/domain/wallet"
@@ -65,7 +66,7 @@ type productReader interface {
 
 type productBlueprintReader interface {
 	GetIDByModelID(ctx context.Context, modelID string) (string, error)
-	GetProductNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
 type walletAddressByMintReader interface {
@@ -290,7 +291,7 @@ func (q *SalesQuery) resolveProductBlueprints(
 			continue
 		}
 
-		productName, err := q.productBlueprintRepo.GetProductNameByID(ctx, productBlueprintID)
+		productBlueprint, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
 		if err != nil {
 			continue
 		}
@@ -298,7 +299,7 @@ func (q *SalesQuery) resolveProductBlueprints(
 		seenProductBlueprintIDs[productBlueprintID] = struct{}{}
 		productBlueprints = append(productBlueprints, SalesProductBlueprint{
 			ProductBlueprintID: productBlueprintID,
-			ProductName:        productName,
+			ProductName:        productBlueprint.ProductName,
 		})
 	}
 

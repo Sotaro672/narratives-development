@@ -109,8 +109,7 @@ type Filter struct {
 	ProductBlueprintCategoryCodes []string
 	ProductBlueprintCategoryKinds []string
 
-	TagTypes    []ProductIDTagType
-	OnlyDeleted bool
+	TagTypes []ProductIDTagType
 }
 
 type Page struct {
@@ -134,14 +133,8 @@ type Repository interface {
 	// Read (live)
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 
-	// ★ 追加: productBlueprintId から brandId だけを取得するヘルパ
-	GetBrandIDByID(ctx context.Context, id string) (string, error)
-
 	// ★ 追加: brandId から productBlueprint の ID 一覧を取得するヘルパ
 	ListIDsByBrandID(ctx context.Context, brandID string) ([]string, error)
-
-	// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
-	GetProductNameByID(ctx context.Context, id string) (string, error)
 
 	// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
 	GetIDByModelID(ctx context.Context, modelID string) (string, error)
@@ -156,12 +149,11 @@ type Repository interface {
 	// companyId 単位で productBlueprint の ID 一覧を取得
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 
-	// 存在確認（adapter の Exists を port に昇格）
-	Exists(ctx context.Context, id string) (bool, error)
-
 	// Write (live)
 	Create(ctx context.Context, in CreateInput) (ProductBlueprint, error)
 	Update(ctx context.Context, id string, patch Patch) (ProductBlueprint, error)
+
+	// Delete physically removes a ProductBlueprint by ID.
 	Delete(ctx context.Context, id string) error
 
 	// ★ 追加: ProductBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する

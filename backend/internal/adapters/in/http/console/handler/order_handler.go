@@ -14,6 +14,7 @@ import (
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
+	pbdom "narratives/internal/domain/productBlueprint"
 )
 
 // ============================================================
@@ -27,7 +28,7 @@ type InventoryBlueprintResolver interface {
 
 // ProductBlueprintNameResolver resolves productName from productBlueprintId.
 type ProductBlueprintNameResolver interface {
-	GetProductNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
 // TokenBlueprintNameResolver resolves tokenName from tokenBlueprintId.
@@ -163,10 +164,13 @@ func toOrderResponseDTO(
 		if v, ok := pbNameCache[id]; ok {
 			return v
 		}
-		name, err := pbName.GetProductNameByID(ctx, id)
+
+		pb, err := pbName.GetByID(ctx, id)
 		if err != nil {
 			return ""
 		}
+
+		name := pb.ProductName
 		pbNameCache[id] = name
 		return name
 	}

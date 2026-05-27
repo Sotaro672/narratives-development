@@ -54,7 +54,7 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		id := strings.Trim(trimmed, "/")
 		h.appendModelRefs(w, r, id)
 
-	// 重要：suffix 付きルート（/history /restore /model-refs）より後に置く
+	// 重要：suffix 付きルート（/model-refs）より後に置く
 	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
 		strings.HasPrefix(path, "/product-blueprints/"):
 		id := strings.TrimPrefix(path, "/product-blueprints/")
@@ -237,43 +237,8 @@ type ProductBlueprintDetailOutput struct {
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 
-	// 論理削除は廃止済みだが、旧レスポンス互換が必要な箇所がある場合に備えて残す。
-	DeletedAt string `json:"deletedAt,omitempty"`
-
 	// modelRefs（model docId + displayOrder）
 	ModelRefs []ModelRefOutput `json:"modelRefs,omitempty"`
-}
-
-// ---------------------------------------------------
-// GET /product-blueprints/deleted
-// ---------------------------------------------------
-//
-// 論理削除一覧は廃止済み。
-// 型だけ残す場合は旧ハンドラ互換用。
-// ---------------------------------------------------
-
-type ProductBlueprintDeletedListOutput struct {
-	ID          string `json:"id"`
-	ProductName string `json:"productName"`
-	BrandId     string `json:"brandId"`
-	AssigneeId  string `json:"assigneeId"`
-	DeletedAt   string `json:"deletedAt"`
-	ExpireAt    string `json:"expireAt"`
-}
-
-// ---------------------------------------------------
-// GET /product-blueprints/{id}/history
-// ---------------------------------------------------
-
-type ProductBlueprintHistoryOutput struct {
-	ID          string  `json:"id"`
-	ProductName string  `json:"productName"`
-	BrandId     string  `json:"brandId"`
-	AssigneeId  string  `json:"assigneeId"`
-	UpdatedAt   string  `json:"updatedAt"`
-	UpdatedBy   *string `json:"updatedBy,omitempty"`
-	DeletedAt   string  `json:"deletedAt,omitempty"`
-	ExpireAt    string  `json:"expireAt,omitempty"`
 }
 
 // ---------------------------------------------------
@@ -442,16 +407,22 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 // ---------------------------------------------------
 // DELETE /product-blueprints/{id}
 // ---------------------------------------------------
-//
-// 論理削除を廃止したため、このエンドポイントは未提供。
-// ---------------------------------------------------
 
 func (h *ProductBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	_ = r
-	_ = id
 
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "delete endpoint is not supported"})
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	if err := h.uc.Delete(r.Context(), id); err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ---------------------------------------------------

@@ -9,7 +9,6 @@ import type { InspectionStatus } from "../../domain/entity/inspections";
  * - productions / inspections / mints の docId はすべて同一
  * - productionId を正とする
  * - id / inspectionId / mintId は主キーとして扱わない
- * - 名揺れ / fallback / legacy subdoc は扱わない
  */
 export type MintRequestManagementRowDTO = {
   productionId: string;

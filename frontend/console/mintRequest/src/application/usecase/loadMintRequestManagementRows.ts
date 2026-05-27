@@ -41,7 +41,7 @@ export type ViewRow = {
 };
 
 // ============================================================
-// Strict helpers (NO legacy / old-compat fields)
+// Strict helpers
 // ============================================================
 
 function normalizeInspectionStatus(v: unknown): InspectionStatus {

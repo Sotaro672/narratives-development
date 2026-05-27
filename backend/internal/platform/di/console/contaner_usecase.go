@@ -127,7 +127,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	productionUC := uc.NewProductionUsecase(
 		r.productionRepo,
-		s.pbSvc,
+		r.productBlueprintRepo,
 		res.nameResolver,
 	)
 

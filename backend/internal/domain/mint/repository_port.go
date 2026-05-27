@@ -46,12 +46,12 @@ type MintRepository interface {
 // （MintUsecase から利用される最小限のインターフェース群）
 // ============================================================
 
-// MintProductBlueprintRepo は productBlueprintId から productName / Patch を解決するための最小ポートです。
+// MintProductBlueprintRepo は productBlueprintId から ProductBlueprint / Patch を解決するための最小ポートです。
 type MintProductBlueprintRepo interface {
-	// GetProductNameByID:
-	// - productBlueprintId から productName だけを取得します。
-	// - 実装例: ProductBlueprintRepositoryFS.GetProductNameByID
-	GetProductNameByID(ctx context.Context, id string) (string, error)
+	// GetByID:
+	// - productBlueprintId から ProductBlueprint を取得します。
+	// - ProductName / BrandID などの基本情報は取得結果から参照します。
+	GetByID(ctx context.Context, id string) (pbpdom.ProductBlueprint, error)
 
 	// GetPatchByID:
 	// - productBlueprintId から Patch 全体を取得します。
