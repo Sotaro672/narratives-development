@@ -37,10 +37,6 @@ type InventoryUpserter interface {
 	) (invdom.Mint, error)
 }
 
-type TokenBlueprintBucketEnsurer interface {
-	EnsureKeepObjects(ctx context.Context, tokenBlueprintID string) error
-}
-
 type TokenBlueprintMetadataEnsurer interface {
 	EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
 }
@@ -88,7 +84,6 @@ type MintUsecase struct {
 	inspRepo  mintdom.MintInspectionRepo
 	modelRepo mintdom.MintModelRepo
 
-	tbBucketEnsurer   TokenBlueprintBucketEnsurer
 	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
 	tbMintMarker      TokenBlueprintMintMarker
 
@@ -131,7 +126,6 @@ func NewMintUsecase(
 		mintResultMapper:    NewMintResultMapper(),
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
-		tbBucketEnsurer:     nil,
 		tbMetadataEnsurer:   nil,
 		tbMintMarker:        nil,
 		inventoryUC:         nil,
@@ -174,61 +168,56 @@ func (u *MintUsecase) UpdateRequestInfo(
 	productionID string,
 	tokenBlueprintID string,
 	scheduledBurnDate *string,
-) (inspectiondom.InspectionBatch, error) {
-	var empty inspectiondom.InspectionBatch
-
+) (*tokendom.MintResult, error) {
 	if u == nil {
-		return empty, errors.New("mint usecase is nil")
-	}
-	if u.inspRepo == nil {
-		return empty, errors.New("inspection repo is nil")
+		return nil, errors.New("mint usecase is nil")
 	}
 	if u.mintRepo == nil {
-		return empty, errors.New("mint repo is nil")
+		return nil, errors.New("mint repo is nil")
 	}
 	if u.passedProductLister == nil {
-		return empty, errors.New("passedProductLister is nil")
+		return nil, errors.New("passedProductLister is nil")
 	}
 	if u.tbRepo == nil {
-		return empty, errors.New("tokenBlueprint repo is nil")
+		return nil, errors.New("tokenBlueprint repo is nil")
 	}
 
 	pid := productionID
 	if pid == "" {
-		return empty, errors.New("productionID is empty")
+		return nil, errors.New("productionID is empty")
 	}
 
 	tbID := tokenBlueprintID
 	if tbID == "" {
-		return empty, errors.New("tokenBlueprintID is empty")
+		return nil, errors.New("tokenBlueprintID is empty")
 	}
 
 	memberID := MemberIDFromContext(ctx)
 	if memberID == "" {
-		return empty, errors.New("memberID not found in context")
+		return nil, errors.New("memberID not found in context")
 	}
 
 	now := time.Now().UTC()
 
 	tb, err := u.tbRepo.GetByID(ctx, tbID)
 	if err != nil {
-		return empty, err
+		return nil, err
 	}
 	if tb == nil {
-		return empty, errors.New("tokenBlueprint not found")
+		return nil, errors.New("tokenBlueprint not found")
 	}
 
 	brandID := tb.BrandID
 	if brandID == "" {
-		return empty, errors.New("brandID is empty on tokenBlueprint")
+		return nil, errors.New("brandID is empty on tokenBlueprint")
 	}
 
 	passedProductIDs, err := u.passedProductLister.ListPassedProductIDsByProductionID(ctx, pid)
 	if err != nil {
-		return empty, err
+		return nil, err
 	}
 	if len(passedProductIDs) == 0 {
-		return empty, errors.New("no passed products for this production")
+		return nil, errors.New("no passed products for this production")
 	}
 
 	mintEntity, err := mintdom.NewMint(
@@ -240,7 +229,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 		now,
 	)
 	if err != nil {
-		return empty, err
+		return nil, err
 	}
 
 	mintEntity.ID = pid
@@ -251,7 +240,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 		if s := *scheduledBurnDate; s != "" {
 			t, err := time.ParseInLocation("2006-01-02", s, time.UTC)
 			if err != nil {
-				return empty, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
+				return nil, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
 			}
 			utc := t.UTC()
 			mintEntity.ScheduledBurnDate = &utc
@@ -259,12 +248,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	if _, err := u.mintRepo.Create(ctx, mintEntity); err != nil {
-		return empty, err
-	}
-
-	batch, err := u.inspRepo.GetByProductionID(ctx, pid)
-	if err != nil {
-		return empty, err
+		return nil, err
 	}
 
 	if u.tokenMinter == nil {
@@ -274,7 +258,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 			tbID,
 		)
 
-		return batch, errors.New("token minter is not configured")
+		return nil, errors.New("token minter is not configured")
 	}
 
 	result, err := u.MintFromMintRequest(ctx, pid)
@@ -286,7 +270,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 			err,
 		)
 
-		return batch, fmt.Errorf("onchain mint failed after mint request was created: %w", err)
+		return nil, fmt.Errorf("onchain mint failed after mint request was created: %w", err)
 	}
 
 	if result == nil {
@@ -296,7 +280,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 			tbID,
 		)
 
-		return batch, errors.New("onchain mint returned nil result")
+		return nil, errors.New("onchain mint returned nil result")
 	}
 
 	log.Printf(
@@ -307,7 +291,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 		result.MintAddress,
 	)
 
-	return batch, nil
+	return result, nil
 }
 
 func (u *MintUsecase) ListMintsByProductionIDs(
@@ -545,12 +529,6 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	if mintEnt.Minted {
 		result = u.mintResultMapper.FromMint(*mintEnt)
 	} else {
-		if u.tbBucketEnsurer != nil {
-			if err := u.tbBucketEnsurer.EnsureKeepObjects(ctx, tbID); err != nil {
-				return nil, err
-			}
-		}
-
 		if u.tbMetadataEnsurer == nil {
 			return nil, fmt.Errorf("tokenBlueprint metadata ensurer is nil")
 		}
