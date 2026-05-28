@@ -42,7 +42,6 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 		u.productionUC,
 		res.nameResolver,
 	)
-	mintRequestQueryService.SetModelRepo(r.modelRepo)
 
 	inventoryQuery := companyquery.NewInventoryQueryWithTokenBlueprintPatch(
 		r.inventoryRepo,

@@ -6,9 +6,6 @@ import {
   buildInspectionResultCardData,
   getInspectionModelIds,
   getMissingModelIds,
-} from "../../application/mapper/buildInspectionResultCardData";
-
-import type {
   InspectionBatchForCard,
   InspectionResultRow,
 } from "../../application/mapper/buildInspectionResultCardData";
