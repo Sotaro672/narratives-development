@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\console\handler\mint_handler.go
 package consoleHandler
 
 import (
@@ -27,21 +28,6 @@ type MintRequestQueryService interface {
 	) ([]querydto.ProductionInspectionMintDTO, error)
 
 	GetMintRequestDetail(ctx context.Context, productionID string) (*querydto.MintRequestDetailDTO, error)
-
-	ListMintListRowsByProductionIDs(
-		ctx context.Context,
-		productionIDs []string,
-	) (map[string]querydto.MintListRowDTO, error)
-
-	ListMintDTOsByProductionIDs(
-		ctx context.Context,
-		productionIDs []string,
-	) (map[string]querydto.MintDTO, error)
-
-	GetMintByProductionID(
-		ctx context.Context,
-		productionID string,
-	) (*querydto.MintDTO, error)
 
 	GetProductBlueprintPatchForMint(
 		ctx context.Context,
@@ -97,20 +83,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getMintRequestDetailByProductionID(w, r)
 		return
 
-	case r.Method == http.MethodGet && r.URL.Path == "/mint/mints":
-		h.listMintsByInspectionIDs(w, r)
-		return
-
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(r.URL.Path, "/mint/mints/") &&
-		strings.HasSuffix(r.URL.Path, "/execute"):
-		h.executeMintByInspectionID(w, r)
-		return
-
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/mint/mints/"):
-		h.getMintByID(w, r)
-		return
-
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
 		strings.HasSuffix(r.URL.Path, "/mint"):
@@ -140,35 +112,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
-}
-
-func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.mintUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
-		return
-	}
-
-	path := strings.TrimPrefix(r.URL.Path, "/mint/mints/")
-	path = strings.TrimSuffix(path, "/execute")
-	inspectionID := strings.Trim(path, "/")
-
-	if inspectionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inspectionId is empty"})
-		return
-	}
-
-	result, err := h.mintUC.MintFromMintRequest(ctx, inspectionID)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, r *http.Request) {
@@ -324,88 +267,6 @@ func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *h
 	}
 
 	_ = json.NewEncoder(w).Encode(batches)
-}
-
-func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
-		return
-	}
-
-	raw := r.URL.Query().Get("inspectionIds")
-	if raw == "" {
-		_ = json.NewEncoder(w).Encode(map[string]any{})
-		return
-	}
-
-	ids := parseCommaSeparatedIDs(raw)
-	if len(ids) == 0 {
-		_ = json.NewEncoder(w).Encode(map[string]any{})
-		return
-	}
-
-	view := r.URL.Query().Get("view")
-	if view == "" {
-		view = "list"
-	}
-
-	if view != "dto" {
-		out, err := h.mintRequestQS.ListMintListRowsByProductionIDs(ctx, ids)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(out)
-		return
-	}
-
-	out, err := h.mintRequestQS.ListMintDTOsByProductionIDs(ctx, ids)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
-}
-
-func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
-		return
-	}
-
-	id := strings.TrimPrefix(r.URL.Path, "/mint/mints/")
-	id = strings.Trim(id, "/")
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is empty"})
-		return
-	}
-
-	out, err := h.mintRequestQS.GetMintByProductionID(ctx, id)
-	if err != nil {
-		if errors.Is(err, mintdom.ErrNotFound) ||
-			strings.Contains(strings.ToLower(err.Error()), "not found") {
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint not found"})
-			return
-		}
-
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
 }
 
 func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
