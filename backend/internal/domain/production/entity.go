@@ -135,13 +135,6 @@ func (p *Production) MarkPrinted(at time.Time) error {
 	return nil
 }
 
-// ResetToUnprinted: printed(true) -> unprinted(false) (clears timestamps)
-func (p *Production) ResetToUnprinted() {
-	p.Printed = false
-	p.PrintedAt = nil
-	p.PrintedBy = nil
-}
-
 // ===== Validation =====
 
 func (p Production) validate() error {

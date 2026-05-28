@@ -250,24 +250,6 @@ func (u *ProductionUsecase) GetByID(ctx context.Context, id string) (productiond
 	return *p, nil
 }
 
-func (u *ProductionUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	_, err := u.repo.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, productiondom.ErrNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (u *ProductionUsecase) List(ctx context.Context) ([]productiondom.Production, error) {
-	if u.listQuery == nil {
-		return nil, errors.New("internal: ProductionUsecase.listQuery is not configured")
-	}
-	return u.listQuery.ListProductionsByCurrentCompany(ctx)
-}
-
 func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]ProductionListItemDTO, error) {
 	if u.listQuery == nil {
 		return nil, errors.New("internal: ProductionUsecase.listQuery is not configured")

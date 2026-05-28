@@ -93,19 +93,16 @@ func (r *ProductionRepositoryFS) Create(
 
 	now := time.Now().UTC()
 
-	// CreatedAt の決定
 	createdAt := now
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
 		createdAt = in.CreatedAt.UTC()
 	}
 
-	// Printed の決定（nil -> false）
 	printed := false
 	if in.Printed != nil {
 		printed = *in.Printed
 	}
 
-	// PrintedAt の決定（printed=true の場合は必須扱いなので補完）
 	var printedAt *time.Time
 	if printed {
 		if in.PrintedAt != nil && !in.PrintedAt.IsZero() {
@@ -115,13 +112,9 @@ func (r *ProductionRepositoryFS) Create(
 			t := now
 			printedAt = &t
 		}
-	} else {
-		printedAt = nil
 	}
 
-	// Entity 組み立て
 	p := proddom.Production{
-		// ID は後で NewDoc から採番
 		ProductBlueprintID: in.ProductBlueprintID,
 		AssigneeID:         in.AssigneeID,
 		Models:             in.Models,
@@ -136,7 +129,6 @@ func (r *ProductionRepositoryFS) Create(
 		UpdatedBy: nil,
 	}
 
-	// Firestore doc ref（常に新規）
 	ref := r.col().NewDoc()
 	p.ID = ref.ID
 
@@ -178,7 +170,6 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 		p.UpdatedAt = now
 	}
 
-	// Printed 整合性補正
 	if p.Printed {
 		if p.PrintedAt == nil || p.PrintedAt.IsZero() {
 			t := now
@@ -188,7 +179,6 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 			p.PrintedAt = &t
 		}
 	} else {
-		// 未印刷なら printedAt/printedBy は必ず nil
 		p.PrintedAt = nil
 		p.PrintedBy = nil
 	}
@@ -246,129 +236,6 @@ func (r *ProductionRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// ListAll returns all productions (sorted by createdAt DESC, then document ID DESC).
-// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
-func (r *ProductionRepositoryFS) ListAll(ctx context.Context) ([]proddom.Production, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	q := r.col().Query.
-		OrderBy("createdAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var all []proddom.Production
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		p, err := docToProduction(doc)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, p)
-	}
-
-	return all, nil
-}
-
-// List implements filtering/paging over ListAll.
-// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
-func (r *ProductionRepositoryFS) List(
-	ctx context.Context,
-	filter proddom.Filter,
-	page proddom.Page,
-) (proddom.PageResult, error) {
-	all, err := r.ListAll(ctx)
-	if err != nil {
-		return proddom.PageResult{}, err
-	}
-
-	var filtered []proddom.Production
-	for _, p := range all {
-		// ID
-		if filter.ID != "" && p.ID != filter.ID {
-			continue
-		}
-		// ProductBlueprintID
-		if filter.ProductBlueprintID != "" && p.ProductBlueprintID != filter.ProductBlueprintID {
-			continue
-		}
-		// AssigneeID
-		if filter.AssigneeID != "" && p.AssigneeID != filter.AssigneeID {
-			continue
-		}
-		// ModelID（ModelQuantity に含まれるかどうか）
-		if filter.ModelID != "" {
-			found := false
-			for _, mq := range p.Models {
-				if mq.ModelID == filter.ModelID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-		}
-
-		// Printed（nil の場合はフィルタしない）
-		if filter.Printed != nil {
-			if p.Printed != *filter.Printed {
-				continue
-			}
-		}
-
-		// NOTE:
-		// PrintedFrom/PrintedTo, CreatedFrom/CreatedTo などの TimeRange filter は
-		// production.Filter から削除したため、ここでは時間範囲フィルタを行わない。
-
-		filtered = append(filtered, p)
-	}
-
-	// Paging
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = len(filtered)
-	}
-	pageNum := page.Number
-	if pageNum <= 0 {
-		pageNum = 1
-	}
-
-	totalCount := len(filtered)
-	totalPages := 0
-	if perPage > 0 {
-		totalPages = (totalCount + perPage - 1) / perPage
-	}
-
-	start := (pageNum - 1) * perPage
-	if start > totalCount {
-		start = totalCount
-	}
-	end := start + perPage
-	if end > totalCount {
-		end = totalCount
-	}
-
-	items := filtered[start:end]
-
-	return proddom.PageResult{
-		Items:      items,
-		TotalCount: totalCount,
-		TotalPages: totalPages,
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
-}
-
 // ListByProductBlueprintID は、指定された productBlueprintId のいずれかを持つ
 // Production をすべて取得します。
 // Firestore の "in" オペレータ制限（最大10要素）に対応するため、IDs をチャンクに分けて問い合わせます。
@@ -380,12 +247,10 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	// 空なら即終了
 	if len(productBlueprintIDs) == 0 {
 		return []proddom.Production{}, nil
 	}
 
-	// 空文字を取り除きつつ重複排除（大小違いも同一扱い）
 	seen := make(map[string]struct{}, len(productBlueprintIDs))
 	ids := make([]string, 0, len(productBlueprintIDs))
 	for _, id := range productBlueprintIDs {
@@ -418,7 +283,6 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 			Where("productBlueprintId", "in", chunk)
 
 		it := q.Documents(ctx)
-		defer it.Stop()
 
 		for {
 			doc, err := it.Next()
@@ -426,14 +290,18 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 				break
 			}
 			if err != nil {
+				it.Stop()
 				return nil, err
 			}
 			p, err := docToProduction(doc)
 			if err != nil {
+				it.Stop()
 				return nil, err
 			}
 			results = append(results, p)
 		}
+
+		it.Stop()
 	}
 
 	return results, nil
@@ -449,7 +317,6 @@ func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	// sanitize + dedup ids（大小違いを同一扱い）
 	ids := make([]string, 0, len(productBlueprintIDs))
 	seen := make(map[string]struct{}, len(productBlueprintIDs))
 	for _, id := range productBlueprintIDs {
@@ -477,7 +344,6 @@ func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
 	origByKey := make(map[string]string, 64)
 
 	for _, p := range prods {
-		// deleted/status の概念は廃止（物理削除前提）なので、全件を集計対象とする
 		for _, mq := range p.Models {
 			mid := mq.ModelID
 			if mid == "" || mq.Quantity <= 0 {
@@ -497,37 +363,13 @@ func (r *ProductionRepositoryFS) GetTotalQuantityByModelID(
 			ModelID:       origByKey[k],
 			TotalQuantity: total,
 		})
+		_ = k
 	}
 
-	// stable order
 	sort.Slice(out, func(i, j int) bool {
 		return strings.ToLower(out[i].ModelID) < strings.ToLower(out[j].ModelID)
 	})
 
-	return out, nil
-}
-
-// GetByModelID は、指定 modelId を Models に含む Production 一覧を返します。
-// ※ RepositoryPort に無いが、既存利用が残っている可能性があるため維持。
-func (r *ProductionRepositoryFS) GetByModelID(ctx context.Context, modelID string) ([]proddom.Production, error) {
-	if modelID == "" {
-		return []proddom.Production{}, nil
-	}
-
-	all, err := r.ListAll(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var out []proddom.Production
-	for _, p := range all {
-		for _, mq := range p.Models {
-			if mq.ModelID == modelID {
-				out = append(out, p)
-				break
-			}
-		}
-	}
 	return out, nil
 }
 
@@ -580,7 +422,6 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 	printedAt := normalizeTimePtr(raw.PrintedAt)
 	printedBy := raw.PrintedBy
 
-	// 整合性補正（ドメインルールに合わせる）
 	if printed {
 		if printedAt == nil {
 			t := createdAt
@@ -627,29 +468,23 @@ func productionToDoc(p proddom.Production) map[string]any {
 	}
 
 	if p.CreatedBy != nil {
-		// CreatedBy の trim は行わない（空文字もそのまま保存したいならここも許容）
 		m["createdBy"] = *p.CreatedBy
 	}
 
-	// printedAt / printedBy は printed=true のときだけ格納（false の場合は null を書いて消す）
 	if p.Printed {
 		if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
 			m["printedAt"] = p.PrintedAt.UTC()
 		}
-		if p.PrintedBy != nil {
-			if *p.PrintedBy != "" {
-				m["printedBy"] = *p.PrintedBy
-			}
+		if p.PrintedBy != nil && *p.PrintedBy != "" {
+			m["printedBy"] = *p.PrintedBy
 		}
 	} else {
 		m["printedAt"] = nil
 		m["printedBy"] = nil
 	}
 
-	if p.UpdatedBy != nil {
-		if *p.UpdatedBy != "" {
-			m["updatedBy"] = *p.UpdatedBy
-		}
+	if p.UpdatedBy != nil && *p.UpdatedBy != "" {
+		m["updatedBy"] = *p.UpdatedBy
 	}
 
 	return m

@@ -109,7 +109,4 @@ type RepositoryPort interface {
 
 	// Delete: productionId で削除
 	Delete(ctx context.Context, id string) error
-
-	// Exists: productionId の存在確認
-	Exists(ctx context.Context, id string) (bool, error)
 }
