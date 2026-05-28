@@ -14,19 +14,21 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-// OrderQuery resolves (mall buyer flow):
-// - uid -> avatarId (avatars where userId == uid)
-// - userId -> shippingAddress / paymentMethod (query style only; docID is NOT userId)
-// - avatarId -> cartItems (via CartQuery; best-effort)
-// - userId -> fullName (via NameResolver.ResolveMemberName; best-effort)
+// OrderQuery resolves mall buyer order context.
+//
+// Responsibilities:
+// - uid -> avatarId
+// - userId -> shippingAddress / paymentMethod
+// - avatarId -> cartItems
+// - userId -> fullName
 type OrderQuery struct {
 	FS *firestore.Client
 
 	// optional: cart read-model
-	// - if nil, ResolveByUID will create CartQuery(fs) and fetch cart items best-effort
+	// - if nil, GetOrderContextByUID will create CartQuery(fs) and fetch cart items best-effort
 	CartQ *CartQuery
 
-	// optional: name resolver (memberId -> "Last First")
+	// optional: name resolver
 	// - if nil, FullName will be empty
 	NameResolver *appresolver.NameResolver
 
@@ -61,10 +63,11 @@ func NewOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQu
 	return q
 }
 
-// ResolveAvatarIDByUID resolves uid -> avatarId only.
-// - Intended for middleware use.
-// - If not found, returns ErrNotFound.
-func (q *OrderQuery) ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error) {
+// GetAvatarIDByUID resolves uid -> avatarId only.
+//
+// Intended for middleware use.
+// If not found, returns ErrNotFound.
+func (q *OrderQuery) GetAvatarIDByUID(ctx context.Context, uid string) (string, error) {
 	if q == nil || q.FS == nil {
 		return "", errors.New("mall order query: firestore client is nil")
 	}
@@ -72,16 +75,26 @@ func (q *OrderQuery) ResolveAvatarIDByUID(ctx context.Context, uid string) (stri
 		return "", errors.New("uid is required")
 	}
 
-	avatarID, _, err := q.resolveAvatarIDByUID(ctx, uid)
+	avatarID, _, err := q.findAvatarIdentityByUID(ctx, uid)
 	if err != nil {
 		return "", err
 	}
+
 	return avatarID, nil
 }
 
-// ResolveByUID resolves uid -> avatarId and payment context (+ cart items).
-// - If avatar is not found, returns ErrNotFound.
-func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (dto.OrderContextDTO, error) {
+// GetOrderContextByUID resolves uid -> order context.
+//
+// It resolves:
+// - avatarId
+// - userId
+// - shippingAddress
+// - paymentMethod
+// - cartItems
+// - fullName
+//
+// If avatar is not found, returns ErrNotFound.
+func (q *OrderQuery) GetOrderContextByUID(ctx context.Context, uid string) (dto.OrderContextDTO, error) {
 	if q == nil || q.FS == nil {
 		return dto.OrderContextDTO{}, errors.New("mall order query: firestore client is nil")
 	}
@@ -89,12 +102,13 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (dto.OrderCon
 		return dto.OrderContextDTO{}, errors.New("uid is required")
 	}
 
-	avatarID, avatarUserID, err := q.resolveAvatarIDByUID(ctx, uid)
+	avatarID, avatarUserID, err := q.findAvatarIdentityByUID(ctx, uid)
 	if err != nil {
 		return dto.OrderContextDTO{}, err
 	}
 
-	// userId は基本 uid と一致させる（avatars の userId も尊重）
+	// userId は基本 uid と一致させる。
+	// avatars の userId が取得できた場合はそちらを尊重する。
 	userID := avatarUserID
 	if userID == "" {
 		userID = uid
@@ -115,7 +129,7 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (dto.OrderCon
 		fullName = q.NameResolver.ResolveMemberName(ctx, userID)
 	}
 
-	out := dto.OrderContextDTO{
+	return dto.OrderContextDTO{
 		UID:             uid,
 		AvatarID:        avatarID,
 		UserID:          userID,
@@ -123,19 +137,24 @@ func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (dto.OrderCon
 		ShippingAddress: ship,
 		PaymentMethod:   paymentMethod,
 		CartItems:       cartItems,
-	}
-	return out, nil
+	}, nil
 }
 
 // ------------------------------------------------------------
-// uid -> avatarId
+// uid -> avatar identity
 // ------------------------------------------------------------
 
-func (q *OrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (avatarID string, userID string, err error) {
+// findAvatarIdentityByUID finds an avatar document by uid.
+//
+// It returns:
+// - avatarID: avatar document ID
+// - userID: avatars.{avatarID}.userId
+func (q *OrderQuery) findAvatarIdentityByUID(ctx context.Context, uid string) (avatarID string, userID string, err error) {
 	col := q.AvatarsCol
 	if col == "" {
 		col = "avatars"
 	}
+
 	userField := q.AvatarUserIDField
 	if userField == "" {
 		userField = "userId"
@@ -159,21 +178,29 @@ func (q *OrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (avat
 	}
 
 	m := doc.Data()
-	u := ""
+
+	resolvedUserID := ""
 	if v, ok := m[userField]; ok {
-		u = fmt.Sprint(v)
+		resolvedUserID = fmt.Sprint(v)
 	}
-	aid := doc.Ref.ID
-	if aid == "" {
+
+	resolvedAvatarID := doc.Ref.ID
+	if resolvedAvatarID == "" {
 		return "", "", ErrNotFound
 	}
 
-	log.Printf("[mall_order_query] resolveAvatarIDByUID ok uid=%q avatarId=%q userId=%q", uid, aid, u)
-	return aid, u, nil
+	log.Printf(
+		"[mall_order_query] findAvatarIdentityByUID ok uid=%q avatarId=%q userId=%q",
+		uid,
+		resolvedAvatarID,
+		resolvedUserID,
+	)
+
+	return resolvedAvatarID, resolvedUserID, nil
 }
 
 // ------------------------------------------------------------
-// avatarId -> cartItems (best-effort)
+// avatarId -> cartItems
 // ------------------------------------------------------------
 
 func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID string) map[string]dto.CartItemDTO {
@@ -200,14 +227,16 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 	if cartDTO.Items == nil {
 		return map[string]dto.CartItemDTO{}
 	}
+
 	return cartDTO.Items
 }
 
 // ------------------------------------------------------------
-// userId -> document (query style only)
+// userId -> document
 // ------------------------------------------------------------
 
 // fetchDocByUserID returns the first matched document as map.
+//
 // kind:
 // - "shippingAddress": injects id/addressId
 // - "paymentMethod": injects id/paymentMethodId
@@ -246,6 +275,7 @@ func (q *OrderQuery) fetchDocByUserID(ctx context.Context, colName string, userI
 	if doc.Ref != nil {
 		return attachDocIDByKind(out, doc.Ref.ID, kind)
 	}
+
 	return out
 }
 
@@ -257,15 +287,17 @@ func normalizeMapAny(m map[string]any) map[string]any {
 	if m == nil {
 		return nil
 	}
+
 	out := make(map[string]any, len(m))
 	for k, v := range m {
 		out[k] = v
 	}
+
 	return out
 }
 
 // attachDocIDByKind injects docID into map if not present.
-// - We intentionally do NOT overwrite if the document already has those keys.
+// It intentionally does not overwrite existing keys.
 func attachDocIDByKind(m map[string]any, docID string, kind string) map[string]any {
 	if m == nil {
 		return nil

@@ -23,7 +23,7 @@ type PaymentHandler struct {
 
 // OrderQuery is the typed contract PaymentHandler needs.
 type OrderQuery interface {
-	ResolveByUID(ctx context.Context, uid string) (dto.OrderContextDTO, error)
+	GetOrderContextByUID(ctx context.Context, uid string) (dto.OrderContextDTO, error)
 }
 
 func NewPaymentHandler(uc *usecase.PaymentUsecase) http.Handler {
@@ -126,7 +126,7 @@ func (h *PaymentHandler) getPaymentsContext(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	out, err := h.orderQ.ResolveByUID(r.Context(), uid)
+	out, err := h.orderQ.GetOrderContextByUID(r.Context(), uid)
 	if err != nil {
 		if errors.Is(err, mallquery.ErrNotFound) || payIsNotFoundLike(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -317,7 +317,9 @@ func payIsNotFoundLike(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	msg := strings.ToLower(err.Error())
+
 	return strings.Contains(msg, "not found") ||
 		strings.Contains(msg, "not_found") ||
 		strings.Contains(msg, "404")
@@ -327,7 +329,9 @@ func payIsBadRequestLike(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	msg := strings.ToLower(err.Error())
+
 	return strings.Contains(msg, "invalid") ||
 		strings.Contains(msg, "required") ||
 		strings.Contains(msg, "missing") ||

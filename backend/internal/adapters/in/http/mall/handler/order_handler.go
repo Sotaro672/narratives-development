@@ -20,7 +20,6 @@ import (
 // OrderHandler handles:
 //   - POST /mall/me/orders
 //   - GET  /mall/me/orders
-//   - GET  /mall/me/orders/{id}
 type OrderHandler struct {
 	uc           *usecase.OrderUsecase
 	historyQuery OrderHistoryQuery
@@ -64,11 +63,6 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodGet && path == "/mall/me/orders":
 		h.listMe(w, r)
-		return
-
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/me/orders/"):
-		id := strings.TrimPrefix(path, "/mall/me/orders/")
-		h.get(w, r, id)
 		return
 
 	default:
@@ -311,24 +305,6 @@ func (h *OrderHandler) enrichOrderHistoryPage(
 	}
 
 	return h.historyQuery.EnrichOrderPage(ctx, in)
-}
-
-func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	out, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writeOrderErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
 }
 
 func parseOrderPage(r *http.Request) common.Page {

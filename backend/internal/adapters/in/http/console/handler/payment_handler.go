@@ -92,7 +92,7 @@ func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	out, err := h.orderQ.ResolveByUID(r.Context(), uid)
+	out, err := h.orderQ.GetOrderContextByUID(r.Context(), uid)
 	if err != nil {
 		if errors.Is(err, mallquery.ErrNotFound) {
 			w.WriteHeader(http.StatusNotFound)

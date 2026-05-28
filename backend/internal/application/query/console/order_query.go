@@ -5,8 +5,8 @@ package query
 // 機能: OrderManagementQuery (console)
 //   - currentCompany 境界（inventory_query 相当）で許可された inventoryId のみを対象に
 //     Order.Items[].InventoryID をフラットに列挙する
-//   - order lister の ListByInventoryIDs を使い、allowed inventoryId に紐づく order を取得し、
-//     allowed items を集約してから再ページングする
+//   - order lister の ListByInventoryIDs を使い、orders を取得する
+//   - allowed items を集約してから item 単位で再ページングする
 //
 // 目的:
 // - order テーブルの items に記載された inventoryId を、company 境界に従って安全に一覧できるようにする
@@ -14,6 +14,7 @@ package query
 // ✅ DI整合のための方針:
 //   - Query側の port は domain/order.Filter / common.Sort / common.Page を引数に取る。
 //   - currentCompany 境界のため、OrderLister は List ではなく ListByInventoryIDs を要求する。
+//   - company-bound inventory filtering は OrderManagementQuery 側で item 単位に適用する。
 //
 // ✅ 重要:
 //   - productName/tokenName は best-effort。
@@ -48,7 +49,9 @@ import (
 // ============================================================
 
 // OrderLister lists orders for console query processing.
-// It must support company-bound inventory filtering.
+//
+// NOTE:
+// Company-bound inventory filtering is applied by OrderManagementQuery at item level.
 type OrderLister interface {
 	ListByInventoryIDs(
 		ctx context.Context,
@@ -63,41 +66,37 @@ type InventoryRowsLister interface {
 	ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error)
 }
 
-// ✅ inventoryId から productBlueprintId / tokenBlueprintId を引ける read-only port
+// InventoryBlueprintResolver resolves productBlueprintId/tokenBlueprintId from inventoryId.
 type InventoryBlueprintResolver interface {
 	ResolveBlueprintIDsByInventoryID(ctx context.Context, inventoryID string) (productBlueprintID string, tokenBlueprintID string, err error)
 }
 
-// ✅ productBlueprintId -> ProductBlueprint（best-effort）
-// productName を取得するために使う。
+// ProductBlueprintNameResolver resolves productName from productBlueprintId.
 type ProductBlueprintNameResolver interface {
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
-// ✅ productBlueprintId -> ProductBlueprint（best-effort）
-// category snapshot / categoryFields を取得するために使う。
+// ProductBlueprintResolver resolves category snapshot/categoryFields from productBlueprintId.
 type ProductBlueprintResolver interface {
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
-// ✅ tokenBlueprintId -> tokenName（best-effort）
-// tokenBlueprint.RepositoryPort の GetNameByID を想定
+// TokenBlueprintNameResolver resolves tokenName from tokenBlueprintId.
 type TokenBlueprintNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
-// ✅ listId -> readableId（best-effort）
+// ListReadableIDResolver resolves listId to readableId.
 type ListReadableIDResolver interface {
 	GetReadableIDByID(ctx context.Context, id string) (string, error)
 }
 
-// ✅ avatarId -> avatarName（best-effort）
-// avatar.RepositoryPort の GetNameByID を想定（今回追加した port）
+// AvatarNameResolver resolves avatarName from avatarId.
 type AvatarNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
-// ✅ modelId(variationID) -> apparel/alcohol 表示情報（best-effort）
+// ModelResolver resolves modelId(variationID) to display fields.
 type ModelResolver interface {
 	ResolveModelResolved(ctx context.Context, variationID string) resolver.ModelResolved
 }
@@ -106,9 +105,7 @@ type ModelResolver interface {
 // DTO
 // ============================================================
 
-// OrderItemInventoryRowDTO
-// - Order.Items をフラット化した 1行 DTO
-// - UI はこれをテーブル表示すればよい
+// OrderItemInventoryRowDTO is a flattened order item row for console UI.
 type OrderItemInventoryRowDTO struct {
 	OrderID string `json:"orderId"`
 
@@ -116,29 +113,21 @@ type OrderItemInventoryRowDTO struct {
 	AvatarID string `json:"avatarId,omitempty"`
 	CartID   string `json:"cartId,omitempty"`
 
-	// resolved from avatarId (best-effort)
 	AvatarName string `json:"avatarName,omitempty"`
 
-	// order-level
 	Paid      bool   `json:"paid"`
 	CreatedAt string `json:"createdAt,omitempty"` // RFC3339(UTC)
 
-	// item-level
 	InventoryID string `json:"inventoryId"`
 
-	// resolved from inventoryId
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 
-	// resolved from IDs (best-effort)
 	ProductName string `json:"productName,omitempty"`
 	TokenName   string `json:"tokenName,omitempty"`
 
-	// UIへは listId ではなく readableId を渡す
-	// - listId 自体が必要なら別フィールドで追加してもよいが、要件に従い置き換える
 	ListReadableID string `json:"listReadableId,omitempty"`
 
-	// productBlueprint category snapshot / categoryFields
 	CategoryID     string         `json:"categoryId,omitempty"`
 	CategoryCode   string         `json:"categoryCode,omitempty"`
 	CategoryNameJa string         `json:"categoryNameJa,omitempty"`
@@ -147,17 +136,14 @@ type OrderItemInventoryRowDTO struct {
 	CategoryPath   []string       `json:"categoryPath,omitempty"`
 	CategoryFields map[string]any `json:"categoryFields,omitempty"`
 
-	// model
 	ModelID string `json:"modelId,omitempty"`
 
-	// model resolved fields (best-effort)
 	Kind        string `json:"kind,omitempty"`
 	Size        string `json:"size,omitempty"`
 	Color       string `json:"color,omitempty"`
 	RGB         string `json:"rgb,omitempty"`
 	ModelNumber string `json:"modelNumber,omitempty"`
 
-	// alcohol model fields
 	VolumeValue *int   `json:"volumeValue,omitempty"`
 	VolumeUnit  string `json:"volumeUnit,omitempty"`
 
@@ -166,11 +152,6 @@ type OrderItemInventoryRowDTO struct {
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"` // RFC3339(UTC)
-}
-
-// （任意）inventoryId だけ欲しい画面向け（distinct）
-type InventoryIDDTO struct {
-	InventoryID string `json:"inventoryId"`
 }
 
 // ============================================================
@@ -182,7 +163,6 @@ type OrderManagementQuery struct {
 	invRows      InventoryRowsLister        // REQUIRED
 	invBlueprint InventoryBlueprintResolver // REQUIRED
 
-	// optional (best-effort)
 	pbName             ProductBlueprintNameResolver
 	productBlueprint   ProductBlueprintResolver
 	tbName             TokenBlueprintNameResolver
@@ -196,7 +176,6 @@ type NewOrderManagementQueryParams struct {
 	InvRows      InventoryRowsLister        // REQUIRED
 	InvBlueprint InventoryBlueprintResolver // REQUIRED
 
-	// optional
 	PBName           ProductBlueprintNameResolver
 	ProductBlueprint ProductBlueprintResolver
 	TBName           TokenBlueprintNameResolver
@@ -231,13 +210,10 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 ) (common.PageResult[OrderItemInventoryRowDTO], error) {
 	page = normalizePage(page)
 
-	// optional は required 扱いしない。
 	if q == nil || q.lister == nil || q.invRows == nil || q.invBlueprint == nil {
 		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
 	}
 
-	// 原因特定用: listReadable の実体型をログ出力（interface の中身確認）
-	// - Cloud Run で意図しない実装が DI されている場合、ここで即判別できる。
 	log.Printf("[OrderManagementQuery] DEBUG listReadable resolver type=%T", q.listReadable)
 
 	allowedSet, err := allowedInventoryIDSetFromContext(ctx, q.invRows)
@@ -257,29 +233,17 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	allowedAll := make([]OrderItemInventoryRowDTO, 0, page.PerPage)
 
-	// inventoryId -> (pbID,tbID) cache
 	type bt struct {
 		pb string
 		tb string
 	}
 	blueprintCache := map[string]bt{}
 
-	// productBlueprintId -> productName cache
 	pbNameCache := map[string]string{}
-
-	// productBlueprintId -> ProductBlueprint cache
 	productBlueprintCache := map[string]pbdom.ProductBlueprint{}
-
-	// tokenBlueprintId -> tokenName cache
 	tbNameCache := map[string]string{}
-
-	// listId -> readableId cache
 	listReadableCache := map[string]string{}
-
-	// avatarId -> avatarName cache
 	avatarNameCache := map[string]string{}
-
-	// modelId -> resolved cache (best-effort)
 	modelCache := map[string]resolver.ModelResolved{}
 
 	resolveBlueprint := func(invID string) (string, string, error) {
@@ -289,21 +253,18 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if v, ok := blueprintCache[invID]; ok {
 			return v.pb, v.tb, nil
 		}
+
 		pbID, tbID, e := q.invBlueprint.ResolveBlueprintIDsByInventoryID(ctx, invID)
 		if e != nil {
 			return "", "", e
 		}
+
 		blueprintCache[invID] = bt{pb: pbID, tb: tbID}
 		return pbID, tbID, nil
 	}
 
 	resolveProductName := func(pbID string) (string, error) {
-		// optional
-		if q.pbName == nil {
-			return "", nil
-		}
-
-		if pbID == "" {
+		if q.pbName == nil || pbID == "" {
 			return "", nil
 		}
 		if v, ok := pbNameCache[pbID]; ok {
@@ -321,12 +282,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	}
 
 	resolveProductBlueprint := func(pbID string) (pbdom.ProductBlueprint, error) {
-		// optional
-		if q.productBlueprint == nil {
-			return pbdom.ProductBlueprint{}, nil
-		}
-
-		if pbID == "" {
+		if q.productBlueprint == nil || pbID == "" {
 			return pbdom.ProductBlueprint{}, nil
 		}
 		if v, ok := productBlueprintCache[pbID]; ok {
@@ -343,52 +299,41 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	}
 
 	resolveTokenName := func(tbID string) (string, error) {
-		// optional
-		if q.tbName == nil {
-			return "", nil
-		}
-
-		if tbID == "" {
+		if q.tbName == nil || tbID == "" {
 			return "", nil
 		}
 		if v, ok := tbNameCache[tbID]; ok {
 			return v, nil
 		}
+
 		name, e := q.tbName.GetNameByID(ctx, tbID)
 		if e != nil {
 			return "", e
 		}
+
 		tbNameCache[tbID] = name
 		return name, nil
 	}
 
 	resolveListReadableID := func(listID string) (string, error) {
-		// optional
-		if q.listReadable == nil {
-			return "", nil
-		}
-
-		if listID == "" {
+		if q.listReadable == nil || listID == "" {
 			return "", nil
 		}
 		if v, ok := listReadableCache[listID]; ok {
 			return v, nil
 		}
+
 		readable, e := q.listReadable.GetReadableIDByID(ctx, listID)
 		if e != nil {
 			return "", e
 		}
+
 		listReadableCache[listID] = readable
 		return readable, nil
 	}
 
 	resolveAvatarName := func(avatarID string) (string, error) {
-		// optional
-		if q.avatarNameResolver == nil {
-			return "", nil
-		}
-
-		if avatarID == "" {
+		if q.avatarNameResolver == nil || avatarID == "" {
 			return "", nil
 		}
 		if v, ok := avatarNameCache[avatarID]; ok {
@@ -399,24 +344,24 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		if e != nil {
 			return "", e
 		}
+
 		avatarNameCache[avatarID] = name
 		return name, nil
 	}
 
 	resolveModel := func(modelID string) resolver.ModelResolved {
-		// optional
 		if q.modelResolver == nil || modelID == "" {
 			return resolver.ModelResolved{}
 		}
 		if v, ok := modelCache[modelID]; ok {
 			return v
 		}
-		resolved := q.modelResolver.ResolveModelResolved(ctx, modelID) // 取れない場合はゼロ値
+
+		resolved := q.modelResolver.ResolveModelResolved(ctx, modelID)
 		modelCache[modelID] = resolved
 		return resolved
 	}
 
-	// スキャン上限
 	const maxScanPages = 500
 	srcPage := 1
 
@@ -453,7 +398,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			avatarID := ord.AvatarID
 			cartID := ord.CartID
 
-			// avatarId -> avatarName (best-effort, order-level)
 			avatarName := ""
 			if avatarID != "" {
 				n, e0 := resolveAvatarName(avatarID)
@@ -470,14 +414,12 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					continue
 				}
 
-				// inventoryId -> pb/tb
 				pbID, tbID, e2 := resolveBlueprint(invID)
 				if e2 != nil {
 					log.Printf("[OrderManagementQuery] ERROR ResolveBlueprintIDsByInventoryID failed inventoryId=%q err=%v", invID, e2)
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e2
 				}
 
-				// productBlueprint category snapshot / categoryFields (best-effort)
 				categoryID := ""
 				categoryCode := ""
 				categoryNameJa := ""
@@ -514,7 +456,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					}
 				}
 
-				// names (best-effort)
 				productName := ""
 				if pbID != "" {
 					n, e3 := resolveProductName(pbID)
@@ -535,8 +476,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					tokenName = n
 				}
 
-				// listId -> readableId (best-effort)
-				// - 失敗しても 500 にしない（listReadableId は空のまま返す）
 				listReadableID := ""
 				if it.ListID != "" {
 					n, e5 := resolveListReadableID(it.ListID)
@@ -547,7 +486,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 					}
 				}
 
-				// model fields (best-effort)
 				kind := ""
 				size := ""
 				color := ""
@@ -630,7 +568,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			}
 		}
 
-		// 終端判定
 		if len(pr.Items) == 0 {
 			break
 		}
@@ -638,16 +575,13 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			if srcPage >= pr.TotalPages {
 				break
 			}
-		} else {
-			if len(pr.Items) < page.PerPage {
-				break
-			}
+		} else if len(pr.Items) < page.PerPage {
+			break
 		}
 
 		srcPage++
 	}
 
-	// item単位で再ページング
 	totalCount := len(allowedAll)
 	tp := totalPages(totalCount, page.PerPage)
 
@@ -664,6 +598,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			TotalPages: tp,
 		}, nil
 	}
+
 	end := minInt(start+page.PerPage, totalCount)
 
 	return common.PageResult[OrderItemInventoryRowDTO]{
@@ -672,41 +607,6 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		PerPage:    page.PerPage,
 		TotalCount: totalCount,
 		TotalPages: tp,
-	}, nil
-}
-
-// ListDistinctInventoryIDs
-func (q *OrderManagementQuery) ListDistinctInventoryIDs(
-	ctx context.Context,
-	filter orderdom.Filter,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[InventoryIDDTO], error) {
-	pr, err := q.ListItemInventoryRows(ctx, filter, sort, page)
-	if err != nil {
-		return common.PageResult[InventoryIDDTO]{}, err
-	}
-
-	seen := map[string]struct{}{}
-	out := make([]InventoryIDDTO, 0, len(pr.Items))
-	for _, row := range pr.Items {
-		id := row.InventoryID
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, InventoryIDDTO{InventoryID: id})
-	}
-
-	return common.PageResult[InventoryIDDTO]{
-		Items:      out,
-		Page:       pr.Page,
-		PerPage:    pr.PerPage,
-		TotalCount: len(out),
-		TotalPages: totalPages(len(out), pr.PerPage),
 	}, nil
 }
 
@@ -731,9 +631,11 @@ func allowedInventoryIDSetFromContext(ctx context.Context, invRows InventoryRows
 		if pbID == "" || tbID == "" {
 			continue
 		}
+
 		invID := pbID + "__" + tbID
 		set[invID] = struct{}{}
 	}
+
 	return set, nil
 }
 
@@ -741,11 +643,11 @@ func inventoryAllowed(set map[string]struct{}, inventoryID string) bool {
 	if len(set) == 0 {
 		return false
 	}
-	id := inventoryID
-	if id == "" {
+	if inventoryID == "" {
 		return false
 	}
-	_, ok := set[id]
+
+	_, ok := set[inventoryID]
 	return ok
 }
 
