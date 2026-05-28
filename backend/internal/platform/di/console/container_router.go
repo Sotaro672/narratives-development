@@ -1,3 +1,4 @@
+// backend/internal/platform/di/console/container_router.go
 package console
 
 import (
@@ -174,56 +175,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		productBPReviewH = consoleHandler.NewProductBlueprintReviewHandler(pbReviewUC)
 	}
 
-	if c.OrderUC != nil && c.OrderManagementQuery != nil {
-		var invBlueprint consoleHandler.InventoryBlueprintResolver
-		if c.InventoryUC != nil {
-			if r, ok := any(c.InventoryUC).(consoleHandler.InventoryBlueprintResolver); ok {
-				invBlueprint = r
-			}
-		}
-
-		var pbName consoleHandler.ProductBlueprintNameResolver
-		if c.ProductBlueprintUC != nil {
-			if r, ok := any(c.ProductBlueprintUC).(consoleHandler.ProductBlueprintNameResolver); ok {
-				pbName = r
-			}
-		}
-
-		var tbName consoleHandler.TokenBlueprintNameResolver
-		if c.TokenBlueprintUC != nil {
-			if r, ok := any(c.TokenBlueprintUC).(consoleHandler.TokenBlueprintNameResolver); ok {
-				tbName = r
-			}
-		}
-
-		var avatarName consoleHandler.AvatarNameResolver
-		if c.AvatarUC != nil {
-			if r, ok := any(c.AvatarUC).(consoleHandler.AvatarNameResolver); ok {
-				avatarName = r
-			}
-		}
-
-		var userName consoleHandler.UserNameResolver
-		if c.UserUC != nil {
-			if r, ok := any(c.UserUC).(consoleHandler.UserNameResolver); ok {
-				userName = r
-			}
-		}
-
-		var modelResolver consoleHandler.ModelResolver
-		if c.NameResolver != nil {
-			modelResolver = c.NameResolver
-		}
-
+	if c.OrderManagementQuery != nil || c.OrderDetailQuery != nil {
 		ordersH = consoleHandler.NewOrderHandler(
-			c.OrderUC,
 			c.OrderManagementQuery,
-			invBlueprint,
-			pbName,
-			tbName,
-			avatarName,
-			userName,
-			modelResolver,
+			c.OrderDetailQuery,
 		)
 	}
 

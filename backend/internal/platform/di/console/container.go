@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 
-	consoleHandler "narratives/internal/adapters/in/http/console/handler"
-
 	query "narratives/internal/application/query/console"
 
 	listdetailquery "narratives/internal/application/query/console/list/detail"
@@ -84,8 +82,9 @@ type Container struct {
 	ListDetailQuery     *listdetailquery.ListDetailQuery
 
 	OrderManagementQuery *query.OrderManagementQuery
+	OrderDetailQuery     *query.OrderDetailQuery
 
-	InventoryBlueprintResolver consoleHandler.InventoryBlueprintResolver
+	InventoryBlueprintResolver query.InventoryBlueprintResolver
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
@@ -117,7 +116,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("clients/infra is nil")
 	}
 
-	var invBlueprint consoleHandler.InventoryBlueprintResolver
+	var invBlueprint query.InventoryBlueprintResolver
 	if repos.inventoryRepo != nil {
 		invBlueprint = repos.inventoryRepo
 	}
@@ -193,7 +192,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ListManagementQuery: q.listManagementQuery,
 		ListDetailQuery:     q.listDetailQuery,
 
-		OrderManagementQuery:       orderMgmtQ,
+		OrderManagementQuery: orderMgmtQ,
+		OrderDetailQuery:     q.orderDetailQuery,
+
 		InventoryBlueprintResolver: invBlueprint,
 
 		OwnerResolveQ: res.ownerResolveQuery,
