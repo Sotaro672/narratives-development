@@ -61,8 +61,8 @@ const (
 type Page = common.Page
 type PageResult = common.PageResult[Order]
 
-// Save options (optional for adapters)
-type SaveOptions = common.SaveOptions
+// Update options (optional for adapters)
+type UpdateOptions = common.SaveOptions
 
 // Repository defines the persistence port for Order.
 type Repository interface {
@@ -72,7 +72,7 @@ type Repository interface {
 
 	// Commands
 	Create(ctx context.Context, o Order) (Order, error)
-	Save(ctx context.Context, o Order, opts *SaveOptions) (Order, error)
+	Update(ctx context.Context, o Order, opts *UpdateOptions) (Order, error)
 }
 
 // Standard repository errors

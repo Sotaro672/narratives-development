@@ -146,7 +146,7 @@ type CreatePaymentAndStartResult struct {
 // 1. create payment record as PENDING
 // 2. execute Stripe PaymentIntent create + confirm
 // 3. persist latest payment status
-// 4. PaymentUsecase.Update runs post-paid side effects when status changes to paid
+// 4. PaymentUsecase.Update runs post-paid side effects when status is paid
 // 5. if requires_action, return clientSecret to frontend
 func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 	ctx context.Context,
@@ -228,6 +228,9 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 	if u == nil || u.paymentIntentGateway == nil {
 		return nil, ErrPaymentFlowStripeGatewayMissing
 	}
+	if u.paymentUC == nil {
+		return nil, ErrPaymentFlowPaymentUsecaseMissing
+	}
 
 	paymentID := created.PaymentID
 	paymentMethodID := created.PaymentMethodID
@@ -280,7 +283,11 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		errMsg := err.Error()
 		failed.ErrorMsg = &errMsg
 
-		_ = u.paymentUC.Update(ctx, failed)
+		_, _ = u.paymentUC.Update(
+			ctx,
+			failed.PaymentID,
+			paymentUpdateInputFromEntity(failed),
+		)
 
 		return &CreatePaymentAndStartResult{
 			Payment:      failed,
@@ -307,7 +314,11 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		succeeded.Status = paymentdom.StatusSucceeded
 		succeeded.StripePaymentIntentID = stripePaymentIntentID
 
-		if err := u.paymentUC.Update(ctx, succeeded); err != nil {
+		if _, err := u.paymentUC.Update(
+			ctx,
+			succeeded.PaymentID,
+			paymentUpdateInputFromEntity(succeeded),
+		); err != nil {
 			return nil, err
 		}
 
@@ -325,7 +336,11 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		pending.Status = paymentdom.StatusRequiresAction
 		pending.StripePaymentIntentID = stripePaymentIntentID
 
-		if err := u.paymentUC.Update(ctx, pending); err != nil {
+		if _, err := u.paymentUC.Update(
+			ctx,
+			pending.PaymentID,
+			paymentUpdateInputFromEntity(pending),
+		); err != nil {
 			return nil, err
 		}
 
@@ -343,7 +358,11 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		processing.Status = paymentdom.StatusProcessing
 		processing.StripePaymentIntentID = stripePaymentIntentID
 
-		if err := u.paymentUC.Update(ctx, processing); err != nil {
+		if _, err := u.paymentUC.Update(
+			ctx,
+			processing.PaymentID,
+			paymentUpdateInputFromEntity(processing),
+		); err != nil {
 			return nil, err
 		}
 
@@ -361,7 +380,11 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		pending.Status = paymentdom.StatusPending
 		pending.StripePaymentIntentID = stripePaymentIntentID
 
-		if err := u.paymentUC.Update(ctx, pending); err != nil {
+		if _, err := u.paymentUC.Update(
+			ctx,
+			pending.PaymentID,
+			paymentUpdateInputFromEntity(pending),
+		); err != nil {
 			return nil, err
 		}
 
@@ -382,7 +405,11 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 		errorMsg := "Stripe PaymentIntent was canceled"
 		canceled.ErrorMsg = &errorMsg
 
-		if err := u.paymentUC.Update(ctx, canceled); err != nil {
+		if _, err := u.paymentUC.Update(
+			ctx,
+			canceled.PaymentID,
+			paymentUpdateInputFromEntity(canceled),
+		); err != nil {
 			return nil, err
 		}
 
@@ -415,7 +442,11 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 			failed.ErrorCode = &v
 		}
 
-		if err := u.paymentUC.Update(ctx, failed); err != nil {
+		if _, err := u.paymentUC.Update(
+			ctx,
+			failed.PaymentID,
+			paymentUpdateInputFromEntity(failed),
+		); err != nil {
 			return nil, err
 		}
 
@@ -428,5 +459,19 @@ func (u *PaymentFlowUsecase) startStripePaymentIntent(
 			ErrorCode:             failed.ErrorCode,
 			ErrorMessage:          failed.ErrorMsg,
 		}, ErrPaymentFlowStripePaymentIntentFailed
+	}
+}
+
+func paymentUpdateInputFromEntity(p paymentdom.Payment) paymentdom.UpdatePaymentInput {
+	return paymentdom.UpdatePaymentInput{
+		PaymentMethodID:       &p.PaymentMethodID,
+		StripeCustomerID:      &p.StripeCustomerID,
+		StripePaymentMethodID: &p.StripePaymentMethodID,
+		StripePaymentIntentID: &p.StripePaymentIntentID,
+		Amount:                &p.Amount,
+		Status:                &p.Status,
+		ErrorType:             p.ErrorType,
+		ErrorCode:             p.ErrorCode,
+		ErrorMsg:              p.ErrorMsg,
 	}
 }

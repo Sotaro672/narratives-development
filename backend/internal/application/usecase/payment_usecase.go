@@ -22,18 +22,16 @@ import (
 // current design:
 // - payment document ID = payment.PaymentID
 // - payment.PaymentID must be the same value as order.ID
+// - paymentId is NOT stored as a document field
+// - payment records are not deleted
+// - payment updates are performed by partial update only
 type PaymentRepo interface {
 	// Reads
-	GetByID(ctx context.Context, id string) (*paymentdom.Payment, error)
 	GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error)
 
 	// Writes
 	Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error)
 	UpdateByPaymentID(ctx context.Context, paymentID string, patch paymentdom.UpdatePaymentInput) (*paymentdom.Payment, error)
-	DeleteByPaymentID(ctx context.Context, paymentID string) error
-
-	// Save stores the whole payment entity.
-	Save(ctx context.Context, entity paymentdom.Payment, opts *paymentdom.SaveOptions) (paymentdom.Payment, error)
 }
 
 // Cart clear の最小ポート（PaymentUsecase 側）
@@ -53,7 +51,7 @@ type InventoryRepoForPayment interface {
 // Order 更新・参照の最小ポート（PaymentUsecase 側）
 type OrderRepoForPayment interface {
 	GetByID(ctx context.Context, id string) (orderdom.Order, error)
-	Save(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
+	Update(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
 }
 
 // userId からメールアドレス取得の最小ポート
@@ -125,17 +123,14 @@ func (u *PaymentUsecase) WithMailSenderForPayment(sender MailSenderForPayment, f
 // Queries
 // ============================================================
 
-func (u *PaymentUsecase) GetByID(ctx context.Context, id string) (*paymentdom.Payment, error) {
-	if u == nil || u.repo == nil {
-		return nil, paymentdom.ErrNotFound
-	}
-	return u.repo.GetByPaymentID(ctx, id)
-}
-
 func (u *PaymentUsecase) GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error) {
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
+	if paymentID == "" {
+		return nil, paymentdom.ErrInvalidPaymentID
+	}
+
 	return u.repo.GetByPaymentID(ctx, paymentID)
 }
 
@@ -166,47 +161,21 @@ func (u *PaymentUsecase) Create(ctx context.Context, p paymentdom.Payment) (*pay
 		return nil, err
 	}
 
-	if created == nil || !isPaidStatus(created.Status) {
-		return created, nil
+	if created != nil && isPaidStatus(created.Status) {
+		u.handlePostPaidBestEffort(ctx, created)
 	}
 
-	u.handlePostPaidBestEffort(ctx, created)
 	return created, nil
 }
 
-// Update stores the whole payment entity.
+// Update partially updates an existing payment document.
 //
 // This method is used by PaymentFlowUsecase after Stripe PaymentIntent state changes.
-// entity.PaymentID is the payment document ID and must be the same value as order.ID.
-func (u *PaymentUsecase) Update(ctx context.Context, entity paymentdom.Payment) error {
-	if u == nil || u.repo == nil {
-		return paymentdom.ErrNotFound
-	}
-
-	before, err := u.repo.GetByPaymentID(ctx, entity.PaymentID)
-	if err != nil && !errorsIsPaymentNotFound(err) {
-		return err
-	}
-
-	saved, err := u.repo.Save(ctx, entity, nil)
-	if err != nil {
-		return err
-	}
-
-	beforePaid := before != nil && isPaidStatus(before.Status)
-	afterPaid := isPaidStatus(saved.Status)
-
-	if !beforePaid && afterPaid {
-		u.handlePostPaidBestEffort(ctx, &saved)
-	}
-
-	return nil
-}
-
-// Patch partially updates a payment document by paymentID.
 //
-// Use this for API/update paths that only need partial updates.
-func (u *PaymentUsecase) Patch(
+// Payment records are not overwritten by Save.
+// Payment records are not deleted.
+// Updates are applied through UpdateByPaymentID only.
+func (u *PaymentUsecase) Update(
 	ctx context.Context,
 	paymentID string,
 	patch paymentdom.UpdatePaymentInput,
@@ -214,38 +183,18 @@ func (u *PaymentUsecase) Patch(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
+	if paymentID == "" {
+		return nil, paymentdom.ErrInvalidPaymentID
+	}
 
-	before, err := u.repo.GetByPaymentID(ctx, paymentID)
+	updated, err := u.repo.UpdateByPaymentID(ctx, paymentID, patch)
 	if err != nil {
 		return nil, err
 	}
 
-	after, err := u.repo.UpdateByPaymentID(ctx, paymentID, patch)
-	if err != nil {
-		return nil, err
+	if updated != nil && isPaidStatus(updated.Status) {
+		u.handlePostPaidBestEffort(ctx, updated)
 	}
 
-	if after == nil {
-		return after, nil
-	}
-
-	beforePaid := before != nil && isPaidStatus(before.Status)
-	afterPaid := isPaidStatus(after.Status)
-
-	if !beforePaid && afterPaid {
-		u.handlePostPaidBestEffort(ctx, after)
-	}
-
-	return after, nil
-}
-
-func (u *PaymentUsecase) Delete(ctx context.Context, id string) error {
-	if u == nil || u.repo == nil {
-		return paymentdom.ErrNotFound
-	}
-	return u.repo.DeleteByPaymentID(ctx, id)
-}
-
-func errorsIsPaymentNotFound(err error) bool {
-	return err == paymentdom.ErrNotFound
+	return updated, nil
 }

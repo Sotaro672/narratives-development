@@ -5,13 +5,15 @@ package query
 // 機能: OrderManagementQuery (console)
 //   - currentCompany 境界（inventory_query 相当）で許可された inventoryId のみを対象に
 //     Order.Items[].InventoryID をフラットに列挙する
-//   - orderRepository の List をスキャンし、allowed items を集約してから再ページングする
+//   - order lister の ListByInventoryIDs を使い、allowed inventoryId に紐づく order を取得し、
+//     allowed items を集約してから再ページングする
 //
 // 目的:
 // - order テーブルの items に記載された inventoryId を、company 境界に従って安全に一覧できるようにする
 //
 // ✅ DI整合のための方針:
 //   - Query側の port は domain/order.Filter / common.Sort / common.Page を引数に取る。
+//   - currentCompany 境界のため、OrderLister は List ではなく ListByInventoryIDs を要求する。
 //
 // ✅ 重要:
 //   - productName/tokenName は best-effort。
@@ -46,8 +48,15 @@ import (
 // ============================================================
 
 // OrderLister lists orders for console query processing.
+// It must support company-bound inventory filtering.
 type OrderLister interface {
-	List(ctx context.Context, filter orderdom.Filter, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
+	ListByInventoryIDs(
+		ctx context.Context,
+		allowedInventoryIDs map[string]struct{},
+		filter orderdom.Filter,
+		sort common.Sort,
+		page common.Page,
+	) (common.PageResult[orderdom.Order], error)
 }
 
 type InventoryRowsLister interface {
@@ -417,9 +426,15 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			break
 		}
 
-		pr, e := q.lister.List(ctx, filter, sort, common.Page{Number: srcPage, PerPage: page.PerPage})
+		pr, e := q.lister.ListByInventoryIDs(
+			ctx,
+			allowedSet,
+			filter,
+			sort,
+			common.Page{Number: srcPage, PerPage: page.PerPage},
+		)
 		if e != nil {
-			log.Printf("[OrderManagementQuery] ERROR lister.List failed (scan page=%d): %v", srcPage, e)
+			log.Printf("[OrderManagementQuery] ERROR lister.ListByInventoryIDs failed (scan page=%d): %v", srcPage, e)
 			return common.PageResult[OrderItemInventoryRowDTO]{}, e
 		}
 		if pr.Items == nil {

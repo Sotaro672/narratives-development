@@ -12,7 +12,6 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
 	common "narratives/internal/domain/common"
@@ -58,26 +57,6 @@ func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Or
 		return orderdom.Order{}, err
 	}
 	return o, nil
-}
-
-// Exists is optional (dev/testing convenience)
-func (r *OrderRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.ordersCol().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 func (r *OrderRepositoryFS) ListByAvatarID(
@@ -194,48 +173,55 @@ func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (order
 	return out, nil
 }
 
-func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *common.SaveOptions) (orderdom.Order, error) {
+func (r *OrderRepositoryFS) Update(ctx context.Context, o orderdom.Order, _ *common.SaveOptions) (orderdom.Order, error) {
 	if r.Client == nil {
 		return orderdom.Order{}, errors.New("firestore client is nil")
 	}
 
 	id := o.ID
-	now := time.Now().UTC()
-
 	if id == "" {
-		if o.CreatedAt.IsZero() {
-			o.CreatedAt = now
+		return orderdom.Order{}, orderdom.ErrNotFound
+	}
+
+	docRef := r.ordersCol().Doc(id)
+
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return orderdom.Order{}, orderdom.ErrNotFound
 		}
-		return r.Create(ctx, o)
+		return orderdom.Order{}, err
 	}
 
 	o.ID = id
 
 	// preserve CreatedAt if missing
 	if o.CreatedAt.IsZero() {
-		if snap, err := r.ordersCol().Doc(id).Get(ctx); err == nil {
-			if existing, err2 := docToOrder(snap); err2 == nil && !existing.CreatedAt.IsZero() {
-				o.CreatedAt = existing.CreatedAt
-			}
+		existing, err := docToOrder(snap)
+		if err != nil {
+			return orderdom.Order{}, err
+		}
+		if !existing.CreatedAt.IsZero() {
+			o.CreatedAt = existing.CreatedAt
 		}
 	}
+
 	if o.CreatedAt.IsZero() {
-		o.CreatedAt = now
+		o.CreatedAt = time.Now().UTC()
 	}
 
-	docRef := r.ordersCol().Doc(id)
 	data := orderToDoc(o)
 
-	_, err := docRef.Set(ctx, data, firestore.MergeAll)
+	_, err = docRef.Set(ctx, data, firestore.MergeAll)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
 
-	snap, err := docRef.Get(ctx)
+	updatedSnap, err := docRef.Get(ctx)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
-	return docToOrder(snap)
+	return docToOrder(updatedSnap)
 }
 
 // ============================================================
@@ -337,14 +323,13 @@ func (r *OrderRepositoryFS) LockTransferItem(ctx context.Context, orderID string
 			return err
 		}
 
-		paid, _ := mapGetBool(snap.Data(), "paid")
-		if !paid {
-			return fmt.Errorf("order %s: not paid", orderID)
-		}
-
 		o, err := docToOrder(snap)
 		if err != nil {
 			return err
+		}
+
+		if !o.Paid {
+			return fmt.Errorf("order %s: not paid", orderID)
 		}
 
 		if itemIndex >= len(o.Items) {
@@ -410,6 +395,54 @@ func (r *OrderRepositoryFS) UnlockTransferItem(ctx context.Context, orderID stri
 }
 
 // ========================
+// Firestore DTO
+// ========================
+
+type orderDoc struct {
+	UserID   string    `firestore:"userId"`
+	AvatarID string    `firestore:"avatarId"`
+	CartID   string    `firestore:"cartId"`
+	Paid     bool      `firestore:"paid"`
+	Items    []itemDoc `firestore:"items"`
+
+	ShippingSnapshot      shippingSnapshotDoc      `firestore:"shippingSnapshot"`
+	PaymentMethodSnapshot paymentMethodSnapshotDoc `firestore:"paymentMethodSnapshot"`
+
+	CreatedAt time.Time `firestore:"createdAt"`
+}
+
+type shippingSnapshotDoc struct {
+	ZipCode string `firestore:"zipCode"`
+	State   string `firestore:"state"`
+	City    string `firestore:"city"`
+	Street  string `firestore:"street"`
+	Street2 string `firestore:"street2"`
+	Country string `firestore:"country"`
+}
+
+type paymentMethodSnapshotDoc struct {
+	CustomerID     string `firestore:"customerId"`
+	Brand          string `firestore:"brand"`
+	Last4          string `firestore:"last4"`
+	ExpMonth       int    `firestore:"expMonth"`
+	ExpYear        int    `firestore:"expYear"`
+	CardholderName string `firestore:"cardholderName"`
+	IsDefault      bool   `firestore:"isDefault"`
+}
+
+type itemDoc struct {
+	ModelID       string     `firestore:"modelId"`
+	InventoryID   string     `firestore:"inventoryId"`
+	ListID        string     `firestore:"listId"`
+	Qty           int        `firestore:"qty"`
+	Price         int        `firestore:"price"`
+	IsCanceled    bool       `firestore:"isCanceled"`
+	IsDispatched  bool       `firestore:"isDispatched"`
+	Transferred   bool       `firestore:"transferred"`
+	TransferredAt *time.Time `firestore:"transferredAt,omitempty"`
+}
+
+// ========================
 // Mapper
 // ========================
 
@@ -418,92 +451,90 @@ func (r *OrderRepositoryFS) UnlockTransferItem(ctx context.Context, orderID stri
 // - paid is on order root
 // - transferred/transferredAt are on each item (items[].transferred / items[].transferredAt)
 func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
-	data := doc.Data()
-	if data == nil {
-		return orderdom.Order{}, fmt.Errorf("empty order document: %s", doc.Ref.ID)
+	if doc == nil {
+		return orderdom.Order{}, fmt.Errorf("nil order document")
 	}
 
-	getStr := func(key string) string {
-		if v, ok := data[key].(string); ok {
-			return v
-		}
-		return ""
+	var d orderDoc
+	if err := doc.DataTo(&d); err != nil {
+		return orderdom.Order{}, err
 	}
 
-	getTime := func(key string) time.Time {
-		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
-			return v.UTC()
-		}
-		return time.Time{}
+	items := make([]orderdom.OrderItemSnapshot, 0, len(d.Items))
+	for _, it := range d.Items {
+		items = append(items, orderdom.OrderItemSnapshot{
+			ModelID:       it.ModelID,
+			InventoryID:   it.InventoryID,
+			ListID:        it.ListID,
+			Qty:           it.Qty,
+			Price:         it.Price,
+			IsCanceled:    it.IsCanceled,
+			IsDispatched:  it.IsDispatched,
+			Transferred:   it.Transferred,
+			TransferredAt: normalizeTimePtr(it.TransferredAt),
+		})
 	}
 
-	getBool := func(key string) bool {
-		if v, ok := data[key].(bool); ok {
-			return v
-		}
-		return false
-	}
-
-	var ship orderdom.ShippingSnapshot
-	if v, ok := data["shippingSnapshot"]; ok {
-		if s, ok2 := decodeShippingSnapshot(v); ok2 {
-			ship = s
-		}
-	}
-
-	var paymentMethod orderdom.PaymentMethodSnapshot
-	if v, ok := data["paymentMethodSnapshot"]; ok {
-		if p, ok2 := decodePaymentMethodSnapshot(v); ok2 {
-			paymentMethod = p
-		}
-	}
-
-	items, ok := decodeItems(data["items"])
-	if !ok {
-		items = nil
-	}
-
-	createdAt := getTime("createdAt")
-	paid := getBool("paid")
-	avatarID := getStr("avatarId")
-
-	if avatarID == "" {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing avatarId", doc.Ref.ID)
-	}
-	if ship.State == "" ||
-		ship.City == "" ||
-		ship.Street == "" ||
-		ship.Country == "" {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot", doc.Ref.ID)
-	}
-	if paymentMethod.CustomerID == "" ||
-		paymentMethod.Brand == "" ||
-		paymentMethod.Last4 == "" ||
-		paymentMethod.ExpMonth < 1 ||
-		paymentMethod.ExpMonth > 12 ||
-		paymentMethod.ExpYear < 2000 ||
-		paymentMethod.ExpYear > 9999 ||
-		paymentMethod.CardholderName == "" {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing paymentMethodSnapshot", doc.Ref.ID)
-	}
-	if len(items) == 0 {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing items", doc.Ref.ID)
-	}
-
-	return orderdom.Order{
+	o := orderdom.Order{
 		ID:       doc.Ref.ID,
-		UserID:   getStr("userId"),
-		AvatarID: avatarID,
-		CartID:   getStr("cartId"),
+		UserID:   d.UserID,
+		AvatarID: d.AvatarID,
+		CartID:   d.CartID,
 
-		ShippingSnapshot:      ship,
-		PaymentMethodSnapshot: paymentMethod,
+		ShippingSnapshot: orderdom.ShippingSnapshot{
+			ZipCode: d.ShippingSnapshot.ZipCode,
+			State:   d.ShippingSnapshot.State,
+			City:    d.ShippingSnapshot.City,
+			Street:  d.ShippingSnapshot.Street,
+			Street2: d.ShippingSnapshot.Street2,
+			Country: d.ShippingSnapshot.Country,
+		},
+		PaymentMethodSnapshot: orderdom.PaymentMethodSnapshot{
+			CustomerID:     d.PaymentMethodSnapshot.CustomerID,
+			Brand:          d.PaymentMethodSnapshot.Brand,
+			Last4:          d.PaymentMethodSnapshot.Last4,
+			ExpMonth:       d.PaymentMethodSnapshot.ExpMonth,
+			ExpYear:        d.PaymentMethodSnapshot.ExpYear,
+			CardholderName: d.PaymentMethodSnapshot.CardholderName,
+			IsDefault:      d.PaymentMethodSnapshot.IsDefault,
+		},
 
-		Paid: paid,
-
+		Paid:      d.Paid,
 		Items:     items,
-		CreatedAt: createdAt,
-	}, nil
+		CreatedAt: d.CreatedAt.UTC(),
+	}
+
+	if err := validateDecodedOrder(o); err != nil {
+		return orderdom.Order{}, fmt.Errorf("order %s: %w", doc.Ref.ID, err)
+	}
+
+	return o, nil
+}
+
+func validateDecodedOrder(o orderdom.Order) error {
+	if o.AvatarID == "" {
+		return fmt.Errorf("missing avatarId")
+	}
+	if o.ShippingSnapshot.State == "" ||
+		o.ShippingSnapshot.City == "" ||
+		o.ShippingSnapshot.Street == "" ||
+		o.ShippingSnapshot.Country == "" {
+		return fmt.Errorf("missing shippingSnapshot")
+	}
+	if o.PaymentMethodSnapshot.CustomerID == "" ||
+		o.PaymentMethodSnapshot.Brand == "" ||
+		o.PaymentMethodSnapshot.Last4 == "" ||
+		o.PaymentMethodSnapshot.ExpMonth < 1 ||
+		o.PaymentMethodSnapshot.ExpMonth > 12 ||
+		o.PaymentMethodSnapshot.ExpYear < 2000 ||
+		o.PaymentMethodSnapshot.ExpYear > 9999 ||
+		o.PaymentMethodSnapshot.CardholderName == "" {
+		return fmt.Errorf("missing paymentMethodSnapshot")
+	}
+	if len(o.Items) == 0 {
+		return fmt.Errorf("missing items")
+	}
+	return nil
 }
 
 // orderToDoc converts orderdom.Order into a Firestore-storable map (NEW schema only).
@@ -567,202 +598,6 @@ func orderToDoc(o orderdom.Order) map[string]any {
 	}
 
 	return m
-}
-
-// ========================
-// Decode helpers
-// ========================
-
-func asMapAny(v any) map[string]any {
-	if v == nil {
-		return nil
-	}
-	if m, ok := v.(map[string]any); ok {
-		return m
-	}
-	return nil
-}
-
-func mapGetStr(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprint(v)
-}
-
-func mapGetInt(m map[string]any, key string) int {
-	if m == nil {
-		return 0
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return 0
-	}
-	switch t := v.(type) {
-	case int:
-		return t
-	case int64:
-		return int(t)
-	case int32:
-		return int(t)
-	case float64:
-		return int(t)
-	case float32:
-		return int(t)
-	default:
-		return 0
-	}
-}
-
-func mapGetBool(m map[string]any, key string) (bool, bool) {
-	if m == nil {
-		return false, false
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return false, false
-	}
-	switch t := v.(type) {
-	case bool:
-		return t, true
-	case string:
-		s := strings.ToLower(strings.TrimSpace(t))
-		if s == "true" {
-			return true, true
-		}
-		if s == "false" {
-			return false, true
-		}
-		return false, false
-	default:
-		return false, false
-	}
-}
-
-// mapGetTimeBestEffort reads Firestore timestamp wobble.
-// - time.Time
-// - *timestamppb.Timestamp
-func mapGetTimeBestEffort(m map[string]any, key string) (time.Time, bool) {
-	if m == nil {
-		return time.Time{}, false
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return time.Time{}, false
-	}
-
-	switch t := v.(type) {
-	case time.Time:
-		if t.IsZero() {
-			return time.Time{}, false
-		}
-		return t.UTC(), true
-	case *timestamppb.Timestamp:
-		if t == nil {
-			return time.Time{}, false
-		}
-		tt := t.AsTime()
-		if tt.IsZero() {
-			return time.Time{}, false
-		}
-		return tt.UTC(), true
-	default:
-		return time.Time{}, false
-	}
-}
-
-func decodeShippingSnapshot(v any) (orderdom.ShippingSnapshot, bool) {
-	m := asMapAny(v)
-	if m == nil {
-		return orderdom.ShippingSnapshot{}, false
-	}
-	return orderdom.ShippingSnapshot{
-		ZipCode: mapGetStr(m, "zipCode"),
-		State:   mapGetStr(m, "state"),
-		City:    mapGetStr(m, "city"),
-		Street:  mapGetStr(m, "street"),
-		Street2: mapGetStr(m, "street2"),
-		Country: mapGetStr(m, "country"),
-	}, true
-}
-
-func decodePaymentMethodSnapshot(v any) (orderdom.PaymentMethodSnapshot, bool) {
-	m := asMapAny(v)
-	if m == nil {
-		return orderdom.PaymentMethodSnapshot{}, false
-	}
-
-	isDefault, _ := mapGetBool(m, "isDefault")
-
-	return orderdom.PaymentMethodSnapshot{
-		CustomerID:     mapGetStr(m, "customerId"),
-		Brand:          mapGetStr(m, "brand"),
-		Last4:          mapGetStr(m, "last4"),
-		ExpMonth:       mapGetInt(m, "expMonth"),
-		ExpYear:        mapGetInt(m, "expYear"),
-		CardholderName: mapGetStr(m, "cardholderName"),
-		IsDefault:      isDefault,
-	}, true
-}
-
-func decodeItems(v any) ([]orderdom.OrderItemSnapshot, bool) {
-	if v == nil {
-		return nil, false
-	}
-
-	build := func(m map[string]any) orderdom.OrderItemSnapshot {
-		if m == nil {
-			return orderdom.OrderItemSnapshot{}
-		}
-
-		transferred, _ := mapGetBool(m, "transferred")
-		isCanceled, _ := mapGetBool(m, "isCanceled")
-		isDispatched, _ := mapGetBool(m, "isDispatched")
-
-		var transferredAt *time.Time
-		if t, ok := mapGetTimeBestEffort(m, "transferredAt"); ok {
-			tt := t.UTC()
-			transferredAt = &tt
-		}
-
-		return orderdom.OrderItemSnapshot{
-			ModelID:       mapGetStr(m, "modelId"),
-			InventoryID:   mapGetStr(m, "inventoryId"),
-			ListID:        mapGetStr(m, "listId"),
-			Qty:           mapGetInt(m, "qty"),
-			Price:         mapGetInt(m, "price"),
-			IsCanceled:    isCanceled,
-			IsDispatched:  isDispatched,
-			Transferred:   transferred,
-			TransferredAt: transferredAt,
-		}
-	}
-
-	switch raw := v.(type) {
-	case []any:
-		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
-		for _, x := range raw {
-			out = append(out, build(asMapAny(x)))
-		}
-		return out, true
-
-	case []map[string]any:
-		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
-		for _, m := range raw {
-			out = append(out, build(m))
-		}
-		return out, true
-
-	default:
-		return nil, false
-	}
 }
 
 // ========================

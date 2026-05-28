@@ -112,26 +112,18 @@ func (h *StripeWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	p, err := paymentdom.New(
-		paymentID,
-		paymentMethodID,
-		stripeCustomerID,
-		stripePaymentMethodID,
-		stripePaymentIntentID,
-		amount,
-		paymentdom.StatusSucceeded,
-		nil,
-		nil,
-		nil,
-		time.Now().UTC(),
-	)
-	if err != nil {
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ignored"})
-		return
+	st := paymentdom.StatusSucceeded
+
+	patch := paymentdom.UpdatePaymentInput{
+		PaymentMethodID:       &paymentMethodID,
+		StripeCustomerID:      &stripeCustomerID,
+		StripePaymentMethodID: &stripePaymentMethodID,
+		StripePaymentIntentID: &stripePaymentIntentID,
+		Amount:                &amount,
+		Status:                &st,
 	}
 
-	if err := h.paymentUC.Update(r.Context(), p); err != nil {
+	if _, err := h.paymentUC.Update(r.Context(), paymentID, patch); err != nil {
 		// Stripe へのリトライを促すなら 500 を返す
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})

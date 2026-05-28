@@ -17,12 +17,11 @@ import (
 type OrderRepo interface {
 	// Queries
 	GetByID(ctx context.Context, id string) (orderdom.Order, error)
-	Exists(ctx context.Context, id string) (bool, error)
 	ListByAvatarID(ctx context.Context, avatarID string, sort common.Sort, page common.Page) (common.PageResult[orderdom.Order], error)
 
 	// Commands
 	Create(ctx context.Context, o orderdom.Order) (orderdom.Order, error)
-	Save(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
+	Update(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
 }
 
 // CartRepo is the persistence port required to read cart items (for listId lookup).
@@ -55,10 +54,6 @@ func NewOrderUsecase(repo OrderRepo, cartRepo CartRepo) *OrderUsecase {
 
 func (u *OrderUsecase) GetByID(ctx context.Context, id string) (orderdom.Order, error) {
 	return u.repo.GetByID(ctx, id)
-}
-
-func (u *OrderUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.repo.Exists(ctx, id)
 }
 
 func (u *OrderUsecase) ListByAvatarID(
@@ -330,7 +325,7 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 		checked.Items = o.Items
 	}
 
-	return u.repo.Save(ctx, checked, nil)
+	return u.repo.Update(ctx, checked, nil)
 }
 
 // ------------------------------------------------------------

@@ -130,7 +130,7 @@ func (h *PaymentHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	p, err := h.uc.GetByID(r.Context(), paymentID)
+	p, err := h.uc.GetByPaymentID(r.Context(), paymentID)
 	if err != nil {
 		writePaymentErr(w, err)
 		return

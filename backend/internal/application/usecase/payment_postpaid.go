@@ -23,7 +23,7 @@ import (
 )
 
 func isPaidStatus(st paymentdom.PaymentStatus) bool {
-	return st == paymentdom.PaymentStatusSucceeded
+	return st == paymentdom.StatusSucceeded
 }
 
 // handlePostPaidBestEffort runs post-paid side effects in best-effort manner.
@@ -119,12 +119,12 @@ func (u *PaymentUsecase) markOrderPaidTrue(
 
 	current.Paid = true
 
-	saved, err := u.orderRepo.Save(ctx, current, nil)
+	updated, err := u.orderRepo.Update(ctx, current, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &saved, nil
+	return &updated, nil
 }
 
 // ------------------------------------------------------------
