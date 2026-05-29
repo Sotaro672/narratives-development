@@ -1,4 +1,4 @@
-// backend\internal\application\query\console\mint_request_detail_query.go
+// backend/internal/application/query/console/mint_request_detail_query.go
 package query
 
 import (
@@ -14,7 +14,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	ctx context.Context,
 	productionID string,
 ) (*querydto.MintRequestDetailDTO, error) {
-	if s == nil || s.mintUC == nil || s.productionUC == nil {
+	if s == nil || s.productionUC == nil {
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
@@ -53,7 +53,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, errors.New("production not found")
 	}
 
-	batchesAny, err := s.mintUC.ListInspectionBatchesByProductionIDs(ctx, []string{pid})
+	batchesAny, err := s.listInspectionBatchesByProductionIDs(ctx, []string{pid})
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 	}
 
-	mintsByPID, err := s.mintUC.ListMintsByProductionIDs(ctx, []string{pid})
+	mintsByPID, err := s.listMintsByProductionIDs(ctx, []string{pid})
 	if err != nil {
 		return nil, err
 	}

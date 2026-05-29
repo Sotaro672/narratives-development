@@ -1,3 +1,4 @@
+// backend/internal/application/query/console/mint_product_blueprint_query.go
 package query
 
 import (
@@ -6,15 +7,14 @@ import (
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
-	mintapp "narratives/internal/application/usecase"
 	pbpdom "narratives/internal/domain/productBlueprint"
 )
 
-func (s *MintRequestQueryService) GetProductBlueprintPatchForMint(
+func (s *MintRequestQueryService) GetProductBlueprintForMint(
 	ctx context.Context,
 	productBlueprintID string,
-) (*querydto.MintProductBlueprintPatchDTO, error) {
-	if s == nil || s.mintUC == nil {
+) (*querydto.MintProductBlueprintDTO, error) {
+	if s == nil || s.pbRepo == nil {
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
@@ -23,32 +23,28 @@ func (s *MintRequestQueryService) GetProductBlueprintPatchForMint(
 		return nil, errors.New("productBlueprintID is empty")
 	}
 
-	patch, err := s.mintUC.GetProductBlueprintPatchByID(ctx, id)
+	productBlueprint, err := s.pbRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	return buildMintProductBlueprintPatchDTO(ctx, patch, s.nameResolver), nil
+	return buildMintProductBlueprintDTO(ctx, productBlueprint, s.nameResolver), nil
 }
 
-func buildMintProductBlueprintPatchDTO(
+func buildMintProductBlueprintDTO(
 	ctx context.Context,
-	patch pbpdom.Patch,
+	productBlueprint pbpdom.ProductBlueprint,
 	nameResolver *resolver.NameResolver,
-) *querydto.MintProductBlueprintPatchDTO {
+) *querydto.MintProductBlueprintDTO {
 	brandName := ""
 
-	if patch.BrandID != nil && nameResolver != nil {
-		brandID := *patch.BrandID
-		if brandID != "" {
-			brandName = nameResolver.ResolveBrandName(ctx, brandID)
-		}
+	brandID := productBlueprint.BrandID
+	if brandID != "" && nameResolver != nil {
+		brandName = nameResolver.ResolveBrandName(ctx, brandID)
 	}
 
-	return &querydto.MintProductBlueprintPatchDTO{
-		Patch:     patch,
-		BrandName: brandName,
+	return &querydto.MintProductBlueprintDTO{
+		ProductBlueprint: productBlueprint,
+		BrandName:        brandName,
 	}
 }
-
-var _ = (*mintapp.MintUsecase)(nil)

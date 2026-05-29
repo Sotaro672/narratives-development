@@ -1,3 +1,4 @@
+// backend/internal/platform/di/console/contaner_usecase.go
 package console
 
 import (
@@ -157,12 +158,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	)
 
 	mintUC := uc.NewMintUsecase(
-		r.productBlueprintRepo,
 		r.productionRepo,
 		r.inspectionRepo,
-		r.modelRepo,
 		r.tokenBlueprintRepo,
-		s.brandSvc,
 		r.mintRepo,
 		r.inspectionRepo,
 		tokenUC,
@@ -178,7 +176,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.tokenBlueprintRepo,
 		uploader,
 	)
-	mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
+
+	tokenUC.SetTokenBlueprintRepo(r.tokenBlueprintRepo)
+	tokenUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
 
 	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
 

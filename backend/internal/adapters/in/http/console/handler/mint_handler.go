@@ -29,10 +29,19 @@ type MintRequestQueryService interface {
 
 	GetMintRequestDetail(ctx context.Context, productionID string) (*querydto.MintRequestDetailDTO, error)
 
-	GetProductBlueprintPatchForMint(
+	ListInspectionBatchesForMint(
+		ctx context.Context,
+		productionIDs []string,
+	) ([]inspectiondom.InspectionBatch, error)
+
+	GetProductBlueprintForMint(
 		ctx context.Context,
 		productBlueprintID string,
-	) (*querydto.MintProductBlueprintPatchDTO, error)
+	) (*querydto.MintProductBlueprintDTO, error)
+
+	ListBrandsForMint(
+		ctx context.Context,
+	) (branddom.PageResult[branddom.Brand], error)
 
 	ListTokenBlueprintsForMint(
 		ctx context.Context,
@@ -96,9 +105,8 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet &&
-		strings.HasPrefix(r.URL.Path, "/mint/product_blueprints/") &&
-		strings.HasSuffix(r.URL.Path, "/patch"):
-		h.getProductBlueprintPatchByID(w, r)
+		strings.HasPrefix(r.URL.Path, "/mint/product_blueprints/"):
+		h.getProductBlueprintByID(w, r)
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/brands":
@@ -203,9 +211,9 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h.mintUC == nil {
+	if h.mintRequestQS == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
@@ -259,7 +267,7 @@ func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *h
 		}
 	}
 
-	batches, err := h.mintUC.ListInspectionBatchesByProductionIDs(ctx, ids)
+	batches, err := h.mintRequestQS.ListInspectionBatchesForMint(ctx, ids)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -353,7 +361,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *http.Request) {
+func (h *MintHandler) getProductBlueprintByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintRequestQS == nil {
@@ -363,7 +371,6 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/mint/product_blueprints/")
-	path = strings.TrimSuffix(path, "/patch")
 	id := strings.Trim(path, "/")
 
 	if id == "" {
@@ -372,7 +379,12 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 		return
 	}
 
-	resp, err := h.mintRequestQS.GetProductBlueprintPatchForMint(ctx, id)
+	if strings.Contains(id, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	resp, err := h.mintRequestQS.GetProductBlueprintForMint(ctx, id)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, pbpdom.ErrNotFound) {
@@ -389,15 +401,13 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h.mintUC == nil {
+	if h.mintRequestQS == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
-	var page branddom.Page
-
-	result, err := h.mintUC.ListBrandsForCurrentCompany(ctx, page)
+	result, err := h.mintRequestQS.ListBrandsForMint(ctx)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {

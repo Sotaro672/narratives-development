@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\mint_usecase.go
+// backend/internal/application/usecase/mint_usecase.go
 package usecase
 
 import (
@@ -7,16 +7,12 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"time"
 
 	resolver "narratives/internal/application/resolver"
-	branddom "narratives/internal/domain/brand"
-	domcommon "narratives/internal/domain/common"
 	inspectiondom "narratives/internal/domain/inspection"
 	invdom "narratives/internal/domain/inventory"
 	mintdom "narratives/internal/domain/mint"
-	pbpdom "narratives/internal/domain/productBlueprint"
 	tokendom "narratives/internal/domain/token"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -35,18 +31,6 @@ type InventoryUpserter interface {
 		modelID string,
 		productIDs []string,
 	) (invdom.Mint, error)
-}
-
-type TokenBlueprintMetadataEnsurer interface {
-	EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
-}
-
-type TokenBlueprintMintMarker interface {
-	MarkTokenBlueprintMinted(
-		ctx context.Context,
-		tokenBlueprintID string,
-		actorID string,
-	) (*tbdom.TokenBlueprint, error)
 }
 
 type MintResultMapper struct{}
@@ -79,17 +63,10 @@ func (m *MintResultMapper) ApplyOnchainResult(ent *mintdom.Mint, result *tokendo
 }
 
 type MintUsecase struct {
-	pbRepo    mintdom.MintProductBlueprintRepo
-	prodRepo  mintdom.MintProductionRepo
-	inspRepo  mintdom.MintInspectionRepo
-	modelRepo mintdom.MintModelRepo
-
-	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
-	tbMintMarker      TokenBlueprintMintMarker
+	prodRepo mintdom.MintProductionRepo
+	inspRepo mintdom.MintInspectionRepo
 
 	tbRepo tbdom.RepositoryPort
-
-	brandSvc *branddom.Service
 
 	mintRepo mintdom.MintRepository
 
@@ -105,29 +82,21 @@ type MintUsecase struct {
 }
 
 func NewMintUsecase(
-	pbRepo mintdom.MintProductBlueprintRepo,
 	prodRepo mintdom.MintProductionRepo,
 	inspRepo mintdom.MintInspectionRepo,
-	modelRepo mintdom.MintModelRepo,
 	tbRepo tbdom.RepositoryPort,
-	brandSvc *branddom.Service,
 	mintRepo mintdom.MintRepository,
 	passedProductLister mintdom.PassedProductLister,
 	tokenMinter TokenMintPort,
 ) *MintUsecase {
 	return &MintUsecase{
-		pbRepo:              pbRepo,
 		prodRepo:            prodRepo,
 		inspRepo:            inspRepo,
-		modelRepo:           modelRepo,
 		tbRepo:              tbRepo,
-		brandSvc:            brandSvc,
 		mintRepo:            mintRepo,
 		mintResultMapper:    NewMintResultMapper(),
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
-		tbMetadataEnsurer:   nil,
-		tbMintMarker:        nil,
 		inventoryUC:         nil,
 		nameResolver:        nil,
 	}
@@ -147,20 +116,6 @@ func (u *MintUsecase) SetInventoryUsecase(uc *InventoryUsecase) {
 
 	var _ InventoryUpserter = uc
 	u.inventoryUC = uc
-}
-
-func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
-	if u == nil {
-		return
-	}
-	u.tbMetadataEnsurer = e
-}
-
-func (u *MintUsecase) SetTokenBlueprintMintMarker(marker TokenBlueprintMintMarker) {
-	if u == nil {
-		return
-	}
-	u.tbMintMarker = marker
 }
 
 func (u *MintUsecase) UpdateRequestInfo(
@@ -294,134 +249,6 @@ func (u *MintUsecase) UpdateRequestInfo(
 	return result, nil
 }
 
-func (u *MintUsecase) ListMintsByProductionIDs(
-	ctx context.Context,
-	productionIDs []string,
-) (map[string]mintdom.Mint, error) {
-	if u == nil {
-		return nil, errors.New("mint usecase is nil")
-	}
-	if u.mintRepo == nil {
-		return nil, errors.New("mint repo is nil")
-	}
-
-	seen := make(map[string]struct{}, len(productionIDs))
-	ids := make([]string, 0, len(productionIDs))
-
-	for _, id := range productionIDs {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
-
-	if len(ids) == 0 {
-		return map[string]mintdom.Mint{}, nil
-	}
-
-	sort.Strings(ids)
-
-	return u.mintRepo.ListByProductionID(ctx, ids)
-}
-
-func (u *MintUsecase) GetProductBlueprintPatchByID(
-	ctx context.Context,
-	productBlueprintID string,
-) (pbpdom.Patch, error) {
-	if u == nil {
-		return pbpdom.Patch{}, errors.New("mint usecase is nil")
-	}
-	if u.pbRepo == nil {
-		return pbpdom.Patch{}, errors.New("productBlueprint repo is nil")
-	}
-
-	if productBlueprintID == "" {
-		return pbpdom.Patch{}, errors.New("productBlueprintID is empty")
-	}
-
-	return u.pbRepo.GetPatchByID(ctx, productBlueprintID)
-}
-
-func (u *MintUsecase) ListBrandsForCurrentCompany(
-	ctx context.Context,
-	page branddom.Page,
-) (branddom.PageResult[branddom.Brand], error) {
-	var empty branddom.PageResult[branddom.Brand]
-
-	if u == nil {
-		return empty, errors.New("mint usecase is nil")
-	}
-	if u.brandSvc == nil {
-		return empty, errors.New("brand service is nil")
-	}
-
-	companyID := CompanyIDFromContext(ctx)
-	if companyID == "" {
-		return empty, ErrCompanyIDMissing
-	}
-
-	return u.brandSvc.ListByCompanyID(ctx, companyID, page)
-}
-
-func (u *MintUsecase) ListTokenBlueprintsByBrand(
-	ctx context.Context,
-	brandID string,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	var empty domcommon.PageResult[tbdom.TokenBlueprint]
-
-	if u == nil {
-		return empty, errors.New("mint usecase is nil")
-	}
-	if u.tbRepo == nil {
-		return empty, errors.New("tokenBlueprint repo is nil")
-	}
-
-	if brandID == "" {
-		return empty, errors.New("brandID is empty")
-	}
-
-	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
-}
-
-func (u *MintUsecase) ListInspectionBatchesByProductionIDs(
-	ctx context.Context,
-	productionIDs []string,
-) ([]inspectiondom.InspectionBatch, error) {
-	if u == nil {
-		return nil, errors.New("mint usecase is nil")
-	}
-	if u.inspRepo == nil {
-		return nil, errors.New("inspection repo is nil")
-	}
-
-	seen := make(map[string]struct{}, len(productionIDs))
-	ids := make([]string, 0, len(productionIDs))
-
-	for _, id := range productionIDs {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
-
-	if len(ids) == 0 {
-		return []inspectiondom.InspectionBatch{}, nil
-	}
-
-	sort.Strings(ids)
-
-	return u.inspRepo.ListByProductionID(ctx, ids)
-}
-
 func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Context, productionID string) string {
 	if u == nil || u.prodRepo == nil {
 		return ""
@@ -502,14 +329,6 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		return nil, err
 	}
 
-	actorID := mintEnt.CreatedBy
-	if actorID == "" {
-		actorID = MemberIDFromContext(ctx)
-	}
-	if actorID == "" {
-		return nil, errors.New("actorID is missing (mint.createdBy and context memberId are empty)")
-	}
-
 	tbID := mintEnt.TokenBlueprintID
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintID is empty on mint")
@@ -529,44 +348,12 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	if mintEnt.Minted {
 		result = u.mintResultMapper.FromMint(*mintEnt)
 	} else {
-		if u.tbMetadataEnsurer == nil {
-			return nil, fmt.Errorf("tokenBlueprint metadata ensurer is nil")
-		}
-		if u.tbRepo == nil {
-			return nil, fmt.Errorf("tokenBlueprint repo is nil")
-		}
-
-		tb, err := u.tbRepo.GetByID(ctx, tbID)
-		if err != nil {
-			return nil, err
-		}
-		if tb == nil {
-			return nil, fmt.Errorf("tokenBlueprint not found (id=%s)", tbID)
-		}
-
-		updated, err := u.tbMetadataEnsurer.EnsureMetadataURI(ctx, tb, actorID)
-		if err != nil {
-			return nil, err
-		}
-		if updated == nil {
-			updated = tb
-		}
-
-		uri := strings.TrimSpace(updated.MetadataURI)
-		if uri == "" {
-			return nil, fmt.Errorf("metadataUri is empty after ensure (tokenBlueprintId=%s)", tbID)
-		}
-
 		result, err = u.tokenMinter.MintFromMintRequest(ctx, mintRequestID)
 		if err != nil {
 			return nil, err
 		}
 		if result == nil {
 			return nil, fmt.Errorf("onchain mint succeeded but result is nil (mintRequestId=%s)", mintRequestID)
-		}
-
-		if u.tbMintMarker != nil {
-			_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(ctx, tbID, actorID)
 		}
 
 		if u.mintRepo != nil {

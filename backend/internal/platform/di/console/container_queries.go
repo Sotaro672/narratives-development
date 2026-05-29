@@ -27,7 +27,7 @@ type queries struct {
 	orderDetailQuery *companyquery.OrderDetailQuery
 }
 
-func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *queries {
+func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s *services) *queries {
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
 		r.productBlueprintRepo,
 		r.productionRepo,
@@ -38,8 +38,12 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases) *q
 	u.productionUC.SetListQuery(companyProductionQueryService)
 
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
-		u.mintUC,
 		u.productionUC,
+		r.mintRepo,
+		r.inspectionRepo,
+		r.productBlueprintRepo,
+		r.tokenBlueprintRepo,
+		s.brandSvc,
 		res.nameResolver,
 	)
 

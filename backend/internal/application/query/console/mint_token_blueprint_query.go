@@ -3,67 +3,44 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	querydto "narratives/internal/application/query/console/dto"
-	domcommon "narratives/internal/domain/common"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-// ListTokenBlueprintsForMint returns tokenBlueprint options required by console mint screens.
 func (s *MintRequestQueryService) ListTokenBlueprintsForMint(
 	ctx context.Context,
 	input querydto.ListTokenBlueprintsForMintInput,
 ) ([]querydto.TokenBlueprintForMintDTO, error) {
-	if s == nil || s.mintUC == nil {
+	if s == nil || s.tbRepo == nil {
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
-	if input.BrandID == "" {
+	brandID := input.BrandID
+	if brandID == "" {
 		return nil, errors.New("brandID is empty")
 	}
 
-	pageNumber := input.Page
-	if pageNumber <= 0 {
-		pageNumber = 1
-	}
-
-	perPage := input.PerPage
-	if perPage <= 0 {
-		perPage = 100
-	}
-
-	result, err := s.mintUC.ListTokenBlueprintsByBrand(ctx, input.BrandID, domcommon.Page{
-		Number:  pageNumber,
-		PerPage: perPage,
-	})
+	result, err := tbdom.ListByBrandID(ctx, s.tbRepo, brandID, pageFromMintInput(input))
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]querydto.TokenBlueprintForMintDTO, 0, len(result.Items))
-	for _, tb := range result.Items {
-		items = append(items, querydto.TokenBlueprintForMintDTO{
-			ID: tb.ID,
-
-			// 既存 UI 互換: selector 表示用
-			Name: tb.Name,
-
-			// TokenBlueprintCard 表示用
-			TokenName: tb.Name,
-
-			Symbol: tb.Symbol,
-
-			BrandID:   tb.BrandID,
-			BrandName: "",
-			CompanyID: tb.CompanyID,
-
-			Description: tb.Description,
-			Minted:      tb.Minted,
-
-			MetadataURI: tb.MetadataURI,
-			IconURL:     tb.IconURL,
-		})
+	out := make([]querydto.TokenBlueprintForMintDTO, 0, len(result.Items))
+	if len(result.Items) == 0 {
+		return out, nil
 	}
 
-	return items, nil
+	b, err := json.Marshal(result.Items)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+
+	return out, nil
 }

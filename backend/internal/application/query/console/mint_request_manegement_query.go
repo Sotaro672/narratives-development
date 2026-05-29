@@ -1,4 +1,4 @@
-// backend\internal\application\query\console\mint_request_management_query.go
+// backend/internal/application/query/console/mint_request_management_query.go
 package query
 
 import (
@@ -11,25 +11,43 @@ import (
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	mintapp "narratives/internal/application/usecase"
+	branddom "narratives/internal/domain/brand"
+	domcommon "narratives/internal/domain/common"
+	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
 
 type MintRequestQueryService struct {
-	mintUC       *mintapp.MintUsecase
 	productionUC *mintapp.ProductionUsecase
+
+	mintRepo mintdom.MintRepository
+	inspRepo mintdom.MintInspectionRepo
+	pbRepo   mintdom.MintProductBlueprintRepo
+	tbRepo   tbdom.RepositoryPort
+	brandSvc *branddom.Service
+
 	nameResolver *resolver.NameResolver
 }
 
 func NewMintRequestQueryService(
-	mintUC *mintapp.MintUsecase,
 	productionUC *mintapp.ProductionUsecase,
+	mintRepo mintdom.MintRepository,
+	inspRepo mintdom.MintInspectionRepo,
+	pbRepo mintdom.MintProductBlueprintRepo,
+	tbRepo tbdom.RepositoryPort,
+	brandSvc *branddom.Service,
 	nameResolver *resolver.NameResolver,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
-		mintUC:       mintUC,
 		productionUC: productionUC,
+		mintRepo:     mintRepo,
+		inspRepo:     inspRepo,
+		pbRepo:       pbRepo,
+		tbRepo:       tbRepo,
+		brandSvc:     brandSvc,
 		nameResolver: nameResolver,
 	}
 }
@@ -38,7 +56,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	ctx context.Context,
 	input querydto.ListMintRequestManagementRowsInput,
 ) ([]querydto.ProductionInspectionMintDTO, error) {
-	if s == nil || s.mintUC == nil || s.productionUC == nil {
+	if s == nil || s.productionUC == nil {
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
@@ -92,7 +110,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		return []querydto.ProductionInspectionMintDTO{}, nil
 	}
 
-	batchesAny, err := s.mintUC.ListInspectionBatchesByProductionIDs(ctx, ids)
+	batchesAny, err := s.listInspectionBatchesByProductionIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +137,7 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		inspByPID[pid] = b
 	}
 
-	mintsByPID, err := s.mintUC.ListMintsByProductionIDs(ctx, ids)
+	mintsByPID, err := s.listMintsByProductionIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +212,92 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	return rows, nil
 }
 
+func (s *MintRequestQueryService) ListInspectionBatchesForMint(
+	ctx context.Context,
+	productionIDs []string,
+) ([]inspectiondom.InspectionBatch, error) {
+	return s.listInspectionBatchesByProductionIDs(ctx, productionIDs)
+}
+
+func (s *MintRequestQueryService) ListBrandsForMint(
+	ctx context.Context,
+) (branddom.PageResult[branddom.Brand], error) {
+	var empty branddom.PageResult[branddom.Brand]
+
+	if s == nil || s.brandSvc == nil {
+		return empty, ErrMintRequestQueryServiceNotConfigured
+	}
+
+	companyID := mintapp.CompanyIDFromContext(ctx)
+	if companyID == "" {
+		return empty, mintapp.ErrCompanyIDMissing
+	}
+
+	return s.brandSvc.ListByCompanyID(ctx, companyID, branddom.Page{})
+}
+
+func (s *MintRequestQueryService) listMintsByProductionIDs(
+	ctx context.Context,
+	productionIDs []string,
+) (map[string]mintdom.Mint, error) {
+	if s == nil || s.mintRepo == nil {
+		return nil, ErrMintRequestQueryServiceNotConfigured
+	}
+
+	seen := make(map[string]struct{}, len(productionIDs))
+	ids := make([]string, 0, len(productionIDs))
+
+	for _, id := range productionIDs {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	if len(ids) == 0 {
+		return map[string]mintdom.Mint{}, nil
+	}
+
+	sort.Strings(ids)
+
+	return s.mintRepo.ListByProductionID(ctx, ids)
+}
+
+func (s *MintRequestQueryService) listInspectionBatchesByProductionIDs(
+	ctx context.Context,
+	productionIDs []string,
+) ([]inspectiondom.InspectionBatch, error) {
+	if s == nil || s.inspRepo == nil {
+		return nil, ErrMintRequestQueryServiceNotConfigured
+	}
+
+	seen := make(map[string]struct{}, len(productionIDs))
+	ids := make([]string, 0, len(productionIDs))
+
+	for _, id := range productionIDs {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	if len(ids) == 0 {
+		return []inspectiondom.InspectionBatch{}, nil
+	}
+
+	sort.Strings(ids)
+
+	return s.inspRepo.ListByProductionID(ctx, ids)
+}
+
 func makeIDSet(ids []string) map[string]struct{} {
 	out := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
@@ -244,4 +348,21 @@ func resolveRequestedByName(
 	}
 
 	return name
+}
+
+func pageFromMintInput(input querydto.ListTokenBlueprintsForMintInput) domcommon.Page {
+	page := input.Page
+	perPage := input.PerPage
+
+	if page <= 0 {
+		page = 1
+	}
+	if perPage <= 0 {
+		perPage = 100
+	}
+
+	return domcommon.Page{
+		Number:  page,
+		PerPage: perPage,
+	}
 }

@@ -16,14 +16,27 @@ import { isValidProductBlueprintCategoryKind } from "../../../../../productBluep
 
 type ProductBlueprintCategoryRaw = {
   ID?: unknown;
+  id?: unknown;
+
   Code?: unknown;
+  code?: unknown;
+
   NameJa?: unknown;
+  nameJa?: unknown;
+
   NameEn?: unknown;
+  nameEn?: unknown;
+
   ParentID?: unknown;
   ParentId?: unknown;
   parentId?: unknown;
+
   Kind?: unknown;
+  kind?: unknown;
+
   Path?: unknown;
+  path?: unknown;
+
   DisplayOrder?: unknown;
   displayOrder?: unknown;
 };
@@ -31,25 +44,59 @@ type ProductBlueprintCategoryRaw = {
 type ProductBlueprintModelRefRaw = {
   ModelID?: unknown;
   modelId?: unknown;
+
   DisplayOrder?: unknown;
   displayOrder?: unknown;
 };
 
 type ProductBlueprintPatchRaw = {
+  ID?: unknown;
+  id?: unknown;
+
+  ProductName?: unknown;
   productName?: unknown;
+
+  Description?: unknown;
   description?: unknown;
 
-  brandId?: unknown;
-  brandName?: unknown;
+  CompanyID?: unknown;
   companyId?: unknown;
 
+  BrandID?: unknown;
+  brandId?: unknown;
+
+  BrandName?: unknown;
+  brandName?: unknown;
+
+  ProductBlueprintCategory?: unknown;
   productBlueprintCategory?: unknown;
+
+  CategoryFields?: unknown;
   categoryFields?: unknown;
 
+  ProductIdTag?: unknown;
   productIdTag?: unknown;
+
+  AssigneeID?: unknown;
   assigneeId?: unknown;
 
+  ModelRefs?: unknown;
   modelRefs?: unknown;
+
+  Printed?: unknown;
+  printed?: unknown;
+
+  CreatedBy?: unknown;
+  createdBy?: unknown;
+
+  CreatedAt?: unknown;
+  createdAt?: unknown;
+
+  UpdatedBy?: unknown;
+  updatedBy?: unknown;
+
+  UpdatedAt?: unknown;
+  updatedAt?: unknown;
 };
 
 const toText = (value: unknown): string => {
@@ -155,12 +202,12 @@ const toProductBlueprintCategorySnapshot = (
 
   const raw = value as ProductBlueprintCategoryRaw;
 
-  const id = toText(raw.ID);
-  const code = toText(raw.Code);
-  const nameJa = toText(raw.NameJa);
-  const nameEn = toText(raw.NameEn);
-  const kind = toCategoryKind(raw.Kind);
-  const path = toStringArray(raw.Path);
+  const id = toText(raw.id) || toText(raw.ID);
+  const code = toText(raw.code) || toText(raw.Code);
+  const nameJa = toText(raw.nameJa) || toText(raw.NameJa);
+  const nameEn = toText(raw.nameEn) || toText(raw.NameEn);
+  const kind = toCategoryKind(raw.kind ?? raw.Kind);
+  const path = toStringArray(raw.path ?? raw.Path);
 
   if (!id && !code) {
     return null;
@@ -195,26 +242,35 @@ const toModelRefs = (
   }
 
   return value
-    .map((item): ProductBlueprintPatchDTO["modelRefs"] extends Array<infer T> | null | undefined ? T | null : never => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) {
-        return null as never;
-      }
+    .map(
+      (
+        item,
+      ): ProductBlueprintPatchDTO["modelRefs"] extends
+        | Array<infer T>
+        | null
+        | undefined
+        ? T | null
+        : never => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          return null as never;
+        }
 
-      const raw = item as ProductBlueprintModelRefRaw;
+        const raw = item as ProductBlueprintModelRefRaw;
 
-      const modelId = toText(raw.modelId) || toText(raw.ModelID);
-      if (!modelId) {
-        return null as never;
-      }
+        const modelId = toText(raw.modelId) || toText(raw.ModelID);
+        if (!modelId) {
+          return null as never;
+        }
 
-      return {
-        modelId,
-        displayOrder:
-          toNumberOrUndefined(raw.displayOrder) ??
-          toNumberOrUndefined(raw.DisplayOrder) ??
-          0,
-      } as never;
-    })
+        return {
+          modelId,
+          displayOrder:
+            toNumberOrUndefined(raw.displayOrder) ??
+            toNumberOrUndefined(raw.DisplayOrder) ??
+            0,
+        } as never;
+      },
+    )
     .filter(
       (
         item,
@@ -248,22 +304,43 @@ const toProductBlueprintPatchDTO = (
   const raw = value as ProductBlueprintPatchRaw;
 
   return {
-    productName: toNullableText(raw.productName),
-    description: toNullableText(raw.description),
+    productName:
+      toNullableText(raw.productName) ??
+      toNullableText(raw.ProductName),
 
-    brandId: toNullableText(raw.brandId),
-    brandName: toNullableText(raw.brandName),
-    companyId: toNullableText(raw.companyId),
+    description:
+      toNullableText(raw.description) ??
+      toNullableText(raw.Description),
+
+    brandId:
+      toNullableText(raw.brandId) ??
+      toNullableText(raw.BrandID),
+
+    brandName:
+      toNullableText(raw.brandName) ??
+      toNullableText(raw.BrandName),
+
+    companyId:
+      toNullableText(raw.companyId) ??
+      toNullableText(raw.CompanyID),
 
     productBlueprintCategory: toProductBlueprintCategorySnapshot(
-      raw.productBlueprintCategory,
+      raw.productBlueprintCategory ?? raw.ProductBlueprintCategory,
     ),
-    categoryFields: toCategoryFieldValues(raw.categoryFields),
 
-    productIdTag: toProductIdTag(raw.productIdTag),
-    assigneeId: toNullableText(raw.assigneeId),
+    categoryFields: toCategoryFieldValues(
+      raw.categoryFields ?? raw.CategoryFields,
+    ),
 
-    modelRefs: toModelRefs(raw.modelRefs),
+    productIdTag: toProductIdTag(
+      raw.productIdTag ?? raw.ProductIdTag,
+    ),
+
+    assigneeId:
+      toNullableText(raw.assigneeId) ??
+      toNullableText(raw.AssigneeID),
+
+    modelRefs: toModelRefs(raw.modelRefs ?? raw.ModelRefs),
   };
 };
 
@@ -277,7 +354,7 @@ export async function fetchProductBlueprintPatchHTTP(
 
   const url = `${API_BASE}/mint/product_blueprints/${encodeURIComponent(
     pbid,
-  )}/patch`;
+  )}`;
 
   const res = await fetch(url, { method: "GET", headers: authHeaders });
 
@@ -286,7 +363,7 @@ export async function fetchProductBlueprintPatchHTTP(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch productBlueprintPatch: ${res.status} ${res.statusText}${
+      `Failed to fetch productBlueprint: ${res.status} ${res.statusText}${
         body ? ` body=${body.slice(0, 400)}` : ""
       }`,
     );

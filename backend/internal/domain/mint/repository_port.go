@@ -5,9 +5,7 @@ import (
 	"context"
 
 	inspectiondom "narratives/internal/domain/inspection"
-	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
-	proddom "narratives/internal/domain/production"
 )
 
 // ------------------------------------------------------
@@ -46,26 +44,16 @@ type MintRepository interface {
 // （MintUsecase から利用される最小限のインターフェース群）
 // ============================================================
 
-// MintProductBlueprintRepo は productBlueprintId から ProductBlueprint / Patch を解決するための最小ポートです。
+// MintProductBlueprintRepo は productBlueprintId から ProductBlueprint を解決するための最小ポートです。
 type MintProductBlueprintRepo interface {
 	// GetByID:
 	// - productBlueprintId から ProductBlueprint を取得します。
 	// - ProductName / BrandID などの基本情報は取得結果から参照します。
 	GetByID(ctx context.Context, id string) (pbpdom.ProductBlueprint, error)
-
-	// GetPatchByID:
-	// - productBlueprintId から Patch 全体を取得します。
-	// - mintRequestDetail 画面の ProductBlueprintCard 表示用です。
-	GetPatchByID(ctx context.Context, id string) (pbpdom.Patch, error)
 }
 
 // MintProductionRepo は production / productBlueprint の関連情報を取得するための最小ポートです。
 type MintProductionRepo interface {
-	// ListByProductBlueprintID:
-	// - 指定された productBlueprintId 群のいずれかを持つ Production をすべて返します。
-	// - 実装例: ProductionRepositoryFS.ListByProductBlueprintID
-	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]proddom.Production, error)
-
 	// GetProductBlueprintIDByProductionID:
 	// - productionId から productBlueprintId を取得します。
 	// - MintUsecase 側では productionID から productBlueprintID を推測・reflect 取得せず、
@@ -96,14 +84,6 @@ type MintInspectionRepo interface {
 	// - query.go の一覧取得で使用します。
 	// - 見つからない ID があってもエラーにせず、存在するものだけを返す想定です。
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
-}
-
-// MintModelRepo は modelId(variationID) から size / color / rgb などの情報を解決するための最小ポートです。
-type MintModelRepo interface {
-	// GetModelVariationByID:
-	// - variationID から ModelVariation を取得します。
-	// - 実装例: ModelRepositoryFS.GetModelVariationByID
-	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 }
 
 // ------------------------------------------------------

@@ -110,7 +110,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	services := buildDomainServices(repos)
 	res := buildResolvers(clients, repos, services)
 	u := buildUsecases(clients, repos, services, res)
-	q := buildQueries(clients.infra, repos, res, u)
+	q := buildQueries(clients.infra, repos, res, u, services)
 
 	if clients == nil || clients.infra == nil {
 		return nil, errors.New("clients/infra is nil")

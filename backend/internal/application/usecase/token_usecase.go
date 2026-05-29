@@ -4,8 +4,10 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tokendom "narratives/internal/domain/token"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -17,16 +19,22 @@ import (
 type MintRequestForUsecase struct {
 	ID string
 
-	// ✅ 受取先アドレス（ブランドウォレット等）
+	// TokenBlueprintID は、metadata URI の確保や tokenBlueprint minted 化に使います。
+	TokenBlueprintID string
+
+	// ActorID は、metadata URI 確保や tokenBlueprint minted 化の実行者として使います。
+	ActorID string
+
+	// 受取先アドレス（ブランドウォレット等）
 	// NOTE:
 	// - これは「NFT/トークンを受け取るアドレス」であり、FeePayer（ガス支払い）ではありません。
 	// - FeePayer はインフラ側（mint/transfer 実装）で master wallet に統一しています。
 	ToAddress string
 
-	// ★ 新規: productId ごとに 1 ミントしたい場合の productId 一覧
+	// productId ごとに 1 ミントしたい場合の productId 一覧。
 	// これが 1件以上入っている場合、
-	//   - 各 productId ごとに Amount=1 で MintToken を呼び出す
-	//   - 1商品 = 1Mint (Supply=1) の NFT 的な運用が可能になる
+	// - 各 productId ごとに Amount=1 で MintToken を呼び出す
+	// - 1商品 = 1Mint (Supply=1) の NFT 的な運用が可能になる
 	ProductIDs []string
 
 	BlueprintName   string
@@ -43,16 +51,37 @@ type MintedTokenForUsecase struct {
 
 // MintRequestPort は、TokenUsecase から見た「ミント対象 MintRequest」の
 // 取得および更新を行うためのポートです。
+//
 // 現在のフローでは「1商品=1Mint」モードのみを想定しています。
 type MintRequestPort interface {
-	// ミント実行に必要な情報をロード
+	// LoadForMinting:
+	// - ミント実行に必要な情報をロードします。
+	// - TokenBlueprintID / ActorID / ToAddress / ProductIDs / BlueprintName /
+	//   BlueprintSymbol / MetadataURI を返す想定です。
 	LoadForMinting(ctx context.Context, id string) (*MintRequestForUsecase, error)
 
-	// ★ productId ごとに 1 ミントした結果一覧で MintRequest / Token 情報を更新
-	// 実装側で:
+	// MarkProductsAsMinted:
+	// - productId ごとに 1 ミントした結果一覧で MintRequest / Token 情報を更新します。
+	// - 実装側で:
 	//   - productId, mintAddress の 1:1 マッピングを tokens コレクション等に保存
 	//   - MintRequest (mints テーブル) 自体も minted=true にする
 	MarkProductsAsMinted(ctx context.Context, id string, minted []MintedTokenForUsecase) error
+}
+
+// ============================================================
+// TokenBlueprint dependencies
+// ============================================================
+
+type TokenBlueprintMetadataEnsurer interface {
+	EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
+}
+
+type TokenBlueprintMintMarker interface {
+	MarkTokenBlueprintMinted(
+		ctx context.Context,
+		tokenBlueprintID string,
+		actorID string,
+	) (*tbdom.TokenBlueprint, error)
 }
 
 // ============================================================
@@ -62,6 +91,10 @@ type MintRequestPort interface {
 type TokenUsecase struct {
 	mintWallet    tokendom.MintAuthorityWalletPort
 	mintRequestPt MintRequestPort
+
+	tbRepo            tbdom.RepositoryPort
+	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
+	tbMintMarker      TokenBlueprintMintMarker
 }
 
 // NewTokenUsecase は TokenUsecase のコンストラクタです。
@@ -70,9 +103,33 @@ func NewTokenUsecase(
 	mintRequestPort MintRequestPort,
 ) *TokenUsecase {
 	return &TokenUsecase{
-		mintWallet:    mintWallet,
-		mintRequestPt: mintRequestPort,
+		mintWallet:        mintWallet,
+		mintRequestPt:     mintRequestPort,
+		tbRepo:            nil,
+		tbMetadataEnsurer: nil,
+		tbMintMarker:      nil,
 	}
+}
+
+func (u *TokenUsecase) SetTokenBlueprintRepo(repo tbdom.RepositoryPort) {
+	if u == nil {
+		return
+	}
+	u.tbRepo = repo
+}
+
+func (u *TokenUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
+	if u == nil {
+		return
+	}
+	u.tbMetadataEnsurer = e
+}
+
+func (u *TokenUsecase) SetTokenBlueprintMintMarker(marker TokenBlueprintMintMarker) {
+	if u == nil {
+		return
+	}
+	u.tbMintMarker = marker
 }
 
 // MintFromMintRequest は、指定された MintRequest を起点に
@@ -81,7 +138,9 @@ func NewTokenUsecase(
 // 動作方針:
 //   - req.ProductIDs が 1件以上あることを前提とし、
 //     productId ごとに Amount=1 で MintToken を複数回呼び出す
+//   - metadata URI が未確定の場合、TokenBlueprintMetadataEnsurer で確保する
 //   - その結果一覧を MarkProductsAsMinted に渡す
+//   - tokenBlueprint minted 化は TokenBlueprintMintMarker が設定されていれば行う
 func (u *TokenUsecase) MintFromMintRequest(
 	ctx context.Context,
 	mintRequestID string,
@@ -96,35 +155,60 @@ func (u *TokenUsecase) MintFromMintRequest(
 		return nil, fmt.Errorf("token usecase is not properly initialized")
 	}
 
-	// 1. ミント用に整形された MintRequest 情報を取得
 	req, err := u.mintRequestPt.LoadForMinting(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("load mint request for minting: %w", err)
 	}
+	if req == nil {
+		return nil, fmt.Errorf("mint request %s is nil", id)
+	}
 
-	to := req.ToAddress
+	to := strings.TrimSpace(req.ToAddress)
 	if to == "" {
 		return nil, fmt.Errorf("mint request %s has empty ToAddress", req.ID)
 	}
 
-	metadataURI := req.MetadataURI
+	tokenBlueprintID := strings.TrimSpace(req.TokenBlueprintID)
+	actorID := strings.TrimSpace(req.ActorID)
+
+	metadataURI := strings.TrimSpace(req.MetadataURI)
+	if tokenBlueprintID != "" && u.tbMetadataEnsurer != nil {
+		if u.tbRepo == nil {
+			return nil, fmt.Errorf("tokenBlueprint repo is nil")
+		}
+
+		tb, err := u.tbRepo.GetByID(ctx, tokenBlueprintID)
+		if err != nil {
+			return nil, fmt.Errorf("get tokenBlueprint for metadata ensure: %w", err)
+		}
+		if tb == nil {
+			return nil, fmt.Errorf("tokenBlueprint not found (id=%s)", tokenBlueprintID)
+		}
+
+		updated, err := u.tbMetadataEnsurer.EnsureMetadataURI(ctx, tb, actorID)
+		if err != nil {
+			return nil, fmt.Errorf("ensure metadata uri: %w", err)
+		}
+		if updated == nil {
+			updated = tb
+		}
+
+		metadataURI = strings.TrimSpace(updated.MetadataURI)
+	}
+
 	if metadataURI == "" {
 		return nil, fmt.Errorf("mint request %s has empty MetadataURI", req.ID)
 	}
 
-	name := req.BlueprintName
-	symbol := req.BlueprintSymbol
+	name := strings.TrimSpace(req.BlueprintName)
+	symbol := strings.TrimSpace(req.BlueprintSymbol)
 	if name == "" || symbol == "" {
 		return nil, fmt.Errorf("mint request %s has empty name or symbol", req.ID)
 	}
 
-	// ------------------------------------------------------------
-	// 2. productId のホワイトリスト整形（空文字を除去）
-	// ------------------------------------------------------------
-
 	productIDs := make([]string, 0, len(req.ProductIDs))
 	for _, pid := range req.ProductIDs {
-		p := pid
+		p := strings.TrimSpace(pid)
 		if p == "" {
 			continue
 		}
@@ -135,16 +219,12 @@ func (u *TokenUsecase) MintFromMintRequest(
 		return nil, fmt.Errorf("mint request %s has no valid productIDs", req.ID)
 	}
 
-	// ------------------------------------------------------------
-	// 3. 「1商品=1Mint」で順次ミント
-	// ------------------------------------------------------------
-
 	minted := make([]MintedTokenForUsecase, 0, len(productIDs))
 
 	for _, pid := range productIDs {
 		params := tokendom.MintParams{
 			ToAddress:   to,
-			Amount:      1, // ★ 各 productId ごとに Supply=1 の Mint を発行
+			Amount:      1,
 			MetadataURI: metadataURI,
 			Name:        name,
 			Symbol:      symbol,
@@ -161,9 +241,7 @@ func (u *TokenUsecase) MintFromMintRequest(
 		})
 	}
 
-	// 4. MintRequest / Token 情報を更新（1商品=1Mint の結果一覧を渡す）
 	if err := u.mintRequestPt.MarkProductsAsMinted(ctx, req.ID, minted); err != nil {
-		// すでにチェーン上ではミント済みなので、エラー内容はアプリ側で扱えるように result は返しておく
 		var lastResult *tokendom.MintResult
 		if len(minted) > 0 {
 			lastResult = minted[len(minted)-1].Result
@@ -171,9 +249,13 @@ func (u *TokenUsecase) MintFromMintRequest(
 		return lastResult, fmt.Errorf("mark mint request as minted (per-product): %w", err)
 	}
 
-	// API 互換のため、最後にミントしたトークンの結果を代表して返す
+	if u.tbMintMarker != nil && tokenBlueprintID != "" {
+		_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(ctx, tokenBlueprintID, actorID)
+	}
+
 	if len(minted) > 0 {
 		return minted[len(minted)-1].Result, nil
 	}
+
 	return nil, nil
 }
