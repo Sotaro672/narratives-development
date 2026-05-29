@@ -74,9 +74,12 @@ type Container struct {
 
 	CompanyProductionQueryService *query.CompanyProductionQueryService
 	MintRequestQueryService       *query.MintRequestQueryService
-	InventoryQuery                *query.InventoryQuery
-	ListCreateQuery               *query.ListCreateQuery
-	SalesQuery                    *query.SalesQuery
+
+	InventoryManagementQuery *query.InventoryManagementQuery
+	InventoryDetailQuery     *query.InventoryDetailQuery
+
+	ListCreateQuery *query.ListCreateQuery
+	SalesQuery      *query.SalesQuery
 
 	ListManagementQuery *listmanagementquery.ListManagementQuery
 	ListDetailQuery     *listdetailquery.ListDetailQuery
@@ -122,10 +125,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	var orderMgmtQ *query.OrderManagementQuery
-	if repos.orderConsoleLister != nil && q.inventoryQuery != nil && invBlueprint != nil {
+	if repos.orderConsoleLister != nil && q.inventoryManagementQuery != nil && invBlueprint != nil {
 		orderMgmtQ = query.NewOrderManagementQuery(query.NewOrderManagementQueryParams{
 			Lister:       repos.orderConsoleLister,
-			InvRows:      q.inventoryQuery,
+			InvRows:      q.inventoryManagementQuery,
 			InvBlueprint: invBlueprint,
 
 			PBName:           repos.productBlueprintRepo,
@@ -185,9 +188,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		CompanyProductionQueryService: q.companyProductionQueryService,
 		MintRequestQueryService:       q.mintRequestQueryService,
-		InventoryQuery:                q.inventoryQuery,
-		ListCreateQuery:               q.listCreateQuery,
-		SalesQuery:                    q.salesQuery,
+
+		InventoryManagementQuery: q.inventoryManagementQuery,
+		InventoryDetailQuery:     q.inventoryDetailQuery,
+
+		ListCreateQuery: q.listCreateQuery,
+		SalesQuery:      q.salesQuery,
 
 		ListManagementQuery: q.listManagementQuery,
 		ListDetailQuery:     q.listDetailQuery,

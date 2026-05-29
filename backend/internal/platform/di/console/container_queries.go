@@ -17,9 +17,12 @@ import (
 type queries struct {
 	companyProductionQueryService *companyquery.CompanyProductionQueryService
 	mintRequestQueryService       *companyquery.MintRequestQueryService
-	inventoryQuery                *companyquery.InventoryQuery
-	listCreateQuery               *companyquery.ListCreateQuery
-	salesQuery                    *companyquery.SalesQuery
+
+	inventoryManagementQuery *companyquery.InventoryManagementQuery
+	inventoryDetailQuery     *companyquery.InventoryDetailQuery
+
+	listCreateQuery *companyquery.ListCreateQuery
+	salesQuery      *companyquery.SalesQuery
 
 	listManagementQuery *listmgmt.ListManagementQuery
 	listDetailQuery     *listdetail.ListDetailQuery
@@ -47,9 +50,14 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		res.nameResolver,
 	)
 
-	inventoryQuery := companyquery.NewInventoryQueryWithTokenBlueprintPatch(
+	inventoryManagementQuery := companyquery.NewInventoryManagementQuery(
 		r.inventoryRepo,
 		r.productBlueprintRepo,
+		res.nameResolver,
+	)
+
+	inventoryDetailQuery := companyquery.NewInventoryDetailQuery(
+		r.inventoryRepo,
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
 		res.nameResolver,
@@ -88,16 +96,13 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		NameResolver: res.nameResolver,
 		PBGetter:     r.productBlueprintRepo,
 		TBGetter:     r.tokenBlueprintRepo,
-		InvRows:      inventoryQuery, // company boundary
+		InvRows:      inventoryManagementQuery, // company boundary
 	})
 
 	// =========================================================
 	// moved: ListDetailQuery
 	// SINGLE ENTRYPOINT: NewListDetailQuery(params) だけ
-	// - displayOrder を priceRows に載せるには pbPatchRepo 注入
 	// - imageUrls を返すには Firestore subcollection reader 注入
-	//
-	// ProductBlueprintPatchReader を typed(Patch) に寄せたため、
 	// =========================================================
 	listDetailQuery := listdetail.NewListDetailQuery(listdetail.NewListDetailQueryParams{
 		Getter:       r.listRepoFS,
@@ -106,8 +111,8 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		PBGetter: r.productBlueprintRepo,
 		TBGetter: r.tokenBlueprintRepo,
 
-		InvGetter: inventoryQuery,
-		InvRows:   inventoryQuery,
+		InvGetter: inventoryDetailQuery,
+		InvRows:   inventoryManagementQuery,
 
 		// Firebase Storage 移行後:
 		// - frontend が Firebase Storage へ直接 upload
@@ -115,7 +120,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		// - ImageURLs は ListImage.URL(Firebase Storage downloadURL) から組み立てる
 		ImgLister: r.listImageRecordRepo,
 
-		PBPatchRepo: r.productBlueprintRepo, // adapter廃止: repo直渡し（GetPatchByID）
+		PBPatchRepo: r.productBlueprintRepo,
 	})
 
 	log.Printf(
@@ -191,7 +196,8 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	return &queries{
 		companyProductionQueryService: companyProductionQueryService,
 		mintRequestQueryService:       mintRequestQueryService,
-		inventoryQuery:                inventoryQuery,
+		inventoryManagementQuery:      inventoryManagementQuery,
+		inventoryDetailQuery:          inventoryDetailQuery,
 		listCreateQuery:               listCreateQuery,
 		salesQuery:                    salesQuery,
 		listManagementQuery:           listManagementQuery,

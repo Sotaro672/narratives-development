@@ -16,7 +16,9 @@ import (
 // - listCreate 画面に必要な最小情報を組み立てる（1出品 = 1 inventory）
 //
 // 方針:
-// - PriceRows の母集団を「productBlueprintPatch.ModelRefs」に統一する。
+// - PriceRows の母集団を「productBlueprint.ModelRefs」に統一する。
+// - productBlueprint は GetByID で取得する。
+// - tokenBlueprint は GetByID で取得する。
 // - displayOrder は「取得して返すのみ」。
 // - 並べ替え（displayOrder 昇順 / size,color 等）は一切しない。
 // - inventoryId の build/split は廃止（inventoryId は inventory テーブルから拾う）
@@ -30,22 +32,22 @@ type ListCreateQuery struct {
 	// ※ GetByInventoryID を使うなら必須
 	invRepo inventoryReader // defined in inventory_query.go
 
-	pbPatchRepo  productBlueprintPatchReader // defined in inventory_query.go
-	tbPatchRepo  tokenBlueprintPatchReader   // defined in inventory_query.go
+	pbRepo       inventoryProductBlueprintReader // defined in inventory_query.go
+	tbRepo       inventoryTokenBlueprintReader   // defined in inventory_query.go
 	nameResolver *resolver.NameResolver
 }
 
 // GetByInventoryID を使うなら invRepo が必要になる
 func NewListCreateQueryWithInventory(
 	invRepo inventoryReader,
-	pbPatchRepo productBlueprintPatchReader,
-	tbPatchRepo tokenBlueprintPatchReader,
+	pbRepo inventoryProductBlueprintReader,
+	tbRepo inventoryTokenBlueprintReader,
 	nameResolver *resolver.NameResolver,
 ) *ListCreateQuery {
 	return &ListCreateQuery{
 		invRepo:      invRepo,
-		pbPatchRepo:  pbPatchRepo,
-		tbPatchRepo:  tbPatchRepo,
+		pbRepo:       pbRepo,
+		tbRepo:       tbRepo,
 		nameResolver: nameResolver,
 	}
 }
@@ -122,14 +124,15 @@ func (q *ListCreateQuery) buildByIDs(
 		productName = q.nameResolver.ResolveProductName(ctx, pbID)
 	}
 
-	if q.pbPatchRepo != nil {
-		if patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID); err == nil {
-			brandID := getStringFieldAny(patch, "BrandID", "BrandId", "brandId")
+	if q.pbRepo != nil {
+		if pb, err := q.pbRepo.GetByID(ctx, pbID); err == nil {
+			if productName == "" {
+				productName = pb.ProductName
+			}
+
+			brandID := pb.BrandID
 			if brandID != "" && q.nameResolver != nil {
 				productBrandName = q.nameResolver.ResolveBrandName(ctx, brandID)
-			}
-			if productBrandName == "" {
-				productBrandName = getStringFieldAny(patch, "BrandName", "brandName")
 			}
 		}
 	}
@@ -144,14 +147,15 @@ func (q *ListCreateQuery) buildByIDs(
 		tokenName = q.nameResolver.ResolveTokenName(ctx, tbID)
 	}
 
-	if q.tbPatchRepo != nil {
-		if patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID); err == nil {
-			brandID := getStringFieldAny(patch, "BrandID", "BrandId", "brandId")
+	if q.tbRepo != nil {
+		if tb, err := q.tbRepo.GetByID(ctx, tbID); err == nil && tb != nil {
+			if tokenName == "" {
+				tokenName = tb.Name
+			}
+
+			brandID := tb.BrandID
 			if brandID != "" && q.nameResolver != nil {
 				tokenBrandName = q.nameResolver.ResolveBrandName(ctx, brandID)
-			}
-			if tokenBrandName == "" {
-				tokenBrandName = getStringFieldAny(patch, "BrandName", "brandName")
 			}
 		}
 	}
@@ -184,7 +188,7 @@ func (q *ListCreateQuery) buildByIDs(
 
 // ============================================================
 // internal: build PriceRows
-// - 母集団: productBlueprintPatch.ModelRefs（順序はそのまま）
+// - 母集団: productBlueprint.ModelRefs（順序はそのまま）
 // - stock: inventory が取れれば picked.Stock[modelId] を反映、無ければ 0
 // - stock==0 でも行を出す（価格入力のため）
 // - 並べ替えはしない
@@ -317,9 +321,9 @@ func toDisplayOrderPtr(v int) *int {
 	return &x
 }
 
-// 母集団: productBlueprintPatch.ModelRefs（順序は patch のまま）
+// 母集団: productBlueprint.ModelRefs（順序は productBlueprint のまま）
 func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID string) []querydto.ListCreateModelRefDTO {
-	if q == nil || q.pbPatchRepo == nil {
+	if q == nil || q.pbRepo == nil {
 		return nil
 	}
 	pbID := productBlueprintID
@@ -327,15 +331,15 @@ func (q *ListCreateQuery) listModelRefs(ctx context.Context, productBlueprintID 
 		return nil
 	}
 
-	patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID)
+	pb, err := q.pbRepo.GetByID(ctx, pbID)
 	if err != nil {
 		return nil
 	}
-	if patch.ModelRefs == nil || len(*patch.ModelRefs) == 0 {
+	if len(pb.ModelRefs) == 0 {
 		return nil
 	}
 
-	refs := *patch.ModelRefs
+	refs := pb.ModelRefs
 	seen := map[string]struct{}{}
 	out := make([]querydto.ListCreateModelRefDTO, 0, len(refs))
 

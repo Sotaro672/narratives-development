@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/console/handler/inventory_handler.go
 package consoleHandler
 
 import (
@@ -13,22 +14,37 @@ import (
 type InventoryHandler struct {
 	// Read-model(Query) for management list (view-only)
 	// only: currentMember.companyId -> productBlueprintIds -> inventories(docId)
-	Q *invquery.InventoryQuery
+	MQ *invquery.InventoryManagementQuery
+
+	// Read-model(Query) for inventory detail
+	DQ *invquery.InventoryDetailQuery
 
 	// listCreate 画面用 Query
 	LQ *invquery.ListCreateQuery
 }
 
-func NewInventoryHandler(q *invquery.InventoryQuery) *InventoryHandler {
-	return &InventoryHandler{Q: q, LQ: nil}
+func NewInventoryHandler(
+	mq *invquery.InventoryManagementQuery,
+	dq *invquery.InventoryDetailQuery,
+) *InventoryHandler {
+	return &InventoryHandler{
+		MQ: mq,
+		DQ: dq,
+		LQ: nil,
+	}
 }
 
 // ListCreateQuery も注入できるコンストラクタ
 func NewInventoryHandlerWithListCreateQuery(
-	q *invquery.InventoryQuery,
+	mq *invquery.InventoryManagementQuery,
+	dq *invquery.InventoryDetailQuery,
 	lq *invquery.ListCreateQuery,
 ) *InventoryHandler {
-	return &InventoryHandler{Q: q, LQ: lq}
+	return &InventoryHandler{
+		MQ: mq,
+		DQ: dq,
+		LQ: lq,
+	}
 }
 
 func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -91,14 +107,14 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ============================================================
 
 func (h *InventoryHandler) ListByCurrentCompanyQuery(w http.ResponseWriter, r *http.Request) {
-	if h.Q == nil {
-		writeInventoryError(w, http.StatusNotImplemented, "inventory query is not configured")
+	if h == nil || h.MQ == nil {
+		writeInventoryError(w, http.StatusNotImplemented, "inventory management query is not configured")
 		return
 	}
 
 	ctx := r.Context()
 
-	rows, err := h.Q.ListByCurrentCompany(ctx)
+	rows, err := h.MQ.ListByCurrentCompany(ctx)
 	if err != nil {
 		writeInventoryError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -113,7 +129,7 @@ func (h *InventoryHandler) ListByCurrentCompanyQuery(w http.ResponseWriter, r *h
 // ============================================================
 
 func (h *InventoryHandler) GetListCreateByPathQuery(w http.ResponseWriter, r *http.Request, path string) {
-	if h.LQ == nil {
+	if h == nil || h.LQ == nil {
 		writeInventoryError(w, http.StatusNotImplemented, "list create query is not configured")
 		return
 	}
@@ -165,8 +181,8 @@ func isInventoryProbablyBadRequest(err error) bool {
 // ============================================================
 
 func (h *InventoryHandler) GetDetailByIDQuery(w http.ResponseWriter, r *http.Request, inventoryID string) {
-	if h == nil || h.Q == nil {
-		writeInventoryError(w, http.StatusNotImplemented, "inventory query is not configured")
+	if h == nil || h.DQ == nil {
+		writeInventoryError(w, http.StatusNotImplemented, "inventory detail query is not configured")
 		return
 	}
 
@@ -176,7 +192,7 @@ func (h *InventoryHandler) GetDetailByIDQuery(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	dto, err := h.Q.GetDetailByID(ctx, inventoryID)
+	dto, err := h.DQ.GetDetailByID(ctx, inventoryID)
 	if err != nil {
 		if errors.Is(err, invdom.ErrNotFound) {
 			writeInventoryError(w, http.StatusNotFound, err.Error())

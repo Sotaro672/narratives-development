@@ -132,10 +132,7 @@ func (uc *InventoryUsecase) UpsertFromMint(
 //
 // - modelID が既に解決済みの場合の低レベル入口
 // - 在庫の蓄積は Stock（modelId -> {Products: ...}）で表現する前提
-//
-// 修正方針:
-//   - 既存 model の追加反映が反射経由の Get->merge->Update で失敗し得るため、
-//     repo の atomic upsert（transaction + UNION）に委譲する。
+// - repo の atomic upsert（transaction + UNION）に委譲する
 func (uc *InventoryUsecase) UpsertFromMintByModel(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -263,25 +260,4 @@ func (uc *InventoryUsecase) ReleaseAfterTransfer(
 		now,
 	)
 	return err
-}
-
-// ============================================================
-// Queries
-// ============================================================
-
-func (uc *InventoryUsecase) GetByID(ctx context.Context, id string) (invdom.Mint, error) {
-	if uc == nil || uc.repo == nil {
-		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
-	}
-	if id == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
-	}
-	return uc.repo.GetByID(ctx, id)
-}
-
-func (uc *InventoryUsecase) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]invdom.Mint, error) {
-	if uc == nil || uc.repo == nil {
-		return nil, errors.New("inventory usecase/repo is nil")
-	}
-	return uc.repo.ListByProductBlueprintID(ctx, productBlueprintID)
 }
