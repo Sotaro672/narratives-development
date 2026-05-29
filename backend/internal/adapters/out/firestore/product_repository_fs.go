@@ -56,6 +56,32 @@ func (r *ProductRepositoryFS) GetByID(ctx context.Context, id string) (productdo
 	return docToProduct(snap)
 }
 
+// GetModelIDByProductID returns modelId for a product.
+// This method implements usecase.ProductModelResolver without importing the usecase package.
+func (r *ProductRepositoryFS) GetModelIDByProductID(
+	ctx context.Context,
+	productID string,
+) (string, error) {
+	if r == nil || r.Client == nil {
+		return "", errors.New("product repository/firestore client is nil")
+	}
+
+	if productID == "" {
+		return "", productdom.ErrNotFound
+	}
+
+	product, err := r.GetByID(ctx, productID)
+	if err != nil {
+		return "", err
+	}
+
+	if product.ModelID == "" {
+		return "", errors.New("product modelId is empty")
+	}
+
+	return product.ModelID, nil
+}
+
 // Exists checks if a product with the given ID exists
 func (r *ProductRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {

@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"sort"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -218,7 +217,9 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 	return m, nil
 }
 
-// Update updates a Mint (docId is fixed to m.ID).
+// Update updates a Mint.
+// docId is fixed to m.ID.
+// In AMOL/Narratives, m.ID is expected to be productionID == inspectionID == mintID.
 func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error) {
 	if r == nil || r.Client == nil {
 		return mintdom.Mint{}, errors.New("firestore client is nil")
@@ -279,7 +280,7 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 // ============================================================
 
 // GetByID returns a Mint by docId.
-// docId is expected to be productionId/mintId (same value).
+// docId is expected to be productionID == inspectionID == mintID.
 func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint, error) {
 	if r == nil || r.Client == nil {
 		return mintdom.Mint{}, errors.New("firestore client is nil")
@@ -298,58 +299,4 @@ func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint
 	}
 
 	return decodeMintFromDoc(doc)
-}
-
-// ListByProductionID lists mints by production docIds.
-// Expectation: production docId == mint docId, so we Get() by docId for each id.
-// Missing docs are treated as "mint not created yet" and skipped.
-func (r *MintRepositoryFS) ListByProductionID(ctx context.Context, productionIDs []string) (map[string]mintdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	seen := make(map[string]struct{}, len(productionIDs))
-	ids := make([]string, 0, len(productionIDs))
-
-	for _, id := range productionIDs {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
-
-	out := make(map[string]mintdom.Mint, len(ids))
-	if len(ids) == 0 {
-		return out, nil
-	}
-
-	sort.Strings(ids)
-
-	for _, id := range ids {
-		doc, err := r.col().Doc(id).Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				continue
-			}
-			return nil, err
-		}
-
-		m, err := decodeMintFromDoc(doc)
-		if err != nil {
-			return nil, err
-		}
-
-		if doc.Ref.ID == "" {
-			continue
-		}
-
-		out[doc.Ref.ID] = m
-	}
-
-	return out, nil
 }

@@ -224,8 +224,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	if c.MintUC != nil {
 		mintH = consoleHandler.NewMintHandler(
 			c.MintUC,
-			c.NameResolver,
-			c.ProductionUC,
 			c.MintRequestQueryService,
 		)
 	}

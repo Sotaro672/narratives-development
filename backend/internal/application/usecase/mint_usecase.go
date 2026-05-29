@@ -5,12 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"sort"
 	"time"
 
-	resolver "narratives/internal/application/resolver"
-	inspectiondom "narratives/internal/domain/inspection"
 	invdom "narratives/internal/domain/inventory"
 	mintdom "narratives/internal/domain/mint"
 	tokendom "narratives/internal/domain/token"
@@ -24,13 +20,12 @@ type TokenMintPort interface {
 }
 
 type InventoryUpserter interface {
-	UpsertFromMintByModel(
+	UpsertFromMint(
 		ctx context.Context,
 		tokenBlueprintID string,
 		productBlueprintID string,
-		modelID string,
 		productIDs []string,
-	) (invdom.Mint, error)
+	) ([]invdom.Mint, error)
 }
 
 type MintResultMapper struct{}
@@ -64,7 +59,6 @@ func (m *MintResultMapper) ApplyOnchainResult(ent *mintdom.Mint, result *tokendo
 
 type MintUsecase struct {
 	prodRepo mintdom.MintProductionRepo
-	inspRepo mintdom.MintInspectionRepo
 
 	tbRepo tbdom.RepositoryPort
 
@@ -77,13 +71,10 @@ type MintUsecase struct {
 	tokenMinter TokenMintPort
 
 	inventoryUC InventoryUpserter
-
-	nameResolver *resolver.NameResolver
 }
 
 func NewMintUsecase(
 	prodRepo mintdom.MintProductionRepo,
-	inspRepo mintdom.MintInspectionRepo,
 	tbRepo tbdom.RepositoryPort,
 	mintRepo mintdom.MintRepository,
 	passedProductLister mintdom.PassedProductLister,
@@ -91,22 +82,13 @@ func NewMintUsecase(
 ) *MintUsecase {
 	return &MintUsecase{
 		prodRepo:            prodRepo,
-		inspRepo:            inspRepo,
 		tbRepo:              tbRepo,
 		mintRepo:            mintRepo,
 		mintResultMapper:    NewMintResultMapper(),
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
 		inventoryUC:         nil,
-		nameResolver:        nil,
 	}
-}
-
-func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
-	if u == nil {
-		return
-	}
-	u.nameResolver = r
 }
 
 func (u *MintUsecase) SetInventoryUsecase(uc *InventoryUsecase) {
@@ -207,44 +189,17 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	if u.tokenMinter == nil {
-		log.Printf(
-			"[mint][UpdateRequestInfo] tokenMinter is nil; mint record created but onchain mint was skipped productionID=%s tokenBlueprintID=%s",
-			pid,
-			tbID,
-		)
-
 		return nil, errors.New("token minter is not configured")
 	}
 
 	result, err := u.MintFromMintRequest(ctx, pid)
 	if err != nil {
-		log.Printf(
-			"[mint][UpdateRequestInfo] onchain mint failed after mint record created productionID=%s tokenBlueprintID=%s err=%v",
-			pid,
-			tbID,
-			err,
-		)
-
 		return nil, fmt.Errorf("onchain mint failed after mint request was created: %w", err)
 	}
 
 	if result == nil {
-		log.Printf(
-			"[mint][UpdateRequestInfo] onchain mint returned nil result productionID=%s tokenBlueprintID=%s",
-			pid,
-			tbID,
-		)
-
 		return nil, errors.New("onchain mint returned nil result")
 	}
-
-	log.Printf(
-		"[mint][UpdateRequestInfo] onchain mint succeeded productionID=%s tokenBlueprintID=%s signature=%s mintAddress=%s",
-		pid,
-		tbID,
-		result.Signature,
-		result.MintAddress,
-	)
 
 	return result, nil
 }
@@ -263,26 +218,6 @@ func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Contex
 	}
 
 	return productBlueprintID
-}
-
-func (u *MintUsecase) loadInspectionBatchByProductionID(
-	ctx context.Context,
-	productionID string,
-) (*inspectiondom.InspectionBatch, error) {
-	if u == nil || u.inspRepo == nil {
-		return nil, errors.New("inspection repo is nil")
-	}
-
-	if productionID == "" {
-		return nil, inspectiondom.ErrInvalidInspectionProductionID
-	}
-
-	batch, err := u.inspRepo.GetByProductionID(ctx, productionID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &batch, nil
 }
 
 func validateProductIDs(productIDs []string) error {
@@ -378,62 +313,13 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		return nil, errors.New("inventory usecase is nil (cannot upsert inventory)")
 	}
 
-	batch, berr := u.loadInspectionBatchByProductionID(ctx, mintRequestID)
-	if berr != nil || batch == nil {
-		if berr != nil {
-			return nil, berr
-		}
-		return nil, errors.New("inspection batch is nil")
-	}
-
-	passedSet := make(map[string]struct{}, len(passedProductIDs))
-	for _, p := range passedProductIDs {
-		passedSet[p] = struct{}{}
-	}
-
-	byModel := map[string][]string{}
-	for _, it := range batch.Inspections {
-		pid := it.ProductID
-		if pid == "" {
-			return nil, mintdom.ErrInvalidProducts
-		}
-		if _, ok := passedSet[pid]; !ok {
-			continue
-		}
-
-		mid := it.ModelID
-		if mid == "" {
-			continue
-		}
-
-		byModel[mid] = append(byModel[mid], pid)
-	}
-
-	modelIDs := make([]string, 0, len(byModel))
-	for mid := range byModel {
-		modelIDs = append(modelIDs, mid)
-	}
-	sort.Strings(modelIDs)
-
-	if len(modelIDs) == 0 {
-		return nil, errors.New("no model groups found from inspection batch for passed products")
-	}
-
-	for _, mid := range modelIDs {
-		pids := byModel[mid]
-		if err := validateProductIDs(pids); err != nil {
-			return nil, err
-		}
-		if len(pids) == 0 {
-			continue
-		}
-
-		invEnt, invErr := u.inventoryUC.UpsertFromMintByModel(ctx, tbID, pbID, mid, pids)
-		if invErr != nil {
-			return nil, invErr
-		}
-
-		var _ invdom.Mint = invEnt
+	if _, invErr := u.inventoryUC.UpsertFromMint(
+		ctx,
+		tbID,
+		pbID,
+		passedProductIDs,
+	); invErr != nil {
+		return nil, invErr
 	}
 
 	return result, nil

@@ -97,6 +97,12 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	inquiryUC := uc.NewInquiryUsecase(r.inquiryRepo, nil, nil)
 
 	inventoryUC := uc.NewInventoryUsecase(r.inventoryRepo)
+	if r.productRepo != nil {
+		if resolver, ok := any(r.productRepo).(uc.ProductModelResolver); ok {
+			inventoryUC.WithProductModelResolver(resolver)
+		}
+	}
+
 	paymentUC := uc.NewPaymentUsecase(r.paymentRepo)
 
 	var listPatchUpdater uc.ListPatchUpdater
@@ -159,13 +165,11 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	mintUC := uc.NewMintUsecase(
 		r.productionRepo,
-		r.inspectionRepo,
 		r.tokenBlueprintRepo,
 		r.mintRepo,
 		r.inspectionRepo,
 		tokenUC,
 	)
-	mintUC.SetNameResolver(res.nameResolver)
 	mintUC.SetInventoryUsecase(inventoryUC)
 
 	baseURL := os.Getenv("ARWEAVE_BASE_URL")

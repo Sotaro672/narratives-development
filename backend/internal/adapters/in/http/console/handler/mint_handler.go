@@ -7,12 +7,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
 	querydto "narratives/internal/application/query/console/dto"
-	resolver "narratives/internal/application/resolver"
 	mintapp "narratives/internal/application/usecase"
 
 	branddom "narratives/internal/domain/brand"
@@ -28,11 +26,6 @@ type MintRequestQueryService interface {
 	) ([]querydto.ProductionInspectionMintDTO, error)
 
 	GetMintRequestDetail(ctx context.Context, productionID string) (*querydto.MintRequestDetailDTO, error)
-
-	ListInspectionBatchesForMint(
-		ctx context.Context,
-		productionIDs []string,
-	) ([]inspectiondom.InspectionBatch, error)
 
 	GetProductBlueprintForMint(
 		ctx context.Context,
@@ -52,24 +45,15 @@ type MintRequestQueryService interface {
 type MintHandler struct {
 	mintUC *mintapp.MintUsecase
 
-	productionUC *mintapp.ProductionUsecase
-
 	mintRequestQS MintRequestQueryService
 }
 
 func NewMintHandler(
 	mintUC *mintapp.MintUsecase,
-	nameResolver *resolver.NameResolver,
-	productionUC *mintapp.ProductionUsecase,
 	mintRequestQS MintRequestQueryService,
 ) http.Handler {
-	if mintUC != nil {
-		mintUC.SetNameResolver(nameResolver)
-	}
-
 	return &MintHandler{
 		mintUC:        mintUC,
-		productionUC:  productionUC,
 		mintRequestQS: mintRequestQS,
 	}
 }
@@ -80,10 +64,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/requests":
 		h.listMintRequestsByCurrentCompany(w, r)
-		return
-
-	case r.Method == http.MethodGet && r.URL.Path == "/mint/inspections":
-		h.listInspectionsByProductionIDs(w, r)
 		return
 
 	case r.Method == http.MethodGet &&
@@ -206,75 +186,6 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 	}
 
 	_ = json.NewEncoder(w).Encode(rows)
-}
-
-func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
-		return
-	}
-
-	rawProductionIDs := r.URL.Query().Get("productionIds")
-	rawInspectionIDs := r.URL.Query().Get("inspectionIds")
-
-	raw := rawProductionIDs
-	if raw == "" {
-		raw = rawInspectionIDs
-	}
-
-	var ids []string
-
-	if raw == "" {
-		if h.productionUC == nil {
-			_ = json.NewEncoder(w).Encode([]any{})
-			return
-		}
-
-		prods, err := h.productionUC.ListWithAssigneeName(ctx)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		seen := make(map[string]struct{}, len(prods))
-		ids = make([]string, 0, len(prods))
-		for _, p := range prods {
-			pid := p.ID
-			if pid == "" {
-				continue
-			}
-			if _, ok := seen[pid]; ok {
-				continue
-			}
-			seen[pid] = struct{}{}
-			ids = append(ids, pid)
-		}
-		sort.Strings(ids)
-
-		if len(ids) == 0 {
-			_ = json.NewEncoder(w).Encode([]any{})
-			return
-		}
-	} else {
-		ids = parseCommaSeparatedIDs(raw)
-		if len(ids) == 0 {
-			_ = json.NewEncoder(w).Encode([]any{})
-			return
-		}
-	}
-
-	batches, err := h.mintRequestQS.ListInspectionBatchesForMint(ctx, ids)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(batches)
 }
 
 func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
@@ -490,6 +401,5 @@ func parseCommaSeparatedIDs(raw string) []string {
 		out = append(out, id)
 	}
 
-	sort.Strings(out)
 	return out
 }

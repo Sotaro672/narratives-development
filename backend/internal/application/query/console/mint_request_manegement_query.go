@@ -264,7 +264,20 @@ func (s *MintRequestQueryService) listMintsByProductionIDs(
 
 	sort.Strings(ids)
 
-	return s.mintRepo.ListByProductionID(ctx, ids)
+	out := make(map[string]mintdom.Mint, len(ids))
+	for _, id := range ids {
+		m, err := s.mintRepo.GetByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, mintdom.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+
+		out[id] = m
+	}
+
+	return out, nil
 }
 
 func (s *MintRequestQueryService) listInspectionBatchesByProductionIDs(
@@ -295,7 +308,20 @@ func (s *MintRequestQueryService) listInspectionBatchesByProductionIDs(
 
 	sort.Strings(ids)
 
-	return s.inspRepo.ListByProductionID(ctx, ids)
+	out := make([]inspectiondom.InspectionBatch, 0, len(ids))
+	for _, id := range ids {
+		batch, err := s.inspRepo.GetByProductionID(ctx, id)
+		if err != nil {
+			if errors.Is(err, inspectiondom.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+
+		out = append(out, batch)
+	}
+
+	return out, nil
 }
 
 func makeIDSet(ids []string) map[string]struct{} {

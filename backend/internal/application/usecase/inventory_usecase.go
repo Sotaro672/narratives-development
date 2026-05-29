@@ -1,28 +1,136 @@
 // backend/internal/application/usecase/inventory_usecase.go
-
 package usecase
 
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	invdom "narratives/internal/domain/inventory"
 )
 
+type ProductModelResolver interface {
+	GetModelIDByProductID(ctx context.Context, productID string) (string, error)
+}
+
 type InventoryUsecase struct {
 	repo invdom.RepositoryPort
+
+	productModelResolver ProductModelResolver
 }
 
 func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
-	return &InventoryUsecase{repo: repo}
+	return &InventoryUsecase{
+		repo:                 repo,
+		productModelResolver: nil,
+	}
+}
+
+func (uc *InventoryUsecase) WithProductModelResolver(
+	resolver ProductModelResolver,
+) *InventoryUsecase {
+	if uc == nil {
+		return uc
+	}
+
+	uc.productModelResolver = resolver
+	return uc
+}
+
+// ============================================================
+// Upsert entry from Mint
+// ============================================================
+//
+// - mint から在庫へ反映する入口
+// - MintUsecase は passed productIDs だけを渡す
+// - productID -> modelID の解決と modelID ごとの grouping は InventoryUsecase が担当する
+func (uc *InventoryUsecase) UpsertFromMint(
+	ctx context.Context,
+	tokenBlueprintID string,
+	productBlueprintID string,
+	productIDs []string,
+) ([]invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return nil, errors.New("inventory usecase/repo is nil")
+	}
+	if uc.productModelResolver == nil {
+		return nil, errors.New("inventory product model resolver is nil")
+	}
+
+	tbID := tokenBlueprintID
+	pbID := productBlueprintID
+
+	if tbID == "" {
+		return nil, invdom.ErrInvalidTokenBlueprintID
+	}
+	if pbID == "" {
+		return nil, invdom.ErrInvalidProductBlueprintID
+	}
+	if len(productIDs) == 0 {
+		return nil, invdom.ErrInvalidProducts
+	}
+
+	seenProducts := make(map[string]struct{}, len(productIDs))
+	byModel := make(map[string][]string)
+
+	for _, productID := range productIDs {
+		pid := productID
+		if pid == "" {
+			return nil, invdom.ErrInvalidProducts
+		}
+
+		if _, ok := seenProducts[pid]; ok {
+			return nil, invdom.ErrInvalidProducts
+		}
+		seenProducts[pid] = struct{}{}
+
+		modelID, err := uc.productModelResolver.GetModelIDByProductID(ctx, pid)
+		if err != nil {
+			return nil, err
+		}
+		if modelID == "" {
+			return nil, invdom.ErrInvalidModelID
+		}
+
+		byModel[modelID] = append(byModel[modelID], pid)
+	}
+
+	modelIDs := make([]string, 0, len(byModel))
+	for modelID := range byModel {
+		modelIDs = append(modelIDs, modelID)
+	}
+	sort.Strings(modelIDs)
+
+	out := make([]invdom.Mint, 0, len(modelIDs))
+	for _, modelID := range modelIDs {
+		groupedProductIDs := byModel[modelID]
+		if len(groupedProductIDs) == 0 {
+			continue
+		}
+
+		inv, err := uc.UpsertFromMintByModel(
+			ctx,
+			tbID,
+			pbID,
+			modelID,
+			groupedProductIDs,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, inv)
+	}
+
+	return out, nil
 }
 
 // ============================================================
 // Upsert entry from Mint by Model
 // ============================================================
 //
-// - mint から在庫へ反映する唯一の入口
+// - modelID が既に解決済みの場合の低レベル入口
 // - 在庫の蓄積は Stock（modelId -> {Products: ...}）で表現する前提
 //
 // 修正方針:
@@ -86,7 +194,6 @@ func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, 
 		return errors.New("inventory reserve: invalid orderId")
 	}
 	if len(items) == 0 {
-		// 何もしない（呼び出し側が「対象なし」でも安全）
 		return nil
 	}
 

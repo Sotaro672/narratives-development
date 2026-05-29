@@ -20,6 +20,7 @@ import (
 type MintRepository interface {
 	// Create:
 	// - 新しい Mint エンティティを保存します。
+	// - AMOL/Narratives では docId (= mintID = productionID) として保存します。
 	Create(ctx context.Context, m Mint) (Mint, error)
 
 	// GetByID:
@@ -28,15 +29,9 @@ type MintRepository interface {
 	GetByID(ctx context.Context, id string) (Mint, error)
 
 	// Update:
-	// - 既存 Mint を更新します（minted/mintedAt 更新など）。
+	// - 既存 Mint を更新します（minted/mintedAt/onChainTxSignature 更新など）。
 	// - 対象が存在しない場合は ErrNotFound を返す想定です。
 	Update(ctx context.Context, m Mint) (Mint, error)
-
-	// ListByProductionID:
-	// - production の docId 群（= mint の docId 群）から mint を取得します。
-	// - mint が存在しない productionID はスキップしてよい（一覧用途）。
-	// - 戻り値は join しやすいよう productionID をキーにした map を推奨します。
-	ListByProductionID(ctx context.Context, productionIDs []string) (map[string]Mint, error)
 }
 
 // ============================================================
@@ -78,12 +73,6 @@ type MintInspectionRepo interface {
 	// - productionID と同一 docId の InspectionBatch を1件取得します。
 	// - MintUsecase で単一 productionID から検品結果を参照する正規ルートです。
 	GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
-
-	// ListByProductionID:
-	// - 複数 productionID に対応する InspectionBatch をまとめて取得します。
-	// - query.go の一覧取得で使用します。
-	// - 見つからない ID があってもエラーにせず、存在するものだけを返す想定です。
-	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
 }
 
 // ------------------------------------------------------
