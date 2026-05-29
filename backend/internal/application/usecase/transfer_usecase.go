@@ -262,8 +262,9 @@ type TransferByVerifiedScanInput struct {
 }
 
 type TransferByVerifiedScanResult struct {
-	MatchedOrderID string
-	MatchedModelID string
+	MatchedOrderID     string
+	MatchedInventoryID string
+	MatchedModelID     string
 
 	ProductID        string
 	MintAddress      string
@@ -372,20 +373,28 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	}
 
 	var (
-		targetOrderID string
-		targetModelID string
+		targetOrderID     string
+		targetInventoryID string
+		targetModelID     string
 	)
+
 	for _, o := range orders {
 		if !o.Paid {
 			continue
 		}
-		if mid, ok := findUntransferredItemByModelAndTB(o, scannedModelID, scannedTBID); ok {
-			targetOrderID = o.ID
-			targetModelID = mid
-			break
+
+		inventoryID, modelID, ok := findUntransferredItemByModelAndTB(o, scannedModelID, scannedTBID)
+		if !ok {
+			continue
 		}
+
+		targetOrderID = o.ID
+		targetInventoryID = inventoryID
+		targetModelID = modelID
+		break
 	}
-	if targetOrderID == "" || targetModelID == "" {
+
+	if targetOrderID == "" || targetInventoryID == "" || targetModelID == "" {
 		return TransferByVerifiedScanResult{}, ErrTransferNoEligibleOrder
 	}
 
@@ -594,9 +603,16 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 
 	// 12) inventory cleanup
 	if u.inventoryUC != nil {
-		if err := u.inventoryUC.ReleaseAfterTransfer(ctx, productID, targetOrderID, now); err != nil {
-			msg := fmt.Sprintf("inventory cleanup failed productId=%s orderId=%s tx=%s: %v",
-				productID, targetOrderID, tx, err,
+		if err := u.inventoryUC.ReleaseAfterTransfer(
+			ctx,
+			targetInventoryID,
+			targetModelID,
+			productID,
+			targetOrderID,
+			now,
+		); err != nil {
+			msg := fmt.Sprintf("inventory cleanup failed inventoryId=%s modelId=%s productId=%s orderId=%s tx=%s: %v",
+				targetInventoryID, targetModelID, productID, targetOrderID, tx, err,
 			)
 			markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
 			return TransferByVerifiedScanResult{}, fmt.Errorf("%w: %s", ErrTransferInventoryCleanupFailed, msg)
@@ -609,8 +625,9 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	locked = false
 
 	return TransferByVerifiedScanResult{
-		MatchedOrderID: targetOrderID,
-		MatchedModelID: targetModelID,
+		MatchedOrderID:     targetOrderID,
+		MatchedInventoryID: targetInventoryID,
+		MatchedModelID:     targetModelID,
 
 		ProductID:        productID,
 		MintAddress:      mint,
@@ -655,23 +672,29 @@ func (u *TransferUsecase) resolveAvatarDisplayName(ctx context.Context, avatarID
 	return strings.TrimSpace(name)
 }
 
-// findUntransferredItemByModelAndTB returns (modelId, true) if order has an item where:
+// findUntransferredItemByModelAndTB returns (inventoryId, modelId, true) if order has an item where:
 // - item.ModelID == scannedModelID
+// - item.InventoryID is not empty
 // - item.Transferred == false
 // - tokenBlueprintId extracted from item.InventoryID matches scannedTBID (strict)
-func findUntransferredItemByModelAndTB(o orderdom.Order, scannedModelID string, scannedTBID string) (string, bool) {
+func findUntransferredItemByModelAndTB(o orderdom.Order, scannedModelID string, scannedTBID string) (string, string, bool) {
 	m := scannedModelID
 	tb := scannedTBID
 	if m == "" || tb == "" {
-		return "", false
+		return "", "", false
 	}
+
 	for _, it := range o.Items {
 		if it.ModelID != m {
+			continue
+		}
+		if it.InventoryID == "" {
 			continue
 		}
 		if it.Transferred {
 			continue
 		}
+
 		itemTB := extractTokenBlueprintIDFromInventoryID(it.InventoryID)
 		if itemTB == "" {
 			continue
@@ -679,9 +702,11 @@ func findUntransferredItemByModelAndTB(o orderdom.Order, scannedModelID string, 
 		if itemTB != tb {
 			continue
 		}
-		return m, true
+
+		return it.InventoryID, it.ModelID, true
 	}
-	return "", false
+
+	return "", "", false
 }
 
 // inventoryId は "__" 区切りで、2つめのセグメントが tokenBlueprintId
@@ -690,9 +715,11 @@ func extractTokenBlueprintIDFromInventoryID(inventoryID string) string {
 	if s == "" {
 		return ""
 	}
+
 	parts := strings.Split(s, "__")
 	if len(parts) < 2 {
 		return ""
 	}
+
 	return parts[1]
 }

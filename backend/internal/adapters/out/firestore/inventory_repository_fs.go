@@ -150,18 +150,21 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, pr
 
 // ============================================================
 // Transfer後の予約解放
+// - order item の inventoryId / modelId を使って対象 inventory を直接更新する
 // - stock[modelId].products から productId を削除
 // - reservedByOrder[orderId] を削除件数分だけ減算（<=0はキー削除）
 // - accumulation/reservedCount を正規化
 //
 // Contract:
 // - transaction-safe
-// - idempotent（無ければ removed=0, nil）
-// - removedCount は通常 1 だが、重複等に備えて int を返す
+// - idempotent（対象 productId が無ければ removed=0, nil）
+// - productID から inventories 全件 scan しない
 // ============================================================
 
 func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	ctx context.Context,
+	inventoryID string,
+	modelID string,
 	productID string,
 	orderID string,
 	now time.Time,
@@ -170,8 +173,17 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 		return 0, errors.New("inventory repo is nil")
 	}
 
+	invID := inventoryID
+	mID := modelID
 	pid := productID
 	oid := orderID
+
+	if invID == "" {
+		return 0, invdom.ErrInvalidMintID
+	}
+	if mID == "" {
+		return 0, invdom.ErrInvalidModelID
+	}
 	if pid == "" {
 		return 0, errors.New("inventory repo: productID is empty")
 	}
@@ -183,13 +195,7 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	}
 	now = now.UTC()
 
-	docRef, modelID, findErr := r.findInventoryDocByProductID(ctx, pid)
-	if findErr != nil {
-		return 0, findErr
-	}
-	if docRef == nil || modelID == "" {
-		return 0, nil
-	}
+	docRef := r.col().Doc(invID)
 
 	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(docRef)
@@ -210,7 +216,7 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 			return nil
 		}
 
-		ms, ok := stock[modelID]
+		ms, ok := stock[mID]
 		if !ok {
 			return nil
 		}
@@ -240,7 +246,7 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 		}
 
 		cur := ms.ReservedByOrder[oid]
-		cur = cur - removed
+		cur -= removed
 		if cur <= 0 {
 			delete(ms.ReservedByOrder, oid)
 		} else {
@@ -248,7 +254,7 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 		}
 
 		ms = normalizeModelStockRecord(ms)
-		stock[modelID] = ms
+		stock[mID] = ms
 
 		stock = normalizeStockRecord(stock)
 		modelIDs := modelIDsFromStockRecord(stock)
@@ -268,49 +274,6 @@ func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
 	}
 
 	return removedCount, nil
-}
-
-func (r *InventoryRepositoryFS) findInventoryDocByProductID(ctx context.Context, productID string) (*firestore.DocumentRef, string, error) {
-	if r == nil || r.Client == nil {
-		return nil, "", errors.New("inventory repo is nil")
-	}
-
-	pid := productID
-	if pid == "" {
-		return nil, "", errors.New("inventory repo: productID is empty")
-	}
-
-	iter := r.col().Documents(ctx)
-	defer iter.Stop()
-
-	for {
-		snap, err := iter.Next()
-		if err != nil {
-			if errors.Is(err, iterator.Done) {
-				break
-			}
-			return nil, "", err
-		}
-
-		var rec inventoryRecord
-		if err := snap.DataTo(&rec); err != nil {
-			return nil, "", err
-		}
-		if rec.Stock == nil {
-			continue
-		}
-
-		for modelID, ms := range rec.Stock {
-			if modelID == "" {
-				continue
-			}
-			if containsString(ms.Products, pid) {
-				return snap.Ref, modelID, nil
-			}
-		}
-	}
-
-	return nil, "", nil
 }
 
 // ============================================================
@@ -382,7 +345,11 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 		if ms.ReservedCount > ms.Accumulation {
 			return fmt.Errorf(
 				"inventory repo: insufficient stock (modelId=%s accumulation=%d reservedCount=%d orderId=%s qty=%d)",
-				modelID, ms.Accumulation, ms.ReservedCount, orderID, qty,
+				modelID,
+				ms.Accumulation,
+				ms.ReservedCount,
+				orderID,
+				qty,
 			)
 		}
 
@@ -522,16 +489,6 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	}
 
 	return out, nil
-}
-
-func (r *InventoryRepositoryFS) UpsertByProductBlueprintAndToken(
-	ctx context.Context,
-	tokenBlueprintID string,
-	productBlueprintID string,
-	modelID string,
-	productIDs []string,
-) (invdom.Mint, error) {
-	return r.UpsertByModelAndToken(ctx, tokenBlueprintID, productBlueprintID, modelID, productIDs)
 }
 
 // ============================================================
@@ -719,26 +676,6 @@ func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.Mo
 		return nil
 	}
 	return out
-}
-
-func hasModelStock(stock map[string]invdom.ModelStock, modelID string) bool {
-	if stock == nil {
-		return false
-	}
-	if modelID == "" {
-		return false
-	}
-	ms, ok := stock[modelID]
-	if !ok {
-		return false
-	}
-	if len(ms.Products) > 0 {
-		return true
-	}
-	if len(ms.ReservedByOrder) > 0 {
-		return true
-	}
-	return false
 }
 
 func unionStrings(a []string, b []string) []string {

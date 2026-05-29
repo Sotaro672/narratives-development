@@ -169,7 +169,7 @@ func (uc *InventoryUsecase) UpsertFromMintByModel(
 		}
 	}
 
-	return uc.repo.UpsertByProductBlueprintAndToken(ctx, tbID, pbID, mID, productIDs)
+	return uc.repo.UpsertByModelAndToken(ctx, tbID, pbID, mID, productIDs)
 }
 
 // ============================================================
@@ -219,9 +219,12 @@ func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, 
 // ============================================================
 
 // ReleaseAfterTransfer removes the transferred product from inventory stock and releases its reservation.
+// The caller must pass inventoryID and modelID from the order item reservation detail.
 // The usecase owns the application-level operation name, while the repository owns the transaction-safe mutation.
 func (uc *InventoryUsecase) ReleaseAfterTransfer(
 	ctx context.Context,
+	inventoryID string,
+	modelID string,
 	productID string,
 	orderID string,
 	now time.Time,
@@ -230,9 +233,17 @@ func (uc *InventoryUsecase) ReleaseAfterTransfer(
 		return errors.New("inventory usecase/repo is nil")
 	}
 
+	invID := inventoryID
+	mid := modelID
 	pid := productID
 	oid := orderID
 
+	if invID == "" {
+		return invdom.ErrInvalidMintID
+	}
+	if mid == "" {
+		return invdom.ErrInvalidModelID
+	}
 	if pid == "" {
 		return errors.New("inventory transfer result: invalid productId")
 	}
@@ -243,7 +254,14 @@ func (uc *InventoryUsecase) ReleaseAfterTransfer(
 		now = time.Now().UTC()
 	}
 
-	_, err := uc.repo.ReleaseReservationAfterTransfer(ctx, pid, oid, now)
+	_, err := uc.repo.ReleaseReservationAfterTransfer(
+		ctx,
+		invID,
+		mid,
+		pid,
+		oid,
+		now,
+	)
 	return err
 }
 

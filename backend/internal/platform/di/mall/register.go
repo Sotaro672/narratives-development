@@ -115,11 +115,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		catalogH = newCatalogCompositeHandler(catalogH, pbReviewH)
 	}
 
-	// Inventory (public read-only)
-	if cont.InventoryUC != nil {
-		invH = mallhandler.NewMallInventoryHandler(cont.InventoryUC)
-	}
-
 	// Brand（/mall/brands/{id}）
 	if cont.BrandQ != nil {
 		brandH = mallhandler.NewMallBrandHandler(cont.BrandQ)

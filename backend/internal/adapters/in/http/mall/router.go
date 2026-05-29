@@ -159,10 +159,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	handleSafe(mux, "/mall/lists", deps.List, "List")
 	handleSafe(mux, "/mall/lists/", deps.List, "List")
 
-	// inventories (public)
-	handleSafe(mux, "/mall/inventories", deps.Inventory, "Inventory")
-	handleSafe(mux, "/mall/inventories/", deps.Inventory, "Inventory")
-
 	// product blueprints (public)
 	handleSafe(mux, "/mall/product-blueprints", deps.ProductBlueprint, "ProductBlueprint")
 	handleSafe(mux, "/mall/product-blueprints/", deps.ProductBlueprint, "ProductBlueprint")

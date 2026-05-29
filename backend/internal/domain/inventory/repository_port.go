@@ -41,7 +41,7 @@ type RepositoryPort interface {
 	// NOTE:
 	// - reserved 系の更新は、競合を避けるためトランザクションで行う専用操作
 	//   （例: ReserveByOrder / ReleaseReservationAfterTransfer）に寄せること。
-	UpsertByProductBlueprintAndToken(
+	UpsertByModelAndToken(
 		ctx context.Context,
 		tokenBlueprintID string,
 		productBlueprintID string,
@@ -67,33 +67,36 @@ type RepositoryPort interface {
 	// Transfer settlement persistence operation
 	// ------------------------------------------------------------
 
-	// ReleaseReservationAfterTransfer atomically removes productID from inventory stock
+	// ReleaseReservationAfterTransfer atomically removes productID from the specified inventory stock
 	// and releases the reservation for orderID.
 	//
 	// Inventory update goal:
-	// - Find the inventory document that contains the productID in Stock[*].Products
-	// - Remove productID from Stock[modelId].Products
+	// - Use inventoryID and modelID from order item reservation detail.
+	// - Remove productID from Stock[modelID].Products.
 	// - Decrement reservation for orderID:
 	//   - If ReservedByOrder[orderID] exists:
-	//       - subtract removedCount (usually 1)
+	//       - subtract removedCount, usually 1
 	//       - if result <= 0, delete the key
 	// - Normalize:
-	//   - Stock[modelId].Accumulation = len(Products)
-	//   - Stock[modelId].ReservedCount = SUM(ReservedByOrder)
+	//   - Stock[modelID].Accumulation = len(Products)
+	//   - Stock[modelID].ReservedCount = SUM(ReservedByOrder)
 	//
 	// Contract:
 	// - Must be transactional.
 	// - Must be idempotent:
-	//   - If productID is not present, do nothing and return removedCount=0, nil.
-	// - The repository can resolve inventoryID by scanning inventories,
-	//   or you may implement a stronger index later.
+	//   - If productID is not present in Stock[modelID].Products, do nothing and return removedCount=0, nil.
+	// - Must not scan inventories by productID.
 	//
 	// Params:
-	// - productID: product ID to remove from stock
-	// - orderID:   order ID whose reservation should be decremented
-	// - now:       timestamp for audit/updatedAt
+	// - inventoryID: inventory document ID from order item
+	// - modelID:     model ID from order item
+	// - productID:   product ID to remove from stock
+	// - orderID:     order ID whose reservation should be decremented
+	// - now:         timestamp for audit/updatedAt
 	ReleaseReservationAfterTransfer(
 		ctx context.Context,
+		inventoryID string,
+		modelID string,
 		productID string,
 		orderID string,
 		now time.Time,
