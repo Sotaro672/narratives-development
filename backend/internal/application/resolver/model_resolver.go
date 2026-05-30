@@ -53,11 +53,11 @@ func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID str
 	}
 
 	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, id)
-	if err != nil || mv == nil || *mv == nil {
+	if err != nil || mv == nil {
 		return ModelResolved{}
 	}
 
-	if apparelMV, ok := toResolverApparelModelVariation(*mv); ok {
+	if apparelMV, ok := mv.(modeldom.ApparelModelVariation); ok {
 		colorName, rgb := extractColorNameAndRGBFromApparelModelVariation(apparelMV)
 
 		return ModelResolved{
@@ -69,7 +69,7 @@ func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID str
 		}
 	}
 
-	if alcoholMV, ok := toResolverAlcoholModelVariation(*mv); ok {
+	if alcoholMV, ok := mv.(modeldom.AlcoholModelVariation); ok {
 		volumeValue, volumeUnit := extractVolumeValueAndUnitFromAlcoholModelVariation(alcoholMV)
 
 		return ModelResolved{
@@ -97,40 +97,4 @@ func extractColorNameAndRGBFromApparelModelVariation(mv modeldom.ApparelModelVar
 func extractVolumeValueAndUnitFromAlcoholModelVariation(mv modeldom.AlcoholModelVariation) (*int, string) {
 	value := mv.Volume.Value
 	return &value, mv.Volume.Unit
-}
-
-func toResolverApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
-	if v == nil {
-		return modeldom.ApparelModelVariation{}, false
-	}
-
-	switch x := v.(type) {
-	case modeldom.ApparelModelVariation:
-		return x, true
-	case *modeldom.ApparelModelVariation:
-		if x == nil {
-			return modeldom.ApparelModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.ApparelModelVariation{}, false
-	}
-}
-
-func toResolverAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
-	if v == nil {
-		return modeldom.AlcoholModelVariation{}, false
-	}
-
-	switch x := v.(type) {
-	case modeldom.AlcoholModelVariation:
-		return x, true
-	case *modeldom.AlcoholModelVariation:
-		if x == nil {
-			return modeldom.AlcoholModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.AlcoholModelVariation{}, false
-	}
 }

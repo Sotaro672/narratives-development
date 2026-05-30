@@ -57,7 +57,7 @@ type ProductReader interface {
 //   - volumeValue
 //   - volumeUnit
 type ModelVariationReader interface {
-	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
+	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
 // ProductBlueprintReader is a minimal read port for ProductBlueprint.
@@ -261,7 +261,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	if err != nil {
 		return nil, err
 	}
-	if v == nil || *v == nil {
+	if v == nil {
 		return nil, ErrModelVariationNotFound
 	}
 
@@ -308,7 +308,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		out.CategoryInputSchema = &schema
 	}
 
-	if err := q.fillResolvedModelInfo(ctx, out, modelID, *v, category.Kind); err != nil {
+	if err := q.fillResolvedModelInfo(ctx, out, modelID, v, category.Kind); err != nil {
 		return nil, err
 	}
 
@@ -534,11 +534,6 @@ func toPreviewApparelModelVariation(v modeldom.ModelVariation) (modeldom.Apparel
 	switch x := v.(type) {
 	case modeldom.ApparelModelVariation:
 		return x, true
-	case *modeldom.ApparelModelVariation:
-		if x == nil {
-			return modeldom.ApparelModelVariation{}, false
-		}
-		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
 	}
@@ -552,11 +547,6 @@ func toPreviewAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.Alcohol
 	switch x := v.(type) {
 	case modeldom.AlcoholModelVariation:
 		return x, true
-	case *modeldom.AlcoholModelVariation:
-		if x == nil {
-			return modeldom.AlcoholModelVariation{}, false
-		}
-		return *x, true
 	default:
 		return modeldom.AlcoholModelVariation{}, false
 	}

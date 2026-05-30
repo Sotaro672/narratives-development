@@ -24,6 +24,8 @@ type queries struct {
 	listCreateQuery *companyquery.ListCreateQuery
 	salesQuery      *companyquery.SalesQuery
 
+	printQueryService *companyquery.PrintQueryService
+
 	listManagementQuery *listmgmt.ListManagementQuery
 	listDetailQuery     *listdetail.ListDetailQuery
 
@@ -81,6 +83,12 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		res.ownerResolveQuery,
 		r.avatarRepo,
 		r.avatarStateRepo,
+	)
+
+	printQueryService := companyquery.NewPrintQueryService(
+		r.productRepo,
+		r.printLogRepo,
+		res.nameResolver,
 	)
 
 	// =========================================================
@@ -193,12 +201,18 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	return &queries{
 		companyProductionQueryService: companyProductionQueryService,
 		mintRequestQueryService:       mintRequestQueryService,
-		inventoryManagementQuery:      inventoryManagementQuery,
-		inventoryDetailQuery:          inventoryDetailQuery,
-		listCreateQuery:               listCreateQuery,
-		salesQuery:                    salesQuery,
-		listManagementQuery:           listManagementQuery,
-		listDetailQuery:               listDetailQuery,
-		orderDetailQuery:              orderDetailQuery,
+
+		inventoryManagementQuery: inventoryManagementQuery,
+		inventoryDetailQuery:     inventoryDetailQuery,
+
+		listCreateQuery: listCreateQuery,
+		salesQuery:      salesQuery,
+
+		printQueryService: printQueryService,
+
+		listManagementQuery: listManagementQuery,
+		listDetailQuery:     listDetailQuery,
+
+		orderDetailQuery: orderDetailQuery,
 	}
 }

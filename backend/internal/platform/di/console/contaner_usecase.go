@@ -128,7 +128,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.productRepo,
 		r.printLogRepo,
 		r.inspectionRepo,
-		res.nameResolver,
 		r.productBlueprintRepo,
 	)
 

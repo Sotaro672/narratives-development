@@ -1,4 +1,4 @@
-// backend\internal\application\query\console\production_query.go
+// backend/internal/application/query/console/production_query.go
 package query
 
 import (
@@ -19,6 +19,7 @@ type ProductBlueprintQueryRepo interface {
 }
 
 type ProductionQueryRepo interface {
+	GetByID(ctx context.Context, id string) (*productiondom.Production, error)
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]productiondom.Production, error)
 }
 
@@ -117,66 +118,130 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 	out := make([]ProductionListItemDTO, 0, len(list))
 
 	for _, p := range list {
-		assigneeName := ""
-		productName := ""
-		brandID := ""
-		brandName := ""
-		createdByName := ""
-		updatedByName := ""
-		printedByName := ""
-
-		if s.nameResolver != nil {
-			productName = s.nameResolver.ResolveProductName(ctx, p.ProductBlueprintID)
-			assigneeName = s.nameResolver.ResolveMemberName(ctx, p.AssigneeID)
-			createdByName = s.nameResolver.ResolveCreatedByName(ctx, p.CreatedBy)
-			updatedByName = s.nameResolver.ResolveUpdatedByName(ctx, p.UpdatedBy)
-			printedByName = s.nameResolver.ResolvePrintedByName(ctx, p.PrintedBy)
-		}
-
-		pbID := p.ProductBlueprintID
-		if pbID != "" && s.pbRepo != nil {
-			if cached, ok := pbBrandCache[pbID]; ok {
-				brandID = cached
-			} else {
-				pb, err := s.pbRepo.GetByID(ctx, pbID)
-				if err == nil {
-					brandID = extractBrandIDFromProductBlueprint(pb)
-					pbBrandCache[pbID] = brandID
-				}
-			}
-		}
-
-		if s.nameResolver != nil && brandID != "" {
-			if cached, ok := brandNameCache[brandID]; ok {
-				brandName = cached
-			} else {
-				brandName = s.nameResolver.ResolveBrandName(ctx, brandID)
-				brandNameCache[brandID] = brandName
-			}
-		}
-
-		totalQty := 0
-		for _, mq := range p.Models {
-			if mq.Quantity > 0 {
-				totalQty += mq.Quantity
-			}
-		}
-
-		out = append(out, ProductionListItemDTO{
-			Production: p,
-
-			TotalQuantity: totalQty,
-
-			ProductName:   productName,
-			BrandName:     brandName,
-			AssigneeName:  assigneeName,
-			CreatedByName: createdByName,
-			UpdatedByName: updatedByName,
-			PrintedByName: printedByName,
-		})
+		item := s.toProductionListItemDTO(ctx, p, pbBrandCache, brandNameCache)
+		out = append(out, item)
 	}
 
 	return out, nil
+}
+
+func (s *CompanyProductionQueryService) GetProductionByIDForCurrentCompany(
+	ctx context.Context,
+	id string,
+) (productiondom.Production, error) {
+	cid := usecase.CompanyIDFromContext(ctx)
+	if cid == "" {
+		return productiondom.Production{}, productbpdom.ErrInvalidCompanyID
+	}
+	if s.pbRepo == nil || s.prodRepo == nil {
+		return productiondom.Production{}, productbpdom.ErrInternal
+	}
+	if id == "" {
+		return productiondom.Production{}, productiondom.ErrInvalidID
+	}
+
+	p, err := s.prodRepo.GetByID(ctx, id)
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+	if p == nil {
+		return productiondom.Production{}, productiondom.ErrNotFound
+	}
+
+	if p.ProductBlueprintID == "" {
+		return productiondom.Production{}, productiondom.ErrInvalidProductBlueprintID
+	}
+
+	pb, err := s.pbRepo.GetByID(ctx, p.ProductBlueprintID)
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+
+	if pb.CompanyID != cid {
+		return productiondom.Production{}, productiondom.ErrNotFound
+	}
+
+	return *p, nil
+}
+
+func (s *CompanyProductionQueryService) GetProductionWithAssigneeNameByID(
+	ctx context.Context,
+	id string,
+) (ProductionListItemDTO, error) {
+	p, err := s.GetProductionByIDForCurrentCompany(ctx, id)
+	if err != nil {
+		return ProductionListItemDTO{}, err
+	}
+
+	pbBrandCache := map[string]string{}
+	brandNameCache := map[string]string{}
+
+	return s.toProductionListItemDTO(ctx, p, pbBrandCache, brandNameCache), nil
+}
+
+func (s *CompanyProductionQueryService) toProductionListItemDTO(
+	ctx context.Context,
+	p productiondom.Production,
+	pbBrandCache map[string]string,
+	brandNameCache map[string]string,
+) ProductionListItemDTO {
+	assigneeName := ""
+	productName := ""
+	brandID := ""
+	brandName := ""
+	createdByName := ""
+	updatedByName := ""
+	printedByName := ""
+
+	if s.nameResolver != nil {
+		productName = s.nameResolver.ResolveProductName(ctx, p.ProductBlueprintID)
+		assigneeName = s.nameResolver.ResolveMemberName(ctx, p.AssigneeID)
+		createdByName = s.nameResolver.ResolveCreatedByName(ctx, p.CreatedBy)
+		updatedByName = s.nameResolver.ResolveUpdatedByName(ctx, p.UpdatedBy)
+		printedByName = s.nameResolver.ResolvePrintedByName(ctx, p.PrintedBy)
+	}
+
+	pbID := p.ProductBlueprintID
+	if pbID != "" && s.pbRepo != nil {
+		if cached, ok := pbBrandCache[pbID]; ok {
+			brandID = cached
+		} else {
+			pb, err := s.pbRepo.GetByID(ctx, pbID)
+			if err == nil {
+				brandID = extractBrandIDFromProductBlueprint(pb)
+				pbBrandCache[pbID] = brandID
+			}
+		}
+	}
+
+	if s.nameResolver != nil && brandID != "" {
+		if cached, ok := brandNameCache[brandID]; ok {
+			brandName = cached
+		} else {
+			brandName = s.nameResolver.ResolveBrandName(ctx, brandID)
+			brandNameCache[brandID] = brandName
+		}
+	}
+
+	totalQty := 0
+	for _, mq := range p.Models {
+		if mq.Quantity > 0 {
+			totalQty += mq.Quantity
+		}
+	}
+
+	return ProductionListItemDTO{
+		Production: p,
+
+		TotalQuantity: totalQty,
+
+		ProductName:   productName,
+		BrandName:     brandName,
+		AssigneeName:  assigneeName,
+		CreatedByName: createdByName,
+		UpdatedByName: updatedByName,
+		PrintedByName: printedByName,
+	}
 }
 
 func extractBrandIDFromProductBlueprint(pb productbpdom.ProductBlueprint) string {

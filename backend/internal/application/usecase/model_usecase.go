@@ -44,7 +44,7 @@ func NewModelUsecase(repo modeldom.RepositoryPort) *ModelUsecase {
 func (u *ModelUsecase) GetModelVariationByID(
 	ctx context.Context,
 	variationID string,
-) (*modeldom.ModelVariation, error) {
+) (modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -96,7 +96,7 @@ func (u *ModelUsecase) GetModelVariations(
 func (u *ModelUsecase) CreateModelVariation(
 	ctx context.Context,
 	v modeldom.NewModelVariation,
-) (*modeldom.ModelVariation, error) {
+) (modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -122,7 +122,7 @@ func (u *ModelUsecase) UpdateModelVariation(
 	ctx context.Context,
 	variationID string,
 	updates modeldom.ModelVariationUpdate,
-) (*modeldom.ModelVariation, error) {
+) (modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
@@ -142,7 +142,7 @@ func (u *ModelUsecase) UpdateModelVariation(
 func (u *ModelUsecase) DeleteModelVariation(
 	ctx context.Context,
 	variationID string,
-) (*modeldom.ModelVariation, error) {
+) (modeldom.ModelVariation, error) {
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}

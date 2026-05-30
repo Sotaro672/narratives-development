@@ -185,7 +185,7 @@ type RepositoryPort interface {
 	ListVariations(ctx context.Context, filter VariationFilter, page Page) (VariationPageResult, error)
 
 	GetModelVariations(ctx context.Context, productBlueprintID string) ([]ModelVariation, error)
-	GetModelVariationByID(ctx context.Context, variationID string) (*ModelVariation, error)
+	GetModelVariationByID(ctx context.Context, variationID string) (ModelVariation, error)
 
 	// CreateModelVariation creates a category-specific model variation.
 	//
@@ -194,10 +194,10 @@ type RepositoryPort interface {
 	//   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
 	//   - alcohol では Volume のみを variation field として扱う。
 	//   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
-	CreateModelVariation(ctx context.Context, variation NewModelVariation) (*ModelVariation, error)
+	CreateModelVariation(ctx context.Context, variation NewModelVariation) (ModelVariation, error)
 
-	UpdateModelVariation(ctx context.Context, variationID string, updates ModelVariationUpdate) (*ModelVariation, error)
-	DeleteModelVariation(ctx context.Context, variationID string) (*ModelVariation, error)
+	UpdateModelVariation(ctx context.Context, variationID string, updates ModelVariationUpdate) (ModelVariation, error)
+	DeleteModelVariation(ctx context.Context, variationID string) (ModelVariation, error)
 
 	// ReplaceModelVariations replaces category-specific model variations.
 	//

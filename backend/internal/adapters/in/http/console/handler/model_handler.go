@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/console/handler/model_handler.go
 package consoleHandler
 
 import (
@@ -192,7 +193,7 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(mv)
+	_ = json.NewEncoder(w).Encode(toModelVariationDTO(mv))
 }
 
 // ------------------------------------------------------------
@@ -246,7 +247,7 @@ func (h *ModelHandler) getVariationByID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toModelVariationDTO(*mv))
+	_ = json.NewEncoder(w).Encode(toModelVariationDTO(mv))
 }
 
 // ------------------------------------------------------------
@@ -273,7 +274,7 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toModelVariationDTO(*m))
+	_ = json.NewEncoder(w).Encode(toModelVariationDTO(m))
 }
 
 // ------------------------------------------------------------
@@ -305,7 +306,7 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(mv)
+	_ = json.NewEncoder(w).Encode(toModelVariationDTO(mv))
 }
 
 // ------------------------------------------------------------
@@ -328,7 +329,7 @@ func (h *ModelHandler) deleteVariation(w http.ResponseWriter, r *http.Request, i
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(mv)
+	_ = json.NewEncoder(w).Encode(toModelVariationDTO(mv))
 }
 
 // ------------------------------------------------------------
@@ -409,24 +410,16 @@ func toModelVariationUpdate(req createModelVariationRequest) modeldom.ModelVaria
 }
 
 func toModelVariationDTO(mv modeldom.ModelVariation) modelVariationDTO {
+	if mv == nil {
+		return modelVariationDTO{}
+	}
+
 	switch v := mv.(type) {
 	case modeldom.ApparelModelVariation:
 		return toApparelModelVariationDTO(v)
 
-	case *modeldom.ApparelModelVariation:
-		if v == nil {
-			return modelVariationDTO{}
-		}
-		return toApparelModelVariationDTO(*v)
-
 	case modeldom.AlcoholModelVariation:
 		return toAlcoholModelVariationDTO(v)
-
-	case *modeldom.AlcoholModelVariation:
-		if v == nil {
-			return modelVariationDTO{}
-		}
-		return toAlcoholModelVariationDTO(*v)
 
 	default:
 		return modelVariationDTO{

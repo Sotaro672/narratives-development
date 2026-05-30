@@ -86,17 +86,11 @@ type TimeRange struct {
 // ===============================
 
 type Repository interface {
-	// 基本CRUD / 一覧
 	GetByID(ctx context.Context, id string) (Product, error)
 	Create(ctx context.Context, entity Product) (Product, error)
 	Update(ctx context.Context, id string, patch Product) (Product, error)
 	Delete(ctx context.Context, id string) error
 
-	List(ctx context.Context, filter Filter, sort common.Sort, page common.Page) (common.PageResult[Product], error)
-
-	// usecase で利用されている追加操作
-	Exists(ctx context.Context, id string) (bool, error)
-	Save(ctx context.Context, p Product) (Product, error)
 	ListByProductionID(ctx context.Context, productionID string) ([]Product, error)
 }
 

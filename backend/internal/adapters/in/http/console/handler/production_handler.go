@@ -10,7 +10,6 @@ import (
 
 	companyquery "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
-	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
 
@@ -114,12 +113,19 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/productions":
 		h.postProduction(w, r)
 
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/productions/"):
+		id := strings.TrimPrefix(r.URL.Path, "/productions/")
+		id = strings.Trim(id, "/")
+		h.getProduction(w, r, id)
+
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/productions/"):
 		id := strings.TrimPrefix(r.URL.Path, "/productions/")
+		id = strings.Trim(id, "/")
 		h.updateProduction(w, r, id)
 
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/productions/"):
 		id := strings.TrimPrefix(r.URL.Path, "/productions/")
+		id = strings.Trim(id, "/")
 		h.deleteProduction(w, r, id)
 
 	default:
@@ -144,6 +150,30 @@ func (h *ProductionHandler) listProduction(w http.ResponseWriter, r *http.Reques
 	}
 
 	_ = json.NewEncoder(w).Encode(rows)
+}
+
+func (h *ProductionHandler) getProduction(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	if h.query == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "query service is nil"})
+		return
+	}
+
+	if id == "" || strings.Contains(id, "/") {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	p, err := h.query.GetProductionWithAssigneeNameByID(ctx, id)
+	if err != nil {
+		writeProductionErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(p)
 }
 
 func (h *ProductionHandler) postProduction(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +213,7 @@ func (h *ProductionHandler) updateProduction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if id == "" {
+	if id == "" || strings.Contains(id, "/") {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -214,7 +244,7 @@ func (h *ProductionHandler) deleteProduction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if id == "" {
+	if id == "" || strings.Contains(id, "/") {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -248,18 +278,6 @@ func writeProductionErr(w http.ResponseWriter, err error) {
 	} else if errors.Is(err, productiondom.ErrInvalidPrintedBy) {
 		code = http.StatusBadRequest
 	} else if errors.Is(err, productiondom.ErrInvalidCreatedAt) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidUpdatedAt) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrInvalidUpdatedBy) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrTransition) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productiondom.ErrNotFound) {
-		code = http.StatusNotFound
-	} else if errors.Is(err, productbpdom.ErrInvalidCompanyID) {
-		code = http.StatusBadRequest
-	} else if errors.Is(err, productbpdom.ErrInvalidID) {
 		code = http.StatusBadRequest
 	}
 

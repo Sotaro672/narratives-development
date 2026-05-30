@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
-	commondom "narratives/internal/domain/common"
 	inspectiondom "narratives/internal/domain/inspection"
 	productdom "narratives/internal/domain/product"
 )
@@ -32,10 +31,10 @@ func (r *ProductRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // ============================================================
-// ProductRepo interface methods
+// Product Repository methods
 // ============================================================
 
-// GetByID returns a single Product by ID
+// GetByID returns a single Product by ID.
 func (r *ProductRepositoryFS) GetByID(ctx context.Context, id string) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -56,53 +55,7 @@ func (r *ProductRepositoryFS) GetByID(ctx context.Context, id string) (productdo
 	return docToProduct(snap)
 }
 
-// GetModelIDByProductID returns modelId for a product.
-// This method implements usecase.ProductModelResolver without importing the usecase package.
-func (r *ProductRepositoryFS) GetModelIDByProductID(
-	ctx context.Context,
-	productID string,
-) (string, error) {
-	if r == nil || r.Client == nil {
-		return "", errors.New("product repository/firestore client is nil")
-	}
-
-	if productID == "" {
-		return "", productdom.ErrNotFound
-	}
-
-	product, err := r.GetByID(ctx, productID)
-	if err != nil {
-		return "", err
-	}
-
-	if product.ModelID == "" {
-		return "", errors.New("product modelId is empty")
-	}
-
-	return product.ModelID, nil
-}
-
-// Exists checks if a product with the given ID exists
-func (r *ProductRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-// Create inserts a new product (Firestore auto-ID allowed)
+// Create inserts a new product. Firestore auto-ID is allowed.
 func (r *ProductRepositoryFS) Create(ctx context.Context, v productdom.Product) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -132,37 +85,11 @@ func (r *ProductRepositoryFS) Create(ctx context.Context, v productdom.Product) 
 	if err != nil {
 		return productdom.Product{}, err
 	}
+
 	return docToProduct(snap)
 }
 
-// Save = full upsert
-func (r *ProductRepositoryFS) Save(ctx context.Context, v productdom.Product) (productdom.Product, error) {
-	if r.Client == nil {
-		return productdom.Product{}, errors.New("firestore client is nil")
-	}
-
-	id := v.ID
-	if id == "" {
-		return r.Create(ctx, v)
-	}
-
-	v.ID = id
-	docRef := r.col().Doc(id)
-	data := productToDoc(v)
-
-	_, err := docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return productdom.Product{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return productdom.Product{}, err
-	}
-	return docToProduct(snap)
-}
-
-// Update(ctx, id, product) = full update
+// Update updates an existing product by ID.
 func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdom.Product) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -172,15 +99,45 @@ func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdo
 		return productdom.Product{}, productdom.ErrNotFound
 	}
 
+	docRef := r.col().Doc(id)
+
+	// 存在確認。Set(MergeAll) だけだと存在しない document を作れてしまうため、
+	// repository port の Update としては not found を返す。
+	if _, err := docRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return productdom.Product{}, productdom.ErrNotFound
+		}
+		return productdom.Product{}, err
+	}
+
 	v.ID = id
-	return r.Save(ctx, v)
+	data := productToDoc(v)
+
+	_, err := docRef.Set(ctx, data, firestore.MergeAll)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return productdom.Product{}, productdom.ErrNotFound
+		}
+		return productdom.Product{}, err
+	}
+
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return productdom.Product{}, productdom.ErrNotFound
+		}
+		return productdom.Product{}, err
+	}
+
+	return docToProduct(snap)
 }
 
-// Delete deletes a product by ID
+// Delete deletes a product by ID.
 func (r *ProductRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
+
 	if id == "" {
 		return productdom.ErrNotFound
 	}
@@ -192,13 +149,11 @@ func (r *ProductRepositoryFS) Delete(ctx context.Context, id string) error {
 		}
 		return err
 	}
+
 	return nil
 }
 
-// ============================================================
-// ListByProductionID
-// ============================================================
-
+// ListByProductionID returns products that belong to the given productionID.
 func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -221,10 +176,12 @@ func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, production
 		if err != nil {
 			return nil, err
 		}
+
 		p, err := docToProduct(doc)
 		if err != nil {
 			return nil, err
 		}
+
 		items = append(items, p)
 	}
 
@@ -232,133 +189,33 @@ func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, production
 }
 
 // ============================================================
-// List
+// ProductModelResolver 用メソッド
 // ============================================================
 
-func (r *ProductRepositoryFS) List(
+// GetModelIDByProductID returns modelId for a product.
+// This method implements usecase.ProductModelResolver without importing the usecase package.
+func (r *ProductRepositoryFS) GetModelIDByProductID(
 	ctx context.Context,
-	filter productdom.Filter,
-	sortOpt commondom.Sort,
-	page commondom.Page,
-) (commondom.PageResult[productdom.Product], error) {
-	if r.Client == nil {
-		return commondom.PageResult[productdom.Product]{}, errors.New("firestore client is nil")
+	productID string,
+) (string, error) {
+	if r == nil || r.Client == nil {
+		return "", errors.New("product repository/firestore client is nil")
 	}
 
-	q := r.col().Query
-
-	if filter.ID != "" {
-		q = q.Where(firestore.DocumentID, "==", filter.ID)
-	}
-	if filter.ModelID != "" {
-		q = q.Where("modelId", "==", filter.ModelID)
-	}
-	if filter.ProductionID != "" {
-		q = q.Where("productionId", "==", filter.ProductionID)
-	}
-	if filter.TokenID != "" {
-		q = q.Where("connectedToken", "==", filter.TokenID)
-	}
-	if filter.HasToken != nil {
-		if *filter.HasToken {
-			q = q.Where("connectedToken", "!=", "")
-		}
+	if productID == "" {
+		return "", productdom.ErrNotFound
 	}
 
-	if len(filter.InspectionResults) == 1 {
-		q = q.Where("inspectionResult", "==", string(filter.InspectionResults[0]))
+	product, err := r.GetByID(ctx, productID)
+	if err != nil {
+		return "", err
 	}
 
-	if filter.Printed.From != nil {
-		q = q.Where("printedAt", ">=", filter.Printed.From.UTC())
-	}
-	if filter.Printed.To != nil {
-		q = q.Where("printedAt", "<=", filter.Printed.To.UTC())
-	}
-	if filter.Inspected.From != nil {
-		q = q.Where("inspectedAt", ">=", filter.Inspected.From.UTC())
-	}
-	if filter.Inspected.To != nil {
-		q = q.Where("inspectedAt", "<=", filter.Inspected.To.UTC())
-	}
-	if filter.Created.From != nil {
-		q = q.Where("createdAt", ">=", filter.Created.From.UTC())
-	}
-	if filter.Created.To != nil {
-		q = q.Where("createdAt", "<=", filter.Created.To.UTC())
-	}
-	if filter.Updated.From != nil {
-		q = q.Where("updatedAt", ">=", filter.Updated.From.UTC())
-	}
-	if filter.Updated.To != nil {
-		q = q.Where("updatedAt", "<=", filter.Updated.To.UTC())
+	if product.ModelID == "" {
+		return "", errors.New("product modelId is empty")
 	}
 
-	if sortOpt.Column != "" {
-		dir := firestore.Asc
-		if sortOpt.Order == commondom.SortDesc {
-			dir = firestore.Desc
-		}
-		q = q.OrderBy(sortOpt.Column, dir)
-	}
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var allItems []productdom.Product
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return commondom.PageResult[productdom.Product]{}, err
-		}
-		p, err := docToProduct(doc)
-		if err != nil {
-			return commondom.PageResult[productdom.Product]{}, err
-		}
-		allItems = append(allItems, p)
-	}
-
-	total := len(allItems)
-
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = total
-		if perPage == 0 {
-			perPage = 20
-		}
-	}
-
-	pageNum := page.Number
-	if pageNum <= 0 {
-		pageNum = 1
-	}
-
-	start := (pageNum - 1) * perPage
-	if start > total {
-		start = total
-	}
-	end := start + perPage
-	if end > total {
-		end = total
-	}
-
-	pagedItems := allItems[start:end]
-
-	totalPages := 0
-	if total > 0 {
-		totalPages = (total + perPage - 1) / perPage
-	}
-
-	return commondom.PageResult[productdom.Product]{
-		Items:      pagedItems,
-		TotalCount: total,
-		TotalPages: totalPages,
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
+	return product.ModelID, nil
 }
 
 // ============================================================
@@ -383,17 +240,27 @@ func (r *ProductRepositoryFS) UpdateInspectionResult(
 		return productdom.ErrNotFound
 	}
 
+	docRef := r.col().Doc(id)
+
+	if _, err := docRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return productdom.ErrNotFound
+		}
+		return err
+	}
+
 	updates := map[string]any{
 		"inspectionResult": string(result),
 	}
 
-	_, err := r.col().Doc(id).Set(ctx, updates, firestore.MergeAll)
+	_, err := docRef.Set(ctx, updates, firestore.MergeAll)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return productdom.ErrNotFound
 		}
 		return err
 	}
+
 	return nil
 }
 
@@ -432,9 +299,6 @@ func (r *PrintLogRepositoryFS) Create(ctx context.Context, v productdom.PrintLog
 
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return productdom.PrintLog{}, err
-		}
 		return productdom.PrintLog{}, err
 	}
 
@@ -468,10 +332,12 @@ func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productio
 		if err != nil {
 			return nil, err
 		}
+
 		l, err := docToPrintLog(doc)
 		if err != nil {
 			return nil, err
 		}
+
 		logs = append(logs, l)
 	}
 
@@ -547,10 +413,9 @@ func productToDoc(v productdom.Product) map[string]any {
 	if v.InspectedAt != nil && !v.InspectedAt.IsZero() {
 		m["inspectedAt"] = v.InspectedAt.UTC()
 	}
-	if v.InspectedBy != nil {
-		if *v.InspectedBy != "" {
-			m["inspectedBy"] = *v.InspectedBy
-		}
+
+	if v.InspectedBy != nil && *v.InspectedBy != "" {
+		m["inspectedBy"] = *v.InspectedBy
 	}
 
 	return m
@@ -571,6 +436,7 @@ func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error)
 				if !ok {
 					continue
 				}
+
 				pidAny := m["productId"]
 				orderAny := m["displayOrder"]
 
@@ -591,6 +457,7 @@ func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error)
 				if pid == "" || order <= 0 {
 					continue
 				}
+
 				items = append(items, productdom.PrintedItem{
 					ProductID:    pid,
 					DisplayOrder: order,

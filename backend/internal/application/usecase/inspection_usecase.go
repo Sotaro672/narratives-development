@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/inspection_usecase.go
 package usecase
 
 import (
@@ -264,7 +265,7 @@ func (u *InspectionUsecase) GetMintByInspectionID(
 func (u *InspectionUsecase) GetModelVariationByID(
 	ctx context.Context,
 	variationID string,
-) (*modeldom.ModelVariation, error) {
+) (modeldom.ModelVariation, error) {
 	if u.modelRepo == nil {
 		return nil, fmt.Errorf("modelRepo is nil")
 	}

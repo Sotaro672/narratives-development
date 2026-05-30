@@ -16,7 +16,7 @@ var (
 )
 
 type HistoryModelVariationRepository interface {
-	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
+	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
 type HistoryModelResolverImpl struct {
@@ -56,11 +56,11 @@ func (r *HistoryModelResolverImpl) ResolveHistoryModelByID(
 		TokenBlueprintID:   in.TokenBlueprintID,
 	}
 
-	if variation == nil || *variation == nil {
+	if variation == nil {
 		return out, nil
 	}
 
-	if apparelVariation, ok := toHistoryApparelModelVariation(*variation); ok {
+	if apparelVariation, ok := toHistoryApparelModelVariation(variation); ok {
 		out.Kind = "apparel"
 		out.Size = apparelVariation.Size
 		out.ModelNumber = apparelVariation.ModelNumber
@@ -70,7 +70,7 @@ func (r *HistoryModelResolverImpl) ResolveHistoryModelByID(
 		return out, nil
 	}
 
-	if alcoholVariation, ok := toHistoryAlcoholModelVariation(*variation); ok {
+	if alcoholVariation, ok := toHistoryAlcoholModelVariation(variation); ok {
 		out.Kind = "alcohol"
 		out.ModelNumber = alcoholVariation.ModelNumber
 		out.VolumeValue = historyVolumeValueFromAlcoholModelVariation(alcoholVariation)
@@ -90,11 +90,6 @@ func toHistoryApparelModelVariation(v modeldom.ModelVariation) (modeldom.Apparel
 	switch x := v.(type) {
 	case modeldom.ApparelModelVariation:
 		return x, true
-	case *modeldom.ApparelModelVariation:
-		if x == nil {
-			return modeldom.ApparelModelVariation{}, false
-		}
-		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
 	}
@@ -108,11 +103,6 @@ func toHistoryAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.Alcohol
 	switch x := v.(type) {
 	case modeldom.AlcoholModelVariation:
 		return x, true
-	case *modeldom.AlcoholModelVariation:
-		if x == nil {
-			return modeldom.AlcoholModelVariation{}, false
-		}
-		return *x, true
 	default:
 		return modeldom.AlcoholModelVariation{}, false
 	}

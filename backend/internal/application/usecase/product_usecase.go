@@ -104,10 +104,11 @@ type ProductGetter interface {
 	GetByID(ctx context.Context, productID string) (productdom.Product, error)
 }
 
-// ModelVariationGetter は model variation を取得する最小ポート
-// Firestore 実装に合わせて *modeldom.ModelVariation を正とする（nil は not found 扱い）
+// ModelVariationGetter は model variation を取得する最小ポート。
+// 戻り値は modeldom.ModelVariation に統一する。
+// *modeldom.ModelVariation のような pointer-to-interface は扱わない。
 type ModelVariationGetter interface {
-	GetModelVariationByID(ctx context.Context, modelID string) (*modeldom.ModelVariation, error)
+	GetModelVariationByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
 }
 
 // ProductionGetter は production を取得する最小ポート
@@ -171,11 +172,11 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 	if err != nil {
 		return ProductDetail{}, err
 	}
-	if mv == nil || *mv == nil {
+	if mv == nil {
 		return ProductDetail{}, errors.New("product: model variation not found")
 	}
 
-	model, ok := toProductUsecaseApparelModelVariation(*mv)
+	model, ok := mv.(modeldom.ApparelModelVariation)
 	if !ok {
 		return ProductDetail{}, errors.New("product: unsupported model variation type")
 	}
@@ -240,8 +241,8 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		CompanyName: companyName,
 
 		ProductBlueprintCategory: ProductBlueprintCategoryDTO{
-			ID:     category.ID,
-			Code:   category.Code,
+			ID:     string(category.ID),
+			Code:   string(category.Code),
 			NameJa: category.NameJa,
 			NameEn: category.NameEn,
 			Kind:   string(category.Kind),
@@ -279,24 +280,6 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 	}
 
 	return detail, nil
-}
-
-func toProductUsecaseApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
-	if v == nil {
-		return modeldom.ApparelModelVariation{}, false
-	}
-
-	switch x := v.(type) {
-	case modeldom.ApparelModelVariation:
-		return x, true
-	case *modeldom.ApparelModelVariation:
-		if x == nil {
-			return modeldom.ApparelModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.ApparelModelVariation{}, false
-	}
 }
 
 func categoryFieldString(fields bpdom.CategoryFields, key string) string {

@@ -81,6 +81,8 @@ type Container struct {
 	ListCreateQuery *query.ListCreateQuery
 	SalesQuery      *query.SalesQuery
 
+	PrintQueryService *query.PrintQueryService
+
 	ListManagementQuery *listmanagementquery.ListManagementQuery
 	ListDetailQuery     *listdetailquery.ListDetailQuery
 
@@ -194,6 +196,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		ListCreateQuery: q.listCreateQuery,
 		SalesQuery:      q.salesQuery,
+
+		PrintQueryService: q.printQueryService,
 
 		ListManagementQuery: q.listManagementQuery,
 		ListDetailQuery:     q.listDetailQuery,

@@ -41,13 +41,12 @@ type MemberNameRepository interface {
 }
 
 // Model → modelId から ModelVariation を 1 件取得できればよい
-// ★ ModelNameRepository → ModelNumberRepository にリネーム
 type ModelNumberRepository interface {
-	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
+	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
 // TokenBlueprint → name / symbol を取得できればよい
-// ✅ GetNameByID のみ要求する（NameResolver用途の最小ポート）
+// GetNameByID のみ要求する（NameResolver用途の最小ポート）
 type TokenBlueprintNameRepository interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
@@ -95,6 +94,7 @@ func (r *NameResolver) ResolveBrandName(ctx context.Context, brandID string) str
 	if r == nil || r.brandRepo == nil {
 		return ""
 	}
+
 	id := brandID
 	if id == "" {
 		return ""
@@ -139,6 +139,7 @@ func (r *NameResolver) ResolveCompanyName(ctx context.Context, companyID string)
 	if r == nil || r.companyRepo == nil {
 		return ""
 	}
+
 	id := companyID
 	if id == "" {
 		return ""
@@ -162,6 +163,7 @@ func (r *NameResolver) ResolveProductName(ctx context.Context, productBlueprintI
 	if r == nil || r.productBlueprintRepo == nil {
 		return ""
 	}
+
 	id := productBlueprintID
 	if id == "" {
 		return ""
@@ -171,6 +173,7 @@ func (r *NameResolver) ResolveProductName(ctx context.Context, productBlueprintI
 	if err != nil {
 		return ""
 	}
+
 	return pb.ProductName
 }
 
@@ -223,6 +226,7 @@ func (r *NameResolver) resolveMemberNameFromPtr(ctx context.Context, uid *string
 	if uid == nil {
 		return ""
 	}
+
 	return r.ResolveMemberName(ctx, *uid)
 }
 
@@ -266,40 +270,26 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 	if r == nil || r.modelNumberRepo == nil {
 		return ""
 	}
+
 	id := variationID
 	if id == "" {
 		return ""
 	}
 
 	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, id)
-	if err != nil || mv == nil || *mv == nil {
+	if err != nil || mv == nil {
 		return ""
 	}
 
-	apparelMV, ok := toNameResolverApparelModelVariation(*mv)
-	if !ok {
-		return ""
+	if apparelMV, ok := mv.(modeldom.ApparelModelVariation); ok {
+		return apparelMV.ModelNumber
 	}
 
-	return apparelMV.ModelNumber
-}
-
-func toNameResolverApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
-	if v == nil {
-		return modeldom.ApparelModelVariation{}, false
+	if alcoholMV, ok := mv.(modeldom.AlcoholModelVariation); ok {
+		return alcoholMV.ModelNumber
 	}
 
-	switch x := v.(type) {
-	case modeldom.ApparelModelVariation:
-		return x, true
-	case *modeldom.ApparelModelVariation:
-		if x == nil {
-			return modeldom.ApparelModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.ApparelModelVariation{}, false
-	}
+	return ""
 }
 
 // ------------------------------------------------------------
@@ -312,6 +302,7 @@ func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID st
 	if r == nil || r.tokenBlueprintRepo == nil {
 		return ""
 	}
+
 	id := tokenBlueprintID
 	if id == "" {
 		return ""
@@ -321,5 +312,6 @@ func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID st
 	if err != nil {
 		return ""
 	}
+
 	return name
 }

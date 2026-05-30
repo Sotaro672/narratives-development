@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -67,8 +66,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet &&
-		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
-		!strings.HasSuffix(r.URL.Path, "/request"):
+		strings.HasPrefix(r.URL.Path, "/mint/inspections/"):
 		h.getMintRequestDetailByProductionID(w, r)
 		return
 
@@ -76,12 +74,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
 		strings.HasSuffix(r.URL.Path, "/mint"):
 		h.mintFromMintRequest(w, r)
-		return
-
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
-		strings.HasSuffix(r.URL.Path, "/request"):
-		h.updateRequestInfo(w, r)
 		return
 
 	case r.Method == http.MethodGet &&
@@ -215,61 +207,6 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	_ = json.NewEncoder(w).Encode(result)
-}
-
-func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.mintUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
-		return
-	}
-
-	path := strings.TrimPrefix(r.URL.Path, "/mint/inspections/")
-	path = strings.TrimSuffix(path, "/request")
-	productionID := strings.Trim(path, "/")
-
-	if productionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is empty"})
-		return
-	}
-
-	defer func() {
-		if rec := recover(); rec != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})
-		}
-	}()
-
-	raw, _ := io.ReadAll(r.Body)
-
-	var body struct {
-		TokenBlueprintID  string  `json:"tokenBlueprintId"`
-		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"`
-	}
-	if err := json.Unmarshal(raw, &body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
-		return
-	}
-
-	tokenBlueprintID := body.TokenBlueprintID
-	if tokenBlueprintID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "tokenBlueprintId is required"})
-		return
-	}
-
-	updated, err := h.mintUC.UpdateRequestInfo(ctx, productionID, tokenBlueprintID, body.ScheduledBurnDate)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(updated)
 }
 
 func (h *MintHandler) getProductBlueprintByID(w http.ResponseWriter, r *http.Request) {

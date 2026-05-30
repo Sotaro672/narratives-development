@@ -39,7 +39,7 @@ func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
 // Variation CRUD（ライブの models コレクション）
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -55,15 +55,10 @@ func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variation
 		return nil, err
 	}
 
-	v, err := docToModelVariation(snap)
-	if err != nil {
-		return nil, err
-	}
-
-	return &v, nil
+	return docToModelVariation(snap)
 }
 
-func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, variation modeldom.NewModelVariation) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, variation modeldom.NewModelVariation) (modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -88,15 +83,10 @@ func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, variation 
 		return nil, err
 	}
 
-	saved, err := docToModelVariation(snap)
-	if err != nil {
-		return nil, err
-	}
-
-	return &saved, nil
+	return docToModelVariation(snap)
 }
 
-func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -156,7 +146,7 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 	return r.GetModelVariationByID(ctx, variationID)
 }
 
-func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationID string) (modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -186,7 +176,7 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 		return nil, err
 	}
 
-	return &v, nil
+	return v, nil
 }
 
 // ------------------------------------------------------------

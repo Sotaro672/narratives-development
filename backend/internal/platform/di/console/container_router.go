@@ -117,12 +117,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		}
 	}
 
-	if c.PrintUC != nil {
+	if c.PrintUC != nil && c.PrintQueryService != nil {
 		productsPrintH = consoleHandler.NewPrintHandler(
 			c.PrintUC,
-			c.ProductionUC,
-			c.ModelUC,
-			c.NameResolver,
+			c.PrintQueryService,
 		)
 	}
 
