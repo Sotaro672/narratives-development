@@ -222,33 +222,3 @@ var (
 
 // Compat alias if some code refers to Repository
 type Repository = RepositoryPort
-
-// ============================================================
-// History repository port for Model (versioned snapshot)
-// ============================================================
-//
-// Firestore 実装（ModelHistoryRepositoryFS）は、以下のようなパスで保存する想定：
-//
-//	product_blueprints_history/{blueprintId}/models/{version}/variations/{variationId}
-//
-// version は ProductBlueprint 側の Version と同期して管理する。
-type ModelHistoryRepository interface {
-	// SaveSnapshot:
-	//   指定された blueprintID + blueprintVersion に対して、
-	//   variations（ライブの ModelVariation 一式）のスナップショットを保存する。
-	SaveSnapshot(
-		ctx context.Context,
-		productBlueprintID string,
-		productBlueprintVersion int64,
-		variations []ModelVariation,
-	) error
-
-	// ListByProductBlueprintIDAndVersion:
-	//   指定された blueprintID + version に紐づく ModelVariation の履歴をすべて返す。
-	//   LogCard から、特定バージョン時点の Model 行を表示する用途を想定。
-	ListByProductBlueprintIDAndVersion(
-		ctx context.Context,
-		productBlueprintID string,
-		productBlueprintVersion int64,
-	) ([]ModelVariation, error)
-}
