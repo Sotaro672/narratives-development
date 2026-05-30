@@ -65,6 +65,12 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listMintRequestsByCurrentCompany(w, r)
 		return
 
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
+		strings.HasSuffix(r.URL.Path, "/request"):
+		h.updateRequestInfo(w, r)
+		return
+
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/"):
 		h.getMintRequestDetailByProductionID(w, r)
@@ -92,6 +98,70 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+type updateMintRequestInfoRequest struct {
+	TokenBlueprintID  string  `json:"tokenBlueprintId"`
+	ScheduledBurnDate *string `json:"scheduledBurnDate"`
+}
+
+func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/mint/inspections/")
+	path = strings.TrimSuffix(path, "/request")
+	productionID := strings.Trim(path, "/")
+
+	if productionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is empty"})
+		return
+	}
+
+	if strings.Contains(productionID, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	var req updateMintRequestInfoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	tokenBlueprintID := strings.TrimSpace(req.TokenBlueprintID)
+	if tokenBlueprintID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "tokenBlueprintId is required"})
+		return
+	}
+
+	result, err := h.mintUC.UpdateRequestInfo(
+		ctx,
+		productionID,
+		tokenBlueprintID,
+		req.ScheduledBurnDate,
+	)
+	if err != nil {
+		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
+			return
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, r *http.Request) {

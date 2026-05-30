@@ -56,9 +56,6 @@ type repos struct {
 	inspectionRepo *fs.InspectionRepositoryFS
 
 	invitationTokenRepo *fs.InvitationTokenRepositoryFS
-
-	// ports
-	mintRequestPort *fs.MintRequestPortFS
 }
 
 func buildRepos(c *clients) *repos {
@@ -118,13 +115,6 @@ func buildRepos(c *clients) *repos {
 
 	invitationTokenRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
 
-	mintRequestPort := fs.NewMintRequestPortFS(
-		fsClient,
-		"mints",
-		"token_blueprints",
-		"brands",
-	)
-
 	return &repos{
 		accountRepo:       accountRepo,
 		announcementRepo:  announcementRepo,
@@ -175,7 +165,5 @@ func buildRepos(c *clients) *repos {
 		inspectionRepo: inspectionRepo,
 
 		invitationTokenRepo: invitationTokenRepo,
-
-		mintRequestPort: mintRequestPort,
 	}
 }

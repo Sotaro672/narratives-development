@@ -62,9 +62,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	var tokenUC *uc.TokenUsecase
 	if c.infra.MintAuthorityKey != nil {
 		solanaClient := solanainfra.NewMintClient(c.infra.MintAuthorityKey)
-		tokenUC = uc.NewTokenUsecase(solanaClient, r.mintRequestPort)
+		tokenUC = uc.NewTokenUsecase(solanaClient)
 	} else {
-		tokenUC = uc.NewTokenUsecase(nil, r.mintRequestPort)
+		tokenUC = uc.NewTokenUsecase(nil)
 	}
 
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
@@ -166,8 +166,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		uploader,
 	)
 
-	tokenUC.SetTokenBlueprintRepo(r.tokenBlueprintRepo)
-	tokenUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
+	mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
 
 	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	invdom "narratives/internal/domain/inventory"
@@ -15,9 +16,82 @@ import (
 
 var ErrCompanyIDMissing = errors.New("companyId not found in context")
 
-type TokenMintPort interface {
-	MintFromMintRequest(ctx context.Context, mintID string) (*tokendom.MintResult, error)
+// ============================================================
+// Mint request ports
+// ============================================================
+
+// MintRequestForUsecase は、MintUsecase が mint 実行フローを進めるために
+// 必要となる MintRequest 情報だけを集約した DTO です。
+type MintRequestForUsecase struct {
+	ID string
+
+	// TokenBlueprintID は、metadata URI の確保や tokenBlueprint minted 化に使います。
+	TokenBlueprintID string
+
+	// ActorID は、metadata URI 確保や tokenBlueprint minted 化の実行者として使います。
+	ActorID string
+
+	// 受取先アドレス（ブランドウォレット等）
+	// NOTE:
+	// - これは「NFT/トークンを受け取るアドレス」であり、FeePayer（ガス支払い）ではありません。
+	// - FeePayer はインフラ側（mint/transfer 実装）で master wallet に統一しています。
+	ToAddress string
+
+	// productId ごとに 1 ミントしたい場合の productId 一覧。
+	ProductIDs []string
+
+	BlueprintName   string
+	BlueprintSymbol string
+
+	MetadataURI string
 }
+
+// MintRequestPort は、MintUsecase から見た「ミント対象 MintRequest」の
+// 取得および更新を行うためのポートです。
+//
+// 現在のフローでは「1商品=1Mint」モードのみを想定しています。
+type MintRequestPort interface {
+	// LoadForMinting:
+	// - ミント実行に必要な情報をロードします。
+	// - TokenBlueprintID / ActorID / ToAddress / ProductIDs / BlueprintName /
+	//   BlueprintSymbol / MetadataURI を返す想定です。
+	LoadForMinting(ctx context.Context, id string) (*MintRequestForUsecase, error)
+
+	// MarkProductsAsMinted:
+	// - productId ごとに 1 ミントした結果一覧で MintRequest / Token 情報を更新します。
+	// - 実装側で:
+	//   - productId, mintAddress の 1:1 マッピングを tokens コレクション等に保存
+	//   - MintRequest (mints テーブル) 自体も minted=true にする
+	MarkProductsAsMinted(ctx context.Context, id string, minted []MintedTokenForUsecase) error
+}
+
+// ============================================================
+// Token mint dependency
+// ============================================================
+
+type TokenMintPort interface {
+	MintProducts(ctx context.Context, input MintProductsInput) ([]MintedTokenForUsecase, error)
+}
+
+// ============================================================
+// TokenBlueprint dependencies
+// ============================================================
+
+type TokenBlueprintMetadataEnsurer interface {
+	EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
+}
+
+type TokenBlueprintMintMarker interface {
+	MarkTokenBlueprintMinted(
+		ctx context.Context,
+		tokenBlueprintID string,
+		actorID string,
+	) (*tbdom.TokenBlueprint, error)
+}
+
+// ============================================================
+// Inventory dependency
+// ============================================================
 
 type InventoryUpserter interface {
 	UpsertFromMint(
@@ -27,6 +101,10 @@ type InventoryUpserter interface {
 		productIDs []string,
 	) ([]invdom.Mint, error)
 }
+
+// ============================================================
+// MintResultMapper
+// ============================================================
 
 type MintResultMapper struct{}
 
@@ -57,12 +135,18 @@ func (m *MintResultMapper) ApplyOnchainResult(ent *mintdom.Mint, result *tokendo
 	return nil
 }
 
+// ============================================================
+// MintUsecase
+// ============================================================
+
 type MintUsecase struct {
 	prodRepo mintdom.MintProductionRepo
 
 	tbRepo tbdom.RepositoryPort
 
 	mintRepo mintdom.MintRepository
+
+	mintRequestPort MintRequestPort
 
 	mintResultMapper *MintResultMapper
 
@@ -71,6 +155,9 @@ type MintUsecase struct {
 	tokenMinter TokenMintPort
 
 	inventoryUC InventoryUpserter
+
+	tbMetadataEnsurer TokenBlueprintMetadataEnsurer
+	tbMintMarker      TokenBlueprintMintMarker
 }
 
 func NewMintUsecase(
@@ -80,14 +167,22 @@ func NewMintUsecase(
 	passedProductLister mintdom.PassedProductLister,
 	tokenMinter TokenMintPort,
 ) *MintUsecase {
+	var mintRequestPort MintRequestPort
+	if p, ok := any(mintRepo).(MintRequestPort); ok {
+		mintRequestPort = p
+	}
+
 	return &MintUsecase{
 		prodRepo:            prodRepo,
 		tbRepo:              tbRepo,
 		mintRepo:            mintRepo,
+		mintRequestPort:     mintRequestPort,
 		mintResultMapper:    NewMintResultMapper(),
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
 		inventoryUC:         nil,
+		tbMetadataEnsurer:   nil,
+		tbMintMarker:        nil,
 	}
 }
 
@@ -98,6 +193,20 @@ func (u *MintUsecase) SetInventoryUsecase(uc *InventoryUsecase) {
 
 	var _ InventoryUpserter = uc
 	u.inventoryUC = uc
+}
+
+func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
+	if u == nil {
+		return
+	}
+	u.tbMetadataEnsurer = e
+}
+
+func (u *MintUsecase) SetTokenBlueprintMintMarker(marker TokenBlueprintMintMarker) {
+	if u == nil {
+		return
+	}
+	u.tbMintMarker = marker
 }
 
 func (u *MintUsecase) UpdateRequestInfo(
@@ -188,10 +297,6 @@ func (u *MintUsecase) UpdateRequestInfo(
 		return nil, err
 	}
 
-	if u.tokenMinter == nil {
-		return nil, errors.New("token minter is not configured")
-	}
-
 	result, err := u.MintFromMintRequest(ctx, pid)
 	if err != nil {
 		return nil, fmt.Errorf("onchain mint failed after mint request was created: %w", err)
@@ -236,15 +341,73 @@ func validateProductIDs(productIDs []string) error {
 	return nil
 }
 
+func normalizeProductIDs(productIDs []string) []string {
+	out := make([]string, 0, len(productIDs))
+	for _, id := range productIDs {
+		p := strings.TrimSpace(id)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func lastMintResult(minted []MintedTokenForUsecase) *tokendom.MintResult {
+	for i := len(minted) - 1; i >= 0; i-- {
+		if minted[i].Result != nil {
+			return minted[i].Result
+		}
+	}
+	return nil
+}
+
+func (u *MintUsecase) ensureMetadataURI(
+	ctx context.Context,
+	tokenBlueprintID string,
+	actorID string,
+	currentMetadataURI string,
+) (string, error) {
+	metadataURI := strings.TrimSpace(currentMetadataURI)
+
+	tbID := strings.TrimSpace(tokenBlueprintID)
+	if tbID == "" {
+		return metadataURI, nil
+	}
+
+	if u.tbMetadataEnsurer == nil {
+		return metadataURI, nil
+	}
+
+	if u.tbRepo == nil {
+		return "", fmt.Errorf("tokenBlueprint repo is nil")
+	}
+
+	tb, err := u.tbRepo.GetByID(ctx, tbID)
+	if err != nil {
+		return "", fmt.Errorf("get tokenBlueprint for metadata ensure: %w", err)
+	}
+	if tb == nil {
+		return "", fmt.Errorf("tokenBlueprint not found (id=%s)", tbID)
+	}
+
+	updated, err := u.tbMetadataEnsurer.EnsureMetadataURI(ctx, tb, actorID)
+	if err != nil {
+		return "", fmt.Errorf("ensure metadata uri: %w", err)
+	}
+	if updated == nil {
+		updated = tb
+	}
+
+	return strings.TrimSpace(updated.MetadataURI), nil
+}
+
 func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID string) (*tokendom.MintResult, error) {
 	if u == nil {
 		return nil, errors.New("mint usecase is nil")
 	}
 	if mintRequestID == "" {
 		return nil, errors.New("mintRequestID is empty")
-	}
-	if u.tokenMinter == nil {
-		return nil, errors.New("token minter is nil")
 	}
 	if u.mintRepo == nil {
 		return nil, errors.New("mint repo is nil")
@@ -259,12 +422,12 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	}
 	mintEnt := &mintEntValue
 
-	passedProductIDs := mintEnt.Products
+	passedProductIDs := normalizeProductIDs(mintEnt.Products)
 	if err := validateProductIDs(passedProductIDs); err != nil {
 		return nil, err
 	}
 
-	tbID := mintEnt.TokenBlueprintID
+	tbID := strings.TrimSpace(mintEnt.TokenBlueprintID)
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintID is empty on mint")
 	}
@@ -283,29 +446,97 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	if mintEnt.Minted {
 		result = u.mintResultMapper.FromMint(*mintEnt)
 	} else {
-		result, err = u.tokenMinter.MintFromMintRequest(ctx, mintRequestID)
+		if u.tokenMinter == nil {
+			return nil, errors.New("token minter is nil")
+		}
+		if u.mintRequestPort == nil {
+			return nil, errors.New("mint request port is nil")
+		}
+
+		req, err := u.mintRequestPort.LoadForMinting(ctx, mintRequestID)
+		if err != nil {
+			return nil, fmt.Errorf("load mint request for minting: %w", err)
+		}
+		if req == nil {
+			return nil, fmt.Errorf("mint request %s is nil", mintRequestID)
+		}
+
+		reqID := strings.TrimSpace(req.ID)
+		if reqID == "" {
+			reqID = mintRequestID
+		}
+
+		reqTBID := strings.TrimSpace(req.TokenBlueprintID)
+		if reqTBID == "" {
+			reqTBID = tbID
+		}
+
+		actorID := strings.TrimSpace(req.ActorID)
+		if actorID == "" {
+			actorID = strings.TrimSpace(mintEnt.CreatedBy)
+		}
+		if actorID == "" {
+			actorID = strings.TrimSpace(MemberIDFromContext(ctx))
+		}
+
+		productIDs := normalizeProductIDs(req.ProductIDs)
+		if len(productIDs) == 0 {
+			productIDs = passedProductIDs
+		}
+		if err := validateProductIDs(productIDs); err != nil {
+			return nil, err
+		}
+
+		metadataURI, err := u.ensureMetadataURI(
+			ctx,
+			reqTBID,
+			actorID,
+			req.MetadataURI,
+		)
 		if err != nil {
 			return nil, err
 		}
-		if result == nil {
-			return nil, fmt.Errorf("onchain mint succeeded but result is nil (mintRequestId=%s)", mintRequestID)
+		if strings.TrimSpace(metadataURI) == "" {
+			return nil, fmt.Errorf("mint request %s has empty MetadataURI", reqID)
 		}
 
-		if u.mintRepo != nil {
-			if updater, ok := any(u.mintRepo).(interface {
-				Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error)
-			}); ok {
-				now := time.Now().UTC()
-				m := *mintEnt
+		toAddress := strings.TrimSpace(req.ToAddress)
+		if toAddress == "" {
+			return nil, fmt.Errorf("mint request %s has empty ToAddress", reqID)
+		}
 
-				m.ID = mintRequestID
-				m.Minted = true
-				m.MintedAt = &now
+		name := strings.TrimSpace(req.BlueprintName)
+		symbol := strings.TrimSpace(req.BlueprintSymbol)
+		if name == "" || symbol == "" {
+			return nil, fmt.Errorf("mint request %s has empty name or symbol", reqID)
+		}
 
-				_ = u.mintResultMapper.ApplyOnchainResult(&m, result)
+		minted, err := u.tokenMinter.MintProducts(ctx, MintProductsInput{
+			ToAddress:       toAddress,
+			ProductIDs:      productIDs,
+			BlueprintName:   name,
+			BlueprintSymbol: symbol,
+			MetadataURI:     metadataURI,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(minted) == 0 {
+			return nil, fmt.Errorf("onchain mint succeeded but minted list is empty (mintRequestId=%s)", mintRequestID)
+		}
 
-				_, _ = updater.Update(ctx, m)
-			}
+		if err := u.mintRequestPort.MarkProductsAsMinted(ctx, reqID, minted); err != nil {
+			result = lastMintResult(minted)
+			return result, fmt.Errorf("mark mint request as minted (per-product): %w", err)
+		}
+
+		if u.tbMintMarker != nil && reqTBID != "" {
+			_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(ctx, reqTBID, actorID)
+		}
+
+		result = lastMintResult(minted)
+		if result == nil {
+			return nil, fmt.Errorf("onchain mint succeeded but result is nil (mintRequestId=%s)", mintRequestID)
 		}
 	}
 

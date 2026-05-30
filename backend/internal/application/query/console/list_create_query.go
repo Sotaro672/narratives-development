@@ -4,7 +4,6 @@ package query
 import (
 	"context"
 	"errors"
-	"log"
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
@@ -246,7 +245,6 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 				available := ms.Accumulation - ms.ReservedCount
 				if available < 0 {
 					// 契約上は起きない想定だが、画面を壊さない保険
-					log.Printf("[list_create_query][stock] WARN availableStock negative accumulation=%d reserved=%d -> clamp to 0", ms.Accumulation, ms.ReservedCount)
 					available = 0
 				}
 				stock = available
@@ -278,13 +276,6 @@ func (q *ListCreateQuery) buildPriceRowsByIDs(
 		if attr.Kind == "alcohol" {
 			row.VolumeValue = attr.VolumeValue
 			row.VolumeUnit = attr.VolumeUnit
-
-			if row.VolumeValue == nil || row.VolumeUnit == "" {
-				log.Printf(
-					"[list_create_query][modelResolved] alcohol model missing volume pbId=%q tbId=%q modelId=%q kind=%q modelNumber=%q volumeValue=%v volumeUnit=%q stock=%d",
-					pbID, tbID, mid, attr.Kind, mn, row.VolumeValue, row.VolumeUnit, stock,
-				)
-			}
 		} else {
 			sz := attr.Size
 			cl := attr.Color
