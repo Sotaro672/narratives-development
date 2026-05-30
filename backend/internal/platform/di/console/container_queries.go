@@ -10,6 +10,8 @@ import (
 	listdetail "narratives/internal/application/query/console/list/detail"
 	listmgmt "narratives/internal/application/query/console/list/management"
 
+	inspectorquery "narratives/internal/application/query/inspector"
+
 	// Shared infra
 	shared "narratives/internal/platform/di/shared"
 )
@@ -30,6 +32,8 @@ type queries struct {
 	listDetailQuery     *listdetail.ListDetailQuery
 
 	orderDetailQuery *companyquery.OrderDetailQuery
+
+	inspectorQuery *inspectorquery.QueryService
 }
 
 func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s *services) *queries {
@@ -89,6 +93,11 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.productRepo,
 		r.printLogRepo,
 		res.nameResolver,
+	)
+
+	inspectorQuery := inspectorquery.NewQueryService(
+		r.inspectionRepo,
+		r.mintRepo,
 	)
 
 	// =========================================================
@@ -214,5 +223,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		listDetailQuery:     listDetailQuery,
 
 		orderDetailQuery: orderDetailQuery,
+
+		inspectorQuery: inspectorQuery,
 	}
 }

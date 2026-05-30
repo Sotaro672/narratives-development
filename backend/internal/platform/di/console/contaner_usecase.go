@@ -147,8 +147,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	inspectionUC := uc.NewInspectionUsecase(
 		r.inspectionRepo,
 		r.productRepo,
-		r.mintRepo,
-		r.modelRepo,
 	)
 
 	productUC := uc.NewProductUsecase(

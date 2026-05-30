@@ -10,6 +10,7 @@ import (
 	listdetailquery "narratives/internal/application/query/console/list/detail"
 	listmanagementquery "narratives/internal/application/query/console/list/management"
 
+	inspectorquery "narratives/internal/application/query/inspector"
 	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
 
@@ -88,6 +89,8 @@ type Container struct {
 
 	OrderManagementQuery *query.OrderManagementQuery
 	OrderDetailQuery     *query.OrderDetailQuery
+
+	InspectorQuery *inspectorquery.QueryService
 
 	InventoryBlueprintResolver query.InventoryBlueprintResolver
 
@@ -204,6 +207,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		OrderManagementQuery: orderMgmtQ,
 		OrderDetailQuery:     q.orderDetailQuery,
+
+		InspectorQuery: q.inspectorQuery,
 
 		InventoryBlueprintResolver: invBlueprint,
 

@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\console\handler\inspection_handler.go
 package consoleHandler
 
 import (
@@ -10,10 +11,10 @@ import (
 	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
+	inspectorquery "narratives/internal/application/query/inspector"
 	"narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	inspectiondom "narratives/internal/domain/inspection"
-	mintdom "narratives/internal/domain/mint"
 	productdom "narratives/internal/domain/product"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
@@ -24,9 +25,10 @@ type ProductBlueprintModelRefGetter interface {
 }
 
 type InspectorHandler struct {
-	productUC    *usecase.ProductUsecase
-	inspectionUC *usecase.InspectionUsecase
-	nameResolver *resolver.NameResolver
+	productUC       *usecase.ProductUsecase
+	inspectionUC    *usecase.InspectionUsecase
+	inspectionQuery *inspectorquery.QueryService
+	nameResolver    *resolver.NameResolver
 
 	// modelId -> displayOrder 解決用
 	pbModelRefGetter ProductBlueprintModelRefGetter
@@ -35,12 +37,14 @@ type InspectorHandler struct {
 func NewInspectorHandler(
 	productUC *usecase.ProductUsecase,
 	inspectionUC *usecase.InspectionUsecase,
+	inspectionQuery *inspectorquery.QueryService,
 	nameResolver *resolver.NameResolver,
 	pbModelRefGetter ProductBlueprintModelRefGetter,
 ) http.Handler {
 	return &InspectorHandler{
 		productUC:        productUC,
 		inspectionUC:     inspectionUC,
+		inspectionQuery:  inspectionQuery,
 		nameResolver:     nameResolver,
 		pbModelRefGetter: pbModelRefGetter,
 	}
@@ -53,10 +57,6 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/inspector/products/"):
 		h.getInspectorProductDetail(w, r)
-		return
-
-	case r.Method == http.MethodGet && r.URL.Path == "/products/inspections/mints":
-		h.getMintByInspectionID(w, r)
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/products/inspections":
@@ -131,48 +131,14 @@ func (h *InspectorHandler) getInspectorProductDetail(w http.ResponseWriter, r *h
 }
 
 // ------------------------------------------------------------
-// GET /products/inspections/mints?inspectionId=...
-// ------------------------------------------------------------
-
-func (h *InspectorHandler) getMintByInspectionID(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.inspectionUC == nil {
-		writeInspectionError(w, http.StatusInternalServerError, "inspection usecase is not configured")
-		return
-	}
-
-	inspectionID := r.URL.Query().Get("inspectionId")
-	if inspectionID == "" {
-		writeInspectionError(w, http.StatusBadRequest, "inspectionId is required")
-		return
-	}
-
-	m, err := h.inspectionUC.GetMintByInspectionID(ctx, inspectionID)
-	if err != nil {
-		code := http.StatusInternalServerError
-		switch {
-		case errors.Is(err, inspectiondom.ErrInvalidInspectionProductionID):
-			code = http.StatusBadRequest
-		case errors.Is(err, mintdom.ErrNotFound):
-			code = http.StatusNotFound
-		}
-		writeInspectionError(w, code, err.Error())
-		return
-	}
-
-	writeInspectionJSON(w, http.StatusOK, m)
-}
-
-// ------------------------------------------------------------
 // GET /products/inspections?productionId=...
 // ------------------------------------------------------------
 
 func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h.inspectionUC == nil {
-		writeInspectionError(w, http.StatusInternalServerError, "inspection usecase is not configured")
+	if h.inspectionQuery == nil {
+		writeInspectionError(w, http.StatusInternalServerError, "inspection query service is not configured")
 		return
 	}
 
@@ -182,7 +148,7 @@ func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r
 		return
 	}
 
-	batch, err := h.inspectionUC.GetBatchByProductionID(ctx, productionID)
+	batch, err := h.inspectionQuery.GetByProductionID(ctx, productionID)
 	if err != nil {
 		code := http.StatusInternalServerError
 		switch {

@@ -32,13 +32,21 @@ func (r *InspectionRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // Create: inspections/{productionId} を新規作成
+//
+// NOTE:
+// inspection.Repository の主ポートは GetByProductionID / Update です。
+// Create は既存呼び出し互換のために残していますが、
+// 通常の更新・upsert は Update を使用します。
 func (r *InspectionRepositoryFS) Create(
 	ctx context.Context,
 	v inspectiondom.InspectionBatch,
 ) (inspectiondom.InspectionBatch, error) {
-
 	if r == nil || r.Client == nil {
 		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
+	}
+
+	if err := v.Validate(); err != nil {
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	pid := v.ProductionID
@@ -61,6 +69,7 @@ func (r *InspectionRepositoryFS) Create(
 	if err != nil {
 		return inspectiondom.InspectionBatch{}, err
 	}
+
 	return docToInspectionBatch(snap)
 }
 
@@ -69,7 +78,6 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 	ctx context.Context,
 	productionID string,
 ) (inspectiondom.InspectionBatch, error) {
-
 	if r == nil || r.Client == nil {
 		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
@@ -90,66 +98,20 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 	return docToInspectionBatch(snap)
 }
 
-// ListByProductionID: 複数 ID の inspections をまとめて取得
-func (r *InspectionRepositoryFS) ListByProductionID(
-	ctx context.Context,
-	productionIDs []string,
-) ([]inspectiondom.InspectionBatch, error) {
-
-	if r == nil || r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	if len(productionIDs) == 0 {
-		return []inspectiondom.InspectionBatch{}, nil
-	}
-
-	uniq := make(map[string]struct{}, len(productionIDs))
-	ids := make([]string, 0, len(productionIDs))
-	for _, id := range productionIDs {
-		if id == "" {
-			continue
-		}
-		if _, ok := uniq[id]; ok {
-			continue
-		}
-		uniq[id] = struct{}{}
-		ids = append(ids, id)
-	}
-
-	if len(ids) == 0 {
-		return []inspectiondom.InspectionBatch{}, nil
-	}
-
-	batches := make([]inspectiondom.InspectionBatch, 0, len(ids))
-
-	for _, pid := range ids {
-		snap, err := r.col().Doc(pid).Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				continue
-			}
-			return nil, err
-		}
-
-		batch, err := docToInspectionBatch(snap)
-		if err != nil {
-			return nil, err
-		}
-		batches = append(batches, batch)
-	}
-
-	return batches, nil
-}
-
-// Save: Upsert
-func (r *InspectionRepositoryFS) Save(
+// Update: inspections/{productionId} を Upsert
+//
+// production と inspection は常に docId が一致するため、
+// batch.ProductionID を inspections/{productionId} の docId として扱います。
+func (r *InspectionRepositoryFS) Update(
 	ctx context.Context,
 	v inspectiondom.InspectionBatch,
 ) (inspectiondom.InspectionBatch, error) {
-
 	if r == nil || r.Client == nil {
 		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
+	}
+
+	if err := v.Validate(); err != nil {
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	pid := v.ProductionID
@@ -185,7 +147,6 @@ func (r *InspectionRepositoryFS) ListPassedProductIDsByProductionID(
 	ctx context.Context,
 	productionID string,
 ) ([]string, error) {
-
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -210,6 +171,7 @@ func (r *InspectionRepositoryFS) ListPassedProductIDsByProductionID(
 		if *item.InspectionResult != inspectiondom.InspectionPassed {
 			continue
 		}
+
 		p := item.ProductID
 		if p == "" {
 			continue
@@ -217,6 +179,7 @@ func (r *InspectionRepositoryFS) ListPassedProductIDsByProductionID(
 		if _, ok := seen[p]; ok {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		out = append(out, p)
 	}
@@ -282,7 +245,6 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 func docToInspectionBatch(
 	doc *firestore.DocumentSnapshot,
 ) (inspectiondom.InspectionBatch, error) {
-
 	data := doc.Data()
 	if data == nil {
 		return inspectiondom.InspectionBatch{}, fmt.Errorf("empty inspection document: %s", doc.Ref.ID)

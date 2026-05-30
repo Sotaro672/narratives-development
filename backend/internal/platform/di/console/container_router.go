@@ -204,7 +204,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		modelsH = consoleHandler.NewModelHandler(c.ModelUC)
 	}
 
-	if c.ProductUC != nil && c.InspectionUC != nil {
+	if c.ProductUC != nil && c.InspectionUC != nil && c.InspectorQuery != nil {
 		var pbGetter consoleHandler.ProductBlueprintModelRefGetter
 		if c.ProductBlueprintRepo != nil {
 			if g, ok := any(c.ProductBlueprintRepo).(consoleHandler.ProductBlueprintModelRefGetter); ok {
@@ -215,6 +215,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		inspectorH = consoleHandler.NewInspectorHandler(
 			c.ProductUC,
 			c.InspectionUC,
+			c.InspectorQuery,
 			c.NameResolver,
 			pbGetter,
 		)

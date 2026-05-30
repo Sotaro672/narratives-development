@@ -82,14 +82,25 @@ type ProductDetail struct {
 	InspectionResult string `json:"inspectionResult"`
 
 	// connectedToken をそのままフロントに返す
+	// NOTE:
+	// 現在の productdom.Product には ConnectedToken が存在しないため、
+	// ここでは値を詰めません。
+	// 将来 token 接続情報を返す場合は、別 repo / query から取得して設定します。
 	ConnectedToken *string `json:"connectedToken,omitempty"`
 
-	ModelNumber string          `json:"modelNumber"`
-	Size        string          `json:"size"`
-	Color       ProductColorDTO `json:"color"`
+	// common
+	Kind        string `json:"kind,omitempty"` // "apparel" / "alcohol"
+	ModelNumber string `json:"modelNumber"`
+	ModelLabel  string `json:"modelLabel,omitempty"` // 表示用共通ラベル
 
-	// modeldom.Measurements は map[string]int の type alias
-	Measurements modeldom.Measurements `json:"measurements"`
+	// apparel
+	Size         string                `json:"size,omitempty"`
+	Color        ProductColorDTO       `json:"color,omitempty"`
+	Measurements modeldom.Measurements `json:"measurements,omitempty"`
+
+	// alcohol
+	VolumeValue int    `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
 
 	ProductBlueprintID  string              `json:"productBlueprintId"`
 	ProductBlueprintDTO ProductBlueprintDTO `json:"productBlueprint"` // Flutter 側の JSON キーに合わせる
@@ -181,13 +192,49 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		return ProductDetail{}, errors.New("product: model variation not found")
 	}
 
-	model, ok := mv.(modeldom.ApparelModelVariation)
-	if !ok {
+	var (
+		productBlueprintID string
+		kind               string
+		modelNumber        string
+		modelLabel         string
+
+		size         string
+		colorDTO     ProductColorDTO
+		measurements modeldom.Measurements
+
+		volumeValue int
+		volumeUnit  string
+	)
+
+	switch model := mv.(type) {
+	case modeldom.ApparelModelVariation:
+		productBlueprintID = model.ProductBlueprintID
+		kind = "apparel"
+		modelNumber = model.ModelNumber
+		modelLabel = model.ModelNumber
+
+		size = model.Size
+		colorDTO = ProductColorDTO{
+			RGB:  model.Color.RGB,
+			Name: model.Color.Name,
+		}
+		measurements = model.Measurements
+
+	case modeldom.AlcoholModelVariation:
+		productBlueprintID = model.ProductBlueprintID
+		kind = "alcohol"
+		modelNumber = model.ModelNumber
+		modelLabel = model.ModelNumber
+
+		volumeValue = model.Volume.Value
+		volumeUnit = model.Volume.Unit
+
+	default:
 		return ProductDetail{}, errors.New("product: unsupported model variation type")
 	}
 
 	// 3) ProductBlueprint を取得（ModelVariation.ProductBlueprintID 起点）
-	bp, err := u.productBlueprintRepo.GetByID(ctx, model.ProductBlueprintID)
+	bp, err := u.productBlueprintRepo.GetByID(ctx, productBlueprintID)
 	if err != nil {
 		return ProductDetail{}, err
 	}
@@ -208,13 +255,7 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		}
 	}
 
-	// 6) Color DTO
-	colorDTO := ProductColorDTO{
-		RGB:  model.Color.RGB,
-		Name: model.Color.Name,
-	}
-
-	// 7) modelRefs を DTO 化する。
+	// 6) modelRefs を DTO 化する。
 	// ModelRefs の空ID除外・重複除外・displayOrder 採番は productBlueprint domain 側の責務。
 	// usecase では補正せず、表示用 DTO へ詰め替えるだけにする。
 	modelRefsDTO := make([]ModelRefDTO, 0, len(bp.ModelRefs))
@@ -236,7 +277,7 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 
 	category := bp.ProductBlueprintCategory
 
-	// 8) ProductBlueprintDTO を構築
+	// 7) ProductBlueprintDTO を構築
 	pbDTO := ProductBlueprintDTO{
 		ID:          bp.ID,
 		ProductName: bp.ProductName,
@@ -266,20 +307,27 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 		ModelRefs: modelRefsDTO,
 	}
 
-	// 9) InspectionResult は domain の型 (productdom.InspectionResult) を string にして詰める
+	// 8) InspectionResult は domain の型 (productdom.InspectionResult) を string にして詰める
 	inspectionResult := string(product.InspectionResult)
 
-	// 10) 最終的な DTO を組み立てて返す
+	// 9) 最終的な DTO を組み立てて返す
 	detail := ProductDetail{
 		ProductID:        product.ID,
 		ModelID:          product.ModelID,
 		ProductionID:     product.ProductionID,
 		InspectionResult: inspectionResult,
 
-		ModelNumber:         model.ModelNumber,
-		Size:                model.Size,
-		Color:               colorDTO,
-		Measurements:        model.Measurements,
+		Kind:        kind,
+		ModelNumber: modelNumber,
+		ModelLabel:  modelLabel,
+
+		Size:         size,
+		Color:        colorDTO,
+		Measurements: measurements,
+
+		VolumeValue: volumeValue,
+		VolumeUnit:  volumeUnit,
+
 		ProductBlueprintID:  bp.ID,
 		ProductBlueprintDTO: pbDTO,
 	}
