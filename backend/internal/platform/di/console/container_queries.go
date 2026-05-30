@@ -37,11 +37,8 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		res.nameResolver,
 	)
 
-	// 追加: ProductionUsecase に listQuery を注入（List / ListWithAssigneeName の 500 回避）
-	u.productionUC.SetListQuery(companyProductionQueryService)
-
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
-		u.productionUC,
+		companyProductionQueryService,
 		r.mintRepo,
 		r.inspectionRepo,
 		r.productBlueprintRepo,

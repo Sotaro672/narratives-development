@@ -3,18 +3,18 @@ package query
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
+	inspectiondom "narratives/internal/domain/inspection"
 )
 
 func (s *MintRequestQueryService) GetMintRequestDetail(
 	ctx context.Context,
 	productionID string,
 ) (*querydto.MintRequestDetailDTO, error) {
-	if s == nil || s.productionUC == nil {
+	if s == nil || s.productionQuery == nil {
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
@@ -23,24 +23,12 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, errors.New("productionId is empty")
 	}
 
-	prodsAny, err := s.productionUC.ListWithAssigneeName(ctx)
+	prods, err := s.productionQuery.ListProductionsWithAssigneeName(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	type prodLite struct {
-		ID                 string `json:"id"`
-		TotalQuantity      int    `json:"totalQuantity"`
-		ProductName        string `json:"productName"`
-		ProductBlueprintID string `json:"ProductBlueprintID"`
-	}
-
-	prods := make([]prodLite, 0)
-	if b, mErr := json.Marshal(prodsAny); mErr == nil {
-		_ = json.Unmarshal(b, &prods)
-	}
-
-	var prod prodLite
+	var prod ProductionListItemDTO
 	foundProd := false
 	for _, p := range prods {
 		if p.ID == pid {
@@ -53,7 +41,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, errors.New("production not found")
 	}
 
-	batchesAny, err := s.listInspectionBatchesByProductionIDs(ctx, []string{pid})
+	batches, err := s.listInspectionBatchesByProductionIDs(ctx, []string{pid})
 	if err != nil {
 		return nil, err
 	}
@@ -78,14 +66,36 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		Inspections   []inspectionItemLite `json:"inspections"`
 	}
 
-	batches := make([]inspectionBatchLite, 0)
-	if b, mErr := json.Marshal(batchesAny); mErr == nil {
-		_ = json.Unmarshal(b, &batches)
+	inspectionBatches := make([]inspectionBatchLite, 0, len(batches))
+	for _, b := range batches {
+		row := inspectionBatchLite{
+			ProductionID:  b.ProductionID,
+			Status:        string(b.Status),
+			TotalPassed:   b.TotalPassed,
+			TotalQuantity: len(b.Inspections),
+			Inspections:   make([]inspectionItemLite, 0, len(b.Inspections)),
+		}
+
+		for _, it := range b.Inspections {
+			row.Inspections = append(row.Inspections, inspectionItemLite{
+				ProductID:        it.ProductID,
+				ModelID:          it.ModelID,
+				InspectionResult: inspectionResultString(it.InspectionResult),
+				RGB:              nil,
+				Size:             "",
+				Color:            "",
+				ModelNumber:      "",
+				InspectedBy:      stringPtrValue(it.InspectedBy),
+				InspectedAt:      timePtrString(it.InspectedAt),
+			})
+		}
+
+		inspectionBatches = append(inspectionBatches, row)
 	}
 
 	var insp inspectionBatchLite
 	hasInsp := false
-	for _, b := range batches {
+	for _, b := range inspectionBatches {
 		if b.ProductionID == pid {
 			insp = b
 			hasInsp = true
@@ -111,9 +121,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		mintQty = insp.TotalPassed
 		if insp.Status != "" {
 			inspStatus = insp.Status
-		}
-		if insp.TotalQuantity > 0 {
-			prodQty = insp.TotalQuantity
 		}
 
 		for _, it := range insp.Inspections {
@@ -178,7 +185,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			ProductionID: insp.ProductionID,
 			Status:       insp.Status,
 			TotalPassed:  insp.TotalPassed,
-			Quantity:     insp.TotalQuantity,
+			Quantity:     prodQty,
 			ProductName:  "",
 			Inspections:  inspectionItems,
 		}
@@ -207,4 +214,25 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	}
 
 	return out, nil
+}
+
+func inspectionResultString(v *inspectiondom.InspectionResult) string {
+	if v == nil {
+		return ""
+	}
+	return string(*v)
+}
+
+func stringPtrValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
+func timePtrString(v *time.Time) string {
+	if v == nil || v.IsZero() {
+		return ""
+	}
+	return v.UTC().Format(time.RFC3339)
 }

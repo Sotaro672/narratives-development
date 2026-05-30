@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\production_repository_fs.go
+// backend/internal/adapters/out/firestore/production_repository_fs.go
 package firestore
 
 import (
@@ -152,13 +152,15 @@ func (r *ProductionRepositoryFS) Create(
 	return &out, nil
 }
 
-// Save is upsert-ish:
-// - If ID is empty -> Create (auto ID)
-// - If ID exists -> update via Set(MergeAll)
-// - If ID does not exist -> treated as Create with that ID
-func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production) (*proddom.Production, error) {
+// Update updates an existing Production document.
+// - 新規作成は行わない
+// - ID が空、または対象 document が存在しない場合は ErrNotFound を返す
+func (r *ProductionRepositoryFS) Update(ctx context.Context, p proddom.Production) (*proddom.Production, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
+	}
+	if p.ID == "" {
+		return nil, proddom.ErrNotFound
 	}
 
 	now := time.Now().UTC()
@@ -183,13 +185,14 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 		p.PrintedBy = nil
 	}
 
-	var ref *firestore.DocumentRef
-	id := p.ID
-	if id == "" {
-		ref = r.col().NewDoc()
-		p.ID = ref.ID
-	} else {
-		ref = r.col().Doc(id)
+	ref := r.col().Doc(p.ID)
+
+	_, err := ref.Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return nil, proddom.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	data := productionToDoc(p)
@@ -205,6 +208,7 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 	if err != nil {
 		return nil, err
 	}
+
 	out, err := docToProduction(snap)
 	if err != nil {
 		return nil, err

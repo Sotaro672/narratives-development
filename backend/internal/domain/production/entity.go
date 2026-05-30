@@ -82,7 +82,8 @@ var (
 
 // ===== Constructors =====
 
-// New creates a Production.
+// New creates a persisted Production.
+// ID is required.
 func New(
 	id, productBlueprintID, assigneeID string,
 	models []ModelQuantity,
@@ -97,13 +98,41 @@ func New(
 		AssigneeID:         assigneeID,
 		Models:             normalizeModels(models),
 		Printed:            printed,
-		PrintedAt:          printedAt,
-		// PrintedBy はコンストラクタでは nil 初期化（後から更新）
-		PrintedBy: nil,
-		CreatedBy: createdBy,
-		CreatedAt: createdAt, // ゼロ許容
+		PrintedAt:          normalizeTimePtr(printedAt),
+		PrintedBy:          nil,
+		CreatedBy:          createdBy,
+		CreatedAt:          createdAt,
 	}
-	if err := p.validate(); err != nil {
+
+	if err := p.Validate(); err != nil {
+		return Production{}, err
+	}
+	return p, nil
+}
+
+// NewForCreate creates a Production before repository ID assignment.
+// ID is not required here because repository.Create may generate it.
+func NewForCreate(
+	productBlueprintID, assigneeID string,
+	models []ModelQuantity,
+	printed bool,
+	printedAt *time.Time,
+	createdBy *string,
+	createdAt time.Time,
+) (Production, error) {
+	p := Production{
+		ID:                 "",
+		ProductBlueprintID: productBlueprintID,
+		AssigneeID:         assigneeID,
+		Models:             normalizeModels(models),
+		Printed:            printed,
+		PrintedAt:          normalizeTimePtr(printedAt),
+		PrintedBy:          nil,
+		CreatedBy:          createdBy,
+		CreatedAt:          createdAt,
+	}
+
+	if err := p.ValidateForCreate(); err != nil {
 		return Production{}, err
 	}
 	return p, nil
@@ -129,16 +158,93 @@ func (p *Production) MarkPrinted(at time.Time) error {
 	if at.IsZero() {
 		return ErrInvalidPrintedAt
 	}
+
 	at = at.UTC()
 	p.Printed = true
 	p.PrintedAt = &at
-	return nil
+
+	return p.Validate()
+}
+
+// ApplyUpdate applies update values to an existing Production and validates it.
+func (p *Production) ApplyUpdate(
+	assigneeID string,
+	models []ModelQuantity,
+	printed *bool,
+	printedAt *time.Time,
+	printedBy *string,
+	updatedBy *string,
+	updatedAt time.Time,
+) error {
+	if assigneeID != "" {
+		p.AssigneeID = assigneeID
+	}
+
+	if len(models) > 0 {
+		p.Models = normalizeModels(models)
+	}
+
+	if printed != nil {
+		p.Printed = *printed
+		if !p.Printed {
+			p.PrintedAt = nil
+			p.PrintedBy = nil
+		}
+	}
+
+	if printedAt != nil && !printedAt.IsZero() {
+		t := printedAt.UTC()
+		p.PrintedAt = &t
+		p.Printed = true
+	}
+
+	if printedBy != nil {
+		if *printedBy == "" {
+			p.PrintedBy = nil
+		} else {
+			v := *printedBy
+			p.PrintedBy = &v
+			p.Printed = true
+		}
+	}
+
+	if !p.Printed {
+		p.PrintedAt = nil
+		p.PrintedBy = nil
+	}
+
+	if updatedBy != nil {
+		if *updatedBy == "" {
+			p.UpdatedBy = nil
+		} else {
+			v := *updatedBy
+			p.UpdatedBy = &v
+		}
+	}
+
+	if !updatedAt.IsZero() {
+		p.UpdatedAt = updatedAt.UTC()
+	}
+
+	return p.Validate()
 }
 
 // ===== Validation =====
 
-func (p Production) validate() error {
-	if p.ID == "" {
+// Validate validates a persisted Production.
+// ID is required.
+func (p Production) Validate() error {
+	return p.validate(true)
+}
+
+// ValidateForCreate validates a Production before repository ID assignment.
+// ID is not required.
+func (p Production) ValidateForCreate() error {
+	return p.validate(false)
+}
+
+func (p Production) validate(requireID bool) error {
+	if requireID && p.ID == "" {
 		return ErrInvalidID
 	}
 	if p.ProductBlueprintID == "" {
@@ -159,7 +265,6 @@ func (p Production) validate() error {
 		}
 	}
 
-	// PrintedBy は nil または非空文字列のみ許容
 	if p.PrintedBy != nil && *p.PrintedBy == "" {
 		return ErrInvalidPrintedBy
 	}
@@ -170,13 +275,11 @@ func (p Production) validate() error {
 		return ErrInvalidUpdatedBy
 	}
 
-	// Printed/time coherence
 	if p.Printed {
 		if p.PrintedAt == nil || p.PrintedAt.IsZero() {
 			return ErrInvalidPrintedAt
 		}
 	} else {
-		// 未印刷なら PrintedAt/PrintedBy は未設定が原則
 		if p.PrintedAt != nil {
 			return ErrInvalidPrintedAt
 		}
@@ -185,30 +288,50 @@ func (p Production) validate() error {
 		}
 	}
 
-	// CreatedAt/UpdatedAt は optional（ゼロ許容）
 	if !p.CreatedAt.IsZero() && !p.UpdatedAt.IsZero() && p.UpdatedAt.Before(p.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
+
 	return nil
 }
 
 // ===== Helpers =====
 
+// NormalizeModelQuantities normalizes model quantities for use outside the domain package.
+func NormalizeModelQuantities(in []ModelQuantity) []ModelQuantity {
+	return normalizeModels(in)
+}
+
 func normalizeModels(in []ModelQuantity) []ModelQuantity {
 	out := make([]ModelQuantity, 0, len(in))
 	seen := make(map[string]struct{}, len(in))
+
 	for _, mq := range in {
 		id := mq.ModelID
 		if id == "" || mq.Quantity <= 0 {
 			continue
 		}
+
 		key := strings.ToLower(id)
 		if _, ok := seen[key]; ok {
-			// 既出はスキップ（必要なら数量を合算するロジックに変更可）
 			continue
 		}
+
 		seen[key] = struct{}{}
-		out = append(out, ModelQuantity{ModelID: id, Quantity: mq.Quantity})
+		out = append(out, ModelQuantity{
+			ModelID:  id,
+			Quantity: mq.Quantity,
+		})
 	}
+
 	return out
+}
+
+func normalizeTimePtr(t *time.Time) *time.Time {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+
+	tt := t.UTC()
+	return &tt
 }

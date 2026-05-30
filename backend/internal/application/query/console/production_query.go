@@ -1,3 +1,4 @@
+// backend\internal\application\query\console\production_query.go
 package query
 
 import (
@@ -19,6 +20,19 @@ type ProductBlueprintQueryRepo interface {
 
 type ProductionQueryRepo interface {
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]productiondom.Production, error)
+}
+
+type ProductionListItemDTO struct {
+	productiondom.Production
+
+	TotalQuantity int `json:"totalQuantity"`
+
+	ProductName   string `json:"productName,omitempty"`
+	BrandName     string `json:"brandName,omitempty"`
+	AssigneeName  string `json:"assigneeName,omitempty"`
+	CreatedByName string `json:"createdByName,omitempty"`
+	UpdatedByName string `json:"updatedByName,omitempty"`
+	PrintedByName string `json:"printedByName,omitempty"`
 }
 
 type CompanyProductionQueryService struct {
@@ -44,51 +58,63 @@ func NewCompanyProductionQueryService(
 func (s *CompanyProductionQueryService) ListProductionsByCurrentCompany(
 	ctx context.Context,
 ) ([]productiondom.Production, error) {
-	return s.listProductionsByCurrentCompany(ctx)
-}
+	cid := usecase.CompanyIDFromContext(ctx)
+	if cid == "" {
+		return nil, productbpdom.ErrInvalidCompanyID
+	}
+	if s.pbRepo == nil || s.prodRepo == nil {
+		return nil, productbpdom.ErrInternal
+	}
 
-func (s *CompanyProductionQueryService) ListProductionIDsByCurrentCompany(
-	ctx context.Context,
-) ([]string, error) {
-	rows, err := s.listProductionsByCurrentCompany(ctx)
+	pbIDs, err := s.pbRepo.ListIDsByCompany(ctx, cid)
 	if err != nil {
 		return nil, err
 	}
-
-	ids := make([]string, 0, len(rows))
-	seen := make(map[string]struct{}, len(rows))
-
-	for _, p := range rows {
-		id := p.ID
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		ids = append(ids, id)
+	if len(pbIDs) == 0 {
+		return []productiondom.Production{}, nil
 	}
 
-	return ids, nil
+	rows, err := s.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []productiondom.Production{}, nil
+	}
+
+	set := make(map[string]struct{}, len(pbIDs))
+	for _, id0 := range pbIDs {
+		if id0 != "" {
+			set[id0] = struct{}{}
+		}
+	}
+
+	out := make([]productiondom.Production, 0, len(rows))
+	for _, p := range rows {
+		if _, ok := set[p.ProductBlueprintID]; !ok {
+			continue
+		}
+		out = append(out, p)
+	}
+
+	return out, nil
 }
 
 func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 	ctx context.Context,
-) ([]usecase.ProductionListItemDTO, error) {
-	list, err := s.listProductionsByCurrentCompany(ctx)
+) ([]ProductionListItemDTO, error) {
+	list, err := s.ListProductionsByCurrentCompany(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if len(list) == 0 {
-		return []usecase.ProductionListItemDTO{}, nil
+		return []ProductionListItemDTO{}, nil
 	}
 
 	pbBrandCache := map[string]string{}
 	brandNameCache := map[string]string{}
 
-	out := make([]usecase.ProductionListItemDTO, 0, len(list))
+	out := make([]ProductionListItemDTO, 0, len(list))
 
 	for _, p := range list {
 		assigneeName := ""
@@ -136,7 +162,7 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 			}
 		}
 
-		out = append(out, usecase.ProductionListItemDTO{
+		out = append(out, ProductionListItemDTO{
 			Production: p,
 
 			TotalQuantity: totalQty,
@@ -148,51 +174,6 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 			UpdatedByName: updatedByName,
 			PrintedByName: printedByName,
 		})
-	}
-
-	return out, nil
-}
-
-func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
-	ctx context.Context,
-) ([]productiondom.Production, error) {
-	cid := usecase.CompanyIDFromContext(ctx)
-	if cid == "" {
-		return nil, productbpdom.ErrInvalidCompanyID
-	}
-	if s.pbRepo == nil || s.prodRepo == nil {
-		return nil, productbpdom.ErrInternal
-	}
-
-	pbIDs, err := s.pbRepo.ListIDsByCompany(ctx, cid)
-	if err != nil {
-		return nil, err
-	}
-	if len(pbIDs) == 0 {
-		return []productiondom.Production{}, nil
-	}
-
-	rows, err := s.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) == 0 {
-		return []productiondom.Production{}, nil
-	}
-
-	set := make(map[string]struct{}, len(pbIDs))
-	for _, id0 := range pbIDs {
-		if id0 != "" {
-			set[id0] = struct{}{}
-		}
-	}
-
-	out := make([]productiondom.Production, 0, len(rows))
-	for _, p := range rows {
-		if _, ok := set[p.ProductBlueprintID]; !ok {
-			continue
-		}
-		out = append(out, p)
 	}
 
 	return out, nil

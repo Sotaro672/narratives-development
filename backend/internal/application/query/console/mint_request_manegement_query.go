@@ -3,14 +3,13 @@ package query
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sort"
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
-	mintapp "narratives/internal/application/usecase"
+	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
 	inspectiondom "narratives/internal/domain/inspection"
@@ -21,7 +20,7 @@ import (
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
 
 type MintRequestQueryService struct {
-	productionUC *mintapp.ProductionUsecase
+	productionQuery *CompanyProductionQueryService
 
 	mintRepo mintdom.MintRepository
 	inspRepo mintdom.MintInspectionRepo
@@ -33,7 +32,7 @@ type MintRequestQueryService struct {
 }
 
 func NewMintRequestQueryService(
-	productionUC *mintapp.ProductionUsecase,
+	productionQuery *CompanyProductionQueryService,
 	mintRepo mintdom.MintRepository,
 	inspRepo mintdom.MintInspectionRepo,
 	pbRepo mintdom.MintProductBlueprintRepo,
@@ -42,13 +41,13 @@ func NewMintRequestQueryService(
 	nameResolver *resolver.NameResolver,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
-		productionUC: productionUC,
-		mintRepo:     mintRepo,
-		inspRepo:     inspRepo,
-		pbRepo:       pbRepo,
-		tbRepo:       tbRepo,
-		brandSvc:     brandSvc,
-		nameResolver: nameResolver,
+		productionQuery: productionQuery,
+		mintRepo:        mintRepo,
+		inspRepo:        inspRepo,
+		pbRepo:          pbRepo,
+		tbRepo:          tbRepo,
+		brandSvc:        brandSvc,
+		nameResolver:    nameResolver,
 	}
 }
 
@@ -56,31 +55,19 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 	ctx context.Context,
 	input querydto.ListMintRequestManagementRowsInput,
 ) ([]querydto.ProductionInspectionMintDTO, error) {
-	if s == nil || s.productionUC == nil {
+	if s == nil || s.productionQuery == nil {
 		return nil, ErrMintRequestQueryServiceNotConfigured
 	}
 
 	filterSet := makeIDSet(input.ProductionIDs)
 
-	prodsAny, err := s.productionUC.ListWithAssigneeName(ctx)
+	prods, err := s.productionQuery.ListProductionsWithAssigneeName(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	type prodLite struct {
-		ID                 string `json:"id"`
-		TotalQuantity      int    `json:"totalQuantity"`
-		ProductName        string `json:"productName"`
-		ProductBlueprintID string `json:"ProductBlueprintID"`
-	}
-
-	prods := make([]prodLite, 0)
-	if b, mErr := json.Marshal(prodsAny); mErr == nil {
-		_ = json.Unmarshal(b, &prods)
-	}
-
 	ids := make([]string, 0, len(prods))
-	prodByID := make(map[string]prodLite, len(prods))
+	prodByID := make(map[string]ProductionListItemDTO, len(prods))
 	seen := make(map[string]struct{}, len(prods))
 
 	for _, p := range prods {
@@ -110,25 +97,12 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		return []querydto.ProductionInspectionMintDTO{}, nil
 	}
 
-	batchesAny, err := s.listInspectionBatchesByProductionIDs(ctx, ids)
+	batches, err := s.listInspectionBatchesByProductionIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	type inspectionLite struct {
-		ProductionID  string `json:"productionId"`
-		Status        string `json:"status"`
-		TotalPassed   int    `json:"totalPassed"`
-		TotalQuantity int    `json:"totalQuantity"`
-		MintID        string `json:"mintId"`
-	}
-
-	batches := make([]inspectionLite, 0)
-	if b, mErr := json.Marshal(batchesAny); mErr == nil {
-		_ = json.Unmarshal(b, &batches)
-	}
-
-	inspByPID := make(map[string]inspectionLite, len(batches))
+	inspByPID := make(map[string]inspectiondom.InspectionBatch, len(batches))
 	for _, b := range batches {
 		pid := b.ProductionID
 		if pid == "" {
@@ -156,21 +130,14 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 		}
 
 		mintQty := 0
-		prodQty := 0
+		prodQty := p.TotalQuantity
 		inspStatus := "notYet"
 
 		if hasInsp {
 			mintQty = insp.TotalPassed
 			if insp.Status != "" {
-				inspStatus = insp.Status
+				inspStatus = string(insp.Status)
 			}
-			if insp.TotalQuantity > 0 {
-				prodQty = insp.TotalQuantity
-			}
-		}
-
-		if prodQty == 0 {
-			prodQty = p.TotalQuantity
 		}
 
 		tokenBlueprintID := ""
@@ -228,9 +195,9 @@ func (s *MintRequestQueryService) ListBrandsForMint(
 		return empty, ErrMintRequestQueryServiceNotConfigured
 	}
 
-	companyID := mintapp.CompanyIDFromContext(ctx)
+	companyID := usecase.CompanyIDFromContext(ctx)
 	if companyID == "" {
-		return empty, mintapp.ErrCompanyIDMissing
+		return empty, usecase.ErrCompanyIDMissing
 	}
 
 	return s.brandSvc.ListByCompanyID(ctx, companyID, branddom.Page{})

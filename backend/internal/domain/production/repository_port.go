@@ -100,12 +100,13 @@ type RepositoryPort interface {
 	// Write
 	// ----------------------------------------
 
-	// Create （CreateProductionInput ベース）
+	// Create: Production を新規作成する。
+	// ID は repository 実装側で採番してよい。
 	Create(ctx context.Context, in CreateProductionInput) (*Production, error)
 
-	// Save: Production エンティティを保存（新規 or 更新）
-	//       実装側で upsert として扱って良い。
-	Save(ctx context.Context, p Production) (*Production, error)
+	// Update: 既存 Production を更新する。
+	// 新規作成は行わない。ID が空、または対象 document が存在しない場合は ErrNotFound を返す。
+	Update(ctx context.Context, p Production) (*Production, error)
 
 	// Delete: productionId で削除
 	Delete(ctx context.Context, id string) error
