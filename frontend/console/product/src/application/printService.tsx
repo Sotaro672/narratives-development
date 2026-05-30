@@ -178,31 +178,12 @@ export async function createProductsForPrint(params: {
 
   const safeRows = Array.isArray(rows) ? rows : [];
 
-  const existingLogs = await listPrintLogsByProductionIdApi(id);
-
-  if (existingLogs.length > 0) {
-    const products = await listProductsByProductionId(id);
-
-    const totalQrCount = await buildAndOpenQrPdfFromLogs({
-      logs: existingLogs,
-      products,
-      rows: safeRows,
-    });
-
-    await notifyPrintLogCompleted({
-      productionId: id,
-      logCount: existingLogs.length,
-      totalQrCount,
-      reusedExistingLogs: true,
-    });
-
-    return existingLogs;
-  }
-
-  const logs = await createProductsForPrintApi({
+  await createProductsForPrintApi({
     productionId: id,
     rows: safeRows,
   });
+
+  const logs = await listPrintLogsByProductionIdApi(id);
 
   if (logs.length === 0) {
     await notifyPrintLogCompleted({

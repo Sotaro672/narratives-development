@@ -88,9 +88,6 @@ type TimeRange struct {
 type Repository interface {
 	GetByID(ctx context.Context, id string) (Product, error)
 	Create(ctx context.Context, entity Product) (Product, error)
-	Update(ctx context.Context, id string, patch Product) (Product, error)
-	Delete(ctx context.Context, id string) error
-
 	ListByProductionID(ctx context.Context, productionID string) ([]Product, error)
 }
 

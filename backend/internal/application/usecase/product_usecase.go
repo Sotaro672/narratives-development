@@ -99,11 +99,6 @@ type ProductDetail struct {
 // Usecase / Repository インターフェース
 // ------------------------------------------------------------
 
-// ProductGetter は product を取得する最小ポート
-type ProductGetter interface {
-	GetByID(ctx context.Context, productID string) (productdom.Product, error)
-}
-
 // ModelVariationGetter は model variation を取得する最小ポート。
 // 戻り値は modeldom.ModelVariation に統一する。
 // *modeldom.ModelVariation のような pointer-to-interface は扱わない。
@@ -124,7 +119,7 @@ type ProductBlueprintGetter interface {
 
 // ProductUsecase は Inspector 用 DTO を組み立てるユースケースです。
 type ProductUsecase struct {
-	productRepo          ProductGetter
+	productRepo          productdom.Repository
 	modelRepo            ModelVariationGetter
 	productionRepo       ProductionGetter // 今は未使用だが、将来の参照のために保持
 	productBlueprintRepo ProductBlueprintGetter
@@ -134,7 +129,7 @@ type ProductUsecase struct {
 }
 
 func NewProductUsecase(
-	productRepo ProductGetter,
+	productRepo productdom.Repository,
 	modelRepo ModelVariationGetter,
 	productionRepo ProductionGetter,
 	productBlueprintRepo ProductBlueprintGetter,
@@ -159,6 +154,16 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 ) (ProductDetail, error) {
 	if productID == "" {
 		return ProductDetail{}, productdom.ErrInvalidID
+	}
+
+	if u == nil || u.productRepo == nil {
+		return ProductDetail{}, errors.New("product: repository is nil")
+	}
+	if u.modelRepo == nil {
+		return ProductDetail{}, errors.New("product: model repository is nil")
+	}
+	if u.productBlueprintRepo == nil {
+		return ProductDetail{}, errors.New("product: productBlueprint repository is nil")
 	}
 
 	// 1) Product を取得

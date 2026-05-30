@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	printdom "narratives/internal/domain/print"
 	productdom "narratives/internal/domain/product"
 )
 
@@ -16,9 +17,8 @@ type ProductPrintQueryRepo interface {
 	ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error)
 }
 
-// PrintLogPrintQueryRepo は print 画面構築用に print_log 一覧を取得する最小ポートです。
 type PrintLogPrintQueryRepo interface {
-	ListByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error)
+	GetByProductionID(ctx context.Context, productionID string) (printdom.PrintLog, error)
 }
 
 // ModelNumberResolver は modelId から modelNumber を解決する最小ポートです。
@@ -73,7 +73,7 @@ func (q *PrintQueryService) ListProductsByProductionID(
 
 	pid := strings.Trim(productionID, " \t\r\n/")
 	if pid == "" {
-		return nil, productdom.ErrInvalidPrintLogProductionID
+		return nil, printdom.ErrInvalidPrintLogProductionID
 	}
 
 	products, err := q.productRepo.ListByProductionID(ctx, pid)
@@ -114,39 +114,40 @@ func (q *PrintQueryService) ListPrintLogsByProductionID(
 
 	pid := strings.Trim(productionID, " \t\r\n/")
 	if pid == "" {
-		return nil, productdom.ErrInvalidPrintLogProductionID
+		return nil, printdom.ErrInvalidPrintLogProductionID
 	}
 
-	logs, err := q.printLogRepo.ListByProductionID(ctx, pid)
+	log, err := q.printLogRepo.GetByProductionID(ctx, pid)
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]PrintLogForPrintDTO, 0, len(logs))
-	for _, log := range logs {
-		items := make([]PrintedItemForPrintDTO, 0, len(log.Items))
-		payloads := make([]string, 0, len(log.Items))
+	dto := buildPrintLogForPrintDTO(log)
 
-		for _, item := range log.Items {
-			if item.ProductID == "" {
-				continue
-			}
+	return []PrintLogForPrintDTO{dto}, nil
+}
 
-			items = append(items, PrintedItemForPrintDTO{
-				ProductID:    item.ProductID,
-				DisplayOrder: item.DisplayOrder,
-			})
+func buildPrintLogForPrintDTO(log printdom.PrintLog) PrintLogForPrintDTO {
+	items := make([]PrintedItemForPrintDTO, 0, len(log.Items))
+	payloads := make([]string, 0, len(log.Items))
 
-			payloads = append(payloads, fmt.Sprintf("%s/%s", publicQRBaseURL, item.ProductID))
+	for _, item := range log.Items {
+		if item.ProductID == "" {
+			continue
 		}
 
-		out = append(out, PrintLogForPrintDTO{
-			ID:           log.ID,
-			ProductionID: log.ProductionID,
-			Items:        items,
-			QrPayloads:   payloads,
+		items = append(items, PrintedItemForPrintDTO{
+			ProductID:    item.ProductID,
+			DisplayOrder: item.DisplayOrder,
 		})
+
+		payloads = append(payloads, fmt.Sprintf("%s/%s", publicQRBaseURL, item.ProductID))
 	}
 
-	return out, nil
+	return PrintLogForPrintDTO{
+		ID:           log.ID,
+		ProductionID: log.ProductionID,
+		Items:        items,
+		QrPayloads:   payloads,
+	}
 }

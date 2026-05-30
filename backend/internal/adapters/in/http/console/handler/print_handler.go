@@ -9,6 +9,7 @@ import (
 
 	consolequery "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
+	printdom "narratives/internal/domain/print"
 	productdom "narratives/internal/domain/product"
 )
 
@@ -101,8 +102,7 @@ func (h *PrintHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *htt
 
 	logs, err := h.query.ListPrintLogsByProductionID(ctx, productionID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeProductErr(w, err)
 		return
 	}
 
@@ -137,8 +137,7 @@ func (h *PrintHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
 
 	pl, err := h.uc.CreatePrintLogForProduction(ctx, productionID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeProductErr(w, err)
 		return
 	}
 
@@ -212,7 +211,7 @@ func writeProductErr(w http.ResponseWriter, err error) {
 		code = http.StatusNotFound
 	case productdom.ErrConflict:
 		code = http.StatusConflict
-	case productdom.ErrInvalidPrintLogProductionID:
+	case printdom.ErrInvalidPrintLogProductionID:
 		code = http.StatusBadRequest
 	}
 

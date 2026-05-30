@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	fscommon "narratives/internal/adapters/out/firestore/common"
 	inspectiondom "narratives/internal/domain/inspection"
 	productdom "narratives/internal/domain/product"
 )
@@ -87,70 +86,6 @@ func (r *ProductRepositoryFS) Create(ctx context.Context, v productdom.Product) 
 	}
 
 	return docToProduct(snap)
-}
-
-// Update updates an existing product by ID.
-func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdom.Product) (productdom.Product, error) {
-	if r.Client == nil {
-		return productdom.Product{}, errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return productdom.Product{}, productdom.ErrNotFound
-	}
-
-	docRef := r.col().Doc(id)
-
-	// 存在確認。Set(MergeAll) だけだと存在しない document を作れてしまうため、
-	// repository port の Update としては not found を返す。
-	if _, err := docRef.Get(ctx); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.Product{}, productdom.ErrNotFound
-		}
-		return productdom.Product{}, err
-	}
-
-	v.ID = id
-	data := productToDoc(v)
-
-	_, err := docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.Product{}, productdom.ErrNotFound
-		}
-		return productdom.Product{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.Product{}, productdom.ErrNotFound
-		}
-		return productdom.Product{}, err
-	}
-
-	return docToProduct(snap)
-}
-
-// Delete deletes a product by ID.
-func (r *ProductRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return productdom.ErrNotFound
-	}
-
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.ErrNotFound
-		}
-		return err
-	}
-
-	return nil
 }
 
 // ListByProductionID returns products that belong to the given productionID.
@@ -265,86 +200,6 @@ func (r *ProductRepositoryFS) UpdateInspectionResult(
 }
 
 // ============================================================
-// PrintLogRepositoryFS
-// ============================================================
-
-type PrintLogRepositoryFS struct {
-	Client *firestore.Client
-}
-
-func NewPrintLogRepositoryFS(client *firestore.Client) *PrintLogRepositoryFS {
-	return &PrintLogRepositoryFS{Client: client}
-}
-
-func (r *PrintLogRepositoryFS) col() *firestore.CollectionRef {
-	return r.Client.Collection("print_logs")
-}
-
-func (r *PrintLogRepositoryFS) Create(ctx context.Context, v productdom.PrintLog) (productdom.PrintLog, error) {
-	if r.Client == nil {
-		return productdom.PrintLog{}, errors.New("firestore client is nil")
-	}
-
-	id := v.ID
-	var docRef *firestore.DocumentRef
-	if id == "" {
-		docRef = r.col().NewDoc()
-		v.ID = docRef.ID
-	} else {
-		docRef = r.col().Doc(id)
-		v.ID = id
-	}
-
-	data := printLogToDoc(v)
-
-	_, err := docRef.Create(ctx, data)
-	if err != nil {
-		return productdom.PrintLog{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return productdom.PrintLog{}, err
-	}
-
-	return docToPrintLog(snap)
-}
-
-func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	if productionID == "" {
-		return []productdom.PrintLog{}, nil
-	}
-
-	q := r.col().Where("productionId", "==", productionID)
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var logs []productdom.PrintLog
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		l, err := docToPrintLog(doc)
-		if err != nil {
-			return nil, err
-		}
-
-		logs = append(logs, l)
-	}
-
-	return logs, nil
-}
-
-// ============================================================
 // Helpers
 // ============================================================
 
@@ -419,73 +274,4 @@ func productToDoc(v productdom.Product) map[string]any {
 	}
 
 	return m
-}
-
-func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error) {
-	data := doc.Data()
-	if data == nil {
-		return productdom.PrintLog{}, fmt.Errorf("empty print_log document: %s", doc.Ref.ID)
-	}
-
-	var items []productdom.PrintedItem
-	if raw, ok := data["items"]; ok {
-		switch vv := raw.(type) {
-		case []interface{}:
-			for _, x := range vv {
-				m, ok := x.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				pidAny := m["productId"]
-				orderAny := m["displayOrder"]
-
-				pid, _ := pidAny.(string)
-
-				var order int
-				switch t := orderAny.(type) {
-				case int:
-					order = t
-				case int64:
-					order = int(t)
-				case float64:
-					order = int(t)
-				default:
-					order = 0
-				}
-
-				if pid == "" || order <= 0 {
-					continue
-				}
-
-				items = append(items, productdom.PrintedItem{
-					ProductID:    pid,
-					DisplayOrder: order,
-				})
-			}
-		}
-	}
-
-	productionID := fscommon.AsString(data["productionId"])
-
-	return productdom.NewPrintLog(
-		doc.Ref.ID,
-		productionID,
-		items,
-	)
-}
-
-func printLogToDoc(v productdom.PrintLog) map[string]any {
-	items := make([]map[string]any, 0, len(v.Items))
-	for _, it := range v.Items {
-		items = append(items, map[string]any{
-			"productId":    it.ProductID,
-			"displayOrder": it.DisplayOrder,
-		})
-	}
-
-	return map[string]any{
-		"productionId": v.ProductionID,
-		"items":        items,
-	}
 }
