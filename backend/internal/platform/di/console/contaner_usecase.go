@@ -36,7 +36,6 @@ type usecases struct {
 	productBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
 
 	inspectionUC *uc.InspectionUsecase
-	productUC    *uc.ProductUsecase
 	mintUC       *uc.MintUsecase
 
 	shippingAddressUC *uc.ShippingAddressUsecase
@@ -149,15 +148,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.productRepo,
 	)
 
-	productUC := uc.NewProductUsecase(
-		r.productRepo,
-		r.modelRepo,
-		r.productionRepo,
-		r.productBlueprintRepo,
-		s.brandSvc,
-		s.companySvc,
-	)
-
 	mintUC := uc.NewMintUsecase(
 		r.productionRepo,
 		r.tokenBlueprintRepo,
@@ -257,7 +247,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		productBlueprintCategoryUC: productBlueprintCategoryUC,
 
 		inspectionUC: inspectionUC,
-		productUC:    productUC,
 		mintUC:       mintUC,
 
 		shippingAddressUC: shippingAddressUC,

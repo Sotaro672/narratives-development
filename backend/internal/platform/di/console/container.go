@@ -96,7 +96,6 @@ type Container struct {
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
-	ProductUC    *uc.ProductUsecase
 	InspectionUC *uc.InspectionUsecase
 	MintUC       *uc.MintUsecase
 
@@ -214,7 +213,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		OwnerResolveQ: res.ownerResolveQuery,
 
-		ProductUC:    u.productUC,
 		InspectionUC: u.inspectionUC,
 		MintUC:       u.mintUC,
 

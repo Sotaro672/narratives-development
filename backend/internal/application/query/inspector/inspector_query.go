@@ -3,11 +3,17 @@ package inspector
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
 	"time"
 
+	branddom "narratives/internal/domain/brand"
+	companydom "narratives/internal/domain/company"
 	inspectiondom "narratives/internal/domain/inspection"
-	mintdom "narratives/internal/domain/mint"
+	modeldom "narratives/internal/domain/model"
+	productdom "narratives/internal/domain/product"
+	bpdom "narratives/internal/domain/productBlueprint"
 )
 
 // ------------------------------------------------------------
@@ -23,13 +29,23 @@ type InspectionRepository interface {
 	) (inspectiondom.InspectionBatch, error)
 }
 
-// MintGetter は productionId / mintId 共通IDから mint を 1 件取得するための
-// query 用ポートです。
+// ProductRepository は inspector 商品詳細 query が必要とする
+// product 永続化ポートです。
+type ProductRepository interface {
+	GetByID(ctx context.Context, id string) (productdom.Product, error)
+}
+
+// ModelVariationGetter は model variation を取得する最小ポートです。
 //
-// AMOL/Narratives では production / inspection / mint の docId は同一値として扱うため、
-// mint repository 側は GetByID のままにします。
-type MintGetter interface {
-	GetByID(ctx context.Context, id string) (mintdom.Mint, error)
+// 戻り値は modeldom.ModelVariation に統一します。
+// *modeldom.ModelVariation のような pointer-to-interface は扱いません。
+type ModelVariationGetter interface {
+	GetModelVariationByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
+}
+
+// ProductBlueprintGetter は product blueprint を取得する最小ポートです。
+type ProductBlueprintGetter interface {
+	GetByID(ctx context.Context, bpID string) (bpdom.ProductBlueprint, error)
 }
 
 // ------------------------------------------------------------
@@ -38,24 +54,48 @@ type MintGetter interface {
 
 type QueryService struct {
 	inspectionRepo InspectionRepository
-	mintRepo       MintGetter // nil 許容
+
+	productRepo          ProductRepository
+	modelRepo            ModelVariationGetter
+	productBlueprintRepo ProductBlueprintGetter
+
+	brandService   *branddom.Service
+	companyService *companydom.Service
 }
 
-func NewQueryService(
-	inspectionRepo InspectionRepository,
-	mintRepo MintGetter,
-) *QueryService {
+type NewQueryServiceParams struct {
+	InspectionRepo InspectionRepository
+
+	ProductRepo          ProductRepository
+	ModelRepo            ModelVariationGetter
+	ProductBlueprintRepo ProductBlueprintGetter
+
+	BrandService   *branddom.Service
+	CompanyService *companydom.Service
+}
+
+func NewQueryService(params NewQueryServiceParams) *QueryService {
 	return &QueryService{
-		inspectionRepo: inspectionRepo,
-		mintRepo:       mintRepo,
+		inspectionRepo: params.InspectionRepo,
+
+		productRepo:          params.ProductRepo,
+		modelRepo:            params.ModelRepo,
+		productBlueprintRepo: params.ProductBlueprintRepo,
+
+		brandService:   params.BrandService,
+		companyService: params.CompanyService,
 	}
 }
 
-// GetByProductionID は productionId から InspectionBatch と関連 Mint を取得し、
+// ------------------------------------------------------------
+// Inspection Query
+// ------------------------------------------------------------
+
+// GetByProductionID は productionId から InspectionBatch を取得し、
 // inspector 画面用 DTO として返します。
 //
-// production / inspection / mint の docId は同一値として扱うため、
-// inspection 取得も mint join も productionID を起点にします。
+// production / inspection の docId は同一値として扱うため、
+// inspection 取得は productionID を起点にします。
 func (q *QueryService) GetByProductionID(
 	ctx context.Context,
 	productionID string,
@@ -74,23 +114,191 @@ func (q *QueryService) GetByProductionID(
 		return InspectionBatchForScreenDTO{}, err
 	}
 
-	var mintDTO *MintDTO
-	if q.mintRepo != nil {
-		m, err := q.mintRepo.GetByID(ctx, pid)
-		if err == nil {
-			dto := NewMintDTO(m, pid)
-			mintDTO = &dto
-		} else if err != mintdom.ErrNotFound {
-			return InspectionBatchForScreenDTO{}, err
-		}
-	}
-
-	return NewInspectionBatchForScreenDTO(batch, mintDTO), nil
+	return NewInspectionBatchForScreenDTO(batch), nil
 }
 
 // ------------------------------------------------------------
-// Inspector Screen DTO
-// - InspectionBatch + Mint joined
+// Product Detail Query
+// ------------------------------------------------------------
+
+// GetInspectorProductDetail は productId を起点に各ドメインから情報を取得し、
+// inspector 商品詳細 DTO に詰め替えて返します。
+func (q *QueryService) GetInspectorProductDetail(
+	ctx context.Context,
+	productID string,
+) (ProductDetail, error) {
+	if productID == "" {
+		return ProductDetail{}, productdom.ErrInvalidID
+	}
+
+	if q == nil || q.productRepo == nil {
+		return ProductDetail{}, errors.New("inspector query: product repository is nil")
+	}
+	if q.modelRepo == nil {
+		return ProductDetail{}, errors.New("inspector query: model repository is nil")
+	}
+	if q.productBlueprintRepo == nil {
+		return ProductDetail{}, errors.New("inspector query: productBlueprint repository is nil")
+	}
+
+	// 1) Product を取得
+	product, err := q.productRepo.GetByID(ctx, productID)
+	if err != nil {
+		return ProductDetail{}, err
+	}
+
+	// 2) ModelVariation を取得（Product.ModelID 起点）
+	mv, err := q.modelRepo.GetModelVariationByID(ctx, product.ModelID)
+	if err != nil {
+		return ProductDetail{}, err
+	}
+	if mv == nil {
+		return ProductDetail{}, errors.New("inspector query: model variation not found")
+	}
+
+	var (
+		productBlueprintID string
+		kind               string
+		modelNumber        string
+		modelLabel         string
+
+		size         string
+		colorDTO     ProductColorDTO
+		measurements modeldom.Measurements
+
+		volumeValue int
+		volumeUnit  string
+	)
+
+	switch model := mv.(type) {
+	case modeldom.ApparelModelVariation:
+		productBlueprintID = model.ProductBlueprintID
+		kind = "apparel"
+		modelNumber = model.ModelNumber
+		modelLabel = model.ModelNumber
+
+		size = model.Size
+		colorDTO = ProductColorDTO{
+			RGB:  model.Color.RGB,
+			Name: model.Color.Name,
+		}
+		measurements = model.Measurements
+
+	case modeldom.AlcoholModelVariation:
+		productBlueprintID = model.ProductBlueprintID
+		kind = "alcohol"
+		modelNumber = model.ModelNumber
+		modelLabel = model.ModelNumber
+
+		volumeValue = model.Volume.Value
+		volumeUnit = model.Volume.Unit
+
+	default:
+		return ProductDetail{}, errors.New("inspector query: unsupported model variation type")
+	}
+
+	// 3) ProductBlueprint を取得（ModelVariation.ProductBlueprintID 起点）
+	bp, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
+	if err != nil {
+		return ProductDetail{}, err
+	}
+
+	// 4) brandId → brandName 解決
+	var brandName string
+	if q.brandService != nil && bp.BrandID != "" {
+		if name, err := q.brandService.GetNameByID(ctx, bp.BrandID); err == nil {
+			brandName = name
+		}
+	}
+
+	// 5) companyId → companyName 解決
+	var companyName string
+	if q.companyService != nil && bp.CompanyID != "" {
+		if name, err := q.companyService.GetCompanyNameByID(ctx, bp.CompanyID); err == nil {
+			companyName = name
+		}
+	}
+
+	// 6) modelRefs を DTO 化する。
+	// ModelRefs の空ID除外・重複除外・displayOrder 採番は productBlueprint domain 側の責務。
+	// query では補正せず、表示用 DTO へ詰め替えるだけにする。
+	modelRefsDTO := make([]ModelRefDTO, 0, len(bp.ModelRefs))
+	for _, r := range bp.ModelRefs {
+		modelRefsDTO = append(modelRefsDTO, ModelRefDTO{
+			ModelID:      r.ModelID,
+			DisplayOrder: r.DisplayOrder,
+		})
+	}
+
+	// 念のため response の表示順は displayOrder 昇順に揃える。
+	// displayOrder <= 0 の補正は行わない。domain validation 側で invalid として扱う前提。
+	sort.SliceStable(modelRefsDTO, func(i, j int) bool {
+		if modelRefsDTO[i].DisplayOrder != modelRefsDTO[j].DisplayOrder {
+			return modelRefsDTO[i].DisplayOrder < modelRefsDTO[j].DisplayOrder
+		}
+		return modelRefsDTO[i].ModelID < modelRefsDTO[j].ModelID
+	})
+
+	category := bp.ProductBlueprintCategory
+
+	// 7) ProductBlueprintDTO を構築
+	pbDTO := ProductBlueprintDTO{
+		ID:          bp.ID,
+		ProductName: bp.ProductName,
+		BrandID:     bp.BrandID,
+		BrandName:   brandName,
+		CompanyID:   bp.CompanyID,
+		CompanyName: companyName,
+
+		ProductBlueprintCategory: ProductBlueprintCategoryDTO{
+			ID:     string(category.ID),
+			Code:   string(category.Code),
+			NameJa: category.NameJa,
+			NameEn: category.NameEn,
+			Kind:   string(category.Kind),
+			Path:   append([]string(nil), category.Path...),
+		},
+
+		// apparel / alcohol どちらも categoryFields を正として返す。
+		// apparel: fit / material / weight / qualityAssurance など
+		// alcohol: vintage / region / material / alcoholContent など
+		CategoryFields: bp.CategoryFields,
+
+		ProductIdTagType: string(bp.ProductIdTag.Type),
+
+		ModelRefs: modelRefsDTO,
+	}
+
+	// 8) InspectionResult は domain の型を string にして詰める
+	inspectionResult := string(product.InspectionResult)
+
+	// 9) 最終的な DTO を組み立てて返す
+	detail := ProductDetail{
+		ProductID:        product.ID,
+		ModelID:          product.ModelID,
+		ProductionID:     product.ProductionID,
+		InspectionResult: inspectionResult,
+
+		Kind:        kind,
+		ModelNumber: modelNumber,
+		ModelLabel:  modelLabel,
+
+		Size:         size,
+		Color:        colorDTO,
+		Measurements: measurements,
+
+		VolumeValue: volumeValue,
+		VolumeUnit:  volumeUnit,
+
+		ProductBlueprintID:  bp.ID,
+		ProductBlueprintDTO: pbDTO,
+	}
+
+	return detail, nil
+}
+
+// ------------------------------------------------------------
+// Inspection DTO
 // ------------------------------------------------------------
 
 type InspectionItemDTO struct {
@@ -108,14 +316,10 @@ type InspectionBatchForScreenDTO struct {
 	Status       string              `json:"status"`
 	TotalPassed  int                 `json:"totalPassed"`
 	Inspections  []InspectionItemDTO `json:"inspections"`
-
-	// joined
-	Mint *MintDTO `json:"mint,omitempty"`
 }
 
 func NewInspectionBatchForScreenDTO(
 	b inspectiondom.InspectionBatch,
-	mint *MintDTO,
 ) InspectionBatchForScreenDTO {
 	items := make([]InspectionItemDTO, 0, len(b.Inspections))
 
@@ -148,54 +352,84 @@ func NewInspectionBatchForScreenDTO(
 		Status:       string(b.Status),
 		TotalPassed:  b.TotalPassed,
 		Inspections:  items,
-		Mint:         mint,
 	}
 }
 
 // ------------------------------------------------------------
-// Mint DTO
+// Product Detail DTO
 // ------------------------------------------------------------
 
-type MintDTO struct {
-	MintID            string  `json:"mintId"`
-	ProductionID      string  `json:"productionId"`
-	BrandID           string  `json:"brandId"`
-	TokenBlueprintID  string  `json:"tokenBlueprintId"`
-	CreatedAt         string  `json:"createdAt"` // RFC3339
-	CreatedBy         string  `json:"createdBy"`
-	Minted            bool    `json:"minted"`
-	MintedAt          *string `json:"mintedAt,omitempty"`          // RFC3339
-	ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // RFC3339
+type ProductColorDTO struct {
+	RGB  int    `json:"rgb"`
+	Name string `json:"name,omitempty"`
 }
 
-// NewMintDTO は productionID に batch.ProductionID を渡す想定です。
-func NewMintDTO(m mintdom.Mint, productionID string) MintDTO {
-	createdAt := ""
-	if !m.CreatedAt.IsZero() {
-		createdAt = m.CreatedAt.UTC().Format(time.RFC3339)
-	}
+// modelRefs（displayOrder含む）
+type ModelRefDTO struct {
+	ModelID      string `json:"modelId"`
+	DisplayOrder int    `json:"displayOrder"`
+}
 
-	var mintedAt *string
-	if m.MintedAt != nil && !m.MintedAt.IsZero() {
-		s := m.MintedAt.UTC().Format(time.RFC3339)
-		mintedAt = &s
-	}
+// ProductBlueprintCategoryDTO は productBlueprint 側に denormalize 保存された
+// productBlueprintCategory の表示用 snapshot を返す DTO。
+type ProductBlueprintCategoryDTO struct {
+	ID     string   `json:"id"`
+	Code   string   `json:"code"`
+	NameJa string   `json:"nameJa"`
+	NameEn string   `json:"nameEn"`
+	Kind   string   `json:"kind"`
+	Path   []string `json:"path"`
+}
 
-	var scheduled *string
-	if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
-		s := m.ScheduledBurnDate.UTC().Format(time.RFC3339)
-		scheduled = &s
-	}
+type ProductBlueprintDTO struct {
+	ID string `json:"id"`
 
-	return MintDTO{
-		MintID:            m.ID,
-		ProductionID:      productionID,
-		BrandID:           m.BrandID,
-		TokenBlueprintID:  m.TokenBlueprintID,
-		CreatedAt:         createdAt,
-		CreatedBy:         m.CreatedBy,
-		Minted:            m.Minted,
-		MintedAt:          mintedAt,
-		ScheduledBurnDate: scheduled,
-	}
+	ProductName string `json:"productName"`
+
+	BrandID   string `json:"brandId"`
+	BrandName string `json:"brandName"`
+
+	CompanyID   string `json:"companyId"`
+	CompanyName string `json:"companyName"`
+
+	ProductBlueprintCategory ProductBlueprintCategoryDTO `json:"productBlueprintCategory"`
+
+	// categoryFields を正として返す。
+	// apparel / alcohol の category 固有値はここに集約する。
+	CategoryFields bpdom.CategoryFields `json:"categoryFields,omitempty"`
+
+	ProductIdTagType string `json:"productIdTagType"`
+
+	ModelRefs []ModelRefDTO `json:"modelRefs"`
+}
+
+type ProductDetail struct {
+	ProductID        string `json:"productId"`
+	ModelID          string `json:"modelId"`
+	ProductionID     string `json:"productionId"`
+	InspectionResult string `json:"inspectionResult"`
+
+	// connectedToken をそのままフロントに返す
+	// NOTE:
+	// 現在の productdom.Product には ConnectedToken が存在しないため、
+	// ここでは値を詰めません。
+	// 将来 token 接続情報を返す場合は、別 repo / query から取得して設定します。
+	ConnectedToken *string `json:"connectedToken,omitempty"`
+
+	// common
+	Kind        string `json:"kind,omitempty"` // "apparel" / "alcohol"
+	ModelNumber string `json:"modelNumber"`
+	ModelLabel  string `json:"modelLabel,omitempty"` // 表示用共通ラベル
+
+	// apparel
+	Size         string                `json:"size,omitempty"`
+	Color        ProductColorDTO       `json:"color,omitempty"`
+	Measurements modeldom.Measurements `json:"measurements,omitempty"`
+
+	// alcohol
+	VolumeValue int    `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
+
+	ProductBlueprintID  string              `json:"productBlueprintId"`
+	ProductBlueprintDTO ProductBlueprintDTO `json:"productBlueprint"` // Flutter 側の JSON キーに合わせる
 }

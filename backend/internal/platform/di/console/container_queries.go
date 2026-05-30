@@ -95,10 +95,16 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		res.nameResolver,
 	)
 
-	inspectorQuery := inspectorquery.NewQueryService(
-		r.inspectionRepo,
-		r.mintRepo,
-	)
+	inspectorQuery := inspectorquery.NewQueryService(inspectorquery.NewQueryServiceParams{
+		InspectionRepo: r.inspectionRepo,
+
+		ProductRepo:          r.productRepo,
+		ModelRepo:            r.modelRepo,
+		ProductBlueprintRepo: r.productBlueprintRepo,
+
+		BrandService:   s.brandSvc,
+		CompanyService: s.companySvc,
+	})
 
 	// =========================================================
 	// moved: ListManagementQuery

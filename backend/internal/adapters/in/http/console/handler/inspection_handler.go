@@ -25,7 +25,6 @@ type ProductBlueprintModelRefGetter interface {
 }
 
 type InspectorHandler struct {
-	productUC       *usecase.ProductUsecase
 	inspectionUC    *usecase.InspectionUsecase
 	inspectionQuery *inspectorquery.QueryService
 	nameResolver    *resolver.NameResolver
@@ -35,14 +34,12 @@ type InspectorHandler struct {
 }
 
 func NewInspectorHandler(
-	productUC *usecase.ProductUsecase,
 	inspectionUC *usecase.InspectionUsecase,
 	inspectionQuery *inspectorquery.QueryService,
 	nameResolver *resolver.NameResolver,
 	pbModelRefGetter ProductBlueprintModelRefGetter,
 ) http.Handler {
 	return &InspectorHandler{
-		productUC:        productUC,
 		inspectionUC:     inspectionUC,
 		inspectionQuery:  inspectionQuery,
 		nameResolver:     nameResolver,
@@ -105,8 +102,8 @@ type inspectionBatchResponse struct {
 // ------------------------------------------------------------
 
 func (h *InspectorHandler) getInspectorProductDetail(w http.ResponseWriter, r *http.Request) {
-	if h.productUC == nil {
-		writeInspectionError(w, http.StatusInternalServerError, "product usecase is not configured")
+	if h.inspectionQuery == nil {
+		writeInspectionError(w, http.StatusInternalServerError, "inspection query service is not configured")
 		return
 	}
 
@@ -117,7 +114,7 @@ func (h *InspectorHandler) getInspectorProductDetail(w http.ResponseWriter, r *h
 		return
 	}
 
-	p, err := h.productUC.GetInspectorProductDetail(r.Context(), productID)
+	p, err := h.inspectionQuery.GetInspectorProductDetail(r.Context(), productID)
 	if errors.Is(err, productdom.ErrNotFound) {
 		writeInspectionError(w, http.StatusNotFound, "product not found")
 		return
