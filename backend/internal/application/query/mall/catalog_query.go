@@ -53,7 +53,7 @@ type ProductBlueprintReviewRepository interface {
 // - backend は GCS bucket / public URL を組み立てない
 type ListImageRepository interface {
 	// listId 配下の画像一覧（displayOrder を含む前提）
-	FindByListID(ctx context.Context, listID string) ([]ldom.ListImage, error)
+	ListByListID(ctx context.Context, listID string) ([]ldom.ListImage, error)
 }
 
 // ============================================================
@@ -178,7 +178,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 	}
 
 	// ------------------------------------------------------------
-	// Inventory (must; inventoryId only; fallback removed)
+	// Inventory (must; inventoryId only)
 	// ------------------------------------------------------------
 	if q.InventoryRepo == nil {
 		return dto.CatalogDTO{}, errors.New("inventory repo is nil")
@@ -374,7 +374,7 @@ func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto
 		return nil, ""
 	}
 
-	imgs, err := q.ListImageRepo.FindByListID(ctx, listID)
+	imgs, err := q.ListImageRepo.ListByListID(ctx, listID)
 	if err != nil {
 		return nil, err.Error()
 	}

@@ -22,18 +22,60 @@ func NewListImageRepositoryFS(client *gfs.Client) *ListImageRepositoryFS {
 	return &ListImageRepositoryFS{Client: client}
 }
 
+var _ listdom.ImageRepository = (*ListImageRepositoryFS)(nil)
+
 func (r *ListImageRepositoryFS) listCol(listID string) *gfs.CollectionRef {
 	return r.Client.Collection("lists").Doc(listID).Collection("images")
 }
 
-var _ listdom.ImageRepository = (*ListImageRepositoryFS)(nil)
+// ============================================================
+// Query
+// ============================================================
 
-func (r *ListImageRepositoryFS) FindByListID(
+func (r *ListImageRepositoryFS) ListByListID(
 	ctx context.Context,
 	listID string,
 ) ([]listdom.ListImage, error) {
-	return r.ListByListID(ctx, listID)
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	if listID == "" {
+		return []listdom.ListImage{}, nil
+	}
+
+	it := r.listCol(listID).
+		OrderBy("display_order", gfs.Asc).
+		OrderBy(gfs.DocumentID, gfs.Asc).
+		Documents(ctx)
+	defer it.Stop()
+
+	out := make([]listdom.ListImage, 0, 8)
+
+	for {
+		doc, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		img, ok := decodeListImageDoc(doc, listID)
+		if !ok {
+			continue
+		}
+
+		out = append(out, img)
+	}
+
+	return out, nil
 }
+
+// ============================================================
+// Write
+// ============================================================
 
 func (r *ListImageRepositoryFS) Create(
 	ctx context.Context,
@@ -96,7 +138,7 @@ func (r *ListImageRepositoryFS) Create(
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
 		_, err := tx.Get(ref)
 		if err == nil {
-			return listdom.ErrListImageConflict
+			return listdom.ErrConflict
 		}
 
 		if status.Code(err) != codes.NotFound {
@@ -105,7 +147,7 @@ func (r *ListImageRepositoryFS) Create(
 
 		if err := tx.Create(ref, encodeListImageDoc(img)); err != nil {
 			if status.Code(err) == codes.AlreadyExists {
-				return listdom.ErrListImageConflict
+				return listdom.ErrConflict
 			}
 			return err
 		}
@@ -113,13 +155,13 @@ func (r *ListImageRepositoryFS) Create(
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, listdom.ErrListImageConflict) {
-			return listdom.ListImage{}, listdom.ErrListImageConflict
+		if errors.Is(err, listdom.ErrConflict) {
+			return listdom.ListImage{}, listdom.ErrConflict
 		}
 		return listdom.ListImage{}, err
 	}
 
-	return r.GetByListIDAndID(ctx, img.ListID, img.ID)
+	return img, nil
 }
 
 func (r *ListImageRepositoryFS) Update(
@@ -146,18 +188,20 @@ func (r *ListImageRepositoryFS) Update(
 
 	ref := r.listCol(listID).Doc(imageID)
 
+	var updated listdom.ListImage
+
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
 		doc, err := tx.Get(ref)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				return listdom.ErrListImageNotFound
+				return listdom.ErrNotFound
 			}
 			return err
 		}
 
 		cur, ok := decodeListImageDoc(doc, listID)
 		if !ok {
-			return listdom.ErrListImageNotFound
+			return listdom.ErrNotFound
 		}
 
 		changed := false
@@ -169,6 +213,7 @@ func (r *ListImageRepositoryFS) Update(
 			if v == "" {
 				return listdom.ErrInvalidListImageURL
 			}
+
 			cur.URL = v
 			changed = true
 		}
@@ -177,6 +222,7 @@ func (r *ListImageRepositoryFS) Update(
 			if *patch.DisplayOrder < 0 {
 				return listdom.ErrInvalidListImageDisplayOrder
 			}
+
 			cur.DisplayOrder = *patch.DisplayOrder
 			changed = true
 		}
@@ -189,6 +235,7 @@ func (r *ListImageRepositoryFS) Update(
 			} else {
 				cur.UpdatedBy = &v
 			}
+
 			changed = true
 		}
 
@@ -200,6 +247,7 @@ func (r *ListImageRepositoryFS) Update(
 				t := patch.UpdatedAt.UTC()
 				cur.UpdatedAt = &t
 			}
+
 			changed = true
 		} else if changed {
 			t := time.Now().UTC()
@@ -207,6 +255,7 @@ func (r *ListImageRepositoryFS) Update(
 		}
 
 		if !changed {
+			updated = cur
 			return nil
 		}
 
@@ -228,16 +277,17 @@ func (r *ListImageRepositoryFS) Update(
 			return err
 		}
 
+		updated = cur
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, listdom.ErrListImageNotFound) {
-			return listdom.ListImage{}, listdom.ErrListImageNotFound
+		if errors.Is(err, listdom.ErrNotFound) {
+			return listdom.ListImage{}, listdom.ErrNotFound
 		}
 		return listdom.ListImage{}, err
 	}
 
-	return r.GetByListIDAndID(ctx, listID, imageID)
+	return updated, nil
 }
 
 func (r *ListImageRepositoryFS) Delete(
@@ -267,7 +317,7 @@ func (r *ListImageRepositoryFS) Delete(
 		_, err := tx.Get(ref)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				return listdom.ErrListImageNotFound
+				return listdom.ErrNotFound
 			}
 			return err
 		}
@@ -275,8 +325,8 @@ func (r *ListImageRepositoryFS) Delete(
 		return tx.Delete(ref)
 	})
 	if err != nil {
-		if errors.Is(err, listdom.ErrListImageNotFound) {
-			return listdom.ErrListImageNotFound
+		if errors.Is(err, listdom.ErrNotFound) {
+			return listdom.ErrNotFound
 		}
 		return err
 	}
@@ -284,83 +334,9 @@ func (r *ListImageRepositoryFS) Delete(
 	return nil
 }
 
-func (r *ListImageRepositoryFS) ListByListID(
-	ctx context.Context,
-	listID string,
-) ([]listdom.ListImage, error) {
-	if r == nil || r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	if listID == "" {
-		return []listdom.ListImage{}, nil
-	}
-
-	it := r.listCol(listID).
-		OrderBy("display_order", gfs.Asc).
-		OrderBy(gfs.DocumentID, gfs.Asc).
-		Documents(ctx)
-	defer it.Stop()
-
-	out := make([]listdom.ListImage, 0, 8)
-
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		img, ok := decodeListImageDoc(doc, listID)
-		if !ok {
-			continue
-		}
-
-		out = append(out, img)
-	}
-
-	return out, nil
-}
-
-func (r *ListImageRepositoryFS) GetByListIDAndID(
-	ctx context.Context,
-	listID string,
-	imageID string,
-) (listdom.ListImage, error) {
-	if r == nil || r.Client == nil {
-		return listdom.ListImage{}, errors.New("firestore client is nil")
-	}
-
-	if listID == "" {
-		return listdom.ListImage{}, listdom.ErrListImageNotFound
-	}
-
-	if imageID == "" {
-		return listdom.ListImage{}, listdom.ErrListImageNotFound
-	}
-
-	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
-		return listdom.ListImage{}, listdom.ErrListImageNotFound
-	}
-
-	doc, err := r.listCol(listID).Doc(imageID).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return listdom.ListImage{}, listdom.ErrListImageNotFound
-		}
-		return listdom.ListImage{}, err
-	}
-
-	img, ok := decodeListImageDoc(doc, listID)
-	if !ok {
-		return listdom.ListImage{}, listdom.ErrListImageNotFound
-	}
-
-	return img, nil
-}
+// ============================================================
+// Firestore encode/decode
+// ============================================================
 
 func encodeListImageDoc(img listdom.ListImage) map[string]any {
 	m := map[string]any{
@@ -430,8 +406,7 @@ func decodeListImageDoc(
 		return listdom.ListImage{}, false
 	}
 
-	urlStr := raw.URL
-	if urlStr == "" {
+	if raw.URL == "" {
 		return listdom.ListImage{}, false
 	}
 
@@ -455,7 +430,7 @@ func decodeListImageDoc(
 	img, err := listdom.NewListImage(
 		imageID,
 		listID,
-		urlStr,
+		raw.URL,
 		displayOrder,
 		createdAt,
 		createdBy,

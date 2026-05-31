@@ -112,9 +112,6 @@ type ImageRepository interface {
 	// Query.
 	ListByListID(ctx context.Context, listID string) ([]ListImage, error)
 
-	// Read.
-	GetByListIDAndID(ctx context.Context, listID string, imageID string) (ListImage, error)
-
 	// Write.
 	Create(ctx context.Context, img ListImage) (ListImage, error)
 	Update(ctx context.Context, listID string, imageID string, patch ListImagePatch) (ListImage, error)

@@ -223,7 +223,7 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 	}
 
 	if err := uc.imageRepo.Delete(ctx, listID, imageID); err != nil {
-		if !errors.Is(err, listdom.ErrListImageNotFound) {
+		if !errors.Is(err, listdom.ErrNotFound) {
 			return err
 		}
 	}
@@ -277,20 +277,37 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, listdom.ErrInvalidImageID
 	}
 
-	img, err := uc.imageRepo.GetByListIDAndID(ctx, lid, iid)
+	images, err := uc.imageRepo.ListByListID(ctx, lid)
 	if err != nil {
 		return listdom.List{}, err
 	}
 
-	if img.ID == "" {
+	var selected listdom.ListImage
+	found := false
+
+	for _, img := range images {
+		if img.ID != iid {
+			continue
+		}
+
+		selected = img
+		found = true
+		break
+	}
+
+	if !found {
+		return listdom.List{}, listdom.ErrNotFound
+	}
+
+	if selected.ID == "" {
 		return listdom.List{}, listdom.ErrInvalidImageID
 	}
 
-	if img.ListID != "" && img.ListID != lid {
+	if selected.ListID != "" && selected.ListID != lid {
 		return listdom.List{}, errors.New("list: image belongs to other list")
 	}
 
-	if img.URL == "" {
+	if selected.URL == "" {
 		return listdom.List{}, listdom.ErrInvalidListImageURL
 	}
 
