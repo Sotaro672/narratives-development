@@ -4,8 +4,6 @@ package query
 import (
 	"context"
 	"errors"
-	"log"
-	"strings"
 	"time"
 
 	resolver "narratives/internal/application/resolver"
@@ -17,8 +15,7 @@ import (
 // ============================================================
 
 type ListManagementLister interface {
-	GetByID(ctx context.Context, id string) (listdom.List, error)
-	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)
+	ListByInventoryID(ctx context.Context, inventoryID string) ([]listdom.List, error)
 }
 
 // ============================================================
@@ -73,7 +70,7 @@ type ListManagementQuery struct {
 // - companyId を使わない「単純な list」は禁止（＝invRows が必須）
 // - List 全体 scan は禁止
 // - current company 境界の inventoryID を列挙し、
-//   ListIDsByInventoryID -> GetByID の順で該当 List のみ取得する
+//   ListByInventoryID の順で該当 List のみ取得する
 // - この ctor のみを公開し、配線を集中させる
 // ============================================================
 
@@ -108,7 +105,8 @@ func (q *ListManagementQuery) ListRows(
 	page listdom.Page,
 ) (listdom.PageResult[ListRowDTO], error) {
 	page = NormalizePage(page)
-	_ = sort // 現状は company boundary first の取得順を維持する
+	_ = filter // filter はフロントエンド側で適用する
+	_ = sort   // 現状は company boundary first の取得順を維持する
 
 	// company boundary を使わない単純 list は禁止
 	if q == nil || q.lister == nil || q.invRows == nil {
@@ -117,7 +115,6 @@ func (q *ListManagementQuery) ListRows(
 
 	allowedInventoryIDs, allowedSet, err := allowedInventoryIDsFromContext(ctx, q.invRows)
 	if err != nil {
-		log.Printf("[ListManagementQuery] ERROR company boundary (inventory_query) failed: %v", err)
 		return listdom.PageResult[ListRowDTO]{}, err
 	}
 
@@ -146,44 +143,28 @@ func (q *ListManagementQuery) ListRows(
 			continue
 		}
 
-		listIDs, e := q.lister.ListIDsByInventoryID(ctx, inventoryID)
-		if e != nil {
-			log.Printf("[ListManagementQuery] ERROR ListIDsByInventoryID failed inventoryID=%q: %v", inventoryID, e)
-			return listdom.PageResult[ListRowDTO]{}, e
+		items, err := q.lister.ListByInventoryID(ctx, inventoryID)
+		if err != nil {
+			return listdom.PageResult[ListRowDTO]{}, err
 		}
 
-		for _, listID := range listIDs {
-			listID = strings.TrimSpace(listID)
-			if listID == "" {
+		for _, it := range items {
+			if it.ID == "" {
 				continue
 			}
 
-			if _, ok := seenListID[listID]; ok {
+			if _, ok := seenListID[it.ID]; ok {
 				continue
 			}
-			seenListID[listID] = struct{}{}
-
-			it, e := q.lister.GetByID(ctx, listID)
-			if e != nil {
-				if errors.Is(e, listdom.ErrNotFound) {
-					continue
-				}
-
-				log.Printf("[ListManagementQuery] ERROR GetByID failed listID=%q inventoryID=%q: %v", listID, inventoryID, e)
-				return listdom.PageResult[ListRowDTO]{}, e
-			}
+			seenListID[it.ID] = struct{}{}
 
 			id := it.ID
 			invID := it.InventoryID
 
 			// Safety:
-			// ListIDsByInventoryID で取った後も、List 実体の InventoryID が
+			// ListByInventoryID で取った後も、List 実体の InventoryID が
 			// current company 境界内か必ず再確認する。
 			if !InventoryAllowed(allowedSet, invID) {
-				continue
-			}
-
-			if !listMatchesFilter(it, filter) {
 				continue
 			}
 
@@ -243,8 +224,8 @@ func (q *ListManagementQuery) ListRows(
 				if cached, ok := brandIDCachePB[pbID]; ok {
 					productBrandID = cached
 				} else {
-					pb, ee := q.pbGetter.GetByID(ctx, pbID)
-					if ee == nil {
+					pb, err := q.pbGetter.GetByID(ctx, pbID)
+					if err == nil {
 						productBrandID = pb.BrandID
 					}
 					brandIDCachePB[pbID] = productBrandID
@@ -255,8 +236,8 @@ func (q *ListManagementQuery) ListRows(
 				if cached, ok := brandIDCacheTB[tbID]; ok {
 					tokenBrandID = cached
 				} else {
-					tb, ee := q.tbGetter.GetByID(ctx, tbID)
-					if ee == nil && tb != nil {
+					tb, err := q.tbGetter.GetByID(ctx, tbID)
+					if err == nil && tb != nil {
 						tokenBrandID = tb.BrandID
 					}
 					brandIDCacheTB[tbID] = tokenBrandID
@@ -385,130 +366,4 @@ func allowedInventoryIDsFromContext(
 	}
 
 	return ids, set, nil
-}
-
-func listMatchesFilter(it listdom.List, filter listdom.Filter) bool {
-	if len(filter.IDs) > 0 && !stringIn(filter.IDs, it.ID) {
-		return false
-	}
-
-	if filter.AssigneeID != nil && *filter.AssigneeID != "" {
-		if it.AssigneeID != *filter.AssigneeID {
-			return false
-		}
-	}
-
-	if filter.Status != nil && *filter.Status != "" {
-		if it.Status != *filter.Status {
-			return false
-		}
-	}
-
-	if len(filter.Statuses) > 0 && !statusIn(filter.Statuses, it.Status) {
-		return false
-	}
-
-	if len(filter.InventoryIDs) > 0 && !stringIn(filter.InventoryIDs, it.InventoryID) {
-		return false
-	}
-
-	if filter.SearchQuery != "" {
-		q := strings.ToLower(strings.TrimSpace(filter.SearchQuery))
-		if q != "" {
-			haystacks := []string{
-				it.ID,
-				it.InventoryID,
-				it.Title,
-				it.Description,
-				it.AssigneeID,
-				string(it.Status),
-			}
-
-			found := false
-			for _, h := range haystacks {
-				if strings.Contains(strings.ToLower(h), q) {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				return false
-			}
-		}
-	}
-
-	if hasPriceFilter(filter) && !listMatchesPriceFilter(it, filter) {
-		return false
-	}
-
-	return true
-}
-
-func hasPriceFilter(filter listdom.Filter) bool {
-	return len(filter.ModelNumbers) > 0 ||
-		filter.MinPrice != nil ||
-		filter.MaxPrice != nil
-}
-
-func listMatchesPriceFilter(it listdom.List, filter listdom.Filter) bool {
-	if len(it.Prices) == 0 {
-		return false
-	}
-
-	for _, row := range it.Prices {
-		if row.ModelID == "" {
-			continue
-		}
-
-		if len(filter.ModelNumbers) > 0 && !stringIn(filter.ModelNumbers, row.ModelID) {
-			continue
-		}
-
-		if filter.MinPrice != nil && row.Price < *filter.MinPrice {
-			continue
-		}
-
-		if filter.MaxPrice != nil && row.Price > *filter.MaxPrice {
-			continue
-		}
-
-		return true
-	}
-
-	return false
-}
-
-func stringIn(values []string, target string) bool {
-	if len(values) == 0 {
-		return false
-	}
-	if target == "" {
-		return false
-	}
-
-	for _, v := range values {
-		if v == target {
-			return true
-		}
-	}
-
-	return false
-}
-
-func statusIn(values []listdom.ListStatus, target listdom.ListStatus) bool {
-	if len(values) == 0 {
-		return false
-	}
-	if target == "" {
-		return false
-	}
-
-	for _, v := range values {
-		if v == target {
-			return true
-		}
-	}
-
-	return false
 }

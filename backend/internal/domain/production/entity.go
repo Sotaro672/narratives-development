@@ -4,7 +4,6 @@ package production
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -96,7 +95,7 @@ func New(
 		ID:                 id,
 		ProductBlueprintID: productBlueprintID,
 		AssigneeID:         assigneeID,
-		Models:             normalizeModels(models),
+		Models:             models,
 		Printed:            printed,
 		PrintedAt:          printedAt,
 		PrintedBy:          nil,
@@ -124,7 +123,7 @@ func NewForCreate(
 		ID:                 "",
 		ProductBlueprintID: productBlueprintID,
 		AssigneeID:         assigneeID,
-		Models:             normalizeModels(models),
+		Models:             models,
 		Printed:            printed,
 		PrintedAt:          printedAt,
 		PrintedBy:          nil,
@@ -181,7 +180,7 @@ func (p *Production) ApplyUpdate(
 	}
 
 	if len(models) > 0 {
-		p.Models = normalizeModels(models)
+		p.Models = models
 	}
 
 	if printed != nil {
@@ -293,36 +292,4 @@ func (p Production) validate(requireID bool) error {
 	}
 
 	return nil
-}
-
-// ===== Helpers =====
-
-// NormalizeModelQuantities normalizes model quantities for use outside the domain package.
-func NormalizeModelQuantities(in []ModelQuantity) []ModelQuantity {
-	return normalizeModels(in)
-}
-
-func normalizeModels(in []ModelQuantity) []ModelQuantity {
-	out := make([]ModelQuantity, 0, len(in))
-	seen := make(map[string]struct{}, len(in))
-
-	for _, mq := range in {
-		id := mq.ModelID
-		if id == "" || mq.Quantity <= 0 {
-			continue
-		}
-
-		key := strings.ToLower(id)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-
-		seen[key] = struct{}{}
-		out = append(out, ModelQuantity{
-			ModelID:  id,
-			Quantity: mq.Quantity,
-		})
-	}
-
-	return out
 }

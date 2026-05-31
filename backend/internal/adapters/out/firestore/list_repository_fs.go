@@ -1,3 +1,4 @@
+// backend/internal/adapters/out/firestore/list_repository_fs.go
 package firestore
 
 import (
@@ -109,13 +110,13 @@ func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (st
 	return l.ReadableID, nil
 }
 
-func (r *ListRepositoryFS) ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error) {
+func (r *ListRepositoryFS) ListByInventoryID(ctx context.Context, inventoryID string) ([]ldom.List, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
 	if inventoryID == "" {
-		return []string{}, nil
+		return []ldom.List{}, nil
 	}
 
 	it := r.col().
@@ -123,7 +124,7 @@ func (r *ListRepositoryFS) ListIDsByInventoryID(ctx context.Context, inventoryID
 		Documents(ctx)
 	defer it.Stop()
 
-	ids := make([]string, 0, 8)
+	items := make([]ldom.List, 0, 8)
 
 	for {
 		doc, err := it.Next()
@@ -137,11 +138,25 @@ func (r *ListRepositoryFS) ListIDsByInventoryID(ctx context.Context, inventoryID
 			continue
 		}
 
-		ids = append(ids, doc.Ref.ID)
+		l, err := decodeListDoc(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		prices, err := r.loadListPricesForOne(ctx, l.ID)
+		if err != nil {
+			return nil, err
+		}
+		l.Prices = prices
+
+		items = append(items, l)
 	}
 
-	sort.Strings(ids)
-	return ids, nil
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ID < items[j].ID
+	})
+
+	return items, nil
 }
 
 func (r *ListRepositoryFS) List(
@@ -382,7 +397,6 @@ func (r *ListRepositoryFS) Update(
 		}
 
 		cur.ID = id
-		// Update now receives List directly and applies mutable fields from List.
 		cur.Status = l.Status
 		cur.AssigneeID = l.AssigneeID
 		cur.Title = l.Title

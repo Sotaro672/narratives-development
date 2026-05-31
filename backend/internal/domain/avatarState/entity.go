@@ -88,17 +88,14 @@ func New(
 	lastActiveAt time.Time,
 	updatedAt *time.Time,
 ) (AvatarState, error) {
-	normalizedFollowers := normalizeFollowRefs(followers)
-	normalizedFollowing := normalizeFollowRefs(following)
-
-	aggregatedFollowerCount := int64(len(normalizedFollowers))
-	aggregatedFollowingCount := int64(len(normalizedFollowing))
+	aggregatedFollowerCount := int64(len(followers))
+	aggregatedFollowingCount := int64(len(following))
 
 	if followerCount == nil {
-		followerCount = int64Ptr(aggregatedFollowerCount)
+		followerCount = &aggregatedFollowerCount
 	}
 	if followingCount == nil {
-		followingCount = int64Ptr(aggregatedFollowingCount)
+		followingCount = &aggregatedFollowingCount
 	}
 
 	var updatedAtUTC *time.Time
@@ -112,8 +109,8 @@ func New(
 		FollowerCount:  followerCount,
 		FollowingCount: followingCount,
 		PostCount:      postCount,
-		Followers:      normalizedFollowers,
-		Following:      normalizedFollowing,
+		Followers:      followers,
+		Following:      following,
 		LastActiveAt:   lastActiveAt.UTC(),
 		UpdatedAt:      updatedAtUTC,
 	}
@@ -194,27 +191,4 @@ func (s AvatarState) validate() error {
 	}
 
 	return nil
-}
-
-/*
-Helpers
-*/
-
-func normalizeFollowRefs(items []AvatarFollowRef) []AvatarFollowRef {
-	if len(items) == 0 {
-		return nil
-	}
-
-	out := make([]AvatarFollowRef, 0, len(items))
-	for _, item := range items {
-		out = append(out, AvatarFollowRef{
-			AvatarID:   item.AvatarID,
-			FollowedAt: item.FollowedAt.UTC(),
-		})
-	}
-	return out
-}
-
-func int64Ptr(v int64) *int64 {
-	return &v
 }

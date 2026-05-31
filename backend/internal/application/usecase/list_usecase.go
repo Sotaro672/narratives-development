@@ -28,21 +28,6 @@ func NewListUsecase(
 	}
 }
 
-func (uc *ListUsecase) WithImageRepository(repo listdom.ImageRepository) *ListUsecase {
-	if uc == nil {
-		return nil
-	}
-
-	uc.imageRepo = repo
-	return uc
-}
-
-func isImageURL(v string) bool {
-	return strings.HasPrefix(v, "https://") ||
-		strings.HasPrefix(v, "http://") ||
-		strings.HasPrefix(v, "gs://")
-}
-
 func generateReadableID(listID string, createdAt time.Time) string {
 	t := createdAt
 	if t.IsZero() {
@@ -63,11 +48,6 @@ func generateReadableID(listID string, createdAt time.Time) string {
 	}
 
 	return fmt.Sprintf("L-%s-%s", date, hex6)
-}
-
-func ptrTime(t time.Time) *time.Time {
-	tt := t
-	return &tt
 }
 
 func (uc *ListUsecase) Create(
@@ -323,8 +303,10 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, err
 	}
 
+	updatedAt := now.UTC()
+
 	l.ImageID = iid
-	l.UpdatedAt = ptrTime(now.UTC())
+	l.UpdatedAt = &updatedAt
 
 	if updatedBy != nil {
 		l.UpdatedBy = updatedBy

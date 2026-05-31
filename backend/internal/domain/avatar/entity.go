@@ -365,33 +365,3 @@ type ListFilter struct {
 	SortBy SortBy
 	Desc   bool
 }
-
-// Sanitize normalizes fields and applies safe defaults.
-func (f *ListFilter) Sanitize() {
-	if f.UserID != nil {
-		v := *f.UserID
-		if v == "" {
-			f.UserID = nil
-		} else {
-			f.UserID = &v
-		}
-	}
-	if f.WalletAddress != nil {
-		v := *f.WalletAddress
-		if v == "" {
-			f.WalletAddress = nil
-		} else {
-			f.WalletAddress = &v
-		}
-	}
-
-	if f.Limit < 0 {
-		f.Limit = 0
-	}
-	if f.Offset < 0 {
-		f.Offset = 0
-	}
-	if !IsValidSortBy(f.SortBy) {
-		f.SortBy = SortByCreatedAt
-	}
-}

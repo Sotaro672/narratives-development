@@ -105,13 +105,12 @@ func NewInspectionBatch(
 		return InspectionBatch{}, ErrInvalidInspectionStatus
 	}
 
-	ids := normalizeIDList(productIDs)
-	if len(ids) == 0 {
+	if len(productIDs) == 0 {
 		return InspectionBatch{}, ErrInvalidInspectionProductIDs
 	}
 
-	inspections := make([]InspectionItem, 0, len(ids))
-	for _, id := range ids {
+	inspections := make([]InspectionItem, 0, len(productIDs))
+	for _, id := range productIDs {
 		r := InspectionNotYet
 		inspections = append(inspections, InspectionItem{
 			ProductID:        id,
@@ -402,29 +401,4 @@ func IsValidInspectionResult(r InspectionResult) bool {
 	default:
 		return false
 	}
-}
-
-// ===============================
-// Helpers
-// ===============================
-
-// normalizeIDList は ID の配列から空文字を除外し、重複を取り除きます。
-func normalizeIDList(raw []string) []string {
-	seen := make(map[string]struct{}, len(raw))
-	out := make([]string, 0, len(raw))
-
-	for _, id := range raw {
-		if id == "" {
-			continue
-		}
-
-		if _, ok := seen[id]; ok {
-			continue
-		}
-
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-
-	return out
 }

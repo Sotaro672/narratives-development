@@ -82,7 +82,7 @@ type Repository interface {
 
 	// Read.
 	GetByID(ctx context.Context, id string) (List, error)
-	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)
+	ListByInventoryID(ctx context.Context, inventoryID string) ([]List, error)
 
 	// Write.
 	Create(ctx context.Context, l List) (List, error)

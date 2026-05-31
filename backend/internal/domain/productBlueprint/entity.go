@@ -280,7 +280,7 @@ func New(
 		Description:              description,
 		BrandID:                  brandID,
 		ProductBlueprintCategory: category,
-		CategoryFields:           normalizeCategoryFields(categoryFields),
+		CategoryFields:           categoryFields,
 		ProductIdTag:             productIDTag,
 		AssigneeID:               assigneeID,
 		CompanyID:                companyID,
@@ -380,7 +380,7 @@ func (p *ProductBlueprint) UpdateCategoryFields(fields CategoryFields, now time.
 		return ErrForbidden
 	}
 
-	p.CategoryFields = normalizeCategoryFields(fields)
+	p.CategoryFields = fields
 	p.touch(now, updatedBy)
 	return nil
 }
@@ -494,24 +494,4 @@ func (p *ProductBlueprint) touch(now time.Time, updatedBy *string) {
 	}
 	p.UpdatedAt = now.UTC()
 	p.UpdatedBy = updatedBy
-}
-
-func normalizeCategoryFields(in CategoryFields) CategoryFields {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make(CategoryFields, len(in))
-	for key, value := range in {
-		if key == "" {
-			continue
-		}
-		out[key] = value
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
 }
