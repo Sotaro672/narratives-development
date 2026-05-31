@@ -26,38 +26,6 @@ type productBlueprintGetter interface {
 // Shared helpers (avoid UndeclaredName)
 // ============================================================
 
-// getString tries keys in order and returns the first string value found.
-// - accepts string / []byte only (avoid fmt.Sprint surprises)
-func getString(m map[string]any, keys ...string) (string, bool) {
-	if m == nil {
-		return "", false
-	}
-	for _, k := range keys {
-		if k == "" {
-			continue
-		}
-		v, ok := m[k]
-		if !ok || v == nil {
-			continue
-		}
-		switch t := v.(type) {
-		case string:
-			s := t
-			if s != "" {
-				return s, true
-			}
-		case []byte:
-			s := string(t)
-			if s != "" {
-				return s, true
-			}
-		default:
-			// ignore
-		}
-	}
-	return "", false
-}
-
 // extractLastPathSegment extracts the last segment after a prefix.
 // Example:
 //

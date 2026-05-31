@@ -208,7 +208,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	sort common.Sort,
 	page common.Page,
 ) (common.PageResult[OrderItemInventoryRowDTO], error) {
-	page = normalizePage(page)
+	page = NormalizeCommonPage(page)
 
 	if q == nil || q.lister == nil || q.invRows == nil || q.invBlueprint == nil {
 		return common.PageResult[OrderItemInventoryRowDTO]{}, errors.New("OrderManagementQuery.ListItemInventoryRows: wiring is incomplete (lister/invRows/invBlueprint required)")
@@ -216,7 +216,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 	log.Printf("[OrderManagementQuery] DEBUG listReadable resolver type=%T", q.listReadable)
 
-	allowedSet, err := allowedInventoryIDSetFromContext(ctx, q.invRows)
+	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
 	if err != nil {
 		log.Printf("[OrderManagementQuery] ERROR company boundary (inventory_query) failed: %v", err)
 		return common.PageResult[OrderItemInventoryRowDTO]{}, err
@@ -387,7 +387,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		}
 
 		for _, ord := range pr.Items {
-			orderID := nonEmpty(ord.ID, "(missing order id)")
+			orderID := NonEmpty(ord.ID, "(missing order id)")
 
 			createdAt := ""
 			if !ord.CreatedAt.IsZero() {
@@ -410,7 +410,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 
 			for _, it := range ord.Items {
 				invID := it.InventoryID
-				if !inventoryAllowed(allowedSet, invID) {
+				if !InventoryAllowed(allowedSet, invID) {
 					continue
 				}
 
@@ -583,7 +583,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 	}
 
 	totalCount := len(allowedAll)
-	tp := totalPages(totalCount, page.PerPage)
+	tp := TotalPages(totalCount, page.PerPage)
 
 	start := (page.Number - 1) * page.PerPage
 	if start < 0 {
@@ -599,7 +599,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		}, nil
 	}
 
-	end := minInt(start+page.PerPage, totalCount)
+	end := MinInt(start+page.PerPage, totalCount)
 
 	return common.PageResult[OrderItemInventoryRowDTO]{
 		Items:      allowedAll[start:end],
@@ -608,76 +608,4 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 		TotalCount: totalCount,
 		TotalPages: tp,
 	}, nil
-}
-
-// ============================================================
-// local helpers
-// ============================================================
-
-func allowedInventoryIDSetFromContext(ctx context.Context, invRows InventoryRowsLister) (map[string]struct{}, error) {
-	if invRows == nil {
-		return nil, errors.New("inventory rows lister is nil (company boundary via inventory_query is not configured)")
-	}
-
-	rows, err := invRows.ListByCurrentCompany(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	set := map[string]struct{}{}
-	for _, r := range rows {
-		pbID := r.ProductBlueprintID
-		tbID := r.TokenBlueprintID
-		if pbID == "" || tbID == "" {
-			continue
-		}
-
-		invID := pbID + "__" + tbID
-		set[invID] = struct{}{}
-	}
-
-	return set, nil
-}
-
-func inventoryAllowed(set map[string]struct{}, inventoryID string) bool {
-	if len(set) == 0 {
-		return false
-	}
-	if inventoryID == "" {
-		return false
-	}
-
-	_, ok := set[inventoryID]
-	return ok
-}
-
-func normalizePage(p common.Page) common.Page {
-	if p.Number <= 0 {
-		p.Number = 1
-	}
-	if p.PerPage <= 0 {
-		p.PerPage = 20
-	}
-	return p
-}
-
-func totalPages(totalCount int, perPage int) int {
-	if perPage <= 0 || totalCount <= 0 {
-		return 0
-	}
-	return (totalCount + perPage - 1) / perPage
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func nonEmpty(v string, fallback string) string {
-	if v == "" {
-		return fallback
-	}
-	return v
 }

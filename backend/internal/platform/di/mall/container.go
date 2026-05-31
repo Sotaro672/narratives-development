@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	mallquery "narratives/internal/application/query/mall"
-	catalogQuery "narratives/internal/application/query/mall/catalog"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 
@@ -72,7 +71,7 @@ type Container struct {
 	NameResolver *appresolver.NameResolver
 
 	BrandQ   *mallquery.BrandQuery
-	CatalogQ *catalogQuery.CatalogQuery
+	CatalogQ *mallquery.CatalogQuery
 	CartQ    *mallquery.CartQuery
 	PreviewQ *mallquery.PreviewQuery
 
@@ -276,15 +275,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			listRepoFS,
 		)
 
-		c.CatalogQ = catalogQuery.NewCatalogQuery(
+		c.CatalogQ = mallquery.NewCatalogQuery(
 			listRepoFS,
 			inventoryRepo,
 			productBlueprintRepoFS,
 			modelRepoFS,
-			catalogQuery.WithListImageRepo(listImageRecordRepo),
-			catalogQuery.WithTokenBlueprintPatchRepo(tokenBlueprintRepo),
-			catalogQuery.WithProductBlueprintReviewRepo(productBlueprintReviewRepo),
-			catalogQuery.WithNameResolver(c.NameResolver),
+			mallquery.WithCatalogListImageRepo(listImageRecordRepo),
+			mallquery.WithCatalogTokenBlueprintPatchRepo(tokenBlueprintRepo),
+			mallquery.WithCatalogProductBlueprintReviewRepo(productBlueprintReviewRepo),
+			mallquery.WithCatalogNameResolver(c.NameResolver),
 		)
 
 		c.CartQ = mallquery.NewCartQuery(fsClient)

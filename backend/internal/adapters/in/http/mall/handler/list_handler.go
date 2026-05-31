@@ -4,7 +4,6 @@ package mallHandler
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -106,39 +105,20 @@ func (h *MallListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.uc.List(ctx, f, sortCond, page)
 	if err != nil {
-		log.Printf("[mall][lists] uc.List error page=%d perPage=%d err=%T %v", pageNum, perPage, err, err)
 		writeListErr(w, err)
 		return
 	}
 
 	items := make([]MallListItem, 0, len(result.Items))
-	for i, l := range result.Items {
+	for _, l := range result.Items {
 		if !isPublicListing(l.Status) {
-			log.Printf("[mall][lists] skip non-public item index=%d id=%q status=%q", i, l.ID, string(l.Status))
 			continue
 		}
 
 		it, err := h.toMallListItem(ctx, l)
 		if err != nil {
-			log.Printf("[mall][lists] resolve image error listId=%q err=%T %v", l.ID, err, err)
 			writeListErr(w, err)
 			return
-		}
-
-		if it.InventoryID == "" {
-			log.Printf("[mall][lists] WARN inventoryId empty listId=%q", it.ID)
-		} else if (it.ProductBlueprintID == "" || it.TokenBlueprintID == "") && strings.Contains(it.InventoryID, "__") {
-			log.Printf(
-				"[mall][lists] WARN inventoryId parse incomplete listId=%q inventoryId=%q pbId=%q tbId=%q",
-				it.ID,
-				it.InventoryID,
-				it.ProductBlueprintID,
-				it.TokenBlueprintID,
-			)
-		}
-
-		if it.Image == "" {
-			log.Printf("[mall][lists] WARN firebase storage image url empty listId=%q imageId=%q", l.ID, l.ImageID)
 		}
 
 		items = append(items, it)
@@ -165,7 +145,6 @@ func (h *MallListHandler) get(w http.ResponseWriter, r *http.Request, id string)
 
 	l, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[mall][lists] uc.GetByID error id=%q err=%T %v", id, err, err)
 		if errors.Is(err, ldom.ErrNotFound) {
 			notFound(w)
 			return
@@ -175,32 +154,14 @@ func (h *MallListHandler) get(w http.ResponseWriter, r *http.Request, id string)
 	}
 
 	if !isPublicListing(l.Status) {
-		log.Printf("[mall][lists] not public id=%q status=%q", l.ID, string(l.Status))
 		notFound(w)
 		return
 	}
 
 	dto, err := h.toMallListItem(ctx, l)
 	if err != nil {
-		log.Printf("[mall][lists] resolve image error listId=%q err=%T %v", l.ID, err, err)
 		writeListErr(w, err)
 		return
-	}
-
-	if dto.InventoryID == "" {
-		log.Printf("[mall][lists] WARN inventoryId empty listId=%q", dto.ID)
-	} else if (dto.ProductBlueprintID == "" || dto.TokenBlueprintID == "") && strings.Contains(dto.InventoryID, "__") {
-		log.Printf(
-			"[mall][lists] WARN inventoryId parse incomplete listId=%q inventoryId=%q pbId=%q tbId=%q",
-			dto.ID,
-			dto.InventoryID,
-			dto.ProductBlueprintID,
-			dto.TokenBlueprintID,
-		)
-	}
-
-	if dto.Image == "" {
-		log.Printf("[mall][lists] WARN firebase storage image url empty listId=%q imageId=%q", l.ID, l.ImageID)
 	}
 
 	writeJSON(w, http.StatusOK, dto)
@@ -247,8 +208,6 @@ func (h *MallListHandler) resolveFirebaseStorageImageURL(ctx context.Context, l 
 				return strings.TrimSpace(img.URL), nil
 			}
 		}
-
-		log.Printf("[mall][lists] WARN primary image not found listId=%q imageId=%q", l.ID, primaryImageID)
 	}
 
 	sort.SliceStable(images, func(i, j int) bool {
@@ -308,8 +267,6 @@ func writeListErr(w http.ResponseWriter, err error) {
 			code = http.StatusBadRequest
 		}
 	}
-
-	log.Printf("[mall][lists] ERROR status=%d err=%T %v", code, err, err)
 
 	writeJSON(w, code, map[string]string{"error": err.Error()})
 }

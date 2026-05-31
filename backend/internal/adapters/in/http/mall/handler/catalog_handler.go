@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\catalog_handler.go
+// backend/internal/adapters/in/http/mall/handler/catalog_handler.go
 package mallHandler
 
 import (
@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	mallquery "narratives/internal/application/query/mall/catalog"
+	mallquery "narratives/internal/application/query/mall"
 	ldom "narratives/internal/domain/list"
 )
 

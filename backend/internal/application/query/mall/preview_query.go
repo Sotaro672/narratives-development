@@ -190,6 +190,8 @@ func NewPreviewQuery(
 		TokenRepo:            nil,
 		TokenBlueprintRepo:   nil,
 		OwnerResolveQ:        nil,
+		BrandNameIconRepo:    nil,
+		AvatarNameIconRepo:   nil,
 		TransferRepo:         nil,
 	}
 
@@ -534,6 +536,11 @@ func toPreviewApparelModelVariation(v modeldom.ModelVariation) (modeldom.Apparel
 	switch x := v.(type) {
 	case modeldom.ApparelModelVariation:
 		return x, true
+	case *modeldom.ApparelModelVariation:
+		if x == nil {
+			return modeldom.ApparelModelVariation{}, false
+		}
+		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
 	}
@@ -547,6 +554,11 @@ func toPreviewAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.Alcohol
 	switch x := v.(type) {
 	case modeldom.AlcoholModelVariation:
 		return x, true
+	case *modeldom.AlcoholModelVariation:
+		if x == nil {
+			return modeldom.AlcoholModelVariation{}, false
+		}
+		return *x, true
 	default:
 		return modeldom.AlcoholModelVariation{}, false
 	}
