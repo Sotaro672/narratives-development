@@ -100,8 +100,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	setupStatusH := notImplemented("SetupStatus")
 
 	// Lists (public)
-	if cont.ListUC != nil {
-		listH = mallhandler.NewMallListHandler(cont.ListUC)
+	if cont.ListQ != nil {
+		listH = mallhandler.NewMallListHandler(cont.ListQ)
 	}
 
 	// Catalog (public)

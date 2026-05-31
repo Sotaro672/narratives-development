@@ -2,9 +2,12 @@ package consoleHandler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+
+	listdom "narratives/internal/domain/list"
 )
 
 func methodNotAllowed(w http.ResponseWriter) {
@@ -42,19 +45,44 @@ func splitCSV(s string) []string {
 	parts := strings.Split(s, ",")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
-		if p != "" {
-			out = append(out, p)
+		v := strings.TrimSpace(p)
+		if v != "" {
+			out = append(out, v)
 		}
 	}
 	return out
 }
 
 // ------------------------------------------------------------
-// log helpers
+// response helpers
 // ------------------------------------------------------------
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeConsoleListErr(w http.ResponseWriter, err error) {
+	code := http.StatusInternalServerError
+
+	switch {
+	case errors.Is(err, listdom.ErrNotFound):
+		code = http.StatusNotFound
+	case errors.Is(err, listdom.ErrListImageNotFound):
+		code = http.StatusNotFound
+	case errors.Is(err, listdom.ErrConflict):
+		code = http.StatusConflict
+	case errors.Is(err, listdom.ErrListImageConflict):
+		code = http.StatusConflict
+	default:
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "invalid") ||
+			strings.Contains(msg, "required") ||
+			strings.Contains(msg, "must") {
+			code = http.StatusBadRequest
+		}
+	}
+
+	writeJSON(w, code, map[string]string{"error": err.Error()})
 }

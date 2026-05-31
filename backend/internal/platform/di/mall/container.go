@@ -71,6 +71,7 @@ type Container struct {
 	NameResolver *appresolver.NameResolver
 
 	BrandQ   *mallquery.BrandQuery
+	ListQ    *mallquery.ListQuery
 	CatalogQ *mallquery.CatalogQuery
 	CartQ    *mallquery.CartQuery
 	PreviewQ *mallquery.PreviewQuery
@@ -185,6 +186,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WithWalletService(avatarWalletSvc)
 
 	c.ListUC = usecase.NewListUsecase(
+		listRepoFS,
+		listImageRecordRepo,
+	)
+
+	c.ListQ = mallquery.NewListQuery(
 		listRepoFS,
 		listImageRecordRepo,
 	)

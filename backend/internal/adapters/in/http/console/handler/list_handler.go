@@ -3,7 +3,6 @@ package consoleHandler
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -49,7 +48,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.listIndex(w, r)
 			return
 		default:
-			listMethodNotAllowed(w)
+			methodNotAllowed(w)
 			return
 		}
 	}
@@ -83,7 +82,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				listMethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 
@@ -93,7 +92,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				listMethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 
@@ -103,7 +102,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		case "primary-image":
 			if r.Method != http.MethodPut {
-				listMethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 
@@ -121,89 +120,16 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		h.get(w, r, id)
 		return
-	case http.MethodPut, http.MethodPatch:
+	case http.MethodPut:
 		h.update(w, r, id)
 		return
 	case http.MethodDelete:
 		h.delete(w, r, id)
 		return
 	default:
-		listMethodNotAllowed(w)
+		methodNotAllowed(w)
 		return
 	}
-}
-
-func listMethodNotAllowed(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
-}
-
-func listIsNotSupported(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	msg := strings.ToLower(err.Error())
-
-	return strings.Contains(msg, "not supported") ||
-		strings.Contains(msg, "not_supported") ||
-		strings.Contains(msg, "notsupported")
-}
-
-func listParseIntDefault(s string, def int) int {
-	if s == "" {
-		return def
-	}
-
-	n, err := strconv.Atoi(s)
-	if err != nil || n <= 0 {
-		return def
-	}
-
-	return n
-}
-
-func listSplitCSV(s string) []string {
-	if s == "" {
-		return nil
-	}
-
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-
-	for _, p := range parts {
-		v := strings.TrimSpace(p)
-		if v != "" {
-			out = append(out, v)
-		}
-	}
-
-	return out
-}
-
-func writeConsoleListErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
-
-	switch {
-	case errors.Is(err, listdom.ErrNotFound):
-		code = http.StatusNotFound
-	case errors.Is(err, listdom.ErrListImageNotFound):
-		code = http.StatusNotFound
-	case errors.Is(err, listdom.ErrConflict):
-		code = http.StatusConflict
-	case errors.Is(err, listdom.ErrListImageConflict):
-		code = http.StatusConflict
-	default:
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "invalid") ||
-			strings.Contains(msg, "required") ||
-			strings.Contains(msg, "must") {
-			code = http.StatusBadRequest
-		}
-	}
-
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
 func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +191,7 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.uc.Create(ctx, item)
 	if err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -294,46 +220,27 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	var in listdom.List
-	if err := json.Unmarshal(body, &in); err != nil {
+	var item listdom.List
+	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	current, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		if listIsNotSupported(err) {
-			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-			return
-		}
-		writeConsoleListErr(w, err)
+	item.ID = id
+
+	if item.ID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
 		return
 	}
 
-	if in.Title != "" {
-		current.Title = in.Title
-	}
-	if in.Description != "" {
-		current.Description = in.Description
-	}
-	if string(in.Status) != "" {
-		current.Status = listdom.ListStatus(string(in.Status))
-	}
-	if in.Prices != nil {
-		current.Prices = in.Prices
-	}
-	if in.UpdatedBy != nil {
-		current.UpdatedBy = in.UpdatedBy
-	}
-
 	now := time.Now().UTC()
-	current.UpdatedAt = &now
+	item.UpdatedAt = &now
 
-	updated, err := h.uc.Update(ctx, current)
+	updated, err := h.uc.Update(ctx, item)
 	if err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -369,7 +276,7 @@ func (h *ListHandler) delete(w http.ResponseWriter, r *http.Request, id string) 
 	}
 
 	if err := h.uc.Delete(ctx, id); err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -388,9 +295,9 @@ func (h *ListHandler) delete(w http.ResponseWriter, r *http.Request, id string) 
 func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+	if h == nil || h.qMgmt == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 		return
 	}
 
@@ -416,7 +323,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if statusesRaw != "" {
-		ss := listSplitCSV(statusesRaw)
+		ss := splitCSV(statusesRaw)
 		if len(ss) == 1 {
 			st := listdom.ListStatus(ss[0])
 			if st != "" {
@@ -448,45 +355,23 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 
 	if vv := qp["modelIds"]; len(vv) > 0 {
 		for _, x := range vv {
-			f.ModelNumbers = append(f.ModelNumbers, listSplitCSV(x)...)
+			f.ModelNumbers = append(f.ModelNumbers, splitCSV(x)...)
 		}
 	} else if vv := qp["model_ids"]; len(vv) > 0 {
 		for _, x := range vv {
-			f.ModelNumbers = append(f.ModelNumbers, listSplitCSV(x)...)
+			f.ModelNumbers = append(f.ModelNumbers, splitCSV(x)...)
 		}
 	}
 
 	sort := listdom.Sort{}
 
-	pageNum := listParseIntDefault(qp.Get("page"), 1)
-	perPage := listParseIntDefault(qp.Get("perPage"), 50)
+	pageNum := parseIntDefault(qp.Get("page"), 1)
+	perPage := parseIntDefault(qp.Get("perPage"), 50)
 	page := listdom.Page{Number: pageNum, PerPage: perPage}
 
-	if h.qMgmt != nil {
-		pr, err := h.qMgmt.ListRows(ctx, f, sort, page)
-		if err != nil {
-			if listIsNotSupported(err) {
-				w.WriteHeader(http.StatusNotImplemented)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-				return
-			}
-			writeConsoleListErr(w, err)
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"items":      pr.Items,
-			"totalCount": pr.TotalCount,
-			"totalPages": pr.TotalPages,
-			"page":       pr.Page,
-			"perPage":    pr.PerPage,
-		})
-		return
-	}
-
-	result, err := h.uc.List(ctx, f, sort, page)
+	pr, err := h.qMgmt.ListRows(ctx, f, sort, page)
 	if err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -496,11 +381,11 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"items":      result.Items,
-		"totalCount": result.TotalCount,
-		"totalPages": result.TotalPages,
-		"page":       result.Page,
-		"perPage":    perPage,
+		"items":      pr.Items,
+		"totalCount": pr.TotalCount,
+		"totalPages": pr.TotalPages,
+		"page":       pr.Page,
+		"perPage":    pr.PerPage,
 	})
 }
 
@@ -515,7 +400,7 @@ func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 
 	dto, err := h.qDetail.BuildListDetailDTO(ctx, id)
 	if err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -549,7 +434,7 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 	}
 
 	if err := h.uc.DeleteImage(ctx, listID, imageID); err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -642,7 +527,7 @@ func (h *ListHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r *h
 		},
 	)
 	if err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -693,7 +578,7 @@ func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, li
 
 	item, err := h.uc.SetPrimaryImage(ctx, listID, imageID, now, req.UpdatedBy)
 	if err != nil {
-		if listIsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return

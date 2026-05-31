@@ -60,25 +60,6 @@ func (r *ProductionRepositoryFS) GetByID(ctx context.Context, id string) (*prodd
 	return &p, nil
 }
 
-// Exists returns true if a document with that ID exists.
-func (r *ProductionRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
 // Create creates a new Production document from CreateProductionInput.
 // - ID は CreateProductionInput には含まれないため、常に Firestore の auto ID を採番
 // - Printed が nil の場合は false 扱い

@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/list_usecase.go
 package usecase
 
 import (
@@ -11,11 +12,6 @@ import (
 
 	listdom "narratives/internal/domain/list"
 )
-
-type ListAggregate struct {
-	List   listdom.List        `json:"list"`
-	Images []listdom.ListImage `json:"images"`
-}
 
 type ListUsecase struct {
 	listRepo  listdom.Repository
@@ -74,30 +70,6 @@ func ptrTime(t time.Time) *time.Time {
 	return &tt
 }
 
-func (uc *ListUsecase) List(
-	ctx context.Context,
-	filter listdom.Filter,
-	sort listdom.Sort,
-	page listdom.Page,
-) (listdom.PageResult[listdom.List], error) {
-	if uc == nil || uc.listRepo == nil {
-		return listdom.PageResult[listdom.List]{}, ErrNotSupported("List.List")
-	}
-
-	return uc.listRepo.List(ctx, filter, sort, page)
-}
-
-func (uc *ListUsecase) Count(
-	ctx context.Context,
-	filter listdom.Filter,
-) (int, error) {
-	if uc == nil || uc.listRepo == nil {
-		return 0, ErrNotSupported("List.Count")
-	}
-
-	return uc.listRepo.Count(ctx, filter)
-}
-
 func (uc *ListUsecase) Create(
 	ctx context.Context,
 	item listdom.List,
@@ -135,7 +107,7 @@ func (uc *ListUsecase) Update(
 		return listdom.List{}, ErrNotSupported("List.Update")
 	}
 
-	id := strings.TrimSpace(item.ID)
+	id := item.ID
 	if id == "" {
 		return listdom.List{}, listdom.ErrInvalidID
 	}
@@ -150,90 +122,11 @@ func (uc *ListUsecase) Delete(ctx context.Context, id string) error {
 		return ErrNotSupported("List.Delete")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return listdom.ErrInvalidID
 	}
 
 	return uc.listRepo.Delete(ctx, id)
-}
-
-func (uc *ListUsecase) GetByID(
-	ctx context.Context,
-	id string,
-) (listdom.List, error) {
-	if uc == nil || uc.listRepo == nil {
-		return listdom.List{}, ErrNotSupported("List.GetByID")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return listdom.List{}, listdom.ErrInvalidID
-	}
-
-	return uc.listRepo.GetByID(ctx, id)
-}
-
-func (uc *ListUsecase) GetImages(
-	ctx context.Context,
-	listID string,
-) ([]listdom.ListImage, error) {
-	if uc == nil || uc.imageRepo == nil {
-		return []listdom.ListImage{}, nil
-	}
-
-	listID = strings.TrimSpace(listID)
-	if listID == "" {
-		return []listdom.ListImage{}, nil
-	}
-
-	items, err := uc.imageRepo.ListByListID(ctx, listID)
-	if err != nil {
-		return nil, err
-	}
-
-	if items == nil {
-		return []listdom.ListImage{}, nil
-	}
-
-	return items, nil
-}
-
-func (uc *ListUsecase) GetAggregate(
-	ctx context.Context,
-	id string,
-) (ListAggregate, error) {
-	if uc == nil || uc.listRepo == nil {
-		return ListAggregate{}, ErrNotSupported("List.GetAggregate")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return ListAggregate{}, listdom.ErrInvalidID
-	}
-
-	li, err := uc.listRepo.GetByID(ctx, id)
-	if err != nil {
-		return ListAggregate{}, err
-	}
-
-	images := []listdom.ListImage{}
-
-	if uc.imageRepo != nil {
-		items, err := uc.imageRepo.ListByListID(ctx, id)
-		if err != nil {
-			return ListAggregate{}, err
-		}
-
-		if items != nil {
-			images = items
-		}
-	}
-
-	return ListAggregate{
-		List:   li,
-		Images: images,
-	}, nil
 }
 
 func (uc *ListUsecase) CreateImage(
@@ -247,11 +140,6 @@ func (uc *ListUsecase) CreateImage(
 	if uc.imageRepo == nil {
 		return listdom.ListImage{}, ErrNotSupported("List.CreateImage.ImageRepo")
 	}
-
-	img.ID = strings.TrimSpace(img.ID)
-	img.ListID = strings.TrimSpace(img.ListID)
-	img.URL = strings.TrimSpace(img.URL)
-	img.CreatedBy = strings.TrimSpace(img.CreatedBy)
 
 	if img.ListID == "" {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageListID
@@ -301,9 +189,6 @@ func (uc *ListUsecase) UpdateImage(
 		return listdom.ListImage{}, ErrNotSupported("List.UpdateImage.ImageRepo")
 	}
 
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
-
 	if listID == "" {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageListID
 	}
@@ -316,11 +201,6 @@ func (uc *ListUsecase) UpdateImage(
 		return listdom.ListImage{}, ErrInvalidArgument("invalid_image_id")
 	}
 
-	if patch.URL != nil {
-		v := strings.TrimSpace(*patch.URL)
-		patch.URL = &v
-	}
-
 	if patch.DisplayOrder != nil && *patch.DisplayOrder < 0 {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageDisplayOrder
 	}
@@ -331,11 +211,6 @@ func (uc *ListUsecase) UpdateImage(
 	} else if !patch.UpdatedAt.IsZero() {
 		t := patch.UpdatedAt.UTC()
 		patch.UpdatedAt = &t
-	}
-
-	if patch.UpdatedBy != nil {
-		v := strings.TrimSpace(*patch.UpdatedBy)
-		patch.UpdatedBy = &v
 	}
 
 	updated, err := uc.imageRepo.Update(ctx, listID, imageID, patch)
@@ -354,9 +229,6 @@ func (uc *ListUsecase) DeleteImage(ctx context.Context, listID string, imageID s
 	if uc.imageRepo == nil {
 		return ErrNotSupported("List.DeleteImage.ImageRepo")
 	}
-
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
 
 	if listID == "" {
 		return listdom.ErrInvalidListImageListID
@@ -410,8 +282,8 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, ErrNotSupported("List.SetPrimaryImage.ImageRepo")
 	}
 
-	lid := strings.TrimSpace(listID)
-	iid := strings.TrimSpace(imageID)
+	lid := listID
+	iid := imageID
 
 	if lid == "" {
 		return listdom.List{}, listdom.ErrInvalidID
@@ -438,7 +310,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 		return listdom.List{}, errors.New("list: image belongs to other list")
 	}
 
-	if strings.TrimSpace(img.URL) == "" {
+	if img.URL == "" {
 		return listdom.List{}, listdom.ErrInvalidListImageURL
 	}
 
@@ -455,8 +327,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 	l.UpdatedAt = ptrTime(now.UTC())
 
 	if updatedBy != nil {
-		v := strings.TrimSpace(*updatedBy)
-		l.UpdatedBy = &v
+		l.UpdatedBy = updatedBy
 	}
 
 	updated, err := uc.listRepo.Update(ctx, lid, l)
