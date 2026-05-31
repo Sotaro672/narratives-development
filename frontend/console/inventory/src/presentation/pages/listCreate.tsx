@@ -38,6 +38,7 @@ export default function InventoryListCreate() {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
+    onAddImages,
     removeImageAt,
     clearImages,
 
@@ -82,7 +83,9 @@ export default function InventoryListCreate() {
 
   const handleChangeAssignee = React.useCallback(
     (selectedName: string) => {
-      const matched = (assigneeCandidates ?? []).find((c) => c.name === selectedName);
+      const matched = (assigneeCandidates ?? []).find(
+        (c) => c.name === selectedName,
+      );
       if (!matched) return;
       handleSelectAssignee(matched.id);
     },
@@ -104,6 +107,7 @@ export default function InventoryListCreate() {
           imageUrls={Array.isArray(imagePreviewUrls) ? imagePreviewUrls : []}
           mainImageIndex={mainImageIndex}
           setMainImageIndex={setMainImageIndex}
+          onAddImages={onAddImages}
           onRemoveImageAt={removeImageAt}
           onClearImages={clearImages}
         />
@@ -175,7 +179,9 @@ export default function InventoryListCreate() {
             <div className="text-sm font-medium mb-2">担当者</div>
 
             {loadingMembers ? (
-              <div className="text-xs text-slate-400">担当者を読み込み中です…</div>
+              <div className="text-xs text-slate-400">
+                担当者を読み込み中です…
+              </div>
             ) : assigneeOptions.length > 0 ? (
               <Select
                 options={assigneeOptions}
@@ -184,7 +190,9 @@ export default function InventoryListCreate() {
                 placeholder="担当者を選択してください"
               />
             ) : (
-              <div className="text-xs text-slate-400">担当者候補がありません。</div>
+              <div className="text-xs text-slate-400">
+                担当者候補がありません。
+              </div>
             )}
           </CardContent>
         </Card>

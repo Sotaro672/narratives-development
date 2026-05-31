@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
 )
 
@@ -27,9 +26,7 @@ func (r *ListImageRepositoryFS) listCol(listID string) *gfs.CollectionRef {
 	return r.Client.Collection("lists").Doc(listID).Collection("images")
 }
 
-var _ usecase.ListImageReader = (*ListImageRepositoryFS)(nil)
-var _ usecase.ListImageRecordRepository = (*ListImageRepositoryFS)(nil)
-var _ usecase.ListImageRecordByIDReader = (*ListImageRepositoryFS)(nil)
+var _ listdom.ImageRepository = (*ListImageRepositoryFS)(nil)
 
 func (r *ListImageRepositoryFS) FindByListID(
 	ctx context.Context,
@@ -38,7 +35,7 @@ func (r *ListImageRepositoryFS) FindByListID(
 	return r.ListByListID(ctx, listID)
 }
 
-func (r *ListImageRepositoryFS) Upsert(
+func (r *ListImageRepositoryFS) Create(
 	ctx context.Context,
 	img listdom.ListImage,
 ) (listdom.ListImage, error) {
@@ -46,112 +43,209 @@ func (r *ListImageRepositoryFS) Upsert(
 		return listdom.ListImage{}, errors.New("firestore client is nil")
 	}
 
-	listID := strings.TrimSpace(img.ListID)
+	img.ID = strings.TrimSpace(img.ID)
+	img.ListID = strings.TrimSpace(img.ListID)
+	img.URL = strings.TrimSpace(img.URL)
+	img.CreatedBy = strings.TrimSpace(img.CreatedBy)
+
+	if img.ListID == "" {
+		return listdom.ListImage{}, listdom.ErrInvalidListImageListID
+	}
+
+	if img.ID == "" {
+		return listdom.ListImage{}, listdom.ErrInvalidListImageID
+	}
+
+	if strings.Contains(img.ID, "/") || strings.Contains(img.ID, "://") {
+		return listdom.ListImage{}, listdom.ErrInvalidListImageID
+	}
+
+	if img.URL == "" {
+		return listdom.ListImage{}, listdom.ErrInvalidListImageURL
+	}
+
+	if img.CreatedBy == "" {
+		return listdom.ListImage{}, listdom.ErrInvalidListImageCreatedBy
+	}
+
+	if img.DisplayOrder < 0 {
+		return listdom.ListImage{}, listdom.ErrInvalidListImageDisplayOrder
+	}
+
+	if img.CreatedAt.IsZero() {
+		img.CreatedAt = time.Now().UTC()
+	} else {
+		img.CreatedAt = img.CreatedAt.UTC()
+	}
+
+	if img.UpdatedAt != nil && !img.UpdatedAt.IsZero() {
+		t := img.UpdatedAt.UTC()
+		img.UpdatedAt = &t
+	}
+
+	if img.UpdatedBy != nil {
+		v := strings.TrimSpace(*img.UpdatedBy)
+		if v == "" {
+			img.UpdatedBy = nil
+		} else {
+			img.UpdatedBy = &v
+		}
+	}
+
+	if err := img.Validate(); err != nil {
+		return listdom.ListImage{}, err
+	}
+
+	ref := r.listCol(img.ListID).Doc(img.ID)
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
+		_, err := tx.Get(ref)
+		if err == nil {
+			return listdom.ErrListImageConflict
+		}
+
+		if status.Code(err) != codes.NotFound {
+			return err
+		}
+
+		if err := tx.Create(ref, encodeListImageDoc(img)); err != nil {
+			if status.Code(err) == codes.AlreadyExists {
+				return listdom.ErrListImageConflict
+			}
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, listdom.ErrListImageConflict) {
+			return listdom.ListImage{}, listdom.ErrListImageConflict
+		}
+		return listdom.ListImage{}, err
+	}
+
+	return r.GetByListIDAndID(ctx, img.ListID, img.ID)
+}
+
+func (r *ListImageRepositoryFS) Update(
+	ctx context.Context,
+	listID string,
+	imageID string,
+	patch listdom.ListImagePatch,
+) (listdom.ListImage, error) {
+	if r == nil || r.Client == nil {
+		return listdom.ListImage{}, errors.New("firestore client is nil")
+	}
+
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+
 	if listID == "" {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageListID
 	}
 
-	imageID := strings.TrimSpace(img.ID)
 	if imageID == "" {
 		return listdom.ListImage{}, listdom.ErrInvalidListImageID
 	}
 
 	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
-		return listdom.ListImage{}, usecase.ErrInvalidArgument("invalid_image_id")
-	}
-
-	urlStr := strings.TrimSpace(img.URL)
-	if urlStr == "" {
-		return listdom.ListImage{}, listdom.ErrInvalidListImageURL
-	}
-
-	createdBy := strings.TrimSpace(img.CreatedBy)
-	if createdBy == "" {
-		return listdom.ListImage{}, listdom.ErrInvalidListImageCreatedBy
-	}
-
-	displayOrder := img.DisplayOrder
-	if displayOrder < 0 {
-		displayOrder = 0
-	}
-
-	now := time.Now().UTC()
-
-	createdAt := img.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = now
-	} else {
-		createdAt = createdAt.UTC()
-	}
-
-	updatedAt := now
-	if img.UpdatedAt != nil && !img.UpdatedAt.IsZero() {
-		updatedAt = img.UpdatedAt.UTC()
-	}
-
-	updatedBy := ""
-	if img.UpdatedBy != nil {
-		updatedBy = strings.TrimSpace(*img.UpdatedBy)
+		return listdom.ListImage{}, listdom.ErrInvalidListImageID
 	}
 
 	ref := r.listCol(listID).Doc(imageID)
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		finalCreatedAt := createdAt
-		finalCreatedBy := createdBy
-
-		snap, err := tx.Get(ref)
+		doc, err := tx.Get(ref)
 		if err != nil {
-			if status.Code(err) != codes.NotFound {
-				return err
+			if status.Code(err) == codes.NotFound {
+				return listdom.ErrListImageNotFound
 			}
-		} else {
-			data := snap.Data()
-
-			if v, ok := data["created_at"].(time.Time); ok && !v.IsZero() {
-				finalCreatedAt = v.UTC()
-			}
-
-			if v, ok := data["created_by"].(string); ok && strings.TrimSpace(v) != "" {
-				finalCreatedBy = strings.TrimSpace(v)
-			}
+			return err
 		}
 
-		data := map[string]any{
-			"id":            imageID,
-			"list_id":       listID,
-			"url":           urlStr,
-			"display_order": displayOrder,
-			"created_at":    finalCreatedAt,
-			"created_by":    finalCreatedBy,
-			"updated_at":    updatedAt,
-			"updated_by":    updatedBy,
+		cur, ok := decodeListImageDoc(doc, listID)
+		if !ok {
+			return listdom.ErrListImageNotFound
 		}
 
-		return tx.Set(ref, data, gfs.MergeAll)
+		changed := false
+		clearUpdatedAt := false
+		clearUpdatedBy := false
+
+		if patch.URL != nil {
+			v := strings.TrimSpace(*patch.URL)
+			if v == "" {
+				return listdom.ErrInvalidListImageURL
+			}
+			cur.URL = v
+			changed = true
+		}
+
+		if patch.DisplayOrder != nil {
+			if *patch.DisplayOrder < 0 {
+				return listdom.ErrInvalidListImageDisplayOrder
+			}
+			cur.DisplayOrder = *patch.DisplayOrder
+			changed = true
+		}
+
+		if patch.UpdatedBy != nil {
+			v := strings.TrimSpace(*patch.UpdatedBy)
+			if v == "" {
+				cur.UpdatedBy = nil
+				clearUpdatedBy = true
+			} else {
+				cur.UpdatedBy = &v
+			}
+			changed = true
+		}
+
+		if patch.UpdatedAt != nil {
+			if patch.UpdatedAt.IsZero() {
+				cur.UpdatedAt = nil
+				clearUpdatedAt = true
+			} else {
+				t := patch.UpdatedAt.UTC()
+				cur.UpdatedAt = &t
+			}
+			changed = true
+		} else if changed {
+			t := time.Now().UTC()
+			cur.UpdatedAt = &t
+		}
+
+		if !changed {
+			return nil
+		}
+
+		if err := cur.Validate(); err != nil {
+			return err
+		}
+
+		data := encodeListImageDoc(cur)
+
+		if clearUpdatedAt {
+			data["updated_at"] = gfs.Delete
+		}
+
+		if clearUpdatedBy {
+			data["updated_by"] = gfs.Delete
+		}
+
+		if err := tx.Set(ref, data, gfs.MergeAll); err != nil {
+			return err
+		}
+
+		return nil
 	})
 	if err != nil {
+		if errors.Is(err, listdom.ErrListImageNotFound) {
+			return listdom.ListImage{}, listdom.ErrListImageNotFound
+		}
 		return listdom.ListImage{}, err
 	}
 
-	out, err := listdom.NewListImage(
-		imageID,
-		listID,
-		urlStr,
-		displayOrder,
-		createdAt,
-		createdBy,
-	)
-	if err != nil {
-		return listdom.ListImage{}, err
-	}
-
-	out.UpdatedAt = &updatedAt
-	if updatedBy != "" {
-		out.UpdatedBy = &updatedBy
-	}
-
-	return out, nil
+	return r.GetByListIDAndID(ctx, listID, imageID)
 }
 
 func (r *ListImageRepositoryFS) Delete(
@@ -175,14 +269,24 @@ func (r *ListImageRepositoryFS) Delete(
 	}
 
 	if strings.Contains(imageID, "/") || strings.Contains(imageID, "://") {
-		return usecase.ErrInvalidArgument("invalid_image_id")
+		return listdom.ErrInvalidListImageID
 	}
 
 	ref := r.listCol(listID).Doc(imageID)
 
-	_, err := ref.Delete(ctx)
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
+		_, err := tx.Get(ref)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return listdom.ErrListImageNotFound
+			}
+			return err
+		}
+
+		return tx.Delete(ref)
+	})
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
+		if errors.Is(err, listdom.ErrListImageNotFound) {
 			return listdom.ErrListImageNotFound
 		}
 		return err
@@ -323,6 +427,29 @@ func (r *ListImageRepositoryFS) GetByID(
 	return img, nil
 }
 
+func encodeListImageDoc(img listdom.ListImage) map[string]any {
+	m := map[string]any{
+		"id":            img.ID,
+		"list_id":       img.ListID,
+		"url":           img.URL,
+		"display_order": img.DisplayOrder,
+		"created_at":    img.CreatedAt.UTC(),
+		"created_by":    img.CreatedBy,
+	}
+
+	if img.UpdatedAt != nil && !img.UpdatedAt.IsZero() {
+		m["updated_at"] = img.UpdatedAt.UTC()
+	}
+
+	if img.UpdatedBy != nil {
+		if v := strings.TrimSpace(*img.UpdatedBy); v != "" {
+			m["updated_by"] = v
+		}
+	}
+
+	return m
+}
+
 func decodeListImageDoc(
 	doc *gfs.DocumentSnapshot,
 	fallbackListID string,
@@ -332,14 +459,14 @@ func decodeListImageDoc(
 	}
 
 	var raw struct {
-		ID           string    `firestore:"id"`
-		ListID       string    `firestore:"list_id"`
-		URL          string    `firestore:"url"`
-		DisplayOrder int       `firestore:"display_order"`
-		CreatedAt    time.Time `firestore:"created_at"`
-		CreatedBy    string    `firestore:"created_by"`
-		UpdatedAt    time.Time `firestore:"updated_at"`
-		UpdatedBy    string    `firestore:"updated_by"`
+		ID           string     `firestore:"id"`
+		ListID       string     `firestore:"list_id"`
+		URL          string     `firestore:"url"`
+		DisplayOrder int        `firestore:"display_order"`
+		CreatedAt    time.Time  `firestore:"created_at"`
+		CreatedBy    string     `firestore:"created_by"`
+		UpdatedAt    *time.Time `firestore:"updated_at"`
+		UpdatedBy    *string    `firestore:"updated_by"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -402,14 +529,16 @@ func decodeListImageDoc(
 		return listdom.ListImage{}, false
 	}
 
-	if !raw.UpdatedAt.IsZero() {
+	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
 		updatedAt := raw.UpdatedAt.UTC()
 		img.UpdatedAt = &updatedAt
 	}
 
-	updatedBy := strings.TrimSpace(raw.UpdatedBy)
-	if updatedBy != "" {
-		img.UpdatedBy = &updatedBy
+	if raw.UpdatedBy != nil {
+		updatedBy := strings.TrimSpace(*raw.UpdatedBy)
+		if updatedBy != "" {
+			img.UpdatedBy = &updatedBy
+		}
 	}
 
 	return img, true

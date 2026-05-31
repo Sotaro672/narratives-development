@@ -7,7 +7,7 @@
 // - company boundary / inventory boundary を確認し、表示可能データのみ返す
 //
 // Firebase Storage 移行後:
-// - backend は GCS signed URL / GCS object / domain/listImage を扱わない
+// - backend は GCS signed URL / GCS object を扱わない
 // - list image record は domain/list.ListImage として扱う
 // - 画像URLは list image record の URL、つまり Firebase Storage getDownloadURL() を使う
 package detail
@@ -39,10 +39,8 @@ type InventoryDetailGetter interface {
 // ListImage を listID で取得できる port（任意）
 //
 // Firebase Storage 移行後:
-// - domain/listImage は削除
 // - domain/list.ListImage を使う
 // - ListImage.URL は Firebase Storage downloadURL
-// - ListImage.ObjectPath は Firebase Storage objectPath
 type ListImageLister interface {
 	ListByListID(ctx context.Context, listID string) ([]listdom.ListImage, error)
 }
@@ -225,7 +223,9 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	// - List.ImageID は primary image record の docID
 	// - 実際の画像URLは /lists/{listId}/images/{imageId} record の URL
 	// - URL は Firebase Storage getDownloadURL()
-	imageURLs := q.buildListImageURLs(ctx, it.ID, it.ImageID)
+	// - frontend の削除差分計算用に id/url/displayOrder を返す
+	images := q.buildListImages(ctx, it.ID, it.ImageID)
+	imageURLs := buildImageURLsFromImages(images)
 
 	// ---- price rows / stock ----
 	//
@@ -274,6 +274,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		TokenName:      tokenName,
 
 		ImageURLs: imageURLs,
+		Images:    images,
 
 		PriceRows: priceRows,
 
@@ -288,91 +289,92 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 // Image helpers
 // ============================================================
 
-// buildListImageURLs returns Firebase Storage downloadURLs.
+// buildListImages returns image records for the list detail DTO.
 //
 // primaryImageID:
 // - List.ImageID に保存されている primary image record docID
-// - 存在する場合、その画像URLを先頭に並べる
-func (q *ListDetailQuery) buildListImageURLs(
+// - 存在する場合、その画像を先頭に並べる
+func (q *ListDetailQuery) buildListImages(
 	ctx context.Context,
 	listID string,
 	primaryImageID string,
-) []string {
+) []querydto.ListImageDTO {
 	if q == nil || q.imgLister == nil || listID == "" {
-		return []string{}
+		return []querydto.ListImageDTO{}
 	}
 
 	items, err := q.imgLister.ListByListID(ctx, listID)
 	if err != nil {
 		log.Printf("[ListDetailQuery] WARN list images failed listID=%q err=%v", listID, err)
-		return []string{}
+		return []querydto.ListImageDTO{}
 	}
 
 	if len(items) == 0 {
-		return []string{}
+		return []querydto.ListImageDTO{}
 	}
 
-	primaryImageID = trimSpace(primaryImageID)
-
-	urls := make([]string, 0, len(items))
-	seen := map[string]struct{}{}
-
-	appendURL := func(u string) {
-		u = trimSpace(u)
-		if u == "" {
-			return
-		}
-		if _, ok := seen[u]; ok {
-			return
-		}
-		seen[u] = struct{}{}
-		urls = append(urls, u)
-	}
+	ordered := make([]listdom.ListImage, 0, len(items))
+	used := make(map[string]struct{}, len(items))
 
 	if primaryImageID != "" {
 		for _, img := range items {
 			if img.ID == primaryImageID {
-				appendURL(img.URL)
+				ordered = append(ordered, img)
+				used[img.ID] = struct{}{}
 				break
 			}
 		}
 	}
 
 	for _, img := range items {
-		appendURL(img.URL)
+		if img.ID != "" {
+			if _, ok := used[img.ID]; ok {
+				continue
+			}
+		}
+		ordered = append(ordered, img)
+		if img.ID != "" {
+			used[img.ID] = struct{}{}
+		}
+	}
+
+	out := make([]querydto.ListImageDTO, 0, len(ordered))
+
+	for index, img := range ordered {
+		if img.URL == "" {
+			continue
+		}
+
+		out = append(out, querydto.ListImageDTO{
+			ID:           img.ID,
+			ImageID:      img.ID,
+			URL:          img.URL,
+			DisplayOrder: index,
+		})
+	}
+
+	return out
+}
+
+func buildImageURLsFromImages(images []querydto.ListImageDTO) []string {
+	if len(images) == 0 {
+		return []string{}
+	}
+
+	urls := make([]string, 0, len(images))
+	seen := map[string]struct{}{}
+
+	for _, img := range images {
+		if img.URL == "" {
+			continue
+		}
+		if _, ok := seen[img.URL]; ok {
+			continue
+		}
+
+		seen[img.URL] = struct{}{}
+		urls = append(urls, img.URL)
 	}
 
 	return urls
-}
-
-func trimSpace(s string) string {
-	if s == "" {
-		return ""
-	}
-
-	start := 0
-	for start < len(s) {
-		switch s[start] {
-		case ' ', '\t', '\n', '\r':
-			start++
-		default:
-			goto foundStart
-		}
-	}
-
-	return ""
-
-foundStart:
-	end := len(s)
-	for end > start {
-		switch s[end-1] {
-		case ' ', '\t', '\n', '\r':
-			end--
-		default:
-			goto foundEnd
-		}
-	}
-
-foundEnd:
-	return s[start:end]
 }

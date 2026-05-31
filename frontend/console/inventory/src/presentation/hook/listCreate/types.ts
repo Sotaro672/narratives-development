@@ -43,7 +43,12 @@ export type UseListCreateResult = {
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
   imageInputRef: ImageInputRef;
-  onSelectImages: (e: React.ChangeEvent<HTMLInputElement>) => void;
+
+  // ListImageCard 用
+  onAddImages: (files: FileList | null) => void;
+
+  // 既存互換
+  onSelectImages: (files: FileList | null) => void;
   onDropImages: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOverImages: (e: React.DragEvent<HTMLDivElement>) => void;
   removeImageAt: (idx: number) => void;

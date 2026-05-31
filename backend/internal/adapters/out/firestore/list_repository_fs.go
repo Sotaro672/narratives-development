@@ -371,7 +371,7 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 func (r *ListRepositoryFS) Update(
 	ctx context.Context,
 	id string,
-	patch ldom.ListPatch,
+	l ldom.List,
 ) (ldom.List, error) {
 	if r.Client == nil {
 		return ldom.List{}, errors.New("firestore client is nil")
@@ -397,88 +397,67 @@ func (r *ListRepositoryFS) Update(
 			return err
 		}
 
-		changed := false
+		cur.ID = id
+		// Update now receives List directly and applies mutable fields from List.
+		cur.Status = l.Status
+		cur.AssigneeID = l.AssigneeID
+		cur.Title = l.Title
+		cur.ImageID = l.ImageID
+		cur.ReadableID = l.ReadableID
+		cur.Description = l.Description
+
+		if l.InventoryID != "" {
+			cur.InventoryID = l.InventoryID
+		}
+
+		if cur.CreatedBy == "" && l.CreatedBy != "" {
+			cur.CreatedBy = l.CreatedBy
+		}
+
+		if cur.CreatedAt.IsZero() && !l.CreatedAt.IsZero() {
+			cur.CreatedAt = l.CreatedAt.UTC()
+		}
+
 		clearUpdatedBy := false
 		clearUpdatedAt := false
 
-		if patch.Status != nil {
-			cur.Status = *patch.Status
-			changed = true
-		}
-
-		if patch.AssigneeID != nil {
-			cur.AssigneeID = *patch.AssigneeID
-			changed = true
-		}
-
-		if patch.ImageID != nil {
-			cur.ImageID = *patch.ImageID
-			changed = true
-		}
-
-		if patch.ReadableID != nil {
-			cur.ReadableID = *patch.ReadableID
-			changed = true
-		}
-
-		if patch.Title != nil {
-			cur.Title = *patch.Title
-			changed = true
-		}
-
-		if patch.Description != nil {
-			cur.Description = *patch.Description
-			changed = true
-		}
-
-		if patch.UpdatedBy != nil {
-			v := *patch.UpdatedBy
+		if l.UpdatedBy != nil {
+			v := *l.UpdatedBy
 			if v == "" {
 				cur.UpdatedBy = nil
 				clearUpdatedBy = true
 			} else {
 				cur.UpdatedBy = &v
 			}
-			changed = true
 		}
 
-		pricesWillChange := patch.Prices != nil
-
-		if patch.UpdatedAt != nil {
-			if patch.UpdatedAt.IsZero() {
+		if l.UpdatedAt != nil {
+			if l.UpdatedAt.IsZero() {
 				cur.UpdatedAt = nil
 				clearUpdatedAt = true
 			} else {
-				t := patch.UpdatedAt.UTC()
+				t := l.UpdatedAt.UTC()
 				cur.UpdatedAt = &t
 			}
-		} else if changed || pricesWillChange {
+		} else {
 			t := time.Now().UTC()
 			cur.UpdatedAt = &t
 		}
 
-		if changed || pricesWillChange {
-			data := encodeListDoc(cur)
+		data := encodeListDoc(cur)
 
-			if clearUpdatedBy {
-				data["updated_by"] = gfs.Delete
-			}
-			if clearUpdatedAt {
-				data["updated_at"] = gfs.Delete
-			}
-
-			if err := tx.Set(ref, data, gfs.MergeAll); err != nil {
-				return err
-			}
+		if clearUpdatedBy {
+			data["updated_by"] = gfs.Delete
+		}
+		if clearUpdatedAt {
+			data["updated_at"] = gfs.Delete
 		}
 
-		if patch.Prices != nil {
-			if err := r.txReplaceListPrices(ctx, tx, ref, *patch.Prices); err != nil {
-				return err
-			}
+		if err := tx.Set(ref, data, gfs.MergeAll); err != nil {
+			return err
 		}
 
-		return nil
+		return r.txReplaceListPrices(ctx, tx, ref, l.Prices)
 	})
 	if err != nil {
 		if errors.Is(err, ldom.ErrNotFound) {

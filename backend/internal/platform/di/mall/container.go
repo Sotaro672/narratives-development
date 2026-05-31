@@ -187,9 +187,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	c.ListUC = usecase.NewListUsecase(
 		listRepoFS,
-		listRepoFS,
-		listRepoFS,
-		listImageRecordRepo,
 		listImageRecordRepo,
 	)
 

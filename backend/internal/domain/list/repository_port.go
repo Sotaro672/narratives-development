@@ -8,35 +8,6 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// ListPatch is a partial update input.
-// nil fields are not updated.
-type ListPatch struct {
-	Status *ListStatus
-
-	AssigneeID *string
-	Title      *string
-
-	// Human-friendly id.
-	// It does not need to be globally unique.
-	// nil means readableId is not updated.
-	ReadableID *string
-
-	// Primary image record id.
-	// This is not a URL.
-	// nil means imageId is not updated.
-	ImageID *string
-
-	Description *string
-
-	// prices is the only supported frontend shape:
-	// [{ modelId: string, price: number }, ...]
-	// nil means prices is not updated.
-	Prices *[]ListPriceRow
-
-	UpdatedAt *time.Time
-	UpdatedBy *string
-}
-
 // ListImagePatch is a partial update input for list image records.
 // nil fields are not updated.
 type ListImagePatch struct {
@@ -115,14 +86,19 @@ type Repository interface {
 
 	// Read.
 	GetByID(ctx context.Context, id string) (List, error)
-
-	// Lightweight getters.
-	GetReadableIDByID(ctx context.Context, id string) (string, error)
 	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)
 
 	// Write.
 	Create(ctx context.Context, l List) (List, error)
-	Update(ctx context.Context, id string, patch ListPatch) (List, error)
+
+	// Update replaces/upserts the mutable fields of a persisted List.
+	//
+	// Expected implementation policy:
+	// - id is the target document id.
+	// - l.ID may be empty or equal to id.
+	// - immutable fields such as InventoryID, CreatedAt, CreatedBy should not be overwritten
+	//   unless the implementation intentionally treats Update as full replacement.
+	Update(ctx context.Context, id string, l List) (List, error)
 
 	// Delete physically deletes a list document.
 	// Implementations may also delete child image records if the storage supports subcollections.
@@ -139,8 +115,6 @@ type Repository interface {
 type ImageRepository interface {
 	// Query.
 	ListByListID(ctx context.Context, listID string) ([]ListImage, error)
-	List(ctx context.Context, filter ListImageFilter, sort Sort, page Page) (PageResult[ListImage], error)
-	Count(ctx context.Context, filter ListImageFilter) (int, error)
 
 	// Read.
 	GetByListIDAndID(ctx context.Context, listID string, imageID string) (ListImage, error)

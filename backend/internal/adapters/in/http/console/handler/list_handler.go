@@ -2,7 +2,6 @@
 package consoleHandler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -42,15 +41,6 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	if path == "/lists/create-seed" {
-		if r.Method != http.MethodGet {
-			listMethodNotAllowed(w)
-			return
-		}
-		h.createSeed(w, r)
-		return
-	}
-
 	if path == "/lists" {
 		switch r.Method {
 		case http.MethodPost:
@@ -82,14 +72,6 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) > 1 {
 		switch parts[1] {
-		case "aggregate":
-			if r.Method != http.MethodGet {
-				listMethodNotAllowed(w)
-				return
-			}
-			h.getAggregate(w, r, id)
-			return
-
 		case "images":
 			sub := ""
 			if len(parts) >= 3 {
@@ -97,17 +79,13 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if len(parts) == 2 {
-				switch r.Method {
-				case http.MethodGet:
-					h.listImages(w, r, id)
-					return
-				case http.MethodPost:
-					h.saveImageFromGCS(w, r, id)
-					return
-				default:
-					listMethodNotAllowed(w)
+				if r.Method == http.MethodPost {
+					h.createImageFromFirebaseStorage(w, r, id)
 					return
 				}
+
+				listMethodNotAllowed(w)
+				return
 			}
 
 			if len(parts) == 3 && sub != "" {
@@ -125,10 +103,11 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case "primary-image":
-			if r.Method != http.MethodPut && r.Method != http.MethodPost && r.Method != http.MethodPatch {
+			if r.Method != http.MethodPut {
 				listMethodNotAllowed(w)
 				return
 			}
+
 			h.setPrimaryImage(w, r, id)
 			return
 
@@ -209,6 +188,12 @@ func writeConsoleListErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, listdom.ErrNotFound):
 		code = http.StatusNotFound
+	case errors.Is(err, listdom.ErrListImageNotFound):
+		code = http.StatusNotFound
+	case errors.Is(err, listdom.ErrConflict):
+		code = http.StatusConflict
+	case errors.Is(err, listdom.ErrListImageConflict):
+		code = http.StatusConflict
 	default:
 		msg := strings.ToLower(err.Error())
 		if strings.Contains(msg, "invalid") ||
@@ -220,76 +205,6 @@ func writeConsoleListErr(w http.ResponseWriter, err error) {
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-}
-
-func (h *ListHandler) createSeed(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "handler is nil"})
-		return
-	}
-
-	if h.qMgmt == nil {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-		return
-	}
-
-	qp := r.URL.Query()
-
-	invID := qp.Get("inventoryId")
-	if invID == "" {
-		invID = qp.Get("inventory_id")
-	}
-	if invID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inventoryId is required"})
-		return
-	}
-
-	modelIDs := []string{}
-
-	if vv := qp["modelIds"]; len(vv) > 0 {
-		for _, x := range vv {
-			modelIDs = append(modelIDs, listSplitCSV(x)...)
-		}
-	} else if vv := qp["model_ids"]; len(vv) > 0 {
-		for _, x := range vv {
-			modelIDs = append(modelIDs, listSplitCSV(x)...)
-		}
-	} else {
-		raw := qp.Get("modelIds")
-		if raw == "" {
-			raw = qp.Get("model_ids")
-		}
-		if raw != "" {
-			modelIDs = append(modelIDs, listSplitCSV(raw)...)
-		}
-	}
-
-	out, err := h.qMgmt.BuildCreateSeed(ctx, invID, modelIDs)
-	if err != nil {
-		if listIsNotSupported(err) {
-			w.WriteHeader(http.StatusNotImplemented)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-			return
-		}
-
-		msg := err.Error()
-		lower := strings.ToLower(msg)
-		if strings.Contains(lower, "invalid") || strings.Contains(lower, "inventory") {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
-			return
-		}
-
-		writeConsoleListErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
 }
 
 func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -417,16 +332,7 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	now := time.Now().UTC()
 	current.UpdatedAt = &now
 
-	updater, ok := any(h.uc).(interface {
-		Update(ctx context.Context, item listdom.List) (listdom.List, error)
-	})
-	if !ok {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-		return
-	}
-
-	updated, err := updater.Update(ctx, current)
+	updated, err := h.uc.Update(ctx, current)
 	if err != nil {
 		if listIsNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
@@ -622,48 +528,6 @@ func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
-func (h *ListHandler) getAggregate(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
-		return
-	}
-
-	agg, err := h.uc.GetAggregate(ctx, id)
-	if err != nil {
-		writeConsoleListErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(agg)
-}
-
-func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
-		return
-	}
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
-		return
-	}
-
-	items, err := h.uc.GetImages(ctx, id)
-	if err != nil {
-		writeConsoleListErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(items)
-}
-
 func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID string, imageID string) {
 	ctx := r.Context()
 
@@ -703,12 +567,13 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 	})
 }
 
-// saveImageFromGCS keeps the historical function name for routing compatibility.
+// createImageFromFirebaseStorage stores a list image record.
+//
 // Current policy:
 // - frontend uploads images directly to Firebase Storage.
 // - backend receives and stores only the Firebase Storage download URL.
 // - backend does not validate or persist objectPath, fileName, contentType, or size.
-func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, listID string) {
+func (h *ListHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
@@ -766,7 +631,7 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 
 	now := time.Now().UTC()
 
-	img, err := h.uc.SaveImage(
+	img, err := h.uc.CreateImage(
 		ctx,
 		listdom.ListImage{
 			ID:           req.ID,

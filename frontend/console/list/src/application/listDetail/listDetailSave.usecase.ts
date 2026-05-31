@@ -1,6 +1,7 @@
 // frontend/console/list/src/application/listDetail/listDetailSave.usecase.ts
 
 import {
+  deleteListImageHTTP,
   saveListImageFromFirebaseStorageHTTP,
   setListPrimaryImageHTTP,
 } from "../../infrastructure/repository";
@@ -16,6 +17,15 @@ import {
 import { uploadListImageToFirebaseStorage } from "../../infrastructure/firebase/listImageStorage";
 
 export type SaveListDetailDraftImage = {
+  /**
+   * Existing image id.
+   *
+   * Existing backend DTOs may expose either id or imageId, so this type accepts both.
+   * New local images usually do not have either until they are uploaded.
+   */
+  id?: string;
+  imageId?: string;
+
   url: string;
   isNew: boolean;
   file?: File;
@@ -52,6 +62,12 @@ type SavedDraftImageItem = {
   displayOrder: number;
 };
 
+type CurrentImageItem = {
+  imageId: string;
+  url: string;
+  displayOrder: number | null;
+};
+
 function isNewDraftImageWithFile(
   image: SaveListDetailDraftImage | undefined,
 ): image is SaveListDetailDraftImage & { file: File } {
@@ -62,6 +78,62 @@ function normalizeDraftImages(
   draftImages: SaveListDetailDraftImage[] | null | undefined,
 ): SaveListDetailDraftImage[] {
   return Array.isArray(draftImages) ? draftImages : [];
+}
+
+function normalizeImageID(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeURL(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function resolveDraftImageID(image: SaveListDetailDraftImage | undefined): string {
+  return normalizeImageID(image?.imageId || image?.id);
+}
+
+function normalizeCurrentImages(currentDTO: any): CurrentImageItem[] {
+  const images = Array.isArray(currentDTO?.images) ? currentDTO.images : [];
+
+  if (images.length > 0) {
+    return images
+      .map((img: any, index: number) => {
+        const imageId = normalizeImageID(img?.imageId || img?.id);
+        const url = normalizeURL(img?.url);
+
+        if (!imageId || !url) return null;
+
+        const displayOrderRaw = img?.displayOrder;
+        const displayOrder =
+          displayOrderRaw === null || displayOrderRaw === undefined
+            ? index
+            : Number(displayOrderRaw);
+
+        return {
+          imageId,
+          url,
+          displayOrder: Number.isFinite(displayOrder) ? displayOrder : index,
+        };
+      })
+      .filter(Boolean) as CurrentImageItem[];
+  }
+
+  const primaryImageId = normalizeImageID(currentDTO?.imageId);
+  const imageUrls = Array.isArray(currentDTO?.imageUrls)
+    ? currentDTO.imageUrls.map(normalizeURL).filter(Boolean)
+    : [];
+
+  return imageUrls
+    .map((url: string, index: number) => {
+      // imageUrls だけだと 2枚目以降の imageId は復元できない。
+      // primary image だけは currentDTO.imageId から復元できる。
+      return {
+        imageId: index === 0 ? primaryImageId : "",
+        url,
+        displayOrder: index,
+      };
+    })
+    .filter((img: CurrentImageItem) => Boolean(img.url));
 }
 
 function buildAfterUrls(args: {
@@ -83,9 +155,9 @@ function buildAfterUrls(args: {
 
     const uploaded = uploadedByDraftIndex.get(index);
     if (uploaded) {
-      url = String(uploaded.url ?? "").trim();
+      url = normalizeURL(uploaded.url);
     } else if (!image?.isNew) {
-      url = String(image?.url ?? "").trim();
+      url = normalizeURL(image?.url);
     }
 
     if (!url || seen.has(url)) return;
@@ -97,37 +169,62 @@ function buildAfterUrls(args: {
   return out;
 }
 
+function collectRemovedImages(args: {
+  currentImages: CurrentImageItem[];
+  draftImages: SaveListDetailDraftImage[];
+}): CurrentImageItem[] {
+  const keptImageIDs = new Set<string>();
+  const keptUrls = new Set<string>();
+
+  for (const image of args.draftImages) {
+    if (image?.isNew) continue;
+
+    const imageId = resolveDraftImageID(image);
+    const url = normalizeURL(image?.url);
+
+    if (imageId) keptImageIDs.add(imageId);
+    if (url) keptUrls.add(url);
+  }
+
+  return args.currentImages.filter((current) => {
+    if (!current.imageId) return false;
+
+    if (keptImageIDs.has(current.imageId)) {
+      return false;
+    }
+
+    // 既存 draft 側に imageId がまだ入っていない場合の fallback。
+    // ただし URL 一致 fallback は duplicate URL がない前提。
+    if (current.url && keptUrls.has(current.url)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
 function resolvePrimaryImageId(args: {
-  currentImageId?: string;
   selectedUrl: string;
-  currentImageUrls: string[];
+  currentImages: CurrentImageItem[];
   uploadedItems: SavedDraftImageItem[];
 }): string {
-  const selectedUrl = String(args.selectedUrl ?? "").trim();
+  const selectedUrl = normalizeURL(args.selectedUrl);
 
   if (!selectedUrl) return "";
 
   const uploadedPrimary = args.uploadedItems.find(
-    (item) => String(item.url ?? "").trim() === selectedUrl,
+    (item) => normalizeURL(item.url) === selectedUrl,
   );
 
   if (uploadedPrimary?.imageId) {
-    return String(uploadedPrimary.imageId ?? "").trim();
+    return normalizeImageID(uploadedPrimary.imageId);
   }
 
-  const currentImageId = String(args.currentImageId ?? "").trim();
-  const currentImageUrls = Array.isArray(args.currentImageUrls)
-    ? args.currentImageUrls
-    : [];
+  const currentPrimary = args.currentImages.find(
+    (item) => normalizeURL(item.url) === selectedUrl,
+  );
 
-  if (
-    currentImageId &&
-    currentImageUrls.some((url) => String(url ?? "").trim() === selectedUrl)
-  ) {
-    return currentImageId;
-  }
-
-  return "";
+  return normalizeImageID(currentPrimary?.imageId);
 }
 
 export async function saveListDetailChanges(
@@ -140,12 +237,7 @@ export async function saveListDetailChanges(
   const draftImages = normalizeDraftImages(input.draftImages);
 
   const currentDTO: any = input.currentDTO;
-  const currentImageId = String(currentDTO?.imageId ?? "").trim();
-  const currentImageUrls = Array.isArray(currentDTO?.imageUrls)
-    ? currentDTO.imageUrls
-        .map((url: unknown) => String(url ?? "").trim())
-        .filter(Boolean)
-    : [];
+  const currentImages = normalizeCurrentImages(currentDTO);
 
   const uploadedItems: SavedDraftImageItem[] = [];
 
@@ -155,7 +247,7 @@ export async function saveListDetailChanges(
     if (!isNewDraftImageWithFile(image)) continue;
 
     const file = image.file;
-    const displayOrder = currentImageUrls.length + uploadedItems.length;
+    const displayOrder = index;
 
     const uploaded = await uploadListImageToFirebaseStorage({
       listId,
@@ -175,7 +267,7 @@ export async function saveListDetailChanges(
       createdAt: new Date().toISOString(),
     });
 
-    const savedUrl = String((saved as any)?.url ?? "").trim() || uploaded.url;
+    const savedUrl = normalizeURL((saved as any)?.url) || uploaded.url;
 
     uploadedItems.push({
       draftIndex: index,
@@ -186,18 +278,29 @@ export async function saveListDetailChanges(
     });
   }
 
+  const removedImages = collectRemovedImages({
+    currentImages,
+    draftImages,
+  });
+
+  for (const image of removedImages) {
+    await deleteListImageHTTP({
+      listId,
+      imageId: image.imageId,
+    });
+  }
+
   const afterUrls = buildAfterUrls({
     draftImages,
     uploadedItems,
   });
 
-  const selectedUrl = String(afterUrls[input.mainImageIndex] ?? "").trim();
+  const selectedUrl = normalizeURL(afterUrls[input.mainImageIndex] ?? afterUrls[0]);
 
   if (selectedUrl) {
     const primaryImageId = resolvePrimaryImageId({
-      currentImageId,
-      currentImageUrls,
       selectedUrl,
+      currentImages,
       uploadedItems,
     });
 

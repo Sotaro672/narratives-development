@@ -25,6 +25,9 @@ import {
   _internal_getListIdFromListDTO,
 } from "./listCreate.images";
 
+export const LIST_IMAGE_UPLOAD_FAILED_MESSAGE =
+  "画像アップロードに失敗しました。後から追加できます。";
+
 /**
  * ListCreateDTO を取得する（Hook からはこれだけ呼ぶ）
  *
@@ -48,6 +51,19 @@ export async function loadListCreateDTOFromParams(
 
 /**
  * list 作成（POST /lists） + 画像（Policy B）
+ *
+ * Policy B:
+ * 1. 画像なしで List を先に作成する
+ * 2. 作成済み listId を使って Firebase Storage へ upload する
+ * 3. backend に /lists/{listId}/images として image record を作成する
+ * 4. primary image を設定する
+ *
+ * 重要:
+ * - List 作成後に画像 upload / image record 登録 / primary image 設定が失敗しても、
+ *   List 作成自体は成功として返す。
+ * - UI には onImageUploadFailed で
+ *   「画像アップロードに失敗しました。後から追加できます。」
+ *   を表示する。
  */
 export async function createListWithImages(args: {
   params: ResolvedListCreateParams;
@@ -59,6 +75,8 @@ export async function createListWithImages(args: {
 
   images?: File[];
   mainImageIndex?: number;
+
+  onImageUploadFailed?: (message: string, error: unknown) => void;
 }): Promise<ListDTO> {
   const images = Array.isArray(args.images) ? args.images : [];
   const mainImageIndex = Number.isFinite(Number(args.mainImageIndex))
@@ -87,13 +105,20 @@ export async function createListWithImages(args: {
   }
 
   // 3) images (Policy B)
+  //
+  // List 作成後の画像失敗は List 作成を失敗扱いにしない。
+  // 画面側で「画像アップロードに失敗しました。後から追加できます。」を出せるようにする。
   if (images.length > 0) {
-    await uploadListImagesPolicyB({
-      listId,
-      files: images,
-      mainImageIndex,
-      createdBy: auth.currentUser?.uid,
-    });
+    try {
+      await uploadListImagesPolicyB({
+        listId,
+        files: images,
+        mainImageIndex,
+        createdBy: auth.currentUser?.uid,
+      });
+    } catch (error) {
+      args.onImageUploadFailed?.(LIST_IMAGE_UPLOAD_FAILED_MESSAGE, error);
+    }
   }
 
   return created;

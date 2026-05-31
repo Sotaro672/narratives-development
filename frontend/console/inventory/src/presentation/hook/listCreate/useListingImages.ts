@@ -10,10 +10,17 @@ function dedupeFiles(prev: File[], add: File[]): File[] {
   );
 
   const filtered = add.filter(
-    (file: File) => !exists.has(`${file.name}__${file.size}__${file.lastModified}`),
+    (file: File) =>
+      !exists.has(`${file.name}__${file.size}__${file.lastModified}`),
   );
 
   return [...prev, ...filtered];
+}
+
+function normalizeImageFiles(files: FileList | File[] | null | undefined): File[] {
+  return Array.from(files ?? [])
+    .filter(Boolean)
+    .filter((file: File) => String(file.type || "").startsWith("image/")) as File[];
 }
 
 export function useListingImages(): {
@@ -22,7 +29,7 @@ export function useListingImages(): {
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
   imageInputRef: ImageInputRef;
-  onSelectImages: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSelectImages: (files: FileList | null) => void;
   onDropImages: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOverImages: (e: React.DragEvent<HTMLDivElement>) => void;
   removeImageAt: (idx: number) => void;
@@ -30,16 +37,16 @@ export function useListingImages(): {
 } {
   const [images, setImages] = React.useState<File[]>([]);
   const [mainImageIndex, setMainImageIndex] = React.useState<number>(0);
+  const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const onSelectImages = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? []).filter(Boolean) as File[];
-      if (files.length === 0) return;
+  const appendImages = React.useCallback((filesLike: FileList | File[] | null) => {
+    const files = normalizeImageFiles(filesLike);
+    if (files.length === 0) return;
 
-      const next = dedupeFiles(images, files);
-      setImages(next);
+    setImages((prev) => {
+      const next = dedupeFiles(prev, files);
 
       // eslint-disable-next-line no-console
       console.log("[inventory/listImage] selected", {
@@ -48,9 +55,15 @@ export function useListingImages(): {
         names: next.slice(0, 6).map((file: File) => file.name),
       });
 
-      e.currentTarget.value = "";
+      return next;
+    });
+  }, []);
+
+  const onSelectImages = React.useCallback(
+    (files: FileList | null) => {
+      appendImages(files);
     },
-    [images],
+    [appendImages],
   );
 
   const onDropImages = React.useCallback(
@@ -58,22 +71,18 @@ export function useListingImages(): {
       e.preventDefault();
       e.stopPropagation();
 
-      const files = Array.from(e.dataTransfer.files ?? [])
-        .filter(Boolean)
-        .filter((file: File) => String(file.type || "").startsWith("image/")) as File[];
-
-      if (files.length === 0) return;
-
-      const next = dedupeFiles(images, files);
-      setImages(next);
+      appendImages(e.dataTransfer.files);
     },
-    [images],
+    [appendImages],
   );
 
-  const onDragOverImages = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+  const onDragOverImages = React.useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    [],
+  );
 
   const removeImageAt = React.useCallback((idx: number) => {
     setImages((prev) => {
@@ -100,8 +109,6 @@ export function useListingImages(): {
     setImages([]);
     setMainImageIndex(0);
   }, []);
-
-  const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     if (images.length === 0) {

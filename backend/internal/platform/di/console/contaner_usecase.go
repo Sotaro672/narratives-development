@@ -104,16 +104,8 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	paymentUC := uc.NewPaymentUsecase(r.paymentRepo)
 
-	var listPatchUpdater uc.ListPatchUpdater
-	if r.listRepoFS != nil {
-		listPatchUpdater = r.listRepoFS
-	}
-
 	listUC := uc.NewListUsecase(
 		r.listRepoFS,
-		r.listRepoFS,
-		listPatchUpdater,
-		r.listImageRecordRepo,
 		r.listImageRecordRepo,
 	)
 

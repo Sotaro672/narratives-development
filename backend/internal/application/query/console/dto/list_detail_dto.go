@@ -61,13 +61,27 @@ type ListDetailDTO struct {
 	TokenName      string `json:"tokenName,omitempty"`
 
 	// images
-	ImageURLs []string `json:"imageUrls,omitempty"`
+	ImageURLs []string       `json:"imageUrls,omitempty"`
+	Images    []ListImageDTO `json:"images,omitempty"`
 
 	// price (PriceCard)
 	PriceRows   []ListDetailPriceRowDTO `json:"priceRows,omitempty"`
 	TotalStock  int                     `json:"totalStock,omitempty"`
 	PriceNote   string                  `json:"priceNote,omitempty"`
 	CurrencyJPY bool                    `json:"currencyJpy,omitempty"`
+}
+
+// ListImageDTO is a list image record DTO for listDetail page.
+//
+// Firebase Storage policy:
+// - ID/ImageID is the image record document ID.
+// - URL is Firebase Storage downloadURL.
+// - DisplayOrder is the display order in the list image record.
+type ListImageDTO struct {
+	ID           string `json:"id"`
+	ImageID      string `json:"imageId"`
+	URL          string `json:"url"`
+	DisplayOrder int    `json:"displayOrder"`
 }
 
 // ListDetailPriceRowDTO is a row DTO for PriceCard in listDetail.

@@ -6,7 +6,7 @@ import {
   createListWithImages,
   buildAfterCreatePath,
   type ResolvedListCreateParams,
-  type PriceRow, // ✅ PriceRowEx 廃止（存在しない）→ PriceRow を使用
+  type PriceRow,
 } from "../../../application/listCreate/listCreateService";
 
 import type { ListingDecision } from "./types";
@@ -17,7 +17,7 @@ export function useCreateList(args: {
   decision: ListingDecision;
   listingTitle: string;
   description: string;
-  priceRows: PriceRow[]; // ✅ PriceRowEx → PriceRow
+  priceRows: PriceRow[];
   assigneeId: string | undefined;
   images: File[];
   mainImageIndex: number;
@@ -36,6 +36,8 @@ export function useCreateList(args: {
 
   const onCreate = React.useCallback(() => {
     void (async () => {
+      let imageUploadFailedMessage = "";
+
       try {
         if (images.length === 0) {
           const msg = "商品画像は1枚以上必須です。画像を追加してください。";
@@ -56,9 +58,17 @@ export function useCreateList(args: {
           assigneeId,
           images,
           mainImageIndex,
+          onImageUploadFailed: (message) => {
+            imageUploadFailedMessage = message;
+          },
         });
 
-        alert("作成しました");
+        if (imageUploadFailedMessage) {
+          alert(imageUploadFailedMessage);
+        } else {
+          alert("作成しました");
+        }
+
         navigate(buildAfterCreatePath(resolvedParams));
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);

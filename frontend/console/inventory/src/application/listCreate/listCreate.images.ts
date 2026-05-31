@@ -16,10 +16,10 @@ import { uploadListImageToFirebaseStorage } from "../../../../list/src/infrastru
  * → backend にメタ情報登録
  * → primary image 設定
  *
- * 新方式:
- * - frontend から Firebase Storage へ upload
+ * Policy B:
+ * - List 作成後の listId を使って Firebase Storage へ upload
  * - Firebase Storage download URL を取得
- * - saveListImageFromFirebaseStorageHTTP で url / objectPath を登録
+ * - saveListImageFromFirebaseStorageHTTP で image record を登録
  *
  * primary:
  * - backend の List.imageId は images subcollection docID
@@ -34,18 +34,20 @@ export async function uploadListImagesPolicyB(args: {
   registered: Array<{ imageId: string; displayOrder: number }>;
   primaryImageId?: string;
 }> {
-  const listId = args.listId;
+  const listId = String(args.listId ?? "").trim();
   const files = Array.isArray(args.files) ? args.files : [];
-  const mainImageIndex = Number.isFinite(Number(args.mainImageIndex))
+
+  const requestedMainImageIndex = Number.isFinite(Number(args.mainImageIndex))
     ? Number(args.mainImageIndex)
     : 0;
 
+  const mainImageIndex =
+    requestedMainImageIndex >= 0 && requestedMainImageIndex < files.length
+      ? requestedMainImageIndex
+      : 0;
+
   if (!listId) throw new Error("invalid_list_id");
   if (files.length === 0) return { registered: [] };
-
-  if (!files[mainImageIndex]) {
-    throw new Error("メイン画像が選択されていません。");
-  }
 
   const uid = args.createdBy || auth.currentUser?.uid || "system";
   const now = new Date().toISOString();

@@ -241,6 +241,11 @@ export function useListCreate(): UseListCreateResult {
     mainImageIndex,
     setMainImageIndex,
     imageInputRef,
+
+    // ListImageCard の props 名に合わせた alias
+    onAddImages: onSelectImages,
+
+    // 既存互換として残す
     onSelectImages,
     onDropImages,
     onDragOverImages,
