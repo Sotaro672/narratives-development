@@ -118,6 +118,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	// =========================================================
 	// ListDetailQuery
 	// SINGLE ENTRYPOINT: NewListDetailQuery(params) だけ
+	// - listID 確定後に GetByID して detail DTO を組み立てる
 	// - imageUrls を返すには Firestore subcollection reader 注入
 	// - displayOrder は ProductBlueprintGetter.GetByID の ModelRefs から解決する
 	// =========================================================
@@ -129,7 +130,6 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		TBGetter: r.tokenBlueprintRepo,
 
 		InvGetter: inventoryDetailQuery,
-		InvRows:   inventoryManagementQuery,
 
 		// Firebase Storage 移行後:
 		// - frontend が Firebase Storage へ直接 upload

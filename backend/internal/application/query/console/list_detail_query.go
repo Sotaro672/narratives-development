@@ -5,7 +5,6 @@
 // 責任:
 // - DI 済み依存（ports）を保持する
 // - listID を入力に listDetail.tsx 用の ListDetailDTO を生成する
-// - company boundary / inventory boundary を確認し、表示可能データのみ返す
 // - ListDetailDTO の priceRows / stock / model attributes を生成する
 // - ProductBlueprint.GetByID から displayOrder を抽出する
 //
@@ -59,7 +58,6 @@ type ListDetailQuery struct {
 	tbGetter TokenBlueprintGetter
 
 	invGetter InventoryDetailGetter
-	invRows   InventoryRowsLister
 
 	// list image record 由来の Firebase Storage downloadURL を返すため（任意）
 	imgLister ListImageLister
@@ -79,7 +77,6 @@ type NewListDetailQueryParams struct {
 	TBGetter TokenBlueprintGetter
 
 	InvGetter InventoryDetailGetter
-	InvRows   InventoryRowsLister
 
 	ImgLister ListImageLister
 }
@@ -91,7 +88,6 @@ func NewListDetailQuery(p NewListDetailQueryParams) *ListDetailQuery {
 		pbGetter:     p.PBGetter,
 		tbGetter:     p.TBGetter,
 		invGetter:    p.InvGetter,
-		invRows:      p.InvRows,
 		imgLister:    p.ImgLister,
 	}
 }
@@ -108,12 +104,6 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: getter is nil (wire list repo to ListDetailQuery)")
 	}
 
-	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
-	if err != nil {
-		log.Printf("[ListDetailQuery] ERROR company boundary (inventory_query) failed (detail): %v", err)
-		return querydto.ListDetailDTO{}, err
-	}
-
 	if listID == "" {
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: listID is empty")
 	}
@@ -124,9 +114,6 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	}
 
 	invID := it.InventoryID
-	if !InventoryAllowed(allowedSet, invID) {
-		return querydto.ListDetailDTO{}, listdom.ErrListImageNotFound
-	}
 
 	pbID, tbID, ok := ParseInventoryIDStrict(invID)
 	if !ok {
@@ -436,8 +423,6 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 		}
 	}
 
-	modelResolvedCache := map[string]resolver.ModelResolved{}
-
 	out := make([]querydto.ListDetailPriceRowDTO, 0, len(rows))
 	total := 0
 
@@ -490,8 +475,8 @@ func (q *ListDetailQuery) buildDetailPriceRows(
 		}
 
 		mr, ok := attrByModel[modelID]
-		if !ok {
-			mr = q.resolveModelResolvedCached(ctx, modelID, modelResolvedCache)
+		if !ok && q != nil && q.nameResolver != nil {
+			mr = q.nameResolver.ResolveModelResolved(ctx, modelID)
 		}
 
 		applyModelResolvedToListDetailPriceRow(&dtoRow, modelID, mr)
@@ -564,32 +549,6 @@ func applyModelResolvedToListDetailPriceRow(
 	row.Size = sz
 	row.Color = cl
 	row.RGB = mr.RGB
-}
-
-func (q *ListDetailQuery) resolveModelResolvedCached(
-	ctx context.Context,
-	variationID string,
-	cache map[string]resolver.ModelResolved,
-) resolver.ModelResolved {
-	id := variationID
-	if id == "" {
-		return resolver.ModelResolved{}
-	}
-	if cache != nil {
-		if v, ok := cache[id]; ok {
-			return v
-		}
-	}
-
-	var v resolver.ModelResolved
-	if q != nil && q.nameResolver != nil {
-		v = q.nameResolver.ResolveModelResolved(ctx, id)
-	}
-
-	if cache != nil {
-		cache[id] = v
-	}
-	return v
 }
 
 // ============================================================
