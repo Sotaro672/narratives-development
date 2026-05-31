@@ -1,5 +1,5 @@
-// backend/internal/application/query/console/list/management/list_management_query.go
-package listManagement
+// backend/internal/application/query/console/list_management_query.go
+package query
 
 import (
 	"context"
@@ -8,33 +8,17 @@ import (
 	"strings"
 	"time"
 
-	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
-	pbpdom "narratives/internal/domain/productBlueprint"
-	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
-// Ports (read-only) - shared
+// Ports (read-only) - list management
 // ============================================================
 
-type ListLister interface {
-	List(ctx context.Context, filter listdom.Filter, sort listdom.Sort, page listdom.Page) (listdom.PageResult[listdom.List], error)
-}
-
-type ProductBlueprintGetter interface {
-	GetByID(ctx context.Context, id string) (pbpdom.ProductBlueprint, error)
-}
-
-type TokenBlueprintGetter interface {
-	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
-}
-
-// company boundary
-// - currentCompany の inventory rows を列挙できることが必須
-type InventoryRowsLister interface {
-	ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error)
+type ListManagementLister interface {
+	GetByID(ctx context.Context, id string) (listdom.List, error)
+	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)
 }
 
 // ============================================================
@@ -67,21 +51,12 @@ type ListRowDTO struct {
 	CreatedAt string `json:"createdAt,omitempty"`
 }
 
-type ListCreateSeedDTO struct {
-	InventoryID        string           `json:"inventoryId"`
-	ProductBlueprintID string           `json:"productBlueprintId"`
-	TokenBlueprintID   string           `json:"tokenBlueprintId"`
-	ProductName        string           `json:"productName"`
-	TokenName          string           `json:"tokenName"`
-	Prices             map[string]int64 `json:"prices"` // modelId -> price value
-}
-
 // ============================================================
-// ListManagementQuery (listManagement.tsx / listCreate.tsx)
+// ListManagementQuery (listManagement.tsx)
 // ============================================================
 
 type ListManagementQuery struct {
-	lister       ListLister
+	lister       ListManagementLister
 	nameResolver *resolver.NameResolver
 
 	pbGetter ProductBlueprintGetter
@@ -92,15 +67,18 @@ type ListManagementQuery struct {
 }
 
 // ============================================================
-// ✅ SINGLE ENTRYPOINT (唯一の出入り口)
+// SINGLE ENTRYPOINT
 //
 // 要件:
 // - companyId を使わない「単純な list」は禁止（＝invRows が必須）
+// - List 全体 scan は禁止
+// - current company 境界の inventoryID を列挙し、
+//   ListIDsByInventoryID -> GetByID の順で該当 List のみ取得する
 // - この ctor のみを公開し、配線を集中させる
 // ============================================================
 
 type NewListManagementQueryParams struct {
-	Lister       ListLister
+	Lister       ListManagementLister
 	NameResolver *resolver.NameResolver
 
 	PBGetter ProductBlueprintGetter
@@ -123,20 +101,27 @@ func NewListManagementQuery(p NewListManagementQueryParams) *ListManagementQuery
 // Query
 // ============================================================
 
-func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filter, sort listdom.Sort, page listdom.Page) (listdom.PageResult[ListRowDTO], error) {
-	page = normalizePage(page)
+func (q *ListManagementQuery) ListRows(
+	ctx context.Context,
+	filter listdom.Filter,
+	sort listdom.Sort,
+	page listdom.Page,
+) (listdom.PageResult[ListRowDTO], error) {
+	page = NormalizePage(page)
+	_ = sort // 現状は company boundary first の取得順を維持する
 
 	// company boundary を使わない単純 list は禁止
 	if q == nil || q.lister == nil || q.invRows == nil {
 		return listdom.PageResult[ListRowDTO]{}, errors.New("ListManagementQuery.ListRows: wiring is incomplete (lister/invRows required)")
 	}
 
-	allowedSet, err := allowedInventoryIDSetFromContext(ctx, q.invRows)
+	allowedInventoryIDs, allowedSet, err := allowedInventoryIDsFromContext(ctx, q.invRows)
 	if err != nil {
 		log.Printf("[ListManagementQuery] ERROR company boundary (inventory_query) failed: %v", err)
 		return listdom.PageResult[ListRowDTO]{}, err
 	}
-	if len(allowedSet) == 0 {
+
+	if len(allowedInventoryIDs) == 0 {
 		return listdom.PageResult[ListRowDTO]{
 			Items:      []ListRowDTO{},
 			Page:       page.Number,
@@ -154,36 +139,57 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 	brandNameByIDCache := map[string]string{}
 
 	allowedAll := make([]ListRowDTO, 0, page.PerPage)
+	seenListID := map[string]struct{}{}
 
-	const maxScanPages = 500
-	srcPage := 1
-
-	for {
-		if srcPage > maxScanPages {
-			log.Printf("[ListManagementQuery] WARN scan page limit reached (max=%d). results may be truncated.", maxScanPages)
-			break
+	for _, inventoryID := range allowedInventoryIDs {
+		if inventoryID == "" {
+			continue
 		}
 
-		pr, e := q.lister.List(ctx, filter, sort, listdom.Page{Number: srcPage, PerPage: page.PerPage})
+		listIDs, e := q.lister.ListIDsByInventoryID(ctx, inventoryID)
 		if e != nil {
-			log.Printf("[ListManagementQuery] ERROR lister.List failed (scan page=%d): %v", srcPage, e)
+			log.Printf("[ListManagementQuery] ERROR ListIDsByInventoryID failed inventoryID=%q: %v", inventoryID, e)
 			return listdom.PageResult[ListRowDTO]{}, e
 		}
-		if pr.Items == nil {
-			pr.Items = []listdom.List{}
-		}
 
-		for _, it := range pr.Items {
+		for _, listID := range listIDs {
+			listID = strings.TrimSpace(listID)
+			if listID == "" {
+				continue
+			}
+
+			if _, ok := seenListID[listID]; ok {
+				continue
+			}
+			seenListID[listID] = struct{}{}
+
+			it, e := q.lister.GetByID(ctx, listID)
+			if e != nil {
+				if errors.Is(e, listdom.ErrNotFound) {
+					continue
+				}
+
+				log.Printf("[ListManagementQuery] ERROR GetByID failed listID=%q inventoryID=%q: %v", listID, inventoryID, e)
+				return listdom.PageResult[ListRowDTO]{}, e
+			}
+
 			id := it.ID
 			invID := it.InventoryID
 
-			if !inventoryAllowed(allowedSet, invID) {
+			// Safety:
+			// ListIDsByInventoryID で取った後も、List 実体の InventoryID が
+			// current company 境界内か必ず再確認する。
+			if !InventoryAllowed(allowedSet, invID) {
+				continue
+			}
+
+			if !listMatchesFilter(it, filter) {
 				continue
 			}
 
 			assigneeID := it.AssigneeID
 
-			pbID, tbID, ok := parseInventoryIDStrict(invID)
+			pbID, tbID, ok := ParseInventoryIDStrict(invID)
 			if !ok {
 				continue
 			}
@@ -244,6 +250,7 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 					brandIDCachePB[pbID] = productBrandID
 				}
 			}
+
 			if tbID != "" && q.tbGetter != nil {
 				if cached, ok := brandIDCacheTB[tbID]; ok {
 					tokenBrandID = cached
@@ -269,6 +276,7 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 						productBrandName = resolved
 					}
 				}
+
 				if tokenBrandID != "" {
 					if cached, ok := brandNameByIDCache[tokenBrandID]; ok {
 						tokenBrandName = cached
@@ -286,7 +294,7 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 			}
 
 			allowedAll = append(allowedAll, ListRowDTO{
-				ID:          nonEmpty(id, "(missing id)"),
+				ID:          NonEmpty(id, "(missing id)"),
 				InventoryID: invID,
 				Title:       title,
 
@@ -309,30 +317,16 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 				CreatedAt: createdAt,
 			})
 		}
-
-		if len(pr.Items) == 0 {
-			break
-		}
-		if pr.TotalPages > 0 {
-			if srcPage >= pr.TotalPages {
-				break
-			}
-		} else {
-			if len(pr.Items) < page.PerPage {
-				break
-			}
-		}
-
-		srcPage++
 	}
 
 	totalCount := len(allowedAll)
-	tp := totalPages(totalCount, page.PerPage)
+	tp := TotalPages(totalCount, page.PerPage)
 
 	start := (page.Number - 1) * page.PerPage
 	if start < 0 {
 		start = 0
 	}
+
 	if start >= totalCount {
 		return listdom.PageResult[ListRowDTO]{
 			Items:      []ListRowDTO{},
@@ -342,7 +336,8 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 			TotalPages: tp,
 		}, nil
 	}
-	end := minInt(start+page.PerPage, totalCount)
+
+	end := MinInt(start+page.PerPage, totalCount)
 
 	return listdom.PageResult[ListRowDTO]{
 		Items:      allowedAll[start:end],
@@ -353,141 +348,167 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 	}, nil
 }
 
-func (q *ListManagementQuery) BuildCreateSeed(ctx context.Context, inventoryID string, modelIDs []string) (ListCreateSeedDTO, error) {
-	// company boundary を使わない単純 list は禁止
-	if q == nil || q.invRows == nil {
-		return ListCreateSeedDTO{}, errors.New("ListManagementQuery.BuildCreateSeed: wiring is incomplete (invRows required)")
-	}
-
-	allowedSet, err := allowedInventoryIDSetFromContext(ctx, q.invRows)
-	if err != nil {
-		log.Printf("[ListManagementQuery] ERROR company boundary (inventory_query) failed (seed): %v", err)
-		return ListCreateSeedDTO{}, err
-	}
-
-	if !inventoryAllowed(allowedSet, inventoryID) {
-		return ListCreateSeedDTO{}, listdom.ErrNotFound
-	}
-
-	pbID, tbID, ok := parseInventoryIDStrict(inventoryID)
-	if !ok {
-		log.Printf("[ListManagementQuery] BuildCreateSeed invalid inventoryID (expected {pbId}__{tbId}) inventoryID=%q", inventoryID)
-		return ListCreateSeedDTO{}, listdom.ErrInvalidInventoryID
-	}
-
-	productName := ""
-	tokenName := ""
-	// ✅ FIX: ここでは q は必ず non-nil（上で guard 済み）なので q != nil チェックを外す
-	if q.nameResolver != nil {
-		productName = q.nameResolver.ResolveProductName(ctx, pbID)
-		tokenName = q.nameResolver.ResolveTokenName(ctx, tbID)
-	}
-
-	prices := map[string]int64{}
-	for _, mid := range modelIDs {
-		if mid == "" {
-			continue
-		}
-		prices[mid] = 0
-	}
-
-	return ListCreateSeedDTO{
-		InventoryID:        inventoryID,
-		ProductBlueprintID: pbID,
-		TokenBlueprintID:   tbID,
-		ProductName:        productName,
-		TokenName:          tokenName,
-		Prices:             prices,
-	}, nil
-}
-
 // ============================================================
-// local helpers (all lowercase)
+// local helpers
 // ============================================================
 
-func allowedInventoryIDSetFromContext(ctx context.Context, invRows InventoryRowsLister) (map[string]struct{}, error) {
+func allowedInventoryIDsFromContext(
+	ctx context.Context,
+	invRows InventoryRowsLister,
+) ([]string, map[string]struct{}, error) {
 	if invRows == nil {
-		return nil, errors.New("inventory rows lister is nil (company boundary via inventory_query is not configured)")
+		return nil, nil, errors.New("inventory rows lister is nil (company boundary via inventory_query is not configured)")
 	}
 
 	rows, err := invRows.ListByCurrentCompany(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	ids := make([]string, 0, len(rows))
 	set := map[string]struct{}{}
+
 	for _, r := range rows {
 		pbID := r.ProductBlueprintID
 		tbID := r.TokenBlueprintID
 		if pbID == "" || tbID == "" {
 			continue
 		}
+
 		invID := pbID + "__" + tbID
+		if _, ok := set[invID]; ok {
+			continue
+		}
+
 		set[invID] = struct{}{}
+		ids = append(ids, invID)
 	}
-	return set, nil
+
+	return ids, set, nil
 }
 
-func inventoryAllowed(set map[string]struct{}, inventoryID string) bool {
-	if len(set) == 0 {
+func listMatchesFilter(it listdom.List, filter listdom.Filter) bool {
+	if len(filter.IDs) > 0 && !stringIn(filter.IDs, it.ID) {
 		return false
 	}
-	if inventoryID == "" {
+
+	if filter.AssigneeID != nil && *filter.AssigneeID != "" {
+		if it.AssigneeID != *filter.AssigneeID {
+			return false
+		}
+	}
+
+	if filter.Status != nil && *filter.Status != "" {
+		if it.Status != *filter.Status {
+			return false
+		}
+	}
+
+	if len(filter.Statuses) > 0 && !statusIn(filter.Statuses, it.Status) {
 		return false
 	}
-	_, ok := set[inventoryID]
-	return ok
+
+	if len(filter.InventoryIDs) > 0 && !stringIn(filter.InventoryIDs, it.InventoryID) {
+		return false
+	}
+
+	if filter.SearchQuery != "" {
+		q := strings.ToLower(strings.TrimSpace(filter.SearchQuery))
+		if q != "" {
+			haystacks := []string{
+				it.ID,
+				it.InventoryID,
+				it.Title,
+				it.Description,
+				it.AssigneeID,
+				string(it.Status),
+			}
+
+			found := false
+			for _, h := range haystacks {
+				if strings.Contains(strings.ToLower(h), q) {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				return false
+			}
+		}
+	}
+
+	if hasPriceFilter(filter) && !listMatchesPriceFilter(it, filter) {
+		return false
+	}
+
+	return true
 }
 
-func normalizePage(p listdom.Page) listdom.Page {
-	if p.Number <= 0 {
-		p.Number = 1
-	}
-	if p.PerPage <= 0 {
-		p.PerPage = 20
-	}
-	return p
+func hasPriceFilter(filter listdom.Filter) bool {
+	return len(filter.ModelNumbers) > 0 ||
+		filter.MinPrice != nil ||
+		filter.MaxPrice != nil
 }
 
-func totalPages(totalCount int, perPage int) int {
-	if perPage <= 0 {
-		return 0
+func listMatchesPriceFilter(it listdom.List, filter listdom.Filter) bool {
+	if len(it.Prices) == 0 {
+		return false
 	}
-	if totalCount <= 0 {
-		return 0
+
+	for _, row := range it.Prices {
+		if row.ModelID == "" {
+			continue
+		}
+
+		if len(filter.ModelNumbers) > 0 && !stringIn(filter.ModelNumbers, row.ModelID) {
+			continue
+		}
+
+		if filter.MinPrice != nil && row.Price < *filter.MinPrice {
+			continue
+		}
+
+		if filter.MaxPrice != nil && row.Price > *filter.MaxPrice {
+			continue
+		}
+
+		return true
 	}
-	return (totalCount + perPage - 1) / perPage
+
+	return false
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
+func stringIn(values []string, target string) bool {
+	if len(values) == 0 {
+		return false
 	}
-	return b
+	if target == "" {
+		return false
+	}
+
+	for _, v := range values {
+		if v == target {
+			return true
+		}
+	}
+
+	return false
 }
 
-func nonEmpty(v string, fallback string) string {
-	if v == "" {
-		return fallback
+func statusIn(values []listdom.ListStatus, target listdom.ListStatus) bool {
+	if len(values) == 0 {
+		return false
 	}
-	return v
-}
+	if target == "" {
+		return false
+	}
 
-func parseInventoryIDStrict(invID string) (pbID string, tbID string, ok bool) {
-	if invID == "" {
-		return "", "", false
+	for _, v := range values {
+		if v == target {
+			return true
+		}
 	}
-	if !strings.Contains(invID, "__") {
-		return "", "", false
-	}
-	parts := strings.Split(invID, "__")
-	if len(parts) < 2 {
-		return "", "", false
-	}
-	pb := parts[0]
-	tb := parts[1]
-	if pb == "" || tb == "" {
-		return "", "", false
-	}
-	return pb, tb, true
+
+	return false
 }

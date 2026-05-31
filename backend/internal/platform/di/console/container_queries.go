@@ -6,10 +6,6 @@ import (
 
 	companyquery "narratives/internal/application/query/console"
 
-	// moved queries
-	listdetail "narratives/internal/application/query/console/list/detail"
-	listmgmt "narratives/internal/application/query/console/list/management"
-
 	inspectorquery "narratives/internal/application/query/inspector"
 
 	// Shared infra
@@ -28,8 +24,8 @@ type queries struct {
 
 	printQueryService *companyquery.PrintQueryService
 
-	listManagementQuery *listmgmt.ListManagementQuery
-	listDetailQuery     *listdetail.ListDetailQuery
+	listManagementQuery *companyquery.ListManagementQuery
+	listDetailQuery     *companyquery.ListDetailQuery
 
 	orderDetailQuery *companyquery.OrderDetailQuery
 
@@ -107,11 +103,11 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	})
 
 	// =========================================================
-	// moved: ListManagementQuery
+	// ListManagementQuery
 	// SINGLE ENTRYPOINT: NewListManagementQuery(params) だけ
 	// - company boundary は InvRows(ListByCurrentCompany) が必須
 	// =========================================================
-	listManagementQuery := listmgmt.NewListManagementQuery(listmgmt.NewListManagementQueryParams{
+	listManagementQuery := companyquery.NewListManagementQuery(companyquery.NewListManagementQueryParams{
 		Lister:       r.listRepoFS,
 		NameResolver: res.nameResolver,
 		PBGetter:     r.productBlueprintRepo,
@@ -120,11 +116,12 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	})
 
 	// =========================================================
-	// moved: ListDetailQuery
+	// ListDetailQuery
 	// SINGLE ENTRYPOINT: NewListDetailQuery(params) だけ
 	// - imageUrls を返すには Firestore subcollection reader 注入
+	// - displayOrder は ProductBlueprintGetter.GetByID の ModelRefs から解決する
 	// =========================================================
-	listDetailQuery := listdetail.NewListDetailQuery(listdetail.NewListDetailQueryParams{
+	listDetailQuery := companyquery.NewListDetailQuery(companyquery.NewListDetailQueryParams{
 		Getter:       r.listRepoFS,
 		NameResolver: res.nameResolver,
 
@@ -139,8 +136,6 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		// - backend は Firestore の /lists/{listId}/images/{imageId} record を読む
 		// - ImageURLs は ListImage.URL(Firebase Storage downloadURL) から組み立てる
 		ImgLister: r.listImageRecordRepo,
-
-		PBPatchRepo: r.productBlueprintRepo,
 	})
 
 	log.Printf(

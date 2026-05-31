@@ -10,22 +10,21 @@ import (
 	"strings"
 	"time"
 
-	listdetailquery "narratives/internal/application/query/console/list/detail"
-	listmanagementquery "narratives/internal/application/query/console/list/management"
+	query "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
 )
 
 type ListHandler struct {
 	uc      *usecase.ListUsecase
-	qMgmt   *listmanagementquery.ListManagementQuery
-	qDetail *listdetailquery.ListDetailQuery
+	qMgmt   *query.ListManagementQuery
+	qDetail *query.ListDetailQuery
 }
 
 type NewListHandlerParams struct {
 	UC      *usecase.ListUsecase
-	QMgmt   *listmanagementquery.ListManagementQuery
-	QDetail *listdetailquery.ListDetailQuery
+	QMgmt   *query.ListManagementQuery
+	QDetail *query.ListDetailQuery
 }
 
 func NewListHandler(p NewListHandlerParams) http.Handler {

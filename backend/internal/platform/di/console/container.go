@@ -7,9 +7,6 @@ import (
 
 	query "narratives/internal/application/query/console"
 
-	listdetailquery "narratives/internal/application/query/console/list/detail"
-	listmanagementquery "narratives/internal/application/query/console/list/management"
-
 	inspectorquery "narratives/internal/application/query/inspector"
 	sharedquery "narratives/internal/application/query/shared"
 	resolver "narratives/internal/application/resolver"
@@ -84,8 +81,8 @@ type Container struct {
 
 	PrintQueryService *query.PrintQueryService
 
-	ListManagementQuery *listmanagementquery.ListManagementQuery
-	ListDetailQuery     *listdetailquery.ListDetailQuery
+	ListManagementQuery *query.ListManagementQuery
+	ListDetailQuery     *query.ListDetailQuery
 
 	OrderManagementQuery *query.OrderManagementQuery
 	OrderDetailQuery     *query.OrderDetailQuery

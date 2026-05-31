@@ -1,16 +1,19 @@
-// backend/internal/application/query/console/list/detail/list_detail_query.go
+// backend/internal/application/query/console/list_detail_query.go
 //
 // 機能: ListDetailQuery の公開API（DTO組み立て）
+//
 // 責任:
 // - DI 済み依存（ports）を保持する
 // - listID を入力に listDetail.tsx 用の ListDetailDTO を生成する
 // - company boundary / inventory boundary を確認し、表示可能データのみ返す
+// - ListDetailDTO の priceRows / stock / model attributes を生成する
+// - ProductBlueprint.GetByID から displayOrder を抽出する
 //
 // Firebase Storage 移行後:
 // - backend は GCS signed URL / GCS object を扱わない
 // - list image record は domain/list.ListImage として扱う
 // - 画像URLは list image record の URL、つまり Firebase Storage getDownloadURL() を使う
-package detail
+package query
 
 import (
 	"context"
@@ -19,13 +22,12 @@ import (
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
-	listq "narratives/internal/application/query/console/list"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
 )
 
 // ============================================================
-// Ports (read-only) - detail
+// Ports (read-only) - list detail
 // ============================================================
 
 type ListGetter interface {
@@ -53,17 +55,14 @@ type ListDetailQuery struct {
 	getter       ListGetter
 	nameResolver *resolver.NameResolver
 
-	pbGetter listq.ProductBlueprintGetter
-	tbGetter listq.TokenBlueprintGetter
+	pbGetter ProductBlueprintGetter
+	tbGetter TokenBlueprintGetter
 
 	invGetter InventoryDetailGetter
-	invRows   listq.InventoryRowsLister
+	invRows   InventoryRowsLister
 
 	// list image record 由来の Firebase Storage downloadURL を返すため（任意）
 	imgLister ListImageLister
-
-	// productBlueprintPatch から modelRef(displayOrder) を取るため（任意）
-	pbPatchRepo listq.ProductBlueprintPatchReader
 }
 
 // ============================================================
@@ -76,14 +75,13 @@ type NewListDetailQueryParams struct {
 	Getter       ListGetter
 	NameResolver *resolver.NameResolver
 
-	PBGetter listq.ProductBlueprintGetter
-	TBGetter listq.TokenBlueprintGetter
+	PBGetter ProductBlueprintGetter
+	TBGetter TokenBlueprintGetter
 
 	InvGetter InventoryDetailGetter
-	InvRows   listq.InventoryRowsLister
+	InvRows   InventoryRowsLister
 
-	ImgLister   ListImageLister
-	PBPatchRepo listq.ProductBlueprintPatchReader
+	ImgLister ListImageLister
 }
 
 func NewListDetailQuery(p NewListDetailQueryParams) *ListDetailQuery {
@@ -95,7 +93,6 @@ func NewListDetailQuery(p NewListDetailQueryParams) *ListDetailQuery {
 		invGetter:    p.InvGetter,
 		invRows:      p.InvRows,
 		imgLister:    p.ImgLister,
-		pbPatchRepo:  p.PBPatchRepo,
 	}
 }
 
@@ -111,7 +108,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 		return querydto.ListDetailDTO{}, errors.New("ListDetailQuery.BuildListDetailDTO: getter is nil (wire list repo to ListDetailQuery)")
 	}
 
-	allowedSet, err := listq.AllowedInventoryIDSetFromContext(ctx, q.invRows)
+	allowedSet, err := AllowedInventoryIDSetFromContext(ctx, q.invRows)
 	if err != nil {
 		log.Printf("[ListDetailQuery] ERROR company boundary (inventory_query) failed (detail): %v", err)
 		return querydto.ListDetailDTO{}, err
@@ -127,11 +124,11 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	}
 
 	invID := it.InventoryID
-	if !listq.InventoryAllowed(allowedSet, invID) {
+	if !InventoryAllowed(allowedSet, invID) {
 		return querydto.ListDetailDTO{}, listdom.ErrListImageNotFound
 	}
 
-	pbID, tbID, ok := listq.ParseInventoryIDStrict(invID)
+	pbID, tbID, ok := ParseInventoryIDStrict(invID)
 	if !ok {
 		return querydto.ListDetailDTO{}, listdom.ErrListImageNotFound
 	}
@@ -231,7 +228,7 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	//
 	// list の price rows を DTO に復元する。
 	// stock は inventory detail が取れる場合は inventory を優先し、
-	// なければ list 側の値を使う。
+	// なければ stock=0 とする。
 	priceRows, totalStock, priceRowsMeta := q.buildDetailPriceRows(ctx, it, invID, pbID)
 	if priceRowsMeta != "" {
 		log.Printf("[ListDetailQuery] priceRows listID=%q %s", listID, priceRowsMeta)
@@ -332,6 +329,7 @@ func (q *ListDetailQuery) buildListImages(
 				continue
 			}
 		}
+
 		ordered = append(ordered, img)
 		if img.ID != "" {
 			used[img.ID] = struct{}{}
@@ -377,4 +375,276 @@ func buildImageURLsFromImages(images []querydto.ListImageDTO) []string {
 	}
 
 	return urls
+}
+
+// ============================================================
+// Price row helpers
+// ============================================================
+
+// buildDetailPriceRows builds ListDetailDTO price rows.
+//
+// 責任:
+// - listdom.List の価格行を抽出し、DTO(ListDetailPriceRowDTO)へ変換する
+// - 在庫情報は InventoryDetailGetter から優先的に取得し、なければ stock=0 とする
+// - displayOrder は ProductBlueprint.GetByID(ModelRefs) から付与する（取得できない場合は nil）
+// - model 情報は resolver.ModelResolved を使って解決する
+//   - apparel: kind / modelNumber / size / color / rgb
+//   - alcohol: kind / modelNumber / volumeValue / volumeUnit
+func (q *ListDetailQuery) buildDetailPriceRows(
+	ctx context.Context,
+	it listdom.List,
+	inventoryID string,
+	productBlueprintID string,
+) ([]querydto.ListDetailPriceRowDTO, int, string) {
+	rows := it.Prices
+	if len(rows) == 0 {
+		return []querydto.ListDetailPriceRowDTO{}, 0, "rows=0"
+	}
+
+	displayOrderByModel := q.buildDisplayOrderByModelID(ctx, productBlueprintID)
+
+	stockByModel := map[string]int{}
+	attrByModel := map[string]resolver.ModelResolved{}
+	invUsed := false
+	invErrMsg := ""
+
+	invID := inventoryID
+	if invID != "" && q != nil && q.invGetter != nil {
+		if invDTO, err := q.invGetter.GetDetailByID(ctx, invID); err != nil {
+			invErrMsg = "invErr=" + err.Error()
+		} else if invDTO != nil {
+			invUsed = true
+			for _, r := range invDTO.Rows {
+				mid := r.ModelID
+				if mid == "" {
+					continue
+				}
+
+				stockByModel[mid] = r.Stock
+				attrByModel[mid] = resolver.ModelResolved{
+					Kind:        r.Kind,
+					ModelNumber: r.ModelNumber,
+
+					Size:  r.Size,
+					Color: r.Color,
+					RGB:   r.RGB,
+
+					VolumeValue: r.VolumeValue,
+					VolumeUnit:  r.VolumeUnit,
+				}
+			}
+		}
+	}
+
+	modelResolvedCache := map[string]resolver.ModelResolved{}
+
+	out := make([]querydto.ListDetailPriceRowDTO, 0, len(rows))
+	total := 0
+
+	resolvedNonEmpty := 0
+	resolvedEmpty := 0
+	stockFromInv := 0
+	stockFromList := 0
+	displayOrderHit := 0
+
+	for _, r := range rows {
+		modelID := r.ModelID
+		if modelID == "" {
+			continue
+		}
+
+		price := r.Price
+		pricePtr := &price
+
+		stock := 0
+		if invUsed {
+			if v, ok := stockByModel[modelID]; ok {
+				stock = v
+				stockFromInv++
+			} else {
+				stock = 0
+				stockFromInv++
+			}
+		} else {
+			// ListPriceRow の正規形は ModelID / Price のみ。
+			// Stock は list ではなく inventory 側から解決する。
+			stock = 0
+			stockFromList++
+		}
+
+		var dispPtr *int
+		if displayOrderByModel != nil {
+			if v, ok := displayOrderByModel[modelID]; ok {
+				dispPtr = v
+				if v != nil {
+					displayOrderHit++
+				}
+			}
+		}
+
+		dtoRow := querydto.ListDetailPriceRowDTO{
+			ModelID:      modelID,
+			DisplayOrder: dispPtr,
+			Stock:        stock,
+			Price:        pricePtr,
+		}
+
+		mr, ok := attrByModel[modelID]
+		if !ok {
+			mr = q.resolveModelResolvedCached(ctx, modelID, modelResolvedCache)
+		}
+
+		applyModelResolvedToListDetailPriceRow(&dtoRow, modelID, mr)
+
+		if dtoRow.ModelNumber != "" ||
+			dtoRow.Size != "" ||
+			dtoRow.Color != "" ||
+			dtoRow.RGB != nil ||
+			dtoRow.VolumeValue != nil ||
+			dtoRow.VolumeUnit != "" {
+			resolvedNonEmpty++
+		} else {
+			resolvedEmpty++
+		}
+
+		out = append(out, dtoRow)
+		total += stock
+	}
+
+	meta := "rows=" + Itoa(len(out)) +
+		" resolvedNonEmpty=" + Itoa(resolvedNonEmpty) +
+		" resolvedEmpty=" + Itoa(resolvedEmpty) +
+		" invUsed=" + Bool01(invUsed) +
+		" stockFromInv=" + Itoa(stockFromInv) +
+		" stockFromList=" + Itoa(stockFromList) +
+		" displayOrderHit=" + Itoa(displayOrderHit)
+	if invErrMsg != "" {
+		meta += " " + invErrMsg
+	}
+
+	return out, total, meta
+}
+
+func applyModelResolvedToListDetailPriceRow(
+	row *querydto.ListDetailPriceRowDTO,
+	modelID string,
+	mr resolver.ModelResolved,
+) {
+	if row == nil {
+		return
+	}
+
+	mn := mr.ModelNumber
+	if mn == "" {
+		mn = modelID
+	}
+	if mn == "" {
+		mn = "-"
+	}
+
+	row.Kind = mr.Kind
+	row.ModelNumber = mn
+
+	if mr.Kind == "alcohol" {
+		row.VolumeValue = mr.VolumeValue
+		row.VolumeUnit = mr.VolumeUnit
+		return
+	}
+
+	sz := mr.Size
+	cl := mr.Color
+
+	if sz == "" {
+		sz = "-"
+	}
+	if cl == "" {
+		cl = "-"
+	}
+
+	row.Size = sz
+	row.Color = cl
+	row.RGB = mr.RGB
+}
+
+func (q *ListDetailQuery) resolveModelResolvedCached(
+	ctx context.Context,
+	variationID string,
+	cache map[string]resolver.ModelResolved,
+) resolver.ModelResolved {
+	id := variationID
+	if id == "" {
+		return resolver.ModelResolved{}
+	}
+	if cache != nil {
+		if v, ok := cache[id]; ok {
+			return v
+		}
+	}
+
+	var v resolver.ModelResolved
+	if q != nil && q.nameResolver != nil {
+		v = q.nameResolver.ResolveModelResolved(ctx, id)
+	}
+
+	if cache != nil {
+		cache[id] = v
+	}
+	return v
+}
+
+// ============================================================
+// Display order helpers
+// ============================================================
+
+// buildDisplayOrderByModelID extracts displayOrder from ProductBlueprint.
+//
+// 責任:
+// - ProductBlueprint.ModelRefs の正規構造から modelID/displayOrder を読み取る
+// - modelID -> *displayOrder の辞書を生成する
+// - displayOrder=0 は未設定として nil にする
+func (q *ListDetailQuery) buildDisplayOrderByModelID(
+	ctx context.Context,
+	productBlueprintID string,
+) map[string]*int {
+	out := map[string]*int{}
+
+	if q == nil || q.pbGetter == nil {
+		return out
+	}
+
+	pbID := productBlueprintID
+	if pbID == "" {
+		return out
+	}
+
+	pb, err := q.pbGetter.GetByID(ctx, pbID)
+	if err != nil {
+		return out
+	}
+
+	if len(pb.ModelRefs) == 0 {
+		return out
+	}
+
+	seen := map[string]struct{}{}
+	for _, r := range pb.ModelRefs {
+		mid := r.ModelID
+		if mid == "" {
+			continue
+		}
+		if _, ok := seen[mid]; ok {
+			continue
+		}
+		seen[mid] = struct{}{}
+
+		var ptr *int
+		if r.DisplayOrder != 0 {
+			x := r.DisplayOrder
+			ptr = &x
+		}
+
+		out[mid] = ptr
+	}
+
+	return out
 }
