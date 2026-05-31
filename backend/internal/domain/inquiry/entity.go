@@ -95,7 +95,7 @@ func NewWithOptional(
 		CreatedAt:          createdAt.UTC(),
 		UpdatedAt:          updatedAt.UTC(),
 		UpdatedBy:          updatedBy,
-		DeletedAt:          normalizeTimePtr(deletedAt),
+		DeletedAt:          deletedAt,
 		DeletedBy:          deletedBy,
 	}
 	if err := in.validate(); err != nil {
@@ -151,14 +151,4 @@ func (i Inquiry) validate() error {
 		return ErrInvalidDeletedBy
 	}
 	return nil
-}
-
-// Helpers
-
-func normalizeTimePtr(p *time.Time) *time.Time {
-	if p == nil || p.IsZero() {
-		return nil
-	}
-	t := p.UTC()
-	return &t
 }

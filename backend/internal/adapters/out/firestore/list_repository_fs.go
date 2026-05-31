@@ -78,32 +78,6 @@ func (r *ListRepositoryFS) GetByID(ctx context.Context, id string) (ldom.List, e
 	return l, nil
 }
 
-func (r *ListRepositoryFS) Count(ctx context.Context, _ ldom.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	aq := r.col().Query.NewAggregationQuery().WithCount("all")
-	res, err := aq.Get(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	v, ok := res["all"]
-	if !ok {
-		return 0, nil
-	}
-
-	switch n := v.(type) {
-	case int64:
-		return int(n), nil
-	case int:
-		return n, nil
-	default:
-		return 0, nil
-	}
-}
-
 func (r *ListRepositoryFS) GetReadableIDByID(ctx context.Context, id string) (string, error) {
 	if r.Client == nil {
 		return "", errors.New("firestore client is nil")
@@ -222,8 +196,13 @@ func (r *ListRepositoryFS) List(
 		items = append(items, l)
 	}
 
-	if err := r.enrichListsWithPrices(ctx, items); err != nil {
-		return ldom.PageResult[ldom.List]{}, err
+	for i := range items {
+		prices, err := r.loadListPricesForOne(ctx, items[i].ID)
+		if err != nil {
+			return ldom.PageResult[ldom.List]{}, err
+		}
+
+		items[i].Prices = prices
 	}
 
 	return ldom.PageResult[ldom.List]{
@@ -292,8 +271,13 @@ func (r *ListRepositoryFS) ListByCursor(
 		}
 	}
 
-	if err := r.enrichListsWithPrices(ctx, items); err != nil {
-		return ldom.CursorPageResult[ldom.List]{}, err
+	for i := range items {
+		prices, err := r.loadListPricesForOne(ctx, items[i].ID)
+		if err != nil {
+			return ldom.CursorPageResult[ldom.List]{}, err
+		}
+
+		items[i].Prices = prices
 	}
 
 	var next *string
@@ -625,19 +609,6 @@ func encodeListDoc(l ldom.List) map[string]any {
 // Helpers - prices
 // ============================================================
 
-func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ldom.List) error {
-	for i := range lists {
-		prices, err := r.loadListPricesForOne(ctx, lists[i].ID)
-		if err != nil {
-			return err
-		}
-
-		lists[i].Prices = prices
-	}
-
-	return nil
-}
-
 func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) ([]ldom.ListPriceRow, error) {
 	if listID == "" {
 		return nil, nil
@@ -721,20 +692,33 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 		return nil
 	}
 
-	np := normalizeListPrices(prices)
-	if len(np) == 0 {
+	priceByModelID := make(map[string]ldom.ListPriceRow, len(prices))
+
+	for _, row := range prices {
+		modelID := row.ModelID
+		if modelID == "" {
+			continue
+		}
+
+		priceByModelID[modelID] = ldom.ListPriceRow{
+			ModelID: modelID,
+			Price:   row.Price,
+		}
+	}
+
+	if len(priceByModelID) == 0 {
 		return nil
 	}
 
-	keys := make([]string, 0, len(np))
-	for k := range np {
-		keys = append(keys, k)
+	modelIDs := make([]string, 0, len(priceByModelID))
+	for modelID := range priceByModelID {
+		modelIDs = append(modelIDs, modelID)
 	}
 
-	sort.Strings(keys)
+	sort.Strings(modelIDs)
 
-	for _, modelID := range keys {
-		p := np[modelID]
+	for _, modelID := range modelIDs {
+		p := priceByModelID[modelID]
 		itemRef := listRef.Collection(listPricesSub).Doc(modelID)
 		if err := tx.Set(itemRef, map[string]any{
 			"model_id": modelID,
@@ -745,30 +729,4 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 	}
 
 	return nil
-}
-
-func normalizeListPrices(in []ldom.ListPriceRow) map[string]ldom.ListPriceRow {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make(map[string]ldom.ListPriceRow, len(in))
-
-	for _, row := range in {
-		mid := row.ModelID
-		if mid == "" {
-			continue
-		}
-
-		out[mid] = ldom.ListPriceRow{
-			ModelID: mid,
-			Price:   row.Price,
-		}
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
 }

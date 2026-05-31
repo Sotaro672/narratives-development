@@ -80,10 +80,6 @@ type Repository interface {
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[List], error)
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[List], error)
 
-	// Count for pagination.
-	// The filter interpretation must be same as List.
-	Count(ctx context.Context, filter Filter) (int, error)
-
 	// Read.
 	GetByID(ctx context.Context, id string) (List, error)
 	ListIDsByInventoryID(ctx context.Context, inventoryID string) ([]string, error)

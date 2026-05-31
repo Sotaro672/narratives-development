@@ -404,7 +404,15 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 		printed = *raw.Printed
 	}
 
-	printedAt := normalizeTimePtr(raw.PrintedAt)
+	printedAt := raw.PrintedAt
+	if printedAt != nil && printedAt.IsZero() {
+		printedAt = nil
+	}
+	if printedAt != nil {
+		t := printedAt.UTC()
+		printedAt = &t
+	}
+
 	printedBy := raw.PrintedBy
 
 	if printed {
@@ -473,12 +481,4 @@ func productionToDoc(p proddom.Production) map[string]any {
 	}
 
 	return m
-}
-
-func normalizeTimePtr(t *time.Time) *time.Time {
-	if t == nil || t.IsZero() {
-		return nil
-	}
-	tt := t.UTC()
-	return &tt
 }

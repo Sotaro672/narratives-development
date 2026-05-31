@@ -292,6 +292,12 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 
 	items := make([]orderdom.OrderItemSnapshot, 0, len(d.Items))
 	for _, it := range d.Items {
+		var transferredAt *time.Time
+		if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
+			t := it.TransferredAt.UTC()
+			transferredAt = &t
+		}
+
 		items = append(items, orderdom.OrderItemSnapshot{
 			ModelID:       it.ModelID,
 			InventoryID:   it.InventoryID,
@@ -301,7 +307,7 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 			IsCanceled:    it.IsCanceled,
 			IsDispatched:  it.IsDispatched,
 			Transferred:   it.Transferred,
-			TransferredAt: normalizeTimePtr(it.TransferredAt),
+			TransferredAt: transferredAt,
 		})
 	}
 

@@ -98,7 +98,7 @@ func New(
 		AssigneeID:         assigneeID,
 		Models:             normalizeModels(models),
 		Printed:            printed,
-		PrintedAt:          normalizeTimePtr(printedAt),
+		PrintedAt:          printedAt,
 		PrintedBy:          nil,
 		CreatedBy:          createdBy,
 		CreatedAt:          createdAt,
@@ -126,7 +126,7 @@ func NewForCreate(
 		AssigneeID:         assigneeID,
 		Models:             normalizeModels(models),
 		Printed:            printed,
-		PrintedAt:          normalizeTimePtr(printedAt),
+		PrintedAt:          printedAt,
 		PrintedBy:          nil,
 		CreatedBy:          createdBy,
 		CreatedAt:          createdAt,
@@ -325,13 +325,4 @@ func normalizeModels(in []ModelQuantity) []ModelQuantity {
 	}
 
 	return out
-}
-
-func normalizeTimePtr(t *time.Time) *time.Time {
-	if t == nil || t.IsZero() {
-		return nil
-	}
-
-	tt := t.UTC()
-	return &tt
 }

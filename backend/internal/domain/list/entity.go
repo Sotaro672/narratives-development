@@ -153,7 +153,7 @@ func NewForCreate(
 		InventoryID: inventoryID,
 		ImageID:     "",
 		Description: description,
-		Prices:      normalizePriceRows(prices),
+		Prices:      prices,
 		CreatedBy:   createdBy,
 		CreatedAt:   time.Time{},
 	}
@@ -219,12 +219,11 @@ func (l *List) UpdateDescription(desc string, now time.Time) error {
 }
 
 func (l *List) ReplacePrices(prices []ListPriceRow, now time.Time) error {
-	np := normalizePriceRows(prices)
-	if err := validatePriceRows(np); err != nil {
+	if err := validatePriceRows(prices); err != nil {
 		return err
 	}
 
-	l.Prices = np
+	l.Prices = prices
 	l.touch(now)
 	return nil
 }
@@ -533,41 +532,6 @@ func (l *List) touch(now time.Time) {
 
 	t := now.UTC()
 	l.UpdatedAt = &t
-}
-
-func normalizePriceRows(in []ListPriceRow) []ListPriceRow {
-	if in == nil {
-		return nil
-	}
-
-	seen := map[string]struct{}{}
-	out := make([]ListPriceRow, 0, len(in))
-
-	for _, v := range in {
-		if v.ModelID == "" {
-			continue
-		}
-
-		if !priceAllowed(v.Price) {
-			continue
-		}
-
-		if _, ok := seen[v.ModelID]; ok {
-			continue
-		}
-
-		seen[v.ModelID] = struct{}{}
-		out = append(out, ListPriceRow{
-			ModelID: v.ModelID,
-			Price:   v.Price,
-		})
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
 }
 
 func validatePriceRows(rows []ListPriceRow) error {
