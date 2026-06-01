@@ -44,6 +44,24 @@ function getNumberValue(fields: ScanCategoryFields, key: string): string {
   return "";
 }
 
+function getStringFromRecord(value: unknown, key: string): string {
+  if (!isRecord(value)) {
+    return "";
+  }
+
+  const raw = value[key];
+
+  if (typeof raw === "string") {
+    return raw.trim();
+  }
+
+  return "";
+}
+
+function isAlcoholKind(value: unknown): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "alcohol";
+}
+
 export function getScanCategoryFields(value: unknown): ScanCategoryFields {
   if (!isRecord(value)) {
     return {};
@@ -61,32 +79,87 @@ export function isAlcoholCategoryFields(fields: ScanCategoryFields): boolean {
   );
 }
 
+function resolveIsAlcohol(input: {
+  categoryFields: ScanCategoryFields;
+  modelKind?: unknown;
+  productBlueprintCategoryKind?: unknown;
+  productBlueprintCategory?: unknown;
+  categoryInputSchema?: unknown;
+}): boolean {
+  if (isAlcoholCategoryFields(input.categoryFields)) {
+    return true;
+  }
+
+  if (isAlcoholKind(input.modelKind)) {
+    return true;
+  }
+
+  if (isAlcoholKind(input.productBlueprintCategoryKind)) {
+    return true;
+  }
+
+  if (isAlcoholKind(getStringFromRecord(input.productBlueprintCategory, "Kind"))) {
+    return true;
+  }
+
+  if (isAlcoholKind(getStringFromRecord(input.productBlueprintCategory, "kind"))) {
+    return true;
+  }
+
+  if (isAlcoholKind(getStringFromRecord(input.categoryInputSchema, "categoryKind"))) {
+    return true;
+  }
+
+  return false;
+}
+
 export function buildScanVolumeLabel(input: {
   volumeValue?: unknown;
   volumeUnit?: unknown;
+  modelLabel?: unknown;
 }): string {
-  const { volumeValue, volumeUnit } = input;
-
-  const hasVolumeValue =
-    typeof volumeValue === "number" && Number.isFinite(volumeValue);
+  const { volumeValue, volumeUnit, modelLabel } = input;
 
   const unit = typeof volumeUnit === "string" ? volumeUnit.trim() : "";
 
-  if (!hasVolumeValue || !unit) {
-    return "";
+  if (typeof volumeValue === "number" && Number.isFinite(volumeValue)) {
+    return unit ? `${volumeValue}${unit}` : String(volumeValue);
   }
 
-  return `${volumeValue}${unit}`;
+  if (typeof volumeValue === "string" && volumeValue.trim()) {
+    const normalizedVolumeValue = volumeValue.trim();
+
+    return unit ? `${normalizedVolumeValue}${unit}` : normalizedVolumeValue;
+  }
+
+  if (typeof modelLabel === "string" && modelLabel.trim()) {
+    return modelLabel.trim();
+  }
+
+  return "";
 }
 
 export function createScanAlcoholInfo(input: {
   categoryFields: unknown;
   volumeValue?: unknown;
   volumeUnit?: unknown;
+  modelLabel?: unknown;
+  modelKind?: unknown;
+  productBlueprintCategoryKind?: unknown;
+  productBlueprintCategory?: unknown;
+  categoryInputSchema?: unknown;
 }): ScanAlcoholInfo | null {
   const fields = getScanCategoryFields(input.categoryFields);
 
-  if (!isAlcoholCategoryFields(fields)) {
+  const isAlcohol = resolveIsAlcohol({
+    categoryFields: fields,
+    modelKind: input.modelKind,
+    productBlueprintCategoryKind: input.productBlueprintCategoryKind,
+    productBlueprintCategory: input.productBlueprintCategory,
+    categoryInputSchema: input.categoryInputSchema,
+  });
+
+  if (!isAlcohol) {
     return null;
   }
 
@@ -99,6 +172,7 @@ export function createScanAlcoholInfo(input: {
     volumeLabel: buildScanVolumeLabel({
       volumeValue: input.volumeValue,
       volumeUnit: input.volumeUnit,
+      modelLabel: input.modelLabel,
     }),
   };
 }

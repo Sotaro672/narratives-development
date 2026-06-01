@@ -138,7 +138,7 @@ func (u *ProductBlueprintUsecase) GetByIDResolved(
 
 // ListByCompanyID は handler 側の GET /product-blueprints から利用される一覧取得。
 // companyId を必須にする（companyId なしの List は廃止済み）。
-// テナント境界は repo 側のクエリに委譲しつつ、usecase 側でも二重ガードする。
+// companyId 境界は repository の ListByCompanyID クエリに委譲する。
 func (u *ProductBlueprintUsecase) ListByCompanyID(
 	ctx context.Context,
 ) ([]productbpdom.ProductBlueprint, error) {
@@ -147,21 +147,7 @@ func (u *ProductBlueprintUsecase) ListByCompanyID(
 		return nil, productbpdom.ErrInvalidCompanyID
 	}
 
-	rows, err := u.repo.ListByCompanyID(ctx, cid)
-	if err != nil {
-		return nil, err
-	}
-
-	// 念のため usecase 側でも companyId をガード
-	filtered := make([]productbpdom.ProductBlueprint, 0, len(rows))
-	for _, pb := range rows {
-		if pb.CompanyID != cid {
-			continue
-		}
-		filtered = append(filtered, pb)
-	}
-
-	return filtered, nil
+	return u.repo.ListByCompanyID(ctx, cid)
 }
 
 func (u *ProductBlueprintUsecase) ListByCompanyIDResolved(

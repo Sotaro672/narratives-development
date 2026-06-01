@@ -126,6 +126,14 @@ export default function ScanResultCard(props: ScanResultCardProps) {
       categoryFields,
       volumeValue: getNumber(preview, "volumeValue"),
       volumeUnit: getString(preview, "volumeUnit"),
+      modelLabel: getString(preview, "modelLabel"),
+      modelKind: getString(preview, "modelKind"),
+      productBlueprintCategoryKind: getString(
+        preview,
+        "productBlueprintCategoryKind",
+      ),
+      productBlueprintCategory: getRecord(preview, "productBlueprintCategory"),
+      categoryInputSchema: getRecord(preview, "categoryInputSchema"),
     });
   }, [categoryFields, preview]);
 
