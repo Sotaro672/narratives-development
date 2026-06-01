@@ -103,13 +103,10 @@ type Patch struct {
 // ===============================
 type RepositoryPort interface {
 	// 単体取得
+	//
+	// Patch 表示用の最小情報や ID → Name 解決が必要な場合も、
+	// 個別の read-model 専用メソッドを使わず GetByID の結果から組み立てる。
 	GetByID(ctx context.Context, id string) (*TokenBlueprint, error)
-
-	// Patch 取得（read-model 用）
-	GetPatchByID(ctx context.Context, id string) (Patch, error)
-
-	// ID → Name の高速解決
-	GetNameByID(ctx context.Context, id string) (string, error)
 
 	// companyId で限定した一覧
 	ListByCompanyID(ctx context.Context, companyID string, page common.Page) (common.PageResult[TokenBlueprint], error)

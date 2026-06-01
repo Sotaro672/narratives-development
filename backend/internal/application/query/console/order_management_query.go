@@ -42,6 +42,7 @@ import (
 	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
 	pbdom "narratives/internal/domain/productBlueprint"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -83,7 +84,7 @@ type ProductBlueprintResolver interface {
 
 // TokenBlueprintNameResolver resolves tokenName from tokenBlueprintId.
 type TokenBlueprintNameResolver interface {
-	GetNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 }
 
 // ListReadableIDResolver resolves listId to readableId.
@@ -306,11 +307,16 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			return v, nil
 		}
 
-		name, e := q.tbName.GetNameByID(ctx, tbID)
+		tb, e := q.tbName.GetByID(ctx, tbID)
 		if e != nil {
 			return "", e
 		}
+		if tb == nil {
+			tbNameCache[tbID] = ""
+			return "", nil
+		}
 
+		name := tb.Name
 		tbNameCache[tbID] = name
 		return name, nil
 	}
@@ -470,7 +476,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 				if tbID != "" {
 					n, e4 := resolveTokenName(tbID)
 					if e4 != nil {
-						log.Printf("[OrderManagementQuery] ERROR GetNameByID failed tokenBlueprintId=%q err=%v", tbID, e4)
+						log.Printf("[OrderManagementQuery] ERROR TokenBlueprint.GetByID failed tokenBlueprintId=%q err=%v", tbID, e4)
 						return common.PageResult[OrderItemInventoryRowDTO]{}, e4
 					}
 					tokenName = n

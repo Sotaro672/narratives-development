@@ -74,10 +74,12 @@ type TokenReader interface {
 	GetByProductID(ctx context.Context, productID string) (*dto.TokenInfo, error)
 }
 
-// TokenBlueprintPatchReader is a minimal read port for TokenBlueprint patch.
-// preview は tokenBlueprintId -> patch(表示用) だけ欲しい。
+// TokenBlueprintPatchReader is a minimal read port for TokenBlueprint.
+//
+// tokenBlueprint.RepositoryPort と同じ GetByID に統一する。
+// preview で必要な patch 表示用データは GetByID の結果から組み立てる。
 type TokenBlueprintPatchReader interface {
-	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
+	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 }
 
 // BrandNameIconReader resolves brandId -> brandName + brandIcon.
@@ -112,7 +114,7 @@ type PreviewQuery struct {
 	// Optional: tokens/{productId} を読む（nil なら token は返さない）
 	TokenRepo TokenReader
 
-	// Optional: tokenBlueprint patch を読む（nil なら tokenBlueprintPatch は返さない）
+	// Optional: tokenBlueprint を読む（nil なら tokenBlueprintPatch は返さない）
 	TokenBlueprintRepo TokenBlueprintPatchReader
 
 	// Optional: tokens.toAddress -> owner を解決（nil なら owner は返さない）
@@ -334,8 +336,10 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		}
 
 		if tok != nil && !repoNil && tbID != "" {
-			tbPatch, perr := q.TokenBlueprintRepo.GetPatchByID(ctx, tbID)
-			if perr == nil {
+			tb, perr := q.TokenBlueprintRepo.GetByID(ctx, tbID)
+			if perr == nil && tb != nil {
+				tbPatch := toPreviewTokenBlueprintPatch(tb)
+
 				if tbPatch.BrandID != "" && tbPatch.BrandName == "" && q.BrandNameIconRepo != nil {
 					ni, nerr := q.BrandNameIconRepo.GetNameIconByID(ctx, tbPatch.BrandID)
 					if nerr == nil && ni.Name != "" {
@@ -385,6 +389,25 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
+
+func toPreviewTokenBlueprintPatch(tb *tbdom.TokenBlueprint) tbdom.Patch {
+	if tb == nil {
+		return tbdom.Patch{}
+	}
+
+	return tbdom.Patch{
+		ID:          tb.ID,
+		TokenName:   tb.Name,
+		Symbol:      tb.Symbol,
+		BrandID:     tb.BrandID,
+		BrandName:   "",
+		CompanyID:   tb.CompanyID,
+		Description: tb.Description,
+		Minted:      tb.Minted,
+		MetadataURI: tb.MetadataURI,
+		IconURL:     tb.IconURL,
+	}
+}
 
 func (q *PreviewQuery) fillResolvedModelInfo(
 	ctx context.Context,

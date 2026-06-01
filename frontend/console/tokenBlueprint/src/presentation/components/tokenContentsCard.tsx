@@ -1,4 +1,5 @@
 // frontend/console/tokenBlueprint/src/presentation/components/tokenContentsCard.tsx
+
 import * as React from "react";
 import { FileText, Upload, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
@@ -11,7 +12,6 @@ import {
 import { Button } from "../../../../shell/src/shared/ui/button";
 
 import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
-import "../styles/tokenBlueprint.css";
 
 type Mode = "edit" | "view";
 
@@ -28,13 +28,13 @@ type TokenContentsCardProps = {
   /**
    * file picker でファイルが選択されたときに呼ばれる。
    * 呼び出し側で Firebase Storage へ直接アップロードし、
-   * downloadURL / objectPath を contentFiles として保存する。
+   * downloadURL を contentFiles[].url として保存する。
    */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
 
   /**
    * edit モードで削除したい時のハンドラ。
-   * Firebase Storage / backend への反映は呼び出し側で実装する。
+   * backend への反映は呼び出し側で実装する。
    */
   onDelete?: (
     item: FirebaseStorageTokenContent,
@@ -51,30 +51,30 @@ function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
 }
 
 function getVideoMimeType(item: FirebaseStorageTokenContent): string {
-  const name = item.name.toLowerCase();
   const url = item.url.toLowerCase();
 
-  if (name.endsWith(".webm") || url.includes(".webm")) return "video/webm";
+  if (url.includes(".webm")) return "video/webm";
 
-  if (
-    name.endsWith(".ogg") ||
-    name.endsWith(".ogv") ||
-    url.includes(".ogg") ||
-    url.includes(".ogv")
-  ) {
+  if (url.includes(".ogg") || url.includes(".ogv")) {
     return "video/ogg";
   }
 
-  return "video/mp4";
+  return item.contentType || "video/mp4";
+}
+
+function getContentLabel(item: FirebaseStorageTokenContent): string {
+  return item.id || "content";
 }
 
 function renderMain(item: FirebaseStorageTokenContent) {
+  const label = getContentLabel(item);
+
   switch (item.type) {
     case "image":
       return (
         <img
           src={item.url}
-          alt={item.name || "content"}
+          alt={label}
           className="token-contents-card__image"
           onError={(e) => {
             // eslint-disable-next-line no-console
@@ -107,7 +107,7 @@ function renderMain(item: FirebaseStorageTokenContent) {
           target="_blank"
           rel="noreferrer"
         >
-          PDF を開く: {item.name || "document.pdf"}
+          PDF を開く: {label}
         </a>
       );
 
@@ -119,7 +119,7 @@ function renderMain(item: FirebaseStorageTokenContent) {
           target="_blank"
           rel="noreferrer"
         >
-          ファイルを開く: {item.name || "document"}
+          ファイルを開く: {label}
         </a>
       );
   }
@@ -148,6 +148,20 @@ export default function TokenContentsCard({
   }, [derivedItems, localItems]);
 
   const hasItems = items.length > 0;
+
+  const safeIndex = React.useMemo(() => {
+    if (items.length === 0) return 0;
+    return Math.min(index, items.length - 1);
+  }, [index, items.length]);
+
+  const currentItem = hasItems ? items[safeIndex] : undefined;
+
+  React.useEffect(() => {
+    setIndex((current) => {
+      if (items.length === 0) return 0;
+      return Math.min(current, items.length - 1);
+    });
+  }, [items.length]);
 
   React.useEffect(() => {
     if (derivedItems.length > 0) {
@@ -229,17 +243,12 @@ export default function TokenContentsCard({
       const url = URL.createObjectURL(f);
       objectUrlsRef.current.add(url);
 
-      const id = `local_${now}_${i}`;
-      const name = f.name || id;
-
       return {
-        id,
-        name,
+        id: `local_${now}_${i}`,
         type: guessContentType(f),
         contentType: f.type || "application/octet-stream",
-        size: f.size,
-        objectPath: "",
         url,
+        visibility: "private",
       };
     });
 
@@ -333,15 +342,15 @@ export default function TokenContentsCard({
           </button>
 
           <div className="token-contents-card__image-slot">
-            {hasItems ? (
+            {hasItems && currentItem ? (
               <div className="token-contents-card__image-main-wrap">
-                {renderMain(items[index])}
+                {renderMain(currentItem)}
 
                 {isEditMode && (
                   <button
                     type="button"
                     className="token-contents-card__delete-btn"
-                    onClick={() => void handleDelete(index)}
+                    onClick={() => void handleDelete(safeIndex)}
                     aria-label="このコンテンツを削除"
                   >
                     <Trash2 className="token-contents-card__delete-icon" />
@@ -372,7 +381,7 @@ export default function TokenContentsCard({
               <div
                 key={`${item.id}-${i}`}
                 className={`token-contents-card__thumb-wrap${
-                  i === index ? " is-active" : ""
+                  i === safeIndex ? " is-active" : ""
                 }`}
               >
                 <button
@@ -384,7 +393,7 @@ export default function TokenContentsCard({
                   {item.type === "image" ? (
                     <img
                       src={item.url}
-                      alt={item.name || `コンテンツ サムネイル ${i + 1}`}
+                      alt={`コンテンツ サムネイル ${i + 1}`}
                       className="token-contents-card__thumb-image"
                     />
                   ) : (

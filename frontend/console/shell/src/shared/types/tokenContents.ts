@@ -5,8 +5,8 @@
  *
  * Firebase Storage 移行後の正仕様:
  * - url: Firebase Storage downloadURL
- * - objectPath: Firebase Storage object path
- * - GCS bucket / public GCS URL / signed URL は扱わない
+ * - backend/domain では objectPath / name / size を保持しない
+ * - backend は url だけで content file を制御する
  */
 
 /** ContentType definition */
@@ -25,24 +25,50 @@ export const ALL_CONTENT_TYPES: ContentType[] = [
   "document",
 ];
 
-/** Firebase Storage token content metadata */
+/** ContentVisibility definition */
+export type ContentVisibility = "private" | "public";
+
+/** ContentVisibility validation helper */
+export function isValidContentVisibility(v: string): v is ContentVisibility {
+  return v === "private" || v === "public";
+}
+
+/**
+ * Firebase Storage token content metadata
+ *
+ * backend ContentFile struct と一致:
+ * - id
+ * - type
+ * - contentType
+ * - url
+ * - visibility
+ * - createdAt
+ * - createdBy
+ * - updatedAt
+ * - updatedBy
+ */
 export interface FirebaseStorageTokenContent {
   id: string;
-  name: string;
   type: ContentType;
   contentType: string;
-  size: number;
-  objectPath: string;
+  url: string;
+  visibility: ContentVisibility;
+
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/**
+ * Delete operation target
+ *
+ * objectPath は廃止済み。
+ * 削除・制御は backend 側で url を基準に行う。
+ */
+export interface FirebaseStorageDeleteOp {
   url: string;
 }
-
-/** Delete operation target in Firebase Storage */
-export interface FirebaseStorageDeleteOp {
-  objectPath: string;
-}
-
-/** Upload policy */
-export const MAX_TOKEN_CONTENT_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 /** Validation logic for FirebaseStorageTokenContent */
 export function validateFirebaseStorageTokenContent(
@@ -50,28 +76,16 @@ export function validateFirebaseStorageTokenContent(
 ): string[] {
   const errors: string[] = [];
 
-  if (!c.id.trim()) errors.push("id is required");
-  if (!c.name.trim()) errors.push("name is required");
+  if (!c.id.trim()) {
+    errors.push("id is required");
+  }
 
   if (!isValidContentType(c.type)) {
     errors.push("type must be one of 'image' | 'video' | 'pdf' | 'document'");
   }
 
-  if (!c.contentType.trim()) {
-    errors.push("contentType is required");
-  }
-
-  if (c.size < 0) {
-    errors.push("size must be >= 0");
-  } else if (
-    MAX_TOKEN_CONTENT_FILE_SIZE > 0 &&
-    c.size > MAX_TOKEN_CONTENT_FILE_SIZE
-  ) {
-    errors.push(`size must be <= ${MAX_TOKEN_CONTENT_FILE_SIZE} bytes`);
-  }
-
-  if (!c.objectPath.trim()) {
-    errors.push("objectPath is required");
+  if (c.contentType && !c.contentType.trim()) {
+    errors.push("contentType must not be blank when provided");
   }
 
   if (!c.url.trim()) {
@@ -79,12 +93,17 @@ export function validateFirebaseStorageTokenContent(
   } else {
     try {
       const u = new URL(c.url);
+
       if (!/^https?:$/i.test(u.protocol)) {
         errors.push("url must be http(s)");
       }
     } catch {
       errors.push("url must be a valid URL");
     }
+  }
+
+  if (!isValidContentVisibility(c.visibility)) {
+    errors.push("visibility must be one of 'private' | 'public'");
   }
 
   return errors;
@@ -94,7 +113,20 @@ export function validateFirebaseStorageTokenContent(
 export function createFirebaseStorageTokenContent(
   input: FirebaseStorageTokenContent,
 ): FirebaseStorageTokenContent {
-  const errors = validateFirebaseStorageTokenContent(input);
+  const normalized: FirebaseStorageTokenContent = {
+    id: input.id.trim(),
+    type: input.type,
+    contentType: input.contentType.trim(),
+    url: input.url.trim(),
+    visibility: input.visibility,
+
+    createdAt: input.createdAt?.trim(),
+    createdBy: input.createdBy?.trim(),
+    updatedAt: input.updatedAt?.trim(),
+    updatedBy: input.updatedBy?.trim(),
+  };
+
+  const errors = validateFirebaseStorageTokenContent(normalized);
 
   if (errors.length > 0) {
     throw new Error(
@@ -102,7 +134,7 @@ export function createFirebaseStorageTokenContent(
     );
   }
 
-  return input;
+  return normalized;
 }
 
 /** Convert FirebaseStorageTokenContent to FirebaseStorageDeleteOp */
@@ -110,6 +142,6 @@ export function toFirebaseStorageDeleteOp(
   content: FirebaseStorageTokenContent,
 ): FirebaseStorageDeleteOp {
   return {
-    objectPath: content.objectPath,
+    url: content.url,
   };
 }

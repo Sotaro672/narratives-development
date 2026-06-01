@@ -65,89 +65,6 @@ func (r *TokenBlueprintRepositoryFS) GetByID(
 	return &tb, nil
 }
 
-// GetPatchByID returns a lightweight Patch used by read-models.
-func (r *TokenBlueprintRepositoryFS) GetPatchByID(
-	ctx context.Context,
-	id string,
-) (tbdom.Patch, error) {
-	if r.Client == nil {
-		return tbdom.Patch{}, errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return tbdom.Patch{}, tbdom.ErrInvalidID
-	}
-
-	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return tbdom.Patch{}, tbdom.ErrNotFound
-	}
-	if err != nil {
-		return tbdom.Patch{}, err
-	}
-
-	var raw struct {
-		Name        string `firestore:"name"`
-		Symbol      string `firestore:"symbol"`
-		BrandID     string `firestore:"brandId"`
-		BrandName   string `firestore:"brandName"`
-		CompanyID   string `firestore:"companyId"`
-		Description string `firestore:"description"`
-		MetadataURI string `firestore:"metadataUri"`
-		Minted      bool   `firestore:"minted"`
-		IconURL     string `firestore:"iconUrl"`
-	}
-
-	if err := snap.DataTo(&raw); err != nil {
-		return tbdom.Patch{}, err
-	}
-
-	return tbdom.Patch{
-		ID:          id,
-		TokenName:   raw.Name,
-		Symbol:      raw.Symbol,
-		BrandID:     raw.BrandID,
-		BrandName:   raw.BrandName,
-		CompanyID:   raw.CompanyID,
-		Description: raw.Description,
-		Minted:      raw.Minted,
-		MetadataURI: raw.MetadataURI,
-		IconURL:     raw.IconURL,
-	}, nil
-}
-
-// GetNameByID returns only the Name field of a TokenBlueprint.
-func (r *TokenBlueprintRepositoryFS) GetNameByID(
-	ctx context.Context,
-	id string,
-) (string, error) {
-	if r.Client == nil {
-		return "", errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return "", tbdom.ErrInvalidID
-	}
-
-	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return "", tbdom.ErrNotFound
-	}
-	if err != nil {
-		return "", err
-	}
-
-	var raw struct {
-		Name string `firestore:"name"`
-	}
-
-	if err := snap.DataTo(&raw); err != nil {
-		return "", err
-	}
-
-	return raw.Name, nil
-}
-
 func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
@@ -701,11 +618,8 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 	for _, f := range xs {
 		m := map[string]any{
 			"id":          f.ID,
-			"name":        f.Name,
 			"type":        string(f.Type),
 			"contentType": f.ContentType,
-			"size":        f.Size,
-			"objectPath":  f.ObjectPath,
 			"url":         f.URL,
 			"visibility":  string(f.Visibility),
 			"createdAt":   f.CreatedAt,
@@ -732,12 +646,6 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 		}
 		f.ID = v
 
-		v, ok = m["name"].(string)
-		if !ok {
-			return nil, fmt.Errorf("%w: contentFiles[%d].name", tbdom.ErrInvalidContentFile, i)
-		}
-		f.Name = v
-
 		tv, ok := m["type"].(string)
 		if !ok {
 			return nil, fmt.Errorf("%w: contentFiles[%d].type", tbdom.ErrInvalidContentType, i)
@@ -748,27 +656,17 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 			f.ContentType = v
 		}
 
-		v, ok = m["objectPath"].(string)
+		v, ok = m["url"].(string)
 		if !ok {
-			return nil, fmt.Errorf("%w: contentFiles[%d].objectPath", tbdom.ErrInvalidContentFile, i)
+			return nil, fmt.Errorf("%w: contentFiles[%d].url", tbdom.ErrInvalidContentFile, i)
 		}
-		f.ObjectPath = v
-
-		if v, ok := m["url"].(string); ok {
-			f.URL = v
-		}
+		f.URL = v
 
 		vv, ok := m["visibility"].(string)
 		if !ok {
 			return nil, fmt.Errorf("%w: contentFiles[%d].visibility", tbdom.ErrInvalidContentVisibility, i)
 		}
 		f.Visibility = tbdom.ContentVisibility(vv)
-
-		size, ok := m["size"].(int64)
-		if !ok {
-			return nil, fmt.Errorf("contentFiles[%d].size must be int64: got %T", i, m["size"])
-		}
-		f.Size = size
 
 		if v, ok := m["createdBy"].(string); ok {
 			f.CreatedBy = v

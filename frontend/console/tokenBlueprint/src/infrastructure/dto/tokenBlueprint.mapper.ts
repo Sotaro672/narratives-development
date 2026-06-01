@@ -10,14 +10,13 @@ import type {
  *
  * 正レスポンス:
  * - url: Firebase Storage downloadURL
- * - objectPath: Firebase Storage object path
  * - createdAt / updatedAt: ISO string
  *
- * backend domain では ContentFile.url は必須 validate されていないため、
+ * objectPath は廃止済み。
  * frontend 表示で必要な url が存在するものだけを採用する。
  */
 function normalizeContentFiles(contentFiles: ContentFile[]): ContentFile[] {
-  return contentFiles.filter((file) => file.id && file.objectPath && file.url);
+  return contentFiles.filter((file) => file.id && file.url);
 }
 
 export function normalizeTokenBlueprint(raw: TokenBlueprint): TokenBlueprint {

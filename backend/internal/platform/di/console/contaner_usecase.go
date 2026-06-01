@@ -40,8 +40,7 @@ type usecases struct {
 
 	shippingAddressUC *uc.ShippingAddressUsecase
 
-	tokenBlueprintUC      *uc.TokenBlueprintUsecase
-	tokenBlueprintQueryUC *uc.TokenBlueprintQueryUsecase
+	tokenBlueprintUC *uc.TokenBlueprintUsecase
 
 	tokenBlueprintReviewUC *uc.TokenBlueprintReviewUsecase
 
@@ -167,12 +166,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		r.tokenBlueprintRepo,
 		tbReviewRepo,
-		res.nameResolver,
-	)
-
-	tokenBlueprintQueryUC := uc.NewTokenBlueprintQueryUsecase(
-		r.tokenBlueprintRepo,
-		res.nameResolver,
 	)
 
 	tokenBlueprintReviewUC := uc.NewTokenBlueprintReviewUsecase(
@@ -214,6 +207,8 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		Companies: r.companyRepo,
 	}
 
+	_ = res // reserved for future use; keeps signature stable
+
 	return &usecases{
 		tokenUC: tokenUC,
 
@@ -243,7 +238,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		shippingAddressUC: shippingAddressUC,
 
 		tokenBlueprintUC:       tokenBlueprintUC,
-		tokenBlueprintQueryUC:  tokenBlueprintQueryUC,
 		tokenBlueprintReviewUC: tokenBlueprintReviewUC,
 
 		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {

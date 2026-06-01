@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\tokenBlueprint_handler.go
+// backend/internal/adapters/in/http/console/handler/tokenBlueprint_handler.go
 package consoleHandler
 
 import (
@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	consolequery "narratives/internal/application/query/console"
 	tbapp "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
@@ -17,20 +18,23 @@ import (
 )
 
 type TokenBlueprintHandler struct {
-	uc       *tbapp.TokenBlueprintUsecase
-	queryUc  *tbapp.TokenBlueprintQueryUsecase
-	brandSvc *branddom.Service
+	uc              *tbapp.TokenBlueprintUsecase
+	detailQuery     *consolequery.TokenBlueprintDetailQuery
+	managementQuery *consolequery.TokenBlueprintManagementQuery
+	brandSvc        *branddom.Service
 }
 
 func NewTokenBlueprintHandler(
 	ucase *tbapp.TokenBlueprintUsecase,
-	queryUcase *tbapp.TokenBlueprintQueryUsecase,
+	detailQuery *consolequery.TokenBlueprintDetailQuery,
+	managementQuery *consolequery.TokenBlueprintManagementQuery,
 	brandSvc *branddom.Service,
 ) http.Handler {
 	return &TokenBlueprintHandler{
-		uc:       ucase,
-		queryUc:  queryUcase,
-		brandSvc: brandSvc,
+		uc:              ucase,
+		detailQuery:     detailQuery,
+		managementQuery: managementQuery,
+		brandSvc:        brandSvc,
 	}
 }
 
@@ -131,6 +135,7 @@ type tokenBlueprintPatchResponse struct {
 	Symbol      string `json:"symbol"`
 	BrandID     string `json:"brandId"`
 	BrandName   string `json:"brandName"`
+	CompanyID   string `json:"companyId"`
 	Description string `json:"description,omitempty"`
 	Minted      bool   `json:"minted"`
 	MetadataURI string `json:"metadataUri"`
@@ -183,7 +188,7 @@ func (h *TokenBlueprintHandler) toResponse(
 	ctx context.Context,
 	tb *tbdom.TokenBlueprint,
 	includeContentViewURL bool,
-	names *tbapp.TokenBlueprintMemberNames,
+	names *consolequery.TokenBlueprintMemberNames,
 ) tokenBlueprintResponse {
 	if tb == nil {
 		return tokenBlueprintResponse{}
@@ -249,6 +254,7 @@ func (h *TokenBlueprintHandler) toPatchResponse(ctx context.Context, tb *tbdom.T
 		Symbol:      strings.Trim(tb.Symbol, " \t\r\n"),
 		BrandID:     strings.Trim(tb.BrandID, " \t\r\n"),
 		BrandName:   h.resolveBrandName(ctx, tb.BrandID),
+		CompanyID:   strings.Trim(tb.CompanyID, " \t\r\n"),
 		Description: strings.Trim(tb.Description, " \t\r\n"),
 		Minted:      tb.Minted,
 		MetadataURI: strings.Trim(tb.MetadataURI, " \t\r\n"),
@@ -336,32 +342,26 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	iconURL := strings.Trim(req.IconURL, " \t\r\n")
-	contentFiles := normalizeContentFilesFromRequest(req.ContentFiles, actorID)
-
 	tb, err := h.uc.Create(ctx, tbapp.CreateBlueprintRequest{
-		Name:         strings.Trim(req.Name, " \t\r\n"),
-		Symbol:       strings.Trim(req.Symbol, " \t\r\n"),
-		BrandID:      strings.Trim(req.BrandID, " \t\r\n"),
+		Name:         req.Name,
+		Symbol:       req.Symbol,
+		BrandID:      req.BrandID,
 		CompanyID:    companyID,
-		Description:  strings.Trim(req.Description, " \t\r\n"),
-		AssigneeID:   strings.Trim(req.AssigneeID, " \t\r\n"),
+		Description:  req.Description,
+		AssigneeID:   req.AssigneeID,
 		CreatedBy:    actorID,
-		ActorID:      actorID,
-		IconURL:      iconURL,
-		ContentFiles: contentFiles,
+		IconURL:      req.IconURL,
+		ContentFiles: req.ContentFiles,
 	})
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	var names tbapp.TokenBlueprintMemberNames
-	if h != nil && h.queryUc != nil {
-		if tb2, n, e := h.queryUc.GetByIDWithMemberNames(ctx, tb.ID); e == nil && tb2 != nil {
-			tb = tb2
-			names = n
-		}
+	tb, names, err := h.detailQuery.GetByIDForCompany(ctx, tb.ID, companyID)
+	if err != nil {
+		writeTokenBlueprintErr(w, err)
+		return
 	}
 
 	resp := h.toResponse(ctx, tb, true, &names)
@@ -387,15 +387,9 @@ func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	tb, err := h.uc.GetByID(ctx, id)
+	tb, _, err := h.detailQuery.GetByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
-		return
-	}
-
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -412,21 +406,9 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	if h == nil || h.queryUc == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "query usecase is not configured"})
-		return
-	}
-
-	tb, names, err := h.queryUc.GetByIDWithMemberNames(ctx, strings.Trim(id, " \t\r\n"))
+	tb, names, err := h.detailQuery.GetByIDForCompany(ctx, strings.Trim(id, " \t\r\n"), companyID)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
-		return
-	}
-
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -472,52 +454,19 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	page := domcommon.Page{Number: pageNum, PerPage: perPage}
 
-	var (
-		result domcommon.PageResult[tbdom.TokenBlueprint]
-		err    error
-	)
-
-	if brandID != "" {
-		result, err = h.uc.ListByBrandID(ctx, brandID, page)
-	} else {
-		result, err = h.uc.ListByCompanyID(ctx, companyID, page)
-	}
-
+	result, err := h.managementQuery.ListForCompany(ctx, companyID, brandID, page)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	var nameByMemberID map[string]string
-	if h != nil && h.queryUc != nil && len(result.Items) > 0 {
-		ids := make([]string, 0, len(result.Items)*3)
-		for i := range result.Items {
-			ids = append(ids,
-				strings.Trim(result.Items[i].AssigneeID, " \t\r\n"),
-				strings.Trim(result.Items[i].CreatedBy, " \t\r\n"),
-				strings.Trim(result.Items[i].UpdatedBy, " \t\r\n"),
-			)
-		}
-
-		m, _ := h.queryUc.ResolveMemberNames(ctx, ids)
-		nameByMemberID = m
-	}
-
 	items := make([]tokenBlueprintResponse, 0, len(result.Items))
 	for i := range result.Items {
-		tb := &result.Items[i]
+		item := result.Items[i]
+		tb := item.TokenBlueprint
+		names := item.MemberNames
 
-		assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
-		createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
-		updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
-
-		names := &tbapp.TokenBlueprintMemberNames{
-			AssigneeName:  strings.Trim(nameByMemberID[assigneeID], " \t\r\n"),
-			CreatedByName: strings.Trim(nameByMemberID[createdBy], " \t\r\n"),
-			UpdatedByName: strings.Trim(nameByMemberID[updatedBy], " \t\r\n"),
-		}
-
-		items = append(items, h.toResponse(ctx, tb, false, names))
+		items = append(items, h.toResponse(ctx, &tb, false, &names))
 	}
 
 	_ = json.NewEncoder(w).Encode(tokenBlueprintPageResponse{
@@ -555,25 +504,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	tb, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writeTokenBlueprintErr(w, err)
-		return
-	}
-
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
-		return
-	}
-
-	var contentFiles *[]tbdom.ContentFile
-	if req.ContentFiles != nil {
-		normalized := normalizeContentFilesFromRequest(*req.ContentFiles, actorID)
-		contentFiles = &normalized
-	}
-
-	updated, err := h.uc.Update(ctx, tbapp.UpdateBlueprintRequest{
+	updated, err := h.uc.UpdateForCompany(ctx, companyID, tbapp.UpdateBlueprintRequest{
 		ID:           id,
 		Name:         req.Name,
 		Symbol:       req.Symbol,
@@ -581,22 +512,20 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		Description:  req.Description,
 		AssigneeID:   req.AssigneeID,
 		IconURL:      req.IconURL,
-		ContentFiles: contentFiles,
+		ContentFiles: req.ContentFiles,
 		MetadataURI:  req.MetadataURI,
 		Minted:       req.Minted,
-		ActorID:      actorID,
+		UpdatedBy:    actorID,
 	})
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	var names tbapp.TokenBlueprintMemberNames
-	if h != nil && h.queryUc != nil {
-		if tb2, n, e := h.queryUc.GetByIDWithMemberNames(ctx, updated.ID); e == nil && tb2 != nil {
-			updated = tb2
-			names = n
-		}
+	updated, names, err := h.detailQuery.GetByIDForCompany(ctx, updated.ID, companyID)
+	if err != nil {
+		writeTokenBlueprintErr(w, err)
+		return
 	}
 
 	resp := h.toResponse(ctx, updated, true, &names)
@@ -609,76 +538,18 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 	id = strings.Trim(id, " \t\r\n")
 
 	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
-
-	tb, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writeTokenBlueprintErr(w, err)
-		return
-	}
-
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
+	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
 		return
 	}
 
-	if err := h.uc.Delete(ctx, id); err != nil {
+	if err := h.uc.DeleteForCompany(ctx, companyID, id); err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func normalizeContentFilesFromRequest(files []tbdom.ContentFile, actorID string) []tbdom.ContentFile {
-	if len(files) == 0 {
-		return []tbdom.ContentFile{}
-	}
-
-	now := time.Now().UTC()
-	out := make([]tbdom.ContentFile, 0, len(files))
-
-	for _, f := range files {
-		f.ID = strings.Trim(f.ID, " \t\r\n")
-		f.Name = strings.Trim(f.Name, " \t\r\n")
-		f.Type = tbdom.ContentFileType(strings.Trim(string(f.Type), " \t\r\n"))
-		f.ContentType = strings.Trim(f.ContentType, " \t\r\n")
-		f.ObjectPath = strings.Trim(f.ObjectPath, " \t\r\n")
-		f.URL = strings.Trim(f.URL, " \t\r\n")
-		f.Visibility = tbdom.ContentVisibility(strings.Trim(string(f.Visibility), " \t\r\n"))
-
-		if f.ContentType == "" {
-			f.ContentType = "application/octet-stream"
-		}
-
-		if f.Visibility == "" {
-			f.Visibility = tbdom.VisibilityPrivate
-		}
-
-		if f.CreatedAt.IsZero() {
-			f.CreatedAt = now
-		}
-
-		if strings.Trim(f.CreatedBy, " \t\r\n") == "" {
-			f.CreatedBy = actorID
-		}
-
-		if f.UpdatedAt.IsZero() {
-			f.UpdatedAt = now
-		}
-
-		if strings.Trim(f.UpdatedBy, " \t\r\n") == "" {
-			f.UpdatedBy = actorID
-		}
-
-		if f.ID == "" {
-			continue
-		}
-
-		out = append(out, f)
-	}
-
-	return out
 }
 
 func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
@@ -690,6 +561,20 @@ func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
 
 	case errors.Is(err, tbdom.ErrConflict):
 		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+
+	case errors.Is(err, tbdom.ErrInvalidID),
+		errors.Is(err, tbdom.ErrInvalidName),
+		errors.Is(err, tbdom.ErrInvalidSymbol),
+		errors.Is(err, tbdom.ErrInvalidBrandID),
+		errors.Is(err, tbdom.ErrInvalidCompanyID),
+		errors.Is(err, tbdom.ErrInvalidCreatedBy),
+		errors.Is(err, tbdom.ErrInvalidUpdatedBy),
+		errors.Is(err, tbdom.ErrInvalidContentFile),
+		errors.Is(err, tbdom.ErrInvalidContentType),
+		errors.Is(err, tbdom.ErrInvalidContentVisibility):
+		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 

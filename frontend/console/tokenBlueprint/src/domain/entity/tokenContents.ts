@@ -5,13 +5,13 @@
  *
  * Firebase Storage 移行後の正仕様:
  * - url は Firebase Storage downloadURL
- * - objectPath は Firebase Storage object path
- * - GCS bucket / public GCS URL / signed URL / gs:// URL は扱わない
+ * - backend/domain では objectPath / name / size を保持しない
+ * - backend は url だけで content file を制御する
  */
 
 /**
  * ContentType
- * backend/internal/domain/tokenContents/entity.go の ContentType に対応。
+ * backend/internal/domain/tokenBlueprint/entity.go の ContentFileType に対応。
  *
  * - "image" | "video" | "pdf" | "document"
  */
@@ -31,35 +31,58 @@ export const ALL_CONTENT_TYPES: ContentType[] = [
 ];
 
 /**
+ * ContentVisibility
+ * backend/internal/domain/tokenBlueprint/entity.go の ContentVisibility に対応。
+ */
+export type ContentVisibility = "private" | "public";
+
+/** ContentVisibility の妥当性チェック */
+export function isValidContentVisibility(v: string): v is ContentVisibility {
+  return v === "private" || v === "public";
+}
+
+/**
  * FirebaseStorageTokenContent
  *
- * Firebase Storage に保存された token content の表示・削除に必要な最小情報。
+ * Firebase Storage に保存された token content の表示に必要な最小情報。
+ *
+ * backend ContentFile struct と一致:
+ * - id
+ * - type
+ * - contentType
+ * - url
+ * - visibility
+ * - createdAt
+ * - createdBy
+ * - updatedAt
+ * - updatedBy
  */
 export interface FirebaseStorageTokenContent {
   id: string;
-  name: string;
   type: ContentType;
   contentType: string;
-  size: number;
-  objectPath: string;
   url: string;
+  visibility: ContentVisibility;
+
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 /**
  * Firebase Storage delete operation.
  *
- * Firebase Storage の削除対象は objectPath のみで特定する。
+ * objectPath は廃止済み。
+ * 削除・制御は backend 側で url を基準に行う。
  */
 export interface FirebaseStorageDeleteOp {
-  objectPath: string;
+  url: string;
 }
 
 /* =========================================================
  * バリデーション / ヘルパ
  * =======================================================*/
-
-/** アップロードポリシー（MaxFileSize: 0 なら上限なし） */
-export const MAX_TOKEN_CONTENT_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 /** FirebaseStorageTokenContent の簡易バリデーション */
 export function validateFirebaseStorageTokenContent(
@@ -67,28 +90,16 @@ export function validateFirebaseStorageTokenContent(
 ): string[] {
   const errors: string[] = [];
 
-  if (!c.id.trim()) errors.push("id is required");
-  if (!c.name.trim()) errors.push("name is required");
+  if (!c.id.trim()) {
+    errors.push("id is required");
+  }
 
   if (!isValidContentType(c.type)) {
     errors.push("type must be one of 'image' | 'video' | 'pdf' | 'document'");
   }
 
-  if (!c.contentType.trim()) {
-    errors.push("contentType is required");
-  }
-
-  if (c.size < 0) {
-    errors.push("size must be >= 0");
-  } else if (
-    MAX_TOKEN_CONTENT_FILE_SIZE > 0 &&
-    c.size > MAX_TOKEN_CONTENT_FILE_SIZE
-  ) {
-    errors.push(`size must be <= ${MAX_TOKEN_CONTENT_FILE_SIZE} bytes`);
-  }
-
-  if (!c.objectPath.trim()) {
-    errors.push("objectPath is required");
+  if (c.contentType && !c.contentType.trim()) {
+    errors.push("contentType must not be blank when provided");
   }
 
   if (!c.url.trim()) {
@@ -105,13 +116,17 @@ export function validateFirebaseStorageTokenContent(
     }
   }
 
+  if (!isValidContentVisibility(c.visibility)) {
+    errors.push("visibility must be one of 'private' | 'public'");
+  }
+
   return errors;
 }
 
 /**
  * 正規化付きファクトリ
  * - 文字列を trim
- * - URL / objectPath / size / type 等を validate
+ * - URL / type / visibility 等を validate
  * - エラー時は例外
  */
 export function createFirebaseStorageTokenContent(
@@ -119,12 +134,15 @@ export function createFirebaseStorageTokenContent(
 ): FirebaseStorageTokenContent {
   const normalized: FirebaseStorageTokenContent = {
     id: input.id.trim(),
-    name: input.name.trim(),
     type: input.type,
     contentType: input.contentType.trim(),
-    size: input.size,
-    objectPath: input.objectPath.trim(),
     url: input.url.trim(),
+    visibility: input.visibility,
+
+    createdAt: input.createdAt?.trim(),
+    createdBy: input.createdBy?.trim(),
+    updatedAt: input.updatedAt?.trim(),
+    updatedBy: input.updatedBy?.trim(),
   };
 
   const errors = validateFirebaseStorageTokenContent(normalized);
@@ -145,13 +163,13 @@ export function createFirebaseStorageTokenContent(
 /**
  * ToFirebaseStorageDeleteOp
  *
- * Firebase Storage では bucket を UI/domain で扱わず、
- * objectPath のみを削除対象として渡す。
+ * objectPath は廃止済み。
+ * backend 側で url を基準に削除・制御する。
  */
 export function toFirebaseStorageDeleteOp(
   content: FirebaseStorageTokenContent,
 ): FirebaseStorageDeleteOp {
   return {
-    objectPath: content.objectPath,
+    url: content.url,
   };
 }

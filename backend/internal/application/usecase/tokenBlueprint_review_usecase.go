@@ -309,9 +309,24 @@ func (u *TokenBlueprintReviewUsecase) GetTokenBlueprintPatchByID(
 		return tokenBlueprint.Patch{}, errTokenBlueprintRepoNotConfigured
 	}
 
-	patch, err := u.tokenBlueprintRepo.GetPatchByID(ctx, tokenBlueprintID)
+	tb, err := u.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
 	if err != nil {
 		return tokenBlueprint.Patch{}, err
+	}
+	if tb == nil {
+		return tokenBlueprint.Patch{}, errors.New("tokenBlueprint_review_usecase: token blueprint not found")
+	}
+
+	patch := tokenBlueprint.Patch{
+		ID:          tb.ID,
+		TokenName:   tb.Name,
+		Symbol:      tb.Symbol,
+		BrandID:     tb.BrandID,
+		CompanyID:   tb.CompanyID,
+		Description: tb.Description,
+		Minted:      tb.Minted,
+		MetadataURI: tb.MetadataURI,
+		IconURL:     tb.IconURL,
 	}
 
 	if patch.BrandID != "" && u.brandSvc != nil {

@@ -1,6 +1,9 @@
 // frontend/console/tokenBlueprint/src/application/tokenBlueprintDetailService.tsx
 
-import type { TokenBlueprint } from "../domain/entity/tokenBlueprint";
+import type {
+  TokenBlueprint,
+  ContentFile,
+} from "../domain/entity/tokenBlueprint";
 import type { ContentFileDTO } from "../infrastructure/dto/tokenBlueprint.dto";
 
 import { safeDateLabelJa } from "../../../shell/src/shared/util/dateJa";
@@ -41,7 +44,8 @@ export function formatCreatedAt(raw: string): string {
  * 正レスポンス:
  * - iconUrl は Firebase Storage downloadURL
  * - contentFiles[].url は Firebase Storage downloadURL
- * - contentFiles[].objectPath は Firebase Storage object path
+ *
+ * objectPath / name / size は廃止済み。
  *
  * update 対象:
  * - name
@@ -84,6 +88,8 @@ export function buildUpdatePayloadFromCardVm(
 type UpdateFromCardOptions = {
   iconFile?: File | null;
 };
+
+type ContentFileForSend = Partial<ContentFile> & Partial<ContentFileDTO>;
 
 /**
  * TokenBlueprintCard の VM から update API を呼び出し、更新後の TokenBlueprint を返す
@@ -141,44 +147,42 @@ export async function updateTokenBlueprintFromCard(
 }
 
 /**
- * レスポンスを正として contentFiles は ContentFileDTO[] として扱う。
+ * レスポンスを正として contentFiles は backend ContentFile struct に絞って送信する。
  *
  * 正レスポンス:
  * - id: string
- * - name: string
  * - type: string
  * - contentType: string
- * - size: number
- * - objectPath: string
  * - visibility: string
  * - createdAt: ISO string
  * - createdBy: string
  * - updatedAt: ISO string
  * - updatedBy: string
  * - url: Firebase Storage downloadURL
+ *
+ * objectPath / name / size は廃止済み。
  */
-function normalizeContentFilesForSend(input: ContentFileDTO[]): ContentFileDTO[] {
+function normalizeContentFilesForSend(
+  input: ContentFileForSend[],
+): ContentFileDTO[] {
   return input
     .map((x) => ({
-      id: x.id,
-      name: x.name,
-      type: x.type,
-      contentType: x.contentType,
-      size: x.size,
-      objectPath: x.objectPath,
-      visibility: x.visibility,
+      id: String(x.id ?? "").trim(),
+      type: String(x.type ?? "").trim(),
+      contentType: String(x.contentType ?? "").trim(),
+      visibility: String(x.visibility ?? "private").trim(),
       createdAt: x.createdAt,
       createdBy: x.createdBy,
       updatedAt: x.updatedAt,
       updatedBy: x.updatedBy,
-      url: x.url,
+      url: String(x.url ?? "").trim(),
     }))
-    .filter((x) => Boolean(x.id && x.objectPath && x.url));
+    .filter((x) => Boolean(x.id && x.type && x.url));
 }
 
 function getCardFields(cardVm: any): Partial<TokenBlueprint> & {
   iconFile?: File | null;
-  contentFiles?: ContentFileDTO[];
+  contentFiles?: ContentFileForSend[];
 } {
   return cardVm?.fields ?? cardVm ?? {};
 }

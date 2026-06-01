@@ -140,10 +140,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 
-	if c.TokenBlueprintUC != nil {
+	if c.TokenBlueprintUC != nil &&
+		c.TokenBlueprintManagementQuery != nil &&
+		c.TokenBlueprintDetailQuery != nil {
 		tokenBPH = consoleHandler.NewTokenBlueprintHandler(
 			c.TokenBlueprintUC,
-			c.TokenBlueprintQueryUC,
+			c.TokenBlueprintDetailQuery,
+			c.TokenBlueprintManagementQuery,
 			c.BrandService,
 		)
 	}

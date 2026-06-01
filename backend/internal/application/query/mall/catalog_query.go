@@ -31,7 +31,7 @@ type ProductBlueprintRepository interface {
 }
 
 type TokenBlueprintPatchRepository interface {
-	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
+	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 }
 
 // ProductBlueprintReview repository (read-only minimal for catalog)
@@ -245,7 +245,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 	out.ProductReviewSummary = toCatalogProductReviewSummaryDTO(summary)
 
 	// ------------------------------------------------------------
-	// TokenBlueprint patch (must; inventory route ONLY) -> dto.CatalogTokenBlueprintDTO
+	// TokenBlueprint (must; inventory route ONLY) -> dto.CatalogTokenBlueprintDTO
 	// ------------------------------------------------------------
 	resolvedTBID := invDTO.TokenBlueprintID
 	if resolvedTBID == "" {
@@ -256,12 +256,15 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		return dto.CatalogDTO{}, errors.New("tokenBlueprint repo is nil")
 	}
 
-	patch, tbErr := q.TokenRepo.GetPatchByID(ctx, resolvedTBID)
+	tokenBlueprint, tbErr := q.TokenRepo.GetByID(ctx, resolvedTBID)
 	if tbErr != nil {
 		return dto.CatalogDTO{}, tbErr
 	}
+	if tokenBlueprint == nil {
+		return dto.CatalogDTO{}, tbdom.ErrNotFound
+	}
 
-	p := patch
+	p := toTokenBlueprintPatch(tokenBlueprint)
 	if q.NameResolver != nil {
 		fillTokenBlueprintPatchNames(ctx, q.NameResolver, &p)
 	}
@@ -557,6 +560,25 @@ func toCatalogInventoryDTOFromMint(m invdom.Mint) *dto.CatalogInventoryDTO {
 	}
 
 	return out
+}
+
+func toTokenBlueprintPatch(tb *tbdom.TokenBlueprint) tbdom.Patch {
+	if tb == nil {
+		return tbdom.Patch{}
+	}
+
+	return tbdom.Patch{
+		ID:          tb.ID,
+		TokenName:   tb.Name,
+		Symbol:      tb.Symbol,
+		BrandID:     tb.BrandID,
+		BrandName:   "",
+		CompanyID:   tb.CompanyID,
+		Description: tb.Description,
+		Minted:      tb.Minted,
+		MetadataURI: tb.MetadataURI,
+		IconURL:     tb.IconURL,
+	}
 }
 
 // ProductBlueprintReview summary -> CatalogProductReviewSummaryDTO

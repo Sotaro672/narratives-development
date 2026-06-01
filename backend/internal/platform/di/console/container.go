@@ -1,4 +1,4 @@
-// backend\internal\platform\di\console\container.go
+// backend/internal/platform/di/console/container.go
 package console
 
 import (
@@ -62,8 +62,7 @@ type Container struct {
 	ShippingAddressUC          *uc.ShippingAddressUsecase
 	TokenUC                    *uc.TokenUsecase
 
-	TokenBlueprintUC      *uc.TokenBlueprintUsecase
-	TokenBlueprintQueryUC *uc.TokenBlueprintQueryUsecase
+	TokenBlueprintUC *uc.TokenBlueprintUsecase
 
 	UserUC   *uc.UserUsecase
 	WalletUC *uc.WalletUsecase
@@ -75,6 +74,9 @@ type Container struct {
 
 	ProductBlueprintManagementQuery *query.ProductBlueprintManagementQuery
 	ProductBlueprintDetailQuery     *query.ProductBlueprintDetailQuery
+
+	TokenBlueprintManagementQuery *query.TokenBlueprintManagementQuery
+	TokenBlueprintDetailQuery     *query.TokenBlueprintDetailQuery
 
 	InventoryManagementQuery *query.InventoryManagementQuery
 	InventoryDetailQuery     *query.InventoryDetailQuery
@@ -182,8 +184,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ShippingAddressUC:          u.shippingAddressUC,
 		TokenUC:                    u.tokenUC,
 
-		TokenBlueprintUC:      u.tokenBlueprintUC,
-		TokenBlueprintQueryUC: u.tokenBlueprintQueryUC,
+		TokenBlueprintUC: u.tokenBlueprintUC,
 
 		UserUC:   u.userUC,
 		WalletUC: u.walletUC,
@@ -195,6 +196,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		ProductBlueprintManagementQuery: q.productBlueprintManagementQuery,
 		ProductBlueprintDetailQuery:     q.productBlueprintDetailQuery,
+
+		TokenBlueprintManagementQuery: q.tokenBlueprintManagementQuery,
+		TokenBlueprintDetailQuery:     q.tokenBlueprintDetailQuery,
 
 		InventoryManagementQuery: q.inventoryManagementQuery,
 		InventoryDetailQuery:     q.inventoryDetailQuery,

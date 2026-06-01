@@ -53,14 +53,14 @@ type HistoryProductBlueprintResolver interface {
 //
 // Concrete implementation can be tokenBlueprint.RepositoryPort because it has:
 //
-//	GetPatchByID(ctx, tokenBlueprintID)
+//	GetByID(ctx, tokenBlueprintID)
 //
-// Patch provides:
-// - TokenName
+// TokenBlueprint provides:
+// - Name
 // - IconURL
 // - BrandID
 type HistoryTokenBlueprintResolver interface {
-	GetPatchByID(ctx context.Context, id string) (tokenbpdom.Patch, error)
+	GetByID(ctx context.Context, id string) (*tokenbpdom.TokenBlueprint, error)
 }
 
 // HistoryBrandResolver resolves brand display data from brandId.
@@ -357,14 +357,17 @@ func (q *HistoryQuery) ResolveTokenBlueprintInfo(
 		return "", "", "", nil
 	}
 
-	patch, patchErr := q.tokenBlueprintResolver.GetPatchByID(ctx, id)
-	if patchErr != nil {
-		return "", "", "", patchErr
+	tb, tbErr := q.tokenBlueprintResolver.GetByID(ctx, id)
+	if tbErr != nil {
+		return "", "", "", tbErr
+	}
+	if tb == nil {
+		return "", "", "", nil
 	}
 
-	return strings.TrimSpace(patch.TokenName),
-		strings.TrimSpace(patch.IconURL),
-		strings.TrimSpace(patch.BrandID),
+	return strings.TrimSpace(tb.Name),
+		strings.TrimSpace(tb.IconURL),
+		strings.TrimSpace(tb.BrandID),
 		nil
 }
 

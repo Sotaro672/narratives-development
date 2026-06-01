@@ -88,16 +88,14 @@ func IsValidVisibility(v ContentVisibility) bool {
 // Firebase Storage 移行後:
 // - frontend が Firebase Storage へ直接 upload する
 // - backend は upload URL を発行しない
-// - 永続化するのは Firebase Storage の objectPath と downloadURL
+// - backend は GCS / Firebase Storage の objectPath を保存しない
+// - name / size は Storage 側または frontend 側の表示責務とし、domain では保持しない
 // - URL は Firebase Storage の getDownloadURL() で取得した値を保存する
 type ContentFile struct {
 	ID          string            `json:"id"`
-	Name        string            `json:"name"`
 	Type        ContentFileType   `json:"type"`
 	ContentType string            `json:"contentType,omitempty"`
-	Size        int64             `json:"size"`
-	ObjectPath  string            `json:"objectPath"`
-	URL         string            `json:"url,omitempty"`
+	URL         string            `json:"url"`
 	Visibility  ContentVisibility `json:"visibility"`
 
 	CreatedAt time.Time `json:"createdAt"`
@@ -110,20 +108,14 @@ func (f ContentFile) Validate() error {
 	if f.ID == "" {
 		return ErrInvalidContentFile
 	}
-	if f.Name == "" {
-		return ErrInvalidContentFile
-	}
 	if !IsValidContentType(f.Type) {
 		return ErrInvalidContentType
 	}
-	if f.ObjectPath == "" {
+	if f.URL == "" {
 		return ErrInvalidContentFile
 	}
 	if !IsValidVisibility(f.Visibility) {
 		return ErrInvalidContentVisibility
-	}
-	if f.Size < 0 {
-		return fmt.Errorf("%w: size", ErrInvalidContentFile)
 	}
 	return nil
 }
@@ -166,7 +158,7 @@ func ValidateContentFiles(files []ContentFile) error {
 // - backend は upload URL を発行しない
 // - iconUrl には Firebase Storage の downloadURL を保存する
 // - contentFiles[].url にも Firebase Storage の downloadURL を保存する
-// - objectPath は Firebase Storage 上の参照パスとして保持する
+// - backend/domain では objectPath / name / size を保持しない
 //
 // create 時:
 // - metadataUri は作成しない（空のまま）
@@ -181,10 +173,6 @@ type TokenBlueprint struct {
 
 	// Firebase Storage downloadURL for tokenBlueprint icon.
 	IconURL string `json:"iconUrl,omitempty"`
-
-	// Firebase Storage object paths.
-	TokenIconObjectPath     string `json:"tokenIconObjectPath"`
-	TokenContentsObjectPath string `json:"tokenContentsObjectPath"`
 
 	ContentFiles []ContentFile `json:"contentFiles"`
 	AssigneeID   string        `json:"assigneeId"`
@@ -222,9 +210,6 @@ var (
 	ErrInvalidContentType       = errors.New("tokenBlueprint: invalid contentFile.type")
 	ErrInvalidContentVisibility = errors.New("tokenBlueprint: invalid contentFile.visibility")
 
-	ErrInvalidTokenIconObjectPath     = errors.New("tokenBlueprint: invalid tokenIconObjectPath")
-	ErrInvalidTokenContentsObjectPath = errors.New("tokenBlueprint: invalid tokenContentsObjectPath")
-
 	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; core fields or deletion are not allowed")
 )
 
@@ -252,12 +237,6 @@ func (t TokenBlueprint) validate() error {
 	}
 	if t.AssigneeID == "" {
 		return ErrInvalidAssigneeID
-	}
-	if t.TokenIconObjectPath == "" {
-		return ErrInvalidTokenIconObjectPath
-	}
-	if t.TokenContentsObjectPath == "" {
-		return ErrInvalidTokenContentsObjectPath
 	}
 
 	if err := ValidateContentFiles(t.ContentFiles); err != nil {
@@ -292,8 +271,6 @@ func New(
 	id, name, symbol, brandID, companyID, description string,
 	contentFiles []ContentFile,
 	assigneeID string,
-	tokenIconObjectPath string,
-	tokenContentsObjectPath string,
 	createdAt time.Time,
 	createdBy string,
 	updatedAt time.Time,
@@ -309,9 +286,6 @@ func New(
 		ContentFiles: contentFiles,
 		AssigneeID:   assigneeID,
 		Minted:       false,
-
-		TokenIconObjectPath:     tokenIconObjectPath,
-		TokenContentsObjectPath: tokenContentsObjectPath,
 
 		CreatedAt: createdAt.UTC(),
 		CreatedBy: createdBy,
@@ -492,28 +466,6 @@ func (t *TokenBlueprint) SetIconURL(url string) error {
 		return ErrNilTokenBlueprint
 	}
 	t.IconURL = url
-	return nil
-}
-
-func (t *TokenBlueprint) SetTokenIconObjectPath(path string) error {
-	if err := t.ensureMutableCoreOrDeletable(); err != nil {
-		return err
-	}
-	if path == "" {
-		return ErrInvalidTokenIconObjectPath
-	}
-	t.TokenIconObjectPath = path
-	return nil
-}
-
-func (t *TokenBlueprint) SetTokenContentsObjectPath(path string) error {
-	if err := t.ensureMutableCoreOrDeletable(); err != nil {
-		return err
-	}
-	if path == "" {
-		return ErrInvalidTokenContentsObjectPath
-	}
-	t.TokenContentsObjectPath = path
 	return nil
 }
 

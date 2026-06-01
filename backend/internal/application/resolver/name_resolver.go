@@ -9,6 +9,7 @@ import (
 	memberdom "narratives/internal/domain/member"
 	modeldom "narratives/internal/domain/model"
 	pbdom "narratives/internal/domain/productBlueprint"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ------------------------------------------------------------
@@ -46,10 +47,12 @@ type ModelNumberRepository interface {
 	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
-// TokenBlueprint → name / symbol を取得できればよい
-// GetNameByID のみ要求する（NameResolver用途の最小ポート）
+// TokenBlueprint の取得に必要な最小限のインターフェース
+//
+// tokenBlueprint.RepositoryPort と同じ GetByID に統一する。
+// name 解決が必要な場合も、GetByID の結果から Name を参照する。
 type TokenBlueprintNameRepository interface {
-	GetNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 }
 
 // ------------------------------------------------------------
@@ -348,7 +351,7 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 // TokenBlueprint 関連
 // ------------------------------------------------------------
 
-// ResolveTokenName は tokenBlueprintId からトークン名（例: name or symbol）を解決する。
+// ResolveTokenName は tokenBlueprintId からトークン名を解決する。
 // 取得できなかった場合は空文字列を返す。
 func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID string) string {
 	if r == nil || r.tokenBlueprintRepo == nil {
@@ -360,10 +363,10 @@ func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID st
 		return ""
 	}
 
-	name, err := r.tokenBlueprintRepo.GetNameByID(ctx, id)
-	if err != nil {
+	tb, err := r.tokenBlueprintRepo.GetByID(ctx, id)
+	if err != nil || tb == nil {
 		return ""
 	}
 
-	return name
+	return tb.Name
 }

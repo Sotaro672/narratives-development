@@ -52,14 +52,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Local repositories recreated from Firestore when needed
 	// ------------------------------------------------------------
 	var tokenBlueprintRepo tokenBlueprint.RepositoryPort
-	var tokenBlueprintPatchRepo mallhandler.TokenBlueprintPatchReader
 	{
 		hasFS := cont.Infra != nil && cont.Infra.Firestore != nil
 		if hasFS {
 			repo := firestoreOut.NewTokenBlueprintRepositoryFS(cont.Infra.Firestore)
 
 			tokenBlueprintRepo = repo
-			tokenBlueprintPatchRepo = repo
 		}
 	}
 
@@ -227,9 +225,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		opts := []mallhandler.PreviewHandlerOption{}
 		if cont.OwnerResolveQ != nil {
 			opts = append(opts, mallhandler.WithOwnerResolveQuery(cont.OwnerResolveQ))
-		}
-		if tokenBlueprintPatchRepo != nil {
-			opts = append(opts, mallhandler.WithTokenBlueprintPatchRepo(tokenBlueprintPatchRepo))
 		}
 		if cont.NameResolver != nil {
 			opts = append(opts, mallhandler.WithNameResolver(cont.NameResolver))

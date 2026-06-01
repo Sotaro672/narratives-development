@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\tokenBlueprint_usecase.go
+// backend/internal/application/usecase/tokenBlueprint_usecase.go
 package usecase
 
 import (
@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"narratives/internal/application/resolver"
 	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 	tbReview "narratives/internal/domain/tokenBlueprint_review"
@@ -22,7 +21,6 @@ type ArweaveUploader interface {
 
 type TokenBlueprintUsecase struct {
 	crud     *TokenBlueprintCRUDUsecase
-	query    *TokenBlueprintQueryUsecase
 	command  *TokenBlueprintCommandUsecase
 	metadata *TokenBlueprintMetadataUsecase
 }
@@ -30,14 +28,12 @@ type TokenBlueprintUsecase struct {
 func NewTokenBlueprintUsecase(
 	tbRepo tbdom.RepositoryPort,
 	tbReviewRepo tbReview.RepositoryPort,
-	nameResolver *resolver.NameResolver,
 ) *TokenBlueprintUsecase {
 	if tbRepo == nil {
 		panic(fmt.Errorf("NewTokenBlueprintUsecase: tbRepo is nil"))
 	}
 
 	crud := NewTokenBlueprintCRUDUsecase(tbRepo, tbReviewRepo)
-	query := NewTokenBlueprintQueryUsecase(tbRepo, nameResolver)
 	command := NewTokenBlueprintCommandUsecase(tbRepo)
 
 	baseURL := os.Getenv("ARWEAVE_BASE_URL")
@@ -48,7 +44,6 @@ func NewTokenBlueprintUsecase(
 
 	return &TokenBlueprintUsecase{
 		crud:     crud,
-		query:    query,
 		command:  command,
 		metadata: metadata,
 	}
@@ -79,7 +74,6 @@ type CreateBlueprintRequest struct {
 	ContentFiles []tbdom.ContentFile
 	AssigneeID   string
 	CreatedBy    string
-	ActorID      string
 }
 
 func (u *TokenBlueprintCRUDUsecase) Create(
@@ -90,29 +84,29 @@ func (u *TokenBlueprintCRUDUsecase) Create(
 		return nil, tbdom.ErrInvalid
 	}
 
-	if in.CreatedBy == "" {
+	createdBy := strings.Trim(in.CreatedBy, " \t\r\n")
+	if createdBy == "" {
 		return nil, tbdom.ErrInvalidCreatedBy
 	}
 
-	if err := tbdom.ValidateContentFiles(in.ContentFiles); err != nil {
+	contentFiles := normalizeContentFilesForCommand(in.ContentFiles, createdBy)
+	if err := tbdom.ValidateContentFiles(contentFiles); err != nil {
 		return nil, err
 	}
 
-	contentFiles := copyContentFiles(in.ContentFiles)
-
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
-		Name:         in.Name,
-		Symbol:       in.Symbol,
-		BrandID:      in.BrandID,
-		CompanyID:    in.CompanyID,
-		Description:  in.Description,
-		IconURL:      in.IconURL,
+		Name:         strings.Trim(in.Name, " \t\r\n"),
+		Symbol:       strings.Trim(in.Symbol, " \t\r\n"),
+		BrandID:      strings.Trim(in.BrandID, " \t\r\n"),
+		CompanyID:    strings.Trim(in.CompanyID, " \t\r\n"),
+		Description:  strings.Trim(in.Description, " \t\r\n"),
+		IconURL:      strings.Trim(in.IconURL, " \t\r\n"),
 		ContentFiles: contentFiles,
-		AssigneeID:   in.AssigneeID,
+		AssigneeID:   strings.Trim(in.AssigneeID, " \t\r\n"),
 		CreatedAt:    nil,
-		CreatedBy:    in.CreatedBy,
+		CreatedBy:    createdBy,
 		UpdatedAt:    nil,
-		UpdatedBy:    in.CreatedBy,
+		UpdatedBy:    createdBy,
 		MetadataURI:  "",
 	})
 	if err != nil {
@@ -140,11 +134,41 @@ func (u *TokenBlueprintCRUDUsecase) GetByID(
 		return nil, tbdom.ErrInvalid
 	}
 
+	id = strings.Trim(id, " \t\r\n")
 	if id == "" {
 		return nil, tbdom.ErrInvalidID
 	}
 
 	return u.tbRepo.GetByID(ctx, id)
+}
+
+func (u *TokenBlueprintCRUDUsecase) GetByIDForCompany(
+	ctx context.Context,
+	id string,
+	companyID string,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.tbRepo == nil {
+		return nil, tbdom.ErrInvalid
+	}
+
+	companyID = strings.Trim(companyID, " \t\r\n")
+	if companyID == "" {
+		return nil, tbdom.ErrInvalidCompanyID
+	}
+
+	tb, err := u.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if tb == nil {
+		return nil, tbdom.ErrNotFound
+	}
+
+	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
+		return nil, tbdom.ErrNotFound
+	}
+
+	return tb, nil
 }
 
 func (u *TokenBlueprintCRUDUsecase) ListByCompanyID(
@@ -158,6 +182,7 @@ func (u *TokenBlueprintCRUDUsecase) ListByCompanyID(
 		return empty, tbdom.ErrInvalid
 	}
 
+	companyID = strings.Trim(companyID, " \t\r\n")
 	if companyID == "" {
 		return empty, tbdom.ErrInvalidCompanyID
 	}
@@ -176,6 +201,7 @@ func (u *TokenBlueprintCRUDUsecase) ListByBrandID(
 		return empty, tbdom.ErrInvalid
 	}
 
+	brandID = strings.Trim(brandID, " \t\r\n")
 	if brandID == "" {
 		return empty, tbdom.ErrInvalidBrandID
 	}
@@ -194,7 +220,7 @@ type UpdateBlueprintRequest struct {
 	ContentFiles *[]tbdom.ContentFile
 	MetadataURI  *string
 	Minted       *bool
-	ActorID      string
+	UpdatedBy    string
 }
 
 func (u *TokenBlueprintCRUDUsecase) Update(
@@ -205,38 +231,40 @@ func (u *TokenBlueprintCRUDUsecase) Update(
 		return nil, tbdom.ErrInvalid
 	}
 
-	if in.ID == "" {
+	id := strings.Trim(in.ID, " \t\r\n")
+	if id == "" {
 		return nil, tbdom.ErrInvalidID
 	}
 
-	if in.ActorID == "" {
+	updatedBy := strings.Trim(in.UpdatedBy, " \t\r\n")
+	if updatedBy == "" {
 		return nil, tbdom.ErrInvalidUpdatedBy
 	}
 
 	var contentFiles *[]tbdom.ContentFile
 	if in.ContentFiles != nil {
-		if err := tbdom.ValidateContentFiles(*in.ContentFiles); err != nil {
+		normalized := normalizeContentFilesForCommand(*in.ContentFiles, updatedBy)
+		if err := tbdom.ValidateContentFiles(normalized); err != nil {
 			return nil, err
 		}
 
-		copied := copyContentFiles(*in.ContentFiles)
-		contentFiles = &copied
+		contentFiles = &normalized
 	}
 
 	now := time.Now().UTC()
 
-	tb, err := u.tbRepo.Update(ctx, in.ID, tbdom.UpdateTokenBlueprintInput{
-		Name:         in.Name,
-		Symbol:       in.Symbol,
-		BrandID:      in.BrandID,
-		Description:  in.Description,
-		AssigneeID:   in.AssigneeID,
-		IconURL:      in.IconURL,
+	tb, err := u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
+		Name:         trimStringPtr(in.Name),
+		Symbol:       trimStringPtr(in.Symbol),
+		BrandID:      trimStringPtr(in.BrandID),
+		Description:  trimStringPtr(in.Description),
+		AssigneeID:   trimStringPtr(in.AssigneeID),
+		IconURL:      trimStringPtr(in.IconURL),
 		ContentFiles: contentFiles,
-		MetadataURI:  in.MetadataURI,
+		MetadataURI:  trimStringPtr(in.MetadataURI),
 		Minted:       in.Minted,
 		UpdatedAt:    &now,
-		UpdatedBy:    ptr(in.ActorID),
+		UpdatedBy:    ptr(updatedBy),
 		DeletedAt:    nil,
 		DeletedBy:    nil,
 	})
@@ -247,11 +275,28 @@ func (u *TokenBlueprintCRUDUsecase) Update(
 	return tb, nil
 }
 
+func (u *TokenBlueprintCRUDUsecase) UpdateForCompany(
+	ctx context.Context,
+	companyID string,
+	in UpdateBlueprintRequest,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.tbRepo == nil {
+		return nil, tbdom.ErrInvalid
+	}
+
+	if _, err := u.GetByIDForCompany(ctx, in.ID, companyID); err != nil {
+		return nil, err
+	}
+
+	return u.Update(ctx, in)
+}
+
 func (u *TokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error {
 	if u == nil || u.tbRepo == nil {
 		return tbdom.ErrInvalid
 	}
 
+	id = strings.Trim(id, " \t\r\n")
 	if id == "" {
 		return tbdom.ErrInvalidID
 	}
@@ -259,125 +304,20 @@ func (u *TokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error
 	return u.tbRepo.Delete(ctx, id)
 }
 
-type TokenBlueprintQueryUsecase struct {
-	tbRepo       tbdom.RepositoryPort
-	nameResolver *resolver.NameResolver
-}
-
-func NewTokenBlueprintQueryUsecase(
-	tbRepo tbdom.RepositoryPort,
-	nameResolver *resolver.NameResolver,
-) *TokenBlueprintQueryUsecase {
-	return &TokenBlueprintQueryUsecase{
-		tbRepo:       tbRepo,
-		nameResolver: nameResolver,
-	}
-}
-
-type TokenBlueprintMemberNames struct {
-	AssigneeName  string `json:"assigneeName"`
-	CreatedByName string `json:"createdByName"`
-	UpdatedByName string `json:"updatedByName"`
-}
-
-func (u *TokenBlueprintQueryUsecase) ResolveMemberNames(
+func (u *TokenBlueprintCRUDUsecase) DeleteForCompany(
 	ctx context.Context,
-	ids []string,
-) (map[string]string, error) {
-	if u == nil || u.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint query usecase/repo is nil")
-	}
-
-	out := make(map[string]string, len(ids))
-
-	seen := make(map[string]struct{}, len(ids))
-	uniq := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		uniq = append(uniq, id)
-	}
-
-	if u.nameResolver == nil {
-		for _, mid := range uniq {
-			out[mid] = ""
-		}
-		return out, nil
-	}
-
-	for _, mid := range uniq {
-		out[mid] = u.nameResolver.ResolveMemberName(ctx, mid)
-	}
-
-	return out, nil
-}
-
-func (u *TokenBlueprintQueryUsecase) GetByIDWithMemberNames(
-	ctx context.Context,
+	companyID string,
 	id string,
-) (*tbdom.TokenBlueprint, TokenBlueprintMemberNames, error) {
+) error {
 	if u == nil || u.tbRepo == nil {
-		return nil, TokenBlueprintMemberNames{}, fmt.Errorf("tokenBlueprint query usecase/repo is nil")
+		return tbdom.ErrInvalid
 	}
 
-	tid := id
-	if tid == "" {
-		return nil, TokenBlueprintMemberNames{}, fmt.Errorf("id is empty")
+	if _, err := u.GetByIDForCompany(ctx, id, companyID); err != nil {
+		return err
 	}
 
-	tb, err := u.tbRepo.GetByID(ctx, tid)
-	if err != nil {
-		return nil, TokenBlueprintMemberNames{}, err
-	}
-	if tb == nil {
-		return nil, TokenBlueprintMemberNames{}, tbdom.ErrNotFound
-	}
-
-	ids := []string{
-		tb.AssigneeID,
-		tb.CreatedBy,
-		tb.UpdatedBy,
-	}
-
-	m, _ := u.ResolveMemberNames(ctx, ids)
-
-	return tb, TokenBlueprintMemberNames{
-		AssigneeName:  m[tb.AssigneeID],
-		CreatedByName: m[tb.CreatedBy],
-		UpdatedByName: m[tb.UpdatedBy],
-	}, nil
-}
-
-func (u *TokenBlueprintQueryUsecase) ResolveNames(
-	ctx context.Context,
-	ids []string,
-) (map[string]string, error) {
-	if u == nil || u.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint query usecase/repo is nil")
-	}
-
-	result := make(map[string]string, len(ids))
-
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-
-		name, err := u.tbRepo.GetNameByID(ctx, id)
-		if err != nil {
-			result[id] = ""
-			continue
-		}
-
-		result[id] = name
-	}
-
-	return result, nil
+	return u.Delete(ctx, id)
 }
 
 type TokenBlueprintCommandUsecase struct {
@@ -400,11 +340,12 @@ func (u *TokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(
 		return nil, fmt.Errorf("tokenBlueprint repo is nil")
 	}
 
-	id := tokenBlueprintID
+	id := strings.Trim(tokenBlueprintID, " \t\r\n")
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
 
+	actorID = strings.Trim(actorID, " \t\r\n")
 	if actorID == "" {
 		return nil, fmt.Errorf("actorID is empty")
 	}
@@ -471,14 +412,11 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(
 	if tb == nil {
 		return nil, fmt.Errorf("tokenBlueprint is nil")
 	}
-	if strings.TrimSpace(tb.ID) == "" {
+	if strings.Trim(tb.ID, " \t\r\n") == "" {
 		return nil, fmt.Errorf("tokenBlueprint.ID is empty")
 	}
-	if strings.TrimSpace(actorID) == "" {
-		return nil, tbdom.ErrInvalidUpdatedBy
-	}
 
-	if strings.TrimSpace(tb.MetadataURI) != "" {
+	if tb.MetadataURI != "" {
 		return tb, nil
 	}
 
@@ -492,12 +430,13 @@ func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(
 		return nil, err
 	}
 
-	uri = strings.TrimSpace(uri)
+	uri = strings.Trim(uri, " \t\r\n")
 	if uri == "" {
 		return nil, fmt.Errorf("metadataUri is empty after upload")
 	}
 
 	now := time.Now().UTC()
+	actorID = strings.Trim(actorID, " \t\r\n")
 
 	updated, err := u.tbRepo.Update(ctx, tb.ID, tbdom.UpdateTokenBlueprintInput{
 		MetadataURI: &uri,
@@ -525,24 +464,24 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 		return nil, fmt.Errorf("tokenBlueprint is nil")
 	}
 
-	id := strings.TrimSpace(tb.ID)
+	id := strings.Trim(tb.ID, " \t\r\n")
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprint.ID is empty")
 	}
 
-	name := strings.TrimSpace(tb.Name)
+	name := strings.Trim(tb.Name, " \t\r\n")
 	if name == "" {
 		return nil, fmt.Errorf("tokenBlueprint.name is empty")
 	}
 
-	symbol := strings.TrimSpace(tb.Symbol)
+	symbol := strings.Trim(tb.Symbol, " \t\r\n")
 	if symbol == "" {
 		return nil, fmt.Errorf("tokenBlueprint.symbol is empty")
 	}
 
-	desc := strings.TrimSpace(tb.Description)
+	desc := strings.Trim(tb.Description, " \t\r\n")
 
-	imageURL := strings.TrimSpace(tb.IconURL)
+	imageURL := strings.Trim(tb.IconURL, " \t\r\n")
 	if imageURL == "" {
 		return nil, fmt.Errorf("tokenBlueprint.iconUrl is empty")
 	}
@@ -557,7 +496,7 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 	seen := make(map[string]struct{}, len(tb.ContentFiles))
 
 	for _, f := range tb.ContentFiles {
-		cid := strings.TrimSpace(f.ID)
+		cid := strings.Trim(f.ID, " \t\r\n")
 		if cid == "" {
 			continue
 		}
@@ -567,26 +506,20 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 		}
 		seen[cid] = struct{}{}
 
-		uri := strings.TrimSpace(f.URL)
+		uri := strings.Trim(f.URL, " \t\r\n")
 		if uri == "" {
 			return nil, fmt.Errorf("tokenBlueprint.contentFiles[%s].url is empty", cid)
 		}
 
-		ct := strings.TrimSpace(f.ContentType)
+		ct := strings.Trim(f.ContentType, " \t\r\n")
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
 
-		file := map[string]any{
+		files = append(files, map[string]any{
 			"uri":  uri,
 			"type": ct,
-		}
-
-		if name := strings.TrimSpace(f.Name); name != "" {
-			file["name"] = name
-		}
-
-		files = append(files, file)
+		})
 	}
 
 	payload := map[string]any{
@@ -628,7 +561,7 @@ func (u *TokenBlueprintUsecase) Create(
 		return nil, err
 	}
 
-	if tb == nil || tb.ID == "" {
+	if tb == nil || strings.Trim(tb.ID, " \t\r\n") == "" {
 		return nil, fmt.Errorf("tokenBlueprint create returned empty id")
 	}
 
@@ -646,15 +579,16 @@ func (u *TokenBlueprintUsecase) GetByID(
 	return u.crud.GetByID(ctx, id)
 }
 
-func (u *TokenBlueprintUsecase) GetByIDWithMemberNames(
+func (u *TokenBlueprintUsecase) GetByIDForCompany(
 	ctx context.Context,
 	id string,
-) (*tbdom.TokenBlueprint, TokenBlueprintMemberNames, error) {
-	if u == nil || u.query == nil {
-		return nil, TokenBlueprintMemberNames{}, fmt.Errorf("tokenBlueprint usecase/query is nil")
+	companyID string,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.crud == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
 	}
 
-	return u.query.GetByIDWithMemberNames(ctx, id)
+	return u.crud.GetByIDForCompany(ctx, id, companyID)
 }
 
 func (u *TokenBlueprintUsecase) ListByCompanyID(
@@ -681,28 +615,6 @@ func (u *TokenBlueprintUsecase) ListByBrandID(
 	return u.crud.ListByBrandID(ctx, brandID, page)
 }
 
-func (u *TokenBlueprintUsecase) ResolveNames(
-	ctx context.Context,
-	ids []string,
-) (map[string]string, error) {
-	if u == nil || u.query == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/query is nil")
-	}
-
-	return u.query.ResolveNames(ctx, ids)
-}
-
-func (u *TokenBlueprintUsecase) ResolveMemberNames(
-	ctx context.Context,
-	ids []string,
-) (map[string]string, error) {
-	if u == nil || u.query == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/query is nil")
-	}
-
-	return u.query.ResolveMemberNames(ctx, ids)
-}
-
 func (u *TokenBlueprintUsecase) Update(
 	ctx context.Context,
 	in UpdateBlueprintRequest,
@@ -712,6 +624,18 @@ func (u *TokenBlueprintUsecase) Update(
 	}
 
 	return u.crud.Update(ctx, in)
+}
+
+func (u *TokenBlueprintUsecase) UpdateForCompany(
+	ctx context.Context,
+	companyID string,
+	in UpdateBlueprintRequest,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.crud == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
+	}
+
+	return u.crud.UpdateForCompany(ctx, companyID, in)
 }
 
 func (u *TokenBlueprintUsecase) EnsureMetadataURI(
@@ -734,6 +658,18 @@ func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	return u.crud.Delete(ctx, id)
 }
 
+func (u *TokenBlueprintUsecase) DeleteForCompany(
+	ctx context.Context,
+	companyID string,
+	id string,
+) error {
+	if u == nil || u.crud == nil {
+		return fmt.Errorf("tokenBlueprint usecase/crud is nil")
+	}
+
+	return u.crud.DeleteForCompany(ctx, companyID, id)
+}
+
 func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -746,15 +682,63 @@ func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
 	return u.command.MarkTokenBlueprintMinted(ctx, tokenBlueprintID, actorID)
 }
 
-func copyContentFiles(files []tbdom.ContentFile) []tbdom.ContentFile {
+func normalizeContentFilesForCommand(files []tbdom.ContentFile, actorID string) []tbdom.ContentFile {
 	if len(files) == 0 {
 		return []tbdom.ContentFile{}
 	}
 
-	out := make([]tbdom.ContentFile, len(files))
-	copy(out, files)
+	actorID = strings.Trim(actorID, " \t\r\n")
+	now := time.Now().UTC()
+	out := make([]tbdom.ContentFile, 0, len(files))
+
+	for _, f := range files {
+		f.ID = strings.Trim(f.ID, " \t\r\n")
+		f.Type = tbdom.ContentFileType(strings.Trim(string(f.Type), " \t\r\n"))
+		f.ContentType = strings.Trim(f.ContentType, " \t\r\n")
+		f.URL = strings.Trim(f.URL, " \t\r\n")
+		f.Visibility = tbdom.ContentVisibility(strings.Trim(string(f.Visibility), " \t\r\n"))
+
+		if f.ContentType == "" {
+			f.ContentType = "application/octet-stream"
+		}
+
+		if f.Visibility == "" {
+			f.Visibility = tbdom.VisibilityPrivate
+		}
+
+		if f.CreatedAt.IsZero() {
+			f.CreatedAt = now
+		}
+
+		if strings.Trim(f.CreatedBy, " \t\r\n") == "" {
+			f.CreatedBy = actorID
+		}
+
+		if f.UpdatedAt.IsZero() {
+			f.UpdatedAt = now
+		}
+
+		if strings.Trim(f.UpdatedBy, " \t\r\n") == "" {
+			f.UpdatedBy = actorID
+		}
+
+		if f.ID == "" || f.URL == "" {
+			continue
+		}
+
+		out = append(out, f)
+	}
 
 	return out
+}
+
+func trimStringPtr(v *string) *string {
+	if v == nil {
+		return nil
+	}
+
+	x := strings.Trim(*v, " \t\r\n")
+	return &x
 }
 
 func ptr[T any](v T) *T {
