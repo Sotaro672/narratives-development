@@ -21,20 +21,20 @@ type TokenBlueprintHandler struct {
 	uc              *tbapp.TokenBlueprintUsecase
 	detailQuery     *consolequery.TokenBlueprintDetailQuery
 	managementQuery *consolequery.TokenBlueprintManagementQuery
-	brandSvc        *branddom.Service
+	brandRepo       branddom.Repository
 }
 
 func NewTokenBlueprintHandler(
 	ucase *tbapp.TokenBlueprintUsecase,
 	detailQuery *consolequery.TokenBlueprintDetailQuery,
 	managementQuery *consolequery.TokenBlueprintManagementQuery,
-	brandSvc *branddom.Service,
+	brandRepo branddom.Repository,
 ) http.Handler {
 	return &TokenBlueprintHandler{
 		uc:              ucase,
 		detailQuery:     detailQuery,
 		managementQuery: managementQuery,
-		brandSvc:        brandSvc,
+		brandRepo:       brandRepo,
 	}
 }
 
@@ -130,12 +130,21 @@ type tokenBlueprintPageResponse struct {
 }
 
 func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string) string {
-	if h == nil || h.brandSvc == nil {
+	if h == nil || h.brandRepo == nil {
 		return ""
 	}
 
-	name, _ := h.brandSvc.GetNameByID(ctx, strings.Trim(id, " \t\r\n"))
-	return name
+	brandID := strings.Trim(id, " \t\r\n")
+	if brandID == "" {
+		return ""
+	}
+
+	brand, err := h.brandRepo.GetByID(ctx, brandID)
+	if err != nil {
+		return ""
+	}
+
+	return strings.Trim(brand.Name, " \t\r\n")
 }
 
 func resolveStoredIconURL(tb *tbdom.TokenBlueprint) string {

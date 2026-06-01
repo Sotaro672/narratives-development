@@ -26,7 +26,8 @@ type MintRequestQueryService struct {
 	inspRepo mintdom.MintInspectionRepo
 	pbRepo   mintdom.MintProductBlueprintRepo
 	tbRepo   tbdom.RepositoryPort
-	brandSvc *branddom.Service
+
+	brandRepo branddom.Repository
 
 	nameResolver *resolver.NameResolver
 }
@@ -37,7 +38,7 @@ func NewMintRequestQueryService(
 	inspRepo mintdom.MintInspectionRepo,
 	pbRepo mintdom.MintProductBlueprintRepo,
 	tbRepo tbdom.RepositoryPort,
-	brandSvc *branddom.Service,
+	brandRepo branddom.Repository,
 	nameResolver *resolver.NameResolver,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
@@ -46,7 +47,7 @@ func NewMintRequestQueryService(
 		inspRepo:        inspRepo,
 		pbRepo:          pbRepo,
 		tbRepo:          tbRepo,
-		brandSvc:        brandSvc,
+		brandRepo:       brandRepo,
 		nameResolver:    nameResolver,
 	}
 }
@@ -191,7 +192,7 @@ func (s *MintRequestQueryService) ListBrandsForMint(
 ) (branddom.PageResult[branddom.Brand], error) {
 	var empty branddom.PageResult[branddom.Brand]
 
-	if s == nil || s.brandSvc == nil {
+	if s == nil || s.brandRepo == nil {
 		return empty, ErrMintRequestQueryServiceNotConfigured
 	}
 
@@ -200,7 +201,7 @@ func (s *MintRequestQueryService) ListBrandsForMint(
 		return empty, usecase.ErrCompanyIDMissing
 	}
 
-	return s.brandSvc.ListByCompanyID(ctx, companyID, branddom.Page{})
+	return s.brandRepo.ListByCompanyID(ctx, companyID, branddom.Page{})
 }
 
 func (s *MintRequestQueryService) listMintsByProductionIDs(

@@ -74,7 +74,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.inspectionRepo,
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
-		s.brandSvc,
+		r.brandRepo,
 		res.nameResolver,
 	)
 
@@ -127,7 +127,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		ModelRepo:            r.modelRepo,
 		ProductBlueprintRepo: r.productBlueprintRepo,
 
-		BrandService:   s.brandSvc,
+		BrandRepo:      r.brandRepo,
 		CompanyService: s.companySvc,
 	})
 

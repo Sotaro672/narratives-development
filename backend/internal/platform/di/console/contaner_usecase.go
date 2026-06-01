@@ -168,14 +168,14 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		tbReviewRepo,
 		r.avatarRepo,
 		r.tokenBlueprintRepo,
-		s.brandSvc,
+		r.brandRepo,
 	)
 
 	userUC := uc.NewUserUsecase(r.userRepo)
 	walletUC := uc.NewWalletUsecase(r.walletRepo)
 	cartUC := uc.NewCartUsecase(r.cartRepo)
 
-	invitationMailer := mailadp.NewInvitationMailerWithResend(s.companySvc, s.brandSvc)
+	invitationMailer := mailadp.NewInvitationMailerWithResend(s.companySvc, r.brandRepo)
 
 	invitationQueryUC := uc.NewInvitationService(
 		r.invitationTokenRepo,
@@ -250,7 +250,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 				r.walletRepo,
 			).
 				WithProductBlueprintRepo(r.productBlueprintRepo).
-				WithBrandService(s.brandSvc).
+				WithBrandRepository(r.brandRepo).
 				WithMemberService(memberSvc)
 		}(),
 

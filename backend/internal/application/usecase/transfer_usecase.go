@@ -92,8 +92,11 @@ type AvatarWalletResolver interface {
 }
 
 // BrandDisplayResolver resolves brand display info for transfer result.
+//
+// brand.RepositoryPort / brand.Repository の GetByID(ctx, id string) に合わせる。
+// transfer response では Brand.Name を表示名として使う。
 type BrandDisplayResolver interface {
-	GetNameIconByID(ctx context.Context, brandID string) (branddom.NameIcon, error)
+	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
 // AvatarDisplayResolver resolves avatar display info for transfer result.
@@ -651,12 +654,12 @@ func (u *TransferUsecase) resolveBrandDisplayName(ctx context.Context, brandID s
 		return ""
 	}
 
-	ni, err := u.brandDisplay.GetNameIconByID(ctx, brandID)
+	b, err := u.brandDisplay.GetByID(ctx, brandID)
 	if err != nil {
 		return ""
 	}
 
-	return strings.TrimSpace(ni.Name)
+	return strings.TrimSpace(b.Name)
 }
 
 func (u *TransferUsecase) resolveAvatarDisplayName(ctx context.Context, avatarID string) string {

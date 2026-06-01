@@ -10,7 +10,7 @@ import (
 )
 
 type BrandUsecase struct {
-	brandRepo  branddom.Repository
+	brandRepo  branddom.RepositoryPort
 	memberRepo memberdom.Repository
 	walletSvc  branddom.SolanaBrandWalletService
 	now        func() time.Time
@@ -33,7 +33,7 @@ func WithNow(now func() time.Time) BrandUsecaseOption {
 }
 
 func NewBrandUsecase(
-	brandRepo branddom.Repository,
+	brandRepo branddom.RepositoryPort,
 	memberRepo memberdom.Repository,
 	opts ...BrandUsecaseOption,
 ) *BrandUsecase {
@@ -54,36 +54,23 @@ func NewBrandUsecase(
 }
 
 func (u *BrandUsecase) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
+	if id == "" {
+		return branddom.Brand{}, branddom.ErrInvalidID
+	}
+
 	return u.brandRepo.GetByID(ctx, id)
 }
 
-func (u *BrandUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.brandRepo.Exists(ctx, id)
-}
-
-func (u *BrandUsecase) List(
+func (u *BrandUsecase) ListByCompanyID(
 	ctx context.Context,
-	f branddom.Filter,
-	p branddom.Page,
+	companyID string,
+	page branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		f.CompanyID = &cid
+	if companyID == "" {
+		return branddom.PageResult[branddom.Brand]{}, branddom.ErrInvalidID
 	}
 
-	var sort branddom.Sort
-	return u.brandRepo.List(ctx, f, sort, p)
-}
-
-func (u *BrandUsecase) ListByCursor(
-	ctx context.Context,
-	f branddom.Filter,
-	c branddom.CursorPage,
-) (branddom.CursorPageResult[branddom.Brand], error) {
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		f.CompanyID = &cid
-	}
-
-	return u.brandRepo.ListByCursor(ctx, f, c)
+	return u.brandRepo.ListByCompanyID(ctx, companyID, page)
 }
 
 func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
@@ -95,23 +82,7 @@ func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
 		return branddom.PageResult[branddom.Brand]{}, nil
 	}
 
-	svc := branddom.NewService(u.brandRepo)
-
-	res, err := svc.ListByCompanyID(ctx, cid, page)
-	if err != nil {
-		return res, err
-	}
-
-	for i, b := range res.Items {
-		name, err := svc.GetNameByID(ctx, b.ID)
-		if err != nil {
-			res.Items[i].Name = b.Name
-			continue
-		}
-		res.Items[i].Name = name
-	}
-
-	return res, nil
+	return u.brandRepo.ListByCompanyID(ctx, cid, page)
 }
 
 func (u *BrandUsecase) GetMemberNameLastFirstByID(
@@ -151,9 +122,17 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 	if u.walletSvc != nil && (wa == "" || wa == "pending") {
 		wallet, werr := u.walletSvc.OpenBrandWallet(ctx, created)
 		if werr == nil && wallet.Address != "" {
-			created.WalletAddress = wallet.Address
-			if saved, errSave := u.brandRepo.Save(ctx, created, nil); errSave == nil {
-				created = saved
+			walletAddress := wallet.Address
+			updatedAt := u.now().UTC()
+
+			updated, errUpdate := u.brandRepo.Update(ctx, created.ID, branddom.BrandPatch{
+				WalletAddress: &walletAddress,
+				UpdatedAt:     &updatedAt,
+			})
+			if errUpdate == nil {
+				created = updated
+			} else {
+				created.WalletAddress = walletAddress
 			}
 		}
 	}
@@ -186,42 +165,6 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 	return created, nil
 }
 
-func (u *BrandUsecase) UpdateBrand(
-	ctx context.Context,
-	id string,
-	managerID *string,
-	brandName *string,
-	description *string,
-	websiteURL *string,
-	brandIcon *string,
-	brandBackgroundImage *string,
-	isActive *bool,
-) (branddom.Brand, error) {
-	if id == "" {
-		return branddom.Brand{}, branddom.ErrInvalidID
-	}
-
-	patch := branddom.BrandPatch{
-		ManagerID:            managerID,
-		Name:                 brandName,
-		Description:          description,
-		URL:                  websiteURL,
-		BrandIcon:            brandIcon,
-		BrandBackgroundImage: brandBackgroundImage,
-		IsActive:             isActive,
-		UpdatedAt: func() *time.Time {
-			t := u.now().UTC()
-			return &t
-		}(),
-	}
-
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		patch.CompanyID = &cid
-	}
-
-	return u.brandRepo.Update(ctx, id, patch)
-}
-
 func (u *BrandUsecase) Update(
 	ctx context.Context,
 	id string,
@@ -243,23 +186,10 @@ func (u *BrandUsecase) Update(
 	return u.brandRepo.Update(ctx, id, patch)
 }
 
-func (u *BrandUsecase) Save(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		b.CompanyID = cid
-	}
-
-	if b.CreatedAt.IsZero() {
-		b.CreatedAt = u.now().UTC()
-	}
-
-	if b.UpdatedAt == nil && b.ID != "" {
-		t := u.now().UTC()
-		b.UpdatedAt = &t
-	}
-
-	return u.brandRepo.Save(ctx, b, nil)
-}
-
 func (u *BrandUsecase) Delete(ctx context.Context, id string) error {
+	if id == "" {
+		return branddom.ErrInvalidID
+	}
+
 	return u.brandRepo.Delete(ctx, id)
 }

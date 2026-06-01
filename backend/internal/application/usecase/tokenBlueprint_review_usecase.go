@@ -26,7 +26,7 @@ type TokenBlueprintReviewUsecase struct {
 	repos              tokenBlueprint_review.RepositoryPort
 	avatarRepos        avatar.Repository
 	tokenBlueprintRepo tokenBlueprint.RepositoryPort
-	brandSvc           *brand.Service
+	brandRepo          brand.Repository
 
 	now func() time.Time
 }
@@ -34,7 +34,7 @@ type TokenBlueprintReviewUsecase struct {
 var (
 	errUsecaseNotConfigured            = errors.New("tokenBlueprint_review_usecase: avatar repository not configured")
 	errTokenBlueprintRepoNotConfigured = errors.New("tokenBlueprint_review_usecase: token blueprint repository not configured")
-	errBrandServiceNotConfigured       = errors.New("tokenBlueprint_review_usecase: brand service not configured")
+	errBrandRepositoryNotConfigured    = errors.New("tokenBlueprint_review_usecase: brand repository not configured")
 
 	ErrTokenBlueprintReactionsListNotImplemented = errors.New("tokenBlueprint_review_usecase: token blueprint reactions list not implemented")
 )
@@ -43,13 +43,13 @@ func NewTokenBlueprintReviewUsecase(
 	repos tokenBlueprint_review.RepositoryPort,
 	avatarRepos avatar.Repository,
 	tokenBlueprintRepo tokenBlueprint.RepositoryPort,
-	brandSvc *brand.Service,
+	brandRepo brand.Repository,
 ) *TokenBlueprintReviewUsecase {
 	return &TokenBlueprintReviewUsecase{
 		repos:              repos,
 		avatarRepos:        avatarRepos,
 		tokenBlueprintRepo: tokenBlueprintRepo,
-		brandSvc:           brandSvc,
+		brandRepo:          brandRepo,
 		now:                time.Now,
 	}
 }
@@ -83,16 +83,16 @@ func (u *TokenBlueprintReviewUsecase) GetBrandNameAndIconByID(
 	ctx context.Context,
 	brandID string,
 ) (name string, icon string, err error) {
-	if u == nil || u.brandSvc == nil {
-		return "", "", errBrandServiceNotConfigured
+	if u == nil || u.brandRepo == nil {
+		return "", "", errBrandRepositoryNotConfigured
 	}
 
-	v, err := u.brandSvc.GetNameIconByID(ctx, brandID)
+	b, err := u.brandRepo.GetByID(ctx, brandID)
 	if err != nil {
 		return "", "", err
 	}
 
-	return v.Name, v.BrandIcon, nil
+	return b.Name, b.BrandIcon, nil
 }
 
 // ============================================================
@@ -329,9 +329,9 @@ func (u *TokenBlueprintReviewUsecase) GetTokenBlueprintPatchByID(
 		IconURL:     tb.IconURL,
 	}
 
-	if patch.BrandID != "" && u.brandSvc != nil {
-		if bn, berr := u.brandSvc.GetNameByID(ctx, patch.BrandID); berr == nil && bn != "" {
-			patch.BrandName = bn
+	if patch.BrandID != "" && u.brandRepo != nil {
+		if b, berr := u.brandRepo.GetByID(ctx, patch.BrandID); berr == nil && b.Name != "" {
+			patch.BrandName = b.Name
 		}
 	}
 

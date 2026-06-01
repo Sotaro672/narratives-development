@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	branddom "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
 	permdom "narratives/internal/domain/permission"
 )
@@ -18,7 +19,7 @@ type CompanyNameResolver interface {
 }
 
 type BrandNameResolver interface {
-	GetNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
 type InvitationMailerPort interface {
@@ -102,16 +103,16 @@ func (m *InvitationMailer) resolveBrandDisplayNames(ctx context.Context, brandID
 
 	results := make([]string, 0, len(normalized))
 	for _, id := range normalized {
-		name, err := m.brandNameResolver.GetNameByID(ctx, id)
+		b, err := m.brandNameResolver.GetByID(ctx, id)
 		if err != nil {
 			results = append(results, id)
 			continue
 		}
-		if name == "" {
+		if b.Name == "" {
 			results = append(results, id)
 			continue
 		}
-		results = append(results, name)
+		results = append(results, b.Name)
 	}
 	return results
 }

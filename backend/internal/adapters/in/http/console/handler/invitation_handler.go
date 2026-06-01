@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\invitation_handler.go
+// backend/internal/adapters/in/http/console/handler/invitation_handler.go
 package consoleHandler
 
 import (
@@ -25,20 +25,20 @@ type InvitationHandler struct {
 	InvitationQuery    usecase.InvitationQueryPort
 	InvitationComplete usecase.InvitationCompletePort
 	CompanyService     *compdom.Service
-	BrandService       *branddom.Service
+	BrandRepo          branddom.Repository
 }
 
 func NewInvitationHandler(
 	inv usecase.InvitationQueryPort,
 	complete usecase.InvitationCompletePort,
 	companyService *compdom.Service,
-	brandService *branddom.Service,
+	brandRepo branddom.Repository,
 ) *InvitationHandler {
 	return &InvitationHandler{
 		InvitationQuery:    inv,
 		InvitationComplete: complete,
 		CompanyService:     companyService,
-		BrandService:       brandService,
+		BrandRepo:          brandRepo,
 	}
 }
 
@@ -148,26 +148,29 @@ func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Req
 	}
 
 	assignedBrandNames := info.AssignedBrandIDs
-	if h.BrandService != nil && len(info.AssignedBrandIDs) > 0 {
+	if h.BrandRepo != nil && len(info.AssignedBrandIDs) > 0 {
 		resolved := make([]string, 0, len(info.AssignedBrandIDs))
+
 		for _, brandID := range info.AssignedBrandIDs {
 			if brandID == "" {
 				continue
 			}
 
-			name, err := h.BrandService.GetNameByID(ctx, brandID)
+			brand, err := h.BrandRepo.GetByID(ctx, brandID)
 			if err != nil {
 				if errors.Is(err, branddom.ErrNotFound) || errors.Is(err, branddom.ErrInvalidID) {
 					resolved = append(resolved, brandID)
 					continue
 				}
+
 				log.Printf("[InvitationHandler.handleResolveInfo] failed to resolve brand name: brandID=%s err=%v", brandID, err)
 				writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_brand_name")
 				return
 			}
 
-			resolved = append(resolved, name)
+			resolved = append(resolved, brand.Name)
 		}
+
 		assignedBrandNames = resolved
 	}
 
@@ -285,6 +288,7 @@ func (h *MemberInvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		writeInvitationJSONError(w, http.StatusNotFound, "not_found")
 		return
 	}
+
 	memberID := parts[0]
 
 	if h.InvitationCommand == nil {

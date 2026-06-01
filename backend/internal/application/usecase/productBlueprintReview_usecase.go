@@ -15,7 +15,7 @@ import (
 	pbr "narratives/internal/domain/productBlueprintReview"
 )
 
-// ✅ wallet_usecase.go で既に定義されている IF/Err を再利用する（ここでは再定義しない）
+// wallet_usecase.go で既に定義されている IF/Err を再利用する（ここでは再定義しない）
 // - WalletRepository
 // - OnchainWalletReader
 // - TokenQuery
@@ -23,22 +23,22 @@ import (
 // - ModelProductBlueprintIDResolver
 // - ErrWalletUsecaseNotConfigured / ErrWalletSyncOnchainNotConfigured / ... etc
 
-// ✅ AvatarName/Icon の軽量取得（N+1 を軽量化する想定のポート）
+// AvatarName/Icon の軽量取得（N+1 を軽量化する想定のポート）
 type AvatarNameIconGetter interface {
 	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
 }
 
-// ✅ Brand 名取得（brand.Service をそのまま注入できる）
-type BrandNameGetter interface {
-	GetNameByID(ctx context.Context, brandID string) (string, error)
+// Brand 取得
+type BrandGetter interface {
+	GetByID(ctx context.Context, brandID string) (branddom.Brand, error)
 }
 
-// ✅ Assignee(Member) 名取得（member.Service をそのまま注入できる）
+// Assignee(Member) 名取得（member.Service をそのまま注入できる）
 type AssigneeNameGetter interface {
 	GetNameLastFirstByID(ctx context.Context, memberID string) (string, error)
 }
 
-// ✅ handler/画面へ渡す DTO（Review + AvatarName/Icon を同梱）
+// handler/画面へ渡す DTO（Review + AvatarName/Icon を同梱）
 type ProductBlueprintReviewListItem struct {
 	pbr.Review
 
@@ -46,7 +46,7 @@ type ProductBlueprintReviewListItem struct {
 	AvatarIcon string `json:"AvatarIcon"`
 }
 
-// ✅ management 用: aggregate + BrandName/AssigneeName（PascalCase JSON）
+// management 用: aggregate + BrandName/AssigneeName（PascalCase JSON）
 type ProductBlueprintReviewAggregateItem struct {
 	ID                 string `json:"ID"`
 	ProductBlueprintID string `json:"ProductBlueprintID"`
@@ -72,11 +72,11 @@ type ProductBlueprintReviewAggregateItem struct {
 type ProductBlueprintReviewUsecase struct {
 	ReviewRepo pbr.Repository
 
-	// ✅ aggregates 用
+	// aggregates 用
 	ProductBlueprintRepo pbdomain.Repository
 
-	// ✅ name resolvers (best-effort)
-	BrandNameGetter    BrandNameGetter
+	// name resolvers (best-effort)
+	BrandGetter        BrandGetter
 	AssigneeNameGetter AssigneeNameGetter
 
 	WalletRepo              WalletRepository
@@ -85,8 +85,8 @@ type ProductBlueprintReviewUsecase struct {
 	ProductReader           ProductReader
 	ModelProductBlueprintID ModelProductBlueprintIDResolver
 
-	// ✅ NEW: avatarId -> (avatarName, avatarIcon)
-	// - 実体は avatar.Repository を注入して使う想定
+	// avatarId -> (avatarName, avatarIcon)
+	// 実体は avatar.Repository を注入して使う想定
 	AvatarRepo AvatarNameIconGetter
 
 	now func() time.Time
@@ -99,7 +99,7 @@ func NewProductBlueprintReviewUsecase(
 	return &ProductBlueprintReviewUsecase{
 		ReviewRepo:              reviewRepo,
 		ProductBlueprintRepo:    nil,
-		BrandNameGetter:         nil,
+		BrandGetter:             nil,
 		AssigneeNameGetter:      nil,
 		WalletRepo:              walletRepo,
 		OnchainReader:           nil,
@@ -118,15 +118,15 @@ func (uc *ProductBlueprintReviewUsecase) WithProductBlueprintRepo(r pbdomain.Rep
 	return uc
 }
 
-// ✅ NEW: BrandService 注入（brand.Service をそのまま渡せる）
-func (uc *ProductBlueprintReviewUsecase) WithBrandService(s *branddom.Service) *ProductBlueprintReviewUsecase {
+// BrandRepository 注入
+func (uc *ProductBlueprintReviewUsecase) WithBrandRepository(r branddom.Repository) *ProductBlueprintReviewUsecase {
 	if uc != nil {
-		uc.BrandNameGetter = s
+		uc.BrandGetter = r
 	}
 	return uc
 }
 
-// ✅ NEW: MemberService 注入（member.Service をそのまま渡せる）
+// MemberService 注入（member.Service をそのまま渡せる）
 func (uc *ProductBlueprintReviewUsecase) WithMemberService(s *memdom.Service) *ProductBlueprintReviewUsecase {
 	if uc != nil {
 		uc.AssigneeNameGetter = s
@@ -162,7 +162,7 @@ func (uc *ProductBlueprintReviewUsecase) WithModelProductBlueprintIDResolver(r M
 	return uc
 }
 
-// ✅ NEW: AvatarRepo 注入（avatar.Repository をそのまま渡せる）
+// AvatarRepo 注入（avatar.Repository をそのまま渡せる）
 func (uc *ProductBlueprintReviewUsecase) WithAvatarRepo(r avatardom.Repository) *ProductBlueprintReviewUsecase {
 	if uc != nil {
 		uc.AvatarRepo = r
@@ -178,7 +178,7 @@ func (uc *ProductBlueprintReviewUsecase) WithNow(f func() time.Time) *ProductBlu
 }
 
 // ============================================================
-// ✅ Public API: Aggregates (Management)
+// Public API: Aggregates (Management)
 // - BrandID/AssigneeID の Name 解決は usecase で実施（best-effort）
 // - paging は「商品（ProductBlueprint）単位」
 // ============================================================
@@ -243,12 +243,12 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 		}
 
 		brandName := ""
-		if pb.BrandID != "" && uc.BrandNameGetter != nil {
+		if pb.BrandID != "" && uc.BrandGetter != nil {
 			if v, ok := brandNameCache[pb.BrandID]; ok {
 				brandName = v
 			} else {
-				if n, err := uc.BrandNameGetter.GetNameByID(ctx, pb.BrandID); err == nil {
-					brandName = n
+				if b, err := uc.BrandGetter.GetByID(ctx, pb.BrandID); err == nil {
+					brandName = b.Name
 				}
 				brandNameCache[pb.BrandID] = brandName
 			}
@@ -295,7 +295,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 }
 
 // ============================================================
-// ✅ Public API: List (for handler)
+// Public API: List (for handler)
 // ============================================================
 
 func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
@@ -311,7 +311,7 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
 }
 
 // ============================================================
-// ✅ Public API: List + AvatarName/Icon (for screen)
+// Public API: List + AvatarName/Icon (for screen)
 // ============================================================
 //
 //   - ReviewRepo の結果に対して、AvatarRepo.GetNameAndIconByID を使って
@@ -353,7 +353,7 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintIDWithAvatar(
 		})
 	}
 
-	// ✅ paging情報は base からそのまま引き継ぐ（handler が TotalCount/TotalPages/PerPage を参照するため）
+	// paging情報は base からそのまま引き継ぐ（handler が TotalCount/TotalPages/PerPage を参照するため）
 	out := domcommon.PageResult[ProductBlueprintReviewListItem]{
 		Items:      items,
 		Page:       base.Page,
@@ -365,7 +365,7 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintIDWithAvatar(
 }
 
 // ============================================================
-// ✅ Public API: VerifiedPurchase check (for handler)
+// Public API: VerifiedPurchase check (for handler)
 // ============================================================
 
 // IsVerifiedPurchase exposes verified-purchase check for handlers.
@@ -380,7 +380,7 @@ func (uc *ProductBlueprintReviewUsecase) IsVerifiedPurchase(
 }
 
 // ============================================================
-// ✅ VerifiedPurchase 判定 “query”
+// VerifiedPurchase 判定 “query”
 // ============================================================
 //
 // 要件：
@@ -390,7 +390,7 @@ func (uc *ProductBlueprintReviewUsecase) IsVerifiedPurchase(
 // modelId から models の productBlueprintId を取得
 // productBlueprintReview の productBlueprintId と一致した場合 VerifiedPurchase=true
 //
-// ✅ 既存 wallet_usecase.go の依存を使って実現：
+// 既存 wallet_usecase.go の依存を使って実現：
 // - mintAddress 一覧: OnchainReader.ListOwnedTokenMints(walletAddress)
 // - mintAddress -> token(docId相当=productId): TokenQuery.ResolveTokenByMintAddress().ProductID
 // - productId -> modelId: ProductReader.GetByID(productId).ModelID
@@ -484,7 +484,7 @@ func (uc *ProductBlueprintReviewUsecase) resolveVerifiedPurchase(
 }
 
 // ============================================================
-// ✅ 命名衝突回避：CreateReviewInput → CreateProductBlueprintReviewInput
+// 命名衝突回避：CreateReviewInput → CreateProductBlueprintReviewInput
 // ============================================================
 
 type CreateProductBlueprintReviewInput struct {
@@ -506,6 +506,9 @@ func (uc *ProductBlueprintReviewUsecase) CreateProductBlueprintReview(
 	ctx context.Context,
 	in CreateProductBlueprintReviewInput,
 ) (pbr.Review, error) {
+	if uc == nil || uc.ReviewRepo == nil {
+		return pbr.Review{}, pbr.ErrInternal
+	}
 
 	createdAt := in.CreatedAt
 	if createdAt.IsZero() {
@@ -530,10 +533,6 @@ func (uc *ProductBlueprintReviewUsecase) CreateProductBlueprintReview(
 	})
 	if err != nil {
 		return pbr.Review{}, err
-	}
-
-	if uc == nil || uc.ReviewRepo == nil {
-		return pbr.Review{}, pbr.ErrInternal
 	}
 
 	return uc.ReviewRepo.Create(ctx, entity)

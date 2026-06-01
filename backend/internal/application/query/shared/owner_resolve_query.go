@@ -4,6 +4,8 @@ package shared
 import (
 	"context"
 	"errors"
+
+	branddom "narratives/internal/domain/brand"
 )
 
 // ------------------------------------------------------------
@@ -35,15 +37,15 @@ type BrandWalletAddressReader interface {
 }
 
 // AvatarNameReader resolves avatarName by avatarId.
-// ✅ brand.Service.GetNameByID と同じ思想で導入する port。
+// avatar 側は現状の GetNameByID port を維持する。
 type AvatarNameReader interface {
 	GetNameByID(ctx context.Context, avatarID string) (string, error)
 }
 
-// BrandNameReader resolves brandName by brandId.
-// ✅ brand.Service.GetNameByID と同じ思想で導入する port。
-type BrandNameReader interface {
-	GetNameByID(ctx context.Context, brandID string) (string, error)
+// BrandReader resolves brand by brandId.
+// brand.Service をそのまま注入できるように GetByID を使う。
+type BrandReader interface {
+	GetByID(ctx context.Context, brandID string) (branddom.Brand, error)
 }
 
 // ------------------------------------------------------------
@@ -68,7 +70,7 @@ type OwnerResolveResult struct {
 	BrandID  string `json:"brandId,omitempty"`
 	AvatarID string `json:"avatarId,omitempty"`
 
-	// ✅ NEW: resolved display names (non-fatal if empty)
+	// resolved display names (non-fatal if empty)
 	BrandName  string `json:"brandName,omitempty"`
 	AvatarName string `json:"avatarName,omitempty"`
 }
@@ -78,7 +80,7 @@ type OwnerResolveResult struct {
 // ------------------------------------------------------------
 
 // OwnerResolveQuery resolves (brandId or avatarId) from a wallet address.
-// ✅ 方針:
+// 方針:
 // - 既に購入済み（tokens/{productId}.toAddress が buyer avatar wallet に更新済み）なら avatarId がヒット
 // - まだ誰にも購入されていない在庫（toAddress が brand wallet のまま）なら brandId がヒット
 //
@@ -88,25 +90,25 @@ type OwnerResolveQuery struct {
 	AvatarRepo AvatarWalletAddressReader
 	BrandRepo  BrandWalletAddressReader
 
-	// ✅ NEW: ID -> Name（nil 許容 / Resolve は継続）
+	// ID -> Name / Brand（nil 許容 / Resolve は継続）
 	AvatarName AvatarNameReader
-	BrandName  BrandNameReader
+	Brand      BrandReader
 }
 
 // NewOwnerResolveQuery constructs OwnerResolveQuery.
 // AvatarRepo / BrandRepo はどちらも nil 許容だが、Resolve には最低1つ必要。
-// AvatarName / BrandName は nil でも Resolve は動作する（名前は埋めない）。
+// AvatarName / Brand は nil でも Resolve は動作する（名前は埋めない）。
 func NewOwnerResolveQuery(
 	avatarRepo AvatarWalletAddressReader,
 	brandRepo BrandWalletAddressReader,
 	avatarName AvatarNameReader,
-	brandName BrandNameReader,
+	brandReader BrandReader,
 ) *OwnerResolveQuery {
 	return &OwnerResolveQuery{
 		AvatarRepo: avatarRepo,
 		BrandRepo:  brandRepo,
 		AvatarName: avatarName,
-		BrandName:  brandName,
+		Brand:      brandReader,
 	}
 }
 
@@ -140,7 +142,7 @@ func (q *OwnerResolveQuery) Resolve(
 				AvatarID:      avatarID,
 			}
 
-			// ✅ optional: avatarId -> avatarName
+			// optional: avatarId -> avatarName
 			if q.AvatarName != nil {
 				if name, err := q.AvatarName.GetNameByID(ctx, avatarID); err == nil {
 					res.AvatarName = name
@@ -164,10 +166,10 @@ func (q *OwnerResolveQuery) Resolve(
 				BrandID:       brandID,
 			}
 
-			// ✅ optional: brandId -> brandName
-			if q.BrandName != nil {
-				if name, err := q.BrandName.GetNameByID(ctx, brandID); err == nil {
-					res.BrandName = name
+			// optional: brandId -> brandName
+			if q.Brand != nil {
+				if b, err := q.Brand.GetByID(ctx, brandID); err == nil {
+					res.BrandName = b.Name
 				}
 			}
 
@@ -188,6 +190,7 @@ func (q *OwnerResolveQuery) ResolveIDs(
 	if err != nil {
 		return "", "", OwnerTypeUnknown, err
 	}
+
 	return r.BrandID, r.AvatarID, r.OwnerType, nil
 }
 
@@ -203,16 +206,19 @@ func looksLikeSolanaAddress(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	// Solana pubkey は通常 32 bytes -> base58 で 32〜44 文字程度。
 	// 将来の拡張を踏まえゆるめに。
 	if len(s) < 32 || len(s) > 64 {
 		return false
 	}
+
 	for _, r := range s {
 		if !isBase58Rune(r) {
 			return false
 		}
 	}
+
 	return true
 }
 

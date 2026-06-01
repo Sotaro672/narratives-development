@@ -128,13 +128,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Hexagonal architecture:
 	// - handler は HTTP adapter
 	// - usecase は application service
-	// - repository / avatar / tokenBlueprintRepo / brand service は usecase に注入する
+	// - repository / avatar / tokenBlueprintRepo / brand repository は usecase に注入する
 	if cont.TokenBlueprintReviewRepo != nil {
 		tbReviewUC := usecase.NewTokenBlueprintReviewUsecase(
 			cont.TokenBlueprintReviewRepo,
 			cont.AvatarRepo,
 			tokenBlueprintRepo,
-			cont.BrandService,
+			cont.BrandRepo,
 		)
 
 		tbReviewH = mallhandler.NewTokenBlueprintReviewHandler(tbReviewUC)

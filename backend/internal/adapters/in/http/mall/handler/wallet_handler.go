@@ -230,9 +230,10 @@ func (h *WalletHandler) resolvePublicTokenSummary(
 
 	brandName := ""
 	if brandID != "" {
-		if h.uc.BrandNameResolver == nil {
-			return usecase.ResolveTokenByMintAddressWithBrandNameResult{}, usecase.ErrWalletBrandNameNotConfigured
+		if h.uc.BrandResolver == nil {
+			return usecase.ResolveTokenByMintAddressWithBrandNameResult{}, usecase.ErrWalletBrandResolverNotConfigured
 		}
+
 		n, err := h.uc.ResolveBrandNameByID(ctx, brandID)
 		if err != nil {
 			return usecase.ResolveTokenByMintAddressWithBrandNameResult{}, err
@@ -468,7 +469,7 @@ func writeWalletErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),
 		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured),
 		errors.Is(err, usecase.ErrWalletTokenQueryNotConfigured),
-		errors.Is(err, usecase.ErrWalletBrandNameNotConfigured),
+		errors.Is(err, usecase.ErrWalletBrandResolverNotConfigured),
 		errors.Is(err, usecase.ErrWalletProductReaderNotConfigured),
 		errors.Is(err, usecase.ErrWalletModelProductBlueprintNotConfigured),
 		errors.Is(err, usecase.ErrWalletProductBlueprintReaderNotConfigured):

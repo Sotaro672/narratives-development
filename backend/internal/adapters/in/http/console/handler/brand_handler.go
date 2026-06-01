@@ -340,17 +340,17 @@ func (h *BrandHandler) update(w http.ResponseWriter, r *http.Request, id string)
 		in.ManagerID = &v
 	}
 
-	updated, err := h.uc.UpdateBrand(
-		ctx,
-		vid,
-		in.ManagerID,
-		in.Name,
-		in.Description,
-		in.WebsiteURL,
-		in.BrandIcon,
-		in.BrandBackgroundImage,
-		in.IsActive,
-	)
+	patch := branddom.BrandPatch{
+		ManagerID:            in.ManagerID,
+		Name:                 in.Name,
+		Description:          in.Description,
+		URL:                  in.WebsiteURL,
+		BrandIcon:            in.BrandIcon,
+		BrandBackgroundImage: in.BrandBackgroundImage,
+		IsActive:             in.IsActive,
+	}
+
+	updated, err := h.uc.Update(ctx, vid, patch)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
@@ -370,48 +370,6 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 
-	var f branddom.Filter
-
-	if raw := q.Get("managerId"); raw != "" {
-		v, err := shared.StrictRequired(raw, "managerId")
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid managerId"})
-			return
-		}
-		f.ManagerID = &v
-	}
-
-	if raw := q.Get("walletAddress"); raw != "" {
-		v, err := shared.StrictRequired(raw, "walletAddress")
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid walletAddress"})
-			return
-		}
-		f.WalletAddress = &v
-	}
-
-	if raw := q.Get("isActive"); raw != "" {
-		b, ok, err := shared.StrictBoolParam(raw, "isActive")
-		if err != nil || !ok {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid isActive"})
-			return
-		}
-		f.IsActive = &b
-	}
-
-	if raw := q.Get("q"); raw != "" {
-		v, err := shared.StrictRequired(raw, "q")
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid q"})
-			return
-		}
-		f.FilterCommon.SearchQuery = v
-	}
-
 	pageNum, err := shared.StrictPositiveIntParam(q.Get("page"), "page", 1)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -426,9 +384,12 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := branddom.Page{Number: pageNum, PerPage: perPage}
+	p := branddom.Page{
+		Number:  pageNum,
+		PerPage: perPage,
+	}
 
-	result, err := h.uc.List(ctx, f, p)
+	result, err := h.uc.ListCurrentCompanyBrandsWithNames(ctx, p)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
@@ -464,6 +425,7 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 
 func writeBrandErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
+
 	switch err {
 	case branddom.ErrInvalidID:
 		code = http.StatusBadRequest

@@ -1,3 +1,4 @@
+// backend/internal/platform/di/mall/container.go
 package mall
 
 import (
@@ -47,12 +48,11 @@ type Container struct {
 	OrderUC           *usecase.OrderUsecase
 
 	AvatarRepo avatardom.Repository
+	BrandRepo  branddom.Repository
 
 	// MeAvatarResolver resolves Firebase UID -> avatarId + walletAddress.
 	// AvatarRepositoryFS implements this via ResolveAvatarByUID.
 	MeAvatarResolver mallhandler.MeAvatarResolver
-
-	BrandService *branddom.Service
 
 	ProductBlueprintReviewUC *usecase.ProductBlueprintReviewUsecase
 
@@ -148,8 +148,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.ResolvedTokenRepo = outfs.NewResolvedTokenRepositoryFS(fsClient)
 
 	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
-	brandSvc := branddom.NewService(brandRepo)
-	c.BrandService = brandSvc
+	c.BrandRepo = brandRepo
 
 	companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
 	companySvc := companydom.NewService(companyRepo)
@@ -208,7 +207,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.WalletUC = usecase.NewWalletUsecase(walletRepo).
 		WithOnchainReader(onchainReader).
 		WithTokenQuery(tokenQuery).
-		WithBrandNameResolver(brandSvc).
+		WithBrandNameResolver(brandRepo).
 		WithProductReader(productRepo).
 		WithModelProductBlueprintIDResolver(productBlueprintRepoFS).
 		WithProductBlueprintReader(productBlueprintRepoFS)
@@ -221,6 +220,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WithTokenQuery(tokenQuery).
 		WithProductReader(productRepo).
 		WithModelProductBlueprintIDResolver(productBlueprintRepoFS).
+		WithBrandRepository(brandRepo).
 		WithAvatarRepo(avatarRepo)
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
@@ -268,7 +268,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			avatarReader,
 			brandReader,
 			avatarRepo,
-			brandSvc,
+			brandRepo,
 		)
 	}
 
@@ -307,7 +307,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			mallquery.WithTokenRepo(tokenReader),
 			mallquery.WithTokenBlueprintRepo(tokenBlueprintRepo),
 			mallquery.WithOwnerResolveQuery(c.OwnerResolveQ),
-			mallquery.WithBrandNameIconRepo(brandSvc),
+			mallquery.WithBrandNameIconRepo(brandRepo),
 			mallquery.WithAvatarNameIconRepo(avatarRepo),
 			mallquery.WithTransferRepo(previewTransferReader),
 		)
@@ -319,7 +319,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			inventoryRepo,
 			productBlueprintRepoFS,
 			tokenBlueprintRepo,
-			brandSvc,
+			brandRepo,
 			historyModelResolver,
 		)
 
@@ -370,7 +370,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 				executor,
 			).
 				WithInventoryUsecase(c.InventoryUC).
-				WithTransferDisplayResolvers(brandSvc, avatarRepo)
+				WithTransferDisplayResolvers(brandRepo, avatarRepo)
 		} else {
 			c.TransferUC = nil
 		}

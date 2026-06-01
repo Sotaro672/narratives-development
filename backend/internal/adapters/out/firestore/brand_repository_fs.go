@@ -27,10 +27,112 @@ func (r *BrandRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("brands")
 }
 
-var _ branddom.Repository = (*BrandRepositoryFS)(nil)
+var _ branddom.RepositoryPort = (*BrandRepositoryFS)(nil)
+
+func (r *BrandRepositoryFS) ListByCompanyID(
+	ctx context.Context,
+	companyID string,
+	page branddom.Page,
+) (branddom.PageResult[branddom.Brand], error) {
+	if companyID == "" {
+		return branddom.PageResult[branddom.Brand]{}, branddom.ErrInvalidID
+	}
+
+	perPage := page.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	if perPage > 200 {
+		perPage = 200
+	}
+
+	number := page.Number
+	if number <= 0 {
+		number = 1
+	}
+
+	baseQuery := r.col().
+		Query.
+		Where("companyId", "==", companyID)
+
+	countIter := baseQuery.Documents(ctx)
+	totalCount := 0
+	for {
+		_, err := countIter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			countIter.Stop()
+			return branddom.PageResult[branddom.Brand]{}, err
+		}
+		totalCount++
+	}
+	countIter.Stop()
+
+	offset := (number - 1) * perPage
+
+	q := baseQuery.OrderBy("createdAt", firestore.Desc)
+
+	if offset > 0 {
+		q = q.Offset(offset)
+	}
+	q = q.Limit(perPage)
+
+	iter := q.Documents(ctx)
+	defer iter.Stop()
+
+	items := make([]branddom.Brand, 0, perPage)
+	for {
+		doc, err := iter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return branddom.PageResult[branddom.Brand]{}, err
+		}
+
+		b, err := r.docToDomain(doc)
+		if err != nil {
+			return branddom.PageResult[branddom.Brand]{}, err
+		}
+
+		items = append(items, b)
+	}
+
+	totalPages := 0
+	if perPage > 0 {
+		totalPages = int(math.Ceil(float64(totalCount) / float64(perPage)))
+	}
+
+	return branddom.PageResult[branddom.Brand]{
+		Items:      items,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+		Page:       number,
+		PerPage:    perPage,
+	}, nil
+}
+
+func (r *BrandRepositoryFS) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
+	if id == "" {
+		return branddom.Brand{}, branddom.ErrNotFound
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return branddom.Brand{}, branddom.ErrNotFound
+	}
+	if err != nil {
+		return branddom.Brand{}, err
+	}
+
+	return r.docToDomain(snap)
+}
 
 func (r *BrandRepositoryFS) Create(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
 	now := time.Now().UTC()
+
 	if b.CreatedAt.IsZero() {
 		b.CreatedAt = now
 	}
@@ -63,61 +165,11 @@ func (r *BrandRepositoryFS) Create(ctx context.Context, b branddom.Brand) (brand
 	return r.docToDomain(snap)
 }
 
-func (r *BrandRepositoryFS) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
-	if id == "" {
-		return branddom.Brand{}, branddom.ErrNotFound
-	}
-
-	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return branddom.Brand{}, branddom.ErrNotFound
-	}
-	if err != nil {
-		return branddom.Brand{}, err
-	}
-
-	return r.docToDomain(snap)
-}
-
-func (r *BrandRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-func (r *BrandRepositoryFS) Count(ctx context.Context, filter branddom.Filter) (int, error) {
-	q := r.col().Query
-	q = applyBrandFilterToQuery(q, filter)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	n := 0
-	for {
-		_, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		n++
-	}
-
-	return n, nil
-}
-
-func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddom.BrandPatch) (branddom.Brand, error) {
+func (r *BrandRepositoryFS) Update(
+	ctx context.Context,
+	id string,
+	patch branddom.BrandPatch,
+) (branddom.Brand, error) {
 	if id == "" {
 		return branddom.Brand{}, branddom.ErrNotFound
 	}
@@ -204,7 +256,10 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 	}
 
 	if !hasUpdatedAt {
-		updates = append(updates, firestore.Update{Path: "updatedAt", Value: time.Now().UTC()})
+		updates = append(updates, firestore.Update{
+			Path:  "updatedAt",
+			Value: time.Now().UTC(),
+		})
 	}
 
 	if _, err := ref.Update(ctx, updates); err != nil {
@@ -240,121 +295,6 @@ func (r *BrandRepositoryFS) Delete(ctx context.Context, id string) error {
 
 	_, err = ref.Delete(ctx)
 	return err
-}
-
-func (r *BrandRepositoryFS) List(
-	ctx context.Context,
-	filter branddom.Filter,
-	_ branddom.Sort,
-	page branddom.Page,
-) (branddom.PageResult[branddom.Brand], error) {
-	totalCount, err := r.Count(ctx, filter)
-	if err != nil {
-		return branddom.PageResult[branddom.Brand]{}, err
-	}
-
-	q := r.col().Query
-	q = applyBrandFilterToQuery(q, filter)
-	q = q.OrderBy("createdAt", firestore.Desc)
-
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	if perPage > 200 {
-		perPage = 200
-	}
-
-	number := page.Number
-	if number <= 0 {
-		number = 1
-	}
-
-	offset := (number - 1) * perPage
-
-	if offset > 0 {
-		q = q.Offset(offset)
-	}
-	q = q.Limit(perPage)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	items := make([]branddom.Brand, 0, perPage)
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return branddom.PageResult[branddom.Brand]{}, err
-		}
-
-		b, err := r.docToDomain(doc)
-		if err != nil {
-			return branddom.PageResult[branddom.Brand]{}, err
-		}
-
-		items = append(items, b)
-	}
-
-	totalPages := 0
-	if perPage > 0 {
-		totalPages = int(math.Ceil(float64(totalCount) / float64(perPage)))
-	}
-
-	return branddom.PageResult[branddom.Brand]{
-		Items:      items,
-		TotalCount: totalCount,
-		TotalPages: totalPages,
-		Page:       number,
-		PerPage:    perPage,
-	}, nil
-}
-
-func (r *BrandRepositoryFS) ListByCursor(
-	_ context.Context,
-	_ branddom.Filter,
-	_ branddom.CursorPage,
-) (branddom.CursorPageResult[branddom.Brand], error) {
-	return branddom.CursorPageResult[branddom.Brand]{}, errors.New("ListByCursor not implemented for Firestore")
-}
-
-func (r *BrandRepositoryFS) Save(
-	ctx context.Context,
-	b branddom.Brand,
-	_ *branddom.SaveOptions,
-) (branddom.Brand, error) {
-	now := time.Now().UTC()
-
-	if b.CreatedAt.IsZero() {
-		b.CreatedAt = now
-	}
-	if b.UpdatedAt == nil || b.UpdatedAt.IsZero() {
-		b.UpdatedAt = ptrTime(now)
-	}
-
-	var ref *firestore.DocumentRef
-	if b.ID == "" {
-		ref = r.col().NewDoc()
-		b.ID = ref.ID
-	} else {
-		ref = r.col().Doc(b.ID)
-	}
-
-	data := r.domainToDocData(b)
-
-	_, err := ref.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return branddom.Brand{}, err
-	}
-
-	snap, err := ref.Get(ctx)
-	if err != nil {
-		return branddom.Brand{}, err
-	}
-
-	return r.docToDomain(snap)
 }
 
 func (r *BrandRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (branddom.Brand, error) {
@@ -442,23 +382,6 @@ func (r *BrandRepositoryFS) domainToDocData(b branddom.Brand) map[string]any {
 	}
 
 	return data
-}
-
-func applyBrandFilterToQuery(q firestore.Query, f branddom.Filter) firestore.Query {
-	if f.CompanyID != nil && *f.CompanyID != "" {
-		q = q.Where("companyId", "==", *f.CompanyID)
-	}
-	if f.ManagerID != nil && *f.ManagerID != "" {
-		q = q.Where("managerId", "==", *f.ManagerID)
-	}
-	if f.IsActive != nil {
-		q = q.Where("isActive", "==", *f.IsActive)
-	}
-	if f.WalletAddress != nil && *f.WalletAddress != "" {
-		q = q.Where("walletAddress", "==", *f.WalletAddress)
-	}
-
-	return q
 }
 
 func optionalStringValue(p *string) any {

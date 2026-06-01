@@ -33,10 +33,12 @@ type TokenQuery interface {
 	ResolveTokenByMintAddress(ctx context.Context, mintAddress string) (tokendom.ResolveTokenByMintAddressResult, error)
 }
 
-// BrandNameResolver (brandId -> brandName)
-// - domain/brand の Service.GetNameByID を使う想定
-type BrandNameResolver interface {
-	GetNameByID(ctx context.Context, brandID string) (string, error)
+// BrandResolver (brandId -> Brand)
+//
+// brand.RepositoryPort / brand.Repository の GetByID(ctx, id string) に合わせる。
+// brand.Service / GetNameByID は使わず、repository の GetByID から Brand.Name を解決する。
+type BrandResolver interface {
+	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
 // ProductReader (productId -> product(modelId取得))
@@ -64,8 +66,8 @@ type WalletUsecase struct {
 	OnchainReader OnchainWalletReader // 必須（同期APIとして使うなら）
 	TokenQuery    TokenQuery          // mint -> token逆引き
 
-	// brandId -> brandName（UI期待値）
-	BrandNameResolver BrandNameResolver
+	// brandId -> Brand.Name（UI期待値）
+	BrandResolver BrandResolver
 
 	// productName 逆引き（UI期待値）
 	ProductReader           ProductReader
@@ -74,13 +76,13 @@ type WalletUsecase struct {
 }
 
 // コンストラクタ（DI コンテナの呼び出しに合わせて 1 引数）
-// OnchainReader / TokenQuery / BrandNameResolver / Product* はセッターで差し込む
+// OnchainReader / TokenQuery / BrandResolver / Product* はセッターで差し込む
 func NewWalletUsecase(walletRepo WalletRepository) *WalletUsecase {
 	return &WalletUsecase{
 		WalletRepo:              walletRepo,
 		OnchainReader:           nil,
 		TokenQuery:              nil,
-		BrandNameResolver:       nil,
+		BrandResolver:           nil,
 		ProductReader:           nil,
 		ModelProductBlueprintID: nil,
 		ProductBlueprintReader:  nil,
@@ -103,12 +105,19 @@ func (uc *WalletUsecase) WithTokenQuery(q TokenQuery) *WalletUsecase {
 	return uc
 }
 
-// BrandNameResolver を後から差し込むためのセッター
-func (uc *WalletUsecase) WithBrandNameResolver(r BrandNameResolver) *WalletUsecase {
+// BrandResolver を後から差し込むためのセッター
+func (uc *WalletUsecase) WithBrandResolver(r BrandResolver) *WalletUsecase {
 	if uc != nil {
-		uc.BrandNameResolver = r
+		uc.BrandResolver = r
 	}
 	return uc
+}
+
+// 既存DIコード互換用。
+// 旧名 WithBrandNameResolver を呼んでいる箇所が残っていても、
+// brand.Repository / brand.RepositoryPort をそのまま差し込める。
+func (uc *WalletUsecase) WithBrandNameResolver(r BrandResolver) *WalletUsecase {
+	return uc.WithBrandResolver(r)
 }
 
 // ProductReader を後から差し込むためのセッター
@@ -145,8 +154,12 @@ var (
 	ErrWalletTokenQueryNotConfigured = errors.New("wallet usecase: token query not configured")
 	ErrMintAddressEmpty              = errors.New("wallet usecase: mintAddress is empty")
 
-	// BrandNameResolver
-	ErrWalletBrandNameNotConfigured = errors.New("wallet usecase: brand name resolver not configured")
+	// BrandResolver
+	ErrWalletBrandResolverNotConfigured = errors.New("wallet usecase: brand resolver not configured")
+
+	// 既存参照互換用。
+	// 今後は ErrWalletBrandResolverNotConfigured を使う。
+	ErrWalletBrandNameNotConfigured = ErrWalletBrandResolverNotConfigured
 
 	// ProductName chain
 	ErrWalletProductReaderNotConfigured          = errors.New("wallet usecase: product reader not configured")
@@ -235,7 +248,9 @@ func (uc *WalletUsecase) ResolveTokenByMintAddress(
 // ============================================================
 // ResolveBrandNameByID
 // ============================================================
-
+//
+// brand.RepositoryPort / brand.Repository の GetByID(ctx, id string) に合わせ、
+// Brand.Name を返す。
 func (uc *WalletUsecase) ResolveBrandNameByID(
 	ctx context.Context,
 	brandID string,
@@ -243,8 +258,8 @@ func (uc *WalletUsecase) ResolveBrandNameByID(
 	if uc == nil {
 		return "", ErrWalletUsecaseNotConfigured
 	}
-	if uc.BrandNameResolver == nil {
-		return "", ErrWalletBrandNameNotConfigured
+	if uc.BrandResolver == nil {
+		return "", ErrWalletBrandResolverNotConfigured
 	}
 
 	bid := brandID
@@ -252,11 +267,12 @@ func (uc *WalletUsecase) ResolveBrandNameByID(
 		return "", branddom.ErrInvalidID
 	}
 
-	name, err := uc.BrandNameResolver.GetNameByID(ctx, bid)
+	b, err := uc.BrandResolver.GetByID(ctx, bid)
 	if err != nil {
 		return "", err
 	}
-	return name, nil
+
+	return b.Name, nil
 }
 
 // ============================================================
@@ -307,8 +323,8 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 	// 2) brandName
 	brandName := ""
 	if brandID != "" {
-		if uc.BrandNameResolver == nil {
-			return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletBrandNameNotConfigured
+		if uc.BrandResolver == nil {
+			return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletBrandResolverNotConfigured
 		}
 		n, err := uc.ResolveBrandNameByID(ctx, brandID)
 		if err != nil {

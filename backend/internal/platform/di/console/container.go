@@ -16,7 +16,6 @@ import (
 	shared "narratives/internal/platform/di/shared"
 
 	avatar "narratives/internal/domain/avatar"
-	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	pbdomain "narratives/internal/domain/productBlueprint"
@@ -39,7 +38,6 @@ type Container struct {
 
 	MemberService  *memdom.Service
 	CompanyService *companydom.Service
-	BrandService   *branddom.Service
 
 	AccountUC                  *uc.AccountUsecase
 	AnnouncementUC             *uc.AnnouncementUsecase
@@ -117,7 +115,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	repos := buildRepos(clients)
 	services := buildDomainServices(repos)
-	res := buildResolvers(clients, repos, services)
+	res := buildResolvers(clients, repos)
 	u := buildUsecases(clients, repos, services, res)
 	q := buildQueries(clients.infra, repos, res, u, services)
 
@@ -161,7 +159,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		MemberService:  services.memberSvc,
 		CompanyService: services.companySvc,
-		BrandService:   services.brandSvc,
 
 		AccountUC:                  u.accountUC,
 		AnnouncementUC:             u.announcementUC,

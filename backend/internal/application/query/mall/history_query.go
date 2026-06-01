@@ -65,15 +65,15 @@ type HistoryTokenBlueprintResolver interface {
 
 // HistoryBrandResolver resolves brand display data from brandId.
 //
-// Concrete implementation can be brand.Service because it has:
+// Concrete implementation can be brand.RepositoryPort / brand.Repository because it has:
 //
-//	GetNameIconByID(ctx, brandID)
+//	GetByID(ctx, brandID)
 //
-// NameIcon provides:
+// Brand provides:
 // - Name
 // - BrandIcon
 type HistoryBrandResolver interface {
-	GetNameIconByID(ctx context.Context, brandID string) (branddom.NameIcon, error)
+	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
 // HistoryModelResolver resolves model variation display information from modelId.
@@ -384,12 +384,12 @@ func (q *HistoryQuery) ResolveBrandInfo(
 		return "", "", nil
 	}
 
-	nameIcon, nameIconErr := q.brandResolver.GetNameIconByID(ctx, id)
-	if nameIconErr != nil {
-		return "", "", nameIconErr
+	b, brandErr := q.brandResolver.GetByID(ctx, id)
+	if brandErr != nil {
+		return "", "", brandErr
 	}
 
-	return strings.TrimSpace(nameIcon.Name), strings.TrimSpace(nameIcon.BrandIcon), nil
+	return strings.TrimSpace(b.Name), strings.TrimSpace(b.BrandIcon), nil
 }
 
 func (q *HistoryQuery) ResolveModel(
@@ -534,6 +534,7 @@ func (q *HistoryQuery) resolveBrandInfo(
 
 	return historyBrandInfo{
 		BrandName: brandName,
+		BrandID:   id,
 		BrandIcon: brandIcon,
 	}
 }

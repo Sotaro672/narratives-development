@@ -82,9 +82,12 @@ type TokenBlueprintPatchReader interface {
 	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 }
 
-// BrandNameIconReader resolves brandId -> brandName + brandIcon.
-type BrandNameIconReader interface {
-	GetNameIconByID(ctx context.Context, brandID string) (branddom.NameIcon, error)
+// BrandReader resolves brandId -> Brand.
+//
+// brand.RepositoryPort / brand.Repository の GetByID(ctx, id string) に合わせる。
+// preview で必要な brandName / brandIcon は GetByID の結果から組み立てる。
+type BrandReader interface {
+	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
 // AvatarNameIconReader resolves avatarId -> avatarName + avatarIcon.
@@ -121,7 +124,7 @@ type PreviewQuery struct {
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	// Optional: display-only name resolvers
-	BrandNameIconRepo  BrandNameIconReader
+	BrandRepo          BrandReader
 	AvatarNameIconRepo AvatarNameIconReader
 
 	// Optional: mintAddress -> transfers を解決（nil なら transfers は返さない）
@@ -158,10 +161,17 @@ func WithOwnerResolveQuery(qry *sharedquery.OwnerResolveQuery) PreviewQueryOptio
 	}
 }
 
-func WithBrandNameIconRepo(r BrandNameIconReader) PreviewQueryOption {
+func WithBrandRepo(r BrandReader) PreviewQueryOption {
 	return func(q *PreviewQuery) {
-		q.BrandNameIconRepo = r
+		q.BrandRepo = r
 	}
+}
+
+// 既存DIコード互換用。
+// 旧名 WithBrandNameIconRepo を呼んでいる箇所が残っていても、
+// brand.Repository / brand.RepositoryPort をそのまま差し込める。
+func WithBrandNameIconRepo(r BrandReader) PreviewQueryOption {
+	return WithBrandRepo(r)
 }
 
 func WithAvatarNameIconRepo(r AvatarNameIconReader) PreviewQueryOption {
@@ -192,7 +202,7 @@ func NewPreviewQuery(
 		TokenRepo:            nil,
 		TokenBlueprintRepo:   nil,
 		OwnerResolveQ:        nil,
-		BrandNameIconRepo:    nil,
+		BrandRepo:            nil,
 		AvatarNameIconRepo:   nil,
 		TransferRepo:         nil,
 	}
@@ -319,8 +329,8 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		out.Token = tok
 
 		// brandId -> brandName（tokens側）
-		if tok != nil && tok.BrandID != "" && q.BrandNameIconRepo != nil {
-			ni, nerr := q.BrandNameIconRepo.GetNameIconByID(ctx, tok.BrandID)
+		if tok != nil && tok.BrandID != "" && q.BrandRepo != nil {
+			ni, nerr := q.getBrandNameIcon(ctx, tok.BrandID)
 			if nerr == nil && ni.Name != "" {
 				tok.BrandName = ni.Name
 				if out.BrandName == "" {
@@ -340,8 +350,8 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 			if perr == nil && tb != nil {
 				tbPatch := toPreviewTokenBlueprintPatch(tb)
 
-				if tbPatch.BrandID != "" && tbPatch.BrandName == "" && q.BrandNameIconRepo != nil {
-					ni, nerr := q.BrandNameIconRepo.GetNameIconByID(ctx, tbPatch.BrandID)
+				if tbPatch.BrandID != "" && tbPatch.BrandName == "" && q.BrandRepo != nil {
+					ni, nerr := q.getBrandNameIcon(ctx, tbPatch.BrandID)
 					if nerr == nil && ni.Name != "" {
 						tbPatch.BrandName = ni.Name
 						if out.BrandName == "" {
@@ -407,6 +417,28 @@ func toPreviewTokenBlueprintPatch(tb *tbdom.TokenBlueprint) tbdom.Patch {
 		MetadataURI: tb.MetadataURI,
 		IconURL:     tb.IconURL,
 	}
+}
+
+func (q *PreviewQuery) getBrandNameIcon(
+	ctx context.Context,
+	brandID string,
+) (branddom.NameIcon, error) {
+	if q == nil || q.BrandRepo == nil {
+		return branddom.NameIcon{}, ErrPreviewQueryNotConfigured
+	}
+	if brandID == "" {
+		return branddom.NameIcon{}, branddom.ErrInvalidID
+	}
+
+	b, err := q.BrandRepo.GetByID(ctx, brandID)
+	if err != nil {
+		return branddom.NameIcon{}, err
+	}
+
+	return branddom.NameIcon{
+		Name:      b.Name,
+		BrandIcon: b.BrandIcon,
+	}, nil
 }
 
 func (q *PreviewQuery) fillResolvedModelInfo(
@@ -662,8 +694,8 @@ func (q *PreviewQuery) fillBrandTransferDisplay(
 		return
 	}
 
-	if q.BrandNameIconRepo != nil {
-		ni, err := q.BrandNameIconRepo.GetNameIconByID(ctx, brandID)
+	if q.BrandRepo != nil {
+		ni, err := q.getBrandNameIcon(ctx, brandID)
 		if err == nil && ni.Name != "" {
 			*nameOut = ni.Name
 			*iconOut = ni.BrandIcon

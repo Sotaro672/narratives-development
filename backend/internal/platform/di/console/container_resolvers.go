@@ -12,7 +12,7 @@ type resolvers struct {
 	nameResolver      *resolver.NameResolver
 }
 
-func buildResolvers(c *clients, r *repos, s *services) *resolvers {
+func buildResolvers(c *clients, r *repos) *resolvers {
 	// avatar owner は wallets/{avatarId}.walletAddress を逆引きする
 	avatarAddrReader := sharedfs.NewAvatarWalletAddressReaderFS(c.fsClient, "wallets")
 	brandAddrReader := sharedfs.NewBrandWalletAddressReaderFS(c.fsClient, "brands")
@@ -21,7 +21,7 @@ func buildResolvers(c *clients, r *repos, s *services) *resolvers {
 		avatarAddrReader,
 		brandAddrReader,
 		r.avatarRepo, // avatarId -> avatarName
-		s.brandSvc,   // brandId -> brandName
+		r.brandRepo,  // brandId -> brand.GetByID(ctx, id) -> brandName
 	)
 
 	nameResolver := resolver.NewNameResolver(

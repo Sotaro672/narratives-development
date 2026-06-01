@@ -59,7 +59,7 @@ type QueryService struct {
 	modelRepo            ModelVariationGetter
 	productBlueprintRepo ProductBlueprintGetter
 
-	brandService   *branddom.Service
+	brandRepo      branddom.Repository
 	companyService *companydom.Service
 }
 
@@ -70,7 +70,7 @@ type NewQueryServiceParams struct {
 	ModelRepo            ModelVariationGetter
 	ProductBlueprintRepo ProductBlueprintGetter
 
-	BrandService   *branddom.Service
+	BrandRepo      branddom.Repository
 	CompanyService *companydom.Service
 }
 
@@ -82,7 +82,7 @@ func NewQueryService(params NewQueryServiceParams) *QueryService {
 		modelRepo:            params.ModelRepo,
 		productBlueprintRepo: params.ProductBlueprintRepo,
 
-		brandService:   params.BrandService,
+		brandRepo:      params.BrandRepo,
 		companyService: params.CompanyService,
 	}
 }
@@ -205,9 +205,9 @@ func (q *QueryService) GetInspectorProductDetail(
 
 	// 4) brandId → brandName 解決
 	var brandName string
-	if q.brandService != nil && bp.BrandID != "" {
-		if name, err := q.brandService.GetNameByID(ctx, bp.BrandID); err == nil {
-			brandName = name
+	if q.brandRepo != nil && bp.BrandID != "" {
+		if brand, err := q.brandRepo.GetByID(ctx, bp.BrandID); err == nil {
+			brandName = brand.Name
 		}
 	}
 
@@ -279,14 +279,24 @@ func (q *QueryService) GetInspectorProductDetail(
 		ProductionID:     product.ProductionID,
 		InspectionResult: inspectionResult,
 
+		// connectedToken をそのままフロントに返す
+		// NOTE:
+		// 現在の productdom.Product には ConnectedToken が存在しないため、
+		// ここでは値を詰めません。
+		// 将来 token 接続情報を返す場合は、別 repo / query から取得して設定します。
+		ConnectedToken: nil,
+
+		// common
 		Kind:        kind,
 		ModelNumber: modelNumber,
 		ModelLabel:  modelLabel,
 
+		// apparel
 		Size:         size,
 		Color:        colorDTO,
 		Measurements: measurements,
 
+		// alcohol
 		VolumeValue: volumeValue,
 		VolumeUnit:  volumeUnit,
 

@@ -147,7 +147,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.TokenBlueprintUC,
 			c.TokenBlueprintDetailQuery,
 			c.TokenBlueprintManagementQuery,
-			c.BrandService,
+			c.BrandUC,
 		)
 	}
 
@@ -156,7 +156,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.TokenBlueprintReviewRepo,
 			c.AvatarRepo,
 			c.TokenBlueprintRepo,
-			c.BrandService,
+			c.BrandUC,
 		)
 		tokenBPReviewH = consoleHandler.NewTokenBlueprintReviewHandler(tbReviewUC)
 	}
@@ -169,7 +169,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			walletRepo,
 		).
 			WithProductBlueprintRepo(c.ProductBlueprintRepo).
-			WithBrandService(c.BrandService).
+			WithBrandRepository(c.BrandUC).
 			WithMemberService(c.MemberService)
 
 		if c.AvatarRepo != nil {
@@ -241,7 +241,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.InvitationQuery,
 			c.InvitationComplete,
 			c.CompanyService,
-			c.BrandService,
+			c.BrandUC,
 		)
 	}
 
