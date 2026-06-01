@@ -5,60 +5,112 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 	tbReview "narratives/internal/domain/tokenBlueprint_review"
-	"narratives/internal/infra/arweave"
 )
 
-type ArweaveUploader interface {
+type arweaveUploader interface {
 	UploadMetadata(ctx context.Context, data []byte) (string, error)
 }
 
 type TokenBlueprintUsecase struct {
-	crud     *TokenBlueprintCRUDUsecase
-	command  *TokenBlueprintCommandUsecase
-	metadata *TokenBlueprintMetadataUsecase
+	crud     *tokenBlueprintCRUDUsecase
+	metadata *tokenBlueprintMetadataUsecase
+	command  *tokenBlueprintCommandUsecase
 }
 
 func NewTokenBlueprintUsecase(
 	tbRepo tbdom.RepositoryPort,
 	tbReviewRepo tbReview.RepositoryPort,
+	uploader arweaveUploader,
 ) *TokenBlueprintUsecase {
 	if tbRepo == nil {
 		panic(fmt.Errorf("NewTokenBlueprintUsecase: tbRepo is nil"))
 	}
 
-	crud := NewTokenBlueprintCRUDUsecase(tbRepo, tbReviewRepo)
-	command := NewTokenBlueprintCommandUsecase(tbRepo)
-
-	baseURL := os.Getenv("ARWEAVE_BASE_URL")
-	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
-	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
-
-	metadata := NewTokenBlueprintMetadataUsecase(tbRepo, uploader)
-
 	return &TokenBlueprintUsecase{
-		crud:     crud,
-		command:  command,
-		metadata: metadata,
+		crud:     newTokenBlueprintCRUDUsecase(tbRepo, tbReviewRepo),
+		metadata: newTokenBlueprintMetadataUsecase(tbRepo, uploader),
+		command:  newTokenBlueprintCommandUsecase(tbRepo),
 	}
 }
 
-type TokenBlueprintCRUDUsecase struct {
+func (u *TokenBlueprintUsecase) Create(
+	ctx context.Context,
+	in CreateBlueprintRequest,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.crud == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
+	}
+
+	tb, err := u.crud.Create(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	if tb == nil || strings.Trim(tb.ID, " \t\r\n") == "" {
+		return nil, fmt.Errorf("tokenBlueprint create returned empty id")
+	}
+
+	return tb, nil
+}
+
+func (u *TokenBlueprintUsecase) Update(
+	ctx context.Context,
+	in UpdateBlueprintRequest,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.crud == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
+	}
+
+	return u.crud.Update(ctx, in)
+}
+
+func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
+	if u == nil || u.crud == nil {
+		return fmt.Errorf("tokenBlueprint usecase/crud is nil")
+	}
+
+	return u.crud.Delete(ctx, id)
+}
+
+func (u *TokenBlueprintUsecase) EnsureMetadataURI(
+	ctx context.Context,
+	tb *tbdom.TokenBlueprint,
+	actorID string,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.metadata == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/metadata is nil")
+	}
+
+	return u.metadata.EnsureMetadataURI(ctx, tb, actorID)
+}
+
+func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
+	ctx context.Context,
+	tokenBlueprintID string,
+	actorID string,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.command == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/command is nil")
+	}
+
+	return u.command.MarkTokenBlueprintMinted(ctx, tokenBlueprintID, actorID)
+}
+
+type tokenBlueprintCRUDUsecase struct {
 	tbRepo       tbdom.RepositoryPort
 	tbReviewRepo tbReview.RepositoryPort
 }
 
-func NewTokenBlueprintCRUDUsecase(
+func newTokenBlueprintCRUDUsecase(
 	tbRepo tbdom.RepositoryPort,
 	tbReviewRepo tbReview.RepositoryPort,
-) *TokenBlueprintCRUDUsecase {
-	return &TokenBlueprintCRUDUsecase{
+) *tokenBlueprintCRUDUsecase {
+	return &tokenBlueprintCRUDUsecase{
 		tbRepo:       tbRepo,
 		tbReviewRepo: tbReviewRepo,
 	}
@@ -76,7 +128,7 @@ type CreateBlueprintRequest struct {
 	CreatedBy    string
 }
 
-func (u *TokenBlueprintCRUDUsecase) Create(
+func (u *tokenBlueprintCRUDUsecase) Create(
 	ctx context.Context,
 	in CreateBlueprintRequest,
 ) (*tbdom.TokenBlueprint, error) {
@@ -126,89 +178,6 @@ func (u *TokenBlueprintCRUDUsecase) Create(
 	return tb, nil
 }
 
-func (u *TokenBlueprintCRUDUsecase) GetByID(
-	ctx context.Context,
-	id string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.tbRepo == nil {
-		return nil, tbdom.ErrInvalid
-	}
-
-	id = strings.Trim(id, " \t\r\n")
-	if id == "" {
-		return nil, tbdom.ErrInvalidID
-	}
-
-	return u.tbRepo.GetByID(ctx, id)
-}
-
-func (u *TokenBlueprintCRUDUsecase) GetByIDForCompany(
-	ctx context.Context,
-	id string,
-	companyID string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.tbRepo == nil {
-		return nil, tbdom.ErrInvalid
-	}
-
-	companyID = strings.Trim(companyID, " \t\r\n")
-	if companyID == "" {
-		return nil, tbdom.ErrInvalidCompanyID
-	}
-
-	tb, err := u.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if tb == nil {
-		return nil, tbdom.ErrNotFound
-	}
-
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
-		return nil, tbdom.ErrNotFound
-	}
-
-	return tb, nil
-}
-
-func (u *TokenBlueprintCRUDUsecase) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	var empty domcommon.PageResult[tbdom.TokenBlueprint]
-
-	if u == nil || u.tbRepo == nil {
-		return empty, tbdom.ErrInvalid
-	}
-
-	companyID = strings.Trim(companyID, " \t\r\n")
-	if companyID == "" {
-		return empty, tbdom.ErrInvalidCompanyID
-	}
-
-	return u.tbRepo.ListByCompanyID(ctx, companyID, page)
-}
-
-func (u *TokenBlueprintCRUDUsecase) ListByBrandID(
-	ctx context.Context,
-	brandID string,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	var empty domcommon.PageResult[tbdom.TokenBlueprint]
-
-	if u == nil || u.tbRepo == nil {
-		return empty, tbdom.ErrInvalid
-	}
-
-	brandID = strings.Trim(brandID, " \t\r\n")
-	if brandID == "" {
-		return empty, tbdom.ErrInvalidBrandID
-	}
-
-	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
-}
-
 type UpdateBlueprintRequest struct {
 	ID           string
 	Name         *string
@@ -223,7 +192,7 @@ type UpdateBlueprintRequest struct {
 	UpdatedBy    string
 }
 
-func (u *TokenBlueprintCRUDUsecase) Update(
+func (u *tokenBlueprintCRUDUsecase) Update(
 	ctx context.Context,
 	in UpdateBlueprintRequest,
 ) (*tbdom.TokenBlueprint, error) {
@@ -275,23 +244,7 @@ func (u *TokenBlueprintCRUDUsecase) Update(
 	return tb, nil
 }
 
-func (u *TokenBlueprintCRUDUsecase) UpdateForCompany(
-	ctx context.Context,
-	companyID string,
-	in UpdateBlueprintRequest,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.tbRepo == nil {
-		return nil, tbdom.ErrInvalid
-	}
-
-	if _, err := u.GetByIDForCompany(ctx, in.ID, companyID); err != nil {
-		return nil, err
-	}
-
-	return u.Update(ctx, in)
-}
-
-func (u *TokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error {
+func (u *tokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error {
 	if u == nil || u.tbRepo == nil {
 		return tbdom.ErrInvalid
 	}
@@ -304,101 +257,22 @@ func (u *TokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error
 	return u.tbRepo.Delete(ctx, id)
 }
 
-func (u *TokenBlueprintCRUDUsecase) DeleteForCompany(
-	ctx context.Context,
-	companyID string,
-	id string,
-) error {
-	if u == nil || u.tbRepo == nil {
-		return tbdom.ErrInvalid
-	}
-
-	if _, err := u.GetByIDForCompany(ctx, id, companyID); err != nil {
-		return err
-	}
-
-	return u.Delete(ctx, id)
-}
-
-type TokenBlueprintCommandUsecase struct {
-	tbRepo tbdom.RepositoryPort
-}
-
-func NewTokenBlueprintCommandUsecase(tbRepo tbdom.RepositoryPort) *TokenBlueprintCommandUsecase {
-	return &TokenBlueprintCommandUsecase{tbRepo: tbRepo}
-}
-
-func (u *TokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(
-	ctx context.Context,
-	tokenBlueprintID string,
-	actorID string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil {
-		return nil, fmt.Errorf("tokenBlueprint command usecase is nil")
-	}
-	if u.tbRepo == nil {
-		return nil, fmt.Errorf("tokenBlueprint repo is nil")
-	}
-
-	id := strings.Trim(tokenBlueprintID, " \t\r\n")
-	if id == "" {
-		return nil, fmt.Errorf("tokenBlueprintID is empty")
-	}
-
-	actorID = strings.Trim(actorID, " \t\r\n")
-	if actorID == "" {
-		return nil, fmt.Errorf("actorID is empty")
-	}
-
-	tb, err := u.tbRepo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if tb == nil {
-		return nil, tbdom.ErrNotFound
-	}
-
-	if tb.Minted {
-		return tb, nil
-	}
-
-	now := time.Now().UTC()
-	minted := true
-	updatedBy := actorID
-
-	updated, err := u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
-		ContentFiles: nil,
-		AssigneeID:   nil,
-		Description:  nil,
-		Minted:       &minted,
-		UpdatedAt:    &now,
-		UpdatedBy:    &updatedBy,
-		DeletedAt:    nil,
-		DeletedBy:    nil,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return updated, nil
-}
-
-type TokenBlueprintMetadataUsecase struct {
+type tokenBlueprintMetadataUsecase struct {
 	tbRepo   tbdom.RepositoryPort
-	uploader ArweaveUploader
+	uploader arweaveUploader
 }
 
-func NewTokenBlueprintMetadataUsecase(
+func newTokenBlueprintMetadataUsecase(
 	tbRepo tbdom.RepositoryPort,
-	uploader ArweaveUploader,
-) *TokenBlueprintMetadataUsecase {
-	return &TokenBlueprintMetadataUsecase{
+	uploader arweaveUploader,
+) *tokenBlueprintMetadataUsecase {
+	return &tokenBlueprintMetadataUsecase{
 		tbRepo:   tbRepo,
 		uploader: uploader,
 	}
 }
 
-func (u *TokenBlueprintMetadataUsecase) EnsureMetadataURI(
+func (u *tokenBlueprintMetadataUsecase) EnsureMetadataURI(
 	ctx context.Context,
 	tb *tbdom.TokenBlueprint,
 	actorID string,
@@ -548,138 +422,67 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 	return b, nil
 }
 
-func (u *TokenBlueprintUsecase) Create(
-	ctx context.Context,
-	in CreateBlueprintRequest,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.crud == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	tb, err := u.crud.Create(ctx, in)
-	if err != nil {
-		return nil, err
-	}
-
-	if tb == nil || strings.Trim(tb.ID, " \t\r\n") == "" {
-		return nil, fmt.Errorf("tokenBlueprint create returned empty id")
-	}
-
-	return tb, nil
+type tokenBlueprintCommandUsecase struct {
+	tbRepo tbdom.RepositoryPort
 }
 
-func (u *TokenBlueprintUsecase) GetByID(
-	ctx context.Context,
-	id string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.crud == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.GetByID(ctx, id)
+func newTokenBlueprintCommandUsecase(tbRepo tbdom.RepositoryPort) *tokenBlueprintCommandUsecase {
+	return &tokenBlueprintCommandUsecase{tbRepo: tbRepo}
 }
 
-func (u *TokenBlueprintUsecase) GetByIDForCompany(
-	ctx context.Context,
-	id string,
-	companyID string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.crud == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.GetByIDForCompany(ctx, id, companyID)
-}
-
-func (u *TokenBlueprintUsecase) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	if u == nil || u.crud == nil {
-		return domcommon.PageResult[tbdom.TokenBlueprint]{}, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.ListByCompanyID(ctx, companyID, page)
-}
-
-func (u *TokenBlueprintUsecase) ListByBrandID(
-	ctx context.Context,
-	brandID string,
-	page domcommon.Page,
-) (domcommon.PageResult[tbdom.TokenBlueprint], error) {
-	if u == nil || u.crud == nil {
-		return domcommon.PageResult[tbdom.TokenBlueprint]{}, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.ListByBrandID(ctx, brandID, page)
-}
-
-func (u *TokenBlueprintUsecase) Update(
-	ctx context.Context,
-	in UpdateBlueprintRequest,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.crud == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.Update(ctx, in)
-}
-
-func (u *TokenBlueprintUsecase) UpdateForCompany(
-	ctx context.Context,
-	companyID string,
-	in UpdateBlueprintRequest,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.crud == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.UpdateForCompany(ctx, companyID, in)
-}
-
-func (u *TokenBlueprintUsecase) EnsureMetadataURI(
-	ctx context.Context,
-	tb *tbdom.TokenBlueprint,
-	actorID string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.metadata == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/metadata is nil")
-	}
-
-	return u.metadata.EnsureMetadataURI(ctx, tb, actorID)
-}
-
-func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
-	if u == nil || u.crud == nil {
-		return fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.Delete(ctx, id)
-}
-
-func (u *TokenBlueprintUsecase) DeleteForCompany(
-	ctx context.Context,
-	companyID string,
-	id string,
-) error {
-	if u == nil || u.crud == nil {
-		return fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.DeleteForCompany(ctx, companyID, id)
-}
-
-func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
+func (u *tokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(
 	ctx context.Context,
 	tokenBlueprintID string,
 	actorID string,
 ) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.command == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/command is nil")
+	if u == nil {
+		return nil, fmt.Errorf("tokenBlueprint command usecase is nil")
+	}
+	if u.tbRepo == nil {
+		return nil, fmt.Errorf("tokenBlueprint repo is nil")
 	}
 
-	return u.command.MarkTokenBlueprintMinted(ctx, tokenBlueprintID, actorID)
+	id := strings.Trim(tokenBlueprintID, " \t\r\n")
+	if id == "" {
+		return nil, fmt.Errorf("tokenBlueprintID is empty")
+	}
+
+	actorID = strings.Trim(actorID, " \t\r\n")
+	if actorID == "" {
+		return nil, fmt.Errorf("actorID is empty")
+	}
+
+	tb, err := u.tbRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if tb == nil {
+		return nil, tbdom.ErrNotFound
+	}
+
+	if tb.Minted {
+		return tb, nil
+	}
+
+	now := time.Now().UTC()
+	minted := true
+	updatedBy := actorID
+
+	updated, err := u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
+		ContentFiles: nil,
+		AssigneeID:   nil,
+		Description:  nil,
+		Minted:       &minted,
+		UpdatedAt:    &now,
+		UpdatedBy:    &updatedBy,
+		DeletedAt:    nil,
+		DeletedBy:    nil,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return updated, nil
 }
 
 func normalizeContentFilesForCommand(files []tbdom.ContentFile, actorID string) []tbdom.ContentFile {

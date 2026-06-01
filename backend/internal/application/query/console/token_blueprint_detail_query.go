@@ -57,35 +57,6 @@ func (q *TokenBlueprintDetailQuery) GetByID(
 	return tb, names, nil
 }
 
-func (q *TokenBlueprintDetailQuery) GetByIDForCompany(
-	ctx context.Context,
-	id string,
-	companyID string,
-) (*tbdom.TokenBlueprint, TokenBlueprintMemberNames, error) {
-	if q == nil || q.tbRepo == nil {
-		return nil, TokenBlueprintMemberNames{}, fmt.Errorf("tokenBlueprint detail query/repo is nil")
-	}
-
-	companyID = strings.Trim(companyID, " \t\r\n")
-	if companyID == "" {
-		return nil, TokenBlueprintMemberNames{}, tbdom.ErrInvalidCompanyID
-	}
-
-	tb, names, err := q.GetByID(ctx, id)
-	if err != nil {
-		return nil, TokenBlueprintMemberNames{}, err
-	}
-	if tb == nil {
-		return nil, TokenBlueprintMemberNames{}, tbdom.ErrNotFound
-	}
-
-	if strings.Trim(tb.CompanyID, " \t\r\n") != companyID {
-		return nil, TokenBlueprintMemberNames{}, tbdom.ErrNotFound
-	}
-
-	return tb, names, nil
-}
-
 func (q *TokenBlueprintDetailQuery) ResolveMemberNames(
 	ctx context.Context,
 	ids []string,

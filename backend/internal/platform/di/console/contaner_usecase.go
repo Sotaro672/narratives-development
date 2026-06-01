@@ -152,21 +152,17 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
 	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
 
-	tbMetadataUC := uc.NewTokenBlueprintMetadataUsecase(
-		r.tokenBlueprintRepo,
-		uploader,
-	)
-
-	mintUC.SetTokenBlueprintMetadataEnsurer(tbMetadataUC)
-
-	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
-
 	tbReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(c.fsClient)
 
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		r.tokenBlueprintRepo,
 		tbReviewRepo,
+		uploader,
 	)
+
+	mintUC.SetTokenBlueprintMetadataEnsurer(tokenBlueprintUC)
+
+	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
 
 	tokenBlueprintReviewUC := uc.NewTokenBlueprintReviewUsecase(
 		tbReviewRepo,

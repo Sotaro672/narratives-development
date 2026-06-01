@@ -129,20 +129,6 @@ type tokenBlueprintPageResponse struct {
 	PerPage    int                      `json:"perPage"`
 }
 
-type tokenBlueprintPatchResponse struct {
-	ID          string `json:"id"`
-	TokenName   string `json:"tokenName"`
-	Symbol      string `json:"symbol"`
-	BrandID     string `json:"brandId"`
-	BrandName   string `json:"brandName"`
-	CompanyID   string `json:"companyId"`
-	Description string `json:"description,omitempty"`
-	Minted      bool   `json:"minted"`
-	MetadataURI string `json:"metadataUri"`
-	IconURL     string `json:"iconUrl,omitempty"`
-	ContentsURL string `json:"contentsUrl,omitempty"`
-}
-
 func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string) string {
 	if h == nil || h.brandSvc == nil {
 		return ""
@@ -243,26 +229,6 @@ func (h *TokenBlueprintHandler) toResponse(
 	}
 }
 
-func (h *TokenBlueprintHandler) toPatchResponse(ctx context.Context, tb *tbdom.TokenBlueprint) tokenBlueprintPatchResponse {
-	if tb == nil {
-		return tokenBlueprintPatchResponse{}
-	}
-
-	return tokenBlueprintPatchResponse{
-		ID:          strings.Trim(tb.ID, " \t\r\n"),
-		TokenName:   strings.Trim(tb.Name, " \t\r\n"),
-		Symbol:      strings.Trim(tb.Symbol, " \t\r\n"),
-		BrandID:     strings.Trim(tb.BrandID, " \t\r\n"),
-		BrandName:   h.resolveBrandName(ctx, tb.BrandID),
-		CompanyID:   strings.Trim(tb.CompanyID, " \t\r\n"),
-		Description: strings.Trim(tb.Description, " \t\r\n"),
-		Minted:      tb.Minted,
-		MetadataURI: strings.Trim(tb.MetadataURI, " \t\r\n"),
-		IconURL:     resolveStoredIconURL(tb),
-		ContentsURL: "",
-	}
-}
-
 func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
@@ -275,14 +241,6 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	case r.Method == http.MethodGet && path == "/token-blueprints":
 		h.list(w, r)
-		return
-
-	case r.Method == http.MethodGet &&
-		strings.HasPrefix(path, "/token-blueprints/") &&
-		strings.HasSuffix(path, "/patch"):
-		id := strings.TrimSuffix(strings.TrimPrefix(path, "/token-blueprints/"), "/patch")
-		id = strings.Trim(id, "/")
-		h.getPatch(w, r, id)
 		return
 
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) &&
@@ -358,7 +316,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tb, names, err := h.detailQuery.GetByIDForCompany(ctx, tb.ID, companyID)
+	tb, names, err := h.detailQuery.GetByID(ctx, tb.ID)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
@@ -367,33 +325,6 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	resp := h.toResponse(ctx, tb, true, &names)
 
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
-	id = strings.Trim(id, " \t\r\n")
-
-	if companyID == "" {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
-		return
-	}
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is empty"})
-		return
-	}
-
-	tb, _, err := h.detailQuery.GetByIDForCompany(ctx, id, companyID)
-	if err != nil {
-		writeTokenBlueprintErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(h.toPatchResponse(ctx, tb))
 }
 
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
@@ -406,7 +337,7 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	tb, names, err := h.detailQuery.GetByIDForCompany(ctx, strings.Trim(id, " \t\r\n"), companyID)
+	tb, names, err := h.detailQuery.GetByID(ctx, strings.Trim(id, " \t\r\n"))
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
@@ -444,6 +375,14 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	brandID := strings.Trim(q.Get("brandId"), " \t\r\n")
 	mintedFilter := strings.Trim(q.Get("minted"), " \t\r\n")
 
+	if brandID != "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "brandId filter is no longer supported",
+		})
+		return
+	}
+
 	if mintedFilter != "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -454,7 +393,7 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	page := domcommon.Page{Number: pageNum, PerPage: perPage}
 
-	result, err := h.managementQuery.ListForCompany(ctx, companyID, brandID, page)
+	result, err := h.managementQuery.ListByCompanyID(ctx, companyID, page)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
@@ -504,7 +443,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	updated, err := h.uc.UpdateForCompany(ctx, companyID, tbapp.UpdateBlueprintRequest{
+	updated, err := h.uc.Update(ctx, tbapp.UpdateBlueprintRequest{
 		ID:           id,
 		Name:         req.Name,
 		Symbol:       req.Symbol,
@@ -522,7 +461,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	updated, names, err := h.detailQuery.GetByIDForCompany(ctx, updated.ID, companyID)
+	updated, names, err := h.detailQuery.GetByID(ctx, updated.ID)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
@@ -544,7 +483,7 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	if err := h.uc.DeleteForCompany(ctx, companyID, id); err != nil {
+	if err := h.uc.Delete(ctx, id); err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}

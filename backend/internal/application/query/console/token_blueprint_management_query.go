@@ -39,10 +39,9 @@ func NewTokenBlueprintManagementQuery(
 	}
 }
 
-func (q *TokenBlueprintManagementQuery) ListForCompany(
+func (q *TokenBlueprintManagementQuery) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
-	brandID string,
 	page domcommon.Page,
 ) (TokenBlueprintWithMemberNamesPage, error) {
 	if q == nil || q.tbRepo == nil {
@@ -54,31 +53,9 @@ func (q *TokenBlueprintManagementQuery) ListForCompany(
 		return TokenBlueprintWithMemberNamesPage{}, tbdom.ErrInvalidCompanyID
 	}
 
-	brandID = strings.Trim(brandID, " \t\r\n")
-
-	var (
-		result domcommon.PageResult[tbdom.TokenBlueprint]
-		err    error
-	)
-
-	if brandID != "" {
-		result, err = q.tbRepo.ListByBrandID(ctx, brandID, page)
-		if err != nil {
-			return TokenBlueprintWithMemberNamesPage{}, err
-		}
-
-		filtered := make([]tbdom.TokenBlueprint, 0, len(result.Items))
-		for i := range result.Items {
-			if strings.Trim(result.Items[i].CompanyID, " \t\r\n") == companyID {
-				filtered = append(filtered, result.Items[i])
-			}
-		}
-		result.Items = filtered
-	} else {
-		result, err = q.tbRepo.ListByCompanyID(ctx, companyID, page)
-		if err != nil {
-			return TokenBlueprintWithMemberNamesPage{}, err
-		}
+	result, err := q.tbRepo.ListByCompanyID(ctx, companyID, page)
+	if err != nil {
+		return TokenBlueprintWithMemberNamesPage{}, err
 	}
 
 	return q.attachMemberNames(ctx, result)
