@@ -37,7 +37,9 @@ export async function listProductsByProductionId(
   return listProductsByProductionIdApi(id);
 }
 
-function buildModelNumberByModelIdMap(rows: PrintRow[] | undefined): Map<string, string> {
+function buildModelNumberByModelIdMap(
+  rows: PrintRow[] | undefined,
+): Map<string, string> {
   const map = new Map<string, string>();
 
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -165,6 +167,55 @@ async function buildAndOpenQrPdfFromLogs(args: {
   return qrItems.length;
 }
 
+/**
+ * 既存 print_log を取得し、存在する場合は GET 結果だけで QR PDF を開く。
+ *
+ * この関数では作成系 API は呼ばない。
+ */
+export async function printExistingLogsForProduction(params: {
+  productionId: string;
+  rows: PrintRow[];
+}): Promise<PrintLogForPrint[]> {
+  const { productionId, rows } = params;
+  const id = productionId.trim();
+
+  if (!id) {
+    throw new Error("productionId is required");
+  }
+
+  const safeRows = Array.isArray(rows) ? rows : [];
+
+  const logs = await listPrintLogsByProductionIdApi(id);
+
+  if (logs.length === 0) {
+    return [];
+  }
+
+  const products = await listProductsByProductionId(id);
+
+  const totalQrCount = await buildAndOpenQrPdfFromLogs({
+    logs,
+    products,
+    rows: safeRows,
+  });
+
+  await notifyPrintLogCompleted({
+    productionId: id,
+    logCount: logs.length,
+    totalQrCount,
+    reusedExistingLogs: true,
+  });
+
+  return logs;
+}
+
+/**
+ * 初回印刷用。
+ *
+ * products / print_log がまだ無い productionId に対してのみ使う。
+ * 既存 print_log の再印刷用途では printExistingLogsForProduction または
+ * printOrCreateProductsForPrint を使う。
+ */
 export async function createProductsForPrint(params: {
   productionId: string;
   rows: PrintRow[];
@@ -212,4 +263,27 @@ export async function createProductsForPrint(params: {
   });
 
   return logs;
+}
+
+/**
+ * 印刷ボタン用の入口。
+ *
+ * 1. まず GET /products/print-logs?productionId=... を実行する
+ * 2. 既存 print_log があれば、その GET 結果で QR PDF を開く
+ * 3. 既存 print_log が無い場合だけ、初回作成として POST 系処理に進む
+ *
+ * GET が失敗した場合は POST にフォールバックしない。
+ * 認証エラーや backend エラーを隠さないため。
+ */
+export async function printOrCreateProductsForPrint(params: {
+  productionId: string;
+  rows: PrintRow[];
+}): Promise<PrintLogForPrint[]> {
+  const existingLogs = await printExistingLogsForProduction(params);
+
+  if (existingLogs.length > 0) {
+    return existingLogs;
+  }
+
+  return createProductsForPrint(params);
 }

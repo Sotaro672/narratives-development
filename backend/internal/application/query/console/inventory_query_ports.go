@@ -15,7 +15,7 @@ type inventoryReader interface {
 }
 
 type inventoryProductBlueprintReader interface {
-	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+	ListByCompanyID(ctx context.Context, companyID string) ([]pbdom.ProductBlueprint, error)
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 

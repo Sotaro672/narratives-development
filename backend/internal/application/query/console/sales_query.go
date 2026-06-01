@@ -65,7 +65,7 @@ type productReader interface {
 }
 
 type productBlueprintReader interface {
-	GetIDByModelID(ctx context.Context, modelID string) (string, error)
+	GetIDByModelID(ctx context.Context, modelID string) (string, []pbdom.ModelRef, error)
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
@@ -121,7 +121,7 @@ func NewSalesQuery(
 		tokenQueryRepo:       tokenQueryRepo,
 		productRepo:          productRepo,
 		productBlueprintRepo: productBlueprintRepo,
-		walletRepo:           walletAddressByMintReader(walletRepo),
+		walletRepo:           walletRepo,
 		ownerResolver:        ownerResolver,
 		avatarRepo:           avatarRepo,
 		avatarStateRepo:      avatarStateRepo,
@@ -280,7 +280,7 @@ func (q *SalesQuery) resolveProductBlueprints(
 			modelIDs = append(modelIDs, modelID)
 		}
 
-		productBlueprintID, err := q.productBlueprintRepo.GetIDByModelID(ctx, modelID)
+		productBlueprintID, _, err := q.productBlueprintRepo.GetIDByModelID(ctx, modelID)
 		if err != nil {
 			continue
 		}

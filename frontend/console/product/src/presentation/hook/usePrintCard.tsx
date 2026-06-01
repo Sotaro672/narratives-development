@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import {
-  createProductsForPrint,
+  printOrCreateProductsForPrint,
   type PrintRow,
   type PrintLogForPrint,
 } from "../../application/printService";
@@ -42,6 +42,9 @@ export function usePrintCard<T extends QuantityRowBase>({
 
   /**
    * 印刷処理本体。
+   *
+   * 既存 print_log がある場合は GET のみで再印刷する。
+   * 既存 print_log が無い場合だけ、初回作成として POST 系処理に進む。
    */
   const onPrint = React.useCallback(async (): Promise<PrintLogForPrint[]> => {
     if (!productionId || !hasProduction) {
@@ -63,7 +66,7 @@ export function usePrintCard<T extends QuantityRowBase>({
         modelNumber: String(row.modelNumber ?? "").trim(),
       }));
 
-      const logs = await createProductsForPrint({
+      const logs = await printOrCreateProductsForPrint({
         productionId,
         rows: rowsForPrint,
       });

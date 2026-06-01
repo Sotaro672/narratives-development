@@ -202,12 +202,12 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 		page.PerPage = 100
 	}
 
-	pbIDs, err := uc.ProductBlueprintRepo.ListIDsByCompany(ctx, companyID)
+	productBlueprints, err := uc.ProductBlueprintRepo.ListByCompanyID(ctx, companyID)
 	if err != nil {
 		return domcommon.PageResult[ProductBlueprintReviewAggregateItem]{}, err
 	}
 
-	totalCount := len(pbIDs)
+	totalCount := len(productBlueprints)
 	totalPages := 0
 	if page.PerPage > 0 {
 		totalPages = int(math.Ceil(float64(totalCount) / float64(page.PerPage)))
@@ -224,7 +224,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 	if end > totalCount {
 		end = totalCount
 	}
-	paged := pbIDs[start:end]
+	paged := productBlueprints[start:end]
 
 	items := make([]ProductBlueprintReviewAggregateItem, 0, len(paged))
 
@@ -232,17 +232,12 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 	brandNameCache := make(map[string]string, 16)
 	assigneeNameCache := make(map[string]string, 16)
 
-	for _, pbID := range paged {
-		if pbID == "" {
+	for _, pb := range paged {
+		if pb.ID == "" {
 			continue
 		}
 
-		pb, e := uc.ProductBlueprintRepo.GetByID(ctx, pbID)
-		if e != nil {
-			return domcommon.PageResult[ProductBlueprintReviewAggregateItem]{}, e
-		}
-
-		sum, e := uc.ReviewRepo.GetProductSummary(ctx, pbID, status)
+		sum, e := uc.ReviewRepo.GetProductSummary(ctx, pb.ID, status)
 		if e != nil {
 			return domcommon.PageResult[ProductBlueprintReviewAggregateItem]{}, e
 		}
@@ -272,8 +267,8 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 		}
 
 		items = append(items, ProductBlueprintReviewAggregateItem{
-			ID:                 pbID,
-			ProductBlueprintID: pbID,
+			ID:                 pb.ID,
+			ProductBlueprintID: pb.ID,
 			ProductName:        pb.ProductName,
 			BrandID:            pb.BrandID,
 			BrandName:          brandName,
@@ -472,7 +467,7 @@ func (uc *ProductBlueprintReviewUsecase) resolveVerifiedPurchase(
 			continue
 		}
 
-		pbID, err := uc.ModelProductBlueprintID.GetIDByModelID(ctx, modelID)
+		pbID, _, err := uc.ModelProductBlueprintID.GetIDByModelID(ctx, modelID)
 		if err != nil {
 			continue
 		}

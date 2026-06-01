@@ -44,10 +44,13 @@ type ProductReader interface {
 	GetByID(ctx context.Context, productID string) (productdom.Product, error)
 }
 
-// ModelProductBlueprintIDResolver (modelId -> productBlueprintId)
-// - port は GetIDByModelID に統一する（productBlueprint.Repository に寄せる）
+// ModelProductBlueprintIDResolver (modelId -> productBlueprintId + modelRefs)
+//
+// repository port の GetIDByModelID に合わせる。
+// - productBlueprintID が必要な caller は第1戻り値を使う
+// - displayOrder / modelRefs が必要な caller は第2戻り値を使う
 type ModelProductBlueprintIDResolver interface {
-	GetIDByModelID(ctx context.Context, modelID string) (string, error)
+	GetIDByModelID(ctx context.Context, modelID string) (string, []productbpdom.ModelRef, error)
 }
 
 // ProductBlueprintReader (productBlueprintId -> productBlueprint(productName取得))
@@ -322,6 +325,7 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 	if err != nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, err
 	}
+
 	modelID := p.ModelID
 	if modelID == "" {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletResolvedModelIDEmpty
@@ -331,7 +335,8 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 	if uc.ModelProductBlueprintID == nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletModelProductBlueprintNotConfigured
 	}
-	pbID, err := uc.ModelProductBlueprintID.GetIDByModelID(ctx, modelID)
+
+	pbID, _, err := uc.ModelProductBlueprintID.GetIDByModelID(ctx, modelID)
 	if err != nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, err
 	}
@@ -343,10 +348,12 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 	if uc.ProductBlueprintReader == nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletProductBlueprintReaderNotConfigured
 	}
+
 	pb, err := uc.ProductBlueprintReader.GetByID(ctx, pbID)
 	if err != nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, err
 	}
+
 	productName := pb.ProductName
 
 	return ResolveTokenByMintAddressWithBrandNameResult{

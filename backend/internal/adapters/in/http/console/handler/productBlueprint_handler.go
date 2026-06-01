@@ -1,35 +1,26 @@
 package consoleHandler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	pbuc "narratives/internal/application/usecase"
-	brand "narratives/internal/domain/brand"
-	memdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
 	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
 // ProductBlueprintHandler は ProductBlueprint 用の HTTP ハンドラです。
 type ProductBlueprintHandler struct {
-	uc        *pbuc.ProductBlueprintUsecase
-	brandSvc  *brand.Service
-	memberSvc *memdom.Service
+	uc *pbuc.ProductBlueprintUsecase
 }
 
 func NewProductBlueprintHandler(
 	uc *pbuc.ProductBlueprintUsecase,
-	brandSvc *brand.Service,
-	memberSvc *memdom.Service,
 ) http.Handler {
 	return &ProductBlueprintHandler{
-		uc:        uc,
-		brandSvc:  brandSvc,
-		memberSvc: memberSvc,
+		uc: uc,
 	}
 }
 
@@ -149,6 +140,7 @@ type UpdateProductBlueprintInput struct {
 //
 // 採用方針
 //   - 入力: modelIds（順序は「色登録順→サイズ登録順」に並んだもの）
+//   - 空 / 重複除外と displayOrder 採番は usecase 側で行う
 //   - 出力: detail（既存の toDetailOutput）
 // ---------------------------------------------------
 
@@ -159,22 +151,24 @@ type AppendModelRefsInput struct {
 
 // ---------------------------------------------------
 // GET /product-blueprints (list)
-// - backend 側で name 解決済みを返す
+// - usecase 側で name 解決済みを返す
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
-	ID           string `json:"id"`
-	ProductName  string `json:"productName"`
-	BrandName    string `json:"brandName"`
-	AssigneeName string `json:"assigneeName"`
-	Printed      bool   `json:"printed"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
+	ID            string `json:"id"`
+	ProductName   string `json:"productName"`
+	BrandName     string `json:"brandName"`
+	AssigneeName  string `json:"assigneeName"`
+	Printed       bool   `json:"printed"`
+	CreatedByName string `json:"createdByName"`
+	UpdatedByName string `json:"updatedByName"`
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
 }
 
 // ---------------------------------------------------
 // GET /product-blueprints/{id} (detail)
-// - backend 側で name 解決済みを返す
+// - usecase 側で name 解決済みを返す
 // ---------------------------------------------------
 
 type ModelRefOutput struct {
@@ -217,6 +211,9 @@ type ProductBlueprintDetailOutput struct {
 	CreatedBy     string `json:"createdBy"`
 	CreatedByName string `json:"createdByName"`
 	CreatedAt     string `json:"createdAt"`
+
+	UpdatedBy     string `json:"updatedBy"`
+	UpdatedByName string `json:"updatedByName"`
 	UpdatedAt     string `json:"updatedAt"`
 
 	// modelRefs（model docId + displayOrder）
@@ -328,13 +325,13 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	created, err := h.uc.Create(ctx, pb)
+	created, err := h.uc.CreateResolved(ctx, pb)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	out := h.toDetailOutput(ctx, created)
+	out := h.toDetailOutput(created)
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(out)
 }
@@ -389,13 +386,13 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		},
 	}
 
-	updated, err := h.uc.Update(ctx, pb)
+	updated, err := h.uc.UpdateResolved(ctx, pb)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	out := h.toDetailOutput(ctx, updated)
+	out := h.toDetailOutput(updated)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -433,13 +430,13 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	pb, err := h.uc.GetByID(ctx, id)
+	pb, err := h.uc.GetByIDResolved(ctx, id)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	out := h.toDetailOutput(ctx, pb)
+	out := h.toDetailOutput(pb)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -450,28 +447,15 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rows, err := h.uc.ListByCompanyID(ctx)
+	rows, err := h.uc.ListByCompanyIDResolved(ctx)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
 	out := make([]ProductBlueprintListOutput, 0, len(rows))
-	for _, pb := range rows {
-		assigneeId := pb.AssigneeID
-		if assigneeId == "" {
-			assigneeId = "-"
-		}
-
-		brandName := h.getBrandNameByID(ctx, pb.BrandID)
-		if brandName == "" {
-			brandName = pb.BrandID
-		}
-
-		assigneeName := "-"
-		if assigneeId != "-" {
-			assigneeName = h.getAssigneeNameByID(ctx, assigneeId)
-		}
+	for _, row := range rows {
+		pb := row.ProductBlueprint
 
 		createdAt := ""
 		if !pb.CreatedAt.IsZero() {
@@ -484,13 +468,15 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		}
 
 		out = append(out, ProductBlueprintListOutput{
-			ID:           pb.ID,
-			ProductName:  pb.ProductName,
-			BrandName:    brandName,
-			AssigneeName: assigneeName,
-			Printed:      pb.Printed,
-			CreatedAt:    createdAt,
-			UpdatedAt:    updatedAt,
+			ID:            pb.ID,
+			ProductName:   pb.ProductName,
+			BrandName:     row.Names.BrandName,
+			AssigneeName:  row.Names.AssigneeName,
+			Printed:       pb.Printed,
+			CreatedByName: row.Names.CreatedByName,
+			UpdatedByName: row.Names.UpdatedByName,
+			CreatedAt:     createdAt,
+			UpdatedAt:     updatedAt,
 		})
 	}
 
@@ -517,41 +503,21 @@ func (h *ProductBlueprintHandler) appendModelRefs(w http.ResponseWriter, r *http
 		return
 	}
 
-	// 入力は modelIds 必須
+	// body として modelIds が未指定 / 空配列の場合だけ handler で弾く。
+	// 空文字除外・重複除外・displayOrder 採番は usecase 側に集約する。
 	if len(in.ModelIds) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelIds is required"})
 		return
 	}
 
-	// 入力順を保持しつつ、空/重複だけを弾く（順序は保持）
-	seen := make(map[string]struct{}, len(in.ModelIds))
-	modelIds := make([]string, 0, len(in.ModelIds))
-	for _, raw := range in.ModelIds {
-		v := raw
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		modelIds = append(modelIds, v)
-	}
-
-	if len(modelIds) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelIds has no valid ids"})
-		return
-	}
-
-	updated, err := h.uc.AppendModelRefs(ctx, id, modelIds)
+	updated, err := h.uc.AppendModelRefsResolved(ctx, id, in.ModelIds)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	out := h.toDetailOutput(ctx, updated)
+	out := h.toDetailOutput(updated)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -560,35 +526,18 @@ func (h *ProductBlueprintHandler) appendModelRefs(w http.ResponseWriter, r *http
 // ---------------------------------------------------
 
 func (h *ProductBlueprintHandler) toDetailOutput(
-	ctx context.Context,
-	pb pbdom.ProductBlueprint,
+	row pbuc.ProductBlueprintResolved,
 ) ProductBlueprintDetailOutput {
-	brandId := pb.BrandID
-	brandName := h.getBrandNameByID(ctx, brandId)
-	if brandName == "" {
-		brandName = brandId
-	}
-
-	assigneeId := pb.AssigneeID
-	assigneeName := "-"
-	if assigneeId != "" {
-		assigneeName = h.getAssigneeNameByID(ctx, assigneeId)
-		if assigneeName == "" {
-			assigneeName = assigneeId
-		}
-	}
+	pb := row.ProductBlueprint
 
 	createdBy := ""
 	if pb.CreatedBy != nil {
 		createdBy = *pb.CreatedBy
 	}
 
-	createdByName := ""
-	if createdBy != "" {
-		createdByName = h.getAssigneeNameByID(ctx, createdBy)
-		if createdByName == "" {
-			createdByName = createdBy
-		}
+	updatedBy := ""
+	if pb.UpdatedBy != nil {
+		updatedBy = *pb.UpdatedBy
 	}
 
 	createdAt := ""
@@ -635,8 +584,8 @@ func (h *ProductBlueprintHandler) toDetailOutput(
 		Description: pb.Description,
 
 		CompanyId: pb.CompanyID,
-		BrandId:   brandId,
-		BrandName: brandName,
+		BrandId:   pb.BrandID,
+		BrandName: row.Names.BrandName,
 
 		ProductBlueprintCategoryId: pb.ProductBlueprintCategory.ID,
 		ProductBlueprintCategory:   category,
@@ -645,58 +594,21 @@ func (h *ProductBlueprintHandler) toDetailOutput(
 
 		ProductIdTag: tag,
 
-		AssigneeId:   assigneeId,
-		AssigneeName: assigneeName,
+		AssigneeId:   pb.AssigneeID,
+		AssigneeName: row.Names.AssigneeName,
 
 		Printed: pb.Printed,
 
 		CreatedBy:     createdBy,
-		CreatedByName: createdByName,
+		CreatedByName: row.Names.CreatedByName,
 		CreatedAt:     createdAt,
+
+		UpdatedBy:     updatedBy,
+		UpdatedByName: row.Names.UpdatedByName,
 		UpdatedAt:     updatedAt,
 
 		ModelRefs: modelRefs,
 	}
-}
-
-// ---------------------------------------------------
-// name resolvers
-// ---------------------------------------------------
-
-// brandId → brandName 解決用ヘルパ
-func (h *ProductBlueprintHandler) getBrandNameByID(ctx context.Context, brandID string) string {
-	if brandID == "" {
-		return ""
-	}
-	if h.brandSvc == nil {
-		return brandID
-	}
-
-	name, err := h.brandSvc.GetNameByID(ctx, brandID)
-	if err != nil {
-		return brandID
-	}
-	return name
-}
-
-// assigneeId → assigneeName 解決用ヘルパ
-func (h *ProductBlueprintHandler) getAssigneeNameByID(ctx context.Context, memberID string) string {
-	if memberID == "" {
-		return ""
-	}
-	if h.memberSvc == nil {
-		return memberID
-	}
-
-	name, err := h.memberSvc.GetNameLastFirstByID(ctx, memberID)
-	if err != nil {
-		return memberID
-	}
-
-	if name == "" {
-		return memberID
-	}
-	return name
 }
 
 // ---------------------------------------------------

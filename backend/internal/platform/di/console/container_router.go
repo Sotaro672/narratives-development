@@ -127,8 +127,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	if c.ProductBlueprintUC != nil {
 		productBPH = consoleHandler.NewProductBlueprintHandler(
 			c.ProductBlueprintUC,
-			c.BrandService,
-			c.MemberService,
 		)
 	}
 

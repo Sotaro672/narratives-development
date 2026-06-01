@@ -133,17 +133,24 @@ type Repository interface {
 	// Read (live)
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 
-	// ★ 追加: brandId から productBlueprint の ID 一覧を取得するヘルパ
+	// companyId 単位で ProductBlueprint 一覧を取得する唯一の正規 port。
+	// ID 一覧が必要な場合も、この戻り値から呼び出し側で ID を抽出する。
+	ListByCompanyID(ctx context.Context, companyID string) ([]ProductBlueprint, error)
+
+	// brandId から productBlueprint の ID 一覧を取得するヘルパ。
 	ListIDsByBrandID(ctx context.Context, brandID string) ([]string, error)
 
-	// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
-	GetIDByModelID(ctx context.Context, modelID string) (string, error)
-
-	// ★ 変更: modelId(=variationId想定) から modelRefs（displayOrder 含む）を取得するヘルパ
-	GetModelRefsByModelID(ctx context.Context, modelID string) ([]ModelRef, error)
-
-	// companyId 単位で productBlueprint の ID 一覧を取得
-	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+	// modelId(=variationId想定) から、その model を含む ProductBlueprint の ID と modelRefs を取得する。
+	//
+	// 戻り値:
+	// - productBlueprintID: model が紐づく ProductBlueprint の ID
+	// - modelRefs: 対象 ProductBlueprint の modelRefs（displayOrder 含む）
+	//
+	// NOTE:
+	// - 旧 GetModelRefsByModelID は廃止。
+	// - productBlueprintId だけが必要な caller は第1戻り値を使う。
+	// - displayOrder が必要な caller は第2戻り値の modelRefs から対象 modelId を探す。
+	GetIDByModelID(ctx context.Context, modelID string) (string, []ModelRef, error)
 
 	// Write (live)
 	Create(ctx context.Context, in CreateInput) (ProductBlueprint, error)
@@ -152,9 +159,9 @@ type Repository interface {
 	// Delete physically removes a ProductBlueprint by ID.
 	Delete(ctx context.Context, id string) error
 
-	// ★ 追加: ProductBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する
+	// ProductBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する。
 	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []ModelRef) (ProductBlueprint, error)
 
-	// ★ printed: false → true への状態遷移
+	// printed: false → true への状態遷移。
 	MarkPrinted(ctx context.Context, id string) (ProductBlueprint, error)
 }

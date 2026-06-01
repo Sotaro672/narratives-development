@@ -51,7 +51,6 @@ type MintProductBlueprintRepo interface {
 type MintProductionRepo interface {
 	// GetProductBlueprintIDByProductionID:
 	// - productionId から productBlueprintId を取得します。
-	// - MintUsecase 側では productionID から productBlueprintID を推測・reflect 取得せず、
 	//   この正規ポートを経由します。
 	//
 	// 実装例:

@@ -63,7 +63,7 @@ type ModelVariationReader interface {
 // ProductBlueprintReader is a minimal read port for ProductBlueprint.
 // We need: modelId -> productBlueprintId -> productBlueprint(+patch if needed).
 type ProductBlueprintReader interface {
-	GetIDByModelID(ctx context.Context, modelID string) (string, error)
+	GetIDByModelID(ctx context.Context, modelID string) (string, []pbdom.ModelRef, error)
 
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
@@ -272,7 +272,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, ErrProductBlueprintRepoNotConfigured
 	}
 
-	pbID, err := q.ProductBlueprintRepo.GetIDByModelID(ctx, modelID)
+	pbID, _, err := q.ProductBlueprintRepo.GetIDByModelID(ctx, modelID)
 	if err != nil {
 		return nil, err
 	}

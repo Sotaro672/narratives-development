@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	resolver "narratives/internal/application/resolver"
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -19,6 +20,19 @@ type ProductBlueprintUsecase struct {
 	// ProductBlueprint 起票時に productBlueprintReview 側も初期化するためのポート
 	// NOTE: NewProductBlueprintUsecase が唯一の入口となるよう、外から With で差し込まない。
 	reviewInit ProductBlueprintReviewInitializer
+
+	// handler ではなく usecase 側で表示名解決を行う。
+	nameResolver *resolver.NameResolver
+}
+
+type ProductBlueprintUsecaseOption func(*ProductBlueprintUsecase)
+
+func WithProductBlueprintNameResolver(
+	nameResolver *resolver.NameResolver,
+) ProductBlueprintUsecaseOption {
+	return func(u *ProductBlueprintUsecase) {
+		u.nameResolver = nameResolver
+	}
 }
 
 // NewProductBlueprintUsecase を唯一の出入り口にするため、reviewInit をコンストラクタ引数にする。
@@ -27,11 +41,20 @@ type ProductBlueprintUsecase struct {
 func NewProductBlueprintUsecase(
 	repo ProductBlueprintRepo,
 	reviewInit ProductBlueprintReviewInitializer,
+	opts ...ProductBlueprintUsecaseOption,
 ) *ProductBlueprintUsecase {
-	return &ProductBlueprintUsecase{
+	u := &ProductBlueprintUsecase{
 		repo:       repo,
 		reviewInit: reviewInit,
 	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(u)
+		}
+	}
+
+	return u
 }
 
 // ------------------------------------------------------------
@@ -45,9 +68,6 @@ type ProductBlueprintRepo interface {
 
 	// Read (multi) - company スコープ必須
 	ListByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
-
-	// companyId 単位で productBlueprint の ID 一覧を取得（MintRequest chain 等）
-	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 
 	// printed フラグを true（印刷済み）に更新する
 	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
@@ -78,6 +98,22 @@ type ProductBlueprintReviewInitializer interface {
 }
 
 // ------------------------------------------------------------
+// Read models
+// ------------------------------------------------------------
+
+type ProductBlueprintResolvedNames struct {
+	BrandName     string
+	AssigneeName  string
+	CreatedByName string
+	UpdatedByName string
+}
+
+type ProductBlueprintResolved struct {
+	ProductBlueprint productbpdom.ProductBlueprint
+	Names            ProductBlueprintResolvedNames
+}
+
+// ------------------------------------------------------------
 // Queries
 // ------------------------------------------------------------
 
@@ -86,6 +122,18 @@ func (u *ProductBlueprintUsecase) GetByID(
 	id string,
 ) (productbpdom.ProductBlueprint, error) {
 	return u.repo.GetByID(ctx, id)
+}
+
+func (u *ProductBlueprintUsecase) GetByIDResolved(
+	ctx context.Context,
+	id string,
+) (ProductBlueprintResolved, error) {
+	pb, err := u.GetByID(ctx, id)
+	if err != nil {
+		return ProductBlueprintResolved{}, err
+	}
+
+	return u.resolveProductBlueprint(ctx, pb), nil
 }
 
 // ListByCompanyID は handler 側の GET /product-blueprints から利用される一覧取得。
@@ -114,6 +162,22 @@ func (u *ProductBlueprintUsecase) ListByCompanyID(
 	}
 
 	return filtered, nil
+}
+
+func (u *ProductBlueprintUsecase) ListByCompanyIDResolved(
+	ctx context.Context,
+) ([]ProductBlueprintResolved, error) {
+	rows, err := u.ListByCompanyID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]ProductBlueprintResolved, 0, len(rows))
+	for _, pb := range rows {
+		out = append(out, u.resolveProductBlueprint(ctx, pb))
+	}
+
+	return out, nil
 }
 
 // ------------------------------------------------------------
@@ -189,6 +253,18 @@ func (u *ProductBlueprintUsecase) Create(
 	return created, nil
 }
 
+func (u *ProductBlueprintUsecase) CreateResolved(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (ProductBlueprintResolved, error) {
+	created, err := u.Create(ctx, v)
+	if err != nil {
+		return ProductBlueprintResolved{}, err
+	}
+
+	return u.resolveProductBlueprint(ctx, created), nil
+}
+
 // MarkPrinted は printed フラグを true（印刷済み）に更新するユースケース。
 // Handler から /product-blueprints/{id}/mark-printed などで呼ばれる想定。
 func (u *ProductBlueprintUsecase) MarkPrinted(
@@ -205,6 +281,18 @@ func (u *ProductBlueprintUsecase) MarkPrinted(
 	}
 
 	return updated, nil
+}
+
+func (u *ProductBlueprintUsecase) MarkPrintedResolved(
+	ctx context.Context,
+	id string,
+) (ProductBlueprintResolved, error) {
+	updated, err := u.MarkPrinted(ctx, id)
+	if err != nil {
+		return ProductBlueprintResolved{}, err
+	}
+
+	return u.resolveProductBlueprint(ctx, updated), nil
 }
 
 // Update updates a ProductBlueprint using Patch.
@@ -271,6 +359,18 @@ func (u *ProductBlueprintUsecase) Update(
 	}
 
 	return updated, nil
+}
+
+func (u *ProductBlueprintUsecase) UpdateResolved(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (ProductBlueprintResolved, error) {
+	updated, err := u.Update(ctx, v)
+	if err != nil {
+		return ProductBlueprintResolved{}, err
+	}
+
+	return u.resolveProductBlueprint(ctx, updated), nil
 }
 
 // Delete physically deletes a ProductBlueprint.
@@ -352,6 +452,135 @@ func (u *ProductBlueprintUsecase) AppendModelRefs(
 	}
 
 	return updated, nil
+}
+
+func (u *ProductBlueprintUsecase) AppendModelRefsResolved(
+	ctx context.Context,
+	id string,
+	modelIds []string,
+) (ProductBlueprintResolved, error) {
+	updated, err := u.AppendModelRefs(ctx, id, modelIds)
+	if err != nil {
+		return ProductBlueprintResolved{}, err
+	}
+
+	return u.resolveProductBlueprint(ctx, updated), nil
+}
+
+// ------------------------------------------------------------
+// Name resolution
+// ------------------------------------------------------------
+
+func (u *ProductBlueprintUsecase) resolveProductBlueprint(
+	ctx context.Context,
+	pb productbpdom.ProductBlueprint,
+) ProductBlueprintResolved {
+	brandName := u.resolveBrandName(ctx, pb.BrandID)
+
+	assigneeName := "-"
+	if pb.AssigneeID != "" {
+		assigneeName = u.resolveAssigneeName(ctx, pb.AssigneeID)
+	}
+
+	createdByName := ""
+	if pb.CreatedBy != nil && *pb.CreatedBy != "" {
+		createdByName = u.resolveCreatedByName(ctx, pb.CreatedBy)
+	}
+
+	updatedByName := ""
+	if pb.UpdatedBy != nil && *pb.UpdatedBy != "" {
+		updatedByName = u.resolveUpdatedByName(ctx, pb.UpdatedBy)
+	}
+
+	return ProductBlueprintResolved{
+		ProductBlueprint: pb,
+		Names: ProductBlueprintResolvedNames{
+			BrandName:     brandName,
+			AssigneeName:  assigneeName,
+			CreatedByName: createdByName,
+			UpdatedByName: updatedByName,
+		},
+	}
+}
+
+func (u *ProductBlueprintUsecase) resolveBrandName(
+	ctx context.Context,
+	brandID string,
+) string {
+	if brandID == "" {
+		return ""
+	}
+
+	if u.nameResolver == nil {
+		return brandID
+	}
+
+	name := u.nameResolver.ResolveBrandName(ctx, brandID)
+	if name == "" {
+		return brandID
+	}
+
+	return name
+}
+
+func (u *ProductBlueprintUsecase) resolveAssigneeName(
+	ctx context.Context,
+	assigneeID string,
+) string {
+	if assigneeID == "" {
+		return ""
+	}
+
+	if u.nameResolver == nil {
+		return assigneeID
+	}
+
+	name := u.nameResolver.ResolveProductBlueprintAssigneeName(ctx, assigneeID)
+	if name == "" {
+		return assigneeID
+	}
+
+	return name
+}
+
+func (u *ProductBlueprintUsecase) resolveCreatedByName(
+	ctx context.Context,
+	createdBy *string,
+) string {
+	if createdBy == nil || *createdBy == "" {
+		return ""
+	}
+
+	if u.nameResolver == nil {
+		return *createdBy
+	}
+
+	name := u.nameResolver.ResolveProductBlueprintCreatedByName(ctx, createdBy)
+	if name == "" {
+		return *createdBy
+	}
+
+	return name
+}
+
+func (u *ProductBlueprintUsecase) resolveUpdatedByName(
+	ctx context.Context,
+	updatedBy *string,
+) string {
+	if updatedBy == nil || *updatedBy == "" {
+		return ""
+	}
+
+	if u.nameResolver == nil {
+		return *updatedBy
+	}
+
+	name := u.nameResolver.ResolveProductBlueprintUpdatedByName(ctx, updatedBy)
+	if name == "" {
+		return *updatedBy
+	}
+
+	return name
 }
 
 // ------------------------------------------------------------

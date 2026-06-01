@@ -92,63 +92,38 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	productIDs := make([]string, 0, len(products))
 	modelIDByProductID := make(map[string]string, len(products))
 	productBlueprintIDSet := make(map[string]struct{})
+	displayOrderByModelID := make(map[string]int, len(products))
 
 	for _, p := range products {
-		id := p.ID
-		if id == "" {
+		productID := p.ID
+		if productID == "" {
 			continue
 		}
 
-		productIDs = append(productIDs, id)
-		modelIDByProductID[id] = p.ModelID
-
-		if p.ModelID == "" {
-			return printdom.PrintLog{}, fmt.Errorf("modelId is empty for productId=%s", p.ID)
-		}
-
-		productBlueprintID, err := u.productBlueprintRepo.GetIDByModelID(ctx, p.ModelID)
-		if err != nil {
-			return printdom.PrintLog{}, fmt.Errorf("get productBlueprintId by modelId failed: modelId=%s: %w", p.ModelID, err)
-		}
-		if productBlueprintID == "" {
-			return printdom.PrintLog{}, fmt.Errorf("productBlueprintId not found for modelId=%s", p.ModelID)
-		}
-
-		productBlueprintIDSet[productBlueprintID] = struct{}{}
-	}
-
-	if len(productIDs) == 0 {
-		return printdom.PrintLog{}, inspectiondom.ErrInvalidInspectionProductIDs
-	}
-
-	var printedAt time.Time
-	for _, p := range products {
-		if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
-			printedAt = p.PrintedAt.UTC()
-			break
-		}
-	}
-	if printedAt.IsZero() {
-		printedAt = time.Now().UTC()
-	}
-
-	displayOrderByModelID := make(map[string]int, len(products))
-	for _, p := range products {
 		modelID := p.ModelID
 		if modelID == "" {
-			return printdom.PrintLog{}, fmt.Errorf("modelId is empty for productId=%s", p.ID)
+			return printdom.PrintLog{}, fmt.Errorf("modelId is empty for productId=%s", productID)
 		}
+
+		productIDs = append(productIDs, productID)
+		modelIDByProductID[productID] = modelID
+
 		if _, exists := displayOrderByModelID[modelID]; exists {
 			continue
 		}
 
-		modelRefs, err := u.productBlueprintRepo.GetModelRefsByModelID(ctx, modelID)
+		productBlueprintID, modelRefs, err := u.productBlueprintRepo.GetIDByModelID(ctx, modelID)
 		if err != nil {
-			return printdom.PrintLog{}, fmt.Errorf("get modelRefs by modelId failed: modelId=%s: %w", modelID, err)
+			return printdom.PrintLog{}, fmt.Errorf("get productBlueprint by modelId failed: modelId=%s: %w", modelID, err)
+		}
+		if productBlueprintID == "" {
+			return printdom.PrintLog{}, fmt.Errorf("productBlueprintId not found for modelId=%s", modelID)
 		}
 		if len(modelRefs) == 0 {
 			return printdom.PrintLog{}, fmt.Errorf("modelRefs not found for modelId=%s", modelID)
 		}
+
+		productBlueprintIDSet[productBlueprintID] = struct{}{}
 
 		found := false
 		for _, ref := range modelRefs {
@@ -166,6 +141,21 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		if !found {
 			return printdom.PrintLog{}, fmt.Errorf("displayOrder not found in modelRefs for modelId=%s", modelID)
 		}
+	}
+
+	if len(productIDs) == 0 {
+		return printdom.PrintLog{}, inspectiondom.ErrInvalidInspectionProductIDs
+	}
+
+	var printedAt time.Time
+	for _, p := range products {
+		if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
+			printedAt = p.PrintedAt.UTC()
+			break
+		}
+	}
+	if printedAt.IsZero() {
+		printedAt = time.Now().UTC()
 	}
 
 	items := make([]printdom.PrintedItem, 0, len(productIDs))

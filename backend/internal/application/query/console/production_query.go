@@ -13,7 +13,7 @@ import (
 )
 
 type ProductBlueprintQueryRepo interface {
-	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+	ListByCompanyID(ctx context.Context, companyID string) ([]productbpdom.ProductBlueprint, error)
 
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
 }
@@ -67,10 +67,28 @@ func (s *CompanyProductionQueryService) ListProductionsByCurrentCompany(
 		return nil, productbpdom.ErrInternal
 	}
 
-	pbIDs, err := s.pbRepo.ListIDsByCompany(ctx, cid)
+	productBlueprints, err := s.pbRepo.ListByCompanyID(ctx, cid)
 	if err != nil {
 		return nil, err
 	}
+	if len(productBlueprints) == 0 {
+		return []productiondom.Production{}, nil
+	}
+
+	pbIDs := make([]string, 0, len(productBlueprints))
+	set := make(map[string]struct{}, len(productBlueprints))
+
+	for _, pb := range productBlueprints {
+		if pb.ID == "" {
+			continue
+		}
+		if _, ok := set[pb.ID]; ok {
+			continue
+		}
+		set[pb.ID] = struct{}{}
+		pbIDs = append(pbIDs, pb.ID)
+	}
+
 	if len(pbIDs) == 0 {
 		return []productiondom.Production{}, nil
 	}
@@ -81,13 +99,6 @@ func (s *CompanyProductionQueryService) ListProductionsByCurrentCompany(
 	}
 	if len(rows) == 0 {
 		return []productiondom.Production{}, nil
-	}
-
-	set := make(map[string]struct{}, len(pbIDs))
-	for _, id0 := range pbIDs {
-		if id0 != "" {
-			set[id0] = struct{}{}
-		}
 	}
 
 	out := make([]productiondom.Production, 0, len(rows))

@@ -30,7 +30,7 @@ func NewInventoryManagementQuery(
 }
 
 // ============================================================
-// currentMember.companyId -> productBlueprintIds -> inventories list
+// currentMember.companyId -> productBlueprints -> inventories list
 // ============================================================
 
 func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error) {
@@ -43,11 +43,11 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 		return nil, errors.New("companyId is missing in context")
 	}
 
-	pbIDs, err := q.pbRepo.ListIDsByCompany(ctx, companyID)
+	productBlueprints, err := q.pbRepo.ListByCompanyID(ctx, companyID)
 	if err != nil {
 		return nil, err
 	}
-	if len(pbIDs) == 0 {
+	if len(productBlueprints) == 0 {
 		return []querydto.InventoryManagementRowDTO{}, nil
 	}
 
@@ -68,17 +68,14 @@ func (q *InventoryManagementQuery) ListByCurrentCompany(ctx context.Context) ([]
 	tokenNameCache := map[string]string{}
 	modelNumberCache := map[string]string{}
 
-	for _, pbID0 := range pbIDs {
-		pbID := pbID0
+	for _, pb := range productBlueprints {
+		pbID := pb.ID
 		if pbID == "" {
 			continue
 		}
 
 		if _, ok := productNameCache[pbID]; !ok {
-			name := ""
-			if q.nameResolver != nil {
-				name = q.nameResolver.ResolveProductName(ctx, pbID)
-			}
+			name := pb.ProductName
 			if name == "" {
 				name = pbID
 			}

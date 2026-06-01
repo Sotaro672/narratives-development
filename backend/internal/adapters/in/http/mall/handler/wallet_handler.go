@@ -256,7 +256,7 @@ func (h *WalletHandler) resolvePublicTokenSummary(
 	if h.uc.ModelProductBlueprintID == nil {
 		return usecase.ResolveTokenByMintAddressWithBrandNameResult{}, usecase.ErrWalletModelProductBlueprintNotConfigured
 	}
-	pbID, err := h.uc.ModelProductBlueprintID.GetIDByModelID(ctx, modelID)
+	pbID, _, err := h.uc.ModelProductBlueprintID.GetIDByModelID(ctx, modelID)
 	if err != nil {
 		return usecase.ResolveTokenByMintAddressWithBrandNameResult{}, err
 	}

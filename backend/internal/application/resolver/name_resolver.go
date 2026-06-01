@@ -30,13 +30,14 @@ type ProductBlueprintNameRepository interface {
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
-// Member → Firebase UID から氏名取得できればよい
+// Member 名の取得に必要な最小限のインターフェース。
 //
 // IMPORTANT:
-// - NameResolver の member 名解決は uid 専用
-// - member docId では検索しない
-// - TokenBlueprint.createdBy / updatedBy は Firebase UID を保持する前提
+// - GetByFirebaseUID は Firebase UID 保存フィールド用に使う。
+// - GetByID は member docId 保存フィールド用に使う。
+// - ProductBlueprint.assigneeId / createdBy / updatedBy は member docId 前提。
 type MemberNameRepository interface {
+	GetByID(ctx context.Context, id string) (memberdom.Member, error)
 	GetByFirebaseUID(ctx context.Context, uid string) (memberdom.Member, error)
 }
 
@@ -159,6 +160,10 @@ func (r *NameResolver) ResolveCompanyName(ctx context.Context, companyID string)
 
 // ResolveProductName は productBlueprintId から productName を解決する。
 // 取得できなかった場合は空文字列を返す。
+//
+// NOTE:
+// ProductBlueprint 自身の list/detail では ProductBlueprint.ProductName をそのまま使う。
+// このメソッドは他ドメインが productBlueprintId から productName を解決したい場合向け。
 func (r *NameResolver) ResolveProductName(ctx context.Context, productBlueprintID string) string {
 	if r == nil || r.productBlueprintRepo == nil {
 		return ""
@@ -202,7 +207,7 @@ func formatMemberDisplayName(m memberdom.Member) string {
 // IMPORTANT:
 // - uid 専用
 // - member docId fallback はしない
-// - createdBy / updatedBy は Firebase UID を保持する前提
+// - Firebase UID を保存しているフィールド向け
 func (r *NameResolver) ResolveMemberName(ctx context.Context, uid string) string {
 	if r == nil || r.memberRepo == nil {
 		return ""
@@ -220,6 +225,30 @@ func (r *NameResolver) ResolveMemberName(ctx context.Context, uid string) string
 	return formatMemberDisplayName(m)
 }
 
+// ResolveMemberNameByID は member docId から member の表示名（例: "姓 名"）を解決する。
+//
+// IMPORTANT:
+// - member docId 専用
+// - Firebase UID fallback はしない
+// - ProductBlueprint.assigneeId / createdBy / updatedBy など、member docId を保存しているフィールド向け
+func (r *NameResolver) ResolveMemberNameByID(ctx context.Context, memberID string) string {
+	if r == nil || r.memberRepo == nil {
+		return ""
+	}
+
+	id := memberID
+	if id == "" {
+		return ""
+	}
+
+	m, err := r.memberRepo.GetByID(ctx, id)
+	if err != nil {
+		return ""
+	}
+
+	return formatMemberDisplayName(m)
+}
+
 // ---- uid 派生フィールド向けヘルパ ----
 
 func (r *NameResolver) resolveMemberNameFromPtr(ctx context.Context, uid *string) string {
@@ -230,12 +259,21 @@ func (r *NameResolver) resolveMemberNameFromPtr(ctx context.Context, uid *string
 	return r.ResolveMemberName(ctx, *uid)
 }
 
+// ---- member docId 派生フィールド向けヘルパ ----
+
+func (r *NameResolver) resolveMemberNameByIDFromPtr(ctx context.Context, memberID *string) string {
+	if memberID == nil {
+		return ""
+	}
+
+	return r.ResolveMemberNameByID(ctx, *memberID)
+}
+
 // ResolveAssigneeName は assigneeId(uid) から member の表示名（例: "姓 名"）を解決する。
 //
 // IMPORTANT:
-// - assigneeId は Firebase UID を保存する
-// - member docId fallback はしない
-// - 見つからない場合は空文字を返し、呼び出し側で fallback する
+// - 既存互換のため UID 解決として残す
+// - ProductBlueprint.assigneeId は member docId 前提なので ResolveProductBlueprintAssigneeName を使う
 func (r *NameResolver) ResolveAssigneeName(ctx context.Context, assigneeID string) string {
 	return r.ResolveMemberName(ctx, assigneeID)
 }
@@ -258,6 +296,20 @@ func (r *NameResolver) ResolveInspectedByName(ctx context.Context, inspectedBy *
 
 func (r *NameResolver) ResolvePrintedByName(ctx context.Context, printedBy *string) string {
 	return r.resolveMemberNameFromPtr(ctx, printedBy)
+}
+
+// ---- ProductBlueprint 専用: member docId 解決 ----
+
+func (r *NameResolver) ResolveProductBlueprintAssigneeName(ctx context.Context, assigneeID string) string {
+	return r.ResolveMemberNameByID(ctx, assigneeID)
+}
+
+func (r *NameResolver) ResolveProductBlueprintCreatedByName(ctx context.Context, createdBy *string) string {
+	return r.resolveMemberNameByIDFromPtr(ctx, createdBy)
+}
+
+func (r *NameResolver) ResolveProductBlueprintUpdatedByName(ctx context.Context, updatedBy *string) string {
+	return r.resolveMemberNameByIDFromPtr(ctx, updatedBy)
 }
 
 // ------------------------------------------------------------
