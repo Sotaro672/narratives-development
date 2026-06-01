@@ -64,7 +64,7 @@ type ModelVariationReader interface {
 // We need: modelId -> productBlueprintId -> productBlueprint(+patch if needed).
 type ProductBlueprintReader interface {
 	GetIDByModelID(ctx context.Context, modelID string) (string, error)
-	GetPatchByID(ctx context.Context, id string) (pbdom.Patch, error)
+
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
@@ -285,11 +285,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, err
 	}
 
-	patch, err := q.ProductBlueprintRepo.GetPatchByID(ctx, pbID)
-	if err != nil {
-		return nil, err
-	}
-
 	category := pb.ProductBlueprintCategory
 
 	out := &dto.PreviewModelInfo{
@@ -301,9 +296,8 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		ProductBlueprintCategoryName: category.NameJa,
 		ProductBlueprintCategory:     &category,
 
-		ProductBlueprintID:    pbID,
-		ProductBlueprint:      &pb,
-		ProductBlueprintPatch: &patch,
+		ProductBlueprintID: pbID,
+		ProductBlueprint:   &pb,
 	}
 
 	if schema, ok := pbcatdom.GetCategoryInputSchema(category.Code); ok {

@@ -142,10 +142,6 @@ type Repository interface {
 	// ★ 変更: modelId(=variationId想定) から modelRefs（displayOrder 含む）を取得するヘルパ
 	GetModelRefsByModelID(ctx context.Context, modelID string) ([]ModelRef, error)
 
-	// ★ 追加: productBlueprintId から Patch 相当の情報を取得するヘルパ
-	// NOTE: Patch.ModelRefs を返せるようにしておく（displayOrder 含む）
-	GetPatchByID(ctx context.Context, id string) (Patch, error)
-
 	// companyId 単位で productBlueprint の ID 一覧を取得
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 

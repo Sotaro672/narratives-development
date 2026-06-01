@@ -3,17 +3,8 @@ package productBlueprintCategory
 
 import (
 	"context"
-	"errors"
 
 	"narratives/internal/domain/common"
-)
-
-// ======================================
-// Repository errors
-// ======================================
-
-var (
-	ErrRepositoryInvalidInput = errors.New("productBlueprintCategory repository: invalid input")
 )
 
 // ======================================

@@ -9,9 +9,9 @@ import (
 
 	pbuc "narratives/internal/application/usecase"
 	brand "narratives/internal/domain/brand"
-	"narratives/internal/domain/common"
 	memdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
+	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
 // ProductBlueprintHandler は ProductBlueprint 用の HTTP ハンドラです。
@@ -79,24 +79,6 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 // Common DTOs
 // ---------------------------------------------------
 
-type ProductBlueprintCategoryInput struct {
-	ID     string   `json:"id"`
-	Code   string   `json:"code"`
-	NameJa string   `json:"nameJa"`
-	NameEn string   `json:"nameEn"`
-	Kind   string   `json:"kind"`
-	Path   []string `json:"path"`
-}
-
-type ProductBlueprintCategoryOutput struct {
-	ID     string   `json:"id"`
-	Code   string   `json:"code"`
-	NameJa string   `json:"nameJa"`
-	NameEn string   `json:"nameEn"`
-	Kind   string   `json:"kind"`
-	Path   []string `json:"path"`
-}
-
 type ProductIdTagInput struct {
 	Type string `json:"type"`
 }
@@ -112,7 +94,7 @@ type CreateProductBlueprintInput struct {
 	BrandId   string `json:"brandId"`
 	CompanyId string `json:"companyId"`
 
-	ProductBlueprintCategory ProductBlueprintCategoryInput `json:"productBlueprintCategory"`
+	ProductBlueprintCategory categorydom.Snapshot `json:"productBlueprintCategory"`
 
 	// CategoryFields はカテゴリ別の productBlueprint 入力値を受け取る。
 	//
@@ -146,7 +128,7 @@ type UpdateProductBlueprintInput struct {
 	BrandId   string `json:"brandId"`
 	CompanyId string `json:"companyId"`
 
-	ProductBlueprintCategory ProductBlueprintCategoryInput `json:"productBlueprintCategory"`
+	ProductBlueprintCategory categorydom.Snapshot `json:"productBlueprintCategory"`
 
 	// nil / empty の扱いは handler / usecase / repository 側の方針に従う。
 	// 今回の endpoint 実装では nil または空 map は nil として domain へ渡す。
@@ -209,8 +191,8 @@ type ProductBlueprintDetailOutput struct {
 	BrandId   string `json:"brandId"`
 	BrandName string `json:"brandName"`
 
-	ProductBlueprintCategoryId string                         `json:"productBlueprintCategoryId"`
-	ProductBlueprintCategory   ProductBlueprintCategoryOutput `json:"productBlueprintCategory"`
+	ProductBlueprintCategoryId string               `json:"productBlueprintCategoryId"`
+	ProductBlueprintCategory   categorydom.Snapshot `json:"productBlueprintCategory"`
 
 	// CategoryFields はカテゴリ別の productBlueprint 入力値。
 	//
@@ -256,13 +238,26 @@ func normalizeTagType(s string) pbdom.ProductIDTagType {
 	}
 }
 
-func toCategorySnapshot(in ProductBlueprintCategoryInput) pbdom.ProductBlueprintCategorySnapshot {
+func toCategorySnapshot(in categorydom.Snapshot) pbdom.ProductBlueprintCategorySnapshot {
 	return pbdom.ProductBlueprintCategorySnapshot{
-		ID:     in.ID,
-		Code:   in.Code,
+		ID:     string(in.ID),
+		Code:   string(in.Code),
 		NameJa: in.NameJa,
 		NameEn: in.NameEn,
-		Kind:   common.ProductCategoryKind(in.Kind),
+		Kind:   in.Kind,
+		Path:   append([]string(nil), in.Path...),
+	}
+}
+
+func toCategoryOutput(
+	in pbdom.ProductBlueprintCategorySnapshot,
+) categorydom.Snapshot {
+	return categorydom.Snapshot{
+		ID:     categorydom.CategoryID(in.ID),
+		Code:   categorydom.CategoryCode(in.Code),
+		NameJa: in.NameJa,
+		NameEn: in.NameEn,
+		Kind:   categorydom.CategoryKind(in.Kind),
 		Path:   append([]string(nil), in.Path...),
 	}
 }
@@ -313,8 +308,8 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		BrandID:   in.BrandId,
 		CompanyID: in.CompanyId,
 
-		// ProductBlueprintCategory は productBlueprintCategory ドメインの正データから生成した
-		// denormalized snapshot を入れる想定。
+		// ProductBlueprintCategory は productBlueprintCategory entity の Snapshot を正として受け取り、
+		// productBlueprint domain の denormalized snapshot へ変換する。
 		ProductBlueprintCategory: toCategorySnapshot(in.ProductBlueprintCategory),
 
 		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
@@ -378,8 +373,8 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		BrandID:   in.BrandId,
 		CompanyID: in.CompanyId,
 
-		// ProductBlueprintCategory は productBlueprintCategory ドメインの正データから生成した
-		// denormalized snapshot を入れる想定。
+		// ProductBlueprintCategory は productBlueprintCategory entity の Snapshot を正として受け取り、
+		// productBlueprint domain の denormalized snapshot へ変換する。
 		ProductBlueprintCategory: toCategorySnapshot(in.ProductBlueprintCategory),
 
 		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
@@ -617,16 +612,8 @@ func (h *ProductBlueprintHandler) toDetailOutput(
 		}
 	}
 
-	category := ProductBlueprintCategoryOutput{
-		ID:     pb.ProductBlueprintCategory.ID,
-		Code:   pb.ProductBlueprintCategory.Code,
-		NameJa: pb.ProductBlueprintCategory.NameJa,
-		NameEn: pb.ProductBlueprintCategory.NameEn,
-		Kind:   string(pb.ProductBlueprintCategory.Kind),
-		Path:   append([]string(nil), pb.ProductBlueprintCategory.Path...),
-	}
+	category := toCategoryOutput(pb.ProductBlueprintCategory)
 
-	// modelRefs
 	var modelRefs []ModelRefOutput
 	if len(pb.ModelRefs) > 0 {
 		modelRefs = make([]ModelRefOutput, 0, len(pb.ModelRefs))
