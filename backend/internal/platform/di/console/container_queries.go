@@ -7,6 +7,7 @@ import (
 	companyquery "narratives/internal/application/query/console"
 
 	inspectorquery "narratives/internal/application/query/inspector"
+	"narratives/internal/application/usecase"
 
 	// Shared infra
 	shared "narratives/internal/platform/di/shared"
@@ -15,6 +16,9 @@ import (
 type queries struct {
 	companyProductionQueryService *companyquery.CompanyProductionQueryService
 	mintRequestQueryService       *companyquery.MintRequestQueryService
+
+	productBlueprintManagementQuery *companyquery.ProductBlueprintManagementQuery
+	productBlueprintDetailQuery     *companyquery.ProductBlueprintDetailQuery
 
 	inventoryManagementQuery *companyquery.InventoryManagementQuery
 	inventoryDetailQuery     *companyquery.InventoryDetailQuery
@@ -33,6 +37,18 @@ type queries struct {
 }
 
 func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s *services) *queries {
+	productBlueprintManagementQuery := companyquery.NewProductBlueprintManagementQuery(
+		r.productBlueprintRepo,
+		res.nameResolver,
+		usecase.CompanyIDFromContext,
+	)
+
+	productBlueprintDetailQuery := companyquery.NewProductBlueprintDetailQuery(
+		r.productBlueprintRepo,
+		productBlueprintManagementQuery,
+		usecase.CompanyIDFromContext,
+	)
+
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
 		r.productBlueprintRepo,
 		r.productionRepo,
@@ -211,6 +227,9 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	return &queries{
 		companyProductionQueryService: companyProductionQueryService,
 		mintRequestQueryService:       mintRequestQueryService,
+
+		productBlueprintManagementQuery: productBlueprintManagementQuery,
+		productBlueprintDetailQuery:     productBlueprintDetailQuery,
 
 		inventoryManagementQuery: inventoryManagementQuery,
 		inventoryDetailQuery:     inventoryDetailQuery,

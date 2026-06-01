@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	pbquery "narratives/internal/application/query/console"
 	pbuc "narratives/internal/application/usecase"
 	pbdom "narratives/internal/domain/productBlueprint"
 	categorydom "narratives/internal/domain/productBlueprintCategory"
@@ -13,14 +14,20 @@ import (
 
 // ProductBlueprintHandler は ProductBlueprint 用の HTTP ハンドラです。
 type ProductBlueprintHandler struct {
-	uc *pbuc.ProductBlueprintUsecase
+	uc              *pbuc.ProductBlueprintUsecase
+	managementQuery *pbquery.ProductBlueprintManagementQuery
+	detailQuery     *pbquery.ProductBlueprintDetailQuery
 }
 
 func NewProductBlueprintHandler(
 	uc *pbuc.ProductBlueprintUsecase,
+	managementQuery *pbquery.ProductBlueprintManagementQuery,
+	detailQuery *pbquery.ProductBlueprintDetailQuery,
 ) http.Handler {
 	return &ProductBlueprintHandler{
-		uc: uc,
+		uc:              uc,
+		managementQuery: managementQuery,
+		detailQuery:     detailQuery,
 	}
 }
 
@@ -151,7 +158,7 @@ type AppendModelRefsInput struct {
 
 // ---------------------------------------------------
 // GET /product-blueprints (list)
-// - usecase 側で name 解決済みを返す
+// - query 側で name 解決済みを返す
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
@@ -168,7 +175,7 @@ type ProductBlueprintListOutput struct {
 
 // ---------------------------------------------------
 // GET /product-blueprints/{id} (detail)
-// - usecase 側で name 解決済みを返す
+// - query 側で name 解決済みを返す
 // ---------------------------------------------------
 
 type ModelRefOutput struct {
@@ -325,13 +332,19 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	created, err := h.uc.CreateResolved(ctx, pb)
+	created, err := h.uc.Create(ctx, pb)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	out := h.toDetailOutput(created)
+	row, err := h.detailQuery.GetByID(ctx, created.ID)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := h.toDetailOutput(row)
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(out)
 }
@@ -386,13 +399,19 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		},
 	}
 
-	updated, err := h.uc.UpdateResolved(ctx, pb)
+	updated, err := h.uc.Update(ctx, pb)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	out := h.toDetailOutput(updated)
+	row, err := h.detailQuery.GetByID(ctx, updated.ID)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := h.toDetailOutput(row)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -430,7 +449,7 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	pb, err := h.uc.GetByIDResolved(ctx, id)
+	pb, err := h.detailQuery.GetByID(ctx, id)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
@@ -447,7 +466,7 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rows, err := h.uc.ListByCompanyIDResolved(ctx)
+	rows, err := h.managementQuery.ListByCompanyID(ctx)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
@@ -511,13 +530,19 @@ func (h *ProductBlueprintHandler) appendModelRefs(w http.ResponseWriter, r *http
 		return
 	}
 
-	updated, err := h.uc.AppendModelRefsResolved(ctx, id, in.ModelIds)
+	updated, err := h.uc.AppendModelRefs(ctx, id, in.ModelIds)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	out := h.toDetailOutput(updated)
+	row, err := h.detailQuery.GetByID(ctx, updated.ID)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := h.toDetailOutput(row)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -526,7 +551,7 @@ func (h *ProductBlueprintHandler) appendModelRefs(w http.ResponseWriter, r *http
 // ---------------------------------------------------
 
 func (h *ProductBlueprintHandler) toDetailOutput(
-	row pbuc.ProductBlueprintResolved,
+	row pbquery.ProductBlueprintResolved,
 ) ProductBlueprintDetailOutput {
 	pb := row.ProductBlueprint
 

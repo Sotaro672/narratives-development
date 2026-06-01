@@ -73,6 +73,9 @@ type Container struct {
 	CompanyProductionQueryService *query.CompanyProductionQueryService
 	MintRequestQueryService       *query.MintRequestQueryService
 
+	ProductBlueprintManagementQuery *query.ProductBlueprintManagementQuery
+	ProductBlueprintDetailQuery     *query.ProductBlueprintDetailQuery
+
 	InventoryManagementQuery *query.InventoryManagementQuery
 	InventoryDetailQuery     *query.InventoryDetailQuery
 
@@ -189,6 +192,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		CompanyProductionQueryService: q.companyProductionQueryService,
 		MintRequestQueryService:       q.mintRequestQueryService,
+
+		ProductBlueprintManagementQuery: q.productBlueprintManagementQuery,
+		ProductBlueprintDetailQuery:     q.productBlueprintDetailQuery,
 
 		InventoryManagementQuery: q.inventoryManagementQuery,
 		InventoryDetailQuery:     q.inventoryDetailQuery,
