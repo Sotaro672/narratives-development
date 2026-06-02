@@ -44,7 +44,6 @@ export function buildProductionRequest(params: {
       Quantity: q.quantity,
     })),
 
-    // status is abolished; use printed boolean
     printed: false,
     printedAt: null,
     printedBy: null,

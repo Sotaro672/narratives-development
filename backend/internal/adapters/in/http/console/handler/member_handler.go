@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	httpmw "narratives/internal/adapters/in/http/middleware"
+	consolequery "narratives/internal/application/query/console"
 	common "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
 )
@@ -24,6 +24,9 @@ type memberCompanyIDReader interface {
 // -----------------------------------------------------------------------------
 type MemberHandler struct {
 	repo memberdom.Repository
+
+	detailQuery     *consolequery.MemberDetailQuery
+	managementQuery *consolequery.MemberManagementQuery
 }
 
 // NewMemberHandler — メンバーハンドラ
@@ -32,6 +35,9 @@ func NewMemberHandler(
 ) http.Handler {
 	return &MemberHandler{
 		repo: repo,
+
+		detailQuery:     consolequery.NewMemberDetailQuery(repo),
+		managementQuery: consolequery.NewMemberManagementQuery(repo),
 	}
 }
 
@@ -53,8 +59,6 @@ type memberResponse struct {
 	CreatedAt      time.Time  `json:"createdAt"`
 	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy      *string    `json:"updatedBy,omitempty"`
-	DeletedAt      *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy      *string    `json:"deletedBy,omitempty"`
 	DisplayName    string     `json:"displayName,omitempty"`
 }
 
@@ -74,8 +78,6 @@ func toMemberResponse(docID string, m memberdom.Member) memberResponse {
 		CreatedAt:      m.CreatedAt,
 		UpdatedAt:      m.UpdatedAt,
 		UpdatedBy:      m.UpdatedBy,
-		DeletedAt:      m.DeletedAt,
-		DeletedBy:      m.DeletedBy,
 		DisplayName:    memberdom.FormatLastFirst(m.LastName, m.FirstName),
 	}
 }
@@ -87,11 +89,11 @@ func toMemberResponse(docID string, m memberdom.Member) memberResponse {
 // - /members の POST は招待前 member 作成として扱う。
 // - 通常の console member 作成では request body の uid を信用しない。
 // - GET /members/me は Authorization token の Firebase UID から現在ログイン中 member を返す。
-// - GET /members/{id} は member docId 専用として扱う。
+// - GET /members/{uid} は Firebase UID 専用として扱う。
 // - PATCH /members/{id} は member docId 専用として扱う。
 // - /members/by-firebase-uid/{uid} は廃止。
 // - /members/{id}/bind-firebase-uid は request body の uid ではなく CurrentMember の UID を使う。
-// - 招待承諾フローは CurrentMember が未確立の状態でも動く必要があるため、別 handler/API で扱う。
+// - 招待承諾フローは CurrentMember が未確立の状態でも動く必要があるため、別 handler/API で扱うこと。
 func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -117,8 +119,8 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// /members/me
 	// IMPORTANT:
-	// /members/{id} より先に判定する。
-	// me を docId として扱わないため。
+	// /members/{uid} より先に判定する。
+	// me を uid として扱わないため。
 	if path == "/members/me" {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
@@ -126,17 +128,6 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.me(w, r)
-		return
-	}
-
-	// /members/by-company
-	if path == "/members/by-company" {
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w)
-			return
-		}
-
-		h.listByCompanyID(w, r)
 		return
 	}
 
@@ -148,43 +139,27 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rest := strings.TrimPrefix(path, "/members/")
 		parts := strings.Split(rest, "/")
 
-		// /members/{id}
-		// GET / PATCH は member docId 専用。
+		// /members/{uid}
+		// GET は Firebase UID 専用。
+		// PATCH は既存 frontend 互換のため member docId 専用。
 		if len(parts) == 1 {
-			id := strings.TrimSpace(parts[0])
-			if id == "" {
+			idOrUID := strings.TrimSpace(parts[0])
+			if idOrUID == "" {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 				return
 			}
 
 			switch r.Method {
 			case http.MethodGet:
-				h.get(w, r, id)
+				h.getByUID(w, r, idOrUID)
 				return
 			case http.MethodPatch:
-				h.update(w, r, id)
+				h.update(w, r, idOrUID)
 				return
 			default:
 				methodNotAllowed(w)
 				return
 			}
-		}
-
-		// /members/{id}/display-name
-		if len(parts) == 2 && parts[1] == "display-name" {
-			id := strings.TrimSpace(parts[0])
-			if id == "" {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
-				return
-			}
-
-			if r.Method != http.MethodGet {
-				methodNotAllowed(w)
-				return
-			}
-
-			h.getDisplayName(w, r, id)
-			return
 		}
 
 		// /members/{id}/bind-firebase-uid
@@ -304,7 +279,7 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	current, err := h.repo.GetByID(ctx, id)
+	current, err := h.findMemberByDocIDInCompany(ctx, id, me.CompanyID)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
@@ -368,7 +343,7 @@ func (h *MemberHandler) bindFirebaseUID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	current, err := h.repo.GetByID(ctx, id)
+	current, err := h.findMemberByDocIDInCompany(ctx, id, me.CompanyID)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
@@ -395,6 +370,10 @@ func (h *MemberHandler) bindFirebaseUID(w http.ResponseWriter, r *http.Request, 
 // -----------------------------------------------------------------------------
 // GET /members
 // -----------------------------------------------------------------------------
+// NOTE:
+// 取得処理は MemberManagementQuery に移譲する。
+// handler は HTTP query parameter の解釈、認証 company scope の取得、
+// response DTO への変換だけを担当する。
 func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	qv := r.URL.Query()
@@ -415,12 +394,12 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 		f.BrandIDs = splitCSV(v)
 	}
 
-	page := common.Page{
+	page := memberdom.Page{
 		Number:  clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000),
 		PerPage: clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200),
 	}
 
-	res, err := h.repo.ListByCompanyID(ctx, me.CompanyID, f, page)
+	res, err := h.managementQuery.ListByCompanyID(ctx, me.CompanyID, f, page)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
@@ -440,11 +419,11 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 // NOTE:
 // /members/me は BootstrapAuthMiddleware 配下でも動く必要がある。
 // そのため CurrentMember には依存しない。
-// Firebase UID は Authorization token から取得し、
-// repository adapter 拡張で companyID を解決してから ListByCompanyID + Filter.UID で member を取得する。
+// Firebase UID は Authorization token から取得し、GetByUID で member を取得する。
+//
+// NOTE:
+// この endpoint は今後 auth 系へ移譲予定のため、現時点では repo 直呼びのまま残す。
 func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	uid, _, ok := httpmw.CurrentUIDAndEmail(r)
 	if !ok || strings.TrimSpace(uid) == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
@@ -456,13 +435,7 @@ func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reader, ok := any(h.repo).(memberCompanyIDReader)
-	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "member company resolver is not configured"})
-		return
-	}
-
-	companyID, err := reader.GetCompanyIDByFirebaseUID(ctx, strings.TrimSpace(uid))
+	rec, err := h.repo.GetByUID(r.Context(), strings.TrimSpace(uid))
 	if err != nil {
 		if errors.Is(err, memberdom.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "member not found"})
@@ -473,82 +446,27 @@ func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	companyID = strings.TrimSpace(companyID)
-	if companyID == "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "member companyId not found"})
-		return
-	}
-
-	res, err := h.repo.ListByCompanyID(ctx, companyID, memberdom.Filter{
-		UID: strings.TrimSpace(uid),
-	}, common.Page{
-		Number:  1,
-		PerPage: 1,
-	})
-	if err != nil {
-		writeMemberErr(w, err)
-		return
-	}
-
-	if len(res.Items) == 0 {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "member not found"})
-		return
-	}
-
-	rec := res.Items[0]
-
 	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
 }
 
 // -----------------------------------------------------------------------------
-// GET /members/by-company
-// -----------------------------------------------------------------------------
-func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	me, ok := httpmw.CurrentMember(r)
-	if !ok || me.CompanyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-
-	companyID := me.CompanyID
-
-	log.Printf("[memberHandler.listByCompanyID] ENTER companyID=%q", companyID)
-
-	res, err := h.repo.ListByCompanyID(ctx, companyID, memberdom.Filter{}, common.Page{
-		Number:  1,
-		PerPage: 200,
-	})
-	if err != nil {
-		log.Printf("[memberHandler.listByCompanyID] ListByCompanyID error: %v", err)
-		writeMemberErr(w, err)
-		return
-	}
-
-	items := make([]memberResponse, 0, len(res.Items))
-	for _, rec := range res.Items {
-		items = append(items, toMemberResponse(rec.DocID, rec.Member))
-	}
-
-	log.Printf("[memberHandler.listByCompanyID] OK items=%d", len(items))
-
-	writeJSON(w, http.StatusOK, items)
-}
-
-// -----------------------------------------------------------------------------
-// GET /members/{id}
+// GET /members/{uid}
 // -----------------------------------------------------------------------------
 // NOTE:
-// GET /members/{id} は member docId 専用。
-// Firebase UID では検索しない。
+// GET /members/{uid} は Firebase UID 専用。
+// docId では検索しない。
 // レスポンスの id は member の Firestore docId を返す。
-func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+//
+// NOTE:
+// 取得処理は MemberDetailQuery に移譲する。
+// handler は uid validation、認証 company scope の確認、
+// response DTO への変換だけを担当する。
+func (h *MemberHandler) getByUID(w http.ResponseWriter, r *http.Request, uid string) {
 	ctx := r.Context()
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid uid"})
 		return
 	}
 
@@ -558,7 +476,7 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	rec, err := h.repo.GetByID(ctx, id)
+	rec, err := h.detailQuery.GetByUID(ctx, uid)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
@@ -573,30 +491,45 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 // -----------------------------------------------------------------------------
-// GET /members/{id}/display-name
+// Internal helpers
 // -----------------------------------------------------------------------------
-// NOTE:
-// display-name は member docId 専用。
-func (h *MemberHandler) getDisplayName(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
+func (h *MemberHandler) findMemberByDocIDInCompany(
+	ctx context.Context,
+	docID string,
+	companyID string,
+) (memberdom.Record, error) {
+	docID = strings.TrimSpace(docID)
+	companyID = strings.TrimSpace(companyID)
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
-		return
+	if docID == "" || companyID == "" {
+		return memberdom.Record{}, memberdom.ErrNotFound
 	}
 
-	rec, err := h.repo.GetByID(ctx, id)
-	if err != nil {
-		writeMemberErr(w, err)
-		return
+	pageNumber := 1
+
+	for {
+		res, err := h.repo.ListByCompanyID(ctx, companyID, memberdom.Filter{}, common.Page{
+			Number:  pageNumber,
+			PerPage: 200,
+		})
+		if err != nil {
+			return memberdom.Record{}, err
+		}
+
+		for _, rec := range res.Items {
+			if rec.DocID == docID {
+				return rec, nil
+			}
+		}
+
+		if len(res.Items) == 0 || pageNumber >= res.TotalPages {
+			break
+		}
+
+		pageNumber++
 	}
 
-	displayName := memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
-
-	writeJSON(w, http.StatusOK, map[string]string{
-		"displayName": displayName,
-	})
+	return memberdom.Record{}, memberdom.ErrNotFound
 }
 
 // -----------------------------------------------------------------------------
@@ -617,8 +550,6 @@ func writeMemberErr(w http.ResponseWriter, err error) {
 		errors.Is(err, memberdom.ErrInvalidCreatedAt),
 		errors.Is(err, memberdom.ErrInvalidUpdatedAt),
 		errors.Is(err, memberdom.ErrInvalidUpdatedBy),
-		errors.Is(err, memberdom.ErrInvalidDeletedAt),
-		errors.Is(err, memberdom.ErrInvalidDeletedBy),
 		errors.Is(err, memberdom.ErrInvalidStatus):
 		code = http.StatusBadRequest
 	case errors.Is(err, memberdom.ErrConflict):

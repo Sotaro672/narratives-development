@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -38,21 +37,25 @@ var _ memdom.Repository = (*MemberRepositoryFS)(nil)
 // Queries
 // ========================
 
-func (r *MemberRepositoryFS) GetByID(ctx context.Context, id string) (memdom.Record, error) {
+func (r *MemberRepositoryFS) GetByUID(ctx context.Context, uid string) (memdom.Record, error) {
 	if r.Client == nil {
 		return memdom.Record{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
-	if id == "" {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
 		return memdom.Record{}, memdom.ErrNotFound
 	}
 
-	doc, err := r.col().Doc(id).Get(ctx)
+	q := r.col().Where("uid", "==", uid).Limit(1)
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	doc, err := it.Next()
+	if err == iterator.Done {
+		return memdom.Record{}, memdom.ErrNotFound
+	}
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return memdom.Record{}, memdom.ErrNotFound
-		}
 		return memdom.Record{}, err
 	}
 
@@ -71,44 +74,18 @@ func (r *MemberRepositoryFS) GetByID(ctx context.Context, id string) (memdom.Rec
 //
 // NOTE:
 // This method is intentionally not part of member.Repository.
-// The domain repository port is kept to GetByID / ListByCompanyID.
+// The domain repository port is kept to GetByUID / ListByCompanyID.
 func (r *MemberRepositoryFS) GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error) {
 	if r.Client == nil {
 		return "", errors.New("firestore client is nil")
 	}
 
-	uid = strings.TrimSpace(uid)
-	if uid == "" {
-		return "", memdom.ErrNotFound
-	}
-
-	q := r.col().Where("uid", "==", uid).Limit(1)
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	doc, err := it.Next()
-	if err == iterator.Done {
-		return "", memdom.ErrNotFound
-	}
+	rec, err := r.GetByUID(ctx, uid)
 	if err != nil {
 		return "", err
 	}
 
-	data := doc.Data()
-
-	if v, ok := data["companyId"].(string); ok {
-		companyID := strings.TrimSpace(v)
-		if companyID != "" {
-			return companyID, nil
-		}
-	}
-
-	m, err := readMemberSnapshot(doc)
-	if err != nil {
-		return "", err
-	}
-
-	companyID := strings.TrimSpace(m.CompanyID)
+	companyID := strings.TrimSpace(rec.Member.CompanyID)
 	if companyID == "" {
 		return "", memdom.ErrNotFound
 	}
@@ -256,17 +233,17 @@ func (r *MemberRepositoryFS) Create(ctx context.Context, m memdom.Member) (memdo
 	}, nil
 }
 
-func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom.MemberPatch) (memdom.Record, error) {
+func (r *MemberRepositoryFS) Update(ctx context.Context, uid string, patch memdom.MemberPatch) (memdom.Record, error) {
 	if r.Client == nil {
 		return memdom.Record{}, errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
-	if id == "" {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
 		return memdom.Record{}, memdom.ErrNotFound
 	}
 
-	rec, err := r.GetByID(ctx, id)
+	rec, err := r.GetByUID(ctx, uid)
 	if err != nil {
 		return memdom.Record{}, err
 	}
@@ -313,16 +290,6 @@ func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom
 		}
 		m.UpdatedBy = &updatedBy
 	}
-	if patch.DeletedAt != nil {
-		m.DeletedAt = patch.DeletedAt
-	}
-	if patch.DeletedBy != nil {
-		deletedBy := strings.TrimSpace(*patch.DeletedBy)
-		if deletedBy == "" {
-			return memdom.Record{}, memdom.ErrInvalidDeletedBy
-		}
-		m.DeletedBy = &deletedBy
-	}
 
 	now := time.Now().UTC()
 	if patch.UpdatedAt != nil {
@@ -344,27 +311,27 @@ func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom
 	}, nil
 }
 
-func (r *MemberRepositoryFS) Delete(ctx context.Context, id string) error {
+func (r *MemberRepositoryFS) Delete(ctx context.Context, uid string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
-	id = strings.TrimSpace(id)
-	if id == "" {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
 		return memdom.ErrNotFound
 	}
 
-	ref := r.col().Doc(id)
-
-	_, err := ref.Get(ctx)
+	rec, err := r.GetByUID(ctx, uid)
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return memdom.ErrNotFound
-		}
 		return err
 	}
 
+	ref := r.col().Doc(rec.DocID)
+
 	if _, err := ref.Delete(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return memdom.ErrNotFound
+		}
 		return err
 	}
 
@@ -490,110 +457,13 @@ func hasAllStrings(values []string, required []string) bool {
 }
 
 // ========================
-// Helper: decode with legacy string timestamps support
+// Helper: decode
 // ========================
 
 func readMemberSnapshot(doc *firestore.DocumentSnapshot) (memdom.Member, error) {
 	var m memdom.Member
-	if err := doc.DataTo(&m); err == nil {
-		return m, nil
-	}
-
-	data := doc.Data()
-
-	asString := func(v any) string {
-		if s, ok := v.(string); ok {
-			return s
-		}
-		return ""
-	}
-
-	asStringPtr := func(v any) *string {
-		if s, ok := v.(string); ok && s != "" {
-			ss := s
-			return &ss
-		}
-		return nil
-	}
-
-	asStringSlice := func(v any) []string {
-		if v == nil {
-			return nil
-		}
-
-		if ss, ok := v.([]string); ok {
-			return ss
-		}
-
-		arr, ok := v.([]interface{})
-		if !ok {
-			return nil
-		}
-
-		out := make([]string, 0, len(arr))
-		for _, x := range arr {
-			if s, ok := x.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-
-		return out
-	}
-
-	asTimeValue := func(v any) (time.Time, bool, error) {
-		switch t := v.(type) {
-		case time.Time:
-			return t.UTC(), true, nil
-		case string:
-			if t == "" {
-				return time.Time{}, false, nil
-			}
-
-			if parsed, err := time.Parse(time.RFC3339, t); err == nil {
-				return parsed.UTC(), true, nil
-			}
-
-			if parsed, err := time.Parse("2006-01-02 15:04:05Z07:00", t); err == nil {
-				return parsed.UTC(), true, nil
-			}
-
-			return time.Time{}, false, fmt.Errorf("invalid time string: %q", t)
-		default:
-			return time.Time{}, false, nil
-		}
-	}
-
-	m = memdom.Member{
-		UID:            asString(data["uid"]),
-		FirstName:      asString(data["firstName"]),
-		LastName:       asString(data["lastName"]),
-		FirstNameKana:  asString(data["firstNameKana"]),
-		LastNameKana:   asString(data["lastNameKana"]),
-		Email:          asString(data["email"]),
-		Permissions:    asStringSlice(data["permissions"]),
-		AssignedBrands: asStringSlice(data["assignedBrands"]),
-		CompanyID:      asString(data["companyId"]),
-		Status:         asString(data["status"]),
-		UpdatedBy:      asStringPtr(data["updatedBy"]),
-		DeletedBy:      asStringPtr(data["deletedBy"]),
-	}
-
-	if createdAt, ok, err := asTimeValue(data["createdAt"]); err != nil {
+	if err := doc.DataTo(&m); err != nil {
 		return memdom.Member{}, err
-	} else if ok {
-		m.CreatedAt = createdAt
-	}
-
-	if updatedAt, ok, err := asTimeValue(data["updatedAt"]); err != nil {
-		return memdom.Member{}, err
-	} else if ok {
-		m.UpdatedAt = &updatedAt
-	}
-
-	if deletedAt, ok, err := asTimeValue(data["deletedAt"]); err != nil {
-		return memdom.Member{}, err
-	} else if ok {
-		m.DeletedAt = &deletedAt
 	}
 
 	return m, nil

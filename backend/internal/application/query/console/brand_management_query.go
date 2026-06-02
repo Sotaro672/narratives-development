@@ -82,18 +82,18 @@ func (q *BrandManagementQuery) toPageResult(
 
 func (q *BrandManagementQuery) resolveMemberName(
 	ctx context.Context,
-	memberID *string,
+	memberUID *string,
 ) string {
 	if q == nil || q.memberRepo == nil {
 		return ""
 	}
 
-	if memberID == nil || *memberID == "" {
+	if memberUID == nil || *memberUID == "" {
 		return ""
 	}
 
 	svc := memberdom.NewService(q.memberRepo)
-	name, err := svc.GetNameLastFirstByID(ctx, *memberID)
+	name, err := svc.GetNameLastFirstByUID(ctx, *memberUID)
 	if err != nil {
 		return ""
 	}

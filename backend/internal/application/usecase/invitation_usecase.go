@@ -127,9 +127,14 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 		return "", fmt.Errorf("memberDocID is empty")
 	}
 
-	rec, err := s.memberRepo.GetByID(ctx, memberDocID)
+	companyID := strings.TrimSpace(CompanyIDFromContext(ctx))
+	if companyID == "" {
+		return "", fmt.Errorf("companyID is empty")
+	}
+
+	rec, err := findMemberByDocIDInCompany(ctx, s.memberRepo, companyID, memberDocID)
 	if err != nil {
-		return "", fmt.Errorf("get member by id failed: %w", err)
+		return "", fmt.Errorf("find member by doc id failed: %w", err)
 	}
 
 	m := rec.Member
@@ -156,7 +161,12 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 
 	if !strings.EqualFold(m.Status, "active") {
 		status := "inactive"
-		if _, err := s.memberRepo.Update(ctx, rec.DocID, memdom.MemberPatch{
+		updateKey := strings.TrimSpace(m.UID)
+		if updateKey == "" {
+			updateKey = rec.DocID
+		}
+
+		if _, err := s.memberRepo.Update(ctx, updateKey, memdom.MemberPatch{
 			Status: &status,
 		}); err != nil {
 			return "", fmt.Errorf("update member status after invitation failed: %w", err)
@@ -244,9 +254,13 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("email_mismatch")
 	}
 
-	rec, err := s.memberRepo.GetByID(ctx, info.MemberID)
+	if info.CompanyID == "" {
+		return fmt.Errorf("companyId is empty")
+	}
+
+	rec, err := findMemberByDocIDInCompany(ctx, s.memberRepo, info.CompanyID, info.MemberID)
 	if err != nil {
-		return fmt.Errorf("get member by invitation member id failed: %w", err)
+		return fmt.Errorf("find member by invitation member id failed: %w", err)
 	}
 
 	companyID := info.CompanyID
@@ -257,8 +271,6 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("companyId is empty")
 	}
 
-	// repository port には GetByFirebaseUID がないため、
-	// company scope 内の ListByCompanyID + Filter.UID で UID 重複を確認する。
 	found, err := s.memberRepo.ListByCompanyID(ctx, companyID, memdom.Filter{
 		UID: in.UID,
 	}, memdom.Page{
@@ -289,7 +301,12 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		AssignedBrands: &info.AssignedBrandIDs,
 	}
 
-	if _, err := s.memberRepo.Update(ctx, rec.DocID, patch); err != nil {
+	updateKey := strings.TrimSpace(rec.Member.UID)
+	if updateKey == "" {
+		updateKey = rec.DocID
+	}
+
+	if _, err := s.memberRepo.Update(ctx, updateKey, patch); err != nil {
 		return fmt.Errorf("update invited member failed: %w", err)
 	}
 
@@ -298,4 +315,52 @@ func (s *InvitationCompleteService) CompleteInvitation(
 	}
 
 	return nil
+}
+
+// ==============================
+// Helpers
+// ==============================
+
+func findMemberByDocIDInCompany(
+	ctx context.Context,
+	repo memdom.Repository,
+	companyID string,
+	docID string,
+) (memdom.Record, error) {
+	if repo == nil {
+		return memdom.Record{}, fmt.Errorf("member repository is not configured")
+	}
+
+	companyID = strings.TrimSpace(companyID)
+	docID = strings.TrimSpace(docID)
+
+	if companyID == "" || docID == "" {
+		return memdom.Record{}, memdom.ErrNotFound
+	}
+
+	pageNumber := 1
+
+	for {
+		res, err := repo.ListByCompanyID(ctx, companyID, memdom.Filter{}, memdom.Page{
+			Number:  pageNumber,
+			PerPage: 200,
+		})
+		if err != nil {
+			return memdom.Record{}, err
+		}
+
+		for _, item := range res.Items {
+			if item.DocID == docID {
+				return item, nil
+			}
+		}
+
+		if len(res.Items) == 0 || pageNumber >= res.TotalPages {
+			break
+		}
+
+		pageNumber++
+	}
+
+	return memdom.Record{}, memdom.ErrNotFound
 }

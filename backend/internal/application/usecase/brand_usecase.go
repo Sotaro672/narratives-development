@@ -98,9 +98,9 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 		return created, nil
 	}
 
-	managerID := *created.ManagerID
+	managerUID := *created.ManagerID
 
-	rec, err := u.memberRepo.GetByID(ctx, managerID)
+	rec, err := u.memberRepo.GetByUID(ctx, managerUID)
 	if err != nil {
 		return created, nil
 	}
@@ -121,7 +121,7 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 	assignedBrands := append([]string(nil), rec.Member.AssignedBrands...)
 	assignedBrands = append(assignedBrands, brandID)
 
-	_, _ = u.memberRepo.Update(ctx, rec.DocID, memberdom.MemberPatch{
+	_, _ = u.memberRepo.Update(ctx, managerUID, memberdom.MemberPatch{
 		AssignedBrands: &assignedBrands,
 	})
 

@@ -73,6 +73,7 @@ var (
 	ErrInvalidQuantity           = errors.New("production: invalid quantity")
 	ErrInvalidPrintedAt          = errors.New("production: invalid printedAt")
 	ErrInvalidPrintedBy          = errors.New("production: invalid printedBy")
+	ErrInvalidCreatedBy          = errors.New("production: invalid createdBy")
 	ErrInvalidCreatedAt          = errors.New("production: invalid createdAt")
 	ErrInvalidUpdatedAt          = errors.New("production: invalid updatedAt")
 	ErrInvalidUpdatedBy          = errors.New("production: invalid updatedBy")
@@ -268,7 +269,7 @@ func (p Production) validate(requireID bool) error {
 		return ErrInvalidPrintedBy
 	}
 	if p.CreatedBy != nil && *p.CreatedBy == "" {
-		return ErrInvalidCreatedAt
+		return ErrInvalidCreatedBy
 	}
 	if p.UpdatedBy != nil && *p.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy

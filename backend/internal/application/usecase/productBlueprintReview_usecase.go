@@ -35,7 +35,7 @@ type BrandGetter interface {
 
 // Assignee(Member) 名取得（member.Service をそのまま注入できる）
 type AssigneeNameGetter interface {
-	GetNameLastFirstByID(ctx context.Context, memberID string) (string, error)
+	GetNameLastFirstByUID(ctx context.Context, uid string) (string, error)
 }
 
 // handler/画面へ渡す DTO（Review + AvatarName/Icon を同梱）
@@ -259,7 +259,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 			if v, ok := assigneeNameCache[pb.AssigneeID]; ok {
 				assigneeName = v
 			} else {
-				if n, err := uc.AssigneeNameGetter.GetNameLastFirstByID(ctx, pb.AssigneeID); err == nil {
+				if n, err := uc.AssigneeNameGetter.GetNameLastFirstByUID(ctx, pb.AssigneeID); err == nil {
 					assigneeName = n
 				}
 				assigneeNameCache[pb.AssigneeID] = assigneeName

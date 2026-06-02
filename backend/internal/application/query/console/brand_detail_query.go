@@ -49,14 +49,14 @@ func (q *BrandDetailQuery) GetByID(
 
 func (q *BrandDetailQuery) resolveMemberName(
 	ctx context.Context,
-	memberID *string,
+	memberUID *string,
 ) string {
-	if memberID == nil || *memberID == "" || q.memberRepo == nil {
+	if memberUID == nil || *memberUID == "" || q.memberRepo == nil {
 		return ""
 	}
 
 	svc := memberdom.NewService(q.memberRepo)
-	name, err := svc.GetNameLastFirstByID(ctx, *memberID)
+	name, err := svc.GetNameLastFirstByUID(ctx, *memberUID)
 	if err != nil {
 		return ""
 	}

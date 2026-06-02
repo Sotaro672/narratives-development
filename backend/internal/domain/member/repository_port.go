@@ -61,25 +61,28 @@ type RecordPageResult struct {
 // Repository is the persistence port for the Member aggregate.
 //
 // 方針:
-//   - Get 系は GetByID に統一する。
-//   - entity.Member には docId を持たせないため、GetByID は Record を返す。
-//   - Exists は廃止する。存在確認は GetByID の ErrNotFound で判定する。
+//   - Get 系は GetByUID に統一する。
+//   - entity.Member には docId を持たせないため、GetByUID は Record を返す。
+//   - Exists は廃止する。存在確認は GetByUID の ErrNotFound で判定する。
 //   - Save は廃止し、Update に置き換える。
+//   - Delete は物理削除として扱う。DeletedAt / DeletedBy による論理削除は扱わない。
 //   - List 系は ListByCompanyID に統一する。
-//   - Firebase UID / email などでの検索が必要な場合は ListByCompanyID + Filter を使う。
+//   - Firebase UID での単体取得は GetByUID を使う。
+//   - email などでの検索が必要な場合は ListByCompanyID + Filter を使う。
 type Repository interface {
 	// Create creates a member and returns the created Firestore docId.
 	Create(ctx context.Context, m Member) (Record, error)
 
-	// GetByID returns a member record by Firestore document ID.
+	// GetByUID returns a member record by Firebase Auth UID.
 	// This is the only Get method in this repository port.
-	GetByID(ctx context.Context, id string) (Record, error)
+	GetByUID(ctx context.Context, uid string) (Record, error)
 
 	// Update updates an existing member by Firestore document ID.
 	// This replaces Save / SaveByDocID.
 	Update(ctx context.Context, id string, patch MemberPatch) (Record, error)
 
-	// Delete deletes a member by Firestore document ID.
+	// Delete physically deletes a member by Firestore document ID.
+	// It does not perform logical deletion with DeletedAt / DeletedBy.
 	Delete(ctx context.Context, id string) error
 
 	// ListByCompanyID returns members scoped by companyID.
@@ -129,17 +132,17 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// GetNameLastFirstByID は memberID/docID から Member を取得し、
+// GetNameLastFirstByUID は Firebase Auth UID から Member を取得し、
 // 「lastName firstName」の順で整形した表示名を返します。
 // - lastName / firstName の両方が存在: "last first"
 // - 片方のみ存在: その値のみ
 // - どちらも空: ""
-func (s *Service) GetNameLastFirstByID(ctx context.Context, memberID string) (string, error) {
-	if memberID == "" {
-		return "", errors.New("member: memberID is empty")
+func (s *Service) GetNameLastFirstByUID(ctx context.Context, uid string) (string, error) {
+	if uid == "" {
+		return "", errors.New("member: uid is empty")
 	}
 
-	rec, err := s.repo.GetByID(ctx, memberID)
+	rec, err := s.repo.GetByUID(ctx, uid)
 	if err != nil {
 		return "", err
 	}

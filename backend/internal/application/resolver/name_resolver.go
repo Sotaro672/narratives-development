@@ -34,12 +34,12 @@ type ProductBlueprintNameRepository interface {
 // Member 名の取得に必要な最小限のインターフェース。
 //
 // IMPORTANT:
-// - member repository port の Get 系は GetByID に統一する。
-// - GetByID は member docId を受け取り、member.Record を返す。
-// - Firebase UID での名前解決はここでは扱わない。
-// - ProductBlueprint.assigneeId / createdBy / updatedBy は member docId 前提。
+// - member repository port の Get 系は GetByUID に統一する。
+// - GetByUID は Firebase Auth UID を受け取り、member.Record を返す。
+// - member docId での名前解決はここでは扱わない。
+// - ProductBlueprint.assigneeId / createdBy / updatedBy は Firebase Auth UID 前提。
 type MemberNameRepository interface {
-	GetByID(ctx context.Context, id string) (memberdom.Record, error)
+	GetByUID(ctx context.Context, uid string) (memberdom.Record, error)
 }
 
 // Model → modelId から ModelVariation を 1 件取得できればよい
@@ -205,33 +205,32 @@ func formatMemberDisplayName(m memberdom.Member) string {
 	}
 }
 
-// ResolveMemberName は member docId から member の表示名（例: "姓 名"）を解決する。
+// ResolveMemberName は Firebase Auth UID から member の表示名（例: "姓 名"）を解決する。
 //
 // IMPORTANT:
-// - member docId 専用
-// - Firebase UID fallback はしない
-// - member repository port の Get 系は GetByID のみに統一する
-func (r *NameResolver) ResolveMemberName(ctx context.Context, memberID string) string {
-	return r.ResolveMemberNameByID(ctx, memberID)
+// - Firebase Auth UID 専用
+// - member docId fallback はしない
+func (r *NameResolver) ResolveMemberName(ctx context.Context, memberUID string) string {
+	return r.ResolveMemberNameByUID(ctx, memberUID)
 }
 
-// ResolveMemberNameByID は member docId から member の表示名（例: "姓 名"）を解決する。
+// ResolveMemberNameByUID は Firebase Auth UID から member の表示名（例: "姓 名"）を解決する。
 //
 // IMPORTANT:
-// - member docId 専用
-// - Firebase UID fallback はしない
-// - ProductBlueprint.assigneeId / createdBy / updatedBy など、member docId を保存しているフィールド向け
-func (r *NameResolver) ResolveMemberNameByID(ctx context.Context, memberID string) string {
+// - Firebase Auth UID 専用
+// - member docId fallback はしない
+// - ProductBlueprint.assigneeId / createdBy / updatedBy など、Firebase Auth UID を保存しているフィールド向け
+func (r *NameResolver) ResolveMemberNameByUID(ctx context.Context, memberUID string) string {
 	if r == nil || r.memberRepo == nil {
 		return ""
 	}
 
-	id := memberID
-	if id == "" {
+	uid := memberUID
+	if uid == "" {
 		return ""
 	}
 
-	rec, err := r.memberRepo.GetByID(ctx, id)
+	rec, err := r.memberRepo.GetByUID(ctx, uid)
 	if err != nil {
 		return ""
 	}
@@ -239,57 +238,57 @@ func (r *NameResolver) ResolveMemberNameByID(ctx context.Context, memberID strin
 	return formatMemberDisplayName(rec.Member)
 }
 
-// ---- member docId 派生フィールド向けヘルパ ----
+// ---- member UID 派生フィールド向けヘルパ ----
 
-func (r *NameResolver) resolveMemberNameByIDFromPtr(ctx context.Context, memberID *string) string {
-	if memberID == nil {
+func (r *NameResolver) resolveMemberNameByUIDFromPtr(ctx context.Context, memberUID *string) string {
+	if memberUID == nil {
 		return ""
 	}
 
-	return r.ResolveMemberNameByID(ctx, *memberID)
+	return r.ResolveMemberNameByUID(ctx, *memberUID)
 }
 
 // ResolveAssigneeName は assigneeId から member の表示名（例: "姓 名"）を解決する。
 //
 // IMPORTANT:
-// - member docId 専用
-// - Firebase UID fallback はしない
-func (r *NameResolver) ResolveAssigneeName(ctx context.Context, assigneeID string) string {
-	return r.ResolveMemberNameByID(ctx, assigneeID)
+// - assigneeId は Firebase Auth UID 前提
+// - member docId fallback はしない
+func (r *NameResolver) ResolveAssigneeName(ctx context.Context, assigneeUID string) string {
+	return r.ResolveMemberNameByUID(ctx, assigneeUID)
 }
 
 func (r *NameResolver) ResolveCreatedByName(ctx context.Context, createdBy *string) string {
-	return r.resolveMemberNameByIDFromPtr(ctx, createdBy)
+	return r.resolveMemberNameByUIDFromPtr(ctx, createdBy)
 }
 
 func (r *NameResolver) ResolveUpdatedByName(ctx context.Context, updatedBy *string) string {
-	return r.resolveMemberNameByIDFromPtr(ctx, updatedBy)
+	return r.resolveMemberNameByUIDFromPtr(ctx, updatedBy)
 }
 
 func (r *NameResolver) ResolveRequestedByName(ctx context.Context, requestedBy *string) string {
-	return r.resolveMemberNameByIDFromPtr(ctx, requestedBy)
+	return r.resolveMemberNameByUIDFromPtr(ctx, requestedBy)
 }
 
 func (r *NameResolver) ResolveInspectedByName(ctx context.Context, inspectedBy *string) string {
-	return r.resolveMemberNameByIDFromPtr(ctx, inspectedBy)
+	return r.resolveMemberNameByUIDFromPtr(ctx, inspectedBy)
 }
 
 func (r *NameResolver) ResolvePrintedByName(ctx context.Context, printedBy *string) string {
-	return r.resolveMemberNameByIDFromPtr(ctx, printedBy)
+	return r.resolveMemberNameByUIDFromPtr(ctx, printedBy)
 }
 
-// ---- ProductBlueprint 専用: member docId 解決 ----
+// ---- ProductBlueprint 専用: member UID 解決 ----
 
-func (r *NameResolver) ResolveProductBlueprintAssigneeName(ctx context.Context, assigneeID string) string {
-	return r.ResolveMemberNameByID(ctx, assigneeID)
+func (r *NameResolver) ResolveProductBlueprintAssigneeName(ctx context.Context, assigneeUID string) string {
+	return r.ResolveMemberNameByUID(ctx, assigneeUID)
 }
 
 func (r *NameResolver) ResolveProductBlueprintCreatedByName(ctx context.Context, createdBy *string) string {
-	return r.resolveMemberNameByIDFromPtr(ctx, createdBy)
+	return r.resolveMemberNameByUIDFromPtr(ctx, createdBy)
 }
 
 func (r *NameResolver) ResolveProductBlueprintUpdatedByName(ctx context.Context, updatedBy *string) string {
-	return r.resolveMemberNameByIDFromPtr(ctx, updatedBy)
+	return r.resolveMemberNameByUIDFromPtr(ctx, updatedBy)
 }
 
 // ------------------------------------------------------------

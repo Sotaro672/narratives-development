@@ -48,8 +48,6 @@ type Member struct {
 	CreatedAt time.Time  `json:"createdAt" firestore:"createdAt"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty" firestore:"updatedAt"`
 	UpdatedBy *string    `json:"updatedBy,omitempty" firestore:"updatedBy"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty" firestore:"deletedAt"`
-	DeletedBy *string    `json:"deletedBy,omitempty" firestore:"deletedBy"`
 }
 
 var (
@@ -62,8 +60,6 @@ var (
 	ErrInvalidCreatedAt   = errors.New("member: invalid createdAt")
 	ErrInvalidUpdatedAt   = errors.New("member: invalid updatedAt")
 	ErrInvalidUpdatedBy   = errors.New("member: invalid updatedBy")
-	ErrInvalidDeletedAt   = errors.New("member: invalid deletedAt")
-	ErrInvalidDeletedBy   = errors.New("member: invalid deletedBy")
 	ErrInvalidStatus      = errors.New("member: invalid status")
 	ErrNotFound           = errors.New("member: not found")
 	ErrConflict           = errors.New("member: conflict")
@@ -155,15 +151,6 @@ func WithUpdated(by string, at time.Time) func(*Member) {
 	}
 }
 
-func WithDeleted(by string, at time.Time) func(*Member) {
-	return func(m *Member) {
-		b := by
-		t := at
-		m.DeletedBy = &b
-		m.DeletedAt = &t
-	}
-}
-
 // ----------------------
 // Mutators
 // ----------------------
@@ -224,27 +211,6 @@ func (m *Member) TouchUpdated(now time.Time, by *string) error {
 	return nil
 }
 
-func (m *Member) MarkDeleted(now time.Time, by *string) error {
-	if now.IsZero() {
-		return ErrInvalidDeletedAt
-	}
-	t := now
-	m.DeletedAt = &t
-	if by != nil {
-		b := strings.TrimSpace(*by)
-		if b == "" {
-			return ErrInvalidDeletedBy
-		}
-		m.DeletedBy = &b
-	}
-	return nil
-}
-
-func (m *Member) ClearDeleted() {
-	m.DeletedAt = nil
-	m.DeletedBy = nil
-}
-
 // -------------------------
 // Validation
 // -------------------------
@@ -296,12 +262,6 @@ func (m Member) validate() error {
 	}
 	if m.UpdatedBy != nil && strings.TrimSpace(*m.UpdatedBy) == "" {
 		return ErrInvalidUpdatedBy
-	}
-	if m.DeletedAt != nil && m.DeletedAt.Before(m.CreatedAt) {
-		return ErrInvalidDeletedAt
-	}
-	if m.DeletedBy != nil && strings.TrimSpace(*m.DeletedBy) == "" {
-		return ErrInvalidDeletedBy
 	}
 
 	return nil
@@ -385,8 +345,6 @@ type MemberPatch struct {
 	CreatedAt      *time.Time
 	UpdatedAt      *time.Time
 	UpdatedBy      *string
-	DeletedAt      *time.Time
-	DeletedBy      *string
 }
 
 func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permission) error {

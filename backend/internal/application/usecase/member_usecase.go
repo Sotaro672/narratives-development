@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	memdom "narratives/internal/domain/member"
@@ -18,14 +17,6 @@ import (
 type MemberRecord struct {
 	DocID  string
 	Member memdom.Member
-}
-
-type MemberRecordPageResult struct {
-	Items      []MemberRecord
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
 }
 
 // -----------------------------------------------------------------------------
@@ -54,67 +45,6 @@ func NewMemberUsecaseWithInvitationCommand(
 		now:               time.Now,
 		invitationCommand: invitationCommand,
 	}
-}
-
-// -----------------------------------------------------------------------------
-// Queries
-// -----------------------------------------------------------------------------
-
-// GetByID は member docId から MemberRecord を取得します。
-// repository port の Get 系は GetByID のみに統一しています。
-func (u *MemberUsecase) GetByID(ctx context.Context, id string) (MemberRecord, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return MemberRecord{}, memdom.ErrNotFound
-	}
-
-	rec, err := u.repo.GetByID(ctx, id)
-	if err != nil {
-		return MemberRecord{}, err
-	}
-
-	return MemberRecord{
-		DocID:  rec.DocID,
-		Member: rec.Member,
-	}, nil
-}
-
-// ListByCompanyID は companyID scope の member 一覧を取得します。
-// repository port の List 系は ListByCompanyID のみに統一しています。
-func (u *MemberUsecase) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	f memdom.Filter,
-	p memdom.Page,
-) (MemberRecordPageResult, error) {
-	companyID = strings.TrimSpace(companyID)
-	if companyID == "" {
-		companyID = strings.TrimSpace(CompanyIDFromContext(ctx))
-	}
-	if companyID == "" {
-		return MemberRecordPageResult{}, errors.New("member: companyID is empty")
-	}
-
-	res, err := u.repo.ListByCompanyID(ctx, companyID, f, p)
-	if err != nil {
-		return MemberRecordPageResult{}, err
-	}
-
-	items := make([]MemberRecord, 0, len(res.Items))
-	for _, item := range res.Items {
-		items = append(items, MemberRecord{
-			DocID:  item.DocID,
-			Member: item.Member,
-		})
-	}
-
-	return MemberRecordPageResult{
-		Items:      items,
-		TotalCount: res.TotalCount,
-		TotalPages: res.TotalPages,
-		Page:       res.Page,
-		PerPage:    res.PerPage,
-	}, nil
 }
 
 // -----------------------------------------------------------------------------
@@ -148,14 +78,14 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (Membe
 		createdAt = &t
 	}
 
-	cid := strings.TrimSpace(CompanyIDFromContext(ctx))
-	companyID := strings.TrimSpace(in.CompanyID)
+	cid := CompanyIDFromContext(ctx)
+	companyID := in.CompanyID
 	if cid != "" {
 		companyID = cid
 	}
 
 	m := memdom.Member{
-		UID:            strings.TrimSpace(in.UID),
+		UID:            in.UID,
 		FirstName:      in.FirstName,
 		LastName:       in.LastName,
 		FirstNameKana:  in.FirstNameKana,
@@ -181,7 +111,8 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (Membe
 }
 
 type UpdateMemberInput struct {
-	ID string
+	// UID is Firebase Auth UID.
+	UID string
 
 	FirstName      *string
 	LastName       *string
@@ -196,8 +127,8 @@ type UpdateMemberInput struct {
 }
 
 func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (MemberRecord, error) {
-	id := strings.TrimSpace(in.ID)
-	if id == "" {
+	uid := in.UID
+	if uid == "" {
 		return MemberRecord{}, memdom.ErrNotFound
 	}
 
@@ -212,17 +143,17 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (Membe
 		Status:         in.Status,
 	}
 
-	if cid := strings.TrimSpace(CompanyIDFromContext(ctx)); cid != "" {
+	if cid := CompanyIDFromContext(ctx); cid != "" {
 		patch.CompanyID = &cid
 	} else if in.CompanyID != nil {
-		companyID := strings.TrimSpace(*in.CompanyID)
+		companyID := *in.CompanyID
 		patch.CompanyID = &companyID
 	}
 
 	now := u.now().UTC()
 	patch.UpdatedAt = &now
 
-	rec, err := u.repo.Update(ctx, id, patch)
+	rec, err := u.repo.Update(ctx, uid, patch)
 	if err != nil {
 		return MemberRecord{}, err
 	}
@@ -234,28 +165,21 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (Membe
 }
 
 type BindFirebaseUIDInput struct {
-	DocID string
-	UID   string
+	UID string
 }
 
 func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDInput) (MemberRecord, error) {
-	docID := strings.TrimSpace(in.DocID)
-	uid := strings.TrimSpace(in.UID)
-
-	if docID == "" {
-		return MemberRecord{}, fmt.Errorf("member docID is empty")
-	}
+	uid := in.UID
 	if uid == "" {
 		return MemberRecord{}, fmt.Errorf("firebase uid is empty")
 	}
 
-	rec, err := u.repo.GetByID(ctx, docID)
+	rec, err := u.repo.GetByUID(ctx, uid)
 	if err != nil {
 		return MemberRecord{}, err
 	}
 
-	currentUID := strings.TrimSpace(rec.Member.UID)
-	if currentUID != "" && currentUID != uid {
+	if rec.Member.UID != "" && rec.Member.UID != uid {
 		return MemberRecord{}, memdom.ErrConflict
 	}
 
@@ -266,7 +190,7 @@ func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDI
 	now := u.now().UTC()
 	patch.UpdatedAt = &now
 
-	updated, err := u.repo.Update(ctx, rec.DocID, patch)
+	updated, err := u.repo.Update(ctx, uid, patch)
 	if err != nil {
 		return MemberRecord{}, err
 	}
@@ -277,13 +201,12 @@ func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDI
 	}, nil
 }
 
-func (u *MemberUsecase) Delete(ctx context.Context, id string) error {
-	id = strings.TrimSpace(id)
-	if id == "" {
+func (u *MemberUsecase) Delete(ctx context.Context, uid string) error {
+	if uid == "" {
 		return memdom.ErrNotFound
 	}
 
-	return u.repo.Delete(ctx, id)
+	return u.repo.Delete(ctx, uid)
 }
 
 // -----------------------------------------------------------------------------
@@ -295,7 +218,6 @@ func (u *MemberUsecase) SendInvitation(ctx context.Context, memberID string) err
 		return errors.New("invitation command is not configured")
 	}
 
-	memberID = strings.TrimSpace(memberID)
 	if memberID == "" {
 		return fmt.Errorf("memberID is empty")
 	}
