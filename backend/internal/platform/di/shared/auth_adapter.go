@@ -18,38 +18,18 @@ import (
 // ========================================
 //
 
-// AuthMemberRepoAdapter adapts memdom.Repository to auth.MemberRepository-like ports.
+// AuthMemberRepoAdapter adapts memdom.Repository to auth member creation.
 //
-// New policy:
+// Policy:
 // - Firestore document ID and Firebase Auth UID are separated.
 // - members/{autoDocID}.uid stores Firebase Auth UID.
-// - Bootstrap lookup must use uid field, not document ID.
-// - Bootstrap creation must create a normal auto-ID member document.
+// - Bootstrap creation creates a normal auto-ID member document.
 type AuthMemberRepoAdapter struct {
 	repo memdom.Repository
 }
 
 func NewAuthMemberRepoAdapter(repo memdom.Repository) *AuthMemberRepoAdapter {
 	return &AuthMemberRepoAdapter{repo: repo}
-}
-
-// GetByFirebaseUID returns a member whose uid field matches Firebase Auth UID.
-func (a *AuthMemberRepoAdapter) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*memdom.Member, error) {
-	if a == nil || a.repo == nil {
-		return nil, errors.New("shared.AuthMemberRepoAdapter.GetByFirebaseUID: repo is nil")
-	}
-
-	firebaseUID = strings.TrimSpace(firebaseUID)
-	if firebaseUID == "" {
-		return nil, memdom.ErrNotFound
-	}
-
-	v, err := a.repo.GetByFirebaseUID(ctx, firebaseUID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &v, nil
 }
 
 // Create creates a new member using repository default document ID behavior.
@@ -65,33 +45,20 @@ func (a *AuthMemberRepoAdapter) Create(ctx context.Context, m *memdom.Member) er
 		return errors.New("shared.AuthMemberRepoAdapter.Create: nil member")
 	}
 
-	m.UID = strings.TrimSpace(m.UID)
-	m.Email = strings.TrimSpace(m.Email)
-	m.FirstName = strings.TrimSpace(m.FirstName)
-	m.LastName = strings.TrimSpace(m.LastName)
-	m.FirstNameKana = strings.TrimSpace(m.FirstNameKana)
-	m.LastNameKana = strings.TrimSpace(m.LastNameKana)
-	m.CompanyID = strings.TrimSpace(m.CompanyID)
-	m.Status = strings.TrimSpace(m.Status)
+	normalizeMemberForAuthAdapter(m)
 
-	saved, err := a.repo.Create(ctx, *m)
+	rec, err := a.repo.Create(ctx, *m)
 	if err != nil {
 		return err
 	}
 
-	*m = saved
+	*m = rec.Member
 	return nil
 }
 
-// Save is kept as a convenience adapter for callers that still expect a
-// simple save-style method. It does not assume document ID equals Firebase UID.
-// Prefer Create for BootstrapService.
-func (a *AuthMemberRepoAdapter) Save(ctx context.Context, m *memdom.Member) error {
-	if a == nil || a.repo == nil {
-		return errors.New("shared.AuthMemberRepoAdapter.Save: repo is nil")
-	}
+func normalizeMemberForAuthAdapter(m *memdom.Member) {
 	if m == nil {
-		return errors.New("shared.AuthMemberRepoAdapter.Save: nil member")
+		return
 	}
 
 	m.UID = strings.TrimSpace(m.UID)
@@ -102,34 +69,6 @@ func (a *AuthMemberRepoAdapter) Save(ctx context.Context, m *memdom.Member) erro
 	m.LastNameKana = strings.TrimSpace(m.LastNameKana)
 	m.CompanyID = strings.TrimSpace(m.CompanyID)
 	m.Status = strings.TrimSpace(m.Status)
-
-	saved, err := a.repo.Save(ctx, *m, nil)
-	if err != nil {
-		return err
-	}
-
-	*m = saved
-	return nil
-}
-
-// GetByID is kept only for legacy callers that still need document ID lookup.
-// BootstrapService should not use this method.
-func (a *AuthMemberRepoAdapter) GetByID(ctx context.Context, id string) (*memdom.Member, error) {
-	if a == nil || a.repo == nil {
-		return nil, errors.New("shared.AuthMemberRepoAdapter.GetByID: repo is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, memdom.ErrNotFound
-	}
-
-	v, err := a.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	return &v, nil
 }
 
 // AuthCompanyRepoAdapter adapts CompanyRepositoryFS to auth.CompanyRepository-like ports.

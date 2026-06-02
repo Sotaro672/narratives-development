@@ -94,26 +94,36 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 		return created, nil
 	}
 
+	if u.memberRepo == nil {
+		return created, nil
+	}
+
 	managerID := *created.ManagerID
 
-	m, err := u.memberRepo.GetByID(ctx, managerID)
+	rec, err := u.memberRepo.GetByID(ctx, managerID)
 	if err != nil {
 		return created, nil
 	}
 
 	brandID := created.ID
 	found := false
-	for _, bid := range m.AssignedBrands {
+	for _, bid := range rec.Member.AssignedBrands {
 		if bid == brandID {
 			found = true
 			break
 		}
 	}
-	if !found {
-		m.AssignedBrands = append(m.AssignedBrands, brandID)
+
+	if found {
+		return created, nil
 	}
 
-	_, _ = u.memberRepo.Save(ctx, m, nil)
+	assignedBrands := append([]string(nil), rec.Member.AssignedBrands...)
+	assignedBrands = append(assignedBrands, brandID)
+
+	_, _ = u.memberRepo.Update(ctx, rec.DocID, memberdom.MemberPatch{
+		AssignedBrands: &assignedBrands,
+	})
 
 	return created, nil
 }

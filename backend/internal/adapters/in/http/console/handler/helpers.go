@@ -86,3 +86,26 @@ func writeConsoleListErr(w http.ResponseWriter, err error) {
 
 	writeJSON(w, code, map[string]string{"error": err.Error()})
 }
+
+func dedupStrings(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+
+	for _, v := range in {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+
+	return out
+}

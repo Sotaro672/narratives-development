@@ -54,6 +54,10 @@ func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		id := path[len("/brands/"):]
 		h.update(w, r, id)
 
+	case r.Method == http.MethodDelete && len(path) > len("/brands/") && path[:len("/brands/")] == "/brands/":
+		id := path[len("/brands/"):]
+		h.delete(w, r, id)
+
 	case r.Method == http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
 
@@ -369,6 +373,22 @@ func (h *BrandHandler) update(w http.ResponseWriter, r *http.Request, id string)
 	_ = json.NewEncoder(w).Encode(toBrandDTO(updated, ""))
 }
 
+func (h *BrandHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
+	vid, err := shared.StrictID(id, "id")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	if err := h.uc.Delete(r.Context(), vid); err != nil {
+		writeBrandErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
@@ -392,7 +412,9 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 		PerPage: perPage,
 	}
 
-	result, err := h.managementQuery.ListCurrentCompanyBrands(ctx, p)
+	companyID := usecase.CompanyIDFromContext(ctx)
+
+	result, err := h.managementQuery.ListByCompanyID(ctx, companyID, p)
 	if err != nil {
 		writeBrandErr(w, err)
 		return

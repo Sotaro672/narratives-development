@@ -5,9 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	common "narratives/internal/domain/common"
 	memdom "narratives/internal/domain/member"
 )
 
@@ -60,68 +60,42 @@ func NewMemberUsecaseWithInvitationCommand(
 // Queries
 // -----------------------------------------------------------------------------
 
-func (u *MemberUsecase) GetByID(ctx context.Context, id string) (memdom.Member, error) {
-	return u.repo.GetByID(ctx, id)
-}
+// GetByID は member docId から MemberRecord を取得します。
+// repository port の Get 系は GetByID のみに統一しています。
+func (u *MemberUsecase) GetByID(ctx context.Context, id string) (MemberRecord, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return MemberRecord{}, memdom.ErrNotFound
+	}
 
-func (u *MemberUsecase) GetByDocID(ctx context.Context, docID string) (MemberRecord, error) {
-	rec, err := u.repo.GetByDocID(ctx, docID)
+	rec, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		return MemberRecord{}, err
 	}
+
 	return MemberRecord{
 		DocID:  rec.DocID,
 		Member: rec.Member,
 	}, nil
 }
 
-func (u *MemberUsecase) GetByFirebaseUID(ctx context.Context, firebaseUID string) (memdom.Member, error) {
-	return u.repo.GetByFirebaseUID(ctx, firebaseUID)
-}
-
-func (u *MemberUsecase) GetRecordByFirebaseUID(ctx context.Context, firebaseUID string) (MemberRecord, error) {
-	rec, err := u.repo.GetRecordByFirebaseUID(ctx, firebaseUID)
-	if err != nil {
-		return MemberRecord{}, err
-	}
-	return MemberRecord{
-		DocID:  rec.DocID,
-		Member: rec.Member,
-	}, nil
-}
-
-func (u *MemberUsecase) GetByEmail(ctx context.Context, email string) (memdom.Member, error) {
-	return u.repo.GetByEmail(ctx, email)
-}
-
-func (u *MemberUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.repo.Exists(ctx, id)
-}
-
-func (u *MemberUsecase) List(
+// ListByCompanyID は companyID scope の member 一覧を取得します。
+// repository port の List 系は ListByCompanyID のみに統一しています。
+func (u *MemberUsecase) ListByCompanyID(
 	ctx context.Context,
+	companyID string,
 	f memdom.Filter,
-	s common.Sort,
-	p common.Page,
-) (common.PageResult[memdom.Member], error) {
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		f.CompanyID = cid
-	}
-
-	return u.repo.List(ctx, f, s, p)
-}
-
-func (u *MemberUsecase) ListWithDocID(
-	ctx context.Context,
-	f memdom.Filter,
-	s common.Sort,
-	p common.Page,
+	p memdom.Page,
 ) (MemberRecordPageResult, error) {
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		f.CompanyID = cid
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" {
+		companyID = strings.TrimSpace(CompanyIDFromContext(ctx))
+	}
+	if companyID == "" {
+		return MemberRecordPageResult{}, errors.New("member: companyID is empty")
 	}
 
-	res, err := u.repo.ListWithDocID(ctx, f, s, p)
+	res, err := u.repo.ListByCompanyID(ctx, companyID, f, p)
 	if err != nil {
 		return MemberRecordPageResult{}, err
 	}
@@ -167,21 +141,21 @@ type CreateMemberInput struct {
 	CreatedAt *time.Time
 }
 
-func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdom.Member, error) {
+func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (MemberRecord, error) {
 	createdAt := in.CreatedAt
 	if createdAt == nil || createdAt.IsZero() {
 		t := u.now().UTC()
 		createdAt = &t
 	}
 
-	cid := CompanyIDFromContext(ctx)
-	companyID := in.CompanyID
+	cid := strings.TrimSpace(CompanyIDFromContext(ctx))
+	companyID := strings.TrimSpace(in.CompanyID)
 	if cid != "" {
 		companyID = cid
 	}
 
 	m := memdom.Member{
-		UID:            in.UID,
+		UID:            strings.TrimSpace(in.UID),
 		FirstName:      in.FirstName,
 		LastName:       in.LastName,
 		FirstNameKana:  in.FirstNameKana,
@@ -195,38 +169,7 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		UpdatedAt:      nil,
 	}
 
-	return u.repo.Create(ctx, m)
-}
-
-func (u *MemberUsecase) CreateWithDocID(ctx context.Context, in CreateMemberInput) (MemberRecord, error) {
-	createdAt := in.CreatedAt
-	if createdAt == nil || createdAt.IsZero() {
-		t := u.now().UTC()
-		createdAt = &t
-	}
-
-	cid := CompanyIDFromContext(ctx)
-	companyID := in.CompanyID
-	if cid != "" {
-		companyID = cid
-	}
-
-	m := memdom.Member{
-		UID:            in.UID,
-		FirstName:      in.FirstName,
-		LastName:       in.LastName,
-		FirstNameKana:  in.FirstNameKana,
-		LastNameKana:   in.LastNameKana,
-		Email:          in.Email,
-		Permissions:    dedupStrings(in.Permissions),
-		AssignedBrands: dedupStrings(in.AssignedBrands),
-		CompanyID:      companyID,
-		Status:         in.Status,
-		CreatedAt:      *createdAt,
-		UpdatedAt:      nil,
-	}
-
-	rec, err := u.repo.CreateWithDocID(ctx, m)
+	rec, err := u.repo.Create(ctx, m)
 	if err != nil {
 		return MemberRecord{}, err
 	}
@@ -252,55 +195,42 @@ type UpdateMemberInput struct {
 	Status    *string
 }
 
-func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdom.Member, error) {
-	id := in.ID
+func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (MemberRecord, error) {
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return memdom.Member{}, memdom.ErrNotFound
+		return MemberRecord{}, memdom.ErrNotFound
 	}
 
-	currentRec, err := u.repo.GetByDocID(ctx, id)
-	if err != nil {
-		return memdom.Member{}, err
+	patch := memdom.MemberPatch{
+		FirstName:      in.FirstName,
+		LastName:       in.LastName,
+		FirstNameKana:  in.FirstNameKana,
+		LastNameKana:   in.LastNameKana,
+		Email:          in.Email,
+		Permissions:    in.Permissions,
+		AssignedBrands: in.AssignedBrands,
+		Status:         in.Status,
 	}
 
-	current := currentRec.Member
-
-	if in.FirstName != nil {
-		current.FirstName = *in.FirstName
-	}
-	if in.LastName != nil {
-		current.LastName = *in.LastName
-	}
-	if in.FirstNameKana != nil {
-		current.FirstNameKana = *in.FirstNameKana
-	}
-	if in.LastNameKana != nil {
-		current.LastNameKana = *in.LastNameKana
-	}
-	if in.Email != nil {
-		current.Email = *in.Email
-	}
-	if in.Permissions != nil {
-		current.Permissions = dedupStrings(*in.Permissions)
-	}
-	if in.AssignedBrands != nil {
-		current.AssignedBrands = dedupStrings(*in.AssignedBrands)
-	}
-
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		current.CompanyID = cid
+	if cid := strings.TrimSpace(CompanyIDFromContext(ctx)); cid != "" {
+		patch.CompanyID = &cid
 	} else if in.CompanyID != nil {
-		current.CompanyID = *in.CompanyID
-	}
-
-	if in.Status != nil {
-		current.Status = *in.Status
+		companyID := strings.TrimSpace(*in.CompanyID)
+		patch.CompanyID = &companyID
 	}
 
 	now := u.now().UTC()
-	current.UpdatedAt = &now
+	patch.UpdatedAt = &now
 
-	return u.repo.SaveByDocID(ctx, currentRec.DocID, current, nil)
+	rec, err := u.repo.Update(ctx, id, patch)
+	if err != nil {
+		return MemberRecord{}, err
+	}
+
+	return MemberRecord{
+		DocID:  rec.DocID,
+		Member: rec.Member,
+	}, nil
 }
 
 type BindFirebaseUIDInput struct {
@@ -309,8 +239,8 @@ type BindFirebaseUIDInput struct {
 }
 
 func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDInput) (MemberRecord, error) {
-	docID := in.DocID
-	uid := in.UID
+	docID := strings.TrimSpace(in.DocID)
+	uid := strings.TrimSpace(in.UID)
 
 	if docID == "" {
 		return MemberRecord{}, fmt.Errorf("member docID is empty")
@@ -319,60 +249,40 @@ func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDI
 		return MemberRecord{}, fmt.Errorf("firebase uid is empty")
 	}
 
-	rec, err := u.repo.GetByDocID(ctx, docID)
+	rec, err := u.repo.GetByID(ctx, docID)
 	if err != nil {
 		return MemberRecord{}, err
 	}
 
-	currentUID := rec.Member.UID
+	currentUID := strings.TrimSpace(rec.Member.UID)
 	if currentUID != "" && currentUID != uid {
 		return MemberRecord{}, memdom.ErrConflict
 	}
 
-	if err := rec.Member.BindUID(uid, u.now().UTC()); err != nil {
-		return MemberRecord{}, err
+	patch := memdom.MemberPatch{
+		UID: &uid,
 	}
 
-	saved, err := u.repo.SaveByDocID(ctx, rec.DocID, rec.Member, nil)
+	now := u.now().UTC()
+	patch.UpdatedAt = &now
+
+	updated, err := u.repo.Update(ctx, rec.DocID, patch)
 	if err != nil {
 		return MemberRecord{}, err
 	}
 
 	return MemberRecord{
-		DocID:  rec.DocID,
-		Member: saved,
+		DocID:  updated.DocID,
+		Member: updated.Member,
 	}, nil
 }
 
-func (u *MemberUsecase) Save(ctx context.Context, m memdom.Member) (memdom.Member, error) {
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = u.now().UTC()
-	}
-
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		m.CompanyID = cid
-	}
-
-	return u.repo.Save(ctx, m, nil)
-}
-
-func (u *MemberUsecase) SaveByDocID(ctx context.Context, docID string, m memdom.Member) (memdom.Member, error) {
-	if docID == "" {
-		return memdom.Member{}, fmt.Errorf("member docID is empty")
-	}
-
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = u.now().UTC()
-	}
-
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		m.CompanyID = cid
-	}
-
-	return u.repo.SaveByDocID(ctx, docID, m, nil)
-}
-
 func (u *MemberUsecase) Delete(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return memdom.ErrNotFound
+	}
+
 	return u.repo.Delete(ctx, id)
 }
 
@@ -385,6 +295,7 @@ func (u *MemberUsecase) SendInvitation(ctx context.Context, memberID string) err
 		return errors.New("invitation command is not configured")
 	}
 
+	memberID = strings.TrimSpace(memberID)
 	if memberID == "" {
 		return fmt.Errorf("memberID is empty")
 	}

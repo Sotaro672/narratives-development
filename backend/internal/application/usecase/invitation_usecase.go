@@ -70,6 +70,7 @@ func (s *InvitationService) GetInvitationInfo(
 		return nil, fmt.Errorf("invitation token repository is not configured")
 	}
 
+	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, memdom.ErrInvitationTokenNotFound
 	}
@@ -120,20 +121,24 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 	if s.mailer == nil {
 		return "", fmt.Errorf("invitation mailer is not configured")
 	}
+
+	memberDocID = strings.TrimSpace(memberDocID)
 	if memberDocID == "" {
 		return "", fmt.Errorf("memberDocID is empty")
 	}
 
-	m, err := s.memberRepo.GetByID(ctx, memberDocID)
+	rec, err := s.memberRepo.GetByID(ctx, memberDocID)
 	if err != nil {
-		return "", fmt.Errorf("get member by doc id failed: %w", err)
+		return "", fmt.Errorf("get member by id failed: %w", err)
 	}
-	if m.Email == "" {
+
+	m := rec.Member
+	if strings.TrimSpace(m.Email) == "" {
 		return "", fmt.Errorf("member email is empty")
 	}
 
 	info := memdom.InvitationInfo{
-		MemberID:         memberDocID,
+		MemberID:         rec.DocID,
 		CompanyID:        m.CompanyID,
 		AssignedBrandIDs: append([]string(nil), m.AssignedBrands...),
 		Permissions:      append([]string(nil), m.Permissions...),
@@ -150,8 +155,10 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 	}
 
 	if !strings.EqualFold(m.Status, "active") {
-		m.Status = "inactive"
-		if _, err := s.memberRepo.SaveByDocID(ctx, memberDocID, m, nil); err != nil {
+		status := "inactive"
+		if _, err := s.memberRepo.Update(ctx, rec.DocID, memdom.MemberPatch{
+			Status: &status,
+		}); err != nil {
 			return "", fmt.Errorf("update member status after invitation failed: %w", err)
 		}
 	}
@@ -202,6 +209,14 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("member repository is not configured")
 	}
 
+	in.Token = strings.TrimSpace(in.Token)
+	in.UID = strings.TrimSpace(in.UID)
+	in.LastName = strings.TrimSpace(in.LastName)
+	in.LastNameKana = strings.TrimSpace(in.LastNameKana)
+	in.FirstName = strings.TrimSpace(in.FirstName)
+	in.FirstNameKana = strings.TrimSpace(in.FirstNameKana)
+	in.Email = strings.TrimSpace(in.Email)
+
 	if in.Token == "" || in.UID == "" {
 		return fmt.Errorf("token_or_uid_required")
 	}
@@ -217,6 +232,10 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return err
 	}
 
+	info.MemberID = strings.TrimSpace(info.MemberID)
+	info.CompanyID = strings.TrimSpace(info.CompanyID)
+	info.Email = strings.TrimSpace(info.Email)
+
 	if info.MemberID == "" {
 		return memdom.ErrNotFound
 	}
@@ -225,37 +244,53 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("email_mismatch")
 	}
 
-	member, err := s.memberRepo.GetByID(ctx, info.MemberID)
+	rec, err := s.memberRepo.GetByID(ctx, info.MemberID)
 	if err != nil {
-		return fmt.Errorf("get member by invitation member doc id failed: %w", err)
+		return fmt.Errorf("get member by invitation member id failed: %w", err)
 	}
 
-	// docId = firebaseUID 前提:
-	// すでに同じ UID の member doc が存在する場合、
-	// provisional memberDocID と同一 doc でない限り衝突とみなす。
-	if _, err := s.memberRepo.GetByFirebaseUID(ctx, in.UID); err == nil {
-		if info.MemberID != in.UID {
-			return fmt.Errorf("firebase_uid_already_in_use")
-		}
-	} else if err != memdom.ErrNotFound {
+	companyID := info.CompanyID
+	if companyID == "" {
+		companyID = strings.TrimSpace(rec.Member.CompanyID)
+	}
+	if companyID == "" {
+		return fmt.Errorf("companyId is empty")
+	}
+
+	// repository port には GetByFirebaseUID がないため、
+	// company scope 内の ListByCompanyID + Filter.UID で UID 重複を確認する。
+	found, err := s.memberRepo.ListByCompanyID(ctx, companyID, memdom.Filter{
+		UID: in.UID,
+	}, memdom.Page{
+		Number:  1,
+		PerPage: 2,
+	})
+	if err != nil {
 		return fmt.Errorf("check firebase uid member failed: %w", err)
 	}
 
-	member.LastName = in.LastName
-	member.LastNameKana = in.LastNameKana
-	member.FirstName = in.FirstName
-	member.FirstNameKana = in.FirstNameKana
-	member.Email = in.Email
-	member.Status = "active"
-
-	if _, err := s.memberRepo.SaveByDocID(ctx, in.UID, member, nil); err != nil {
-		return fmt.Errorf("save member by firebase uid failed: %w", err)
+	for _, item := range found.Items {
+		if item.DocID != rec.DocID {
+			return fmt.Errorf("firebase_uid_already_in_use")
+		}
 	}
 
-	if info.MemberID != "" && info.MemberID != in.UID {
-		if err := s.memberRepo.Delete(ctx, info.MemberID); err != nil {
-			return fmt.Errorf("delete provisional member failed: %w", err)
-		}
+	status := "active"
+	patch := memdom.MemberPatch{
+		UID:            &in.UID,
+		LastName:       &in.LastName,
+		LastNameKana:   &in.LastNameKana,
+		FirstName:      &in.FirstName,
+		FirstNameKana:  &in.FirstNameKana,
+		Email:          &in.Email,
+		CompanyID:      &companyID,
+		Status:         &status,
+		Permissions:    &info.Permissions,
+		AssignedBrands: &info.AssignedBrandIDs,
+	}
+
+	if _, err := s.memberRepo.Update(ctx, rec.DocID, patch); err != nil {
+		return fmt.Errorf("update invited member failed: %w", err)
 	}
 
 	if err := s.invitationTokenRepo.ConsumeInvitationToken(ctx, in.Token); err != nil {

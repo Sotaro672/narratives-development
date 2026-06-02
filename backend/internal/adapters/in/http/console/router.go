@@ -190,6 +190,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.Members != nil || deps.MemberInvitation != nil {
 		if deps.Members != nil {
 			mux.Handle("/members", withAuth(deps.Members))
+
+			// /members/me は初回ログイン直後にも呼ばれるため、
+			// 通常 AuthMiddleware ではなく BootstrapAuthMiddleware を通す。
+			// member 未作成時は handler 側で 404 を返す。
+			mux.Handle("/members/me", withBootstrap(deps.Members))
 		}
 
 		membersSubtree := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

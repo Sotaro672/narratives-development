@@ -4,7 +4,6 @@ package query
 import (
 	"context"
 
-	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	memberdom "narratives/internal/domain/member"
 )
@@ -37,12 +36,12 @@ type BrandManagementPageResult struct {
 	TotalPages int
 }
 
-func (q *BrandManagementQuery) ListCurrentCompanyBrands(
+func (q *BrandManagementQuery) ListByCompanyID(
 	ctx context.Context,
+	companyID string,
 	page branddom.Page,
 ) (BrandManagementPageResult, error) {
-	cid := usecase.CompanyIDFromContext(ctx)
-	if cid == "" {
+	if companyID == "" {
 		return BrandManagementPageResult{
 			Items:      []BrandManagementItem{},
 			TotalCount: 0,
@@ -52,42 +51,18 @@ func (q *BrandManagementQuery) ListCurrentCompanyBrands(
 		}, nil
 	}
 
-	result, err := q.brandRepo.ListByCompanyID(ctx, cid, page)
-	if err != nil {
-		return BrandManagementPageResult{}, err
-	}
-
-	items := make([]BrandManagementItem, 0, len(result.Items))
-	for _, b := range result.Items {
-		items = append(items, BrandManagementItem{
-			Brand:      b,
-			MemberName: q.resolveMemberName(ctx, b.ManagerID),
-		})
-	}
-
-	return BrandManagementPageResult{
-		Items:      items,
-		TotalCount: result.TotalCount,
-		Page:       result.Page,
-		PerPage:    result.PerPage,
-		TotalPages: result.TotalPages,
-	}, nil
-}
-
-func (q *BrandManagementQuery) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	page branddom.Page,
-) (BrandManagementPageResult, error) {
-	if companyID == "" {
-		return BrandManagementPageResult{}, branddom.ErrInvalidID
-	}
-
 	result, err := q.brandRepo.ListByCompanyID(ctx, companyID, page)
 	if err != nil {
 		return BrandManagementPageResult{}, err
 	}
 
+	return q.toPageResult(ctx, result), nil
+}
+
+func (q *BrandManagementQuery) toPageResult(
+	ctx context.Context,
+	result branddom.PageResult[branddom.Brand],
+) BrandManagementPageResult {
 	items := make([]BrandManagementItem, 0, len(result.Items))
 	for _, b := range result.Items {
 		items = append(items, BrandManagementItem{
@@ -102,14 +77,18 @@ func (q *BrandManagementQuery) ListByCompanyID(
 		Page:       result.Page,
 		PerPage:    result.PerPage,
 		TotalPages: result.TotalPages,
-	}, nil
+	}
 }
 
 func (q *BrandManagementQuery) resolveMemberName(
 	ctx context.Context,
 	memberID *string,
 ) string {
-	if memberID == nil || *memberID == "" || q.memberRepo == nil {
+	if q == nil || q.memberRepo == nil {
+		return ""
+	}
+
+	if memberID == nil || *memberID == "" {
 		return ""
 	}
 

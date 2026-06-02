@@ -2,34 +2,35 @@
 package consoleHandler
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	httpmw "narratives/internal/adapters/in/http/middleware"
-	memberuc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
 )
+
+type memberCompanyIDReader interface {
+	GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error)
+}
 
 // -----------------------------------------------------------------------------
 // MemberHandler
 // -----------------------------------------------------------------------------
 type MemberHandler struct {
-	uc   *memberuc.MemberUsecase
 	repo memberdom.Repository
 }
 
 // NewMemberHandler — メンバーハンドラ
-// ※ 第二引数 repo は docId を返す用途でも利用する
 func NewMemberHandler(
-	uc *memberuc.MemberUsecase,
 	repo memberdom.Repository,
 ) http.Handler {
 	return &MemberHandler{
-		uc:   uc,
 		repo: repo,
 	}
 }
@@ -85,10 +86,11 @@ func toMemberResponse(docID string, m memberdom.Member) memberResponse {
 // 方針:
 // - /members の POST は招待前 member 作成として扱う。
 // - 通常の console member 作成では request body の uid を信用しない。
-// - GET /members/{uid} は Firebase UID 専用として扱う。
-// - PATCH /members/{docId} は member docId 専用として扱う。
+// - GET /members/me は Authorization token の Firebase UID から現在ログイン中 member を返す。
+// - GET /members/{id} は member docId 専用として扱う。
+// - PATCH /members/{id} は member docId 専用として扱う。
 // - /members/by-firebase-uid/{uid} は廃止。
-// - /members/{docId}/bind-firebase-uid は request body の uid ではなく CurrentMember の UID を使う。
+// - /members/{id}/bind-firebase-uid は request body の uid ではなく CurrentMember の UID を使う。
 // - 招待承諾フローは CurrentMember が未確立の状態でも動く必要があるため、別 handler/API で扱う。
 func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -108,19 +110,32 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.list(w, r)
 			return
 		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
+			methodNotAllowed(w)
 			return
 		}
+	}
+
+	// /members/me
+	// IMPORTANT:
+	// /members/{id} より先に判定する。
+	// me を docId として扱わないため。
+	if path == "/members/me" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.me(w, r)
+		return
 	}
 
 	// /members/by-company
 	if path == "/members/by-company" {
 		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
+			methodNotAllowed(w)
 			return
 		}
+
 		h.listByCompanyID(w, r)
 		return
 	}
@@ -133,14 +148,12 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rest := strings.TrimPrefix(path, "/members/")
 		parts := strings.Split(rest, "/")
 
-		// /members/{uid}
-		// GET は Firebase UID 専用。
-		// PATCH は member docId 専用。
+		// /members/{id}
+		// GET / PATCH は member docId 専用。
 		if len(parts) == 1 {
 			id := strings.TrimSpace(parts[0])
 			if id == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 				return
 			}
 
@@ -152,24 +165,21 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.update(w, r, id)
 				return
 			default:
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
+				methodNotAllowed(w)
 				return
 			}
 		}
 
-		// /members/{docId}/display-name
+		// /members/{id}/display-name
 		if len(parts) == 2 && parts[1] == "display-name" {
 			id := strings.TrimSpace(parts[0])
 			if id == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 				return
 			}
 
 			if r.Method != http.MethodGet {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
+				methodNotAllowed(w)
 				return
 			}
 
@@ -177,7 +187,7 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// /members/{docId}/bind-firebase-uid
+		// /members/{id}/bind-firebase-uid
 		// NOTE:
 		// この console handler では request body の uid を信用しない。
 		// CurrentMember の UID を使って bind する。
@@ -185,14 +195,12 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(parts) == 2 && parts[1] == "bind-firebase-uid" {
 			id := strings.TrimSpace(parts[0])
 			if id == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 				return
 			}
 
 			if r.Method != http.MethodPost {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
+				methodNotAllowed(w)
 				return
 			}
 
@@ -200,17 +208,15 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// /members/{docId}/invitation はこのハンドラでは扱わない
-		// MemberInvitationHandler 側にルーティングさせるため not_found を返す
+		// /members/{id}/invitation はこのハンドラでは扱わない。
+		// MemberInvitationHandler 側にルーティングさせるため not_found を返す。
 		if len(parts) == 2 && parts[1] == "invitation" {
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 			return
 		}
 	}
 
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 }
 
 // -----------------------------------------------------------------------------
@@ -236,15 +242,13 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	var req memberCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || me.CompanyID == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
@@ -262,18 +266,17 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:      time.Now().UTC(),
 	}
 
-	rec, err := h.repo.CreateWithDocID(ctx, m)
+	rec, err := h.repo.Create(ctx, m)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toMemberResponse(rec.DocID, rec.Member))
+	writeJSON(w, http.StatusCreated, toMemberResponse(rec.DocID, rec.Member))
 }
 
 // -----------------------------------------------------------------------------
-// PATCH /members/{docId}
+// PATCH /members/{id}
 // -----------------------------------------------------------------------------
 type memberUpdateRequest struct {
 	FirstName      *string   `json:"firstName,omitempty"`
@@ -291,27 +294,34 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || me.CompanyID == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	current, err := h.repo.GetByID(ctx, id)
+	if err != nil {
+		writeMemberErr(w, err)
+		return
+	}
+
+	if current.Member.CompanyID != me.CompanyID {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
 	var req memberUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
 
-	input := memberuc.UpdateMemberInput{
-		ID:             id,
+	patch := memberdom.MemberPatch{
 		FirstName:      req.FirstName,
 		LastName:       req.LastName,
 		FirstNameKana:  req.FirstNameKana,
@@ -322,23 +332,17 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 		Status:         req.Status,
 	}
 
-	updated, err := h.uc.Update(ctx, input)
+	rec, err := h.repo.Update(ctx, id, patch)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
-	rec, err := h.repo.GetByDocID(ctx, id)
-	if err != nil {
-		writeMemberErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(toMemberResponse(rec.DocID, updated))
+	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
 }
 
 // -----------------------------------------------------------------------------
-// POST /members/{docId}/bind-firebase-uid
+// POST /members/{id}/bind-firebase-uid
 // -----------------------------------------------------------------------------
 // NOTE:
 // request body の uid は使わない。
@@ -348,35 +352,44 @@ func (h *MemberHandler) bindFirebaseUID(w http.ResponseWriter, r *http.Request, 
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || me.CompanyID == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	uid := strings.TrimSpace(me.UID)
 	if uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: current member uid is empty"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: current member uid is empty"})
 		return
 	}
 
-	rec, err := h.uc.BindFirebaseUID(ctx, memberuc.BindFirebaseUIDInput{
-		DocID: id,
-		UID:   uid,
-	})
+	current, err := h.repo.GetByID(ctx, id)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toMemberResponse(rec.DocID, rec.Member))
+	if current.Member.CompanyID != me.CompanyID {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	patch := memberdom.MemberPatch{
+		UID: &uid,
+	}
+
+	rec, err := h.repo.Update(ctx, id, patch)
+	if err != nil {
+		writeMemberErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
 }
 
 // -----------------------------------------------------------------------------
@@ -386,50 +399,28 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	qv := r.URL.Query()
 
-	var f memberdom.Filter
-	f.SearchQuery = qv.Get("q")
-	f.UID = strings.TrimSpace(qv.Get("uid"))
-
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || me.CompanyID == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	f.CompanyID = me.CompanyID
-	f.Status = strings.TrimSpace(qv.Get("status"))
+	f := memberdom.Filter{
+		SearchQuery: strings.TrimSpace(qv.Get("q")),
+		UID:         strings.TrimSpace(qv.Get("uid")),
+		Status:      strings.TrimSpace(qv.Get("status")),
+	}
 
 	if v := qv.Get("brandIds"); v != "" {
 		f.BrandIDs = splitCSV(v)
 	}
 
-	var sort common.Sort
-	switch strings.ToLower(qv.Get("sort")) {
-	case "name":
-		sort.Column = "name"
-	case "email":
-		sort.Column = "email"
-	case "joinedat":
-		sort.Column = "joinedAt"
-	case "updatedat":
-		sort.Column = "updatedAt"
-	default:
-		sort.Column = "updatedAt"
+	page := common.Page{
+		Number:  clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000),
+		PerPage: clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200),
 	}
 
-	switch strings.ToLower(qv.Get("order")) {
-	case "asc":
-		sort.Order = "asc"
-	default:
-		sort.Order = "desc"
-	}
-
-	var page common.Page
-	page.Number = clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000)
-	page.PerPage = clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200)
-
-	res, err := h.repo.ListWithDocID(ctx, f, sort, page)
+	res, err := h.repo.ListByCompanyID(ctx, me.CompanyID, f, page)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
@@ -440,7 +431,73 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toMemberResponse(rec.DocID, rec.Member))
 	}
 
-	_ = json.NewEncoder(w).Encode(items)
+	writeJSON(w, http.StatusOK, items)
+}
+
+// -----------------------------------------------------------------------------
+// GET /members/me
+// -----------------------------------------------------------------------------
+// NOTE:
+// /members/me は BootstrapAuthMiddleware 配下でも動く必要がある。
+// そのため CurrentMember には依存しない。
+// Firebase UID は Authorization token から取得し、
+// repository adapter 拡張で companyID を解決してから ListByCompanyID + Filter.UID で member を取得する。
+func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	uid, _, ok := httpmw.CurrentUIDAndEmail(r)
+	if !ok || strings.TrimSpace(uid) == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	if h.repo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "member repository is not configured"})
+		return
+	}
+
+	reader, ok := any(h.repo).(memberCompanyIDReader)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "member company resolver is not configured"})
+		return
+	}
+
+	companyID, err := reader.GetCompanyIDByFirebaseUID(ctx, strings.TrimSpace(uid))
+	if err != nil {
+		if errors.Is(err, memberdom.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "member not found"})
+			return
+		}
+
+		writeMemberErr(w, err)
+		return
+	}
+
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "member companyId not found"})
+		return
+	}
+
+	res, err := h.repo.ListByCompanyID(ctx, companyID, memberdom.Filter{
+		UID: strings.TrimSpace(uid),
+	}, common.Page{
+		Number:  1,
+		PerPage: 1,
+	})
+	if err != nil {
+		writeMemberErr(w, err)
+		return
+	}
+
+	if len(res.Items) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "member not found"})
+		return
+	}
+
+	rec := res.Items[0]
+
+	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
 }
 
 // -----------------------------------------------------------------------------
@@ -451,8 +508,7 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || me.CompanyID == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
@@ -460,14 +516,12 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 
 	log.Printf("[memberHandler.listByCompanyID] ENTER companyID=%q", companyID)
 
-	res, err := h.repo.ListWithDocID(ctx, memberdom.Filter{
-		CompanyID: companyID,
-	}, common.Sort{}, common.Page{
+	res, err := h.repo.ListByCompanyID(ctx, companyID, memberdom.Filter{}, common.Page{
 		Number:  1,
 		PerPage: 200,
 	})
 	if err != nil {
-		log.Printf("[memberHandler.listByCompanyID] ListWithDocID error: %v", err)
+		log.Printf("[memberHandler.listByCompanyID] ListByCompanyID error: %v", err)
 		writeMemberErr(w, err)
 		return
 	}
@@ -479,71 +533,68 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 
 	log.Printf("[memberHandler.listByCompanyID] OK items=%d", len(items))
 
-	_ = json.NewEncoder(w).Encode(items)
+	writeJSON(w, http.StatusOK, items)
 }
 
 // -----------------------------------------------------------------------------
-// GET /members/{uid}
+// GET /members/{id}
 // -----------------------------------------------------------------------------
 // NOTE:
-// GET /members/{uid} は Firebase UID 専用。
-// member docId では検索しない。
+// GET /members/{id} は member docId 専用。
+// Firebase UID では検索しない。
 // レスポンスの id は member の Firestore docId を返す。
-func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	uid = strings.TrimSpace(uid)
-	if uid == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid uid"})
+	id = strings.TrimSpace(id)
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || me.CompanyID == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	rec, err := h.repo.GetRecordByFirebaseUID(ctx, uid)
+	rec, err := h.repo.GetByID(ctx, id)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
 	if rec.Member.CompanyID != me.CompanyID {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toMemberResponse(rec.DocID, rec.Member))
+	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
 }
 
 // -----------------------------------------------------------------------------
-// GET /members/{docId}/display-name
+// GET /members/{id}/display-name
 // -----------------------------------------------------------------------------
 // NOTE:
-// display-name は docId 専用。
+// display-name は member docId 専用。
 func (h *MemberHandler) getDisplayName(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 
-	rec, err := h.repo.GetByDocID(ctx, id)
+	rec, err := h.repo.GetByID(ctx, id)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
 	displayName := memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+
+	writeJSON(w, http.StatusOK, map[string]string{
 		"displayName": displayName,
 	})
 }
@@ -554,19 +605,29 @@ func (h *MemberHandler) getDisplayName(w http.ResponseWriter, r *http.Request, i
 func writeMemberErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
-	switch err {
-	case memberdom.ErrNotFound:
+	switch {
+	case errors.Is(err, memberdom.ErrNotFound):
 		code = http.StatusNotFound
-	case memberdom.ErrInvalidUID,
-		memberdom.ErrInvalidEmail,
-		memberdom.ErrInvalidCreatedAt:
+	case errors.Is(err, memberdom.ErrInvalidUID),
+		errors.Is(err, memberdom.ErrInvalidEmail),
+		errors.Is(err, memberdom.ErrInvalidFirstName),
+		errors.Is(err, memberdom.ErrInvalidLastName),
+		errors.Is(err, memberdom.ErrInvalidFirstKana),
+		errors.Is(err, memberdom.ErrInvalidLastKana),
+		errors.Is(err, memberdom.ErrInvalidCreatedAt),
+		errors.Is(err, memberdom.ErrInvalidUpdatedAt),
+		errors.Is(err, memberdom.ErrInvalidUpdatedBy),
+		errors.Is(err, memberdom.ErrInvalidDeletedAt),
+		errors.Is(err, memberdom.ErrInvalidDeletedBy),
+		errors.Is(err, memberdom.ErrInvalidStatus):
 		code = http.StatusBadRequest
-	case memberdom.ErrConflict:
+	case errors.Is(err, memberdom.ErrConflict):
 		code = http.StatusConflict
+	case errors.Is(err, memberdom.ErrPreconditionFailed):
+		code = http.StatusPreconditionFailed
 	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	writeJSON(w, code, map[string]string{"error": err.Error()})
 }
 
 // -----------------------------------------------------------------------------
@@ -580,24 +641,4 @@ func clampInt(v, min, max int) int {
 		return max
 	}
 	return v
-}
-
-func dedupStrings(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(in))
-	out := make([]string, 0, len(in))
-	for _, v := range in {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-	return out
 }

@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
-	common "narratives/internal/domain/common"
 	memdom "narratives/internal/domain/member"
 )
 
@@ -32,50 +31,24 @@ func (r *MemberRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("members")
 }
 
-// Compile-time check
+// Compile-time check.
 var _ memdom.Repository = (*MemberRepositoryFS)(nil)
 
 // ========================
 // Queries
 // ========================
 
-func (r *MemberRepositoryFS) GetByID(ctx context.Context, id string) (memdom.Member, error) {
-	if r.Client == nil {
-		return memdom.Member{}, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return memdom.Member{}, memdom.ErrNotFound
-	}
-
-	doc, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return memdom.Member{}, memdom.ErrNotFound
-		}
-		return memdom.Member{}, err
-	}
-
-	m, err := readMemberSnapshot(doc)
-	if err != nil {
-		return memdom.Member{}, err
-	}
-
-	return m, nil
-}
-
-func (r *MemberRepositoryFS) GetByDocID(ctx context.Context, docID string) (memdom.Record, error) {
+func (r *MemberRepositoryFS) GetByID(ctx context.Context, id string) (memdom.Record, error) {
 	if r.Client == nil {
 		return memdom.Record{}, errors.New("firestore client is nil")
 	}
 
-	docID = strings.TrimSpace(docID)
-	if docID == "" {
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return memdom.Record{}, memdom.ErrNotFound
 	}
 
-	doc, err := r.col().Doc(docID).Get(ctx)
+	doc, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return memdom.Record{}, memdom.ErrNotFound
@@ -94,252 +67,97 @@ func (r *MemberRepositoryFS) GetByDocID(ctx context.Context, docID string) (memd
 	}, nil
 }
 
-func (r *MemberRepositoryFS) GetByEmail(ctx context.Context, email string) (memdom.Member, error) {
+// GetCompanyIDByFirebaseUID is an adapter extension used by auth middleware/usecase.
+//
+// NOTE:
+// This method is intentionally not part of member.Repository.
+// The domain repository port is kept to GetByID / ListByCompanyID.
+func (r *MemberRepositoryFS) GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error) {
 	if r.Client == nil {
-		return memdom.Member{}, errors.New("firestore client is nil")
+		return "", errors.New("firestore client is nil")
 	}
 
-	email = strings.TrimSpace(email)
-	if email == "" {
-		return memdom.Member{}, memdom.ErrNotFound
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		return "", memdom.ErrNotFound
 	}
 
-	q := r.col().Where("email", "==", email).Limit(1)
+	q := r.col().Where("uid", "==", uid).Limit(1)
 	it := q.Documents(ctx)
 	defer it.Stop()
 
 	doc, err := it.Next()
 	if err == iterator.Done {
-		return memdom.Member{}, memdom.ErrNotFound
+		return "", memdom.ErrNotFound
 	}
 	if err != nil {
-		return memdom.Member{}, err
+		return "", err
+	}
+
+	data := doc.Data()
+
+	if v, ok := data["companyId"].(string); ok {
+		companyID := strings.TrimSpace(v)
+		if companyID != "" {
+			return companyID, nil
+		}
 	}
 
 	m, err := readMemberSnapshot(doc)
 	if err != nil {
-		return memdom.Member{}, err
+		return "", err
 	}
 
-	return m, nil
-}
-
-// GetByFirebaseUID returns a member whose uid field matches the Firebase Auth UID.
-// Firestore document ID and Firebase Auth UID are intentionally separated.
-func (r *MemberRepositoryFS) GetByFirebaseUID(ctx context.Context, firebaseUID string) (memdom.Member, error) {
-	rec, err := r.GetRecordByFirebaseUID(ctx, firebaseUID)
-	if err != nil {
-		return memdom.Member{}, err
+	companyID := strings.TrimSpace(m.CompanyID)
+	if companyID == "" {
+		return "", memdom.ErrNotFound
 	}
 
-	return rec.Member, nil
-}
-
-// GetRecordByFirebaseUID returns a member record whose uid field matches the Firebase Auth UID.
-// Use this when the caller also needs the Firestore document ID.
-func (r *MemberRepositoryFS) GetRecordByFirebaseUID(ctx context.Context, firebaseUID string) (memdom.Record, error) {
-	if r.Client == nil {
-		return memdom.Record{}, errors.New("firestore client is nil")
-	}
-
-	firebaseUID = strings.TrimSpace(firebaseUID)
-	if firebaseUID == "" {
-		return memdom.Record{}, memdom.ErrNotFound
-	}
-
-	q := r.col().Where("uid", "==", firebaseUID).Limit(1)
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	doc, err := it.Next()
-	if err == iterator.Done {
-		return memdom.Record{}, memdom.ErrNotFound
-	}
-	if err != nil {
-		return memdom.Record{}, err
-	}
-
-	m, err := readMemberSnapshot(doc)
-	if err != nil {
-		return memdom.Record{}, err
-	}
-
-	return memdom.Record{
-		DocID:  doc.Ref.ID,
-		Member: m,
-	}, nil
-}
-
-func (r *MemberRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+	return companyID, nil
 }
 
 // ========================
-// List / Count
+// List
 // ========================
 
-// Count は companyId / uid / status を Firestore クエリに反映し、
-// その他の filter 条件は無視します。
-func (r *MemberRepositoryFS) Count(ctx context.Context, f memdom.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	q := r.col().Query
-
-	if f.CompanyID != "" {
-		q = q.Where("companyId", "==", strings.TrimSpace(f.CompanyID))
-	}
-	if f.UID != "" {
-		q = q.Where("uid", "==", strings.TrimSpace(f.UID))
-	}
-	if f.Status != "" {
-		q = q.Where("status", "==", strings.TrimSpace(f.Status))
-	}
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	total := 0
-	for {
-		_, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		total++
-	}
-
-	return total, nil
-}
-
-// List は companyId / uid / status で絞り込み、updatedAt desc / docID desc の固定ソートでページングします。
-// s / f の詳細な sort / filter 条件は使用しません。
-func (r *MemberRepositoryFS) List(
+func (r *MemberRepositoryFS) ListByCompanyID(
 	ctx context.Context,
+	companyID string,
 	f memdom.Filter,
-	_ common.Sort,
-	p common.Page,
-) (common.PageResult[memdom.Member], error) {
-	if r.Client == nil {
-		return common.PageResult[memdom.Member]{}, errors.New("firestore client is nil")
-	}
-
-	pageNum, perPage, offset := fscommon.NormalizePage(p.Number, p.PerPage, 50, 200)
-
-	q := r.col().Query
-
-	if f.CompanyID != "" {
-		q = q.Where("companyId", "==", strings.TrimSpace(f.CompanyID))
-	}
-	if f.UID != "" {
-		q = q.Where("uid", "==", strings.TrimSpace(f.UID))
-	}
-	if f.Status != "" {
-		q = q.Where("status", "==", strings.TrimSpace(f.Status))
-	}
-
-	q = q.OrderBy("updatedAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var all []memdom.Member
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.PageResult[memdom.Member]{}, err
-		}
-
-		m, err := readMemberSnapshot(doc)
-		if err != nil {
-			return common.PageResult[memdom.Member]{}, err
-		}
-		all = append(all, m)
-	}
-
-	total := len(all)
-	if total == 0 {
-		return common.PageResult[memdom.Member]{
-			Items:      []memdom.Member{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
-	}
-
-	if offset > total {
-		offset = total
-	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-	items := all[offset:end]
-
-	return common.PageResult[memdom.Member]{
-		Items:      items,
-		TotalCount: total,
-		TotalPages: fscommon.ComputeTotalPages(total, perPage),
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
-}
-
-func (r *MemberRepositoryFS) ListWithDocID(
-	ctx context.Context,
-	f memdom.Filter,
-	_ common.Sort,
 	p memdom.Page,
 ) (memdom.RecordPageResult, error) {
 	if r.Client == nil {
 		return memdom.RecordPageResult{}, errors.New("firestore client is nil")
 	}
 
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" {
+		return memdom.RecordPageResult{}, errors.New("member: companyID is empty")
+	}
+
 	pageNum, perPage, offset := fscommon.NormalizePage(p.Number, p.PerPage, 50, 200)
 
-	q := r.col().Query
+	q := r.col().Query.
+		Where("companyId", "==", companyID)
 
-	if f.CompanyID != "" {
-		q = q.Where("companyId", "==", strings.TrimSpace(f.CompanyID))
-	}
 	if f.UID != "" {
 		q = q.Where("uid", "==", strings.TrimSpace(f.UID))
 	}
+
 	if f.Status != "" {
 		q = q.Where("status", "==", strings.TrimSpace(f.Status))
 	}
 
+	// Firestore 側では companyId / uid / status の確定条件だけを使う。
+	// SearchQuery / BrandIDs / Permissions / date range は読み出し後にメモリ上で絞り込む。
 	q = q.OrderBy("updatedAt", firestore.Desc).
 		OrderBy(firestore.DocumentID, firestore.Desc)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
 
-	var all []memdom.Record
+	all := make([]memdom.Record, 0)
+
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
@@ -354,10 +172,16 @@ func (r *MemberRepositoryFS) ListWithDocID(
 			return memdom.RecordPageResult{}, err
 		}
 
-		all = append(all, memdom.Record{
+		rec := memdom.Record{
 			DocID:  doc.Ref.ID,
 			Member: m,
-		})
+		}
+
+		if !matchesMemberFilter(rec, f) {
+			continue
+		}
+
+		all = append(all, rec)
 	}
 
 	total := len(all)
@@ -391,131 +215,11 @@ func (r *MemberRepositoryFS) ListWithDocID(
 	}, nil
 }
 
-// ListByCursor は companyId / uid / status で絞り込み、updatedAt desc / docID desc の固定ソートで
-// DocumentID ベースのカーソルページングを行います。memdom.Sort は使用しません。
-func (r *MemberRepositoryFS) ListByCursor(
-	ctx context.Context,
-	f memdom.Filter,
-	cpage memdom.CursorPage,
-) (memdom.CursorPageResult, error) {
-	if r.Client == nil {
-		return memdom.CursorPageResult{}, errors.New("firestore client is nil")
-	}
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	q := r.col().Query
-
-	if f.CompanyID != "" {
-		q = q.Where("companyId", "==", strings.TrimSpace(f.CompanyID))
-	}
-	if f.UID != "" {
-		q = q.Where("uid", "==", strings.TrimSpace(f.UID))
-	}
-	if f.Status != "" {
-		q = q.Where("status", "==", strings.TrimSpace(f.Status))
-	}
-
-	q = q.OrderBy("updatedAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	after := cpage.After
-	skipping := after != ""
-
-	var (
-		items          []memdom.Member
-		lastDocID      string
-		lastIncludedID string
-	)
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return memdom.CursorPageResult{}, err
-		}
-
-		docID := doc.Ref.ID
-
-		if skipping {
-			if docID == after {
-				skipping = false
-			}
-			continue
-		}
-
-		m, err := readMemberSnapshot(doc)
-		if err != nil {
-			return memdom.CursorPageResult{}, err
-		}
-
-		items = append(items, m)
-		lastDocID = docID
-		if len(items) <= limit {
-			lastIncludedID = docID
-		}
-
-		if len(items) >= limit+1 {
-			break
-		}
-	}
-
-	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		if lastIncludedID != "" {
-			next = &lastIncludedID
-		} else if lastDocID != "" {
-			next = &lastDocID
-		}
-	}
-
-	return memdom.CursorPageResult{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
-	}, nil
-}
-
 // ========================
 // Mutations
 // ========================
 
-func (r *MemberRepositoryFS) Create(ctx context.Context, m memdom.Member) (memdom.Member, error) {
-	if r.Client == nil {
-		return memdom.Member{}, errors.New("firestore client is nil")
-	}
-
-	ref := r.col().NewDoc()
-
-	now := time.Now().UTC()
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = now
-	}
-	m.UpdatedAt = &now
-
-	m.UID = strings.TrimSpace(m.UID)
-	m.Email = strings.TrimSpace(m.Email)
-
-	if _, err := ref.Create(ctx, m); err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return memdom.Member{}, memdom.ErrConflict
-		}
-		return memdom.Member{}, err
-	}
-
-	return m, nil
-}
-
-func (r *MemberRepositoryFS) CreateWithDocID(ctx context.Context, m memdom.Member) (memdom.Record, error) {
+func (r *MemberRepositoryFS) Create(ctx context.Context, m memdom.Member) (memdom.Record, error) {
 	if r.Client == nil {
 		return memdom.Record{}, errors.New("firestore client is nil")
 	}
@@ -530,6 +234,14 @@ func (r *MemberRepositoryFS) CreateWithDocID(ctx context.Context, m memdom.Membe
 
 	m.UID = strings.TrimSpace(m.UID)
 	m.Email = strings.TrimSpace(m.Email)
+	m.FirstName = strings.TrimSpace(m.FirstName)
+	m.LastName = strings.TrimSpace(m.LastName)
+	m.FirstNameKana = strings.TrimSpace(m.FirstNameKana)
+	m.LastNameKana = strings.TrimSpace(m.LastNameKana)
+	m.CompanyID = strings.TrimSpace(m.CompanyID)
+	m.Status = strings.TrimSpace(m.Status)
+	m.Permissions = dedupStrings(m.Permissions)
+	m.AssignedBrands = dedupStrings(m.AssignedBrands)
 
 	if _, err := ref.Create(ctx, m); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
@@ -544,20 +256,19 @@ func (r *MemberRepositoryFS) CreateWithDocID(ctx context.Context, m memdom.Membe
 	}, nil
 }
 
-// Update: required by common.RepositoryCRUD[Member, MemberPatch].
-func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom.MemberPatch) (memdom.Member, error) {
+func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom.MemberPatch) (memdom.Record, error) {
 	if r.Client == nil {
-		return memdom.Member{}, errors.New("firestore client is nil")
+		return memdom.Record{}, errors.New("firestore client is nil")
 	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return memdom.Member{}, memdom.ErrNotFound
+		return memdom.Record{}, memdom.ErrNotFound
 	}
 
-	rec, err := r.GetByDocID(ctx, id)
+	rec, err := r.GetByID(ctx, id)
 	if err != nil {
-		return memdom.Member{}, err
+		return memdom.Record{}, err
 	}
 
 	m := rec.Member
@@ -566,16 +277,16 @@ func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom
 		m.UID = strings.TrimSpace(*patch.UID)
 	}
 	if patch.FirstName != nil {
-		m.FirstName = *patch.FirstName
+		m.FirstName = strings.TrimSpace(*patch.FirstName)
 	}
 	if patch.LastName != nil {
-		m.LastName = *patch.LastName
+		m.LastName = strings.TrimSpace(*patch.LastName)
 	}
 	if patch.FirstNameKana != nil {
-		m.FirstNameKana = *patch.FirstNameKana
+		m.FirstNameKana = strings.TrimSpace(*patch.FirstNameKana)
 	}
 	if patch.LastNameKana != nil {
-		m.LastNameKana = *patch.LastNameKana
+		m.LastNameKana = strings.TrimSpace(*patch.LastNameKana)
 	}
 	if patch.Email != nil {
 		m.Email = strings.TrimSpace(*patch.Email)
@@ -595,83 +306,42 @@ func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom
 	if patch.CreatedAt != nil {
 		m.CreatedAt = *patch.CreatedAt
 	}
-	if patch.UpdatedAt != nil {
-		m.UpdatedAt = patch.UpdatedAt
-	}
 	if patch.UpdatedBy != nil {
-		m.UpdatedBy = patch.UpdatedBy
+		updatedBy := strings.TrimSpace(*patch.UpdatedBy)
+		if updatedBy == "" {
+			return memdom.Record{}, memdom.ErrInvalidUpdatedBy
+		}
+		m.UpdatedBy = &updatedBy
 	}
 	if patch.DeletedAt != nil {
 		m.DeletedAt = patch.DeletedAt
 	}
 	if patch.DeletedBy != nil {
-		m.DeletedBy = patch.DeletedBy
-	}
-
-	return r.SaveByDocID(ctx, rec.DocID, m, nil)
-}
-
-func (r *MemberRepositoryFS) Save(ctx context.Context, m memdom.Member, _ *memdom.SaveOptions) (memdom.Member, error) {
-	if r.Client == nil {
-		return memdom.Member{}, errors.New("firestore client is nil")
-	}
-
-	now := time.Now().UTC()
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = now
-	}
-	m.UpdatedAt = &now
-
-	m.UID = strings.TrimSpace(m.UID)
-	m.Email = strings.TrimSpace(m.Email)
-
-	if m.UID != "" {
-		rec, err := r.GetRecordByFirebaseUID(ctx, m.UID)
-		if err == nil {
-			if _, err := r.col().Doc(rec.DocID).Set(ctx, m); err != nil {
-				return memdom.Member{}, err
-			}
-			return m, nil
+		deletedBy := strings.TrimSpace(*patch.DeletedBy)
+		if deletedBy == "" {
+			return memdom.Record{}, memdom.ErrInvalidDeletedBy
 		}
-	}
-
-	ref := r.col().NewDoc()
-	if _, err := ref.Set(ctx, m); err != nil {
-		return memdom.Member{}, err
-	}
-
-	return m, nil
-}
-
-func (r *MemberRepositoryFS) SaveByDocID(
-	ctx context.Context,
-	docID string,
-	m memdom.Member,
-	_ *memdom.SaveOptions,
-) (memdom.Member, error) {
-	if r.Client == nil {
-		return memdom.Member{}, errors.New("firestore client is nil")
-	}
-
-	docID = strings.TrimSpace(docID)
-	if docID == "" {
-		return memdom.Member{}, memdom.ErrNotFound
+		m.DeletedBy = &deletedBy
 	}
 
 	now := time.Now().UTC()
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = now
+	if patch.UpdatedAt != nil {
+		now = patch.UpdatedAt.UTC()
 	}
 	m.UpdatedAt = &now
 
-	m.UID = strings.TrimSpace(m.UID)
-	m.Email = strings.TrimSpace(m.Email)
-
-	if _, err := r.col().Doc(docID).Set(ctx, m); err != nil {
-		return memdom.Member{}, err
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = now
 	}
 
-	return m, nil
+	if _, err := r.col().Doc(rec.DocID).Set(ctx, m); err != nil {
+		return memdom.Record{}, err
+	}
+
+	return memdom.Record{
+		DocID:  rec.DocID,
+		Member: m,
+	}, nil
 }
 
 func (r *MemberRepositoryFS) Delete(ctx context.Context, id string) error {
@@ -685,6 +355,7 @@ func (r *MemberRepositoryFS) Delete(ctx context.Context, id string) error {
 	}
 
 	ref := r.col().Doc(id)
+
 	_, err := ref.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -696,7 +367,126 @@ func (r *MemberRepositoryFS) Delete(ctx context.Context, id string) error {
 	if _, err := ref.Delete(ctx); err != nil {
 		return err
 	}
+
 	return nil
+}
+
+// ========================
+// Helper: filters
+// ========================
+
+func matchesMemberFilter(rec memdom.Record, f memdom.Filter) bool {
+	m := rec.Member
+
+	if len(f.BrandIDs) > 0 && !hasAnyString(m.AssignedBrands, f.BrandIDs) {
+		return false
+	}
+
+	if len(f.Permissions) > 0 && !hasAllStrings(m.Permissions, f.Permissions) {
+		return false
+	}
+
+	if f.CreatedFrom != nil && m.CreatedAt.Before(f.CreatedFrom.UTC()) {
+		return false
+	}
+
+	if f.CreatedTo != nil && m.CreatedAt.After(f.CreatedTo.UTC()) {
+		return false
+	}
+
+	if f.UpdatedFrom != nil {
+		if m.UpdatedAt == nil || m.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+			return false
+		}
+	}
+
+	if f.UpdatedTo != nil {
+		if m.UpdatedAt == nil || m.UpdatedAt.After(f.UpdatedTo.UTC()) {
+			return false
+		}
+	}
+
+	query := strings.ToLower(strings.TrimSpace(f.SearchQuery))
+	if query != "" {
+		targets := []string{
+			rec.DocID,
+			m.UID,
+			m.FirstName,
+			m.LastName,
+			m.FirstNameKana,
+			m.LastNameKana,
+			m.Email,
+			memdom.FormatLastFirst(m.LastName, m.FirstName),
+		}
+
+		found := false
+		for _, target := range targets {
+			if strings.Contains(strings.ToLower(target), query) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
+func hasAnyString(values []string, candidates []string) bool {
+	if len(values) == 0 || len(candidates) == 0 {
+		return false
+	}
+
+	set := make(map[string]struct{}, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		set[v] = struct{}{}
+	}
+
+	for _, c := range candidates {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if _, ok := set[c]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasAllStrings(values []string, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+
+	set := make(map[string]struct{}, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		set[v] = struct{}{}
+	}
+
+	for _, r := range required {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			continue
+		}
+		if _, ok := set[r]; !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 // ========================
@@ -730,13 +520,16 @@ func readMemberSnapshot(doc *firestore.DocumentSnapshot) (memdom.Member, error) 
 		if v == nil {
 			return nil
 		}
+
 		if ss, ok := v.([]string); ok {
 			return ss
 		}
+
 		arr, ok := v.([]interface{})
 		if !ok {
 			return nil
 		}
+
 		out := make([]string, 0, len(arr))
 		for _, x := range arr {
 			if s, ok := x.(string); ok && s != "" {
@@ -819,6 +612,7 @@ func dedupStrings(in []string) []string {
 		if v == "" {
 			continue
 		}
+
 		if _, ok := seen[v]; ok {
 			continue
 		}

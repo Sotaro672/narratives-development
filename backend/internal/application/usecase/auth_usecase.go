@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 	permdom "narratives/internal/domain/permission"
@@ -35,13 +36,23 @@ type BootstrapService struct {
 	Companies companydom.Repository
 }
 
+// MemberCompanyIDReader は、Firebase Auth UID から companyID だけを取得するための
+// adapter 側の任意拡張です。
+//
+// member.Repository 本体は GetByID / ListByCompanyID に統一しているため、
+// uid から companyID を逆引きする処理は repository port 本体には含めません。
+type MemberCompanyIDReader interface {
+	GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error)
+}
+
 // -------------------------------------------------------
 // Bootstrap（管理アカウントの初回ログイン時に呼ばれる想定）
 //
 // 方針:
 // - Firestore document ID と Firebase Auth UID は分離する
 // - members/{autoDocID}.uid = Firebase Auth UID として保存する
-// - 既存 member 確認は docID ではなく uid フィールドで行う
+// - 既存 member 確認は repository port 本体の GetByFirebaseUID では行わない
+// - uid から companyID を解決できる adapter の場合のみ、ListByCompanyID + Filter.UID で冪等確認する
 // - 新規作成時のみ firstName / lastName を必須にする
 // -------------------------------------------------------
 
@@ -67,14 +78,50 @@ func (s *BootstrapService) Bootstrap(
 
 	// ---------------------------------------------------------
 	// 0) 既に member がいるなら（冪等）基本は何もしない
-	//    新方針では docID ではなく uid フィールドで検索する
+	//
+	// repository port から GetByFirebaseUID は削除済み。
+	// そのため、adapter 側が GetCompanyIDByFirebaseUID を実装している場合のみ、
+	// companyID を取得したうえで ListByCompanyID + Filter.UID により既存 member を確認する。
 	// ---------------------------------------------------------
-	if m, err := s.Members.GetByFirebaseUID(ctx, uid); err == nil && m.UID != "" {
-		log.Printf("[bootstrap] member already exists: uid=%s companyID=%s (noop)", uid, m.CompanyID)
-		return nil
-	} else if err != nil && !isAuthNotFoundLike(err) {
-		log.Printf("[bootstrap] failed to check existing member by uid: uid=%s err=%v", uid, err)
-		return err
+	if r, ok := any(s.Members).(MemberCompanyIDReader); ok {
+		companyID, err := r.GetCompanyIDByFirebaseUID(ctx, uid)
+		if err == nil {
+			companyID = strings.TrimSpace(companyID)
+
+			if companyID != "" {
+				res, listErr := s.Members.ListByCompanyID(
+					ctx,
+					companyID,
+					memberdom.Filter{
+						UID: uid,
+					},
+					common.Page{
+						Number:  1,
+						PerPage: 1,
+					},
+				)
+				if listErr != nil && !isAuthNotFoundLike(listErr) {
+					log.Printf("[bootstrap] failed to check existing member by uid: uid=%s companyID=%s err=%v", uid, companyID, listErr)
+					return listErr
+				}
+
+				if len(res.Items) > 0 {
+					rec := res.Items[0]
+					log.Printf(
+						"[bootstrap] member already exists: uid=%s memberDocID=%s companyID=%s (noop)",
+						uid,
+						rec.DocID,
+						rec.Member.CompanyID,
+					)
+					return nil
+				}
+			}
+		} else if !isAuthNotFoundLike(err) {
+			log.Printf("[bootstrap] failed to resolve companyID by uid: uid=%s err=%v", uid, err)
+			return err
+		}
+	} else {
+		log.Printf("[bootstrap] member repository does not implement MemberCompanyIDReader: uid=%s", uid)
 	}
 
 	// ---------------------------------------------------------
@@ -184,14 +231,20 @@ func (s *BootstrapService) Bootstrap(
 		memberEntity.CompanyID = companyID
 	}
 
-	createdMember, err := s.Members.Create(ctx, memberEntity)
+	createdRecord, err := s.Members.Create(ctx, memberEntity)
 	if err != nil {
 		log.Printf("[bootstrap] failed to save member: uid=%s err=%v", uid, err)
 		return err
 	}
 
-	log.Printf("[bootstrap] member created: uid=%s, companyID=%s, permissions=%d, status=%s",
-		uid, companyID, len(createdMember.Permissions), createdMember.Status)
+	log.Printf(
+		"[bootstrap] member created: uid=%s, memberDocID=%s, companyID=%s, permissions=%d, status=%s",
+		uid,
+		createdRecord.DocID,
+		createdRecord.Member.CompanyID,
+		len(createdRecord.Member.Permissions),
+		createdRecord.Member.Status,
+	)
 
 	return nil
 }

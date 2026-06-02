@@ -201,7 +201,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.MemberUC != nil && c.MemberRepo != nil {
-		membersH = consoleHandler.NewMemberHandler(c.MemberUC, c.MemberRepo)
+		membersH = consoleHandler.NewMemberHandler(c.MemberRepo)
 	}
 
 	if c.InvitationCommand != nil {

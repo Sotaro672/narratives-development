@@ -10,7 +10,9 @@ import (
 )
 
 // Filter defines list conditions for members.
-// NOTE: Field names/semantics align with entity.Member (camelCase in JSON/Firestore).
+// NOTE:
+//   - List scope is always companyID through ListByCompanyID.
+//   - CompanyID is not included here to avoid duplicated scope sources.
 type Filter struct {
 	// Firebase Auth UID.
 	UID string
@@ -18,33 +20,29 @@ type Filter struct {
 	// Free-text query for name/kana/email, etc.
 	SearchQuery string
 
-	// Brand filters
+	// Brand filters.
 	BrandIDs []string
 
-	// Company scope & status
-	CompanyID string // owning company to scope results
-	Status    string // "", "active", "inactive"
+	// Status filter.
+	// "", "active", "inactive"
+	Status string
 
-	// Ranges
+	// Ranges.
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
 	UpdatedFrom *time.Time
 	UpdatedTo   *time.Time
 
-	// Permission names (AND)
+	// Permission names.
 	Permissions []string
 }
 
-// Common aliases
+// Common aliases.
 type Page = common.Page
-type PageResult = common.PageResult[Member]
-type CursorPage = common.CursorPage
-type CursorPageResult = common.CursorPageResult[Member]
-type SaveOptions = common.SaveOptions
 
 // ============================================================
 // DTOs for application/handler layers
-// entity に id を持たせず、docId は外側のDTOで扱う
+// entity に id を持たせず、docId は外側の DTO で扱う
 // ============================================================
 
 type Record struct {
@@ -61,45 +59,37 @@ type RecordPageResult struct {
 }
 
 // Repository is the persistence port for the Member aggregate.
+//
+// 方針:
+//   - Get 系は GetByID に統一する。
+//   - entity.Member には docId を持たせないため、GetByID は Record を返す。
+//   - Exists は廃止する。存在確認は GetByID の ErrNotFound で判定する。
+//   - Save は廃止し、Update に置き換える。
+//   - List 系は ListByCompanyID に統一する。
+//   - Firebase UID / email などでの検索が必要な場合は ListByCompanyID + Filter を使う。
 type Repository interface {
-	// Common CRUD/List
-	common.RepositoryCRUD[Member, MemberPatch]
-	common.RepositoryList[Member, Filter]
+	// Create creates a member and returns the created Firestore docId.
+	Create(ctx context.Context, m Member) (Record, error)
 
-	// Additional requirements
-	ListByCursor(ctx context.Context, filter Filter, cpage CursorPage) (CursorPageResult, error)
-	GetByID(ctx context.Context, id string) (Member, error)
-	GetByEmail(ctx context.Context, email string) (Member, error)
+	// GetByID returns a member record by Firestore document ID.
+	// This is the only Get method in this repository port.
+	GetByID(ctx context.Context, id string) (Record, error)
 
-	// GetByFirebaseUID returns a member whose uid field matches the Firebase Auth UID.
-	// Firestore document ID and Firebase Auth UID are intentionally separated.
-	GetByFirebaseUID(ctx context.Context, firebaseUID string) (Member, error)
+	// Update updates an existing member by Firestore document ID.
+	// This replaces Save / SaveByDocID.
+	Update(ctx context.Context, id string, patch MemberPatch) (Record, error)
 
-	// GetRecordByFirebaseUID returns a member record whose uid field matches the Firebase Auth UID.
-	// Use this when the caller also needs the Firestore document ID.
-	GetRecordByFirebaseUID(ctx context.Context, firebaseUID string) (Record, error)
+	// Delete deletes a member by Firestore document ID.
+	Delete(ctx context.Context, id string) error
 
-	Exists(ctx context.Context, id string) (bool, error)
-
-	// Save persists a member with the repository's default document ID behavior.
-	Save(ctx context.Context, m Member, opts *SaveOptions) (Member, error)
-
-	// SaveByDocID persists a member using the specified document ID explicitly.
-	// This is used when updating an existing member document, including invitation flow.
-	SaveByDocID(ctx context.Context, docID string, m Member, opts *SaveOptions) (Member, error)
-
-	// ========================================================
-	// docId を application / handler 層に返すための DTO 用 API
-	// ========================================================
-
-	// CreateWithDocID creates a member and returns the created Firestore docId.
-	CreateWithDocID(ctx context.Context, m Member) (Record, error)
-
-	// GetByDocID returns a member record with its docId.
-	GetByDocID(ctx context.Context, docID string) (Record, error)
-
-	// ListWithDocID returns page results including each member's docId.
-	ListWithDocID(ctx context.Context, f Filter, s common.Sort, p Page) (RecordPageResult, error)
+	// ListByCompanyID returns members scoped by companyID.
+	// This is the only List method in this repository port.
+	ListByCompanyID(
+		ctx context.Context,
+		companyID string,
+		filter Filter,
+		page Page,
+	) (RecordPageResult, error)
 }
 
 var (
@@ -126,32 +116,6 @@ type InvitationTokenRepository interface {
 }
 
 // ============================================================
-// currentMember の companyId を使って Member を一覧取得するヘルパー
-// ============================================================
-
-// ListMembersByCompanyID は、与えられた companyID でスコープされた
-// Member 一覧（カーソルページ）を取得するドメインヘルパーです。
-// auth ミドルウェアで context に積まれた companyId を取得したあと、
-// ハンドラー側で呼び出すことを想定しています。
-func ListMembersByCompanyID(
-	ctx context.Context,
-	repo Repository,
-	companyID string,
-	cpage CursorPage,
-) (CursorPageResult, error) {
-	cid := companyID
-	if cid == "" {
-		return CursorPageResult{}, errors.New("member: companyID is empty")
-	}
-
-	filter := Filter{
-		CompanyID: cid,
-	}
-
-	return repo.ListByCursor(ctx, filter, cpage)
-}
-
-// ============================================================
 // Service: member 領域のユースケース的な便宜関数
 // ============================================================
 
@@ -165,7 +129,7 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// GetNameLastFirstByID は memberID から Member を取得し、
+// GetNameLastFirstByID は memberID/docID から Member を取得し、
 // 「lastName firstName」の順で整形した表示名を返します。
 // - lastName / firstName の両方が存在: "last first"
 // - 片方のみ存在: その値のみ
@@ -175,22 +139,7 @@ func (s *Service) GetNameLastFirstByID(ctx context.Context, memberID string) (st
 		return "", errors.New("member: memberID is empty")
 	}
 
-	m, err := s.repo.GetByID(ctx, memberID)
-	if err != nil {
-		return "", err
-	}
-
-	return FormatLastFirst(m.LastName, m.FirstName), nil
-}
-
-// GetNameLastFirstByDocID は docId から Member を取得し、
-// 「lastName firstName」の順で整形した表示名を返します。
-func (s *Service) GetNameLastFirstByDocID(ctx context.Context, docID string) (string, error) {
-	if docID == "" {
-		return "", errors.New("member: docID is empty")
-	}
-
-	rec, err := s.repo.GetByDocID(ctx, docID)
+	rec, err := s.repo.GetByID(ctx, memberID)
 	if err != nil {
 		return "", err
 	}
@@ -201,16 +150,13 @@ func (s *Service) GetNameLastFirstByDocID(ctx context.Context, docID string) (st
 // FormatLastFirst は「姓→名」の順で半角スペース区切りの表示名を返します。
 // 空要素は除外され、両方空の場合は空文字を返します。
 func FormatLastFirst(lastName, firstName string) string {
-	ln := lastName
-	fn := firstName
-
 	switch {
-	case ln != "" && fn != "":
-		return ln + " " + fn
-	case ln != "":
-		return ln
-	case fn != "":
-		return fn
+	case lastName != "" && firstName != "":
+		return lastName + " " + firstName
+	case lastName != "":
+		return lastName
+	case firstName != "":
+		return firstName
 	default:
 		return ""
 	}

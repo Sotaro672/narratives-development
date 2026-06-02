@@ -10,25 +10,21 @@ import { buildConsoleUrl } from "../../../shared/http/apiBase";
 // -------------------------------
 
 /**
- * Firebase Auth UID から現在 member を取得して「生の JSON」を返す関数。
+ * Authorization token から現在 member を取得して「生の JSON」を返す関数。
  *
  * Backend 側の使い分け:
- * - GET /members/{uid}
- *   - Firebase Auth UID 用
+ * - GET /members/me
+ *   - ログイン中ユーザー自身の member 取得用
+ *   - Firebase Auth UID は URL ではなく Authorization token から backend が取得する
  *
  * - PATCH /members/{docId}
  *   - Firestore members の docId 用
  */
-export async function fetchCurrentMemberRaw(
-  uid: string,
-): Promise<any | null> {
+export async function fetchCurrentMemberRaw(): Promise<any | null> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) return null;
 
-  const firebaseUid = (uid ?? "").trim();
-  if (!firebaseUid) return null;
-
-  const url = buildConsoleUrl(`/members/${encodeURIComponent(firebaseUid)}`);
+  const url = buildConsoleUrl("/members/me");
 
   const res = await fetch(url, {
     method: "GET",
@@ -98,7 +94,7 @@ export async function updateCurrentMemberProfileRaw(
 }
 
 /**
- * companies/{id} を叩いて「生の JSON」を返す関数
+ * companies/{id} を叩いて「生の JSON」を返す関数。
  */
 export async function fetchCompanyByIdRaw(
   companyId: string,

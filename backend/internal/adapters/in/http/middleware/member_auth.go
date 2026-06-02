@@ -11,6 +11,7 @@ import (
 	fbauth "firebase.google.com/go/v4/auth"
 
 	usecase "narratives/internal/application/usecase"
+	common "narratives/internal/domain/common"
 	memdom "narratives/internal/domain/member"
 )
 
@@ -29,6 +30,8 @@ var (
 )
 
 // MemberCompanyIDReader は「member entity を作らずに companyId だけ」取得するためのオプショナル拡張。
+// repository port 本体は GetByID / ListByCompanyID に寄せているため、
+// Firebase UID から companyID を解決する処理だけ adapter 拡張として扱う。
 type MemberCompanyIDReader interface {
 	GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error)
 }
@@ -81,64 +84,85 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		}
 
 		// ------------------------------------------------------------
-		// uid → Member（失敗しても companyId だけは回収できるようにする）
+		// Firebase UID -> companyID -> Member
 		// ------------------------------------------------------------
+		// repository port は GetByFirebaseUID を持たない。
+		// そのため、まず adapter 拡張で companyID を解決し、
+		// その companyID scope 内で ListByCompanyID + Filter.UID により member を取得する。
 		var member memdom.Member
+		memberDocID := ""
 		memberOK := false
+		companyID := ""
 
-		memberVal, mErr := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
-		if mErr == nil {
-			member = memberVal
-			memberOK = true
+		if r2, ok := any(m.MemberRepo).(MemberCompanyIDReader); ok {
+			cid, e := r2.GetCompanyIDByFirebaseUID(r.Context(), uid)
+			if e == nil {
+				companyID = strings.TrimSpace(cid)
+				log.Printf("[auth] resolved companyId by firebase uid uid=%s companyId=%q", uid, companyID)
+			} else {
+				log.Printf("[auth] GetCompanyIDByFirebaseUID failed uid=%s err=%v", uid, e)
+			}
+		} else {
+			log.Printf("[auth] repo-ext MemberCompanyIDReader not implemented uid=%s", uid)
 		}
 
-		// companyId は「member.CompanyID」優先。ただし空なら repo 拡張から回収を試みる。
-		companyID := member.CompanyID
+		if companyID != "" {
+			res, e := m.MemberRepo.ListByCompanyID(
+				r.Context(),
+				companyID,
+				memdom.Filter{
+					UID: uid,
+				},
+				common.Page{
+					Number:  1,
+					PerPage: 1,
+				},
+			)
+			if e == nil && len(res.Items) > 0 {
+				rec := res.Items[0]
+				memberDocID = rec.DocID
+				member = rec.Member
+				memberOK = true
 
-		log.Printf(
-			"[auth] resolved (primary) uid=%s memberOK=%v companyId=%q",
-			uid,
-			memberOK,
-			companyID,
-		)
-
-		if companyID == "" {
-			if r2, ok := any(m.MemberRepo).(MemberCompanyIDReader); ok {
-				if cid, e := r2.GetCompanyIDByFirebaseUID(r.Context(), uid); e == nil {
-					companyID = cid
-
-					log.Printf(
-						"[auth] resolved (repo-ext) uid=%s memberOK(beforePlaceholder)=%v companyId=%q",
-						uid,
-						memberOK,
-						companyID,
-					)
-
-					// member が取れていない場合でも placeholder を作る
-					if !memberOK && companyID != "" {
-						member = memdom.Member{
-							CompanyID: companyID,
-						}
-						memberOK = true
-						log.Printf("[auth] placeholder member created uid=%s companyId=%q", uid, companyID)
-					}
-				} else {
-					log.Printf("[auth] repo-ext GetCompanyIDByFirebaseUID failed uid=%s err=%v", uid, e)
+				if member.CompanyID == "" {
+					member.CompanyID = companyID
 				}
+
+				log.Printf(
+					"[auth] member resolved uid=%s memberDocID=%s companyId=%q",
+					uid,
+					memberDocID,
+					member.CompanyID,
+				)
+			} else if e != nil {
+				log.Printf("[auth] ListByCompanyID failed uid=%s companyId=%q err=%v", uid, companyID, e)
 			} else {
-				log.Printf("[auth] repo-ext not implemented uid=%s", uid)
+				log.Printf("[auth] member not found by uid uid=%s companyId=%q", uid, companyID)
 			}
 		}
 
 		// company 境界必須
 		if companyID == "" {
-			if !memberOK {
-				log.Printf("[auth] forbidden: member not found uid=%s", uid)
-				http.Error(w, "member not found", http.StatusForbidden)
-				return
-			}
 			log.Printf("[auth] forbidden: companyId not resolved uid=%s", uid)
 			http.Error(w, "companyId not resolved for current user", http.StatusForbidden)
+			return
+		}
+
+		if !memberOK {
+			log.Printf("[auth] forbidden: member not found uid=%s companyId=%q", uid, companyID)
+			http.Error(w, "member not found", http.StatusForbidden)
+			return
+		}
+
+		if member.CompanyID != "" && member.CompanyID != companyID {
+			log.Printf(
+				"[auth] forbidden: company mismatch uid=%s memberDocID=%s memberCompanyId=%q resolvedCompanyId=%q",
+				uid,
+				memberDocID,
+				member.CompanyID,
+				companyID,
+			)
+			http.Error(w, "companyId mismatch for current user", http.StatusForbidden)
 			return
 		}
 
@@ -147,21 +171,19 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// ------------------------------------------------------------
 		ctx := r.Context()
 
-		if memberOK {
-			ctx = context.WithValue(ctx, ctxKeyMember, member)
+		ctx = context.WithValue(ctx, ctxKeyMember, member)
 
-			// member の識別子は docId(firebase uid) を使う
-			ctx = usecase.WithMemberID(ctx, uid)
-
-			// fullName（member が正常に取れている時だけ）
-			fullName := memdom.FormatLastFirst(member.LastName, member.FirstName)
-			if fullName != "" {
-				ctx = context.WithValue(ctx, ctxKeyFullName, fullName)
-			}
+		// member の識別子は Firestore docId を使う。
+		// docId が空になることは通常ないが、念のため uid fallback を置く。
+		if memberDocID != "" {
+			ctx = usecase.WithMemberID(ctx, memberDocID)
 		} else {
-			log.Printf("[auth] internal error: member not found after resolve uid=%s", uid)
-			returnErr(w, errors.New("member not found"))
-			return
+			ctx = usecase.WithMemberID(ctx, uid)
+		}
+
+		fullName := memdom.FormatLastFirst(member.LastName, member.FirstName)
+		if fullName != "" {
+			ctx = context.WithValue(ctx, ctxKeyFullName, fullName)
 		}
 
 		ctx = context.WithValue(ctx, ctxKeyUID, uid)
@@ -180,7 +202,7 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		log.Printf(
 			"[auth] context set uid=%s memberDocID=%s companyId=%q path=%s",
 			uid,
-			uid,
+			memberDocID,
 			companyID,
 			r.URL.Path,
 		)
@@ -259,3 +281,16 @@ func CurrentFullName(r *http.Request) (string, bool) {
 	}
 	return s, true
 }
+
+// CurrentMemberID は現在ログイン中の member docId を取得します。
+// usecase.WithMemberID で context に格納される値を参照したい場合は、
+// application/usecase 側の getter を使ってください。
+func CurrentMemberID(r *http.Request) (string, bool) {
+	member, ok := CurrentMember(r)
+	if !ok || member == nil {
+		return "", false
+	}
+	return "", false
+}
+
+var _ = errors.New
