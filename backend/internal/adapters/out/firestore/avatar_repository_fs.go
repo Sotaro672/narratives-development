@@ -40,93 +40,13 @@ var (
 )
 
 // ==============================
-// ✅ GetNameByID (avatarId -> avatarName)
-// ==============================
-
-func (r *AvatarRepositoryFS) GetNameByID(ctx context.Context, id string) (string, error) {
-	if r == nil || r.Client == nil {
-		return "", errBadClient
-	}
-
-	if id == "" {
-		return "", errNotFound
-	}
-
-	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return "", errNotFound
-	}
-	if err != nil {
-		return "", err
-	}
-
-	// Prefer direct field read (cheap)
-	if data := snap.Data(); data != nil {
-		if v, ok := data["avatarName"].(string); ok {
-			return v, nil
-		}
-	}
-
-	// Fallback: decode full entity (schema drift safety)
-	a, err := r.docToDomain(snap)
-	if err != nil {
-		return "", err
-	}
-	return a.AvatarName, nil
-}
-
-// ==============================
-// ✅ GetNameAndIconByID (avatarId -> avatarName, avatarIcon)
-// ==============================
-
-func (r *AvatarRepositoryFS) GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error) {
-	if r == nil || r.Client == nil {
-		return "", "", errBadClient
-	}
-	if id == "" {
-		return "", "", errNotFound
-	}
-
-	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return "", "", errNotFound
-	}
-	if err != nil {
-		return "", "", err
-	}
-
-	// Prefer direct field read (cheap)
-	if data := snap.Data(); data != nil {
-		if v, ok := data["avatarName"].(string); ok {
-			name = v
-		}
-		// avatarIcon is optional in schema
-		if v, ok := data["avatarIcon"].(string); ok {
-			icon = v
-		}
-		// If both resolved, return early
-		if name != "" || icon != "" {
-			// name が空でも icon だけ取れたケースがあるので、そのまま返す
-			return name, icon, nil
-		}
-	}
-
-	// Fallback: decode full entity (schema drift safety)
-	a, err := r.docToDomain(snap)
-	if err != nil {
-		return "", "", err
-	}
-	if a.AvatarIcon != nil {
-		icon = *a.AvatarIcon
-	}
-	return a.AvatarName, icon, nil
-}
-
-// ==============================
 // GetByID
 // ==============================
 
 func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avatar, error) {
+	if r == nil || r.Client == nil {
+		return avdom.Avatar{}, errBadClient
+	}
 	if id == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -146,6 +66,9 @@ func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avat
 // ==============================
 
 func (r *AvatarRepositoryFS) GetByWalletAddress(ctx context.Context, wallet string) (avdom.Avatar, error) {
+	if r == nil || r.Client == nil {
+		return avdom.Avatar{}, errBadClient
+	}
 	if wallet == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -165,11 +88,14 @@ func (r *AvatarRepositoryFS) GetByWalletAddress(ctx context.Context, wallet stri
 }
 
 // ==============================
-// ✅ GetByFirebaseUID (compat helper)
+// GetByFirebaseUID
 // ==============================
 // Avatar エンティティに FirebaseUID フィールドが無い前提のため、
 // Firestore の "userId" を Firebase UID として扱う。
 func (r *AvatarRepositoryFS) GetByFirebaseUID(ctx context.Context, uid string) (avdom.Avatar, error) {
+	if r == nil || r.Client == nil {
+		return avdom.Avatar{}, errBadClient
+	}
 	if uid == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -234,9 +160,13 @@ func (r *AvatarRepositoryFS) ResolveAvatarByUID(ctx context.Context, uid string)
 // ==============================
 
 func (r *AvatarRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
+	if r == nil || r.Client == nil {
+		return false, errBadClient
+	}
 	if id == "" {
 		return false, nil
 	}
+
 	_, err := r.col().Doc(id).Get(ctx)
 	if status.Code(err) == codes.NotFound {
 		return false, nil
@@ -281,6 +211,10 @@ func (r *AvatarRepositoryFS) ExistsByUserID(ctx context.Context, userID string) 
 // ==============================
 
 func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.Avatar, error) {
+	if r == nil || r.Client == nil {
+		return avdom.Avatar{}, errBadClient
+	}
+
 	now := time.Now().UTC()
 	if a.CreatedAt.IsZero() {
 		a.CreatedAt = now
@@ -318,14 +252,18 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 // Update (patch)
 // ==============================
 //
-// ✅ 重要: walletAddress は「avatar につき 1回だけ」設定可能。
+// 重要: walletAddress は「avatar につき 1回だけ」設定可能。
 // - すでに walletAddress が入っている場合は上書きしない（Conflict）。
 // - 空文字/nil で walletAddress を消すことも許可しない。
 // - 競合を避けるため walletAddress を含む更新は Transaction で行う。
 func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.AvatarPatch) (avdom.Avatar, error) {
+	if r == nil || r.Client == nil {
+		return avdom.Avatar{}, errBadClient
+	}
 	if id == "" {
 		return avdom.Avatar{}, errNotFound
 	}
+
 	ref := r.col().Doc(id)
 
 	// walletAddress を含む場合は transaction で「未設定ならセット」を保証
@@ -333,10 +271,6 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 		want := *patch.WalletAddress
 		if want == "" {
 			return avdom.Avatar{}, errInvalidWalletAddr
-		}
-
-		if r.Client == nil {
-			return avdom.Avatar{}, errBadClient
 		}
 
 		// sanitize optional strings (empty -> nil)
@@ -375,7 +309,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 				})
 			}
 
-			// ✅ entity.go 正: AvatarIconURL/Path -> AvatarIcon
+			// entity.go 正: AvatarIconURL/Path -> AvatarIcon
 			if patch.AvatarIcon != nil {
 				var v any
 				if sAvatarIcon == nil {
@@ -413,20 +347,6 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 					Path:  "externalLink",
 					Value: v,
 				})
-			}
-
-			if patch.DeletedAt != nil {
-				if patch.DeletedAt.IsZero() {
-					updates = append(updates, firestore.Update{
-						Path:  "deletedAt",
-						Value: nil,
-					})
-				} else {
-					updates = append(updates, firestore.Update{
-						Path:  "deletedAt",
-						Value: patch.DeletedAt.UTC(),
-					})
-				}
 			}
 
 			// Always bump updatedAt
@@ -484,7 +404,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 		})
 	}
 
-	// ✅ entity.go 正: AvatarIconURL/Path -> AvatarIcon
+	// entity.go 正: AvatarIconURL/Path -> AvatarIcon
 	if patch.AvatarIcon != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "avatarIcon",
@@ -492,7 +412,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 		})
 	}
 
-	// ❌ walletAddress は通常 Update では扱わない（上書き防止のため）
+	// walletAddress は通常 Update では扱わない（上書き防止のため）
 
 	if patch.Profile != nil {
 		updates = append(updates, firestore.Update{
@@ -506,20 +426,6 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 			Path:  "externalLink",
 			Value: optionalString(*patch.ExternalLink),
 		})
-	}
-
-	if patch.DeletedAt != nil {
-		if patch.DeletedAt.IsZero() {
-			updates = append(updates, firestore.Update{
-				Path:  "deletedAt",
-				Value: nil,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "deletedAt",
-				Value: patch.DeletedAt.UTC(),
-			})
-		}
 	}
 
 	if len(updates) == 0 {
@@ -559,15 +465,20 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 // ==============================
 
 func (r *AvatarRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r == nil || r.Client == nil {
+		return errBadClient
+	}
 	if id == "" {
 		return errNotFound
 	}
+
 	ref := r.col().Doc(id)
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
 		return errNotFound
 	} else if err != nil {
 		return err
 	}
+
 	_, err := ref.Delete(ctx)
 	return err
 }
@@ -577,6 +488,10 @@ func (r *AvatarRepositoryFS) Delete(ctx context.Context, id string) error {
 // ==============================
 
 func (r *AvatarRepositoryFS) Save(ctx context.Context, a avdom.Avatar, _ *avdom.SaveOptions) (avdom.Avatar, error) {
+	if r == nil || r.Client == nil {
+		return avdom.Avatar{}, errBadClient
+	}
+
 	now := time.Now().UTC()
 	if a.CreatedAt.IsZero() {
 		a.CreatedAt = now
@@ -613,17 +528,16 @@ func (r *AvatarRepositoryFS) Save(ctx context.Context, a avdom.Avatar, _ *avdom.
 
 func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom.Avatar, error) {
 	var raw struct {
-		// ✅ userId は Firebase UID を格納している前提
+		// userId は Firebase UID を格納している前提
 		UserID string `firestore:"userId"`
 
-		AvatarName    string     `firestore:"avatarName"`
-		AvatarIcon    *string    `firestore:"avatarIcon"`
-		WalletAddress *string    `firestore:"walletAddress"`
-		Profile       *string    `firestore:"profile"`
-		ExternalLink  *string    `firestore:"externalLink"`
-		CreatedAt     time.Time  `firestore:"createdAt"`
-		UpdatedAt     time.Time  `firestore:"updatedAt"`
-		DeletedAt     *time.Time `firestore:"deletedAt"`
+		AvatarName    string    `firestore:"avatarName"`
+		AvatarIcon    *string   `firestore:"avatarIcon"`
+		WalletAddress *string   `firestore:"walletAddress"`
+		Profile       *string   `firestore:"profile"`
+		ExternalLink  *string   `firestore:"externalLink"`
+		CreatedAt     time.Time `firestore:"createdAt"`
+		UpdatedAt     time.Time `firestore:"updatedAt"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -654,17 +568,13 @@ func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom
 		v := *raw.ExternalLink
 		a.ExternalLink = &v
 	}
-	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
-		t := raw.DeletedAt.UTC()
-		a.DeletedAt = &t
-	}
 
 	return a, nil
 }
 
 func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
 	data := map[string]any{
-		// ✅ userId は Firebase UID を格納している前提
+		// userId は Firebase UID を格納している前提
 		"userId":     a.UserID,
 		"avatarName": a.AvatarName,
 		"createdAt":  a.CreatedAt.UTC(),
@@ -682,9 +592,6 @@ func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
 	}
 	if a.ExternalLink != nil && *a.ExternalLink != "" {
 		data["externalLink"] = *a.ExternalLink
-	}
-	if a.DeletedAt != nil && !a.DeletedAt.IsZero() {
-		data["deletedAt"] = a.DeletedAt.UTC()
 	}
 
 	return data

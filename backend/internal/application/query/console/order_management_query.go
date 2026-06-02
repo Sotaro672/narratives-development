@@ -22,7 +22,8 @@ package query
 //   - listReadableId も best-effort。
 //     listReadable が DI されていれば listId->readableId を引いて埋める。なければ空で返す（500にしない）。
 //   - avatarName も best-effort。
-//     avatarNameResolver が DI されていれば avatarId->avatarName を引いて埋める。なければ空で返す（500にしない）。
+//     avatarNameResolver が DI されていれば avatarId->avatar を引いて avatarName を埋める。
+//     なければ空で返す（500にしない）。
 //   - model fields も best-effort。
 //     modelResolver が DI されていれば modelId(variationID)->apparel/alcohol 表示情報を埋める。なければ空で返す（500にしない）。
 //   - category/categoryFields も best-effort。
@@ -38,6 +39,7 @@ import (
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
+	avatardom "narratives/internal/domain/avatar"
 	common "narratives/internal/domain/common"
 	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
@@ -92,9 +94,9 @@ type ListReadableIDResolver interface {
 	GetReadableIDByID(ctx context.Context, id string) (string, error)
 }
 
-// AvatarNameResolver resolves avatarName from avatarId.
+// AvatarNameResolver resolves avatar from avatarId.
 type AvatarNameResolver interface {
-	GetNameByID(ctx context.Context, id string) (string, error)
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 // ModelResolver resolves modelId(variationID) to display fields.
@@ -346,11 +348,12 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			return v, nil
 		}
 
-		name, e := q.avatarNameResolver.GetNameByID(ctx, avatarID)
+		avatar, e := q.avatarNameResolver.GetByID(ctx, avatarID)
 		if e != nil {
 			return "", e
 		}
 
+		name := avatar.AvatarName
 		avatarNameCache[avatarID] = name
 		return name, nil
 	}
@@ -408,7 +411,7 @@ func (q *OrderManagementQuery) ListItemInventoryRows(
 			if avatarID != "" {
 				n, e0 := resolveAvatarName(avatarID)
 				if e0 != nil {
-					log.Printf("[OrderManagementQuery] ERROR GetNameByID failed avatarId=%q err=%v", avatarID, e0)
+					log.Printf("[OrderManagementQuery] ERROR Avatar.GetByID failed avatarId=%q err=%v", avatarID, e0)
 					return common.PageResult[OrderItemInventoryRowDTO]{}, e0
 				}
 				avatarName = n

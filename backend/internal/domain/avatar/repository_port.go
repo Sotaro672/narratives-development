@@ -3,7 +3,6 @@ package avatar
 
 import (
 	"context"
-	"time"
 
 	common "narratives/internal/domain/common"
 )
@@ -19,13 +18,12 @@ import (
 // - Website      → ExternalLink
 // - FirebaseUID  を追加
 type AvatarPatch struct {
-	UserID        string     `json:"userId"`
-	AvatarName    *string    `json:"avatarName,omitempty"`
-	AvatarIcon    *string    `json:"avatarIcon,omitempty"`
-	WalletAddress *string    `json:"walletAddress,omitempty"`
-	Profile       *string    `json:"profile,omitempty"`
-	ExternalLink  *string    `json:"externalLink,omitempty"`
-	DeletedAt     *time.Time `json:"deletedAt,omitempty"` // soft delete/restore 用（必要な場合のみ使用）
+	UserID        string  `json:"userId"`
+	AvatarName    *string `json:"avatarName,omitempty"`
+	AvatarIcon    *string `json:"avatarIcon,omitempty"`
+	WalletAddress *string `json:"walletAddress,omitempty"`
+	Profile       *string `json:"profile,omitempty"`
+	ExternalLink  *string `json:"externalLink,omitempty"`
 }
 
 // Sanitize keeps patch fields as-is.
@@ -33,7 +31,6 @@ func (p *AvatarPatch) Sanitize() {
 	if p == nil {
 		return
 	}
-	// DeletedAt: keep as-is (nil means "no change")
 }
 
 type Sort struct {
@@ -64,24 +61,12 @@ type CursorPageResult = common.CursorPageResult[Avatar]
 // ========================================
 
 type Repository interface {
-	// 共通CRUD
-	RepositoryCRUD
 
-	// ✅ NEW: avatarId -> avatarName (best-effort lightweight getter)
-	GetNameByID(ctx context.Context, id string) (string, error)
-
-	// ✅ NEW: avatarId -> (avatarName, avatarIcon) (best-effort lightweight getter)
-	// - 一覧表示やコメント表示などで N+1 を軽量化する用途を想定
-	// - 見つからない場合は error を返す（実装側で NotFound を返却）
-	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+	// avatarId による取得
+	GetByID(ctx context.Context, id string) (Avatar, error)
 
 	// owner / user lookup
 	// - avatar document id は avatarId であり userId ではない
 	// - setup status や mall/me/avatar 判定では userId で存在確認する
 	ExistsByUserID(ctx context.Context, userID string) (bool, error)
-
-	// 追加要件（必要に応じて実装側で活用）
-	GetByWalletAddress(ctx context.Context, wallet string) (Avatar, error)
-	Exists(ctx context.Context, id string) (bool, error)
-	Save(ctx context.Context, a Avatar, opts *SaveOptions) (Avatar, error)
 }

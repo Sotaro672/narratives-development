@@ -23,9 +23,9 @@ import (
 // - ModelProductBlueprintIDResolver
 // - ErrWalletUsecaseNotConfigured / ErrWalletSyncOnchainNotConfigured / ... etc
 
-// AvatarName/Icon の軽量取得（N+1 を軽量化する想定のポート）
-type AvatarNameIconGetter interface {
-	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+// Avatar 取得
+type AvatarGetter interface {
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 // Brand 取得
@@ -85,9 +85,9 @@ type ProductBlueprintReviewUsecase struct {
 	ProductReader           ProductReader
 	ModelProductBlueprintID ModelProductBlueprintIDResolver
 
-	// avatarId -> (avatarName, avatarIcon)
+	// avatarId -> Avatar
 	// 実体は avatar.Repository を注入して使う想定
-	AvatarRepo AvatarNameIconGetter
+	AvatarRepo AvatarGetter
 
 	now func() time.Time
 }
@@ -314,7 +314,7 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
 // Public API: List + AvatarName/Icon (for screen)
 // ============================================================
 //
-//   - ReviewRepo の結果に対して、AvatarRepo.GetNameAndIconByID を使って
+//   - ReviewRepo の結果に対して、AvatarRepo.GetByID を使って
 //     AvatarName / AvatarIcon を詰めて返す
 //   - AvatarRepo 未設定でも一覧自体は返す（name/icon は空）
 //   - Avatar 取得失敗は best-effort でスキップ（画面表示優先）
@@ -339,10 +339,12 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintIDWithAvatar(
 		icon := ""
 
 		if uc.AvatarRepo != nil && r.AvatarID != "" {
-			n, i, e := uc.AvatarRepo.GetNameAndIconByID(ctx, r.AvatarID)
+			a, e := uc.AvatarRepo.GetByID(ctx, r.AvatarID)
 			if e == nil {
-				name = n
-				icon = i
+				name = a.AvatarName
+				if a.AvatarIcon != nil {
+					icon = *a.AvatarIcon
+				}
 			}
 		}
 

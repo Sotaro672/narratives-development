@@ -99,12 +99,11 @@ func (r *NameResolver) ResolveBrandName(ctx context.Context, brandID string) str
 		return ""
 	}
 
-	id := brandID
-	if id == "" {
+	if brandID == "" {
 		return ""
 	}
 
-	b, err := r.brandRepo.GetByID(ctx, id)
+	b, err := r.brandRepo.GetByID(ctx, brandID)
 	if err != nil {
 		return ""
 	}
@@ -120,12 +119,11 @@ func (r *NameResolver) ResolveBrandCompanyID(ctx context.Context, brandID string
 		return ""
 	}
 
-	id := brandID
-	if id == "" {
+	if brandID == "" {
 		return ""
 	}
 
-	b, err := r.brandRepo.GetByID(ctx, id)
+	b, err := r.brandRepo.GetByID(ctx, brandID)
 	if err != nil {
 		return ""
 	}
@@ -144,12 +142,11 @@ func (r *NameResolver) ResolveCompanyName(ctx context.Context, companyID string)
 		return ""
 	}
 
-	id := companyID
-	if id == "" {
+	if companyID == "" {
 		return ""
 	}
 
-	c, err := r.companyRepo.GetByID(ctx, id)
+	c, err := r.companyRepo.GetByID(ctx, companyID)
 	if err != nil {
 		return ""
 	}
@@ -172,12 +169,11 @@ func (r *NameResolver) ResolveProductName(ctx context.Context, productBlueprintI
 		return ""
 	}
 
-	id := productBlueprintID
-	if id == "" {
+	if productBlueprintID == "" {
 		return ""
 	}
 
-	pb, err := r.productBlueprintRepo.GetByID(ctx, id)
+	pb, err := r.productBlueprintRepo.GetByID(ctx, productBlueprintID)
 	if err != nil {
 		return ""
 	}
@@ -189,20 +185,8 @@ func (r *NameResolver) ResolveProductName(ctx context.Context, productBlueprintI
 // Member 関連
 // ------------------------------------------------------------
 
-func formatMemberDisplayName(m memberdom.Member) string {
-	family := m.LastName
-	given := m.FirstName
-
-	switch {
-	case family == "" && given == "":
-		return ""
-	case family == "":
-		return given
-	case given == "":
-		return family
-	default:
-		return family + " " + given
-	}
+func formatMemberDisplayName(rec memberdom.Record) string {
+	return memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
 }
 
 // ResolveMemberName は Firebase Auth UID から member の表示名（例: "姓 名"）を解決する。
@@ -225,17 +209,16 @@ func (r *NameResolver) ResolveMemberNameByUID(ctx context.Context, memberUID str
 		return ""
 	}
 
-	uid := memberUID
-	if uid == "" {
+	if memberUID == "" {
 		return ""
 	}
 
-	rec, err := r.memberRepo.GetByUID(ctx, uid)
+	rec, err := r.memberRepo.GetByUID(ctx, memberUID)
 	if err != nil {
 		return ""
 	}
 
-	return formatMemberDisplayName(rec.Member)
+	return formatMemberDisplayName(rec)
 }
 
 // ---- member UID 派生フィールド向けヘルパ ----
@@ -302,12 +285,11 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 		return ""
 	}
 
-	id := variationID
-	if id == "" {
+	if variationID == "" {
 		return ""
 	}
 
-	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, id)
+	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, variationID)
 	if err != nil || mv == nil {
 		return ""
 	}
@@ -334,12 +316,11 @@ func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID st
 		return ""
 	}
 
-	id := tokenBlueprintID
-	if id == "" {
+	if tokenBlueprintID == "" {
 		return ""
 	}
 
-	tb, err := r.tokenBlueprintRepo.GetByID(ctx, id)
+	tb, err := r.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
 	if err != nil || tb == nil {
 		return ""
 	}

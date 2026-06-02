@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	sharedquery "narratives/internal/application/query/shared"
+	avatardom "narratives/internal/domain/avatar"
 	avatastatedom "narratives/internal/domain/avatarState"
 	branddom "narratives/internal/domain/brand"
 	common "narratives/internal/domain/common"
@@ -81,8 +82,8 @@ type brandReader interface {
 	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
-type avatarNameAndIconReader interface {
-	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+type avatarReader interface {
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 type avatarStateReader interface {
@@ -98,7 +99,7 @@ type SalesQuery struct {
 	productBlueprintRepo productBlueprintReader
 	walletRepo           walletAddressByMintReader
 	ownerResolver        ownerResolveReader
-	avatarRepo           avatarNameAndIconReader
+	avatarRepo           avatarReader
 	avatarStateRepo      avatarStateReader
 }
 
@@ -111,7 +112,7 @@ func NewSalesQuery(
 	productBlueprintRepo productBlueprintReader,
 	walletRepo walletAddressByMintReader,
 	ownerResolver ownerResolveReader,
-	avatarRepo avatarNameAndIconReader,
+	avatarRepo avatarReader,
 	avatarStateRepo avatarStateReader,
 ) *SalesQuery {
 	return &SalesQuery{
@@ -353,9 +354,14 @@ func (q *SalesQuery) resolveSalesOwners(
 			continue
 		}
 
-		avatarName, avatarIcon, err := q.avatarRepo.GetNameAndIconByID(ctx, owner.AvatarID)
+		avatar, err := q.avatarRepo.GetByID(ctx, owner.AvatarID)
 		if err != nil {
 			return nil, err
+		}
+
+		avatarIcon := ""
+		if avatar.AvatarIcon != nil {
+			avatarIcon = *avatar.AvatarIcon
 		}
 
 		avatarState, err := q.avatarStateRepo.GetByAvatarID(ctx, owner.AvatarID)
@@ -368,7 +374,7 @@ func (q *SalesQuery) resolveSalesOwners(
 		seen[owner.AvatarID] = struct{}{}
 		result = append(result, SalesOwner{
 			AvatarID:       owner.AvatarID,
-			AvatarName:     avatarName,
+			AvatarName:     avatar.AvatarName,
 			AvatarIcon:     avatarIcon,
 			FollowerCount:  int64Value(avatarState.FollowerCount),
 			FollowingCount: int64Value(avatarState.FollowingCount),

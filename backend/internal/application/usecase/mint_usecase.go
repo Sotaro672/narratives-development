@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	invdom "narratives/internal/domain/inventory"
@@ -325,34 +324,6 @@ func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Contex
 	return productBlueprintID
 }
 
-func validateProductIDs(productIDs []string) error {
-	seen := make(map[string]struct{}, len(productIDs))
-
-	for _, id := range productIDs {
-		if id == "" {
-			return mintdom.ErrInvalidProducts
-		}
-		if _, ok := seen[id]; ok {
-			return mintdom.ErrInvalidProducts
-		}
-		seen[id] = struct{}{}
-	}
-
-	return nil
-}
-
-func normalizeProductIDs(productIDs []string) []string {
-	out := make([]string, 0, len(productIDs))
-	for _, id := range productIDs {
-		p := strings.TrimSpace(id)
-		if p == "" {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
-}
-
 func lastMintResult(minted []MintedTokenForUsecase) *tokendom.MintResult {
 	for i := len(minted) - 1; i >= 0; i-- {
 		if minted[i].Result != nil {
@@ -368,9 +339,9 @@ func (u *MintUsecase) ensureMetadataURI(
 	actorID string,
 	currentMetadataURI string,
 ) (string, error) {
-	metadataURI := strings.TrimSpace(currentMetadataURI)
+	metadataURI := currentMetadataURI
 
-	tbID := strings.TrimSpace(tokenBlueprintID)
+	tbID := tokenBlueprintID
 	if tbID == "" {
 		return metadataURI, nil
 	}
@@ -399,7 +370,7 @@ func (u *MintUsecase) ensureMetadataURI(
 		updated = tb
 	}
 
-	return strings.TrimSpace(updated.MetadataURI), nil
+	return updated.MetadataURI, nil
 }
 
 func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID string) (*tokendom.MintResult, error) {
@@ -422,12 +393,9 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	}
 	mintEnt := &mintEntValue
 
-	passedProductIDs := normalizeProductIDs(mintEnt.Products)
-	if err := validateProductIDs(passedProductIDs); err != nil {
-		return nil, err
-	}
+	passedProductIDs := mintEnt.Products
 
-	tbID := strings.TrimSpace(mintEnt.TokenBlueprintID)
+	tbID := mintEnt.TokenBlueprintID
 	if tbID == "" {
 		return nil, errors.New("tokenBlueprintID is empty on mint")
 	}
@@ -461,30 +429,27 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			return nil, fmt.Errorf("mint request %s is nil", mintRequestID)
 		}
 
-		reqID := strings.TrimSpace(req.ID)
+		reqID := req.ID
 		if reqID == "" {
 			reqID = mintRequestID
 		}
 
-		reqTBID := strings.TrimSpace(req.TokenBlueprintID)
+		reqTBID := req.TokenBlueprintID
 		if reqTBID == "" {
 			reqTBID = tbID
 		}
 
-		actorID := strings.TrimSpace(req.ActorID)
+		actorID := req.ActorID
 		if actorID == "" {
-			actorID = strings.TrimSpace(mintEnt.CreatedBy)
+			actorID = mintEnt.CreatedBy
 		}
 		if actorID == "" {
-			actorID = strings.TrimSpace(MemberIDFromContext(ctx))
+			actorID = MemberIDFromContext(ctx)
 		}
 
-		productIDs := normalizeProductIDs(req.ProductIDs)
+		productIDs := req.ProductIDs
 		if len(productIDs) == 0 {
 			productIDs = passedProductIDs
-		}
-		if err := validateProductIDs(productIDs); err != nil {
-			return nil, err
 		}
 
 		metadataURI, err := u.ensureMetadataURI(
@@ -496,17 +461,17 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		if err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(metadataURI) == "" {
+		if metadataURI == "" {
 			return nil, fmt.Errorf("mint request %s has empty MetadataURI", reqID)
 		}
 
-		toAddress := strings.TrimSpace(req.ToAddress)
+		toAddress := req.ToAddress
 		if toAddress == "" {
 			return nil, fmt.Errorf("mint request %s has empty ToAddress", reqID)
 		}
 
-		name := strings.TrimSpace(req.BlueprintName)
-		symbol := strings.TrimSpace(req.BlueprintSymbol)
+		name := req.BlueprintName
+		symbol := req.BlueprintSymbol
 		if name == "" || symbol == "" {
 			return nil, fmt.Errorf("mint request %s has empty name or symbol", reqID)
 		}

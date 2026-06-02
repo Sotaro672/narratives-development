@@ -9,6 +9,7 @@ import (
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
+	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	commondom "narratives/internal/domain/common"
 	modeldom "narratives/internal/domain/model"
@@ -90,9 +91,10 @@ type BrandReader interface {
 	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
-// AvatarNameIconReader resolves avatarId -> avatarName + avatarIcon.
+// AvatarNameIconReader resolves avatarId -> Avatar.
+// avatar 側は GetByID port に統一する。
 type AvatarNameIconReader interface {
-	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 // TransferReader resolves mintAddress -> transfer records.
@@ -730,10 +732,12 @@ func (q *PreviewQuery) fillAvatarTransferDisplay(
 	}
 
 	if q.AvatarNameIconRepo != nil {
-		name, icon, err := q.AvatarNameIconRepo.GetNameAndIconByID(ctx, avatarID)
-		if err == nil && name != "" {
-			*nameOut = name
-			*iconOut = icon
+		avatar, err := q.AvatarNameIconRepo.GetByID(ctx, avatarID)
+		if err == nil && avatar.AvatarName != "" {
+			*nameOut = avatar.AvatarName
+			if avatar.AvatarIcon != nil {
+				*iconOut = *avatar.AvatarIcon
+			}
 			return
 		}
 	}

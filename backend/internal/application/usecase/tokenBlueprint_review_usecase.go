@@ -76,7 +76,17 @@ func (u *TokenBlueprintReviewUsecase) GetNameAndIconByID(
 	if u == nil || u.avatarRepos == nil {
 		return "", "", errUsecaseNotConfigured
 	}
-	return u.avatarRepos.GetNameAndIconByID(ctx, avatarID)
+
+	a, err := u.avatarRepos.GetByID(ctx, avatarID)
+	if err != nil {
+		return "", "", err
+	}
+
+	if a.AvatarIcon != nil {
+		icon = *a.AvatarIcon
+	}
+
+	return a.AvatarName, icon, nil
 }
 
 func (u *TokenBlueprintReviewUsecase) GetBrandNameAndIconByID(

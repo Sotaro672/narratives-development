@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
 	mallquery "narratives/internal/application/query/mall"
@@ -153,7 +152,6 @@ func (h *MeAvatarHandler) resolveAvatarPatchByUID(ctx context.Context, uid strin
 		WalletAddress: strPtrTrim(walletAddress),
 		Profile:       nil,
 		ExternalLink:  nil,
-		DeletedAt:     nil,
 	}
 
 	if h.AvatarUC == nil {
@@ -174,7 +172,6 @@ func (h *MeAvatarHandler) resolveAvatarPatchByUID(ctx context.Context, uid strin
 		WalletAddress: av.WalletAddress,
 		Profile:       av.Profile,
 		ExternalLink:  av.ExternalLink,
-		DeletedAt:     av.DeletedAt,
 	}
 
 	if patch.WalletAddress == nil {
@@ -201,7 +198,6 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(ctx context.Context, uid string
 
 	patch.UserID = ""
 	patch.WalletAddress = nil
-	patch.DeletedAt = nil
 	patch.Sanitize()
 
 	updated, uerr := h.AvatarUC.Update(ctx, avatarID, patch)
@@ -216,7 +212,6 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(ctx context.Context, uid string
 		WalletAddress: updated.WalletAddress,
 		Profile:       updated.Profile,
 		ExternalLink:  updated.ExternalLink,
-		DeletedAt:     updated.DeletedAt,
 	}
 
 	if out.WalletAddress == nil {
@@ -249,14 +244,13 @@ func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid 
 	}
 
 	type meAvatarPatchResponse struct {
-		AvatarID      string     `json:"avatarId"`
-		UserID        string     `json:"userId"`
-		AvatarName    *string    `json:"avatarName,omitempty"`
-		AvatarIcon    *string    `json:"avatarIcon,omitempty"`
-		WalletAddress *string    `json:"walletAddress,omitempty"`
-		Profile       *string    `json:"profile,omitempty"`
-		ExternalLink  *string    `json:"externalLink,omitempty"`
-		DeletedAt     *time.Time `json:"deletedAt,omitempty"`
+		AvatarID      string  `json:"avatarId"`
+		UserID        string  `json:"userId"`
+		AvatarName    *string `json:"avatarName,omitempty"`
+		AvatarIcon    *string `json:"avatarIcon,omitempty"`
+		WalletAddress *string `json:"walletAddress,omitempty"`
+		Profile       *string `json:"profile,omitempty"`
+		ExternalLink  *string `json:"externalLink,omitempty"`
 	}
 
 	out := meAvatarPatchResponse{
@@ -267,7 +261,6 @@ func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid 
 		WalletAddress: patch.WalletAddress,
 		Profile:       patch.Profile,
 		ExternalLink:  patch.ExternalLink,
-		DeletedAt:     patch.DeletedAt,
 	}
 
 	_ = json.NewEncoder(w).Encode(out)
@@ -340,7 +333,6 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 		WalletAddress: nil,
 		Profile:       req.Profile,
 		ExternalLink:  req.ExternalLink,
-		DeletedAt:     nil,
 	}
 
 	avatarID, outPatch, uerr := h.updateAvatarPatchByUID(r.Context(), uid, patch)
@@ -364,14 +356,13 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 	}
 
 	type meAvatarPatchResponse struct {
-		AvatarID      string     `json:"avatarId"`
-		UserID        string     `json:"userId"`
-		AvatarName    *string    `json:"avatarName,omitempty"`
-		AvatarIcon    *string    `json:"avatarIcon,omitempty"`
-		WalletAddress *string    `json:"walletAddress,omitempty"`
-		Profile       *string    `json:"profile,omitempty"`
-		ExternalLink  *string    `json:"externalLink,omitempty"`
-		DeletedAt     *time.Time `json:"deletedAt,omitempty"`
+		AvatarID      string  `json:"avatarId"`
+		UserID        string  `json:"userId"`
+		AvatarName    *string `json:"avatarName,omitempty"`
+		AvatarIcon    *string `json:"avatarIcon,omitempty"`
+		WalletAddress *string `json:"walletAddress,omitempty"`
+		Profile       *string `json:"profile,omitempty"`
+		ExternalLink  *string `json:"externalLink,omitempty"`
 	}
 
 	out := meAvatarPatchResponse{
@@ -382,7 +373,6 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 		WalletAddress: outPatch.WalletAddress,
 		Profile:       outPatch.Profile,
 		ExternalLink:  outPatch.ExternalLink,
-		DeletedAt:     outPatch.DeletedAt,
 	}
 
 	_ = json.NewEncoder(w).Encode(out)

@@ -1,3 +1,4 @@
+// backend/internal/domain/avatar/entity.go
 package avatar
 
 import (
@@ -18,7 +19,7 @@ import (
 // - プロフィール         → Profile
 // - 外部リンク           → ExternalLink
 //
-// それ以外（AvatarState / WalletAddress / timestamps / deleted）はシステム側で管理され得るため保持します。
+// それ以外（AvatarState / WalletAddress / timestamps）はシステム側で管理され得るため保持します。
 type Avatar struct {
 	ID     string `json:"id"`
 	UserID string `json:"userId"`
@@ -35,7 +36,6 @@ type Avatar struct {
 	ExternalLink  *string                 `json:"externalLink,omitempty"`
 	CreatedAt     time.Time               `json:"createdAt"`
 	UpdatedAt     time.Time               `json:"updatedAt"`
-	DeletedAt     *time.Time              `json:"deletedAt,omitempty"` // null 許容
 }
 
 // SolanaAvatarWallet
@@ -65,7 +65,6 @@ var (
 	ErrInvalidAvatarIcon   = errors.New("avatar: invalid avatarIcon")
 	ErrInvalidCreatedAt    = errors.New("avatar: invalid createdAt")
 	ErrInvalidUpdatedAt    = errors.New("avatar: invalid updatedAt")
-	ErrInvalidDeletedAt    = errors.New("avatar: invalid deletedAt")
 
 	// Link errors
 	ErrInvalidWalletAddressLink = errors.New("avatar: invalid walletAddress link")
@@ -79,7 +78,6 @@ func NewWithState(
 	state avatarstate.AvatarState,
 	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt time.Time,
-	deletedAt *time.Time,
 ) (Avatar, error) {
 	a := Avatar{
 		ID:           id,
@@ -95,12 +93,6 @@ func NewWithState(
 
 	// walletAddress はオプショナル
 	a.WalletAddress = walletAddr
-
-	// DeletedAt はオプショナル（nil 可）
-	if deletedAt != nil && !deletedAt.IsZero() {
-		t := deletedAt.UTC()
-		a.DeletedAt = &t
-	}
 
 	// Validation
 	if err := a.validate(); err != nil {
@@ -135,7 +127,6 @@ func NewForCreateWithState(
 		input.ExternalLink,
 		now,
 		now,
-		nil,
 	)
 }
 
@@ -145,7 +136,6 @@ func NewFromStringTimesWithState(
 	state avatarstate.AvatarState,
 	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt string,
-	deletedAt *string,
 ) (Avatar, error) {
 	ct, err := time.Parse(time.RFC3339, createdAt)
 	if err != nil {
@@ -154,16 +144,6 @@ func NewFromStringTimesWithState(
 	ut, err := time.Parse(time.RFC3339, updatedAt)
 	if err != nil {
 		return Avatar{}, ErrInvalidUpdatedAt
-	}
-
-	var dtPtr *time.Time
-	if deletedAt != nil && *deletedAt != "" {
-		dt, err := time.Parse(time.RFC3339, *deletedAt)
-		if err != nil {
-			return Avatar{}, ErrInvalidDeletedAt
-		}
-		dtUTC := dt.UTC()
-		dtPtr = &dtUTC
 	}
 
 	return NewWithState(
@@ -177,7 +157,6 @@ func NewFromStringTimesWithState(
 		externalLink,
 		ct.UTC(),
 		ut.UTC(),
-		dtPtr,
 	)
 }
 
@@ -310,9 +289,6 @@ func (a Avatar) validate() error {
 	if a.UpdatedAt.IsZero() || a.UpdatedAt.Before(a.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
-	if a.DeletedAt != nil && a.DeletedAt.Before(a.CreatedAt) {
-		return ErrInvalidDeletedAt
-	}
 	return nil
 }
 
@@ -358,9 +334,8 @@ type ListFilter struct {
 	NameContains  string
 	WalletAddress *string
 
-	IncludeDeleted bool
-	Limit          int
-	Offset         int
+	Limit  int
+	Offset int
 
 	SortBy SortBy
 	Desc   bool

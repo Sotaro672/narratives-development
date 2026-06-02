@@ -15,7 +15,7 @@ import (
 )
 
 type AvatarSummaryRepository interface {
-	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 type AvatarHandler struct {
@@ -303,10 +303,12 @@ func (h *AvatarHandler) resolveFollowRefs(
 		}
 
 		if h != nil && h.avatarRepo != nil && ref.AvatarID != "" {
-			name, icon, err := h.avatarRepo.GetNameAndIconByID(ctx, ref.AvatarID)
+			a, err := h.avatarRepo.GetByID(ctx, ref.AvatarID)
 			if err == nil {
-				item.AvatarName = name
-				item.AvatarIcon = icon
+				item.AvatarName = a.AvatarName
+				if a.AvatarIcon != nil {
+					item.AvatarIcon = *a.AvatarIcon
+				}
 			}
 		}
 
@@ -425,12 +427,11 @@ type avatarResponse struct {
 
 	AvatarState *avatarstate.AvatarState `json:"avatarState,omitempty"`
 
-	WalletAddress *string    `json:"walletAddress,omitempty"`
-	Profile       *string    `json:"profile,omitempty"`
-	ExternalLink  *string    `json:"externalLink,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
+	WalletAddress *string   `json:"walletAddress,omitempty"`
+	Profile       *string   `json:"profile,omitempty"`
+	ExternalLink  *string   `json:"externalLink,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 func toAvatarResponse(a avatardom.Avatar) avatarResponse {
@@ -451,7 +452,6 @@ func toAvatarResponse(a avatardom.Avatar) avatarResponse {
 		ExternalLink:  a.ExternalLink,
 		CreatedAt:     a.CreatedAt,
 		UpdatedAt:     a.UpdatedAt,
-		DeletedAt:     a.DeletedAt,
 	}
 }
 

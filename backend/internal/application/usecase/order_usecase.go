@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -100,10 +99,6 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		id = u.newOrderID(now)
 	}
 
-	log.Printf("[order_uc] Create start id=%s userId=%s avatarId=%s cartId=%s items=%d",
-		id, in.UserID, in.AvatarID, in.CartID, len(in.Items),
-	)
-
 	ship := orderdom.ShippingSnapshot{
 		ZipCode: in.ShippingSnapshot.ZipCode,
 		State:   in.ShippingSnapshot.State,
@@ -129,7 +124,6 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 	if u.cartRepo != nil && cartID != "" {
 		c, err := u.cartRepo.GetByID(ctx, cartID)
 		if err != nil {
-			log.Printf("[order_uc] Create cartRepo.GetByID failed cartId=%s err=%v", cartID, err)
 			return orderdom.Order{}, err
 		}
 		cart = c
@@ -146,9 +140,6 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		if listID == "" && cartLoaded {
 			resolved, err := resolveListIDFromCart(cart, inventoryID, modelID)
 			if err != nil {
-				log.Printf("[order_uc] Create resolveListIDFromCart failed cartId=%s inv=%s model=%s err=%v",
-					cartID, inventoryID, modelID, err,
-				)
 				return orderdom.Order{}, err
 			}
 			listID = resolved
@@ -179,7 +170,6 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		createdAt,
 	)
 	if err != nil {
-		log.Printf("[order_uc] Create domain.New failed id=%s err=%v", id, err)
 		return orderdom.Order{}, err
 	}
 
@@ -187,10 +177,8 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 
 	created, err := u.repo.Create(ctx, o)
 	if err != nil {
-		log.Printf("[order_uc] Create repo.Create failed id=%s err=%v", id, err)
 		return orderdom.Order{}, err
 	}
-	log.Printf("[order_uc] Create repo.Create OK id=%s items=%d", created.ID, len(created.Items))
 
 	return created, nil
 }
@@ -264,7 +252,6 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 		if u.cartRepo != nil && cartID != "" {
 			c, err := u.cartRepo.GetByID(ctx, cartID)
 			if err != nil {
-				log.Printf("[order_uc] Update cartRepo.GetByID failed cartId=%s err=%v", cartID, err)
 				return orderdom.Order{}, err
 			}
 			cart = c
@@ -280,9 +267,6 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 			if listID == "" && cartLoaded {
 				resolved, err := resolveListIDFromCart(cart, inventoryID, modelID)
 				if err != nil {
-					log.Printf("[order_uc] Update resolveListIDFromCart failed cartId=%s inv=%s model=%s err=%v",
-						cartID, inventoryID, modelID, err,
-					)
 					return orderdom.Order{}, err
 				}
 				listID = resolved

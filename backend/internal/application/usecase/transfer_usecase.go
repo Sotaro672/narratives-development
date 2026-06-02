@@ -9,6 +9,7 @@ import (
 	"time"
 
 	mallquery "narratives/internal/application/query/mall"
+	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
@@ -100,8 +101,11 @@ type BrandDisplayResolver interface {
 }
 
 // AvatarDisplayResolver resolves avatar display info for transfer result.
+//
+// avatar.Repository の GetByID(ctx, id string) に合わせる。
+// transfer response では Avatar.AvatarName を表示名として使う。
 type AvatarDisplayResolver interface {
-	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 // WalletSecretProvider provides a signing capability for a brand.
@@ -667,12 +671,12 @@ func (u *TransferUsecase) resolveAvatarDisplayName(ctx context.Context, avatarID
 		return ""
 	}
 
-	name, _, err := u.avatarDisplay.GetNameAndIconByID(ctx, avatarID)
+	a, err := u.avatarDisplay.GetByID(ctx, avatarID)
 	if err != nil {
 		return ""
 	}
 
-	return strings.TrimSpace(name)
+	return strings.TrimSpace(a.AvatarName)
 }
 
 // findUntransferredItemByModelAndTB returns (inventoryId, modelId, true) if order has an item where:

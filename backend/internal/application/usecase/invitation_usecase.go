@@ -70,7 +70,6 @@ func (s *InvitationService) GetInvitationInfo(
 		return nil, fmt.Errorf("invitation token repository is not configured")
 	}
 
-	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, memdom.ErrInvitationTokenNotFound
 	}
@@ -122,12 +121,11 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 		return "", fmt.Errorf("invitation mailer is not configured")
 	}
 
-	memberDocID = strings.TrimSpace(memberDocID)
 	if memberDocID == "" {
 		return "", fmt.Errorf("memberDocID is empty")
 	}
 
-	companyID := strings.TrimSpace(CompanyIDFromContext(ctx))
+	companyID := CompanyIDFromContext(ctx)
 	if companyID == "" {
 		return "", fmt.Errorf("companyID is empty")
 	}
@@ -138,7 +136,7 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 	}
 
 	m := rec.Member
-	if strings.TrimSpace(m.Email) == "" {
+	if m.Email == "" {
 		return "", fmt.Errorf("member email is empty")
 	}
 
@@ -161,7 +159,7 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 
 	if !strings.EqualFold(m.Status, "active") {
 		status := "inactive"
-		updateKey := strings.TrimSpace(m.UID)
+		updateKey := m.UID
 		if updateKey == "" {
 			updateKey = rec.DocID
 		}
@@ -219,14 +217,6 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("member repository is not configured")
 	}
 
-	in.Token = strings.TrimSpace(in.Token)
-	in.UID = strings.TrimSpace(in.UID)
-	in.LastName = strings.TrimSpace(in.LastName)
-	in.LastNameKana = strings.TrimSpace(in.LastNameKana)
-	in.FirstName = strings.TrimSpace(in.FirstName)
-	in.FirstNameKana = strings.TrimSpace(in.FirstNameKana)
-	in.Email = strings.TrimSpace(in.Email)
-
 	if in.Token == "" || in.UID == "" {
 		return fmt.Errorf("token_or_uid_required")
 	}
@@ -241,10 +231,6 @@ func (s *InvitationCompleteService) CompleteInvitation(
 	if err != nil {
 		return err
 	}
-
-	info.MemberID = strings.TrimSpace(info.MemberID)
-	info.CompanyID = strings.TrimSpace(info.CompanyID)
-	info.Email = strings.TrimSpace(info.Email)
 
 	if info.MemberID == "" {
 		return memdom.ErrNotFound
@@ -265,7 +251,7 @@ func (s *InvitationCompleteService) CompleteInvitation(
 
 	companyID := info.CompanyID
 	if companyID == "" {
-		companyID = strings.TrimSpace(rec.Member.CompanyID)
+		companyID = rec.Member.CompanyID
 	}
 	if companyID == "" {
 		return fmt.Errorf("companyId is empty")
@@ -301,7 +287,7 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		AssignedBrands: &info.AssignedBrandIDs,
 	}
 
-	updateKey := strings.TrimSpace(rec.Member.UID)
+	updateKey := rec.Member.UID
 	if updateKey == "" {
 		updateKey = rec.DocID
 	}
@@ -330,9 +316,6 @@ func findMemberByDocIDInCompany(
 	if repo == nil {
 		return memdom.Record{}, fmt.Errorf("member repository is not configured")
 	}
-
-	companyID = strings.TrimSpace(companyID)
-	docID = strings.TrimSpace(docID)
 
 	if companyID == "" || docID == "" {
 		return memdom.Record{}, memdom.ErrNotFound

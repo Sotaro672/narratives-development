@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 )
 
@@ -36,10 +37,10 @@ type BrandWalletAddressReader interface {
 	FindBrandIDByWalletAddress(ctx context.Context, walletAddress string) (string, error)
 }
 
-// AvatarNameReader resolves avatarName by avatarId.
-// avatar 側は現状の GetNameByID port を維持する。
-type AvatarNameReader interface {
-	GetNameByID(ctx context.Context, avatarID string) (string, error)
+// AvatarReader resolves avatar by avatarId.
+// avatar 側は GetByID port に統一する。
+type AvatarReader interface {
+	GetByID(ctx context.Context, avatarID string) (avatardom.Avatar, error)
 }
 
 // BrandReader resolves brand by brandId.
@@ -90,24 +91,24 @@ type OwnerResolveQuery struct {
 	AvatarRepo AvatarWalletAddressReader
 	BrandRepo  BrandWalletAddressReader
 
-	// ID -> Name / Brand（nil 許容 / Resolve は継続）
-	AvatarName AvatarNameReader
-	Brand      BrandReader
+	// ID -> Avatar / Brand（nil 許容 / Resolve は継続）
+	Avatar AvatarReader
+	Brand  BrandReader
 }
 
 // NewOwnerResolveQuery constructs OwnerResolveQuery.
 // AvatarRepo / BrandRepo はどちらも nil 許容だが、Resolve には最低1つ必要。
-// AvatarName / Brand は nil でも Resolve は動作する（名前は埋めない）。
+// Avatar / Brand は nil でも Resolve は動作する（名前は埋めない）。
 func NewOwnerResolveQuery(
 	avatarRepo AvatarWalletAddressReader,
 	brandRepo BrandWalletAddressReader,
-	avatarName AvatarNameReader,
+	avatarReader AvatarReader,
 	brandReader BrandReader,
 ) *OwnerResolveQuery {
 	return &OwnerResolveQuery{
 		AvatarRepo: avatarRepo,
 		BrandRepo:  brandRepo,
-		AvatarName: avatarName,
+		Avatar:     avatarReader,
 		Brand:      brandReader,
 	}
 }
@@ -143,9 +144,9 @@ func (q *OwnerResolveQuery) Resolve(
 			}
 
 			// optional: avatarId -> avatarName
-			if q.AvatarName != nil {
-				if name, err := q.AvatarName.GetNameByID(ctx, avatarID); err == nil {
-					res.AvatarName = name
+			if q.Avatar != nil {
+				if a, err := q.Avatar.GetByID(ctx, avatarID); err == nil {
+					res.AvatarName = a.AvatarName
 				}
 			}
 

@@ -18,7 +18,7 @@ type AvatarStateQuery struct {
 }
 
 type AvatarQueryAvatarRepository interface {
-	GetNameAndIconByID(ctx context.Context, id string) (name string, icon string, err error)
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 type AvatarQueryAvatarStateRepository interface {
@@ -130,12 +130,15 @@ func (q *AvatarStateQuery) ResolveFollowRef(
 		return out
 	}
 
-	name, icon, err := q.avatarRepo.GetNameAndIconByID(ctx, ref.AvatarID)
+	avatar, err := q.avatarRepo.GetByID(ctx, ref.AvatarID)
 	if err != nil {
 		return out
 	}
 
-	out.AvatarName = name
-	out.AvatarIcon = icon
+	out.AvatarName = avatar.AvatarName
+	if avatar.AvatarIcon != nil {
+		out.AvatarIcon = *avatar.AvatarIcon
+	}
+
 	return out
 }
