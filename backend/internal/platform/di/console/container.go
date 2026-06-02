@@ -16,6 +16,7 @@ import (
 	shared "narratives/internal/platform/di/shared"
 
 	avatar "narratives/internal/domain/avatar"
+	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	pbdomain "narratives/internal/domain/productBlueprint"
@@ -28,6 +29,7 @@ type Container struct {
 	Infra *shared.Infra
 
 	MemberRepo memdom.Repository
+	BrandRepo  branddom.Repository
 
 	TokenBlueprintRepo         tokenBlueprint.RepositoryPort
 	TokenBlueprintReviewRepo   tbReview.RepositoryPort
@@ -69,6 +71,9 @@ type Container struct {
 
 	CompanyProductionQueryService *query.CompanyProductionQueryService
 	MintRequestQueryService       *query.MintRequestQueryService
+
+	BrandManagementQuery *query.BrandManagementQuery
+	BrandDetailQuery     *query.BrandDetailQuery
 
 	ProductBlueprintManagementQuery *query.ProductBlueprintManagementQuery
 	ProductBlueprintDetailQuery     *query.ProductBlueprintDetailQuery
@@ -149,6 +154,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		Infra: clients.infra,
 
 		MemberRepo: repos.memberRepo,
+		BrandRepo:  repos.brandRepo,
 
 		TokenBlueprintRepo:         repos.tokenBlueprintRepo,
 		TokenBlueprintReviewRepo:   repos.tokenBlueprintReviewRepo,
@@ -190,6 +196,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		CompanyProductionQueryService: q.companyProductionQueryService,
 		MintRequestQueryService:       q.mintRequestQueryService,
+
+		BrandManagementQuery: q.brandManagementQuery,
+		BrandDetailQuery:     q.brandDetailQuery,
 
 		ProductBlueprintManagementQuery: q.productBlueprintManagementQuery,
 		ProductBlueprintDetailQuery:     q.productBlueprintDetailQuery,

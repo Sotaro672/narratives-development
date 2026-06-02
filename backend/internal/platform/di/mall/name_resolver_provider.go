@@ -25,13 +25,9 @@ func MallNameResolver(c *consoleDI.Container) *appresolver.NameResolver {
 		return nil
 	}
 
-	var brandUC *usecase.BrandUsecase
-	{
-		if x, ok := any(c).(interface{ BrandUsecase() *usecase.BrandUsecase }); ok {
-			brandUC = x.BrandUsecase()
-		} else if x, ok := any(c).(interface{ GetBrandUsecase() *usecase.BrandUsecase }); ok {
-			brandUC = x.GetBrandUsecase()
-		}
+	var brandRepo branddom.Repository
+	if c.BrandRepo != nil {
+		brandRepo = c.BrandRepo
 	}
 
 	var companyUC *usecase.CompanyUsecase
@@ -45,18 +41,22 @@ func MallNameResolver(c *consoleDI.Container) *appresolver.NameResolver {
 		}); ok {
 			companyUC = x.GetCompanyUsecase()
 		}
+
+		if companyUC == nil {
+			companyUC = c.CompanyUC
+		}
 	}
 
-	if brandUC == nil && companyUC == nil {
-		log.Printf("[di.mall] MallNameResolver unavailable (brandUC=nil & companyUC=nil)")
+	if brandRepo == nil && companyUC == nil {
+		log.Printf("[di.mall] MallNameResolver unavailable (brandRepo=nil & companyUC=nil)")
 		return nil
 	}
 
 	var br appresolver.BrandNameRepository
 	var cr appresolver.CompanyNameRepository
 
-	if brandUC != nil {
-		br = &brandNameRepoAdapter{uc: brandUC}
+	if brandRepo != nil {
+		br = &brandNameRepoAdapter{repo: brandRepo}
 	}
 	if companyUC != nil {
 		cr = &companyNameRepoAdapter{uc: companyUC}
@@ -81,18 +81,18 @@ func MallNameResolver(c *consoleDI.Container) *appresolver.NameResolver {
 // ------------------------------------------------------------
 
 type brandNameRepoAdapter struct {
-	uc *usecase.BrandUsecase
+	repo branddom.Repository
 }
 
 func (a *brandNameRepoAdapter) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
-	if a == nil || a.uc == nil {
-		return branddom.Brand{}, errors.New("brandNameRepoAdapter: uc is nil")
+	if a == nil || a.repo == nil {
+		return branddom.Brand{}, errors.New("brandNameRepoAdapter: repo is nil")
 	}
 	if id == "" {
 		return branddom.Brand{}, errors.New("brandNameRepoAdapter: id is empty")
 	}
 
-	return a.uc.GetByID(ctx, id)
+	return a.repo.GetByID(ctx, id)
 }
 
 type companyNameRepoAdapter struct {

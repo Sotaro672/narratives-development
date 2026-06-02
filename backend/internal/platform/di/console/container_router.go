@@ -82,8 +82,14 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		permissionsH = consoleHandler.NewPermissionHandler(c.PermissionUC)
 	}
 
-	if c.BrandUC != nil {
-		brandsH = consoleHandler.NewBrandHandler(c.BrandUC)
+	if c.BrandUC != nil &&
+		c.BrandManagementQuery != nil &&
+		c.BrandDetailQuery != nil {
+		brandsH = consoleHandler.NewBrandHandler(
+			c.BrandUC,
+			c.BrandManagementQuery,
+			c.BrandDetailQuery,
+		)
 	}
 
 	if c.CompanyUC != nil {
@@ -147,21 +153,25 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.TokenBlueprintUC,
 			c.TokenBlueprintDetailQuery,
 			c.TokenBlueprintManagementQuery,
-			c.BrandUC,
+			c.BrandRepo,
 		)
 	}
 
-	if c.TokenBlueprintRepo != nil && c.TokenBlueprintReviewRepo != nil {
+	if c.TokenBlueprintRepo != nil &&
+		c.TokenBlueprintReviewRepo != nil &&
+		c.BrandRepo != nil {
 		tbReviewUC := usecase.NewTokenBlueprintReviewUsecase(
 			c.TokenBlueprintReviewRepo,
 			c.AvatarRepo,
 			c.TokenBlueprintRepo,
-			c.BrandUC,
+			c.BrandRepo,
 		)
 		tokenBPReviewH = consoleHandler.NewTokenBlueprintReviewHandler(tbReviewUC)
 	}
 
-	if c.ProductBlueprintRepo != nil && c.ProductBlueprintReviewRepo != nil {
+	if c.ProductBlueprintRepo != nil &&
+		c.ProductBlueprintReviewRepo != nil &&
+		c.BrandRepo != nil {
 		var walletRepo usecase.WalletRepository = nil
 
 		pbReviewUC := usecase.NewProductBlueprintReviewUsecase(
@@ -169,7 +179,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			walletRepo,
 		).
 			WithProductBlueprintRepo(c.ProductBlueprintRepo).
-			WithBrandRepository(c.BrandUC).
+			WithBrandRepository(c.BrandRepo).
 			WithMemberService(c.MemberService)
 
 		if c.AvatarRepo != nil {
@@ -236,12 +246,14 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ownerResolveH = consoleHandler.NewOwnerResolveHandler(c.OwnerResolveQ)
 	}
 
-	if c.InvitationQuery != nil && c.InvitationComplete != nil {
+	if c.InvitationQuery != nil &&
+		c.InvitationComplete != nil &&
+		c.BrandRepo != nil {
 		invitationH = consoleHandler.NewInvitationHandler(
 			c.InvitationQuery,
 			c.InvitationComplete,
 			c.CompanyService,
-			c.BrandUC,
+			c.BrandRepo,
 		)
 	}
 

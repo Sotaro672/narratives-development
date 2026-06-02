@@ -7,16 +7,27 @@ import (
 	"time"
 
 	shared "narratives/internal/adapters/in/http/shared"
+	query "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 )
 
 type BrandHandler struct {
-	uc *usecase.BrandUsecase
+	uc              *usecase.BrandUsecase
+	managementQuery *query.BrandManagementQuery
+	detailQuery     *query.BrandDetailQuery
 }
 
-func NewBrandHandler(uc *usecase.BrandUsecase) http.Handler {
-	return &BrandHandler{uc: uc}
+func NewBrandHandler(
+	uc *usecase.BrandUsecase,
+	managementQuery *query.BrandManagementQuery,
+	detailQuery *query.BrandDetailQuery,
+) http.Handler {
+	return &BrandHandler{
+		uc:              uc,
+		managementQuery: managementQuery,
+		detailQuery:     detailQuery,
+	}
 }
 
 func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -104,20 +115,13 @@ func (h *BrandHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	brand, err := h.uc.GetByID(ctx, vid)
+	result, err := h.detailQuery.GetByID(ctx, vid)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
 	}
 
-	memberName := ""
-	if brand.ManagerID != nil && *brand.ManagerID != "" {
-		if name, nerr := h.uc.ResolveMemberNameByID(ctx, *brand.ManagerID); nerr == nil {
-			memberName = name
-		}
-	}
-
-	_ = json.NewEncoder(w).Encode(toBrandDTO(brand, memberName))
+	_ = json.NewEncoder(w).Encode(toBrandDTO(result.Brand, result.MemberName))
 }
 
 func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -248,15 +252,15 @@ func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	memberName := ""
-	if created.ManagerID != nil && *created.ManagerID != "" {
-		if name, nerr := h.uc.ResolveMemberNameByID(ctx, *created.ManagerID); nerr == nil {
-			memberName = name
-		}
+	w.WriteHeader(http.StatusCreated)
+
+	result, err := h.detailQuery.GetByID(ctx, created.ID)
+	if err == nil {
+		_ = json.NewEncoder(w).Encode(toBrandDTO(result.Brand, result.MemberName))
+		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toBrandDTO(created, memberName))
+	_ = json.NewEncoder(w).Encode(toBrandDTO(created, ""))
 }
 
 func (h *BrandHandler) update(w http.ResponseWriter, r *http.Request, id string) {
@@ -356,14 +360,13 @@ func (h *BrandHandler) update(w http.ResponseWriter, r *http.Request, id string)
 		return
 	}
 
-	memberName := ""
-	if updated.ManagerID != nil && *updated.ManagerID != "" {
-		if name, nerr := h.uc.ResolveMemberNameByID(ctx, *updated.ManagerID); nerr == nil {
-			memberName = name
-		}
+	result, err := h.detailQuery.GetByID(ctx, updated.ID)
+	if err == nil {
+		_ = json.NewEncoder(w).Encode(toBrandDTO(result.Brand, result.MemberName))
+		return
 	}
 
-	_ = json.NewEncoder(w).Encode(toBrandDTO(updated, memberName))
+	_ = json.NewEncoder(w).Encode(toBrandDTO(updated, ""))
 }
 
 func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -389,21 +392,15 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 		PerPage: perPage,
 	}
 
-	result, err := h.uc.ListCurrentCompanyBrandsWithNames(ctx, p)
+	result, err := h.managementQuery.ListCurrentCompanyBrands(ctx, p)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
 	}
 
 	dtoItems := make([]brandDTO, 0, len(result.Items))
-	for _, b := range result.Items {
-		memberName := ""
-		if b.ManagerID != nil && *b.ManagerID != "" {
-			if name, nerr := h.uc.ResolveMemberNameByID(ctx, *b.ManagerID); nerr == nil {
-				memberName = name
-			}
-		}
-		dtoItems = append(dtoItems, toBrandDTO(b, memberName))
+	for _, item := range result.Items {
+		dtoItems = append(dtoItems, toBrandDTO(item.Brand, item.MemberName))
 	}
 
 	out := struct {

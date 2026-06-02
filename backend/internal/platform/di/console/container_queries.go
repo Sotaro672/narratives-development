@@ -17,6 +17,9 @@ type queries struct {
 	companyProductionQueryService *companyquery.CompanyProductionQueryService
 	mintRequestQueryService       *companyquery.MintRequestQueryService
 
+	brandManagementQuery *companyquery.BrandManagementQuery
+	brandDetailQuery     *companyquery.BrandDetailQuery
+
 	productBlueprintManagementQuery *companyquery.ProductBlueprintManagementQuery
 	productBlueprintDetailQuery     *companyquery.ProductBlueprintDetailQuery
 
@@ -40,6 +43,16 @@ type queries struct {
 }
 
 func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s *services) *queries {
+	brandManagementQuery := companyquery.NewBrandManagementQuery(
+		r.brandRepo,
+		r.memberRepo,
+	)
+
+	brandDetailQuery := companyquery.NewBrandDetailQuery(
+		r.brandRepo,
+		r.memberRepo,
+	)
+
 	productBlueprintManagementQuery := companyquery.NewProductBlueprintManagementQuery(
 		r.productBlueprintRepo,
 		res.nameResolver,
@@ -240,6 +253,9 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	return &queries{
 		companyProductionQueryService: companyProductionQueryService,
 		mintRequestQueryService:       mintRequestQueryService,
+
+		brandManagementQuery: brandManagementQuery,
+		brandDetailQuery:     brandDetailQuery,
 
 		productBlueprintManagementQuery: productBlueprintManagementQuery,
 		productBlueprintDetailQuery:     productBlueprintDetailQuery,

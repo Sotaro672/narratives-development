@@ -53,53 +53,6 @@ func NewBrandUsecase(
 	return u
 }
 
-func (u *BrandUsecase) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
-	if id == "" {
-		return branddom.Brand{}, branddom.ErrInvalidID
-	}
-
-	return u.brandRepo.GetByID(ctx, id)
-}
-
-func (u *BrandUsecase) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	page branddom.Page,
-) (branddom.PageResult[branddom.Brand], error) {
-	if companyID == "" {
-		return branddom.PageResult[branddom.Brand]{}, branddom.ErrInvalidID
-	}
-
-	return u.brandRepo.ListByCompanyID(ctx, companyID, page)
-}
-
-func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
-	ctx context.Context,
-	page branddom.Page,
-) (branddom.PageResult[branddom.Brand], error) {
-	cid := CompanyIDFromContext(ctx)
-	if cid == "" {
-		return branddom.PageResult[branddom.Brand]{}, nil
-	}
-
-	return u.brandRepo.ListByCompanyID(ctx, cid, page)
-}
-
-func (u *BrandUsecase) GetMemberNameLastFirstByID(
-	ctx context.Context,
-	memberID string,
-) (string, error) {
-	svc := memberdom.NewService(u.memberRepo)
-	return svc.GetNameLastFirstByID(ctx, memberID)
-}
-
-func (u *BrandUsecase) ResolveMemberNameByID(
-	ctx context.Context,
-	memberID string,
-) (string, error) {
-	return u.GetMemberNameLastFirstByID(ctx, memberID)
-}
-
 func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		b.CompanyID = cid
