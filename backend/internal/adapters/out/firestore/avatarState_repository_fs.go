@@ -62,54 +62,8 @@ func (r *AvatarStateRepositoryFS) followingCol(avatarID string) *firestore.Colle
 }
 
 // ==============================
-// Upsert
-// ==============================
-
-// Upsert upserts avatar state.
-// The avatar state document ID is avatarID.
-func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, state avatarstate.AvatarState) (avatarstate.AvatarState, error) {
-	if r == nil || r.Client == nil {
-		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: client is nil")
-	}
-
-	avatarID := state.ID
-	if avatarID == "" {
-		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: avatarID is empty")
-	}
-
-	data := avatarStateParentData(state)
-
-	if _, err := r.col().Doc(avatarID).Set(ctx, data, firestore.MergeAll); err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return avatarstate.AvatarState{}, avatarstate.ErrConflict
-		}
-		return avatarstate.AvatarState{}, err
-	}
-
-	if shouldReplaceFollowers(state) {
-		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(state.Followers)); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-	}
-
-	if shouldReplaceFollowing(state) {
-		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(state.Following)); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-	}
-
-	return r.GetByAvatarID(ctx, avatarID)
-}
-
-// ==============================
 // Get
 // ==============================
-
-// GetByID gets avatar state by avatarID.
-// This method exists for common repository compatibility.
-func (r *AvatarStateRepositoryFS) GetByID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
-	return r.GetByAvatarID(ctx, avatarID)
-}
 
 // GetByAvatarID gets avatar state by avatarID.
 // The avatarID is the parent document ID.
@@ -130,32 +84,12 @@ func (r *AvatarStateRepositoryFS) GetByAvatarID(ctx context.Context, avatarID st
 }
 
 // ==============================
-// Exists
+// Upsert
 // ==============================
 
-func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, avatarID string) (bool, error) {
-	if avatarID == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(avatarID).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
-}
-
-// ==============================
-// Create / Update / Delete / Save
-// ==============================
-
-// Create creates avatar state.
+// Upsert creates or updates avatar state.
 // The avatar state document ID is avatarID.
-func (r *AvatarStateRepositoryFS) Create(ctx context.Context, state avatarstate.AvatarState) (avatarstate.AvatarState, error) {
+func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, state avatarstate.AvatarState) (avatarstate.AvatarState, error) {
 	if r == nil || r.Client == nil {
 		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: client is nil")
 	}
@@ -167,11 +101,7 @@ func (r *AvatarStateRepositoryFS) Create(ctx context.Context, state avatarstate.
 
 	data := avatarStateParentData(state)
 
-	_, err := r.col().Doc(avatarID).Create(ctx, data)
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return avatarstate.AvatarState{}, avatarstate.ErrConflict
-		}
+	if _, err := r.col().Doc(avatarID).Set(ctx, data, firestore.MergeAll); err != nil {
 		return avatarstate.AvatarState{}, err
 	}
 
@@ -190,121 +120,13 @@ func (r *AvatarStateRepositoryFS) Create(ctx context.Context, state avatarstate.
 	return r.GetByAvatarID(ctx, avatarID)
 }
 
-// Update updates avatar state by avatarID.
-// This method exists for common repository compatibility.
-func (r *AvatarStateRepositoryFS) Update(ctx context.Context, avatarID string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
-	return r.UpdateByAvatarID(ctx, avatarID, patch)
-}
-
-// UpdateByAvatarID updates avatar state by avatarID.
-// The avatarID is the parent document ID.
-func (r *AvatarStateRepositoryFS) UpdateByAvatarID(ctx context.Context, avatarID string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
-	if avatarID == "" {
-		return avatarstate.AvatarState{}, avatarstate.ErrNotFound
-	}
-
-	return r.updateByAvatarID(ctx, avatarID, patch)
-}
-
-func (r *AvatarStateRepositoryFS) updateByAvatarID(
-	ctx context.Context,
-	avatarID string,
-	patch avatarstate.AvatarStatePatch,
-) (avatarstate.AvatarState, error) {
-	ref := r.col().Doc(avatarID)
-
-	if _, err := ref.Get(ctx); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return avatarstate.AvatarState{}, avatarstate.ErrNotFound
-		}
-		return avatarstate.AvatarState{}, err
-	}
-
-	updates := make([]firestore.Update, 0)
-
-	if patch.FollowerCount != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "followerCount",
-			Value: *patch.FollowerCount,
-		})
-	}
-
-	if patch.FollowingCount != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "followingCount",
-			Value: *patch.FollowingCount,
-		})
-	}
-
-	if patch.PostCount != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "postCount",
-			Value: *patch.PostCount,
-		})
-	}
-
-	if patch.Followers != nil {
-		followers := cloneFollowRefs(*patch.Followers)
-
-		if err := r.replaceFollowRefs(ctx, ref.Collection("followers"), followers); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-
-		updates = append(updates, firestore.Update{
-			Path:  "followerCount",
-			Value: int64(len(followers)),
-		})
-	}
-
-	if patch.Following != nil {
-		following := cloneFollowRefs(*patch.Following)
-
-		if err := r.replaceFollowRefs(ctx, ref.Collection("following"), following); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-
-		updates = append(updates, firestore.Update{
-			Path:  "followingCount",
-			Value: int64(len(following)),
-		})
-	}
-
-	if patch.LastActiveAt != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "lastActiveAt",
-			Value: patch.LastActiveAt.UTC(),
-		})
-	}
-
-	updatedAt := time.Now().UTC()
-	if patch.UpdatedAt != nil {
-		updatedAt = patch.UpdatedAt.UTC()
-	}
-
-	updates = append(updates, firestore.Update{
-		Path:  "updatedAt",
-		Value: updatedAt,
-	})
-
-	if _, err := ref.Update(ctx, updates); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return avatarstate.AvatarState{}, avatarstate.ErrNotFound
-		}
-		return avatarstate.AvatarState{}, err
-	}
-
-	return r.GetByAvatarID(ctx, avatarID)
-}
+// ==============================
+// Delete
+// ==============================
 
 // Delete deletes avatar state by avatarID.
-// This method exists for common repository compatibility.
-func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, avatarID string) error {
-	return r.DeleteByAvatarID(ctx, avatarID)
-}
-
-// DeleteByAvatarID deletes avatar state by avatarID.
 // The avatarID is the parent document ID.
-func (r *AvatarStateRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string) error {
+func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, avatarID string) error {
 	if avatarID == "" {
 		return avatarstate.ErrNotFound
 	}
@@ -328,39 +150,6 @@ func (r *AvatarStateRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID
 
 	_, err := ref.Delete(ctx)
 	return err
-}
-
-// Save overwrites the avatar state parent document.
-// The avatar state document ID is avatarID.
-func (r *AvatarStateRepositoryFS) Save(ctx context.Context, state avatarstate.AvatarState, _ *avatarstate.SaveOptions) (avatarstate.AvatarState, error) {
-	if r == nil || r.Client == nil {
-		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: client is nil")
-	}
-
-	avatarID := state.ID
-	if avatarID == "" {
-		return avatarstate.AvatarState{}, errors.New("avatar_state_repository_fs: avatarID is empty")
-	}
-
-	data := avatarStateParentData(state)
-
-	if _, err := r.col().Doc(avatarID).Set(ctx, data); err != nil {
-		return avatarstate.AvatarState{}, err
-	}
-
-	if shouldReplaceFollowers(state) {
-		if err := r.replaceFollowRefs(ctx, r.followersCol(avatarID), sliceOrEmpty(state.Followers)); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-	}
-
-	if shouldReplaceFollowing(state) {
-		if err := r.replaceFollowRefs(ctx, r.followingCol(avatarID), sliceOrEmpty(state.Following)); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-	}
-
-	return r.GetByAvatarID(ctx, avatarID)
 }
 
 // ==============================

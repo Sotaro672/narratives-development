@@ -12,11 +12,10 @@ import (
 // ========================================
 // nil のフィールドは更新しない契約
 //
-// ✅ entity.go を正として:
+// entity.go を正として:
 // - AvatarIconURL / AvatarIconPath → AvatarIcon
 // - Bio          → Profile
 // - Website      → ExternalLink
-// - FirebaseUID  を追加
 type AvatarPatch struct {
 	UserID        string  `json:"userId"`
 	AvatarName    *string `json:"avatarName,omitempty"`
@@ -61,12 +60,20 @@ type CursorPageResult = common.CursorPageResult[Avatar]
 // ========================================
 
 type Repository interface {
-
 	// avatarId による取得
 	GetByID(ctx context.Context, id string) (Avatar, error)
 
-	// owner / user lookup
-	// - avatar document id は avatarId であり userId ではない
-	// - setup status や mall/me/avatar 判定では userId で存在確認する
+	// 作成
+	Create(ctx context.Context, a Avatar) (Avatar, error)
+
+	// 更新
+	Update(ctx context.Context, id string, patch AvatarPatch) (Avatar, error)
+
+	// 削除
+	Delete(ctx context.Context, id string) error
+
+	// userId による存在確認
+	// avatar document id は avatarId であり userId ではない。
+	// setup status や mall/me/avatar 判定では userId で存在確認する。
 	ExistsByUserID(ctx context.Context, userID string) (bool, error)
 }

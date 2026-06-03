@@ -113,80 +113,29 @@ type PreviewQuery struct {
 	ModelRepo            ModelVariationReader
 	ProductBlueprintRepo ProductBlueprintReader
 
-	// Optional: modelId -> apparel/alcohol display fields
+	// modelId -> apparel/alcohol display fields
 	NameResolver *appresolver.NameResolver
 
-	// Optional: tokens/{productId} を読む（nil なら token は返さない）
+	// tokens/{productId} を読む
 	TokenRepo TokenReader
 
-	// Optional: tokenBlueprint を読む（nil なら tokenBlueprintPatch は返さない）
+	// tokenBlueprint を読む
 	TokenBlueprintRepo TokenBlueprintPatchReader
 
-	// Optional: tokens.toAddress -> owner を解決（nil なら owner は返さない）
+	// tokens.toAddress -> owner を解決
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
-	// Optional: display-only name resolvers
+	// display-only name resolvers
 	BrandRepo          BrandReader
 	AvatarNameIconRepo AvatarNameIconReader
 
-	// Optional: mintAddress -> transfers を解決（nil なら transfers は返さない）
+	// mintAddress -> transfers を解決
 	TransferRepo TransferReader
 }
 
 // ------------------------------------------------------------
-// Options (wiring helpers)
+// Constructor
 // ------------------------------------------------------------
-
-type PreviewQueryOption func(q *PreviewQuery)
-
-func WithNameResolver(r *appresolver.NameResolver) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.NameResolver = r
-	}
-}
-
-func WithTokenRepo(r TokenReader) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.TokenRepo = r
-	}
-}
-
-func WithTokenBlueprintRepo(r TokenBlueprintPatchReader) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.TokenBlueprintRepo = r
-	}
-}
-
-func WithOwnerResolveQuery(qry *sharedquery.OwnerResolveQuery) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.OwnerResolveQ = qry
-	}
-}
-
-func WithBrandRepo(r BrandReader) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.BrandRepo = r
-	}
-}
-
-// 既存DIコード互換用。
-// 旧名 WithBrandNameIconRepo を呼んでいる箇所が残っていても、
-// brand.Repository / brand.RepositoryPort をそのまま差し込める。
-func WithBrandNameIconRepo(r BrandReader) PreviewQueryOption {
-	return WithBrandRepo(r)
-}
-
-func WithAvatarNameIconRepo(r AvatarNameIconReader) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.AvatarNameIconRepo = r
-	}
-}
-
-func WithTransferRepo(r TransferReader) PreviewQueryOption {
-	return func(q *PreviewQuery) {
-		q.TransferRepo = r
-	}
-}
 
 // NewPreviewQuery constructs PreviewQuery.
 // This is the only entry point for wiring dependencies.
@@ -194,28 +143,26 @@ func NewPreviewQuery(
 	productRepo ProductReader,
 	modelRepo ModelVariationReader,
 	pbRepo ProductBlueprintReader,
-	opts ...PreviewQueryOption,
+	nameResolver *appresolver.NameResolver,
+	tokenRepo TokenReader,
+	tokenBlueprintRepo TokenBlueprintPatchReader,
+	ownerResolveQ *sharedquery.OwnerResolveQuery,
+	brandRepo BrandReader,
+	avatarNameIconRepo AvatarNameIconReader,
+	transferRepo TransferReader,
 ) *PreviewQuery {
-	q := &PreviewQuery{
+	return &PreviewQuery{
 		ProductRepo:          productRepo,
 		ModelRepo:            modelRepo,
 		ProductBlueprintRepo: pbRepo,
-		NameResolver:         nil,
-		TokenRepo:            nil,
-		TokenBlueprintRepo:   nil,
-		OwnerResolveQ:        nil,
-		BrandRepo:            nil,
-		AvatarNameIconRepo:   nil,
-		TransferRepo:         nil,
+		NameResolver:         nameResolver,
+		TokenRepo:            tokenRepo,
+		TokenBlueprintRepo:   tokenBlueprintRepo,
+		OwnerResolveQ:        ownerResolveQ,
+		BrandRepo:            brandRepo,
+		AvatarNameIconRepo:   avatarNameIconRepo,
+		TransferRepo:         transferRepo,
 	}
-
-	for _, opt := range opts {
-		if opt != nil {
-			opt(q)
-		}
-	}
-
-	return q
 }
 
 // ResolveModelIDByProductID resolves modelId from productId.

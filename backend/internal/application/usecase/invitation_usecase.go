@@ -130,9 +130,13 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 		return "", fmt.Errorf("companyID is empty")
 	}
 
-	rec, err := findMemberByDocIDInCompany(ctx, s.memberRepo, companyID, memberDocID)
+	rec, err := s.memberRepo.GetByID(ctx, memberDocID)
 	if err != nil {
 		return "", fmt.Errorf("find member by doc id failed: %w", err)
+	}
+
+	if rec.Member.CompanyID != companyID {
+		return "", memdom.ErrNotFound
 	}
 
 	m := rec.Member
@@ -159,12 +163,8 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 
 	if !strings.EqualFold(m.Status, "active") {
 		status := "inactive"
-		updateKey := m.UID
-		if updateKey == "" {
-			updateKey = rec.DocID
-		}
 
-		if _, err := s.memberRepo.Update(ctx, updateKey, memdom.MemberPatch{
+		if _, err := s.memberRepo.Update(ctx, rec.DocID, memdom.MemberPatch{
 			Status: &status,
 		}); err != nil {
 			return "", fmt.Errorf("update member status after invitation failed: %w", err)
@@ -244,9 +244,13 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("companyId is empty")
 	}
 
-	rec, err := findMemberByDocIDInCompany(ctx, s.memberRepo, info.CompanyID, info.MemberID)
+	rec, err := s.memberRepo.GetByID(ctx, info.MemberID)
 	if err != nil {
 		return fmt.Errorf("find member by invitation member id failed: %w", err)
+	}
+
+	if rec.Member.CompanyID != info.CompanyID {
+		return memdom.ErrNotFound
 	}
 
 	companyID := info.CompanyID
@@ -287,12 +291,7 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		AssignedBrands: &info.AssignedBrandIDs,
 	}
 
-	updateKey := rec.Member.UID
-	if updateKey == "" {
-		updateKey = rec.DocID
-	}
-
-	if _, err := s.memberRepo.Update(ctx, updateKey, patch); err != nil {
+	if _, err := s.memberRepo.Update(ctx, rec.DocID, patch); err != nil {
 		return fmt.Errorf("update invited member failed: %w", err)
 	}
 
@@ -301,49 +300,4 @@ func (s *InvitationCompleteService) CompleteInvitation(
 	}
 
 	return nil
-}
-
-// ==============================
-// Helpers
-// ==============================
-
-func findMemberByDocIDInCompany(
-	ctx context.Context,
-	repo memdom.Repository,
-	companyID string,
-	docID string,
-) (memdom.Record, error) {
-	if repo == nil {
-		return memdom.Record{}, fmt.Errorf("member repository is not configured")
-	}
-
-	if companyID == "" || docID == "" {
-		return memdom.Record{}, memdom.ErrNotFound
-	}
-
-	pageNumber := 1
-
-	for {
-		res, err := repo.ListByCompanyID(ctx, companyID, memdom.Filter{}, memdom.Page{
-			Number:  pageNumber,
-			PerPage: 200,
-		})
-		if err != nil {
-			return memdom.Record{}, err
-		}
-
-		for _, item := range res.Items {
-			if item.DocID == docID {
-				return item, nil
-			}
-		}
-
-		if len(res.Items) == 0 || pageNumber >= res.TotalPages {
-			break
-		}
-
-		pageNumber++
-	}
-
-	return memdom.Record{}, memdom.ErrNotFound
 }

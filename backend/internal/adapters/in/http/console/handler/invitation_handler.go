@@ -4,7 +4,6 @@ package consoleHandler
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -124,7 +123,6 @@ func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	info, err := h.InvitationQuery.GetInvitationInfo(ctx, token)
 	if err != nil {
-		log.Printf("[InvitationHandler.handleResolveInfo] failed: method=%s token=%s err=%v", r.Method, token, err)
 		if errors.Is(err, memdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
 			writeInvitationJSONError(w, http.StatusNotFound, "invitation_token_not_found")
 			return
@@ -138,7 +136,6 @@ func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Req
 		name, err := h.CompanyService.GetCompanyNameByID(ctx, info.CompanyID)
 		if err != nil {
 			if !errors.Is(err, compdom.ErrNotFound) {
-				log.Printf("[InvitationHandler.handleResolveInfo] failed to resolve company name: companyID=%s err=%v", info.CompanyID, err)
 				writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_company_name")
 				return
 			}
@@ -163,7 +160,6 @@ func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Req
 					continue
 				}
 
-				log.Printf("[InvitationHandler.handleResolveInfo] failed to resolve brand name: brandID=%s err=%v", brandID, err)
 				writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_brand_name")
 				return
 			}
@@ -248,7 +244,6 @@ func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Reques
 			writeInvitationJSONError(w, http.StatusBadRequest, "email_mismatch")
 			return
 		default:
-			log.Printf("[InvitationHandler.handleComplete] failed: token=%s uid=%s err=%v", req.Token, req.UID, err)
 			writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_complete_invitation")
 			return
 		}
@@ -299,7 +294,6 @@ func (h *MemberInvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	token, err := h.InvitationCommand.CreateInvitationAndSend(ctx, memberID)
 	if err != nil {
-		log.Printf("[MemberInvitationHandler] failed: memberID=%s err=%v", memberID, err)
 		writeInvitationJSONError(w, http.StatusInternalServerError, "cannot_send_invitation")
 		return
 	}

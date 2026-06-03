@@ -29,14 +29,7 @@ type MemberUsecase struct {
 	invitationCommand InvitationCommandPort
 }
 
-func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
-	return &MemberUsecase{
-		repo: repo,
-		now:  time.Now,
-	}
-}
-
-func NewMemberUsecaseWithInvitationCommand(
+func NewMemberUsecase(
 	repo memdom.Repository,
 	invitationCommand InvitationCommandPort,
 ) *MemberUsecase {
@@ -111,8 +104,9 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (Membe
 }
 
 type UpdateMemberInput struct {
-	// UID is Firebase Auth UID.
-	UID string
+	// MemberID is Firestore member document ID.
+	// Console の PATCH /members/{id} は Firebase UID ではなく member docId を使う。
+	MemberID string
 
 	FirstName      *string
 	LastName       *string
@@ -122,13 +116,30 @@ type UpdateMemberInput struct {
 	Permissions    *[]string
 	AssignedBrands *[]string
 
-	CompanyID *string
+	CompanyID string
 	Status    *string
 }
 
 func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (MemberRecord, error) {
-	uid := in.UID
-	if uid == "" {
+	memberID := in.MemberID
+	if memberID == "" {
+		return MemberRecord{}, memdom.ErrNotFound
+	}
+
+	companyID := in.CompanyID
+	if cid := CompanyIDFromContext(ctx); cid != "" {
+		companyID = cid
+	}
+	if companyID == "" {
+		return MemberRecord{}, memdom.ErrNotFound
+	}
+
+	current, err := u.repo.GetByID(ctx, memberID)
+	if err != nil {
+		return MemberRecord{}, err
+	}
+
+	if current.Member.CompanyID != companyID {
 		return MemberRecord{}, memdom.ErrNotFound
 	}
 
@@ -143,17 +154,10 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (Membe
 		Status:         in.Status,
 	}
 
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		patch.CompanyID = &cid
-	} else if in.CompanyID != nil {
-		companyID := *in.CompanyID
-		patch.CompanyID = &companyID
-	}
-
 	now := u.now().UTC()
 	patch.UpdatedAt = &now
 
-	rec, err := u.repo.Update(ctx, uid, patch)
+	rec, err := u.repo.Update(ctx, memberID, patch)
 	if err != nil {
 		return MemberRecord{}, err
 	}
@@ -165,32 +169,58 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (Membe
 }
 
 type BindFirebaseUIDInput struct {
-	UID string
+	// MemberID is Firestore member document ID.
+	// Console の POST /members/{id}/bind-firebase-uid は member docId を使う。
+	MemberID string
+
+	// CompanyID is authenticated console member's company scope.
+	CompanyID string
+
+	// FirebaseUID is current authenticated Firebase UID.
+	// request body の uid は信用せず、middleware 由来の UID を渡す。
+	FirebaseUID string
 }
 
 func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDInput) (MemberRecord, error) {
-	uid := in.UID
-	if uid == "" {
-		return MemberRecord{}, fmt.Errorf("firebase uid is empty")
+	memberID := in.MemberID
+	if memberID == "" {
+		return MemberRecord{}, memdom.ErrNotFound
 	}
 
-	rec, err := u.repo.GetByUID(ctx, uid)
+	companyID := in.CompanyID
+	if cid := CompanyIDFromContext(ctx); cid != "" {
+		companyID = cid
+	}
+	if companyID == "" {
+		return MemberRecord{}, memdom.ErrNotFound
+	}
+
+	firebaseUID := in.FirebaseUID
+	if firebaseUID == "" {
+		return MemberRecord{}, memdom.ErrInvalidUID
+	}
+
+	current, err := u.repo.GetByID(ctx, memberID)
 	if err != nil {
 		return MemberRecord{}, err
 	}
 
-	if rec.Member.UID != "" && rec.Member.UID != uid {
+	if current.Member.CompanyID != companyID {
+		return MemberRecord{}, memdom.ErrNotFound
+	}
+
+	if current.Member.UID != "" && current.Member.UID != firebaseUID {
 		return MemberRecord{}, memdom.ErrConflict
 	}
 
 	patch := memdom.MemberPatch{
-		UID: &uid,
+		UID: &firebaseUID,
 	}
 
 	now := u.now().UTC()
 	patch.UpdatedAt = &now
 
-	updated, err := u.repo.Update(ctx, uid, patch)
+	updated, err := u.repo.Update(ctx, memberID, patch)
 	if err != nil {
 		return MemberRecord{}, err
 	}
@@ -198,6 +228,27 @@ func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDI
 	return MemberRecord{
 		DocID:  updated.DocID,
 		Member: updated.Member,
+	}, nil
+}
+
+type GetCurrentMemberInput struct {
+	FirebaseUID string
+}
+
+func (u *MemberUsecase) GetCurrentMember(ctx context.Context, in GetCurrentMemberInput) (MemberRecord, error) {
+	firebaseUID := in.FirebaseUID
+	if firebaseUID == "" {
+		return MemberRecord{}, memdom.ErrInvalidUID
+	}
+
+	rec, err := u.repo.GetByUID(ctx, firebaseUID)
+	if err != nil {
+		return MemberRecord{}, err
+	}
+
+	return MemberRecord{
+		DocID:  rec.DocID,
+		Member: rec.Member,
 	}, nil
 }
 

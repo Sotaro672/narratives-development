@@ -63,8 +63,8 @@ type ProductBlueprintReader interface {
 // WalletUsecase は Wallet 同期ユースケース
 type WalletUsecase struct {
 	WalletRepo    WalletRepository
-	OnchainReader OnchainWalletReader // 必須（同期APIとして使うなら）
-	TokenQuery    TokenQuery          // mint -> token逆引き
+	OnchainReader OnchainWalletReader
+	TokenQuery    TokenQuery
 
 	// brandId -> Brand.Name（UI期待値）
 	BrandResolver BrandResolver
@@ -75,73 +75,26 @@ type WalletUsecase struct {
 	ProductBlueprintReader  ProductBlueprintReader
 }
 
-// コンストラクタ（DI コンテナの呼び出しに合わせて 1 引数）
-// OnchainReader / TokenQuery / BrandResolver / Product* はセッターで差し込む
-func NewWalletUsecase(walletRepo WalletRepository) *WalletUsecase {
+// NewWalletUsecase is the only wiring entrypoint.
+// All dependencies must be routed through this constructor.
+func NewWalletUsecase(
+	walletRepo WalletRepository,
+	onchainReader OnchainWalletReader,
+	tokenQuery TokenQuery,
+	brandResolver BrandResolver,
+	productReader ProductReader,
+	modelProductBlueprintID ModelProductBlueprintIDResolver,
+	productBlueprintReader ProductBlueprintReader,
+) *WalletUsecase {
 	return &WalletUsecase{
 		WalletRepo:              walletRepo,
-		OnchainReader:           nil,
-		TokenQuery:              nil,
-		BrandResolver:           nil,
-		ProductReader:           nil,
-		ModelProductBlueprintID: nil,
-		ProductBlueprintReader:  nil,
+		OnchainReader:           onchainReader,
+		TokenQuery:              tokenQuery,
+		BrandResolver:           brandResolver,
+		ProductReader:           productReader,
+		ModelProductBlueprintID: modelProductBlueprintID,
+		ProductBlueprintReader:  productBlueprintReader,
 	}
-}
-
-// 任意: OnchainReader を後から差し込むためのセッター
-func (uc *WalletUsecase) WithOnchainReader(r OnchainWalletReader) *WalletUsecase {
-	if uc != nil {
-		uc.OnchainReader = r
-	}
-	return uc
-}
-
-// TokenQuery を後から差し込むためのセッター
-func (uc *WalletUsecase) WithTokenQuery(q TokenQuery) *WalletUsecase {
-	if uc != nil {
-		uc.TokenQuery = q
-	}
-	return uc
-}
-
-// BrandResolver を後から差し込むためのセッター
-func (uc *WalletUsecase) WithBrandResolver(r BrandResolver) *WalletUsecase {
-	if uc != nil {
-		uc.BrandResolver = r
-	}
-	return uc
-}
-
-// 既存DIコード互換用。
-// 旧名 WithBrandNameResolver を呼んでいる箇所が残っていても、
-// brand.Repository / brand.RepositoryPort をそのまま差し込める。
-func (uc *WalletUsecase) WithBrandNameResolver(r BrandResolver) *WalletUsecase {
-	return uc.WithBrandResolver(r)
-}
-
-// ProductReader を後から差し込むためのセッター
-func (uc *WalletUsecase) WithProductReader(r ProductReader) *WalletUsecase {
-	if uc != nil {
-		uc.ProductReader = r
-	}
-	return uc
-}
-
-// ModelProductBlueprintIDResolver を後から差し込むためのセッター
-func (uc *WalletUsecase) WithModelProductBlueprintIDResolver(r ModelProductBlueprintIDResolver) *WalletUsecase {
-	if uc != nil {
-		uc.ModelProductBlueprintID = r
-	}
-	return uc
-}
-
-// ProductBlueprintReader を後から差し込むためのセッター
-func (uc *WalletUsecase) WithProductBlueprintReader(r ProductBlueprintReader) *WalletUsecase {
-	if uc != nil {
-		uc.ProductBlueprintReader = r
-	}
-	return uc
 }
 
 var (
@@ -156,10 +109,6 @@ var (
 
 	// BrandResolver
 	ErrWalletBrandResolverNotConfigured = errors.New("wallet usecase: brand resolver not configured")
-
-	// 既存参照互換用。
-	// 今後は ErrWalletBrandResolverNotConfigured を使う。
-	ErrWalletBrandNameNotConfigured = ErrWalletBrandResolverNotConfigured
 
 	// ProductName chain
 	ErrWalletProductReaderNotConfigured          = errors.New("wallet usecase: product reader not configured")

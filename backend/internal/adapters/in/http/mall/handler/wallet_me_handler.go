@@ -469,7 +469,6 @@ func writeMallMeWalletErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),
 		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured),
 		errors.Is(err, usecase.ErrWalletTokenQueryNotConfigured),
-		errors.Is(err, usecase.ErrWalletBrandNameNotConfigured),
 		errors.Is(err, usecase.ErrWalletProductReaderNotConfigured),
 		errors.Is(err, usecase.ErrWalletModelProductBlueprintNotConfigured),
 		errors.Is(err, usecase.ErrWalletProductBlueprintReaderNotConfigured):

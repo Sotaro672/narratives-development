@@ -28,32 +28,23 @@ type AvatarUsecase struct {
 func NewAvatarUsecase(
 	avRepo AvatarRepo,
 	stRepo AvatarStateRepo,
+	walletSvc AvatarWalletService,
+	walletRepo WalletRepo,
+	cartRepo AvatarCartRepo,
+	now func() time.Time,
 ) *AvatarUsecase {
-	return &AvatarUsecase{
-		avRepo: avRepo,
-		stRepo: stRepo,
-		now:    time.Now,
+	if now == nil {
+		now = time.Now
 	}
-}
 
-func (u *AvatarUsecase) WithNow(now func() time.Time) *AvatarUsecase {
-	u.now = now
-	return u
-}
-
-func (u *AvatarUsecase) WithWalletService(svc AvatarWalletService) *AvatarUsecase {
-	u.walletSvc = svc
-	return u
-}
-
-func (u *AvatarUsecase) WithWalletRepo(r WalletRepo) *AvatarUsecase {
-	u.walletRepo = r
-	return u
-}
-
-func (u *AvatarUsecase) WithCartRepo(r AvatarCartRepo) *AvatarUsecase {
-	u.cartRepo = r
-	return u
+	return &AvatarUsecase{
+		avRepo:     avRepo,
+		stRepo:     stRepo,
+		walletSvc:  walletSvc,
+		walletRepo: walletRepo,
+		cartRepo:   cartRepo,
+		now:        now,
+	}
 }
 
 type AvatarRepo interface {
@@ -66,6 +57,17 @@ type AvatarRepo interface {
 type AvatarStateRepo interface {
 	GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error)
 	Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error)
+	Delete(ctx context.Context, avatarID string) error
+}
+
+type AvatarStatePatch struct {
+	FollowerCount  *int64
+	FollowingCount *int64
+	PostCount      *int64
+	Followers      *[]avatarstate.AvatarFollowRef
+	Following      *[]avatarstate.AvatarFollowRef
+	LastActiveAt   *time.Time
+	UpdatedAt      *time.Time
 }
 
 type WalletRepo interface {
@@ -194,7 +196,7 @@ func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (a
 func (u *AvatarUsecase) UpdateAvatarState(
 	ctx context.Context,
 	avatarID string,
-	patch avatarstate.AvatarStatePatch,
+	patch AvatarStatePatch,
 ) (avatarstate.AvatarState, error) {
 	if avatarID == "" {
 		return avatarstate.AvatarState{}, avatardom.ErrInvalidID
@@ -338,7 +340,7 @@ func (u *AvatarUsecase) FollowAvatar(
 		FollowedAt: now,
 	})
 
-	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, avatarstate.AvatarStatePatch{
+	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, AvatarStatePatch{
 		Following:    &myFollowing,
 		LastActiveAt: &now,
 		UpdatedAt:    &now,
@@ -347,7 +349,7 @@ func (u *AvatarUsecase) FollowAvatar(
 		return FollowAvatarOutput{}, err
 	}
 
-	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, avatarstate.AvatarStatePatch{
+	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, AvatarStatePatch{
 		Followers:    &targetFollowers,
 		LastActiveAt: &now,
 		UpdatedAt:    &now,
@@ -405,7 +407,7 @@ func (u *AvatarUsecase) UnfollowAvatar(
 	myFollowing := removeFollowRef(meState.Following, targetAvatarID)
 	targetFollowers := removeFollowRef(targetState.Followers, meAvatarID)
 
-	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, avatarstate.AvatarStatePatch{
+	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, AvatarStatePatch{
 		Following:    &myFollowing,
 		LastActiveAt: &now,
 		UpdatedAt:    &now,
@@ -414,7 +416,7 @@ func (u *AvatarUsecase) UnfollowAvatar(
 		return FollowAvatarOutput{}, err
 	}
 
-	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, avatarstate.AvatarStatePatch{
+	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, AvatarStatePatch{
 		Followers:    &targetFollowers,
 		LastActiveAt: &now,
 		UpdatedAt:    &now,
@@ -467,6 +469,10 @@ func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string
 		_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
 	}
 
+	if u.stRepo != nil {
+		_ = u.stRepo.Delete(ctx, avatarID)
+	}
+
 	if u.avRepo == nil {
 		return errors.New("avatar repo not configured")
 	}
@@ -509,14 +515,14 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, ErrInvalidUserUID
 	}
 
-	name := strings.TrimSpace(in.AvatarName)
+	name := in.AvatarName
 	if name == "" {
 		return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
 	}
 
 	var avatarIcon *string
 	if in.AvatarIcon != nil {
-		s := strings.TrimSpace(*in.AvatarIcon)
+		s := *in.AvatarIcon
 		if s != "" {
 			if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
 				return avatardom.Avatar{}, avatardom.ErrInvalidAvatarIcon
@@ -525,8 +531,8 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		}
 	}
 
-	profile := normalizeOptionalString(in.Profile)
-	externalLink := normalizeOptionalString(in.ExternalLink)
+	profile := in.Profile
+	externalLink := in.ExternalLink
 
 	now := u.now().UTC()
 
@@ -552,6 +558,12 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	}
 
 	rollback := func() {
+		if u.cartRepo != nil {
+			_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
+		}
+		if u.stRepo != nil {
+			_ = u.stRepo.Delete(ctx, avatarID)
+		}
 		if u.avRepo != nil {
 			_ = u.avRepo.Delete(ctx, avatarID)
 		}
@@ -637,26 +649,18 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
 	}
 
-	if patch.AvatarName != nil {
-		s := strings.TrimSpace(*patch.AvatarName)
-		if s == "" {
-			return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
-		}
-		patch.AvatarName = &s
+	if patch.AvatarName != nil && *patch.AvatarName == "" {
+		return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
 	}
 
 	if patch.AvatarIcon != nil {
-		s := strings.TrimSpace(*patch.AvatarIcon)
+		s := *patch.AvatarIcon
 		if s != "" &&
 			!strings.HasPrefix(s, "http://") &&
 			!strings.HasPrefix(s, "https://") {
 			return avatardom.Avatar{}, avatardom.ErrInvalidAvatarIcon
 		}
-		patch.AvatarIcon = &s
 	}
-
-	patch.Profile = normalizeOptionalString(patch.Profile)
-	patch.ExternalLink = normalizeOptionalString(patch.ExternalLink)
 
 	return u.avRepo.Update(ctx, id, patch)
 }
@@ -742,13 +746,4 @@ func removeFollowRef(items []avatarstate.AvatarFollowRef, avatarID string) []ava
 	}
 
 	return out
-}
-
-func normalizeOptionalString(p *string) *string {
-	if p == nil {
-		return nil
-	}
-
-	s := strings.TrimSpace(*p)
-	return &s
 }

@@ -37,6 +37,35 @@ var _ memdom.Repository = (*MemberRepositoryFS)(nil)
 // Queries
 // ========================
 
+func (r *MemberRepositoryFS) GetByID(ctx context.Context, id string) (memdom.Record, error) {
+	if r.Client == nil {
+		return memdom.Record{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return memdom.Record{}, memdom.ErrNotFound
+	}
+
+	doc, err := r.col().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return memdom.Record{}, memdom.ErrNotFound
+		}
+		return memdom.Record{}, err
+	}
+
+	m, err := readMemberSnapshot(doc)
+	if err != nil {
+		return memdom.Record{}, err
+	}
+
+	return memdom.Record{
+		DocID:  doc.Ref.ID,
+		Member: m,
+	}, nil
+}
+
 func (r *MemberRepositoryFS) GetByUID(ctx context.Context, uid string) (memdom.Record, error) {
 	if r.Client == nil {
 		return memdom.Record{}, errors.New("firestore client is nil")
@@ -74,7 +103,7 @@ func (r *MemberRepositoryFS) GetByUID(ctx context.Context, uid string) (memdom.R
 //
 // NOTE:
 // This method is intentionally not part of member.Repository.
-// The domain repository port is kept to GetByUID / ListByCompanyID.
+// The domain repository port is kept to GetByID / GetByUID / ListByCompanyID.
 func (r *MemberRepositoryFS) GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error) {
 	if r.Client == nil {
 		return "", errors.New("firestore client is nil")
@@ -233,17 +262,17 @@ func (r *MemberRepositoryFS) Create(ctx context.Context, m memdom.Member) (memdo
 	}, nil
 }
 
-func (r *MemberRepositoryFS) Update(ctx context.Context, uid string, patch memdom.MemberPatch) (memdom.Record, error) {
+func (r *MemberRepositoryFS) Update(ctx context.Context, id string, patch memdom.MemberPatch) (memdom.Record, error) {
 	if r.Client == nil {
 		return memdom.Record{}, errors.New("firestore client is nil")
 	}
 
-	uid = strings.TrimSpace(uid)
-	if uid == "" {
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return memdom.Record{}, memdom.ErrNotFound
 	}
 
-	rec, err := r.GetByUID(ctx, uid)
+	rec, err := r.GetByID(ctx, id)
 	if err != nil {
 		return memdom.Record{}, err
 	}
@@ -311,22 +340,17 @@ func (r *MemberRepositoryFS) Update(ctx context.Context, uid string, patch memdo
 	}, nil
 }
 
-func (r *MemberRepositoryFS) Delete(ctx context.Context, uid string) error {
+func (r *MemberRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
-	uid = strings.TrimSpace(uid)
-	if uid == "" {
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return memdom.ErrNotFound
 	}
 
-	rec, err := r.GetByUID(ctx, uid)
-	if err != nil {
-		return err
-	}
-
-	ref := r.col().Doc(rec.DocID)
+	ref := r.col().Doc(id)
 
 	if _, err := ref.Delete(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {

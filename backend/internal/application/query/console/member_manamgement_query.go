@@ -1,3 +1,4 @@
+// backend/internal/application/query/console/member_management_query.go
 package query
 
 import (
@@ -24,6 +25,18 @@ type MemberRecordPageResult struct {
 	PerPage    int
 }
 
+type MemberListInput struct {
+	CompanyID string
+
+	SearchQuery string
+	UID         string
+	Status      string
+	BrandIDs    []string
+
+	Page    int
+	PerPage int
+}
+
 // -----------------------------------------------------------------------------
 // Query
 // -----------------------------------------------------------------------------
@@ -39,17 +52,30 @@ func NewMemberManagementQuery(repo memdom.Repository) *MemberManagementQuery {
 }
 
 // ListByCompanyID は companyID scope の member 一覧を取得します。
+//
+// handler からは HTTP query parameter をそのまま input として受け取り、
+// domain の Filter / Page への変換は query 層で行います。
 func (q *MemberManagementQuery) ListByCompanyID(
 	ctx context.Context,
-	companyID string,
-	f memdom.Filter,
-	p memdom.Page,
+	in MemberListInput,
 ) (MemberRecordPageResult, error) {
-	if companyID == "" {
+	if in.CompanyID == "" {
 		return MemberRecordPageResult{}, errors.New("member: companyID is empty")
 	}
 
-	res, err := q.repo.ListByCompanyID(ctx, companyID, f, p)
+	f := memdom.Filter{
+		SearchQuery: in.SearchQuery,
+		UID:         in.UID,
+		Status:      in.Status,
+		BrandIDs:    in.BrandIDs,
+	}
+
+	p := memdom.Page{
+		Number:  clampInt(in.Page, 1, 1_000_000),
+		PerPage: clampInt(in.PerPage, 1, 200),
+	}
+
+	res, err := q.repo.ListByCompanyID(ctx, in.CompanyID, f, p)
 	if err != nil {
 		return MemberRecordPageResult{}, err
 	}
@@ -69,4 +95,18 @@ func (q *MemberManagementQuery) ListByCompanyID(
 		Page:       res.Page,
 		PerPage:    res.PerPage,
 	}, nil
+}
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }

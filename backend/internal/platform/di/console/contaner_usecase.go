@@ -75,10 +75,11 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	avatarUC := uc.NewAvatarUsecase(
 		r.avatarRepo,
 		r.avatarStateRepo,
-	).
-		WithWalletService(avatarWalletSvc).
-		WithWalletRepo(r.walletRepo).
-		WithCartRepo(r.cartRepo)
+		avatarWalletSvc,
+		r.walletRepo,
+		r.cartRepo,
+		nil,
+	)
 
 	paymentMethodUC := uc.NewPaymentMethodUsecase(
 		r.paymentMethodRepo,
@@ -172,7 +173,20 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	)
 
 	userUC := uc.NewUserUsecase(r.userRepo)
-	walletUC := uc.NewWalletUsecase(r.walletRepo)
+
+	onchainReader := solanainfra.NewOnchainWalletReaderDevnet()
+	tokenQuery := fsrepo.NewTokenReaderFS(c.fsClient)
+
+	walletUC := uc.NewWalletUsecase(
+		r.walletRepo,
+		onchainReader,
+		tokenQuery,
+		r.brandRepo,
+		r.productRepo,
+		r.productBlueprintRepo,
+		r.productBlueprintRepo,
+	)
+
 	cartUC := uc.NewCartUsecase(r.cartRepo)
 
 	invitationMailer := mailadp.NewInvitationMailerWithResend(s.companySvc, r.brandRepo)
@@ -193,7 +207,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.memberRepo,
 	)
 
-	memberUC := uc.NewMemberUsecaseWithInvitationCommand(
+	memberUC := uc.NewMemberUsecase(
 		r.memberRepo,
 		invitationCommandUC,
 	)
@@ -248,10 +262,16 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 			return uc.NewProductBlueprintReviewUsecase(
 				r.productBlueprintReviewRepo,
 				r.walletRepo,
-			).
-				WithProductBlueprintRepo(r.productBlueprintRepo).
-				WithBrandRepository(r.brandRepo).
-				WithMemberService(memberSvc)
+				r.productBlueprintRepo,
+				r.brandRepo,
+				memberSvc,
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+			)
 		}(),
 
 		userUC:   userUC,

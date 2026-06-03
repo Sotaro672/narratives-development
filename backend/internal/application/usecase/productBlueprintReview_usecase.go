@@ -9,7 +9,6 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
-	memdom "narratives/internal/domain/member"
 	productdom "narratives/internal/domain/product"
 	pbdomain "narratives/internal/domain/productBlueprint"
 	pbr "narratives/internal/domain/productBlueprintReview"
@@ -95,86 +94,33 @@ type ProductBlueprintReviewUsecase struct {
 func NewProductBlueprintReviewUsecase(
 	reviewRepo pbr.Repository,
 	walletRepo WalletRepository,
+	productBlueprintRepo pbdomain.Repository,
+	brandGetter BrandGetter,
+	assigneeNameGetter AssigneeNameGetter,
+	onchainReader OnchainWalletReader,
+	tokenQuery TokenQuery,
+	productReader ProductReader,
+	modelProductBlueprintID ModelProductBlueprintIDResolver,
+	avatarRepo AvatarGetter,
+	now func() time.Time,
 ) *ProductBlueprintReviewUsecase {
+	if now == nil {
+		now = time.Now
+	}
+
 	return &ProductBlueprintReviewUsecase{
 		ReviewRepo:              reviewRepo,
-		ProductBlueprintRepo:    nil,
-		BrandGetter:             nil,
-		AssigneeNameGetter:      nil,
+		ProductBlueprintRepo:    productBlueprintRepo,
+		BrandGetter:             brandGetter,
+		AssigneeNameGetter:      assigneeNameGetter,
 		WalletRepo:              walletRepo,
-		OnchainReader:           nil,
-		TokenQuery:              nil,
-		ProductReader:           nil,
-		ModelProductBlueprintID: nil,
-		AvatarRepo:              nil,
-		now:                     time.Now,
+		OnchainReader:           onchainReader,
+		TokenQuery:              tokenQuery,
+		ProductReader:           productReader,
+		ModelProductBlueprintID: modelProductBlueprintID,
+		AvatarRepo:              avatarRepo,
+		now:                     now,
 	}
-}
-
-func (uc *ProductBlueprintReviewUsecase) WithProductBlueprintRepo(r pbdomain.Repository) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.ProductBlueprintRepo = r
-	}
-	return uc
-}
-
-// BrandRepository 注入
-func (uc *ProductBlueprintReviewUsecase) WithBrandRepository(r branddom.Repository) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.BrandGetter = r
-	}
-	return uc
-}
-
-// MemberService 注入（member.Service をそのまま渡せる）
-func (uc *ProductBlueprintReviewUsecase) WithMemberService(s *memdom.Service) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.AssigneeNameGetter = s
-	}
-	return uc
-}
-
-func (uc *ProductBlueprintReviewUsecase) WithOnchainReader(r OnchainWalletReader) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.OnchainReader = r
-	}
-	return uc
-}
-
-func (uc *ProductBlueprintReviewUsecase) WithTokenQuery(q TokenQuery) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.TokenQuery = q
-	}
-	return uc
-}
-
-func (uc *ProductBlueprintReviewUsecase) WithProductReader(r ProductReader) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.ProductReader = r
-	}
-	return uc
-}
-
-func (uc *ProductBlueprintReviewUsecase) WithModelProductBlueprintIDResolver(r ModelProductBlueprintIDResolver) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.ModelProductBlueprintID = r
-	}
-	return uc
-}
-
-// AvatarRepo 注入（avatar.Repository をそのまま渡せる）
-func (uc *ProductBlueprintReviewUsecase) WithAvatarRepo(r avatardom.Repository) *ProductBlueprintReviewUsecase {
-	if uc != nil {
-		uc.AvatarRepo = r
-	}
-	return uc
-}
-
-func (uc *ProductBlueprintReviewUsecase) WithNow(f func() time.Time) *ProductBlueprintReviewUsecase {
-	if uc != nil && f != nil {
-		uc.now = f
-	}
-	return uc
 }
 
 // ============================================================

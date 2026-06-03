@@ -61,20 +61,22 @@ type RecordPageResult struct {
 // Repository is the persistence port for the Member aggregate.
 //
 // 方針:
-//   - Get 系は GetByUID に統一する。
-//   - entity.Member には docId を持たせないため、GetByUID は Record を返す。
-//   - Exists は廃止する。存在確認は GetByUID の ErrNotFound で判定する。
+//   - docId による単体取得は GetByID を使う。
+//   - Firebase UID による単体取得は GetByUID を使う。
+//   - entity.Member には docId を持たせないため、GetByID / GetByUID は Record を返す。
+//   - Exists は廃止する。存在確認は GetByID / GetByUID の ErrNotFound で判定する。
 //   - Save は廃止し、Update に置き換える。
 //   - Delete は物理削除として扱う。DeletedAt / DeletedBy による論理削除は扱わない。
 //   - List 系は ListByCompanyID に統一する。
-//   - Firebase UID での単体取得は GetByUID を使う。
 //   - email などでの検索が必要な場合は ListByCompanyID + Filter を使う。
 type Repository interface {
 	// Create creates a member and returns the created Firestore docId.
 	Create(ctx context.Context, m Member) (Record, error)
 
+	// GetByID returns a member record by Firestore document ID.
+	GetByID(ctx context.Context, id string) (Record, error)
+
 	// GetByUID returns a member record by Firebase Auth UID.
-	// This is the only Get method in this repository port.
 	GetByUID(ctx context.Context, uid string) (Record, error)
 
 	// Update updates an existing member by Firestore document ID.

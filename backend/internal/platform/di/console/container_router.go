@@ -177,14 +177,16 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		pbReviewUC := usecase.NewProductBlueprintReviewUsecase(
 			c.ProductBlueprintReviewRepo,
 			walletRepo,
-		).
-			WithProductBlueprintRepo(c.ProductBlueprintRepo).
-			WithBrandRepository(c.BrandRepo).
-			WithMemberService(c.MemberService)
-
-		if c.AvatarRepo != nil {
-			pbReviewUC = pbReviewUC.WithAvatarRepo(c.AvatarRepo)
-		}
+			c.ProductBlueprintRepo,
+			c.BrandRepo,
+			c.MemberService,
+			nil,
+			nil,
+			nil,
+			nil,
+			c.AvatarRepo,
+			nil,
+		)
 
 		productBPReviewH = consoleHandler.NewProductBlueprintReviewHandler(pbReviewUC)
 	}

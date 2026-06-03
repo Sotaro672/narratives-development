@@ -179,10 +179,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.AvatarUC = usecase.NewAvatarUsecase(
 		avatarRepo,
 		avatarStateRepo,
-	).
-		WithCartRepo(cartRepo).
-		WithWalletRepo(walletRepo).
-		WithWalletService(avatarWalletSvc)
+		avatarWalletSvc,
+		walletRepo,
+		cartRepo,
+		nil,
+	)
 
 	c.ListUC = usecase.NewListUsecase(
 		listRepoFS,
@@ -204,24 +205,29 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
 	tokenQuery := outfs.NewTokenReaderFS(fsClient)
 
-	c.WalletUC = usecase.NewWalletUsecase(walletRepo).
-		WithOnchainReader(onchainReader).
-		WithTokenQuery(tokenQuery).
-		WithBrandNameResolver(brandRepo).
-		WithProductReader(productRepo).
-		WithModelProductBlueprintIDResolver(productBlueprintRepoFS).
-		WithProductBlueprintReader(productBlueprintRepoFS)
+	c.WalletUC = usecase.NewWalletUsecase(
+		walletRepo,
+		onchainReader,
+		tokenQuery,
+		brandRepo,
+		productRepo,
+		productBlueprintRepoFS,
+		productBlueprintRepoFS,
+	)
 
 	c.ProductBlueprintReviewUC = usecase.NewProductBlueprintReviewUsecase(
 		productBlueprintReviewRepo,
 		walletRepo,
-	).
-		WithOnchainReader(onchainReader).
-		WithTokenQuery(tokenQuery).
-		WithProductReader(productRepo).
-		WithModelProductBlueprintIDResolver(productBlueprintRepoFS).
-		WithBrandRepository(brandRepo).
-		WithAvatarRepo(avatarRepo)
+		productBlueprintRepoFS,
+		brandRepo,
+		nil,
+		onchainReader,
+		tokenQuery,
+		productRepo,
+		productBlueprintRepoFS,
+		avatarRepo,
+		nil,
+	)
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
 
@@ -286,10 +292,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			inventoryRepo,
 			productBlueprintRepoFS,
 			modelRepoFS,
-			mallquery.WithCatalogListImageRepo(listImageRecordRepo),
-			mallquery.WithCatalogTokenBlueprintPatchRepo(tokenBlueprintRepo),
-			mallquery.WithCatalogProductBlueprintReviewRepo(productBlueprintReviewRepo),
-			mallquery.WithCatalogNameResolver(c.NameResolver),
+			listImageRecordRepo,
+			tokenBlueprintRepo,
+			productBlueprintReviewRepo,
+			c.NameResolver,
 		)
 
 		c.CartQ = mallquery.NewCartQuery(fsClient)
@@ -303,13 +309,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			productRepo,
 			modelRepoFS,
 			productBlueprintRepoFS,
-			mallquery.WithNameResolver(c.NameResolver),
-			mallquery.WithTokenRepo(tokenReader),
-			mallquery.WithTokenBlueprintRepo(tokenBlueprintRepo),
-			mallquery.WithOwnerResolveQuery(c.OwnerResolveQ),
-			mallquery.WithBrandNameIconRepo(brandRepo),
-			mallquery.WithAvatarNameIconRepo(avatarRepo),
-			mallquery.WithTransferRepo(previewTransferReader),
+			c.NameResolver,
+			tokenReader,
+			tokenBlueprintRepo,
+			c.OwnerResolveQ,
+			brandRepo,
+			avatarRepo,
+			previewTransferReader,
 		)
 
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)

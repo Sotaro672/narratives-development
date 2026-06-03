@@ -72,71 +72,38 @@ type CatalogQuery struct {
 	// product blueprint reviews
 	ProductBlueprintReviewRepo ProductBlueprintReviewRepository
 
-	// list images (optional)
+	// list images
 	ListImageRepo ListImageRepository
 
 	NameResolver *appresolver.NameResolver
 }
 
 // ============================================================
-// Constructor Options (single entrypoint)
+// Constructor
 // ============================================================
 
-type CatalogQueryOption func(*CatalogQuery)
-
-func WithCatalogTokenBlueprintPatchRepo(tokenRepo TokenBlueprintPatchRepository) CatalogQueryOption {
-	return func(q *CatalogQuery) {
-		q.TokenRepo = tokenRepo
-	}
-}
-
-func WithCatalogNameResolver(nameResolver *appresolver.NameResolver) CatalogQueryOption {
-	return func(q *CatalogQuery) {
-		q.NameResolver = nameResolver
-	}
-}
-
-func WithCatalogProductBlueprintReviewRepo(repo ProductBlueprintReviewRepository) CatalogQueryOption {
-	return func(q *CatalogQuery) {
-		q.ProductBlueprintReviewRepo = repo
-	}
-}
-
-func WithCatalogListImageRepo(repo ListImageRepository) CatalogQueryOption {
-	return func(q *CatalogQuery) {
-		q.ListImageRepo = repo
-	}
-}
-
-// NewCatalogQuery is the ONLY wiring entrypoint.
+// NewCatalogQuery is the only wiring entrypoint.
 // All dependencies must be routed through this constructor.
 func NewCatalogQuery(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
 	productRepo ProductBlueprintRepository,
 	modelRepo modeldom.RepositoryPort,
-	opts ...CatalogQueryOption,
+	listImageRepo ListImageRepository,
+	tokenRepo TokenBlueprintPatchRepository,
+	productBlueprintReviewRepo ProductBlueprintReviewRepository,
+	nameResolver *appresolver.NameResolver,
 ) *CatalogQuery {
-	q := &CatalogQuery{
-		ListRepo:      listRepo,
-		InventoryRepo: invRepo,
-		ProductRepo:   productRepo,
-		TokenRepo:     nil, // optional
-		ModelRepo:     modelRepo,
-
-		ProductBlueprintReviewRepo: nil, // optional
-
-		ListImageRepo: nil, // optional
-		NameResolver:  nil, // optional
+	return &CatalogQuery{
+		ListRepo:                   listRepo,
+		InventoryRepo:              invRepo,
+		ProductRepo:                productRepo,
+		TokenRepo:                  tokenRepo,
+		ModelRepo:                  modelRepo,
+		ProductBlueprintReviewRepo: productBlueprintReviewRepo,
+		ListImageRepo:              listImageRepo,
+		NameResolver:               nameResolver,
 	}
-
-	for _, opt := range opts {
-		if opt != nil {
-			opt(q)
-		}
-	}
-
-	return q
 }
 
 // ============================================================

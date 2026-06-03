@@ -399,7 +399,7 @@ func (h *AvatarHandler) upsertState(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	patch := avatarstate.AvatarStatePatch{
+	patch := avataruc.AvatarStatePatch{
 		FollowerCount:  body.FollowerCount,
 		FollowingCount: body.FollowingCount,
 		PostCount:      body.PostCount,
