@@ -81,8 +81,6 @@ func New(
 	for _, opt := range opts {
 		opt(&m)
 	}
-	m.normalize()
-	m.dedupAll()
 
 	if err := m.validate(); err != nil {
 		return Member{}, err
@@ -156,7 +154,6 @@ func WithUpdated(by string, at time.Time) func(*Member) {
 // ----------------------
 
 func (m *Member) BindUID(uid string, now time.Time) error {
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return ErrInvalidUID
 	}
@@ -166,7 +163,6 @@ func (m *Member) BindUID(uid string, now time.Time) error {
 }
 
 func (m *Member) UpdateEmail(email string, now time.Time) error {
-	email = strings.TrimSpace(email)
 	if email != "" && !emailRe.MatchString(email) {
 		return ErrInvalidEmail
 	}
@@ -176,7 +172,6 @@ func (m *Member) UpdateEmail(email string, now time.Time) error {
 }
 
 func (m *Member) AssignBrand(id string, now time.Time) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return
 	}
@@ -187,7 +182,6 @@ func (m *Member) AssignBrand(id string, now time.Time) {
 }
 
 func (m *Member) UnassignBrand(id string, now time.Time) {
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return
 	}
@@ -202,7 +196,7 @@ func (m *Member) TouchUpdated(now time.Time, by *string) error {
 	t := now
 	m.UpdatedAt = &t
 	if by != nil {
-		b := strings.TrimSpace(*by)
+		b := *by
 		if b == "" {
 			return ErrInvalidUpdatedBy
 		}
@@ -216,10 +210,6 @@ func (m *Member) TouchUpdated(now time.Time, by *string) error {
 // -------------------------
 
 func (m Member) validate() error {
-	if strings.TrimSpace(m.UID) != m.UID {
-		return ErrInvalidUID
-	}
-
 	if m.Email != "" && !emailRe.MatchString(m.Email) {
 		return ErrInvalidEmail
 	}
@@ -260,7 +250,7 @@ func (m Member) validate() error {
 	if m.UpdatedAt != nil && m.UpdatedAt.Before(m.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
-	if m.UpdatedBy != nil && strings.TrimSpace(*m.UpdatedBy) == "" {
+	if m.UpdatedBy != nil && *m.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
 	}
 
@@ -271,24 +261,8 @@ func (m Member) validate() error {
 // Helpers
 // -------------------------
 
-func (m *Member) normalize() {
-	m.UID = strings.TrimSpace(m.UID)
-	m.Email = strings.TrimSpace(m.Email)
-	m.FirstName = strings.TrimSpace(m.FirstName)
-	m.LastName = strings.TrimSpace(m.LastName)
-	m.FirstNameKana = strings.TrimSpace(m.FirstNameKana)
-	m.LastNameKana = strings.TrimSpace(m.LastNameKana)
-	m.CompanyID = strings.TrimSpace(m.CompanyID)
-	m.Status = strings.TrimSpace(m.Status)
-}
-
 func (m *Member) touch(now time.Time) {
 	m.UpdatedAt = &now
-}
-
-func (m *Member) dedupAll() {
-	m.Permissions = dedup(m.Permissions)
-	m.AssignedBrands = dedup(m.AssignedBrands)
 }
 
 func contains(xs []string, v string) bool {
@@ -306,23 +280,6 @@ func remove(xs []string, v string) []string {
 		if x != v {
 			out = append(out, x)
 		}
-	}
-	return out
-}
-
-func dedup(xs []string) []string {
-	seen := make(map[string]struct{}, len(xs))
-	out := make([]string, 0, len(xs))
-	for _, x := range xs {
-		x = strings.TrimSpace(x)
-		if x == "" {
-			continue
-		}
-		if _, ok := seen[x]; ok {
-			continue
-		}
-		seen[x] = struct{}{}
-		out = append(out, x)
 	}
 	return out
 }
@@ -361,7 +318,6 @@ func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permissi
 	seen := make(map[string]struct{}, len(names))
 	out := make([]string, 0, len(names))
 	for _, n := range names {
-		n = strings.TrimSpace(n)
 		if n == "" {
 			continue
 		}
@@ -402,27 +358,4 @@ func (m Member) HasPermission(name string) bool {
 		}
 	}
 	return false
-}
-
-type InvitationToken struct {
-	Token            string   `firestore:"token"`
-	MemberID         string   `firestore:"memberId"`
-	CompanyID        string   `firestore:"companyId"`
-	AssignedBrandIDs []string `firestore:"assignedBrands"`
-	Permissions      []string `firestore:"permissions"`
-	Email            string   `firestore:"email"`
-
-	CreatedAt time.Time  `firestore:"createdAt"`
-	ExpiresAt *time.Time `firestore:"expiresAt,omitempty"`
-	UsedAt    *time.Time `firestore:"usedAt,omitempty"`
-	UpdatedAt *time.Time `firestore:"updatedAt,omitempty"`
-}
-
-// 招待リンク表示用
-type InvitationInfo struct {
-	MemberID         string   `json:"memberId"`
-	CompanyID        string   `json:"companyId"`
-	AssignedBrandIDs []string `json:"assignedBrandIds"`
-	Permissions      []string `json:"permissions"`
-	Email            string   `json:"email"`
 }

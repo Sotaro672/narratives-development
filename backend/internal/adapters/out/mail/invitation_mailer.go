@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	branddom "narratives/internal/domain/brand"
-	memdom "narratives/internal/domain/member"
+	invitationdom "narratives/internal/domain/invitation"
 	permdom "narratives/internal/domain/permission"
 )
 
@@ -23,7 +23,7 @@ type BrandNameResolver interface {
 }
 
 type InvitationMailerPort interface {
-	SendInvitationEmail(ctx context.Context, toEmail string, token string, info memdom.InvitationInfo) error
+	SendInvitationEmail(ctx context.Context, toEmail string, token string, info invitationdom.InvitationInfo) error
 }
 
 type EmailClient interface {
@@ -140,7 +140,7 @@ func (m *InvitationMailer) SendInvitationEmail(
 	ctx context.Context,
 	toEmail string,
 	token string,
-	info memdom.InvitationInfo,
+	info invitationdom.InvitationInfo,
 ) error {
 	if m == nil {
 		return fmt.Errorf("invitation mailer is nil")

@@ -104,10 +104,7 @@ type Container struct {
 	InspectionUC *uc.InspectionUsecase
 	MintUC       *uc.MintUsecase
 
-	InvitationQuery    uc.InvitationQueryPort
-	InvitationCommand  uc.InvitationCommandPort
-	InvitationComplete uc.InvitationCompletePort
-
+	InvitationUC  uc.InvitationUsecasePort
 	AuthBootstrap *uc.BootstrapService
 	NameResolver  *resolver.NameResolver
 }
@@ -229,9 +226,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		InspectionUC: u.inspectionUC,
 		MintUC:       u.mintUC,
 
-		InvitationQuery:    u.invitationQueryUC,
-		InvitationCommand:  u.invitationCommandUC,
-		InvitationComplete: u.invitationCompleteUC,
+		InvitationUC: u.invitationUC,
 
 		AuthBootstrap: u.authBootstrapSvc,
 

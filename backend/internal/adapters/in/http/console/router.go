@@ -3,7 +3,6 @@ package httpin
 
 import (
 	"net/http"
-	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
 )
@@ -34,7 +33,6 @@ type RouterDeps struct {
 	Orders              http.Handler
 	Wallets             http.Handler
 	Members             http.Handler
-	MemberInvitation    http.Handler
 	Productions         http.Handler
 	Models              http.Handler
 	Inspector           http.Handler
@@ -76,9 +74,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	if deps.Invitation != nil {
-		h := withPublic(deps.Invitation)
-		mux.Handle("/api/invitation", h)
-		mux.Handle("/api/invitation/", h)
+		authInvitation := withAuth(deps.Invitation)
+		mux.Handle("/invitations", authInvitation)
+
+		publicInvitation := withPublic(deps.Invitation)
+		mux.Handle("/invitations/validate", publicInvitation)
+		mux.Handle("/invitations/complete", publicInvitation)
 	}
 
 	if deps.Accounts != nil {
@@ -186,32 +187,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/wallets/", h)
 	}
 
-	// Members / MemberInvitation
-	if deps.Members != nil || deps.MemberInvitation != nil {
-		if deps.Members != nil {
-			mux.Handle("/members", withAuth(deps.Members))
+	if deps.Members != nil {
+		mux.Handle("/members", withAuth(deps.Members))
 
-			// /members/me は初回ログイン直後にも呼ばれるため、
-			// 通常 AuthMiddleware ではなく BootstrapAuthMiddleware を通す。
-			// member 未作成時は handler 側で 404 を返す。
-			mux.Handle("/members/me", withBootstrap(deps.Members))
-		}
+		// /members/me は初回ログイン直後にも呼ばれるため、
+		// 通常 AuthMiddleware ではなく BootstrapAuthMiddleware を通す。
+		// member 未作成時は handler 側で 404 を返す。
+		mux.Handle("/members/me", withBootstrap(deps.Members))
 
-		membersSubtree := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasSuffix(strings.TrimRight(r.URL.Path, "/"), "/invitation") && deps.MemberInvitation != nil {
-				withAuth(deps.MemberInvitation).ServeHTTP(w, r)
-				return
-			}
-
-			if deps.Members != nil {
-				withAuth(deps.Members).ServeHTTP(w, r)
-				return
-			}
-
-			http.NotFound(w, r)
-		})
-
-		mux.Handle("/members/", membersSubtree)
+		mux.Handle("/members/", withAuth(deps.Members))
 	}
 
 	if deps.Productions != nil {
@@ -243,6 +227,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.OwnerResolve)
 		mux.Handle("/owners/resolve", h)
 		mux.Handle("/owners/resolve/", h)
+	}
+
+	if deps.Users != nil {
+		h := withAuth(deps.Users)
+		mux.Handle("/users", h)
+		mux.Handle("/users/", h)
 	}
 
 	if deps.Sales != nil {

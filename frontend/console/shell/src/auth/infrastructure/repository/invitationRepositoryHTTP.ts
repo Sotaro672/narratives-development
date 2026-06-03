@@ -1,4 +1,4 @@
-//frontend\console\shell\src\auth\infrastructure\repository\invitationRepositoryHTTP.ts
+// frontend/console/shell/src/auth/infrastructure/repository/invitationRepositoryHTTP.ts
 import { buildConsoleUrl } from "../../../shared/http/apiBase";
 
 // ------------------------------
@@ -25,17 +25,6 @@ export type ValidateResponse = {
   permissions?: string[];
 };
 
-export type CompanyResponse = {
-  id: string;
-  name?: string;
-};
-
-export type BrandResponse = {
-  id: string;
-  name?: string;
-};
-
-// 新形式
 export type CompleteInvitationBackendPayload = {
   token: string;
   uid: string;
@@ -46,7 +35,6 @@ export type CompleteInvitationBackendPayload = {
   email: string;
 };
 
-// 旧形式も受けられるようにしておく
 export type LegacyCompleteInvitationBackendPayload = {
   token: string;
   uid: string;
@@ -70,6 +58,7 @@ type ErrorResponse = {
 // ------------------------------
 // Helpers
 // ------------------------------
+
 function safeTrim(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -177,7 +166,7 @@ function normalizeValidateResponse(data: ValidateResponse): ValidateResponse {
     email: safeTrim(data.email),
     memberId: safeTrim(data.memberId) || undefined,
     companyId: companyId || undefined,
-    companyName: (companyName || companyId) || undefined,
+    companyName: companyName || companyId || undefined,
     assignedBrandIds: assignedBrandIds.length > 0 ? assignedBrandIds : undefined,
     brandNames: brandNames.length > 0 ? brandNames : assignedBrandIds,
     permissions: Array.isArray(data.permissions)
@@ -186,139 +175,56 @@ function normalizeValidateResponse(data: ValidateResponse): ValidateResponse {
   };
 }
 
+function validateResponseToInvitationInfo(data: ValidateResponse): InvitationInfo {
+  const normalized = normalizeValidateResponse(data);
+
+  return normalizeInvitationInfo({
+    memberId: normalized.memberId ?? "",
+    companyId: normalized.companyId ?? "",
+    companyName: normalized.companyName,
+    assignedBrandIds: normalized.assignedBrandIds ?? [],
+    brandNames: normalized.brandNames,
+    permissions: normalized.permissions ?? [],
+    email: normalized.email || undefined,
+  });
+}
+
+async function parseErrorMessage(
+  res: Response,
+  text: string,
+  fallback: string,
+): Promise<string> {
+  let msg = `${fallback} (status ${res.status})`;
+
+  try {
+    const errJson = JSON.parse(text) as ErrorResponse;
+    if (errJson.error) {
+      msg = errJson.error;
+    }
+  } catch {
+    // ignore
+  }
+
+  return msg;
+}
+
 // ------------------------------
-// 招待情報取得（GET /api/invitation）
+// 招待情報取得
+// - POST /invitations/validate
 // ------------------------------
+
 export async function fetchInvitationInfo(
   token: string,
 ): Promise<InvitationInfo> {
-  const trimmed = token.trim();
-  if (!trimmed) {
-    throw new Error("token が指定されていません。");
-  }
-
-  const url = buildConsoleUrl(
-    `/api/invitation?token=${encodeURIComponent(trimmed)}`,
-  );
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    let msg = `Failed to load invitation info (status ${res.status})`;
-    try {
-      const errJson = JSON.parse(text) as ErrorResponse;
-      if (errJson.error) {
-        msg = errJson.error;
-      }
-    } catch {
-      // ignore
-    }
-    throw new Error(msg);
-  }
-
-  const data = JSON.parse(text) as InvitationInfo;
-  return normalizeInvitationInfo(data);
+  const data = await validateInvitation(token);
+  return validateResponseToInvitationInfo(data);
 }
 
 // ------------------------------
-// companyId → companyName 取得ヘルパ
-// ※ 招待ページは未ログインの可能性があるため、失敗時は ID を返す
+// validateInvitation
+// - POST /invitations/validate
 // ------------------------------
-export async function fetchCompanyNameById(companyId: string): Promise<string> {
-  const trimmed = companyId.trim();
-  if (!trimmed) {
-    return "";
-  }
 
-  const url = buildConsoleUrl(`/companies/${encodeURIComponent(trimmed)}`);
-
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    const text = await res.text();
-
-    if (!res.ok) {
-      return trimmed;
-    }
-
-    const data = JSON.parse(text) as CompanyResponse;
-    const name = (data.name ?? "").trim();
-    return name || trimmed;
-  } catch {
-    return trimmed;
-  }
-}
-
-// ------------------------------
-// assignedBrandId(s) → brandName(s) 取得ヘルパ
-// ※ 招待ページは未ログインの可能性があるため、失敗時は ID を返す
-// ------------------------------
-export async function fetchBrandNameById(brandId: string): Promise<string> {
-  const trimmed = brandId.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const url = buildConsoleUrl(`/brands/${encodeURIComponent(trimmed)}`);
-
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    const text = await res.text();
-
-    if (!res.ok) {
-      return trimmed;
-    }
-
-    const data = JSON.parse(text) as BrandResponse;
-    const name = (data.name ?? "").trim();
-    return name || trimmed;
-  } catch {
-    return trimmed;
-  }
-}
-
-// assignedBrandIds 全体を brandName[] に変換するヘルパ
-export async function fetchBrandNamesByIds(
-  assignedBrandIds: string[],
-): Promise<string[]> {
-  const ids = assignedBrandIds
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
-
-  if (ids.length === 0) return [];
-
-  const tasks = ids.map(async (id) => {
-    try {
-      return await fetchBrandNameById(id);
-    } catch {
-      return id;
-    }
-  });
-
-  return Promise.all(tasks);
-}
-
-// ------------------------------
-// validateInvitation (POST /api/invitation/validate)
-// ------------------------------
 export async function validateInvitation(
   token: string,
 ): Promise<ValidateResponse> {
@@ -327,7 +233,7 @@ export async function validateInvitation(
     throw new Error("token が指定されていません。");
   }
 
-  const url = buildConsoleUrl("/api/invitation/validate");
+  const url = buildConsoleUrl("/invitations/validate");
 
   const res = await fetch(url, {
     method: "POST",
@@ -340,13 +246,11 @@ export async function validateInvitation(
   const text = await res.text();
 
   if (!res.ok) {
-    let msg = `招待の検証に失敗しました (status ${res.status})`;
-    try {
-      const errJson = JSON.parse(text) as ErrorResponse;
-      if (errJson.error) msg = errJson.error;
-    } catch {
-      // ignore
-    }
+    const msg = await parseErrorMessage(
+      res,
+      text,
+      "招待の検証に失敗しました",
+    );
     throw new Error(msg);
   }
 
@@ -355,12 +259,14 @@ export async function validateInvitation(
 }
 
 // ------------------------------
-// completeInvitationOnBackend (POST /api/invitation/complete)
+// completeInvitationOnBackend
+// - POST /invitations/complete
 // ------------------------------
+
 export async function completeInvitationOnBackend(
   payload: CompleteInvitationPayloadInput,
 ): Promise<void> {
-  const url = buildConsoleUrl("/api/invitation/complete");
+  const url = buildConsoleUrl("/invitations/complete");
 
   const body = normalizeCompleteInvitationPayload(payload);
 
@@ -375,13 +281,11 @@ export async function completeInvitationOnBackend(
   const text = await res.text();
 
   if (!res.ok) {
-    let msg = `招待の完了処理に失敗しました (status ${res.status})`;
-    try {
-      const errJson = JSON.parse(text) as ErrorResponse;
-      if (errJson.error) msg = errJson.error;
-    } catch {
-      // ignore
-    }
+    const msg = await parseErrorMessage(
+      res,
+      text,
+      "招待の完了処理に失敗しました",
+    );
     throw new Error(msg);
   }
 }

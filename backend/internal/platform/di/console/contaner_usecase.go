@@ -50,9 +50,7 @@ type usecases struct {
 	walletUC *uc.WalletUsecase
 	cartUC   *uc.CartUsecase
 
-	invitationQueryUC    uc.InvitationQueryPort
-	invitationCommandUC  uc.InvitationCommandPort
-	invitationCompleteUC uc.InvitationCompletePort
+	invitationUC uc.InvitationUsecasePort
 
 	authBootstrapSvc *uc.BootstrapService
 }
@@ -191,25 +189,15 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	invitationMailer := mailadp.NewInvitationMailerWithResend(s.companySvc, r.brandRepo)
 
-	invitationQueryUC := uc.NewInvitationService(
-		r.invitationTokenRepo,
-		r.memberRepo,
-	)
-
-	invitationCommandUC := uc.NewInvitationCommandService(
+	invitationUC := uc.NewInvitationUsecase(
 		r.invitationTokenRepo,
 		r.memberRepo,
 		invitationMailer,
 	)
 
-	invitationCompleteUC := uc.NewInvitationCompleteService(
-		r.invitationTokenRepo,
-		r.memberRepo,
-	)
-
 	memberUC := uc.NewMemberUsecase(
 		r.memberRepo,
-		invitationCommandUC,
+		invitationUC,
 	)
 
 	authBootstrapSvc := &uc.BootstrapService{
@@ -278,9 +266,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		walletUC: walletUC,
 		cartUC:   cartUC,
 
-		invitationQueryUC:    invitationQueryUC,
-		invitationCommandUC:  invitationCommandUC,
-		invitationCompleteUC: invitationCompleteUC,
+		invitationUC: invitationUC,
 
 		authBootstrapSvc: authBootstrapSvc,
 	}

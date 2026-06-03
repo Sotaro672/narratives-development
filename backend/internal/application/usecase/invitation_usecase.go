@@ -6,75 +6,93 @@ import (
 	"fmt"
 	"strings"
 
+	invdom "narratives/internal/domain/invitation"
 	memdom "narratives/internal/domain/member"
 )
 
 // ==============================
-// Inbound Ports (Query)
+// Inbound Ports
 // ==============================
 
 // InvitationQueryPort は、招待リンク（トークン）から
 // InvitationInfo（memberId / companyId / assignedBrandIds / permissions / email）
 // を取得するユースケースです。
 type InvitationQueryPort interface {
-	GetInvitationInfo(ctx context.Context, token string) (*memdom.InvitationInfo, error)
+	GetInvitationInfo(ctx context.Context, token string) (*invdom.InvitationInfo, error)
 }
 
-// ==============================
-// Inbound Ports (Command)
-// ==============================
-
-// 招待メール送信ユースケース
+// InvitationCommandPort は、招待トークン作成と招待メール送信を行うユースケースです。
 type InvitationCommandPort interface {
 	CreateInvitationAndSend(ctx context.Context, memberDocID string) (string, error)
 }
 
-// 招待完了ユースケース
+// InvitationCompletePort は、招待完了処理を行うユースケースです。
 type InvitationCompletePort interface {
 	CompleteInvitation(ctx context.Context, in CompleteInvitationInput) error
+}
+
+// InvitationUsecasePort は、招待に関する Query / Command / Complete をまとめた入口です。
+type InvitationUsecasePort interface {
+	InvitationQueryPort
+	InvitationCommandPort
+	InvitationCompletePort
 }
 
 // ==============================
 // Outbound Ports
 // ==============================
 
-// 招待メール送信用ポート
+// InvitationMailerPort は、招待メール送信用ポートです。
 type InvitationMailerPort interface {
-	SendInvitationEmail(ctx context.Context, toEmail string, token string, info memdom.InvitationInfo) error
+	SendInvitationEmail(ctx context.Context, toEmail string, token string, info invdom.InvitationInfo) error
 }
 
 // ==============================
-// Query Service
+// Usecase
 // ==============================
 
-type InvitationService struct {
-	invitationTokenRepo memdom.InvitationTokenRepository
+type invitationUsecase struct {
+	invitationTokenRepo invdom.Repository
+	memberRepo          memdom.Repository
+	mailer              InvitationMailerPort
 }
 
-func NewInvitationService(
-	invitationTokenRepo memdom.InvitationTokenRepository,
-	_ memdom.Repository,
-) InvitationQueryPort {
-	return &InvitationService{
+// NewInvitationUsecase は、招待ユースケースの唯一の生成入口です。
+// Query / Command / Complete で必要な依存をここに集中させます。
+func NewInvitationUsecase(
+	invitationTokenRepo invdom.Repository,
+	memberRepo memdom.Repository,
+	mailer InvitationMailerPort,
+) InvitationUsecasePort {
+	return &invitationUsecase{
 		invitationTokenRepo: invitationTokenRepo,
+		memberRepo:          memberRepo,
+		mailer:              mailer,
 	}
 }
 
+// ==============================
+// Query
+// ==============================
+
 // GET /api/invitation?token=...
 // POST /api/invitation/validate
-func (s *InvitationService) GetInvitationInfo(
+func (u *invitationUsecase) GetInvitationInfo(
 	ctx context.Context,
 	token string,
-) (*memdom.InvitationInfo, error) {
-	if s == nil || s.invitationTokenRepo == nil {
+) (*invdom.InvitationInfo, error) {
+	if u == nil {
+		return nil, fmt.Errorf("invitation usecase is nil")
+	}
+	if u.invitationTokenRepo == nil {
 		return nil, fmt.Errorf("invitation token repository is not configured")
 	}
 
 	if token == "" {
-		return nil, memdom.ErrInvitationTokenNotFound
+		return nil, invdom.ErrInvitationTokenNotFound
 	}
 
-	info, err := s.invitationTokenRepo.ResolveInvitationInfoByToken(ctx, token)
+	info, err := u.invitationTokenRepo.ResolveInvitationInfoByToken(ctx, token)
 	if err != nil {
 		return nil, err
 	}
@@ -83,41 +101,23 @@ func (s *InvitationService) GetInvitationInfo(
 }
 
 // ==============================
-// Command Service (Create & Send)
+// Command: Create & Send
 // ==============================
 
-type InvitationCommandService struct {
-	invitationTokenRepo memdom.InvitationTokenRepository
-	memberRepo          memdom.Repository
-	mailer              InvitationMailerPort
-}
-
-func NewInvitationCommandService(
-	invitationTokenRepo memdom.InvitationTokenRepository,
-	memberRepo memdom.Repository,
-	mailer InvitationMailerPort,
-) InvitationCommandPort {
-	return &InvitationCommandService{
-		invitationTokenRepo: invitationTokenRepo,
-		memberRepo:          memberRepo,
-		mailer:              mailer,
-	}
-}
-
-func (s *InvitationCommandService) CreateInvitationAndSend(
+func (u *invitationUsecase) CreateInvitationAndSend(
 	ctx context.Context,
 	memberDocID string,
 ) (string, error) {
-	if s == nil {
-		return "", fmt.Errorf("invitation command service is nil")
+	if u == nil {
+		return "", fmt.Errorf("invitation usecase is nil")
 	}
-	if s.invitationTokenRepo == nil {
+	if u.invitationTokenRepo == nil {
 		return "", fmt.Errorf("invitation token repository is not configured")
 	}
-	if s.memberRepo == nil {
+	if u.memberRepo == nil {
 		return "", fmt.Errorf("member repository is not configured")
 	}
-	if s.mailer == nil {
+	if u.mailer == nil {
 		return "", fmt.Errorf("invitation mailer is not configured")
 	}
 
@@ -130,7 +130,7 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 		return "", fmt.Errorf("companyID is empty")
 	}
 
-	rec, err := s.memberRepo.GetByID(ctx, memberDocID)
+	rec, err := u.memberRepo.GetByID(ctx, memberDocID)
 	if err != nil {
 		return "", fmt.Errorf("find member by doc id failed: %w", err)
 	}
@@ -144,7 +144,7 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 		return "", fmt.Errorf("member email is empty")
 	}
 
-	info := memdom.InvitationInfo{
+	info := invdom.InvitationInfo{
 		MemberID:         rec.DocID,
 		CompanyID:        m.CompanyID,
 		AssignedBrandIDs: append([]string(nil), m.AssignedBrands...),
@@ -152,19 +152,19 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 		Email:            m.Email,
 	}
 
-	token, err := s.invitationTokenRepo.CreateInvitationToken(ctx, info)
+	token, err := u.invitationTokenRepo.CreateInvitationToken(ctx, info)
 	if err != nil {
 		return "", fmt.Errorf("create invitation token failed: %w", err)
 	}
 
-	if err := s.mailer.SendInvitationEmail(ctx, m.Email, token, info); err != nil {
+	if err := u.mailer.SendInvitationEmail(ctx, m.Email, token, info); err != nil {
 		return "", fmt.Errorf("send invitation email failed: %w", err)
 	}
 
 	if !strings.EqualFold(m.Status, "active") {
 		status := "inactive"
 
-		if _, err := s.memberRepo.Update(ctx, rec.DocID, memdom.MemberPatch{
+		if _, err := u.memberRepo.Update(ctx, rec.DocID, memdom.MemberPatch{
 			Status: &status,
 		}); err != nil {
 			return "", fmt.Errorf("update member status after invitation failed: %w", err)
@@ -175,7 +175,7 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 }
 
 // ==============================
-// Command Service (Complete)
+// Command: Complete
 // ==============================
 
 type CompleteInvitationInput struct {
@@ -188,32 +188,17 @@ type CompleteInvitationInput struct {
 	Email         string
 }
 
-type InvitationCompleteService struct {
-	invitationTokenRepo memdom.InvitationTokenRepository
-	memberRepo          memdom.Repository
-}
-
-func NewInvitationCompleteService(
-	invitationTokenRepo memdom.InvitationTokenRepository,
-	memberRepo memdom.Repository,
-) InvitationCompletePort {
-	return &InvitationCompleteService{
-		invitationTokenRepo: invitationTokenRepo,
-		memberRepo:          memberRepo,
-	}
-}
-
-func (s *InvitationCompleteService) CompleteInvitation(
+func (u *invitationUsecase) CompleteInvitation(
 	ctx context.Context,
 	in CompleteInvitationInput,
 ) error {
-	if s == nil {
-		return fmt.Errorf("invitation complete service is nil")
+	if u == nil {
+		return fmt.Errorf("invitation usecase is nil")
 	}
-	if s.invitationTokenRepo == nil {
+	if u.invitationTokenRepo == nil {
 		return fmt.Errorf("invitation token repository is not configured")
 	}
-	if s.memberRepo == nil {
+	if u.memberRepo == nil {
 		return fmt.Errorf("member repository is not configured")
 	}
 
@@ -227,7 +212,7 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("email_required")
 	}
 
-	info, err := s.invitationTokenRepo.ResolveInvitationInfoByToken(ctx, in.Token)
+	info, err := u.invitationTokenRepo.ResolveInvitationInfoByToken(ctx, in.Token)
 	if err != nil {
 		return err
 	}
@@ -244,7 +229,7 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("companyId is empty")
 	}
 
-	rec, err := s.memberRepo.GetByID(ctx, info.MemberID)
+	rec, err := u.memberRepo.GetByID(ctx, info.MemberID)
 	if err != nil {
 		return fmt.Errorf("find member by invitation member id failed: %w", err)
 	}
@@ -261,7 +246,7 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		return fmt.Errorf("companyId is empty")
 	}
 
-	found, err := s.memberRepo.ListByCompanyID(ctx, companyID, memdom.Filter{
+	found, err := u.memberRepo.ListByCompanyID(ctx, companyID, memdom.Filter{
 		UID: in.UID,
 	}, memdom.Page{
 		Number:  1,
@@ -291,11 +276,11 @@ func (s *InvitationCompleteService) CompleteInvitation(
 		AssignedBrands: &info.AssignedBrandIDs,
 	}
 
-	if _, err := s.memberRepo.Update(ctx, rec.DocID, patch); err != nil {
+	if _, err := u.memberRepo.Update(ctx, rec.DocID, patch); err != nil {
 		return fmt.Errorf("update invited member failed: %w", err)
 	}
 
-	if err := s.invitationTokenRepo.ConsumeInvitationToken(ctx, in.Token); err != nil {
+	if err := u.invitationTokenRepo.ConsumeInvitationToken(ctx, in.Token); err != nil {
 		return fmt.Errorf("consume invitation token failed: %w", err)
 	}
 

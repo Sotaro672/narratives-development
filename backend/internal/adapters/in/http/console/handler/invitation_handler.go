@@ -10,45 +10,41 @@ import (
 	"narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	compdom "narratives/internal/domain/company"
+	invdom "narratives/internal/domain/invitation"
 	memdom "narratives/internal/domain/member"
 )
 
 /*
 InvitationHandler
-- GET  /api/invitation?token=INV_xxx
-- POST /api/invitation/validate
-- POST /api/invitation/complete
+- POST /invitations
+- POST /invitations/validate
+- POST /invitations/complete
 */
 
 type InvitationHandler struct {
-	InvitationQuery    usecase.InvitationQueryPort
-	InvitationComplete usecase.InvitationCompletePort
-	CompanyService     *compdom.Service
-	BrandRepo          branddom.Repository
+	InvitationUC   usecase.InvitationUsecasePort
+	CompanyService *compdom.Service
+	BrandRepo      branddom.Repository
 }
 
 func NewInvitationHandler(
-	inv usecase.InvitationQueryPort,
-	complete usecase.InvitationCompletePort,
+	invitationUC usecase.InvitationUsecasePort,
 	companyService *compdom.Service,
 	brandRepo branddom.Repository,
 ) *InvitationHandler {
 	return &InvitationHandler{
-		InvitationQuery:    inv,
-		InvitationComplete: complete,
-		CompanyService:     companyService,
-		BrandRepo:          brandRepo,
+		InvitationUC:   invitationUC,
+		CompanyService: companyService,
+		BrandRepo:      brandRepo,
 	}
 }
-
-// --------------------------------------------------
-// 共通レスポンス型（GET / validate 共通）
-// --------------------------------------------------
 
 type invitationInfoResponse struct {
 	MemberID         string   `json:"memberId,omitempty"`
 	CompanyID        string   `json:"companyId,omitempty"`
+	CompanyName      string   `json:"companyName,omitempty"`
 	AssignedBrandIDs []string `json:"assignedBrandIds,omitempty"`
+	BrandNames       []string `json:"brandNames,omitempty"`
 	Permissions      []string `json:"permissions,omitempty"`
 	Email            string   `json:"email,omitempty"`
 }
@@ -57,73 +53,113 @@ type invitationValidateRequest struct {
 	Token string `json:"token"`
 }
 
-// =====================================
-// ルーティング分岐
-// =====================================
+type createInvitationRequest struct {
+	MemberID string `json:"memberId"`
+}
+
+type createInvitationResponse struct {
+	MemberID string `json:"memberId"`
+	Token    string `json:"token"`
+}
 
 func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
-	path := strings.TrimRight(strings.TrimPrefix(r.URL.Path, "/api/invitation"), "/")
+	path := strings.TrimRight(r.URL.Path, "/")
 	if path == "" {
-		h.handleResolveInfo(w, r)
-		return
+		path = "/"
 	}
 
 	switch path {
-	case "/validate":
+	case "/invitations":
+		h.handleCreateInvitation(w, r)
+		return
+
+	case "/invitations/validate":
 		h.handleResolveInfo(w, r)
-	case "/complete":
+		return
+
+	case "/invitations/complete":
 		h.handleComplete(w, r)
+		return
+
 	default:
 		writeInvitationJSONError(w, http.StatusNotFound, "not_found")
+		return
 	}
 }
 
-// =====================================
-// GET /api/invitation?token=xxx
-// POST /api/invitation/validate
-// 共通処理
-// =====================================
-
-func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Request) {
-	if h.InvitationQuery == nil {
-		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_usecase_not_configured")
-		return
-	}
-
-	var token string
-
-	switch r.Method {
-	case http.MethodGet:
-		token = r.URL.Query().Get("token")
-		if token == "" {
-			writeInvitationJSONError(w, http.StatusBadRequest, "missing_token")
-			return
-		}
-
-	case http.MethodPost:
-		var req invitationValidateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeInvitationJSONError(w, http.StatusBadRequest, "invalid_body")
-			return
-		}
-		token = req.Token
-		if token == "" {
-			writeInvitationJSONError(w, http.StatusBadRequest, "token_required")
-			return
-		}
-
-	default:
-		w.Header().Set("Allow", "GET, POST")
+func (h *InvitationHandler) handleCreateInvitation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
 		writeInvitationJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
 
-	ctx := r.Context()
-	info, err := h.InvitationQuery.GetInvitationInfo(ctx, token)
+	if h.InvitationUC == nil {
+		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_usecase_not_configured")
+		return
+	}
+
+	var req createInvitationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeInvitationJSONError(w, http.StatusBadRequest, "invalid_body")
+		return
+	}
+
+	memberID := strings.TrimSpace(req.MemberID)
+	if memberID == "" {
+		writeInvitationJSONError(w, http.StatusBadRequest, "memberId_required")
+		return
+	}
+
+	token, err := h.InvitationUC.CreateInvitationAndSend(r.Context(), memberID)
 	if err != nil {
-		if errors.Is(err, memdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
+		switch {
+		case errors.Is(err, memdom.ErrNotFound):
+			writeInvitationJSONError(w, http.StatusNotFound, "member_not_found")
+			return
+		default:
+			writeInvitationJSONError(w, http.StatusInternalServerError, "cannot_send_invitation")
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(createInvitationResponse{
+		MemberID: memberID,
+		Token:    token,
+	})
+}
+
+func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeInvitationJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+		return
+	}
+
+	if h.InvitationUC == nil {
+		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_usecase_not_configured")
+		return
+	}
+
+	var req invitationValidateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeInvitationJSONError(w, http.StatusBadRequest, "invalid_body")
+		return
+	}
+
+	token := strings.TrimSpace(req.Token)
+	if token == "" {
+		writeInvitationJSONError(w, http.StatusBadRequest, "token_required")
+		return
+	}
+
+	ctx := r.Context()
+	info, err := h.InvitationUC.GetInvitationInfo(ctx, token)
+	if err != nil {
+		if errors.Is(err, invdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
 			writeInvitationJSONError(w, http.StatusNotFound, "invitation_token_not_found")
 			return
 		}
@@ -144,11 +180,12 @@ func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	assignedBrandNames := info.AssignedBrandIDs
+	brandNames := info.AssignedBrandIDs
 	if h.BrandRepo != nil && len(info.AssignedBrandIDs) > 0 {
 		resolved := make([]string, 0, len(info.AssignedBrandIDs))
 
 		for _, brandID := range info.AssignedBrandIDs {
+			brandID = strings.TrimSpace(brandID)
 			if brandID == "" {
 				continue
 			}
@@ -167,25 +204,20 @@ func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Req
 			resolved = append(resolved, brand.Name)
 		}
 
-		assignedBrandNames = resolved
+		brandNames = resolved
 	}
 
-	resp := invitationInfoResponse{
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(invitationInfoResponse{
 		MemberID:         info.MemberID,
-		CompanyID:        companyName,        // 画面には companyId キーで会社名を渡す
-		AssignedBrandIDs: assignedBrandNames, // 画面には assignedBrandIds キーでブランド名を渡す
+		CompanyID:        info.CompanyID,
+		CompanyName:      companyName,
+		AssignedBrandIDs: info.AssignedBrandIDs,
+		BrandNames:       brandNames,
 		Permissions:      info.Permissions,
 		Email:            info.Email,
-	}
-
-	_ = json.NewEncoder(w).Encode(resp)
+	})
 }
-
-/*
-=====================================
-POST /api/invitation/complete
-=====================================
-*/
 
 type invitationCompleteRequest struct {
 	Token         string `json:"token"`
@@ -204,7 +236,7 @@ func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.InvitationComplete == nil {
+	if h.InvitationUC == nil {
 		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_complete_usecase_not_configured")
 		return
 	}
@@ -225,10 +257,10 @@ func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Reques
 		Email:         req.Email,
 	}
 
-	err := h.InvitationComplete.CompleteInvitation(r.Context(), in)
+	err := h.InvitationUC.CompleteInvitation(r.Context(), in)
 	if err != nil {
 		switch {
-		case errors.Is(err, memdom.ErrInvitationTokenNotFound), errors.Is(err, memdom.ErrNotFound):
+		case errors.Is(err, invdom.ErrInvitationTokenNotFound), errors.Is(err, memdom.ErrNotFound):
 			writeInvitationJSONError(w, http.StatusNotFound, "invitation_token_or_member_not_found")
 			return
 		case err.Error() == "token_or_uid_required":
@@ -250,60 +282,6 @@ func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-/*
-=====================================
-MemberInvitationHandler
-=====================================
-*/
-
-type MemberInvitationHandler struct {
-	InvitationCommand usecase.InvitationCommandPort
-}
-
-func NewMemberInvitationHandler(cmd usecase.InvitationCommandPort) *MemberInvitationHandler {
-	return &MemberInvitationHandler{
-		InvitationCommand: cmd,
-	}
-}
-
-func (h *MemberInvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeInvitationJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-
-	path := strings.TrimRight(strings.TrimPrefix(r.URL.Path, "/members/"), "/")
-	parts := strings.Split(path, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] != "invitation" {
-		writeInvitationJSONError(w, http.StatusNotFound, "not_found")
-		return
-	}
-
-	memberID := parts[0]
-
-	if h.InvitationCommand == nil {
-		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_command_usecase_not_configured")
-		return
-	}
-
-	ctx := r.Context()
-	token, err := h.InvitationCommand.CreateInvitationAndSend(ctx, memberID)
-	if err != nil {
-		writeInvitationJSONError(w, http.StatusInternalServerError, "cannot_send_invitation")
-		return
-	}
-
-	resp := map[string]string{
-		"memberId": memberID,
-		"token":    token,
-	}
-
-	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func writeInvitationJSONError(w http.ResponseWriter, status int, message string) {

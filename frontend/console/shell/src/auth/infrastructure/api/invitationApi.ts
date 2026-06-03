@@ -4,16 +4,11 @@
 import type {
   InvitationInfo,
   ValidateResponse,
-  CompanyResponse,
-  BrandResponse,
   CompleteInvitationBackendPayload,
 } from "../repository/invitationRepositoryHTTP";
 
 import {
   fetchInvitationInfo as fetchInvitationInfoRepo,
-  fetchCompanyNameById as fetchCompanyNameByIdRepo,
-  fetchBrandNameById as fetchBrandNameByIdRepo,
-  fetchBrandNamesByIds as fetchBrandNamesByIdsRepo,
   validateInvitation as validateInvitationRepo,
   completeInvitationOnBackend as completeInvitationOnBackendRepo,
 } from "../repository/invitationRepositoryHTTP";
@@ -24,8 +19,6 @@ import {
 export type {
   InvitationInfo,
   ValidateResponse,
-  CompanyResponse,
-  BrandResponse,
   CompleteInvitationBackendPayload,
 };
 
@@ -38,20 +31,6 @@ export function fetchInvitationInfo(
   token: string,
 ): Promise<InvitationInfo> {
   return fetchInvitationInfoRepo(token);
-}
-
-export function fetchCompanyNameById(companyId: string): Promise<string> {
-  return fetchCompanyNameByIdRepo(companyId);
-}
-
-export function fetchBrandNameById(brandId: string): Promise<string> {
-  return fetchBrandNameByIdRepo(brandId);
-}
-
-export function fetchBrandNamesByIds(
-  assignedBrandIds: string[],
-): Promise<string[]> {
-  return fetchBrandNamesByIdsRepo(assignedBrandIds);
 }
 
 export function validateInvitation(

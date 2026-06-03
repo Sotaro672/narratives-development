@@ -105,22 +105,6 @@ var (
 )
 
 // ============================================================
-// InvitationToken 用 Repository ポート（ヘキサゴナルの out ポート）
-// ============================================================
-
-type InvitationTokenRepository interface {
-	// トークン文字列から InvitationInfo を取得
-	// 見つからない場合は ErrInvitationTokenNotFound を返す
-	ResolveInvitationInfoByToken(ctx context.Context, token string) (InvitationInfo, error)
-
-	// InvitationInfo をもとに新しい招待トークンを作成し、token 文字列を返す
-	CreateInvitationToken(ctx context.Context, info InvitationInfo) (string, error)
-
-	// 招待トークンを消費済みにする
-	ConsumeInvitationToken(ctx context.Context, token string) error
-}
-
-// ============================================================
 // Service: member 領域のユースケース的な便宜関数
 // ============================================================
 

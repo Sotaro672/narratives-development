@@ -50,14 +50,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		tokenBPReviewH   http.Handler
 		productBPReviewH http.Handler
 
-		messagesH         http.Handler
-		ordersH           http.Handler
-		walletsH          http.Handler
-		membersH          http.Handler
-		memberInvitationH http.Handler
-		productionsH      http.Handler
-		modelsH           http.Handler
-		usersH            http.Handler
+		messagesH    http.Handler
+		ordersH      http.Handler
+		walletsH     http.Handler
+		membersH     http.Handler
+		productionsH http.Handler
+		modelsH      http.Handler
+		usersH       http.Handler
 
 		inspectorH  http.Handler
 		mintH       http.Handler
@@ -206,10 +205,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		membersH = consoleHandler.NewMemberHandler(c.MemberRepo)
 	}
 
-	if c.InvitationCommand != nil {
-		memberInvitationH = consoleHandler.NewMemberInvitationHandler(c.InvitationCommand)
-	}
-
 	if c.ProductionUC != nil && c.CompanyProductionQueryService != nil {
 		productionsH = consoleHandler.NewProductionHandler(
 			c.CompanyProductionQueryService,
@@ -248,12 +243,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ownerResolveH = consoleHandler.NewOwnerResolveHandler(c.OwnerResolveQ)
 	}
 
-	if c.InvitationQuery != nil &&
-		c.InvitationComplete != nil &&
-		c.BrandRepo != nil {
+	if c.InvitationUC != nil {
 		invitationH = consoleHandler.NewInvitationHandler(
-			c.InvitationQuery,
-			c.InvitationComplete,
+			c.InvitationUC,
 			c.CompanyService,
 			c.BrandRepo,
 		)
@@ -283,11 +275,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		TokenBPReview:   tokenBPReviewH,
 		ProductBPReview: productBPReviewH,
 
-		Messages:         messagesH,
-		Orders:           ordersH,
-		Wallets:          walletsH,
-		Members:          membersH,
-		MemberInvitation: memberInvitationH,
+		Messages: messagesH,
+		Orders:   ordersH,
+		Wallets:  walletsH,
+		Members:  membersH,
 
 		Productions: productionsH,
 		Models:      modelsH,

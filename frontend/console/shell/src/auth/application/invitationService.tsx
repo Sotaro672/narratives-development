@@ -1,4 +1,4 @@
-//frontend\console\shell\src\auth\application\invitationService.tsx
+// frontend/console/shell/src/auth/application/invitationService.tsx
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../infrastructure/config/firebaseClient";
 import { mapPermissionNamesToDescriptionsJa } from "../../../../permission/src/application/permissionCatalog";
@@ -6,8 +6,6 @@ import { mapPermissionNamesToDescriptionsJa } from "../../../../permission/src/a
 // API 呼び出し系は infra/api に委譲
 import {
   fetchInvitationInfo as fetchInvitationInfoApi,
-  fetchCompanyNameById as fetchCompanyNameByIdApi,
-  fetchBrandNamesByIds as fetchBrandNamesByIdsApi,
   validateInvitation,
   completeInvitationOnBackend,
 } from "../infrastructure/api/invitationApi";
@@ -36,18 +34,17 @@ export type CompleteInvitationParams = {
 // ------------------------------
 // API ラッパー（従来の呼び出し口を維持）
 // ------------------------------
+
 export async function fetchInvitationInfo(
   token: string,
 ): Promise<InvitationInfo> {
   return fetchInvitationInfoApi(token);
 }
 
-export { fetchCompanyNameByIdApi as fetchCompanyNameById };
-export { fetchBrandNamesByIdsApi as fetchBrandNamesByIds };
-
 // ------------------------------
 // 招待の完了フロー（Firebase 認証 + backend API）
 // ------------------------------
+
 export async function completeInvitation(
   params: CompleteInvitationParams,
 ): Promise<void> {
@@ -64,19 +61,25 @@ export async function completeInvitation(
     permissions,
   } = params;
 
-  if (!token.trim()) {
+  const trimmedToken = token.trim();
+  const trimmedLastName = lastName.trim();
+  const trimmedLastNameKana = lastNameKana.trim();
+  const trimmedFirstName = firstName.trim();
+  const trimmedFirstNameKana = firstNameKana.trim();
+
+  if (!trimmedToken) {
     throw new Error("招待トークンが指定されていません。");
   }
-  if (!lastName.trim()) {
+  if (!trimmedLastName) {
     throw new Error("姓が指定されていません。");
   }
-  if (!lastNameKana.trim()) {
+  if (!trimmedLastNameKana) {
     throw new Error("姓（かな）が指定されていません。");
   }
-  if (!firstName.trim()) {
+  if (!trimmedFirstName) {
     throw new Error("名が指定されていません。");
   }
-  if (!firstNameKana.trim()) {
+  if (!trimmedFirstNameKana) {
     throw new Error("名（かな）が指定されていません。");
   }
   if (!password || !passwordConfirm) {
@@ -86,8 +89,8 @@ export async function completeInvitation(
     throw new Error("パスワードが一致していません。");
   }
 
-  // 1) backend: /api/invitation/validate(token)
-  const validateData = await validateInvitation(token);
+  // 1) backend: POST /invitations/validate
+  const validateData = await validateInvitation(trimmedToken);
 
   const email = (validateData.email ?? "").trim();
   if (!email) {
@@ -98,39 +101,37 @@ export async function completeInvitation(
   const effectiveBrandIds = validateData.assignedBrandIds ?? assignedBrandIds;
   const effectivePermissions = validateData.permissions ?? permissions;
 
-  // 表示用の名前解決（失敗しても続行）
-  try {
-    const [companyName, brandNames, permissionDescriptions] = await Promise.all([
-      fetchCompanyNameByIdApi(effectiveCompanyId),
-      fetchBrandNamesByIdsApi(effectiveBrandIds),
-      Promise.resolve(mapPermissionNamesToDescriptionsJa(effectivePermissions)),
-    ]);
+  // 未ログイン招待画面では /companies/{id} / /brands/{id} は認証必須のため呼ばない。
+  // 表示名は POST /invitations/validate のレスポンスに含まれる companyName / brandNames を使う。
+  const companyName = validateData.companyName ?? effectiveCompanyId;
+  const brandNames =
+    validateData.brandNames && validateData.brandNames.length > 0
+      ? validateData.brandNames
+      : effectiveBrandIds;
+  const permissionDescriptions =
+    mapPermissionNamesToDescriptionsJa(effectivePermissions);
 
-    // eslint-disable-next-line no-console
-    console.log("[InvitationService] display info:", {
-      companyId: effectiveCompanyId,
-      companyName,
-      brandIds: effectiveBrandIds,
-      brandNames,
-      permissionNames: effectivePermissions,
-      permissionDescriptionsJa: permissionDescriptions,
-    });
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn("[InvitationService] failed to resolve display names", e);
-  }
+  // eslint-disable-next-line no-console
+  console.log("[InvitationService] display info:", {
+    companyId: effectiveCompanyId,
+    companyName,
+    brandIds: effectiveBrandIds,
+    brandNames,
+    permissionNames: effectivePermissions,
+    permissionDescriptionsJa: permissionDescriptions,
+  });
 
   // 2) Firebase: createUserWithEmailAndPassword
   const cred = await createUserWithEmailAndPassword(auth, email, password);
 
-  // 3) backend: /api/invitation/complete(token, uid, 氏名, email)
+  // 3) backend: POST /invitations/complete
   await completeInvitationOnBackend({
-    token,
+    token: trimmedToken,
     uid: cred.user.uid,
-    lastName,
-    lastNameKana,
-    firstName,
-    firstNameKana,
+    lastName: trimmedLastName,
+    lastNameKana: trimmedLastNameKana,
+    firstName: trimmedFirstName,
+    firstNameKana: trimmedFirstNameKana,
     email,
   });
 }

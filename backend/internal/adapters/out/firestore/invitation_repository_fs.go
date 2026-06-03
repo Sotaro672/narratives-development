@@ -1,3 +1,4 @@
+// backend/internal/adapters/out/firestore/invitation_repository_fs.go
 package firestore
 
 import (
@@ -10,27 +11,26 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	itdom "narratives/internal/domain/member"
+	itdom "narratives/internal/domain/invitation"
 )
 
 // InvitationTokenRepositoryFS is a Firestore-based implementation of
-// InvitationTokenRepository.
+// invitation.Repository.
+//
 // Uses the "invitationTokens" collection.
 //
 // ドキュメント構造の想定：
 // - コレクション: "invitationTokens"
-// - ドキュメントID: token (INV_xxx など)
+// - ドキュメントID: token
 // - フィールド:
-//   - token          : string （任意。docID と重複してもよい）
 //   - memberId       : string
 //   - email          : string
-//   - companyId      : string (任意)
-//   - assignedBrands : []string (任意)
-//   - permissions    : []string (任意)
-//   - expiresAt      : timestamp/string (任意)
-//   - usedAt         : timestamp/string (任意)
-//   - createdAt      : timestamp/string
-//   - updatedAt      : timestamp/string (任意)
+//   - companyId      : string
+//   - assignedBrands : []string
+//   - permissions    : []string
+//   - createdAt      : timestamp
+//   - usedAt         : timestamp (optional)
+//   - updatedAt      : timestamp (optional)
 type InvitationTokenRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -43,12 +43,8 @@ func (r *InvitationTokenRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("invitationTokens")
 }
 
-// ============================================================
-// Domain ポート itdom.InvitationTokenRepository 相当の実装
-// ============================================================
-
 // FindByToken retrieves an invitation token document by token string.
-// token は基本的にドキュメントIDとして扱う想定です。
+// token は Firestore document ID として扱う。
 func (r *InvitationTokenRepositoryFS) FindByToken(
 	ctx context.Context,
 	token string,
@@ -78,7 +74,6 @@ func (r *InvitationTokenRepositoryFS) FindByToken(
 		it.Token = doc.Ref.ID
 	}
 
-	// usedAt が入っている token は消費済みとして扱う
 	if it.UsedAt != nil && !it.UsedAt.IsZero() {
 		return itdom.InvitationToken{}, itdom.ErrInvitationTokenNotFound
 	}
@@ -86,9 +81,8 @@ func (r *InvitationTokenRepositoryFS) FindByToken(
 	return it, nil
 }
 
-// Save は InvitationToken を作成/更新します。
-// - Token が空なら新規 docID を発行
-// - Token が指定されていればそのIDのドキュメントに Set
+// Save creates or updates an invitation token document.
+// Token が空なら新規 docID を発行し、Token が指定されていればその ID に保存する。
 func (r *InvitationTokenRepositoryFS) Save(
 	ctx context.Context,
 	t itdom.InvitationToken,
@@ -112,45 +106,30 @@ func (r *InvitationTokenRepositoryFS) Save(
 		t.CreatedAt = now
 	}
 
-	if t.UpdatedAt == nil {
-		t.UpdatedAt = &now
-	} else {
-		*t.UpdatedAt = now
+	t.UpdatedAt = &now
+
+	data := map[string]any{
+		"memberId":       t.MemberID,
+		"email":          t.Email,
+		"companyId":      t.CompanyID,
+		"assignedBrands": t.AssignedBrandIDs,
+		"permissions":    t.Permissions,
+		"createdAt":      t.CreatedAt,
+		"updatedAt":      now,
 	}
 
-	if _, err := ref.Set(ctx, t); err != nil {
+	if t.UsedAt != nil && !t.UsedAt.IsZero() {
+		data["usedAt"] = *t.UsedAt
+	}
+
+	if _, err := ref.Set(ctx, data); err != nil {
 		return itdom.InvitationToken{}, err
 	}
+
 	return t, nil
 }
 
-// Delete はトークン文字列を指定してドキュメントを削除します。
-func (r *InvitationTokenRepositoryFS) Delete(ctx context.Context, token string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	if token == "" {
-		return itdom.ErrInvitationTokenNotFound
-	}
-
-	ref := r.col().Doc(token)
-	_, err := ref.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return itdom.ErrInvitationTokenNotFound
-		}
-		return err
-	}
-
-	if _, err := ref.Delete(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
 // ConsumeInvitationToken marks the invitation token as used.
-// usecase.InvitationTokenRepository インターフェースに対応。
 func (r *InvitationTokenRepositoryFS) ConsumeInvitationToken(
 	ctx context.Context,
 	token string,
@@ -197,31 +176,7 @@ func (r *InvitationTokenRepositoryFS) ConsumeInvitationToken(
 	return nil
 }
 
-// ============================================================
-// Application ポート usecase.InvitationTokenRepository 用の実装
-// （ResolveXXX / CreateInvitationToken / ConsumeInvitationToken）
-// ============================================================
-
-// ResolveMemberIDByToken は token → memberID の解決を行います。
-// ※ 既存コード互換用に残しています（不要であれば後で削除可）。
-func (r *InvitationTokenRepositoryFS) ResolveMemberIDByToken(
-	ctx context.Context,
-	token string,
-) (string, error) {
-	it, err := r.FindByToken(ctx, token)
-	if err != nil {
-		return "", err
-	}
-	memberID := it.MemberID
-	if memberID == "" {
-		return "", itdom.ErrInvitationTokenNotFound
-	}
-	return memberID, nil
-}
-
-// ResolveInvitationInfoByToken は token → InvitationInfo
-// （MemberID / Email / CompanyID / AssignedBrandIDs / Permissions）
-// を解決して返します。
+// ResolveInvitationInfoByToken resolves token to InvitationInfo.
 func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
 	ctx context.Context,
 	token string,
@@ -237,10 +192,10 @@ func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
 
 	info := itdom.InvitationInfo{
 		MemberID:         it.MemberID,
-		Email:            it.Email,
 		CompanyID:        it.CompanyID,
 		AssignedBrandIDs: it.AssignedBrandIDs,
 		Permissions:      it.Permissions,
+		Email:            it.Email,
 	}
 
 	if info.MemberID == "" {
@@ -250,8 +205,7 @@ func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
 	return info, nil
 }
 
-// CreateInvitationToken は InvitationInfo に紐づく新しい招待トークンを作成し、
-// その token 文字列を返します。
+// CreateInvitationToken creates a new invitation token and returns the token string.
 func (r *InvitationTokenRepositoryFS) CreateInvitationToken(
 	ctx context.Context,
 	info itdom.InvitationInfo,
@@ -269,25 +223,22 @@ func (r *InvitationTokenRepositoryFS) CreateInvitationToken(
 	t := itdom.InvitationToken{
 		Token:            "",
 		MemberID:         memberID,
-		Email:            info.Email,
 		CompanyID:        info.CompanyID,
 		AssignedBrandIDs: info.AssignedBrandIDs,
 		Permissions:      info.Permissions,
+		Email:            info.Email,
 		CreatedAt:        now,
-		UpdatedAt:        &now,
 		UsedAt:           nil,
+		UpdatedAt:        &now,
 	}
 
 	saved, err := r.Save(ctx, t)
 	if err != nil {
 		return "", err
 	}
+
 	return saved.Token, nil
 }
-
-// ========================
-// Helper: decode InvitationToken snapshot
-// ========================
 
 func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot) (itdom.InvitationToken, error) {
 	data := doc.Data()
@@ -303,19 +254,23 @@ func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot) (itdom.Invitat
 		if v == nil {
 			return nil
 		}
+
 		if ss, ok := v.([]string); ok {
 			return ss
 		}
+
 		arr, ok := v.([]interface{})
 		if !ok {
 			return nil
 		}
+
 		out := make([]string, 0, len(arr))
 		for _, x := range arr {
 			if s, ok := x.(string); ok {
 				out = append(out, s)
 			}
 		}
+
 		return out
 	}
 
@@ -361,13 +316,13 @@ func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot) (itdom.Invitat
 	t := itdom.InvitationToken{
 		Token:            doc.Ref.ID,
 		MemberID:         asString(data["memberId"]),
-		Email:            asString(data["email"]),
 		CompanyID:        asString(data["companyId"]),
 		AssignedBrandIDs: asStringSlice(data["assignedBrands"]),
 		Permissions:      asStringSlice(data["permissions"]),
+		Email:            asString(data["email"]),
 		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
 		UsedAt:           usedAt,
+		UpdatedAt:        updatedAt,
 	}
 
 	return t, nil
