@@ -12,9 +12,6 @@ import (
 // ✅ domain/user/repository_port.go を正として採用
 type UserRepo interface {
 	GetByID(ctx context.Context, id string) (*userdom.User, error)
-	List(ctx context.Context, filter userdom.Filter, page userdom.Page) (userdom.PageResult, error)
-
-	GetNameByID(ctx context.Context, id string) (string, error)
 
 	// docId = uid を caller が必ず渡す
 	Create(ctx context.Context, id string, in userdom.CreateUserInput) (*userdom.User, error)
@@ -27,18 +24,20 @@ type UserUsecase struct {
 	now  func() time.Time
 }
 
-func NewUserUsecase(repo UserRepo) *UserUsecase {
+// NewUserUsecase is the only entry point for constructing UserUsecase.
+//
+// すべての依存はここに集約する。
+// - repo: user repository
+// - now: 時刻取得関数。nil の場合は time.Now を使用する。
+func NewUserUsecase(repo UserRepo, now func() time.Time) *UserUsecase {
+	if now == nil {
+		now = time.Now
+	}
+
 	return &UserUsecase{
 		repo: repo,
-		now:  time.Now,
+		now:  now,
 	}
-}
-
-func (u *UserUsecase) WithNow(now func() time.Time) *UserUsecase {
-	if now != nil {
-		u.now = now
-	}
-	return u
 }
 
 func (u *UserUsecase) ensureRepo() error {
@@ -62,27 +61,6 @@ func (u *UserUsecase) GetByID(ctx context.Context, id string) (*userdom.User, er
 	return u.repo.GetByID(ctx, id)
 }
 
-func (u *UserUsecase) List(ctx context.Context, filter userdom.Filter, page userdom.Page) (userdom.PageResult, error) {
-	if err := u.ensureRepo(); err != nil {
-		return userdom.PageResult{}, err
-	}
-	return u.repo.List(ctx, filter, page)
-}
-
-func (u *UserUsecase) GetNameByID(ctx context.Context, id string) (string, error) {
-	if err := u.ensureRepo(); err != nil {
-		return "", err
-	}
-	if id == "" {
-		return "", userdom.ErrInvalidID
-	}
-	name, err := u.repo.GetNameByID(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	return name, nil
-}
-
 // --------------------
 // Commands
 // --------------------
@@ -98,8 +76,6 @@ func (u *UserUsecase) Create(ctx context.Context, id string, in userdom.CreateUs
 	if id == "" {
 		return nil, userdom.ErrInvalidID
 	}
-
-	normalizeCreateInput(&in)
 
 	now := u.now().UTC()
 	in.CreatedAt = &now
@@ -119,9 +95,6 @@ func (u *UserUsecase) Upsert(ctx context.Context, id string, in userdom.CreateUs
 		return nil, userdom.ErrInvalidID
 	}
 
-	normalizeCreateInput(&in)
-
-	// exists?
 	_, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		if err == userdom.ErrNotFound {
@@ -133,7 +106,6 @@ func (u *UserUsecase) Upsert(ctx context.Context, id string, in userdom.CreateUs
 		return nil, err
 	}
 
-	// Update
 	now := u.now().UTC()
 	uin := userdom.UpdateUserInput{
 		FirstName:     in.FirstName,
@@ -143,6 +115,7 @@ func (u *UserUsecase) Upsert(ctx context.Context, id string, in userdom.CreateUs
 		UpdatedAt:     &now,
 		DeletedAt:     in.DeletedAt, // nil=変更なし / zero=not deleted へ戻す
 	}
+
 	return u.repo.Update(ctx, id, uin)
 }
 
@@ -154,8 +127,6 @@ func (u *UserUsecase) Update(ctx context.Context, id string, in userdom.UpdateUs
 	if id == "" {
 		return nil, userdom.ErrInvalidID
 	}
-
-	normalizeUpdateInput(&in)
 
 	if in.UpdatedAt == nil {
 		now := u.now().UTC()
@@ -169,44 +140,10 @@ func (u *UserUsecase) Delete(ctx context.Context, id string) error {
 	if err := u.ensureRepo(); err != nil {
 		return err
 	}
+
 	if id == "" {
 		return userdom.ErrInvalidID
 	}
+
 	return u.repo.Delete(ctx, id)
-}
-
-// --------------------
-// input normalizers
-// --------------------
-
-func trimStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := *p
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func normalizeCreateInput(in *userdom.CreateUserInput) {
-	if in == nil {
-		return
-	}
-	in.FirstName = trimStrPtr(in.FirstName)
-	in.FirstNameKana = trimStrPtr(in.FirstNameKana)
-	in.LastNameKana = trimStrPtr(in.LastNameKana)
-	in.LastName = trimStrPtr(in.LastName)
-	// times are server-controlled in Create/Upsert
-}
-
-func normalizeUpdateInput(in *userdom.UpdateUserInput) {
-	if in == nil {
-		return
-	}
-	in.FirstName = trimStrPtr(in.FirstName)
-	in.FirstNameKana = trimStrPtr(in.FirstNameKana)
-	in.LastNameKana = trimStrPtr(in.LastNameKana)
-	in.LastName = trimStrPtr(in.LastName)
 }

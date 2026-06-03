@@ -198,7 +198,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		paymentMethodRepo,
 		infra.PaymentMethodGateway,
 	)
-	c.UserUC = usecase.NewUserUsecase(userRepo)
+	c.UserUC = usecase.NewUserUsecase(userRepo, nil)
 
 	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
 	tokenQuery := outfs.NewTokenReaderFS(fsClient)

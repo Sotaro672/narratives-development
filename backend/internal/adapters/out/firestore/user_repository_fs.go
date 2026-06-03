@@ -7,11 +7,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	dbcommon "narratives/internal/adapters/out/firestore/common"
 	udom "narratives/internal/domain/user"
 )
 
@@ -105,87 +103,6 @@ func (r *UserRepositoryFS) GetEmailByID(ctx context.Context, userID string) (str
 	}
 
 	return email, nil
-}
-
-// List: Firestore 制約により全件取得してメモリ上で Filter/Paging を適用。
-// ✅ sort は削除（repository_port.go に合わせる）
-func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, page udom.Page) (udom.PageResult, error) {
-	if r == nil || r.Client == nil {
-		return udom.PageResult{}, errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	var all []udom.User
-	for {
-		snap, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return udom.PageResult{}, err
-		}
-		u, err := docToUser(snap)
-		if err != nil {
-			return udom.PageResult{}, err
-		}
-		if matchUserFilter(u, filter) {
-			all = append(all, u)
-		}
-	}
-
-	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-	total := len(all)
-
-	if offset > total {
-		offset = total
-	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-
-	paged := all[offset:end]
-
-	return udom.PageResult{
-		Items:      paged,
-		TotalCount: total,
-		TotalPages: dbcommon.ComputeTotalPages(total, perPage),
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
-}
-
-// GetNameByID: "last_name first_name"
-func (r *UserRepositoryFS) GetNameByID(ctx context.Context, id string) (string, error) {
-	u, err := r.GetByID(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	if u == nil {
-		return "", udom.ErrNotFound
-	}
-
-	ln := ""
-	fn := ""
-	if u.LastName != nil {
-		ln = *u.LastName
-	}
-	if u.FirstName != nil {
-		fn = *u.FirstName
-	}
-
-	switch {
-	case ln != "" && fn != "":
-		return ln + " " + fn, nil
-	case ln != "":
-		return ln, nil
-	case fn != "":
-		return fn, nil
-	default:
-		return "", nil
-	}
 }
 
 // --------------------
@@ -406,44 +323,4 @@ func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 		UpdatedAt:     getTime("updatedAt"),
 		DeletedAt:     getTime("deletedAt"),
 	}, nil
-}
-
-// --------------------
-// Filter (in-memory)
-// --------------------
-
-func matchUserFilter(u udom.User, f udom.Filter) bool {
-	if len(f.IDs) > 0 {
-		match := false
-		for _, id := range f.IDs {
-			if id == u.ID {
-				match = true
-				break
-			}
-		}
-		if !match {
-			return false
-		}
-	}
-
-	if f.CreatedFrom != nil && u.CreatedAt.Before(f.CreatedFrom.UTC()) {
-		return false
-	}
-	if f.CreatedTo != nil && !u.CreatedAt.Before(f.CreatedTo.UTC()) {
-		return false
-	}
-	if f.UpdatedFrom != nil && u.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
-		return false
-	}
-	if f.UpdatedTo != nil && !u.UpdatedAt.Before(f.UpdatedTo.UTC()) {
-		return false
-	}
-	if f.DeletedFrom != nil && u.DeletedAt.Before(f.DeletedFrom.UTC()) {
-		return false
-	}
-	if f.DeletedTo != nil && !u.DeletedAt.Before(f.DeletedTo.UTC()) {
-		return false
-	}
-
-	return true
 }

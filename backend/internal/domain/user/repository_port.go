@@ -38,48 +38,12 @@ type UpdateUserInput struct {
 }
 
 // ========================================
-// 検索条件/ページング（契約のみ）
-// ※ sort 機能は削除
-// ========================================
-
-type Filter struct {
-	IDs         []string
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
-	DeletedFrom *time.Time
-	DeletedTo   *time.Time
-}
-
-type Page struct {
-	Number  int
-	PerPage int
-}
-
-type PageResult struct {
-	Items      []User
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
-}
-
-// ========================================
 // Repository Port（契約のみ）
 // ========================================
 
 type RepositoryPort interface {
 	// 取得系
 	GetByID(ctx context.Context, id string) (*User, error)
-
-	// List: filter + paging のみ（sort は削除）
-	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
-
-	// ✅ 画面表示用（best-effort）: userId -> "lastName firstName"
-	// - 実装側で lastName / firstName を取得し、"姓 名" の順で返す
-	// - 見つからない場合は ErrNotFound
-	GetNameByID(ctx context.Context, id string) (string, error)
 
 	// 変更系
 	//

@@ -193,7 +193,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.brandRepo,
 	)
 
-	userUC := uc.NewUserUsecase(r.userRepo)
+	userUC := uc.NewUserUsecase(r.userRepo, nil)
 
 	onchainReader := solanainfra.NewOnchainWalletReaderDevnet()
 	tokenQuery := fsrepo.NewTokenReaderFS(c.fsClient)
