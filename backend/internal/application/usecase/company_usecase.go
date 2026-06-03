@@ -26,10 +26,6 @@ func (u *CompanyUsecase) GetByID(ctx context.Context, id string) (companydom.Com
 	return u.repo.GetByID(ctx, id)
 }
 
-func (u *CompanyUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.repo.Exists(ctx, id)
-}
-
 // Commands
 
 // Create accepts a fully-formed entity.
@@ -56,27 +52,6 @@ func (u *CompanyUsecase) Update(ctx context.Context, id string, patch companydom
 	}
 
 	return u.repo.Update(ctx, id, patch)
-}
-
-// UpdateFromEntity converts a Company entity into CompanyPatch and updates it.
-// 既存の Save(ctx, company) 的な呼び出しを置き換えるための入口。
-func (u *CompanyUsecase) UpdateFromEntity(ctx context.Context, c companydom.Company) (companydom.Company, error) {
-	updatedAt := c.UpdatedAt
-	if updatedAt.IsZero() {
-		updatedAt = u.now().UTC()
-	}
-
-	patch := companydom.CompanyPatch{
-		Name:      &c.Name,
-		Admin:     &c.Admin,
-		IsActive:  &c.IsActive,
-		UpdatedAt: &updatedAt,
-		UpdatedBy: &c.UpdatedBy,
-		DeletedAt: c.DeletedAt,
-		DeletedBy: c.DeletedBy,
-	}
-
-	return u.repo.Update(ctx, c.ID, patch)
 }
 
 func (u *CompanyUsecase) Delete(ctx context.Context, id string) error {

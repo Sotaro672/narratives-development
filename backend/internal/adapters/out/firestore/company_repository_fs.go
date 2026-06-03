@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -42,7 +41,7 @@ func (r *CompanyRepositoryFS) NewID(ctx context.Context) (string, error) {
 }
 
 // ==============================
-// Get / Exists
+// Get
 // ==============================
 
 func (r *CompanyRepositoryFS) GetByID(ctx context.Context, id string) (compdom.Company, error) {
@@ -57,22 +56,8 @@ func (r *CompanyRepositoryFS) GetByID(ctx context.Context, id string) (compdom.C
 		}
 		return compdom.Company{}, err
 	}
+
 	return docToCompany(snap)
-}
-
-func (r *CompanyRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 // ==============================
@@ -95,7 +80,6 @@ func (r *CompanyRepositoryFS) Create(ctx context.Context, c compdom.Company) (co
 	}
 
 	data := companyToDocData(c)
-	data["id"] = c.ID
 
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
@@ -109,6 +93,7 @@ func (r *CompanyRepositoryFS) Create(ctx context.Context, c compdom.Company) (co
 	if err != nil {
 		return compdom.Company{}, err
 	}
+
 	return docToCompany(snap)
 }
 
@@ -185,6 +170,7 @@ func (r *CompanyRepositoryFS) Delete(ctx context.Context, id string) error {
 		}
 		return err
 	}
+
 	return nil
 }
 
@@ -226,33 +212,30 @@ func docToCompany(doc *firestore.DocumentSnapshot) (compdom.Company, error) {
 		return compdom.Company{}, fmt.Errorf("empty company document: %s", doc.Ref.ID)
 	}
 
-	getStr := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				return v
-			}
+	getStr := func(key string) string {
+		if v, ok := data[key].(string); ok {
+			return v
 		}
 		return ""
 	}
-	getBool := func(keys ...string) bool {
-		for _, k := range keys {
-			if v, ok := data[k].(bool); ok {
-				return v
-			}
+
+	getBool := func(key string) bool {
+		if v, ok := data[key].(bool); ok {
+			return v
 		}
 		return false
 	}
-	getTimePtr := func(keys ...string) *time.Time {
-		for _, k := range keys {
-			if v, ok := data[k].(time.Time); ok {
-				t := v.UTC()
-				return &t
-			}
+
+	getTimePtr := func(key string) *time.Time {
+		if v, ok := data[key].(time.Time); ok {
+			t := v.UTC()
+			return &t
 		}
 		return nil
 	}
-	getTimeVal := func(keys ...string) time.Time {
-		if pt := getTimePtr(keys...); pt != nil {
+
+	getTimeVal := func(key string) time.Time {
+		if pt := getTimePtr(key); pt != nil {
 			return *pt
 		}
 		return time.Time{}
@@ -264,28 +247,30 @@ func docToCompany(doc *firestore.DocumentSnapshot) (compdom.Company, error) {
 	if c.ID == "" {
 		c.ID = doc.Ref.ID
 	}
+
 	c.Name = getStr("name")
 	c.Admin = getStr("admin")
-	c.IsActive = getBool("isActive", "is_active")
+	c.IsActive = getBool("isActive")
 
-	if t := getTimeVal("createdAt", "created_at"); !t.IsZero() {
+	if t := getTimeVal("createdAt"); !t.IsZero() {
 		c.CreatedAt = t
 	}
 
-	c.CreatedBy = getStr("createdBy", "created_by")
+	c.CreatedBy = getStr("createdBy")
 
-	if pt := getTimePtr("updatedAt", "updated_at"); pt != nil {
+	if pt := getTimePtr("updatedAt"); pt != nil {
 		c.UpdatedAt = *pt
 	}
 
-	if s := getStr("updatedBy", "updated_by"); s != "" {
+	if s := getStr("updatedBy"); s != "" {
 		c.UpdatedBy = s
 	}
 
-	if pt := getTimePtr("deletedAt", "deleted_at"); pt != nil {
+	if pt := getTimePtr("deletedAt"); pt != nil {
 		c.DeletedAt = pt
 	}
-	if s := getStr("deletedBy", "deleted_by"); s != "" {
+
+	if s := getStr("deletedBy"); s != "" {
 		c.DeletedBy = &s
 	}
 
@@ -297,9 +282,3 @@ func docToCompany(doc *firestore.DocumentSnapshot) (compdom.Company, error) {
 // ==============================
 
 var _ compdom.Repository = (*CompanyRepositoryFS)(nil)
-
-// ==============================
-// optional iterator import usage guard
-// ==============================
-
-var _ = iterator.Done

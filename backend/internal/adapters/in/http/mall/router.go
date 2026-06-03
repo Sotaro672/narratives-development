@@ -177,10 +177,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	handleSafe(mux, "/mall/token-blueprints", deps.TokenBlueprint, "TokenBlueprint")
 	handleSafe(mux, "/mall/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint")
 
-	// companies / brands (public)
-	handleSafe(mux, "/mall/companies", deps.Company, "Company")
-	handleSafe(mux, "/mall/companies/", deps.Company, "Company")
-
 	handleSafe(mux, "/mall/brands", deps.Brand, "Brand")
 	handleSafe(mux, "/mall/brands/", deps.Brand, "Brand")
 

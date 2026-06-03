@@ -32,8 +32,6 @@ type Repository interface {
 
 	// 取得
 	GetByID(ctx context.Context, id string) (Company, error)
-	Exists(ctx context.Context, id string) (bool, error)
-
 	// 変更
 	Create(ctx context.Context, c Company) (Company, error)
 	Update(ctx context.Context, id string, patch CompanyPatch) (Company, error)

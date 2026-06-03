@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/console/handler/company_handler.go
 package consoleHandler
 
 import (
@@ -22,14 +23,24 @@ func (h *CompanyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
-	// 新規追加: POST /companies
+	// POST /companies
 	case r.Method == http.MethodPost && strings.Trim(r.URL.Path, "/") == "companies":
 		h.create(w, r)
 
-	// 単一取得: GET /companies/{id}
+	// GET /companies/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/companies/"):
 		id := strings.TrimPrefix(r.URL.Path, "/companies/")
 		h.get(w, r, id)
+
+	// PATCH /companies/{id}
+	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/companies/"):
+		id := strings.TrimPrefix(r.URL.Path, "/companies/")
+		h.update(w, r, id)
+
+	// DELETE /companies/{id}
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/companies/"):
+		id := strings.TrimPrefix(r.URL.Path, "/companies/")
+		h.delete(w, r, id)
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -38,6 +49,7 @@ func (h *CompanyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- GET /companies/{id} ----
+
 func (h *CompanyHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -52,16 +64,16 @@ func (h *CompanyHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		writeCompanyErr(w, err)
 		return
 	}
+
 	_ = json.NewEncoder(w).Encode(company)
 }
 
 // ---- POST /companies ----
+
 type createCompanyRequest struct {
-	// 空文字は無効として 400 を返す（必要に応じて緩和）
-	Name     string `json:"name"`
-	Admin    string `json:"admin"`              // 登録者/責任者メールやUIDなど
-	IsActive *bool  `json:"isActive,omitempty"` // 省略時 true
-	// 監査系（必要に応じてミドルウェアで設定）
+	Name      string  `json:"name"`
+	Admin     string  `json:"admin"`
+	IsActive  *bool   `json:"isActive,omitempty"`
 	CreatedBy *string `json:"createdBy,omitempty"`
 }
 
@@ -89,12 +101,12 @@ func (h *CompanyHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := companydom.Company{
-		// ID は repo 側で採番でもOK。指定したい場合はここでセット
 		Name:      name,
 		Admin:     admin,
 		IsActive:  isActive,
 		CreatedAt: time.Now().UTC(),
 	}
+
 	if req.CreatedBy != nil {
 		c.CreatedBy = *req.CreatedBy
 	}
@@ -109,17 +121,78 @@ func (h *CompanyHandler) create(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(created)
 }
 
+// ---- PATCH /companies/{id} ----
+
+type updateCompanyRequest struct {
+	Name      *string `json:"name,omitempty"`
+	Admin     *string `json:"admin,omitempty"`
+	IsActive  *bool   `json:"isActive,omitempty"`
+	UpdatedBy *string `json:"updatedBy,omitempty"`
+}
+
+func (h *CompanyHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var req updateCompanyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	patch := companydom.CompanyPatch{
+		Name:      req.Name,
+		Admin:     req.Admin,
+		IsActive:  req.IsActive,
+		UpdatedBy: req.UpdatedBy,
+	}
+
+	updated, err := h.uc.Update(ctx, id, patch)
+	if err != nil {
+		writeCompanyErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+// ---- DELETE /companies/{id} ----
+
+func (h *CompanyHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	if err := h.uc.Delete(ctx, id); err != nil {
+		writeCompanyErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ---- 共通エラーハンドリング ----
+
 func writeCompanyErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
+
 	switch err {
-	case companydom.ErrInvalidID:
-		code = http.StatusBadRequest
 	case companydom.ErrNotFound:
 		code = http.StatusNotFound
 	case companydom.ErrConflict:
 		code = http.StatusConflict
 	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
