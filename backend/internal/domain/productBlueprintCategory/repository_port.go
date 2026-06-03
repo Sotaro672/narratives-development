@@ -41,7 +41,6 @@ type Filter struct {
 
 const (
 	SortColumnDisplayOrder = "displayOrder"
-	SortColumnCode         = "code"
 	SortColumnNameJa       = "nameJa"
 	SortColumnKind         = "kind"
 	SortColumnCreatedAt    = "createdAt"
@@ -51,7 +50,6 @@ const (
 func IsAllowedSortColumn(column string) bool {
 	switch column {
 	case SortColumnDisplayOrder,
-		SortColumnCode,
 		SortColumnNameJa,
 		SortColumnKind,
 		SortColumnCreatedAt,
@@ -77,8 +75,6 @@ func IsAllowedSortColumn(column string) bool {
 type ReadOnlyRepositoryPort interface {
 	GetByID(ctx context.Context, id string) (ProductBlueprintCategory, error)
 
-	GetByCode(ctx context.Context, code CategoryCode) (ProductBlueprintCategory, error)
-
 	List(
 		ctx context.Context,
 		filter Filter,
@@ -97,8 +93,6 @@ type ReadOnlyRepositoryPort interface {
 	) (common.CursorPageResult[ProductBlueprintCategory], error)
 
 	ExistsByID(ctx context.Context, id string) (bool, error)
-
-	ExistsByCode(ctx context.Context, code CategoryCode) (bool, error)
 }
 
 // RepositoryPort は後方互換用 alias。

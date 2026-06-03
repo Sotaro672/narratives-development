@@ -256,6 +256,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			companyRepo,
 			productBlueprintRepoFS,
 			memberRepo,
+			userRepo,
 			modelRepoFS,
 			tokenBlueprintRepo,
 		)

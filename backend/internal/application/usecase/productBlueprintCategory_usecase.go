@@ -23,11 +23,6 @@ type ProductBlueprintCategoryReadRepository interface {
 		id string,
 	) (categorydom.ProductBlueprintCategory, error)
 
-	GetByCode(
-		ctx context.Context,
-		code categorydom.CategoryCode,
-	) (categorydom.ProductBlueprintCategory, error)
-
 	List(
 		ctx context.Context,
 		filter categorydom.Filter,
@@ -35,18 +30,21 @@ type ProductBlueprintCategoryReadRepository interface {
 		page common.Page,
 	) (common.PageResult[categorydom.ProductBlueprintCategory], error)
 
+	// ListTree はフロントのカテゴリ選択 UI 向け。
+	// displayOrder 昇順で返す想定。
 	ListTree(
 		ctx context.Context,
 	) ([]categorydom.ProductBlueprintCategory, error)
 
+	ListCursor(
+		ctx context.Context,
+		filter categorydom.Filter,
+		page common.CursorPage,
+	) (common.CursorPageResult[categorydom.ProductBlueprintCategory], error)
+
 	ExistsByID(
 		ctx context.Context,
 		id string,
-	) (bool, error)
-
-	ExistsByCode(
-		ctx context.Context,
-		code categorydom.CategoryCode,
 	) (bool, error)
 }
 
@@ -111,22 +109,6 @@ func (u *ProductBlueprintCategoryUsecase) GetByID(
 	return u.repo.GetByID(ctx, id)
 }
 
-func (u *ProductBlueprintCategoryUsecase) GetByCode(
-	ctx context.Context,
-	code string,
-) (categorydom.ProductBlueprintCategory, error) {
-	if u == nil || u.repo == nil {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrRepositoryInvalidInput
-	}
-
-	code = strings.TrimSpace(code)
-	if code == "" {
-		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidCode
-	}
-
-	return u.repo.GetByCode(ctx, categorydom.CategoryCode(code))
-}
-
 func (u *ProductBlueprintCategoryUsecase) List(
 	ctx context.Context,
 	q ListProductBlueprintCategoriesQuery,
@@ -185,6 +167,23 @@ func (u *ProductBlueprintCategoryUsecase) ListTree(
 	return u.repo.ListTree(ctx)
 }
 
+func (u *ProductBlueprintCategoryUsecase) ListCursor(
+	ctx context.Context,
+	q ListProductBlueprintCategoriesQuery,
+	page common.CursorPage,
+) (common.CursorPageResult[categorydom.ProductBlueprintCategory], error) {
+	if u == nil || u.repo == nil {
+		return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, categorydom.ErrRepositoryInvalidInput
+	}
+
+	filter, err := buildProductBlueprintCategoryFilter(q)
+	if err != nil {
+		return common.CursorPageResult[categorydom.ProductBlueprintCategory]{}, err
+	}
+
+	return u.repo.ListCursor(ctx, filter, page)
+}
+
 func (u *ProductBlueprintCategoryUsecase) ExistsByID(
 	ctx context.Context,
 	id string,
@@ -199,22 +198,6 @@ func (u *ProductBlueprintCategoryUsecase) ExistsByID(
 	}
 
 	return u.repo.ExistsByID(ctx, id)
-}
-
-func (u *ProductBlueprintCategoryUsecase) ExistsByCode(
-	ctx context.Context,
-	code string,
-) (bool, error) {
-	if u == nil || u.repo == nil {
-		return false, categorydom.ErrRepositoryInvalidInput
-	}
-
-	code = strings.TrimSpace(code)
-	if code == "" {
-		return false, categorydom.ErrInvalidCode
-	}
-
-	return u.repo.ExistsByCode(ctx, categorydom.CategoryCode(code))
 }
 
 // BuildProductBlueprintCategorySnapshot は productBlueprint 作成/更新時に使う

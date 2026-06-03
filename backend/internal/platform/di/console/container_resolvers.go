@@ -29,6 +29,7 @@ func buildResolvers(c *clients, r *repos) *resolvers {
 		r.companyRepo,
 		r.productBlueprintRepo,
 		r.memberRepo,
+		r.userRepo,
 		r.modelRepo,
 		r.tokenBlueprintRepo,
 	)

@@ -3,6 +3,7 @@ package resolver
 
 import (
 	"context"
+	"strings"
 
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
@@ -10,6 +11,7 @@ import (
 	modeldom "narratives/internal/domain/model"
 	pbdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
+	userdom "narratives/internal/domain/user"
 )
 
 // ------------------------------------------------------------
@@ -42,6 +44,15 @@ type MemberNameRepository interface {
 	GetByUID(ctx context.Context, uid string) (memberdom.Record, error)
 }
 
+// User 名の取得に必要な最小限のインターフェース。
+//
+// IMPORTANT:
+// - user repository port の GetByID を使う。
+// - GetNameByID は使わない。
+type UserNameRepository interface {
+	GetByID(ctx context.Context, id string) (*userdom.User, error)
+}
+
 // Model → modelId から ModelVariation を 1 件取得できればよい
 type ModelNumberRepository interface {
 	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
@@ -64,6 +75,7 @@ type NameResolver struct {
 	companyRepo          CompanyNameRepository
 	productBlueprintRepo ProductBlueprintNameRepository
 	memberRepo           MemberNameRepository
+	userRepo             UserNameRepository
 	modelNumberRepo      ModelNumberRepository
 	tokenBlueprintRepo   TokenBlueprintNameRepository
 }
@@ -75,6 +87,7 @@ func NewNameResolver(
 	companyRepo CompanyNameRepository,
 	productBlueprintRepo ProductBlueprintNameRepository,
 	memberRepo MemberNameRepository,
+	userRepo UserNameRepository,
 	modelNumberRepo ModelNumberRepository,
 	tokenBlueprintRepo TokenBlueprintNameRepository,
 ) *NameResolver {
@@ -83,6 +96,7 @@ func NewNameResolver(
 		companyRepo:          companyRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		memberRepo:           memberRepo,
+		userRepo:             userRepo,
 		modelNumberRepo:      modelNumberRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 	}
@@ -272,6 +286,60 @@ func (r *NameResolver) ResolveProductBlueprintCreatedByName(ctx context.Context,
 
 func (r *NameResolver) ResolveProductBlueprintUpdatedByName(ctx context.Context, updatedBy *string) string {
 	return r.resolveMemberNameByUIDFromPtr(ctx, updatedBy)
+}
+
+// ------------------------------------------------------------
+// User 関連
+// ------------------------------------------------------------
+
+func formatUserDisplayName(u *userdom.User) string {
+	if u == nil {
+		return ""
+	}
+
+	lastName := ""
+	firstName := ""
+
+	if u.LastName != nil {
+		lastName = strings.TrimSpace(*u.LastName)
+	}
+	if u.FirstName != nil {
+		firstName = strings.TrimSpace(*u.FirstName)
+	}
+
+	switch {
+	case lastName != "" && firstName != "":
+		return lastName + " " + firstName
+	case lastName != "":
+		return lastName
+	case firstName != "":
+		return firstName
+	default:
+		return ""
+	}
+}
+
+// ResolveUserName は userId から user の表示名（例: "姓 名"）を解決する。
+//
+// IMPORTANT:
+// - user repository port の GetByID を使う
+// - GetNameByID は使わない
+func (r *NameResolver) ResolveUserName(ctx context.Context, userID string) string {
+	if r == nil || r.userRepo == nil {
+		return ""
+	}
+
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return ""
+	}
+
+	u, err := r.userRepo.GetByID(ctx, userID)
+	if err != nil || u == nil {
+		return ""
+	}
+
+	return formatUserDisplayName(u)
 }
 
 // ------------------------------------------------------------

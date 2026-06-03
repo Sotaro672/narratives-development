@@ -23,11 +23,6 @@ type ProductBlueprintCategoryUsecase interface {
 		id string,
 	) (categorydom.ProductBlueprintCategory, error)
 
-	GetByCode(
-		ctx context.Context,
-		code string,
-	) (categorydom.ProductBlueprintCategory, error)
-
 	List(
 		ctx context.Context,
 		q usecase.ListProductBlueprintCategoriesQuery,

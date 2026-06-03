@@ -219,8 +219,8 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	}
 
 	var userName companyquery.OrderDetailUserNameResolver
-	if u.userUC != nil {
-		if v, ok := any(u.userUC).(companyquery.OrderDetailUserNameResolver); ok {
+	if res.nameResolver != nil {
+		if v, ok := any(res.nameResolver).(companyquery.OrderDetailUserNameResolver); ok {
 			userName = v
 		}
 	}

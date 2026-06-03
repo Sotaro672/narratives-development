@@ -141,8 +141,7 @@ func (u *tokenBlueprintCRUDUsecase) Create(
 		return nil, tbdom.ErrInvalidCreatedBy
 	}
 
-	contentFiles := normalizeContentFilesForCommand(in.ContentFiles, createdBy)
-	if err := tbdom.ValidateContentFiles(contentFiles); err != nil {
+	if err := tbdom.ValidateContentFiles(in.ContentFiles); err != nil {
 		return nil, err
 	}
 
@@ -153,7 +152,7 @@ func (u *tokenBlueprintCRUDUsecase) Create(
 		CompanyID:    strings.Trim(in.CompanyID, " \t\r\n"),
 		Description:  strings.Trim(in.Description, " \t\r\n"),
 		IconURL:      strings.Trim(in.IconURL, " \t\r\n"),
-		ContentFiles: contentFiles,
+		ContentFiles: in.ContentFiles,
 		AssigneeID:   strings.Trim(in.AssigneeID, " \t\r\n"),
 		CreatedAt:    nil,
 		CreatedBy:    createdBy,
@@ -210,27 +209,23 @@ func (u *tokenBlueprintCRUDUsecase) Update(
 		return nil, tbdom.ErrInvalidUpdatedBy
 	}
 
-	var contentFiles *[]tbdom.ContentFile
 	if in.ContentFiles != nil {
-		normalized := normalizeContentFilesForCommand(*in.ContentFiles, updatedBy)
-		if err := tbdom.ValidateContentFiles(normalized); err != nil {
+		if err := tbdom.ValidateContentFiles(*in.ContentFiles); err != nil {
 			return nil, err
 		}
-
-		contentFiles = &normalized
 	}
 
 	now := time.Now().UTC()
 
 	tb, err := u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
-		Name:         trimStringPtr(in.Name),
-		Symbol:       trimStringPtr(in.Symbol),
-		BrandID:      trimStringPtr(in.BrandID),
-		Description:  trimStringPtr(in.Description),
-		AssigneeID:   trimStringPtr(in.AssigneeID),
-		IconURL:      trimStringPtr(in.IconURL),
-		ContentFiles: contentFiles,
-		MetadataURI:  trimStringPtr(in.MetadataURI),
+		Name:         in.Name,
+		Symbol:       in.Symbol,
+		BrandID:      in.BrandID,
+		Description:  in.Description,
+		AssigneeID:   in.AssigneeID,
+		IconURL:      in.IconURL,
+		ContentFiles: in.ContentFiles,
+		MetadataURI:  in.MetadataURI,
 		Minted:       in.Minted,
 		UpdatedAt:    &now,
 		UpdatedBy:    ptr(updatedBy),
@@ -483,65 +478,6 @@ func (u *tokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(
 	}
 
 	return updated, nil
-}
-
-func normalizeContentFilesForCommand(files []tbdom.ContentFile, actorID string) []tbdom.ContentFile {
-	if len(files) == 0 {
-		return []tbdom.ContentFile{}
-	}
-
-	actorID = strings.Trim(actorID, " \t\r\n")
-	now := time.Now().UTC()
-	out := make([]tbdom.ContentFile, 0, len(files))
-
-	for _, f := range files {
-		f.ID = strings.Trim(f.ID, " \t\r\n")
-		f.Type = tbdom.ContentFileType(strings.Trim(string(f.Type), " \t\r\n"))
-		f.ContentType = strings.Trim(f.ContentType, " \t\r\n")
-		f.URL = strings.Trim(f.URL, " \t\r\n")
-		f.Visibility = tbdom.ContentVisibility(strings.Trim(string(f.Visibility), " \t\r\n"))
-
-		if f.ContentType == "" {
-			f.ContentType = "application/octet-stream"
-		}
-
-		if f.Visibility == "" {
-			f.Visibility = tbdom.VisibilityPrivate
-		}
-
-		if f.CreatedAt.IsZero() {
-			f.CreatedAt = now
-		}
-
-		if strings.Trim(f.CreatedBy, " \t\r\n") == "" {
-			f.CreatedBy = actorID
-		}
-
-		if f.UpdatedAt.IsZero() {
-			f.UpdatedAt = now
-		}
-
-		if strings.Trim(f.UpdatedBy, " \t\r\n") == "" {
-			f.UpdatedBy = actorID
-		}
-
-		if f.ID == "" || f.URL == "" {
-			continue
-		}
-
-		out = append(out, f)
-	}
-
-	return out
-}
-
-func trimStringPtr(v *string) *string {
-	if v == nil {
-		return nil
-	}
-
-	x := strings.Trim(*v, " \t\r\n")
-	return &x
 }
 
 func ptr[T any](v T) *T {

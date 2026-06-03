@@ -67,6 +67,7 @@ func MallNameResolver(c *consoleDI.Container) *appresolver.NameResolver {
 		cr,
 		nil, // productBlueprintRepo
 		nil, // memberRepo
+		nil, // userRepo
 		nil, // modelNumberRepo
 		nil, // tokenBlueprintRepo
 	)

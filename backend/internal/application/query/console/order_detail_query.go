@@ -38,8 +38,10 @@ type OrderDetailAvatarNameResolver interface {
 	GetNameByID(ctx context.Context, id string) (string, error)
 }
 
+// OrderDetailUserNameResolver は NameResolver 経由で userName を解決する。
+// 実装側は resolver.NameResolver.ResolveUserName(ctx, userID) を使う。
 type OrderDetailUserNameResolver interface {
-	GetNameByID(ctx context.Context, id string) (string, error)
+	ResolveUserName(ctx context.Context, userID string) string
 }
 
 type OrderDetailModelResolver interface {
@@ -85,7 +87,7 @@ type OrderDetailItemDTO struct {
 
 	ListID string `json:"listId,omitempty"`
 	Qty    int    `json:"qty,omitempty"`
-	Price  int    `json:"price,omitempty"`
+	Price  int    `json:"price"`
 
 	Transferred   bool   `json:"transferred"`
 	TransferredAt string `json:"transferredAt,omitempty"`
@@ -172,13 +174,11 @@ func (q *OrderDetailQuery) toDTO(ctx context.Context, o orderdom.Order) OrderDet
 		dto.CreatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
 	}
 
-	if q.userName != nil && o.UserID != "" {
-		if n, err := q.userName.GetNameByID(ctx, o.UserID); err == nil {
-			dto.UserName = n
-		}
+	if q.userName != nil && strings.TrimSpace(o.UserID) != "" {
+		dto.UserName = q.userName.ResolveUserName(ctx, o.UserID)
 	}
 
-	if q.avatarName != nil && o.AvatarID != "" {
+	if q.avatarName != nil && strings.TrimSpace(o.AvatarID) != "" {
 		if n, err := q.avatarName.GetNameByID(ctx, o.AvatarID); err == nil {
 			dto.AvatarName = n
 		}

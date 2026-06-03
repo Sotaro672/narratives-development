@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	tokendom "narratives/internal/domain/token"
 )
@@ -64,29 +63,28 @@ func (u *TokenUsecase) MintProducts(
 		return nil, fmt.Errorf("token usecase is not properly initialized")
 	}
 
-	to := strings.TrimSpace(input.ToAddress)
+	to := input.ToAddress
 	if to == "" {
 		return nil, fmt.Errorf("toAddress is empty")
 	}
 
-	metadataURI := strings.TrimSpace(input.MetadataURI)
+	metadataURI := input.MetadataURI
 	if metadataURI == "" {
 		return nil, fmt.Errorf("metadataURI is empty")
 	}
 
-	name := strings.TrimSpace(input.BlueprintName)
-	symbol := strings.TrimSpace(input.BlueprintSymbol)
+	name := input.BlueprintName
+	symbol := input.BlueprintSymbol
 	if name == "" || symbol == "" {
 		return nil, fmt.Errorf("blueprint name or symbol is empty")
 	}
 
 	productIDs := make([]string, 0, len(input.ProductIDs))
 	for _, pid := range input.ProductIDs {
-		p := strings.TrimSpace(pid)
-		if p == "" {
+		if pid == "" {
 			continue
 		}
-		productIDs = append(productIDs, p)
+		productIDs = append(productIDs, pid)
 	}
 
 	if len(productIDs) == 0 {
