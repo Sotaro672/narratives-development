@@ -28,8 +28,9 @@ import (
 type Container struct {
 	Infra *shared.Infra
 
-	MemberRepo memdom.Repository
-	BrandRepo  branddom.Repository
+	MemberRepo  memdom.Repository
+	BrandRepo   branddom.Repository
+	CompanyRepo companydom.Repository
 
 	TokenBlueprintRepo         tokenBlueprint.RepositoryPort
 	TokenBlueprintReviewRepo   tbReview.RepositoryPort
@@ -38,8 +39,7 @@ type Container struct {
 
 	AvatarRepo avatar.Repository
 
-	MemberService  *memdom.Service
-	CompanyService *companydom.Service
+	MemberService *memdom.Service
 
 	AccountUC                  *uc.AccountUsecase
 	AnnouncementUC             *uc.AnnouncementUsecase
@@ -150,8 +150,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	return &Container{
 		Infra: clients.infra,
 
-		MemberRepo: repos.memberRepo,
-		BrandRepo:  repos.brandRepo,
+		MemberRepo:  repos.memberRepo,
+		BrandRepo:   repos.brandRepo,
+		CompanyRepo: repos.companyRepo,
 
 		TokenBlueprintRepo:         repos.tokenBlueprintRepo,
 		TokenBlueprintReviewRepo:   repos.tokenBlueprintReviewRepo,
@@ -160,8 +161,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		AvatarRepo: repos.avatarRepo,
 
-		MemberService:  services.memberSvc,
-		CompanyService: services.companySvc,
+		MemberService: services.memberSvc,
 
 		AccountUC:                  u.accountUC,
 		AnnouncementUC:             u.announcementUC,

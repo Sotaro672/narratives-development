@@ -1,3 +1,4 @@
+// backend\internal\domain\company\entity.go
 package company
 
 import (
@@ -12,7 +13,7 @@ import (
 // ---------------------------
 //
 // 会社名：漢字/ひらがな/カタカナ/英数字(半角/全角)/長音/スペース
-// - 追加: 全角数字 ０-９ を許可
+// - 全角数字 ０-９ を許可
 var companyNameRe = regexp.MustCompile(`^[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9０-９ー\s]+$`)
 
 // ---------------------------
@@ -53,6 +54,9 @@ type Company struct {
 // Constructor
 // ----------------------------------------
 
+// NewCompany は Company の唯一の生成入口。
+// 新規作成時は CreatedAt / UpdatedAt と CreatedBy / UpdatedBy を同一にする。
+// 永続化済みデータを復元する場合も、この constructor に必要な値を渡して生成する。
 func NewCompany(
 	id, name, admin, createdBy, updatedBy string,
 	createdAt, updatedAt time.Time,
@@ -77,14 +81,6 @@ func NewCompany(
 		return Company{}, err
 	}
 	return c, nil
-}
-
-func NewCompanyWithNow(
-	id, name, admin, createdBy, updatedBy string,
-	isActive bool,
-	now time.Time,
-) (Company, error) {
-	return NewCompany(id, name, admin, createdBy, updatedBy, now, now, isActive, nil, nil)
 }
 
 // ----------------------------------------
@@ -219,13 +215,15 @@ func validateCompanyName(name string) error {
 	if name == "" {
 		return ErrInvalidName
 	}
-	// ★ rune 数で 100 文字制限（日本語でも意図通り）
+
+	// rune 数で 100 文字制限（日本語でも意図通り）
 	if utf8.RuneCountInString(name) > 100 {
 		return ErrInvalidName
 	}
-	// ★ 全角数字も許可
+
 	if !companyNameRe.MatchString(name) {
 		return ErrInvalidName
 	}
+
 	return nil
 }

@@ -246,7 +246,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	if c.InvitationUC != nil {
 		invitationH = consoleHandler.NewInvitationHandler(
 			c.InvitationUC,
-			c.CompanyService,
+			c.CompanyRepo,
 			c.BrandRepo,
 		)
 	}

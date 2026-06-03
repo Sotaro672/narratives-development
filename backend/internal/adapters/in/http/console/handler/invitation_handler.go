@@ -22,20 +22,20 @@ InvitationHandler
 */
 
 type InvitationHandler struct {
-	InvitationUC   usecase.InvitationUsecasePort
-	CompanyService *compdom.Service
-	BrandRepo      branddom.Repository
+	InvitationUC usecase.InvitationUsecasePort
+	CompanyRepo  compdom.Repository
+	BrandRepo    branddom.Repository
 }
 
 func NewInvitationHandler(
 	invitationUC usecase.InvitationUsecasePort,
-	companyService *compdom.Service,
+	companyRepo compdom.Repository,
 	brandRepo branddom.Repository,
 ) *InvitationHandler {
 	return &InvitationHandler{
-		InvitationUC:   invitationUC,
-		CompanyService: companyService,
-		BrandRepo:      brandRepo,
+		InvitationUC: invitationUC,
+		CompanyRepo:  companyRepo,
+		BrandRepo:    brandRepo,
 	}
 }
 
@@ -168,15 +168,15 @@ func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Req
 	}
 
 	companyName := info.CompanyID
-	if h.CompanyService != nil && info.CompanyID != "" {
-		name, err := h.CompanyService.GetCompanyNameByID(ctx, info.CompanyID)
+	if h.CompanyRepo != nil && info.CompanyID != "" {
+		companyEntity, err := h.CompanyRepo.GetByID(ctx, info.CompanyID)
 		if err != nil {
 			if !errors.Is(err, compdom.ErrNotFound) {
 				writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_company_name")
 				return
 			}
-		} else {
-			companyName = name
+		} else if companyEntity.Name != "" {
+			companyName = companyEntity.Name
 		}
 	}
 

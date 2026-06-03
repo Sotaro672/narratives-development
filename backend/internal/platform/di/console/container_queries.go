@@ -140,8 +140,8 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		ModelRepo:            r.modelRepo,
 		ProductBlueprintRepo: r.productBlueprintRepo,
 
-		BrandRepo:      r.brandRepo,
-		CompanyService: s.companySvc,
+		BrandRepo:   r.brandRepo,
+		CompanyRepo: r.companyRepo,
 	})
 
 	// =========================================================
@@ -249,6 +249,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 	}
 
 	_ = infra // reserved for future wiring; keeps signature stable
+	_ = s     // reserved for future wiring; keeps signature stable
 
 	return &queries{
 		companyProductionQueryService: companyProductionQueryService,

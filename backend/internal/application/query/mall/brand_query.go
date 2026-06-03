@@ -1,7 +1,9 @@
+// backend/internal/application/query/mall/brand_query.go
 package mall
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"narratives/internal/domain/brand"
@@ -14,7 +16,7 @@ import (
 
 type BrandQuery struct {
 	brandRepo            brand.Repository
-	companyService       *companydom.Service
+	companyRepo          companydom.Repository
 	productBlueprintRepo productBlueprintdom.Repository
 	tokenBlueprintRepo   tokenBlueprintdom.RepositoryPort
 	listRepo             listdom.Repository
@@ -22,14 +24,14 @@ type BrandQuery struct {
 
 func NewBrandQuery(
 	brandRepo brand.Repository,
-	companyService *companydom.Service,
+	companyRepo companydom.Repository,
 	productBlueprintRepo productBlueprintdom.Repository,
 	tokenBlueprintRepo tokenBlueprintdom.RepositoryPort,
 	listRepo listdom.Repository,
 ) *BrandQuery {
 	return &BrandQuery{
 		brandRepo:            brandRepo,
-		companyService:       companyService,
+		companyRepo:          companyRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		listRepo:             listRepo,
@@ -60,13 +62,13 @@ func (q *BrandQuery) GetBrandDetailByID(ctx context.Context, brandID string) (Br
 	}
 
 	companyName := ""
-	if q.companyService != nil && b.CompanyID != "" {
-		name, err := q.companyService.GetCompanyNameByID(ctx, b.CompanyID)
-		if err != nil && err != companydom.ErrNotFound {
+	if q.companyRepo != nil && b.CompanyID != "" {
+		companyEntity, err := q.companyRepo.GetByID(ctx, b.CompanyID)
+		if err != nil && !errors.Is(err, companydom.ErrNotFound) {
 			return BrandDetailDTO{}, err
 		}
 		if err == nil {
-			companyName = name
+			companyName = companyEntity.Name
 		}
 	}
 

@@ -2,11 +2,13 @@
 package console
 
 import (
+	"context"
 	"os"
 
 	fsrepo "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
+	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
@@ -53,6 +55,27 @@ type usecases struct {
 	invitationUC uc.InvitationUsecasePort
 
 	authBootstrapSvc *uc.BootstrapService
+}
+
+type companyNameResolver struct {
+	repo companydom.Repository
+}
+
+func (r companyNameResolver) GetCompanyNameByID(ctx context.Context, id string) (string, error) {
+	if id == "" || r.repo == nil {
+		return "", companydom.ErrNotFound
+	}
+
+	companyEntity, err := r.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	if companyEntity.Name == "" {
+		return "", companydom.ErrNotFound
+	}
+
+	return companyEntity.Name, nil
 }
 
 func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases {
@@ -187,7 +210,10 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	cartUC := uc.NewCartUsecase(r.cartRepo)
 
-	invitationMailer := mailadp.NewInvitationMailerWithResend(s.companySvc, r.brandRepo)
+	invitationMailer := mailadp.NewInvitationMailerWithResend(
+		companyNameResolver{repo: r.companyRepo},
+		r.brandRepo,
+	)
 
 	invitationUC := uc.NewInvitationUsecase(
 		r.invitationTokenRepo,
@@ -205,6 +231,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		Companies: r.companyRepo,
 	}
 
+	_ = s   // reserved for future use; keeps signature stable
 	_ = res // reserved for future use; keeps signature stable
 
 	return &usecases{

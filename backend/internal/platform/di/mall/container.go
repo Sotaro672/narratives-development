@@ -23,7 +23,6 @@ import (
 
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
-	companydom "narratives/internal/domain/company"
 	tokenBlueprint_review "narratives/internal/domain/tokenBlueprint_review"
 
 	shared "narratives/internal/platform/di/shared"
@@ -151,7 +150,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.BrandRepo = brandRepo
 
 	companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
-	companySvc := companydom.NewService(companyRepo)
 
 	cartRepo := outfs.NewCartRepositoryFS(fsClient)
 	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
@@ -281,7 +279,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		c.BrandQ = mallquery.NewBrandQuery(
 			brandRepo,
-			companySvc,
+			companyRepo,
 			productBlueprintRepoFS,
 			tokenBlueprintRepo,
 			listRepoFS,

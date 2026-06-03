@@ -1,11 +1,10 @@
+// backend/internal/domain/company/repository_port.go
 package company
 
 import (
 	"context"
 	"errors"
 	"time"
-
-	common "narratives/internal/domain/common"
 )
 
 // Patch（部分更新）: nil のフィールドは更新しない
@@ -19,9 +18,6 @@ type CompanyPatch struct {
 	DeletedAt *time.Time
 	DeletedBy *string
 }
-
-// 共通型エイリアス（インフラ非依存）
-type SaveOptions = common.SaveOptions
 
 // 代表的なエラー（契約上の表現）
 var (
@@ -42,7 +38,4 @@ type Repository interface {
 	Create(ctx context.Context, c Company) (Company, error)
 	Update(ctx context.Context, id string, patch CompanyPatch) (Company, error)
 	Delete(ctx context.Context, id string) error
-
-	// 任意: Upsert 等
-	Save(ctx context.Context, c Company, opts *SaveOptions) (Company, error)
 }

@@ -167,28 +167,28 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	qp := r.URL.Query()
 
 	query := usecase.ListProductBlueprintCategoriesQuery{
-		SearchQuery: strings.TrimSpace(qp.Get("search")),
+		SearchQuery: qp.Get("search"),
 
 		IDs: parseCSV(qp.Get("ids")),
 
 		RootOnly: parseBoolDefaultFalse(qp.Get("rootOnly")),
 
-		SortColumn: strings.TrimSpace(qp.Get("sort")),
+		SortColumn: qp.Get("sort"),
 		SortOrder:  parseSortOrder(qp.Get("order")),
 
 		Page:    parseIntDefault(qp.Get("page"), 1),
 		PerPage: parseIntDefault(qp.Get("perPage"), 20),
 	}
 
-	if v := strings.TrimSpace(qp.Get("code")); v != "" {
+	if v := qp.Get("code"); v != "" {
 		query.Code = &v
 	}
 
-	if v := strings.TrimSpace(qp.Get("kind")); v != "" {
+	if v := qp.Get("kind"); v != "" {
 		query.Kind = &v
 	}
 
-	if v := strings.TrimSpace(qp.Get("parentId")); v != "" {
+	if v := qp.Get("parentId"); v != "" {
 		query.ParentID = &v
 	}
 
@@ -295,30 +295,21 @@ func writeProductBlueprintCategoryErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
 	switch {
-	case errors.Is(err, categorydom.ErrNotFound) || categorydom.IsNotFound(err):
+	case errors.Is(err, categorydom.ErrNotFound):
 		code = http.StatusNotFound
 
-	case errors.Is(err, categorydom.ErrConflict) || categorydom.IsConflict(err):
+	case errors.Is(err, categorydom.ErrConflict):
 		code = http.StatusConflict
 
-	case errors.Is(err, categorydom.ErrUnauthorized) || categorydom.IsUnauthorized(err):
+	case errors.Is(err, categorydom.ErrUnauthorized):
 		code = http.StatusUnauthorized
 
-	case errors.Is(err, categorydom.ErrForbidden) || categorydom.IsForbidden(err):
+	case errors.Is(err, categorydom.ErrForbidden):
 		code = http.StatusForbidden
 
 	case errors.Is(err, categorydom.ErrInvalid) ||
-		categorydom.IsInvalid(err) ||
 		isCategoryValidationErr(err):
 		code = http.StatusBadRequest
-
-	default:
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "invalid") ||
-			strings.Contains(msg, "required") ||
-			strings.Contains(msg, "must") {
-			code = http.StatusBadRequest
-		}
 	}
 
 	writeJSON(w, code, map[string]string{
@@ -349,7 +340,6 @@ func notFound(w http.ResponseWriter) {
 }
 
 func parseCSV(s string) []string {
-	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
@@ -359,26 +349,24 @@ func parseCSV(s string) []string {
 	seen := make(map[string]struct{}, len(parts))
 
 	for _, part := range parts {
-		v := strings.TrimSpace(part)
-		if v == "" {
+		if part == "" {
 			continue
 		}
 
-		if _, ok := seen[v]; ok {
+		if _, ok := seen[part]; ok {
 			continue
 		}
 
-		seen[v] = struct{}{}
-		out = append(out, v)
+		seen[part] = struct{}{}
+		out = append(out, part)
 	}
 
 	return out
 }
 
 func parseBoolDefaultFalse(s string) bool {
-	s = strings.TrimSpace(strings.ToLower(s))
 	switch s {
-	case "1", "true", "yes", "y":
+	case "true":
 		return true
 	default:
 		return false
@@ -386,10 +374,10 @@ func parseBoolDefaultFalse(s string) bool {
 }
 
 func parseSortOrder(s string) common.SortOrder {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case string(common.SortDesc), "descending":
+	switch s {
+	case string(common.SortDesc):
 		return common.SortDesc
-	case string(common.SortAsc), "ascending":
+	case string(common.SortAsc):
 		return common.SortAsc
 	default:
 		return ""
@@ -397,22 +385,17 @@ func parseSortOrder(s string) common.SortOrder {
 }
 
 func parseTimePtr(s string) *time.Time {
-	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
 
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		utc := t.UTC()
-		return &utc
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil
 	}
 
-	if t, err := time.Parse("2006-01-02", s); err == nil {
-		utc := t.UTC()
-		return &utc
-	}
-
-	return nil
+	utc := t.UTC()
+	return &utc
 }
 
 func formatTime(t time.Time) string {

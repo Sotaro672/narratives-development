@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	common "narratives/internal/domain/common"
 	compdom "narratives/internal/domain/company"
 )
 
@@ -187,39 +186,6 @@ func (r *CompanyRepositoryFS) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	return nil
-}
-
-func (r *CompanyRepositoryFS) Save(ctx context.Context, c compdom.Company, _ *common.SaveOptions) (compdom.Company, error) {
-	now := time.Now().UTC()
-
-	var docRef *firestore.DocumentRef
-	if c.ID == "" {
-		docRef = r.col().NewDoc()
-		c.ID = docRef.ID
-	} else {
-		docRef = r.col().Doc(c.ID)
-	}
-
-	if c.CreatedAt.IsZero() {
-		c.CreatedAt = now
-	}
-	if c.UpdatedAt.IsZero() {
-		c.UpdatedAt = now
-	}
-
-	data := companyToDocData(c)
-	data["id"] = c.ID
-
-	_, err := docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return compdom.Company{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return compdom.Company{}, err
-	}
-	return docToCompany(snap)
 }
 
 // ==============================

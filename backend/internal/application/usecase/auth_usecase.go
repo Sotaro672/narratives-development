@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"log"
 	"strings"
 	"time"
 
@@ -52,7 +51,7 @@ type MemberCompanyIDReader interface {
 // - Firestore document ID と Firebase Auth UID は分離する
 // - members/{autoDocID}.uid = Firebase Auth UID として保存する
 // - 既存 member 確認は repository port 本体の GetByFirebaseUID では行わない
-// - uid から companyID を解決できる adapter の場合のみ、ListByCompanyID + Filter.UID で冪等確認する
+// - uid から companyID を解決できる adapter の場合のみ、ListByCompanyID + Filter.UID により冪等確認する
 // - 新規作成時のみ firstName / lastName を必須にする
 // -------------------------------------------------------
 
@@ -66,8 +65,6 @@ func (s *BootstrapService) Bootstrap(
 
 	uid = strings.TrimSpace(uid)
 	email = strings.TrimSpace(email)
-
-	log.Printf("[bootstrap] request received: uid=%s email=%s", uid, email)
 
 	if uid == "" {
 		return errors.New("bootstrap: uid is empty")
@@ -101,27 +98,16 @@ func (s *BootstrapService) Bootstrap(
 					},
 				)
 				if listErr != nil && !isAuthNotFoundLike(listErr) {
-					log.Printf("[bootstrap] failed to check existing member by uid: uid=%s companyID=%s err=%v", uid, companyID, listErr)
 					return listErr
 				}
 
 				if len(res.Items) > 0 {
-					rec := res.Items[0]
-					log.Printf(
-						"[bootstrap] member already exists: uid=%s memberDocID=%s companyID=%s (noop)",
-						uid,
-						rec.DocID,
-						rec.Member.CompanyID,
-					)
 					return nil
 				}
 			}
 		} else if !isAuthNotFoundLike(err) {
-			log.Printf("[bootstrap] failed to resolve companyID by uid: uid=%s err=%v", uid, err)
 			return err
 		}
-	} else {
-		log.Printf("[bootstrap] member repository does not implement MemberCompanyIDReader: uid=%s", uid)
 	}
 
 	// ---------------------------------------------------------
@@ -161,7 +147,6 @@ func (s *BootstrapService) Bootstrap(
 	// 2) 新規作成時は名前必須
 	// ---------------------------------------------------------
 	if firstName == "" || lastName == "" {
-		log.Printf("[bootstrap] invalid profile for new member: uid=%s firstName=%q lastName=%q", uid, firstName, lastName)
 		return errors.New("member: invalid firstName")
 	}
 
@@ -172,38 +157,34 @@ func (s *BootstrapService) Bootstrap(
 	if companyName != "" {
 		issuedID, err := s.Companies.NewID(ctx)
 		if err != nil {
-			log.Printf("[bootstrap] failed to issue companyID: uid=%s err=%v", uid, err)
 			return err
 		}
 
-		companyEntity, err := companydom.NewCompanyWithNow(
+		companyEntity, err := companydom.NewCompany(
 			issuedID,
 			companyName,
 			uid, // admin
 			uid, // createdBy
 			uid, // updatedBy
-			true,
 			now,
+			now,
+			true,
+			nil,
+			nil,
 		)
 		if err != nil {
-			log.Printf("[bootstrap] failed to create company entity: uid=%s companyName=%s err=%v", uid, companyName, err)
 			return err
 		}
 
-		savedCompany, err := s.Companies.Save(ctx, companyEntity, nil)
+		createdCompany, err := s.Companies.Create(ctx, companyEntity)
 		if err != nil {
-			log.Printf("[bootstrap] failed to save company: uid=%s companyID=%s err=%v", uid, issuedID, err)
 			return err
 		}
 
-		companyID = savedCompany.ID
+		companyID = createdCompany.ID
 		if companyID == "" {
 			companyID = issuedID
 		}
-
-		log.Printf("[bootstrap] company created: uid=%s companyID=%s name=%s", uid, companyID, companyName)
-	} else {
-		log.Printf("[bootstrap] no companyName provided, will create member only: uid=%s", uid)
 	}
 
 	// ---------------------------------------------------------
@@ -223,7 +204,6 @@ func (s *BootstrapService) Bootstrap(
 		memberdom.WithPermissions(allPermNames),
 	)
 	if err != nil {
-		log.Printf("[bootstrap] failed to create member entity: uid=%s err=%v", uid, err)
 		return err
 	}
 
@@ -231,20 +211,10 @@ func (s *BootstrapService) Bootstrap(
 		memberEntity.CompanyID = companyID
 	}
 
-	createdRecord, err := s.Members.Create(ctx, memberEntity)
+	_, err = s.Members.Create(ctx, memberEntity)
 	if err != nil {
-		log.Printf("[bootstrap] failed to save member: uid=%s err=%v", uid, err)
 		return err
 	}
-
-	log.Printf(
-		"[bootstrap] member created: uid=%s, memberDocID=%s, companyID=%s, permissions=%d, status=%s",
-		uid,
-		createdRecord.DocID,
-		createdRecord.Member.CompanyID,
-		len(createdRecord.Member.Permissions),
-		createdRecord.Member.Status,
-	)
 
 	return nil
 }

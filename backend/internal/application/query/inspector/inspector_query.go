@@ -59,8 +59,8 @@ type QueryService struct {
 	modelRepo            ModelVariationGetter
 	productBlueprintRepo ProductBlueprintGetter
 
-	brandRepo      branddom.Repository
-	companyService *companydom.Service
+	brandRepo   branddom.Repository
+	companyRepo companydom.Repository
 }
 
 type NewQueryServiceParams struct {
@@ -70,8 +70,8 @@ type NewQueryServiceParams struct {
 	ModelRepo            ModelVariationGetter
 	ProductBlueprintRepo ProductBlueprintGetter
 
-	BrandRepo      branddom.Repository
-	CompanyService *companydom.Service
+	BrandRepo   branddom.Repository
+	CompanyRepo companydom.Repository
 }
 
 func NewQueryService(params NewQueryServiceParams) *QueryService {
@@ -82,8 +82,8 @@ func NewQueryService(params NewQueryServiceParams) *QueryService {
 		modelRepo:            params.ModelRepo,
 		productBlueprintRepo: params.ProductBlueprintRepo,
 
-		brandRepo:      params.BrandRepo,
-		companyService: params.CompanyService,
+		brandRepo:   params.BrandRepo,
+		companyRepo: params.CompanyRepo,
 	}
 }
 
@@ -213,9 +213,9 @@ func (q *QueryService) GetInspectorProductDetail(
 
 	// 5) companyId → companyName 解決
 	var companyName string
-	if q.companyService != nil && bp.CompanyID != "" {
-		if name, err := q.companyService.GetCompanyNameByID(ctx, bp.CompanyID); err == nil {
-			companyName = name
+	if q.companyRepo != nil && bp.CompanyID != "" {
+		if companyEntity, err := q.companyRepo.GetByID(ctx, bp.CompanyID); err == nil {
+			companyName = companyEntity.Name
 		}
 	}
 
