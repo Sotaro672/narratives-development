@@ -61,14 +61,21 @@ export default function AdminPanel({
   if (!open) return null;
 
   // ─────────────────────────────
-  // ユーティリティ: カタカナ判定
+  // ユーティリティ: ひらがな判定
   // ─────────────────────────────
-  const isKatakana = (value: string): boolean => {
-    const v = value.trim();
-    if (!v) return true; // 空は許可
-    // 全角カタカナ + 長音符 + スペース
-    const katakanaRegex = /^[\u30A0-\u30FFー\s]+$/;
-    return katakanaRegex.test(v);
+  const isHiraganaOnly = (value: string): boolean => {
+    if (!value) return true;
+    return /^[\u3041-\u3096\s]+$/.test(value);
+  };
+
+  const handleLastNameKanaChange = (value: string) => {
+    if (!isHiraganaOnly(value)) return;
+    setLastNameKana(value);
+  };
+
+  const handleFirstNameKanaChange = (value: string) => {
+    if (!isHiraganaOnly(value)) return;
+    setFirstNameKana(value);
   };
 
   // ─────────────────────────────
@@ -76,9 +83,8 @@ export default function AdminPanel({
   // ─────────────────────────────
   const handleProfileSave = async () => {
     try {
-      // ひらがなバリデーション
-      if (!isKatakana(lastNameKana) || !isKatakana(firstNameKana)) {
-        window.alert("フリガナはひらがなで入力してください。");
+      if (!isHiraganaOnly(lastNameKana) || !isHiraganaOnly(firstNameKana)) {
+        window.alert("姓・名のかなはひらがなのみで入力してください。");
         return;
       }
 
@@ -229,8 +235,9 @@ export default function AdminPanel({
                   <Input
                     className="admin-modal-input"
                     value={lastNameKana}
-                    onChange={(e) => setLastNameKana(e.target.value)}
+                    onChange={(e) => handleLastNameKanaChange(e.target.value)}
                     placeholder="やまだ"
+                    inputMode="text"
                   />
                 </div>
               </div>
@@ -251,8 +258,9 @@ export default function AdminPanel({
                   <Input
                     className="admin-modal-input"
                     value={firstNameKana}
-                    onChange={(e) => setFirstNameKana(e.target.value)}
+                    onChange={(e) => handleFirstNameKanaChange(e.target.value)}
                     placeholder="たろう"
+                    inputMode="text"
                   />
                 </div>
               </div>

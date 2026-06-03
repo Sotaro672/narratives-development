@@ -7,34 +7,12 @@ import {
 } from "../../application/memberService";
 import {
   changeEmail,
-  // changePassword,  // ★ もう使わない
-  sendPasswordResetForCurrentUser, // ★ 追加
+  sendPasswordResetForCurrentUser,
 } from "../../application/profileService";
 
 // -------------------------
 // かな関連ヘルパ
 // -------------------------
-
-// ひらがな・カタカナ・半角カナをひらがなに寄せる（削除はしない）
-function toHiragana(input: string): string {
-  if (!input) return "";
-
-  let s = input;
-
-  // 全角カタカナ → ひらがな
-  s = s.replace(/[\u30A1-\u30F6]/g, (ch) =>
-    String.fromCharCode(ch.charCodeAt(0) - 0x60),
-  );
-
-  // 半角カナ → 全角カナ → ひらがな（簡易変換）
-  s = s.replace(/[\uff61-\uff9f]/g, (ch) => {
-    const kataCode = ch.charCodeAt(0) - 0xff61 + 0x30a1;
-    const hiraCode = kataCode - 0x60;
-    return String.fromCharCode(hiraCode);
-  });
-
-  return s;
-}
 
 // 「ひらがな + スペースのみか」をチェック
 function isHiraganaOnly(input: string): boolean {
@@ -61,31 +39,30 @@ export function useAdminPanel() {
   const [newEmail, setNewEmail] = useState("");
   const [currentPasswordForEmail, setCurrentPasswordForEmail] = useState("");
 
-  // ★ パスワード用の state は不要になったので削除
-  // const [currentPassword, setCurrentPassword] = useState("");
-  // const [newPassword, setNewPassword] = useState("");
-  // const [confirmPassword, setConfirmPassword] = useState("");
-
   // ─────────────────────────────
   // currentMember を取得 & Auth email と差分があれば同期
   // ─────────────────────────────
   useEffect(() => {
     async function loadAndSyncCurrentMember() {
       const user = auth.currentUser;
-      const uid = user?.uid;
-      if (!uid) {
+      if (!user) {
         console.warn("[useAdminPanel] no currentUser, skip loadCurrentMember");
         return;
       }
 
       try {
-        const member = await fetchCurrentMember(uid);
+        const member = await fetchCurrentMember();
         if (!member) {
           console.warn("[useAdminPanel] fetchCurrentMember returned null");
           return;
         }
 
-        const memberIdResolved = member.id ?? uid;
+        const memberIdResolved = member.id;
+        if (!memberIdResolved) {
+          console.warn("[useAdminPanel] member.id is missing");
+          return;
+        }
+
         setMemberId(memberIdResolved);
 
         setFirstName(member.firstName ?? "");
@@ -129,14 +106,10 @@ export function useAdminPanel() {
       return;
     }
 
-    // かな入力をひらがなに正規化してからバリデーション
-    const normalizedLastKana = toHiragana(lastNameKana.trim());
-    const normalizedFirstKana = toHiragana(firstNameKana.trim());
+    const lastKana = lastNameKana.trim();
+    const firstKana = firstNameKana.trim();
 
-    if (
-      !isHiraganaOnly(normalizedLastKana) ||
-      !isHiraganaOnly(normalizedFirstKana)
-    ) {
+    if (!isHiraganaOnly(lastKana) || !isHiraganaOnly(firstKana)) {
       window.alert("姓・名のかなはひらがなのみで入力してください。");
       return;
     }
@@ -146,13 +119,12 @@ export function useAdminPanel() {
         id: memberId,
         firstName,
         lastName,
-        firstNameKana: normalizedFirstKana,
-        lastNameKana: normalizedLastKana,
+        firstNameKana: firstKana,
+        lastNameKana: lastKana,
       });
 
-      // 正規化した値で state も更新しておくと UI と揃う
-      setFirstNameKana(normalizedFirstKana);
-      setLastNameKana(normalizedLastKana);
+      setFirstNameKana(firstKana);
+      setLastNameKana(lastKana);
 
       setShowProfileDialog(false);
     } catch (e) {
@@ -180,9 +152,9 @@ export function useAdminPanel() {
   }, [newEmail, currentPasswordForEmail]);
 
   // ─────────────────────────────
-  // ★ パスワード再設定メール送信
-  //   - Firebase テンプレート「%APP_NAME% のパスワードを再設定してください」が送信される
-  //   - 新しいパスワードはメール先の画面で入力
+  // パスワード再設定メール送信
+  // Firebase テンプレート「%APP_NAME% のパスワードを再設定してください」が送信される
+  // 新しいパスワードはメール先の画面で入力
   // ─────────────────────────────
   const savePassword = useCallback(async () => {
     await sendPasswordResetForCurrentUser();
@@ -217,6 +189,6 @@ export function useAdminPanel() {
     // handlers
     saveProfile,
     saveEmail,
-    savePassword, // ← これが「再設定メール送信」
+    savePassword,
   };
 }

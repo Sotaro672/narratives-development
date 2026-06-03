@@ -1,4 +1,4 @@
-//frontend\console\shell\src\auth\presentation\hook\useAuthPage.ts
+// frontend/console/shell/src/auth/presentation/hook/useAuthPage.ts
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthActions } from "../../application/useAuthActions";
@@ -10,27 +10,6 @@ export type AuthMode = "signup" | "signin";
 // -------------------------
 // かな関連ヘルパ
 // -------------------------
-
-// ひらがな・カタカナ・半角カナをひらがなに寄せる（削除はしない）
-function toHiragana(input: string): string {
-  if (!input) return "";
-
-  let s = input;
-
-  // 全角カタカナ → ひらがな
-  s = s.replace(/[\u30A1-\u30F6]/g, (ch) =>
-    String.fromCharCode(ch.charCodeAt(0) - 0x60),
-  );
-
-  // 半角カナ → 全角カナ → ひらがな（簡易変換）
-  s = s.replace(/[\uff61-\uff9f]/g, (ch) => {
-    const kataCode = ch.charCodeAt(0) - 0xff61 + 0x30a1;
-    const hiraCode = kataCode - 0x60;
-    return String.fromCharCode(hiraCode);
-  });
-
-  return s;
-}
 
 // 「ひらがな + スペースのみか」をチェック
 function isHiraganaOnly(input: string): boolean {
@@ -147,14 +126,10 @@ export function useAuthPage() {
           return;
         }
 
-        // かな入力チェック（カタカナ/半角カナもひらがなへ正規化してから判定）
-        const normalizedLastKana = toHiragana(lastNameKana.trim());
-        const normalizedFirstKana = toHiragana(firstNameKana.trim());
+        const lastKana = lastNameKana.trim();
+        const firstKana = firstNameKana.trim();
 
-        if (
-          !isHiraganaOnly(normalizedLastKana) ||
-          !isHiraganaOnly(normalizedFirstKana)
-        ) {
+        if (!isHiraganaOnly(lastKana) || !isHiraganaOnly(firstKana)) {
           setError("姓・名のかなはひらがなのみで入力してください。");
           return;
         }
@@ -165,8 +140,8 @@ export function useAuthPage() {
         await signUp(email, password, {
           lastName,
           firstName,
-          lastNameKana: normalizedLastKana,
-          firstNameKana: normalizedFirstKana,
+          lastNameKana: lastKana,
+          firstNameKana: firstKana,
           companyName,
         });
         return;

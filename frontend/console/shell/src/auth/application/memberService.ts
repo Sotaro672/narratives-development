@@ -1,4 +1,3 @@
-// frontend/console/shell/src/auth/application/memberService.ts
 /// <reference types="vite/client" />
 
 import type { MemberDTO } from "../domain/entity/member";
@@ -12,7 +11,6 @@ import {
 // -------------------------------
 function mapRawToMemberDTO(
   raw: any,
-  fallbackUid: string,
   fallbackEmail?: string | null,
 ): MemberDTO {
   const firstName =
@@ -47,8 +45,8 @@ function mapRawToMemberDTO(
     // backend response の id は Firestore members の docId
     id: String(raw?.id ?? "").trim(),
 
-    // Firebase Auth UID
-    uid: String(raw?.uid ?? fallbackUid ?? "").trim(),
+    // Firebase Auth UID は backend response の uid を正とする
+    uid: String(raw?.uid ?? "").trim(),
 
     firstName,
     lastName,
@@ -65,14 +63,11 @@ function mapRawToMemberDTO(
 // -------------------------------
 // 現在メンバー取得
 // -------------------------------
-export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null> {
-  const firebaseUid = String(uid ?? "").trim();
-  if (!firebaseUid) return null;
-
-  const raw = await fetchCurrentMemberRaw(firebaseUid);
+export async function fetchCurrentMember(): Promise<MemberDTO | null> {
+  const raw = await fetchCurrentMemberRaw();
   if (!raw) return null;
 
-  return mapRawToMemberDTO(raw, firebaseUid);
+  return mapRawToMemberDTO(raw);
 }
 
 // -------------------------------
@@ -105,5 +100,5 @@ export async function updateCurrentMemberProfile(
   const raw = await updateCurrentMemberProfileRaw(input.id, payload);
   if (!raw) return null;
 
-  return mapRawToMemberDTO(raw, String(raw?.uid ?? ""), input.email ?? null);
+  return mapRawToMemberDTO(raw, input.email ?? null);
 }

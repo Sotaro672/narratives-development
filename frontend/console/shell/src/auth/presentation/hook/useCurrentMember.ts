@@ -1,4 +1,4 @@
-// frontend\console\shell\src\auth\presentation\hook\useCurrentMember.ts
+// frontend/console/shell/src/auth/presentation/hook/useCurrentMember.ts
 /// <reference types="vite/client" />
 
 import { useEffect, useMemo, useState } from "react";
@@ -93,7 +93,7 @@ export function useAuth() {
       setMemberError(null);
 
       try {
-        const m = await fetchCurrentMember(uid);
+        const m = await fetchCurrentMember();
         if (!disposed) setCurrentMember(m);
       } catch (e: any) {
         if (!disposed) {
@@ -105,7 +105,7 @@ export function useAuth() {
       }
     }
 
-    loadMember();
+    void loadMember();
     return () => {
       disposed = true;
     };
