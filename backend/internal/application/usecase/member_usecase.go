@@ -3,8 +3,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 
 	memdom "narratives/internal/domain/member"
@@ -24,19 +22,17 @@ type MemberRecord struct {
 // -----------------------------------------------------------------------------
 
 type MemberUsecase struct {
-	repo              memdom.Repository
-	now               func() time.Time
-	invitationCommand InvitationCommandPort
+	repo memdom.Repository
+	now  func() time.Time
 }
 
 func NewMemberUsecase(
 	repo memdom.Repository,
-	invitationCommand InvitationCommandPort,
+	_ InvitationCommandPort,
 ) *MemberUsecase {
 	return &MemberUsecase{
-		repo:              repo,
-		now:               time.Now,
-		invitationCommand: invitationCommand,
+		repo: repo,
+		now:  time.Now,
 	}
 }
 
@@ -48,7 +44,7 @@ type CreateMemberInput struct {
 	// UID is Firebase Auth UID.
 	//
 	// 初回会社登録者など、Firebase Auth user がすでに確定している member 作成では必須。
-	// 招待前 member 作成では空を許可し、招待承諾時に BindFirebaseUID で後付けする。
+	// 招待前 member 作成では空を許可し、招待承諾時に InvitationCompleteService 側で UID を設定する。
 	UID string
 
 	FirstName      string
@@ -168,69 +164,6 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (Membe
 	}, nil
 }
 
-type BindFirebaseUIDInput struct {
-	// MemberID is Firestore member document ID.
-	// Console の POST /members/{id}/bind-firebase-uid は member docId を使う。
-	MemberID string
-
-	// CompanyID is authenticated console member's company scope.
-	CompanyID string
-
-	// FirebaseUID is current authenticated Firebase UID.
-	// request body の uid は信用せず、middleware 由来の UID を渡す。
-	FirebaseUID string
-}
-
-func (u *MemberUsecase) BindFirebaseUID(ctx context.Context, in BindFirebaseUIDInput) (MemberRecord, error) {
-	memberID := in.MemberID
-	if memberID == "" {
-		return MemberRecord{}, memdom.ErrNotFound
-	}
-
-	companyID := in.CompanyID
-	if cid := CompanyIDFromContext(ctx); cid != "" {
-		companyID = cid
-	}
-	if companyID == "" {
-		return MemberRecord{}, memdom.ErrNotFound
-	}
-
-	firebaseUID := in.FirebaseUID
-	if firebaseUID == "" {
-		return MemberRecord{}, memdom.ErrInvalidUID
-	}
-
-	current, err := u.repo.GetByID(ctx, memberID)
-	if err != nil {
-		return MemberRecord{}, err
-	}
-
-	if current.Member.CompanyID != companyID {
-		return MemberRecord{}, memdom.ErrNotFound
-	}
-
-	if current.Member.UID != "" && current.Member.UID != firebaseUID {
-		return MemberRecord{}, memdom.ErrConflict
-	}
-
-	patch := memdom.MemberPatch{
-		UID: &firebaseUID,
-	}
-
-	now := u.now().UTC()
-	patch.UpdatedAt = &now
-
-	updated, err := u.repo.Update(ctx, memberID, patch)
-	if err != nil {
-		return MemberRecord{}, err
-	}
-
-	return MemberRecord{
-		DocID:  updated.DocID,
-		Member: updated.Member,
-	}, nil
-}
-
 type GetCurrentMemberInput struct {
 	FirebaseUID string
 }
@@ -252,31 +185,10 @@ func (u *MemberUsecase) GetCurrentMember(ctx context.Context, in GetCurrentMembe
 	}, nil
 }
 
-func (u *MemberUsecase) Delete(ctx context.Context, uid string) error {
-	if uid == "" {
+func (u *MemberUsecase) Delete(ctx context.Context, memberID string) error {
+	if memberID == "" {
 		return memdom.ErrNotFound
 	}
 
-	return u.repo.Delete(ctx, uid)
-}
-
-// -----------------------------------------------------------------------------
-// Invitation (招待メール送信)
-// -----------------------------------------------------------------------------
-
-func (u *MemberUsecase) SendInvitation(ctx context.Context, memberID string) error {
-	if u.invitationCommand == nil {
-		return errors.New("invitation command is not configured")
-	}
-
-	if memberID == "" {
-		return fmt.Errorf("memberID is empty")
-	}
-
-	_, err := u.invitationCommand.CreateInvitationAndSend(ctx, memberID)
-	if err != nil {
-		return fmt.Errorf("send invitation failed: %w", err)
-	}
-
-	return nil
+	return u.repo.Delete(ctx, memberID)
 }

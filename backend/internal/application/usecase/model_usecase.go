@@ -16,7 +16,6 @@ import (
 //
 // NOTE:
 // Product-level metadata は productBlueprint.CategoryFields に集約する方針。
-// そのため旧 GetModelData / GetModelDataByBlueprintID / UpdateModelData は廃止済み。
 //
 // この usecase は category-specific model variation の操作を担当する。
 // apparel では size / color / measurements を扱う。

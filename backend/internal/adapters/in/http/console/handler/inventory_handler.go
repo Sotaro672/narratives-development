@@ -177,7 +177,6 @@ func isInventoryProbablyBadRequest(err error) bool {
 
 // ============================================================
 // Detail endpoint（確定）
-// - Query が必須（fallback は削除）
 // ============================================================
 
 func (h *InventoryHandler) GetDetailByIDQuery(w http.ResponseWriter, r *http.Request, inventoryID string) {

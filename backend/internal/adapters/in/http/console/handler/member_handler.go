@@ -89,9 +89,7 @@ func toMemberResponse(docID string, m memberdom.Member) memberResponse {
 // - GET /members/me は Authorization token の Firebase UID から現在ログイン中 member を返す。
 // - GET /members/{uid} は Firebase UID 専用として扱う。
 // - PATCH /members/{id} は member docId 専用として扱う。
-// - /members/by-firebase-uid/{uid} は廃止。
-// - /members/{id}/bind-firebase-uid は request body の uid ではなく CurrentMember の UID を使う。
-// - 招待承諾フローは CurrentMember が未確立の状態でも動く必要があるため、別 handler/API で扱うこと。
+// - DELETE /members/{id} は member docId 専用として扱う。
 func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -129,9 +127,6 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// /members/by-firebase-uid/{uid} は廃止。
-	// ここでは専用分岐を持たず、/members/{...} 配下の未対応ルートとして not_found に落とす。
-
 	// /members/{...}
 	if strings.HasPrefix(path, "/members/") {
 		rest := strings.TrimPrefix(path, "/members/")
@@ -139,7 +134,7 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// /members/{uid}
 		// GET は Firebase UID 専用。
-		// PATCH は既存 frontend 互換のため member docId 専用。
+		// PATCH / DELETE は member docId 専用。
 		if len(parts) == 1 {
 			idOrUID := strings.TrimSpace(parts[0])
 			if idOrUID == "" {
@@ -154,38 +149,13 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case http.MethodPatch:
 				h.update(w, r, idOrUID)
 				return
+			case http.MethodDelete:
+				h.delete(w, r, idOrUID)
+				return
 			default:
 				methodNotAllowed(w)
 				return
 			}
-		}
-
-		// /members/{id}/bind-firebase-uid
-		// NOTE:
-		// この console handler では request body の uid を信用しない。
-		// CurrentMember の UID を使って bind する。
-		// 招待承諾時の uid bind は CurrentMember が未確立でも動く専用APIで扱うこと。
-		if len(parts) == 2 && parts[1] == "bind-firebase-uid" {
-			id := strings.TrimSpace(parts[0])
-			if id == "" {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
-				return
-			}
-
-			if r.Method != http.MethodPost {
-				methodNotAllowed(w)
-				return
-			}
-
-			h.bindFirebaseUID(w, r, id)
-			return
-		}
-
-		// /members/{id}/invitation はこのハンドラでは扱わない。
-		// MemberInvitationHandler 側にルーティングさせるため not_found を返す。
-		if len(parts) == 2 && parts[1] == "invitation" {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-			return
 		}
 	}
 
@@ -308,13 +278,10 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 }
 
 // -----------------------------------------------------------------------------
-// POST /members/{id}/bind-firebase-uid
+// DELETE /members/{id}
 // -----------------------------------------------------------------------------
-//
-// NOTE:
-// request body の uid は使わない。
-// CurrentMember の UID を使うことで、クライアントが任意の Firebase UID を指定できないようにする。
-func (h *MemberHandler) bindFirebaseUID(w http.ResponseWriter, r *http.Request, id string) {
+
+func (h *MemberHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
@@ -329,17 +296,12 @@ func (h *MemberHandler) bindFirebaseUID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	rec, err := h.memberUC.BindFirebaseUID(ctx, memberusecase.BindFirebaseUIDInput{
-		MemberID:    id,
-		CompanyID:   me.CompanyID,
-		FirebaseUID: me.UID,
-	})
-	if err != nil {
+	if err := h.memberUC.Delete(ctx, id); err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
+	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
 // -----------------------------------------------------------------------------
