@@ -40,20 +40,19 @@ function uuidLike(): string {
   return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-type PendingContent = {
-  id: string;
-  file: File;
-  previewUrl: string;
-  type: FirebaseStorageTokenContent["type"];
-};
-
 type AssigneeCandidateLike = {
-  id?: string | null;
   uid?: string | null;
   name?: string | null;
   displayName?: string | null;
   fullName?: string | null;
   email?: string | null;
+};
+
+type PendingContent = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  type: FirebaseStorageTokenContent["type"];
 };
 
 export default function TokenBlueprintCreate() {
@@ -83,40 +82,32 @@ export default function TokenBlueprintCreate() {
     getDefaultAssigneeName,
   } = useAdminCardHook();
 
-  const getCandidateUidByIdOrUid = useCallback(
-    (idOrUid: string): string => {
-      const key = idOrUid.trim();
+  const normalizeAssigneeDocId = useCallback(
+    (rawId: string): string => {
+      const key = rawId.trim();
       if (!key) return "";
 
       const matched = (assigneeCandidates as AssigneeCandidateLike[]).find(
         (candidate) => {
-          const candidateUid = candidate.uid?.trim() ?? "";
-          const candidateId = candidate.id?.trim() ?? "";
-
-          return candidateUid === key || candidateId === key;
+          const candidateDocId = candidate.uid?.trim() ?? "";
+          return candidateDocId === key;
         },
       );
 
-      const uid = matched?.uid?.trim() ?? "";
-
-      // uid が候補に存在する場合は必ず uid を使う。
-      // 候補に uid が無い場合は、既に uid が渡っている可能性を考慮して key を返す。
-      return uid || key;
+      return matched?.uid?.trim() || key;
     },
     [assigneeCandidates],
   );
 
-  const getCandidateNameByIdOrUid = useCallback(
-    (idOrUid: string): string => {
-      const key = idOrUid.trim();
+  const getCandidateNameByDocId = useCallback(
+    (docId: string): string => {
+      const key = docId.trim();
       if (!key) return "";
 
       const matched = (assigneeCandidates as AssigneeCandidateLike[]).find(
         (candidate) => {
-          const candidateUid = candidate.uid?.trim() ?? "";
-          const candidateId = candidate.id?.trim() ?? "";
-
-          return candidateUid === key || candidateId === key;
+          const candidateDocId = candidate.uid?.trim() ?? "";
+          return candidateDocId === key;
         },
       );
 
@@ -135,8 +126,8 @@ export default function TokenBlueprintCreate() {
     const raw = initialTokenBlueprint.assigneeId?.trim() ?? "";
     if (!raw) return null;
 
-    return getCandidateUidByIdOrUid(raw) || raw;
-  }, [initialTokenBlueprint, getCandidateUidByIdOrUid]);
+    return normalizeAssigneeDocId(raw) || raw;
+  }, [initialTokenBlueprint, normalizeAssigneeDocId]);
 
   const companyId = useMemo(() => {
     return initialTokenBlueprint.companyId?.trim() ?? "";
@@ -178,7 +169,7 @@ export default function TokenBlueprintCreate() {
 
     const resolveInitialAssigneeName = async () => {
       if (assigneeId) {
-        const localName = getCandidateNameByIdOrUid(assigneeId);
+        const localName = getCandidateNameByDocId(assigneeId);
         if (localName) {
           if (!cancelled) {
             setSelectedAssigneeName(localName);
@@ -208,32 +199,29 @@ export default function TokenBlueprintCreate() {
     };
   }, [
     assigneeId,
-    getCandidateNameByIdOrUid,
+    getCandidateNameByDocId,
     getAssigneeNameById,
     getDefaultAssigneeName,
     initialAssigneeName,
   ]);
 
   const handleSelectAssignee = useCallback(
-    async (idOrUid: string) => {
-      const normalized = idOrUid.trim();
+    async (docId: string) => {
+      const normalized = normalizeAssigneeDocId(docId);
       if (!normalized) return;
 
-      const uid = getCandidateUidByIdOrUid(normalized);
-      const nextAssigneeId = uid || normalized;
+      setAssigneeId(normalized);
 
-      setAssigneeId(nextAssigneeId);
-
-      const localName = getCandidateNameByIdOrUid(nextAssigneeId);
+      const localName = getCandidateNameByDocId(normalized);
       if (localName) {
         setSelectedAssigneeName(localName);
         return;
       }
 
-      const resolved = await getAssigneeNameById(nextAssigneeId);
+      const resolved = await getAssigneeNameById(normalized);
       setSelectedAssigneeName(resolved || "未設定");
     },
-    [getCandidateUidByIdOrUid, getCandidateNameByIdOrUid, getAssigneeNameById],
+    [normalizeAssigneeDocId, getCandidateNameByDocId, getAssigneeNameById],
   );
 
   const handleTokenContentsFilesSelected = useCallback(async (files: File[]) => {
@@ -328,9 +316,10 @@ export default function TokenBlueprintCreate() {
             uploaded.contentType || file.type || "application/octet-stream",
           objectPath: uploaded.objectPath,
           url: uploaded.downloadUrl,
-          size: Number.isFinite(uploaded.size) && uploaded.size >= 0
-            ? uploaded.size
-            : file.size,
+          size:
+            Number.isFinite(uploaded.size) && uploaded.size >= 0
+              ? uploaded.size
+              : file.size,
           visibility: "private",
           createdAt: nowIso,
           createdBy: actor,
@@ -353,8 +342,8 @@ export default function TokenBlueprintCreate() {
     setIsSaving(true);
 
     try {
-      const assigneeUid = assigneeId
-        ? getCandidateUidByIdOrUid(assigneeId)
+      const assigneeDocId = assigneeId
+        ? normalizeAssigneeDocId(assigneeId)
         : undefined;
 
       const input: Partial<TokenBlueprint> & {
@@ -367,7 +356,7 @@ export default function TokenBlueprintCreate() {
         description: vm.description,
         contentFiles: [],
         iconFile: selectedIconFile ?? null,
-        assigneeId: assigneeUid || undefined,
+        assigneeId: assigneeDocId || undefined,
       };
 
       const created = await onSave(input);
@@ -408,7 +397,7 @@ export default function TokenBlueprintCreate() {
     }
   }, [
     assigneeId,
-    getCandidateUidByIdOrUid,
+    normalizeAssigneeDocId,
     isSaving,
     isUploadingContents,
     vm.name,

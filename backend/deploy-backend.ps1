@@ -1,5 +1,6 @@
 param(
-  # Example explicit image: asia-northeast1-docker.pkg.dev/<PROJECT>/<REPO>/<SERVICE>:<TAG>
+  # Example explicit image:
+  # asia-northeast1-docker.pkg.dev/<PROJECT>/<REPO>/<SERVICE>:<TAG>
   [string]$Image,
 
   # Region / Cloud Run service name
@@ -7,12 +8,7 @@ param(
   [string]$ServiceName = "narratives-backend",
 
   # Artifact Registry repository name (Docker)
-  [string]$RepoName    = "narratives-backend",
-
-  # If -Image is auto-generated and Podman is available, use local podman build/push.
-  # If Podman is unavailable, fallback to Cloud Build automatically.
-  # If Podman push fails, fallback to Cloud Build automatically.
-  [bool]$PreferPodmanWhenAvailable = $true
+  [string]$RepoName    = "narratives-backend"
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +19,7 @@ function Write-Warn($msg) { Write-Host "!! $msg ==" -ForegroundColor Yellow }
 
 function Normalize-EnvValue([string]$v) {
   if ($null -eq $v) { return "" }
+
   $s = $v
   if ($null -eq $s) { return "" }
 
@@ -30,11 +27,13 @@ function Normalize-EnvValue([string]$v) {
   if (($s.StartsWith('"') -and $s.EndsWith('"')) -or ($s.StartsWith("'") -and $s.EndsWith("'"))) {
     $s = $s.Substring(1, $s.Length - 2)
   }
+
   return $s
 }
 
 function Read-EnvFile([string]$path) {
   $map = @{}
+
   foreach ($line in Get-Content $path) {
     if ($null -eq $line) { continue }
 
@@ -50,6 +49,7 @@ function Read-EnvFile([string]$path) {
 
     $map[$key] = (Normalize-EnvValue $value)
   }
+
   return $map
 }
 
@@ -58,10 +58,35 @@ function Exec-GCloudOrThrow {
     [Parameter(Mandatory=$true)][string[]]$Args,
     [string]$ErrorMessage = "gcloud command failed."
   )
+
   & $GCLOUD @Args
   if ($LASTEXITCODE -ne 0) {
-    throw "$ErrorMessage (exit code: $LASTEXITCODE)  Args: gcloud $($Args -join ' ')"
+    throw "$ErrorMessage (exit code: $LASTEXITCODE) Args: gcloud $($Args -join ' ')"
   }
+}
+
+function Invoke-CloudBuildOrThrow {
+  param(
+    [Parameter(Mandatory=$true)][string]$Image
+  )
+
+  Write-Step "Running Cloud Build"
+  Write-Step "Cloud Build image: $Image"
+
+  Push-Location $SourceDir
+  try {
+    & $GCLOUD builds submit `
+      --tag "$Image" `
+      --project "$ProjectId"
+
+    if ($LASTEXITCODE -ne 0) {
+      throw "Cloud Build failed. exit code: $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+
+  Write-Ok "Image build & push completed by Cloud Build"
 }
 
 # ------------------------------------------------------------
@@ -75,8 +100,6 @@ $env:CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK = "1"
 $GCLOUD = (Get-Command gcloud.cmd -ErrorAction Stop).Source
 Write-Step "Using gcloud.cmd: $GCLOUD"
 
-try { & $GCLOUD config set core/pager cat | Out-Null } catch { }
-
 Write-Step "Confirming gcloud config (project/account)"
 $ConfiguredProject = (& $GCLOUD config get-value project)
 $ConfiguredAccount = (& $GCLOUD config get-value account)
@@ -84,6 +107,7 @@ $ConfiguredAccount = (& $GCLOUD config get-value account)
 if (-not $ConfiguredProject) {
   throw "gcloud config project is not set. Example: gcloud config set project <YOUR_PROJECT_ID>"
 }
+
 if (-not $ConfiguredAccount) {
   throw "gcloud active account is not set. Example: gcloud auth login"
 }
@@ -91,11 +115,12 @@ if (-not $ConfiguredAccount) {
 Write-Ok "gcloud project: $ConfiguredProject"
 Write-Ok "gcloud account: $ConfiguredAccount"
 
-Write-Step "Resolving GCP project id (gcloud config get-value project)"
-$ProjectId = (& $GCLOUD config get-value project --verbosity=debug)
+Write-Step "Resolving GCP project id"
+$ProjectId = (& $GCLOUD config get-value project)
 if (-not $ProjectId) {
   throw "gcloud config project is not set. Example: gcloud config set project <YOUR_PROJECT_ID>"
 }
+
 Write-Step "Using project: $ProjectId"
 
 $RunServiceAccount = "narratives-backend-sa@$ProjectId.iam.gserviceaccount.com"
@@ -112,13 +137,19 @@ if (-not (Test-Path $MainGo)) {
 }
 
 Write-Step "go build check (cmd/api)"
+
 Push-Location $SourceDir
 try {
   go version | Out-Null
   go build ./cmd/api
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "go build ./cmd/api failed. exit code: $LASTEXITCODE"
+  }
 } finally {
   Pop-Location
 }
+
 Write-Ok "go build succeeded"
 
 # ------------------------------------------------------------
@@ -126,11 +157,15 @@ Write-Ok "go build succeeded"
 # ------------------------------------------------------------
 Write-Step "Ensuring Artifact Registry repository: ${RepoName}"
 
-& $GCLOUD artifacts repositories describe $RepoName --location=$Region --project=$ProjectId | Out-Null
+& $GCLOUD artifacts repositories describe $RepoName `
+  --location=$Region `
+  --project=$ProjectId | Out-Null
+
 $repoExists = ($LASTEXITCODE -eq 0)
 
 if (-not $repoExists) {
   Write-Warn "Repository '${RepoName}' not found OR no permission. Trying to create it..."
+
   & $GCLOUD artifacts repositories create $RepoName `
     --repository-format=docker `
     --location=$Region `
@@ -138,8 +173,9 @@ if (-not $repoExists) {
     --project=$ProjectId | Out-Null
 
   if ($LASTEXITCODE -ne 0) {
-    throw "Failed to describe/create Artifact Registry repository '${RepoName}'. Check: (1) gcloud project/account, (2) IAM roles (artifactregistry.*). exit code: $LASTEXITCODE"
+    throw "Failed to describe/create Artifact Registry repository '${RepoName}'. Check: (1) gcloud project/account, (2) IAM roles artifactregistry.*. exit code: $LASTEXITCODE"
   }
+
   Write-Ok "Repository created: ${RepoName}"
 } else {
   Write-Ok "Repository exists: ${RepoName}"
@@ -149,127 +185,22 @@ if (-not $repoExists) {
 # 3) イメージ名決定
 # ------------------------------------------------------------
 $AutoGenerated = $false
+
 if ([string]::IsNullOrWhiteSpace($Image)) {
   $RegistryHost = "${Region}-docker.pkg.dev"
   $Tag = Get-Date -Format "yyyyMMdd-HHmmss"
   $Image = "${RegistryHost}/${ProjectId}/${RepoName}/${ServiceName}:${Tag}"
   $AutoGenerated = $true
+
   Write-Step "No image specified. Generated image: $Image"
 } else {
   Write-Step "Using specified image: $Image"
 }
 
 # ------------------------------------------------------------
-# 4) ビルド & push
-#    - Podman が使える場合は local podman build & push
-#    - Podman が使えない場合は Cloud Build
-#    - Podman push が失敗した場合も Cloud Build に fallback
+# 4) Cloud Build でビルド & Artifact Registry へ push
 # ------------------------------------------------------------
-function Try-StartPodmanMachine {
-  try {
-    podman machine start | Out-Null
-  } catch {
-  }
-}
-
-function Test-PodmanAvailable {
-  try {
-    podman info | Out-Null
-    return $true
-  } catch {
-    Try-StartPodmanMachine
-    try {
-      podman info | Out-Null
-      return $true
-    } catch {
-      return $false
-    }
-  }
-}
-
-function Configure-ArtifactRegistryAuthForPodman([string]$RegistryHost) {
-  Write-Step "Logging in to Artifact Registry (Podman): ${RegistryHost}"
-  $token = (& $GCLOUD auth print-access-token --project $ProjectId)
-  if (-not $token) {
-    throw "Failed to obtain access token. Run: gcloud auth login  (and/or) gcloud auth application-default login"
-  }
-
-  $token | podman login $RegistryHost --username "oauth2accesstoken" --password-stdin | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "podman login failed with exit code $LASTEXITCODE" }
-
-  Write-Ok "Podman registry login succeeded"
-}
-
-function Invoke-CloudBuildOrThrow {
-  param(
-    [Parameter(Mandatory=$true)][string]$Image,
-    [string]$Reason = "Cloud Build"
-  )
-
-  Write-Step "${Reason}: running Cloud Build"
-  & $GCLOUD builds submit --tag "$Image" --project "$ProjectId"
-
-  if ($LASTEXITCODE -ne 0) {
-    throw "Cloud Build failed. exit code: $LASTEXITCODE"
-  }
-
-  Write-Ok "Image build & push completed (Cloud Build)"
-}
-
-if ($AutoGenerated) {
-  $PodmanAvailable = $false
-  if ($PreferPodmanWhenAvailable) {
-    $PodmanAvailable = Test-PodmanAvailable
-  }
-
-  if ($PodmanAvailable) {
-    Write-Step "Podman detected. Using local podman build & push"
-
-    $RegistryHost = "${Region}-docker.pkg.dev"
-    Configure-ArtifactRegistryAuthForPodman $RegistryHost
-
-    $podmanBuildSucceeded = $false
-    $podmanPushSucceeded = $false
-    $podmanPushExitCode = $null
-
-    Push-Location $SourceDir
-    try {
-      podman build -t "$Image" .
-      if ($LASTEXITCODE -ne 0) {
-        throw "podman build failed with exit code $LASTEXITCODE"
-      }
-
-      $podmanBuildSucceeded = $true
-      Write-Ok "Image build completed (Podman)"
-
-      podman push "$Image"
-      if ($LASTEXITCODE -eq 0) {
-        $podmanPushSucceeded = $true
-        Write-Ok "Image push completed (Podman)"
-      } else {
-        $podmanPushExitCode = $LASTEXITCODE
-        Write-Warn "podman push failed with exit code $podmanPushExitCode. Falling back to Cloud Build..."
-      }
-    } finally {
-      Pop-Location
-    }
-
-    if ($podmanBuildSucceeded -and $podmanPushSucceeded) {
-      Write-Ok "Image build & push completed (Podman)"
-    } else {
-      try {
-        Invoke-CloudBuildOrThrow -Image $Image -Reason "Podman push fallback"
-      } catch {
-        throw "Both podman push and Cloud Build failed. podman push exit code: $podmanPushExitCode. $($_.Exception.Message)"
-      }
-    }
-  } else {
-    Write-Step "Podman not available. Using Cloud Build"
-    Invoke-CloudBuildOrThrow -Image $Image -Reason "Podman unavailable fallback"
-  }
-} else {
-  Write-Warn "Auto-image disabled (explicit -Image). Skipping build/push."
-}
+Invoke-CloudBuildOrThrow -Image $Image
 
 # ------------------------------------------------------------
 # 5) Cloud Run に渡す環境変数を組み立てる
@@ -309,6 +240,7 @@ $envMap = @{}
 $envMap["GOOGLE_CLOUD_PROJECT"] = $ProjectId
 
 $EnvFile = Join-Path $SourceDir ".env"
+
 if (Test-Path $EnvFile) {
   Write-Ok "Found .env: $EnvFile"
   $fileMap = Read-EnvFile $EnvFile
@@ -322,9 +254,17 @@ if (Test-Path $EnvFile) {
   Write-Warn ".env file not found at $EnvFile. Will only set GOOGLE_CLOUD_PROJECT and project-id defaults."
 }
 
-if (-not $envMap.ContainsKey("GCP_PROJECT_ID"))       { $envMap["GCP_PROJECT_ID"] = $ProjectId }
-if (-not $envMap.ContainsKey("FIREBASE_PROJECT_ID"))  { $envMap["FIREBASE_PROJECT_ID"] = $ProjectId }
-if (-not $envMap.ContainsKey("FIRESTORE_PROJECT_ID")) { $envMap["FIRESTORE_PROJECT_ID"] = $ProjectId }
+if (-not $envMap.ContainsKey("GCP_PROJECT_ID")) {
+  $envMap["GCP_PROJECT_ID"] = $ProjectId
+}
+
+if (-not $envMap.ContainsKey("FIREBASE_PROJECT_ID")) {
+  $envMap["FIREBASE_PROJECT_ID"] = $ProjectId
+}
+
+if (-not $envMap.ContainsKey("FIRESTORE_PROJECT_ID")) {
+  $envMap["FIRESTORE_PROJECT_ID"] = $ProjectId
+}
 
 if (-not $envMap.ContainsKey("SELF_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])) {
   try {
@@ -339,9 +279,10 @@ if (-not $envMap.ContainsKey("SELF_BASE_URL") -or [string]::IsNullOrWhiteSpace($
       } else {
         $envMap["SELF_BASE_URL"] = $selfUrl
       }
+
       Write-Ok "SELF_BASE_URL resolved from Cloud Run: $($envMap["SELF_BASE_URL"])"
     } else {
-      Write-Warn "SELF_BASE_URL could not be resolved (service url empty). Please set it in .env."
+      Write-Warn "SELF_BASE_URL could not be resolved because service url is empty. Please set it in .env."
     }
   } catch {
     Write-Warn "Failed to resolve SELF_BASE_URL from Cloud Run. Please set it in .env."
@@ -349,11 +290,14 @@ if (-not $envMap.ContainsKey("SELF_BASE_URL") -or [string]::IsNullOrWhiteSpace($
 }
 
 $envPairs = @()
+
 foreach ($k in $envMap.Keys) {
   $v = $envMap[$k]
   if ($null -eq $v) { $v = "" }
+
   $envPairs += "$k=$v"
 }
+
 $envArg = [string]::Join(",", $envPairs)
 
 Write-Step "Env vars to update: $envArg"
@@ -368,20 +312,6 @@ $removeEnvVars = @(
   "GOOGLE_APPLICATION_CREDENTIALS",
   "FIRESTORE_CREDENTIALS_FILE",
 
-  # 旧 SendGrid
-  "SENDGRID_API_KEY",
-  "SENDGRID_FROM",
-  "SENDGRID_CONTACT_ADMIN_TO",
-
-  # 廃止済み GCS bucket / signer env
-  "TOKEN_ICON_BUCKET",
-  "TOKEN_CONTENTS_BUCKET",
-  "LIST_BUCKET",
-  "AVATAR_ICON_BUCKET",
-  "BRAND_ICON_BUCKET",
-  "BRAND_BACKGROUND_BUCKET",
-  "GCS_SIGNER_EMAIL",
-
   # 旧 Stripe env
   # Stripe secret は Secret Manager の stripe-secret-key を使用する
   "STRIPE_SECRET_KEY",
@@ -390,31 +320,30 @@ $removeEnvVars = @(
 )
 
 $deployArgs = @(
-  "run","deploy", $ServiceName,
-  "--image",           $Image,
-  "--region",          $Region,
-  "--platform",        "managed",
+  "run", "deploy", $ServiceName,
+  "--image", $Image,
+  "--region", $Region,
+  "--platform", "managed",
   "--allow-unauthenticated",
   "--service-account", $RunServiceAccount,
 
   "--remove-env-vars", ([string]::Join(",", $removeEnvVars)),
 
   "--update-env-vars", $envArg,
-  "--min-instances",   "0",
-  "--max-instances",   "5",
-  "--memory",          "512Mi",
-  "--cpu",             "1",
-  "--concurrency",     "80",
-  "--timeout",         "60s",
-  "--project",         $ProjectId
+  "--min-instances", "0",
+  "--max-instances", "5",
+  "--memory", "512Mi",
+  "--cpu", "1",
+  "--concurrency", "80",
+  "--timeout", "60s",
+  "--project", $ProjectId
 )
 
 & $GCLOUD @deployArgs
+
 if ($LASTEXITCODE -ne 0) {
   throw "gcloud run deploy failed. exit code: $LASTEXITCODE"
 }
 
 Write-Ok "Cloud Run deployment finished: service '${ServiceName}'"
-if ($AutoGenerated) {
-  Write-Ok "Deployed with image: ${Image}"
-}
+Write-Ok "Deployed with image: ${Image}"

@@ -49,7 +49,6 @@ yarn-error.log*
 .terraform/
 .env
 .env.*
-**/*secret*
 **/*credentials*
 **/*key*.json
 

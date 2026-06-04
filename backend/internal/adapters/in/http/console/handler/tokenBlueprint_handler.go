@@ -33,28 +33,32 @@ func NewTokenBlueprintHandler(
 	}
 }
 
-func trimSlashSuffix(p string) string {
-	p = strings.Trim(p, " \t\r\n")
+func withoutTrailingSlash(p string) string {
 	if p == "" {
 		return ""
 	}
-	return strings.TrimSuffix(p, "/")
+	if len(p) > 1 && p[len(p)-1:] == "/" {
+		return p[:len(p)-1]
+	}
+	return p
 }
 
 func extractFirstSegmentAfterPrefix(path, prefix string) string {
-	path = trimSlashSuffix(path)
+	path = withoutTrailingSlash(path)
 	if !strings.HasPrefix(path, prefix) {
 		return ""
 	}
 
-	rest := strings.TrimPrefix(path, prefix)
-	rest = strings.TrimPrefix(rest, "/")
+	rest := path[len(prefix):]
+	if len(rest) > 0 && rest[0:1] == "/" {
+		rest = rest[1:]
+	}
 	if rest == "" {
 		return ""
 	}
 
 	parts := strings.SplitN(rest, "/", 2)
-	return strings.Trim(parts[0], " \t\r\n")
+	return parts[0]
 }
 
 type createTokenBlueprintRequest struct {
@@ -148,11 +152,11 @@ func resolveStoredIconURL(tb *tbdom.TokenBlueprint) string {
 		return ""
 	}
 
-	return strings.Trim(tb.IconURL, " \t\r\n")
+	return tb.IconURL
 }
 
 func resolveStoredContentFileURL(f tbdom.ContentFile) string {
-	return strings.Trim(f.URL, " \t\r\n")
+	return f.URL
 }
 
 func (h *TokenBlueprintHandler) toContentFilesResponse(
@@ -192,46 +196,42 @@ func (h *TokenBlueprintHandler) toResponse(
 	createdByName := ""
 	updatedByName := ""
 	if names != nil {
-		brandName = strings.Trim(names.BrandName, " \t\r\n")
-		assigneeName = strings.Trim(names.AssigneeName, " \t\r\n")
-		createdByName = strings.Trim(names.CreatedByName, " \t\r\n")
-		updatedByName = strings.Trim(names.UpdatedByName, " \t\r\n")
+		brandName = names.BrandName
+		assigneeName = names.AssigneeName
+		createdByName = names.CreatedByName
+		updatedByName = names.UpdatedByName
 	}
 
-	assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
-	createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
-	updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
-
 	return tokenBlueprintResponse{
-		ID:          strings.Trim(tb.ID, " \t\r\n"),
-		Name:        strings.Trim(tb.Name, " \t\r\n"),
-		Symbol:      strings.Trim(tb.Symbol, " \t\r\n"),
-		BrandID:     strings.Trim(tb.BrandID, " \t\r\n"),
+		ID:          tb.ID,
+		Name:        tb.Name,
+		Symbol:      tb.Symbol,
+		BrandID:     tb.BrandID,
 		BrandName:   brandName,
-		CompanyID:   strings.Trim(tb.CompanyID, " \t\r\n"),
-		Description: strings.Trim(tb.Description, " \t\r\n"),
+		CompanyID:   tb.CompanyID,
+		Description: tb.Description,
 		Minted:      tb.Minted,
 
 		ContentFiles: h.toContentFilesResponse(tb),
 
-		AssigneeID:   assigneeID,
+		AssigneeID:   tb.AssigneeID,
 		AssigneeName: assigneeName,
 
 		CreatedAt: tb.CreatedAt,
 
-		CreatedBy:     createdBy,
+		CreatedBy:     tb.CreatedBy,
 		CreatedByName: createdByName,
 
 		UpdatedAt:     updPtr,
-		UpdatedBy:     updatedBy,
+		UpdatedBy:     tb.UpdatedBy,
 		UpdatedByName: updatedByName,
 
-		MetadataURI: strings.Trim(tb.MetadataURI, " \t\r\n"),
+		MetadataURI: tb.MetadataURI,
 
 		IconURL:         resolveStoredIconURL(tb),
-		IconObjectPath:  strings.Trim(tb.IconObjectPath, " \t\r\n"),
-		IconFileName:    strings.Trim(tb.IconFileName, " \t\r\n"),
-		IconContentType: strings.Trim(tb.IconContentType, " \t\r\n"),
+		IconObjectPath:  tb.IconObjectPath,
+		IconFileName:    tb.IconFileName,
+		IconContentType: tb.IconContentType,
 		IconSize:        tb.IconSize,
 
 		ContentsURL: "",
@@ -241,7 +241,7 @@ func (h *TokenBlueprintHandler) toResponse(
 func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
-	path := trimSlashSuffix(r.URL.Path)
+	path := withoutTrailingSlash(r.URL.Path)
 
 	switch {
 	case r.Method == http.MethodPost && path == "/token-blueprints":
@@ -275,11 +275,24 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func actorMemberIDFromContext(r *http.Request) (string, error) {
+	if r == nil {
+		return "", errors.New("request is nil")
+	}
+
+	memberID := tbapp.MemberIDFromContext(r.Context())
+	if memberID == "" {
+		return "", errors.New("memberId not found in context")
+	}
+
+	return memberID, nil
+}
+
 func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
-	actorID := strings.Trim(r.Header.Get("X-Actor-Id"), " \t\r\n")
+	companyID := tbapp.CompanyIDFromContext(ctx)
+	actorMemberID, err := actorMemberIDFromContext(r)
 
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
@@ -287,9 +300,8 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if actorID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "X-Actor-Id is required"})
+	if err != nil {
+		writeActorResolveErr(w, err)
 		return
 	}
 
@@ -300,10 +312,10 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.Trim(req.Name, " \t\r\n") == "" ||
-		strings.Trim(req.Symbol, " \t\r\n") == "" ||
-		strings.Trim(req.BrandID, " \t\r\n") == "" ||
-		strings.Trim(req.AssigneeID, " \t\r\n") == "" {
+	if req.Name == "" ||
+		req.Symbol == "" ||
+		req.BrandID == "" ||
+		req.AssigneeID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing required fields"})
 		return
@@ -317,7 +329,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 
 		AssigneeID: req.AssigneeID,
-		CreatedBy:  actorID,
+		CreatedBy:  actorMemberID,
 
 		IconURL:         req.IconURL,
 		IconObjectPath:  req.IconObjectPath,
@@ -346,14 +358,14 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := tbapp.CompanyIDFromContext(ctx)
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
 		return
 	}
 
-	tb, names, err := h.detailQuery.GetByID(ctx, strings.Trim(id, " \t\r\n"))
+	tb, names, err := h.detailQuery.GetByID(ctx, id)
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
@@ -365,7 +377,7 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := tbapp.CompanyIDFromContext(ctx)
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -388,8 +400,8 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	brandID := strings.Trim(q.Get("brandId"), " \t\r\n")
-	mintedFilter := strings.Trim(q.Get("minted"), " \t\r\n")
+	brandID := q.Get("brandId")
+	mintedFilter := q.Get("minted")
 
 	if brandID != "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -435,10 +447,9 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-	id = strings.Trim(id, " \t\r\n")
 
-	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
-	actorID := strings.Trim(r.Header.Get("X-Actor-Id"), " \t\r\n")
+	companyID := tbapp.CompanyIDFromContext(ctx)
+	actorMemberID, err := actorMemberIDFromContext(r)
 
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
@@ -446,9 +457,8 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	if actorID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "X-Actor-Id is required"})
+	if err != nil {
+		writeActorResolveErr(w, err)
 		return
 	}
 
@@ -476,7 +486,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		ContentFiles: req.ContentFiles,
 		MetadataURI:  req.MetadataURI,
 		Minted:       req.Minted,
-		UpdatedBy:    actorID,
+		UpdatedBy:    actorMemberID,
 	})
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
@@ -496,9 +506,8 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 
 func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-	id = strings.Trim(id, " \t\r\n")
 
-	companyID := strings.Trim(tbapp.CompanyIDFromContext(ctx), " \t\r\n")
+	companyID := tbapp.CompanyIDFromContext(ctx)
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -511,6 +520,15 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeActorResolveErr(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
 func writeTokenBlueprintErr(w http.ResponseWriter, err error) {

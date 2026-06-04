@@ -27,19 +27,31 @@ import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructu
  * - tokenBlueprintIcon は create service 側で Firebase Storage へ upload
  * - tokenBlueprintContents は Firebase Storage へ frontend から直接 upload
  * - downloadURL / objectPath を contentFiles として backend に保存
+ *
+ * 保存する member 系 ID:
+ * - createdBy: members document ID
+ * - updatedBy: members document ID
+ * - assigneeId: members document ID
+ * - contentFiles[].createdBy: members document ID
+ * - contentFiles[].updatedBy: members document ID
  */
 export function useTokenBlueprintCreate() {
   const navigate = useNavigate();
 
   const { currentMember } = useAuth();
-  const companyId = currentMember?.companyId ?? "";
-  const memberUid = currentMember?.uid ?? "";
 
-  const [assignee, setAssignee] = React.useState<string>(memberUid);
+  const companyId = currentMember?.companyId ?? "";
+
+  /**
+   * Firebase Auth UID ではなく、Firestore members の document ID を保存する。
+   */
+  const memberId = currentMember?.id ?? "";
+
+  const [assignee, setAssignee] = React.useState<string>(memberId);
 
   React.useEffect(() => {
-    if (!assignee && memberUid) setAssignee(memberUid);
-  }, [assignee, memberUid]);
+    if (!assignee && memberId) setAssignee(memberId);
+  }, [assignee, memberId]);
 
   const createdAt = React.useMemo(() => new Date().toISOString(), []);
 
@@ -112,9 +124,9 @@ export function useTokenBlueprintCreate() {
           url: file.url,
           visibility: file.visibility ?? "private",
           createdAt: normalizeIsoOrFallback(file.createdAt, nowIso),
-          createdBy: file.createdBy || memberUid,
+          createdBy: file.createdBy || memberId,
           updatedAt: normalizeIsoOrFallback(file.updatedAt, nowIso),
-          updatedBy: file.updatedBy || memberUid,
+          updatedBy: file.updatedBy || memberId,
         };
       });
   }
@@ -130,13 +142,13 @@ export function useTokenBlueprintCreate() {
         throw new Error("companyId が取得できません（ログイン状態を確認してください）");
       }
 
-      if (!memberUid) {
-        throw new Error("memberUid が取得できません（ログイン状態を確認してください）");
+      if (!memberId) {
+        throw new Error("memberId が取得できません（ログイン状態を確認してください）");
       }
 
       const iconFile = input.iconFile ?? null;
       const effectiveAssigneeId =
-        input.assigneeId?.trim() || assignee || memberUid;
+        input.assigneeId?.trim() || assignee || memberId;
 
       const payload: CreateTokenBlueprintInput = {
         name: input.name?.trim() ?? "",
@@ -145,7 +157,7 @@ export function useTokenBlueprintCreate() {
         description: input.description?.trim() ?? "",
         assigneeId: effectiveAssigneeId,
         companyId,
-        createdBy: memberUid,
+        createdBy: memberId,
 
         iconUrl: input.iconUrl,
         iconObjectPath: input.iconObjectPath,
@@ -168,7 +180,7 @@ export function useTokenBlueprintCreate() {
 
       return created;
     },
-    [companyId, memberUid, assignee],
+    [companyId, memberId, assignee],
   );
 
   const tokenContents: FirebaseStorageTokenContent[] = React.useMemo(() => {
@@ -193,8 +205,8 @@ export function useTokenBlueprintCreate() {
         throw new Error("companyId is missing");
       }
 
-      if (!memberUid) {
-        throw new Error("memberUid is missing");
+      if (!memberId) {
+        throw new Error("memberId is missing");
       }
 
       setIsUploadingContents(true);
@@ -222,12 +234,15 @@ export function useTokenBlueprintCreate() {
               uploaded.contentType || file.type || "application/octet-stream",
             objectPath: uploaded.objectPath,
             url: uploaded.downloadUrl,
-            size: Number.isFinite(uploaded.size) ? uploaded.size : file.size,
+            size:
+              Number.isFinite(uploaded.size) && uploaded.size >= 0
+                ? uploaded.size
+                : file.size,
             visibility: "private",
             createdAt: nowIso,
-            createdBy: memberUid,
+            createdBy: memberId,
             updatedAt: nowIso,
-            updatedBy: memberUid,
+            updatedBy: memberId,
           });
         }
 
@@ -258,7 +273,7 @@ export function useTokenBlueprintCreate() {
         setIsUploadingContents(false);
       }
     },
-    [createdBlueprint, companyId, memberUid],
+    [createdBlueprint, companyId, memberId],
   );
 
   const onDeleteTokenContent = React.useCallback(
@@ -304,15 +319,15 @@ export function useTokenBlueprintCreate() {
       description: "",
       companyId,
       contentFiles: [],
-      assigneeId: assignee || memberUid,
-      createdBy: memberUid,
+      assigneeId: assignee || memberId,
+      createdBy: memberId,
       createdAt,
-      updatedBy: memberUid,
+      updatedBy: memberId,
       updatedAt: createdAt,
       deletedAt: null,
       deletedBy: null,
     }),
-    [companyId, assignee, memberUid, createdAt],
+    [companyId, assignee, memberId, createdAt],
   );
 
   return {

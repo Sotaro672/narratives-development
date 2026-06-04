@@ -154,8 +154,6 @@ type VariationFilter struct {
 	UpdatedTo   *time.Time
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
-
-	Deleted *bool // nil: all, true: deleted only, false: non-deleted only
 }
 
 type Page struct {

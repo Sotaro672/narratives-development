@@ -4,10 +4,9 @@ package query
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"narratives/internal/application/resolver"
 	branddom "narratives/internal/domain/brand"
+	memberdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -19,20 +18,20 @@ type TokenBlueprintMemberNames struct {
 }
 
 type TokenBlueprintDetailQuery struct {
-	tbRepo       tbdom.RepositoryPort
-	nameResolver *resolver.NameResolver
-	brandRepo    branddom.Repository
+	tbRepo     tbdom.RepositoryPort
+	memberRepo memberdom.Repository
+	brandRepo  branddom.Repository
 }
 
 func NewTokenBlueprintDetailQuery(
 	tbRepo tbdom.RepositoryPort,
-	nameResolver *resolver.NameResolver,
+	memberRepo memberdom.Repository,
 	brandRepo branddom.Repository,
 ) *TokenBlueprintDetailQuery {
 	return &TokenBlueprintDetailQuery{
-		tbRepo:       tbRepo,
-		nameResolver: nameResolver,
-		brandRepo:    brandRepo,
+		tbRepo:     tbRepo,
+		memberRepo: memberRepo,
+		brandRepo:  brandRepo,
 	}
 }
 
@@ -44,7 +43,6 @@ func (q *TokenBlueprintDetailQuery) GetByID(
 		return nil, TokenBlueprintMemberNames{}, fmt.Errorf("tokenBlueprint detail query/repo is nil")
 	}
 
-	id = strings.Trim(id, " \t\r\n")
 	if id == "" {
 		return nil, TokenBlueprintMemberNames{}, tbdom.ErrInvalidID
 	}
@@ -76,7 +74,6 @@ func (q *TokenBlueprintDetailQuery) ResolveMemberNames(
 	uniq := make([]string, 0, len(ids))
 
 	for _, id := range ids {
-		id = strings.Trim(id, " \t\r\n")
 		if id == "" {
 			continue
 		}
@@ -88,7 +85,7 @@ func (q *TokenBlueprintDetailQuery) ResolveMemberNames(
 		uniq = append(uniq, id)
 	}
 
-	if q.nameResolver == nil {
+	if q.memberRepo == nil {
 		for _, id := range uniq {
 			out[id] = ""
 		}
@@ -96,7 +93,16 @@ func (q *TokenBlueprintDetailQuery) ResolveMemberNames(
 	}
 
 	for _, id := range uniq {
-		out[id] = strings.Trim(q.nameResolver.ResolveMemberName(ctx, id), " \t\r\n")
+		rec, err := q.memberRepo.GetByID(ctx, id)
+		if err != nil {
+			out[id] = ""
+			continue
+		}
+
+		out[id] = memberdom.FormatLastFirst(
+			rec.Member.LastName,
+			rec.Member.FirstName,
+		)
 	}
 
 	return out, nil
@@ -116,7 +122,6 @@ func (q *TokenBlueprintDetailQuery) ResolveBrandNames(
 	uniq := make([]string, 0, len(ids))
 
 	for _, id := range ids {
-		id = strings.Trim(id, " \t\r\n")
 		if id == "" {
 			continue
 		}
@@ -142,7 +147,7 @@ func (q *TokenBlueprintDetailQuery) ResolveBrandNames(
 			continue
 		}
 
-		out[id] = strings.Trim(brand.Name, " \t\r\n")
+		out[id] = brand.Name
 	}
 
 	return out, nil
@@ -166,15 +171,10 @@ func (q *TokenBlueprintDetailQuery) resolveNamesForTokenBlueprint(
 		tb.BrandID,
 	})
 
-	brandID := strings.Trim(tb.BrandID, " \t\r\n")
-	assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
-	createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
-	updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
-
 	return TokenBlueprintMemberNames{
-		BrandName:     strings.Trim(brandNameByID[brandID], " \t\r\n"),
-		AssigneeName:  strings.Trim(memberNameByID[assigneeID], " \t\r\n"),
-		CreatedByName: strings.Trim(memberNameByID[createdBy], " \t\r\n"),
-		UpdatedByName: strings.Trim(memberNameByID[updatedBy], " \t\r\n"),
+		BrandName:     brandNameByID[tb.BrandID],
+		AssigneeName:  memberNameByID[tb.AssigneeID],
+		CreatedByName: memberNameByID[tb.CreatedBy],
+		UpdatedByName: memberNameByID[tb.UpdatedBy],
 	}
 }

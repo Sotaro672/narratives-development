@@ -4,11 +4,10 @@ package query
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"narratives/internal/application/resolver"
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
+	memberdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -26,20 +25,20 @@ type TokenBlueprintWithMemberNamesPage struct {
 }
 
 type TokenBlueprintManagementQuery struct {
-	tbRepo       tbdom.RepositoryPort
-	nameResolver *resolver.NameResolver
-	brandRepo    branddom.Repository
+	tbRepo     tbdom.RepositoryPort
+	memberRepo memberdom.Repository
+	brandRepo  branddom.Repository
 }
 
 func NewTokenBlueprintManagementQuery(
 	tbRepo tbdom.RepositoryPort,
-	nameResolver *resolver.NameResolver,
+	memberRepo memberdom.Repository,
 	brandRepo branddom.Repository,
 ) *TokenBlueprintManagementQuery {
 	return &TokenBlueprintManagementQuery{
-		tbRepo:       tbRepo,
-		nameResolver: nameResolver,
-		brandRepo:    brandRepo,
+		tbRepo:     tbRepo,
+		memberRepo: memberRepo,
+		brandRepo:  brandRepo,
 	}
 }
 
@@ -52,7 +51,6 @@ func (q *TokenBlueprintManagementQuery) ListByCompanyID(
 		return TokenBlueprintWithMemberNamesPage{}, fmt.Errorf("tokenBlueprint management query/repo is nil")
 	}
 
-	companyID = strings.Trim(companyID, " \t\r\n")
 	if companyID == "" {
 		return TokenBlueprintWithMemberNamesPage{}, tbdom.ErrInvalidCompanyID
 	}
@@ -77,7 +75,6 @@ func (q *TokenBlueprintManagementQuery) ResolveTokenBlueprintNames(
 
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
-		id = strings.Trim(id, " \t\r\n")
 		if id == "" {
 			continue
 		}
@@ -93,7 +90,7 @@ func (q *TokenBlueprintManagementQuery) ResolveTokenBlueprintNames(
 			continue
 		}
 
-		result[id] = strings.Trim(tb.Name, " \t\r\n")
+		result[id] = tb.Name
 	}
 
 	return result, nil
@@ -123,18 +120,18 @@ func (q *TokenBlueprintManagementQuery) attachResolvedNames(
 	for i := range result.Items {
 		tb := result.Items[i]
 
-		brandID := strings.Trim(tb.BrandID, " \t\r\n")
-		assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
-		createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
-		updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
+		brandID := tb.BrandID
+		assigneeID := tb.AssigneeID
+		createdBy := tb.CreatedBy
+		updatedBy := tb.UpdatedBy
 
 		items = append(items, TokenBlueprintWithMemberNames{
 			TokenBlueprint: tb,
 			MemberNames: TokenBlueprintMemberNames{
-				BrandName:     strings.Trim(nameByBrandID[brandID], " \t\r\n"),
-				AssigneeName:  strings.Trim(nameByMemberID[assigneeID], " \t\r\n"),
-				CreatedByName: strings.Trim(nameByMemberID[createdBy], " \t\r\n"),
-				UpdatedByName: strings.Trim(nameByMemberID[updatedBy], " \t\r\n"),
+				BrandName:     nameByBrandID[brandID],
+				AssigneeName:  nameByMemberID[assigneeID],
+				CreatedByName: nameByMemberID[createdBy],
+				UpdatedByName: nameByMemberID[updatedBy],
 			},
 		})
 	}
@@ -158,7 +155,6 @@ func (q *TokenBlueprintManagementQuery) resolveMemberNames(
 	uniq := make([]string, 0, len(ids))
 
 	for _, id := range ids {
-		id = strings.Trim(id, " \t\r\n")
 		if id == "" {
 			continue
 		}
@@ -170,7 +166,7 @@ func (q *TokenBlueprintManagementQuery) resolveMemberNames(
 		uniq = append(uniq, id)
 	}
 
-	if q.nameResolver == nil {
+	if q.memberRepo == nil {
 		for _, id := range uniq {
 			out[id] = ""
 		}
@@ -178,7 +174,16 @@ func (q *TokenBlueprintManagementQuery) resolveMemberNames(
 	}
 
 	for _, id := range uniq {
-		out[id] = strings.Trim(q.nameResolver.ResolveMemberName(ctx, id), " \t\r\n")
+		rec, err := q.memberRepo.GetByID(ctx, id)
+		if err != nil {
+			out[id] = ""
+			continue
+		}
+
+		out[id] = memberdom.FormatLastFirst(
+			rec.Member.LastName,
+			rec.Member.FirstName,
+		)
 	}
 
 	return out
@@ -194,7 +199,6 @@ func (q *TokenBlueprintManagementQuery) resolveBrandNames(
 	uniq := make([]string, 0, len(ids))
 
 	for _, id := range ids {
-		id = strings.Trim(id, " \t\r\n")
 		if id == "" {
 			continue
 		}
@@ -220,7 +224,7 @@ func (q *TokenBlueprintManagementQuery) resolveBrandNames(
 			continue
 		}
 
-		out[id] = strings.Trim(brand.Name, " \t\r\n")
+		out[id] = brand.Name
 	}
 
 	return out

@@ -68,13 +68,13 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 
 	tokenBlueprintManagementQuery := companyquery.NewTokenBlueprintManagementQuery(
 		r.tokenBlueprintRepo,
-		res.nameResolver,
+		r.memberRepo,
 		r.brandRepo,
 	)
 
 	tokenBlueprintDetailQuery := companyquery.NewTokenBlueprintDetailQuery(
 		r.tokenBlueprintRepo,
-		res.nameResolver,
+		r.memberRepo,
 		r.brandRepo,
 	)
 

@@ -272,12 +272,10 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		return dto.CatalogDTO{}, errors.New("model repo is nil")
 	}
 
-	deletedFalse := false
 	res, mvErr := q.ModelRepo.ListVariations(
 		ctx,
 		modeldom.VariationFilter{
 			ProductBlueprintID: resolvedPBID,
-			Deleted:            &deletedFalse,
 		},
 		modeldom.Page{
 			Number:  1,
