@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -74,7 +72,12 @@ func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, variation 
 		return nil, err
 	}
 
-	if _, err := docRef.Create(ctx, modelVariationToDoc(mv)); err != nil {
+	doc, err := modelVariationToDoc(mv)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := docRef.Create(ctx, doc); err != nil {
 		return nil, err
 	}
 
@@ -94,10 +97,9 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 		return nil, modeldom.ErrNotFound
 	}
 
-	log.Printf("[ModelRepositoryFS] UpdateModelVariation id=%s path=models/%s", variationID, variationID)
-
 	docRef := r.variationsCol().Doc(variationID)
-	var fsUpdates []firestore.Update
+
+	fsUpdates := make([]firestore.Update, 0, 6)
 
 	if updates.Size != nil {
 		fsUpdates = append(fsUpdates, firestore.Update{Path: "size", Value: *updates.Size})
@@ -131,10 +133,6 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 		Path:  "updatedAt",
 		Value: time.Now().UTC(),
 	})
-
-	if len(fsUpdates) == 0 {
-		return r.GetModelVariationByID(ctx, variationID)
-	}
 
 	if _, err := docRef.Update(ctx, fsUpdates); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -189,7 +187,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, vars []m
 	}
 
 	if len(vars) == 0 {
-		return []modeldom.ModelVariation{}, nil
+		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
 	productBlueprintID := vars[0].ProductBlueprintID()
@@ -224,8 +222,9 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, vars []m
 			for _, v := range chunk {
 				id := v.GetID()
 				if id == "" {
-					continue
+					return modeldom.ErrInvalidID
 				}
+
 				ref := r.variationsCol().Doc(id)
 				if err := tx.Delete(ref); err != nil {
 					return err
@@ -255,7 +254,12 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, vars []m
 					return err
 				}
 
-				if err := tx.Set(docRef, modelVariationToDoc(mv)); err != nil {
+				doc, err := modelVariationToDoc(mv)
+				if err != nil {
+					return err
+				}
+
+				if err := tx.Set(docRef, doc); err != nil {
 					return err
 				}
 			}
@@ -297,7 +301,7 @@ func (r *ModelRepositoryFS) ListVariations(
 			return true
 		}
 		for _, x := range xs {
-			if strings.EqualFold(x, s) {
+			if x == s {
 				return true
 			}
 		}
@@ -309,7 +313,7 @@ func (r *ModelRepositoryFS) ListVariations(
 			return true
 		}
 		for _, x := range xs {
-			if v.Value == x.Value && strings.EqualFold(v.Unit, x.Unit) {
+			if v.Value == x.Value && v.Unit == x.Unit {
 				return true
 			}
 		}
@@ -348,10 +352,6 @@ func (r *ModelRepositoryFS) ListVariations(
 				continue
 			}
 
-			if filter.Deleted != nil && *filter.Deleted {
-				continue
-			}
-
 			if q != "" {
 				hay := strings.ToLower(apparel.ModelNumber + " " + apparel.Size + " " + apparel.Color.Name)
 				if !strings.Contains(hay, q) {
@@ -387,10 +387,6 @@ func (r *ModelRepositoryFS) ListVariations(
 				continue
 			}
 
-			if filter.Deleted != nil && *filter.Deleted {
-				continue
-			}
-
 			if q != "" {
 				volumeText := fmt.Sprintf("%d%s", alcohol.Volume.Value, alcohol.Volume.Unit)
 				hay := strings.ToLower(alcohol.ModelNumber + " " + volumeText)
@@ -400,7 +396,10 @@ func (r *ModelRepositoryFS) ListVariations(
 			}
 
 			filtered = append(filtered, alcohol)
+			continue
 		}
+
+		return modeldom.VariationPageResult{}, modeldom.ErrInvalid
 	}
 
 	sort.Slice(filtered, func(i, j int) bool {
@@ -468,7 +467,7 @@ func (r *ModelRepositoryFS) GetSizeVariations(ctx context.Context, productBluepr
 	}
 
 	seen := map[string]struct{}{}
-	var sizes []string
+	out := make([]modeldom.SizeVariation, 0)
 
 	for _, raw := range vars {
 		v, ok := toApparelModelVariation(raw)
@@ -476,43 +475,26 @@ func (r *ModelRepositoryFS) GetSizeVariations(ctx context.Context, productBluepr
 			continue
 		}
 
-		s := v.Size
-		if s == "" {
+		if v.Size == "" {
 			continue
 		}
-		if _, ok := seen[s]; ok {
+		if _, ok := seen[v.Size]; ok {
 			continue
 		}
-		seen[s] = struct{}{}
-		sizes = append(sizes, s)
+		seen[v.Size] = struct{}{}
+
+		out = append(out, modeldom.SizeVariation{
+			ID:           v.ID,
+			Size:         v.Size,
+			Measurements: cloneMeasurements(v.Measurements),
+		})
 	}
 
-	sort.Strings(sizes)
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Size < out[j].Size
+	})
 
-	makeSizeVariation := func(size string) modeldom.SizeVariation {
-		var out modeldom.SizeVariation
-		rv := reflect.ValueOf(&out).Elem()
-		switch rv.Kind() {
-		case reflect.String:
-			rv.SetString(size)
-		case reflect.Struct:
-			for _, fn := range []string{"Size", "Name", "Value"} {
-				f := rv.FieldByName(fn)
-				if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
-					f.SetString(size)
-					break
-				}
-			}
-		}
-		return out
-	}
-
-	res := make([]modeldom.SizeVariation, 0, len(sizes))
-	for _, s := range sizes {
-		res = append(res, makeSizeVariation(s))
-	}
-
-	return res, nil
+	return out, nil
 }
 
 func (r *ModelRepositoryFS) GetModelNumbers(ctx context.Context, productBlueprintID string) ([]modeldom.ModelNumber, error) {
@@ -522,50 +504,46 @@ func (r *ModelRepositoryFS) GetModelNumbers(ctx context.Context, productBlueprin
 	}
 
 	seen := map[string]struct{}{}
-	var nums []string
+	out := make([]modeldom.ModelNumber, 0)
 
 	for _, raw := range vars {
 		if raw == nil {
 			continue
 		}
 
-		s := raw.GetModelNumber()
-		if s == "" {
+		modelNumber := raw.GetModelNumber()
+		if modelNumber == "" {
 			continue
 		}
-		if _, ok := seen[s]; ok {
+		if _, ok := seen[modelNumber]; ok {
 			continue
 		}
-		seen[s] = struct{}{}
-		nums = append(nums, s)
-	}
+		seen[modelNumber] = struct{}{}
 
-	sort.Strings(nums)
-
-	makeModelNumber := func(mn string) modeldom.ModelNumber {
-		var out modeldom.ModelNumber
-		rv := reflect.ValueOf(&out).Elem()
-		switch rv.Kind() {
-		case reflect.String:
-			rv.SetString(mn)
-		case reflect.Struct:
-			for _, fn := range []string{"ModelNumber", "Number", "Name", "Value"} {
-				f := rv.FieldByName(fn)
-				if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
-					f.SetString(mn)
-					break
-				}
-			}
+		if apparel, ok := toApparelModelVariation(raw); ok {
+			out = append(out, modeldom.ModelNumber{
+				Size:        apparel.Size,
+				Color:       apparel.Color.Name,
+				ModelNumber: apparel.ModelNumber,
+			})
+			continue
 		}
-		return out
+
+		if alcohol, ok := toAlcoholModelVariation(raw); ok {
+			out = append(out, modeldom.ModelNumber{
+				ModelNumber: alcohol.ModelNumber,
+			})
+			continue
+		}
+
+		return nil, modeldom.ErrInvalid
 	}
 
-	res := make([]modeldom.ModelNumber, 0, len(nums))
-	for _, s := range nums {
-		res = append(res, makeModelNumber(s))
-	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ModelNumber < out[j].ModelNumber
+	})
 
-	return res, nil
+	return out, nil
 }
 
 // ------------------------------------------------------------
@@ -635,7 +613,7 @@ func newModelVariationToDomain(id string, input modeldom.NewModelVariation, now 
 				Name: input.Apparel.Color.Name,
 				RGB:  input.Apparel.Color.RGB,
 			},
-			Measurements: input.Apparel.Measurements,
+			Measurements: cloneMeasurements(input.Apparel.Measurements),
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}
@@ -657,81 +635,65 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		return nil, fmt.Errorf("empty variation: %s", doc.Ref.ID)
 	}
 
-	getStr := func(k string) string {
-		if v, ok := data[k].(string); ok {
-			return v
-		}
-		return ""
+	kind, err := requiredModelString(data, "kind")
+	if err != nil {
+		return nil, err
 	}
 
-	getTime := func(k string) time.Time {
-		if v, ok := data[k].(time.Time); ok {
-			return v.UTC()
-		}
-		return time.Time{}
-	}
-
-	getStringPtr := func(k string) *string {
-		if v, ok := data[k].(string); ok && v != "" {
-			s := v
-			return &s
-		}
-		return nil
-	}
-
-	kind := getStr("kind")
-	if kind == "" {
-		kind = string(modeldom.ModelVariationKindApparel)
-	}
-
-	if kind == string(modeldom.ModelVariationKindAlcohol) {
-		return modeldom.AlcoholModelVariation{
+	switch kind {
+	case string(modeldom.ModelVariationKindAlcohol):
+		mv := modeldom.AlcoholModelVariation{
 			ID:                 doc.Ref.ID,
-			ProductBlueprintID: getStr("productBlueprintId"),
-			ModelNumber:        getStr("modelNumber"),
-			Volume:             getVolumeFromDoc(data),
-			CreatedAt:          getTime("createdAt"),
-			CreatedBy:          getStringPtr("createdBy"),
-			UpdatedAt:          getTime("updatedAt"),
-			UpdatedBy:          getStringPtr("updatedBy"),
-		}, nil
-	}
+			ProductBlueprintID: modelString(data, "productBlueprintId"),
+			ModelNumber:        modelString(data, "modelNumber"),
+			Volume:             modelVolume(data, "volume"),
+			CreatedAt:          modelTime(data, "createdAt"),
+			CreatedBy:          modelStringPtr(data, "createdBy"),
+			UpdatedAt:          modelTime(data, "updatedAt"),
+			UpdatedBy:          modelStringPtr(data, "updatedBy"),
+		}
 
-	return modeldom.ApparelModelVariation{
-		ID:                 doc.Ref.ID,
-		ProductBlueprintID: getStr("productBlueprintId"),
-		ModelNumber:        getStr("modelNumber"),
-		Size:               getStr("size"),
-		Color:              getColorFromDoc(data),
-		Measurements:       getMeasurementsFromDoc(data),
-		CreatedAt:          getTime("createdAt"),
-		CreatedBy:          getStringPtr("createdBy"),
-		UpdatedAt:          getTime("updatedAt"),
-		UpdatedBy:          getStringPtr("updatedBy"),
-	}, nil
+		if err := mv.Validate(); err != nil {
+			return nil, err
+		}
+
+		return mv, nil
+
+	case string(modeldom.ModelVariationKindApparel):
+		mv := modeldom.ApparelModelVariation{
+			ID:                 doc.Ref.ID,
+			ProductBlueprintID: modelString(data, "productBlueprintId"),
+			ModelNumber:        modelString(data, "modelNumber"),
+			Size:               modelString(data, "size"),
+			Color:              modelColor(data, "color"),
+			Measurements:       modelMeasurements(data, "measurements"),
+			CreatedAt:          modelTime(data, "createdAt"),
+			CreatedBy:          modelStringPtr(data, "createdBy"),
+			UpdatedAt:          modelTime(data, "updatedAt"),
+			UpdatedBy:          modelStringPtr(data, "updatedBy"),
+		}
+
+		if err := mv.Validate(); err != nil {
+			return nil, err
+		}
+
+		return mv, nil
+
+	default:
+		return nil, modeldom.ErrInvalid
+	}
 }
 
-func modelVariationToDoc(v modeldom.ModelVariation) map[string]any {
+func modelVariationToDoc(v modeldom.ModelVariation) (map[string]any, error) {
 	switch mv := v.(type) {
 	case modeldom.AlcoholModelVariation:
-		return alcoholModelVariationToDoc(mv)
-	case *modeldom.AlcoholModelVariation:
-		if mv == nil {
-			return map[string]any{}
-		}
-		return alcoholModelVariationToDoc(*mv)
+		return alcoholModelVariationToDoc(mv), nil
+
 	case modeldom.ApparelModelVariation:
-		return apparelModelVariationToDoc(mv)
-	case *modeldom.ApparelModelVariation:
-		if mv == nil {
-			return map[string]any{}
-		}
-		return apparelModelVariationToDoc(*mv)
+		return apparelModelVariationToDoc(mv), nil
+
 	default:
-		return map[string]any{
-			"productBlueprintId": v.GetProductBlueprintID(),
-			"modelNumber":        v.GetModelNumber(),
-		}
+		return nil, modeldom.ErrInvalid
 	}
 }
 
@@ -748,7 +710,7 @@ func apparelModelVariationToDoc(v modeldom.ApparelModelVariation) map[string]any
 	}
 
 	if v.Measurements != nil {
-		m["measurements"] = v.Measurements
+		m["measurements"] = cloneMeasurements(v.Measurements)
 	}
 	if !v.CreatedAt.IsZero() {
 		m["createdAt"] = v.CreatedAt
@@ -793,82 +755,72 @@ func alcoholModelVariationToDoc(v modeldom.AlcoholModelVariation) map[string]any
 	return m
 }
 
-func getColorFromDoc(data map[string]any) modeldom.Color {
-	var color modeldom.Color
-	raw, ok := data["color"]
-	if !ok || raw == nil {
-		return color
+func requiredModelString(data map[string]any, key string) (string, error) {
+	v, ok := data[key].(string)
+	if !ok || v == "" {
+		return "", modeldom.ErrInvalid
 	}
-
-	if v, ok := raw.(map[string]any); ok {
-		if n, ok2 := v["name"].(string); ok2 {
-			color.Name = n
-		}
-		switch rv := v["rgb"].(type) {
-		case int64:
-			color.RGB = int(rv)
-		case int:
-			color.RGB = rv
-		case float64:
-			color.RGB = int(rv)
-		}
-	}
-
-	return color
+	return v, nil
 }
 
-func getVolumeFromDoc(data map[string]any) modeldom.Volume {
-	var volume modeldom.Volume
-	raw, ok := data["volume"]
-	if !ok || raw == nil {
-		return volume
-	}
-
-	if v, ok := raw.(map[string]any); ok {
-		switch rv := v["value"].(type) {
-		case int64:
-			volume.Value = int(rv)
-		case int:
-			volume.Value = rv
-		case float64:
-			volume.Value = int(rv)
-		}
-		if unit, ok := v["unit"].(string); ok {
-			volume.Unit = unit
-		}
-	}
-
-	return volume
+func modelString(data map[string]any, key string) string {
+	v, _ := data[key].(string)
+	return v
 }
 
-func getMeasurementsFromDoc(data map[string]any) modeldom.Measurements {
-	raw, ok := data["measurements"]
+func modelStringPtr(data map[string]any, key string) *string {
+	v, _ := data[key].(string)
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func modelTime(data map[string]any, key string) time.Time {
+	v, _ := data[key].(time.Time)
+	if v.IsZero() {
+		return time.Time{}
+	}
+	return v.UTC()
+}
+
+func modelColor(data map[string]any, key string) modeldom.Color {
+	raw, _ := data[key].(map[string]any)
+
+	name, _ := raw["name"].(string)
+	rgb, _ := raw["rgb"].(int64)
+
+	return modeldom.Color{
+		Name: name,
+		RGB:  int(rgb),
+	}
+}
+
+func modelVolume(data map[string]any, key string) modeldom.Volume {
+	raw, _ := data[key].(map[string]any)
+
+	value, _ := raw["value"].(int64)
+	unit, _ := raw["unit"].(string)
+
+	return modeldom.Volume{
+		Value: int(value),
+		Unit:  unit,
+	}
+}
+
+func modelMeasurements(data map[string]any, key string) modeldom.Measurements {
+	raw, ok := data[key].(map[string]any)
 	if !ok || raw == nil {
 		return nil
 	}
 
-	out := make(modeldom.Measurements)
-
-	switch vv := raw.(type) {
-	case map[string]any:
-		for k, v := range vv {
-			switch n := v.(type) {
-			case int64:
-				out[k] = int(n)
-			case int:
-				out[k] = n
-			case float64:
-				out[k] = int(n)
-			}
+	out := make(modeldom.Measurements, len(raw))
+	for k, v := range raw {
+		n, ok := v.(int64)
+		if !ok {
+			return nil
 		}
-	case map[string]int:
-		for k, v := range vv {
-			out[k] = v
-		}
-	case map[string]int64:
-		for k, v := range vv {
-			out[k] = int(v)
-		}
+		out[k] = int(n)
 	}
 
 	if len(out) == 0 {
@@ -883,17 +835,8 @@ func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVa
 		return modeldom.ApparelModelVariation{}, false
 	}
 
-	switch x := v.(type) {
-	case modeldom.ApparelModelVariation:
-		return x, true
-	case *modeldom.ApparelModelVariation:
-		if x == nil {
-			return modeldom.ApparelModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.ApparelModelVariation{}, false
-	}
+	x, ok := v.(modeldom.ApparelModelVariation)
+	return x, ok
 }
 
 func toAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
@@ -901,17 +844,8 @@ func toAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVa
 		return modeldom.AlcoholModelVariation{}, false
 	}
 
-	switch x := v.(type) {
-	case modeldom.AlcoholModelVariation:
-		return x, true
-	case *modeldom.AlcoholModelVariation:
-		if x == nil {
-			return modeldom.AlcoholModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.AlcoholModelVariation{}, false
-	}
+	x, ok := v.(modeldom.AlcoholModelVariation)
+	return x, ok
 }
 
 func modelVariationSortValues(v modeldom.ModelVariation) (time.Time, time.Time, string) {
@@ -925,4 +859,17 @@ func modelVariationSortValues(v modeldom.ModelVariation) (time.Time, time.Time, 
 		return time.Time{}, time.Time{}, ""
 	}
 	return time.Time{}, time.Time{}, v.GetID()
+}
+
+func cloneMeasurements(in modeldom.Measurements) modeldom.Measurements {
+	if in == nil {
+		return nil
+	}
+
+	out := make(modeldom.Measurements, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+
+	return out
 }

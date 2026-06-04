@@ -1,9 +1,7 @@
-//frontend\console\shell\src\auth\application\authService.ts
 /// <reference types="vite/client" />
 
 import { onAuthStateChanged, type User } from "firebase/auth";
-import { auth, db } from "../infrastructure/config/firebaseClient";
-import { doc, getDoc } from "firebase/firestore";
+import { auth } from "../infrastructure/config/firebaseClient";
 
 /**
  * auth.currentUser が即時に得られないケースに備えて、
@@ -18,10 +16,12 @@ function waitForAuthReady(): Promise<User | null> {
     authReadyPromise = new Promise<User | null>((resolve) => {
       const unsub = onAuthStateChanged(auth, (u) => {
         unsub();
+        authReadyPromise = null;
         resolve(u ?? null);
       });
     });
   }
+
   return authReadyPromise;
 }
 
@@ -35,8 +35,9 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function getIdToken(): Promise<string | null> {
   const u = await getCurrentUser();
   if (!u?.getIdToken) return null;
+
   try {
-    return await u.getIdToken(/* forceRefresh? */ false);
+    return await u.getIdToken(false);
   } catch {
     return null;
   }
@@ -48,28 +49,66 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// ─────────────────────────────────────────────
+// Backend base URL
+// ─────────────────────────────────────────────
+
+const RAW_ENV_BASE =
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined) ?? "";
+
+const FALLBACK_BASE =
+  "https://narratives-backend-871263659099.asia-northeast1.run.app";
+
+function sanitizeBase(u: string): string {
+  return (u || "").replace(/\/+$/g, "");
+}
+
+const API_BASE = sanitizeBase(RAW_ENV_BASE || FALLBACK_BASE);
+
+if (!API_BASE) {
+  throw new Error(
+    "[authService] BACKEND BASE URL is empty. Set VITE_BACKEND_BASE_URL in .env.local",
+  );
+}
+
 /**
- * Firestore: members/{uid} から companyId を取得（存在しなければ null）
- * サーバ側で context.companyId を強制する方針でも、クライアント側の表示/補助用途に便利。
+ * Backend: /members/me から companyId を取得する。
+ *
+ * NOTE:
+ * members の Firestore docId は Firebase Auth UID ではない。
+ * そのため frontend から members/{uid} を直接読みに行かない。
  */
 export async function getCompanyId(): Promise<string | null> {
-  const u = await getCurrentUser();
-  const uid = u?.uid?.trim();
-  if (!uid) return null;
+  const headers = await getAuthHeaders();
+
+  if (!headers.Authorization) {
+    return null;
+  }
 
   try {
-    const snap = await getDoc(doc(db, "members", uid));
-    if (!snap.exists()) return null;
-    const data = snap.data() || {};
-    const cid = (data.companyId ?? "").toString().trim();
+    const res = await fetch(`${API_BASE}/members/me`, {
+      method: "GET",
+      mode: "cors",
+      headers,
+    });
+
+    if (!res.ok) {
+      console.error("[authService] getCompanyId /members/me failed:", res.status);
+      return null;
+    }
+
+    const json = await res.json();
+    const data = json?.data ?? json;
+
+    const cid = String(data?.companyId ?? "").trim();
     return cid || null;
-  } catch {
+  } catch (error) {
+    console.error("[authService] getCompanyId failed:", error);
     return null;
   }
 }
 
-/** 便利ユーティリティ：companyId が取得できるまで待って返す（タイムアウト無し版） */
+/** 便利ユーティリティ：companyId を取得して返す */
 export async function ensureCompanyId(): Promise<string | null> {
-  // 必要に応じてリトライ/タイムアウトを足してください
   return await getCompanyId();
 }

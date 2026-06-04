@@ -29,19 +29,6 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 
 	// ------------------------------------------------------------
-	// GET /models/variations/{variationId}
-	//   → ModelUsecase.GetModelVariationByID
-	// ※ mintRequest の「モデル別検査結果」(modelId=variationId) 用
-	// ------------------------------------------------------------
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/variations/"):
-		if id, ok := extractSingleID(r.URL.Path, "/models/variations/"); ok {
-			h.getVariationByID(w, r, id)
-			return
-		}
-		writeNotFound(w)
-		return
-
-	// ------------------------------------------------------------
 	// GET /models/by-blueprint/{productBlueprintID}/variations
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/by-blueprint/"):
@@ -90,7 +77,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// GET /models/{id}
-	//   → ModelUsecase.GetByID
+	//   → ModelUsecase.GetModelVariationByID
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/"):
 		if id, ok := extractModelID(r.URL.Path); ok {
@@ -115,8 +102,8 @@ type createModelVariationRequest struct {
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 
 	// category-specific variation kind.
-	// 未指定の場合は既存互換として apparel 扱いにする。
-	Kind string `json:"kind,omitempty"`
+	// 必須: "apparel" または "alcohol"
+	Kind string `json:"kind"`
 
 	// common
 	ModelNumber string `json:"modelNumber"`
@@ -148,7 +135,7 @@ type volumeDTO struct {
 type modelVariationDTO struct {
 	ID                 string         `json:"id"`
 	ProductBlueprintID string         `json:"productBlueprintId"`
-	Kind               string         `json:"kind,omitempty"`
+	Kind               string         `json:"kind"`
 	ModelNumber        string         `json:"modelNumber"`
 	Size               string         `json:"size,omitempty"`
 	Color              *colorDTO      `json:"color,omitempty"`
@@ -180,7 +167,12 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	newVar := toNewModelVariation(productBlueprintID, req)
+	newVar, err := toNewModelVariation(productBlueprintID, req)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
 	if err := newVar.Validate(); err != nil {
 		writeModelErr(w, err)
 		return
@@ -221,33 +213,6 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(toModelVariationDTOs(vars))
-}
-
-// ------------------------------------------------------------
-// GET /models/variations/{variationId}
-// ------------------------------------------------------------
-
-func (h *ModelHandler) getVariationByID(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	mv, err := h.uc.GetModelVariationByID(ctx, id)
-	if err != nil {
-		writeModelErr(w, err)
-		return
-	}
-	if mv == nil {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "variation not found"})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(toModelVariationDTO(mv))
 }
 
 // ------------------------------------------------------------
@@ -297,7 +262,11 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	updates := toModelVariationUpdate(req)
+	updates, err := toModelVariationUpdate(req)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
 
 	mv, err := h.uc.UpdateModelVariation(ctx, id, updates)
 	if err != nil {
@@ -343,11 +312,10 @@ func toMeasurements(in map[string]float64) modeldom.Measurements {
 
 	ms := make(modeldom.Measurements, len(in))
 	for k, v := range in {
-		key := k
-		if key == "" {
+		if k == "" {
 			continue
 		}
-		ms[key] = int(v)
+		ms[k] = int(v)
 	}
 
 	if len(ms) == 0 {
@@ -361,51 +329,61 @@ func toMeasurements(in map[string]float64) modeldom.Measurements {
 func toNewModelVariation(
 	productBlueprintID string,
 	req createModelVariationRequest,
-) modeldom.NewModelVariation {
-	if req.Kind == string(modeldom.ModelVariationKindAlcohol) {
+) (modeldom.NewModelVariation, error) {
+	switch req.Kind {
+	case string(modeldom.ModelVariationKindApparel):
+		return modeldom.NewModelVariationFromApparel(modeldom.NewApparelModelVariation{
+			ProductBlueprintID: productBlueprintID,
+			ModelNumber:        req.ModelNumber,
+			Size:               req.Size,
+			Color: modeldom.Color{
+				Name: req.Color,
+				RGB:  req.RGB,
+			},
+			Measurements: toMeasurements(req.Measurements),
+		}), nil
+
+	case string(modeldom.ModelVariationKindAlcohol):
 		return modeldom.NewModelVariationFromAlcohol(modeldom.NewAlcoholModelVariation{
 			ProductBlueprintID: productBlueprintID,
 			ModelNumber:        req.ModelNumber,
 			Volume:             req.Volume,
-		})
-	}
+		}), nil
 
-	return modeldom.NewModelVariationFromApparel(modeldom.NewApparelModelVariation{
-		ProductBlueprintID: productBlueprintID,
-		ModelNumber:        req.ModelNumber,
-		Size:               req.Size,
-		Color: modeldom.Color{
-			Name: req.Color,
-			RGB:  req.RGB,
-		},
-		Measurements: toMeasurements(req.Measurements),
-	})
+	default:
+		return modeldom.NewModelVariation{}, modeldom.ErrInvalid
+	}
 }
 
 // toModelVariationUpdate は request を category-specific な update DTO に変換する。
-func toModelVariationUpdate(req createModelVariationRequest) modeldom.ModelVariationUpdate {
+func toModelVariationUpdate(req createModelVariationRequest) (modeldom.ModelVariationUpdate, error) {
 	modelNumber := req.ModelNumber
 
-	if req.Kind == string(modeldom.ModelVariationKindAlcohol) {
+	switch req.Kind {
+	case string(modeldom.ModelVariationKindApparel):
+		size := req.Size
+		color := modeldom.Color{
+			Name: req.Color,
+			RGB:  req.RGB,
+		}
+
+		return modeldom.ModelVariationUpdate{
+			ModelNumber:  &modelNumber,
+			Size:         &size,
+			Color:        &color,
+			Measurements: toMeasurements(req.Measurements),
+		}, nil
+
+	case string(modeldom.ModelVariationKindAlcohol):
 		volume := req.Volume
 
 		return modeldom.ModelVariationUpdate{
 			ModelNumber: &modelNumber,
 			Volume:      &volume,
-		}
-	}
+		}, nil
 
-	size := req.Size
-	color := modeldom.Color{
-		Name: req.Color,
-		RGB:  req.RGB,
-	}
-
-	return modeldom.ModelVariationUpdate{
-		ModelNumber:  &modelNumber,
-		Size:         &size,
-		Color:        &color,
-		Measurements: toMeasurements(req.Measurements),
+	default:
+		return modeldom.ModelVariationUpdate{}, modeldom.ErrInvalid
 	}
 }
 
@@ -425,6 +403,7 @@ func toModelVariationDTO(mv modeldom.ModelVariation) modelVariationDTO {
 		return modelVariationDTO{
 			ID:                 mv.GetID(),
 			ProductBlueprintID: mv.GetProductBlueprintID(),
+			Kind:               "",
 			ModelNumber:        mv.GetModelNumber(),
 		}
 	}
@@ -499,23 +478,6 @@ func timePtrToRFC3339(t *time.Time) *string {
 // Path helpers
 // ------------------------------------------------------------
 
-// extractSingleID は prefix 配下の単一IDを抽出します。
-// 例: path="/models/variations/123", prefix="/models/variations/" => "123"
-func extractSingleID(path string, prefix string) (string, bool) {
-	if !strings.HasPrefix(path, prefix) {
-		return "", false
-	}
-	id := strings.TrimPrefix(path, prefix)
-	id = strings.Trim(id, "/")
-	if id == "" {
-		return "", false
-	}
-	if strings.Contains(id, "/") {
-		return "", false
-	}
-	return id, true
-}
-
 // extractBlueprintIDForList は以下のパスから productBlueprintID を抽出します。
 // GET /models/by-blueprint/{productBlueprintID}/variations
 func extractBlueprintIDForList(path string) (string, bool) {
@@ -569,6 +531,10 @@ func extractModelID(path string) (string, bool) {
 	id := strings.TrimPrefix(path, "/models/")
 	id = strings.Trim(id, "/")
 	if id == "" {
+		return "", false
+	}
+
+	if strings.HasPrefix(id, "by-blueprint/") || id == "by-blueprint" {
 		return "", false
 	}
 

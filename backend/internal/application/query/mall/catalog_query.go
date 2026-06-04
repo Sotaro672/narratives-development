@@ -772,14 +772,3 @@ func attachStockToModelVariations(items *[]dto.CatalogModelVariationDTO, inv *dt
 		(*items)[i].StockKeys = stockKeys
 	}
 }
-
-// ============================================================
-// Small utilities
-// ============================================================
-
-func boolStr(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}

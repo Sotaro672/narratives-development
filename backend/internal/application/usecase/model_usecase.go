@@ -38,7 +38,7 @@ func NewModelUsecase(repo modeldom.RepositoryPort) *ModelUsecase {
 // Queries
 // ------------------------------------------------------------
 
-// HTTP の GET /models/variations/{variationId} 用の明示メソッド。
+// HTTP の GET /models/{variationId} 用の明示メソッド。
 // このメソッドは 1 箇所のみ定義（DuplicateMethod 回避）。
 func (u *ModelUsecase) GetModelVariationByID(
 	ctx context.Context,
@@ -116,6 +116,8 @@ func (u *ModelUsecase) CreateModelVariation(
 // NOTE:
 //   - apparel では size / color / measurements 更新に対応する。
 //   - alcohol では volume 更新に対応する。
+//   - 一括差し替えは行わない。
+//   - 削除が必要な variation は DeleteModelVariation を個別に呼び出す。
 //   - 履歴は保存しない。
 func (u *ModelUsecase) UpdateModelVariation(
 	ctx context.Context,
@@ -138,6 +140,14 @@ func (u *ModelUsecase) UpdateModelVariation(
 	return updated, nil
 }
 
+// DeleteModelVariation physically deletes a category-specific ModelVariation.
+//
+// NOTE:
+//   - repository は対象 document を物理削除する。
+//   - soft delete は使わない。
+//   - 一括差し替えは行わない。
+//   - 履歴は保存しない。
+//   - 復元前提の状態管理は行わない。
 func (u *ModelUsecase) DeleteModelVariation(
 	ctx context.Context,
 	variationID string,
@@ -151,49 +161,6 @@ func (u *ModelUsecase) DeleteModelVariation(
 	}
 
 	return u.repo.DeleteModelVariation(ctx, variationID)
-}
-
-// ReplaceModelVariations replaces category-specific ModelVariations.
-//
-// NOTE:
-//   - 全要素が同じ ProductBlueprintID を持つ前提。
-//   - ProductBlueprintID は NewModelVariation.ProductBlueprintID() から解決する。
-//   - apparel では size / color / measurements を扱う。
-//   - alcohol では volume のみを扱う。
-//   - ModelVariation は interface なので、UpdatedAt はここで直接補正しない。
-//     UpdatedAt は repository / domain 側で設定された値を正とする。
-func (u *ModelUsecase) ReplaceModelVariations(
-	ctx context.Context,
-	vars []modeldom.NewModelVariation,
-) ([]modeldom.ModelVariation, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-
-	if len(vars) == 0 {
-		return u.repo.ReplaceModelVariations(ctx, vars)
-	}
-
-	productBlueprintID := vars[0].ProductBlueprintID()
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
-	}
-
-	for _, v := range vars {
-		if err := v.Validate(); err != nil {
-			return nil, err
-		}
-		if v.ProductBlueprintID() != productBlueprintID {
-			return nil, modeldom.ErrProductMismatch
-		}
-	}
-
-	updated, err := u.repo.ReplaceModelVariations(ctx, vars)
-	if err != nil {
-		return nil, err
-	}
-
-	return updated, nil
 }
 
 func (u *ModelUsecase) GetSizeVariations(
