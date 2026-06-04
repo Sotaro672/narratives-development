@@ -1,10 +1,12 @@
-// backend\internal\application\query\console\productBlueprint_management_query.go
+// backend/internal/application/query/console/productBlueprint_management_query.go
 package query
 
 import (
 	"context"
+	"errors"
 
 	resolver "narratives/internal/application/resolver"
+	memberdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -22,17 +24,20 @@ type ProductBlueprintCompanyIDFromContext func(ctx context.Context) string
 
 type ProductBlueprintManagementQuery struct {
 	repo                 ProductBlueprintManagementRepo
+	memberRepo           memberdom.Repository
 	nameResolver         *resolver.NameResolver
 	companyIDFromContext ProductBlueprintCompanyIDFromContext
 }
 
 func NewProductBlueprintManagementQuery(
 	repo ProductBlueprintManagementRepo,
+	memberRepo memberdom.Repository,
 	nameResolver *resolver.NameResolver,
 	companyIDFromContext ProductBlueprintCompanyIDFromContext,
 ) *ProductBlueprintManagementQuery {
 	return &ProductBlueprintManagementQuery{
 		repo:                 repo,
+		memberRepo:           memberRepo,
 		nameResolver:         nameResolver,
 		companyIDFromContext: companyIDFromContext,
 	}
@@ -87,17 +92,17 @@ func (q *ProductBlueprintManagementQuery) resolveProductBlueprint(
 
 	assigneeName := "-"
 	if pb.AssigneeID != "" {
-		assigneeName = q.resolveAssigneeName(ctx, pb.AssigneeID)
+		assigneeName = q.resolveMemberNameByID(ctx, pb.AssigneeID)
 	}
 
 	createdByName := ""
 	if pb.CreatedBy != nil && *pb.CreatedBy != "" {
-		createdByName = q.resolveCreatedByName(ctx, pb.CreatedBy)
+		createdByName = q.resolveMemberNameByID(ctx, *pb.CreatedBy)
 	}
 
 	updatedByName := ""
 	if pb.UpdatedBy != nil && *pb.UpdatedBy != "" {
-		updatedByName = q.resolveUpdatedByName(ctx, pb.UpdatedBy)
+		updatedByName = q.resolveMemberNameByID(ctx, *pb.UpdatedBy)
 	}
 
 	return ProductBlueprintResolved{
@@ -131,61 +136,29 @@ func (q *ProductBlueprintManagementQuery) resolveBrandName(
 	return name
 }
 
-func (q *ProductBlueprintManagementQuery) resolveAssigneeName(
+func (q *ProductBlueprintManagementQuery) resolveMemberNameByID(
 	ctx context.Context,
-	assigneeID string,
+	memberID string,
 ) string {
-	if assigneeID == "" {
+	if memberID == "" {
 		return ""
 	}
 
-	if q.nameResolver == nil {
-		return assigneeID
+	if q.memberRepo == nil {
+		return memberID
 	}
 
-	name := q.nameResolver.ResolveProductBlueprintAssigneeName(ctx, assigneeID)
+	rec, err := q.memberRepo.GetByID(ctx, memberID)
+	if err != nil {
+		if errors.Is(err, memberdom.ErrNotFound) {
+			return memberID
+		}
+		return memberID
+	}
+
+	name := memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
 	if name == "" {
-		return assigneeID
-	}
-
-	return name
-}
-
-func (q *ProductBlueprintManagementQuery) resolveCreatedByName(
-	ctx context.Context,
-	createdBy *string,
-) string {
-	if createdBy == nil || *createdBy == "" {
-		return ""
-	}
-
-	if q.nameResolver == nil {
-		return *createdBy
-	}
-
-	name := q.nameResolver.ResolveProductBlueprintCreatedByName(ctx, createdBy)
-	if name == "" {
-		return *createdBy
-	}
-
-	return name
-}
-
-func (q *ProductBlueprintManagementQuery) resolveUpdatedByName(
-	ctx context.Context,
-	updatedBy *string,
-) string {
-	if updatedBy == nil || *updatedBy == "" {
-		return ""
-	}
-
-	if q.nameResolver == nil {
-		return *updatedBy
-	}
-
-	name := q.nameResolver.ResolveProductBlueprintUpdatedByName(ctx, updatedBy)
-	if name == "" {
-		return *updatedBy
+		return memberID
 	}
 
 	return name

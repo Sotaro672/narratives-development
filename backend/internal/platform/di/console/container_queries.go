@@ -55,6 +55,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 
 	productBlueprintManagementQuery := companyquery.NewProductBlueprintManagementQuery(
 		r.productBlueprintRepo,
+		r.memberRepo,
 		res.nameResolver,
 		usecase.CompanyIDFromContext,
 	)

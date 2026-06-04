@@ -199,15 +199,6 @@ type RepositoryPort interface {
 	UpdateModelVariation(ctx context.Context, variationID string, updates ModelVariationUpdate) (ModelVariation, error)
 	DeleteModelVariation(ctx context.Context, variationID string) (ModelVariation, error)
 
-	// ReplaceModelVariations replaces category-specific model variations.
-	//
-	// NOTE:
-	//   - 全要素が同じ ProductBlueprintID を持つ前提。
-	//   - ProductBlueprintID は NewModelVariation.ProductBlueprintID() から解決する。
-	//   - apparel では size / color / measurements を使う。
-	//   - alcohol では volume のみを使う。
-	ReplaceModelVariations(ctx context.Context, variations []NewModelVariation) ([]ModelVariation, error)
-
 	// Convenience aggregations (resolver-style)
 	GetSizeVariations(ctx context.Context, productBlueprintID string) ([]SizeVariation, error)
 	GetModelNumbers(ctx context.Context, productBlueprintID string) ([]ModelNumber, error)
