@@ -1,7 +1,13 @@
 // frontend/console/tokenBlueprint/src/presentation/components/tokenContentsCard.tsx
 
 import * as React from "react";
-import { FileText, Upload, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import {
+  FileText,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+} from "lucide-react";
 
 import {
   Card,
@@ -11,7 +17,7 @@ import {
 } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 
-import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
+import type { FirebaseStorageTokenContent } from "../../domain/entity/tokenBlueprint";
 
 type Mode = "edit" | "view";
 
@@ -28,7 +34,7 @@ type TokenContentsCardProps = {
   /**
    * file picker でファイルが選択されたときに呼ばれる。
    * 呼び出し側で Firebase Storage へ直接アップロードし、
-   * downloadURL を contentFiles[].url として保存する。
+   * downloadURL / objectPath を contentFiles に保存する。
    */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
 
@@ -50,6 +56,32 @@ function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
   return "document";
 }
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function buildLocalContent(
+  file: File,
+  index: number,
+  url: string,
+  createdAt: string,
+): FirebaseStorageTokenContent {
+  return {
+    id: `local_${Date.now()}_${index}`,
+    name: file.name || `local_${index}`,
+    type: guessContentType(file),
+    contentType: file.type || "application/octet-stream",
+    url,
+    objectPath: `local/${Date.now()}_${index}`,
+    visibility: "private",
+    size: file.size,
+    createdAt,
+    createdBy: "local",
+    updatedAt: createdAt,
+    updatedBy: "local",
+  };
+}
+
 function getVideoMimeType(item: FirebaseStorageTokenContent): string {
   const url = item.url.toLowerCase();
 
@@ -63,7 +95,7 @@ function getVideoMimeType(item: FirebaseStorageTokenContent): string {
 }
 
 function getContentLabel(item: FirebaseStorageTokenContent): string {
-  return item.id || "content";
+  return item.name || item.id || "content";
 }
 
 function renderMain(item: FirebaseStorageTokenContent) {
@@ -137,7 +169,9 @@ export default function TokenContentsCard({
     return contents ?? [];
   }, [contents]);
 
-  const [localItems, setLocalItems] = React.useState<FirebaseStorageTokenContent[]>([]);
+  const [localItems, setLocalItems] = React.useState<
+    FirebaseStorageTokenContent[]
+  >([]);
   const [index, setIndex] = React.useState(0);
 
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -238,18 +272,12 @@ export default function TokenContentsCard({
       return;
     }
 
-    const now = Date.now();
+    const createdAt = nowIso();
     const newItems: FirebaseStorageTokenContent[] = files.map((f, i) => {
       const url = URL.createObjectURL(f);
       objectUrlsRef.current.add(url);
 
-      return {
-        id: `local_${now}_${i}`,
-        type: guessContentType(f),
-        contentType: f.type || "application/octet-stream",
-        url,
-        visibility: "private",
-      };
+      return buildLocalContent(f, i, url, createdAt);
     });
 
     setLocalItems((prevItems) => {
@@ -306,7 +334,9 @@ export default function TokenContentsCard({
           <span className="token-contents-card__title-icon">
             <FileText className="token-contents-card__title-icon-svg" />
           </span>
-          <CardTitle className="token-contents-card__title">コンテンツ</CardTitle>
+          <CardTitle className="token-contents-card__title">
+            コンテンツ
+          </CardTitle>
         </div>
 
         <input

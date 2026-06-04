@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"narratives/internal/application/resolver"
+	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -27,15 +28,18 @@ type TokenBlueprintWithMemberNamesPage struct {
 type TokenBlueprintManagementQuery struct {
 	tbRepo       tbdom.RepositoryPort
 	nameResolver *resolver.NameResolver
+	brandRepo    branddom.Repository
 }
 
 func NewTokenBlueprintManagementQuery(
 	tbRepo tbdom.RepositoryPort,
 	nameResolver *resolver.NameResolver,
+	brandRepo branddom.Repository,
 ) *TokenBlueprintManagementQuery {
 	return &TokenBlueprintManagementQuery{
 		tbRepo:       tbRepo,
 		nameResolver: nameResolver,
+		brandRepo:    brandRepo,
 	}
 }
 
@@ -58,7 +62,7 @@ func (q *TokenBlueprintManagementQuery) ListByCompanyID(
 		return TokenBlueprintWithMemberNamesPage{}, err
 	}
 
-	return q.attachMemberNames(ctx, result)
+	return q.attachResolvedNames(ctx, result)
 }
 
 func (q *TokenBlueprintManagementQuery) ResolveTokenBlueprintNames(
@@ -95,25 +99,31 @@ func (q *TokenBlueprintManagementQuery) ResolveTokenBlueprintNames(
 	return result, nil
 }
 
-func (q *TokenBlueprintManagementQuery) attachMemberNames(
+func (q *TokenBlueprintManagementQuery) attachResolvedNames(
 	ctx context.Context,
 	result domcommon.PageResult[tbdom.TokenBlueprint],
 ) (TokenBlueprintWithMemberNamesPage, error) {
-	ids := make([]string, 0, len(result.Items)*3)
+	memberIDs := make([]string, 0, len(result.Items)*3)
+	brandIDs := make([]string, 0, len(result.Items))
+
 	for i := range result.Items {
-		ids = append(ids,
+		memberIDs = append(memberIDs,
 			result.Items[i].AssigneeID,
 			result.Items[i].CreatedBy,
 			result.Items[i].UpdatedBy,
 		)
+
+		brandIDs = append(brandIDs, result.Items[i].BrandID)
 	}
 
-	nameByMemberID := q.resolveMemberNames(ctx, ids)
+	nameByMemberID := q.resolveMemberNames(ctx, memberIDs)
+	nameByBrandID := q.resolveBrandNames(ctx, brandIDs)
 
 	items := make([]TokenBlueprintWithMemberNames, 0, len(result.Items))
 	for i := range result.Items {
 		tb := result.Items[i]
 
+		brandID := strings.Trim(tb.BrandID, " \t\r\n")
 		assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
 		createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
 		updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
@@ -121,6 +131,7 @@ func (q *TokenBlueprintManagementQuery) attachMemberNames(
 		items = append(items, TokenBlueprintWithMemberNames{
 			TokenBlueprint: tb,
 			MemberNames: TokenBlueprintMemberNames{
+				BrandName:     strings.Trim(nameByBrandID[brandID], " \t\r\n"),
 				AssigneeName:  strings.Trim(nameByMemberID[assigneeID], " \t\r\n"),
 				CreatedByName: strings.Trim(nameByMemberID[createdBy], " \t\r\n"),
 				UpdatedByName: strings.Trim(nameByMemberID[updatedBy], " \t\r\n"),
@@ -167,7 +178,49 @@ func (q *TokenBlueprintManagementQuery) resolveMemberNames(
 	}
 
 	for _, id := range uniq {
-		out[id] = q.nameResolver.ResolveMemberName(ctx, id)
+		out[id] = strings.Trim(q.nameResolver.ResolveMemberName(ctx, id), " \t\r\n")
+	}
+
+	return out
+}
+
+func (q *TokenBlueprintManagementQuery) resolveBrandNames(
+	ctx context.Context,
+	ids []string,
+) map[string]string {
+	out := make(map[string]string, len(ids))
+
+	seen := make(map[string]struct{}, len(ids))
+	uniq := make([]string, 0, len(ids))
+
+	for _, id := range ids {
+		id = strings.Trim(id, " \t\r\n")
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+
+		seen[id] = struct{}{}
+		uniq = append(uniq, id)
+	}
+
+	if q.brandRepo == nil {
+		for _, id := range uniq {
+			out[id] = ""
+		}
+		return out
+	}
+
+	for _, id := range uniq {
+		brand, err := q.brandRepo.GetByID(ctx, id)
+		if err != nil {
+			out[id] = ""
+			continue
+		}
+
+		out[id] = strings.Trim(brand.Name, " \t\r\n")
 	}
 
 	return out

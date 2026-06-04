@@ -117,15 +117,22 @@ func newTokenBlueprintCRUDUsecase(
 }
 
 type CreateBlueprintRequest struct {
-	Name         string
-	Symbol       string
-	BrandID      string
-	CompanyID    string
-	Description  string
-	IconURL      string
+	Name        string
+	Symbol      string
+	BrandID     string
+	CompanyID   string
+	Description string
+
+	IconURL         string
+	IconObjectPath  string
+	IconFileName    string
+	IconContentType string
+	IconSize        int64
+
 	ContentFiles []tbdom.ContentFile
-	AssigneeID   string
-	CreatedBy    string
+
+	AssigneeID string
+	CreatedBy  string
 }
 
 func (u *tokenBlueprintCRUDUsecase) Create(
@@ -146,19 +153,28 @@ func (u *tokenBlueprintCRUDUsecase) Create(
 	}
 
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
-		Name:         strings.Trim(in.Name, " \t\r\n"),
-		Symbol:       strings.Trim(in.Symbol, " \t\r\n"),
-		BrandID:      strings.Trim(in.BrandID, " \t\r\n"),
-		CompanyID:    strings.Trim(in.CompanyID, " \t\r\n"),
-		Description:  strings.Trim(in.Description, " \t\r\n"),
-		IconURL:      strings.Trim(in.IconURL, " \t\r\n"),
+		Name:        strings.Trim(in.Name, " \t\r\n"),
+		Symbol:      strings.Trim(in.Symbol, " \t\r\n"),
+		BrandID:     strings.Trim(in.BrandID, " \t\r\n"),
+		CompanyID:   strings.Trim(in.CompanyID, " \t\r\n"),
+		Description: strings.Trim(in.Description, " \t\r\n"),
+
+		IconURL:         strings.Trim(in.IconURL, " \t\r\n"),
+		IconObjectPath:  strings.Trim(in.IconObjectPath, " \t\r\n"),
+		IconFileName:    strings.Trim(in.IconFileName, " \t\r\n"),
+		IconContentType: strings.Trim(in.IconContentType, " \t\r\n"),
+		IconSize:        in.IconSize,
+
 		ContentFiles: in.ContentFiles,
-		AssigneeID:   strings.Trim(in.AssigneeID, " \t\r\n"),
-		CreatedAt:    nil,
-		CreatedBy:    createdBy,
-		UpdatedAt:    nil,
-		UpdatedBy:    createdBy,
-		MetadataURI:  "",
+
+		AssigneeID: strings.Trim(in.AssigneeID, " \t\r\n"),
+
+		CreatedAt: nil,
+		CreatedBy: createdBy,
+		UpdatedAt: nil,
+		UpdatedBy: createdBy,
+
+		MetadataURI: "",
 	})
 	if err != nil {
 		return nil, err
@@ -178,17 +194,24 @@ func (u *tokenBlueprintCRUDUsecase) Create(
 }
 
 type UpdateBlueprintRequest struct {
-	ID           string
-	Name         *string
-	Symbol       *string
-	BrandID      *string
-	Description  *string
-	AssigneeID   *string
-	IconURL      *string
+	ID          string
+	Name        *string
+	Symbol      *string
+	BrandID     *string
+	Description *string
+	AssigneeID  *string
+
+	IconURL         *string
+	IconObjectPath  *string
+	IconFileName    *string
+	IconContentType *string
+	IconSize        *int64
+
 	ContentFiles *[]tbdom.ContentFile
-	MetadataURI  *string
-	Minted       *bool
-	UpdatedBy    string
+
+	MetadataURI *string
+	Minted      *bool
+	UpdatedBy   string
 }
 
 func (u *tokenBlueprintCRUDUsecase) Update(
@@ -218,19 +241,27 @@ func (u *tokenBlueprintCRUDUsecase) Update(
 	now := time.Now().UTC()
 
 	tb, err := u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
-		Name:         in.Name,
-		Symbol:       in.Symbol,
-		BrandID:      in.BrandID,
-		Description:  in.Description,
-		AssigneeID:   in.AssigneeID,
-		IconURL:      in.IconURL,
+		Name:        in.Name,
+		Symbol:      in.Symbol,
+		BrandID:     in.BrandID,
+		Description: in.Description,
+		AssigneeID:  in.AssigneeID,
+
+		IconURL:         in.IconURL,
+		IconObjectPath:  in.IconObjectPath,
+		IconFileName:    in.IconFileName,
+		IconContentType: in.IconContentType,
+		IconSize:        in.IconSize,
+
 		ContentFiles: in.ContentFiles,
-		MetadataURI:  in.MetadataURI,
-		Minted:       in.Minted,
-		UpdatedAt:    &now,
-		UpdatedBy:    ptr(updatedBy),
-		DeletedAt:    nil,
-		DeletedBy:    nil,
+
+		MetadataURI: in.MetadataURI,
+		Minted:      in.Minted,
+
+		UpdatedAt: &now,
+		UpdatedBy: ptr(updatedBy),
+		DeletedAt: nil,
+		DeletedBy: nil,
 	})
 	if err != nil {
 		return nil, err
@@ -357,9 +388,14 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 
 	files := make([]map[string]any, 0, 1+len(tb.ContentFiles))
 
+	iconContentType := strings.Trim(tb.IconContentType, " \t\r\n")
+	if iconContentType == "" {
+		iconContentType = "image/*"
+	}
+
 	files = append(files, map[string]any{
 		"uri":  imageURL,
-		"type": "image/*",
+		"type": iconContentType,
 	})
 
 	seen := make(map[string]struct{}, len(tb.ContentFiles))
@@ -378,6 +414,11 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 		uri := strings.Trim(f.URL, " \t\r\n")
 		if uri == "" {
 			return nil, fmt.Errorf("tokenBlueprint.contentFiles[%s].url is empty", cid)
+		}
+
+		objectPath := strings.Trim(f.ObjectPath, " \t\r\n")
+		if objectPath == "" {
+			return nil, fmt.Errorf("tokenBlueprint.contentFiles[%s].objectPath is empty", cid)
 		}
 
 		ct := strings.Trim(f.ContentType, " \t\r\n")

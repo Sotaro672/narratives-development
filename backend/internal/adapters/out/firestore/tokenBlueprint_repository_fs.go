@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -231,22 +232,26 @@ func (r *TokenBlueprintRepositoryFS) Create(
 	docRef := r.col().NewDoc()
 
 	data := map[string]any{
-		"name":         in.Name,
-		"symbol":       in.Symbol,
-		"brandId":      in.BrandID,
-		"companyId":    in.CompanyID,
-		"description":  in.Description,
-		"iconUrl":      in.IconURL,
-		"contentFiles": toFSContentFiles(in.ContentFiles),
-		"assigneeId":   in.AssigneeID,
-		"minted":       false,
-		"createdAt":    createdAt,
-		"createdBy":    in.CreatedBy,
-		"updatedAt":    updatedAt,
-		"updatedBy":    in.UpdatedBy,
-		"deletedAt":    nil,
-		"deletedBy":    nil,
-		"metadataUri":  in.MetadataURI,
+		"name":            in.Name,
+		"symbol":          in.Symbol,
+		"brandId":         in.BrandID,
+		"companyId":       in.CompanyID,
+		"description":     in.Description,
+		"iconUrl":         in.IconURL,
+		"iconObjectPath":  in.IconObjectPath,
+		"iconFileName":    in.IconFileName,
+		"iconContentType": in.IconContentType,
+		"iconSize":        in.IconSize,
+		"contentFiles":    toFSContentFiles(in.ContentFiles),
+		"assigneeId":      in.AssigneeID,
+		"minted":          false,
+		"createdAt":       createdAt,
+		"createdBy":       in.CreatedBy,
+		"updatedAt":       updatedAt,
+		"updatedBy":       in.UpdatedBy,
+		"deletedAt":       nil,
+		"deletedBy":       nil,
+		"metadataUri":     in.MetadataURI,
 	}
 
 	if _, err := docRef.Create(ctx, data); err != nil {
@@ -309,9 +314,22 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		}
 	}
 
+	setInt64 := func(field string, p *int64) {
+		if p != nil {
+			updates = append(updates, firestore.Update{
+				Path:  field,
+				Value: *p,
+			})
+		}
+	}
+
 	setStr("name", in.Name)
 	setStr("symbol", in.Symbol)
 	setStr("iconUrl", in.IconURL)
+	setStr("iconObjectPath", in.IconObjectPath)
+	setStr("iconFileName", in.IconFileName)
+	setStr("iconContentType", in.IconContentType)
+	setInt64("iconSize", in.IconSize)
 
 	if in.BrandID != nil {
 		updates = append(updates, firestore.Update{
@@ -533,22 +551,26 @@ func docToTokenBlueprint(
 	doc *firestore.DocumentSnapshot,
 ) (tbdom.TokenBlueprint, error) {
 	var raw struct {
-		Name         string           `firestore:"name"`
-		Symbol       string           `firestore:"symbol"`
-		BrandID      string           `firestore:"brandId"`
-		CompanyID    string           `firestore:"companyId"`
-		Description  string           `firestore:"description"`
-		IconURL      string           `firestore:"iconUrl"`
-		ContentFiles []map[string]any `firestore:"contentFiles"`
-		AssigneeID   string           `firestore:"assigneeId"`
-		Minted       bool             `firestore:"minted"`
-		CreatedAt    time.Time        `firestore:"createdAt"`
-		CreatedBy    string           `firestore:"createdBy"`
-		UpdatedAt    time.Time        `firestore:"updatedAt"`
-		UpdatedBy    string           `firestore:"updatedBy"`
-		DeletedAt    *time.Time       `firestore:"deletedAt"`
-		DeletedBy    *string          `firestore:"deletedBy"`
-		MetadataURI  string           `firestore:"metadataUri"`
+		Name            string           `firestore:"name"`
+		Symbol          string           `firestore:"symbol"`
+		BrandID         string           `firestore:"brandId"`
+		CompanyID       string           `firestore:"companyId"`
+		Description     string           `firestore:"description"`
+		IconURL         string           `firestore:"iconUrl"`
+		IconObjectPath  string           `firestore:"iconObjectPath"`
+		IconFileName    string           `firestore:"iconFileName"`
+		IconContentType string           `firestore:"iconContentType"`
+		IconSize        int64            `firestore:"iconSize"`
+		ContentFiles    []map[string]any `firestore:"contentFiles"`
+		AssigneeID      string           `firestore:"assigneeId"`
+		Minted          bool             `firestore:"minted"`
+		CreatedAt       time.Time        `firestore:"createdAt"`
+		CreatedBy       string           `firestore:"createdBy"`
+		UpdatedAt       time.Time        `firestore:"updatedAt"`
+		UpdatedBy       string           `firestore:"updatedBy"`
+		DeletedAt       *time.Time       `firestore:"deletedAt"`
+		DeletedBy       *string          `firestore:"deletedBy"`
+		MetadataURI     string           `firestore:"metadataUri"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -574,13 +596,19 @@ func docToTokenBlueprint(
 	}
 
 	tb := tbdom.TokenBlueprint{
-		ID:           doc.Ref.ID,
-		Name:         raw.Name,
-		Symbol:       raw.Symbol,
-		BrandID:      raw.BrandID,
-		CompanyID:    raw.CompanyID,
-		Description:  raw.Description,
-		IconURL:      raw.IconURL,
+		ID:          doc.Ref.ID,
+		Name:        raw.Name,
+		Symbol:      raw.Symbol,
+		BrandID:     raw.BrandID,
+		CompanyID:   raw.CompanyID,
+		Description: raw.Description,
+
+		IconURL:         raw.IconURL,
+		IconObjectPath:  raw.IconObjectPath,
+		IconFileName:    raw.IconFileName,
+		IconContentType: raw.IconContentType,
+		IconSize:        raw.IconSize,
+
 		ContentFiles: files,
 		AssigneeID:   raw.AssigneeID,
 		Minted:       raw.Minted,
@@ -618,10 +646,13 @@ func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
 	for _, f := range xs {
 		m := map[string]any{
 			"id":          f.ID,
+			"name":        f.Name,
 			"type":        string(f.Type),
 			"contentType": f.ContentType,
 			"url":         f.URL,
+			"objectPath":  f.ObjectPath,
 			"visibility":  string(f.Visibility),
+			"size":        f.Size,
 			"createdAt":   f.CreatedAt,
 			"createdBy":   f.CreatedBy,
 			"updatedAt":   f.UpdatedAt,
@@ -641,13 +672,19 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 		var f tbdom.ContentFile
 
 		v, ok := m["id"].(string)
-		if !ok {
+		if !ok || v == "" {
 			return nil, fmt.Errorf("%w: contentFiles[%d].id", tbdom.ErrInvalidContentFile, i)
 		}
 		f.ID = v
 
+		v, ok = m["name"].(string)
+		if !ok || v == "" {
+			return nil, fmt.Errorf("%w: contentFiles[%d].name", tbdom.ErrInvalidContentFile, i)
+		}
+		f.Name = v
+
 		tv, ok := m["type"].(string)
-		if !ok {
+		if !ok || tv == "" {
 			return nil, fmt.Errorf("%w: contentFiles[%d].type", tbdom.ErrInvalidContentType, i)
 		}
 		f.Type = tbdom.ContentFileType(tv)
@@ -657,16 +694,28 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 		}
 
 		v, ok = m["url"].(string)
-		if !ok {
+		if !ok || v == "" {
 			return nil, fmt.Errorf("%w: contentFiles[%d].url", tbdom.ErrInvalidContentFile, i)
 		}
 		f.URL = v
 
+		v, ok = m["objectPath"].(string)
+		if !ok || v == "" {
+			return nil, fmt.Errorf("%w: contentFiles[%d].objectPath", tbdom.ErrInvalidContentFile, i)
+		}
+		f.ObjectPath = v
+
 		vv, ok := m["visibility"].(string)
-		if !ok {
+		if !ok || vv == "" {
 			return nil, fmt.Errorf("%w: contentFiles[%d].visibility", tbdom.ErrInvalidContentVisibility, i)
 		}
 		f.Visibility = tbdom.ContentVisibility(vv)
+
+		size, err := int64FromAny(m["size"])
+		if err != nil {
+			return nil, fmt.Errorf("%w: contentFiles[%d].size: %v", tbdom.ErrInvalidContentFile, i, err)
+		}
+		f.Size = size
 
 		if v, ok := m["createdBy"].(string); ok {
 			f.CreatedBy = v
@@ -692,4 +741,76 @@ func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
 	}
 
 	return out, nil
+}
+
+func int64FromAny(v any) (int64, error) {
+	switch x := v.(type) {
+	case nil:
+		return 0, nil
+	case int:
+		if x < 0 {
+			return 0, fmt.Errorf("negative size")
+		}
+		return int64(x), nil
+	case int8:
+		if x < 0 {
+			return 0, fmt.Errorf("negative size")
+		}
+		return int64(x), nil
+	case int16:
+		if x < 0 {
+			return 0, fmt.Errorf("negative size")
+		}
+		return int64(x), nil
+	case int32:
+		if x < 0 {
+			return 0, fmt.Errorf("negative size")
+		}
+		return int64(x), nil
+	case int64:
+		if x < 0 {
+			return 0, fmt.Errorf("negative size")
+		}
+		return x, nil
+	case uint:
+		if uint64(x) > math.MaxInt64 {
+			return 0, fmt.Errorf("size overflows int64")
+		}
+		return int64(x), nil
+	case uint8:
+		return int64(x), nil
+	case uint16:
+		return int64(x), nil
+	case uint32:
+		return int64(x), nil
+	case uint64:
+		if x > math.MaxInt64 {
+			return 0, fmt.Errorf("size overflows int64")
+		}
+		return int64(x), nil
+	case float32:
+		if x < 0 {
+			return 0, fmt.Errorf("negative size")
+		}
+		if math.Trunc(float64(x)) != float64(x) {
+			return 0, fmt.Errorf("size must be integer")
+		}
+		if float64(x) > math.MaxInt64 {
+			return 0, fmt.Errorf("size overflows int64")
+		}
+		return int64(x), nil
+	case float64:
+		if x < 0 {
+			return 0, fmt.Errorf("negative size")
+		}
+		if math.Trunc(x) != x {
+			return 0, fmt.Errorf("size must be integer")
+		}
+		if x > math.MaxInt64 {
+			return 0, fmt.Errorf("size overflows int64")
+		}
+		return int64(x), nil
+	default:
+		return 0, fmt.Errorf("unsupported size type %T", v)
+	}
 }

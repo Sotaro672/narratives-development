@@ -152,7 +152,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.TokenBlueprintUC,
 			c.TokenBlueprintDetailQuery,
 			c.TokenBlueprintManagementQuery,
-			c.BrandRepo,
 		)
 	}
 

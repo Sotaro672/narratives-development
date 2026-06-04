@@ -15,13 +15,15 @@ import (
 // Firebase Storage 移行後の正:
 // - backend は GCS signed URL / upload endpoint を持たない
 // - iconId は存在しない
-// - tokenIconObjectPath / tokenContentsObjectPath は create input として扱わない
 // - tokenBlueprintIcon は frontend が Firebase Storage へ直接 upload する
 // - iconUrl は Firebase Storage の downloadURL を保存する
+// - iconObjectPath は Firebase Storage 上の icon objectPath を保存する
+// - iconFileName / iconContentType / iconSize は表示・差し替え・監査用に保存する
 // - tokenBlueprintContents も frontend が Firebase Storage へ直接 upload する
 // - contentFiles は []ContentFile embedded として保存する
 // - contentFiles[].url には Firebase Storage の downloadURL を保存する
 // - contentFiles[].objectPath には Firebase Storage 上の objectPath を保存する
+// - contentFiles[].name / contentFiles[].size は表示・差し替え・監査用に保存する
 // - minted は create 時は常に false
 // - metadataUri は任意
 type CreateTokenBlueprintInput struct {
@@ -31,7 +33,12 @@ type CreateTokenBlueprintInput struct {
 	CompanyID   string `json:"companyId"`
 	Description string `json:"description,omitempty"`
 
-	IconURL      string        `json:"iconUrl,omitempty"`
+	IconURL         string `json:"iconUrl,omitempty"`
+	IconObjectPath  string `json:"iconObjectPath,omitempty"`
+	IconFileName    string `json:"iconFileName,omitempty"`
+	IconContentType string `json:"iconContentType,omitempty"`
+	IconSize        int64  `json:"iconSize,omitempty"`
+
 	ContentFiles []ContentFile `json:"contentFiles"`
 
 	AssigneeID string `json:"assigneeId"`
@@ -49,11 +56,14 @@ type CreateTokenBlueprintInput struct {
 // ===============================
 //
 // Firebase Storage 移行後の正:
+// - backend は GCS signed URL / upload endpoint を持たない
 // - iconUrl は Firebase Storage downloadURL
+// - iconObjectPath は Firebase Storage objectPath
+// - iconFileName / iconContentType / iconSize は表示・差し替え・監査用
 // - contentFiles は []ContentFile の全置換
 // - contentFiles[].url は Firebase Storage downloadURL
 // - contentFiles[].objectPath は Firebase Storage objectPath
-// - backend は signed URL を発行しない
+// - contentFiles[].name / contentFiles[].size は表示・差し替え・監査用
 // - minted は bool
 // - metadataUri は任意
 type UpdateTokenBlueprintInput struct {
@@ -62,7 +72,12 @@ type UpdateTokenBlueprintInput struct {
 	BrandID     *string `json:"brandId,omitempty"`
 	Description *string `json:"description,omitempty"`
 
-	IconURL      *string        `json:"iconUrl,omitempty"`
+	IconURL         *string `json:"iconUrl,omitempty"`
+	IconObjectPath  *string `json:"iconObjectPath,omitempty"`
+	IconFileName    *string `json:"iconFileName,omitempty"`
+	IconContentType *string `json:"iconContentType,omitempty"`
+	IconSize        *int64  `json:"iconSize,omitempty"`
+
 	ContentFiles *[]ContentFile `json:"contentFiles,omitempty"`
 
 	AssigneeID *string `json:"assigneeId,omitempty"`
@@ -83,7 +98,8 @@ type UpdateTokenBlueprintInput struct {
 // Firebase Storage 移行後の正:
 // - Patch は read-model 用の最小情報
 // - iconUrl は Firebase Storage downloadURL
-// - tokenIconObjectPath / tokenContentsObjectPath は GCS 互換不要のため保持しない
+// - iconObjectPath は Firebase Storage objectPath
+// - iconFileName / iconContentType / iconSize は表示・差し替え用に返す
 // - metadataUri を含める
 type Patch struct {
 	ID          string `json:"id"`
@@ -95,7 +111,12 @@ type Patch struct {
 	Description string `json:"description"`
 	Minted      bool   `json:"minted"`
 	MetadataURI string `json:"metadataUri"`
-	IconURL     string `json:"iconUrl,omitempty"`
+
+	IconURL         string `json:"iconUrl,omitempty"`
+	IconObjectPath  string `json:"iconObjectPath,omitempty"`
+	IconFileName    string `json:"iconFileName,omitempty"`
+	IconContentType string `json:"iconContentType,omitempty"`
+	IconSize        int64  `json:"iconSize,omitempty"`
 }
 
 // ===============================

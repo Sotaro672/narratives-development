@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type {
   TokenBlueprint,
   ContentFile,
+  FirebaseStorageTokenContent,
 } from "../../domain/entity/tokenBlueprint";
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
@@ -14,8 +15,6 @@ import {
   fetchTokenBlueprintDetail,
   updateTokenBlueprintFromCard,
 } from "../../application/tokenBlueprintDetailService";
-
-import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
 
 import { patchTokenBlueprintContentFiles } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructure/storage/tokenBlueprintAssetStorage";
@@ -81,20 +80,39 @@ function uuidLike(): string {
   return `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+function normalizeIsoOrFallback(value: unknown, fallback: string): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+
+  return parsed.toISOString();
+}
+
 function toTokenContents(
   contentFiles: ContentFile[],
 ): FirebaseStorageTokenContent[] {
   return contentFiles
-    .filter((file) => Boolean(file.url))
-    .map((file) => ({
-      id: file.id,
-      name: file.name,
-      type: file.type,
-      contentType: file.contentType,
-      size: file.size,
-      objectPath: file.objectPath,
-      url: file.url as string,
-    }));
+    .filter((file) => Boolean(file.id && file.url && file.objectPath))
+    .map((file) => {
+      const nowIso = new Date().toISOString();
+
+      return {
+        id: file.id,
+        name: file.name,
+        type: file.type,
+        contentType: file.contentType || "application/octet-stream",
+        size: Number.isFinite(file.size) && file.size >= 0 ? file.size : 0,
+        objectPath: file.objectPath,
+        url: file.url,
+        visibility: file.visibility ?? "private",
+        createdAt: normalizeIsoOrFallback(file.createdAt, nowIso),
+        createdBy: file.createdBy || "",
+        updatedAt: normalizeIsoOrFallback(file.updatedAt, nowIso),
+        updatedBy: file.updatedBy || "",
+      };
+    });
 }
 
 export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
@@ -272,6 +290,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
         for (const file of files) {
           const contentId = uuidLike();
+          const nowIso = new Date().toISOString();
 
           const uploaded = await uploadTokenBlueprintContentToFirebaseStorage({
             companyId,
@@ -282,16 +301,20 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
           newOnes.push({
             id: contentId,
-            name: file.name || contentId,
-            type: guessContentType(file),
-            contentType: file.type || "application/octet-stream",
-            size: file.size,
+            name: uploaded.fileName || file.name || contentId,
+            type: uploaded.kind ?? guessContentType(file),
+            contentType:
+              uploaded.contentType || file.type || "application/octet-stream",
+            size:
+              Number.isFinite(uploaded.size) && uploaded.size >= 0
+                ? uploaded.size
+                : file.size,
             objectPath: uploaded.objectPath,
             url: uploaded.downloadUrl,
             visibility: "private",
-            createdAt: "",
+            createdAt: nowIso,
             createdBy: memberId,
-            updatedAt: "",
+            updatedAt: nowIso,
             updatedBy: memberId,
           });
         }

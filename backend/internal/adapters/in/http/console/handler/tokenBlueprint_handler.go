@@ -2,7 +2,6 @@
 package consoleHandler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 
 	consolequery "narratives/internal/application/query/console"
 	tbapp "narratives/internal/application/usecase"
-	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -21,20 +19,17 @@ type TokenBlueprintHandler struct {
 	uc              *tbapp.TokenBlueprintUsecase
 	detailQuery     *consolequery.TokenBlueprintDetailQuery
 	managementQuery *consolequery.TokenBlueprintManagementQuery
-	brandRepo       branddom.Repository
 }
 
 func NewTokenBlueprintHandler(
 	ucase *tbapp.TokenBlueprintUsecase,
 	detailQuery *consolequery.TokenBlueprintDetailQuery,
 	managementQuery *consolequery.TokenBlueprintManagementQuery,
-	brandRepo branddom.Repository,
 ) http.Handler {
 	return &TokenBlueprintHandler{
 		uc:              ucase,
 		detailQuery:     detailQuery,
 		managementQuery: managementQuery,
-		brandRepo:       brandRepo,
 	}
 }
 
@@ -63,24 +58,37 @@ func extractFirstSegmentAfterPrefix(path, prefix string) string {
 }
 
 type createTokenBlueprintRequest struct {
-	Name         string              `json:"name"`
-	Symbol       string              `json:"symbol"`
-	BrandID      string              `json:"brandId"`
-	CompanyID    string              `json:"companyId,omitempty"`
-	Description  string              `json:"description,omitempty"`
-	AssigneeID   string              `json:"assigneeId"`
-	CreatedBy    string              `json:"createdBy,omitempty"`
-	IconURL      string              `json:"iconUrl,omitempty"`
+	Name        string `json:"name"`
+	Symbol      string `json:"symbol"`
+	BrandID     string `json:"brandId"`
+	CompanyID   string `json:"companyId,omitempty"`
+	Description string `json:"description,omitempty"`
+
+	AssigneeID string `json:"assigneeId"`
+	CreatedBy  string `json:"createdBy,omitempty"`
+
+	IconURL         string `json:"iconUrl,omitempty"`
+	IconObjectPath  string `json:"iconObjectPath,omitempty"`
+	IconFileName    string `json:"iconFileName,omitempty"`
+	IconContentType string `json:"iconContentType,omitempty"`
+	IconSize        int64  `json:"iconSize,omitempty"`
+
 	ContentFiles []tbdom.ContentFile `json:"contentFiles,omitempty"`
 }
 
 type updateTokenBlueprintRequest struct {
-	Name         *string              `json:"name,omitempty"`
-	Symbol       *string              `json:"symbol,omitempty"`
-	BrandID      *string              `json:"brandId,omitempty"`
-	Description  *string              `json:"description,omitempty"`
-	AssigneeID   *string              `json:"assigneeId,omitempty"`
-	IconURL      *string              `json:"iconUrl,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Symbol      *string `json:"symbol,omitempty"`
+	BrandID     *string `json:"brandId,omitempty"`
+	Description *string `json:"description,omitempty"`
+	AssigneeID  *string `json:"assigneeId,omitempty"`
+
+	IconURL         *string `json:"iconUrl,omitempty"`
+	IconObjectPath  *string `json:"iconObjectPath,omitempty"`
+	IconFileName    *string `json:"iconFileName,omitempty"`
+	IconContentType *string `json:"iconContentType,omitempty"`
+	IconSize        *int64  `json:"iconSize,omitempty"`
+
 	ContentFiles *[]tbdom.ContentFile `json:"contentFiles,omitempty"`
 	MetadataURI  *string              `json:"metadataUri,omitempty"`
 	Minted       *bool                `json:"minted,omitempty"`
@@ -117,7 +125,13 @@ type tokenBlueprintResponse struct {
 
 	MetadataURI string `json:"metadataUri"`
 
-	IconURL     string `json:"iconUrl,omitempty"`
+	IconURL         string `json:"iconUrl,omitempty"`
+	IconObjectPath  string `json:"iconObjectPath,omitempty"`
+	IconFileName    string `json:"iconFileName,omitempty"`
+	IconContentType string `json:"iconContentType,omitempty"`
+	IconSize        int64  `json:"iconSize,omitempty"`
+
+	// Deprecated: content files are returned via contentFiles[].url.
 	ContentsURL string `json:"contentsUrl,omitempty"`
 }
 
@@ -127,24 +141,6 @@ type tokenBlueprintPageResponse struct {
 	TotalPages int                      `json:"totalPages"`
 	Page       int                      `json:"page"`
 	PerPage    int                      `json:"perPage"`
-}
-
-func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string) string {
-	if h == nil || h.brandRepo == nil {
-		return ""
-	}
-
-	brandID := strings.Trim(id, " \t\r\n")
-	if brandID == "" {
-		return ""
-	}
-
-	brand, err := h.brandRepo.GetByID(ctx, brandID)
-	if err != nil {
-		return ""
-	}
-
-	return strings.Trim(brand.Name, " \t\r\n")
 }
 
 func resolveStoredIconURL(tb *tbdom.TokenBlueprint) string {
@@ -160,9 +156,7 @@ func resolveStoredContentFileURL(f tbdom.ContentFile) string {
 }
 
 func (h *TokenBlueprintHandler) toContentFilesResponse(
-	_ context.Context,
 	tb *tbdom.TokenBlueprint,
-	_ bool,
 ) []contentFileResponse {
 	if tb == nil || len(tb.ContentFiles) == 0 {
 		return []contentFileResponse{}
@@ -180,9 +174,7 @@ func (h *TokenBlueprintHandler) toContentFilesResponse(
 }
 
 func (h *TokenBlueprintHandler) toResponse(
-	ctx context.Context,
 	tb *tbdom.TokenBlueprint,
-	includeContentViewURL bool,
 	names *consolequery.TokenBlueprintMemberNames,
 ) tokenBlueprintResponse {
 	if tb == nil {
@@ -195,29 +187,32 @@ func (h *TokenBlueprintHandler) toResponse(
 		updPtr = &t
 	}
 
-	assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
-	createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
-	updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
-
+	brandName := ""
 	assigneeName := ""
 	createdByName := ""
 	updatedByName := ""
 	if names != nil {
+		brandName = strings.Trim(names.BrandName, " \t\r\n")
 		assigneeName = strings.Trim(names.AssigneeName, " \t\r\n")
 		createdByName = strings.Trim(names.CreatedByName, " \t\r\n")
 		updatedByName = strings.Trim(names.UpdatedByName, " \t\r\n")
 	}
 
+	assigneeID := strings.Trim(tb.AssigneeID, " \t\r\n")
+	createdBy := strings.Trim(tb.CreatedBy, " \t\r\n")
+	updatedBy := strings.Trim(tb.UpdatedBy, " \t\r\n")
+
 	return tokenBlueprintResponse{
-		ID:           strings.Trim(tb.ID, " \t\r\n"),
-		Name:         strings.Trim(tb.Name, " \t\r\n"),
-		Symbol:       strings.Trim(tb.Symbol, " \t\r\n"),
-		BrandID:      strings.Trim(tb.BrandID, " \t\r\n"),
-		BrandName:    h.resolveBrandName(ctx, tb.BrandID),
-		CompanyID:    strings.Trim(tb.CompanyID, " \t\r\n"),
-		Description:  strings.Trim(tb.Description, " \t\r\n"),
-		Minted:       tb.Minted,
-		ContentFiles: h.toContentFilesResponse(ctx, tb, includeContentViewURL),
+		ID:          strings.Trim(tb.ID, " \t\r\n"),
+		Name:        strings.Trim(tb.Name, " \t\r\n"),
+		Symbol:      strings.Trim(tb.Symbol, " \t\r\n"),
+		BrandID:     strings.Trim(tb.BrandID, " \t\r\n"),
+		BrandName:   brandName,
+		CompanyID:   strings.Trim(tb.CompanyID, " \t\r\n"),
+		Description: strings.Trim(tb.Description, " \t\r\n"),
+		Minted:      tb.Minted,
+
+		ContentFiles: h.toContentFilesResponse(tb),
 
 		AssigneeID:   assigneeID,
 		AssigneeName: assigneeName,
@@ -233,7 +228,12 @@ func (h *TokenBlueprintHandler) toResponse(
 
 		MetadataURI: strings.Trim(tb.MetadataURI, " \t\r\n"),
 
-		IconURL:     resolveStoredIconURL(tb),
+		IconURL:         resolveStoredIconURL(tb),
+		IconObjectPath:  strings.Trim(tb.IconObjectPath, " \t\r\n"),
+		IconFileName:    strings.Trim(tb.IconFileName, " \t\r\n"),
+		IconContentType: strings.Trim(tb.IconContentType, " \t\r\n"),
+		IconSize:        tb.IconSize,
+
 		ContentsURL: "",
 	}
 }
@@ -310,14 +310,21 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tb, err := h.uc.Create(ctx, tbapp.CreateBlueprintRequest{
-		Name:         req.Name,
-		Symbol:       req.Symbol,
-		BrandID:      req.BrandID,
-		CompanyID:    companyID,
-		Description:  req.Description,
-		AssigneeID:   req.AssigneeID,
-		CreatedBy:    actorID,
-		IconURL:      req.IconURL,
+		Name:        req.Name,
+		Symbol:      req.Symbol,
+		BrandID:     req.BrandID,
+		CompanyID:   companyID,
+		Description: req.Description,
+
+		AssigneeID: req.AssigneeID,
+		CreatedBy:  actorID,
+
+		IconURL:         req.IconURL,
+		IconObjectPath:  req.IconObjectPath,
+		IconFileName:    req.IconFileName,
+		IconContentType: req.IconContentType,
+		IconSize:        req.IconSize,
+
 		ContentFiles: req.ContentFiles,
 	})
 	if err != nil {
@@ -331,7 +338,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := h.toResponse(ctx, tb, true, &names)
+	resp := h.toResponse(tb, &names)
 
 	_ = json.NewEncoder(w).Encode(resp)
 }
@@ -352,7 +359,7 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb, true, &names))
+	_ = json.NewEncoder(w).Encode(h.toResponse(tb, &names))
 }
 
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -414,7 +421,7 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		tb := item.TokenBlueprint
 		names := item.MemberNames
 
-		items = append(items, h.toResponse(ctx, &tb, false, &names))
+		items = append(items, h.toResponse(&tb, &names))
 	}
 
 	_ = json.NewEncoder(w).Encode(tokenBlueprintPageResponse{
@@ -453,13 +460,19 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	}
 
 	updated, err := h.uc.Update(ctx, tbapp.UpdateBlueprintRequest{
-		ID:           id,
-		Name:         req.Name,
-		Symbol:       req.Symbol,
-		BrandID:      req.BrandID,
-		Description:  req.Description,
-		AssigneeID:   req.AssigneeID,
-		IconURL:      req.IconURL,
+		ID:          id,
+		Name:        req.Name,
+		Symbol:      req.Symbol,
+		BrandID:     req.BrandID,
+		Description: req.Description,
+		AssigneeID:  req.AssigneeID,
+
+		IconURL:         req.IconURL,
+		IconObjectPath:  req.IconObjectPath,
+		IconFileName:    req.IconFileName,
+		IconContentType: req.IconContentType,
+		IconSize:        req.IconSize,
+
 		ContentFiles: req.ContentFiles,
 		MetadataURI:  req.MetadataURI,
 		Minted:       req.Minted,
@@ -476,7 +489,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	resp := h.toResponse(ctx, updated, true, &names)
+	resp := h.toResponse(updated, &names)
 
 	_ = json.NewEncoder(w).Encode(resp)
 }
@@ -517,8 +530,14 @@ func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
 		errors.Is(err, tbdom.ErrInvalidSymbol),
 		errors.Is(err, tbdom.ErrInvalidBrandID),
 		errors.Is(err, tbdom.ErrInvalidCompanyID),
+		errors.Is(err, tbdom.ErrInvalidAssigneeID),
 		errors.Is(err, tbdom.ErrInvalidCreatedBy),
 		errors.Is(err, tbdom.ErrInvalidUpdatedBy),
+		errors.Is(err, tbdom.ErrInvalidIconURL),
+		errors.Is(err, tbdom.ErrInvalidIconObjectPath),
+		errors.Is(err, tbdom.ErrInvalidIconFileName),
+		errors.Is(err, tbdom.ErrInvalidIconContentType),
+		errors.Is(err, tbdom.ErrInvalidIconSize),
 		errors.Is(err, tbdom.ErrInvalidContentFile),
 		errors.Is(err, tbdom.ErrInvalidContentType),
 		errors.Is(err, tbdom.ErrInvalidContentVisibility):

@@ -11,8 +11,11 @@ import { useTokenBlueprintCreate } from "../hook/useTokenBlueprintCreate";
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
-import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
+import type {
+  TokenBlueprint,
+  ContentFile,
+  FirebaseStorageTokenContent,
+} from "../../domain/entity/tokenBlueprint";
 
 import { patchTokenBlueprintContentFiles } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructure/storage/tokenBlueprintAssetStorage";
@@ -138,6 +141,10 @@ export default function TokenBlueprintCreate() {
   const companyId = useMemo(() => {
     return initialTokenBlueprint.companyId?.trim() ?? "";
   }, [initialTokenBlueprint]);
+
+  const createdBy = useMemo(() => {
+    return initialTokenBlueprint.createdBy?.trim() ?? "";
+  }, [initialTokenBlueprint.createdBy]);
 
   const [assigneeId, setAssigneeId] = useState<string | null>(
     initialAssigneeId,
@@ -267,6 +274,9 @@ export default function TokenBlueprintCreate() {
   );
 
   const pendingContents: FirebaseStorageTokenContent[] = useMemo(() => {
+    const nowIso = new Date().toISOString();
+    const actor = createdBy || assigneeId || "";
+
     return pending.map((p) => ({
       id: p.id,
       name: p.file.name || p.id,
@@ -274,9 +284,14 @@ export default function TokenBlueprintCreate() {
       contentType: p.file.type || "application/octet-stream",
       url: p.previewUrl,
       objectPath: "",
+      visibility: "private",
       size: p.file.size,
+      createdAt: nowIso,
+      createdBy: actor,
+      updatedAt: nowIso,
+      updatedBy: actor,
     }));
-  }, [pending]);
+  }, [pending, createdBy, assigneeId]);
 
   const uploadContentsAfterCreate = useCallback(
     async (tokenBlueprintId: string, pendingItems: PendingContent[]) => {
@@ -286,11 +301,17 @@ export default function TokenBlueprintCreate() {
         throw new Error("companyId is missing");
       }
 
-      const newOnes = [];
+      const actor = createdBy || assigneeId || "";
+      if (!actor) {
+        throw new Error("createdBy is missing");
+      }
+
+      const newOnes: ContentFile[] = [];
 
       for (const pendingItem of pendingItems) {
         const contentId = uuidLike();
         const file = pendingItem.file;
+        const nowIso = new Date().toISOString();
 
         const uploaded = await uploadTokenBlueprintContentToFirebaseStorage({
           companyId,
@@ -301,15 +322,20 @@ export default function TokenBlueprintCreate() {
 
         newOnes.push({
           id: contentId,
-          name: file.name || contentId,
-          type: pendingItem.type,
-          contentType: file.type || "application/octet-stream",
+          name: uploaded.fileName || file.name || contentId,
+          type: uploaded.kind ?? pendingItem.type,
+          contentType:
+            uploaded.contentType || file.type || "application/octet-stream",
           objectPath: uploaded.objectPath,
           url: uploaded.downloadUrl,
-          size: file.size,
+          size: Number.isFinite(uploaded.size) && uploaded.size >= 0
+            ? uploaded.size
+            : file.size,
           visibility: "private",
-          createdBy: initialTokenBlueprint.createdBy,
-          updatedBy: initialTokenBlueprint.createdBy,
+          createdAt: nowIso,
+          createdBy: actor,
+          updatedAt: nowIso,
+          updatedBy: actor,
         });
       }
 
@@ -318,7 +344,7 @@ export default function TokenBlueprintCreate() {
         contentFiles: newOnes,
       });
     },
-    [companyId, initialTokenBlueprint.createdBy],
+    [companyId, createdBy, assigneeId],
   );
 
   const handleSave = useCallback(async () => {
