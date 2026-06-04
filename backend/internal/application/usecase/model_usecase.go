@@ -52,20 +52,6 @@ func (u *ModelUsecase) ListByProductBlueprintID(
 	return u.repo.ListByProductBlueprintID(ctx, productBlueprintID)
 }
 
-func (u *ModelUsecase) GetByID(
-	ctx context.Context,
-	variationID string,
-) (modeldom.ModelVariation, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-	if variationID == "" {
-		return nil, modeldom.ErrInvalidID
-	}
-
-	return u.repo.GetByID(ctx, variationID)
-}
-
 // Create creates a category-specific ModelVariation.
 //
 // NOTE:
@@ -125,10 +111,6 @@ func (u *ModelUsecase) Update(
 //
 // NOTE:
 //   - repository は対象 document を物理削除する。
-//   - soft delete は使わない。
-//   - 一括差し替えは行わない。
-//   - 履歴は保存しない。
-//   - 復元前提の状態管理は行わない。
 func (u *ModelUsecase) Delete(
 	ctx context.Context,
 	variationID string,

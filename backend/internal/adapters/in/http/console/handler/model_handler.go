@@ -32,10 +32,15 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// GET /models/by-blueprint/{productBlueprintID}/variations
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/by-blueprint/"):
-		if productBlueprintID, ok := extractBlueprintIDForList(r.URL.Path); ok {
-			h.listVariationsByProductBlueprintID(w, r, productBlueprintID)
+		rest := strings.TrimPrefix(r.URL.Path, "/models/by-blueprint/")
+		rest = strings.Trim(rest, "/")
+		parts := strings.Split(rest, "/")
+
+		if len(parts) == 2 && parts[0] != "" && parts[1] == "variations" && !strings.Contains(parts[0], "/") {
+			h.listVariationsByProductBlueprintID(w, r, parts[0])
 			return
 		}
+
 		writeNotFound(w)
 		return
 
@@ -44,10 +49,15 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//   → ModelUsecase.Create
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/models/"):
-		if productBlueprintID, ok := extractBlueprintIDForCreate(r.URL.Path); ok {
-			h.createVariation(w, r, productBlueprintID)
+		rest := strings.TrimPrefix(r.URL.Path, "/models/")
+		rest = strings.Trim(rest, "/")
+		parts := strings.Split(rest, "/")
+
+		if len(parts) == 2 && parts[0] != "" && parts[1] == "variations" && !strings.Contains(parts[0], "/") {
+			h.createVariation(w, r, parts[0])
 			return
 		}
+
 		writeNotFound(w)
 		return
 
@@ -56,10 +66,19 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//   → ModelUsecase.Update
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/models/"):
-		if id, ok := extractModelID(r.URL.Path); ok {
+		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.Trim(id, "/")
+
+		if id != "" &&
+			id != "by-blueprint" &&
+			id != "variations" &&
+			!strings.HasPrefix(id, "by-blueprint/") &&
+			!strings.HasPrefix(id, "variations/") &&
+			!strings.Contains(id, "/") {
 			h.updateVariation(w, r, id)
 			return
 		}
+
 		writeNotFound(w)
 		return
 
@@ -68,22 +87,19 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//   → ModelUsecase.Delete
 	// ------------------------------------------------------------
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/models/"):
-		if id, ok := extractModelID(r.URL.Path); ok {
+		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.Trim(id, "/")
+
+		if id != "" &&
+			id != "by-blueprint" &&
+			id != "variations" &&
+			!strings.HasPrefix(id, "by-blueprint/") &&
+			!strings.HasPrefix(id, "variations/") &&
+			!strings.Contains(id, "/") {
 			h.deleteVariation(w, r, id)
 			return
 		}
-		writeNotFound(w)
-		return
 
-	// ------------------------------------------------------------
-	// GET /models/{id}
-	//   → ModelUsecase.GetByID
-	// ------------------------------------------------------------
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/"):
-		if id, ok := extractModelID(r.URL.Path); ok {
-			h.get(w, r, id)
-			return
-		}
 		writeNotFound(w)
 		return
 
@@ -213,33 +229,6 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(toModelVariationDTOs(vars))
-}
-
-// ------------------------------------------------------------
-// GET /models/{id}
-// ------------------------------------------------------------
-
-func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	m, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writeModelErr(w, err)
-		return
-	}
-	if m == nil {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "variation not found"})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(toModelVariationDTO(m))
 }
 
 // ------------------------------------------------------------
@@ -470,81 +459,6 @@ func timePtrToRFC3339(t *time.Time) *string {
 	}
 	s := t.UTC().Format(time.RFC3339)
 	return &s
-}
-
-// ------------------------------------------------------------
-// Path helpers
-// ------------------------------------------------------------
-
-// extractBlueprintIDForList は以下のパスから productBlueprintID を抽出します。
-// GET /models/by-blueprint/{productBlueprintID}/variations
-func extractBlueprintIDForList(path string) (string, bool) {
-	if !strings.HasPrefix(path, "/models/by-blueprint/") {
-		return "", false
-	}
-	rest := strings.TrimPrefix(path, "/models/by-blueprint/")
-	rest = strings.Trim(rest, "/")
-	parts := strings.Split(rest, "/")
-	if len(parts) != 2 || parts[1] != "variations" {
-		return "", false
-	}
-	id := parts[0]
-	if id == "" {
-		return "", false
-	}
-	if strings.Contains(id, "/") {
-		return "", false
-	}
-	return id, true
-}
-
-// extractBlueprintIDForCreate は以下のパスから productBlueprintID を抽出します。
-// POST /models/{productBlueprintID}/variations
-func extractBlueprintIDForCreate(path string) (string, bool) {
-	if !strings.HasPrefix(path, "/models/") {
-		return "", false
-	}
-	rest := strings.TrimPrefix(path, "/models/")
-	rest = strings.Trim(rest, "/")
-	parts := strings.Split(rest, "/")
-	if len(parts) != 2 || parts[1] != "variations" {
-		return "", false
-	}
-	id := parts[0]
-	if id == "" {
-		return "", false
-	}
-	if strings.Contains(id, "/") {
-		return "", false
-	}
-	return id, true
-}
-
-// extractModelID は以下のパスから model variation ID を抽出します。
-// GET/PUT/DELETE /models/{id}
-func extractModelID(path string) (string, bool) {
-	if !strings.HasPrefix(path, "/models/") {
-		return "", false
-	}
-	id := strings.TrimPrefix(path, "/models/")
-	id = strings.Trim(id, "/")
-	if id == "" {
-		return "", false
-	}
-
-	if strings.HasPrefix(id, "by-blueprint/") || id == "by-blueprint" {
-		return "", false
-	}
-
-	if strings.HasPrefix(id, "variations/") || id == "variations" {
-		return "", false
-	}
-
-	if strings.Contains(id, "/") {
-		return "", false
-	}
-
-	return id, true
 }
 
 // ------------------------------------------------------------
