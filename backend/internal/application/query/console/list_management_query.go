@@ -113,7 +113,7 @@ func (q *ListManagementQuery) ListRows(
 		return listdom.PageResult[ListRowDTO]{}, errors.New("ListManagementQuery.ListRows: wiring is incomplete (lister/invRows required)")
 	}
 
-	allowedInventoryIDs, allowedSet, err := allowedInventoryIDsFromContext(ctx, q.invRows)
+	allowedInventoryIDs, allowedSet, err := AllowedInventoryIDsFromContext(ctx, q.invRows)
 	if err != nil {
 		return listdom.PageResult[ListRowDTO]{}, err
 	}
@@ -327,43 +327,4 @@ func (q *ListManagementQuery) ListRows(
 		TotalCount: totalCount,
 		TotalPages: tp,
 	}, nil
-}
-
-// ============================================================
-// local helpers
-// ============================================================
-
-func allowedInventoryIDsFromContext(
-	ctx context.Context,
-	invRows InventoryRowsLister,
-) ([]string, map[string]struct{}, error) {
-	if invRows == nil {
-		return nil, nil, errors.New("inventory rows lister is nil (company boundary via inventory_query is not configured)")
-	}
-
-	rows, err := invRows.ListByCurrentCompany(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ids := make([]string, 0, len(rows))
-	set := map[string]struct{}{}
-
-	for _, r := range rows {
-		pbID := r.ProductBlueprintID
-		tbID := r.TokenBlueprintID
-		if pbID == "" || tbID == "" {
-			continue
-		}
-
-		invID := pbID + "__" + tbID
-		if _, ok := set[invID]; ok {
-			continue
-		}
-
-		set[invID] = struct{}{}
-		ids = append(ids, invID)
-	}
-
-	return ids, set, nil
 }

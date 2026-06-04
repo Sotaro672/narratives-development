@@ -16,7 +16,7 @@ var (
 )
 
 type HistoryModelVariationRepository interface {
-	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
+	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
 type HistoryModelResolverImpl struct {
@@ -44,7 +44,7 @@ func (r *HistoryModelResolverImpl) ResolveHistoryModelByID(
 		return historydto.HistoryResolvedModel{}, ErrHistoryModelIDEmpty
 	}
 
-	variation, err := r.modelRepo.GetModelVariationByID(ctx, modelID)
+	variation, err := r.modelRepo.GetByID(ctx, modelID)
 	if err != nil {
 		return historydto.HistoryResolvedModel{}, err
 	}
@@ -61,7 +61,7 @@ func (r *HistoryModelResolverImpl) ResolveHistoryModelByID(
 	}
 
 	if apparelVariation, ok := toHistoryApparelModelVariation(variation); ok {
-		out.Kind = "apparel"
+		out.Kind = string(modeldom.ModelVariationKindApparel)
 		out.Size = apparelVariation.Size
 		out.ModelNumber = apparelVariation.ModelNumber
 		out.Measurements = cloneHistoryModelMeasurements(apparelVariation.Measurements)
@@ -71,7 +71,7 @@ func (r *HistoryModelResolverImpl) ResolveHistoryModelByID(
 	}
 
 	if alcoholVariation, ok := toHistoryAlcoholModelVariation(variation); ok {
-		out.Kind = "alcohol"
+		out.Kind = string(modeldom.ModelVariationKindAlcohol)
 		out.ModelNumber = alcoholVariation.ModelNumber
 		out.VolumeValue = historyVolumeValueFromAlcoholModelVariation(alcoholVariation)
 		out.VolumeUnit = alcoholVariation.Volume.Unit
@@ -90,6 +90,12 @@ func toHistoryApparelModelVariation(v modeldom.ModelVariation) (modeldom.Apparel
 	switch x := v.(type) {
 	case modeldom.ApparelModelVariation:
 		return x, true
+	case *modeldom.ApparelModelVariation:
+		if x == nil {
+			return modeldom.ApparelModelVariation{}, false
+		}
+
+		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
 	}
@@ -103,6 +109,12 @@ func toHistoryAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.Alcohol
 	switch x := v.(type) {
 	case modeldom.AlcoholModelVariation:
 		return x, true
+	case *modeldom.AlcoholModelVariation:
+		if x == nil {
+			return modeldom.AlcoholModelVariation{}, false
+		}
+
+		return *x, true
 	default:
 		return modeldom.AlcoholModelVariation{}, false
 	}
@@ -151,5 +163,6 @@ func historyVolumeValueFromAlcoholModelVariation(
 	mv modeldom.AlcoholModelVariation,
 ) *int {
 	value := mv.Volume.Value
+
 	return &value
 }

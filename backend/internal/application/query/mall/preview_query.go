@@ -58,7 +58,7 @@ type ProductReader interface {
 //   - volumeValue
 //   - volumeUnit
 type ModelVariationReader interface {
-	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
+	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
 // ProductBlueprintReader is a minimal read port for ProductBlueprint.
@@ -220,7 +220,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, ErrModelIDEmpty
 	}
 
-	v, err := q.ModelRepo.GetModelVariationByID(ctx, modelID)
+	v, err := q.ModelRepo.GetByID(ctx, modelID)
 	if err != nil {
 		return nil, err
 	}

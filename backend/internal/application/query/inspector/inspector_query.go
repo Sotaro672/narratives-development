@@ -40,7 +40,7 @@ type ProductRepository interface {
 // 戻り値は modeldom.ModelVariation に統一します。
 // *modeldom.ModelVariation のような pointer-to-interface は扱いません。
 type ModelVariationGetter interface {
-	GetModelVariationByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
+	GetByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
 }
 
 // ProductBlueprintGetter は product blueprint を取得する最小ポートです。
@@ -148,7 +148,7 @@ func (q *QueryService) GetInspectorProductDetail(
 	}
 
 	// 2) ModelVariation を取得（Product.ModelID 起点）
-	mv, err := q.modelRepo.GetModelVariationByID(ctx, product.ModelID)
+	mv, err := q.modelRepo.GetByID(ctx, product.ModelID)
 	if err != nil {
 		return ProductDetail{}, err
 	}

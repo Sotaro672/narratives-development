@@ -272,34 +272,20 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		return dto.CatalogDTO{}, errors.New("model repo is nil")
 	}
 
-	res, mvErr := q.ModelRepo.ListVariations(
-		ctx,
-		modeldom.VariationFilter{
-			ProductBlueprintID: resolvedPBID,
-		},
-		modeldom.Page{
-			Number:  1,
-			PerPage: 200,
-		},
-	)
+	variations, mvErr := q.ModelRepo.ListByProductBlueprintID(ctx, resolvedPBID)
 	if mvErr != nil {
 		return dto.CatalogDTO{}, mvErr
 	}
 
-	items := make([]dto.CatalogModelVariationDTO, 0, len(res.Items))
-	for _, it := range res.Items {
-		if it == nil {
+	items := make([]dto.CatalogModelVariationDTO, 0, len(variations))
+	for _, mv := range variations {
+		if mv == nil {
 			return dto.CatalogDTO{}, errors.New("model variation is nil")
 		}
 
-		modelID := it.GetID()
+		modelID := mv.GetID()
 		if modelID == "" {
 			return dto.CatalogDTO{}, errors.New("model variation id is empty")
-		}
-
-		mv, ge := q.ModelRepo.GetModelVariationByID(ctx, modelID)
-		if ge != nil {
-			return dto.CatalogDTO{}, ge
 		}
 
 		mvDTO, ok := toCatalogModelVariationDTOAny(mv)

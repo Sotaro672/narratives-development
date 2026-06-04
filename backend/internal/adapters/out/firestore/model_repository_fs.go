@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -34,10 +33,40 @@ func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
 }
 
 // ------------------------------------------------------------
-// Variation CRUD（ライブの models コレクション）
+// RepositoryPort implementation
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+
+	variations, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(variations, func(i, j int) bool {
+		aUpdatedAt, aCreatedAt, aID := modelVariationSortValues(variations[i])
+		bUpdatedAt, bCreatedAt, bID := modelVariationSortValues(variations[j])
+
+		if !aUpdatedAt.Equal(bUpdatedAt) {
+			return aUpdatedAt.After(bUpdatedAt)
+		}
+		if !aCreatedAt.Equal(bCreatedAt) {
+			return aCreatedAt.After(bCreatedAt)
+		}
+
+		return aID < bID
+	})
+
+	return variations, nil
+}
+
+func (r *ModelRepositoryFS) GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -50,13 +79,14 @@ func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variation
 		if status.Code(err) == codes.NotFound {
 			return nil, modeldom.ErrNotFound
 		}
+
 		return nil, err
 	}
 
 	return docToModelVariation(snap)
 }
 
-func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, variation modeldom.NewModelVariation) (modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) Create(ctx context.Context, variation modeldom.NewModelVariation) (modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -89,7 +119,7 @@ func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, variation 
 	return docToModelVariation(snap)
 }
 
-func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) Update(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -138,316 +168,32 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 		if status.Code(err) == codes.NotFound {
 			return nil, modeldom.ErrNotFound
 		}
+
 		return nil, err
 	}
 
-	return r.GetModelVariationByID(ctx, variationID)
+	return r.GetByID(ctx, variationID)
 }
 
-func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationID string) (modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) Delete(ctx context.Context, variationID string) error {
 	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
+		return errors.New("firestore client is nil")
 	}
 	if variationID == "" {
-		return nil, modeldom.ErrNotFound
+		return modeldom.ErrNotFound
 	}
 
 	docRef := r.variationsCol().Doc(variationID)
 
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, modeldom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	v, err := docToModelVariation(snap)
-	if err != nil {
-		return nil, err
-	}
-
 	if _, err := docRef.Delete(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
-			return nil, modeldom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	return v, nil
-}
-
-// ------------------------------------------------------------
-// RepositoryPort implementation
-// ------------------------------------------------------------
-
-func (r *ModelRepositoryFS) ListVariations(
-	ctx context.Context,
-	filter modeldom.VariationFilter,
-	page modeldom.Page,
-) (modeldom.VariationPageResult, error) {
-	if r.Client == nil {
-		return modeldom.VariationPageResult{}, errors.New("firestore client is nil")
-	}
-
-	pbID := filter.ProductBlueprintID
-	if pbID == "" {
-		return modeldom.VariationPageResult{}, modeldom.ErrInvalidBlueprintID
-	}
-
-	all, err := r.listVariationsByProductBlueprintID(ctx, pbID)
-	if err != nil {
-		return modeldom.VariationPageResult{}, err
-	}
-
-	inSet := func(s string, xs []string) bool {
-		if len(xs) == 0 {
-			return true
-		}
-		for _, x := range xs {
-			if x == s {
-				return true
-			}
-		}
-		return false
-	}
-
-	volumeInSet := func(v modeldom.Volume, xs []modeldom.Volume) bool {
-		if len(xs) == 0 {
-			return true
-		}
-		for _, x := range xs {
-			if v.Value == x.Value && v.Unit == x.Unit {
-				return true
-			}
-		}
-		return false
-	}
-
-	q := strings.ToLower(filter.SearchQuery)
-
-	filtered := make([]modeldom.ModelVariation, 0, len(all))
-	for _, raw := range all {
-		if raw == nil {
-			continue
+			return modeldom.ErrNotFound
 		}
 
-		if apparel, ok := toApparelModelVariation(raw); ok {
-			if !inSet(apparel.Size, filter.Sizes) {
-				continue
-			}
-			if !inSet(apparel.Color.Name, filter.Colors) {
-				continue
-			}
-			if !inSet(apparel.ModelNumber, filter.ModelNumbers) {
-				continue
-			}
-
-			if filter.CreatedFrom != nil && !apparel.CreatedAt.IsZero() && apparel.CreatedAt.Before(filter.CreatedFrom.UTC()) {
-				continue
-			}
-			if filter.CreatedTo != nil && !apparel.CreatedAt.IsZero() && apparel.CreatedAt.After(filter.CreatedTo.UTC()) {
-				continue
-			}
-			if filter.UpdatedFrom != nil && !apparel.UpdatedAt.IsZero() && apparel.UpdatedAt.Before(filter.UpdatedFrom.UTC()) {
-				continue
-			}
-			if filter.UpdatedTo != nil && !apparel.UpdatedAt.IsZero() && apparel.UpdatedAt.After(filter.UpdatedTo.UTC()) {
-				continue
-			}
-
-			if q != "" {
-				hay := strings.ToLower(apparel.ModelNumber + " " + apparel.Size + " " + apparel.Color.Name)
-				if !strings.Contains(hay, q) {
-					continue
-				}
-			}
-
-			filtered = append(filtered, apparel)
-			continue
-		}
-
-		if alcohol, ok := toAlcoholModelVariation(raw); ok {
-			if len(filter.Sizes) > 0 || len(filter.Colors) > 0 {
-				continue
-			}
-			if !inSet(alcohol.ModelNumber, filter.ModelNumbers) {
-				continue
-			}
-			if !volumeInSet(alcohol.Volume, filter.Volumes) {
-				continue
-			}
-
-			if filter.CreatedFrom != nil && !alcohol.CreatedAt.IsZero() && alcohol.CreatedAt.Before(filter.CreatedFrom.UTC()) {
-				continue
-			}
-			if filter.CreatedTo != nil && !alcohol.CreatedAt.IsZero() && alcohol.CreatedAt.After(filter.CreatedTo.UTC()) {
-				continue
-			}
-			if filter.UpdatedFrom != nil && !alcohol.UpdatedAt.IsZero() && alcohol.UpdatedAt.Before(filter.UpdatedFrom.UTC()) {
-				continue
-			}
-			if filter.UpdatedTo != nil && !alcohol.UpdatedAt.IsZero() && alcohol.UpdatedAt.After(filter.UpdatedTo.UTC()) {
-				continue
-			}
-
-			if q != "" {
-				volumeText := fmt.Sprintf("%d%s", alcohol.Volume.Value, alcohol.Volume.Unit)
-				hay := strings.ToLower(alcohol.ModelNumber + " " + volumeText)
-				if !strings.Contains(hay, q) {
-					continue
-				}
-			}
-
-			filtered = append(filtered, alcohol)
-			continue
-		}
-
-		return modeldom.VariationPageResult{}, modeldom.ErrInvalid
+		return err
 	}
 
-	sort.Slice(filtered, func(i, j int) bool {
-		aUpdatedAt, aCreatedAt, aID := modelVariationSortValues(filtered[i])
-		bUpdatedAt, bCreatedAt, bID := modelVariationSortValues(filtered[j])
-
-		if !aUpdatedAt.Equal(bUpdatedAt) {
-			return aUpdatedAt.After(bUpdatedAt)
-		}
-		if !aCreatedAt.Equal(bCreatedAt) {
-			return aCreatedAt.After(bCreatedAt)
-		}
-		return aID < bID
-	})
-
-	per := page.PerPage
-	if per <= 0 {
-		per = 50
-	}
-	num := page.Number
-	if num <= 0 {
-		num = 1
-	}
-
-	total := len(filtered)
-	totalPages := (total + per - 1) / per
-	start := (num - 1) * per
-	if start > total {
-		start = total
-	}
-	end := start + per
-	if end > total {
-		end = total
-	}
-
-	items := make([]modeldom.ModelVariation, 0, end-start)
-	if start < end {
-		items = append(items, filtered[start:end]...)
-	}
-
-	return modeldom.VariationPageResult{
-		Items:      items,
-		TotalCount: total,
-		TotalPages: totalPages,
-		Page:       num,
-		PerPage:    per,
-	}, nil
-}
-
-func (r *ModelRepositoryFS) GetModelVariations(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
-	}
-
-	return r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
-}
-
-func (r *ModelRepositoryFS) GetSizeVariations(ctx context.Context, productBlueprintID string) ([]modeldom.SizeVariation, error) {
-	vars, err := r.GetModelVariations(ctx, productBlueprintID)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := map[string]struct{}{}
-	out := make([]modeldom.SizeVariation, 0)
-
-	for _, raw := range vars {
-		v, ok := toApparelModelVariation(raw)
-		if !ok {
-			continue
-		}
-
-		if v.Size == "" {
-			continue
-		}
-		if _, ok := seen[v.Size]; ok {
-			continue
-		}
-		seen[v.Size] = struct{}{}
-
-		out = append(out, modeldom.SizeVariation{
-			ID:           v.ID,
-			Size:         v.Size,
-			Measurements: cloneMeasurements(v.Measurements),
-		})
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Size < out[j].Size
-	})
-
-	return out, nil
-}
-
-func (r *ModelRepositoryFS) GetModelNumbers(ctx context.Context, productBlueprintID string) ([]modeldom.ModelNumber, error) {
-	vars, err := r.GetModelVariations(ctx, productBlueprintID)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := map[string]struct{}{}
-	out := make([]modeldom.ModelNumber, 0)
-
-	for _, raw := range vars {
-		if raw == nil {
-			continue
-		}
-
-		modelNumber := raw.GetModelNumber()
-		if modelNumber == "" {
-			continue
-		}
-		if _, ok := seen[modelNumber]; ok {
-			continue
-		}
-		seen[modelNumber] = struct{}{}
-
-		if apparel, ok := toApparelModelVariation(raw); ok {
-			out = append(out, modeldom.ModelNumber{
-				Size:        apparel.Size,
-				Color:       apparel.Color.Name,
-				ModelNumber: apparel.ModelNumber,
-			})
-			continue
-		}
-
-		if alcohol, ok := toAlcoholModelVariation(raw); ok {
-			out = append(out, modeldom.ModelNumber{
-				ModelNumber: alcohol.ModelNumber,
-			})
-			continue
-		}
-
-		return nil, modeldom.ErrInvalid
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ModelNumber < out[j].ModelNumber
-	})
-
-	return out, nil
+	return nil
 }
 
 // ------------------------------------------------------------
@@ -468,6 +214,7 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Conte
 			if err == iterator.Done {
 				break
 			}
+
 			return nil, err
 		}
 
@@ -475,6 +222,7 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Conte
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, v)
 	}
 
@@ -546,15 +294,25 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 
 	switch kind {
 	case string(modeldom.ModelVariationKindAlcohol):
+		createdAt, _ := asTime(data["createdAt"])
+		updatedAt, _ := asTime(data["updatedAt"])
+
 		mv := modeldom.AlcoholModelVariation{
 			ID:                 doc.Ref.ID,
-			ProductBlueprintID: modelString(data, "productBlueprintId"),
-			ModelNumber:        modelString(data, "modelNumber"),
+			ProductBlueprintID: asString(data["productBlueprintId"]),
+			ModelNumber:        asString(data["modelNumber"]),
 			Volume:             modelVolume(data, "volume"),
-			CreatedAt:          modelTime(data, "createdAt"),
+			CreatedAt:          createdAt.UTC(),
 			CreatedBy:          modelStringPtr(data, "createdBy"),
-			UpdatedAt:          modelTime(data, "updatedAt"),
+			UpdatedAt:          updatedAt.UTC(),
 			UpdatedBy:          modelStringPtr(data, "updatedBy"),
+		}
+
+		if createdAt.IsZero() {
+			mv.CreatedAt = time.Time{}
+		}
+		if updatedAt.IsZero() {
+			mv.UpdatedAt = time.Time{}
 		}
 
 		if err := mv.Validate(); err != nil {
@@ -564,17 +322,27 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		return mv, nil
 
 	case string(modeldom.ModelVariationKindApparel):
+		createdAt, _ := asTime(data["createdAt"])
+		updatedAt, _ := asTime(data["updatedAt"])
+
 		mv := modeldom.ApparelModelVariation{
 			ID:                 doc.Ref.ID,
-			ProductBlueprintID: modelString(data, "productBlueprintId"),
-			ModelNumber:        modelString(data, "modelNumber"),
-			Size:               modelString(data, "size"),
+			ProductBlueprintID: asString(data["productBlueprintId"]),
+			ModelNumber:        asString(data["modelNumber"]),
+			Size:               asString(data["size"]),
 			Color:              modelColor(data, "color"),
 			Measurements:       modelMeasurements(data, "measurements"),
-			CreatedAt:          modelTime(data, "createdAt"),
+			CreatedAt:          createdAt.UTC(),
 			CreatedBy:          modelStringPtr(data, "createdBy"),
-			UpdatedAt:          modelTime(data, "updatedAt"),
+			UpdatedAt:          updatedAt.UTC(),
 			UpdatedBy:          modelStringPtr(data, "updatedBy"),
+		}
+
+		if createdAt.IsZero() {
+			mv.CreatedAt = time.Time{}
+		}
+		if updatedAt.IsZero() {
+			mv.UpdatedAt = time.Time{}
 		}
 
 		if err := mv.Validate(); err != nil {
@@ -664,28 +432,17 @@ func requiredModelString(data map[string]any, key string) (string, error) {
 	if !ok || v == "" {
 		return "", modeldom.ErrInvalid
 	}
+
 	return v, nil
 }
 
-func modelString(data map[string]any, key string) string {
-	v, _ := data[key].(string)
-	return v
-}
-
 func modelStringPtr(data map[string]any, key string) *string {
-	v, _ := data[key].(string)
+	v := asString(data[key])
 	if v == "" {
 		return nil
 	}
-	return &v
-}
 
-func modelTime(data map[string]any, key string) time.Time {
-	v, _ := data[key].(time.Time)
-	if v.IsZero() {
-		return time.Time{}
-	}
-	return v.UTC()
+	return &v
 }
 
 func modelColor(data map[string]any, key string) modeldom.Color {
@@ -724,6 +481,7 @@ func modelMeasurements(data map[string]any, key string) modeldom.Measurements {
 		if !ok {
 			return nil
 		}
+
 		out[k] = int(n)
 	}
 
@@ -740,6 +498,7 @@ func toApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVa
 	}
 
 	x, ok := v.(modeldom.ApparelModelVariation)
+
 	return x, ok
 }
 
@@ -749,6 +508,7 @@ func toAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVa
 	}
 
 	x, ok := v.(modeldom.AlcoholModelVariation)
+
 	return x, ok
 }
 
@@ -762,6 +522,7 @@ func modelVariationSortValues(v modeldom.ModelVariation) (time.Time, time.Time, 
 	if v == nil {
 		return time.Time{}, time.Time{}, ""
 	}
+
 	return time.Time{}, time.Time{}, v.GetID()
 }
 

@@ -47,12 +47,11 @@ func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID str
 		return ModelResolved{}
 	}
 
-	id := variationID
-	if id == "" {
+	if variationID == "" {
 		return ModelResolved{}
 	}
 
-	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, id)
+	mv, err := r.modelNumberRepo.GetByID(ctx, variationID)
 	if err != nil || mv == nil {
 		return ModelResolved{}
 	}
@@ -61,7 +60,7 @@ func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID str
 		colorName, rgb := extractColorNameAndRGBFromApparelModelVariation(apparelMV)
 
 		return ModelResolved{
-			Kind:        "apparel",
+			Kind:        string(modeldom.ModelVariationKindApparel),
 			ModelNumber: apparelMV.ModelNumber,
 			Size:        apparelMV.Size,
 			Color:       colorName,
@@ -73,7 +72,7 @@ func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID str
 		volumeValue, volumeUnit := extractVolumeValueAndUnitFromAlcoholModelVariation(alcoholMV)
 
 		return ModelResolved{
-			Kind:        "alcohol",
+			Kind:        string(modeldom.ModelVariationKindAlcohol),
 			ModelNumber: alcoholMV.ModelNumber,
 			VolumeValue: volumeValue,
 			VolumeUnit:  volumeUnit,
@@ -88,6 +87,7 @@ func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID str
 // modeldom.Color{Name, RGB} に変換済みであることを前提にする。
 func extractColorNameAndRGBFromApparelModelVariation(mv modeldom.ApparelModelVariation) (string, *int) {
 	rgb := mv.Color.RGB
+
 	return mv.Color.Name, &rgb
 }
 
@@ -96,5 +96,6 @@ func extractColorNameAndRGBFromApparelModelVariation(mv modeldom.ApparelModelVar
 // modeldom.Volume{Value, Unit} に変換済みであることを前提にする。
 func extractVolumeValueAndUnitFromAlcoholModelVariation(mv modeldom.AlcoholModelVariation) (*int, string) {
 	value := mv.Volume.Value
+
 	return &value, mv.Volume.Unit
 }

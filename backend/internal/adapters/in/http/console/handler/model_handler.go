@@ -41,7 +41,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// POST /models/{productBlueprintID}/variations
-	//   → ModelUsecase.CreateModelVariation
+	//   → ModelUsecase.Create
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/models/"):
 		if productBlueprintID, ok := extractBlueprintIDForCreate(r.URL.Path); ok {
@@ -53,7 +53,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// PUT /models/{id}
-	//   → ModelUsecase.UpdateModelVariation
+	//   → ModelUsecase.Update
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/models/"):
 		if id, ok := extractModelID(r.URL.Path); ok {
@@ -65,7 +65,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// DELETE /models/{id}
-	//   → ModelUsecase.DeleteModelVariation
+	//   → ModelUsecase.Delete
 	// ------------------------------------------------------------
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/models/"):
 		if id, ok := extractModelID(r.URL.Path); ok {
@@ -77,7 +77,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// GET /models/{id}
-	//   → ModelUsecase.GetModelVariationByID
+	//   → ModelUsecase.GetByID
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/"):
 		if id, ok := extractModelID(r.URL.Path); ok {
@@ -178,7 +178,7 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	mv, err := h.uc.CreateModelVariation(ctx, newVar)
+	mv, err := h.uc.Create(ctx, newVar)
 	if err != nil {
 		writeModelErr(w, err)
 		return
@@ -205,7 +205,7 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 		return
 	}
 
-	vars, err := h.uc.GetModelVariations(ctx, productBlueprintID)
+	vars, err := h.uc.ListByProductBlueprintID(ctx, productBlueprintID)
 	if err != nil {
 		writeModelErr(w, err)
 		return
@@ -228,7 +228,7 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	m, err := h.uc.GetModelVariationByID(ctx, id)
+	m, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		writeModelErr(w, err)
 		return
@@ -268,7 +268,7 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	mv, err := h.uc.UpdateModelVariation(ctx, id, updates)
+	mv, err := h.uc.Update(ctx, id, updates)
 	if err != nil {
 		writeModelErr(w, err)
 		return
@@ -291,14 +291,12 @@ func (h *ModelHandler) deleteVariation(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	mv, err := h.uc.DeleteModelVariation(ctx, id)
-	if err != nil {
+	if err := h.uc.Delete(ctx, id); err != nil {
 		writeModelErr(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(toModelVariationDTO(mv))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ------------------------------------------------------------

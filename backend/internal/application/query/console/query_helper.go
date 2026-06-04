@@ -14,29 +14,42 @@ import (
 // Company boundary helpers
 // ============================================================
 
-func AllowedInventoryIDSetFromContext(ctx context.Context, invRows InventoryRowsLister) (map[string]struct{}, error) {
+func AllowedInventoryIDsFromContext(
+	ctx context.Context,
+	invRows InventoryRowsLister,
+) ([]string, map[string]struct{}, error) {
 	if invRows == nil {
-		return nil, errors.New("inventory rows lister is nil (company boundary via inventory_query is not configured)")
+		return nil, nil, errors.New("inventory rows lister is nil (company boundary via inventory_query is not configured)")
 	}
 
 	rows, err := invRows.ListByCurrentCompany(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	ids := make([]string, 0, len(rows))
 	set := map[string]struct{}{}
+
 	for _, r := range rows {
-		pbID := r.ProductBlueprintID
-		tbID := r.TokenBlueprintID
-		if pbID == "" || tbID == "" {
+		invID := BuildInventoryID(r.ProductBlueprintID, r.TokenBlueprintID)
+		if invID == "" {
 			continue
 		}
 
-		invID := pbID + "__" + tbID
+		if _, ok := set[invID]; ok {
+			continue
+		}
+
 		set[invID] = struct{}{}
+		ids = append(ids, invID)
 	}
 
-	return set, nil
+	return ids, set, nil
+}
+
+func AllowedInventoryIDSetFromContext(ctx context.Context, invRows InventoryRowsLister) (map[string]struct{}, error) {
+	_, set, err := AllowedInventoryIDsFromContext(ctx, invRows)
+	return set, err
 }
 
 func InventoryAllowed(set map[string]struct{}, inventoryID string) bool {
@@ -106,6 +119,14 @@ func NonEmpty(v string, fallback string) string {
 // ============================================================
 // InventoryID helpers
 // ============================================================
+
+func BuildInventoryID(pbID string, tbID string) string {
+	if pbID == "" || tbID == "" {
+		return ""
+	}
+
+	return pbID + "__" + tbID
+}
 
 func ParseInventoryIDStrict(invID string) (pbID string, tbID string, ok bool) {
 	if invID == "" {

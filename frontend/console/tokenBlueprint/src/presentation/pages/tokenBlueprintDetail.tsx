@@ -1,4 +1,4 @@
-//frontend\console\tokenBlueprint\src\presentation\pages\tokenBlueprintDetail.tsx
+// frontend\console\tokenBlueprint\src\presentation\pages\tokenBlueprintDetail.tsx
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
@@ -50,6 +50,13 @@ export default function TokenBlueprintDetail() {
     (cardVm?.iconFile as File | null | undefined) ??
     (((vm as any)?.selectedIconFile as File | null) ?? null);
 
+  const tokenName =
+    ((blueprint as any)?.tokenName as string | undefined) ??
+    ((blueprint as any)?.name as string | undefined) ??
+    "";
+
+  const pageTitle = tokenName ? `${tokenName}` : "トークン設計";
+
   // データが無い場合のフォールバック
   if (!blueprint) {
     return (
@@ -64,7 +71,7 @@ export default function TokenBlueprintDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title="トークン設計"
+      title={pageTitle}
       onBack={onBack}
       onEdit={!isEditMode ? onEdit : undefined}
       onCancel={isEditMode ? onCancel : undefined}

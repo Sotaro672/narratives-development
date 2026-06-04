@@ -4,14 +4,17 @@ package model
 import (
 	"context"
 	"errors"
-	"time"
 )
 
-// Domain helper types (inputs/patches)
-
-// Measurements は「各計測位置(string) → 計測値(int)」のマップ。
-// apparel.go の ApparelModelVariation.Measurements に対応。
-
+// ModelVariationKind は category-specific model variation の種別を表す。
+//
+// NOTE:
+//   - repository port 自体は productBlueprintID 配下の model variation 永続化のみを扱う。
+//   - category ごとの入力仕様・variation を作る/作らない判定は、
+//     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
+//   - Product-level metadata は productBlueprint.CategoryFields に集約する。
+//   - alcohol の vintage / region / material / alcoholContent などは ProductBlueprint.CategoryFields 側を正とし、
+//     model variation では容量のみを扱う。
 type ModelVariationKind string
 
 const (
@@ -24,8 +27,8 @@ const (
 // NOTE:
 //   - apparel では NewApparelModelVariation を使う。
 //   - alcohol では NewAlcoholModelVariation を使う。
-//   - どの category で model variation を作成するかは、
-//     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
+//   - 今後 category が増える場合も、repository port の method は増やさず、
+//     NewModelVariation の組み立て・validation・mapping を application/usecase 側で吸収する。
 //   - Product-level metadata は productBlueprint.CategoryFields に集約する。
 //   - alcohol の vintage / region / material / alcoholContent などは ProductBlueprint.CategoryFields 側を正とし、
 //     model variation では容量のみを扱う。
@@ -138,68 +141,34 @@ type ModelVariationUpdate struct {
 	Volume *Volume `json:"volume,omitempty"`
 }
 
-// Listing contracts (filters/sort/page)
-
-type VariationFilter struct {
-	ProductBlueprintID string
-
-	Sizes        []string
-	Colors       []string // Color.Name を前提としたフィルタとして扱う想定
-	Volumes      []Volume // alcohol 用の容量フィルタ
-	ModelNumbers []string
-
-	SearchQuery string // free text over modelNumber/size/color/volume (implementation-defined)
-
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-}
-
-type Page struct {
-	Number  int
-	PerPage int
-}
-
-type VariationPageResult struct {
-	Items      []ModelVariation
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
-}
-
 // RepositoryPort abstracts model variation data access.
 //
 // NOTE:
+//   - model variation は productBlueprint に従属するため、
+//     productBlueprintID を超えた横断 List は持たない。
 //   - Product-level metadata は productBlueprint.CategoryFields に集約する。
 //   - この port は category-specific model variation の永続化境界として扱う。
 //   - apparel では size / color / measurements を使う。
 //   - alcohol では volume のみを使う。
 //   - どの category で model variation を作成するかは、
 //     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
+//   - size / color / volume / modelNumber などの表示用 aggregation は repository port ではなく、
+//     application/query/read model 側で ListByProductBlueprintID の結果から組み立てる。
 type RepositoryPort interface {
-	// Variations (CRUD)
-	ListVariations(ctx context.Context, filter VariationFilter, page Page) (VariationPageResult, error)
+	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]ModelVariation, error)
+	GetByID(ctx context.Context, variationID string) (ModelVariation, error)
 
-	GetModelVariations(ctx context.Context, productBlueprintID string) ([]ModelVariation, error)
-	GetModelVariationByID(ctx context.Context, variationID string) (ModelVariation, error)
-
-	// CreateModelVariation creates a category-specific model variation.
+	// Create creates a category-specific model variation.
 	//
 	// NOTE:
 	//   - 新規作成では productID は使わず、NewModelVariation.ProductBlueprintID() で紐付ける。
 	//   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
 	//   - alcohol では Volume のみを variation field として扱う。
 	//   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
-	CreateModelVariation(ctx context.Context, variation NewModelVariation) (ModelVariation, error)
+	Create(ctx context.Context, variation NewModelVariation) (ModelVariation, error)
 
-	UpdateModelVariation(ctx context.Context, variationID string, updates ModelVariationUpdate) (ModelVariation, error)
-	DeleteModelVariation(ctx context.Context, variationID string) (ModelVariation, error)
-
-	// Convenience aggregations (resolver-style)
-	GetSizeVariations(ctx context.Context, productBlueprintID string) ([]SizeVariation, error)
-	GetModelNumbers(ctx context.Context, productBlueprintID string) ([]ModelNumber, error)
+	Update(ctx context.Context, variationID string, updates ModelVariationUpdate) (ModelVariation, error)
+	Delete(ctx context.Context, variationID string) error
 }
 
 // Common repository errors

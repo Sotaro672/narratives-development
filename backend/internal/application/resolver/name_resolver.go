@@ -53,9 +53,13 @@ type UserNameRepository interface {
 	GetByID(ctx context.Context, id string) (*userdom.User, error)
 }
 
-// Model → modelId から ModelVariation を 1 件取得できればよい
+// Model → modelId から ModelVariation を 1 件取得できればよい。
+//
+// IMPORTANT:
+// - model repository port の Get 系は GetByID に統一する。
+// - GetModelVariationByID は使わない。
 type ModelNumberRepository interface {
-	GetModelVariationByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
+	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
 // TokenBlueprint の取得に必要な最小限のインターフェース
@@ -357,7 +361,7 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 		return ""
 	}
 
-	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, variationID)
+	mv, err := r.modelNumberRepo.GetByID(ctx, variationID)
 	if err != nil || mv == nil {
 		return ""
 	}

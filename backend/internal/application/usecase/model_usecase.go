@@ -35,42 +35,10 @@ func NewModelUsecase(repo modeldom.RepositoryPort) *ModelUsecase {
 }
 
 // ------------------------------------------------------------
-// Queries
+// RepositoryPort implementation
 // ------------------------------------------------------------
 
-// HTTP の GET /models/{variationId} 用の明示メソッド。
-// このメソッドは 1 箇所のみ定義（DuplicateMethod 回避）。
-func (u *ModelUsecase) GetModelVariationByID(
-	ctx context.Context,
-	variationID string,
-) (modeldom.ModelVariation, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-	if variationID == "" {
-		return nil, modeldom.ErrInvalidID
-	}
-
-	return u.repo.GetModelVariationByID(ctx, variationID)
-}
-
-// ------------------------------------------------------------
-// RepositoryPort implementation (delegate to u.repo)
-// ------------------------------------------------------------
-
-func (u *ModelUsecase) ListVariations(
-	ctx context.Context,
-	filter modeldom.VariationFilter,
-	page modeldom.Page,
-) (modeldom.VariationPageResult, error) {
-	if u.repo == nil {
-		return modeldom.VariationPageResult{}, modeldom.ErrNotFound
-	}
-
-	return u.repo.ListVariations(ctx, filter, page)
-}
-
-func (u *ModelUsecase) GetModelVariations(
+func (u *ModelUsecase) ListByProductBlueprintID(
 	ctx context.Context,
 	productBlueprintID string,
 ) ([]modeldom.ModelVariation, error) {
@@ -81,10 +49,24 @@ func (u *ModelUsecase) GetModelVariations(
 		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
-	return u.repo.GetModelVariations(ctx, productBlueprintID)
+	return u.repo.ListByProductBlueprintID(ctx, productBlueprintID)
 }
 
-// CreateModelVariation creates a category-specific ModelVariation.
+func (u *ModelUsecase) GetByID(
+	ctx context.Context,
+	variationID string,
+) (modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+	if variationID == "" {
+		return nil, modeldom.ErrInvalidID
+	}
+
+	return u.repo.GetByID(ctx, variationID)
+}
+
+// Create creates a category-specific ModelVariation.
 //
 // NOTE:
 //   - apparel では NewModelVariation.Apparel を使う。
@@ -92,7 +74,7 @@ func (u *ModelUsecase) GetModelVariations(
 //   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
 //   - alcohol では Volume のみを variation field として扱う。
 //   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
-func (u *ModelUsecase) CreateModelVariation(
+func (u *ModelUsecase) Create(
 	ctx context.Context,
 	v modeldom.NewModelVariation,
 ) (modeldom.ModelVariation, error) {
@@ -103,7 +85,7 @@ func (u *ModelUsecase) CreateModelVariation(
 		return nil, err
 	}
 
-	created, err := u.repo.CreateModelVariation(ctx, v)
+	created, err := u.repo.Create(ctx, v)
 	if err != nil {
 		return nil, err
 	}
@@ -111,15 +93,15 @@ func (u *ModelUsecase) CreateModelVariation(
 	return created, nil
 }
 
-// UpdateModelVariation updates a category-specific ModelVariation.
+// Update updates a category-specific ModelVariation.
 //
 // NOTE:
 //   - apparel では size / color / measurements 更新に対応する。
 //   - alcohol では volume 更新に対応する。
 //   - 一括差し替えは行わない。
-//   - 削除が必要な variation は DeleteModelVariation を個別に呼び出す。
+//   - 削除が必要な variation は Delete を個別に呼び出す。
 //   - 履歴は保存しない。
-func (u *ModelUsecase) UpdateModelVariation(
+func (u *ModelUsecase) Update(
 	ctx context.Context,
 	variationID string,
 	updates modeldom.ModelVariationUpdate,
@@ -127,12 +109,11 @@ func (u *ModelUsecase) UpdateModelVariation(
 	if u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
-
 	if variationID == "" {
 		return nil, modeldom.ErrInvalidID
 	}
 
-	updated, err := u.repo.UpdateModelVariation(ctx, variationID, updates)
+	updated, err := u.repo.Update(ctx, variationID, updates)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +121,7 @@ func (u *ModelUsecase) UpdateModelVariation(
 	return updated, nil
 }
 
-// DeleteModelVariation physically deletes a category-specific ModelVariation.
+// Delete physically deletes a category-specific ModelVariation.
 //
 // NOTE:
 //   - repository は対象 document を物理削除する。
@@ -148,45 +129,16 @@ func (u *ModelUsecase) UpdateModelVariation(
 //   - 一括差し替えは行わない。
 //   - 履歴は保存しない。
 //   - 復元前提の状態管理は行わない。
-func (u *ModelUsecase) DeleteModelVariation(
+func (u *ModelUsecase) Delete(
 	ctx context.Context,
 	variationID string,
-) (modeldom.ModelVariation, error) {
+) error {
 	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
+		return modeldom.ErrNotFound
 	}
-
 	if variationID == "" {
-		return nil, modeldom.ErrInvalidID
+		return modeldom.ErrInvalidID
 	}
 
-	return u.repo.DeleteModelVariation(ctx, variationID)
-}
-
-func (u *ModelUsecase) GetSizeVariations(
-	ctx context.Context,
-	productBlueprintID string,
-) ([]modeldom.SizeVariation, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
-	}
-
-	return u.repo.GetSizeVariations(ctx, productBlueprintID)
-}
-
-func (u *ModelUsecase) GetModelNumbers(
-	ctx context.Context,
-	productBlueprintID string,
-) ([]modeldom.ModelNumber, error) {
-	if u.repo == nil {
-		return nil, modeldom.ErrNotFound
-	}
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
-	}
-
-	return u.repo.GetModelNumbers(ctx, productBlueprintID)
+	return u.repo.Delete(ctx, variationID)
 }
