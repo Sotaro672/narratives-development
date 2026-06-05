@@ -84,6 +84,27 @@ func (u *ModelUsecase) ListByProductBlueprintID(
 	return u.repo.ListByProductBlueprintID(ctx, productBlueprintID)
 }
 
+// GetByID returns a category-specific ModelVariation by variation ID.
+//
+// NOTE:
+//   - MintRequest detail / InspectionResultCard などで、
+//     modelId から modelNumber / size / color / volume を単体解決する用途。
+//   - 永続化の正は repository なので、usecase では repo.GetByID に委譲する。
+//   - productBlueprint.modelRefs の同期は不要。
+func (u *ModelUsecase) GetByID(
+	ctx context.Context,
+	variationID string,
+) (modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+	if variationID == "" {
+		return nil, modeldom.ErrInvalidID
+	}
+
+	return u.repo.GetByID(ctx, variationID)
+}
+
 // Create creates a category-specific ModelVariation.
 //
 // NOTE:

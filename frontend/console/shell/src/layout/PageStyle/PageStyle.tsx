@@ -1,4 +1,3 @@
-//frontend\console\shell\src\layout\PageStyle\PageStyle.tsx
 import * as React from "react";
 import type { ReactNode } from "react";
 import {
@@ -101,9 +100,11 @@ export default function PageStyle({
 
   const [isCreating, setIsCreating] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isListing, setIsListing] = React.useState(false);
 
   const handleCreate = React.useCallback(async () => {
     if (!onCreate || isCreating) return;
+
     try {
       setIsCreating(true);
       await onCreate();
@@ -114,6 +115,7 @@ export default function PageStyle({
 
   const handleSave = React.useCallback(async () => {
     if (!onSave || isSaving) return;
+
     try {
       setIsSaving(true);
       await onSave();
@@ -121,6 +123,17 @@ export default function PageStyle({
       setIsSaving(false);
     }
   }, [onSave, isSaving]);
+
+  const handleList = React.useCallback(async () => {
+    if (!onList || isListing) return;
+
+    try {
+      setIsListing(true);
+      await onList();
+    } finally {
+      setIsListing(false);
+    }
+  }, [onList, isListing]);
 
   const header = (
     <header className="page-header">
@@ -137,6 +150,7 @@ export default function PageStyle({
                 <ArrowLeft size={16} />
               </button>
             )}
+
             <div className="flex items-center gap-2">
               <h1 className="page-header__title">{title ?? ""}</h1>
               {badge}
@@ -192,10 +206,16 @@ export default function PageStyle({
               <button
                 type="button"
                 className="page-header__btn"
-                onClick={onList}
+                onClick={() => void handleList()}
+                disabled={isListing}
+                aria-busy={isListing}
               >
-                <Tag size={16} style={{ marginRight: 4 }} />
-                出品
+                {isListing ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <Tag size={16} style={{ marginRight: 4 }} />
+                )}
+                {isListing ? "出品中" : "出品"}
               </button>
             )}
 
@@ -207,7 +227,11 @@ export default function PageStyle({
                 disabled={isCreating}
                 aria-busy={isCreating}
               >
-                {isCreating ? <SpinnerArrow size={16} /> : <Plus size={16} style={{ marginRight: 4 }} />}
+                {isCreating ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <Plus size={16} style={{ marginRight: 4 }} />
+                )}
                 {isCreating ? "作成中" : "作成"}
               </button>
             )}
@@ -220,7 +244,11 @@ export default function PageStyle({
                 disabled={isSaving}
                 aria-busy={isSaving}
               >
-                {isSaving ? <SpinnerArrow size={16} /> : <Save size={16} style={{ marginRight: 4 }} />}
+                {isSaving ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <Save size={16} style={{ marginRight: 4 }} />
+                )}
                 {isSaving ? "保存中" : "保存"}
               </button>
             )}
@@ -238,9 +266,11 @@ export default function PageStyle({
     return (
       <div className={rootClass}>
         {header}
+
         <div className="page-container">
           <div className="content-grid">
             <div>{left}</div>
+
             <div className={stickyAside ? "sticky-aside" : undefined}>
               {right}
             </div>

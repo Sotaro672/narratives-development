@@ -378,6 +378,9 @@ func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint
 
 // LoadForMinting は mintID を受け取り、
 // mints + token_blueprints + brands から MintRequestForUsecase を構築して返します。
+// 初回 mint では tokenBlueprint.metadataUri が空の可能性があります。
+// metadataUri の生成・保存は MintUsecase.ensureMetadataURI が担当するため、
+// この adapter では metadataUri が空でもエラーにせず DTO に詰めて返します。
 func (r *MintRepositoryFS) LoadForMinting(
 	ctx context.Context,
 	id string,
@@ -422,6 +425,8 @@ func (r *MintRepositoryFS) LoadForMinting(
 	if tbID == "" {
 		return nil, fmt.Errorf("mint %s has empty tokenBlueprintId", mintID)
 	}
+
+	actorID := s(raw["createdBy"])
 
 	productIDs := decodeStringSlice(raw["products"])
 
@@ -472,10 +477,6 @@ func (r *MintRepositoryFS) LoadForMinting(
 		return nil, fmt.Errorf("tokenBlueprint %s has empty name or symbol", tbID)
 	}
 
-	if metadataURI == "" {
-		return nil, fmt.Errorf("tokenBlueprint %s has empty metadataUri", tbID)
-	}
-
 	brandSnap, err := r.brandsCol().Doc(brandID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -495,12 +496,14 @@ func (r *MintRepositoryFS) LoadForMinting(
 	}
 
 	dto := &usecase.MintRequestForUsecase{
-		ID:              mintID,
-		ToAddress:       toAddress,
-		ProductIDs:      productIDs,
-		BlueprintName:   name,
-		BlueprintSymbol: symbol,
-		MetadataURI:     metadataURI,
+		ID:               mintID,
+		TokenBlueprintID: tbID,
+		ActorID:          actorID,
+		ToAddress:        toAddress,
+		ProductIDs:       productIDs,
+		BlueprintName:    name,
+		BlueprintSymbol:  symbol,
+		MetadataURI:      metadataURI,
 	}
 
 	return dto, nil

@@ -1,10 +1,6 @@
 // frontend/console/list/src/presentation/components/listImageCard.tsx
 // 商品画像カード（style 要素のみ / ロジックは hook に移譲）
 
-import * as React from "react";
-
-import "../styles/list.css";
-
 import { Button } from "../../../../shell/src/shared/ui/button";
 import { useListImageCard } from "../hook/useListImageCard";
 

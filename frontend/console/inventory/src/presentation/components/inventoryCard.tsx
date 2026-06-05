@@ -17,8 +17,6 @@ import {
   TableCell,
 } from "../../../../shell/src/shared/ui/table";
 
-import "../styles/inventory.css";
-
 import type { InventoryRow } from "../../application/inventoryTypes";
 
 import { rgbIntToHex } from "../../../../shell/src/shared/util/color";

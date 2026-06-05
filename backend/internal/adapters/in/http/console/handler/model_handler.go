@@ -45,6 +45,25 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	// ------------------------------------------------------------
+	// GET /models/{id}
+	//   → ModelUsecase.GetByID
+	//
+	// MintRequest detail / InspectionResultCard など、
+	// modelId から modelNumber / size / color / volume を単体解決する用途。
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/"):
+		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.Trim(id, "/")
+
+		if isSingleModelIDPath(id) {
+			h.getVariation(w, r, id)
+			return
+		}
+
+		writeNotFound(w)
+		return
+
+	// ------------------------------------------------------------
 	// POST /models/{productBlueprintID}/variations
 	//   → ModelUsecase.Create
 	// ------------------------------------------------------------
@@ -69,12 +88,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/models/")
 		id = strings.Trim(id, "/")
 
-		if id != "" &&
-			id != "by-blueprint" &&
-			id != "variations" &&
-			!strings.HasPrefix(id, "by-blueprint/") &&
-			!strings.HasPrefix(id, "variations/") &&
-			!strings.Contains(id, "/") {
+		if isSingleModelIDPath(id) {
 			h.updateVariation(w, r, id)
 			return
 		}
@@ -90,12 +104,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/models/")
 		id = strings.Trim(id, "/")
 
-		if id != "" &&
-			id != "by-blueprint" &&
-			id != "variations" &&
-			!strings.HasPrefix(id, "by-blueprint/") &&
-			!strings.HasPrefix(id, "variations/") &&
-			!strings.Contains(id, "/") {
+		if isSingleModelIDPath(id) {
 			h.deleteVariation(w, r, id)
 			return
 		}
@@ -107,6 +116,16 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeNotFound(w)
 		return
 	}
+}
+
+// isSingleModelIDPath は /models/{id} 系の単体 ID path だけを許可する。
+func isSingleModelIDPath(id string) bool {
+	return id != "" &&
+		id != "by-blueprint" &&
+		id != "variations" &&
+		!strings.HasPrefix(id, "by-blueprint/") &&
+		!strings.HasPrefix(id, "variations/") &&
+		!strings.Contains(id, "/")
 }
 
 // ------------------------------------------------------------
@@ -229,6 +248,29 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(toModelVariationDTOs(vars))
+}
+
+// ------------------------------------------------------------
+// GET /models/{id}
+// ------------------------------------------------------------
+
+func (h *ModelHandler) getVariation(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	mv, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(toModelVariationDTO(mv))
 }
 
 // ------------------------------------------------------------

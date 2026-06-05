@@ -1,5 +1,3 @@
-// frontend/console/inventory/src/presentation/pages/listCreate.tsx
-
 import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
@@ -87,6 +85,7 @@ export default function InventoryListCreate() {
         (c) => c.name === selectedName,
       );
       if (!matched) return;
+
       handleSelectAssignee(matched.id);
     },
     [assigneeCandidates, handleSelectAssignee],
@@ -97,7 +96,7 @@ export default function InventoryListCreate() {
       layout="grid-2"
       title={headerTitle}
       onBack={onBack}
-      onCreate={onCreate}
+      onList={onCreate}
     >
       {/* 左カラム */}
       <div className="space-y-4">
