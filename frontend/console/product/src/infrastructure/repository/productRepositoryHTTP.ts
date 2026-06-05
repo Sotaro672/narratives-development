@@ -4,45 +4,15 @@ import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
 
 /* ---------------------------------------------------------
- * Product 作成API（印刷用）: 1件分
- *   POST /products
- * --------------------------------------------------------- */
-export async function createProductHTTP(payload: {
-  modelId: string;
-  productionId: string;
-  printedAt: string; // ISO 文字列
-  printedBy?: string | null;
-}): Promise<void> {
-  const res = await fetch(`${API_BASE}/products`, {
-    method: "POST",
-    headers: await getAuthJsonHeadersOrThrow(),
-    body: JSON.stringify({
-      modelId: payload.modelId,
-      productionId: payload.productionId,
-      printedAt: payload.printedAt,
-      printedBy: payload.printedBy ?? null,
-      // inspectionResult / connectedToken などは
-      // バックエンド側でデフォルト値(notYet/null)を設定する想定
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      `Product create failed: ${res.status} ${res.statusText}${
-        body ? ` - ${body}` : ""
-      }`,
-    );
-  }
-}
-
-/* ---------------------------------------------------------
  * print_log 作成 API:
  *   POST /products/print-logs
  *   body: { productionId }
- *   → バックエンド側で
- *     - 対象 productionId の products をもとに print_log を作成
- *     - BuildProductQRValue を実行して QR ペイロードを生成
+ *
+ * バックエンド側で以下をまとめて実行する:
+ *   - production.models から products を作成
+ *   - print_log を作成
+ *   - inspections を作成
+ *   - productions.printed を true に更新
  * --------------------------------------------------------- */
 export async function createPrintLogsHTTP(productionId: string): Promise<void> {
   const id = productionId.trim();
@@ -70,6 +40,10 @@ export async function createPrintLogsHTTP(productionId: string): Promise<void> {
  * print_log 取得 API（生 JSON を返す）:
  *   GET /products/print-logs?productionId={id}
  *   → any[] を返し、マッピングは application 層で実施
+ *
+ * NOTE:
+ * 初回印刷前は print_log が存在しないため、404 は空配列として扱う。
+ * 認証エラーや 500 は通常どおり throw する。
  * --------------------------------------------------------- */
 export async function fetchPrintLogsByProductionId(
   productionId: string,
@@ -87,6 +61,10 @@ export async function fetchPrintLogsByProductionId(
     },
   );
 
+  if (res.status === 404) {
+    return [];
+  }
+
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
@@ -96,7 +74,12 @@ export async function fetchPrintLogsByProductionId(
     );
   }
 
-  const raw = (await res.json()) as any[];
+  const raw = await res.json();
+
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
   return raw;
 }
 
@@ -127,6 +110,11 @@ export async function fetchProductsByProductionId(
     );
   }
 
-  const raw = (await res.json()) as any[];
+  const raw = await res.json();
+
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
   return raw;
 }

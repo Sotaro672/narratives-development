@@ -1,7 +1,6 @@
 // frontend/console/product/src/infrastructure/api/printApi.ts
 
 import {
-  createProductHTTP,
   createPrintLogsHTTP,
   fetchPrintLogsByProductionId,
   fetchProductsByProductionId,
@@ -91,47 +90,31 @@ export async function listPrintLogsByProductionId(
 }
 
 /* ---------------------------------------------------------
- * 印刷用 Product 作成 + print_log 取得
- *   1. Product を rows の順で逐次作成
- *   2. print_log を作成
- *   3. listPrintLogsByProductionId で結果を取得
+ * 初回印刷処理
  *
  * NOTE:
- * modelNumber は createProductHTTP には送らない。
- * Product 作成 API は modelId / productionId / printedAt を正として受ける。
- * modelNumber は printService 層で PDF ラベル生成用に使う。
+ * 関数名は既存呼び出し互換のため createProductsForPrint のまま。
+ * ただし、frontend から個別に POST /products は呼ばない。
+ *
+ * 実際には POST /products/print-logs を呼び、
+ * backend 側で以下をまとめて処理する:
+ *   - production.models から products 作成
+ *   - print_log 作成
+ *   - inspections 作成
+ *   - productions.printed = true
+ *
+ * rows は backend には送らない。
+ * rows は printService 層で QR PDF のラベル生成に使う。
  * --------------------------------------------------------- */
 export async function createProductsForPrint(params: {
   productionId: string;
   rows: PrintRow[];
 }): Promise<PrintLogForPrint[]> {
-  const { productionId, rows } = params;
+  const { productionId } = params;
   const id = productionId.trim();
 
   if (!id) {
     throw new Error("productionId is required");
-  }
-
-  const printedAtISO = new Date().toISOString();
-
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const quantity = Number.isFinite(Number(row.quantity))
-      ? Math.max(0, Math.floor(Number(row.quantity)))
-      : 0;
-
-    const modelId = String(row.modelId ?? "").trim();
-
-    if (!modelId || quantity <= 0) {
-      continue;
-    }
-
-    for (let i = 0; i < quantity; i += 1) {
-      await createProductHTTP({
-        modelId,
-        productionId: id,
-        printedAt: printedAtISO,
-      });
-    }
   }
 
   await createPrintLogsHTTP(id);

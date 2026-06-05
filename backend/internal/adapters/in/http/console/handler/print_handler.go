@@ -3,6 +3,7 @@ package consoleHandler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -37,7 +38,7 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/products/print-logs":
-		productionID := r.URL.Query().Get("productionId")
+		productionID := strings.Trim(r.URL.Query().Get("productionId"), " \t\r\n/")
 		if productionID == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{
@@ -50,7 +51,7 @@ func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/products":
-		productionID := r.URL.Query().Get("productionId")
+		productionID := strings.Trim(r.URL.Query().Get("productionId"), " \t\r\n/")
 		if productionID == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{
@@ -88,6 +89,11 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if list == nil {
+		_ = json.NewEncoder(w).Encode([]any{})
+		return
+	}
+
 	_ = json.NewEncoder(w).Encode(list)
 }
 
@@ -102,7 +108,18 @@ func (h *PrintHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *htt
 
 	logs, err := h.query.ListPrintLogsByProductionID(ctx, productionID)
 	if err != nil {
+		if errors.Is(err, printdom.ErrNotFound) {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode([]any{})
+			return
+		}
+
 		writeProductErr(w, err)
+		return
+	}
+
+	if logs == nil {
+		_ = json.NewEncoder(w).Encode([]any{})
 		return
 	}
 
@@ -204,15 +221,17 @@ func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
 func writeProductErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
-	switch err {
-	case productdom.ErrInvalidID:
+	switch {
+	case errors.Is(err, productdom.ErrInvalidID):
 		code = http.StatusBadRequest
-	case productdom.ErrNotFound:
+	case errors.Is(err, productdom.ErrNotFound):
 		code = http.StatusNotFound
-	case productdom.ErrConflict:
+	case errors.Is(err, productdom.ErrConflict):
 		code = http.StatusConflict
-	case printdom.ErrInvalidPrintLogProductionID:
+	case errors.Is(err, printdom.ErrInvalidPrintLogProductionID):
 		code = http.StatusBadRequest
+	case errors.Is(err, printdom.ErrNotFound):
+		code = http.StatusNotFound
 	}
 
 	w.WriteHeader(code)
