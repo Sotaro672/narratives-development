@@ -44,11 +44,6 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	case r.Method == http.MethodGet && path0 == "/mall/avatars":
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-		return
-
 	case r.Method == http.MethodPost && path0 == "/mall/avatars":
 		h.post(w, r)
 		return
@@ -75,7 +70,7 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getState(w, r, id)
 		return
 
-	case (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
+	case r.Method == http.MethodPatch &&
 		strings.HasPrefix(path0, "/mall/avatars/") &&
 		strings.HasSuffix(path0, "/state"):
 		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/state")

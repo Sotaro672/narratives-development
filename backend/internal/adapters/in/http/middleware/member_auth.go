@@ -86,7 +86,6 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// ------------------------------------------------------------
 		// Firebase UID -> companyID -> Member
 		// ------------------------------------------------------------
-		// repository port は GetByFirebaseUID を持たない。
 		// そのため、まず adapter 拡張で companyID を解決し、
 		// その companyID scope 内で ListByCompanyID + Filter.UID により member を取得する。
 		var member memdom.Member

@@ -62,59 +62,6 @@ func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avat
 }
 
 // ==============================
-// GetByWalletAddress
-// ==============================
-
-func (r *AvatarRepositoryFS) GetByWalletAddress(ctx context.Context, wallet string) (avdom.Avatar, error) {
-	if r == nil || r.Client == nil {
-		return avdom.Avatar{}, errBadClient
-	}
-	if wallet == "" {
-		return avdom.Avatar{}, errNotFound
-	}
-
-	q := r.col().Where("walletAddress", "==", wallet).Limit(1)
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	doc, err := iter.Next()
-	if errors.Is(err, iterator.Done) {
-		return avdom.Avatar{}, errNotFound
-	}
-	if err != nil {
-		return avdom.Avatar{}, err
-	}
-	return r.docToDomain(doc)
-}
-
-// ==============================
-// GetByFirebaseUID
-// ==============================
-// Avatar エンティティに FirebaseUID フィールドが無い前提のため、
-// Firestore の "userId" を Firebase UID として扱う。
-func (r *AvatarRepositoryFS) GetByFirebaseUID(ctx context.Context, uid string) (avdom.Avatar, error) {
-	if r == nil || r.Client == nil {
-		return avdom.Avatar{}, errBadClient
-	}
-	if uid == "" {
-		return avdom.Avatar{}, errNotFound
-	}
-
-	q := r.col().Where("userId", "==", uid).Limit(1)
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	doc, err := iter.Next()
-	if errors.Is(err, iterator.Done) {
-		return avdom.Avatar{}, errNotFound
-	}
-	if err != nil {
-		return avdom.Avatar{}, err
-	}
-	return r.docToDomain(doc)
-}
-
-// ==============================
 // ResolveAvatarByUID
 // ==============================
 //
@@ -153,28 +100,6 @@ func (r *AvatarRepositoryFS) ResolveAvatarByUID(ctx context.Context, uid string)
 	}
 
 	return avatarID, walletAddress, nil
-}
-
-// ==============================
-// Exists
-// ==============================
-
-func (r *AvatarRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r == nil || r.Client == nil {
-		return false, errBadClient
-	}
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // ==============================
@@ -481,45 +406,6 @@ func (r *AvatarRepositoryFS) Delete(ctx context.Context, id string) error {
 
 	_, err := ref.Delete(ctx)
 	return err
-}
-
-// ==============================
-// Save (upsert)
-// ==============================
-
-func (r *AvatarRepositoryFS) Save(ctx context.Context, a avdom.Avatar, _ *avdom.SaveOptions) (avdom.Avatar, error) {
-	if r == nil || r.Client == nil {
-		return avdom.Avatar{}, errBadClient
-	}
-
-	now := time.Now().UTC()
-	if a.CreatedAt.IsZero() {
-		a.CreatedAt = now
-	}
-	if a.UpdatedAt.IsZero() {
-		a.UpdatedAt = now
-	}
-
-	var ref *firestore.DocumentRef
-	if a.ID == "" {
-		ref = r.col().NewDoc()
-		a.ID = ref.ID
-	} else {
-		ref = r.col().Doc(a.ID)
-	}
-
-	// userId は Firebase UID を格納している前提
-	data := r.domainToDocData(a)
-
-	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
-		return avdom.Avatar{}, err
-	}
-
-	snap, err := ref.Get(ctx)
-	if err != nil {
-		return avdom.Avatar{}, err
-	}
-	return r.docToDomain(snap)
 }
 
 // ==============================

@@ -27,8 +27,9 @@ import (
 //
 // Endpoints (primary only):
 // - GET    /mall/me/avatars
-// - GET    /mall/me/avatars/state
 // - PATCH  /mall/me/avatars        (avatarName/profile/externalLink/avatarIcon)
+// - DELETE /mall/me/avatars
+// - GET    /mall/me/avatars/state
 // - POST   /mall/me/avatars/follow
 // - DELETE /mall/me/avatars/follow
 
@@ -92,12 +93,16 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleGet(w, r, uid)
 		return
 
-	case r.Method == http.MethodGet && path0 == meAvatarsStatePath:
-		h.handleGetState(w, r, uid)
-		return
-
 	case r.Method == http.MethodPatch && path0 == meAvatarsPath:
 		h.handlePatch(w, r, uid)
+		return
+
+	case r.Method == http.MethodDelete && path0 == meAvatarsPath:
+		h.handleDelete(w, r, uid)
+		return
+
+	case r.Method == http.MethodGet && path0 == meAvatarsStatePath:
+		h.handleGetState(w, r, uid)
 		return
 
 	case r.Method == http.MethodPost && path0 == meAvatarsFollowPath:
@@ -122,27 +127,21 @@ func strPtrTrim(s string) *string {
 	return &s
 }
 
-func (h *MeAvatarHandler) resolveAvatarIDByUID(ctx context.Context, uid string) (string, string, error) {
+func (h *MeAvatarHandler) ResolveAvatarByUID(
+	ctx context.Context,
+	uid string,
+) (string, string, avatardom.AvatarPatch, error) {
 	if h == nil || h.Repo == nil {
-		return "", "", errors.New("me avatar handler not configured")
+		return "", "", avatardom.AvatarPatch{}, errors.New("me avatar handler not configured")
 	}
 
 	avatarID, walletAddress, err := h.Repo.ResolveAvatarByUID(ctx, uid)
 	if err != nil {
-		return "", "", err
+		return "", "", avatardom.AvatarPatch{}, err
 	}
 
 	if avatarID == "" {
-		return "", walletAddress, avatardom.ErrInvalidID
-	}
-
-	return avatarID, walletAddress, nil
-}
-
-func (h *MeAvatarHandler) resolveAvatarPatchByUID(ctx context.Context, uid string) (string, avatardom.AvatarPatch, error) {
-	avatarID, walletAddress, err := h.resolveAvatarIDByUID(ctx, uid)
-	if err != nil {
-		return "", avatardom.AvatarPatch{}, err
+		return "", walletAddress, avatardom.AvatarPatch{}, avatardom.ErrInvalidID
 	}
 
 	base := avatardom.AvatarPatch{
@@ -156,13 +155,13 @@ func (h *MeAvatarHandler) resolveAvatarPatchByUID(ctx context.Context, uid strin
 
 	if h.AvatarUC == nil {
 		base.Sanitize()
-		return avatarID, base, nil
+		return avatarID, walletAddress, base, nil
 	}
 
 	av, gerr := h.AvatarUC.GetByID(ctx, avatarID)
 	if gerr != nil {
 		base.Sanitize()
-		return avatarID, base, nil
+		return avatarID, walletAddress, base, nil
 	}
 
 	patch := avatardom.AvatarPatch{
@@ -179,10 +178,14 @@ func (h *MeAvatarHandler) resolveAvatarPatchByUID(ctx context.Context, uid strin
 	}
 
 	patch.Sanitize()
-	return avatarID, patch, nil
+	return avatarID, walletAddress, patch, nil
 }
 
-func (h *MeAvatarHandler) updateAvatarPatchByUID(ctx context.Context, uid string, patch avatardom.AvatarPatch) (string, avatardom.AvatarPatch, error) {
+func (h *MeAvatarHandler) updateAvatarPatchByUID(
+	ctx context.Context,
+	uid string,
+	patch avatardom.AvatarPatch,
+) (string, avatardom.AvatarPatch, error) {
 	if h == nil || h.Repo == nil {
 		return "", avatardom.AvatarPatch{}, errors.New("me avatar handler not configured")
 	}
@@ -191,7 +194,7 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(ctx context.Context, uid string
 		return "", avatardom.AvatarPatch{}, errors.New("avatar usecase not configured")
 	}
 
-	avatarID, walletAddress, err := h.resolveAvatarIDByUID(ctx, uid)
+	avatarID, walletAddress, _, err := h.ResolveAvatarByUID(ctx, uid)
 	if err != nil {
 		return "", avatardom.AvatarPatch{}, err
 	}
@@ -223,7 +226,7 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(ctx context.Context, uid string
 }
 
 func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid string) {
-	avatarID, patch, err := h.resolveAvatarPatchByUID(r.Context(), uid)
+	avatarID, _, patch, err := h.ResolveAvatarByUID(r.Context(), uid)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return
@@ -273,7 +276,7 @@ func (h *MeAvatarHandler) handleGetState(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	avatarID, _, err := h.resolveAvatarIDByUID(r.Context(), uid)
+	avatarID, _, _, err := h.ResolveAvatarByUID(r.Context(), uid)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return
@@ -378,6 +381,27 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 	_ = json.NewEncoder(w).Encode(out)
 }
 
+func (h *MeAvatarHandler) handleDelete(w http.ResponseWriter, r *http.Request, uid string) {
+	if h == nil || h.AvatarUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
+		return
+	}
+
+	avatarID, _, _, err := h.ResolveAvatarByUID(r.Context(), uid)
+	if err != nil {
+		writeMeAvatarErr(w, err)
+		return
+	}
+
+	if err := h.AvatarUC.Delete(r.Context(), avatarID); err != nil {
+		writeMeAvatarErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *MeAvatarHandler) handleFollow(w http.ResponseWriter, r *http.Request, uid string) {
 	ctx := r.Context()
 
@@ -403,7 +427,7 @@ func (h *MeAvatarHandler) handleFollow(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 
-	myAvatarID, _, err := h.resolveAvatarIDByUID(ctx, uid)
+	myAvatarID, _, _, err := h.ResolveAvatarByUID(ctx, uid)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return
@@ -457,7 +481,7 @@ func (h *MeAvatarHandler) handleUnfollow(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	myAvatarID, _, err := h.resolveAvatarIDByUID(ctx, uid)
+	myAvatarID, _, _, err := h.ResolveAvatarByUID(ctx, uid)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return

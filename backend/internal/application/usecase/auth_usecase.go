@@ -50,7 +50,6 @@ type MemberCompanyIDReader interface {
 // 方針:
 // - Firestore document ID と Firebase Auth UID は分離する
 // - members/{autoDocID}.uid = Firebase Auth UID として保存する
-// - 既存 member 確認は repository port 本体の GetByFirebaseUID では行わない
 // - uid から companyID を解決できる adapter の場合のみ、ListByCompanyID + Filter.UID により冪等確認する
 // - 新規作成時のみ firstName / lastName を必須にする
 // -------------------------------------------------------
@@ -76,7 +75,6 @@ func (s *BootstrapService) Bootstrap(
 	// ---------------------------------------------------------
 	// 0) 既に member がいるなら（冪等）基本は何もしない
 	//
-	// repository port から GetByFirebaseUID は削除済み。
 	// そのため、adapter 側が GetCompanyIDByFirebaseUID を実装している場合のみ、
 	// companyID を取得したうえで ListByCompanyID + Filter.UID により既存 member を確認する。
 	// ---------------------------------------------------------
