@@ -163,7 +163,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   });
 
   const isAvatarPage = location.pathname === "/avatar";
-  const isListsPage = location.pathname === "/lists" || location.pathname === "/rooms";
 
   useEffect(() => {
     const auth = getAuth();
@@ -194,7 +193,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
-      if (isAvatarPage || isListsPage) {
+      if (isAvatarPage) {
         setAvatarStatus({
           status: {
             hasAvatar: true,
@@ -231,7 +230,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return () => {
       cancelled = true;
     };
-  }, [authState.loading, authState.user, backendUrl, isAvatarPage, isListsPage]);
+  }, [authState.loading, authState.user, backendUrl, isAvatarPage]);
 
   if (authState.loading) {
     return null;
@@ -245,8 +244,8 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return null;
   }
 
-  if (!isListsPage && !avatarStatus.status?.hasAvatar) {
-    return <Navigate to="/lists" replace />;
+  if (!isAvatarPage && !avatarStatus.status?.hasAvatar) {
+    return <Navigate to="/avatar" replace />;
   }
 
   return <>{children}</>;

@@ -146,8 +146,8 @@ async function fetchCartItemCount(args: {
     avatarId,
   });
 
-  let response = await fetch(
-    `${apiBaseUrl}/mall/me/cart/query?${searchParams.toString()}`,
+  const response = await fetch(
+    `${apiBaseUrl}/mall/me/cart?${searchParams.toString()}`,
     {
       method: "GET",
       headers: {
@@ -157,20 +157,6 @@ async function fetchCartItemCount(args: {
       credentials: "include",
     }
   );
-
-  if (response.status === 404) {
-    response = await fetch(
-      `${apiBaseUrl}/mall/me/cart?${searchParams.toString()}`,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        credentials: "include",
-      }
-    );
-  }
 
   if (!response.ok) {
     return 0;
@@ -328,7 +314,7 @@ export function useHeaderController({
       }
     }
 
-    loadCartItemCount();
+    void loadCartItemCount();
 
     return () => {
       cancelled = true;

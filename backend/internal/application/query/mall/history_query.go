@@ -576,10 +576,6 @@ func buildHistoryModelCacheKey(
 }
 
 func cloneHistoryOrders(in []historydto.HistoryOrder) []historydto.HistoryOrder {
-	if len(in) == 0 {
-		return nil
-	}
-
 	out := make([]historydto.HistoryOrder, 0, len(in))
 
 	for _, order := range in {
@@ -588,6 +584,8 @@ func cloneHistoryOrders(in []historydto.HistoryOrder) []historydto.HistoryOrder 
 		if len(order.Items) > 0 {
 			next.Items = make([]historydto.HistoryOrderItem, len(order.Items))
 			copy(next.Items, order.Items)
+		} else {
+			next.Items = []historydto.HistoryOrderItem{}
 		}
 
 		out = append(out, next)
