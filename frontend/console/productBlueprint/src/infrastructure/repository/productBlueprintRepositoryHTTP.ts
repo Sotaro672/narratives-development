@@ -9,10 +9,8 @@ import {
 // application 層の型だけを type import
 import type { CreateProductBlueprintParams } from "../../application/productBlueprintCreateService";
 
-import type {
-  UpdateProductBlueprintParams,
-  ProductBlueprintDetailResponse,
-} from "../api/productBlueprintDetailApi";
+import type { ProductBlueprintDetailResponse } from "../api/productBlueprintDetailApi";
+import type { UpdateProductBlueprintParams } from "../api/productBlueprintUpdateApi";
 
 // -----------------------------------------------------------
 // internal helpers
@@ -53,6 +51,14 @@ function buildProductBlueprintCategoryPayload(params: {
   };
 }
 
+function buildProductIdTagPayload(type: string | null | undefined): {
+  type: string;
+} {
+  return {
+    type: String(type ?? "").trim(),
+  };
+}
+
 // -----------------------------------------------------------
 // POST: 商品設計 作成
 // -----------------------------------------------------------
@@ -73,19 +79,15 @@ export async function createProductBlueprintHTTP(
     brandId: params.brandId,
 
     // itemType は廃止。
-    // productBlueprintCategoryId / productBlueprintCategory を正として送る。
+    // productBlueprintCategoryId / productBlueprintCategory / categoryFields を正として送る。
     ...categoryPayload,
 
-    fit: params.fit,
-    material: params.material,
-    weight: params.weight,
-    qualityAssurance: params.qualityAssurance,
     productIdTag: params.productIdTag,
     companyId: params.companyId,
     assigneeId: params.assigneeId ?? null,
     createdBy: params.createdBy ?? null,
 
-    // printed は backend 側で false を設定する想定なので送らない
+    // printed は backend 側で false を設定する想定なので送らない。
   };
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
@@ -155,16 +157,10 @@ export async function updateProductBlueprintHTTP(
     brandId: params.brandId,
 
     // itemType は廃止。
-    // productBlueprintCategoryId / productBlueprintCategory を正として送る。
+    // productBlueprintCategoryId / productBlueprintCategory / categoryFields を正として送る。
     ...categoryPayload,
 
-    fit: params.fit,
-    material: params.material,
-    weight: params.weight,
-    qualityAssurance: params.qualityAssurance ?? [],
-    productIdTag: {
-      type: params.productIdTagType ?? "",
-    },
+    productIdTag: buildProductIdTagPayload(params.productIdTagType),
     companyId: params.companyId,
     assigneeId: params.assigneeId,
     updatedBy: params.updatedBy ?? null,

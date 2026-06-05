@@ -140,6 +140,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
 
 	printUC := uc.NewPrintUsecase(
+		r.productionRepo,
 		r.productRepo,
 		r.printLogRepo,
 		r.inspectionRepo,
@@ -234,8 +235,8 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		Companies: r.companyRepo,
 	}
 
-	_ = s   // reserved for future use; keeps signature stable
-	_ = res // reserved for future use; keeps signature stable
+	_ = s
+	_ = res
 
 	return &usecases{
 		tokenUC: tokenUC,

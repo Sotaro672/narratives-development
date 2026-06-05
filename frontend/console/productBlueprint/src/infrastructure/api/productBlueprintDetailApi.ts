@@ -5,137 +5,128 @@ import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import { fetchJSON } from "../../../../shell/src/shared/http/fetchJSON";
 
 import type {
-  ApparelModelNumberRow,
-  ApparelSizeInput,
-} from "../../domain/entity/apparel";
-
-import type {
   CategoryFieldValues,
   ProductBlueprintCategoryKind,
   ProductBlueprintCategorySnapshot,
 } from "../../domain/entity/productBlueprintCategory";
 
-// ------------------------------------------------------
-// apparel model variation 共通型
-// ------------------------------------------------------
-
-export type ApparelModelVariationResponse = {
-  id?: string;
-  size?: string;
-  color?: string;
-  modelNumber?: string;
-  rgb?: number | null;
-  measurements?: Record<string, number | null>;
-  productBlueprintId?: string;
-  version?: number;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
+export type { UpdateProductBlueprintParams } from "./productBlueprintUpdateApi";
 
 export type ProductBlueprintModelRef = {
   modelId: string;
   displayOrder: number;
 };
 
-// ------------------------------------------------------
-// ProductBlueprint 詳細レスポンス
-// ------------------------------------------------------
+export type ProductBlueprintModelVariationResponse = {
+  id?: string;
+  productBlueprintId?: string;
+  kind?: "apparel" | "alcohol" | string;
+
+  modelNumber?: string;
+
+  size?: string;
+  color?: string | { name?: string; rgb?: number | null };
+  rgb?: number | null;
+  measurements?: Record<string, number | null>;
+
+  volume?: {
+    value?: number | null;
+    unit?: string | null;
+  } | null;
+
+  version?: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+type ProductBlueprintCategorySnapshotRaw =
+  | ProductBlueprintCategorySnapshot
+  | {
+      ID?: string;
+      Code?: string;
+      NameJa?: string;
+      NameEn?: string;
+      Kind?: ProductBlueprintCategoryKind;
+      Path?: string[];
+    }
+  | null
+  | undefined;
 
 export type ProductBlueprintDetailResponse = {
   id: string;
   productName: string;
+  description?: string | null;
 
+  companyId?: string;
   brandId: string;
+  brandName?: string | null;
 
   productBlueprintCategoryId: string;
   productBlueprintCategory: ProductBlueprintCategorySnapshot;
 
-  /**
-   * 旧固定 field。
-   *
-   * backend 新仕様では categoryFields 側へ寄せていくが、
-   * 既存画面・既存データ互換のため response 型としては残す。
-   */
-  fit?: string | null;
-  material?: string | null;
-  weight?: number | null;
-  qualityAssurance?: string[] | null;
+  categoryFields?: CategoryFieldValues | null;
 
   productIdTag?: {
     type?: string | null;
   } | null;
 
-  companyId?: string;
   assigneeId?: string;
+  assigneeName?: string | null;
 
   printed?: boolean | null;
 
-  brandName?: string | null;
-  assigneeName?: string | null;
-  createdByName?: string | null;
-
   createdBy?: string | null;
+  createdByName?: string | null;
   createdAt?: string | null;
+
+  updatedBy?: string | null;
+  updatedByName?: string | null;
   updatedAt?: string | null;
+
   deletedAt?: string | null;
 
   modelRefs?: ProductBlueprintModelRef[];
-
-  modelVariations?: ApparelModelVariationResponse[];
-
-  /**
-   * backend ProductBlueprint.CategoryFields。
-   *
-   * brandId / productName / productIdTagType / description は含めない。
-   * color / size / measurements も model variation 側なので含めない。
-   */
-  categoryFields?: CategoryFieldValues | null;
+  modelVariations?: ProductBlueprintModelVariationResponse[];
 };
 
-// ------------------------------------------------------
-// 更新用パラメータ
-// ------------------------------------------------------
-
-export type UpdateProductBlueprintParams = {
-  id: string;
-
-  productName: string;
-  brandId: string;
-
-  productBlueprintCategoryId: string;
-  productBlueprintCategory: ProductBlueprintCategorySnapshot;
-
-  /**
-   * 旧固定 field。
-   *
-   * 新仕様では categoryFields に寄せるが、
-   * 既存 UI / repository の段階移行のため optional として残す。
-   */
-  fit?: string | null;
-  material?: string | null;
-  weight?: number | null;
-  qualityAssurance?: string[] | null;
-
-  productIdTagType: string | null;
-
-  companyId: string;
-  assigneeId: string;
-
-  colors: string[];
-  colorRgbMap?: Record<string, string>;
-
-  sizes?: ApparelSizeInput[];
-  modelNumbers?: ApparelModelNumberRow[];
-  updatedBy?: string | null;
-
-  categoryFields?: CategoryFieldValues | null;
+type ProductBlueprintDetailRawResponse = Omit<
+  ProductBlueprintDetailResponse,
+  "productBlueprintCategory"
+> & {
+  productBlueprintCategory: ProductBlueprintCategorySnapshotRaw;
 };
 
 export type { ProductBlueprintCategoryKind, ProductBlueprintCategorySnapshot };
 
-// ------------------------------------------------------
-// category kind helpers
-// ------------------------------------------------------
+function normalizeProductBlueprintCategorySnapshot(
+  raw: ProductBlueprintCategorySnapshotRaw,
+): ProductBlueprintCategorySnapshot {
+  const record = (raw ?? {}) as Record<string, unknown>;
+
+  const id = String(record.id ?? record.ID ?? "");
+  const code = String(record.code ?? record.Code ?? id);
+  const nameJa = String(record.nameJa ?? record.NameJa ?? "");
+  const nameEn = String(record.nameEn ?? record.NameEn ?? "");
+  const kind = String(
+    record.kind ?? record.Kind ?? "",
+  ) as ProductBlueprintCategoryKind;
+
+  const rawPath = record.path ?? record.Path;
+  const path = Array.isArray(rawPath)
+    ? rawPath.map((value) => String(value)).filter(Boolean)
+    : code
+      ? code.split(".").filter(Boolean)
+      : [];
+
+  return {
+    id,
+    code,
+    nameJa,
+    nameEn,
+    kind,
+    path,
+  };
+}
 
 export function getProductBlueprintDetailCategoryKind(
   detail: ProductBlueprintDetailResponse | null | undefined,
@@ -173,10 +164,6 @@ export function isOtherProductBlueprintDetail(
   return getProductBlueprintDetailCategoryKind(detail) === "other";
 }
 
-// ------------------------------------------------------
-// GET /product-blueprints/{id} 詳細取得
-// ------------------------------------------------------
-
 export async function getProductBlueprintDetailApi(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
@@ -189,18 +176,18 @@ export async function getProductBlueprintDetailApi(
 
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}`;
 
-  const json = await fetchJSON<ProductBlueprintDetailResponse>(url, {
+  const json = await fetchJSON<ProductBlueprintDetailRawResponse>(url, {
     method: "GET",
     headers,
   });
 
   return {
     ...json,
-    fit: json.fit ?? null,
-    material: json.material ?? null,
-    weight: json.weight ?? null,
-    qualityAssurance: json.qualityAssurance ?? [],
+    productBlueprintCategory: normalizeProductBlueprintCategorySnapshot(
+      json.productBlueprintCategory,
+    ),
     categoryFields: json.categoryFields ?? null,
+    productIdTag: json.productIdTag ?? null,
     modelRefs: json.modelRefs ?? [],
     modelVariations: json.modelVariations ?? [],
   };

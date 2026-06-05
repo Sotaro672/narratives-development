@@ -38,8 +38,8 @@ import {
   type CreateModelVariationRequest,
 } from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
 
-const makeApparelKey = (sizeLabel: string, color: string) =>
-  `${sizeLabel}__${color}`;
+const makeApparelKey = (sizeLabel: string, color: string): string =>
+  `${String(sizeLabel ?? "").trim()}__${String(color ?? "").trim()}`;
 
 const makeVolumeKey = (volume: Volume): string => {
   const value =
@@ -78,8 +78,10 @@ function resolveApparelCategoryCode(
 function isAlcoholCategory(
   params: Pick<UpdateProductBlueprintParams, "productBlueprintCategory">,
 ): boolean {
+  const kind = String(params.productBlueprintCategory?.kind ?? "").trim();
   const code = String(params.productBlueprintCategory?.code ?? "").trim();
-  return isAlcoholCategoryCode(code);
+
+  return kind === "alcohol" || isAlcoholCategoryCode(code);
 }
 
 function isApparelVariation(
@@ -155,20 +157,13 @@ function normalizeMeasurementsForRequest(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function buildMeasurementsFromSizeRowForUpdate(
+function buildMeasurementsFromSizeRow(
   categoryCode: ApparelCategoryCode,
   size: ApparelSizeInput,
 ): Record<string, number> | undefined {
   return normalizeMeasurementsForRequest(
     buildApparelMeasurements(categoryCode, size),
   );
-}
-
-function buildMeasurementsForCreate(
-  categoryCode: ApparelCategoryCode,
-  size: ApparelSizeInput,
-): Record<string, number> | undefined {
-  return buildMeasurementsFromSizeRowForUpdate(categoryCode, size);
 }
 
 function resolveRgbInt(args: {
@@ -211,7 +206,7 @@ export async function getProductBlueprintDetail(
 }
 
 // -----------------------------------------
-// UPDATE（Blueprint メタ情報 + ModelVariation）
+// UPDATE: ProductBlueprint 本体 + ModelVariation
 // -----------------------------------------
 
 export async function updateProductBlueprint(
@@ -226,10 +221,6 @@ export async function updateProductBlueprint(
   const {
     id,
     productName,
-    fit,
-    material,
-    weight,
-    qualityAssurance,
     productIdTagType,
     brandId,
     assigneeId,
@@ -267,10 +258,6 @@ export async function updateProductBlueprint(
       productBlueprintCategoryId,
       productBlueprintCategory,
       categoryFields: categoryFields ?? null,
-      fit,
-      material,
-      weight,
-      qualityAssurance,
       productIdTagType,
       companyId,
       assigneeId,
@@ -286,10 +273,6 @@ export async function updateProductBlueprint(
     productBlueprintCategory,
   });
 
-  const shouldUpdateAlcoholVariations = isAlcoholCategory({
-    productBlueprintCategory,
-  });
-
   if (apparelCategoryCode) {
     await updateApparelModelVariations({
       productBlueprintId: id,
@@ -300,7 +283,7 @@ export async function updateProductBlueprint(
     });
   }
 
-  if (shouldUpdateAlcoholVariations) {
+  if (isAlcoholCategory({ productBlueprintCategory })) {
     await updateAlcoholModelVariations({
       productBlueprintId: id,
       volumes,
@@ -370,7 +353,7 @@ async function updateApparelModelVariations(args: {
       return;
     }
 
-    const measurements = buildMeasurementsFromSizeRowForUpdate(
+    const measurements = buildMeasurementsFromSizeRow(
       apparelCategoryCode,
       size,
     );
@@ -406,14 +389,14 @@ async function updateApparelModelVariations(args: {
       fallbackRgb: variation.color?.rgb ?? null,
     });
 
-    const measurements = measurementsMap.get(sizeLabel);
-
     const modelNumber =
       modelNumbers.find(
         (candidate) =>
           String(candidate.size ?? "").trim() === sizeLabel &&
           String(candidate.color ?? "").trim() === colorName,
       )?.code ?? "";
+
+    const measurements = measurementsMap.get(sizeLabel);
 
     const payload: ModelVariationUpdateRequest = {
       kind: "apparel",
@@ -444,7 +427,9 @@ async function updateApparelModelVariations(args: {
       return;
     }
 
-    const sizeRow = sizes.find((size) => size.sizeLabel === sizeLabel);
+    const sizeRow = sizes.find(
+      (size) => String(size.sizeLabel ?? "").trim() === sizeLabel,
+    );
 
     if (!sizeRow) {
       return;
@@ -456,17 +441,17 @@ async function updateApparelModelVariations(args: {
       fallbackRgb: null,
     });
 
-    const measurements = buildMeasurementsForCreate(
-      apparelCategoryCode,
-      sizeRow,
-    );
-
     const modelNumber =
       modelNumbers.find(
         (candidate) =>
           String(candidate.size ?? "").trim() === sizeLabel &&
           String(candidate.color ?? "").trim() === colorName,
       )?.code ?? "";
+
+    const measurements = buildMeasurementsFromSizeRow(
+      apparelCategoryCode,
+      sizeRow,
+    );
 
     const createReq: CreateModelVariationRequest = {
       kind: "apparel",
@@ -529,8 +514,7 @@ async function updateAlcoholModelVariations(args: {
   const selectedKeys = new Set<string>();
 
   volumes.forEach((row) => {
-    const volume = volumeRowToVolume(row);
-    const key = makeVolumeKey(volume);
+    const key = makeVolumeKey(volumeRowToVolume(row));
 
     if (!key) {
       return;
