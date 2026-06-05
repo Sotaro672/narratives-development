@@ -3,9 +3,32 @@ package usecase
 
 import (
 	"context"
+	"sort"
 
 	modeldom "narratives/internal/domain/model"
+	productbpdom "narratives/internal/domain/productBlueprint"
 )
+
+// ------------------------------------------------------------
+// ProductBlueprintModelRefPort
+// ------------------------------------------------------------
+//
+// ModelUsecase が models collection を正として
+// productBlueprint.modelRefs を同期するための port。
+//
+// NOTE:
+// - ProductBlueprint の通常更新責務は持たない。
+// - modelRefs の置き換えだけを扱う。
+// - ReplaceModelRefsWithoutTouch は updatedAt / updatedBy を触らない。
+type ProductBlueprintModelRefPort interface {
+	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+
+	ReplaceModelRefsWithoutTouch(
+		ctx context.Context,
+		id string,
+		refs []productbpdom.ModelRef,
+	) (productbpdom.ProductBlueprint, error)
+}
 
 // ------------------------------------------------------------
 // ModelUsecase
@@ -22,15 +45,24 @@ import (
 // alcohol では volume のみを扱う。
 // どの category で model variation を作成するかは、
 // productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
+//
+// modelRefs は ProductBlueprintUsecase ではなく、ModelUsecase 側で
+// models collection を正として同期する。
 // ------------------------------------------------------------
 
 type ModelUsecase struct {
 	repo modeldom.RepositoryPort
+
+	productBlueprintRefs ProductBlueprintModelRefPort
 }
 
-func NewModelUsecase(repo modeldom.RepositoryPort) *ModelUsecase {
+func NewModelUsecase(
+	repo modeldom.RepositoryPort,
+	productBlueprintRefs ProductBlueprintModelRefPort,
+) *ModelUsecase {
 	return &ModelUsecase{
-		repo: repo,
+		repo:                 repo,
+		productBlueprintRefs: productBlueprintRefs,
 	}
 }
 
@@ -60,6 +92,7 @@ func (u *ModelUsecase) ListByProductBlueprintID(
 //   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
 //   - alcohol では Volume のみを variation field として扱う。
 //   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
+//   - 作成後、models collection を正として productBlueprint.modelRefs を同期する。
 func (u *ModelUsecase) Create(
 	ctx context.Context,
 	v modeldom.NewModelVariation,
@@ -76,6 +109,10 @@ func (u *ModelUsecase) Create(
 		return nil, err
 	}
 
+	if err := u.syncProductBlueprintModelRefs(ctx, v.ProductBlueprintID()); err != nil {
+		return nil, err
+	}
+
 	return created, nil
 }
 
@@ -87,6 +124,7 @@ func (u *ModelUsecase) Create(
 //   - 一括差し替えは行わない。
 //   - 削除が必要な variation は Delete を個別に呼び出す。
 //   - 履歴は保存しない。
+//   - modelId 自体は変わらないため、modelRefs の同期は行わない。
 func (u *ModelUsecase) Update(
 	ctx context.Context,
 	variationID string,
@@ -111,6 +149,8 @@ func (u *ModelUsecase) Update(
 //
 // NOTE:
 //   - repository は対象 document を物理削除する。
+//   - 削除前に productBlueprintID を保持する。
+//   - 削除後、models collection を正として productBlueprint.modelRefs を同期する。
 func (u *ModelUsecase) Delete(
 	ctx context.Context,
 	variationID string,
@@ -122,5 +162,147 @@ func (u *ModelUsecase) Delete(
 		return modeldom.ErrInvalidID
 	}
 
-	return u.repo.Delete(ctx, variationID)
+	current, err := u.repo.GetByID(ctx, variationID)
+	if err != nil {
+		return err
+	}
+
+	productBlueprintID := modelVariationProductBlueprintID(current)
+	if productBlueprintID == "" {
+		return modeldom.ErrInvalidBlueprintID
+	}
+
+	if err := u.repo.Delete(ctx, variationID); err != nil {
+		return err
+	}
+
+	return u.syncProductBlueprintModelRefs(ctx, productBlueprintID)
+}
+
+// ------------------------------------------------------------
+// productBlueprint.modelRefs sync
+// ------------------------------------------------------------
+
+func (u *ModelUsecase) syncProductBlueprintModelRefs(
+	ctx context.Context,
+	productBlueprintID string,
+) error {
+	if u.repo == nil {
+		return modeldom.ErrNotFound
+	}
+	if u.productBlueprintRefs == nil {
+		return nil
+	}
+	if productBlueprintID == "" {
+		return modeldom.ErrInvalidBlueprintID
+	}
+
+	pb, err := u.productBlueprintRefs.GetByID(ctx, productBlueprintID)
+	if err != nil {
+		return err
+	}
+
+	models, err := u.repo.ListByProductBlueprintID(ctx, productBlueprintID)
+	if err != nil {
+		return err
+	}
+
+	refs := rebuildModelRefsPreservingOrder(pb.ModelRefs, models)
+
+	_, err = u.productBlueprintRefs.ReplaceModelRefsWithoutTouch(
+		ctx,
+		productBlueprintID,
+		refs,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func rebuildModelRefsPreservingOrder(
+	current []productbpdom.ModelRef,
+	models []modeldom.ModelVariation,
+) []productbpdom.ModelRef {
+	existingModelIDs := make(map[string]struct{}, len(models))
+	modelIDsInListOrder := make([]string, 0, len(models))
+
+	for _, model := range models {
+		modelID := modelVariationID(model)
+		if modelID == "" {
+			continue
+		}
+		if _, ok := existingModelIDs[modelID]; ok {
+			continue
+		}
+
+		existingModelIDs[modelID] = struct{}{}
+		modelIDsInListOrder = append(modelIDsInListOrder, modelID)
+	}
+
+	used := make(map[string]struct{}, len(modelIDsInListOrder))
+	orderedIDs := make([]string, 0, len(modelIDsInListOrder))
+
+	currentCopy := append([]productbpdom.ModelRef(nil), current...)
+	sort.SliceStable(currentCopy, func(i, j int) bool {
+		return currentCopy[i].DisplayOrder < currentCopy[j].DisplayOrder
+	})
+
+	for _, ref := range currentCopy {
+		modelID := ref.ModelID
+		if modelID == "" {
+			continue
+		}
+		if _, ok := existingModelIDs[modelID]; !ok {
+			continue
+		}
+		if _, ok := used[modelID]; ok {
+			continue
+		}
+
+		used[modelID] = struct{}{}
+		orderedIDs = append(orderedIDs, modelID)
+	}
+
+	for _, modelID := range modelIDsInListOrder {
+		if modelID == "" {
+			continue
+		}
+		if _, ok := used[modelID]; ok {
+			continue
+		}
+
+		used[modelID] = struct{}{}
+		orderedIDs = append(orderedIDs, modelID)
+	}
+
+	refs := make([]productbpdom.ModelRef, 0, len(orderedIDs))
+	for i, modelID := range orderedIDs {
+		refs = append(refs, productbpdom.ModelRef{
+			ModelID:      modelID,
+			DisplayOrder: i + 1,
+		})
+	}
+
+	return refs
+}
+
+func modelVariationID(v modeldom.ModelVariation) string {
+	if v == nil {
+		return ""
+	}
+
+	return v.GetID()
+}
+
+func modelVariationProductBlueprintID(v modeldom.ModelVariation) string {
+	switch x := v.(type) {
+	case modeldom.ApparelModelVariation:
+		return x.ProductBlueprintID
+	case modeldom.AlcoholModelVariation:
+		return x.ProductBlueprintID
+	default:
+		return ""
+	}
 }

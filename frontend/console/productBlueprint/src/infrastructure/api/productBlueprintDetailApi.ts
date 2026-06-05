@@ -134,85 +134,6 @@ export type UpdateProductBlueprintParams = {
 export type { ProductBlueprintCategoryKind, ProductBlueprintCategorySnapshot };
 
 // ------------------------------------------------------
-// raw response helpers
-// ------------------------------------------------------
-
-type RawProductBlueprintCategorySnapshot =
-  Partial<ProductBlueprintCategorySnapshot> & {
-    ID?: string | null;
-    Code?: string | null;
-    NameJa?: string | null;
-    NameEn?: string | null;
-    Kind?: ProductBlueprintCategoryKind | string | null;
-    Path?: string[] | null;
-  };
-
-function normalizeProductBlueprintCategoryKind(
-  value: unknown,
-): ProductBlueprintCategoryKind {
-  const kind = String(value ?? "").trim();
-
-  switch (kind) {
-    case "apparel":
-    case "alcohol":
-    case "cosmetics":
-    case "healthcare":
-    case "other":
-      return kind;
-    default:
-      return "other";
-  }
-}
-
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((item) => String(item ?? "").trim())
-    .filter((item) => item !== "");
-}
-
-function normalizeProductBlueprintCategorySnapshot(
-  raw: RawProductBlueprintCategorySnapshot | null | undefined,
-): ProductBlueprintCategorySnapshot {
-  const id = String(raw?.id ?? raw?.ID ?? "").trim();
-  const code = String(raw?.code ?? raw?.Code ?? "").trim();
-
-  return {
-    id,
-    code,
-    nameJa: String(raw?.nameJa ?? raw?.NameJa ?? "").trim(),
-    nameEn: String(raw?.nameEn ?? raw?.NameEn ?? "").trim(),
-    kind: normalizeProductBlueprintCategoryKind(raw?.kind ?? raw?.Kind),
-    path:
-      Array.isArray(raw?.path) && raw.path.length > 0
-        ? normalizeStringArray(raw.path)
-        : normalizeStringArray(raw?.Path),
-  };
-}
-
-function resolveProductBlueprintCategoryId(args: {
-  productBlueprintCategoryId?: string | null;
-  productBlueprintCategory?: RawProductBlueprintCategorySnapshot | null;
-}): string {
-  const fromField = String(args.productBlueprintCategoryId ?? "").trim();
-
-  if (fromField) {
-    return fromField;
-  }
-
-  return String(
-    args.productBlueprintCategory?.id ??
-      args.productBlueprintCategory?.ID ??
-      args.productBlueprintCategory?.code ??
-      args.productBlueprintCategory?.Code ??
-      "",
-  ).trim();
-}
-
-// ------------------------------------------------------
 // category kind helpers
 // ------------------------------------------------------
 
@@ -273,17 +194,8 @@ export async function getProductBlueprintDetailApi(
     headers,
   });
 
-  const rawCategory =
-    json.productBlueprintCategory as RawProductBlueprintCategorySnapshot;
-
   return {
     ...json,
-    productBlueprintCategoryId: resolveProductBlueprintCategoryId({
-      productBlueprintCategoryId: json.productBlueprintCategoryId,
-      productBlueprintCategory: rawCategory,
-    }),
-    productBlueprintCategory:
-      normalizeProductBlueprintCategorySnapshot(rawCategory),
     fit: json.fit ?? null,
     material: json.material ?? null,
     weight: json.weight ?? null,

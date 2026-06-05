@@ -42,7 +42,8 @@ type CreateInput struct {
 
 	// ★ modelRefs（modelId + displayOrder）
 	// NOTE:
-	// - create 時点では空でもよい（後段で AppendModelRefsWithoutTouch で追記する運用を許容）
+	// - create 時点では空でもよい
+	// - modelRefs は ModelUsecase 側で models collection を正として同期する
 	// - 永続化は adapter 側で modelRefs として保存する想定
 	ModelRefs []ModelRef `json:"modelRefs,omitempty"`
 
@@ -88,8 +89,9 @@ type Patch struct {
 
 	// ★ modelRefs を受ける（displayOrder 含む）
 	// NOTE:
-	// - これを永続化に使う（modelRefs を正にする）
-	// - displayOrder は 1..N の採番済みを期待（ただし実装側で正規化/再採番してよい）
+	// - modelRefs は通常の ProductBlueprint 更新 API では原則変更しない
+	// - modelRefs の同期は ModelUsecase + ReplaceModelRefsWithoutTouch を正とする
+	// - 既存の read/write 互換で Patch に残すが、command usecase 側では基本的に渡さない
 	ModelRefs *[]ModelRef `json:"modelRefs,omitempty"`
 }
 
@@ -147,7 +149,6 @@ type Repository interface {
 	// - modelRefs: 対象 ProductBlueprint の modelRefs（displayOrder 含む）
 	//
 	// NOTE:
-	// - 旧 GetModelRefsByModelID は廃止。
 	// - productBlueprintId だけが必要な caller は第1戻り値を使う。
 	// - displayOrder が必要な caller は第2戻り値の modelRefs から対象 modelId を探す。
 	GetIDByModelID(ctx context.Context, modelID string) (string, []ModelRef, error)
@@ -159,8 +160,14 @@ type Repository interface {
 	// Delete physically removes a ProductBlueprint by ID.
 	Delete(ctx context.Context, id string) error
 
-	// ProductBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する。
-	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []ModelRef) (ProductBlueprint, error)
+	// ProductBlueprint の modelRefs（modelId + displayOrder）を置き換える。
+	//
+	// NOTE:
+	// - ModelUsecase が models collection を正として同期するために使う。
+	// - refs は repository 実装側で displayOrder 昇順に正規化し、1..N に再採番してよい。
+	// - refs が空の場合は modelRefs を空配列に置き換える。
+	// - updatedAt / updatedBy は更新しない。
+	ReplaceModelRefsWithoutTouch(ctx context.Context, id string, refs []ModelRef) (ProductBlueprint, error)
 
 	// printed: false → true への状態遷移。
 	MarkPrinted(ctx context.Context, id string) (ProductBlueprint, error)

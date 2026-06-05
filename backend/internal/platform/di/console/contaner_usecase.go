@@ -130,7 +130,10 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.listImageRecordRepo,
 	)
 
-	modelUC := uc.NewModelUsecase(r.modelRepo)
+	modelUC := uc.NewModelUsecase(
+		r.modelRepo,
+		r.productBlueprintRepo,
+	)
 
 	orderUC := uc.NewOrderUsecase(r.orderRepo, r.cartRepo)
 

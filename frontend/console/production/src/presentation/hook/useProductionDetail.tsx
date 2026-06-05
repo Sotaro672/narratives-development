@@ -34,7 +34,7 @@ export function useProductionDetail() {
   const { productionId } = useParams<{ productionId: string }>();
 
   const { currentMember } = useAuth();
-  const creator = currentMember?.fullName ?? "-";
+  const creator = currentMember?.displayName ?? "-";
 
   const [production, setProduction] = React.useState<ProductionDetail | null>(
     null,

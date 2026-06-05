@@ -26,10 +26,7 @@ import { hexToRgbInt } from "../../../shell/src/shared/util/color";
 
 import type { ProductBlueprintDetailResponse } from "../infrastructure/api/productBlueprintDetailApi";
 
-import {
-  appendModelRefsHTTP,
-  createProductBlueprintHTTP,
-} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
+import { createProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
 import {
   createModelVariations,
@@ -117,28 +114,6 @@ function assertProductBlueprintCategory(
 
 function extractProductBlueprintId(json: ProductBlueprintDetailResponse): string {
   return typeof json.id === "string" ? json.id : "";
-}
-
-function dedupKeepOrder(values: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-
-  for (const raw of values) {
-    const value = String(raw ?? "").trim();
-
-    if (!value) {
-      continue;
-    }
-
-    if (seen.has(value)) {
-      continue;
-    }
-
-    seen.add(value);
-    out.push(value);
-  }
-
-  return out;
 }
 
 function normalizeMeasurementsForRequest(
@@ -258,20 +233,6 @@ function toCreateAlcoholModelVariationRequests(args: {
   }
 
   return requests;
-}
-
-function shouldAppendModelRefs(
-  params: CreateProductBlueprintParams,
-  requests: CreateModelVariationRequest[],
-): boolean {
-  const kind = String(params.productBlueprintCategory.kind ?? "").trim();
-  const code = String(params.productBlueprintCategory.code ?? "").trim();
-
-  if (requests.length === 0) {
-    return false;
-  }
-
-  return kind === "apparel" || isApparelCategoryCode(code) || isAlcoholCategoryCode(code);
 }
 
 // ------------------------------
@@ -448,7 +409,7 @@ async function createProductBlueprintWithModelRequests(
     throw new Error("createProductBlueprint: 作成後の id が空です");
   }
 
-  if (!shouldAppendModelRefs(params, requests)) {
+  if (requests.length === 0) {
     return created;
   }
 
@@ -457,18 +418,9 @@ async function createProductBlueprintWithModelRequests(
     productBlueprintId,
   })) as CreateModelVariationRequest[];
 
-  const modelIds = await createModelVariations(
-    productBlueprintId,
-    normalizedRequests,
-  );
+  await createModelVariations(productBlueprintId, normalizedRequests);
 
-  const cleanedModelIds = dedupKeepOrder(modelIds);
-
-  if (cleanedModelIds.length === 0) {
-    throw new Error("createProductBlueprint: modelIds が空です");
-  }
-
-  return await appendModelRefsHTTP(productBlueprintId, cleanedModelIds);
+  return created;
 }
 
 // ------------------------------

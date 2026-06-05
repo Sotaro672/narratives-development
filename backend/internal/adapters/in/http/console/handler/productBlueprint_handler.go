@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/console/handler/productBlueprint_handler.go
 package consoleHandler
 
 import (
@@ -43,16 +44,6 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	case r.Method == http.MethodPost && path == "/product-blueprints":
 		h.post(w, r)
 
-	// POST /product-blueprints/{id}/model-refs
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(path, "/product-blueprints/") &&
-		strings.HasSuffix(path, "/model-refs"):
-		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
-		trimmed = strings.TrimSuffix(trimmed, "/model-refs")
-		id := strings.Trim(trimmed, "/")
-		h.appendModelRefs(w, r, id)
-
-	// 重要：suffix 付きルート（/model-refs）より後に置く
 	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
 		strings.HasPrefix(path, "/product-blueprints/"):
 		id := strings.TrimPrefix(path, "/product-blueprints/")
@@ -138,22 +129,6 @@ type UpdateProductBlueprintInput struct {
 
 	AssigneeId string `json:"assigneeId"`
 	UpdatedBy  string `json:"updatedBy,omitempty"`
-}
-
-// ---------------------------------------------------
-// POST /product-blueprints/{id}/model-refs
-// - productBlueprint 起票後に modelRefs（modelId + displayOrder）を追記する
-// - updatedAt / updatedBy は更新しない（repo 側で touch しない更新を行う）
-//
-// 採用方針
-//   - 入力: modelIds（順序は「色登録順→サイズ登録順」に並んだもの）
-//   - 空 / 重複除外と displayOrder 採番は usecase 側で行う
-//   - 出力: detail（既存の toDetailOutput）
-// ---------------------------------------------------
-
-type AppendModelRefsInput struct {
-	// model テーブルの docId の配列（順序は displayOrder の採番元）
-	ModelIds []string `json:"modelIds"`
 }
 
 // ---------------------------------------------------
@@ -499,50 +474,6 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	_ = json.NewEncoder(w).Encode(out)
-}
-
-// ---------------------------------------------------
-// POST /product-blueprints/{id}/model-refs
-// ---------------------------------------------------
-
-func (h *ProductBlueprintHandler) appendModelRefs(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	var in AppendModelRefsInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	// body として modelIds が未指定 / 空配列の場合だけ handler で弾く。
-	// 空文字除外・重複除外・displayOrder 採番は usecase 側に集約する。
-	if len(in.ModelIds) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelIds is required"})
-		return
-	}
-
-	updated, err := h.uc.AppendModelRefs(ctx, id, in.ModelIds)
-	if err != nil {
-		writeProductBlueprintErr(w, err)
-		return
-	}
-
-	row, err := h.detailQuery.GetByID(ctx, updated.ID)
-	if err != nil {
-		writeProductBlueprintErr(w, err)
-		return
-	}
-
-	out := h.toDetailOutput(row)
 	_ = json.NewEncoder(w).Encode(out)
 }
 

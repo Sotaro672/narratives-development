@@ -42,6 +42,7 @@ func NewProductBlueprintUsecase(
 // NOTE:
 // ProductBlueprintUsecase は command 専用に寄せる。
 // 一覧/詳細など画面構築用 read model は application/query/console 側へ分離する。
+// modelRefs の同期は ModelUsecase 側で models collection を正として行う。
 type ProductBlueprintRepo interface {
 	// Read for command-side existence/company-boundary checks.
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
@@ -55,11 +56,6 @@ type ProductBlueprintRepo interface {
 
 	// Delete (physical)
 	Delete(ctx context.Context, id string) error
-
-	// 起票後に modelRefs を追記（updatedAt / updatedBy を更新しない）
-	// - refs は displayOrder を含む（usecase 側で採番して渡す）
-	// - repo 実装側で modelRefs フィールドのみ部分更新し、updatedAt/updatedBy を触らないこと
-	AppendModelRefsWithoutTouch(ctx context.Context, id string, refs []productbpdom.ModelRef) (productbpdom.ProductBlueprint, error)
 }
 
 // ProductBlueprintReviewInitializer は ProductBlueprint 起票時に、
@@ -119,7 +115,7 @@ func (u *ProductBlueprintUsecase) Create(
 		// domain.validate が CreatedAt 必須なので必ず埋める
 		CreatedAt: createdAt,
 
-		// create 時点では空でも良い（後段で append）
+		// modelRefs は ModelUsecase 側で models collection を正として同期する
 		ModelRefs: nil,
 	}
 
@@ -258,84 +254,8 @@ func (u *ProductBlueprintUsecase) Delete(
 }
 
 // ------------------------------------------------------------
-// Append model refs (no touch updatedAt/updatedBy)
-// ------------------------------------------------------------
-
-// AppendModelRefs は productBlueprint 起票後に modelRefs を追記する。
-// 要件:
-// - 入力: modelIds（順序が displayOrder の採番元）
-// - 追記時に updatedAt / updatedBy が更新されないこと（repo 側で担保する）
-func (u *ProductBlueprintUsecase) AppendModelRefs(
-	ctx context.Context,
-	id string,
-	modelIds []string,
-) (productbpdom.ProductBlueprint, error) {
-	if id == "" {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
-	}
-
-	// 境界チェック（companyId が取れないなら弾く）
-	cid := CompanyIDFromContext(ctx)
-	if cid == "" {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
-	}
-
-	modelIds = sanitizeModelIDs(modelIds)
-	if len(modelIds) == 0 {
-		return productbpdom.ProductBlueprint{}, productbpdom.WrapInvalid(nil, "modelIds is required")
-	}
-
-	// 存在確認 + 越境防止
-	current, err := u.repo.GetByID(ctx, id)
-	if err != nil {
-		return productbpdom.ProductBlueprint{}, err
-	}
-	if current.CompanyID == "" || current.CompanyID != cid {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrForbidden
-	}
-
-	// displayOrder は usecase 側で採番（順序は保持）
-	refs := make([]productbpdom.ModelRef, 0, len(modelIds))
-	for i, mid := range modelIds {
-		refs = append(refs, productbpdom.ModelRef{
-			ModelID:      mid,
-			DisplayOrder: i + 1,
-		})
-	}
-
-	// updatedAt/updatedBy を触らない repository API を呼ぶ（repo 側で担保）
-	updated, err := u.repo.AppendModelRefsWithoutTouch(ctx, id, refs)
-	if err != nil {
-		return productbpdom.ProductBlueprint{}, err
-	}
-
-	return updated, nil
-}
-
-// ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
-
-// sanitizeModelIDs は入力 modelIds を正規化する。
-// - 空は除外
-// - 重複は除外（順序は保持）
-func sanitizeModelIDs(in []string) []string {
-	seen := make(map[string]struct{}, len(in))
-	out := make([]string, 0, len(in))
-
-	for _, v := range in {
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-
-	return out
-}
 
 func cloneCategoryFields(in productbpdom.CategoryFields) productbpdom.CategoryFields {
 	if len(in) == 0 {

@@ -13,9 +13,9 @@ import {
   loadAssigneeCandidates,
 } from "../../infrastructure/api/productionCreateApi";
 
-// Detail 側の index loader（VM builder が要求するため）
+// Detail 側の index builder（VM builder が要求するため）
 import {
-  loadModelVariationIndexByProductBlueprintId,
+  buildModelIndexFromVariations,
   type ModelVariationSummary,
 } from "../../application/detail/index";
 
@@ -60,7 +60,7 @@ export function useProductionCreate() {
   // currentMember 情報
   // ==========================
   const { currentMember, user } = useAuth();
-  const creator = currentMember?.fullName ?? "-";
+  const creator = currentMember?.displayName?.trim() || "-";
 
   // createdBy は members docId ではなく Firebase Auth UID を保存する。
   // currentMember.uid が backend response の影響で docId になる可能性があるため、
@@ -154,7 +154,7 @@ export function useProductionCreate() {
   );
 
   // ==========================
-  // 詳細 + modelVariations
+  // 詳細 + modelVariations + modelIndex
   // ==========================
   React.useEffect(() => {
     if (!selectedId) {
@@ -173,10 +173,13 @@ export function useProductionCreate() {
 
         if (cancelled) return;
 
+        const safeModels = Array.isArray(models)
+          ? (models as ModelVariationResponse[])
+          : [];
+
         setSelectedDetail(detail);
-        setModelVariations(
-          Array.isArray(models) ? (models as ModelVariationResponse[]) : [],
-        );
+        setModelVariations(safeModels);
+        setModelIndex(buildModelIndexFromVariations(safeModels as any));
       } catch {
         if (cancelled) return;
 
@@ -193,41 +196,9 @@ export function useProductionCreate() {
   }, [selectedId]);
 
   // ==========================
-  // modelIndex（productBlueprintId ベース）
-  // ==========================
-  React.useEffect(() => {
-    if (!selectedId) {
-      setModelIndex({});
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const index = await loadModelVariationIndexByProductBlueprintId(
-          selectedId,
-        );
-
-        if (!cancelled) {
-          setModelIndex(index);
-        }
-      } catch {
-        if (!cancelled) {
-          setModelIndex({});
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
-
-  // ==========================
   // detail.modelRefs + modelVariations → VM rows
-  // - ProductBlueprint.detail.modelRefs を主データとして扱う
-  // - modelVariations は modelRefs が無い場合の fallback
+  // - create 画面では /models/by-blueprint/{id}/variations を行の母数として扱う
+  // - modelRefs は displayOrder 補正にのみ利用する
   // - builder は backend の production.Models 形式
   //   （ModelID/Quantity/DisplayOrder）を正として読む
   // ==========================
@@ -244,37 +215,6 @@ export function useProductionCreate() {
     const refs = Array.isArray(selectedDetail?.modelRefs)
       ? ((selectedDetail.modelRefs as ProductBlueprintModelRef[]) ?? [])
       : [];
-
-    const refModels = refs
-      .map((ref, index) => {
-        const modelId = String(ref?.modelId ?? "").trim();
-
-        if (!modelId) {
-          return null;
-        }
-
-        const displayOrderNum =
-          typeof ref?.displayOrder === "number"
-            ? ref.displayOrder
-            : Number(ref?.displayOrder);
-
-        return {
-          ModelID: modelId,
-          Quantity: 0,
-          DisplayOrder: Number.isFinite(displayOrderNum)
-            ? displayOrderNum
-            : index + 1,
-        };
-      })
-      .filter(
-        (
-          model,
-        ): model is {
-          ModelID: string;
-          Quantity: number;
-          DisplayOrder: number;
-        } => model !== null,
-      );
 
     const orderByModelId = new Map<string, number>();
 
@@ -326,7 +266,7 @@ export function useProductionCreate() {
         } => model !== null,
       );
 
-    const pseudoModels = refModels.length > 0 ? refModels : fallbackModels;
+    const pseudoModels = fallbackModels;
 
     const vms = buildProductionQuantityRowVMs(pseudoModels, modelIndex);
     setQuantityRowVMs(vms);

@@ -17,8 +17,6 @@ import {
   TableCell,
 } from "../../../../shell/src/shared/ui/table";
 import { Input } from "../../../../shell/src/shared/ui/input";
-
-import "../styles/production.css";
 import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
 
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";

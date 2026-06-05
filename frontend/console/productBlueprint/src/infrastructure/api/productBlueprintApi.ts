@@ -1,4 +1,4 @@
-// frontend\console\productBlueprint\src\infrastructure\api\productBlueprintApi.ts
+// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts
 
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
@@ -9,15 +9,15 @@ import type {
 } from "../../domain/entity/productBlueprintCategory";
 
 type ProductBlueprintCategoryListResponse = {
-  items?: ProductBlueprintCategory[];
-  totalCount?: number;
-  totalPages?: number;
-  page?: number;
-  perPage?: number;
+  items: ProductBlueprintCategory[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  perPage: number;
 };
 
 type ProductBlueprintCategoryTreeResponse = {
-  items?: ProductBlueprintCategory[];
+  items: ProductBlueprintCategory[];
 };
 
 export type ListProductBlueprintCategoriesParams = {
@@ -121,7 +121,7 @@ export async function listProductBlueprintCategoriesApi(
     "商品カテゴリ一覧の取得に失敗しました",
   );
 
-  return sortProductBlueprintCategories(json.items ?? []);
+  return sortProductBlueprintCategories(json.items);
 }
 
 /**
@@ -176,7 +176,7 @@ export async function listProductBlueprintCategoryTreeApi(): Promise<
     "商品カテゴリツリーの取得に失敗しました",
   );
 
-  return sortProductBlueprintCategories(json.items ?? []);
+  return sortProductBlueprintCategories(json.items);
 }
 
 /**
