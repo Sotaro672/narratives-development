@@ -229,11 +229,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
 
-	c.PaymentUC = usecase.NewPaymentUsecase(paymentRepo).
-		WithCartRepoForPayment(cartRepo).
-		WithOrderRepoForPayment(orderRepo).
-		WithInventoryRepoForPayment(inventoryRepo).
-		WithUserRepoForPayment(userRepo)
+	c.PaymentUC = usecase.NewPaymentUsecase(usecase.NewPaymentUsecaseInput{
+		PaymentRepo: paymentRepo,
+
+		CartRepo:      cartRepo,
+		OrderRepo:     orderRepo,
+		InventoryRepo: inventoryRepo,
+
+		UserRepo: userRepo,
+	})
 
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo, cartRepo)
 

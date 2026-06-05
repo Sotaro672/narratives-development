@@ -123,7 +123,9 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		}
 	}
 
-	paymentUC := uc.NewPaymentUsecase(r.paymentRepo)
+	paymentUC := uc.NewPaymentUsecase(uc.NewPaymentUsecaseInput{
+		PaymentRepo: r.paymentRepo,
+	})
 
 	listUC := uc.NewListUsecase(
 		r.listRepoFS,

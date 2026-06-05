@@ -81,42 +81,38 @@ type PaymentUsecase struct {
 	now func() time.Time
 }
 
-func NewPaymentUsecase(repo PaymentRepo) *PaymentUsecase {
-	return &PaymentUsecase{
-		repo: repo,
-		now:  time.Now,
+type NewPaymentUsecaseInput struct {
+	PaymentRepo PaymentRepo
+
+	CartRepo      CartRepoForPayment
+	InventoryRepo InventoryRepoForPayment
+	OrderRepo     OrderRepoForPayment
+
+	UserRepo   UserRepoForPayment
+	MailSender MailSenderForPayment
+	MailFrom   string
+
+	Now func() time.Time
+}
+
+func NewPaymentUsecase(in NewPaymentUsecaseInput) *PaymentUsecase {
+	now := in.Now
+	if now == nil {
+		now = time.Now
 	}
-}
 
-// optional injection: paid 時に cart を空にしたい場合に注入する
-func (u *PaymentUsecase) WithCartRepoForPayment(repo CartRepoForPayment) *PaymentUsecase {
-	u.cartRepo = repo
-	return u
-}
+	return &PaymentUsecase{
+		repo:          in.PaymentRepo,
+		cartRepo:      in.CartRepo,
+		inventoryRepo: in.InventoryRepo,
+		orderRepo:     in.OrderRepo,
 
-// optional injection: paid 時に inventory の reservedByOrder / reservedCount を更新したい場合に注入する
-func (u *PaymentUsecase) WithInventoryRepoForPayment(repo InventoryRepoForPayment) *PaymentUsecase {
-	u.inventoryRepo = repo
-	return u
-}
+		userRepo:   in.UserRepo,
+		mailSender: in.MailSender,
+		mailFrom:   in.MailFrom,
 
-// optional injection: paid 時に order を参照・更新したい場合に注入する
-func (u *PaymentUsecase) WithOrderRepoForPayment(repo OrderRepoForPayment) *PaymentUsecase {
-	u.orderRepo = repo
-	return u
-}
-
-// optional injection: paid 時に userId からメールアドレスを引きたい場合に注入する
-func (u *PaymentUsecase) WithUserRepoForPayment(repo UserRepoForPayment) *PaymentUsecase {
-	u.userRepo = repo
-	return u
-}
-
-// optional injection: paid 時に注文確定メールを送りたい場合に注入する
-func (u *PaymentUsecase) WithMailSenderForPayment(sender MailSenderForPayment, from string) *PaymentUsecase {
-	u.mailSender = sender
-	u.mailFrom = from
-	return u
+		now: now,
+	}
 }
 
 // ============================================================
