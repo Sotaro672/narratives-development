@@ -1,4 +1,3 @@
-// backend/internal/platform/di/mall/container.go
 package mall
 
 import (
@@ -18,12 +17,11 @@ import (
 	outsolana "narratives/internal/adapters/out/solana"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 
-	solanainfra "narratives/internal/infra/solana"
-	solanaplatform "narratives/internal/infra/solana"
+	solana "narratives/internal/infra/solana"
 
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
-	tokenBlueprint_review "narratives/internal/domain/tokenBlueprint_review"
+	tokenblueprintreview "narratives/internal/domain/tokenBlueprint_review"
 
 	shared "narratives/internal/platform/di/shared"
 )
@@ -63,7 +61,7 @@ type Container struct {
 
 	InventoryUC *usecase.InventoryUsecase
 
-	TokenBlueprintReviewRepo tokenBlueprint_review.RepositoryPort
+	TokenBlueprintReviewRepo tokenblueprintreview.RepositoryPort
 
 	ResolvedTokenRepo mallhandler.ResolvedTokenRepository
 
@@ -172,7 +170,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
 
 	projectID := infra.ProjectID
-	avatarWalletSvc := solanainfra.NewAvatarWalletService(projectID)
+	avatarWalletSvc := solana.NewAvatarWalletService(projectID)
 
 	c.AvatarUC = usecase.NewAvatarUsecase(
 		avatarRepo,
@@ -200,7 +198,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	)
 	c.UserUC = usecase.NewUserUsecase(userRepo, nil)
 
-	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
+	onchainReader := solana.NewOnchainWalletReaderDevnet()
 	tokenQuery := outfs.NewTokenReaderFS(fsClient)
 
 	c.WalletUC = usecase.NewWalletUsecase(
@@ -305,7 +303,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		tokenReader := outfs.NewTokenReaderFS(fsClient)
 
-		solanaTransferReader := solanainfra.NewTokenTransferReaderSolana("")
+		solanaTransferReader := solana.NewTokenTransferReaderSolana("")
 		previewTransferReader := outsolana.NewPreviewTransferReader(solanaTransferReader)
 
 		c.PreviewQ = mallquery.NewPreviewQuery(
@@ -346,6 +344,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	{
 		scanVerifier := buildScanVerifier(c.OrderScanVerifyQ)
+		if scanVerifier == nil {
+			return nil, errors.New("di.mall: scan verifier is nil")
+		}
 
 		var orderRepoForTransfer usecase.OrderRepoForTransfer = outfs.NewOrderRepoForTransferFS(fsClient)
 
@@ -362,27 +363,26 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		if err != nil {
 			return nil, err
 		}
-
-		var executor usecase.TokenTransferExecutor = solanainfra.NewTokenTransferExecutorSolana("")
-
-		if scanVerifier != nil && secrets != nil {
-			c.TransferUC = usecase.NewTransferUsecase(
-				scanVerifier,
-				orderRepoForTransfer,
-				tokenResolver,
-				tokenOwnerUpdater,
-				walletItemUpdater,
-				transferRepo,
-				walletResolver,
-				avatarWalletResolver,
-				secrets,
-				executor,
-			).
-				WithInventoryUsecase(c.InventoryUC).
-				WithTransferDisplayResolvers(brandRepo, avatarRepo)
-		} else {
-			c.TransferUC = nil
+		if secrets == nil {
+			return nil, errors.New("di.mall: wallet secret provider is nil")
 		}
+
+		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
+
+		c.TransferUC = usecase.NewTransferUsecase(
+			scanVerifier,
+			orderRepoForTransfer,
+			tokenResolver,
+			tokenOwnerUpdater,
+			walletItemUpdater,
+			transferRepo,
+			walletResolver,
+			avatarWalletResolver,
+			secrets,
+			executor,
+		).
+			WithInventoryUsecase(c.InventoryUC).
+			WithTransferDisplayResolvers(brandRepo, avatarRepo)
 	}
 
 	{
@@ -398,7 +398,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			return nil, err
 		}
 
-		var executor usecase.TokenTransferExecutor = solanainfra.NewTokenTransferExecutorSolana("")
+		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
 
 		walletUpdate, walletOK := any(walletRepo).(usecase.AvatarWalletItemTransferUpdater)
 		avatarSecrets, secretOK := any(secretsBase).(usecase.AvatarSecretProvider)

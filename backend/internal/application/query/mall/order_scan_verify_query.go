@@ -69,15 +69,6 @@ type VerifyResult struct {
 	Match   *ModelTokenPair `json:"match,omitempty"`
 }
 
-// ✅ A案: handler 側の ScanVerifyQuery interface に合わせるためのメソッドを追加
-// - 実体は VerifyMatch を呼ぶ薄いアダプタ
-func (q *OrderScanVerifyQuery) VerifyScanPurchasedByAvatarID(ctx context.Context, avatarID string, productID string) (VerifyResult, error) {
-	return q.VerifyMatch(ctx, VerifyInput{
-		AvatarID:  avatarID,
-		ProductID: productID,
-	})
-}
-
 // VerifyMatch verifies whether the scanned pair exists in purchased(untransferred) pairs.
 func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyResult, error) {
 	if q == nil || q.PurchasedQ == nil || q.PreviewQ == nil {

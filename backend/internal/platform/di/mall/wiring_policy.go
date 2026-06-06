@@ -61,7 +61,6 @@ func buildStripePaymentIntentGateway(infra *shared.Infra) usecase.StripePaymentI
 //
 // NOTE:
 //   - Adapter was removed.
-//   - usecase.ScanVerifier now expects VerifyScanPurchasedByAvatarID,
 //     which *mallquery.OrderScanVerifyQuery already implements.
 func buildScanVerifier(orderScanVerifyQ *mallquery.OrderScanVerifyQuery) usecase.ScanVerifier {
 	if orderScanVerifyQ == nil {

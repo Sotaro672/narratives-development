@@ -5,38 +5,24 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 
 	mallquery "narratives/internal/application/query/mall"
 
-	// uid / avatarId を取る（avatarId は AvatarContextMiddleware が詰める前提）
 	"narratives/internal/adapters/in/http/middleware"
 )
 
-// ✅ A案: handler 独自型をやめ、アプリ層の型をそのまま使う
-// (Dart 側の MallScanVerifyResponse と shape が一致する前提)
 type ScanVerifyResult = mallquery.VerifyResult
 type ModelTokenPair = mallquery.ModelTokenPair
 
-// ScanVerifyQuery is the dependency for /mall/me/orders/scan/verify.
-// ✅ A案: 戻り値を app/query の value 型に合わせる（ポインタをやめる）
 type ScanVerifyQuery interface {
-	VerifyScanPurchasedByAvatarID(ctx context.Context, avatarId, productId string) (mallquery.VerifyResult, error)
+	VerifyMatch(ctx context.Context, in mallquery.VerifyInput) (mallquery.VerifyResult, error)
 }
 
-// OrderScanVerifyHandler handles:
-// POST /mall/me/orders/scan/verify
-//
-// ✅ Option A: anti-spoof を AvatarContextMiddleware に一本化する。
-// - handler は uid->avatarId resolver を持たない
-// - avatarId は request context からのみ取得する（body の avatarId は使わない）
 type OrderScanVerifyHandler struct {
 	q ScanVerifyQuery
 }
 
-// NewOrderScanVerifyHandler creates handler.
-// NOTE: This handler assumes AvatarContextMiddleware is enabled for this route.
 func NewOrderScanVerifyHandler(q ScanVerifyQuery) http.Handler {
 	return &OrderScanVerifyHandler{q: q}
 }
@@ -44,7 +30,6 @@ func NewOrderScanVerifyHandler(q ScanVerifyQuery) http.Handler {
 func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Preflight
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -64,7 +49,6 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// /mall/me/... is auth-required (normally enforced by middleware)
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{
@@ -73,15 +57,13 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	uid, ok := middleware.CurrentUserUID(r)
-	if !ok {
+	if _, ok := middleware.CurrentUserUID(r); !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "unauthorized: missing uid",
 		})
 		return
 	}
 
-	// Body: productId only (avatarId is taken from context)
 	var body struct {
 		ProductID string `json:"productId"`
 	}
@@ -100,25 +82,18 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// ✅ avatarId is resolved and stored by AvatarContextMiddleware (required)
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
-		// This should not happen if requireAvatarContext is wired.
-		// Treat as service misconfiguration to make the bug obvious.
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error": "avatar_context_missing",
 		})
 		return
 	}
 
-	log.Printf(
-		`[mall.order.scan.verify] incoming uid=%q avatarId=%q productId=%q`,
-		uid,
-		avatarID,
-		productID,
-	)
-
-	out, err := h.q.VerifyScanPurchasedByAvatarID(r.Context(), avatarID, productID)
+	out, err := h.q.VerifyMatch(r.Context(), mallquery.VerifyInput{
+		AvatarID:  avatarID,
+		ProductID: productID,
+	})
 	if err != nil {
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
@@ -144,13 +119,13 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Ensure ids are set (best-effort)
 	if out.AvatarID == "" {
 		out.AvatarID = avatarID
 	}
 	if out.ProductID == "" {
 		out.ProductID = productID
 	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": out,
 	})

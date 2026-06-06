@@ -8,12 +8,10 @@ import (
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
+	firestoreOut "narratives/internal/adapters/out/firestore"
 	mallquery "narratives/internal/application/query/mall"
 	"narratives/internal/application/usecase"
 	tokenBlueprint "narratives/internal/domain/tokenBlueprint"
-
-	// resolvedTokens repo (Firestore)
-	firestoreOut "narratives/internal/adapters/out/firestore"
 )
 
 // Register registers mall routes onto mux.
@@ -56,7 +54,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		hasFS := cont.Infra != nil && cont.Infra.Firestore != nil
 		if hasFS {
 			repo := firestoreOut.NewTokenBlueprintRepositoryFS(cont.Infra.Firestore)
-
 			tokenBlueprintRepo = repo
 		}
 	}
@@ -92,7 +89,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	previewMeH := notImplemented("PreviewMe")
 
 	orderScanVerifyH := notImplemented("OrderScanVerify")
-	orderScanTransferH := notImplemented("OrderScanTransfer")
+	orderScanTransferH := transferUsecaseNotConfiguredHandler()
 	shareTransferH := notImplemented("ShareTransfer")
 
 	setupStatusH := notImplemented("SetupStatus")
@@ -318,4 +315,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 		mux.Handle(StripeWebhookPath, stripeWH)
 		mux.Handle(StripeWebhookPath+"/", stripeWH)
 	}
+}
+
+func transferUsecaseNotConfiguredHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"transfer_usecase_not_configured"}`))
+	})
 }

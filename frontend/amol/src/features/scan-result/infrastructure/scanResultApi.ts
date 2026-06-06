@@ -1,4 +1,4 @@
-// frontend\amol\src\features\scan-result\infrastructure\scanResultApi.ts
+// frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts
 import type {
   CatalogReviewPage,
   MallOwnerInfo,
@@ -32,6 +32,7 @@ import {
   walletResolvedTokenResponseFromJson,
   type WalletResolvedTokenResponse,
 } from "./scanResultMappers";
+
 export { getAuthHeadersOrUndefined } from "./scanResultHttp";
 export { listSolanaTransfersByMintAddress } from "./scanResultSolanaApi";
 export type { WalletResolvedTokenResponse } from "./scanResultMappers";
@@ -101,29 +102,34 @@ export async function fetchMeAvatar(headers?: HeadersInit): Promise<MallOwnerInf
   return mallOwnerInfoFromJson(decoded);
 }
 
-export async function verifyScanPurchasedByAvatarId(args: {
-  avatarId: string;
+export async function verifyScanPurchased(args: {
   productId: string;
   headers?: HeadersInit;
 }): Promise<MallScanVerifyResponse> {
-  const avatarId = args.avatarId.trim();
   const productId = args.productId.trim();
 
-  if (!avatarId) throw new Error("avatarId is empty");
   if (!productId) throw new Error("productId is empty");
 
   const base = resolveApiBase();
   if (!base) throw new Error("VITE_API_BASE_URL is not configured");
 
   const url = `${base}/mall/me/orders/scan/verify`;
+  const headers = mergeHeaders(jsonPostHeaders(), args.headers);
+  const authHeader = getAuthorizationHeader(headers);
+
+  if (!authHeader) {
+    throw new Error("Authorization header is required for scan verify");
+  }
+
+  headers.set("Authorization", authHeader);
 
   const decoded = await readJsonObject(
     await fetch(url, {
       method: "POST",
-      headers: mergeHeaders(jsonPostHeaders(), args.headers),
-      body: JSON.stringify({ avatarId, productId }),
+      headers,
+      body: JSON.stringify({ productId }),
     }),
-    "verifyScanPurchasedByAvatarId",
+    "verifyScanPurchased",
     url
   );
 

@@ -20,10 +20,8 @@ import (
 // ============================================================
 
 // ScanVerifier verifies whether scan(productId) matches purchased(untransferred) items for avatar.
-// 案A: application/query/mall の OrderScanVerifyQuery を直接 DI する。
-// OrderScanVerifyQuery は VerifyScanPurchasedByAvatarID を実装しているため、adapter は不要。
 type ScanVerifier interface {
-	VerifyScanPurchasedByAvatarID(ctx context.Context, avatarID, productID string) (mallquery.VerifyResult, error)
+	VerifyMatch(ctx context.Context, in mallquery.VerifyInput) (mallquery.VerifyResult, error)
 }
 
 // OrderRepoForTransfer is the minimal port needed for transfer orchestration.
@@ -328,7 +326,10 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	}
 
 	// 0) verify
-	vres, err := u.verifier.VerifyScanPurchasedByAvatarID(ctx, avatarID, productID)
+	vres, err := u.verifier.VerifyMatch(ctx, mallquery.VerifyInput{
+		AvatarID:  avatarID,
+		ProductID: productID,
+	})
 	if err != nil {
 		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: verify failed: %w", err)
 	}

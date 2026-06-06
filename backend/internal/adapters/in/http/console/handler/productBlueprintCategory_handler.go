@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/console/handler/productBlueprintCategory_handler.go
 package consoleHandler
 
 import (
@@ -41,10 +40,18 @@ type Handler struct {
 	uc ProductBlueprintCategoryUsecase
 }
 
-func NewHandler(uc ProductBlueprintCategoryUsecase) *Handler {
+func NewProductBlueprintCategoryHandler(
+	uc ProductBlueprintCategoryUsecase,
+) *Handler {
 	return &Handler{
 		uc: uc,
 	}
+}
+
+// NewHandler is kept for backward compatibility.
+// Prefer NewProductBlueprintCategoryHandler in new DI wiring.
+func NewHandler(uc ProductBlueprintCategoryUsecase) *Handler {
+	return NewProductBlueprintCategoryHandler(uc)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

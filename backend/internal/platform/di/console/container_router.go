@@ -1,4 +1,3 @@
-// backend/internal/platform/di/console/container_router.go
 package console
 
 import (
@@ -99,7 +98,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		inquiriesH = consoleHandler.NewInquiryHandler(c.InquiryUC)
 	}
 
-	if c.InventoryUC != nil {
+	if c.InventoryManagementQuery != nil &&
+		c.InventoryDetailQuery != nil &&
+		c.ListCreateQuery != nil {
 		inventoriesH = consoleHandler.NewInventoryHandlerWithListCreateQuery(
 			c.InventoryManagementQuery,
 			c.InventoryDetailQuery,
@@ -140,7 +141,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.ProductBlueprintCategoryUC != nil {
-		productBPCategoriesH = consoleHandler.NewHandler(
+		productBPCategoriesH = consoleHandler.NewProductBlueprintCategoryHandler(
 			c.ProductBlueprintCategoryUC,
 		)
 	}
@@ -200,7 +201,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		walletsH = consoleHandler.NewWalletHandler(c.WalletUC)
 	}
 
-	if c.MemberUC != nil && c.MemberRepo != nil {
+	if c.MemberRepo != nil {
 		membersH = consoleHandler.NewMemberHandler(c.MemberRepo)
 	}
 
