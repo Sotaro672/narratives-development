@@ -39,10 +39,7 @@ func NewCartHandlerWithQueries(
 }
 
 func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimRight(r.URL.Path, "/")
-	if path == "" {
-		path = "/"
-	}
+	path := r.URL.Path
 
 	if h.uc == nil {
 		writeErr(w, http.StatusInternalServerError, "cart handler is not configured")
@@ -54,50 +51,29 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	isPOST := r.Method == http.MethodPost
 	isPUT := r.Method == http.MethodPut
 
-	hasSuffixAny := func(p string, suffixes ...string) bool {
-		for _, s := range suffixes {
-			if s == "" {
-				continue
-			}
-			if strings.HasSuffix(p, s) {
-				return true
-			}
-		}
-		return false
-	}
-
-	isAnyExact := func(p string, exacts ...string) bool {
-		for _, e := range exacts {
-			if p == e {
-				return true
-			}
-		}
-		return false
-	}
-
 	switch {
 	// Unified GET
-	case isGET && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
+	case isGET && path == "/mall/me/cart":
 		h.handleGetUnified(w, r)
 		return
 
 	// Clear
-	case isDEL && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
+	case isDEL && path == "/mall/me/cart":
 		h.handleClear(w, r)
 		return
 
 	// Add item
-	case isPOST && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	case isPOST && path == "/mall/me/cart/items":
 		h.handleAddItem(w, r)
 		return
 
 	// Set qty
-	case isPUT && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	case isPUT && path == "/mall/me/cart/items":
 		h.handleSetItemQty(w, r)
 		return
 
 	// Remove item
-	case isDEL && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	case isDEL && path == "/mall/me/cart/items":
 		h.handleRemoveItem(w, r)
 		return
 	}

@@ -16,34 +16,52 @@ import (
 	ldom "narratives/internal/domain/list"
 )
 
+// ListReader is the minimal list read port required by CartQuery.
+//
+// ldom.Repository satisfies this interface.
+type ListReader interface {
+	GetByID(ctx context.Context, id string) (ldom.List, error)
+}
+
 type CartQuery struct {
 	FS *firestore.Client
 
-	// prefer domain repository (same as catalog_query)
-	ListRepo ldom.Repository
+	// ListReader is used to resolve list title, image, and prices.
+	ListRepo ListReader
+
+	// InventoryRepo is used to resolve inventory document ID to blueprint IDs.
+	InventoryRepo invdom.RepositoryPort
 
 	// optional: inject from DI
 	Resolver *appresolver.NameResolver
 
-	CartCol        string
-	ListsCol       string // fallback only (when ListRepo is nil)
-	InventoriesCol string
+	CartCol string
 }
 
 func NewCartQuery(fs *firestore.Client) *CartQuery {
 	return &CartQuery{
-		FS:             fs,
-		ListRepo:       nil,
-		Resolver:       nil,
-		CartCol:        "carts",
-		ListsCol:       "lists",
-		InventoriesCol: "inventories",
+		FS:            fs,
+		ListRepo:      nil,
+		InventoryRepo: nil,
+		Resolver:      nil,
+		CartCol:       "carts",
 	}
 }
 
-func NewCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *CartQuery {
+func NewCartQueryWithListRepo(fs *firestore.Client, listRepo ListReader) *CartQuery {
 	q := NewCartQuery(fs)
 	q.ListRepo = listRepo
+	return q
+}
+
+func NewCartQueryWithRepos(
+	fs *firestore.Client,
+	listRepo ListReader,
+	inventoryRepo invdom.RepositoryPort,
+) *CartQuery {
+	q := NewCartQuery(fs)
+	q.ListRepo = listRepo
+	q.InventoryRepo = inventoryRepo
 	return q
 }
 
@@ -306,7 +324,7 @@ func (q *CartQuery) fetchListIndicesByCart(
 	ctx context.Context,
 	c *cartdom.Cart,
 ) (map[string]map[string]int, map[string]listMeta) {
-	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || q.ListRepo == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil, nil
 	}
 
@@ -326,21 +344,6 @@ func (q *CartQuery) fetchListIndicesByCart(
 	}
 
 	if len(listIDs) == 0 {
-		return nil, nil
-	}
-
-	if q.ListRepo != nil {
-		return q.fetchListIndicesByCartViaRepo(ctx, listIDs)
-	}
-
-	return q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
-}
-
-func (q *CartQuery) fetchListIndicesByCartViaRepo(
-	ctx context.Context,
-	listIDs []string,
-) (map[string]map[string]int, map[string]listMeta) {
-	if q == nil || q.ListRepo == nil || len(listIDs) == 0 {
 		return nil, nil
 	}
 
@@ -387,85 +390,7 @@ func (q *CartQuery) fetchListIndicesByCartViaRepo(
 	if len(metaOut) == 0 {
 		metaOut = nil
 	}
-	return priceOut, metaOut
-}
 
-func (q *CartQuery) fetchListIndicesByCartViaFirestore(
-	ctx context.Context,
-	listIDs []string,
-) (map[string]map[string]int, map[string]listMeta) {
-	if q == nil || q.FS == nil || len(listIDs) == 0 {
-		return nil, nil
-	}
-
-	listsCol := q.ListsCol
-	if listsCol == "" {
-		listsCol = "lists"
-	}
-
-	refs := make([]*firestore.DocumentRef, 0, len(listIDs))
-	for _, lid := range listIDs {
-		if lid == "" {
-			continue
-		}
-		refs = append(refs, q.FS.Collection(listsCol).Doc(lid))
-	}
-
-	if len(refs) == 0 {
-		return nil, nil
-	}
-
-	snaps, err := q.FS.GetAll(ctx, refs)
-	if err != nil {
-		return nil, nil
-	}
-
-	priceOut := map[string]map[string]int{}
-	metaOut := map[string]listMeta{}
-
-	for i, snap := range snaps {
-		lid := ""
-		if i >= 0 && i < len(listIDs) {
-			lid = listIDs[i]
-		}
-		if lid == "" || snap == nil || !snap.Exists() {
-			continue
-		}
-
-		var l ldom.List
-		if err := snap.DataTo(&l); err != nil {
-			continue
-		}
-
-		mt := listMeta{
-			Title:   l.Title,
-			ImageID: l.ImageID,
-		}
-		if mt.Title != "" || mt.ImageID != "" {
-			metaOut[lid] = mt
-		}
-
-		if len(l.Prices) > 0 {
-			m := map[string]int{}
-			for _, row := range l.Prices {
-				mid := row.ModelID
-				if mid == "" {
-					continue
-				}
-				m[mid] = row.Price
-			}
-			if len(m) > 0 {
-				priceOut[lid] = m
-			}
-		}
-	}
-
-	if len(priceOut) == 0 {
-		priceOut = nil
-	}
-	if len(metaOut) == 0 {
-		metaOut = nil
-	}
 	return priceOut, metaOut
 }
 
@@ -477,68 +402,47 @@ func (q *CartQuery) fetchInventoryIndexByCart(
 	ctx context.Context,
 	c *cartdom.Cart,
 ) map[string]invParts {
-	if q == nil || q.FS == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || q.InventoryRepo == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil
-	}
-
-	invCol := q.InventoriesCol
-	if invCol == "" {
-		invCol = "inventories"
 	}
 
 	seen := map[string]struct{}{}
 	invIDs := make([]string, 0, 8)
 
 	for _, it := range c.Items {
-		inv := it.InventoryID
-		if inv == "" {
+		invID := it.InventoryID
+		if invID == "" {
 			continue
 		}
-		if _, ok := seen[inv]; ok {
+		if _, ok := seen[invID]; ok {
 			continue
 		}
-		seen[inv] = struct{}{}
-		invIDs = append(invIDs, inv)
+		seen[invID] = struct{}{}
+		invIDs = append(invIDs, invID)
 	}
 
 	if len(invIDs) == 0 {
 		return nil
 	}
 
-	refs := make([]*firestore.DocumentRef, 0, len(invIDs))
-	for _, id := range invIDs {
-		refs = append(refs, q.FS.Collection(invCol).Doc(id))
-	}
-
-	snaps, err := q.FS.GetAll(ctx, refs)
-	if err != nil {
-		return nil
-	}
-
 	out := map[string]invParts{}
-	for i, snap := range snaps {
-		invID := ""
-		if i >= 0 && i < len(invIDs) {
-			invID = invIDs[i]
-		}
-		if invID == "" || snap == nil || !snap.Exists() {
+
+	for _, invID := range invIDs {
+		productBlueprintID, tokenBlueprintID, err :=
+			q.InventoryRepo.ResolveBlueprintIDsByInventoryID(ctx, invID)
+		if err != nil {
+			// Cart read-model では、削除済み・不正な inventory は該当 item の補助情報だけ欠落させる。
+			// ここで全体エラーにすると cart 表示全体が落ちるため、既存実装と同様に skip する。
 			continue
 		}
 
-		var m invdom.Mint
-		if err := snap.DataTo(&m); err != nil {
-			continue
-		}
-
-		m.ID = invID
-
-		if m.ProductBlueprintID == "" || m.TokenBlueprintID == "" {
+		if productBlueprintID == "" || tokenBlueprintID == "" {
 			continue
 		}
 
 		out[invID] = invParts{
-			ProductBlueprintID: m.ProductBlueprintID,
-			TokenBlueprintID:   m.TokenBlueprintID,
+			ProductBlueprintID: productBlueprintID,
+			TokenBlueprintID:   tokenBlueprintID,
 		}
 	}
 

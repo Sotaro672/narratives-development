@@ -205,13 +205,3 @@ func normalizeLast4(v string) string {
 	}
 	return string(digits[len(digits)-4:])
 }
-
-func normalizeDigits(v string) string {
-	digits := make([]rune, 0, len(v))
-	for _, r := range v {
-		if unicode.IsDigit(r) {
-			digits = append(digits, r)
-		}
-	}
-	return string(digits)
-}

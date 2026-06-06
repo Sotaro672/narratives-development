@@ -4,50 +4,33 @@ package shippingAddress
 import (
 	"context"
 	"errors"
-	"time"
 )
 
 // ========================================
-// 入出力（契約のみ）
+// Repository Port
 // - entity.go (ShippingAddress) を single source とする
-// - docId = uid (= ShippingAddress.ID)
-// - UserID も uid 固定
-// ========================================
-
-type UpsertShippingAddressInput struct {
-	ZipCode string `json:"zipCode"`
-	State   string `json:"state"`
-	City    string `json:"city"`
-	Street  string `json:"street"`
-	Street2 string `json:"street2"` // optional (may be "")
-	Country string `json:"country"` // required (if UI has no input, caller sets "JP" etc.)
-}
-
-type UpdateShippingAddressInput struct {
-	ZipCode   *string    `json:"zipCode,omitempty"`
-	State     *string    `json:"state,omitempty"`
-	City      *string    `json:"city,omitempty"`
-	Street    *string    `json:"street,omitempty"`
-	Street2   *string    `json:"street2,omitempty"`
-	Country   *string    `json:"country,omitempty"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"` // server can fill
-}
-
-// ========================================
-// Repository Port（契約のみ）
+// - docId = ShippingAddress.ID = UUID
+// - UserID = owner uid
+// - docId と UserID は異なる
+// - 1 user can have many shipping addresses
 // ========================================
 
 type RepositoryPort interface {
 	// Read
 	GetByID(ctx context.Context, id string) (*ShippingAddress, error)
+	Exists(ctx context.Context, id string) (bool, error)
+	ListByUserID(ctx context.Context, userID string) ([]ShippingAddress, error)
 
 	// Write
-	// ✅ CreateWithID: docId を caller が指定（id=uid）
-	// - 既存なら ErrConflict
-	CreateWithID(ctx context.Context, id string, a ShippingAddress) (*ShippingAddress, error)
+	// Create creates a new document.
+	// - ShippingAddress.ID must already be assigned by usecase.
+	// - If the document already exists, return ErrConflict.
+	Create(ctx context.Context, a ShippingAddress) (*ShippingAddress, error)
 
-	// ✅ Update: docId を指定して上書き（必須フィールドは usecase 側で保証）
-	Update(ctx context.Context, id string, a ShippingAddress) (*ShippingAddress, error)
+	// Update updates an existing document.
+	// - No upsert.
+	// - If the document does not exist, return ErrNotFound.
+	Update(ctx context.Context, a ShippingAddress) (*ShippingAddress, error)
 
 	Delete(ctx context.Context, id string) error
 }

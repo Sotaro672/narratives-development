@@ -100,26 +100,6 @@ func (r *CartRepositoryFS) Upsert(ctx context.Context, c *cartdom.Cart) error {
 	return err
 }
 
-// ✅ (optional) explicit docId upsert API (kept for compatibility / explicitness)
-func (r *CartRepositoryFS) UpsertByAvatarID(ctx context.Context, avatarID string, c *cartdom.Cart) error {
-	if r == nil || r.Client == nil {
-		return errors.New("cart_repository_fs: firestore client is nil")
-	}
-	if c == nil {
-		return errors.New("cart_repository_fs: cart is nil")
-	}
-
-	aid := avatarID
-	if aid == "" {
-		return errors.New("cart_repository_fs: avatarID is empty")
-	}
-
-	doc := cartDocFromDomain(c)
-
-	_, err := r.col().Doc(aid).Set(ctx, doc)
-	return err
-}
-
 func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")

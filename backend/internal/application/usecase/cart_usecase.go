@@ -14,34 +14,15 @@ var (
 	ErrCartNotFound        = errors.New("cart_usecase: not found")
 )
 
-// Clock provides current time (for testability).
-type Clock interface {
-	Now() time.Time
-}
-
-type systemClock struct{}
-
-func (systemClock) Now() time.Time { return time.Now() }
-
 // CartUsecase coordinates cart operations.
 type CartUsecase struct {
-	repo  cartdom.Repository
-	clock Clock
+	repo cartdom.Repository
 }
 
 func NewCartUsecase(repo cartdom.Repository) *CartUsecase {
 	return &CartUsecase{
-		repo:  repo,
-		clock: systemClock{},
+		repo: repo,
 	}
-}
-
-// NewCartUsecaseWithClock is useful for tests.
-func NewCartUsecaseWithClock(repo cartdom.Repository, clock Clock) *CartUsecase {
-	if clock == nil {
-		clock = systemClock{}
-	}
-	return &CartUsecase{repo: repo, clock: clock}
 }
 
 // Get returns the cart for avatarID.
@@ -77,7 +58,7 @@ func (uc *CartUsecase) GetOrCreate(ctx context.Context, avatarID string) (*cartd
 		return c, nil
 	}
 
-	now := uc.clock.Now()
+	now := time.Now()
 	newCart, err := cartdom.NewCart(aid, nil, now)
 	if err != nil {
 		return nil, err
@@ -103,7 +84,7 @@ func (uc *CartUsecase) AddItem(
 		return nil, ErrCartInvalidArgument
 	}
 
-	now := uc.clock.Now()
+	now := time.Now()
 
 	c, err := uc.repo.GetByAvatarID(ctx, aid)
 	if err != nil {
@@ -145,7 +126,7 @@ func (uc *CartUsecase) SetItemQty(
 		return nil, err
 	}
 
-	now := uc.clock.Now()
+	now := time.Now()
 
 	if c == nil {
 		// policy: cart absent -> create (then apply)
@@ -190,7 +171,7 @@ func (uc *CartUsecase) EmptyItems(ctx context.Context, avatarID string) error {
 		return ErrCartInvalidArgument
 	}
 
-	now := uc.clock.Now()
+	now := time.Now()
 
 	c, err := uc.repo.GetByAvatarID(ctx, aid)
 	if err != nil {
