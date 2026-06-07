@@ -123,6 +123,85 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 	}, nil
 }
 
+// ListEligibleTransferItemsByAvatarID returns paid and untransferred order items for transfer verification.
+//
+// Query condition:
+// - order.avatarId == avatarID
+// - order.paid == true
+//
+// In-memory item filter:
+// - item.transferred == false
+// - item.modelId is not empty
+// - item.inventoryId is not empty
+func (r *OrderRepositoryFS) ListEligibleTransferItemsByAvatarID(
+	ctx context.Context,
+	avatarID string,
+) ([]orderdom.EligibleTransferItem, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return []orderdom.EligibleTransferItem{}, nil
+	}
+
+	it := r.ordersCol().
+		Where("avatarId", "==", avatarID).
+		Where("paid", "==", true).
+		Documents(ctx)
+	defer it.Stop()
+
+	out := make([]orderdom.EligibleTransferItem, 0)
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if doc == nil || doc.Ref == nil {
+			continue
+		}
+
+		o, err := docToOrder(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		// Firestore query already filters avatarId and paid,
+		// but keep these as defensive checks.
+		if o.AvatarID != avatarID {
+			continue
+		}
+		if !o.Paid {
+			continue
+		}
+
+		for _, item := range o.Items {
+			if item.Transferred {
+				continue
+			}
+			if item.ModelID == "" {
+				continue
+			}
+			if item.InventoryID == "" {
+				continue
+			}
+
+			out = append(out, orderdom.EligibleTransferItem{
+				OrderID:     o.ID,
+				ModelID:     item.ModelID,
+				InventoryID: item.InventoryID,
+			})
+		}
+	}
+
+	return out, nil
+}
+
 func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (orderdom.Order, error) {
 	if r.Client == nil {
 		return orderdom.Order{}, errors.New("firestore client is nil")

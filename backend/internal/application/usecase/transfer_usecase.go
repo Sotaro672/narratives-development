@@ -664,7 +664,7 @@ func (u *TransferUsecase) resolveBrandDisplayName(ctx context.Context, brandID s
 		return ""
 	}
 
-	return strings.TrimSpace(b.Name)
+	return b.Name
 }
 
 func (u *TransferUsecase) resolveAvatarDisplayName(ctx context.Context, avatarID string) string {
@@ -677,7 +677,7 @@ func (u *TransferUsecase) resolveAvatarDisplayName(ctx context.Context, avatarID
 		return ""
 	}
 
-	return strings.TrimSpace(a.AvatarName)
+	return a.AvatarName
 }
 
 // findUntransferredItemByModelAndTB returns (inventoryId, modelId, true) if order has an item where:

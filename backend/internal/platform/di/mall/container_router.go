@@ -219,8 +219,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// Order scan verify
-	if cont.OrderScanVerifyQ != nil {
-		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(cont.OrderScanVerifyQ)
+	if cont.PreviewQ != nil {
+		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(cont.PreviewQ)
 	}
 
 	// Order scan transfer

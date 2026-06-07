@@ -75,10 +75,6 @@ type Container struct {
 
 	HistoryQ *mallquery.HistoryQuery
 
-	OrderPurchasedQ *mallquery.OrderPurchasedQuery
-
-	OrderScanVerifyQ *mallquery.OrderScanVerifyQuery
-
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }
 
@@ -311,6 +307,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			productRepo,
 			modelRepoFS,
 			productBlueprintRepoFS,
+			orderRepo,
 			c.NameResolver,
 			tokenReader,
 			tokenBlueprintRepo,
@@ -331,13 +328,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			brandRepo,
 			historyModelResolver,
 		)
-
-		c.OrderPurchasedQ = mallquery.NewOrderPurchasedQuery(fsClient)
-		c.OrderScanVerifyQ = mallquery.NewOrderScanVerifyQuery(c.OrderPurchasedQ, c.PreviewQ)
 	}
 
 	{
-		scanVerifier := buildScanVerifier(c.OrderScanVerifyQ)
+		scanVerifier := buildScanVerifier(c.PreviewQ)
 		if scanVerifier == nil {
 			return nil, errors.New("di.mall: scan verifier is nil")
 		}

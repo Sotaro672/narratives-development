@@ -4,7 +4,6 @@ package mall
 import (
 	"errors"
 
-	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	shared "narratives/internal/platform/di/shared"
 )
@@ -56,18 +55,17 @@ func buildStripePaymentIntentGateway(infra *shared.Infra) usecase.StripePaymentI
 
 // buildScanVerifier wires ScanVerifier conditionally.
 // Policy:
-// - If OrderScanVerifyQ exists, expose it directly as usecase.ScanVerifier.
+// - If a verifier exists, expose it directly as usecase.ScanVerifier.
 // - Otherwise, return nil (feature disabled).
 //
 // NOTE:
-//   - Adapter was removed.
-//     which *mallquery.OrderScanVerifyQuery already implements.
-func buildScanVerifier(orderScanVerifyQ *mallquery.OrderScanVerifyQuery) usecase.ScanVerifier {
-	if orderScanVerifyQ == nil {
+// - PreviewQuery now implements VerifyMatch and can be used as usecase.ScanVerifier.
+func buildScanVerifier(verifier usecase.ScanVerifier) usecase.ScanVerifier {
+	if verifier == nil {
 		return nil
 	}
 
-	return orderScanVerifyQ
+	return verifier
 }
 
 // buildWalletSecretProvider wires WalletSecretProvider / AvatarSecretProvider conditionally.

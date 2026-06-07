@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
@@ -13,6 +14,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	commondom "narratives/internal/domain/common"
 	modeldom "narratives/internal/domain/model"
+	orderdom "narratives/internal/domain/order"
 	productdom "narratives/internal/domain/product"
 	pbdom "narratives/internal/domain/productBlueprint"
 	pbcatdom "narratives/internal/domain/productBlueprintCategory"
@@ -31,6 +33,15 @@ var (
 	ErrModelVariationNotFound            = errors.New("preview_query: model variation not found")
 	ErrProductBlueprintRepoNotConfigured = errors.New("preview_query: productBlueprint repo not configured")
 	ErrProductBlueprintIDEmpty           = errors.New("preview_query: resolved productBlueprintId is empty")
+
+	ErrOrderPurchasedQueryNotConfigured = errors.New("order_purchased_query: not configured")
+	ErrInvalidAvatarID                  = errors.New("order_purchased_query: invalid avatarId")
+
+	ErrOrderScanVerifyQueryNotConfigured  = errors.New("order_scan_verify_query: not configured")
+	ErrOrderScanVerifyAvatarIDEmpty       = errors.New("order_scan_verify_query: avatarId is empty")
+	ErrOrderScanVerifyProductIDEmpty      = errors.New("order_scan_verify_query: productId is empty")
+	ErrOrderScanVerifyTokenNotFound       = errors.New("order_scan_verify_query: token not found for productId")
+	ErrOrderScanVerifyTokenBlueprintEmpty = errors.New("order_scan_verify_query: tokenBlueprintId is empty")
 )
 
 // ------------------------------------------------------------
@@ -103,15 +114,66 @@ type TransferReader interface {
 }
 
 // ------------------------------------------------------------
+// Purchased / scan verify DTOs
+// ------------------------------------------------------------
+
+// PurchasedPair is a resolved (modelId, tokenBlueprintId) pair derived from an eligible order item.
+type PurchasedPair struct {
+	OrderID          string `json:"orderId"`
+	ModelID          string `json:"modelId"`
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+}
+
+// OrderPurchasedResult is the purchased-side query output.
+// - Pairs は orderId 単位で返す（同一 modelId/tokenBlueprintId が複数回出る可能性あり）
+type OrderPurchasedResult struct {
+	AvatarID string          `json:"avatarId"`
+	Pairs    []PurchasedPair `json:"pairs"`
+}
+
+// ModelTokenPair is a minimal pair used for matching.
+type ModelTokenPair struct {
+	ModelID          string `json:"modelId"`
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+}
+
+type VerifyInput struct {
+	AvatarID  string `json:"avatarId"`
+	ProductID string `json:"productId"`
+}
+
+type VerifyResult struct {
+	AvatarID  string `json:"avatarId"`
+	ProductID string `json:"productId"`
+
+	// scan side
+	ScannedModelID          string `json:"scannedModelId"`
+	ScannedTokenBlueprintID string `json:"scannedTokenBlueprintId"`
+
+	// purchased side (dedup list)
+	PurchasedPairs []ModelTokenPair `json:"purchasedPairs"`
+
+	// verdict
+	Matched bool            `json:"matched"`
+	Match   *ModelTokenPair `json:"match,omitempty"`
+}
+
+// ------------------------------------------------------------
 // Query
 // ------------------------------------------------------------
 
 // PreviewQuery resolves preview entry info from productId.
 // This struct is intended to be injected as cont.PreviewQ.
+//
+// It also owns scan verification dependencies so NewPreviewQuery is the
+// single construction entry point for preview + order scan verification.
 type PreviewQuery struct {
 	ProductRepo          ProductReader
 	ModelRepo            ModelVariationReader
 	ProductBlueprintRepo ProductBlueprintReader
+
+	// order scan verify / purchased-side resolver
+	OrderRepo orderdom.Repository
 
 	// modelId -> apparel/alcohol display fields
 	NameResolver *appresolver.NameResolver
@@ -138,11 +200,12 @@ type PreviewQuery struct {
 // ------------------------------------------------------------
 
 // NewPreviewQuery constructs PreviewQuery.
-// This is the only entry point for wiring dependencies.
+// This is the only entry point for wiring preview and scan verification dependencies.
 func NewPreviewQuery(
 	productRepo ProductReader,
 	modelRepo ModelVariationReader,
 	pbRepo ProductBlueprintReader,
+	orderRepo orderdom.Repository,
 	nameResolver *appresolver.NameResolver,
 	tokenRepo TokenReader,
 	tokenBlueprintRepo TokenBlueprintPatchReader,
@@ -155,6 +218,7 @@ func NewPreviewQuery(
 		ProductRepo:          productRepo,
 		ModelRepo:            modelRepo,
 		ProductBlueprintRepo: pbRepo,
+		OrderRepo:            orderRepo,
 		NameResolver:         nameResolver,
 		TokenRepo:            tokenRepo,
 		TokenBlueprintRepo:   tokenBlueprintRepo,
@@ -343,6 +407,155 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	}
 
 	return out, nil
+}
+
+// ListEligiblePairsByAvatarID resolves eligible transfer pairs through order.Repository.
+//
+// Repository-side condition:
+// - order.avatarId == avatarID
+// - order.paid == true
+// - item.transferred == false
+// - item.modelId is not empty
+// - item.inventoryId is not empty
+//
+// This query then derives:
+// - modelId from item.modelId
+// - tokenBlueprintId from item.inventoryId 2nd segment
+func (q *PreviewQuery) ListEligiblePairsByAvatarID(ctx context.Context, avatarID string) (OrderPurchasedResult, error) {
+	if q == nil || q.OrderRepo == nil {
+		return OrderPurchasedResult{}, ErrOrderPurchasedQueryNotConfigured
+	}
+
+	aid := avatarID
+	if aid == "" {
+		return OrderPurchasedResult{}, ErrInvalidAvatarID
+	}
+
+	items, err := q.OrderRepo.ListEligibleTransferItemsByAvatarID(ctx, aid)
+	if err != nil {
+		return OrderPurchasedResult{}, err
+	}
+
+	pairs := make([]PurchasedPair, 0, len(items))
+
+	for _, item := range items {
+		if item.ModelID == "" {
+			continue
+		}
+		if item.InventoryID == "" {
+			continue
+		}
+
+		parts := strings.Split(item.InventoryID, "__")
+		if len(parts) < 2 || parts[1] == "" {
+			continue
+		}
+
+		tokenBlueprintID := parts[1]
+
+		pairs = append(pairs, PurchasedPair{
+			OrderID:          item.OrderID,
+			ModelID:          item.ModelID,
+			TokenBlueprintID: tokenBlueprintID,
+		})
+	}
+
+	return OrderPurchasedResult{
+		AvatarID: aid,
+		Pairs:    pairs,
+	}, nil
+}
+
+// VerifyMatch verifies whether the scanned pair exists in purchased(untransferred) pairs.
+func (q *PreviewQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyResult, error) {
+	if q == nil || q.OrderRepo == nil || q.ProductRepo == nil || q.ModelRepo == nil {
+		return VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
+	}
+
+	avatarID := in.AvatarID
+	productID := in.ProductID
+
+	if avatarID == "" {
+		return VerifyResult{}, ErrOrderScanVerifyAvatarIDEmpty
+	}
+	if productID == "" {
+		return VerifyResult{}, ErrOrderScanVerifyProductIDEmpty
+	}
+
+	// 1) scan side: productId -> modelId + tokenBlueprintId(tokens/{productId}.tokenBlueprintId)
+	info, err := q.ResolveModelInfoByProductID(ctx, productID)
+	if err != nil {
+		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve failed: %w", err)
+	}
+	if info == nil {
+		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve returned nil")
+	}
+
+	scannedModelID := info.ModelID
+	if scannedModelID == "" {
+		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: scanned modelId is empty")
+	}
+
+	// token must exist (tokens/{productId} が存在する or TokenRepo 注入されている)
+	if info.Token == nil {
+		return VerifyResult{}, ErrOrderScanVerifyTokenNotFound
+	}
+
+	// scanned tokenBlueprintId is tokens/{productId}.tokenBlueprintId (docId=productId)
+	scannedTokenBlueprintID := info.Token.TokenBlueprintID
+	if scannedTokenBlueprintID == "" {
+		return VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
+	}
+
+	// 2) purchased side: avatarId -> paid orders -> items.transfer=false -> (modelId,tbId)
+	purchased, err := q.ListEligiblePairsByAvatarID(ctx, avatarID)
+	if err != nil {
+		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: purchased pairs resolve failed: %w", err)
+	}
+
+	// 3) dedup to []ModelTokenPair
+	seen := map[string]struct{}{}
+	outPairs := make([]ModelTokenPair, 0, len(purchased.Pairs))
+
+	for _, p := range purchased.Pairs {
+		modelID := p.ModelID
+		tokenBlueprintID := p.TokenBlueprintID
+		if modelID == "" || tokenBlueprintID == "" {
+			continue
+		}
+
+		key := modelID + "::" + tokenBlueprintID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+
+		seen[key] = struct{}{}
+		outPairs = append(outPairs, ModelTokenPair{
+			ModelID:          modelID,
+			TokenBlueprintID: tokenBlueprintID,
+		})
+	}
+
+	// 4) match
+	var match *ModelTokenPair
+	for i := range outPairs {
+		p := outPairs[i]
+		if p.ModelID == scannedModelID && p.TokenBlueprintID == scannedTokenBlueprintID {
+			cp := p
+			match = &cp
+			break
+		}
+	}
+
+	return VerifyResult{
+		AvatarID:                avatarID,
+		ProductID:               productID,
+		ScannedModelID:          scannedModelID,
+		ScannedTokenBlueprintID: scannedTokenBlueprintID,
+		PurchasedPairs:          outPairs,
+		Matched:                 match != nil,
+		Match:                   match,
+	}, nil
 }
 
 // ------------------------------------------------------------

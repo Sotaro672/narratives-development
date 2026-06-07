@@ -64,11 +64,31 @@ type PageResult = common.PageResult[Order]
 // Update options (optional for adapters)
 type UpdateOptions = common.SaveOptions
 
+// EligibleTransferItem is an order item eligible for token transfer verification.
+//
+// Expected source condition:
+// - order.avatarId == avatarID
+// - order.paid == true
+// - item.transferred == false
+// - item.modelId is not empty
+// - item.inventoryId is not empty
+type EligibleTransferItem struct {
+	OrderID     string
+	ModelID     string
+	InventoryID string
+}
+
 // Repository defines the persistence port for Order.
 type Repository interface {
 	// Queries
 	GetByID(ctx context.Context, id string) (Order, error)
 	ListByAvatarID(ctx context.Context, avatarID string, sort Sort, page Page) (PageResult, error)
+
+	// Transfer verification query
+	ListEligibleTransferItemsByAvatarID(
+		ctx context.Context,
+		avatarID string,
+	) ([]EligibleTransferItem, error)
 
 	// Commands
 	Create(ctx context.Context, o Order) (Order, error)
