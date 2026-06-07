@@ -161,11 +161,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	// Wallet (public)
-	if cont.WalletUC != nil {
-		walletH = mallhandler.NewWalletHandler(cont.WalletUC, resolvedRepo)
-	}
-
 	// Wallet (me)
 	if cont.WalletUC != nil {
 		meWalletH = mallhandler.NewMallMeWalletHandler(cont.WalletUC, resolvedRepo)
