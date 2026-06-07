@@ -4,10 +4,18 @@ package wallet
 import "context"
 
 // Repository は Wallet 集約の永続化ポートです。
+//
+// Collection design:
+// - collection: wallets
+// - docId: avatarId
+// - fields: walletAddress, tokens, lastUpdatedAt, status
+// - avatarId field is NOT stored. docId is the source of truth.
 type Repository interface {
-	GetByAddress(ctx context.Context, addr string) (Wallet, error)
-	GetWalletAddressByMintAddress(ctx context.Context, mintAddress string) (string, error)
-	Save(ctx context.Context, w Wallet) error
+	// GetByAvatarID は wallets/{avatarId} から Wallet を取得します。
+	GetByAvatarID(ctx context.Context, avatarID string) (Wallet, error)
+
+	// Save は wallets/{avatarId} に Wallet を保存します。
+	Save(ctx context.Context, avatarID string, w Wallet) error
 }
 
 // OnchainReader は Solana 上のウォレットが保持するトークンの mint 一覧を取得するポートです。

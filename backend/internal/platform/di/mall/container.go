@@ -63,8 +63,6 @@ type Container struct {
 
 	TokenBlueprintReviewRepo tokenblueprintreview.RepositoryPort
 
-	ResolvedTokenRepo mallhandler.ResolvedTokenRepository
-
 	NameResolver *appresolver.NameResolver
 
 	BrandQ   *mallquery.BrandQuery
@@ -141,8 +139,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			return nil, errors.New("di.mall: stripe payment method gateway is nil after registration")
 		}
 	}
-
-	c.ResolvedTokenRepo = outfs.NewResolvedTokenRepositoryFS(fsClient)
 
 	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 	c.BrandRepo = brandRepo

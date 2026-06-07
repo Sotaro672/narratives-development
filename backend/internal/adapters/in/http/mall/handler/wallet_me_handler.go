@@ -3,7 +3,6 @@ package mallHandler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -31,27 +30,15 @@ import (
 type MallMeWalletHandler struct {
 	walletUC *usecase.WalletUsecase
 
-	// resolved token cache (Firestore wallets/{avatarId}/resolvedTokens/{mint})
-	resolvedTokenRepo ResolvedTokenRepository
-
 	// optional: allowlist for proxy host validation
 	// if empty, defaults are used
 	allowedProxyHosts map[string]struct{}
 }
 
-// ResolvedTokenRepository is a minimal port for resolvedTokens cache.
-// (Firestore implementation lives in adapters/out)
-type ResolvedTokenRepository interface {
-	GetByAvatarIDAndMint(ctx context.Context, avatarID string, mintAddress string) (usecase.ResolveTokenByMintAddressWithBrandNameResult, error)
-	Upsert(ctx context.Context, avatarID string, mintAddress string, res usecase.ResolveTokenByMintAddressWithBrandNameResult, now time.Time) error
-}
-
 // NewMallMeWalletHandler wires mall /me wallet endpoints.
-// - resolvedTokenRepo can be nil (handler falls back to full resolve every time).
-func NewMallMeWalletHandler(walletUC *usecase.WalletUsecase, resolvedTokenRepo ResolvedTokenRepository) http.Handler {
+func NewMallMeWalletHandler(walletUC *usecase.WalletUsecase) http.Handler {
 	return &MallMeWalletHandler{
-		walletUC:          walletUC,
-		resolvedTokenRepo: resolvedTokenRepo,
+		walletUC: walletUC,
 		allowedProxyHosts: map[string]struct{}{
 			"gateway.irys.xyz":             {},
 			"uploader.irys.xyz":            {},
@@ -104,7 +91,7 @@ func (h *MallMeWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h == nil || h.walletUC == nil || h.walletUC.WalletRepo == nil {
+	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
 		return
@@ -117,36 +104,10 @@ func (h *MallMeWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	wallet, err := h.walletUC.WalletRepo.GetByAvatarID(ctx, avatarID)
+	wallet, err := h.walletUC.GetWalletByAvatarIDWithReadThroughSync(ctx, avatarID)
 	if err != nil {
 		writeMallMeWalletErr(w, err)
 		return
-	}
-
-	if h.walletUC.OnchainReader == nil {
-		_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
-		return
-	}
-
-	if wallet.WalletAddress == "" {
-		_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
-		return
-	}
-
-	onchainMints, err := h.walletUC.OnchainReader.ListOwnedTokenMints(ctx, wallet.WalletAddress)
-	if err != nil {
-		_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
-		return
-	}
-
-	if !sameStringSet(wallet.Tokens, onchainMints) {
-		synced, syncErr := h.walletUC.SyncWalletTokens(ctx, avatarID)
-		if syncErr != nil {
-			_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
-			return
-		}
-
-		wallet = synced
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
@@ -202,50 +163,10 @@ func (h *MallMeWalletHandler) resolveMeTokenByMintAddress(w http.ResponseWriter,
 		return
 	}
 
-	if h.walletUC.WalletRepo == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet repository not configured"})
-		return
-	}
-
-	snap, err := h.walletUC.WalletRepo.GetByAvatarID(ctx, avatarID)
+	res, err := h.walletUC.ResolveOwnedTokenByMintAddressWithBrandName(ctx, avatarID, mintAddress)
 	if err != nil {
 		writeMallMeWalletErr(w, err)
 		return
-	}
-
-	owned := walletSnapshotHasMintPreferTokens(snap, mintAddress)
-
-	if !owned && h.walletUC.OnchainReader != nil {
-		addr := snap.WalletAddress
-		if addr != "" {
-			mints, e := h.walletUC.OnchainReader.ListOwnedTokenMints(ctx, addr)
-			if e == nil {
-				owned = stringSliceContainsExact(mints, mintAddress)
-			}
-		}
-	}
-
-	if !owned {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintAddress is not owned by current avatar"})
-		return
-	}
-
-	var res usecase.ResolveTokenByMintAddressWithBrandNameResult
-	var fromCache bool
-
-	if !fromCache {
-		rr, e := h.walletUC.ResolveTokenByMintAddressWithBrandName(ctx, mintAddress)
-		if e != nil {
-			writeMallMeWalletErr(w, e)
-			return
-		}
-		res = rr
-
-		if h.resolvedTokenRepo != nil {
-			_ = h.resolvedTokenRepo.Upsert(ctx, avatarID, mintAddress, res, time.Now().UTC())
-		}
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -458,6 +379,9 @@ func writeMallMeWalletErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, tokendom.ErrNotFound):
 		code = http.StatusNotFound
 
+	case errors.Is(err, usecase.ErrWalletMintAddressNotOwned):
+		code = http.StatusForbidden
+
 	case errors.Is(err, usecase.ErrWalletSyncAvatarIDEmpty),
 		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty):
 		code = http.StatusBadRequest
@@ -477,54 +401,6 @@ func writeMallMeWalletErr(w http.ResponseWriter, err error) {
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-}
-
-func stringSliceContainsExact(xs []string, target string) bool {
-	if target == "" || len(xs) == 0 {
-		return false
-	}
-	for _, x := range xs {
-		if x == target {
-			return true
-		}
-	}
-	return false
-}
-
-func sameStringSet(a []string, b []string) bool {
-	am := make(map[string]int, len(a))
-	bm := make(map[string]int, len(b))
-
-	for _, x := range a {
-		if x == "" {
-			continue
-		}
-		am[x]++
-	}
-
-	for _, x := range b {
-		if x == "" {
-			continue
-		}
-		bm[x]++
-	}
-
-	if len(am) != len(bm) {
-		return false
-	}
-
-	for k, av := range am {
-		if bm[k] != av {
-			return false
-		}
-	}
-
-	return true
-}
-
-// walletSnapshotHasMintPreferTokens uses only the canonical field "Tokens".
-func walletSnapshotHasMintPreferTokens(w walletdom.Wallet, mintAddress string) bool {
-	return stringSliceContainsExact(w.Tokens, mintAddress)
 }
 
 func isKeepObjectURI(raw string) bool {

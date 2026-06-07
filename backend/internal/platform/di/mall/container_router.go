@@ -153,17 +153,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 		paymentMethodH = mallhandler.NewPaymentMethodHandler(cont.PaymentMethodUC)
 	}
 
-	var resolvedRepo mallhandler.ResolvedTokenRepository
-	{
-		hasFS := cont.Infra != nil && cont.Infra.Firestore != nil
-		if hasFS {
-			resolvedRepo = firestoreOut.NewResolvedTokenRepositoryFS(cont.Infra.Firestore)
-		}
-	}
-
 	// Wallet (me)
 	if cont.WalletUC != nil {
-		meWalletH = mallhandler.NewMallMeWalletHandler(cont.WalletUC, resolvedRepo)
+		meWalletH = mallhandler.NewMallMeWalletHandler(cont.WalletUC)
 	}
 
 	// /mall/me/avatars
