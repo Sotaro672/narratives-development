@@ -41,12 +41,21 @@ type PreviewDTO struct {
 	ProductBlueprintCategoryKind commondom.ProductCategoryKind `json:"productBlueprintCategoryKind,omitempty"`
 	ProductBlueprintCategoryName string                        `json:"productBlueprintCategoryName,omitempty"`
 
-	// token
+	// token flat fields
+	//
+	// preview 表示で頻繁に使う値は flat field として維持する。
+	// 正規の tokenBlueprint 表示情報は TokenBlueprintPatch に入れる。
 	TokenName   string `json:"tokenName,omitempty"`
 	BrandName   string `json:"brandName,omitempty"`
 	CompanyName string `json:"companyName,omitempty"`
 	Description string `json:"description,omitempty"`
 	IconURL     string `json:"iconUrl,omitempty"`
+
+	// tokenBlueprint patch
+	//
+	// backend/internal/domain/tokenBlueprint/repository_port.go の Patch を再利用する。
+	// preview 独自 Patch は持たない。
+	TokenBlueprintPatch *tbdom.Patch `json:"tokenBlueprintPatch,omitempty"`
 
 	// model common
 	ModelKind   commondom.ProductCategoryKind `json:"modelKind,omitempty"`
@@ -140,6 +149,10 @@ type PreviewModelInfo struct {
 
 	Token *TokenInfo `json:"token,omitempty"`
 
+	// tokenBlueprint patch
+	//
+	// backend/internal/domain/tokenBlueprint/repository_port.go の Patch を再利用する。
+	// preview 独自 Patch は持たない。
 	TokenBlueprintPatch *tbdom.Patch `json:"tokenBlueprintPatch,omitempty"`
 
 	Owner *sharedquery.OwnerResolveResult `json:"owner,omitempty"`

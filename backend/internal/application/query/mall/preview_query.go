@@ -55,19 +55,8 @@ type ProductReader interface {
 }
 
 // ModelVariationReader is a minimal read port for model variation.
-// We need: modelId(=variationId想定) -> variation -> model display fields.
-//
-// apparel:
-//   - modelNumber
-//   - size
-//   - color
-//   - rgb
-//   - measurements
-//
-// alcohol:
-//   - modelNumber
-//   - volumeValue
-//   - volumeUnit
+// preview では measurements 補完用途だけに使う。
+// modelNumber / size / color / rgb / volume は NameResolver.ResolveModelResolved を正とする。
 type ModelVariationReader interface {
 	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
@@ -84,14 +73,6 @@ type ProductBlueprintReader interface {
 // 想定: tokens/{productId} を読む（存在しない=未mint は nil を返してOK）
 type TokenReader interface {
 	GetByProductID(ctx context.Context, productID string) (*dto.TokenInfo, error)
-}
-
-// TokenBlueprintPatchReader is a minimal read port for TokenBlueprint.
-//
-// tokenBlueprint.RepositoryPort と同じ GetByID に統一する。
-// preview で必要な patch 表示用データは GetByID の結果から組み立てる。
-type TokenBlueprintPatchReader interface {
-	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 }
 
 // BrandReader resolves brandId -> Brand.
@@ -182,7 +163,7 @@ type PreviewQuery struct {
 	TokenRepo TokenReader
 
 	// tokenBlueprint を読む
-	TokenBlueprintRepo TokenBlueprintPatchReader
+	TokenBlueprintRepo tbdom.RepositoryPort
 
 	// tokens.toAddress -> owner を解決
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
@@ -208,7 +189,7 @@ func NewPreviewQuery(
 	orderRepo orderdom.Repository,
 	nameResolver *appresolver.NameResolver,
 	tokenRepo TokenReader,
-	tokenBlueprintRepo TokenBlueprintPatchReader,
+	tokenBlueprintRepo tbdom.RepositoryPort,
 	ownerResolveQ *sharedquery.OwnerResolveQuery,
 	brandRepo BrandReader,
 	avatarNameIconRepo AvatarNameIconReader,
@@ -265,7 +246,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	ctx context.Context,
 	productID string,
 ) (*dto.PreviewModelInfo, error) {
-	if q == nil || q.ProductRepo == nil || q.ModelRepo == nil {
+	if q == nil || q.ProductRepo == nil || q.ModelRepo == nil || q.NameResolver == nil {
 		return nil, ErrPreviewQueryNotConfigured
 	}
 
@@ -284,11 +265,13 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, ErrModelIDEmpty
 	}
 
-	v, err := q.ModelRepo.GetByID(ctx, modelID)
+	// measurements 補完用。
+	// modelNumber / size / color / rgb / volume は NameResolver.ResolveModelResolved を正とする。
+	mv, err := q.ModelRepo.GetByID(ctx, modelID)
 	if err != nil {
 		return nil, err
 	}
-	if v == nil {
+	if mv == nil {
 		return nil, ErrModelVariationNotFound
 	}
 
@@ -329,7 +312,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		out.CategoryInputSchema = &schema
 	}
 
-	if err := q.fillResolvedModelInfo(ctx, out, modelID, v, category.Kind); err != nil {
+	if err := q.fillResolvedModelInfo(ctx, out, modelID, mv, category.Kind); err != nil {
 		return nil, err
 	}
 
@@ -342,35 +325,20 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		out.Token = tok
 
 		// brandId -> brandName（tokens側）
-		if tok != nil && tok.BrandID != "" && q.BrandRepo != nil {
-			ni, nerr := q.getBrandNameIcon(ctx, tok.BrandID)
-			if nerr == nil && ni.Name != "" {
-				tok.BrandName = ni.Name
-				if out.BrandName == "" {
-					out.BrandName = ni.Name
-				}
+		if tok != nil && tok.BrandID != "" {
+			if brandName := q.resolveBrandNameForPreview(ctx, tok.BrandID, out); brandName != "" {
+				tok.BrandName = brandName
 			}
 		}
 
-		repoNil := q.TokenBlueprintRepo == nil
-		tbID := ""
-		if tok != nil {
-			tbID = tok.TokenBlueprintID
-		}
-
-		if tok != nil && !repoNil && tbID != "" {
-			tb, perr := q.TokenBlueprintRepo.GetByID(ctx, tbID)
+		// tokenBlueprint.Patch は domain/tokenBlueprint 側の Patch を再利用する。
+		if tok != nil && q.TokenBlueprintRepo != nil && tok.TokenBlueprintID != "" {
+			tb, perr := q.TokenBlueprintRepo.GetByID(ctx, tok.TokenBlueprintID)
 			if perr == nil && tb != nil {
-				tbPatch := toPreviewTokenBlueprintPatch(tb)
+				tbPatch := tbdom.NewPatchFromTokenBlueprint(tb)
 
-				if tbPatch.BrandID != "" && tbPatch.BrandName == "" && q.BrandRepo != nil {
-					ni, nerr := q.getBrandNameIcon(ctx, tbPatch.BrandID)
-					if nerr == nil && ni.Name != "" {
-						tbPatch.BrandName = ni.Name
-						if out.BrandName == "" {
-							out.BrandName = ni.Name
-						}
-					}
+				if tbPatch.BrandID != "" && tbPatch.BrandName == "" {
+					tbPatch.BrandName = q.resolveBrandNameForPreview(ctx, tbPatch.BrandID, out)
 				}
 
 				out.TokenBlueprintPatch = &tbPatch
@@ -468,7 +436,7 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(ctx context.Context, avatarID
 
 // VerifyMatch verifies whether the scanned pair exists in purchased(untransferred) pairs.
 func (q *PreviewQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyResult, error) {
-	if q == nil || q.OrderRepo == nil || q.ProductRepo == nil || q.ModelRepo == nil {
+	if q == nil || q.OrderRepo == nil || q.ProductRepo == nil || q.NameResolver == nil {
 		return VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
 	}
 
@@ -562,25 +530,6 @@ func (q *PreviewQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyR
 // Helpers
 // ------------------------------------------------------------
 
-func toPreviewTokenBlueprintPatch(tb *tbdom.TokenBlueprint) tbdom.Patch {
-	if tb == nil {
-		return tbdom.Patch{}
-	}
-
-	return tbdom.Patch{
-		ID:          tb.ID,
-		TokenName:   tb.Name,
-		Symbol:      tb.Symbol,
-		BrandID:     tb.BrandID,
-		BrandName:   "",
-		CompanyID:   tb.CompanyID,
-		Description: tb.Description,
-		Minted:      tb.Minted,
-		MetadataURI: tb.MetadataURI,
-		IconURL:     tb.IconURL,
-	}
-}
-
 func (q *PreviewQuery) getBrandNameIcon(
 	ctx context.Context,
 	brandID string,
@@ -603,6 +552,27 @@ func (q *PreviewQuery) getBrandNameIcon(
 	}, nil
 }
 
+func (q *PreviewQuery) resolveBrandNameForPreview(
+	ctx context.Context,
+	brandID string,
+	out *dto.PreviewModelInfo,
+) string {
+	if q == nil || q.BrandRepo == nil || brandID == "" {
+		return ""
+	}
+
+	ni, err := q.getBrandNameIcon(ctx, brandID)
+	if err != nil || ni.Name == "" {
+		return ""
+	}
+
+	if out != nil && out.BrandName == "" {
+		out.BrandName = ni.Name
+	}
+
+	return ni.Name
+}
+
 func (q *PreviewQuery) fillResolvedModelInfo(
 	ctx context.Context,
 	out *dto.PreviewModelInfo,
@@ -613,89 +583,49 @@ func (q *PreviewQuery) fillResolvedModelInfo(
 	if out == nil {
 		return ErrPreviewQueryNotConfigured
 	}
+	if q == nil || q.NameResolver == nil {
+		return ErrPreviewQueryNotConfigured
+	}
 
-	if q != nil && q.NameResolver != nil {
-		resolved := q.NameResolver.ResolveModelResolved(ctx, modelID)
-		if resolved.Kind != "" || resolved.ModelNumber != "" {
-			out.ModelKind = commondom.ProductCategoryKind(resolved.Kind)
-			out.ModelNumber = resolved.ModelNumber
-			out.ModelLabel = buildPreviewModelLabel(
-				resolved.Kind,
-				resolved.ModelNumber,
-				resolved.Size,
-				resolved.Color,
-				resolved.VolumeValue,
-				resolved.VolumeUnit,
-			)
+	resolved := q.NameResolver.ResolveModelResolved(ctx, modelID)
+	if resolved.Kind == "" && resolved.ModelNumber == "" {
+		return ErrModelVariationNotFound
+	}
 
-			out.Size = resolved.Size
-			out.Color = resolved.Color
-			if resolved.RGB != nil {
-				out.RGB = *resolved.RGB
-			}
+	modelKind := resolved.Kind
+	if modelKind == "" {
+		modelKind = string(categoryKind)
+	}
 
-			out.VolumeValue = resolved.VolumeValue
-			out.VolumeUnit = resolved.VolumeUnit
+	out.ModelKind = commondom.ProductCategoryKind(modelKind)
+	out.ModelNumber = resolved.ModelNumber
+	out.ModelLabel = buildPreviewModelLabel(
+		modelKind,
+		resolved.ModelNumber,
+		resolved.Size,
+		resolved.Color,
+		resolved.VolumeValue,
+		resolved.VolumeUnit,
+	)
 
-			if resolved.Kind == "apparel" {
-				if apparelVariation, ok := toPreviewApparelModelVariation(mv); ok {
-					out.Measurements = cloneMeasurements(apparelVariation.Measurements)
-				}
-			}
+	out.Size = resolved.Size
+	out.Color = resolved.Color
+	if resolved.RGB != nil {
+		out.RGB = *resolved.RGB
+	}
 
-			return nil
+	out.VolumeValue = resolved.VolumeValue
+	out.VolumeUnit = resolved.VolumeUnit
+
+	// measurements は apparel のみに存在するため、preview 側で補完する。
+	// model 表示値そのものは resolver の結果を正とする。
+	if modelKind == string(modeldom.ModelVariationKindApparel) {
+		if apparelVariation, ok := toPreviewApparelModelVariation(mv); ok {
+			out.Measurements = cloneMeasurements(apparelVariation.Measurements)
 		}
 	}
 
-	switch string(categoryKind) {
-	case "alcohol":
-		alcoholVariation, ok := toPreviewAlcoholModelVariation(mv)
-		if !ok {
-			return ErrModelVariationNotFound
-		}
-
-		value := alcoholVariation.Volume.Value
-
-		out.ModelKind = categoryKind
-		out.ModelNumber = alcoholVariation.ModelNumber
-		out.VolumeValue = &value
-		out.VolumeUnit = alcoholVariation.Volume.Unit
-		out.ModelLabel = buildPreviewModelLabel(
-			"alcohol",
-			alcoholVariation.ModelNumber,
-			"",
-			"",
-			&value,
-			alcoholVariation.Volume.Unit,
-		)
-
-		return nil
-
-	default:
-		apparelVariation, ok := toPreviewApparelModelVariation(mv)
-		if !ok {
-			return ErrModelVariationNotFound
-		}
-
-		rgb := apparelVariation.Color.RGB
-
-		out.ModelKind = categoryKind
-		out.ModelNumber = apparelVariation.ModelNumber
-		out.Size = apparelVariation.Size
-		out.Color = apparelVariation.Color.Name
-		out.RGB = rgb
-		out.Measurements = cloneMeasurements(apparelVariation.Measurements)
-		out.ModelLabel = buildPreviewModelLabel(
-			"apparel",
-			apparelVariation.ModelNumber,
-			apparelVariation.Size,
-			apparelVariation.Color.Name,
-			nil,
-			"",
-		)
-
-		return nil
-	}
+	return nil
 }
 
 func buildPreviewModelLabel(
@@ -754,24 +684,6 @@ func toPreviewApparelModelVariation(v modeldom.ModelVariation) (modeldom.Apparel
 		return *x, true
 	default:
 		return modeldom.ApparelModelVariation{}, false
-	}
-}
-
-func toPreviewAlcoholModelVariation(v modeldom.ModelVariation) (modeldom.AlcoholModelVariation, bool) {
-	if v == nil {
-		return modeldom.AlcoholModelVariation{}, false
-	}
-
-	switch x := v.(type) {
-	case modeldom.AlcoholModelVariation:
-		return x, true
-	case *modeldom.AlcoholModelVariation:
-		if x == nil {
-			return modeldom.AlcoholModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.AlcoholModelVariation{}, false
 	}
 }
 

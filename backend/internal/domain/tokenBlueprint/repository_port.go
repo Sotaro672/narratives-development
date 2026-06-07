@@ -119,6 +119,32 @@ type Patch struct {
 	IconSize        int64  `json:"iconSize,omitempty"`
 }
 
+// NewPatchFromTokenBlueprint builds a display Patch from TokenBlueprint.
+// BrandName は caller 側の NameResolver / BrandRepo で補完する。
+func NewPatchFromTokenBlueprint(tb *TokenBlueprint) Patch {
+	if tb == nil {
+		return Patch{}
+	}
+
+	return Patch{
+		ID:          tb.ID,
+		TokenName:   tb.Name,
+		Symbol:      tb.Symbol,
+		BrandID:     tb.BrandID,
+		BrandName:   "",
+		CompanyID:   tb.CompanyID,
+		Description: tb.Description,
+		Minted:      tb.Minted,
+		MetadataURI: tb.MetadataURI,
+
+		IconURL:         tb.IconURL,
+		IconObjectPath:  tb.IconObjectPath,
+		IconFileName:    tb.IconFileName,
+		IconContentType: tb.IconContentType,
+		IconSize:        tb.IconSize,
+	}
+}
+
 // ===============================
 // RepositoryPort（リポジトリ境界）
 // ===============================
