@@ -7,14 +7,19 @@ import (
 	"fmt"
 	"time"
 
-	"cloud.google.com/go/firestore"
-
 	malldto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 	cartdom "narratives/internal/domain/cart"
 	invdom "narratives/internal/domain/inventory"
 	ldom "narratives/internal/domain/list"
 )
+
+// CartReader is the minimal cart read port required by CartQuery.
+//
+// cartdom.Repository satisfies this interface.
+type CartReader interface {
+	GetByAvatarID(ctx context.Context, avatarID string) (*cartdom.Cart, error)
+}
 
 // ListReader is the minimal list read port required by CartQuery.
 //
@@ -24,7 +29,8 @@ type ListReader interface {
 }
 
 type CartQuery struct {
-	FS *firestore.Client
+	// CartRepo is used to read the cart document.
+	CartRepo CartReader
 
 	// ListReader is used to resolve list title, image, and prices.
 	ListRepo ListReader
@@ -32,37 +38,21 @@ type CartQuery struct {
 	// InventoryRepo is used to resolve inventory document ID to blueprint IDs.
 	InventoryRepo invdom.RepositoryPort
 
-	// optional: inject from DI
 	Resolver *appresolver.NameResolver
-
-	CartCol string
 }
 
-func NewCartQuery(fs *firestore.Client) *CartQuery {
-	return &CartQuery{
-		FS:            fs,
-		ListRepo:      nil,
-		InventoryRepo: nil,
-		Resolver:      nil,
-		CartCol:       "carts",
-	}
-}
-
-func NewCartQueryWithListRepo(fs *firestore.Client, listRepo ListReader) *CartQuery {
-	q := NewCartQuery(fs)
-	q.ListRepo = listRepo
-	return q
-}
-
-func NewCartQueryWithRepos(
-	fs *firestore.Client,
+func NewCartQuery(
+	cartRepo CartReader,
 	listRepo ListReader,
 	inventoryRepo invdom.RepositoryPort,
+	resolver *appresolver.NameResolver,
 ) *CartQuery {
-	q := NewCartQuery(fs)
-	q.ListRepo = listRepo
-	q.InventoryRepo = inventoryRepo
-	return q
+	return &CartQuery{
+		CartRepo:      cartRepo,
+		ListRepo:      listRepo,
+		InventoryRepo: inventoryRepo,
+		Resolver:      resolver,
+	}
 }
 
 // CartHandler 側の CartQueryService（GetCartQuery）に明示的に合わせる。
@@ -77,40 +67,36 @@ func (q *CartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, err
 }
 
 func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto.CartDTO, error) {
-	if q == nil || q.FS == nil {
-		return malldto.CartDTO{}, errors.New("mall cart query: firestore client is nil")
+	if q == nil || q.CartRepo == nil {
+		return malldto.CartDTO{}, errors.New("mall cart query: cart repo is nil")
 	}
 
 	if avatarID == "" {
 		return malldto.CartDTO{}, errors.New("avatarId is required")
 	}
 
-	cartCol := q.CartCol
-	if cartCol == "" {
-		cartCol = "carts"
-	}
-
-	snap, err := q.FS.Collection(cartCol).Doc(avatarID).Get(ctx)
+	c, err := q.CartRepo.GetByAvatarID(ctx, avatarID)
 	if err != nil {
-		if isFirestoreNotFound(err) {
-			return malldto.CartDTO{}, ErrNotFound
-		}
 		return malldto.CartDTO{}, err
 	}
-	if snap == nil || !snap.Exists() {
+	if c == nil {
 		return malldto.CartDTO{}, ErrNotFound
 	}
 
-	// carts doc は domain/cart.Cart の firestore tag 付き構造を正とする。
-	c, perr := cartFromSnapshot(avatarID, snap)
-	if perr != nil {
-		return malldto.CartDTO{}, perr
+	// Cart.ID は Firestore docId (= avatarId) が正。
+	// repository 側で未設定だった場合でも read-model では avatarID を補完する。
+	if c.ID == "" {
+		c.ID = avatarID
 	}
 
-	priceIndex, listMetaIndex := q.fetchListIndicesByCart(ctx, c)
-	invIndex := q.fetchInventoryIndexByCart(ctx, c)
-	modelIndex := q.fetchModelSimpleIndexByCart(ctx, c)
-	productNameIndex := q.fetchProductNameIndexByCart(ctx, c, invIndex)
+	// Query 側では itemKey を分解しない。
+	// CartItem の中身だけを見て、不正 item は read-model から除外する。
+	c = normalizeCart(c)
+
+	priceIndex, listMetaIndex := q.fetchLists(ctx, c)
+	invIndex := q.fetchInventories(ctx, c)
+	modelIndex := q.fetchModels(ctx, c)
+	productNameIndex := q.fetchProductNames(ctx, c, invIndex)
 
 	out := toCartDTO(
 		c,
@@ -125,33 +111,19 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 }
 
 // ============================================================
-// cart snapshot parsing (current schema only)
+// cart read-model normalization
 // ============================================================
 
-// carts doc supported shape:
-// - docId = avatarId
-// - items: map[itemKey] = {inventoryId, listId, modelId, qty}
-// - createdAt / updatedAt / expiresAt are Firestore timestamps
-func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartdom.Cart, error) {
-	if snap == nil {
-		return nil, errors.New("mall cart query: snapshot is nil")
+func normalizeCart(c *cartdom.Cart) *cartdom.Cart {
+	if c == nil {
+		return nil
 	}
-
-	c := &cartdom.Cart{}
-	if err := snap.DataTo(c); err != nil {
-		return nil, err
-	}
-
-	// Cart.ID is firestore:"-" and must come from docId.
-	c.ID = avatarID
 
 	if c.Items == nil {
 		c.Items = map[string]cartdom.CartItem{}
-		return c, nil
+		return c
 	}
 
-	// Query 側では itemKey を分解しない。
-	// 正規 CartItem の中身だけを見て、不正 item は read-model から除外する。
 	items := map[string]cartdom.CartItem{}
 	for itemKey, it := range c.Items {
 		if itemKey == "" {
@@ -170,7 +142,7 @@ func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartd
 	}
 	c.Items = items
 
-	return c, nil
+	return c
 }
 
 // ============================================================
@@ -320,7 +292,7 @@ func toRFC3339Ptr(t time.Time) *string {
 // list lookup
 // ============================================================
 
-func (q *CartQuery) fetchListIndicesByCart(
+func (q *CartQuery) fetchLists(
 	ctx context.Context,
 	c *cartdom.Cart,
 ) (map[string]map[string]int, map[string]listMeta) {
@@ -398,7 +370,7 @@ func (q *CartQuery) fetchListIndicesByCart(
 // inventory lookup
 // ============================================================
 
-func (q *CartQuery) fetchInventoryIndexByCart(
+func (q *CartQuery) fetchInventories(
 	ctx context.Context,
 	c *cartdom.Cart,
 ) map[string]invParts {
@@ -456,7 +428,7 @@ func (q *CartQuery) fetchInventoryIndexByCart(
 // model resolver lookup
 // ============================================================
 
-func (q *CartQuery) fetchModelSimpleIndexByCart(
+func (q *CartQuery) fetchModels(
 	ctx context.Context,
 	c *cartdom.Cart,
 ) map[string]modelSimple {
@@ -494,17 +466,15 @@ func (q *CartQuery) fetchModelSimpleIndexByCart(
 		ms := modelSimple{
 			Kind:        mr.Kind,
 			ModelNumber: mr.ModelNumber,
-
-			Size:  mr.Size,
-			Color: mr.Color,
-
+			Size:        mr.Size,
+			Color:       mr.Color,
 			VolumeValue: mr.VolumeValue,
 			VolumeUnit:  mr.VolumeUnit,
 		}
 
-		ms.ModelLabel = buildCartModelLabel(ms)
+		ms.ModelLabel = buildModelLabel(ms)
 
-		if isEmptyModelSimple(ms) {
+		if isEmptyModel(ms) {
 			continue
 		}
 
@@ -517,7 +487,7 @@ func (q *CartQuery) fetchModelSimpleIndexByCart(
 	return out
 }
 
-func isEmptyModelSimple(ms modelSimple) bool {
+func isEmptyModel(ms modelSimple) bool {
 	return ms.Kind == "" &&
 		ms.ModelNumber == "" &&
 		ms.ModelLabel == "" &&
@@ -527,7 +497,7 @@ func isEmptyModelSimple(ms modelSimple) bool {
 		ms.VolumeUnit == ""
 }
 
-func buildCartModelLabel(ms modelSimple) string {
+func buildModelLabel(ms modelSimple) string {
 	if ms.Kind == "alcohol" {
 		if ms.ModelNumber != "" && ms.VolumeValue != nil && ms.VolumeUnit != "" {
 			return fmt.Sprintf("%s / %d%s", ms.ModelNumber, *ms.VolumeValue, ms.VolumeUnit)
@@ -569,7 +539,7 @@ func buildCartModelLabel(ms modelSimple) string {
 // productName lookup
 // ============================================================
 
-func (q *CartQuery) fetchProductNameIndexByCart(
+func (q *CartQuery) fetchProductNames(
 	ctx context.Context,
 	c *cartdom.Cart,
 	invIndex map[string]invParts,

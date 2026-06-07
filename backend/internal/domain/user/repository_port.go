@@ -45,9 +45,17 @@ type RepositoryPort interface {
 	// 取得系
 	GetByID(ctx context.Context, id string) (*User, error)
 
+	// userId からメールアドレスを取得する。
+	//
+	// PaymentUsecase の注文確定メール送信など、
+	// user document に保存された email を参照する用途で使う。
+	//
+	// users/{userID}.email が存在しない場合は空文字を返してよい。
+	GetEmailByID(ctx context.Context, userID string) (string, error)
+
 	// 変更系
 	//
-	// ✅ Create は docId = uid を必ず指定する契約
+	// Create は docId = uid を必ず指定する契約
 	// - /mall/me/users の設計と整合（uid は認証から得る）
 	// - body の id を信用しない（spoof 防止）
 	Create(ctx context.Context, id string, in CreateUserInput) (*User, error)

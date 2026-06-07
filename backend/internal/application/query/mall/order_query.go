@@ -25,7 +25,7 @@ type OrderQuery struct {
 	FS *firestore.Client
 
 	// optional: cart read-model
-	// - if nil, GetOrderContextByUID will create CartQuery(fs) and fetch cart items best-effort
+	// - if nil, GetOrderContextByUID skips cart item resolution
 	CartQ *CartQuery
 
 	// optional: name resolver
@@ -204,7 +204,7 @@ func (q *OrderQuery) findAvatarIdentityByUID(ctx context.Context, uid string) (a
 // ------------------------------------------------------------
 
 func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID string) map[string]dto.CartItemDTO {
-	if q == nil || q.FS == nil {
+	if q == nil {
 		return nil
 	}
 	if avatarID == "" {
@@ -213,7 +213,7 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 
 	cq := q.CartQ
 	if cq == nil {
-		cq = NewCartQuery(q.FS)
+		return nil
 	}
 
 	cartDTO, err := cq.GetByAvatarID(ctx, avatarID)

@@ -299,7 +299,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			c.NameResolver,
 		)
 
-		c.CartQ = mallquery.NewCartQuery(fsClient)
+		c.CartQ = mallquery.NewCartQuery(
+			cartRepo,
+			listRepoFS,
+			inventoryRepo,
+			c.NameResolver,
+		)
 
 		tokenReader := outfs.NewTokenReaderFS(fsClient)
 
@@ -319,7 +324,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			previewTransferReader,
 		)
 
-		c.OrderQ = mallquery.NewOrderQuery(fsClient)
+		c.OrderQ = mallquery.NewOrderQueryWithCartQuery(fsClient, c.CartQ)
+		c.OrderQ.NameResolver = c.NameResolver
 
 		historyModelResolver := mallquery.NewHistoryModelResolver(modelRepoFS)
 		c.HistoryQ = mallquery.NewHistoryQuery(
@@ -332,14 +338,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		c.OrderPurchasedQ = mallquery.NewOrderPurchasedQuery(fsClient)
 		c.OrderScanVerifyQ = mallquery.NewOrderScanVerifyQuery(c.OrderPurchasedQ, c.PreviewQ)
-
-		if c.CartQ != nil && c.NameResolver != nil && c.CartQ.Resolver == nil {
-			c.CartQ.Resolver = c.NameResolver
-		}
-
-		if c.CartQ != nil && listRepoFS != nil && c.CartQ.ListRepo == nil {
-			c.CartQ.ListRepo = listRepoFS
-		}
 	}
 
 	{
