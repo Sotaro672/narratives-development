@@ -1,4 +1,4 @@
-// backend\internal\application\query\mall\history_query.go
+// backend/internal/application/query/mall/history_query.go
 package mall
 
 import (
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	historydto "narratives/internal/application/query/mall/dto"
+	appresolver "narratives/internal/application/resolver"
 
 	branddom "narratives/internal/domain/brand"
 	pbdom "narratives/internal/domain/productBlueprint"
@@ -77,25 +78,12 @@ type HistoryBrandResolver interface {
 	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
-// HistoryModelResolver resolves model variation display information from modelId.
-//
-// Expected responsibility:
-// modelId
-// -> ModelVariation
-// -> size / color / modelNumber / measurements
-type HistoryModelResolver interface {
-	ResolveHistoryModelByID(
-		ctx context.Context,
-		in historydto.HistoryResolveModelInput,
-	) (historydto.HistoryResolvedModel, error)
-}
-
 type HistoryQuery struct {
 	inventoryBlueprintResolver HistoryInventoryBlueprintResolver
 	productBlueprintResolver   HistoryProductBlueprintResolver
 	tokenBlueprintResolver     HistoryTokenBlueprintResolver
 	brandResolver              HistoryBrandResolver
-	modelResolver              HistoryModelResolver
+	nameResolver               *appresolver.NameResolver
 }
 
 func NewHistoryQuery(
@@ -103,14 +91,14 @@ func NewHistoryQuery(
 	productBlueprintResolver HistoryProductBlueprintResolver,
 	tokenBlueprintResolver HistoryTokenBlueprintResolver,
 	brandResolver HistoryBrandResolver,
-	modelResolver HistoryModelResolver,
+	nameResolver *appresolver.NameResolver,
 ) *HistoryQuery {
 	return &HistoryQuery{
 		inventoryBlueprintResolver: inventoryBlueprintResolver,
 		productBlueprintResolver:   productBlueprintResolver,
 		tokenBlueprintResolver:     tokenBlueprintResolver,
 		brandResolver:              brandResolver,
-		modelResolver:              modelResolver,
+		nameResolver:               nameResolver,
 	}
 }
 
@@ -124,7 +112,7 @@ func NewHistoryQuery(
 //  2. productBlueprintId -> productName / brandId
 //  3. tokenBlueprintId -> tokenName / tokenIcon / brandId
 //  4. brandId -> brandName / brandIcon
-//  5. modelId -> size / color / modelNumber / measurements
+//  5. modelId -> size / color / modelNumber / volume
 func (q *HistoryQuery) EnrichOrderPage(
 	ctx context.Context,
 	in historydto.EnrichHistoryOrderPageInput,
@@ -134,7 +122,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 		q.productBlueprintResolver == nil ||
 		q.tokenBlueprintResolver == nil ||
 		q.brandResolver == nil ||
-		q.modelResolver == nil {
+		q.nameResolver == nil {
 		return historydto.HistoryOrderPage{}, ErrHistoryQueryNotConfigured
 	}
 
@@ -249,7 +237,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 
 			resolved, ok := modelCache[cacheKey]
 			if !ok {
-				nextResolved, err := q.modelResolver.ResolveHistoryModelByID(ctx, historydto.HistoryResolveModelInput{
+				nextResolved, err := q.resolveHistoryModelByID(ctx, historydto.HistoryResolveModelInput{
 					ModelID:            modelID,
 					InventoryID:        inventoryID,
 					ProductBlueprintID: blueprintIDs.ProductBlueprintID,
@@ -397,7 +385,7 @@ func (q *HistoryQuery) ResolveModel(
 	ctx context.Context,
 	in historydto.HistoryResolveModelInput,
 ) (historydto.HistoryResolvedModel, error) {
-	if q == nil || q.modelResolver == nil {
+	if q == nil || q.nameResolver == nil {
 		return historydto.HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
 	}
 
@@ -427,7 +415,7 @@ func (q *HistoryQuery) ResolveModel(
 		}
 	}
 
-	resolved, err := q.modelResolver.ResolveHistoryModelByID(ctx, nextInput)
+	resolved, err := q.resolveHistoryModelByID(ctx, nextInput)
 	if err != nil {
 		return historydto.HistoryResolvedModel{}, err
 	}
@@ -476,6 +464,49 @@ func (q *HistoryQuery) ResolveModel(
 	}
 
 	return resolved, nil
+}
+
+func (q *HistoryQuery) resolveHistoryModelByID(
+	ctx context.Context,
+	in historydto.HistoryResolveModelInput,
+) (historydto.HistoryResolvedModel, error) {
+	if q == nil || q.nameResolver == nil {
+		return historydto.HistoryResolvedModel{}, ErrHistoryQueryNotConfigured
+	}
+
+	if in.ModelID == "" {
+		return historydto.HistoryResolvedModel{}, ErrHistoryModelIDEmpty
+	}
+
+	model := q.nameResolver.ResolveModelResolved(ctx, in.ModelID)
+
+	return historyResolvedModelFromNameResolver(in, model), nil
+}
+
+func historyResolvedModelFromNameResolver(
+	in historydto.HistoryResolveModelInput,
+	model appresolver.ModelResolved,
+) historydto.HistoryResolvedModel {
+	out := historydto.HistoryResolvedModel{
+		ModelID:            in.ModelID,
+		InventoryID:        in.InventoryID,
+		ProductBlueprintID: in.ProductBlueprintID,
+		TokenBlueprintID:   in.TokenBlueprintID,
+		Kind:               model.Kind,
+		ModelNumber:        model.ModelNumber,
+		Size:               model.Size,
+		VolumeValue:        model.VolumeValue,
+		VolumeUnit:         model.VolumeUnit,
+	}
+
+	if model.Color != "" || model.RGB != nil {
+		out.Color = &historydto.HistoryColor{
+			Name: model.Color,
+			RGB:  model.RGB,
+		}
+	}
+
+	return out
 }
 
 func (q *HistoryQuery) resolveProductBlueprintInfo(
@@ -636,7 +667,7 @@ func applyResolvedModelToItem(
 	}
 
 	if len(resolved.Measurements) > 0 {
-		item.Measurements = cloneMeasurements(resolved.Measurements)
+		item.Measurements = cloneHistoryModelMeasurements(resolved.Measurements)
 	}
 
 	if resolved.VolumeValue != nil {
@@ -662,4 +693,25 @@ func applyResolvedModelToItem(
 	if resolved.BrandIcon != "" {
 		item.BrandIcon = resolved.BrandIcon
 	}
+}
+
+func cloneHistoryModelMeasurements(in map[string]int) map[string]int {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make(map[string]int, len(in))
+	for key, value := range in {
+		if key == "" {
+			continue
+		}
+
+		out[key] = value
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }

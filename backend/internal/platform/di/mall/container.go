@@ -320,13 +320,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.OrderQ = mallquery.NewOrderQueryWithCartQuery(fsClient, c.CartQ)
 		c.OrderQ.NameResolver = c.NameResolver
 
-		historyModelResolver := mallquery.NewHistoryModelResolver(modelRepoFS)
 		c.HistoryQ = mallquery.NewHistoryQuery(
 			inventoryRepo,
 			productBlueprintRepoFS,
 			tokenBlueprintRepo,
 			brandRepo,
-			historyModelResolver,
+			c.NameResolver,
 		)
 	}
 
