@@ -10,6 +10,7 @@ import (
 	dto "narratives/internal/application/query/mall/dto"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
+	appusecase "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	commondom "narratives/internal/domain/common"
@@ -95,7 +96,7 @@ type TransferReader interface {
 }
 
 // ------------------------------------------------------------
-// Purchased / scan verify DTOs
+// Purchased DTOs
 // ------------------------------------------------------------
 
 // PurchasedPair is a resolved (modelId, tokenBlueprintId) pair derived from an eligible order item.
@@ -110,33 +111,6 @@ type PurchasedPair struct {
 type OrderPurchasedResult struct {
 	AvatarID string          `json:"avatarId"`
 	Pairs    []PurchasedPair `json:"pairs"`
-}
-
-// ModelTokenPair is a minimal pair used for matching.
-type ModelTokenPair struct {
-	ModelID          string `json:"modelId"`
-	TokenBlueprintID string `json:"tokenBlueprintId"`
-}
-
-type VerifyInput struct {
-	AvatarID  string `json:"avatarId"`
-	ProductID string `json:"productId"`
-}
-
-type VerifyResult struct {
-	AvatarID  string `json:"avatarId"`
-	ProductID string `json:"productId"`
-
-	// scan side
-	ScannedModelID          string `json:"scannedModelId"`
-	ScannedTokenBlueprintID string `json:"scannedTokenBlueprintId"`
-
-	// purchased side (dedup list)
-	PurchasedPairs []ModelTokenPair `json:"purchasedPairs"`
-
-	// verdict
-	Matched bool            `json:"matched"`
-	Match   *ModelTokenPair `json:"match,omitempty"`
 }
 
 // ------------------------------------------------------------
@@ -435,55 +409,58 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(ctx context.Context, avatarID
 }
 
 // VerifyMatch verifies whether the scanned pair exists in purchased(untransferred) pairs.
-func (q *PreviewQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyResult, error) {
+func (q *PreviewQuery) VerifyMatch(
+	ctx context.Context,
+	in appusecase.VerifyInput,
+) (appusecase.VerifyResult, error) {
 	if q == nil || q.OrderRepo == nil || q.ProductRepo == nil || q.NameResolver == nil {
-		return VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
 	}
 
 	avatarID := in.AvatarID
 	productID := in.ProductID
 
 	if avatarID == "" {
-		return VerifyResult{}, ErrOrderScanVerifyAvatarIDEmpty
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyAvatarIDEmpty
 	}
 	if productID == "" {
-		return VerifyResult{}, ErrOrderScanVerifyProductIDEmpty
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyProductIDEmpty
 	}
 
 	// 1) scan side: productId -> modelId + tokenBlueprintId(tokens/{productId}.tokenBlueprintId)
 	info, err := q.ResolveModelInfoByProductID(ctx, productID)
 	if err != nil {
-		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve failed: %w", err)
+		return appusecase.VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve failed: %w", err)
 	}
 	if info == nil {
-		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve returned nil")
+		return appusecase.VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve returned nil")
 	}
 
 	scannedModelID := info.ModelID
 	if scannedModelID == "" {
-		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: scanned modelId is empty")
+		return appusecase.VerifyResult{}, fmt.Errorf("order_scan_verify_query: scanned modelId is empty")
 	}
 
 	// token must exist (tokens/{productId} が存在する or TokenRepo 注入されている)
 	if info.Token == nil {
-		return VerifyResult{}, ErrOrderScanVerifyTokenNotFound
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyTokenNotFound
 	}
 
 	// scanned tokenBlueprintId is tokens/{productId}.tokenBlueprintId (docId=productId)
 	scannedTokenBlueprintID := info.Token.TokenBlueprintID
 	if scannedTokenBlueprintID == "" {
-		return VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
+		return appusecase.VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
 	}
 
 	// 2) purchased side: avatarId -> paid orders -> items.transfer=false -> (modelId,tbId)
 	purchased, err := q.ListEligiblePairsByAvatarID(ctx, avatarID)
 	if err != nil {
-		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: purchased pairs resolve failed: %w", err)
+		return appusecase.VerifyResult{}, fmt.Errorf("order_scan_verify_query: purchased pairs resolve failed: %w", err)
 	}
 
 	// 3) dedup to []ModelTokenPair
 	seen := map[string]struct{}{}
-	outPairs := make([]ModelTokenPair, 0, len(purchased.Pairs))
+	outPairs := make([]appusecase.ModelTokenPair, 0, len(purchased.Pairs))
 
 	for _, p := range purchased.Pairs {
 		modelID := p.ModelID
@@ -498,14 +475,14 @@ func (q *PreviewQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyR
 		}
 
 		seen[key] = struct{}{}
-		outPairs = append(outPairs, ModelTokenPair{
+		outPairs = append(outPairs, appusecase.ModelTokenPair{
 			ModelID:          modelID,
 			TokenBlueprintID: tokenBlueprintID,
 		})
 	}
 
 	// 4) match
-	var match *ModelTokenPair
+	var match *appusecase.ModelTokenPair
 	for i := range outPairs {
 		p := outPairs[i]
 		if p.ModelID == scannedModelID && p.TokenBlueprintID == scannedTokenBlueprintID {
@@ -515,7 +492,7 @@ func (q *PreviewQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyR
 		}
 	}
 
-	return VerifyResult{
+	return appusecase.VerifyResult{
 		AvatarID:                avatarID,
 		ProductID:               productID,
 		ScannedModelID:          scannedModelID,

@@ -7,16 +7,15 @@ import (
 	"errors"
 	"net/http"
 
-	mallquery "narratives/internal/application/query/mall"
-
 	"narratives/internal/adapters/in/http/middleware"
+	appusecase "narratives/internal/application/usecase"
 )
 
-type ScanVerifyResult = mallquery.VerifyResult
-type ModelTokenPair = mallquery.ModelTokenPair
+type ScanVerifyResult = appusecase.VerifyResult
+type ModelTokenPair = appusecase.ModelTokenPair
 
 type ScanVerifyQuery interface {
-	VerifyMatch(ctx context.Context, in mallquery.VerifyInput) (mallquery.VerifyResult, error)
+	VerifyMatch(ctx context.Context, in appusecase.VerifyInput) (appusecase.VerifyResult, error)
 }
 
 type OrderScanVerifyHandler struct {
@@ -90,7 +89,7 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	out, err := h.q.VerifyMatch(r.Context(), mallquery.VerifyInput{
+	out, err := h.q.VerifyMatch(r.Context(), appusecase.VerifyInput{
 		AvatarID:  avatarID,
 		ProductID: productID,
 	})
@@ -103,6 +102,7 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			})
 			return
 		}
+
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
 				"error":     "request canceled",
@@ -111,6 +111,7 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			})
 			return
 		}
+
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "verify failed",
 			"avatarId":  avatarID,

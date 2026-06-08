@@ -27,6 +27,23 @@ type PatchTokenBlueprintReviewAggregate struct {
 	PinnedCommentID      *string `json:"pinnedCommentId"`
 }
 
+// NewPatchFromTokenBlueprintReviewAggregate creates a repository patch from
+// the current aggregate state.
+//
+// This is used when domain methods mutate aggregate counters and the
+// application layer needs to persist the changed counter fields.
+func NewPatchFromTokenBlueprintReviewAggregate(
+	agg TokenBlueprintReviewAggregate,
+) PatchTokenBlueprintReviewAggregate {
+	return PatchTokenBlueprintReviewAggregate{
+		LikeCount:            &agg.LikeCount,
+		DislikeCount:         &agg.DislikeCount,
+		TopLevelCommentCount: &agg.TopLevelCommentCount,
+		TotalCommentCount:    &agg.TotalCommentCount,
+		PinnedCommentID:      &agg.PinnedCommentID,
+	}
+}
+
 // FilterComment is for listing comments under a tokenBlueprintId.
 // This supports both top-level comments and nested replies.
 type FilterComment struct {
@@ -49,6 +66,28 @@ type PatchComment struct {
 	LikeCount      *int64  `json:"likeCount"`
 	DislikeCount   *int64  `json:"dislikeCount"`
 	ChildCount     *int64  `json:"childCount"`
+}
+
+// NewChildCountPatchFromComment creates a patch for persisting only the
+// direct child count of a comment.
+func NewChildCountPatchFromComment(
+	comment Comment,
+) PatchComment {
+	return PatchComment{
+		ChildCount: &comment.ChildCount,
+	}
+}
+
+// NewReactionCountPatchFromComment creates a patch for persisting only
+// reaction-related counters of a comment.
+func NewReactionCountPatchFromComment(
+	comment Comment,
+) PatchComment {
+	return PatchComment{
+		LikeCount:    &comment.LikeCount,
+		DislikeCount: &comment.DislikeCount,
+		ChildCount:   &comment.ChildCount,
+	}
 }
 
 // FilterTokenBlueprintReaction is for listing reactions on the tokenBlueprint aggregate.

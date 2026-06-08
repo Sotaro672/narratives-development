@@ -734,3 +734,25 @@ func ValidateCommentReaction(r *CommentReaction) error {
 	}
 	return nil
 }
+
+func (a *TokenBlueprintReviewAggregate) ApplyCommentCreated(
+	comment Comment,
+	now time.Time,
+) {
+	if comment.IsTopLevel() {
+		a.IncrementTopLevelCommentCount(now)
+	}
+	a.IncrementTotalCommentCount(now)
+}
+
+func (a *TokenBlueprintReviewAggregate) ApplyCommentDeleted(
+	comment Comment,
+	now time.Time,
+) error {
+	if comment.IsTopLevel() {
+		if err := a.DecrementTopLevelCommentCount(now); err != nil {
+			return err
+		}
+	}
+	return a.DecrementTotalCommentCount(now)
+}

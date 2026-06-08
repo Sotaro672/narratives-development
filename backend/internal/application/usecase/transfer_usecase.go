@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	mallquery "narratives/internal/application/query/mall"
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	orderdom "narratives/internal/domain/order"
@@ -19,9 +18,36 @@ import (
 // Ports
 // ============================================================
 
+// ModelTokenPair is a minimal pair used for matching scanned product and purchased items.
+type ModelTokenPair struct {
+	ModelID          string `json:"modelId"`
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+}
+
+type VerifyInput struct {
+	AvatarID  string `json:"avatarId"`
+	ProductID string `json:"productId"`
+}
+
+type VerifyResult struct {
+	AvatarID  string `json:"avatarId"`
+	ProductID string `json:"productId"`
+
+	// scan side
+	ScannedModelID          string `json:"scannedModelId"`
+	ScannedTokenBlueprintID string `json:"scannedTokenBlueprintId"`
+
+	// purchased side (dedup list)
+	PurchasedPairs []ModelTokenPair `json:"purchasedPairs"`
+
+	// verdict
+	Matched bool            `json:"matched"`
+	Match   *ModelTokenPair `json:"match,omitempty"`
+}
+
 // ScanVerifier verifies whether scan(productId) matches purchased(untransferred) items for avatar.
 type ScanVerifier interface {
-	VerifyMatch(ctx context.Context, in mallquery.VerifyInput) (mallquery.VerifyResult, error)
+	VerifyMatch(ctx context.Context, in VerifyInput) (VerifyResult, error)
 }
 
 // OrderRepoForTransfer is the minimal port needed for transfer orchestration.
@@ -302,7 +328,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	}
 
 	// 0) verify
-	vres, err := u.verifier.VerifyMatch(ctx, mallquery.VerifyInput{
+	vres, err := u.verifier.VerifyMatch(ctx, VerifyInput{
 		AvatarID:  avatarID,
 		ProductID: productID,
 	})

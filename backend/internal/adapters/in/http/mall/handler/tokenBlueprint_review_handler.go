@@ -2,16 +2,16 @@
 package mallHandler
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	mw "narratives/internal/adapters/in/http/middleware"
+	appquery "narratives/internal/application/query/mall"
 	appusecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
-	tokenBlueprint_review "narratives/internal/domain/tokenBlueprint_review"
+	tokenBlueprintReview "narratives/internal/domain/tokenBlueprint_review"
 )
 
 // 標準 net/http 前提。
@@ -23,12 +23,19 @@ import (
 //   - method check
 //   - auth actor resolution
 //   - request/query parsing
-//   - response DTO mapping
+//   - command invocation
+//   - response writing
 //
-// - usecase: application service
-//   - repository orchestration
-//   - aggregate/comment/reaction state transition
-//   - count update
+// - query: application read model service
+//   - aggregate/comment/reaction read model composition
+//   - avatar / brand lightweight display resolution
+//   - mall actor policy
+//
+// - usecase: application command service
+//   - comment creation
+//   - comment deletion
+//   - reaction mutation
+//   - aggregate count update
 //   - domain invariant execution
 //
 // Supported:
@@ -43,90 +50,28 @@ import (
 // - GET    /mall/me/token-blueprints/{id}/comments/{commentId}/replies
 // - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/replies
 type TokenBlueprintReviewHandler struct {
-	uc  tokenBlueprintReviewApplicationPort
-	now func() time.Time
-}
-
-type tokenBlueprintReviewApplicationPort interface {
-	ListAggregates(
-		ctx context.Context,
-		filter tokenBlueprint_review.FilterTokenBlueprintReviewAggregate,
-		sort common.Sort,
-		page common.Page,
-	) (common.PageResult[tokenBlueprint_review.TokenBlueprintReviewAggregate], error)
-
-	GetAggregate(
-		ctx context.Context,
-		tokenBlueprintID string,
-	) (tokenBlueprint_review.TokenBlueprintReviewAggregate, error)
-
-	ListTokenBlueprintReactions(
-		ctx context.Context,
-		tokenBlueprintID string,
-	) ([]tokenBlueprint_review.TokenBlueprintReaction, error)
-
-	ReactToTokenBlueprintDetailed(
-		ctx context.Context,
-		tokenBlueprintID string,
-		actorID string,
-		actorType tokenBlueprint_review.ActorType,
-		newType tokenBlueprint_review.ReactionType,
-	) (appusecase.TokenBlueprintReactionResult, error)
-
-	ListComments(
-		ctx context.Context,
-		in appusecase.ListCommentsInput,
-	) (common.PageResult[tokenBlueprint_review.Comment], error)
-
-	CreateComment(
-		ctx context.Context,
-		in appusecase.CreateCommentInput,
-	) (tokenBlueprint_review.Comment, error)
-
-	DeleteComment(
-		ctx context.Context,
-		tokenBlueprintID string,
-		commentID string,
-	) error
-
-	ReactToComment(
-		ctx context.Context,
-		tokenBlueprintID string,
-		commentID string,
-		actorID string,
-		actorType tokenBlueprint_review.ActorType,
-		newType tokenBlueprint_review.ReactionType,
-	) (tokenBlueprint_review.Comment, error)
-
-	GetNameAndIconByID(
-		ctx context.Context,
-		avatarID string,
-	) (name string, icon string, err error)
-
-	GetBrandNameAndIconByID(
-		ctx context.Context,
-		brandID string,
-	) (name string, icon string, err error)
+	uc    *appusecase.TokenBlueprintReviewUsecase
+	query *appquery.TokenBlueprintReviewMallQuery
 }
 
 func NewTokenBlueprintReviewHandler(
-	uc tokenBlueprintReviewApplicationPort,
+	uc *appusecase.TokenBlueprintReviewUsecase,
 ) *TokenBlueprintReviewHandler {
 	return &TokenBlueprintReviewHandler{
-		uc:  uc,
-		now: time.Now,
+		uc:    uc,
+		query: appquery.NewTokenBlueprintReviewMallQuery(uc),
 	}
 }
 
 func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h == nil || h.uc == nil {
+	if h == nil || h.uc == nil || h.query == nil {
 		internalError(w, "handler not configured")
 		return
 	}
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// aggregate list
+	// GET /mall/me/token-blueprints
 	if path == "/mall/me/token-blueprints" {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
@@ -302,7 +247,7 @@ func (h *TokenBlueprintReviewHandler) dispatchComments(w http.ResponseWriter, r 
 // ============================================================
 
 type reactionRequest struct {
-	Type tokenBlueprint_review.ReactionType `json:"type"`
+	Type tokenBlueprintReview.ReactionType `json:"type"`
 }
 
 type createCommentRequest struct {
@@ -312,120 +257,57 @@ type createCommentRequest struct {
 }
 
 // ============================================================
-// Response DTO
+// Helpers
 // ============================================================
 
-type CommentDTO struct {
-	CommentID        string `json:"CommentID"`
-	TokenBlueprintID string `json:"TokenBlueprintID"`
-	ParentCommentID  string `json:"ParentCommentID"`
-	RootCommentID    string `json:"RootCommentID"`
-	Depth            int    `json:"Depth"`
-	AuthorID         string `json:"AuthorID"`
-	AuthorType       string `json:"AuthorType"`
-
-	AuthorAvatarName string  `json:"AuthorAvatarName"`
-	AuthorAvatarIcon *string `json:"AuthorAvatarIcon"`
-
-	BrandName string  `json:"BrandName"`
-	BrandIcon *string `json:"BrandIcon"`
-
-	IsOwnerComment bool `json:"IsOwnerComment"`
-
-	Body         string `json:"Body"`
-	LikeCount    int64  `json:"LikeCount"`
-	DislikeCount int64  `json:"DislikeCount"`
-	ChildCount   int64  `json:"ChildCount"`
-	Deleted      bool   `json:"Deleted"`
-
-	CreatedAt string `json:"CreatedAt"`
-	UpdatedAt string `json:"UpdatedAt"`
-}
-
-type aggregateListItem struct {
-	tokenBlueprint_review.TokenBlueprintReviewAggregate
-}
-
-type tokenBlueprintReactionItem struct {
-	TokenBlueprintID string                             `json:"TokenBlueprintID"`
-	ActorID          string                             `json:"ActorID"`
-	ActorType        tokenBlueprint_review.ActorType    `json:"ActorType"`
-	Type             tokenBlueprint_review.ReactionType `json:"Type"`
-	CreatedAt        string                             `json:"CreatedAt"`
-	UpdatedAt        string                             `json:"UpdatedAt"`
-	AuthorAvatarName string                             `json:"AuthorAvatarName"`
-	AuthorAvatarIcon *string                            `json:"AuthorAvatarIcon"`
-	BrandName        string                             `json:"BrandName"`
-	BrandIcon        *string                            `json:"BrandIcon"`
-}
-
-type tokenBlueprintReactionListResponse struct {
-	Items []tokenBlueprintReactionItem `json:"items"`
-}
-
-type aggregateListResponse struct {
-	Items []aggregateListItem `json:"items"`
-}
-
-type commentListResponse struct {
-	Items      []CommentDTO `json:"items"`
-	Page       int          `json:"page"`
-	PerPage    int          `json:"perPage"`
-	TotalCount int          `json:"totalCount"`
-}
-
-// ============================================================
-// DTO mapping / lightweight resolution
-// ============================================================
-
-func strPtrOrNil(s string) *string {
-	if s == "" {
+func queryStringPtr(r *http.Request, key string) *string {
+	if r == nil {
 		return nil
 	}
-	return &s
+
+	raw, ok := r.URL.Query()[key]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+
+	v := raw[0]
+	return &v
 }
 
-func (h *TokenBlueprintReviewHandler) resolveAvatarNameIconBestEffort(ctx context.Context, avatarID string) (string, *string) {
-	if h == nil || h.uc == nil || avatarID == "" {
-		return "", nil
+func queryBoolPtr(r *http.Request, key string) *bool {
+	if r == nil {
+		return nil
 	}
 
-	name, icon, err := h.uc.GetNameAndIconByID(ctx, avatarID)
-	if err != nil {
-		return "", nil
+	raw := r.URL.Query().Get(key)
+	if raw == "" {
+		return nil
 	}
 
-	return name, strPtrOrNil(icon)
+	v := strings.EqualFold(raw, "true")
+	return &v
 }
 
-func (h *TokenBlueprintReviewHandler) resolveBrandNameIconBestEffort(ctx context.Context, brandID string) (string, *string) {
-	if h == nil || h.uc == nil || brandID == "" {
-		return "", nil
+func queryIntPtr(r *http.Request, key string) *int {
+	if r == nil {
+		return nil
 	}
 
-	name, icon, err := h.uc.GetBrandNameAndIconByID(ctx, brandID)
-	if err != nil {
-		return "", nil
+	raw := r.URL.Query().Get(key)
+	if raw == "" {
+		return nil
 	}
 
-	return name, strPtrOrNil(icon)
+	v := parseIntDefault(raw, 0)
+	return &v
 }
 
-func (h *TokenBlueprintReviewHandler) toCommentDTO(r *http.Request, c tokenBlueprint_review.Comment) CommentDTO {
-	avatarName := ""
-	var avatarIcon *string
+func toMallCommentReadModel(
+	view appusecase.CommentView,
+) appquery.MallTokenBlueprintCommentReadModel {
+	c := view.Comment
 
-	brandName := ""
-	var brandIcon *string
-
-	switch c.AuthorType {
-	case tokenBlueprint_review.AuthorTypeAvatar:
-		avatarName, avatarIcon = h.resolveAvatarNameIconBestEffort(r.Context(), c.AuthorID)
-	case tokenBlueprint_review.AuthorTypeBrand:
-		brandName, brandIcon = h.resolveBrandNameIconBestEffort(r.Context(), c.AuthorID)
-	}
-
-	return CommentDTO{
+	return appquery.MallTokenBlueprintCommentReadModel{
 		CommentID:        c.CommentID,
 		TokenBlueprintID: c.TokenBlueprintID,
 		ParentCommentID:  c.ParentCommentID,
@@ -434,10 +316,10 @@ func (h *TokenBlueprintReviewHandler) toCommentDTO(r *http.Request, c tokenBluep
 		AuthorID:         c.AuthorID,
 		AuthorType:       string(c.AuthorType),
 
-		AuthorAvatarName: avatarName,
-		AuthorAvatarIcon: avatarIcon,
-		BrandName:        brandName,
-		BrandIcon:        brandIcon,
+		AuthorAvatarName: view.AuthorAvatarName,
+		AuthorAvatarIcon: view.AuthorAvatarIcon,
+		BrandName:        view.BrandName,
+		BrandIcon:        view.BrandIcon,
 		IsOwnerComment:   c.IsOwnerComment,
 
 		Body:         c.Body,
@@ -446,57 +328,34 @@ func (h *TokenBlueprintReviewHandler) toCommentDTO(r *http.Request, c tokenBluep
 		ChildCount:   c.ChildCount,
 		Deleted:      c.Deleted,
 
-		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339Nano),
-		UpdatedAt: c.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		CreatedAt: formatRFC3339NanoUTC(c.CreatedAt),
+		UpdatedAt: formatRFC3339NanoUTC(c.UpdatedAt),
 	}
 }
 
-func (h *TokenBlueprintReviewHandler) toTokenBlueprintReactionItem(
-	r *http.Request,
-	reaction tokenBlueprint_review.TokenBlueprintReaction,
-) tokenBlueprintReactionItem {
-	avatarName := ""
-	var avatarIcon *string
-
-	brandName := ""
-	var brandIcon *string
-
-	switch reaction.ActorType {
-	case tokenBlueprint_review.ActorTypeAvatar:
-		avatarName, avatarIcon = h.resolveAvatarNameIconBestEffort(r.Context(), reaction.ActorID)
-	case tokenBlueprint_review.ActorTypeBrand:
-		brandName, brandIcon = h.resolveBrandNameIconBestEffort(r.Context(), reaction.ActorID)
+func formatRFC3339NanoUTC(t time.Time) string {
+	if t.IsZero() {
+		return ""
 	}
-
-	return tokenBlueprintReactionItem{
-		TokenBlueprintID: reaction.TokenBlueprintID,
-		ActorID:          reaction.ActorID,
-		ActorType:        reaction.ActorType,
-		Type:             reaction.Type,
-		CreatedAt:        reaction.CreatedAt.UTC().Format(time.RFC3339Nano),
-		UpdatedAt:        reaction.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		AuthorAvatarName: avatarName,
-		AuthorAvatarIcon: avatarIcon,
-		BrandName:        brandName,
-		BrandIcon:        brandIcon,
-	}
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 // ============================================================
-// Aggregate
+// Aggregate read handlers
 // ============================================================
 
 func (h *TokenBlueprintReviewHandler) listAggregates(w http.ResponseWriter, r *http.Request) {
-	res, err := h.uc.ListAggregates(
+	res, err := h.query.ListAggregates(
 		r.Context(),
-		tokenBlueprint_review.FilterTokenBlueprintReviewAggregate{},
-		common.Sort{
-			Column: "createdAt",
-			Order:  common.SortDesc,
-		},
-		common.Page{
-			Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
-			PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 50),
+		appquery.ListMallTokenBlueprintReviewAggregatesInput{
+			Sort: common.Sort{
+				Column: "createdAt",
+				Order:  common.SortDesc,
+			},
+			Page: common.Page{
+				Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
+				PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 50),
+			},
 		},
 	)
 	if err != nil {
@@ -504,18 +363,16 @@ func (h *TokenBlueprintReviewHandler) listAggregates(w http.ResponseWriter, r *h
 		return
 	}
 
-	items := make([]aggregateListItem, 0, len(res.Items))
-	for _, it := range res.Items {
-		items = append(items, aggregateListItem{
-			TokenBlueprintReviewAggregate: it,
-		})
-	}
-
-	writeJSON(w, http.StatusOK, aggregateListResponse{Items: items})
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (h *TokenBlueprintReviewHandler) getAggregate(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
-	agg, err := h.uc.GetAggregate(r.Context(), tokenBlueprintID)
+	res, err := h.query.GetAggregateByTokenBlueprintID(
+		r.Context(),
+		appquery.GetMallTokenBlueprintReviewAggregateInput{
+			TokenBlueprintID: tokenBlueprintID,
+		},
+	)
 	if err != nil {
 		if isNotFound(err) {
 			notFound(w)
@@ -525,15 +382,24 @@ func (h *TokenBlueprintReviewHandler) getAggregate(w http.ResponseWriter, r *htt
 		return
 	}
 
-	writeJSON(w, http.StatusOK, agg)
+	writeJSON(w, http.StatusOK, res)
 }
+
+// ============================================================
+// TokenBlueprint reaction read / command handlers
+// ============================================================
 
 func (h *TokenBlueprintReviewHandler) listTokenBlueprintReactions(
 	w http.ResponseWriter,
 	r *http.Request,
 	tokenBlueprintID string,
 ) {
-	items, err := h.uc.ListTokenBlueprintReactions(r.Context(), tokenBlueprintID)
+	res, err := h.query.ListTokenBlueprintReactions(
+		r.Context(),
+		appquery.ListMallTokenBlueprintReactionsInput{
+			TokenBlueprintID: tokenBlueprintID,
+		},
+	)
 	if err != nil {
 		if errors.Is(err, appusecase.ErrTokenBlueprintReactionsListNotImplemented) {
 			writeJSON(w, http.StatusNotImplemented, map[string]any{
@@ -546,12 +412,7 @@ func (h *TokenBlueprintReviewHandler) listTokenBlueprintReactions(
 		return
 	}
 
-	out := make([]tokenBlueprintReactionItem, 0, len(items))
-	for _, item := range items {
-		out = append(out, h.toTokenBlueprintReactionItem(r, item))
-	}
-
-	writeJSON(w, http.StatusOK, tokenBlueprintReactionListResponse{Items: out})
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (h *TokenBlueprintReviewHandler) upsertTokenBlueprintReaction(
@@ -570,12 +431,16 @@ func (h *TokenBlueprintReviewHandler) upsertTokenBlueprintReaction(
 		badRequest(w, err.Error())
 		return
 	}
+	if err := req.Type.Validate(); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
 
 	result, err := h.uc.ReactToTokenBlueprintDetailed(
 		r.Context(),
 		tokenBlueprintID,
 		avatarID,
-		tokenBlueprint_review.ActorTypeAvatar,
+		h.query.ActorType(),
 		req.Type,
 	)
 	if err != nil {
@@ -586,7 +451,7 @@ func (h *TokenBlueprintReviewHandler) upsertTokenBlueprintReaction(
 	writeJSON(w, http.StatusOK, map[string]any{
 		"TokenBlueprintID":     result.Aggregate.TokenBlueprintID,
 		"ActorID":              avatarID,
-		"ActorType":            tokenBlueprint_review.ActorTypeAvatar,
+		"ActorType":            h.query.ActorType(),
 		"Type":                 result.Reaction.Type,
 		"LikeCount":            result.Aggregate.LikeCount,
 		"DislikeCount":         result.Aggregate.DislikeCount,
@@ -596,78 +461,38 @@ func (h *TokenBlueprintReviewHandler) upsertTokenBlueprintReaction(
 }
 
 // ============================================================
-// Comments
+// Comment read / command handlers
 // ============================================================
 
 func (h *TokenBlueprintReviewHandler) listComments(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
-	page := common.Page{
-		Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
-		PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 0),
-	}
+	res, err := h.query.ListCommentsByTokenBlueprintID(
+		r.Context(),
+		appquery.ListMallTokenBlueprintCommentsInput{
+			TokenBlueprintID: tokenBlueprintID,
 
-	sort := common.Sort{
-		Column: r.URL.Query().Get("sort"),
-		Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),
-	}
-	if sort.Column == "" {
-		sort.Column = "createdAt"
-	}
-	if sort.Order != common.SortAsc && sort.Order != common.SortDesc {
-		sort.Order = common.SortDesc
-	}
+			SearchQuery:     r.URL.Query().Get("q"),
+			ParentCommentID: queryStringPtr(r, "parentCommentId"),
+			RootCommentID:   r.URL.Query().Get("rootCommentId"),
+			AuthorID:        r.URL.Query().Get("authorId"),
+			Deleted:         queryBoolPtr(r, "deleted"),
+			Depth:           queryIntPtr(r, "depth"),
 
-	var parentCommentID *string
-	if raw, ok := r.URL.Query()["parentCommentId"]; ok && len(raw) > 0 {
-		v := raw[0]
-		parentCommentID = &v
-	}
-
-	var deleted *bool
-	if raw := r.URL.Query().Get("deleted"); raw != "" {
-		v := strings.EqualFold(raw, "true")
-		deleted = &v
-	}
-
-	var depth *int
-	if raw := r.URL.Query().Get("depth"); raw != "" {
-		v := parseIntDefault(raw, 0)
-		depth = &v
-	}
-
-	filter := tokenBlueprint_review.FilterComment{
-		FilterCommon: common.FilterCommon{
-			SearchQuery: r.URL.Query().Get("q"),
+			Sort: common.Sort{
+				Column: r.URL.Query().Get("sort"),
+				Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),
+			},
+			Page: common.Page{
+				Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
+				PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 0),
+			},
 		},
-		TokenBlueprintID: tokenBlueprintID,
-		ParentCommentID:  parentCommentID,
-		RootCommentID:    r.URL.Query().Get("rootCommentId"),
-		AuthorID:         r.URL.Query().Get("authorId"),
-		Deleted:          deleted,
-		Depth:            depth,
-	}
-
-	res, err := h.uc.ListComments(r.Context(), appusecase.ListCommentsInput{
-		TokenBlueprintID: tokenBlueprintID,
-		Filter:           filter,
-		Sort:             sort,
-		Page:             page,
-	})
+	)
 	if err != nil {
 		internalError(w, err.Error())
 		return
 	}
 
-	out := commentListResponse{
-		Items:      make([]CommentDTO, 0, len(res.Items)),
-		Page:       res.Page,
-		PerPage:    res.PerPage,
-		TotalCount: res.TotalCount,
-	}
-	for _, it := range res.Items {
-		out.Items = append(out.Items, h.toCommentDTO(r, it))
-	}
-
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (h *TokenBlueprintReviewHandler) listChildComments(
@@ -676,52 +501,28 @@ func (h *TokenBlueprintReviewHandler) listChildComments(
 	tokenBlueprintID string,
 	parentCommentID string,
 ) {
-	page := common.Page{
-		Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
-		PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 0),
-	}
-
-	sort := common.Sort{
-		Column: r.URL.Query().Get("sort"),
-		Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),
-	}
-	if sort.Column == "" {
-		sort.Column = "createdAt"
-	}
-	if sort.Order != common.SortAsc && sort.Order != common.SortDesc {
-		sort.Order = common.SortAsc
-	}
-
-	filter := tokenBlueprint_review.FilterComment{
-		FilterCommon: common.FilterCommon{
-			SearchQuery: r.URL.Query().Get("q"),
+	res, err := h.query.ListRepliesByCommentID(
+		r.Context(),
+		appquery.ListMallTokenBlueprintRepliesInput{
+			TokenBlueprintID: tokenBlueprintID,
+			ParentCommentID:  parentCommentID,
+			SearchQuery:      r.URL.Query().Get("q"),
+			Sort: common.Sort{
+				Column: r.URL.Query().Get("sort"),
+				Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),
+			},
+			Page: common.Page{
+				Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
+				PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 0),
+			},
 		},
-		TokenBlueprintID: tokenBlueprintID,
-		ParentCommentID:  &parentCommentID,
-	}
-
-	res, err := h.uc.ListComments(r.Context(), appusecase.ListCommentsInput{
-		TokenBlueprintID: tokenBlueprintID,
-		Filter:           filter,
-		Sort:             sort,
-		Page:             page,
-	})
+	)
 	if err != nil {
 		internalError(w, err.Error())
 		return
 	}
 
-	out := commentListResponse{
-		Items:      make([]CommentDTO, 0, len(res.Items)),
-		Page:       res.Page,
-		PerPage:    res.PerPage,
-		TotalCount: res.TotalCount,
-	}
-	for _, it := range res.Items {
-		out.Items = append(out.Items, h.toCommentDTO(r, it))
-	}
-
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (h *TokenBlueprintReviewHandler) createComment(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
@@ -742,7 +543,7 @@ func (h *TokenBlueprintReviewHandler) createComment(w http.ResponseWriter, r *ht
 		TokenBlueprintID: tokenBlueprintID,
 		ParentCommentID:  ptrStr(req.ParentCommentID),
 		AuthorID:         authorAvatarID,
-		AuthorType:       tokenBlueprint_review.AuthorTypeAvatar,
+		AuthorType:       h.query.AuthorType(),
 		IsOwnerComment:   false,
 		Body:             req.Body,
 	})
@@ -755,7 +556,7 @@ func (h *TokenBlueprintReviewHandler) createComment(w http.ResponseWriter, r *ht
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, h.toCommentDTO(r, created))
+	writeJSON(w, http.StatusCreated, toMallCommentReadModel(h.uc.BuildComment(r.Context(), created)))
 }
 
 func (h *TokenBlueprintReviewHandler) createReplyComment(
@@ -781,7 +582,7 @@ func (h *TokenBlueprintReviewHandler) createReplyComment(
 		TokenBlueprintID: tokenBlueprintID,
 		ParentCommentID:  parentCommentID,
 		AuthorID:         authorAvatarID,
-		AuthorType:       tokenBlueprint_review.AuthorTypeAvatar,
+		AuthorType:       h.query.AuthorType(),
 		IsOwnerComment:   false,
 		Body:             req.Body,
 	})
@@ -794,7 +595,7 @@ func (h *TokenBlueprintReviewHandler) createReplyComment(
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, h.toCommentDTO(r, created))
+	writeJSON(w, http.StatusCreated, toMallCommentReadModel(h.uc.BuildComment(r.Context(), created)))
 }
 
 func (h *TokenBlueprintReviewHandler) deleteComment(w http.ResponseWriter, r *http.Request, tokenBlueprintID, commentID string) {
@@ -816,7 +617,7 @@ func (h *TokenBlueprintReviewHandler) deleteComment(w http.ResponseWriter, r *ht
 }
 
 // ============================================================
-// Comment reaction
+// Comment reaction command handler
 // ============================================================
 
 func (h *TokenBlueprintReviewHandler) upsertCommentReaction(
@@ -836,13 +637,17 @@ func (h *TokenBlueprintReviewHandler) upsertCommentReaction(
 		badRequest(w, err.Error())
 		return
 	}
+	if err := req.Type.Validate(); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
 
 	updated, err := h.uc.ReactToComment(
 		r.Context(),
 		tokenBlueprintID,
 		commentID,
 		avatarID,
-		tokenBlueprint_review.ActorTypeAvatar,
+		h.query.ActorType(),
 		req.Type,
 	)
 	if err != nil {
@@ -854,5 +659,5 @@ func (h *TokenBlueprintReviewHandler) upsertCommentReaction(
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.toCommentDTO(r, updated))
+	writeJSON(w, http.StatusOK, toMallCommentReadModel(h.uc.BuildComment(r.Context(), updated)))
 }
