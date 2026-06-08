@@ -45,8 +45,6 @@ var (
 	errTokenBlueprintRepoNotConfigured = errors.New("tokenBlueprint_review_usecase: token blueprint repository not configured")
 	errBrandRepositoryNotConfigured    = errors.New("tokenBlueprint_review_usecase: brand repository not configured")
 	errTokenBlueprintIDRequired        = errors.New("tokenBlueprint_review_usecase: tokenBlueprintID is required")
-
-	ErrTokenBlueprintReactionsListNotImplemented = errors.New("tokenBlueprint_review_usecase: token blueprint reactions list not implemented")
 )
 
 // NewTokenBlueprintReviewUsecase is the only construction entry point for
@@ -68,17 +66,6 @@ func NewTokenBlueprintReviewUsecase(
 		brandRepo:          brandRepo,
 		now:                time.Now,
 	}
-}
-
-// ============================================================
-// Repository exposure for transitional adapters
-// ============================================================
-
-func (u *TokenBlueprintReviewUsecase) TokenBlueprintReactionRepository() any {
-	if u == nil || u.repos == nil {
-		return nil
-	}
-	return u.repos.TokenBlueprintReactions()
 }
 
 // ============================================================
@@ -135,16 +122,6 @@ type CommentView struct {
 	BrandIcon *string `json:"BrandIcon,omitempty"`
 }
 
-type TokenBlueprintReactionView struct {
-	tokenBlueprint_review.TokenBlueprintReaction
-
-	AuthorAvatarName string  `json:"AuthorAvatarName,omitempty"`
-	AuthorAvatarIcon *string `json:"AuthorAvatarIcon,omitempty"`
-
-	BrandName string  `json:"BrandName,omitempty"`
-	BrandIcon *string `json:"BrandIcon,omitempty"`
-}
-
 func strPtrOrNil(s string) *string {
 	if s == "" {
 		return nil
@@ -186,44 +163,6 @@ func (u *TokenBlueprintReviewUsecase) BuildComments(
 	out := make([]CommentView, 0, len(comments))
 	for _, c := range comments {
 		out = append(out, u.BuildComment(ctx, c))
-	}
-	return out
-}
-
-func (u *TokenBlueprintReviewUsecase) BuildTokenBlueprintReaction(
-	ctx context.Context,
-	reaction tokenBlueprint_review.TokenBlueprintReaction,
-) TokenBlueprintReactionView {
-	view := TokenBlueprintReactionView{
-		TokenBlueprintReaction: reaction,
-	}
-
-	switch reaction.ActorType {
-	case tokenBlueprint_review.ActorTypeAvatar:
-		name, icon, err := u.GetNameAndIconByID(ctx, reaction.ActorID)
-		if err == nil {
-			view.AuthorAvatarName = name
-			view.AuthorAvatarIcon = strPtrOrNil(icon)
-		}
-
-	case tokenBlueprint_review.ActorTypeBrand:
-		name, icon, err := u.GetBrandNameAndIconByID(ctx, reaction.ActorID)
-		if err == nil {
-			view.BrandName = name
-			view.BrandIcon = strPtrOrNil(icon)
-		}
-	}
-
-	return view
-}
-
-func (u *TokenBlueprintReviewUsecase) BuildTokenBlueprintReactions(
-	ctx context.Context,
-	reactions []tokenBlueprint_review.TokenBlueprintReaction,
-) []TokenBlueprintReactionView {
-	out := make([]TokenBlueprintReactionView, 0, len(reactions))
-	for _, r := range reactions {
-		out = append(out, u.BuildTokenBlueprintReaction(ctx, r))
 	}
 	return out
 }
@@ -393,19 +332,6 @@ func (u *TokenBlueprintReviewUsecase) GetTokenBlueprintPatchByID(
 // Aggregates
 // ============================================================
 
-func (u *TokenBlueprintReviewUsecase) ListAggregates(
-	ctx context.Context,
-	filter tokenBlueprint_review.FilterTokenBlueprintReviewAggregate,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[tokenBlueprint_review.TokenBlueprintReviewAggregate], error) {
-	if err := u.ensureConfigured(); err != nil {
-		return common.PageResult[tokenBlueprint_review.TokenBlueprintReviewAggregate]{}, err
-	}
-
-	return u.repos.TokenBlueprintAggregates().List(ctx, filter, sort, page)
-}
-
 func (u *TokenBlueprintReviewUsecase) GetAggregate(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -486,38 +412,12 @@ func (u *TokenBlueprintReviewUsecase) listAllTokenBlueprintIDsByCompany(
 }
 
 // ============================================================
-// TokenBlueprint reactions
+// TokenBlueprint reaction command
 // ============================================================
 
 type TokenBlueprintReactionResult struct {
 	Aggregate tokenBlueprint_review.TokenBlueprintReviewAggregate
 	Reaction  tokenBlueprint_review.TokenBlueprintReaction
-}
-
-func (u *TokenBlueprintReviewUsecase) ListTokenBlueprintReactions(
-	ctx context.Context,
-	tokenBlueprintID string,
-) ([]TokenBlueprintReactionView, error) {
-	if err := u.ensureConfigured(); err != nil {
-		return nil, err
-	}
-
-	type lister interface {
-		ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]tokenBlueprint_review.TokenBlueprintReaction, error)
-	}
-
-	reactionRepo := u.repos.TokenBlueprintReactions()
-	ls, ok := any(reactionRepo).(lister)
-	if !ok {
-		return nil, ErrTokenBlueprintReactionsListNotImplemented
-	}
-
-	reactions, err := ls.ListByTokenBlueprintID(ctx, tokenBlueprintID)
-	if err != nil {
-		return nil, err
-	}
-
-	return u.BuildTokenBlueprintReactions(ctx, reactions), nil
 }
 
 func (u *TokenBlueprintReviewUsecase) ReactToTokenBlueprintDetailed(
@@ -588,27 +488,6 @@ func (u *TokenBlueprintReviewUsecase) ReactToTokenBlueprintDetailed(
 	}, nil
 }
 
-func (u *TokenBlueprintReviewUsecase) ReactToTokenBlueprint(
-	ctx context.Context,
-	tokenBlueprintID string,
-	actorID string,
-	actorType tokenBlueprint_review.ActorType,
-	newType tokenBlueprint_review.ReactionType,
-) (tokenBlueprint_review.TokenBlueprintReviewAggregate, error) {
-	result, err := u.ReactToTokenBlueprintDetailed(
-		ctx,
-		tokenBlueprintID,
-		actorID,
-		actorType,
-		newType,
-	)
-	if err != nil {
-		return tokenBlueprint_review.TokenBlueprintReviewAggregate{}, err
-	}
-
-	return result.Aggregate, nil
-}
-
 // ============================================================
 // Comments list
 // ============================================================
@@ -666,52 +545,6 @@ func (u *TokenBlueprintReviewUsecase) ListComments(
 		TotalCount: res.TotalCount,
 		TotalPages: res.TotalPages,
 	}, nil
-}
-
-func (u *TokenBlueprintReviewUsecase) ListTopLevelComments(
-	ctx context.Context,
-	tokenBlueprintID string,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[CommentView], error) {
-	topLevel := ""
-
-	return u.ListComments(ctx, ListCommentsInput{
-		TokenBlueprintID: tokenBlueprintID,
-		ParentCommentID:  &topLevel,
-		Sort:             sort,
-		Page:             page,
-	})
-}
-
-func (u *TokenBlueprintReviewUsecase) ListChildComments(
-	ctx context.Context,
-	tokenBlueprintID string,
-	parentCommentID string,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[CommentView], error) {
-	return u.ListComments(ctx, ListCommentsInput{
-		TokenBlueprintID: tokenBlueprintID,
-		ParentCommentID:  &parentCommentID,
-		Sort:             sort,
-		Page:             page,
-	})
-}
-
-func (u *TokenBlueprintReviewUsecase) ListThreadComments(
-	ctx context.Context,
-	tokenBlueprintID string,
-	rootCommentID string,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[CommentView], error) {
-	return u.ListComments(ctx, ListCommentsInput{
-		TokenBlueprintID: tokenBlueprintID,
-		RootCommentID:    rootCommentID,
-		Sort:             sort,
-		Page:             page,
-	})
 }
 
 // ============================================================

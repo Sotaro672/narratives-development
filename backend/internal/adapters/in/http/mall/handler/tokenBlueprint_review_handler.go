@@ -2,7 +2,6 @@
 package mallHandler
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -27,7 +26,7 @@ import (
 //   - response writing
 //
 // - query: application read model service
-//   - aggregate/comment/reaction read model composition
+//   - aggregate/comment read model composition
 //   - avatar / brand lightweight display resolution
 //   - mall actor policy
 //
@@ -39,15 +38,12 @@ import (
 //   - domain invariant execution
 //
 // Supported:
-// - GET    /mall/me/token-blueprints
 // - GET    /mall/me/token-blueprints/{id}/reviews/aggregate
-// - GET    /mall/me/token-blueprints/{id}/reactions
 // - POST   /mall/me/token-blueprints/{id}/reactions
 // - GET    /mall/me/token-blueprints/{id}/comments
 // - POST   /mall/me/token-blueprints/{id}/comments
 // - DELETE /mall/me/token-blueprints/{id}/comments/{commentId}
 // - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/reactions
-// - GET    /mall/me/token-blueprints/{id}/comments/{commentId}/replies
 // - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/replies
 type TokenBlueprintReviewHandler struct {
 	uc    *appusecase.TokenBlueprintReviewUsecase
@@ -71,16 +67,6 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// GET /mall/me/token-blueprints
-	if path == "/mall/me/token-blueprints" {
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w)
-			return
-		}
-		h.listAggregates(w, r)
-		return
-	}
-
 	tokenBlueprintID := extractTokenBlueprintIDFromPath(path)
 	if tokenBlueprintID == "" {
 		notFound(w)
@@ -97,14 +83,11 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 
 	case strings.HasSuffix(path, "/reactions") && isTokenBlueprintReactionPath(path, tokenBlueprintID):
-		switch r.Method {
-		case http.MethodGet:
-			h.listTokenBlueprintReactions(w, r, tokenBlueprintID)
-		case http.MethodPost:
-			h.upsertTokenBlueprintReaction(w, r, tokenBlueprintID)
-		default:
+		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
+			return
 		}
+		h.upsertTokenBlueprintReaction(w, r, tokenBlueprintID)
 		return
 
 	case strings.Contains(path, "/comments"):
@@ -228,14 +211,11 @@ func (h *TokenBlueprintReviewHandler) dispatchComments(w http.ResponseWriter, r 
 
 	// /mall/me/token-blueprints/{id}/comments/{commentId}/replies
 	if path == base+"/"+commentID+"/replies" {
-		switch r.Method {
-		case http.MethodGet:
-			h.listChildComments(w, r, tokenBlueprintID, commentID)
-		case http.MethodPost:
-			h.createReplyComment(w, r, tokenBlueprintID, commentID)
-		default:
+		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
+			return
 		}
+		h.createReplyComment(w, r, tokenBlueprintID, commentID)
 		return
 	}
 
@@ -341,30 +321,8 @@ func formatRFC3339NanoUTC(t time.Time) string {
 }
 
 // ============================================================
-// Aggregate read handlers
+// Aggregate read handler
 // ============================================================
-
-func (h *TokenBlueprintReviewHandler) listAggregates(w http.ResponseWriter, r *http.Request) {
-	res, err := h.query.ListAggregates(
-		r.Context(),
-		appquery.ListMallTokenBlueprintReviewAggregatesInput{
-			Sort: common.Sort{
-				Column: "createdAt",
-				Order:  common.SortDesc,
-			},
-			Page: common.Page{
-				Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
-				PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 50),
-			},
-		},
-	)
-	if err != nil {
-		internalError(w, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, res)
-}
 
 func (h *TokenBlueprintReviewHandler) getAggregate(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
 	res, err := h.query.GetAggregateByTokenBlueprintID(
@@ -386,34 +344,8 @@ func (h *TokenBlueprintReviewHandler) getAggregate(w http.ResponseWriter, r *htt
 }
 
 // ============================================================
-// TokenBlueprint reaction read / command handlers
+// TokenBlueprint reaction command handler
 // ============================================================
-
-func (h *TokenBlueprintReviewHandler) listTokenBlueprintReactions(
-	w http.ResponseWriter,
-	r *http.Request,
-	tokenBlueprintID string,
-) {
-	res, err := h.query.ListTokenBlueprintReactions(
-		r.Context(),
-		appquery.ListMallTokenBlueprintReactionsInput{
-			TokenBlueprintID: tokenBlueprintID,
-		},
-	)
-	if err != nil {
-		if errors.Is(err, appusecase.ErrTokenBlueprintReactionsListNotImplemented) {
-			writeJSON(w, http.StatusNotImplemented, map[string]any{
-				"error": "token blueprint reactions list not implemented",
-			})
-			return
-		}
-
-		internalError(w, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, res)
-}
 
 func (h *TokenBlueprintReviewHandler) upsertTokenBlueprintReaction(
 	w http.ResponseWriter,
@@ -477,36 +409,6 @@ func (h *TokenBlueprintReviewHandler) listComments(w http.ResponseWriter, r *htt
 			Deleted:         queryBoolPtr(r, "deleted"),
 			Depth:           queryIntPtr(r, "depth"),
 
-			Sort: common.Sort{
-				Column: r.URL.Query().Get("sort"),
-				Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),
-			},
-			Page: common.Page{
-				Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
-				PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 0),
-			},
-		},
-	)
-	if err != nil {
-		internalError(w, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, res)
-}
-
-func (h *TokenBlueprintReviewHandler) listChildComments(
-	w http.ResponseWriter,
-	r *http.Request,
-	tokenBlueprintID string,
-	parentCommentID string,
-) {
-	res, err := h.query.ListRepliesByCommentID(
-		r.Context(),
-		appquery.ListMallTokenBlueprintRepliesInput{
-			TokenBlueprintID: tokenBlueprintID,
-			ParentCommentID:  parentCommentID,
-			SearchQuery:      r.URL.Query().Get("q"),
 			Sort: common.Sort{
 				Column: r.URL.Query().Get("sort"),
 				Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),

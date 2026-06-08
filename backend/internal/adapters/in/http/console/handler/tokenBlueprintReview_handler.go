@@ -39,16 +39,15 @@ func NewTokenBlueprintReviewHandler(
 //
 // Supported:
 // - GET    /token-blueprint-reviews
-// - GET    /token-blueprint-reviews/{tokenBlueprintId}
 // - GET    /token-blueprint-reviews/{tokenBlueprintId}/comments
 // - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments
 // - DELETE /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}
 // - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/reactions
-// - GET    /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
 // - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
 //
 // console handler では brand 側からのみ comment / reply / comment reaction を許可する。
 // aggregate への reaction は扱わない。
+// 未使用の閲覧系である aggregate detail / reply list は扱わない。
 func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil || h.query == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "handler not configured"})
@@ -73,13 +72,9 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// /{id}
+	// GET /token-blueprint-reviews/{tokenBlueprintId} は未使用の閲覧系のため扱わない。
 	if len(parts) == 1 {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		h.GetAggregateByID(w, r, tbID)
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 
@@ -103,7 +98,7 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		// DELETE /{id}/comments/{commentId}
+		// DELETE /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}
 		if len(parts) == 3 {
 			if r.Method != http.MethodDelete {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -113,7 +108,7 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		// POST /{id}/comments/{commentId}/reactions
+		// POST /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/reactions
 		if len(parts) == 4 && parts[3] == "reactions" {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -123,16 +118,13 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		// GET|POST /{id}/comments/{commentId}/replies
+		// POST /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
 		if len(parts) == 4 && parts[3] == "replies" {
-			switch r.Method {
-			case http.MethodGet:
-				h.ListChildCommentsByTokenBlueprintID(w, r, tbID, commentID)
-			case http.MethodPost:
-				h.CreateBrandReply(w, r, tbID, commentID)
-			default:
+			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
 			}
+			h.CreateBrandReply(w, r, tbID, commentID)
 			return
 		}
 
@@ -149,7 +141,7 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 // Requests / Responses
 // ================================
 
-type createBrandReplyRequest struct {
+type createBrandCommentRequest struct {
 	CommentID       *string `json:"commentId,omitempty"`
 	ParentCommentID *string `json:"parentCommentId,omitempty"`
 	Body            string  `json:"body"`
@@ -159,7 +151,7 @@ type reactAsBrandRequest struct {
 	Type tbReview.ReactionType `json:"type"`
 }
 
-type createBrandReplyResponse struct {
+type createBrandCommentResponse struct {
 	Item appquery.ConsoleTokenBlueprintCommentReadModel `json:"item"`
 }
 
@@ -285,28 +277,6 @@ func (h *TokenBlueprintReviewHandler) ListAggregatesByCompanyTokenBlueprints(w h
 	writeJSON(w, http.StatusOK, res)
 }
 
-func (h *TokenBlueprintReviewHandler) GetAggregateByID(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
-	companyID, ok := middleware.CompanyID(r)
-	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
-		return
-	}
-
-	res, err := h.query.GetAggregateByTokenBlueprintID(
-		r.Context(),
-		appquery.GetConsoleTokenBlueprintReviewAggregateInput{
-			CompanyID:        companyID,
-			TokenBlueprintID: tokenBlueprintID,
-		},
-	)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, res)
-}
-
 func (h *TokenBlueprintReviewHandler) ListCommentsByTokenBlueprintID(w http.ResponseWriter, r *http.Request, tokenBlueprintID string) {
 	companyID, ok := middleware.CompanyID(r)
 	if !ok || companyID == "" {
@@ -345,43 +315,6 @@ func (h *TokenBlueprintReviewHandler) ListCommentsByTokenBlueprintID(w http.Resp
 	writeJSON(w, http.StatusOK, res)
 }
 
-func (h *TokenBlueprintReviewHandler) ListChildCommentsByTokenBlueprintID(
-	w http.ResponseWriter,
-	r *http.Request,
-	tokenBlueprintID string,
-	parentCommentID string,
-) {
-	companyID, ok := middleware.CompanyID(r)
-	if !ok || companyID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": errUnauthorized.Error()})
-		return
-	}
-
-	res, err := h.query.ListRepliesByCommentID(
-		r.Context(),
-		appquery.ListConsoleTokenBlueprintRepliesInput{
-			CompanyID:        companyID,
-			TokenBlueprintID: tokenBlueprintID,
-			ParentCommentID:  parentCommentID,
-			SearchQuery:      r.URL.Query().Get("q"),
-			Sort: common.Sort{
-				Column: r.URL.Query().Get("sort"),
-				Order:  common.SortOrder(strings.ToLower(r.URL.Query().Get("order"))),
-			},
-			Page: common.Page{
-				Number:  parseIntDefault(r.URL.Query().Get("page"), 1),
-				PerPage: parseIntDefault(r.URL.Query().Get("perPage"), 200),
-			},
-		},
-	)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, res)
-}
-
 // ================================
 // Command handlers
 // ================================
@@ -394,7 +327,7 @@ func (h *TokenBlueprintReviewHandler) CreateCommentAsBrand(w http.ResponseWriter
 	}
 	_ = companyID
 
-	var req createBrandReplyRequest
+	var req createBrandCommentRequest
 	if err := decodeJSONBody(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -420,14 +353,11 @@ func (h *TokenBlueprintReviewHandler) CreateCommentAsBrand(w http.ResponseWriter
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, createBrandReplyResponse{
+	writeJSON(w, http.StatusCreated, createBrandCommentResponse{
 		Item: toConsoleCommentReadModel(h.uc.BuildComment(r.Context(), created)),
 	})
 }
 
-// CreateBrandReply
-//
-// POST /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
 func (h *TokenBlueprintReviewHandler) CreateBrandReply(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -441,7 +371,7 @@ func (h *TokenBlueprintReviewHandler) CreateBrandReply(
 	}
 	_ = companyID
 
-	var req createBrandReplyRequest
+	var req createBrandCommentRequest
 	if err := decodeJSONBody(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -467,7 +397,7 @@ func (h *TokenBlueprintReviewHandler) CreateBrandReply(
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, createBrandReplyResponse{
+	writeJSON(w, http.StatusCreated, createBrandCommentResponse{
 		Item: toConsoleCommentReadModel(h.uc.BuildComment(r.Context(), created)),
 	})
 }

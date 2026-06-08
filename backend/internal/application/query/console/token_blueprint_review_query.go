@@ -16,7 +16,6 @@ var (
 	ErrConsoleTokenBlueprintReviewQueryNotConfigured = errors.New("console token_blueprint_review_query: service not configured")
 	ErrConsoleCompanyIDRequired                      = errors.New("console token_blueprint_review_query: companyID is required")
 	ErrConsoleTokenBlueprintIDRequired               = errors.New("console token_blueprint_review_query: tokenBlueprintID is required")
-	ErrConsoleCommentIDRequired                      = errors.New("console token_blueprint_review_query: commentID is required")
 	ErrConsoleBrandIDNotFound                        = errors.New("console token_blueprint_review_query: brandId not found on tokenBlueprint")
 )
 
@@ -33,6 +32,8 @@ var (
 // - reaction mutation
 // - aggregate count update
 // - low-level avatar / brand display resolution
+// - aggregate detail read model composition
+// - reply-only list read model composition
 type TokenBlueprintReviewConsoleQuery struct {
 	uc *usecase.TokenBlueprintReviewUsecase
 }
@@ -124,10 +125,6 @@ type ConsoleTokenBlueprintReviewAggregateListReadModel struct {
 	Items []ConsoleTokenBlueprintReviewAggregateItem `json:"items"`
 }
 
-type ConsoleTokenBlueprintReviewAggregateReadModel struct {
-	Item ConsoleTokenBlueprintReviewAggregateItem `json:"item"`
-}
-
 type ConsoleTokenBlueprintCommentReadModel struct {
 	CommentID        string `json:"CommentID"`
 	TokenBlueprintID string `json:"TokenBlueprintID"`
@@ -174,11 +171,6 @@ type ListConsoleTokenBlueprintReviewAggregatesInput struct {
 	CompanyID string
 }
 
-type GetConsoleTokenBlueprintReviewAggregateInput struct {
-	CompanyID        string
-	TokenBlueprintID string
-}
-
 type ListConsoleTokenBlueprintCommentsInput struct {
 	CompanyID        string
 	TokenBlueprintID string
@@ -192,16 +184,6 @@ type ListConsoleTokenBlueprintCommentsInput struct {
 
 	Sort common.Sort
 	Page common.Page
-}
-
-type ListConsoleTokenBlueprintRepliesInput struct {
-	CompanyID        string
-	TokenBlueprintID string
-	ParentCommentID  string
-
-	SearchQuery string
-	Sort        common.Sort
-	Page        common.Page
 }
 
 // ============================================================
@@ -242,40 +224,6 @@ func (q *TokenBlueprintReviewConsoleQuery) ListAggregatesByCompanyTokenBlueprint
 	}, nil
 }
 
-func (q *TokenBlueprintReviewConsoleQuery) GetAggregateByTokenBlueprintID(
-	ctx context.Context,
-	in GetConsoleTokenBlueprintReviewAggregateInput,
-) (ConsoleTokenBlueprintReviewAggregateReadModel, error) {
-	if err := q.validateConfigured(); err != nil {
-		return ConsoleTokenBlueprintReviewAggregateReadModel{}, err
-	}
-
-	companyID := strings.TrimSpace(in.CompanyID)
-	if companyID == "" {
-		return ConsoleTokenBlueprintReviewAggregateReadModel{}, ErrConsoleCompanyIDRequired
-	}
-
-	tokenBlueprintID := strings.TrimSpace(in.TokenBlueprintID)
-	if tokenBlueprintID == "" {
-		return ConsoleTokenBlueprintReviewAggregateReadModel{}, ErrConsoleTokenBlueprintIDRequired
-	}
-
-	agg, err := q.uc.GetAggregate(ctx, tokenBlueprintID)
-	if err != nil {
-		return ConsoleTokenBlueprintReviewAggregateReadModel{}, err
-	}
-
-	tbName, brandName := q.resolveTokenBlueprintNameBrandName(ctx, tokenBlueprintID)
-
-	return ConsoleTokenBlueprintReviewAggregateReadModel{
-		Item: ConsoleTokenBlueprintReviewAggregateItem{
-			TokenBlueprintReviewAggregate: agg,
-			TokenBlueprintName:            tbName,
-			BrandName:                     brandName,
-		},
-	}, nil
-}
-
 // ============================================================
 // Comment queries
 // ============================================================
@@ -309,55 +257,6 @@ func (q *TokenBlueprintReviewConsoleQuery) ListCommentsByTokenBlueprintID(
 		AuthorID:         strings.TrimSpace(in.AuthorID),
 		Deleted:          in.Deleted,
 		Depth:            in.Depth,
-		Sort:             sort,
-		Page:             page,
-	})
-	if err != nil {
-		return ConsoleTokenBlueprintCommentListReadModel{}, err
-	}
-
-	tbName, brandName := q.resolveTokenBlueprintNameBrandName(ctx, tokenBlueprintID)
-
-	return ConsoleTokenBlueprintCommentListReadModel{
-		Items:              q.toCommentReadModels(res.Items),
-		TokenBlueprintName: tbName,
-		BrandName:          brandName,
-		Page:               res.Page,
-		PerPage:            res.PerPage,
-		TotalCount:         res.TotalCount,
-	}, nil
-}
-
-func (q *TokenBlueprintReviewConsoleQuery) ListRepliesByCommentID(
-	ctx context.Context,
-	in ListConsoleTokenBlueprintRepliesInput,
-) (ConsoleTokenBlueprintCommentListReadModel, error) {
-	if err := q.validateConfigured(); err != nil {
-		return ConsoleTokenBlueprintCommentListReadModel{}, err
-	}
-
-	companyID := strings.TrimSpace(in.CompanyID)
-	if companyID == "" {
-		return ConsoleTokenBlueprintCommentListReadModel{}, ErrConsoleCompanyIDRequired
-	}
-
-	tokenBlueprintID := strings.TrimSpace(in.TokenBlueprintID)
-	if tokenBlueprintID == "" {
-		return ConsoleTokenBlueprintCommentListReadModel{}, ErrConsoleTokenBlueprintIDRequired
-	}
-
-	parentCommentID := strings.TrimSpace(in.ParentCommentID)
-	if parentCommentID == "" {
-		return ConsoleTokenBlueprintCommentListReadModel{}, ErrConsoleCommentIDRequired
-	}
-
-	sort := normalizeCommentSort(in.Sort, common.SortAsc)
-	page := normalizePage(in.Page, 1, 200)
-
-	res, err := q.uc.ListComments(ctx, usecase.ListCommentsInput{
-		TokenBlueprintID: tokenBlueprintID,
-		SearchQuery:      strings.TrimSpace(in.SearchQuery),
-		ParentCommentID:  &parentCommentID,
 		Sort:             sort,
 		Page:             page,
 	})
