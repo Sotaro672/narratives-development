@@ -43,29 +43,18 @@ const defaultTransferLockTTL = 10 * time.Minute
 
 type OrderRepoForTransferFS struct {
 	Client *firestore.Client
-
-	// OrdersCollection defaults to "orders"
-	OrdersCollection string
 }
 
 var _ usecase.OrderRepoForTransfer = (*OrderRepoForTransferFS)(nil)
 
 func NewOrderRepoForTransferFS(client *firestore.Client) *OrderRepoForTransferFS {
 	return &OrderRepoForTransferFS{
-		Client:           client,
-		OrdersCollection: "",
+		Client: client,
 	}
 }
 
 func (r *OrderRepoForTransferFS) ordersCol() *firestore.CollectionRef {
-	col := r.OrdersCollection
-	if col == "" {
-		col = os.Getenv("ORDERS_COLLECTION")
-	}
-	if col == "" {
-		col = "orders"
-	}
-	return r.Client.Collection(col)
+	return r.Client.Collection("orders")
 }
 
 func (r *OrderRepoForTransferFS) orderDoc(orderID string) *firestore.DocumentRef {
@@ -79,13 +68,24 @@ func (r *OrderRepoForTransferFS) orderDoc(orderID string) *firestore.DocumentRef
 // ListPaidByAvatarID returns paid orders for avatar.
 //
 // Current Firestore order schema:
-// - avatarId: string
-// - paid: bool
-// - items: []map
-// - shippingSnapshot: map
-// - paymentMethodSnapshot: map
-//
-// billingSnapshot / billingAddress are deprecated and are not used here.
+//   - avatarId: string
+//   - cartId: string
+//   - createdAt: timestamp
+//   - paid: bool
+//   - items: []map{
+//     inventoryId: string
+//     isCanceled: bool
+//     isDispatched: bool
+//     listId: string
+//     modelId: string
+//     price: int64
+//     qty: int64
+//     transferred: bool
+//     transferredAt: timestamp
+//     }
+//   - paymentMethodSnapshot: map
+//   - shippingSnapshot: map
+//   - userId: string
 func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarID string) ([]orderdom.Order, error) {
 	if r == nil || r.Client == nil {
 		return nil, ErrOrderRepoNotConfigured
@@ -373,6 +373,7 @@ func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 	if v == nil {
 		return []orderdom.OrderItemSnapshot{}, nil
 	}
+
 	arr, ok := v.([]any)
 	if !ok {
 		return nil, ErrOrderItemsMissing
@@ -389,37 +390,21 @@ func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 
 		if s, ok := m["modelId"].(string); ok {
 			it.ModelID = s
-		} else if s, ok := m["modelID"].(string); ok {
-			it.ModelID = s
 		}
 
 		if s, ok := m["inventoryId"].(string); ok {
-			it.InventoryID = s
-		} else if s, ok := m["inventoryID"].(string); ok {
 			it.InventoryID = s
 		}
 
 		if s, ok := m["listId"].(string); ok {
 			it.ListID = s
-		} else if s, ok := m["listID"].(string); ok {
-			it.ListID = s
 		}
 
-		switch n := m["qty"].(type) {
-		case int:
-			it.Qty = n
-		case int64:
-			it.Qty = int(n)
-		case float64:
+		if n, ok := m["qty"].(int64); ok {
 			it.Qty = int(n)
 		}
 
-		switch n := m["price"].(type) {
-		case int:
-			it.Price = n
-		case int64:
-			it.Price = int(n)
-		case float64:
+		if n, ok := m["price"].(int64); ok {
 			it.Price = int(n)
 		}
 
@@ -434,6 +419,7 @@ func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 
 		out = append(out, it)
 	}
+
 	return out, nil
 }
 
@@ -448,11 +434,9 @@ func findItemMapByModelID(items []any, modelID string) (int, map[string]any, err
 			continue
 		}
 
-		var got string
-		if s, ok := m["modelId"].(string); ok {
-			got = s
-		} else if s, ok := m["modelID"].(string); ok {
-			got = s
+		got, ok := m["modelId"].(string)
+		if !ok {
+			continue
 		}
 
 		if got == modelID {
@@ -587,6 +571,7 @@ func (r *TransferRepositoryFS) NextAttempt(ctx context.Context, productID string
 	if err != nil {
 		return 0, err
 	}
+
 	return out, nil
 }
 

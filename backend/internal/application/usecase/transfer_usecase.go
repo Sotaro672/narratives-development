@@ -174,7 +174,7 @@ type TransferUsecase struct {
 	// resolve warmup after successful transfer
 	resolveWarmer PostTransferResolveWarmer
 
-	// optional injection
+	// optional dependency
 	inventoryUC *InventoryUsecase
 
 	now func() time.Time
@@ -189,59 +189,35 @@ func NewTransferUsecase(
 	transferRepo TransferRepo,
 	brandWallet BrandWalletResolver,
 	avatarWallet AvatarWalletResolver,
-	secrets WalletSecretProvider,
-	executor TokenTransferExecutor,
-) *TransferUsecase {
-	return &TransferUsecase{
-		verifier:      verifier,
-		orderRepo:     orderRepo,
-		tokenRepo:     tokenRepo,
-		tokenUpdate:   tokenUpdate,
-		walletUpdate:  walletUpdate,
-		transferRepo:  transferRepo,
-		brandWallet:   brandWallet,
-		avatarWallet:  avatarWallet,
-		brandDisplay:  nil,
-		avatarDisplay: nil,
-		secrets:       secrets,
-		executor:      executor,
-		resolveWarmer: nil,
-		inventoryUC:   nil,
-		now:           time.Now,
-	}
-}
-
-// WithInventoryUsecase injects InventoryUsecase for post-transfer cleanup.
-func (u *TransferUsecase) WithInventoryUsecase(inventoryUC *InventoryUsecase) *TransferUsecase {
-	if u != nil {
-		u.inventoryUC = inventoryUC
-	}
-	return u
-}
-
-// WithTransferDisplayResolvers injects display resolvers for transfer response.
-// These are used only for response display values.
-func (u *TransferUsecase) WithTransferDisplayResolvers(
 	brandDisplay BrandDisplayResolver,
 	avatarDisplay AvatarDisplayResolver,
+	secrets WalletSecretProvider,
+	executor TokenTransferExecutor,
+	resolveWarmer PostTransferResolveWarmer,
+	inventoryUC *InventoryUsecase,
 ) *TransferUsecase {
-	if u != nil {
-		u.brandDisplay = brandDisplay
-		u.avatarDisplay = avatarDisplay
-	}
-	return u
-}
+	return &TransferUsecase{
+		verifier:     verifier,
+		orderRepo:    orderRepo,
+		tokenRepo:    tokenRepo,
+		tokenUpdate:  tokenUpdate,
+		walletUpdate: walletUpdate,
+		transferRepo: transferRepo,
 
-// WithPostTransferResolveWarmer injects resolve warmup logic.
-// 例:
-// - wallet resolve cache warm
-// - signed viewUri issuance
-// - ownership visibility confirmation
-func (u *TransferUsecase) WithPostTransferResolveWarmer(w PostTransferResolveWarmer) *TransferUsecase {
-	if u != nil {
-		u.resolveWarmer = w
+		brandWallet:  brandWallet,
+		avatarWallet: avatarWallet,
+
+		brandDisplay:  brandDisplay,
+		avatarDisplay: avatarDisplay,
+
+		secrets:  secrets,
+		executor: executor,
+
+		resolveWarmer: resolveWarmer,
+		inventoryUC:   inventoryUC,
+
+		now: time.Now,
 	}
-	return u
 }
 
 var (

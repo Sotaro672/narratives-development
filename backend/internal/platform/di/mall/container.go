@@ -208,7 +208,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		walletRepo,
 		productBlueprintRepoFS,
 		brandRepo,
-		nil,
 		onchainReader,
 		tokenQuery,
 		productRepo,
@@ -365,11 +364,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			transferRepo,
 			walletResolver,
 			avatarWalletResolver,
+			brandRepo,
+			avatarRepo,
 			secrets,
 			executor,
-		).
-			WithInventoryUsecase(c.InventoryUC).
-			WithTransferDisplayResolvers(brandRepo, avatarRepo)
+			nil,
+			c.InventoryUC,
+		)
 	}
 
 	{

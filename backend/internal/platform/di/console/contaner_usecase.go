@@ -9,7 +9,6 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
 	companydom "narratives/internal/domain/company"
-	memdom "narratives/internal/domain/member"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
 )
@@ -278,14 +277,11 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 				return nil
 			}
 
-			memberSvc := memdom.NewService(r.memberRepo)
-
 			return uc.NewProductBlueprintReviewUsecase(
 				r.productBlueprintReviewRepo,
 				r.walletRepo,
 				r.productBlueprintRepo,
 				r.brandRepo,
-				memberSvc,
 				nil,
 				nil,
 				nil,

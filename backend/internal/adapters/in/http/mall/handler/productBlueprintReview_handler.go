@@ -11,10 +11,9 @@ import (
 	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
+	uc "narratives/internal/application/usecase"
 	domcommon "narratives/internal/domain/common"
 	pbr "narratives/internal/domain/productBlueprintReview"
-
-	uc "narratives/internal/application/usecase"
 )
 
 // ============================================================
@@ -24,16 +23,8 @@ import (
 // ProductBlueprintReviewService is the application port used by this HTTP handler.
 // NOTE: この interface を満たす実装（usecase）を DI してください。
 type ProductBlueprintReviewService interface {
-	// List (閲覧)
+	// List (閲覧) + AvatarName/Icon
 	ListByProductBlueprintID(
-		ctx context.Context,
-		productBlueprintID string,
-		status pbr.ReviewStatus,
-		page domcommon.Page,
-	) (domcommon.PageResult[pbr.Review], error)
-
-	// ✅ NEW: List (閲覧) + AvatarName/Icon
-	ListByProductBlueprintIDWithAvatar(
 		ctx context.Context,
 		productBlueprintID string,
 		status pbr.ReviewStatus,
@@ -48,7 +39,7 @@ type ProductBlueprintReviewService interface {
 	) (bool, error)
 
 	// Create (投稿)
-	// ✅ usecase 側の Input 型を使う（型不一致の解消）
+	// usecase 側の Input 型を使う（型不一致の解消）
 	CreateProductBlueprintReview(
 		ctx context.Context,
 		in uc.CreateProductBlueprintReviewInput,
@@ -123,8 +114,8 @@ func (h *ProductBlueprintReviewHandler) handleList(w http.ResponseWriter, r *htt
 	page := parsePage(r)
 	status := pbr.ReviewStatusPublished
 
-	// ✅ AvatarName/Icon 付きで返す
-	res, err := h.svc.ListByProductBlueprintIDWithAvatar(ctx, productBlueprintID, status, page)
+	// AvatarName/Icon 付きで返す
+	res, err := h.svc.ListByProductBlueprintID(ctx, productBlueprintID, status, page)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -137,7 +128,7 @@ func (h *ProductBlueprintReviewHandler) handleList(w http.ResponseWriter, r *htt
 func (h *ProductBlueprintReviewHandler) handleCreateMe(w http.ResponseWriter, r *http.Request, productBlueprintID string) {
 	ctx := r.Context()
 
-	// ✅ IMPORTANT:
+	// IMPORTANT:
 	// avatarId は middleware が request context に積む前提。
 	// ctx.Value("avatarId") のようなキー直読みは middleware 実装差分で壊れやすいので、
 	// wallet handler と同様に middleware getter を正とする。
@@ -147,7 +138,7 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(w http.ResponseWriter, r 
 		return
 	}
 
-	// ✅ VerifiedPurchase:true のみ投稿可（事前チェック）
+	// VerifiedPurchase:true のみ投稿可（事前チェック）
 	ok2, err := h.svc.IsVerifiedPurchase(ctx, avatarID, productBlueprintID)
 	if err != nil {
 		writeDomainError(w, err)
@@ -175,7 +166,7 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(w http.ResponseWriter, r 
 		reviewedAt = now
 	}
 
-	// ✅ usecase.Input 型で作る（entity.go を正としてフィールドを合わせる）
+	// usecase.Input 型で作る（entity.go を正としてフィールドを合わせる）
 	in := uc.CreateProductBlueprintReviewInput{
 		ProductBlueprintID: productBlueprintID,
 		AvatarID:           avatarID,
@@ -221,7 +212,7 @@ type catalogReviewDTO struct {
 	ReviewedAt       string `json:"reviewedAt"` // RFC3339
 	Status           string `json:"status"`
 
-	// ✅ NEW: 画面に渡す
+	// 画面に渡す
 	AvatarName string `json:"avatarName"`
 	AvatarIcon string `json:"avatarIcon"`
 }
@@ -380,27 +371,6 @@ func parsePage(r *http.Request) domcommon.Page {
 		}
 	}
 	return p
-}
-
-// ============================================================
-// Context helpers
-// ============================================================
-
-func getAvatarIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	if v := ctx.Value("avatarId"); v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	if v := ctx.Value("avatarID"); v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
 }
 
 // ============================================================

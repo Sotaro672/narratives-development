@@ -32,11 +32,6 @@ type BrandGetter interface {
 	GetByID(ctx context.Context, brandID string) (branddom.Brand, error)
 }
 
-// Assignee(Member) 名取得（member.Service をそのまま注入できる）
-type AssigneeNameGetter interface {
-	GetNameLastFirstByUID(ctx context.Context, uid string) (string, error)
-}
-
 // handler/画面へ渡す DTO（Review + AvatarName/Icon を同梱）
 type ProductBlueprintReviewListItem struct {
 	pbr.Review
@@ -45,7 +40,7 @@ type ProductBlueprintReviewListItem struct {
 	AvatarIcon string `json:"AvatarIcon"`
 }
 
-// management 用: aggregate + BrandName/AssigneeName（PascalCase JSON）
+// management 用: aggregate + BrandName（PascalCase JSON）
 type ProductBlueprintReviewAggregateItem struct {
 	ID                 string `json:"ID"`
 	ProductBlueprintID string `json:"ProductBlueprintID"`
@@ -55,8 +50,7 @@ type ProductBlueprintReviewAggregateItem struct {
 	BrandID   string `json:"BrandID"`
 	BrandName string `json:"BrandName"`
 
-	AssigneeID   string `json:"AssigneeID"`
-	AssigneeName string `json:"AssigneeName"`
+	AssigneeID string `json:"AssigneeID"`
 
 	Rating1Count int `json:"Rating1Count"`
 	Rating2Count int `json:"Rating2Count"`
@@ -75,8 +69,7 @@ type ProductBlueprintReviewUsecase struct {
 	ProductBlueprintRepo pbdomain.Repository
 
 	// name resolvers (best-effort)
-	BrandGetter        BrandGetter
-	AssigneeNameGetter AssigneeNameGetter
+	BrandGetter BrandGetter
 
 	WalletRepo              WalletRepository
 	OnchainReader           OnchainWalletReader
@@ -96,7 +89,6 @@ func NewProductBlueprintReviewUsecase(
 	walletRepo WalletRepository,
 	productBlueprintRepo pbdomain.Repository,
 	brandGetter BrandGetter,
-	assigneeNameGetter AssigneeNameGetter,
 	onchainReader OnchainWalletReader,
 	tokenQuery TokenQuery,
 	productReader ProductReader,
@@ -112,7 +104,6 @@ func NewProductBlueprintReviewUsecase(
 		ReviewRepo:              reviewRepo,
 		ProductBlueprintRepo:    productBlueprintRepo,
 		BrandGetter:             brandGetter,
-		AssigneeNameGetter:      assigneeNameGetter,
 		WalletRepo:              walletRepo,
 		OnchainReader:           onchainReader,
 		TokenQuery:              tokenQuery,
@@ -125,7 +116,7 @@ func NewProductBlueprintReviewUsecase(
 
 // ============================================================
 // Public API: Aggregates (Management)
-// - BrandID/AssigneeID の Name 解決は usecase で実施（best-effort）
+// - BrandID の Name 解決は usecase で実施（best-effort）
 // - paging は「商品（ProductBlueprint）単位」
 // ============================================================
 
@@ -176,7 +167,6 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 
 	// simple per-request cache
 	brandNameCache := make(map[string]string, 16)
-	assigneeNameCache := make(map[string]string, 16)
 
 	for _, pb := range paged {
 		if pb.ID == "" {
@@ -200,18 +190,6 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 			}
 		}
 
-		assigneeName := ""
-		if pb.AssigneeID != "" && uc.AssigneeNameGetter != nil {
-			if v, ok := assigneeNameCache[pb.AssigneeID]; ok {
-				assigneeName = v
-			} else {
-				if n, err := uc.AssigneeNameGetter.GetNameLastFirstByUID(ctx, pb.AssigneeID); err == nil {
-					assigneeName = n
-				}
-				assigneeNameCache[pb.AssigneeID] = assigneeName
-			}
-		}
-
 		items = append(items, ProductBlueprintReviewAggregateItem{
 			ID:                 pb.ID,
 			ProductBlueprintID: pb.ID,
@@ -219,7 +197,6 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 			BrandID:            pb.BrandID,
 			BrandName:          brandName,
 			AssigneeID:         pb.AssigneeID,
-			AssigneeName:       assigneeName,
 			Rating1Count:       sum.Rating1Count,
 			Rating2Count:       sum.Rating2Count,
 			Rating3Count:       sum.Rating3Count,
@@ -241,30 +218,14 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 }
 
 // ============================================================
-// Public API: List (for handler)
-// ============================================================
-
-func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
-	ctx context.Context,
-	productBlueprintID string,
-	status pbr.ReviewStatus,
-	page domcommon.Page,
-) (domcommon.PageResult[pbr.Review], error) {
-	if uc == nil || uc.ReviewRepo == nil {
-		return domcommon.PageResult[pbr.Review]{}, pbr.ErrInternal
-	}
-	return uc.ReviewRepo.ListByProductBlueprintID(ctx, productBlueprintID, status, page)
-}
-
-// ============================================================
-// Public API: List + AvatarName/Icon (for screen)
+// Public API: List + AvatarName/Icon
 // ============================================================
 //
 //   - ReviewRepo の結果に対して、AvatarRepo.GetByID を使って
 //     AvatarName / AvatarIcon を詰めて返す
 //   - AvatarRepo 未設定でも一覧自体は返す（name/icon は空）
 //   - Avatar 取得失敗は best-effort でスキップ（画面表示優先）
-func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintIDWithAvatar(
+func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
 	ctx context.Context,
 	productBlueprintID string,
 	status pbr.ReviewStatus,
@@ -301,7 +262,6 @@ func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintIDWithAvatar(
 		})
 	}
 
-	// paging情報は base からそのまま引き継ぐ（handler が TotalCount/TotalPages/PerPage を参照するため）
 	out := domcommon.PageResult[ProductBlueprintReviewListItem]{
 		Items:      items,
 		Page:       base.Page,

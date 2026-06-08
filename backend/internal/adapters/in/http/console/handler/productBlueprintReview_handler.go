@@ -130,7 +130,7 @@ func parsePositiveInt(raw string, def, max int) int {
 
 // ============================================================
 // 1) Detail page: reviews for a single ProductBlueprintID
-// - ✅ AvatarID -> AvatarName / AvatarIcon を usecase で解決して返す
+// - AvatarID -> AvatarName / AvatarIcon を usecase で解決して返す
 // ============================================================
 
 type ListProductBlueprintReviewsResponse struct {
@@ -173,7 +173,7 @@ func (h *ProductBlueprintReviewHandler) ListReviewsByProductBlueprintID(
 		PerPage: perPage,
 	}
 
-	out, err := h.ProductBlueprintReviewUC.ListByProductBlueprintIDWithAvatar(
+	out, err := h.ProductBlueprintReviewUC.ListByProductBlueprintID(
 		r.Context(),
 		productBlueprintID,
 		status,
@@ -199,7 +199,7 @@ func (h *ProductBlueprintReviewHandler) ListReviewsByProductBlueprintID(
 
 // ============================================================
 // 2) Management page: aggregates (summary docId == ProductBlueprintID)
-// - ✅ BrandName / AssigneeName を usecase で解決して返す
+// - BrandName を usecase で解決して返す
 // ============================================================
 
 type ListCompanyReviewAggregatesResponse struct {
