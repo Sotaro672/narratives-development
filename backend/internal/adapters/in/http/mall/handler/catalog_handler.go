@@ -57,6 +57,5 @@ func (h *MallCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// (future) /mall/catalog index not implemented
 	notFound(w)
 }

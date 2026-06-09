@@ -46,8 +46,6 @@ func NewTokenBlueprintReviewHandler(
 // - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
 //
 // console handler では brand 側からのみ comment / reply / comment reaction を許可する。
-// aggregate への reaction は扱わない。
-// 未使用の閲覧系である aggregate detail / reply list は扱わない。
 func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil || h.query == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "handler not configured"})
@@ -72,7 +70,6 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// GET /token-blueprint-reviews/{tokenBlueprintId} は未使用の閲覧系のため扱わない。
 	if len(parts) == 1 {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -98,7 +95,6 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		// DELETE /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}
 		if len(parts) == 3 {
 			if r.Method != http.MethodDelete {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -108,7 +104,6 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		// POST /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/reactions
 		if len(parts) == 4 && parts[3] == "reactions" {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -118,7 +113,6 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		// POST /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
 		if len(parts) == 4 && parts[3] == "replies" {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -423,9 +417,6 @@ func (h *TokenBlueprintReviewHandler) DeleteComment(
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ReactToCommentAsBrand
-//
-// POST /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/reactions
 func (h *TokenBlueprintReviewHandler) ReactToCommentAsBrand(
 	w http.ResponseWriter,
 	r *http.Request,
