@@ -7,9 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	sharedquery "narratives/internal/application/query/shared"
-
 	"narratives/internal/adapters/in/http/middleware"
+	sharedquery "narratives/internal/application/query/shared"
 )
 
 type PreviewMeHandler struct {
@@ -25,24 +24,18 @@ type PreviewMeHandler struct {
 	nameR PreviewNameResolver
 }
 
-func NewPreviewMeHandler(q PreviewQuery, opts ...PreviewHandlerOption) http.Handler {
-	ph := &PreviewHandler{q: q}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(ph)
-		}
-	}
-
+func NewPreviewMeHandler(
+	q PreviewQuery,
+	ownerQ *sharedquery.OwnerResolveQuery,
+	tbRepo TokenBlueprintPatchReader,
+	nameR PreviewNameResolver,
+) http.Handler {
 	return &PreviewMeHandler{
 		q:      q,
-		ownerQ: ph.ownerQ,
-		tbRepo: ph.tbRepo,
-		nameR:  ph.nameR,
+		ownerQ: ownerQ,
+		tbRepo: tbRepo,
+		nameR:  nameR,
 	}
-}
-
-func NewPreviewMeHandlerWithOwner(q PreviewQuery, ownerQ *sharedquery.OwnerResolveQuery) http.Handler {
-	return NewPreviewMeHandler(q, WithOwnerResolveQuery(ownerQ))
 }
 
 func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -24,11 +24,7 @@ type CartHandler struct {
 	cartQuery CartQueryService
 }
 
-func NewCartHandler(uc *usecase.CartUsecase) http.Handler {
-	return &CartHandler{uc: uc, cartQuery: nil}
-}
-
-func NewCartHandlerWithQueries(
+func NewCartHandler(
 	uc *usecase.CartUsecase,
 	cartQuery CartQueryService,
 ) http.Handler {
@@ -135,6 +131,7 @@ func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "not found") ||
 		strings.Contains(s, "notfound") ||
@@ -170,6 +167,7 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -201,6 +199,7 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -232,6 +231,7 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -251,6 +251,7 @@ func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
+
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -305,9 +306,11 @@ func readAvatarID(r *http.Request, fallback string) string {
 	if v := r.URL.Query().Get("avatarId"); v != "" {
 		return v
 	}
+
 	if v := r.Header.Get("X-Avatar-Id"); v != "" {
 		return v
 	}
+
 	return fallback
 }
 

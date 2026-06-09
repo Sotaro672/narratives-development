@@ -180,28 +180,21 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Cart
 	if cont.CartUC != nil {
-		cartH = mallhandler.NewCartHandlerWithQueries(cont.CartUC, cont.CartQ)
+		cartH = mallhandler.NewCartHandler(cont.CartUC, cont.CartQ)
 	}
 
-	// Payment / Order
+	// Payment
 	if cont.PaymentUC != nil {
-		if cont.PaymentFlowUC != nil {
-			payH = mallhandler.NewPaymentHandlerWithOrderQueryAndPaymentFlow(
-				cont.PaymentUC,
-				cont.OrderQ,
-				cont.PaymentFlowUC,
-			)
-		} else {
-			payH = mallhandler.NewPaymentHandlerWithOrderQuery(cont.PaymentUC, cont.OrderQ)
-		}
+		payH = mallhandler.NewPaymentHandler(
+			cont.PaymentUC,
+			cont.OrderQ,
+			cont.PaymentFlowUC,
+		)
 	}
 
+	// Order
 	if cont.OrderUC != nil {
-		if cont.HistoryQ != nil {
-			orderH = mallhandler.NewOrderHandlerWithHistoryQuery(cont.OrderUC, cont.HistoryQ)
-		} else {
-			orderH = mallhandler.NewOrderHandler(cont.OrderUC)
-		}
+		orderH = mallhandler.NewOrderHandler(cont.OrderUC, cont.HistoryQ)
 	}
 
 	// Preview
@@ -215,7 +208,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 		}
 
 		previewPublicH = mallhandler.NewPreviewHandler(cont.PreviewQ, opts...)
-		previewMeH = mallhandler.NewPreviewMeHandler(cont.PreviewQ, opts...)
+
+		previewMeH = mallhandler.NewPreviewMeHandler(
+			cont.PreviewQ,
+			cont.OwnerResolveQ,
+			nil,
+			cont.NameResolver,
+		)
 	}
 
 	// Order scan verify

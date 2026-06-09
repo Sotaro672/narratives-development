@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"strings"
 
 	historydto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
@@ -228,14 +227,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 				continue
 			}
 
-			cacheKey := buildHistoryModelCacheKey(
-				modelID,
-				inventoryID,
-				blueprintIDs.ProductBlueprintID,
-				blueprintIDs.TokenBlueprintID,
-			)
-
-			resolved, ok := modelCache[cacheKey]
+			resolved, ok := modelCache[modelID]
 			if !ok {
 				nextResolved, err := q.resolveHistoryModelByID(ctx, historydto.HistoryResolveModelInput{
 					ModelID:            modelID,
@@ -248,7 +240,7 @@ func (q *HistoryQuery) EnrichOrderPage(
 				}
 
 				resolved = nextResolved
-				modelCache[cacheKey] = nextResolved
+				modelCache[modelID] = nextResolved
 			}
 
 			applyResolvedModelToItem(item, resolved)
@@ -593,20 +585,6 @@ type historyBrandInfo struct {
 	BrandIcon string
 }
 
-func buildHistoryModelCacheKey(
-	modelID string,
-	inventoryID string,
-	productBlueprintID string,
-	tokenBlueprintID string,
-) string {
-	return strings.Join([]string{
-		modelID,
-		inventoryID,
-		productBlueprintID,
-		tokenBlueprintID,
-	}, "|")
-}
-
 func cloneHistoryOrders(in []historydto.HistoryOrder) []historydto.HistoryOrder {
 	out := make([]historydto.HistoryOrder, 0, len(in))
 
@@ -666,10 +644,6 @@ func applyResolvedModelToItem(
 		item.Color = resolved.Color
 	}
 
-	if len(resolved.Measurements) > 0 {
-		item.Measurements = cloneHistoryModelMeasurements(resolved.Measurements)
-	}
-
 	if resolved.VolumeValue != nil {
 		item.VolumeValue = resolved.VolumeValue
 	}
@@ -693,25 +667,4 @@ func applyResolvedModelToItem(
 	if resolved.BrandIcon != "" {
 		item.BrandIcon = resolved.BrandIcon
 	}
-}
-
-func cloneHistoryModelMeasurements(in map[string]int) map[string]int {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make(map[string]int, len(in))
-	for key, value := range in {
-		if key == "" {
-			continue
-		}
-
-		out[key] = value
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
 }

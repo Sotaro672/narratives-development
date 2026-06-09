@@ -32,11 +32,7 @@ type OrderHistoryQuery interface {
 	) (historydto.HistoryOrderPage, error)
 }
 
-func NewOrderHandler(uc *usecase.OrderUsecase) http.Handler {
-	return &OrderHandler{uc: uc}
-}
-
-func NewOrderHandlerWithHistoryQuery(
+func NewOrderHandler(
 	uc *usecase.OrderUsecase,
 	historyQuery OrderHistoryQuery,
 ) http.Handler {

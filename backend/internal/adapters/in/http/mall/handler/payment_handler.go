@@ -26,41 +26,7 @@ type OrderQuery interface {
 	GetOrderContextByUID(ctx context.Context, uid string) (dto.OrderContextDTO, error)
 }
 
-func NewPaymentHandler(uc *usecase.PaymentUsecase) http.Handler {
-	return &PaymentHandler{
-		uc:     uc,
-		flowUC: nil,
-		orderQ: nil,
-	}
-}
-
-func NewPaymentHandlerWithOrderQuery(
-	uc *usecase.PaymentUsecase,
-	orderQ OrderQuery,
-) http.Handler {
-	return &PaymentHandler{
-		uc:     uc,
-		flowUC: nil,
-		orderQ: orderQ,
-	}
-}
-
-// NewPaymentHandlerWithPaymentFlow is the preferred constructor for
-// Stripe PaymentIntent based payment flow.
-func NewPaymentHandlerWithPaymentFlow(
-	uc *usecase.PaymentUsecase,
-	flowUC *usecase.PaymentFlowUsecase,
-) http.Handler {
-	return &PaymentHandler{
-		uc:     uc,
-		flowUC: flowUC,
-		orderQ: nil,
-	}
-}
-
-// NewPaymentHandlerWithOrderQueryAndPaymentFlow is the preferred constructor
-// when both GET /mall/me/payments and POST /mall/me/payments are enabled.
-func NewPaymentHandlerWithOrderQueryAndPaymentFlow(
+func NewPaymentHandler(
 	uc *usecase.PaymentUsecase,
 	orderQ OrderQuery,
 	flowUC *usecase.PaymentFlowUsecase,
