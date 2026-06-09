@@ -77,11 +77,7 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	avatarID, _ := middleware.CurrentAvatarID(r)
 
-	productID := r.URL.Query().Get("productId")
-	if productID == "" {
-		productID = extractLastPathSegment(r.URL.Path, "/mall/me/preview")
-	}
-
+	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
 	if productID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "productId is required",
@@ -127,7 +123,7 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if info.Owner == nil && h.ownerQ != nil && info.Token != nil {
-		addr := info.Token.ToAddress
+		addr := strings.TrimSpace(info.Token.ToAddress)
 		if addr != "" {
 			res, rerr := h.ownerQ.Resolve(r.Context(), addr)
 			if rerr == nil {
@@ -140,7 +136,6 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.tbRepo != nil && info.Token != nil {
 		tbID := strings.TrimSpace(info.Token.TokenBlueprintID)
-
 		if tbID != "" {
 			p, perr := h.tbRepo.GetPatchByID(r.Context(), tbID)
 			if perr == nil {
@@ -148,16 +143,19 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				companyName := ""
 
 				if h.nameR != nil {
-					if strings.TrimSpace(p.BrandID) != "" {
-						brandName = h.nameR.ResolveBrandName(r.Context(), p.BrandID)
+					brandID := strings.TrimSpace(p.BrandID)
+					companyID := strings.TrimSpace(p.CompanyID)
+
+					if brandID != "" {
+						brandName = h.nameR.ResolveBrandName(r.Context(), brandID)
 					}
 
-					if strings.TrimSpace(p.CompanyID) != "" {
-						companyName = h.nameR.ResolveCompanyName(r.Context(), p.CompanyID)
+					if companyID != "" {
+						companyName = h.nameR.ResolveCompanyName(r.Context(), companyID)
 					}
 
-					if companyName == "" && strings.TrimSpace(p.BrandID) != "" {
-						brandCompanyID := h.nameR.ResolveBrandCompanyID(r.Context(), p.BrandID)
+					if companyName == "" && brandID != "" {
+						brandCompanyID := h.nameR.ResolveBrandCompanyID(r.Context(), brandID)
 						if brandCompanyID != "" {
 							companyName = h.nameR.ResolveCompanyName(r.Context(), brandCompanyID)
 						}

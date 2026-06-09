@@ -63,6 +63,11 @@ type Repository interface {
 	// avatarId による取得
 	GetByID(ctx context.Context, id string) (Avatar, error)
 
+	// userId による取得
+	// avatar document id は avatarId であり userId ではない。
+	// uid -> avatarId 解決や mall/me/avatar 判定で使用する。
+	GetByUserID(ctx context.Context, userID string) (Avatar, error)
+
 	// 作成
 	Create(ctx context.Context, a Avatar) (Avatar, error)
 

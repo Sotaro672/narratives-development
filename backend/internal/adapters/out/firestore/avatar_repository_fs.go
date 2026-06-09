@@ -62,6 +62,39 @@ func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avat
 }
 
 // ==============================
+// GetByUserID
+// ==============================
+//
+// Avatar document id は avatarId であり userId ではないため、
+// Firebase UID / userId から avatar document を取得する。
+// uid -> avatarId 解決や mall/me/avatar 判定で使用する。
+func (r *AvatarRepositoryFS) GetByUserID(ctx context.Context, userID string) (avdom.Avatar, error) {
+	if r == nil || r.Client == nil {
+		return avdom.Avatar{}, errBadClient
+	}
+	if userID == "" {
+		return avdom.Avatar{}, errNotFound
+	}
+
+	q := r.col().Where("userId", "==", userID).Limit(1)
+	iter := q.Documents(ctx)
+	defer iter.Stop()
+
+	doc, err := iter.Next()
+	if errors.Is(err, iterator.Done) {
+		return avdom.Avatar{}, errNotFound
+	}
+	if err != nil {
+		return avdom.Avatar{}, err
+	}
+	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+		return avdom.Avatar{}, errNotFound
+	}
+
+	return r.docToDomain(doc)
+}
+
+// ==============================
 // ResolveAvatarByUID
 // ==============================
 //

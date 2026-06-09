@@ -14,7 +14,6 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	commondom "narratives/internal/domain/common"
-	modeldom "narratives/internal/domain/model"
 	orderdom "narratives/internal/domain/order"
 	productdom "narratives/internal/domain/product"
 	pbdom "narratives/internal/domain/productBlueprint"
@@ -53,13 +52,6 @@ var (
 // We only need: productId -> product -> modelId.
 type ProductReader interface {
 	GetByID(ctx context.Context, productID string) (productdom.Product, error)
-}
-
-// ModelVariationReader is a minimal read port for model variation.
-// preview では measurements 補完用途だけに使う。
-// modelNumber / size / color / rgb / volume は NameResolver.ResolveModelResolved を正とする。
-type ModelVariationReader interface {
-	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
 // ProductBlueprintReader is a minimal read port for ProductBlueprint.
@@ -124,7 +116,6 @@ type OrderPurchasedResult struct {
 // single construction entry point for preview + order scan verification.
 type PreviewQuery struct {
 	ProductRepo          ProductReader
-	ModelRepo            ModelVariationReader
 	ProductBlueprintRepo ProductBlueprintReader
 
 	// order scan verify / purchased-side resolver
@@ -158,7 +149,6 @@ type PreviewQuery struct {
 // This is the only entry point for wiring preview and scan verification dependencies.
 func NewPreviewQuery(
 	productRepo ProductReader,
-	modelRepo ModelVariationReader,
 	pbRepo ProductBlueprintReader,
 	orderRepo orderdom.Repository,
 	nameResolver *appresolver.NameResolver,
@@ -171,7 +161,6 @@ func NewPreviewQuery(
 ) *PreviewQuery {
 	return &PreviewQuery{
 		ProductRepo:          productRepo,
-		ModelRepo:            modelRepo,
 		ProductBlueprintRepo: pbRepo,
 		OrderRepo:            orderRepo,
 		NameResolver:         nameResolver,
@@ -220,7 +209,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	ctx context.Context,
 	productID string,
 ) (*dto.PreviewModelInfo, error) {
-	if q == nil || q.ProductRepo == nil || q.ModelRepo == nil || q.NameResolver == nil {
+	if q == nil || q.ProductRepo == nil || q.NameResolver == nil {
 		return nil, ErrPreviewQueryNotConfigured
 	}
 
@@ -237,16 +226,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	modelID := p.ModelID
 	if modelID == "" {
 		return nil, ErrModelIDEmpty
-	}
-
-	// measurements 補完用。
-	// modelNumber / size / color / rgb / volume は NameResolver.ResolveModelResolved を正とする。
-	mv, err := q.ModelRepo.GetByID(ctx, modelID)
-	if err != nil {
-		return nil, err
-	}
-	if mv == nil {
-		return nil, ErrModelVariationNotFound
 	}
 
 	// modelId -> productBlueprintId -> productBlueprint(全フィールド) + patch
@@ -286,7 +265,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		out.CategoryInputSchema = &schema
 	}
 
-	if err := q.fillResolvedModelInfo(ctx, out, modelID, mv, category.Kind); err != nil {
+	if err := q.fillResolvedModelInfo(ctx, out, modelID, category.Kind); err != nil {
 		return nil, err
 	}
 
@@ -554,7 +533,6 @@ func (q *PreviewQuery) fillResolvedModelInfo(
 	ctx context.Context,
 	out *dto.PreviewModelInfo,
 	modelID string,
-	mv modeldom.ModelVariation,
 	categoryKind commondom.ProductCategoryKind,
 ) error {
 	if out == nil {
@@ -594,13 +572,9 @@ func (q *PreviewQuery) fillResolvedModelInfo(
 	out.VolumeValue = resolved.VolumeValue
 	out.VolumeUnit = resolved.VolumeUnit
 
-	// measurements は apparel のみに存在するため、preview 側で補完する。
-	// model 表示値そのものは resolver の結果を正とする。
-	if modelKind == string(modeldom.ModelVariationKindApparel) {
-		if apparelVariation, ok := toPreviewApparelModelVariation(mv); ok {
-			out.Measurements = cloneMeasurements(apparelVariation.Measurements)
-		}
-	}
+	// measurements は apparel のみに存在する。
+	// model 表示値と同じく NameResolver.ResolveModelResolved の結果を正とする。
+	out.Measurements = cloneMeasurements(resolved.Measurements)
 
 	return nil
 }
@@ -643,24 +617,6 @@ func buildPreviewModelLabel(
 			return size
 		}
 		return color
-	}
-}
-
-func toPreviewApparelModelVariation(v modeldom.ModelVariation) (modeldom.ApparelModelVariation, bool) {
-	if v == nil {
-		return modeldom.ApparelModelVariation{}, false
-	}
-
-	switch x := v.(type) {
-	case modeldom.ApparelModelVariation:
-		return x, true
-	case *modeldom.ApparelModelVariation:
-		if x == nil {
-			return modeldom.ApparelModelVariation{}, false
-		}
-		return *x, true
-	default:
-		return modeldom.ApparelModelVariation{}, false
 	}
 }
 

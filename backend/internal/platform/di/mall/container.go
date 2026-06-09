@@ -1,3 +1,4 @@
+// backend/internal/platform/di/mall/container.go
 package mall
 
 import (
@@ -304,7 +305,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		c.PreviewQ = mallquery.NewPreviewQuery(
 			productRepo,
-			modelRepoFS,
 			productBlueprintRepoFS,
 			orderRepo,
 			c.NameResolver,
@@ -316,8 +316,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			previewTransferReader,
 		)
 
-		c.OrderQ = mallquery.NewOrderQueryWithCartQuery(fsClient, c.CartQ)
-		c.OrderQ.NameResolver = c.NameResolver
+		c.OrderQ = mallquery.NewOrderQuery(
+			avatarRepo,
+			cartRepo,
+			shippingAddressRepo,
+			paymentMethodRepo,
+			c.NameResolver,
+		)
 
 		c.HistoryQ = mallquery.NewHistoryQuery(
 			inventoryRepo,

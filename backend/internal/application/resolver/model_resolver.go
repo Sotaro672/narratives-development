@@ -8,16 +8,17 @@ import (
 )
 
 // ------------------------------------------------------------
-// ModelVariation (modelId → modelNumber/size/color/rgb/volume)
+// ModelVariation (modelId → modelNumber/size/color/rgb/volume/measurements)
 // - Firestore の保存 label は repository / mapper 側で domain に変換済みとする
 // - resolver は domain の正規 field だけを読む
 //
 // apparel:
-//   - kind:        "apparel"
-//   - modelNumber: apparelMV.ModelNumber
-//   - size:        apparelMV.Size
-//   - color:       apparelMV.Color.Name
-//   - rgb:         apparelMV.Color.RGB
+//   - kind:         "apparel"
+//   - modelNumber:  apparelMV.ModelNumber
+//   - size:         apparelMV.Size
+//   - color:        apparelMV.Color.Name
+//   - rgb:          apparelMV.Color.RGB
+//   - measurements: apparelMV.Measurements
 //
 // alcohol:
 //   - kind:        "alcohol"
@@ -31,9 +32,10 @@ type ModelResolved struct {
 	ModelNumber string
 
 	// apparel
-	Size  string
-	Color string
-	RGB   *int
+	Size         string
+	Color        string
+	RGB          *int
+	Measurements modeldom.Measurements
 
 	// alcohol
 	VolumeValue *int
@@ -60,11 +62,12 @@ func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID str
 		colorName, rgb := extractColorNameAndRGBFromApparelModelVariation(apparelMV)
 
 		return ModelResolved{
-			Kind:        string(modeldom.ModelVariationKindApparel),
-			ModelNumber: apparelMV.ModelNumber,
-			Size:        apparelMV.Size,
-			Color:       colorName,
-			RGB:         rgb,
+			Kind:         string(modeldom.ModelVariationKindApparel),
+			ModelNumber:  apparelMV.ModelNumber,
+			Size:         apparelMV.Size,
+			Color:        colorName,
+			RGB:          rgb,
+			Measurements: apparelMV.Measurements,
 		}
 	}
 
