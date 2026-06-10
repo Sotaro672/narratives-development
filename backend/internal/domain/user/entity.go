@@ -9,24 +9,20 @@ import (
 // User mirrors web-app/src/shared/types/user.ts
 // TS fields:
 // - id: string
-// - first_name?: string
-// - first_name_kana?: string
-// - last_name_kana?: string
-// - last_name?: string
+// - first_name: string
+// - first_name_kana: string
+// - last_name_kana: string
+// - last_name: string
 // - createdAt: Date | string
 // - updatedAt: Date | string
-// - deletedAt: Date | string
 type User struct {
 	ID            string    `json:"id"`
-	FirstName     *string   `json:"first_name,omitempty"`
-	FirstNameKana *string   `json:"first_name_kana,omitempty"`
-	LastNameKana  *string   `json:"last_name_kana,omitempty"`
-	LastName      *string   `json:"last_name,omitempty"`
+	FirstName     string    `json:"first_name"`
+	FirstNameKana string    `json:"first_name_kana"`
+	LastNameKana  string    `json:"last_name_kana"`
+	LastName      string    `json:"last_name"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
-
-	// soft delete: zero means "not deleted"
-	DeletedAt time.Time `json:"deletedAt"`
 }
 
 // Errors (single source)
@@ -38,7 +34,6 @@ var (
 	ErrInvalidLastName      = errors.New("user: invalid last_name")
 	ErrInvalidCreatedAt     = errors.New("user: invalid createdAt")
 	ErrInvalidUpdatedAt     = errors.New("user: invalid updatedAt")
-	ErrInvalidDeletedAt     = errors.New("user: invalid deletedAt")
 )
 
 // Policy
@@ -47,32 +42,32 @@ var (
 )
 
 // Mutators
-func (u *User) SetFirstName(v *string) error {
-	if v != nil && len([]rune(*v)) > MaxNameLength {
+func (u *User) SetFirstName(v string) error {
+	if v == "" || len([]rune(v)) > MaxNameLength {
 		return ErrInvalidFirstName
 	}
 	u.FirstName = v
 	return nil
 }
 
-func (u *User) SetFirstNameKana(v *string) error {
-	if v != nil && len([]rune(*v)) > MaxNameLength {
+func (u *User) SetFirstNameKana(v string) error {
+	if v == "" || len([]rune(v)) > MaxNameLength {
 		return ErrInvalidFirstNameKana
 	}
 	u.FirstNameKana = v
 	return nil
 }
 
-func (u *User) SetLastName(v *string) error {
-	if v != nil && len([]rune(*v)) > MaxNameLength {
+func (u *User) SetLastName(v string) error {
+	if v == "" || len([]rune(v)) > MaxNameLength {
 		return ErrInvalidLastName
 	}
 	u.LastName = v
 	return nil
 }
 
-func (u *User) SetLastNameKana(v *string) error {
-	if v != nil && len([]rune(*v)) > MaxNameLength {
+func (u *User) SetLastNameKana(v string) error {
+	if v == "" || len([]rune(v)) > MaxNameLength {
 		return ErrInvalidLastNameKana
 	}
 	u.LastNameKana = v
@@ -92,17 +87,17 @@ func (u User) validate() error {
 	if u.ID == "" {
 		return ErrInvalidID
 	}
-	if u.FirstName != nil && len([]rune(*u.FirstName)) > MaxNameLength {
+	if u.FirstName == "" || len([]rune(u.FirstName)) > MaxNameLength {
 		return ErrInvalidFirstName
 	}
-	if u.FirstNameKana != nil && len([]rune(*u.FirstNameKana)) > MaxNameLength {
+	if u.FirstNameKana == "" || len([]rune(u.FirstNameKana)) > MaxNameLength {
 		return ErrInvalidFirstNameKana
 	}
-	if u.LastName != nil && len([]rune(*u.LastName)) > MaxNameLength {
-		return ErrInvalidLastName
-	}
-	if u.LastNameKana != nil && len([]rune(*u.LastNameKana)) > MaxNameLength {
+	if u.LastNameKana == "" || len([]rune(u.LastNameKana)) > MaxNameLength {
 		return ErrInvalidLastNameKana
+	}
+	if u.LastName == "" || len([]rune(u.LastName)) > MaxNameLength {
+		return ErrInvalidLastName
 	}
 
 	// created/updated must be set by server
@@ -113,13 +108,6 @@ func (u User) validate() error {
 		return ErrInvalidUpdatedAt
 	}
 
-	// soft delete:
-	// - DeletedAt is allowed to be zero (not deleted)
-	// - If set, it must not be before CreatedAt
-	if !u.DeletedAt.IsZero() && u.DeletedAt.Before(u.CreatedAt) {
-		return ErrInvalidDeletedAt
-	}
-
 	return nil
 }
 
@@ -127,8 +115,8 @@ func (u User) validate() error {
 
 func New(
 	id string,
-	firstName, firstNameKana, lastNameKana, lastName *string,
-	createdAt, updatedAt, deletedAt time.Time,
+	firstName, firstNameKana, lastNameKana, lastName string,
+	createdAt, updatedAt time.Time,
 ) (User, error) {
 	u := User{
 		ID:            id,
@@ -138,7 +126,6 @@ func New(
 		LastName:      lastName,
 		CreatedAt:     createdAt.UTC(),
 		UpdatedAt:     updatedAt.UTC(),
-		DeletedAt:     deletedAt.UTC(), // zero stays zero
 	}
 	if err := u.validate(); err != nil {
 		return User{}, err
@@ -149,11 +136,9 @@ func New(
 // NewWithNow is convenient for CreateUserInput (server sets created/updated).
 func NewWithNow(
 	id string,
-	firstName, firstNameKana, lastNameKana, lastName *string,
+	firstName, firstNameKana, lastNameKana, lastName string,
 	now time.Time,
-	deletedAt time.Time,
 ) (User, error) {
 	now = now.UTC()
-	// deletedAt can be zero (not deleted)
-	return New(id, firstName, firstNameKana, lastNameKana, lastName, now, now, deletedAt)
+	return New(id, firstName, firstNameKana, lastNameKana, lastName, now, now)
 }

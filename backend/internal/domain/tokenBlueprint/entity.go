@@ -201,7 +201,7 @@ func ValidateContentFiles(files []ContentFile) error {
 // - minted は常に false
 // - metadataUri は作成直後は空でもよい
 // - icon は未登録状態を許容する
-// - assignee / createdBy / updatedBy / deletedBy は member id を保持する
+// - assignee / createdBy / updatedBy は member id を保持する
 type TokenBlueprint struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -225,9 +225,6 @@ type TokenBlueprint struct {
 	UpdatedAt    time.Time     `json:"updatedAt"`
 	UpdatedBy    string        `json:"updatedBy"`
 
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy *string    `json:"deletedBy,omitempty"`
-
 	MetadataURI string `json:"metadataUri,omitempty"`
 }
 
@@ -246,7 +243,6 @@ var (
 	ErrInvalidCreatedBy = errors.New("tokenBlueprint: invalid createdBy")
 	ErrInvalidUpdatedAt = errors.New("tokenBlueprint: invalid updatedAt")
 	ErrInvalidUpdatedBy = errors.New("tokenBlueprint: invalid updatedBy")
-	ErrInvalidDeletedBy = errors.New("tokenBlueprint: invalid deletedBy")
 
 	ErrInvalidIconURL         = errors.New("tokenBlueprint: invalid iconUrl")
 	ErrInvalidIconObjectPath  = errors.New("tokenBlueprint: invalid iconObjectPath")
@@ -259,7 +255,7 @@ var (
 	ErrInvalidContentType       = errors.New("tokenBlueprint: invalid contentFile.type")
 	ErrInvalidContentVisibility = errors.New("tokenBlueprint: invalid contentFile.visibility")
 
-	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; core fields or deletion are not allowed")
+	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; core fields are not allowed")
 )
 
 var symbolRe = regexp.MustCompile(`^[A-Z0-9]{1,10}$`)
@@ -307,9 +303,6 @@ func (t TokenBlueprint) validate() error {
 	}
 	if t.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
-	}
-	if t.DeletedBy != nil && *t.DeletedBy == "" {
-		return ErrInvalidDeletedBy
 	}
 
 	return nil
@@ -507,35 +500,6 @@ func (t *TokenBlueprint) SetUpdatedBy(updatedBy string) error {
 func (t TokenBlueprint) ValidateUpdatedByLink() error {
 	if t.UpdatedBy == "" {
 		return ErrInvalidUpdatedBy
-	}
-	return nil
-}
-
-func (t *TokenBlueprint) SetDeletedBy(deletedBy string) error {
-	if err := t.ensureMutableCoreOrDeletable(); err != nil {
-		return err
-	}
-	if deletedBy == "" {
-		return ErrInvalidDeletedBy
-	}
-	t.DeletedBy = &deletedBy
-	return nil
-}
-
-func (t *TokenBlueprint) ClearDeletedBy() error {
-	if err := t.ensureMutableCoreOrDeletable(); err != nil {
-		return err
-	}
-	t.DeletedBy = nil
-	return nil
-}
-
-func (t TokenBlueprint) ValidateDeletedByLink() error {
-	if t.DeletedBy == nil {
-		return nil
-	}
-	if *t.DeletedBy == "" {
-		return ErrInvalidDeletedBy
 	}
 	return nil
 }

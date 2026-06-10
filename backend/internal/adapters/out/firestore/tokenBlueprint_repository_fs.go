@@ -113,10 +113,6 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
 		}
 
-		if tb.DeletedAt != nil {
-			continue
-		}
-
 		items = append(items, tb)
 	}
 
@@ -174,10 +170,6 @@ func (r *TokenBlueprintRepositoryFS) ListByBrandID(
 		tb, err := docToTokenBlueprint(doc)
 		if err != nil {
 			return domcommon.PageResult[tbdom.TokenBlueprint]{}, err
-		}
-
-		if tb.DeletedAt != nil {
-			continue
 		}
 
 		items = append(items, tb)
@@ -249,8 +241,6 @@ func (r *TokenBlueprintRepositoryFS) Create(
 		"createdBy":       in.CreatedBy,
 		"updatedAt":       updatedAt,
 		"updatedBy":       in.UpdatedBy,
-		"deletedAt":       nil,
-		"deletedBy":       nil,
 		"metadataUri":     in.MetadataURI,
 	}
 
@@ -385,28 +375,6 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		Path:  "updatedBy",
 		Value: *in.UpdatedBy,
 	})
-
-	if in.DeletedAt != nil {
-		if in.DeletedAt.IsZero() {
-			return nil, tbdom.ErrInvalid
-		}
-
-		updates = append(updates, firestore.Update{
-			Path:  "deletedAt",
-			Value: in.DeletedAt.UTC(),
-		})
-	}
-
-	if in.DeletedBy != nil {
-		if *in.DeletedBy == "" {
-			return nil, tbdom.ErrInvalidDeletedBy
-		}
-
-		updates = append(updates, firestore.Update{
-			Path:  "deletedBy",
-			Value: *in.DeletedBy,
-		})
-	}
 
 	if len(updates) == 0 {
 		snap, err := ref.Get(ctx)
@@ -568,8 +536,6 @@ func docToTokenBlueprint(
 		CreatedBy       string           `firestore:"createdBy"`
 		UpdatedAt       time.Time        `firestore:"updatedAt"`
 		UpdatedBy       string           `firestore:"updatedBy"`
-		DeletedAt       *time.Time       `firestore:"deletedAt"`
-		DeletedBy       *string          `firestore:"deletedBy"`
 		MetadataURI     string           `firestore:"metadataUri"`
 	}
 
@@ -617,24 +583,6 @@ func docToTokenBlueprint(
 		UpdatedAt:    raw.UpdatedAt.UTC(),
 		UpdatedBy:    raw.UpdatedBy,
 		MetadataURI:  raw.MetadataURI,
-	}
-
-	if raw.DeletedAt != nil {
-		if raw.DeletedAt.IsZero() {
-			return tbdom.TokenBlueprint{}, tbdom.ErrInvalid
-		}
-
-		t := raw.DeletedAt.UTC()
-		tb.DeletedAt = &t
-	}
-
-	if raw.DeletedBy != nil {
-		if *raw.DeletedBy == "" {
-			return tbdom.TokenBlueprint{}, tbdom.ErrInvalidDeletedBy
-		}
-
-		v := *raw.DeletedBy
-		tb.DeletedBy = &v
 	}
 
 	return tb, nil

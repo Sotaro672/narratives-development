@@ -3,22 +3,23 @@ package mall
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 
 	"narratives/internal/domain/brand"
-	domcommon "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
+	inventorydom "narratives/internal/domain/inventory"
 	listdom "narratives/internal/domain/list"
 	productBlueprintdom "narratives/internal/domain/productBlueprint"
-	tokenBlueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 type BrandQuery struct {
 	brandRepo            brand.Repository
 	companyRepo          companydom.Repository
 	productBlueprintRepo productBlueprintdom.Repository
-	tokenBlueprintRepo   tokenBlueprintdom.RepositoryPort
+	inventoryRepo        inventorydom.RepositoryPort
 	listRepo             listdom.Repository
 }
 
@@ -26,14 +27,14 @@ func NewBrandQuery(
 	brandRepo brand.Repository,
 	companyRepo companydom.Repository,
 	productBlueprintRepo productBlueprintdom.Repository,
-	tokenBlueprintRepo tokenBlueprintdom.RepositoryPort,
+	inventoryRepo inventorydom.RepositoryPort,
 	listRepo listdom.Repository,
 ) *BrandQuery {
 	return &BrandQuery{
 		brandRepo:            brandRepo,
 		companyRepo:          companyRepo,
 		productBlueprintRepo: productBlueprintRepo,
-		tokenBlueprintRepo:   tokenBlueprintRepo,
+		inventoryRepo:        inventoryRepo,
 		listRepo:             listRepo,
 	}
 }
@@ -101,7 +102,7 @@ func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID stri
 		return []string{}, brand.ErrInvalidID
 	}
 
-	if q.productBlueprintRepo == nil || q.tokenBlueprintRepo == nil {
+	if q.productBlueprintRepo == nil || q.inventoryRepo == nil {
 		return []string{}, nil
 	}
 
@@ -110,39 +111,34 @@ func (q *BrandQuery) listInventoryIDsByBrandID(ctx context.Context, brandID stri
 		return nil, err
 	}
 
-	tokenBlueprints, err := q.listAllTokenBlueprintsByBrandID(ctx, brandID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(productBlueprintIDs) == 0 || len(tokenBlueprints) == 0 {
+	if len(productBlueprintIDs) == 0 {
 		return []string{}, nil
 	}
 
-	seen := make(map[string]struct{}, len(productBlueprintIDs)*len(tokenBlueprints))
-	inventoryIDs := make([]string, 0, len(productBlueprintIDs)*len(tokenBlueprints))
+	seen := make(map[string]struct{})
+	inventoryIDs := make([]string, 0)
 
-	for _, pbID := range productBlueprintIDs {
-		if pbID == "" {
+	for _, productBlueprintID := range productBlueprintIDs {
+		if productBlueprintID == "" {
 			continue
 		}
 
-		for _, tb := range tokenBlueprints {
-			if tb.ID == "" {
+		inventories, err := q.inventoryRepo.ListByProductBlueprintID(ctx, productBlueprintID)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, inv := range inventories {
+			if inv.ID == "" {
 				continue
 			}
 
-			inventoryID := buildInventoryID(pbID, tb.ID)
-			if inventoryID == "" {
+			if _, ok := seen[inv.ID]; ok {
 				continue
 			}
 
-			if _, ok := seen[inventoryID]; ok {
-				continue
-			}
-
-			seen[inventoryID] = struct{}{}
-			inventoryIDs = append(inventoryIDs, inventoryID)
+			seen[inv.ID] = struct{}{}
+			inventoryIDs = append(inventoryIDs, inv.ID)
 		}
 	}
 
@@ -225,55 +221,24 @@ func (q *BrandQuery) listListingListIDsByInventoryIDs(ctx context.Context, inven
 	return listIDs, nil
 }
 
-func (q *BrandQuery) listAllTokenBlueprintsByBrandID(
-	ctx context.Context,
-	brandID string,
-) ([]tokenBlueprintdom.TokenBlueprint, error) {
-	if q.tokenBlueprintRepo == nil {
-		return []tokenBlueprintdom.TokenBlueprint{}, nil
-	}
-
-	const perPage = 200
-
-	all := make([]tokenBlueprintdom.TokenBlueprint, 0)
-	pageNumber := 1
-
-	for {
-		result, err := q.tokenBlueprintRepo.ListByBrandID(ctx, brandID, domcommon.Page{
-			Number:  pageNumber,
-			PerPage: perPage,
-		})
-		if err != nil {
-			return nil, err
+func writeMallBrandErr(w http.ResponseWriter, err error) {
+	code := http.StatusInternalServerError
+	switch err {
+	case brand.ErrInvalidID:
+		code = http.StatusBadRequest
+	case brand.ErrNotFound:
+		code = http.StatusNotFound
+	case brand.ErrConflict:
+		code = http.StatusConflict
+	default:
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "invalid") ||
+			strings.Contains(msg, "required") ||
+			strings.Contains(msg, "must") {
+			code = http.StatusBadRequest
 		}
-
-		if len(result.Items) == 0 {
-			break
-		}
-
-		all = append(all, result.Items...)
-
-		if len(result.Items) < perPage {
-			break
-		}
-
-		pageNumber++
 	}
 
-	return all, nil
-}
-
-func buildInventoryID(productBlueprintID, tokenBlueprintID string) string {
-	if productBlueprintID == "" || tokenBlueprintID == "" {
-		return ""
-	}
-
-	sanitize := func(s string) string {
-		return strings.ReplaceAll(s, "/", "_")
-	}
-
-	pb := sanitize(productBlueprintID)
-	tb := sanitize(tokenBlueprintID)
-
-	return pb + "__" + tb
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

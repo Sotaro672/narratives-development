@@ -301,15 +301,8 @@ func formatUserDisplayName(u *userdom.User) string {
 		return ""
 	}
 
-	lastName := ""
-	firstName := ""
-
-	if u.LastName != nil {
-		lastName = strings.TrimSpace(*u.LastName)
-	}
-	if u.FirstName != nil {
-		firstName = strings.TrimSpace(*u.FirstName)
-	}
+	lastName := strings.TrimSpace(u.LastName)
+	firstName := strings.TrimSpace(u.FirstName)
 
 	switch {
 	case lastName != "" && firstName != "":

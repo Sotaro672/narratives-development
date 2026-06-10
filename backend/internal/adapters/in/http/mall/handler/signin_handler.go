@@ -34,7 +34,7 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ mall のみ受付（/mall/sign-in のみ。末尾スラッシュは吸収）
+	// mall のみ受付（/mall/sign-in のみ。末尾スラッシュは吸収）
 	path := strings.TrimSuffix(r.URL.Path, "/")
 	if path != "/mall/sign-in" {
 		w.WriteHeader(http.StatusNotFound)
@@ -76,14 +76,13 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 無ければ作る（name 系は nil でOK。id は uid を使う）
+	// 無ければ作る（id は uid を使う）
 	in := userdom.CreateUserInput{
 		FirstName:     nil,
 		FirstNameKana: nil,
 		LastNameKana:  nil,
 		LastName:      nil,
 		// createdAt/updatedAt は usecase が server now を差し込む
-		// deletedAt は nil(未指定) = not deleted
 	}
 
 	created, cerr := h.uc.Create(ctx, uid, in)
@@ -111,8 +110,7 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			errors.Is(cerr, userdom.ErrInvalidLastNameKana) ||
 			errors.Is(cerr, userdom.ErrInvalidLastName) ||
 			errors.Is(cerr, userdom.ErrInvalidCreatedAt) ||
-			errors.Is(cerr, userdom.ErrInvalidUpdatedAt) ||
-			errors.Is(cerr, userdom.ErrInvalidDeletedAt) {
+			errors.Is(cerr, userdom.ErrInvalidUpdatedAt) {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": cerr.Error()})
 			return

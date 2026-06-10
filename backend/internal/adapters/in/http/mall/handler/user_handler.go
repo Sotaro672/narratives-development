@@ -79,7 +79,7 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ============================================================
 // Single source of truth: entity.go に合わせる
 // - names: snake_case
-// - times: camelCase (createdAt/updatedAt/deletedAt)
+// - times: camelCase (createdAt/updatedAt)
 // ============================================================
 
 type userBody struct {
@@ -90,7 +90,6 @@ type userBody struct {
 	LastName      *string    `json:"last_name"`
 	CreatedAt     *time.Time `json:"createdAt"`
 	UpdatedAt     *time.Time `json:"updatedAt"`
-	DeletedAt     *time.Time `json:"deletedAt"`
 }
 
 func readJSONBody(r *http.Request, dst any) error {
@@ -143,7 +142,6 @@ func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 		LastNameKana:  nil,
 		LastName:      nil,
 		// createdAt/updatedAt は usecase 側で server now を入れる想定
-		// deletedAt は未指定(nil) = not deleted
 	}
 
 	u, err := h.uc.Create(ctx, uid, in)
@@ -176,7 +174,6 @@ func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
 // - Create のみ行う
 // - 既存 users/{uid} がある場合は ErrConflict -> 409
 // - createdAt/updatedAt は usecase が server now を入れる
-// - deletedAt は入力があれば採用（nil=未指定 / zero=not deleted / 非zero=soft delete）
 // ============================================================
 func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
@@ -208,11 +205,6 @@ func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 		LastName:      b.LastName,
 	}
 
-	if b.DeletedAt != nil {
-		t := b.DeletedAt.UTC()
-		in.DeletedAt = &t
-	}
-
 	u, err := h.uc.Create(ctx, uid, in)
 	if err != nil {
 		writeUserErr(w, err)
@@ -228,7 +220,6 @@ func (h *UserHandler) postMe(w http.ResponseWriter, r *http.Request) {
 // - uid を docID として強制
 // - nil は「未指定」
 // - 空文字は「フィールド削除」
-// - deletedAt は nil=未指定 / zero=not deleted / 非zero=soft delete
 // ============================================================
 func (h *UserHandler) patchMe(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.uc == nil {
@@ -259,11 +250,6 @@ func (h *UserHandler) patchMe(w http.ResponseWriter, r *http.Request) {
 		LastNameKana:  b.LastNameKana,
 		LastName:      b.LastName,
 		// UpdatedAt は usecase が差し込む
-	}
-
-	if b.DeletedAt != nil {
-		t := b.DeletedAt.UTC()
-		in.DeletedAt = &t
 	}
 
 	u, err := h.uc.Update(ctx, uid, in)
@@ -319,8 +305,7 @@ func writeUserErr(w http.ResponseWriter, err error) {
 		errors.Is(err, userdom.ErrInvalidLastNameKana),
 		errors.Is(err, userdom.ErrInvalidLastName),
 		errors.Is(err, userdom.ErrInvalidCreatedAt),
-		errors.Is(err, userdom.ErrInvalidUpdatedAt),
-		errors.Is(err, userdom.ErrInvalidDeletedAt):
+		errors.Is(err, userdom.ErrInvalidUpdatedAt):
 		code = http.StatusBadRequest
 
 	case errors.Is(err, userdom.ErrNotFound):
