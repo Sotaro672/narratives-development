@@ -1,7 +1,7 @@
 // frontend/console/sales/src/presentation/pages/salesDetail.tsx
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
-import LogCard from "../../../../log/src/presentation/LogCard";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import LogCard from "../../../log/src/presentation/LogCard";
 import SalesOwnersCard from "../components/salesOwnersCard";
 import InputCard from "../components/inputCard";
 

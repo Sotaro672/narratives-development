@@ -5,10 +5,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../shell/src/shared/ui/card";
-import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
-import Pagination from "../../../../shell/src/shared/ui/pagination";
-import FilterableTableHeader from "../../../../shell/src/shared/ui/filterable-table-header";
+} from "../../../shell/src/shared/ui/card";
+import { Checkbox } from "../../../shell/src/shared/ui/checkbox";
+import Pagination from "../../../shell/src/shared/ui/pagination";
+import FilterableTableHeader from "../../../shell/src/shared/ui/filterable-table-header";
 import {
   Table,
   TableBody,
@@ -16,8 +16,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../../shell/src/shared/ui/table";
-import { SortableTableHeader } from "../../../../shell/src/layout/List/List";
+} from "../../../shell/src/shared/ui/table";
+import { SortableTableHeader } from "../../../shell/src/layout/List/List";
 
 export type SalesOwnerItem = {
   avatarId?: string;

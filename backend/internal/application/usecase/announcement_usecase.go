@@ -6,29 +6,25 @@ import (
 	"time"
 
 	ann "narratives/internal/domain/announcement"
-	aa "narratives/internal/domain/announcementAttachment"
 	common "narratives/internal/domain/common"
 )
 
-// AnnouncementUsecase coordinates Announcement and AnnouncementAttachment domains.
+// AnnouncementUsecase coordinates Announcement and its attachment metadata.
 type AnnouncementUsecase struct {
-	annRepo  ann.Repository       // announcement repository (source of truth)
-	attRepo  aa.Repository        // attachment metadata repository
-	objStore aa.ObjectStoragePort // GCS (or compatible) object storage adapter
+	annRepo ann.Repository           // announcement repository
+	attRepo ann.AttachmentRepository // announcement attachment metadata repository
 
 	now func() time.Time
 }
 
 func NewAnnouncementUsecase(
 	annRepo ann.Repository,
-	attRepo aa.Repository,
-	objStore aa.ObjectStoragePort,
+	attRepo ann.AttachmentRepository,
 ) *AnnouncementUsecase {
 	return &AnnouncementUsecase{
-		annRepo:  annRepo,
-		attRepo:  attRepo,
-		objStore: objStore,
-		now:      time.Now,
+		annRepo: annRepo,
+		attRepo: attRepo,
+		now:     time.Now,
 	}
 }
 
@@ -70,8 +66,6 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 		input.PublishedAt,
 		nil,
 		nil,
-		nil,
-		nil,
 	)
 	if err != nil {
 		return ann.Announcement{}, err
@@ -105,20 +99,6 @@ func (u *AnnouncementUsecase) ListAnnouncementsByCursor(
 	return u.annRepo.ListByCursor(ctx, filter, sort, cpage)
 }
 
-func (u *AnnouncementUsecase) SearchAnnouncements(
-	ctx context.Context,
-	query string,
-) ([]ann.Announcement, error) {
-	return u.annRepo.Search(ctx, query)
-}
-
-func (u *AnnouncementUsecase) CountAnnouncements(
-	ctx context.Context,
-	filter ann.Filter,
-) (int, error) {
-	return u.annRepo.Count(ctx, filter)
-}
-
 type UpdateAnnouncementInput struct {
 	Title       *string
 	Content     *string
@@ -127,8 +107,6 @@ type UpdateAnnouncementInput struct {
 	PublishedAt *time.Time
 	Attachments *[]string
 	UpdatedBy   *string
-	DeletedAt   *time.Time
-	DeletedBy   *string
 }
 
 func (u *AnnouncementUsecase) UpdateAnnouncement(
@@ -144,8 +122,6 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 		PublishedAt: input.PublishedAt,
 		Attachments: input.Attachments,
 		UpdatedBy:   input.UpdatedBy,
-		DeletedAt:   input.DeletedAt,
-		DeletedBy:   input.DeletedBy,
 	}
 	return u.annRepo.Update(ctx, id, patch)
 }
@@ -216,53 +192,61 @@ func (u *AnnouncementUsecase) DeleteAnnouncementAvatar(
 }
 
 // =======================
-// Attachments (create/replace)
+// Attachments metadata
 // =======================
 
 type NewAttachmentInput struct {
-	FileName string
-	FileURL  string
-	FileSize int64
-	MimeType string
+	ID         string
+	FileName   string
+	FileURL    string
+	FileSize   int64
+	MimeType   string
+	ObjectPath string
 }
 
-// ReplaceAttachments replaces all attachments of the announcement with the provided inputs.
-// It persists attachment metadata and returns both the saved records and the IDs to set into Announcement.Attachments.
-// Note: The caller should update the Announcement entity to use the returned IDs (e.g., via annRepo).
+// ReplaceAttachments replaces all attachment metadata of the announcement with the provided inputs.
+// Firebase Storage upload/delete is handled by the frontend.
+// This usecase only persists metadata and returns both the saved records and IDs to set into Announcement.Attachments.
 func (u *AnnouncementUsecase) ReplaceAttachments(
 	ctx context.Context,
 	announcementID string,
 	inputs []NewAttachmentInput,
-) ([]aa.AttachmentFile, []string, error) {
+) ([]ann.AttachmentFile, []string, error) {
 	if announcementID == "" {
-		return nil, nil, aa.ErrInvalidAnnouncementID
+		return nil, nil, ann.ErrInvalidAnnouncementID
+	}
+	if u.attRepo == nil {
+		return nil, nil, ann.ErrNotFound
 	}
 
-	files := make([]aa.AttachmentFile, 0, len(inputs))
+	files := make([]ann.AttachmentFile, 0, len(inputs))
 	ids := make([]string, 0, len(inputs))
+
 	for _, in := range inputs {
-		f, err := aa.NewAttachmentFileWithBucket(
-			aa.DefaultBucket,
+		f, err := ann.NewAttachmentFileWithObjectPath(
 			announcementID,
+			in.ID,
 			in.FileName,
 			in.FileURL,
 			in.FileSize,
 			in.MimeType,
+			in.ObjectPath,
 		)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		files = append(files, f)
 		ids = append(ids, f.ID)
 	}
 
-	if err := u.attRepo.DeleteAllByAnnouncementID(ctx, announcementID); err != nil {
+	if err := u.attRepo.DeleteAllAttachmentsByAnnouncementID(ctx, announcementID); err != nil {
 		return nil, nil, err
 	}
 
-	saved := make([]aa.AttachmentFile, 0, len(files))
+	saved := make([]ann.AttachmentFile, 0, len(files))
 	for _, f := range files {
-		out, err := u.attRepo.Create(ctx, f)
+		out, err := u.attRepo.CreateAttachment(ctx, f)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -278,7 +262,7 @@ func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 	announcementID string,
 	inputs []NewAttachmentInput,
 	updatedBy *string,
-) (ann.Announcement, []aa.AttachmentFile, error) {
+) (ann.Announcement, []ann.AttachmentFile, error) {
 	saved, ids, err := u.ReplaceAttachments(ctx, announcementID, inputs)
 	if err != nil {
 		return ann.Announcement{}, nil, err
@@ -296,38 +280,25 @@ func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 }
 
 // =======================
-// Delete with cascade (Announcement -> Attachments in GCS)
+// Delete with cascade (Announcement -> Attachment metadata)
 // =======================
 
-// DeleteAnnouncementCascade deletes the announcement and also removes related attachments:
-// - delete GCS objects via ObjectStoragePort (if provided)
-// - delete attachment metadata via Repository (attRepo)
-// - finally delete the announcement via annRepo
+// DeleteAnnouncementCascade deletes related attachment metadata and then deletes the announcement.
+// Firebase Storage objects are not deleted here because file storage is managed by the frontend.
 func (u *AnnouncementUsecase) DeleteAnnouncementCascade(ctx context.Context, announcementID string) error {
 	if announcementID == "" {
-		return aa.ErrInvalidAnnouncementID
+		return ann.ErrInvalidAnnouncementID
 	}
 
-	files, err := u.attRepo.GetByAnnouncementID(ctx, announcementID)
-	if err != nil {
-		return err
-	}
-
-	if u.objStore != nil && len(files) > 0 {
-		ops := aa.BuildGCSDeleteOps(files)
-		if len(ops) > 0 {
-			if err := u.objStore.DeleteObjects(ctx, ops); err != nil {
-				return err
-			}
+	if u.attRepo != nil {
+		if err := u.attRepo.DeleteAllAttachmentsByAnnouncementID(ctx, announcementID); err != nil {
+			return err
 		}
-	}
-
-	if err := u.attRepo.DeleteAllByAnnouncementID(ctx, announcementID); err != nil {
-		return err
 	}
 
 	if err := u.annRepo.Delete(ctx, announcementID); err != nil {
 		return err
 	}
+
 	return nil
 }

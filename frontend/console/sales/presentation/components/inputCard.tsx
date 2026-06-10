@@ -1,13 +1,13 @@
 // frontend/console/sales/src/presentation/components/inputCard.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
-import { Button } from "../../../../shell/src/shared/ui/button";
+import { Button } from "../../../shell/src/shared/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 
 type SubmitPayload = {
   title: string;

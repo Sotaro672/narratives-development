@@ -87,7 +87,11 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	}
 
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
-	announcementUC := uc.NewAnnouncementUsecase(r.announcementRepo, nil, nil)
+
+	announcementUC := uc.NewAnnouncementUsecase(
+		r.announcementRepo,
+		r.announcementRepo,
+	)
 
 	brandWalletSvc := solanainfra.NewBrandWalletService(c.firestoreProjectID)
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(c.firestoreProjectID)

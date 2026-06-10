@@ -2,10 +2,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
-import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
-import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import type { TokenBlueprint } from "../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
+import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 
-import { fetchTokenBlueprintDetail } from "../../../../tokenBlueprint/src/application/tokenBlueprintDetailService";
+import { fetchTokenBlueprintDetail } from "../../../tokenBlueprint/src/application/tokenBlueprintDetailService";
 
 export type SalesOwnerVM = {
   avatarId: string;

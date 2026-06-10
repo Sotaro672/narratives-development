@@ -20,8 +20,6 @@ type AnnouncementPatch struct {
 	PublishedAt *time.Time
 	Attachments *[]string
 	UpdatedBy   *string
-	DeletedAt   *time.Time
-	DeletedBy   *string
 }
 
 // avatars サブコレクション用
@@ -34,13 +32,29 @@ type AnnouncementAvatarFilter struct {
 	IsRead    *bool
 }
 
+// attachment 部分更新用パッチ（nil は更新しない）
+type AttachmentFilePatch struct {
+	FileURL    *string
+	FileSize   *int64
+	MimeType   *string
+	ObjectPath *string
+}
+
+// attachment 一覧取得用フィルタ
+type AttachmentFilter struct {
+	SearchQuery    string   // fileName/fileUrl/objectPath 等の部分一致（実装側で解釈）
+	AnnouncementID *string  // 特定のお知らせに限定
+	FileName       *string  // 完全一致（必要に応じて実装側で LIKE）
+	MimeTypes      []string // IN
+	SizeMin        *int64
+	SizeMax        *int64
+	ObjectPathLike string // 例: "announcements/{id}/attachments/" のような前方一致
+}
+
 // ========================================
 // フィルタ/ソート/ページング（契約）
 // ========================================
 type Filter struct {
-	// キーワード検索（title, content, attachments など実装側で解釈）
-	SearchQuery string
-
 	TargetToken *string
 
 	// 公開状態
@@ -53,10 +67,6 @@ type Filter struct {
 	UpdatedTo     *time.Time
 	PublishedFrom *time.Time
 	PublishedTo   *time.Time
-
-	// 論理削除フィルタ
-	// nil: 全件 / true: 削除済のみ / false: 未削除のみ
-	Deleted *bool
 }
 
 // 共通型エイリアス（インフラに依存しない）
@@ -66,7 +76,6 @@ type Page = common.Page
 type PageResult[T any] = common.PageResult[T]
 type CursorPage = common.CursorPage
 type CursorPageResult[T any] = common.CursorPageResult[T]
-type SaveOptions = common.SaveOptions
 
 const (
 	SortAsc  = common.SortAsc
@@ -89,9 +98,6 @@ type Repository interface {
 
 	// 取得
 	GetByID(ctx context.Context, id string) (Announcement, error)
-	Exists(ctx context.Context, id string) (bool, error)
-	Count(ctx context.Context, filter Filter) (int, error)
-	Search(ctx context.Context, query string) ([]Announcement, error)
 
 	// 変更
 	Create(ctx context.Context, a Announcement) (Announcement, error)
@@ -104,7 +110,22 @@ type Repository interface {
 	UpsertAvatar(ctx context.Context, announcementID string, avatar AnnouncementAvatar) (AnnouncementAvatar, error)
 	UpdateAvatar(ctx context.Context, announcementID, avatarID string, patch AnnouncementAvatarPatch) (AnnouncementAvatar, error)
 	DeleteAvatar(ctx context.Context, announcementID, avatarID string) error
+}
 
-	// 任意: Upsert 等
-	Save(ctx context.Context, a Announcement, opts *SaveOptions) (Announcement, error)
+// AttachmentRepository は Announcement 添付ファイル metadata の repository 契約。
+// Firebase Storage の実体操作は frontend 側で行い、backend は metadata のみ扱う。
+type AttachmentRepository interface {
+	// 一覧
+	ListAttachments(ctx context.Context, filter AttachmentFilter, sort Sort, page Page) (PageResult[AttachmentFile], error)
+	ListAttachmentsByCursor(ctx context.Context, filter AttachmentFilter, sort Sort, cpage CursorPage) (CursorPageResult[AttachmentFile], error)
+
+	// 取得系
+	GetAttachment(ctx context.Context, announcementID, fileName string) (AttachmentFile, error)
+	GetAttachmentsByAnnouncementID(ctx context.Context, announcementID string) ([]AttachmentFile, error)
+
+	// 変更系
+	CreateAttachment(ctx context.Context, f AttachmentFile) (AttachmentFile, error)
+	UpdateAttachment(ctx context.Context, announcementID, fileName string, patch AttachmentFilePatch) (AttachmentFile, error)
+	DeleteAttachment(ctx context.Context, announcementID, fileName string) error
+	DeleteAllAttachmentsByAnnouncementID(ctx context.Context, announcementID string) error
 }

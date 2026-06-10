@@ -6,7 +6,7 @@ import {
   listSalesByCompanyId,
   type SalesRow,
 } from "../../infrastructure/repository_http";
-import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
 
 type SalesManagementRow = SalesRow & {
   issueCount: number;

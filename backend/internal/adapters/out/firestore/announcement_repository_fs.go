@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -28,12 +29,27 @@ func NewAnnouncementRepositoryFS(client *firestore.Client) *AnnouncementReposito
 // Compile-time check: ensure this satisfies announcement.Repository.
 var _ announcement.Repository = (*AnnouncementRepositoryFS)(nil)
 
+// Compile-time check: ensure this satisfies announcement.AttachmentRepository.
+var _ announcement.AttachmentRepository = (*AnnouncementRepositoryFS)(nil)
+
 func (r *AnnouncementRepositoryFS) announcementCollection() *firestore.CollectionRef {
 	return r.Client.Collection("announcements")
 }
 
 func (r *AnnouncementRepositoryFS) avatarCollection(announcementID string) *firestore.CollectionRef {
 	return r.announcementCollection().Doc(announcementID).Collection("avatars")
+}
+
+func (r *AnnouncementRepositoryFS) attachmentCollection(announcementID string) *firestore.CollectionRef {
+	return r.announcementCollection().Doc(announcementID).Collection("attachments")
+}
+
+func (r *AnnouncementRepositoryFS) attachmentDoc(
+	announcementID string,
+	fileName string,
+) *firestore.DocumentRef {
+	id := announcement.MakeAttachmentID(announcementID, fileName)
+	return r.attachmentCollection(announcementID).Doc(id)
 }
 
 // GetByID retrieves an announcement by ID from Firestore.
@@ -58,18 +74,6 @@ func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (anno
 	return a, nil
 }
 
-// Exists checks if an announcement with the given ID exists.
-func (r *AnnouncementRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	_, err := r.announcementCollection().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
 // Create inserts a new announcement.
 func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.Announcement) (announcement.Announcement, error) {
 	ref := r.announcementCollection().Doc(a.ID)
@@ -86,32 +90,6 @@ func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.An
 	if err != nil {
 		return announcement.Announcement{}, err
 	}
-	return a, nil
-}
-
-// Save upserts an announcement.
-func (r *AnnouncementRepositoryFS) Save(
-	ctx context.Context,
-	a announcement.Announcement,
-	_ *common.SaveOptions,
-) (announcement.Announcement, error) {
-	ref := r.announcementCollection().Doc(a.ID)
-	if a.ID == "" {
-		ref = r.announcementCollection().NewDoc()
-		a.ID = ref.ID
-	}
-
-	now := time.Now().UTC()
-	if a.CreatedAt.IsZero() {
-		a.CreatedAt = now
-	}
-	a.UpdatedAt = &now
-
-	_, err := ref.Set(ctx, a)
-	if err != nil {
-		return announcement.Announcement{}, err
-	}
-
 	return a, nil
 }
 
@@ -146,12 +124,6 @@ func (r *AnnouncementRepositoryFS) Update(
 	}
 	if p.UpdatedBy != nil {
 		updates = append(updates, firestore.Update{Path: "updatedBy", Value: *p.UpdatedBy})
-	}
-	if p.DeletedAt != nil {
-		updates = append(updates, firestore.Update{Path: "deletedAt", Value: p.DeletedAt})
-	}
-	if p.DeletedBy != nil {
-		updates = append(updates, firestore.Update{Path: "deletedBy", Value: *p.DeletedBy})
 	}
 
 	// Always bump updatedAt
@@ -200,6 +172,7 @@ func (r *AnnouncementRepositoryFS) List(
 	iter := r.announcementCollection().
 		OrderBy("createdAt", firestore.Desc).
 		Documents(ctx)
+	defer iter.Stop()
 
 	var items []announcement.Announcement
 	for {
@@ -210,6 +183,7 @@ func (r *AnnouncementRepositoryFS) List(
 		if err != nil {
 			return common.PageResult[announcement.Announcement]{}, err
 		}
+
 		var a announcement.Announcement
 		if err := doc.DataTo(&a); err == nil {
 			if a.ID == "" {
@@ -319,56 +293,6 @@ func (r *AnnouncementRepositoryFS) ListByCursor(
 		NextCursor: next,
 		Limit:      limit,
 	}, nil
-}
-
-// Count returns the number of announcements (full scan).
-func (r *AnnouncementRepositoryFS) Count(ctx context.Context, _ announcement.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	iter := r.announcementCollection().Documents(ctx)
-	count := 0
-	for {
-		_, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		count++
-	}
-	return count, nil
-}
-
-// Search performs a simple contains-based search on title and content.
-func (r *AnnouncementRepositoryFS) Search(ctx context.Context, query string) ([]announcement.Announcement, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	iter := r.announcementCollection().Documents(ctx)
-	var results []announcement.Announcement
-	for {
-		doc, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		var a announcement.Announcement
-		if err := doc.DataTo(&a); err == nil {
-			if contains(a.Title, query) || contains(a.Content, query) {
-				if a.ID == "" {
-					a.ID = doc.Ref.ID
-				}
-				results = append(results, a)
-			}
-		}
-	}
-	return results, nil
 }
 
 // ListAvatars returns avatar subcollection documents.
@@ -506,44 +430,385 @@ func (r *AnnouncementRepositoryFS) DeleteAvatar(
 	return nil
 }
 
-// Utility: case-insensitive substring check.
-func contains(s, sub string) bool {
-	if s == "" || sub == "" {
-		return false
+// ListAttachments returns attachment metadata with simple pagination.
+func (r *AnnouncementRepositoryFS) ListAttachments(
+	ctx context.Context,
+	filter announcement.AttachmentFilter,
+	_ announcement.Sort,
+	page announcement.Page,
+) (announcement.PageResult[announcement.AttachmentFile], error) {
+	if r.Client == nil {
+		return announcement.PageResult[announcement.AttachmentFile]{}, errors.New("firestore client is nil")
 	}
-	return len(s) >= len(sub) && stringContainsInsensitive(s, sub)
+
+	iter := r.Client.CollectionGroup("attachments").Documents(ctx)
+	defer iter.Stop()
+
+	var items []announcement.AttachmentFile
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return announcement.PageResult[announcement.AttachmentFile]{}, err
+		}
+
+		var f announcement.AttachmentFile
+		if err := doc.DataTo(&f); err != nil {
+			return announcement.PageResult[announcement.AttachmentFile]{}, err
+		}
+
+		normalizeAttachmentFromDoc(doc, &f)
+
+		if !matchesAttachmentFilter(f, filter) {
+			continue
+		}
+
+		items = append(items, f)
+	}
+
+	total := len(items)
+	if total == 0 {
+		return announcement.PageResult[announcement.AttachmentFile]{
+			Items:      []announcement.AttachmentFile{},
+			TotalCount: 0,
+			Page:       1,
+			PerPage:    0,
+		}, nil
+	}
+
+	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
+
+	offset := (pageNum - 1) * perPage
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+
+	return announcement.PageResult[announcement.AttachmentFile]{
+		Items:      items[offset:end],
+		TotalCount: total,
+		Page:       pageNum,
+		PerPage:    perPage,
+	}, nil
 }
 
-func stringContainsInsensitive(s, sub string) bool {
-	sLower := toLowerASCII(s)
-	subLower := toLowerASCII(sub)
-	return stringContains(sLower, subLower)
-}
+// ListAttachmentsByCursor returns attachment metadata using a simple ID-based cursor.
+func (r *AnnouncementRepositoryFS) ListAttachmentsByCursor(
+	ctx context.Context,
+	filter announcement.AttachmentFilter,
+	_ announcement.Sort,
+	cpage announcement.CursorPage,
+) (announcement.CursorPageResult[announcement.AttachmentFile], error) {
+	if r.Client == nil {
+		return announcement.CursorPageResult[announcement.AttachmentFile]{}, errors.New("firestore client is nil")
+	}
 
-func toLowerASCII(s string) string {
-	out := make([]rune, 0, len(s))
-	for _, r := range s {
-		if r >= 'A' && r <= 'Z' {
-			out = append(out, r+'a'-'A')
-		} else {
-			out = append(out, r)
+	limit := cpage.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	it := r.Client.CollectionGroup("attachments").Documents(ctx)
+	defer it.Stop()
+
+	after := cpage.After
+	skipping := after != ""
+
+	var items []announcement.AttachmentFile
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return announcement.CursorPageResult[announcement.AttachmentFile]{}, err
+		}
+
+		var f announcement.AttachmentFile
+		if err := doc.DataTo(&f); err != nil {
+			return announcement.CursorPageResult[announcement.AttachmentFile]{}, err
+		}
+
+		normalizeAttachmentFromDoc(doc, &f)
+
+		if !matchesAttachmentFilter(f, filter) {
+			continue
+		}
+
+		if skipping {
+			if f.ID >= after {
+				continue
+			}
+			skipping = false
+		}
+
+		items = append(items, f)
+
+		if len(items) >= limit+1 {
+			break
 		}
 	}
-	return string(out)
+
+	var next *string
+	if len(items) > limit {
+		cursor := items[limit-1].ID
+		items = items[:limit]
+		next = &cursor
+	}
+
+	return announcement.CursorPageResult[announcement.AttachmentFile]{
+		Items:      items,
+		NextCursor: next,
+		Limit:      limit,
+	}, nil
 }
 
-func stringContains(s, sub string) bool {
-	ls, lsub := len(s), len(sub)
-	if lsub == 0 {
-		return true
+// GetAttachment retrieves one attachment metadata document.
+func (r *AnnouncementRepositoryFS) GetAttachment(
+	ctx context.Context,
+	announcementID string,
+	fileName string,
+) (announcement.AttachmentFile, error) {
+	doc, err := r.attachmentDoc(announcementID, fileName).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return announcement.AttachmentFile{}, announcement.ErrNotFound
+		}
+		return announcement.AttachmentFile{}, err
 	}
-	if lsub > ls {
-		return false
+
+	var f announcement.AttachmentFile
+	if err := doc.DataTo(&f); err != nil {
+		return announcement.AttachmentFile{}, err
 	}
-	for i := 0; i <= ls-lsub; i++ {
-		if s[i:i+lsub] == sub {
-			return true
+
+	normalizeAttachmentFromDoc(doc, &f)
+
+	return f, nil
+}
+
+// GetAttachmentsByAnnouncementID retrieves all attachment metadata documents for one announcement.
+func (r *AnnouncementRepositoryFS) GetAttachmentsByAnnouncementID(
+	ctx context.Context,
+	announcementID string,
+) ([]announcement.AttachmentFile, error) {
+	if announcementID == "" {
+		return nil, announcement.ErrInvalidAnnouncementID
+	}
+
+	iter := r.attachmentCollection(announcementID).Documents(ctx)
+	defer iter.Stop()
+
+	var results []announcement.AttachmentFile
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var f announcement.AttachmentFile
+		if err := doc.DataTo(&f); err != nil {
+			return nil, err
+		}
+
+		normalizeAttachmentFromDoc(doc, &f)
+
+		results = append(results, f)
+	}
+
+	return results, nil
+}
+
+// CreateAttachment inserts attachment metadata.
+func (r *AnnouncementRepositoryFS) CreateAttachment(
+	ctx context.Context,
+	f announcement.AttachmentFile,
+) (announcement.AttachmentFile, error) {
+	if f.AnnouncementID == "" {
+		return announcement.AttachmentFile{}, announcement.ErrInvalidAnnouncementID
+	}
+	if f.ID == "" {
+		return announcement.AttachmentFile{}, announcement.ErrInvalidID
+	}
+
+	_, err := r.attachmentCollection(f.AnnouncementID).Doc(f.ID).Set(ctx, f)
+	if err != nil {
+		return announcement.AttachmentFile{}, err
+	}
+
+	return f, nil
+}
+
+// UpdateAttachment applies a patch to attachment metadata.
+func (r *AnnouncementRepositoryFS) UpdateAttachment(
+	ctx context.Context,
+	announcementID string,
+	fileName string,
+	patch announcement.AttachmentFilePatch,
+) (announcement.AttachmentFile, error) {
+	ref := r.attachmentDoc(announcementID, fileName)
+
+	updates := []firestore.Update{}
+
+	if patch.FileURL != nil {
+		updates = append(updates, firestore.Update{Path: "fileUrl", Value: *patch.FileURL})
+	}
+	if patch.FileSize != nil {
+		updates = append(updates, firestore.Update{Path: "fileSize", Value: *patch.FileSize})
+	}
+	if patch.MimeType != nil {
+		updates = append(updates, firestore.Update{Path: "mimeType", Value: *patch.MimeType})
+	}
+	if patch.ObjectPath != nil {
+		updates = append(updates, firestore.Update{Path: "objectPath", Value: *patch.ObjectPath})
+	}
+
+	if len(updates) == 0 {
+		return r.GetAttachment(ctx, announcementID, fileName)
+	}
+
+	_, err := ref.Update(ctx, updates)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return announcement.AttachmentFile{}, announcement.ErrNotFound
+		}
+		return announcement.AttachmentFile{}, err
+	}
+
+	return r.GetAttachment(ctx, announcementID, fileName)
+}
+
+// DeleteAttachment removes one attachment metadata document.
+func (r *AnnouncementRepositoryFS) DeleteAttachment(
+	ctx context.Context,
+	announcementID string,
+	fileName string,
+) error {
+	ref := r.attachmentDoc(announcementID, fileName)
+
+	_, err := ref.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return announcement.ErrNotFound
+		}
+		return err
+	}
+
+	_, err = ref.Delete(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// DeleteAllAttachmentsByAnnouncementID removes all attachment metadata documents for one announcement.
+func (r *AnnouncementRepositoryFS) DeleteAllAttachmentsByAnnouncementID(
+	ctx context.Context,
+	announcementID string,
+) error {
+	if announcementID == "" {
+		return announcement.ErrInvalidAnnouncementID
+	}
+
+	iter := r.attachmentCollection(announcementID).Documents(ctx)
+	defer iter.Stop()
+
+	batch := r.Client.Batch()
+	count := 0
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		batch.Delete(doc.Ref)
+		count++
+
+		if count == 500 {
+			if _, err := batch.Commit(ctx); err != nil {
+				return err
+			}
+			batch = r.Client.Batch()
+			count = 0
 		}
 	}
-	return false
+
+	if count > 0 {
+		if _, err := batch.Commit(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func normalizeAttachmentFromDoc(
+	doc *firestore.DocumentSnapshot,
+	f *announcement.AttachmentFile,
+) {
+	if f == nil || doc == nil {
+		return
+	}
+
+	if f.ID == "" {
+		f.ID = doc.Ref.ID
+	}
+
+	if f.AnnouncementID == "" && doc.Ref.Parent != nil && doc.Ref.Parent.Parent != nil {
+		f.AnnouncementID = doc.Ref.Parent.Parent.ID
+	}
+}
+
+func matchesAttachmentFilter(
+	f announcement.AttachmentFile,
+	filter announcement.AttachmentFilter,
+) bool {
+	if filter.AnnouncementID != nil && f.AnnouncementID != *filter.AnnouncementID {
+		return false
+	}
+
+	if filter.FileName != nil && f.FileName != *filter.FileName {
+		return false
+	}
+
+	if len(filter.MimeTypes) > 0 && !containsString(filter.MimeTypes, f.MimeType) {
+		return false
+	}
+
+	if filter.SizeMin != nil && f.FileSize < *filter.SizeMin {
+		return false
+	}
+
+	if filter.SizeMax != nil && f.FileSize > *filter.SizeMax {
+		return false
+	}
+
+	if filter.ObjectPathLike != "" && !strings.HasPrefix(f.ObjectPath, filter.ObjectPathLike) {
+		return false
+	}
+
+	if filter.SearchQuery != "" {
+		q := strings.ToLower(filter.SearchQuery)
+		if !strings.Contains(strings.ToLower(f.FileName), q) &&
+			!strings.Contains(strings.ToLower(f.FileURL), q) &&
+			!strings.Contains(strings.ToLower(f.ObjectPath), q) {
+			return false
+		}
+	}
+
+	return true
 }

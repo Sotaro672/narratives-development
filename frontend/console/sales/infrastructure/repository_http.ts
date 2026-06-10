@@ -1,6 +1,6 @@
 // frontend/console/sales/src/infrastructure/repository_http.ts
-import { API_BASE } from "../../../shell/src/shared/http/apiBase";
-import { getAuthJsonHeaders } from "../../../shell/src/shared/http/authHeaders";
+import { API_BASE } from "../../shell/src/shared/http/apiBase";
+import { getAuthJsonHeaders } from "../../shell/src/shared/http/authHeaders";
 
 // ============================================================
 // Domain types

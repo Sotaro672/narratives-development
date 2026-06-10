@@ -1,6 +1,6 @@
 // frontend/announcement/src/infrastructure/mock/mockdata.tsx
 
-import type { Announcement } from "../../../../shell/src/shared/types/announcement";
+import type { Announcement } from "../../../shell/src/shared/types/announcement";
 
 /**
  * ダミーアナウンスデータ
