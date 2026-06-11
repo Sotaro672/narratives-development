@@ -8,15 +8,12 @@ import (
 	"strings"
 
 	branddom "narratives/internal/domain/brand"
+	companydom "narratives/internal/domain/company"
 	invitationdom "narratives/internal/domain/invitation"
 	permdom "narratives/internal/domain/permission"
 )
 
 const fixedInvitationConsoleBaseURL = "https://narratives-console-dev.web.app"
-
-type CompanyNameResolver interface {
-	GetCompanyNameByID(ctx context.Context, id string) (string, error)
-}
 
 type BrandNameResolver interface {
 	GetByID(ctx context.Context, id string) (branddom.Brand, error)
@@ -31,33 +28,45 @@ type EmailClient interface {
 }
 
 type InvitationMailer struct {
-	client              EmailClient
-	fromAddress         string
-	consoleBaseURL      string
-	companyNameResolver CompanyNameResolver
-	brandNameResolver   BrandNameResolver
+	client            EmailClient
+	fromAddress       string
+	consoleBaseURL    string
+	companyRepo       companydom.Repository
+	brandNameResolver BrandNameResolver
 }
 
 func NewInvitationMailer(
 	client EmailClient,
 	fromAddress,
 	consoleBaseURL string,
-	companyResolver CompanyNameResolver,
+	companyRepo companydom.Repository,
 	brandResolver BrandNameResolver,
 ) *InvitationMailer {
+	baseURL := strings.TrimSpace(consoleBaseURL)
+	if baseURL == "" {
+		baseURL = fixedInvitationConsoleBaseURL
+	}
+
 	return &InvitationMailer{
-		client:              client,
-		fromAddress:         fromAddress,
-		consoleBaseURL:      fixedInvitationConsoleBaseURL,
-		companyNameResolver: companyResolver,
-		brandNameResolver:   brandResolver,
+		client:            client,
+		fromAddress:       fromAddress,
+		consoleBaseURL:    baseURL,
+		companyRepo:       companyRepo,
+		brandNameResolver: brandResolver,
 	}
 }
 
 func (m *InvitationMailer) buildInvitationURL(token string) string {
-	base := strings.TrimRight(fixedInvitationConsoleBaseURL, "/")
+	base := fixedInvitationConsoleBaseURL
+	if m != nil && strings.TrimSpace(m.consoleBaseURL) != "" {
+		base = strings.TrimSpace(m.consoleBaseURL)
+	}
+
+	base = strings.TrimRight(base, "/")
+
 	v := url.Values{}
 	v.Set("token", token)
+
 	return fmt.Sprintf("%s/invitation?%s", base, v.Encode())
 }
 
@@ -66,19 +75,20 @@ func (m *InvitationMailer) resolveCompanyDisplayName(ctx context.Context, compan
 	if id == "" {
 		return ""
 	}
-	if m.companyNameResolver == nil {
+	if m == nil || m.companyRepo == nil {
 		return id
 	}
 
-	name, err := m.companyNameResolver.GetCompanyNameByID(ctx, id)
+	companyEntity, err := m.companyRepo.GetByID(ctx, id)
 	if err != nil {
 		return id
 	}
 
-	if name == "" {
+	if companyEntity.Name == "" {
 		return id
 	}
-	return name
+
+	return companyEntity.Name
 }
 
 func (m *InvitationMailer) resolveBrandDisplayNames(ctx context.Context, brandIDs []string) []string {
@@ -97,7 +107,7 @@ func (m *InvitationMailer) resolveBrandDisplayNames(ctx context.Context, brandID
 		return nil
 	}
 
-	if m.brandNameResolver == nil {
+	if m == nil || m.brandNameResolver == nil {
 		return normalized
 	}
 
@@ -114,6 +124,7 @@ func (m *InvitationMailer) resolveBrandDisplayNames(ctx context.Context, brandID
 		}
 		results = append(results, b.Name)
 	}
+
 	return results
 }
 
@@ -133,6 +144,7 @@ func (m *InvitationMailer) resolvePermissionDisplayNamesJa(permissionNames []str
 			out = append(out, name)
 		}
 	}
+
 	return out
 }
 

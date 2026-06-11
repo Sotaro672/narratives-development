@@ -4,6 +4,8 @@ package mail
 import (
 	"log"
 	"os"
+
+	companydom "narratives/internal/domain/company"
 )
 
 // 環境変数名（Cloud Run / ローカル共通）
@@ -19,10 +21,10 @@ const (
 // - RESEND_FROM     : 送信元メールアドレス
 // - CONSOLE_BASE_URL: https://amol.jp
 //
-// companyResolver には CompanyID→会社名、brandResolver には BrandID→ブランド名を返す
-// ドメインサービス（company.Service / brand.Service など）を渡してください。
+// companyRepo には CompanyID から Company を取得する company.Repository、
+// brandResolver には BrandID から Brand を取得する Repository / Resolver を渡してください。
 func NewInvitationMailerWithResend(
-	companyResolver CompanyNameResolver,
+	companyRepo companydom.Repository,
 	brandResolver BrandNameResolver,
 ) *InvitationMailer {
 	apiKey := os.Getenv(envResendAPIKey)
@@ -40,16 +42,13 @@ func NewInvitationMailerWithResend(
 		log.Printf("[mail] INFO: CONSOLE_BASE_URL is empty. default=%s", consoleBaseURL)
 	}
 
-	// ResendClient を EmailClient として利用
 	client := NewResendClient(apiKey)
 
-	// InvitationMailer は InvitationMailerPort の実装で、
-	// usecase.InvitationMailerPort とシグネチャ互換なのでそのまま渡せる。
 	mailer := NewInvitationMailer(
 		client,
 		fromAddr,
 		consoleBaseURL,
-		companyResolver,
+		companyRepo,
 		brandResolver,
 	)
 
