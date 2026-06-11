@@ -225,8 +225,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		CartRepo:      cartRepo,
 		OrderRepo:     orderRepo,
 		InventoryRepo: inventoryRepo,
-
-		UserRepo: userRepo,
 	})
 
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo, cartRepo)

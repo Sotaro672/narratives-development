@@ -28,7 +28,6 @@ import (
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
-	userdom "narratives/internal/domain/user"
 )
 
 // ============================================================
@@ -73,6 +72,14 @@ type OrderRepoForPayment interface {
 	Update(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
 }
 
+// AuthUserEmailGetter is the minimal port for reading email from Firebase Authentication.
+//
+// Firestore users table does not own email.
+// PaymentUsecase uses this port only for sending order confirmation mail.
+type AuthUserEmailGetter interface {
+	GetEmailByUID(ctx context.Context, uid string) (string, error)
+}
+
 // MailSenderForPayment is the minimal port for sending order confirmation mail.
 //
 // メール件名・本文の組み立ては application/usecase では行わず、
@@ -92,11 +99,11 @@ type PaymentUsecase struct {
 	inventoryRepo InventoryRepoForPayment
 	orderRepo     OrderRepoForPayment
 
-	// userRepo は domain/user.RepositoryPort を正として接続する。
-	// PaymentUsecase では主に GetEmailByID を利用する。
-	userRepo   userdom.RepositoryPort
-	mailSender MailSenderForPayment
-	mailFrom   string
+	// authUserGetter は Firebase Authentication から uid に紐づく email を取得する。
+	// Firestore users table に email は持たせない。
+	authUserGetter AuthUserEmailGetter
+	mailSender     MailSenderForPayment
+	mailFrom       string
 
 	now func() time.Time
 }
@@ -108,11 +115,11 @@ type NewPaymentUsecaseInput struct {
 	InventoryRepo InventoryRepoForPayment
 	OrderRepo     OrderRepoForPayment
 
-	// UserRepo は domain/user.RepositoryPort を渡す。
-	// これにより GetEmailByID も user repository port の契約に含まれる。
-	UserRepo   userdom.RepositoryPort
-	MailSender MailSenderForPayment
-	MailFrom   string
+	// AuthUserGetter は Firebase Authentication から email を取得するための port。
+	// 注文確定メール送信時に ord.UserID を uid として利用する。
+	AuthUserGetter AuthUserEmailGetter
+	MailSender     MailSenderForPayment
+	MailFrom       string
 
 	Now func() time.Time
 }
@@ -129,9 +136,9 @@ func NewPaymentUsecase(in NewPaymentUsecaseInput) *PaymentUsecase {
 		inventoryRepo: in.InventoryRepo,
 		orderRepo:     in.OrderRepo,
 
-		userRepo:   in.UserRepo,
-		mailSender: in.MailSender,
-		mailFrom:   in.MailFrom,
+		authUserGetter: in.AuthUserGetter,
+		mailSender:     in.MailSender,
+		mailFrom:       in.MailFrom,
 
 		now: now,
 	}
@@ -268,7 +275,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 	}
 
 	// 1) 注文確定メール送信
-	if ord != nil && u.userRepo != nil && u.mailSender != nil && u.mailFrom != "" {
+	if ord != nil && u.authUserGetter != nil && u.mailSender != nil && u.mailFrom != "" {
 		_ = u.sendOrderConfirmationMail(ctx, *ord)
 	}
 
@@ -342,7 +349,7 @@ func (u *PaymentUsecase) markOrderPaidTrue(
 // ============================================================
 
 func (u *PaymentUsecase) sendOrderConfirmationMail(ctx context.Context, ord orderdom.Order) error {
-	if u == nil || u.userRepo == nil || u.mailSender == nil || u.mailFrom == "" {
+	if u == nil || u.authUserGetter == nil || u.mailSender == nil || u.mailFrom == "" {
 		return nil
 	}
 
@@ -350,7 +357,7 @@ func (u *PaymentUsecase) sendOrderConfirmationMail(ctx context.Context, ord orde
 		return nil
 	}
 
-	to, err := u.userRepo.GetEmailByID(ctx, ord.UserID)
+	to, err := u.authUserGetter.GetEmailByUID(ctx, ord.UserID)
 	if err != nil {
 		return err
 	}
