@@ -2,7 +2,7 @@
 import type { RouteObject } from "react-router-dom";
 
 // モジュールのルート定義（型衝突を避けるため unknown→RouteObject[] にキャスト）
-import announcementRoutesRaw from "../../../announcement/src/presentation/routes/routes";
+import announcementRoutesRaw from "../../../announcement/presentation/routes/routes";
 const announcementRoutes = announcementRoutesRaw as unknown as RouteObject[];
 
 import messageRouteRaw from "../../../message/src/presentation/routes/routes";
@@ -55,7 +55,7 @@ import tokenBlueprintReviewRoutesRaw from "../../../tokenBlueprintReview/src/pre
 const tokenBlueprintReviewRoutes =
   tokenBlueprintReviewRoutesRaw as unknown as RouteObject[];
 
-import salesRoutesRaw from "../../../sales/src/presentation/routes/routes";
+import salesRoutesRaw from "../../../sales/presentation/routes/routes";
 const salesRoutes = salesRoutesRaw as unknown as RouteObject[];
 
 export const routes: RouteObject[] = [

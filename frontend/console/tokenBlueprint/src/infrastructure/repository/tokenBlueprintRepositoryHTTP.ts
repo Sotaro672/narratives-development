@@ -99,7 +99,7 @@ export async function fetchTokenBlueprints(params?: {
 export async function listTokenBlueprintsByCompanyId(
   companyId: string,
 ): Promise<TokenBlueprint[]> {
-  const cid = companyId.trim();
+  const cid = companyId;
   if (!cid) return [];
 
   const res = await apiGet("/token-blueprints?perPage=200");
@@ -107,17 +107,16 @@ export async function listTokenBlueprintsByCompanyId(
   const page = normalizePageResult(raw);
 
   return page.items.filter((x) => {
-    return String(x.companyId ?? "").trim() === cid;
+    return String(x.companyId ?? "") === cid;
   });
 }
 
 export async function fetchTokenBlueprintById(
   id: string,
 ): Promise<TokenBlueprint> {
-  const trimmed = id.trim();
-  if (!trimmed) throw new Error("id is empty");
+  if (!id) throw new Error("id is empty");
 
-  const res = await apiGet(`/token-blueprints/${encodeURIComponent(trimmed)}`);
+  const res = await apiGet(`/token-blueprints/${encodeURIComponent(id)}`);
   const raw = await handleJsonResponse<unknown>(res);
 
   return normalizeTokenBlueprint(raw);
@@ -126,19 +125,19 @@ export async function fetchTokenBlueprintById(
 export async function createTokenBlueprint(
   payload: CreateTokenBlueprintPayload,
 ): Promise<TokenBlueprint> {
-  const companyId = String(payload.companyId ?? "").trim();
+  const companyId = String(payload.companyId ?? "");
   if (!companyId) {
     throw new Error("companyId is required");
   }
 
   const body: CreateTokenBlueprintPayload = {
-    name: String(payload.name ?? "").trim(),
-    symbol: String(payload.symbol ?? "").trim(),
-    brandId: String(payload.brandId ?? "").trim(),
+    name: String(payload.name ?? ""),
+    symbol: String(payload.symbol ?? ""),
+    brandId: String(payload.brandId ?? ""),
     companyId,
-    description: String(payload.description ?? "").trim(),
-    assigneeId: String(payload.assigneeId ?? "").trim(),
-    createdBy: String(payload.createdBy ?? "").trim(),
+    description: String(payload.description ?? ""),
+    assigneeId: String(payload.assigneeId ?? ""),
+    createdBy: String(payload.createdBy ?? ""),
 
     iconUrl: normalizeOptionalString(payload.iconUrl),
     iconObjectPath: normalizeOptionalString(payload.iconObjectPath),
@@ -159,25 +158,24 @@ export async function updateTokenBlueprint(
   id: string,
   payload: UpdateTokenBlueprintPayload,
 ): Promise<TokenBlueprint> {
-  const trimmed = id.trim();
-  if (!trimmed) throw new Error("id is empty");
+  if (!id) throw new Error("id is empty");
 
   const body: UpdateTokenBlueprintPayload = {};
 
   if (payload.name !== undefined) {
-    body.name = payload.name.trim();
+    body.name = payload.name;
   }
 
   if (payload.symbol !== undefined) {
-    body.symbol = payload.symbol.trim();
+    body.symbol = payload.symbol;
   }
 
   if (payload.description !== undefined) {
-    body.description = payload.description.trim();
+    body.description = payload.description;
   }
 
   if (payload.assigneeId !== undefined) {
-    body.assigneeId = payload.assigneeId.trim();
+    body.assigneeId = payload.assigneeId;
   }
 
   if (payload.iconUrl !== undefined) {
@@ -207,7 +205,7 @@ export async function updateTokenBlueprint(
   }
 
   const res = await apiPutJson(
-    `/token-blueprints/${encodeURIComponent(trimmed)}`,
+    `/token-blueprints/${encodeURIComponent(id)}`,
     body,
   );
   const raw = await handleJsonResponse<unknown>(res);
@@ -216,12 +214,9 @@ export async function updateTokenBlueprint(
 }
 
 export async function deleteTokenBlueprint(id: string): Promise<void> {
-  const trimmed = id.trim();
-  if (!trimmed) throw new Error("id is empty");
+  if (!id) throw new Error("id is empty");
 
-  const res = await apiDelete(
-    `/token-blueprints/${encodeURIComponent(trimmed)}`,
-  );
+  const res = await apiDelete(`/token-blueprints/${encodeURIComponent(id)}`);
 
   await handleJsonResponse<unknown>(res);
 }
@@ -239,7 +234,7 @@ export async function patchTokenBlueprintContentFiles(params: {
   tokenBlueprintId: string;
   contentFiles: ContentFileDTO[];
 }): Promise<TokenBlueprint> {
-  const id = params.tokenBlueprintId.trim();
+  const id = params.tokenBlueprintId;
   if (!id) throw new Error("tokenBlueprintId is empty");
 
   const contentFiles = (params.contentFiles ?? []).map(
@@ -268,13 +263,13 @@ export async function attachTokenBlueprintIcon(params: {
   iconContentType?: string | null;
   iconSize?: number | null;
 }): Promise<TokenBlueprint> {
-  const id = params.tokenBlueprintId.trim();
+  const id = params.tokenBlueprintId;
   if (!id) throw new Error("tokenBlueprintId is empty");
 
-  const iconUrl = String(params.iconUrl ?? "").trim();
+  const iconUrl = String(params.iconUrl ?? "");
   if (!iconUrl) throw new Error("iconUrl is empty");
 
-  const iconObjectPath = String(params.iconObjectPath ?? "").trim();
+  const iconObjectPath = String(params.iconObjectPath ?? "");
   if (!iconObjectPath) throw new Error("iconObjectPath is empty");
 
   return await updateTokenBlueprint(id, {
@@ -294,14 +289,14 @@ function normalizeOptionalString(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   if (value === null) return undefined;
 
-  return String(value).trim();
+  return String(value);
 }
 
 function normalizeNullableString(value: unknown): string | null {
   if (value === undefined) return null;
   if (value === null) return null;
 
-  const s = String(value).trim();
+  const s = String(value);
   return s || null;
 }
 
@@ -332,7 +327,7 @@ function toIsoStringOrNow(value: unknown): string {
     return value.toISOString();
   }
 
-  const raw = String(value ?? "").trim();
+  const raw = String(value ?? "");
   if (!raw) {
     return new Date().toISOString();
   }
@@ -346,7 +341,7 @@ function toIsoStringOrNow(value: unknown): string {
 }
 
 function normalizeContentFileType(value: unknown): ContentFileDTO["type"] {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "").toLowerCase();
 
   if (
     raw === "image" ||
@@ -363,7 +358,7 @@ function normalizeContentFileType(value: unknown): ContentFileDTO["type"] {
 function normalizeContentVisibility(
   value: unknown,
 ): ContentFileDTO["visibility"] {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "").toLowerCase();
 
   if (raw === "public" || raw === "private") {
     return raw as ContentFileDTO["visibility"];
@@ -375,13 +370,13 @@ function normalizeContentVisibility(
 function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
   const obj: any = x && typeof x === "object" ? (x as any) : {};
 
-  const id = String(obj.id ?? "").trim();
-  const name = String(obj.name ?? "").trim();
+  const id = String(obj.id ?? "");
+  const name = String(obj.name ?? "");
   const type = normalizeContentFileType(obj.type);
   const contentType =
-    String(obj.contentType ?? "").trim() || "application/octet-stream";
-  const objectPath = String(obj.objectPath ?? "").trim();
-  const url = String(obj.url ?? "").trim();
+    String(obj.contentType ?? "") || "application/octet-stream";
+  const objectPath = String(obj.objectPath ?? "");
+  const url = String(obj.url ?? "");
   const visibility = normalizeContentVisibility(obj.visibility);
 
   const size = Number(obj.size ?? 0);
@@ -389,10 +384,8 @@ function normalizeContentFileForSend(x: ContentFileDTO): ContentFileDTO {
 
   const nowIso = new Date().toISOString();
 
-  const createdBy =
-    obj.createdBy != null ? String(obj.createdBy).trim() : "";
-  const updatedBy =
-    obj.updatedBy != null ? String(obj.updatedBy).trim() : "";
+  const createdBy = obj.createdBy != null ? String(obj.createdBy) : "";
+  const updatedBy = obj.updatedBy != null ? String(obj.updatedBy) : "";
 
   if (!id) throw new Error("contentFile.id is required");
   if (!name) throw new Error("contentFile.name is required");

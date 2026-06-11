@@ -1,8 +1,9 @@
 // frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintManagement.tsx
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
-import type { TokenBlueprint } from "../../../../shell/src/shared/types/tokenBlueprint";
+import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 import {
   SortKey,
   SortDir,
@@ -98,17 +99,17 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     const assigneeNameById = new Map<string, string>();
 
     rows.forEach((r) => {
-      const bid = r.brandId?.trim();
+      const bid = r.brandId;
       if (bid) {
-        const bname = (r as any).brandName ?? "";
+        const bname = r.brandName ?? "";
         if (bname && !brandNameById.has(bid)) {
           brandNameById.set(bid, bname);
         }
       }
 
-      const aid = r.assigneeId?.trim();
+      const aid = r.assigneeId;
       if (aid) {
-        const aname = (r as any).assigneeName ?? "";
+        const aname = r.assigneeName ?? "";
         if (aname && !assigneeNameById.has(aid)) {
           assigneeNameById.set(aid, aname);
         }
@@ -149,7 +150,7 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     }
 
     return base.filter((tb) => {
-      const mintedValue = String(Boolean((tb as any).minted));
+      const mintedValue = String(Boolean(tb.minted));
       return mintedFilter.includes(mintedValue);
     });
   }, [rows, brandFilter, assigneeFilter, mintedFilter, sortKey, sortDir]);

@@ -3,64 +3,25 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
-  listSalesByCompanyId,
-  type SalesRow,
-} from "../../infrastructure/repository_http";
+  buildSalesManagementNavigateState,
+  enrichSalesManagementRows,
+  fetchSalesManagementRows,
+  normalizeSalesManagementSortKey,
+  sortSalesManagementRows,
+  type SalesManagementSortDir,
+  type SalesManagementSortKey,
+} from "../../application/sales_management_service";
+import type { SalesRow } from "../../infrastructure/sales_repository_http";
 import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
-
-type SalesManagementRow = SalesRow & {
-  issueCount: number;
-};
-
-type SortKey = "tokenName" | "brandName" | "issueCount";
-type SortDir = "asc" | "desc";
-
-function compareStrings(a: string, b: string): number {
-  return a.localeCompare(b, "ja");
-}
-
-function compareNumbers(a: number, b: number): number {
-  return a - b;
-}
-
-function sortRows(
-  rows: SalesManagementRow[],
-  sortKey: SortKey,
-  sortDir: SortDir,
-): SalesManagementRow[] {
-  const next = [...rows];
-
-  next.sort((a, b) => {
-    let result = 0;
-
-    switch (sortKey) {
-      case "tokenName":
-        result = compareStrings(a.tokenName ?? "", b.tokenName ?? "");
-        break;
-      case "brandName":
-        result = compareStrings(a.brandName ?? "", b.brandName ?? "");
-        break;
-      case "issueCount":
-        result = compareNumbers(a.issueCount ?? 0, b.issueCount ?? 0);
-        break;
-      default:
-        result = 0;
-        break;
-    }
-
-    return sortDir === "asc" ? result : -result;
-  });
-
-  return next;
-}
 
 export function useSalesManagement() {
   const navigate = useNavigate();
   const { user, loading, currentMember, loadingMember } = useAuth();
 
   const [sourceRows, setSourceRows] = useState<SalesRow[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>("tokenName");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] =
+    useState<SalesManagementSortKey>("tokenName");
+  const [sortDir, setSortDir] = useState<SalesManagementSortDir>("asc");
   const [isResetting, setIsResetting] = useState(false);
 
   const companyId = useMemo(() => {
@@ -80,8 +41,8 @@ export function useSalesManagement() {
     }
 
     try {
-      const result = await listSalesByCompanyId(companyId);
-      setSourceRows(Array.isArray(result.rows) ? result.rows : []);
+      const rows = await fetchSalesManagementRows(companyId);
+      setSourceRows(rows);
     } catch {
       setSourceRows([]);
     }
@@ -92,21 +53,12 @@ export function useSalesManagement() {
   }, [load]);
 
   const rows = useMemo(() => {
-    const enrichedRows: SalesManagementRow[] = sourceRows.map((row) => ({
-      ...row,
-      issueCount: Array.isArray(row.mintAddresses) ? row.mintAddresses.length : 0,
-    }));
-
-    return sortRows(enrichedRows, sortKey, sortDir);
+    const enrichedRows = enrichSalesManagementRows(sourceRows);
+    return sortSalesManagementRows(enrichedRows, sortKey, sortDir);
   }, [sourceRows, sortDir, sortKey]);
 
   const handleChangeSort = useCallback((nextKey: string) => {
-    const normalizedKey: SortKey =
-      nextKey === "tokenName"
-        ? "tokenName"
-        : nextKey === "brandName"
-          ? "brandName"
-          : "issueCount";
+    const normalizedKey = normalizeSalesManagementSortKey(nextKey);
 
     setSortKey((prevKey) => {
       if (prevKey === normalizedKey) {
@@ -132,21 +84,13 @@ export function useSalesManagement() {
 
   const handleRowClick = useCallback(
     (tokenBlueprintId: string) => {
-      const row = sourceRows.find((x) => x.tokenBlueprintId === tokenBlueprintId);
       const id = String(tokenBlueprintId ?? "").trim();
-
       if (!id) return;
 
+      const row = sourceRows.find((x) => x.tokenBlueprintId === id);
+
       navigate(`./${encodeURIComponent(id)}`, {
-        state: {
-          tokenName: row?.tokenName ?? "",
-          brandId: row?.brandId ?? "",
-          brandName: row?.brandName ?? "",
-          mintAddresses: row?.mintAddresses ?? [],
-          modelIds: row?.modelIds ?? [],
-          productBlueprints: row?.productBlueprints ?? [],
-          owners: row?.owners ?? [],
-        },
+        state: buildSalesManagementNavigateState(row),
       });
     },
     [navigate, sourceRows],

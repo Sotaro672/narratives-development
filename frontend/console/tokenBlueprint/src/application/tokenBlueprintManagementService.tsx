@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprint/src/application/tokenBlueprintManagementService.tsx
 
-import type { TokenBlueprint } from "../../../shell/src/shared/types/tokenBlueprint";
+import type { TokenBlueprint } from "../domain/entity/tokenBlueprint";
 import { listTokenBlueprintsByCompanyId } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 /** ISO8601 → timestamp（不正値は 0 扱い） */
@@ -31,7 +31,7 @@ export type TokenBlueprintFilterState = {
 export async function fetchTokenBlueprintsForCompany(
   companyId: string,
 ): Promise<TokenBlueprint[]> {
-  const cid = companyId.trim();
+  const cid = companyId;
   if (!cid) return [];
 
   // backend は companyId を context で見ているので、
@@ -86,14 +86,15 @@ export function filterAndSortTokenBlueprints(
   // ★ minted の絞り込みはしない
   let data = (rows ?? []).filter(
     (r) =>
-      (brandFilter.length === 0 || brandFilter.includes(r.brandId)) &&
-      (assigneeFilter.length === 0 || assigneeFilter.includes(r.assigneeId)),
+      (brandFilter.length === 0 || brandFilter.includes(r.brandId ?? "")) &&
+      (assigneeFilter.length === 0 ||
+        assigneeFilter.includes(r.assigneeId ?? "")),
   );
 
   if (sortKey && sortDir) {
     data = [...data].sort((a, b) => {
-      const av = toTs((a as any)[sortKey] as string);
-      const bv = toTs((b as any)[sortKey] as string);
+      const av = toTs(a[sortKey] ?? "");
+      const bv = toTs(b[sortKey] ?? "");
       return sortDir === "asc" ? av - bv : bv - av;
     });
   }

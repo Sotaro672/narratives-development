@@ -23,7 +23,7 @@ import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/sto
 export async function fetchTokenBlueprintDetail(
   id: string,
 ): Promise<TokenBlueprint> {
-  const tokenBlueprintId = id.trim();
+  const tokenBlueprintId = id;
   if (!tokenBlueprintId) {
     throw new Error("id is empty");
   }
@@ -188,18 +188,18 @@ function normalizeContentFilesForSend(
     .map((x) => {
       const nowIso = new Date().toISOString();
 
-      const id = String(x.id ?? "").trim();
-      const name = String(x.name ?? "").trim();
+      const id = String(x.id ?? "");
+      const name = String(x.name ?? "");
       const type = normalizeContentType(x.type);
       const contentType =
-        String(x.contentType ?? "").trim() || "application/octet-stream";
+        String(x.contentType ?? "") || "application/octet-stream";
       const visibility = normalizeContentVisibility(x.visibility);
       const createdAt = toIsoStringOrNow(x.createdAt ?? nowIso);
-      const createdBy = String(x.createdBy ?? "").trim();
+      const createdBy = String(x.createdBy ?? "");
       const updatedAt = toIsoStringOrNow(x.updatedAt ?? nowIso);
-      const updatedBy = String(x.updatedBy ?? "").trim();
-      const url = String(x.url ?? "").trim();
-      const objectPath = String(x.objectPath ?? "").trim();
+      const updatedBy = String(x.updatedBy ?? "");
+      const url = String(x.url ?? "");
+      const objectPath = String(x.objectPath ?? "");
 
       const rawSize = Number(x.size ?? 0);
       const size = Number.isFinite(rawSize) && rawSize >= 0 ? rawSize : 0;
@@ -235,7 +235,7 @@ function normalizeContentFilesForSend(
 }
 
 function normalizeContentType(value: unknown): ContentType {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "").toLowerCase();
 
   if (
     raw === "image" ||
@@ -250,7 +250,7 @@ function normalizeContentType(value: unknown): ContentType {
 }
 
 function normalizeContentVisibility(value: unknown): ContentVisibility {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "").toLowerCase();
 
   if (raw === "public" || raw === "private") {
     return raw;
@@ -268,7 +268,7 @@ function toIsoStringOrNow(value: unknown): string {
     return value.toISOString();
   }
 
-  const raw = String(value ?? "").trim();
+  const raw = String(value ?? "");
   if (!raw) {
     return new Date().toISOString();
   }

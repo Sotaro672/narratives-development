@@ -1,4 +1,4 @@
-// frontend/console/sales/src/infrastructure/repository_http.ts
+// frontend\console\sales\infrastructure\sales_repository_http.ts
 import { API_BASE } from "../../shell/src/shared/http/apiBase";
 import { getAuthJsonHeaders } from "../../shell/src/shared/http/authHeaders";
 
@@ -71,6 +71,12 @@ type ApiSalesQueryResult = {
 };
 
 // ============================================================
+// Endpoint
+// ============================================================
+
+const SALES_ENDPOINT = "/sales";
+
+// ============================================================
 // Helpers
 // ============================================================
 
@@ -87,6 +93,7 @@ async function apiGetJson<T>(path: string): Promise<T> {
   });
 
   const text = await res.text().catch(() => "");
+
   if (!res.ok) {
     throw new Error(text || `GET ${path} failed: ${res.status}`);
   }
@@ -110,6 +117,7 @@ function uniqueStrings(values: unknown): string[] {
     const s = String(v ?? "").trim();
     if (!s) continue;
     if (seen.has(s)) continue;
+
     seen.add(s);
     result.push(s);
   }
@@ -145,7 +153,9 @@ function fromApiSalesProductBlueprint(
   productBlueprint: ApiSalesProductBlueprint,
 ): SalesProductBlueprint {
   return {
-    productBlueprintId: String(productBlueprint?.productBlueprintId ?? "").trim(),
+    productBlueprintId: String(
+      productBlueprint?.productBlueprintId ?? "",
+    ).trim(),
     productName: String(productBlueprint?.productName ?? "").trim(),
   };
 }
@@ -188,20 +198,26 @@ function fromApiSalesQueryResult(data: ApiSalesQueryResult): SalesQueryResult {
 // ============================================================
 
 /**
- * backend: GET /sales?companyId={companyId}
+ * backend: GET /sales
+ *
+ * companyId は backend 側で middleware.CompanyID(r) から取得する。
+ * frontend から query parameter として companyId は送らない。
  */
 export async function listSalesByCompanyId(
-  companyId: string,
+  _companyId?: string,
 ): Promise<SalesQueryResult> {
-  const id = String(companyId || "").trim();
+  const data = await apiGetJson<ApiSalesQueryResult>(SALES_ENDPOINT);
 
-  if (!id) {
-    throw new Error("companyId is required");
-  }
+  return fromApiSalesQueryResult(data);
+}
 
-  const data = await apiGetJson<ApiSalesQueryResult>(
-    `/sales?companyId=${encodeURIComponent(id)}`,
-  );
+/**
+ * backend: GET /sales
+ *
+ * companyId を frontend 側で持たない呼び出し用。
+ */
+export async function listSales(): Promise<SalesQueryResult> {
+  const data = await apiGetJson<ApiSalesQueryResult>(SALES_ENDPOINT);
 
   return fromApiSalesQueryResult(data);
 }
