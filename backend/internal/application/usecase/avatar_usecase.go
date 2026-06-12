@@ -120,59 +120,9 @@ func (u *AvatarUsecase) GetAggregate(ctx context.Context, id string) (AvatarAggr
 
 var (
 	ErrInvalidUserUID             = errors.New("avatar: invalid userUid")
-	ErrAvatarWalletAlreadyOpened  = errors.New("avatar: wallet already opened")
 	ErrAvatarWalletServiceMissing = errors.New("avatar: wallet service not configured")
 	ErrAvatarWalletAddressEmpty   = errors.New("avatar: opened wallet address is empty")
 )
-
-func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatardom.Avatar, error) {
-	if avatarID == "" {
-		return avatardom.Avatar{}, avatardom.ErrInvalidID
-	}
-	if u.avRepo == nil {
-		return avatardom.Avatar{}, errors.New("avatar repo not configured")
-	}
-	if u.walletSvc == nil {
-		return avatardom.Avatar{}, ErrAvatarWalletServiceMissing
-	}
-
-	a, err := u.avRepo.GetByID(ctx, avatarID)
-	if err != nil {
-		return avatardom.Avatar{}, err
-	}
-
-	if a.WalletAddress != nil && *a.WalletAddress != "" {
-		return avatardom.Avatar{}, ErrAvatarWalletAlreadyOpened
-	}
-
-	w, err := u.walletSvc.OpenAvatarWallet(ctx, avatarID)
-	if err != nil {
-		return avatardom.Avatar{}, err
-	}
-
-	addr := w.Address
-	if addr == "" {
-		return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
-	}
-
-	patch := avatardom.AvatarPatch{
-		WalletAddress: &addr,
-	}
-
-	updated, err := u.avRepo.Update(ctx, avatarID, patch)
-	if err != nil {
-		return avatardom.Avatar{}, err
-	}
-
-	if u.walletRepo != nil {
-		now := u.now().UTC()
-		if wrow, e := walletdom.New(addr, nil, now); e == nil {
-			_ = u.walletRepo.Save(ctx, avatarID, wrow)
-		}
-	}
-
-	return updated, nil
-}
 
 func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
 	if avatarID == "" {

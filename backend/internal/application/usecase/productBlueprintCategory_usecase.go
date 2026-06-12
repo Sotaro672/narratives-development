@@ -3,7 +3,6 @@ package usecase
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"narratives/internal/domain/common"
@@ -101,7 +100,6 @@ func (u *ProductBlueprintCategoryUsecase) GetByID(
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrRepositoryInvalidInput
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return categorydom.ProductBlueprintCategory{}, categorydom.ErrInvalidID
 	}
@@ -123,7 +121,7 @@ func (u *ProductBlueprintCategoryUsecase) List(
 	}
 
 	sortSpec := common.Sort{
-		Column: strings.TrimSpace(q.SortColumn),
+		Column: q.SortColumn,
 		Order:  q.SortOrder,
 	}
 
@@ -192,7 +190,6 @@ func (u *ProductBlueprintCategoryUsecase) ExistsByID(
 		return false, categorydom.ErrRepositoryInvalidInput
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, categorydom.ErrInvalidID
 	}
@@ -206,7 +203,6 @@ func (u *ProductBlueprintCategoryUsecase) BuildProductBlueprintCategorySnapshot(
 	ctx context.Context,
 	categoryID string,
 ) (categorydom.Snapshot, error) {
-	categoryID = strings.TrimSpace(categoryID)
 	if categoryID == "" {
 		return categorydom.Snapshot{}, categorydom.ErrInvalidID
 	}
@@ -228,7 +224,6 @@ func buildProductBlueprintCategoryFilter(
 ) (categorydom.Filter, error) {
 	ids := make([]categorydom.CategoryID, 0, len(q.IDs))
 	for _, raw := range q.IDs {
-		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue
 		}
@@ -237,14 +232,14 @@ func buildProductBlueprintCategoryFilter(
 	}
 
 	var code *categorydom.CategoryCode
-	if q.Code != nil && strings.TrimSpace(*q.Code) != "" {
-		v := categorydom.CategoryCode(strings.TrimSpace(*q.Code))
+	if q.Code != nil && *q.Code != "" {
+		v := categorydom.CategoryCode(*q.Code)
 		code = &v
 	}
 
 	var kind *categorydom.CategoryKind
-	if q.Kind != nil && strings.TrimSpace(*q.Kind) != "" {
-		v := categorydom.CategoryKind(strings.TrimSpace(*q.Kind))
+	if q.Kind != nil && *q.Kind != "" {
+		v := categorydom.CategoryKind(*q.Kind)
 		if !categorydom.IsValidCategoryKind(v) {
 			return categorydom.Filter{}, categorydom.ErrInvalidKind
 		}
@@ -252,8 +247,8 @@ func buildProductBlueprintCategoryFilter(
 	}
 
 	var parentID *categorydom.CategoryID
-	if q.ParentID != nil && strings.TrimSpace(*q.ParentID) != "" {
-		v := categorydom.CategoryID(strings.TrimSpace(*q.ParentID))
+	if q.ParentID != nil && *q.ParentID != "" {
+		v := categorydom.CategoryID(*q.ParentID)
 		parentID = &v
 	}
 
@@ -263,7 +258,7 @@ func buildProductBlueprintCategoryFilter(
 
 	return categorydom.Filter{
 		FilterCommon: common.FilterCommon{
-			SearchQuery: strings.TrimSpace(q.SearchQuery),
+			SearchQuery: q.SearchQuery,
 			Created: common.TimeRange{
 				From: q.CreatedFrom,
 				To:   q.CreatedTo,

@@ -48,17 +48,6 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.post(w, r)
 		return
 
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(path0, "/mall/avatars/") &&
-		strings.HasSuffix(path0, "/wallet"):
-		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/wallet")
-		if !ok {
-			notFound(w)
-			return
-		}
-		h.openWallet(w, r, id)
-		return
-
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path0, "/mall/avatars/") &&
 		strings.HasSuffix(path0, "/state"):
@@ -168,42 +157,6 @@ func ptrLen(p *string) int {
 	return len([]rune(*p))
 }
 
-func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
-		return
-	}
-
-	a, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writeAvatarErr(w, err)
-		return
-	}
-
-	if a.WalletAddress != nil && *a.WalletAddress != "" {
-		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet already opened"})
-		return
-	}
-
-	updated, err := h.uc.OpenWallet(ctx, id)
-	if err != nil {
-		writeAvatarErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(toAvatarResponse(updated))
-}
-
 func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -229,7 +182,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.AvatarIcon != nil {
-		s := strings.TrimSpace(*body.AvatarIcon)
+		s := *body.AvatarIcon
 		if s != "" &&
 			!strings.HasPrefix(s, "http://") &&
 			!strings.HasPrefix(s, "https://") {

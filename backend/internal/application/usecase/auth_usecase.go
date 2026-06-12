@@ -62,9 +62,6 @@ func (s *BootstrapService) Bootstrap(
 ) error {
 	now := time.Now().UTC()
 
-	uid = strings.TrimSpace(uid)
-	email = strings.TrimSpace(email)
-
 	if uid == "" {
 		return errors.New("bootstrap: uid is empty")
 	}
@@ -81,8 +78,6 @@ func (s *BootstrapService) Bootstrap(
 	if r, ok := any(s.Members).(MemberCompanyIDReader); ok {
 		companyID, err := r.GetCompanyIDByFirebaseUID(ctx, uid)
 		if err == nil {
-			companyID = strings.TrimSpace(companyID)
-
 			if companyID != "" {
 				res, listErr := s.Members.ListByCompanyID(
 					ctx,
@@ -118,27 +113,27 @@ func (s *BootstrapService) Bootstrap(
 
 	companyName := ""
 	if p.CompanyName != nil {
-		companyName = strings.TrimSpace(*p.CompanyName)
+		companyName = *p.CompanyName
 	}
 
 	firstName := ""
 	if p.FirstName != nil {
-		firstName = strings.TrimSpace(*p.FirstName)
+		firstName = *p.FirstName
 	}
 
 	lastName := ""
 	if p.LastName != nil {
-		lastName = strings.TrimSpace(*p.LastName)
+		lastName = *p.LastName
 	}
 
 	firstNameKana := ""
 	if p.FirstNameKana != nil {
-		firstNameKana = strings.TrimSpace(*p.FirstNameKana)
+		firstNameKana = *p.FirstNameKana
 	}
 
 	lastNameKana := ""
 	if p.LastNameKana != nil {
-		lastNameKana = strings.TrimSpace(*p.LastNameKana)
+		lastNameKana = *p.LastNameKana
 	}
 
 	// ---------------------------------------------------------

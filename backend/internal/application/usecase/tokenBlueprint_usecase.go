@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -17,7 +16,9 @@ type arweaveUploader interface {
 }
 
 type TokenBlueprintUsecase struct {
-	crud     *tokenBlueprintCRUDUsecase
+	tbRepo       tbdom.RepositoryPort
+	tbReviewRepo tbReview.RepositoryPort
+
 	metadata *tokenBlueprintMetadataUsecase
 	command  *tokenBlueprintCommandUsecase
 }
@@ -32,87 +33,10 @@ func NewTokenBlueprintUsecase(
 	}
 
 	return &TokenBlueprintUsecase{
-		crud:     newTokenBlueprintCRUDUsecase(tbRepo, tbReviewRepo),
-		metadata: newTokenBlueprintMetadataUsecase(tbRepo, uploader),
-		command:  newTokenBlueprintCommandUsecase(tbRepo),
-	}
-}
-
-func (u *TokenBlueprintUsecase) Create(
-	ctx context.Context,
-	in CreateBlueprintRequest,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.crud == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	tb, err := u.crud.Create(ctx, in)
-	if err != nil {
-		return nil, err
-	}
-
-	if tb == nil || strings.Trim(tb.ID, " \t\r\n") == "" {
-		return nil, fmt.Errorf("tokenBlueprint create returned empty id")
-	}
-
-	return tb, nil
-}
-
-func (u *TokenBlueprintUsecase) Update(
-	ctx context.Context,
-	in UpdateBlueprintRequest,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.crud == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.Update(ctx, in)
-}
-
-func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
-	if u == nil || u.crud == nil {
-		return fmt.Errorf("tokenBlueprint usecase/crud is nil")
-	}
-
-	return u.crud.Delete(ctx, id)
-}
-
-func (u *TokenBlueprintUsecase) EnsureMetadataURI(
-	ctx context.Context,
-	tb *tbdom.TokenBlueprint,
-	actorID string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.metadata == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/metadata is nil")
-	}
-
-	return u.metadata.EnsureMetadataURI(ctx, tb, actorID)
-}
-
-func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
-	ctx context.Context,
-	tokenBlueprintID string,
-	actorID string,
-) (*tbdom.TokenBlueprint, error) {
-	if u == nil || u.command == nil {
-		return nil, fmt.Errorf("tokenBlueprint usecase/command is nil")
-	}
-
-	return u.command.MarkTokenBlueprintMinted(ctx, tokenBlueprintID, actorID)
-}
-
-type tokenBlueprintCRUDUsecase struct {
-	tbRepo       tbdom.RepositoryPort
-	tbReviewRepo tbReview.RepositoryPort
-}
-
-func newTokenBlueprintCRUDUsecase(
-	tbRepo tbdom.RepositoryPort,
-	tbReviewRepo tbReview.RepositoryPort,
-) *tokenBlueprintCRUDUsecase {
-	return &tokenBlueprintCRUDUsecase{
 		tbRepo:       tbRepo,
 		tbReviewRepo: tbReviewRepo,
+		metadata:     newTokenBlueprintMetadataUsecase(tbRepo, uploader),
+		command:      newTokenBlueprintCommandUsecase(tbRepo),
 	}
 }
 
@@ -135,7 +59,7 @@ type CreateBlueprintRequest struct {
 	CreatedBy  string
 }
 
-func (u *tokenBlueprintCRUDUsecase) Create(
+func (u *TokenBlueprintUsecase) Create(
 	ctx context.Context,
 	in CreateBlueprintRequest,
 ) (*tbdom.TokenBlueprint, error) {
@@ -143,7 +67,7 @@ func (u *tokenBlueprintCRUDUsecase) Create(
 		return nil, tbdom.ErrInvalid
 	}
 
-	createdBy := strings.Trim(in.CreatedBy, " \t\r\n")
+	createdBy := in.CreatedBy
 	if createdBy == "" {
 		return nil, tbdom.ErrInvalidCreatedBy
 	}
@@ -153,21 +77,21 @@ func (u *tokenBlueprintCRUDUsecase) Create(
 	}
 
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
-		Name:        strings.Trim(in.Name, " \t\r\n"),
-		Symbol:      strings.Trim(in.Symbol, " \t\r\n"),
-		BrandID:     strings.Trim(in.BrandID, " \t\r\n"),
-		CompanyID:   strings.Trim(in.CompanyID, " \t\r\n"),
-		Description: strings.Trim(in.Description, " \t\r\n"),
+		Name:        in.Name,
+		Symbol:      in.Symbol,
+		BrandID:     in.BrandID,
+		CompanyID:   in.CompanyID,
+		Description: in.Description,
 
-		IconURL:         strings.Trim(in.IconURL, " \t\r\n"),
-		IconObjectPath:  strings.Trim(in.IconObjectPath, " \t\r\n"),
-		IconFileName:    strings.Trim(in.IconFileName, " \t\r\n"),
-		IconContentType: strings.Trim(in.IconContentType, " \t\r\n"),
+		IconURL:         in.IconURL,
+		IconObjectPath:  in.IconObjectPath,
+		IconFileName:    in.IconFileName,
+		IconContentType: in.IconContentType,
 		IconSize:        in.IconSize,
 
 		ContentFiles: in.ContentFiles,
 
-		AssigneeID: strings.Trim(in.AssigneeID, " \t\r\n"),
+		AssigneeID: in.AssigneeID,
 
 		CreatedAt: nil,
 		CreatedBy: createdBy,
@@ -178,6 +102,10 @@ func (u *tokenBlueprintCRUDUsecase) Create(
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if tb == nil || tb.ID == "" {
+		return nil, fmt.Errorf("tokenBlueprint create returned empty id")
 	}
 
 	if u.tbReviewRepo != nil {
@@ -214,7 +142,7 @@ type UpdateBlueprintRequest struct {
 	UpdatedBy   string
 }
 
-func (u *tokenBlueprintCRUDUsecase) Update(
+func (u *TokenBlueprintUsecase) Update(
 	ctx context.Context,
 	in UpdateBlueprintRequest,
 ) (*tbdom.TokenBlueprint, error) {
@@ -222,12 +150,12 @@ func (u *tokenBlueprintCRUDUsecase) Update(
 		return nil, tbdom.ErrInvalid
 	}
 
-	id := strings.Trim(in.ID, " \t\r\n")
+	id := in.ID
 	if id == "" {
 		return nil, tbdom.ErrInvalidID
 	}
 
-	updatedBy := strings.Trim(in.UpdatedBy, " \t\r\n")
+	updatedBy := in.UpdatedBy
 	if updatedBy == "" {
 		return nil, tbdom.ErrInvalidUpdatedBy
 	}
@@ -270,17 +198,40 @@ func (u *tokenBlueprintCRUDUsecase) Update(
 	return tb, nil
 }
 
-func (u *tokenBlueprintCRUDUsecase) Delete(ctx context.Context, id string) error {
+func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	if u == nil || u.tbRepo == nil {
 		return tbdom.ErrInvalid
 	}
 
-	id = strings.Trim(id, " \t\r\n")
 	if id == "" {
 		return tbdom.ErrInvalidID
 	}
 
 	return u.tbRepo.Delete(ctx, id)
+}
+
+func (u *TokenBlueprintUsecase) EnsureMetadataURI(
+	ctx context.Context,
+	tb *tbdom.TokenBlueprint,
+	actorID string,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.metadata == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/metadata is nil")
+	}
+
+	return u.metadata.EnsureMetadataURI(ctx, tb, actorID)
+}
+
+func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
+	ctx context.Context,
+	tokenBlueprintID string,
+	actorID string,
+) (*tbdom.TokenBlueprint, error) {
+	if u == nil || u.command == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/command is nil")
+	}
+
+	return u.command.MarkTokenBlueprintMinted(ctx, tokenBlueprintID, actorID)
 }
 
 type tokenBlueprintMetadataUsecase struct {
@@ -312,7 +263,7 @@ func (u *tokenBlueprintMetadataUsecase) EnsureMetadataURI(
 	if tb == nil {
 		return nil, fmt.Errorf("tokenBlueprint is nil")
 	}
-	if strings.Trim(tb.ID, " \t\r\n") == "" {
+	if tb.ID == "" {
 		return nil, fmt.Errorf("tokenBlueprint.ID is empty")
 	}
 
@@ -330,13 +281,11 @@ func (u *tokenBlueprintMetadataUsecase) EnsureMetadataURI(
 		return nil, err
 	}
 
-	uri = strings.Trim(uri, " \t\r\n")
 	if uri == "" {
 		return nil, fmt.Errorf("metadataUri is empty after upload")
 	}
 
 	now := time.Now().UTC()
-	actorID = strings.Trim(actorID, " \t\r\n")
 
 	updated, err := u.tbRepo.Update(ctx, tb.ID, tbdom.UpdateTokenBlueprintInput{
 		MetadataURI: &uri,
@@ -364,31 +313,31 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 		return nil, fmt.Errorf("tokenBlueprint is nil")
 	}
 
-	id := strings.Trim(tb.ID, " \t\r\n")
+	id := tb.ID
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprint.ID is empty")
 	}
 
-	name := strings.Trim(tb.Name, " \t\r\n")
+	name := tb.Name
 	if name == "" {
 		return nil, fmt.Errorf("tokenBlueprint.name is empty")
 	}
 
-	symbol := strings.Trim(tb.Symbol, " \t\r\n")
+	symbol := tb.Symbol
 	if symbol == "" {
 		return nil, fmt.Errorf("tokenBlueprint.symbol is empty")
 	}
 
-	desc := strings.Trim(tb.Description, " \t\r\n")
+	desc := tb.Description
 
-	imageURL := strings.Trim(tb.IconURL, " \t\r\n")
+	imageURL := tb.IconURL
 	if imageURL == "" {
 		return nil, fmt.Errorf("tokenBlueprint.iconUrl is empty")
 	}
 
 	files := make([]map[string]any, 0, 1+len(tb.ContentFiles))
 
-	iconContentType := strings.Trim(tb.IconContentType, " \t\r\n")
+	iconContentType := tb.IconContentType
 	if iconContentType == "" {
 		iconContentType = "image/*"
 	}
@@ -401,7 +350,7 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 	seen := make(map[string]struct{}, len(tb.ContentFiles))
 
 	for _, f := range tb.ContentFiles {
-		cid := strings.Trim(f.ID, " \t\r\n")
+		cid := f.ID
 		if cid == "" {
 			continue
 		}
@@ -411,17 +360,17 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 		}
 		seen[cid] = struct{}{}
 
-		uri := strings.Trim(f.URL, " \t\r\n")
+		uri := f.URL
 		if uri == "" {
 			return nil, fmt.Errorf("tokenBlueprint.contentFiles[%s].url is empty", cid)
 		}
 
-		objectPath := strings.Trim(f.ObjectPath, " \t\r\n")
+		objectPath := f.ObjectPath
 		if objectPath == "" {
 			return nil, fmt.Errorf("tokenBlueprint.contentFiles[%s].objectPath is empty", cid)
 		}
 
-		ct := strings.Trim(f.ContentType, " \t\r\n")
+		ct := f.ContentType
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
@@ -478,12 +427,11 @@ func (u *tokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(
 		return nil, fmt.Errorf("tokenBlueprint repo is nil")
 	}
 
-	id := strings.Trim(tokenBlueprintID, " \t\r\n")
+	id := tokenBlueprintID
 	if id == "" {
 		return nil, fmt.Errorf("tokenBlueprintID is empty")
 	}
 
-	actorID = strings.Trim(actorID, " \t\r\n")
 	if actorID == "" {
 		return nil, fmt.Errorf("actorID is empty")
 	}
