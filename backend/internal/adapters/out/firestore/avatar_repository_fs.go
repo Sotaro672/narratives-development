@@ -366,7 +366,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 	if patch.AvatarIcon != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "avatarIcon",
-			Value: optionalString(*patch.AvatarIcon),
+			Value: optionalAvatarString(*patch.AvatarIcon),
 		})
 	}
 
@@ -375,14 +375,14 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 	if patch.Profile != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "profile",
-			Value: optionalString(*patch.Profile),
+			Value: optionalAvatarString(*patch.Profile),
 		})
 	}
 
 	if patch.ExternalLink != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "externalLink",
-			Value: optionalString(*patch.ExternalLink),
+			Value: optionalAvatarString(*patch.ExternalLink),
 		})
 	}
 
@@ -520,7 +520,7 @@ func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
 // small utils
 // ==============================
 
-func optionalString(v string) any {
+func optionalAvatarString(v string) any {
 	if v == "" {
 		return nil
 	}

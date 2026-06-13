@@ -32,7 +32,10 @@ var _ udom.RepositoryPort = (*UserRepositoryFS)(nil)
 // - Delete は users/{id} を削除する。存在しなければ ErrNotFound
 // - Upsert は RepositoryPort に無いため実装しない
 //
-// - first_name / first_name_kana / last_name_kana / last_name は必須
+// - first_name / first_name_kana / last_name_kana / last_name は任意
+// - nil / missing は "" として扱う
+// - 空文字は未入力状態として保存する
+// - 最大長のみ検証する
 // =====================================================
 
 type UserRepositoryFS struct {
@@ -128,7 +131,10 @@ func (r *UserRepositoryFS) GetEmailByID(ctx context.Context, userID string) (str
 // - docId = uid
 // - 既存 document があれば ErrConflict
 // - CreatedAt / UpdatedAt が未指定なら repository 側で now を補完
-// - first_name / first_name_kana / last_name_kana / last_name は必須
+// - first_name / first_name_kana / last_name_kana / last_name は任意
+// - nil は "" として保存
+// - 空文字は未入力状態として保存
+// - 最大長超過のみ ErrInvalidXxx を返す
 func (r *UserRepositoryFS) Create(ctx context.Context, id string, in udom.CreateUserInput) (*udom.User, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -138,22 +144,22 @@ func (r *UserRepositoryFS) Create(ctx context.Context, id string, in udom.Create
 		return nil, udom.ErrInvalidID
 	}
 
-	firstName, err := requiredString(in.FirstName, udom.ErrInvalidFirstName)
+	firstName, err := optionalString(in.FirstName, udom.ErrInvalidFirstName)
 	if err != nil {
 		return nil, err
 	}
 
-	firstNameKana, err := requiredString(in.FirstNameKana, udom.ErrInvalidFirstNameKana)
+	firstNameKana, err := optionalString(in.FirstNameKana, udom.ErrInvalidFirstNameKana)
 	if err != nil {
 		return nil, err
 	}
 
-	lastNameKana, err := requiredString(in.LastNameKana, udom.ErrInvalidLastNameKana)
+	lastNameKana, err := optionalString(in.LastNameKana, udom.ErrInvalidLastNameKana)
 	if err != nil {
 		return nil, err
 	}
 
-	lastName, err := requiredString(in.LastName, udom.ErrInvalidLastName)
+	lastName, err := optionalString(in.LastName, udom.ErrInvalidLastName)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +217,8 @@ func (r *UserRepositoryFS) Create(ctx context.Context, id string, in udom.Create
 //	Update(ctx context.Context, id string, in UpdateUserInput) (*User, error)
 //
 // - nil は未指定
-// - 空文字は必須項目違反として ErrInvalidXxx を返す
+// - 空文字は未入力状態として保存
+// - 最大長超過のみ ErrInvalidXxx を返す
 // - UpdatedAt が未指定なら repository 側で now を補完
 func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.UpdateUserInput) (*udom.User, error) {
 	if r == nil || r.Client == nil {
@@ -240,9 +247,6 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 		}
 
 		v := *p
-		if v == "" {
-			return invalidErr
-		}
 
 		if len([]rune(v)) > udom.MaxNameLength {
 			return invalidErr
@@ -377,15 +381,12 @@ func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 	)
 }
 
-func requiredString(p *string, invalidErr error) (string, error) {
+func optionalString(p *string, invalidErr error) (string, error) {
 	if p == nil {
-		return "", invalidErr
+		return "", nil
 	}
 
 	v := *p
-	if v == "" {
-		return "", invalidErr
-	}
 
 	if len([]rune(v)) > udom.MaxNameLength {
 		return "", invalidErr

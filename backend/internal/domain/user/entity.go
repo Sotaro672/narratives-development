@@ -1,4 +1,3 @@
-// backend/internal/domain/user/entity.go
 package user
 
 import (
@@ -41,35 +40,47 @@ var (
 	MaxNameLength = 100
 )
 
+func validateOptionalName(v string, err error) error {
+	if len([]rune(v)) > MaxNameLength {
+		return err
+	}
+
+	return nil
+}
+
 // Mutators
 func (u *User) SetFirstName(v string) error {
-	if v == "" || len([]rune(v)) > MaxNameLength {
-		return ErrInvalidFirstName
+	if err := validateOptionalName(v, ErrInvalidFirstName); err != nil {
+		return err
 	}
+
 	u.FirstName = v
 	return nil
 }
 
 func (u *User) SetFirstNameKana(v string) error {
-	if v == "" || len([]rune(v)) > MaxNameLength {
-		return ErrInvalidFirstNameKana
+	if err := validateOptionalName(v, ErrInvalidFirstNameKana); err != nil {
+		return err
 	}
+
 	u.FirstNameKana = v
 	return nil
 }
 
 func (u *User) SetLastName(v string) error {
-	if v == "" || len([]rune(v)) > MaxNameLength {
-		return ErrInvalidLastName
+	if err := validateOptionalName(v, ErrInvalidLastName); err != nil {
+		return err
 	}
+
 	u.LastName = v
 	return nil
 }
 
 func (u *User) SetLastNameKana(v string) error {
-	if v == "" || len([]rune(v)) > MaxNameLength {
-		return ErrInvalidLastNameKana
+	if err := validateOptionalName(v, ErrInvalidLastNameKana); err != nil {
+		return err
 	}
+
 	u.LastNameKana = v
 	return nil
 }
@@ -78,6 +89,7 @@ func (u *User) TouchUpdatedAt(now time.Time) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
+
 	u.UpdatedAt = now.UTC()
 	return nil
 }
@@ -87,23 +99,28 @@ func (u User) validate() error {
 	if u.ID == "" {
 		return ErrInvalidID
 	}
-	if u.FirstName == "" || len([]rune(u.FirstName)) > MaxNameLength {
-		return ErrInvalidFirstName
+
+	if err := validateOptionalName(u.FirstName, ErrInvalidFirstName); err != nil {
+		return err
 	}
-	if u.FirstNameKana == "" || len([]rune(u.FirstNameKana)) > MaxNameLength {
-		return ErrInvalidFirstNameKana
+
+	if err := validateOptionalName(u.FirstNameKana, ErrInvalidFirstNameKana); err != nil {
+		return err
 	}
-	if u.LastNameKana == "" || len([]rune(u.LastNameKana)) > MaxNameLength {
-		return ErrInvalidLastNameKana
+
+	if err := validateOptionalName(u.LastNameKana, ErrInvalidLastNameKana); err != nil {
+		return err
 	}
-	if u.LastName == "" || len([]rune(u.LastName)) > MaxNameLength {
-		return ErrInvalidLastName
+
+	if err := validateOptionalName(u.LastName, ErrInvalidLastName); err != nil {
+		return err
 	}
 
 	// created/updated must be set by server
 	if u.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	if u.UpdatedAt.IsZero() || u.UpdatedAt.Before(u.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
@@ -112,7 +129,6 @@ func (u User) validate() error {
 }
 
 // Constructors
-
 func New(
 	id string,
 	firstName, firstNameKana, lastNameKana, lastName string,
@@ -127,9 +143,11 @@ func New(
 		CreatedAt:     createdAt.UTC(),
 		UpdatedAt:     updatedAt.UTC(),
 	}
+
 	if err := u.validate(); err != nil {
 		return User{}, err
 	}
+
 	return u, nil
 }
 
@@ -140,5 +158,6 @@ func NewWithNow(
 	now time.Time,
 ) (User, error) {
 	now = now.UTC()
+
 	return New(id, firstName, firstNameKana, lastNameKana, lastName, now, now)
 }

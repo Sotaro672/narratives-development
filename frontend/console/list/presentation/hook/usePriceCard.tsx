@@ -7,13 +7,19 @@ import { rgbIntToHex } from "../../../shell/src/shared/util/color";
 // 型は inventory/application を正とする
 import type {
   PriceCardProps,
+  PriceRow,
   PriceRowVM,
   UsePriceCardResult,
-} from "../../../inventory/src/application/listCreate/listCreate.types";
+} from "../../../inventory/src/application/listCreate/listCreateService";
 
 // ----------------------------------------------------------
 // Helpers
 // ----------------------------------------------------------
+
+type IndexedPriceRow = {
+  row: PriceRow;
+  originalIdx: number;
+};
 
 /**
  * 数値入力の正規化
@@ -116,6 +122,7 @@ function getVolumeUnit(row: { volumeUnit?: string | null }): string | null {
 // ----------------------------------------------------------
 // Hook
 // ----------------------------------------------------------
+
 export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
   const {
     title = "価格設定",
@@ -129,9 +136,16 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
   const showModeBadge = mode !== "view";
 
   const rowsVM = React.useMemo<PriceRowVM[]>(() => {
-    const sorted = (rows ?? [])
-      .map((row, originalIdx) => ({ row, originalIdx }))
-      .sort((a, b) => {
+    const sourceRows: PriceRow[] = Array.isArray(rows) ? rows : [];
+
+    const sorted: IndexedPriceRow[] = sourceRows
+      .map(
+        (row: PriceRow, originalIdx: number): IndexedPriceRow => ({
+          row,
+          originalIdx,
+        }),
+      )
+      .sort((a: IndexedPriceRow, b: IndexedPriceRow) => {
         const ao =
           a.row.displayOrder === null || a.row.displayOrder === undefined
             ? Number.POSITIVE_INFINITY
@@ -148,7 +162,7 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
         return a.originalIdx - b.originalIdx;
       });
 
-    return sorted.map(({ row, originalIdx }) => {
+    return sorted.map(({ row, originalIdx }: IndexedPriceRow) => {
       const modelId = String(row.modelId ?? "").trim();
 
       const priceInputValue = getPriceInputValue(row.price);
