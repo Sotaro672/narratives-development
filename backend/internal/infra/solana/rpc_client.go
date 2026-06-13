@@ -40,6 +40,7 @@ func NewJSONRPCClient() *JSONRPCClient {
 	if ep == "" {
 		ep = DevnetEndpoint
 	}
+
 	return &JSONRPCClient{
 		Endpoint: ep,
 		HTTP: &http.Client{
@@ -86,6 +87,7 @@ func (c *JSONRPCClient) call(ctx context.Context, method string, params any, out
 	if err != nil {
 		return fmt.Errorf("solana rpc: new request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.HTTP.Do(req)
@@ -102,6 +104,7 @@ func (c *JSONRPCClient) call(ctx context.Context, method string, params any, out
 	if err := json.NewDecoder(resp.Body).Decode(&rr); err != nil {
 		return fmt.Errorf("solana rpc: decode response: %w", err)
 	}
+
 	if rr.Error != nil {
 		return fmt.Errorf("solana rpc: error code=%d message=%s", rr.Error.Code, rr.Error.Message)
 	}
@@ -111,6 +114,7 @@ func (c *JSONRPCClient) call(ctx context.Context, method string, params any, out
 			return fmt.Errorf("solana rpc: unmarshal result: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -146,10 +150,10 @@ type GetTokenAccountsByOwnerResult struct {
 func (c *JSONRPCClient) GetTokenAccountsByOwner(ctx context.Context, owner string, programID string) (GetTokenAccountsByOwnerResult, error) {
 	var out GetTokenAccountsByOwnerResult
 
-	owner = stringsTrim(owner)
 	if owner == "" {
 		return out, fmt.Errorf("solana rpc: owner is empty")
 	}
+
 	if programID == "" {
 		programID = TokenProgramID
 	}
@@ -168,22 +172,6 @@ func (c *JSONRPCClient) GetTokenAccountsByOwner(ctx context.Context, owner strin
 	if err := c.call(ctx, "getTokenAccountsByOwner", params, &out); err != nil {
 		return GetTokenAccountsByOwnerResult{}, err
 	}
-	return out, nil
-}
 
-func stringsTrim(s string) string {
-	// tiny helper to avoid importing strings everywhere in this file
-	n := len(s)
-	i := 0
-	for i < n && (s[i] == ' ' || s[i] == '\n' || s[i] == '\t' || s[i] == '\r') {
-		i++
-	}
-	j := n - 1
-	for j >= i && (s[j] == ' ' || s[j] == '\n' || s[j] == '\t' || s[j] == '\r') {
-		j--
-	}
-	if i > j {
-		return ""
-	}
-	return s[i : j+1]
+	return out, nil
 }

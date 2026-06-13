@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -33,8 +32,6 @@ const (
 )
 
 // Infra is shared runtime infrastructure for DI.
-//
-// GCS は廃止済みのため、この shared infra では storage.Client / bucket 設定を持ちません。
 type Infra struct {
 	// Config
 	Config    *appcfg.Config
@@ -79,23 +76,17 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 	// --------------------------------------------------------
 	// Runtime settings
 	// --------------------------------------------------------
-	settings, warns, err := ResolveRuntimeSettings(cfg)
+	settings, _, err := ResolveRuntimeSettings(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// NOTE:
-	// GCS bucket 廃止後、RuntimeSettings.Validate() が bucket 必須を検証している場合は、
-	// ResolveRuntimeSettings / Validate 側から bucket 必須条件も削除してください。
 	if err := settings.Validate(); err != nil {
 		return nil, err
 	}
 
-	for _, w := range warns {
-		log.Printf("[shared.infra] WARN: %s", w)
-	}
-
 	inf.SelfBaseURL = settings.SelfBaseURL
+
 	inf.BrandsCollection = settings.BrandsCollection
 	if inf.BrandsCollection == "" {
 		inf.BrandsCollection = defaultBrandsCollection
@@ -127,9 +118,6 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 	var clientOpts []option.ClientOption
 	if credFile != "" {
 		clientOpts = append(clientOpts, option.WithCredentialsFile(credFile))
-		log.Printf("[shared.infra] Using credentials file for GCP clients: %s", redactPath(credFile))
-	} else {
-		log.Printf("[shared.infra] Using Application Default Credentials")
 	}
 
 	// --------------------------------------------------------
@@ -146,27 +134,21 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		}
 
 		if err != nil {
-			// stripe-secret-key を使うため Secret Manager は実質必須。
 			return nil, fmt.Errorf("shared.infra: secretmanager.NewClient failed: %w", err)
 		}
 
 		inf.SecretManager = sm
-		log.Printf("[shared.infra] Secret Manager initialized")
 	}
 
 	// --------------------------------------------------------
 	// Solana mint authority key
 	// --------------------------------------------------------
 	{
-		mintKey, err := solanainfra.LoadMintAuthorityKey(
-			ctx,
-			inf.ProjectID,
-			"narratives-solana-mint-authority",
-		)
+		mintKey, err := solanainfra.LoadMintAuthorityKeyFromEnv(ctx)
 		if err != nil {
-			log.Printf("[shared.infra] WARN: failed to load mint authority key: %v", err)
 			mintKey = nil
 		}
+
 		inf.MintAuthorityKey = mintKey
 	}
 
@@ -189,7 +171,6 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		}
 
 		inf.Firestore = fsClient
-		log.Printf("[shared.infra] Firestore connected project=%s", inf.ProjectID)
 	}
 
 	// --------------------------------------------------------
@@ -207,17 +188,12 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 			fbApp, err = firebase.NewApp(ctx, fbCfg)
 		}
 
-		if err != nil {
-			log.Printf("[shared.infra] WARN: firebase app init failed: %v", err)
-		} else {
+		if err == nil {
 			inf.FirebaseApp = fbApp
 
 			authClient, err := fbApp.Auth(ctx)
-			if err != nil {
-				log.Printf("[shared.infra] WARN: firebase auth init failed: %v", err)
-			} else {
+			if err == nil {
 				inf.FirebaseAuth = authClient
-				log.Printf("[shared.infra] Firebase Auth initialized")
 			}
 		}
 	}
@@ -226,6 +202,7 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		_ = inf.Close()
 		return nil, errors.New("shared.infra: firestore client is nil after initialization")
 	}
+
 	if inf.SecretManager == nil {
 		_ = inf.Close()
 		return nil, errors.New("shared.infra: secret manager client is nil after initialization")
@@ -239,6 +216,7 @@ func (i *Infra) AccessSecretVersion(ctx context.Context, secretID string) (strin
 	if i == nil {
 		return "", errors.New("shared.infra: infra is nil")
 	}
+
 	if i.SecretManager == nil {
 		return "", errors.New("shared.infra: secret manager client is nil")
 	}
@@ -284,9 +262,11 @@ func (i *Infra) RegisterPaymentMethodGateway(
 	if stripeSecretKey == "" {
 		return errors.New("shared.infra: stripe secret key is empty")
 	}
+
 	if !strings.HasPrefix(stripeSecretKey, "sk_") {
 		return errors.New("shared.infra: stripe secret key is invalid")
 	}
+
 	if customerStore == nil {
 		return errors.New("shared.infra: payment method customer store is nil")
 	}
@@ -300,7 +280,6 @@ func (i *Infra) RegisterPaymentMethodGateway(
 		return errors.New("shared.infra: stripe payment method gateway is nil after registration")
 	}
 
-	log.Printf("[shared.infra] Stripe PaymentMethodGateway registered from provided secret")
 	return nil
 }
 
@@ -313,6 +292,7 @@ func (i *Infra) RegisterPaymentMethodGatewayFromSecret(
 	if i == nil {
 		return errors.New("shared.infra: infra is nil")
 	}
+
 	if customerStore == nil {
 		return errors.New("shared.infra: payment method customer store is nil")
 	}
@@ -326,7 +306,6 @@ func (i *Infra) RegisterPaymentMethodGatewayFromSecret(
 		return err
 	}
 
-	log.Printf("[shared.infra] Stripe PaymentMethodGateway registered from Secret Manager secret=%q", stripeSecretKeySecretID)
 	return nil
 }
 

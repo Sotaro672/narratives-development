@@ -1,7 +1,7 @@
 // frontend/console/shell/src/layout/Header/Header.tsx
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { UserRound, ChevronDown } from "lucide-react";
 import "./Header.css";
 import AdminPanel from "../../auth/presentation/components/AdminPanel";
 import { useAuthActions } from "../../auth/application/useAuthActions";
@@ -11,34 +11,23 @@ import { getCompanyNameById } from "../../auth/application/companyService";
 interface HeaderProps {
   username?: string;
   email?: string;
-  announcementsCount?: number;
-  messagesCount?: number;
 }
 
 export default function Header({
-  username = "管理者",
-  email = "admin@narratives.com",
-  announcementsCount = 3,
-  messagesCount = 2,
+  username = "ログインできていません",
+  email = "ログインできていません",
 }: HeaderProps) {
   const [openAdmin, setOpenAdmin] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
 
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
-  // Auth
   const { signOut } = useAuthActions();
-  // companyName は信用せず、currentMember をソースにする
   const { user, currentMember } = useAuth();
 
-  // Header 表示用の companyName（毎回 fresh に更新）
   const [brandName, setBrandName] = useState<string>("Company Name");
 
-  // ─────────────────────────────────────────────
-  // 外側クリックで閉じる
-  // ─────────────────────────────────────────────
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       const t = e.target as Node;
@@ -46,38 +35,34 @@ export default function Header({
       if (panelContainerRef.current.contains(t)) return;
       setOpenAdmin(false);
     };
+
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  // ─────────────────────────────────────────────
-  // Esc キーで閉じる
-  // ─────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpenAdmin(false);
     };
+
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // ─────────────────────────────────────────────
-  // ルートアクセス（location.key） or companyId 変化の度に、必ず fresh 取得
-  // ─────────────────────────────────────────────
   useEffect(() => {
     let alive = true;
 
     async function run() {
-      const companyId = (currentMember?.companyId ?? "").trim();
+      const companyId = currentMember?.companyId ?? "";
       if (!companyId) {
         if (alive) setBrandName("Company Name");
         return;
       }
 
-      const name = await getCompanyNameById(companyId); // fresh（キャッシュ無し）
+      const name = await getCompanyNameById(companyId);
       if (!alive) return;
 
-      setBrandName(name && name.trim().length > 0 ? name : "Company Name");
+      setBrandName(name && name.length > 0 ? name : "Company Name");
     }
 
     run();
@@ -87,83 +72,37 @@ export default function Header({
     };
   }, [currentMember?.companyId, location.key]);
 
-  // ─────────────────────────────────────────────
-  // ボタン押下時の遷移処理
-  // ─────────────────────────────────────────────
-  const handleNotificationClick = () => {
-    navigate("/announcement");
-  };
-
-  const handleMessageClick = () => {
-    navigate("/message");
-  };
-
-  // ─────────────────────────────────────────────
-  // ログアウト処理
-  // ─────────────────────────────────────────────
   const handleLogout = async () => {
     try {
       await signOut();
+    } finally {
       setOpenAdmin(false);
-    } catch (e) {
-      console.error("logout failed", e);
     }
   };
 
-  // ヘッダー右上のユーザー名表示
+  const memberName =
+    `${currentMember?.lastName ?? ""} ${currentMember?.firstName ?? ""}`;
+
   const fullName =
-    (currentMember?.fullName ?? "").trim() ||
-    `${currentMember?.lastName ?? ""} ${currentMember?.firstName ?? ""}`.trim() ||
+    memberName ||
     user?.email ||
     username ||
-    "ゲスト";
+    "ログインできていません";
 
-  // メールアドレス表示
   const displayEmail =
-    (currentMember?.email ?? "").trim() ||
-    (user?.email ?? "").trim() ||
-    email;
+    currentMember?.email ||
+    user?.email ||
+    email ||
+    "ログインできていません";
 
   return (
     <header className="app-header">
-      {/* Left: Brand */}
       <div className="brand">
         <span className="brand-main">{brandName}</span>
         <span className="brand-sub">Console</span>
       </div>
 
-      {/* Right: Actions */}
       <div className="actions">
-        <button
-          className="icon-btn"
-          aria-label="通知"
-          onClick={handleNotificationClick}
-        >
-          <span className="icon-wrap">
-            <Bell className="icon" aria-hidden />
-            {announcementsCount > 0 && (
-              <span className="badge" aria-label={`${announcementsCount}件の通知`}>
-                {announcementsCount}
-              </span>
-            )}
-          </span>
-        </button>
-
-        <button
-          className="icon-btn"
-          aria-label="メッセージ"
-          onClick={handleMessageClick}
-        >
-          <span className="icon-wrap">
-            <MessageSquare className="icon" aria-hidden />
-            {messagesCount > 0 && (
-              <span className="badge" aria-label={`${messagesCount}件の新着メッセージ`}>
-                {messagesCount}
-              </span>
-            )}
-          </span>
-        </button>
-
         <div className="relative" ref={panelContainerRef}>
           <button
             ref={triggerRef}
@@ -184,9 +123,9 @@ export default function Header({
             open={openAdmin}
             fullName={fullName}
             email={displayEmail}
-            onEditProfile={() => console.log("プロフィール変更")}
-            onChangeEmail={() => console.log("メールアドレス変更")}
-            onChangePassword={() => console.log("パスワード変更")}
+            onEditProfile={() => undefined}
+            onChangeEmail={() => undefined}
+            onChangePassword={() => undefined}
             onLogout={handleLogout}
           />
         </div>

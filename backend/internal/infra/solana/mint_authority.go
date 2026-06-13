@@ -26,7 +26,7 @@ type MintAuthorityKey struct {
 }
 
 // LoadMintAuthority は SOLANA_MINT_KEY_SECRET に指定した Secret から
-// solana-keygen の keypair(JSON配列 [u8;64]) を復元して、types.Account を返します。
+// solana-keygen の keypair JSON 配列を復元して、types.Account を返します。
 //
 // SOLANA_MINT_KEY_SECRET には
 //
@@ -52,8 +52,6 @@ func LoadMintAuthority(ctx context.Context) (*MintAuthority, error) {
 		return nil, fmt.Errorf("AccessSecretVersion: %w", err)
 	}
 
-	// シークレットの中身は solana-keygen の keypair JSON。
-	// 正式には [u8;64] を想定するが、後方互換のため [int,...] 形式も許容する。
 	keyBytes, err := decodeKeypairJSON(resp.Payload.Data)
 	if err != nil {
 		return nil, err
@@ -64,8 +62,6 @@ func LoadMintAuthority(ctx context.Context) (*MintAuthority, error) {
 		return nil, fmt.Errorf("AccountFromBytes: %w", err)
 	}
 
-	// ★ マスターウォレット（ミント権限）との接続確認ログ
-	//   - Secret Manager からの取得が成功し、Account を復元できたタイミングで出す
 	log.Printf(
 		"[narratives-mint] loaded mint authority from Secret Manager: secret=%s pubkey=%s",
 		secretName,
@@ -83,7 +79,6 @@ func LoadMintAuthorityKeyFromEnv(ctx context.Context) (*MintAuthorityKey, error)
 		return nil, err
 	}
 
-	// types.Account.PrivateKey は 64 バイトの ed25519 秘密鍵（seed + public key）を想定
 	priv := ed25519.PrivateKey(mint.Account.PrivateKey)
 	if len(priv) != ed25519.PrivateKeySize {
 		return nil, fmt.Errorf("unexpected private key length: got %d, want %d", len(priv), ed25519.PrivateKeySize)
@@ -93,9 +88,9 @@ func LoadMintAuthorityKeyFromEnv(ctx context.Context) (*MintAuthorityKey, error)
 	if len(pubBytes) != ed25519.PublicKeySize {
 		return nil, fmt.Errorf("unexpected public key length: got %d, want %d", len(pubBytes), ed25519.PublicKeySize)
 	}
+
 	pub := ed25519.PublicKey(pubBytes)
 
-	// ★ ed25519 鍵ペアとしても問題なく復元できたことを追加でログ（公開鍵のみ）
 	log.Printf(
 		"[narratives-mint] mint authority ed25519 key restored: pubkey=%s",
 		mint.Account.PublicKey.ToBase58(),
@@ -107,46 +102,16 @@ func LoadMintAuthorityKeyFromEnv(ctx context.Context) (*MintAuthorityKey, error)
 	}, nil
 }
 
-// 互換用: 旧 infra 実装のシグネチャを維持したラッパ
-// projectID, secretID は現在は使用せず、SOLANA_MINT_KEY_SECRET に委譲します。
-func LoadMintAuthorityKey(
-	ctx context.Context,
-	projectID string,
-	secretID string,
-) (*MintAuthorityKey, error) {
-	_ = projectID
-	_ = secretID
-
-	return LoadMintAuthorityKeyFromEnv(ctx)
-}
-
-// decodeKeypairJSON は Secret Manager に保存した keypair JSON から
+// decodeKeypairJSON は Secret Manager に保存した solana-keygen keypair JSON から
 // 64 バイトの鍵配列を復元します。
-// - 正: [u8;64] を []byte で受け取る
-// - 互換: [int,...] を []int で受けてから []byte に変換
 func decodeKeypairJSON(data []byte) ([]byte, error) {
-	// まずは []byte としてのデコードを試みる
 	var keyBytes []byte
-	if err := json.Unmarshal(data, &keyBytes); err == nil {
-		if len(keyBytes) == ed25519.PrivateKeySize {
-			return keyBytes, nil
-		}
-		// 長さが想定外の場合は後続のパスでエラーにする
-	}
-
-	// フォールバック: [int,int,...] の形式
-	var ints []int
-	if err := json.Unmarshal(data, &ints); err != nil {
+	if err := json.Unmarshal(data, &keyBytes); err != nil {
 		return nil, fmt.Errorf("unmarshal keypair json: %w", err)
 	}
 
-	if len(ints) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("unexpected secret key length: got %d, want %d", len(ints), ed25519.PrivateKeySize)
-	}
-
-	keyBytes = make([]byte, len(ints))
-	for i, v := range ints {
-		keyBytes[i] = byte(v)
+	if len(keyBytes) != ed25519.PrivateKeySize {
+		return nil, fmt.Errorf("unexpected secret key length: got %d, want %d", len(keyBytes), ed25519.PrivateKeySize)
 	}
 
 	return keyBytes, nil

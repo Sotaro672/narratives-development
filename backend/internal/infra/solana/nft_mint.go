@@ -4,7 +4,6 @@ package solana
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/blocto/solana-go-sdk/client"
@@ -36,35 +35,34 @@ func MintNFTToOwner(
 	if rpcURL == "" {
 		rpcURL = rpc.DevnetRPCEndpoint
 	}
+
 	c := client.NewClient(rpcURL)
 
-	// Mint authority / fee payer を Secret から取得（master に統一）
 	auth, err := LoadMintAuthority(ctx)
 	if err != nil {
 		return "", "", fmt.Errorf("LoadMintAuthority: %w", err)
 	}
-	feePayer := auth.Account // master wallet
+
+	feePayer := auth.Account
 
 	owner := common.PublicKeyFromString(ownerWallet)
-	mint := types.NewAccount() // NFT用Mintアカウント新規作成
+	mint := types.NewAccount()
 
-	// Associated Token Account
 	ata, _, err := common.FindAssociatedTokenAddress(owner, mint.PublicKey)
 	if err != nil {
 		return "", "", fmt.Errorf("FindAssociatedTokenAddress: %w", err)
 	}
 
-	// Metadata / MasterEdition PDA
 	metadataPubkey, err := token_metadata.GetTokenMetaPubkey(mint.PublicKey)
 	if err != nil {
 		return "", "", fmt.Errorf("GetTokenMetaPubkey: %w", err)
 	}
+
 	masterEditionPubkey, err := token_metadata.GetMasterEdition(mint.PublicKey)
 	if err != nil {
 		return "", "", fmt.Errorf("GetMasterEdition: %w", err)
 	}
 
-	// Mint アカウントの rent
 	mintRent, err := c.GetMinimumBalanceForRentExemption(ctx, token.MintAccountSize)
 	if err != nil {
 		return "", "", fmt.Errorf("GetMinimumBalanceForRentExemption: %w", err)
@@ -75,17 +73,14 @@ func MintNFTToOwner(
 		return "", "", fmt.Errorf("GetLatestBlockhash: %w", err)
 	}
 
-	// ★ 1商品=1トークンをプロトコルで固定（MaxSupply = 1）
 	maxSupply := uint64(1)
 
-	// Transaction を組み立て（FeePayer=master に統一）
 	tx, err := types.NewTransaction(types.NewTransactionParam{
 		Signers: []types.Account{mint, feePayer},
 		Message: types.NewMessage(types.NewMessageParam{
 			FeePayer:        feePayer.PublicKey,
 			RecentBlockhash: recent.Blockhash,
 			Instructions: []types.Instruction{
-				// 1) Mint アカウント作成（From=master）
 				system.CreateAccount(system.CreateAccountParam{
 					From:     feePayer.PublicKey,
 					New:      mint.PublicKey,
@@ -93,14 +88,12 @@ func MintNFTToOwner(
 					Lamports: mintRent,
 					Space:    token.MintAccountSize,
 				}),
-				// 2) Mint 初期化 (decimals = 0)（Authority=master）
 				token.InitializeMint(token.InitializeMintParam{
 					Decimals:   0,
 					Mint:       mint.PublicKey,
 					MintAuth:   feePayer.PublicKey,
 					FreezeAuth: &feePayer.PublicKey,
 				}),
-				// 3) Metaplex Metadata アカウント作成（Payer/Authority=master）
 				token_metadata.CreateMetadataAccountV3(
 					token_metadata.CreateMetadataAccountV3Param{
 						Metadata:                metadataPubkey,
@@ -126,7 +119,6 @@ func MintNFTToOwner(
 						CollectionDetails: nil,
 					},
 				),
-				// 4) Owner の ATA 作成（Funder=master）
 				associated_token_account.CreateAssociatedTokenAccount(
 					associated_token_account.CreateAssociatedTokenAccountParam{
 						Funder:                 feePayer.PublicKey,
@@ -135,14 +127,12 @@ func MintNFTToOwner(
 						AssociatedTokenAccount: ata,
 					},
 				),
-				// 5) NFT を 1 枚ミント（Authority=master）
 				token.MintTo(token.MintToParam{
 					Mint:   mint.PublicKey,
 					To:     ata,
 					Auth:   feePayer.PublicKey,
 					Amount: 1,
 				}),
-				// 6) MasterEdition v3 作成（Payer/Authority=master）
 				token_metadata.CreateMasterEditionV3(
 					token_metadata.CreateMasterEditionParam{
 						Edition:         masterEditionPubkey,
@@ -151,7 +141,7 @@ func MintNFTToOwner(
 						MintAuthority:   feePayer.PublicKey,
 						Metadata:        metadataPubkey,
 						Payer:           feePayer.PublicKey,
-						MaxSupply:       &maxSupply, // ← ここで *uint64 を直接渡す
+						MaxSupply:       &maxSupply,
 					},
 				),
 			},
@@ -167,18 +157,6 @@ func MintNFTToOwner(
 	}
 
 	mintAddr = mint.PublicKey.ToBase58()
-
-	// ★ Cloud Run / Cloud Logging にミント結果を出力
-	log.Printf(
-		"[narratives-mint] minted 1 NFT on devnet: mint=%s sig=%s owner=%s feePayer=%s name=%s symbol=%s uri=%s",
-		mintAddr,
-		sig,
-		ownerWallet,
-		feePayer.PublicKey.ToBase58(),
-		meta.Name,
-		meta.Symbol,
-		meta.URI,
-	)
 
 	return mintAddr, sig, nil
 }

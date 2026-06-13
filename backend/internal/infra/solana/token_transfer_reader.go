@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -33,12 +32,12 @@ type TokenTransferReaderSolana struct {
 }
 
 func NewTokenTransferReaderSolana(rpcURL string) *TokenTransferReaderSolana {
-	u := stringsTrim(rpcURL)
+	u := rpcURL
 	if u == "" {
-		u = stringsTrim(os.Getenv("SOLANA_RPC_URL"))
+		u = os.Getenv("SOLANA_RPC_URL")
 	}
 	if u == "" {
-		u = stringsTrim(os.Getenv("SOLANA_RPC_ENDPOINT"))
+		u = os.Getenv("SOLANA_RPC_ENDPOINT")
 	}
 	if u == "" {
 		u = DevnetEndpoint
@@ -80,7 +79,7 @@ func (e *TokenTransferReaderSolana) ListMintTransfers(
 		return ListMintTransfersResult{}, ErrTokenTransferReaderNotConfigured
 	}
 
-	mintAddress := stringsTrim(in.MintAddress)
+	mintAddress := in.MintAddress
 	if mintAddress == "" {
 		return ListMintTransfersResult{}, ErrTokenTransferReaderMintEmpty
 	}
@@ -214,6 +213,7 @@ func (e *TokenTransferReaderSolana) getTokenAccountsByMint(ctx context.Context, 
 		}
 		keys = append(keys, row.Pubkey)
 	}
+
 	return keys, nil
 }
 
@@ -228,9 +228,6 @@ func (e *TokenTransferReaderSolana) getSignaturesForAddress(
 		"commitment": e.commitment(),
 		"limit":      limit,
 	}
-
-	before = stringsTrim(before)
-	until = stringsTrim(until)
 
 	if before != "" {
 		cfg["before"] = before
@@ -254,6 +251,7 @@ func (e *TokenTransferReaderSolana) getSignaturesForAddress(
 		}
 		res = append(res, s.Signature)
 	}
+
 	return res, nil
 }
 
@@ -272,6 +270,7 @@ func (e *TokenTransferReaderSolana) getTransaction(
 	}, &out); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -340,14 +339,16 @@ func (e *TokenTransferReaderSolana) rpcCall(
 	if err := json.Unmarshal(rpcResp.Result, out); err != nil {
 		return fmt.Errorf("unmarshal rpc result: %w body=%s", err, string(respBody))
 	}
+
 	return nil
 }
 
 func (e *TokenTransferReaderSolana) commitment() string {
-	c := stringsTrim(e.Commitment)
+	c := e.Commitment
 	if c == "" {
 		return "finalized"
 	}
+
 	return c
 }
 
@@ -463,11 +464,12 @@ func dedupeTransferRecords(in []MintTransferRecord) []MintTransferRecord {
 }
 
 func isSPLTokenTransferInstruction(ix rpcParsedInstruction) bool {
-	program := strings.TrimSpace(ix.Program)
+	program := ix.Program
 	if program != "spl-token" && ix.ProgramID != TokenProgramID {
 		return false
 	}
-	t := strings.TrimSpace(ix.Parsed.Type)
+
+	t := ix.Parsed.Type
 	return t == "transfer" || t == "transferChecked"
 }
 
@@ -494,6 +496,7 @@ func resolveOwnerByTokenAccount(
 		}
 		break
 	}
+
 	return ""
 }
 
@@ -516,11 +519,7 @@ func stringValue(v any) string {
 	case uint64:
 		return fmt.Sprintf("%d", t)
 	default:
-		b, err := json.Marshal(t)
-		if err != nil {
-			return ""
-		}
-		return strings.Trim(string(b), `"`)
+		return ""
 	}
 }
 
@@ -596,6 +595,7 @@ func (k *rpcAccountKey) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
+
 	k.Pubkey = v.Pubkey
 	return nil
 }
