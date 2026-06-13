@@ -90,7 +90,6 @@ export default function InquiryDetail() {
         createdAt={createdAt}
         onEditAssignee={() => setOwner("新担当者")}
         onClickAssignee={() => console.log("assignee clicked:", owner)}
-        onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
       />
     </PageStyle>
   );

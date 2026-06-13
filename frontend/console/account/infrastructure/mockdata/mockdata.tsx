@@ -4,7 +4,7 @@ import {
   AccountStatus,
   AccountType,
   DEFAULT_CURRENCY, // ← type ではなく value として通常import
-} from "../../../../shell/src/shared/types/account";
+} from "../../../shell/src/shared/types/account";
 
 export const ACCOUNTS: Account[] = [
   {

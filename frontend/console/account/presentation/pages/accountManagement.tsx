@@ -1,14 +1,14 @@
 // frontend/account/src/presentation/pages/accountManagement.tsx
 
 import * as React from "react";
-import List from "../../../../shell/src/layout/List/List";
+import List from "../../../shell/src/layout/List/List";
 import { Filter } from "lucide-react";
 import "../styles/account.css";
 import { ACCOUNTS } from "../../infrastructure/mockdata/mockdata";
 import type {
   Account,
   AccountStatus,
-} from "../../../../shell/src/shared/types/account";
+} from "../../../shell/src/shared/types/account";
 
 // Lucide型エラー対策
 const IconFilter = Filter as unknown as React.ComponentType<
