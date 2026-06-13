@@ -21,7 +21,7 @@ export function useCreateList(args: {
   assigneeId: string | undefined;
   images: File[];
   mainImageIndex: number;
-}): { onCreate: () => void } {
+}): { onCreate: () => Promise<void> } {
   const {
     navigate,
     resolvedParams,
@@ -34,47 +34,45 @@ export function useCreateList(args: {
     mainImageIndex,
   } = args;
 
-  const onCreate = React.useCallback(() => {
-    void (async () => {
-      let imageUploadFailedMessage = "";
+  const onCreate = React.useCallback(async () => {
+    let imageUploadFailedMessage = "";
 
-      try {
-        if (images.length === 0) {
-          const msg = "商品画像は1枚以上必須です。画像を追加してください。";
-          alert(msg);
-          throw new Error(msg);
-        }
-
-        // inventoryId は docId を正としてそのまま扱う（split しない）
-        const rawInventoryId = String(resolvedParams.inventoryId ?? "");
-        const safeInventoryId = rawInventoryId;
-
-        await createListWithImages({
-          params: { ...resolvedParams, inventoryId: safeInventoryId },
-          listingTitle,
-          description,
-          priceRows: priceRows as any,
-          decision,
-          assigneeId,
-          images,
-          mainImageIndex,
-          onImageUploadFailed: (message) => {
-            imageUploadFailedMessage = message;
-          },
-        });
-
-        if (imageUploadFailedMessage) {
-          alert(imageUploadFailedMessage);
-        } else {
-          alert("作成しました");
-        }
-
-        navigate(buildAfterCreatePath(resolvedParams));
-      } catch (e) {
-        const msg = String(e instanceof Error ? e.message : e);
+    try {
+      if (images.length === 0) {
+        const msg = "商品画像は1枚以上必須です。画像を追加してください。";
         alert(msg);
+        throw new Error(msg);
       }
-    })();
+
+      // inventoryId は docId を正としてそのまま扱う（split しない）
+      const rawInventoryId = String(resolvedParams.inventoryId ?? "");
+      const safeInventoryId = rawInventoryId;
+
+      await createListWithImages({
+        params: { ...resolvedParams, inventoryId: safeInventoryId },
+        listingTitle,
+        description,
+        priceRows: priceRows as any,
+        decision,
+        assigneeId,
+        images,
+        mainImageIndex,
+        onImageUploadFailed: (message) => {
+          imageUploadFailedMessage = message;
+        },
+      });
+
+      if (imageUploadFailedMessage) {
+        alert(imageUploadFailedMessage);
+      } else {
+        alert("作成しました");
+      }
+
+      navigate(buildAfterCreatePath(resolvedParams));
+    } catch (e) {
+      const msg = String(e instanceof Error ? e.message : e);
+      alert(msg);
+    }
   }, [
     assigneeId,
     decision,

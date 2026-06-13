@@ -18,6 +18,8 @@ type AssigneeCandidate = {
   name: string;
 };
 
+type ProductBlueprintCategoryKind = "apparel" | "alcohol";
+
 function getMemberUid(member: unknown): string {
   const m = member as any;
 
@@ -67,36 +69,30 @@ function normalizeAssigneeCandidates(
     .filter(Boolean) as AssigneeCandidate[];
 }
 
-function resolveProductBlueprintCategory(dto: unknown): string | undefined {
+function isProductBlueprintCategoryKind(
+  value: unknown,
+): value is ProductBlueprintCategoryKind {
+  return value === "apparel" || value === "alcohol";
+}
+
+function resolveProductBlueprintCategory(
+  dto: unknown,
+): ProductBlueprintCategoryKind | undefined {
   const d = dto as any;
 
-  const categoryCode =
-    d?.productBlueprintCategory ||
-    d?.productBlueprintCategoryCode ||
-    d?.productBlueprintPatch?.productBlueprintCategory?.code;
-
-  if (categoryCode) {
-    return String(categoryCode);
-  }
-
-  const categoryKind =
-    d?.productBlueprintCategoryKind ||
-    d?.productBlueprintPatch?.productBlueprintCategory?.kind;
-
-  if (categoryKind) {
-    return String(categoryKind);
+  const categoryKind = d?.productBlueprintCategory?.kind;
+  if (isProductBlueprintCategoryKind(categoryKind)) {
+    return categoryKind;
   }
 
   const priceRows = Array.isArray(d?.priceRows) ? d.priceRows : [];
 
-  const hasAlcoholRow = priceRows.some((row: any) => row?.kind === "alcohol");
-  if (hasAlcoholRow) {
-    return "alcohol";
-  }
+  const firstKind = priceRows.find((row: any) =>
+    isProductBlueprintCategoryKind(row?.kind),
+  )?.kind;
 
-  const hasApparelRow = priceRows.some((row: any) => row?.kind === "apparel");
-  if (hasApparelRow) {
-    return "apparel";
+  if (isProductBlueprintCategoryKind(firstKind)) {
+    return firstKind;
   }
 
   return undefined;
@@ -117,10 +113,6 @@ export function useListCreate(): UseListCreateResult {
     setMainImageIndex,
     imageInputRef,
     onSelectImages,
-    onDropImages,
-    onDragOverImages,
-    removeImageAt,
-    clearImages,
   } = useListingImages();
 
   const {
@@ -241,16 +233,7 @@ export function useListCreate(): UseListCreateResult {
     mainImageIndex,
     setMainImageIndex,
     imageInputRef,
-
-    // ListImageCard の props 名に合わせた alias
     onAddImages: onSelectImages,
-
-    // 既存互換として残す
-    onSelectImages,
-    onDropImages,
-    onDragOverImages,
-    removeImageAt,
-    clearImages,
 
     assigneeName,
     assigneeCandidates,

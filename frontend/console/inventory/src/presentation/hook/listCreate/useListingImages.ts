@@ -45,18 +45,7 @@ export function useListingImages(): {
     const files = normalizeImageFiles(filesLike);
     if (files.length === 0) return;
 
-    setImages((prev) => {
-      const next = dedupeFiles(prev, files);
-
-      // eslint-disable-next-line no-console
-      console.log("[inventory/listImage] selected", {
-        addedCount: files.length,
-        totalCount: next.length,
-        names: next.slice(0, 6).map((file: File) => file.name),
-      });
-
-      return next;
-    });
+    setImages((prev) => dedupeFiles(prev, files));
   }, []);
 
   const onSelectImages = React.useCallback(
@@ -85,18 +74,7 @@ export function useListingImages(): {
   );
 
   const removeImageAt = React.useCallback((idx: number) => {
-    setImages((prev) => {
-      const next = prev.filter((_, i) => i !== idx);
-
-      // eslint-disable-next-line no-console
-      console.log("[inventory/listImage] removed", {
-        removedIndex: idx,
-        totalCount: next.length,
-        names: next.slice(0, 6).map((file: File) => file.name),
-      });
-
-      return next;
-    });
+    setImages((prev) => prev.filter((_, i) => i !== idx));
 
     setMainImageIndex((prevMain) => {
       if (idx === prevMain) return 0;

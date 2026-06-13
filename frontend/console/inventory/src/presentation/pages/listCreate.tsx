@@ -1,3 +1,5 @@
+// frontend/console/inventory/src/presentation/pages/listCreate.tsx
+
 import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
@@ -37,8 +39,6 @@ export default function InventoryListCreate() {
     mainImageIndex,
     setMainImageIndex,
     onAddImages,
-    removeImageAt,
-    clearImages,
 
     assigneeName,
     assigneeCandidates,
@@ -107,8 +107,6 @@ export default function InventoryListCreate() {
           mainImageIndex={mainImageIndex}
           setMainImageIndex={setMainImageIndex}
           onAddImages={onAddImages}
-          onRemoveImageAt={removeImageAt}
-          onClearImages={clearImages}
         />
 
         <Card>

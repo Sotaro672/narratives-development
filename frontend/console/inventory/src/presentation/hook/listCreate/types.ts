@@ -1,7 +1,8 @@
 // frontend/console/inventory/src/presentation/hook/listCreate/types.ts
+
 import * as React from "react";
 
-import type { usePriceCard } from "../../../../../list/src/presentation/hook/usePriceCard";
+import type { usePriceCard } from "../../../../../list/presentation/hook/usePriceCard";
 import type { PriceRow } from "../../../application/listCreate/listCreateService";
 import type { ImageInputRef } from "../../../application/listCreate/listCreate.types";
 import type { ListCreateDTO } from "../../../infrastructure/http/inventoryRepositoryHTTP";
@@ -18,17 +19,15 @@ export type UseListCreateResult = {
   loadingDTO: boolean;
   dtoError: string;
 
-  // display strings (already trimmed)
+  // display strings
   productBrandName: string;
   productName: string;
   tokenBrandName: string;
   tokenName: string;
 
-  // price (PriceCard 用)
+  // price
   priceRows: PriceRow[];
   onChangePrice: (index: number, price: number | null) => void;
-
-  // ✅ PriceCard hook の結果
   priceCard: ReturnType<typeof usePriceCard>;
 
   // listing local states
@@ -43,16 +42,7 @@ export type UseListCreateResult = {
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
   imageInputRef: ImageInputRef;
-
-  // ListImageCard 用
   onAddImages: (files: FileList | null) => void;
-
-  // 既存互換
-  onSelectImages: (files: FileList | null) => void;
-  onDropImages: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragOverImages: (e: React.DragEvent<HTMLDivElement>) => void;
-  removeImageAt: (idx: number) => void;
-  clearImages: () => void;
 
   // assignee
   assigneeName: string;

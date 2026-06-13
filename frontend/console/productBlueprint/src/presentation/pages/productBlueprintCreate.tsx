@@ -109,10 +109,6 @@ export default function ProductBlueprintCreate() {
 
     onChangeProductName,
     onChangeProductBlueprintCategory,
-    onChangeFit,
-    onChangeMaterial,
-    onChangeWeight,
-    onChangeQualityAssurance,
     onChangeCategoryField,
 
     onChangeColorInput,
