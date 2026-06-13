@@ -4,15 +4,15 @@
 /**
  * Shared API base resolver for module federation remotes.
  *
- * Policy (現状のバックエンドに合わせた修正):
+ * Policy:
  * - env VITE_BACKEND_BASE_URL は「originのみ」（例: https://...run.app）を想定
- * - console API は "現状 /console プレフィックス無し" で動いているため、console は origin を返す
- * - ただし事故防止のため、env に /console 等が入っていても除去して正規化する
+ * - console API は現状 /console プレフィックス無しで動いているため、console は origin を返す
+ * - 事故防止のため、env に /console 等が入っていても除去して正規化する
  */
 
-type ApiScope = "console" | "mall" | "sns";
+type ApiScope = "console" | "mall";
 
-/** Cloud Run fallback (keep as last resort). */
+/** Cloud Run fallback. */
 export const FALLBACK_BACKEND_ORIGIN =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
@@ -33,20 +33,14 @@ function normalizeOrigin(input: string): string {
   let s = String(input ?? "").trim();
   if (!s) return "";
 
-  // remove trailing slashes
   s = s.replace(/\/+$/g, "");
-
-  // If user mistakenly sets "https://.../console", strip it back to origin.
-  // (Also strip nested /console/ etc.)
   s = s.replace(/\/(console|mall|sns)(\/.*)?$/i, "");
-
-  // remove trailing slashes again after stripping
   s = s.replace(/\/+$/g, "");
 
   return s;
 }
 
-/** Join base and path safely (avoid double slashes). */
+/** Join base and path safely. */
 function join(base: string, path: string): string {
   const b = (base ?? "").replace(/\/+$/g, "");
   const p = (path ?? "").replace(/^\/+/g, "");
@@ -55,7 +49,7 @@ function join(base: string, path: string): string {
   return `${b}/${p}`;
 }
 
-/** Backend origin (no /console). */
+/** Backend origin. */
 export function getBackendOrigin(): string {
   const env = normalizeOrigin(readEnvBackendBase());
   return env || FALLBACK_BACKEND_ORIGIN;
@@ -64,35 +58,34 @@ export function getBackendOrigin(): string {
 /**
  * Base URL for a scope.
  *
- * ✅ IMPORTANT:
- * - 現状の backend は console API を /console ではなくルート直下で提供しているため、
- *   scope==="console" は origin を返す。
- * - mall/sns は将来 prefix を切りたい時のために残す（必要なら backend 側も合わせる）
+ * console API は現状 /console ではなくルート直下で提供しているため、
+ * scope === "console" は origin を返す。
  */
 export function getApiBase(scope: ApiScope): string {
   const origin = getBackendOrigin();
-  if (scope === "console") return origin; // ←ここが404解消の要点
+  if (scope === "console") return origin;
   return join(origin, scope);
 }
 
-/** Convenience */
+/** Console API base. */
 export function getConsoleApiBase(): string {
   return getApiBase("console");
 }
 
 /**
- * ✅ Backward-compatible export:
- * repositories can import { API_BASE } as "console API base".
+ * Console API base.
+ *
+ * Existing repositories can import this as:
+ * import { API_BASE } from ".../apiBase";
  */
 export const API_BASE = getConsoleApiBase();
 
-/** Optional: build a full URL under console base with a given path. */
+/** Build a full URL under console base with a given path. */
 export function buildConsoleUrl(path: string): string {
-  // allow callers to pass "/members/xxx" or "members/xxx"
   return join(getConsoleApiBase(), path);
 }
 
-/** Optional: for other scopes */
+/** Build a full URL for a given API scope. */
 export function buildApiUrl(scope: ApiScope, path: string): string {
   return join(getApiBase(scope), path);
 }

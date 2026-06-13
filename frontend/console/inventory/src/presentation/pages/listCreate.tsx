@@ -5,8 +5,8 @@ import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 import { Select } from "../../../../shell/src/shared/ui/select";
 
-import PriceCard from "../../../../list/src/presentation/components/priceCard";
-import ListImageCard from "../../../../list/src/presentation/components/listImageCard";
+import PriceCard from "../../../../list/presentation/components/priceCard";
+import ListImageCard from "../../../../list/presentation/components/listImageCard";
 import { useListCreate } from "../hook/useListCreate";
 
 function s(v: unknown): string {

@@ -1,7 +1,7 @@
 // frontend/console/list/src/infrastructure/firebase/listImageStorage.ts
 
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { storage } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { storage } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 export type UploadListImageToFirebaseStorageInput = {
   listId: string;

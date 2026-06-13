@@ -5,11 +5,11 @@ import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseC
 import {
   saveListImageFromFirebaseStorageHTTP,
   setListPrimaryImageHTTP,
-} from "../../../../list/src/infrastructure/repository";
+} from "../../../../list/infrastructure/repository";
 
-import type { ListDTO } from "../../../../list/src/infrastructure/dto";
+import type { ListDTO } from "../../../../list/infrastructure/dto";
 
-import { uploadListImageToFirebaseStorage } from "../../../../list/src/infrastructure/firebase/listImageStorage";
+import { uploadListImageToFirebaseStorage } from "../../../../list/infrastructure/firebase/listImageStorage";
 
 /**
  * 複数画像を Firebase Storage へ直接アップロード

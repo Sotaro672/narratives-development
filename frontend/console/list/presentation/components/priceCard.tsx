@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -15,14 +15,14 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../../shell/src/shared/ui/table";
-import { Input } from "../../../../shell/src/shared/ui/input";
+} from "../../../shell/src/shared/ui/table";
+import { Input } from "../../../shell/src/shared/ui/input";
 
 // ロジックは hook に寄せる
 import { usePriceCard } from "../hook/usePriceCard";
 
 // 型は inventory/application を正とする
-import type { PriceCardProps } from "../../../../inventory/src/application/listCreate/listCreate.types";
+import type { PriceCardProps } from "../../../inventory/src/application/listCreate/listCreate.types";
 
 type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 

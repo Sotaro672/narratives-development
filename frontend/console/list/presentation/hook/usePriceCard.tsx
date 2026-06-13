@@ -2,14 +2,14 @@
 
 import * as React from "react";
 
-import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
+import { rgbIntToHex } from "../../../shell/src/shared/util/color";
 
 // 型は inventory/application を正とする
 import type {
   PriceCardProps,
   PriceRowVM,
   UsePriceCardResult,
-} from "../../../../inventory/src/application/listCreate/listCreate.types";
+} from "../../../inventory/src/application/listCreate/listCreate.types";
 
 // ----------------------------------------------------------
 // Helpers

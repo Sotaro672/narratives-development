@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { usePriceCard } from "../../../../../list/src/presentation/hook/usePriceCard";
+import { usePriceCard } from "../../../../../list/presentation/hook/usePriceCard";
 import type { PriceRow } from "../../../application/listCreate/listCreate.types";
 
 type UsePriceRowsResult = {
@@ -47,7 +47,7 @@ export function usePriceRows(): UsePriceRowsResult {
     mode: "edit",
     currencySymbol: "¥",
     productBlueprintCategory,
-    onChangePrice: (index, price) => onChangePrice(index, price),
+    onChangePrice,
   });
 
   return {

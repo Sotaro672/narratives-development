@@ -8,11 +8,11 @@ import { mapListCreateDTO } from "../../infrastructure/http/listCreateRepository
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // list create (POST /lists)
-import { createListHTTP } from "../../../../list/src/infrastructure/repository";
+import { createListHTTP } from "../../../../list/infrastructure/repository";
 import type {
   CreateListInput,
   ListDTO,
-} from "../../../../list/src/infrastructure/dto";
+} from "../../../../list/infrastructure/dto";
 
 import type { ResolvedListCreateParams } from "./listCreate.types";
 import { buildListCreateFetchInput } from "./listCreate.routing";

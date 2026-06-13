@@ -1,6 +1,6 @@
 // frontend/console/list/src/application/listDetail/listDetailMapper.ts
 
-import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 
 export type ListingDecisionNorm = "listing" | "holding" | "";
 
@@ -13,7 +13,7 @@ function dedupeUrlsKeepOrder(urls: string[]): string[] {
   const out: string[] = [];
 
   for (const url of urls) {
-    const normalizedUrl = String(url ?? "").trim();
+    const normalizedUrl = String(url ?? "");
     if (!normalizedUrl) continue;
     if (seen.has(normalizedUrl)) continue;
 
@@ -51,7 +51,7 @@ function toDisplayOrderOrNull(v: unknown): number | null {
 function toStringOrNull(v: unknown): string | null {
   if (v === null || v === undefined) return null;
 
-  const s = String(v).trim();
+  const s = String(v);
   return s || null;
 }
 
@@ -65,7 +65,7 @@ function toStringOrNull(v: unknown): string | null {
  * - "hold"    => "hold"（保留）
  */
 export function normalizeDecision(dto: any): string {
-  const raw = String(dto?.decision ?? "").trim().toLowerCase();
+  const raw = String(dto?.decision ?? "").toLowerCase();
 
   if (raw === "listing") return "list";
   if (raw === "hold") return "hold";
@@ -74,7 +74,7 @@ export function normalizeDecision(dto: any): string {
 }
 
 export function normalizeListingDecisionNorm(v: unknown): ListingDecisionNorm {
-  const x = String(v ?? "").trim().toLowerCase();
+  const x = String(v ?? "").toLowerCase();
 
   if (x === "listing" || x === "list") return "listing";
   if (x === "holding" || x === "hold") return "holding";
@@ -101,7 +101,7 @@ export function toDecisionForUpdate(v: unknown): "list" | "hold" | undefined {
  * - 空/不正な値でも落ちず、fallback は空文字
  */
 export function formatYMDHM(v: unknown): string {
-  return safeDateTimeLabelJa(String(v ?? "").trim(), "");
+  return safeDateTimeLabelJa(String(v ?? ""), "");
 }
 
 // ---------------------------------------------------------
@@ -119,7 +119,7 @@ export function normalizeImageUrls(dto: any): string[] {
   const imageUrls = Array.isArray(dto?.imageUrls) ? dto.imageUrls : [];
 
   return dedupeUrlsKeepOrder(
-    imageUrls.map((url: any) => String(url ?? "").trim()).filter(Boolean),
+    imageUrls.map((url: any) => String(url ?? "")).filter(Boolean),
   );
 }
 
@@ -153,7 +153,7 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(
   const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
 
   return rowsRaw.map((r: any, idx: number) => {
-    const modelId = String(r?.modelId ?? "").trim();
+    const modelId = String(r?.modelId ?? "");
     const displayOrder = toDisplayOrderOrNull(r?.displayOrder);
 
     const stock = toInt(r?.stock);
@@ -206,32 +206,26 @@ export function updatePriceRowPrice<TRow extends Record<string, any>>(
 // ---------------------------------------------------------
 
 export function deriveListDetail<TRow extends Record<string, any> = any>(dto: any) {
-  const listingTitle = String(dto?.title ?? "").trim();
-  const description = String(dto?.description ?? "").trim();
+  const listingTitle = String(dto?.title ?? "");
+  const description = String(dto?.description ?? "");
   const decision = normalizeDecision(dto);
 
-  const productBrandId = String(dto?.productBrandId ?? "").trim();
-  const productBrandName = String(dto?.productBrandName ?? "").trim();
-  const productName = String(dto?.productName ?? "").trim();
+  const productBrandId = String(dto?.productBrandId ?? "");
+  const productBrandName = String(dto?.productBrandName ?? "");
+  const productName = String(dto?.productName ?? "");
 
-  const tokenBrandId = String(dto?.tokenBrandId ?? "").trim();
-  const tokenBrandName = String(dto?.tokenBrandName ?? "").trim();
-  const tokenName = String(dto?.tokenName ?? "").trim();
+  const tokenBrandId = String(dto?.tokenBrandId ?? "");
+  const tokenBrandName = String(dto?.tokenBrandName ?? "");
+  const tokenName = String(dto?.tokenName ?? "");
 
-  const assigneeId = String(dto?.assigneeId ?? "").trim();
-  const assigneeName = String(dto?.assigneeName ?? "").trim() || "未設定";
+  const assigneeId = String(dto?.assigneeId ?? "");
+  const assigneeName = String(dto?.assigneeName ?? "") || "未設定";
 
-  const createdByName = String(dto?.createdByName ?? "").trim();
-  const createdAt = safeDateTimeLabelJa(
-    String(dto?.createdAt ?? "").trim(),
-    "",
-  );
+  const createdByName = String(dto?.createdByName ?? "");
+  const createdAt = safeDateTimeLabelJa(String(dto?.createdAt ?? ""), "");
 
-  const updatedByName = String(dto?.updatedByName ?? "").trim();
-  const updatedAt = safeDateTimeLabelJa(
-    String(dto?.updatedAt ?? "").trim(),
-    "",
-  );
+  const updatedByName = String(dto?.updatedByName ?? "");
+  const updatedAt = safeDateTimeLabelJa(String(dto?.updatedAt ?? ""), "");
 
   const imageUrls = normalizeImageUrls(dto);
   const priceRows = normalizePriceRows<TRow>(dto);
@@ -267,8 +261,8 @@ export function computeListDetailPageTitle(args: {
   listId?: string;
   listingTitle?: string;
 }) {
-  const id = String(args.listId ?? "").trim();
-  const title = String(args.listingTitle ?? "").trim() || "出品詳細";
+  const id = String(args.listId ?? "");
+  const title = String(args.listingTitle ?? "") || "出品詳細";
 
   return id ? `${title}（listId: ${id}）` : title;
 }
