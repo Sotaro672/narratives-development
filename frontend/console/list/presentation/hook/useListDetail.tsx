@@ -3,22 +3,26 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-// ✅ PriceCard hook
+// PriceCard hook
 import { usePriceCard } from "./usePriceCard";
 
-// ✅ 型は inventory/application を正とする（依存方向を正す）
-import type { PriceRow } from "../../../inventory/src/application/listCreate/listCreate.types";
+// 型は inventory/application を正とする
+import type { PriceRow } from "../../../inventory/src/application/listCreate/listCreateService";
 
 // Firebase Auth
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-// ✅ internal hooks（presentation 層内で完結）
+// internal hooks（presentation 層内で完結）
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
 import { useCancelledRef } from "./internal/useCancelledRef";
 
 import { saveListDetailChanges } from "../../application/listDetail/listDetailSave.usecase";
 
-// ✅ それ以外は service へ
+import {
+  updatePriceRowPrice,
+} from "../../application/listDetail/listDetailMapper";
+
+// それ以外は service へ
 import {
   resolveListDetailParams,
   loadListDetailDTO,
@@ -26,7 +30,6 @@ import {
   computeListDetailPageTitle,
   normalizeListingDecisionNorm,
   toDecisionForUpdate,
-  formatYMDHM,
   type ListingDecisionNorm,
   type ListDetailRouteParams,
   type ListDetailDTO,
@@ -90,7 +93,7 @@ export type UseListDetailResult = {
   onToggleDecision: (next: ListingDecisionNorm) => void;
 
   // =========================
-  // display strings (already trimmed)
+  // display strings (already normalized by mapper)
   // =========================
   productBrandId: string;
   productBrandName: string;
@@ -120,7 +123,7 @@ export type UseListDetailResult = {
   setDraftPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
   onChangePrice: (index: number, price: number | null, row: PriceRow) => void;
 
-  // ✅ PriceCard result（page が参照するため）
+  // PriceCard result（page が参照するため）
   priceCard: ReturnType<typeof usePriceCard>;
 
   // =========================
@@ -358,7 +361,7 @@ export function useListDetail(): UseListDetailResult {
   }, [reload]);
 
   // -----------------------------
-  // Derived view fields (service)
+  // Derived view fields (mapper/service)
   // -----------------------------
   const derived = React.useMemo(() => deriveListDetail<PriceRow>(dto), [dto]);
 
@@ -381,43 +384,12 @@ export function useListDetail(): UseListDetailResult {
     assigneeId,
     assigneeName,
 
-    createdByName: createdByNameFromDerived,
-    createdAt: createdAtRawFromDerived,
+    createdByName,
+    createdAt,
+
+    updatedByName,
+    updatedAt,
   } = derived;
-
-  // dto 優先
-  const dtoAny: any = dto as any;
-
-  const createdBy = String(dtoAny?.createdBy ?? "").trim();
-  const createdByNameFromDTO = String(dtoAny?.createdByName ?? "").trim();
-  const effectiveCreatedByName =
-    createdByNameFromDTO ||
-    String(createdByNameFromDerived ?? "").trim() ||
-    createdBy;
-
-  const createdAtRaw =
-    String(dtoAny?.createdAt ?? "").trim() ||
-    String(createdAtRawFromDerived ?? "").trim();
-
-  const updatedBy = String(dtoAny?.updatedBy ?? "").trim();
-  const updatedByNameFromDTO = String(dtoAny?.updatedByName ?? "").trim();
-  const updatedByNameFromDerived = String((derived as any)?.updatedByName ?? "").trim();
-  const effectiveUpdatedByName =
-    updatedByNameFromDTO || updatedByNameFromDerived || updatedBy;
-
-  const updatedAtRaw =
-    String(dtoAny?.updatedAt ?? "").trim() ||
-    String((derived as any)?.updatedAt ?? "").trim();
-
-  const createdAt = React.useMemo(
-    () => formatYMDHM(createdAtRaw),
-    [createdAtRaw],
-  );
-
-  const updatedAt = React.useMemo(
-    () => formatYMDHM(updatedAtRaw),
-    [updatedAtRaw],
-  );
 
   const decisionNorm = React.useMemo(
     () => normalizeListingDecisionNorm(decision),
@@ -560,11 +532,7 @@ export function useListDetail(): UseListDetailResult {
 
   // effective urls (view/edit)
   const effectiveImageUrls = React.useMemo(() => {
-    if (isEdit) return img.imageUrls;
-
-    return (Array.isArray(viewImageUrls) ? viewImageUrls : [])
-      .map((url) => String(url ?? "").trim())
-      .filter(Boolean);
+    return isEdit ? img.imageUrls : viewImageUrls;
   }, [isEdit, img.imageUrls, viewImageUrls]);
 
   // images: main index
@@ -577,21 +545,10 @@ export function useListDetail(): UseListDetailResult {
 
   // Price change -> draftPriceRows
   const onChangePrice = React.useCallback(
-    (index: number, price: number | null, row: PriceRow) => {
+    (index: number, price: number | null, _row: PriceRow) => {
       if (!isEdit) return;
 
-      setDraftPriceRows((prev) => {
-        const src = Array.isArray(prev) ? prev : [];
-
-        return src.map((item, i) => {
-          if (i !== index) return item;
-
-          return {
-            ...(item as any),
-            price,
-          } as PriceRow;
-        });
-      });
+      setDraftPriceRows((prev) => updatePriceRowPrice(prev, index, price));
     },
     [isEdit],
   );
@@ -763,10 +720,10 @@ export function useListDetail(): UseListDetailResult {
     onEditAssignee,
     onClickAssignee,
 
-    createdByName: effectiveCreatedByName,
+    createdByName,
     createdAt,
 
-    updatedByName: effectiveUpdatedByName,
+    updatedByName,
     updatedAt,
   };
 }
