@@ -94,7 +94,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	)
 
 	companyUC := uc.NewCompanyUsecase(r.companyRepo)
-	inquiryUC := uc.NewInquiryUsecase(r.inquiryRepo, nil, nil)
+	inquiryUC := uc.NewInquiryUsecase(r.inquiryRepo)
 
 	inventoryUC := uc.NewInventoryUsecase(r.inventoryRepo)
 	if r.productRepo != nil {

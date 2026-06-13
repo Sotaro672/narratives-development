@@ -3,14 +3,49 @@ package inquiry
 
 import (
 	"errors"
+	"net/url"
+	"regexp"
+	"strings"
 	"time"
 )
 
-// Types (mirror TS)
+// Types
 type InquiryStatus string
 type InquiryType string
 
-// Entity (mirror TS Inquiry)
+// FirebaseStorageDeleteOp represents a delete operation target in Firebase Storage.
+// ObjectPath is the Firebase Storage object path, for example:
+// inquiry-images/{inquiryId}/{imageId}/{fileName}
+type FirebaseStorageDeleteOp struct {
+	ObjectPath string
+}
+
+// ImageFile represents an image file attached to an inquiry.
+//
+// Firebase Storage policy:
+// - frontend uploads the binary file directly to Firebase Storage.
+// - backend stores only the Firebase Storage download URL and objectPath.
+// - no GCS bucket/object metadata should be stored here.
+type ImageFile struct {
+	InquiryID  string     `json:"inquiryId"`
+	FileName   string     `json:"fileName"`
+	FileURL    string     `json:"fileUrl"`
+	ObjectPath *string    `json:"objectPath,omitempty"`
+	FileSize   int64      `json:"fileSize"`
+	MimeType   string     `json:"mimeType"`
+	Width      *int       `json:"width,omitempty"`
+	Height     *int       `json:"height,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	CreatedBy  string     `json:"createdBy"`
+	UpdatedAt  *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy  *string    `json:"updatedBy,omitempty"`
+	DeletedAt  *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy  *string    `json:"deletedBy,omitempty"`
+}
+
+// Inquiry is the root aggregate.
+// Images are now part of the inquiry aggregate.
+// The old inquiryImage domain and ImageID reference are no longer needed.
 type Inquiry struct {
 	ID                 string        `json:"id"`
 	AvatarID           string        `json:"avatarId"`
@@ -21,13 +56,34 @@ type Inquiry struct {
 	ProductBlueprintID *string       `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   *string       `json:"tokenBlueprintId,omitempty"`
 	AssigneeID         *string       `json:"assigneeId,omitempty"`
-	ImageID            *string       `json:"imageId,omitempty"`
+	Images             []ImageFile   `json:"images,omitempty"`
 	CreatedAt          time.Time     `json:"createdAt"`
 	UpdatedAt          time.Time     `json:"updatedAt"`
 	UpdatedBy          *string       `json:"updatedBy,omitempty"`
 	DeletedAt          *time.Time    `json:"deletedAt,omitempty"`
 	DeletedBy          *string       `json:"deletedBy,omitempty"`
 }
+
+// Policy
+var (
+	MaxImages               = 10
+	MinFileSizeBytes  int64 = 1
+	MaxFileSizeBytes  int64 = 20 * 1024 * 1024
+	MaxFileNameLength       = 255
+
+	AllowedMimeTypes = map[string]struct{}{
+		"image/jpeg": {},
+		"image/png":  {},
+		"image/webp": {},
+		"image/gif":  {},
+	}
+
+	// Empty means all URL hosts are allowed.
+	// If you want to restrict to Firebase Storage hosts, configure this in infrastructure/bootstrap.
+	AllowedURLHosts = map[string]struct{}{}
+
+	mimeRe = regexp.MustCompile(`^[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+$`)
+)
 
 // Errors
 var (
@@ -43,13 +99,27 @@ var (
 	ErrInvalidDeletedAt   = errors.New("inquiry: invalid deletedAt")
 	ErrInvalidDeletedBy   = errors.New("inquiry: invalid deletedBy")
 
-	// ImageID は inquiryImage の主キー（= inquiryId）を指す必要がある
-	ErrInconsistentImageID = errors.New("inquiry: imageId must equal inquiry id (points to inquiryImage primary key)")
+	ErrInvalidImageInquiryID  = errors.New("inquiry: invalid image inquiryId")
+	ErrInvalidImageFileName   = errors.New("inquiry: invalid image fileName")
+	ErrInvalidImageFileURL    = errors.New("inquiry: invalid image fileUrl")
+	ErrInvalidImageObjectPath = errors.New("inquiry: invalid image objectPath")
+	ErrInvalidImageFileSize   = errors.New("inquiry: invalid image fileSize")
+	ErrInvalidImageMIMEType   = errors.New("inquiry: invalid image mimeType")
+	ErrInvalidImageDimensions = errors.New("inquiry: invalid image dimensions")
+	ErrInvalidImageCreatedAt  = errors.New("inquiry: invalid image createdAt")
+	ErrInvalidImageCreatedBy  = errors.New("inquiry: invalid image createdBy")
+	ErrInvalidImageUpdatedAt  = errors.New("inquiry: invalid image updatedAt")
+	ErrInvalidImageUpdatedBy  = errors.New("inquiry: invalid image updatedBy")
+	ErrInvalidImageDeletedAt  = errors.New("inquiry: invalid image deletedAt")
+	ErrInvalidImageDeletedBy  = errors.New("inquiry: invalid image deletedBy")
+
+	ErrDuplicateImage      = errors.New("inquiry: duplicate image")
+	ErrTooManyImages       = errors.New("inquiry: too many images")
+	ErrInconsistentInquiry = errors.New("inquiry: image inquiryId must match inquiry id")
 )
 
 // Constructors
 
-// New constructs a minimal Inquiry with required fields.
 func New(
 	id, avatarID, subject, content string,
 	status InquiryStatus,
@@ -63,23 +133,24 @@ func New(
 		Content:     content,
 		Status:      status,
 		InquiryType: inquiryType,
+		Images:      []ImageFile{},
 		CreatedAt:   createdAt.UTC(),
 		UpdatedAt:   updatedAt.UTC(),
 	}
-	if err := in.validate(); err != nil {
+	if err := in.Validate(); err != nil {
 		return Inquiry{}, err
 	}
 	return in, nil
 }
 
-// NewWithOptional constructs an Inquiry with optional fields.
 func NewWithOptional(
 	id, avatarID, subject, content string,
 	status InquiryStatus,
 	inquiryType InquiryType,
 	createdAt, updatedAt time.Time,
-	productBlueprintID, tokenBlueprintID, assigneeID, imageID, updatedBy, deletedBy *string,
+	productBlueprintID, tokenBlueprintID, assigneeID, updatedBy, deletedBy *string,
 	deletedAt *time.Time,
+	images []ImageFile,
 ) (Inquiry, error) {
 	in := Inquiry{
 		ID:                 id,
@@ -91,17 +162,82 @@ func NewWithOptional(
 		ProductBlueprintID: productBlueprintID,
 		TokenBlueprintID:   tokenBlueprintID,
 		AssigneeID:         assigneeID,
-		ImageID:            imageID,
+		Images:             images,
 		CreatedAt:          createdAt.UTC(),
 		UpdatedAt:          updatedAt.UTC(),
 		UpdatedBy:          updatedBy,
 		DeletedAt:          deletedAt,
 		DeletedBy:          deletedBy,
 	}
-	if err := in.validate(); err != nil {
+	if in.Images == nil {
+		in.Images = []ImageFile{}
+	}
+	if err := in.Validate(); err != nil {
 		return Inquiry{}, err
 	}
 	return in, nil
+}
+
+func NewImageFile(
+	inquiryID, fileName, fileURL string,
+	objectPath *string,
+	fileSize int64,
+	mimeType string,
+	width, height *int,
+	createdAt time.Time,
+	createdBy string,
+	updatedAt *time.Time,
+	updatedBy *string,
+	deletedAt *time.Time,
+	deletedBy *string,
+) (ImageFile, error) {
+	img := ImageFile{
+		InquiryID:  inquiryID,
+		FileName:   fileName,
+		FileURL:    fileURL,
+		ObjectPath: objectPath,
+		FileSize:   fileSize,
+		MimeType:   mimeType,
+		Width:      width,
+		Height:     height,
+		CreatedAt:  createdAt.UTC(),
+		CreatedBy:  createdBy,
+		UpdatedAt:  normalizeOptionalTime(updatedAt),
+		UpdatedBy:  updatedBy,
+		DeletedAt:  normalizeOptionalTime(deletedAt),
+		DeletedBy:  deletedBy,
+	}
+	if err := validateImageFile(img); err != nil {
+		return ImageFile{}, err
+	}
+	return img, nil
+}
+
+func NewImageFileMinimal(
+	inquiryID, fileName, fileURL string,
+	objectPath *string,
+	fileSize int64,
+	mimeType string,
+	width, height *int,
+	createdAt time.Time,
+	createdBy string,
+) (ImageFile, error) {
+	return NewImageFile(
+		inquiryID,
+		fileName,
+		fileURL,
+		objectPath,
+		fileSize,
+		mimeType,
+		width,
+		height,
+		createdAt,
+		createdBy,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
 }
 
 // Behavior
@@ -114,9 +250,105 @@ func (i *Inquiry) Touch(now time.Time) error {
 	return nil
 }
 
+func (i *Inquiry) AddImage(img ImageFile) error {
+	if err := validateImageFile(img); err != nil {
+		return err
+	}
+	if img.InquiryID != i.ID {
+		return ErrInconsistentInquiry
+	}
+	if containsImageURL(i.Images, img.FileURL) {
+		return ErrDuplicateImage
+	}
+	if MaxImages > 0 && len(i.Images) >= MaxImages {
+		return ErrTooManyImages
+	}
+
+	i.Images = append(i.Images, img)
+	return nil
+}
+
+func (i *Inquiry) ReplaceImages(images []ImageFile) error {
+	out := make([]ImageFile, 0, len(images))
+	seen := map[string]struct{}{}
+
+	for _, img := range images {
+		if err := validateImageFile(img); err != nil {
+			return err
+		}
+		if img.InquiryID != i.ID {
+			return ErrInconsistentInquiry
+		}
+
+		u := normURL(img.FileURL)
+		if _, ok := seen[u]; ok {
+			return ErrDuplicateImage
+		}
+		seen[u] = struct{}{}
+
+		out = append(out, img)
+	}
+
+	if MaxImages > 0 && len(out) > MaxImages {
+		return ErrTooManyImages
+	}
+
+	i.Images = out
+	return nil
+}
+
+func (i *Inquiry) RemoveImageByURL(fileURL string) bool {
+	fileURL = normURL(fileURL)
+
+	out := i.Images[:0]
+	removed := false
+
+	for _, img := range i.Images {
+		if normURL(img.FileURL) == fileURL {
+			removed = true
+			continue
+		}
+		out = append(out, img)
+	}
+
+	i.Images = out
+	return removed
+}
+
+func (i *Inquiry) RemoveImageByFileName(fileName string) bool {
+	out := i.Images[:0]
+	removed := false
+
+	for _, img := range i.Images {
+		if img.FileName == fileName {
+			removed = true
+			continue
+		}
+		out = append(out, img)
+	}
+
+	i.Images = out
+	return removed
+}
+
+func (i Inquiry) FirebaseStorageDeleteOps() []FirebaseStorageDeleteOp {
+	out := make([]FirebaseStorageDeleteOp, 0, len(i.Images))
+
+	for _, img := range i.Images {
+		if img.ObjectPath == nil || *img.ObjectPath == "" {
+			continue
+		}
+		out = append(out, FirebaseStorageDeleteOp{
+			ObjectPath: *img.ObjectPath,
+		})
+	}
+
+	return out
+}
+
 // Validation
 
-func (i Inquiry) validate() error {
+func (i Inquiry) Validate() error {
 	if i.ID == "" {
 		return ErrInvalidID
 	}
@@ -150,5 +382,137 @@ func (i Inquiry) validate() error {
 	if i.DeletedBy != nil && *i.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
+
+	if MaxImages > 0 && len(i.Images) > MaxImages {
+		return ErrTooManyImages
+	}
+
+	seen := map[string]struct{}{}
+	for _, img := range i.Images {
+		if err := validateImageFile(img); err != nil {
+			return err
+		}
+		if img.InquiryID != i.ID {
+			return ErrInconsistentInquiry
+		}
+
+		u := normURL(img.FileURL)
+		if _, ok := seen[u]; ok {
+			return ErrDuplicateImage
+		}
+		seen[u] = struct{}{}
+	}
+
 	return nil
+}
+
+func validateImageFile(img ImageFile) error {
+	if img.InquiryID == "" {
+		return ErrInvalidImageInquiryID
+	}
+
+	if img.FileName == "" || (MaxFileNameLength > 0 && len([]rune(img.FileName)) > MaxFileNameLength) {
+		return ErrInvalidImageFileName
+	}
+
+	if !urlOK(img.FileURL) {
+		return ErrInvalidImageFileURL
+	}
+
+	if img.ObjectPath != nil && *img.ObjectPath == "" {
+		return ErrInvalidImageObjectPath
+	}
+
+	if img.FileSize < MinFileSizeBytes || (MaxFileSizeBytes > 0 && img.FileSize > MaxFileSizeBytes) {
+		return ErrInvalidImageFileSize
+	}
+
+	if img.MimeType == "" || (mimeRe != nil && !mimeRe.MatchString(img.MimeType)) {
+		return ErrInvalidImageMIMEType
+	}
+	if len(AllowedMimeTypes) > 0 {
+		if _, ok := AllowedMimeTypes[img.MimeType]; !ok {
+			return ErrInvalidImageMIMEType
+		}
+	}
+
+	if img.Width != nil && *img.Width <= 0 {
+		return ErrInvalidImageDimensions
+	}
+	if img.Height != nil && *img.Height <= 0 {
+		return ErrInvalidImageDimensions
+	}
+
+	if img.CreatedAt.IsZero() {
+		return ErrInvalidImageCreatedAt
+	}
+	if img.CreatedBy == "" {
+		return ErrInvalidImageCreatedBy
+	}
+
+	if img.UpdatedAt != nil {
+		if img.UpdatedAt.IsZero() || img.UpdatedAt.Before(img.CreatedAt) {
+			return ErrInvalidImageUpdatedAt
+		}
+	}
+	if img.UpdatedBy != nil && *img.UpdatedBy == "" {
+		return ErrInvalidImageUpdatedBy
+	}
+
+	if img.DeletedAt != nil {
+		if img.DeletedAt.IsZero() || img.DeletedAt.Before(img.CreatedAt) {
+			return ErrInvalidImageDeletedAt
+		}
+	}
+	if img.DeletedBy != nil && *img.DeletedBy == "" {
+		return ErrInvalidImageDeletedBy
+	}
+
+	return nil
+}
+
+// Helpers
+
+func normalizeOptionalTime(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	utc := t.UTC()
+	return &utc
+}
+
+func normURL(u string) string {
+	return u
+}
+
+func urlOK(raw string) bool {
+	if raw == "" {
+		return false
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return false
+	}
+
+	if len(AllowedURLHosts) > 0 {
+		host := strings.ToLower(u.Hostname())
+		if _, ok := AllowedURLHosts[host]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func containsImageURL(images []ImageFile, fileURL string) bool {
+	fileURL = normURL(fileURL)
+
+	for _, img := range images {
+		if normURL(img.FileURL) == fileURL {
+			return true
+		}
+	}
+
+	return false
 }

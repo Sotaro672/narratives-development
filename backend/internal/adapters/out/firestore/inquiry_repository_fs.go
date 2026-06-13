@@ -29,15 +29,16 @@ func (r *InquiryRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("inquiries")
 }
 
-// Compile-time check
+// Compile-time check.
 var _ idom.Repository = (*InquiryRepositoryFS)(nil)
 
 // =======================
 // Queries
 // =======================
 
-func (r *InquiryRepositoryFS) List(
+func (r *InquiryRepositoryFS) ListByCompanyID(
 	ctx context.Context,
+	companyID string,
 	filter idom.Filter,
 	sort idom.Sort,
 	page idom.Page,
@@ -45,8 +46,10 @@ func (r *InquiryRepositoryFS) List(
 	if r.Client == nil {
 		return idom.PageResult[idom.Inquiry]{}, errors.New("firestore client is nil")
 	}
+	if companyID == "" {
+		return idom.PageResult[idom.Inquiry]{}, idom.ErrNotFound
+	}
 
-	// normalize paging locally (removed NormalizePage dependency)
 	pageNum := page.Number
 	perPage := page.PerPage
 	if pageNum <= 0 {
@@ -59,13 +62,14 @@ func (r *InquiryRepositoryFS) List(
 		perPage = 200
 	}
 
-	q := r.col().Query
+	q := r.col().Where("companyId", "==", companyID)
 	q = applyInquirySort(q, sort)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
 
-	var all []idom.Inquiry
+	items := make([]idom.Inquiry, 0)
+
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
@@ -74,16 +78,18 @@ func (r *InquiryRepositoryFS) List(
 		if err != nil {
 			return idom.PageResult[idom.Inquiry]{}, err
 		}
+
 		in, err := docToInquiry(doc)
 		if err != nil {
 			return idom.PageResult[idom.Inquiry]{}, err
 		}
+
 		if matchInquiryFilter(in, filter) {
-			all = append(all, in)
+			items = append(items, in)
 		}
 	}
 
-	total := len(all)
+	total := len(items)
 	if total == 0 {
 		return idom.PageResult[idom.Inquiry]{
 			Items:      []idom.Inquiry{},
@@ -94,25 +100,23 @@ func (r *InquiryRepositoryFS) List(
 		}, nil
 	}
 
-	// apply offset/limit in-memory
 	offset := (pageNum - 1) * perPage
 	if offset > total {
 		offset = total
 	}
+
 	end := offset + perPage
 	if end > total {
 		end = total
 	}
-	items := all[offset:end]
 
-	// compute total pages locally (removed ComputeTotalPages dependency)
 	totalPages := 0
 	if perPage > 0 {
 		totalPages = (total + perPage - 1) / perPage
 	}
 
 	return idom.PageResult[idom.Inquiry]{
-		Items:      items,
+		Items:      items[offset:end],
 		TotalCount: total,
 		TotalPages: totalPages,
 		Page:       pageNum,
@@ -120,84 +124,10 @@ func (r *InquiryRepositoryFS) List(
 	}, nil
 }
 
-func (r *InquiryRepositoryFS) ListByCursor(
-	ctx context.Context,
-	filter idom.Filter,
-	_ idom.Sort,
-	cpage idom.CursorPage,
-) (idom.CursorPageResult[idom.Inquiry], error) {
-	if r.Client == nil {
-		return idom.CursorPageResult[idom.Inquiry]{}, errors.New("firestore client is nil")
-	}
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	// Cursor pagination by id ASC (string compare)
-	q := r.col().OrderBy("id", firestore.Asc)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	after := cpage.After
-	skipping := after != ""
-
-	var (
-		items  []idom.Inquiry
-		lastID string
-	)
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return idom.CursorPageResult[idom.Inquiry]{}, err
-		}
-
-		in, err := docToInquiry(doc)
-		if err != nil {
-			return idom.CursorPageResult[idom.Inquiry]{}, err
-		}
-		if !matchInquiryFilter(in, filter) {
-			continue
-		}
-
-		if skipping {
-			if in.ID <= after {
-				continue
-			}
-			skipping = false
-		}
-
-		items = append(items, in)
-		lastID = in.ID
-		if len(items) >= limit+1 {
-			break
-		}
-	}
-
-	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		next = &lastID
-	}
-
-	return idom.CursorPageResult[idom.Inquiry]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
-	}, nil
-}
-
 func (r *InquiryRepositoryFS) GetByID(ctx context.Context, id string) (idom.Inquiry, error) {
 	if r.Client == nil {
 		return idom.Inquiry{}, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return idom.Inquiry{}, idom.ErrNotFound
 	}
@@ -213,55 +143,6 @@ func (r *InquiryRepositoryFS) GetByID(ctx context.Context, id string) (idom.Inqu
 	return docToInquiry(snap)
 }
 
-func (r *InquiryRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (r *InquiryRepositoryFS) Count(ctx context.Context, filter idom.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	q := r.col().Query
-	// To avoid complex composite indexes, fetch and filter in-memory
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	total := 0
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		in, err := docToInquiry(doc)
-		if err != nil {
-			return 0, err
-		}
-		if matchInquiryFilter(in, filter) {
-			total++
-		}
-	}
-	return total, nil
-}
-
 // =======================
 // Mutations
 // =======================
@@ -273,7 +154,6 @@ func (r *InquiryRepositoryFS) Create(ctx context.Context, inq idom.Inquiry) (ido
 
 	now := time.Now().UTC()
 
-	// ID: if empty, use auto ID
 	var docRef *firestore.DocumentRef
 	if inq.ID == "" {
 		docRef = r.col().NewDoc()
@@ -289,12 +169,13 @@ func (r *InquiryRepositoryFS) Create(ctx context.Context, inq idom.Inquiry) (ido
 		inq.UpdatedAt = now
 	}
 
+	normalizeInquiryImages(&inq, now)
+
 	data := inquiryToDocData(inq)
 	data["id"] = inq.ID
 
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
-		// Firestore no unique constraint; treat AlreadyExists as conflict
 		if status.Code(err) == codes.AlreadyExists {
 			return idom.Inquiry{}, idom.ErrConflict
 		}
@@ -305,6 +186,7 @@ func (r *InquiryRepositoryFS) Create(ctx context.Context, inq idom.Inquiry) (ido
 	if err != nil {
 		return idom.Inquiry{}, err
 	}
+
 	return docToInquiry(snap)
 }
 
@@ -312,95 +194,16 @@ func (r *InquiryRepositoryFS) Update(ctx context.Context, id string, patch idom.
 	if r.Client == nil {
 		return idom.Inquiry{}, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return idom.Inquiry{}, idom.ErrNotFound
 	}
 
-	docRef := r.col().Doc(id)
-
-	var updates []firestore.Update
-
-	if patch.Subject != nil {
-		updates = append(updates, firestore.Update{Path: "subject", Value: *patch.Subject})
-	}
-	if patch.Content != nil {
-		updates = append(updates, firestore.Update{Path: "content", Value: *patch.Content})
-	}
-	if patch.Status != nil {
-		updates = append(updates, firestore.Update{Path: "status", Value: string(*patch.Status)})
-	}
-	if patch.InquiryType != nil {
-		updates = append(updates, firestore.Update{Path: "inquiryType", Value: string(*patch.InquiryType)})
-	}
-	if patch.ProductBlueprintID != nil {
-		if *patch.ProductBlueprintID != "" {
-			updates = append(updates, firestore.Update{Path: "productBlueprintId", Value: *patch.ProductBlueprintID})
-		} else {
-			updates = append(updates, firestore.Update{Path: "productBlueprintId", Value: firestore.Delete})
-		}
-	}
-	if patch.TokenBlueprintID != nil {
-		if *patch.TokenBlueprintID != "" {
-			updates = append(updates, firestore.Update{Path: "tokenBlueprintId", Value: *patch.TokenBlueprintID})
-		} else {
-			updates = append(updates, firestore.Update{Path: "tokenBlueprintId", Value: firestore.Delete})
-		}
-	}
-	if patch.AssigneeID != nil {
-		if *patch.AssigneeID != "" {
-			updates = append(updates, firestore.Update{Path: "assigneeId", Value: *patch.AssigneeID})
-		} else {
-			updates = append(updates, firestore.Update{Path: "assigneeId", Value: firestore.Delete})
-		}
-	}
-	// Image(ID): domain patch is Image (string), mapped to imageId
-	if patch.Image != nil {
-		if *patch.Image != "" {
-			updates = append(updates, firestore.Update{Path: "imageId", Value: *patch.Image})
-		} else {
-			updates = append(updates, firestore.Update{Path: "imageId", Value: firestore.Delete})
-		}
-	}
-	if patch.UpdatedBy != nil {
-		if *patch.UpdatedBy != "" {
-			updates = append(updates, firestore.Update{Path: "updatedBy", Value: *patch.UpdatedBy})
-		} else {
-			updates = append(updates, firestore.Update{Path: "updatedBy", Value: firestore.Delete})
-		}
-	}
-	if patch.DeletedAt != nil {
-		if patch.DeletedAt.IsZero() {
-			updates = append(updates, firestore.Update{Path: "deletedAt", Value: firestore.Delete})
-		} else {
-			updates = append(updates, firestore.Update{Path: "deletedAt", Value: patch.DeletedAt.UTC()})
-		}
-	}
-	if patch.DeletedBy != nil {
-		if *patch.DeletedBy != "" {
-			updates = append(updates, firestore.Update{Path: "deletedBy", Value: *patch.DeletedBy})
-		} else {
-			updates = append(updates, firestore.Update{Path: "deletedBy", Value: firestore.Delete})
-		}
-	}
-
-	// updatedAt: explicit or now if any other field updated
-	if patch.UpdatedAt != nil {
-		if patch.UpdatedAt.IsZero() {
-			updates = append(updates, firestore.Update{Path: "updatedAt", Value: firestore.Delete})
-		} else {
-			updates = append(updates, firestore.Update{Path: "updatedAt", Value: patch.UpdatedAt.UTC()})
-		}
-	} else if len(updates) > 0 {
-		updates = append(updates, firestore.Update{Path: "updatedAt", Value: time.Now().UTC()})
-	}
-
+	updates := inquiryPatchToUpdates(patch)
 	if len(updates) == 0 {
-		// no-op
 		return r.GetByID(ctx, id)
 	}
 
-	_, err := docRef.Update(ctx, updates)
+	_, err := r.col().Doc(id).Update(ctx, updates)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return idom.Inquiry{}, idom.ErrNotFound
@@ -415,7 +218,6 @@ func (r *InquiryRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return idom.ErrNotFound
 	}
@@ -427,49 +229,8 @@ func (r *InquiryRepositoryFS) Delete(ctx context.Context, id string) error {
 		}
 		return err
 	}
+
 	return nil
-}
-
-func (r *InquiryRepositoryFS) Save(
-	ctx context.Context,
-	inq idom.Inquiry,
-	_ *idom.SaveOptions,
-) (idom.Inquiry, error) {
-	if r.Client == nil {
-		return idom.Inquiry{}, errors.New("firestore client is nil")
-	}
-
-	now := time.Now().UTC()
-
-	// ID: if empty, auto-generate
-	var docRef *firestore.DocumentRef
-	if inq.ID == "" {
-		docRef = r.col().NewDoc()
-		inq.ID = docRef.ID
-	} else {
-		docRef = r.col().Doc(inq.ID)
-	}
-
-	if inq.CreatedAt.IsZero() {
-		inq.CreatedAt = now
-	}
-	if inq.UpdatedAt.IsZero() {
-		inq.UpdatedAt = now
-	}
-
-	data := inquiryToDocData(inq)
-	data["id"] = inq.ID
-
-	_, err := docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return idom.Inquiry{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return idom.Inquiry{}, err
-	}
-	return docToInquiry(snap)
 }
 
 // =======================
@@ -484,33 +245,47 @@ func inquiryToDocData(in idom.Inquiry) map[string]any {
 		"content":     in.Content,
 		"status":      string(in.Status),
 		"inquiryType": string(in.InquiryType),
+		"images":      imagesToDocData(in.Images),
 		"createdAt":   in.CreatedAt.UTC(),
 		"updatedAt":   in.UpdatedAt.UTC(),
 	}
 
-	if in.ProductBlueprintID != nil && *in.ProductBlueprintID != "" {
-		m["productBlueprintId"] = *in.ProductBlueprintID
-	}
-	if in.TokenBlueprintID != nil && *in.TokenBlueprintID != "" {
-		m["tokenBlueprintId"] = *in.TokenBlueprintID
-	}
-	if in.AssigneeID != nil && *in.AssigneeID != "" {
-		m["assigneeId"] = *in.AssigneeID
-	}
-	if in.ImageID != nil && *in.ImageID != "" {
-		m["imageId"] = *in.ImageID
-	}
-	if in.UpdatedBy != nil && *in.UpdatedBy != "" {
-		m["updatedBy"] = *in.UpdatedBy
-	}
-	if in.DeletedAt != nil && !in.DeletedAt.IsZero() {
-		m["deletedAt"] = in.DeletedAt.UTC()
-	}
-	if in.DeletedBy != nil && *in.DeletedBy != "" {
-		m["deletedBy"] = *in.DeletedBy
-	}
+	setOptionalString(m, "productBlueprintId", in.ProductBlueprintID)
+	setOptionalString(m, "tokenBlueprintId", in.TokenBlueprintID)
+	setOptionalString(m, "assigneeId", in.AssigneeID)
+	setOptionalString(m, "updatedBy", in.UpdatedBy)
+	setOptionalTime(m, "deletedAt", in.DeletedAt)
+	setOptionalString(m, "deletedBy", in.DeletedBy)
 
 	return m
+}
+
+func imagesToDocData(images []idom.ImageFile) []map[string]any {
+	out := make([]map[string]any, 0, len(images))
+
+	for _, img := range images {
+		m := map[string]any{
+			"inquiryId": img.InquiryID,
+			"fileName":  img.FileName,
+			"fileUrl":   img.FileURL,
+			"fileSize":  img.FileSize,
+			"mimeType":  img.MimeType,
+			"createdAt": img.CreatedAt.UTC(),
+			"createdBy": img.CreatedBy,
+		}
+
+		setOptionalString(m, "objectPath", img.ObjectPath)
+		setOptionalInt(m, "width", img.Width)
+		setOptionalInt(m, "height", img.Height)
+		setOptionalTime(m, "updatedAt", img.UpdatedAt)
+		setOptionalString(m, "updatedBy", img.UpdatedBy)
+		setOptionalTime(m, "deletedAt", img.DeletedAt)
+		setOptionalString(m, "deletedBy", img.DeletedBy)
+
+		out = append(out, m)
+	}
+
+	return out
 }
 
 func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
@@ -519,65 +294,139 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		return idom.Inquiry{}, fmt.Errorf("empty inquiry document: %s", doc.Ref.ID)
 	}
 
-	getStr := func(key string) string {
-		if v, ok := data[key].(string); ok {
-			return v
-		}
-		return ""
-	}
-	getPtrStr := func(key string) *string {
-		if v, ok := data[key].(string); ok {
-			s := v
-			if s != "" {
-				return &s
-			}
-		}
-		return nil
-	}
-	getTime := func(key string) (time.Time, bool) {
-		if v, ok := data[key].(time.Time); ok {
-			return v.UTC(), !v.IsZero()
-		}
-		return time.Time{}, false
-	}
-	getPtrTime := func(key string) *time.Time {
-		if t, ok := getTime(key); ok && !t.IsZero() {
-			return &t
-		}
-		return nil
+	in := idom.Inquiry{
+		ID:                 asString(data["id"]),
+		AvatarID:           asString(data["avatarId"]),
+		Subject:            asString(data["subject"]),
+		Content:            asString(data["content"]),
+		Status:             idom.InquiryStatus(asString(data["status"])),
+		InquiryType:        idom.InquiryType(asString(data["inquiryType"])),
+		ProductBlueprintID: ptrStringFromMap(data, "productBlueprintId"),
+		TokenBlueprintID:   ptrStringFromMap(data, "tokenBlueprintId"),
+		AssigneeID:         ptrStringFromMap(data, "assigneeId"),
+		UpdatedBy:          ptrStringFromMap(data, "updatedBy"),
+		DeletedAt:          ptrTimeFromMap(data, "deletedAt"),
+		DeletedBy:          ptrStringFromMap(data, "deletedBy"),
 	}
 
-	var in idom.Inquiry
-
-	in.ID = getStr("id")
 	if in.ID == "" {
 		in.ID = doc.Ref.ID
 	}
 
-	in.AvatarID = getStr("avatarId")
-	in.Subject = getStr("subject")
-	in.Content = getStr("content")
-	in.Status = idom.InquiryStatus(getStr("status"))
-	in.InquiryType = idom.InquiryType(getStr("inquiryType"))
-
-	in.ProductBlueprintID = getPtrStr("productBlueprintId")
-	in.TokenBlueprintID = getPtrStr("tokenBlueprintId")
-	in.AssigneeID = getPtrStr("assigneeId")
-	// stored as imageId
-	in.ImageID = getPtrStr("imageId")
-
-	if t, ok := getTime("createdAt"); ok {
-		in.CreatedAt = t
+	if t, ok := asTime(data["createdAt"]); ok {
+		in.CreatedAt = t.UTC()
 	}
-	if t, ok := getTime("updatedAt"); ok {
-		in.UpdatedAt = t
+	if t, ok := asTime(data["updatedAt"]); ok {
+		in.UpdatedAt = t.UTC()
 	}
 
-	in.UpdatedBy = getPtrStr("updatedBy")
-	in.DeletedAt = getPtrTime("deletedAt")
-	in.DeletedBy = getPtrStr("deletedBy")
+	in.Images = docImagesToDomain(data["images"], in.ID)
 
 	return in, nil
+}
+
+func docImagesToDomain(raw any, fallbackInquiryID string) []idom.ImageFile {
+	items, ok := raw.([]any)
+	if !ok || len(items) == 0 {
+		return []idom.ImageFile{}
+	}
+
+	images := make([]idom.ImageFile, 0, len(items))
+
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		img := idom.ImageFile{
+			InquiryID:  asString(m["inquiryId"]),
+			FileName:   asString(m["fileName"]),
+			FileURL:    asString(m["fileUrl"]),
+			ObjectPath: ptrStringFromMap(m, "objectPath"),
+			FileSize:   int64(asInt(m["fileSize"])),
+			MimeType:   asString(m["mimeType"]),
+			Width:      ptrIntFromMap(m, "width"),
+			Height:     ptrIntFromMap(m, "height"),
+			CreatedAt:  timeFromMap(m, "createdAt"),
+			CreatedBy:  asString(m["createdBy"]),
+			UpdatedAt:  ptrTimeFromMap(m, "updatedAt"),
+			UpdatedBy:  ptrStringFromMap(m, "updatedBy"),
+			DeletedAt:  ptrTimeFromMap(m, "deletedAt"),
+			DeletedBy:  ptrStringFromMap(m, "deletedBy"),
+		}
+
+		if img.InquiryID == "" {
+			img.InquiryID = fallbackInquiryID
+		}
+
+		images = append(images, img)
+	}
+
+	return images
+}
+
+func inquiryPatchToUpdates(patch idom.InquiryPatch) []firestore.Update {
+	updates := make([]firestore.Update, 0)
+
+	appendStringUpdate := func(path string, value *string) {
+		if value == nil {
+			return
+		}
+		if *value == "" {
+			updates = append(updates, firestore.Update{Path: path, Value: firestore.Delete})
+			return
+		}
+		updates = append(updates, firestore.Update{Path: path, Value: *value})
+	}
+
+	if patch.Subject != nil {
+		updates = append(updates, firestore.Update{Path: "subject", Value: *patch.Subject})
+	}
+	if patch.Content != nil {
+		updates = append(updates, firestore.Update{Path: "content", Value: *patch.Content})
+	}
+	if patch.Status != nil {
+		updates = append(updates, firestore.Update{Path: "status", Value: string(*patch.Status)})
+	}
+	if patch.InquiryType != nil {
+		updates = append(updates, firestore.Update{Path: "inquiryType", Value: string(*patch.InquiryType)})
+	}
+
+	appendStringUpdate("productBlueprintId", patch.ProductBlueprintID)
+	appendStringUpdate("tokenBlueprintId", patch.TokenBlueprintID)
+	appendStringUpdate("assigneeId", patch.AssigneeID)
+
+	if patch.Images != nil {
+		updates = append(updates, firestore.Update{
+			Path:  "images",
+			Value: imagesToDocData(*patch.Images),
+		})
+	}
+
+	appendStringUpdate("updatedBy", patch.UpdatedBy)
+
+	if patch.DeletedAt != nil {
+		if patch.DeletedAt.IsZero() {
+			updates = append(updates, firestore.Update{Path: "deletedAt", Value: firestore.Delete})
+		} else {
+			updates = append(updates, firestore.Update{Path: "deletedAt", Value: patch.DeletedAt.UTC()})
+		}
+	}
+
+	appendStringUpdate("deletedBy", patch.DeletedBy)
+
+	if patch.UpdatedAt != nil {
+		if patch.UpdatedAt.IsZero() {
+			updates = append(updates, firestore.Update{Path: "updatedAt", Value: firestore.Delete})
+		} else {
+			updates = append(updates, firestore.Update{Path: "updatedAt", Value: patch.UpdatedAt.UTC()})
+		}
+	} else if len(updates) > 0 {
+		updates = append(updates, firestore.Update{Path: "updatedAt", Value: time.Now().UTC()})
+	}
+
+	return updates
 }
 
 // =======================
@@ -585,146 +434,98 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 // =======================
 
 func matchInquiryFilter(in idom.Inquiry, f idom.Filter) bool {
-	// Free text search: subject, content, updated_by, assignee_id
-	if sq := f.SearchQuery; sq != "" {
-		lq := strings.ToLower(sq)
-		haystack := strings.ToLower(
-			in.Subject + " " +
-				in.Content + " " +
-				ptrOrEmpty(in.UpdatedBy) + " " +
-				ptrOrEmpty(in.AssigneeID),
-		)
-		if !strings.Contains(haystack, lq) {
+	if f.SearchQuery != "" {
+		query := strings.ToLower(f.SearchQuery)
+		target := strings.ToLower(searchText(in))
+		if !strings.Contains(target, query) {
 			return false
 		}
 	}
 
-	// IDs
-	if len(f.IDs) > 0 {
-		found := false
-		for _, v := range f.IDs {
-			if v == in.ID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-
-	// Avatar
-	if f.AvatarID != nil && *f.AvatarID != "" {
-		if in.AvatarID != *f.AvatarID {
-			return false
-		}
-	}
-
-	// Assignee
-	if f.AssigneeID != nil && *f.AssigneeID != "" {
-		if ptrOrEmpty(in.AssigneeID) != *f.AssigneeID {
-			return false
-		}
-	}
-
-	// Status
-	if f.Status != nil && string(*f.Status) != "" {
-		if in.Status != *f.Status {
-			return false
-		}
-	}
-	if len(f.Statuses) > 0 {
-		ok := false
-		for _, st := range f.Statuses {
-			if in.Status == st {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-
-	// InquiryType
-	if f.InquiryType != nil && string(*f.InquiryType) != "" {
-		if in.InquiryType != *f.InquiryType {
-			return false
-		}
-	}
-	if len(f.InquiryTypes) > 0 {
-		ok := false
-		for _, it := range f.InquiryTypes {
-			if in.InquiryType == it {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-
-	// Blueprint IDs
-	if f.ProductBlueprintID != nil && *f.ProductBlueprintID != "" {
-		if ptrOrEmpty(in.ProductBlueprintID) != *f.ProductBlueprintID {
-			return false
-		}
-	}
-	if f.TokenBlueprintID != nil && *f.TokenBlueprintID != "" {
-		if ptrOrEmpty(in.TokenBlueprintID) != *f.TokenBlueprintID {
-			return false
-		}
-	}
-
-	// HasImage tri-state
-	if f.HasImage != nil {
-		has := in.ImageID != nil && *in.ImageID != ""
-		if *f.HasImage != has {
-			return false
-		}
-	}
-
-	// UpdatedBy / DeletedBy
-	if f.UpdatedBy != nil && *f.UpdatedBy != "" {
-		if ptrOrEmpty(in.UpdatedBy) != *f.UpdatedBy {
-			return false
-		}
-	}
-	if f.DeletedBy != nil && *f.DeletedBy != "" {
-		if ptrOrEmpty(in.DeletedBy) != *f.DeletedBy {
-			return false
-		}
-	}
-
-	// Date ranges
-	if f.CreatedFrom != nil && in.CreatedAt.Before(f.CreatedFrom.UTC()) {
+	if len(f.IDs) > 0 && !containsString(f.IDs, in.ID) {
 		return false
 	}
-	if f.CreatedTo != nil && !in.CreatedAt.Before(f.CreatedTo.UTC()) {
-		return false
-	}
-	if f.UpdatedFrom != nil && in.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
-		return false
-	}
-	if f.UpdatedTo != nil && !in.UpdatedAt.Before(f.UpdatedTo.UTC()) {
-		return false
-	}
-	if f.DeletedFrom != nil {
-		if in.DeletedAt == nil || in.DeletedAt.Before(f.DeletedFrom.UTC()) {
-			return false
-		}
-	}
-	if f.DeletedTo != nil {
-		if in.DeletedAt == nil || !in.DeletedAt.Before(f.DeletedTo.UTC()) {
-			return false
-		}
-	}
 
-	// Deleted tri-state
+	if f.AvatarID != nil && *f.AvatarID != "" && in.AvatarID != *f.AvatarID {
+		return false
+	}
+	if f.AssigneeID != nil && *f.AssigneeID != "" && ptrOrEmpty(in.AssigneeID) != *f.AssigneeID {
+		return false
+	}
+	if f.Status != nil && string(*f.Status) != "" && in.Status != *f.Status {
+		return false
+	}
+	if len(f.Statuses) > 0 && !containsInquiryStatus(f.Statuses, in.Status) {
+		return false
+	}
+	if f.InquiryType != nil && string(*f.InquiryType) != "" && in.InquiryType != *f.InquiryType {
+		return false
+	}
+	if len(f.InquiryTypes) > 0 && !containsInquiryType(f.InquiryTypes, in.InquiryType) {
+		return false
+	}
+	if f.ProductBlueprintID != nil && *f.ProductBlueprintID != "" && ptrOrEmpty(in.ProductBlueprintID) != *f.ProductBlueprintID {
+		return false
+	}
+	if f.TokenBlueprintID != nil && *f.TokenBlueprintID != "" && ptrOrEmpty(in.TokenBlueprintID) != *f.TokenBlueprintID {
+		return false
+	}
+	if f.HasImage != nil && *f.HasImage != hasActiveImage(in.Images) {
+		return false
+	}
+	if f.UpdatedBy != nil && *f.UpdatedBy != "" && ptrOrEmpty(in.UpdatedBy) != *f.UpdatedBy {
+		return false
+	}
+	if f.DeletedBy != nil && *f.DeletedBy != "" && ptrOrEmpty(in.DeletedBy) != *f.DeletedBy {
+		return false
+	}
 	if f.Deleted != nil {
 		isDeleted := in.DeletedAt != nil
 		if *f.Deleted != isDeleted {
+			return false
+		}
+	}
+
+	return matchImageFilters(in.Images, f)
+}
+
+func matchImageFilters(images []idom.ImageFile, f idom.Filter) bool {
+	if f.ImageFileName != nil && *f.ImageFileName != "" {
+		if !anyImageMatches(images, func(img idom.ImageFile) bool {
+			return img.FileName == *f.ImageFileName
+		}) {
+			return false
+		}
+	}
+
+	if f.ImageMimeType != nil && *f.ImageMimeType != "" {
+		if !anyImageMatches(images, func(img idom.ImageFile) bool {
+			return img.MimeType == *f.ImageMimeType
+		}) {
+			return false
+		}
+	}
+
+	if f.ImageCreatedBy != nil && *f.ImageCreatedBy != "" {
+		if !anyImageMatches(images, func(img idom.ImageFile) bool {
+			return img.CreatedBy == *f.ImageCreatedBy
+		}) {
+			return false
+		}
+	}
+
+	if f.ImageUpdatedBy != nil && *f.ImageUpdatedBy != "" {
+		if !anyImageMatches(images, func(img idom.ImageFile) bool {
+			return ptrOrEmpty(img.UpdatedBy) == *f.ImageUpdatedBy
+		}) {
+			return false
+		}
+	}
+
+	if f.ImageDeletedBy != nil && *f.ImageDeletedBy != "" {
+		if !anyImageMatches(images, func(img idom.ImageFile) bool {
+			return ptrOrEmpty(img.DeletedBy) == *f.ImageDeletedBy
+		}) {
 			return false
 		}
 	}
@@ -735,47 +536,111 @@ func matchInquiryFilter(in idom.Inquiry, f idom.Filter) bool {
 func applyInquirySort(q firestore.Query, sort idom.Sort) firestore.Query {
 	col, dir := mapInquirySort(sort)
 	if col == "" {
-		// default: createdAt DESC, id DESC
 		return q.OrderBy("createdAt", firestore.Desc).OrderBy("id", firestore.Desc)
 	}
 	return q.OrderBy(col, dir).OrderBy("id", firestore.Asc)
 }
 
 func mapInquirySort(sort idom.Sort) (string, firestore.Direction) {
-	col := strings.ToLower(string(sort.Column))
-	var field string
-
-	switch col {
+	switch strings.ToLower(string(sort.Column)) {
 	case "id":
-		field = "id"
+		return "id", sortDirection(sort)
 	case "avatarid", "avatar_id":
-		field = "avatarId"
+		return "avatarId", sortDirection(sort)
 	case "subject":
-		field = "subject"
+		return "subject", sortDirection(sort)
 	case "status":
-		field = "status"
+		return "status", sortDirection(sort)
 	case "inquirytype", "inquiry_type":
-		field = "inquiryType"
+		return "inquiryType", sortDirection(sort)
 	case "assigneeid", "assignee_id":
-		field = "assigneeId"
+		return "assigneeId", sortDirection(sort)
 	case "createdat", "created_at":
-		field = "createdAt"
+		return "createdAt", sortDirection(sort)
 	case "updatedat", "updated_at":
-		field = "updatedAt"
+		return "updatedAt", sortDirection(sort)
 	case "deletedat", "deleted_at":
-		field = "deletedAt"
+		return "deletedAt", sortDirection(sort)
 	default:
 		return "", firestore.Desc
 	}
-
-	dir := firestore.Asc
-	if strings.EqualFold(string(sort.Order), "desc") {
-		dir = firestore.Desc
-	}
-	return field, dir
 }
 
-// small helper
+func sortDirection(sort idom.Sort) firestore.Direction {
+	if strings.EqualFold(string(sort.Order), "desc") {
+		return firestore.Desc
+	}
+	return firestore.Asc
+}
+
+// =======================
+// Small Helpers
+// =======================
+
+func normalizeInquiryImages(inq *idom.Inquiry, now time.Time) {
+	if inq.Images == nil {
+		inq.Images = []idom.ImageFile{}
+		return
+	}
+
+	for i := range inq.Images {
+		if inq.Images[i].InquiryID == "" {
+			inq.Images[i].InquiryID = inq.ID
+		}
+		if inq.Images[i].CreatedAt.IsZero() {
+			inq.Images[i].CreatedAt = now
+		}
+	}
+}
+
+func setOptionalString(m map[string]any, key string, value *string) {
+	if value != nil && *value != "" {
+		m[key] = *value
+	}
+}
+
+func setOptionalTime(m map[string]any, key string, value *time.Time) {
+	if value != nil && !value.IsZero() {
+		m[key] = value.UTC()
+	}
+}
+
+func setOptionalInt(m map[string]any, key string, value *int) {
+	if value != nil {
+		m[key] = *value
+	}
+}
+
+func ptrStringFromMap(m map[string]any, key string) *string {
+	s := asString(m[key])
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func ptrIntFromMap(m map[string]any, key string) *int {
+	if _, ok := m[key]; !ok {
+		return nil
+	}
+	n := asInt(m[key])
+	return &n
+}
+
+func timeFromMap(m map[string]any, key string) time.Time {
+	t, _ := asTime(m[key])
+	return t.UTC()
+}
+
+func ptrTimeFromMap(m map[string]any, key string) *time.Time {
+	t, ok := asTime(m[key])
+	if !ok || t.IsZero() {
+		return nil
+	}
+	utc := t.UTC()
+	return &utc
+}
+
 func ptrOrEmpty(p *string) string {
 	if p == nil {
 		return ""
@@ -783,26 +648,75 @@ func ptrOrEmpty(p *string) string {
 	return *p
 }
 
-// local paging helpers (replacing removed fscommon helpers)
-
-func NormalizePage(number, perPage, defPerPage, _ int) (int, int, int) {
-	n := number
-	pp := perPage
-	if n <= 0 {
-		n = 1
+func hasActiveImage(images []idom.ImageFile) bool {
+	for _, img := range images {
+		if img.DeletedAt == nil {
+			return true
+		}
 	}
-	if pp <= 0 {
-		pp = defPerPage
-	}
-	if pp > 200 {
-		pp = 200
-	}
-	return n, pp, 0
+	return false
 }
 
-func ComputeTotalPages(total, perPage int) int {
-	if total <= 0 || perPage <= 0 {
-		return 0
+func anyImageMatches(images []idom.ImageFile, fn func(idom.ImageFile) bool) bool {
+	for _, img := range images {
+		if fn(img) {
+			return true
+		}
 	}
-	return (total + perPage - 1) / perPage
+	return false
+}
+
+func containsInquiryStatus(xs []idom.InquiryStatus, v idom.InquiryStatus) bool {
+	if string(v) == "" || len(xs) == 0 {
+		return false
+	}
+	for _, x := range xs {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func containsInquiryType(xs []idom.InquiryType, v idom.InquiryType) bool {
+	if string(v) == "" || len(xs) == 0 {
+		return false
+	}
+	for _, x := range xs {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func searchText(in idom.Inquiry) string {
+	var b strings.Builder
+
+	b.WriteString(in.Subject)
+	b.WriteString(" ")
+	b.WriteString(in.Content)
+	b.WriteString(" ")
+	b.WriteString(ptrOrEmpty(in.UpdatedBy))
+	b.WriteString(" ")
+	b.WriteString(ptrOrEmpty(in.AssigneeID))
+
+	for _, img := range in.Images {
+		b.WriteString(" ")
+		b.WriteString(img.FileName)
+		b.WriteString(" ")
+		b.WriteString(img.FileURL)
+		b.WriteString(" ")
+		b.WriteString(ptrOrEmpty(img.ObjectPath))
+		b.WriteString(" ")
+		b.WriteString(img.MimeType)
+		b.WriteString(" ")
+		b.WriteString(img.CreatedBy)
+		b.WriteString(" ")
+		b.WriteString(ptrOrEmpty(img.UpdatedBy))
+		b.WriteString(" ")
+		b.WriteString(ptrOrEmpty(img.DeletedBy))
+	}
+
+	return b.String()
 }

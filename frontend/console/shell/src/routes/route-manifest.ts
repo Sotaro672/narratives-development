@@ -31,8 +31,4 @@ export const remoteRouteModules = {
   orders: "orders/routes",
   accounts: "accounts/routes",
   transactions: "transactions/routes",
-
-  // ─────────── 通知・メッセージ
-  message: "message/routes",
-  announce: "announce/routes",
 } as const;

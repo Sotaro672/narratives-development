@@ -187,7 +187,7 @@ export default function PageStyle({
                 onClick={onPurge}
               >
                 <Trash2 size={16} style={{ marginRight: 4 }} />
-                物理削除
+                削除
               </button>
             )}
 
