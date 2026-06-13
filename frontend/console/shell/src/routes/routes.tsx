@@ -1,9 +1,6 @@
 // frontend/shell/src/router/routes.tsx
 import type { RouteObject } from "react-router-dom";
 
-import messageRouteRaw from "../../../message/src/presentation/routes/routes";
-const messageRoutes = messageRouteRaw as unknown as RouteObject[];
-
 import inquiryRoutesRaw from "../../../inquiry/src/presentation/routes/routes";
 const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
 
@@ -55,10 +52,6 @@ import salesRoutesRaw from "../../../sales/presentation/routes/routes";
 const salesRoutes = salesRoutesRaw as unknown as RouteObject[];
 
 export const routes: RouteObject[] = [
-  {
-    path: "/message",
-    children: messageRoutes,
-  },
   {
     path: "/inquiry",
     children: inquiryRoutes,
