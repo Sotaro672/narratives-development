@@ -1,4 +1,5 @@
 // frontend/shell/src/layout/Sidebar/Sidebar.tsx
+
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -12,8 +13,6 @@ import {
   Wallet,
   ChevronRight, // ← これだけ使う（回転で下向き表示）
 } from "lucide-react";
-
-const OPEN_INQUIRIES_DUMMY = 1;
 
 import "./Sidebar.css";
 
@@ -38,15 +37,12 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const openInquiriesCount = OPEN_INQUIRIES_DUMMY;
-
   const menuItems: MenuItem[] = useMemo(
     () => [
       {
         label: "問い合わせ",
         path: "/inquiry",
         icon: MessageSquare,
-        badgeCount: openInquiriesCount > 0 ? openInquiriesCount : null,
       },
       { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
@@ -59,7 +55,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
       { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
-    [openInquiriesCount],
+    [],
   );
 
   const productSubItems: SubItem[] = useMemo(
@@ -156,7 +152,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       p.startsWith("/permission")
     ) {
       setOpenKey("org");
-    } else if (p.startsWith("/finance") || p.startsWith("/transaction") || p.startsWith("/account")) {
+    } else if (
+      p.startsWith("/finance") ||
+      p.startsWith("/transaction") ||
+      p.startsWith("/account")
+    ) {
       setOpenKey("finance");
     } else {
       // それ以外（問い合わせ/出品/注文など）はすべて閉じる

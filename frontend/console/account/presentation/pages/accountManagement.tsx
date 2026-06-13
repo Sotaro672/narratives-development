@@ -4,43 +4,11 @@ import * as React from "react";
 import List from "../../../shell/src/layout/List/List";
 import { Filter } from "lucide-react";
 import "../styles/account.css";
-import { ACCOUNTS } from "../../infrastructure/mockdata/mockdata";
-import type {
-  Account,
-  AccountStatus,
-} from "../../../shell/src/shared/types/account";
 
 // Lucide型エラー対策
 const IconFilter = Filter as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>
 >;
-
-const formatAccountNumber = (num: number): string =>
-  num.toString().padStart(8, "0");
-
-const formatDate = (iso: string): string => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}/${mm}/${dd}`;
-};
-
-const statusClass = (status: AccountStatus): string => {
-  switch (status) {
-    case "active":
-      return "account-status-badge is-active";
-    case "inactive":
-      return "account-status-badge is-inactive";
-    case "suspended":
-      return "account-status-badge is-suspended";
-    case "deleted":
-      return "account-status-badge is-deleted";
-    default:
-      return "account-status-badge";
-  }
-};
 
 export default function AccountManagementPage() {
   const headers: React.ReactNode[] = [
@@ -74,27 +42,16 @@ export default function AccountManagementPage() {
       <List
         title="口座管理"
         headerCells={headers}
-        showCreateButton
-        createLabel="口座登録"
-        onCreate={() => console.log("新規口座登録")}
-        showResetButton
-        onReset={() => console.log("リスト更新")}
+        showCreateButton={false}
+        showResetButton={false}
       >
-        {ACCOUNTS.map((acc: Account) => (
-          <tr key={acc.id}>
-            <td>{acc.id}</td>
-            <td>{acc.memberId}</td>
-            <td>{acc.bankName}</td>
-            <td>{acc.branchName}</td>
-            <td>{formatAccountNumber(acc.accountNumber)}</td>
-            <td>{acc.accountType}</td>
-            <td>{acc.currency}</td>
-            <td>
-              <span className={statusClass(acc.status)}>{acc.status}</span>
-            </td>
-            <td>{formatDate(acc.createdAt)}</td>
-          </tr>
-        ))}
+        <tr>
+          <td colSpan={9}>
+            <div className="account-empty">
+              試作品では口座管理機能は未実装です。
+            </div>
+          </td>
+        </tr>
       </List>
     </div>
   );
