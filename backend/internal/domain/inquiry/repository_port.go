@@ -21,6 +21,7 @@ type InquiryPatch struct {
 	Content     *string
 	Status      *InquiryStatus
 	InquiryType *InquiryType
+	IsRead      *bool
 
 	ProductBlueprintID *string
 	TokenBlueprintID   *string
@@ -34,8 +35,8 @@ type InquiryPatch struct {
 }
 
 // Filter is used by repository implementations.
-// CompanyID is supplied by ListByCompanyID, so this filter represents
-// additional conditions within the company scope.
+// CompanyID is supplied by ListByCompanyID / CountUnreadByCompanyID,
+// so this filter represents additional conditions within the company scope.
 //
 // Image filters are included here because inquiryImage is no longer a separate domain.
 type Filter struct {
@@ -45,20 +46,13 @@ type Filter struct {
 	AvatarID           *string
 	AssigneeID         *string
 	Status             *InquiryStatus
-	Statuses           []InquiryStatus
 	InquiryType        *InquiryType
-	InquiryTypes       []InquiryType
 	ProductBlueprintID *string
 	TokenBlueprintID   *string
-	HasImage           *bool
 	UpdatedBy          *string
 	DeletedBy          *string
 
-	ImageFileName  *string
-	ImageMimeType  *string
-	ImageCreatedBy *string
-	ImageUpdatedBy *string
-	ImageDeletedBy *string
+	ImageFileName *string
 
 	Deleted *bool
 }
@@ -93,6 +87,14 @@ type Repository interface {
 		sort Sort,
 		page Page,
 	) (PageResult[Inquiry], error)
+
+	// CountUnreadByCompanyID counts inquiries where isRead is false
+	// within the given company scope.
+	CountUnreadByCompanyID(
+		ctx context.Context,
+		companyID string,
+		filter Filter,
+	) (int, error)
 
 	GetByID(ctx context.Context, id string) (Inquiry, error)
 	Create(ctx context.Context, inq Inquiry) (Inquiry, error)

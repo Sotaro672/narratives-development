@@ -124,6 +124,52 @@ func (r *InquiryRepositoryFS) ListByCompanyID(
 	}, nil
 }
 
+func (r *InquiryRepositoryFS) CountUnreadByCompanyID(
+	ctx context.Context,
+	companyID string,
+	filter idom.Filter,
+) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("firestore client is nil")
+	}
+	if companyID == "" {
+		return 0, idom.ErrNotFound
+	}
+
+	q := r.col().Where("companyId", "==", companyID)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	count := 0
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		in, err := docToInquiry(doc)
+		if err != nil {
+			return 0, err
+		}
+
+		if in.IsRead {
+			continue
+		}
+		if !matchInquiryFilter(in, filter) {
+			continue
+		}
+
+		count++
+	}
+
+	return count, nil
+}
+
 func (r *InquiryRepositoryFS) GetByID(ctx context.Context, id string) (idom.Inquiry, error) {
 	if r.Client == nil {
 		return idom.Inquiry{}, errors.New("firestore client is nil")
@@ -141,6 +187,25 @@ func (r *InquiryRepositoryFS) GetByID(ctx context.Context, id string) (idom.Inqu
 	}
 
 	return docToInquiry(snap)
+}
+
+func (r *InquiryRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
+	if r.Client == nil {
+		return false, errors.New("firestore client is nil")
+	}
+	if id == "" {
+		return false, nil
+	}
+
+	_, err := r.col().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return true, nil
 }
 
 // =======================
@@ -245,6 +310,7 @@ func inquiryToDocData(in idom.Inquiry) map[string]any {
 		"content":     in.Content,
 		"status":      string(in.Status),
 		"inquiryType": string(in.InquiryType),
+		"isRead":      in.IsRead,
 		"images":      imagesToDocData(in.Images),
 		"createdAt":   in.CreatedAt.UTC(),
 		"updatedAt":   in.UpdatedAt.UTC(),
@@ -275,8 +341,6 @@ func imagesToDocData(images []idom.ImageFile) []map[string]any {
 		}
 
 		setOptionalString(m, "objectPath", img.ObjectPath)
-		setOptionalInt(m, "width", img.Width)
-		setOptionalInt(m, "height", img.Height)
 		setOptionalTime(m, "updatedAt", img.UpdatedAt)
 		setOptionalString(m, "updatedBy", img.UpdatedBy)
 		setOptionalTime(m, "deletedAt", img.DeletedAt)
@@ -301,6 +365,7 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		Content:            asString(data["content"]),
 		Status:             idom.InquiryStatus(asString(data["status"])),
 		InquiryType:        idom.InquiryType(asString(data["inquiryType"])),
+		IsRead:             asBool(data["isRead"]),
 		ProductBlueprintID: ptrStringFromMap(data, "productBlueprintId"),
 		TokenBlueprintID:   ptrStringFromMap(data, "tokenBlueprintId"),
 		AssigneeID:         ptrStringFromMap(data, "assigneeId"),
@@ -346,8 +411,6 @@ func docImagesToDomain(raw any, fallbackInquiryID string) []idom.ImageFile {
 			ObjectPath: ptrStringFromMap(m, "objectPath"),
 			FileSize:   int64(asInt(m["fileSize"])),
 			MimeType:   asString(m["mimeType"]),
-			Width:      ptrIntFromMap(m, "width"),
-			Height:     ptrIntFromMap(m, "height"),
 			CreatedAt:  timeFromMap(m, "createdAt"),
 			CreatedBy:  asString(m["createdBy"]),
 			UpdatedAt:  ptrTimeFromMap(m, "updatedAt"),
@@ -391,6 +454,9 @@ func inquiryPatchToUpdates(patch idom.InquiryPatch) []firestore.Update {
 	}
 	if patch.InquiryType != nil {
 		updates = append(updates, firestore.Update{Path: "inquiryType", Value: string(*patch.InquiryType)})
+	}
+	if patch.IsRead != nil {
+		updates = append(updates, firestore.Update{Path: "isRead", Value: *patch.IsRead})
 	}
 
 	appendStringUpdate("productBlueprintId", patch.ProductBlueprintID)
@@ -455,22 +521,13 @@ func matchInquiryFilter(in idom.Inquiry, f idom.Filter) bool {
 	if f.Status != nil && string(*f.Status) != "" && in.Status != *f.Status {
 		return false
 	}
-	if len(f.Statuses) > 0 && !containsInquiryStatus(f.Statuses, in.Status) {
-		return false
-	}
 	if f.InquiryType != nil && string(*f.InquiryType) != "" && in.InquiryType != *f.InquiryType {
-		return false
-	}
-	if len(f.InquiryTypes) > 0 && !containsInquiryType(f.InquiryTypes, in.InquiryType) {
 		return false
 	}
 	if f.ProductBlueprintID != nil && *f.ProductBlueprintID != "" && ptrOrEmpty(in.ProductBlueprintID) != *f.ProductBlueprintID {
 		return false
 	}
 	if f.TokenBlueprintID != nil && *f.TokenBlueprintID != "" && ptrOrEmpty(in.TokenBlueprintID) != *f.TokenBlueprintID {
-		return false
-	}
-	if f.HasImage != nil && *f.HasImage != hasActiveImage(in.Images) {
 		return false
 	}
 	if f.UpdatedBy != nil && *f.UpdatedBy != "" && ptrOrEmpty(in.UpdatedBy) != *f.UpdatedBy {
@@ -493,38 +550,6 @@ func matchImageFilters(images []idom.ImageFile, f idom.Filter) bool {
 	if f.ImageFileName != nil && *f.ImageFileName != "" {
 		if !anyImageMatches(images, func(img idom.ImageFile) bool {
 			return img.FileName == *f.ImageFileName
-		}) {
-			return false
-		}
-	}
-
-	if f.ImageMimeType != nil && *f.ImageMimeType != "" {
-		if !anyImageMatches(images, func(img idom.ImageFile) bool {
-			return img.MimeType == *f.ImageMimeType
-		}) {
-			return false
-		}
-	}
-
-	if f.ImageCreatedBy != nil && *f.ImageCreatedBy != "" {
-		if !anyImageMatches(images, func(img idom.ImageFile) bool {
-			return img.CreatedBy == *f.ImageCreatedBy
-		}) {
-			return false
-		}
-	}
-
-	if f.ImageUpdatedBy != nil && *f.ImageUpdatedBy != "" {
-		if !anyImageMatches(images, func(img idom.ImageFile) bool {
-			return ptrOrEmpty(img.UpdatedBy) == *f.ImageUpdatedBy
-		}) {
-			return false
-		}
-	}
-
-	if f.ImageDeletedBy != nil && *f.ImageDeletedBy != "" {
-		if !anyImageMatches(images, func(img idom.ImageFile) bool {
-			return ptrOrEmpty(img.DeletedBy) == *f.ImageDeletedBy
 		}) {
 			return false
 		}
@@ -605,26 +630,12 @@ func setOptionalTime(m map[string]any, key string, value *time.Time) {
 	}
 }
 
-func setOptionalInt(m map[string]any, key string, value *int) {
-	if value != nil {
-		m[key] = *value
-	}
-}
-
 func ptrStringFromMap(m map[string]any, key string) *string {
 	s := asString(m[key])
 	if s == "" {
 		return nil
 	}
 	return &s
-}
-
-func ptrIntFromMap(m map[string]any, key string) *int {
-	if _, ok := m[key]; !ok {
-		return nil
-	}
-	n := asInt(m[key])
-	return &n
 }
 
 func timeFromMap(m map[string]any, key string) time.Time {
@@ -648,30 +659,9 @@ func ptrOrEmpty(p *string) string {
 	return *p
 }
 
-func hasActiveImage(images []idom.ImageFile) bool {
-	for _, img := range images {
-		if img.DeletedAt == nil {
-			return true
-		}
-	}
-	return false
-}
-
 func anyImageMatches(images []idom.ImageFile, fn func(idom.ImageFile) bool) bool {
 	for _, img := range images {
 		if fn(img) {
-			return true
-		}
-	}
-	return false
-}
-
-func containsInquiryStatus(xs []idom.InquiryStatus, v idom.InquiryStatus) bool {
-	if string(v) == "" || len(xs) == 0 {
-		return false
-	}
-	for _, x := range xs {
-		if x == v {
 			return true
 		}
 	}

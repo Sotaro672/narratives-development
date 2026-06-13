@@ -5,14 +5,14 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../../shell/src/layout/List/List";
+} from "../../../shell/src/layout/List/List";
 import "../styles/inquiry.css";
 import { INQUIRIES } from "../../infrastructure/mockdata/inquiry_mockdata";
 import type {
   Inquiry,
   InquiryStatus,
   InquiryType,
-} from "../../../../shell/src/shared/types/inquiry";
+} from "../../../shell/src/shared/types/inquiry";
 
 // ISO8601 → number（タイムスタンプ）
 // 不正 or 未設定は 0 扱い（= 並び替え時に末尾側へ）

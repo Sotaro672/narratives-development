@@ -1,7 +1,7 @@
 // frontend/shell/src/router/routes.tsx
 import type { RouteObject } from "react-router-dom";
 
-import inquiryRoutesRaw from "../../../inquiry/src/presentation/routes/routes";
+import inquiryRoutesRaw from "../../../inquiry/presentation/routes/routes";
 const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
 
 import productBlueprintRoutesRaw from "../../../productBlueprint/src/presentation/routes/routes";

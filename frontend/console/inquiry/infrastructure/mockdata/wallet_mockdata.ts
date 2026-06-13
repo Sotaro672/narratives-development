@@ -4,7 +4,7 @@
 // Mirrors frontend/shell/src/shared/types/wallet.ts
 // ------------------------------------------------------
 
-import type { Wallet } from "../../../../shell/src/shared/types/wallet";
+import type { Wallet } from "../../../shell/src/shared/types/wallet";
 
 /**
  * Mock Wallet data representing Solana-like wallets and owned token mints.

@@ -33,8 +33,6 @@ type ImageFile struct {
 	ObjectPath *string    `json:"objectPath,omitempty"`
 	FileSize   int64      `json:"fileSize"`
 	MimeType   string     `json:"mimeType"`
-	Width      *int       `json:"width,omitempty"`
-	Height     *int       `json:"height,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	CreatedBy  string     `json:"createdBy"`
 	UpdatedAt  *time.Time `json:"updatedAt,omitempty"`
@@ -53,6 +51,7 @@ type Inquiry struct {
 	Content            string        `json:"content"`
 	Status             InquiryStatus `json:"status"`
 	InquiryType        InquiryType   `json:"inquiryType"`
+	IsRead             bool          `json:"isRead"`
 	ProductBlueprintID *string       `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   *string       `json:"tokenBlueprintId,omitempty"`
 	AssigneeID         *string       `json:"assigneeId,omitempty"`
@@ -105,7 +104,6 @@ var (
 	ErrInvalidImageObjectPath = errors.New("inquiry: invalid image objectPath")
 	ErrInvalidImageFileSize   = errors.New("inquiry: invalid image fileSize")
 	ErrInvalidImageMIMEType   = errors.New("inquiry: invalid image mimeType")
-	ErrInvalidImageDimensions = errors.New("inquiry: invalid image dimensions")
 	ErrInvalidImageCreatedAt  = errors.New("inquiry: invalid image createdAt")
 	ErrInvalidImageCreatedBy  = errors.New("inquiry: invalid image createdBy")
 	ErrInvalidImageUpdatedAt  = errors.New("inquiry: invalid image updatedAt")
@@ -133,6 +131,7 @@ func New(
 		Content:     content,
 		Status:      status,
 		InquiryType: inquiryType,
+		IsRead:      false,
 		Images:      []ImageFile{},
 		CreatedAt:   createdAt.UTC(),
 		UpdatedAt:   updatedAt.UTC(),
@@ -159,6 +158,7 @@ func NewWithOptional(
 		Content:            content,
 		Status:             status,
 		InquiryType:        inquiryType,
+		IsRead:             false,
 		ProductBlueprintID: productBlueprintID,
 		TokenBlueprintID:   tokenBlueprintID,
 		AssigneeID:         assigneeID,
@@ -183,7 +183,6 @@ func NewImageFile(
 	objectPath *string,
 	fileSize int64,
 	mimeType string,
-	width, height *int,
 	createdAt time.Time,
 	createdBy string,
 	updatedAt *time.Time,
@@ -198,8 +197,6 @@ func NewImageFile(
 		ObjectPath: objectPath,
 		FileSize:   fileSize,
 		MimeType:   mimeType,
-		Width:      width,
-		Height:     height,
 		CreatedAt:  createdAt.UTC(),
 		CreatedBy:  createdBy,
 		UpdatedAt:  normalizeOptionalTime(updatedAt),
@@ -218,7 +215,6 @@ func NewImageFileMinimal(
 	objectPath *string,
 	fileSize int64,
 	mimeType string,
-	width, height *int,
 	createdAt time.Time,
 	createdBy string,
 ) (ImageFile, error) {
@@ -229,8 +225,6 @@ func NewImageFileMinimal(
 		objectPath,
 		fileSize,
 		mimeType,
-		width,
-		height,
 		createdAt,
 		createdBy,
 		nil,
@@ -246,6 +240,24 @@ func (i *Inquiry) Touch(now time.Time) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
+	i.UpdatedAt = now.UTC()
+	return nil
+}
+
+func (i *Inquiry) MarkAsRead(now time.Time) error {
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+	i.IsRead = true
+	i.UpdatedAt = now.UTC()
+	return nil
+}
+
+func (i *Inquiry) MarkAsUnread(now time.Time) error {
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+	i.IsRead = false
 	i.UpdatedAt = now.UTC()
 	return nil
 }
@@ -434,13 +446,6 @@ func validateImageFile(img ImageFile) error {
 		if _, ok := AllowedMimeTypes[img.MimeType]; !ok {
 			return ErrInvalidImageMIMEType
 		}
-	}
-
-	if img.Width != nil && *img.Width <= 0 {
-		return ErrInvalidImageDimensions
-	}
-	if img.Height != nil && *img.Height <= 0 {
-		return ErrInvalidImageDimensions
 	}
 
 	if img.CreatedAt.IsZero() {

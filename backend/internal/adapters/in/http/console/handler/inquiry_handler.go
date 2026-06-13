@@ -34,29 +34,37 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/inquiries/")
 	parts := strings.Split(rest, "/")
-	id := parts[0]
-	if id == "" {
+
+	if len(parts) == 0 || parts[0] == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
+	// GET /inquiries/company/{companyId}
+	if parts[0] == "company" {
+		if len(parts) != 2 || parts[1] == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid company id"})
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.listByCompanyID(w, r, parts[1])
+		return
+	}
+
+	id := parts[0]
+
 	// サブリソース
 	if len(parts) > 1 {
 		switch parts[1] {
-		case "aggregate":
-			if r.Method != http.MethodGet {
-				methodNotAllowed(w)
-				return
-			}
-			h.getAggregate(w, r, id)
-			return
-
 		case "images":
 			switch r.Method {
-			case http.MethodGet:
-				h.listImages(w, r, id)
-				return
 			case http.MethodPost:
 				h.addImage(w, r, id)
 				return
@@ -75,12 +83,94 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// /inquiries/{id}
+	// GET /inquiries/{id}
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
 		return
 	}
+
 	h.get(w, r, id)
+}
+
+// GET /inquiries/company/{companyId}
+//
+// Query:
+//
+//	searchQuery
+//	avatarId
+//	assigneeId
+//	status
+//	inquiryType
+//	productBlueprintId
+//	tokenBlueprintId
+//	updatedBy
+//	deletedBy
+//	imageFileName
+//	deleted=true|false
+func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request, companyID string) {
+	ctx := r.Context()
+	q := r.URL.Query()
+
+	filter := inquirydom.Filter{
+		SearchQuery: q.Get("searchQuery"),
+	}
+
+	if v := q.Get("avatarId"); v != "" {
+		filter.AvatarID = &v
+	}
+
+	if v := q.Get("assigneeId"); v != "" {
+		filter.AssigneeID = &v
+	}
+
+	if v := q.Get("status"); v != "" {
+		status := inquirydom.InquiryStatus(v)
+		filter.Status = &status
+	}
+
+	if v := q.Get("inquiryType"); v != "" {
+		inquiryType := inquirydom.InquiryType(v)
+		filter.InquiryType = &inquiryType
+	}
+
+	if v := q.Get("productBlueprintId"); v != "" {
+		filter.ProductBlueprintID = &v
+	}
+
+	if v := q.Get("tokenBlueprintId"); v != "" {
+		filter.TokenBlueprintID = &v
+	}
+
+	if v := q.Get("updatedBy"); v != "" {
+		filter.UpdatedBy = &v
+	}
+
+	if v := q.Get("deletedBy"); v != "" {
+		filter.DeletedBy = &v
+	}
+
+	if v := q.Get("imageFileName"); v != "" {
+		filter.ImageFileName = &v
+	}
+
+	if v := q.Get("deleted"); v != "" {
+		deleted := v == "true"
+		filter.Deleted = &deleted
+	}
+
+	result, err := h.uc.ListByCompanyID(
+		ctx,
+		companyID,
+		filter,
+		inquirydom.Sort{},
+		inquirydom.Page{},
+	)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // GET /inquiries/{id}
@@ -96,23 +186,6 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 	_ = json.NewEncoder(w).Encode(in)
 }
 
-// GET /inquiries/{id}/images
-func (h *InquiryHandler) listImages(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	items, err := h.uc.GetImages(ctx, id)
-	if err != nil {
-		writeInquiryErr(w, err)
-		return
-	}
-
-	if items == nil {
-		items = []inquirydom.ImageFile{}
-	}
-
-	_ = json.NewEncoder(w).Encode(items)
-}
-
 // POST /inquiries/{id}/images
 //
 // Body:
@@ -123,8 +196,6 @@ func (h *InquiryHandler) listImages(w http.ResponseWriter, r *http.Request, id s
 //	  "objectPath": "inquiry-images/{inquiryId}/{imageId}/sample.png",
 //	  "fileSize": 123,
 //	  "mimeType": "image/png",
-//	  "width": 123,
-//	  "height": 456,
 //	  "createdAt": "2026-01-01T00:00:00Z",
 //	  "createdBy": "uid_or_member_id"
 //	}
@@ -140,8 +211,6 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		ObjectPath string  `json:"objectPath"`
 		FileSize   int64   `json:"fileSize"`
 		MimeType   string  `json:"mimeType"`
-		Width      *int    `json:"width"`
-		Height     *int    `json:"height"`
 		CreatedAt  *string `json:"createdAt"`
 		CreatedBy  string  `json:"createdBy"`
 	}
@@ -179,8 +248,6 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		objectPath,
 		req.FileSize,
 		req.MimeType,
-		req.Width,
-		req.Height,
 		createdAt,
 		createdBy,
 	)
@@ -263,19 +330,6 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 	_ = json.NewEncoder(w).Encode(updated.Images)
 }
 
-// GET /inquiries/{id}/aggregate
-func (h *InquiryHandler) getAggregate(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	agg, err := h.uc.GetAggregate(ctx, id)
-	if err != nil {
-		writeInquiryErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(agg)
-}
-
 // エラーハンドリング
 func writeInquiryErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
@@ -298,7 +352,6 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, inquirydom.ErrInvalidImageObjectPath),
 		errors.Is(err, inquirydom.ErrInvalidImageFileSize),
 		errors.Is(err, inquirydom.ErrInvalidImageMIMEType),
-		errors.Is(err, inquirydom.ErrInvalidImageDimensions),
 		errors.Is(err, inquirydom.ErrInvalidImageCreatedAt),
 		errors.Is(err, inquirydom.ErrInvalidImageCreatedBy),
 		errors.Is(err, inquirydom.ErrInvalidImageUpdatedAt),
