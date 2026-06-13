@@ -88,13 +88,13 @@ export type ListCreateDTO = {
 
   listImageUrl?: string | null;
 
-  modelRefs?: ListCreateModelRefDTO[];
+  modelRefs: ListCreateModelRefDTO[];
 
   /**
    * PriceCard 用。
    * GET /inventory/list-create/{inventoryId} の priceRows を正とする。
    */
-  priceRows?: ListCreatePriceRowDTO[];
+  priceRows: ListCreatePriceRowDTO[];
 
   totalStock?: number;
   priceNote?: string | null;

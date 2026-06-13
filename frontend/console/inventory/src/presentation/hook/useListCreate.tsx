@@ -34,11 +34,9 @@ type ImageInputRef = React.RefObject<HTMLInputElement | null>;
 type ListingDecision = "list" | "hold";
 
 type AssigneeCandidate = {
-  id: string; // uid を入れる
+  id: string;
   name: string;
 };
-
-type ProductBlueprintCategoryKind = "apparel" | "alcohol";
 
 export type UseListCreateResult = {
   title: string;
@@ -90,10 +88,6 @@ type UsePriceRowsResult = {
   priceRows: PriceRow[];
   setPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
   initializedPriceRowsRef: React.MutableRefObject<boolean>;
-  productBlueprintCategory: string | undefined;
-  setProductBlueprintCategory: React.Dispatch<
-    React.SetStateAction<string | undefined>
-  >;
   onChangePrice: (index: number, price: number | null) => void;
   priceCard: ReturnType<typeof usePriceCard>;
 };
@@ -159,35 +153,6 @@ function normalizeAssigneeCandidates(
     .filter(Boolean) as AssigneeCandidate[];
 }
 
-function isProductBlueprintCategoryKind(
-  value: unknown,
-): value is ProductBlueprintCategoryKind {
-  return value === "apparel" || value === "alcohol";
-}
-
-function resolveProductBlueprintCategory(
-  dto: unknown,
-): ProductBlueprintCategoryKind | undefined {
-  const d = dto as any;
-
-  const categoryKind = d?.productBlueprintCategory?.kind;
-  if (isProductBlueprintCategoryKind(categoryKind)) {
-    return categoryKind;
-  }
-
-  const priceRows = Array.isArray(d?.priceRows) ? d.priceRows : [];
-
-  const firstKind = priceRows.find((row: any) =>
-    isProductBlueprintCategoryKind(row?.kind),
-  )?.kind;
-
-  if (isProductBlueprintCategoryKind(firstKind)) {
-    return firstKind;
-  }
-
-  return undefined;
-}
-
 function dedupeFiles(prev: File[], add: File[]): File[] {
   const exists = new Set(
     prev.map((file: File) => `${file.name}__${file.size}__${file.lastModified}`),
@@ -209,39 +174,6 @@ function normalizeImageFiles(
     .filter((file: File) =>
       String(file.type || "").startsWith("image/"),
     ) as File[];
-}
-
-function initPriceRowsFromDTOKeepingModelFields(dto: ListCreateDTO): PriceRow[] {
-  const rows = Array.isArray(dto.priceRows) ? dto.priceRows : [];
-
-  return rows.map((row) => ({
-    modelId: row.modelId,
-
-    kind: row.kind ?? null,
-
-    displayOrder:
-      row.displayOrder === undefined || row.displayOrder === null
-        ? null
-        : row.displayOrder,
-
-    // apparel category 用
-    size: row.size ?? null,
-    color: row.color ?? null,
-    rgb: row.rgb ?? null,
-
-    // alcohol category 用
-    volumeValue: row.volumeValue ?? null,
-    volumeUnit: row.volumeUnit ?? null,
-
-    stock: Number.isFinite(Number(row.stock)) ? Number(row.stock) : 0,
-
-    price:
-      row.price === undefined || row.price === null
-        ? row.price
-        : Number.isFinite(Number(row.price))
-          ? Number(row.price)
-          : null,
-  }));
 }
 
 function useListCreateParamsAndTitle(): {
@@ -411,8 +343,6 @@ function useListingImages(): {
 
 function usePriceRows(): UsePriceRowsResult {
   const [priceRows, setPriceRows] = React.useState<PriceRow[]>([]);
-  const [productBlueprintCategory, setProductBlueprintCategory] =
-    React.useState<string | undefined>(undefined);
 
   const initializedPriceRowsRef = React.useRef(false);
 
@@ -438,7 +368,6 @@ function usePriceRows(): UsePriceRowsResult {
     rows: priceRows,
     mode: "edit",
     currencySymbol: "¥",
-    productBlueprintCategory,
     onChangePrice,
   });
 
@@ -446,8 +375,6 @@ function usePriceRows(): UsePriceRowsResult {
     priceRows,
     setPriceRows,
     initializedPriceRowsRef,
-    productBlueprintCategory,
-    setProductBlueprintCategory,
     onChangePrice,
     priceCard,
   };
@@ -533,8 +460,7 @@ function useListCreateDTO(args: {
         setDTO(data);
 
         if (!initializedPriceRowsRef.current) {
-          const nextRows = initPriceRowsFromDTOKeepingModelFields(data);
-          setPriceRows(nextRows);
+          setPriceRows(data.priceRows);
           initializedPriceRowsRef.current = true;
         }
       } catch (e) {
@@ -610,18 +536,16 @@ function useCreateList(args: {
         throw new Error(msg);
       }
 
-      // inventoryId は docId を正としてそのまま扱う（split しない）
-      const rawInventoryId = String(resolvedParams.inventoryId ?? "");
-      const safeInventoryId = rawInventoryId;
+      const inventoryId = String(resolvedParams.inventoryId ?? "");
 
       await createListWithImages({
         params: {
           ...resolvedParams,
-          inventoryId: safeInventoryId,
+          inventoryId,
         },
         listingTitle,
         description,
-        priceRows: priceRows as any,
+        priceRows,
         decision,
         assigneeId,
         images,
@@ -681,7 +605,6 @@ export function useListCreate(): UseListCreateResult {
     priceRows,
     setPriceRows,
     initializedPriceRowsRef,
-    setProductBlueprintCategory,
     onChangePrice,
     priceCard,
   } = usePriceRows();
@@ -749,11 +672,6 @@ export function useListCreate(): UseListCreateResult {
     initializedPriceRowsRef,
     setPriceRows,
   });
-
-  React.useEffect(() => {
-    const nextCategory = resolveProductBlueprintCategory(dto);
-    setProductBlueprintCategory(nextCategory);
-  }, [dto, setProductBlueprintCategory]);
 
   const { onCreate } = useCreateList({
     navigate,
