@@ -1,7 +1,7 @@
 // frontend/console/inventory/src/presentation/hook/listCreate/useListCreateDTO.ts
 
 import * as React from "react";
-import type { useNavigate } from "react-router-dom";
+import type { NavigateFunction } from "react-router-dom";
 
 import {
   canFetchListCreate,
@@ -9,14 +9,13 @@ import {
   shouldRedirectToInventoryIdRoute,
   buildInventoryListCreatePath,
   extractDisplayStrings,
+  loadListCreateDTOFromParams,
 } from "../../../application/listCreate/listCreateService";
-
-import { loadListCreateDTOFromParams } from "../../../application/listCreate/listCreate.usecase";
 
 import type {
   PriceRow,
   ResolvedListCreateParams,
-} from "../../../application/listCreate/listCreate.types";
+} from "../../../application/listCreate/listCreateService";
 
 import type { ListCreateDTO } from "../../../infrastructure/http/listCreateRepositoryHTTP.types";
 
@@ -54,7 +53,7 @@ function initPriceRowsFromDTOKeepingModelFields(dto: ListCreateDTO): PriceRow[] 
 }
 
 export function useListCreateDTO(args: {
-  navigate: ReturnType<typeof useNavigate>;
+  navigate: NavigateFunction;
   inventoryId: string | undefined;
   resolvedParams: ResolvedListCreateParams;
   initializedPriceRowsRef: React.MutableRefObject<boolean>;
@@ -94,15 +93,17 @@ export function useListCreateDTO(args: {
 
       try {
         /**
-         * ここでは必ず usecase を通す。
+         * ここでは必ず統合済み service を通す。
          *
          * loadListCreateDTOFromParams() 内で:
          * - /inventory/list-create/:inventoryId を取得
-         * - /models/by-blueprint/:productBlueprintId/variations を取得
-         * - priceRows に kind / volumeValue / volumeUnit を合成
+         * - backend response を ListCreateDTO に mapper 変換
          *
-         * まで行うため、raw API や旧 initPriceRowsFromDTO を使うと
-         * alcohol 用 field が PriceCard に届かない。
+         * まで行う。
+         *
+         * frontend では model variations API を呼ばない。
+         * priceRows は backend 側で productCategory / model kind に応じた
+         * 完成形になっている前提。
          */
         const data = await loadListCreateDTOFromParams(resolvedParams);
         if (cancelled) return;
@@ -154,7 +155,13 @@ export function useListCreateDTO(args: {
     return () => {
       cancelled = true;
     };
-  }, [navigate, inventoryId, resolvedParams, setPriceRows, initializedPriceRowsRef]);
+  }, [
+    navigate,
+    inventoryId,
+    resolvedParams,
+    setPriceRows,
+    initializedPriceRowsRef,
+  ]);
 
   const { productBrandName, productName, tokenBrandName, tokenName } =
     React.useMemo(() => extractDisplayStrings(dto), [dto]);

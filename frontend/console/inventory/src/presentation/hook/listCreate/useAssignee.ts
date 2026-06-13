@@ -1,5 +1,4 @@
 // frontend/console/inventory/src/presentation/hook/listCreate/useAssignee.ts
-
 import * as React from "react";
 
 import { useAdminCard as useAdminCardHook } from "../../../../../admin/src/presentation/hook/useAdminCard";
@@ -19,23 +18,23 @@ function getMemberUid(member: unknown): string {
 function getMemberDisplayName(member: unknown): string {
   const m = member as any;
 
-  const displayName = String(m?.displayName ?? "").trim();
+  const displayName = String(m?.displayName ?? "");
   if (displayName) return displayName;
 
   const nameParts = [m?.lastName, m?.firstName]
-    .map((v) => String(v ?? "").trim())
+    .map((v) => String(v ?? ""))
     .filter(Boolean);
 
   const joinedName = nameParts.join(" ");
   if (joinedName) return joinedName;
 
-  const email = String(m?.email ?? "").trim();
+  const email = String(m?.email ?? "");
   if (email) return email;
 
   const uid = getMemberUid(member);
   if (uid) return uid;
 
-  return String(m?.id ?? "").trim();
+  return String(m?.id ?? "");
 }
 
 function normalizeAssigneeCandidates(rawCandidates: unknown): AssigneeCandidate[] {
@@ -45,17 +44,17 @@ function normalizeAssigneeCandidates(rawCandidates: unknown): AssigneeCandidate[
     .map((raw) => {
       const c = raw as any;
 
-      const id = String(c?.uid ?? c?.id ?? "").trim();
+      const id = String(c?.uid ?? c?.id ?? "");
       if (!id) return null;
 
-      const displayName = String(c?.displayName ?? "").trim();
+      const displayName = String(c?.displayName ?? "");
 
       const nameParts = [c?.lastName, c?.firstName]
-        .map((v) => String(v ?? "").trim())
+        .map((v) => String(v ?? ""))
         .filter(Boolean);
 
       const joinedName = nameParts.join(" ");
-      const name = displayName || joinedName || String(c?.email ?? "").trim() || id;
+      const name = displayName || joinedName || String(c?.email ?? "") || id;
 
       return {
         id,
@@ -113,7 +112,7 @@ export function useAssignee(): {
 
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
-      const nextId = String(id ?? "").trim();
+      const nextId = String(id ?? "");
       if (!nextId) return;
 
       setAssigneeId(nextId);
