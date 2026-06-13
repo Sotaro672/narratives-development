@@ -1,6 +1,6 @@
 // frontend\console\list\src\infrastructure\http\list\authToken.ts
 
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 function toText(v: unknown): string {
   if (v === null || v === undefined) return "";

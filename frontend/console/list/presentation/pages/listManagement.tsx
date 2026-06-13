@@ -1,5 +1,5 @@
 // frontend/list/src/presentation/pages/listManagement.tsx
-import List from "../../../../shell/src/layout/List/List";
+import List from "../../../shell/src/layout/List/List";
 import "../styles/list.css";
 
 import { useListManagement } from "../hook/useListManagement";

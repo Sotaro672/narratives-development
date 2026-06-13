@@ -1,7 +1,7 @@
 // frontend/console/list/src/presentation/components/listImageCard.tsx
 // 商品画像カード（style 要素のみ / ロジックは hook に移譲）
 
-import { Button } from "../../../../shell/src/shared/ui/button";
+import { Button } from "../../../shell/src/shared/ui/button";
 import { useListImageCard } from "../hook/useListImageCard";
 
 function ImageIcon() {

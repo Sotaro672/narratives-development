@@ -3,13 +3,13 @@
 
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 
-import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
-import { Input } from "../../../../shell/src/shared/ui/input";
+import { Card, CardContent } from "../../../shell/src/shared/ui/card";
+import { Input } from "../../../shell/src/shared/ui/input";
 
-import PriceCard from "../../../../list/src/presentation/components/priceCard";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+import PriceCard from "../components/priceCard";
+import AdminCard from "../../../admin/src/presentation/components/AdminCard";
 import ListImageCard from "../components/listImageCard";
 import { useListDetail } from "../hook/useListDetail";
 

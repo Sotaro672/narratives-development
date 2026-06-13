@@ -1,6 +1,6 @@
 // frontend\console\list\src\infrastructure\repository\listImageHttpRepository.ts
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
 import type { ListDTO } from "../dto/listDto";
 import type { SaveListImageFromFirebaseStorageInput } from "../dto/listImageDto";
 import { requestJSON } from "../http/httpClient";

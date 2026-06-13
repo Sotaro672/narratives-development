@@ -1,6 +1,6 @@
 // frontend\console\list\src\infrastructure\repository\listHttpRepository.ts
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
 import type { CreateListInput } from "../dto/createListInput";
 import type { UpdateListInput } from "../dto/updateListInput";
 import type { ListDTO } from "../dto/listDto";

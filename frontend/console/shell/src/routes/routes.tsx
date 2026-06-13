@@ -19,7 +19,7 @@ const tokenBlueprintRoutes = tokenBlueprintRoutesRaw as unknown as RouteObject[]
 import mintRequestRoutesRaw from "../../../mintRequest/src/presentation/routes/routes";
 const mintRequestRoutes = mintRequestRoutesRaw as unknown as RouteObject[];
 
-import listRoutesRaw from "../../../list/src/presentation/routes/routes";
+import listRoutesRaw from "../../../list/presentation/routes/routes";
 const listRoutes = listRoutesRaw as unknown as RouteObject[];
 
 import orderRoutesRaw from "../../../order/src/presentation/routes/routes";

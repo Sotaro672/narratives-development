@@ -4,13 +4,13 @@ import React from "react";
 import {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
+} from "../../shell/src/layout/List/List";
 
-import type { ListStatus } from "../../../shell/src/shared/types/list";
+import type { ListStatus } from "../../shell/src/shared/types/list";
 
 // 分割後のHTTP repository入口（index.ts 経由）
 import { fetchListsHTTP } from "../infrastructure/repository";
-import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
+import { safeDateTimeLabelJa } from "../../shell/src/shared/util/dateJa";
 
 export type SortKey = "id" | "createdAt" | null;
 

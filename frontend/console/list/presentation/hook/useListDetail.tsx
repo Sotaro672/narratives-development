@@ -4,13 +4,13 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 // ✅ PriceCard hook
-import { usePriceCard } from "../../../../list/src/presentation/hook/usePriceCard";
+import { usePriceCard } from "./usePriceCard";
 
 // ✅ 型は inventory/application を正とする（依存方向を正す）
-import type { PriceRow } from "../../../../inventory/src/application/listCreate/listCreate.types";
+import type { PriceRow } from "../../../inventory/src/application/listCreate/listCreate.types";
 
 // Firebase Auth
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // ✅ internal hooks（presentation 層内で完結）
 import { useMainImageIndexGuard } from "./internal/useMainImageIndexGuard";
