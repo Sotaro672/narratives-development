@@ -113,6 +113,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	shippingAddressRepo := outfs.NewShippingAddressRepositoryFS(fsClient)
 	paymentMethodRepo := outfs.NewPaymentMethodRepositoryFS(fsClient)
 	userRepo := outfs.NewUserRepositoryFS(fsClient)
+	memberRepo := outfs.NewMemberRepositoryFS(fsClient)
 	walletRepo := outfs.NewWalletRepositoryFS(fsClient)
 	productRepo := outfs.NewProductRepositoryFS(fsClient)
 
@@ -209,6 +210,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		walletRepo,
 		productBlueprintRepoFS,
 		brandRepo,
+		memberRepo,
 		onchainReader,
 		tokenQuery,
 		productRepo,
@@ -241,8 +243,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
 
 	{
-		memberRepo := outfs.NewMemberRepositoryFS(fsClient)
-
 		c.NameResolver = appresolver.NewNameResolver(
 			brandRepo,
 			companyRepo,

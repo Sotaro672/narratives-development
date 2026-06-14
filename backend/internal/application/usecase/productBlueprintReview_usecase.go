@@ -3,12 +3,14 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"math"
 	"time"
 
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
+	memberdom "narratives/internal/domain/member"
 	productdom "narratives/internal/domain/product"
 	pbdomain "narratives/internal/domain/productBlueprint"
 	pbr "narratives/internal/domain/productBlueprintReview"
@@ -40,7 +42,7 @@ type ProductBlueprintReviewListItem struct {
 	AvatarIcon string `json:"AvatarIcon"`
 }
 
-// management 用: aggregate + BrandName（PascalCase JSON）
+// management 用: aggregate + BrandName + AssigneeName（PascalCase JSON）
 type ProductBlueprintReviewAggregateItem struct {
 	ID                 string `json:"ID"`
 	ProductBlueprintID string `json:"ProductBlueprintID"`
@@ -50,7 +52,8 @@ type ProductBlueprintReviewAggregateItem struct {
 	BrandID   string `json:"BrandID"`
 	BrandName string `json:"BrandName"`
 
-	AssigneeID string `json:"AssigneeID"`
+	AssigneeID   string `json:"AssigneeID"`
+	AssigneeName string `json:"AssigneeName"`
 
 	Rating1Count int `json:"Rating1Count"`
 	Rating2Count int `json:"Rating2Count"`
@@ -71,6 +74,10 @@ type ProductBlueprintReviewUsecase struct {
 	// name resolvers (best-effort)
 	BrandGetter BrandGetter
 
+	// assigneeId は member の Firestore docId として保存されている前提。
+	// そのため AssigneeName 解決では GetByUID ではなく GetByID を使う。
+	MemberRepo memberdom.Repository
+
 	WalletRepo              WalletRepository
 	OnchainReader           OnchainWalletReader
 	TokenQuery              TokenQuery
@@ -89,6 +96,7 @@ func NewProductBlueprintReviewUsecase(
 	walletRepo WalletRepository,
 	productBlueprintRepo pbdomain.Repository,
 	brandGetter BrandGetter,
+	memberRepo memberdom.Repository,
 	onchainReader OnchainWalletReader,
 	tokenQuery TokenQuery,
 	productReader ProductReader,
@@ -104,6 +112,7 @@ func NewProductBlueprintReviewUsecase(
 		ReviewRepo:              reviewRepo,
 		ProductBlueprintRepo:    productBlueprintRepo,
 		BrandGetter:             brandGetter,
+		MemberRepo:              memberRepo,
 		WalletRepo:              walletRepo,
 		OnchainReader:           onchainReader,
 		TokenQuery:              tokenQuery,
@@ -117,6 +126,8 @@ func NewProductBlueprintReviewUsecase(
 // ============================================================
 // Public API: Aggregates (Management)
 // - BrandID の Name 解決は usecase で実施（best-effort）
+// - AssigneeID は ProductBlueprintRepo.GetByID(ctx, pb.ID) の戻り値から取得する
+// - AssigneeID は member の docId 前提で、MemberRepo.GetByID(ctx, assigneeID) により名前解決する
 // - paging は「商品（ProductBlueprint）単位」
 // ============================================================
 
@@ -167,36 +178,54 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 
 	// simple per-request cache
 	brandNameCache := make(map[string]string, 16)
+	memberNameCache := make(map[string]string, 16)
 
 	for _, pb := range paged {
 		if pb.ID == "" {
 			continue
 		}
 
-		sum, e := uc.ReviewRepo.GetProductSummary(ctx, pb.ID, status)
+		// AssigneeID は GetByID の戻り値を正として扱う。
+		livePB, err := uc.ProductBlueprintRepo.GetByID(ctx, pb.ID)
+		if err != nil {
+			return domcommon.PageResult[ProductBlueprintReviewAggregateItem]{}, err
+		}
+
+		sum, e := uc.ReviewRepo.GetProductSummary(ctx, livePB.ID, status)
 		if e != nil {
 			return domcommon.PageResult[ProductBlueprintReviewAggregateItem]{}, e
 		}
 
 		brandName := ""
-		if pb.BrandID != "" && uc.BrandGetter != nil {
-			if v, ok := brandNameCache[pb.BrandID]; ok {
+		if livePB.BrandID != "" && uc.BrandGetter != nil {
+			if v, ok := brandNameCache[livePB.BrandID]; ok {
 				brandName = v
 			} else {
-				if b, err := uc.BrandGetter.GetByID(ctx, pb.BrandID); err == nil {
+				if b, err := uc.BrandGetter.GetByID(ctx, livePB.BrandID); err == nil {
 					brandName = b.Name
 				}
-				brandNameCache[pb.BrandID] = brandName
+				brandNameCache[livePB.BrandID] = brandName
+			}
+		}
+
+		assigneeName := "-"
+		if livePB.AssigneeID != "" {
+			if v, ok := memberNameCache[livePB.AssigneeID]; ok {
+				assigneeName = v
+			} else {
+				assigneeName = uc.resolveAssigneeNameByMemberID(ctx, livePB.AssigneeID)
+				memberNameCache[livePB.AssigneeID] = assigneeName
 			}
 		}
 
 		items = append(items, ProductBlueprintReviewAggregateItem{
-			ID:                 pb.ID,
-			ProductBlueprintID: pb.ID,
-			ProductName:        pb.ProductName,
-			BrandID:            pb.BrandID,
+			ID:                 livePB.ID,
+			ProductBlueprintID: livePB.ID,
+			ProductName:        livePB.ProductName,
+			BrandID:            livePB.BrandID,
 			BrandName:          brandName,
-			AssigneeID:         pb.AssigneeID,
+			AssigneeID:         livePB.AssigneeID,
+			AssigneeName:       assigneeName,
 			Rating1Count:       sum.Rating1Count,
 			Rating2Count:       sum.Rating2Count,
 			Rating3Count:       sum.Rating3Count,
@@ -215,6 +244,38 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 		TotalPages: totalPages,
 	}
 	return out, nil
+}
+
+// resolveAssigneeNameByMemberID resolves assigneeName from member Firestore docId.
+// NOTE:
+// ProductBlueprint.AssigneeID は Firebase Auth UID ではなく member の Firestore docId。
+// そのため GetByUID ではなく GetByID を使う。
+func (uc *ProductBlueprintReviewUsecase) resolveAssigneeNameByMemberID(
+	ctx context.Context,
+	memberID string,
+) string {
+	if memberID == "" {
+		return ""
+	}
+
+	if uc.MemberRepo == nil {
+		return memberID
+	}
+
+	rec, err := uc.MemberRepo.GetByID(ctx, memberID)
+	if err != nil {
+		if errors.Is(err, memberdom.ErrNotFound) {
+			return memberID
+		}
+		return memberID
+	}
+
+	name := memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
+	if name == "" {
+		return memberID
+	}
+
+	return name
 }
 
 // ============================================================

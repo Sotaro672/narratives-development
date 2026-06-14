@@ -178,6 +178,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			walletRepo,
 			c.ProductBlueprintRepo,
 			c.BrandRepo,
+			c.MemberRepo,
 			nil,
 			nil,
 			nil,
