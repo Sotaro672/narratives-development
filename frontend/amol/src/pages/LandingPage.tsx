@@ -376,7 +376,7 @@ export default function LandingPage() {
               予定料金プラン
             </h2>
             <p className="landing-page-card__text landing-page-sales-support__lead">
-              現在試作品段階です。本番運用リリース時の料金体系を以下に予定しております。
+              現在試作品段階です。本番運用リリース時は以下の料金体系を予定しております。
             </p>
           </div>
 

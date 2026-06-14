@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -17,8 +16,18 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// Firestore implementation of announcement.Repository
+// Firestore implementation of announcement.Repository.
 type AnnouncementRepositoryFS struct {
+	Client *firestore.Client
+}
+
+// Firestore implementation of announcement.AvatarRepository.
+type AnnouncementAvatarRepositoryFS struct {
+	Client *firestore.Client
+}
+
+// Firestore implementation of announcement.AttachmentRepository.
+type AnnouncementAttachmentRepositoryFS struct {
 	Client *firestore.Client
 }
 
@@ -26,35 +35,47 @@ func NewAnnouncementRepositoryFS(client *firestore.Client) *AnnouncementReposito
 	return &AnnouncementRepositoryFS{Client: client}
 }
 
-// Compile-time check: ensure this satisfies announcement.Repository.
+func NewAnnouncementAvatarRepositoryFS(client *firestore.Client) *AnnouncementAvatarRepositoryFS {
+	return &AnnouncementAvatarRepositoryFS{Client: client}
+}
+
+func NewAnnouncementAttachmentRepositoryFS(client *firestore.Client) *AnnouncementAttachmentRepositoryFS {
+	return &AnnouncementAttachmentRepositoryFS{Client: client}
+}
+
+// Compile-time checks.
 var _ announcement.Repository = (*AnnouncementRepositoryFS)(nil)
+var _ announcement.AvatarRepository = (*AnnouncementAvatarRepositoryFS)(nil)
+var _ announcement.AttachmentRepository = (*AnnouncementAttachmentRepositoryFS)(nil)
 
-// Compile-time check: ensure this satisfies announcement.AttachmentRepository.
-var _ announcement.AttachmentRepository = (*AnnouncementRepositoryFS)(nil)
-
-func (r *AnnouncementRepositoryFS) announcementCollection() *firestore.CollectionRef {
-	return r.Client.Collection("announcements")
+func announcementCollection(client *firestore.Client) *firestore.CollectionRef {
+	return client.Collection("announcements")
 }
 
-func (r *AnnouncementRepositoryFS) avatarCollection(announcementID string) *firestore.CollectionRef {
-	return r.announcementCollection().Doc(announcementID).Collection("avatars")
+func avatarCollection(client *firestore.Client, announcementID string) *firestore.CollectionRef {
+	return announcementCollection(client).Doc(announcementID).Collection("avatars")
 }
 
-func (r *AnnouncementRepositoryFS) attachmentCollection(announcementID string) *firestore.CollectionRef {
-	return r.announcementCollection().Doc(announcementID).Collection("attachments")
+func attachmentCollection(client *firestore.Client, announcementID string) *firestore.CollectionRef {
+	return announcementCollection(client).Doc(announcementID).Collection("attachments")
 }
 
-func (r *AnnouncementRepositoryFS) attachmentDoc(
+func attachmentDoc(
+	client *firestore.Client,
 	announcementID string,
 	fileName string,
 ) *firestore.DocumentRef {
 	id := announcement.MakeAttachmentID(announcementID, fileName)
-	return r.attachmentCollection(announcementID).Doc(id)
+	return attachmentCollection(client, announcementID).Doc(id)
 }
 
 // GetByID retrieves an announcement by ID from Firestore.
 func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (announcement.Announcement, error) {
-	doc, err := r.announcementCollection().Doc(id).Get(ctx)
+	if r.Client == nil {
+		return announcement.Announcement{}, errors.New("firestore client is nil")
+	}
+
+	doc, err := announcementCollection(r.Client).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return announcement.Announcement{}, announcement.ErrNotFound
@@ -76,9 +97,13 @@ func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (anno
 
 // Create inserts a new announcement.
 func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.Announcement) (announcement.Announcement, error) {
-	ref := r.announcementCollection().Doc(a.ID)
+	if r.Client == nil {
+		return announcement.Announcement{}, errors.New("firestore client is nil")
+	}
+
+	ref := announcementCollection(r.Client).Doc(a.ID)
 	if a.ID == "" {
-		ref = r.announcementCollection().NewDoc()
+		ref = announcementCollection(r.Client).NewDoc()
 		a.ID = ref.ID
 	}
 
@@ -90,44 +115,45 @@ func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.An
 	if err != nil {
 		return announcement.Announcement{}, err
 	}
+
 	return a, nil
 }
 
-// Update applies a patch to an existing announcement.
+// Update replaces/upserts the mutable fields of a persisted announcement.
+//
+// Expected policy:
+// - id is the target document id.
+// - a.ID may be empty or equal to id.
+// - immutable fields such as CreatedAt and CreatedBy are not overwritten here.
 func (r *AnnouncementRepositoryFS) Update(
 	ctx context.Context,
 	id string,
-	p announcement.AnnouncementPatch,
+	a announcement.Announcement,
 ) (announcement.Announcement, error) {
-	ref := r.announcementCollection().Doc(id)
-
-	updates := []firestore.Update{}
-	now := time.Now().UTC()
-
-	if p.Title != nil {
-		updates = append(updates, firestore.Update{Path: "title", Value: *p.Title})
-	}
-	if p.Content != nil {
-		updates = append(updates, firestore.Update{Path: "content", Value: *p.Content})
-	}
-	if p.TargetToken != nil {
-		updates = append(updates, firestore.Update{Path: "targetToken", Value: *p.TargetToken})
-	}
-	if p.Published != nil {
-		updates = append(updates, firestore.Update{Path: "published", Value: *p.Published})
-	}
-	if p.PublishedAt != nil {
-		updates = append(updates, firestore.Update{Path: "publishedAt", Value: p.PublishedAt})
-	}
-	if p.Attachments != nil {
-		updates = append(updates, firestore.Update{Path: "attachments", Value: *p.Attachments})
-	}
-	if p.UpdatedBy != nil {
-		updates = append(updates, firestore.Update{Path: "updatedBy", Value: *p.UpdatedBy})
+	if r.Client == nil {
+		return announcement.Announcement{}, errors.New("firestore client is nil")
 	}
 
-	// Always bump updatedAt
-	updates = append(updates, firestore.Update{Path: "updatedAt", Value: now})
+	ref := announcementCollection(r.Client).Doc(id)
+
+	updatedAt := time.Now().UTC()
+	if a.UpdatedAt != nil {
+		updatedAt = *a.UpdatedAt
+	}
+
+	updates := []firestore.Update{
+		{Path: "title", Value: a.Title},
+		{Path: "content", Value: a.Content},
+		{Path: "targetToken", Value: a.TargetToken},
+		{Path: "published", Value: a.Published},
+		{Path: "publishedAt", Value: a.PublishedAt},
+		{Path: "attachments", Value: a.Attachments},
+		{Path: "updatedAt", Value: updatedAt},
+	}
+
+	if a.UpdatedBy != nil {
+		updates = append(updates, firestore.Update{Path: "updatedBy", Value: *a.UpdatedBy})
+	}
 
 	_, err := ref.Update(ctx, updates)
 	if err != nil {
@@ -142,7 +168,12 @@ func (r *AnnouncementRepositoryFS) Update(
 
 // Delete removes an announcement by ID.
 func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error {
-	ref := r.announcementCollection().Doc(id)
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	ref := announcementCollection(r.Client).Doc(id)
+
 	_, err := ref.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -155,6 +186,7 @@ func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error 
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -169,7 +201,7 @@ func (r *AnnouncementRepositoryFS) List(
 		return common.PageResult[announcement.Announcement]{}, errors.New("firestore client is nil")
 	}
 
-	iter := r.announcementCollection().
+	iter := announcementCollection(r.Client).
 		OrderBy("createdAt", firestore.Desc).
 		Documents(ctx)
 	defer iter.Stop()
@@ -185,12 +217,15 @@ func (r *AnnouncementRepositoryFS) List(
 		}
 
 		var a announcement.Announcement
-		if err := doc.DataTo(&a); err == nil {
-			if a.ID == "" {
-				a.ID = doc.Ref.ID
-			}
-			items = append(items, a)
+		if err := doc.DataTo(&a); err != nil {
+			return common.PageResult[announcement.Announcement]{}, err
 		}
+
+		if a.ID == "" {
+			a.ID = doc.Ref.ID
+		}
+
+		items = append(items, a)
 	}
 
 	total := len(items)
@@ -209,6 +244,7 @@ func (r *AnnouncementRepositoryFS) List(
 	if offset > total {
 		offset = total
 	}
+
 	end := offset + perPage
 	if end > total {
 		end = total
@@ -238,7 +274,7 @@ func (r *AnnouncementRepositoryFS) ListByCursor(
 		limit = 50
 	}
 
-	q := r.announcementCollection().
+	q := announcementCollection(r.Client).
 		OrderBy("createdAt", firestore.Desc).
 		OrderBy("id", firestore.Desc)
 
@@ -263,6 +299,7 @@ func (r *AnnouncementRepositoryFS) ListByCursor(
 		if err := doc.DataTo(&a); err != nil {
 			return common.CursorPageResult[announcement.Announcement]{}, err
 		}
+
 		if a.ID == "" {
 			a.ID = doc.Ref.ID
 		}
@@ -295,8 +332,8 @@ func (r *AnnouncementRepositoryFS) ListByCursor(
 	}, nil
 }
 
-// ListAvatars returns avatar subcollection documents.
-func (r *AnnouncementRepositoryFS) ListAvatars(
+// ListByAnnouncementID returns avatar subcollection documents.
+func (r *AnnouncementAvatarRepositoryFS) ListByAnnouncementID(
 	ctx context.Context,
 	announcementID string,
 	filter announcement.AnnouncementAvatarFilter,
@@ -305,7 +342,7 @@ func (r *AnnouncementRepositoryFS) ListAvatars(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	iter := r.avatarCollection(announcementID).Documents(ctx)
+	iter := avatarCollection(r.Client, announcementID).Documents(ctx)
 	defer iter.Stop()
 
 	var results []announcement.AnnouncementAvatar
@@ -322,6 +359,7 @@ func (r *AnnouncementRepositoryFS) ListAvatars(
 		if err := doc.DataTo(&avatar); err != nil {
 			return nil, err
 		}
+
 		if avatar.AvatarID == "" {
 			avatar.AvatarID = doc.Ref.ID
 		}
@@ -339,12 +377,48 @@ func (r *AnnouncementRepositoryFS) ListAvatars(
 	return results, nil
 }
 
-// GetAvatar retrieves one avatar subcollection document.
-func (r *AnnouncementRepositoryFS) GetAvatar(
+// Update manages the avatar read state.
+//
+// This method intentionally works as an upsert so the port does not need
+// separate Upsert/Delete methods for announcement avatar records.
+func (r *AnnouncementAvatarRepositoryFS) Update(
 	ctx context.Context,
-	announcementID, avatarID string,
+	announcementID string,
+	avatarID string,
+	patch announcement.AnnouncementAvatarPatch,
 ) (announcement.AnnouncementAvatar, error) {
-	doc, err := r.avatarCollection(announcementID).Doc(avatarID).Get(ctx)
+	if r.Client == nil {
+		return announcement.AnnouncementAvatar{}, errors.New("firestore client is nil")
+	}
+	if announcementID == "" {
+		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidAnnouncementID
+	}
+	if avatarID == "" {
+		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidID
+	}
+
+	now := time.Now().UTC()
+
+	data := map[string]any{
+		"avatarId":  avatarID,
+		"updatedAt": now,
+	}
+
+	if patch.IsRead != nil {
+		data["isRead"] = *patch.IsRead
+	}
+	if patch.UpdatedAt != nil {
+		data["updatedAt"] = *patch.UpdatedAt
+	}
+
+	ref := avatarCollection(r.Client, announcementID).Doc(avatarID)
+
+	_, err := ref.Set(ctx, data, firestore.MergeAll)
+	if err != nil {
+		return announcement.AnnouncementAvatar{}, err
+	}
+
+	doc, err := ref.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return announcement.AnnouncementAvatar{}, announcement.ErrNotFound
@@ -356,6 +430,7 @@ func (r *AnnouncementRepositoryFS) GetAvatar(
 	if err := doc.DataTo(&avatar); err != nil {
 		return announcement.AnnouncementAvatar{}, err
 	}
+
 	if avatar.AvatarID == "" {
 		avatar.AvatarID = doc.Ref.ID
 	}
@@ -363,246 +438,19 @@ func (r *AnnouncementRepositoryFS) GetAvatar(
 	return avatar, nil
 }
 
-// UpsertAvatar saves one avatar subcollection document.
-func (r *AnnouncementRepositoryFS) UpsertAvatar(
-	ctx context.Context,
-	announcementID string,
-	avatar announcement.AnnouncementAvatar,
-) (announcement.AnnouncementAvatar, error) {
-	if avatar.AvatarID == "" {
-		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidID
-	}
-
-	_, err := r.avatarCollection(announcementID).Doc(avatar.AvatarID).Set(ctx, avatar)
-	if err != nil {
-		return announcement.AnnouncementAvatar{}, err
-	}
-
-	return avatar, nil
-}
-
-// UpdateAvatar applies a patch to an avatar subcollection document.
-func (r *AnnouncementRepositoryFS) UpdateAvatar(
-	ctx context.Context,
-	announcementID, avatarID string,
-	patch announcement.AnnouncementAvatarPatch,
-) (announcement.AnnouncementAvatar, error) {
-	updates := []firestore.Update{}
-
-	if patch.IsRead != nil {
-		updates = append(updates, firestore.Update{Path: "isRead", Value: *patch.IsRead})
-	}
-
-	if len(updates) == 0 {
-		return r.GetAvatar(ctx, announcementID, avatarID)
-	}
-
-	_, err := r.avatarCollection(announcementID).Doc(avatarID).Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return announcement.AnnouncementAvatar{}, announcement.ErrNotFound
-		}
-		return announcement.AnnouncementAvatar{}, err
-	}
-
-	return r.GetAvatar(ctx, announcementID, avatarID)
-}
-
-// DeleteAvatar removes an avatar subcollection document.
-func (r *AnnouncementRepositoryFS) DeleteAvatar(
-	ctx context.Context,
-	announcementID, avatarID string,
-) error {
-	ref := r.avatarCollection(announcementID).Doc(avatarID)
-
-	_, err := ref.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return announcement.ErrNotFound
-		}
-		return err
-	}
-
-	_, err = ref.Delete(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// ListAttachments returns attachment metadata with simple pagination.
-func (r *AnnouncementRepositoryFS) ListAttachments(
-	ctx context.Context,
-	filter announcement.AttachmentFilter,
-	_ announcement.Sort,
-	page announcement.Page,
-) (announcement.PageResult[announcement.AttachmentFile], error) {
-	if r.Client == nil {
-		return announcement.PageResult[announcement.AttachmentFile]{}, errors.New("firestore client is nil")
-	}
-
-	iter := r.Client.CollectionGroup("attachments").Documents(ctx)
-	defer iter.Stop()
-
-	var items []announcement.AttachmentFile
-	for {
-		doc, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return announcement.PageResult[announcement.AttachmentFile]{}, err
-		}
-
-		var f announcement.AttachmentFile
-		if err := doc.DataTo(&f); err != nil {
-			return announcement.PageResult[announcement.AttachmentFile]{}, err
-		}
-
-		normalizeAttachmentFromDoc(doc, &f)
-
-		if !matchesAttachmentFilter(f, filter) {
-			continue
-		}
-
-		items = append(items, f)
-	}
-
-	total := len(items)
-	if total == 0 {
-		return announcement.PageResult[announcement.AttachmentFile]{
-			Items:      []announcement.AttachmentFile{},
-			TotalCount: 0,
-			Page:       1,
-			PerPage:    0,
-		}, nil
-	}
-
-	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
-
-	offset := (pageNum - 1) * perPage
-	if offset > total {
-		offset = total
-	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-
-	return announcement.PageResult[announcement.AttachmentFile]{
-		Items:      items[offset:end],
-		TotalCount: total,
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
-}
-
-// ListAttachmentsByCursor returns attachment metadata using a simple ID-based cursor.
-func (r *AnnouncementRepositoryFS) ListAttachmentsByCursor(
-	ctx context.Context,
-	filter announcement.AttachmentFilter,
-	_ announcement.Sort,
-	cpage announcement.CursorPage,
-) (announcement.CursorPageResult[announcement.AttachmentFile], error) {
-	if r.Client == nil {
-		return announcement.CursorPageResult[announcement.AttachmentFile]{}, errors.New("firestore client is nil")
-	}
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	it := r.Client.CollectionGroup("attachments").Documents(ctx)
-	defer it.Stop()
-
-	after := cpage.After
-	skipping := after != ""
-
-	var items []announcement.AttachmentFile
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return announcement.CursorPageResult[announcement.AttachmentFile]{}, err
-		}
-
-		var f announcement.AttachmentFile
-		if err := doc.DataTo(&f); err != nil {
-			return announcement.CursorPageResult[announcement.AttachmentFile]{}, err
-		}
-
-		normalizeAttachmentFromDoc(doc, &f)
-
-		if !matchesAttachmentFilter(f, filter) {
-			continue
-		}
-
-		if skipping {
-			if f.ID >= after {
-				continue
-			}
-			skipping = false
-		}
-
-		items = append(items, f)
-
-		if len(items) >= limit+1 {
-			break
-		}
-	}
-
-	var next *string
-	if len(items) > limit {
-		cursor := items[limit-1].ID
-		items = items[:limit]
-		next = &cursor
-	}
-
-	return announcement.CursorPageResult[announcement.AttachmentFile]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
-	}, nil
-}
-
-// GetAttachment retrieves one attachment metadata document.
-func (r *AnnouncementRepositoryFS) GetAttachment(
-	ctx context.Context,
-	announcementID string,
-	fileName string,
-) (announcement.AttachmentFile, error) {
-	doc, err := r.attachmentDoc(announcementID, fileName).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return announcement.AttachmentFile{}, announcement.ErrNotFound
-		}
-		return announcement.AttachmentFile{}, err
-	}
-
-	var f announcement.AttachmentFile
-	if err := doc.DataTo(&f); err != nil {
-		return announcement.AttachmentFile{}, err
-	}
-
-	normalizeAttachmentFromDoc(doc, &f)
-
-	return f, nil
-}
-
-// GetAttachmentsByAnnouncementID retrieves all attachment metadata documents for one announcement.
-func (r *AnnouncementRepositoryFS) GetAttachmentsByAnnouncementID(
+// ListByAnnouncementID retrieves all attachment metadata documents for one announcement.
+func (r *AnnouncementAttachmentRepositoryFS) ListByAnnouncementID(
 	ctx context.Context,
 	announcementID string,
 ) ([]announcement.AttachmentFile, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
 	if announcementID == "" {
 		return nil, announcement.ErrInvalidAnnouncementID
 	}
 
-	iter := r.attachmentCollection(announcementID).Documents(ctx)
+	iter := attachmentCollection(r.Client, announcementID).Documents(ctx)
 	defer iter.Stop()
 
 	var results []announcement.AttachmentFile
@@ -628,19 +476,25 @@ func (r *AnnouncementRepositoryFS) GetAttachmentsByAnnouncementID(
 	return results, nil
 }
 
-// CreateAttachment inserts attachment metadata.
-func (r *AnnouncementRepositoryFS) CreateAttachment(
+// Create inserts attachment metadata.
+func (r *AnnouncementAttachmentRepositoryFS) Create(
 	ctx context.Context,
 	f announcement.AttachmentFile,
 ) (announcement.AttachmentFile, error) {
+	if r.Client == nil {
+		return announcement.AttachmentFile{}, errors.New("firestore client is nil")
+	}
 	if f.AnnouncementID == "" {
 		return announcement.AttachmentFile{}, announcement.ErrInvalidAnnouncementID
+	}
+	if f.ID == "" {
+		f.ID = announcement.MakeAttachmentID(f.AnnouncementID, f.FileName)
 	}
 	if f.ID == "" {
 		return announcement.AttachmentFile{}, announcement.ErrInvalidID
 	}
 
-	_, err := r.attachmentCollection(f.AnnouncementID).Doc(f.ID).Set(ctx, f)
+	_, err := attachmentCollection(r.Client, f.AnnouncementID).Doc(f.ID).Set(ctx, f)
 	if err != nil {
 		return announcement.AttachmentFile{}, err
 	}
@@ -648,14 +502,24 @@ func (r *AnnouncementRepositoryFS) CreateAttachment(
 	return f, nil
 }
 
-// UpdateAttachment applies a patch to attachment metadata.
-func (r *AnnouncementRepositoryFS) UpdateAttachment(
+// Update applies a patch to attachment metadata.
+func (r *AnnouncementAttachmentRepositoryFS) Update(
 	ctx context.Context,
 	announcementID string,
 	fileName string,
 	patch announcement.AttachmentFilePatch,
 ) (announcement.AttachmentFile, error) {
-	ref := r.attachmentDoc(announcementID, fileName)
+	if r.Client == nil {
+		return announcement.AttachmentFile{}, errors.New("firestore client is nil")
+	}
+	if announcementID == "" {
+		return announcement.AttachmentFile{}, announcement.ErrInvalidAnnouncementID
+	}
+	if fileName == "" {
+		return announcement.AttachmentFile{}, announcement.ErrInvalidFileName
+	}
+
+	ref := attachmentDoc(r.Client, announcementID, fileName)
 
 	updates := []firestore.Update{}
 
@@ -671,9 +535,12 @@ func (r *AnnouncementRepositoryFS) UpdateAttachment(
 	if patch.ObjectPath != nil {
 		updates = append(updates, firestore.Update{Path: "objectPath", Value: *patch.ObjectPath})
 	}
+	if patch.UpdatedAt != nil {
+		updates = append(updates, firestore.Update{Path: "updatedAt", Value: *patch.UpdatedAt})
+	}
 
 	if len(updates) == 0 {
-		return r.GetAttachment(ctx, announcementID, fileName)
+		return getAttachment(ctx, r.Client, announcementID, fileName)
 	}
 
 	_, err := ref.Update(ctx, updates)
@@ -684,16 +551,26 @@ func (r *AnnouncementRepositoryFS) UpdateAttachment(
 		return announcement.AttachmentFile{}, err
 	}
 
-	return r.GetAttachment(ctx, announcementID, fileName)
+	return getAttachment(ctx, r.Client, announcementID, fileName)
 }
 
-// DeleteAttachment removes one attachment metadata document.
-func (r *AnnouncementRepositoryFS) DeleteAttachment(
+// Delete removes one attachment metadata document.
+func (r *AnnouncementAttachmentRepositoryFS) Delete(
 	ctx context.Context,
 	announcementID string,
 	fileName string,
 ) error {
-	ref := r.attachmentDoc(announcementID, fileName)
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+	if announcementID == "" {
+		return announcement.ErrInvalidAnnouncementID
+	}
+	if fileName == "" {
+		return announcement.ErrInvalidFileName
+	}
+
+	ref := attachmentDoc(r.Client, announcementID, fileName)
 
 	_, err := ref.Get(ctx)
 	if err != nil {
@@ -711,49 +588,28 @@ func (r *AnnouncementRepositoryFS) DeleteAttachment(
 	return nil
 }
 
-// DeleteAllAttachmentsByAnnouncementID removes all attachment metadata documents for one announcement.
-func (r *AnnouncementRepositoryFS) DeleteAllAttachmentsByAnnouncementID(
+func getAttachment(
 	ctx context.Context,
+	client *firestore.Client,
 	announcementID string,
-) error {
-	if announcementID == "" {
-		return announcement.ErrInvalidAnnouncementID
+	fileName string,
+) (announcement.AttachmentFile, error) {
+	doc, err := attachmentDoc(client, announcementID, fileName).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return announcement.AttachmentFile{}, announcement.ErrNotFound
+		}
+		return announcement.AttachmentFile{}, err
 	}
 
-	iter := r.attachmentCollection(announcementID).Documents(ctx)
-	defer iter.Stop()
-
-	batch := r.Client.Batch()
-	count := 0
-
-	for {
-		doc, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		batch.Delete(doc.Ref)
-		count++
-
-		if count == 500 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-			count = 0
-		}
+	var f announcement.AttachmentFile
+	if err := doc.DataTo(&f); err != nil {
+		return announcement.AttachmentFile{}, err
 	}
 
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
-			return err
-		}
-	}
+	normalizeAttachmentFromDoc(doc, &f)
 
-	return nil
+	return f, nil
 }
 
 func normalizeAttachmentFromDoc(
@@ -771,44 +627,4 @@ func normalizeAttachmentFromDoc(
 	if f.AnnouncementID == "" && doc.Ref.Parent != nil && doc.Ref.Parent.Parent != nil {
 		f.AnnouncementID = doc.Ref.Parent.Parent.ID
 	}
-}
-
-func matchesAttachmentFilter(
-	f announcement.AttachmentFile,
-	filter announcement.AttachmentFilter,
-) bool {
-	if filter.AnnouncementID != nil && f.AnnouncementID != *filter.AnnouncementID {
-		return false
-	}
-
-	if filter.FileName != nil && f.FileName != *filter.FileName {
-		return false
-	}
-
-	if len(filter.MimeTypes) > 0 && !containsString(filter.MimeTypes, f.MimeType) {
-		return false
-	}
-
-	if filter.SizeMin != nil && f.FileSize < *filter.SizeMin {
-		return false
-	}
-
-	if filter.SizeMax != nil && f.FileSize > *filter.SizeMax {
-		return false
-	}
-
-	if filter.ObjectPathLike != "" && !strings.HasPrefix(f.ObjectPath, filter.ObjectPathLike) {
-		return false
-	}
-
-	if filter.SearchQuery != "" {
-		q := strings.ToLower(filter.SearchQuery)
-		if !strings.Contains(strings.ToLower(f.FileName), q) &&
-			!strings.Contains(strings.ToLower(f.FileURL), q) &&
-			!strings.Contains(strings.ToLower(f.ObjectPath), q) {
-			return false
-		}
-	}
-
-	return true
 }

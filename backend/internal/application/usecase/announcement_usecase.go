@@ -9,22 +9,26 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// AnnouncementUsecase coordinates Announcement and its attachment metadata.
+// AnnouncementUsecase coordinates Announcement, avatar read state,
+// and attachment metadata.
 type AnnouncementUsecase struct {
-	annRepo ann.Repository           // announcement repository
-	attRepo ann.AttachmentRepository // announcement attachment metadata repository
+	annRepo    ann.Repository           // announcement repository
+	avatarRepo ann.AvatarRepository     // announcement avatar repository
+	attRepo    ann.AttachmentRepository // announcement attachment metadata repository
 
 	now func() time.Time
 }
 
 func NewAnnouncementUsecase(
 	annRepo ann.Repository,
+	avatarRepo ann.AvatarRepository,
 	attRepo ann.AttachmentRepository,
 ) *AnnouncementUsecase {
 	return &AnnouncementUsecase{
-		annRepo: annRepo,
-		attRepo: attRepo,
-		now:     time.Now,
+		annRepo:    annRepo,
+		avatarRepo: avatarRepo,
+		attRepo:    attRepo,
+		now:        time.Now,
 	}
 }
 
@@ -114,16 +118,37 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	id string,
 	input UpdateAnnouncementInput,
 ) (ann.Announcement, error) {
-	patch := ann.AnnouncementPatch{
-		Title:       input.Title,
-		Content:     input.Content,
-		TargetToken: input.TargetToken,
-		Published:   input.Published,
-		PublishedAt: input.PublishedAt,
-		Attachments: input.Attachments,
-		UpdatedBy:   input.UpdatedBy,
+	entity, err := u.annRepo.GetByID(ctx, id)
+	if err != nil {
+		return ann.Announcement{}, err
 	}
-	return u.annRepo.Update(ctx, id, patch)
+
+	if input.Title != nil {
+		entity.Title = *input.Title
+	}
+	if input.Content != nil {
+		entity.Content = *input.Content
+	}
+	if input.TargetToken != nil {
+		entity.TargetToken = input.TargetToken
+	}
+	if input.Published != nil {
+		entity.Published = *input.Published
+	}
+	if input.PublishedAt != nil {
+		entity.PublishedAt = input.PublishedAt
+	}
+	if input.Attachments != nil {
+		entity.Attachments = *input.Attachments
+	}
+	if input.UpdatedBy != nil {
+		entity.UpdatedBy = input.UpdatedBy
+	}
+
+	now := u.now()
+	entity.UpdatedAt = &now
+
+	return u.annRepo.Update(ctx, id, entity)
 }
 
 func (u *AnnouncementUsecase) DeleteAnnouncement(
@@ -134,7 +159,7 @@ func (u *AnnouncementUsecase) DeleteAnnouncement(
 }
 
 // =======================
-// Announcement avatars CRUD
+// Announcement avatars
 // =======================
 
 type UpsertAnnouncementAvatarInput struct {
@@ -151,44 +176,84 @@ func (u *AnnouncementUsecase) ListAnnouncementAvatars(
 	announcementID string,
 	filter ann.AnnouncementAvatarFilter,
 ) ([]ann.AnnouncementAvatar, error) {
-	return u.annRepo.ListAvatars(ctx, announcementID, filter)
+	if u.avatarRepo == nil {
+		return nil, ann.ErrNotFound
+	}
+
+	return u.avatarRepo.ListByAnnouncementID(ctx, announcementID, filter)
 }
 
 func (u *AnnouncementUsecase) GetAnnouncementAvatar(
 	ctx context.Context,
-	announcementID, avatarID string,
+	announcementID string,
+	avatarID string,
 ) (ann.AnnouncementAvatar, error) {
-	return u.annRepo.GetAvatar(ctx, announcementID, avatarID)
+	if u.avatarRepo == nil {
+		return ann.AnnouncementAvatar{}, ann.ErrNotFound
+	}
+	if avatarID == "" {
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidID
+	}
+
+	avatars, err := u.avatarRepo.ListByAnnouncementID(ctx, announcementID, ann.AnnouncementAvatarFilter{
+		AvatarIDs: []string{avatarID},
+	})
+	if err != nil {
+		return ann.AnnouncementAvatar{}, err
+	}
+	if len(avatars) == 0 {
+		return ann.AnnouncementAvatar{}, ann.ErrNotFound
+	}
+
+	return avatars[0], nil
 }
 
+// UpsertAnnouncementAvatar is kept as an application-level operation,
+// but the repository port is intentionally managed only by Update.
 func (u *AnnouncementUsecase) UpsertAnnouncementAvatar(
 	ctx context.Context,
 	announcementID string,
 	input UpsertAnnouncementAvatarInput,
 ) (ann.AnnouncementAvatar, error) {
-	avatar := ann.AnnouncementAvatar{
-		AvatarID: input.AvatarID,
-		IsRead:   input.IsRead,
+	if u.avatarRepo == nil {
+		return ann.AnnouncementAvatar{}, ann.ErrNotFound
 	}
-	return u.annRepo.UpsertAvatar(ctx, announcementID, avatar)
+	if input.AvatarID == "" {
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidID
+	}
+
+	isRead := input.IsRead
+	now := u.now()
+
+	patch := ann.AnnouncementAvatarPatch{
+		IsRead:    &isRead,
+		UpdatedAt: &now,
+	}
+
+	return u.avatarRepo.Update(ctx, announcementID, input.AvatarID, patch)
 }
 
 func (u *AnnouncementUsecase) UpdateAnnouncementAvatar(
 	ctx context.Context,
-	announcementID, avatarID string,
+	announcementID string,
+	avatarID string,
 	input UpdateAnnouncementAvatarInput,
 ) (ann.AnnouncementAvatar, error) {
-	patch := ann.AnnouncementAvatarPatch{
-		IsRead: input.IsRead,
+	if u.avatarRepo == nil {
+		return ann.AnnouncementAvatar{}, ann.ErrNotFound
 	}
-	return u.annRepo.UpdateAvatar(ctx, announcementID, avatarID, patch)
-}
+	if avatarID == "" {
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidID
+	}
 
-func (u *AnnouncementUsecase) DeleteAnnouncementAvatar(
-	ctx context.Context,
-	announcementID, avatarID string,
-) error {
-	return u.annRepo.DeleteAvatar(ctx, announcementID, avatarID)
+	now := u.now()
+
+	patch := ann.AnnouncementAvatarPatch{
+		IsRead:    input.IsRead,
+		UpdatedAt: &now,
+	}
+
+	return u.avatarRepo.Update(ctx, announcementID, avatarID, patch)
 }
 
 // =======================
@@ -240,13 +305,20 @@ func (u *AnnouncementUsecase) ReplaceAttachments(
 		ids = append(ids, f.ID)
 	}
 
-	if err := u.attRepo.DeleteAllAttachmentsByAnnouncementID(ctx, announcementID); err != nil {
+	current, err := u.attRepo.ListByAnnouncementID(ctx, announcementID)
+	if err != nil {
 		return nil, nil, err
+	}
+
+	for _, f := range current {
+		if err := u.attRepo.Delete(ctx, announcementID, f.FileName); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	saved := make([]ann.AttachmentFile, 0, len(files))
 	for _, f := range files {
-		out, err := u.attRepo.CreateAttachment(ctx, f)
+		out, err := u.attRepo.Create(ctx, f)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -268,10 +340,20 @@ func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 		return ann.Announcement{}, nil, err
 	}
 
-	updated, err := u.annRepo.Update(ctx, announcementID, ann.AnnouncementPatch{
-		Attachments: &ids,
-		UpdatedBy:   updatedBy,
-	})
+	entity, err := u.annRepo.GetByID(ctx, announcementID)
+	if err != nil {
+		return ann.Announcement{}, nil, err
+	}
+
+	entity.Attachments = ids
+	if updatedBy != nil {
+		entity.UpdatedBy = updatedBy
+	}
+
+	now := u.now()
+	entity.UpdatedAt = &now
+
+	updated, err := u.annRepo.Update(ctx, announcementID, entity)
 	if err != nil {
 		return ann.Announcement{}, nil, err
 	}
@@ -291,8 +373,15 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(ctx context.Context, ann
 	}
 
 	if u.attRepo != nil {
-		if err := u.attRepo.DeleteAllAttachmentsByAnnouncementID(ctx, announcementID); err != nil {
+		files, err := u.attRepo.ListByAnnouncementID(ctx, announcementID)
+		if err != nil {
 			return err
+		}
+
+		for _, f := range files {
+			if err := u.attRepo.Delete(ctx, announcementID, f.FileName); err != nil {
+				return err
+			}
 		}
 	}
 
