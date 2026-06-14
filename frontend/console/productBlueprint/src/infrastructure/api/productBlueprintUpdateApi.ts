@@ -3,6 +3,7 @@
 import type {
   ApparelModelNumberRow,
   ApparelSizeInput,
+  Fit,
 } from "../../domain/entity/apparel";
 
 import type {
@@ -20,6 +21,17 @@ export type UpdateProductBlueprintParams = {
   productBlueprintCategory: ProductBlueprintCategorySnapshot;
 
   categoryFields?: CategoryFieldValues | null;
+
+  /**
+   * Apparel category fields.
+   *
+   * ProductBlueprint.categoryFields へ集約する方針を維持しつつ、
+   * presentation/application 層からは従来通り個別フィールドとしても渡せるようにする。
+   */
+  fit?: Fit | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null;
 
   productIdTagType: string | null;
 

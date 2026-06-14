@@ -144,6 +144,26 @@ function removeModelOwnedCategoryFields(
   return next;
 }
 
+function getMemberDisplayLabel(member: {
+  id: string;
+  email?: string | null;
+  displayName?: string | null;
+}): string {
+  const displayName = String(member.displayName ?? "").trim();
+
+  if (displayName) {
+    return displayName;
+  }
+
+  const email = String(member.email ?? "").trim();
+
+  if (email) {
+    return email;
+  }
+
+  return member.id;
+}
+
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const navigate = useNavigate();
   const { currentMember, user } = useAuth();
@@ -181,8 +201,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     }
 
     const memberId = currentMember.id;
-    const label =
-      currentMember.fullName || currentMember.email || currentMember.id;
+    const label = getMemberDisplayLabel(currentMember);
 
     setAssigneeId(memberId);
     setAssigneeName(label);
@@ -329,8 +348,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       let nextName = "";
 
       if (currentMember?.id === nextId) {
-        nextName =
-          currentMember.fullName || currentMember.email || currentMember.id;
+        nextName = getMemberDisplayLabel(currentMember);
       } else {
         nextName = nextId;
       }
