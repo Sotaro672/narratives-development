@@ -4,8 +4,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shell/src/shared/ui";
-import "../style/logStyle.css";
+} from "../../shell/src/shared/ui";
 
 export type LogCardEntry = {
   /** 一意な ID（履歴 ID / ログ ID など） */

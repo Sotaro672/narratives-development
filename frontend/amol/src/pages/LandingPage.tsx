@@ -48,7 +48,7 @@ export default function LandingPage() {
         <div className="landing-page-hero__inner">
           <div className="landing-page-hero__content">
             <p className="landing-page-hero__eyebrow">
-              本物だけを届ける
+              業務を変えずに真贋を自動証明
             </p>
 
             <h1 className="landing-page-hero__title">AMOL</h1>
