@@ -13,11 +13,11 @@ import {
   isApparelCategoryCode,
   type MeasurementOption,
   type ApparelSizeRow as SizeRow,
-} from "../../../domain/entity/apparel";
+} from "../../../domain/apparel";
 
-import { isAlcoholCategoryCode } from "../../../domain/entity/alcohol";
+import { isAlcoholCategoryCode } from "../../../domain/alcohol";
 
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/entity/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
 
 function createId(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto

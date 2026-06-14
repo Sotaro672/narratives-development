@@ -7,9 +7,9 @@ import {
   type ApparelMeasurements,
   type ApparelModelVariationPayload,
   type ApparelSizeRow,
-} from "../domain/entity/apparel";
+} from "../domain/apparel";
 
-import { isAlcoholCategoryCode } from "../domain/entity/alcohol";
+import { isAlcoholCategoryCode } from "../domain/alcohol";
 
 import type {
   AlcoholModelNumber,
@@ -20,7 +20,7 @@ import type {
 import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
-} from "../domain/entity/productBlueprintCategory";
+} from "../domain/productBlueprintCategory";
 
 import { hexToRgbInt } from "../../../shell/src/shared/util/color";
 

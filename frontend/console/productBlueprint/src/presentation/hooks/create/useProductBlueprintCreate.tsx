@@ -16,13 +16,13 @@ import {
   type MeasurementOption,
   type ApparelSizeRow as SizeRow,
   type Fit,
-} from "../../../domain/entity/apparel";
+} from "../../../domain/apparel";
 
 import type {
   CategoryFieldValue,
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
-} from "../../../domain/entity/productBlueprintCategory";
+} from "../../../domain/productBlueprintCategory";
 
 import { createProductBlueprint } from "../../../application/productBlueprintCreateService";
 
@@ -36,7 +36,7 @@ export {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   FIT_OPTIONS,
   WASH_TAG_OPTIONS,
-} from "../../../domain/entity/apparel";
+} from "../../../domain/apparel";
 
 export interface UseProductBlueprintCreateResult {
   title: string;

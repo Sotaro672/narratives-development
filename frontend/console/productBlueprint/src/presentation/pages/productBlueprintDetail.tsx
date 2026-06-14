@@ -19,7 +19,7 @@ import { useProductBlueprintDetail } from "../hooks/detail/useProductBlueprintDe
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
-} from "../../domain/entity/apparel";
+} from "../../domain/apparel";
 
 function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (

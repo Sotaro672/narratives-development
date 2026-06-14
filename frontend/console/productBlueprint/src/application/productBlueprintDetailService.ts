@@ -5,9 +5,9 @@ import {
   type ApparelCategoryCode,
   type ApparelMeasurements,
   type ApparelSizeInput,
-} from "../domain/entity/apparel";
+} from "../domain/apparel";
 
-import { isAlcoholCategoryCode } from "../domain/entity/alcohol";
+import { isAlcoholCategoryCode } from "../domain/alcohol";
 
 import type {
   AlcoholModelNumber,

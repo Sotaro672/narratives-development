@@ -6,11 +6,11 @@ import type {
   CategoryFieldValue,
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
-} from "../../../domain/entity/productBlueprintCategory";
+} from "../../../domain/productBlueprintCategory";
 
-import { getProductBlueprintCategoryFieldKeys } from "../../../domain/entity/categoryFieldRegistry";
+import { getProductBlueprintCategoryFieldKeys } from "../../../domain/categoryFieldRegistry";
 
-import type { Fit } from "../../../domain/entity/apparel";
+import type { Fit } from "../../../domain/apparel";
 
 export type UseProductBlueprintCreateCategoryFieldsResult = {
   fit: Fit;

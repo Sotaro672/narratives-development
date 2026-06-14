@@ -17,19 +17,19 @@ import {
   PopoverTrigger,
 } from "../../../../../shell/src/shared/ui/popover";
 
-import { FIT_OPTIONS, type Fit } from "../../../domain/entity/apparel";
+import { FIT_OPTIONS, type Fit } from "../../../domain/apparel";
 
 import type {
   CategoryFieldValue,
   CategoryFieldValues,
-} from "../../../domain/entity/productBlueprintCategory";
+} from "../../../domain/productBlueprintCategory";
 
 import {
   getCategoryCardVisibility,
   isNumberCategoryField,
   toCategoryInputValue,
   toCategoryNumberOrNull,
-} from "../../../domain/entity/categoryCardVisibility";
+} from "../../../domain/categoryCardVisibility";
 
 import WashTagField from "./WashTagField";
 

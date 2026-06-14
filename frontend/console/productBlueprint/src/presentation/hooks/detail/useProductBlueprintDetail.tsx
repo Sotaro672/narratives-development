@@ -16,9 +16,9 @@ import {
   type ApparelModelNumberRow as ModelNumberRow,
   type ApparelSizeRow as SizeRow,
   type Fit,
-} from "../../../domain/entity/apparel";
+} from "../../../domain/apparel";
 
-import { isAlcoholCategoryCode } from "../../../domain/entity/alcohol";
+import { isAlcoholCategoryCode } from "../../../domain/alcohol";
 
 import type {
   AlcoholModelNumber,
@@ -29,7 +29,7 @@ import type {
   CategoryFieldValue,
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
-} from "../../../domain/entity/productBlueprintCategory";
+} from "../../../domain/productBlueprintCategory";
 
 import { mapVariationsToUiState } from "../../util/variationMapper";
 import { useBrandOptions, type BrandOption } from "../shared/useBrandOptions";
@@ -41,9 +41,9 @@ import {
 export {
   FIT_OPTIONS,
   WASH_TAG_OPTIONS,
-} from "../../../domain/entity/apparel";
+} from "../../../domain/apparel";
 
-export type { Fit, WashTagOption } from "../../../domain/entity/apparel";
+export type { Fit, WashTagOption } from "../../../domain/apparel";
 
 type ModelRefLike = { modelId?: string; displayOrder?: number };
 

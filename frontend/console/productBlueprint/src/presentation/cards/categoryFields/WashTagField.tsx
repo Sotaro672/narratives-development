@@ -14,7 +14,7 @@ import { Checkbox } from "../../../../../shell/src/shared/ui/checkbox";
 import {
   WASH_TAG_OPTIONS,
   type WashTagOption,
-} from "../../../domain/entity/apparel";
+} from "../../../domain/apparel";
 
 type WashTagFieldProps = {
   value: string[];

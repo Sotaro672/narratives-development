@@ -10,9 +10,9 @@ import type {
   ProductBlueprintCategorySnapshot,
   CategoryFieldValues,
   CategoryFieldValue,
-} from "../../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+} from "../../../../../productBlueprint/src/domain/productBlueprintCategory";
 
-import { isValidProductBlueprintCategoryKind } from "../../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+import { isValidProductBlueprintCategoryKind } from "../../../../../productBlueprint/src/domain/productBlueprintCategory";
 
 type ProductBlueprintCategoryRaw = {
   ID?: unknown;
