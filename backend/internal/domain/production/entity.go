@@ -260,7 +260,7 @@ func (p Production) validate(requireID bool) error {
 		if mq.ModelID == "" {
 			return ErrInvalidModelID
 		}
-		if mq.Quantity <= 0 {
+		if mq.Quantity < 0 {
 			return ErrInvalidQuantity
 		}
 	}

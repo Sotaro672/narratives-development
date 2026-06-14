@@ -108,6 +108,10 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 			return printdom.PrintLog{}, err
 		}
 
+		if err := u.markProductBlueprintsPrintedByProduction(ctx, *production); err != nil {
+			return printdom.PrintLog{}, err
+		}
+
 		existing.QrPayloads = buildQrPayloads(existing.Items)
 		return existing, nil
 	}
@@ -248,6 +252,10 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		return printdom.PrintLog{}, err
 	}
 
+	if err := u.markProductBlueprintsPrintedByProduction(ctx, *production); err != nil {
+		return printdom.PrintLog{}, err
+	}
+
 	created.QrPayloads = buildQrPayloads(created.Items)
 
 	return created, nil
@@ -271,13 +279,17 @@ func (u *PrintUsecase) createProductsForProduction(
 			return fmt.Errorf("modelId is empty: productionId=%s", production.ID)
 		}
 
-		if model.Quantity <= 0 {
+		if model.Quantity < 0 {
 			return fmt.Errorf(
 				"invalid quantity: productionId=%s modelId=%s quantity=%d",
 				production.ID,
 				model.ModelID,
 				model.Quantity,
 			)
+		}
+
+		if model.Quantity == 0 {
+			continue
 		}
 
 		for i := 0; i < model.Quantity; i++ {
@@ -332,6 +344,63 @@ func (u *PrintUsecase) markProductionPrinted(
 	}
 
 	return updated.Validate()
+}
+
+func (u *PrintUsecase) markProductBlueprintsPrintedByProduction(
+	ctx context.Context,
+	production productiondom.Production,
+) error {
+	if production.ID == "" {
+		return productiondom.ErrInvalidID
+	}
+
+	if len(production.Models) == 0 {
+		return fmt.Errorf("production models is empty: productionId=%s", production.ID)
+	}
+
+	productBlueprintIDs := make(map[string]struct{})
+
+	for _, model := range production.Models {
+		modelID := model.ModelID
+		if modelID == "" {
+			return fmt.Errorf("modelId is empty: productionId=%s", production.ID)
+		}
+
+		if model.Quantity < 0 {
+			return fmt.Errorf(
+				"invalid quantity: productionId=%s modelId=%s quantity=%d",
+				production.ID,
+				modelID,
+				model.Quantity,
+			)
+		}
+
+		if model.Quantity == 0 {
+			continue
+		}
+
+		productBlueprintID, _, err := u.productBlueprintRepo.GetIDByModelID(ctx, modelID)
+		if err != nil {
+			return fmt.Errorf("get productBlueprint by modelId failed: modelId=%s: %w", modelID, err)
+		}
+		if productBlueprintID == "" {
+			return fmt.Errorf("productBlueprintId not found for modelId=%s", modelID)
+		}
+
+		productBlueprintIDs[productBlueprintID] = struct{}{}
+	}
+
+	for productBlueprintID := range productBlueprintIDs {
+		if _, err := u.productBlueprintRepo.MarkPrinted(ctx, productBlueprintID); err != nil {
+			return fmt.Errorf(
+				"mark productBlueprint printed failed: productBlueprintId=%s: %w",
+				productBlueprintID,
+				err,
+			)
+		}
+	}
+
+	return nil
 }
 
 func (u *PrintUsecase) Create(ctx context.Context, p productdom.Product) (productdom.Product, error) {
