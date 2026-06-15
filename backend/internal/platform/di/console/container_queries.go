@@ -91,7 +91,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
 		r.brandRepo,
-		res.nameResolver,
+		r.memberRepo,
 	)
 
 	inventoryManagementQuery := companyquery.NewInventoryManagementQuery(

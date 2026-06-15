@@ -35,7 +35,7 @@ const sellerSteps: Step[] = [
     title: "商品設計",
     description:
       "商品の名前、型番、採寸、色などの基本情報を登録します。",
-    youtubeUrl: "https://www.youtube.com/embed/BwgZz6osVbA",
+    youtubeUrl: "https://www.youtube.com/embed/_Wm9PvLmkww",
   },
   {
     number: "04",
@@ -56,10 +56,10 @@ const sellerSteps: Step[] = [
     title: "検品",
     description:
       "検品スキャナーでQRコードをスキャンして検品結果を入力します。",
-    youtubeUrl: "https://www.youtube.com/embed/a9d31Goh_4I",
+    youtubeUrl: "https://www.youtube.com/embed/Xd-HX6Mhoto",
     links: [
       {
-        label: "Inspectorへログイン",
+        label: "検品スキャナーへログイン",
         url: "https://amol-inspector.web.app/",
       },
     ],
@@ -93,7 +93,7 @@ const buyerSteps: Step[] = [
     title: "アバター登録",
     description:
       "購入者Mallでアカウントを作成し、アバター情報を登録します。",
-    youtubeUrl: "https://www.youtube.com/embed/Zcy9rDrHN8Y",
+    youtubeUrl: "https://www.youtube.com/embed/31my_0TYhuw",
   },
   {
     number: "02",

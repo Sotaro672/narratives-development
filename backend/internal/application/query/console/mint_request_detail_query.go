@@ -1,4 +1,3 @@
-// backend/internal/application/query/console/mint_request_detail_query.go
 package query
 
 import (
@@ -152,8 +151,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		mintedAt = m.MintedAt
 		tokenBlueprintID = m.TokenBlueprintID
 
-		tokenName = resolveTokenName(ctx, s.nameResolver, tokenBlueprintID)
-		requestedByName = resolveRequestedByName(ctx, s.nameResolver, requestedBy)
+		tokenName = s.resolveTokenName(ctx, tokenBlueprintID)
+		requestedByName = s.resolveMemberNameByID(ctx, requestedBy)
 
 		products := make([]string, 0, len(m.Products))
 		products = append(products, m.Products...)

@@ -1,4 +1,3 @@
-// backend/internal/application/query/console/mint_request_management_query.go
 package query
 
 import (
@@ -8,11 +7,11 @@ import (
 	"time"
 
 	querydto "narratives/internal/application/query/console/dto"
-	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	domcommon "narratives/internal/domain/common"
 	inspectiondom "narratives/internal/domain/inspection"
+	memberdom "narratives/internal/domain/member"
 	mintdom "narratives/internal/domain/mint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -22,14 +21,12 @@ var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query serv
 type MintRequestQueryService struct {
 	productionQuery *CompanyProductionQueryService
 
-	mintRepo mintdom.MintRepository
-	inspRepo mintdom.MintInspectionRepo
-	pbRepo   mintdom.MintProductBlueprintRepo
-	tbRepo   tbdom.RepositoryPort
-
-	brandRepo branddom.Repository
-
-	nameResolver *resolver.NameResolver
+	mintRepo   mintdom.MintRepository
+	inspRepo   mintdom.MintInspectionRepo
+	pbRepo     mintdom.MintProductBlueprintRepo
+	tbRepo     tbdom.RepositoryPort
+	brandRepo  branddom.Repository
+	memberRepo memberdom.Repository
 }
 
 func NewMintRequestQueryService(
@@ -39,7 +36,7 @@ func NewMintRequestQueryService(
 	pbRepo mintdom.MintProductBlueprintRepo,
 	tbRepo tbdom.RepositoryPort,
 	brandRepo branddom.Repository,
-	nameResolver *resolver.NameResolver,
+	memberRepo memberdom.Repository,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
 		productionQuery: productionQuery,
@@ -48,7 +45,7 @@ func NewMintRequestQueryService(
 		pbRepo:          pbRepo,
 		tbRepo:          tbRepo,
 		brandRepo:       brandRepo,
-		nameResolver:    nameResolver,
+		memberRepo:      memberRepo,
 	}
 }
 
@@ -152,8 +149,8 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(
 			mintedAt = m.MintedAt
 			tokenBlueprintID = m.TokenBlueprintID
 
-			tokenName = resolveTokenName(ctx, s.nameResolver, tokenBlueprintID)
-			requestedByName = resolveRequestedByName(ctx, s.nameResolver, requestedBy)
+			tokenName = s.resolveTokenName(ctx, tokenBlueprintID)
+			requestedByName = s.resolveMemberNameByID(ctx, requestedBy)
 		}
 
 		rows = append(rows, querydto.ProductionInspectionMintDTO{
@@ -303,40 +300,46 @@ func makeIDSet(ids []string) map[string]struct{} {
 	return out
 }
 
-func resolveTokenName(
+func (s *MintRequestQueryService) resolveTokenName(
 	ctx context.Context,
-	nameResolver *resolver.NameResolver,
 	tokenBlueprintID string,
 ) string {
 	if tokenBlueprintID == "" {
 		return ""
 	}
-	if nameResolver == nil {
+	if s == nil || s.tbRepo == nil {
 		return tokenBlueprintID
 	}
 
-	name := nameResolver.ResolveTokenName(ctx, tokenBlueprintID)
-	if name == "" {
+	tb, err := s.tbRepo.GetByID(ctx, tokenBlueprintID)
+	if err != nil {
 		return tokenBlueprintID
 	}
 
-	return name
+	if tb.Name == "" {
+		return tokenBlueprintID
+	}
+
+	return tb.Name
 }
 
-func resolveRequestedByName(
+func (s *MintRequestQueryService) resolveMemberNameByID(
 	ctx context.Context,
-	nameResolver *resolver.NameResolver,
 	memberID string,
 ) string {
 	if memberID == "" {
 		return ""
 	}
-	if nameResolver == nil {
+	if s == nil || s.memberRepo == nil {
 		return memberID
 	}
 
-	v := memberID
-	name := nameResolver.ResolveRequestedByName(ctx, &v)
+	rec, err := s.memberRepo.GetByID(ctx, memberID)
+	if err != nil {
+		return memberID
+	}
+
+	name := memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
 	if name == "" {
 		return memberID
 	}

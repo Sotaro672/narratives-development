@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	querydto "narratives/internal/application/query/console/dto"
-	resolver "narratives/internal/application/resolver"
 	pbpdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -28,23 +27,13 @@ func (s *MintRequestQueryService) GetProductBlueprintForMint(
 		return nil, err
 	}
 
-	return buildMintProductBlueprintDTO(ctx, productBlueprint, s.nameResolver), nil
+	return buildMintProductBlueprintDTO(productBlueprint), nil
 }
 
 func buildMintProductBlueprintDTO(
-	ctx context.Context,
 	productBlueprint pbpdom.ProductBlueprint,
-	nameResolver *resolver.NameResolver,
 ) *querydto.MintProductBlueprintDTO {
-	brandName := ""
-
-	brandID := productBlueprint.BrandID
-	if brandID != "" && nameResolver != nil {
-		brandName = nameResolver.ResolveBrandName(ctx, brandID)
-	}
-
 	return &querydto.MintProductBlueprintDTO{
 		ProductBlueprint: productBlueprint,
-		BrandName:        brandName,
 	}
 }

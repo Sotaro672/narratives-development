@@ -19,7 +19,7 @@ type SignInTarget = {
 
 const signInTargets: SignInTarget[] = [
   {
-    title: "Console",
+    title: "コンソール",
     description:
       "商品を登録・管理し、ブロックチェーントークンを発行できる出品者向けのプラットフォーム。",
     url: "https://narratives-console-dev.web.app",
@@ -28,20 +28,20 @@ const signInTargets: SignInTarget[] = [
     deviceTags: ["PC専用"],
   },
   {
-    title: "Inspector",
+    title: "検品スキャナー",
     description:
       "QRコードをスキャンして検品結果を入力できる、Console付属の検品専用アプリ。",
     url: "https://amol-inspector.web.app/",
-    buttonLabel: "Inspectorにログイン",
+    buttonLabel: "検品スキャナーにログイン",
     variant: "secondary",
     deviceTags: ["モバイル専用"],
   },
   {
-    title: "Mall",
+    title: "モール",
     description:
       "商品を閲覧・購入し、QRコードからトークンコンテンツにアクセスできる購入者向けのモール。",
     internalPath: "/signin",
-    buttonLabel: "Mallにログイン",
+    buttonLabel: "モールにログイン",
     variant: "primary",
     deviceTags: ["PC対応", "モバイル対応"],
   },
