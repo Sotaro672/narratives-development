@@ -315,12 +315,38 @@ func (s *MintRequestQueryService) resolveTokenName(
 	if err != nil {
 		return tokenBlueprintID
 	}
+	if tb == nil {
+		return tokenBlueprintID
+	}
 
 	if tb.Name == "" {
 		return tokenBlueprintID
 	}
 
 	return tb.Name
+}
+
+func (s *MintRequestQueryService) resolveBrandNameByID(
+	ctx context.Context,
+	brandID string,
+) string {
+	if brandID == "" {
+		return ""
+	}
+	if s == nil || s.brandRepo == nil {
+		return brandID
+	}
+
+	brand, err := s.brandRepo.GetByID(ctx, brandID)
+	if err != nil {
+		return brandID
+	}
+
+	if brand.Name == "" {
+		return brandID
+	}
+
+	return brand.Name
 }
 
 func (s *MintRequestQueryService) resolveMemberNameByID(

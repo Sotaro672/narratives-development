@@ -27,13 +27,17 @@ func (s *MintRequestQueryService) GetProductBlueprintForMint(
 		return nil, err
 	}
 
-	return buildMintProductBlueprintDTO(productBlueprint), nil
+	brandName := s.resolveBrandNameByID(ctx, productBlueprint.BrandID)
+
+	return buildMintProductBlueprintDTO(productBlueprint, brandName), nil
 }
 
 func buildMintProductBlueprintDTO(
 	productBlueprint pbpdom.ProductBlueprint,
+	brandName string,
 ) *querydto.MintProductBlueprintDTO {
 	return &querydto.MintProductBlueprintDTO{
 		ProductBlueprint: productBlueprint,
+		BrandName:        brandName,
 	}
 }
