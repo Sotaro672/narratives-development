@@ -5,7 +5,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
-import LogCard from "../../../../log/src/presentation/LogCard";
+import LogCard from "../../../../log/presentation/LogCard";
 
 import Pagination from "../../../../shell/src/shared/ui/pagination";
 import RefreshButton from "../../../../shell/src/shared/ui/refresh";

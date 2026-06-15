@@ -2,6 +2,7 @@
 
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth } from "../infrastructure/config/firebaseClient";
+import { fetchCurrentMemberRaw } from "../infrastructure/repository/authRepositoryHTTP";
 
 /**
  * auth.currentUser が即時に得られないケースに備えて、
@@ -32,43 +33,99 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 /** 現在ユーザーの ID トークンを取得（無ければ null） */
-export async function getIdToken(): Promise<string | null> {
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
   const u = await getCurrentUser();
   if (!u?.getIdToken) return null;
 
   try {
-    return await u.getIdToken(false);
+    return await u.getIdToken(forceRefresh);
   } catch {
     return null;
   }
 }
 
 /** Authorization ヘッダを返す（取得できない場合は空オブジェクト） */
-export async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = await getIdToken();
+export async function getAuthHeaders(
+  forceRefresh = false,
+): Promise<Record<string, string>> {
+  const token = await getIdToken(forceRefresh);
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// ─────────────────────────────────────────────
-// Backend base URL
-// ─────────────────────────────────────────────
-
-const RAW_ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-function sanitizeBase(u: string): string {
-  return (u || "").replace(/\/+$/g, "");
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const API_BASE = sanitizeBase(RAW_ENV_BASE || FALLBACK_BASE);
+export type CurrentMemberResponse = {
+  id?: string;
+  uid?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  firstNameKana?: string | null;
+  lastNameKana?: string | null;
+  email?: string | null;
+  permissions?: string[];
+  companyId?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  displayName?: string | null;
+};
 
-if (!API_BASE) {
-  throw new Error(
-    "[authService] BACKEND BASE URL is empty. Set VITE_BACKEND_BASE_URL in .env.local",
-  );
+async function fetchCurrentMemberOnce(): Promise<CurrentMemberResponse | null> {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const raw = await fetchCurrentMemberRaw();
+  const member = raw?.data ?? raw ?? null;
+
+  return member;
+}
+
+/**
+ * Backend: /members/me から current member を取得する。
+ *
+ * 新規登録直後は Firebase Auth user は存在していても、
+ * backend 側 member document がまだ作成直後/未反映のことがあるため、
+ * 404 は短時間だけ retry する。
+ */
+export async function getCurrentMember(options?: {
+  retries?: number;
+  retryDelayMs?: number;
+}): Promise<CurrentMemberResponse | null> {
+  const retries = options?.retries ?? 5;
+  const retryDelayMs = options?.retryDelayMs ?? 300;
+
+  for (let i = 0; i <= retries; i += 1) {
+    try {
+      const member = await fetchCurrentMemberOnce();
+
+      if (member?.id && member?.companyId) {
+        return member;
+      }
+
+      if (i < retries) {
+        await sleep(retryDelayMs * (i + 1));
+        continue;
+      }
+
+      return member;
+    } catch (error) {
+      console.error("[authService] getCurrentMember failed:", error);
+
+      if (i < retries) {
+        await sleep(retryDelayMs * (i + 1));
+        continue;
+      }
+
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -79,33 +136,13 @@ if (!API_BASE) {
  * そのため frontend から members/{uid} を直接読みに行かない。
  */
 export async function getCompanyId(): Promise<string | null> {
-  const headers = await getAuthHeaders();
+  const member = await getCurrentMember({
+    retries: 5,
+    retryDelayMs: 300,
+  });
 
-  if (!headers.Authorization) {
-    return null;
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/members/me`, {
-      method: "GET",
-      mode: "cors",
-      headers,
-    });
-
-    if (!res.ok) {
-      console.error("[authService] getCompanyId /members/me failed:", res.status);
-      return null;
-    }
-
-    const json = await res.json();
-    const data = json?.data ?? json;
-
-    const cid = String(data?.companyId ?? "").trim();
-    return cid || null;
-  } catch (error) {
-    console.error("[authService] getCompanyId failed:", error);
-    return null;
-  }
+  const cid = String(member?.companyId ?? "").trim();
+  return cid || null;
 }
 
 /** 便利ユーティリティ：companyId を取得して返す */

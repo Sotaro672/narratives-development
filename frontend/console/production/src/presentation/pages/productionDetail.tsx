@@ -10,7 +10,7 @@ import ProductionQuantityCard from "../components/productionQuantityCard";
 import { useProductionDetail } from "../hook/useProductionDetail";
 import "../styles/production.css";
 
-import LogCard from "../../../../log/src/presentation/LogCard";
+import LogCard from "../../../../log/presentation/LogCard";
 
 // usePrintCard Hook（print_log + QR 情報取得）
 // modelId を正にした版（QuantityRowBase: modelId）

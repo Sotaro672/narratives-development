@@ -3,7 +3,7 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../components/tokenContentsCard";
-import LogCard from "../../../../log/src/presentation/LogCard";
+import LogCard from "../../../../log/presentation/LogCard";
 
 // ★ ロジックはすべて Hook に移譲
 import { useTokenBlueprintDetail } from "../hook/useTokenBlueprintDetail";

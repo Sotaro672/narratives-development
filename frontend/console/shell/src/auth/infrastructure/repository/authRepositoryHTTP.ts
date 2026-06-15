@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-// frontend/console/shell/src/auth/infrastructure/repository/authRepositoryHTTP.ts
+// frontend\console\shell\src\auth\infrastructure\repository\authRepositoryHTTP.ts
 
 import { auth } from "../config/firebaseClient";
 import { buildConsoleUrl } from "../../../shared/http/apiBase";
@@ -8,6 +8,58 @@ import { buildConsoleUrl } from "../../../shared/http/apiBase";
 // -------------------------------
 // HTTP functions (Auth / Member / Company 用)
 // -------------------------------
+
+async function getIdToken(forceRefresh = false): Promise<string | null> {
+  const token = await auth.currentUser?.getIdToken(forceRefresh);
+  return token ?? null;
+}
+
+function buildAuthHeaders(token: string, initHeaders?: HeadersInit): Headers {
+  const headers = new Headers(initHeaders);
+
+  headers.set("Authorization", `Bearer ${token}`);
+
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  return headers;
+}
+
+async function fetchJsonWithAuth(
+  url: string,
+  init: RequestInit = {},
+): Promise<any | null> {
+  const token = await getIdToken(false);
+  if (!token) return null;
+
+  let res = await fetch(url, {
+    ...init,
+    headers: buildAuthHeaders(token, init.headers),
+  });
+
+  if (res.status === 401) {
+    const refreshedToken = await getIdToken(true);
+    if (!refreshedToken) return null;
+
+    res = await fetch(url, {
+      ...init,
+      headers: buildAuthHeaders(refreshedToken, init.headers),
+    });
+  }
+
+  if (!res.ok) {
+    await res.text().catch(() => "");
+    return null;
+  }
+
+  const ct = res.headers.get("Content-Type") ?? "";
+  if (!ct.includes("application/json")) {
+    return null;
+  }
+
+  return await res.json();
+}
 
 /**
  * Authorization token から現在 member を取得して「生の JSON」を返す関数。
@@ -21,34 +73,9 @@ import { buildConsoleUrl } from "../../../shared/http/apiBase";
  *   - Firestore members の docId 用
  */
 export async function fetchCurrentMemberRaw(): Promise<any | null> {
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) return null;
-
-  const url = buildConsoleUrl("/members/me");
-
-  const res = await fetch(url, {
+  return await fetchJsonWithAuth(buildConsoleUrl("/members/me"), {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
   });
-
-  if (!res.ok) {
-    await res.text().catch(() => "");
-    return null;
-  }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    throw new Error(
-      `members API が JSON を返していません (content-type=${ct}). ` +
-        `VITE_BACKEND_BASE_URL または buildConsoleUrl の設定を確認してください。`,
-    );
-  }
-
-  const raw = await res.json();
-  return raw;
 }
 
 /**
@@ -62,35 +89,16 @@ export async function updateCurrentMemberProfileRaw(
   id: string,
   payload: any,
 ): Promise<any | null> {
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) return null;
-
   const memberDocId = (id ?? "").trim();
   if (!memberDocId) return null;
 
-  const url = buildConsoleUrl(`/members/${encodeURIComponent(memberDocId)}`);
-
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+  return await fetchJsonWithAuth(
+    buildConsoleUrl(`/members/${encodeURIComponent(memberDocId)}`),
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    await res.text().catch(() => "");
-    return null;
-  }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    return null;
-  }
-
-  const raw = await res.json();
-  return raw;
+  );
 }
 
 /**
@@ -102,33 +110,10 @@ export async function fetchCompanyByIdRaw(
   const id = (companyId ?? "").trim();
   if (!id) return null;
 
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
-
-  const idToken = await user.getIdToken();
-
-  const url = buildConsoleUrl(`/companies/${encodeURIComponent(id)}`);
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
+  return await fetchJsonWithAuth(
+    buildConsoleUrl(`/companies/${encodeURIComponent(id)}`),
+    {
+      method: "GET",
     },
-  });
-
-  if (!res.ok) {
-    await res.text().catch(() => "");
-    return null;
-  }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    return null;
-  }
-
-  const raw = await res.json();
-  return raw;
+  );
 }

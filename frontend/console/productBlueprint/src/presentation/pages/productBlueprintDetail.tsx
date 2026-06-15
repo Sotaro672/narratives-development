@@ -12,7 +12,7 @@ import SizeVariationCard from "../../../../model/src/presentation/components/Siz
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
 import VolumeCard from "../../../../model/src/presentation/components/VolumeCard";
 import AlcoholModelNumberCard from "../../../../model/src/presentation/components/AlcoholModelNumberCard";
-import LogCard from "../../../../log/src/presentation/LogCard";
+import LogCard from "../../../../log/presentation/LogCard";
 
 import { useProductBlueprintDetail } from "../hooks/detail/useProductBlueprintDetail";
 
