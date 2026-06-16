@@ -23,7 +23,7 @@ const signInTargets: SignInTarget[] = [
     description:
       "商品を登録・管理し、ブロックチェーントークンを発行できる出品者向けのプラットフォーム。",
     url: "https://narratives-console-dev.web.app",
-    buttonLabel: "Consoleにログイン",
+    buttonLabel: "コンソールにログイン",
     variant: "primary",
     deviceTags: ["PC専用"],
   },

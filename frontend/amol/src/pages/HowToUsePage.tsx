@@ -1,5 +1,8 @@
-//frontend\amol\src\pages\HowToUsePage.tsx
+// frontend/amol/src/pages/HowToUsePage.tsx
+import { useNavigate } from "react-router-dom";
+
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-page.css";
@@ -107,7 +110,7 @@ const buyerSteps: Step[] = [
     title: "レビュー投稿",
     description:
       "購入後に商品の体験や評価をレビューとして投稿し、他の購入者に共有します。",
-    youtubeUrl: "https://www.youtube.com/embed/ccLE5KMZnR8",
+    youtubeUrl: "https://www.youtube.com/embed/RgLNaWVdWVE",
   },
   {
     number: "04",
@@ -190,8 +193,10 @@ function StepFlow({
 }
 
 export default function HowToUsePage() {
+  const navigate = useNavigate();
+
   return (
-    <Layout title="使い方" mode="landing">
+    <Layout title="AMOL" mode="landing">
       <main className="how-to-use-page">
         <div className="how-to-use-page__inner">
           <header className="how-to-use-page__header">
@@ -199,7 +204,8 @@ export default function HowToUsePage() {
             <h1 className="how-to-use-page__title">使い方</h1>
             <p className="how-to-use-page__lead">
               出品者Consoleと購入者Mallの使い方を解説します。
-              <br/>一連の操作には出品するテナント役と購入するお客様役が必要です。
+              <br />
+              一連の操作には出品するテナント役と購入するお客様役が必要です。
             </p>
           </header>
 
@@ -222,6 +228,15 @@ export default function HowToUsePage() {
             subtitle="アバター登録から購入、レビュー投稿、トークン交換までの4つのステップ"
             steps={buyerSteps}
           />
+
+          <div className="page-actions">
+            <Button
+              variant="primary"
+              onClick={() => navigate("/signup/select")}
+            >
+              試作品を体験
+            </Button>
+          </div>
         </div>
       </main>
     </Layout>

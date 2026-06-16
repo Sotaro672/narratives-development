@@ -68,6 +68,21 @@
   white-space: nowrap;
 }
 
+.header__title-button {
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.header__title-button:hover {
+  opacity: 0.8;
+}
+
 .header__menu-button,
 .header__back-button,
 .header__settings-link {
@@ -186,6 +201,7 @@
 .header__back-button:focus-visible,
 .header__menu-link:focus-visible,
 .header__title-link:focus-visible,
+.header__title-button:focus-visible,
 .header__login-link:focus-visible,
 .header__settings-link:focus-visible,
 .header__menu-backdrop:focus-visible {

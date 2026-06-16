@@ -12,6 +12,7 @@ import type { HeaderProps } from "./header/types";
 export default function Header(props: HeaderProps) {
   const {
     displayTitle,
+    handleTitleClick,
     menuOpen,
     settingsOpen,
     shouldShowMenuButton,
@@ -44,7 +45,13 @@ export default function Header(props: HeaderProps) {
             </button>
           ) : null}
 
-          <span className="header__title">{displayTitle}</span>
+          <button
+            type="button"
+            className="header__title header__title-button"
+            onClick={handleTitleClick}
+          >
+            {displayTitle}
+          </button>
         </div>
 
         <HeaderActions actions={actions} />

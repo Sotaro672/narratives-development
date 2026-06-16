@@ -6,9 +6,14 @@ import Layout from "../components/layout/Layout";
 
 export default function PrivacyPolicyPage() {
   return (
-    <Layout title="プライバシーポリシー" mode="landing">
+    <Layout title="AMOL" mode="landing">
       <section className="landing-page-section">
         <div className="landing-page-section__inner">
+          <header className="how-to-use-page__header">
+            <p className="how-to-use-page__eyebrow">Privacy Policy</p>
+            <h1 className="how-to-use-page__title">プライバシーポリシー</h1>
+          </header>
+
           <div className="landing-page-card terms-page">
             <section className="terms-page__section">
               <h2 className="terms-page__heading">1. 基本方針</h2>

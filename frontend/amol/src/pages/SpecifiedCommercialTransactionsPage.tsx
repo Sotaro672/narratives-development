@@ -3,7 +3,7 @@ import Layout from "../components/layout/Layout";
 
 export default function SpecifiedCommercialTransactionsPage() {
   return (
-    <Layout title="特定商取引法に基づく表記" mode="landing">
+    <Layout title="AMOL" mode="landing">
       <section className="landing-page-section">
         <div className="landing-page-section__inner">
           <p className="landing-page-card__text landing-page-legal-lead">

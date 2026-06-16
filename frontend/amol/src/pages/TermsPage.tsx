@@ -3,9 +3,14 @@ import Layout from "../components/layout/Layout";
 
 export default function TermsPage() {
   return (
-    <Layout title="利用規約" mode="landing">
+    <Layout title="AMOL" mode="landing">
       <section className="landing-page-section">
         <div className="landing-page-section__inner">
+          <header className="how-to-use-page__header">
+            <p className="how-to-use-page__eyebrow">Terms</p>
+            <h1 className="how-to-use-page__title">利用規約</h1>
+          </header>
+
           <div className="landing-page-card terms-page">
             <section className="terms-page__section">
               <h2 className="terms-page__heading">第1条（適用）</h2>

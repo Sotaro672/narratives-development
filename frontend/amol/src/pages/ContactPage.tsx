@@ -1,6 +1,7 @@
 // frontend/src/pages/ContactPage.tsx
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
+import Button from "../components/ui/Button";
 
 import { useContactAuth } from "../features/contact/hooks/useContactAuth";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
@@ -55,15 +56,18 @@ export default function ContactPage() {
 
   return (
     <Layout
-      title="お問い合わせ"
+      title="AMOL"
       mode="landing"
       hideHamburgerMenu={isLoggedIn}
       hideSettingsButton={isLoggedIn}
-      actionButtonLabel={isDesktop ? submitButtonLabel : undefined}
-      onActionButtonClick={isDesktop ? handleSubmit : undefined}
     >
       <section className="landing-page-section landing-page-section--with-mobile-footer-action">
         <div className="landing-page-section__inner">
+          <header className="how-to-use-page__header">
+            <p className="how-to-use-page__eyebrow">Contact</p>
+            <h1 className="how-to-use-page__title">お問い合わせ</h1>
+          </header>
+
           <div className="landing-page-card">
             <ContactForm
               shouldShowGuestEmailInput={shouldShowGuestEmailInput}
@@ -85,6 +89,18 @@ export default function ContactPage() {
               onCarouselScroll={handleCarouselScroll}
               onMoveToSlide={handleMoveToSlide}
             />
+
+            {isDesktop ? (
+              <div className="page-actions contact-page__actions">
+                <Button
+                  variant="primary"
+                  disabled={submitting}
+                  onClick={handleSubmit}
+                >
+                  {submitButtonLabel}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

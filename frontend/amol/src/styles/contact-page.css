@@ -3,3 +3,7 @@
   display: grid;
   row-gap: 24px;
 }
+
+.contact-page__actions {
+  margin-top: 24px;
+}

@@ -56,9 +56,9 @@ export default function LandingPage() {
             <div className="page-actions">
               <Button
                 variant="primary"
-                onClick={() => navigate("/signup/select")}
+                onClick={() => navigate("/how-to-use")}
               >
-                試作品を体験
+                使い方
               </Button>
             </div>
           </div>
@@ -388,7 +388,7 @@ export default function LandingPage() {
                 試験運用価格
               </p>
               <p className="landing-page-pricing-card__text">
-                Consoleの月額利用料です。月毎の契約です。
+                コンソールの月額利用料です。月毎の契約です。
               </p>
             </article>
 
@@ -404,12 +404,13 @@ export default function LandingPage() {
 
             <article className="landing-page-pricing-card">
               <p className="landing-page-pricing-card__label">
-                MALL販売手数料
+                モール販売手数料
               </p>
               <h3 className="landing-page-pricing-card__price">売上の10%</h3>
               <p className="landing-page-pricing-card__text">
                 テナント様所有EC経由での販売は対象外です。
-                <br/>接続工事費は別途相談させてください。
+                <br />
+                接続工事費は別途相談させてください。
               </p>
             </article>
           </div>
@@ -417,9 +418,9 @@ export default function LandingPage() {
           <div className="page-actions">
             <Button
               variant="primary"
-              onClick={() => navigate("/signup/select")}
+              onClick={() => navigate("/how-to-use")}
             >
-              試作品を体験
+              使い方
             </Button>
           </div>
         </div>

@@ -410,6 +410,10 @@ export function useHeaderController({
     navigate(normalizedBackTo || WALLET_PATH);
   };
 
+  const handleTitleClick = () => {
+    navigate("/");
+  };
+
   const actions: HeaderActionState = {
     hasActionButton,
     actionButtonLabel: actionButtonLabel ?? "",
@@ -438,6 +442,7 @@ export function useHeaderController({
 
   return {
     displayTitle,
+    handleTitleClick,
     menuOpen,
     settingsOpen,
     shouldShowMenuButton,
