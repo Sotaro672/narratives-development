@@ -13,11 +13,13 @@ import type { CatalogProductBlueprint } from "../../types";
 type ProductInfoCardProps = {
   productBlueprint: CatalogProductBlueprint;
   categoryKind?: ProductCategoryKind;
+  onBrandClick?: () => void;
 };
 
 export default function ProductInfoCard({
   productBlueprint,
   categoryKind = "unknown",
+  onBrandClick,
 }: ProductInfoCardProps) {
   const viewModel = createProductInfoCardViewModel({
     productBlueprint,
@@ -33,11 +35,27 @@ export default function ProductInfoCard({
       />
 
       <InfoList className="catalog-page-definition-list">
-        {viewModel.rows.map((row) => (
-          <InfoRow key={row.key} label={row.label}>
-            {row.value}
-          </InfoRow>
-        ))}
+        {viewModel.rows.map((row) => {
+          const isBrandRow = row.label === "ブランド";
+
+          return (
+            <InfoRow key={row.key} label={row.label}>
+              {isBrandRow ? (
+                <button
+                  type="button"
+                  className="catalog-page-brand-link"
+                  onClick={onBrandClick}
+                  disabled={!onBrandClick}
+                  aria-label={`${productBlueprint.brandName}のブランドページへ移動`}
+                >
+                  {row.value}
+                </button>
+              ) : (
+                row.value
+              )}
+            </InfoRow>
+          );
+        })}
       </InfoList>
 
       {viewModel.qualityAssuranceItems.length > 0 ? (

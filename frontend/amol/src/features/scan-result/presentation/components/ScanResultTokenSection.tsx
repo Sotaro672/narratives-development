@@ -65,11 +65,11 @@ export default function ScanResultTokenSection(
           )}
 
           {tokenBrandName ? (
-            <TextState>ブランド: {tokenBrandName}</TextState>
+            <TextState> {tokenBrandName}</TextState>
           ) : null}
 
           {tokenCompanyName ? (
-            <TextState>会社: {tokenCompanyName}</TextState>
+            <TextState> {tokenCompanyName}</TextState>
           ) : null}
 
           {tokenDescription ? (

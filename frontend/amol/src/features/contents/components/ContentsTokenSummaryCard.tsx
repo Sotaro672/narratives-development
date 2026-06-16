@@ -1,4 +1,4 @@
-//frontend\amol\src\features\contents\components\ContentsTokenSummaryCard.tsx
+// frontend/amol/src/features/contents/components/ContentsTokenSummaryCard.tsx
 import Tab from "../../../components/ui/Tab";
 import TokenReviewAggregateCard from "../../token-commnet/components/TokenReviewAggregateCard";
 import type { ContentsSearchParams } from "../types";
@@ -10,6 +10,7 @@ type ContentsTokenSummaryCardProps = {
   loadingAvatarId: boolean;
   currentAvatarId: string;
   onProductNameClick: () => void;
+  onBrandNameClick: () => void;
 };
 
 export default function ContentsTokenSummaryCard({
@@ -19,7 +20,11 @@ export default function ContentsTokenSummaryCard({
   loadingAvatarId,
   currentAvatarId,
   onProductNameClick,
+  onBrandNameClick,
 }: ContentsTokenSummaryCardProps) {
+  const hasProductName = Boolean(contents.productName);
+  const hasBrandName = Boolean(contents.brandName);
+
   return (
     <div className="contents-page-card">
       <div className="contents-page-card__header">
@@ -42,20 +47,28 @@ export default function ContentsTokenSummaryCard({
             {tokenName || "名称未設定のトークン"}
           </p>
 
-          {contents.productName ? (
-            <Tab
-              className="contents-page-card__product-name"
-              onClick={onProductNameClick}
-              disabled={!contents.productId}
-            >
-              {contents.productName}
-            </Tab>
-          ) : null}
+          {hasProductName || hasBrandName ? (
+            <div className="contents-page-card__tag-list">
+              {hasProductName ? (
+                <Tab
+                  className="contents-page-card__product-name"
+                  onClick={onProductNameClick}
+                  disabled={!contents.productId}
+                >
+                  {contents.productName}
+                </Tab>
+              ) : null}
 
-          {contents.brandName ? (
-            <p className="contents-page-card__brand-name">
-              {contents.brandName}
-            </p>
+              {hasBrandName ? (
+                <Tab
+                  className="contents-page-card__brand-name"
+                  onClick={onBrandNameClick}
+                  disabled={!contents.brandId}
+                >
+                  {contents.brandName}
+                </Tab>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

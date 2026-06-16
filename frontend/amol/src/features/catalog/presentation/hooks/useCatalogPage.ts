@@ -255,6 +255,16 @@ export function useCatalogPage() {
     setCartErrorMessage("");
   }
 
+  function handleBrandClick() {
+    const brandId = catalog?.productBlueprint.brandId?.trim();
+
+    if (!brandId) {
+      return;
+    }
+
+    navigate(`/brands/${encodeURIComponent(brandId)}`);
+  }
+
   async function handleAddToCart() {
     setIsAddingToCart(true);
     setCartMessage("");
@@ -309,6 +319,7 @@ export function useCatalogPage() {
     handleImageTouchEnd,
     handleSelectColor,
     handleSelectSize,
+    handleBrandClick,
     handleAddToCart,
     handleCartButtonClick,
   };

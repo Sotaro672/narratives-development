@@ -464,7 +464,6 @@ function BrandContent(props: {
         <BrandIcon brand={brand} />
 
         <div className="brand-page-profile-body">
-          <p className="brand-page-label">Brand</p>
           <h1>{brand.brandName || "名称未設定のブランド"}</h1>
 
           {hasCompanyName ? (
@@ -501,6 +500,10 @@ export default function BrandPage() {
     listItems: [],
     error: "",
   });
+
+  function handleHeaderBackButtonClick() {
+    navigate(-1);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -562,7 +565,8 @@ export default function BrandPage() {
         mode="landing"
         showHeader
         showBackButton
-        backTo="/"
+        backTo="/lists"
+        onBackButtonClick={handleHeaderBackButtonClick}
         showFooter={false}
         hideHamburgerMenu={false}
         hideSettingsButton
@@ -582,7 +586,8 @@ export default function BrandPage() {
         mode="landing"
         showHeader
         showBackButton
-        backTo="/"
+        backTo="/lists"
+        onBackButtonClick={handleHeaderBackButtonClick}
         showFooter={false}
         hideHamburgerMenu={false}
         hideSettingsButton
@@ -593,7 +598,7 @@ export default function BrandPage() {
             <h1>ブランド情報を取得できませんでした</h1>
             <p>{state.error}</p>
             <div className="brand-page-error-actions">
-              <button type="button" onClick={() => navigate(-1)}>
+              <button type="button" onClick={handleHeaderBackButtonClick}>
                 戻る
               </button>
               <Link to="/">トップへ</Link>
@@ -611,7 +616,8 @@ export default function BrandPage() {
         mode="landing"
         showHeader
         showBackButton
-        backTo="/"
+        backTo="/lists"
+        onBackButtonClick={handleHeaderBackButtonClick}
         showFooter={false}
         hideHamburgerMenu={false}
         hideSettingsButton
@@ -622,7 +628,7 @@ export default function BrandPage() {
             <h1>ブランド情報を取得できませんでした</h1>
             <p>brand data is empty</p>
             <div className="brand-page-error-actions">
-              <button type="button" onClick={() => navigate(-1)}>
+              <button type="button" onClick={handleHeaderBackButtonClick}>
                 戻る
               </button>
               <Link to="/">トップへ</Link>
@@ -639,7 +645,8 @@ export default function BrandPage() {
       mode="landing"
       showHeader
       showBackButton
-      backTo="/"
+      backTo="/lists"
+      onBackButtonClick={handleHeaderBackButtonClick}
       showFooter={false}
       hideHamburgerMenu={false}
       hideSettingsButton

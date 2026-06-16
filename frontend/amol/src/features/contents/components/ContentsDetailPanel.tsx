@@ -1,4 +1,4 @@
-//frontend\amol\src\features\contents\components\ContentsDetailPanel.tsx
+// frontend/amol/src/features/contents/components/ContentsDetailPanel.tsx
 import TokenCommentCard from "../../token-commnet/components/TokenCommentCard";
 import type {
   ContentsSearchParams,
@@ -16,6 +16,7 @@ type ContentsDetailPanelProps = {
   isMobilePortrait: boolean;
   commentCard: TokenCommentCardController;
   onProductNameClick: () => void;
+  onBrandNameClick: () => void;
 };
 
 export default function ContentsDetailPanel({
@@ -28,6 +29,7 @@ export default function ContentsDetailPanel({
   isMobilePortrait,
   commentCard,
   onProductNameClick,
+  onBrandNameClick,
 }: ContentsDetailPanelProps) {
   return (
     <div className="split-page-right contents-page-detail">
@@ -38,6 +40,7 @@ export default function ContentsDetailPanel({
         loadingAvatarId={loadingAvatarId}
         currentAvatarId={currentAvatarId}
         onProductNameClick={onProductNameClick}
+        onBrandNameClick={onBrandNameClick}
       />
 
       <TokenCommentCard

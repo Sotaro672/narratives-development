@@ -257,6 +257,7 @@ export function useHeaderController({
 
   const isInfoPage =
     location.pathname === "/" ||
+    location.pathname === "/landing" ||
     location.pathname === "/specified-commercial-transactions" ||
     location.pathname === "/terms" ||
     location.pathname === "/privacy-policy" ||
@@ -264,8 +265,7 @@ export function useHeaderController({
 
   const isRoomDetailPage = /^\/lists\/[^/]+$/.test(location.pathname);
 
-  const shouldHideHamburgerMenu =
-    hideHamburgerMenu || isRoomDetailPage || isDesktop;
+  const shouldHideHamburgerMenu = hideHamburgerMenu || isRoomDetailPage;
 
   const hasActionButton =
     mode !== "signin" &&
@@ -368,10 +368,19 @@ export function useHeaderController({
     mode !== "signin" &&
     authResolved &&
     !isLoggedIn &&
+    !isDesktop &&
+    !shouldHideHamburgerMenu;
+
+  const shouldShowAuthenticatedMenuButton =
+    mode !== "signin" &&
+    authResolved &&
+    isLoggedIn &&
     !shouldHideHamburgerMenu;
 
   const shouldShowLandscapeSidebarMenuButton = false;
-  const shouldShowMenuButton = shouldShowGuestMenuButton;
+
+  const shouldShowMenuButton =
+    shouldShowGuestMenuButton || shouldShowAuthenticatedMenuButton;
 
   const closeMenu = () => {
     setMenuOpen(false);
@@ -403,7 +412,7 @@ export function useHeaderController({
   };
 
   const handleTitleClick = () => {
-    navigate("/");
+    navigate("/landing");
   };
 
   const actions: HeaderActionState = {

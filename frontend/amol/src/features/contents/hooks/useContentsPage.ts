@@ -61,6 +61,16 @@ export function useContentsPage() {
     navigate(`/scan/result?productId=${encodeURIComponent(contents.productId)}`);
   };
 
+  const handleBrandNameClick = () => {
+    const brandId = contents.brandId.trim();
+
+    if (!brandId) {
+      return;
+    }
+
+    navigate(`/brands/${encodeURIComponent(brandId)}`);
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -215,6 +225,7 @@ export function useContentsPage() {
     hasMediaItems,
     isMobilePortrait,
     handleProductNameClick,
+    handleBrandNameClick,
     handlePrevFile,
     handleNextFile,
   };

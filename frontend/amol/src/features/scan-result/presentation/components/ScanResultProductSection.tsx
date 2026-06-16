@@ -2,7 +2,6 @@
 import { useNavigate } from "react-router-dom";
 
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
-import MediaIcon from "../../../../components/ui/MediaIcon";
 import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Tab from "../../../../components/ui/Tab";
@@ -19,7 +18,6 @@ type ScanResultProductSectionProps = {
   owner: MallOwnerInfo | null;
   brandId: string;
   brandName: string;
-  brandIcon: string;
   hasBrandInfo: boolean;
   productBlueprintRows: ProductInfoRow[];
   qualityAssuranceTabs: string[];
@@ -62,7 +60,6 @@ export default function ScanResultProductSection(
     owner,
     brandId,
     brandName,
-    brandIcon,
     hasBrandInfo,
     productBlueprintRows,
     qualityAssuranceTabs,
@@ -76,14 +73,14 @@ export default function ScanResultProductSection(
 
   const isAlcohol = alcoholInfo?.isAlcohol === true;
   const shouldShowAlcoholInfo = hasAlcoholDisplayInfo(alcoholInfo);
-  const normalizedBrandId = brandId.trim();
+  const canOpenBrand = Boolean(brandId);
 
   const handleOpenBrand = () => {
-    if (!normalizedBrandId) {
+    if (!brandId) {
       return;
     }
 
-    navigate(`/brands/${encodeURIComponent(normalizedBrandId)}`);
+    navigate(`/brands/${encodeURIComponent(brandId)}`);
   };
 
   return (
@@ -114,15 +111,8 @@ export default function ScanResultProductSection(
                 type="button"
                 className="scan-result-brand-value scan-result-brand-value--button"
                 onClick={handleOpenBrand}
-                disabled={!normalizedBrandId}
+                disabled={!canOpenBrand}
               >
-                <MediaIcon
-                  src={brandIcon}
-                  fallback=""
-                  size="xs"
-                  shape="circle"
-                  className="scan-result-brand-icon"
-                />
                 <span>{brandName || "-"}</span>
               </button>
             </InfoRow>
@@ -157,9 +147,7 @@ export default function ScanResultProductSection(
 
         {isAlcohol ? (
           <>
-            <InfoRow label="容量">
-              {alcoholInfo?.volumeLabel || "-"}
-            </InfoRow>
+            <InfoRow label="容量">{alcoholInfo?.volumeLabel || "-"}</InfoRow>
 
             <InfoRow label="ヴィンテージ">
               {alcoholInfo?.vintage || "-"}

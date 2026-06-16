@@ -49,7 +49,7 @@ export default function ScanResultPage() {
 
   return (
     <Layout
-      title="スキャン結果"
+      title="AMOL"
       mode={isLoggedIn ? "mypage" : "landing"}
       showHeader
       showBackButton={isLoggedIn && isMobilePortrait}

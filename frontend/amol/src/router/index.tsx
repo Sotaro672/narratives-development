@@ -60,6 +60,8 @@ function RootPage() {
 
 export const router = createBrowserRouter([
   { path: "/", element: <RootPage /> },
+  { path: "/landing", element: <LandingPage /> },
+
   { path: "/signin", element: <SignInPage /> },
   { path: "/signin/select", element: <SignInSelectPage /> },
   { path: "/signup", element: <SignUpPage /> },
@@ -70,6 +72,8 @@ export const router = createBrowserRouter([
   { path: "/how-to-use", element: <HowToUsePage /> },
   { path: "/faq", element: <VisionPage /> },
   { path: "/terms", element: <TermsPage /> },
+  { path: "/privacy-policy", element: <TermsPage /> },
+  { path: "/specified-commercial-transactions", element: <TermsPage /> },
   { path: "/contact", element: <ContactPage /> },
 
   {
@@ -160,7 +164,6 @@ export const router = createBrowserRouter([
     path: "/scan/result/:productId",
     element: <ScanResultPage />,
   },
-
   {
     path: "/wallet",
     element: (
@@ -213,7 +216,6 @@ export const router = createBrowserRouter([
     path: "/auth/action",
     element: <AuthActionPage />,
   },
-
   {
     path: "/:productId",
     element: <ScanResultPage />,

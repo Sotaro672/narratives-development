@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
-  createOwnedTokenContentsPath,
   createScanResultPageViewModel,
   createScanTransferSuccessModalViewModel,
   loadScanReviews,
@@ -573,21 +572,88 @@ export function useScanResultPage() {
         headers,
       );
 
-      const metadataUri = resolved.metadataUri.trim();
-      const tokenBlueprintId = resolved.tokenBlueprintId.trim();
+      const fallbackToken = previewState?.raw.token ?? null;
+      const fallbackTokenBlueprintPatch = previewState?.tokenBlueprintPatch ?? null;
+      const fallbackProductBlueprintPatch =
+        previewState?.raw.productBlueprintPatch ?? null;
 
-      if (!metadataUri || !tokenBlueprintId) {
+      const metadataUri =
+        resolved.metadataUri.trim() || fallbackToken?.metadataUri.trim() || "";
+
+      const tokenBlueprintId =
+        resolved.tokenBlueprintId.trim() ||
+        fallbackToken?.tokenBlueprintId.trim() ||
+        fallbackTokenBlueprintPatch?.id.trim() ||
+        "";
+
+      if (!metadataUri) {
         return;
       }
 
-      navigate(
-        createOwnedTokenContentsPath({
-          mintAddress: normalizedMintAddress,
-          resolved,
-        }),
-      );
+      const resolvedMintAddress =
+        resolved.mintAddress.trim() || normalizedMintAddress;
+
+      const resolvedProductId = resolved.productId.trim() || productId.trim();
+
+      const resolvedBrandId =
+        resolved.brandId.trim() || fallbackToken?.brandId.trim() || "";
+
+      const resolvedBrandName =
+        resolved.brandName.trim() || fallbackToken?.brandName.trim() || "";
+
+      const resolvedProductName =
+        resolved.productName.trim() ||
+        fallbackProductBlueprintPatch?.productName ||
+        "";
+
+      const productBlueprintIdForContents =
+        resolved.productBlueprintId.trim() ||
+        previewState?.raw.productBlueprintId.trim() ||
+        "";
+
+      const tokenName = fallbackTokenBlueprintPatch?.tokenName || "";
+      const tokenIconUrl = fallbackTokenBlueprintPatch?.tokenIcon || "";
+
+      const searchParams = new URLSearchParams();
+
+      searchParams.set("mintAddress", resolvedMintAddress);
+      searchParams.set("metadataUri", metadataUri);
+
+      if (resolvedProductId) {
+        searchParams.set("productId", resolvedProductId);
+      }
+
+      if (resolvedBrandId) {
+        searchParams.set("brandId", resolvedBrandId);
+      }
+
+      if (resolvedBrandName) {
+        searchParams.set("brandName", resolvedBrandName);
+      }
+
+      if (resolvedProductName) {
+        searchParams.set("productName", resolvedProductName);
+      }
+
+      if (productBlueprintIdForContents) {
+        searchParams.set("productBlueprintId", productBlueprintIdForContents);
+      }
+
+      if (tokenBlueprintId) {
+        searchParams.set("tokenBlueprintId", tokenBlueprintId);
+      }
+
+      if (tokenName) {
+        searchParams.set("tokenName", tokenName);
+      }
+
+      if (tokenIconUrl) {
+        searchParams.set("tokenIconUrl", tokenIconUrl);
+      }
+
+      navigate(`/contents?${searchParams.toString()}`);
     },
-    [navigate],
+    [navigate, previewState, productId],
   );
 
   const submitReview = useCallback(

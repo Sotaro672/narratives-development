@@ -57,6 +57,10 @@ export default function WalletProfile({
       </div>
 
       <div className="wallet-page-profile__body">
+        {avatarName ? (
+          <div className="wallet-page-profile__name">{avatarName}</div>
+        ) : null}
+
         {shouldShowStats ? (
           <div className="wallet-page-profile__stats">
             <div className="wallet-page-profile__stat">

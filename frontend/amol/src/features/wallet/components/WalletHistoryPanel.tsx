@@ -4,7 +4,6 @@ import { formatDateTime } from "../../../components/utils/date";
 import type {
   WalletOrder,
   WalletOrderItemSnapshot,
-  WalletOrderMeasurements,
 } from "../types/orderTypes";
 import { formatAmount } from "../utils/format";
 
@@ -13,6 +12,7 @@ type WalletHistoryPanelProps = {
   error: string;
   hasItems: boolean;
   orderHistory: WalletOrder[];
+  onBrandClick?: (brandId: string) => void;
 };
 
 function getOrderTotal(order: WalletOrder): number {
@@ -180,11 +180,58 @@ function renderItemMeta(item: WalletOrderItemSnapshot) {
   );
 }
 
+function renderBrandLabel(
+  item: WalletOrderItemSnapshot,
+  brandName: string,
+  onBrandClick?: (brandId: string) => void,
+) {
+  const brandId = item.brandId?.trim() || "";
+  const canOpenBrand = Boolean(brandId && onBrandClick);
+
+  const content = (
+    <>
+      <MediaIcon
+        src={item.brandIcon}
+        alt={brandName}
+        fallback={getFallbackInitial(brandName)}
+        size="xs"
+        shape="circle"
+        className="wallet-page-history__brand-icon"
+      />
+
+      <span className="wallet-page-history__brand-name">{brandName}</span>
+    </>
+  );
+
+  if (!canOpenBrand) {
+    return <div className="wallet-page-history__brand">{content}</div>;
+  }
+
+  return (
+    <div
+      className="wallet-page-history__brand"
+      role="button"
+      tabIndex={0}
+      aria-label={`${brandName}のブランドページへ移動`}
+      onClick={() => onBrandClick?.(brandId)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onBrandClick?.(brandId);
+        }
+      }}
+    >
+      {content}
+    </div>
+  );
+}
+
 export default function WalletHistoryPanel({
   loading,
   error,
   hasItems,
   orderHistory,
+  onBrandClick,
 }: WalletHistoryPanelProps) {
   if (loading) {
     return <p className="wallet-page__message">読み込み中です...</p>;
@@ -263,20 +310,7 @@ export default function WalletHistoryPanel({
                         </span>
                       </div>
 
-                      <div className="wallet-page-history__brand">
-                        <MediaIcon
-                          src={item.brandIcon}
-                          alt={brandName}
-                          fallback={getFallbackInitial(brandName)}
-                          size="xs"
-                          shape="circle"
-                          className="wallet-page-history__brand-icon"
-                        />
-
-                        <span className="wallet-page-history__brand-name">
-                          {brandName}
-                        </span>
-                      </div>
+                      {renderBrandLabel(item, brandName, onBrandClick)}
 
                       {renderItemMeta(item)}
                       {renderMeasurements(item)}

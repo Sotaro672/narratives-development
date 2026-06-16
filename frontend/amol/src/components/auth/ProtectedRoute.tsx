@@ -1,5 +1,4 @@
 // frontend/src/components/auth/ProtectedRoute.tsx
-
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
@@ -190,6 +189,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       const user = authState.user;
 
       if (!user) {
+        setAvatarStatus({
+          status: null,
+          loading: false,
+          checked: true,
+        });
         return;
       }
 
@@ -237,7 +241,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!authState.user) {
-    return <Navigate to="/signin" replace />;
+    return <>{children}</>;
   }
 
   if (avatarStatus.loading || !avatarStatus.checked) {

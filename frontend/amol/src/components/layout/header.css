@@ -489,15 +489,6 @@
   .header__desktop-nav {
     display: inline-flex;
   }
-
-  .header__menu-button {
-    display: none;
-  }
-
-  .header__menu-backdrop,
-  .header__menu-panel {
-    display: none;
-  }
 }
 
 @media (max-width: 1023px) {

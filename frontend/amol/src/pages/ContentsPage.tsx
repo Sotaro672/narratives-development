@@ -1,4 +1,4 @@
-//frontend\amol\src\pages\ContentsPage.tsx
+// frontend/amol/src/pages/ContentsPage.tsx
 import "../styles/page-layout.css";
 import "../styles/contents-page.css";
 
@@ -63,6 +63,7 @@ export default function ContentsPage() {
             isMobilePortrait={page.isMobilePortrait}
             commentCard={page.commentCard}
             onProductNameClick={page.handleProductNameClick}
+            onBrandNameClick={page.handleBrandNameClick}
           />
         </div>
       </section>

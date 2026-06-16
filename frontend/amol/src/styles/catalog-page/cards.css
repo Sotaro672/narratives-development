@@ -57,6 +57,43 @@
   word-break: break-word;
 }
 
+.catalog-page-brand-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-primary, #2563eb);
+  font: inherit;
+  font-weight: 900;
+  line-height: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.catalog-page-brand-link:hover {
+  opacity: 0.75;
+}
+
+.catalog-page-brand-link:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.catalog-page-brand-link:disabled {
+  color: var(--color-text, #1f1f1f);
+  text-decoration: none;
+  cursor: default;
+  opacity: 1;
+}
+
 .catalog-page-chip-list {
   display: flex;
   flex-wrap: wrap;

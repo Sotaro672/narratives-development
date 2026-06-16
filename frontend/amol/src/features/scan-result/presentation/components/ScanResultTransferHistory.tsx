@@ -1,4 +1,4 @@
-//frontend\amol\src\features\scan-result\presentation\components\ScanResultTransferHistory.tsx
+// frontend/amol/src/features/scan-result/components/ScanResultTransferHistory.tsx
 import { useNavigate } from "react-router-dom";
 
 import MediaIcon from "../../../../components/ui/MediaIcon";
@@ -16,14 +16,15 @@ type ScanResultTransferHistoryProps = {
   transfers: MallPreviewTransferInfo[];
 };
 
-function TransferPartyBlock(props: {
+type TransferPartyBlockProps = {
   title: string;
   name: string;
   iconUrl: string;
-  brandId: string;
-  onOpenBrand: (brandId: string) => void;
-}) {
-  const clickable = props.brandId.trim().length > 0;
+  onClick?: () => void;
+};
+
+function TransferPartyBlock(props: TransferPartyBlockProps) {
+  const clickable = Boolean(props.onClick);
 
   const content = (
     <>
@@ -50,7 +51,7 @@ function TransferPartyBlock(props: {
     <button
       type="button"
       className="scan-result-party scan-result-party--button"
-      onClick={() => props.onOpenBrand(props.brandId)}
+      onClick={props.onClick}
     >
       {content}
     </button>
@@ -58,7 +59,7 @@ function TransferPartyBlock(props: {
 }
 
 export default function ScanResultTransferHistory(
-  props: ScanResultTransferHistoryProps
+  props: ScanResultTransferHistoryProps,
 ) {
   const navigate = useNavigate();
 
@@ -69,13 +70,19 @@ export default function ScanResultTransferHistory(
   });
 
   const handleOpenBrand = (brandId: string) => {
-    const id = brandId.trim();
-
-    if (!id) {
+    if (!brandId) {
       return;
     }
 
-    navigate(`/brands/${encodeURIComponent(id)}`);
+    navigate(`/brands/${encodeURIComponent(brandId)}`);
+  };
+
+  const handleOpenAvatar = (avatarId: string) => {
+    if (!avatarId) {
+      return;
+    }
+
+    navigate(`/avatars/${encodeURIComponent(avatarId)}`);
   };
 
   return (
@@ -92,7 +99,7 @@ export default function ScanResultTransferHistory(
             const fromIcon = transferIconUrl(transfer, "from");
             const toIcon = transferIconUrl(transfer, "to");
             const fromBrandId = transferBrandId(transfer, "from");
-            const toBrandId = transferBrandId(transfer, "to");
+            const toAvatarId = transfer.toAvatarId || "";
 
             return (
               <article
@@ -109,8 +116,9 @@ export default function ScanResultTransferHistory(
                   title="移譲元"
                   name={fromName}
                   iconUrl={fromIcon}
-                  brandId={fromBrandId}
-                  onOpenBrand={handleOpenBrand}
+                  onClick={
+                    fromBrandId ? () => handleOpenBrand(fromBrandId) : undefined
+                  }
                 />
 
                 <div className="scan-result-transfer__arrow">↓</div>
@@ -119,8 +127,9 @@ export default function ScanResultTransferHistory(
                   title="移譲先"
                   name={toName}
                   iconUrl={toIcon}
-                  brandId={toBrandId}
-                  onOpenBrand={handleOpenBrand}
+                  onClick={
+                    toAvatarId ? () => handleOpenAvatar(toAvatarId) : undefined
+                  }
                 />
               </article>
             );

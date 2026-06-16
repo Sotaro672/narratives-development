@@ -20,11 +20,7 @@ import type {
   TokenResolveDTO,
   WalletDTO,
 } from "../types";
-import {
-  isRecord,
-  trimText,
-  tokenBlueprintPatchHasAnyField,
-} from "../utils/format";
+import { isRecord, tokenBlueprintPatchHasAnyField } from "../utils/format";
 
 export type WalletResolvedTokenResponse = {
   productId: string;
@@ -38,12 +34,17 @@ export type WalletResolvedTokenResponse = {
   tokenContentsFiles: TokenContentFile[];
 };
 
+function textValue(value: unknown): string {
+  if (value == null) return "";
+  return String(value);
+}
+
 export function boolValue(value: unknown): boolean {
   if (value == null) return false;
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
 
-  const s = String(value).trim().toLowerCase();
+  const s = String(value).toLowerCase();
   return s === "true" || s === "1" || s === "yes";
 }
 
@@ -54,7 +55,7 @@ export function intValue(value: unknown): number {
     return Math.trunc(value);
   }
 
-  const s = String(value).trim();
+  const s = String(value);
   if (!s) return 0;
 
   if (s.startsWith("0x") || s.startsWith("0X")) {
@@ -73,7 +74,7 @@ export function optionalIntValue(value: unknown): number | undefined {
     return Math.trunc(value);
   }
 
-  const s = String(value).trim();
+  const s = String(value);
   if (!s) return undefined;
 
   if (s.startsWith("0x") || s.startsWith("0X")) {
@@ -105,13 +106,13 @@ function stringArrayFromJson(raw: unknown): string[] | undefined {
     return undefined;
   }
 
-  const values = raw.map(trimText).filter(Boolean);
+  const values = raw.map(textValue).filter(Boolean);
 
   return values.length > 0 ? values : undefined;
 }
 
 function categoryKindFromJson(raw: unknown): ProductCategoryKind | undefined {
-  const value = trimText(raw);
+  const value = textValue(raw);
 
   return value ? value : undefined;
 }
@@ -124,10 +125,10 @@ function productBlueprintCategorySnapshotFromJson(
   }
 
   const snapshot: ProductBlueprintCategorySnapshot = {
-    ID: trimText(raw.ID) || trimText(raw.id),
-    Code: trimText(raw.Code) || trimText(raw.code),
-    NameJa: trimText(raw.NameJa) || trimText(raw.nameJa),
-    NameEn: trimText(raw.NameEn) || trimText(raw.nameEn),
+    ID: textValue(raw.ID) || textValue(raw.id),
+    Code: textValue(raw.Code) || textValue(raw.code),
+    NameJa: textValue(raw.NameJa) || textValue(raw.nameJa),
+    NameEn: textValue(raw.NameEn) || textValue(raw.nameEn),
     Kind: categoryKindFromJson(raw.Kind) || categoryKindFromJson(raw.kind),
     Path: stringArrayFromJson(raw.Path) || stringArrayFromJson(raw.path),
   };
@@ -151,20 +152,20 @@ function categoryInputFieldDefinitionFromJson(
     return null;
   }
 
-  const key = trimText(raw.key);
-  const label = trimText(raw.label);
+  const key = textValue(raw.key);
+  const label = textValue(raw.label);
 
   if (!key && !label) {
     return null;
   }
 
   return {
-    scope: trimText(raw.scope),
+    scope: textValue(raw.scope),
     key,
     label,
-    type: trimText(raw.type),
+    type: textValue(raw.type),
     required: boolValue(raw.required),
-    unit: trimText(raw.unit) || undefined,
+    unit: textValue(raw.unit) || undefined,
   };
 }
 
@@ -186,9 +187,9 @@ function categoryInputSchemaFromJson(raw: unknown): CategoryInputSchema | null {
   }
 
   const schema: CategoryInputSchema = {
-    categoryCode: trimText(raw.categoryCode),
-    categoryKind: trimText(raw.categoryKind),
-    categoryNameJa: trimText(raw.categoryNameJa),
+    categoryCode: textValue(raw.categoryCode),
+    categoryKind: textValue(raw.categoryKind),
+    categoryNameJa: textValue(raw.categoryNameJa),
     productBlueprintFields: categoryInputFieldDefinitionsFromJson(
       raw.productBlueprintFields,
     ),
@@ -213,7 +214,7 @@ function productIdTagFromJson(
     return undefined;
   }
 
-  const type = trimText(raw.Type) || trimText(raw.type);
+  const type = textValue(raw.Type) || textValue(raw.type);
 
   if (!type) {
     return undefined;
@@ -233,7 +234,7 @@ function modelRefsFromJson(raw: unknown): ProductBlueprintPatch["modelRefs"] {
   const refs = raw
     .filter(isRecord)
     .map((item) => {
-      const modelId = trimText(item.ModelID) || trimText(item.modelId);
+      const modelId = textValue(item.ModelID) || textValue(item.modelId);
       const displayOrder =
         optionalIntValue(item.DisplayOrder) ?? optionalIntValue(item.displayOrder);
 
@@ -268,16 +269,16 @@ export function productBlueprintPatchFromJson(
   const patch: ProductBlueprintPatch = {
     ...raw,
 
-    productName: trimText(raw.productName) || undefined,
-    description: trimText(raw.description) || undefined,
-    brandId: trimText(raw.brandId) || undefined,
-    companyId: trimText(raw.companyId) || undefined,
+    productName: textValue(raw.productName) || undefined,
+    description: textValue(raw.description) || undefined,
+    brandId: textValue(raw.brandId) || undefined,
+    companyId: textValue(raw.companyId) || undefined,
 
     productBlueprintCategory: productBlueprintCategory ?? undefined,
     categoryFields: categoryFields ?? undefined,
 
     productIdTag: productIdTagFromJson(raw.productIdTag),
-    assigneeId: trimText(raw.assigneeId) || undefined,
+    assigneeId: textValue(raw.assigneeId) || undefined,
     modelRefs: modelRefsFromJson(raw.modelRefs),
   };
 
@@ -288,10 +289,10 @@ export function mallOwnerInfoFromJson(raw: unknown): MallOwnerInfo {
   const j = unwrapData(raw);
 
   return {
-    brandId: trimText(j.brandId),
-    avatarId: trimText(j.avatarId),
-    brandName: trimText(j.brandName),
-    avatarName: trimText(j.avatarName),
+    brandId: textValue(j.brandId),
+    avatarId: textValue(j.avatarId),
+    brandName: textValue(j.brandName),
+    avatarName: textValue(j.avatarName),
   };
 }
 
@@ -301,8 +302,8 @@ export function mallModelTokenPairFromJson(
   if (!isRecord(raw)) return null;
 
   return {
-    modelId: trimText(raw.modelId),
-    tokenBlueprintId: trimText(raw.tokenBlueprintId),
+    modelId: textValue(raw.modelId),
+    tokenBlueprintId: textValue(raw.tokenBlueprintId),
   };
 }
 
@@ -318,10 +319,10 @@ export function mallScanVerifyResponseFromJson(
     : [];
 
   return {
-    avatarId: trimText(j.avatarId),
-    productId: trimText(j.productId),
-    scannedModelId: trimText(j.scannedModelId),
-    scannedTokenBlueprintId: trimText(j.scannedTokenBlueprintId),
+    avatarId: textValue(j.avatarId),
+    productId: textValue(j.productId),
+    scannedModelId: textValue(j.scannedModelId),
+    scannedTokenBlueprintId: textValue(j.scannedTokenBlueprintId),
     purchasedPairs,
     matched: boolValue(j.matched),
     match: mallModelTokenPairFromJson(j.match),
@@ -334,27 +335,27 @@ export function mallPreviewTransferInfoFromJson(
   if (!isRecord(raw)) return null;
 
   const j = unwrapData(raw);
-  const transferredAt = trimText(j.transferredAt);
+  const transferredAt = textValue(j.transferredAt);
 
   return {
     transferredAt: transferredAt || null,
 
-    fromWalletAddress: trimText(j.fromWalletAddress),
-    toWalletAddress: trimText(j.toWalletAddress),
+    fromWalletAddress: textValue(j.fromWalletAddress),
+    toWalletAddress: textValue(j.toWalletAddress),
 
-    fromAvatarId: trimText(j.fromAvatarId),
-    fromAvatarName: trimText(j.fromAvatarName),
-    fromAvatarIcon: trimText(j.fromAvatarIcon),
-    fromBrandId: trimText(j.fromBrandId),
-    fromBrandName: trimText(j.fromBrandName),
-    fromBrandIcon: trimText(j.fromBrandIcon),
+    fromAvatarId: textValue(j.fromAvatarId),
+    fromAvatarName: textValue(j.fromAvatarName),
+    fromAvatarIcon: textValue(j.fromAvatarIcon),
+    fromBrandId: textValue(j.fromBrandId),
+    fromBrandName: textValue(j.fromBrandName),
+    fromBrandIcon: textValue(j.fromBrandIcon),
 
-    toAvatarId: trimText(j.toAvatarId),
-    toAvatarName: trimText(j.toAvatarName),
-    toAvatarIcon: trimText(j.toAvatarIcon),
-    toBrandId: trimText(j.toBrandId),
-    toBrandName: trimText(j.toBrandName),
-    toBrandIcon: trimText(j.toBrandIcon),
+    toAvatarId: textValue(j.toAvatarId),
+    toAvatarName: textValue(j.toAvatarName),
+    toAvatarIcon: textValue(j.toAvatarIcon),
+    toBrandId: textValue(j.toBrandId),
+    toBrandName: textValue(j.toBrandName),
+    toBrandIcon: textValue(j.toBrandIcon),
   };
 }
 
@@ -364,15 +365,15 @@ export function mallTokenInfoFromJson(raw: unknown): MallTokenInfo | null {
   const j = unwrapData(raw);
 
   return {
-    productId: trimText(j.productId),
-    brandId: trimText(j.brandId),
-    brandName: trimText(j.brandName),
-    tokenBlueprintId: trimText(j.tokenBlueprintId),
-    toAddress: trimText(j.toAddress),
-    metadataUri: trimText(j.metadataUri),
-    mintAddress: trimText(j.mintAddress),
-    onChainTxSignature: trimText(j.onChainTxSignature),
-    mintedAt: trimText(j.mintedAt),
+    productId: textValue(j.productId),
+    brandId: textValue(j.brandId),
+    brandName: textValue(j.brandName),
+    tokenBlueprintId: textValue(j.tokenBlueprintId),
+    toAddress: textValue(j.toAddress),
+    metadataUri: textValue(j.metadataUri),
+    mintAddress: textValue(j.mintAddress),
+    onChainTxSignature: textValue(j.onChainTxSignature),
+    mintedAt: textValue(j.mintedAt),
   };
 }
 
@@ -384,7 +385,7 @@ export function measurementsFromJson(
   const out: Record<string, number> = {};
 
   Object.entries(raw).forEach(([key, value]) => {
-    const k = trimText(key);
+    const k = textValue(key);
     if (!k) return;
     out[k] = intValue(value);
   });
@@ -409,28 +410,28 @@ export function mallPreviewResponseFromJson(
   const product = isRecord(j.product) ? j.product : null;
 
   const nestedProductId = product
-    ? trimText(product.id) || trimText(product.productId)
+    ? textValue(product.id) || textValue(product.productId)
     : "";
 
-  const productId = trimText(j.productId) || nestedProductId || trimText(j.id);
+  const productId = textValue(j.productId) || nestedProductId || textValue(j.id);
 
   const productBlueprintId =
-    trimText(j.productBlueprintId) ||
-    (product ? trimText(product.productBlueprintId) : "");
+    textValue(j.productBlueprintId) ||
+    (product ? textValue(product.productBlueprintId) : "");
 
-  const modelId = trimText(j.modelId) || (product ? trimText(product.modelId) : "");
+  const modelId = textValue(j.modelId) || (product ? textValue(product.modelId) : "");
 
   const modelKind =
-    trimText(j.modelKind) || (product ? trimText(product.modelKind) : "");
+    textValue(j.modelKind) || (product ? textValue(product.modelKind) : "");
 
   const modelNumber =
-    trimText(j.modelNumber) || (product ? trimText(product.modelNumber) : "");
+    textValue(j.modelNumber) || (product ? textValue(product.modelNumber) : "");
 
   const modelLabel =
-    trimText(j.modelLabel) || (product ? trimText(product.modelLabel) : "");
+    textValue(j.modelLabel) || (product ? textValue(product.modelLabel) : "");
 
-  const size = trimText(j.size) || (product ? trimText(product.size) : "");
-  const color = trimText(j.color) || (product ? trimText(product.color) : "");
+  const size = textValue(j.size) || (product ? textValue(product.size) : "");
+  const color = textValue(j.color) || (product ? textValue(product.color) : "");
 
   const rootRgb = intValue(j.rgb);
   const rgb = rootRgb !== 0 ? rootRgb : product ? intValue(product.rgb) : 0;
@@ -444,19 +445,19 @@ export function mallPreviewResponseFromJson(
     (product ? optionalIntValue(product.volumeValue) : undefined);
 
   const volumeUnit =
-    trimText(j.volumeUnit) || (product ? trimText(product.volumeUnit) : "");
+    textValue(j.volumeUnit) || (product ? textValue(product.volumeUnit) : "");
 
   const productBlueprintCategoryCode =
-    trimText(j.productBlueprintCategoryCode) ||
-    (product ? trimText(product.productBlueprintCategoryCode) : "");
+    textValue(j.productBlueprintCategoryCode) ||
+    (product ? textValue(product.productBlueprintCategoryCode) : "");
 
   const productBlueprintCategoryKind =
-    trimText(j.productBlueprintCategoryKind) ||
-    (product ? trimText(product.productBlueprintCategoryKind) : "");
+    textValue(j.productBlueprintCategoryKind) ||
+    (product ? textValue(product.productBlueprintCategoryKind) : "");
 
   const productBlueprintCategoryName =
-    trimText(j.productBlueprintCategoryName) ||
-    (product ? trimText(product.productBlueprintCategoryName) : "");
+    textValue(j.productBlueprintCategoryName) ||
+    (product ? textValue(product.productBlueprintCategoryName) : "");
 
   const productBlueprintCategory =
     productBlueprintCategorySnapshotFromJson(j.productBlueprintCategory) ||
@@ -475,6 +476,23 @@ export function mallPreviewResponseFromJson(
   const token =
     mallTokenInfoFromJson(j.token) ||
     (product ? mallTokenInfoFromJson(product.token) : null);
+
+  const tokenBlueprintPatch =
+    tokenBlueprintPatchVMFromMap(j.tokenBlueprintPatch) ||
+    (product ? tokenBlueprintPatchVMFromMap(product.tokenBlueprintPatch) : null);
+
+  const brandName =
+    textValue(j.brandName) ||
+    (product ? textValue(product.brandName) : "") ||
+    token?.brandName ||
+    tokenBlueprintPatch?.brandName ||
+    "";
+
+  const companyName =
+    textValue(j.companyName) ||
+    (product ? textValue(product.companyName) : "") ||
+    tokenBlueprintPatch?.companyName ||
+    "";
 
   const owner =
     (isRecord(j.owner) ? mallOwnerInfoFromJson(j.owner) : null) ||
@@ -504,9 +522,12 @@ export function mallPreviewResponseFromJson(
     productBlueprintCategory,
     categoryInputSchema,
     productBlueprintPatch,
+    brandName,
+    companyName,
     token,
     owner,
     transfers: rootTransfers.length > 0 ? rootTransfers : productTransfers,
+    tokenBlueprintPatch,
   };
 }
 
@@ -517,8 +538,8 @@ export function mallTransferFlowStepFromJson(
 
   return {
     no: intValue(raw.no),
-    title: trimText(raw.title),
-    note: trimText(raw.note),
+    title: textValue(raw.title),
+    note: textValue(raw.note),
   };
 }
 
@@ -528,21 +549,21 @@ export function mallScanTransferResponseFromJson(
   const j = unwrapData(raw);
 
   return {
-    avatarId: trimText(j.avatarId),
-    productId: trimText(j.productId),
+    avatarId: textValue(j.avatarId),
+    productId: textValue(j.productId),
     matched: boolValue(j.matched),
-    txSignature: trimText(j.txSignature),
-    fromWallet: trimText(j.fromWallet),
-    toWallet: trimText(j.toWallet),
+    txSignature: textValue(j.txSignature),
+    fromWallet: textValue(j.fromWallet),
+    toWallet: textValue(j.toWallet),
     updatedToAddress: boolValue(j.updatedToAddress),
-    mintAddress: trimText(j.mintAddress),
+    mintAddress: textValue(j.mintAddress),
     flow: Array.isArray(j.flow)
       ? j.flow
           .map(mallTransferFlowStepFromJson)
           .filter((v): v is MallTransferFlowStep => Boolean(v))
       : [],
-    fromDisplayName: trimText(j.fromDisplayName),
-    toDisplayName: trimText(j.toDisplayName),
+    fromDisplayName: textValue(j.fromDisplayName),
+    toDisplayName: textValue(j.toDisplayName),
   };
 }
 
@@ -552,15 +573,15 @@ export function tokenBlueprintPatchVMFromMap(
   if (!isRecord(raw)) return null;
 
   const tokenIcon =
-    trimText(raw.tokenIcon) || trimText(raw.iconUrl) || trimText(raw.icon);
+    textValue(raw.tokenIcon) || textValue(raw.iconUrl) || textValue(raw.icon);
 
   const vm: TokenBlueprintPatchVM = {
-    id: trimText(raw.id),
-    tokenName: trimText(raw.tokenName) || trimText(raw.name),
-    symbol: trimText(raw.symbol),
-    brandName: trimText(raw.brandName),
-    companyName: trimText(raw.companyName),
-    description: trimText(raw.description),
+    id: textValue(raw.id),
+    tokenName: textValue(raw.tokenName) || textValue(raw.name),
+    symbol: textValue(raw.symbol),
+    brandName: textValue(raw.brandName),
+    companyName: textValue(raw.companyName),
+    description: textValue(raw.description),
     tokenIcon,
   };
 
@@ -571,17 +592,17 @@ export function catalogReviewFromJson(raw: unknown): CatalogReview | null {
   if (!isRecord(raw)) return null;
 
   return {
-    id: trimText(raw.id),
-    productBlueprintId: trimText(raw.productBlueprintId),
-    avatarId: trimText(raw.avatarId),
-    avatarName: trimText(raw.avatarName),
-    avatarIcon: trimText(raw.avatarIcon),
+    id: textValue(raw.id),
+    productBlueprintId: textValue(raw.productBlueprintId),
+    avatarId: textValue(raw.avatarId),
+    avatarName: textValue(raw.avatarName),
+    avatarIcon: textValue(raw.avatarIcon),
     rating: intValue(raw.rating),
-    title: trimText(raw.title),
-    body: trimText(raw.body),
+    title: textValue(raw.title),
+    body: textValue(raw.body),
     helpfulVotes: intValue(raw.helpfulVotes),
     totalVotes: intValue(raw.totalVotes),
-    reviewedAt: trimText(raw.reviewedAt || raw.createdAt),
+    reviewedAt: textValue(raw.reviewedAt || raw.createdAt),
   };
 }
 
@@ -617,10 +638,10 @@ export function tokenContentFileFromJson(
   if (!isRecord(raw)) return null;
 
   return {
-    id: trimText(raw.id),
-    name: trimText(raw.name || raw.fileName),
-    viewUri: trimText(raw.viewUri || raw.url),
-    contentType: trimText(raw.contentType),
+    id: textValue(raw.id),
+    name: textValue(raw.name || raw.fileName),
+    viewUri: textValue(raw.viewUri || raw.url),
+    contentType: textValue(raw.contentType),
     isPreviewable: boolValue(raw.isPreviewable),
   };
 }
@@ -637,14 +658,14 @@ export function walletResolvedTokenResponseFromJson(
       : [];
 
   return {
-    productId: trimText(root.productId),
-    brandId: trimText(root.brandId),
-    brandName: trimText(root.brandName),
-    productBlueprintId: trimText(root.productBlueprintId),
-    productName: trimText(root.productName),
-    metadataUri: trimText(root.metadataUri),
-    mintAddress: trimText(root.mintAddress),
-    tokenBlueprintId: trimText(root.tokenBlueprintId),
+    productId: textValue(root.productId),
+    brandId: textValue(root.brandId),
+    brandName: textValue(root.brandName),
+    productBlueprintId: textValue(root.productBlueprintId),
+    productName: textValue(root.productName),
+    metadataUri: textValue(root.metadataUri),
+    mintAddress: textValue(root.mintAddress),
+    tokenBlueprintId: textValue(root.tokenBlueprintId),
     tokenContentsFiles: rawFiles
       .map(tokenContentFileFromJson)
       .filter((v): v is TokenContentFile => Boolean(v)),
@@ -658,9 +679,9 @@ export function walletDTOFromJson(raw: unknown): WalletDTO {
 
   const tokens =
     firstWallet && Array.isArray(firstWallet.Tokens)
-      ? firstWallet.Tokens.map(trimText).filter(Boolean)
+      ? firstWallet.Tokens.map(textValue).filter(Boolean)
       : firstWallet && Array.isArray(firstWallet.tokens)
-        ? firstWallet.tokens.map(trimText).filter(Boolean)
+        ? firstWallet.tokens.map(textValue).filter(Boolean)
         : [];
 
   return { tokens };
@@ -679,7 +700,7 @@ export function tokenResolveDTOFromJson(
       : [];
 
   return {
-    mintAddress: trimText(root.mintAddress) || fallbackMintAddress,
+    mintAddress: textValue(root.mintAddress) || fallbackMintAddress,
     tokenContentsFiles: rawFiles
       .map(tokenContentFileFromJson)
       .filter((v): v is TokenContentFile => Boolean(v)),

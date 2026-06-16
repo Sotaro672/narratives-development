@@ -153,8 +153,18 @@ export default function WalletPage() {
     navigate(`/avatars/${encodeURIComponent(nextAvatarId)}`);
   };
 
+  const handleOpenBrand = (brandId: string) => {
+    const id = brandId.trim();
+
+    if (!id) {
+      return;
+    }
+
+    navigate(`/brands/${encodeURIComponent(id)}`);
+  };
+
   return (
-    <Layout title={pageTitle} mode="mypage">
+    <Layout title="AMOL" mode="mypage">
       <section className="content-page-section wallet-page">
         <div className="wallet-page-layout">
           <aside className="wallet-page-layout__profile">
@@ -188,6 +198,7 @@ export default function WalletPage() {
                     error={error || orderError}
                     hasItems={hasItems}
                     orderHistory={orderHistory}
+                    onBrandClick={handleOpenBrand}
                   />
                 ) : null}
 

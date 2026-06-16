@@ -87,9 +87,15 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     getRecord(preview, "tokenBlueprintPatch") ??
     getRecord(previewStateRecord, "tokenBlueprintPatch");
 
-  const brandId = getString(preview, "brandId");
-  const brandName = getString(preview, "brandName");
-  const brandIcon = getString(preview, "brandIcon");
+  const brandId =
+    getString(preview, "brandId") ||
+    getString(productBlueprintPatch, "brandId") ||
+    getString(token, "brandId");
+
+  const brandName =
+    getString(preview, "brandName") ||
+    getString(token, "brandName") ||
+    getString(tokenBlueprintPatch, "brandName");
 
   const productName = getString(productBlueprintPatch, "productName");
   const tokenName = getString(tokenBlueprintPatch, "tokenName");
@@ -117,7 +123,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     const measurements = getRecord(preview, "measurements");
 
     return Object.entries(measurements ?? {})
-      .filter(([key]) => key.trim())
+      .filter(([key]) => Boolean(key))
       .sort(([a], [b]) => a.localeCompare(b));
   }, [preview]);
 
@@ -167,7 +173,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   }
 
   const owned = state.ownedByWallet;
-  const ownedError = state.ownedByWalletError?.trim() || "";
+  const ownedError = state.ownedByWalletError || "";
   const rgb = getNumber(preview, "rgb") ?? 0;
   const swatch = rgbToCssColor(rgb);
   const modelNumber = getString(preview, "modelNumber");
@@ -179,16 +185,16 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const title = productName || modelNumber || productId || "Scan Result";
 
   const canOpenTokenContents =
-    owned === true && Boolean(tokenName.trim()) && Boolean(mintAddress.trim());
+    owned === true && Boolean(tokenName) && Boolean(mintAddress);
 
   const hasTokenInfo =
-    Boolean(tokenName.trim()) ||
-    Boolean(tokenIconUrl.trim()) ||
-    Boolean(tokenBrandName.trim()) ||
-    Boolean(tokenCompanyName.trim()) ||
-    Boolean(tokenDescription.trim());
+    Boolean(tokenName) ||
+    Boolean(tokenIconUrl) ||
+    Boolean(tokenBrandName) ||
+    Boolean(tokenCompanyName) ||
+    Boolean(tokenDescription);
 
-  const hasBrandInfo = Boolean(brandName.trim()) || Boolean(brandIcon.trim());
+  const hasBrandInfo = Boolean(brandId || brandName);
 
   return (
     <div className="scan-result-desktop-grid">
@@ -200,7 +206,6 @@ export default function ScanResultCard(props: ScanResultCardProps) {
           owner={owner}
           brandId={brandId}
           brandName={brandName}
-          brandIcon={brandIcon}
           hasBrandInfo={hasBrandInfo}
           productBlueprintRows={productBlueprintRows}
           qualityAssuranceTabs={qualityAssuranceTabs}

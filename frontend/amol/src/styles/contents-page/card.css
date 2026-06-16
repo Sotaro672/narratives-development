@@ -55,16 +55,19 @@
   word-break: break-word;
 }
 
-.contents-page-card__product-name {
+.contents-page-card__tag-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   margin-top: 8px;
 }
 
+.contents-page-card__product-name,
 .contents-page-card__brand-name {
-  margin: 8px 0 0;
-  color: #6b7280;
+  margin: 0;
   font-size: 13px;
-  line-height: 1.5;
-  word-break: break-word;
+  line-height: 1.3;
 }
 
 .contents-page-card__message {

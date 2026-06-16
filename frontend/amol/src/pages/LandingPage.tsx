@@ -1,17 +1,63 @@
 // frontend/amol/src/pages/LandingPage.tsx
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { onAuthStateChanged, type User } from "firebase/auth";
 
 import "../styles/page-layout.css";
 import "../styles/landing-page.css";
 
 import Layout from "../components/layout/Layout";
+import FooterNav from "../components/layout/FooterNav";
 import Button from "../components/ui/Button";
+import { auth } from "../lib/firebase";
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const authenticationEyebrowRef = useRef<HTMLParagraphElement | null>(null);
   const salesSupportEyebrowRef = useRef<HTMLParagraphElement | null>(null);
+
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthResolved(true);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+
+    const updateViewportState = () => {
+      setIsMobile(mediaQuery.matches);
+    };
+
+    updateViewportState();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateViewportState);
+
+      return () => {
+        mediaQuery.removeEventListener("change", updateViewportState);
+      };
+    }
+
+    mediaQuery.addListener(updateViewportState);
+
+    return () => {
+      mediaQuery.removeListener(updateViewportState);
+    };
+  }, []);
+
+  const shouldShowFooterNav = authResolved && !!currentUser && isMobile;
 
   const scrollToElement = (element: HTMLElement | null) => {
     if (!element) return;
@@ -24,9 +70,9 @@ export default function LandingPage() {
       return;
     }
 
-    const isMobile = window.matchMedia("(max-width: 767px)").matches;
+    const isMobileViewport = window.matchMedia("(max-width: 767px)").matches;
     const rect = element.getBoundingClientRect();
-    const mobileOffset = isMobile ? element.offsetHeight + 56 : 0;
+    const mobileOffset = isMobileViewport ? element.offsetHeight + 56 : 0;
 
     window.scrollTo({
       top: window.scrollY + rect.top - mobileOffset,
@@ -416,15 +462,14 @@ export default function LandingPage() {
           </div>
 
           <div className="page-actions">
-            <Button
-              variant="primary"
-              onClick={() => navigate("/how-to-use")}
-            >
+            <Button variant="primary" onClick={() => navigate("/how-to-use")}>
               使い方解説
             </Button>
           </div>
         </div>
       </section>
+
+      {shouldShowFooterNav ? <FooterNav /> : null}
     </Layout>
   );
 }

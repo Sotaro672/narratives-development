@@ -68,6 +68,7 @@ export default function CatalogPage() {
     handleImageTouchEnd,
     handleSelectColor,
     handleSelectSize,
+    handleBrandClick,
     handleAddToCart,
     handleCartButtonClick,
   } = useCatalogPage();
@@ -155,6 +156,7 @@ export default function CatalogPage() {
               <ProductInfoCard
                 productBlueprint={catalog.productBlueprint}
                 categoryKind={catalogKind}
+                onBrandClick={handleBrandClick}
               />
 
               {shouldShowMeasurementTable ? (
