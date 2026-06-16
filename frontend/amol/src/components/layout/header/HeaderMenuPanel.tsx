@@ -1,8 +1,6 @@
 // frontend/src/components/layout/header/HeaderMenuPanel.tsx
 import { Link } from "react-router-dom";
 
-import FooterNav from "../FooterNav";
-
 type HeaderMenuPanelProps = {
   menuOpen: boolean;
   closeMenu: () => void;
@@ -12,7 +10,6 @@ type HeaderMenuPanelProps = {
 export default function HeaderMenuPanel({
   menuOpen,
   closeMenu,
-  shouldShowLandscapeSidebarMenuButton,
 }: HeaderMenuPanelProps) {
   return (
     <>
@@ -30,70 +27,30 @@ export default function HeaderMenuPanel({
       <div
         className={`header__menu-panel ${
           menuOpen ? "header__menu-panel--open" : ""
-        } ${
-          shouldShowLandscapeSidebarMenuButton
-            ? "header__menu-panel--sidebar"
-            : ""
         }`}
         aria-hidden={!menuOpen}
       >
-        {shouldShowLandscapeSidebarMenuButton ? (
-          <FooterNav renderMode="sidebar" onNavigate={closeMenu} />
-        ) : (
-          <div className="header__menu-list">
-            <Link to="/" className="header__menu-link" onClick={closeMenu}>
-              トップ
-            </Link>
+        <div className="header__menu-list">
+          <Link
+            to="/how-to-use"
+            className="header__menu-link"
+            onClick={closeMenu}
+          >
+            使い方
+          </Link>
 
-            <Link
-              to="/how-to-use"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              使い方
-            </Link>
+          <Link to="/faq" className="header__menu-link" onClick={closeMenu}>
+            チーム
+          </Link>
 
-            <Link
-              to="/faq"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              チーム
-            </Link>
+          <Link to="/terms" className="header__menu-link" onClick={closeMenu}>
+            規約・ポリシー
+          </Link>
 
-            <Link
-              to="/specified-commercial-transactions"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              特定商取引法に基づく表記
-            </Link>
-
-            <Link
-              to="/terms"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              利用規約
-            </Link>
-
-            <Link
-              to="/privacy-policy"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              プライバシーポリシー
-            </Link>
-
-            <Link
-              to="/contact"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              お問い合わせ
-            </Link>
-          </div>
-        )}
+          <Link to="/contact" className="header__menu-link" onClick={closeMenu}>
+            お問い合わせ
+          </Link>
+        </div>
       </div>
     </>
   );

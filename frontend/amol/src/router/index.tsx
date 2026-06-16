@@ -30,9 +30,7 @@ import WalletPage from "../pages/WalletPage";
 import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";
 import AvatarShareQrPage from "../pages/AvatarShareQrPage";
-import SpecifiedCommercialTransactionsPage from "../pages/SpecifiedCommercialTransactionsPage";
 import TermsPage from "../pages/TermsPage";
-import PrivacyPolicyPage from "../pages/PrivacyPolicyPage";
 import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
@@ -71,12 +69,7 @@ export const router = createBrowserRouter([
 
   { path: "/how-to-use", element: <HowToUsePage /> },
   { path: "/faq", element: <VisionPage /> },
-  {
-    path: "/specified-commercial-transactions",
-    element: <SpecifiedCommercialTransactionsPage />,
-  },
   { path: "/terms", element: <TermsPage /> },
-  { path: "/privacy-policy", element: <PrivacyPolicyPage /> },
   { path: "/contact", element: <ContactPage /> },
 
   {

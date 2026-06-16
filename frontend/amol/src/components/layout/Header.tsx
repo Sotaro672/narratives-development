@@ -1,4 +1,6 @@
 // frontend/src/components/layout/Header.tsx
+import { Link } from "react-router-dom";
+
 import "./header.css";
 import "../../styles/settings-page.css";
 
@@ -54,7 +56,30 @@ export default function Header(props: HeaderProps) {
           </button>
         </div>
 
-        <HeaderActions actions={actions} />
+        <div className="header__right">
+          <nav
+            className="header__desktop-nav"
+            aria-label="ページナビゲーション"
+          >
+            <Link to="/how-to-use" className="header__desktop-nav-link">
+              使い方
+            </Link>
+
+            <Link to="/faq" className="header__desktop-nav-link">
+              チーム
+            </Link>
+
+            <Link to="/terms" className="header__desktop-nav-link">
+              規約・ポリシー
+            </Link>
+
+            <Link to="/contact" className="header__desktop-nav-link">
+              お問い合わせ
+            </Link>
+          </nav>
+
+          <HeaderActions actions={actions} />
+        </div>
       </div>
 
       {shouldShowMenuButton ? (

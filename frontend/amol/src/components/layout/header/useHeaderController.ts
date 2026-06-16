@@ -205,7 +205,7 @@ export function useHeaderController({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const [fetchedCartItemCount, setFetchedCartItemCount] = useState(0);
 
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
@@ -229,26 +229,26 @@ export function useHeaderController({
       return;
     }
 
-    const landscapeQuery = window.matchMedia("(orientation: landscape)");
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
 
     const updateViewportState = () => {
-      setIsLandscape(landscapeQuery.matches);
+      setIsDesktop(desktopQuery.matches);
     };
 
     updateViewportState();
 
-    if (typeof landscapeQuery.addEventListener === "function") {
-      landscapeQuery.addEventListener("change", updateViewportState);
+    if (typeof desktopQuery.addEventListener === "function") {
+      desktopQuery.addEventListener("change", updateViewportState);
 
       return () => {
-        landscapeQuery.removeEventListener("change", updateViewportState);
+        desktopQuery.removeEventListener("change", updateViewportState);
       };
     }
 
-    landscapeQuery.addListener(updateViewportState);
+    desktopQuery.addListener(updateViewportState);
 
     return () => {
-      landscapeQuery.removeListener(updateViewportState);
+      desktopQuery.removeListener(updateViewportState);
     };
   }, []);
 
@@ -264,7 +264,8 @@ export function useHeaderController({
 
   const isRoomDetailPage = /^\/lists\/[^/]+$/.test(location.pathname);
 
-  const shouldHideHamburgerMenu = hideHamburgerMenu || isRoomDetailPage;
+  const shouldHideHamburgerMenu =
+    hideHamburgerMenu || isRoomDetailPage || isDesktop;
 
   const hasActionButton =
     mode !== "signin" &&
@@ -369,17 +370,8 @@ export function useHeaderController({
     !isLoggedIn &&
     !shouldHideHamburgerMenu;
 
-  const shouldShowLandscapeSidebarMenuButton =
-    mode !== "signin" &&
-    authResolved &&
-    isLoggedIn &&
-    isLandscape &&
-    !shouldHideHamburgerMenu &&
-    !hasActionButton &&
-    !hasSecondaryActionButton;
-
-  const shouldShowMenuButton =
-    shouldShowGuestMenuButton || shouldShowLandscapeSidebarMenuButton;
+  const shouldShowLandscapeSidebarMenuButton = false;
+  const shouldShowMenuButton = shouldShowGuestMenuButton;
 
   const closeMenu = () => {
     setMenuOpen(false);
