@@ -60,7 +60,8 @@
   min-width: 0;
   max-width: 100%;
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   color: var(--color-text);
   line-height: 1.2;
   text-align: left;
@@ -70,18 +71,33 @@
 }
 
 .header__title-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: auto;
+  height: 44px;
+  padding: 0 12px;
   border: none;
-  padding: 0;
+  border-radius: 9999px;
   background: transparent;
   cursor: pointer;
   font: inherit;
   color: inherit;
-  min-width: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  transition:
+    background-color 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .header__title-button:hover {
-  opacity: 0.8;
+  background: rgba(0, 0, 0, 0.04);
+  opacity: 1;
+}
+
+.header__title-button:active {
+  transform: translateY(1px);
 }
 
 .header__desktop-nav {
@@ -116,6 +132,43 @@
 
 .header__desktop-nav-link:hover {
   background: #f8fafc;
+}
+
+.header__desktop-nav--authenticated .header__desktop-nav-link {
+  min-width: 104px;
+  gap: 8px;
+}
+
+.header__desktop-nav-link--with-icon {
+  gap: 8px;
+}
+
+.header__desktop-nav-link--active {
+  border-color: var(--color-text);
+  background: #f8fafc;
+}
+
+.header__desktop-nav-svg-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.header__desktop-nav-avatar-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.header__desktop-nav-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  object-fit: cover;
+  display: block;
 }
 
 .header__menu-button,
@@ -425,11 +478,24 @@
 }
 
 @media (min-width: 1024px) {
+  .header__title {
+    font-size: 26px;
+  }
+
+  .header__title-button {
+    padding: 0 16px;
+  }
+
   .header__desktop-nav {
     display: inline-flex;
   }
 
   .header__menu-button {
+    display: none;
+  }
+
+  .header__menu-backdrop,
+  .header__menu-panel {
     display: none;
   }
 }
@@ -460,10 +526,14 @@
 
   .header__title-button {
     flex: 1 1 auto;
+    justify-content: flex-start;
+    padding: 0;
+    height: 40px;
   }
 
   .header__title {
     font-size: 20px;
+    font-weight: 800;
   }
 
   .header__menu-list {

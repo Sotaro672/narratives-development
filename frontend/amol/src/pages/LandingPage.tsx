@@ -58,7 +58,7 @@ export default function LandingPage() {
                 variant="primary"
                 onClick={() => navigate("/how-to-use")}
               >
-                使い方
+                使い方解説
               </Button>
             </div>
           </div>
@@ -420,7 +420,7 @@ export default function LandingPage() {
               variant="primary"
               onClick={() => navigate("/how-to-use")}
             >
-              使い方
+              使い方解説
             </Button>
           </div>
         </div>
