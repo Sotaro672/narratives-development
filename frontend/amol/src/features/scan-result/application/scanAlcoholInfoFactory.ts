@@ -38,6 +38,7 @@ function getNumberValue(fields: ScanCategoryFields, key: string): string {
 
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
+
     return Number.isFinite(parsed) ? String(parsed) : "";
   }
 
@@ -62,6 +63,16 @@ function isAlcoholKind(value: unknown): boolean {
   return typeof value === "string" && value.trim().toLowerCase() === "alcohol";
 }
 
+function isAlcoholCode(value: unknown): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const code = value.trim().toLowerCase();
+
+  return code === "alcohol" || code.startsWith("alcohol.");
+}
+
 export function getScanCategoryFields(value: unknown): ScanCategoryFields {
   if (!isRecord(value)) {
     return {};
@@ -74,8 +85,7 @@ export function isAlcoholCategoryFields(fields: ScanCategoryFields): boolean {
   return (
     Object.prototype.hasOwnProperty.call(fields, "alcoholContent") ||
     Object.prototype.hasOwnProperty.call(fields, "vintage") ||
-    Object.prototype.hasOwnProperty.call(fields, "region") ||
-    Object.prototype.hasOwnProperty.call(fields, "material")
+    Object.prototype.hasOwnProperty.call(fields, "region")
   );
 }
 
@@ -86,10 +96,6 @@ function resolveIsAlcohol(input: {
   productBlueprintCategory?: unknown;
   categoryInputSchema?: unknown;
 }): boolean {
-  if (isAlcoholCategoryFields(input.categoryFields)) {
-    return true;
-  }
-
   if (isAlcoholKind(input.modelKind)) {
     return true;
   }
@@ -106,11 +112,23 @@ function resolveIsAlcohol(input: {
     return true;
   }
 
+  if (isAlcoholCode(getStringFromRecord(input.productBlueprintCategory, "Code"))) {
+    return true;
+  }
+
+  if (isAlcoholCode(getStringFromRecord(input.productBlueprintCategory, "code"))) {
+    return true;
+  }
+
   if (isAlcoholKind(getStringFromRecord(input.categoryInputSchema, "categoryKind"))) {
     return true;
   }
 
-  return false;
+  if (isAlcoholCode(getStringFromRecord(input.categoryInputSchema, "categoryCode"))) {
+    return true;
+  }
+
+  return isAlcoholCategoryFields(input.categoryFields);
 }
 
 export function buildScanVolumeLabel(input: {

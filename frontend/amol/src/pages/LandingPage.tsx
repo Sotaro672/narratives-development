@@ -383,12 +383,12 @@ export default function LandingPage() {
           <div className="landing-page-pricing-grid">
             <article className="landing-page-pricing-card">
               <p className="landing-page-pricing-card__label">基本利用料金</p>
-              <h3 className="landing-page-pricing-card__price">3,990円/月</h3>
+              <h3 className="landing-page-pricing-card__price">4,990円/月</h3>
               <p className="landing-page-pricing-card__badge">
-                最初の1か月は無料
+                試験運用価格
               </p>
               <p className="landing-page-pricing-card__text">
-                出品者Consoleの月額使用料です。月毎の契約です。
+                Consoleの月額利用料です。月毎の契約です。
               </p>
             </article>
 

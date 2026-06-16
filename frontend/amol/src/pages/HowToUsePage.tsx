@@ -100,7 +100,7 @@ const buyerSteps: Step[] = [
     title: "購入",
     description:
       "一般的な購入フローで商品を購入し、届いた商品のQRコードをスキャンするだけでブロックチェーントークンがアバターに移譲されます。",
-    youtubeUrl: "https://www.youtube.com/embed/nFWtXlK0T2k",
+    youtubeUrl: "https://www.youtube.com/embed/XJuQe9XhQ3k",
   },
   {
     number: "03",

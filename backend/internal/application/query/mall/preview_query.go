@@ -1,4 +1,3 @@
-// backend/internal/application/query/mall/preview_query.go
 package mall
 
 import (
@@ -261,6 +260,9 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		ProductBlueprint:   &pb,
 	}
 
+	pbPatch := productBlueprintPatchForPreview(pb)
+	out.ProductBlueprintPatch = &pbPatch
+
 	if schema, ok := pbcatdom.GetCategoryInputSchema(category.Code); ok {
 		out.CategoryInputSchema = &schema
 	}
@@ -485,6 +487,28 @@ func (q *PreviewQuery) VerifyMatch(
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
+
+func productBlueprintPatchForPreview(pb pbdom.ProductBlueprint) pbdom.Patch {
+	return pbdom.Patch{
+		ProductName:              stringPtrOrNil(pb.ProductName),
+		Description:              stringPtrOrNil(pb.Description),
+		BrandID:                  stringPtrOrNil(pb.BrandID),
+		CompanyID:                stringPtrOrNil(pb.CompanyID),
+		ProductBlueprintCategory: &pb.ProductBlueprintCategory,
+		CategoryFields:           &pb.CategoryFields,
+		ProductIdTag:             &pb.ProductIdTag,
+		AssigneeID:               stringPtrOrNil(pb.AssigneeID),
+		ModelRefs:                &pb.ModelRefs,
+	}
+}
+
+func stringPtrOrNil(value string) *string {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return nil
+	}
+	return &v
+}
 
 func (q *PreviewQuery) getBrandNameIcon(
 	ctx context.Context,

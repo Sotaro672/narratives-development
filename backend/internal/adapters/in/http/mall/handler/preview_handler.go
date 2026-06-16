@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/mall/handler/preview_handler.go
 package mallHandler
 
 import (
@@ -150,53 +149,8 @@ func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// tokenBlueprint patch (best-effort)
-	var tbDTO *tokenBlueprintPatchDTO
-	if h.tbRepo != nil && info.Token != nil {
-		tbID := strings.TrimSpace(info.Token.TokenBlueprintID)
-		if tbID != "" {
-			p, perr := h.tbRepo.GetPatchByID(r.Context(), tbID)
-			if perr == nil {
-				brandName := ""
-				companyName := ""
-
-				if h.nameR != nil {
-					brandID := strings.TrimSpace(p.BrandID)
-					companyID := strings.TrimSpace(p.CompanyID)
-
-					if brandID != "" {
-						brandName = h.nameR.ResolveBrandName(r.Context(), brandID)
-					}
-
-					if companyID != "" {
-						companyName = h.nameR.ResolveCompanyName(r.Context(), companyID)
-					}
-
-					if companyName == "" && brandID != "" {
-						brandCompanyID := h.nameR.ResolveBrandCompanyID(r.Context(), brandID)
-						if brandCompanyID != "" {
-							companyName = h.nameR.ResolveCompanyName(r.Context(), brandCompanyID)
-						}
-					}
-				}
-
-				// Firebase Storage 移行後:
-				// - Patch.IconURL には Firebase Storage の downloadURL が入る
-				// - GCS objectPath から URL を解決しない
-				// - gcs.NewTokenIconURLResolver / TokenIconObjectPath は使わない
-				resolvedIconURL := strings.TrimSpace(p.IconURL)
-
-				tbDTO = &tokenBlueprintPatchDTO{
-					ID:          p.ID,
-					TokenName:   p.TokenName,
-					Symbol:      p.Symbol,
-					BrandName:   brandName,
-					CompanyName: companyName,
-					Description: p.Description,
-					TokenIcon:   resolvedIconURL,
-				}
-			}
-		}
-	}
+	tbPatch := resolveTokenBlueprintPatch(r.Context(), info, h.tbRepo)
+	tbDTO := buildTokenBlueprintPatchDTO(r.Context(), tbPatch, h.nameR)
 
 	// 期待値：productBlueprint は返さず patch のみ
 	data := map[string]any{
@@ -237,4 +191,87 @@ func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
+}
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+func resolveTokenBlueprintPatch(
+	ctx context.Context,
+	info *dto.PreviewModelInfo,
+	tbRepo TokenBlueprintPatchReader,
+) *tokenbpdom.Patch {
+	if info == nil {
+		return nil
+	}
+
+	if info.TokenBlueprintPatch != nil {
+		return info.TokenBlueprintPatch
+	}
+
+	if tbRepo == nil || info.Token == nil {
+		return nil
+	}
+
+	tbID := strings.TrimSpace(info.Token.TokenBlueprintID)
+	if tbID == "" {
+		return nil
+	}
+
+	p, err := tbRepo.GetPatchByID(ctx, tbID)
+	if err != nil {
+		return nil
+	}
+
+	return &p
+}
+
+func buildTokenBlueprintPatchDTO(
+	ctx context.Context,
+	p *tokenbpdom.Patch,
+	nameR PreviewNameResolver,
+) *tokenBlueprintPatchDTO {
+	if p == nil {
+		return nil
+	}
+
+	brandName := strings.TrimSpace(p.BrandName)
+	companyName := ""
+
+	if nameR != nil {
+		brandID := strings.TrimSpace(p.BrandID)
+		companyID := strings.TrimSpace(p.CompanyID)
+
+		if brandName == "" && brandID != "" {
+			brandName = nameR.ResolveBrandName(ctx, brandID)
+		}
+
+		if companyID != "" {
+			companyName = nameR.ResolveCompanyName(ctx, companyID)
+		}
+
+		if companyName == "" && brandID != "" {
+			brandCompanyID := nameR.ResolveBrandCompanyID(ctx, brandID)
+			if brandCompanyID != "" {
+				companyName = nameR.ResolveCompanyName(ctx, brandCompanyID)
+			}
+		}
+	}
+
+	// Firebase Storage 移行後:
+	// - Patch.IconURL には Firebase Storage の downloadURL が入る
+	// - GCS objectPath から URL を解決しない
+	// - gcs.NewTokenIconURLResolver / TokenIconObjectPath は使わない
+	resolvedIconURL := strings.TrimSpace(p.IconURL)
+
+	return &tokenBlueprintPatchDTO{
+		ID:          p.ID,
+		TokenName:   p.TokenName,
+		Symbol:      p.Symbol,
+		BrandName:   brandName,
+		CompanyName: companyName,
+		Description: p.Description,
+		TokenIcon:   resolvedIconURL,
+	}
 }
