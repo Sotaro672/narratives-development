@@ -43,7 +43,7 @@ export default function SignInPage() {
   };
 
   return (
-    <Layout title="ログイン" showBackButton mode="signin" backTo="/">
+    <Layout title="AMOL" showBackButton mode="signin" backTo="/">
       <section className="signin-page-section">
         <div className="signin-page-section__inner">
           <p className="page-description signin-page-description">

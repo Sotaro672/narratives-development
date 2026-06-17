@@ -232,7 +232,7 @@ export default function HowToUsePage() {
           <div className="page-actions">
             <Button
               variant="primary"
-              onClick={() => navigate("/signup/select")}
+              onClick={() => navigate("/signin/select")}
             >
               試作品を体験
             </Button>

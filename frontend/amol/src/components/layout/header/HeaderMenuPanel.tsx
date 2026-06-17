@@ -62,7 +62,7 @@ export default function HeaderMenuPanel({
               className="header__menu-link"
               onClick={closeMenu}
             >
-              利用規約
+              規約・ポリシー
             </Link>
 
             <Link

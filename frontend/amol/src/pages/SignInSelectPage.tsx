@@ -62,7 +62,7 @@ export default function SignInSelectPage() {
   };
 
   return (
-    <Layout title="ログイン" mode="landing">
+    <Layout title="AMOL" mode="landing">
       <main className="sign-up-select-page">
         <div className="sign-up-select-page__inner">
           <header className="sign-up-select-page__header">

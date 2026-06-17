@@ -9,7 +9,6 @@ import LandingPage from "../pages/LandingPage";
 import SignInPage from "../pages/SignInPage";
 import SignInSelectPage from "../pages/SignInSelectPage";
 import SignUpPage from "../pages/SignUpPage";
-import SignUpSelectPage from "../pages/SignUpSelectPage";
 import VerificationSentPage from "../pages/VerificationSentPage";
 import PasswordResetPage from "../pages/PasswordResetPage";
 import AvatarPage from "../pages/AvatarPage";
@@ -65,7 +64,6 @@ export const router = createBrowserRouter([
   { path: "/signin", element: <SignInPage /> },
   { path: "/signin/select", element: <SignInSelectPage /> },
   { path: "/signup", element: <SignUpPage /> },
-  { path: "/signup/select", element: <SignUpSelectPage /> },
   { path: "/verification-sent", element: <VerificationSentPage /> },
   { path: "/password-reset", element: <PasswordResetPage /> },
 
