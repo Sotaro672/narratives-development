@@ -1,4 +1,4 @@
-//frontend\src\pages\PasswordPage.tsx
+// frontend/src/pages/PasswordPage.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -85,6 +85,7 @@ export default function PasswordPage() {
   return (
     <Layout
       title="パスワード変更"
+      titleClickable={false}
       showBackButton
       mode="signin"
       backTo="/lists"

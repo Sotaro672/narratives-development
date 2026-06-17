@@ -1,6 +1,7 @@
 // frontend/src/components/layout/header/types.ts
 export type HeaderProps = {
   title?: string;
+  titleClickable?: boolean;
   showBackButton?: boolean;
   backTo?: string;
   mode?: "default" | "landing" | "signin";

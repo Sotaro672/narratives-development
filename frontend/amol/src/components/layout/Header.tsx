@@ -46,13 +46,19 @@ export default function Header(props: HeaderProps) {
             </button>
           ) : null}
 
-          <button
-            type="button"
-            className="header__title header__title-button"
-            onClick={handleTitleClick}
-          >
-            {displayTitle}
-          </button>
+          {props.titleClickable === false ? (
+            <span className="header__title header__title-text">
+              {displayTitle}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="header__title header__title-button"
+              onClick={handleTitleClick}
+            >
+              {displayTitle}
+            </button>
+          )}
         </div>
 
         <HeaderDesktopNavigation />

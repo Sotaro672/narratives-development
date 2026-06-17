@@ -1,4 +1,4 @@
-//frontend\amol\src\pages\AvatarPage.tsx
+// frontend/amol/src/pages/AvatarPage.tsx
 import "../styles/page-layout.css";
 import "../styles/form.css";
 import "../styles/avatar-create-page.css";
@@ -26,6 +26,7 @@ export default function AvatarPage() {
   return (
     <Layout
       title={vm.pageTitle}
+      titleClickable={false}
       showBackButton={isEditMode}
       backTo="/wallet"
       actionButtonLabel={vm.saveButtonLabel}

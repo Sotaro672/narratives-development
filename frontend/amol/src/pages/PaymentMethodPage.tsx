@@ -1,4 +1,4 @@
-//frontend\amol\src\pages\PaymentMethodPage.tsx
+// frontend/amol/src/pages/PaymentMethodPage.tsx
 import { Elements } from "@stripe/react-stripe-js";
 
 import "../styles/page-layout.css";
@@ -28,7 +28,13 @@ export default function PaymentMethodPage() {
   } = usePaymentMethodPage();
 
   return (
-    <Layout title="支払方法" showBackButton mode="signin" backTo="/lists">
+    <Layout
+      title="支払方法"
+      titleClickable={false}
+      showBackButton
+      mode="signin"
+      backTo="/lists"
+    >
       <section className="page-section settings-page">
         <div className="payment-method-page-content">
           <PaymentMethodStatusCard

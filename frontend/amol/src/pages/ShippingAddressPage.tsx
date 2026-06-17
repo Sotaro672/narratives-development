@@ -28,6 +28,7 @@ export default function ShippingAddressPage() {
   return (
     <Layout
       title={isEditMode ? "配送先情報編集" : "配送先情報登録"}
+      titleClickable={false}
       showBackButton
       mode="default"
       backTo="/lists"

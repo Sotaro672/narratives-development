@@ -26,6 +26,7 @@ export default function AvatarShareQrPage() {
   return (
     <Layout
       title="プロフィールをシェア"
+      titleClickable={false}
       mode="mypage"
       showBackButton
       backTo="/wallet"

@@ -46,6 +46,7 @@ type FooterProps =
 
 type LayoutProps = {
   title: string;
+  titleClickable?: boolean;
   children: ReactNode;
   showBackButton?: boolean;
   mode?: LayoutMode;
@@ -77,6 +78,7 @@ type LayoutProps = {
 
 export default function Layout({
   title,
+  titleClickable = true,
   children,
   showBackButton = false,
   mode = "default",
@@ -114,6 +116,7 @@ export default function Layout({
       {showHeader ? (
         <Header
           title={title}
+          titleClickable={titleClickable}
           showBackButton={showBackButton}
           mode={headerMode}
           backTo={backTo}

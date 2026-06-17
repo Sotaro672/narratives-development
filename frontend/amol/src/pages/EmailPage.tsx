@@ -1,4 +1,4 @@
-//frontend\src\pages\EmailPage.tsx
+// frontend/src/pages/EmailPage.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -118,6 +118,7 @@ export default function EmailPage() {
   return (
     <Layout
       title="メールアドレス変更"
+      titleClickable={false}
       showBackButton
       mode="signin"
       backTo="/lists"

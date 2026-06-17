@@ -13,7 +13,7 @@ export default function VerificationSentPage() {
   const email = searchParams.get("email");
 
   return (
-    <Layout title="認証メールを送信しました">
+    <Layout title="AMOL">
       <section className="page-section">
         <p className="page-description">
           {email ? (
