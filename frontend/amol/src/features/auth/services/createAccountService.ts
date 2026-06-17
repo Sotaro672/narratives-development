@@ -1,10 +1,6 @@
 // frontend/src/features/auth/services/createAccountService.ts
 
-import {
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
-  type Auth,
-} from "firebase/auth";
+import { createUserWithEmailAndPassword, type Auth } from "firebase/auth";
 
 import type { CreateAccountParams, CreateAccountResult } from "../types";
 import {
@@ -17,6 +13,55 @@ import {
 type ServiceParams = CreateAccountParams & {
   auth: Auth;
 };
+
+function buildVerificationEmailEndpoint(): string {
+  const apiBaseURL = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "");
+
+  if (!apiBaseURL) {
+    throw new Error("APIの接続先が設定されていません。");
+  }
+
+  return `${apiBaseURL}/auth/email-verification/send`;
+}
+
+async function requestVerificationEmail(idToken: string): Promise<void> {
+  const response = await fetch(buildVerificationEmailEndpoint(), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!response.ok) {
+    let message = "確認メールの送信に失敗しました。";
+
+    if (contentType.includes("application/json")) {
+      try {
+        const data = (await response.json()) as {
+          error?: string;
+          message?: string;
+        };
+
+        message = data.error || data.message || message;
+      } catch {
+        // レスポンスがJSONでない場合は既定メッセージを使う
+      }
+    }
+
+    throw new Error(message);
+  }
+
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      "確認メール送信APIではなく、別のページが返されました。APIのURL設定を確認してください。"
+    );
+  }
+}
 
 export async function createAccountAndSendVerification({
   auth,
@@ -69,7 +114,9 @@ export async function createAccountAndSendVerification({
       password
     );
 
-    await sendEmailVerification(credential.user);
+    const idToken = await credential.user.getIdToken();
+
+    await requestVerificationEmail(idToken);
 
     return {
       ok: true,

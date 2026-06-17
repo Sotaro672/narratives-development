@@ -31,6 +31,13 @@ type Deps struct {
 
 	SignIn http.Handler
 
+	// ✅ auth actions
+	// - POST /auth/email-verification/send
+	// NOTE:
+	// - UserAuthMiddleware のみ必須
+	// - サインアップ直後は avatar 未作成の可能性があるため AvatarContextMiddleware は使わない
+	Auth http.Handler
+
 	User            http.Handler
 	ShippingAddress http.Handler
 	PaymentMethod   http.Handler
@@ -203,6 +210,16 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// preview (public)
 	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
 	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
+
+	// ------------------------------------------------------------
+	// Auth-required routes outside /mall/me
+	// ------------------------------------------------------------
+
+	// ✅ auth email verification - auth only (NO avatar middleware)
+	// サインアップ直後は avatar が未作成の可能性があるため、
+	// uid 検証のみ行い、avatarId 解決は行わない。
+	handleSafeAuth(mux, "/auth/email-verification/send", deps.Auth, "Auth(emailVerification)", auth)
+	handleSafeAuth(mux, "/auth/email-verification/send/", deps.Auth, "Auth(emailVerification)", auth)
 
 	// ------------------------------------------------------------
 	// Auth-required routes (/mall/me/**)

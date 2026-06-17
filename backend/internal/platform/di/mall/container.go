@@ -4,6 +4,7 @@ package mall
 import (
 	"context"
 	"errors"
+	"log"
 
 	mallquery "narratives/internal/application/query/mall"
 	sharedquery "narratives/internal/application/query/shared"
@@ -395,12 +396,39 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		avatarSecrets, secretOK := any(secretsBase).(usecase.AvatarSecretProvider)
 		walletSync, syncOK := any(c.WalletUC).(usecase.AvatarWalletSyncer)
 
+		log.Printf(
+			"[di.mall] ShareTransfer deps walletOK=%v secretOK=%v syncOK=%v walletRepo=%T secretsBase=%T walletUC=%T tokenResolver=%T tokenOwnerUpdater=%T transferRepo=%T avatarWalletResolver=%T executor=%T",
+			walletOK,
+			secretOK,
+			syncOK,
+			walletRepo,
+			secretsBase,
+			c.WalletUC,
+			tokenResolver,
+			tokenOwnerUpdater,
+			transferRepo,
+			avatarWalletResolver,
+			executor,
+		)
+
 		switch {
 		case !walletOK:
+			log.Printf(
+				"[di.mall] ShareTransferUC disabled: walletRepo does not implement usecase.AvatarWalletItemTransferUpdater walletRepo=%T",
+				walletRepo,
+			)
 			c.ShareTransferUC = nil
 		case !secretOK:
+			log.Printf(
+				"[di.mall] ShareTransferUC disabled: wallet secret provider does not implement usecase.AvatarSecretProvider secretsBase=%T",
+				secretsBase,
+			)
 			c.ShareTransferUC = nil
 		case !syncOK:
+			log.Printf(
+				"[di.mall] ShareTransferUC disabled: WalletUC does not implement usecase.AvatarWalletSyncer walletUC=%T",
+				c.WalletUC,
+			)
 			c.ShareTransferUC = nil
 		default:
 			c.ShareTransferUC = usecase.NewShareTransferUsecase(
@@ -412,6 +440,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 				avatarWalletResolver,
 				avatarSecrets,
 				executor,
+			)
+
+			log.Printf(
+				"[di.mall] ShareTransferUC configured shareTransferUC=%T",
+				c.ShareTransferUC,
 			)
 		}
 	}

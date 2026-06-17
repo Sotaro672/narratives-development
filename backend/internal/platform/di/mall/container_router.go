@@ -1,3 +1,4 @@
+// backend\internal\platform\di\mall\container_router.go
 package mall
 
 import (
@@ -9,6 +10,7 @@ import (
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
 	firestoreOut "narratives/internal/adapters/out/firestore"
+	mailadp "narratives/internal/adapters/out/mail"
 	mallquery "narratives/internal/application/query/mall"
 	"narratives/internal/application/usecase"
 	tokenBlueprint "narratives/internal/domain/tokenBlueprint"
@@ -73,6 +75,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	companyH := notImplemented("Company")
 	brandH := notImplemented("Brand")
 
+	authH := notImplemented("Auth")
+
 	userH := notImplemented("User")
 	shipH := notImplemented("ShippingAddress")
 	paymentMethodH := notImplemented("PaymentMethod")
@@ -93,6 +97,20 @@ func Register(mux *http.ServeMux, cont *Container) {
 	shareTransferH := notImplemented("ShareTransfer")
 
 	setupStatusH := notImplemented("SetupStatus")
+
+	// Auth email verification
+	// POST /auth/email-verification/send
+	//
+	// NOTE:
+	// - UserAuthMiddleware のみを通す
+	// - サインアップ直後は avatar 未作成の可能性があるため AvatarContextMiddleware は使わない
+	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
+		authH = mallhandler.NewAuthHandler(
+			cont.Infra.FirebaseAuth,
+			mailadp.NewAuthMailerWithResend(),
+			os.Getenv("AUTH_ACTION_BASE_URL"),
+		)
+	}
 
 	// Lists (public)
 	if cont.ListQ != nil {
@@ -255,6 +273,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Brand:   brandH,
 
 		SignIn: signInH,
+
+		Auth: authH,
 
 		User:            userH,
 		ShippingAddress: shipH,

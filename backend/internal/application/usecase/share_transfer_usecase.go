@@ -19,7 +19,7 @@ type AvatarSecretProvider interface {
 // AvatarWalletItemTransferUpdater updates sender / receiver wallet token caches.
 type AvatarWalletItemTransferUpdater interface {
 	RemoveMintFromAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error
-	AddMintToAvatarWalletItems(ctx context.Context, mintAddress string, now time.Time, txSignature string) error
+	AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error
 }
 
 // AvatarWalletSyncer fully syncs wallet tokens from on-chain after transfer.
@@ -340,7 +340,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: %s", msg)
 	}
 
-	if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, mint, now, tx); err != nil {
+	if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, toAvatarID, mint, now, tx); err != nil {
 		msg := fmt.Sprintf("add receiver wallet item failed avatarId=%s mint=%s tx=%s: %v", toAvatarID, mint, tx, err)
 		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
 		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: %s", msg)

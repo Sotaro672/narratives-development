@@ -117,7 +117,7 @@ const buyerSteps: Step[] = [
     title: "トークン交換",
     description:
       "アバター同士でトークンを交換できます。プレビュー画面では、そのトークンがどのアバターに渡ってきたのかの履歴を確認できます。",
-    youtubeUrl: "https://www.youtube.com/embed/_rMNGVlEdR8",
+    youtubeUrl: "https://www.youtube.com/embed/atYk9E9C5aw",
   },
 ];
 

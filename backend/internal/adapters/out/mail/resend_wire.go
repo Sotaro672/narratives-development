@@ -57,3 +57,33 @@ func NewInvitationMailerWithResend(
 
 	return mailer
 }
+
+// NewAuthMailerWithResend は、Resend を使った AuthMailer を生成します。
+//
+// - RESEND_API_KEY: Resend の API キー
+// - RESEND_FROM   : 送信元メールアドレス
+//
+// Firebase Auth の標準メール送信ではなく、Backend 側で生成した認証リンクを
+// Resend 経由で送信するために使用します。
+func NewAuthMailerWithResend() *AuthMailer {
+	apiKey := os.Getenv(envResendAPIKey)
+	fromAddr := os.Getenv(envResendFrom)
+
+	if apiKey == "" {
+		log.Printf("[mail] WARN: RESEND_API_KEY is empty. AuthMailer will fail to send mail.")
+	}
+	if fromAddr == "" {
+		log.Printf("[mail] WARN: RESEND_FROM is empty. AuthMailer will fail to send mail.")
+	}
+
+	client := NewResendClient(apiKey)
+
+	mailer := NewAuthMailer(
+		client,
+		fromAddr,
+	)
+
+	log.Printf("[mail] AuthMailerWithResend initialized. from=%s", fromAddr)
+
+	return mailer
+}
