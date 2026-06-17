@@ -1,4 +1,5 @@
-// frontend/src/pages/SignUpPage.tsx
+//frontend\amol\src\pages\SignUpPage.tsx
+import { useEffect, useState } from "react";
 
 import "../styles/page-layout.css";
 import "../styles/form.css";
@@ -11,9 +12,49 @@ import { useSignUpPage } from "../features/auth/hooks/useSignUpPage";
 
 export default function SignUpPage() {
   const vm = useSignUpPage();
+  const [termsText, setTermsText] = useState("");
+  const [termsLoading, setTermsLoading] = useState(true);
+  const [termsError, setTermsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTerms = async () => {
+      try {
+        setTermsLoading(true);
+        setTermsError(null);
+
+        const response = await fetch("/assets/terms.txt");
+
+        if (!response.ok) {
+          throw new Error("利用規約を読み込めませんでした。");
+        }
+
+        const text = await response.text();
+
+        if (!cancelled) {
+          setTermsText(text);
+        }
+      } catch {
+        if (!cancelled) {
+          setTermsError("利用規約を読み込めませんでした。");
+        }
+      } finally {
+        if (!cancelled) {
+          setTermsLoading(false);
+        }
+      }
+    };
+
+    void loadTerms();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
-    <Layout title="新規登録">
+    <Layout title="AMOL">
       <section className="page-section signup-page-section">
         <p className="page-description">{vm.topMessage}</p>
 
@@ -60,11 +101,25 @@ export default function SignUpPage() {
             fullWidth
           />
 
+          <div className="terms-block">
+            <p className="terms-title">利用規約</p>
+
+            <div className="terms-scroll-box">
+              {termsLoading ? (
+                <p className="terms-status-text">利用規約を読み込み中...</p>
+              ) : termsError ? (
+                <p className="terms-error-text">{termsError}</p>
+              ) : (
+                <pre className="terms-text">{termsText}</pre>
+              )}
+            </div>
+          </div>
+
           <label className="form-checkbox-row">
             <input
               type="checkbox"
               checked={vm.agree}
-              disabled={vm.loading}
+              disabled={vm.loading || termsLoading || Boolean(termsError)}
               onChange={(e) => {
                 vm.setAgree(e.target.checked);
                 vm.clearError();
@@ -80,7 +135,7 @@ export default function SignUpPage() {
           <Button
             variant="primary"
             onClick={vm.handleSignUp}
-            disabled={!vm.canSubmit}
+            disabled={!vm.canSubmit || termsLoading || Boolean(termsError)}
           >
             {vm.loading ? "送信中..." : "認証メールを送信"}
           </Button>

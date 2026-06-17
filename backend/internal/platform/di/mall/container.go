@@ -4,7 +4,10 @@ package mall
 import (
 	"context"
 	"errors"
-	"log"
+	"os"
+	"strings"
+
+	firebaseauth "firebase.google.com/go/v4/auth"
 
 	mallquery "narratives/internal/application/query/mall"
 	sharedquery "narratives/internal/application/query/shared"
@@ -16,6 +19,7 @@ import (
 
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
+	mailadp "narratives/internal/adapters/out/mail"
 	outsolana "narratives/internal/adapters/out/solana"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 
@@ -32,6 +36,42 @@ const (
 	StripeWebhookPath = "/mall/webhooks/stripe"
 )
 
+type firebaseAuthEmailGetter struct {
+	client *firebaseauth.Client
+}
+
+func newFirebaseAuthEmailGetter(client *firebaseauth.Client) usecase.AuthUserEmailGetter {
+	if client == nil {
+		return nil
+	}
+
+	return &firebaseAuthEmailGetter{
+		client: client,
+	}
+}
+
+func (g *firebaseAuthEmailGetter) GetEmailByUID(ctx context.Context, uid string) (string, error) {
+	if g == nil || g.client == nil {
+		return "", errors.New("firebase auth email getter is not configured")
+	}
+
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		return "", errors.New("firebase auth uid is empty")
+	}
+
+	userRecord, err := g.client.GetUser(ctx, uid)
+	if err != nil {
+		return "", err
+	}
+
+	if userRecord == nil {
+		return "", errors.New("firebase auth user record is nil")
+	}
+
+	return strings.TrimSpace(userRecord.Email), nil
+}
+
 type Container struct {
 	Infra *shared.Infra
 
@@ -45,6 +85,9 @@ type Container struct {
 	CartUC            *usecase.CartUsecase
 	PaymentUC         *usecase.PaymentUsecase
 	OrderUC           *usecase.OrderUsecase
+
+	OrderMailer   *mailadp.OrderMailer
+	OrderMailFrom string
 
 	AvatarRepo avatardom.Repository
 	BrandRepo  branddom.Repository
@@ -103,6 +146,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	c := &Container{Infra: infra}
+
+	authUserEmailGetter := newFirebaseAuthEmailGetter(infra.FirebaseAuth)
 
 	avatarRepo := outfs.NewAvatarRepositoryFS(fsClient)
 	avatarStateRepo := outfs.NewAvatarStateRepositoryFS(fsClient)
@@ -163,6 +208,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
 
 	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
+
+	c.OrderMailer = mailadp.NewOrderMailer(
+		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
+		modelRepoFS,
+		inventoryRepo,
+		productBlueprintRepoFS,
+		tokenBlueprintRepo,
+		brandRepo,
+		companyRepo,
+	)
+	c.OrderMailFrom = os.Getenv("RESEND_FROM")
 
 	projectID := infra.ProjectID
 	avatarWalletSvc := solana.NewAvatarWalletService(projectID)
@@ -228,6 +284,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		CartRepo:      cartRepo,
 		OrderRepo:     orderRepo,
 		InventoryRepo: inventoryRepo,
+
+		AuthUserGetter: authUserEmailGetter,
+		MailSender:     c.OrderMailer,
+		MailFrom:       c.OrderMailFrom,
 	})
 
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo, cartRepo)
@@ -396,39 +456,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		avatarSecrets, secretOK := any(secretsBase).(usecase.AvatarSecretProvider)
 		walletSync, syncOK := any(c.WalletUC).(usecase.AvatarWalletSyncer)
 
-		log.Printf(
-			"[di.mall] ShareTransfer deps walletOK=%v secretOK=%v syncOK=%v walletRepo=%T secretsBase=%T walletUC=%T tokenResolver=%T tokenOwnerUpdater=%T transferRepo=%T avatarWalletResolver=%T executor=%T",
-			walletOK,
-			secretOK,
-			syncOK,
-			walletRepo,
-			secretsBase,
-			c.WalletUC,
-			tokenResolver,
-			tokenOwnerUpdater,
-			transferRepo,
-			avatarWalletResolver,
-			executor,
-		)
-
 		switch {
 		case !walletOK:
-			log.Printf(
-				"[di.mall] ShareTransferUC disabled: walletRepo does not implement usecase.AvatarWalletItemTransferUpdater walletRepo=%T",
-				walletRepo,
-			)
 			c.ShareTransferUC = nil
 		case !secretOK:
-			log.Printf(
-				"[di.mall] ShareTransferUC disabled: wallet secret provider does not implement usecase.AvatarSecretProvider secretsBase=%T",
-				secretsBase,
-			)
 			c.ShareTransferUC = nil
 		case !syncOK:
-			log.Printf(
-				"[di.mall] ShareTransferUC disabled: WalletUC does not implement usecase.AvatarWalletSyncer walletUC=%T",
-				c.WalletUC,
-			)
 			c.ShareTransferUC = nil
 		default:
 			c.ShareTransferUC = usecase.NewShareTransferUsecase(
@@ -440,11 +473,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 				avatarWalletResolver,
 				avatarSecrets,
 				executor,
-			)
-
-			log.Printf(
-				"[di.mall] ShareTransferUC configured shareTransferUC=%T",
-				c.ShareTransferUC,
 			)
 		}
 	}
