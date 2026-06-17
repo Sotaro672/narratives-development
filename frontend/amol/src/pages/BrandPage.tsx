@@ -562,6 +562,7 @@ export default function BrandPage() {
     return (
       <Layout
         title="ブランド"
+        titleClickable={false}
         mode="landing"
         showHeader
         showBackButton
@@ -583,6 +584,7 @@ export default function BrandPage() {
     return (
       <Layout
         title="ブランド"
+        titleClickable={false}
         mode="landing"
         showHeader
         showBackButton
@@ -613,6 +615,7 @@ export default function BrandPage() {
     return (
       <Layout
         title="ブランド"
+        titleClickable={false}
         mode="landing"
         showHeader
         showBackButton
@@ -642,6 +645,7 @@ export default function BrandPage() {
   return (
     <Layout
       title={state.brand.brandName || "ブランド"}
+      titleClickable={false}
       mode="landing"
       showHeader
       showBackButton

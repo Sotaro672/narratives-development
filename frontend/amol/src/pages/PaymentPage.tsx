@@ -1,4 +1,4 @@
-//frontend\amol\src\pages\PaymentPage.tsx
+// frontend/amol/src/pages/PaymentPage.tsx
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -43,6 +43,7 @@ export default function PaymentPage() {
       {isLoading ? (
         <Layout
           title="お支払い"
+          titleClickable={false}
           mode="mypage"
           showBackButton
           backTo={backTo}
@@ -58,6 +59,7 @@ export default function PaymentPage() {
       ) : (
         <Layout
           title="お支払い"
+          titleClickable={false}
           mode="mypage"
           showBackButton
           backTo={backTo}

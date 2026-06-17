@@ -13,6 +13,7 @@ export default function ContentsPage() {
   return (
     <Layout
       title={page.pageTitle}
+      titleClickable={false}
       mode="mypage"
       showBackButton
       backTo="/wallet"

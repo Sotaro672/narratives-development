@@ -401,6 +401,7 @@ export default function FollowPage() {
   return (
     <Layout
       title={pageTitle}
+      titleClickable={false}
       mode="mypage"
       showBackButton
       backTo="/wallet"

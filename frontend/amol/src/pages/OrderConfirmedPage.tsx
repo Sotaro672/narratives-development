@@ -1,4 +1,4 @@
-//frontend\amol\src\pages\OrderConfirmedPage.tsx
+// frontend/amol/src/pages/OrderConfirmedPage.tsx
 import Layout from "../components/layout/Layout";
 import { OrderConfirmedActions } from "../features/order-confirmed/components/OrderConfirmedActions";
 import { OrderConfirmedHero } from "../features/order-confirmed/components/OrderConfirmedHero";
@@ -23,6 +23,7 @@ export default function OrderConfirmedPage() {
   return (
     <Layout
       title="注文完了"
+      titleClickable={false}
       mode="mypage"
       showBackButton={false}
       showFooter

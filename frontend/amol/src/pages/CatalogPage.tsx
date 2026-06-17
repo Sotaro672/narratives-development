@@ -96,6 +96,7 @@ export default function CatalogPage() {
         catalog?.productBlueprint.productName ||
         (isLoadingCatalog ? "" : "カタログ詳細")
       }
+      titleClickable={false}
       mode={isLoggedIn ? "mypage" : "landing"}
       showBackButton
       backTo="/lists"

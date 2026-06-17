@@ -184,6 +184,7 @@ export default function CartPage() {
   return (
     <Layout
       title="カート"
+      titleClickable={false}
       mode="mypage"
       showBackButton
       backTo="/lists"
