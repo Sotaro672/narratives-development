@@ -1,6 +1,7 @@
 // frontend/amol/src/features/token-commnet/components/TokenCommentCard.tsx
 
 import type { ChangeEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type {
   TokenComment,
@@ -86,14 +87,33 @@ function getFallbackAuthorName(comment: TokenComment): string {
   return `${comment.authorId.slice(0, 6)}...${comment.authorId.slice(-4)}`;
 }
 
+function getAuthorAvatarId(comment: TokenComment): string {
+  if (comment.deleted) {
+    return "";
+  }
+
+  return comment.authorId || "";
+}
+
 function TokenCommentAuthor({ comment }: { comment: TokenComment }) {
+  const navigate = useNavigate();
+
   const displayName =
     getTokenCommentDisplayName(comment) || getFallbackAuthorName(comment);
   const iconUrl = getTokenCommentDisplayIconUrl(comment);
+  const avatarId = getAuthorAvatarId(comment);
 
-  return (
-    <div className="token-comment-author">
-      <div className="token-comment-author__icon-wrap">
+  const handleOpenAvatar = () => {
+    if (!avatarId) {
+      return;
+    }
+
+    navigate(`/avatars/${encodeURIComponent(avatarId)}`);
+  };
+
+  const content = (
+    <>
+      <span className="token-comment-author__icon-wrap">
         {iconUrl ? (
           <img
             src={iconUrl}
@@ -103,10 +123,24 @@ function TokenCommentAuthor({ comment }: { comment: TokenComment }) {
         ) : (
           <span className="token-comment-author__icon-fallback">👤</span>
         )}
-      </div>
+      </span>
 
       <span className="token-comment-author__name">{displayName}</span>
-    </div>
+    </>
+  );
+
+  if (!avatarId) {
+    return <div className="token-comment-author">{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      className="token-comment-author token-comment-author--button"
+      onClick={handleOpenAvatar}
+    >
+      {content}
+    </button>
   );
 }
 
@@ -163,7 +197,7 @@ function TokenCommentItem({
   };
 
   const handleSubmitReply = () => {
-    if (!replyBody.trim() || replyPosting) {
+    if (!replyBody || replyPosting) {
       return;
     }
 
@@ -256,7 +290,7 @@ function TokenCommentItem({
               <button
                 type="button"
                 className="token-comment-reply-form__button"
-                disabled={replyPosting || !replyBody.trim()}
+                disabled={replyPosting || !replyBody}
                 onClick={handleSubmitReply}
               >
                 {replyPosting ? "投稿中..." : "返信を投稿"}
@@ -354,7 +388,7 @@ export default function TokenCommentCard({
               <button
                 type="button"
                 className="token-comment-form__button"
-                disabled={posting || loading || !commentBody.trim()}
+                disabled={posting || loading || !commentBody}
                 onClick={() => void onPostComment()}
               >
                 {posting ? "投稿中..." : "投稿"}

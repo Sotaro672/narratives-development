@@ -4,8 +4,6 @@ import { useMemo, useState } from "react";
 import type { Comment, ReactionType } from "../../domain/entity";
 import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
 import { Button } from "../../../../shell/src/shared/ui/button";
-import "../../style/tokenBlueprintReview.css";
-
 type ReviewCardProps = {
   item: Comment;
   repliesByParentId?: Map<string, Comment[]>;

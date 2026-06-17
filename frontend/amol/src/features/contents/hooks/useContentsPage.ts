@@ -62,7 +62,7 @@ export function useContentsPage() {
   };
 
   const handleBrandNameClick = () => {
-    const brandId = contents.brandId.trim();
+    const brandId = contents.brandId;
 
     if (!brandId) {
       return;

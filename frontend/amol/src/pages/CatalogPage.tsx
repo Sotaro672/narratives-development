@@ -82,6 +82,14 @@ export default function CatalogPage() {
     navigate(-1);
   };
 
+  const handleAvatarClick = (avatarId: string) => {
+    if (!avatarId) {
+      return;
+    }
+
+    navigate(`/avatars/${encodeURIComponent(avatarId)}`);
+  };
+
   return (
     <Layout
       title={
@@ -188,6 +196,7 @@ export default function CatalogPage() {
                 reviewItems={reviewItems}
                 isLoadingReviews={isLoadingReviews}
                 reviewErrorMessage={reviewErrorMessage}
+                onAvatarClick={handleAvatarClick}
               />
             </div>
           </div>

@@ -98,8 +98,6 @@ export default function ScanResultReviewList(props: ScanResultReviewListProps) {
                     {"★".repeat(Math.max(1, Math.min(5, review.rating)))}
                   </span>
                 </div>
-
-                <h3>{review.title || "Review"}</h3>
                 <p>{review.body}</p>
                 <small>{formatDateTime(review.reviewedAt)}</small>
               </article>

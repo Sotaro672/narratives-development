@@ -1,4 +1,4 @@
-// frontend/amol/src/features/catalog/components/ReviewSection.tsx
+// frontend/amol/src/features/catalog/presentation/components/ReviewSection.tsx
 import { formatDateTime } from "../../../../components/utils/date";
 import type {
   CatalogProductBlueprintReview,
@@ -11,6 +11,7 @@ type ReviewSectionProps = {
   reviewItems: CatalogProductBlueprintReview[];
   isLoadingReviews: boolean;
   reviewErrorMessage: string;
+  onAvatarClick?: (avatarId: string) => void;
 };
 
 export default function ReviewSection({
@@ -18,6 +19,7 @@ export default function ReviewSection({
   reviewItems,
   isLoadingReviews,
   reviewErrorMessage,
+  onAvatarClick,
 }: ReviewSectionProps) {
   return (
     <section className="catalog-page-card">
@@ -55,7 +57,11 @@ export default function ReviewSection({
       reviewItems.length > 0 ? (
         <div className="catalog-page-review-list">
           {reviewItems.map((review) => (
-            <ReviewItem key={review.id} review={review} />
+            <ReviewItem
+              key={review.id}
+              review={review}
+              onAvatarClick={onAvatarClick}
+            />
           ))}
         </div>
       ) : null}
@@ -65,40 +71,56 @@ export default function ReviewSection({
 
 function ReviewItem({
   review,
+  onAvatarClick,
 }: {
   review: CatalogProductBlueprintReview;
+  onAvatarClick?: (avatarId: string) => void;
 }) {
   const reviewedAt = formatDateTime(review.reviewedAt);
+  const avatarName = review.avatarName || "匿名ユーザー";
+  const canOpenAvatar = Boolean(review.avatarId && onAvatarClick);
+
+  const avatarContent = (
+    <>
+      {review.avatarIcon ? (
+        <img
+          src={review.avatarIcon}
+          alt={avatarName}
+          className="catalog-page-review-avatar"
+        />
+      ) : (
+        <div className="catalog-page-review-avatar-placeholder">
+          {avatarName.slice(0, 1)}
+        </div>
+      )}
+
+      <div className="catalog-page-review-avatar-body">
+        <p className="catalog-page-review-avatar-name">{avatarName}</p>
+        <p className="catalog-page-review-meta">
+          {renderRatingStars(review.rating)}
+          {reviewedAt !== "-" ? `・${reviewedAt}` : ""}
+        </p>
+      </div>
+    </>
+  );
 
   return (
     <article className="catalog-page-review-item">
       <div className="catalog-page-review-header">
-        {review.avatarIcon ? (
-          <img
-            src={review.avatarIcon}
-            alt={review.avatarName || "avatar"}
-            className="catalog-page-review-avatar"
-          />
+        {canOpenAvatar ? (
+          <button
+            type="button"
+            className="catalog-page-review-avatar-button"
+            onClick={() => onAvatarClick?.(review.avatarId)}
+          >
+            {avatarContent}
+          </button>
         ) : (
-          <div className="catalog-page-review-avatar-placeholder">
-            {review.avatarName?.slice(0, 1) || "?"}
+          <div className="catalog-page-review-avatar-content">
+            {avatarContent}
           </div>
         )}
-
-        <div>
-          <p className="catalog-page-review-avatar-name">
-            {review.avatarName || "匿名ユーザー"}
-          </p>
-          <p className="catalog-page-review-meta">
-            {renderRatingStars(review.rating)}
-            {reviewedAt !== "-" ? `・${reviewedAt}` : ""}
-          </p>
-        </div>
       </div>
-
-      {review.title ? (
-        <h3 className="catalog-page-review-title">{review.title}</h3>
-      ) : null}
 
       {review.body ? (
         <p className="catalog-page-review-body">{review.body}</p>

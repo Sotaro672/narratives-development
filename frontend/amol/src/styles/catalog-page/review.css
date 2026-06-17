@@ -45,6 +45,47 @@
   min-width: 0;
 }
 
+.catalog-page-review-avatar-content,
+.catalog-page-review-avatar-button {
+  display: inline-grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.catalog-page-review-avatar-button {
+  border: none;
+  border-radius: 999px;
+  padding: 2px 10px 2px 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.catalog-page-review-avatar-button:hover {
+  background: var(--color-surface, #ffffff);
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.08);
+  transform: translateY(-1px);
+}
+
+.catalog-page-review-avatar-button:active {
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+.catalog-page-review-avatar-button:focus-visible {
+  outline: 2px solid var(--color-focus, #93c5fd);
+  outline-offset: 3px;
+}
+
 .catalog-page-review-avatar,
 .catalog-page-review-avatar-placeholder {
   flex: 0 0 auto;
@@ -69,13 +110,19 @@
   font-weight: 900;
 }
 
+.catalog-page-review-avatar-body {
+  min-width: 0;
+}
+
 .catalog-page-review-avatar-name {
   margin: 0;
   color: var(--color-text, #1f1f1f);
   font-size: 13px;
   font-weight: 900;
   line-height: 1.4;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .catalog-page-review-meta {

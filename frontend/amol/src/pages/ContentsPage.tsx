@@ -30,7 +30,7 @@ export default function ContentsPage() {
                 page.commentCard.posting ||
                 page.loading ||
                 !page.contents.tokenBlueprintId ||
-                !page.commentCard.commentBody.trim(),
+                !page.commentCard.commentBody,
               posting: page.commentCard.posting,
               onChange: page.commentCard.setCommentBody,
               onSubmit: page.commentCard.postComment,

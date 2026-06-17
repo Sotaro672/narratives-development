@@ -162,6 +162,38 @@
   min-width: 0;
 }
 
+.token-comment-author--button {
+  max-width: 100%;
+  border: none;
+  border-radius: 9999px;
+  padding: 2px 10px 2px 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.token-comment-author--button:hover {
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.08);
+  transform: translateY(-1px);
+}
+
+.token-comment-author--button:active {
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+.token-comment-author--button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 3px;
+}
+
 .token-comment-author__icon-wrap {
   flex: 0 0 auto;
   width: 22px;
