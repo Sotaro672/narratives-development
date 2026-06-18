@@ -1,7 +1,8 @@
-// frontend/src/components/layout/header/HeaderMenuPanel.tsx
+// frontend/amol/src/components/layout/header/HeaderMenuPanel.tsx
 import { Link } from "react-router-dom";
 
 import FooterNav from "../FooterNav";
+import { publicHeaderNavigationItems } from "./headerNavigationItems";
 
 type HeaderMenuPanelProps = {
   menuOpen: boolean;
@@ -41,37 +42,16 @@ export default function HeaderMenuPanel({
           <FooterNav renderMode="sidebar" onNavigate={closeMenu} />
         ) : (
           <div className="header__menu-list">
-            <Link
-              to="/how-to-use"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              使い方
-            </Link>
-
-            <Link
-              to="/faq"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              チーム
-            </Link>
-
-            <Link
-              to="/terms"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              規約・ポリシー
-            </Link>
-
-            <Link
-              to="/contact"
-              className="header__menu-link"
-              onClick={closeMenu}
-            >
-              お問い合わせ
-            </Link>
+            {publicHeaderNavigationItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="header__menu-link"
+                onClick={closeMenu}
+              >
+                {item.label}
+              </Link>
+            ))}
           </div>
         )}
       </div>

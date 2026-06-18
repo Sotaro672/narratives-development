@@ -4,6 +4,8 @@ import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
 import { Link, NavLink } from "react-router-dom";
 import { ScanLine, ShoppingBag, UserRound } from "lucide-react";
 
+import { publicHeaderNavigationItems } from "./headerNavigationItems";
+
 type AvatarResponse = {
   avatarId?: string;
   avatarName?: string;
@@ -125,21 +127,15 @@ export default function HeaderDesktopNavigation() {
   if (!currentUser) {
     return (
       <nav className="header__desktop-nav" aria-label="ページナビゲーション">
-        <Link to="/how-to-use" className="header__desktop-nav-link">
-          使い方
-        </Link>
-
-        <Link to="/faq" className="header__desktop-nav-link">
-          チーム
-        </Link>
-
-        <Link to="/terms" className="header__desktop-nav-link">
-          規約・ポリシー
-        </Link>
-
-        <Link to="/contact" className="header__desktop-nav-link">
-          お問い合わせ
-        </Link>
+        {publicHeaderNavigationItems.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className="header__desktop-nav-link"
+          >
+            {item.label}
+          </Link>
+        ))}
       </nav>
     );
   }

@@ -33,6 +33,8 @@ import TermsPage from "../pages/TermsPage";
 import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
+import Examples from "../pages/Examples";
+import PricePlan from "../pages/PricePlan";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 
 function RootPage() {
@@ -68,6 +70,8 @@ export const router = createBrowserRouter([
   { path: "/password-reset", element: <PasswordResetPage /> },
 
   { path: "/how-to-use", element: <HowToUsePage /> },
+  { path: "/use-cases", element: <Examples /> },
+  { path: "/pricing", element: <PricePlan /> },
   { path: "/faq", element: <VisionPage /> },
   { path: "/terms", element: <TermsPage /> },
   { path: "/privacy-policy", element: <TermsPage /> },

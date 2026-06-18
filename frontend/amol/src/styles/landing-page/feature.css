@@ -692,3 +692,9 @@
     font-size: 26px;
   }
 }
+
+@media (max-width: 1023px) and (orientation: portrait) {
+  .landing-page--with-footer-nav {
+    padding-bottom: var(--footer-nav-height);
+  }
+}
