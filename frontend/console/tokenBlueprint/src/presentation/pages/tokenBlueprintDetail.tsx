@@ -1,11 +1,11 @@
-// frontend\console\tokenBlueprint\src\presentation\pages\tokenBlueprintDetail.tsx
+// frontend/console/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../components/tokenContentsCard";
 import LogCard from "../../../../log/presentation/LogCard";
 
-// ★ ロジックはすべて Hook に移譲
 import { useTokenBlueprintDetail } from "../hook/useTokenBlueprintDetail";
 
 export default function TokenBlueprintDetail() {
@@ -17,7 +17,6 @@ export default function TokenBlueprintDetail() {
     assigneeName,
     minted,
 
-    // ★ 管理情報
     createdByName,
     createdAt,
     updatedByName,
@@ -39,25 +38,10 @@ export default function TokenBlueprintDetail() {
     onClickAssignee,
     cardHandlers,
 
-    // ★ token-contents: upload / delete handlers
     onTokenContentsFilesSelected,
     onDeleteTokenContent,
   } = handlers;
 
-  // ★ A案：単一ソースは cardVm.iconFile
-  // useTokenBlueprintDetail が selectedIconFile を vm に載せる実装でも壊れないようにフォールバックも残す
-  const selectedIconFile: File | null =
-    (cardVm?.iconFile as File | null | undefined) ??
-    (((vm as any)?.selectedIconFile as File | null) ?? null);
-
-  const tokenName =
-    ((blueprint as any)?.tokenName as string | undefined) ??
-    ((blueprint as any)?.name as string | undefined) ??
-    "";
-
-  const pageTitle = tokenName ? `${tokenName}` : "トークン設計";
-
-  // データが無い場合のフォールバック
   if (!blueprint) {
     return (
       <PageStyle layout="single" title="トークン設計" onBack={onBack}>
@@ -67,6 +51,9 @@ export default function TokenBlueprintDetail() {
       </PageStyle>
     );
   }
+
+  const selectedIconFile: File | null = cardVm.iconFile ?? null;
+  const pageTitle = blueprint.name || "トークン設計";
 
   return (
     <PageStyle
@@ -78,9 +65,8 @@ export default function TokenBlueprintDetail() {
       onSave={
         isEditMode
           ? () => {
-              // eslint-disable-next-line no-console
               console.log("[TokenBlueprintDetail] onSave clicked", {
-                id: (blueprint as any)?.id,
+                id: blueprint.id,
                 hasIconFile: Boolean(selectedIconFile),
                 iconFile: selectedIconFile
                   ? {
@@ -91,14 +77,12 @@ export default function TokenBlueprintDetail() {
                   : null,
               });
 
-              // hook 側が引数を取る実装でも / 取らない実装でも動くように any 呼び出し
-              void (onSave as any)({ iconFile: selectedIconFile });
+              void onSave();
             }
           : undefined
       }
       onDelete={isEditMode && !minted ? onDelete : undefined}
     >
-      {/* 左カラム：トークン設計カード＋コンテンツビューア */}
       <div>
         <TokenBlueprintCard
           vm={{
@@ -109,7 +93,6 @@ export default function TokenBlueprintDetail() {
         />
 
         <div style={{ marginTop: 16 }}>
-          {/* ★ upload / delete を Hook の handler に接続 */}
           <TokenContentsCard
             mode={isEditMode ? "edit" : "view"}
             contents={tokenContents}
@@ -119,7 +102,6 @@ export default function TokenBlueprintDetail() {
         </div>
       </div>
 
-      {/* 右カラム：管理情報＋ログ */}
       <div className="space-y-4">
         <AdminCard
           title="管理情報"

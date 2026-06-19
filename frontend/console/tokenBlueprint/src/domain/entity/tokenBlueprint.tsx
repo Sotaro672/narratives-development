@@ -236,7 +236,7 @@ export function toContentFileFirebaseStorageDeleteOp(
   content: ContentFile,
 ): FirebaseStorageDeleteOp {
   return {
-    objectPath: content.objectPath.trim(),
+    objectPath: content.objectPath,
   };
 }
 
@@ -244,7 +244,7 @@ export function toTokenIconFirebaseStorageDeleteOp(
   icon: TokenIcon,
 ): FirebaseStorageDeleteOp {
   return {
-    objectPath: icon.objectPath.trim(),
+    objectPath: icon.objectPath,
   };
 }
 
@@ -274,7 +274,7 @@ export const TOKEN_ICON_ALLOWED_CONTENT_TYPES = [
  * =======================================================*/
 
 export function normalizeContentType(value: unknown): ContentType {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "").toLowerCase();
 
   if (isValidContentType(raw)) {
     return raw;
@@ -284,7 +284,7 @@ export function normalizeContentType(value: unknown): ContentType {
 }
 
 export function normalizeContentVisibility(value: unknown): ContentVisibility {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "").toLowerCase();
 
   if (isValidContentVisibility(raw)) {
     return raw;
@@ -296,11 +296,11 @@ export function normalizeContentVisibility(value: unknown): ContentVisibility {
 export function validateContentFile(content: ContentFile): string[] {
   const errors: string[] = [];
 
-  if (!content.id?.trim()) {
+  if (!content.id) {
     errors.push("id is required");
   }
 
-  if (!content.name?.trim()) {
+  if (!content.name) {
     errors.push("name is required");
   }
 
@@ -308,17 +308,17 @@ export function validateContentFile(content: ContentFile): string[] {
     errors.push("type must be one of 'image' | 'video' | 'pdf' | 'document'");
   }
 
-  if (!content.contentType?.trim()) {
+  if (!content.contentType) {
     errors.push("contentType is required");
   }
 
-  if (!content.url?.trim()) {
+  if (!content.url) {
     errors.push("url is required");
   } else if (!isValidHttpUrl(content.url)) {
     errors.push("url must be a valid http(s) URL");
   }
 
-  if (!content.objectPath?.trim()) {
+  if (!content.objectPath) {
     errors.push("objectPath is required");
   }
 
@@ -330,19 +330,19 @@ export function validateContentFile(content: ContentFile): string[] {
     errors.push("size must be 0 or greater");
   }
 
-  if (!content.createdAt?.trim()) {
+  if (!content.createdAt) {
     errors.push("createdAt is required");
   }
 
-  if (!content.createdBy?.trim()) {
+  if (!content.createdBy) {
     errors.push("createdBy is required");
   }
 
-  if (!content.updatedAt?.trim()) {
+  if (!content.updatedAt) {
     errors.push("updatedAt is required");
   }
 
-  if (!content.updatedBy?.trim()) {
+  if (!content.updatedBy) {
     errors.push("updatedBy is required");
   }
 
@@ -351,20 +351,20 @@ export function validateContentFile(content: ContentFile): string[] {
 
 export function createContentFile(input: ContentFile): ContentFile {
   const normalized: ContentFile = {
-    id: input.id.trim(),
-    name: input.name.trim(),
+    id: input.id,
+    name: input.name,
     type: normalizeContentType(input.type),
     contentType:
-      input.contentType.trim() || "application/octet-stream",
-    url: input.url.trim(),
-    objectPath: input.objectPath.trim(),
+      input.contentType || "application/octet-stream",
+    url: input.url,
+    objectPath: input.objectPath,
     visibility: normalizeContentVisibility(input.visibility),
     size: Number.isFinite(input.size) && input.size >= 0 ? input.size : 0,
 
-    createdAt: input.createdAt.trim(),
-    createdBy: input.createdBy.trim(),
-    updatedAt: input.updatedAt.trim(),
-    updatedBy: input.updatedBy.trim(),
+    createdAt: input.createdAt,
+    createdBy: input.createdBy,
+    updatedAt: input.updatedAt,
+    updatedBy: input.updatedBy,
   };
 
   const errors = validateContentFile(normalized);
@@ -387,7 +387,7 @@ export function validateContentFiles(contents: ContentFile[]): string[] {
       errors.push(`contentFiles[${index}].${error}`);
     }
 
-    const id = content.id.trim();
+    const id = content.id;
     if (id) {
       if (ids.has(id)) {
         errors.push(`contentFiles[${index}].id duplicated`);
@@ -395,7 +395,7 @@ export function validateContentFiles(contents: ContentFile[]): string[] {
       ids.add(id);
     }
 
-    const objectPath = content.objectPath.trim();
+    const objectPath = content.objectPath;
     if (objectPath) {
       if (objectPaths.has(objectPath)) {
         errors.push(`contentFiles[${index}].objectPath duplicated`);
@@ -420,7 +420,7 @@ export function isTokenIconExtensionAllowed(fileName: string): boolean {
 }
 
 export function isTokenIconContentTypeAllowed(contentType: string): boolean {
-  const normalized = contentType.trim().toLowerCase();
+  const normalized = contentType.toLowerCase();
 
   return TOKEN_ICON_ALLOWED_CONTENT_TYPES.some(
     (allowed) => allowed === normalized,
@@ -428,16 +428,16 @@ export function isTokenIconContentTypeAllowed(contentType: string): boolean {
 }
 
 export function validateTokenIcon(icon: TokenIcon): boolean {
-  if (!icon.id?.trim()) return false;
+  if (!icon.id) return false;
 
-  if (!icon.url?.trim()) return false;
+  if (!icon.url) return false;
   if (!isValidHttpUrl(icon.url)) return false;
 
-  if (!icon.objectPath?.trim()) return false;
+  if (!icon.objectPath) return false;
 
-  if (!icon.fileName?.trim()) return false;
+  if (!icon.fileName) return false;
 
-  if (!icon.contentType?.trim()) return false;
+  if (!icon.contentType) return false;
   if (!isTokenIconContentTypeAllowed(icon.contentType)) return false;
 
   if (!Number.isFinite(icon.size) || icon.size < 0) return false;
@@ -451,10 +451,10 @@ export function validateTokenIcon(icon: TokenIcon): boolean {
 export function validateTokenIconFile(file: File): boolean {
   if (!file) return false;
 
-  if (!file.name?.trim()) return false;
+  if (!file.name) return false;
   if (!isTokenIconExtensionAllowed(file.name)) return false;
 
-  if (!file.type?.trim()) return false;
+  if (!file.type) return false;
   if (!isTokenIconContentTypeAllowed(file.type)) return false;
 
   if (!Number.isFinite(file.size) || file.size < 0) return false;
@@ -467,11 +467,11 @@ export function validateTokenIconFile(file: File): boolean {
 
 export function createTokenIcon(input: TokenIcon): TokenIcon {
   const normalized: TokenIcon = {
-    id: input.id.trim(),
-    url: input.url.trim(),
-    objectPath: input.objectPath.trim(),
-    fileName: input.fileName.trim(),
-    contentType: input.contentType.trim(),
+    id: input.id,
+    url: input.url,
+    objectPath: input.objectPath,
+    fileName: input.fileName,
+    contentType: input.contentType,
     size: Number.isFinite(input.size) && input.size >= 0 ? input.size : 0,
   };
 
@@ -489,39 +489,39 @@ export function createTokenIcon(input: TokenIcon): TokenIcon {
 export function validateTokenBlueprint(input: TokenBlueprint): string[] {
   const errors: string[] = [];
 
-  if (!input.id?.trim()) {
+  if (!input.id) {
     errors.push("id is required");
   }
 
-  if (!input.name?.trim()) {
+  if (!input.name) {
     errors.push("name is required");
   }
 
-  if (!input.symbol?.trim()) {
+  if (!input.symbol) {
     errors.push("symbol is required");
   }
 
-  if (!input.brandId?.trim()) {
+  if (!input.brandId) {
     errors.push("brandId is required");
   }
 
-  if (!input.companyId?.trim()) {
+  if (!input.companyId) {
     errors.push("companyId is required");
   }
 
-  if (!input.assigneeId?.trim()) {
+  if (!input.assigneeId) {
     errors.push("assigneeId is required");
   }
 
   const hasAnyIconField =
-    Boolean(input.iconUrl?.trim()) ||
-    Boolean(input.iconObjectPath?.trim()) ||
-    Boolean(input.iconFileName?.trim()) ||
-    Boolean(input.iconContentType?.trim()) ||
+    Boolean(input.iconUrl) ||
+    Boolean(input.iconObjectPath) ||
+    Boolean(input.iconFileName) ||
+    Boolean(input.iconContentType) ||
     input.iconSize != null;
 
   if (hasAnyIconField) {
-    if (!input.iconUrl?.trim()) {
+    if (!input.iconUrl) {
       errors.push("iconUrl is required when icon is set");
     }
 
@@ -529,11 +529,11 @@ export function validateTokenBlueprint(input: TokenBlueprint): string[] {
       errors.push("iconUrl must be a valid http(s) URL");
     }
 
-    if (!input.iconObjectPath?.trim()) {
+    if (!input.iconObjectPath) {
       errors.push("iconObjectPath is required when icon is set");
     }
 
-    if (!input.iconFileName?.trim()) {
+    if (!input.iconFileName) {
       errors.push("iconFileName is required when icon is set");
     }
 
@@ -553,7 +553,7 @@ export function validateTokenBlueprint(input: TokenBlueprint): string[] {
 
 function isValidHttpUrl(raw: string): boolean {
   try {
-    const u = new URL(raw.trim());
+    const u = new URL(raw);
     if (!u.protocol || !u.hostname) return false;
     return u.protocol === "http:" || u.protocol === "https:";
   } catch {

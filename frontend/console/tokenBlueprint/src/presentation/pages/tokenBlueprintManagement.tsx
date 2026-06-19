@@ -1,11 +1,10 @@
 // frontend/console/tokenBlueprint/src/presentation/pages/tokenBlueprintManagement.tsx
-
 import React from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import type { TokenBlueprint } from "../../../../shell/src/shared/types/tokenBlueprint";
+import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 import { useTokenBlueprintManagement } from "../hook/useTokenBlueprintManagement";
 
 export default function TokenBlueprintManagementPage() {
