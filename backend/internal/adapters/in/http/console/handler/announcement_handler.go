@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\announcement_handler.go
+// backend/internal/adapters/in/http/console/handler/announcement_handler.go
 package consoleHandler
 
 import (
@@ -70,24 +70,26 @@ func (h *AnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // =======================
 
 type createAnnouncementRequest struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Content     string     `json:"content"`
-	TargetToken *string    `json:"targetToken"`
-	Attachments []string   `json:"attachments"`
-	Published   bool       `json:"published"`
-	PublishedAt *time.Time `json:"publishedAt"`
-	CreatedBy   string     `json:"createdBy"`
+	ID            string     `json:"id"`
+	Title         string     `json:"title"`
+	Content       string     `json:"content"`
+	TargetToken   *string    `json:"targetToken"`
+	TargetAvatars []string   `json:"targetAvatars"`
+	Attachments   []string   `json:"attachments"`
+	Published     bool       `json:"published"`
+	PublishedAt   *time.Time `json:"publishedAt"`
+	CreatedBy     string     `json:"createdBy"`
 }
 
 type updateAnnouncementRequest struct {
-	Title       *string    `json:"title"`
-	Content     *string    `json:"content"`
-	TargetToken *string    `json:"targetToken"`
-	Published   *bool      `json:"published"`
-	PublishedAt *time.Time `json:"publishedAt"`
-	Attachments *[]string  `json:"attachments"`
-	UpdatedBy   *string    `json:"updatedBy"`
+	Title         *string    `json:"title"`
+	Content       *string    `json:"content"`
+	TargetToken   *string    `json:"targetToken"`
+	TargetAvatars *[]string  `json:"targetAvatars"`
+	Published     *bool      `json:"published"`
+	PublishedAt   *time.Time `json:"publishedAt"`
+	Attachments   *[]string  `json:"attachments"`
+	UpdatedBy     *string    `json:"updatedBy"`
 }
 
 // =======================
@@ -156,14 +158,15 @@ func (h *AnnouncementHandler) createAnnouncement(w http.ResponseWriter, r *http.
 	}
 
 	result, err := h.uc.CreateAnnouncement(r.Context(), uc.CreateAnnouncementInput{
-		ID:          req.ID,
-		Title:       req.Title,
-		Content:     req.Content,
-		TargetToken: req.TargetToken,
-		Attachments: req.Attachments,
-		Published:   req.Published,
-		PublishedAt: req.PublishedAt,
-		CreatedBy:   req.CreatedBy,
+		ID:            req.ID,
+		Title:         req.Title,
+		Content:       req.Content,
+		TargetToken:   req.TargetToken,
+		TargetAvatars: req.TargetAvatars,
+		Attachments:   req.Attachments,
+		Published:     req.Published,
+		PublishedAt:   req.PublishedAt,
+		CreatedBy:     req.CreatedBy,
 	})
 	if err != nil {
 		writeAnnouncementErr(w, err)
@@ -187,13 +190,14 @@ func (h *AnnouncementHandler) updateAnnouncement(w http.ResponseWriter, r *http.
 	}
 
 	result, err := h.uc.UpdateAnnouncement(r.Context(), announcementID, uc.UpdateAnnouncementInput{
-		Title:       req.Title,
-		Content:     req.Content,
-		TargetToken: req.TargetToken,
-		Published:   req.Published,
-		PublishedAt: req.PublishedAt,
-		Attachments: req.Attachments,
-		UpdatedBy:   req.UpdatedBy,
+		Title:         req.Title,
+		Content:       req.Content,
+		TargetToken:   req.TargetToken,
+		TargetAvatars: req.TargetAvatars,
+		Published:     req.Published,
+		PublishedAt:   req.PublishedAt,
+		Attachments:   req.Attachments,
+		UpdatedBy:     req.UpdatedBy,
 	})
 	if err != nil {
 		writeAnnouncementErr(w, err)

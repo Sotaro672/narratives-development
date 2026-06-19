@@ -38,17 +38,18 @@ type AnnouncementAvatar struct {
 
 // Entity
 type Announcement struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Content     string     `json:"content"`
-	TargetToken *string    `json:"targetToken,omitempty"`
-	Published   bool       `json:"published"`
-	PublishedAt *time.Time `json:"publishedAt,omitempty"`
-	Attachments []string   `json:"attachments,omitempty"` // IDs of AnnouncementAttachment
-	CreatedAt   time.Time  `json:"createdAt"`
-	CreatedBy   string     `json:"createdBy"`
-	UpdatedAt   *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy   *string    `json:"updatedBy,omitempty"`
+	ID            string     `json:"id"`
+	Title         string     `json:"title"`
+	Content       string     `json:"content"`
+	TargetToken   *string    `json:"targetToken,omitempty"`
+	TargetAvatars []string   `json:"targetAvatars,omitempty"`
+	Published     bool       `json:"published"`
+	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
+	Attachments   []string   `json:"attachments,omitempty"` // IDs of AnnouncementAttachment
+	CreatedAt     time.Time  `json:"createdAt"`
+	CreatedBy     string     `json:"createdBy"`
+	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy     *string    `json:"updatedBy,omitempty"`
 }
 
 // AttachmentFile は Announcement 添付ファイルのメタデータ。
@@ -67,6 +68,7 @@ type AttachmentFile struct {
 func New(
 	id, title, content string,
 	targetToken *string,
+	targetAvatars []string,
 	attachments []string,
 	published bool,
 	createdAt time.Time,
@@ -75,17 +77,18 @@ func New(
 	updatedBy *string,
 ) (Announcement, error) {
 	a := Announcement{
-		ID:          id,
-		Title:       title,
-		Content:     content,
-		TargetToken: targetToken,
-		Published:   published,
-		PublishedAt: publishedAt,
-		Attachments: attachments,
-		CreatedAt:   createdAt,
-		CreatedBy:   createdBy,
-		UpdatedAt:   updatedAt,
-		UpdatedBy:   updatedBy,
+		ID:            id,
+		Title:         title,
+		Content:       content,
+		TargetToken:   targetToken,
+		TargetAvatars: targetAvatars,
+		Published:     published,
+		PublishedAt:   publishedAt,
+		Attachments:   attachments,
+		CreatedAt:     createdAt,
+		CreatedBy:     createdBy,
+		UpdatedAt:     updatedAt,
+		UpdatedBy:     updatedBy,
 	}
 	if err := a.validate(); err != nil {
 		return Announcement{}, err

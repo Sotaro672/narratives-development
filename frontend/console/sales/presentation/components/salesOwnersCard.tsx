@@ -33,6 +33,8 @@ export type SalesOwnerItem = {
 
 type Props = {
   owners?: SalesOwnerItem[];
+  selectedAvatarIds?: string[];
+  onSelectionChange?: (avatarIds: string[]) => void;
 };
 
 type SortKey = "followerCount" | "postCount";
@@ -107,6 +109,7 @@ function uniqueStrings(values: string[]): string[] {
     const normalized = String(value ?? "").trim();
     if (!normalized) continue;
     if (seen.has(normalized)) continue;
+
     seen.add(normalized);
     result.push(normalized);
   }
@@ -114,14 +117,25 @@ function uniqueStrings(values: string[]): string[] {
   return result;
 }
 
-export default function SalesOwnersCard({ owners = [] }: Props) {
+function getAvatarId(owner: SalesOwnerItem): string {
+  return String(owner.avatarId ?? "").trim();
+}
+
+export default function SalesOwnersCard({
+  owners = [],
+  selectedAvatarIds = [],
+  onSelectionChange,
+}: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("followerCount");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [selectedOwnerKeys, setSelectedOwnerKeys] = useState<string[]>([]);
   const [selectedProductNames, setSelectedProductNames] = useState<string[]>(
     [],
   );
   const [currentPage, setCurrentPage] = useState(1);
+
+  const selectedAvatarIdSet = useMemo(() => {
+    return new Set(uniqueStrings(selectedAvatarIds));
+  }, [selectedAvatarIds]);
 
   const productFilterOptions = useMemo(() => {
     const names = owners.map((owner) => String(owner.productName ?? "").trim());
@@ -157,24 +171,33 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
     return sortedOwners.slice(start, end);
   }, [currentPage, sortedOwners]);
 
-  const allOwnerKeys = useMemo(() => {
-    return pagedOwners.map((owner, index) =>
-      ownerKey(owner, (currentPage - 1) * PAGE_SIZE + index),
-    );
-  }, [currentPage, pagedOwners]);
+  const pagedAvatarIds = useMemo(() => {
+    return uniqueStrings(pagedOwners.map(getAvatarId));
+  }, [pagedOwners]);
+
+  const validAvatarIds = useMemo(() => {
+    return uniqueStrings(owners.map(getAvatarId));
+  }, [owners]);
+
+  const selectedCount = useMemo(() => {
+    return selectedAvatarIds.filter((avatarId) =>
+      validAvatarIds.includes(String(avatarId ?? "").trim()),
+    ).length;
+  }, [selectedAvatarIds, validAvatarIds]);
 
   const isAllSelected =
-    allOwnerKeys.length > 0 &&
-    allOwnerKeys.every((key) => selectedOwnerKeys.includes(key));
+    pagedAvatarIds.length > 0 &&
+    pagedAvatarIds.every((avatarId) => selectedAvatarIdSet.has(avatarId));
 
   useEffect(() => {
-    setSelectedOwnerKeys((prev) => {
-      const validKeys = sortedOwners.map((owner, index) =>
-        ownerKey(owner, index),
-      );
-      return prev.filter((key) => validKeys.includes(key));
-    });
-  }, [sortedOwners]);
+    const next = selectedAvatarIds.filter((avatarId) =>
+      validAvatarIds.includes(String(avatarId ?? "").trim()),
+    );
+
+    if (next.length !== selectedAvatarIds.length) {
+      onSelectionChange?.(uniqueStrings(next));
+    }
+  }, [onSelectionChange, selectedAvatarIds, validAvatarIds]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -201,23 +224,46 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
     });
   };
 
-  const handleToggleAll = (checked: boolean) => {
-    setSelectedOwnerKeys((prev) => {
-      if (checked) {
-        return uniqueStrings([...prev, ...allOwnerKeys]);
-      }
-      return prev.filter((key) => !allOwnerKeys.includes(key));
-    });
+  const handleToggleAll = (checked: boolean | "indeterminate") => {
+    if (pagedAvatarIds.length === 0) return;
+
+    const nextChecked = checked === true;
+
+    if (nextChecked) {
+      onSelectionChange?.(
+        uniqueStrings([...selectedAvatarIds, ...pagedAvatarIds]),
+      );
+      return;
+    }
+
+    onSelectionChange?.(
+      selectedAvatarIds.filter(
+        (avatarId) => !pagedAvatarIds.includes(String(avatarId ?? "").trim()),
+      ),
+    );
   };
 
-  const handleToggleRow = (key: string, checked: boolean) => {
-    setSelectedOwnerKeys((prev) => {
-      if (checked) {
-        if (prev.includes(key)) return prev;
-        return [...prev, key];
-      }
-      return prev.filter((item) => item !== key);
-    });
+  const handleToggleRow = (
+    avatarId: string,
+    checked: boolean | "indeterminate",
+  ) => {
+    const normalizedAvatarId = String(avatarId ?? "").trim();
+    if (!normalizedAvatarId) return;
+
+    const nextChecked = checked === true;
+
+    if (nextChecked) {
+      onSelectionChange?.(
+        uniqueStrings([...selectedAvatarIds, normalizedAvatarId]),
+      );
+      return;
+    }
+
+    onSelectionChange?.(
+      selectedAvatarIds.filter(
+        (item) => String(item ?? "").trim() !== normalizedAvatarId,
+      ),
+    );
   };
 
   return (
@@ -225,6 +271,10 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <CardTitle>所有者一覧</CardTitle>
+
+          <div className="text-sm text-slate-500">
+            宛先選択 {selectedCount} 件
+          </div>
         </div>
       </CardHeader>
 
@@ -239,11 +289,19 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">
-                    <Checkbox
-                      id="sales-owners-select-all"
-                      checked={isAllSelected}
-                      onCheckedChange={handleToggleAll}
-                    />
+                    <span
+                      className={
+                        pagedAvatarIds.length === 0
+                          ? "opacity-40 pointer-events-none"
+                          : undefined
+                      }
+                    >
+                      <Checkbox
+                        id="sales-owners-select-all"
+                        checked={isAllSelected}
+                        onCheckedChange={handleToggleAll}
+                      />
+                    </span>
                   </TableHead>
                   <TableHead>アバター</TableHead>
                   <TableHead>
@@ -280,12 +338,14 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
                 {pagedOwners.map((owner, index) => {
                   const absoluteIndex = (currentPage - 1) * PAGE_SIZE + index;
                   const key = ownerKey(owner, absoluteIndex);
+                  const avatarId = getAvatarId(owner);
                   const avatarName = String(owner.avatarName ?? "").trim();
                   const avatarIconUrl = String(owner.avatarIconUrl ?? "").trim();
                   const productName = String(owner.productName ?? "").trim();
                   const followerCount = toSafeNumber(owner.followerCount);
                   const postCount = toSafeNumber(owner.postCount);
-                  const checked = selectedOwnerKeys.includes(key);
+                  const checked =
+                    avatarId !== "" && selectedAvatarIdSet.has(avatarId);
 
                   return (
                     <TableRow
@@ -293,13 +353,21 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
                       data-state={checked ? "selected" : undefined}
                     >
                       <TableCell>
-                        <Checkbox
-                          id={`sales-owner-${key}`}
-                          checked={checked}
-                          onCheckedChange={(nextChecked) =>
-                            handleToggleRow(key, nextChecked)
+                        <span
+                          className={
+                            !avatarId
+                              ? "opacity-40 pointer-events-none"
+                              : undefined
                           }
-                        />
+                        >
+                          <Checkbox
+                            id={`sales-owner-${key}`}
+                            checked={checked}
+                            onCheckedChange={(nextChecked) =>
+                              handleToggleRow(avatarId, nextChecked)
+                            }
+                          />
+                        </span>
                       </TableCell>
 
                       <TableCell>

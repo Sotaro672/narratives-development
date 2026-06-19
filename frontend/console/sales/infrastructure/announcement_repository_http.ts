@@ -11,6 +11,7 @@ export type Announcement = {
   title: string;
   content: string;
   targetToken: string | null;
+  targetAvatars: string[];
   published: boolean;
   publishedAt: string | null;
   attachments: string[];
@@ -39,6 +40,7 @@ export type CreateAnnouncementInput = {
   title: string;
   content: string;
   targetToken?: string | null;
+  targetAvatars?: string[];
   attachments?: string[];
   published?: boolean;
   publishedAt?: string | null;
@@ -49,6 +51,7 @@ export type UpdateAnnouncementInput = {
   title?: string;
   content?: string;
   targetToken?: string | null;
+  targetAvatars?: string[];
   published?: boolean;
   publishedAt?: string | null;
   attachments?: string[];
@@ -64,6 +67,7 @@ type ApiAnnouncement = {
   title?: string | null;
   content?: string | null;
   targetToken?: string | null;
+  targetAvatars?: string[] | null;
   published?: boolean | null;
   publishedAt?: string | null;
   attachments?: string[] | null;
@@ -223,6 +227,7 @@ function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
     title: String(data?.title ?? "").trim(),
     content: String(data?.content ?? "").trim(),
     targetToken: nullableString(data?.targetToken),
+    targetAvatars: uniqueStrings(data?.targetAvatars),
     published: Boolean(data?.published),
     publishedAt: nullableString(data?.publishedAt),
     attachments: uniqueStrings(data?.attachments),
@@ -316,6 +321,7 @@ function buildCreateAnnouncementBody(
     title,
     content,
     targetToken: input.targetToken ?? null,
+    targetAvatars: uniqueStrings(input.targetAvatars),
     attachments: uniqueStrings(input.attachments),
     published: Boolean(input.published),
     publishedAt: input.publishedAt ?? null,
@@ -338,6 +344,10 @@ function buildUpdateAnnouncementBody(
 
   if (input.targetToken !== undefined) {
     body.targetToken = input.targetToken;
+  }
+
+  if (input.targetAvatars !== undefined) {
+    body.targetAvatars = uniqueStrings(input.targetAvatars);
   }
 
   if (input.published !== undefined) {

@@ -3,6 +3,8 @@ package usecase
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	ann "narratives/internal/domain/announcement"
@@ -42,14 +44,15 @@ func (u *AnnouncementUsecase) WithNow(now func() time.Time) *AnnouncementUsecase
 // =======================
 
 type CreateAnnouncementInput struct {
-	ID          string
-	Title       string
-	Content     string
-	TargetToken *string
-	Attachments []string
-	Published   bool
-	PublishedAt *time.Time
-	CreatedBy   string
+	ID            string
+	Title         string
+	Content       string
+	TargetToken   *string
+	TargetAvatars []string
+	Attachments   []string
+	Published     bool
+	PublishedAt   *time.Time
+	CreatedBy     string
 }
 
 func (u *AnnouncementUsecase) CreateAnnouncement(
@@ -58,11 +61,22 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 ) (ann.Announcement, error) {
 	now := u.now()
 
+	id := input.ID
+	if id == "" {
+		generatedID, err := newAnnouncementID()
+		if err != nil {
+			return ann.Announcement{}, err
+		}
+
+		id = generatedID
+	}
+
 	entity, err := ann.New(
-		input.ID,
+		id,
 		input.Title,
 		input.Content,
 		input.TargetToken,
+		input.TargetAvatars,
 		input.Attachments,
 		input.Published,
 		now,
@@ -104,13 +118,14 @@ func (u *AnnouncementUsecase) ListAnnouncementsByCursor(
 }
 
 type UpdateAnnouncementInput struct {
-	Title       *string
-	Content     *string
-	TargetToken *string
-	Published   *bool
-	PublishedAt *time.Time
-	Attachments *[]string
-	UpdatedBy   *string
+	Title         *string
+	Content       *string
+	TargetToken   *string
+	TargetAvatars *[]string
+	Published     *bool
+	PublishedAt   *time.Time
+	Attachments   *[]string
+	UpdatedBy     *string
 }
 
 func (u *AnnouncementUsecase) UpdateAnnouncement(
@@ -131,6 +146,9 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	}
 	if input.TargetToken != nil {
 		entity.TargetToken = input.TargetToken
+	}
+	if input.TargetAvatars != nil {
+		entity.TargetAvatars = *input.TargetAvatars
 	}
 	if input.Published != nil {
 		entity.Published = *input.Published
@@ -390,4 +408,17 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(ctx context.Context, ann
 	}
 
 	return nil
+}
+
+// =======================
+// Helpers
+// =======================
+
+func newAnnouncementID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b[:]), nil
 }

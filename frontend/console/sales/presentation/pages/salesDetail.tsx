@@ -18,8 +18,10 @@ const initialInputPayload: SubmitPayload = {
 
 export default function SalesDetail() {
   const { vm, handlers } = useSalesDetail();
+
   const [inputPayload, setInputPayload] =
     useState<SubmitPayload>(initialInputPayload);
+  const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>([]);
   const [isSavingInput, setIsSavingInput] = useState(false);
   const [isSendingInput, setIsSendingInput] = useState(false);
 
@@ -34,10 +36,14 @@ export default function SalesDetail() {
     owners,
   } = vm;
 
-  const { onBack } = handlers;
+  const { onBack, onSaveAnnouncement, onSendAnnouncement } = handlers;
 
   const handleInputChange = useCallback((payload: SubmitPayload) => {
     setInputPayload(payload);
+  }, []);
+
+  const handleSelectionChange = useCallback((avatarIds: string[]) => {
+    setSelectedAvatarIds(avatarIds);
   }, []);
 
   const buildSubmitPayload = useCallback((): SubmitPayload => {
@@ -54,17 +60,26 @@ export default function SalesDetail() {
     setIsSavingInput(true);
 
     try {
-      const payload = buildSubmitPayload();
-
-      // TODO: 告知の下書き保存 API / usecase と接続する
-      console.log("save sales announcement", {
-        tokenBlueprintId: sales?.tokenBlueprintId,
-        ...payload,
+      await onSaveAnnouncement({
+        payload: buildSubmitPayload(),
+        targetAvatarIds: selectedAvatarIds,
       });
+      window.alert("告知を保存しました。");
+    } catch (error) {
+      console.error("[SalesDetail] save announcement failed", error);
+      window.alert(
+        error instanceof Error ? error.message : "告知の保存に失敗しました。",
+      );
     } finally {
       setIsSavingInput(false);
     }
-  }, [buildSubmitPayload, isSavingInput, isSendingInput, sales]);
+  }, [
+    buildSubmitPayload,
+    isSavingInput,
+    isSendingInput,
+    onSaveAnnouncement,
+    selectedAvatarIds,
+  ]);
 
   const handleSend = useCallback(async () => {
     if (isSavingInput || isSendingInput) return;
@@ -72,17 +87,26 @@ export default function SalesDetail() {
     setIsSendingInput(true);
 
     try {
-      const payload = buildSubmitPayload();
-
-      // TODO: 告知の送信 API / usecase と接続する
-      console.log("send sales announcement", {
-        tokenBlueprintId: sales?.tokenBlueprintId,
-        ...payload,
+      await onSendAnnouncement({
+        payload: buildSubmitPayload(),
+        targetAvatarIds: selectedAvatarIds,
       });
+      window.alert("告知を送信しました。");
+    } catch (error) {
+      console.error("[SalesDetail] send announcement failed", error);
+      window.alert(
+        error instanceof Error ? error.message : "告知の送信に失敗しました。",
+      );
     } finally {
       setIsSendingInput(false);
     }
-  }, [buildSubmitPayload, isSavingInput, isSendingInput, sales]);
+  }, [
+    buildSubmitPayload,
+    isSavingInput,
+    isSendingInput,
+    onSendAnnouncement,
+    selectedAvatarIds,
+  ]);
 
   if (!sales) {
     return (
@@ -106,7 +130,11 @@ export default function SalesDetail() {
     >
       <div className="space-y-4">
         <div style={{ marginTop: 16 }}>
-          <SalesOwnersCard owners={owners} />
+          <SalesOwnersCard
+            owners={owners}
+            selectedAvatarIds={selectedAvatarIds}
+            onSelectionChange={handleSelectionChange}
+          />
         </div>
 
         <InputCard
