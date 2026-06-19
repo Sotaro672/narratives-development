@@ -6,12 +6,11 @@ import (
 	"errors"
 
 	sharedquery "narratives/internal/application/query/shared"
+	appresolver "narratives/internal/application/resolver"
 	avatardom "narratives/internal/domain/avatar"
 	avatastatedom "narratives/internal/domain/avatarState"
 	branddom "narratives/internal/domain/brand"
 	common "narratives/internal/domain/common"
-	productdom "narratives/internal/domain/product"
-	pbdom "narratives/internal/domain/productBlueprint"
 	tokendom "narratives/internal/domain/token"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 	walletdom "narratives/internal/domain/wallet"
@@ -54,22 +53,6 @@ type mintListByTokenBlueprintReader interface {
 	) (tokendom.ListMintAddressesByTokenBlueprintIDResult, error)
 }
 
-type tokenResolveByMintReader interface {
-	ResolveTokenByMintAddress(
-		ctx context.Context,
-		mintAddress string,
-	) (tokendom.ResolveTokenByMintAddressResult, error)
-}
-
-type productReader interface {
-	GetByID(ctx context.Context, id string) (productdom.Product, error)
-}
-
-type productBlueprintReader interface {
-	GetIDByModelID(ctx context.Context, modelID string) (string, []pbdom.ModelRef, error)
-	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
-}
-
 type walletAddressByMintReader interface {
 	GetWalletAddressByMintAddress(ctx context.Context, mintAddress string) (string, error)
 }
@@ -90,42 +73,43 @@ type avatarStateReader interface {
 	GetByAvatarID(ctx context.Context, avatarID string) (avatastatedom.AvatarState, error)
 }
 
+type mintProductBlueprintResolver interface {
+	ResolveByMintAddresses(
+		ctx context.Context,
+		mintAddresses []string,
+	) (appresolver.MintProductBlueprintResolveResult, error)
+}
+
 type SalesQuery struct {
-	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
-	brandRepo            brandReader
-	mintRepo             mintListByTokenBlueprintReader
-	tokenQueryRepo       tokenResolveByMintReader
-	productRepo          productReader
-	productBlueprintRepo productBlueprintReader
-	walletRepo           walletAddressByMintReader
-	ownerResolver        ownerResolveReader
-	avatarRepo           avatarReader
-	avatarStateRepo      avatarStateReader
+	tokenBlueprintRepo           tokenblueprintdom.RepositoryPort
+	brandRepo                    brandReader
+	mintRepo                     mintListByTokenBlueprintReader
+	walletRepo                   walletAddressByMintReader
+	ownerResolver                ownerResolveReader
+	avatarRepo                   avatarReader
+	avatarStateRepo              avatarStateReader
+	mintProductBlueprintResolver mintProductBlueprintResolver
 }
 
 func NewSalesQuery(
 	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
 	brandRepo brandReader,
 	mintRepo mintListByTokenBlueprintReader,
-	tokenQueryRepo tokenResolveByMintReader,
-	productRepo productReader,
-	productBlueprintRepo productBlueprintReader,
 	walletRepo walletAddressByMintReader,
 	ownerResolver ownerResolveReader,
 	avatarRepo avatarReader,
 	avatarStateRepo avatarStateReader,
+	mintProductBlueprintResolver mintProductBlueprintResolver,
 ) *SalesQuery {
 	return &SalesQuery{
-		tokenBlueprintRepo:   tokenBlueprintRepo,
-		brandRepo:            brandRepo,
-		mintRepo:             mintRepo,
-		tokenQueryRepo:       tokenQueryRepo,
-		productRepo:          productRepo,
-		productBlueprintRepo: productBlueprintRepo,
-		walletRepo:           walletRepo,
-		ownerResolver:        ownerResolver,
-		avatarRepo:           avatarRepo,
-		avatarStateRepo:      avatarStateRepo,
+		tokenBlueprintRepo:           tokenBlueprintRepo,
+		brandRepo:                    brandRepo,
+		mintRepo:                     mintRepo,
+		walletRepo:                   walletRepo,
+		ownerResolver:                ownerResolver,
+		avatarRepo:                   avatarRepo,
+		avatarStateRepo:              avatarStateRepo,
+		mintProductBlueprintResolver: mintProductBlueprintResolver,
 	}
 }
 
@@ -145,15 +129,6 @@ func (q *SalesQuery) ListByCompanyID(
 	if q.mintRepo == nil {
 		return SalesQueryResult{}, errors.New("mintRepo is nil")
 	}
-	if q.tokenQueryRepo == nil {
-		return SalesQueryResult{}, errors.New("tokenQueryRepo is nil")
-	}
-	if q.productRepo == nil {
-		return SalesQueryResult{}, errors.New("productRepo is nil")
-	}
-	if q.productBlueprintRepo == nil {
-		return SalesQueryResult{}, errors.New("productBlueprintRepo is nil")
-	}
 	if q.walletRepo == nil {
 		return SalesQueryResult{}, errors.New("walletRepo is nil")
 	}
@@ -165,6 +140,9 @@ func (q *SalesQuery) ListByCompanyID(
 	}
 	if q.avatarStateRepo == nil {
 		return SalesQueryResult{}, errors.New("avatarStateRepo is nil")
+	}
+	if q.mintProductBlueprintResolver == nil {
+		return SalesQueryResult{}, errors.New("mintProductBlueprintResolver is nil")
 	}
 	if companyID == "" {
 		return SalesQueryResult{}, errors.New("companyID is empty")
@@ -238,73 +216,39 @@ func (q *SalesQuery) resolveProductBlueprints(
 	if len(mintAddresses) == 0 {
 		return []string{}, []SalesProductBlueprint{}, nil
 	}
+	if q == nil {
+		return nil, nil, errors.New("sales query is nil")
+	}
+	if q.mintProductBlueprintResolver == nil {
+		return nil, nil, errors.New("mintProductBlueprintResolver is nil")
+	}
 
-	modelIDs := make([]string, 0, len(mintAddresses))
-	seenModelIDs := make(map[string]struct{}, len(mintAddresses))
+	resolved, err := q.mintProductBlueprintResolver.ResolveByMintAddresses(
+		ctx,
+		mintAddresses,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	productBlueprints := make([]SalesProductBlueprint, 0, len(mintAddresses))
-	seenProductBlueprintIDs := make(map[string]struct{}, len(mintAddresses))
+	productBlueprints := make(
+		[]SalesProductBlueprint,
+		0,
+		len(resolved.ProductBlueprints),
+	)
 
-	for _, mintAddress := range mintAddresses {
-		if mintAddress == "" {
+	for _, pb := range resolved.ProductBlueprints {
+		if pb.ProductBlueprintID == "" {
 			continue
 		}
 
-		tokenResult, err := q.tokenQueryRepo.ResolveTokenByMintAddress(ctx, mintAddress)
-		if err != nil {
-			if errors.Is(err, tokendom.ErrNotFound) {
-				continue
-			}
-			return nil, nil, err
-		}
-
-		productID := tokenResult.ProductID
-		if productID == "" {
-			continue
-		}
-
-		product, err := q.productRepo.GetByID(ctx, productID)
-		if err != nil {
-			if errors.Is(err, productdom.ErrNotFound) {
-				continue
-			}
-			return nil, nil, err
-		}
-
-		modelID := product.ModelID
-		if modelID == "" {
-			continue
-		}
-
-		if _, ok := seenModelIDs[modelID]; !ok {
-			seenModelIDs[modelID] = struct{}{}
-			modelIDs = append(modelIDs, modelID)
-		}
-
-		productBlueprintID, _, err := q.productBlueprintRepo.GetIDByModelID(ctx, modelID)
-		if err != nil {
-			continue
-		}
-		if productBlueprintID == "" {
-			continue
-		}
-		if _, ok := seenProductBlueprintIDs[productBlueprintID]; ok {
-			continue
-		}
-
-		productBlueprint, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
-		if err != nil {
-			continue
-		}
-
-		seenProductBlueprintIDs[productBlueprintID] = struct{}{}
 		productBlueprints = append(productBlueprints, SalesProductBlueprint{
-			ProductBlueprintID: productBlueprintID,
-			ProductName:        productBlueprint.ProductName,
+			ProductBlueprintID: pb.ProductBlueprintID,
+			ProductName:        pb.ProductName,
 		})
 	}
 
-	return modelIDs, productBlueprints, nil
+	return uniqueStrings(resolved.ModelIDs), productBlueprints, nil
 }
 
 func (q *SalesQuery) resolveSalesOwners(

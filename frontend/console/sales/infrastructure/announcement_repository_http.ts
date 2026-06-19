@@ -6,19 +6,57 @@ import { getAuthJsonHeaders } from "../../shell/src/shared/http/authHeaders";
 // Domain types
 // ============================================================
 
+export type AnnouncementAvatarStateFollow = {
+  avatarId: string;
+  followedAt: string | null;
+};
+
+export type AnnouncementAvatarState = {
+  id: string;
+  followerCount: number;
+  followingCount: number;
+  postCount: number;
+  followers: AnnouncementAvatarStateFollow[];
+  following: AnnouncementAvatarStateFollow[];
+  lastActiveAt: string | null;
+  updatedAt: string | null;
+};
+
+export type AnnouncementTargetAvatarDetail = {
+  avatarId: string;
+  avatarName: string;
+  avatarIcon: string;
+  avatarState: AnnouncementAvatarState | null;
+  followerCount: number;
+  followingCount: number;
+  postCount: number;
+};
+
+export type AnnouncementProductBlueprint = {
+  productBlueprintId: string;
+  productName: string;
+};
+
 export type Announcement = {
   id: string;
   title: string;
   content: string;
   targetToken: string | null;
+  tokenName: string | null;
   targetAvatars: string[];
+  targetAvatarDetails: AnnouncementTargetAvatarDetail[];
+  mintAddresses: string[];
+  modelIds: string[];
+  productBlueprints: AnnouncementProductBlueprint[];
   published: boolean;
   publishedAt: string | null;
   attachments: string[];
   createdAt: string;
   createdBy: string;
+  createdByName: string;
   updatedAt: string | null;
   updatedBy: string | null;
+  updatedByName: string | null;
 };
 
 export type AnnouncementListResult = {
@@ -87,6 +125,71 @@ export type MarkPublishedInput = {
 // API DTOs
 // ============================================================
 
+type ApiAnnouncementAvatarStateFollow = {
+  avatarId?: string | null;
+  AvatarID?: string | null;
+
+  followedAt?: string | null;
+  FollowedAt?: string | null;
+};
+
+type ApiAnnouncementAvatarState = {
+  id?: string | null;
+  ID?: string | null;
+
+  followerCount?: number | null;
+  FollowerCount?: number | null;
+
+  followingCount?: number | null;
+  FollowingCount?: number | null;
+
+  postCount?: number | null;
+  PostCount?: number | null;
+
+  followers?: ApiAnnouncementAvatarStateFollow[] | null;
+  Followers?: ApiAnnouncementAvatarStateFollow[] | null;
+
+  following?: ApiAnnouncementAvatarStateFollow[] | null;
+  Following?: ApiAnnouncementAvatarStateFollow[] | null;
+
+  lastActiveAt?: string | null;
+  LastActiveAt?: string | null;
+
+  updatedAt?: string | null;
+  UpdatedAt?: string | null;
+};
+
+type ApiAnnouncementTargetAvatarDetail = {
+  avatarId?: string | null;
+  AvatarID?: string | null;
+
+  avatarName?: string | null;
+  AvatarName?: string | null;
+
+  avatarIcon?: string | null;
+  AvatarIcon?: string | null;
+
+  avatarState?: ApiAnnouncementAvatarState | null;
+  AvatarState?: ApiAnnouncementAvatarState | null;
+
+  followerCount?: number | null;
+  FollowerCount?: number | null;
+
+  followingCount?: number | null;
+  FollowingCount?: number | null;
+
+  postCount?: number | null;
+  PostCount?: number | null;
+};
+
+type ApiAnnouncementProductBlueprint = {
+  productBlueprintId?: string | null;
+  ProductBlueprintID?: string | null;
+
+  productName?: string | null;
+  ProductName?: string | null;
+};
+
 type ApiAnnouncement = {
   id?: string | null;
   ID?: string | null;
@@ -100,8 +203,23 @@ type ApiAnnouncement = {
   targetToken?: string | null;
   TargetToken?: string | null;
 
+  tokenName?: string | null;
+  TokenName?: string | null;
+
   targetAvatars?: string[] | null;
   TargetAvatars?: string[] | null;
+
+  targetAvatarDetails?: ApiAnnouncementTargetAvatarDetail[] | null;
+  TargetAvatarDetails?: ApiAnnouncementTargetAvatarDetail[] | null;
+
+  mintAddresses?: string[] | null;
+  MintAddresses?: string[] | null;
+
+  modelIds?: string[] | null;
+  ModelIDs?: string[] | null;
+
+  productBlueprints?: ApiAnnouncementProductBlueprint[] | null;
+  ProductBlueprints?: ApiAnnouncementProductBlueprint[] | null;
 
   published?: boolean | null;
   Published?: boolean | null;
@@ -118,11 +236,17 @@ type ApiAnnouncement = {
   createdBy?: string | null;
   CreatedBy?: string | null;
 
+  createdByName?: string | null;
+  CreatedByName?: string | null;
+
   updatedAt?: string | null;
   UpdatedAt?: string | null;
 
   updatedBy?: string | null;
   UpdatedBy?: string | null;
+
+  updatedByName?: string | null;
+  UpdatedByName?: string | null;
 };
 
 type ApiAnnouncementListResult = {
@@ -307,6 +431,155 @@ function nullableString(value: unknown): string | null {
   return s === "" ? null : s;
 }
 
+function fromApiAnnouncementAvatarStateFollow(
+  data: ApiAnnouncementAvatarStateFollow,
+): AnnouncementAvatarStateFollow {
+  return {
+    avatarId: String(firstValue(data?.avatarId, data?.AvatarID) ?? "").trim(),
+    followedAt: nullableString(firstValue(data?.followedAt, data?.FollowedAt)),
+  };
+}
+
+function fromApiAnnouncementAvatarStateFollows(
+  values: unknown,
+): AnnouncementAvatarStateFollow[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) =>
+      fromApiAnnouncementAvatarStateFollow(
+        value as ApiAnnouncementAvatarStateFollow,
+      ),
+    )
+    .filter((item) => item.avatarId !== "");
+}
+
+function fromApiAnnouncementAvatarState(
+  data: ApiAnnouncementAvatarState | null | undefined,
+): AnnouncementAvatarState | null {
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
+    followerCount: toSafeNumber(
+      firstValue(data?.followerCount, data?.FollowerCount),
+    ),
+    followingCount: toSafeNumber(
+      firstValue(data?.followingCount, data?.FollowingCount),
+    ),
+    postCount: toSafeNumber(firstValue(data?.postCount, data?.PostCount)),
+    followers: fromApiAnnouncementAvatarStateFollows(
+      firstValue(data?.followers, data?.Followers),
+    ),
+    following: fromApiAnnouncementAvatarStateFollows(
+      firstValue(data?.following, data?.Following),
+    ),
+    lastActiveAt: nullableString(
+      firstValue(data?.lastActiveAt, data?.LastActiveAt),
+    ),
+    updatedAt: nullableString(firstValue(data?.updatedAt, data?.UpdatedAt)),
+  };
+}
+
+function fromApiAnnouncementTargetAvatarDetail(
+  data: ApiAnnouncementTargetAvatarDetail,
+): AnnouncementTargetAvatarDetail {
+  const avatarState = fromApiAnnouncementAvatarState(
+    firstValue(data?.avatarState, data?.AvatarState),
+  );
+
+  return {
+    avatarId: String(firstValue(data?.avatarId, data?.AvatarID) ?? "").trim(),
+    avatarName: String(
+      firstValue(data?.avatarName, data?.AvatarName) ?? "",
+    ).trim(),
+    avatarIcon: String(
+      firstValue(data?.avatarIcon, data?.AvatarIcon) ?? "",
+    ).trim(),
+    avatarState,
+    followerCount: toSafeNumber(
+      firstValue(
+        data?.followerCount,
+        data?.FollowerCount,
+        avatarState?.followerCount,
+      ),
+    ),
+    followingCount: toSafeNumber(
+      firstValue(
+        data?.followingCount,
+        data?.FollowingCount,
+        avatarState?.followingCount,
+      ),
+    ),
+    postCount: toSafeNumber(
+      firstValue(data?.postCount, data?.PostCount, avatarState?.postCount),
+    ),
+  };
+}
+
+function fromApiAnnouncementTargetAvatarDetails(
+  values: unknown,
+): AnnouncementTargetAvatarDetail[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) =>
+      fromApiAnnouncementTargetAvatarDetail(
+        value as ApiAnnouncementTargetAvatarDetail,
+      ),
+    )
+    .filter((avatar) => avatar.avatarId !== "");
+}
+
+function fromApiAnnouncementProductBlueprint(
+  data: ApiAnnouncementProductBlueprint,
+): AnnouncementProductBlueprint {
+  return {
+    productBlueprintId: String(
+      firstValue(data?.productBlueprintId, data?.ProductBlueprintID) ?? "",
+    ).trim(),
+    productName: String(
+      firstValue(data?.productName, data?.ProductName) ?? "",
+    ).trim(),
+  };
+}
+
+function fromApiAnnouncementProductBlueprints(
+  values: unknown,
+): AnnouncementProductBlueprint[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const result: AnnouncementProductBlueprint[] = [];
+
+  for (const value of values) {
+    const item = fromApiAnnouncementProductBlueprint(
+      value as ApiAnnouncementProductBlueprint,
+    );
+
+    if (!item.productBlueprintId) {
+      continue;
+    }
+
+    if (seen.has(item.productBlueprintId)) {
+      continue;
+    }
+
+    seen.add(item.productBlueprintId);
+    result.push(item);
+  }
+
+  return result;
+}
+
 function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
   return {
     id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
@@ -315,8 +588,19 @@ function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
     targetToken: nullableString(
       firstValue(data?.targetToken, data?.TargetToken),
     ),
+    tokenName: nullableString(firstValue(data?.tokenName, data?.TokenName)),
     targetAvatars: uniqueStrings(
       firstValue(data?.targetAvatars, data?.TargetAvatars),
+    ),
+    targetAvatarDetails: fromApiAnnouncementTargetAvatarDetails(
+      firstValue(data?.targetAvatarDetails, data?.TargetAvatarDetails),
+    ),
+    mintAddresses: uniqueStrings(
+      firstValue(data?.mintAddresses, data?.MintAddresses),
+    ),
+    modelIds: uniqueStrings(firstValue(data?.modelIds, data?.ModelIDs)),
+    productBlueprints: fromApiAnnouncementProductBlueprints(
+      firstValue(data?.productBlueprints, data?.ProductBlueprints),
     ),
     published: Boolean(firstValue(data?.published, data?.Published)),
     publishedAt: nullableString(
@@ -327,8 +611,14 @@ function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
     ),
     createdAt: String(firstValue(data?.createdAt, data?.CreatedAt) ?? "").trim(),
     createdBy: String(firstValue(data?.createdBy, data?.CreatedBy) ?? "").trim(),
+    createdByName: String(
+      firstValue(data?.createdByName, data?.CreatedByName) ?? "",
+    ).trim(),
     updatedAt: nullableString(firstValue(data?.updatedAt, data?.UpdatedAt)),
     updatedBy: nullableString(firstValue(data?.updatedBy, data?.UpdatedBy)),
+    updatedByName: nullableString(
+      firstValue(data?.updatedByName, data?.UpdatedByName),
+    ),
   };
 }
 

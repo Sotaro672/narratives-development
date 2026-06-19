@@ -8,8 +8,9 @@ import (
 )
 
 type resolvers struct {
-	ownerResolveQuery *sharedquery.OwnerResolveQuery
-	nameResolver      *resolver.NameResolver
+	ownerResolveQuery            *sharedquery.OwnerResolveQuery
+	nameResolver                 *resolver.NameResolver
+	mintProductBlueprintResolver *resolver.MintProductBlueprintResolver
 }
 
 func buildResolvers(c *clients, r *repos) *resolvers {
@@ -34,8 +35,15 @@ func buildResolvers(c *clients, r *repos) *resolvers {
 		r.tokenBlueprintRepo,
 	)
 
+	mintProductBlueprintResolver := resolver.NewMintProductBlueprintResolver(
+		r.tokenReaderRepo,
+		r.productRepo,
+		r.productBlueprintRepo,
+	)
+
 	return &resolvers{
-		ownerResolveQuery: ownerResolveQuery,
-		nameResolver:      nameResolver,
+		ownerResolveQuery:            ownerResolveQuery,
+		nameResolver:                 nameResolver,
+		mintProductBlueprintResolver: mintProductBlueprintResolver,
 	}
 }

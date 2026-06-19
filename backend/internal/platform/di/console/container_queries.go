@@ -115,19 +115,17 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		res.nameResolver,
 	)
 
-	// salesQuery は mintAddress -> productId -> modelId -> productBlueprintId 解決のため
-	// productRepo / productBlueprintRepo を追加
+	// salesQuery は mintAddress -> productName 解決を
+	// application/resolver.MintProductBlueprintResolver に委譲する
 	salesQuery := companyquery.NewSalesQuery(
 		r.tokenBlueprintRepo,
 		r.brandRepo,
 		r.tokenReaderRepo,
-		r.tokenReaderRepo,
-		r.productRepo,
-		r.productBlueprintRepo,
 		r.walletRepo,
 		res.ownerResolveQuery,
 		r.avatarRepo,
 		r.avatarStateRepo,
+		res.mintProductBlueprintResolver,
 	)
 
 	printQueryService := companyquery.NewPrintQueryService(

@@ -117,28 +117,6 @@ func (q *AnnouncementManagementQuery) ListByCompanyID(
 	}, nil
 }
 
-func (q *AnnouncementManagementQuery) GetByID(
-	ctx context.Context,
-	announcementID string,
-) (AnnouncementManagementAnnouncement, error) {
-	if q == nil {
-		return AnnouncementManagementAnnouncement{}, errors.New("announcement management query is nil")
-	}
-	if q.announcementRepo == nil {
-		return AnnouncementManagementAnnouncement{}, errors.New("announcementRepo is nil")
-	}
-	if announcementID == "" {
-		return AnnouncementManagementAnnouncement{}, announcementdom.ErrInvalidID
-	}
-
-	a, err := q.announcementRepo.GetByID(ctx, announcementID)
-	if err != nil {
-		return AnnouncementManagementAnnouncement{}, err
-	}
-
-	return toAnnouncementManagementAnnouncement(a), nil
-}
-
 func toAnnouncementManagementAnnouncements(
 	items []announcementdom.Announcement,
 ) []AnnouncementManagementAnnouncement {

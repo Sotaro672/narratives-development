@@ -16,15 +16,18 @@ import (
 type AnnouncementHandler struct {
 	uc              *uc.AnnouncementUsecase
 	managementQuery *consolequery.AnnouncementManagementQuery
+	detailQuery     *consolequery.AnnouncementDetailQuery
 }
 
 func NewAnnouncementHandler(
 	announcementUC *uc.AnnouncementUsecase,
 	announcementManagementQuery *consolequery.AnnouncementManagementQuery,
+	announcementDetailQuery *consolequery.AnnouncementDetailQuery,
 ) http.Handler {
 	return &AnnouncementHandler{
 		uc:              announcementUC,
 		managementQuery: announcementManagementQuery,
+		detailQuery:     announcementDetailQuery,
 	}
 }
 
@@ -132,8 +135,8 @@ func (h *AnnouncementHandler) listAnnouncements(w http.ResponseWriter, r *http.R
 }
 
 func (h *AnnouncementHandler) getAnnouncement(w http.ResponseWriter, r *http.Request, announcementID string) {
-	if h.managementQuery == nil {
-		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_management_query_not_configured"})
+	if h.detailQuery == nil {
+		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_detail_query_not_configured"})
 		return
 	}
 
@@ -143,7 +146,7 @@ func (h *AnnouncementHandler) getAnnouncement(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	result, err := h.managementQuery.GetByID(r.Context(), announcementID)
+	result, err := h.detailQuery.GetByID(r.Context(), announcementID)
 	if err != nil {
 		writeAnnouncementErr(w, err)
 		return

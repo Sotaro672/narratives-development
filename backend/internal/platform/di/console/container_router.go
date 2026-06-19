@@ -1,4 +1,4 @@
-// backend\internal\platform\di\console\container_router.go
+// backend/internal/platform/di/console/container_router.go
 package console
 
 import (
@@ -73,10 +73,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		accountsH = consoleHandler.NewAccountHandler(c.AccountUC)
 	}
 
-	if c.AnnouncementUC != nil && c.AnnouncementManagementQuery != nil {
+	if c.AnnouncementUC != nil &&
+		c.AnnouncementManagementQuery != nil &&
+		c.AnnouncementDetailQuery != nil {
 		announcementsH = consoleHandler.NewAnnouncementHandler(
 			c.AnnouncementUC,
 			c.AnnouncementManagementQuery,
+			c.AnnouncementDetailQuery,
 		)
 	}
 

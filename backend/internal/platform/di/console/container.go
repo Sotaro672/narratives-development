@@ -16,6 +16,7 @@ import (
 	shared "narratives/internal/platform/di/shared"
 
 	avatar "narratives/internal/domain/avatar"
+	avatarstate "narratives/internal/domain/avatarState"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
@@ -37,7 +38,8 @@ type Container struct {
 	ProductBlueprintRepo       pbdomain.Repository
 	ProductBlueprintReviewRepo pbReview.Repository
 
-	AvatarRepo avatar.Repository
+	AvatarRepo      avatar.Repository
+	AvatarStateRepo avatarstate.Repository
 
 	MemberService *memdom.Service
 
@@ -87,6 +89,7 @@ type Container struct {
 	ListCreateQuery             *query.ListCreateQuery
 	SalesQuery                  *query.SalesQuery
 	AnnouncementManagementQuery *query.AnnouncementManagementQuery
+	AnnouncementDetailQuery     *query.AnnouncementDetailQuery
 
 	PrintQueryService *query.PrintQueryService
 
@@ -153,6 +156,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		repos.announcementRepo,
 	)
 
+	announcementDetailQuery := query.NewAnnouncementDetailQuery(
+		repos.announcementRepo,
+		repos.memberRepo,
+		repos.avatarRepo,
+		repos.avatarStateRepo,
+		repos.tokenReaderRepo,
+		res.mintProductBlueprintResolver,
+	)
+
 	return &Container{
 		Infra: clients.infra,
 
@@ -165,7 +177,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ProductBlueprintRepo:       repos.productBlueprintRepo,
 		ProductBlueprintReviewRepo: repos.productBlueprintReviewRepo,
 
-		AvatarRepo: repos.avatarRepo,
+		AvatarRepo:      repos.avatarRepo,
+		AvatarStateRepo: repos.avatarStateRepo,
 
 		MemberService: services.memberSvc,
 
@@ -212,9 +225,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		InventoryManagementQuery: q.inventoryManagementQuery,
 		InventoryDetailQuery:     q.inventoryDetailQuery,
 
-		ListCreateQuery:             q.listCreateQuery,
-		SalesQuery:                  q.salesQuery,
+		ListCreateQuery: q.listCreateQuery,
+		SalesQuery:      q.salesQuery,
+
 		AnnouncementManagementQuery: announcementManagementQuery,
+		AnnouncementDetailQuery:     announcementDetailQuery,
 
 		PrintQueryService: q.printQueryService,
 
