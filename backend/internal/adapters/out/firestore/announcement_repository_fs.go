@@ -148,18 +148,18 @@ func (r *AnnouncementRepositoryFS) Update(
 	}
 
 	updates := []firestore.Update{
-		{Path: "title", Value: a.Title},
-		{Path: "content", Value: a.Content},
-		{Path: "targetToken", Value: a.TargetToken},
-		{Path: "targetAvatars", Value: a.TargetAvatars},
-		{Path: "published", Value: a.Published},
-		{Path: "publishedAt", Value: a.PublishedAt},
-		{Path: "attachments", Value: a.Attachments},
-		{Path: "updatedAt", Value: updatedAt},
+		{Path: "Title", Value: a.Title},
+		{Path: "Content", Value: a.Content},
+		{Path: "TargetToken", Value: a.TargetToken},
+		{Path: "TargetAvatars", Value: a.TargetAvatars},
+		{Path: "Published", Value: a.Published},
+		{Path: "PublishedAt", Value: a.PublishedAt},
+		{Path: "Attachments", Value: a.Attachments},
+		{Path: "UpdatedAt", Value: updatedAt},
 	}
 
 	if a.UpdatedBy != nil {
-		updates = append(updates, firestore.Update{Path: "updatedBy", Value: *a.UpdatedBy})
+		updates = append(updates, firestore.Update{Path: "UpdatedBy", Value: *a.UpdatedBy})
 	}
 
 	_, err := ref.Update(ctx, updates)
@@ -193,13 +193,13 @@ func (r *AnnouncementRepositoryFS) MarkPublished(
 	ref := announcementCollection(r.Client).Doc(id)
 
 	updates := []firestore.Update{
-		{Path: "published", Value: true},
-		{Path: "publishedAt", Value: publishedAt},
-		{Path: "updatedAt", Value: publishedAt},
+		{Path: "Published", Value: true},
+		{Path: "PublishedAt", Value: publishedAt},
+		{Path: "UpdatedAt", Value: publishedAt},
 	}
 
 	if updatedBy != nil {
-		updates = append(updates, firestore.Update{Path: "updatedBy", Value: *updatedBy})
+		updates = append(updates, firestore.Update{Path: "UpdatedBy", Value: *updatedBy})
 	}
 
 	_, err := ref.Update(ctx, updates)
@@ -240,7 +240,7 @@ func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error 
 	return nil
 }
 
-// ListByTargetToken returns announcements whose targetToken equals tokenBlueprintID.
+// ListByTargetToken returns announcements whose TargetToken equals tokenBlueprintID.
 func (r *AnnouncementRepositoryFS) ListByTargetToken(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -254,8 +254,8 @@ func (r *AnnouncementRepositoryFS) ListByTargetToken(
 	}
 
 	iter := announcementCollection(r.Client).
-		Where("targetToken", "==", tokenBlueprintID).
-		OrderBy("createdAt", firestore.Desc).
+		Where("TargetToken", "==", tokenBlueprintID).
+		OrderBy("CreatedAt", firestore.Desc).
 		Documents(ctx)
 	defer iter.Stop()
 
@@ -284,7 +284,7 @@ func (r *AnnouncementRepositoryFS) ListByTargetToken(
 	return paginateAnnouncements(items, page), nil
 }
 
-// ListByTargetAvatar returns announcements whose targetAvatars contains avatarID.
+// ListByTargetAvatar returns announcements whose TargetAvatars contains avatarID.
 func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 	ctx context.Context,
 	avatarID string,
@@ -298,8 +298,8 @@ func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 	}
 
 	iter := announcementCollection(r.Client).
-		Where("targetAvatars", "array-contains", avatarID).
-		OrderBy("createdAt", firestore.Desc).
+		Where("TargetAvatars", "array-contains", avatarID).
+		OrderBy("CreatedAt", firestore.Desc).
 		Documents(ctx)
 	defer iter.Stop()
 

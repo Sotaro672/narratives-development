@@ -66,6 +66,14 @@ export default function AnnouncementManagementPage() {
       direction={sortDir}
       onChange={handleChangeSort}
     />,
+    <SortableTableHeader
+      key="tokenName"
+      label="対象トークン"
+      sortKey="tokenName"
+      activeKey={sortKey}
+      direction={sortDir}
+      onChange={handleChangeSort}
+    />,
     <FilterableTableHeader
       key="published"
       label="状態"
@@ -126,6 +134,7 @@ export default function AnnouncementManagementPage() {
             }}
           >
             <td>{row.title}</td>
+            <td>{row.tokenName ?? row.targetToken ?? ""}</td>
             <td>{row.published ? "公開済み" : "下書き"}</td>
             <td>{row.targetAvatarCount}</td>
             <td>{row.createdAt}</td>

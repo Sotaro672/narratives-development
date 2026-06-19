@@ -1,7 +1,9 @@
 // frontend/console/sales/application/announcement_management_service.tsx
 import {
+  listAnnouncementManagementByCompanyId,
   listAnnouncements,
   type Announcement,
+  type AnnouncementManagementApiResult,
 } from "../infrastructure/announcement_repository_http";
 
 export type AnnouncementManagementRow = {
@@ -18,12 +20,17 @@ export type AnnouncementManagementRow = {
   updatedAt: string | null;
   updatedBy: string | null;
 
+  tokenBlueprintId: string;
+  tokenName: string;
+  brandId: string;
+
   targetAvatarCount: number;
   attachmentCount: number;
 };
 
 export type AnnouncementManagementSortKey =
   | "title"
+  | "tokenName"
   | "published"
   | "publishedAt"
   | "createdAt"
@@ -33,7 +40,8 @@ export type AnnouncementManagementSortKey =
 export type AnnouncementManagementSortDir = "asc" | "desc";
 
 export type AnnouncementManagementListParams = {
-  targetToken: string;
+  companyId?: string | null;
+  targetToken?: string | null;
   page?: number;
   perPage?: number;
 };
@@ -46,39 +54,91 @@ export type AnnouncementManagementListResult = {
 };
 
 export async function fetchAnnouncementManagementRows({
+  companyId,
   targetToken,
   page = 1,
   perPage = 50,
 }: AnnouncementManagementListParams): Promise<AnnouncementManagementListResult> {
+  const normalizedCompanyId = String(companyId ?? "").trim();
   const normalizedTargetToken = String(targetToken ?? "").trim();
 
-  if (!normalizedTargetToken) {
+  if (normalizedCompanyId) {
+    const result = await listAnnouncementManagementByCompanyId({
+      companyId: normalizedCompanyId,
+      page,
+      perPage,
+    });
+
+    const rows = enrichAnnouncementManagementRowsFromCompanyResult(result);
+
     return {
-      rows: [],
-      totalCount: 0,
+      rows,
+      totalCount: rows.length,
       page,
       perPage,
     };
   }
 
-  const result = await listAnnouncements({
-    targetToken: normalizedTargetToken,
-    page,
-    perPage,
-  });
+  if (normalizedTargetToken) {
+    const result = await listAnnouncements({
+      targetToken: normalizedTargetToken,
+      page,
+      perPage,
+    });
 
-  return {
-    rows: enrichAnnouncementManagementRows(result.items),
-    totalCount: result.totalCount,
-    page: result.page || page,
-    perPage: result.perPage || perPage,
-  };
+    return {
+      rows: enrichAnnouncementManagementRows(result.items),
+      totalCount: result.totalCount,
+      page: result.page || page,
+      perPage: result.perPage || perPage,
+    };
+  }
+
+  return createEmptyAnnouncementManagementListResult(page, perPage);
+}
+
+export function enrichAnnouncementManagementRowsFromCompanyResult(
+  result: AnnouncementManagementApiResult,
+): AnnouncementManagementRow[] {
+  const sourceRows = Array.isArray(result?.rows) ? result.rows : [];
+
+  return sourceRows.flatMap((sourceRow) => {
+    const tokenBlueprint = sourceRow.tokenBlueprint;
+    const announcements = Array.isArray(sourceRow.announcements)
+      ? sourceRow.announcements
+      : [];
+
+    return announcements.map((announcement) =>
+      toAnnouncementManagementRow(announcement, {
+        tokenBlueprintId: tokenBlueprint?.tokenBlueprintId ?? "",
+        tokenName: tokenBlueprint?.tokenName ?? "",
+        brandId: tokenBlueprint?.brandId ?? "",
+      }),
+    );
+  });
 }
 
 export function enrichAnnouncementManagementRows(
   announcements: Announcement[],
 ): AnnouncementManagementRow[] {
-  return announcements.map((announcement) => ({
+  return announcements.map((announcement) =>
+    toAnnouncementManagementRow(announcement, {
+      tokenBlueprintId: announcement.targetToken ?? "",
+      tokenName: announcement.targetToken ?? "",
+      brandId: "",
+    }),
+  );
+}
+
+function toAnnouncementManagementRow(
+  announcement: Announcement,
+  tokenBlueprint: {
+    tokenBlueprintId: string;
+    tokenName: string;
+    brandId: string;
+  },
+): AnnouncementManagementRow {
+  return {
     id: announcement.id,
     title: announcement.title,
     content: announcement.content,
@@ -92,13 +152,17 @@ export function enrichAnnouncementManagementRows(
     updatedAt: announcement.updatedAt,
     updatedBy: announcement.updatedBy,
 
+    tokenBlueprintId: tokenBlueprint.tokenBlueprintId,
+    tokenName: tokenBlueprint.tokenName,
+    brandId: tokenBlueprint.brandId,
+
     targetAvatarCount: Array.isArray(announcement.targetAvatars)
       ? announcement.targetAvatars.length
       : 0,
     attachmentCount: Array.isArray(announcement.attachments)
       ? announcement.attachments.length
       : 0,
-  }));
+  };
 }
 
 export function sortAnnouncementManagementRows(
@@ -114,6 +178,9 @@ export function sortAnnouncementManagementRows(
     switch (sortKey) {
       case "title":
         result = compareStrings(a.title, b.title);
+        break;
+      case "tokenName":
+        result = compareStrings(a.tokenName, b.tokenName);
         break;
       case "published":
         result = compareBooleans(a.published, b.published);
@@ -146,6 +213,10 @@ export function normalizeAnnouncementManagementSortKey(
 ): AnnouncementManagementSortKey {
   if (value === "title") {
     return "title";
+  }
+
+  if (value === "tokenName") {
+    return "tokenName";
   }
 
   if (value === "published") {

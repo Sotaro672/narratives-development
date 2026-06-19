@@ -28,8 +28,30 @@ export type AnnouncementListResult = {
   perPage: number;
 };
 
+export type AnnouncementManagementTokenBlueprint = {
+  tokenBlueprintId: string;
+  tokenName: string;
+  brandId: string;
+};
+
+export type AnnouncementManagementApiRow = {
+  tokenBlueprint: AnnouncementManagementTokenBlueprint;
+  announcements: Announcement[];
+};
+
+export type AnnouncementManagementApiResult = {
+  companyId: string;
+  rows: AnnouncementManagementApiRow[];
+};
+
 export type ListAnnouncementsParams = {
   targetToken: string;
+  page?: number;
+  perPage?: number;
+};
+
+export type ListAnnouncementManagementByCompanyIdParams = {
+  companyId: string;
   page?: number;
   perPage?: number;
 };
@@ -67,24 +89,81 @@ export type MarkPublishedInput = {
 
 type ApiAnnouncement = {
   id?: string | null;
+  ID?: string | null;
+
   title?: string | null;
+  Title?: string | null;
+
   content?: string | null;
+  Content?: string | null;
+
   targetToken?: string | null;
+  TargetToken?: string | null;
+
   targetAvatars?: string[] | null;
+  TargetAvatars?: string[] | null;
+
   published?: boolean | null;
+  Published?: boolean | null;
+
   publishedAt?: string | null;
+  PublishedAt?: string | null;
+
   attachments?: string[] | null;
+  Attachments?: string[] | null;
+
   createdAt?: string | null;
+  CreatedAt?: string | null;
+
   createdBy?: string | null;
+  CreatedBy?: string | null;
+
   updatedAt?: string | null;
+  UpdatedAt?: string | null;
+
   updatedBy?: string | null;
+  UpdatedBy?: string | null;
 };
 
 type ApiAnnouncementListResult = {
   items?: ApiAnnouncement[] | null;
+  Items?: ApiAnnouncement[] | null;
+
   totalCount?: number | null;
+  TotalCount?: number | null;
+
   page?: number | null;
+  Page?: number | null;
+
   perPage?: number | null;
+  PerPage?: number | null;
+};
+
+type ApiAnnouncementManagementTokenBlueprint = {
+  tokenBlueprintId?: string | null;
+  TokenBlueprintID?: string | null;
+
+  tokenName?: string | null;
+  TokenName?: string | null;
+
+  brandId?: string | null;
+  BrandID?: string | null;
+};
+
+type ApiAnnouncementManagementRow = {
+  tokenBlueprint?: ApiAnnouncementManagementTokenBlueprint | null;
+  TokenBlueprint?: ApiAnnouncementManagementTokenBlueprint | null;
+
+  announcements?: ApiAnnouncement[] | null;
+  Announcements?: ApiAnnouncement[] | null;
+};
+
+type ApiAnnouncementManagementResult = {
+  companyId?: string | null;
+  CompanyID?: string | null;
+
+  rows?: ApiAnnouncementManagementRow[] | null;
+  Rows?: ApiAnnouncementManagementRow[] | null;
 };
 
 // ============================================================
@@ -188,6 +267,10 @@ async function parseJsonResponse<T>(
 // Mapper helpers
 // ============================================================
 
+function firstValue<T>(...values: Array<T | null | undefined>): T | undefined {
+  return values.find((value) => value !== undefined && value !== null);
+}
+
 function toSafeNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -226,33 +309,90 @@ function nullableString(value: unknown): string | null {
 
 function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
   return {
-    id: String(data?.id ?? "").trim(),
-    title: String(data?.title ?? "").trim(),
-    content: String(data?.content ?? "").trim(),
-    targetToken: nullableString(data?.targetToken),
-    targetAvatars: uniqueStrings(data?.targetAvatars),
-    published: Boolean(data?.published),
-    publishedAt: nullableString(data?.publishedAt),
-    attachments: uniqueStrings(data?.attachments),
-    createdAt: String(data?.createdAt ?? "").trim(),
-    createdBy: String(data?.createdBy ?? "").trim(),
-    updatedAt: nullableString(data?.updatedAt),
-    updatedBy: nullableString(data?.updatedBy),
+    id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
+    title: String(firstValue(data?.title, data?.Title) ?? "").trim(),
+    content: String(firstValue(data?.content, data?.Content) ?? "").trim(),
+    targetToken: nullableString(
+      firstValue(data?.targetToken, data?.TargetToken),
+    ),
+    targetAvatars: uniqueStrings(
+      firstValue(data?.targetAvatars, data?.TargetAvatars),
+    ),
+    published: Boolean(firstValue(data?.published, data?.Published)),
+    publishedAt: nullableString(
+      firstValue(data?.publishedAt, data?.PublishedAt),
+    ),
+    attachments: uniqueStrings(
+      firstValue(data?.attachments, data?.Attachments),
+    ),
+    createdAt: String(firstValue(data?.createdAt, data?.CreatedAt) ?? "").trim(),
+    createdBy: String(firstValue(data?.createdBy, data?.CreatedBy) ?? "").trim(),
+    updatedAt: nullableString(firstValue(data?.updatedAt, data?.UpdatedAt)),
+    updatedBy: nullableString(firstValue(data?.updatedBy, data?.UpdatedBy)),
   };
 }
 
 function fromApiAnnouncementListResult(
   data: ApiAnnouncementListResult,
 ): AnnouncementListResult {
-  const rawItems = Array.isArray(data?.items) ? data.items : [];
+  const rawItems = firstValue(data?.items, data?.Items);
+  const items = Array.isArray(rawItems) ? rawItems : [];
 
   return {
-    items: rawItems
+    items: items
       .map(fromApiAnnouncement)
       .filter((announcement) => announcement.id !== ""),
-    totalCount: toSafeNumber(data?.totalCount),
-    page: toSafeNumber(data?.page),
-    perPage: toSafeNumber(data?.perPage),
+    totalCount: toSafeNumber(firstValue(data?.totalCount, data?.TotalCount)),
+    page: toSafeNumber(firstValue(data?.page, data?.Page)),
+    perPage: toSafeNumber(firstValue(data?.perPage, data?.PerPage)),
+  };
+}
+
+function fromApiAnnouncementManagementTokenBlueprint(
+  data: ApiAnnouncementManagementTokenBlueprint | null | undefined,
+): AnnouncementManagementTokenBlueprint {
+  return {
+    tokenBlueprintId: String(
+      firstValue(data?.tokenBlueprintId, data?.TokenBlueprintID) ?? "",
+    ).trim(),
+    tokenName: String(firstValue(data?.tokenName, data?.TokenName) ?? "").trim(),
+    brandId: String(firstValue(data?.brandId, data?.BrandID) ?? "").trim(),
+  };
+}
+
+function fromApiAnnouncementManagementRow(
+  data: ApiAnnouncementManagementRow,
+): AnnouncementManagementApiRow {
+  const rawTokenBlueprint = firstValue(
+    data?.tokenBlueprint,
+    data?.TokenBlueprint,
+  );
+  const rawAnnouncements = firstValue(data?.announcements, data?.Announcements);
+  const announcements = Array.isArray(rawAnnouncements)
+    ? rawAnnouncements
+    : [];
+
+  return {
+    tokenBlueprint: fromApiAnnouncementManagementTokenBlueprint(
+      rawTokenBlueprint,
+    ),
+    announcements: announcements
+      .map(fromApiAnnouncement)
+      .filter((announcement) => announcement.id !== ""),
+  };
+}
+
+function fromApiAnnouncementManagementResult(
+  data: ApiAnnouncementManagementResult,
+): AnnouncementManagementApiResult {
+  const rawRows = firstValue(data?.rows, data?.Rows);
+  const rows = Array.isArray(rawRows) ? rawRows : [];
+
+  return {
+    companyId: String(firstValue(data?.companyId, data?.CompanyID) ?? "").trim(),
+    rows: rows
+      .map(fromApiAnnouncementManagementRow)
+      .filter((row) => row.announcements.length > 0),
   };
 }
 
@@ -271,6 +411,29 @@ function buildAnnouncementListPath(
   }
 
   searchParams.set("targetToken", targetToken);
+
+  if (params.page != null) {
+    searchParams.set("page", String(params.page));
+  }
+
+  if (params.perPage != null) {
+    searchParams.set("perPage", String(params.perPage));
+  }
+
+  return `${ANNOUNCEMENTS_ENDPOINT}?${searchParams.toString()}`;
+}
+
+function buildAnnouncementManagementByCompanyIdPath(
+  params: ListAnnouncementManagementByCompanyIdParams,
+): string {
+  const searchParams = new URLSearchParams();
+
+  const companyId = String(params.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error("companyId is required");
+  }
+
+  searchParams.set("companyId", companyId);
 
   if (params.page != null) {
     searchParams.set("page", String(params.page));
@@ -397,6 +560,20 @@ export async function listAnnouncements(
   );
 
   return fromApiAnnouncementListResult(data);
+}
+
+/**
+ * backend:
+ * GET /announcements?companyId={companyId}&page=1&perPage=50
+ */
+export async function listAnnouncementManagementByCompanyId(
+  params: ListAnnouncementManagementByCompanyIdParams,
+): Promise<AnnouncementManagementApiResult> {
+  const data = await apiGetJson<ApiAnnouncementManagementResult>(
+    buildAnnouncementManagementByCompanyIdPath(params),
+  );
+
+  return fromApiAnnouncementManagementResult(data);
 }
 
 /**

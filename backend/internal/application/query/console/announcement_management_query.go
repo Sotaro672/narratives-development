@@ -96,13 +96,18 @@ func (q *AnnouncementManagementQuery) ListByCompanyID(
 			return AnnouncementManagementQueryResult{}, err
 		}
 
+		announcements := toAnnouncementManagementAnnouncements(announcementResult.Items)
+		if len(announcements) == 0 {
+			continue
+		}
+
 		rows = append(rows, AnnouncementManagementRow{
 			TokenBlueprint: AnnouncementManagementTokenBlueprint{
 				TokenBlueprintID: tb.ID,
 				TokenName:        tb.Name,
 				BrandID:          tb.BrandID,
 			},
-			Announcements: toAnnouncementManagementAnnouncements(announcementResult.Items),
+			Announcements: announcements,
 		})
 	}
 

@@ -1,6 +1,6 @@
 // frontend/console/sales/src/presentation/hook/useAnnouncementManagement.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import {
   createEmptyAnnouncementManagementListResult,
@@ -11,13 +11,14 @@ import {
   type AnnouncementManagementSortDir,
   type AnnouncementManagementSortKey,
 } from "../../application/announcement_management_service";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 50;
 
 export function useAnnouncementManagement() {
   const navigate = useNavigate();
-  const { tokenBlueprintId } = useParams<{ tokenBlueprintId: string }>();
+  const { user, loading, currentMember, loadingMember } = useAuth();
 
   const [sourceRows, setSourceRows] = useState<AnnouncementManagementRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -30,17 +31,24 @@ export function useAnnouncementManagement() {
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const targetToken = useMemo(() => {
-    return String(tokenBlueprintId ?? "").trim();
-  }, [tokenBlueprintId]);
+  const companyId = useMemo(() => {
+    return String(currentMember?.companyId ?? user?.companyId ?? "").trim();
+  }, [currentMember, user]);
+
+  const isAuthLoading = loading || loadingMember;
 
   const load = useCallback(
     async (nextPage = page, nextPerPage = perPage) => {
-      if (!targetToken) {
+      if (isAuthLoading) {
+        return;
+      }
+
+      if (!companyId) {
         const empty = createEmptyAnnouncementManagementListResult(
           nextPage,
           nextPerPage,
         );
+
         setSourceRows(empty.rows);
         setTotalCount(empty.totalCount);
         setPage(empty.page);
@@ -52,7 +60,7 @@ export function useAnnouncementManagement() {
 
       try {
         const result = await fetchAnnouncementManagementRows({
-          targetToken,
+          companyId,
           page: nextPage,
           perPage: nextPerPage,
         });
@@ -66,6 +74,7 @@ export function useAnnouncementManagement() {
           nextPage,
           nextPerPage,
         );
+
         setSourceRows(empty.rows);
         setTotalCount(empty.totalCount);
         setPage(empty.page);
@@ -74,7 +83,7 @@ export function useAnnouncementManagement() {
         setIsLoading(false);
       }
     },
-    [page, perPage, targetToken],
+    [companyId, isAuthLoading, page, perPage],
   );
 
   useEffect(() => {
@@ -118,15 +127,11 @@ export function useAnnouncementManagement() {
   const handleRowClick = useCallback(
     (announcementId: string) => {
       const id = String(announcementId ?? "").trim();
-      if (!id || !targetToken) return;
+      if (!id) return;
 
-      navigate(
-        `/sales/${encodeURIComponent(targetToken)}/announcements/${encodeURIComponent(
-          id,
-        )}`,
-      );
+      navigate(`/sales/announcements/${encodeURIComponent(id)}`);
     },
-    [navigate, targetToken],
+    [navigate],
   );
 
   return {
