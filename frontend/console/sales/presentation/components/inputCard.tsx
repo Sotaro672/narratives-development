@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "../../../shell/src/shared/ui/card";
 
-type SubmitPayload = {
+export type SubmitPayload = {
   title: string;
   text: string;
   images: File[];
@@ -22,8 +22,7 @@ type Props = {
   initialImages?: File[];
   saving?: boolean;
   sending?: boolean;
-  onSave?: (payload: SubmitPayload) => void | Promise<void>;
-  onSend?: (payload: SubmitPayload) => void | Promise<void>;
+  onChange?: (payload: SubmitPayload) => void;
 };
 
 type PreviewImage = {
@@ -82,8 +81,7 @@ export default function InputCard({
   initialImages = [],
   saving = false,
   sending = false,
-  onSave,
-  onSend,
+  onChange,
 }: Props) {
   const [inputTitle, setInputTitle] = useState(initialTitle);
   const [text, setText] = useState(initialText);
@@ -105,6 +103,14 @@ export default function InputCard({
     setMainImageIndex(0);
   }, [initialImages]);
 
+  useEffect(() => {
+    onChange?.({
+      title: inputTitle,
+      text,
+      images,
+    });
+  }, [inputTitle, text, images, onChange]);
+
   const previewImages = useMemo<PreviewImage[]>(() => {
     return images.map((file, index) => ({
       key: fileKey(file, index),
@@ -124,6 +130,7 @@ export default function InputCard({
       if (mainImageIndex !== 0) setMainImageIndex(0);
       return;
     }
+
     if (mainImageIndex > images.length - 1) {
       setMainImageIndex(images.length - 1);
     }
@@ -193,22 +200,6 @@ export default function InputCard({
   const handleClearImages = () => {
     setImages([]);
     setMainImageIndex(0);
-  };
-
-  const handleSave = async () => {
-    await onSave?.({
-      title: inputTitle.trim(),
-      text: text.trim(),
-      images,
-    });
-  };
-
-  const handleSend = async () => {
-    await onSend?.({
-      title: inputTitle.trim(),
-      text: text.trim(),
-      images,
-    });
   };
 
   return (
@@ -309,7 +300,9 @@ export default function InputCard({
                     </button>
 
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                      <div>{previewImages.length} 枚（×で削除 / クリックで追加）</div>
+                      <div>
+                        {previewImages.length} 枚（×で削除 / クリックで追加）
+                      </div>
                     </div>
                   </div>
 
@@ -405,25 +398,6 @@ export default function InputCard({
               disabled={isBusy}
               className="min-h-[140px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50"
             />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isBusy}
-              onClick={handleSave}
-            >
-              {saving ? "保存中..." : "保存"}
-            </Button>
-            <Button
-              type="button"
-              variant="solid"
-              disabled={isBusy}
-              onClick={handleSend}
-            >
-              {sending ? "送信中..." : "送信"}
-            </Button>
           </div>
         </div>
       </CardContent>

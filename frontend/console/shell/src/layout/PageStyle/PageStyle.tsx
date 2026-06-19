@@ -10,6 +10,7 @@ import {
   X,
   Tag,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import "./PageStyle.css";
 
@@ -62,6 +63,9 @@ interface PageStyleProps {
 
   onBack?: () => void | Promise<void>;
   onSave?: () => void | Promise<void>;
+  isSaving?: boolean;
+  onSend?: () => void | Promise<void>;
+  isSending?: boolean;
   onCreate?: () => void | Promise<void>;
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
@@ -87,6 +91,9 @@ export default function PageStyle({
   className,
   onBack,
   onSave,
+  isSaving: controlledIsSaving,
+  onSend,
+  isSending: controlledIsSending,
   onCreate,
   onRefresh,
   isRefreshing: controlledIsRefreshing,
@@ -105,10 +112,13 @@ export default function PageStyle({
   const handleBack = onBack ?? (() => {});
 
   const [isCreating, setIsCreating] = React.useState(false);
-  const [isSaving, setIsSaving] = React.useState(false);
+  const [internalIsSaving, setInternalIsSaving] = React.useState(false);
+  const [internalIsSending, setInternalIsSending] = React.useState(false);
   const [isListing, setIsListing] = React.useState(false);
   const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
 
+  const isSaving = controlledIsSaving ?? internalIsSaving;
+  const isSending = controlledIsSending ?? internalIsSending;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
 
   const handleCreate = React.useCallback(async () => {
@@ -126,12 +136,23 @@ export default function PageStyle({
     if (!onSave || isSaving) return;
 
     try {
-      setIsSaving(true);
+      setInternalIsSaving(true);
       await onSave();
     } finally {
-      setIsSaving(false);
+      setInternalIsSaving(false);
     }
   }, [onSave, isSaving]);
+
+  const handleSend = React.useCallback(async () => {
+    if (!onSend || isSending) return;
+
+    try {
+      setInternalIsSending(true);
+      await onSend();
+    } finally {
+      setInternalIsSending(false);
+    }
+  }, [onSend, isSending]);
 
   const handleList = React.useCallback(async () => {
     if (!onList || isListing) return;
@@ -287,6 +308,23 @@ export default function PageStyle({
                   <Save size={16} style={{ marginRight: 4 }} />
                 )}
                 {isSaving ? "保存中" : "保存"}
+              </button>
+            )}
+
+            {onSend && (
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={() => void handleSend()}
+                disabled={isSending}
+                aria-busy={isSending}
+              >
+                {isSending ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <Send size={16} style={{ marginRight: 4 }} />
+                )}
+                {isSending ? "送信中" : "送信"}
               </button>
             )}
 

@@ -4,7 +4,7 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import FilterableTableHeader from "../../../shell/src/shared/ui/filterable-table-header";
-import { useSalesManagement } from "../hook/useSalesManagement";
+import { useSalesManagement } from "../hook/useSalesCreate";
 
 export default function SalesManagementPage() {
   const {

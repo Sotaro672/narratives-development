@@ -8,7 +8,7 @@ import List, {
 } from "../../../shell/src/layout/List/List";
 import FilterableTableHeader from "../../../shell/src/shared/ui/filterable-table-header";
 import { buildSalesManagementNavigateState } from "../../application/sales_management_service";
-import { useSalesManagement } from "../hook/useSalesManagement";
+import { useSalesManagement } from "../hook/useSalesCreate";
 
 export default function SalesCreatePage() {
   const navigate = useNavigate();
