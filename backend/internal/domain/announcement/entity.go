@@ -22,6 +22,9 @@ var (
 	ErrInvalidUpdatedAt   = errors.New("announcement: invalid updatedAt")
 	ErrInvalidPublishedAt = errors.New("announcement: invalid publishedAt")
 
+	ErrInvalidAvatarID = errors.New("announcement avatar: invalid avatarId")
+	ErrInvalidReadAt   = errors.New("announcement avatar: invalid readAt")
+
 	ErrInvalidAnnouncementID = errors.New("announcement attachment: invalid announcementId")
 	ErrInvalidFileName       = errors.New("announcement attachment: invalid fileName")
 	ErrInvalidFileURL        = errors.New("announcement attachment: invalid fileUrl")
@@ -30,10 +33,15 @@ var (
 	ErrInvalidObjectPath     = errors.New("announcement attachment: invalid objectPath")
 )
 
-// avatars サブコレクション用
+// AnnouncementAvatar は announcements/{announcementId}/avatars/{avatarId} subcollection 用の entity。
+// Announcement 本体ではなく、avatar ごとの既読状態を表す。
 type AnnouncementAvatar struct {
-	AvatarID string `json:"avatarId"`
-	IsRead   bool   `json:"isRead"`
+	AnnouncementID string     `json:"announcementId"`
+	AvatarID       string     `json:"avatarId"`
+	IsRead         bool       `json:"isRead"`
+	ReadAt         *time.Time `json:"readAt,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
 }
 
 // Entity
@@ -96,6 +104,51 @@ func New(
 	return a, nil
 }
 
+// NewAnnouncementAvatar creates an unread avatar state for
+// announcements/{announcementId}/avatars/{avatarId}.
+func NewAnnouncementAvatar(
+	announcementID string,
+	avatarID string,
+	createdAt time.Time,
+) (AnnouncementAvatar, error) {
+	av := AnnouncementAvatar{
+		AnnouncementID: announcementID,
+		AvatarID:       avatarID,
+		IsRead:         false,
+		ReadAt:         nil,
+		CreatedAt:      createdAt,
+		UpdatedAt:      nil,
+	}
+	if err := av.validate(); err != nil {
+		return AnnouncementAvatar{}, err
+	}
+	return av, nil
+}
+
+// NewAnnouncementAvatarWithState creates an avatar state with explicit read state.
+// Firestore repository などで永続化済み document から domain entity に戻す場合に使う。
+func NewAnnouncementAvatarWithState(
+	announcementID string,
+	avatarID string,
+	isRead bool,
+	readAt *time.Time,
+	createdAt time.Time,
+	updatedAt *time.Time,
+) (AnnouncementAvatar, error) {
+	av := AnnouncementAvatar{
+		AnnouncementID: announcementID,
+		AvatarID:       avatarID,
+		IsRead:         isRead,
+		ReadAt:         readAt,
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
+	}
+	if err := av.validate(); err != nil {
+		return AnnouncementAvatar{}, err
+	}
+	return av, nil
+}
+
 // Validation
 func (a Announcement) validate() error {
 	if a.ID == "" {
@@ -120,6 +173,84 @@ func (a Announcement) validate() error {
 		return ErrInvalidPublishedAt
 	}
 	return nil
+}
+
+func (av AnnouncementAvatar) validate() error {
+	if av.AnnouncementID == "" {
+		return ErrInvalidAnnouncementID
+	}
+	if av.AvatarID == "" {
+		return ErrInvalidAvatarID
+	}
+	if av.CreatedAt.IsZero() {
+		return ErrInvalidCreatedAt
+	}
+	if av.UpdatedAt != nil && av.UpdatedAt.Before(av.CreatedAt) {
+		return ErrInvalidUpdatedAt
+	}
+	if av.ReadAt != nil && av.ReadAt.Before(av.CreatedAt) {
+		return ErrInvalidReadAt
+	}
+	if av.IsRead && av.ReadAt == nil {
+		return ErrInvalidReadAt
+	}
+	if !av.IsRead && av.ReadAt != nil {
+		return ErrInvalidReadAt
+	}
+	return nil
+}
+
+// MarkRead marks this announcement avatar state as read.
+// 既読化は冪等に扱う。すでに既読の場合は状態を壊さず、UpdatedAt のみ更新する。
+func (av AnnouncementAvatar) MarkRead(now time.Time) (AnnouncementAvatar, error) {
+	if now.IsZero() {
+		return AnnouncementAvatar{}, ErrInvalidUpdatedAt
+	}
+
+	if !av.IsRead {
+		av.IsRead = true
+		av.ReadAt = &now
+	}
+
+	av.UpdatedAt = &now
+
+	if err := av.validate(); err != nil {
+		return AnnouncementAvatar{}, err
+	}
+	return av, nil
+}
+
+// MarkUnread marks this announcement avatar state as unread.
+// 管理者操作やテスト用途などで未読へ戻す場合に使う。
+func (av AnnouncementAvatar) MarkUnread(now time.Time) (AnnouncementAvatar, error) {
+	if now.IsZero() {
+		return AnnouncementAvatar{}, ErrInvalidUpdatedAt
+	}
+
+	av.IsRead = false
+	av.ReadAt = nil
+	av.UpdatedAt = &now
+
+	if err := av.validate(); err != nil {
+		return AnnouncementAvatar{}, err
+	}
+	return av, nil
+}
+
+// IsTargetAvatar returns whether the announcement targets the given avatar directly.
+// TargetAvatars が空の場合の全体配信扱いは usecase 側の policy に寄せる。
+func (a Announcement) IsTargetAvatar(avatarID string) bool {
+	if avatarID == "" {
+		return false
+	}
+
+	for _, targetAvatarID := range a.TargetAvatars {
+		if targetAvatarID == avatarID {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ========================================

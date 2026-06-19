@@ -27,6 +27,7 @@ type AnnouncementPatch struct {
 // nil fields are not updated.
 type AnnouncementAvatarPatch struct {
 	IsRead *bool
+	ReadAt *time.Time
 
 	UpdatedAt *time.Time
 }
@@ -104,9 +105,25 @@ var (
 
 // Repository is the repository port for Announcement aggregate root.
 type Repository interface {
-	// List query.
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[Announcement], error)
-	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[Announcement], error)
+	// ListByTargetToken returns announcements whose targetToken equals tokenBlueprintID.
+	//
+	// Expected implementation policy:
+	// - tokenBlueprintID is compared with Announcement.TargetToken.
+	// - tokenBlueprintID should be treated as tokenBlueprintId from tokenBlueprint domain.
+	// - Empty tokenBlueprintID should return ErrInvalidID or another validation error.
+	// - Result should be paginated by page.
+	ListByTargetToken(ctx context.Context, tokenBlueprintID string, page Page) (PageResult[Announcement], error)
+
+	// ListByTargetAvatar returns announcements whose targetAvatars contains avatarID.
+	//
+	// Expected implementation policy:
+	// - avatarID is the logged-in/current avatar id.
+	// - avatarID is compared with Announcement.TargetAvatars.
+	// - Empty avatarID should return ErrInvalidAvatarID or another validation error.
+	// - Result should be paginated by page.
+	// - In Firestore, this is usually implemented with:
+	//   Where("targetAvatars", "array-contains", avatarID)
+	ListByTargetAvatar(ctx context.Context, avatarID string, page Page) (PageResult[Announcement], error)
 
 	// Read.
 	GetByID(ctx context.Context, id string) (Announcement, error)
@@ -123,6 +140,19 @@ type Repository interface {
 	//   unless the implementation intentionally treats Update as full replacement.
 	Update(ctx context.Context, id string, a Announcement) (Announcement, error)
 
+	// MarkPublished marks an announcement as published.
+	//
+	// Expected implementation policy:
+	// - id is the target announcement document id.
+	// - It should set published=true.
+	// - It should set publishedAt=publishedAt.
+	// - It should set updatedAt=publishedAt.
+	// - It should set updatedBy=updatedBy when updatedBy is not nil.
+	// - It should return the updated Announcement.
+	// - Empty id should return ErrInvalidID or another validation error.
+	// - Zero publishedAt should return ErrInvalidPublishedAt or another validation error.
+	MarkPublished(ctx context.Context, id string, publishedAt time.Time, updatedBy *string) (Announcement, error)
+
 	// Delete physically deletes an announcement document.
 	// Implementations may also delete child avatar and attachment records
 	// if the storage supports subcollections.
@@ -134,7 +164,8 @@ type Repository interface {
 // Avatar policy:
 // - Avatar record is scoped by announcementId.
 // - avatarID alone should not be used as a global lookup key.
-// - Avatar read state is managed by Update.
+// - Avatar read state is managed by MarkRead / Update.
+// - MarkRead should be idempotent.
 // - Update may create the avatar record if it does not exist, depending on implementation policy.
 type AvatarRepository interface {
 	// Query.
@@ -142,6 +173,18 @@ type AvatarRepository interface {
 
 	// Write.
 	Update(ctx context.Context, announcementID string, avatarID string, patch AnnouncementAvatarPatch) (AnnouncementAvatar, error)
+
+	// MarkRead marks announcements/{announcementId}/avatars/{avatarId} as read.
+	//
+	// Expected implementation policy:
+	// - announcementID is the parent announcement document id.
+	// - avatarID is the avatar subcollection document id.
+	// - It should set isRead=true.
+	// - It should set readAt=readAt.
+	// - It should set updatedAt=readAt.
+	// - It should be idempotent; calling it multiple times should not create an invalid state.
+	// - It may create the avatar record if it does not exist, depending on implementation policy.
+	MarkRead(ctx context.Context, announcementID string, avatarID string, readAt time.Time) (AnnouncementAvatar, error)
 }
 
 // AttachmentRepository is the repository port for announcement attachment file metadata.

@@ -88,6 +88,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	payH := notImplemented("Payment")
 	orderH := notImplemented("Order")
 	meAvatarsH := notImplemented("MeAvatars")
+	announcementH := notImplemented("Announcement")
 
 	previewPublicH := notImplemented("PreviewPublic")
 	previewMeH := notImplemented("PreviewMe")
@@ -187,6 +188,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarStateQuery := mallquery.NewAvatarStateQuery(cont.AvatarRepo, avatarStateRepo)
 
 		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarResolver, cont.AvatarUC, avatarStateQuery)
+	}
+
+	// /mall/me/announcement
+	if cont.MeAvatarResolver != nil && cont.AnnouncementUC != nil {
+		announcementH = mallhandler.NewMeAnnouncementHandler(
+			cont.MeAvatarResolver,
+			cont.AnnouncementUC,
+		)
 	}
 
 	// ------------------------------------------------------------
@@ -297,6 +306,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		OwnerResolve:      notImplemented("OwnerResolve(endpoint_disabled)"),
 		Payment:           payH,
 		Order:             orderH,
+		Announcement:      announcementH,
 
 		SetupStatus: setupStatusH,
 	}

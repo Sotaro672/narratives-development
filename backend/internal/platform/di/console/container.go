@@ -84,8 +84,9 @@ type Container struct {
 	InventoryManagementQuery *query.InventoryManagementQuery
 	InventoryDetailQuery     *query.InventoryDetailQuery
 
-	ListCreateQuery *query.ListCreateQuery
-	SalesQuery      *query.SalesQuery
+	ListCreateQuery             *query.ListCreateQuery
+	SalesQuery                  *query.SalesQuery
+	AnnouncementManagementQuery *query.AnnouncementManagementQuery
 
 	PrintQueryService *query.PrintQueryService
 
@@ -147,6 +148,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		})
 	}
 
+	announcementManagementQuery := query.NewAnnouncementManagementQuery(
+		repos.tokenBlueprintRepo,
+		repos.announcementRepo,
+	)
+
 	return &Container{
 		Infra: clients.infra,
 
@@ -206,8 +212,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		InventoryManagementQuery: q.inventoryManagementQuery,
 		InventoryDetailQuery:     q.inventoryDetailQuery,
 
-		ListCreateQuery: q.listCreateQuery,
-		SalesQuery:      q.salesQuery,
+		ListCreateQuery:             q.listCreateQuery,
+		SalesQuery:                  q.salesQuery,
+		AnnouncementManagementQuery: announcementManagementQuery,
 
 		PrintQueryService: q.printQueryService,
 

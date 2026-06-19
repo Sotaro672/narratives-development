@@ -29,10 +29,9 @@ export type AnnouncementListResult = {
 };
 
 export type ListAnnouncementsParams = {
+  targetToken: string;
   page?: number;
   perPage?: number;
-  targetToken?: string | null;
-  published?: boolean | null;
 };
 
 export type CreateAnnouncementInput = {
@@ -55,6 +54,10 @@ export type UpdateAnnouncementInput = {
   published?: boolean;
   publishedAt?: string | null;
   attachments?: string[];
+  updatedBy?: string | null;
+};
+
+export type MarkPublishedInput = {
   updatedBy?: string | null;
 };
 
@@ -258,9 +261,16 @@ function fromApiAnnouncementListResult(
 // ============================================================
 
 function buildAnnouncementListPath(
-  params: ListAnnouncementsParams = {},
+  params: ListAnnouncementsParams,
 ): string {
   const searchParams = new URLSearchParams();
+
+  const targetToken = String(params.targetToken ?? "").trim();
+  if (!targetToken) {
+    throw new Error("targetToken is required");
+  }
+
+  searchParams.set("targetToken", targetToken);
 
   if (params.page != null) {
     searchParams.set("page", String(params.page));
@@ -270,17 +280,7 @@ function buildAnnouncementListPath(
     searchParams.set("perPage", String(params.perPage));
   }
 
-  const targetToken = String(params.targetToken ?? "").trim();
-  if (targetToken) {
-    searchParams.set("targetToken", targetToken);
-  }
-
-  if (params.published != null) {
-    searchParams.set("published", String(params.published));
-  }
-
-  const query = searchParams.toString();
-  return query ? `${ANNOUNCEMENTS_ENDPOINT}?${query}` : ANNOUNCEMENTS_ENDPOINT;
+  return `${ANNOUNCEMENTS_ENDPOINT}?${searchParams.toString()}`;
 }
 
 function buildAnnouncementDetailPath(id: string): string {
@@ -291,6 +291,10 @@ function buildAnnouncementDetailPath(id: string): string {
   }
 
   return `${ANNOUNCEMENTS_ENDPOINT}/${encodeURIComponent(normalizedId)}`;
+}
+
+function buildAnnouncementPublishPath(id: string): string {
+  return `${buildAnnouncementDetailPath(id)}/publish`;
 }
 
 // ============================================================
@@ -369,15 +373,24 @@ function buildUpdateAnnouncementBody(
   return body;
 }
 
+function buildMarkPublishedBody(
+  input: MarkPublishedInput = {},
+): Record<string, unknown> {
+  return {
+    updatedBy: input.updatedBy ?? null,
+  };
+}
+
 // ============================================================
 // Repository
 // ============================================================
 
 /**
- * backend: GET /announcements
+ * backend:
+ * GET /announcements?targetToken={tokenBlueprintId}&page=1&perPage=50
  */
 export async function listAnnouncements(
-  params: ListAnnouncementsParams = {},
+  params: ListAnnouncementsParams,
 ): Promise<AnnouncementListResult> {
   const data = await apiGetJson<ApiAnnouncementListResult>(
     buildAnnouncementListPath(params),
@@ -421,6 +434,21 @@ export async function updateAnnouncement(
   const data = await apiPutJson<ApiAnnouncement>(
     buildAnnouncementDetailPath(id),
     buildUpdateAnnouncementBody(input),
+  );
+
+  return fromApiAnnouncement(data);
+}
+
+/**
+ * backend: POST /announcements/{id}/publish
+ */
+export async function markAnnouncementPublished(
+  id: string,
+  input: MarkPublishedInput = {},
+): Promise<Announcement> {
+  const data = await apiPostJson<ApiAnnouncement>(
+    buildAnnouncementPublishPath(id),
+    buildMarkPublishedBody(input),
   );
 
   return fromApiAnnouncement(data);

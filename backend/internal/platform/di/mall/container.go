@@ -85,6 +85,7 @@ type Container struct {
 	CartUC            *usecase.CartUsecase
 	PaymentUC         *usecase.PaymentUsecase
 	OrderUC           *usecase.OrderUsecase
+	AnnouncementUC    *usecase.AnnouncementUsecase
 
 	OrderMailer   *mailadp.OrderMailer
 	OrderMailFrom string
@@ -196,6 +197,16 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	inventoryRepo := outfs.NewInventoryRepositoryFS(fsClient)
 
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
+
+	announcementRepo := outfs.NewAnnouncementRepositoryFS(fsClient)
+	announcementAvatarRepo := outfs.NewAnnouncementAvatarRepositoryFS(fsClient)
+	announcementAttachmentRepo := outfs.NewAnnouncementAttachmentRepositoryFS(fsClient)
+
+	c.AnnouncementUC = usecase.NewAnnouncementUsecase(
+		announcementRepo,
+		announcementAvatarRepo,
+		announcementAttachmentRepo,
+	)
 
 	c.TokenBlueprintReviewRepo = outfs.NewTokenBlueprintReviewRepositoryFS(fsClient)
 

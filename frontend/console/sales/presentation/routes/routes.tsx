@@ -1,8 +1,8 @@
 // frontend\console\sales\src\presentation\routes\routes.tsx
 import type { RouteObject } from "react-router-dom";
-import SalesManagement from "../pages/salesManagement";
-import SalesDetail from "../pages/salesDetail";
-import SalesCreate from "../pages/salesCreate";
+import SalesManagement from "../pages/announcementManagement";
+import SalesDetail from "../pages/announcementCreatePage";
+import SalesCreate from "../pages/announcementTokenListPage";
 
 /**
  * Sales Module Routes

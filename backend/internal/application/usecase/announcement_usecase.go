@@ -40,7 +40,7 @@ func (u *AnnouncementUsecase) WithNow(now func() time.Time) *AnnouncementUsecase
 }
 
 // =======================
-// Announcement CRUD
+// Announcement command
 // =======================
 
 type CreateAnnouncementInput struct {
@@ -59,6 +59,10 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 	ctx context.Context,
 	input CreateAnnouncementInput,
 ) (ann.Announcement, error) {
+	if u.annRepo == nil {
+		return ann.Announcement{}, ann.ErrNotFound
+	}
+
 	now := u.now()
 
 	id := input.ID
@@ -92,29 +96,19 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 	return u.annRepo.Create(ctx, entity)
 }
 
-func (u *AnnouncementUsecase) GetAnnouncement(
+func (u *AnnouncementUsecase) ListAnnouncementsByTargetAvatar(
 	ctx context.Context,
-	id string,
-) (ann.Announcement, error) {
-	return u.annRepo.GetByID(ctx, id)
-}
-
-func (u *AnnouncementUsecase) ListAnnouncements(
-	ctx context.Context,
-	filter ann.Filter,
-	sort common.Sort,
+	avatarID string,
 	page common.Page,
 ) (common.PageResult[ann.Announcement], error) {
-	return u.annRepo.List(ctx, filter, sort, page)
-}
+	if u.annRepo == nil {
+		return common.PageResult[ann.Announcement]{}, ann.ErrNotFound
+	}
+	if avatarID == "" {
+		return common.PageResult[ann.Announcement]{}, ann.ErrInvalidAvatarID
+	}
 
-func (u *AnnouncementUsecase) ListAnnouncementsByCursor(
-	ctx context.Context,
-	filter ann.Filter,
-	sort common.Sort,
-	cpage common.CursorPage,
-) (common.CursorPageResult[ann.Announcement], error) {
-	return u.annRepo.ListByCursor(ctx, filter, sort, cpage)
+	return u.annRepo.ListByTargetAvatar(ctx, avatarID, page)
 }
 
 type UpdateAnnouncementInput struct {
@@ -133,6 +127,13 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	id string,
 	input UpdateAnnouncementInput,
 ) (ann.Announcement, error) {
+	if u.annRepo == nil {
+		return ann.Announcement{}, ann.ErrNotFound
+	}
+	if id == "" {
+		return ann.Announcement{}, ann.ErrInvalidID
+	}
+
 	entity, err := u.annRepo.GetByID(ctx, id)
 	if err != nil {
 		return ann.Announcement{}, err
@@ -169,10 +170,34 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	return u.annRepo.Update(ctx, id, entity)
 }
 
+func (u *AnnouncementUsecase) MarkPublished(
+	ctx context.Context,
+	announcementID string,
+	updatedBy *string,
+) (ann.Announcement, error) {
+	if u.annRepo == nil {
+		return ann.Announcement{}, ann.ErrNotFound
+	}
+	if announcementID == "" {
+		return ann.Announcement{}, ann.ErrInvalidAnnouncementID
+	}
+
+	now := u.now()
+
+	return u.annRepo.MarkPublished(ctx, announcementID, now, updatedBy)
+}
+
 func (u *AnnouncementUsecase) DeleteAnnouncement(
 	ctx context.Context,
 	id string,
 ) error {
+	if u.annRepo == nil {
+		return ann.ErrNotFound
+	}
+	if id == "" {
+		return ann.ErrInvalidID
+	}
+
 	return u.annRepo.Delete(ctx, id)
 }
 
@@ -210,7 +235,7 @@ func (u *AnnouncementUsecase) GetAnnouncementAvatar(
 		return ann.AnnouncementAvatar{}, ann.ErrNotFound
 	}
 	if avatarID == "" {
-		return ann.AnnouncementAvatar{}, ann.ErrInvalidID
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidAvatarID
 	}
 
 	avatars, err := u.avatarRepo.ListByAnnouncementID(ctx, announcementID, ann.AnnouncementAvatarFilter{
@@ -237,7 +262,7 @@ func (u *AnnouncementUsecase) UpsertAnnouncementAvatar(
 		return ann.AnnouncementAvatar{}, ann.ErrNotFound
 	}
 	if input.AvatarID == "" {
-		return ann.AnnouncementAvatar{}, ann.ErrInvalidID
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidAvatarID
 	}
 
 	isRead := input.IsRead
@@ -261,7 +286,7 @@ func (u *AnnouncementUsecase) UpdateAnnouncementAvatar(
 		return ann.AnnouncementAvatar{}, ann.ErrNotFound
 	}
 	if avatarID == "" {
-		return ann.AnnouncementAvatar{}, ann.ErrInvalidID
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidAvatarID
 	}
 
 	now := u.now()
@@ -272,6 +297,26 @@ func (u *AnnouncementUsecase) UpdateAnnouncementAvatar(
 	}
 
 	return u.avatarRepo.Update(ctx, announcementID, avatarID, patch)
+}
+
+func (u *AnnouncementUsecase) MarkRead(
+	ctx context.Context,
+	announcementID string,
+	avatarID string,
+) (ann.AnnouncementAvatar, error) {
+	if u.avatarRepo == nil {
+		return ann.AnnouncementAvatar{}, ann.ErrNotFound
+	}
+	if announcementID == "" {
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidAnnouncementID
+	}
+	if avatarID == "" {
+		return ann.AnnouncementAvatar{}, ann.ErrInvalidAvatarID
+	}
+
+	now := u.now()
+
+	return u.avatarRepo.MarkRead(ctx, announcementID, avatarID, now)
 }
 
 // =======================
@@ -401,6 +446,10 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(ctx context.Context, ann
 				return err
 			}
 		}
+	}
+
+	if u.annRepo == nil {
+		return ann.ErrNotFound
 	}
 
 	if err := u.annRepo.Delete(ctx, announcementID); err != nil {

@@ -5,27 +5,33 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
+	consolequery "narratives/internal/application/query/console"
 	uc "narratives/internal/application/usecase"
 	ann "narratives/internal/domain/announcement"
-	common "narratives/internal/domain/common"
 )
 
 type AnnouncementHandler struct {
-	uc *uc.AnnouncementUsecase
+	uc              *uc.AnnouncementUsecase
+	managementQuery *consolequery.AnnouncementManagementQuery
 }
 
-func NewAnnouncementHandler(announcementUC *uc.AnnouncementUsecase) http.Handler {
-	return &AnnouncementHandler{uc: announcementUC}
+func NewAnnouncementHandler(
+	announcementUC *uc.AnnouncementUsecase,
+	announcementManagementQuery *consolequery.AnnouncementManagementQuery,
+) http.Handler {
+	return &AnnouncementHandler{
+		uc:              announcementUC,
+		managementQuery: announcementManagementQuery,
+	}
 }
 
 func (h *AnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if h.uc == nil {
+	if h == nil {
 		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "not_configured"})
 		return
 	}
@@ -57,6 +63,10 @@ func (h *AnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	case len(parts) == 2 && r.Method == http.MethodDelete:
 		h.deleteAnnouncementCascade(w, r, parts[1])
+		return
+
+	case len(parts) == 3 && parts[2] == "publish" && r.Method == http.MethodPost:
+		h.markPublished(w, r, parts[1])
 		return
 
 	default:
@@ -92,40 +102,27 @@ type updateAnnouncementRequest struct {
 	UpdatedBy     *string    `json:"updatedBy"`
 }
 
+type markPublishedRequest struct {
+	UpdatedBy *string `json:"updatedBy"`
+}
+
 // =======================
 // Handlers
 // =======================
 
 func (h *AnnouncementHandler) listAnnouncements(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-
-	filter := ann.Filter{}
-
-	if targetToken := strings.TrimSpace(q.Get("targetToken")); targetToken != "" {
-		filter.TargetToken = &targetToken
+	if h.managementQuery == nil {
+		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_management_query_not_configured"})
+		return
 	}
 
-	if publishedRaw := strings.TrimSpace(q.Get("published")); publishedRaw != "" {
-		published, err := strconv.ParseBool(publishedRaw)
-		if err != nil {
-			writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid published"})
-			return
-		}
-		filter.Published = &published
+	companyID := strings.TrimSpace(r.URL.Query().Get("companyId"))
+	if companyID == "" {
+		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "companyId is required"})
+		return
 	}
 
-	pageNumber := parseAnnouncementPositiveInt(q.Get("page"), 1)
-	perPage := parseAnnouncementPositiveInt(q.Get("perPage"), 50)
-
-	result, err := h.uc.ListAnnouncements(
-		r.Context(),
-		filter,
-		common.Sort{},
-		common.Page{
-			Number:  pageNumber,
-			PerPage: perPage,
-		},
-	)
+	result, err := h.managementQuery.ListByCompanyID(r.Context(), companyID)
 	if err != nil {
 		writeAnnouncementErr(w, err)
 		return
@@ -135,13 +132,18 @@ func (h *AnnouncementHandler) listAnnouncements(w http.ResponseWriter, r *http.R
 }
 
 func (h *AnnouncementHandler) getAnnouncement(w http.ResponseWriter, r *http.Request, announcementID string) {
+	if h.managementQuery == nil {
+		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_management_query_not_configured"})
+		return
+	}
+
 	announcementID = strings.TrimSpace(announcementID)
 	if announcementID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 
-	result, err := h.uc.GetAnnouncement(r.Context(), announcementID)
+	result, err := h.managementQuery.GetByID(r.Context(), announcementID)
 	if err != nil {
 		writeAnnouncementErr(w, err)
 		return
@@ -151,6 +153,11 @@ func (h *AnnouncementHandler) getAnnouncement(w http.ResponseWriter, r *http.Req
 }
 
 func (h *AnnouncementHandler) createAnnouncement(w http.ResponseWriter, r *http.Request) {
+	if h.uc == nil {
+		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_usecase_not_configured"})
+		return
+	}
+
 	var req createAnnouncementRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -177,6 +184,11 @@ func (h *AnnouncementHandler) createAnnouncement(w http.ResponseWriter, r *http.
 }
 
 func (h *AnnouncementHandler) updateAnnouncement(w http.ResponseWriter, r *http.Request, announcementID string) {
+	if h.uc == nil {
+		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_usecase_not_configured"})
+		return
+	}
+
 	announcementID = strings.TrimSpace(announcementID)
 	if announcementID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
@@ -207,7 +219,41 @@ func (h *AnnouncementHandler) updateAnnouncement(w http.ResponseWriter, r *http.
 	writeAnnouncementJSON(w, http.StatusOK, result)
 }
 
+func (h *AnnouncementHandler) markPublished(w http.ResponseWriter, r *http.Request, announcementID string) {
+	if h.uc == nil {
+		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_usecase_not_configured"})
+		return
+	}
+
+	announcementID = strings.TrimSpace(announcementID)
+	if announcementID == "" {
+		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var req markPublishedRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+	}
+
+	result, err := h.uc.MarkPublished(r.Context(), announcementID, req.UpdatedBy)
+	if err != nil {
+		writeAnnouncementErr(w, err)
+		return
+	}
+
+	writeAnnouncementJSON(w, http.StatusOK, result)
+}
+
 func (h *AnnouncementHandler) deleteAnnouncementCascade(w http.ResponseWriter, r *http.Request, announcementID string) {
+	if h.uc == nil {
+		writeAnnouncementJSON(w, http.StatusInternalServerError, map[string]string{"error": "announcement_usecase_not_configured"})
+		return
+	}
+
 	announcementID = strings.TrimSpace(announcementID)
 	if announcementID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
@@ -226,20 +272,6 @@ func (h *AnnouncementHandler) deleteAnnouncementCascade(w http.ResponseWriter, r
 // Helpers
 // =======================
 
-func parseAnnouncementPositiveInt(raw string, fallback int) int {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return fallback
-	}
-
-	n, err := strconv.Atoi(raw)
-	if err != nil || n <= 0 {
-		return fallback
-	}
-
-	return n
-}
-
 func writeAnnouncementErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
@@ -254,6 +286,8 @@ func writeAnnouncementErr(w http.ResponseWriter, err error) {
 		errors.Is(err, ann.ErrInvalidCreatedAt),
 		errors.Is(err, ann.ErrInvalidUpdatedAt),
 		errors.Is(err, ann.ErrInvalidPublishedAt),
+		errors.Is(err, ann.ErrInvalidAvatarID),
+		errors.Is(err, ann.ErrInvalidReadAt),
 		errors.Is(err, ann.ErrInvalidAnnouncementID),
 		errors.Is(err, ann.ErrInvalidFileName),
 		errors.Is(err, ann.ErrInvalidFileURL),
