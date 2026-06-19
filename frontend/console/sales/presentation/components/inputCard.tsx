@@ -15,8 +15,11 @@ export type SubmitPayload = {
   images: File[];
 };
 
+export type InputCardMode = "view" | "edit";
+
 type Props = {
   title?: string;
+  mode?: InputCardMode;
   initialTitle?: string;
   initialText?: string;
   initialImages?: File[];
@@ -74,8 +77,14 @@ function getImageIdentity(file: File): string {
   return `${file.name}-${file.size}-${file.lastModified}`;
 }
 
+function formatViewText(value: string): string {
+  const text = String(value ?? "").trim();
+  return text || "-";
+}
+
 export default function InputCard({
   title = "入力",
+  mode = "edit",
   initialTitle = "",
   initialText = "",
   initialImages = [],
@@ -89,6 +98,11 @@ export default function InputCard({
   const [mainImageIndex, setMainImageIndex] = useState(0);
 
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isEditMode = mode === "edit";
+  const isViewMode = mode === "view";
+  const isBusy = saving || sending;
+  const isDisabled = isBusy || isViewMode;
 
   useEffect(() => {
     setInputTitle(initialTitle);
@@ -136,7 +150,6 @@ export default function InputCard({
     }
   }, [images, mainImageIndex]);
 
-  const isBusy = saving || sending;
   const hasImages = previewImages.length > 0;
   const mainImage = previewImages[mainImageIndex] ?? null;
   const thumbIndices = previewImages
@@ -144,12 +157,12 @@ export default function InputCard({
     .filter((index) => index !== mainImageIndex);
 
   const openPicker = () => {
-    if (isBusy) return;
+    if (!isEditMode || isBusy) return;
     imageInputRef.current?.click();
   };
 
   const addImages = (nextFiles: File[]) => {
-    if (nextFiles.length === 0) return;
+    if (!isEditMode || nextFiles.length === 0) return;
 
     setImages((prev) => {
       const seen = new Set(prev.map((file) => getImageIdentity(file)));
@@ -177,7 +190,7 @@ export default function InputCard({
 
   const handleDropImages = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (isBusy) return;
+    if (!isEditMode || isBusy) return;
 
     const nextFiles = Array.from(event.dataTransfer.files ?? []);
     addImages(nextFiles);
@@ -188,6 +201,8 @@ export default function InputCard({
   };
 
   const handleRemoveImageAt = (targetIndex: number) => {
+    if (!isEditMode || isBusy) return;
+
     setImages((prev) => prev.filter((_, index) => index !== targetIndex));
 
     setMainImageIndex((prev) => {
@@ -198,8 +213,15 @@ export default function InputCard({
   };
 
   const handleClearImages = () => {
+    if (!isEditMode || isBusy) return;
+
     setImages([]);
     setMainImageIndex(0);
+  };
+
+  const handleSelectMainImage = (index: number) => {
+    if (!isEditMode) return;
+    setMainImageIndex(index);
   };
 
   return (
@@ -216,12 +238,12 @@ export default function InputCard({
                 画像アップロード
               </label>
 
-              {hasImages && (
+              {isEditMode && hasImages && (
                 <Button
                   type="button"
                   variant="ghost"
                   className="h-8"
-                  disabled={isBusy}
+                  disabled={isDisabled}
                   onClick={handleClearImages}
                 >
                   クリア
@@ -229,17 +251,19 @@ export default function InputCard({
               )}
             </div>
 
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: "none" }}
-              onChange={handleSelectImages}
-            />
+            {isEditMode && (
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: "none" }}
+                onChange={handleSelectImages}
+              />
+            )}
 
             <div className="rounded-xl border border-slate-300 bg-slate-50 p-4">
-              {!hasImages && (
+              {!hasImages && isEditMode && (
                 <div
                   className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center transition hover:bg-slate-50"
                   onClick={openPicker}
@@ -261,20 +285,34 @@ export default function InputCard({
                 </div>
               )}
 
+              {!hasImages && isViewMode && (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+                  <div className="mb-3 text-slate-400">
+                    <ImageIcon />
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    画像はありません
+                  </div>
+                </div>
+              )}
+
               {hasImages && (
                 <div className="space-y-3">
                   <div
                     className="relative"
-                    onDrop={handleDropImages}
-                    onDragOver={handleDragOverImages}
-                    title="クリックで画像追加"
+                    onDrop={isEditMode ? handleDropImages : undefined}
+                    onDragOver={isEditMode ? handleDragOverImages : undefined}
+                    title={isEditMode ? "クリックで画像追加" : undefined}
                   >
                     <div
-                      className="flex cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white"
+                      className={[
+                        "flex items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white",
+                        isEditMode ? "cursor-pointer" : "",
+                      ].join(" ")}
                       style={{ minHeight: 260 }}
                       onClick={openPicker}
-                      role="button"
-                      tabIndex={0}
+                      role={isEditMode ? "button" : undefined}
+                      tabIndex={isEditMode ? 0 : undefined}
                     >
                       {mainImage && (
                         <img
@@ -285,23 +323,27 @@ export default function InputCard({
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-lg text-white disabled:opacity-50"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleRemoveImageAt(mainImageIndex);
-                      }}
-                      aria-label="remove main image"
-                      title="削除"
-                      disabled={isBusy}
-                    >
-                      ×
-                    </button>
+                    {isEditMode && (
+                      <button
+                        type="button"
+                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-lg text-white disabled:opacity-50"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleRemoveImageAt(mainImageIndex);
+                        }}
+                        aria-label="remove main image"
+                        title="削除"
+                        disabled={isDisabled}
+                      >
+                        ×
+                      </button>
+                    )}
 
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                       <div>
-                        {previewImages.length} 枚（×で削除 / クリックで追加）
+                        {isEditMode
+                          ? `${previewImages.length} 枚（×で削除 / クリックで追加）`
+                          : `${previewImages.length} 枚`}
                       </div>
                     </div>
                   </div>
@@ -314,11 +356,14 @@ export default function InputCard({
                       return (
                         <div
                           key={item.key}
-                          className="relative cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white"
-                          onClick={() => setMainImageIndex(index)}
-                          role="button"
-                          tabIndex={0}
-                          title="クリックでメインに設定"
+                          className={[
+                            "relative overflow-hidden rounded-xl border border-slate-200 bg-white",
+                            isEditMode ? "cursor-pointer" : "",
+                          ].join(" ")}
+                          onClick={() => handleSelectMainImage(index)}
+                          role={isEditMode ? "button" : undefined}
+                          tabIndex={isEditMode ? 0 : undefined}
+                          title={isEditMode ? "クリックでメインに設定" : undefined}
                         >
                           <div className="aspect-square bg-slate-100">
                             <img
@@ -328,37 +373,41 @@ export default function InputCard({
                             />
                           </div>
 
-                          <button
-                            type="button"
-                            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-sm text-white disabled:opacity-50"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleRemoveImageAt(index);
-                            }}
-                            aria-label="remove image"
-                            title="削除"
-                            disabled={isBusy}
-                          >
-                            ×
-                          </button>
+                          {isEditMode && (
+                            <button
+                              type="button"
+                              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-sm text-white disabled:opacity-50"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleRemoveImageAt(index);
+                              }}
+                              aria-label="remove image"
+                              title="削除"
+                              disabled={isDisabled}
+                            >
+                              ×
+                            </button>
+                          )}
                         </div>
                       );
                     })}
 
-                    <div
-                      className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50"
-                      onClick={openPicker}
-                      onDrop={handleDropImages}
-                      onDragOver={handleDragOverImages}
-                      role="button"
-                      tabIndex={0}
-                      title="クリックで画像を追加"
-                    >
-                      <div className="mb-1">
-                        <PlusIcon />
+                    {isEditMode && (
+                      <div
+                        className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50"
+                        onClick={openPicker}
+                        onDrop={handleDropImages}
+                        onDragOver={handleDragOverImages}
+                        role="button"
+                        tabIndex={0}
+                        title="クリックで画像を追加"
+                      >
+                        <div className="mb-1">
+                          <PlusIcon />
+                        </div>
+                        <div className="text-xs font-medium">画像を追加</div>
                       </div>
-                      <div className="text-xs font-medium">画像を追加</div>
-                    </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -372,15 +421,22 @@ export default function InputCard({
             >
               タイトル
             </label>
-            <input
-              id="sales-input-title"
-              type="text"
-              value={inputTitle}
-              onChange={(event) => setInputTitle(event.target.value)}
-              placeholder="タイトルを入力してください"
-              disabled={isBusy}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50"
-            />
+
+            {isEditMode ? (
+              <input
+                id="sales-input-title"
+                type="text"
+                value={inputTitle}
+                onChange={(event) => setInputTitle(event.target.value)}
+                placeholder="タイトルを入力してください"
+                disabled={isDisabled}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50"
+              />
+            ) : (
+              <div className="min-h-10 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900">
+                {formatViewText(inputTitle)}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -390,14 +446,21 @@ export default function InputCard({
             >
               文章
             </label>
-            <textarea
-              id="sales-input-text"
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder="文章を入力してください"
-              disabled={isBusy}
-              className="min-h-[140px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50"
-            />
+
+            {isEditMode ? (
+              <textarea
+                id="sales-input-text"
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder="文章を入力してください"
+                disabled={isDisabled}
+                className="min-h-[140px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50"
+              />
+            ) : (
+              <div className="min-h-[140px] w-full whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-900">
+                {formatViewText(text)}
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

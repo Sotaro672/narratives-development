@@ -31,7 +31,11 @@ export type SalesOwnerItem = {
   postCount?: number;
 };
 
+export type SalesOwnersCardMode = "view" | "edit";
+
 type Props = {
+  title?: string;
+  mode?: SalesOwnersCardMode;
   owners?: SalesOwnerItem[];
   selectedAvatarIds?: string[];
   onSelectionChange?: (avatarIds: string[]) => void;
@@ -122,6 +126,8 @@ function getAvatarId(owner: SalesOwnerItem): string {
 }
 
 export default function SalesOwnersCard({
+  title = "所有者一覧",
+  mode = "edit",
   owners = [],
   selectedAvatarIds = [],
   onSelectionChange,
@@ -133,28 +139,53 @@ export default function SalesOwnersCard({
   );
   const [currentPage, setCurrentPage] = useState(1);
 
-  const selectedAvatarIdSet = useMemo(() => {
-    return new Set(uniqueStrings(selectedAvatarIds));
+  const isEditMode = mode === "edit";
+  const isViewMode = mode === "view";
+
+  const normalizedSelectedAvatarIds = useMemo(() => {
+    return uniqueStrings(selectedAvatarIds);
   }, [selectedAvatarIds]);
 
-  const productFilterOptions = useMemo(() => {
-    const names = owners.map((owner) => String(owner.productName ?? "").trim());
-    return uniqueStrings(names).map((name) => ({
-      value: name,
-      label: name,
-    }));
-  }, [owners]);
+  const selectedAvatarIdSet = useMemo(() => {
+    return new Set(normalizedSelectedAvatarIds);
+  }, [normalizedSelectedAvatarIds]);
 
-  const filteredOwners = useMemo(() => {
-    if (selectedProductNames.length === 0) {
+  const visibleOwners = useMemo(() => {
+    if (!isViewMode) {
+      return owners;
+    }
+
+    if (normalizedSelectedAvatarIds.length === 0) {
       return owners;
     }
 
     return owners.filter((owner) => {
+      const avatarId = getAvatarId(owner);
+      return avatarId !== "" && selectedAvatarIdSet.has(avatarId);
+    });
+  }, [isViewMode, normalizedSelectedAvatarIds.length, owners, selectedAvatarIdSet]);
+
+  const productFilterOptions = useMemo(() => {
+    const names = visibleOwners.map((owner) =>
+      String(owner.productName ?? "").trim(),
+    );
+
+    return uniqueStrings(names).map((name) => ({
+      value: name,
+      label: name,
+    }));
+  }, [visibleOwners]);
+
+  const filteredOwners = useMemo(() => {
+    if (selectedProductNames.length === 0) {
+      return visibleOwners;
+    }
+
+    return visibleOwners.filter((owner) => {
       const productName = String(owner.productName ?? "").trim();
       return selectedProductNames.includes(productName);
     });
-  }, [owners, selectedProductNames]);
+  }, [selectedProductNames, visibleOwners]);
 
   const sortedOwners = useMemo(() => {
     return sortOwners(filteredOwners, sortKey, sortDir);
@@ -180,16 +211,25 @@ export default function SalesOwnersCard({
   }, [owners]);
 
   const selectedCount = useMemo(() => {
+    if (isViewMode) {
+      return visibleOwners.length;
+    }
+
     return selectedAvatarIds.filter((avatarId) =>
       validAvatarIds.includes(String(avatarId ?? "").trim()),
     ).length;
-  }, [selectedAvatarIds, validAvatarIds]);
+  }, [isViewMode, selectedAvatarIds, validAvatarIds, visibleOwners.length]);
 
   const isAllSelected =
+    isEditMode &&
     pagedAvatarIds.length > 0 &&
     pagedAvatarIds.every((avatarId) => selectedAvatarIdSet.has(avatarId));
 
   useEffect(() => {
+    if (!isEditMode) {
+      return;
+    }
+
     const next = selectedAvatarIds.filter((avatarId) =>
       validAvatarIds.includes(String(avatarId ?? "").trim()),
     );
@@ -197,7 +237,7 @@ export default function SalesOwnersCard({
     if (next.length !== selectedAvatarIds.length) {
       onSelectionChange?.(uniqueStrings(next));
     }
-  }, [onSelectionChange, selectedAvatarIds, validAvatarIds]);
+  }, [isEditMode, onSelectionChange, selectedAvatarIds, validAvatarIds]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -225,6 +265,7 @@ export default function SalesOwnersCard({
   };
 
   const handleToggleAll = (checked: boolean | "indeterminate") => {
+    if (!isEditMode) return;
     if (pagedAvatarIds.length === 0) return;
 
     const nextChecked = checked === true;
@@ -247,6 +288,8 @@ export default function SalesOwnersCard({
     avatarId: string,
     checked: boolean | "indeterminate",
   ) => {
+    if (!isEditMode) return;
+
     const normalizedAvatarId = String(avatarId ?? "").trim();
     if (!normalizedAvatarId) return;
 
@@ -270,16 +313,16 @@ export default function SalesOwnersCard({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle>所有者一覧</CardTitle>
+          <CardTitle>{title}</CardTitle>
 
           <div className="text-sm text-slate-500">
-            宛先選択 {selectedCount} 件
+            {isEditMode ? `宛先選択 ${selectedCount} 件` : `宛先 ${selectedCount} 件`}
           </div>
         </div>
       </CardHeader>
 
       <CardContent>
-        {owners.length === 0 ? (
+        {visibleOwners.length === 0 ? (
           <p className="text-sm text-slate-500">
             表示可能なオーナーがありません。
           </p>
@@ -288,22 +331,26 @@ export default function SalesOwnersCard({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">
-                    <span
-                      className={
-                        pagedAvatarIds.length === 0
-                          ? "opacity-40 pointer-events-none"
-                          : undefined
-                      }
-                    >
-                      <Checkbox
-                        id="sales-owners-select-all"
-                        checked={isAllSelected}
-                        onCheckedChange={handleToggleAll}
-                      />
-                    </span>
-                  </TableHead>
+                  {isEditMode && (
+                    <TableHead className="w-12">
+                      <span
+                        className={
+                          pagedAvatarIds.length === 0
+                            ? "opacity-40 pointer-events-none"
+                            : undefined
+                        }
+                      >
+                        <Checkbox
+                          id="sales-owners-select-all"
+                          checked={isAllSelected}
+                          onCheckedChange={handleToggleAll}
+                        />
+                      </span>
+                    </TableHead>
+                  )}
+
                   <TableHead>アバター</TableHead>
+
                   <TableHead>
                     <FilterableTableHeader
                       label="商品名"
@@ -313,6 +360,7 @@ export default function SalesOwnersCard({
                       dialogTitle="商品名で絞り込み"
                     />
                   </TableHead>
+
                   <TableHead>
                     <SortableTableHeader
                       label="フォロワー数"
@@ -322,6 +370,7 @@ export default function SalesOwnersCard({
                       onChange={handleChangeSort}
                     />
                   </TableHead>
+
                   <TableHead>
                     <SortableTableHeader
                       label="投稿数"
@@ -350,25 +399,29 @@ export default function SalesOwnersCard({
                   return (
                     <TableRow
                       key={key}
-                      data-state={checked ? "selected" : undefined}
+                      data-state={
+                        isEditMode && checked ? "selected" : undefined
+                      }
                     >
-                      <TableCell>
-                        <span
-                          className={
-                            !avatarId
-                              ? "opacity-40 pointer-events-none"
-                              : undefined
-                          }
-                        >
-                          <Checkbox
-                            id={`sales-owner-${key}`}
-                            checked={checked}
-                            onCheckedChange={(nextChecked) =>
-                              handleToggleRow(avatarId, nextChecked)
+                      {isEditMode && (
+                        <TableCell>
+                          <span
+                            className={
+                              !avatarId
+                                ? "opacity-40 pointer-events-none"
+                                : undefined
                             }
-                          />
-                        </span>
-                      </TableCell>
+                          >
+                            <Checkbox
+                              id={`sales-owner-${key}`}
+                              checked={checked}
+                              onCheckedChange={(nextChecked) =>
+                                handleToggleRow(avatarId, nextChecked)
+                              }
+                            />
+                          </span>
+                        </TableCell>
+                      )}
 
                       <TableCell>
                         <div className="flex items-center gap-3">
