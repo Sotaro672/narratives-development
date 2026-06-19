@@ -11,7 +11,7 @@ import {
   MessagesSquare,
   Building2,
   Wallet,
-  ChevronRight, // ← これだけ使う（回転で下向き表示）
+  ChevronRight,
 } from "lucide-react";
 
 import "./Sidebar.css";
@@ -30,7 +30,6 @@ type MenuItem = {
 
 type SubItem = { label: string; path: string };
 
-// 開く可能性がある親キー
 type OpenKey = "products" | "tokens" | "reviews" | "org" | "finance" | null;
 
 export default function Sidebar({ isOpen }: SidebarProps) {
@@ -48,10 +47,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
       { label: "出品", path: "/list", icon: Store },
       { label: "注文", path: "/order", icon: ShoppingCart },
-
-      // ✅ 置き換え: 広告 → レビュー（子要素に商品/トークン）
       { label: "レビュー", path: "/review", icon: MessagesSquare, hasSubmenu: true },
-
       { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
       { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
@@ -71,14 +67,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     () => [
       { label: "設計", path: "/tokenBlueprint" },
       { label: "ミント", path: "/mintRequest" },
-      { label: "営業", path: "/sales" },
-      // ✅ 削除: { label: "運用", path: "/operation" },
+      { label: "告知", path: "/sales" },
     ],
     [],
   );
 
-  // ✅ 追加: レビュー配下
-  // NOTE: ルーティングに合わせて path は調整してください。
   const reviewSubItems: SubItem[] = useMemo(
     () => [
       { label: "商品", path: "/productBlueprintReview" },
@@ -104,21 +97,17 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     [],
   );
 
-  // ✅ 排他開閉用のキーを1つだけ保持
   const [openKey, setOpenKey] = useState<OpenKey>(null);
 
-  // ✅ 初期表示でルート("/")なら問い合わせへ誘導（デフォルト選択）
   useEffect(() => {
     if (location.pathname === "/" || location.pathname === "") {
       navigate("/inquiry", { replace: true });
     }
   }, [location.pathname, navigate]);
 
-  // ルートに応じて自動的に該当グループを開く（他は閉じる）
   useEffect(() => {
     const p = location.pathname;
 
-    // ✅ レビューは /productBlueprint, /tokenBlueprint の prefix と衝突するので先に判定する
     if (
       p.startsWith("/review") ||
       p.startsWith("/productBlueprintReview") ||
@@ -128,7 +117,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       return;
     }
 
-    // 商品（※ Review を除外しておくと安全）
     if (
       (p.startsWith("/product") ||
         p.startsWith("/productBlueprint") ||
@@ -159,16 +147,13 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     ) {
       setOpenKey("finance");
     } else {
-      // それ以外（問い合わせ/出品/注文など）はすべて閉じる
       setOpenKey(null);
     }
   }, [location.pathname]);
 
-  // 親クリック時：同じキーなら閉じる、別キーならそれを開いて他は閉じる
   const toggleExclusive = (key: Exclude<OpenKey, null>) =>
     setOpenKey((curr) => (curr === key ? null : key));
 
-  // 汎用：サブメニュー無しの行をクリックしたらすべて閉じる
   const navigateAndCloseAll = (path: string) => {
     setOpenKey(null);
     navigate(path);
@@ -183,14 +168,12 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           const isActiveTop =
             location.pathname === path || location.pathname.startsWith(path + "/");
 
-          // 各グループのオープン判定
           const isProductsOpen = openKey === "products";
           const isTokensOpen = openKey === "tokens";
           const isReviewsOpen = openKey === "reviews";
           const isOrgOpen = openKey === "org";
           const isFinanceOpen = openKey === "finance";
 
-          // 商品
           if (label === "商品") {
             const isOpen = isProductsOpen;
             return (
@@ -233,7 +216,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
-          // トークン
           if (label === "トークン") {
             const isOpen = isTokensOpen;
             return (
@@ -276,7 +258,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
-          // レビュー
           if (label === "レビュー") {
             const isOpen = isReviewsOpen;
             return (
@@ -319,7 +300,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
-          // 組織
           if (label === "組織") {
             const isOpen = isOrgOpen;
             return (
@@ -362,7 +342,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
-          // 財務
           if (label === "財務") {
             const isOpen = isFinanceOpen;
             return (
@@ -405,7 +384,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
-          // サブメニューがない一般行
           return (
             <button
               key={path}

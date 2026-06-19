@@ -55,7 +55,7 @@ export default function AnnouncementTokenListPage() {
   };
 
   const handleBack = () => {
-    navigate("/sales");
+    navigate("/sales", { replace: true });
   };
 
   const handleRowClick = (tokenBlueprintId: string) => {
@@ -64,7 +64,7 @@ export default function AnnouncementTokenListPage() {
 
     const row = rows.find((item) => item.tokenBlueprintId === id);
 
-    navigate(`/sales/${encodeURIComponent(id)}`, {
+    navigate(`/sales/${encodeURIComponent(id)}/create`, {
       state: buildAnnouncementTokenListNavigateState(row),
     });
   };
@@ -99,7 +99,7 @@ export default function AnnouncementTokenListPage() {
   return (
     <PageStyle
       layout="single"
-      title="告知を作成"
+      title="告知対象トークンを選択"
       onBack={handleBack}
       onRefresh={handlePageReset}
       isRefreshing={isResetting}

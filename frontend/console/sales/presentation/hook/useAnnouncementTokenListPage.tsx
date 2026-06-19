@@ -74,6 +74,7 @@ export function useAnnouncementTokenListPage() {
 
   const handleReset = useCallback(async () => {
     setIsResetting(true);
+
     try {
       setSortKey("tokenName");
       setSortDir("asc");
@@ -83,8 +84,8 @@ export function useAnnouncementTokenListPage() {
     }
   }, [load]);
 
-  const handleCreate = useCallback(() => {
-    navigate("./create");
+  const handleBack = useCallback(() => {
+    navigate("/sales");
   }, [navigate]);
 
   const handleRowClick = useCallback(
@@ -94,7 +95,7 @@ export function useAnnouncementTokenListPage() {
 
       const row = sourceRows.find((x) => x.tokenBlueprintId === id);
 
-      navigate(`./${encodeURIComponent(id)}`, {
+      navigate(`/sales/${encodeURIComponent(id)}/create`, {
         state: buildAnnouncementTokenListNavigateState(row),
       });
     },
@@ -107,7 +108,7 @@ export function useAnnouncementTokenListPage() {
     sortDir,
     handleChangeSort,
     handleReset,
-    handleCreate,
+    handleBack,
     handleRowClick,
     isResetting,
   };

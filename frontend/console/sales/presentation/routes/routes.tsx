@@ -1,19 +1,19 @@
-// frontend\console\sales\src\presentation\routes\routes.tsx
+// frontend/console/sales/presentation/routes/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import SalesManagement from "../pages/announcementManagement";
-import SalesDetail from "../pages/announcementCreatePage";
-import SalesCreate from "../pages/announcementTokenListPage";
+import AnnouncementManagementPage from "../pages/announcementManagement";
+import AnnouncementCreatePage from "../pages/announcementCreatePage";
+import AnnouncementTokenListPage from "../pages/announcementTokenListPage";
 
 /**
  * Sales Module Routes
  * - /sales
  * - /sales/create
- * - /sales/:tokenBlueprintId
+ * - /sales/:tokenBlueprintId/create
  */
 const routes: RouteObject[] = [
-  { path: "", element: <SalesManagement /> },
-  { path: "create", element: <SalesCreate /> },
-  { path: ":tokenBlueprintId", element: <SalesDetail /> },
+  { path: "", element: <AnnouncementManagementPage /> },
+  { path: "create", element: <AnnouncementTokenListPage /> },
+  { path: ":tokenBlueprintId/create", element: <AnnouncementCreatePage /> },
 ];
 
 export default routes;

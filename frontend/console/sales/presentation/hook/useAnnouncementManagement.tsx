@@ -12,14 +12,17 @@ import {
   type AnnouncementManagementSortKey,
 } from "../../application/announcement_management_service";
 
+const DEFAULT_PAGE = 1;
+const DEFAULT_PER_PAGE = 50;
+
 export function useAnnouncementManagement() {
   const navigate = useNavigate();
   const { tokenBlueprintId } = useParams<{ tokenBlueprintId: string }>();
 
   const [sourceRows, setSourceRows] = useState<AnnouncementManagementRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(50);
+  const [page, setPage] = useState(DEFAULT_PAGE);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
   const [sortKey, setSortKey] =
     useState<AnnouncementManagementSortKey>("createdAt");
   const [sortDir, setSortDir] =
@@ -31,39 +34,48 @@ export function useAnnouncementManagement() {
     return String(tokenBlueprintId ?? "").trim();
   }, [tokenBlueprintId]);
 
-  const load = useCallback(async () => {
-    if (!targetToken) {
-      const empty = createEmptyAnnouncementManagementListResult(page, perPage);
-      setSourceRows(empty.rows);
-      setTotalCount(empty.totalCount);
-      setPage(empty.page);
-      setPerPage(empty.perPage);
-      return;
-    }
+  const load = useCallback(
+    async (nextPage = page, nextPerPage = perPage) => {
+      if (!targetToken) {
+        const empty = createEmptyAnnouncementManagementListResult(
+          nextPage,
+          nextPerPage,
+        );
+        setSourceRows(empty.rows);
+        setTotalCount(empty.totalCount);
+        setPage(empty.page);
+        setPerPage(empty.perPage);
+        return;
+      }
 
-    setIsLoading(true);
+      setIsLoading(true);
 
-    try {
-      const result = await fetchAnnouncementManagementRows({
-        targetToken,
-        page,
-        perPage,
-      });
+      try {
+        const result = await fetchAnnouncementManagementRows({
+          targetToken,
+          page: nextPage,
+          perPage: nextPerPage,
+        });
 
-      setSourceRows(result.rows);
-      setTotalCount(result.totalCount);
-      setPage(result.page);
-      setPerPage(result.perPage);
-    } catch {
-      const empty = createEmptyAnnouncementManagementListResult(page, perPage);
-      setSourceRows(empty.rows);
-      setTotalCount(empty.totalCount);
-      setPage(empty.page);
-      setPerPage(empty.perPage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, perPage, targetToken]);
+        setSourceRows(result.rows);
+        setTotalCount(result.totalCount);
+        setPage(result.page || nextPage);
+        setPerPage(result.perPage || nextPerPage);
+      } catch {
+        const empty = createEmptyAnnouncementManagementListResult(
+          nextPage,
+          nextPerPage,
+        );
+        setSourceRows(empty.rows);
+        setTotalCount(empty.totalCount);
+        setPage(empty.page);
+        setPerPage(empty.perPage);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [page, perPage, targetToken],
+  );
 
   useEffect(() => {
     void load();
@@ -93,30 +105,28 @@ export function useAnnouncementManagement() {
     try {
       setSortKey("createdAt");
       setSortDir("desc");
-      setPage(1);
-      await load();
+      await load(DEFAULT_PAGE, DEFAULT_PER_PAGE);
     } finally {
       setIsResetting(false);
     }
   }, [load]);
 
   const handleCreate = useCallback(() => {
-    if (!targetToken) {
-      navigate("/sales/create");
-      return;
-    }
-
-    navigate(`/sales/${encodeURIComponent(targetToken)}/create`);
-  }, [navigate, targetToken]);
+    navigate("/sales/create");
+  }, [navigate]);
 
   const handleRowClick = useCallback(
     (announcementId: string) => {
       const id = String(announcementId ?? "").trim();
-      if (!id) return;
+      if (!id || !targetToken) return;
 
-      navigate(`./${encodeURIComponent(id)}`);
+      navigate(
+        `/sales/${encodeURIComponent(targetToken)}/announcements/${encodeURIComponent(
+          id,
+        )}`,
+      );
     },
-    [navigate],
+    [navigate, targetToken],
   );
 
   return {
