@@ -82,6 +82,10 @@ export function useSalesManagement() {
     }
   }, [load]);
 
+  const handleCreate = useCallback(() => {
+    navigate("./create");
+  }, [navigate]);
+
   const handleRowClick = useCallback(
     (tokenBlueprintId: string) => {
       const id = String(tokenBlueprintId ?? "").trim();
@@ -102,6 +106,7 @@ export function useSalesManagement() {
     sortDir,
     handleChangeSort,
     handleReset,
+    handleCreate,
     handleRowClick,
     isResetting,
   };

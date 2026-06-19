@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "../../../shell/src/shared/ui/card";
 import { Checkbox } from "../../../shell/src/shared/ui/checkbox";
+import AvatarIcon from "../../../shell/src/shared/ui/icon";
 import Pagination from "../../../shell/src/shared/ui/pagination";
 import FilterableTableHeader from "../../../shell/src/shared/ui/filterable-table-header";
 import {
@@ -168,7 +169,9 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
 
   useEffect(() => {
     setSelectedOwnerKeys((prev) => {
-      const validKeys = sortedOwners.map((owner, index) => ownerKey(owner, index));
+      const validKeys = sortedOwners.map((owner, index) =>
+        ownerKey(owner, index),
+      );
       return prev.filter((key) => validKeys.includes(key));
     });
   }, [sortedOwners]);
@@ -298,27 +301,21 @@ export default function SalesOwnersCard({ owners = [] }: Props) {
                           }
                         />
                       </TableCell>
+
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-                            {avatarIconUrl ? (
-                              <img
-                                src={avatarIconUrl}
-                                alt={avatarName || "avatar icon"}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
-                                -
-                              </div>
-                            )}
-                          </div>
+                          <AvatarIcon
+                            src={avatarIconUrl}
+                            name={avatarName}
+                            size="md"
+                          />
 
                           <div className="h-10 flex items-center text-sm font-medium text-slate-900">
                             {avatarName || "-"}
                           </div>
                         </div>
                       </TableCell>
+
                       <TableCell>{productName || "-"}</TableCell>
                       <TableCell>{followerCount}</TableCell>
                       <TableCell>{postCount}</TableCell>

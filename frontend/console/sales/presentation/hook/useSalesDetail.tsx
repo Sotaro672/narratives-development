@@ -73,7 +73,7 @@ function uniqueStrings(values: unknown): string[] {
   const result: string[] = [];
 
   for (const v of values) {
-    const s = String(v ?? "").trim();
+    const s = String(v ?? "");
     if (!s) continue;
     if (seen.has(s)) continue;
     seen.add(s);
@@ -106,7 +106,7 @@ function getFirstProductName(productBlueprintsValue: unknown): string {
 
     const productName = String(
       (item as SalesDetailLocationProductBlueprint).productName ?? "",
-    ).trim();
+    );
 
     if (productName) {
       return productName;
@@ -144,10 +144,10 @@ function toOwnersFromState(
         : {};
 
     return {
-      avatarId: String(item.avatarId ?? "").trim(),
-      avatarName: String(item.avatarName ?? "").trim(),
-      avatarIconUrl: String(item.avatarIcon ?? "").trim(),
-      mintAddress: String(mintAddresses[index] ?? "").trim(),
+      avatarId: String(item.avatarId ?? ""),
+      avatarName: String(item.avatarName ?? ""),
+      avatarIconUrl: String(item.avatarIcon ?? ""),
+      mintAddress: String(mintAddresses[index] ?? ""),
       productName,
       followerCount: toSafeNumber(item.followerCount),
       followingCount: toSafeNumber(item.followingCount),
@@ -178,7 +178,7 @@ export function useSalesDetail(): UseSalesDetailResult {
   }, [locationState]);
 
   useEffect(() => {
-    const id = String(tokenBlueprintId ?? "").trim();
+    const id = String(tokenBlueprintId ?? "");
     if (!id) return;
 
     let cancelled = false;
@@ -191,7 +191,7 @@ export function useSalesDetail(): UseSalesDetailResult {
         setBlueprint(tb);
       } catch {
         if (!cancelled) {
-          navigate("/sales", { replace: true });
+          navigate("/sales/create", { replace: true });
         }
       }
     })();
@@ -202,7 +202,7 @@ export function useSalesDetail(): UseSalesDetailResult {
   }, [tokenBlueprintId, navigate]);
 
   const sales = useMemo<SalesEntity | null>(() => {
-    const id = String((blueprint as any)?.id ?? tokenBlueprintId ?? "").trim();
+    const id = String((blueprint as any)?.id ?? tokenBlueprintId ?? "");
     if (!id) return null;
     return { tokenBlueprintId: id };
   }, [blueprint, tokenBlueprintId]);
@@ -212,15 +212,15 @@ export function useSalesDetail(): UseSalesDetailResult {
   }, [blueprint]);
 
   const createdByName = useMemo(() => {
-    const name = String((blueprint as any)?.createdByName ?? "").trim();
+    const name = String((blueprint as any)?.createdByName ?? "");
     if (name) return name;
-    return String((blueprint as any)?.createdBy ?? "").trim();
+    return String((blueprint as any)?.createdBy ?? "");
   }, [blueprint]);
 
   const updatedByName = useMemo(() => {
-    const name = String((blueprint as any)?.updatedByName ?? "").trim();
+    const name = String((blueprint as any)?.updatedByName ?? "");
     if (name) return name;
-    return String((blueprint as any)?.updatedBy ?? "").trim();
+    return String((blueprint as any)?.updatedBy ?? "");
   }, [blueprint]);
 
   const createdAt = useMemo(() => {
@@ -240,16 +240,16 @@ export function useSalesDetail(): UseSalesDetailResult {
   }, [ownersFromState, mintAddressesFromState, productBlueprintsFromState]);
 
   const handleBack = useCallback(() => {
-    navigate("/sales", { replace: true });
+    navigate("/sales/create", { replace: true });
   }, [navigate]);
 
   const vm: UseSalesDetailVM = {
     sales,
     title: "営業",
-    assigneeId: String((blueprint as any)?.assigneeId ?? "").trim(),
+    assigneeId: String((blueprint as any)?.assigneeId ?? ""),
     assigneeName:
-      String((blueprint as any)?.assigneeName ?? "").trim() ||
-      String((blueprint as any)?.assigneeId ?? "").trim(),
+      String((blueprint as any)?.assigneeName ?? "") ||
+      String((blueprint as any)?.assigneeId ?? ""),
     minted,
     createdByName,
     createdAt,

@@ -1,4 +1,4 @@
-//frontend\console\shell\src\layout\PageStyle\PageStyle.tsx
+// frontend/console/shell/src/layout/PageStyle/PageStyle.tsx
 import * as React from "react";
 import type { ReactNode } from "react";
 import {
@@ -9,6 +9,7 @@ import {
   Trash2,
   X,
   Tag,
+  RefreshCw,
 } from "lucide-react";
 import "./PageStyle.css";
 
@@ -62,6 +63,8 @@ interface PageStyleProps {
   onBack?: () => void | Promise<void>;
   onSave?: () => void | Promise<void>;
   onCreate?: () => void | Promise<void>;
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
 
   onEdit?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
@@ -85,6 +88,8 @@ export default function PageStyle({
   onBack,
   onSave,
   onCreate,
+  onRefresh,
+  isRefreshing: controlledIsRefreshing,
   onEdit,
   onDelete,
   onCancel,
@@ -102,6 +107,9 @@ export default function PageStyle({
   const [isCreating, setIsCreating] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isListing, setIsListing] = React.useState(false);
+  const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
+
+  const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
 
   const handleCreate = React.useCallback(async () => {
     if (!onCreate || isCreating) return;
@@ -136,6 +144,17 @@ export default function PageStyle({
     }
   }, [onList, isListing]);
 
+  const handleRefresh = React.useCallback(async () => {
+    if (!onRefresh || isRefreshing) return;
+
+    try {
+      setInternalIsRefreshing(true);
+      await onRefresh();
+    } finally {
+      setInternalIsRefreshing(false);
+    }
+  }, [onRefresh, isRefreshing]);
+
   const header = (
     <header className="page-header">
       <div className="px-4 py-3">
@@ -159,6 +178,23 @@ export default function PageStyle({
           </div>
 
           <div className="page-header__actions">
+            {onRefresh && (
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={() => void handleRefresh()}
+                disabled={isRefreshing}
+                aria-busy={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <RefreshCw size={16} style={{ marginRight: 4 }} />
+                )}
+                {isRefreshing ? "更新中" : "更新"}
+              </button>
+            )}
+
             {onEdit && (
               <button
                 type="button"

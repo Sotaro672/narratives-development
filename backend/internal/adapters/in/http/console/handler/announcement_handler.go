@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\console\handler\announcement_handler.go
 package consoleHandler
 
 import (

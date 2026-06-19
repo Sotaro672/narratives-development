@@ -16,7 +16,7 @@ import {
 import "./List.css";
 
 interface ListProps {
-  title: string;
+  title?: string;
   headerCells?: ReactNode[];
   children?: ReactNode;
 
@@ -31,7 +31,6 @@ interface ListProps {
   showTrashButton?: boolean;
   onTrash?: () => void;
 
-  // ★ 追加（キャンセルボタン）
   showCancelButton?: boolean;
   onCancel?: () => void;
 }
@@ -39,7 +38,7 @@ interface ListProps {
 const ITEMS_PER_PAGE = 10;
 
 export default function List({
-  title,
+  title = "",
   headerCells = [],
   children,
 
@@ -57,9 +56,6 @@ export default function List({
   showCancelButton = false,
   onCancel,
 }: ListProps) {
-  // ----------------------------------------------------
-  // 読み込み状態
-  // ----------------------------------------------------
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -71,83 +67,93 @@ export default function List({
   const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
 
   const [page, setPage] = useState(1);
+
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
   }, [totalPages, page]);
 
   const paginatedRows = useMemo(() => {
-    if (totalItems <= ITEMS_PER_PAGE) return rows;
+    if (totalItems <= ITEMS_PER_PAGE) {
+      return rows;
+    }
+
     const start = (page - 1) * ITEMS_PER_PAGE;
     return rows.slice(start, start + ITEMS_PER_PAGE);
   }, [rows, totalItems, page]);
 
   const colSpan = Math.max(1, headerCells.length);
-
-  // ✅ 表示上の「読み込み中...」判定は loading OR isResetting
   const isBusy = loading || isResetting;
+  const hasTitle = Boolean(title);
+
+  const hasHeaderActions =
+    showCreateButton ||
+    showCancelButton ||
+    showResetButton ||
+    showTrashButton;
+
+  const shouldShowHeader = hasTitle || hasHeaderActions;
+
+  const tableLabel = title ? `${title} 一覧` : "一覧";
 
   return (
     <div className="list-container">
-      {/* ─────────────────────────────────────── */}
-      {/* 上部ヘッダー */}
-      {/* ─────────────────────────────────────── */}
-      <div className="list-header one-line">
-        <h1 className="list-title">{title}</h1>
-        <div className="list-header-spacer" />
-        <div className="list-actions-right">
-          {/* ▼ 新規作成 */}
-          {showCreateButton && (
-            <button className="lp-btn lp-btn-primary" onClick={onCreate}>
-              <Plus className="lp-btn-icon" aria-hidden />
-              <span>{createLabel}</span>
-            </button>
-          )}
+      {shouldShowHeader && (
+        <div className="list-header one-line">
+          {hasTitle && <h1 className="list-title">{title}</h1>}
 
-          {/* ▼ キャンセルボタン（★追加） */}
-          {showCancelButton && (
-            <button
-              className="lp-btn lp-btn-secondary"
-              onClick={onCancel}
-              title="キャンセル"
-              aria-label="キャンセル"
-            >
-              <X className="lp-btn-icon" aria-hidden />
-            </button>
-          )}
+          <div className="list-header-spacer" />
 
-          {/* ▼ リフレッシュボタン（★位置を左へ移動） */}
-          {showResetButton && (
-            <RefreshButton
-              onClick={onReset}
-              loading={isResetting}
-              title="リフレッシュ"
-              ariaLabel="リフレッシュ"
-            />
-          )}
+          <div className="list-actions-right">
+            {showCreateButton && (
+              <button className="lp-btn lp-btn-primary" onClick={onCreate}>
+                <Plus className="lp-btn-icon" aria-hidden />
+                <span>{createLabel}</span>
+              </button>
+            )}
 
-          {/* ▼ ゴミ箱ボタン（★右側→左側へ移動） */}
-          {showTrashButton && (
-            <button
-              className="lp-btn lp-btn-danger"
-              onClick={onTrash}
-              title="ゴミ箱"
-              aria-label="ゴミ箱"
-            >
-              <Trash2 className="lp-btn-icon" aria-hidden />
-            </button>
-          )}
+            {showCancelButton && (
+              <button
+                className="lp-btn lp-btn-secondary"
+                onClick={onCancel}
+                title="キャンセル"
+                aria-label="キャンセル"
+              >
+                <X className="lp-btn-icon" aria-hidden />
+              </button>
+            )}
+
+            {showResetButton && (
+              <RefreshButton
+                onClick={onReset}
+                loading={isResetting}
+                title="リフレッシュ"
+                ariaLabel="リフレッシュ"
+              />
+            )}
+
+            {showTrashButton && (
+              <button
+                className="lp-btn lp-btn-danger"
+                onClick={onTrash}
+                title="ゴミ箱"
+                aria-label="ゴミ箱"
+              >
+                <Trash2 className="lp-btn-icon" aria-hidden />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ─────────────────────────────────────── */}
-      {/* テーブル領域 */}
-      {/* ─────────────────────────────────────── */}
       <Card className="lp-card">
         <CardHeader className="sr-only">
-          <CardTitle>{title} 一覧</CardTitle>
+          <CardTitle>{tableLabel}</CardTitle>
         </CardHeader>
+
         <CardContent>
-          <Table role="table" aria-label={`${title} 一覧`} className="lp-table">
+          <Table role="table" aria-label={tableLabel} className="lp-table">
             <TableHeader className="lp-thead">
               <TableRow className="lp-row-head" role="row">
                 {headerCells.map((cell, i) => (
@@ -182,15 +188,12 @@ export default function List({
             </TableBody>
 
             <TableCaption className="sr-only">
-              {title} の一覧テーブル
+              {title ? `${title} の一覧テーブル` : "一覧テーブル"}
             </TableCaption>
           </Table>
         </CardContent>
       </Card>
 
-      {/* ─────────────────────────────────────── */}
-      {/* ページネーション */}
-      {/* ─────────────────────────────────────── */}
       <Pagination
         currentPage={page}
         totalPages={totalPages}
@@ -200,6 +203,5 @@ export default function List({
   );
 }
 
-/** 再エクスポート */
 export { default as FilterableTableHeader } from "../../shared/ui/filterable-table-header";
 export { default as SortableTableHeader } from "../../shared/ui/sortable-table-header";

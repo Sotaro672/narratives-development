@@ -1,20 +1,24 @@
-// frontend/console/sales/src/presentation/pages/salesManagement.tsx
+// frontend/console/sales/src/presentation/pages/salesCreate.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import FilterableTableHeader from "../../../shell/src/shared/ui/filterable-table-header";
+import { buildSalesManagementNavigateState } from "../../application/sales_management_service";
 import { useSalesManagement } from "../hook/useSalesManagement";
 
-export default function SalesManagementPage() {
+export default function SalesCreatePage() {
+  const navigate = useNavigate();
+
   const {
     rows,
     sortKey,
     sortDir,
     handleChangeSort,
     handleReset,
-    handleCreate,
-    handleRowClick,
     isResetting,
   } = useSalesManagement();
 
@@ -50,6 +54,21 @@ export default function SalesManagementPage() {
     await handleReset();
   };
 
+  const handleBack = () => {
+    navigate("/sales");
+  };
+
+  const handleRowClick = (tokenBlueprintId: string) => {
+    const id = String(tokenBlueprintId ?? "");
+    if (!id) return;
+
+    const row = rows.find((item) => item.tokenBlueprintId === id);
+
+    navigate(`/sales/${encodeURIComponent(id)}`, {
+      state: buildSalesManagementNavigateState(row),
+    });
+  };
+
   const headers: React.ReactNode[] = [
     <span key="tokenName">トークン名</span>,
     <FilterableTableHeader
@@ -78,42 +97,41 @@ export default function SalesManagementPage() {
   ];
 
   return (
-    <div className="p-0">
-      <List
-        title="営業"
-        headerCells={headers}
-        showCreateButton
-        createLabel="告知を作成"
-        showResetButton
-        isResetting={isResetting}
-        onCreate={handleCreate}
-        onReset={handlePageReset}
-      >
-        {filteredRows.map((row) => (
-          <tr
-            key={row.tokenBlueprintId}
-            role="button"
-            tabIndex={0}
-            className="cursor-pointer hover:bg-slate-50 transition-colors"
-            onClick={() => handleRowClick(row.tokenBlueprintId)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleRowClick(row.tokenBlueprintId);
-              }
-            }}
-          >
-            <td>{row.tokenName}</td>
-            <td>{row.brandName}</td>
-            <td>
-              {Array.isArray(row.mintAddresses)
-                ? row.mintAddresses.length
-                : 0}
-            </td>
-            <td>{Array.isArray(row.owners) ? row.owners.length : 0}</td>
-          </tr>
-        ))}
-      </List>
-    </div>
+    <PageStyle
+      layout="single"
+      title="告知を作成"
+      onBack={handleBack}
+      onRefresh={handlePageReset}
+      isRefreshing={isResetting}
+    >
+      <div className="p-0">
+        <List headerCells={headers} showResetButton={false}>
+          {filteredRows.map((row) => (
+            <tr
+              key={row.tokenBlueprintId}
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer hover:bg-slate-50 transition-colors"
+              onClick={() => handleRowClick(row.tokenBlueprintId)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleRowClick(row.tokenBlueprintId);
+                }
+              }}
+            >
+              <td>{row.tokenName}</td>
+              <td>{row.brandName}</td>
+              <td>
+                {Array.isArray(row.mintAddresses)
+                  ? row.mintAddresses.length
+                  : 0}
+              </td>
+              <td>{Array.isArray(row.owners) ? row.owners.length : 0}</td>
+            </tr>
+          ))}
+        </List>
+      </div>
+    </PageStyle>
   );
 }
