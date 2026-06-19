@@ -421,6 +421,12 @@ export default function LandingPage() {
                 </div>
               </article>
             </div>
+
+            <div className="page-actions">
+              <Button variant="primary" onClick={() => navigate("/use-cases")}>
+                想定導入例
+              </Button>
+            </div>
           </div>
         </section>
 
@@ -472,8 +478,8 @@ export default function LandingPage() {
             </div>
 
             <div className="page-actions">
-              <Button variant="primary" onClick={() => navigate("/how-to-use")}>
-                使い方解説
+              <Button variant="primary" onClick={() => navigate("/pricing")}>
+                料金プラン
               </Button>
             </div>
           </div>

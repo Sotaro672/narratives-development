@@ -1,75 +1,84 @@
 // frontend/amol/src/pages/Examples.tsx
+import { useEffect } from "react";
+import { Link } from "react-router-dom";
+
 import "../styles/page-layout.css";
-import "../styles/vision-page.css";
+import "../styles/examples.css";
 
 import Layout from "../components/layout/Layout";
 
 const examples = [
   {
-    title: "アパレルブランド",
+    title: "アパレル",
+    to: "/use-cases/apparel",
     description:
-      "商品ごとに電子名札を付与し、正規品であることを購入者が確認できるようにします。偽物対策やブランド価値の保護に活用できます。",
+      "色、採寸、素材、GSM、洗濯表示を登録できます。ブランドテーマを表現するコンテンツをトークンに掲載し、コーデのアイデアをお客様と共有することができます。",
+    image: "/shirts.png",
+    imageAlt: "首元のブランドタグにQRコードが付いた赤いTシャツのイラスト",
   },
   {
-    title: "酒類・地域産品",
+    title: "酒類",
+    to: "/use-cases/alcohol",
     description:
-      "生産者、産地、製造情報を商品と紐づけ、購入者へ信頼できる情報を届けます。地域ブランドや限定商品の真正性証明に活用できます。",
+      "生産者、産地、素材、製造年数を登録できます。酒米の生育状況や醸造過程をトークンに掲載し、お客様に蔵出しを楽しみにしてもらう運用ができます。",
+    image: "/sake.png",
+    imageAlt: "ラベルにQRコードが印字された一升瓶のイラスト",
   },
   {
-    title: "限定商品・コレクション商品",
-    description:
-      "数量限定品やコラボ商品に電子名札を付与し、所有証明や二次流通時の真正性確認に活用できます。",
+    title: "化粧品",
+    to: "/use-cases/cosmetics",
+    description: "現在実装中",
+    image: "/cosmetics.png",
+    imageAlt: "QRコード付きラベルが付いた化粧品ボトルのイラスト",
   },
 ];
 
 export default function Examples() {
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+  }, []);
+
   return (
     <Layout title="AMOL" mode="landing">
       <section className="landing-page-section">
         <div className="landing-page-section__inner">
-          <section id="examples" className="landing-page-vision">
-            <div className="landing-page-vision__header">
-              <h2 className="landing-page-vision__title">想定導入事例</h2>
-              <p className="landing-page-vision__lead">
-                AMOLを導入できる代表的なユースケース
-              </p>
-              <p className="landing-page-vision__description">
-                AMOLは、商品の真正性や所有を証明したい事業者向けに、
-                ブロックチェーン技術を活用した電子名札を提供します。
+          <section id="examples" className="examples-page">
+            <div className="examples-page__header">
+              <h2 className="examples-page__title">想定導入事例</h2>
+              <p className="examples-page__description">
+                現在想定している想定導入事例を業界ごとに提示いたします。
               </p>
             </div>
 
-            <div className="landing-page-vision__steps">
-              {examples.map((item, index) => (
-                <div key={item.title} className="landing-page-vision-step-wrap">
-                  <article
-                    className={[
-                      "landing-page-vision-step",
-                      index === 0 ? "landing-page-vision-step--current" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <div className="landing-page-vision-step__content">
-                      <div className="landing-page-vision-step__meta">
-                        <span className="landing-page-vision-step__step">
-                          Example {index + 1}
-                        </span>
-                      </div>
+            <div className="examples-page__grid">
+              {examples.map((item) => (
+                <article key={item.title} className="examples-page-card">
+                  <h3 className="examples-page-card__title">
+                    <Link
+                      to={item.to}
+                      className="examples-page-card__title-link"
+                    >
+                      {item.title}
+                    </Link>
+                  </h3>
 
-                      <h3 className="landing-page-vision-step__title">
-                        {item.title}
-                      </h3>
-                      <p className="landing-page-vision-step__description">
-                        {item.description}
-                      </p>
-                    </div>
-                  </article>
+                  <div className="examples-page-card__image-wrap">
+                    <img
+                      src={item.image}
+                      alt={item.imageAlt}
+                      className="examples-page-card__image"
+                      loading="lazy"
+                    />
+                  </div>
 
-                  {index < examples.length - 1 && (
-                    <div className="landing-page-vision-step__connector" />
-                  )}
-                </div>
+                  <p className="examples-page-card__description">
+                    {item.description}
+                  </p>
+                </article>
               ))}
             </div>
           </section>

@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/HowToUsePage.tsx
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -194,6 +195,14 @@ function StepFlow({
 
 export default function HowToUsePage() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+  }, []);
 
   return (
     <Layout title="AMOL" mode="landing">
