@@ -14,6 +14,7 @@ const initialInputPayload: SubmitPayload = {
   title: "",
   text: "",
   images: [],
+  imageUrls: [],
 };
 
 export default function AnnouncementCreatePage() {
@@ -51,6 +52,7 @@ export default function AnnouncementCreatePage() {
       title: inputPayload.title.trim(),
       text: inputPayload.text.trim(),
       images: inputPayload.images,
+      imageUrls: inputPayload.imageUrls,
     };
   }, [inputPayload]);
 

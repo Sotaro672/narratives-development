@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import { Button } from "../../../shell/src/shared/ui/button";
+import DeleteButton from "../../../shell/src/shared/ui/delete";
 import {
   Card,
   CardContent,
@@ -12,7 +13,14 @@ import {
 export type SubmitPayload = {
   title: string;
   text: string;
+
+  // 新規追加された画像 File。
+  // 既存画像 URL は含めない。
   images: File[];
+
+  // 既存画像として残っている URL。
+  // detail 編集時に既存 attachment の削除状態を親へ伝えるために使う。
+  imageUrls: string[];
 };
 
 export type InputCardMode = "view" | "edit";
@@ -95,6 +103,31 @@ function getSubmitImages(values: InitialImage[]): File[] {
   return values.filter(isFile);
 }
 
+function getSubmitImageUrls(values: InitialImage[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    if (isFile(value)) {
+      continue;
+    }
+
+    const url = String(value ?? "").trim();
+    if (!url) {
+      continue;
+    }
+
+    if (seen.has(url)) {
+      continue;
+    }
+
+    seen.add(url);
+    result.push(url);
+  }
+
+  return result;
+}
+
 function formatViewText(value: string): string {
   const text = String(value ?? "").trim();
   return text || "-";
@@ -140,6 +173,7 @@ export default function InputCard({
       title: inputTitle,
       text,
       images: getSubmitImages(images),
+      imageUrls: getSubmitImageUrls(images),
     });
   }, [inputTitle, text, images, onChange]);
 
@@ -357,7 +391,7 @@ export default function InputCard({
               {hasImages && (
                 <div className="space-y-3">
                   <div
-                    className="relative"
+                    className="relative overflow-visible"
                     onDrop={isEditMode ? handleDropImages : undefined}
                     onDragOver={isEditMode ? handleDragOverImages : undefined}
                     title={isEditMode ? "クリックで画像追加" : undefined}
@@ -382,19 +416,15 @@ export default function InputCard({
                     </div>
 
                     {isEditMode && (
-                      <button
-                        type="button"
-                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-lg text-white disabled:opacity-50"
+                      <DeleteButton
+                        size="md"
+                        disabled={isDisabled}
+                        ariaLabel="remove main image"
                         onClick={(event) => {
                           event.stopPropagation();
                           handleRemoveImageAt(mainImageIndex);
                         }}
-                        aria-label="remove main image"
-                        title="削除"
-                        disabled={isDisabled}
-                      >
-                        ×
-                      </button>
+                      />
                     )}
 
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
@@ -415,7 +445,7 @@ export default function InputCard({
                         <div
                           key={item.key}
                           className={[
-                            "relative overflow-hidden rounded-xl border border-slate-200 bg-white",
+                            "relative overflow-visible rounded-xl border border-slate-200 bg-white",
                             isEditMode ? "cursor-pointer" : "",
                           ].join(" ")}
                           onClick={() => handleSelectMainImage(index)}
@@ -423,7 +453,7 @@ export default function InputCard({
                           tabIndex={isEditMode ? 0 : undefined}
                           title={isEditMode ? "クリックでメインに設定" : undefined}
                         >
-                          <div className="aspect-square bg-slate-100">
+                          <div className="aspect-square overflow-hidden rounded-xl bg-slate-100">
                             <img
                               src={item.url}
                               alt={item.name}
@@ -432,19 +462,15 @@ export default function InputCard({
                           </div>
 
                           {isEditMode && (
-                            <button
-                              type="button"
-                              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-sm text-white disabled:opacity-50"
+                            <DeleteButton
+                              size="sm"
+                              disabled={isDisabled}
+                              ariaLabel="remove image"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 handleRemoveImageAt(index);
                               }}
-                              aria-label="remove image"
-                              title="削除"
-                              disabled={isDisabled}
-                            >
-                              ×
-                            </button>
+                            />
                           )}
                         </div>
                       );

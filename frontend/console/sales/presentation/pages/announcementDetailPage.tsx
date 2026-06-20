@@ -14,12 +14,14 @@ import {
   markAnnouncementPublished,
   updateAnnouncement,
   type Announcement,
+  type AnnouncementAttachmentInput,
 } from "../../infrastructure/announcement_repository_http";
 
 const emptyInputPayload: SubmitPayload = {
   title: "",
   text: "",
   images: [],
+  imageUrls: [],
 };
 
 type AnnouncementTargetAvatarDetailLike = {
@@ -176,6 +178,49 @@ function getAnnouncementUpdatedByName(
   ).trim();
 }
 
+function buildRetainedAttachmentInputs(params: {
+  announcement: AnnouncementWithResolvedFields;
+  imageUrls: string[];
+}): AnnouncementAttachmentInput[] {
+  const files = Array.isArray(params.announcement.attachmentFiles)
+    ? params.announcement.attachmentFiles
+    : [];
+
+  const retainedUrlSet = new Set(
+    params.imageUrls.map((url) => String(url ?? "").trim()).filter(Boolean),
+  );
+
+  const seen = new Set<string>();
+  const result: AnnouncementAttachmentInput[] = [];
+
+  for (const file of files) {
+    const fileUrl = String(file?.fileUrl ?? "").trim();
+    if (!fileUrl) continue;
+    if (!retainedUrlSet.has(fileUrl)) continue;
+
+    const fileName = String(file?.fileName ?? "").trim();
+    const objectPath = String(file?.objectPath ?? "").trim();
+    const mimeType = String(file?.mimeType ?? "").trim();
+    const fileSize = toSafeNumber(file?.fileSize);
+
+    if (!fileName || !objectPath) continue;
+
+    const dedupeKey = objectPath || fileUrl || fileName;
+    if (seen.has(dedupeKey)) continue;
+
+    seen.add(dedupeKey);
+    result.push({
+      fileName,
+      fileUrl,
+      fileSize,
+      mimeType,
+      objectPath,
+    });
+  }
+
+  return result;
+}
+
 export default function AnnouncementDetailPage() {
   const navigate = useNavigate();
   const { announcementId } = useParams<{ announcementId: string }>();
@@ -201,6 +246,7 @@ export default function AnnouncementDetailPage() {
         title: source.title,
         text: source.content,
         images: [],
+        imageUrls: normalizeAttachmentImageUrls(source.attachmentFiles),
       });
 
       setSelectedAvatarIds(normalizeAvatarIds(source.targetAvatars));
@@ -232,6 +278,22 @@ export default function AnnouncementDetailPage() {
       setIsLoading(false);
     }
   }, [normalizedAnnouncementId]);
+
+  const reloadAnnouncement = useCallback(
+    async (id: string) => {
+      const normalizedId = String(id ?? "").trim();
+      if (!normalizedId) {
+        return null;
+      }
+
+      const refreshed = await getAnnouncement(normalizedId);
+      const next = refreshed as AnnouncementWithResolvedFields;
+      setAnnouncement(next);
+
+      return next;
+    },
+    [],
+  );
 
   useEffect(() => {
     void load();
@@ -283,6 +345,7 @@ export default function AnnouncementDetailPage() {
       title: inputPayload.title.trim(),
       text: inputPayload.text.trim(),
       images: inputPayload.images,
+      imageUrls: inputPayload.imageUrls,
     };
   }, [inputPayload]);
 
@@ -302,17 +365,22 @@ export default function AnnouncementDetailPage() {
     setIsSavingInput(true);
 
     try {
-      const result = await updateAnnouncement(announcement.id, {
+      await updateAnnouncement(announcement.id, {
         title: payload.title,
         content: payload.text,
         targetToken: announcement.targetToken,
         targetAvatars: selectedAvatarIds,
         published: announcement.published,
         publishedAt: announcement.publishedAt,
+        attachments: buildRetainedAttachmentInputs({
+          announcement,
+          imageUrls: payload.imageUrls,
+        }),
         updatedBy: getUpdatedBy(),
       });
 
-      setAnnouncement(result as AnnouncementWithResolvedFields);
+      await reloadAnnouncement(announcement.id);
+
       setIsEditMode(false);
       window.alert("告知を保存しました。");
     } catch (error) {
@@ -329,6 +397,7 @@ export default function AnnouncementDetailPage() {
     getUpdatedBy,
     isSavingInput,
     isSendingInput,
+    reloadAnnouncement,
     selectedAvatarIds,
   ]);
 
@@ -342,25 +411,28 @@ export default function AnnouncementDetailPage() {
     setIsSendingInput(true);
 
     try {
-      let targetAnnouncement = announcement;
-
       if (isEditMode) {
-        targetAnnouncement = (await updateAnnouncement(announcement.id, {
+        await updateAnnouncement(announcement.id, {
           title: payload.title,
           content: payload.text,
           targetToken: announcement.targetToken,
           targetAvatars: selectedAvatarIds,
           published: announcement.published,
           publishedAt: announcement.publishedAt,
+          attachments: buildRetainedAttachmentInputs({
+            announcement,
+            imageUrls: payload.imageUrls,
+          }),
           updatedBy: getUpdatedBy(),
-        })) as AnnouncementWithResolvedFields;
+        });
       }
 
-      const result = await markAnnouncementPublished(targetAnnouncement.id, {
+      await markAnnouncementPublished(announcement.id, {
         updatedBy: getUpdatedBy(),
       });
 
-      setAnnouncement(result as AnnouncementWithResolvedFields);
+      await reloadAnnouncement(announcement.id);
+
       setIsEditMode(false);
       window.alert("告知を送信しました。");
     } catch (error) {
@@ -378,6 +450,7 @@ export default function AnnouncementDetailPage() {
     isEditMode,
     isSavingInput,
     isSendingInput,
+    reloadAnnouncement,
     selectedAvatarIds,
   ]);
 
