@@ -57,6 +57,7 @@ type LayoutProps = {
   showEditButton?: boolean;
   hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
+  hideAnnouncementButton?: boolean;
   mainClassName?: string;
   disableFooterPaddingOnDesktop?: boolean;
 
@@ -89,6 +90,7 @@ export default function Layout({
   showEditButton = false,
   hideHamburgerMenu = false,
   hideSettingsButton = false,
+  hideAnnouncementButton = false,
   mainClassName,
   disableFooterPaddingOnDesktop = false,
 
@@ -124,6 +126,7 @@ export default function Layout({
           showEditButton={showEditButton}
           hideHamburgerMenu={hideHamburgerMenu}
           hideSettingsButton={hideSettingsButton}
+          hideAnnouncementButton={hideAnnouncementButton}
           actionButtonLabel={actionButtonLabel}
           onActionButtonClick={onActionButtonClick}
           actionButtonDisabled={actionButtonDisabled}

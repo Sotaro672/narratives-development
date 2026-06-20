@@ -1,4 +1,4 @@
-// frontend/src/components/layout/header/types.ts
+// frontend/amol/src/components/layout/header/types.ts
 export type HeaderProps = {
   title?: string;
   titleClickable?: boolean;
@@ -8,6 +8,7 @@ export type HeaderProps = {
   showEditButton?: boolean;
   hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
+  hideAnnouncementButton?: boolean;
 
   onBackButtonClick?: () => void | Promise<void>;
 
@@ -44,6 +45,7 @@ export type HeaderActionState = {
   cartItemCount: number;
 
   shouldShowLoginButton: boolean;
+  shouldShowAnnouncementButton: boolean;
   shouldShowRoomCopyButton: boolean;
   shouldShowEditButton: boolean;
   shouldShowSettingsButton: boolean;

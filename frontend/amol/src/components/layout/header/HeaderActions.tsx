@@ -1,3 +1,4 @@
+// frontend/amol/src/components/layout/header/HeaderActions.tsx
 import { Link } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
@@ -20,6 +21,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     secondaryActionButtonDisabled,
 
     shouldShowLoginButton,
+    shouldShowAnnouncementButton,
     shouldShowSettingsButton,
 
     shouldShowCartButton,
@@ -30,8 +32,6 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
 
     toggleSettings,
   } = actions;
-
-  const shouldShowAnnouncementButton = !shouldShowLoginButton;
 
   const { unreadCount } = useAnnouncementUnreadCount({
     enabled: shouldShowAnnouncementButton,

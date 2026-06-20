@@ -56,15 +56,12 @@ export default function Examples() {
 
             <div className="examples-page__grid">
               {examples.map((item) => (
-                <article key={item.title} className="examples-page-card">
-                  <h3 className="examples-page-card__title">
-                    <Link
-                      to={item.to}
-                      className="examples-page-card__title-link"
-                    >
-                      {item.title}
-                    </Link>
-                  </h3>
+                <Link
+                  key={item.title}
+                  to={item.to}
+                  className="examples-page-card examples-page-card--link"
+                >
+                  <h3 className="examples-page-card__title">{item.title}</h3>
 
                   <div className="examples-page-card__image-wrap">
                     <img
@@ -78,7 +75,7 @@ export default function Examples() {
                   <p className="examples-page-card__description">
                     {item.description}
                   </p>
-                </article>
+                </Link>
               ))}
             </div>
           </section>

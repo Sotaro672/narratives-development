@@ -185,6 +185,7 @@ export function useHeaderController({
   showEditButton = false,
   hideHamburgerMenu = false,
   hideSettingsButton = false,
+  hideAnnouncementButton = false,
   onBackButtonClick,
   actionButtonLabel,
   onActionButtonClick,
@@ -345,6 +346,12 @@ export function useHeaderController({
   const shouldShowLoginButton =
     mode !== "signin" && authResolved && !isLoggedIn;
 
+  const shouldShowAnnouncementButton =
+    mode !== "signin" &&
+    authResolved &&
+    !shouldShowLoginButton &&
+    !hideAnnouncementButton;
+
   const shouldShowSettingsButton =
     mode !== "signin" &&
     authResolved &&
@@ -433,6 +440,7 @@ export function useHeaderController({
     cartItemCount: displayCartItemCount,
 
     shouldShowLoginButton,
+    shouldShowAnnouncementButton,
     shouldShowRoomCopyButton: false,
     shouldShowEditButton,
     shouldShowSettingsButton,

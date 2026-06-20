@@ -87,7 +87,7 @@ export default function PricePlan() {
             <div className="price-plan-page__header">
               <h2 className="price-plan-page__title">料金プラン</h2>
               <p className="price-plan-page__description">
-                AMOLではお客様の自社ECサイトとの接続工事も対応しております。
+                AMOLではお客様の自社ECサイトとの接続工事もご対応いたします。
               </p>
             </div>
 

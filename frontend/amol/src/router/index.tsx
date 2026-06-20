@@ -36,6 +36,9 @@ import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
 import Examples from "../pages/Examples";
+import AppareUsecase from "../pages/AppareUsecase";
+import SakeUsecasePage from "../pages/SakeUsecasePage";
+import CosmeticUsecase from "../pages/CosmeticUsecase";
 import PricePlan from "../pages/PricePlan";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 
@@ -73,6 +76,9 @@ export const router = createBrowserRouter([
 
   { path: "/how-to-use", element: <HowToUsePage /> },
   { path: "/use-cases", element: <Examples /> },
+  { path: "/use-cases/apparel", element: <AppareUsecase /> },
+  { path: "/use-cases/alcohol", element: <SakeUsecasePage /> },
+  { path: "/use-cases/cosmetics", element: <CosmeticUsecase /> },
   { path: "/pricing", element: <PricePlan /> },
   { path: "/faq", element: <VisionPage /> },
   { path: "/terms", element: <TermsPage /> },
