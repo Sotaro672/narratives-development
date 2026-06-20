@@ -158,6 +158,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	announcementDetailQuery := query.NewAnnouncementDetailQuery(
 		repos.announcementRepo,
+		repos.announcementAttachmentRepo,
 		repos.memberRepo,
 		repos.avatarRepo,
 		repos.avatarStateRepo,

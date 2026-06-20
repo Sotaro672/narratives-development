@@ -7,14 +7,15 @@ import (
 
 type repos struct {
 	// FS repos
-	accountRepo       *fs.AccountRepositoryFS
-	announcementRepo  *fs.AnnouncementRepositoryFS
-	avatarRepo        *fs.AvatarRepositoryFS
-	avatarStateRepo   *fs.AvatarStateRepositoryFS
-	paymentMethodRepo *fs.PaymentMethodRepositoryFS
-	brandRepo         *fs.BrandRepositoryFS
-	companyRepo       *fs.CompanyRepositoryFS
-	inquiryRepo       *fs.InquiryRepositoryFS
+	accountRepo                *fs.AccountRepositoryFS
+	announcementRepo           *fs.AnnouncementRepositoryFS
+	announcementAttachmentRepo *fs.AnnouncementAttachmentRepositoryFS
+	avatarRepo                 *fs.AvatarRepositoryFS
+	avatarStateRepo            *fs.AvatarStateRepositoryFS
+	paymentMethodRepo          *fs.PaymentMethodRepositoryFS
+	brandRepo                  *fs.BrandRepositoryFS
+	companyRepo                *fs.CompanyRepositoryFS
+	inquiryRepo                *fs.InquiryRepositoryFS
 
 	inventoryRepo *fs.InventoryRepositoryFS
 
@@ -66,6 +67,7 @@ func buildRepos(c *clients) *repos {
 	// =========================================================
 	accountRepo := fs.NewAccountRepositoryFS(fsClient)
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
+	announcementAttachmentRepo := fs.NewAnnouncementAttachmentRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
 	avatarStateRepo := fs.NewAvatarStateRepositoryFS(fsClient)
 
@@ -116,14 +118,15 @@ func buildRepos(c *clients) *repos {
 	invitationTokenRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
 
 	return &repos{
-		accountRepo:       accountRepo,
-		announcementRepo:  announcementRepo,
-		avatarRepo:        avatarRepo,
-		avatarStateRepo:   avatarStateRepo,
-		paymentMethodRepo: paymentMethodRepo,
-		brandRepo:         brandRepo,
-		companyRepo:       companyRepo,
-		inquiryRepo:       inquiryRepo,
+		accountRepo:                accountRepo,
+		announcementRepo:           announcementRepo,
+		announcementAttachmentRepo: announcementAttachmentRepo,
+		avatarRepo:                 avatarRepo,
+		avatarStateRepo:            avatarStateRepo,
+		paymentMethodRepo:          paymentMethodRepo,
+		brandRepo:                  brandRepo,
+		companyRepo:                companyRepo,
+		inquiryRepo:                inquiryRepo,
 
 		inventoryRepo: inventoryRepo,
 

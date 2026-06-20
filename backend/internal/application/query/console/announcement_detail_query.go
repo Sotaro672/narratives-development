@@ -30,6 +30,16 @@ type AnnouncementDetailProductBlueprint struct {
 	ProductName        string `json:"productName"`
 }
 
+type AnnouncementDetailAttachmentFile struct {
+	AnnouncementID string `json:"announcementId"`
+	ID             string `json:"id"`
+	FileName       string `json:"fileName"`
+	FileURL        string `json:"fileUrl"`
+	FileSize       int64  `json:"fileSize"`
+	MimeType       string `json:"mimeType"`
+	ObjectPath     string `json:"objectPath"`
+}
+
 type AnnouncementDetail struct {
 	ID                  string                               `json:"id"`
 	Title               string                               `json:"title"`
@@ -42,13 +52,20 @@ type AnnouncementDetail struct {
 	ProductBlueprints   []AnnouncementDetailProductBlueprint `json:"productBlueprints,omitempty"`
 	Published           bool                                 `json:"published"`
 	PublishedAt         *time.Time                           `json:"publishedAt,omitempty"`
-	Attachments         []string                             `json:"attachments,omitempty"`
-	CreatedAt           time.Time                            `json:"createdAt"`
-	CreatedBy           string                               `json:"createdBy"`
-	CreatedByName       string                               `json:"createdByName"`
-	UpdatedAt           *time.Time                           `json:"updatedAt,omitempty"`
-	UpdatedBy           *string                              `json:"updatedBy,omitempty"`
-	UpdatedByName       *string                              `json:"updatedByName,omitempty"`
+
+	// Attachments is kept as the announcement attachment ID list.
+	Attachments []string `json:"attachments,omitempty"`
+
+	// AttachmentFiles contains attachment metadata stored under:
+	// announcements/{announcementId}/attachments/{attachmentId}
+	AttachmentFiles []AnnouncementDetailAttachmentFile `json:"attachmentFiles,omitempty"`
+
+	CreatedAt     time.Time  `json:"createdAt"`
+	CreatedBy     string     `json:"createdBy"`
+	CreatedByName string     `json:"createdByName"`
+	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy     *string    `json:"updatedBy,omitempty"`
+	UpdatedByName *string    `json:"updatedByName,omitempty"`
 }
 
 type announcementDetailMintReader interface {
@@ -67,6 +84,7 @@ type announcementDetailMintProductBlueprintResolver interface {
 
 type AnnouncementDetailQuery struct {
 	announcementRepo             announcementdom.Repository
+	attachmentRepo               announcementdom.AttachmentRepository
 	memberRepo                   memberdom.Repository
 	avatarRepo                   avatardom.Repository
 	avatarStateRepo              avatarstatedom.Repository
@@ -76,6 +94,7 @@ type AnnouncementDetailQuery struct {
 
 func NewAnnouncementDetailQuery(
 	announcementRepo announcementdom.Repository,
+	attachmentRepo announcementdom.AttachmentRepository,
 	memberRepo memberdom.Repository,
 	avatarRepo avatardom.Repository,
 	avatarStateRepo avatarstatedom.Repository,
@@ -84,6 +103,7 @@ func NewAnnouncementDetailQuery(
 ) *AnnouncementDetailQuery {
 	return &AnnouncementDetailQuery{
 		announcementRepo:             announcementRepo,
+		attachmentRepo:               attachmentRepo,
 		memberRepo:                   memberRepo,
 		avatarRepo:                   avatarRepo,
 		avatarStateRepo:              avatarStateRepo,
@@ -101,6 +121,9 @@ func (q *AnnouncementDetailQuery) GetByID(
 	}
 	if q.announcementRepo == nil {
 		return AnnouncementDetail{}, errors.New("announcementRepo is nil")
+	}
+	if q.attachmentRepo == nil {
+		return AnnouncementDetail{}, errors.New("attachmentRepo is nil")
 	}
 	if q.memberRepo == nil {
 		return AnnouncementDetail{}, errors.New("memberRepo is nil")
@@ -163,6 +186,11 @@ func (q *AnnouncementDetailQuery) toAnnouncementDetail(
 		return AnnouncementDetail{}, err
 	}
 
+	attachmentFiles, err := q.resolveAttachmentFiles(ctx, a.ID)
+	if err != nil {
+		return AnnouncementDetail{}, err
+	}
+
 	return AnnouncementDetail{
 		ID:                  a.ID,
 		Title:               a.Title,
@@ -176,6 +204,7 @@ func (q *AnnouncementDetailQuery) toAnnouncementDetail(
 		Published:           a.Published,
 		PublishedAt:         a.PublishedAt,
 		Attachments:         normalizeStringSlice(a.Attachments),
+		AttachmentFiles:     attachmentFiles,
 		CreatedAt:           a.CreatedAt,
 		CreatedBy:           a.CreatedBy,
 		CreatedByName:       createdByName,
@@ -260,6 +289,56 @@ func (q *AnnouncementDetailQuery) resolveTargetAvatars(
 	return result, nil
 }
 
+func (q *AnnouncementDetailQuery) resolveAttachmentFiles(
+	ctx context.Context,
+	announcementID string,
+) ([]AnnouncementDetailAttachmentFile, error) {
+	announcementID = strings.TrimSpace(announcementID)
+	if announcementID == "" {
+		return []AnnouncementDetailAttachmentFile{}, nil
+	}
+	if q == nil {
+		return nil, errors.New("announcement detail query is nil")
+	}
+	if q.attachmentRepo == nil {
+		return nil, errors.New("attachmentRepo is nil")
+	}
+
+	files, err := q.attachmentRepo.ListByAnnouncementID(ctx, announcementID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(files) == 0 {
+		return []AnnouncementDetailAttachmentFile{}, nil
+	}
+
+	result := make([]AnnouncementDetailAttachmentFile, 0, len(files))
+	for _, file := range files {
+		id := strings.TrimSpace(file.ID)
+		fileName := strings.TrimSpace(file.FileName)
+		fileURL := strings.TrimSpace(file.FileURL)
+		mimeType := strings.TrimSpace(file.MimeType)
+		objectPath := strings.TrimSpace(file.ObjectPath)
+
+		if id == "" && fileName == "" && fileURL == "" && objectPath == "" {
+			continue
+		}
+
+		result = append(result, AnnouncementDetailAttachmentFile{
+			AnnouncementID: strings.TrimSpace(file.AnnouncementID),
+			ID:             id,
+			FileName:       fileName,
+			FileURL:        fileURL,
+			FileSize:       file.FileSize,
+			MimeType:       mimeType,
+			ObjectPath:     objectPath,
+		})
+	}
+
+	return result, nil
+}
+
 func (q *AnnouncementDetailQuery) resolveProductBlueprintsByTargetToken(
 	ctx context.Context,
 	targetToken *string,
@@ -321,36 +400,4 @@ func (q *AnnouncementDetailQuery) resolveProductBlueprintsByTargetToken(
 	}
 
 	return mintAddresses, normalizeStringSlice(resolved.ModelIDs), productBlueprints, nil
-}
-
-func normalizeStringSlice(values []string) []string {
-	if len(values) == 0 {
-		return []string{}
-	}
-
-	result := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-
-	for _, value := range values {
-		normalized := strings.TrimSpace(value)
-		if normalized == "" {
-			continue
-		}
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-
-		seen[normalized] = struct{}{}
-		result = append(result, normalized)
-	}
-
-	return result
-}
-
-func int64PtrValue(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-
-	return *value
 }

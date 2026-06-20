@@ -1,4 +1,4 @@
-// frontend/console/sales/src/presentation/components/inputCard.tsx
+// frontend\console\sales\presentation\components\inputCard.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import { Button } from "../../../shell/src/shared/ui/button";
@@ -17,12 +17,14 @@ export type SubmitPayload = {
 
 export type InputCardMode = "view" | "edit";
 
+type InitialImage = File | string;
+
 type Props = {
   title?: string;
   mode?: InputCardMode;
   initialTitle?: string;
   initialText?: string;
-  initialImages?: File[];
+  initialImages?: InitialImage[];
   saving?: boolean;
   sending?: boolean;
   onChange?: (payload: SubmitPayload) => void;
@@ -30,12 +32,20 @@ type Props = {
 
 type PreviewImage = {
   key: string;
-  file: File;
+  file: File | null;
   url: string;
+  name: string;
+  revokeOnCleanup: boolean;
 };
+
+const EMPTY_INITIAL_IMAGES: InitialImage[] = [];
 
 function fileKey(file: File, index: number): string {
   return `${file.name}-${file.size}-${file.lastModified}-${index}`;
+}
+
+function urlKey(url: string, index: number): string {
+  return `${url}-${index}`;
 }
 
 function ImageIcon() {
@@ -73,8 +83,16 @@ function PlusIcon() {
   );
 }
 
+function isFile(value: InitialImage): value is File {
+  return value instanceof File;
+}
+
 function getImageIdentity(file: File): string {
   return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+function getSubmitImages(values: InitialImage[]): File[] {
+  return values.filter(isFile);
 }
 
 function formatViewText(value: string): string {
@@ -87,14 +105,14 @@ export default function InputCard({
   mode = "edit",
   initialTitle = "",
   initialText = "",
-  initialImages = [],
+  initialImages = EMPTY_INITIAL_IMAGES,
   saving = false,
   sending = false,
   onChange,
 }: Props) {
   const [inputTitle, setInputTitle] = useState(initialTitle);
   const [text, setText] = useState(initialText);
-  const [images, setImages] = useState<File[]>(initialImages);
+  const [images, setImages] = useState<InitialImage[]>(initialImages);
   const [mainImageIndex, setMainImageIndex] = useState(0);
 
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -121,21 +139,46 @@ export default function InputCard({
     onChange?.({
       title: inputTitle,
       text,
-      images,
+      images: getSubmitImages(images),
     });
   }, [inputTitle, text, images, onChange]);
 
   const previewImages = useMemo<PreviewImage[]>(() => {
-    return images.map((file, index) => ({
-      key: fileKey(file, index),
-      file,
-      url: URL.createObjectURL(file),
-    }));
+    return images
+      .map((image, index): PreviewImage | null => {
+        if (isFile(image)) {
+          return {
+            key: fileKey(image, index),
+            file: image,
+            url: URL.createObjectURL(image),
+            name: image.name,
+            revokeOnCleanup: true,
+          };
+        }
+
+        const url = String(image ?? "").trim();
+        if (!url) {
+          return null;
+        }
+
+        return {
+          key: urlKey(url, index),
+          file: null,
+          url,
+          name: `image-${index + 1}`,
+          revokeOnCleanup: false,
+        };
+      })
+      .filter((item): item is PreviewImage => item !== null);
   }, [images]);
 
   useEffect(() => {
     return () => {
-      previewImages.forEach((item) => URL.revokeObjectURL(item.url));
+      previewImages.forEach((item) => {
+        if (item.revokeOnCleanup) {
+          URL.revokeObjectURL(item.url);
+        }
+      });
     };
   }, [previewImages]);
 
@@ -165,8 +208,11 @@ export default function InputCard({
     if (!isEditMode || nextFiles.length === 0) return;
 
     setImages((prev) => {
-      const seen = new Set(prev.map((file) => getImageIdentity(file)));
+      const existingFiles = prev.filter(isFile);
+      const seen = new Set(existingFiles.map((file) => getImageIdentity(file)));
       const merged = [...prev];
+
+      let firstAddedIndex = -1;
 
       for (const file of nextFiles) {
         if (!file.type.startsWith("image/")) continue;
@@ -175,7 +221,16 @@ export default function InputCard({
         if (seen.has(id)) continue;
 
         seen.add(id);
+
+        if (firstAddedIndex === -1) {
+          firstAddedIndex = merged.length;
+        }
+
         merged.push(file);
+      }
+
+      if (firstAddedIndex !== -1) {
+        setMainImageIndex(firstAddedIndex);
       }
 
       return merged;
@@ -190,6 +245,8 @@ export default function InputCard({
 
   const handleDropImages = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
+
     if (!isEditMode || isBusy) return;
 
     const nextFiles = Array.from(event.dataTransfer.files ?? []);
@@ -198,6 +255,7 @@ export default function InputCard({
 
   const handleDragOverImages = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
   };
 
   const handleRemoveImageAt = (targetIndex: number) => {
@@ -317,7 +375,7 @@ export default function InputCard({
                       {mainImage && (
                         <img
                           src={mainImage.url}
-                          alt={mainImage.file.name}
+                          alt={mainImage.name}
                           className="max-h-[360px] w-full object-contain"
                         />
                       )}
@@ -368,7 +426,7 @@ export default function InputCard({
                           <div className="aspect-square bg-slate-100">
                             <img
                               src={item.url}
-                              alt={item.file.name}
+                              alt={item.name}
                               className="h-full w-full object-cover"
                             />
                           </div>

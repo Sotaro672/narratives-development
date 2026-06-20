@@ -1,4 +1,4 @@
-// frontend/console/sales/infrastructure/announcement_repository_http.ts
+//frontend\console\sales\infrastructure\announcement_repository_http.ts
 import { API_BASE } from "../../shell/src/shared/http/apiBase";
 import { getAuthJsonHeaders } from "../../shell/src/shared/http/authHeaders";
 
@@ -37,6 +37,24 @@ export type AnnouncementProductBlueprint = {
   productName: string;
 };
 
+export type AnnouncementAttachmentInput = {
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  objectPath: string;
+};
+
+export type AnnouncementAttachmentFile = {
+  announcementId: string;
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  objectPath: string;
+};
+
 export type Announcement = {
   id: string;
   title: string;
@@ -51,6 +69,7 @@ export type Announcement = {
   published: boolean;
   publishedAt: string | null;
   attachments: string[];
+  attachmentFiles: AnnouncementAttachmentFile[];
   createdAt: string;
   createdBy: string;
   createdByName: string;
@@ -100,7 +119,7 @@ export type CreateAnnouncementInput = {
   content: string;
   targetToken?: string | null;
   targetAvatars?: string[];
-  attachments?: string[];
+  attachments?: AnnouncementAttachmentInput[];
   published?: boolean;
   publishedAt?: string | null;
   createdBy: string;
@@ -113,7 +132,7 @@ export type UpdateAnnouncementInput = {
   targetAvatars?: string[];
   published?: boolean;
   publishedAt?: string | null;
-  attachments?: string[];
+  attachments?: AnnouncementAttachmentInput[];
   updatedBy?: string | null;
 };
 
@@ -190,6 +209,30 @@ type ApiAnnouncementProductBlueprint = {
   ProductName?: string | null;
 };
 
+type ApiAnnouncementAttachmentFile = {
+  announcementId?: string | null;
+  AnnouncementID?: string | null;
+
+  id?: string | null;
+  ID?: string | null;
+
+  fileName?: string | null;
+  FileName?: string | null;
+
+  fileUrl?: string | null;
+  fileURL?: string | null;
+  FileURL?: string | null;
+
+  fileSize?: number | null;
+  FileSize?: number | null;
+
+  mimeType?: string | null;
+  MimeType?: string | null;
+
+  objectPath?: string | null;
+  ObjectPath?: string | null;
+};
+
 type ApiAnnouncement = {
   id?: string | null;
   ID?: string | null;
@@ -229,6 +272,9 @@ type ApiAnnouncement = {
 
   attachments?: string[] | null;
   Attachments?: string[] | null;
+
+  attachmentFiles?: ApiAnnouncementAttachmentFile[] | null;
+  AttachmentFiles?: ApiAnnouncementAttachmentFile[] | null;
 
   createdAt?: string | null;
   CreatedAt?: string | null;
@@ -431,6 +477,52 @@ function nullableString(value: unknown): string | null {
   return s === "" ? null : s;
 }
 
+function normalizeAttachmentInputs(
+  values: unknown,
+): AnnouncementAttachmentInput[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const result: AnnouncementAttachmentInput[] = [];
+
+  for (const value of values) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+
+    const item = value as Partial<AnnouncementAttachmentInput>;
+
+    const fileName = String(item.fileName ?? "").trim();
+    const fileUrl = String(item.fileUrl ?? "").trim();
+    const objectPath = String(item.objectPath ?? "").trim();
+    const mimeType = String(item.mimeType ?? "").trim();
+    const fileSize = toSafeNumber(item.fileSize);
+
+    if (!fileName || !fileUrl || !objectPath) {
+      continue;
+    }
+
+    const dedupeKey = objectPath || fileUrl || fileName;
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+
+    result.push({
+      fileName,
+      fileUrl,
+      fileSize,
+      mimeType,
+      objectPath,
+    });
+  }
+
+  return result;
+}
+
 function fromApiAnnouncementAvatarStateFollow(
   data: ApiAnnouncementAvatarStateFollow,
 ): AnnouncementAvatarStateFollow {
@@ -580,6 +672,61 @@ function fromApiAnnouncementProductBlueprints(
   return result;
 }
 
+function fromApiAnnouncementAttachmentFile(
+  data: ApiAnnouncementAttachmentFile,
+): AnnouncementAttachmentFile {
+  return {
+    announcementId: String(
+      firstValue(data?.announcementId, data?.AnnouncementID) ?? "",
+    ).trim(),
+    id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
+    fileName: String(firstValue(data?.fileName, data?.FileName) ?? "").trim(),
+    fileUrl: String(
+      firstValue(data?.fileUrl, data?.fileURL, data?.FileURL) ?? "",
+    ).trim(),
+    fileSize: toSafeNumber(firstValue(data?.fileSize, data?.FileSize)),
+    mimeType: String(firstValue(data?.mimeType, data?.MimeType) ?? "").trim(),
+    objectPath: String(
+      firstValue(data?.objectPath, data?.ObjectPath) ?? "",
+    ).trim(),
+  };
+}
+
+function fromApiAnnouncementAttachmentFiles(
+  values: unknown,
+): AnnouncementAttachmentFile[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const result: AnnouncementAttachmentFile[] = [];
+
+  for (const value of values) {
+    const item = fromApiAnnouncementAttachmentFile(
+      value as ApiAnnouncementAttachmentFile,
+    );
+
+    const dedupeKey = item.id || item.objectPath || item.fileUrl || item.fileName;
+    if (!dedupeKey) {
+      continue;
+    }
+
+    if (!item.fileUrl) {
+      continue;
+    }
+
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    result.push(item);
+  }
+
+  return result;
+}
+
 function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
   return {
     id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
@@ -608,6 +755,9 @@ function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
     ),
     attachments: uniqueStrings(
       firstValue(data?.attachments, data?.Attachments),
+    ),
+    attachmentFiles: fromApiAnnouncementAttachmentFiles(
+      firstValue(data?.attachmentFiles, data?.AttachmentFiles),
     ),
     createdAt: String(firstValue(data?.createdAt, data?.CreatedAt) ?? "").trim(),
     createdBy: String(firstValue(data?.createdBy, data?.CreatedBy) ?? "").trim(),
@@ -779,7 +929,7 @@ function buildCreateAnnouncementBody(
     content,
     targetToken: input.targetToken ?? null,
     targetAvatars: uniqueStrings(input.targetAvatars),
-    attachments: uniqueStrings(input.attachments),
+    attachments: normalizeAttachmentInputs(input.attachments),
     published: Boolean(input.published),
     publishedAt: input.publishedAt ?? null,
     createdBy,
@@ -816,7 +966,7 @@ function buildUpdateAnnouncementBody(
   }
 
   if (input.attachments !== undefined) {
-    body.attachments = uniqueStrings(input.attachments);
+    body.attachments = normalizeAttachmentInputs(input.attachments);
   }
 
   if (input.updatedBy !== undefined) {
@@ -879,6 +1029,9 @@ export async function getAnnouncement(id: string): Promise<Announcement> {
 
 /**
  * backend: POST /announcements
+ *
+ * attachments は Firebase Storage へ frontend から upload 済みの metadata を送る。
+ * GCS signed URL / GCS object は使わない。
  */
 export async function createAnnouncement(
   input: CreateAnnouncementInput,
@@ -893,6 +1046,9 @@ export async function createAnnouncement(
 
 /**
  * backend: PUT /announcements/{id}
+ *
+ * attachments は Firebase Storage へ frontend から upload 済みの metadata を送る。
+ * GCS signed URL / GCS object は使わない。
  */
 export async function updateAnnouncement(
   id: string,

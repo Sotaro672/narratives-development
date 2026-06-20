@@ -1,4 +1,4 @@
-// backend/internal/application/usecase/announcement_usecase.go
+// backend\internal\application\usecase\announcement_usecase.go
 package usecase
 
 import (
@@ -43,13 +43,22 @@ func (u *AnnouncementUsecase) WithNow(now func() time.Time) *AnnouncementUsecase
 // Announcement command
 // =======================
 
+type AnnouncementAttachmentInput struct {
+	ID         string
+	FileName   string
+	FileURL    string
+	FileSize   int64
+	MimeType   string
+	ObjectPath string
+}
+
 type CreateAnnouncementInput struct {
 	ID            string
 	Title         string
 	Content       string
 	TargetToken   *string
 	TargetAvatars []string
-	Attachments   []string
+	Attachments   []AnnouncementAttachmentInput
 	Published     bool
 	PublishedAt   *time.Time
 	CreatedBy     string
@@ -75,13 +84,21 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 		id = generatedID
 	}
 
+	attachmentFiles, attachmentIDs, err := buildAttachmentFiles(
+		id,
+		toNewAttachmentInputs(input.Attachments),
+	)
+	if err != nil {
+		return ann.Announcement{}, err
+	}
+
 	entity, err := ann.New(
 		id,
 		input.Title,
 		input.Content,
 		input.TargetToken,
 		input.TargetAvatars,
-		input.Attachments,
+		attachmentIDs,
 		input.Published,
 		now,
 		input.CreatedBy,
@@ -93,7 +110,31 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 		return ann.Announcement{}, err
 	}
 
-	return u.annRepo.Create(ctx, entity)
+	created, err := u.annRepo.Create(ctx, entity)
+	if err != nil {
+		return ann.Announcement{}, err
+	}
+
+	if len(attachmentFiles) == 0 {
+		return created, nil
+	}
+
+	if u.attRepo == nil {
+		return ann.Announcement{}, ann.ErrNotFound
+	}
+
+	for _, file := range attachmentFiles {
+		if _, err := u.attRepo.Create(ctx, file); err != nil {
+			return ann.Announcement{}, err
+		}
+	}
+
+	refreshed, err := u.annRepo.GetByID(ctx, created.ID)
+	if err != nil {
+		return ann.Announcement{}, err
+	}
+
+	return refreshed, nil
 }
 
 func (u *AnnouncementUsecase) ListAnnouncementsByTargetAvatar(
@@ -118,7 +159,7 @@ type UpdateAnnouncementInput struct {
 	TargetAvatars *[]string
 	Published     *bool
 	PublishedAt   *time.Time
-	Attachments   *[]string
+	Attachments   *[]AnnouncementAttachmentInput
 	UpdatedBy     *string
 }
 
@@ -157,9 +198,6 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	if input.PublishedAt != nil {
 		entity.PublishedAt = input.PublishedAt
 	}
-	if input.Attachments != nil {
-		entity.Attachments = *input.Attachments
-	}
 	if input.UpdatedBy != nil {
 		entity.UpdatedBy = input.UpdatedBy
 	}
@@ -167,7 +205,26 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	now := u.now()
 	entity.UpdatedAt = &now
 
-	return u.annRepo.Update(ctx, id, entity)
+	updated, err := u.annRepo.Update(ctx, id, entity)
+	if err != nil {
+		return ann.Announcement{}, err
+	}
+
+	if input.Attachments == nil {
+		return updated, nil
+	}
+
+	returned, _, err := u.ReplaceAttachmentsAndSyncAnnouncement(
+		ctx,
+		id,
+		toNewAttachmentInputs(*input.Attachments),
+		input.UpdatedBy,
+	)
+	if err != nil {
+		return ann.Announcement{}, err
+	}
+
+	return returned, nil
 }
 
 func (u *AnnouncementUsecase) MarkPublished(
@@ -347,25 +404,9 @@ func (u *AnnouncementUsecase) ReplaceAttachments(
 		return nil, nil, ann.ErrNotFound
 	}
 
-	files := make([]ann.AttachmentFile, 0, len(inputs))
-	ids := make([]string, 0, len(inputs))
-
-	for _, in := range inputs {
-		f, err := ann.NewAttachmentFileWithObjectPath(
-			announcementID,
-			in.ID,
-			in.FileName,
-			in.FileURL,
-			in.FileSize,
-			in.MimeType,
-			in.ObjectPath,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		files = append(files, f)
-		ids = append(ids, f.ID)
+	files, ids, err := buildAttachmentFiles(announcementID, inputs)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	current, err := u.attRepo.ListByAnnouncementID(ctx, announcementID)
@@ -462,6 +503,59 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(ctx context.Context, ann
 // =======================
 // Helpers
 // =======================
+
+func toNewAttachmentInputs(values []AnnouncementAttachmentInput) []NewAttachmentInput {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make([]NewAttachmentInput, 0, len(values))
+
+	for _, value := range values {
+		result = append(result, NewAttachmentInput{
+			ID:         value.ID,
+			FileName:   value.FileName,
+			FileURL:    value.FileURL,
+			FileSize:   value.FileSize,
+			MimeType:   value.MimeType,
+			ObjectPath: value.ObjectPath,
+		})
+	}
+
+	return result
+}
+
+func buildAttachmentFiles(
+	announcementID string,
+	inputs []NewAttachmentInput,
+) ([]ann.AttachmentFile, []string, error) {
+	if len(inputs) == 0 {
+		return nil, nil, nil
+	}
+
+	files := make([]ann.AttachmentFile, 0, len(inputs))
+	ids := make([]string, 0, len(inputs))
+
+	for _, in := range inputs {
+		f, err := ann.NewAttachmentFileWithObjectPath(
+			announcementID,
+			in.ID,
+			in.FileName,
+			in.FileURL,
+			in.FileSize,
+			in.MimeType,
+			in.ObjectPath,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		files = append(files, f)
+		ids = append(ids, f.ID)
+	}
+
+	return files, ids, nil
+}
 
 func newAnnouncementID() (string, error) {
 	var b [16]byte

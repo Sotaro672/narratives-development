@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/console/handler/announcement_handler.go
 package consoleHandler
 
 import (
@@ -82,27 +81,35 @@ func (h *AnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // Request DTOs
 // =======================
 
+type announcementAttachmentRequest struct {
+	FileName   string `json:"fileName"`
+	FileURL    string `json:"fileUrl"`
+	FileSize   int64  `json:"fileSize"`
+	MimeType   string `json:"mimeType"`
+	ObjectPath string `json:"objectPath"`
+}
+
 type createAnnouncementRequest struct {
-	ID            string     `json:"id"`
-	Title         string     `json:"title"`
-	Content       string     `json:"content"`
-	TargetToken   *string    `json:"targetToken"`
-	TargetAvatars []string   `json:"targetAvatars"`
-	Attachments   []string   `json:"attachments"`
-	Published     bool       `json:"published"`
-	PublishedAt   *time.Time `json:"publishedAt"`
-	CreatedBy     string     `json:"createdBy"`
+	ID            string                          `json:"id"`
+	Title         string                          `json:"title"`
+	Content       string                          `json:"content"`
+	TargetToken   *string                         `json:"targetToken"`
+	TargetAvatars []string                        `json:"targetAvatars"`
+	Attachments   []announcementAttachmentRequest `json:"attachments"`
+	Published     bool                            `json:"published"`
+	PublishedAt   *time.Time                      `json:"publishedAt"`
+	CreatedBy     string                          `json:"createdBy"`
 }
 
 type updateAnnouncementRequest struct {
-	Title         *string    `json:"title"`
-	Content       *string    `json:"content"`
-	TargetToken   *string    `json:"targetToken"`
-	TargetAvatars *[]string  `json:"targetAvatars"`
-	Published     *bool      `json:"published"`
-	PublishedAt   *time.Time `json:"publishedAt"`
-	Attachments   *[]string  `json:"attachments"`
-	UpdatedBy     *string    `json:"updatedBy"`
+	Title         *string                          `json:"title"`
+	Content       *string                          `json:"content"`
+	TargetToken   *string                          `json:"targetToken"`
+	TargetAvatars *[]string                        `json:"targetAvatars"`
+	Published     *bool                            `json:"published"`
+	PublishedAt   *time.Time                       `json:"publishedAt"`
+	Attachments   *[]announcementAttachmentRequest `json:"attachments"`
+	UpdatedBy     *string                          `json:"updatedBy"`
 }
 
 type markPublishedRequest struct {
@@ -163,20 +170,23 @@ func (h *AnnouncementHandler) createAnnouncement(w http.ResponseWriter, r *http.
 
 	var req createAnnouncementRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{
+			"error":  "invalid json",
+			"detail": err.Error(),
+		})
 		return
 	}
 
 	result, err := h.uc.CreateAnnouncement(r.Context(), uc.CreateAnnouncementInput{
-		ID:            req.ID,
+		ID:            strings.TrimSpace(req.ID),
 		Title:         req.Title,
 		Content:       req.Content,
-		TargetToken:   req.TargetToken,
-		TargetAvatars: req.TargetAvatars,
-		Attachments:   req.Attachments,
+		TargetToken:   trimStringPtr(req.TargetToken),
+		TargetAvatars: normalizeAnnouncementStringList(req.TargetAvatars),
+		Attachments:   toAnnouncementAttachmentInputs(req.Attachments),
 		Published:     req.Published,
 		PublishedAt:   req.PublishedAt,
-		CreatedBy:     req.CreatedBy,
+		CreatedBy:     strings.TrimSpace(req.CreatedBy),
 	})
 	if err != nil {
 		writeAnnouncementErr(w, err)
@@ -200,19 +210,22 @@ func (h *AnnouncementHandler) updateAnnouncement(w http.ResponseWriter, r *http.
 
 	var req updateAnnouncementRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{
+			"error":  "invalid json",
+			"detail": err.Error(),
+		})
 		return
 	}
 
 	result, err := h.uc.UpdateAnnouncement(r.Context(), announcementID, uc.UpdateAnnouncementInput{
-		Title:         req.Title,
-		Content:       req.Content,
-		TargetToken:   req.TargetToken,
-		TargetAvatars: req.TargetAvatars,
+		Title:         trimStringPtr(req.Title),
+		Content:       trimStringPtr(req.Content),
+		TargetToken:   trimStringPtr(req.TargetToken),
+		TargetAvatars: normalizeAnnouncementStringListPtr(req.TargetAvatars),
 		Published:     req.Published,
 		PublishedAt:   req.PublishedAt,
-		Attachments:   req.Attachments,
-		UpdatedBy:     req.UpdatedBy,
+		Attachments:   toAnnouncementAttachmentInputPtr(req.Attachments),
+		UpdatedBy:     trimStringPtr(req.UpdatedBy),
 	})
 	if err != nil {
 		writeAnnouncementErr(w, err)
@@ -237,12 +250,15 @@ func (h *AnnouncementHandler) markPublished(w http.ResponseWriter, r *http.Reque
 	var req markPublishedRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{
+				"error":  "invalid json",
+				"detail": err.Error(),
+			})
 			return
 		}
 	}
 
-	result, err := h.uc.MarkPublished(r.Context(), announcementID, req.UpdatedBy)
+	result, err := h.uc.MarkPublished(r.Context(), announcementID, trimStringPtr(req.UpdatedBy))
 	if err != nil {
 		writeAnnouncementErr(w, err)
 		return
@@ -272,7 +288,110 @@ func (h *AnnouncementHandler) deleteAnnouncementCascade(w http.ResponseWriter, r
 }
 
 // =======================
-// Helpers
+// Mapper helpers
+// =======================
+
+func toAnnouncementAttachmentInputs(
+	values []announcementAttachmentRequest,
+) []uc.AnnouncementAttachmentInput {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make([]uc.AnnouncementAttachmentInput, 0, len(values))
+	seen := map[string]struct{}{}
+
+	for _, value := range values {
+		fileName := strings.TrimSpace(value.FileName)
+		fileURL := strings.TrimSpace(value.FileURL)
+		mimeType := strings.TrimSpace(value.MimeType)
+		objectPath := strings.TrimSpace(value.ObjectPath)
+
+		if fileName == "" && fileURL == "" && objectPath == "" {
+			continue
+		}
+
+		dedupeKey := objectPath
+		if dedupeKey == "" {
+			dedupeKey = fileURL
+		}
+		if dedupeKey == "" {
+			dedupeKey = fileName
+		}
+
+		if _, ok := seen[dedupeKey]; ok {
+			continue
+		}
+		seen[dedupeKey] = struct{}{}
+
+		result = append(result, uc.AnnouncementAttachmentInput{
+			FileName:   fileName,
+			FileURL:    fileURL,
+			FileSize:   value.FileSize,
+			MimeType:   mimeType,
+			ObjectPath: objectPath,
+		})
+	}
+
+	return result
+}
+
+func toAnnouncementAttachmentInputPtr(
+	values *[]announcementAttachmentRequest,
+) *[]uc.AnnouncementAttachmentInput {
+	if values == nil {
+		return nil
+	}
+
+	converted := toAnnouncementAttachmentInputs(*values)
+	return &converted
+}
+
+func trimStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(*value)
+	return &trimmed
+}
+
+func normalizeAnnouncementStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(values))
+
+	for _, value := range values {
+		normalized := strings.TrimSpace(value)
+		if normalized == "" {
+			continue
+		}
+
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+
+		seen[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+
+	return result
+}
+
+func normalizeAnnouncementStringListPtr(values *[]string) *[]string {
+	if values == nil {
+		return nil
+	}
+
+	normalized := normalizeAnnouncementStringList(*values)
+	return &normalized
+}
+
+// =======================
+// Response helpers
 // =======================
 
 func writeAnnouncementErr(w http.ResponseWriter, err error) {

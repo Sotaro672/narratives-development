@@ -1,4 +1,4 @@
-// frontend/console/sales/presentation/pages/announcementDetailPage.tsx
+// frontend\console\sales\presentation\pages\announcementDetailPage.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
@@ -37,10 +37,21 @@ type AnnouncementProductBlueprintLike = {
   productName?: string | null;
 };
 
+type AnnouncementAttachmentFileLike = {
+  announcementId?: string | null;
+  id?: string | null;
+  fileName?: string | null;
+  fileUrl?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  objectPath?: string | null;
+};
+
 type AnnouncementWithResolvedFields = Announcement & {
   tokenName?: string | null;
   targetAvatarDetails?: AnnouncementTargetAvatarDetailLike[];
   productBlueprints?: AnnouncementProductBlueprintLike[];
+  attachmentFiles?: AnnouncementAttachmentFileLike[];
   createdByName?: string | null;
   updatedByName?: string | null;
 };
@@ -86,6 +97,29 @@ function normalizeAvatarDetails(
       followingCount: toSafeNumber(value.followingCount),
       postCount: toSafeNumber(value.postCount),
     });
+  }
+
+  return result;
+}
+
+function normalizeAttachmentImageUrls(
+  values: AnnouncementAttachmentFileLike[] | undefined | null,
+): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const fileUrl = String(value?.fileUrl ?? "").trim();
+    const mimeType = String(value?.mimeType ?? "").trim().toLowerCase();
+
+    if (!fileUrl) continue;
+    if (mimeType && !mimeType.startsWith("image/")) continue;
+    if (seen.has(fileUrl)) continue;
+
+    seen.add(fileUrl);
+    result.push(fileUrl);
   }
 
   return result;
@@ -273,7 +307,6 @@ export default function AnnouncementDetailPage() {
         content: payload.text,
         targetToken: announcement.targetToken,
         targetAvatars: selectedAvatarIds,
-        attachments: announcement.attachments,
         published: announcement.published,
         publishedAt: announcement.publishedAt,
         updatedBy: getUpdatedBy(),
@@ -317,7 +350,6 @@ export default function AnnouncementDetailPage() {
           content: payload.text,
           targetToken: announcement.targetToken,
           targetAvatars: selectedAvatarIds,
-          attachments: announcement.attachments,
           published: announcement.published,
           publishedAt: announcement.publishedAt,
           updatedBy: getUpdatedBy(),
@@ -364,6 +396,10 @@ export default function AnnouncementDetailPage() {
 
   const productName = useMemo(() => {
     return getAnnouncementProductName(announcement);
+  }, [announcement]);
+
+  const initialImageUrls = useMemo(() => {
+    return normalizeAttachmentImageUrls(announcement?.attachmentFiles);
   }, [announcement]);
 
   const owners = useMemo<SalesOwnerItem[]>(() => {
@@ -457,7 +493,7 @@ export default function AnnouncementDetailPage() {
           mode={isEditMode ? "edit" : "view"}
           initialTitle={announcement.title}
           initialText={announcement.content}
-          initialImages={[]}
+          initialImages={initialImageUrls}
           saving={isSavingInput}
           sending={isSendingInput}
           onChange={isEditMode ? handleInputChange : undefined}
@@ -468,8 +504,6 @@ export default function AnnouncementDetailPage() {
         <AdminCard
           title="管理情報"
           mode="view"
-          assigneeId=""
-          assigneeName=""
           createdByName={createdByName}
           createdAt={createdAt}
           updatedByName={updatedByName}

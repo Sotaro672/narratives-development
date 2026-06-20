@@ -26,9 +26,13 @@ type AnnouncementAvatarRepositoryFS struct {
 	Client *firestore.Client
 }
 
-// Firestore implementation of announcement.AttachmentRepository.
-type AnnouncementAttachmentRepositoryFS struct {
-	Client *firestore.Client
+type announcementAvatarDoc struct {
+	AnnouncementID string     `firestore:"announcementId"`
+	AvatarID       string     `firestore:"avatarId"`
+	IsRead         bool       `firestore:"isRead"`
+	ReadAt         *time.Time `firestore:"readAt,omitempty"`
+	CreatedAt      time.Time  `firestore:"createdAt"`
+	UpdatedAt      *time.Time `firestore:"updatedAt,omitempty"`
 }
 
 func NewAnnouncementRepositoryFS(client *firestore.Client) *AnnouncementRepositoryFS {
@@ -39,34 +43,24 @@ func NewAnnouncementAvatarRepositoryFS(client *firestore.Client) *AnnouncementAv
 	return &AnnouncementAvatarRepositoryFS{Client: client}
 }
 
-func NewAnnouncementAttachmentRepositoryFS(client *firestore.Client) *AnnouncementAttachmentRepositoryFS {
-	return &AnnouncementAttachmentRepositoryFS{Client: client}
-}
-
 // Compile-time checks.
 var _ announcement.Repository = (*AnnouncementRepositoryFS)(nil)
 var _ announcement.AvatarRepository = (*AnnouncementAvatarRepositoryFS)(nil)
-var _ announcement.AttachmentRepository = (*AnnouncementAttachmentRepositoryFS)(nil)
 
 func announcementCollection(client *firestore.Client) *firestore.CollectionRef {
 	return client.Collection("announcements")
 }
 
+func announcementDoc(client *firestore.Client, announcementID string) *firestore.DocumentRef {
+	return announcementCollection(client).Doc(announcementID)
+}
+
 func avatarCollection(client *firestore.Client, announcementID string) *firestore.CollectionRef {
-	return announcementCollection(client).Doc(announcementID).Collection("avatars")
+	return announcementDoc(client, announcementID).Collection("avatars")
 }
 
-func attachmentCollection(client *firestore.Client, announcementID string) *firestore.CollectionRef {
-	return announcementCollection(client).Doc(announcementID).Collection("attachments")
-}
-
-func attachmentDoc(
-	client *firestore.Client,
-	announcementID string,
-	fileName string,
-) *firestore.DocumentRef {
-	id := announcement.MakeAttachmentID(announcementID, fileName)
-	return attachmentCollection(client, announcementID).Doc(id)
+func avatarDoc(client *firestore.Client, announcementID string, avatarID string) *firestore.DocumentRef {
+	return avatarCollection(client, announcementID).Doc(avatarID)
 }
 
 // GetByID retrieves an announcement by ID from Firestore.
@@ -78,7 +72,7 @@ func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (anno
 		return announcement.Announcement{}, announcement.ErrInvalidID
 	}
 
-	doc, err := announcementCollection(r.Client).Doc(id).Get(ctx)
+	doc, err := announcementDoc(r.Client, id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return announcement.Announcement{}, announcement.ErrNotFound
@@ -86,25 +80,27 @@ func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (anno
 		return announcement.Announcement{}, err
 	}
 
-	var a announcement.Announcement
-	if err := doc.DataTo(&a); err != nil {
-		return announcement.Announcement{}, err
-	}
-
-	if a.ID == "" {
-		a.ID = doc.Ref.ID
-	}
-
-	return a, nil
+	return announcementFromDoc(ctx, doc)
 }
 
 // Create inserts a new announcement.
+//
+// Parent document does not store:
+// - ID
+// - TargetAvatars
+// - Attachments
+//
+// Target avatars are stored under:
+// announcements/{announcementId}/avatars/{avatarId}
+//
+// Attachment metadata is stored under:
+// announcements/{announcementId}/attachments/{attachmentId}
 func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.Announcement) (announcement.Announcement, error) {
 	if r.Client == nil {
 		return announcement.Announcement{}, errors.New("firestore client is nil")
 	}
 
-	ref := announcementCollection(r.Client).Doc(a.ID)
+	ref := announcementDoc(r.Client, a.ID)
 	if a.ID == "" {
 		ref = announcementCollection(r.Client).NewDoc()
 		a.ID = ref.ID
@@ -114,8 +110,11 @@ func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.An
 	a.CreatedAt = now
 	a.UpdatedAt = &now
 
-	_, err := ref.Set(ctx, a)
-	if err != nil {
+	if _, err := ref.Set(ctx, announcementData(a)); err != nil {
+		return announcement.Announcement{}, err
+	}
+
+	if err := syncAnnouncementAvatars(ctx, r.Client, a.ID, a.TargetAvatars, a.CreatedAt); err != nil {
 		return announcement.Announcement{}, err
 	}
 
@@ -123,11 +122,6 @@ func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.An
 }
 
 // Update replaces/upserts the mutable fields of a persisted announcement.
-//
-// Expected policy:
-// - id is the target document id.
-// - a.ID may be empty or equal to id.
-// - immutable fields such as CreatedAt and CreatedBy are not overwritten here.
 func (r *AnnouncementRepositoryFS) Update(
 	ctx context.Context,
 	id string,
@@ -140,8 +134,6 @@ func (r *AnnouncementRepositoryFS) Update(
 		return announcement.Announcement{}, announcement.ErrInvalidID
 	}
 
-	ref := announcementCollection(r.Client).Doc(id)
-
 	updatedAt := time.Now().UTC()
 	if a.UpdatedAt != nil {
 		updatedAt = *a.UpdatedAt
@@ -151,22 +143,33 @@ func (r *AnnouncementRepositoryFS) Update(
 		{Path: "Title", Value: a.Title},
 		{Path: "Content", Value: a.Content},
 		{Path: "TargetToken", Value: a.TargetToken},
-		{Path: "TargetAvatars", Value: a.TargetAvatars},
 		{Path: "Published", Value: a.Published},
 		{Path: "PublishedAt", Value: a.PublishedAt},
-		{Path: "Attachments", Value: a.Attachments},
 		{Path: "UpdatedAt", Value: updatedAt},
+
+		// Remove legacy duplicated/embedded fields.
+		{Path: "ID", Value: firestore.Delete},
+		{Path: "TargetAvatars", Value: firestore.Delete},
+		{Path: "Attachments", Value: firestore.Delete},
 	}
 
 	if a.UpdatedBy != nil {
 		updates = append(updates, firestore.Update{Path: "UpdatedBy", Value: *a.UpdatedBy})
 	}
 
-	_, err := ref.Update(ctx, updates)
-	if err != nil {
+	if _, err := announcementDoc(r.Client, id).Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return announcement.Announcement{}, announcement.ErrNotFound
 		}
+		return announcement.Announcement{}, err
+	}
+
+	createdAt := a.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = updatedAt
+	}
+
+	if err := syncAnnouncementAvatars(ctx, r.Client, id, a.TargetAvatars, createdAt); err != nil {
 		return announcement.Announcement{}, err
 	}
 
@@ -190,20 +193,22 @@ func (r *AnnouncementRepositoryFS) MarkPublished(
 		return announcement.Announcement{}, announcement.ErrInvalidPublishedAt
 	}
 
-	ref := announcementCollection(r.Client).Doc(id)
-
 	updates := []firestore.Update{
 		{Path: "Published", Value: true},
 		{Path: "PublishedAt", Value: publishedAt},
 		{Path: "UpdatedAt", Value: publishedAt},
+
+		// Remove legacy duplicated/embedded fields when touched.
+		{Path: "ID", Value: firestore.Delete},
+		{Path: "TargetAvatars", Value: firestore.Delete},
+		{Path: "Attachments", Value: firestore.Delete},
 	}
 
 	if updatedBy != nil {
 		updates = append(updates, firestore.Update{Path: "UpdatedBy", Value: *updatedBy})
 	}
 
-	_, err := ref.Update(ctx, updates)
-	if err != nil {
+	if _, err := announcementDoc(r.Client, id).Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return announcement.Announcement{}, announcement.ErrNotFound
 		}
@@ -222,22 +227,17 @@ func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error 
 		return announcement.ErrInvalidID
 	}
 
-	ref := announcementCollection(r.Client).Doc(id)
+	ref := announcementDoc(r.Client, id)
 
-	_, err := ref.Get(ctx)
-	if err != nil {
+	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return announcement.ErrNotFound
 		}
 		return err
 	}
 
-	_, err = ref.Delete(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	_, err := ref.Delete(ctx)
+	return err
 }
 
 // ListByTargetToken returns announcements whose TargetToken equals tokenBlueprintID.
@@ -259,32 +259,15 @@ func (r *AnnouncementRepositoryFS) ListByTargetToken(
 		Documents(ctx)
 	defer iter.Stop()
 
-	var items []announcement.Announcement
-	for {
-		doc, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.PageResult[announcement.Announcement]{}, err
-		}
-
-		var a announcement.Announcement
-		if err := doc.DataTo(&a); err != nil {
-			return common.PageResult[announcement.Announcement]{}, err
-		}
-
-		if a.ID == "" {
-			a.ID = doc.Ref.ID
-		}
-
-		items = append(items, a)
+	items, err := announcementsFromIter(ctx, iter)
+	if err != nil {
+		return common.PageResult[announcement.Announcement]{}, err
 	}
 
 	return paginateAnnouncements(items, page), nil
 }
 
-// ListByTargetAvatar returns announcements whose TargetAvatars contains avatarID.
+// ListByTargetAvatar returns announcements whose avatars subcollection contains avatarID.
 func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 	ctx context.Context,
 	avatarID string,
@@ -297,15 +280,18 @@ func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 		return common.PageResult[announcement.Announcement]{}, announcement.ErrInvalidAvatarID
 	}
 
-	iter := announcementCollection(r.Client).
-		Where("TargetAvatars", "array-contains", avatarID).
-		OrderBy("CreatedAt", firestore.Desc).
+	iter := r.Client.
+		CollectionGroup("avatars").
+		Where("avatarId", "==", avatarID).
+		OrderBy("createdAt", firestore.Desc).
 		Documents(ctx)
 	defer iter.Stop()
 
-	var items []announcement.Announcement
+	items := []announcement.Announcement{}
+	seen := map[string]struct{}{}
+
 	for {
-		doc, err := iter.Next()
+		avatarDocSnap, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
@@ -313,13 +299,29 @@ func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 			return common.PageResult[announcement.Announcement]{}, err
 		}
 
-		var a announcement.Announcement
-		if err := doc.DataTo(&a); err != nil {
+		if avatarDocSnap.Ref == nil ||
+			avatarDocSnap.Ref.Parent == nil ||
+			avatarDocSnap.Ref.Parent.Parent == nil {
+			continue
+		}
+
+		parentRef := avatarDocSnap.Ref.Parent.Parent
+		if _, ok := seen[parentRef.ID]; ok {
+			continue
+		}
+		seen[parentRef.ID] = struct{}{}
+
+		parentDoc, err := parentRef.Get(ctx)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
 			return common.PageResult[announcement.Announcement]{}, err
 		}
 
-		if a.ID == "" {
-			a.ID = doc.Ref.ID
+		a, err := announcementFromDoc(ctx, parentDoc)
+		if err != nil {
+			return common.PageResult[announcement.Announcement]{}, err
 		}
 
 		items = append(items, a)
@@ -344,7 +346,8 @@ func (r *AnnouncementAvatarRepositoryFS) ListByAnnouncementID(
 	iter := avatarCollection(r.Client, announcementID).Documents(ctx)
 	defer iter.Stop()
 
-	var results []announcement.AnnouncementAvatar
+	results := []announcement.AnnouncementAvatar{}
+
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -354,17 +357,12 @@ func (r *AnnouncementAvatarRepositoryFS) ListByAnnouncementID(
 			return nil, err
 		}
 
-		var avatar announcement.AnnouncementAvatar
-		if err := doc.DataTo(&avatar); err != nil {
+		avatar, err := announcementAvatarFromDoc(doc, announcementID)
+		if err != nil {
 			return nil, err
 		}
 
-		normalizeAnnouncementAvatarFromDoc(doc, &avatar)
-
-		if len(filter.AvatarIDs) > 0 && !containsString(filter.AvatarIDs, avatar.AvatarID) {
-			continue
-		}
-		if filter.IsRead != nil && avatar.IsRead != *filter.IsRead {
+		if !avatarMatchesFilter(avatar, filter) {
 			continue
 		}
 
@@ -375,9 +373,6 @@ func (r *AnnouncementAvatarRepositoryFS) ListByAnnouncementID(
 }
 
 // Update manages the avatar read state.
-//
-// This method intentionally works as an upsert so the port does not need
-// separate Upsert/Delete methods for announcement avatar records.
 func (r *AnnouncementAvatarRepositoryFS) Update(
 	ctx context.Context,
 	announcementID string,
@@ -395,6 +390,7 @@ func (r *AnnouncementAvatarRepositoryFS) Update(
 	}
 
 	now := time.Now().UTC()
+	ref := avatarDoc(r.Client, announcementID, avatarID)
 
 	data := map[string]any{
 		"announcementId": announcementID,
@@ -402,26 +398,18 @@ func (r *AnnouncementAvatarRepositoryFS) Update(
 		"updatedAt":      now,
 	}
 
-	doc, err := avatarCollection(r.Client, announcementID).Doc(avatarID).Get(ctx)
-	if err != nil {
+	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) != codes.NotFound {
 			return announcement.AnnouncementAvatar{}, err
 		}
 		data["createdAt"] = now
 	}
 
-	if doc != nil && doc.Exists() {
-		var current announcement.AnnouncementAvatar
-		if err := doc.DataTo(&current); err != nil {
-			return announcement.AnnouncementAvatar{}, err
-		}
-		if current.CreatedAt.IsZero() {
-			data["createdAt"] = now
-		}
-	}
-
 	if patch.IsRead != nil {
 		data["isRead"] = *patch.IsRead
+		if !*patch.IsRead {
+			data["readAt"] = nil
+		}
 	}
 	if patch.ReadAt != nil {
 		data["readAt"] = *patch.ReadAt
@@ -430,10 +418,7 @@ func (r *AnnouncementAvatarRepositoryFS) Update(
 		data["updatedAt"] = *patch.UpdatedAt
 	}
 
-	ref := avatarCollection(r.Client, announcementID).Doc(avatarID)
-
-	_, err = ref.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
+	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
 		return announcement.AnnouncementAvatar{}, err
 	}
 
@@ -441,9 +426,6 @@ func (r *AnnouncementAvatarRepositoryFS) Update(
 }
 
 // MarkRead marks announcements/{announcementId}/avatars/{avatarId} as read.
-//
-// This method is idempotent. If the avatar record already exists, it updates
-// isRead/readAt/updatedAt. If it does not exist, it creates the avatar record.
 func (r *AnnouncementAvatarRepositoryFS) MarkRead(
 	ctx context.Context,
 	announcementID string,
@@ -463,7 +445,7 @@ func (r *AnnouncementAvatarRepositoryFS) MarkRead(
 		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidReadAt
 	}
 
-	ref := avatarCollection(r.Client, announcementID).Doc(avatarID)
+	ref := avatarDoc(r.Client, announcementID, avatarID)
 
 	data := map[string]any{
 		"announcementId": announcementID,
@@ -473,48 +455,134 @@ func (r *AnnouncementAvatarRepositoryFS) MarkRead(
 		"updatedAt":      readAt,
 	}
 
-	doc, err := ref.Get(ctx)
-	if err != nil {
+	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) != codes.NotFound {
 			return announcement.AnnouncementAvatar{}, err
 		}
 		data["createdAt"] = readAt
 	}
 
-	if doc != nil && doc.Exists() {
-		var current announcement.AnnouncementAvatar
-		if err := doc.DataTo(&current); err != nil {
-			return announcement.AnnouncementAvatar{}, err
-		}
-		if current.CreatedAt.IsZero() {
-			data["createdAt"] = readAt
-		}
-	}
-
-	_, err = ref.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
+	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
 		return announcement.AnnouncementAvatar{}, err
 	}
 
 	return getAnnouncementAvatar(ctx, r.Client, announcementID, avatarID)
 }
 
-// ListByAnnouncementID retrieves all attachment metadata documents for one announcement.
-func (r *AnnouncementAttachmentRepositoryFS) ListByAnnouncementID(
-	ctx context.Context,
-	announcementID string,
-) ([]announcement.AttachmentFile, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
+func announcementData(a announcement.Announcement) map[string]any {
+	return map[string]any{
+		"Title":       a.Title,
+		"Content":     a.Content,
+		"TargetToken": a.TargetToken,
+		"Published":   a.Published,
+		"PublishedAt": a.PublishedAt,
+		"CreatedAt":   a.CreatedAt,
+		"CreatedBy":   a.CreatedBy,
+		"UpdatedAt":   a.UpdatedAt,
+		"UpdatedBy":   a.UpdatedBy,
 	}
-	if announcementID == "" {
-		return nil, announcement.ErrInvalidAnnouncementID
-	}
+}
 
-	iter := attachmentCollection(r.Client, announcementID).Documents(ctx)
+func syncAnnouncementAvatars(
+	ctx context.Context,
+	client *firestore.Client,
+	announcementID string,
+	targetAvatarIDs []string,
+	createdAt time.Time,
+) error {
+	targets := uniqueStringSet(targetAvatarIDs)
+	col := avatarCollection(client, announcementID)
+	batch := client.Batch()
+	writes := 0
+
+	iter := col.Documents(ctx)
 	defer iter.Stop()
 
-	var results []announcement.AttachmentFile
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if _, ok := targets[doc.Ref.ID]; !ok {
+			batch.Delete(doc.Ref)
+			writes++
+		}
+	}
+
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+
+	for avatarID := range targets {
+		ref := col.Doc(avatarID)
+
+		doc, err := ref.Get(ctx)
+		if err == nil && doc.Exists() {
+			continue
+		}
+		if err != nil && status.Code(err) != codes.NotFound {
+			return err
+		}
+
+		batch.Set(ref, map[string]any{
+			"announcementId": announcementID,
+			"avatarId":       avatarID,
+			"isRead":         false,
+			"readAt":         nil,
+			"createdAt":      createdAt,
+			"updatedAt":      nil,
+		})
+		writes++
+	}
+
+	if writes == 0 {
+		return nil
+	}
+
+	_, err := batch.Commit(ctx)
+	return err
+}
+
+func announcementFromDoc(
+	ctx context.Context,
+	doc *firestore.DocumentSnapshot,
+) (announcement.Announcement, error) {
+	if doc == nil {
+		return announcement.Announcement{}, announcement.ErrNotFound
+	}
+
+	var a announcement.Announcement
+	if err := doc.DataTo(&a); err != nil {
+		return announcement.Announcement{}, err
+	}
+
+	a.ID = doc.Ref.ID
+
+	targetAvatarIDs, err := childDocIDs(ctx, doc.Ref.Collection("avatars"))
+	if err != nil {
+		return announcement.Announcement{}, err
+	}
+	attachmentIDs, err := childDocIDs(ctx, doc.Ref.Collection("attachments"))
+	if err != nil {
+		return announcement.Announcement{}, err
+	}
+
+	a.TargetAvatars = targetAvatarIDs
+	a.Attachments = attachmentIDs
+
+	return a, nil
+}
+
+func announcementsFromIter(
+	ctx context.Context,
+	iter *firestore.DocumentIterator,
+) ([]announcement.Announcement, error) {
+	items := []announcement.Announcement{}
+
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -524,129 +592,41 @@ func (r *AnnouncementAttachmentRepositoryFS) ListByAnnouncementID(
 			return nil, err
 		}
 
-		var f announcement.AttachmentFile
-		if err := doc.DataTo(&f); err != nil {
+		a, err := announcementFromDoc(ctx, doc)
+		if err != nil {
 			return nil, err
 		}
 
-		normalizeAttachmentFromDoc(doc, &f)
-
-		results = append(results, f)
+		items = append(items, a)
 	}
 
-	return results, nil
+	return items, nil
 }
 
-// Create inserts attachment metadata.
-func (r *AnnouncementAttachmentRepositoryFS) Create(
+func childDocIDs(
 	ctx context.Context,
-	f announcement.AttachmentFile,
-) (announcement.AttachmentFile, error) {
-	if r.Client == nil {
-		return announcement.AttachmentFile{}, errors.New("firestore client is nil")
-	}
-	if f.AnnouncementID == "" {
-		return announcement.AttachmentFile{}, announcement.ErrInvalidAnnouncementID
-	}
-	if f.ID == "" {
-		f.ID = announcement.MakeAttachmentID(f.AnnouncementID, f.FileName)
-	}
-	if f.ID == "" {
-		return announcement.AttachmentFile{}, announcement.ErrInvalidID
-	}
+	col *firestore.CollectionRef,
+) ([]string, error) {
+	iter := col.Documents(ctx)
+	defer iter.Stop()
 
-	_, err := attachmentCollection(r.Client, f.AnnouncementID).Doc(f.ID).Set(ctx, f)
-	if err != nil {
-		return announcement.AttachmentFile{}, err
-	}
+	ids := []string{}
 
-	return f, nil
-}
-
-// Update applies a patch to attachment metadata.
-func (r *AnnouncementAttachmentRepositoryFS) Update(
-	ctx context.Context,
-	announcementID string,
-	fileName string,
-	patch announcement.AttachmentFilePatch,
-) (announcement.AttachmentFile, error) {
-	if r.Client == nil {
-		return announcement.AttachmentFile{}, errors.New("firestore client is nil")
-	}
-	if announcementID == "" {
-		return announcement.AttachmentFile{}, announcement.ErrInvalidAnnouncementID
-	}
-	if fileName == "" {
-		return announcement.AttachmentFile{}, announcement.ErrInvalidFileName
-	}
-
-	ref := attachmentDoc(r.Client, announcementID, fileName)
-
-	updates := []firestore.Update{}
-
-	if patch.FileURL != nil {
-		updates = append(updates, firestore.Update{Path: "fileUrl", Value: *patch.FileURL})
-	}
-	if patch.FileSize != nil {
-		updates = append(updates, firestore.Update{Path: "fileSize", Value: *patch.FileSize})
-	}
-	if patch.MimeType != nil {
-		updates = append(updates, firestore.Update{Path: "mimeType", Value: *patch.MimeType})
-	}
-	if patch.ObjectPath != nil {
-		updates = append(updates, firestore.Update{Path: "objectPath", Value: *patch.ObjectPath})
-	}
-	if patch.UpdatedAt != nil {
-		updates = append(updates, firestore.Update{Path: "updatedAt", Value: *patch.UpdatedAt})
-	}
-
-	if len(updates) == 0 {
-		return getAttachment(ctx, r.Client, announcementID, fileName)
-	}
-
-	_, err := ref.Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return announcement.AttachmentFile{}, announcement.ErrNotFound
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
 		}
-		return announcement.AttachmentFile{}, err
-	}
-
-	return getAttachment(ctx, r.Client, announcementID, fileName)
-}
-
-// Delete removes one attachment metadata document.
-func (r *AnnouncementAttachmentRepositoryFS) Delete(
-	ctx context.Context,
-	announcementID string,
-	fileName string,
-) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	if announcementID == "" {
-		return announcement.ErrInvalidAnnouncementID
-	}
-	if fileName == "" {
-		return announcement.ErrInvalidFileName
-	}
-
-	ref := attachmentDoc(r.Client, announcementID, fileName)
-
-	_, err := ref.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return announcement.ErrNotFound
+		if err != nil {
+			return nil, err
 		}
-		return err
+
+		if doc.Ref != nil && doc.Ref.ID != "" {
+			ids = append(ids, doc.Ref.ID)
+		}
 	}
 
-	_, err = ref.Delete(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return ids, nil
 }
 
 func getAnnouncementAvatar(
@@ -655,7 +635,7 @@ func getAnnouncementAvatar(
 	announcementID string,
 	avatarID string,
 ) (announcement.AnnouncementAvatar, error) {
-	doc, err := avatarCollection(client, announcementID).Doc(avatarID).Get(ctx)
+	doc, err := avatarDoc(client, announcementID, avatarID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return announcement.AnnouncementAvatar{}, announcement.ErrNotFound
@@ -663,72 +643,67 @@ func getAnnouncementAvatar(
 		return announcement.AnnouncementAvatar{}, err
 	}
 
-	var avatar announcement.AnnouncementAvatar
-	if err := doc.DataTo(&avatar); err != nil {
+	return announcementAvatarFromDoc(doc, announcementID)
+}
+
+func announcementAvatarFromDoc(
+	doc *firestore.DocumentSnapshot,
+	announcementID string,
+) (announcement.AnnouncementAvatar, error) {
+	if doc == nil {
+		return announcement.AnnouncementAvatar{}, announcement.ErrNotFound
+	}
+
+	var data announcementAvatarDoc
+	if err := doc.DataTo(&data); err != nil {
 		return announcement.AnnouncementAvatar{}, err
 	}
 
-	normalizeAnnouncementAvatarFromDoc(doc, &avatar)
+	if data.AvatarID == "" {
+		data.AvatarID = doc.Ref.ID
+	}
+	if data.AnnouncementID == "" {
+		data.AnnouncementID = announcementID
+	}
 
-	return avatar, nil
+	return announcement.NewAnnouncementAvatarWithState(
+		data.AnnouncementID,
+		data.AvatarID,
+		data.IsRead,
+		data.ReadAt,
+		data.CreatedAt,
+		data.UpdatedAt,
+	)
 }
 
-func getAttachment(
-	ctx context.Context,
-	client *firestore.Client,
-	announcementID string,
-	fileName string,
-) (announcement.AttachmentFile, error) {
-	doc, err := attachmentDoc(client, announcementID, fileName).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return announcement.AttachmentFile{}, announcement.ErrNotFound
+func avatarMatchesFilter(
+	avatar announcement.AnnouncementAvatar,
+	filter announcement.AnnouncementAvatarFilter,
+) bool {
+	if len(filter.AvatarIDs) > 0 {
+		if _, ok := uniqueStringSet(filter.AvatarIDs)[avatar.AvatarID]; !ok {
+			return false
 		}
-		return announcement.AttachmentFile{}, err
 	}
 
-	var f announcement.AttachmentFile
-	if err := doc.DataTo(&f); err != nil {
-		return announcement.AttachmentFile{}, err
+	if filter.IsRead != nil && avatar.IsRead != *filter.IsRead {
+		return false
 	}
 
-	normalizeAttachmentFromDoc(doc, &f)
-
-	return f, nil
+	return true
 }
 
-func normalizeAnnouncementAvatarFromDoc(
-	doc *firestore.DocumentSnapshot,
-	avatar *announcement.AnnouncementAvatar,
-) {
-	if avatar == nil || doc == nil {
-		return
+func uniqueStringSet(values []string) map[string]struct{} {
+	out := map[string]struct{}{}
+
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		out[value] = struct{}{}
 	}
 
-	if avatar.AvatarID == "" {
-		avatar.AvatarID = doc.Ref.ID
-	}
-
-	if avatar.AnnouncementID == "" && doc.Ref.Parent != nil && doc.Ref.Parent.Parent != nil {
-		avatar.AnnouncementID = doc.Ref.Parent.Parent.ID
-	}
-}
-
-func normalizeAttachmentFromDoc(
-	doc *firestore.DocumentSnapshot,
-	f *announcement.AttachmentFile,
-) {
-	if f == nil || doc == nil {
-		return
-	}
-
-	if f.ID == "" {
-		f.ID = doc.Ref.ID
-	}
-
-	if f.AnnouncementID == "" && doc.Ref.Parent != nil && doc.Ref.Parent.Parent != nil {
-		f.AnnouncementID = doc.Ref.Parent.Parent.ID
-	}
+	return out
 }
 
 func paginateAnnouncements(

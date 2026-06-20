@@ -1,8 +1,18 @@
-// frontend/console/sales/src/application/announcement_create_service.tsx
+//frontend\console\sales\application\announcement_create_service.tsx
 import type { TokenBlueprint } from "../../tokenBlueprint/src/domain/entity/tokenBlueprint";
 import { safeDateTimeLabelJa } from "../../shell/src/shared/util/dateJa";
 import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/src/application/tokenBlueprintDetailService";
-import { createAnnouncement } from "../infrastructure/announcement_repository_http";
+import {
+  createAnnouncement,
+  type AnnouncementAttachmentInput,
+} from "../infrastructure/announcement_repository_http";
+
+import {
+  getDownloadURL,
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+} from "firebase/storage";
 
 export type AnnouncementOwnerVM = {
   avatarId: string;
@@ -84,7 +94,7 @@ function uniqueStrings(values: unknown): string[] {
   const result: string[] = [];
 
   for (const v of values) {
-    const s = String(v ?? "");
+    const s = String(v ?? "").trim();
     if (!s) continue;
     if (seen.has(s)) continue;
 
@@ -121,7 +131,7 @@ function getFirstProductName(productBlueprintsValue: unknown): string {
 
     const productName = String(
       (item as AnnouncementCreateLocationProductBlueprint).productName ?? "",
-    );
+    ).trim();
 
     if (productName) {
       return productName;
@@ -159,10 +169,10 @@ function toOwnersFromState(
         : {};
 
     return {
-      avatarId: String(item.avatarId ?? ""),
-      avatarName: String(item.avatarName ?? ""),
-      avatarIconUrl: String(item.avatarIcon ?? ""),
-      mintAddress: String(mintAddresses[index] ?? ""),
+      avatarId: String(item.avatarId ?? "").trim(),
+      avatarName: String(item.avatarName ?? "").trim(),
+      avatarIconUrl: String(item.avatarIcon ?? "").trim(),
+      mintAddress: String(mintAddresses[index] ?? "").trim(),
       productName,
       followerCount: toSafeNumber(item.followerCount),
       followingCount: toSafeNumber(item.followingCount),
@@ -173,6 +183,132 @@ function toOwnersFromState(
 
 function uniqueAvatarIds(values: unknown): string[] {
   return uniqueStrings(values);
+}
+
+function createClientId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function sanitizePathSegment(value: string): string {
+  const normalized = String(value ?? "").trim();
+
+  if (!normalized) {
+    return "file";
+  }
+
+  return normalized
+    .replace(/[\\/#?[\]*]/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_");
+}
+
+function getFileExtension(fileName: string): string {
+  const normalized = String(fileName ?? "").trim();
+  const index = normalized.lastIndexOf(".");
+
+  if (index < 0 || index === normalized.length - 1) {
+    return "";
+  }
+
+  return normalized.slice(index);
+}
+
+function buildAnnouncementAttachmentStorageFileName(params: {
+  file: File;
+  index: number;
+}): string {
+  const extension = getFileExtension(params.file.name || "image");
+  const attachmentId = createClientId();
+  const displayOrder = String(params.index + 1).padStart(2, "0");
+
+  return sanitizePathSegment(`${displayOrder}-${attachmentId}${extension}`);
+}
+
+function buildAnnouncementAttachmentObjectPath(params: {
+  announcementId: string;
+  storageFileName: string;
+}): string {
+  const announcementId = sanitizePathSegment(params.announcementId);
+  const storageFileName = sanitizePathSegment(params.storageFileName);
+
+  return [
+    "announcements",
+    announcementId,
+    "attachments",
+    storageFileName,
+  ].join("/");
+}
+
+async function uploadAnnouncementImage(params: {
+  announcementId: string;
+  file: File;
+  index: number;
+}): Promise<AnnouncementAttachmentInput> {
+  const storageFileName = buildAnnouncementAttachmentStorageFileName({
+    file: params.file,
+    index: params.index,
+  });
+
+  const mimeType = String(params.file.type || "application/octet-stream").trim();
+
+  const objectPath = buildAnnouncementAttachmentObjectPath({
+    announcementId: params.announcementId,
+    storageFileName,
+  });
+
+  const storage = getStorage();
+  const ref = storageRef(storage, objectPath);
+
+  await uploadBytes(ref, params.file, {
+    contentType: mimeType,
+    customMetadata: {
+      announcementId: params.announcementId,
+      fileName: storageFileName,
+      originalFileName: params.file.name,
+    },
+  });
+
+  const fileUrl = await getDownloadURL(ref);
+
+  return {
+    fileName: storageFileName,
+    fileUrl,
+    fileSize: params.file.size,
+    mimeType,
+    objectPath,
+  };
+}
+
+async function uploadAnnouncementImages(params: {
+  announcementId: string;
+  images: File[];
+}): Promise<AnnouncementAttachmentInput[]> {
+  const images = Array.isArray(params.images) ? params.images : [];
+
+  const validImages = images.filter((file) => {
+    return file instanceof File && file.type.startsWith("image/");
+  });
+
+  if (validImages.length === 0) {
+    return [];
+  }
+
+  return Promise.all(
+    validImages.map((file, index) =>
+      uploadAnnouncementImage({
+        announcementId: params.announcementId,
+        file,
+        index,
+      }),
+    ),
+  );
 }
 
 export function normalizeAnnouncementCreateLocationState(
@@ -199,25 +335,25 @@ export function buildAnnouncementCreateVM(
   tokenBlueprintId: string | undefined,
   locationState: AnnouncementCreateLocationState,
 ): AnnouncementCreateVM {
-  const id = String((blueprint as any)?.id ?? tokenBlueprintId ?? "");
+  const id = String((blueprint as any)?.id ?? tokenBlueprintId ?? "").trim();
 
   const sales = id ? { tokenBlueprintId: id } : null;
-  const createdById = String((blueprint as any)?.createdBy ?? "");
-  const updatedById = String((blueprint as any)?.updatedBy ?? "");
+  const createdById = String((blueprint as any)?.createdBy ?? "").trim();
+  const updatedById = String((blueprint as any)?.updatedBy ?? "").trim();
 
   const createdByName =
-    String((blueprint as any)?.createdByName ?? "") || createdById;
+    String((blueprint as any)?.createdByName ?? "").trim() || createdById;
 
   const updatedByName =
-    String((blueprint as any)?.updatedByName ?? "") || updatedById;
+    String((blueprint as any)?.updatedByName ?? "").trim() || updatedById;
 
   return {
     sales,
     title: "告知",
-    assigneeId: String((blueprint as any)?.assigneeId ?? ""),
+    assigneeId: String((blueprint as any)?.assigneeId ?? "").trim(),
     assigneeName:
-      String((blueprint as any)?.assigneeName ?? "") ||
-      String((blueprint as any)?.assigneeId ?? ""),
+      String((blueprint as any)?.assigneeName ?? "").trim() ||
+      String((blueprint as any)?.assigneeId ?? "").trim(),
     minted: Boolean((blueprint as any)?.minted),
 
     createdById,
@@ -240,7 +376,7 @@ export async function fetchAnnouncementCreateVM(
   tokenBlueprintId: string | undefined,
   locationState: AnnouncementCreateLocationState,
 ): Promise<AnnouncementCreateVM> {
-  const id = String(tokenBlueprintId ?? "");
+  const id = String(tokenBlueprintId ?? "").trim();
 
   if (!id) {
     return buildAnnouncementCreateVM(null, tokenBlueprintId, locationState);
@@ -284,12 +420,20 @@ export async function saveAnnouncement({
   validateAnnouncementPayload(payload);
   validateTargetAvatarIds(targetAvatarIds);
 
+  const announcementId = createClientId();
+
+  const attachments = await uploadAnnouncementImages({
+    announcementId,
+    images: payload.images,
+  });
+
   return createAnnouncement({
+    id: announcementId,
     title: payload.title,
     content: payload.text,
     targetToken: sales.tokenBlueprintId,
     targetAvatars: uniqueAvatarIds(targetAvatarIds),
-    attachments: [],
+    attachments,
     published: false,
     publishedAt: null,
     createdBy,
@@ -313,12 +457,20 @@ export async function sendAnnouncement({
   validateAnnouncementPayload(payload);
   validateTargetAvatarIds(targetAvatarIds);
 
+  const announcementId = createClientId();
+
+  const attachments = await uploadAnnouncementImages({
+    announcementId,
+    images: payload.images,
+  });
+
   return createAnnouncement({
+    id: announcementId,
     title: payload.title,
     content: payload.text,
     targetToken: sales.tokenBlueprintId,
     targetAvatars: uniqueAvatarIds(targetAvatarIds),
-    attachments: [],
+    attachments,
     published: true,
     publishedAt: new Date().toISOString(),
     createdBy,

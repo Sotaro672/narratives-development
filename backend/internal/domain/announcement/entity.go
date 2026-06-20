@@ -1,4 +1,4 @@
-// backend/internal/domain/announcement/entity.go
+// backend\internal\domain\announcement\entity.go
 package announcement
 
 import (
@@ -281,19 +281,20 @@ var (
 )
 
 // BuildAttachmentObjectPath builds the standard Firebase Storage object path.
-// e.g. announcements/{announcementId}/attachments/{attachmentId}/{fileName}
+// e.g. announcements/{announcementId}/attachments/{fileName}
+//
+// attachmentID is kept in the signature for backward compatibility,
+// but it is not used in the Firebase Storage object path.
+// The Firestore attachment document ID is still AttachmentFile.ID.
 func BuildAttachmentObjectPath(announcementID, attachmentID, fileName string) (string, error) {
 	if announcementID == "" {
 		return "", ErrInvalidAnnouncementID
-	}
-	if attachmentID == "" {
-		return "", ErrInvalidID
 	}
 	if fileName == "" {
 		return "", ErrInvalidFileName
 	}
 
-	return path.Join("announcements", announcementID, "attachments", attachmentID, fileName), nil
+	return path.Join("announcements", announcementID, "attachments", fileName), nil
 }
 
 // MakeAttachmentID は announcementId と fileName から安定IDを生成します。
