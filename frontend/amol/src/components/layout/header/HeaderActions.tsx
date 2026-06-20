@@ -1,6 +1,6 @@
-// frontend/src/components/layout/header/HeaderActions.tsx
 import { Link } from "react-router-dom";
 
+import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {
@@ -31,13 +31,29 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     toggleSettings,
   } = actions;
 
+  const shouldShowAnnouncementButton = !shouldShowLoginButton;
+
+  const { unreadCount } = useAnnouncementUnreadCount({
+    enabled: shouldShowAnnouncementButton,
+  });
+
   const safeCartItemCount =
     typeof cartItemCount === "number" && Number.isFinite(cartItemCount)
       ? Math.max(0, Math.floor(cartItemCount))
       : 0;
 
+  const safeAnnouncementUnreadCount =
+    typeof unreadCount === "number" && Number.isFinite(unreadCount)
+      ? Math.max(0, Math.floor(unreadCount))
+      : 0;
+
   const cartBadgeLabel =
     safeCartItemCount > 99 ? "99+" : String(safeCartItemCount);
+
+  const announcementBadgeLabel =
+    safeAnnouncementUnreadCount > 99
+      ? "99+"
+      : String(safeAnnouncementUnreadCount);
 
   return (
     <div className="header__right">
@@ -70,6 +86,25 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
       {shouldShowLoginButton ? (
         <Link to="/signin/select" className="header__login-link">
           ログイン
+        </Link>
+      ) : null}
+
+      {shouldShowAnnouncementButton ? (
+        <Link
+          to="/announcements"
+          className="header__settings-link header__cart-link"
+          aria-label={`お知らせ ${safeAnnouncementUnreadCount}件`}
+          title="お知らせ"
+        >
+          <span className="header__cart-icon" aria-hidden="true">
+            🔔
+          </span>
+
+          {safeAnnouncementUnreadCount > 0 ? (
+            <span className="header__cart-badge" aria-hidden="true">
+              {announcementBadgeLabel}
+            </span>
+          ) : null}
         </Link>
       ) : null}
 

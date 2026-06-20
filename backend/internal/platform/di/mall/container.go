@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strings"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -55,7 +54,6 @@ func (g *firebaseAuthEmailGetter) GetEmailByUID(ctx context.Context, uid string)
 		return "", errors.New("firebase auth email getter is not configured")
 	}
 
-	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return "", errors.New("firebase auth uid is empty")
 	}
@@ -69,7 +67,7 @@ func (g *firebaseAuthEmailGetter) GetEmailByUID(ctx context.Context, uid string)
 		return "", errors.New("firebase auth user record is nil")
 	}
 
-	return strings.TrimSpace(userRecord.Email), nil
+	return userRecord.Email, nil
 }
 
 type Container struct {
@@ -111,11 +109,12 @@ type Container struct {
 
 	NameResolver *appresolver.NameResolver
 
-	BrandQ   *mallquery.BrandQuery
-	ListQ    *mallquery.ListQuery
-	CatalogQ *mallquery.CatalogQuery
-	CartQ    *mallquery.CartQuery
-	PreviewQ *mallquery.PreviewQuery
+	BrandQ        *mallquery.BrandQuery
+	ListQ         *mallquery.ListQuery
+	CatalogQ      *mallquery.CatalogQuery
+	CartQ         *mallquery.CartQuery
+	PreviewQ      *mallquery.PreviewQuery
+	AnnouncementQ *mallquery.AnnouncementQueryService
 
 	OrderQ *mallquery.OrderQuery
 
@@ -206,6 +205,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		announcementRepo,
 		announcementAvatarRepo,
 		announcementAttachmentRepo,
+	)
+
+	c.AnnouncementQ = mallquery.NewAnnouncementQueryService(
+		announcementRepo,
+		announcementAvatarRepo,
+		tokenBlueprintRepo,
 	)
 
 	c.TokenBlueprintReviewRepo = outfs.NewTokenBlueprintReviewRepositoryFS(fsClient)

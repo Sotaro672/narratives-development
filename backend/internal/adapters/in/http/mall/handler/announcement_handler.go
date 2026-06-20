@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
+	mallquery "narratives/internal/application/query/mall"
 	announcementuc "narratives/internal/application/usecase"
 	ann "narratives/internal/domain/announcement"
 	avatardom "narratives/internal/domain/avatar"
@@ -31,17 +32,20 @@ type AnnouncementMeAvatarResolver interface {
 }
 
 type MeAnnouncementHandler struct {
-	Repo           AnnouncementMeAvatarResolver
-	AnnouncementUC *announcementuc.AnnouncementUsecase
+	Repo              AnnouncementMeAvatarResolver
+	AnnouncementUC    *announcementuc.AnnouncementUsecase
+	AnnouncementQuery *mallquery.AnnouncementQueryService
 }
 
 func NewMeAnnouncementHandler(
 	repo AnnouncementMeAvatarResolver,
 	announcementUC *announcementuc.AnnouncementUsecase,
+	announcementQuery *mallquery.AnnouncementQueryService,
 ) http.Handler {
 	return &MeAnnouncementHandler{
-		Repo:           repo,
-		AnnouncementUC: announcementUC,
+		Repo:              repo,
+		AnnouncementUC:    announcementUC,
+		AnnouncementQuery: announcementQuery,
 	}
 }
 
@@ -66,6 +70,12 @@ func (h *MeAnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	if h.AnnouncementUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "announcement_usecase_not_configured"})
+		return
+	}
+
+	if h.AnnouncementQuery == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "announcement_query_not_configured"})
 		return
 	}
 
@@ -104,7 +114,7 @@ func (h *MeAnnouncementHandler) handleList(w http.ResponseWriter, r *http.Reques
 	pageNumber := parseMeAnnouncementPositiveInt(r.URL.Query().Get("page"), 1)
 	perPage := parseMeAnnouncementPositiveInt(r.URL.Query().Get("perPage"), 50)
 
-	result, err := h.AnnouncementUC.ListAnnouncementsByTargetAvatar(
+	result, err := h.AnnouncementQuery.ListByTargetAvatar(
 		r.Context(),
 		avatarID,
 		common.Page{
@@ -176,11 +186,10 @@ func extractAnnouncementIDForRead(path0 string) string {
 		return ""
 	}
 
-	return strings.TrimSpace(parts[3])
+	return parts[3]
 }
 
 func parseMeAnnouncementPositiveInt(raw string, fallback int) int {
-	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return fallback
 	}

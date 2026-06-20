@@ -114,7 +114,7 @@ function uniqueStrings(values: unknown): string[] {
   const result: string[] = [];
 
   for (const v of values) {
-    const s = String(v ?? "").trim();
+    const s = String(v ?? "");
     if (!s) continue;
     if (seen.has(s)) continue;
 
@@ -140,9 +140,9 @@ function toSafeNumber(value: unknown): number {
 
 function fromApiSalesOwner(owner: ApiSalesOwner): SalesOwner {
   return {
-    avatarId: String(owner?.avatarId ?? "").trim(),
-    avatarName: String(owner?.avatarName ?? "").trim(),
-    avatarIcon: String(owner?.avatarIcon ?? "").trim(),
+    avatarId: String(owner?.avatarId ?? ""),
+    avatarName: String(owner?.avatarName ?? ""),
+    avatarIcon: String(owner?.avatarIcon ?? ""),
     followerCount: toSafeNumber(owner?.followerCount),
     followingCount: toSafeNumber(owner?.followingCount),
     postCount: toSafeNumber(owner?.postCount),
@@ -153,10 +153,8 @@ function fromApiSalesProductBlueprint(
   productBlueprint: ApiSalesProductBlueprint,
 ): SalesProductBlueprint {
   return {
-    productBlueprintId: String(
-      productBlueprint?.productBlueprintId ?? "",
-    ).trim(),
-    productName: String(productBlueprint?.productName ?? "").trim(),
+    productBlueprintId: String(productBlueprint?.productBlueprintId ?? ""),
+    productName: String(productBlueprint?.productName ?? ""),
   };
 }
 
@@ -167,10 +165,10 @@ function fromApiSalesRow(row: ApiSalesRow): SalesRow {
     : [];
 
   return {
-    tokenBlueprintId: String(row?.tokenBlueprintId ?? "").trim(),
-    tokenName: String(row?.tokenName ?? "").trim(),
-    brandId: String(row?.brandId ?? "").trim(),
-    brandName: String(row?.brandName ?? "").trim(),
+    tokenBlueprintId: String(row?.tokenBlueprintId ?? ""),
+    tokenName: String(row?.tokenName ?? ""),
+    brandId: String(row?.brandId ?? ""),
+    brandName: String(row?.brandName ?? ""),
     mintAddresses: uniqueStrings(row?.mintAddresses),
     modelIds: uniqueStrings(row?.modelIds),
     productBlueprints: rawProductBlueprints
@@ -186,7 +184,7 @@ function fromApiSalesQueryResult(data: ApiSalesQueryResult): SalesQueryResult {
   const rawRows = Array.isArray(data?.rows) ? data.rows : [];
 
   return {
-    companyId: String(data?.companyId ?? "").trim(),
+    companyId: String(data?.companyId ?? ""),
     rows: rawRows
       .map(fromApiSalesRow)
       .filter((row) => row.tokenBlueprintId !== ""),

@@ -461,7 +461,7 @@ function uniqueStrings(values: unknown): string[] {
   const result: string[] = [];
 
   for (const value of values) {
-    const s = String(value ?? "").trim();
+    const s = String(value ?? "");
     if (!s) continue;
     if (seen.has(s)) continue;
 
@@ -473,7 +473,7 @@ function uniqueStrings(values: unknown): string[] {
 }
 
 function nullableString(value: unknown): string | null {
-  const s = String(value ?? "").trim();
+  const s = String(value ?? "");
   return s === "" ? null : s;
 }
 
@@ -494,10 +494,10 @@ function normalizeAttachmentInputs(
 
     const item = value as Partial<AnnouncementAttachmentInput>;
 
-    const fileName = String(item.fileName ?? "").trim();
-    const fileUrl = String(item.fileUrl ?? "").trim();
-    const objectPath = String(item.objectPath ?? "").trim();
-    const mimeType = String(item.mimeType ?? "").trim();
+    const fileName = String(item.fileName ?? "");
+    const fileUrl = String(item.fileUrl ?? "");
+    const objectPath = String(item.objectPath ?? "");
+    const mimeType = String(item.mimeType ?? "");
     const fileSize = toSafeNumber(item.fileSize);
 
     if (!fileName || !fileUrl || !objectPath) {
@@ -527,7 +527,7 @@ function fromApiAnnouncementAvatarStateFollow(
   data: ApiAnnouncementAvatarStateFollow,
 ): AnnouncementAvatarStateFollow {
   return {
-    avatarId: String(firstValue(data?.avatarId, data?.AvatarID) ?? "").trim(),
+    avatarId: String(firstValue(data?.avatarId, data?.AvatarID) ?? ""),
     followedAt: nullableString(firstValue(data?.followedAt, data?.FollowedAt)),
   };
 }
@@ -556,7 +556,7 @@ function fromApiAnnouncementAvatarState(
   }
 
   return {
-    id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
+    id: String(firstValue(data?.id, data?.ID) ?? ""),
     followerCount: toSafeNumber(
       firstValue(data?.followerCount, data?.FollowerCount),
     ),
@@ -585,13 +585,13 @@ function fromApiAnnouncementTargetAvatarDetail(
   );
 
   return {
-    avatarId: String(firstValue(data?.avatarId, data?.AvatarID) ?? "").trim(),
+    avatarId: String(firstValue(data?.avatarId, data?.AvatarID) ?? ""),
     avatarName: String(
       firstValue(data?.avatarName, data?.AvatarName) ?? "",
-    ).trim(),
+    ),
     avatarIcon: String(
       firstValue(data?.avatarIcon, data?.AvatarIcon) ?? "",
-    ).trim(),
+    ),
     avatarState,
     followerCount: toSafeNumber(
       firstValue(
@@ -635,10 +635,10 @@ function fromApiAnnouncementProductBlueprint(
   return {
     productBlueprintId: String(
       firstValue(data?.productBlueprintId, data?.ProductBlueprintID) ?? "",
-    ).trim(),
+    ),
     productName: String(
       firstValue(data?.productName, data?.ProductName) ?? "",
-    ).trim(),
+    ),
   };
 }
 
@@ -678,17 +678,17 @@ function fromApiAnnouncementAttachmentFile(
   return {
     announcementId: String(
       firstValue(data?.announcementId, data?.AnnouncementID) ?? "",
-    ).trim(),
-    id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
-    fileName: String(firstValue(data?.fileName, data?.FileName) ?? "").trim(),
+    ),
+    id: String(firstValue(data?.id, data?.ID) ?? ""),
+    fileName: String(firstValue(data?.fileName, data?.FileName) ?? ""),
     fileUrl: String(
       firstValue(data?.fileUrl, data?.fileURL, data?.FileURL) ?? "",
-    ).trim(),
+    ),
     fileSize: toSafeNumber(firstValue(data?.fileSize, data?.FileSize)),
-    mimeType: String(firstValue(data?.mimeType, data?.MimeType) ?? "").trim(),
+    mimeType: String(firstValue(data?.mimeType, data?.MimeType) ?? ""),
     objectPath: String(
       firstValue(data?.objectPath, data?.ObjectPath) ?? "",
-    ).trim(),
+    ),
   };
 }
 
@@ -729,9 +729,9 @@ function fromApiAnnouncementAttachmentFiles(
 
 function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
   return {
-    id: String(firstValue(data?.id, data?.ID) ?? "").trim(),
-    title: String(firstValue(data?.title, data?.Title) ?? "").trim(),
-    content: String(firstValue(data?.content, data?.Content) ?? "").trim(),
+    id: String(firstValue(data?.id, data?.ID) ?? ""),
+    title: String(firstValue(data?.title, data?.Title) ?? ""),
+    content: String(firstValue(data?.content, data?.Content) ?? ""),
     targetToken: nullableString(
       firstValue(data?.targetToken, data?.TargetToken),
     ),
@@ -759,11 +759,11 @@ function fromApiAnnouncement(data: ApiAnnouncement): Announcement {
     attachmentFiles: fromApiAnnouncementAttachmentFiles(
       firstValue(data?.attachmentFiles, data?.AttachmentFiles),
     ),
-    createdAt: String(firstValue(data?.createdAt, data?.CreatedAt) ?? "").trim(),
-    createdBy: String(firstValue(data?.createdBy, data?.CreatedBy) ?? "").trim(),
+    createdAt: String(firstValue(data?.createdAt, data?.CreatedAt) ?? ""),
+    createdBy: String(firstValue(data?.createdBy, data?.CreatedBy) ?? ""),
     createdByName: String(
       firstValue(data?.createdByName, data?.CreatedByName) ?? "",
-    ).trim(),
+    ),
     updatedAt: nullableString(firstValue(data?.updatedAt, data?.UpdatedAt)),
     updatedBy: nullableString(firstValue(data?.updatedBy, data?.UpdatedBy)),
     updatedByName: nullableString(
@@ -794,9 +794,9 @@ function fromApiAnnouncementManagementTokenBlueprint(
   return {
     tokenBlueprintId: String(
       firstValue(data?.tokenBlueprintId, data?.TokenBlueprintID) ?? "",
-    ).trim(),
-    tokenName: String(firstValue(data?.tokenName, data?.TokenName) ?? "").trim(),
-    brandId: String(firstValue(data?.brandId, data?.BrandID) ?? "").trim(),
+    ),
+    tokenName: String(firstValue(data?.tokenName, data?.TokenName) ?? ""),
+    brandId: String(firstValue(data?.brandId, data?.BrandID) ?? ""),
   };
 }
 
@@ -829,7 +829,7 @@ function fromApiAnnouncementManagementResult(
   const rows = Array.isArray(rawRows) ? rawRows : [];
 
   return {
-    companyId: String(firstValue(data?.companyId, data?.CompanyID) ?? "").trim(),
+    companyId: String(firstValue(data?.companyId, data?.CompanyID) ?? ""),
     rows: rows
       .map(fromApiAnnouncementManagementRow)
       .filter((row) => row.announcements.length > 0),
@@ -845,7 +845,7 @@ function buildAnnouncementListPath(
 ): string {
   const searchParams = new URLSearchParams();
 
-  const targetToken = String(params.targetToken ?? "").trim();
+  const targetToken = String(params.targetToken ?? "");
   if (!targetToken) {
     throw new Error("targetToken is required");
   }
@@ -868,7 +868,7 @@ function buildAnnouncementManagementByCompanyIdPath(
 ): string {
   const searchParams = new URLSearchParams();
 
-  const companyId = String(params.companyId ?? "").trim();
+  const companyId = String(params.companyId ?? "");
   if (!companyId) {
     throw new Error("companyId is required");
   }
@@ -887,7 +887,7 @@ function buildAnnouncementManagementByCompanyIdPath(
 }
 
 function buildAnnouncementDetailPath(id: string): string {
-  const normalizedId = String(id || "").trim();
+  const normalizedId = String(id || "");
 
   if (!normalizedId) {
     throw new Error("announcement id is required");
@@ -907,9 +907,9 @@ function buildAnnouncementPublishPath(id: string): string {
 function buildCreateAnnouncementBody(
   input: CreateAnnouncementInput,
 ): Record<string, unknown> {
-  const title = String(input.title ?? "").trim();
-  const content = String(input.content ?? "").trim();
-  const createdBy = String(input.createdBy ?? "").trim();
+  const title = String(input.title ?? "");
+  const content = String(input.content ?? "");
+  const createdBy = String(input.createdBy ?? "");
 
   if (!title) {
     throw new Error("title is required");
@@ -924,7 +924,7 @@ function buildCreateAnnouncementBody(
   }
 
   return {
-    id: String(input.id ?? "").trim(),
+    id: String(input.id ?? ""),
     title,
     content,
     targetToken: input.targetToken ?? null,

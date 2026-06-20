@@ -1,4 +1,4 @@
-// backend\internal\platform\di\mall\container_router.go
+// backend/internal/platform/di/mall/container_router.go
 package mall
 
 import (
@@ -190,11 +190,15 @@ func Register(mux *http.ServeMux, cont *Container) {
 		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarResolver, cont.AvatarUC, avatarStateQuery)
 	}
 
-	// /mall/me/announcement
-	if cont.MeAvatarResolver != nil && cont.AnnouncementUC != nil {
+	// /mall/me/announcements
+	if cont.MeAvatarResolver != nil &&
+		cont.AnnouncementUC != nil &&
+		cont.AnnouncementQ != nil {
+
 		announcementH = mallhandler.NewMeAnnouncementHandler(
 			cont.MeAvatarResolver,
 			cont.AnnouncementUC,
+			cont.AnnouncementQ,
 		)
 	}
 
