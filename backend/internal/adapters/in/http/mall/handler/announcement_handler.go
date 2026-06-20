@@ -20,12 +20,12 @@ import (
 // Policy (me-only):
 // - uid は認証コンテキストから取得し、クライアント入力では受けない
 // - avatarId はサーバで uid -> avatarId を解決する
-// - GET /mall/me/announcements はログイン中 avatarId が targetAvatars に含まれる announcement を返す
-// - POST /mall/me/announcements/{announcementId}/read はログイン中 avatarId で既読化する
+// - GET /mall/me/announcement はログイン中 avatarId が targetAvatars に含まれる announcement を返す
+// - POST /mall/me/announcement/{announcementId}/read はログイン中 avatarId で既読化する
 //
 // Endpoints:
-// - GET  /mall/me/announcements
-// - POST /mall/me/announcements/{announcementId}/read
+// - GET  /mall/me/announcement
+// - POST /mall/me/announcement/{announcementId}/read
 
 type AnnouncementMeAvatarResolver interface {
 	ResolveAvatarByUID(ctx context.Context, uid string) (avatarID string, walletAddress string, err error)
@@ -50,7 +50,7 @@ func NewMeAnnouncementHandler(
 }
 
 const (
-	meAnnouncementsPath = "/mall/me/announcements"
+	meAnnouncementsPath = "/mall/me/announcement"
 )
 
 func (h *MeAnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -178,11 +178,11 @@ func extractAnnouncementIDForRead(path0 string) string {
 	parts := strings.Split(trimmed, "/")
 
 	// Expected:
-	// mall / me / announcements / {announcementId} / read
+	// mall / me / announcement / {announcementId} / read
 	if len(parts) != 5 {
 		return ""
 	}
-	if parts[0] != "mall" || parts[1] != "me" || parts[2] != "announcements" || parts[4] != "read" {
+	if parts[0] != "mall" || parts[1] != "me" || parts[2] != "announcement" || parts[4] != "read" {
 		return ""
 	}
 

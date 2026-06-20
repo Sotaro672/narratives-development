@@ -1,4 +1,14 @@
-//frontend\amol\src\features\announcement\types.ts
+// frontend/amol/src/features/announcement/types.ts
+export type AnnouncementAttachmentFileItem = {
+  announcementId: string;
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  objectPath: string;
+};
+
 export type AnnouncementListItem = {
   id: string;
   title: string;
@@ -8,6 +18,7 @@ export type AnnouncementListItem = {
   published?: boolean;
   publishedAt?: string | null;
   attachments?: string[];
+  attachmentFiles?: AnnouncementAttachmentFileItem[];
   createdAt?: string;
   createdBy?: string;
   updatedAt?: string | null;

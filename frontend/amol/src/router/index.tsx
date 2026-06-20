@@ -29,6 +29,8 @@ import WalletPage from "../pages/WalletPage";
 import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";
 import AvatarShareQrPage from "../pages/AvatarShareQrPage";
+import AnnouncementPage from "../pages/Announcementpage";
+import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
 import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
@@ -147,6 +149,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <CartPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/announcements",
+    element: (
+      <ProtectedRoute>
+        <AnnouncementPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/announcements/:announcementId",
+    element: (
+      <ProtectedRoute>
+        <AnnouncementDetailPage />
       </ProtectedRoute>
     ),
   },

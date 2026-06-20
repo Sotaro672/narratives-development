@@ -210,6 +210,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.AnnouncementQ = mallquery.NewAnnouncementQueryService(
 		announcementRepo,
 		announcementAvatarRepo,
+		announcementAttachmentRepo,
 		tokenBlueprintRepo,
 	)
 

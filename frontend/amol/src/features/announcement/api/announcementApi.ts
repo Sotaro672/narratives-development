@@ -1,9 +1,10 @@
 // frontend/amol/src/features/announcement/api/announcementApi.ts
-import { getAuth } from "firebase/auth";
+import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
+import { getFirebaseIdToken } from "../../../lib/authToken";
 
 import type { AnnouncementListResult } from "../types";
 
-const ANNOUNCEMENTS_ENDPOINT = "/mall/me/announcements";
+const ANNOUNCEMENTS_ENDPOINT = "/mall/me/announcement";
 
 type FetchAnnouncementsParams = {
   page?: number;
@@ -17,7 +18,7 @@ export async function fetchMeAnnouncements(
   const page = params.page ?? 1;
   const perPage = params.perPage ?? 100;
 
-  const token = await getCurrentUserIdToken();
+  const token = await getOptionalFirebaseIdToken();
 
   if (!token) {
     return {
@@ -33,13 +34,18 @@ export async function fetchMeAnnouncements(
     perPage: String(perPage),
   });
 
-  const response = await fetch(`${ANNOUNCEMENTS_ENDPOINT}?${searchParams}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const response = await fetch(
+    `${apiUrl(ANNOUNCEMENTS_ENDPOINT)}?${searchParams}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      signal: params.signal,
+      cache: "no-store",
     },
-    signal: params.signal,
-  });
+  );
 
   if (response.status === 401 || response.status === 403) {
     return {
@@ -52,6 +58,11 @@ export async function fetchMeAnnouncements(
 
   if (!response.ok) {
     throw new Error(`failed to fetch announcements: ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("failed to fetch announcements: response is not json");
   }
 
   const json = (await response.json()) as Partial<AnnouncementListResult>;
@@ -80,19 +91,21 @@ export async function markMeAnnouncementRead(
     return;
   }
 
-  const token = await getCurrentUserIdToken();
+  const token = await getOptionalFirebaseIdToken();
 
   if (!token) {
     return;
   }
 
   const response = await fetch(
-    `${ANNOUNCEMENTS_ENDPOINT}/${announcementId}/read`,
+    apiUrl(`${ANNOUNCEMENTS_ENDPOINT}/${announcementId}/read`),
     {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
+      cache: "no-store",
     },
   );
 
@@ -105,13 +118,20 @@ export async function markMeAnnouncementRead(
   }
 }
 
-async function getCurrentUserIdToken(): Promise<string | null> {
-  const auth = getAuth();
-  const user = auth.currentUser;
+function apiUrl(path: string): string {
+  const baseUrl = getApiBaseUrl();
 
-  if (!user) {
-    return null;
+  if (!baseUrl) {
+    return path;
   }
 
-  return user.getIdToken();
+  return `${baseUrl}${path}`;
+}
+
+async function getOptionalFirebaseIdToken(): Promise<string | null> {
+  try {
+    return await getFirebaseIdToken();
+  } catch {
+    return null;
+  }
 }

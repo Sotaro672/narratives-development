@@ -13,17 +13,20 @@ import (
 type AnnouncementQueryService struct {
 	announcementRepo       ann.Repository
 	announcementAvatarRepo ann.AvatarRepository
+	announcementAttachRepo ann.AttachmentRepository
 	tokenBlueprintRepo     tokenblueprint.RepositoryPort
 }
 
 func NewAnnouncementQueryService(
 	announcementRepo ann.Repository,
 	announcementAvatarRepo ann.AvatarRepository,
+	announcementAttachRepo ann.AttachmentRepository,
 	tokenBlueprintRepo tokenblueprint.RepositoryPort,
 ) *AnnouncementQueryService {
 	return &AnnouncementQueryService{
 		announcementRepo:       announcementRepo,
 		announcementAvatarRepo: announcementAvatarRepo,
+		announcementAttachRepo: announcementAttachRepo,
 		tokenBlueprintRepo:     tokenBlueprintRepo,
 	}
 }
@@ -49,12 +52,26 @@ type AnnouncementListItem struct {
 	IsRead bool       `json:"isRead"`
 	ReadAt *time.Time `json:"readAt,omitempty"`
 
+	// Attachments は既存互換の attachment ID 配列。
 	Attachments []string `json:"attachments,omitempty"`
+
+	// AttachmentFiles は画面表示用の attachment metadata。
+	AttachmentFiles []AnnouncementAttachmentFileItem `json:"attachmentFiles,omitempty"`
 
 	CreatedAt time.Time  `json:"createdAt"`
 	CreatedBy string     `json:"createdBy"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy *string    `json:"updatedBy,omitempty"`
+}
+
+type AnnouncementAttachmentFileItem struct {
+	AnnouncementID string `json:"announcementId"`
+	ID             string `json:"id"`
+	FileName       string `json:"fileName"`
+	FileURL        string `json:"fileUrl"`
+	FileSize       int64  `json:"fileSize"`
+	MimeType       string `json:"mimeType"`
+	ObjectPath     string `json:"objectPath"`
 }
 
 func (s *AnnouncementQueryService) ListByTargetAvatar(
@@ -114,6 +131,11 @@ func (s *AnnouncementQueryService) toListItem(
 		return AnnouncementListItem{}, err
 	}
 
+	attachmentFiles, err := s.resolveAttachmentFiles(ctx, a.ID)
+	if err != nil {
+		return AnnouncementListItem{}, err
+	}
+
 	return AnnouncementListItem{
 		ID:          a.ID,
 		Title:       a.Title,
@@ -127,7 +149,8 @@ func (s *AnnouncementQueryService) toListItem(
 		IsRead: isRead,
 		ReadAt: readAt,
 
-		Attachments: a.Attachments,
+		Attachments:     a.Attachments,
+		AttachmentFiles: attachmentFiles,
 
 		CreatedAt: a.CreatedAt,
 		CreatedBy: a.CreatedBy,
@@ -168,6 +191,40 @@ func (s *AnnouncementQueryService) resolveReadState(
 	}
 
 	return avatars[0].IsRead, avatars[0].ReadAt, nil
+}
+
+func (s *AnnouncementQueryService) resolveAttachmentFiles(
+	ctx context.Context,
+	announcementID string,
+) ([]AnnouncementAttachmentFileItem, error) {
+	if announcementID == "" {
+		return nil, ann.ErrInvalidAnnouncementID
+	}
+
+	if s == nil || s.announcementAttachRepo == nil {
+		return []AnnouncementAttachmentFileItem{}, nil
+	}
+
+	files, err := s.announcementAttachRepo.ListByAnnouncementID(ctx, announcementID)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]AnnouncementAttachmentFileItem, 0, len(files))
+
+	for _, file := range files {
+		items = append(items, AnnouncementAttachmentFileItem{
+			AnnouncementID: file.AnnouncementID,
+			ID:             file.ID,
+			FileName:       file.FileName,
+			FileURL:        file.FileURL,
+			FileSize:       file.FileSize,
+			MimeType:       file.MimeType,
+			ObjectPath:     file.ObjectPath,
+		})
+	}
+
+	return items, nil
 }
 
 func (s *AnnouncementQueryService) resolveTokenName(

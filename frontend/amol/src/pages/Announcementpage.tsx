@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+// frontend/amol/src/pages/AnnouncementPage.tsx
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
+import Layout from "../components/layout/Layout";
 import {
   fetchMeAnnouncements,
   markMeAnnouncementRead,
@@ -9,15 +12,13 @@ import type { AnnouncementListItem } from "../features/announcement/types";
 import "../styles/page-layout.css";
 import "../styles/announcement-page.css";
 
-export default function Announcementpage() {
+export default function AnnouncementPage() {
+  const navigate = useNavigate();
+
   const [items, setItems] = useState<AnnouncementListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
-
-  const unreadCount = useMemo(() => {
-    return items.filter((item) => item.isRead === false).length;
-  }, [items]);
 
   const loadAnnouncements = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -59,29 +60,31 @@ export default function Announcementpage() {
     };
   }, [loadAnnouncements]);
 
-  const handleMarkRead = useCallback(
-    async (announcementId: string) => {
-      if (!announcementId || markingReadId) {
+  const handleOpenAnnouncement = useCallback(
+    async (item: AnnouncementListItem) => {
+      if (!item.id || navigatingId) {
         return;
       }
 
-      setMarkingReadId(announcementId);
+      setNavigatingId(item.id);
       setError("");
 
       try {
-        await markMeAnnouncementRead(announcementId);
+        if (item.isRead === false) {
+          await markMeAnnouncementRead(item.id);
 
-        setItems((current) =>
-          current.map((item) =>
-            item.id === announcementId
-              ? {
-                  ...item,
-                  isRead: true,
-                  readAt: item.readAt ?? new Date().toISOString(),
-                }
-              : item,
-          ),
-        );
+          setItems((current) =>
+            current.map((currentItem) =>
+              currentItem.id === item.id
+                ? {
+                    ...currentItem,
+                    isRead: true,
+                    readAt: currentItem.readAt ?? new Date().toISOString(),
+                  }
+                : currentItem,
+            ),
+          );
+        }
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -89,116 +92,125 @@ export default function Announcementpage() {
             : "お知らせの既読化に失敗しました",
         );
       } finally {
-        setMarkingReadId(null);
+        setNavigatingId(null);
+
+        navigate(`/announcements/${item.id}`, {
+          state: {
+            announcement: {
+              ...item,
+              isRead: true,
+              readAt: item.readAt ?? new Date().toISOString(),
+            },
+          },
+        });
       }
     },
-    [markingReadId],
+    [navigate, navigatingId],
   );
 
   return (
-    <section className="page-section content-page-section announcement-page">
-      <div className="announcement-page__header">
-        <p className="announcement-page__eyebrow">Announcement</p>
+    <Layout
+      title="お知らせ"
+      showBackButton
+      showFooter
+      mode="mypage"
+      mainClassName="announcement-page-layout"
+    >
+      <section className="page-section content-page-section announcement-page">
+        {error ? (
+          <div className="announcement-page__error" role="alert">
+            {error}
+          </div>
+        ) : null}
 
-        <h1 className="page-title announcement-page__title">お知らせ</h1>
+        {loading ? (
+          <div className="announcement-page__state">読み込み中...</div>
+        ) : null}
 
-        <p className="page-description content-page-description announcement-page__description">
-          あなた宛てのお知らせを確認できます。
-        </p>
+        {!loading && items.length === 0 ? (
+          <div className="announcement-page__empty">
+            現在、お知らせはありません。
+          </div>
+        ) : null}
 
-        <div className="announcement-page__summary" aria-label="未読件数">
-          未読 {unreadCount} 件
-        </div>
-      </div>
+        {!loading && items.length > 0 ? (
+          <div className="announcement-page__list">
+            {items.map((item) => {
+              const isUnread = item.isRead === false;
+              const tokenLabel =
+                item.tokenName || item.targetToken || "対象トークン";
+              const publishedAtLabel = formatDateTime(item.publishedAt);
+              const isNavigating = navigatingId === item.id;
 
-      {error ? (
-        <div className="announcement-page__error" role="alert">
-          {error}
-        </div>
-      ) : null}
+              return (
+                <article
+                  key={item.id}
+                  className={
+                    isUnread
+                      ? "announcement-page__card announcement-page__card--unread"
+                      : "announcement-page__card"
+                  }
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${item.title} の詳細を開く`}
+                  aria-busy={isNavigating}
+                  onClick={() => void handleOpenAnnouncement(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void handleOpenAnnouncement(item);
+                    }
+                  }}
+                >
+                  <div className="announcement-page__card-head">
+                    <div className="announcement-page__card-meta">
+                      <span className="announcement-page__token">
+                        {tokenLabel}
+                      </span>
 
-      {loading ? (
-        <div className="announcement-page__state">読み込み中...</div>
-      ) : null}
+                      {publishedAtLabel ? (
+                        <time
+                          className="announcement-page__date"
+                          dateTime={item.publishedAt ?? undefined}
+                        >
+                          {publishedAtLabel}
+                        </time>
+                      ) : null}
+                    </div>
 
-      {!loading && items.length === 0 ? (
-        <div className="announcement-page__empty">
-          現在、お知らせはありません。
-        </div>
-      ) : null}
-
-      {!loading && items.length > 0 ? (
-        <div className="announcement-page__list">
-          {items.map((item) => {
-            const isUnread = item.isRead === false;
-            const tokenLabel = item.tokenName || item.targetToken || "対象トークン";
-            const publishedAtLabel = formatDateTime(item.publishedAt);
-            const isMarking = markingReadId === item.id;
-
-            return (
-              <article
-                key={item.id}
-                className={
-                  isUnread
-                    ? "announcement-page__card announcement-page__card--unread"
-                    : "announcement-page__card"
-                }
-              >
-                <div className="announcement-page__card-head">
-                  <div className="announcement-page__card-meta">
-                    <span className="announcement-page__token">
-                      {tokenLabel}
-                    </span>
-
-                    {publishedAtLabel ? (
-                      <time
-                        className="announcement-page__date"
-                        dateTime={item.publishedAt ?? undefined}
-                      >
-                        {publishedAtLabel}
-                      </time>
-                    ) : null}
+                    {isUnread ? (
+                      <span className="announcement-page__unread-badge">
+                        未読
+                      </span>
+                    ) : (
+                      <span className="announcement-page__read-badge">
+                        既読
+                      </span>
+                    )}
                   </div>
 
-                  {isUnread ? (
-                    <span className="announcement-page__unread-badge">
-                      未読
-                    </span>
-                  ) : (
-                    <span className="announcement-page__read-badge">
-                      既読
-                    </span>
-                  )}
-                </div>
+                  <h2 className="announcement-page__card-title">
+                    {item.title}
+                  </h2>
 
-                <h2 className="announcement-page__card-title">{item.title}</h2>
-
-                <p className="announcement-page__content">{item.content}</p>
-
-                {Array.isArray(item.attachments) && item.attachments.length > 0 ? (
-                  <div className="announcement-page__attachments">
-                    添付 {item.attachments.length} 件
-                  </div>
-                ) : null}
-
-                {isUnread ? (
-                  <div className="announcement-page__card-actions">
-                    <button
-                      type="button"
-                      className="announcement-page__read-button"
-                      onClick={() => void handleMarkRead(item.id)}
-                      disabled={isMarking}
-                    >
-                      {isMarking ? "更新中..." : "既読にする"}
-                    </button>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      ) : null}
-    </section>
+                  {Array.isArray(item.attachmentFiles) &&
+                  item.attachmentFiles.length > 0 ? (
+                    <div className="announcement-page__attachments">
+                      添付 {item.attachmentFiles.length} 件
+                    </div>
+                  ) : Array.isArray(item.attachments) &&
+                    item.attachments.length > 0 ? (
+                    <div className="announcement-page__attachments">
+                      添付 {item.attachments.length} 件
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+    </Layout>
   );
 }
 

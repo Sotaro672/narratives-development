@@ -267,7 +267,7 @@ func (r *AnnouncementRepositoryFS) ListByTargetToken(
 	return paginateAnnouncements(items, page), nil
 }
 
-// ListByTargetAvatar returns announcements whose avatars subcollection contains avatarID.
+// ListByTargetAvatar returns published announcements whose avatars subcollection contains avatarID.
 func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 	ctx context.Context,
 	avatarID string,
@@ -322,6 +322,10 @@ func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 		a, err := announcementFromDoc(ctx, parentDoc)
 		if err != nil {
 			return common.PageResult[announcement.Announcement]{}, err
+		}
+
+		if !a.Published {
+			continue
 		}
 
 		items = append(items, a)
