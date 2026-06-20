@@ -4,6 +4,7 @@ import { safeDateTimeLabelJa } from "../../shell/src/shared/util/dateJa";
 import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/src/application/tokenBlueprintDetailService";
 import {
   createAnnouncement,
+  markAnnouncementPublished,
   type AnnouncementAttachmentInput,
 } from "../infrastructure/announcement_repository_http";
 
@@ -51,6 +52,7 @@ export type AnnouncementCreateInputPayload = {
   title: string;
   text: string;
   images: File[];
+  imageUrls?: string[];
 };
 
 export type AnnouncementCreateLocationOwner = {
@@ -464,16 +466,20 @@ export async function sendAnnouncement({
     images: payload.images,
   });
 
-  return createAnnouncement({
+  await createAnnouncement({
     id: announcementId,
     title: payload.title,
     content: payload.text,
     targetToken: sales.tokenBlueprintId,
     targetAvatars: uniqueAvatarIds(targetAvatarIds),
     attachments,
-    published: true,
-    publishedAt: new Date().toISOString(),
+    published: false,
+    publishedAt: null,
     createdBy,
+  });
+
+  return markAnnouncementPublished(announcementId, {
+    updatedBy: createdBy,
   });
 }
 

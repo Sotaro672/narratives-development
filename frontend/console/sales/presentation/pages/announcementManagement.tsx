@@ -4,6 +4,7 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import FilterableTableHeader from "../../../shell/src/shared/ui/filterable-table-header";
+import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 import { useAnnouncementManagement } from "../hook/useAnnouncementManagement";
 
 export default function AnnouncementManagementPage() {
@@ -137,8 +138,8 @@ export default function AnnouncementManagementPage() {
             <td>{row.tokenName ?? row.targetToken ?? ""}</td>
             <td>{row.published ? "公開済み" : "下書き"}</td>
             <td>{row.targetAvatarCount}</td>
-            <td>{row.createdAt}</td>
-            <td>{row.updatedAt ?? ""}</td>
+            <td>{safeDateTimeLabelJa(row.createdAt, "")}</td>
+            <td>{safeDateTimeLabelJa(row.updatedAt, "")}</td>
           </tr>
         ))}
       </List>

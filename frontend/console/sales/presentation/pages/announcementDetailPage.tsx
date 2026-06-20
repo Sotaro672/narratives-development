@@ -16,6 +16,7 @@ import {
   type Announcement,
   type AnnouncementAttachmentInput,
 } from "../../infrastructure/announcement_repository_http";
+import { listSales } from "../../infrastructure/sales_repository_http";
 
 const emptyInputPayload: SubmitPayload = {
   title: "",
@@ -56,6 +57,27 @@ type AnnouncementWithResolvedFields = Announcement & {
   attachmentFiles?: AnnouncementAttachmentFileLike[];
   createdByName?: string | null;
   updatedByName?: string | null;
+};
+
+type SalesProductBlueprintLike = {
+  productBlueprintId?: string | null;
+  productName?: string | null;
+};
+
+type SalesOwnerLike = {
+  avatarId?: string | null;
+  avatarName?: string | null;
+  avatarIcon?: string | null;
+  avatarIconUrl?: string | null;
+  followerCount?: number | null;
+  followingCount?: number | null;
+  postCount?: number | null;
+};
+
+type SalesRowLike = {
+  tokenBlueprintId?: string | null;
+  owners?: SalesOwnerLike[] | null;
+  productBlueprints?: SalesProductBlueprintLike[] | null;
 };
 
 function normalizeAvatarIds(values: string[] | undefined | null): string[] {
@@ -178,6 +200,64 @@ function getAnnouncementUpdatedByName(
   ).trim();
 }
 
+function getFirstProductNameFromSalesRow(row: SalesRowLike | null): string {
+  const productBlueprints = row?.productBlueprints;
+  if (!Array.isArray(productBlueprints)) return "";
+
+  for (const productBlueprint of productBlueprints) {
+    const productName = String(productBlueprint?.productName ?? "").trim();
+    if (productName) {
+      return productName;
+    }
+  }
+
+  return "";
+}
+
+function normalizeSalesRows(value: unknown): SalesRowLike[] {
+  if (Array.isArray(value)) {
+    return value as SalesRowLike[];
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const rows = (value as { rows?: unknown }).rows;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows as SalesRowLike[];
+}
+
+function buildSalesOwnersFromRow(row: SalesRowLike | null): SalesOwnerItem[] {
+  const owners = Array.isArray(row?.owners) ? row.owners : [];
+  const productName = getFirstProductNameFromSalesRow(row);
+
+  const seen = new Set<string>();
+  const result: SalesOwnerItem[] = [];
+
+  for (const owner of owners) {
+    const avatarId = String(owner?.avatarId ?? "").trim();
+    if (!avatarId) continue;
+    if (seen.has(avatarId)) continue;
+
+    seen.add(avatarId);
+    result.push({
+      avatarId,
+      avatarName: String(owner?.avatarName ?? "").trim(),
+      avatarIconUrl: String(owner?.avatarIconUrl || owner?.avatarIcon || "").trim(),
+      productName,
+      followerCount: toSafeNumber(owner?.followerCount),
+      followingCount: toSafeNumber(owner?.followingCount),
+      postCount: toSafeNumber(owner?.postCount),
+    });
+  }
+
+  return result;
+}
+
 function buildRetainedAttachmentInputs(params: {
   announcement: AnnouncementWithResolvedFields;
   imageUrls: string[];
@@ -230,6 +310,7 @@ export default function AnnouncementDetailPage() {
   const [inputPayload, setInputPayload] =
     useState<SubmitPayload>(emptyInputPayload);
   const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>([]);
+  const [salesOwners, setSalesOwners] = useState<SalesOwnerItem[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingInput, setIsSavingInput] = useState(false);
@@ -295,14 +376,51 @@ export default function AnnouncementDetailPage() {
     [],
   );
 
+  const loadSalesOwners = useCallback(async (targetToken: string) => {
+    const tokenBlueprintId = String(targetToken ?? "").trim();
+    if (!tokenBlueprintId) {
+      setSalesOwners([]);
+      return;
+    }
+
+    try {
+      const result = await listSales();
+      const rows = normalizeSalesRows(result);
+
+      const row =
+        rows.find((item) => {
+          return (
+            String(item?.tokenBlueprintId ?? "").trim() === tokenBlueprintId
+          );
+        }) ?? null;
+
+      setSalesOwners(buildSalesOwnersFromRow(row));
+    } catch (error) {
+      console.error("[AnnouncementDetailPage] load sales owners failed", error);
+      setSalesOwners([]);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
+    const targetToken = String(announcement?.targetToken ?? "").trim();
+
+    if (!targetToken) {
+      setSalesOwners([]);
+      return;
+    }
+
+    void loadSalesOwners(targetToken);
+  }, [announcement?.targetToken, loadSalesOwners]);
+
+  useEffect(() => {
     if (!announcement) {
       setInputPayload(emptyInputPayload);
       setSelectedAvatarIds([]);
+      setSalesOwners([]);
       setIsEditMode(false);
       return;
     }
@@ -475,7 +593,7 @@ export default function AnnouncementDetailPage() {
     return normalizeAttachmentImageUrls(announcement?.attachmentFiles);
   }, [announcement]);
 
-  const owners = useMemo<SalesOwnerItem[]>(() => {
+  const fallbackTargetOwners = useMemo<SalesOwnerItem[]>(() => {
     const details = normalizeAvatarDetails(announcement?.targetAvatarDetails);
     const detailsByAvatarId = new Map(
       details.map((detail) => [String(detail.avatarId ?? "").trim(), detail]),
@@ -499,6 +617,14 @@ export default function AnnouncementDetailPage() {
       };
     });
   }, [announcement, productName, targetAvatarIds]);
+
+  const owners = useMemo<SalesOwnerItem[]>(() => {
+    if (salesOwners.length > 0) {
+      return salesOwners;
+    }
+
+    return fallbackTargetOwners;
+  }, [fallbackTargetOwners, salesOwners]);
 
   const pageTitle = useMemo(() => {
     const tokenName = getAnnouncementTokenName(announcement);
