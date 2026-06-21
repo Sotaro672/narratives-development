@@ -278,19 +278,19 @@ export default function LandingPage() {
               <article className="landing-page-service-case-card landing-page-service-case-card--mall">
                 <div className="landing-page-service-case-card__content">
                   <p className="landing-page-service-case-card__label">
-                    AMOL MALL
+                    店舗購入のお客様
                   </p>
                   <h3 className="landing-page-service-case-card__title">
-                    ブランド名で出品
+                    QRコードをスキャンで自動更新
                   </h3>
                   <p className="landing-page-service-case-card__text">
-                    電子名札が発行された商品のみが出品できるようになります。
+                    お客様のアカウントで購入した商品のQRコードをスキャンすると自動で所有者名（アバター名）が更新されます。
                   </p>
                 </div>
 
                 <div className="landing-page-service-case-card__image-wrap">
                   <img
-                    src="/Mall.png"
+                    src="/Customer.png"
                     alt="AMOL MALLで日本酒が販売され、所有者が書き換わる図"
                     className="landing-page-service-case-card__image"
                     loading="lazy"
@@ -301,19 +301,19 @@ export default function LandingPage() {
               <article className="landing-page-service-case-card landing-page-service-case-card--customer">
                 <div className="landing-page-service-case-card__content">
                   <p className="landing-page-service-case-card__label">
-                    個人のお客様
+                    二次流通先のお客様
                   </p>
                   <h3 className="landing-page-service-case-card__title">
-                    購入後、名前が自動で更新される
+                    移譲と同時に自動更新
                   </h3>
                   <p className="landing-page-service-case-card__text">
-                    お客様が購入後、配送された商品のQRコードをお客様がスキャンした時点で所有者がお客様のアバター名義に更新されます。
+                    フォロー先、フォロワー間でトークンを渡すことができます。譲渡と同時に所有者名（アバター名）が自動更新されます。
                   </p>
                 </div>
 
                 <div className="landing-page-service-case-card__image-wrap">
                   <img
-                    src="/Customer.png"
+                    src="/2ndCustomer.png"
                     alt="個人のお客様が日本酒の所有者として記録される図"
                     className="landing-page-service-case-card__image"
                     loading="lazy"
