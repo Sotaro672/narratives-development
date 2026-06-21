@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/CosmeticUsecase.tsx
+
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -44,7 +45,7 @@ export default function CosmeticUsecase() {
             </div>
 
             <div className="examples-page__grid">
-              <article className="examples-page-card">
+              <article className="examples-page-card examples-page-card--static">
                 <h3 className="examples-page-card__title">登録予定の情報</h3>
 
                 <div className="examples-page-card__image-wrap">
@@ -62,7 +63,7 @@ export default function CosmeticUsecase() {
                 </p>
               </article>
 
-              <article className="examples-page-card">
+              <article className="examples-page-card examples-page-card--static">
                 <h3 className="examples-page-card__title">
                   ブランドコンテンツ
                 </h3>
@@ -73,7 +74,7 @@ export default function CosmeticUsecase() {
                 </p>
               </article>
 
-              <article className="examples-page-card">
+              <article className="examples-page-card examples-page-card--static">
                 <h3 className="examples-page-card__title">今後の展開</h3>
 
                 <p className="examples-page-card__description">
@@ -82,6 +83,21 @@ export default function CosmeticUsecase() {
                 </p>
               </article>
             </div>
+
+            <article className="examples-page-cta-card">
+              <p className="examples-page-cta-card__label">
+                導入検討企業募集中
+              </p>
+
+              <h3 className="examples-page-cta-card__title">
+                化粧品ブランド・製造販売事業者の導入相談を受け付けています。
+              </h3>
+
+              <p className="examples-page-cta-card__description">
+                AMOLでは、QRコードを起点にした成分情報の提供、ブランドストーリーの共有、
+                購入後のお客様との接点づくりに関心のある企業様を募集しています。
+              </p>
+            </article>
           </section>
         </div>
       </section>

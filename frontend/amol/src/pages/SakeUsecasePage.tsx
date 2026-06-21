@@ -1,4 +1,5 @@
 // frontend/amol/src/pages/SakeUsecasePage.tsx
+
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -43,7 +44,7 @@ export default function SakeUsecasePage() {
             </div>
 
             <div className="examples-page__grid">
-              <article className="examples-page-card">
+              <article className="examples-page-card examples-page-card--static">
                 <h3 className="examples-page-card__title">登録できる情報</h3>
 
                 <div className="examples-page-card__image-wrap">
@@ -62,7 +63,7 @@ export default function SakeUsecasePage() {
                 </p>
               </article>
 
-              <article className="examples-page-card">
+              <article className="examples-page-card examples-page-card--static">
                 <h3 className="examples-page-card__title">製造過程の共有</h3>
 
                 <p className="examples-page-card__description">
@@ -72,7 +73,7 @@ export default function SakeUsecasePage() {
                 </p>
               </article>
 
-              <article className="examples-page-card">
+              <article className="examples-page-card examples-page-card--static">
                 <h3 className="examples-page-card__title">ファン化への活用</h3>
 
                 <p className="examples-page-card__description">
@@ -81,6 +82,21 @@ export default function SakeUsecasePage() {
                 </p>
               </article>
             </div>
+
+            <article className="examples-page-cta-card">
+              <p className="examples-page-cta-card__label">
+                導入検討企業募集中
+              </p>
+
+              <h3 className="examples-page-cta-card__title">
+                酒造メーカー・酒類販売事業者の導入相談を受け付けています。
+              </h3>
+
+              <p className="examples-page-cta-card__description">
+                AMOLでは、QRコードを起点にした商品情報の提供、製造背景の共有、
+                購入者との継続的な関係づくりに関心のある企業様を募集しています。
+              </p>
+            </article>
           </section>
         </div>
       </section>

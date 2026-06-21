@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/Examples.tsx
+// frontend\amol\src\pages\ExamplesPage.tsx
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 

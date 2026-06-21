@@ -90,6 +90,21 @@ export default function AppareUsecase() {
                 </p>
               </article>
             </div>
+
+            <article className="examples-page-cta-card">
+              <p className="examples-page-cta-card__label">
+                導入検討企業募集中
+              </p>
+
+              <h3 className="examples-page-cta-card__title">
+                導入相談を受け付けています。
+              </h3>
+
+              <p className="examples-page-cta-card__description">
+                AMOLでは、QRコードを起点にした真贋証明、二次流通後の所有者との接点づくり、
+                商品体験の拡張に関心のある企業様を募集しています。
+              </p>
+            </article>
           </section>
         </div>
       </section>
