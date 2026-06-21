@@ -1,9 +1,10 @@
 // frontend/amol/src/pages/AppareUsecase.tsx
+
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
-import "../styles/examples.css";
+import "../styles/examples-page.css";
 
 import Layout from "../components/layout/Layout";
 
@@ -20,7 +21,7 @@ export default function AppareUsecase() {
 
   return (
     <Layout
-      title="アパレルでの導入事例"
+      title="アパレル想定導入事例"
       mode="landing"
       showBackButton
       titleClickable={false}
@@ -34,21 +35,21 @@ export default function AppareUsecase() {
         <div className="landing-page-section__inner">
           <section className="examples-page">
             <div className="examples-page__header">
-              <h2 className="examples-page__title">アパレルでの導入事例</h2>
+              <h3 className="examples-page__title">届けるお客様像</h3>
 
               <p className="examples-page__description">
-                AMOLでは、衣服に紐づく情報をトークンとして管理し、
-                商品の背景や品質情報、ブランドの世界観をお客様へ届けることができます。
+                模造品が流通しているという報告が入ったが迅速な対策を講じれない。
+                自社製品の二次流通先と繋がりたい。
               </p>
             </div>
 
             <div className="examples-page__grid">
-              <article className="examples-page-card">
-                <h3 className="examples-page-card__title">登録できる情報</h3>
+              <article className="examples-page-card examples-page-card--static">
+                <h3 className="examples-page-card__title">QRコード印刷例</h3>
 
                 <div className="examples-page-card__image-wrap">
                   <img
-                    src="/shirts.png"
+                    src="/scan.png"
                     alt="首元のブランドタグにQRコードが付いた赤いTシャツのイラスト"
                     className="examples-page-card__image"
                     loading="lazy"
@@ -56,29 +57,36 @@ export default function AppareUsecase() {
                 </div>
 
                 <p className="examples-page-card__description">
-                  色、採寸、素材、GSM、洗濯表示など、アパレル商品に必要な情報を登録できます。
-                  商品ごとの仕様やケア情報を、購入後も確認できる形で届けられます。
+                  トップスで想定している印刷例です。QRコードをスキャンできる全ての形態に対応できます。
                 </p>
               </article>
 
-              <article className="examples-page-card">
+              <article className="examples-page-card examples-page-card--static">
                 <h3 className="examples-page-card__title">
-                  ブランド体験の拡張
+                  コピーされた場合の真贋対策
                 </h3>
 
+                <div className="examples-page-card__image-wrap">
+                  <img
+                    src="/antiCopy.png"
+                    alt="首元のブランドタグにQRコードが付いた赤いTシャツのイラスト"
+                    className="examples-page-card__image"
+                    loading="lazy"
+                  />
+                </div>
+
                 <p className="examples-page-card__description">
-                  商品に付与されたQRコードから、ブランドストーリー、着用イメージ、
-                  コーディネート提案、制作背景などのコンテンツへ誘導できます。
-                  タグや下げ札だけでは伝えきれない情報を、デジタル上で補完できます。
+                  QRコードをコピーされたとしても商品の移譲履歴は１本しか伸びません。
+                  ２本目以降はユーザー間でトークンを渡すことができないため、偽造業者は利益を稼ぐことができなくなります。
                 </p>
               </article>
 
-              <article className="examples-page-card">
-                <h3 className="examples-page-card__title">購入後の活用</h3>
+              <article className="examples-page-card examples-page-card--static">
+                <h3 className="examples-page-card__title">現所有者との繋がり</h3>
 
                 <p className="examples-page-card__description">
-                  お客様は商品に紐づくトークンを通じて、保有商品の情報を確認できます。
-                  将来的には、限定コンテンツ、メンテナンス案内、コミュニティ施策などにも活用できます。
+                  デザイナー、製造者は商品の現所有者へメッセージのやり取りをすることができます。
+                  レビュー投稿、告知一斉送信、問い合わせをQRコードを介してやり取りすることができます。
                 </p>
               </article>
             </div>

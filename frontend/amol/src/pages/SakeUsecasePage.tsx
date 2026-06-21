@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
-import "../styles/examples.css";
+import "../styles/examples-page.css";
 
 import Layout from "../components/layout/Layout";
 

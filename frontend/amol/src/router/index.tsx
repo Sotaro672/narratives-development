@@ -35,7 +35,7 @@ import TermsPage from "../pages/TermsPage";
 import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
-import Examples from "../pages/Examples";
+import Examples from "../pages/ExamplesPage";
 import AppareUsecase from "../pages/AppareUsecase";
 import SakeUsecasePage from "../pages/SakeUsecasePage";
 import CosmeticUsecase from "../pages/CosmeticUsecase";
