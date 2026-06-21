@@ -10,10 +10,6 @@ export const publicHeaderNavigationItems: HeaderNavigationItem[] = [
     to: "/how-to-use",
   },
   {
-    label: "想定導入例",
-    to: "/use-cases",
-  },
-  {
     label: "料金プラン",
     to: "/pricing",
   },

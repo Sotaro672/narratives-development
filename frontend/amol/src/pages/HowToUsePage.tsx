@@ -89,6 +89,13 @@ const sellerSteps: Step[] = [
       "Mallからの注文と購入者からのレビューを確認します。",
     youtubeUrl: "https://www.youtube.com/embed/GiNrATQWiEk",
   },
+    {
+    number: "10",
+    title: "告知",
+    description:
+      "発行したトークンを所有するアバターへお知らせを一斉送信します。",
+    youtubeUrl: "https://www.youtube.com/embed/8-L7mRXos04",
+  },
 ];
 
 const buyerSteps: Step[] = [
@@ -228,7 +235,7 @@ export default function HowToUsePage() {
 
           <StepFlow
             title="出品者Consoleの使い方"
-            subtitle="ブランド登録からブロックチェーン連携、出品までの9つのステップ"
+            subtitle="ブランド登録からブロックチェーン連携、出品までの10のステップ"
             steps={sellerSteps}
           />
 

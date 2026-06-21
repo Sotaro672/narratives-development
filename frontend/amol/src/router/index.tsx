@@ -29,16 +29,12 @@ import WalletPage from "../pages/WalletPage";
 import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";
 import AvatarShareQrPage from "../pages/AvatarShareQrPage";
-import AnnouncementPage from "../pages/Announcementpage";
+import AnnouncementPage from "../pages/AnnouncementPage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
 import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
-import Examples from "../pages/ExamplesPage";
-import AppareUsecase from "../pages/AppareUsecase";
-import SakeUsecasePage from "../pages/SakeUsecasePage";
-import CosmeticUsecase from "../pages/CosmeticUsecase";
 import PricePlan from "../pages/PricePlan";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 
@@ -75,10 +71,6 @@ export const router = createBrowserRouter([
   { path: "/password-reset", element: <PasswordResetPage /> },
 
   { path: "/how-to-use", element: <HowToUsePage /> },
-  { path: "/use-cases", element: <Examples /> },
-  { path: "/use-cases/apparel", element: <AppareUsecase /> },
-  { path: "/use-cases/alcohol", element: <SakeUsecasePage /> },
-  { path: "/use-cases/cosmetics", element: <CosmeticUsecase /> },
   { path: "/pricing", element: <PricePlan /> },
   { path: "/faq", element: <VisionPage /> },
   { path: "/terms", element: <TermsPage /> },
