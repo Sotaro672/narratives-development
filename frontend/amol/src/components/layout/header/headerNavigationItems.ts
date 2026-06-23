@@ -14,7 +14,7 @@ export const publicHeaderNavigationItems: HeaderNavigationItem[] = [
     to: "/pricing",
   },
   {
-    label: "チーム",
+    label: "代表者",
     to: "/faq",
   },
   {

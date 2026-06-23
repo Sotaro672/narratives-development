@@ -7,8 +7,8 @@ import Layout from "../components/layout/Layout";
 const team = [
   {
     name: "奥岡 曹太朗",
-    role: "開発者",
-    bio: "商流で世界を繋げることで平和を築いていくことを目標に、ブロックチェーン技術でお客様の信用と信頼を守ってまいります。",
+    role: "開発者・代表",
+    bio: "生産者の信頼を技術で守る",
     career: [
       "2020 東京農業大学 生物応用化学科（農芸化学科）卒業",
       "2022 京都大学大学院農学研究科地域環境科学専攻 土壌学研究室 修士課程修了",
@@ -51,7 +51,7 @@ export default function VisionPage() {
         <div className="landing-page-section__inner">
           <section id="team" className="landing-page-team">
             <div className="landing-page-team__header">
-              <h2 className="landing-page-team__title">チーム</h2>
+              <h2 className="landing-page-team__title">代表者</h2>
             </div>
 
             <div className="landing-page-team__content">
@@ -97,12 +97,11 @@ export default function VisionPage() {
             <div className="landing-page-vision__header">
               <h2 className="landing-page-vision__title">ビジョン</h2>
               <p className="landing-page-vision__lead">
-                ブロックチェーントークン経済圏を構築する
+                生産者の信頼を国境を越えて守られる経済圏を構築します。
               </p>
               <p className="landing-page-vision__description">
-                3つのステップを通じて、ブロックチェーン技術を活用した信頼性の高い経済圏を構築します。
-                商品の真正性保証から始まり、SNSでのコミュニティ形成、そしてフリマでの安全な二次流通まで、
-                ユーザーにとって価値ある体験を提供し続けます。
+                自分の作成した製品がどこで誰の役に立っているのか、誰を豊かにしているのかを国境を越えて追跡できる経済圏を構築します。
+                偽物かもしれないという不当な疑義をかけられることなく全ての生産者が正当に評価し、競い合える舞台を３つのステップを通して構築します。
               </p>
             </div>
 
