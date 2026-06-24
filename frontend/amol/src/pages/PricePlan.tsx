@@ -1,4 +1,3 @@
-// frontend/amol/src/pages/PricePlan.tsx
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -8,19 +7,45 @@ import "../styles/price-plan-page.css";
 import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
 
+const subscriptionPlanColumns = ["Starter", "Simple", "Grow", "Advanced"];
+
+const subscriptionPlanRows = [
+  {
+    label: "料金",
+    values: ["4,990円/月", "9,990円/月", "19,990円/月", "29,990円/月"],
+  },
+  {
+    label: "ミント",
+    values: ["〇", "〇", "〇", "〇"],
+  },
+  {
+    label: "レビュー",
+    values: ["×", "〇", "〇", "〇"],
+  },
+  {
+    label: "一斉告知",
+    values: ["×", "×", "〇", "〇"],
+  },
+  {
+    label: "メンバー招待",
+    values: ["×", "×", "×", "〇"],
+  },
+  {
+    label: "ブランド数",
+    values: ["1", "1", "1", "無制限"],
+  },
+];
+
 const pricePlans = [
   {
-    name: "AMOL MALL 出品",
-    description:
-      "AMOL MALLへ商品を出品し、AMOL上で販売・トークン移譲・レビュー投稿まで行う導入パターンです。",
+    name: "AMOL MALL 出品される場合",
     fees: [
       {
-        label: "基本使用料",
-        value: "月額4,990円",
+        label: "月額利用料金",
       },
       {
-        label: "電子名札発行手数料",
-        value: "10円 / 点",
+        label: "ミント料金",
+        value: "10円/点",
       },
       {
         label: "販売手数料",
@@ -36,17 +61,14 @@ const pricePlans = [
     ],
   },
   {
-    name: "自社EC 接続",
-    description:
-      "既存の自社ECとAMOLを接続し、自社EC上で販売しながら、電子名札とトークン移譲をAMOLで利用する導入パターンです。",
+    name: "自社EC 接続される場合",
     fees: [
       {
-        label: "基本使用料",
-        value: "月額4,990円",
+        label: "月額利用料金",
       },
       {
-        label: "電子名札発行手数料",
-        value: "10円 / 点",
+        label: "ミント料金",
+        value: "10円/点",
       },
       {
         label: "販売手数料",
@@ -55,8 +77,7 @@ const pricePlans = [
     ],
     developmentFee: {
       title: "接続開発費",
-      description:
-        "既存ECの仕様や連携範囲に応じて、個別に接続開発費が発生します。",
+      description: "工事費は個別で相談させていただきます。",
     },
     flow: [
       "AMOL Consoleで商品設計を登録",
@@ -86,6 +107,57 @@ export default function PricePlan() {
           <section id="price-plan" className="price-plan-page">
             <div className="price-plan-page__header">
               <h2 className="price-plan-page__title">料金プラン</h2>
+            </div>
+
+            <section className="price-plan-page__subscription">
+              <div className="price-plan-page__subscription-header">
+                <p className="price-plan-page__eyebrow">Monthly Plan</p>
+                <h3 className="price-plan-page__subscription-title">
+                  プラン別月額利用料金
+                </h3>
+              </div>
+
+              <div className="price-plan-table-wrap">
+                <table className="price-plan-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="price-plan-table__corner">
+                        プラン
+                      </th>
+                      {subscriptionPlanColumns.map((column) => (
+                        <th key={column} scope="col">
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {subscriptionPlanRows.map((row) => (
+                      <tr key={row.label}>
+                        <th scope="row">{row.label}</th>
+                        {row.values.map((value, index) => (
+                          <td
+                            key={`${row.label}-${subscriptionPlanColumns[index]}`}
+                            className={
+                              value === "〇"
+                                ? "price-plan-table__available"
+                                : value === "×"
+                                  ? "price-plan-table__unavailable"
+                                  : ""
+                            }
+                          >
+                            {value}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <div className="price-plan-page__connection-header">
               <p className="price-plan-page__description">
                 AMOLではお客様の自社ECサイトとの接続工事もご対応いたします。
               </p>
@@ -99,9 +171,6 @@ export default function PricePlan() {
                   <article key={plan.name} className="price-plan-card">
                     <div className="price-plan-card__header">
                       <h3 className="price-plan-card__title">{plan.name}</h3>
-                      <p className="price-plan-card__description">
-                        {plan.description}
-                      </p>
                     </div>
 
                     <div
@@ -124,9 +193,11 @@ export default function PricePlan() {
                               <span className="price-plan-card__fee-label">
                                 {fee.label}
                               </span>
-                              <span className="price-plan-card__fee-value">
-                                {fee.value}
-                              </span>
+                              {fee.value && (
+                                <span className="price-plan-card__fee-value">
+                                  {fee.value}
+                                </span>
+                              )}
                             </li>
                           ))}
                         </ul>
