@@ -3,7 +3,7 @@
 import type {
   // quantity の最小表現は domain を正にする
   ModelQuantity,
-} from "../../../../production/src/domain/entity/production";
+} from "../../../../production/src/domain/production";
 
 /**
  * Production 詳細（backend ProductionDetailDTO と整合）

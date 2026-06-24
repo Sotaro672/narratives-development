@@ -497,9 +497,9 @@ export default function LandingPage() {
             <div className="landing-page-pricing-grid">
               <article className="landing-page-pricing-card">
                 <p className="landing-page-pricing-card__label">基本利用料金</p>
-                <h3 className="landing-page-pricing-card__price">150,000円/月</h3>
+                <h3 className="landing-page-pricing-card__price">4,990円/月</h3>
                 <p className="landing-page-pricing-card__badge">
-                  試験運用価格
+                  初月無料
                 </p>
                 <p className="landing-page-pricing-card__text">
                   試験運用価格であり、今後金額が上下する可能性があります。

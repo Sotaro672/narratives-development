@@ -16,7 +16,7 @@ const pricePlans = [
     fees: [
       {
         label: "基本使用料",
-        value: "月額150,000円",
+        value: "月額4,990円",
       },
       {
         label: "電子名札発行手数料",
