@@ -1,3 +1,4 @@
+//frontend\amol\src\pages\PricePlan.tsx
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 

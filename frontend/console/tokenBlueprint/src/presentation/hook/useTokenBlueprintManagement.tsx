@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
+import type { TokenBlueprint } from "../../domain/tokenBlueprint";
 import {
   SortKey,
   SortDir,

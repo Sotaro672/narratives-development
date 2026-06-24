@@ -7,7 +7,7 @@ import type {
   TokenBlueprint,
   ContentFile,
   FirebaseStorageTokenContent,
-} from "../../domain/entity/tokenBlueprint";
+} from "../../domain/tokenBlueprint";
 
 import {
   createTokenBlueprintWithOptionalIcon,

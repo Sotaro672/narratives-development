@@ -4,7 +4,7 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
+import type { TokenBlueprint } from "../../domain/tokenBlueprint";
 import { useTokenBlueprintManagement } from "../hook/useTokenBlueprintManagement";
 
 export default function TokenBlueprintManagementPage() {

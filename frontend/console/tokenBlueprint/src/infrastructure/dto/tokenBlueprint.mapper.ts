@@ -3,7 +3,7 @@
 import type {
   TokenBlueprint,
   ContentFile,
-} from "../../domain/entity/tokenBlueprint";
+} from "../../domain/tokenBlueprint";
 
 import type {
   TokenBlueprintDTO,

@@ -6,7 +6,7 @@ import type {
   TokenBlueprint,
   ContentFile,
   FirebaseStorageTokenContent,
-} from "../../domain/entity/tokenBlueprint";
+} from "../../domain/tokenBlueprint";
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";

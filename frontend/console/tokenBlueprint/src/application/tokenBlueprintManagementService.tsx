@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprint/src/application/tokenBlueprintManagementService.tsx
 
-import type { TokenBlueprint } from "../domain/entity/tokenBlueprint";
+import type { TokenBlueprint } from "../domain/tokenBlueprint";
 import { listTokenBlueprintsByCompanyId } from "../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 /** ISO8601 → timestamp（不正値は 0 扱い） */

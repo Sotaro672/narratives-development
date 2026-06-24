@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintCard.tsx
 import * as React from "react";
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
+import type { TokenBlueprint } from "../../domain/tokenBlueprint";
 
 import type {
   TokenBlueprintCardViewModel,

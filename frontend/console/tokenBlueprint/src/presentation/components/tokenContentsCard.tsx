@@ -17,7 +17,7 @@ import {
 } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 
-import type { FirebaseStorageTokenContent } from "../../domain/entity/tokenBlueprint";
+import type { FirebaseStorageTokenContent } from "../../domain/tokenBlueprint";
 
 type Mode = "edit" | "view";
 

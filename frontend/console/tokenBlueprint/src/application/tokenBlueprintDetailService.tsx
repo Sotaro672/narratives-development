@@ -5,7 +5,7 @@ import type {
   ContentFile,
   ContentType,
   ContentVisibility,
-} from "../domain/entity/tokenBlueprint";
+} from "../domain/tokenBlueprint";
 import type { ContentFileDTO } from "../infrastructure/dto/tokenBlueprint.dto";
 
 import { safeDateLabelJa } from "../../../shell/src/shared/util/dateJa";

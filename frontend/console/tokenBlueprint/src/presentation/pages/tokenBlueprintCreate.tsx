@@ -15,7 +15,7 @@ import type {
   TokenBlueprint,
   ContentFile,
   FirebaseStorageTokenContent,
-} from "../../domain/entity/tokenBlueprint";
+} from "../../domain/tokenBlueprint";
 
 import { patchTokenBlueprintContentFiles } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 import { uploadTokenBlueprintContentToFirebaseStorage } from "../../infrastructure/storage/tokenBlueprintAssetStorage";

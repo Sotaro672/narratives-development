@@ -16,7 +16,7 @@
  *   Firebase Storage の downloadURL + objectPath を保存する
  */
 
-import type { TokenBlueprint } from "../domain/entity/tokenBlueprint";
+import type { TokenBlueprint } from "../domain/tokenBlueprint";
 
 import {
   createTokenBlueprint,

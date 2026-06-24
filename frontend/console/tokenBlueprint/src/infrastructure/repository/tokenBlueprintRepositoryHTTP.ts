@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprint/src/infrastructure/repository/tokenBlueprintRepositoryHTTP.ts
 
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
+import type { TokenBlueprint } from "../../domain/tokenBlueprint";
 import type { ContentFileDTO } from "../dto/tokenBlueprint.dto";
 
 import { handleJsonResponse } from "../http/json";
