@@ -56,6 +56,10 @@ export type InquiryManagementItem = {
   inquiry: Inquiry;
   modelId: string;
   productBlueprintId: string;
+  productName: string;
+  brandId: string;
+  brandName: string;
+  avatarName: string;
   companyId: string;
 };
 
@@ -63,6 +67,10 @@ export type InquiryDetail = {
   inquiry: Inquiry;
   modelId: string;
   productBlueprintId: string;
+  productName: string;
+  brandId: string;
+  brandName: string;
+  avatarName: string;
   companyId: string;
 };
 
@@ -71,6 +79,10 @@ export type InquiryAggregate = {
   images: InquiryImageFile[];
   modelId: string;
   productBlueprintId: string;
+  productName: string;
+  brandId: string;
+  brandName: string;
+  avatarName: string;
   companyId: string;
 };
 

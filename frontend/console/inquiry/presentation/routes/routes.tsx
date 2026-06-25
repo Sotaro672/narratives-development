@@ -5,7 +5,7 @@ import InquiryDetail from "../pages/inquiryDetail";
 
 const routes: RouteObject[] = [
   { path: "", element: <InquiryManagement /> },
-  { path: "/inquiry/:inquiryId", element: <InquiryDetail /> },
+  { path: ":inquiryId", element: <InquiryDetail /> },
 ];
 
 export default routes;

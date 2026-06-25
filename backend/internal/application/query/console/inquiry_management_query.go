@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	avatardom "narratives/internal/domain/avatar"
+	branddom "narratives/internal/domain/brand"
 	inquirydom "narratives/internal/domain/inquiry"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
@@ -20,7 +22,9 @@ import (
 //
 // Inquiry.ProductID から Product.ModelID を解決し、
 // ModelVariation.GetProductBlueprintID() から productBlueprintId を解決し、
-// ProductBlueprint.CompanyID を解決します。
+// ProductBlueprint.CompanyID / ProductName / BrandID を解決します。
+// さらに Brand.GetByID() から BrandName を解決します。
+// Inquiry.AvatarID から Avatar.GetByID() を使って AvatarName を解決します。
 //
 // ListByCompanyID では、ログイン中 member の companyId と一致する inquiry のみを返します。
 type InquiryManagementQuery struct {
@@ -28,6 +32,8 @@ type InquiryManagementQuery struct {
 	productRepo          productdom.Repository
 	modelRepo            modeldom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
+	brandRepo            branddom.RepositoryPort
+	avatarRepo           avatardom.Repository
 }
 
 // NewInquiryManagementQuery は InquiryManagementQuery を初期化します。
@@ -36,32 +42,46 @@ func NewInquiryManagementQuery(
 	productRepo productdom.Repository,
 	modelRepo modeldom.RepositoryPort,
 	productBlueprintRepo productblueprintdom.Repository,
+	brandRepo branddom.RepositoryPort,
+	avatarRepo avatardom.Repository,
 ) *InquiryManagementQuery {
 	return &InquiryManagementQuery{
 		repo:                 repo,
 		productRepo:          productRepo,
 		modelRepo:            modelRepo,
 		productBlueprintRepo: productBlueprintRepo,
+		brandRepo:            brandRepo,
+		avatarRepo:           avatarRepo,
 	}
 }
 
 // InquiryManagementItem は Console 管理画面向けの Inquiry 一覧 item です。
 //
-// Inquiry.ProductID から解決した modelId / productBlueprintId / companyId を含めます。
+// Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// Inquiry.AvatarID から解決した avatarName を含めます。
 type InquiryManagementItem struct {
 	Inquiry            inquirydom.Inquiry `json:"inquiry"`
 	ModelID            string             `json:"modelId"`
 	ProductBlueprintID string             `json:"productBlueprintId"`
+	ProductName        string             `json:"productName"`
+	BrandID            string             `json:"brandId"`
+	BrandName          string             `json:"brandName"`
+	AvatarName         string             `json:"avatarName"`
 	CompanyID          string             `json:"companyId"`
 }
 
 // InquiryDetail は Console 管理画面向けの Inquiry 詳細 read model です。
 //
-// Inquiry.ProductID から解決した modelId / productBlueprintId / companyId を含めます。
+// Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// Inquiry.AvatarID から解決した avatarName を含めます。
 type InquiryDetail struct {
 	Inquiry            inquirydom.Inquiry `json:"inquiry"`
 	ModelID            string             `json:"modelId"`
 	ProductBlueprintID string             `json:"productBlueprintId"`
+	ProductName        string             `json:"productName"`
+	BrandID            string             `json:"brandId"`
+	BrandName          string             `json:"brandName"`
+	AvatarName         string             `json:"avatarName"`
 	CompanyID          string             `json:"companyId"`
 }
 
@@ -69,12 +89,17 @@ type InquiryDetail struct {
 //
 // inquiryImage ドメインは inquiry ドメインへ統合済みのため、
 // Images は Inquiry.Images から取得します。
-// また、Inquiry.ProductID から解決した modelId / productBlueprintId / companyId を含めます。
+// また、Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// Inquiry.AvatarID から解決した avatarName を含めます。
 type InquiryAggregate struct {
 	Inquiry            inquirydom.Inquiry     `json:"inquiry"`
 	Images             []inquirydom.ImageFile `json:"images"`
 	ModelID            string                 `json:"modelId"`
 	ProductBlueprintID string                 `json:"productBlueprintId"`
+	ProductName        string                 `json:"productName"`
+	BrandID            string                 `json:"brandId"`
+	BrandName          string                 `json:"brandName"`
+	AvatarName         string                 `json:"avatarName"`
 	CompanyID          string                 `json:"companyId"`
 }
 
@@ -109,7 +134,7 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 
 	items := make([]InquiryManagementItem, 0, len(result.Items))
 	for _, inq := range result.Items {
-		modelID, productBlueprintID, resolvedCompanyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
+		modelID, productBlueprintID, productName, brandID, brandName, resolvedCompanyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
 		if err != nil {
 			return inquirydom.PageResult[InquiryManagementItem]{}, err
 		}
@@ -124,10 +149,19 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 			continue
 		}
 
+		avatarName, err := q.resolveAvatarNameByAvatarID(ctx, inq.AvatarID)
+		if err != nil {
+			return inquirydom.PageResult[InquiryManagementItem]{}, err
+		}
+
 		items = append(items, InquiryManagementItem{
 			Inquiry:            inq,
 			ModelID:            modelID,
 			ProductBlueprintID: productBlueprintID,
+			ProductName:        productName,
+			BrandID:            brandID,
+			BrandName:          brandName,
+			AvatarName:         avatarName,
 			CompanyID:          resolvedCompanyID,
 		})
 	}
@@ -158,7 +192,7 @@ func (q *InquiryManagementQuery) CountUnreadByCompanyID(
 // GetByID は Inquiry を返します。
 //
 // command 処理前の現在状態取得など、domain entity が必要な場合に使います。
-// 画面表示で modelId / productBlueprintId / companyId も必要な場合は GetDetailByID を使ってください。
+// 画面表示で modelId / productBlueprintId / productName / brandId / brandName / avatarName / companyId も必要な場合は GetDetailByID を使ってください。
 func (q *InquiryManagementQuery) GetByID(ctx context.Context, id string) (inquirydom.Inquiry, error) {
 	if q == nil || q.repo == nil {
 		return inquirydom.Inquiry{}, fmt.Errorf("inquiry management query: repository is nil")
@@ -176,14 +210,21 @@ func (q *InquiryManagementQuery) GetByID(ctx context.Context, id string) (inquir
 //
 // Inquiry.ProductID から product repository を使って Product.ModelID を取得し、
 // model repository を使って ModelVariation.GetProductBlueprintID() を取得し、
-// productBlueprint repository を使って ProductBlueprint.CompanyID を取得します。
+// productBlueprint repository を使って ProductBlueprint.CompanyID / ProductName / BrandID を取得します。
+// brand repository を使って BrandName を取得します。
+// avatar repository を使って AvatarName を取得します。
 func (q *InquiryManagementQuery) GetDetailByID(ctx context.Context, id string) (InquiryDetail, error) {
 	inq, err := q.GetByID(ctx, id)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
 
-	modelID, productBlueprintID, companyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
+	modelID, productBlueprintID, productName, brandID, brandName, companyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+
+	avatarName, err := q.resolveAvatarNameByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
@@ -192,6 +233,10 @@ func (q *InquiryManagementQuery) GetDetailByID(ctx context.Context, id string) (
 		Inquiry:            inq,
 		ModelID:            modelID,
 		ProductBlueprintID: productBlueprintID,
+		ProductName:        productName,
+		BrandID:            brandID,
+		BrandName:          brandName,
+		AvatarName:         avatarName,
 		CompanyID:          companyID,
 	}, nil
 }
@@ -261,7 +306,8 @@ func (q *InquiryManagementQuery) GetImagesForCompany(
 // GetAggregate は Inquiry と画像一覧をまとめて返します。
 //
 // 画像は Inquiry.Images を正として扱います。
-// また、Inquiry.ProductID から解決した modelId / productBlueprintId / companyId を含めます。
+// また、Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// Inquiry.AvatarID から解決した avatarName を含めます。
 func (q *InquiryManagementQuery) GetAggregate(ctx context.Context, id string) (InquiryAggregate, error) {
 	if q == nil || q.repo == nil {
 		return InquiryAggregate{}, fmt.Errorf("inquiry management query: repository is nil")
@@ -277,7 +323,12 @@ func (q *InquiryManagementQuery) GetAggregate(ctx context.Context, id string) (I
 		images = []inquirydom.ImageFile{}
 	}
 
-	modelID, productBlueprintID, companyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
+	modelID, productBlueprintID, productName, brandID, brandName, companyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
+	if err != nil {
+		return InquiryAggregate{}, err
+	}
+
+	avatarName, err := q.resolveAvatarNameByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
@@ -287,6 +338,10 @@ func (q *InquiryManagementQuery) GetAggregate(ctx context.Context, id string) (I
 		Images:             images,
 		ModelID:            modelID,
 		ProductBlueprintID: productBlueprintID,
+		ProductName:        productName,
+		BrandID:            brandID,
+		BrandName:          brandName,
+		AvatarName:         avatarName,
 		CompanyID:          companyID,
 	}, nil
 }
@@ -319,58 +374,113 @@ func (q *InquiryManagementQuery) GetAggregateForCompany(
 func (q *InquiryManagementQuery) resolveProductModelRefByInquiryProductID(
 	ctx context.Context,
 	productID string,
-) (modelID string, productBlueprintID string, companyID string, err error) {
+) (
+	modelID string,
+	productBlueprintID string,
+	productName string,
+	brandID string,
+	brandName string,
+	companyID string,
+	err error,
+) {
 	if q == nil {
-		return "", "", "", fmt.Errorf("inquiry management query: query is nil")
+		return "", "", "", "", "", "", fmt.Errorf("inquiry management query: query is nil")
 	}
 
 	productID = strings.TrimSpace(productID)
 	if productID == "" {
-		return "", "", "", nil
+		return "", "", "", "", "", "", nil
 	}
 
 	if q.productRepo == nil {
-		return "", "", "", fmt.Errorf("inquiry management query: product repository is nil")
+		return "", "", "", "", "", "", fmt.Errorf("inquiry management query: product repository is nil")
 	}
 
 	product, err := q.productRepo.GetByID(ctx, productID)
 	if err != nil {
 		if errors.Is(err, productdom.ErrNotFound) {
-			return "", "", "", nil
+			return "", "", "", "", "", "", nil
 		}
-		return "", "", "", err
+		return "", "", "", "", "", "", err
 	}
 
 	modelID = strings.TrimSpace(product.ModelID)
 	if modelID == "" {
-		return "", "", "", nil
+		return "", "", "", "", "", "", nil
 	}
 
 	if q.modelRepo == nil {
-		return modelID, "", "", fmt.Errorf("inquiry management query: model repository is nil")
+		return modelID, "", "", "", "", "", fmt.Errorf("inquiry management query: model repository is nil")
 	}
 
 	model, err := q.modelRepo.GetByID(ctx, modelID)
 	if err != nil {
 		if errors.Is(err, modeldom.ErrNotFound) {
-			return modelID, "", "", nil
+			return modelID, "", "", "", "", "", nil
 		}
-		return modelID, "", "", err
+		return modelID, "", "", "", "", "", err
 	}
 
 	productBlueprintID = strings.TrimSpace(model.GetProductBlueprintID())
 	if productBlueprintID == "" {
-		return modelID, "", "", nil
+		return modelID, "", "", "", "", "", nil
 	}
 
 	if q.productBlueprintRepo == nil {
-		return modelID, productBlueprintID, "", fmt.Errorf("inquiry management query: product blueprint repository is nil")
+		return modelID, productBlueprintID, "", "", "", "", fmt.Errorf("inquiry management query: product blueprint repository is nil")
 	}
 
 	productBlueprint, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
 	if err != nil {
-		return modelID, productBlueprintID, "", err
+		return modelID, productBlueprintID, "", "", "", "", err
 	}
 
-	return modelID, productBlueprintID, strings.TrimSpace(productBlueprint.CompanyID), nil
+	productName = strings.TrimSpace(productBlueprint.ProductName)
+	brandID = strings.TrimSpace(productBlueprint.BrandID)
+	companyID = strings.TrimSpace(productBlueprint.CompanyID)
+
+	if brandID == "" {
+		return modelID, productBlueprintID, productName, "", "", companyID, nil
+	}
+
+	if q.brandRepo == nil {
+		return modelID, productBlueprintID, productName, brandID, "", companyID, fmt.Errorf("inquiry management query: brand repository is nil")
+	}
+
+	brand, err := q.brandRepo.GetByID(ctx, brandID)
+	if err != nil {
+		if errors.Is(err, branddom.ErrNotFound) {
+			return modelID, productBlueprintID, productName, brandID, "", companyID, nil
+		}
+		return modelID, productBlueprintID, productName, brandID, "", companyID, err
+	}
+
+	brandName = strings.TrimSpace(brand.Name)
+
+	return modelID, productBlueprintID, productName, brandID, brandName, companyID, nil
+}
+
+func (q *InquiryManagementQuery) resolveAvatarNameByAvatarID(
+	ctx context.Context,
+	avatarID string,
+) (string, error) {
+	if q == nil {
+		return "", fmt.Errorf("inquiry management query: query is nil")
+	}
+
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return "", nil
+	}
+
+	if q.avatarRepo == nil {
+		return "", fmt.Errorf("inquiry management query: avatar repository is nil")
+	}
+
+	avatar, err := q.avatarRepo.GetByID(ctx, avatarID)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(avatar.AvatarName), nil
 }
