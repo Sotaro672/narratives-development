@@ -83,6 +83,28 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (Order, error)
 	ListByAvatarID(ctx context.Context, avatarID string, sort Sort, page Page) (PageResult, error)
 
+	// ListTransferredByAvatarIDModelIDAndTransferredAt returns orders that contain
+	// transferred items matching avatarId, modelId, and transferredAt.
+	//
+	// Expected source condition:
+	// - order.avatarId == avatarID
+	// - order.paid == true
+	// - item.modelId == modelID
+	// - item.transferred == true
+	// - item.transferredAt == transferredAt
+	//
+	// Repository implementation is responsible for item-level filtering.
+	// Firestore cannot reliably query nested array map fields with this full condition,
+	// so Firestore adapter may query by avatarId first and filter items in memory.
+	ListTransferredByAvatarIDModelIDAndTransferredAt(
+		ctx context.Context,
+		avatarID string,
+		modelID string,
+		transferredAt time.Time,
+		sort Sort,
+		page Page,
+	) (PageResult, error)
+
 	// Transfer verification query
 	ListEligibleTransferItemsByAvatarID(
 		ctx context.Context,

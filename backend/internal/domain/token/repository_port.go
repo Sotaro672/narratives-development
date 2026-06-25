@@ -1,4 +1,4 @@
-// backend\internal\domain\token\repository_port.go
+// backend/internal/domain/token/repository_port.go
 package token
 
 import (
@@ -34,13 +34,19 @@ type TokenBlueprintRepositoryPort interface {
 // - fields: brandId, tokenBlueprintId, mintAddress, metadataUri, ...
 //
 // 本ポートは以下の read-model query を提供する:
-// 1. mintAddress をキーに tokens を逆引きする
-// 2. tokenBlueprintId をキーに同一 blueprint 配下の mintAddress 一覧を取得する
+// 1. productId/docId をキーに token を取得する
+// 2. mintAddress をキーに tokens を逆引きする
+// 3. tokenBlueprintId をキーに同一 blueprint 配下の mintAddress 一覧を取得する
 //
 // ※ metadata の JSON 本体（URI の先の内容）まで取得したい場合は、
 //    別途 HTTP fetch 用ポートを設ける（このポートには含めない）のが推奨です。
 
 type TokenQueryPort interface {
+	GetTokenByProductID(
+		ctx context.Context,
+		productID string,
+	) (GetTokenByProductIDResult, error)
+
 	ResolveTokenByMintAddress(
 		ctx context.Context,
 		mintAddress string,

@@ -1,4 +1,4 @@
-// frontend/inquiry/src/pages/inquiryDetail.tsx
+// frontend/console/inquiry/presentation/pages/inquiryDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -99,29 +99,12 @@ function getTokenNames(detail: InquiryDetailDTO | null): string {
   return tokenNames.length > 0 ? tokenNames.join(" / ") : "-";
 }
 
-function getShippingAddressName(address: Record<string, unknown>): string {
-  return textOrDash(
-    normalizeText(address.name) ||
-      normalizeText(address.recipientName) ||
-      normalizeText(address.fullName),
-  );
-}
-
-function getShippingAddressPhone(address: Record<string, unknown>): string {
-  return textOrDash(
-    normalizeText(address.phoneNumber) ||
-      normalizeText(address.phone) ||
-      normalizeText(address.tel),
-  );
-}
-
 function getShippingAddressLine(address: Record<string, unknown>): string {
   const postalCode =
     normalizeText(address.zipCode) ||
     normalizeText(address.postalCode) ||
     normalizeText(address.postCode);
 
-  const country = normalizeText(address.country);
   const state =
     normalizeText(address.state) ||
     normalizeText(address.prefecture) ||
@@ -131,24 +114,28 @@ function getShippingAddressLine(address: Record<string, unknown>): string {
     normalizeText(address.street) ||
     normalizeText(address.address1) ||
     normalizeText(address.line1);
-  const street2 =
-    normalizeText(address.street2) ||
-    normalizeText(address.address2) ||
-    normalizeText(address.line2);
 
   const parts = [
     postalCode ? `〒${postalCode}` : "",
-    country,
     state,
     city,
     street,
-    street2,
   ].filter(Boolean);
 
   return parts.length > 0 ? parts.join(" ") : "-";
 }
 
-function getShippingAddresses(detail: InquiryDetailDTO | null): Record<string, unknown>[] {
+function getShippingAddressStreet2(address: Record<string, unknown>): string {
+  return (
+    normalizeText(address.street2) ||
+    normalizeText(address.address2) ||
+    normalizeText(address.line2)
+  );
+}
+
+function getShippingAddresses(
+  detail: InquiryDetailDTO | null,
+): Record<string, unknown>[] {
   if (!detail?.shippingAddresses?.length) {
     return [];
   }
@@ -434,13 +421,17 @@ export default function InquiryDetail() {
 
                   {shippingAddresses.length > 0 ? (
                     <div className="inq-detail__value">
-                      {shippingAddresses.map((address, index) => (
-                        <div key={`${normalizeText(address.id) || index}`}>
-                          <div>{getShippingAddressName(address)}</div>
-                          <div>{getShippingAddressPhone(address)}</div>
-                          <div>{getShippingAddressLine(address)}</div>
-                        </div>
-                      ))}
+                      {shippingAddresses.map((address, index) => {
+                        const addressLine = getShippingAddressLine(address);
+                        const street2 = getShippingAddressStreet2(address);
+
+                        return (
+                          <div key={`${normalizeText(address.id) || index}`}>
+                            <div>{addressLine}</div>
+                            {street2 ? <div>{street2}</div> : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <span className="inq-detail__value">-</span>

@@ -28,6 +28,7 @@ type repos struct {
 
 	mintRepo        *fs.MintRepositoryFS
 	tokenReaderRepo *fs.TokenReaderFS
+	transferRepo    *fs.TransferRepositoryFS
 
 	orderRepo          *fs.OrderRepositoryFS
 	orderConsoleLister *fs.OrderConsoleListerFS
@@ -87,6 +88,7 @@ func buildRepos(c *clients) *repos {
 
 	mintRepo := fs.NewMintRepositoryFS(fsClient)
 	tokenReaderRepo := fs.NewTokenReaderFS(fsClient)
+	transferRepo := fs.NewTransferRepositoryFS(fsClient)
 
 	orderRepo := fs.NewOrderRepositoryFS(fsClient)
 	orderConsoleLister := fs.NewOrderConsoleListerFS(fsClient)
@@ -139,6 +141,7 @@ func buildRepos(c *clients) *repos {
 
 		mintRepo:        mintRepo,
 		tokenReaderRepo: tokenReaderRepo,
+		transferRepo:    transferRepo,
 
 		orderRepo:          orderRepo,
 		orderConsoleLister: orderConsoleLister,

@@ -16,7 +16,9 @@ import (
 	productdom "narratives/internal/domain/product"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 	shippingaddressdom "narratives/internal/domain/shippingAddress"
+	tokendom "narratives/internal/domain/token"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
+	transferdom "narratives/internal/domain/transfer"
 	userdom "narratives/internal/domain/user"
 )
 
@@ -29,11 +31,13 @@ import (
 // ModelVariation.GetProductBlueprintID() から productBlueprintId を解決し、
 // ProductBlueprint.CompanyID / ProductName / BrandID を解決します。
 // さらに Brand.GetByID() から BrandName を解決します。
+// Inquiry.ProductID を tokens/{productId} として解決し、Token.MintAddress を取得します。
+// 取得した MintAddress から Transfer.TransferredAt を解決します。
 // Inquiry.AvatarID から Avatar.GetByID() を使って AvatarName / UserID を解決します。
 // 解決した UserID から User.GetByID() を使って UserFullName を解決します。
 // 解決した UserID から ShippingAddress.ListByUserID() を使って配送先住所一覧を解決します。
 // Inquiry.AvatarID から Order.ListByAvatarID() を使って注文一覧を取得し、
-// Inquiry.ProductID 由来の modelId と一致する Order.Items を持つ注文のみ返します。
+// Inquiry.ProductID 由来の modelId と MintAddress 由来の transferredAt が一致する Order.Items を持つ注文のみ返します。
 // OrderItem.InventoryID の "_" 以降を tokenBlueprintId として解決し、TokenBlueprint.GetByID() から tokenName を取得します。
 //
 // ListByCompanyID では、ログイン中 member の companyId と一致する inquiry のみを返します。
@@ -42,6 +46,8 @@ type InquiryManagementQuery struct {
 	productRepo          productdom.Repository
 	modelRepo            modeldom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
+	tokenQueryRepo       tokendom.TokenQueryPort
+	transferQueryRepo    transferdom.TransferQueryPort
 	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
 	brandRepo            branddom.RepositoryPort
 	avatarRepo           avatardom.Repository
@@ -56,6 +62,8 @@ func NewInquiryManagementQuery(
 	productRepo productdom.Repository,
 	modelRepo modeldom.RepositoryPort,
 	productBlueprintRepo productblueprintdom.Repository,
+	tokenQueryRepo tokendom.TokenQueryPort,
+	transferQueryRepo transferdom.TransferQueryPort,
 	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
 	brandRepo branddom.RepositoryPort,
 	avatarRepo avatardom.Repository,
@@ -68,6 +76,8 @@ func NewInquiryManagementQuery(
 		productRepo:          productRepo,
 		modelRepo:            modelRepo,
 		productBlueprintRepo: productBlueprintRepo,
+		tokenQueryRepo:       tokenQueryRepo,
+		transferQueryRepo:    transferQueryRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		brandRepo:            brandRepo,
 		avatarRepo:           avatarRepo,
@@ -79,7 +89,7 @@ func NewInquiryManagementQuery(
 
 // InquiryManagementItem は Console 管理画面向けの Inquiry 一覧 item です。
 //
-// Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId / mintAddress / transferredAt と、
 // Inquiry.AvatarID から解決した avatarName / userId / userFullName / shippingAddresses / orders を含めます。
 type InquiryManagementItem struct {
 	Inquiry            inquirydom.Inquiry                   `json:"inquiry"`
@@ -88,6 +98,8 @@ type InquiryManagementItem struct {
 	ProductName        string                               `json:"productName"`
 	BrandID            string                               `json:"brandId"`
 	BrandName          string                               `json:"brandName"`
+	MintAddress        string                               `json:"mintAddress"`
+	TransferredAt      *time.Time                           `json:"transferredAt,omitempty"`
 	AvatarName         string                               `json:"avatarName"`
 	UserID             string                               `json:"userId"`
 	UserFullName       string                               `json:"userFullName"`
@@ -98,7 +110,7 @@ type InquiryManagementItem struct {
 
 // InquiryDetail は Console 管理画面向けの Inquiry 詳細 read model です。
 //
-// Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId / mintAddress / transferredAt と、
 // Inquiry.AvatarID から解決した avatarName / userId / userFullName / shippingAddresses / orders を含めます。
 type InquiryDetail struct {
 	Inquiry            inquirydom.Inquiry                   `json:"inquiry"`
@@ -107,6 +119,8 @@ type InquiryDetail struct {
 	ProductName        string                               `json:"productName"`
 	BrandID            string                               `json:"brandId"`
 	BrandName          string                               `json:"brandName"`
+	MintAddress        string                               `json:"mintAddress"`
+	TransferredAt      *time.Time                           `json:"transferredAt,omitempty"`
 	AvatarName         string                               `json:"avatarName"`
 	UserID             string                               `json:"userId"`
 	UserFullName       string                               `json:"userFullName"`
@@ -119,7 +133,7 @@ type InquiryDetail struct {
 //
 // inquiryImage ドメインは inquiry ドメインへ統合済みのため、
 // Images は Inquiry.Images から取得します。
-// また、Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// また、Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId / mintAddress / transferredAt と、
 // Inquiry.AvatarID から解決した avatarName / userId / userFullName / shippingAddresses / orders を含めます。
 type InquiryAggregate struct {
 	Inquiry            inquirydom.Inquiry                   `json:"inquiry"`
@@ -129,6 +143,8 @@ type InquiryAggregate struct {
 	ProductName        string                               `json:"productName"`
 	BrandID            string                               `json:"brandId"`
 	BrandName          string                               `json:"brandName"`
+	MintAddress        string                               `json:"mintAddress"`
+	TransferredAt      *time.Time                           `json:"transferredAt,omitempty"`
 	AvatarName         string                               `json:"avatarName"`
 	UserID             string                               `json:"userId"`
 	UserFullName       string                               `json:"userFullName"`
@@ -201,14 +217,22 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 			return inquirydom.PageResult[InquiryManagementItem]{}, err
 		}
 
-		// companyId を解決できない Inquiry は company boundary を保証できないため返さない。
 		if resolvedCompanyID == "" {
 			continue
 		}
 
-		// ログイン中 member の companyId と一致する Inquiry のみ返す。
 		if resolvedCompanyID != companyID {
 			continue
+		}
+
+		mintAddress, err := q.resolveMintAddressByProductID(ctx, inq.ProductID)
+		if err != nil {
+			return inquirydom.PageResult[InquiryManagementItem]{}, err
+		}
+
+		transferredAt, err := q.resolveTransferredAtByMintAddress(ctx, mintAddress)
+		if err != nil {
+			return inquirydom.PageResult[InquiryManagementItem]{}, err
 		}
 
 		avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
@@ -216,7 +240,7 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 			return inquirydom.PageResult[InquiryManagementItem]{}, err
 		}
 
-		orders, err := q.resolveOrdersByAvatarIDAndModelID(ctx, inq.AvatarID, modelID)
+		orders, err := q.resolveOrdersByAvatarIDModelIDAndTransferredAt(ctx, inq.AvatarID, modelID, transferredAt)
 		if err != nil {
 			return inquirydom.PageResult[InquiryManagementItem]{}, err
 		}
@@ -228,6 +252,8 @@ func (q *InquiryManagementQuery) ListByCompanyID(
 			ProductName:        productName,
 			BrandID:            brandID,
 			BrandName:          brandName,
+			MintAddress:        mintAddress,
+			TransferredAt:      transferredAt,
 			AvatarName:         avatarName,
 			UserID:             userID,
 			UserFullName:       userFullName,
@@ -278,13 +304,15 @@ func (q *InquiryManagementQuery) GetByID(ctx context.Context, id string) (inquir
 // GetDetailByID は Inquiry 詳細 read model を返します。
 //
 // Inquiry.ProductID から product repository を使って Product.ModelID を取得し、
+// token query repository を使って tokens/{productId} から MintAddress を取得し、
+// transfer query repository を使って MintAddress から TransferredAt を取得し、
 // model repository を使って ModelVariation.GetProductBlueprintID() を取得し、
 // productBlueprint repository を使って ProductBlueprint.CompanyID / ProductName / BrandID を取得します。
 // brand repository を使って BrandName を取得します。
 // avatar repository を使って AvatarName / UserID を取得します。
 // user repository を使って UserFullName を取得します。
 // shippingAddress repository を使って ShippingAddresses を取得します。
-// order repository を使って、avatarId と modelId が一致する Orders を取得します。
+// order repository を使って、avatarId / modelId / transferredAt が一致する Orders を取得します。
 func (q *InquiryManagementQuery) GetDetailByID(ctx context.Context, id string) (InquiryDetail, error) {
 	inq, err := q.GetByID(ctx, id)
 	if err != nil {
@@ -296,12 +324,22 @@ func (q *InquiryManagementQuery) GetDetailByID(ctx context.Context, id string) (
 		return InquiryDetail{}, err
 	}
 
+	mintAddress, err := q.resolveMintAddressByProductID(ctx, inq.ProductID)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+
+	transferredAt, err := q.resolveTransferredAtByMintAddress(ctx, mintAddress)
+	if err != nil {
+		return InquiryDetail{}, err
+	}
+
 	avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
 
-	orders, err := q.resolveOrdersByAvatarIDAndModelID(ctx, inq.AvatarID, modelID)
+	orders, err := q.resolveOrdersByAvatarIDModelIDAndTransferredAt(ctx, inq.AvatarID, modelID, transferredAt)
 	if err != nil {
 		return InquiryDetail{}, err
 	}
@@ -313,6 +351,8 @@ func (q *InquiryManagementQuery) GetDetailByID(ctx context.Context, id string) (
 		ProductName:        productName,
 		BrandID:            brandID,
 		BrandName:          brandName,
+		MintAddress:        mintAddress,
+		TransferredAt:      transferredAt,
 		AvatarName:         avatarName,
 		UserID:             userID,
 		UserFullName:       userFullName,
@@ -386,7 +426,7 @@ func (q *InquiryManagementQuery) GetImagesForCompany(
 // GetAggregate は Inquiry と画像一覧をまとめて返します。
 //
 // 画像は Inquiry.Images を正として扱います。
-// また、Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId と、
+// また、Inquiry.ProductID から解決した modelId / productBlueprintId / productName / brandId / brandName / companyId / mintAddress / transferredAt と、
 // Inquiry.AvatarID から解決した avatarName / userId / userFullName / shippingAddresses / orders を含めます。
 func (q *InquiryManagementQuery) GetAggregate(ctx context.Context, id string) (InquiryAggregate, error) {
 	if q == nil || q.repo == nil {
@@ -408,12 +448,22 @@ func (q *InquiryManagementQuery) GetAggregate(ctx context.Context, id string) (I
 		return InquiryAggregate{}, err
 	}
 
+	mintAddress, err := q.resolveMintAddressByProductID(ctx, inq.ProductID)
+	if err != nil {
+		return InquiryAggregate{}, err
+	}
+
+	transferredAt, err := q.resolveTransferredAtByMintAddress(ctx, mintAddress)
+	if err != nil {
+		return InquiryAggregate{}, err
+	}
+
 	avatarName, userID, userFullName, shippingAddresses, err := q.resolveAvatarUserRefByAvatarID(ctx, inq.AvatarID)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
 
-	orders, err := q.resolveOrdersByAvatarIDAndModelID(ctx, inq.AvatarID, modelID)
+	orders, err := q.resolveOrdersByAvatarIDModelIDAndTransferredAt(ctx, inq.AvatarID, modelID, transferredAt)
 	if err != nil {
 		return InquiryAggregate{}, err
 	}
@@ -426,6 +476,8 @@ func (q *InquiryManagementQuery) GetAggregate(ctx context.Context, id string) (I
 		ProductName:        productName,
 		BrandID:            brandID,
 		BrandName:          brandName,
+		MintAddress:        mintAddress,
+		TransferredAt:      transferredAt,
 		AvatarName:         avatarName,
 		UserID:             userID,
 		UserFullName:       userFullName,
@@ -547,6 +599,66 @@ func (q *InquiryManagementQuery) resolveProductModelRefByInquiryProductID(
 	return modelID, productBlueprintID, productName, brandID, brandName, companyID, nil
 }
 
+func (q *InquiryManagementQuery) resolveMintAddressByProductID(
+	ctx context.Context,
+	productID string,
+) (string, error) {
+	if q == nil {
+		return "", fmt.Errorf("inquiry management query: query is nil")
+	}
+
+	if productID == "" {
+		return "", nil
+	}
+
+	if q.tokenQueryRepo == nil {
+		return "", fmt.Errorf("inquiry management query: token query repository is nil")
+	}
+
+	token, err := q.tokenQueryRepo.GetTokenByProductID(ctx, productID)
+	if err != nil {
+		if errors.Is(err, tokendom.ErrNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	return strings.TrimSpace(token.MintAddress), nil
+}
+
+func (q *InquiryManagementQuery) resolveTransferredAtByMintAddress(
+	ctx context.Context,
+	mintAddress string,
+) (*time.Time, error) {
+	if q == nil {
+		return nil, fmt.Errorf("inquiry management query: query is nil")
+	}
+
+	m := strings.TrimSpace(mintAddress)
+	if m == "" {
+		return nil, nil
+	}
+
+	if q.transferQueryRepo == nil {
+		return nil, fmt.Errorf("inquiry management query: transfer query repository is nil")
+	}
+
+	result, err := q.transferQueryRepo.ResolveTransferredAtByMintAddress(ctx, m)
+	if err != nil {
+		if errors.Is(err, transferdom.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	transferredAt := result.TransferredAt.UTC()
+	if transferredAt.IsZero() {
+		return nil, nil
+	}
+
+	return &transferredAt, nil
+}
+
 func (q *InquiryManagementQuery) resolveAvatarUserRefByAvatarID(
 	ctx context.Context,
 	avatarID string,
@@ -615,16 +727,17 @@ func (q *InquiryManagementQuery) resolveAvatarUserRefByAvatarID(
 	return avatarName, userID, userFullName, shippingAddresses, nil
 }
 
-func (q *InquiryManagementQuery) resolveOrdersByAvatarIDAndModelID(
+func (q *InquiryManagementQuery) resolveOrdersByAvatarIDModelIDAndTransferredAt(
 	ctx context.Context,
 	avatarID string,
 	modelID string,
+	transferredAt *time.Time,
 ) ([]InquiryOrderSummary, error) {
 	if q == nil {
 		return nil, fmt.Errorf("inquiry management query: query is nil")
 	}
 
-	if avatarID == "" || modelID == "" {
+	if avatarID == "" || modelID == "" || transferredAt == nil || transferredAt.IsZero() {
 		return []InquiryOrderSummary{}, nil
 	}
 
@@ -653,7 +766,7 @@ func (q *InquiryManagementQuery) resolveOrdersByAvatarIDAndModelID(
 
 	orders := make([]InquiryOrderSummary, 0, len(result.Items))
 	for _, order := range result.Items {
-		items, err := q.filterOrderItemsByModelID(ctx, order.Items, modelID)
+		items, err := q.filterOrderItemsByModelIDAndTransferredAt(ctx, order.Items, modelID, transferredAt)
 		if err != nil {
 			return nil, err
 		}
@@ -675,18 +788,30 @@ func (q *InquiryManagementQuery) resolveOrdersByAvatarIDAndModelID(
 	return orders, nil
 }
 
-func (q *InquiryManagementQuery) filterOrderItemsByModelID(
+func (q *InquiryManagementQuery) filterOrderItemsByModelIDAndTransferredAt(
 	ctx context.Context,
 	items []orderdom.OrderItemSnapshot,
 	modelID string,
+	transferredAt *time.Time,
 ) ([]InquiryOrderItemSummary, error) {
-	if modelID == "" || len(items) == 0 {
+	if modelID == "" || transferredAt == nil || transferredAt.IsZero() || len(items) == 0 {
 		return []InquiryOrderItemSummary{}, nil
 	}
+
+	expectedTransferredAt := transferredAt.UTC()
 
 	filtered := make([]InquiryOrderItemSummary, 0, len(items))
 	for _, item := range items {
 		if item.ModelID != modelID {
+			continue
+		}
+
+		if item.TransferredAt == nil || item.TransferredAt.IsZero() {
+			continue
+		}
+
+		itemTransferredAt := item.TransferredAt.UTC()
+		if !itemTransferredAt.Equal(expectedTransferredAt) {
 			continue
 		}
 

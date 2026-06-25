@@ -23,6 +23,8 @@ type OrderRepositoryFS struct {
 	Client *firestore.Client
 }
 
+var _ orderdom.Repository = (*OrderRepositoryFS)(nil)
+
 func NewOrderRepositoryFS(client *firestore.Client) *OrderRepositoryFS {
 	return &OrderRepositoryFS{Client: client}
 }
@@ -116,6 +118,110 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 
 	return common.PageResult[orderdom.Order]{
 		Items:      items,
+		TotalCount: total,
+		TotalPages: fscommon.ComputeTotalPages(total, perPage),
+		Page:       pageNum,
+		PerPage:    perPage,
+	}, nil
+}
+
+// ListTransferredByAvatarIDModelIDAndTransferredAt returns orders that contain
+// transferred items matching avatarId, modelId, and transferredAt.
+//
+// Query condition:
+// - order.avatarId == avatarID
+// - order.paid == true
+//
+// In-memory item filter:
+// - item.modelId == modelID
+// - item.transferred == true
+// - item.transferredAt == transferredAt
+//
+// Firestore cannot reliably query nested array map fields with this full condition,
+// so this repository queries by avatarId/paid first and filters order items here.
+func (r *OrderRepositoryFS) ListTransferredByAvatarIDModelIDAndTransferredAt(
+	ctx context.Context,
+	avatarID string,
+	modelID string,
+	transferredAt time.Time,
+	sort common.Sort,
+	page common.Page,
+) (common.PageResult[orderdom.Order], error) {
+	if r.Client == nil {
+		return common.PageResult[orderdom.Order]{}, errors.New("firestore client is nil")
+	}
+
+	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+
+	avatarID = strings.TrimSpace(avatarID)
+	modelID = strings.TrimSpace(modelID)
+	transferredAt = transferredAt.UTC()
+
+	if avatarID == "" || modelID == "" || transferredAt.IsZero() {
+		return common.PageResult[orderdom.Order]{
+			Items:      []orderdom.Order{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	q := r.ordersCol().
+		Where("avatarId", "==", avatarID).
+		Where("paid", "==", true)
+
+	q = applyOrderSort(q, sort)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	matched := make([]orderdom.Order, 0)
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return common.PageResult[orderdom.Order]{}, err
+		}
+		if doc == nil || doc.Ref == nil {
+			continue
+		}
+
+		o, err := docToOrder(doc)
+		if err != nil {
+			return common.PageResult[orderdom.Order]{}, err
+		}
+
+		// Firestore query already filters avatarId and paid,
+		// but keep these as defensive checks.
+		if o.AvatarID != avatarID {
+			continue
+		}
+		if !o.Paid {
+			continue
+		}
+
+		filteredItems := filterTransferredOrderItemsByModelIDAndTransferredAt(
+			o.Items,
+			modelID,
+			transferredAt,
+		)
+		if len(filteredItems) == 0 {
+			continue
+		}
+
+		o.Items = filteredItems
+		matched = append(matched, o)
+	}
+
+	total := len(matched)
+	paged := paginateOrders(matched, offset, perPage)
+
+	return common.PageResult[orderdom.Order]{
+		Items:      paged,
 		TotalCount: total,
 		TotalPages: fscommon.ComputeTotalPages(total, perPage),
 		Page:       pageNum,
@@ -533,4 +639,64 @@ func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
 
 	return q.OrderBy("createdAt", dir).
 		OrderBy(firestore.DocumentID, dir)
+}
+
+func filterTransferredOrderItemsByModelIDAndTransferredAt(
+	items []orderdom.OrderItemSnapshot,
+	modelID string,
+	transferredAt time.Time,
+) []orderdom.OrderItemSnapshot {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" || transferredAt.IsZero() || len(items) == 0 {
+		return []orderdom.OrderItemSnapshot{}
+	}
+
+	expected := transferredAt.UTC()
+
+	out := make([]orderdom.OrderItemSnapshot, 0, len(items))
+	for _, item := range items {
+		if item.ModelID != modelID {
+			continue
+		}
+		if !item.Transferred {
+			continue
+		}
+		if item.TransferredAt == nil || item.TransferredAt.IsZero() {
+			continue
+		}
+
+		actual := item.TransferredAt.UTC()
+		if !actual.Equal(expected) {
+			continue
+		}
+
+		out = append(out, item)
+	}
+
+	return out
+}
+
+func paginateOrders(items []orderdom.Order, offset int, perPage int) []orderdom.Order {
+	if len(items) == 0 {
+		return []orderdom.Order{}
+	}
+
+	if perPage <= 0 {
+		perPage = len(items)
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+
+	if offset >= len(items) {
+		return []orderdom.Order{}
+	}
+
+	end := offset + perPage
+	if end > len(items) {
+		end = len(items)
+	}
+
+	return items[offset:end]
 }

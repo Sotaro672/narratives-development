@@ -1,7 +1,10 @@
-// backend\internal\domain\token\entity.go
+// backend/internal/domain/token/entity.go
 package token
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // MintParams は、Solana 上でトークン/NFT をミントする際に
 // MintAuthorityWalletPort に渡す最小限のパラメータです。
@@ -37,6 +40,25 @@ type MintResult struct {
 }
 
 // ============================================================
+// GetTokenByProductIDResult
+// ============================================================
+//
+// Firestore の tokens/{docId} を productId で取得した結果。
+// productId は "docId" を正とする（= 1 token doc が 1 product に紐づく想定）。
+//
+// Firestore 実データ前提:
+// - tokens/{docId}
+// - docId = productId
+// - fields: brandId, tokenBlueprintId, mintAddress, metadataUri, ...
+type GetTokenByProductIDResult struct {
+	ProductID        string
+	BrandID          string
+	TokenBlueprintID string
+	MetadataURI      string
+	MintAddress      string
+}
+
+// ============================================================
 // ResolveTokenByMintAddressResult
 // ============================================================
 //
@@ -60,13 +82,29 @@ type ListMintAddressesByTokenBlueprintIDResult struct {
 	MintAddresses    []string
 }
 
+// ResolveTransferredAtByMintAddressResult represents a lookup result for order identification.
+//
+// Transfer entity には transferredAt を持たせない方針のため、
+// mintAddress から transfer 実行日時を引きたい query では、この read result として返す。
+type ResolveTransferredAtByMintAddressResult struct {
+	ProductID     string    `json:"productId"`
+	Attempt       int       `json:"attempt"`
+	AvatarID      string    `json:"avatarId"`
+	MintAddress   string    `json:"mintAddress"`
+	TransferredAt time.Time `json:"transferredAt"`
+}
+
 var (
-	// TokenQuery が「mintAddress で見つからない」時に返す
+	// TokenQuery が「token document が見つからない」時に返す
 	ErrNotFound = errors.New("token: not found")
+
+	// TokenQuery が「productId が不正」時に返す
+	ErrInvalidProductID = errors.New("token: invalid productId")
 
 	// TokenQuery が「mintAddress が不正」時に返す
 	ErrInvalidMintAddress = errors.New("token: invalid mintAddress")
 
 	// TokenQuery が「tokenBlueprintId が不正」時に返す
 	ErrInvalidTokenBlueprintID = errors.New("token: invalid tokenBlueprintId")
+	ErrInvalidTransferredAt    = errors.New("transfer: invalid transferredAt")
 )

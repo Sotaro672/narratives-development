@@ -2,6 +2,7 @@
 package transfer
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -17,6 +18,7 @@ import (
 方針:
 - NewPending の引数順を "attempt -> productId -> ..." に統一し、呼び出し側の型不一致を防ぐ。
   （usecase 側で attempt(int) を先に渡せるようにする）
+- transferredAt は Transfer entity には持たせず、mintAddress 逆引き用の read result として返す。
 */
 
 type Status string
@@ -54,14 +56,28 @@ const (
 )
 
 var (
+	ErrNotFound = errors.New("transfer: not found")
+
 	ErrInvalidProductID       = errors.New("transfer: invalid productId")
 	ErrInvalidOrderID         = errors.New("transfer: invalid orderId")
 	ErrInvalidAvatarID        = errors.New("transfer: invalid avatarId")
 	ErrInvalidToWalletAddress = errors.New("transfer: invalid toWalletAddress")
 	ErrInvalidMintAddress     = errors.New("transfer: invalid mintAddress")
+	ErrInvalidTransferredAt   = errors.New("transfer: invalid transferredAt")
 	ErrInvalidStatus          = errors.New("transfer: invalid status")
 	ErrInvalidCreatedAt       = errors.New("transfer: invalid createdAt")
 )
+
+// TransferQueryPort defines read-only query behavior for transfer lookup.
+//
+// RepositoryPort は Transfer の永続化用、TransferQueryPort は画面/query 用の逆引き専用。
+// mintAddress から transferredAt を取得し、注文特定に使う。
+type TransferQueryPort interface {
+	ResolveTransferredAtByMintAddress(
+		ctx context.Context,
+		mintAddress string,
+	) (ResolveTransferredAtByMintAddressResult, error)
+}
 
 // Transfer represents one attempt of token transfer for a specific product item.
 type Transfer struct {
@@ -87,6 +103,19 @@ type Transfer struct {
 
 	// Timestamps
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+// ResolveTransferredAtByMintAddressResult represents a lookup result for order identification.
+//
+// Transfer entity には transferredAt を持たせない方針のため、
+// mintAddress から transfer 実行日時を引きたい query では、この read result として返す。
+// transferredAt のみを正とし、transferedAt などの typo field は扱わない。
+type ResolveTransferredAtByMintAddressResult struct {
+	ProductID     string    `json:"productId"`
+	Attempt       int       `json:"attempt"`
+	AvatarID      string    `json:"avatarId"`
+	MintAddress   string    `json:"mintAddress"`
+	TransferredAt time.Time `json:"transferredAt"`
 }
 
 // TransferPatch represents partial updates.

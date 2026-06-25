@@ -262,3 +262,49 @@ func (r *TokenOwnerUpdaterFS) UpdateToAddressByProductID(
 	_, err := r.Client.Collection(col).Doc(pid).Set(ctx, updates, firestore.MergeAll)
 	return err
 }
+
+// ============================================================
+// TokenQuery (productId/docId -> token)
+// ============================================================
+//
+// domain token.TokenQueryPort を満たすための productId 直引きです。
+// 既存の GetByProductID は mall preview 用に *dto.TokenInfo を返すため、
+// 戻り値型の衝突を避ける目的で GetTokenByProductID という別名にしています。
+func (r *TokenReaderFS) GetTokenByProductID(
+	ctx context.Context,
+	productID string,
+) (tokendom.GetTokenByProductIDResult, error) {
+	if r == nil || r.Client == nil {
+		return tokendom.GetTokenByProductIDResult{}, errors.New("token_reader_fs: firestore client is nil")
+	}
+
+	id := strings.TrimSpace(productID)
+	if id == "" {
+		return tokendom.GetTokenByProductIDResult{}, tokendom.ErrInvalidProductID
+	}
+
+	snap, err := r.Client.Collection("tokens").Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return tokendom.GetTokenByProductIDResult{}, tokendom.ErrNotFound
+		}
+		return tokendom.GetTokenByProductIDResult{}, err
+	}
+
+	if snap.Data() == nil {
+		return tokendom.GetTokenByProductIDResult{}, tokendom.ErrNotFound
+	}
+
+	var d tokenDoc
+	if err := snap.DataTo(&d); err != nil {
+		return tokendom.GetTokenByProductIDResult{}, err
+	}
+
+	return tokendom.GetTokenByProductIDResult{
+		ProductID:        id,
+		BrandID:          d.BrandID,
+		TokenBlueprintID: d.TokenBlueprintID,
+		MetadataURI:      d.MetadataURI,
+		MintAddress:      strings.TrimSpace(d.MintAddress),
+	}, nil
+}

@@ -472,6 +472,7 @@ type TransferRepositoryFS struct {
 }
 
 var _ usecase.TransferRepo = (*TransferRepositoryFS)(nil)
+var _ transferdom.TransferQueryPort = (*TransferRepositoryFS)(nil)
 
 // NewTransferRepositoryFS is referenced from DI as outfs.NewTransferRepositoryFS(...).
 func NewTransferRepositoryFS(client *firestore.Client) *TransferRepositoryFS {
@@ -648,8 +649,10 @@ func (r *TransferRepositoryFS) Update(ctx context.Context, productID string, att
 		return ErrInvalidTransferAttempt
 	}
 
+	now := time.Now().UTC()
+
 	update := map[string]any{
-		"updatedAt": time.Now().UTC(),
+		"updatedAt": now,
 	}
 
 	if p.Status != nil {
@@ -671,6 +674,66 @@ func (r *TransferRepositoryFS) Update(ctx context.Context, productID string, att
 	docID := r.transferDocID(productID, attempt)
 	_, err := r.transfersCol().Doc(docID).Set(ctx, update, firestore.MergeAll)
 	return err
+}
+
+// ResolveTransferredAtByMintAddress resolves the transfer execution time by mintAddress.
+//
+// transfers collection では transferredAt を持たず、createdAt を transfer 実行日時として扱う。
+// そのため戻り値の TransferredAt には createdAt を入れる。
+func (r *TransferRepositoryFS) ResolveTransferredAtByMintAddress(
+	ctx context.Context,
+	mintAddress string,
+) (transferdom.ResolveTransferredAtByMintAddressResult, error) {
+	if r == nil || r.Client == nil {
+		return transferdom.ResolveTransferredAtByMintAddressResult{}, ErrTransferRepoNotConfigured
+	}
+
+	m := strings.TrimSpace(mintAddress)
+	if m == "" {
+		return transferdom.ResolveTransferredAtByMintAddressResult{}, transferdom.ErrInvalidMintAddress
+	}
+
+	iter := r.transfersCol().
+		Where("mintAddress", "==", m).
+		Where("status", "==", string(transferdom.StatusSucceeded)).
+		OrderBy("createdAt", firestore.Desc).
+		Limit(1).
+		Documents(ctx)
+	defer iter.Stop()
+
+	doc, err := iter.Next()
+	if err != nil {
+		if errors.Is(err, iterator.Done) {
+			return transferdom.ResolveTransferredAtByMintAddressResult{}, transferdom.ErrNotFound
+		}
+		return transferdom.ResolveTransferredAtByMintAddressResult{}, err
+	}
+
+	if doc == nil || doc.Ref == nil {
+		return transferdom.ResolveTransferredAtByMintAddressResult{}, transferdom.ErrNotFound
+	}
+
+	raw := doc.Data()
+	if raw == nil {
+		return transferdom.ResolveTransferredAtByMintAddressResult{}, transferdom.ErrNotFound
+	}
+
+	createdAt := timeFromRaw(raw, "createdAt")
+	if createdAt.IsZero() {
+		return transferdom.ResolveTransferredAtByMintAddressResult{}, transferdom.ErrNotFound
+	}
+
+	productID := stringFromRaw(raw, "productId")
+	avatarID := stringFromRaw(raw, "avatarId")
+	attempt := intFromRaw(raw, "attempt")
+
+	return transferdom.ResolveTransferredAtByMintAddressResult{
+		ProductID:     productID,
+		Attempt:       attempt,
+		AvatarID:      avatarID,
+		MintAddress:   m,
+		TransferredAt: createdAt,
+	}, nil
 }
 
 type shareTransferRef struct {
@@ -708,4 +771,47 @@ func parseShareTransferRef(ref string, fallbackProductID string) (shareTransferR
 		ToAvatarID:   parts[2],
 		ProductID:    productID,
 	}, true
+}
+
+func stringFromRaw(raw map[string]any, key string) string {
+	if raw == nil {
+		return ""
+	}
+
+	v, ok := raw[key].(string)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(v)
+}
+
+func intFromRaw(raw map[string]any, key string) int {
+	if raw == nil {
+		return 0
+	}
+
+	switch v := raw[key].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func timeFromRaw(raw map[string]any, key string) time.Time {
+	if raw == nil {
+		return time.Time{}
+	}
+
+	t, ok := raw[key].(time.Time)
+	if !ok || t.IsZero() {
+		return time.Time{}
+	}
+
+	return t.UTC()
 }
