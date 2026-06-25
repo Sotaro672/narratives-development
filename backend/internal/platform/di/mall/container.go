@@ -327,6 +327,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.InquiryMailTo,
 	)
 
+	if c.InquiryUC != nil {
+		c.InquiryUC.SetAvatarEmailResolver(avatarRepo)
+		c.InquiryUC.SetAuthUserEmailGetter(authUserEmailGetter)
+	}
+
 	{
 		pf, configured, err := buildPaymentFlowUsecase(infra, c.PaymentUC)
 		if err != nil {

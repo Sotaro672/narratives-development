@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	avatardom "narratives/internal/domain/avatar"
 	inquirydom "narratives/internal/domain/inquiry"
 )
 
@@ -20,6 +21,14 @@ type InquiryCreatedMailer interface {
 		to string,
 		inq inquirydom.Inquiry,
 	) error
+}
+
+// AvatarEmailResolver is the minimal avatar reader required for resolving
+// Inquiry.AvatarID -> Avatar.UserID -> Firebase Auth email.
+//
+// Avatar.UserID is treated as Firebase Auth UID.
+type AvatarEmailResolver interface {
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
 // InquiryAggregate は Inquiry とその画像一覧をまとめたビューです。
@@ -41,7 +50,13 @@ type InquiryUsecase struct {
 
 	mailer   InquiryCreatedMailer
 	mailFrom string
-	mailTo   string
+
+	// mailTo は後方互換 / fallback 用です。
+	// 原則として問い合わせ作成者 avatar の UserID から Firebase Auth email を解決します。
+	mailTo string
+
+	avatarEmailResolver AvatarEmailResolver
+	authUserGetter      AuthUserEmailGetter
 
 	now func() time.Time
 }
@@ -56,7 +71,9 @@ func NewInquiryUsecase(repo inquirydom.Repository) *InquiryUsecase {
 
 // NewInquiryUsecaseWithMailer はメール送信ありの InquiryUsecase を初期化します。
 //
-// mailer が nil、または mailFrom/mailTo が空の場合、Create 時のメール送信は行いません。
+// mailer が nil、または mailFrom が空の場合、Create 時のメール送信は行いません。
+// mailTo は fallback 用です。通常は SetAvatarEmailResolver と SetAuthUserEmailGetter で
+// avatar.UserID から送信先 email を解決してください。
 func NewInquiryUsecaseWithMailer(
 	repo inquirydom.Repository,
 	mailer InquiryCreatedMailer,
@@ -75,6 +92,7 @@ func NewInquiryUsecaseWithMailer(
 // SetInquiryCreatedMailer は既存の InquiryUsecase にメール送信設定を追加します。
 //
 // bootstrap / wire 側で既存 constructor を変えにくい場合に使います。
+// mailTo は fallback 用です。通常は avatar.UserID から送信先 email を解決します。
 func (uc *InquiryUsecase) SetInquiryCreatedMailer(
 	mailer InquiryCreatedMailer,
 	mailFrom string,
@@ -87,6 +105,24 @@ func (uc *InquiryUsecase) SetInquiryCreatedMailer(
 	uc.mailer = mailer
 	uc.mailFrom = strings.TrimSpace(mailFrom)
 	uc.mailTo = strings.TrimSpace(mailTo)
+}
+
+// SetAvatarEmailResolver は Inquiry.AvatarID から avatar を取得する resolver を設定します。
+func (uc *InquiryUsecase) SetAvatarEmailResolver(resolver AvatarEmailResolver) {
+	if uc == nil {
+		return
+	}
+
+	uc.avatarEmailResolver = resolver
+}
+
+// SetAuthUserEmailGetter は Firebase Auth UID から email を取得する getter を設定します。
+func (uc *InquiryUsecase) SetAuthUserEmailGetter(getter AuthUserEmailGetter) {
+	if uc == nil {
+		return
+	}
+
+	uc.authUserGetter = getter
 }
 
 // SetNowFunc はテスト用に現在時刻関数を差し替えます。
@@ -248,10 +284,13 @@ func (uc *InquiryUsecase) ReopenByMember(
 		return inquirydom.Inquiry{}, err
 	}
 
+	clearResolvedAt := time.Time{}
+	clearResolvedBy := ""
+
 	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
 		Status:     &current.Status,
-		ResolvedAt: current.ResolvedAt,
-		ResolvedBy: current.ResolvedBy,
+		ResolvedAt: &clearResolvedAt,
+		ResolvedBy: &clearResolvedBy,
 		UpdatedAt:  &current.UpdatedAt,
 		UpdatedBy:  current.UpdatedBy,
 	})
@@ -376,9 +415,17 @@ func (uc *InquiryUsecase) sendInquiryCreatedMail(ctx context.Context, inq inquir
 	}
 
 	from := strings.TrimSpace(uc.mailFrom)
-	to := strings.TrimSpace(uc.mailTo)
+	if from == "" {
+		return nil
+	}
 
-	if from == "" || to == "" {
+	to, err := uc.resolveInquiryMailTo(ctx, inq)
+	if err != nil {
+		return fmt.Errorf("inquiry usecase: failed to resolve inquiry mail recipient: %w", err)
+	}
+
+	to = strings.TrimSpace(to)
+	if to == "" {
 		return nil
 	}
 
@@ -387,6 +434,37 @@ func (uc *InquiryUsecase) sendInquiryCreatedMail(ctx context.Context, inq inquir
 	}
 
 	return nil
+}
+
+func (uc *InquiryUsecase) resolveInquiryMailTo(ctx context.Context, inq inquirydom.Inquiry) (string, error) {
+	if uc == nil {
+		return "", nil
+	}
+
+	if uc.avatarEmailResolver != nil && uc.authUserGetter != nil {
+		avatarID := strings.TrimSpace(inq.AvatarID)
+		if avatarID != "" {
+			avatar, err := uc.avatarEmailResolver.GetByID(ctx, avatarID)
+			if err != nil {
+				return "", err
+			}
+
+			uid := strings.TrimSpace(avatar.UserID)
+			if uid != "" {
+				email, err := uc.authUserGetter.GetEmailByUID(ctx, uid)
+				if err != nil {
+					return "", err
+				}
+
+				email = strings.TrimSpace(email)
+				if email != "" {
+					return email, nil
+				}
+			}
+		}
+	}
+
+	return strings.TrimSpace(uc.mailTo), nil
 }
 
 func (uc *InquiryUsecase) nowUTC() time.Time {

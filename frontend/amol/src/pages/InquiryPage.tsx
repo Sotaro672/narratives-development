@@ -125,7 +125,7 @@ export default function InquiryPage() {
 
   return (
     <Layout
-      title="問い合わせ"
+      title="AMOL"
       mode="mypage"
       showHeader
       showBackButton
@@ -145,9 +145,6 @@ export default function InquiryPage() {
         <div className="inquiry-page__header">
           <p className="inquiry-page__eyebrow">CONTACT</p>
           <h1 className="inquiry-page__title">商品について問い合わせる</h1>
-          <p className="inquiry-page__description">
-            商品について確認したいことや、購入前に相談したい内容を入力してください。
-          </p>
         </div>
 
         {!productId ? (

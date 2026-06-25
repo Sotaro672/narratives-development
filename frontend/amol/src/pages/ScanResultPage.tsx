@@ -72,9 +72,11 @@ export default function ScanResultPage() {
       hideHamburgerMenu={false}
       hideSettingsButton={!isLoggedIn}
       mainClassName="scan-result-page"
-      actionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
-      onActionButtonClick={canOpenInquiryPage ? handleOpenInquiryPage : undefined}
-      actionButtonDisabled={!canOpenInquiryPage}
+      secondaryActionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
+      onSecondaryActionButtonClick={
+        canOpenInquiryPage ? handleOpenInquiryPage : undefined
+      }
+      secondaryActionButtonDisabled={!canOpenInquiryPage}
       footerProps={
         isLoggedIn && isMobilePortrait && state.ownedByWallet === true
           ? {
