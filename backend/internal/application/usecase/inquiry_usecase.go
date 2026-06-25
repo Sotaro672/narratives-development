@@ -281,6 +281,41 @@ func (uc *InquiryUsecase) CloseByAvatar(
 	})
 }
 
+// MarkInquiryAsReadInput は Inquiry を既読にする入力です。
+type MarkInquiryAsReadInput struct {
+	InquiryID string
+}
+
+// MarkAsRead は Inquiry を既読にします。
+func (uc *InquiryUsecase) MarkAsRead(
+	ctx context.Context,
+	in MarkInquiryAsReadInput,
+) (inquirydom.Inquiry, error) {
+	if uc == nil || uc.repo == nil {
+		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
+	}
+
+	inquiryID := in.InquiryID
+	if inquiryID == "" {
+		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
+	}
+
+	current, err := uc.repo.GetByID(ctx, inquiryID)
+	if err != nil {
+		return inquirydom.Inquiry{}, err
+	}
+
+	now := uc.nowUTC()
+	if err := current.MarkAsRead(now); err != nil {
+		return inquirydom.Inquiry{}, err
+	}
+
+	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
+		IsRead:    &current.IsRead,
+		UpdatedAt: &current.UpdatedAt,
+	})
+}
+
 // Update は Inquiry を部分更新します。
 //
 // 画像追加・更新・削除は InquiryPatch.Images に更新後の Images 全体を渡して行います。

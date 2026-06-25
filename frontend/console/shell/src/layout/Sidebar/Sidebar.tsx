@@ -41,6 +41,7 @@ type InquiryUnreadCountResponse = {
 };
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
+const INQUIRY_READ_STATE_CHANGED_EVENT = "inquiry:read-state-changed";
 
 function toSafeCount(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -50,6 +51,18 @@ function toSafeCount(value: unknown): number | null {
   const count = Math.trunc(value);
 
   return count > 0 ? count : null;
+}
+
+function isInquiryDetailPath(pathname: string): boolean {
+  const normalized = String(pathname ?? "").trim();
+
+  if (!normalized.startsWith("/inquiry/")) {
+    return false;
+  }
+
+  const id = normalized.replace(/^\/inquiry\//, "").split("/")[0];
+
+  return id !== "";
 }
 
 async function fetchInquiryUnreadCount(): Promise<number | null> {
@@ -88,6 +101,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   useEffect(() => {
     let active = true;
+    let timer: number | null = null;
 
     async function load() {
       try {
@@ -104,20 +118,34 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
     void load();
 
+    if (isInquiryDetailPath(location.pathname)) {
+      timer = window.setTimeout(() => {
+        if (!active) return;
+
+        void load();
+      }, 400);
+    }
+
     return () => {
       active = false;
+
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
     };
   }, [location.pathname]);
 
   useEffect(() => {
-    const onFocus = () => {
+    const refresh = () => {
       void loadInquiryUnreadCount();
     };
 
-    window.addEventListener("focus", onFocus);
+    window.addEventListener("focus", refresh);
+    window.addEventListener(INQUIRY_READ_STATE_CHANGED_EVENT, refresh);
 
     return () => {
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(INQUIRY_READ_STATE_CHANGED_EVENT, refresh);
     };
   }, [loadInquiryUnreadCount]);
 

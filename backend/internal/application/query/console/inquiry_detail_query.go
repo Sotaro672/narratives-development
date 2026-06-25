@@ -17,6 +17,7 @@ import (
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 	shippingaddressdom "narratives/internal/domain/shippingAddress"
 	tokendom "narratives/internal/domain/token"
+	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 	transferdom "narratives/internal/domain/transfer"
 	userdom "narratives/internal/domain/user"
 )
@@ -35,11 +36,13 @@ import (
 // 解決した UserID から ShippingAddress.ListByUserID() を使って配送先住所一覧を解決します。
 // Inquiry.AvatarID から Order.ListByAvatarID() を使って注文一覧を取得し、
 // Inquiry.ProductID 由来の modelId と MintAddress 由来の transferredAt が一致する Order.Items を持つ注文のみ返します。
+// Order item の tokenBlueprintId / tokenName は InventoryID から tokenBlueprint を解決して補完します。
 type InquiryDetailQuery struct {
 	repo                 inquirydom.Repository
 	productRepo          productdom.Repository
 	modelRepo            modeldom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
+	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
 	tokenQueryRepo       tokendom.TokenQueryPort
 	transferQueryRepo    transferdom.TransferQueryPort
 	brandRepo            branddom.RepositoryPort
@@ -55,6 +58,7 @@ func NewInquiryDetailQuery(
 	productRepo productdom.Repository,
 	modelRepo modeldom.RepositoryPort,
 	productBlueprintRepo productblueprintdom.Repository,
+	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
 	tokenQueryRepo tokendom.TokenQueryPort,
 	transferQueryRepo transferdom.TransferQueryPort,
 	brandRepo branddom.RepositoryPort,
@@ -68,6 +72,7 @@ func NewInquiryDetailQuery(
 		productRepo:          productRepo,
 		modelRepo:            modelRepo,
 		productBlueprintRepo: productBlueprintRepo,
+		tokenBlueprintRepo:   tokenBlueprintRepo,
 		tokenQueryRepo:       tokenQueryRepo,
 		transferQueryRepo:    transferQueryRepo,
 		brandRepo:            brandRepo,
@@ -134,15 +139,17 @@ type InquiryOrderSummary struct {
 
 // InquiryOrderItemSummary は Inquiry 詳細画面向けの注文 item read model です。
 type InquiryOrderItemSummary struct {
-	ModelID       string     `json:"modelId"`
-	InventoryID   string     `json:"inventoryId"`
-	ListID        string     `json:"listId"`
-	Qty           int        `json:"qty"`
-	Price         int        `json:"price"`
-	IsCanceled    bool       `json:"isCanceled"`
-	IsDispatched  bool       `json:"isDispatched"`
-	Transferred   bool       `json:"transferred"`
-	TransferredAt *time.Time `json:"transferredAt,omitempty"`
+	ModelID          string     `json:"modelId"`
+	InventoryID      string     `json:"inventoryId"`
+	TokenBlueprintID string     `json:"tokenBlueprintId"`
+	TokenName        string     `json:"tokenName"`
+	ListID           string     `json:"listId"`
+	Qty              int        `json:"qty"`
+	Price            int        `json:"price"`
+	IsCanceled       bool       `json:"isCanceled"`
+	IsDispatched     bool       `json:"isDispatched"`
+	Transferred      bool       `json:"transferred"`
+	TransferredAt    *time.Time `json:"transferredAt,omitempty"`
 }
 
 // GetByID は Inquiry を返します。
@@ -608,7 +615,10 @@ func (q *InquiryDetailQuery) resolveOrdersByAvatarIDModelIDAndTransferredAt(
 
 	orders := make([]InquiryOrderSummary, 0, len(result.Items))
 	for _, order := range result.Items {
-		items := filterInquiryOrderItemsByModelIDAndTransferredAt(order.Items, modelID, transferredAt)
+		items, err := q.filterInquiryOrderItemsByModelIDAndTransferredAt(ctx, order.Items, modelID, transferredAt)
+		if err != nil {
+			return nil, err
+		}
 		if len(items) == 0 {
 			continue
 		}
@@ -627,13 +637,14 @@ func (q *InquiryDetailQuery) resolveOrdersByAvatarIDModelIDAndTransferredAt(
 	return orders, nil
 }
 
-func filterInquiryOrderItemsByModelIDAndTransferredAt(
+func (q *InquiryDetailQuery) filterInquiryOrderItemsByModelIDAndTransferredAt(
+	ctx context.Context,
 	items []orderdom.OrderItemSnapshot,
 	modelID string,
 	transferredAt *time.Time,
-) []InquiryOrderItemSummary {
+) ([]InquiryOrderItemSummary, error) {
 	if modelID == "" || transferredAt == nil || transferredAt.IsZero() || len(items) == 0 {
-		return []InquiryOrderItemSummary{}
+		return []InquiryOrderItemSummary{}, nil
 	}
 
 	expectedTransferredAt := transferredAt.UTC()
@@ -653,18 +664,96 @@ func filterInquiryOrderItemsByModelIDAndTransferredAt(
 			continue
 		}
 
+		tokenBlueprintID, tokenName, err := q.resolveTokenBlueprintSnapshotByInventoryID(ctx, item.InventoryID)
+		if err != nil {
+			return nil, err
+		}
+
 		filtered = append(filtered, InquiryOrderItemSummary{
-			ModelID:       item.ModelID,
-			InventoryID:   item.InventoryID,
-			ListID:        item.ListID,
-			Qty:           item.Qty,
-			Price:         item.Price,
-			IsCanceled:    item.IsCanceled,
-			IsDispatched:  item.IsDispatched,
-			Transferred:   item.Transferred,
-			TransferredAt: item.TransferredAt,
+			ModelID:          item.ModelID,
+			InventoryID:      item.InventoryID,
+			TokenBlueprintID: tokenBlueprintID,
+			TokenName:        tokenName,
+			ListID:           item.ListID,
+			Qty:              item.Qty,
+			Price:            item.Price,
+			IsCanceled:       item.IsCanceled,
+			IsDispatched:     item.IsDispatched,
+			Transferred:      item.Transferred,
+			TransferredAt:    item.TransferredAt,
 		})
 	}
 
-	return filtered
+	return filtered, nil
+}
+
+func (q *InquiryDetailQuery) resolveTokenBlueprintSnapshotByInventoryID(
+	ctx context.Context,
+	inventoryID string,
+) (tokenBlueprintID string, tokenName string, err error) {
+	if q == nil {
+		return "", "", fmt.Errorf("inquiry detail query: query is nil")
+	}
+
+	if inventoryID == "" {
+		return "", "", nil
+	}
+
+	if q.tokenBlueprintRepo == nil {
+		return "", "", nil
+	}
+
+	candidates := tokenBlueprintIDCandidatesFromInventoryID(inventoryID)
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+
+		tb, err := q.tokenBlueprintRepo.GetByID(ctx, candidate)
+		if err != nil {
+			continue
+		}
+		if tb == nil {
+			continue
+		}
+
+		return tb.ID, tb.Name, nil
+	}
+
+	return "", "", nil
+}
+
+func tokenBlueprintIDCandidatesFromInventoryID(inventoryID string) []string {
+	if inventoryID == "" {
+		return []string{}
+	}
+
+	seen := map[string]struct{}{}
+	out := make([]string, 0, 8)
+
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return
+		}
+		if _, ok := seen[v]; ok {
+			return
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+
+	add(inventoryID)
+
+	for _, sep := range []string{":", "/", "|", "#", "_"} {
+		parts := strings.Split(inventoryID, sep)
+		if len(parts) <= 1 {
+			continue
+		}
+
+		add(parts[0])
+		add(parts[len(parts)-1])
+	}
+
+	return out
 }

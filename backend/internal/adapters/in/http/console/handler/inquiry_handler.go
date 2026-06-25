@@ -291,6 +291,18 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
+	if !detail.Inquiry.IsRead {
+		updated, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
+			InquiryID: id,
+		})
+		if err != nil {
+			writeInquiryErr(w, err)
+			return
+		}
+
+		detail.Inquiry = updated
+	}
+
 	_ = json.NewEncoder(w).Encode(detail)
 }
 
