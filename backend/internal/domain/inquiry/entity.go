@@ -55,8 +55,8 @@ type ImageFile struct {
 //
 // Lifecycle:
 // - avatar creates an inquiry as open.
-// - company member replies and can mark it as resolved.
-// - avatar closes the ticket after confirming the issue has been handled.
+// - company member can mark it as resolved.
+// - company member or owner avatar can close the inquiry.
 type Inquiry struct {
 	ID          string        `json:"id"`
 	ProductID   string        `json:"productId"`
@@ -304,9 +304,6 @@ func (i *Inquiry) MarkAsUnread(now time.Time) error {
 }
 
 // ResolveByMember marks the inquiry as resolved by a company member.
-//
-// Company members should resolve inquiries, not close them.
-// The final close is performed by the avatar after confirmation.
 func (i *Inquiry) ResolveByMember(memberID string, now time.Time) error {
 	if memberID == "" {
 		return ErrInvalidResolvedBy
@@ -330,26 +327,26 @@ func (i *Inquiry) ResolveByMember(memberID string, now time.Time) error {
 	return nil
 }
 
-// ReopenByMember reopens a resolved inquiry if further handling is required.
-func (i *Inquiry) ReopenByMember(memberID string, now time.Time) error {
+// CloseByMember closes the inquiry by a company member.
+func (i *Inquiry) CloseByMember(memberID string, now time.Time) error {
 	if memberID == "" {
-		return ErrInvalidUpdatedBy
+		return ErrInvalidClosedBy
 	}
 	if now.IsZero() {
-		return ErrInvalidUpdatedAt
+		return ErrInvalidClosedAt
 	}
 	if i.Status == InquiryStatusClosed {
 		return ErrInquiryAlreadyClosed
 	}
 
-	updatedAt := now.UTC()
-	updatedBy := memberID
+	closedAt := now.UTC()
+	closedBy := memberID
 
-	i.Status = InquiryStatusOpen
-	i.ResolvedAt = nil
-	i.ResolvedBy = nil
-	i.UpdatedAt = updatedAt
-	i.UpdatedBy = &updatedBy
+	i.Status = InquiryStatusClosed
+	i.ClosedAt = &closedAt
+	i.ClosedBy = &closedBy
+	i.UpdatedAt = closedAt
+	i.UpdatedBy = &closedBy
 
 	return nil
 }

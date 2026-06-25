@@ -18,18 +18,21 @@ import (
 
 // InquiryHandler は /inquiries 関連のエンドポイントを担当します。
 type InquiryHandler struct {
-	uc    *usecase.InquiryUsecase
-	query *consolequery.InquiryManagementQuery
+	uc              *usecase.InquiryUsecase
+	managementQuery *consolequery.InquiryManagementQuery
+	detailQuery     *consolequery.InquiryDetailQuery
 }
 
 // NewInquiryHandler はHTTPハンドラを初期化します。
 func NewInquiryHandler(
 	uc *usecase.InquiryUsecase,
-	query *consolequery.InquiryManagementQuery,
+	managementQuery *consolequery.InquiryManagementQuery,
+	detailQuery *consolequery.InquiryDetailQuery,
 ) http.Handler {
 	return &InquiryHandler{
-		uc:    uc,
-		query: query,
+		uc:              uc,
+		managementQuery: managementQuery,
+		detailQuery:     detailQuery,
 	}
 }
 
@@ -53,24 +56,30 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// GET /inquiries/company/{companyId}
+	// GET /inquiries/company/{companyId}/unread-count
 	//
 	// NOTE:
 	// URL 上の companyId は既存 route 互換のため受け取るが、
 	// 実際の company boundary は middleware が context に入れた
 	// ログイン中 member の companyId を使う。
 	if parts[0] == "company" {
-		if len(parts) != 2 || parts[1] == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid company id"})
-			return
-		}
-
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
 			return
 		}
 
-		h.listByCompanyID(w, r)
+		if len(parts) == 2 && parts[1] != "" {
+			h.listByCompanyID(w, r)
+			return
+		}
+
+		if len(parts) == 3 && parts[1] != "" && parts[2] == "unread-count" {
+			h.countUnreadByCompanyID(w, r)
+			return
+		}
+
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid company id"})
 		return
 	}
 
@@ -100,12 +109,12 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.resolve(w, r, id)
 			return
 
-		case "reopen":
+		case "close":
 			if r.Method != http.MethodPost {
 				methodNotAllowed(w)
 				return
 			}
-			h.reopen(w, r, id)
+			h.close(w, r, id)
 			return
 
 		default:
@@ -143,12 +152,69 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //	closed=true|false
 func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	q := r.URL.Query()
 
 	companyID, ok := currentCompanyID(w, r)
 	if !ok {
 		return
 	}
+
+	filter := inquiryFilterFromRequest(r)
+
+	result, err := h.managementQuery.ListByCompanyID(
+		ctx,
+		companyID,
+		filter,
+		inquirydom.Sort{},
+		inquirydom.Page{},
+	)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// GET /inquiries/company/{companyId}/unread-count
+//
+// Query:
+//
+//	searchQuery
+//	productId
+//	avatarId
+//	status
+//	inquiryType
+//	updatedBy
+//	deletedBy
+//	resolvedBy
+//	closedBy
+//	imageFileName
+//	deleted=true|false
+//	resolved=true|false
+//	closed=true|false
+func (h *InquiryHandler) countUnreadByCompanyID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	filter := inquiryFilterFromRequest(r)
+
+	count, err := h.managementQuery.CountUnreadByCompanyID(ctx, companyID, filter)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]int{
+		"count": count,
+	})
+}
+
+func inquiryFilterFromRequest(r *http.Request) inquirydom.Filter {
+	q := r.URL.Query()
 
 	filter := inquirydom.Filter{
 		SearchQuery: q.Get("searchQuery"),
@@ -207,19 +273,7 @@ func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request)
 		filter.Closed = &closed
 	}
 
-	result, err := h.query.ListByCompanyID(
-		ctx,
-		companyID,
-		filter,
-		inquirydom.Sort{},
-		inquirydom.Page{},
-	)
-	if err != nil {
-		writeInquiryErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(result)
+	return filter
 }
 
 // GET /inquiries/{id}
@@ -231,7 +285,7 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	detail, err := h.query.GetDetailByIDForCompany(ctx, id, companyID)
+	detail, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -248,8 +302,8 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 //	  "memberId": "member_document_id"
 //	}
 //
-// company member が問い合わせを「対処済み」にします。
-// avatar 側の close とは分離し、ここでは status=resolved にします。
+// company member が問い合わせを「対応済み」にします。
+// ここでは status=resolved にします。
 func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -258,7 +312,7 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	if _, err := h.query.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
+	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
@@ -290,7 +344,7 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-// POST /inquiries/{id}/reopen
+// POST /inquiries/{id}/close
 //
 // Body:
 //
@@ -298,8 +352,8 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 //	  "memberId": "member_document_id"
 //	}
 //
-// company member が resolved 状態の問い合わせを open に戻します。
-func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id string) {
+// company member が問い合わせを close します。
+func (h *InquiryHandler) close(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	companyID, ok := currentCompanyID(w, r)
@@ -307,7 +361,7 @@ func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	if _, err := h.query.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
+	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
@@ -323,11 +377,11 @@ func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id strin
 
 	memberID := strings.TrimSpace(req.MemberID)
 	if memberID == "" {
-		writeInquiryErr(w, inquirydom.ErrInvalidUpdatedBy)
+		writeInquiryErr(w, inquirydom.ErrInvalidClosedBy)
 		return
 	}
 
-	updated, err := h.uc.ReopenByMember(ctx, usecase.ReopenInquiryInput{
+	updated, err := h.uc.CloseByMember(ctx, usecase.CloseInquiryByMemberInput{
 		InquiryID: id,
 		MemberID:  memberID,
 	})
@@ -415,7 +469,7 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		return
 	}
 
-	detail, err := h.query.GetDetailByIDForCompany(ctx, id, companyID)
+	detail, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -470,7 +524,7 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	detail, err := h.query.GetDetailByIDForCompany(ctx, id, companyID)
+	detail, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return

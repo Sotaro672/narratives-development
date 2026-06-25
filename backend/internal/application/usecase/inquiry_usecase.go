@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	avatardom "narratives/internal/domain/avatar"
@@ -74,8 +73,8 @@ func NewInquiryUsecaseWithMailer(
 	return &InquiryUsecase{
 		repo:     repo,
 		mailer:   mailer,
-		mailFrom: strings.TrimSpace(mailFrom),
-		mailTo:   strings.TrimSpace(mailTo),
+		mailFrom: mailFrom,
+		mailTo:   mailTo,
 		now:      time.Now,
 	}
 }
@@ -94,8 +93,8 @@ func (uc *InquiryUsecase) SetInquiryCreatedMailer(
 	}
 
 	uc.mailer = mailer
-	uc.mailFrom = strings.TrimSpace(mailFrom)
-	uc.mailTo = strings.TrimSpace(mailTo)
+	uc.mailFrom = mailFrom
+	uc.mailTo = mailTo
 }
 
 // SetAvatarEmailResolver は Inquiry.AvatarID から avatar を取得する resolver を設定します。
@@ -155,7 +154,6 @@ type ResolveInquiryInput struct {
 // ResolveByMember は company member が Inquiry を resolved にします。
 //
 // company member は close せず、対処済みとして resolved にします。
-// 最終 close は avatar 側で行います。
 func (uc *InquiryUsecase) ResolveByMember(
 	ctx context.Context,
 	in ResolveInquiryInput,
@@ -164,8 +162,8 @@ func (uc *InquiryUsecase) ResolveByMember(
 		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
-	inquiryID := strings.TrimSpace(in.InquiryID)
-	memberID := strings.TrimSpace(in.MemberID)
+	inquiryID := in.InquiryID
+	memberID := in.MemberID
 
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
@@ -193,31 +191,29 @@ func (uc *InquiryUsecase) ResolveByMember(
 	})
 }
 
-// ReopenInquiryInput は company member が問い合わせを open に戻す入力です。
-type ReopenInquiryInput struct {
+// CloseInquiryByMemberInput は company member が問い合わせを close する入力です。
+type CloseInquiryByMemberInput struct {
 	InquiryID string
 	MemberID  string
 }
 
-// ReopenByMember は company member が resolved 状態の Inquiry を open に戻します。
-//
-// 追加対応が必要になった場合に使います。
-func (uc *InquiryUsecase) ReopenByMember(
+// CloseByMember は company member が Inquiry を closed にします。
+func (uc *InquiryUsecase) CloseByMember(
 	ctx context.Context,
-	in ReopenInquiryInput,
+	in CloseInquiryByMemberInput,
 ) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
 		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
-	inquiryID := strings.TrimSpace(in.InquiryID)
-	memberID := strings.TrimSpace(in.MemberID)
+	inquiryID := in.InquiryID
+	memberID := in.MemberID
 
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
 	if memberID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidUpdatedBy
+		return inquirydom.Inquiry{}, inquirydom.ErrInvalidClosedBy
 	}
 
 	current, err := uc.repo.GetByID(ctx, inquiryID)
@@ -226,19 +222,16 @@ func (uc *InquiryUsecase) ReopenByMember(
 	}
 
 	now := uc.nowUTC()
-	if err := current.ReopenByMember(memberID, now); err != nil {
+	if err := current.CloseByMember(memberID, now); err != nil {
 		return inquirydom.Inquiry{}, err
 	}
 
-	clearResolvedAt := time.Time{}
-	clearResolvedBy := ""
-
 	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
-		Status:     &current.Status,
-		ResolvedAt: &clearResolvedAt,
-		ResolvedBy: &clearResolvedBy,
-		UpdatedAt:  &current.UpdatedAt,
-		UpdatedBy:  current.UpdatedBy,
+		Status:    &current.Status,
+		ClosedAt:  current.ClosedAt,
+		ClosedBy:  current.ClosedBy,
+		UpdatedAt: &current.UpdatedAt,
+		UpdatedBy: current.UpdatedBy,
 	})
 }
 
@@ -259,8 +252,8 @@ func (uc *InquiryUsecase) CloseByAvatar(
 		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
 	}
 
-	inquiryID := strings.TrimSpace(in.InquiryID)
-	avatarID := strings.TrimSpace(in.AvatarID)
+	inquiryID := in.InquiryID
+	avatarID := in.AvatarID
 
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
@@ -317,7 +310,7 @@ func (uc *InquiryUsecase) sendInquiryCreatedMail(ctx context.Context, inq inquir
 		return nil
 	}
 
-	from := strings.TrimSpace(uc.mailFrom)
+	from := uc.mailFrom
 	if from == "" {
 		return nil
 	}
@@ -327,7 +320,6 @@ func (uc *InquiryUsecase) sendInquiryCreatedMail(ctx context.Context, inq inquir
 		return fmt.Errorf("inquiry usecase: failed to resolve inquiry mail recipient: %w", err)
 	}
 
-	to = strings.TrimSpace(to)
 	if to == "" {
 		return nil
 	}
@@ -345,21 +337,20 @@ func (uc *InquiryUsecase) resolveInquiryMailTo(ctx context.Context, inq inquiryd
 	}
 
 	if uc.avatarEmailResolver != nil && uc.authUserGetter != nil {
-		avatarID := strings.TrimSpace(inq.AvatarID)
+		avatarID := inq.AvatarID
 		if avatarID != "" {
 			avatar, err := uc.avatarEmailResolver.GetByID(ctx, avatarID)
 			if err != nil {
 				return "", err
 			}
 
-			uid := strings.TrimSpace(avatar.UserID)
+			uid := avatar.UserID
 			if uid != "" {
 				email, err := uc.authUserGetter.GetEmailByUID(ctx, uid)
 				if err != nil {
 					return "", err
 				}
 
-				email = strings.TrimSpace(email)
 				if email != "" {
 					return email, nil
 				}
@@ -367,7 +358,7 @@ func (uc *InquiryUsecase) resolveInquiryMailTo(ctx context.Context, inq inquiryd
 		}
 	}
 
-	return strings.TrimSpace(uc.mailTo), nil
+	return uc.mailTo, nil
 }
 
 func (uc *InquiryUsecase) nowUTC() time.Time {

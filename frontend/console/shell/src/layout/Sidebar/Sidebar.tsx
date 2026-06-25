@@ -1,7 +1,7 @@
 // frontend/shell/src/layout/Sidebar/Sidebar.tsx
 
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MessageSquare,
   Box,
@@ -13,6 +13,10 @@ import {
   Wallet,
   ChevronRight,
 } from "lucide-react";
+
+import { buildConsoleUrl } from "../../shared/http/apiBase";
+import { getAuthHeaders } from "../../shared/http/authHeaders";
+import { fetchJSON } from "../../shared/http/fetchJSON";
 
 import "./Sidebar.css";
 
@@ -32,9 +36,90 @@ type SubItem = { label: string; path: string };
 
 type OpenKey = "products" | "tokens" | "reviews" | "org" | "finance" | null;
 
+type InquiryUnreadCountResponse = {
+  count?: number | null;
+};
+
+const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
+
+function toSafeCount(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const count = Math.trunc(value);
+
+  return count > 0 ? count : null;
+}
+
+async function fetchInquiryUnreadCount(): Promise<number | null> {
+  const headers = await getAuthHeaders();
+
+  const url = buildConsoleUrl(
+    `/inquiries/company/${encodeURIComponent(
+      CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER,
+    )}/unread-count`,
+  );
+
+  const data = await fetchJSON<InquiryUnreadCountResponse>(url, {
+    method: "GET",
+    headers,
+  });
+
+  return toSafeCount(data.count);
+}
+
 export default function Sidebar({ isOpen }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [inquiryUnreadCount, setInquiryUnreadCount] = useState<number | null>(
+    null,
+  );
+
+  const loadInquiryUnreadCount = useCallback(async () => {
+    try {
+      const count = await fetchInquiryUnreadCount();
+      setInquiryUnreadCount(count);
+    } catch {
+      setInquiryUnreadCount(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      try {
+        const count = await fetchInquiryUnreadCount();
+        if (!active) return;
+
+        setInquiryUnreadCount(count);
+      } catch {
+        if (!active) return;
+
+        setInquiryUnreadCount(null);
+      }
+    }
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      void loadInquiryUnreadCount();
+    };
+
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadInquiryUnreadCount]);
 
   const menuItems: MenuItem[] = useMemo(
     () => [
@@ -42,6 +127,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         label: "問い合わせ",
         path: "/inquiry",
         icon: MessageSquare,
+        badgeCount: inquiryUnreadCount,
       },
       { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
@@ -51,7 +137,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
       { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
-    [],
+    [inquiryUnreadCount],
   );
 
   const productSubItems: SubItem[] = useMemo(

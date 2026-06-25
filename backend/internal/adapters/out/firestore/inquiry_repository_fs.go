@@ -195,25 +195,6 @@ func (r *InquiryRepositoryFS) GetByID(ctx context.Context, id string) (idom.Inqu
 	return docToInquiry(snap)
 }
 
-func (r *InquiryRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
-}
-
 // =======================
 // Mutations
 // =======================

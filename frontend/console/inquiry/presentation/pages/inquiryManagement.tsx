@@ -28,6 +28,28 @@ function normalizeText(value: string | null | undefined): string {
   return String(value ?? "").trim();
 }
 
+function statusLabel(
+  statusValue: string | null | undefined,
+  isRead: boolean | null | undefined,
+): string {
+  if (isRead === false) {
+    return "未読";
+  }
+
+  const status = String(statusValue ?? "").trim();
+
+  switch (status) {
+    case "open":
+      return "オープン";
+    case "resolved":
+      return "対応済み";
+    case "closed":
+      return "クローズ";
+    default:
+      return status || "-";
+  }
+}
+
 function getInquiryID(item: InquiryManagementItem): string {
   return textOrDash(item.inquiry.id);
 }
@@ -41,7 +63,7 @@ function getCustomerName(item: InquiryManagementItem): string {
 }
 
 function getStatus(item: InquiryManagementItem): string {
-  return textOrDash(item.inquiry.status);
+  return statusLabel(item.inquiry.status, item.inquiry.isRead);
 }
 
 function getProductName(item: InquiryManagementItem): string {

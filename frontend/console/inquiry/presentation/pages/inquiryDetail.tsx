@@ -83,22 +83,6 @@ function uniqueTextValues(values: Array<string | null | undefined>): string[] {
   return result;
 }
 
-function getTokenNames(detail: InquiryDetailDTO | null): string {
-  if (!detail?.orders?.length) {
-    return "-";
-  }
-
-  const tokenNames = uniqueTextValues(
-    detail.orders.flatMap((order) =>
-      Array.isArray(order.items)
-        ? order.items.map((item) => item.tokenName)
-        : [],
-    ),
-  );
-
-  return tokenNames.length > 0 ? tokenNames.join(" / ") : "-";
-}
-
 function getShippingAddressLine(address: Record<string, unknown>): string {
   const postalCode =
     normalizeText(address.zipCode) ||
@@ -250,7 +234,6 @@ export default function InquiryDetail() {
   const type = typeLabel(inquiry?.inquiryType);
   const productName = textOrDash(detail?.productName);
   const brandName = textOrDash(detail?.brandName);
-  const tokenNames = getTokenNames(detail);
   const inquiredAt = safeDateTimeLabelJa(inquiry?.createdAt, "-");
   const updatedAt = safeDateTimeLabelJa(inquiry?.updatedAt, "-");
   const shippingAddresses = getShippingAddresses(detail);
@@ -297,19 +280,10 @@ export default function InquiryDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>商品情報</CardTitle>
+              <CardTitle>商品・注文情報</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="inq__empty">商品情報を読み込み中です。</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>注文情報</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="inq__empty">注文情報を読み込み中です。</div>
+              <div className="inq__empty">商品・注文情報を読み込み中です。</div>
             </CardContent>
           </Card>
         </div>
@@ -346,19 +320,10 @@ export default function InquiryDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>商品情報</CardTitle>
+              <CardTitle>商品・注文情報</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="inq__empty">商品情報を表示できません。</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>注文情報</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="inq__empty">注文情報を表示できません。</div>
+              <div className="inq__empty">商品・注文情報を表示できません。</div>
             </CardContent>
           </Card>
         </div>
@@ -459,7 +424,7 @@ export default function InquiryDetail() {
 
         <Card>
           <CardHeader>
-            <CardTitle>商品情報</CardTitle>
+            <CardTitle>商品・注文情報</CardTitle>
           </CardHeader>
 
           <CardContent>
@@ -475,25 +440,8 @@ export default function InquiryDetail() {
                   <span className="inq-detail__value">{brandName}</span>
                 </div>
 
-                <div>
-                  <span className="inq-detail__label">トークン名</span>
-                  <span className="inq-detail__value">{tokenNames}</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>注文情報</CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            {orders.length > 0 ? (
-              <div className="inq-detail">
-                <div className="inq-detail__meta">
-                  {orders.map((order) => (
+                {orders.length > 0 ? (
+                  orders.map((order) => (
                     <div key={order.id}>
                       <span className="inq-detail__label">注文ID</span>
                       <span className="inq-detail__value">
@@ -515,12 +463,12 @@ export default function InquiryDetail() {
                         {getOrderItemsLabel(order)}
                       </span>
                     </div>
-                  ))}
-                </div>
+                  ))
+                ) : (
+                  <div className="inq__empty">注文情報はありません。</div>
+                )}
               </div>
-            ) : (
-              <div className="inq__empty">注文情報はありません。</div>
-            )}
+            </div>
           </CardContent>
         </Card>
       </div>
