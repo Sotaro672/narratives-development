@@ -9,19 +9,25 @@ import (
 	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
+	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	inquirydom "narratives/internal/domain/inquiry"
 )
 
 // InquiryHandler は mall 側の問い合わせエンドポイントを担当します。
 type InquiryHandler struct {
-	uc *usecase.InquiryUsecase
+	uc    *usecase.InquiryUsecase
+	query *mallquery.InquiryQuery
 }
 
 // NewInquiryHandler は mall inquiry handler を初期化します。
-func NewInquiryHandler(uc *usecase.InquiryUsecase) http.Handler {
+func NewInquiryHandler(
+	uc *usecase.InquiryUsecase,
+	query *mallquery.InquiryQuery,
+) http.Handler {
 	return &InquiryHandler{
-		uc: uc,
+		uc:    uc,
+		query: query,
 	}
 }
 
@@ -39,6 +45,12 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inquiry usecase is nil"})
+		return
+	}
+
+	if h.query == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inquiry query is nil"})
 		return
 	}
 
@@ -219,14 +231,9 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	in, err := h.uc.GetByID(ctx, id)
+	in, err := h.query.GetByIDForAvatar(ctx, id, avatarID)
 	if err != nil {
 		writeInquiryErr(w, err)
-		return
-	}
-
-	if in.AvatarID != avatarID {
-		writeInquiryErr(w, inquirydom.ErrInquiryForbidden)
 		return
 	}
 
@@ -276,14 +283,9 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	in, err := h.uc.GetByID(ctx, id)
+	in, err := h.query.GetByIDForAvatar(ctx, id, avatarID)
 	if err != nil {
 		writeInquiryErr(w, err)
-		return
-	}
-
-	if in.AvatarID != avatarID {
-		writeInquiryErr(w, inquirydom.ErrInquiryForbidden)
 		return
 	}
 

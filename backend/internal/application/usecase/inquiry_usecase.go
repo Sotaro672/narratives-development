@@ -31,16 +31,7 @@ type AvatarEmailResolver interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
-// InquiryAggregate は Inquiry とその画像一覧をまとめたビューです。
-//
-// inquiryImage ドメインは inquiry ドメインへ統合済みのため、
-// Images は Inquiry.Images から取得します。
-type InquiryAggregate struct {
-	Inquiry inquirydom.Inquiry     `json:"inquiry"`
-	Images  []inquirydom.ImageFile `json:"images"`
-}
-
-// InquiryUsecase は Inquiry 集約を扱います。
+// InquiryUsecase は Inquiry の command を扱います。
 //
 // 画像は Inquiry.Images として Inquiry 集約内で管理します。
 // Firebase Storage への保存・削除は frontend / application 層の責務とし、
@@ -132,51 +123,6 @@ func (uc *InquiryUsecase) SetNowFunc(now func() time.Time) {
 	}
 
 	uc.now = now
-}
-
-// ListByCompanyID は companyID に紐づく Inquiry 一覧を返します。
-//
-// 現在 Inquiry 自体は companyId を保持しないため、repository 実装側では
-// 互換メソッドとして扱います。将来的には companyId -> productIds を解決する
-// query service 側へ分離する想定です。
-func (uc *InquiryUsecase) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	filter inquirydom.Filter,
-	sort inquirydom.Sort,
-	page inquirydom.Page,
-) (inquirydom.PageResult[inquirydom.Inquiry], error) {
-	if uc == nil || uc.repo == nil {
-		return inquirydom.PageResult[inquirydom.Inquiry]{}, fmt.Errorf("inquiry usecase: repository is nil")
-	}
-
-	return uc.repo.ListByCompanyID(ctx, companyID, filter, sort, page)
-}
-
-// CountUnreadByCompanyID は companyID に紐づく未読 Inquiry 件数を返します。
-//
-// 現在 Inquiry 自体は companyId を保持しないため、repository 実装側では
-// 互換メソッドとして扱います。将来的には companyId -> productIds を解決する
-// query service 側へ分離する想定です。
-func (uc *InquiryUsecase) CountUnreadByCompanyID(
-	ctx context.Context,
-	companyID string,
-	filter inquirydom.Filter,
-) (int, error) {
-	if uc == nil || uc.repo == nil {
-		return 0, fmt.Errorf("inquiry usecase: repository is nil")
-	}
-
-	return uc.repo.CountUnreadByCompanyID(ctx, companyID, filter)
-}
-
-// GetByID は Inquiry を返します。
-func (uc *InquiryUsecase) GetByID(ctx context.Context, id string) (inquirydom.Inquiry, error) {
-	if uc == nil || uc.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
-	}
-
-	return uc.repo.GetByID(ctx, id)
 }
 
 // Create は Inquiry を作成します。
@@ -364,49 +310,6 @@ func (uc *InquiryUsecase) Delete(ctx context.Context, id string) error {
 	}
 
 	return uc.repo.Delete(ctx, id)
-}
-
-// GetImages は Inquiry に紐づく画像一覧を返します。
-//
-// inquiryImage ドメインは廃止済みのため、別 repository へは問い合わせず、
-// Inquiry.Images をそのまま返します。
-func (uc *InquiryUsecase) GetImages(ctx context.Context, inquiryID string) ([]inquirydom.ImageFile, error) {
-	if uc == nil || uc.repo == nil {
-		return nil, fmt.Errorf("inquiry usecase: repository is nil")
-	}
-
-	in, err := uc.repo.GetByID(ctx, inquiryID)
-	if err != nil {
-		return nil, err
-	}
-	if len(in.Images) == 0 {
-		return []inquirydom.ImageFile{}, nil
-	}
-	return in.Images, nil
-}
-
-// GetAggregate は Inquiry と画像一覧をまとめて返します。
-//
-// 画像は Inquiry.Images を正として扱います。
-func (uc *InquiryUsecase) GetAggregate(ctx context.Context, id string) (InquiryAggregate, error) {
-	if uc == nil || uc.repo == nil {
-		return InquiryAggregate{}, fmt.Errorf("inquiry usecase: repository is nil")
-	}
-
-	in, err := uc.repo.GetByID(ctx, id)
-	if err != nil {
-		return InquiryAggregate{}, err
-	}
-
-	images := in.Images
-	if images == nil {
-		images = []inquirydom.ImageFile{}
-	}
-
-	return InquiryAggregate{
-		Inquiry: in,
-		Images:  images,
-	}, nil
 }
 
 func (uc *InquiryUsecase) sendInquiryCreatedMail(ctx context.Context, inq inquirydom.Inquiry) error {

@@ -118,6 +118,7 @@ type Container struct {
 	CatalogQ      *mallquery.CatalogQuery
 	CartQ         *mallquery.CartQuery
 	PreviewQ      *mallquery.PreviewQuery
+	InquiryQ      *mallquery.InquiryQuery
 	AnnouncementQ *mallquery.AnnouncementQueryService
 
 	OrderQ *mallquery.OrderQuery
@@ -201,7 +202,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
 
+	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
+	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
+
 	inquiryRepo := outfs.NewInquiryRepositoryFS(fsClient)
+
+	c.InquiryQ = mallquery.NewInquiryQuery(
+		inquiryRepo,
+		productRepo,
+		modelRepoFS,
+		productBlueprintRepoFS,
+	)
 
 	announcementRepo := outfs.NewAnnouncementRepositoryFS(fsClient)
 	announcementAvatarRepo := outfs.NewAnnouncementAvatarRepositoryFS(fsClient)
@@ -223,10 +234,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.TokenBlueprintReviewRepo = outfs.NewTokenBlueprintReviewRepositoryFS(fsClient)
 
 	productBlueprintReviewRepo := outfs.NewProductBlueprintReviewRepositoryFS(fsClient)
-
-	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
-
-	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
 
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
 

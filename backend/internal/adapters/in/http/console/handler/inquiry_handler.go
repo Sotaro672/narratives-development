@@ -8,18 +8,29 @@ import (
 	"strings"
 	"time"
 
+	consolequery "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
+
+	middleware "narratives/internal/adapters/in/http/middleware"
+
 	inquirydom "narratives/internal/domain/inquiry"
 )
 
 // InquiryHandler は /inquiries 関連のエンドポイントを担当します。
 type InquiryHandler struct {
-	uc *usecase.InquiryUsecase
+	uc    *usecase.InquiryUsecase
+	query *consolequery.InquiryManagementQuery
 }
 
 // NewInquiryHandler はHTTPハンドラを初期化します。
-func NewInquiryHandler(uc *usecase.InquiryUsecase) http.Handler {
-	return &InquiryHandler{uc: uc}
+func NewInquiryHandler(
+	uc *usecase.InquiryUsecase,
+	query *consolequery.InquiryManagementQuery,
+) http.Handler {
+	return &InquiryHandler{
+		uc:    uc,
+		query: query,
+	}
 }
 
 // ServeHTTP はHTTPルーティングの入口です。
@@ -42,6 +53,11 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// GET /inquiries/company/{companyId}
+	//
+	// NOTE:
+	// URL 上の companyId は既存 route 互換のため受け取るが、
+	// 実際の company boundary は middleware が context に入れた
+	// ログイン中 member の companyId を使う。
 	if parts[0] == "company" {
 		if len(parts) != 2 || parts[1] == "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -54,7 +70,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.listByCompanyID(w, r, parts[1])
+		h.listByCompanyID(w, r)
 		return
 	}
 
@@ -125,9 +141,14 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //	deleted=true|false
 //	resolved=true|false
 //	closed=true|false
-func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request, companyID string) {
+func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
 
 	filter := inquirydom.Filter{
 		SearchQuery: q.Get("searchQuery"),
@@ -186,7 +207,7 @@ func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request,
 		filter.Closed = &closed
 	}
 
-	result, err := h.uc.ListByCompanyID(
+	result, err := h.query.ListByCompanyID(
 		ctx,
 		companyID,
 		filter,
@@ -205,13 +226,18 @@ func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request,
 func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	in, err := h.uc.GetByID(ctx, id)
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	detail, err := h.query.GetDetailByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(in)
+	_ = json.NewEncoder(w).Encode(detail)
 }
 
 // POST /inquiries/{id}/resolve
@@ -226,6 +252,16 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 // avatar 側の close とは分離し、ここでは status=resolved にします。
 func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.query.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
 
 	var req struct {
 		MemberID string `json:"memberId"`
@@ -265,6 +301,16 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 // company member が resolved 状態の問い合わせを open に戻します。
 func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.query.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
 
 	var req struct {
 		MemberID string `json:"memberId"`
@@ -311,6 +357,11 @@ func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id strin
 // backend は Firebase Storage の downloadURL(fileUrl) と objectPath のみ保存します。
 func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
 
 	var req struct {
 		FileName   string  `json:"fileName"`
@@ -364,11 +415,13 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		return
 	}
 
-	in, err := h.uc.GetByID(ctx, id)
+	detail, err := h.query.GetDetailByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
+
+	in := detail.Inquiry
 
 	if err := in.AddImage(image); err != nil {
 		writeInquiryErr(w, err)
@@ -405,6 +458,11 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
 	fileName := strings.TrimSpace(r.URL.Query().Get("fileName"))
 	if fileName == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -412,11 +470,13 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	in, err := h.uc.GetByID(ctx, id)
+	detail, err := h.query.GetDetailByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
+
+	in := detail.Inquiry
 
 	removed := in.RemoveImageByFileName(fileName)
 	if !removed {
@@ -436,6 +496,18 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 	}
 
 	_ = json.NewEncoder(w).Encode(updated.Images)
+}
+
+func currentCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	companyID, ok := middleware.CompanyID(r)
+	companyID = strings.TrimSpace(companyID)
+	if !ok || companyID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found"})
+		return "", false
+	}
+
+	return companyID, true
 }
 
 // エラーハンドリング

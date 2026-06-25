@@ -236,8 +236,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// - GET  /mall/me/inquiries/{id}
 	// - POST /mall/me/inquiries/{id}/reply
 	// - POST /mall/me/inquiries/{id}/close
-	if cont.InquiryUC != nil {
-		inquiryH = mallhandler.NewInquiryHandler(cont.InquiryUC)
+	if cont.InquiryUC != nil && cont.InquiryQ != nil {
+		inquiryH = mallhandler.NewInquiryHandler(
+			cont.InquiryUC,
+			cont.InquiryQ,
+		)
 	}
 
 	// Preview

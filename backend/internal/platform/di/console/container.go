@@ -83,6 +83,8 @@ type Container struct {
 	TokenBlueprintManagementQuery *query.TokenBlueprintManagementQuery
 	TokenBlueprintDetailQuery     *query.TokenBlueprintDetailQuery
 
+	InquiryManagementQuery *query.InquiryManagementQuery
+
 	InventoryManagementQuery *query.InventoryManagementQuery
 	InventoryDetailQuery     *query.InventoryDetailQuery
 
@@ -222,6 +224,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		TokenBlueprintManagementQuery: q.tokenBlueprintManagementQuery,
 		TokenBlueprintDetailQuery:     q.tokenBlueprintDetailQuery,
+
+		InquiryManagementQuery: q.inquiryManagementQuery,
 
 		InventoryManagementQuery: q.inventoryManagementQuery,
 		InventoryDetailQuery:     q.inventoryDetailQuery,

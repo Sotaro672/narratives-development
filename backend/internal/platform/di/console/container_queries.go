@@ -26,6 +26,8 @@ type queries struct {
 	tokenBlueprintManagementQuery *companyquery.TokenBlueprintManagementQuery
 	tokenBlueprintDetailQuery     *companyquery.TokenBlueprintDetailQuery
 
+	inquiryManagementQuery *companyquery.InquiryManagementQuery
+
 	inventoryManagementQuery *companyquery.InventoryManagementQuery
 	inventoryDetailQuery     *companyquery.InventoryDetailQuery
 
@@ -76,6 +78,13 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.tokenBlueprintRepo,
 		r.memberRepo,
 		r.brandRepo,
+	)
+
+	inquiryManagementQuery := companyquery.NewInquiryManagementQuery(
+		r.inquiryRepo,
+		r.productRepo,
+		r.modelRepo,
+		r.productBlueprintRepo,
 	)
 
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
@@ -264,6 +273,8 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 
 		tokenBlueprintManagementQuery: tokenBlueprintManagementQuery,
 		tokenBlueprintDetailQuery:     tokenBlueprintDetailQuery,
+
+		inquiryManagementQuery: inquiryManagementQuery,
 
 		inventoryManagementQuery: inventoryManagementQuery,
 		inventoryDetailQuery:     inventoryDetailQuery,

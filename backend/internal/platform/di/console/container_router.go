@@ -101,8 +101,11 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		companiesH = consoleHandler.NewCompanyHandler(c.CompanyUC)
 	}
 
-	if c.InquiryUC != nil {
-		inquiriesH = consoleHandler.NewInquiryHandler(c.InquiryUC)
+	if c.InquiryUC != nil && c.InquiryManagementQuery != nil {
+		inquiriesH = consoleHandler.NewInquiryHandler(
+			c.InquiryUC,
+			c.InquiryManagementQuery,
+		)
 	}
 
 	if c.InventoryManagementQuery != nil &&
