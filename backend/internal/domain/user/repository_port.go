@@ -38,6 +38,29 @@ type UpdateUserInput struct {
 }
 
 // ========================================
+// 表示名
+// ========================================
+
+// FormatLastFirst は lastName -> firstName の順で表示名を組み立てます。
+func FormatLastFirst(lastName string, firstName string) string {
+	if lastName == "" {
+		return firstName
+	}
+	if firstName == "" {
+		return lastName
+	}
+	return lastName + " " + firstName
+}
+
+// FormatName は User の LastName -> FirstName の順で表示名を組み立てます。
+func FormatName(u *User) string {
+	if u == nil {
+		return ""
+	}
+	return FormatLastFirst(u.LastName, u.FirstName)
+}
+
+// ========================================
 // Repository Port（契約のみ）
 // ========================================
 

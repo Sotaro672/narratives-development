@@ -159,6 +159,8 @@ export function useScanResultPage() {
     return backendTransfers.length > 0 ? backendTransfers : chainTransfers;
   }, [chainTransfers, previewState?.raw.transfers]);
 
+  const hasMultipleTransfers = displayTransfers.length >= 2;
+
   const state: ScanResultPageState = {
     productId,
     previewState,
@@ -820,6 +822,7 @@ export function useScanResultPage() {
     viewModel,
     transferSuccessModalViewModel,
     displayTransfers,
+    hasMultipleTransfers,
     load,
     loadReviews,
     loadOwnedState,

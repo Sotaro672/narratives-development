@@ -85,8 +85,12 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.productRepo,
 		r.modelRepo,
 		r.productBlueprintRepo,
+		r.tokenBlueprintRepo,
 		r.brandRepo,
 		r.avatarRepo,
+		r.userRepo,
+		r.shippingAddressRepo,
+		r.orderRepo,
 	)
 
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(

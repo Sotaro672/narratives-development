@@ -27,8 +27,7 @@ type Filter struct {
 
 	// Snapshot-based (optional)
 	// If nil, it means "no filter".
-	ShippingSnapshot      *ShippingSnapshot
-	PaymentMethodSnapshot *PaymentMethodSnapshot
+	ShippingSnapshot *ShippingSnapshot
 
 	// Item-based filters (optional)
 	ModelID      string

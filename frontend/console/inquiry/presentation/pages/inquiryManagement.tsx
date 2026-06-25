@@ -36,8 +36,8 @@ function getSubject(item: InquiryManagementItem): string {
   return textOrDash(item.inquiry.subject);
 }
 
-function getAvatarName(item: InquiryManagementItem): string {
-  return textOrDash(item.avatarName);
+function getCustomerName(item: InquiryManagementItem): string {
+  return textOrDash(item.userFullName);
 }
 
 function getStatus(item: InquiryManagementItem): string {
@@ -289,7 +289,7 @@ export default function InquiryManagementPage() {
           }}
         >
           <td>{getSubject(item)}</td>
-          <td>{getAvatarName(item)}</td>
+          <td>{getCustomerName(item)}</td>
           <td>{getStatus(item)}</td>
           <td>{getProductName(item)}</td>
           <td>{getBrandName(item)}</td>
@@ -303,7 +303,7 @@ export default function InquiryManagementPage() {
   const headers = useMemo(() => {
     return [
       "件名",
-      "アバター名",
+      "お客様名",
       <FilterableTableHeader
         key="status"
         label="ステータス"

@@ -75,6 +75,9 @@ interface PageStyleProps {
 
   onCancel?: () => void | Promise<void>;
 
+  onClose?: () => void | Promise<void>;
+  isClosing?: boolean;
+
   onPurge?: () => void | Promise<void>;
 
   onList?: () => void | Promise<void>;
@@ -100,6 +103,8 @@ export default function PageStyle({
   onEdit,
   onDelete,
   onCancel,
+  onClose,
+  isClosing: controlledIsClosing,
   onPurge,
   onList,
   title,
@@ -116,10 +121,12 @@ export default function PageStyle({
   const [internalIsSending, setInternalIsSending] = React.useState(false);
   const [isListing, setIsListing] = React.useState(false);
   const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
+  const [internalIsClosing, setInternalIsClosing] = React.useState(false);
 
   const isSaving = controlledIsSaving ?? internalIsSaving;
   const isSending = controlledIsSending ?? internalIsSending;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
+  const isClosing = controlledIsClosing ?? internalIsClosing;
 
   const handleCreate = React.useCallback(async () => {
     if (!onCreate || isCreating) return;
@@ -175,6 +182,17 @@ export default function PageStyle({
       setInternalIsRefreshing(false);
     }
   }, [onRefresh, isRefreshing]);
+
+  const handleClose = React.useCallback(async () => {
+    if (!onClose || isClosing) return;
+
+    try {
+      setInternalIsClosing(true);
+      await onClose();
+    } finally {
+      setInternalIsClosing(false);
+    }
+  }, [onClose, isClosing]);
 
   const header = (
     <header className="page-header">
@@ -257,6 +275,23 @@ export default function PageStyle({
               >
                 <X size={16} style={{ marginRight: 4 }} />
                 キャンセル
+              </button>
+            )}
+
+            {onClose && (
+              <button
+                type="button"
+                className="page-header__btn page-header__btn--ghost"
+                onClick={() => void handleClose()}
+                disabled={isClosing}
+                aria-busy={isClosing}
+              >
+                {isClosing ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <X size={16} style={{ marginRight: 4 }} />
+                )}
+                {isClosing ? "クローズ中" : "クローズ"}
               </button>
             )}
 

@@ -52,6 +52,56 @@ export type Inquiry = {
   closedBy?: string | null;
 };
 
+export type InquiryShippingAddress = {
+  id: string;
+  userId: string;
+
+  name?: string;
+  phoneNumber?: string;
+
+  zipCode?: string;
+  state?: string;
+  city?: string;
+  street?: string;
+  street2?: string;
+  country?: string;
+
+  isDefault?: boolean;
+
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+
+  [key: string]: unknown;
+};
+
+export type InquiryOrderItemSummary = {
+  modelId: string;
+  inventoryId: string;
+  tokenBlueprintId: string;
+  tokenName: string;
+  listId: string;
+  qty: number;
+  price: number;
+  isCanceled: boolean;
+  isDispatched: boolean;
+  transferred: boolean;
+  transferredAt?: string | null;
+};
+
+export type InquiryOrderSummary = {
+  id: string;
+  userId: string;
+  avatarId: string;
+  cartId: string;
+  paid: boolean;
+  items: InquiryOrderItemSummary[];
+  createdAt: string;
+};
+
 export type InquiryManagementItem = {
   inquiry: Inquiry;
   modelId: string;
@@ -60,6 +110,10 @@ export type InquiryManagementItem = {
   brandId: string;
   brandName: string;
   avatarName: string;
+  userId: string;
+  userFullName: string;
+  shippingAddresses: InquiryShippingAddress[];
+  orders: InquiryOrderSummary[];
   companyId: string;
 };
 
@@ -71,6 +125,10 @@ export type InquiryDetail = {
   brandId: string;
   brandName: string;
   avatarName: string;
+  userId: string;
+  userFullName: string;
+  shippingAddresses: InquiryShippingAddress[];
+  orders: InquiryOrderSummary[];
   companyId: string;
 };
 
@@ -83,6 +141,10 @@ export type InquiryAggregate = {
   brandId: string;
   brandName: string;
   avatarName: string;
+  userId: string;
+  userFullName: string;
+  shippingAddresses: InquiryShippingAddress[];
+  orders: InquiryOrderSummary[];
   companyId: string;
 };
 
