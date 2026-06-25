@@ -76,6 +76,22 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+		case "resolve":
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w)
+				return
+			}
+			h.resolve(w, r, id)
+			return
+
+		case "reopen":
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w)
+				return
+			}
+			h.reopen(w, r, id)
+			return
+
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -97,16 +113,18 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Query:
 //
 //	searchQuery
+//	productId
 //	avatarId
-//	assigneeId
 //	status
 //	inquiryType
-//	productBlueprintId
-//	tokenBlueprintId
 //	updatedBy
 //	deletedBy
+//	resolvedBy
+//	closedBy
 //	imageFileName
 //	deleted=true|false
+//	resolved=true|false
+//	closed=true|false
 func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request, companyID string) {
 	ctx := r.Context()
 	q := r.URL.Query()
@@ -115,47 +133,57 @@ func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request,
 		SearchQuery: q.Get("searchQuery"),
 	}
 
-	if v := q.Get("avatarId"); v != "" {
+	if v := strings.TrimSpace(q.Get("productId")); v != "" {
+		filter.ProductID = &v
+	}
+
+	if v := strings.TrimSpace(q.Get("avatarId")); v != "" {
 		filter.AvatarID = &v
 	}
 
-	if v := q.Get("assigneeId"); v != "" {
-		filter.AssigneeID = &v
-	}
-
-	if v := q.Get("status"); v != "" {
+	if v := strings.TrimSpace(q.Get("status")); v != "" {
 		status := inquirydom.InquiryStatus(v)
 		filter.Status = &status
 	}
 
-	if v := q.Get("inquiryType"); v != "" {
+	if v := strings.TrimSpace(q.Get("inquiryType")); v != "" {
 		inquiryType := inquirydom.InquiryType(v)
 		filter.InquiryType = &inquiryType
 	}
 
-	if v := q.Get("productBlueprintId"); v != "" {
-		filter.ProductBlueprintID = &v
-	}
-
-	if v := q.Get("tokenBlueprintId"); v != "" {
-		filter.TokenBlueprintID = &v
-	}
-
-	if v := q.Get("updatedBy"); v != "" {
+	if v := strings.TrimSpace(q.Get("updatedBy")); v != "" {
 		filter.UpdatedBy = &v
 	}
 
-	if v := q.Get("deletedBy"); v != "" {
+	if v := strings.TrimSpace(q.Get("deletedBy")); v != "" {
 		filter.DeletedBy = &v
 	}
 
-	if v := q.Get("imageFileName"); v != "" {
+	if v := strings.TrimSpace(q.Get("resolvedBy")); v != "" {
+		filter.ResolvedBy = &v
+	}
+
+	if v := strings.TrimSpace(q.Get("closedBy")); v != "" {
+		filter.ClosedBy = &v
+	}
+
+	if v := strings.TrimSpace(q.Get("imageFileName")); v != "" {
 		filter.ImageFileName = &v
 	}
 
-	if v := q.Get("deleted"); v != "" {
+	if v := strings.TrimSpace(q.Get("deleted")); v != "" {
 		deleted := v == "true"
 		filter.Deleted = &deleted
+	}
+
+	if v := strings.TrimSpace(q.Get("resolved")); v != "" {
+		resolved := v == "true"
+		filter.Resolved = &resolved
+	}
+
+	if v := strings.TrimSpace(q.Get("closed")); v != "" {
+		closed := v == "true"
+		filter.Closed = &closed
 	}
 
 	result, err := h.uc.ListByCompanyID(
@@ -184,6 +212,85 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 	}
 
 	_ = json.NewEncoder(w).Encode(in)
+}
+
+// POST /inquiries/{id}/resolve
+//
+// Body:
+//
+//	{
+//	  "memberId": "member_document_id"
+//	}
+//
+// company member が問い合わせを「対処済み」にします。
+// avatar 側の close とは分離し、ここでは status=resolved にします。
+func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	var req struct {
+		MemberID string `json:"memberId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	memberID := strings.TrimSpace(req.MemberID)
+	if memberID == "" {
+		writeInquiryErr(w, inquirydom.ErrInvalidResolvedBy)
+		return
+	}
+
+	updated, err := h.uc.ResolveByMember(ctx, usecase.ResolveInquiryInput{
+		InquiryID: id,
+		MemberID:  memberID,
+	})
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+// POST /inquiries/{id}/reopen
+//
+// Body:
+//
+//	{
+//	  "memberId": "member_document_id"
+//	}
+//
+// company member が resolved 状態の問い合わせを open に戻します。
+func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	var req struct {
+		MemberID string `json:"memberId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	memberID := strings.TrimSpace(req.MemberID)
+	if memberID == "" {
+		writeInquiryErr(w, inquirydom.ErrInvalidUpdatedBy)
+		return
+	}
+
+	updated, err := h.uc.ReopenByMember(ctx, usecase.ReopenInquiryInput{
+		InquiryID: id,
+		MemberID:  memberID,
+	})
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(updated)
 }
 
 // POST /inquiries/{id}/images
@@ -221,8 +328,8 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 	}
 
 	createdAt := time.Now().UTC()
-	if req.CreatedAt != nil && *req.CreatedAt != "" {
-		t, err := time.Parse(time.RFC3339, *req.CreatedAt)
+	if req.CreatedAt != nil && strings.TrimSpace(*req.CreatedAt) != "" {
+		t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.CreatedAt))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid createdAt"})
@@ -231,23 +338,24 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		createdAt = t.UTC()
 	}
 
-	createdBy := req.CreatedBy
+	createdBy := strings.TrimSpace(req.CreatedBy)
 	if createdBy == "" {
 		createdBy = "system"
 	}
 
 	var objectPath *string
-	if req.ObjectPath != "" {
-		objectPath = &req.ObjectPath
+	if strings.TrimSpace(req.ObjectPath) != "" {
+		v := strings.TrimSpace(req.ObjectPath)
+		objectPath = &v
 	}
 
 	image, err := inquirydom.NewImageFileMinimal(
 		id,
-		req.FileName,
-		req.FileURL,
+		strings.TrimSpace(req.FileName),
+		strings.TrimSpace(req.FileURL),
 		objectPath,
 		req.FileSize,
-		req.MimeType,
+		strings.TrimSpace(req.MimeType),
 		createdAt,
 		createdBy,
 	)
@@ -297,7 +405,7 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	fileName := r.URL.Query().Get("fileName")
+	fileName := strings.TrimSpace(r.URL.Query().Get("fileName"))
 	if fileName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "fileName is required"})
@@ -336,6 +444,7 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 
 	switch {
 	case errors.Is(err, inquirydom.ErrInvalidID),
+		errors.Is(err, inquirydom.ErrInvalidProductID),
 		errors.Is(err, inquirydom.ErrInvalidAvatarID),
 		errors.Is(err, inquirydom.ErrInvalidSubject),
 		errors.Is(err, inquirydom.ErrInvalidContent),
@@ -346,6 +455,10 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, inquirydom.ErrInvalidUpdatedBy),
 		errors.Is(err, inquirydom.ErrInvalidDeletedAt),
 		errors.Is(err, inquirydom.ErrInvalidDeletedBy),
+		errors.Is(err, inquirydom.ErrInvalidResolvedAt),
+		errors.Is(err, inquirydom.ErrInvalidResolvedBy),
+		errors.Is(err, inquirydom.ErrInvalidClosedAt),
+		errors.Is(err, inquirydom.ErrInvalidClosedBy),
 		errors.Is(err, inquirydom.ErrInvalidImageInquiryID),
 		errors.Is(err, inquirydom.ErrInvalidImageFileName),
 		errors.Is(err, inquirydom.ErrInvalidImageFileURL),
@@ -360,8 +473,13 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, inquirydom.ErrInvalidImageDeletedBy),
 		errors.Is(err, inquirydom.ErrInconsistentInquiry),
 		errors.Is(err, inquirydom.ErrDuplicateImage),
-		errors.Is(err, inquirydom.ErrTooManyImages):
+		errors.Is(err, inquirydom.ErrTooManyImages),
+		errors.Is(err, inquirydom.ErrInquiryAlreadyClosed),
+		errors.Is(err, inquirydom.ErrInquiryInvalidWorkflow):
 		code = http.StatusBadRequest
+
+	case errors.Is(err, inquirydom.ErrInquiryForbidden):
+		code = http.StatusForbidden
 
 	case errors.Is(err, inquirydom.ErrNotFound):
 		code = http.StatusNotFound

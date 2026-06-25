@@ -13,6 +13,12 @@ import (
 type InquiryStatus string
 type InquiryType string
 
+const (
+	InquiryStatusOpen     InquiryStatus = "open"
+	InquiryStatusResolved InquiryStatus = "resolved"
+	InquiryStatusClosed   InquiryStatus = "closed"
+)
+
 // FirebaseStorageDeleteOp represents a delete operation target in Firebase Storage.
 // ObjectPath is the Firebase Storage object path, for example:
 // inquiry-images/{inquiryId}/{imageId}/{fileName}
@@ -42,25 +48,36 @@ type ImageFile struct {
 }
 
 // Inquiry is the root aggregate.
-// Images are now part of the inquiry aggregate.
+//
+// Inquiry is identified in the mall context by productId + avatarId.
+// Images are part of the inquiry aggregate.
 // The old inquiryImage domain and ImageID reference are no longer needed.
+//
+// Lifecycle:
+// - avatar creates an inquiry as open.
+// - company member replies and can mark it as resolved.
+// - avatar closes the ticket after confirming the issue has been handled.
 type Inquiry struct {
-	ID                 string        `json:"id"`
-	AvatarID           string        `json:"avatarId"`
-	Subject            string        `json:"subject"`
-	Content            string        `json:"content"`
-	Status             InquiryStatus `json:"status"`
-	InquiryType        InquiryType   `json:"inquiryType"`
-	IsRead             bool          `json:"isRead"`
-	ProductBlueprintID *string       `json:"productBlueprintId,omitempty"`
-	TokenBlueprintID   *string       `json:"tokenBlueprintId,omitempty"`
-	AssigneeID         *string       `json:"assigneeId,omitempty"`
-	Images             []ImageFile   `json:"images,omitempty"`
-	CreatedAt          time.Time     `json:"createdAt"`
-	UpdatedAt          time.Time     `json:"updatedAt"`
-	UpdatedBy          *string       `json:"updatedBy,omitempty"`
-	DeletedAt          *time.Time    `json:"deletedAt,omitempty"`
-	DeletedBy          *string       `json:"deletedBy,omitempty"`
+	ID          string        `json:"id"`
+	ProductID   string        `json:"productId"`
+	AvatarID    string        `json:"avatarId"`
+	Subject     string        `json:"subject"`
+	Content     string        `json:"content"`
+	Status      InquiryStatus `json:"status"`
+	InquiryType InquiryType   `json:"inquiryType"`
+	IsRead      bool          `json:"isRead"`
+	Images      []ImageFile   `json:"images,omitempty"`
+
+	ResolvedAt *time.Time `json:"resolvedAt,omitempty"`
+	ResolvedBy *string    `json:"resolvedBy,omitempty"`
+	ClosedAt   *time.Time `json:"closedAt,omitempty"`
+	ClosedBy   *string    `json:"closedBy,omitempty"`
+
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+	UpdatedBy *string    `json:"updatedBy,omitempty"`
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy *string    `json:"deletedBy,omitempty"`
 }
 
 // Policy
@@ -87,6 +104,7 @@ var (
 // Errors
 var (
 	ErrInvalidID          = errors.New("inquiry: invalid id")
+	ErrInvalidProductID   = errors.New("inquiry: invalid productId")
 	ErrInvalidAvatarID    = errors.New("inquiry: invalid avatarId")
 	ErrInvalidSubject     = errors.New("inquiry: invalid subject")
 	ErrInvalidContent     = errors.New("inquiry: invalid content")
@@ -97,6 +115,10 @@ var (
 	ErrInvalidUpdatedBy   = errors.New("inquiry: invalid updatedBy")
 	ErrInvalidDeletedAt   = errors.New("inquiry: invalid deletedAt")
 	ErrInvalidDeletedBy   = errors.New("inquiry: invalid deletedBy")
+	ErrInvalidResolvedAt  = errors.New("inquiry: invalid resolvedAt")
+	ErrInvalidResolvedBy  = errors.New("inquiry: invalid resolvedBy")
+	ErrInvalidClosedAt    = errors.New("inquiry: invalid closedAt")
+	ErrInvalidClosedBy    = errors.New("inquiry: invalid closedBy")
 
 	ErrInvalidImageInquiryID  = errors.New("inquiry: invalid image inquiryId")
 	ErrInvalidImageFileName   = errors.New("inquiry: invalid image fileName")
@@ -111,21 +133,25 @@ var (
 	ErrInvalidImageDeletedAt  = errors.New("inquiry: invalid image deletedAt")
 	ErrInvalidImageDeletedBy  = errors.New("inquiry: invalid image deletedBy")
 
-	ErrDuplicateImage      = errors.New("inquiry: duplicate image")
-	ErrTooManyImages       = errors.New("inquiry: too many images")
-	ErrInconsistentInquiry = errors.New("inquiry: image inquiryId must match inquiry id")
+	ErrDuplicateImage         = errors.New("inquiry: duplicate image")
+	ErrTooManyImages          = errors.New("inquiry: too many images")
+	ErrInconsistentInquiry    = errors.New("inquiry: image inquiryId must match inquiry id")
+	ErrInquiryAlreadyClosed   = errors.New("inquiry: already closed")
+	ErrInquiryForbidden       = errors.New("inquiry: forbidden")
+	ErrInquiryInvalidWorkflow = errors.New("inquiry: invalid workflow")
 )
 
 // Constructors
 
 func New(
-	id, avatarID, subject, content string,
+	id, productID, avatarID, subject, content string,
 	status InquiryStatus,
 	inquiryType InquiryType,
 	createdAt, updatedAt time.Time,
 ) (Inquiry, error) {
 	in := Inquiry{
 		ID:          id,
+		ProductID:   productID,
 		AvatarID:    avatarID,
 		Subject:     subject,
 		Content:     content,
@@ -136,6 +162,11 @@ func New(
 		CreatedAt:   createdAt.UTC(),
 		UpdatedAt:   updatedAt.UTC(),
 	}
+
+	if in.Status == "" {
+		in.Status = InquiryStatusOpen
+	}
+
 	if err := in.Validate(); err != nil {
 		return Inquiry{}, err
 	}
@@ -143,31 +174,41 @@ func New(
 }
 
 func NewWithOptional(
-	id, avatarID, subject, content string,
+	id, productID, avatarID, subject, content string,
 	status InquiryStatus,
 	inquiryType InquiryType,
 	createdAt, updatedAt time.Time,
-	productBlueprintID, tokenBlueprintID, assigneeID, updatedBy, deletedBy *string,
+	resolvedAt *time.Time,
+	resolvedBy *string,
+	closedAt *time.Time,
+	closedBy *string,
+	updatedBy, deletedBy *string,
 	deletedAt *time.Time,
 	images []ImageFile,
 ) (Inquiry, error) {
 	in := Inquiry{
-		ID:                 id,
-		AvatarID:           avatarID,
-		Subject:            subject,
-		Content:            content,
-		Status:             status,
-		InquiryType:        inquiryType,
-		IsRead:             false,
-		ProductBlueprintID: productBlueprintID,
-		TokenBlueprintID:   tokenBlueprintID,
-		AssigneeID:         assigneeID,
-		Images:             images,
-		CreatedAt:          createdAt.UTC(),
-		UpdatedAt:          updatedAt.UTC(),
-		UpdatedBy:          updatedBy,
-		DeletedAt:          deletedAt,
-		DeletedBy:          deletedBy,
+		ID:          id,
+		ProductID:   productID,
+		AvatarID:    avatarID,
+		Subject:     subject,
+		Content:     content,
+		Status:      status,
+		InquiryType: inquiryType,
+		IsRead:      false,
+		Images:      images,
+		ResolvedAt:  normalizeOptionalTime(resolvedAt),
+		ResolvedBy:  resolvedBy,
+		ClosedAt:    normalizeOptionalTime(closedAt),
+		ClosedBy:    closedBy,
+		CreatedAt:   createdAt.UTC(),
+		UpdatedAt:   updatedAt.UTC(),
+		UpdatedBy:   updatedBy,
+		DeletedAt:   normalizeOptionalTime(deletedAt),
+		DeletedBy:   deletedBy,
+	}
+
+	if in.Status == "" {
+		in.Status = InquiryStatusOpen
 	}
 	if in.Images == nil {
 		in.Images = []ImageFile{}
@@ -259,6 +300,86 @@ func (i *Inquiry) MarkAsUnread(now time.Time) error {
 	}
 	i.IsRead = false
 	i.UpdatedAt = now.UTC()
+	return nil
+}
+
+// ResolveByMember marks the inquiry as resolved by a company member.
+//
+// Company members should resolve inquiries, not close them.
+// The final close is performed by the avatar after confirmation.
+func (i *Inquiry) ResolveByMember(memberID string, now time.Time) error {
+	if memberID == "" {
+		return ErrInvalidResolvedBy
+	}
+	if now.IsZero() {
+		return ErrInvalidResolvedAt
+	}
+	if i.Status == InquiryStatusClosed {
+		return ErrInquiryAlreadyClosed
+	}
+
+	resolvedAt := now.UTC()
+	resolvedBy := memberID
+
+	i.Status = InquiryStatusResolved
+	i.ResolvedAt = &resolvedAt
+	i.ResolvedBy = &resolvedBy
+	i.UpdatedAt = resolvedAt
+	i.UpdatedBy = &resolvedBy
+
+	return nil
+}
+
+// ReopenByMember reopens a resolved inquiry if further handling is required.
+func (i *Inquiry) ReopenByMember(memberID string, now time.Time) error {
+	if memberID == "" {
+		return ErrInvalidUpdatedBy
+	}
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+	if i.Status == InquiryStatusClosed {
+		return ErrInquiryAlreadyClosed
+	}
+
+	updatedAt := now.UTC()
+	updatedBy := memberID
+
+	i.Status = InquiryStatusOpen
+	i.ResolvedAt = nil
+	i.ResolvedBy = nil
+	i.UpdatedAt = updatedAt
+	i.UpdatedBy = &updatedBy
+
+	return nil
+}
+
+// CloseByAvatar closes the inquiry by the owner avatar.
+//
+// Only the avatar that created the inquiry can close it.
+func (i *Inquiry) CloseByAvatar(avatarID string, now time.Time) error {
+	if avatarID == "" {
+		return ErrInvalidAvatarID
+	}
+	if now.IsZero() {
+		return ErrInvalidClosedAt
+	}
+	if i.AvatarID != avatarID {
+		return ErrInquiryForbidden
+	}
+	if i.Status == InquiryStatusClosed {
+		return ErrInquiryAlreadyClosed
+	}
+
+	closedAt := now.UTC()
+	closedBy := avatarID
+
+	i.Status = InquiryStatusClosed
+	i.ClosedAt = &closedAt
+	i.ClosedBy = &closedBy
+	i.UpdatedAt = closedAt
+	i.UpdatedBy = &closedBy
+
 	return nil
 }
 
@@ -364,6 +485,9 @@ func (i Inquiry) Validate() error {
 	if i.ID == "" {
 		return ErrInvalidID
 	}
+	if i.ProductID == "" {
+		return ErrInvalidProductID
+	}
 	if i.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
@@ -373,7 +497,7 @@ func (i Inquiry) Validate() error {
 	if i.Content == "" {
 		return ErrInvalidContent
 	}
-	if string(i.Status) == "" {
+	if !isValidInquiryStatus(i.Status) {
 		return ErrInvalidStatus
 	}
 	if string(i.InquiryType) == "" {
@@ -395,6 +519,13 @@ func (i Inquiry) Validate() error {
 		return ErrInvalidDeletedBy
 	}
 
+	if err := validateResolvedFields(i); err != nil {
+		return err
+	}
+	if err := validateClosedFields(i); err != nil {
+		return err
+	}
+
 	if MaxImages > 0 && len(i.Images) > MaxImages {
 		return ErrTooManyImages
 	}
@@ -413,6 +544,50 @@ func (i Inquiry) Validate() error {
 			return ErrDuplicateImage
 		}
 		seen[u] = struct{}{}
+	}
+
+	return nil
+}
+
+func validateResolvedFields(i Inquiry) error {
+	if i.ResolvedAt != nil {
+		if i.ResolvedAt.IsZero() || i.ResolvedAt.Before(i.CreatedAt) {
+			return ErrInvalidResolvedAt
+		}
+	}
+	if i.ResolvedBy != nil && *i.ResolvedBy == "" {
+		return ErrInvalidResolvedBy
+	}
+
+	if i.Status == InquiryStatusResolved {
+		if i.ResolvedAt == nil || i.ResolvedAt.IsZero() {
+			return ErrInvalidResolvedAt
+		}
+		if i.ResolvedBy == nil || *i.ResolvedBy == "" {
+			return ErrInvalidResolvedBy
+		}
+	}
+
+	return nil
+}
+
+func validateClosedFields(i Inquiry) error {
+	if i.ClosedAt != nil {
+		if i.ClosedAt.IsZero() || i.ClosedAt.Before(i.CreatedAt) {
+			return ErrInvalidClosedAt
+		}
+	}
+	if i.ClosedBy != nil && *i.ClosedBy == "" {
+		return ErrInvalidClosedBy
+	}
+
+	if i.Status == InquiryStatusClosed {
+		if i.ClosedAt == nil || i.ClosedAt.IsZero() {
+			return ErrInvalidClosedAt
+		}
+		if i.ClosedBy == nil || *i.ClosedBy == "" {
+			return ErrInvalidClosedBy
+		}
 	}
 
 	return nil
@@ -477,6 +652,15 @@ func validateImageFile(img ImageFile) error {
 }
 
 // Helpers
+
+func isValidInquiryStatus(status InquiryStatus) bool {
+	switch status {
+	case InquiryStatusOpen, InquiryStatusResolved, InquiryStatusClosed:
+		return true
+	default:
+		return false
+	}
+}
 
 func normalizeOptionalTime(t *time.Time) *time.Time {
 	if t == nil {

@@ -87,6 +87,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	cartH := notImplemented("Cart")
 	payH := notImplemented("Payment")
 	orderH := notImplemented("Order")
+	inquiryH := notImplemented("Inquiry")
 	meAvatarsH := notImplemented("MeAvatars")
 	announcementH := notImplemented("Announcement")
 
@@ -228,6 +229,17 @@ func Register(mux *http.ServeMux, cont *Container) {
 		orderH = mallhandler.NewOrderHandler(cont.OrderUC, cont.HistoryQ)
 	}
 
+	// Inquiry
+	//
+	// Routes are registered in mall router as auth+avatar required:
+	// - POST /mall/me/inquiries
+	// - GET  /mall/me/inquiries/{id}
+	// - POST /mall/me/inquiries/{id}/reply
+	// - POST /mall/me/inquiries/{id}/close
+	if cont.InquiryUC != nil {
+		inquiryH = mallhandler.NewInquiryHandler(cont.InquiryUC)
+	}
+
 	// Preview
 	if cont.PreviewQ != nil {
 		opts := []mallhandler.PreviewHandlerOption{}
@@ -310,6 +322,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		OwnerResolve:      notImplemented("OwnerResolve(endpoint_disabled)"),
 		Payment:           payH,
 		Order:             orderH,
+		Inquiry:           inquiryH,
 		Announcement:      announcementH,
 
 		SetupStatus: setupStatusH,

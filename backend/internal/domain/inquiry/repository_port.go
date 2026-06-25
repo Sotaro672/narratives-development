@@ -17,16 +17,18 @@ import (
 // image add/update/delete should be handled by reading Inquiry,
 // mutating Inquiry.Images, and calling Update.
 type InquiryPatch struct {
+	ProductID   *string
 	Subject     *string
 	Content     *string
 	Status      *InquiryStatus
 	InquiryType *InquiryType
 	IsRead      *bool
+	Images      *[]ImageFile
 
-	ProductBlueprintID *string
-	TokenBlueprintID   *string
-	AssigneeID         *string
-	Images             *[]ImageFile
+	ResolvedAt *time.Time
+	ResolvedBy *string
+	ClosedAt   *time.Time
+	ClosedBy   *string
 
 	UpdatedAt *time.Time
 	UpdatedBy *string
@@ -35,26 +37,28 @@ type InquiryPatch struct {
 }
 
 // Filter is used by repository implementations.
-// CompanyID is supplied by ListByCompanyID / CountUnreadByCompanyID,
-// so this filter represents additional conditions within the company scope.
 //
+// Inquiry is identified in the mall context by productId + avatarId.
 // Image filters are included here because inquiryImage is no longer a separate domain.
 type Filter struct {
 	SearchQuery string
 
-	IDs                []string
-	AvatarID           *string
-	AssigneeID         *string
-	Status             *InquiryStatus
-	InquiryType        *InquiryType
-	ProductBlueprintID *string
-	TokenBlueprintID   *string
-	UpdatedBy          *string
-	DeletedBy          *string
+	IDs         []string
+	ProductID   *string
+	AvatarID    *string
+	Status      *InquiryStatus
+	InquiryType *InquiryType
+	UpdatedBy   *string
+	DeletedBy   *string
+
+	ResolvedBy *string
+	ClosedBy   *string
 
 	ImageFileName *string
 
-	Deleted *bool
+	Deleted  *bool
+	Resolved *bool
+	Closed   *bool
 }
 
 // Common aliases.
@@ -90,6 +94,10 @@ type Repository interface {
 
 	// CountUnreadByCompanyID counts inquiries where isRead is false
 	// within the given company scope.
+	//
+	// Inquiry itself does not store companyId. Repository implementations that
+	// cannot resolve company scope directly should keep this as a compatibility
+	// method until company-scoped inquiry listing/counting is moved to a query service.
 	CountUnreadByCompanyID(
 		ctx context.Context,
 		companyID string,

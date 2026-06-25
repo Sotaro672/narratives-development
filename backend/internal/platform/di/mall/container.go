@@ -83,10 +83,14 @@ type Container struct {
 	CartUC            *usecase.CartUsecase
 	PaymentUC         *usecase.PaymentUsecase
 	OrderUC           *usecase.OrderUsecase
+	InquiryUC         *usecase.InquiryUsecase
 	AnnouncementUC    *usecase.AnnouncementUsecase
 
 	OrderMailer   *mailadp.OrderMailer
 	OrderMailFrom string
+
+	InquiryMailer *mailadp.InquiryMailer
+	InquiryMailTo string
 
 	AvatarRepo avatardom.Repository
 	BrandRepo  branddom.Repository
@@ -197,6 +201,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
 
+	inquiryRepo := outfs.NewInquiryRepositoryFS(fsClient)
+
 	announcementRepo := outfs.NewAnnouncementRepositoryFS(fsClient)
 	announcementAvatarRepo := outfs.NewAnnouncementAvatarRepositoryFS(fsClient)
 	announcementAttachmentRepo := outfs.NewAnnouncementAttachmentRepositoryFS(fsClient)
@@ -236,6 +242,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		companyRepo,
 	)
 	c.OrderMailFrom = os.Getenv("RESEND_FROM")
+
+	c.InquiryMailer = mailadp.NewInquiryMailer(
+		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),
+	)
+	c.InquiryMailTo = os.Getenv("INQUIRY_MAIL_TO")
 
 	projectID := infra.ProjectID
 	avatarWalletSvc := solana.NewAvatarWalletService(projectID)
@@ -308,6 +319,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	})
 
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo, cartRepo)
+
+	c.InquiryUC = usecase.NewInquiryUsecaseWithMailer(
+		inquiryRepo,
+		c.InquiryMailer,
+		c.OrderMailFrom,
+		c.InquiryMailTo,
+	)
 
 	{
 		pf, configured, err := buildPaymentFlowUsecase(infra, c.PaymentUC)

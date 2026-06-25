@@ -73,6 +73,13 @@ type Deps struct {
 
 	Order http.Handler
 
+	// ✅ inquiries (me)
+	// - POST /mall/me/inquiries
+	// - GET  /mall/me/inquiries/{id}
+	// - POST /mall/me/inquiries/{id}/reply
+	// - POST /mall/me/inquiries/{id}/close
+	Inquiry http.Handler
+
 	// ✅ me announcements
 	// - GET  /mall/me/announcement
 	// - POST /mall/me/announcement/{announcementId}/read
@@ -311,4 +318,8 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// orders (me)
 	handleSafeAuthAvatar(mux, "/mall/me/orders", deps.Order, "Order(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/orders/", deps.Order, "Order(me)", auth, avatar)
+
+	// inquiries (me)
+	handleSafeAuthAvatar(mux, "/mall/me/inquiries", deps.Inquiry, "Inquiry(me)", auth, avatar)
+	handleSafeAuthAvatar(mux, "/mall/me/inquiries/", deps.Inquiry, "Inquiry(me)", auth, avatar)
 }

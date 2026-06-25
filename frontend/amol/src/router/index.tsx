@@ -25,6 +25,7 @@ import PaymentPage from "../pages/PaymentPage";
 import OrderConfirmedPage from "../pages/OrderConfirmedPage";
 import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
+import InquiryPage from "../pages/InquiryPage";
 import WalletPage from "../pages/WalletPage";
 import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";
@@ -181,6 +182,14 @@ export const router = createBrowserRouter([
   {
     path: "/scan/result/:productId",
     element: <ScanResultPage />,
+  },
+  {
+    path: "/inquiries/new",
+    element: (
+      <ProtectedRoute>
+        <InquiryPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/wallet",

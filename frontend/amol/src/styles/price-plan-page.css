@@ -1,5 +1,7 @@
 .price-plan-page {
   width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .price-plan-page__header {
@@ -24,6 +26,8 @@
 }
 
 .price-plan-page__subscription {
+  max-width: 100%;
+  min-width: 0;
   margin-bottom: 44px;
 }
 
@@ -50,15 +54,20 @@
 }
 
 .price-plan-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+  -webkit-overflow-scrolling: touch;
 }
 
 .price-plan-table {
-  width: 100%;
+  width: max-content;
   min-width: 720px;
   border-collapse: collapse;
 }
@@ -122,11 +131,13 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 28px;
   align-items: stretch;
+  min-width: 0;
 }
 
 .price-plan-card {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 100%;
   padding: 30px;
   border: 1px solid rgba(15, 23, 42, 0.1);
@@ -317,5 +328,86 @@
 
   .price-plan-card__fee-box {
     padding: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .price-plan-page__header {
+    margin-bottom: 32px;
+  }
+
+  .price-plan-page__title {
+    font-size: 2rem;
+  }
+
+  .price-plan-page__subscription {
+    margin-bottom: 36px;
+  }
+
+  .price-plan-page__subscription-header {
+    margin-bottom: 16px;
+  }
+
+  .price-plan-page__subscription-title {
+    font-size: 1.35rem;
+  }
+
+  .price-plan-table-wrap {
+    border-radius: 20px;
+  }
+
+  .price-plan-table {
+    min-width: 560px;
+  }
+
+  .price-plan-table th,
+  .price-plan-table td {
+    padding: 14px 12px;
+    font-size: 0.86rem;
+  }
+
+  .price-plan-table thead th {
+    font-size: 0.88rem;
+  }
+
+  .price-plan-table tbody th {
+    font-size: 0.86rem;
+  }
+
+  .price-plan-table tbody td {
+    font-size: 0.88rem;
+  }
+
+  .price-plan-table__available,
+  .price-plan-table__unavailable {
+    font-size: 1rem !important;
+  }
+
+  .price-plan-page__connection-header {
+    margin-bottom: 22px;
+    text-align: left;
+  }
+
+  .price-plan-page__description {
+    font-size: 0.94rem;
+    line-height: 1.8;
+  }
+
+  .price-plan-card {
+    padding: 22px;
+    border-radius: 22px;
+  }
+
+  .price-plan-card__title {
+    font-size: 1.25rem;
+  }
+
+  .price-plan-card__section {
+    margin-top: 22px;
+  }
+
+  .price-plan-card__fee-box {
+    padding: 16px;
+    border-radius: 18px;
   }
 }

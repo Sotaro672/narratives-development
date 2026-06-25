@@ -1,5 +1,6 @@
 // frontend/amol/src/pages/ScanResultPage.tsx
 import { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
@@ -10,6 +11,7 @@ import { useScanResultPage } from "../features/scan-result/presentation/hooks/us
 import "../styles/scan-result-page.css";
 
 export default function ScanResultPage() {
+  const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
 
   const [reviewBody, setReviewBody] = useState("");
@@ -39,6 +41,16 @@ export default function ScanResultPage() {
     }
   }, [reviewBody, reviewRating, submitReview]);
 
+  const handleOpenInquiryPage = useCallback(() => {
+    const productId = state.productId.trim();
+
+    if (!productId) {
+      return;
+    }
+
+    navigate(`/inquiries/new?productId=${encodeURIComponent(productId)}`);
+  }, [navigate, state.productId]);
+
   const isLoggedIn = state.authAvailable === true;
 
   const canPostReview =
@@ -46,6 +58,8 @@ export default function ScanResultPage() {
     !state.loading &&
     !state.postingReview &&
     Boolean(reviewBody.trim());
+
+  const canOpenInquiryPage = isLoggedIn && Boolean(state.productId.trim());
 
   return (
     <Layout
@@ -58,6 +72,9 @@ export default function ScanResultPage() {
       hideHamburgerMenu={false}
       hideSettingsButton={!isLoggedIn}
       mainClassName="scan-result-page"
+      actionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
+      onActionButtonClick={canOpenInquiryPage ? handleOpenInquiryPage : undefined}
+      actionButtonDisabled={!canOpenInquiryPage}
       footerProps={
         isLoggedIn && isMobilePortrait && state.ownedByWallet === true
           ? {
