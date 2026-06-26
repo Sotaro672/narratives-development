@@ -298,6 +298,99 @@ func (r *InquiryRepositoryFS) Delete(ctx context.Context, id string) error {
 }
 
 // =======================
+// Reply Subcollection Repository
+// =======================
+
+// InquiryReplyRepositoryFS implements Inquiry reply repository using Firestore.
+//
+// 保存先:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+type InquiryReplyRepositoryFS struct {
+	Client *firestore.Client
+}
+
+func NewInquiryReplyRepositoryFS(client *firestore.Client) *InquiryReplyRepositoryFS {
+	return &InquiryReplyRepositoryFS{Client: client}
+}
+
+func (r *InquiryReplyRepositoryFS) col(inquiryID string) *firestore.CollectionRef {
+	return r.Client.
+		Collection("inquiries").
+		Doc(inquiryID).
+		Collection("replies")
+}
+
+func (r *InquiryReplyRepositoryFS) Create(
+	ctx context.Context,
+	reply idom.Reply,
+) (idom.Reply, error) {
+	if r.Client == nil {
+		return idom.Reply{}, errors.New("firestore client is nil")
+	}
+
+	if err := reply.Validate(); err != nil {
+		return idom.Reply{}, err
+	}
+
+	docRef := r.col(reply.InquiryID).Doc(reply.ID)
+
+	_, err := docRef.Create(ctx, replyToDocData(reply))
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return idom.Reply{}, idom.ErrConflict
+		}
+		return idom.Reply{}, err
+	}
+
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		return idom.Reply{}, err
+	}
+
+	return docToReply(snap)
+}
+
+func (r *InquiryReplyRepositoryFS) ListByInquiryID(
+	ctx context.Context,
+	inquiryID string,
+) ([]idom.Reply, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	if inquiryID == "" {
+		return nil, idom.ErrInvalidReplyInquiryID
+	}
+
+	it := r.col(inquiryID).
+		OrderBy("createdAt", firestore.Asc).
+		OrderBy("id", firestore.Asc).
+		Documents(ctx)
+	defer it.Stop()
+
+	replies := make([]idom.Reply, 0)
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		reply, err := docToReply(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		replies = append(replies, reply)
+	}
+
+	return replies, nil
+}
+
+// =======================
 // Mapping Helpers
 // =======================
 
@@ -323,6 +416,26 @@ func inquiryToDocData(in idom.Inquiry) map[string]any {
 	setOptionalString(m, "updatedBy", in.UpdatedBy)
 	setOptionalTime(m, "deletedAt", in.DeletedAt)
 	setOptionalString(m, "deletedBy", in.DeletedBy)
+
+	return m
+}
+
+func replyToDocData(reply idom.Reply) map[string]any {
+	m := map[string]any{
+		"id":         reply.ID,
+		"inquiryId":  reply.InquiryID,
+		"senderType": string(reply.SenderType),
+		"senderId":   reply.SenderID,
+		"content":    reply.Content,
+		"images":     imagesToDocData(reply.Images),
+		"createdAt":  reply.CreatedAt.UTC(),
+		"createdBy":  reply.CreatedBy,
+	}
+
+	setOptionalTime(m, "updatedAt", reply.UpdatedAt)
+	setOptionalString(m, "updatedBy", reply.UpdatedBy)
+	setOptionalTime(m, "deletedAt", reply.DeletedAt)
+	setOptionalString(m, "deletedBy", reply.DeletedBy)
 
 	return m
 }
@@ -391,6 +504,42 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 	in.Images = docImagesToDomain(data["images"], in.ID)
 
 	return in, nil
+}
+
+func docToReply(doc *firestore.DocumentSnapshot) (idom.Reply, error) {
+	data := doc.Data()
+	if data == nil {
+		return idom.Reply{}, fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
+	}
+
+	reply := idom.Reply{
+		ID:         asString(data["id"]),
+		InquiryID:  asString(data["inquiryId"]),
+		SenderType: idom.ReplySenderType(asString(data["senderType"])),
+		SenderID:   asString(data["senderId"]),
+		Content:    asString(data["content"]),
+		CreatedBy:  asString(data["createdBy"]),
+		UpdatedAt:  ptrTimeFromMap(data, "updatedAt"),
+		UpdatedBy:  ptrStringFromMap(data, "updatedBy"),
+		DeletedAt:  ptrTimeFromMap(data, "deletedAt"),
+		DeletedBy:  ptrStringFromMap(data, "deletedBy"),
+	}
+
+	if reply.ID == "" {
+		reply.ID = doc.Ref.ID
+	}
+
+	if t, ok := asTime(data["createdAt"]); ok {
+		reply.CreatedAt = t.UTC()
+	}
+
+	reply.Images = docImagesToDomain(data["images"], reply.InquiryID)
+
+	if err := reply.Validate(); err != nil {
+		return idom.Reply{}, err
+	}
+
+	return reply, nil
 }
 
 func docImagesToDomain(raw any, fallbackInquiryID string) []idom.ImageFile {

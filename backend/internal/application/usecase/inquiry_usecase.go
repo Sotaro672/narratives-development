@@ -30,13 +30,32 @@ type AvatarEmailResolver interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
+// InquiryReplyRepository is the minimal repository required for storing
+// inquiry replies in Firestore subcollection:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+//
+// Reply is intentionally separated from Inquiry.Content.
+// Inquiry.Content must remain the first inquiry body only.
+type InquiryReplyRepository interface {
+	Create(ctx context.Context, reply inquirydom.Reply) (inquirydom.Reply, error)
+	ListByInquiryID(ctx context.Context, inquiryID string) ([]inquirydom.Reply, error)
+}
+
 // InquiryUsecase は Inquiry の command を扱います。
 //
 // 画像は Inquiry.Images として Inquiry 集約内で管理します。
 // Firebase Storage への保存・削除は frontend / application 層の責務とし、
 // domain / repository では fileUrl と objectPath のメタデータのみ扱います。
+//
+// 返信は Inquiry.Content へ追記せず、Firestore subcollection:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+//
+// に保存します。
 type InquiryUsecase struct {
-	repo inquirydom.Repository
+	repo      inquirydom.Repository
+	replyRepo InquiryReplyRepository
 
 	mailer   InquiryCreatedMailer
 	mailFrom string
@@ -97,6 +116,19 @@ func (uc *InquiryUsecase) SetInquiryCreatedMailer(
 	uc.mailTo = mailTo
 }
 
+// SetReplyRepository は Inquiry reply subcollection 保存用 repository を設定します。
+//
+// 保存先:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+func (uc *InquiryUsecase) SetReplyRepository(repo InquiryReplyRepository) {
+	if uc == nil {
+		return
+	}
+
+	uc.replyRepo = repo
+}
+
 // SetAvatarEmailResolver は Inquiry.AvatarID から avatar を取得する resolver を設定します。
 func (uc *InquiryUsecase) SetAvatarEmailResolver(resolver AvatarEmailResolver) {
 	if uc == nil {
@@ -143,6 +175,146 @@ func (uc *InquiryUsecase) Create(ctx context.Context, inq inquirydom.Inquiry) (i
 	}
 
 	return created, nil
+}
+
+// CreateInquiryReplyInput は company member / avatar が問い合わせへ返信する入力です。
+//
+// Console からの返信では SenderType=member, SenderID=memberId を使います。
+// Mall / SNS から avatar が返信する場合は SenderType=avatar, SenderID=avatarId を使います。
+type CreateInquiryReplyInput struct {
+	InquiryID  string
+	SenderType inquirydom.ReplySenderType
+	SenderID   string
+	Content    string
+	Images     []inquirydom.ImageFile
+}
+
+// CreateReply は Inquiry の reply subcollection に返信を作成します。
+//
+// 保存先:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+//
+// Inquiry.Content へ返信本文を追記しません。
+// Inquiry 本体は updatedAt / updatedBy のみ更新します。
+func (uc *InquiryUsecase) CreateReply(
+	ctx context.Context,
+	in CreateInquiryReplyInput,
+) (inquirydom.Reply, error) {
+	if uc == nil || uc.repo == nil {
+		return inquirydom.Reply{}, fmt.Errorf("inquiry usecase: repository is nil")
+	}
+	if uc.replyRepo == nil {
+		return inquirydom.Reply{}, fmt.Errorf("inquiry usecase: reply repository is nil")
+	}
+
+	inquiryID := in.InquiryID
+	senderID := in.SenderID
+
+	if inquiryID == "" {
+		return inquirydom.Reply{}, inquirydom.ErrInvalidReplyInquiryID
+	}
+	if senderID == "" {
+		return inquirydom.Reply{}, inquirydom.ErrInvalidReplySenderID
+	}
+
+	current, err := uc.repo.GetByID(ctx, inquiryID)
+	if err != nil {
+		return inquirydom.Reply{}, err
+	}
+
+	if current.Status == inquirydom.InquiryStatusClosed {
+		return inquirydom.Reply{}, inquirydom.ErrInquiryAlreadyClosed
+	}
+
+	now := uc.nowUTC()
+
+	replyID := newInquiryReplyID(now)
+	reply, err := inquirydom.NewReply(
+		replyID,
+		inquiryID,
+		in.SenderType,
+		senderID,
+		in.Content,
+		in.Images,
+		now,
+		senderID,
+	)
+	if err != nil {
+		return inquirydom.Reply{}, err
+	}
+
+	created, err := uc.replyRepo.Create(ctx, reply)
+	if err != nil {
+		return inquirydom.Reply{}, err
+	}
+
+	updatedBy := senderID
+	if _, err := uc.repo.Update(ctx, inquiryID, inquirydom.InquiryPatch{
+		UpdatedAt: &now,
+		UpdatedBy: &updatedBy,
+	}); err != nil {
+		return inquirydom.Reply{}, err
+	}
+
+	return created, nil
+}
+
+// CreateReplyByMember は company member が問い合わせへ返信します。
+//
+// Console 用の shorthand です。
+func (uc *InquiryUsecase) CreateReplyByMember(
+	ctx context.Context,
+	inquiryID string,
+	memberID string,
+	content string,
+	images []inquirydom.ImageFile,
+) (inquirydom.Reply, error) {
+	return uc.CreateReply(ctx, CreateInquiryReplyInput{
+		InquiryID:  inquiryID,
+		SenderType: inquirydom.ReplySenderTypeMember,
+		SenderID:   memberID,
+		Content:    content,
+		Images:     images,
+	})
+}
+
+// CreateReplyByAvatar は avatar が問い合わせへ返信します。
+//
+// Mall / SNS 用の shorthand です。
+func (uc *InquiryUsecase) CreateReplyByAvatar(
+	ctx context.Context,
+	inquiryID string,
+	avatarID string,
+	content string,
+	images []inquirydom.ImageFile,
+) (inquirydom.Reply, error) {
+	return uc.CreateReply(ctx, CreateInquiryReplyInput{
+		InquiryID:  inquiryID,
+		SenderType: inquirydom.ReplySenderTypeAvatar,
+		SenderID:   avatarID,
+		Content:    content,
+		Images:     images,
+	})
+}
+
+// ListReplies は Inquiry の reply subcollection を取得します。
+//
+// 保存先:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+func (uc *InquiryUsecase) ListReplies(
+	ctx context.Context,
+	inquiryID string,
+) ([]inquirydom.Reply, error) {
+	if uc == nil || uc.replyRepo == nil {
+		return nil, fmt.Errorf("inquiry usecase: reply repository is nil")
+	}
+	if inquiryID == "" {
+		return nil, inquirydom.ErrInvalidReplyInquiryID
+	}
+
+	return uc.replyRepo.ListByInquiryID(ctx, inquiryID)
 }
 
 // ResolveInquiryInput は company member が問い合わせを対処済みにする入力です。
@@ -404,4 +576,12 @@ func (uc *InquiryUsecase) nowUTC() time.Time {
 	}
 
 	return uc.now().UTC()
+}
+
+func newInquiryReplyID(now time.Time) string {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	return fmt.Sprintf("reply_%d", now.UTC().UnixNano())
 }

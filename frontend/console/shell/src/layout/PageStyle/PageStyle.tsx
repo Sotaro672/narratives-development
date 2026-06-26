@@ -11,6 +11,7 @@ import {
   Tag,
   RefreshCw,
   Send,
+  MessageSquareReply,
 } from "lucide-react";
 import "./PageStyle.css";
 
@@ -68,6 +69,8 @@ interface PageStyleProps {
   isSaving?: boolean;
   onSend?: () => void | Promise<void>;
   isSending?: boolean;
+  onReply?: () => void | Promise<void>;
+  isReplying?: boolean;
   onCreate?: () => void | Promise<void>;
   onRefresh?: () => void | Promise<void>;
   isRefreshing?: boolean;
@@ -107,6 +110,8 @@ export default function PageStyle({
   isSaving: controlledIsSaving,
   onSend,
   isSending: controlledIsSending,
+  onReply,
+  isReplying: controlledIsReplying,
   onCreate,
   onRefresh,
   isRefreshing: controlledIsRefreshing,
@@ -135,6 +140,7 @@ export default function PageStyle({
   const [isCreating, setIsCreating] = React.useState(false);
   const [internalIsSaving, setInternalIsSaving] = React.useState(false);
   const [internalIsSending, setInternalIsSending] = React.useState(false);
+  const [internalIsReplying, setInternalIsReplying] = React.useState(false);
   const [isListing, setIsListing] = React.useState(false);
   const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
   const [internalIsClosing, setInternalIsClosing] = React.useState(false);
@@ -143,6 +149,7 @@ export default function PageStyle({
 
   const isSaving = controlledIsSaving ?? internalIsSaving;
   const isSending = controlledIsSending ?? internalIsSending;
+  const isReplying = controlledIsReplying ?? internalIsReplying;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
   const isClosing = controlledIsClosing ?? internalIsClosing;
   const isStatusButtonLoading =
@@ -180,6 +187,17 @@ export default function PageStyle({
       setInternalIsSending(false);
     }
   }, [onSend, isSending]);
+
+  const handleReply = React.useCallback(async () => {
+    if (!onReply || isReplying) return;
+
+    try {
+      setInternalIsReplying(true);
+      await onReply();
+    } finally {
+      setInternalIsReplying(false);
+    }
+  }, [onReply, isReplying]);
 
   const handleList = React.useCallback(async () => {
     if (!onList || isListing) return;
@@ -272,6 +290,23 @@ export default function PageStyle({
                 {isStatusButtonLoading
                   ? statusButtonBusyLabel ?? "更新中"
                   : statusButtonLabel}
+              </button>
+            )}
+
+            {onReply && (
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={() => void handleReply()}
+                disabled={isReplying}
+                aria-busy={isReplying}
+              >
+                {isReplying ? (
+                  <SpinnerArrow size={16} />
+                ) : (
+                  <MessageSquareReply size={16} style={{ marginRight: 4 }} />
+                )}
+                {isReplying ? "準備中" : "返信"}
               </button>
             )}
 

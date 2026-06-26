@@ -101,6 +101,14 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+		case "reply":
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w)
+				return
+			}
+			h.reply(w, r, id)
+			return
+
 		case "resolve":
 			if r.Method != http.MethodPost {
 				methodNotAllowed(w)
@@ -304,6 +312,91 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 	}
 
 	_ = json.NewEncoder(w).Encode(detail)
+}
+
+// POST /inquiries/{id}/reply
+//
+// Body:
+//
+//	{
+//	  "memberId": "member_document_id",
+//	  "content": "返信本文",
+//	  "images": []
+//	}
+//
+// company member が問い合わせに返信します。
+//
+// Reply は Inquiry.Content へ追記せず、Firestore subcollection:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+//
+// に保存します。
+func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	companyID, ok := currentCompanyID(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		MemberID string `json:"memberId"`
+		Content  string `json:"content"`
+		Images   []struct {
+			FileName   string  `json:"fileName"`
+			FileURL    string  `json:"fileUrl"`
+			ObjectPath string  `json:"objectPath"`
+			FileSize   int64   `json:"fileSize"`
+			MimeType   string  `json:"mimeType"`
+			CreatedAt  *string `json:"createdAt"`
+		} `json:"images"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	memberID := strings.TrimSpace(req.MemberID)
+	if memberID == "" {
+		writeInquiryErr(w, inquirydom.ErrInvalidReplySenderID)
+		return
+	}
+
+	content := strings.TrimSpace(req.Content)
+	if content == "" && len(req.Images) == 0 {
+		writeInquiryErr(w, inquirydom.ErrReplyContentOrImageRequired)
+		return
+	}
+
+	detail, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	if detail.Inquiry.Status == inquirydom.InquiryStatusClosed {
+		writeInquiryErr(w, inquirydom.ErrInquiryAlreadyClosed)
+		return
+	}
+
+	now := time.Now().UTC()
+
+	images, err := buildInquiryImagesForConsoleReply(id, memberID, now, req.Images)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	created, err := h.uc.CreateReplyByMember(ctx, id, memberID, content, images)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(created)
 }
 
 // POST /inquiries/{id}/resolve
@@ -564,6 +657,61 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 	_ = json.NewEncoder(w).Encode(updated.Images)
 }
 
+func buildInquiryImagesForConsoleReply(
+	inquiryID string,
+	memberID string,
+	now time.Time,
+	rawImages []struct {
+		FileName   string  `json:"fileName"`
+		FileURL    string  `json:"fileUrl"`
+		ObjectPath string  `json:"objectPath"`
+		FileSize   int64   `json:"fileSize"`
+		MimeType   string  `json:"mimeType"`
+		CreatedAt  *string `json:"createdAt"`
+	},
+) ([]inquirydom.ImageFile, error) {
+	if len(rawImages) == 0 {
+		return []inquirydom.ImageFile{}, nil
+	}
+
+	images := make([]inquirydom.ImageFile, 0, len(rawImages))
+
+	for _, raw := range rawImages {
+		imgCreatedAt := now
+		if raw.CreatedAt != nil && strings.TrimSpace(*raw.CreatedAt) != "" {
+			t, err := time.Parse(time.RFC3339, strings.TrimSpace(*raw.CreatedAt))
+			if err != nil {
+				return nil, inquirydom.ErrInvalidImageCreatedAt
+			}
+			imgCreatedAt = t.UTC()
+		}
+
+		var objectPath *string
+		if strings.TrimSpace(raw.ObjectPath) != "" {
+			v := strings.TrimSpace(raw.ObjectPath)
+			objectPath = &v
+		}
+
+		img, err := inquirydom.NewImageFileMinimal(
+			inquiryID,
+			strings.TrimSpace(raw.FileName),
+			strings.TrimSpace(raw.FileURL),
+			objectPath,
+			raw.FileSize,
+			strings.TrimSpace(raw.MimeType),
+			imgCreatedAt,
+			memberID,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		images = append(images, img)
+	}
+
+	return images, nil
+}
+
 func currentCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	companyID, ok := middleware.CompanyID(r)
 	companyID = strings.TrimSpace(companyID)
@@ -609,6 +757,21 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, inquirydom.ErrInvalidImageUpdatedBy),
 		errors.Is(err, inquirydom.ErrInvalidImageDeletedAt),
 		errors.Is(err, inquirydom.ErrInvalidImageDeletedBy),
+		errors.Is(err, inquirydom.ErrInvalidReplyID),
+		errors.Is(err, inquirydom.ErrInvalidReplyInquiryID),
+		errors.Is(err, inquirydom.ErrInvalidReplySenderType),
+		errors.Is(err, inquirydom.ErrInvalidReplySenderID),
+		errors.Is(err, inquirydom.ErrInvalidReplyContent),
+		errors.Is(err, inquirydom.ErrInvalidReplyCreatedAt),
+		errors.Is(err, inquirydom.ErrInvalidReplyCreatedBy),
+		errors.Is(err, inquirydom.ErrInvalidReplyUpdatedAt),
+		errors.Is(err, inquirydom.ErrInvalidReplyUpdatedBy),
+		errors.Is(err, inquirydom.ErrInvalidReplyDeletedAt),
+		errors.Is(err, inquirydom.ErrInvalidReplyDeletedBy),
+		errors.Is(err, inquirydom.ErrReplyTooManyImages),
+		errors.Is(err, inquirydom.ErrReplyInconsistentImage),
+		errors.Is(err, inquirydom.ErrReplyDuplicateImage),
+		errors.Is(err, inquirydom.ErrReplyContentOrImageRequired),
 		errors.Is(err, inquirydom.ErrInconsistentInquiry),
 		errors.Is(err, inquirydom.ErrDuplicateImage),
 		errors.Is(err, inquirydom.ErrTooManyImages),

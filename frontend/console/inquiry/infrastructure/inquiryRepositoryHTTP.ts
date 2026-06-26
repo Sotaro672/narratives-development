@@ -152,6 +152,10 @@ export type InquiryPageResult<T> = {
   items: T[];
 };
 
+export type InquiryUnreadCountResult = {
+  count: number;
+};
+
 export type ListInquiriesParams = {
   companyId: string;
 
@@ -171,6 +175,8 @@ export type ListInquiriesParams = {
   closed?: boolean;
 };
 
+export type CountUnreadInquiriesParams = ListInquiriesParams;
+
 export type AddInquiryImageParams = {
   fileName: string;
   fileUrl: string;
@@ -187,6 +193,12 @@ export type ResolveInquiryParams = {
 
 export type ReopenInquiryParams = {
   memberId: string;
+};
+
+export type ReplyInquiryParams = {
+  memberId: string;
+  content: string;
+  images?: InquiryImageFile[];
 };
 
 // -----------------------------------------------------------
@@ -247,6 +259,10 @@ async function readErrorDetail(res: Response): Promise<string> {
 // -----------------------------------------------------------
 // GET: Inquiry 一覧
 //   backend: GET /inquiries/company/{companyId}
+//
+// NOTE:
+//   URL 上の companyId は既存 route 互換のため渡す。
+//   実際の company boundary は backend middleware の companyId が使われる。
 // -----------------------------------------------------------
 
 export async function listInquiriesHTTP(
@@ -274,8 +290,45 @@ export async function listInquiriesHTTP(
 }
 
 // -----------------------------------------------------------
+// GET: Inquiry 未読件数
+//   backend: GET /inquiries/company/{companyId}/unread-count
+//
+// Query:
+//   listInquiriesHTTP と同じ filter を利用可能。
+// -----------------------------------------------------------
+
+export async function countUnreadInquiriesHTTP(
+  params: CountUnreadInquiriesParams,
+): Promise<InquiryUnreadCountResult> {
+  const companyId = assertID(params.companyId, "companyId");
+  const headers = await getAuthHeadersOrThrow();
+
+  const query = buildInquiryListQuery(params);
+  const url = `${API_BASE}/inquiries/company/${encodeURIComponent(
+    companyId,
+  )}/unread-count${query}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers,
+  });
+
+  if (!res.ok) {
+    const detail = await readErrorDetail(res);
+    throw new Error(
+      `問い合わせ未読件数の取得に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+    );
+  }
+
+  return (await res.json()) as InquiryUnreadCountResult;
+}
+
+// -----------------------------------------------------------
 // GET: Inquiry 詳細
 //   backend: GET /inquiries/{id}
+//
+// NOTE:
+//   backend 側で未読の場合は MarkAsRead される。
 // -----------------------------------------------------------
 
 export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
@@ -366,8 +419,60 @@ export async function reopenInquiryHTTP(
 }
 
 // -----------------------------------------------------------
+// POST: Inquiry 返信
+//   backend: POST /inquiries/{id}/reply
+//
+// Body:
+//   {
+//     "memberId": "member_document_id",
+//     "content": "返信本文",
+//     "images": []
+//   }
+//
+// NOTE:
+//   この関数は frontend の型エラー解消と返信モーダル接続用。
+//   backend 側に POST /inquiries/{id}/reply が未実装の場合は 404 になります。
+// -----------------------------------------------------------
+
+export async function replyInquiryHTTP(
+  id: string,
+  params: ReplyInquiryParams,
+): Promise<Inquiry> {
+  const trimmedId = assertID(id, "id");
+  const memberId = assertID(params.memberId, "memberId");
+  const content = assertID(params.content, "content");
+  const headers = await getAuthJsonHeadersOrThrow();
+
+  const res = await fetch(
+    `${API_BASE}/inquiries/${encodeURIComponent(trimmedId)}/reply`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        memberId,
+        content,
+        images: params.images ?? [],
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await readErrorDetail(res);
+    throw new Error(
+      `問い合わせ返信の送信に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+    );
+  }
+
+  return (await res.json()) as Inquiry;
+}
+
+// -----------------------------------------------------------
 // POST: Inquiry 画像追加
 //   backend: POST /inquiries/{id}/images
+//
+// NOTE:
+//   画像バイナリは frontend から Firebase Storage へ直接保存する。
+//   backend へは Firebase Storage の downloadURL(fileUrl) と objectPath のみ渡す。
 // -----------------------------------------------------------
 
 export async function addInquiryImageHTTP(
@@ -413,6 +518,10 @@ export async function addInquiryImageHTTP(
 // -----------------------------------------------------------
 // DELETE: Inquiry 画像削除
 //   backend: DELETE /inquiries/{id}/images?fileName=...
+//
+// NOTE:
+//   この endpoint は Firestore 上の Inquiry.Images から画像メタデータを削除する。
+//   Firebase Storage の実ファイル削除は別処理で行う必要がある。
 // -----------------------------------------------------------
 
 export async function deleteInquiryImageHTTP(

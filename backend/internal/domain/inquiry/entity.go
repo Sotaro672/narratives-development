@@ -12,11 +12,17 @@ import (
 // Types
 type InquiryStatus string
 type InquiryType string
+type ReplySenderType string
 
 const (
 	InquiryStatusOpen     InquiryStatus = "open"
 	InquiryStatusResolved InquiryStatus = "resolved"
 	InquiryStatusClosed   InquiryStatus = "closed"
+)
+
+const (
+	ReplySenderTypeAvatar ReplySenderType = "avatar"
+	ReplySenderTypeMember ReplySenderType = "member"
 )
 
 // FirebaseStorageDeleteOp represents a delete operation target in Firebase Storage.
@@ -51,10 +57,14 @@ type ImageFile struct {
 //
 // Inquiry is identified in the mall context by productId + avatarId.
 // Images are part of the inquiry aggregate.
-// The old inquiryImage domain and ImageID reference are no longer needed.
+// Replies are NOT stored in Inquiry.Content.
+// Replies should be stored in Firestore subcollection:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
 //
 // Lifecycle:
 // - avatar creates an inquiry as open.
+// - company member can reply to the inquiry.
 // - company member can mark it as resolved.
 // - company member can reopen it.
 // - owner avatar can close the inquiry.
@@ -81,12 +91,41 @@ type Inquiry struct {
 	DeletedBy *string    `json:"deletedBy,omitempty"`
 }
 
+// Reply represents one message in inquiry replies subcollection.
+//
+// Firestore path:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+//
+// Notes:
+//   - Inquiry.Content remains the first inquiry body only.
+//   - Reply.Content stores each reply body.
+//   - Reply.Images stores metadata only. The binary files are uploaded directly
+//     from frontend to Firebase Storage.
+type Reply struct {
+	ID         string          `json:"id"`
+	InquiryID  string          `json:"inquiryId"`
+	SenderType ReplySenderType `json:"senderType"`
+	SenderID   string          `json:"senderId"`
+	Content    string          `json:"content"`
+	Images     []ImageFile     `json:"images,omitempty"`
+
+	CreatedAt time.Time  `json:"createdAt"`
+	CreatedBy string     `json:"createdBy"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy *string    `json:"updatedBy,omitempty"`
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy *string    `json:"deletedBy,omitempty"`
+}
+
 // Policy
 var (
-	MaxImages               = 10
-	MinFileSizeBytes  int64 = 1
-	MaxFileSizeBytes  int64 = 20 * 1024 * 1024
-	MaxFileNameLength       = 255
+	MaxImages                   = 10
+	MaxReplyImages              = 10
+	MaxReplyContentLength       = 5000
+	MinFileSizeBytes      int64 = 1
+	MaxFileSizeBytes      int64 = 20 * 1024 * 1024
+	MaxFileNameLength           = 255
 
 	AllowedMimeTypes = map[string]struct{}{
 		"image/jpeg": {},
@@ -133,6 +172,22 @@ var (
 	ErrInvalidImageUpdatedBy  = errors.New("inquiry: invalid image updatedBy")
 	ErrInvalidImageDeletedAt  = errors.New("inquiry: invalid image deletedAt")
 	ErrInvalidImageDeletedBy  = errors.New("inquiry: invalid image deletedBy")
+
+	ErrInvalidReplyID              = errors.New("inquiry: invalid reply id")
+	ErrInvalidReplyInquiryID       = errors.New("inquiry: invalid reply inquiryId")
+	ErrInvalidReplySenderType      = errors.New("inquiry: invalid reply senderType")
+	ErrInvalidReplySenderID        = errors.New("inquiry: invalid reply senderId")
+	ErrInvalidReplyContent         = errors.New("inquiry: invalid reply content")
+	ErrInvalidReplyCreatedAt       = errors.New("inquiry: invalid reply createdAt")
+	ErrInvalidReplyCreatedBy       = errors.New("inquiry: invalid reply createdBy")
+	ErrInvalidReplyUpdatedAt       = errors.New("inquiry: invalid reply updatedAt")
+	ErrInvalidReplyUpdatedBy       = errors.New("inquiry: invalid reply updatedBy")
+	ErrInvalidReplyDeletedAt       = errors.New("inquiry: invalid reply deletedAt")
+	ErrInvalidReplyDeletedBy       = errors.New("inquiry: invalid reply deletedBy")
+	ErrReplyTooManyImages          = errors.New("inquiry: reply too many images")
+	ErrReplyInconsistentImage      = errors.New("inquiry: reply image inquiryId must match reply inquiryId")
+	ErrReplyDuplicateImage         = errors.New("inquiry: reply duplicate image")
+	ErrReplyContentOrImageRequired = errors.New("inquiry: reply content or images required")
 
 	ErrDuplicateImage         = errors.New("inquiry: duplicate image")
 	ErrTooManyImages          = errors.New("inquiry: too many images")
@@ -218,6 +273,78 @@ func NewWithOptional(
 		return Inquiry{}, err
 	}
 	return in, nil
+}
+
+func NewReply(
+	id string,
+	inquiryID string,
+	senderType ReplySenderType,
+	senderID string,
+	content string,
+	images []ImageFile,
+	createdAt time.Time,
+	createdBy string,
+) (Reply, error) {
+	reply := Reply{
+		ID:         id,
+		InquiryID:  inquiryID,
+		SenderType: senderType,
+		SenderID:   senderID,
+		Content:    content,
+		Images:     images,
+		CreatedAt:  createdAt.UTC(),
+		CreatedBy:  createdBy,
+	}
+
+	if reply.Images == nil {
+		reply.Images = []ImageFile{}
+	}
+
+	if err := reply.Validate(); err != nil {
+		return Reply{}, err
+	}
+
+	return reply, nil
+}
+
+func NewReplyWithOptional(
+	id string,
+	inquiryID string,
+	senderType ReplySenderType,
+	senderID string,
+	content string,
+	images []ImageFile,
+	createdAt time.Time,
+	createdBy string,
+	updatedAt *time.Time,
+	updatedBy *string,
+	deletedAt *time.Time,
+	deletedBy *string,
+) (Reply, error) {
+	reply := Reply{
+		ID:         id,
+		InquiryID:  inquiryID,
+		SenderType: senderType,
+		SenderID:   senderID,
+		Content:    content,
+		Images:     images,
+		CreatedAt:  createdAt.UTC(),
+		CreatedBy:  createdBy,
+		UpdatedAt:  normalizeOptionalTime(updatedAt),
+		UpdatedBy:  updatedBy,
+		DeletedAt:  normalizeOptionalTime(deletedAt),
+		DeletedBy:  deletedBy,
+	}
+
+	if reply.Images == nil {
+		reply.Images = []ImageFile{}
+	}
+
+	if err := reply.Validate(); err != nil {
+		return Reply{}, err
+	}
+
+	return reply, nil
 }
 
 func NewImageFile(
@@ -476,6 +603,56 @@ func (i Inquiry) FirebaseStorageDeleteOps() []FirebaseStorageDeleteOp {
 	return out
 }
 
+func (r *Reply) Touch(now time.Time, updatedBy string) error {
+	if now.IsZero() {
+		return ErrInvalidReplyUpdatedAt
+	}
+	if strings.TrimSpace(updatedBy) == "" {
+		return ErrInvalidReplyUpdatedBy
+	}
+
+	updatedAt := now.UTC()
+	normalizedUpdatedBy := strings.TrimSpace(updatedBy)
+
+	r.UpdatedAt = &updatedAt
+	r.UpdatedBy = &normalizedUpdatedBy
+
+	return nil
+}
+
+func (r *Reply) SoftDelete(now time.Time, deletedBy string) error {
+	if now.IsZero() {
+		return ErrInvalidReplyDeletedAt
+	}
+	if strings.TrimSpace(deletedBy) == "" {
+		return ErrInvalidReplyDeletedBy
+	}
+
+	deletedAt := now.UTC()
+	normalizedDeletedBy := strings.TrimSpace(deletedBy)
+
+	r.DeletedAt = &deletedAt
+	r.DeletedBy = &normalizedDeletedBy
+
+	return nil
+}
+
+func (r Reply) FirebaseStorageDeleteOps() []FirebaseStorageDeleteOp {
+	out := make([]FirebaseStorageDeleteOp, 0, len(r.Images))
+
+	for _, img := range r.Images {
+		if img.ObjectPath == nil || *img.ObjectPath == "" {
+			continue
+		}
+
+		out = append(out, FirebaseStorageDeleteOp{
+			ObjectPath: *img.ObjectPath,
+		})
+	}
+
+	return out
+}
+
 // Validation
 
 func (i Inquiry) Validate() error {
@@ -539,6 +716,76 @@ func (i Inquiry) Validate() error {
 		u := normURL(img.FileURL)
 		if _, ok := seen[u]; ok {
 			return ErrDuplicateImage
+		}
+		seen[u] = struct{}{}
+	}
+
+	return nil
+}
+
+func (r Reply) Validate() error {
+	if strings.TrimSpace(r.ID) == "" {
+		return ErrInvalidReplyID
+	}
+	if strings.TrimSpace(r.InquiryID) == "" {
+		return ErrInvalidReplyInquiryID
+	}
+	if !isValidReplySenderType(r.SenderType) {
+		return ErrInvalidReplySenderType
+	}
+	if strings.TrimSpace(r.SenderID) == "" {
+		return ErrInvalidReplySenderID
+	}
+
+	trimmedContent := strings.TrimSpace(r.Content)
+	if trimmedContent == "" && len(r.Images) == 0 {
+		return ErrReplyContentOrImageRequired
+	}
+	if MaxReplyContentLength > 0 && len([]rune(trimmedContent)) > MaxReplyContentLength {
+		return ErrInvalidReplyContent
+	}
+
+	if r.CreatedAt.IsZero() {
+		return ErrInvalidReplyCreatedAt
+	}
+	if strings.TrimSpace(r.CreatedBy) == "" {
+		return ErrInvalidReplyCreatedBy
+	}
+
+	if r.UpdatedAt != nil {
+		if r.UpdatedAt.IsZero() || r.UpdatedAt.Before(r.CreatedAt) {
+			return ErrInvalidReplyUpdatedAt
+		}
+	}
+	if r.UpdatedBy != nil && strings.TrimSpace(*r.UpdatedBy) == "" {
+		return ErrInvalidReplyUpdatedBy
+	}
+
+	if r.DeletedAt != nil {
+		if r.DeletedAt.IsZero() || r.DeletedAt.Before(r.CreatedAt) {
+			return ErrInvalidReplyDeletedAt
+		}
+	}
+	if r.DeletedBy != nil && strings.TrimSpace(*r.DeletedBy) == "" {
+		return ErrInvalidReplyDeletedBy
+	}
+
+	if MaxReplyImages > 0 && len(r.Images) > MaxReplyImages {
+		return ErrReplyTooManyImages
+	}
+
+	seen := map[string]struct{}{}
+	for _, img := range r.Images {
+		if err := validateImageFile(img); err != nil {
+			return err
+		}
+		if img.InquiryID != r.InquiryID {
+			return ErrReplyInconsistentImage
+		}
+
+		u := normURL(img.FileURL)
+		if _, ok := seen[u]; ok {
+			return ErrReplyDuplicateImage
 		}
 		seen[u] = struct{}{}
 	}
@@ -653,6 +900,15 @@ func validateImageFile(img ImageFile) error {
 func isValidInquiryStatus(status InquiryStatus) bool {
 	switch status {
 	case InquiryStatusOpen, InquiryStatusResolved, InquiryStatusClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidReplySenderType(senderType ReplySenderType) bool {
+	switch senderType {
+	case ReplySenderTypeAvatar, ReplySenderTypeMember:
 		return true
 	default:
 		return false
