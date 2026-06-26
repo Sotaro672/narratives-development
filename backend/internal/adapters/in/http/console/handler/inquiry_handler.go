@@ -109,12 +109,12 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.resolve(w, r, id)
 			return
 
-		case "close":
+		case "reopen":
 			if r.Method != http.MethodPost {
 				methodNotAllowed(w)
 				return
 			}
-			h.close(w, r, id)
+			h.reopen(w, r, id)
 			return
 
 		default:
@@ -356,7 +356,7 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-// POST /inquiries/{id}/close
+// POST /inquiries/{id}/reopen
 //
 // Body:
 //
@@ -364,8 +364,8 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 //	  "memberId": "member_document_id"
 //	}
 //
-// company member が問い合わせを close します。
-func (h *InquiryHandler) close(w http.ResponseWriter, r *http.Request, id string) {
+// company member が問い合わせを open に戻します。
+func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	companyID, ok := currentCompanyID(w, r)
@@ -389,11 +389,11 @@ func (h *InquiryHandler) close(w http.ResponseWriter, r *http.Request, id string
 
 	memberID := strings.TrimSpace(req.MemberID)
 	if memberID == "" {
-		writeInquiryErr(w, inquirydom.ErrInvalidClosedBy)
+		writeInquiryErr(w, inquirydom.ErrInvalidUpdatedBy)
 		return
 	}
 
-	updated, err := h.uc.CloseByMember(ctx, usecase.CloseInquiryByMemberInput{
+	updated, err := h.uc.ReopenByMember(ctx, usecase.ReopenInquiryInput{
 		InquiryID: id,
 		MemberID:  memberID,
 	})

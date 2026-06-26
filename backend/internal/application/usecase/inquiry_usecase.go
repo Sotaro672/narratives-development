@@ -191,16 +191,16 @@ func (uc *InquiryUsecase) ResolveByMember(
 	})
 }
 
-// CloseInquiryByMemberInput は company member が問い合わせを close する入力です。
-type CloseInquiryByMemberInput struct {
+// ReopenInquiryInput は company member が問い合わせを open に戻す入力です。
+type ReopenInquiryInput struct {
 	InquiryID string
 	MemberID  string
 }
 
-// CloseByMember は company member が Inquiry を closed にします。
-func (uc *InquiryUsecase) CloseByMember(
+// ReopenByMember は company member が Inquiry を open に戻します。
+func (uc *InquiryUsecase) ReopenByMember(
 	ctx context.Context,
-	in CloseInquiryByMemberInput,
+	in ReopenInquiryInput,
 ) (inquirydom.Inquiry, error) {
 	if uc == nil || uc.repo == nil {
 		return inquirydom.Inquiry{}, fmt.Errorf("inquiry usecase: repository is nil")
@@ -213,7 +213,7 @@ func (uc *InquiryUsecase) CloseByMember(
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
 	}
 	if memberID == "" {
-		return inquirydom.Inquiry{}, inquirydom.ErrInvalidClosedBy
+		return inquirydom.Inquiry{}, inquirydom.ErrInvalidUpdatedBy
 	}
 
 	current, err := uc.repo.GetByID(ctx, inquiryID)
@@ -222,16 +222,18 @@ func (uc *InquiryUsecase) CloseByMember(
 	}
 
 	now := uc.nowUTC()
-	if err := current.CloseByMember(memberID, now); err != nil {
+	if err := current.ReopenByMember(memberID, now); err != nil {
 		return inquirydom.Inquiry{}, err
 	}
 
 	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
-		Status:    &current.Status,
-		ClosedAt:  current.ClosedAt,
-		ClosedBy:  current.ClosedBy,
-		UpdatedAt: &current.UpdatedAt,
-		UpdatedBy: current.UpdatedBy,
+		Status:     &current.Status,
+		ResolvedAt: current.ResolvedAt,
+		ResolvedBy: current.ResolvedBy,
+		ClosedAt:   current.ClosedAt,
+		ClosedBy:   current.ClosedBy,
+		UpdatedAt:  &current.UpdatedAt,
+		UpdatedBy:  current.UpdatedBy,
 	})
 }
 

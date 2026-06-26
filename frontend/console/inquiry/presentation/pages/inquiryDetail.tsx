@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
 import {
   Card,
   CardContent,
@@ -13,8 +14,12 @@ import {
 
 import {
   getInquiryHTTP,
+  reopenInquiryHTTP,
+  resolveInquiryHTTP,
   type InquiryDetail as InquiryDetailDTO,
 } from "../../infrastructure/inquiryRepositoryHTTP";
+
+const INQUIRY_READ_STATE_CHANGED_EVENT = "inquiry:read-state-changed";
 
 function textOrDash(value: string | null | undefined): string {
   const trimmed = String(value ?? "").trim();
@@ -40,6 +45,10 @@ function statusLabel(value: string | null | undefined): string {
     default:
       return status || "-";
   }
+}
+
+function isResolvedStatus(value: string | null | undefined): boolean {
+  return String(value ?? "").trim() === "resolved";
 }
 
 function isUnresolvedStatus(value: string | null | undefined): boolean {
@@ -166,13 +175,27 @@ function getOrderTransferredAtLabel(
     .join(" / ");
 }
 
+function replaceDetailInquiry(
+  detail: InquiryDetailDTO,
+  inquiry: InquiryDetailDTO["inquiry"],
+): InquiryDetailDTO {
+  return {
+    ...detail,
+    inquiry,
+  };
+}
+
 export default function InquiryDetail() {
   const navigate = useNavigate();
   const { inquiryId } = useParams<{ inquiryId: string }>();
+  const { currentMember } = useAuth();
 
   const [detail, setDetail] = React.useState<InquiryDetailDTO | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [statusUpdating, setStatusUpdating] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+
+  const memberId = String(currentMember?.id ?? "").trim();
 
   const onBack = React.useCallback(() => {
     navigate(-1);
@@ -200,6 +223,7 @@ export default function InquiryDetail() {
         if (!active) return;
 
         setDetail(result);
+        window.dispatchEvent(new Event(INQUIRY_READ_STATE_CHANGED_EVENT));
       } catch (error) {
         if (!active) return;
 
@@ -239,17 +263,48 @@ export default function InquiryDetail() {
   const shippingAddresses = getShippingAddresses(detail);
   const orders = Array.isArray(detail?.orders) ? detail.orders : [];
 
-  const statusBadge = isUnresolvedStatus(inquiry?.status) ? (
-    <span className="inq__badge inq__badge--danger">
-      <span className="inq__dot" />
-      {status}
-    </span>
-  ) : (
-    <span className="inq__badge inq__badge--neutral">
-      <span className="inq__dot" />
-      {status}
-    </span>
-  );
+  const statusButtonVariant = isUnresolvedStatus(inquiry?.status)
+    ? "danger"
+    : "neutral";
+
+  const onToggleStatus = React.useCallback(async () => {
+    const trimmedInquiryId = String(inquiryId ?? "").trim();
+
+    if (!detail || !trimmedInquiryId) {
+      return;
+    }
+
+    if (!memberId) {
+      setErrorMessage("メンバーIDが取得できません。ログインし直してください。");
+      return;
+    }
+
+    setStatusUpdating(true);
+    setErrorMessage(null);
+
+    try {
+      const updatedInquiry = isResolvedStatus(detail.inquiry.status)
+        ? await reopenInquiryHTTP(trimmedInquiryId, { memberId })
+        : await resolveInquiryHTTP(trimmedInquiryId, { memberId });
+
+      setDetail((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return replaceDetailInquiry(current, updatedInquiry);
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "問い合わせステータスの更新に失敗しました";
+
+      setErrorMessage(message);
+    } finally {
+      setStatusUpdating(false);
+    }
+  }, [detail, inquiryId, memberId]);
 
   if (loading) {
     return (
@@ -291,7 +346,7 @@ export default function InquiryDetail() {
     );
   }
 
-  if (errorMessage) {
+  if (errorMessage && !detail) {
     return (
       <PageStyle
         layout="grid-2"
@@ -337,6 +392,12 @@ export default function InquiryDetail() {
       title="問い合わせ詳細"
       onBack={onBack}
       onSave={undefined}
+      statusButtonLabel={status}
+      statusButtonBusyLabel="更新中"
+      statusButtonVariant={statusButtonVariant}
+      onStatusButtonClick={onToggleStatus}
+      isStatusButtonLoading={statusUpdating}
+      statusButtonDisabled={!detail || !memberId}
     >
       <Card>
         <CardHeader>
@@ -345,6 +406,10 @@ export default function InquiryDetail() {
 
         <CardContent>
           <div className="inq-detail">
+            {errorMessage ? (
+              <div className="inq__empty">{errorMessage}</div>
+            ) : null}
+
             <h2 className="inq-detail__title">{title}</h2>
 
             <div className="inq-detail__meta">
@@ -401,11 +466,6 @@ export default function InquiryDetail() {
                   ) : (
                     <span className="inq-detail__value">-</span>
                   )}
-                </div>
-
-                <div>
-                  <span className="inq-detail__label">ステータス</span>
-                  {statusBadge}
                 </div>
 
                 <div>

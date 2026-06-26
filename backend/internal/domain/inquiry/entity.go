@@ -56,7 +56,8 @@ type ImageFile struct {
 // Lifecycle:
 // - avatar creates an inquiry as open.
 // - company member can mark it as resolved.
-// - company member or owner avatar can close the inquiry.
+// - company member can reopen it.
+// - owner avatar can close the inquiry.
 type Inquiry struct {
 	ID          string        `json:"id"`
 	ProductID   string        `json:"productId"`
@@ -327,26 +328,25 @@ func (i *Inquiry) ResolveByMember(memberID string, now time.Time) error {
 	return nil
 }
 
-// CloseByMember closes the inquiry by a company member.
-func (i *Inquiry) CloseByMember(memberID string, now time.Time) error {
+// ReopenByMember reopens the inquiry by a company member.
+func (i *Inquiry) ReopenByMember(memberID string, now time.Time) error {
 	if memberID == "" {
-		return ErrInvalidClosedBy
+		return ErrInvalidUpdatedBy
 	}
 	if now.IsZero() {
-		return ErrInvalidClosedAt
-	}
-	if i.Status == InquiryStatusClosed {
-		return ErrInquiryAlreadyClosed
+		return ErrInvalidUpdatedAt
 	}
 
-	closedAt := now.UTC()
-	closedBy := memberID
+	updatedAt := now.UTC()
+	updatedBy := memberID
 
-	i.Status = InquiryStatusClosed
-	i.ClosedAt = &closedAt
-	i.ClosedBy = &closedBy
-	i.UpdatedAt = closedAt
-	i.UpdatedBy = &closedBy
+	i.Status = InquiryStatusOpen
+	i.ResolvedAt = nil
+	i.ResolvedBy = nil
+	i.ClosedAt = nil
+	i.ClosedBy = nil
+	i.UpdatedAt = updatedAt
+	i.UpdatedBy = &updatedBy
 
 	return nil
 }

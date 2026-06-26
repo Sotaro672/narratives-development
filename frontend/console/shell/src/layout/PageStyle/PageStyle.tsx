@@ -56,6 +56,8 @@ function SpinnerArrow({ size = 16 }: { size?: number }) {
   );
 }
 
+type HeaderStatusButtonVariant = "default" | "danger" | "neutral";
+
 interface PageStyleProps {
   children: ReactNode | [ReactNode, ReactNode];
   layout?: "grid-2" | "single";
@@ -85,6 +87,14 @@ interface PageStyleProps {
   title?: string;
   badge?: ReactNode;
   actions?: ReactNode;
+
+  statusButtonLabel?: string;
+  statusButtonBusyLabel?: string;
+  statusButtonVariant?: HeaderStatusButtonVariant;
+  onStatusButtonClick?: () => void | Promise<void>;
+  isStatusButtonLoading?: boolean;
+  statusButtonDisabled?: boolean;
+
   stickyAside?: boolean;
 }
 
@@ -110,6 +120,12 @@ export default function PageStyle({
   title,
   badge,
   actions,
+  statusButtonLabel,
+  statusButtonBusyLabel,
+  statusButtonVariant = "default",
+  onStatusButtonClick,
+  isStatusButtonLoading: controlledIsStatusButtonLoading,
+  statusButtonDisabled,
   stickyAside = true,
 }: PageStyleProps) {
   const rootClass = cn("pbp", className);
@@ -122,11 +138,15 @@ export default function PageStyle({
   const [isListing, setIsListing] = React.useState(false);
   const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
   const [internalIsClosing, setInternalIsClosing] = React.useState(false);
+  const [internalIsStatusButtonLoading, setInternalIsStatusButtonLoading] =
+    React.useState(false);
 
   const isSaving = controlledIsSaving ?? internalIsSaving;
   const isSending = controlledIsSending ?? internalIsSending;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
   const isClosing = controlledIsClosing ?? internalIsClosing;
+  const isStatusButtonLoading =
+    controlledIsStatusButtonLoading ?? internalIsStatusButtonLoading;
 
   const handleCreate = React.useCallback(async () => {
     if (!onCreate || isCreating) return;
@@ -194,6 +214,29 @@ export default function PageStyle({
     }
   }, [onClose, isClosing]);
 
+  const handleStatusButtonClick = React.useCallback(async () => {
+    if (
+      !onStatusButtonClick ||
+      isStatusButtonLoading ||
+      statusButtonDisabled
+    ) {
+      return;
+    }
+
+    try {
+      setInternalIsStatusButtonLoading(true);
+      await onStatusButtonClick();
+    } finally {
+      setInternalIsStatusButtonLoading(false);
+    }
+  }, [onStatusButtonClick, isStatusButtonLoading, statusButtonDisabled]);
+
+  const statusButtonClassName = cn(
+    "page-header__btn",
+    statusButtonVariant === "danger" && "page-header__btn--danger",
+    statusButtonVariant === "neutral" && "page-header__btn--ghost",
+  );
+
   const header = (
     <header className="page-header">
       <div className="px-4 py-3">
@@ -217,6 +260,21 @@ export default function PageStyle({
           </div>
 
           <div className="page-header__actions">
+            {onStatusButtonClick && statusButtonLabel && (
+              <button
+                type="button"
+                className={statusButtonClassName}
+                onClick={() => void handleStatusButtonClick()}
+                disabled={isStatusButtonLoading || Boolean(statusButtonDisabled)}
+                aria-busy={isStatusButtonLoading}
+              >
+                {isStatusButtonLoading && <SpinnerArrow size={16} />}
+                {isStatusButtonLoading
+                  ? statusButtonBusyLabel ?? "更新中"
+                  : statusButtonLabel}
+              </button>
+            )}
+
             {onRefresh && (
               <button
                 type="button"
