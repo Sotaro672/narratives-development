@@ -27,7 +27,11 @@ function SpinnerArrow({ size = 16 }: { size?: number }) {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      style={{ marginRight: 4, display: "inline-block", verticalAlign: "middle" }}
+      style={{
+        marginRight: 4,
+        display: "inline-block",
+        verticalAlign: "middle",
+      }}
     >
       <g>
         <animateTransform
@@ -87,7 +91,7 @@ interface PageStyleProps {
 
   onList?: () => void | Promise<void>;
 
-  title?: string;
+  title?: ReactNode;
   badge?: ReactNode;
   actions?: ReactNode;
 

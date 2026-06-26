@@ -1,7 +1,9 @@
 // frontend/amol/src/components/layout/header/HeaderActions.tsx
-import { Link } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
+import { useInquiryUnreadCounter } from "../../../features/inquiry/hooks/useInquiryUnreadCounter";
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {
@@ -9,6 +11,8 @@ type HeaderActionsProps = {
 };
 
 export default function HeaderActions({ actions }: HeaderActionsProps) {
+  const [searchParams] = useSearchParams();
+
   const {
     hasActionButton,
     actionButtonLabel,
@@ -33,8 +37,17 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     toggleSettings,
   } = actions;
 
-  const { unreadCount } = useAnnouncementUnreadCount({
+  const companyId = useMemo(() => {
+    return (searchParams.get("companyId") ?? "").trim();
+  }, [searchParams]);
+
+  const { unreadCount: announcementUnreadCount } = useAnnouncementUnreadCount({
     enabled: shouldShowAnnouncementButton,
+  });
+
+  const { unreadCount: inquiryUnreadCount } = useInquiryUnreadCounter({
+    companyId,
+    enabled: shouldShowAnnouncementButton && Boolean(companyId),
   });
 
   const safeCartItemCount =
@@ -43,17 +56,24 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
       : 0;
 
   const safeAnnouncementUnreadCount =
-    typeof unreadCount === "number" && Number.isFinite(unreadCount)
-      ? Math.max(0, Math.floor(unreadCount))
+    typeof announcementUnreadCount === "number" &&
+    Number.isFinite(announcementUnreadCount)
+      ? Math.max(0, Math.floor(announcementUnreadCount))
       : 0;
+
+  const safeInquiryUnreadCount =
+    typeof inquiryUnreadCount === "number" && Number.isFinite(inquiryUnreadCount)
+      ? Math.max(0, Math.floor(inquiryUnreadCount))
+      : 0;
+
+  const safeHeaderUnreadCount =
+    safeAnnouncementUnreadCount + safeInquiryUnreadCount;
 
   const cartBadgeLabel =
     safeCartItemCount > 99 ? "99+" : String(safeCartItemCount);
 
-  const announcementBadgeLabel =
-    safeAnnouncementUnreadCount > 99
-      ? "99+"
-      : String(safeAnnouncementUnreadCount);
+  const headerUnreadBadgeLabel =
+    safeHeaderUnreadCount > 99 ? "99+" : String(safeHeaderUnreadCount);
 
   return (
     <div className="header__right">
@@ -93,16 +113,16 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
         <Link
           to="/announcements"
           className="header__settings-link header__cart-link"
-          aria-label={`お知らせ ${safeAnnouncementUnreadCount}件`}
+          aria-label={`お知らせと問い合わせ ${safeHeaderUnreadCount}件`}
           title="お知らせ"
         >
           <span className="header__cart-icon" aria-hidden="true">
             🔔
           </span>
 
-          {safeAnnouncementUnreadCount > 0 ? (
+          {safeHeaderUnreadCount > 0 ? (
             <span className="header__cart-badge" aria-hidden="true">
-              {announcementBadgeLabel}
+              {headerUnreadBadgeLabel}
             </span>
           ) : null}
         </Link>

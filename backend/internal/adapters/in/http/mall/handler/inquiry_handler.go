@@ -36,7 +36,10 @@ func NewInquiryHandler(
 // Supported:
 //
 //	POST /mall/me/inquiries
+//	GET  /mall/me/inquiries/unread-count?companyId={companyId}
 //	GET  /mall/me/inquiries/{id}
+//	GET  /mall/me/inquiries/{id}/replies
+//	POST /mall/me/inquiries/{id}/mark-as-read
 //	POST /mall/me/inquiries/{id}/reply
 //	POST /mall/me/inquiries/{id}/close
 func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +64,16 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.create(w, r)
+		return
+	}
+
+	if r.URL.Path == "/mall/me/inquiries/unread-count" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.countUnread(w, r)
 		return
 	}
 
@@ -98,6 +111,22 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch parts[1] {
+	case "replies":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		h.listReplies(w, r, inquiryID)
+		return
+
+	case "mark-as-read":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+		h.markAsRead(w, r, inquiryID)
+		return
+
 	case "reply":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
@@ -148,9 +177,8 @@ type createInquiryImageIn struct {
 
 // replyInquiryRequest は avatar 側の返信 request です。
 //
-// 現時点では InquiryMessage repository が未導入のため、
-// reply は Inquiry.Content に追記する形で保存します。
-// 将来的には inquiries/{inquiryId}/messages/{messageId} に保存する形へ置き換えてください。
+// reply は Inquiry.Content に追記せず、
+// inquiries/{inquiryId}/replies/{replyId} に保存します。
 type replyInquiryRequest struct {
 	Content string                 `json:"content"`
 	Images  []createInquiryImageIn `json:"images"`
@@ -219,10 +247,47 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /mall/me/inquiries/unread-count?companyId={companyId}
+//
+// avatar 側が受け取る未読数を返します。
+// 自分が送信した reply は count 対象外です。
+func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+
+	companyID := strings.TrimSpace(r.URL.Query().Get("companyId"))
+	if companyID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is required"})
+		return
+	}
+
+	filter := buildInquiryFilterFromQuery(r)
+
+	count, err := h.uc.CountUnreadByCompanyIDForAvatar(ctx, usecase.CountUnreadInquiriesForAvatarInput{
+		CompanyID: companyID,
+		AvatarID:  avatarID,
+		Filter:    filter,
+	})
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"count": count,
+	})
+}
+
 // GET /mall/me/inquiries/{id}
 //
 // avatar 側が company member からの返信・ステータス更新を受け取るための取得 endpoint です。
-// 現状は Inquiry 本体を返します。
+// Inquiry 本体を返します。
+// reply 一覧は GET /mall/me/inquiries/{id}/replies で取得します。
 func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -242,6 +307,65 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 	})
 }
 
+// GET /mall/me/inquiries/{id}/replies
+//
+// avatar 側が問い合わせ配下の reply 一覧を取得します。
+func (h *InquiryHandler) listReplies(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	replies, err := h.uc.ListReplies(ctx, id)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"items": replies,
+	})
+}
+
+// POST /mall/me/inquiries/{id}/mark-as-read
+//
+// avatar 側が問い合わせを開いたタイミングなどで、
+// 自分が送信した reply 以外を既読化します。
+func (h *InquiryHandler) markAsRead(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	updated, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
+		InquiryID:        id,
+		ReaderSenderType: inquirydom.ReplySenderTypeAvatar,
+		ReaderSenderID:   avatarID,
+	})
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": updated,
+	})
+}
+
 // POST /mall/me/inquiries/{id}/reply
 //
 // Body:
@@ -252,7 +376,7 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 //	    {
 //	      "fileName": "sample.png",
 //	      "fileUrl": "https://firebasestorage.googleapis.com/...",
-//	      "objectPath": "inquiry-images/{inquiryId}/{imageId}/sample.png",
+//	      "objectPath": "inquiry-replies/{inquiryId}/{imageId}/sample.png",
 //	      "fileSize": 123,
 //	      "mimeType": "image/png",
 //	      "createdAt": "2026-01-01T00:00:00Z"
@@ -296,12 +420,7 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 
 	now := time.Now().UTC()
 
-	content := in.Content
-	if req.Content != "" {
-		content = appendInquiryReplyContent(content, avatarID, req.Content, now)
-	}
-
-	images := in.Images
+	images := []inquirydom.ImageFile{}
 	if len(req.Images) > 0 {
 		replyImages, err := buildInquiryImagesForMall(id, avatarID, now, req.Images)
 		if err != nil {
@@ -309,33 +428,17 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 			return
 		}
 
-		for _, img := range replyImages {
-			if err := in.AddImage(img); err != nil {
-				writeInquiryErr(w, err)
-				return
-			}
-		}
-
-		images = in.Images
+		images = replyImages
 	}
 
-	status := inquirydom.InquiryStatusOpen
-	updatedBy := avatarID
-
-	updated, err := h.uc.Update(ctx, id, inquirydom.InquiryPatch{
-		Content:   &content,
-		Status:    &status,
-		Images:    &images,
-		UpdatedAt: &now,
-		UpdatedBy: &updatedBy,
-	})
+	created, err := h.uc.CreateReplyByAvatar(ctx, id, avatarID, req.Content, images)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": updated,
+		"data": created,
 	})
 }
 
@@ -362,6 +465,31 @@ func (h *InquiryHandler) close(w http.ResponseWriter, r *http.Request, id string
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"data": updated,
 	})
+}
+
+func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
+	q := r.URL.Query()
+	filter := inquirydom.Filter{}
+
+	if searchQuery := strings.TrimSpace(q.Get("searchQuery")); searchQuery != "" {
+		filter.SearchQuery = searchQuery
+	}
+
+	if productID := strings.TrimSpace(q.Get("productId")); productID != "" {
+		filter.ProductID = &productID
+	}
+
+	if statusRaw := strings.TrimSpace(q.Get("status")); statusRaw != "" {
+		status := inquirydom.InquiryStatus(statusRaw)
+		filter.Status = &status
+	}
+
+	if inquiryTypeRaw := strings.TrimSpace(q.Get("inquiryType")); inquiryTypeRaw != "" {
+		inquiryType := inquirydom.InquiryType(inquiryTypeRaw)
+		filter.InquiryType = &inquiryType
+	}
+
+	return filter
 }
 
 func buildInquiryImagesForMall(
@@ -409,28 +537,6 @@ func buildInquiryImagesForMall(
 	return images, nil
 }
 
-func appendInquiryReplyContent(current string, avatarID string, reply string, now time.Time) string {
-	current = strings.TrimSpace(current)
-	reply = strings.TrimSpace(reply)
-
-	var b strings.Builder
-	if current != "" {
-		b.WriteString(current)
-		b.WriteString("\n\n")
-	}
-
-	b.WriteString("----- avatar reply -----\n")
-	b.WriteString("avatarId: ")
-	b.WriteString(avatarID)
-	b.WriteString("\n")
-	b.WriteString("createdAt: ")
-	b.WriteString(now.UTC().Format(time.RFC3339))
-	b.WriteString("\n")
-	b.WriteString(reply)
-
-	return b.String()
-}
-
 func currentAvatarIDFromRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || strings.TrimSpace(avatarID) == "" {
@@ -475,6 +581,16 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, inquirydom.ErrInvalidImageUpdatedBy),
 		errors.Is(err, inquirydom.ErrInvalidImageDeletedAt),
 		errors.Is(err, inquirydom.ErrInvalidImageDeletedBy),
+		errors.Is(err, inquirydom.ErrInvalidReplyInquiryID),
+		errors.Is(err, inquirydom.ErrInvalidReplySenderType),
+		errors.Is(err, inquirydom.ErrInvalidReplySenderID),
+		errors.Is(err, inquirydom.ErrInvalidReplyContent),
+		errors.Is(err, inquirydom.ErrInvalidReplyCreatedAt),
+		errors.Is(err, inquirydom.ErrInvalidReplyCreatedBy),
+		errors.Is(err, inquirydom.ErrInvalidReplyUpdatedAt),
+		errors.Is(err, inquirydom.ErrInvalidReplyUpdatedBy),
+		errors.Is(err, inquirydom.ErrInvalidReplyDeletedAt),
+		errors.Is(err, inquirydom.ErrInvalidReplyDeletedBy),
 		errors.Is(err, inquirydom.ErrInconsistentInquiry),
 		errors.Is(err, inquirydom.ErrDuplicateImage),
 		errors.Is(err, inquirydom.ErrTooManyImages),

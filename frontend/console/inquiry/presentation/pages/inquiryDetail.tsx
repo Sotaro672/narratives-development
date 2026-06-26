@@ -431,6 +431,13 @@ export default function InquiryDetail() {
   const shippingAddresses = getShippingAddresses(detail);
   const orders = Array.isArray(detail?.orders) ? detail.orders : [];
 
+  const pageTitle = (
+    <div className="inq-detail__page-title">
+      <span className="inq__chip">{type}</span>
+      <span className="inq-detail__page-title-text">{title}</span>
+    </div>
+  );
+
   const statusButtonVariant = isUnresolvedStatus(inquiry?.status)
     ? "danger"
     : "neutral";
@@ -746,7 +753,7 @@ export default function InquiryDetail() {
     <>
       <PageStyle
         layout="grid-2"
-        title="問い合わせ詳細"
+        title={pageTitle}
         onBack={onBack}
         onSave={undefined}
         onReply={onOpenReplyModal}
@@ -757,122 +764,119 @@ export default function InquiryDetail() {
         isStatusButtonLoading={statusUpdating}
         statusButtonDisabled={!detail || !memberId}
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>問い合わせ内容</CardTitle>
-          </CardHeader>
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle>問い合わせ内容</CardTitle>
+            </CardHeader>
 
-          <CardContent>
-            <div className="inq-detail">
-              {errorMessage ? (
-                <div className="inq__empty">{errorMessage}</div>
-              ) : null}
+            <CardContent>
+              <div className="inq-detail">
+                {errorMessage ? (
+                  <div className="inq__empty">{errorMessage}</div>
+                ) : null}
 
-              <h2 className="inq-detail__title">{title}</h2>
+                <div className="inq-detail__body">
+                  <div className="inq-detail__label">問い合わせ本文</div>
+                  <p className="inq-detail__text">{body}</p>
+                </div>
 
-              <div className="inq-detail__meta">
-                <div>
-                  <span className="inq-detail__label">タイプ</span>
-                  <span className="inq__chip">{type}</span>
+                <div className="inq-detail__body">
+                  <div className="inq-detail__label">添付画像</div>
+
+                  {inquiryImages.length > 0 ? (
+                    <div className="inq-detail__image-grid">
+                      {inquiryImages.map((image) => (
+                        <a
+                          key={image.id}
+                          href={image.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inq-detail__image-link"
+                          aria-label={`${image.fileName}を開く`}
+                        >
+                          <img
+                            src={image.fileUrl}
+                            alt={image.fileName}
+                            className="inq-detail__image"
+                            loading="lazy"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="inq__empty">添付画像はありません。</div>
+                  )}
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="inq-detail__body">
-                <div className="inq-detail__label">問い合わせ本文</div>
-                <p className="inq-detail__text">{body}</p>
-              </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>返信一覧</CardTitle>
+            </CardHeader>
 
-              <div className="inq-detail__body">
-                <div className="inq-detail__label">添付画像</div>
+            <CardContent>
+              {replies.length > 0 ? (
+                <div className="inq-reply-list">
+                  {replies.map((reply) => {
+                    const replyImagesView = getReplyImages(reply);
+                    const senderLabel = replySenderLabel(reply, {
+                      memberId,
+                      avatarName,
+                    });
+                    const createdAtLabel = safeDateTimeLabelJa(
+                      reply.createdAt,
+                      "-",
+                    );
 
-                {inquiryImages.length > 0 ? (
-                  <div className="inq-detail__image-grid">
-                    {inquiryImages.map((image) => (
-                      <a
-                        key={image.id}
-                        href={image.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inq-detail__image-link"
-                        aria-label={`${image.fileName}を開く`}
-                      >
-                        <img
-                          src={image.fileUrl}
-                          alt={image.fileName}
-                          className="inq-detail__image"
-                          loading="lazy"
-                        />
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="inq__empty">添付画像はありません。</div>
-                )}
-              </div>
+                    return (
+                      <article key={reply.id} className="inq-reply-item">
+                        <div className="inq-reply-item__header">
+                          <span className="inq-reply-item__sender">
+                            {senderLabel}
+                          </span>
+                          <span className="inq-reply-item__date">
+                            {createdAtLabel}
+                          </span>
+                        </div>
 
-              <div className="inq-detail__body">
-                <div className="inq-detail__label">返信一覧</div>
+                        <p className="inq-reply-item__content">
+                          {textOrDash(reply.content)}
+                        </p>
 
-                {replies.length > 0 ? (
-                  <div className="inq-reply-list">
-                    {replies.map((reply) => {
-                      const replyImagesView = getReplyImages(reply);
-                      const senderLabel = replySenderLabel(reply, {
-                        memberId,
-                        avatarName,
-                      });
-                      const createdAtLabel = safeDateTimeLabelJa(
-                        reply.createdAt,
-                        "-",
-                      );
-
-                      return (
-                        <article key={reply.id} className="inq-reply-item">
-                          <div className="inq-reply-item__header">
-                            <span className="inq-reply-item__sender">
-                              {senderLabel}
-                            </span>
-                            <span className="inq-reply-item__date">
-                              {createdAtLabel}
-                            </span>
+                        {replyImagesView.length > 0 ? (
+                          <div className="inq-detail__image-grid">
+                            {replyImagesView.map((image) => (
+                              <a
+                                key={image.id}
+                                href={image.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inq-detail__image-link"
+                                aria-label={`${image.fileName}を開く`}
+                              >
+                                <img
+                                  src={image.fileUrl}
+                                  alt={image.fileName}
+                                  className="inq-detail__image"
+                                  loading="lazy"
+                                />
+                              </a>
+                            ))}
                           </div>
-
-                          <p className="inq-reply-item__content">
-                            {textOrDash(reply.content)}
-                          </p>
-
-                          {replyImagesView.length > 0 ? (
-                            <div className="inq-detail__image-grid">
-                              {replyImagesView.map((image) => (
-                                <a
-                                  key={image.id}
-                                  href={image.fileUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inq-detail__image-link"
-                                  aria-label={`${image.fileName}を開く`}
-                                >
-                                  <img
-                                    src={image.fileUrl}
-                                    alt={image.fileName}
-                                    className="inq-detail__image"
-                                    loading="lazy"
-                                  />
-                                </a>
-                              ))}
-                            </div>
-                          ) : null}
-                        </article>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="inq__empty">返信はありません。</div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="inq__empty">返信はありません。</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         <div>
           <Card>

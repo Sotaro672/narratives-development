@@ -25,7 +25,7 @@ import PaymentPage from "../pages/PaymentPage";
 import OrderConfirmedPage from "../pages/OrderConfirmedPage";
 import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
-import InquiryPage from "../pages/InquiryPage";
+import InquiryPage from "../pages/InquiryCreatePage";
 import WalletPage from "../pages/WalletPage";
 import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";

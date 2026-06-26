@@ -348,7 +348,7 @@ func (r *InquiryReplyRepositoryFS) Create(
 		return idom.Reply{}, err
 	}
 
-	return docToReply(snap)
+	return docToReplyWithFallbackInquiryID(snap, reply.InquiryID)
 }
 
 func (r *InquiryReplyRepositoryFS) ListByInquiryID(
@@ -379,7 +379,7 @@ func (r *InquiryReplyRepositoryFS) ListByInquiryID(
 			return nil, err
 		}
 
-		reply, err := docToReply(doc)
+		reply, err := docToReplyWithFallbackInquiryID(doc, inquiryID)
 		if err != nil {
 			return nil, err
 		}
@@ -430,16 +430,20 @@ func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
 			return err
 		}
 
-		reply, err := docToReply(doc)
-		if err != nil {
-			return err
+		data := doc.Data()
+		if data == nil {
+			return fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
 		}
 
-		if reply.SenderType == readerSenderType && reply.SenderID == readerSenderID {
+		senderType := idom.ReplySenderType(asString(data["senderType"]))
+		senderID := asString(data["senderId"])
+		isRead := asBool(data["isRead"])
+
+		if senderType == readerSenderType && senderID == readerSenderID {
 			continue
 		}
 
-		if reply.IsRead {
+		if isRead {
 			continue
 		}
 
@@ -453,6 +457,72 @@ func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
 	}
 
 	return nil
+}
+
+// CountUnreadByInquiryIDExcludingSender は、指定 inquiry 配下の未読 reply 数を返します。
+//
+// count 条件:
+//
+//	!reply.isRead
+//	&& !(reply.senderType == excludedSenderType && reply.senderId == excludedSenderID)
+//
+// usecase 側では member / avatar どちらもこの考え方で集計できます。
+// 現在の usecase interface では必須メソッドではありませんが、
+// repository 側の任意拡張として用意しています。
+func (r *InquiryReplyRepositoryFS) CountUnreadByInquiryIDExcludingSender(
+	ctx context.Context,
+	inquiryID string,
+	excludedSenderType idom.ReplySenderType,
+	excludedSenderID string,
+) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("firestore client is nil")
+	}
+	if inquiryID == "" {
+		return 0, idom.ErrInvalidReplyInquiryID
+	}
+	if excludedSenderType == "" {
+		return 0, idom.ErrInvalidReplySenderType
+	}
+	if excludedSenderID == "" {
+		return 0, idom.ErrInvalidReplySenderID
+	}
+
+	it := r.col(inquiryID).Documents(ctx)
+	defer it.Stop()
+
+	count := 0
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		data := doc.Data()
+		if data == nil {
+			return 0, fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
+		}
+
+		senderType := idom.ReplySenderType(asString(data["senderType"]))
+		senderID := asString(data["senderId"])
+		isRead := asBool(data["isRead"])
+
+		if isRead {
+			continue
+		}
+
+		if senderType == excludedSenderType && senderID == excludedSenderID {
+			continue
+		}
+
+		count++
+	}
+
+	return count, nil
 }
 
 // =======================
@@ -573,6 +643,13 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 }
 
 func docToReply(doc *firestore.DocumentSnapshot) (idom.Reply, error) {
+	return docToReplyWithFallbackInquiryID(doc, "")
+}
+
+func docToReplyWithFallbackInquiryID(
+	doc *firestore.DocumentSnapshot,
+	fallbackInquiryID string,
+) (idom.Reply, error) {
 	data := doc.Data()
 	if data == nil {
 		return idom.Reply{}, fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
@@ -594,6 +671,10 @@ func docToReply(doc *firestore.DocumentSnapshot) (idom.Reply, error) {
 
 	if reply.ID == "" {
 		reply.ID = doc.Ref.ID
+	}
+
+	if reply.InquiryID == "" {
+		reply.InquiryID = fallbackInquiryID
 	}
 
 	if t, ok := asTime(data["createdAt"]); ok {
