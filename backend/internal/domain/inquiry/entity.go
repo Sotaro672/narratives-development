@@ -102,12 +102,14 @@ type Inquiry struct {
 //   - Reply.Content stores each reply body.
 //   - Reply.Images stores metadata only. The binary files are uploaded directly
 //     from frontend to Firebase Storage.
+//   - Reply.IsRead is false when a reply is created.
 type Reply struct {
 	ID         string          `json:"id"`
 	InquiryID  string          `json:"inquiryId"`
 	SenderType ReplySenderType `json:"senderType"`
 	SenderID   string          `json:"senderId"`
 	Content    string          `json:"content"`
+	IsRead     bool            `json:"isRead"`
 	Images     []ImageFile     `json:"images,omitempty"`
 
 	CreatedAt time.Time  `json:"createdAt"`
@@ -291,6 +293,7 @@ func NewReply(
 		SenderType: senderType,
 		SenderID:   senderID,
 		Content:    content,
+		IsRead:     false,
 		Images:     images,
 		CreatedAt:  createdAt.UTC(),
 		CreatedBy:  createdBy,
@@ -327,6 +330,7 @@ func NewReplyWithOptional(
 		SenderType: senderType,
 		SenderID:   senderID,
 		Content:    content,
+		IsRead:     false,
 		Images:     images,
 		CreatedAt:  createdAt.UTC(),
 		CreatedBy:  createdBy,
@@ -601,6 +605,32 @@ func (i Inquiry) FirebaseStorageDeleteOps() []FirebaseStorageDeleteOp {
 	}
 
 	return out
+}
+
+func (r *Reply) MarkAsRead(now time.Time) error {
+	if now.IsZero() {
+		return ErrInvalidReplyUpdatedAt
+	}
+
+	updatedAt := now.UTC()
+
+	r.IsRead = true
+	r.UpdatedAt = &updatedAt
+
+	return nil
+}
+
+func (r *Reply) MarkAsUnread(now time.Time) error {
+	if now.IsZero() {
+		return ErrInvalidReplyUpdatedAt
+	}
+
+	updatedAt := now.UTC()
+
+	r.IsRead = false
+	r.UpdatedAt = &updatedAt
+
+	return nil
 }
 
 func (r *Reply) Touch(now time.Time, updatedBy string) error {

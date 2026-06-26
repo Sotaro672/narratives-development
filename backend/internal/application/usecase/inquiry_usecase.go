@@ -40,6 +40,24 @@ type AvatarEmailResolver interface {
 type InquiryReplyRepository interface {
 	Create(ctx context.Context, reply inquirydom.Reply) (inquirydom.Reply, error)
 	ListByInquiryID(ctx context.Context, inquiryID string) ([]inquirydom.Reply, error)
+
+	// MarkAsReadByInquiryID marks replies under the given inquiry as read.
+	//
+	// Repository implementations must not mark the reader's own replies as read.
+	// A reply should be skipped when:
+	//
+	//	reply.SenderType == readerSenderType && reply.SenderID == readerSenderID
+	//
+	// Repository implementations should update:
+	// - isRead = true
+	// - updatedAt = readAt
+	MarkAsReadByInquiryID(
+		ctx context.Context,
+		inquiryID string,
+		readerSenderType inquirydom.ReplySenderType,
+		readerSenderID string,
+		readAt time.Time,
+	) error
 }
 
 // InquiryUsecase は Inquiry の command を扱います。
@@ -455,12 +473,28 @@ func (uc *InquiryUsecase) CloseByAvatar(
 	})
 }
 
-// MarkInquiryAsReadInput は Inquiry を既読にする入力です。
+// MarkInquiryAsReadInput は Inquiry を既読にする入力です.
+//
+// ReaderSenderType / ReaderSenderID は reply の既読化で自分の reply を除外するために使います。
+//
+// Console 側で company member が読む場合:
+//
+//	ReaderSenderType: inquirydom.ReplySenderTypeMember
+//	ReaderSenderID:   memberId
+//
+// Mall / SNS 側で avatar が読む場合:
+//
+//	ReaderSenderType: inquirydom.ReplySenderTypeAvatar
+//	ReaderSenderID:   avatarId
 type MarkInquiryAsReadInput struct {
-	InquiryID string
+	InquiryID        string
+	ReaderSenderType inquirydom.ReplySenderType
+	ReaderSenderID   string
 }
 
-// MarkAsRead は Inquiry を既読にします。
+// MarkAsRead は Inquiry と配下の replies を既読にします。
+//
+// replies の既読化では、自分が送信した reply は除外します。
 func (uc *InquiryUsecase) MarkAsRead(
 	ctx context.Context,
 	in MarkInquiryAsReadInput,
@@ -470,8 +504,17 @@ func (uc *InquiryUsecase) MarkAsRead(
 	}
 
 	inquiryID := in.InquiryID
+	readerSenderType := in.ReaderSenderType
+	readerSenderID := in.ReaderSenderID
+
 	if inquiryID == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
+	}
+	if readerSenderType == "" {
+		return inquirydom.Inquiry{}, inquirydom.ErrInvalidReplySenderType
+	}
+	if readerSenderID == "" {
+		return inquirydom.Inquiry{}, inquirydom.ErrInvalidReplySenderID
 	}
 
 	current, err := uc.repo.GetByID(ctx, inquiryID)
@@ -484,10 +527,27 @@ func (uc *InquiryUsecase) MarkAsRead(
 		return inquirydom.Inquiry{}, err
 	}
 
-	return uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
+	updated, err := uc.repo.Update(ctx, current.ID, inquirydom.InquiryPatch{
 		IsRead:    &current.IsRead,
 		UpdatedAt: &current.UpdatedAt,
 	})
+	if err != nil {
+		return inquirydom.Inquiry{}, err
+	}
+
+	if uc.replyRepo != nil {
+		if err := uc.replyRepo.MarkAsReadByInquiryID(
+			ctx,
+			inquiryID,
+			readerSenderType,
+			readerSenderID,
+			now,
+		); err != nil {
+			return inquirydom.Inquiry{}, err
+		}
+	}
+
+	return updated, nil
 }
 
 // Update は Inquiry を部分更新します。

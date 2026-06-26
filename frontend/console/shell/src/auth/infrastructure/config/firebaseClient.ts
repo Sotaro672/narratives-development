@@ -1,14 +1,9 @@
-// frontend\console\shell\src\auth\infrastructure\config\firebaseClient.ts
+// frontend/console/shell/src/auth/infrastructure/config/firebaseClient.ts
 /// <reference types="vite/client" />
 
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  type DocumentData,
-} from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {

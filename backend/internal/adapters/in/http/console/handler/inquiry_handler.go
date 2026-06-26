@@ -228,55 +228,55 @@ func inquiryFilterFromRequest(r *http.Request) inquirydom.Filter {
 		SearchQuery: q.Get("searchQuery"),
 	}
 
-	if v := strings.TrimSpace(q.Get("productId")); v != "" {
+	if v := q.Get("productId"); v != "" {
 		filter.ProductID = &v
 	}
 
-	if v := strings.TrimSpace(q.Get("avatarId")); v != "" {
+	if v := q.Get("avatarId"); v != "" {
 		filter.AvatarID = &v
 	}
 
-	if v := strings.TrimSpace(q.Get("status")); v != "" {
+	if v := q.Get("status"); v != "" {
 		status := inquirydom.InquiryStatus(v)
 		filter.Status = &status
 	}
 
-	if v := strings.TrimSpace(q.Get("inquiryType")); v != "" {
+	if v := q.Get("inquiryType"); v != "" {
 		inquiryType := inquirydom.InquiryType(v)
 		filter.InquiryType = &inquiryType
 	}
 
-	if v := strings.TrimSpace(q.Get("updatedBy")); v != "" {
+	if v := q.Get("updatedBy"); v != "" {
 		filter.UpdatedBy = &v
 	}
 
-	if v := strings.TrimSpace(q.Get("deletedBy")); v != "" {
+	if v := q.Get("deletedBy"); v != "" {
 		filter.DeletedBy = &v
 	}
 
-	if v := strings.TrimSpace(q.Get("resolvedBy")); v != "" {
+	if v := q.Get("resolvedBy"); v != "" {
 		filter.ResolvedBy = &v
 	}
 
-	if v := strings.TrimSpace(q.Get("closedBy")); v != "" {
+	if v := q.Get("closedBy"); v != "" {
 		filter.ClosedBy = &v
 	}
 
-	if v := strings.TrimSpace(q.Get("imageFileName")); v != "" {
+	if v := q.Get("imageFileName"); v != "" {
 		filter.ImageFileName = &v
 	}
 
-	if v := strings.TrimSpace(q.Get("deleted")); v != "" {
+	if v := q.Get("deleted"); v != "" {
 		deleted := v == "true"
 		filter.Deleted = &deleted
 	}
 
-	if v := strings.TrimSpace(q.Get("resolved")); v != "" {
+	if v := q.Get("resolved"); v != "" {
 		resolved := v == "true"
 		filter.Resolved = &resolved
 	}
 
-	if v := strings.TrimSpace(q.Get("closed")); v != "" {
+	if v := q.Get("closed"); v != "" {
 		closed := v == "true"
 		filter.Closed = &closed
 	}
@@ -293,6 +293,11 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	detail, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID)
 	if err != nil {
 		writeInquiryErr(w, err)
@@ -301,7 +306,9 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 
 	if !detail.Inquiry.IsRead {
 		updated, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
-			InquiryID: id,
+			InquiryID:        id,
+			ReaderSenderType: inquirydom.ReplySenderTypeMember,
+			ReaderSenderID:   memberID,
 		})
 		if err != nil {
 			writeInquiryErr(w, err)
@@ -311,7 +318,13 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		detail.Inquiry = updated
 	}
 
-	_ = json.NewEncoder(w).Encode(detail)
+	replies, err := h.uc.ListReplies(ctx, id)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	writeInquiryDetailWithReplies(w, detail, replies)
 }
 
 // POST /inquiries/{id}/reply
@@ -358,13 +371,13 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	memberID := strings.TrimSpace(req.MemberID)
+	memberID := req.MemberID
 	if memberID == "" {
 		writeInquiryErr(w, inquirydom.ErrInvalidReplySenderID)
 		return
 	}
 
-	content := strings.TrimSpace(req.Content)
+	content := req.Content
 	if content == "" && len(req.Images) == 0 {
 		writeInquiryErr(w, inquirydom.ErrReplyContentOrImageRequired)
 		return
@@ -431,7 +444,7 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	memberID := strings.TrimSpace(req.MemberID)
+	memberID := req.MemberID
 	if memberID == "" {
 		writeInquiryErr(w, inquirydom.ErrInvalidResolvedBy)
 		return
@@ -480,7 +493,7 @@ func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	memberID := strings.TrimSpace(req.MemberID)
+	memberID := req.MemberID
 	if memberID == "" {
 		writeInquiryErr(w, inquirydom.ErrInvalidUpdatedBy)
 		return
@@ -538,8 +551,8 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 	}
 
 	createdAt := time.Now().UTC()
-	if req.CreatedAt != nil && strings.TrimSpace(*req.CreatedAt) != "" {
-		t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.CreatedAt))
+	if req.CreatedAt != nil && *req.CreatedAt != "" {
+		t, err := time.Parse(time.RFC3339, *req.CreatedAt)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid createdAt"})
@@ -548,24 +561,24 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 		createdAt = t.UTC()
 	}
 
-	createdBy := strings.TrimSpace(req.CreatedBy)
+	createdBy := req.CreatedBy
 	if createdBy == "" {
 		createdBy = "system"
 	}
 
 	var objectPath *string
-	if strings.TrimSpace(req.ObjectPath) != "" {
-		v := strings.TrimSpace(req.ObjectPath)
+	if req.ObjectPath != "" {
+		v := req.ObjectPath
 		objectPath = &v
 	}
 
 	image, err := inquirydom.NewImageFileMinimal(
 		id,
-		strings.TrimSpace(req.FileName),
-		strings.TrimSpace(req.FileURL),
+		req.FileName,
+		req.FileURL,
 		objectPath,
 		req.FileSize,
-		strings.TrimSpace(req.MimeType),
+		req.MimeType,
 		createdAt,
 		createdBy,
 	)
@@ -622,7 +635,7 @@ func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	fileName := strings.TrimSpace(r.URL.Query().Get("fileName"))
+	fileName := r.URL.Query().Get("fileName")
 	if fileName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "fileName is required"})
@@ -678,8 +691,8 @@ func buildInquiryImagesForConsoleReply(
 
 	for _, raw := range rawImages {
 		imgCreatedAt := now
-		if raw.CreatedAt != nil && strings.TrimSpace(*raw.CreatedAt) != "" {
-			t, err := time.Parse(time.RFC3339, strings.TrimSpace(*raw.CreatedAt))
+		if raw.CreatedAt != nil && *raw.CreatedAt != "" {
+			t, err := time.Parse(time.RFC3339, *raw.CreatedAt)
 			if err != nil {
 				return nil, inquirydom.ErrInvalidImageCreatedAt
 			}
@@ -687,18 +700,18 @@ func buildInquiryImagesForConsoleReply(
 		}
 
 		var objectPath *string
-		if strings.TrimSpace(raw.ObjectPath) != "" {
-			v := strings.TrimSpace(raw.ObjectPath)
+		if raw.ObjectPath != "" {
+			v := raw.ObjectPath
 			objectPath = &v
 		}
 
 		img, err := inquirydom.NewImageFileMinimal(
 			inquiryID,
-			strings.TrimSpace(raw.FileName),
-			strings.TrimSpace(raw.FileURL),
+			raw.FileName,
+			raw.FileURL,
 			objectPath,
 			raw.FileSize,
-			strings.TrimSpace(raw.MimeType),
+			raw.MimeType,
 			imgCreatedAt,
 			memberID,
 		)
@@ -714,7 +727,6 @@ func buildInquiryImagesForConsoleReply(
 
 func currentCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	companyID, ok := middleware.CompanyID(r)
-	companyID = strings.TrimSpace(companyID)
 	if !ok || companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found"})
@@ -722,6 +734,45 @@ func currentCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	}
 
 	return companyID, true
+}
+
+func currentMemberID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	memberID := usecase.MemberIDFromContext(r.Context())
+	if memberID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "memberId not found"})
+		return "", false
+	}
+
+	return memberID, true
+}
+
+func writeInquiryDetailWithReplies(
+	w http.ResponseWriter,
+	detail any,
+	replies []inquirydom.Reply,
+) {
+	raw, err := json.Marshal(detail)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to encode inquiry detail"})
+		return
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to encode inquiry detail"})
+		return
+	}
+
+	if replies == nil {
+		replies = []inquirydom.Reply{}
+	}
+
+	body["replies"] = replies
+
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 // エラーハンドリング

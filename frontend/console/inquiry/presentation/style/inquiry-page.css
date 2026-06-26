@@ -22,26 +22,29 @@
 .inq-detail__meta {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
+  gap: 10px;
 }
 
 .inq-detail__meta > div {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 12px;
 }
 
 .inq-detail__label {
   color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
   font-size: 0.75rem;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .inq-detail__value {
+  min-width: 0;
   color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font-size: 0.92rem;
-  line-height: 1.7;
+  font-size: 0.88rem;
+  line-height: 1.5;
   word-break: break-word;
 }
 
@@ -73,6 +76,7 @@
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.4;
+  white-space: nowrap;
 }
 
 .inq__empty {
@@ -130,10 +134,13 @@
 .inq-reply-modal {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100dvh;
   padding: 24px;
   background: rgba(15, 23, 42, 0.48);
   backdrop-filter: blur(4px);
@@ -141,7 +148,7 @@
 
 .inq-reply-modal__panel {
   width: min(640px, 100%);
-  max-height: min(720px, calc(100vh - 48px));
+  max-height: min(760px, calc(100vh - 48px));
   overflow: auto;
   border-radius: 20px;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
@@ -305,36 +312,110 @@
 }
 
 /* =========================================================
-   Responsive
+   Reply modal upload
 ========================================================= */
 
-@media (max-width: 768px) {
-  .inq-detail__image-grid {
-    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  }
+.inq-reply-modal__upload {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
-  .inq-reply-modal {
-    align-items: flex-end;
-    padding: 12px;
-  }
+.inq-reply-modal__upload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  .inq-reply-modal__panel {
-    max-height: calc(100vh - 24px);
-    border-radius: 18px;
-  }
+.inq-reply-modal__upload-count {
+  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
 
-  .inq-reply-modal__header,
-  .inq-reply-modal__body,
-  .inq-reply-modal__actions {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
+.inq-reply-modal__upload-box {
+  display: flex;
+  min-height: 92px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed hsl(var(--border, 214.3 31.8% 91.4%));
+  border-radius: 14px;
+  background: hsl(var(--muted, 210 40% 96.1%));
+  cursor: pointer;
+  padding: 16px;
+  text-align: center;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
 
-  .inq-reply-modal__actions {
-    flex-direction: column-reverse;
-  }
+.inq-reply-modal__upload-box:hover {
+  border-color: hsl(var(--ring, 215 20.2% 65.1%));
+  background: hsl(var(--background, 0 0% 100%));
+}
 
-  .inq-reply-modal__button {
-    width: 100%;
-  }
+.inq-reply-modal__upload-input {
+  display: none;
+}
+
+.inq-reply-modal__upload-main {
+  color: hsl(var(--foreground, 222.2 84% 4.9%));
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.inq-reply-modal__upload-sub {
+  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.inq-reply-modal__preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+}
+
+.inq-reply-modal__preview-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
+  background: hsl(var(--muted, 210 40% 96.1%));
+}
+
+.inq-reply-modal__preview-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.inq-reply-modal__preview-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(15, 23, 42, 0.86);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.inq-reply-modal__preview-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }

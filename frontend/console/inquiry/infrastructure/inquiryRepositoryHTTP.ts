@@ -1,5 +1,8 @@
 // frontend/console/inquiry/infrastructure/inquiryRepositoryHTTP.ts
 
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+
+import { storage } from "../../shell/src/auth/infrastructure/config/firebaseClient";
 import { API_BASE } from "../../shell/src/shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,
@@ -12,6 +15,7 @@ import {
 
 export type InquiryStatus = string;
 export type InquiryType = string;
+export type InquiryReplySenderType = "avatar" | "member" | string;
 
 export type InquiryImageFile = {
   inquiryId?: string;
@@ -20,6 +24,23 @@ export type InquiryImageFile = {
   objectPath?: string | null;
   fileSize: number;
   mimeType: string;
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+};
+
+export type InquiryReply = {
+  id: string;
+  inquiryId: string;
+  senderType: InquiryReplySenderType;
+  senderId: string;
+  content: string;
+  isRead?: boolean;
+  images?: InquiryImageFile[];
+
   createdAt?: string;
   createdBy?: string;
   updatedAt?: string | null;
@@ -119,6 +140,7 @@ export type InquiryManagementItem = {
 
 export type InquiryDetail = {
   inquiry: Inquiry;
+  replies?: InquiryReply[];
   modelId: string;
   productBlueprintId: string;
   productName: string;
@@ -130,10 +152,14 @@ export type InquiryDetail = {
   shippingAddresses: InquiryShippingAddress[];
   orders: InquiryOrderSummary[];
   companyId: string;
+
+  mintAddress?: string;
+  transferredAt?: string | null;
 };
 
 export type InquiryAggregate = {
   inquiry: Inquiry;
+  replies?: InquiryReply[];
   images: InquiryImageFile[];
   modelId: string;
   productBlueprintId: string;
@@ -146,6 +172,9 @@ export type InquiryAggregate = {
   shippingAddresses: InquiryShippingAddress[];
   orders: InquiryOrderSummary[];
   companyId: string;
+
+  mintAddress?: string;
+  transferredAt?: string | null;
 };
 
 export type InquiryPageResult<T> = {
@@ -201,6 +230,18 @@ export type ReplyInquiryParams = {
   images?: InquiryImageFile[];
 };
 
+export type UploadInquiryReplyImageParams = {
+  inquiryId: string;
+  memberId: string;
+  file: File;
+};
+
+export type UploadInquiryReplyImagesParams = {
+  inquiryId: string;
+  memberId: string;
+  files: File[];
+};
+
 // -----------------------------------------------------------
 // internal helpers
 // -----------------------------------------------------------
@@ -254,6 +295,106 @@ function buildInquiryListQuery(params: ListInquiriesParams): string {
 
 async function readErrorDetail(res: Response): Promise<string> {
   return res.text().catch(() => "");
+}
+
+function sanitizeFileName(fileName: string): string {
+  const sanitized = String(fileName ?? "")
+    .trim()
+    .replace(/[\\/:*?"<>|#%{}[\]`^~]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 120);
+
+  return sanitized || "image";
+}
+
+function createClientID(prefix: string): string {
+  const randomID =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  return `${prefix}_${randomID}`;
+}
+
+function assertImageFile(file: File): File {
+  if (!file) {
+    throw new Error("inquiryRepositoryHTTP: file が空です");
+  }
+
+  if (!String(file.type ?? "").startsWith("image/")) {
+    throw new Error("画像ファイルのみアップロードできます");
+  }
+
+  return file;
+}
+
+// -----------------------------------------------------------
+// Firebase Storage: Inquiry reply 画像アップロード
+//
+// Storage path:
+//   inquiry-replies/{inquiryId}/{imageId}/{fileName}
+//
+// Firestore 保存用 metadata:
+//   backend の POST /inquiries/{id}/reply の images に渡す。
+// -----------------------------------------------------------
+
+export async function uploadInquiryReplyImageToStorage(
+  params: UploadInquiryReplyImageParams,
+): Promise<InquiryImageFile> {
+  const inquiryId = assertID(params.inquiryId, "inquiryId");
+  const memberId = assertID(params.memberId, "memberId");
+  const file = assertImageFile(params.file);
+
+  const imageId = createClientID("reply_image");
+  const fileName = sanitizeFileName(file.name);
+  const mimeType = file.type || "application/octet-stream";
+  const objectPath = `inquiry-replies/${encodeURIComponent(
+    inquiryId,
+  )}/${encodeURIComponent(imageId)}/${encodeURIComponent(fileName)}`;
+
+  const storageRef = ref(storage, objectPath);
+
+  await uploadBytes(storageRef, file, {
+    contentType: mimeType,
+    customMetadata: {
+      inquiryId,
+      createdBy: memberId,
+    },
+  });
+
+  const fileUrl = await getDownloadURL(storageRef);
+
+  return {
+    inquiryId,
+    fileName,
+    fileUrl,
+    objectPath,
+    fileSize: Number(file.size ?? 0),
+    mimeType,
+    createdAt: new Date().toISOString(),
+    createdBy: memberId,
+  };
+}
+
+export async function uploadInquiryReplyImagesToStorage(
+  params: UploadInquiryReplyImagesParams,
+): Promise<InquiryImageFile[]> {
+  const inquiryId = assertID(params.inquiryId, "inquiryId");
+  const memberId = assertID(params.memberId, "memberId");
+  const files = Array.isArray(params.files) ? params.files : [];
+
+  if (files.length === 0) {
+    return [];
+  }
+
+  return Promise.all(
+    files.map((file) =>
+      uploadInquiryReplyImageToStorage({
+        inquiryId,
+        memberId,
+        file,
+      }),
+    ),
+  );
 }
 
 // -----------------------------------------------------------
@@ -329,6 +470,7 @@ export async function countUnreadInquiriesHTTP(
 //
 // NOTE:
 //   backend 側で未読の場合は MarkAsRead される。
+//   response.replies には inquiries/{id}/replies 配下の返信一覧が入る。
 // -----------------------------------------------------------
 
 export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
@@ -347,7 +489,12 @@ export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
     );
   }
 
-  return (await res.json()) as InquiryDetail;
+  const detail = (await res.json()) as InquiryDetail;
+
+  return {
+    ...detail,
+    replies: Array.isArray(detail.replies) ? detail.replies : [],
+  };
 }
 
 // -----------------------------------------------------------
@@ -426,18 +573,22 @@ export async function reopenInquiryHTTP(
 //   {
 //     "memberId": "member_document_id",
 //     "content": "返信本文",
-//     "images": []
+//     "images": [
+//       {
+//         "fileName": "sample.png",
+//         "fileUrl": "https://firebasestorage.googleapis.com/...",
+//         "objectPath": "inquiry-replies/{inquiryId}/{imageId}/sample.png",
+//         "fileSize": 12345,
+//         "mimeType": "image/png"
+//       }
+//     ]
 //   }
-//
-// NOTE:
-//   この関数は frontend の型エラー解消と返信モーダル接続用。
-//   backend 側に POST /inquiries/{id}/reply が未実装の場合は 404 になります。
 // -----------------------------------------------------------
 
 export async function replyInquiryHTTP(
   id: string,
   params: ReplyInquiryParams,
-): Promise<Inquiry> {
+): Promise<InquiryReply> {
   const trimmedId = assertID(id, "id");
   const memberId = assertID(params.memberId, "memberId");
   const content = assertID(params.content, "content");
@@ -463,7 +614,7 @@ export async function replyInquiryHTTP(
     );
   }
 
-  return (await res.json()) as Inquiry;
+  return (await res.json()) as InquiryReply;
 }
 
 // -----------------------------------------------------------

@@ -390,6 +390,71 @@ func (r *InquiryReplyRepositoryFS) ListByInquiryID(
 	return replies, nil
 }
 
+func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
+	ctx context.Context,
+	inquiryID string,
+	readerSenderType idom.ReplySenderType,
+	readerSenderID string,
+	readAt time.Time,
+) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+	if inquiryID == "" {
+		return idom.ErrInvalidReplyInquiryID
+	}
+	if readerSenderType == "" {
+		return idom.ErrInvalidReplySenderType
+	}
+	if readerSenderID == "" {
+		return idom.ErrInvalidReplySenderID
+	}
+	if readAt.IsZero() {
+		return idom.ErrInvalidReplyUpdatedAt
+	}
+
+	updatedAt := readAt.UTC()
+
+	it := r.col(inquiryID).Documents(ctx)
+	defer it.Stop()
+
+	bulk := r.Client.BulkWriter(ctx)
+	defer bulk.End()
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		reply, err := docToReply(doc)
+		if err != nil {
+			return err
+		}
+
+		if reply.SenderType == readerSenderType && reply.SenderID == readerSenderID {
+			continue
+		}
+
+		if reply.IsRead {
+			continue
+		}
+
+		_, err = bulk.Update(doc.Ref, []firestore.Update{
+			{Path: "isRead", Value: true},
+			{Path: "updatedAt", Value: updatedAt},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // =======================
 // Mapping Helpers
 // =======================
@@ -427,6 +492,7 @@ func replyToDocData(reply idom.Reply) map[string]any {
 		"senderType": string(reply.SenderType),
 		"senderId":   reply.SenderID,
 		"content":    reply.Content,
+		"isRead":     reply.IsRead,
 		"images":     imagesToDocData(reply.Images),
 		"createdAt":  reply.CreatedAt.UTC(),
 		"createdBy":  reply.CreatedBy,
@@ -518,6 +584,7 @@ func docToReply(doc *firestore.DocumentSnapshot) (idom.Reply, error) {
 		SenderType: idom.ReplySenderType(asString(data["senderType"])),
 		SenderID:   asString(data["senderId"]),
 		Content:    asString(data["content"]),
+		IsRead:     asBool(data["isRead"]),
 		CreatedBy:  asString(data["createdBy"]),
 		UpdatedAt:  ptrTimeFromMap(data, "updatedAt"),
 		UpdatedBy:  ptrStringFromMap(data, "updatedBy"),
