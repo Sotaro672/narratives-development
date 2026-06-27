@@ -124,7 +124,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
 
       {shouldShowAnnouncementButton ? (
         <Link
-          to="/announcements"
+          to="/chats"
           className="header__settings-link header__cart-link"
           aria-label={`問い合わせ ${safeInquiryUnreadCount}件`}
           title="問い合わせ"

@@ -35,6 +35,7 @@ func NewInquiryHandler(
 //
 // Supported:
 //
+//	GET  /mall/me/inquiries
 //	POST /mall/me/inquiries
 //	GET  /mall/me/inquiries/unread-count
 //	GET  /mall/me/inquiries/{id}
@@ -58,13 +59,19 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Path == "/mall/me/inquiries" {
-		if r.Method != http.MethodPost {
+		switch r.Method {
+		case http.MethodGet:
+			h.list(w, r)
+			return
+
+		case http.MethodPost:
+			h.create(w, r)
+			return
+
+		default:
 			methodNotAllowed(w)
 			return
 		}
-
-		h.create(w, r)
-		return
 	}
 
 	if r.URL.Path == "/mall/me/inquiries/unread-count" {
@@ -184,6 +191,39 @@ type replyInquiryRequest struct {
 	Images  []createInquiryImageIn `json:"images"`
 }
 
+// GET /mall/me/inquiries
+//
+// avatar 側が自分の起票した問い合わせ一覧を取得します。
+func (h *InquiryHandler) list(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	avatarID, ok := currentAvatarIDFromRequest(w, r)
+	if !ok {
+		return
+	}
+
+	filter := buildInquiryFilterFromQuery(r)
+	page := buildInquiryPageFromQuery(r)
+
+	result, err := h.query.ListByAvatarID(
+		ctx,
+		avatarID,
+		filter,
+		inquirydom.Sort{},
+		page,
+	)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"items":   result.Items,
+		"page":    page.Number,
+		"perPage": page.PerPage,
+	})
+}
+
 // POST /mall/me/inquiries
 func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -279,9 +319,7 @@ func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 
 // GET /mall/me/inquiries/{id}
 //
-// avatar 側が company member からの返信・ステータス更新を受け取るための取得 endpoint です。
-// Inquiry 本体を返します。
-// reply 一覧は GET /mall/me/inquiries/{id}/replies で取得します。
+// avatar 側が自分の問い合わせ本体を取得します。
 func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -304,6 +342,10 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 // GET /mall/me/inquiries/{id}/replies
 //
 // avatar 側が問い合わせ配下の reply 一覧を取得します。
+//
+// Expected flow:
+//
+//	ListByAvatarID -> GetByID -> ListByInquiryID
 func (h *InquiryHandler) listReplies(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -312,12 +354,7 @@ func (h *InquiryHandler) listReplies(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
-		writeInquiryErr(w, err)
-		return
-	}
-
-	replies, err := h.uc.ListReplies(ctx, id)
+	replies, err := h.query.ListRepliesByInquiryIDForAvatar(ctx, id, avatarID)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -447,6 +484,11 @@ func (h *InquiryHandler) close(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
+	if _, err := h.query.GetByIDForAvatar(ctx, id, avatarID); err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
 	updated, err := h.uc.CloseByAvatar(ctx, usecase.CloseInquiryByAvatarInput{
 		InquiryID: id,
 		AvatarID:  avatarID,
@@ -484,6 +526,22 @@ func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
 	}
 
 	return filter
+}
+
+func buildInquiryPageFromQuery(r *http.Request) inquirydom.Page {
+	q := r.URL.Query()
+
+	pageNumber := parsePositiveInt(q.Get("page"), 1)
+	perPage := parsePositiveInt(q.Get("perPage"), 100)
+
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	return inquirydom.Page{
+		Number:  pageNumber,
+		PerPage: perPage,
+	}
 }
 
 func buildInquiryImagesForMall(

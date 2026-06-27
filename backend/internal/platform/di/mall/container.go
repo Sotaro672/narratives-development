@@ -210,9 +210,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	c.InquiryQ = mallquery.NewInquiryQuery(
 		inquiryRepo,
-		productRepo,
-		modelRepoFS,
-		productBlueprintRepoFS,
+		inquiryReplyRepo,
 	)
 
 	announcementRepo := outfs.NewAnnouncementRepositoryFS(fsClient)

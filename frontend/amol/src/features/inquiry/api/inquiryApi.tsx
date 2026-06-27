@@ -1,3 +1,4 @@
+// frontend/amol/src/features/inquiry/api/inquiryApi.tsx
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
@@ -52,6 +53,29 @@ export type InquiryReply = {
   updatedAt?: string | null;
 };
 
+export type ListMeInquiriesParams = {
+  page?: number;
+  perPage?: number;
+  productId?: string;
+  status?: string;
+  inquiryType?: string;
+  searchQuery?: string;
+  signal?: AbortSignal;
+};
+
+export type ListMeInquiriesResult = {
+  items: Inquiry[];
+  page?: number;
+  perPage?: number;
+  total?: number;
+  totalCount?: number;
+};
+
+export type InquiryThread = {
+  inquiry: Inquiry | null;
+  replies: InquiryReply[];
+};
+
 type ApiDataResponse<T> = {
   data?: T;
   error?: string;
@@ -59,11 +83,16 @@ type ApiDataResponse<T> = {
 
 type ApiItemsResponse<T> = {
   items?: T[];
+  page?: number;
+  perPage?: number;
+  total?: number;
+  totalCount?: number;
   error?: string;
 };
 
 type ApiUnreadCountResponse = {
   count?: number;
+  unreadCount?: number;
   error?: string;
 };
 
@@ -102,6 +131,24 @@ function sanitizeStorageFileName(fileName: string): string {
   }
 
   return trimmed.replace(/[^\w.\-()]/g, "_");
+}
+
+function appendOptionalQuery(
+  query: URLSearchParams,
+  key: string,
+  value: string | number | null | undefined,
+) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  const normalized = String(value).trim();
+
+  if (!normalized) {
+    return;
+  }
+
+  query.set(key, normalized);
 }
 
 async function readApiJson<T>(res: Response): Promise<T> {
@@ -198,6 +245,44 @@ export async function createInquiry(
   return json.data ?? null;
 }
 
+export async function listMeInquiries(
+  params: ListMeInquiriesParams = {},
+): Promise<ListMeInquiriesResult> {
+  const query = new URLSearchParams();
+
+  appendOptionalQuery(query, "page", params.page);
+  appendOptionalQuery(query, "perPage", params.perPage);
+  appendOptionalQuery(query, "productId", params.productId);
+  appendOptionalQuery(query, "status", params.status);
+  appendOptionalQuery(query, "inquiryType", params.inquiryType);
+  appendOptionalQuery(query, "searchQuery", params.searchQuery);
+
+  const queryString = query.toString();
+  const path = queryString
+    ? `/mall/me/inquiries?${queryString}`
+    : "/mall/me/inquiries";
+
+  const json = await fetchWithAuth<ApiItemsResponse<Inquiry>>(path, {
+    method: "GET",
+    signal: params.signal,
+  });
+
+  return {
+    items: Array.isArray(json.items) ? json.items : [],
+    page: json.page,
+    perPage: json.perPage,
+    total: json.total,
+    totalCount: json.totalCount,
+  };
+}
+
+// ChatListPage などから使いやすい互換 alias です。
+export async function fetchMeInquiries(
+  params: ListMeInquiriesParams = {},
+): Promise<ListMeInquiriesResult> {
+  return listMeInquiries(params);
+}
+
 export async function getInquiry(inquiryId: string): Promise<Inquiry | null> {
   const json = await fetchWithAuth<ApiDataResponse<Inquiry>>(
     `/mall/me/inquiries/${encodeURIComponent(inquiryId)}`,
@@ -222,26 +307,29 @@ export async function listInquiryReplies(
   return Array.isArray(json.items) ? json.items : [];
 }
 
+export async function getInquiryThread(
+  inquiryId: string,
+): Promise<InquiryThread> {
+  const [inquiry, replies] = await Promise.all([
+    getInquiry(inquiryId),
+    listInquiryReplies(inquiryId),
+  ]);
+
+  return {
+    inquiry,
+    replies,
+  };
+}
+
 export async function getUnreadInquiryCount(
   params: GetUnreadInquiryCountParams = {},
 ): Promise<number> {
   const query = new URLSearchParams();
 
-  if (params.productId) {
-    query.set("productId", params.productId);
-  }
-
-  if (params.status) {
-    query.set("status", params.status);
-  }
-
-  if (params.inquiryType) {
-    query.set("inquiryType", params.inquiryType);
-  }
-
-  if (params.searchQuery) {
-    query.set("searchQuery", params.searchQuery);
-  }
+  appendOptionalQuery(query, "productId", params.productId);
+  appendOptionalQuery(query, "status", params.status);
+  appendOptionalQuery(query, "inquiryType", params.inquiryType);
+  appendOptionalQuery(query, "searchQuery", params.searchQuery);
 
   const queryString = query.toString();
   const path = queryString
@@ -252,7 +340,7 @@ export async function getUnreadInquiryCount(
     method: "GET",
   });
 
-  return Number(json.count ?? 0);
+  return Number(json.count ?? json.unreadCount ?? 0);
 }
 
 export async function markInquiryAsRead(

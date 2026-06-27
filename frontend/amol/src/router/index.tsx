@@ -26,6 +26,7 @@ import OrderConfirmedPage from "../pages/OrderConfirmedPage";
 import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
 import InquiryPage from "../pages/InquiryCreatePage";
+import ChatListPage from "../pages/ChatListPage";
 import WalletPage from "../pages/WalletPage";
 import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";
@@ -164,6 +165,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <AnnouncementDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/chats",
+    element: (
+      <ProtectedRoute>
+        <ChatListPage />
       </ProtectedRoute>
     ),
   },

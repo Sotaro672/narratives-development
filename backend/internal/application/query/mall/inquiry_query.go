@@ -3,59 +3,85 @@ package mall
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	inquirydom "narratives/internal/domain/inquiry"
-	modeldom "narratives/internal/domain/model"
-	productdom "narratives/internal/domain/product"
-	productblueprintdom "narratives/internal/domain/productBlueprint"
 )
 
-// InquiryQuery は mall 側の Inquiry read model を扱います。
+// InquiryQuery は mall 側の Inquiry / Reply read model を扱います。
 //
-// usecase は command 専用に寄せるため、mall 画面で必要な Inquiry 取得は
+// usecase は command 専用に寄せるため、mall 画面で必要な read 処理は
 // この query service に集約します。
-// また、Inquiry.ProductID から Product.ModelID を解決し、
-// ModelVariation.GetProductBlueprintID() から productBlueprintId を解決し、
-// ProductBlueprint.CompanyID を解決します。
+//
+// 期待する reply 一覧取得フロー:
+//
+//  1. ListByAvatarID
+//     avatarId に紐づく Inquiry 一覧を取得し、対象 inquiryId が avatar のものか確認する
+//
+//  2. GetByID
+//     対象 Inquiry の現在状態を取得する
+//
+//  3. ListByInquiryID
+//     inquiries/{inquiryId}/replies/{replyId} を取得する
 type InquiryQuery struct {
-	repo                 inquirydom.Repository
-	productRepo          productdom.Repository
-	modelRepo            modeldom.RepositoryPort
-	productBlueprintRepo productblueprintdom.Repository
+	repo      inquirydom.Repository
+	replyRepo inquirydom.ReplyRepository
 }
 
 // NewInquiryQuery は InquiryQuery を初期化します。
 func NewInquiryQuery(
 	repo inquirydom.Repository,
-	productRepo productdom.Repository,
-	modelRepo modeldom.RepositoryPort,
-	productBlueprintRepo productblueprintdom.Repository,
+	replyRepo inquirydom.ReplyRepository,
 ) *InquiryQuery {
 	return &InquiryQuery{
-		repo:                 repo,
-		productRepo:          productRepo,
-		modelRepo:            modelRepo,
-		productBlueprintRepo: productBlueprintRepo,
+		repo:      repo,
+		replyRepo: replyRepo,
 	}
 }
 
-// InquiryDetail は mall 側の Inquiry 詳細表示用 read model です。
+// ListByAvatarID は avatar に紐づく Inquiry 一覧を取得します。
 //
-// Inquiry.ProductID から解決した modelId / productBlueprintId / companyId を含めます。
-type InquiryDetail struct {
-	Inquiry            inquirydom.Inquiry `json:"inquiry"`
-	ModelID            string             `json:"modelId"`
-	ProductBlueprintID string             `json:"productBlueprintId"`
-	CompanyID          string             `json:"companyId"`
+// Mall 側のチャット一覧 / 問い合わせ一覧で使います。
+// avatarID は request body / query から受け取らず、middleware の AvatarContext から解決した値を渡します。
+//
+// filter.AvatarID は呼び出し元の値を信用せず、必ず引数 avatarID で上書きします。
+func (q *InquiryQuery) ListByAvatarID(
+	ctx context.Context,
+	avatarID string,
+	filter inquirydom.Filter,
+	sort inquirydom.Sort,
+	page inquirydom.Page,
+) (inquirydom.PageResult[inquirydom.Inquiry], error) {
+	if q == nil || q.repo == nil {
+		return inquirydom.PageResult[inquirydom.Inquiry]{}, fmt.Errorf("mall inquiry query: repository is nil")
+	}
+
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return inquirydom.PageResult[inquirydom.Inquiry]{}, inquirydom.ErrInvalidAvatarID
+	}
+
+	filter.AvatarID = &avatarID
+
+	if page.Number <= 0 {
+		page.Number = 1
+	}
+
+	if page.PerPage <= 0 {
+		page.PerPage = 100
+	}
+
+	return q.repo.ListByAvatarID(ctx, avatarID, filter, sort, page)
 }
 
 // GetByID は Inquiry を取得します。
 //
 // command 処理前の現在状態取得など、domain entity が必要な場合に使います。
-func (q *InquiryQuery) GetByID(ctx context.Context, id string) (inquirydom.Inquiry, error) {
+func (q *InquiryQuery) GetByID(
+	ctx context.Context,
+	id string,
+) (inquirydom.Inquiry, error) {
 	if q == nil || q.repo == nil {
 		return inquirydom.Inquiry{}, fmt.Errorf("mall inquiry query: repository is nil")
 	}
@@ -70,16 +96,13 @@ func (q *InquiryQuery) GetByID(ctx context.Context, id string) (inquirydom.Inqui
 
 // GetByIDForAvatar は avatar 所有確認込みで Inquiry を取得します。
 //
-// reply / close 前の現在状態確認など、domain entity が必要な command 補助で使います。
+// ListByAvatarID で avatar scope を確認した後、GetByID で現在状態を取得します。
+// 取得結果の AvatarID も念のため確認します。
 func (q *InquiryQuery) GetByIDForAvatar(
 	ctx context.Context,
 	id string,
 	avatarID string,
 ) (inquirydom.Inquiry, error) {
-	if q == nil || q.repo == nil {
-		return inquirydom.Inquiry{}, fmt.Errorf("mall inquiry query: repository is nil")
-	}
-
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidID
@@ -90,7 +113,37 @@ func (q *InquiryQuery) GetByIDForAvatar(
 		return inquirydom.Inquiry{}, inquirydom.ErrInvalidAvatarID
 	}
 
-	inq, err := q.repo.GetByID(ctx, id)
+	filter := inquirydom.Filter{
+		IDs: []string{id},
+	}
+
+	result, err := q.ListByAvatarID(
+		ctx,
+		avatarID,
+		filter,
+		inquirydom.Sort{},
+		inquirydom.Page{
+			Number:  1,
+			PerPage: 1,
+		},
+	)
+	if err != nil {
+		return inquirydom.Inquiry{}, err
+	}
+
+	found := false
+	for _, item := range result.Items {
+		if strings.TrimSpace(item.ID) == id {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return inquirydom.Inquiry{}, inquirydom.ErrInquiryForbidden
+	}
+
+	inq, err := q.GetByID(ctx, id)
 	if err != nil {
 		return inquirydom.Inquiry{}, err
 	}
@@ -102,89 +155,44 @@ func (q *InquiryQuery) GetByIDForAvatar(
 	return inq, nil
 }
 
-// GetDetailByIDForAvatar は avatar 所有確認込みで Inquiry 詳細 read model を取得します。
+// ListByInquiryID は Inquiry の reply subcollection を取得します。
 //
-// Inquiry.ProductID から product repository を使って Product.ModelID を取得し、
-// model repository を使って ModelVariation.GetProductBlueprintID() を取得し、
-// productBlueprint repository を使って ProductBlueprint.CompanyID を取得します。
-func (q *InquiryQuery) GetDetailByIDForAvatar(
+// 保存先:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+func (q *InquiryQuery) ListByInquiryID(
 	ctx context.Context,
-	id string,
-	avatarID string,
-) (InquiryDetail, error) {
-	inq, err := q.GetByIDForAvatar(ctx, id, avatarID)
-	if err != nil {
-		return InquiryDetail{}, err
+	inquiryID string,
+) ([]inquirydom.Reply, error) {
+	if q == nil || q.replyRepo == nil {
+		return nil, fmt.Errorf("mall inquiry query: reply repository is nil")
 	}
 
-	modelID, productBlueprintID, companyID, err := q.resolveProductModelRefByInquiryProductID(ctx, inq.ProductID)
-	if err != nil {
-		return InquiryDetail{}, err
+	inquiryID = strings.TrimSpace(inquiryID)
+	if inquiryID == "" {
+		return nil, inquirydom.ErrInvalidReplyInquiryID
 	}
 
-	return InquiryDetail{
-		Inquiry:            inq,
-		ModelID:            modelID,
-		ProductBlueprintID: productBlueprintID,
-		CompanyID:          companyID,
-	}, nil
+	return q.replyRepo.ListByInquiryID(ctx, inquiryID)
 }
 
-func (q *InquiryQuery) resolveProductModelRefByInquiryProductID(
+// ListRepliesByInquiryIDForAvatar は avatar 所有確認込みで reply 一覧を取得します。
+//
+// 処理順:
+//
+//  1. ListByAvatarID
+//  2. GetByID
+//  3. ListByInquiryID
+//
+// handler 側で reply 一覧を返す場合は、この method を呼びます。
+func (q *InquiryQuery) ListRepliesByInquiryIDForAvatar(
 	ctx context.Context,
-	productID string,
-) (modelID string, productBlueprintID string, companyID string, err error) {
-	if q == nil {
-		return "", "", "", fmt.Errorf("mall inquiry query: query is nil")
+	inquiryID string,
+	avatarID string,
+) ([]inquirydom.Reply, error) {
+	if _, err := q.GetByIDForAvatar(ctx, inquiryID, avatarID); err != nil {
+		return nil, err
 	}
 
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
-		return "", "", "", nil
-	}
-
-	if q.productRepo == nil {
-		return "", "", "", fmt.Errorf("mall inquiry query: product repository is nil")
-	}
-
-	product, err := q.productRepo.GetByID(ctx, productID)
-	if err != nil {
-		if errors.Is(err, productdom.ErrNotFound) {
-			return "", "", "", nil
-		}
-		return "", "", "", err
-	}
-
-	modelID = strings.TrimSpace(product.ModelID)
-	if modelID == "" {
-		return "", "", "", nil
-	}
-
-	if q.modelRepo == nil {
-		return modelID, "", "", fmt.Errorf("mall inquiry query: model repository is nil")
-	}
-
-	model, err := q.modelRepo.GetByID(ctx, modelID)
-	if err != nil {
-		if errors.Is(err, modeldom.ErrNotFound) {
-			return modelID, "", "", nil
-		}
-		return modelID, "", "", err
-	}
-
-	productBlueprintID = strings.TrimSpace(model.GetProductBlueprintID())
-	if productBlueprintID == "" {
-		return modelID, "", "", nil
-	}
-
-	if q.productBlueprintRepo == nil {
-		return modelID, productBlueprintID, "", fmt.Errorf("mall inquiry query: product blueprint repository is nil")
-	}
-
-	productBlueprint, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
-	if err != nil {
-		return modelID, productBlueprintID, "", err
-	}
-
-	return modelID, productBlueprintID, strings.TrimSpace(productBlueprint.CompanyID), nil
+	return q.ListByInquiryID(ctx, inquiryID)
 }
