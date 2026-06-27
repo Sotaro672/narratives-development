@@ -27,6 +27,25 @@ export default function Header(props: HeaderProps) {
     actions,
   } = useHeaderController(props);
 
+  const hasDirectActionButton =
+    !!props.actionButtonLabel && typeof props.onActionButtonClick === "function";
+
+  const mergedActions = {
+    ...actions,
+    hasActionButton: actions.hasActionButton || hasDirectActionButton,
+    actionButtonLabel: props.actionButtonLabel ?? actions.actionButtonLabel,
+    onActionButtonClick:
+      props.onActionButtonClick ?? actions.onActionButtonClick,
+    actionButtonDisabled:
+      props.actionButtonDisabled ?? actions.actionButtonDisabled,
+    shouldShowSettingsButton: hasDirectActionButton
+      ? false
+      : actions.shouldShowSettingsButton,
+  };
+
+  const shouldRenderSettingsPanel =
+    shouldShowSettingsButton && !hasDirectActionButton;
+
   return (
     <header className="header">
       <div className="header__inner">
@@ -63,7 +82,7 @@ export default function Header(props: HeaderProps) {
 
         <HeaderDesktopNavigation />
 
-        <HeaderActions actions={actions} />
+        <HeaderActions actions={mergedActions} />
       </div>
 
       {shouldShowMenuButton ? (
@@ -76,7 +95,7 @@ export default function Header(props: HeaderProps) {
         />
       ) : null}
 
-      {shouldShowSettingsButton ? (
+      {shouldRenderSettingsPanel ? (
         <HeaderSettingsPanel
           settingsOpen={settingsOpen}
           closeSettings={closeSettings}

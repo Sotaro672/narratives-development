@@ -14,6 +14,9 @@ type FooterProps =
       variant?: "default";
       renderMode?: "bottom" | "sidebar";
       onNavigate?: () => void;
+      centerActionLabel?: string;
+      centerActionDisabled?: boolean;
+      onCenterActionClick?: () => void | Promise<void>;
     }
   | {
       variant: "action";

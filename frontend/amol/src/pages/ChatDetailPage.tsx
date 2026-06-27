@@ -1,5 +1,11 @@
 // frontend/amol/src/pages/ChatDetailPage.tsx
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -7,6 +13,8 @@ import {
   getInquiry,
   listInquiryReplies,
   markInquiryAsRead,
+  replyInquiry,
+  uploadReplyImage,
   type Inquiry,
   type InquiryImage,
   type InquiryReply,
@@ -35,6 +43,14 @@ export default function ChatDetailPage() {
   const [loading, setLoading] = useState<boolean>(!state?.inquiry);
   const [error, setError] = useState<string>("");
 
+  const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [replyError, setReplyError] = useState("");
+  const [postingReply, setPostingReply] = useState(false);
+
+  const canSubmitReply = replyContent.trim() !== "" || replyFiles.length > 0;
+
   const sortedReplies = useMemo(() => {
     return [...replies].sort((a, b) => {
       const aTime = getComparableTime(a.createdAt ?? a.updatedAt);
@@ -57,26 +73,14 @@ export default function ChatDetailPage() {
     setError("");
 
     try {
-      const [nextInquiry, nextReplies] = await Promise.all([
+      const [nextInquiry, nextReplies, updatedInquiry] = await Promise.all([
         getInquiry(inquiryId),
         listInquiryReplies(inquiryId),
+        markInquiryAsRead(inquiryId),
       ]);
 
-      setInquiry(nextInquiry);
+      setInquiry(updatedInquiry ?? nextInquiry);
       setReplies(nextReplies);
-
-      if (nextInquiry?.isRead === false) {
-        await markInquiryAsRead(inquiryId);
-
-        setInquiry((current) =>
-          current
-            ? {
-                ...current,
-                isRead: true,
-              }
-            : current,
-        );
-      }
     } catch (caught) {
       setInquiry(null);
       setReplies([]);
@@ -94,7 +98,92 @@ export default function ChatDetailPage() {
     void loadThread();
   }, [loadThread]);
 
+  const openReplyModal = useCallback(() => {
+    setReplyError("");
+    setIsReplyModalOpen(true);
+  }, []);
+
+  const closeReplyModal = useCallback(() => {
+    if (postingReply) {
+      return;
+    }
+
+    setIsReplyModalOpen(false);
+    setReplyContent("");
+    setReplyFiles([]);
+    setReplyError("");
+  }, [postingReply]);
+
+  const handleReplyFilesChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+
+      if (files.length > 0) {
+        setReplyFiles((current) => [...current, ...files]);
+      }
+
+      event.target.value = "";
+    },
+    [],
+  );
+
+  const removeReplyFile = useCallback((index: number) => {
+    setReplyFiles((current) =>
+      current.filter((_, currentIndex) => currentIndex !== index),
+    );
+  }, []);
+
+  const submitReply = useCallback(async () => {
+    if (!inquiryId || postingReply) {
+      return;
+    }
+
+    const content = replyContent.trim();
+
+    if (!content && replyFiles.length === 0) {
+      setReplyError("本文または画像を入力してください。");
+      return;
+    }
+
+    setPostingReply(true);
+    setReplyError("");
+
+    try {
+      const images = await Promise.all(
+        replyFiles.map((file) =>
+          uploadReplyImage({
+            inquiryId,
+            file,
+          }),
+        ),
+      );
+
+      const createdReply = await replyInquiry(inquiryId, {
+        content,
+        images,
+      });
+
+      if (createdReply) {
+        setReplies((current) => [...current, createdReply]);
+      } else {
+        const nextReplies = await listInquiryReplies(inquiryId);
+        setReplies(nextReplies);
+      }
+
+      setIsReplyModalOpen(false);
+      setReplyContent("");
+      setReplyFiles([]);
+    } catch (caught) {
+      setReplyError(
+        caught instanceof Error ? caught.message : "返信の送信に失敗しました",
+      );
+    } finally {
+      setPostingReply(false);
+    }
+  }, [inquiryId, postingReply, replyContent, replyFiles]);
+
   const title = getInquiryTitle(inquiry);
+  const replyActionDisabled = !inquiryId || loading || !inquiry || postingReply;
 
   return (
     <Layout
@@ -103,6 +192,15 @@ export default function ChatDetailPage() {
       showFooter
       mode="mypage"
       mainClassName="chat-detail-page-layout"
+      actionButtonLabel="返信"
+      onActionButtonClick={openReplyModal}
+      actionButtonDisabled={replyActionDisabled}
+      footerProps={{
+        variant: "default",
+        centerActionLabel: "返信",
+        centerActionDisabled: replyActionDisabled,
+        onCenterActionClick: openReplyModal,
+      }}
     >
       <section className="page-section content-page-section chat-detail-page">
         {error ? (
@@ -161,9 +259,7 @@ export default function ChatDetailPage() {
             </article>
 
             <div className="chat-detail-page__reply-section">
-              <h3 className="chat-detail-page__section-title">
-                返信一覧
-              </h3>
+              <h3 className="chat-detail-page__section-title">返信一覧</h3>
 
               {sortedReplies.length === 0 ? (
                 <div className="chat-detail-page__no-replies">
@@ -216,6 +312,93 @@ export default function ChatDetailPage() {
           </div>
         ) : null}
       </section>
+
+      {isReplyModalOpen ? (
+        <div className="chat-detail-page__modal-backdrop">
+          <div
+            className="chat-detail-page__modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chat-detail-reply-modal-title"
+          >
+            <div className="chat-detail-page__modal-header">
+              <h2 id="chat-detail-reply-modal-title">返信する</h2>
+              <button
+                type="button"
+                className="chat-detail-page__modal-close"
+                onClick={closeReplyModal}
+                disabled={postingReply}
+                aria-label="閉じる"
+              >
+                ×
+              </button>
+            </div>
+
+            <textarea
+              className="chat-detail-page__reply-input"
+              value={replyContent}
+              onChange={(event) => setReplyContent(event.target.value)}
+              placeholder="返信内容を入力"
+              rows={6}
+              disabled={postingReply}
+            />
+
+            <label className="chat-detail-page__file-picker">
+              <span>画像を追加</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleReplyFilesChange}
+                disabled={postingReply}
+              />
+            </label>
+
+            {replyFiles.length > 0 ? (
+              <div className="chat-detail-page__selected-files">
+                {replyFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${file.lastModified}-${index}`}
+                    className="chat-detail-page__selected-file"
+                  >
+                    <span>{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeReplyFile(index)}
+                      disabled={postingReply}
+                    >
+                      削除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {replyError ? (
+              <div className="chat-detail-page__modal-error" role="alert">
+                {replyError}
+              </div>
+            ) : null}
+
+            <div className="chat-detail-page__modal-actions">
+              <button
+                type="button"
+                onClick={closeReplyModal}
+                disabled={postingReply}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={submitReply}
+                disabled={!canSubmitReply || postingReply}
+              >
+                {postingReply ? "送信中..." : "送信"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Layout>
   );
 }
@@ -244,7 +427,7 @@ function ImageGrid({ images }: { images?: InquiryImage[] | null }) {
             <img
               className="chat-detail-page__image"
               src={src}
-              alt={image.fileName || `添付画像 ${index + 1}`}
+              alt={image.fileName || `添付画像${index + 1}`}
               loading="lazy"
             />
           </a>

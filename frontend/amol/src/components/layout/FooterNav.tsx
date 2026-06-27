@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { NavLink, useLocation } from "react-router-dom";
-import { ScanLine, ShoppingBag, UserRound } from "lucide-react";
+import { MessageCircle, ScanLine, ShoppingBag, UserRound } from "lucide-react";
 import "./footer.css";
 
 type FooterNavProps =
@@ -10,6 +10,9 @@ type FooterNavProps =
       variant?: "default";
       renderMode?: "bottom" | "sidebar";
       onNavigate?: () => void;
+      centerActionLabel?: string;
+      centerActionDisabled?: boolean;
+      onCenterActionClick?: () => void | Promise<void>;
     }
   | {
       variant: "action";
@@ -93,7 +96,7 @@ export default function FooterNav(props: FooterNavProps) {
               Authorization: `Bearer ${idToken}`,
             },
             credentials: "include",
-          }
+          },
         );
 
         if (!response.ok) {
@@ -222,7 +225,7 @@ export default function FooterNav(props: FooterNavProps) {
               className="footer-nav__review-rating-caret"
               aria-hidden="true"
             >
-              ▲
+              ▾
             </span>
           </button>
 
@@ -276,6 +279,9 @@ export default function FooterNav(props: FooterNavProps) {
 
   const renderMode = props.renderMode ?? "bottom";
   const onNavigate = props.onNavigate;
+  const centerActionLabel = props.centerActionLabel?.trim() ?? "";
+  const hasCenterAction =
+    centerActionLabel !== "" && typeof props.onCenterActionClick === "function";
 
   const footerClassName =
     renderMode === "sidebar" ? "footer-nav footer-nav--sidebar" : "footer-nav";
@@ -295,18 +301,33 @@ export default function FooterNav(props: FooterNavProps) {
         <span className="footer-nav__label">ショップ</span>
       </NavLink>
 
-      <NavLink
-        to="/scan"
-        onClick={onNavigate}
-        className={({ isActive }) =>
-          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
-        }
-      >
-        <span className="footer-nav__icon" aria-hidden="true">
-          <ScanLine className="footer-nav__svg-icon" strokeWidth={2.2} />
-        </span>
-        <span className="footer-nav__label">スキャン</span>
-      </NavLink>
+      {hasCenterAction ? (
+        <button
+          type="button"
+          onClick={() => void props.onCenterActionClick?.()}
+          disabled={props.centerActionDisabled}
+          className="footer-nav__item footer-nav__item--button"
+          aria-label={centerActionLabel}
+        >
+          <span className="footer-nav__icon" aria-hidden="true">
+            <MessageCircle className="footer-nav__svg-icon" strokeWidth={2.2} />
+          </span>
+          <span className="footer-nav__label">{centerActionLabel}</span>
+        </button>
+      ) : (
+        <NavLink
+          to="/scan"
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+          }
+        >
+          <span className="footer-nav__icon" aria-hidden="true">
+            <ScanLine className="footer-nav__svg-icon" strokeWidth={2.2} />
+          </span>
+          <span className="footer-nav__label">スキャン</span>
+        </NavLink>
+      )}
 
       <NavLink
         to="/wallet"
