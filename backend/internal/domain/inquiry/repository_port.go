@@ -92,6 +92,18 @@ type Repository interface {
 		page Page,
 	) (PageResult[Inquiry], error)
 
+	// ListByAvatarID lists inquiries created by / associated with the given avatar.
+	//
+	// This is used by avatar-side features where companyId is not available.
+	// Repository implementations should apply avatarId as the primary scope.
+	ListByAvatarID(
+		ctx context.Context,
+		avatarID string,
+		filter Filter,
+		sort Sort,
+		page Page,
+	) (PageResult[Inquiry], error)
+
 	// CountUnreadByCompanyID counts inquiries where isRead is false
 	// within the given company scope.
 	//
@@ -108,4 +120,63 @@ type Repository interface {
 	Create(ctx context.Context, inq Inquiry) (Inquiry, error)
 	Update(ctx context.Context, id string, patch InquiryPatch) (Inquiry, error)
 	Delete(ctx context.Context, id string) error
+}
+
+// ReplyRepository is the repository port for inquiry replies.
+//
+// Replies are stored outside the Inquiry aggregate body:
+//
+//	inquiries/{inquiryId}/replies/{replyId}
+//
+// Reply is intentionally separated from Inquiry.Content.
+// Inquiry.Content must remain the first inquiry body only.
+type ReplyRepository interface {
+	Create(ctx context.Context, reply Reply) (Reply, error)
+
+	ListByInquiryID(
+		ctx context.Context,
+		inquiryID string,
+	) ([]Reply, error)
+
+	// CountUnreadByAvatarID counts unread replies for the given avatar.
+	//
+	// Expected flow:
+	// - avatar creates an Inquiry for a product
+	// - member replies to that Inquiry
+	// - avatar receives +1 unread reply count
+	//
+	// Repository implementations should count replies under inquiries associated
+	// with avatarID where:
+	// - reply.isRead == false
+	// - reply.senderType != avatar OR reply.senderId != avatarID
+	//
+	// Inquiry.IsRead should not be counted here because the Inquiry body is
+	// created by the avatar itself.
+	//
+	// If Reply does not denormalize avatarId, repository implementations should
+	// first resolve inquiries by avatarId, then count unread replies under those
+	// inquiry documents.
+	CountUnreadByAvatarID(
+		ctx context.Context,
+		avatarID string,
+		filter Filter,
+	) (int, error)
+
+	// MarkAsReadByInquiryID marks replies under the given inquiry as read.
+	//
+	// Repository implementations must not mark the reader's own replies as read.
+	// A reply should be skipped when:
+	//
+	//	reply.SenderType == readerSenderType && reply.SenderID == readerSenderID
+	//
+	// Repository implementations should update:
+	// - isRead = true
+	// - updatedAt = readAt
+	MarkAsReadByInquiryID(
+		ctx context.Context,
+		inquiryID string,
+		readerSenderType ReplySenderType,
+		readerSenderID string,
+		readAt time.Time,
+	) error
 }

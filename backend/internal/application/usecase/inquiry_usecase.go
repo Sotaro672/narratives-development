@@ -30,36 +30,6 @@ type AvatarEmailResolver interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
 }
 
-// InquiryReplyRepository is the minimal repository required for storing
-// inquiry replies in Firestore subcollection:
-//
-//	inquiries/{inquiryId}/replies/{replyId}
-//
-// Reply is intentionally separated from Inquiry.Content.
-// Inquiry.Content must remain the first inquiry body only.
-type InquiryReplyRepository interface {
-	Create(ctx context.Context, reply inquirydom.Reply) (inquirydom.Reply, error)
-	ListByInquiryID(ctx context.Context, inquiryID string) ([]inquirydom.Reply, error)
-
-	// MarkAsReadByInquiryID marks replies under the given inquiry as read.
-	//
-	// Repository implementations must not mark the reader's own replies as read.
-	// A reply should be skipped when:
-	//
-	//	reply.SenderType == readerSenderType && reply.SenderID == readerSenderID
-	//
-	// Repository implementations should update:
-	// - isRead = true
-	// - updatedAt = readAt
-	MarkAsReadByInquiryID(
-		ctx context.Context,
-		inquiryID string,
-		readerSenderType inquirydom.ReplySenderType,
-		readerSenderID string,
-		readAt time.Time,
-	) error
-}
-
 // InquiryUsecase は Inquiry の command を扱います。
 //
 // 画像は Inquiry.Images として Inquiry 集約内で管理します。
@@ -73,7 +43,7 @@ type InquiryReplyRepository interface {
 // に保存します。
 type InquiryUsecase struct {
 	repo      inquirydom.Repository
-	replyRepo InquiryReplyRepository
+	replyRepo inquirydom.ReplyRepository
 
 	mailer   InquiryCreatedMailer
 	mailFrom string
@@ -88,81 +58,32 @@ type InquiryUsecase struct {
 	now func() time.Time
 }
 
-// NewInquiryUsecase はユースケースを初期化します。
-func NewInquiryUsecase(repo inquirydom.Repository) *InquiryUsecase {
-	return &InquiryUsecase{
-		repo: repo,
-		now:  time.Now,
-	}
-}
-
-// NewInquiryUsecaseWithMailer はメール送信ありの InquiryUsecase を初期化します。
+// NewInquiryUsecase は InquiryUsecase の唯一の生成入口です。
 //
-// mailer が nil、または mailFrom が空の場合、Create 時のメール送信は行いません。
-// mailTo は fallback 用です。通常は SetAvatarEmailResolver と SetAuthUserEmailGetter で
-// avatar.UserID から送信先 email を解決してください。
-func NewInquiryUsecaseWithMailer(
+// InquiryUsecase が必要とする依存はここに集約します。
+// replyRepo は reply 作成・一覧取得・既読化・avatar 未読件数集計で必須です。
+//
+// mailer / mailFrom / mailTo / avatarEmailResolver / authUserGetter はメール送信用です。
+// メール送信を使わない場合は nil / 空文字を渡してください。
+func NewInquiryUsecase(
 	repo inquirydom.Repository,
+	replyRepo inquirydom.ReplyRepository,
 	mailer InquiryCreatedMailer,
 	mailFrom string,
 	mailTo string,
+	avatarEmailResolver AvatarEmailResolver,
+	authUserGetter AuthUserEmailGetter,
 ) *InquiryUsecase {
 	return &InquiryUsecase{
-		repo:     repo,
-		mailer:   mailer,
-		mailFrom: mailFrom,
-		mailTo:   mailTo,
-		now:      time.Now,
+		repo:                repo,
+		replyRepo:           replyRepo,
+		mailer:              mailer,
+		mailFrom:            mailFrom,
+		mailTo:              mailTo,
+		avatarEmailResolver: avatarEmailResolver,
+		authUserGetter:      authUserGetter,
+		now:                 time.Now,
 	}
-}
-
-// SetInquiryCreatedMailer は既存の InquiryUsecase にメール送信設定を追加します。
-//
-// bootstrap / wire 側で既存 constructor を変えにくい場合に使います。
-// mailTo は fallback 用です。通常は avatar.UserID から送信先 email を解決します。
-func (uc *InquiryUsecase) SetInquiryCreatedMailer(
-	mailer InquiryCreatedMailer,
-	mailFrom string,
-	mailTo string,
-) {
-	if uc == nil {
-		return
-	}
-
-	uc.mailer = mailer
-	uc.mailFrom = mailFrom
-	uc.mailTo = mailTo
-}
-
-// SetReplyRepository は Inquiry reply subcollection 保存用 repository を設定します。
-//
-// 保存先:
-//
-//	inquiries/{inquiryId}/replies/{replyId}
-func (uc *InquiryUsecase) SetReplyRepository(repo InquiryReplyRepository) {
-	if uc == nil {
-		return
-	}
-
-	uc.replyRepo = repo
-}
-
-// SetAvatarEmailResolver は Inquiry.AvatarID から avatar を取得する resolver を設定します。
-func (uc *InquiryUsecase) SetAvatarEmailResolver(resolver AvatarEmailResolver) {
-	if uc == nil {
-		return
-	}
-
-	uc.avatarEmailResolver = resolver
-}
-
-// SetAuthUserEmailGetter は Firebase Auth UID から email を取得する getter を設定します。
-func (uc *InquiryUsecase) SetAuthUserEmailGetter(getter AuthUserEmailGetter) {
-	if uc == nil {
-		return
-	}
-
-	uc.authUserGetter = getter
 }
 
 // SetNowFunc はテスト用に現在時刻関数を差し替えます。
@@ -361,6 +282,17 @@ type CountUnreadInquiriesForAvatarInput struct {
 	Filter    inquirydom.Filter
 }
 
+// CountUnreadByAvatarIDInput は avatar 向けの未読件数集計入力です。
+//
+// companyId を使わず、avatarId に紐づく Inquiry 配下 replies の未読数を返します。
+//
+// avatar 側では、avatar 自身が起票した Inquiry 本体を未読件数に含めません。
+// member が avatar 宛に返信した unread reply を count 対象にします。
+type CountUnreadByAvatarIDInput struct {
+	AvatarID string
+	Filter   inquirydom.Filter
+}
+
 // CountUnreadByCompanyIDForMember は Inquiry 本体と replies を対象に未読件数を返します。
 //
 // reply の count 条件:
@@ -507,6 +439,34 @@ func (uc *InquiryUsecase) CountUnreadByCompanyIDForAvatar(
 	}
 
 	return total, nil
+}
+
+// CountUnreadByAvatarID は avatarId のみで avatar 向け未読件数を返します。
+//
+// Inquiry 本体の IsRead は avatar 自身が起票した初回本文に対する既読状態のため、
+// avatar 向け未読数には含めません。
+//
+// count 条件は ReplyRepository 側で以下として扱います:
+//
+//	!reply.IsRead
+//	&& !(reply.SenderType == avatar && reply.SenderID == avatarID)
+func (uc *InquiryUsecase) CountUnreadByAvatarID(
+	ctx context.Context,
+	in CountUnreadByAvatarIDInput,
+) (int, error) {
+	if uc == nil || uc.replyRepo == nil {
+		return 0, fmt.Errorf("inquiry usecase: reply repository is nil")
+	}
+
+	avatarID := in.AvatarID
+	if avatarID == "" {
+		return 0, inquirydom.ErrInvalidAvatarID
+	}
+
+	filter := in.Filter
+	filter.AvatarID = &avatarID
+
+	return uc.replyRepo.CountUnreadByAvatarID(ctx, avatarID, filter)
 }
 
 // CountUnreadByCompanyID は後方互換用の shorthand です。

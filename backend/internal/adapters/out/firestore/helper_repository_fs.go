@@ -67,6 +67,46 @@ func asInt(v any) int {
 	}
 }
 
+func asBool(v any) bool {
+	if v == nil {
+		return false
+	}
+
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return strings.EqualFold(t, "true") || t == "1"
+	case int:
+		return t != 0
+	case int8:
+		return t != 0
+	case int16:
+		return t != 0
+	case int32:
+		return t != 0
+	case int64:
+		return t != 0
+	case uint:
+		return t != 0
+	case uint8:
+		return t != 0
+	case uint16:
+		return t != 0
+	case uint32:
+		return t != 0
+	case uint64:
+		return t != 0
+	case float32:
+		return t != 0
+	case float64:
+		return t != 0
+	default:
+		s := strings.TrimSpace(fmt.Sprint(v))
+		return strings.EqualFold(s, "true") || s == "1"
+	}
+}
+
 // asTime returns (time, ok)
 func asTime(v any) (time.Time, bool) {
 	if v == nil {
@@ -134,6 +174,7 @@ func containsString(xs []string, v string) bool {
 	}
 	return false
 }
+
 func getStringField(obj any, field string) string {
 	rv := reflect.ValueOf(obj)
 	if rv.Kind() == reflect.Ptr {
@@ -153,4 +194,73 @@ func getStringField(obj any, field string) string {
 		return f.String()
 	}
 	return ""
+}
+
+func setOptionalString(m map[string]any, key string, value *string) {
+	if value != nil && *value != "" {
+		m[key] = *value
+	}
+}
+
+func setOptionalTime(m map[string]any, key string, value *time.Time) {
+	if value != nil && !value.IsZero() {
+		m[key] = value.UTC()
+	}
+}
+
+func optionalStringFromPatch(value *string) *string {
+	if value == nil || *value == "" {
+		return nil
+	}
+
+	v := *value
+	return &v
+}
+
+func optionalTimeFromPatch(value *time.Time) *time.Time {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+
+	utc := value.UTC()
+	return &utc
+}
+
+func ptrStringFromMap(m map[string]any, key string) *string {
+	s := asString(m[key])
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func timeFromMap(m map[string]any, key string) time.Time {
+	t, _ := asTime(m[key])
+	return t.UTC()
+}
+
+func ptrTimeFromMap(m map[string]any, key string) *time.Time {
+	t, ok := asTime(m[key])
+	if !ok || t.IsZero() {
+		return nil
+	}
+
+	utc := t.UTC()
+	return &utc
+}
+
+func ptrOrEmpty(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func anyImageMatches[T any](items []T, fn func(T) bool) bool {
+	for _, item := range items {
+		if fn(item) {
+			return true
+		}
+	}
+	return false
 }

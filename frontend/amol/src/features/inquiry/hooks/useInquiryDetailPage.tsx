@@ -135,10 +135,6 @@ export function useInquiryDetailPage() {
     return (searchParams.get("inquiryId") ?? "").trim();
   }, [searchParams]);
 
-  const companyId = useMemo(() => {
-    return (searchParams.get("companyId") ?? "").trim();
-  }, [searchParams]);
-
   const backTo = useMemo(() => {
     if (productId) {
       return `/scan/result/${encodeURIComponent(productId)}`;
@@ -154,7 +150,7 @@ export function useInquiryDetailPage() {
     loadUnreadCount,
     clearUnreadCount,
   } = useInquiryUnreadCounter({
-    companyId,
+    enabled: Boolean(inquiryId),
   });
 
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
@@ -410,7 +406,6 @@ export function useInquiryDetailPage() {
     navigate,
     productId,
     inquiryId,
-    companyId,
     backTo,
 
     inquiry,

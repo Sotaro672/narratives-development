@@ -127,6 +127,97 @@ func (r *InquiryRepositoryFS) ListByCompanyID(
 	}, nil
 }
 
+func (r *InquiryRepositoryFS) ListByAvatarID(
+	ctx context.Context,
+	avatarID string,
+	filter idom.Filter,
+	sort idom.Sort,
+	page idom.Page,
+) (idom.PageResult[idom.Inquiry], error) {
+	if r.Client == nil {
+		return idom.PageResult[idom.Inquiry]{}, errors.New("firestore client is nil")
+	}
+	if avatarID == "" {
+		return idom.PageResult[idom.Inquiry]{}, idom.ErrInvalidAvatarID
+	}
+
+	pageNum := page.Number
+	perPage := page.PerPage
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+	if perPage <= 0 {
+		perPage = 50
+	}
+	if perPage > 200 {
+		perPage = 200
+	}
+
+	filter.AvatarID = &avatarID
+
+	q := r.col().
+		Where("avatarId", "==", avatarID)
+	q = applyInquirySort(q, sort)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	items := make([]idom.Inquiry, 0)
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return idom.PageResult[idom.Inquiry]{}, err
+		}
+
+		in, err := docToInquiry(doc)
+		if err != nil {
+			return idom.PageResult[idom.Inquiry]{}, err
+		}
+
+		if matchInquiryFilter(in, filter) {
+			items = append(items, in)
+		}
+	}
+
+	total := len(items)
+	if total == 0 {
+		return idom.PageResult[idom.Inquiry]{
+			Items:      []idom.Inquiry{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	offset := (pageNum - 1) * perPage
+	if offset > total {
+		offset = total
+	}
+
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+
+	totalPages := 0
+	if perPage > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+
+	return idom.PageResult[idom.Inquiry]{
+		Items:      items[offset:end],
+		TotalCount: total,
+		TotalPages: totalPages,
+		Page:       pageNum,
+		PerPage:    perPage,
+	}, nil
+}
+
 func (r *InquiryRepositoryFS) CountUnreadByCompanyID(
 	ctx context.Context,
 	companyID string,
@@ -295,234 +386,6 @@ func (r *InquiryRepositoryFS) Delete(ctx context.Context, id string) error {
 	}
 
 	return nil
-}
-
-// =======================
-// Reply Subcollection Repository
-// =======================
-
-// InquiryReplyRepositoryFS implements Inquiry reply repository using Firestore.
-//
-// 保存先:
-//
-//	inquiries/{inquiryId}/replies/{replyId}
-type InquiryReplyRepositoryFS struct {
-	Client *firestore.Client
-}
-
-func NewInquiryReplyRepositoryFS(client *firestore.Client) *InquiryReplyRepositoryFS {
-	return &InquiryReplyRepositoryFS{Client: client}
-}
-
-func (r *InquiryReplyRepositoryFS) col(inquiryID string) *firestore.CollectionRef {
-	return r.Client.
-		Collection("inquiries").
-		Doc(inquiryID).
-		Collection("replies")
-}
-
-func (r *InquiryReplyRepositoryFS) Create(
-	ctx context.Context,
-	reply idom.Reply,
-) (idom.Reply, error) {
-	if r.Client == nil {
-		return idom.Reply{}, errors.New("firestore client is nil")
-	}
-
-	if err := reply.Validate(); err != nil {
-		return idom.Reply{}, err
-	}
-
-	docRef := r.col(reply.InquiryID).Doc(reply.ID)
-
-	_, err := docRef.Create(ctx, replyToDocData(reply))
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return idom.Reply{}, idom.ErrConflict
-		}
-		return idom.Reply{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return idom.Reply{}, err
-	}
-
-	return docToReplyWithFallbackInquiryID(snap, reply.InquiryID)
-}
-
-func (r *InquiryReplyRepositoryFS) ListByInquiryID(
-	ctx context.Context,
-	inquiryID string,
-) ([]idom.Reply, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-	if inquiryID == "" {
-		return nil, idom.ErrInvalidReplyInquiryID
-	}
-
-	it := r.col(inquiryID).
-		OrderBy("createdAt", firestore.Asc).
-		OrderBy("id", firestore.Asc).
-		Documents(ctx)
-	defer it.Stop()
-
-	replies := make([]idom.Reply, 0)
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		reply, err := docToReplyWithFallbackInquiryID(doc, inquiryID)
-		if err != nil {
-			return nil, err
-		}
-
-		replies = append(replies, reply)
-	}
-
-	return replies, nil
-}
-
-func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
-	ctx context.Context,
-	inquiryID string,
-	readerSenderType idom.ReplySenderType,
-	readerSenderID string,
-	readAt time.Time,
-) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	if inquiryID == "" {
-		return idom.ErrInvalidReplyInquiryID
-	}
-	if readerSenderType == "" {
-		return idom.ErrInvalidReplySenderType
-	}
-	if readerSenderID == "" {
-		return idom.ErrInvalidReplySenderID
-	}
-	if readAt.IsZero() {
-		return idom.ErrInvalidReplyUpdatedAt
-	}
-
-	updatedAt := readAt.UTC()
-
-	it := r.col(inquiryID).Documents(ctx)
-	defer it.Stop()
-
-	bulk := r.Client.BulkWriter(ctx)
-	defer bulk.End()
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		data := doc.Data()
-		if data == nil {
-			return fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
-		}
-
-		senderType := idom.ReplySenderType(asString(data["senderType"]))
-		senderID := asString(data["senderId"])
-		isRead := asBool(data["isRead"])
-
-		if senderType == readerSenderType && senderID == readerSenderID {
-			continue
-		}
-
-		if isRead {
-			continue
-		}
-
-		_, err = bulk.Update(doc.Ref, []firestore.Update{
-			{Path: "isRead", Value: true},
-			{Path: "updatedAt", Value: updatedAt},
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// CountUnreadByInquiryIDExcludingSender は、指定 inquiry 配下の未読 reply 数を返します。
-//
-// count 条件:
-//
-//	!reply.isRead
-//	&& !(reply.senderType == excludedSenderType && reply.senderId == excludedSenderID)
-//
-// usecase 側では member / avatar どちらもこの考え方で集計できます。
-// 現在の usecase interface では必須メソッドではありませんが、
-// repository 側の任意拡張として用意しています。
-func (r *InquiryReplyRepositoryFS) CountUnreadByInquiryIDExcludingSender(
-	ctx context.Context,
-	inquiryID string,
-	excludedSenderType idom.ReplySenderType,
-	excludedSenderID string,
-) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-	if inquiryID == "" {
-		return 0, idom.ErrInvalidReplyInquiryID
-	}
-	if excludedSenderType == "" {
-		return 0, idom.ErrInvalidReplySenderType
-	}
-	if excludedSenderID == "" {
-		return 0, idom.ErrInvalidReplySenderID
-	}
-
-	it := r.col(inquiryID).Documents(ctx)
-	defer it.Stop()
-
-	count := 0
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-
-		data := doc.Data()
-		if data == nil {
-			return 0, fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
-		}
-
-		senderType := idom.ReplySenderType(asString(data["senderType"]))
-		senderID := asString(data["senderId"])
-		isRead := asBool(data["isRead"])
-
-		if isRead {
-			continue
-		}
-
-		if senderType == excludedSenderType && senderID == excludedSenderID {
-			continue
-		}
-
-		count++
-	}
-
-	return count, nil
 }
 
 // =======================
@@ -932,7 +795,7 @@ func sortDirection(sort idom.Sort) firestore.Direction {
 }
 
 // =======================
-// Small Helpers
+// Inquiry-specific Helpers
 // =======================
 
 func normalizeInquiryImages(inq *idom.Inquiry, now time.Time) {
@@ -949,74 +812,6 @@ func normalizeInquiryImages(inq *idom.Inquiry, now time.Time) {
 			inq.Images[i].CreatedAt = now.UTC()
 		}
 	}
-}
-
-func setOptionalString(m map[string]any, key string, value *string) {
-	if value != nil && *value != "" {
-		m[key] = *value
-	}
-}
-
-func setOptionalTime(m map[string]any, key string, value *time.Time) {
-	if value != nil && !value.IsZero() {
-		m[key] = value.UTC()
-	}
-}
-
-func optionalStringFromPatch(value *string) *string {
-	if value == nil || *value == "" {
-		return nil
-	}
-
-	v := *value
-	return &v
-}
-
-func optionalTimeFromPatch(value *time.Time) *time.Time {
-	if value == nil || value.IsZero() {
-		return nil
-	}
-
-	utc := value.UTC()
-	return &utc
-}
-
-func ptrStringFromMap(m map[string]any, key string) *string {
-	s := asString(m[key])
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func timeFromMap(m map[string]any, key string) time.Time {
-	t, _ := asTime(m[key])
-	return t.UTC()
-}
-
-func ptrTimeFromMap(m map[string]any, key string) *time.Time {
-	t, ok := asTime(m[key])
-	if !ok || t.IsZero() {
-		return nil
-	}
-	utc := t.UTC()
-	return &utc
-}
-
-func ptrOrEmpty(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
-func anyImageMatches(images []idom.ImageFile, fn func(idom.ImageFile) bool) bool {
-	for _, img := range images {
-		if fn(img) {
-			return true
-		}
-	}
-	return false
 }
 
 func searchText(in idom.Inquiry) string {

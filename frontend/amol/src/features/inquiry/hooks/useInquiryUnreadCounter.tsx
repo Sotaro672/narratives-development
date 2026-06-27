@@ -1,10 +1,8 @@
-// frontend/amol/src/features/inquiry/hooks/useInquiryUnreadCounter.tsx
 import { useCallback, useEffect, useState } from "react";
 
 import { getUnreadInquiryCount } from "../api/inquiryApi";
 
 type UseInquiryUnreadCounterParams = {
-  companyId?: string;
   enabled?: boolean;
 };
 
@@ -25,11 +23,10 @@ function toError(caught: unknown): Error {
 export function useInquiryUnreadCounter(
   params: UseInquiryUnreadCounterParams = {},
 ): UseInquiryUnreadCounterResult {
-  const companyId = String(params.companyId ?? "").trim();
   const enabled = params.enabled ?? true;
 
   const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(enabled && Boolean(companyId));
+  const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
 
   const clearUnreadCount = useCallback(() => {
@@ -39,7 +36,7 @@ export function useInquiryUnreadCounter(
   }, []);
 
   const loadUnreadCount = useCallback(async () => {
-    if (!enabled || !companyId) {
+    if (!enabled) {
       clearUnreadCount();
       return;
     }
@@ -48,9 +45,7 @@ export function useInquiryUnreadCounter(
     setError(null);
 
     try {
-      const count = await getUnreadInquiryCount({
-        companyId,
-      });
+      const count = await getUnreadInquiryCount();
 
       setUnreadCount(
         typeof count === "number" && Number.isFinite(count)
@@ -63,7 +58,7 @@ export function useInquiryUnreadCounter(
     } finally {
       setLoading(false);
     }
-  }, [clearUnreadCount, companyId, enabled]);
+  }, [clearUnreadCount, enabled]);
 
   useEffect(() => {
     void loadUnreadCount();

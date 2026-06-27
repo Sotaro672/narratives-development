@@ -44,14 +44,6 @@ func (r *MintRepositoryFS) tokenBlueprintsCol() *firestore.CollectionRef {
 	return r.Client.Collection("token_blueprints")
 }
 
-func asBool(v any) bool {
-	b, ok := v.(bool)
-	if ok {
-		return b
-	}
-	return false
-}
-
 // s delegates to helper_repository_fs.go's asString(v any).
 func s(v any) string {
 	return asString(v)

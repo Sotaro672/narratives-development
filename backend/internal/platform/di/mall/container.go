@@ -206,6 +206,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
 
 	inquiryRepo := outfs.NewInquiryRepositoryFS(fsClient)
+	inquiryReplyRepo := outfs.NewInquiryReplyRepositoryFS(fsClient)
 
 	c.InquiryQ = mallquery.NewInquiryQuery(
 		inquiryRepo,
@@ -327,17 +328,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo, cartRepo)
 
-	c.InquiryUC = usecase.NewInquiryUsecaseWithMailer(
+	c.InquiryUC = usecase.NewInquiryUsecase(
 		inquiryRepo,
+		inquiryReplyRepo,
 		c.InquiryMailer,
 		c.OrderMailFrom,
 		c.InquiryMailTo,
+		avatarRepo,
+		authUserEmailGetter,
 	)
-
-	if c.InquiryUC != nil {
-		c.InquiryUC.SetAvatarEmailResolver(avatarRepo)
-		c.InquiryUC.SetAuthUserEmailGetter(authUserEmailGetter)
-	}
 
 	{
 		pf, configured, err := buildPaymentFlowUsecase(infra, c.PaymentUC)

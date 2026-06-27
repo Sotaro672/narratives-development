@@ -1,4 +1,3 @@
-// frontend/amol/src/features/inquiry/api/inquiryApi.tsx
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
@@ -66,6 +65,13 @@ type ApiItemsResponse<T> = {
 type ApiUnreadCountResponse = {
   count?: number;
   error?: string;
+};
+
+type GetUnreadInquiryCountParams = {
+  productId?: string;
+  status?: string;
+  inquiryType?: string;
+  searchQuery?: string;
 };
 
 function buildApiUrl(path: string): string {
@@ -216,16 +222,10 @@ export async function listInquiryReplies(
   return Array.isArray(json.items) ? json.items : [];
 }
 
-export async function getUnreadInquiryCount(params: {
-  companyId: string;
-  productId?: string;
-  status?: string;
-  inquiryType?: string;
-  searchQuery?: string;
-}): Promise<number> {
+export async function getUnreadInquiryCount(
+  params: GetUnreadInquiryCountParams = {},
+): Promise<number> {
   const query = new URLSearchParams();
-
-  query.set("companyId", params.companyId);
 
   if (params.productId) {
     query.set("productId", params.productId);
@@ -243,12 +243,14 @@ export async function getUnreadInquiryCount(params: {
     query.set("searchQuery", params.searchQuery);
   }
 
-  const json = await fetchWithAuth<ApiUnreadCountResponse>(
-    `/mall/me/inquiries/unread-count?${query.toString()}`,
-    {
-      method: "GET",
-    },
-  );
+  const queryString = query.toString();
+  const path = queryString
+    ? `/mall/me/inquiries/unread-count?${queryString}`
+    : "/mall/me/inquiries/unread-count";
+
+  const json = await fetchWithAuth<ApiUnreadCountResponse>(path, {
+    method: "GET",
+  });
 
   return Number(json.count ?? 0);
 }

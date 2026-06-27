@@ -36,7 +36,7 @@ func NewInquiryHandler(
 // Supported:
 //
 //	POST /mall/me/inquiries
-//	GET  /mall/me/inquiries/unread-count?companyId={companyId}
+//	GET  /mall/me/inquiries/unread-count
 //	GET  /mall/me/inquiries/{id}
 //	GET  /mall/me/inquiries/{id}/replies
 //	POST /mall/me/inquiries/{id}/mark-as-read
@@ -247,9 +247,10 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /mall/me/inquiries/unread-count?companyId={companyId}
+// GET /mall/me/inquiries/unread-count
 //
-// avatar 側が受け取る未読数を返します。
+// avatar 側が受け取る未読 reply 数を avatarId のみで返します。
+// companyId は使いません。
 // 自分が送信した reply は count 対象外です。
 func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -259,19 +260,11 @@ func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	companyID := strings.TrimSpace(r.URL.Query().Get("companyId"))
-	if companyID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is required"})
-		return
-	}
-
 	filter := buildInquiryFilterFromQuery(r)
 
-	count, err := h.uc.CountUnreadByCompanyIDForAvatar(ctx, usecase.CountUnreadInquiriesForAvatarInput{
-		CompanyID: companyID,
-		AvatarID:  avatarID,
-		Filter:    filter,
+	count, err := h.uc.CountUnreadByAvatarID(ctx, usecase.CountUnreadByAvatarIDInput{
+		AvatarID: avatarID,
+		Filter:   filter,
 	})
 	if err != nil {
 		writeInquiryErr(w, err)
@@ -279,7 +272,8 @@ func (h *InquiryHandler) countUnread(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"count": count,
+		"unreadCount": count,
+		"count":       count,
 	})
 }
 
