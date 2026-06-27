@@ -130,20 +130,23 @@ export default function ChatListPage() {
 
       const now = new Date().toISOString();
 
+      let nextItem: ChatListItem = item;
+
       try {
         if (item.isRead === false) {
           const updated = await markInquiryAsRead(item.id);
 
+          nextItem = {
+            ...item,
+            ...(updated ?? {}),
+            isRead: true,
+            readAt: item.readAt ?? now,
+            replies: item.replies,
+          };
+
           setItems((current) =>
             current.map((currentItem) =>
-              currentItem.id === item.id
-                ? {
-                    ...currentItem,
-                    ...(updated ?? {}),
-                    isRead: true,
-                    readAt: currentItem.readAt ?? now,
-                  }
-                : currentItem,
+              currentItem.id === item.id ? nextItem : currentItem,
             ),
           );
         }
@@ -159,11 +162,11 @@ export default function ChatListPage() {
         navigate(`/chats/${item.id}`, {
           state: {
             inquiry: {
-              ...item,
+              ...nextItem,
               isRead: true,
-              readAt: item.readAt ?? now,
+              readAt: nextItem.readAt ?? now,
             },
-            replies: item.replies,
+            replies: nextItem.replies,
           },
         });
       }
@@ -315,16 +318,6 @@ function getInquiryPreview(item: ChatListItem): string {
 
   if (latestReplyContent) {
     return latestReplyContent;
-  }
-
-  const apiLatestReplyContent = textOrEmpty(item.latestReplyContent);
-  if (apiLatestReplyContent) {
-    return apiLatestReplyContent;
-  }
-
-  const latestMessage = textOrEmpty(item.latestMessage);
-  if (latestMessage) {
-    return latestMessage;
   }
 
   const content = textOrEmpty(item.content);

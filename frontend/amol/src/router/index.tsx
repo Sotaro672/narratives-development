@@ -27,6 +27,7 @@ import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
 import InquiryPage from "../pages/InquiryCreatePage";
 import ChatListPage from "../pages/ChatListPage";
+import ChatDetailPage from "../pages/ChatDetailPage";
 import WalletPage from "../pages/WalletPage";
 import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";
@@ -173,6 +174,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <ChatListPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/chats/:inquiryId",
+    element: (
+      <ProtectedRoute>
+        <ChatDetailPage />
       </ProtectedRoute>
     ),
   },
