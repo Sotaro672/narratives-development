@@ -262,7 +262,7 @@ func (uc *InquiryUsecase) ListReplies(
 // - Inquiry 本体の isRead=false
 // - Inquiry 配下 replies の isRead=false
 //
-// ただし、memberId 自身が送信した reply は未読件数に含めません。
+// ただし、member 側から送信された reply は未読件数に含めません。
 type CountUnreadInquiriesForMemberInput struct {
 	CompanyID string
 	MemberID  string
@@ -298,7 +298,7 @@ type CountUnreadByAvatarIDInput struct {
 // reply の count 条件:
 //
 //	!reply.IsRead
-//	&& !(reply.SenderType == member && reply.SenderID == memberId)
+//	&& reply.SenderType != member
 //
 // NOTE:
 // company scope / filter に一致する Inquiry のみを対象に replies を集計します。
@@ -344,12 +344,7 @@ func (uc *InquiryUsecase) CountUnreadByCompanyIDForMember(
 				total++
 			}
 
-			replyUnreadCount, err := uc.countUnreadRepliesExcludingSender(
-				ctx,
-				inquiry.ID,
-				inquirydom.ReplySenderTypeMember,
-				memberID,
-			)
+			replyUnreadCount, err := uc.countUnreadRepliesForMember(ctx, inquiry.ID)
 			if err != nil {
 				return 0, err
 			}
@@ -486,6 +481,39 @@ func (uc *InquiryUsecase) CountUnreadByCompanyID(
 	}
 
 	return uc.repo.CountUnreadByCompanyID(ctx, companyID, filter)
+}
+
+func (uc *InquiryUsecase) countUnreadRepliesForMember(
+	ctx context.Context,
+	inquiryID string,
+) (int, error) {
+	if uc == nil || uc.replyRepo == nil {
+		return 0, nil
+	}
+	if inquiryID == "" {
+		return 0, inquirydom.ErrInvalidReplyInquiryID
+	}
+
+	replies, err := uc.replyRepo.ListByInquiryID(ctx, inquiryID)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+
+	for _, reply := range replies {
+		if reply.IsRead {
+			continue
+		}
+
+		if reply.SenderType == inquirydom.ReplySenderTypeMember {
+			continue
+		}
+
+		count++
+	}
+
+	return count, nil
 }
 
 func (uc *InquiryUsecase) countUnreadRepliesExcludingSender(

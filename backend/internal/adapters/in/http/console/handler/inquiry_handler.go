@@ -208,9 +208,21 @@ func (h *InquiryHandler) countUnreadByCompanyID(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	memberID, ok := currentMemberID(w, r)
+	if !ok {
+		return
+	}
+
 	filter := inquiryFilterFromRequest(r)
 
-	count, err := h.managementQuery.CountUnreadByCompanyID(ctx, companyID, filter)
+	count, err := h.uc.CountUnreadByCompanyIDForMember(
+		ctx,
+		usecase.CountUnreadInquiriesForMemberInput{
+			CompanyID: companyID,
+			MemberID:  memberID,
+			Filter:    filter,
+		},
+	)
 	if err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -304,7 +316,13 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	if !detail.Inquiry.IsRead {
+	replies, err := h.uc.ListReplies(ctx, id)
+	if err != nil {
+		writeInquiryErr(w, err)
+		return
+	}
+
+	if !detail.Inquiry.IsRead || hasUnreadAvatarReply(replies) {
 		updated, err := h.uc.MarkAsRead(ctx, usecase.MarkInquiryAsReadInput{
 			InquiryID:        id,
 			ReaderSenderType: inquirydom.ReplySenderTypeMember,
@@ -316,15 +334,29 @@ func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		}
 
 		detail.Inquiry = updated
-	}
 
-	replies, err := h.uc.ListReplies(ctx, id)
-	if err != nil {
-		writeInquiryErr(w, err)
-		return
+		replies, err = h.uc.ListReplies(ctx, id)
+		if err != nil {
+			writeInquiryErr(w, err)
+			return
+		}
 	}
 
 	writeInquiryDetailWithReplies(w, detail, replies)
+}
+
+func hasUnreadAvatarReply(replies []inquirydom.Reply) bool {
+	for _, reply := range replies {
+		if reply.IsRead {
+			continue
+		}
+
+		if reply.SenderType == inquirydom.ReplySenderTypeAvatar {
+			return true
+		}
+	}
+
+	return false
 }
 
 // POST /inquiries/{id}/reply

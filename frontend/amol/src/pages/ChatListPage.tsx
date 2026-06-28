@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/ChatListPage.tsx
+//frontend\amol\src\pages\ChatListPage.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,11 +10,18 @@ import {
   type Inquiry,
   type InquiryReply,
 } from "../features/inquiry/api/inquiryApi";
+import {
+  listReceivedMessages,
+  listSentMessages,
+  markMessageAsRead,
+  type Message,
+} from "../features/message/api/messageApi";
 
 import "../styles/page-layout.css";
 import "../styles/chat-list-page.css";
 
-type ChatListItem = Inquiry & {
+type InquiryChatListItem = Inquiry & {
+  chatKind: "inquiry";
   readAt?: string | null;
 
   productName?: string | null;
@@ -28,6 +35,20 @@ type ChatListItem = Inquiry & {
 
   replies: InquiryReply[];
 };
+
+type MessageThreadListItem = {
+  chatKind: "message";
+  id: string;
+  peerAvatarId: string;
+  messages: Message[];
+  unreadMessageIds: string[];
+  latestMessage?: Message;
+  isRead: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type ChatListItem = InquiryChatListItem | MessageThreadListItem;
 
 export default function ChatListPage() {
   const navigate = useNavigate();
@@ -46,51 +67,21 @@ export default function ChatListPage() {
     });
   }, [items]);
 
-  const loadInquiries = useCallback(async (signal?: AbortSignal) => {
+  const loadChats = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
 
     try {
-      const result = await listMeInquiries({
-        page: 1,
-        perPage: 100,
-        signal,
-      });
+      const [inquiries, messageThreads] = await Promise.all([
+        loadInquiryItems(signal),
+        loadMessageThreadItems(),
+      ]);
 
       if (signal?.aborted) {
         return;
       }
 
-      const itemsWithReplies = await Promise.all(
-        result.items.map(async (item): Promise<ChatListItem> => {
-          if (!item.id) {
-            return {
-              ...item,
-              replies: [],
-            };
-          }
-
-          try {
-            const replies = await listInquiryReplies(item.id);
-
-            return {
-              ...item,
-              replies,
-            };
-          } catch {
-            return {
-              ...item,
-              replies: [],
-            };
-          }
-        }),
-      );
-
-      if (signal?.aborted) {
-        return;
-      }
-
-      setItems(itemsWithReplies);
+      setItems([...inquiries, ...messageThreads]);
     } catch (caught) {
       if (signal?.aborted) {
         return;
@@ -100,7 +91,7 @@ export default function ChatListPage() {
       setError(
         caught instanceof Error
           ? caught.message
-          : "問い合わせ一覧の取得に失敗しました",
+          : "チャット一覧の取得に失敗しました",
       );
     } finally {
       if (!signal?.aborted) {
@@ -112,12 +103,12 @@ export default function ChatListPage() {
   useEffect(() => {
     const controller = new AbortController();
 
-    void loadInquiries(controller.signal);
+    void loadChats(controller.signal);
 
     return () => {
       controller.abort();
     };
-  }, [loadInquiries]);
+  }, [loadChats]);
 
   const handleOpenChat = useCallback(
     async (item: ChatListItem) => {
@@ -128,47 +119,21 @@ export default function ChatListPage() {
       setNavigatingId(item.id);
       setError("");
 
-      const now = new Date().toISOString();
-
-      let nextItem: ChatListItem = item;
-
       try {
-        if (item.isRead === false) {
-          const updated = await markInquiryAsRead(item.id);
-
-          nextItem = {
-            ...item,
-            ...(updated ?? {}),
-            isRead: true,
-            readAt: item.readAt ?? now,
-            replies: item.replies,
-          };
-
-          setItems((current) =>
-            current.map((currentItem) =>
-              currentItem.id === item.id ? nextItem : currentItem,
-            ),
-          );
+        if (item.chatKind === "inquiry") {
+          await openInquiryChat(item, setItems, navigate);
+          return;
         }
+
+        await openMessageThread(item, setItems, navigate);
       } catch (caught) {
         setError(
           caught instanceof Error
             ? caught.message
-            : "問い合わせの既読化に失敗しました",
+            : "チャットを開く処理に失敗しました",
         );
       } finally {
         setNavigatingId(null);
-
-        navigate(`/chats/${item.id}`, {
-          state: {
-            inquiry: {
-              ...nextItem,
-              isRead: true,
-              readAt: nextItem.readAt ?? now,
-            },
-            replies: nextItem.replies,
-          },
-        });
       }
     },
     [navigate, navigatingId],
@@ -195,7 +160,7 @@ export default function ChatListPage() {
 
         {!loading && sortedItems.length === 0 ? (
           <div className="chat-list-page__empty">
-            現在、問い合わせはありません。
+            現在、チャットはありません。
           </div>
         ) : null}
 
@@ -205,16 +170,16 @@ export default function ChatListPage() {
               const isUnread = item.isRead === false;
               const isNavigating = navigatingId === item.id;
 
-              const title = getInquiryTitle(item);
-              const preview = getInquiryPreview(item);
+              const title = getChatTitle(item);
+              const preview = getChatPreview(item);
               const dateLabel = formatChatDate(getLatestActivityAt(item));
-              const subLabel = getSubLabel(item);
-              const statusLabel = getStatusLabel(item.status);
-              const replyCount = item.replies.length;
+              const subLabel = getChatSubLabel(item);
+              const statusLabel = getChatStatusLabel(item);
+              const countLabel = getChatCountLabel(item);
 
               return (
                 <article
-                  key={item.id}
+                  key={`${item.chatKind}:${item.id}`}
                   className={
                     isUnread
                       ? "chat-list-page__row chat-list-page__row--unread"
@@ -262,9 +227,9 @@ export default function ChatListPage() {
                       <p className="chat-list-page__preview">{preview}</p>
 
                       <div className="chat-list-page__meta">
-                        {replyCount > 0 ? (
+                        {countLabel ? (
                           <span className="chat-list-page__reply-count">
-                            返信 {replyCount} 件
+                            {countLabel}
                           </span>
                         ) : null}
 
@@ -293,7 +258,297 @@ export default function ChatListPage() {
   );
 }
 
-function getInquiryTitle(item: ChatListItem): string {
+async function loadInquiryItems(
+  signal?: AbortSignal,
+): Promise<InquiryChatListItem[]> {
+  const result = await listMeInquiries({
+    page: 1,
+    perPage: 100,
+    signal,
+  });
+
+  if (signal?.aborted) {
+    return [];
+  }
+
+  return Promise.all(
+    result.items.map(async (item): Promise<InquiryChatListItem> => {
+      if (!item.id) {
+        return {
+          ...item,
+          chatKind: "inquiry",
+          replies: [],
+        };
+      }
+
+      try {
+        const replies = await listInquiryReplies(item.id);
+
+        return {
+          ...item,
+          chatKind: "inquiry",
+          replies,
+        };
+      } catch {
+        return {
+          ...item,
+          chatKind: "inquiry",
+          replies: [],
+        };
+      }
+    }),
+  );
+}
+
+async function loadMessageThreadItems(): Promise<MessageThreadListItem[]> {
+  const [received, sent] = await Promise.all([
+    listReceivedMessages({ limit: 100 }),
+    listSentMessages({ limit: 100 }),
+  ]);
+
+  return buildMessageThreads(received.messages, sent.messages);
+}
+
+async function openInquiryChat(
+  item: InquiryChatListItem,
+  setItems: React.Dispatch<React.SetStateAction<ChatListItem[]>>,
+  navigate: ReturnType<typeof useNavigate>,
+): Promise<void> {
+  const inquiryId = item.id;
+
+  if (!inquiryId) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  let nextItem: InquiryChatListItem = item;
+
+  if (item.isRead === false) {
+    const updated = await markInquiryAsRead(inquiryId);
+
+    nextItem = {
+      ...item,
+      ...(updated ?? {}),
+      chatKind: "inquiry",
+      isRead: true,
+      readAt: item.readAt ?? now,
+      replies: item.replies,
+    };
+
+    setItems((current) =>
+      current.map((currentItem) =>
+        currentItem.chatKind === "inquiry" && currentItem.id === inquiryId
+          ? nextItem
+          : currentItem,
+      ),
+    );
+  }
+
+  navigate(`/chats/${inquiryId}`, {
+    state: {
+      inquiry: {
+        ...nextItem,
+        isRead: true,
+        readAt: nextItem.readAt ?? now,
+      },
+      replies: nextItem.replies,
+    },
+  });
+}
+
+async function openMessageThread(
+  item: MessageThreadListItem,
+  setItems: React.Dispatch<React.SetStateAction<ChatListItem[]>>,
+  navigate: ReturnType<typeof useNavigate>,
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  if (item.unreadMessageIds.length > 0) {
+    await Promise.all(item.unreadMessageIds.map((id) => markMessageAsRead(id)));
+  }
+
+  const nextItem: MessageThreadListItem = {
+    ...item,
+    isRead: true,
+    unreadMessageIds: [],
+    messages: item.messages.map((message) =>
+      item.unreadMessageIds.includes(message.id)
+        ? {
+            ...message,
+            isRead: true,
+            readAt: message.readAt ?? now,
+            updatedAt: message.updatedAt ?? now,
+          }
+        : message,
+    ),
+  };
+
+  setItems((current) =>
+    current.map((currentItem) =>
+      currentItem.chatKind === "message" && currentItem.id === item.id
+        ? nextItem
+        : currentItem,
+    ),
+  );
+
+  navigate(`/chats/messages/${item.peerAvatarId}`, {
+    state: {
+      messageThread: {
+        peerAvatarId: item.peerAvatarId,
+        messages: nextItem.messages,
+      },
+    },
+  });
+}
+
+function buildMessageThreads(
+  received: Message[],
+  sent: Message[],
+): MessageThreadListItem[] {
+  const threads = new Map<
+    string,
+    {
+      peerAvatarId: string;
+      messages: Message[];
+      unreadMessageIds: string[];
+    }
+  >();
+
+  for (const message of received) {
+    const peerAvatarId = textOrEmpty(message.senderAvatarId);
+    if (!peerAvatarId) {
+      continue;
+    }
+
+    const thread = getOrCreateThread(threads, peerAvatarId);
+    thread.messages.push(message);
+
+    if (message.isRead === false && message.id) {
+      thread.unreadMessageIds.push(message.id);
+    }
+  }
+
+  for (const message of sent) {
+    const peerAvatarId = textOrEmpty(message.receiverAvatarId);
+    if (!peerAvatarId) {
+      continue;
+    }
+
+    const thread = getOrCreateThread(threads, peerAvatarId);
+    thread.messages.push(message);
+  }
+
+  return Array.from(threads.values()).map((thread) => {
+    const messages = sortMessagesDesc(dedupeMessages(thread.messages));
+    const latestMessage = messages[0];
+
+    return {
+      chatKind: "message",
+      id: `message:${thread.peerAvatarId}`,
+      peerAvatarId: thread.peerAvatarId,
+      messages,
+      unreadMessageIds: Array.from(new Set(thread.unreadMessageIds)),
+      latestMessage,
+      isRead: thread.unreadMessageIds.length === 0,
+      createdAt: latestMessage?.createdAt,
+      updatedAt: latestMessage?.updatedAt,
+    };
+  });
+}
+
+function getOrCreateThread(
+  threads: Map<
+    string,
+    {
+      peerAvatarId: string;
+      messages: Message[];
+      unreadMessageIds: string[];
+    }
+  >,
+  peerAvatarId: string,
+) {
+  const current = threads.get(peerAvatarId);
+  if (current) {
+    return current;
+  }
+
+  const next = {
+    peerAvatarId,
+    messages: [],
+    unreadMessageIds: [],
+  };
+
+  threads.set(peerAvatarId, next);
+  return next;
+}
+
+function dedupeMessages(messages: Message[]): Message[] {
+  const byID = new Map<string, Message>();
+
+  for (const message of messages) {
+    const key =
+      message.id ||
+      `${message.senderAvatarId}:${message.receiverAvatarId}:${message.createdAt}`;
+
+    if (!byID.has(key)) {
+      byID.set(key, message);
+    }
+  }
+
+  return Array.from(byID.values());
+}
+
+function sortMessagesDesc(messages: Message[]): Message[] {
+  return [...messages].sort((a, b) => {
+    const aTime = getComparableTime(a.updatedAt || a.createdAt);
+    const bTime = getComparableTime(b.updatedAt || b.createdAt);
+
+    return bTime - aTime;
+  });
+}
+
+function getChatTitle(item: ChatListItem): string {
+  if (item.chatKind === "message") {
+    return getMessageThreadTitle(item);
+  }
+
+  return getInquiryTitle(item);
+}
+
+function getChatPreview(item: ChatListItem): string {
+  if (item.chatKind === "message") {
+    return getMessagePreview(item);
+  }
+
+  return getInquiryPreview(item);
+}
+
+function getChatSubLabel(item: ChatListItem): string {
+  if (item.chatKind === "message") {
+    return "メッセージ";
+  }
+
+  return getInquirySubLabel(item);
+}
+
+function getChatStatusLabel(item: ChatListItem): string {
+  if (item.chatKind === "message") {
+    return "";
+  }
+
+  return getStatusLabel(item.status);
+}
+
+function getChatCountLabel(item: ChatListItem): string {
+  if (item.chatKind === "message") {
+    return item.messages.length > 0 ? `メッセージ ${item.messages.length} 件` : "";
+  }
+
+  return item.replies.length > 0 ? `返信 ${item.replies.length} 件` : "";
+}
+
+function getInquiryTitle(item: InquiryChatListItem): string {
   const subject = textOrEmpty(item.subject);
   if (subject) {
     return subject;
@@ -312,7 +567,7 @@ function getInquiryTitle(item: ChatListItem): string {
   return "問い合わせ";
 }
 
-function getInquiryPreview(item: ChatListItem): string {
+function getInquiryPreview(item: InquiryChatListItem): string {
   const latestReply = getLatestReply(item.replies);
   const latestReplyContent = textOrEmpty(latestReply?.content);
 
@@ -332,7 +587,32 @@ function getInquiryPreview(item: ChatListItem): string {
   return "メッセージはありません";
 }
 
-function getSubLabel(item: ChatListItem): string {
+function getMessageThreadTitle(item: MessageThreadListItem): string {
+  const peerAvatarId = textOrEmpty(item.peerAvatarId);
+
+  if (!peerAvatarId) {
+    return "メッセージ";
+  }
+
+  return peerAvatarId;
+}
+
+function getMessagePreview(item: MessageThreadListItem): string {
+  const latest = item.latestMessage ?? item.messages[0];
+
+  const body = textOrEmpty(latest?.body);
+  if (body) {
+    return body;
+  }
+
+  if (Array.isArray(latest?.images) && latest.images.length > 0) {
+    return `画像 ${latest.images.length} 件`;
+  }
+
+  return "メッセージはありません";
+}
+
+function getInquirySubLabel(item: InquiryChatListItem): string {
   return (
     textOrEmpty(item.brandName) ||
     textOrEmpty(item.avatarName) ||
@@ -359,13 +639,22 @@ function getInitial(value: string): string {
   const trimmed = textOrEmpty(value);
 
   if (!trimmed) {
-    return "問";
+    return "？";
   }
 
-  return Array.from(trimmed)[0] ?? "問";
+  return Array.from(trimmed)[0] ?? "？";
 }
 
 function getLatestActivityAt(item: ChatListItem): string | null | undefined {
+  if (item.chatKind === "message") {
+    return (
+      item.latestMessage?.updatedAt ||
+      item.latestMessage?.createdAt ||
+      item.updatedAt ||
+      item.createdAt
+    );
+  }
+
   const latestReply = getLatestReply(item.replies);
 
   return (

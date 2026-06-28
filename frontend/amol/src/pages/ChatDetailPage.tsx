@@ -6,10 +6,12 @@ import {
   useMemo,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import {
+  closeInquiry,
   getInquiry,
   listInquiryReplies,
   markInquiryAsRead,
@@ -49,6 +51,9 @@ export default function ChatDetailPage() {
   const [replyError, setReplyError] = useState("");
   const [postingReply, setPostingReply] = useState(false);
 
+  const [closingInquiry, setClosingInquiry] = useState(false);
+  const [closeError, setCloseError] = useState("");
+
   const canSubmitReply = replyContent.trim() !== "" || replyFiles.length > 0;
 
   const sortedReplies = useMemo(() => {
@@ -71,6 +76,7 @@ export default function ChatDetailPage() {
 
     setLoading(true);
     setError("");
+    setCloseError("");
 
     try {
       const [nextInquiry, nextReplies, updatedInquiry] = await Promise.all([
@@ -97,6 +103,23 @@ export default function ChatDetailPage() {
   useEffect(() => {
     void loadThread();
   }, [loadThread]);
+
+  useEffect(() => {
+    if (!isReplyModalOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    const previousTouchAction = document.body.style.touchAction;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.touchAction = previousTouchAction;
+    };
+  }, [isReplyModalOpen]);
 
   const openReplyModal = useCallback(() => {
     setReplyError("");
@@ -182,224 +205,301 @@ export default function ChatDetailPage() {
     }
   }, [inquiryId, postingReply, replyContent, replyFiles]);
 
+  const handleCloseInquiry = useCallback(async () => {
+    if (!inquiryId || closingInquiry) {
+      return;
+    }
+
+    setClosingInquiry(true);
+    setCloseError("");
+
+    try {
+      const closedInquiry = await closeInquiry(inquiryId);
+
+      setInquiry((current) =>
+        closedInquiry ??
+        (current
+          ? {
+              ...current,
+              status: "closed",
+            }
+          : current),
+      );
+    } catch (caught) {
+      setCloseError(
+        caught instanceof Error ? caught.message : "クローズに失敗しました",
+      );
+    } finally {
+      setClosingInquiry(false);
+    }
+  }, [inquiryId, closingInquiry]);
+
   const title = getInquiryTitle(inquiry);
-  const replyActionDisabled = !inquiryId || loading || !inquiry || postingReply;
+  const shouldShowClosePrompt = inquiry?.status === "resolved";
+  const replyActionDisabled =
+    !inquiryId ||
+    loading ||
+    !inquiry ||
+    postingReply ||
+    inquiry.status === "closed";
 
   return (
-    <Layout
-      title={title}
-      showBackButton
-      showFooter
-      mode="mypage"
-      mainClassName="chat-detail-page-layout"
-      actionButtonLabel="返信"
-      onActionButtonClick={openReplyModal}
-      actionButtonDisabled={replyActionDisabled}
-      footerProps={{
-        variant: "default",
-        centerActionLabel: "返信",
-        centerActionDisabled: replyActionDisabled,
-        onCenterActionClick: openReplyModal,
-      }}
-    >
-      <section className="page-section content-page-section chat-detail-page">
-        {error ? (
-          <div className="chat-detail-page__error" role="alert">
-            {error}
-          </div>
-        ) : null}
+    <>
+      <Layout
+        title={title}
+        showBackButton
+        showFooter={!isReplyModalOpen}
+        mode="mypage"
+        mainClassName="chat-detail-page-layout"
+        actionButtonLabel="返信"
+        onActionButtonClick={openReplyModal}
+        actionButtonDisabled={replyActionDisabled}
+        footerProps={{
+          variant: "default",
+          centerActionLabel: "返信",
+          centerActionDisabled: replyActionDisabled,
+          onCenterActionClick: openReplyModal,
+        }}
+      >
+        <section className="page-section content-page-section chat-detail-page">
+          {error ? (
+            <div className="chat-detail-page__error" role="alert">
+              {error}
+            </div>
+          ) : null}
 
-        {loading ? (
-          <div className="chat-detail-page__state">読み込み中...</div>
-        ) : null}
+          {loading ? (
+            <div className="chat-detail-page__state">読み込み中...</div>
+          ) : null}
 
-        {!loading && !inquiry ? (
-          <div className="chat-detail-page__empty">
-            問い合わせが見つかりません。
-          </div>
-        ) : null}
+          {!loading && !inquiry ? (
+            <div className="chat-detail-page__empty">
+              問い合わせが見つかりません。
+            </div>
+          ) : null}
 
-        {!loading && inquiry ? (
-          <div className="chat-detail-page__thread">
-            <article className="chat-detail-page__inquiry">
-              <div className="chat-detail-page__message-head">
-                <div>
-                  <span className="chat-detail-page__sender">
-                    あなたの問い合わせ
-                  </span>
+          {!loading && inquiry ? (
+            <div className="chat-detail-page__thread">
+              <article className="chat-detail-page__inquiry">
+                <div className="chat-detail-page__message-head">
+                  <div>
+                    <span className="chat-detail-page__sender">
+                      あなたの問い合わせ
+                    </span>
 
-                  {inquiry.createdAt ? (
-                    <time
-                      className="chat-detail-page__date"
-                      dateTime={inquiry.createdAt}
-                    >
-                      {formatDateTime(inquiry.createdAt)}
-                    </time>
+                    {inquiry.createdAt ? (
+                      <time
+                        className="chat-detail-page__date"
+                        dateTime={inquiry.createdAt}
+                      >
+                        {formatDateTime(inquiry.createdAt)}
+                      </time>
+                    ) : null}
+                  </div>
+
+                  {inquiry.status ? (
+                    <span className="chat-detail-page__status">
+                      {getStatusLabel(inquiry.status)}
+                    </span>
                   ) : null}
                 </div>
 
-                {inquiry.status ? (
-                  <span className="chat-detail-page__status">
-                    {getStatusLabel(inquiry.status)}
-                  </span>
+                {inquiry.subject ? (
+                  <h2 className="chat-detail-page__subject">
+                    {inquiry.subject}
+                  </h2>
                 ) : null}
-              </div>
 
-              {inquiry.subject ? (
-                <h2 className="chat-detail-page__subject">
-                  {inquiry.subject}
-                </h2>
-              ) : null}
+                {inquiry.content ? (
+                  <p className="chat-detail-page__content">
+                    {inquiry.content}
+                  </p>
+                ) : null}
 
-              {inquiry.content ? (
-                <p className="chat-detail-page__content">{inquiry.content}</p>
-              ) : null}
+                <ImageGrid images={inquiry.images} />
+              </article>
 
-              <ImageGrid images={inquiry.images} />
-            </article>
+              <div className="chat-detail-page__reply-section">
+                <h3 className="chat-detail-page__section-title">返信一覧</h3>
 
-            <div className="chat-detail-page__reply-section">
-              <h3 className="chat-detail-page__section-title">返信一覧</h3>
+                {sortedReplies.length === 0 && !shouldShowClosePrompt ? (
+                  <div className="chat-detail-page__no-replies">
+                    まだ返信はありません。
+                  </div>
+                ) : (
+                  <div className="chat-detail-page__replies">
+                    {sortedReplies.map((reply, index) => {
+                      const isAvatarReply = reply.senderType === "avatar";
 
-              {sortedReplies.length === 0 ? (
-                <div className="chat-detail-page__no-replies">
-                  まだ返信はありません。
-                </div>
-              ) : (
-                <div className="chat-detail-page__replies">
-                  {sortedReplies.map((reply, index) => {
-                    const isAvatarReply = reply.senderType === "avatar";
+                      return (
+                        <article
+                          key={reply.id || `${reply.inquiryId}-${index}`}
+                          className={
+                            isAvatarReply
+                              ? "chat-detail-page__reply chat-detail-page__reply--avatar"
+                              : "chat-detail-page__reply"
+                          }
+                        >
+                          <div className="chat-detail-page__message-head">
+                            <div>
+                              <span className="chat-detail-page__sender">
+                                {isAvatarReply ? "あなた" : "テナント"}
+                              </span>
 
-                    return (
-                      <article
-                        key={reply.id || `${reply.inquiryId}-${index}`}
-                        className={
-                          isAvatarReply
-                            ? "chat-detail-page__reply chat-detail-page__reply--avatar"
-                            : "chat-detail-page__reply"
-                        }
-                      >
+                              {reply.createdAt ? (
+                                <time
+                                  className="chat-detail-page__date"
+                                  dateTime={reply.createdAt}
+                                >
+                                  {formatDateTime(reply.createdAt)}
+                                </time>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {reply.content ? (
+                            <p className="chat-detail-page__content">
+                              {reply.content}
+                            </p>
+                          ) : null}
+
+                          <ImageGrid images={reply.images} />
+                        </article>
+                      );
+                    })}
+
+                    {shouldShowClosePrompt ? (
+                      <article className="chat-detail-page__reply chat-detail-page__reply--system">
                         <div className="chat-detail-page__message-head">
                           <div>
                             <span className="chat-detail-page__sender">
-                              {isAvatarReply ? "あなた" : "テナント"}
+                              テナント
                             </span>
-
-                            {reply.createdAt ? (
-                              <time
-                                className="chat-detail-page__date"
-                                dateTime={reply.createdAt}
-                              >
-                                {formatDateTime(reply.createdAt)}
-                              </time>
-                            ) : null}
                           </div>
                         </div>
 
-                        {reply.content ? (
-                          <p className="chat-detail-page__content">
-                            {reply.content}
-                          </p>
+                        <p className="chat-detail-page__content">
+                          クローズしますか？
+                        </p>
+
+                        {closeError ? (
+                          <div
+                            className="chat-detail-page__modal-error"
+                            role="alert"
+                          >
+                            {closeError}
+                          </div>
                         ) : null}
 
-                        <ImageGrid images={reply.images} />
+                        <div className="chat-detail-page__close-prompt-actions">
+                          <button
+                            type="button"
+                            onClick={handleCloseInquiry}
+                            disabled={closingInquiry}
+                          >
+                            {closingInquiry ? "クローズ中..." : "クローズする"}
+                          </button>
+                        </div>
                       </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      {isReplyModalOpen ? (
-        <div className="chat-detail-page__modal-backdrop">
-          <div
-            className="chat-detail-page__modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="chat-detail-reply-modal-title"
-          >
-            <div className="chat-detail-page__modal-header">
-              <h2 id="chat-detail-reply-modal-title">返信する</h2>
-              <button
-                type="button"
-                className="chat-detail-page__modal-close"
-                onClick={closeReplyModal}
-                disabled={postingReply}
-                aria-label="閉じる"
-              >
-                ×
-              </button>
-            </div>
-
-            <textarea
-              className="chat-detail-page__reply-input"
-              value={replyContent}
-              onChange={(event) => setReplyContent(event.target.value)}
-              placeholder="返信内容を入力"
-              rows={6}
-              disabled={postingReply}
-            />
-
-            <label className="chat-detail-page__file-picker">
-              <span>画像を追加</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleReplyFilesChange}
-                disabled={postingReply}
-              />
-            </label>
-
-            {replyFiles.length > 0 ? (
-              <div className="chat-detail-page__selected-files">
-                {replyFiles.map((file, index) => (
-                  <div
-                    key={`${file.name}-${file.lastModified}-${index}`}
-                    className="chat-detail-page__selected-file"
-                  >
-                    <span>{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeReplyFile(index)}
-                      disabled={postingReply}
-                    >
-                      削除
-                    </button>
+                    ) : null}
                   </div>
-                ))}
+                )}
               </div>
-            ) : null}
-
-            {replyError ? (
-              <div className="chat-detail-page__modal-error" role="alert">
-                {replyError}
-              </div>
-            ) : null}
-
-            <div className="chat-detail-page__modal-actions">
-              <button
-                type="button"
-                onClick={closeReplyModal}
-                disabled={postingReply}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={submitReply}
-                disabled={!canSubmitReply || postingReply}
-              >
-                {postingReply ? "送信中..." : "送信"}
-              </button>
             </div>
-          </div>
-        </div>
-      ) : null}
-    </Layout>
+          ) : null}
+        </section>
+      </Layout>
+
+      {isReplyModalOpen
+        ? createPortal(
+            <div className="chat-detail-page__modal-backdrop">
+              <div
+                className="chat-detail-page__modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="chat-detail-reply-modal-title"
+              >
+                <div className="chat-detail-page__modal-header">
+                  <h2 id="chat-detail-reply-modal-title">返信する</h2>
+                  <button
+                    type="button"
+                    className="chat-detail-page__modal-close"
+                    onClick={closeReplyModal}
+                    disabled={postingReply}
+                    aria-label="閉じる"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <textarea
+                  className="chat-detail-page__reply-input"
+                  value={replyContent}
+                  onChange={(event) => setReplyContent(event.target.value)}
+                  placeholder="返信内容を入力"
+                  rows={6}
+                  disabled={postingReply}
+                />
+
+                <label className="chat-detail-page__file-picker">
+                  <span>画像を追加</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleReplyFilesChange}
+                    disabled={postingReply}
+                  />
+                </label>
+
+                {replyFiles.length > 0 ? (
+                  <div className="chat-detail-page__selected-files">
+                    {replyFiles.map((file, index) => (
+                      <div
+                        key={`${file.name}-${file.lastModified}-${index}`}
+                        className="chat-detail-page__selected-file"
+                      >
+                        <span>{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeReplyFile(index)}
+                          disabled={postingReply}
+                        >
+                          削除
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {replyError ? (
+                  <div className="chat-detail-page__modal-error" role="alert">
+                    {replyError}
+                  </div>
+                ) : null}
+
+                <div className="chat-detail-page__modal-actions">
+                  <button
+                    type="button"
+                    onClick={closeReplyModal}
+                    disabled={postingReply}
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitReply}
+                    disabled={!canSubmitReply || postingReply}
+                  >
+                    {postingReply ? "送信中..." : "送信"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

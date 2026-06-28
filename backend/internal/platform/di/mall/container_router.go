@@ -1,4 +1,3 @@
-// backend/internal/platform/di/mall/container_router.go
 package mall
 
 import (
@@ -82,6 +81,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	paymentMethodH := notImplemented("PaymentMethod")
 	avatarH := notImplemented("Avatar")
 	avatarStateH := notImplemented("AvatarState")
+	messageH := notImplemented("Message")
 	walletH := notImplemented("Wallet")
 	meWalletH := notImplemented("MeWallet")
 	cartH := notImplemented("Cart")
@@ -101,11 +101,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	setupStatusH := notImplemented("SetupStatus")
 
 	// Auth email verification
-	// POST /auth/email-verification/send
-	//
-	// NOTE:
-	// - UserAuthMiddleware のみを通す
-	// - サインアップ直後は avatar 未作成の可能性があるため AvatarContextMiddleware は使わない
 	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
 		authH = mallhandler.NewAuthHandler(
 			cont.Infra.FirebaseAuth,
@@ -130,22 +125,17 @@ func Register(mux *http.ServeMux, cont *Container) {
 		catalogH = newCatalogCompositeHandler(catalogH, pbReviewH)
 	}
 
-	// Brand（/mall/brands/{id}）
+	// Brand
 	if cont.BrandQ != nil {
 		brandH = mallhandler.NewMallBrandHandler(cont.BrandQ)
 	}
 
-	// Avatar（/mall/avatars）
+	// Avatar
 	if cont.AvatarUC != nil {
 		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC, cont.AvatarRepo)
 	}
 
 	// TokenBlueprintReview wiring
-	//
-	// Hexagonal architecture:
-	// - handler は HTTP adapter
-	// - usecase は application service
-	// - repository / avatar / tokenBlueprintRepo / brand repository は usecase に注入する
 	if cont.TokenBlueprintReviewRepo != nil {
 		tbReviewUC := usecase.NewTokenBlueprintReviewUsecase(
 			cont.TokenBlueprintReviewRepo,
@@ -157,7 +147,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		tbReviewH = mallhandler.NewTokenBlueprintReviewHandler(tbReviewUC)
 	}
 
-	// 方法A: TokenBlueprint handler 1つだけ登録し、内部で reviews へ振り分ける
 	if tbReviewH != nil && tbReviewH != http.NotFoundHandler() {
 		tbH = mallhandler.NewTokenBlueprintCompositeHandler(tbH, tbReviewH)
 	}
@@ -189,6 +178,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarStateQuery := mallquery.NewAvatarStateQuery(cont.AvatarRepo, avatarStateRepo)
 
 		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarResolver, cont.AvatarUC, avatarStateQuery)
+	}
+
+	// /mall/me/messages
+	if cont.MeAvatarResolver != nil && cont.MessageUC != nil {
+		messageH = mallhandler.NewMessageHandler(cont.MeAvatarResolver, cont.MessageUC)
 	}
 
 	// /mall/me/announcements
@@ -230,12 +224,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// Inquiry
-	//
-	// Routes are registered in mall router as auth+avatar required:
-	// - POST /mall/me/inquiries
-	// - GET  /mall/me/inquiries/{id}
-	// - POST /mall/me/inquiries/{id}/reply
-	// - POST /mall/me/inquiries/{id}/close
 	if cont.InquiryUC != nil && cont.InquiryQ != nil {
 		inquiryH = mallhandler.NewInquiryHandler(
 			cont.InquiryUC,
@@ -312,6 +300,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		MeAvatar: meAvatarsH,
 
 		AvatarState: avatarStateH,
+		Message:     messageH,
 		Wallet:      walletH,
 		MeWallet:    meWalletH,
 		Cart:        cartH,

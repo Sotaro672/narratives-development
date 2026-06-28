@@ -68,6 +68,10 @@ function isResolvedStatus(value: string | null | undefined): boolean {
   return String(value ?? "").trim() === "resolved";
 }
 
+function isClosedStatus(value: string | null | undefined): boolean {
+  return String(value ?? "").trim() === "closed";
+}
+
 function isUnresolvedStatus(value: string | null | undefined): boolean {
   const status = String(value ?? "").trim();
 
@@ -442,6 +446,9 @@ export default function InquiryDetail() {
     ? "danger"
     : "neutral";
 
+  const statusButtonDisabled =
+    !detail || !memberId || isClosedStatus(inquiry?.status);
+
   const revokeReplyImagePreviewUrl = React.useCallback((previewUrl: string) => {
     URL.revokeObjectURL(previewUrl);
     replyImagePreviewUrlsRef.current.delete(previewUrl);
@@ -607,6 +614,10 @@ export default function InquiryDetail() {
       return;
     }
 
+    if (isClosedStatus(detail.inquiry.status)) {
+      return;
+    }
+
     if (!memberId) {
       setErrorMessage("メンバーIDが取得できません。ログインし直してください。");
       return;
@@ -762,7 +773,7 @@ export default function InquiryDetail() {
         statusButtonVariant={statusButtonVariant}
         onStatusButtonClick={onToggleStatus}
         isStatusButtonLoading={statusUpdating}
-        statusButtonDisabled={!detail || !memberId}
+        statusButtonDisabled={statusButtonDisabled}
       >
         <div>
           <Card>

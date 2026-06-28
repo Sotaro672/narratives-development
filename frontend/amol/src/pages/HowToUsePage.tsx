@@ -89,7 +89,7 @@ const sellerSteps: Step[] = [
       "Mallからの注文と購入者からのレビューを確認します。",
     youtubeUrl: "https://www.youtube.com/embed/GiNrATQWiEk",
   },
-    {
+  {
     number: "10",
     title: "告知",
     description:
@@ -126,6 +126,13 @@ const buyerSteps: Step[] = [
     description:
       "アバター同士でトークンを交換できます。プレビュー画面では、そのトークンがどのアバターに渡ってきたのかの履歴を確認できます。",
     youtubeUrl: "https://www.youtube.com/embed/atYk9E9C5aw",
+  },
+  {
+    number: "05",
+    title: "お問い合わせ",
+    description:
+      "購入した商品や取引内容について、購入者Mallから出品者へお問い合わせを送信できます。返信が届いた場合は、問い合わせ詳細からこれまでのやり取りを確認できます。",
+    youtubeUrl: "https://www.youtube.com/embed/rxoMwIyRt8Y",
   },
 ];
 
@@ -241,7 +248,7 @@ export default function HowToUsePage() {
 
           <StepFlow
             title="購入者Mallの使い方"
-            subtitle="アバター登録から購入、レビュー投稿、トークン交換までの4つのステップ"
+            subtitle="アバター登録から購入、レビュー投稿、トークン交換、お問い合わせまでの5つのステップ"
             steps={buyerSteps}
           />
 
