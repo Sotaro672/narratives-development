@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/ChatDetailPage.tsx
+//frontend\amol\src\pages\ChatDetailPage.tsx
 import {
   type ChangeEvent,
   useCallback,
@@ -21,6 +21,14 @@ import {
   type InquiryImage,
   type InquiryReply,
 } from "../features/inquiry/api/inquiryApi";
+import {
+  listMessageThread,
+  markMessageAsRead,
+  sendMessage,
+  uploadMessageImage,
+  type Message,
+  type MessageImageAttachment,
+} from "../features/message/api/messageApi";
 
 import "../styles/page-layout.css";
 import "../styles/chat-detail-page.css";
@@ -28,21 +36,43 @@ import "../styles/chat-detail-page.css";
 type ChatDetailLocationState = {
   inquiry?: Inquiry | null;
   replies?: InquiryReply[] | null;
+  messageThread?: {
+    peerAvatarId: string;
+    messages: Message[];
+  } | null;
+};
+
+type ChatRouteParams = {
+  inquiryId?: string;
+  peerAvatarId?: string;
 };
 
 export default function ChatDetailPage() {
-  const { inquiryId } = useParams<{ inquiryId: string }>();
+  const { inquiryId, peerAvatarId } = useParams<ChatRouteParams>();
   const location = useLocation();
 
   const state = location.state as ChatDetailLocationState | null;
+  const isMessageMode = location.pathname.startsWith("/chats/messages/");
+  const messagePeerAvatarId =
+    peerAvatarId || (isMessageMode ? getLastPathSegment(location.pathname) : "");
 
   const [inquiry, setInquiry] = useState<Inquiry | null>(
-    state?.inquiry ?? null,
+    isMessageMode ? null : state?.inquiry ?? null,
   );
   const [replies, setReplies] = useState<InquiryReply[]>(
-    Array.isArray(state?.replies) ? state.replies : [],
+    !isMessageMode && Array.isArray(state?.replies) ? state.replies : [],
   );
-  const [loading, setLoading] = useState<boolean>(!state?.inquiry);
+  const [messages, setMessages] = useState<Message[]>(
+    isMessageMode && Array.isArray(state?.messageThread?.messages)
+      ? state.messageThread.messages
+      : [],
+  );
+
+  const [loading, setLoading] = useState<boolean>(
+    isMessageMode
+      ? !Array.isArray(state?.messageThread?.messages)
+      : !state?.inquiry,
+  );
   const [error, setError] = useState<string>("");
 
   const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
@@ -65,7 +95,72 @@ export default function ChatDetailPage() {
     });
   }, [replies]);
 
+  const sortedMessages = useMemo(() => {
+    return [...messages].sort((a, b) => {
+      const aTime = getComparableTime(a.createdAt ?? a.updatedAt);
+      const bTime = getComparableTime(b.createdAt ?? b.updatedAt);
+
+      return aTime - bTime;
+    });
+  }, [messages]);
+
   const loadThread = useCallback(async () => {
+    if (isMessageMode) {
+      if (!messagePeerAvatarId) {
+        setMessages([]);
+        setError("相手のアバターIDを取得できませんでした。");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+      setCloseError("");
+
+      try {
+        const result = await listMessageThread(messagePeerAvatarId, {
+          limit: 100,
+        });
+
+        const nextMessages = result.messages ?? [];
+        setMessages(nextMessages);
+
+        const unreadIds = nextMessages
+          .filter((message) => message.isRead === false)
+          .map((message) => message.id)
+          .filter(Boolean);
+
+        if (unreadIds.length > 0) {
+          await Promise.allSettled(
+            unreadIds.map((messageId) => markMessageAsRead(messageId)),
+          );
+
+          setMessages((current) =>
+            current.map((message) =>
+              unreadIds.includes(message.id)
+                ? {
+                    ...message,
+                    isRead: true,
+                    readAt: message.readAt ?? new Date().toISOString(),
+                  }
+                : message,
+            ),
+          );
+        }
+      } catch (caught) {
+        setMessages([]);
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "メッセージの取得に失敗しました。",
+        );
+      } finally {
+        setLoading(false);
+      }
+
+      return;
+    }
+
     if (!inquiryId) {
       setInquiry(null);
       setReplies([]);
@@ -93,12 +188,12 @@ export default function ChatDetailPage() {
       setError(
         caught instanceof Error
           ? caught.message
-          : "チャット内容の取得に失敗しました",
+          : "チャット内容の取得に失敗しました。",
       );
     } finally {
       setLoading(false);
     }
-  }, [inquiryId]);
+  }, [inquiryId, isMessageMode, messagePeerAvatarId]);
 
   useEffect(() => {
     void loadThread();
@@ -157,7 +252,7 @@ export default function ChatDetailPage() {
   }, []);
 
   const submitReply = useCallback(async () => {
-    if (!inquiryId || postingReply) {
+    if (postingReply) {
       return;
     }
 
@@ -172,6 +267,46 @@ export default function ChatDetailPage() {
     setReplyError("");
 
     try {
+      if (isMessageMode) {
+        if (!messagePeerAvatarId) {
+          setReplyError("相手のアバターIDを取得できませんでした。");
+          return;
+        }
+
+        const images = await Promise.all(
+          replyFiles.map((file) =>
+            uploadMessageImage({
+              receiverAvatarId: messagePeerAvatarId,
+              file,
+            }),
+          ),
+        );
+
+        const createdMessage = await sendMessage({
+          receiverAvatarId: messagePeerAvatarId,
+          body: content,
+          images,
+        });
+
+        if (createdMessage) {
+          setMessages((current) => [...current, createdMessage]);
+        } else {
+          const result = await listMessageThread(messagePeerAvatarId, {
+            limit: 100,
+          });
+          setMessages(result.messages ?? []);
+        }
+
+        setIsReplyModalOpen(false);
+        setReplyContent("");
+        setReplyFiles([]);
+        return;
+      }
+
+      if (!inquiryId) {
+        return;
+      }
+
       const images = await Promise.all(
         replyFiles.map((file) =>
           uploadReplyImage({
@@ -198,15 +333,22 @@ export default function ChatDetailPage() {
       setReplyFiles([]);
     } catch (caught) {
       setReplyError(
-        caught instanceof Error ? caught.message : "返信の送信に失敗しました",
+        caught instanceof Error ? caught.message : "送信に失敗しました。",
       );
     } finally {
       setPostingReply(false);
     }
-  }, [inquiryId, postingReply, replyContent, replyFiles]);
+  }, [
+    inquiryId,
+    isMessageMode,
+    messagePeerAvatarId,
+    postingReply,
+    replyContent,
+    replyFiles,
+  ]);
 
   const handleCloseInquiry = useCallback(async () => {
-    if (!inquiryId || closingInquiry) {
+    if (!inquiryId || closingInquiry || isMessageMode) {
       return;
     }
 
@@ -227,21 +369,22 @@ export default function ChatDetailPage() {
       );
     } catch (caught) {
       setCloseError(
-        caught instanceof Error ? caught.message : "クローズに失敗しました",
+        caught instanceof Error ? caught.message : "クローズに失敗しました。",
       );
     } finally {
       setClosingInquiry(false);
     }
-  }, [inquiryId, closingInquiry]);
+  }, [inquiryId, closingInquiry, isMessageMode]);
 
-  const title = getInquiryTitle(inquiry);
-  const shouldShowClosePrompt = inquiry?.status === "resolved";
-  const replyActionDisabled =
-    !inquiryId ||
-    loading ||
-    !inquiry ||
-    postingReply ||
-    inquiry.status === "closed";
+  const title = isMessageMode ? "メッセージ" : getInquiryTitle(inquiry);
+  const shouldShowClosePrompt = !isMessageMode && inquiry?.status === "resolved";
+  const replyActionDisabled = isMessageMode
+    ? !messagePeerAvatarId || loading || postingReply
+    : !inquiryId ||
+      loading ||
+      !inquiry ||
+      postingReply ||
+      inquiry.status === "closed";
 
   return (
     <>
@@ -251,12 +394,12 @@ export default function ChatDetailPage() {
         showFooter={!isReplyModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"
-        actionButtonLabel="返信"
+        actionButtonLabel={isMessageMode ? "送信" : "返信"}
         onActionButtonClick={openReplyModal}
         actionButtonDisabled={replyActionDisabled}
         footerProps={{
           variant: "default",
-          centerActionLabel: "返信",
+          centerActionLabel: isMessageMode ? "送信" : "返信",
           centerActionDisabled: replyActionDisabled,
           onCenterActionClick: openReplyModal,
         }}
@@ -272,13 +415,20 @@ export default function ChatDetailPage() {
             <div className="chat-detail-page__state">読み込み中...</div>
           ) : null}
 
-          {!loading && !inquiry ? (
+          {!loading && isMessageMode ? (
+            <MessageThread
+              messages={sortedMessages}
+              peerAvatarId={messagePeerAvatarId}
+            />
+          ) : null}
+
+          {!loading && !isMessageMode && !inquiry ? (
             <div className="chat-detail-page__empty">
               問い合わせが見つかりません。
             </div>
           ) : null}
 
-          {!loading && inquiry ? (
+          {!loading && !isMessageMode && inquiry ? (
             <div className="chat-detail-page__thread">
               <article className="chat-detail-page__inquiry">
                 <div className="chat-detail-page__message-head">
@@ -420,7 +570,9 @@ export default function ChatDetailPage() {
                 aria-labelledby="chat-detail-reply-modal-title"
               >
                 <div className="chat-detail-page__modal-header">
-                  <h2 id="chat-detail-reply-modal-title">返信する</h2>
+                  <h2 id="chat-detail-reply-modal-title">
+                    {isMessageMode ? "メッセージを送る" : "返信する"}
+                  </h2>
                   <button
                     type="button"
                     className="chat-detail-page__modal-close"
@@ -436,7 +588,7 @@ export default function ChatDetailPage() {
                   className="chat-detail-page__reply-input"
                   value={replyContent}
                   onChange={(event) => setReplyContent(event.target.value)}
-                  placeholder="返信内容を入力"
+                  placeholder={isMessageMode ? "メッセージを入力" : "返信内容を入力"}
                   rows={6}
                   disabled={postingReply}
                 />
@@ -503,7 +655,75 @@ export default function ChatDetailPage() {
   );
 }
 
-function ImageGrid({ images }: { images?: InquiryImage[] | null }) {
+function MessageThread({
+  messages,
+  peerAvatarId,
+}: {
+  messages: Message[];
+  peerAvatarId: string;
+}) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return (
+      <div className="chat-detail-page__empty">
+        まだメッセージはありません。
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-detail-page__thread">
+      <div className="chat-detail-page__reply-section">
+        <h3 className="chat-detail-page__section-title">メッセージ</h3>
+
+        <div className="chat-detail-page__replies">
+          {messages.map((message, index) => {
+            const isOwnMessage = message.senderAvatarId !== peerAvatarId;
+
+            return (
+              <article
+                key={message.id || `${message.createdAt}-${index}`}
+                className={
+                  isOwnMessage
+                    ? "chat-detail-page__reply chat-detail-page__reply--avatar"
+                    : "chat-detail-page__reply"
+                }
+              >
+                <div className="chat-detail-page__message-head">
+                  <div>
+                    <span className="chat-detail-page__sender">
+                      {isOwnMessage ? "あなた" : "相手"}
+                    </span>
+
+                    {message.createdAt ? (
+                      <time
+                        className="chat-detail-page__date"
+                        dateTime={message.createdAt}
+                      >
+                        {formatDateTime(message.createdAt)}
+                      </time>
+                    ) : null}
+                  </div>
+                </div>
+
+                {message.body ? (
+                  <p className="chat-detail-page__content">{message.body}</p>
+                ) : null}
+
+                <ImageGrid images={message.images} />
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImageGrid({
+  images,
+}: {
+  images?: Array<InquiryImage | MessageImageAttachment> | null;
+}) {
   if (!Array.isArray(images) || images.length === 0) {
     return null;
   }
@@ -511,14 +731,16 @@ function ImageGrid({ images }: { images?: InquiryImage[] | null }) {
   return (
     <div className="chat-detail-page__images">
       {images.map((image, index) => {
-        const src = image.fileUrl;
+        const src = getImageSrc(image);
         if (!src) {
           return null;
         }
 
+        const label = getImageLabel(image, index);
+
         return (
           <a
-            key={`${image.objectPath || image.fileName || src}-${index}`}
+            key={`${getImageKey(image, src)}-${index}`}
             className="chat-detail-page__image-link"
             href={src}
             target="_blank"
@@ -527,7 +749,7 @@ function ImageGrid({ images }: { images?: InquiryImage[] | null }) {
             <img
               className="chat-detail-page__image"
               src={src}
-              alt={image.fileName || `添付画像${index + 1}`}
+              alt={label}
               loading="lazy"
             />
           </a>
@@ -535,6 +757,40 @@ function ImageGrid({ images }: { images?: InquiryImage[] | null }) {
       })}
     </div>
   );
+}
+
+function getImageSrc(image: InquiryImage | MessageImageAttachment): string {
+  if ("fileUrl" in image) {
+    return image.fileUrl || "";
+  }
+
+  return image.downloadUrl || "";
+}
+
+function getImageLabel(
+  image: InquiryImage | MessageImageAttachment,
+  index: number,
+): string {
+  if ("fileName" in image && image.fileName) {
+    return image.fileName;
+  }
+
+  return `添付画像 ${index + 1}`;
+}
+
+function getImageKey(
+  image: InquiryImage | MessageImageAttachment,
+  src: string,
+): string {
+  if ("objectPath" in image && image.objectPath) {
+    return image.objectPath;
+  }
+
+  if ("storagePath" in image && image.storagePath) {
+    return image.storagePath;
+  }
+
+  return src;
 }
 
 function getInquiryTitle(inquiry: Inquiry | null): string {
@@ -558,6 +814,11 @@ function getStatusLabel(status?: string | null): string {
     default:
       return "";
   }
+}
+
+function getLastPathSegment(pathname: string): string {
+  const parts = pathname.split("/").filter(Boolean);
+  return decodeURIComponent(parts[parts.length - 1] ?? "");
 }
 
 function formatDateTime(value?: string | null): string {

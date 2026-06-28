@@ -1,13 +1,27 @@
 // frontend/amol/src/components/layout/header/HeaderActions.tsx
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
 import { useInquiryUnreadCounter } from "../../../features/inquiry/hooks/useInquiryUnreadCounter";
+import { countUnreadReceivedMessages } from "../../../features/message/api/messageApi";
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {
   actions: HeaderActionState;
 };
+
+const MESSAGE_UNREAD_FETCH_LIMIT = 100;
+
+function normalizeCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : 0;
+}
+
+function formatBadgeLabel(count: number): string {
+  return count > 99 ? "99+" : String(count);
+}
 
 export default function HeaderActions({ actions }: HeaderActionsProps) {
   const {
@@ -34,6 +48,8 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     toggleSettings,
   } = actions;
 
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+
   const { unreadCount: announcementUnreadCount } = useAnnouncementUnreadCount({
     enabled: shouldShowAnnouncementButton,
   });
@@ -42,32 +58,54 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     enabled: shouldShowAnnouncementButton,
   });
 
-  const safeCartItemCount =
-    typeof cartItemCount === "number" && Number.isFinite(cartItemCount)
-      ? Math.max(0, Math.floor(cartItemCount))
-      : 0;
+  useEffect(() => {
+    let ignore = false;
 
-  const safeAnnouncementUnreadCount =
-    typeof announcementUnreadCount === "number" &&
-    Number.isFinite(announcementUnreadCount)
-      ? Math.max(0, Math.floor(announcementUnreadCount))
-      : 0;
+    async function loadMessageUnreadCount() {
+      if (!shouldShowAnnouncementButton) {
+        setMessageUnreadCount(0);
+        return;
+      }
 
-  const safeInquiryUnreadCount =
-    typeof inquiryUnreadCount === "number" && Number.isFinite(inquiryUnreadCount)
-      ? Math.max(0, Math.floor(inquiryUnreadCount))
-      : 0;
+      try {
+        const unreadCount = await countUnreadReceivedMessages({
+          limit: MESSAGE_UNREAD_FETCH_LIMIT,
+        });
 
-  const cartBadgeLabel =
-    safeCartItemCount > 99 ? "99+" : String(safeCartItemCount);
+        if (ignore) {
+          return;
+        }
 
-  const announcementUnreadBadgeLabel =
-    safeAnnouncementUnreadCount > 99
-      ? "99+"
-      : String(safeAnnouncementUnreadCount);
+        setMessageUnreadCount(unreadCount);
+      } catch (error) {
+        console.error(error);
 
-  const inquiryUnreadBadgeLabel =
-    safeInquiryUnreadCount > 99 ? "99+" : String(safeInquiryUnreadCount);
+        if (!ignore) {
+          setMessageUnreadCount(0);
+        }
+      }
+    }
+
+    void loadMessageUnreadCount();
+
+    return () => {
+      ignore = true;
+    };
+  }, [shouldShowAnnouncementButton]);
+
+  const safeCartItemCount = normalizeCount(cartItemCount);
+  const safeAnnouncementUnreadCount = normalizeCount(announcementUnreadCount);
+  const safeInquiryUnreadCount = normalizeCount(inquiryUnreadCount);
+  const safeMessageUnreadCount = normalizeCount(messageUnreadCount);
+
+  const safeChatUnreadCount =
+    safeInquiryUnreadCount + safeMessageUnreadCount;
+
+  const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
+  const announcementUnreadBadgeLabel = formatBadgeLabel(
+    safeAnnouncementUnreadCount,
+  );
+  const chatUnreadBadgeLabel = formatBadgeLabel(safeChatUnreadCount);
 
   return (
     <div className="header__right">
@@ -126,16 +164,16 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
         <Link
           to="/chats"
           className="header__settings-link header__cart-link"
-          aria-label={`問い合わせ ${safeInquiryUnreadCount}件`}
-          title="問い合わせ"
+          aria-label={`メッセージ ${safeChatUnreadCount}件`}
+          title="メッセージ"
         >
           <span className="header__cart-icon" aria-hidden="true">
             💬
           </span>
 
-          {safeInquiryUnreadCount > 0 ? (
+          {safeChatUnreadCount > 0 ? (
             <span className="header__cart-badge" aria-hidden="true">
-              {inquiryUnreadBadgeLabel}
+              {chatUnreadBadgeLabel}
             </span>
           ) : null}
         </Link>

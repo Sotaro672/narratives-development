@@ -1,4 +1,4 @@
-// frontend/amol/src/router/index.tsx
+//frontend\amol\src\router\index.tsx
 import { useEffect, useState } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
@@ -174,6 +174,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <ChatListPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/chats/messages/:peerAvatarId",
+    element: (
+      <ProtectedRoute>
+        <ChatDetailPage />
       </ProtectedRoute>
     ),
   },

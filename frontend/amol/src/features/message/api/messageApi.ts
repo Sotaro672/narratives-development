@@ -1,3 +1,4 @@
+//frontend\amol\src\features\message\api\messageApi.ts
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
@@ -199,7 +200,7 @@ function normalizeMessageList(json: ApiMessageListResponse): MessageListResponse
 }
 
 function isAllowedMessageImageContentType(contentType: string): boolean {
-  switch ( contentType.toLowerCase()) {
+  switch (contentType.toLowerCase()) {
     case "image/jpeg":
     case "image/png":
     case "image/webp":
@@ -350,6 +351,16 @@ export async function listReceivedMessages(
   });
 
   return normalizeMessageList(json);
+}
+
+export async function countUnreadReceivedMessages(
+  filter: MessageListFilter = {},
+): Promise<number> {
+  const response = await listReceivedMessages(filter);
+
+  return response.messages.reduce((total: number, message: Message) => {
+    return message.isRead === false ? total + 1 : total;
+  }, 0);
 }
 
 // GET /mall/me/messages/sent
