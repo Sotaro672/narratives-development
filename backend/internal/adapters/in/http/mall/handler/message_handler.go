@@ -171,7 +171,7 @@ func (h *MessageHandler) handleList(w http.ResponseWriter, r *http.Request, myAv
 
 	peerAvatarID := r.URL.Query().Get("peerAvatarId")
 	if peerAvatarID != "" {
-		messages, err := h.MessageUC.ListThread(r.Context(), myAvatarID, peerAvatarID, filter)
+		messages, err := h.MessageUC.ListThreadViews(r.Context(), myAvatarID, peerAvatarID, filter)
 		if err != nil {
 			writeMessageErr(w, err)
 			return
@@ -180,7 +180,7 @@ func (h *MessageHandler) handleList(w http.ResponseWriter, r *http.Request, myAv
 		return
 	}
 
-	messages, err := h.MessageUC.ListReceived(r.Context(), myAvatarID, filter)
+	messages, err := h.MessageUC.ListReceivedViews(r.Context(), myAvatarID, filter)
 	if err != nil {
 		writeMessageErr(w, err)
 		return
@@ -196,7 +196,7 @@ func (h *MessageHandler) handleListReceived(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	messages, err := h.MessageUC.ListReceived(r.Context(), myAvatarID, filter)
+	messages, err := h.MessageUC.ListReceivedViews(r.Context(), myAvatarID, filter)
 	if err != nil {
 		writeMessageErr(w, err)
 		return
@@ -212,7 +212,7 @@ func (h *MessageHandler) handleListSent(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	messages, err := h.MessageUC.ListSent(r.Context(), myAvatarID, filter)
+	messages, err := h.MessageUC.ListSentViews(r.Context(), myAvatarID, filter)
 	if err != nil {
 		writeMessageErr(w, err)
 		return
@@ -483,10 +483,10 @@ func isMessageParticipant(message messagedom.Message, avatarID string) bool {
 	return message.SenderAvatarID == avatarID || message.ReceiverAvatarID == avatarID
 }
 
-func writeMessageList(w http.ResponseWriter, messages []messagedom.Message) {
+func writeMessageList(w http.ResponseWriter, messages []messageuc.MessageView) {
 	type messageListResponse struct {
-		Messages []messagedom.Message `json:"messages"`
-		Count    int                  `json:"count"`
+		Messages []messageuc.MessageView `json:"messages"`
+		Count    int                     `json:"count"`
 	}
 
 	_ = json.NewEncoder(w).Encode(messageListResponse{

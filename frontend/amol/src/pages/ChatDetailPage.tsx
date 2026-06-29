@@ -38,6 +38,8 @@ type ChatDetailLocationState = {
   replies?: InquiryReply[] | null;
   messageThread?: {
     peerAvatarId: string;
+    peerAvatarName?: string | null;
+    peerAvatarIcon?: string | null;
     messages: Message[];
   } | null;
 };
@@ -45,6 +47,11 @@ type ChatDetailLocationState = {
 type ChatRouteParams = {
   inquiryId?: string;
   peerAvatarId?: string;
+};
+
+type PeerAvatarInfo = {
+  name: string;
+  icon: string;
 };
 
 export default function ChatDetailPage() {
@@ -56,6 +63,19 @@ export default function ChatDetailPage() {
   const messagePeerAvatarId =
     peerAvatarId || (isMessageMode ? getLastPathSegment(location.pathname) : "");
 
+  const initialMessageThread = isMessageMode
+    ? state?.messageThread ?? null
+    : null;
+  const initialMessageThreadMessages = Array.isArray(
+    initialMessageThread?.messages,
+  )
+    ? initialMessageThread.messages
+    : [];
+  const initialPeerAvatarInfo = resolvePeerAvatarFromMessages(
+    initialMessageThreadMessages,
+    messagePeerAvatarId,
+  );
+
   const [inquiry, setInquiry] = useState<Inquiry | null>(
     isMessageMode ? null : state?.inquiry ?? null,
   );
@@ -66,6 +86,14 @@ export default function ChatDetailPage() {
     isMessageMode && Array.isArray(state?.messageThread?.messages)
       ? state.messageThread.messages
       : [],
+  );
+  const [peerAvatarName, setPeerAvatarName] = useState<string>(
+    textOrEmpty(initialMessageThread?.peerAvatarName) ||
+      initialPeerAvatarInfo.name,
+  );
+  const [peerAvatarIcon, setPeerAvatarIcon] = useState<string>(
+    textOrEmpty(initialMessageThread?.peerAvatarIcon) ||
+      initialPeerAvatarInfo.icon,
   );
 
   const [loading, setLoading] = useState<boolean>(
@@ -108,6 +136,8 @@ export default function ChatDetailPage() {
     if (isMessageMode) {
       if (!messagePeerAvatarId) {
         setMessages([]);
+        setPeerAvatarName("");
+        setPeerAvatarIcon("");
         setError("相手のアバターIDを取得できませんでした。");
         setLoading(false);
         return;
@@ -124,6 +154,14 @@ export default function ChatDetailPage() {
 
         const nextMessages = result.messages ?? [];
         setMessages(nextMessages);
+
+        const resolvedPeer = resolvePeerAvatarFromMessages(
+          nextMessages,
+          messagePeerAvatarId,
+        );
+
+        setPeerAvatarName((current) => resolvedPeer.name || current);
+        setPeerAvatarIcon((current) => resolvedPeer.icon || current);
 
         const unreadIds = nextMessages
           .filter((message) => message.isRead === false)
@@ -290,11 +328,29 @@ export default function ChatDetailPage() {
 
         if (createdMessage) {
           setMessages((current) => [...current, createdMessage]);
+
+          const resolvedPeer = resolvePeerAvatarFromMessages(
+            [createdMessage],
+            messagePeerAvatarId,
+          );
+
+          setPeerAvatarName((current) => resolvedPeer.name || current);
+          setPeerAvatarIcon((current) => resolvedPeer.icon || current);
         } else {
           const result = await listMessageThread(messagePeerAvatarId, {
             limit: 100,
           });
-          setMessages(result.messages ?? []);
+          const nextMessages = result.messages ?? [];
+
+          setMessages(nextMessages);
+
+          const resolvedPeer = resolvePeerAvatarFromMessages(
+            nextMessages,
+            messagePeerAvatarId,
+          );
+
+          setPeerAvatarName((current) => resolvedPeer.name || current);
+          setPeerAvatarIcon((current) => resolvedPeer.icon || current);
         }
 
         setIsReplyModalOpen(false);
@@ -376,7 +432,8 @@ export default function ChatDetailPage() {
     }
   }, [inquiryId, closingInquiry, isMessageMode]);
 
-  const title = isMessageMode ? "メッセージ" : getInquiryTitle(inquiry);
+  const messageTitle = textOrEmpty(peerAvatarName) || "メッセージ";
+  const title = isMessageMode ? messageTitle : getInquiryTitle(inquiry);
   const shouldShowClosePrompt = !isMessageMode && inquiry?.status === "resolved";
   const replyActionDisabled = isMessageMode
     ? !messagePeerAvatarId || loading || postingReply
@@ -419,6 +476,8 @@ export default function ChatDetailPage() {
             <MessageThread
               messages={sortedMessages}
               peerAvatarId={messagePeerAvatarId}
+              peerAvatarName={peerAvatarName}
+              peerAvatarIcon={peerAvatarIcon}
             />
           ) : null}
 
@@ -658,10 +717,16 @@ export default function ChatDetailPage() {
 function MessageThread({
   messages,
   peerAvatarId,
+  peerAvatarName,
+  peerAvatarIcon,
 }: {
   messages: Message[];
   peerAvatarId: string;
+  peerAvatarName?: string;
+  peerAvatarIcon?: string;
 }) {
+  const peerDisplayName = textOrEmpty(peerAvatarName) || "相手";
+
   if (!Array.isArray(messages) || messages.length === 0) {
     return (
       <div className="chat-detail-page__empty">
@@ -678,43 +743,107 @@ function MessageThread({
         <div className="chat-detail-page__replies">
           {messages.map((message, index) => {
             const isOwnMessage = message.senderAvatarId !== peerAvatarId;
+            const senderName = isOwnMessage ? "あなた" : peerDisplayName;
+            const senderIcon = isOwnMessage
+              ? ""
+              : getPeerIconForMessage(message, peerAvatarId, peerAvatarIcon);
+            const initialSource = senderName || peerAvatarId || "相";
 
             return (
               <article
                 key={message.id || `${message.createdAt}-${index}`}
                 className={
                   isOwnMessage
-                    ? "chat-detail-page__reply chat-detail-page__reply--avatar"
-                    : "chat-detail-page__reply"
+                    ? "chat-detail-page__reply chat-detail-page__reply--avatar chat-detail-page__message-card chat-detail-page__message-card--own"
+                    : "chat-detail-page__reply chat-detail-page__message-card chat-detail-page__message-card--peer"
                 }
               >
-                <div className="chat-detail-page__message-head">
-                  <div>
-                    <span className="chat-detail-page__sender">
-                      {isOwnMessage ? "あなた" : "相手"}
-                    </span>
+                <div
+                  className={
+                    isOwnMessage
+                      ? "chat-detail-page__message-line chat-detail-page__message-line--own"
+                      : "chat-detail-page__message-line"
+                  }
+                >
+                  {!isOwnMessage ? (
+                    <MessageAvatarIcon
+                      icon={senderIcon}
+                      fallbackText={initialSource}
+                    />
+                  ) : null}
 
-                    {message.createdAt ? (
-                      <time
-                        className="chat-detail-page__date"
-                        dateTime={message.createdAt}
-                      >
-                        {formatDateTime(message.createdAt)}
-                      </time>
+                  <div className="chat-detail-page__message-main">
+                    <div className="chat-detail-page__message-head">
+                      <div>
+                        <span className="chat-detail-page__sender">
+                          {senderName}
+                        </span>
+
+                        {message.createdAt ? (
+                          <time
+                            className="chat-detail-page__date"
+                            dateTime={message.createdAt}
+                          >
+                            {formatDateTime(message.createdAt)}
+                          </time>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {message.body ? (
+                      <p className="chat-detail-page__content">
+                        {message.body}
+                      </p>
                     ) : null}
+
+                    <ImageGrid images={message.images} />
                   </div>
                 </div>
-
-                {message.body ? (
-                  <p className="chat-detail-page__content">{message.body}</p>
-                ) : null}
-
-                <ImageGrid images={message.images} />
               </article>
             );
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MessageAvatarIcon({
+  icon,
+  fallbackText,
+}: {
+  icon?: string;
+  fallbackText: string;
+}) {
+  return (
+    <div className="chat-detail-page__message-avatar" aria-hidden="true">
+      {icon ? (
+        <img
+          className="chat-detail-page__message-avatar-image"
+          src={icon}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={(event) => {
+            event.currentTarget.classList.add("is-hidden");
+
+            const fallback = event.currentTarget.nextElementSibling;
+            if (fallback instanceof HTMLElement) {
+              fallback.classList.remove("is-hidden");
+            }
+          }}
+        />
+      ) : null}
+
+      <span
+        className={
+          icon
+            ? "chat-detail-page__message-avatar-fallback is-hidden"
+            : "chat-detail-page__message-avatar-fallback"
+        }
+      >
+        {getInitial(fallbackText)}
+      </span>
     </div>
   );
 }
@@ -816,6 +945,80 @@ function getStatusLabel(status?: string | null): string {
   }
 }
 
+function resolvePeerAvatarFromMessages(
+  messages: Message[] | null | undefined,
+  peerAvatarId: string,
+): PeerAvatarInfo {
+  let name = "";
+  let icon = "";
+
+  for (const message of messages ?? []) {
+    if (!name) {
+      name = textOrEmpty(message.peerAvatarName);
+    }
+
+    if (!icon) {
+      icon = textOrEmpty(message.peerAvatarIcon);
+    }
+
+    if (name && icon) {
+      return { name, icon };
+    }
+  }
+
+  for (const message of messages ?? []) {
+    const senderAvatarId = textOrEmpty(message.senderAvatarId);
+    const receiverAvatarId = textOrEmpty(message.receiverAvatarId);
+
+    if (senderAvatarId === peerAvatarId) {
+      if (!name) {
+        name = textOrEmpty(message.senderAvatarName);
+      }
+
+      if (!icon) {
+        icon = textOrEmpty(message.senderAvatarIcon);
+      }
+    }
+
+    if (receiverAvatarId === peerAvatarId) {
+      if (!name) {
+        name = textOrEmpty(message.receiverAvatarName);
+      }
+
+      if (!icon) {
+        icon = textOrEmpty(message.receiverAvatarIcon);
+      }
+    }
+
+    if (name && icon) {
+      return { name, icon };
+    }
+  }
+
+  return { name, icon };
+}
+
+function getPeerIconForMessage(
+  message: Message,
+  peerAvatarId: string,
+  fallbackIcon?: string,
+): string {
+  const peerIcon = textOrEmpty(message.peerAvatarIcon);
+  if (peerIcon) {
+    return peerIcon;
+  }
+
+  if (textOrEmpty(message.senderAvatarId) === peerAvatarId) {
+    return textOrEmpty(message.senderAvatarIcon) || textOrEmpty(fallbackIcon);
+  }
+
+  if (textOrEmpty(message.receiverAvatarId) === peerAvatarId) {
+    return textOrEmpty(message.receiverAvatarIcon) || textOrEmpty(fallbackIcon);
+  }
+
+  return textOrEmpty(fallbackIcon);
+}
+
 function getLastPathSegment(pathname: string): string {
   const parts = pathname.split("/").filter(Boolean);
   return decodeURIComponent(parts[parts.length - 1] ?? "");
@@ -839,6 +1042,16 @@ function formatDateTime(value?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function getInitial(value: string): string {
+  const trimmed = textOrEmpty(value);
+
+  if (!trimmed) {
+    return "？";
+  }
+
+  return Array.from(trimmed)[0] ?? "？";
 }
 
 function getComparableTime(value?: string | null): number {

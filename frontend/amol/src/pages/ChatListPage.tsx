@@ -40,12 +40,22 @@ type MessageThreadListItem = {
   chatKind: "message";
   id: string;
   peerAvatarId: string;
+  peerAvatarName?: string | null;
+  peerAvatarIcon?: string | null;
   messages: Message[];
   unreadMessageIds: string[];
   latestMessage?: Message;
   isRead: boolean;
   createdAt?: string;
   updatedAt?: string;
+};
+
+type MessageThreadDraft = {
+  peerAvatarId: string;
+  peerAvatarName?: string | null;
+  peerAvatarIcon?: string | null;
+  messages: Message[];
+  unreadMessageIds: string[];
 };
 
 type ChatListItem = InquiryChatListItem | MessageThreadListItem;
@@ -176,6 +186,8 @@ export default function ChatListPage() {
               const subLabel = getChatSubLabel(item);
               const statusLabel = getChatStatusLabel(item);
               const countLabel = getChatCountLabel(item);
+              const avatarIcon = getChatAvatarIcon(item);
+              const avatarInitial = getInitial(title);
 
               return (
                 <article
@@ -198,7 +210,34 @@ export default function ChatListPage() {
                   }}
                 >
                   <div className="chat-list-page__avatar" aria-hidden="true">
-                    {getInitial(title)}
+                    {avatarIcon ? (
+                      <img
+                        src={avatarIcon}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          display: "block",
+                          objectFit: "cover",
+                          borderRadius: "inherit",
+                        }}
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+
+                          const fallback =
+                            event.currentTarget.nextElementSibling;
+                          if (fallback instanceof HTMLElement) {
+                            fallback.style.display = "inline";
+                          }
+                        }}
+                      />
+                    ) : null}
+
+                    <span style={avatarIcon ? { display: "none" } : undefined}>
+                      {avatarInitial}
+                    </span>
                   </div>
 
                   <div className="chat-list-page__body">
@@ -396,6 +435,8 @@ async function openMessageThread(
     state: {
       messageThread: {
         peerAvatarId: item.peerAvatarId,
+        peerAvatarName: item.peerAvatarName,
+        peerAvatarIcon: item.peerAvatarIcon,
         messages: nextItem.messages,
       },
     },
@@ -406,22 +447,22 @@ function buildMessageThreads(
   received: Message[],
   sent: Message[],
 ): MessageThreadListItem[] {
-  const threads = new Map<
-    string,
-    {
-      peerAvatarId: string;
-      messages: Message[];
-      unreadMessageIds: string[];
-    }
-  >();
+  const threads = new Map<string, MessageThreadDraft>();
 
   for (const message of received) {
-    const peerAvatarId = textOrEmpty(message.senderAvatarId);
+    const peerAvatarId =
+      textOrEmpty(message.peerAvatarId) || textOrEmpty(message.senderAvatarId);
     if (!peerAvatarId) {
       continue;
     }
 
     const thread = getOrCreateThread(threads, peerAvatarId);
+    rememberPeerAvatar(
+      thread,
+      message.peerAvatarName || message.senderAvatarName,
+      message.peerAvatarIcon || message.senderAvatarIcon,
+    );
+
     thread.messages.push(message);
 
     if (message.isRead === false && message.id) {
@@ -430,12 +471,19 @@ function buildMessageThreads(
   }
 
   for (const message of sent) {
-    const peerAvatarId = textOrEmpty(message.receiverAvatarId);
+    const peerAvatarId =
+      textOrEmpty(message.peerAvatarId) || textOrEmpty(message.receiverAvatarId);
     if (!peerAvatarId) {
       continue;
     }
 
     const thread = getOrCreateThread(threads, peerAvatarId);
+    rememberPeerAvatar(
+      thread,
+      message.peerAvatarName || message.receiverAvatarName,
+      message.peerAvatarIcon || message.receiverAvatarIcon,
+    );
+
     thread.messages.push(message);
   }
 
@@ -447,6 +495,8 @@ function buildMessageThreads(
       chatKind: "message",
       id: `message:${thread.peerAvatarId}`,
       peerAvatarId: thread.peerAvatarId,
+      peerAvatarName: thread.peerAvatarName,
+      peerAvatarIcon: thread.peerAvatarIcon,
       messages,
       unreadMessageIds: Array.from(new Set(thread.unreadMessageIds)),
       latestMessage,
@@ -458,22 +508,15 @@ function buildMessageThreads(
 }
 
 function getOrCreateThread(
-  threads: Map<
-    string,
-    {
-      peerAvatarId: string;
-      messages: Message[];
-      unreadMessageIds: string[];
-    }
-  >,
+  threads: Map<string, MessageThreadDraft>,
   peerAvatarId: string,
-) {
+): MessageThreadDraft {
   const current = threads.get(peerAvatarId);
   if (current) {
     return current;
   }
 
-  const next = {
+  const next: MessageThreadDraft = {
     peerAvatarId,
     messages: [],
     unreadMessageIds: [],
@@ -481,6 +524,23 @@ function getOrCreateThread(
 
   threads.set(peerAvatarId, next);
   return next;
+}
+
+function rememberPeerAvatar(
+  thread: Pick<
+    MessageThreadDraft,
+    "peerAvatarId" | "peerAvatarName" | "peerAvatarIcon"
+  >,
+  name?: string | null,
+  icon?: string | null,
+) {
+  if (!thread.peerAvatarName) {
+    thread.peerAvatarName = textOrEmpty(name) || null;
+  }
+
+  if (!thread.peerAvatarIcon) {
+    thread.peerAvatarIcon = textOrEmpty(icon) || null;
+  }
 }
 
 function dedupeMessages(messages: Message[]): Message[] {
@@ -588,13 +648,17 @@ function getInquiryPreview(item: InquiryChatListItem): string {
 }
 
 function getMessageThreadTitle(item: MessageThreadListItem): string {
-  const peerAvatarId = textOrEmpty(item.peerAvatarId);
-
-  if (!peerAvatarId) {
-    return "メッセージ";
+  const peerAvatarName = textOrEmpty(item.peerAvatarName);
+  if (peerAvatarName) {
+    return peerAvatarName;
   }
 
-  return peerAvatarId;
+  const peerAvatarId = textOrEmpty(item.peerAvatarId);
+  if (peerAvatarId) {
+    return peerAvatarId;
+  }
+
+  return "メッセージ";
 }
 
 function getMessagePreview(item: MessageThreadListItem): string {
@@ -610,6 +674,14 @@ function getMessagePreview(item: MessageThreadListItem): string {
   }
 
   return "メッセージはありません";
+}
+
+function getChatAvatarIcon(item: ChatListItem): string {
+  if (item.chatKind === "message") {
+    return textOrEmpty(item.peerAvatarIcon);
+  }
+
+  return "";
 }
 
 function getInquirySubLabel(item: InquiryChatListItem): string {

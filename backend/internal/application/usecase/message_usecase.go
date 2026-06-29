@@ -1,8 +1,10 @@
+// backend\internal\application\usecase\message_usecase.go
 package usecase
 
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	avatardom "narratives/internal/domain/avatar"
@@ -94,6 +96,25 @@ type SendMessageInput struct {
 
 	// ImageUploads are saved to Firebase Storage before the message metadata is saved.
 	ImageUploads []MessageImageUploadInput `json:"-"`
+}
+
+type MessageView struct {
+	ID                 string                              `json:"id"`
+	SenderAvatarID     string                              `json:"senderAvatarId"`
+	SenderAvatarName   string                              `json:"senderAvatarName,omitempty"`
+	SenderAvatarIcon   *string                             `json:"senderAvatarIcon,omitempty"`
+	ReceiverAvatarID   string                              `json:"receiverAvatarId"`
+	ReceiverAvatarName string                              `json:"receiverAvatarName,omitempty"`
+	ReceiverAvatarIcon *string                             `json:"receiverAvatarIcon,omitempty"`
+	PeerAvatarID       string                              `json:"peerAvatarId,omitempty"`
+	PeerAvatarName     string                              `json:"peerAvatarName,omitempty"`
+	PeerAvatarIcon     *string                             `json:"peerAvatarIcon,omitempty"`
+	Body               string                              `json:"body,omitempty"`
+	Images             []messagedom.MessageImageAttachment `json:"images,omitempty"`
+	IsRead             bool                                `json:"isRead"`
+	ReadAt             *time.Time                          `json:"readAt,omitempty"`
+	CreatedAt          time.Time                           `json:"createdAt"`
+	UpdatedAt          time.Time                           `json:"updatedAt"`
 }
 
 var (
@@ -193,6 +214,20 @@ func (u *MessageUsecase) ListThread(
 	return u.msgRepo.ListThread(ctx, avatarID, peerAvatarID, filter)
 }
 
+func (u *MessageUsecase) ListThreadViews(
+	ctx context.Context,
+	avatarID string,
+	peerAvatarID string,
+	filter messagedom.ListFilter,
+) ([]MessageView, error) {
+	messages, err := u.ListThread(ctx, avatarID, peerAvatarID, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	return u.decorateMessagesWithAvatars(ctx, avatarID, messages), nil
+}
+
 func (u *MessageUsecase) ListReceived(
 	ctx context.Context,
 	receiverAvatarID string,
@@ -208,6 +243,19 @@ func (u *MessageUsecase) ListReceived(
 	return u.msgRepo.ListReceived(ctx, receiverAvatarID, filter)
 }
 
+func (u *MessageUsecase) ListReceivedViews(
+	ctx context.Context,
+	receiverAvatarID string,
+	filter messagedom.ListFilter,
+) ([]MessageView, error) {
+	messages, err := u.ListReceived(ctx, receiverAvatarID, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	return u.decorateMessagesWithAvatars(ctx, receiverAvatarID, messages), nil
+}
+
 func (u *MessageUsecase) ListSent(
 	ctx context.Context,
 	senderAvatarID string,
@@ -221,6 +269,19 @@ func (u *MessageUsecase) ListSent(
 	}
 
 	return u.msgRepo.ListSent(ctx, senderAvatarID, filter)
+}
+
+func (u *MessageUsecase) ListSentViews(
+	ctx context.Context,
+	senderAvatarID string,
+	filter messagedom.ListFilter,
+) ([]MessageView, error) {
+	messages, err := u.ListSent(ctx, senderAvatarID, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	return u.decorateMessagesWithAvatars(ctx, senderAvatarID, messages), nil
 }
 
 func (u *MessageUsecase) MarkAsRead(ctx context.Context, id string) error {
@@ -390,6 +451,96 @@ func (u *MessageUsecase) cleanupUploadedImages(ctx context.Context, images []mes
 		}
 		_ = u.imageStorage.DeleteMessageImage(ctx, image.StoragePath)
 	}
+}
+
+func (u *MessageUsecase) decorateMessagesWithAvatars(
+	ctx context.Context,
+	currentAvatarID string,
+	messages []messagedom.Message,
+) []MessageView {
+	avatars := u.avatarMapByMessages(ctx, messages)
+
+	views := make([]MessageView, 0, len(messages))
+	for _, message := range messages {
+		views = append(views, newMessageView(message, currentAvatarID, avatars))
+	}
+
+	return views
+}
+
+func (u *MessageUsecase) avatarMapByMessages(
+	ctx context.Context,
+	messages []messagedom.Message,
+) map[string]avatardom.Avatar {
+	avatars := make(map[string]avatardom.Avatar)
+
+	if u.avatarRepo == nil {
+		return avatars
+	}
+
+	for _, message := range messages {
+		for _, avatarID := range []string{message.SenderAvatarID, message.ReceiverAvatarID} {
+			avatarID = strings.TrimSpace(avatarID)
+			if avatarID == "" {
+				continue
+			}
+			if _, ok := avatars[avatarID]; ok {
+				continue
+			}
+
+			avatar, err := u.avatarRepo.GetByID(ctx, avatarID)
+			if err != nil {
+				continue
+			}
+
+			avatars[avatarID] = avatar
+		}
+	}
+
+	return avatars
+}
+
+func newMessageView(
+	message messagedom.Message,
+	currentAvatarID string,
+	avatars map[string]avatardom.Avatar,
+) MessageView {
+	sender := avatars[message.SenderAvatarID]
+	receiver := avatars[message.ReceiverAvatarID]
+
+	peerAvatarID := message.SenderAvatarID
+	if peerAvatarID == currentAvatarID {
+		peerAvatarID = message.ReceiverAvatarID
+	}
+
+	peer := avatars[peerAvatarID]
+
+	return MessageView{
+		ID:                 message.ID,
+		SenderAvatarID:     message.SenderAvatarID,
+		SenderAvatarName:   avatarNameOrID(sender, message.SenderAvatarID),
+		SenderAvatarIcon:   cloneStringPtr(sender.AvatarIcon),
+		ReceiverAvatarID:   message.ReceiverAvatarID,
+		ReceiverAvatarName: avatarNameOrID(receiver, message.ReceiverAvatarID),
+		ReceiverAvatarIcon: cloneStringPtr(receiver.AvatarIcon),
+		PeerAvatarID:       peerAvatarID,
+		PeerAvatarName:     avatarNameOrID(peer, peerAvatarID),
+		PeerAvatarIcon:     cloneStringPtr(peer.AvatarIcon),
+		Body:               message.Body,
+		Images:             message.Images,
+		IsRead:             message.IsRead,
+		ReadAt:             message.ReadAt,
+		CreatedAt:          message.CreatedAt,
+		UpdatedAt:          message.UpdatedAt,
+	}
+}
+
+func avatarNameOrID(avatar avatardom.Avatar, fallbackID string) string {
+	if name := strings.TrimSpace(avatar.AvatarName); name != "" {
+		return name
+	}
+
+	return strings.TrimSpace(fallbackID)
 }
 
 func normalizeMessageImageUploadInput(

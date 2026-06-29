@@ -18,7 +18,14 @@ export type MessageImageAttachment = {
 export type Message = {
   id: string;
   senderAvatarId: string;
+  senderAvatarName?: string | null;
+  senderAvatarIcon?: string | null;
   receiverAvatarId: string;
+  receiverAvatarName?: string | null;
+  receiverAvatarIcon?: string | null;
+  peerAvatarId?: string | null;
+  peerAvatarName?: string | null;
+  peerAvatarIcon?: string | null;
   body?: string;
   images?: MessageImageAttachment[];
   isRead: boolean;

@@ -487,7 +487,7 @@ export default function LandingPage() {
             <div className="landing-page-sales-support__header">
               <p className="landing-page-sales-support__eyebrow">利用料金</p>
               <h2 className="landing-page-section__title landing-page-sales-support__title">
-                予定料金プラン
+                本番運用時の料金体系
               </h2>
               <p className="landing-page-card__text landing-page-sales-support__lead">
                 現在試作品段階です。本番運用リリース時は以下の料金体系を予定しております。
@@ -497,7 +497,7 @@ export default function LandingPage() {
             <div className="landing-page-pricing-grid">
               <article className="landing-page-pricing-card">
                 <p className="landing-page-pricing-card__label">基本利用料金</p>
-                <h3 className="landing-page-pricing-card__price">4,990円/月</h3>
+                <h3 className="landing-page-pricing-card__price">4,990円/月～</h3>
                 <p className="landing-page-pricing-card__badge">
                   初月無料
                 </p>
@@ -518,13 +518,12 @@ export default function LandingPage() {
 
               <article className="landing-page-pricing-card">
                 <p className="landing-page-pricing-card__label">
-                  モール販売手数料
+                  販売手数料
                 </p>
                 <h3 className="landing-page-pricing-card__price">売上の10%</h3>
                 <p className="landing-page-pricing-card__text">
-                  テナント様所有EC経由での販売は対象外です。
-                  <br />
-                  接続工事費は別途相談させてください。
+                  自社ECと接続可能です。<br/>
+                  開発費は別途相談させてください。
                 </p>
               </article>
             </div>
