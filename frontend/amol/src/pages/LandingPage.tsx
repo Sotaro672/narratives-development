@@ -5,36 +5,11 @@ import { onAuthStateChanged, type User } from "firebase/auth";
 
 import "../styles/page-layout.css";
 import "../styles/landing-page.css";
-import "../styles/examples-page.css";
 
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import Button from "../components/ui/Button";
 import { auth } from "../lib/firebase";
-
-const examples = [
-  {
-    title: "コピー品対策",
-    description:
-      "AMOLは、QRコードそのものではなく、ブロックチェーン上の移譲履歴によって商品の真正性を判定するため、QRコードのコピーだけでは正規品を増やすことができません。",
-    imageSrc: "/antiCopy.png",
-    imageAlt: "コピー品対策のイメージ",
-  },
-  {
-    title: "空瓶入替対策",
-    description:
-      "電子名札の移譲回数制限または移譲可能期日を設けることで、移譲履歴が伸びていない、または期日が過ぎているのに新品として販売されている場合は瓶の内容物の正規性を保障しないようにできます。",
-    imageSrc: "/sake.png",
-    imageAlt: "空瓶入替対策のイメージ",
-  },
-  {
-    title: "不当レビュー・荒らし対策",
-    description:
-      "AMOLでは、購入されたお客様、電子名札を譲渡されたお客様のみがレビューを投稿できる制御をかけており、実際に商品を消費・利用された感想のみが投稿されるようになっています。",
-    imageSrc: "/Review.png",
-    imageAlt: "不当レビュー・荒らし対策のイメージ",
-  },
-];
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -347,31 +322,38 @@ export default function LandingPage() {
               </article>
             </div>
 
-            <div className="examples-page__header">
-              <h2 className="examples-page__title">３つのブランド毀損対策</h2>
-            </div>
+            <div className="landing-page-anti-copy">
+              <div className="landing-page-anti-copy__header">
+                <h2 className="landing-page-section__title landing-page-anti-copy__title">
+                  QRコードがコピーされたらどう本物を判別する？
+                </h2>
+              </div>
 
-            <div className="examples-page__grid">
-              {examples.map((item) => (
-                <article key={item.title} className="examples-page-card">
-                  <h3 className="examples-page-card__title">{item.title}</h3>
+              <div className="landing-page-anti-copy__body">
+                <div className="landing-page-anti-copy__image-wrap">
+                  <img
+                    src="/antiCopy.png"
+                    alt="QRコードのコピーとブロックチェーントークンによる真贋判定のイメージ"
+                    className="landing-page-anti-copy__image"
+                    loading="lazy"
+                  />
+                </div>
 
-                  {"imageSrc" in item ? (
-                    <div className="examples-page-card__image-wrap">
-                      <img
-                        src={item.imageSrc}
-                        alt={item.imageAlt}
-                        className="examples-page-card__image"
-                        loading="lazy"
-                      />
-                    </div>
-                  ) : null}
-
-                  <p className="examples-page-card__description">
-                    {item.description}
+                <div className="landing-page-anti-copy__content">
+                  <p className="landing-page-anti-copy__text">
+                    QRコード自体は、容易にコピーできます。
                   </p>
-                </article>
-              ))}
+                  <p className="landing-page-anti-copy__text">
+                    しかし、商品に紐づくブロックチェーントークンの所有権移譲履歴は、正規品の1本だけしか更新されません。
+                  </p>
+                  <p className="landing-page-anti-copy__text">
+                    そのため、コピー品をスキャンしても所有者名義は購入者のアバター名に更新されず、正規品ではないことが判明します。
+                  </p>
+                  <p className="landing-page-anti-copy__text">
+                    つまり偽造業者は、QRコードを複製できてもブロックチェーントークンまでは複製できないため、市場に流通できる商品を増やすことができません。
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -498,9 +480,7 @@ export default function LandingPage() {
               <article className="landing-page-pricing-card">
                 <p className="landing-page-pricing-card__label">基本利用料金</p>
                 <h3 className="landing-page-pricing-card__price">4,990円/月～</h3>
-                <p className="landing-page-pricing-card__badge">
-                  初月無料
-                </p>
+                <p className="landing-page-pricing-card__badge">初月無料</p>
                 <p className="landing-page-pricing-card__text">
                   試験運用価格であり、今後金額が上下する可能性があります。
                 </p>
@@ -522,7 +502,7 @@ export default function LandingPage() {
                 </p>
                 <h3 className="landing-page-pricing-card__price">売上の10%</h3>
                 <p className="landing-page-pricing-card__text">
-                  自社ECと接続可能です。<br/>
+                  自社ECと接続可能です。<br />
                   開発費は別途相談させてください。
                 </p>
               </article>
