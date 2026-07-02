@@ -1,6 +1,6 @@
-// frontend/amol/src/components/layout/header/HeaderActions.tsx
+//frontend\amol\src\components\layout\header\HeaderActions.tsx
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
 import { useInquiryUnreadCounter } from "../../../features/inquiry/hooks/useInquiryUnreadCounter";
@@ -23,7 +23,14 @@ function formatBadgeLabel(count: number): string {
   return count > 99 ? "99+" : String(count);
 }
 
+function isResalePagePath(pathname: string): boolean {
+  return pathname === "/resale" || pathname === "/resale/";
+}
+
 export default function HeaderActions({ actions }: HeaderActionsProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const {
     hasActionButton,
     actionButtonLabel,
@@ -98,17 +105,29 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
   const safeInquiryUnreadCount = normalizeCount(inquiryUnreadCount);
   const safeMessageUnreadCount = normalizeCount(messageUnreadCount);
 
-  const safeChatUnreadCount =
-    safeInquiryUnreadCount + safeMessageUnreadCount;
+  const safeChatUnreadCount = safeInquiryUnreadCount + safeMessageUnreadCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
   const announcementUnreadBadgeLabel = formatBadgeLabel(
     safeAnnouncementUnreadCount,
   );
   const chatUnreadBadgeLabel = formatBadgeLabel(safeChatUnreadCount);
+  const shouldShowResaleButton = isResalePagePath(location.pathname);
 
   return (
     <div className="header__right">
+      {shouldShowResaleButton ? (
+        <button
+          type="button"
+          className="header__settings-link header__resale-button"
+          aria-label="出品"
+          title="出品"
+          onClick={() => navigate("/wallet")}
+        >
+          出品
+        </button>
+      ) : null}
+
       {hasActionButton ? (
         <button
           type="button"

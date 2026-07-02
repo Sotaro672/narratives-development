@@ -17,6 +17,7 @@ type ContentsDetailPanelProps = {
   commentCard: TokenCommentCardController;
   onProductNameClick: () => void;
   onBrandNameClick: () => void;
+  onResaleClick: () => void;
 };
 
 export default function ContentsDetailPanel({
@@ -30,6 +31,7 @@ export default function ContentsDetailPanel({
   commentCard,
   onProductNameClick,
   onBrandNameClick,
+  onResaleClick,
 }: ContentsDetailPanelProps) {
   return (
     <div className="split-page-right contents-page-detail">
@@ -41,6 +43,7 @@ export default function ContentsDetailPanel({
         currentAvatarId={currentAvatarId}
         onProductNameClick={onProductNameClick}
         onBrandNameClick={onBrandNameClick}
+        onResaleClick={onResaleClick}
       />
 
       <TokenCommentCard

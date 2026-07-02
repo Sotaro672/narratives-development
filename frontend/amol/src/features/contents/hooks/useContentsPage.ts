@@ -9,10 +9,7 @@ import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRe
 import { useMobilePortrait } from "../../catalog/presentation/hooks/useMobilePortrait";
 import { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";
 import { fetchContentsMetadata } from "../api/contentsApi";
-import type {
-  ContentsMetadata,
-  ContentsSearchParams,
-} from "../types";
+import type { ContentsMetadata, ContentsSearchParams } from "../types";
 
 function buildContentsSearchParams(
   searchParams: URLSearchParams,
@@ -208,6 +205,27 @@ export function useContentsPage() {
     );
   };
 
+  const handleOpenResalePage = () => {
+    if (!contents.productId || !contents.tokenBlueprintId) {
+      return;
+    }
+
+    navigate("/resale", {
+      state: {
+        mintAddress: contents.mintAddress,
+        productId: contents.productId,
+        brandId: contents.brandId,
+        brandName: contents.brandName,
+        productName: contents.productName,
+        productBlueprintId: contents.productBlueprintId,
+        tokenBlueprintId: contents.tokenBlueprintId,
+        tokenName,
+        tokenIconUrl,
+        currentAvatarId,
+      },
+    });
+  };
+
   return {
     contents,
     commentCard,
@@ -228,5 +246,6 @@ export function useContentsPage() {
     handleBrandNameClick,
     handlePrevFile,
     handleNextFile,
+    handleOpenResalePage,
   };
 }

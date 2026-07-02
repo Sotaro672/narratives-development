@@ -1,4 +1,4 @@
-//frontend\amol\src\router\index.tsx
+// frontend/amol/src/router/index.tsx
 import { useEffect, useState } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
@@ -39,6 +39,7 @@ import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
 import PricePlan from "../pages/PricePlan";
+import ResalePage from "../pages/ResalePage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 
 function RootPage() {
@@ -75,6 +76,7 @@ export const router = createBrowserRouter([
 
   { path: "/how-to-use", element: <HowToUsePage /> },
   { path: "/pricing", element: <PricePlan /> },
+  { path: "/resale", element: <ResalePage /> },
   { path: "/faq", element: <VisionPage /> },
   { path: "/terms", element: <TermsPage /> },
   { path: "/privacy-policy", element: <TermsPage /> },

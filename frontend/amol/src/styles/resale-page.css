@@ -1,0 +1,124 @@
+/* frontend/amol/src/styles/resale-page.css */
+
+.resale-token-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.resale-token-summary__icon {
+  flex: 0 0 auto;
+}
+
+.resale-token-summary__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resale-token-summary__token-name {
+  margin: 0;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.resale-token-summary__brand-name {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.resale-token-summary__product-name {
+  margin: 4px 0 0;
+  color: #9ca3af;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.page-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page-form__label {
+  color: #374151;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.page-form__field select {
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  appearance: none;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #6b7280 50%),
+    linear-gradient(135deg, #6b7280 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 14px) 50%;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 12px 44px 12px 14px;
+  outline: none;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.page-form__field select:focus {
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.12);
+}
+
+.page-form__field select:disabled {
+  cursor: not-allowed;
+  background-color: #f3f4f6;
+  color: #9ca3af;
+}
+
+@media (max-width: 640px) {
+  .resale-token-summary {
+    gap: 12px;
+  }
+
+  .resale-token-summary__token-name {
+    font-size: 0.95rem;
+  }
+
+  .resale-token-summary__brand-name {
+    font-size: 0.825rem;
+  }
+
+  .resale-token-summary__product-name {
+    font-size: 0.78rem;
+  }
+
+  .page-form__field select {
+    min-height: 44px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    padding: 11px 42px 11px 13px;
+  }
+}

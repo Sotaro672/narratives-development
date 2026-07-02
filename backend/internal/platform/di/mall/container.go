@@ -27,6 +27,7 @@ import (
 
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
+	resaledom "narratives/internal/domain/resale"
 	tokenblueprintreview "narratives/internal/domain/tokenBlueprint_review"
 
 	shared "narratives/internal/platform/di/shared"
@@ -102,6 +103,7 @@ type Container struct {
 	OrderUC           *usecase.OrderUsecase
 	InquiryUC         *usecase.InquiryUsecase
 	AnnouncementUC    *usecase.AnnouncementUsecase
+	ResaleUC          *usecase.ResaleUsecase
 
 	OrderMailer   *mailadp.OrderMailer
 	OrderMailFrom string
@@ -111,6 +113,9 @@ type Container struct {
 
 	AvatarRepo avatardom.Repository
 	BrandRepo  branddom.Repository
+
+	ResaleRepo               resaledom.Repository
+	ResaleConditionImageRepo resaledom.ImageRepository
 
 	// MeAvatarResolver resolves Firebase UID -> avatarId + walletAddress.
 	// AvatarRepositoryFS implements this via ResolveAvatarByUID.
@@ -255,6 +260,16 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
 
 	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
+
+	resaleRepo := outfs.NewResaleRepositoryFS(fsClient)
+	resaleConditionImageRepo := outfs.NewResaleConditionImageRepositoryFS(fsClient)
+
+	c.ResaleRepo = resaleRepo
+	c.ResaleConditionImageRepo = resaleConditionImageRepo
+	c.ResaleUC = usecase.NewResaleUsecase(
+		resaleRepo,
+		resaleConditionImageRepo,
+	)
 
 	c.OrderMailer = mailadp.NewOrderMailer(
 		mailadp.NewResendClient(os.Getenv("RESEND_API_KEY")),

@@ -90,6 +90,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	inquiryH := notImplemented("Inquiry")
 	meAvatarsH := notImplemented("MeAvatars")
 	announcementH := notImplemented("Announcement")
+	resaleH := notImplemented("Resale")
 
 	previewPublicH := notImplemented("PreviewPublic")
 	previewMeH := notImplemented("PreviewMe")
@@ -194,6 +195,16 @@ func Register(mux *http.ServeMux, cont *Container) {
 			cont.MeAvatarResolver,
 			cont.AnnouncementUC,
 			cont.AnnouncementQ,
+		)
+	}
+
+	// /mall/me/resales
+	if cont.ResaleUC != nil && cont.ResaleRepo != nil {
+		resaleH = mallhandler.NewResaleHandler(
+			mallhandler.NewResaleHandlerParams{
+				UC:    cont.ResaleUC,
+				Query: cont.ResaleRepo,
+			},
 		)
 	}
 
@@ -304,6 +315,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Wallet:      walletH,
 		MeWallet:    meWalletH,
 		Cart:        cartH,
+		Resale:      resaleH,
 
 		Preview:   previewPublicH,
 		PreviewMe: previewMeH,

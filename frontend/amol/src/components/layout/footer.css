@@ -150,6 +150,17 @@
 }
 
 /* ==============================
+   Resale page action footer
+   ============================== */
+
+.footer-nav--resale-action .footer-nav__action-button {
+  width: auto;
+  min-width: 168px;
+  max-width: min(82vw, 320px);
+  padding: 0 28px;
+}
+
+/* ==============================
    Comment action footer
    ============================== */
 
@@ -330,6 +341,12 @@
     display: block;
   }
 
+  .footer-nav--action.footer-nav--resale-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .footer-nav--comment-action,
   .footer-nav--review-action {
     display: grid;
@@ -376,6 +393,12 @@
   .footer-nav__action-button {
     min-height: 48px;
     font-size: 15px;
+  }
+
+  .footer-nav--resale-action .footer-nav__action-button {
+    min-width: 156px;
+    max-width: min(84vw, 280px);
+    padding: 0 24px;
   }
 
   .footer-nav--comment-action,

@@ -65,6 +65,7 @@ export default function ContentsPage() {
             commentCard={page.commentCard}
             onProductNameClick={page.handleProductNameClick}
             onBrandNameClick={page.handleBrandNameClick}
+            onResaleClick={page.handleOpenResalePage}
           />
         </div>
       </section>

@@ -133,9 +133,17 @@ export default function FooterNav(props: FooterNavProps) {
 
   if (props.variant === "action") {
     const { buttonLabel, disabled = false, onButtonClick } = props;
+    const isResalePageAction = location.pathname === "/resale";
+
+    const footerClassName = [
+      "footer-nav--action",
+      isResalePageAction ? "footer-nav--resale-action" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     return (
-      <footer className="footer-nav--action">
+      <footer className={footerClassName}>
         <button
           type="button"
           className="footer-nav__action-button"

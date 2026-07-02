@@ -11,6 +11,7 @@ type ContentsTokenSummaryCardProps = {
   currentAvatarId: string;
   onProductNameClick: () => void;
   onBrandNameClick: () => void;
+  onResaleClick: () => void;
 };
 
 export default function ContentsTokenSummaryCard({
@@ -21,6 +22,7 @@ export default function ContentsTokenSummaryCard({
   currentAvatarId,
   onProductNameClick,
   onBrandNameClick,
+  onResaleClick,
 }: ContentsTokenSummaryCardProps) {
   const hasProductName = Boolean(contents.productName);
   const hasBrandName = Boolean(contents.brandName);
@@ -80,6 +82,7 @@ export default function ContentsTokenSummaryCard({
         shareTitle={tokenName || "トークン詳細"}
         shareText={contents.productName || contents.brandName || ""}
         shareUrl={window.location.href}
+        onResaleClick={onResaleClick}
       />
 
       {loadingAvatarId ? (
