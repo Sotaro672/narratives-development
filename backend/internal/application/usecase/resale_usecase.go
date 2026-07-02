@@ -65,6 +65,26 @@ func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
 	return uc.resaleRepo.Delete(ctx, id)
 }
 
+func (uc *ResaleUsecase) ListImages(
+	ctx context.Context,
+	resaleID string,
+) ([]resaledom.ResaleConditionImage, error) {
+	if uc == nil {
+		return nil, ErrNotSupported("Resale.ListImages")
+	}
+
+	if uc.imageRepo == nil {
+		return nil, ErrNotSupported("Resale.ListImages.ImageRepo")
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	if resaleID == "" {
+		return nil, resaledom.ErrInvalidConditionImageResaleID
+	}
+
+	return uc.imageRepo.ListByResaleID(ctx, resaleID)
+}
+
 func (uc *ResaleUsecase) CreateImage(
 	ctx context.Context,
 	img resaledom.ResaleConditionImage,

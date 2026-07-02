@@ -1,8 +1,16 @@
 // frontend/amol/src/features/wallet/components/WalletResalePanel.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { listMyResaleListings } from "../../resale/api/resaleApi";
-import type { ResaleListing } from "../../resale/api/resaleApi";
+import {
+  listMyResaleConditionImages,
+  listMyResaleListings,
+} from "../../resale/api/resaleApi";
+import type {
+  ResaleConditionImage,
+  ResaleListing,
+} from "../../resale/api/resaleApi";
+
+type ResaleImageMap = Record<string, string>;
 
 function formatPrice(value: number | undefined): string {
   const price = Number(value ?? 0);
@@ -45,20 +53,43 @@ function formatDateTime(value: string | undefined | null): string {
   }).format(date);
 }
 
-function getDisplayTitle(item: ResaleListing): string {
-  if (item.productId) {
-    return `商品ID: ${item.productId}`;
+function getPrimaryImageUrl(
+  item: ResaleListing,
+  images: ResaleConditionImage[],
+): string {
+  if (images.length === 0) {
+    return "";
   }
 
-  if (item.mintAddress) {
-    return `Mint: ${item.mintAddress.slice(0, 8)}...`;
+  const primaryImageId = String(item.imageId ?? "").trim();
+
+  if (primaryImageId) {
+    const primary = images.find((image) => image.id === primaryImageId);
+
+    if (primary?.url) {
+      return primary.url;
+    }
   }
 
-  return "出品商品";
+  const sortedImages = [...images].sort((a, b) => {
+    const aOrder = Number(a.displayOrder ?? 0);
+    const bOrder = Number(b.displayOrder ?? 0);
+
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+
+    return String(a.id || "").localeCompare(String(b.id || ""), "ja");
+  });
+
+  return sortedImages[0]?.url || "";
 }
 
 export default function WalletResalePanel() {
   const [items, setItems] = useState<ResaleListing[]>([]);
+  const [imageUrlByResaleId, setImageUrlByResaleId] = useState<ResaleImageMap>(
+    {},
+  );
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
@@ -85,6 +116,43 @@ export default function WalletResalePanel() {
     });
   }, [items]);
 
+  const loadResaleImages = useCallback(
+    async (nextItems: ResaleListing[]): Promise<ResaleImageMap> => {
+      const entries = await Promise.all(
+        nextItems.map(async (item) => {
+          const resaleId = String(item.id ?? "").trim();
+
+          if (!resaleId) {
+            return null;
+          }
+
+          try {
+            const images = await listMyResaleConditionImages(resaleId);
+            const imageUrl = getPrimaryImageUrl(item, images);
+
+            return [resaleId, imageUrl] as const;
+          } catch {
+            return [resaleId, ""] as const;
+          }
+        }),
+      );
+
+      const nextMap: ResaleImageMap = {};
+
+      for (const entry of entries) {
+        if (!entry) {
+          continue;
+        }
+
+        const [resaleId, imageUrl] = entry;
+        nextMap[resaleId] = imageUrl;
+      }
+
+      return nextMap;
+    },
+    [],
+  );
+
   const loadResales = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -95,7 +163,11 @@ export default function WalletResalePanel() {
         perPage: 50,
       });
 
-      setItems(result.items ?? []);
+      const nextItems = result.items ?? [];
+      const nextImageMap = await loadResaleImages(nextItems);
+
+      setItems(nextItems);
+      setImageUrlByResaleId(nextImageMap);
     } catch (error) {
       setError(
         error instanceof Error
@@ -105,7 +177,7 @@ export default function WalletResalePanel() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadResaleImages]);
 
   useEffect(() => {
     void loadResales();
@@ -113,7 +185,7 @@ export default function WalletResalePanel() {
 
   if (loading) {
     return (
-      <div className="wallet-page-token-list">
+      <div className="wallet-resale-list">
         <p className="wallet-page__message">読み込み中です...</p>
       </div>
     );
@@ -121,7 +193,7 @@ export default function WalletResalePanel() {
 
   if (error) {
     return (
-      <div className="wallet-page-token-list">
+      <div className="wallet-resale-list">
         <div role="alert" className="wallet-page__message">
           <p>{error}</p>
           <button
@@ -138,7 +210,7 @@ export default function WalletResalePanel() {
 
   if (!hasItems) {
     return (
-      <div className="wallet-page-token-list">
+      <div className="wallet-resale-list">
         <div className="wallet-page__message">
           <p>出品中の商品はありません。</p>
         </div>
@@ -147,55 +219,50 @@ export default function WalletResalePanel() {
   }
 
   return (
-    <div className="wallet-page-token-list">
-      {sortedItems.map((item) => (
-        <article
-          key={item.id || item.productId || item.mintAddress}
-          className="wallet-page-token-list__item"
-        >
-          <div className="wallet-resale-card">
-            <div className="wallet-resale-card__body">
-              <div className="wallet-resale-card__header">
-                <p className="wallet-resale-card__title">
-                  {getDisplayTitle(item)}
-                </p>
+    <div className="wallet-resale-list">
+      {sortedItems.map((item) => {
+        const resaleId = String(item.id ?? "").trim();
+        const imageUrl = resaleId ? imageUrlByResaleId[resaleId] || "" : "";
 
-                <span className="wallet-resale-card__status">
-                  {formatStatus(item.status)}
-                </span>
+        return (
+          <article
+            key={resaleId || item.mintAddress}
+            className="wallet-resale-list__item"
+          >
+            <div className="wallet-resale-card">
+              <div className="wallet-resale-card__media">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt="出品画像"
+                    className="wallet-resale-card__image"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div
+                    className="wallet-resale-card__image-placeholder"
+                    aria-label="画像未設定"
+                  >
+                    画像未設定
+                  </div>
+                )}
               </div>
 
-              <dl className="wallet-resale-card__meta">
-                <div className="wallet-resale-card__meta-row">
-                  <dt>価格</dt>
-                  <dd>{formatPrice(item.price)}</dd>
-                </div>
+              <div className="wallet-resale-card__body">
+                <div className="wallet-resale-card__values">
+                  <p className="wallet-resale-card__price">
+                    {formatPrice(item.price)}
+                  </p>
 
-                <div className="wallet-resale-card__meta-row">
-                  <dt>状態</dt>
-                  <dd>{item.condition || "-"}</dd>
+                  <p className="wallet-resale-card__date">
+                    {formatDateTime(item.createdAt)}
+                  </p>
                 </div>
-
-                <div className="wallet-resale-card__meta-row">
-                  <dt>出品日</dt>
-                  <dd>{formatDateTime(item.createdAt)}</dd>
-                </div>
-
-                <div className="wallet-resale-card__meta-row">
-                  <dt>画像</dt>
-                  <dd>{item.imageId ? "設定済み" : "未設定"}</dd>
-                </div>
-              </dl>
-
-              {item.description ? (
-                <p className="wallet-resale-card__description">
-                  {item.description}
-                </p>
-              ) : null}
+              </div>
             </div>
-          </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }

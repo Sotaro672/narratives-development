@@ -91,13 +91,17 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if len(parts) == 2 {
-				if r.Method == http.MethodPost {
+				switch r.Method {
+				case http.MethodGet:
+					h.listImages(w, r, resaleID)
+					return
+				case http.MethodPost:
 					h.createImageFromFirebaseStorage(w, r, resaleID)
 					return
+				default:
+					methodNotAllowed(w)
+					return
 				}
-
-				methodNotAllowed(w)
-				return
 			}
 
 			if len(parts) == 3 && imageID != "" {
@@ -397,6 +401,30 @@ func (h *ResaleHandler) delete(w http.ResponseWriter, r *http.Request, resaleID 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":       true,
 		"resaleId": resaleID,
+	})
+}
+
+func (h *ResaleHandler) listImages(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+		return
+	}
+
+	if _, ok := h.getOwnedResale(w, r, ctx, resaleID); !ok {
+		return
+	}
+
+	images, err := h.uc.ListImages(ctx, resaleID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": images,
 	})
 }
 

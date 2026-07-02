@@ -261,3 +261,23 @@ export async function listMyResaleListings(
     },
   );
 }
+
+export async function listMyResaleConditionImages(
+  resaleId: string,
+): Promise<ResaleConditionImage[]> {
+  const id = resaleId.trim();
+
+  if (!id) {
+    return [];
+  }
+
+  const result = await fetchWithAuth<{
+    data?: ResaleConditionImage[] | null;
+    items?: ResaleConditionImage[];
+    error?: string;
+  }>(`/mall/me/resales/${encodeURIComponent(id)}/images`, {
+    method: "GET",
+  });
+
+  return result.data ?? result.items ?? [];
+}

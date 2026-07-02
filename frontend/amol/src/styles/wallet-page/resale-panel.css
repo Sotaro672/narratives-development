@@ -1,0 +1,131 @@
+/* frontend/amol/src/styles/wallet-page/resale-panel.css */
+
+.wallet-resale-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: #fff;
+}
+
+.wallet-resale-list__item {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wallet-resale-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.wallet-resale-card__media {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #f3f4f6;
+}
+
+.wallet-resale-card__media::after {
+  content: "\51FA\54C1\4E2D";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  min-width: 54px;
+  padding: 6px 9px;
+  box-sizing: border-box;
+  border-top-left-radius: 10px;
+  background-color: #e60023;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  letter-spacing: 0.02em;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.16);
+}
+
+.wallet-resale-card__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wallet-resale-card__image-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.wallet-resale-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.wallet-resale-card__values {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wallet-resale-card__price {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.wallet-resale-card__date {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .wallet-resale-card {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .wallet-resale-card__media {
+    width: 88px;
+    height: 88px;
+    border-radius: 12px;
+  }
+
+  .wallet-resale-card__media::after {
+    min-width: 50px;
+    padding: 6px 8px;
+    border-top-left-radius: 9px;
+    font-size: 11px;
+  }
+
+  .wallet-resale-card__price {
+    font-size: 15px;
+  }
+
+  .wallet-resale-card__date {
+    font-size: 12px;
+  }
+}
