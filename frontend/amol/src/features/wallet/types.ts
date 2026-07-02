@@ -30,4 +30,4 @@ export type WalletAvatar = {
   followingCount: number;
 };
 
-export type WalletTabKey = "history" | "tokens";
+export type WalletTabKey = "history" | "tokens" | "resales";

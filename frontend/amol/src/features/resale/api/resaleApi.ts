@@ -233,3 +233,31 @@ export async function createResaleListing(
 
   return updated ?? created;
 }
+export type ListMyResaleListingsParams = {
+  page?: number;
+  perPage?: number;
+};
+
+export type ListMyResaleListingsResponse = {
+  items?: ResaleListing[];
+  totalCount?: number;
+  totalPages?: number;
+  page?: number;
+  perPage?: number;
+};
+
+export async function listMyResaleListings(
+  params: ListMyResaleListingsParams = {},
+): Promise<ListMyResaleListingsResponse> {
+  const searchParams = new URLSearchParams();
+
+  searchParams.set("page", String(params.page ?? 1));
+  searchParams.set("perPage", String(params.perPage ?? 50));
+
+  return fetchWithAuth<ListMyResaleListingsResponse>(
+    `/mall/me/resales?${searchParams.toString()}`,
+    {
+      method: "GET",
+    },
+  );
+}

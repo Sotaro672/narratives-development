@@ -20,6 +20,7 @@ import (
 // resaledom.Repository satisfies this interface.
 type ResaleQuery interface {
 	List(ctx context.Context, filter resaledom.Filter, sort resaledom.Sort, page resaledom.Page) (resaledom.PageResult[resaledom.Resale], error)
+	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
 	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
 }
 
@@ -241,23 +242,53 @@ func (h *ResaleHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := buildResaleFilterFromQuery(r)
-	filter.AvatarIDs = []string{avatarID}
-
-	page := buildResalePageFromQuery(r)
-
-	pr, err := h.query.List(ctx, filter, resaledom.Sort{}, page)
+	items, err := h.query.ListByAvatarID(ctx, avatarID)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
 	}
 
+	page := buildResalePageFromQuery(r)
+
+	pageNum := page.Number
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+
+	perPage := page.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	totalCount := len(items)
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = (totalCount + perPage - 1) / perPage
+	}
+
+	offset := (pageNum - 1) * perPage
+	if offset < 0 {
+		offset = 0
+	}
+
+	pagedItems := []resaledom.Resale{}
+	if offset < totalCount {
+		end := offset + perPage
+		if end > totalCount {
+			end = totalCount
+		}
+		pagedItems = items[offset:end]
+	}
+
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"items":      pr.Items,
-		"totalCount": pr.TotalCount,
-		"totalPages": pr.TotalPages,
-		"page":       pr.Page,
-		"perPage":    pr.PerPage,
+		"items":      pagedItems,
+		"totalCount": totalCount,
+		"totalPages": totalPages,
+		"page":       pageNum,
+		"perPage":    perPage,
 	})
 }
 

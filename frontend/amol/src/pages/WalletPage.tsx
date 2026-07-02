@@ -12,6 +12,7 @@ import { formatDateTime } from "../components/utils/date";
 import WalletHistoryPanel from "../features/wallet/components/WalletHistoryPanel";
 import WalletProfile from "../features/wallet/components/WalletProfile";
 import WalletProfileActions from "../features/wallet/components/WalletProfileActions";
+import WalletResalePanel from "../features/wallet/components/WalletResalePanel";
 import WalletTabs from "../features/wallet/components/WalletTabs";
 import WalletTokenContentsCard from "../features/wallet/components/WalletTokenContentsCard";
 import WalletTokenEmpty from "../features/wallet/components/WalletTokenEmpty";
@@ -164,7 +165,7 @@ export default function WalletPage() {
   };
 
   return (
-    <Layout title="AMOL" mode="mypage">
+    <Layout title={pageTitle || "AMOL"} mode="mypage">
       <section className="content-page-section wallet-page">
         <div className="wallet-page-layout">
           <aside className="wallet-page-layout__profile">
@@ -235,6 +236,8 @@ export default function WalletPage() {
                       : null}
                   </div>
                 ) : null}
+
+                {activeTab === "resales" ? <WalletResalePanel /> : null}
               </>
             ) : (
               <div className="wallet-page-public-follow">

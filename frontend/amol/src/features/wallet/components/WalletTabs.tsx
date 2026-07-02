@@ -42,6 +42,21 @@ export default function WalletTabs({ activeTab, onChange }: WalletTabsProps) {
       >
         トークン
       </button>
+
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "resales"}
+        className={[
+          "wallet-page-tabs__button",
+          activeTab === "resales" ? "wallet-page-tabs__button--active" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        onClick={() => onChange("resales")}
+      >
+        出品
+      </button>
     </div>
   );
 }
