@@ -17,11 +17,15 @@ import (
 )
 
 // ResaleQuery is the read-side port used by mall resale handler.
-// resaledom.Repository satisfies this interface.
+// mall.ResaleQuery satisfies this interface.
+//
+// NOTE:
+// /mall/me/resales は「自分の出品管理」専用。
+// 公開マーケット一覧の List / ListByCursor は market_handler.go に移譲する。
 type ResaleQuery interface {
-	List(ctx context.Context, filter resaledom.Filter, sort resaledom.Sort, page resaledom.Page) (resaledom.PageResult[resaledom.Resale], error)
 	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
 	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
+	ListImages(ctx context.Context, resaleID string) ([]resaledom.ResaleImage, error)
 }
 
 type ResaleHandler struct {
@@ -407,9 +411,9 @@ func (h *ResaleHandler) delete(w http.ResponseWriter, r *http.Request, resaleID 
 func (h *ResaleHandler) listImages(w http.ResponseWriter, r *http.Request, resaleID string) {
 	ctx := r.Context()
 
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resale usecase is nil"})
+	if h == nil || h.query == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 		return
 	}
 
@@ -417,7 +421,7 @@ func (h *ResaleHandler) listImages(w http.ResponseWriter, r *http.Request, resal
 		return
 	}
 
-	images, err := h.uc.ListImages(ctx, resaleID)
+	images, err := h.query.ListImages(ctx, resaleID)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -497,7 +501,7 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r 
 
 	img, err := h.uc.CreateImage(
 		ctx,
-		resaledom.ResaleConditionImage{
+		resaledom.ResaleImage{
 			ID:           req.ID,
 			ResaleID:     resaleID,
 			URL:          req.URL,
@@ -648,126 +652,6 @@ func currentResaleAvatarIDFromRequest(w http.ResponseWriter, r *http.Request) (s
 	return strings.TrimSpace(avatarID), true
 }
 
-func buildResaleFilterFromQuery(r *http.Request) resaledom.Filter {
-	qp := r.URL.Query()
-
-	filter := resaledom.Filter{}
-
-	if s := strings.TrimSpace(qp.Get("q")); s != "" {
-		filter.SearchQuery = s
-	} else if s := strings.TrimSpace(qp.Get("search")); s != "" {
-		filter.SearchQuery = s
-	} else if s := strings.TrimSpace(qp.Get("searchQuery")); s != "" {
-		filter.SearchQuery = s
-	}
-
-	if vv := qp["ids"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.IDs = append(filter.IDs, splitResaleCSV(v)...)
-		}
-	}
-
-	if vv := qp["mintAddresses"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.MintAddresses = append(filter.MintAddresses, splitResaleCSV(v)...)
-		}
-	} else if vv := qp["mint_addresses"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.MintAddresses = append(filter.MintAddresses, splitResaleCSV(v)...)
-		}
-	}
-
-	if vv := qp["tokenBlueprintIds"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.TokenBlueprintIDs = append(filter.TokenBlueprintIDs, splitResaleCSV(v)...)
-		}
-	} else if vv := qp["token_blueprint_ids"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.TokenBlueprintIDs = append(filter.TokenBlueprintIDs, splitResaleCSV(v)...)
-		}
-	}
-
-	if vv := qp["productIds"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.ProductIDs = append(filter.ProductIDs, splitResaleCSV(v)...)
-		}
-	} else if vv := qp["product_ids"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.ProductIDs = append(filter.ProductIDs, splitResaleCSV(v)...)
-		}
-	}
-
-	if vv := qp["brandIds"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.BrandIDs = append(filter.BrandIDs, splitResaleCSV(v)...)
-		}
-	} else if vv := qp["brand_ids"]; len(vv) > 0 {
-		for _, v := range vv {
-			filter.BrandIDs = append(filter.BrandIDs, splitResaleCSV(v)...)
-		}
-	}
-
-	statusesRaw := strings.TrimSpace(qp.Get("statuses"))
-	if statusesRaw == "" {
-		statusesRaw = strings.TrimSpace(qp.Get("status"))
-	}
-	if statusesRaw != "" {
-		statuses := splitResaleCSV(statusesRaw)
-		if len(statuses) == 1 {
-			status := resaledom.ResaleStatus(statuses[0])
-			if status != "" {
-				filter.Status = &status
-			}
-		} else if len(statuses) > 1 {
-			out := make([]resaledom.ResaleStatus, 0, len(statuses))
-			for _, s := range statuses {
-				status := resaledom.ResaleStatus(s)
-				if status != "" {
-					out = append(out, status)
-				}
-			}
-			filter.Statuses = out
-		}
-	}
-
-	conditionsRaw := strings.TrimSpace(qp.Get("conditions"))
-	if conditionsRaw == "" {
-		conditionsRaw = strings.TrimSpace(qp.Get("condition"))
-	}
-	if conditionsRaw != "" {
-		conditions := splitResaleCSV(conditionsRaw)
-		if len(conditions) == 1 {
-			condition := resaledom.ResaleCondition(conditions[0])
-			if condition != "" {
-				filter.Condition = &condition
-			}
-		} else if len(conditions) > 1 {
-			out := make([]resaledom.ResaleCondition, 0, len(conditions))
-			for _, s := range conditions {
-				condition := resaledom.ResaleCondition(s)
-				if condition != "" {
-					out = append(out, condition)
-				}
-			}
-			filter.Conditions = out
-		}
-	}
-
-	if v := strings.TrimSpace(qp.Get("minPrice")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			filter.MinPrice = &n
-		}
-	}
-
-	if v := strings.TrimSpace(qp.Get("maxPrice")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			filter.MaxPrice = &n
-		}
-	}
-
-	return filter
-}
-
 func buildResalePageFromQuery(r *http.Request) resaledom.Page {
 	qp := r.URL.Query()
 
@@ -790,22 +674,6 @@ func parseResalePositiveInt(raw string, fallback int) int {
 	}
 
 	return n
-}
-
-func splitResaleCSV(raw string) []string {
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-
-	for _, part := range parts {
-		v := strings.TrimSpace(part)
-		if v == "" {
-			continue
-		}
-
-		out = append(out, v)
-	}
-
-	return out
 }
 
 func writeResaleErr(w http.ResponseWriter, err error) {

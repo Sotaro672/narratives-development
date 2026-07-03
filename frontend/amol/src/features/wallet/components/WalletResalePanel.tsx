@@ -22,17 +22,6 @@ function formatPrice(value: number | undefined): string {
   return `¥${price.toLocaleString("ja-JP")}`;
 }
 
-function formatStatus(value: string | undefined): string {
-  switch (value) {
-    case "listing":
-      return "出品中";
-    case "suspended":
-      return "停止中";
-    default:
-      return value || "-";
-  }
-}
-
 function formatDateTime(value: string | undefined | null): string {
   if (!value) {
     return "-";
@@ -51,6 +40,10 @@ function formatDateTime(value: string | undefined | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function textOrEmpty(value: string | undefined | null): string {
+  return String(value ?? "").trim();
 }
 
 function getPrimaryImageUrl(
@@ -224,6 +217,10 @@ export default function WalletResalePanel() {
         const resaleId = String(item.id ?? "").trim();
         const imageUrl = resaleId ? imageUrlByResaleId[resaleId] || "" : "";
 
+        const productName = textOrEmpty(item.productName);
+        const tokenName = textOrEmpty(item.tokenName);
+        const brandName = textOrEmpty(item.brandName);
+
         return (
           <article
             key={resaleId || item.mintAddress}
@@ -234,7 +231,7 @@ export default function WalletResalePanel() {
                 {imageUrl ? (
                   <img
                     src={imageUrl}
-                    alt="出品画像"
+                    alt={productName || tokenName || brandName || "出品画像"}
                     className="wallet-resale-card__image"
                     loading="lazy"
                   />
@@ -249,6 +246,26 @@ export default function WalletResalePanel() {
               </div>
 
               <div className="wallet-resale-card__body">
+                <div className="wallet-resale-card__summary">
+                  {productName ? (
+                    <p className="wallet-resale-card__product-name">
+                      {productName}
+                    </p>
+                  ) : null}
+
+                  {tokenName ? (
+                    <p className="wallet-resale-card__token-name">
+                      {tokenName}
+                    </p>
+                  ) : null}
+
+                  {brandName ? (
+                    <p className="wallet-resale-card__brand-name">
+                      {brandName}
+                    </p>
+                  ) : null}
+                </div>
+
                 <div className="wallet-resale-card__values">
                   <p className="wallet-resale-card__price">
                     {formatPrice(item.price)}

@@ -1,3 +1,4 @@
+// backend/internal/domain/resale/repository_port.go
 package resale
 
 import (
@@ -8,9 +9,9 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// ResaleConditionImagePatch is a partial update input for resale condition image records.
+// ResaleImagePatch is a partial update input for resale image records.
 // nil fields are not updated.
-type ResaleConditionImagePatch struct {
+type ResaleImagePatch struct {
 	URL          *string
 	DisplayOrder *int
 
@@ -45,8 +46,8 @@ type Filter struct {
 	MaxPrice *int
 }
 
-// ResaleConditionImageFilter is the query condition for ResaleConditionImage repository.
-type ResaleConditionImageFilter struct {
+// ResaleImageFilter is the query condition for ResaleImage repository.
+type ResaleImageFilter struct {
 	ResaleID  *string
 	ResaleIDs []string
 
@@ -96,11 +97,11 @@ type Repository interface {
 	Update(ctx context.Context, id string, r Resale) (Resale, error)
 
 	// Delete physically deletes a resale document.
-	// Implementations may also delete child condition image records if the storage supports subcollections.
+	// Implementations may also delete child image records if the storage supports subcollections.
 	Delete(ctx context.Context, id string) error
 }
 
-// ImageRepository is the repository port for resale condition image records.
+// ImageRepository is the repository port for resale image records.
 //
 // Image policy:
 // - Backend stores only Firebase Storage download URL.
@@ -109,12 +110,12 @@ type Repository interface {
 // - imageID alone should not be used as a global lookup key.
 type ImageRepository interface {
 	// Query.
-	ListByResaleID(ctx context.Context, resaleID string) ([]ResaleConditionImage, error)
+	ListByResaleID(ctx context.Context, resaleID string) ([]ResaleImage, error)
 
 	// Write.
-	Create(ctx context.Context, img ResaleConditionImage) (ResaleConditionImage, error)
-	Update(ctx context.Context, resaleID string, imageID string, patch ResaleConditionImagePatch) (ResaleConditionImage, error)
+	Create(ctx context.Context, img ResaleImage) (ResaleImage, error)
+	Update(ctx context.Context, resaleID string, imageID string, patch ResaleImagePatch) (ResaleImage, error)
 
-	// Delete physically deletes a resale condition image record.
+	// Delete physically deletes a resale image record.
 	Delete(ctx context.Context, resaleID string, imageID string) error
 }

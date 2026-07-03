@@ -1,3 +1,4 @@
+// backend/internal/domain/resale/entity.go
 package resale
 
 import (
@@ -66,16 +67,16 @@ var (
 	ErrEmptyImageID   = errors.New("resale: imageId must not be empty")
 	ErrInvalidImageID = errors.New("resale: invalid imageId")
 
-	ErrInvalidConditionImageID           = errors.New("resale: invalid conditionImage id")
-	ErrInvalidConditionImageResaleID     = errors.New("resale: invalid conditionImage resaleId")
-	ErrInvalidConditionImageURL          = errors.New("resale: invalid conditionImage url")
-	ErrInvalidConditionImageDisplayOrder = errors.New("resale: invalid conditionImage displayOrder")
-	ErrInvalidConditionImageCreatedAt    = errors.New("resale: invalid conditionImage createdAt")
-	ErrInvalidConditionImageCreatedBy    = errors.New("resale: invalid conditionImage createdBy")
-	ErrInvalidConditionImageUpdatedAt    = errors.New("resale: invalid conditionImage updatedAt")
-	ErrInvalidConditionImageUpdatedBy    = errors.New("resale: invalid conditionImage updatedBy")
-	ErrConditionImageNotFound            = errors.New("resale: conditionImage not found")
-	ErrConditionImageConflict            = errors.New("resale: conditionImage conflict")
+	ErrInvalidConditionImageID           = errors.New("resale: invalid image id")
+	ErrInvalidConditionImageResaleID     = errors.New("resale: invalid image resaleId")
+	ErrInvalidConditionImageURL          = errors.New("resale: invalid image url")
+	ErrInvalidConditionImageDisplayOrder = errors.New("resale: invalid image displayOrder")
+	ErrInvalidConditionImageCreatedAt    = errors.New("resale: invalid image createdAt")
+	ErrInvalidConditionImageCreatedBy    = errors.New("resale: invalid image createdBy")
+	ErrInvalidConditionImageUpdatedAt    = errors.New("resale: invalid image updatedAt")
+	ErrInvalidConditionImageUpdatedBy    = errors.New("resale: invalid image updatedBy")
+	ErrConditionImageNotFound            = errors.New("resale: image not found")
+	ErrConditionImageConflict            = errors.New("resale: image conflict")
 )
 
 var (
@@ -94,9 +95,9 @@ var (
 // - Backend does not keep DeletedAt / DeletedBy.
 //
 // Image policy:
-// - Frontend uploads condition images before or around listing creation.
-// - Backend persists only the primary condition image record id on Resale.ImageID.
-// - Display URL is resolved from ResaleConditionImage.URL in query / mapper / handler layer.
+// - Frontend uploads resale images before or around listing creation.
+// - Backend persists only the primary image record id on Resale.ImageID.
+// - Display URL is resolved from ResaleImage.URL in query / mapper / handler layer.
 type Resale struct {
 	ID     string       `json:"id,omitempty"`
 	Status ResaleStatus `json:"status,omitempty"`
@@ -112,8 +113,13 @@ type Resale struct {
 	Condition   ResaleCondition `json:"condition,omitempty"`
 	Description string          `json:"description,omitempty"`
 
-	// Primary condition image record id. This is not a URL.
+	// Primary resale image record id. This is not a URL.
 	ImageID string `json:"imageId,omitempty"`
+
+	// Display-only fields.
+	ProductName string `json:"productName,omitempty"`
+	TokenName   string `json:"tokenName,omitempty"`
+	BrandName   string `json:"brandName,omitempty"`
 
 	CreatedBy string    `json:"createdBy,omitempty"`
 	CreatedAt time.Time `json:"createdAt,omitempty"`
@@ -129,7 +135,7 @@ func (r Resale) GetID() string {
 // NewForCreate creates a Resale for create flow.
 // - ID can be empty because repository generates it.
 // - CreatedAt can be zero because repository fills it.
-// - ImageID can be empty because condition images can be attached later.
+// - ImageID can be empty because images can be attached later.
 func NewForCreate(
 	status ResaleStatus,
 	mintAddress string,
@@ -160,6 +166,9 @@ func NewForCreate(
 		Condition:          condition,
 		Description:        description,
 		ImageID:            "",
+		ProductName:        "",
+		TokenName:          "",
+		BrandName:          "",
 		CreatedBy:          createdBy,
 		CreatedAt:          time.Time{},
 	}
@@ -223,7 +232,7 @@ func (r *Resale) Resume(now time.Time) error {
 	return nil
 }
 
-// SetPrimaryImageID sets Resale.ImageID as primary condition image record id.
+// SetPrimaryImageID sets Resale.ImageID as primary resale image record id.
 // Empty value is not allowed here. Use ClearPrimaryImageID to unset.
 func (r *Resale) SetPrimaryImageID(imageID string, now time.Time) error {
 	if r == nil {
@@ -410,7 +419,7 @@ func (r Resale) ValidateForPersist() error {
 	return nil
 }
 
-// ResaleConditionImage is an image record under:
+// ResaleImage is an image record under:
 //
 // /resales/{resaleId}/conditionImages/{imageId}
 //
@@ -418,7 +427,7 @@ func (r Resale) ValidateForPersist() error {
 // - URL is Firebase Storage getDownloadURL().
 // - Backend persists only the display URL and ordering metadata.
 // - Backend does not manage objectPath, fileName, contentType, or size.
-type ResaleConditionImage struct {
+type ResaleImage struct {
 	ID           string     `json:"id"`
 	ResaleID     string     `json:"resaleId"`
 	URL          string     `json:"url"`
@@ -429,15 +438,15 @@ type ResaleConditionImage struct {
 	UpdatedBy    *string    `json:"updatedBy,omitempty"`
 }
 
-func NewResaleConditionImage(
+func NewResaleImage(
 	id string,
 	resaleID string,
 	u string,
 	displayOrder int,
 	createdAt time.Time,
 	createdBy string,
-) (ResaleConditionImage, error) {
-	image := ResaleConditionImage{
+) (ResaleImage, error) {
+	image := ResaleImage{
 		ID:           id,
 		ResaleID:     resaleID,
 		URL:          u,
@@ -447,13 +456,13 @@ func NewResaleConditionImage(
 	}
 
 	if err := image.Validate(); err != nil {
-		return ResaleConditionImage{}, err
+		return ResaleImage{}, err
 	}
 
 	return image, nil
 }
 
-func (image *ResaleConditionImage) UpdateURL(u string) error {
+func (image *ResaleImage) UpdateURL(u string) error {
 	if err := validateURL(u); err != nil {
 		return err
 	}
@@ -462,7 +471,7 @@ func (image *ResaleConditionImage) UpdateURL(u string) error {
 	return nil
 }
 
-func (image *ResaleConditionImage) SetDisplayOrder(order int) error {
+func (image *ResaleImage) SetDisplayOrder(order int) error {
 	if order < 0 {
 		return ErrInvalidConditionImageDisplayOrder
 	}
@@ -471,7 +480,7 @@ func (image *ResaleConditionImage) SetDisplayOrder(order int) error {
 	return nil
 }
 
-func (image *ResaleConditionImage) Touch(now time.Time, actor string) {
+func (image *ResaleImage) Touch(now time.Time, actor string) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -484,7 +493,7 @@ func (image *ResaleConditionImage) Touch(now time.Time, actor string) {
 	}
 }
 
-func (image ResaleConditionImage) Validate() error {
+func (image ResaleImage) Validate() error {
 	if image.ID == "" {
 		return ErrInvalidConditionImageID
 	}

@@ -114,8 +114,8 @@ type Container struct {
 	AvatarRepo avatardom.Repository
 	BrandRepo  branddom.Repository
 
-	ResaleRepo               resaledom.Repository
-	ResaleConditionImageRepo resaledom.ImageRepository
+	ResaleRepo      resaledom.Repository
+	ResaleImageRepo resaledom.ImageRepository
 
 	// MeAvatarResolver resolves Firebase UID -> avatarId + walletAddress.
 	// AvatarRepositoryFS implements this via ResolveAvatarByUID.
@@ -142,6 +142,7 @@ type Container struct {
 	PreviewQ      *mallquery.PreviewQuery
 	InquiryQ      *mallquery.InquiryQuery
 	AnnouncementQ *mallquery.AnnouncementQueryService
+	ResaleQ       *mallquery.ResaleQuery
 
 	OrderQ *mallquery.OrderQuery
 
@@ -213,7 +214,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
-	c.BrandRepo = brandRepo
 
 	companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
 
@@ -262,13 +262,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
 
 	resaleRepo := outfs.NewResaleRepositoryFS(fsClient)
-	resaleConditionImageRepo := outfs.NewResaleConditionImageRepositoryFS(fsClient)
-
-	c.ResaleRepo = resaleRepo
-	c.ResaleConditionImageRepo = resaleConditionImageRepo
+	resaleImageRepo := outfs.NewResaleImageRepositoryFS(fsClient)
 	c.ResaleUC = usecase.NewResaleUsecase(
 		resaleRepo,
-		resaleConditionImageRepo,
+		resaleImageRepo,
+	)
+	c.ResaleQ = mallquery.NewResaleQuery(
+		resaleRepo,
+		resaleImageRepo,
+		productBlueprintRepoFS,
+		tokenBlueprintRepo,
+		brandRepo,
 	)
 
 	c.OrderMailer = mailadp.NewOrderMailer(

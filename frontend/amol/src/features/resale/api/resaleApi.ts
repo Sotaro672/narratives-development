@@ -1,4 +1,4 @@
-//frontend\amol\src\features\resale\api\resaleApi.ts
+// frontend/amol/src/features/resale/api/resaleApi.ts
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
@@ -18,6 +18,11 @@ export type ResaleListing = {
   condition?: string;
   description?: string;
   imageId?: string;
+
+  productName?: string;
+  tokenName?: string;
+  brandName?: string;
+
   createdBy?: string;
   createdAt?: string;
   updatedBy?: string | null;
@@ -233,6 +238,7 @@ export async function createResaleListing(
 
   return updated ?? created;
 }
+
 export type ListMyResaleListingsParams = {
   page?: number;
   perPage?: number;
