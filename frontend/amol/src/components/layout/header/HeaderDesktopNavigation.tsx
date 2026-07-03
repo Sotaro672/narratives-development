@@ -2,7 +2,13 @@
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
 import { Link, NavLink } from "react-router-dom";
-import { ScanLine, ShoppingBag, UserRound } from "lucide-react";
+import {
+  Heart,
+  ScanLine,
+  ShoppingBag,
+  Store,
+  UserRound,
+} from "lucide-react";
 
 import { publicHeaderNavigationItems } from "./headerNavigationItems";
 
@@ -162,7 +168,27 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
-        <span>ショップ</span>
+        <span>モール</span>
+      </NavLink>
+
+      <NavLink
+        to="/market"
+        className={({ isActive }) =>
+          [
+            "header__desktop-nav-link",
+            "header__desktop-nav-link--with-icon",
+            isActive ? "header__desktop-nav-link--active" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")
+        }
+      >
+        <Store
+          className="header__desktop-nav-svg-icon"
+          strokeWidth={2.2}
+          aria-hidden="true"
+        />
+        <span>マーケット</span>
       </NavLink>
 
       <NavLink
@@ -183,6 +209,26 @@ export default function HeaderDesktopNavigation() {
           aria-hidden="true"
         />
         <span>スキャン</span>
+      </NavLink>
+
+      <NavLink
+        to="/favorites"
+        className={({ isActive }) =>
+          [
+            "header__desktop-nav-link",
+            "header__desktop-nav-link--with-icon",
+            isActive ? "header__desktop-nav-link--active" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")
+        }
+      >
+        <Heart
+          className="header__desktop-nav-svg-icon"
+          strokeWidth={2.2}
+          aria-hidden="true"
+        />
+        <span>お気に入り</span>
       </NavLink>
 
       <NavLink

@@ -18,6 +18,8 @@ import PaymentMethodPage from "../pages/PaymentMethodPage";
 import ShippingAddressPage from "../pages/ShippingAddressPage";
 import AuthActionPage from "../pages/AuthActionPage";
 import ListsPage from "../pages/ListsPage";
+import MarketPage from "../pages/MarketPage";
+import LikesPage from "../pages/LikesPage";
 import CartPage from "../pages/CartPage";
 import CatalogPage from "../pages/CatalogPage";
 import BrandPage from "../pages/BrandPage";
@@ -126,6 +128,30 @@ export const router = createBrowserRouter([
   {
     path: "/lists/:listId",
     element: <CatalogPage />,
+  },
+  {
+    path: "/market",
+    element: (
+      <ProtectedRoute>
+        <MarketPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/favorites",
+    element: (
+      <ProtectedRoute>
+        <LikesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/favorites/:listId",
+    element: (
+      <ProtectedRoute>
+        <CatalogPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/brands/:brandId",

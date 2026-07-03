@@ -120,6 +120,7 @@ type Resale struct {
 	ProductName string `json:"productName,omitempty"`
 	TokenName   string `json:"tokenName,omitempty"`
 	BrandName   string `json:"brandName,omitempty"`
+	ImageURL    string `json:"imageUrl,omitempty"`
 
 	CreatedBy string    `json:"createdBy,omitempty"`
 	CreatedAt time.Time `json:"createdAt,omitempty"`
@@ -169,6 +170,7 @@ func NewForCreate(
 		ProductName:        "",
 		TokenName:          "",
 		BrandName:          "",
+		ImageURL:           "",
 		CreatedBy:          createdBy,
 		CreatedAt:          time.Time{},
 	}

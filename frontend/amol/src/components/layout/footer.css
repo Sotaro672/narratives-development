@@ -15,7 +15,7 @@
   right: 0;
   bottom: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: stretch;
   background: #fff;
   border-top: 1px solid #ddd;
@@ -25,20 +25,23 @@
 }
 
 .footer-nav__item {
+  min-width: 0;
   min-height: 72px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  padding: 0 4px;
   text-decoration: none;
   color: #6b7280;
-  font-size: 14px;
+  font-size: 12px;
+  box-sizing: border-box;
 }
 
 .footer-nav__item--button {
   width: 100%;
-  padding: 0;
+  padding: 0 4px;
   border: 0;
   background: transparent;
   appearance: none;
@@ -57,8 +60,13 @@
 }
 
 .footer-nav__icon {
+  width: 28px;
+  height: 28px;
   font-size: 24px;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .footer-nav__svg-icon {
@@ -68,8 +76,12 @@
 }
 
 .footer-nav__label {
-  font-size: 14px;
+  max-width: 100%;
+  font-size: 12px;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .footer-nav--sidebar {
@@ -102,12 +114,17 @@
 }
 
 .footer-nav--sidebar .footer-nav__icon {
+  width: 28px;
+  height: 28px;
   font-size: 22px;
 }
 
 .footer-nav--sidebar .footer-nav__label {
   font-size: 15px;
   line-height: 1.4;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .footer-nav--action {
@@ -383,6 +400,22 @@
 
   .footer-nav__item {
     min-height: 68px;
+    gap: 3px;
+    padding: 0 2px;
+  }
+
+  .footer-nav__icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .footer-nav__svg-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .footer-nav__label {
+    font-size: 11px;
   }
 
   .footer-nav--action {
@@ -432,16 +465,6 @@
 }
 
 /* avatar icon in footer nav */
-.footer-nav__icon {
-  width: 28px;
-  height: 28px;
-  font-size: 24px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .footer-nav__avatar-icon {
   width: 24px;
   height: 24px;
@@ -455,15 +478,18 @@
   overflow: hidden;
 }
 
-.footer-nav--sidebar .footer-nav__icon {
-  width: 28px;
-  height: 28px;
-  font-size: 22px;
-}
-
 .footer-nav--sidebar .footer-nav__avatar-icon {
   width: 24px;
   height: 24px;
   max-width: 24px;
   max-height: 24px;
+}
+
+@media (max-width: 640px) {
+  .footer-nav__avatar-icon {
+    width: 22px;
+    height: 22px;
+    max-width: 22px;
+    max-height: 22px;
+  }
 }

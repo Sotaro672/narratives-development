@@ -2,38 +2,26 @@
 package mallHandler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
+	mallquery "narratives/internal/application/query/mall"
 	resaledom "narratives/internal/domain/resale"
 )
 
-// MarketResaleQuery is the read-side port used by mall market handler.
-// resaledom.Repository satisfies this interface.
-//
-// NOTE:
-// 公開マーケット側の List / ListByCursor はこの handler に集約する。
-// /mall/me/resales 側では ListByAvatarID のみを使う。
-type MarketResaleQuery interface {
-	List(ctx context.Context, filter resaledom.Filter, sort resaledom.Sort, page resaledom.Page) (resaledom.PageResult[resaledom.Resale], error)
-	ListByCursor(ctx context.Context, filter resaledom.Filter, sort resaledom.Sort, cpage resaledom.CursorPage) (resaledom.CursorPageResult[resaledom.Resale], error)
-	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
-}
-
 type MarketHandler struct {
-	resales MarketResaleQuery
+	marketQ *mallquery.MarketQuery
 }
 
 type NewMarketHandlerParams struct {
-	Resales MarketResaleQuery
+	MarketQ *mallquery.MarketQuery
 }
 
 func NewMarketHandler(p NewMarketHandlerParams) http.Handler {
 	return &MarketHandler{
-		resales: p.Resales,
+		marketQ: p.MarketQ,
 	}
 }
 
@@ -101,7 +89,7 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *MarketHandler) listResales(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h == nil || h.resales == nil {
+	if h == nil || h.marketQ == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 		return
@@ -111,7 +99,7 @@ func (h *MarketHandler) listResales(w http.ResponseWriter, r *http.Request) {
 	sortSpec := buildMarketResaleSortFromQuery(r)
 	page := buildMarketResalePageFromQuery(r)
 
-	result, err := h.resales.List(ctx, filter, sortSpec, page)
+	result, err := h.marketQ.List(ctx, filter, sortSpec, page)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -129,7 +117,7 @@ func (h *MarketHandler) listResales(w http.ResponseWriter, r *http.Request) {
 func (h *MarketHandler) listResalesByCursor(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h == nil || h.resales == nil {
+	if h == nil || h.marketQ == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 		return
@@ -139,7 +127,7 @@ func (h *MarketHandler) listResalesByCursor(w http.ResponseWriter, r *http.Reque
 	sortSpec := buildMarketResaleSortFromQuery(r)
 	cpage := buildMarketResaleCursorPageFromQuery(r)
 
-	result, err := h.resales.ListByCursor(ctx, filter, sortSpec, cpage)
+	result, err := h.marketQ.ListByCursor(ctx, filter, sortSpec, cpage)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -155,13 +143,13 @@ func (h *MarketHandler) listResalesByCursor(w http.ResponseWriter, r *http.Reque
 func (h *MarketHandler) getResale(w http.ResponseWriter, r *http.Request, resaleID string) {
 	ctx := r.Context()
 
-	if h == nil || h.resales == nil {
+	if h == nil || h.marketQ == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 		return
 	}
 
-	item, err := h.resales.GetByID(ctx, resaleID)
+	item, err := h.marketQ.GetByID(ctx, resaleID)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -353,7 +341,7 @@ func buildMarketResaleSortFromQuery(r *http.Request) resaledom.Sort {
 		column = strings.TrimSpace(qp.Get("orderBy"))
 	}
 	if column == "" {
-		column = "updatedAt"
+		column = "createdAt"
 	}
 
 	orderRaw := strings.ToLower(strings.TrimSpace(qp.Get("order")))

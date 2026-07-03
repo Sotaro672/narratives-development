@@ -201,10 +201,10 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// /mall/market/resales
-	if cont.ResaleRepo != nil {
+	if cont.MarketQ != nil {
 		marketH = mallhandler.NewMarketHandler(
 			mallhandler.NewMarketHandlerParams{
-				Resales: cont.ResaleRepo,
+				MarketQ: cont.MarketQ,
 			},
 		)
 	}

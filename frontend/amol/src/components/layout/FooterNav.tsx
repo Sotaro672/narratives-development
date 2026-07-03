@@ -2,7 +2,14 @@
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { NavLink, useLocation } from "react-router-dom";
-import { MessageCircle, ScanLine, ShoppingBag, UserRound } from "lucide-react";
+import {
+  Heart,
+  MessageCircle,
+  ScanLine,
+  ShoppingBag,
+  Store,
+  UserRound,
+} from "lucide-react";
 import "./footer.css";
 
 type FooterNavProps =
@@ -306,7 +313,20 @@ export default function FooterNav(props: FooterNavProps) {
         <span className="footer-nav__icon" aria-hidden="true">
           <ShoppingBag className="footer-nav__svg-icon" strokeWidth={2.2} />
         </span>
-        <span className="footer-nav__label">ショップ</span>
+        <span className="footer-nav__label">モール</span>
+      </NavLink>
+
+      <NavLink
+        to="/market"
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+        }
+      >
+        <span className="footer-nav__icon" aria-hidden="true">
+          <Store className="footer-nav__svg-icon" strokeWidth={2.2} />
+        </span>
+        <span className="footer-nav__label">マーケット</span>
       </NavLink>
 
       {hasCenterAction ? (
@@ -336,6 +356,19 @@ export default function FooterNav(props: FooterNavProps) {
           <span className="footer-nav__label">スキャン</span>
         </NavLink>
       )}
+
+      <NavLink
+        to="/favorites"
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
+        }
+      >
+        <span className="footer-nav__icon" aria-hidden="true">
+          <Heart className="footer-nav__svg-icon" strokeWidth={2.2} />
+        </span>
+        <span className="footer-nav__label">お気に入り</span>
+      </NavLink>
 
       <NavLink
         to="/wallet"

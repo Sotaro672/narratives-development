@@ -143,6 +143,7 @@ type Container struct {
 	InquiryQ      *mallquery.InquiryQuery
 	AnnouncementQ *mallquery.AnnouncementQueryService
 	ResaleQ       *mallquery.ResaleQuery
+	MarketQ       *mallquery.MarketQuery
 
 	OrderQ *mallquery.OrderQuery
 
@@ -263,11 +264,24 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	resaleRepo := outfs.NewResaleRepositoryFS(fsClient)
 	resaleImageRepo := outfs.NewResaleImageRepositoryFS(fsClient)
+
+	c.ResaleRepo = resaleRepo
+	c.ResaleImageRepo = resaleImageRepo
+
 	c.ResaleUC = usecase.NewResaleUsecase(
 		resaleRepo,
 		resaleImageRepo,
 	)
+
 	c.ResaleQ = mallquery.NewResaleQuery(
+		resaleRepo,
+		resaleImageRepo,
+		productBlueprintRepoFS,
+		tokenBlueprintRepo,
+		brandRepo,
+	)
+
+	c.MarketQ = mallquery.NewMarketQuery(
 		resaleRepo,
 		resaleImageRepo,
 		productBlueprintRepoFS,
