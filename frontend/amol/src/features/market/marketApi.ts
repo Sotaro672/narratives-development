@@ -1,4 +1,3 @@
-// frontend/amol/src/features/market/marketApi.ts
 import { getApiBaseUrl } from "../../lib/apiBaseUrl";
 
 export type MarketResaleStatus = "listing" | "suspended";
@@ -23,6 +22,7 @@ export type MarketResaleListing = {
   condition?: MarketResaleCondition;
   description?: string;
   imageId?: string;
+  imageUrl?: string;
 
   productName?: string;
   tokenName?: string;
@@ -44,7 +44,7 @@ export type MarketResaleListResponse = {
 
 export type MarketResaleCursorListResponse = {
   items: MarketResaleListing[];
-  nextCursor: string;
+  nextCursor: string | null;
   limit: number;
 };
 

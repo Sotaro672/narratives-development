@@ -1,0 +1,178 @@
+.market-detail-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 20px 96px;
+}
+
+.market-detail-page__back-button {
+  appearance: none;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  color: #222;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 20px;
+}
+
+.market-detail-page__back-button:hover {
+  background: #f7f7f7;
+}
+
+.market-detail-page__state {
+  border: 1px solid #e5e5e5;
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  color: #555;
+  font-size: 14px;
+}
+
+.market-detail-page__state--error {
+  border-color: #f1c8c8;
+  background: #fff7f7;
+  color: #b42318;
+}
+
+.market-detail-page__card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.market-detail-page__image-wrap {
+  width: 100%;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #f4f4f4;
+  border: 1px solid #eee;
+}
+
+.market-detail-page__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.market-detail-page__image-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  color: #999;
+  font-size: 14px;
+  font-weight: 600;
+  background: #f5f5f5;
+}
+
+.market-detail-page__content {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 24px;
+  padding: 24px;
+}
+
+.market-detail-page__brand {
+  margin: 0 0 8px;
+  color: #777;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.market-detail-page__title {
+  margin: 0;
+  color: #111;
+  font-size: 28px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.market-detail-page__price {
+  margin: 18px 0 0;
+  color: #111;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.market-detail-page__meta {
+  margin: 24px 0 0;
+  border-top: 1px solid #eee;
+}
+
+.market-detail-page__meta-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.market-detail-page__meta-row dt {
+  color: #777;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.market-detail-page__meta-row dd {
+  margin: 0;
+  color: #222;
+  font-size: 14px;
+}
+
+.market-detail-page__description {
+  margin-top: 24px;
+}
+
+.market-detail-page__description h2 {
+  margin: 0 0 10px;
+  color: #111;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.market-detail-page__description p {
+  margin: 0;
+  color: #333;
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .market-detail-page {
+    padding: 16px 16px 96px;
+  }
+
+  .market-detail-page__card {
+    display: block;
+  }
+
+  .market-detail-page__image-wrap {
+    border-radius: 20px;
+  }
+
+  .market-detail-page__content {
+    margin-top: 16px;
+    border-radius: 20px;
+    padding: 20px;
+  }
+
+  .market-detail-page__title {
+    font-size: 22px;
+  }
+
+  .market-detail-page__price {
+    font-size: 24px;
+  }
+
+  .market-detail-page__meta-row {
+    grid-template-columns: 80px minmax(0, 1fr);
+  }
+}

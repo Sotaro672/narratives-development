@@ -19,6 +19,7 @@ import ShippingAddressPage from "../pages/ShippingAddressPage";
 import AuthActionPage from "../pages/AuthActionPage";
 import ListsPage from "../pages/ListsPage";
 import MarketPage from "../pages/MarketPage";
+import MarketDetailPage from "../pages/MarketDetailPage";
 import LikesPage from "../pages/LikesPage";
 import CartPage from "../pages/CartPage";
 import CatalogPage from "../pages/CatalogPage";
@@ -134,6 +135,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <MarketPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/market/:resaleId",
+    element: (
+      <ProtectedRoute>
+        <MarketDetailPage />
       </ProtectedRoute>
     ),
   },
