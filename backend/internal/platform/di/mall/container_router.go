@@ -99,7 +99,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	orderScanVerifyH := notImplemented("OrderScanVerify")
 	orderScanTransferH := transferUsecaseNotConfiguredHandler()
-	shareTransferH := notImplemented("ShareTransfer")
 
 	setupStatusH := notImplemented("SetupStatus")
 
@@ -283,11 +282,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 		orderScanTransferH = mallhandler.NewTransferHandler(cont.TransferUC)
 	}
 
-	// Share transfer
-	if cont.ShareTransferUC != nil {
-		shareTransferH = mallhandler.NewShareTransferHandler(cont.ShareTransferUC)
-	}
-
 	// SignIn: keep a stable no-op endpoint
 	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -335,7 +329,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		OrderScanVerify:   orderScanVerifyH,
 		OrderScanTransfer: orderScanTransferH,
-		ShareTransfer:     shareTransferH,
 		OwnerResolve:      notImplemented("OwnerResolve(endpoint_disabled)"),
 		Payment:           payH,
 		Order:             orderH,

@@ -60,10 +60,6 @@ type Deps struct {
 	OrderScanVerify   http.Handler
 	OrderScanTransfer http.Handler
 
-	// share transfer (me)
-	// POST /mall/me/contents/share
-	ShareTransfer http.Handler
-
 	OwnerResolve http.Handler
 
 	Order http.Handler
@@ -306,10 +302,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// order scan transfer (me)
 	handleSafeAuthAvatar(mux, "/mall/me/orders/scan/transfer", deps.OrderScanTransfer, "OrderScanTransfer(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/orders/scan/transfer/", deps.OrderScanTransfer, "OrderScanTransfer(me)", auth, avatar)
-
-	// share transfer (me)
-	handleSafeAuthAvatar(mux, "/mall/me/contents/share", deps.ShareTransfer, "ShareTransfer(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/contents/share/", deps.ShareTransfer, "ShareTransfer(me)", auth, avatar)
 
 	// announcements (me)
 	handleSafeAuthAvatar(mux, "/mall/me/announcement", deps.Announcement, "Announcement(me)", auth, avatar)

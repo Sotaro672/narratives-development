@@ -4,16 +4,30 @@ package dto
 import "narratives/internal/domain/common"
 
 type HistoryResolveModelInput struct {
-	ModelID            string
-	InventoryID        string
+	ItemType string
+
+	ModelID     string
+	InventoryID string
+	ListID      string
+
+	ResaleID string
+
+	ProductID          string
 	ProductBlueprintID string
 	TokenBlueprintID   string
+	BrandID            string
 }
 
 type HistoryResolvedModel struct {
-	ModelID     string `json:"modelId"`
-	InventoryID string `json:"inventoryId"`
+	ItemType string `json:"itemType,omitempty"`
 
+	ModelID     string `json:"modelId,omitempty"`
+	InventoryID string `json:"inventoryId,omitempty"`
+	ListID      string `json:"listId,omitempty"`
+
+	ResaleID string `json:"resaleId,omitempty"`
+
+	ProductID          string `json:"productId,omitempty"`
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 
@@ -89,10 +103,15 @@ type HistoryPaymentMethodSnapshot struct {
 }
 
 type HistoryOrderItem struct {
-	ModelID     string `json:"modelId"`
-	InventoryID string `json:"inventoryId"`
-	ListID      string `json:"listId"`
+	ItemType string `json:"itemType,omitempty"`
 
+	ModelID     string `json:"modelId,omitempty"`
+	InventoryID string `json:"inventoryId,omitempty"`
+	ListID      string `json:"listId,omitempty"`
+
+	ResaleID string `json:"resaleId,omitempty"`
+
+	ProductID          string `json:"productId,omitempty"`
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 
