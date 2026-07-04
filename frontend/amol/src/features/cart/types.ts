@@ -2,11 +2,41 @@
 
 export type CartModelKind = "apparel" | "alcohol" | "unknown" | string;
 
+export type CartItemType = "list" | "resale";
+
 export type CartItemDTO = {
   avatarId?: string;
+
+  /**
+   * item type
+   * - list: 通常販売 item
+   * - resale: 二次流通 item
+   *
+   * 既存レスポンス互換のため optional。
+   * 未指定で inventoryId/listId/modelId があれば list として扱う。
+   */
+  type?: CartItemType | string;
+
+  /**
+   * list item identifiers
+   */
   inventoryId?: string;
   listId?: string;
   modelId?: string;
+
+  /**
+   * resale item identifiers
+   */
+  resaleId?: string;
+
+  /**
+   * product identifiers
+   */
+  productId?: string;
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+  brandId?: string;
+
   qty?: number;
   quantity?: number;
   itemKey?: string;
@@ -17,6 +47,7 @@ export type CartItemDTO = {
    */
   title?: string;
   listImage?: string;
+  imageUrl?: string;
   price?: number;
   productName?: string;
 
@@ -33,6 +64,7 @@ export type CartItemDTO = {
    */
   size?: string;
   colorName?: string;
+  color?: string;
   colorRGB?: number;
 
   /**
@@ -55,22 +87,54 @@ export type CartDTO = {
 export type CartDisplayItem = {
   itemKey: string;
   avatarId: string;
-  inventoryId: string;
-  listId: string;
-  modelId: string;
+
+  /**
+   * item type
+   * - list: 通常販売 item
+   * - resale: 二次流通 item
+   *
+   * 既存データ互換のため optional。
+   */
+  type?: CartItemType;
+
+  /**
+   * list item identifiers
+   *
+   * resale item では存在しないため optional。
+   */
+  inventoryId?: string;
+  listId?: string;
+  modelId?: string;
+
+  /**
+   * resale item identifiers
+   */
+  resaleId?: string;
+
+  /**
+   * product identifiers
+   */
+  productId?: string;
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+  brandId?: string;
+
   qty: number;
 
   /**
    * cart response 由来の表示用情報。
-   * catalog が null の場合でも CartPage で表示できるようにする。
+   * catalog が null の場合でも CartPage / PaymentPage で表示できるようにする。
    */
   title?: string;
   listImage?: string;
+  imageUrl?: string;
   price?: number;
   productName?: string;
 
   /**
    * apparel / alcohol の表示切り替え用。
+   *
+   * resale item では存在しないことがあるため optional。
    */
   modelKind?: CartModelKind;
   modelNumber?: string;
@@ -81,6 +145,7 @@ export type CartDisplayItem = {
    */
   size?: string;
   colorName?: string;
+  color?: string;
   colorRGB?: number;
 
   /**

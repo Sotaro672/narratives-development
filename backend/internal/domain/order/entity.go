@@ -29,17 +29,44 @@ type PaymentMethodSnapshot struct {
 	IsDefault      bool   `json:"isDefault"`
 }
 
+// OrderItemType identifies what kind of item is stored in Order.Items.
+type OrderItemType string
+
+const (
+	OrderItemTypeList   OrderItemType = "list"
+	OrderItemTypeResale OrderItemType = "resale"
+)
+
 // OrderItemSnapshot is stored inside Order.Items.
-// Expectation: items are NOT split by listId, and each item is
-// [modelId, inventoryId, qty, price].
+//
+// list item:
+// - type: "list" or empty for backward compatibility
+// - modelId, inventoryId, listId, qty, price
+//
+// resale item:
+// - type: "resale"
+// - resaleId, productId, productBlueprintId, tokenBlueprintId, brandId, qty=1, price
 //
 // item 単位で配送/キャンセル/移転状態を保持する。
 type OrderItemSnapshot struct {
-	ModelID     string `json:"modelId"`
-	InventoryID string `json:"inventoryId"`
-	ListID      string `json:"listId"`
-	Qty         int    `json:"qty"`
-	Price       int    `json:"price"`
+	Type OrderItemType `json:"type,omitempty"`
+
+	// list item identifiers
+	ModelID     string `json:"modelId,omitempty"`
+	InventoryID string `json:"inventoryId,omitempty"`
+	ListID      string `json:"listId,omitempty"`
+
+	// resale item identifiers
+	ResaleID string `json:"resaleId,omitempty"`
+
+	// product identifiers
+	ProductID          string `json:"productId,omitempty"`
+	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
+	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+	BrandID            string `json:"brandId,omitempty"`
+
+	Qty   int `json:"qty"`
+	Price int `json:"price"`
 
 	IsCanceled   bool `json:"isCanceled"`
 	IsDispatched bool `json:"isDispatched"`
@@ -301,25 +328,100 @@ func validateItems(items []OrderItemSnapshot) error {
 	if len(items) < MinItemsRequired {
 		return ErrInvalidItems
 	}
+
 	for _, it := range items {
-		if it.ModelID == "" {
-			return ErrInvalidItemSnapshot
-		}
-		if it.InventoryID == "" {
-			return ErrInvalidItemSnapshot
-		}
-		if it.Qty <= 0 {
-			return ErrInvalidItemSnapshot
-		}
-		if it.Price < 0 {
-			return ErrInvalidItemSnapshot
-		}
-		if it.Transferred && it.TransferredAt == nil {
-			return ErrInvalidItemSnapshot
-		}
-		if !it.Transferred && it.TransferredAt != nil {
-			return ErrInvalidItemSnapshot
+		if err := validateItemSnapshot(it); err != nil {
+			return err
 		}
 	}
+
 	return nil
+}
+
+func validateItemSnapshot(it OrderItemSnapshot) error {
+	switch inferOrderItemType(it) {
+	case OrderItemTypeList:
+		return validateListItemSnapshot(it)
+
+	case OrderItemTypeResale:
+		return validateResaleItemSnapshot(it)
+
+	default:
+		return ErrInvalidItemSnapshot
+	}
+}
+
+func validateListItemSnapshot(it OrderItemSnapshot) error {
+	if it.ModelID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.InventoryID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.ListID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.Qty <= 0 {
+		return ErrInvalidItemSnapshot
+	}
+	if it.Price < 0 {
+		return ErrInvalidItemSnapshot
+	}
+	if it.Transferred && it.TransferredAt == nil {
+		return ErrInvalidItemSnapshot
+	}
+	if !it.Transferred && it.TransferredAt != nil {
+		return ErrInvalidItemSnapshot
+	}
+
+	return nil
+}
+
+func validateResaleItemSnapshot(it OrderItemSnapshot) error {
+	if it.ResaleID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.ProductID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.ProductBlueprintID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.TokenBlueprintID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.BrandID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if it.Qty != 1 {
+		return ErrInvalidItemSnapshot
+	}
+	if it.Price < 0 {
+		return ErrInvalidItemSnapshot
+	}
+	if it.Transferred && it.TransferredAt == nil {
+		return ErrInvalidItemSnapshot
+	}
+	if !it.Transferred && it.TransferredAt != nil {
+		return ErrInvalidItemSnapshot
+	}
+
+	return nil
+}
+
+func inferOrderItemType(it OrderItemSnapshot) OrderItemType {
+	switch it.Type {
+	case OrderItemTypeList, OrderItemTypeResale:
+		return it.Type
+	}
+
+	if it.ResaleID != "" || it.ProductID != "" {
+		return OrderItemTypeResale
+	}
+
+	if it.ModelID != "" || it.InventoryID != "" || it.ListID != "" {
+		return OrderItemTypeList
+	}
+
+	return ""
 }

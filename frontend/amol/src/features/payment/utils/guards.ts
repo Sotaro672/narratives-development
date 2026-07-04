@@ -1,4 +1,4 @@
-//frontend\amol\src\features\payment\utils\guards.ts
+// frontend/amol/src/features/payment/utils/guards.ts
 import type { CartDisplayItem } from "../../cart/types";
 import type { ShippingAddress } from "../../shipping-address/types";
 import type {
@@ -26,7 +26,7 @@ export function isPaymentRequiresAction(payment: CreatedPayment): boolean {
 export function normalizeCartItems(
   items: CartDisplayItem[],
 ): CanonicalCartDisplayItem[] {
-  return items.map((item) => item as CanonicalCartDisplayItem);
+  return items.map((item) => normalizeCartItem(item));
 }
 
 export function normalizeShippingAddress(
@@ -37,4 +37,33 @@ export function normalizeShippingAddress(
   }
 
   return address as CanonicalShippingAddress;
+}
+
+function normalizeCartItem(item: CartDisplayItem): CanonicalCartDisplayItem {
+  const raw = item as CanonicalCartDisplayItem;
+
+  const type =
+    raw.type === "resale" || raw.resaleId || raw.productId ? "resale" : "list";
+
+  if (type === "resale") {
+    return {
+      ...raw,
+      type: "resale",
+      qty: 1,
+    };
+  }
+
+  return {
+    ...raw,
+    type: "list",
+    qty: normalizeQty(raw.qty),
+  };
+}
+
+function normalizeQty(qty: number | undefined): number {
+  if (typeof qty !== "number" || !Number.isFinite(qty) || qty <= 0) {
+    return 1;
+  }
+
+  return qty;
 }

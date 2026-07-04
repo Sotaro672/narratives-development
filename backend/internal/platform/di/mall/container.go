@@ -1,3 +1,4 @@
+// backend/internal/platform/di/mall/container.go
 package mall
 
 import (
@@ -458,6 +459,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			cartRepo,
 			listRepoFS,
 			inventoryRepo,
+			productBlueprintRepoFS,
+			resaleRepo,
+			resaleImageRepo,
 			c.NameResolver,
 		)
 
@@ -484,6 +488,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			cartRepo,
 			shippingAddressRepo,
 			paymentMethodRepo,
+			productBlueprintRepoFS,
+			resaleRepo,
+			resaleImageRepo,
 			c.NameResolver,
 		)
 
@@ -521,6 +528,21 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			return nil, errors.New("di.mall: wallet secret provider is nil")
 		}
 
+		walletTransferUpdate, walletTransferOK := any(walletRepo).(usecase.AvatarWalletItemTransferUpdater)
+		if !walletTransferOK {
+			return nil, errors.New("di.mall: wallet repository does not implement AvatarWalletItemTransferUpdater for resale transfer")
+		}
+
+		avatarSecrets, avatarSecretOK := any(secrets).(usecase.AvatarSecretProvider)
+		if !avatarSecretOK {
+			return nil, errors.New("di.mall: wallet secret provider does not implement AvatarSecretProvider for resale transfer")
+		}
+
+		walletSync, walletSyncOK := any(c.WalletUC).(usecase.AvatarWalletSyncer)
+		if !walletSyncOK {
+			return nil, errors.New("di.mall: wallet usecase does not implement AvatarWalletSyncer for resale transfer")
+		}
+
 		var executor usecase.TokenTransferExecutor = solana.NewTokenTransferExecutorSolana("")
 
 		c.TransferUC = usecase.NewTransferUsecase(
@@ -538,6 +560,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			executor,
 			nil,
 			c.InventoryUC,
+		).WithResaleTransferDependencies(
+			resaleRepo,
+			avatarSecrets,
+			walletTransferUpdate,
+			walletSync,
 		)
 	}
 

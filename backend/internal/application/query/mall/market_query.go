@@ -17,6 +17,7 @@ type MarketResaleRepository interface {
 	List(ctx context.Context, filter resaledom.Filter, sort resaledom.Sort, page resaledom.Page) (resaledom.PageResult[resaledom.Resale], error)
 	ListByCursor(ctx context.Context, filter resaledom.Filter, sort resaledom.Sort, cpage resaledom.CursorPage) (resaledom.CursorPageResult[resaledom.Resale], error)
 	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
+	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
 }
 
 // MarketQuery is the buyer-facing public market read model.
@@ -24,8 +25,14 @@ type MarketResaleRepository interface {
 // Public market policy:
 // - Only listing resales are visible.
 // - Suspended resales are never returned from List / ListByCursor.
-// - Detail visibility is also guarded by status.
+// - Own resales are excluded from List / ListByCursor when viewer avatarId is provided.
+// - Detail visibility is guarded by status.
 // - Display fields are enriched here.
+//
+// NOTE:
+// Current implementation treats filter.AvatarIDs as viewer avatarIds for exclusion.
+// Public market listing itself does not support seller avatar filtering because returning
+// the viewer's own listings in buyer-facing market is contradictory.
 type MarketQuery struct {
 	resaleRepo           MarketResaleRepository
 	imageRepo            resaledom.ImageRepository
@@ -60,7 +67,11 @@ func (q *MarketQuery) List(
 		return resaledom.PageResult[resaledom.Resale]{}, errors.New("not supported: MarketQuery.List")
 	}
 
+	viewerAvatarIDs := normalizeViewerAvatarIDs(filter.AvatarIDs)
+
 	filter = forcePublicMarketFilter(filter)
+	filter = removeViewerAvatarIDsFromPublicMarketFilter(filter)
+
 	sort = normalizePublicMarketSort(sort)
 	page = normalizePublicMarketPage(page)
 
@@ -69,7 +80,13 @@ func (q *MarketQuery) List(
 		return resaledom.PageResult[resaledom.Resale]{}, err
 	}
 
+	result.Items, err = q.excludeOwnResales(ctx, result.Items, viewerAvatarIDs)
+	if err != nil {
+		return resaledom.PageResult[resaledom.Resale]{}, err
+	}
+
 	result.Items = q.enrichResalesForDisplay(ctx, result.Items)
+	result = normalizePageResultCount(result, page)
 
 	return result, nil
 }
@@ -84,11 +101,20 @@ func (q *MarketQuery) ListByCursor(
 		return resaledom.CursorPageResult[resaledom.Resale]{}, errors.New("not supported: MarketQuery.ListByCursor")
 	}
 
+	viewerAvatarIDs := normalizeViewerAvatarIDs(filter.AvatarIDs)
+
 	filter = forcePublicMarketFilter(filter)
+	filter = removeViewerAvatarIDsFromPublicMarketFilter(filter)
+
 	sort = normalizePublicMarketSort(sort)
 	cpage = normalizePublicMarketCursorPage(cpage)
 
 	result, err := q.resaleRepo.ListByCursor(ctx, filter, sort, cpage)
+	if err != nil {
+		return resaledom.CursorPageResult[resaledom.Resale]{}, err
+	}
+
+	result.Items, err = q.excludeOwnResales(ctx, result.Items, viewerAvatarIDs)
 	if err != nil {
 		return resaledom.CursorPageResult[resaledom.Resale]{}, err
 	}
@@ -120,6 +146,58 @@ func (q *MarketQuery) GetByID(ctx context.Context, id string) (resaledom.Resale,
 	item = q.enrichResaleForDisplay(ctx, item)
 
 	return item, nil
+}
+
+func (q *MarketQuery) excludeOwnResales(
+	ctx context.Context,
+	items []resaledom.Resale,
+	viewerAvatarIDs []string,
+) ([]resaledom.Resale, error) {
+	if len(items) == 0 || len(viewerAvatarIDs) == 0 {
+		return items, nil
+	}
+
+	if q == nil || q.resaleRepo == nil {
+		return items, nil
+	}
+
+	ownIDs := make(map[string]struct{})
+
+	for _, avatarID := range viewerAvatarIDs {
+		ownItems, err := q.resaleRepo.ListByAvatarID(ctx, avatarID)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, own := range ownItems {
+			id := strings.TrimSpace(own.ID)
+			if id == "" {
+				continue
+			}
+
+			ownIDs[id] = struct{}{}
+		}
+	}
+
+	if len(ownIDs) == 0 {
+		return items, nil
+	}
+
+	out := make([]resaledom.Resale, 0, len(items))
+	for _, item := range items {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+
+		if _, ok := ownIDs[id]; ok {
+			continue
+		}
+
+		out = append(out, item)
+	}
+
+	return out, nil
 }
 
 func (q *MarketQuery) enrichResalesForDisplay(
@@ -270,6 +348,37 @@ func forcePublicMarketFilter(filter resaledom.Filter) resaledom.Filter {
 	return filter
 }
 
+func removeViewerAvatarIDsFromPublicMarketFilter(filter resaledom.Filter) resaledom.Filter {
+	filter.AvatarIDs = nil
+
+	return filter
+}
+
+func normalizeViewerAvatarIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return []string{}
+	}
+
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+
+	for _, id := range ids {
+		normalized := strings.TrimSpace(id)
+		if normalized == "" {
+			continue
+		}
+
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+
+	return out
+}
+
 func normalizePublicMarketSort(sort resaledom.Sort) resaledom.Sort {
 	column := strings.TrimSpace(sort.Column)
 	order := sort.Order
@@ -313,6 +422,32 @@ func normalizePublicMarketPage(page resaledom.Page) resaledom.Page {
 	}
 
 	return page
+}
+
+func normalizePageResultCount(
+	result resaledom.PageResult[resaledom.Resale],
+	page resaledom.Page,
+) resaledom.PageResult[resaledom.Resale] {
+	result.TotalCount = len(result.Items)
+
+	if page.PerPage <= 0 {
+		result.TotalPages = 1
+		return result
+	}
+
+	if result.TotalCount == 0 {
+		result.TotalPages = 0
+		return result
+	}
+
+	totalPages := result.TotalCount / page.PerPage
+	if result.TotalCount%page.PerPage != 0 {
+		totalPages++
+	}
+
+	result.TotalPages = totalPages
+
+	return result
 }
 
 func normalizePublicMarketCursorPage(page resaledom.CursorPage) resaledom.CursorPage {

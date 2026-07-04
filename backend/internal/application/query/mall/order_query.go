@@ -41,6 +41,18 @@ type OrderQuery struct {
 	// - GetDefaultByUser を注文文脈用 payment method snapshot として採用する
 	PaymentMethodRepo paymentmethod.RepositoryPort
 
+	// optional: product blueprint repository
+	// - resale/list item の productName 解決に使う
+	ProductBlueprintRepo ProductBlueprintReader
+
+	// optional: resale repository
+	// - resale item の price/productBlueprintId/tokenBlueprintId/brandId を解決する
+	ResaleRepo ResaleReader
+
+	// optional: resale image repository
+	// - resale item の imageUrl/listImage を解決する
+	ResaleImageRepo ResaleImageReader
+
 	// optional: name resolver
 	// - if nil, FullName will be empty
 	NameResolver *appresolver.NameResolver
@@ -51,14 +63,20 @@ func NewOrderQuery(
 	cartRepo cart.Repository,
 	shippingAddressRepo shippingaddress.RepositoryPort,
 	paymentMethodRepo paymentmethod.RepositoryPort,
+	productBlueprintRepo ProductBlueprintReader,
+	resaleRepo ResaleReader,
+	resaleImageRepo ResaleImageReader,
 	nameResolver *appresolver.NameResolver,
 ) *OrderQuery {
 	return &OrderQuery{
-		AvatarRepo:          avatarRepo,
-		CartRepo:            cartRepo,
-		ShippingAddressRepo: shippingAddressRepo,
-		PaymentMethodRepo:   paymentMethodRepo,
-		NameResolver:        nameResolver,
+		AvatarRepo:           avatarRepo,
+		CartRepo:             cartRepo,
+		ShippingAddressRepo:  shippingAddressRepo,
+		PaymentMethodRepo:    paymentMethodRepo,
+		ProductBlueprintRepo: productBlueprintRepo,
+		ResaleRepo:           resaleRepo,
+		ResaleImageRepo:      resaleImageRepo,
+		NameResolver:         nameResolver,
 	}
 }
 
@@ -128,6 +146,7 @@ func (q *OrderQuery) GetOrderContextByUID(ctx context.Context, uid string) (dto.
 	// cartItems:
 	// - carts docID = avatarId
 	// - items の itemKey は上位層で分解しない
+	// - list item と resale item の両方を返す
 	cartItems := q.fetchCartItemsBestEffort(ctx, avatarID)
 
 	// fullName（best-effort）
@@ -276,26 +295,132 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 		return map[string]dto.CartItemDTO{}
 	}
 
-	return cartItemsToDTOMap(c.Items)
+	return q.cartItemsToDTOMap(ctx, c.Items)
 }
 
-func cartItemsToDTOMap(items map[string]cart.CartItem) map[string]dto.CartItemDTO {
+func (q *OrderQuery) cartItemsToDTOMap(ctx context.Context, items map[string]cart.CartItem) map[string]dto.CartItemDTO {
 	if len(items) == 0 {
 		return map[string]dto.CartItemDTO{}
 	}
 
 	out := make(map[string]dto.CartItemDTO, len(items))
 	for itemKey, item := range items {
-		out[itemKey] = cartItemToDTO(item)
+		if itemKey == "" {
+			continue
+		}
+
+		dtoItem, ok := q.cartItemToDTO(ctx, item)
+		if !ok {
+			continue
+		}
+
+		out[itemKey] = dtoItem
 	}
+
 	return out
 }
 
-func cartItemToDTO(item cart.CartItem) dto.CartItemDTO {
-	return dto.CartItemDTO{
+func (q *OrderQuery) cartItemToDTO(ctx context.Context, item cart.CartItem) (dto.CartItemDTO, bool) {
+	switch inferCartItemType(item) {
+	case cart.CartItemTypeList:
+		return q.listCartItemToDTO(ctx, item)
+
+	case cart.CartItemTypeResale:
+		return q.resaleCartItemToDTO(ctx, item)
+
+	default:
+		return dto.CartItemDTO{}, false
+	}
+}
+
+func (q *OrderQuery) listCartItemToDTO(ctx context.Context, item cart.CartItem) (dto.CartItemDTO, bool) {
+	if item.InventoryID == "" || item.ListID == "" || item.ModelID == "" || item.Qty <= 0 {
+		return dto.CartItemDTO{}, false
+	}
+
+	out := dto.CartItemDTO{
+		Type:        string(cart.CartItemTypeList),
 		InventoryID: item.InventoryID,
 		ListID:      item.ListID,
 		ModelID:     item.ModelID,
 		Qty:         item.Qty,
 	}
+
+	// OrderContext では cart query ほど詳細な list 情報は解決しない。
+	// productName が必要な場合は、注文作成前の CartQuery を表示用途の正とする。
+	_ = ctx
+
+	return out, true
+}
+
+func (q *OrderQuery) resaleCartItemToDTO(ctx context.Context, item cart.CartItem) (dto.CartItemDTO, bool) {
+	if item.ResaleID == "" || item.ProductID == "" {
+		return dto.CartItemDTO{}, false
+	}
+
+	out := dto.CartItemDTO{
+		Type:      string(cart.CartItemTypeResale),
+		ResaleID:  item.ResaleID,
+		ProductID: item.ProductID,
+		Qty:       1,
+	}
+
+	if q == nil {
+		return out, true
+	}
+
+	pbID := ""
+
+	if q.ResaleRepo != nil {
+		r, err := q.ResaleRepo.GetByID(ctx, item.ResaleID)
+		if err == nil {
+			if r.ProductID != "" {
+				out.ProductID = r.ProductID
+			}
+			if r.ProductBlueprintID != "" {
+				out.ProductBlueprintID = r.ProductBlueprintID
+				pbID = r.ProductBlueprintID
+			}
+			if r.TokenBlueprintID != "" {
+				out.TokenBlueprintID = r.TokenBlueprintID
+			}
+			if r.BrandID != "" {
+				out.BrandID = r.BrandID
+			}
+
+			price := r.Price
+			out.Price = &price
+		} else {
+			log.Printf("[mall_order_query] resale query error resaleId=%q err=%v", item.ResaleID, err)
+		}
+	}
+
+	if q.ResaleImageRepo != nil {
+		images, err := q.ResaleImageRepo.ListByResaleID(ctx, item.ResaleID)
+		if err == nil {
+			imageURL := firstResaleImageURL(images)
+			if imageURL != "" {
+				out.ImageURL = imageURL
+				out.ListImage = imageURL
+			}
+		} else {
+			log.Printf("[mall_order_query] resale image query error resaleId=%q err=%v", item.ResaleID, err)
+		}
+	}
+
+	if pbID == "" {
+		pbID = out.ProductBlueprintID
+	}
+
+	if pbID != "" && q.ProductBlueprintRepo != nil {
+		pb, err := q.ProductBlueprintRepo.GetByID(ctx, pbID)
+		if err == nil && pb.ProductName != "" {
+			out.ProductName = pb.ProductName
+			out.Title = pb.ProductName
+		} else if err != nil {
+			log.Printf("[mall_order_query] product blueprint query error productBlueprintId=%q err=%v", pbID, err)
+		}
+	}
+
+	return out, true
 }

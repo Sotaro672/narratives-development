@@ -27,16 +27,18 @@ import (
 // ============================================================
 
 var (
-	ErrOrderRepoNotConfigured  = errors.New("order_repo_for_transfer_fs: not configured")
-	ErrInvalidOrderID          = errors.New("order_repo_for_transfer_fs: orderId is empty")
-	ErrInvalidItemModelID      = errors.New("order_repo_for_transfer_fs: item modelId is empty")
-	ErrInvalidTransferAvatarID = errors.New("order_repo_for_transfer_fs: avatarId is empty")
-	ErrOrderNotFound           = errors.New("order_repo_for_transfer_fs: order not found")
-	ErrOrderNotPaid            = errors.New("order_repo_for_transfer_fs: order is not paid")
-	ErrOrderItemsMissing       = errors.New("order_repo_for_transfer_fs: order items missing/invalid")
-	ErrTransferItemNotFound    = errors.New("order_repo_for_transfer_fs: transfer item not found")
-	ErrTransferItemTransferred = errors.New("order_repo_for_transfer_fs: item already transferred")
-	ErrTransferItemLocked      = errors.New("order_repo_for_transfer_fs: item is locked")
+	ErrOrderRepoNotConfigured   = errors.New("order_repo_for_transfer_fs: not configured")
+	ErrInvalidOrderID           = errors.New("order_repo_for_transfer_fs: orderId is empty")
+	ErrInvalidTransferItemKey   = errors.New("order_repo_for_transfer_fs: itemKey is empty")
+	ErrInvalidItemModelID       = errors.New("order_repo_for_transfer_fs: item modelId is empty")
+	ErrInvalidTransferAvatarID  = errors.New("order_repo_for_transfer_fs: avatarId is empty")
+	ErrOrderNotFound            = errors.New("order_repo_for_transfer_fs: order not found")
+	ErrOrderNotPaid             = errors.New("order_repo_for_transfer_fs: order is not paid")
+	ErrOrderItemsMissing        = errors.New("order_repo_for_transfer_fs: order items missing/invalid")
+	ErrTransferItemNotFound     = errors.New("order_repo_for_transfer_fs: transfer item not found")
+	ErrTransferItemTransferred  = errors.New("order_repo_for_transfer_fs: item already transferred")
+	ErrTransferItemLocked       = errors.New("order_repo_for_transfer_fs: item is locked")
+	ErrTransferItemKeyMalformed = errors.New("order_repo_for_transfer_fs: itemKey is malformed")
 )
 
 const defaultTransferLockTTL = 10 * time.Minute
@@ -73,11 +75,17 @@ func (r *OrderRepoForTransferFS) orderDoc(orderID string) *firestore.DocumentRef
 //   - createdAt: timestamp
 //   - paid: bool
 //   - items: []map{
+//     type: string
 //     inventoryId: string
 //     isCanceled: bool
 //     isDispatched: bool
 //     listId: string
 //     modelId: string
+//     resaleId: string
+//     productId: string
+//     productBlueprintId: string
+//     tokenBlueprintId: string
+//     brandId: string
 //     price: int64
 //     qty: int64
 //     transferred: bool
@@ -90,6 +98,8 @@ func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarI
 	if r == nil || r.Client == nil {
 		return nil, ErrOrderRepoNotConfigured
 	}
+
+	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return nil, ErrInvalidTransferAvatarID
 	}
@@ -156,15 +166,23 @@ func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarI
 // LockTransferItem acquires an item-level lock within an order.
 // - fails if already transferred
 // - fails if locked and not expired
-func (r *OrderRepoForTransferFS) LockTransferItem(ctx context.Context, orderID string, itemModelID string, now time.Time) error {
+//
+// itemKey policy:
+// - list item:   "list:" + modelId
+// - resale item: "resale:" + resaleId
+func (r *OrderRepoForTransferFS) LockTransferItem(ctx context.Context, orderID string, itemKey string, now time.Time) error {
 	if r == nil || r.Client == nil {
 		return ErrOrderRepoNotConfigured
 	}
+
+	orderID = strings.TrimSpace(orderID)
+	itemKey = strings.TrimSpace(itemKey)
+
 	if orderID == "" {
 		return ErrInvalidOrderID
 	}
-	if itemModelID == "" {
-		return ErrInvalidItemModelID
+	if itemKey == "" {
+		return ErrInvalidTransferItemKey
 	}
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -195,16 +213,12 @@ func (r *OrderRepoForTransferFS) LockTransferItem(ctx context.Context, orderID s
 			return ErrOrderNotPaid
 		}
 
-		itemsAny, ok := raw["items"]
-		if !ok {
-			return ErrOrderItemsMissing
-		}
-		items, ok := itemsAny.([]any)
-		if !ok {
-			return ErrOrderItemsMissing
+		items, err := rawOrderItemMaps(raw["items"])
+		if err != nil {
+			return err
 		}
 
-		idx, itMap, err := findItemMapByModelID(items, itemModelID)
+		idx, itMap, err := findItemMapByItemKey(items, itemKey)
 		if err != nil {
 			return err
 		}
@@ -236,15 +250,19 @@ func (r *OrderRepoForTransferFS) LockTransferItem(ctx context.Context, orderID s
 }
 
 // UnlockTransferItem releases an item-level lock.
-func (r *OrderRepoForTransferFS) UnlockTransferItem(ctx context.Context, orderID string, itemModelID string) error {
+func (r *OrderRepoForTransferFS) UnlockTransferItem(ctx context.Context, orderID string, itemKey string) error {
 	if r == nil || r.Client == nil {
 		return ErrOrderRepoNotConfigured
 	}
+
+	orderID = strings.TrimSpace(orderID)
+	itemKey = strings.TrimSpace(itemKey)
+
 	if orderID == "" {
 		return ErrInvalidOrderID
 	}
-	if itemModelID == "" {
-		return ErrInvalidItemModelID
+	if itemKey == "" {
+		return ErrInvalidTransferItemKey
 	}
 
 	ref := r.orderDoc(orderID)
@@ -266,16 +284,12 @@ func (r *OrderRepoForTransferFS) UnlockTransferItem(ctx context.Context, orderID
 			return ErrOrderNotFound
 		}
 
-		itemsAny, ok := raw["items"]
-		if !ok {
-			return ErrOrderItemsMissing
-		}
-		items, ok := itemsAny.([]any)
-		if !ok {
-			return ErrOrderItemsMissing
+		items, err := rawOrderItemMaps(raw["items"])
+		if err != nil {
+			return err
 		}
 
-		idx, itMap, err := findItemMapByModelID(items, itemModelID)
+		idx, itMap, err := findItemMapByItemKey(items, itemKey)
 		if err != nil {
 			return err
 		}
@@ -293,15 +307,19 @@ func (r *OrderRepoForTransferFS) UnlockTransferItem(ctx context.Context, orderID
 }
 
 // MarkTransferredItem marks an item as transferred and clears lock fields.
-func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderID string, itemModelID string, at time.Time) error {
+func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderID string, itemKey string, at time.Time) error {
 	if r == nil || r.Client == nil {
 		return ErrOrderRepoNotConfigured
 	}
+
+	orderID = strings.TrimSpace(orderID)
+	itemKey = strings.TrimSpace(itemKey)
+
 	if orderID == "" {
 		return ErrInvalidOrderID
 	}
-	if itemModelID == "" {
-		return ErrInvalidItemModelID
+	if itemKey == "" {
+		return ErrInvalidTransferItemKey
 	}
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -331,16 +349,12 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderI
 			return ErrOrderNotPaid
 		}
 
-		itemsAny, ok := raw["items"]
-		if !ok {
-			return ErrOrderItemsMissing
-		}
-		items, ok := itemsAny.([]any)
-		if !ok {
-			return ErrOrderItemsMissing
+		items, err := rawOrderItemMaps(raw["items"])
+		if err != nil {
+			return err
 		}
 
-		idx, itMap, err := findItemMapByModelID(items, itemModelID)
+		idx, itMap, err := findItemMapByItemKey(items, itemKey)
 		if err != nil {
 			return err
 		}
@@ -388,24 +402,55 @@ func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 
 		it := orderdom.OrderItemSnapshot{}
 
+		if s, ok := m["type"].(string); ok {
+			it.Type = orderdom.OrderItemType(strings.TrimSpace(s))
+		}
+
 		if s, ok := m["modelId"].(string); ok {
-			it.ModelID = s
+			it.ModelID = strings.TrimSpace(s)
 		}
 
 		if s, ok := m["inventoryId"].(string); ok {
-			it.InventoryID = s
+			it.InventoryID = strings.TrimSpace(s)
 		}
 
 		if s, ok := m["listId"].(string); ok {
-			it.ListID = s
+			it.ListID = strings.TrimSpace(s)
 		}
 
-		if n, ok := m["qty"].(int64); ok {
-			it.Qty = int(n)
+		if s, ok := m["resaleId"].(string); ok {
+			it.ResaleID = strings.TrimSpace(s)
 		}
 
-		if n, ok := m["price"].(int64); ok {
-			it.Price = int(n)
+		if s, ok := m["productId"].(string); ok {
+			it.ProductID = strings.TrimSpace(s)
+		}
+
+		if s, ok := m["productBlueprintId"].(string); ok {
+			it.ProductBlueprintID = strings.TrimSpace(s)
+		}
+
+		if s, ok := m["tokenBlueprintId"].(string); ok {
+			it.TokenBlueprintID = strings.TrimSpace(s)
+		}
+
+		if s, ok := m["brandId"].(string); ok {
+			it.BrandID = strings.TrimSpace(s)
+		}
+
+		if it.Type == "" {
+			it.Type = inferOrderItemTypeFromSnapshot(it)
+		}
+
+		it.Qty = intFromAny(m["qty"])
+		it.Price = intFromAny(m["price"])
+
+		if b, ok := m["isCanceled"].(bool); ok {
+			it.IsCanceled = b
+		}
+
+		if b, ok := m["isDispatched"].(bool); ok {
+			it.IsDispatched = b
 		}
 
 		if b, ok := m["transferred"].(bool); ok {
@@ -423,9 +468,23 @@ func parseOrderItems(v any) ([]orderdom.OrderItemSnapshot, error) {
 	return out, nil
 }
 
-func findItemMapByModelID(items []any, modelID string) (int, map[string]any, error) {
-	if modelID == "" {
-		return -1, nil, ErrInvalidItemModelID
+func rawOrderItemMaps(v any) ([]any, error) {
+	if v == nil {
+		return nil, ErrOrderItemsMissing
+	}
+
+	items, ok := v.([]any)
+	if !ok {
+		return nil, ErrOrderItemsMissing
+	}
+
+	return items, nil
+}
+
+func findItemMapByItemKey(items []any, itemKey string) (int, map[string]any, error) {
+	itemKey = strings.TrimSpace(itemKey)
+	if itemKey == "" {
+		return -1, nil, ErrInvalidTransferItemKey
 	}
 
 	for i, v := range items {
@@ -434,17 +493,117 @@ func findItemMapByModelID(items []any, modelID string) (int, map[string]any, err
 			continue
 		}
 
-		got, ok := m["modelId"].(string)
-		if !ok {
-			continue
-		}
-
-		if got == modelID {
+		if itemMapMatchesItemKey(m, itemKey) {
 			return i, m, nil
 		}
 	}
 
 	return -1, nil, ErrTransferItemNotFound
+}
+
+func itemMapMatchesItemKey(m map[string]any, itemKey string) bool {
+	itemKey = strings.TrimSpace(itemKey)
+	if itemKey == "" || m == nil {
+		return false
+	}
+
+	itemType, rawID, ok := parseTransferItemKey(itemKey)
+	if !ok {
+		return false
+	}
+
+	switch itemType {
+	case orderdom.OrderItemTypeResale:
+		resaleID := stringFromAny(m["resaleId"])
+		return resaleID != "" && resaleID == rawID
+
+	case orderdom.OrderItemTypeList:
+		modelID := stringFromAny(m["modelId"])
+		return modelID != "" && modelID == rawID
+
+	default:
+		return false
+	}
+}
+
+func parseTransferItemKey(itemKey string) (orderdom.OrderItemType, string, bool) {
+	itemKey = strings.TrimSpace(itemKey)
+	if itemKey == "" {
+		return "", "", false
+	}
+
+	parts := strings.SplitN(itemKey, ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+
+	itemType := orderdom.OrderItemType(strings.TrimSpace(parts[0]))
+	id := strings.TrimSpace(parts[1])
+
+	if id == "" {
+		return "", "", false
+	}
+
+	switch itemType {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+		return itemType, id, true
+	default:
+		return "", "", false
+	}
+}
+
+func inferOrderItemTypeFromSnapshot(it orderdom.OrderItemSnapshot) orderdom.OrderItemType {
+	if strings.TrimSpace(it.ResaleID) != "" || strings.TrimSpace(it.ProductID) != "" {
+		return orderdom.OrderItemTypeResale
+	}
+
+	if strings.TrimSpace(it.ModelID) != "" ||
+		strings.TrimSpace(it.InventoryID) != "" ||
+		strings.TrimSpace(it.ListID) != "" {
+		return orderdom.OrderItemTypeList
+	}
+
+	return ""
+}
+
+func stringFromAny(v any) string {
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(s)
+}
+
+func intFromAny(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int8:
+		return int(n)
+	case int16:
+		return int(n)
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case uint:
+		return int(n)
+	case uint8:
+		return int(n)
+	case uint16:
+		return int(n)
+	case uint32:
+		return int(n)
+	case uint64:
+		return int(n)
+	case float32:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
 }
 
 // ============================================================
@@ -520,6 +679,8 @@ func (r *TransferRepositoryFS) NextAttempt(ctx context.Context, productID string
 	if r == nil || r.Client == nil {
 		return 0, ErrTransferRepoNotConfigured
 	}
+
+	productID = strings.TrimSpace(productID)
 	if productID == "" {
 		return 0, ErrInvalidTransferProductID
 	}
@@ -589,6 +750,8 @@ func (r *TransferRepositoryFS) Create(ctx context.Context, t transferdom.Transfe
 	if r == nil || r.Client == nil {
 		return ErrTransferRepoNotConfigured
 	}
+
+	t.ProductID = strings.TrimSpace(t.ProductID)
 	if t.ProductID == "" {
 		return ErrInvalidTransferProductID
 	}
@@ -642,6 +805,8 @@ func (r *TransferRepositoryFS) Update(ctx context.Context, productID string, att
 	if r == nil || r.Client == nil {
 		return ErrTransferRepoNotConfigured
 	}
+
+	productID = strings.TrimSpace(productID)
 	if productID == "" {
 		return ErrInvalidTransferProductID
 	}
@@ -791,16 +956,7 @@ func intFromRaw(raw map[string]any, key string) int {
 		return 0
 	}
 
-	switch v := raw[key].(type) {
-	case int:
-		return v
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return 0
-	}
+	return intFromAny(raw[key])
 }
 
 func timeFromRaw(raw map[string]any, key string) time.Time {

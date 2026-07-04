@@ -237,8 +237,15 @@ func (r *OrderRepositoryFS) ListTransferredByAvatarIDModelIDAndTransferredAt(
 //
 // In-memory item filter:
 // - item.transferred == false
+//
+// list item:
 // - item.modelId is not empty
 // - item.inventoryId is not empty
+//
+// resale item:
+// - item.resaleId is not empty
+// - item.productId is not empty
+// - item.tokenBlueprintId is not empty
 func (r *OrderRepositoryFS) ListEligibleTransferItemsByAvatarID(
 	ctx context.Context,
 	avatarID string,
@@ -286,22 +293,13 @@ func (r *OrderRepositoryFS) ListEligibleTransferItemsByAvatarID(
 			continue
 		}
 
-		for _, item := range o.Items {
-			if item.Transferred {
-				continue
-			}
-			if item.ModelID == "" {
-				continue
-			}
-			if item.InventoryID == "" {
+		for i, item := range o.Items {
+			eligible, ok := eligibleTransferItemFromOrderItem(o.ID, i, item)
+			if !ok {
 				continue
 			}
 
-			out = append(out, orderdom.EligibleTransferItem{
-				OrderID:     o.ID,
-				ModelID:     item.ModelID,
-				InventoryID: item.InventoryID,
-			})
+			out = append(out, eligible)
 		}
 	}
 
@@ -446,13 +444,28 @@ type paymentMethodSnapshotDoc struct {
 }
 
 type itemDoc struct {
-	ModelID       string     `firestore:"modelId"`
-	InventoryID   string     `firestore:"inventoryId"`
-	ListID        string     `firestore:"listId"`
-	Qty           int        `firestore:"qty"`
-	Price         int        `firestore:"price"`
-	IsCanceled    bool       `firestore:"isCanceled"`
-	IsDispatched  bool       `firestore:"isDispatched"`
+	Type string `firestore:"type,omitempty"`
+
+	// list item identifiers
+	ModelID     string `firestore:"modelId,omitempty"`
+	InventoryID string `firestore:"inventoryId,omitempty"`
+	ListID      string `firestore:"listId,omitempty"`
+
+	// resale item identifiers
+	ResaleID string `firestore:"resaleId,omitempty"`
+
+	// product identifiers
+	ProductID          string `firestore:"productId,omitempty"`
+	ProductBlueprintID string `firestore:"productBlueprintId,omitempty"`
+	TokenBlueprintID   string `firestore:"tokenBlueprintId,omitempty"`
+	BrandID            string `firestore:"brandId,omitempty"`
+
+	Qty   int `firestore:"qty"`
+	Price int `firestore:"price"`
+
+	IsCanceled   bool `firestore:"isCanceled"`
+	IsDispatched bool `firestore:"isDispatched"`
+
 	Transferred   bool       `firestore:"transferred"`
 	TransferredAt *time.Time `firestore:"transferredAt,omitempty"`
 }
@@ -465,6 +478,8 @@ type itemDoc struct {
 // NEW schema:
 // - paid is on order root
 // - transferred/transferredAt are on each item (items[].transferred / items[].transferredAt)
+// - list item fields are stored on items[]
+// - resale item fields are stored on items[]
 func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 	if doc == nil {
 		return orderdom.Order{}, fmt.Errorf("nil order document")
@@ -483,10 +498,22 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 			transferredAt = &t
 		}
 
+		itemType := orderdom.OrderItemType(strings.TrimSpace(it.Type))
+
 		items = append(items, orderdom.OrderItemSnapshot{
-			ModelID:       it.ModelID,
-			InventoryID:   it.InventoryID,
-			ListID:        it.ListID,
+			Type: itemType,
+
+			ModelID:     strings.TrimSpace(it.ModelID),
+			InventoryID: strings.TrimSpace(it.InventoryID),
+			ListID:      strings.TrimSpace(it.ListID),
+
+			ResaleID: strings.TrimSpace(it.ResaleID),
+
+			ProductID:          strings.TrimSpace(it.ProductID),
+			ProductBlueprintID: strings.TrimSpace(it.ProductBlueprintID),
+			TokenBlueprintID:   strings.TrimSpace(it.TokenBlueprintID),
+			BrandID:            strings.TrimSpace(it.BrandID),
+
 			Qty:           it.Qty,
 			Price:         it.Price,
 			IsCanceled:    it.IsCanceled,
@@ -562,6 +589,8 @@ func validateDecodedOrder(o orderdom.Order) error {
 // NEW schema:
 // - paid is on order root
 // - transferred/transferredAt are on each item (items[].transferred / items[].transferredAt)
+// - list item fields are stored on items[]
+// - resale item fields are stored on items[]
 func orderToDoc(o orderdom.Order) map[string]any {
 	ship := map[string]any{
 		"zipCode": o.ShippingSnapshot.ZipCode,
@@ -583,21 +612,7 @@ func orderToDoc(o orderdom.Order) map[string]any {
 
 	items := make([]map[string]any, 0, len(o.Items))
 	for _, it := range o.Items {
-		im := map[string]any{
-			"modelId":      it.ModelID,
-			"inventoryId":  it.InventoryID,
-			"listId":       it.ListID,
-			"qty":          it.Qty,
-			"price":        it.Price,
-			"isCanceled":   it.IsCanceled,
-			"isDispatched": it.IsDispatched,
-			"transferred":  it.Transferred,
-		}
-
-		if it.Transferred && it.TransferredAt != nil && !it.TransferredAt.IsZero() {
-			im["transferredAt"] = it.TransferredAt.UTC()
-		}
-
+		im := orderItemToDocMap(it)
 		items = append(items, im)
 	}
 
@@ -621,9 +636,162 @@ func orderToDoc(o orderdom.Order) map[string]any {
 	return m
 }
 
+func orderItemToDocMap(it orderdom.OrderItemSnapshot) map[string]any {
+	itemType := inferOrderDocItemType(it)
+
+	im := map[string]any{
+		"qty":          it.Qty,
+		"price":        it.Price,
+		"isCanceled":   it.IsCanceled,
+		"isDispatched": it.IsDispatched,
+		"transferred":  it.Transferred,
+	}
+
+	if itemType != "" {
+		im["type"] = string(itemType)
+	}
+
+	switch itemType {
+	case orderdom.OrderItemTypeResale:
+		im["resaleId"] = strings.TrimSpace(it.ResaleID)
+		im["productId"] = strings.TrimSpace(it.ProductID)
+		im["productBlueprintId"] = strings.TrimSpace(it.ProductBlueprintID)
+		im["tokenBlueprintId"] = strings.TrimSpace(it.TokenBlueprintID)
+		im["brandId"] = strings.TrimSpace(it.BrandID)
+
+	case orderdom.OrderItemTypeList:
+		im["modelId"] = strings.TrimSpace(it.ModelID)
+		im["inventoryId"] = strings.TrimSpace(it.InventoryID)
+		im["listId"] = strings.TrimSpace(it.ListID)
+
+	default:
+		// Keep all known identifier fields for malformed or future-compatible data
+		// instead of silently discarding them.
+		im["modelId"] = strings.TrimSpace(it.ModelID)
+		im["inventoryId"] = strings.TrimSpace(it.InventoryID)
+		im["listId"] = strings.TrimSpace(it.ListID)
+		im["resaleId"] = strings.TrimSpace(it.ResaleID)
+		im["productId"] = strings.TrimSpace(it.ProductID)
+		im["productBlueprintId"] = strings.TrimSpace(it.ProductBlueprintID)
+		im["tokenBlueprintId"] = strings.TrimSpace(it.TokenBlueprintID)
+		im["brandId"] = strings.TrimSpace(it.BrandID)
+	}
+
+	if it.Transferred && it.TransferredAt != nil && !it.TransferredAt.IsZero() {
+		im["transferredAt"] = it.TransferredAt.UTC()
+	}
+
+	return im
+}
+
+func inferOrderDocItemType(it orderdom.OrderItemSnapshot) orderdom.OrderItemType {
+	switch it.Type {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+		return it.Type
+	}
+
+	if strings.TrimSpace(it.ResaleID) != "" || strings.TrimSpace(it.ProductID) != "" {
+		return orderdom.OrderItemTypeResale
+	}
+
+	if strings.TrimSpace(it.ModelID) != "" ||
+		strings.TrimSpace(it.InventoryID) != "" ||
+		strings.TrimSpace(it.ListID) != "" {
+		return orderdom.OrderItemTypeList
+	}
+
+	return ""
+}
+
 // ========================
 // Query helpers
 // ========================
+
+func eligibleTransferItemFromOrderItem(
+	orderID string,
+	itemIndex int,
+	item orderdom.OrderItemSnapshot,
+) (orderdom.EligibleTransferItem, bool) {
+	if item.Transferred {
+		return orderdom.EligibleTransferItem{}, false
+	}
+
+	itemType := inferOrderDocItemType(item)
+
+	switch itemType {
+	case orderdom.OrderItemTypeResale:
+		return eligibleResaleTransferItem(orderID, itemIndex, item)
+
+	case orderdom.OrderItemTypeList:
+		return eligibleListTransferItem(orderID, itemIndex, item)
+
+	default:
+		return orderdom.EligibleTransferItem{}, false
+	}
+}
+
+func eligibleListTransferItem(
+	orderID string,
+	itemIndex int,
+	item orderdom.OrderItemSnapshot,
+) (orderdom.EligibleTransferItem, bool) {
+	modelID := strings.TrimSpace(item.ModelID)
+	inventoryID := strings.TrimSpace(item.InventoryID)
+
+	if modelID == "" || inventoryID == "" {
+		return orderdom.EligibleTransferItem{}, false
+	}
+
+	itemKey := "list:" + modelID
+
+	return orderdom.EligibleTransferItem{
+		OrderID: orderID,
+
+		ItemKey:   itemKey,
+		ItemType:  orderdom.OrderItemTypeList,
+		ItemIndex: itemIndex,
+
+		ModelID:     modelID,
+		InventoryID: inventoryID,
+		ListID:      strings.TrimSpace(item.ListID),
+
+		ProductID:          strings.TrimSpace(item.ProductID),
+		ProductBlueprintID: strings.TrimSpace(item.ProductBlueprintID),
+		TokenBlueprintID:   strings.TrimSpace(item.TokenBlueprintID),
+		BrandID:            strings.TrimSpace(item.BrandID),
+	}, true
+}
+
+func eligibleResaleTransferItem(
+	orderID string,
+	itemIndex int,
+	item orderdom.OrderItemSnapshot,
+) (orderdom.EligibleTransferItem, bool) {
+	resaleID := strings.TrimSpace(item.ResaleID)
+	productID := strings.TrimSpace(item.ProductID)
+	tokenBlueprintID := strings.TrimSpace(item.TokenBlueprintID)
+
+	if resaleID == "" || productID == "" || tokenBlueprintID == "" {
+		return orderdom.EligibleTransferItem{}, false
+	}
+
+	itemKey := "resale:" + resaleID
+
+	return orderdom.EligibleTransferItem{
+		OrderID: orderID,
+
+		ItemKey:   itemKey,
+		ItemType:  orderdom.OrderItemTypeResale,
+		ItemIndex: itemIndex,
+
+		ResaleID: resaleID,
+
+		ProductID:          productID,
+		ProductBlueprintID: strings.TrimSpace(item.ProductBlueprintID),
+		TokenBlueprintID:   tokenBlueprintID,
+		BrandID:            strings.TrimSpace(item.BrandID),
+	}, true
+}
 
 func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
 	dir := firestore.Desc

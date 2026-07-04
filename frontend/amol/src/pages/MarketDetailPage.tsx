@@ -7,9 +7,112 @@ import {
   fetchMarketResaleById,
   type MarketResaleListing,
 } from "../features/market/marketApi";
+import { getApiBaseUrl } from "../lib/apiBaseUrl";
+import { auth } from "../lib/firebase";
 
 import "../styles/page-layout.css";
 import "../styles/market-detail-page.css";
+
+type MeAvatarStateResponse = {
+  avatarId?: string;
+};
+
+async function readResponseErrorMessage(response: Response): Promise<string> {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    const data = (await response.json().catch(() => null)) as
+      | { error?: unknown; message?: unknown }
+      | null;
+
+    if (typeof data?.error === "string" && data.error.trim() !== "") {
+      return data.error;
+    }
+
+    if (typeof data?.message === "string" && data.message.trim() !== "") {
+      return data.message;
+    }
+  }
+
+  const text = await response.text().catch(() => "");
+
+  if (text.trim() !== "") {
+    return text;
+  }
+
+  return "リクエストに失敗しました。";
+}
+
+async function fetchCurrentAvatarId(idToken: string): Promise<string> {
+  const apiBaseUrl = getApiBaseUrl();
+
+  if (!apiBaseUrl) {
+    throw new Error("APIの接続先が設定されていません。");
+  }
+
+  const response = await fetch(`${apiBaseUrl}/mall/me/avatars/state`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const message = await readResponseErrorMessage(response);
+    throw new Error(message || "現在のアバター情報の取得に失敗しました。");
+  }
+
+  const data = (await response.json()) as MeAvatarStateResponse;
+  const avatarId = data.avatarId?.trim();
+
+  if (!avatarId) {
+    throw new Error("現在のavatarIdが見つかりません。");
+  }
+
+  return avatarId;
+}
+
+async function addResaleProductToCart(args: {
+  resaleId: string;
+  productId: string;
+}): Promise<void> {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw new Error("カートに追加するにはログインが必要です。");
+  }
+
+  const apiBaseUrl = getApiBaseUrl();
+
+  if (!apiBaseUrl) {
+    throw new Error("APIの接続先が設定されていません。");
+  }
+
+  const idToken = await currentUser.getIdToken();
+  const avatarId = await fetchCurrentAvatarId(idToken);
+
+  const response = await fetch(`${apiBaseUrl}/mall/me/cart/resales`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      avatarId,
+      resaleId: args.resaleId,
+      productId: args.productId,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await readResponseErrorMessage(response);
+    throw new Error(message || "カートへの追加に失敗しました。");
+  }
+}
 
 export default function MarketDetailPage() {
   const navigate = useNavigate();
@@ -17,7 +120,10 @@ export default function MarketDetailPage() {
 
   const [item, setItem] = useState<MarketResaleListing | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [addingToCart, setAddingToCart] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [cartMessage, setCartMessage] = useState<string>("");
+  const [cartErrorMessage, setCartErrorMessage] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +137,8 @@ export default function MarketDetailPage() {
 
       setLoading(true);
       setError("");
+      setCartMessage("");
+      setCartErrorMessage("");
 
       try {
         const data = await fetchMarketResaleById(resaleId);
@@ -67,16 +175,63 @@ export default function MarketDetailPage() {
       ? `${item.price.toLocaleString("ja-JP")}円`
       : "価格未設定";
 
+  const canAddToCart = Boolean(
+    item?.id && item?.productId && !loading && !error && !addingToCart,
+  );
+
+  async function handleAddToCart() {
+    const targetResaleId = item?.id?.trim();
+    const targetProductId = item?.productId?.trim();
+
+    if (!targetResaleId || !targetProductId) {
+      setCartMessage("");
+      setCartErrorMessage("出品情報が不足しています。");
+      return;
+    }
+
+    setAddingToCart(true);
+    setCartMessage("");
+    setCartErrorMessage("");
+
+    try {
+      await addResaleProductToCart({
+        resaleId: targetResaleId,
+        productId: targetProductId,
+      });
+
+      setCartMessage("カートに追加しました。");
+    } catch (err) {
+      setCartErrorMessage(
+        err instanceof Error ? err.message : "カートへの追加に失敗しました。",
+      );
+    } finally {
+      setAddingToCart(false);
+    }
+  }
+
   return (
-<Layout
-  title={title}
-  titleClickable={false}
-  showBackButton
-  onBackButtonClick={() => navigate(-1)}
-  hideAnnouncementButton
-  hideSettingsButton
-  hideHamburgerMenu
->
+    <Layout
+      title={title}
+      titleClickable={false}
+      showBackButton
+      onBackButtonClick={() => navigate(-1)}
+      hideAnnouncementButton
+      hideSettingsButton
+      hideHamburgerMenu
+      showCartButton
+      cartButtonLabel="カート"
+      onCartButtonClick={() => navigate("/cart")}
+      actionButtonLabel={addingToCart ? "追加中" : "カートに入れる"}
+      onActionButtonClick={handleAddToCart}
+      actionButtonDisabled={!canAddToCart}
+      showFooter
+      footerProps={{
+        variant: "action",
+        buttonLabel: addingToCart ? "追加中" : "カートに入れる",
+        disabled: !canAddToCart,
+        onButtonClick: handleAddToCart,
+      }}
+    >
       <div className="page-layout market-detail-page">
         {loading ? (
           <div className="market-detail-page__state">
@@ -131,6 +286,18 @@ export default function MarketDetailPage() {
                   <h2>商品説明</h2>
                   <p>{item.description}</p>
                 </div>
+              ) : null}
+
+              {cartMessage ? (
+                <p className="market-detail-page__cart-message">
+                  {cartMessage}
+                </p>
+              ) : null}
+
+              {cartErrorMessage ? (
+                <p className="market-detail-page__cart-error" role="alert">
+                  {cartErrorMessage}
+                </p>
               ) : null}
             </div>
           </section>

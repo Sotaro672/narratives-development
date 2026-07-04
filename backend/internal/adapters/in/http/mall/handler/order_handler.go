@@ -88,11 +88,24 @@ type paymentMethodSnapshotRequest struct {
 }
 
 type orderItemSnapshotRequest struct {
+	Type string `json:"type"`
+
+	// list item identifiers
 	ModelID     string `json:"modelId"`
 	InventoryID string `json:"inventoryId"`
 	ListID      string `json:"listId"`
-	Qty         int    `json:"qty"`
-	Price       int    `json:"price"`
+
+	// resale item identifiers
+	ResaleID string `json:"resaleId"`
+
+	// product identifiers
+	ProductID          string `json:"productId"`
+	ProductBlueprintID string `json:"productBlueprintId"`
+	TokenBlueprintID   string `json:"tokenBlueprintId"`
+	BrandID            string `json:"brandId"`
+
+	Qty   int `json:"qty"`
+	Price int `json:"price"`
 
 	IsCanceled   bool `json:"isCanceled"`
 	IsDispatched bool `json:"isDispatched"`
@@ -204,27 +217,14 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]orderdom.OrderItemSnapshot, 0, len(req.Items))
 	for _, it := range req.Items {
-		mid := it.ModelID
-		iid := it.InventoryID
-		lid := it.ListID
-		qty := it.Qty
-		price := it.Price
-
-		if mid == "" || iid == "" || lid == "" || qty <= 0 || price < 0 {
+		item, ok := orderItemRequestToSnapshot(it)
+		if !ok {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid item snapshot"})
 			return
 		}
 
-		items = append(items, orderdom.OrderItemSnapshot{
-			ModelID:      mid,
-			InventoryID:  iid,
-			ListID:       lid,
-			Qty:          qty,
-			Price:        price,
-			IsCanceled:   it.IsCanceled,
-			IsDispatched: it.IsDispatched,
-		})
+		items = append(items, item)
 	}
 
 	in := usecase.CreateOrderInput{
@@ -247,6 +247,89 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+func orderItemRequestToSnapshot(it orderItemSnapshotRequest) (orderdom.OrderItemSnapshot, bool) {
+	switch inferOrderItemRequestType(it) {
+	case orderdom.OrderItemTypeList:
+		return listOrderItemRequestToSnapshot(it)
+
+	case orderdom.OrderItemTypeResale:
+		return resaleOrderItemRequestToSnapshot(it)
+
+	default:
+		return orderdom.OrderItemSnapshot{}, false
+	}
+}
+
+func listOrderItemRequestToSnapshot(it orderItemSnapshotRequest) (orderdom.OrderItemSnapshot, bool) {
+	mid := it.ModelID
+	iid := it.InventoryID
+	lid := it.ListID
+	qty := it.Qty
+	price := it.Price
+
+	if mid == "" || iid == "" || lid == "" || qty <= 0 || price < 0 {
+		return orderdom.OrderItemSnapshot{}, false
+	}
+
+	return orderdom.OrderItemSnapshot{
+		Type:         orderdom.OrderItemTypeList,
+		ModelID:      mid,
+		InventoryID:  iid,
+		ListID:       lid,
+		Qty:          qty,
+		Price:        price,
+		IsCanceled:   it.IsCanceled,
+		IsDispatched: it.IsDispatched,
+	}, true
+}
+
+func resaleOrderItemRequestToSnapshot(it orderItemSnapshotRequest) (orderdom.OrderItemSnapshot, bool) {
+	qty := it.Qty
+	if qty <= 0 {
+		qty = 1
+	}
+
+	if it.ResaleID == "" ||
+		it.ProductID == "" ||
+		it.ProductBlueprintID == "" ||
+		it.TokenBlueprintID == "" ||
+		it.BrandID == "" ||
+		qty != 1 ||
+		it.Price < 0 {
+		return orderdom.OrderItemSnapshot{}, false
+	}
+
+	return orderdom.OrderItemSnapshot{
+		Type:               orderdom.OrderItemTypeResale,
+		ResaleID:           it.ResaleID,
+		ProductID:          it.ProductID,
+		ProductBlueprintID: it.ProductBlueprintID,
+		TokenBlueprintID:   it.TokenBlueprintID,
+		BrandID:            it.BrandID,
+		Qty:                1,
+		Price:              it.Price,
+		IsCanceled:         it.IsCanceled,
+		IsDispatched:       it.IsDispatched,
+	}, true
+}
+
+func inferOrderItemRequestType(it orderItemSnapshotRequest) orderdom.OrderItemType {
+	switch orderdom.OrderItemType(it.Type) {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+		return orderdom.OrderItemType(it.Type)
+	}
+
+	if it.ResaleID != "" || it.ProductID != "" {
+		return orderdom.OrderItemTypeResale
+	}
+
+	if it.ModelID != "" || it.InventoryID != "" || it.ListID != "" {
+		return orderdom.OrderItemTypeList
+	}
+
+	return ""
 }
 
 func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {

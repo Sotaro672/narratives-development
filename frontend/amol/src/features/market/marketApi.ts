@@ -1,3 +1,5 @@
+// frontend/amol/src/features/market/marketApi.ts
+import { fetchCurrentAvatarId } from "../cart/api/cartApi";
 import { getApiBaseUrl } from "../../lib/apiBaseUrl";
 
 export type MarketResaleStatus = "listing" | "suspended";
@@ -66,7 +68,17 @@ export type FetchMarketResalesParams = {
   productIds?: string[];
   brandIds?: string[];
   productBlueprintIds?: string[];
+
+  /**
+   * NOTE:
+   * backend の MarketQuery では avatarIds は「閲覧者 avatarId の除外用」として扱う。
+   * 新規呼び出しでは viewerAvatarId / viewerAvatarIds を優先する。
+   */
   avatarIds?: string[];
+  avatarId?: string;
+  viewerAvatarId?: string;
+  viewerAvatarIds?: string[];
+
   status?: MarketResaleStatus;
   statuses?: MarketResaleStatus[];
   condition?: MarketResaleCondition;
@@ -179,7 +191,11 @@ function buildMarketResaleSearchParams(
     "productBlueprintIds",
     params.productBlueprintIds,
   );
+
   appendStringList(searchParams, "avatarIds", params.avatarIds);
+  appendString(searchParams, "avatarId", params.avatarId);
+  appendString(searchParams, "viewerAvatarId", params.viewerAvatarId);
+  appendStringList(searchParams, "viewerAvatarIds", params.viewerAvatarIds);
 
   appendString(searchParams, "status", params.status);
   appendStringList(searchParams, "statuses", params.statuses);
@@ -255,6 +271,75 @@ async function readJsonResponse<T>(
   return data;
 }
 
+async function resolveViewerAvatarId(
+  apiBaseUrl: string,
+  params: FetchMarketResalesParams | FetchMarketResalesByCursorParams,
+): Promise<string> {
+  const explicitViewerAvatarId = normalizeString(params.viewerAvatarId);
+  if (explicitViewerAvatarId) {
+    return explicitViewerAvatarId;
+  }
+
+  const firstViewerAvatarId = firstNonEmptyString(params.viewerAvatarIds);
+  if (firstViewerAvatarId) {
+    return firstViewerAvatarId;
+  }
+
+  const explicitAvatarId = normalizeString(params.avatarId);
+  if (explicitAvatarId) {
+    return explicitAvatarId;
+  }
+
+  const firstAvatarId = firstNonEmptyString(params.avatarIds);
+  if (firstAvatarId) {
+    return firstAvatarId;
+  }
+
+  try {
+    return await fetchCurrentAvatarId(apiBaseUrl);
+  } catch {
+    return "";
+  }
+}
+
+async function withResolvedViewerAvatarId<
+  T extends FetchMarketResalesParams | FetchMarketResalesByCursorParams,
+>(apiBaseUrl: string, params: T): Promise<T> {
+  const viewerAvatarId = await resolveViewerAvatarId(apiBaseUrl, params);
+
+  if (!viewerAvatarId) {
+    return params;
+  }
+
+  return {
+    ...params,
+    viewerAvatarId,
+  };
+}
+
+function normalizeString(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+}
+
+function firstNonEmptyString(values: unknown): string {
+  if (!Array.isArray(values)) {
+    return "";
+  }
+
+  for (const value of values) {
+    const normalized = normalizeString(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return "";
+}
+
 export async function fetchMarketResales(
   params: FetchMarketResalesParams = {},
 ): Promise<MarketResaleListResponse> {
@@ -264,7 +349,8 @@ export async function fetchMarketResales(
     throw new Error("API Base URLが未設定です。");
   }
 
-  const searchParams = buildMarketResaleSearchParams(params);
+  const resolvedParams = await withResolvedViewerAvatarId(apiBaseUrl, params);
+  const searchParams = buildMarketResaleSearchParams(resolvedParams);
   const query = searchParams.toString();
   const url = `${apiBaseUrl}${MARKET_RESALES_PATH}${query ? `?${query}` : ""}`;
 
@@ -291,7 +377,8 @@ export async function fetchMarketResalesByCursor(
     throw new Error("API Base URLが未設定です。");
   }
 
-  const searchParams = buildMarketResaleSearchParams(params);
+  const resolvedParams = await withResolvedViewerAvatarId(apiBaseUrl, params);
+  const searchParams = buildMarketResaleSearchParams(resolvedParams);
   searchParams.set("mode", "cursor");
 
   const query = searchParams.toString();
@@ -320,7 +407,8 @@ export async function fetchMarketResalesCursorEndpoint(
     throw new Error("API Base URLが未設定です。");
   }
 
-  const searchParams = buildMarketResaleSearchParams(params);
+  const resolvedParams = await withResolvedViewerAvatarId(apiBaseUrl, params);
+  const searchParams = buildMarketResaleSearchParams(resolvedParams);
   const query = searchParams.toString();
   const url = `${apiBaseUrl}${MARKET_RESALES_PATH}/cursor${
     query ? `?${query}` : ""

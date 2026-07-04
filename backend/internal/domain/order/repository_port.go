@@ -29,10 +29,19 @@ type Filter struct {
 	// If nil, it means "no filter".
 	ShippingSnapshot *ShippingSnapshot
 
-	// Item-based filters (optional)
-	ModelID      string
-	InventoryID  string
-	ListID       string
+	// Item-based filters for list items.
+	ModelID     string
+	InventoryID string
+	ListID      string
+
+	// Item-based filters for resale items.
+	ItemType           OrderItemType
+	ResaleID           string
+	ProductID          string
+	ProductBlueprintID string
+	TokenBlueprintID   string
+	BrandID            string
+
 	IsCanceled   *bool
 	IsDispatched *bool
 	Transferred  *bool
@@ -65,16 +74,45 @@ type UpdateOptions = common.SaveOptions
 
 // EligibleTransferItem is an order item eligible for token transfer verification.
 //
-// Expected source condition:
+// Common expected source condition:
 // - order.avatarId == avatarID
 // - order.paid == true
 // - item.transferred == false
+//
+// list item condition:
+// - item.type == "list" or legacy empty
 // - item.modelId is not empty
 // - item.inventoryId is not empty
+//
+// resale item condition:
+// - item.type == "resale"
+// - item.resaleId is not empty
+// - item.productId is not empty
+//
+// ItemKey is the stable transfer lock/mark key used by transfer repositories.
+// Recommended values:
+// - list item:   "list:" + modelId
+// - resale item: "resale:" + resaleId
 type EligibleTransferItem struct {
-	OrderID     string
+	OrderID string
+
+	ItemKey   string
+	ItemType  OrderItemType
+	ItemIndex int
+
+	// list item identifiers
 	ModelID     string
 	InventoryID string
+	ListID      string
+
+	// resale item identifiers
+	ResaleID string
+
+	// product identifiers
+	ProductID          string
+	ProductBlueprintID string
+	TokenBlueprintID   string
+	BrandID            string
 }
 
 // Repository defines the persistence port for Order.
@@ -84,7 +122,7 @@ type Repository interface {
 	ListByAvatarID(ctx context.Context, avatarID string, sort Sort, page Page) (PageResult, error)
 
 	// ListTransferredByAvatarIDModelIDAndTransferredAt returns orders that contain
-	// transferred items matching avatarId, modelId, and transferredAt.
+	// transferred list items matching avatarId, modelId, and transferredAt.
 	//
 	// Expected source condition:
 	// - order.avatarId == avatarID
@@ -96,6 +134,11 @@ type Repository interface {
 	// Repository implementation is responsible for item-level filtering.
 	// Firestore cannot reliably query nested array map fields with this full condition,
 	// so Firestore adapter may query by avatarId first and filter items in memory.
+	//
+	// NOTE:
+	// This query is list-item oriented and intentionally remains modelId-based
+	// for backward compatibility. Resale transfer history should use productId,
+	// resaleId, or transfer records depending on the caller's requirement.
 	ListTransferredByAvatarIDModelIDAndTransferredAt(
 		ctx context.Context,
 		avatarID string,
@@ -105,7 +148,12 @@ type Repository interface {
 		page Page,
 	) (PageResult, error)
 
-	// Transfer verification query
+	// Transfer verification query.
+	//
+	// Implementations should return both list and resale items when eligible.
+	// Legacy list items can still be returned with ItemKey empty if the caller
+	// does not use this method for locking, but new transfer paths should prefer
+	// ItemKey.
 	ListEligibleTransferItemsByAvatarID(
 		ctx context.Context,
 		avatarID string,

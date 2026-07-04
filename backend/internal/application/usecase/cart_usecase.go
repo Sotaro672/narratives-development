@@ -106,6 +106,41 @@ func (uc *CartUsecase) AddItem(
 	return c, nil
 }
 
+// AddResaleItem adds a resale item to cart.
+// Resale item is stored by (resaleId, productId), and qty is always 1.
+func (uc *CartUsecase) AddResaleItem(
+	ctx context.Context,
+	avatarID, resaleID, productID string,
+) (*cartdom.Cart, error) {
+	aid := avatarID
+	rid := resaleID
+	pid := productID
+	if aid == "" || rid == "" || pid == "" {
+		return nil, ErrCartInvalidArgument
+	}
+
+	now := time.Now()
+
+	c, err := uc.repo.GetByAvatarID(ctx, aid)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		c, err = cartdom.NewCart(aid, nil, now)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := c.AddResale(rid, pid, now); err != nil {
+		return nil, err
+	}
+	if err := uc.repo.Upsert(ctx, c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 // SetItemQty sets qty for (inventoryId, listId, modelId).
 // If qty <= 0, it removes the item.
 func (uc *CartUsecase) SetItemQty(
@@ -129,7 +164,6 @@ func (uc *CartUsecase) SetItemQty(
 	now := time.Now()
 
 	if c == nil {
-		// policy: cart absent -> create (then apply)
 		c, err = cartdom.NewCart(aid, nil, now)
 		if err != nil {
 			return nil, err
@@ -151,6 +185,40 @@ func (uc *CartUsecase) RemoveItem(
 	avatarID, inventoryID, listID, modelID string,
 ) (*cartdom.Cart, error) {
 	return uc.SetItemQty(ctx, avatarID, inventoryID, listID, modelID, 0)
+}
+
+// RemoveResaleItem removes a resale item from cart.
+func (uc *CartUsecase) RemoveResaleItem(
+	ctx context.Context,
+	avatarID, resaleID, productID string,
+) (*cartdom.Cart, error) {
+	aid := avatarID
+	rid := resaleID
+	pid := productID
+	if aid == "" || rid == "" || pid == "" {
+		return nil, ErrCartInvalidArgument
+	}
+
+	now := time.Now()
+
+	c, err := uc.repo.GetByAvatarID(ctx, aid)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		c, err = cartdom.NewCart(aid, nil, now)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := c.RemoveResale(rid, pid, now); err != nil {
+		return nil, err
+	}
+	if err := uc.repo.Upsert(ctx, c); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // Clear deletes the cart doc (useful for "empty cart" UX).
@@ -178,7 +246,6 @@ func (uc *CartUsecase) EmptyItems(ctx context.Context, avatarID string) error {
 		return err
 	}
 
-	// absent -> create empty and upsert (idempotent)
 	if c == nil {
 		newCart, err := cartdom.NewCart(aid, nil, now)
 		if err != nil {

@@ -13,14 +13,31 @@ type CartDTO struct {
 }
 
 type CartItemDTO struct {
-	// identifiers
+	// item type
+	//
+	// Type:
+	// - list
+	// - resale
+	Type string `json:"type,omitempty"`
+
+	// list item identifiers
 	InventoryID string `json:"inventoryId,omitempty"`
 	ListID      string `json:"listId,omitempty"`
 	ModelID     string `json:"modelId,omitempty"`
 
-	// list fields
+	// resale item identifiers
+	ResaleID string `json:"resaleId,omitempty"`
+
+	// product identifiers
+	ProductID          string `json:"productId,omitempty"`
+	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
+	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
+	BrandID            string `json:"brandId,omitempty"`
+
+	// list / resale display fields
 	Title     string `json:"title,omitempty"`
 	ListImage string `json:"listImage,omitempty"` // List.ImageID or resolved image URL
+	ImageURL  string `json:"imageUrl,omitempty"`  // Resale image URL etc.
 	Price     *int   `json:"price,omitempty"`     // JPY
 
 	// product fields

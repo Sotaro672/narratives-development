@@ -1,3 +1,4 @@
+// backend/internal/application/query/mall/preview_query.go
 package mall
 
 import (
@@ -90,15 +91,39 @@ type TransferReader interface {
 // Purchased DTOs
 // ------------------------------------------------------------
 
-// PurchasedPair is a resolved (modelId, tokenBlueprintId) pair derived from an eligible order item.
+// PurchasedPair is a resolved purchased item pair derived from an eligible order item.
+//
+// list item:
+// - ItemType == "list"
+// - ModelID + TokenBlueprintID で scan item と照合する
+//
+// resale item:
+// - ItemType == "resale"
+// - ProductID + TokenBlueprintID で scan item と照合する
 type PurchasedPair struct {
-	OrderID          string `json:"orderId"`
-	ModelID          string `json:"modelId"`
-	TokenBlueprintID string `json:"tokenBlueprintId"`
+	OrderID string `json:"orderId"`
+
+	ItemKey   string                 `json:"itemKey,omitempty"`
+	ItemType  orderdom.OrderItemType `json:"itemType,omitempty"`
+	ItemIndex int                    `json:"itemIndex,omitempty"`
+
+	// list item identifiers
+	ModelID     string `json:"modelId,omitempty"`
+	InventoryID string `json:"inventoryId,omitempty"`
+	ListID      string `json:"listId,omitempty"`
+
+	// resale item identifiers
+	ResaleID string `json:"resaleId,omitempty"`
+
+	// product identifiers
+	ProductID          string `json:"productId,omitempty"`
+	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
+	TokenBlueprintID   string `json:"tokenBlueprintId"`
+	BrandID            string `json:"brandId,omitempty"`
 }
 
 // OrderPurchasedResult is the purchased-side query output.
-// - Pairs は orderId 単位で返す（同一 modelId/tokenBlueprintId が複数回出る可能性あり）
+// - Pairs は orderId/item 単位で返す（同一 pair が複数回出る可能性あり）
 type OrderPurchasedResult struct {
 	AvatarID string          `json:"avatarId"`
 	Pairs    []PurchasedPair `json:"pairs"`
@@ -338,18 +363,22 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 // - order.avatarId == avatarID
 // - order.paid == true
 // - item.transferred == false
+//
+// list item:
 // - item.modelId is not empty
 // - item.inventoryId is not empty
+// - tokenBlueprintId is derived from item.tokenBlueprintId or inventoryId 2nd segment
 //
-// This query then derives:
-// - modelId from item.modelId
-// - tokenBlueprintId from item.inventoryId 2nd segment
+// resale item:
+// - item.resaleId is not empty
+// - item.productId is not empty
+// - item.tokenBlueprintId is not empty
 func (q *PreviewQuery) ListEligiblePairsByAvatarID(ctx context.Context, avatarID string) (OrderPurchasedResult, error) {
 	if q == nil || q.OrderRepo == nil {
 		return OrderPurchasedResult{}, ErrOrderPurchasedQueryNotConfigured
 	}
 
-	aid := avatarID
+	aid := strings.TrimSpace(avatarID)
 	if aid == "" {
 		return OrderPurchasedResult{}, ErrInvalidAvatarID
 	}
@@ -362,25 +391,26 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(ctx context.Context, avatarID
 	pairs := make([]PurchasedPair, 0, len(items))
 
 	for _, item := range items {
-		if item.ModelID == "" {
+		itemType := inferPurchasedItemType(item)
+
+		switch itemType {
+		case orderdom.OrderItemTypeResale:
+			pair, ok := purchasedPairFromResaleItem(item)
+			if !ok {
+				continue
+			}
+			pairs = append(pairs, pair)
+
+		case orderdom.OrderItemTypeList:
+			pair, ok := purchasedPairFromListItem(item)
+			if !ok {
+				continue
+			}
+			pairs = append(pairs, pair)
+
+		default:
 			continue
 		}
-		if item.InventoryID == "" {
-			continue
-		}
-
-		parts := strings.Split(item.InventoryID, "__")
-		if len(parts) < 2 || parts[1] == "" {
-			continue
-		}
-
-		tokenBlueprintID := parts[1]
-
-		pairs = append(pairs, PurchasedPair{
-			OrderID:          item.OrderID,
-			ModelID:          item.ModelID,
-			TokenBlueprintID: tokenBlueprintID,
-		})
 	}
 
 	return OrderPurchasedResult{
@@ -389,7 +419,7 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(ctx context.Context, avatarID
 	}, nil
 }
 
-// VerifyMatch verifies whether the scanned pair exists in purchased(untransferred) pairs.
+// VerifyMatch verifies whether the scanned product exists in purchased(untransferred) pairs.
 func (q *PreviewQuery) VerifyMatch(
 	ctx context.Context,
 	in appusecase.VerifyInput,
@@ -398,8 +428,8 @@ func (q *PreviewQuery) VerifyMatch(
 		return appusecase.VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
 	}
 
-	avatarID := in.AvatarID
-	productID := in.ProductID
+	avatarID := strings.TrimSpace(in.AvatarID)
+	productID := strings.TrimSpace(in.ProductID)
 
 	if avatarID == "" {
 		return appusecase.VerifyResult{}, ErrOrderScanVerifyAvatarIDEmpty
@@ -417,7 +447,7 @@ func (q *PreviewQuery) VerifyMatch(
 		return appusecase.VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve returned nil")
 	}
 
-	scannedModelID := info.ModelID
+	scannedModelID := strings.TrimSpace(info.ModelID)
 	if scannedModelID == "" {
 		return appusecase.VerifyResult{}, fmt.Errorf("order_scan_verify_query: scanned modelId is empty")
 	}
@@ -428,48 +458,83 @@ func (q *PreviewQuery) VerifyMatch(
 	}
 
 	// scanned tokenBlueprintId is tokens/{productId}.tokenBlueprintId (docId=productId)
-	scannedTokenBlueprintID := info.Token.TokenBlueprintID
+	scannedTokenBlueprintID := strings.TrimSpace(info.Token.TokenBlueprintID)
 	if scannedTokenBlueprintID == "" {
 		return appusecase.VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
 	}
 
-	// 2) purchased side: avatarId -> paid orders -> items.transfer=false -> (modelId,tbId)
+	// 2) purchased side: avatarId -> paid orders -> items.transfer=false
 	purchased, err := q.ListEligiblePairsByAvatarID(ctx, avatarID)
 	if err != nil {
 		return appusecase.VerifyResult{}, fmt.Errorf("order_scan_verify_query: purchased pairs resolve failed: %w", err)
 	}
 
-	// 3) dedup to []ModelTokenPair
+	// 3) build response pairs.
+	//
+	// VerifyResult currently exposes []ModelTokenPair only.
+	// For resale items, the actual match is productId + tokenBlueprintId,
+	// but response compatibility is preserved by exposing scannedModelID + tokenBlueprintId
+	// for the matched resale product.
 	seen := map[string]struct{}{}
 	outPairs := make([]appusecase.ModelTokenPair, 0, len(purchased.Pairs))
 
-	for _, p := range purchased.Pairs {
-		modelID := p.ModelID
-		tokenBlueprintID := p.TokenBlueprintID
-		if modelID == "" || tokenBlueprintID == "" {
-			continue
-		}
-
-		key := modelID + "::" + tokenBlueprintID
-		if _, ok := seen[key]; ok {
-			continue
-		}
-
-		seen[key] = struct{}{}
-		outPairs = append(outPairs, appusecase.ModelTokenPair{
-			ModelID:          modelID,
-			TokenBlueprintID: tokenBlueprintID,
-		})
-	}
-
-	// 4) match
 	var match *appusecase.ModelTokenPair
-	for i := range outPairs {
-		p := outPairs[i]
-		if p.ModelID == scannedModelID && p.TokenBlueprintID == scannedTokenBlueprintID {
-			cp := p
-			match = &cp
-			break
+
+	for _, p := range purchased.Pairs {
+		tokenBlueprintID := strings.TrimSpace(p.TokenBlueprintID)
+		if tokenBlueprintID == "" {
+			continue
+		}
+
+		switch p.ItemType {
+		case orderdom.OrderItemTypeResale:
+			if strings.TrimSpace(p.ProductID) != productID {
+				continue
+			}
+			if tokenBlueprintID != scannedTokenBlueprintID {
+				continue
+			}
+
+			cp := appusecase.ModelTokenPair{
+				ModelID:          scannedModelID,
+				TokenBlueprintID: tokenBlueprintID,
+			}
+
+			key := cp.ModelID + "::" + cp.TokenBlueprintID
+			if _, ok := seen[key]; !ok {
+				seen[key] = struct{}{}
+				outPairs = append(outPairs, cp)
+			}
+
+			if match == nil {
+				m := cp
+				match = &m
+			}
+
+		case orderdom.OrderItemTypeList:
+			modelID := strings.TrimSpace(p.ModelID)
+			if modelID == "" {
+				continue
+			}
+
+			cp := appusecase.ModelTokenPair{
+				ModelID:          modelID,
+				TokenBlueprintID: tokenBlueprintID,
+			}
+
+			key := cp.ModelID + "::" + cp.TokenBlueprintID
+			if _, ok := seen[key]; !ok {
+				seen[key] = struct{}{}
+				outPairs = append(outPairs, cp)
+			}
+
+			if modelID == scannedModelID && tokenBlueprintID == scannedTokenBlueprintID && match == nil {
+				m := cp
+				match = &m
+			}
+
+		default:
+			continue
 		}
 	}
 
@@ -487,6 +552,95 @@ func (q *PreviewQuery) VerifyMatch(
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
+
+func purchasedPairFromListItem(item orderdom.EligibleTransferItem) (PurchasedPair, bool) {
+	modelID := strings.TrimSpace(item.ModelID)
+	inventoryID := strings.TrimSpace(item.InventoryID)
+
+	if modelID == "" || inventoryID == "" {
+		return PurchasedPair{}, false
+	}
+
+	tokenBlueprintID := strings.TrimSpace(item.TokenBlueprintID)
+	if tokenBlueprintID == "" {
+		tokenBlueprintID = extractTokenBlueprintIDFromInventoryID(inventoryID)
+	}
+	if tokenBlueprintID == "" {
+		return PurchasedPair{}, false
+	}
+
+	return PurchasedPair{
+		OrderID: item.OrderID,
+
+		ItemKey:   strings.TrimSpace(item.ItemKey),
+		ItemType:  orderdom.OrderItemTypeList,
+		ItemIndex: item.ItemIndex,
+
+		ModelID:     modelID,
+		InventoryID: inventoryID,
+		ListID:      strings.TrimSpace(item.ListID),
+
+		TokenBlueprintID: tokenBlueprintID,
+	}, true
+}
+
+func purchasedPairFromResaleItem(item orderdom.EligibleTransferItem) (PurchasedPair, bool) {
+	resaleID := strings.TrimSpace(item.ResaleID)
+	productID := strings.TrimSpace(item.ProductID)
+	tokenBlueprintID := strings.TrimSpace(item.TokenBlueprintID)
+
+	if resaleID == "" || productID == "" || tokenBlueprintID == "" {
+		return PurchasedPair{}, false
+	}
+
+	return PurchasedPair{
+		OrderID: item.OrderID,
+
+		ItemKey:   strings.TrimSpace(item.ItemKey),
+		ItemType:  orderdom.OrderItemTypeResale,
+		ItemIndex: item.ItemIndex,
+
+		ResaleID: resaleID,
+
+		ProductID:          productID,
+		ProductBlueprintID: strings.TrimSpace(item.ProductBlueprintID),
+		TokenBlueprintID:   tokenBlueprintID,
+		BrandID:            strings.TrimSpace(item.BrandID),
+	}, true
+}
+
+func inferPurchasedItemType(item orderdom.EligibleTransferItem) orderdom.OrderItemType {
+	switch item.ItemType {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+		return item.ItemType
+	}
+
+	if strings.TrimSpace(item.ResaleID) != "" || strings.TrimSpace(item.ProductID) != "" {
+		return orderdom.OrderItemTypeResale
+	}
+
+	if strings.TrimSpace(item.ModelID) != "" ||
+		strings.TrimSpace(item.InventoryID) != "" ||
+		strings.TrimSpace(item.ListID) != "" {
+		return orderdom.OrderItemTypeList
+	}
+
+	return ""
+}
+
+func extractTokenBlueprintIDFromInventoryID(inventoryID string) string {
+	inventoryID = strings.TrimSpace(inventoryID)
+	if inventoryID == "" {
+		return ""
+	}
+
+	parts := strings.Split(inventoryID, "__")
+	if len(parts) < 2 {
+		return ""
+	}
+
+	return strings.TrimSpace(parts[1])
+}
 
 func productBlueprintPatchForPreview(pb pbdom.ProductBlueprint) pbdom.Patch {
 	return pbdom.Patch{

@@ -17,7 +17,7 @@ import (
 //
 // Collection design (recommended):
 // - collection: carts
-// - docId: avatarId  ✅ (docId is the source of truth)
+// - docId: avatarId (docId is the source of truth)
 // - fields: items(map), createdAt, updatedAt, expiresAt
 //
 // TTL:
@@ -35,21 +35,18 @@ func (r *CartRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // GetByID returns cart by docId (= avatarId).
-// - returns (zero, error) if repo is invalid
-// - returns (zero, nil) if not found (nil policy)
 func (r *CartRepositoryFS) GetByID(ctx context.Context, id string) (cartdom.Cart, error) {
 	c, err := r.GetByAvatarID(ctx, id)
 	if err != nil {
 		return cartdom.Cart{}, err
 	}
 	if c == nil {
-		// not found
 		return cartdom.Cart{}, nil
 	}
 	return *c, nil
 }
 
-// GetByAvatarID returns (nil, nil) if not found (nil policy).
+// GetByAvatarID returns (nil, nil) if not found.
 func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (*cartdom.Cart, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("cart_repository_fs: firestore client is nil")
@@ -74,7 +71,6 @@ func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (
 	}
 
 	d := doc.toDomain()
-	// ✅ docId が source of truth（doc内に id フィールドが無くても必ず埋める）
 	d.ID = aid
 	return d, nil
 }
@@ -87,16 +83,13 @@ func (r *CartRepositoryFS) Upsert(ctx context.Context, c *cartdom.Cart) error {
 	if c == nil {
 		return errors.New("cart_repository_fs: cart is nil")
 	}
-
-	aid := c.ID
-	if aid == "" {
+	if c.ID == "" {
 		return errors.New("cart_repository_fs: Upsert requires cart.ID (= avatarId) as docId")
 	}
 
 	doc := cartDocFromDomain(c)
 
-	// Overwrite full doc (simple & predictable).
-	_, err := r.col().Doc(aid).Set(ctx, doc)
+	_, err := r.col().Doc(c.ID).Set(ctx, doc)
 	return err
 }
 
@@ -104,52 +97,43 @@ func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
-
-	aid := avatarID
-	if aid == "" {
+	if avatarID == "" {
 		return errors.New("cart_repository_fs: avatarID is empty")
 	}
 
-	_, err := r.col().Doc(aid).Delete(ctx)
+	_, err := r.col().Doc(avatarID).Delete(ctx)
 	return err
 }
 
 // Clear empties cart items by docId (= avatarId / cartId).
-// - items を空にして updatedAt を更新する
-// - doc が存在しない場合は、空カートを作って成功扱いにする（冪等）
 func (r *CartRepositoryFS) Clear(ctx context.Context, cartID string) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
-
-	id := cartID
-	if id == "" {
+	if cartID == "" {
 		return errors.New("cart_repository_fs: cartID is empty")
 	}
 
 	now := time.Now().UTC()
+	expiresAt := now.Add(cartdom.DefaultCartTTL)
 
-	// try update first
-	_, err := r.col().Doc(id).Update(ctx, []firestore.Update{
+	_, err := r.col().Doc(cartID).Update(ctx, []firestore.Update{
 		{Path: "items", Value: map[string]any{}},
 		{Path: "updatedAt", Value: now},
+		{Path: "expiresAt", Value: expiresAt},
 	})
 	if err == nil {
 		return nil
 	}
 
-	// If missing, create a new empty cart doc (idempotent behavior).
 	if status.Code(err) == codes.NotFound {
-		// expiresAt は TTL 運用のために一応入れておく（未使用なら TTL 設定側で無視されるだけ）
-		expiresAt := now.Add(30 * 24 * time.Hour)
-
 		doc := cartDoc{
 			Items:     map[string]cartItemDoc{},
 			CreatedAt: now,
 			UpdatedAt: now,
 			ExpiresAt: expiresAt,
 		}
-		_, setErr := r.col().Doc(id).Set(ctx, doc)
+		_, setErr := r.col().Doc(cartID).Set(ctx, doc)
 		return setErr
 	}
 
@@ -161,7 +145,6 @@ func (r *CartRepositoryFS) Clear(ctx context.Context, cartID string) error {
 // -----------------------------------------
 
 type cartDoc struct {
-	// ✅ Items: itemKey -> CartItem
 	Items map[string]cartItemDoc `firestore:"items"`
 
 	CreatedAt time.Time `firestore:"createdAt"`
@@ -170,13 +153,18 @@ type cartDoc struct {
 }
 
 type cartItemDoc struct {
-	InventoryID string `firestore:"inventoryId"`
-	ListID      string `firestore:"listId"`
-	ModelID     string `firestore:"modelId"`
-	Qty         int    `firestore:"qty"`
+	Type string `firestore:"type,omitempty"`
+
+	InventoryID string `firestore:"inventoryId,omitempty"`
+	ListID      string `firestore:"listId,omitempty"`
+	ModelID     string `firestore:"modelId,omitempty"`
+
+	ResaleID  string `firestore:"resaleId,omitempty"`
+	ProductID string `firestore:"productId,omitempty"`
+
+	Qty int `firestore:"qty"`
 }
 
-// cartDocFromSnapshot parses Firestore document data.
 func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 	if snap == nil {
 		return cartDoc{}, errors.New("cart_repository_fs: snapshot is nil")
@@ -184,17 +172,11 @@ func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 
 	raw := snap.Data()
 	if raw == nil {
-		// empty doc is unusual but handle defensively
-		return cartDoc{
-			Items: map[string]cartItemDoc{},
-		}, nil
+		return cartDoc{Items: map[string]cartItemDoc{}}, nil
 	}
 
-	out := cartDoc{
-		Items: map[string]cartItemDoc{},
-	}
+	out := cartDoc{Items: map[string]cartItemDoc{}}
 
-	// times
 	if t, ok := raw["createdAt"]; ok {
 		if tt, ok2 := asTime(t); ok2 {
 			out.CreatedAt = tt
@@ -211,42 +193,38 @@ func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 		}
 	}
 
-	// items
 	itemsAny, _ := raw["items"]
 	m, ok := itemsAny.(map[string]any)
 	if !ok || m == nil {
-		// no items
 		return out, nil
 	}
 
 	for k, v := range m {
-		itemKey := k
-		if itemKey == "" {
+		if k == "" {
 			continue
 		}
 
 		mv, ok := v.(map[string]any)
 		if !ok {
-			// unexpected shape -> skip
 			continue
 		}
 
-		inv := asString(mv["inventoryId"])
-		lid := asString(mv["listId"])
-		mid := asString(mv["modelId"])
-		qty := asInt(mv["qty"])
+		item := cartItemDoc{
+			Type:        asString(mv["type"]),
+			InventoryID: asString(mv["inventoryId"]),
+			ListID:      asString(mv["listId"]),
+			ModelID:     asString(mv["modelId"]),
+			ResaleID:    asString(mv["resaleId"]),
+			ProductID:   asString(mv["productId"]),
+			Qty:         asInt(mv["qty"]),
+		}
 
-		// 必須チェック（qty > 0 は必須）
-		if qty <= 0 {
+		normalized, ok := normalizeCartItemDoc(item)
+		if !ok {
 			continue
 		}
 
-		out.Items[itemKey] = cartItemDoc{
-			InventoryID: inv,
-			ListID:      lid,
-			ModelID:     mid,
-			Qty:         qty,
-		}
+		out.Items[k] = normalized
 	}
 
 	return out, nil
@@ -254,45 +232,19 @@ func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 
 func cartDocFromDomain(c *cartdom.Cart) cartDoc {
 	items := map[string]cartItemDoc{}
+
 	if c != nil && c.Items != nil {
 		for k, it := range c.Items {
 			if k == "" {
 				continue
 			}
 
-			inv := it.InventoryID
-			lid := it.ListID
-			mid := it.ModelID
-			qty := it.Qty
-
-			// qty は必須、ID も必須（空は捨てる）
-			if qty <= 0 || inv == "" || lid == "" || mid == "" {
+			normalized, ok := cartItemDocFromDomain(it)
+			if !ok {
 				continue
 			}
 
-			normalized := cartItemDoc{
-				InventoryID: inv,
-				ListID:      lid,
-				ModelID:     mid,
-				Qty:         qty,
-			}
-
-			if existing, ok := items[k]; ok {
-				// 同一キーは qty を合算（IDs は既存優先、ただし空なら埋める）
-				if existing.InventoryID == "" {
-					existing.InventoryID = inv
-				}
-				if existing.ListID == "" {
-					existing.ListID = lid
-				}
-				if existing.ModelID == "" {
-					existing.ModelID = mid
-				}
-				existing.Qty = existing.Qty + qty
-				items[k] = existing
-			} else {
-				items[k] = normalized
-			}
+			items[k] = normalized
 		}
 	}
 
@@ -306,53 +258,145 @@ func cartDocFromDomain(c *cartdom.Cart) cartDoc {
 
 func (d cartDoc) toDomain() *cartdom.Cart {
 	items := map[string]cartdom.CartItem{}
+
 	if d.Items != nil {
 		for k, it := range d.Items {
 			if k == "" {
 				continue
 			}
 
-			inv := it.InventoryID
-			lid := it.ListID
-			mid := it.ModelID
-			qty := it.Qty
-
-			if qty <= 0 {
+			normalized, ok := cartItemDomainFromDoc(it)
+			if !ok {
 				continue
 			}
 
-			normalized := cartdom.CartItem{
-				InventoryID: inv,
-				ListID:      lid,
-				ModelID:     mid,
-				Qty:         qty,
-			}
-
-			if existing, ok := items[k]; ok {
-				// 重複キーは qty を合算
-				existing.Qty = existing.Qty + qty
-				// IDs が空なら埋める
-				if existing.InventoryID == "" {
-					existing.InventoryID = inv
-				}
-				if existing.ListID == "" {
-					existing.ListID = lid
-				}
-				if existing.ModelID == "" {
-					existing.ModelID = mid
-				}
-				items[k] = existing
-			} else {
-				items[k] = normalized
-			}
+			items[k] = normalized
 		}
 	}
 
 	return &cartdom.Cart{
-		// ID は呼び出し元（docId）で必ず埋める
 		Items:     items,
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
 		ExpiresAt: d.ExpiresAt,
 	}
+}
+
+func cartItemDocFromDomain(it cartdom.CartItem) (cartItemDoc, bool) {
+	switch inferCartItemType(string(it.Type), it.InventoryID, it.ListID, it.ModelID, it.ResaleID, it.ProductID) {
+	case cartdom.CartItemTypeList:
+		if it.Qty <= 0 || it.InventoryID == "" || it.ListID == "" || it.ModelID == "" {
+			return cartItemDoc{}, false
+		}
+
+		return cartItemDoc{
+			Type:        string(cartdom.CartItemTypeList),
+			InventoryID: it.InventoryID,
+			ListID:      it.ListID,
+			ModelID:     it.ModelID,
+			Qty:         it.Qty,
+		}, true
+
+	case cartdom.CartItemTypeResale:
+		if it.ResaleID == "" || it.ProductID == "" {
+			return cartItemDoc{}, false
+		}
+
+		return cartItemDoc{
+			Type:      string(cartdom.CartItemTypeResale),
+			ResaleID:  it.ResaleID,
+			ProductID: it.ProductID,
+			Qty:       1,
+		}, true
+
+	default:
+		return cartItemDoc{}, false
+	}
+}
+
+func cartItemDomainFromDoc(it cartItemDoc) (cartdom.CartItem, bool) {
+	normalized, ok := normalizeCartItemDoc(it)
+	if !ok {
+		return cartdom.CartItem{}, false
+	}
+
+	switch inferCartItemType(normalized.Type, normalized.InventoryID, normalized.ListID, normalized.ModelID, normalized.ResaleID, normalized.ProductID) {
+	case cartdom.CartItemTypeList:
+		return cartdom.CartItem{
+			Type:        cartdom.CartItemTypeList,
+			InventoryID: normalized.InventoryID,
+			ListID:      normalized.ListID,
+			ModelID:     normalized.ModelID,
+			Qty:         normalized.Qty,
+		}, true
+
+	case cartdom.CartItemTypeResale:
+		return cartdom.CartItem{
+			Type:      cartdom.CartItemTypeResale,
+			ResaleID:  normalized.ResaleID,
+			ProductID: normalized.ProductID,
+			Qty:       1,
+		}, true
+
+	default:
+		return cartdom.CartItem{}, false
+	}
+}
+
+func normalizeCartItemDoc(it cartItemDoc) (cartItemDoc, bool) {
+	switch inferCartItemType(it.Type, it.InventoryID, it.ListID, it.ModelID, it.ResaleID, it.ProductID) {
+	case cartdom.CartItemTypeList:
+		if it.Qty <= 0 || it.InventoryID == "" || it.ListID == "" || it.ModelID == "" {
+			return cartItemDoc{}, false
+		}
+
+		return cartItemDoc{
+			Type:        string(cartdom.CartItemTypeList),
+			InventoryID: it.InventoryID,
+			ListID:      it.ListID,
+			ModelID:     it.ModelID,
+			Qty:         it.Qty,
+		}, true
+
+	case cartdom.CartItemTypeResale:
+		if it.ResaleID == "" || it.ProductID == "" {
+			return cartItemDoc{}, false
+		}
+
+		return cartItemDoc{
+			Type:      string(cartdom.CartItemTypeResale),
+			ResaleID:  it.ResaleID,
+			ProductID: it.ProductID,
+			Qty:       1,
+		}, true
+
+	default:
+		return cartItemDoc{}, false
+	}
+}
+
+func inferCartItemType(
+	rawType string,
+	inventoryID string,
+	listID string,
+	modelID string,
+	resaleID string,
+	productID string,
+) cartdom.CartItemType {
+	itemType := cartdom.CartItemType(rawType)
+
+	switch itemType {
+	case cartdom.CartItemTypeList, cartdom.CartItemTypeResale:
+		return itemType
+	}
+
+	if resaleID != "" || productID != "" {
+		return cartdom.CartItemTypeResale
+	}
+
+	if inventoryID != "" || listID != "" || modelID != "" {
+		return cartdom.CartItemTypeList
+	}
+
+	return ""
 }

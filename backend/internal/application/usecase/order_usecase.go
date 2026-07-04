@@ -117,7 +117,7 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		IsDefault:      in.PaymentMethodSnapshot.IsDefault,
 	}
 
-	// --- fetch cart to resolve listId (if needed) ---
+	// --- fetch cart to resolve listId for list items only ---
 	cartID := in.CartID
 	var cart cartdom.Cart
 	cartLoaded := false
@@ -130,33 +130,9 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		cartLoaded = true
 	}
 
-	// normalize items + item-level defaults
-	items := make([]orderdom.OrderItemSnapshot, 0, len(in.Items))
-	for _, it := range in.Items {
-		modelID := it.ModelID
-		inventoryID := it.InventoryID
-
-		listID := it.ListID
-		if listID == "" && cartLoaded {
-			resolved, err := resolveListIDFromCart(cart, inventoryID, modelID)
-			if err != nil {
-				return orderdom.Order{}, err
-			}
-			listID = resolved
-		}
-
-		n := orderdom.OrderItemSnapshot{
-			ModelID:       modelID,
-			InventoryID:   inventoryID,
-			ListID:        listID,
-			Qty:           it.Qty,
-			Price:         it.Price,
-			IsCanceled:    false,
-			IsDispatched:  false,
-			Transferred:   false,
-			TransferredAt: nil,
-		}
-		items = append(items, n)
+	items, err := normalizeOrderItems(in.Items, cart, cartLoaded)
+	if err != nil {
+		return orderdom.Order{}, err
 	}
 
 	o, err := orderdom.New(
@@ -258,32 +234,11 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 			cartLoaded = true
 		}
 
-		items := make([]orderdom.OrderItemSnapshot, 0, len(*in.ReplaceItems))
-		for _, it := range *in.ReplaceItems {
-			modelID := it.ModelID
-			inventoryID := it.InventoryID
-
-			listID := it.ListID
-			if listID == "" && cartLoaded {
-				resolved, err := resolveListIDFromCart(cart, inventoryID, modelID)
-				if err != nil {
-					return orderdom.Order{}, err
-				}
-				listID = resolved
-			}
-
-			items = append(items, orderdom.OrderItemSnapshot{
-				ModelID:       modelID,
-				InventoryID:   inventoryID,
-				ListID:        listID,
-				Qty:           it.Qty,
-				Price:         it.Price,
-				IsCanceled:    false,
-				IsDispatched:  false,
-				Transferred:   false,
-				TransferredAt: nil,
-			})
+		items, err := normalizeOrderItems(*in.ReplaceItems, cart, cartLoaded)
+		if err != nil {
+			return orderdom.Order{}, err
 		}
+
 		if err := o.ReplaceItems(items); err != nil {
 			return orderdom.Order{}, err
 		}
@@ -310,6 +265,115 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 	}
 
 	return u.repo.Update(ctx, checked, nil)
+}
+
+// ------------------------------------------------------------
+// item normalization
+// ------------------------------------------------------------
+
+func normalizeOrderItems(
+	input []orderdom.OrderItemSnapshot,
+	cart cartdom.Cart,
+	cartLoaded bool,
+) ([]orderdom.OrderItemSnapshot, error) {
+	items := make([]orderdom.OrderItemSnapshot, 0, len(input))
+
+	for _, it := range input {
+		switch inferOrderInputItemType(it) {
+		case orderdom.OrderItemTypeList:
+			n, err := normalizeListOrderItem(it, cart, cartLoaded)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, n)
+
+		case orderdom.OrderItemTypeResale:
+			n, err := normalizeResaleOrderItem(it)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, n)
+
+		default:
+			return nil, orderdom.ErrInvalidItemSnapshot
+		}
+	}
+
+	return items, nil
+}
+
+func normalizeListOrderItem(
+	it orderdom.OrderItemSnapshot,
+	cart cartdom.Cart,
+	cartLoaded bool,
+) (orderdom.OrderItemSnapshot, error) {
+	modelID := it.ModelID
+	inventoryID := it.InventoryID
+
+	listID := it.ListID
+	if listID == "" && cartLoaded {
+		resolved, err := resolveListIDFromCart(cart, inventoryID, modelID)
+		if err != nil {
+			return orderdom.OrderItemSnapshot{}, err
+		}
+		listID = resolved
+	}
+
+	return orderdom.OrderItemSnapshot{
+		Type:          orderdom.OrderItemTypeList,
+		ModelID:       modelID,
+		InventoryID:   inventoryID,
+		ListID:        listID,
+		Qty:           it.Qty,
+		Price:         it.Price,
+		IsCanceled:    false,
+		IsDispatched:  false,
+		Transferred:   false,
+		TransferredAt: nil,
+	}, nil
+}
+
+func normalizeResaleOrderItem(it orderdom.OrderItemSnapshot) (orderdom.OrderItemSnapshot, error) {
+	qty := it.Qty
+	if qty <= 0 {
+		qty = 1
+	}
+
+	if qty != 1 {
+		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
+	}
+
+	return orderdom.OrderItemSnapshot{
+		Type:               orderdom.OrderItemTypeResale,
+		ResaleID:           it.ResaleID,
+		ProductID:          it.ProductID,
+		ProductBlueprintID: it.ProductBlueprintID,
+		TokenBlueprintID:   it.TokenBlueprintID,
+		BrandID:            it.BrandID,
+		Qty:                1,
+		Price:              it.Price,
+		IsCanceled:         false,
+		IsDispatched:       false,
+		Transferred:        false,
+		TransferredAt:      nil,
+	}, nil
+}
+
+func inferOrderInputItemType(it orderdom.OrderItemSnapshot) orderdom.OrderItemType {
+	switch it.Type {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+		return it.Type
+	}
+
+	if it.ResaleID != "" || it.ProductID != "" {
+		return orderdom.OrderItemTypeResale
+	}
+
+	if it.ModelID != "" || it.InventoryID != "" || it.ListID != "" {
+		return orderdom.OrderItemTypeList
+	}
+
+	return ""
 }
 
 // ------------------------------------------------------------
