@@ -1,5 +1,5 @@
-//frontend\amol\src\features\payment\api\paymentHttp.ts
-import { getFirebaseIdToken } from "../../cart/api/cartApi";
+// frontend/amol/src/features/payment/api/paymentHttp.ts
+import { getFirebaseIdToken } from "../../../lib/authToken";
 
 export const API_BASE_URL = getApiBaseUrl();
 
@@ -7,7 +7,7 @@ export function getApiBaseUrl(): string {
   const env = import.meta.env.VITE_API_BASE_URL;
 
   if (typeof env === "string" && env.trim() !== "") {
-    return env.replace(/\/$/, "");
+    return env.replace(/\/+$/, "");
   }
 
   return "";

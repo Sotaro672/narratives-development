@@ -25,6 +25,18 @@ type FooterProps =
       onButtonClick: () => void | Promise<void>;
     }
   | {
+      variant: "tripleAction";
+      leftButtonLabel: string;
+      centerButtonLabel: string;
+      rightButtonLabel: string;
+      leftButtonDisabled?: boolean;
+      centerButtonDisabled?: boolean;
+      rightButtonDisabled?: boolean;
+      onLeftButtonClick: () => void | Promise<void>;
+      onCenterButtonClick: () => void | Promise<void>;
+      onRightButtonClick: () => void | Promise<void>;
+    }
+  | {
       variant: "commentAction";
       value: string;
       placeholder?: string;
@@ -114,7 +126,10 @@ export default function Layout({
 }: LayoutProps) {
   const shouldShowFooter = showFooter ?? mode === "mypage";
   const headerMode: HeaderMode = mode === "mypage" ? "default" : mode;
-  const isActionFooter = shouldShowFooter && footerProps?.variant === "action";
+  const isActionFooter =
+    shouldShowFooter &&
+    (footerProps?.variant === "action" ||
+      footerProps?.variant === "tripleAction");
 
   return (
     <div className="layout-shell">

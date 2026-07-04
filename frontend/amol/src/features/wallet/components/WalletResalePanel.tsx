@@ -53,6 +53,44 @@ function textOrEmpty(value: string | undefined | null): string {
   return String(value ?? "").trim();
 }
 
+function normalizeStatus(value: string | undefined | null): string {
+  const status = String(value ?? "").trim();
+
+  if (status === "suspended" || status === "sold" || status === "listing") {
+    return status;
+  }
+
+  return "listing";
+}
+
+function formatStatusLabel(value: string | undefined | null): string {
+  const status = normalizeStatus(value);
+
+  switch (status) {
+    case "suspended":
+      return "公開停止";
+    case "sold":
+      return "売却済み";
+    case "listing":
+    default:
+      return "出品中";
+  }
+}
+
+function getStatusClassName(value: string | undefined | null): string {
+  const status = normalizeStatus(value);
+
+  switch (status) {
+    case "suspended":
+      return "wallet-resale-card__media--suspended";
+    case "sold":
+      return "wallet-resale-card__media--sold";
+    case "listing":
+    default:
+      return "wallet-resale-card__media--listing";
+  }
+}
+
 function getPrimaryImageUrl(
   item: ResaleListing,
   images: ResaleConditionImage[],
@@ -265,6 +303,9 @@ export default function WalletResalePanel({
         const tokenName = textOrEmpty(item.tokenName);
         const brandName = textOrEmpty(item.brandName);
 
+        const statusLabel = formatStatusLabel(item.status);
+        const statusClassName = getStatusClassName(item.status);
+
         const isClickable = Boolean(resaleId && onItemClick);
 
         return (
@@ -288,7 +329,15 @@ export default function WalletResalePanel({
             }
           >
             <div className="wallet-resale-card">
-              <div className="wallet-resale-card__media">
+              <div
+                className={[
+                  "wallet-resale-card__media",
+                  statusClassName,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                data-status-label={statusLabel}
+              >
                 {imageUrl ? (
                   <img
                     src={imageUrl}

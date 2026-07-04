@@ -1,0 +1,38 @@
+/* frontend/amol/src/styles/resale-detail-page.css */
+
+.resale-detail-page {
+  padding-bottom: calc(var(--footer-action-height, 76px) + 24px);
+}
+
+.resale-detail-page .page-section {
+  padding-bottom: calc(var(--footer-action-height, 76px) + 24px);
+}
+
+.resale-detail-page .page-stack {
+  padding-bottom: 16px;
+}
+
+.resale-detail-page__description {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.resale-detail-page__readonly-meta {
+  margin-top: 16px;
+}
+
+.resale-detail-page__footer-spacer {
+  height: calc(var(--footer-action-height, 76px) + 16px);
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .resale-detail-page {
+    padding-bottom: calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 24px);
+  }
+
+  .resale-detail-page .page-section {
+    padding-bottom: calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 24px);
+  }
+}

@@ -493,3 +493,53 @@
     max-height: 22px;
   }
 }
+
+/* frontend/amol/src/components/layout/footer.css */
+
+.footer-nav--triple-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--footer-nav-z-index);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid #ddd;
+  box-sizing: border-box;
+}
+
+.footer-nav__triple-action-button {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.footer-nav__triple-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.footer-nav__triple-action-button--secondary {
+  color: #111;
+  background: #fff;
+  border: 1px solid #d6d6d6;
+}
+
+.footer-nav__triple-action-button--primary {
+  color: #fff;
+  background: #111;
+  border: 1px solid #111;
+}
+
+.footer-nav__triple-action-button--danger {
+  color: #fff;
+  background: #f2281f;
+  border: 1px solid #f2281f;
+}

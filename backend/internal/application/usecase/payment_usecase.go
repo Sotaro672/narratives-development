@@ -15,19 +15,22 @@ package usecase
 
 支払い成功後の後続処理:
 0) order.Paid=true 更新
-1) 注文確定メール送信
-2) inventory reserve 更新（best-effort）
-3) cart clear（best-effort）
+1) resale status=sold 更新（best-effort）
+2) 注文確定メール送信
+3) inventory reserve 更新（best-effort）
+4) cart clear（best-effort）
 */
 
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
+	resaledom "narratives/internal/domain/resale"
 )
 
 // ============================================================
@@ -72,6 +75,18 @@ type OrderRepoForPayment interface {
 	Update(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
 }
 
+// ResaleRepoForPayment is the minimal port for updating resale status after payment.
+//
+// resale order item:
+// - order.Items[].Type == "resale"
+// - order.Items[].ResaleID points to resales/{resaleId}
+//
+// PaymentUsecase marks those resale listings as sold after payment succeeded.
+type ResaleRepoForPayment interface {
+	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
+	Update(ctx context.Context, id string, item resaledom.Resale) (resaledom.Resale, error)
+}
+
 // AuthUserEmailGetter is the minimal port for reading email from Firebase Authentication.
 //
 // Firestore users table does not own email.
@@ -98,6 +113,7 @@ type PaymentUsecase struct {
 	cartRepo      CartRepoForPayment
 	inventoryRepo InventoryRepoForPayment
 	orderRepo     OrderRepoForPayment
+	resaleRepo    ResaleRepoForPayment
 
 	// authUserGetter は Firebase Authentication から uid に紐づく email を取得する。
 	// Firestore users table に email は持たせない。
@@ -114,6 +130,7 @@ type NewPaymentUsecaseInput struct {
 	CartRepo      CartRepoForPayment
 	InventoryRepo InventoryRepoForPayment
 	OrderRepo     OrderRepoForPayment
+	ResaleRepo    ResaleRepoForPayment
 
 	// AuthUserGetter は Firebase Authentication から email を取得するための port。
 	// 注文確定メール送信時に ord.UserID を uid として利用する。
@@ -135,6 +152,7 @@ func NewPaymentUsecase(in NewPaymentUsecaseInput) *PaymentUsecase {
 		cartRepo:      in.CartRepo,
 		inventoryRepo: in.InventoryRepo,
 		orderRepo:     in.OrderRepo,
+		resaleRepo:    in.ResaleRepo,
 
 		authUserGetter: in.AuthUserGetter,
 		mailSender:     in.MailSender,
@@ -245,9 +263,10 @@ func isPaidStatus(st paymentdom.PaymentStatus) bool {
 //
 // 処理順:
 // 0) order.Paid=true 更新
-// 1) 注文確定メール送信
-// 2) inventory reserve
-// 3) cart clear
+// 1) resale status=sold
+// 2) 注文確定メール送信
+// 3) inventory reserve
+// 4) cart clear
 func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymentdom.Payment) {
 	if u == nil || p == nil {
 		return
@@ -274,12 +293,17 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 		}
 	}
 
-	// 1) 注文確定メール送信
+	// 1) resale status=sold
+	if u.resaleRepo != nil && ord != nil {
+		_ = u.markResalesSoldByOrder(ctx, *ord)
+	}
+
+	// 2) 注文確定メール送信
 	if ord != nil && u.authUserGetter != nil && u.mailSender != nil && u.mailFrom != "" {
 		_ = u.sendOrderConfirmationMail(ctx, *ord)
 	}
 
-	// 2) inventory reserve
+	// 3) inventory reserve
 	if u.inventoryRepo != nil && ord != nil {
 		rawItems := extractOrderItems(*ord)
 		agg := aggregateReserveItems(rawItems)
@@ -294,7 +318,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 		}
 	}
 
-	// 3) cart clear
+	// 4) cart clear
 	if u.cartRepo != nil && ord != nil {
 		cartID := ord.CartID
 		if cartID != "" {
@@ -342,6 +366,73 @@ func (u *PaymentUsecase) markOrderPaidTrue(
 	}
 
 	return &updated, nil
+}
+
+// ============================================================
+// resale.Status = sold
+// ============================================================
+
+func (u *PaymentUsecase) markResalesSoldByOrder(ctx context.Context, ord orderdom.Order) error {
+	if u == nil || u.resaleRepo == nil {
+		return nil
+	}
+
+	resaleIDs := extractResaleIDsFromOrder(ord)
+	if len(resaleIDs) == 0 {
+		return nil
+	}
+
+	now := u.now().UTC()
+
+	for _, resaleID := range resaleIDs {
+		current, err := u.resaleRepo.GetByID(ctx, resaleID)
+		if err != nil {
+			continue
+		}
+
+		if current.Status == resaledom.StatusSold {
+			continue
+		}
+
+		if err := current.MarkSold(now); err != nil {
+			continue
+		}
+
+		_, _ = u.resaleRepo.Update(ctx, resaleID, current)
+	}
+
+	return nil
+}
+
+func extractResaleIDsFromOrder(ord orderdom.Order) []string {
+	if len(ord.Items) == 0 {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(ord.Items))
+
+	for _, it := range ord.Items {
+		if it.Type != orderdom.OrderItemTypeResale {
+			continue
+		}
+
+		resaleID := strings.TrimSpace(it.ResaleID)
+		if resaleID == "" {
+			continue
+		}
+
+		if _, ok := seen[resaleID]; ok {
+			continue
+		}
+
+		seen[resaleID] = struct{}{}
+		out = append(out, resaleID)
+	}
+
+	sort.Strings(out)
+
+	return out
 }
 
 // ============================================================

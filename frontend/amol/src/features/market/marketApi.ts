@@ -1,6 +1,6 @@
 // frontend/amol/src/features/market/marketApi.ts
-import { fetchCurrentAvatarId } from "../cart/api/cartApi";
 import { getApiBaseUrl } from "../../lib/apiBaseUrl";
+import { fetchCurrentAvatarId } from "../catalog/infrastructure/avatarStateRepository";
 
 export type MarketResaleStatus = "listing" | "suspended";
 
@@ -108,7 +108,7 @@ function normalizeApiBaseUrl(): string {
   const baseUrl = getApiBaseUrl();
 
   if (typeof baseUrl === "string" && baseUrl.trim() !== "") {
-    return baseUrl.replace(/\/$/, "");
+    return baseUrl.replace(/\/+$/, "");
   }
 
   return "";

@@ -349,6 +349,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		CartRepo:      cartRepo,
 		OrderRepo:     orderRepo,
 		InventoryRepo: inventoryRepo,
+		ResaleRepo:    resaleRepo,
 
 		AuthUserGetter: authUserEmailGetter,
 		MailSender:     c.OrderMailer,

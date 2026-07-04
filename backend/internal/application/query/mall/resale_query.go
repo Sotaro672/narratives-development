@@ -158,7 +158,7 @@ func (q *ResaleQuery) enrichResaleForDisplay(
 	item resaledom.Resale,
 ) resaledom.Resale {
 	item = q.enrichResaleWithProductName(ctx, item)
-	item = q.enrichResaleWithTokenName(ctx, item)
+	item = q.enrichResaleWithTokenBlueprint(ctx, item)
 	item = q.enrichResaleWithBrandName(ctx, item)
 
 	return item
@@ -187,7 +187,7 @@ func (q *ResaleQuery) enrichResaleWithProductName(
 	return item
 }
 
-func (q *ResaleQuery) enrichResaleWithTokenName(
+func (q *ResaleQuery) enrichResaleWithTokenBlueprint(
 	ctx context.Context,
 	item resaledom.Resale,
 ) resaledom.Resale {
@@ -210,6 +210,10 @@ func (q *ResaleQuery) enrichResaleWithTokenName(
 	}
 
 	item.TokenName = strings.TrimSpace(tb.Name)
+
+	if iconURL := strings.TrimSpace(tb.IconURL); iconURL != "" {
+		item.ImageURL = iconURL
+	}
 
 	return item
 }

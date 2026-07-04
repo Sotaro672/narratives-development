@@ -53,6 +53,14 @@ export type CreateResaleListingParams = {
   conditionImages: File[];
 };
 
+export type UpdateResaleListingParams = {
+  resaleId: string;
+  price?: number;
+  condition?: string;
+  description?: string;
+  status?: string;
+};
+
 type ApiDataResponse<T> = {
   data?: T;
   error?: string;
@@ -239,6 +247,51 @@ export async function createResaleListing(
   return updated ?? created;
 }
 
+export async function updateResaleListing(
+  params: UpdateResaleListingParams,
+): Promise<ResaleListing | null> {
+  const resaleId = params.resaleId.trim();
+
+  if (!resaleId) {
+    throw new Error("resaleId is required");
+  }
+
+  const body: {
+    price?: number;
+    condition?: string;
+    description?: string;
+    status?: string;
+  } = {};
+
+  if (typeof params.price === "number") {
+    body.price = params.price;
+  }
+
+  const condition = nonEmptyOrUndefined(params.condition);
+  if (condition) {
+    body.condition = condition;
+  }
+
+  if (typeof params.description === "string") {
+    body.description = params.description.trim();
+  }
+
+  const status = nonEmptyOrUndefined(params.status);
+  if (status) {
+    body.status = status;
+  }
+
+  const json = await fetchWithAuth<ApiDataResponse<ResaleListing>>(
+    `/mall/me/resales/${encodeURIComponent(resaleId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(body),
+    },
+  );
+
+  return json.data ?? null;
+}
+
 export type ListMyResaleListingsParams = {
   page?: number;
   perPage?: number;
@@ -340,4 +393,88 @@ export async function listPublicResaleConditionImages(
   });
 
   return result.data ?? result.items ?? [];
+}
+
+// frontend/amol/src/features/resale/api/resaleApi.ts に追加
+
+export async function addMyResaleConditionImages(params: {
+  resaleId: string;
+  files: File[];
+  startDisplayOrder?: number;
+}): Promise<ResaleConditionImage[]> {
+  const resaleId = params.resaleId.trim();
+
+  if (!resaleId) {
+    throw new Error("resaleId is required");
+  }
+
+  const uploadedImages = await Promise.all(
+    params.files.map((file, index) =>
+      uploadResaleConditionImage({
+        resaleId,
+        file,
+        displayOrder: (params.startDisplayOrder ?? 0) + index,
+      }),
+    ),
+  );
+
+  const createdImages = await Promise.all(
+    uploadedImages.map(createResaleConditionImage),
+  );
+
+  return createdImages
+    .filter((image): image is ResaleConditionImage => Boolean(image))
+    .map((image, index) => ({
+      ...image,
+      fileName: image.fileName || uploadedImages[index]?.fileName || "",
+      fileSize: image.fileSize || uploadedImages[index]?.fileSize || 0,
+      mimeType: image.mimeType || uploadedImages[index]?.mimeType || "",
+      objectPath: image.objectPath || uploadedImages[index]?.objectPath || "",
+    }));
+}
+
+export async function deleteMyResaleConditionImage(params: {
+  resaleId: string;
+  imageId: string;
+}): Promise<void> {
+  const resaleId = params.resaleId.trim();
+  const imageId = params.imageId.trim();
+
+  if (!resaleId) {
+    throw new Error("resaleId is required");
+  }
+
+  if (!imageId) {
+    throw new Error("imageId is required");
+  }
+
+  await fetchWithAuth<{ ok?: boolean; error?: string }>(
+    `/mall/me/resales/${encodeURIComponent(resaleId)}/images/${encodeURIComponent(
+      imageId,
+    )}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export async function updatePrimaryResaleImage(params: {
+  resaleId: string;
+  imageId: string;
+}): Promise<ResaleListing | null> {
+  return setPrimaryResaleImage(params);
+}
+export async function deleteResaleListing(resaleId: string): Promise<void> {
+  const id = resaleId.trim();
+
+  if (!id) {
+    throw new Error("resaleId is required");
+  }
+
+  await fetchWithAuth<{ ok?: boolean; resaleId?: string; error?: string }>(
+    `/mall/me/resales/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    },
+  );
 }

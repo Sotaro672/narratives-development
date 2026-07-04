@@ -28,6 +28,18 @@ type FooterNavProps =
       onButtonClick: () => void | Promise<void>;
     }
   | {
+      variant: "tripleAction";
+      leftButtonLabel: string;
+      centerButtonLabel: string;
+      rightButtonLabel: string;
+      leftButtonDisabled?: boolean;
+      centerButtonDisabled?: boolean;
+      rightButtonDisabled?: boolean;
+      onLeftButtonClick: () => void | Promise<void>;
+      onCenterButtonClick: () => void | Promise<void>;
+      onRightButtonClick: () => void | Promise<void>;
+    }
+  | {
       variant: "commentAction";
       value: string;
       placeholder?: string;
@@ -70,6 +82,7 @@ export default function FooterNav(props: FooterNavProps) {
   useEffect(() => {
     if (
       props.variant === "action" ||
+      props.variant === "tripleAction" ||
       props.variant === "commentAction" ||
       props.variant === "reviewAction"
     ) {
@@ -159,6 +172,54 @@ export default function FooterNav(props: FooterNavProps) {
           aria-label={buttonLabel}
         >
           {buttonLabel}
+        </button>
+      </footer>
+    );
+  }
+
+  if (props.variant === "tripleAction") {
+    const {
+      leftButtonLabel,
+      centerButtonLabel,
+      rightButtonLabel,
+      leftButtonDisabled = false,
+      centerButtonDisabled = false,
+      rightButtonDisabled = false,
+      onLeftButtonClick,
+      onCenterButtonClick,
+      onRightButtonClick,
+    } = props;
+
+    return (
+      <footer className="footer-nav--triple-action">
+        <button
+          type="button"
+          className="footer-nav__triple-action-button footer-nav__triple-action-button--secondary"
+          onClick={onLeftButtonClick}
+          disabled={leftButtonDisabled}
+          aria-label={leftButtonLabel}
+        >
+          {leftButtonLabel}
+        </button>
+
+        <button
+          type="button"
+          className="footer-nav__triple-action-button footer-nav__triple-action-button--primary"
+          onClick={onCenterButtonClick}
+          disabled={centerButtonDisabled}
+          aria-label={centerButtonLabel}
+        >
+          {centerButtonLabel}
+        </button>
+
+        <button
+          type="button"
+          className="footer-nav__triple-action-button footer-nav__triple-action-button--danger"
+          onClick={onRightButtonClick}
+          disabled={rightButtonDisabled}
+          aria-label={rightButtonLabel}
+        >
+          {rightButtonLabel}
         </button>
       </footer>
     );

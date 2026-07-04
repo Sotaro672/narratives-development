@@ -15,11 +15,12 @@ type ResaleStatus string
 const (
 	StatusListing   ResaleStatus = "listing"
 	StatusSuspended ResaleStatus = "suspended"
+	StatusSold      ResaleStatus = "sold"
 )
 
 func IsValidStatus(s ResaleStatus) bool {
 	switch s {
-	case StatusListing, StatusSuspended:
+	case StatusListing, StatusSuspended, StatusSold:
 		return true
 	default:
 		return false
@@ -230,6 +231,12 @@ func (r *Resale) Suspend(now time.Time) error {
 
 func (r *Resale) Resume(now time.Time) error {
 	r.Status = StatusListing
+	r.touch(now)
+	return nil
+}
+
+func (r *Resale) MarkSold(now time.Time) error {
+	r.Status = StatusSold
 	r.touch(now)
 	return nil
 }

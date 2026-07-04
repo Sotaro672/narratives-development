@@ -1,6 +1,8 @@
 // frontend/amol/src/features/cart/api/cartApi.ts
 
-import { getAuth } from "firebase/auth";
+import { getFirebaseIdToken } from "../../../lib/authToken";
+import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
+import { readResponseErrorMessage } from "../../catalog/infrastructure/httpErrorReader";
 
 import type {
   CartDTO,
@@ -51,109 +53,6 @@ type CartDisplayItemWithResale = CartDisplayItem & {
   price?: number;
 };
 
-type MeAvatarResponse = {
-  avatarId?: string;
-};
-
-function unwrapData(value: unknown): unknown {
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  const record = value as Record<string, unknown>;
-
-  return record.data ?? value;
-}
-
-function isMeAvatarResponse(value: unknown): value is MeAvatarResponse {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-
-  return typeof record.avatarId === "string";
-}
-
-export async function readResponseErrorMessage(
-  response: Response,
-): Promise<string> {
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    const data = (await response.json().catch(() => null)) as
-      | { error?: unknown; message?: unknown }
-      | null;
-
-    if (typeof data?.error === "string" && data.error.trim() !== "") {
-      return data.error;
-    }
-
-    if (typeof data?.message === "string" && data.message.trim() !== "") {
-      return data.message;
-    }
-  }
-
-  const text = await response.text().catch(() => "");
-
-  if (text.trim() !== "") {
-    return text;
-  }
-
-  return "リクエストに失敗しました。";
-}
-
-export async function getFirebaseIdToken(): Promise<string> {
-  const auth = getAuth();
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません。再ログインしてください。");
-  }
-
-  return user.getIdToken();
-}
-
-export async function fetchCurrentAvatarId(apiBaseUrl: string): Promise<string> {
-  const idToken = await getFirebaseIdToken();
-  const base = apiBaseUrl.replace(/\/+$/, "");
-
-  const response = await fetch(`${base}/mall/me/avatars`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    const message = await readResponseErrorMessage(response);
-    throw new Error(message || "現在のアバター情報の取得に失敗しました。");
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (!contentType.includes("application/json")) {
-    throw new Error("現在のアバター情報APIがJSON以外を返しました。");
-  }
-
-  const responseBody: unknown = await response.json();
-  const data = unwrapData(responseBody);
-
-  if (!isMeAvatarResponse(data)) {
-    throw new Error("現在のアバター情報APIのレスポンス形式が不正です。");
-  }
-
-  const avatarId = data.avatarId?.trim();
-
-  if (!avatarId) {
-    throw new Error("現在のavatarIdが見つかりません。");
-  }
-
-  return avatarId;
-}
-
 async function fetchCartFromPath(args: {
   apiBaseUrl: string;
   avatarId: string;
@@ -176,6 +75,8 @@ async function fetchCartFromPath(args: {
     credentials: "include",
   });
 }
+
+export { fetchCurrentAvatarId };
 
 export async function fetchCart(
   apiBaseUrl: string,

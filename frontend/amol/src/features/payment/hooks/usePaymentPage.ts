@@ -1,16 +1,19 @@
-//frontend\amol\src\features\payment\hooks\usePaymentPage.ts
+// frontend/amol/src/features/payment/hooks/usePaymentPage.ts
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 
-import {
-  fetchCartItemsWithCatalog,
-  fetchCurrentAvatarId,
-  getFirebaseIdToken,
-} from "../../cart/api/cartApi";
+import { getFirebaseIdToken } from "../../../lib/authToken";
+import { fetchCurrentAvatarId } from "../../catalog/infrastructure/avatarStateRepository";
+import { fetchCartItemsWithCatalog } from "../../cart/api/cartApi";
 import { calculateCartTotalAmount, formatYen } from "../../cart/utils/cartUtils";
 import { fetchShippingAddressPageInitialData } from "../../shipping-address/api/shippingAddressApi";
 import type { UserProfile } from "../../shipping-address/types";
-import { createOrder, createPayment, fetchPaymentContext, fetchPaymentMethods } from "../api/paymentApi";
+import {
+  createOrder,
+  createPayment,
+  fetchPaymentContext,
+  fetchPaymentMethods,
+} from "../api/paymentApi";
 import { API_BASE_URL } from "../api/paymentHttp";
 import type {
   CanonicalCartDisplayItem,
