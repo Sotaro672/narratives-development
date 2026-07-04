@@ -1,9 +1,12 @@
 // frontend/amol/src/features/wallet/components/WalletResalePanel.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   listMyResaleConditionImages,
   listMyResaleListings,
+  listPublicResaleConditionImages,
+  listResaleListingsByAvatarId,
 } from "../../resale/api/resaleApi";
 import type {
   ResaleConditionImage,
@@ -11,6 +14,10 @@ import type {
 } from "../../resale/api/resaleApi";
 
 type ResaleImageMap = Record<string, string>;
+
+type WalletResalePanelProps = {
+  avatarId?: string;
+};
 
 function formatPrice(value: number | undefined): string {
   const price = Number(value ?? 0);
@@ -78,7 +85,14 @@ function getPrimaryImageUrl(
   return sortedImages[0]?.url || "";
 }
 
-export default function WalletResalePanel() {
+export default function WalletResalePanel({
+  avatarId,
+}: WalletResalePanelProps) {
+  const navigate = useNavigate();
+
+  const normalizedAvatarId = String(avatarId ?? "").trim();
+  const isPublicAvatarMode = Boolean(normalizedAvatarId);
+
   const [items, setItems] = useState<ResaleListing[]>([]);
   const [imageUrlByResaleId, setImageUrlByResaleId] = useState<ResaleImageMap>(
     {},
@@ -109,6 +123,19 @@ export default function WalletResalePanel() {
     });
   }, [items]);
 
+  const handleOpenMarketDetail = useCallback(
+    (resaleId: string | undefined) => {
+      const id = String(resaleId ?? "").trim();
+
+      if (!id) {
+        return;
+      }
+
+      navigate(`/market/${encodeURIComponent(id)}`);
+    },
+    [navigate],
+  );
+
   const loadResaleImages = useCallback(
     async (nextItems: ResaleListing[]): Promise<ResaleImageMap> => {
       const entries = await Promise.all(
@@ -120,7 +147,10 @@ export default function WalletResalePanel() {
           }
 
           try {
-            const images = await listMyResaleConditionImages(resaleId);
+            const images = isPublicAvatarMode
+              ? await listPublicResaleConditionImages(resaleId)
+              : await listMyResaleConditionImages(resaleId);
+
             const imageUrl = getPrimaryImageUrl(item, images);
 
             return [resaleId, imageUrl] as const;
@@ -143,7 +173,7 @@ export default function WalletResalePanel() {
 
       return nextMap;
     },
-    [],
+    [isPublicAvatarMode],
   );
 
   const loadResales = useCallback(async () => {
@@ -151,10 +181,16 @@ export default function WalletResalePanel() {
     setError("");
 
     try {
-      const result = await listMyResaleListings({
-        page: 1,
-        perPage: 50,
-      });
+      const result = isPublicAvatarMode
+        ? await listResaleListingsByAvatarId({
+            avatarId: normalizedAvatarId,
+            page: 1,
+            perPage: 50,
+          })
+        : await listMyResaleListings({
+            page: 1,
+            perPage: 50,
+          });
 
       const nextItems = result.items ?? [];
       const nextImageMap = await loadResaleImages(nextItems);
@@ -170,7 +206,7 @@ export default function WalletResalePanel() {
     } finally {
       setLoading(false);
     }
-  }, [loadResaleImages]);
+  }, [isPublicAvatarMode, loadResaleImages, normalizedAvatarId]);
 
   useEffect(() => {
     void loadResales();
@@ -220,13 +256,21 @@ export default function WalletResalePanel() {
         const productName = textOrEmpty(item.productName);
         const tokenName = textOrEmpty(item.tokenName);
         const brandName = textOrEmpty(item.brandName);
+        const title = productName || tokenName || brandName || "出品商品";
+        const isClickable = Boolean(resaleId);
 
         return (
           <article
             key={resaleId || item.mintAddress}
             className="wallet-resale-list__item"
           >
-            <div className="wallet-resale-card">
+            <button
+              type="button"
+              className="wallet-resale-card wallet-resale-card--button"
+              onClick={() => handleOpenMarketDetail(resaleId)}
+              disabled={!isClickable}
+              aria-label={`${title}の詳細を開く`}
+            >
               <div className="wallet-resale-card__media">
                 {imageUrl ? (
                   <img
@@ -276,7 +320,7 @@ export default function WalletResalePanel() {
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
           </article>
         );
       })}

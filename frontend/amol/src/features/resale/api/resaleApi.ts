@@ -268,6 +268,40 @@ export async function listMyResaleListings(
   );
 }
 
+export type ListResaleListingsByAvatarIdParams = {
+  avatarId: string;
+  page?: number;
+  perPage?: number;
+};
+
+export async function listResaleListingsByAvatarId(
+  params: ListResaleListingsByAvatarIdParams,
+): Promise<ListMyResaleListingsResponse> {
+  const avatarId = params.avatarId.trim();
+
+  if (!avatarId) {
+    return {
+      items: [],
+      totalCount: 0,
+      totalPages: 0,
+      page: params.page ?? 1,
+      perPage: params.perPage ?? 50,
+    };
+  }
+
+  const searchParams = new URLSearchParams();
+
+  searchParams.set("page", String(params.page ?? 1));
+  searchParams.set("perPage", String(params.perPage ?? 50));
+
+  return fetchWithAuth<ListMyResaleListingsResponse>(
+    `/mall/resales/avatar/${encodeURIComponent(avatarId)}?${searchParams.toString()}`,
+    {
+      method: "GET",
+    },
+  );
+}
+
 export async function listMyResaleConditionImages(
   resaleId: string,
 ): Promise<ResaleConditionImage[]> {
@@ -282,6 +316,26 @@ export async function listMyResaleConditionImages(
     items?: ResaleConditionImage[];
     error?: string;
   }>(`/mall/me/resales/${encodeURIComponent(id)}/images`, {
+    method: "GET",
+  });
+
+  return result.data ?? result.items ?? [];
+}
+
+export async function listPublicResaleConditionImages(
+  resaleId: string,
+): Promise<ResaleConditionImage[]> {
+  const id = resaleId.trim();
+
+  if (!id) {
+    return [];
+  }
+
+  const result = await fetchWithAuth<{
+    data?: ResaleConditionImage[] | null;
+    items?: ResaleConditionImage[];
+    error?: string;
+  }>(`/mall/resales/${encodeURIComponent(id)}/images`, {
     method: "GET",
   });
 

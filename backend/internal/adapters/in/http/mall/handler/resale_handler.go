@@ -21,6 +21,7 @@ import (
 //
 // NOTE:
 // /mall/me/resales は「自分の出品管理」専用。
+// /mall/resales/avatar/{avatarId} は公開アバターの出品一覧表示専用。
 // 公開マーケット一覧の List / ListByCursor は market_handler.go に移譲する。
 type ResaleQuery interface {
 	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
@@ -45,7 +46,10 @@ func NewResaleHandler(p NewResaleHandlerParams) http.Handler {
 	}
 }
 
-const meResalesPath = "/mall/me/resales"
+const (
+	meResalesPath     = "/mall/me/resales"
+	publicResalesPath = "/mall/resales"
+)
 
 func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -56,6 +60,15 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
+
+	if path == "" {
+		path = r.URL.Path
+	}
+
+	if path == publicResalesPath || strings.HasPrefix(path, publicResalesPath+"/") {
+		h.servePublic(w, r, path)
+		return
+	}
 
 	if path == meResalesPath {
 		switch r.Method {
@@ -152,6 +165,161 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
+}
+
+func (h *ResaleHandler) servePublic(w http.ResponseWriter, r *http.Request, path string) {
+	if h == nil || h.query == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		return
+	}
+
+	if path == publicResalesPath {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	rest := strings.TrimPrefix(path, publicResalesPath+"/")
+	parts := strings.Split(rest, "/")
+
+	if len(parts) == 2 && parts[0] == "avatar" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		avatarID := strings.TrimSpace(parts[1])
+		h.listPublicByAvatarID(w, r, avatarID)
+		return
+	}
+
+	if len(parts) == 1 {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		resaleID := strings.TrimSpace(parts[0])
+		h.getPublic(w, r, resaleID)
+		return
+	}
+
+	if len(parts) == 2 && (parts[1] == "images" || parts[1] == "condition-images") {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		resaleID := strings.TrimSpace(parts[0])
+		h.listPublicImages(w, r, resaleID)
+		return
+	}
+
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+}
+
+func (h *ResaleHandler) listPublicByAvatarID(w http.ResponseWriter, r *http.Request, avatarID string) {
+	ctx := r.Context()
+
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatarId is required"})
+		return
+	}
+
+	items, err := h.query.ListByAvatarID(ctx, avatarID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	page := buildResalePageFromQuery(r)
+
+	pageNum := page.Number
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+
+	perPage := page.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	totalCount := len(items)
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = (totalCount + perPage - 1) / perPage
+	}
+
+	offset := (pageNum - 1) * perPage
+	if offset < 0 {
+		offset = 0
+	}
+
+	pagedItems := []resaledom.Resale{}
+	if offset < totalCount {
+		end := offset + perPage
+		if end > totalCount {
+			end = totalCount
+		}
+		pagedItems = items[offset:end]
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"items":      pagedItems,
+		"totalCount": totalCount,
+		"totalPages": totalPages,
+		"page":       pageNum,
+		"perPage":    perPage,
+	})
+}
+
+func (h *ResaleHandler) getPublic(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	resaleID = strings.TrimSpace(resaleID)
+	if resaleID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resaleId is required"})
+		return
+	}
+
+	item, err := h.query.GetByID(ctx, resaleID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": item,
+	})
+}
+
+func (h *ResaleHandler) listPublicImages(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	resaleID = strings.TrimSpace(resaleID)
+	if resaleID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resaleId is required"})
+		return
+	}
+
+	images, err := h.query.ListImages(ctx, resaleID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": images,
+	})
 }
 
 func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {

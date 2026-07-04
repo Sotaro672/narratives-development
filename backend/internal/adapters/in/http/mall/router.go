@@ -67,7 +67,13 @@ type Deps struct {
 	// - GET /mall/market/resales/{id}
 	Market http.Handler
 
-	// resales (me)
+	// resales
+	// public:
+	// - GET /mall/resales/avatar/{avatarId}
+	// - GET /mall/resales/{id}
+	// - GET /mall/resales/{id}/images
+	//
+	// me:
 	// - POST /mall/me/resales
 	// - GET  /mall/me/resales
 	// - GET/PUT/DELETE /mall/me/resales/{id}
@@ -219,6 +225,10 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// market resales (public)
 	handleSafe(mux, "/mall/market/resales", deps.Market, "Market")
 	handleSafe(mux, "/mall/market/resales/", deps.Market, "Market")
+
+	// resales by public avatar
+	handleSafe(mux, "/mall/resales", deps.Resale, "Resale(public)")
+	handleSafe(mux, "/mall/resales/", deps.Resale, "Resale(public)")
 
 	// ------------------------------------------------------------
 	// Auth-required routes outside /mall/me
