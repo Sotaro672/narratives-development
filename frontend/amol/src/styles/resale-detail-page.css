@@ -12,8 +12,108 @@
   padding-bottom: 16px;
 }
 
+/* ===============================
+   Token summary
+================================ */
+
+.resale-detail-page .resale-token-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.resale-detail-page .resale-token-summary__icon {
+  flex: 0 0 auto;
+}
+
+.resale-detail-page .resale-token-summary__body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.resale-detail-page .resale-token-summary__token-name {
+  margin: 0;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.resale-detail-page .resale-token-summary__brand-name {
+  margin: 4px 0 0;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.resale-detail-page .resale-token-summary__product-name {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ===============================
+   Definition list
+================================ */
+
+.resale-detail-page .page-definition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.resale-detail-page .page-definition-list__row {
+  display: grid;
+  grid-template-columns: minmax(96px, 36%) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 12px;
+  margin: 0;
+}
+
+.resale-detail-page .page-definition-list__row dt {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.resale-detail-page .page-definition-list__row dd {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* ===============================
+   Description
+================================ */
+
+.resale-detail-page .page-card__subtitle {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
 .resale-detail-page__description {
   margin: 0;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -27,12 +127,95 @@
   flex: 0 0 auto;
 }
 
+/* ===============================
+   Dropdown button
+================================ */
+
+.resale-detail-page .page-form__dropdown-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resale-detail-page .page-form__dropdown-button:hover {
+  background: #f9fafb;
+}
+
+.resale-detail-page .page-form__dropdown-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ===============================
+   Form text
+================================ */
+
+.resale-detail-page .page-form__label {
+  color: #374151;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.resale-detail-page .page-error {
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.resale-detail-page .page-card__text {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+/* ===============================
+   Mobile
+================================ */
+
 @media (max-width: 640px) {
   .resale-detail-page {
-    padding-bottom: calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 24px);
+    padding-bottom: calc(
+      var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 24px
+    );
   }
 
   .resale-detail-page .page-section {
-    padding-bottom: calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 24px);
+    padding-bottom: calc(
+      var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 24px
+    );
+  }
+
+  .resale-detail-page .page-definition-list {
+    gap: 8px;
+  }
+
+  .resale-detail-page .page-definition-list__row {
+    grid-template-columns: minmax(88px, 34%) minmax(0, 1fr);
+    column-gap: 10px;
+  }
+
+  .resale-detail-page .page-definition-list__row dt {
+    font-size: 13px;
+  }
+
+  .resale-detail-page .page-definition-list__row dd {
+    font-size: 15px;
   }
 }

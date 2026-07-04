@@ -10,6 +10,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Dropdown from "../components/ui/Dropdown";
 import Input from "../components/ui/Input";
 import MediaGallery from "../components/ui/MediaGallery";
 import type { MediaGalleryItem } from "../components/ui/MediaGallery";
@@ -38,15 +39,45 @@ import "../styles/page-layout.css";
 import "../styles/resale-page.css";
 import "../styles/resale-detail-page.css";
 
-const CONDITION_OPTIONS = [
-  "新品・未使用",
-  "未使用に近い",
-  "目立った傷や汚れなし",
-  "やや傷や汚れあり",
-  "傷や汚れあり",
+type ResaleConditionValue =
+  | "新品・未使用"
+  | "未使用に近い"
+  | "目立った傷や汚れなし"
+  | "やや傷や汚れあり"
+  | "傷や汚れあり";
+
+const CONDITION_OPTIONS: {
+  value: ResaleConditionValue;
+  label: string;
+}[] = [
+  {
+    value: "新品・未使用",
+    label: "新品・未使用",
+  },
+  {
+    value: "未使用に近い",
+    label: "未使用に近い",
+  },
+  {
+    value: "目立った傷や汚れなし",
+    label: "目立った傷や汚れなし",
+  },
+  {
+    value: "やや傷や汚れあり",
+    label: "やや傷や汚れあり",
+  },
+  {
+    value: "傷や汚れあり",
+    label: "傷や汚れあり",
+  },
 ];
 
-const RESALE_STATUS_OPTIONS = [
+type ResaleEditableStatus = "listing" | "suspended";
+
+const RESALE_STATUS_OPTIONS: {
+  value: ResaleEditableStatus;
+  label: string;
+}[] = [
   {
     value: "listing",
     label: "出品中",
@@ -56,6 +87,27 @@ const RESALE_STATUS_OPTIONS = [
     label: "公開停止",
   },
 ];
+
+type ResaleModelColor = {
+  name?: string;
+  rgb?: number;
+};
+
+type ResaleModelVolume = {
+  amount?: number;
+  value?: number;
+  unit?: string;
+};
+
+type ResaleListingWithModel = ResaleListing & {
+  modelId?: string;
+  kind?: string;
+  modelNumber?: string;
+  size?: string;
+  color?: ResaleModelColor | null;
+  measurements?: Record<string, number> | null;
+  volume?: ResaleModelVolume | null;
+};
 
 type EditableConditionMediaItem = MediaUploaderItem & {
   source: "existing" | "new";
@@ -120,6 +172,109 @@ function formatResaleStatus(value: string): string {
   }
 }
 
+function formatModelKind(value: string): string {
+  switch (value) {
+    case "apparel":
+      return "アパレル";
+    case "alcohol":
+      return "酒類";
+    default:
+      return value || "-";
+  }
+}
+
+function formatModelColor(color: ResaleModelColor | null | undefined): string {
+  if (!color) {
+    return "-";
+  }
+
+  const name = normalizeText(color.name);
+  const rgb = Number(color.rgb);
+
+  if (!name && !Number.isFinite(rgb)) {
+    return "-";
+  }
+
+  if (!Number.isFinite(rgb)) {
+    return name || "-";
+  }
+
+  return name ? `${name} / RGB: ${rgb}` : `RGB: ${rgb}`;
+}
+
+function formatModelVolume(volume: ResaleModelVolume | null | undefined): string {
+  if (!volume) {
+    return "-";
+  }
+
+  const amount = Number(volume.amount ?? volume.value ?? 0);
+  const unit = normalizeText(volume.unit);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return unit || "-";
+  }
+
+  return unit ? `${amount.toLocaleString("ja-JP")}${unit}` : `${amount}`;
+}
+
+function formatMeasurements(
+  measurements: Record<string, number> | null | undefined,
+): string {
+  if (!measurements) {
+    return "-";
+  }
+
+  const entries = Object.entries(measurements).filter(([key, value]) => {
+    const label = normalizeText(key);
+    const numericValue = Number(value);
+
+    return label !== "" && Number.isFinite(numericValue);
+  });
+
+  if (entries.length === 0) {
+    return "-";
+  }
+
+  return entries
+    .sort(([a], [b]) => a.localeCompare(b, "ja"))
+    .map(([key, value]) => `${key}: ${Number(value).toLocaleString("ja-JP")}`)
+    .join(" / ");
+}
+
+function normalizeEditableStatus(value: unknown): ResaleEditableStatus {
+  return value === "suspended" ? "suspended" : "listing";
+}
+
+function normalizeCondition(value: unknown): ResaleConditionValue {
+  const text = normalizeText(value);
+
+  if (
+    text === "新品・未使用" ||
+    text === "未使用に近い" ||
+    text === "目立った傷や汚れなし" ||
+    text === "やや傷や汚れあり" ||
+    text === "傷や汚れあり"
+  ) {
+    return text;
+  }
+
+  return "未使用に近い";
+}
+
+function getConditionOptionLabel(value: ResaleConditionValue): string {
+  return (
+    CONDITION_OPTIONS.find((option) => option.value === value)?.label ??
+    "未使用に近い"
+  );
+}
+
+function getStatusOptionLabel(value: ResaleEditableStatus): string {
+  return (
+    RESALE_STATUS_OPTIONS.find((option) => option.value === value)?.label ??
+    "出品中"
+  );
+}
+
 function sortImages(images: ResaleConditionImage[]): ResaleConditionImage[] {
   return [...images].sort((a, b) => {
     const aOrder = Number(a.displayOrder ?? 0);
@@ -168,12 +323,12 @@ function createGalleryItem(image: ResaleConditionImage): MediaGalleryItem {
   };
 }
 
-function getTokenIconUrl(item: ResaleListing | null): string {
+function getTokenIconUrl(item: ResaleListingWithModel | null): string {
   if (!item) {
     return "";
   }
 
-  const record = item as ResaleListing & {
+  const record = item as ResaleListingWithModel & {
     imageUrl?: string;
     tokenIcon?: string;
     tokenIconUrl?: string;
@@ -199,7 +354,7 @@ export default function ResaleDetailPage() {
 
   const normalizedResaleId = normalizeText(resaleId);
 
-  const [item, setItem] = useState<ResaleListing | null>(null);
+  const [item, setItem] = useState<ResaleListingWithModel | null>(null);
   const [images, setImages] = useState<ResaleConditionImage[]>([]);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
 
@@ -219,9 +374,11 @@ export default function ResaleDetailPage() {
   const [saveMessage, setSaveMessage] = useState("");
 
   const [priceInput, setPriceInput] = useState("");
-  const [conditionInput, setConditionInput] = useState("未使用に近い");
+  const [conditionInput, setConditionInput] =
+    useState<ResaleConditionValue>("未使用に近い");
   const [descriptionInput, setDescriptionInput] = useState("");
-  const [statusInput, setStatusInput] = useState("listing");
+  const [statusInput, setStatusInput] =
+    useState<ResaleEditableStatus>("listing");
 
   const sortedImages = useMemo(() => sortImages(images), [images]);
   const galleryItems = useMemo(
@@ -238,6 +395,23 @@ export default function ResaleDetailPage() {
   const resaleAvatarId = normalizeText(item?.avatarId);
   const tokenIconUrl = getTokenIconUrl(item);
 
+  const modelId = normalizeText(item?.modelId);
+  const modelKind = normalizeText(item?.kind);
+  const modelNumber = normalizeText(item?.modelNumber);
+  const modelSize = normalizeText(item?.size);
+  const modelColorLabel = formatModelColor(item?.color);
+  const modelVolumeLabel = formatModelVolume(item?.volume);
+  const measurementsLabel = formatMeasurements(item?.measurements);
+
+  const hasModelInfo =
+    Boolean(modelId) ||
+    Boolean(modelKind) ||
+    Boolean(modelNumber) ||
+    Boolean(modelSize) ||
+    modelColorLabel !== "-" ||
+    modelVolumeLabel !== "-" ||
+    measurementsLabel !== "-";
+
   const isSold = status === "sold";
 
   const isOwnResale =
@@ -252,6 +426,8 @@ export default function ResaleDetailPage() {
   const createdAtLabel = formatDateTime(item?.createdAt);
   const updatedAtLabel = formatDateTime(item?.updatedAt);
   const statusLabel = formatResaleStatus(status);
+  const selectedConditionLabel = getConditionOptionLabel(conditionInput);
+  const selectedStatusLabel = getStatusOptionLabel(statusInput);
 
   const priceNumber = Number(priceInput.replace(/[^\d]/g, ""));
   const hasValidPrice = Number.isFinite(priceNumber) && priceNumber > 0;
@@ -274,20 +450,17 @@ export default function ResaleDetailPage() {
     !loading && Boolean(item) && isOwnResale && !isEditing && !isSold;
 
   const resetFormFromItem = useCallback(
-    (nextItem: ResaleListing | null, nextImages: ResaleConditionImage[]) => {
+    (nextItem: ResaleListingWithModel | null, nextImages: ResaleConditionImage[]) => {
       const nextPrice = Number(nextItem?.price ?? 0);
-      const nextStatus = normalizeText(nextItem?.status);
+      const nextStatus = normalizeEditableStatus(nextItem?.status);
+      const nextCondition = normalizeCondition(nextItem?.condition);
 
       setPriceInput(
         Number.isFinite(nextPrice) && nextPrice > 0 ? String(nextPrice) : "",
       );
-      setConditionInput(normalizeText(nextItem?.condition) || "未使用に近い");
+      setConditionInput(nextCondition);
       setDescriptionInput(normalizeText(nextItem?.description));
-      setStatusInput(
-        nextStatus === "suspended" || nextStatus === "listing"
-          ? nextStatus
-          : "listing",
-      );
+      setStatusInput(nextStatus);
       setConditionMediaItems(sortImages(nextImages).map(createEditableImageItem));
       setConditionMediaCurrentIndex(0);
       setDeletedImageIds([]);
@@ -324,7 +497,7 @@ export default function ResaleDetailPage() {
       ]);
 
       const nextItem =
-        result.items?.find(
+        (result.items as ResaleListingWithModel[] | undefined)?.find(
           (listing) => normalizeText(listing.id) === normalizedResaleId,
         ) ?? null;
 
@@ -437,14 +610,14 @@ export default function ResaleDetailPage() {
     setErrorMessage("");
   };
 
-  const handleChangeCondition = (event: ChangeEvent<HTMLSelectElement>) => {
-    setConditionInput(event.currentTarget.value);
+  const handleSelectCondition = (value: ResaleConditionValue) => {
+    setConditionInput(value);
     setSaveMessage("");
     setErrorMessage("");
   };
 
-  const handleChangeStatus = (event: ChangeEvent<HTMLSelectElement>) => {
-    setStatusInput(event.currentTarget.value);
+  const handleSelectStatus = (value: ResaleEditableStatus) => {
+    setStatusInput(value);
     setSaveMessage("");
     setErrorMessage("");
   };
@@ -594,7 +767,7 @@ export default function ResaleDetailPage() {
       ]);
 
       const nextItem =
-        result.items?.find(
+        (result.items as ResaleListingWithModel[] | undefined)?.find(
           (listing) => normalizeText(listing.id) === normalizedResaleId,
         ) ?? null;
 
@@ -618,7 +791,7 @@ export default function ResaleDetailPage() {
       ]);
 
       const refreshedItem =
-        refreshedResult.items?.find(
+        (refreshedResult.items as ResaleListingWithModel[] | undefined)?.find(
           (listing) => normalizeText(listing.id) === normalizedResaleId,
         ) ?? nextItem;
 
@@ -779,6 +952,52 @@ export default function ResaleDetailPage() {
                   ) : null}
                 </div>
               </div>
+
+              {hasModelInfo ? (
+                <dl className="page-definition-list resale-detail-page__readonly-meta">
+                  {modelKind ? (
+                    <div className="page-definition-list__row">
+                      <dt>種別</dt>
+                      <dd>{formatModelKind(modelKind)}</dd>
+                    </div>
+                  ) : null}
+
+                  {modelNumber ? (
+                    <div className="page-definition-list__row">
+                      <dt>モデル番号</dt>
+                      <dd>{modelNumber}</dd>
+                    </div>
+                  ) : null}
+
+                  {modelSize ? (
+                    <div className="page-definition-list__row">
+                      <dt>サイズ</dt>
+                      <dd>{modelSize}</dd>
+                    </div>
+                  ) : null}
+
+                  {modelColorLabel !== "-" ? (
+                    <div className="page-definition-list__row">
+                      <dt>カラー</dt>
+                      <dd>{modelColorLabel}</dd>
+                    </div>
+                  ) : null}
+
+                  {measurementsLabel !== "-" ? (
+                    <div className="page-definition-list__row">
+                      <dt>採寸</dt>
+                      <dd>{measurementsLabel}</dd>
+                    </div>
+                  ) : null}
+
+                  {modelVolumeLabel !== "-" ? (
+                    <div className="page-definition-list__row">
+                      <dt>容量</dt>
+                      <dd>{modelVolumeLabel}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
             </section>
 
             {!isEditing ? (
@@ -813,30 +1032,49 @@ export default function ResaleDetailPage() {
                     onChange={handleChangePrice}
                   />
 
-                  <label className="page-form__field">
+                  <div className="page-form__field">
                     <span className="page-form__label">商品の状態</span>
-                    <select
-                      value={conditionInput}
-                      onChange={handleChangeCondition}
-                    >
-                      {CONDITION_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
 
-                  <label className="page-form__field">
+                    <Dropdown
+                      buttonLabel={selectedConditionLabel}
+                      items={CONDITION_OPTIONS}
+                      selectedValue={conditionInput}
+                      onSelect={handleSelectCondition}
+                      renderButton={({ isOpen, toggle }) => (
+                        <button
+                          type="button"
+                          className="page-form__dropdown-button"
+                          onClick={toggle}
+                          aria-expanded={isOpen}
+                        >
+                          <span>{selectedConditionLabel}</span>
+                          <span aria-hidden="true">{isOpen ? "▲" : "▼"}</span>
+                        </button>
+                      )}
+                    />
+                  </div>
+
+                  <div className="page-form__field">
                     <span className="page-form__label">公開状態</span>
-                    <select value={statusInput} onChange={handleChangeStatus}>
-                      {RESALE_STATUS_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+
+                    <Dropdown
+                      buttonLabel={selectedStatusLabel}
+                      items={RESALE_STATUS_OPTIONS}
+                      selectedValue={statusInput}
+                      onSelect={handleSelectStatus}
+                      renderButton={({ isOpen, toggle }) => (
+                        <button
+                          type="button"
+                          className="page-form__dropdown-button"
+                          onClick={toggle}
+                          aria-expanded={isOpen}
+                        >
+                          <span>{selectedStatusLabel}</span>
+                          <span aria-hidden="true">{isOpen ? "▲" : "▼"}</span>
+                        </button>
+                      )}
+                    />
+                  </div>
 
                   <MediaUploader
                     label="商品状態の写真"

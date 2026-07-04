@@ -1,5 +1,6 @@
-//frontend\src\components\ui\Dropdown.tsx
+// frontend/amol/src/components/ui/Dropdown.tsx
 import { useEffect, useRef, useState, type ReactNode } from "react";
+
 import "./dropdown.css";
 
 type DropdownItem<T extends string> = {
@@ -54,7 +55,7 @@ export default function Dropdown<T extends string>({
     <div className="ui-dropdown" ref={rootRef}>
       {renderButton({ isOpen, toggle })}
 
-      {isOpen && (
+      {isOpen ? (
         <div className="ui-dropdown__menu" role="menu">
           {items.map((item) => (
             <button
@@ -70,7 +71,7 @@ export default function Dropdown<T extends string>({
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -257,6 +257,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.ResaleQ = mallquery.NewResaleQuery(
 		resaleRepo,
 		resaleImageRepo,
+		productRepo,
+		modelRepoFS,
 		productBlueprintRepoFS,
 		tokenBlueprintRepo,
 		brandRepo,
@@ -265,6 +267,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.MarketQ = mallquery.NewMarketQuery(
 		resaleRepo,
 		resaleImageRepo,
+		productRepo,
+		modelRepoFS,
 		productBlueprintRepoFS,
 		tokenBlueprintRepo,
 		brandRepo,

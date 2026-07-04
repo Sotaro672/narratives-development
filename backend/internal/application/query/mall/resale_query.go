@@ -4,9 +4,10 @@ package mall
 import (
 	"context"
 	"errors"
-	"strings"
 
 	branddom "narratives/internal/domain/brand"
+	modeldom "narratives/internal/domain/model"
+	productdom "narratives/internal/domain/product"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 	resaledom "narratives/internal/domain/resale"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
@@ -15,6 +16,8 @@ import (
 type ResaleQuery struct {
 	resaleRepo           resaledom.Repository
 	imageRepo            resaledom.ImageRepository
+	productRepo          productdom.Repository
+	modelRepo            modeldom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
 	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
 	brandRepo            branddom.Repository
@@ -23,6 +26,8 @@ type ResaleQuery struct {
 func NewResaleQuery(
 	resaleRepo resaledom.Repository,
 	imageRepo resaledom.ImageRepository,
+	productRepo productdom.Repository,
+	modelRepo modeldom.RepositoryPort,
 	productBlueprintRepo productblueprintdom.Repository,
 	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
 	brandRepo branddom.Repository,
@@ -30,6 +35,8 @@ func NewResaleQuery(
 	return &ResaleQuery{
 		resaleRepo:           resaleRepo,
 		imageRepo:            imageRepo,
+		productRepo:          productRepo,
+		modelRepo:            modelRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		brandRepo:            brandRepo,
@@ -84,7 +91,6 @@ func (q *ResaleQuery) GetByID(
 		return resaledom.Resale{}, errors.New("not supported: ResaleQuery.GetByID")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidID
 	}
@@ -107,7 +113,6 @@ func (q *ResaleQuery) ListByAvatarID(
 		return nil, errors.New("not supported: ResaleQuery.ListByAvatarID")
 	}
 
-	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
 		return []resaledom.Resale{}, nil
 	}
@@ -130,7 +135,6 @@ func (q *ResaleQuery) ListImages(
 		return nil, errors.New("not supported: ResaleQuery.ListImages")
 	}
 
-	resaleID = strings.TrimSpace(resaleID)
 	if resaleID == "" {
 		return nil, resaledom.ErrInvalidConditionImageResaleID
 	}
@@ -157,9 +161,114 @@ func (q *ResaleQuery) enrichResaleForDisplay(
 	ctx context.Context,
 	item resaledom.Resale,
 ) resaledom.Resale {
+	item = q.enrichResaleWithProductAndModel(ctx, item)
 	item = q.enrichResaleWithProductName(ctx, item)
 	item = q.enrichResaleWithTokenBlueprint(ctx, item)
 	item = q.enrichResaleWithBrandName(ctx, item)
+
+	return item
+}
+
+func (q *ResaleQuery) enrichResaleWithProductAndModel(
+	ctx context.Context,
+	item resaledom.Resale,
+) resaledom.Resale {
+	if q == nil || q.productRepo == nil {
+		return item
+	}
+
+	productID := item.ProductID
+	if productID == "" {
+		return item
+	}
+
+	product, err := q.productRepo.GetByID(ctx, productID)
+	if err != nil {
+		return item
+	}
+
+	item.ModelID = product.ModelID
+
+	if q.modelRepo == nil || product.ModelID == "" {
+		return item
+	}
+
+	modelVariation, err := q.modelRepo.GetByID(ctx, product.ModelID)
+	if err != nil {
+		return item
+	}
+
+	item = applyModelVariationToResale(item, modelVariation)
+
+	return item
+}
+
+func applyModelVariationToResale(
+	item resaledom.Resale,
+	modelVariation modeldom.ModelVariation,
+) resaledom.Resale {
+	if modelVariation == nil {
+		return item
+	}
+
+	item.ModelID = modelVariation.GetID()
+	item.ProductBlueprintID = firstNonEmpty(
+		item.ProductBlueprintID,
+		modelVariation.GetProductBlueprintID(),
+	)
+	item.ModelNumber = modelVariation.GetModelNumber()
+
+	switch mv := modelVariation.(type) {
+	case modeldom.ApparelModelVariation:
+		item = applyApparelModelVariationToResale(item, mv)
+
+	case *modeldom.ApparelModelVariation:
+		if mv != nil {
+			item = applyApparelModelVariationToResale(item, *mv)
+		}
+
+	case modeldom.AlcoholModelVariation:
+		item = applyAlcoholModelVariationToResale(item, mv)
+
+	case *modeldom.AlcoholModelVariation:
+		if mv != nil {
+			item = applyAlcoholModelVariationToResale(item, *mv)
+		}
+	}
+
+	return item
+}
+
+func applyApparelModelVariationToResale(
+	item resaledom.Resale,
+	modelVariation modeldom.ApparelModelVariation,
+) resaledom.Resale {
+	item.Kind = string(modeldom.ModelVariationKindApparel)
+	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
+	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
+	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
+	item.Size = modelVariation.Size
+	item.Color = &resaledom.ResaleColor{
+		Name: modelVariation.Color.Name,
+		RGB:  modelVariation.Color.RGB,
+	}
+	item.Measurements = modelVariation.Measurements
+
+	return item
+}
+
+func applyAlcoholModelVariationToResale(
+	item resaledom.Resale,
+	modelVariation modeldom.AlcoholModelVariation,
+) resaledom.Resale {
+	item.Kind = string(modeldom.ModelVariationKindAlcohol)
+	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
+	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
+	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
+	item.Volume = &resaledom.ResaleVolume{
+		Amount: modelVariation.Volume.Value,
+		Unit:   modelVariation.Volume.Unit,
+	}
 
 	return item
 }
@@ -172,7 +281,7 @@ func (q *ResaleQuery) enrichResaleWithProductName(
 		return item
 	}
 
-	productBlueprintID := strings.TrimSpace(item.ProductBlueprintID)
+	productBlueprintID := item.ProductBlueprintID
 	if productBlueprintID == "" {
 		return item
 	}
@@ -182,7 +291,7 @@ func (q *ResaleQuery) enrichResaleWithProductName(
 		return item
 	}
 
-	item.ProductName = strings.TrimSpace(pb.ProductName)
+	item.ProductName = pb.ProductName
 
 	return item
 }
@@ -195,7 +304,7 @@ func (q *ResaleQuery) enrichResaleWithTokenBlueprint(
 		return item
 	}
 
-	tokenBlueprintID := strings.TrimSpace(item.TokenBlueprintID)
+	tokenBlueprintID := item.TokenBlueprintID
 	if tokenBlueprintID == "" {
 		return item
 	}
@@ -209,10 +318,10 @@ func (q *ResaleQuery) enrichResaleWithTokenBlueprint(
 		return item
 	}
 
-	item.TokenName = strings.TrimSpace(tb.Name)
+	item.TokenName = tb.Name
 
-	if iconURL := strings.TrimSpace(tb.IconURL); iconURL != "" {
-		item.ImageURL = iconURL
+	if tb.IconURL != "" {
+		item.ImageURL = tb.IconURL
 	}
 
 	return item
@@ -226,7 +335,7 @@ func (q *ResaleQuery) enrichResaleWithBrandName(
 		return item
 	}
 
-	brandID := strings.TrimSpace(item.BrandID)
+	brandID := item.BrandID
 	if brandID == "" {
 		return item
 	}
@@ -236,7 +345,15 @@ func (q *ResaleQuery) enrichResaleWithBrandName(
 		return item
 	}
 
-	item.BrandName = strings.TrimSpace(brand.Name)
+	item.BrandName = brand.Name
 
 	return item
+}
+
+func firstNonEmpty(primary string, fallback string) string {
+	if primary != "" {
+		return primary
+	}
+
+	return fallback
 }

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	branddom "narratives/internal/domain/brand"
+	modeldom "narratives/internal/domain/model"
+	productdom "narratives/internal/domain/product"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 	resaledom "narratives/internal/domain/resale"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
@@ -36,6 +38,8 @@ type MarketResaleRepository interface {
 type MarketQuery struct {
 	resaleRepo           MarketResaleRepository
 	imageRepo            resaledom.ImageRepository
+	productRepo          productdom.Repository
+	modelRepo            modeldom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
 	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
 	brandRepo            branddom.Repository
@@ -44,6 +48,8 @@ type MarketQuery struct {
 func NewMarketQuery(
 	resaleRepo MarketResaleRepository,
 	imageRepo resaledom.ImageRepository,
+	productRepo productdom.Repository,
+	modelRepo modeldom.RepositoryPort,
 	productBlueprintRepo productblueprintdom.Repository,
 	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
 	brandRepo branddom.Repository,
@@ -51,6 +57,8 @@ func NewMarketQuery(
 	return &MarketQuery{
 		resaleRepo:           resaleRepo,
 		imageRepo:            imageRepo,
+		productRepo:          productRepo,
+		modelRepo:            modelRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		brandRepo:            brandRepo,
@@ -219,10 +227,115 @@ func (q *MarketQuery) enrichResaleForDisplay(
 	ctx context.Context,
 	item resaledom.Resale,
 ) resaledom.Resale {
+	item = q.enrichResaleWithProductAndModel(ctx, item)
 	item = q.enrichResaleWithProductName(ctx, item)
 	item = q.enrichResaleWithTokenName(ctx, item)
 	item = q.enrichResaleWithBrandName(ctx, item)
 	item = q.enrichResaleWithImageURL(ctx, item)
+
+	return item
+}
+
+func (q *MarketQuery) enrichResaleWithProductAndModel(
+	ctx context.Context,
+	item resaledom.Resale,
+) resaledom.Resale {
+	if q == nil || q.productRepo == nil {
+		return item
+	}
+
+	productID := strings.TrimSpace(item.ProductID)
+	if productID == "" {
+		return item
+	}
+
+	product, err := q.productRepo.GetByID(ctx, productID)
+	if err != nil {
+		return item
+	}
+
+	item.ModelID = product.ModelID
+
+	if q.modelRepo == nil || product.ModelID == "" {
+		return item
+	}
+
+	modelVariation, err := q.modelRepo.GetByID(ctx, product.ModelID)
+	if err != nil {
+		return item
+	}
+
+	item = applyMarketModelVariationToResale(item, modelVariation)
+
+	return item
+}
+
+func applyMarketModelVariationToResale(
+	item resaledom.Resale,
+	modelVariation modeldom.ModelVariation,
+) resaledom.Resale {
+	if modelVariation == nil {
+		return item
+	}
+
+	item.ModelID = modelVariation.GetID()
+	item.ProductBlueprintID = firstNonEmpty(
+		item.ProductBlueprintID,
+		modelVariation.GetProductBlueprintID(),
+	)
+	item.ModelNumber = modelVariation.GetModelNumber()
+
+	switch mv := modelVariation.(type) {
+	case modeldom.ApparelModelVariation:
+		item = applyMarketApparelModelVariationToResale(item, mv)
+
+	case *modeldom.ApparelModelVariation:
+		if mv != nil {
+			item = applyMarketApparelModelVariationToResale(item, *mv)
+		}
+
+	case modeldom.AlcoholModelVariation:
+		item = applyMarketAlcoholModelVariationToResale(item, mv)
+
+	case *modeldom.AlcoholModelVariation:
+		if mv != nil {
+			item = applyMarketAlcoholModelVariationToResale(item, *mv)
+		}
+	}
+
+	return item
+}
+
+func applyMarketApparelModelVariationToResale(
+	item resaledom.Resale,
+	modelVariation modeldom.ApparelModelVariation,
+) resaledom.Resale {
+	item.Kind = string(modeldom.ModelVariationKindApparel)
+	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
+	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
+	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
+	item.Size = modelVariation.Size
+	item.Color = &resaledom.ResaleColor{
+		Name: modelVariation.Color.Name,
+		RGB:  modelVariation.Color.RGB,
+	}
+	item.Measurements = modelVariation.Measurements
+
+	return item
+}
+
+func applyMarketAlcoholModelVariationToResale(
+	item resaledom.Resale,
+	modelVariation modeldom.AlcoholModelVariation,
+) resaledom.Resale {
+	item.Kind = string(modeldom.ModelVariationKindAlcohol)
+	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
+	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
+	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
+	item.Volume = &resaledom.ResaleVolume{
+		Amount: modelVariation.Volume.Value,
+		Unit:   modelVariation.Volume.Unit,
+	}
 
 	return item
 }

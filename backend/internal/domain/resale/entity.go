@@ -89,6 +89,18 @@ var (
 	MaxImageIDLength     = 128
 )
 
+// ResaleColor is a display-only color value resolved from model variation.
+type ResaleColor struct {
+	Name string `json:"name,omitempty"`
+	RGB  int    `json:"rgb,omitempty"`
+}
+
+// ResaleVolume is a display-only volume value resolved from model variation.
+type ResaleVolume struct {
+	Amount int    `json:"amount,omitempty"`
+	Unit   string `json:"unit,omitempty"`
+}
+
 // Resale is the resale listing aggregate root.
 //
 // Delete policy:
@@ -117,11 +129,20 @@ type Resale struct {
 	// Primary resale image record id. This is not a URL.
 	ImageID string `json:"imageId,omitempty"`
 
-	// Display-only fields.
+	// Display-only fields resolved by mall resale query.
 	ProductName string `json:"productName,omitempty"`
 	TokenName   string `json:"tokenName,omitempty"`
 	BrandName   string `json:"brandName,omitempty"`
 	ImageURL    string `json:"imageUrl,omitempty"`
+
+	// Display-only model fields resolved from product.modelId -> model variation.
+	ModelID      string         `json:"modelId,omitempty"`
+	Kind         string         `json:"kind,omitempty"`
+	ModelNumber  string         `json:"modelNumber,omitempty"`
+	Size         string         `json:"size,omitempty"`
+	Color        *ResaleColor   `json:"color,omitempty"`
+	Measurements map[string]int `json:"measurements,omitempty"`
+	Volume       *ResaleVolume  `json:"volume,omitempty"`
 
 	CreatedBy string    `json:"createdBy,omitempty"`
 	CreatedAt time.Time `json:"createdAt,omitempty"`
@@ -172,6 +193,13 @@ func NewForCreate(
 		TokenName:          "",
 		BrandName:          "",
 		ImageURL:           "",
+		ModelID:            "",
+		Kind:               "",
+		ModelNumber:        "",
+		Size:               "",
+		Color:              nil,
+		Measurements:       nil,
+		Volume:             nil,
 		CreatedBy:          createdBy,
 		CreatedAt:          time.Time{},
 	}
@@ -299,6 +327,7 @@ func (r Resale) ValidateImageLink() error {
 //   - BrandID and ProductBlueprintID are optional because the frontend can submit
 //     a resale listing from token context where productId and tokenBlueprintId are
 //     the required listing target.
+//   - Model display fields are query-only and are not validated here.
 func (r Resale) ValidateForCreate() error {
 	if r.Status != "" && !IsValidStatus(r.Status) {
 		return ErrInvalidStatus
@@ -360,6 +389,7 @@ func (r Resale) ValidateForCreate() error {
 }
 
 // ValidateForPersist validates a fully persisted Resale.
+//   - Model display fields are query-only and are not validated here.
 func (r Resale) ValidateForPersist() error {
 	if r.ID == "" {
 		return ErrInvalidID
