@@ -1,4 +1,4 @@
-//frontend\amol\src\pages\ChatListPage.tsx
+// frontend/amol/src/pages/ChatListPage.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,12 +10,6 @@ import {
   type Inquiry,
   type InquiryReply,
 } from "../features/inquiry/api/inquiryApi";
-import {
-  listReceivedMessages,
-  listSentMessages,
-  markMessageAsRead,
-  type Message,
-} from "../features/message/api/messageApi";
 
 import "../styles/page-layout.css";
 import "../styles/chat-list-page.css";
@@ -36,29 +30,7 @@ type InquiryChatListItem = Inquiry & {
   replies: InquiryReply[];
 };
 
-type MessageThreadListItem = {
-  chatKind: "message";
-  id: string;
-  peerAvatarId: string;
-  peerAvatarName?: string | null;
-  peerAvatarIcon?: string | null;
-  messages: Message[];
-  unreadMessageIds: string[];
-  latestMessage?: Message;
-  isRead: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-type MessageThreadDraft = {
-  peerAvatarId: string;
-  peerAvatarName?: string | null;
-  peerAvatarIcon?: string | null;
-  messages: Message[];
-  unreadMessageIds: string[];
-};
-
-type ChatListItem = InquiryChatListItem | MessageThreadListItem;
+type ChatListItem = InquiryChatListItem;
 
 export default function ChatListPage() {
   const navigate = useNavigate();
@@ -82,16 +54,13 @@ export default function ChatListPage() {
     setError("");
 
     try {
-      const [inquiries, messageThreads] = await Promise.all([
-        loadInquiryItems(signal),
-        loadMessageThreadItems(),
-      ]);
+      const inquiries = await loadInquiryItems(signal);
 
       if (signal?.aborted) {
         return;
       }
 
-      setItems([...inquiries, ...messageThreads]);
+      setItems(inquiries);
     } catch (caught) {
       if (signal?.aborted) {
         return;
@@ -130,12 +99,7 @@ export default function ChatListPage() {
       setError("");
 
       try {
-        if (item.chatKind === "inquiry") {
-          await openInquiryChat(item, setItems, navigate);
-          return;
-        }
-
-        await openMessageThread(item, setItems, navigate);
+        await openInquiryChat(item, setItems, navigate);
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -339,15 +303,6 @@ async function loadInquiryItems(
   );
 }
 
-async function loadMessageThreadItems(): Promise<MessageThreadListItem[]> {
-  const [received, sent] = await Promise.all([
-    listReceivedMessages({ limit: 100 }),
-    listSentMessages({ limit: 100 }),
-  ]);
-
-  return buildMessageThreads(received.messages, sent.messages);
-}
-
 async function openInquiryChat(
   item: InquiryChatListItem,
   setItems: React.Dispatch<React.SetStateAction<ChatListItem[]>>,
@@ -377,9 +332,7 @@ async function openInquiryChat(
 
     setItems((current) =>
       current.map((currentItem) =>
-        currentItem.chatKind === "inquiry" && currentItem.id === inquiryId
-          ? nextItem
-          : currentItem,
+        currentItem.id === inquiryId ? nextItem : currentItem,
       ),
     );
   }
@@ -396,215 +349,23 @@ async function openInquiryChat(
   });
 }
 
-async function openMessageThread(
-  item: MessageThreadListItem,
-  setItems: React.Dispatch<React.SetStateAction<ChatListItem[]>>,
-  navigate: ReturnType<typeof useNavigate>,
-): Promise<void> {
-  const now = new Date().toISOString();
-
-  if (item.unreadMessageIds.length > 0) {
-    await Promise.all(item.unreadMessageIds.map((id) => markMessageAsRead(id)));
-  }
-
-  const nextItem: MessageThreadListItem = {
-    ...item,
-    isRead: true,
-    unreadMessageIds: [],
-    messages: item.messages.map((message) =>
-      item.unreadMessageIds.includes(message.id)
-        ? {
-            ...message,
-            isRead: true,
-            readAt: message.readAt ?? now,
-            updatedAt: message.updatedAt ?? now,
-          }
-        : message,
-    ),
-  };
-
-  setItems((current) =>
-    current.map((currentItem) =>
-      currentItem.chatKind === "message" && currentItem.id === item.id
-        ? nextItem
-        : currentItem,
-    ),
-  );
-
-  navigate(`/chats/messages/${item.peerAvatarId}`, {
-    state: {
-      messageThread: {
-        peerAvatarId: item.peerAvatarId,
-        peerAvatarName: item.peerAvatarName,
-        peerAvatarIcon: item.peerAvatarIcon,
-        messages: nextItem.messages,
-      },
-    },
-  });
-}
-
-function buildMessageThreads(
-  received: Message[],
-  sent: Message[],
-): MessageThreadListItem[] {
-  const threads = new Map<string, MessageThreadDraft>();
-
-  for (const message of received) {
-    const peerAvatarId =
-      textOrEmpty(message.peerAvatarId) || textOrEmpty(message.senderAvatarId);
-    if (!peerAvatarId) {
-      continue;
-    }
-
-    const thread = getOrCreateThread(threads, peerAvatarId);
-    rememberPeerAvatar(
-      thread,
-      message.peerAvatarName || message.senderAvatarName,
-      message.peerAvatarIcon || message.senderAvatarIcon,
-    );
-
-    thread.messages.push(message);
-
-    if (message.isRead === false && message.id) {
-      thread.unreadMessageIds.push(message.id);
-    }
-  }
-
-  for (const message of sent) {
-    const peerAvatarId =
-      textOrEmpty(message.peerAvatarId) || textOrEmpty(message.receiverAvatarId);
-    if (!peerAvatarId) {
-      continue;
-    }
-
-    const thread = getOrCreateThread(threads, peerAvatarId);
-    rememberPeerAvatar(
-      thread,
-      message.peerAvatarName || message.receiverAvatarName,
-      message.peerAvatarIcon || message.receiverAvatarIcon,
-    );
-
-    thread.messages.push(message);
-  }
-
-  return Array.from(threads.values()).map((thread) => {
-    const messages = sortMessagesDesc(dedupeMessages(thread.messages));
-    const latestMessage = messages[0];
-
-    return {
-      chatKind: "message",
-      id: `message:${thread.peerAvatarId}`,
-      peerAvatarId: thread.peerAvatarId,
-      peerAvatarName: thread.peerAvatarName,
-      peerAvatarIcon: thread.peerAvatarIcon,
-      messages,
-      unreadMessageIds: Array.from(new Set(thread.unreadMessageIds)),
-      latestMessage,
-      isRead: thread.unreadMessageIds.length === 0,
-      createdAt: latestMessage?.createdAt,
-      updatedAt: latestMessage?.updatedAt,
-    };
-  });
-}
-
-function getOrCreateThread(
-  threads: Map<string, MessageThreadDraft>,
-  peerAvatarId: string,
-): MessageThreadDraft {
-  const current = threads.get(peerAvatarId);
-  if (current) {
-    return current;
-  }
-
-  const next: MessageThreadDraft = {
-    peerAvatarId,
-    messages: [],
-    unreadMessageIds: [],
-  };
-
-  threads.set(peerAvatarId, next);
-  return next;
-}
-
-function rememberPeerAvatar(
-  thread: Pick<
-    MessageThreadDraft,
-    "peerAvatarId" | "peerAvatarName" | "peerAvatarIcon"
-  >,
-  name?: string | null,
-  icon?: string | null,
-) {
-  if (!thread.peerAvatarName) {
-    thread.peerAvatarName = textOrEmpty(name) || null;
-  }
-
-  if (!thread.peerAvatarIcon) {
-    thread.peerAvatarIcon = textOrEmpty(icon) || null;
-  }
-}
-
-function dedupeMessages(messages: Message[]): Message[] {
-  const byID = new Map<string, Message>();
-
-  for (const message of messages) {
-    const key =
-      message.id ||
-      `${message.senderAvatarId}:${message.receiverAvatarId}:${message.createdAt}`;
-
-    if (!byID.has(key)) {
-      byID.set(key, message);
-    }
-  }
-
-  return Array.from(byID.values());
-}
-
-function sortMessagesDesc(messages: Message[]): Message[] {
-  return [...messages].sort((a, b) => {
-    const aTime = getComparableTime(a.updatedAt || a.createdAt);
-    const bTime = getComparableTime(b.updatedAt || b.createdAt);
-
-    return bTime - aTime;
-  });
-}
-
 function getChatTitle(item: ChatListItem): string {
-  if (item.chatKind === "message") {
-    return getMessageThreadTitle(item);
-  }
-
   return getInquiryTitle(item);
 }
 
 function getChatPreview(item: ChatListItem): string {
-  if (item.chatKind === "message") {
-    return getMessagePreview(item);
-  }
-
   return getInquiryPreview(item);
 }
 
 function getChatSubLabel(item: ChatListItem): string {
-  if (item.chatKind === "message") {
-    return "メッセージ";
-  }
-
   return getInquirySubLabel(item);
 }
 
 function getChatStatusLabel(item: ChatListItem): string {
-  if (item.chatKind === "message") {
-    return "";
-  }
-
   return getStatusLabel(item.status);
 }
 
 function getChatCountLabel(item: ChatListItem): string {
-  if (item.chatKind === "message") {
-    return item.messages.length > 0 ? `メッセージ ${item.messages.length} 件` : "";
-  }
-
   return item.replies.length > 0 ? `返信 ${item.replies.length} 件` : "";
 }
 
@@ -647,40 +408,7 @@ function getInquiryPreview(item: InquiryChatListItem): string {
   return "メッセージはありません";
 }
 
-function getMessageThreadTitle(item: MessageThreadListItem): string {
-  const peerAvatarName = textOrEmpty(item.peerAvatarName);
-  if (peerAvatarName) {
-    return peerAvatarName;
-  }
-
-  const peerAvatarId = textOrEmpty(item.peerAvatarId);
-  if (peerAvatarId) {
-    return peerAvatarId;
-  }
-
-  return "メッセージ";
-}
-
-function getMessagePreview(item: MessageThreadListItem): string {
-  const latest = item.latestMessage ?? item.messages[0];
-
-  const body = textOrEmpty(latest?.body);
-  if (body) {
-    return body;
-  }
-
-  if (Array.isArray(latest?.images) && latest.images.length > 0) {
-    return `画像 ${latest.images.length} 件`;
-  }
-
-  return "メッセージはありません";
-}
-
-function getChatAvatarIcon(item: ChatListItem): string {
-  if (item.chatKind === "message") {
-    return textOrEmpty(item.peerAvatarIcon);
-  }
-
+function getChatAvatarIcon(_item: ChatListItem): string {
   return "";
 }
 
@@ -718,15 +446,6 @@ function getInitial(value: string): string {
 }
 
 function getLatestActivityAt(item: ChatListItem): string | null | undefined {
-  if (item.chatKind === "message") {
-    return (
-      item.latestMessage?.updatedAt ||
-      item.latestMessage?.createdAt ||
-      item.updatedAt ||
-      item.createdAt
-    );
-  }
-
   const latestReply = getLatestReply(item.replies);
 
   return (

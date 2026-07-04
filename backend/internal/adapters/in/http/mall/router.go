@@ -42,9 +42,6 @@ type Deps struct {
 
 	AvatarState http.Handler
 
-	// me: /mall/me/messages
-	Message http.Handler
-
 	// public: /mall/wallets
 	Wallet http.Handler
 
@@ -278,10 +275,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// avatar states (me)
 	handleSafeAuthAvatar(mux, "/mall/me/avatar-states", deps.AvatarState, "AvatarState(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/avatar-states/", deps.AvatarState, "AvatarState(me)", auth, avatar)
-
-	// messages (me)
-	handleSafeAuthAvatar(mux, "/mall/me/messages", deps.Message, "Message(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/messages/", deps.Message, "Message(me)", auth, avatar)
 
 	// wallet (me)
 	handleSafeAuthAvatar(mux, "/mall/me/wallets", deps.MeWallet, "MeWallet", auth, avatar)

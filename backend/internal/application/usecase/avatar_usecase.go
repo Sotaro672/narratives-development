@@ -8,14 +8,12 @@ import (
 	"time"
 
 	avatardom "narratives/internal/domain/avatar"
-	avatarstate "narratives/internal/domain/avatarState"
 	cartdom "narratives/internal/domain/cart"
 	walletdom "narratives/internal/domain/wallet"
 )
 
 type AvatarUsecase struct {
 	avRepo AvatarRepo
-	stRepo AvatarStateRepo
 
 	walletSvc  AvatarWalletService
 	walletRepo WalletRepo
@@ -27,7 +25,6 @@ type AvatarUsecase struct {
 
 func NewAvatarUsecase(
 	avRepo AvatarRepo,
-	stRepo AvatarStateRepo,
 	walletSvc AvatarWalletService,
 	walletRepo WalletRepo,
 	cartRepo AvatarCartRepo,
@@ -39,7 +36,6 @@ func NewAvatarUsecase(
 
 	return &AvatarUsecase{
 		avRepo:     avRepo,
-		stRepo:     stRepo,
 		walletSvc:  walletSvc,
 		walletRepo: walletRepo,
 		cartRepo:   cartRepo,
@@ -52,22 +48,6 @@ type AvatarRepo interface {
 	Create(ctx context.Context, a avatardom.Avatar) (avatardom.Avatar, error)
 	Update(ctx context.Context, id string, patch avatardom.AvatarPatch) (avatardom.Avatar, error)
 	Delete(ctx context.Context, id string) error
-}
-
-type AvatarStateRepo interface {
-	GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error)
-	Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error)
-	Delete(ctx context.Context, avatarID string) error
-}
-
-type AvatarStatePatch struct {
-	FollowerCount  *int64
-	FollowingCount *int64
-	PostCount      *int64
-	Followers      *[]avatarstate.AvatarFollowRef
-	Following      *[]avatarstate.AvatarFollowRef
-	LastActiveAt   *time.Time
-	UpdatedAt      *time.Time
 }
 
 type WalletRepo interface {
@@ -83,11 +63,6 @@ type AvatarWalletService interface {
 	OpenAvatarWallet(ctx context.Context, avatarID string) (avatardom.SolanaAvatarWallet, error)
 }
 
-type AvatarAggregate struct {
-	Avatar avatardom.Avatar
-	State  *avatarstate.AvatarState
-}
-
 func (u *AvatarUsecase) GetByID(ctx context.Context, id string) (avatardom.Avatar, error) {
 	if id == "" {
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
@@ -95,27 +70,8 @@ func (u *AvatarUsecase) GetByID(ctx context.Context, id string) (avatardom.Avata
 	if u.avRepo == nil {
 		return avatardom.Avatar{}, errors.New("avatar repo not configured")
 	}
+
 	return u.avRepo.GetByID(ctx, id)
-}
-
-func (u *AvatarUsecase) GetAggregate(ctx context.Context, id string) (AvatarAggregate, error) {
-	a, err := u.GetByID(ctx, id)
-	if err != nil {
-		return AvatarAggregate{}, err
-	}
-
-	var stPtr *avatarstate.AvatarState
-	if u.stRepo != nil {
-		if st, err := u.stRepo.GetByAvatarID(ctx, id); err == nil && st.ID != "" {
-			tmp := st
-			stPtr = &tmp
-		}
-	}
-
-	return AvatarAggregate{
-		Avatar: a,
-		State:  stPtr,
-	}, nil
 }
 
 var (
@@ -124,292 +80,6 @@ var (
 	ErrAvatarWalletAddressEmpty   = errors.New("avatar: opened wallet address is empty")
 )
 
-func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
-	if avatarID == "" {
-		return avatarstate.AvatarState{}, avatardom.ErrInvalidID
-	}
-	if u.stRepo == nil {
-		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
-	}
-
-	now := u.now().UTC()
-
-	state := avatarstate.AvatarState{
-		ID:           avatarID,
-		LastActiveAt: now,
-		UpdatedAt:    &now,
-	}
-
-	return u.stRepo.Upsert(ctx, state)
-}
-
-func (u *AvatarUsecase) UpdateAvatarState(
-	ctx context.Context,
-	avatarID string,
-	patch AvatarStatePatch,
-) (avatarstate.AvatarState, error) {
-	if avatarID == "" {
-		return avatarstate.AvatarState{}, avatardom.ErrInvalidID
-	}
-	if u.stRepo == nil {
-		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
-	}
-	if u.avRepo == nil {
-		return avatarstate.AvatarState{}, errors.New("avatar repo not configured")
-	}
-
-	if _, err := u.avRepo.GetByID(ctx, avatarID); err != nil {
-		return avatarstate.AvatarState{}, err
-	}
-
-	now := u.now().UTC()
-
-	current, err := u.stRepo.GetByAvatarID(ctx, avatarID)
-	if err != nil && !isAvatarStateNotFound(err) {
-		return avatarstate.AvatarState{}, err
-	}
-	if err != nil && isAvatarStateNotFound(err) {
-		current = avatarstate.AvatarState{
-			ID:           avatarID,
-			LastActiveAt: now,
-			UpdatedAt:    &now,
-		}
-	}
-	if current.ID == "" {
-		current.ID = avatarID
-	}
-
-	followerCount := current.FollowerCount
-	followingCount := current.FollowingCount
-	postCount := current.PostCount
-	followers := cloneAvatarFollowRefs(current.Followers)
-	following := cloneAvatarFollowRefs(current.Following)
-	lastActiveAt := current.LastActiveAt
-	updatedAt := current.UpdatedAt
-
-	if patch.FollowerCount != nil {
-		followerCount = patch.FollowerCount
-	}
-	if patch.FollowingCount != nil {
-		followingCount = patch.FollowingCount
-	}
-	if patch.PostCount != nil {
-		postCount = patch.PostCount
-	}
-	if patch.Followers != nil {
-		followers = cloneAvatarFollowRefs(*patch.Followers)
-		followerCount = nil
-	}
-	if patch.Following != nil {
-		following = cloneAvatarFollowRefs(*patch.Following)
-		followingCount = nil
-	}
-	if patch.LastActiveAt != nil {
-		lastActiveAt = patch.LastActiveAt.UTC()
-	}
-	if lastActiveAt.IsZero() {
-		lastActiveAt = now
-	}
-	if patch.UpdatedAt != nil {
-		t := patch.UpdatedAt.UTC()
-		updatedAt = &t
-	} else {
-		t := now
-		updatedAt = &t
-	}
-
-	next, nerr := avatarstate.New(
-		avatarID,
-		followerCount,
-		followingCount,
-		postCount,
-		followers,
-		following,
-		lastActiveAt,
-		updatedAt,
-	)
-	if nerr != nil {
-		return avatarstate.AvatarState{}, nerr
-	}
-
-	return u.stRepo.Upsert(ctx, next)
-}
-
-type FollowAvatarOutput struct {
-	MeAvatarID     string
-	TargetAvatarID string
-	Following      bool
-	MeState        avatarstate.AvatarState
-	TargetState    avatarstate.AvatarState
-}
-
-func (u *AvatarUsecase) FollowAvatar(
-	ctx context.Context,
-	meAvatarID string,
-	targetAvatarID string,
-) (FollowAvatarOutput, error) {
-	if meAvatarID == "" || targetAvatarID == "" {
-		return FollowAvatarOutput{}, avatardom.ErrInvalidID
-	}
-	if meAvatarID == targetAvatarID {
-		return FollowAvatarOutput{}, avatarstate.ErrSelfFollowingRelation
-	}
-	if u.avRepo == nil {
-		return FollowAvatarOutput{}, errors.New("avatar repo not configured")
-	}
-	if u.stRepo == nil {
-		return FollowAvatarOutput{}, errors.New("avatarState repo not configured")
-	}
-
-	if _, err := u.avRepo.GetByID(ctx, meAvatarID); err != nil {
-		return FollowAvatarOutput{}, err
-	}
-	if _, err := u.avRepo.GetByID(ctx, targetAvatarID); err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	now := u.now().UTC()
-
-	meState, err := u.getAvatarStateForMutation(ctx, meAvatarID, now)
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	targetState, err := u.getAvatarStateForMutation(ctx, targetAvatarID, now)
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	myFollowing := upsertFollowRef(meState.Following, avatarstate.AvatarFollowRef{
-		AvatarID:   targetAvatarID,
-		FollowedAt: now,
-	})
-
-	targetFollowers := upsertFollowRef(targetState.Followers, avatarstate.AvatarFollowRef{
-		AvatarID:   meAvatarID,
-		FollowedAt: now,
-	})
-
-	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, AvatarStatePatch{
-		Following:    &myFollowing,
-		LastActiveAt: &now,
-		UpdatedAt:    &now,
-	})
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, AvatarStatePatch{
-		Followers:    &targetFollowers,
-		LastActiveAt: &now,
-		UpdatedAt:    &now,
-	})
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	return FollowAvatarOutput{
-		MeAvatarID:     meAvatarID,
-		TargetAvatarID: targetAvatarID,
-		Following:      true,
-		MeState:        updatedMeState,
-		TargetState:    updatedTargetState,
-	}, nil
-}
-
-func (u *AvatarUsecase) UnfollowAvatar(
-	ctx context.Context,
-	meAvatarID string,
-	targetAvatarID string,
-) (FollowAvatarOutput, error) {
-	if meAvatarID == "" || targetAvatarID == "" {
-		return FollowAvatarOutput{}, avatardom.ErrInvalidID
-	}
-	if meAvatarID == targetAvatarID {
-		return FollowAvatarOutput{}, avatarstate.ErrSelfFollowingRelation
-	}
-	if u.avRepo == nil {
-		return FollowAvatarOutput{}, errors.New("avatar repo not configured")
-	}
-	if u.stRepo == nil {
-		return FollowAvatarOutput{}, errors.New("avatarState repo not configured")
-	}
-
-	if _, err := u.avRepo.GetByID(ctx, meAvatarID); err != nil {
-		return FollowAvatarOutput{}, err
-	}
-	if _, err := u.avRepo.GetByID(ctx, targetAvatarID); err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	now := u.now().UTC()
-
-	meState, err := u.getAvatarStateForMutation(ctx, meAvatarID, now)
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	targetState, err := u.getAvatarStateForMutation(ctx, targetAvatarID, now)
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	myFollowing := removeFollowRef(meState.Following, targetAvatarID)
-	targetFollowers := removeFollowRef(targetState.Followers, meAvatarID)
-
-	updatedMeState, err := u.UpdateAvatarState(ctx, meAvatarID, AvatarStatePatch{
-		Following:    &myFollowing,
-		LastActiveAt: &now,
-		UpdatedAt:    &now,
-	})
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	updatedTargetState, err := u.UpdateAvatarState(ctx, targetAvatarID, AvatarStatePatch{
-		Followers:    &targetFollowers,
-		LastActiveAt: &now,
-		UpdatedAt:    &now,
-	})
-	if err != nil {
-		return FollowAvatarOutput{}, err
-	}
-
-	return FollowAvatarOutput{
-		MeAvatarID:     meAvatarID,
-		TargetAvatarID: targetAvatarID,
-		Following:      false,
-		MeState:        updatedMeState,
-		TargetState:    updatedTargetState,
-	}, nil
-}
-
-func (u *AvatarUsecase) getAvatarStateForMutation(
-	ctx context.Context,
-	avatarID string,
-	now time.Time,
-) (avatarstate.AvatarState, error) {
-	st, err := u.stRepo.GetByAvatarID(ctx, avatarID)
-	if err == nil {
-		if st.ID == "" {
-			st.ID = avatarID
-		}
-		return st, nil
-	}
-
-	if !isAvatarStateNotFound(err) {
-		return avatarstate.AvatarState{}, err
-	}
-
-	return avatarstate.AvatarState{
-		ID:           avatarID,
-		Followers:    []avatarstate.AvatarFollowRef{},
-		Following:    []avatarstate.AvatarFollowRef{},
-		LastActiveAt: now.UTC(),
-		UpdatedAt:    &now,
-	}, nil
-}
-
 func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string) error {
 	if avatarID == "" {
 		return avatardom.ErrInvalidID
@@ -417,10 +87,6 @@ func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string
 
 	if u.cartRepo != nil {
 		_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
-	}
-
-	if u.stRepo != nil {
-		_ = u.stRepo.Delete(ctx, avatarID)
 	}
 
 	if u.avRepo == nil {
@@ -443,9 +109,6 @@ type CreateAvatarInput struct {
 func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avatardom.Avatar, error) {
 	if u.avRepo == nil {
 		return avatardom.Avatar{}, errors.New("avatar repo not configured")
-	}
-	if u.stRepo == nil {
-		return avatardom.Avatar{}, errors.New("avatarState repo not configured")
 	}
 	if u.walletSvc == nil {
 		return avatardom.Avatar{}, ErrAvatarWalletServiceMissing
@@ -511,34 +174,9 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		if u.cartRepo != nil {
 			_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
 		}
-		if u.stRepo != nil {
-			_ = u.stRepo.Delete(ctx, avatarID)
-		}
 		if u.avRepo != nil {
 			_ = u.avRepo.Delete(ctx, avatarID)
 		}
-	}
-
-	zero := int64(0)
-
-	as, aerr := avatarstate.New(
-		avatarID,
-		&zero,
-		&zero,
-		&zero,
-		[]avatarstate.AvatarFollowRef{},
-		[]avatarstate.AvatarFollowRef{},
-		now,
-		&now,
-	)
-	if aerr != nil {
-		rollback()
-		return avatardom.Avatar{}, aerr
-	}
-
-	if _, err := u.stRepo.Upsert(ctx, as); err != nil {
-		rollback()
-		return avatardom.Avatar{}, err
 	}
 
 	cart, cerr := cartdom.NewCart(avatarID, nil, now)
@@ -617,83 +255,4 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 
 func (u *AvatarUsecase) Delete(ctx context.Context, avatarID string) error {
 	return u.DeleteAvatarCascade(ctx, avatarID)
-}
-
-func isAvatarStateNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, avatarstate.ErrNotFound) {
-		return true
-	}
-
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not found") || strings.Contains(msg, "not_found")
-}
-
-func cloneAvatarFollowRefs(in []avatarstate.AvatarFollowRef) []avatarstate.AvatarFollowRef {
-	if len(in) == 0 {
-		return []avatarstate.AvatarFollowRef{}
-	}
-
-	out := make([]avatarstate.AvatarFollowRef, 0, len(in))
-	for _, item := range in {
-		out = append(out, avatarstate.AvatarFollowRef{
-			AvatarID:   item.AvatarID,
-			FollowedAt: item.FollowedAt.UTC(),
-		})
-	}
-
-	return out
-}
-
-func upsertFollowRef(items []avatarstate.AvatarFollowRef, ref avatarstate.AvatarFollowRef) []avatarstate.AvatarFollowRef {
-	out := make([]avatarstate.AvatarFollowRef, 0, len(items)+1)
-	found := false
-
-	for _, item := range items {
-		if item.AvatarID == ref.AvatarID {
-			out = append(out, avatarstate.AvatarFollowRef{
-				AvatarID:   item.AvatarID,
-				FollowedAt: ref.FollowedAt.UTC(),
-			})
-			found = true
-			continue
-		}
-
-		out = append(out, avatarstate.AvatarFollowRef{
-			AvatarID:   item.AvatarID,
-			FollowedAt: item.FollowedAt.UTC(),
-		})
-	}
-
-	if !found {
-		out = append(out, avatarstate.AvatarFollowRef{
-			AvatarID:   ref.AvatarID,
-			FollowedAt: ref.FollowedAt.UTC(),
-		})
-	}
-
-	return out
-}
-
-func removeFollowRef(items []avatarstate.AvatarFollowRef, avatarID string) []avatarstate.AvatarFollowRef {
-	if len(items) == 0 {
-		return []avatarstate.AvatarFollowRef{}
-	}
-
-	out := make([]avatarstate.AvatarFollowRef, 0, len(items))
-
-	for _, item := range items {
-		if item.AvatarID == avatarID {
-			continue
-		}
-
-		out = append(out, avatarstate.AvatarFollowRef{
-			AvatarID:   item.AvatarID,
-			FollowedAt: item.FollowedAt.UTC(),
-		})
-	}
-
-	return out
 }

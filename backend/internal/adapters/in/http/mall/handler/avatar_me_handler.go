@@ -10,10 +10,8 @@ import (
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
-	mallquery "narratives/internal/application/query/mall"
 	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
-	avatarstate "narratives/internal/domain/avatarState"
 )
 
 // Policy (me-only):
@@ -25,45 +23,31 @@ import (
 // - PATCH /mall/me/avatars は avatarName/profile/externalLink/avatarIcon を更新する
 // - avatarIcon には Firebase Storage の download URL を保存する
 //
-// Endpoints (primary only):
+// Endpoints:
 // - GET    /mall/me/avatars
 // - PATCH  /mall/me/avatars        (avatarName/profile/externalLink/avatarIcon)
 // - DELETE /mall/me/avatars
-// - GET    /mall/me/avatars/state
-// - POST   /mall/me/avatars/follow
-// - DELETE /mall/me/avatars/follow
-
-type AvatarStateResolvedQuery interface {
-	GetResolvedByAvatarID(ctx context.Context, avatarID string) (mallquery.AvatarStateResolvedView, error)
-}
 
 type MeAvatarResolver interface {
 	ResolveAvatarByUID(ctx context.Context, uid string) (avatarID string, walletAddress string, err error)
 }
 
 type MeAvatarHandler struct {
-	Repo             MeAvatarResolver
-	AvatarUC         *avataruc.AvatarUsecase
-	AvatarStateQuery AvatarStateResolvedQuery
+	Repo     MeAvatarResolver
+	AvatarUC *avataruc.AvatarUsecase
 }
 
 func NewMeAvatarHandler(
 	repo MeAvatarResolver,
 	avatarUC *avataruc.AvatarUsecase,
-	avatarStateQuery AvatarStateResolvedQuery,
 ) http.Handler {
 	return &MeAvatarHandler{
-		Repo:             repo,
-		AvatarUC:         avatarUC,
-		AvatarStateQuery: avatarStateQuery,
+		Repo:     repo,
+		AvatarUC: avatarUC,
 	}
 }
 
-const (
-	meAvatarsPath       = "/mall/me/avatars"
-	meAvatarsStatePath  = "/mall/me/avatars/state"
-	meAvatarsFollowPath = "/mall/me/avatars/follow"
-)
+const meAvatarsPath = "/mall/me/avatars"
 
 func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -99,18 +83,6 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodDelete && path0 == meAvatarsPath:
 		h.handleDelete(w, r, uid)
-		return
-
-	case r.Method == http.MethodGet && path0 == meAvatarsStatePath:
-		h.handleGetState(w, r, uid)
-		return
-
-	case r.Method == http.MethodPost && path0 == meAvatarsFollowPath:
-		h.handleFollow(w, r, uid)
-		return
-
-	case r.Method == http.MethodDelete && path0 == meAvatarsFollowPath:
-		h.handleUnfollow(w, r, uid)
 		return
 
 	default:
@@ -269,28 +241,6 @@ func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid 
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func (h *MeAvatarHandler) handleGetState(w http.ResponseWriter, r *http.Request, uid string) {
-	if h == nil || h.AvatarStateQuery == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_state_query_not_configured"})
-		return
-	}
-
-	avatarID, _, _, err := h.ResolveAvatarByUID(r.Context(), uid)
-	if err != nil {
-		writeMeAvatarErr(w, err)
-		return
-	}
-
-	out, err := h.AvatarStateQuery.GetResolvedByAvatarID(r.Context(), avatarID)
-	if err != nil {
-		writeMeAvatarErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
-}
-
 func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, uid string) {
 	type meAvatarUpdateRequest struct {
 		AvatarName   *string `json:"avatarName,omitempty"`
@@ -402,114 +352,6 @@ func (h *MeAvatarHandler) handleDelete(w http.ResponseWriter, r *http.Request, u
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *MeAvatarHandler) handleFollow(w http.ResponseWriter, r *http.Request, uid string) {
-	ctx := r.Context()
-
-	if h == nil || h.AvatarUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
-		return
-	}
-
-	var req struct {
-		TargetAvatarID string `json:"targetAvatarId"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
-		return
-	}
-
-	if req.TargetAvatarID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "targetAvatarId is required"})
-		return
-	}
-
-	myAvatarID, _, _, err := h.ResolveAvatarByUID(ctx, uid)
-	if err != nil {
-		writeMeAvatarErr(w, err)
-		return
-	}
-
-	result, err := h.AvatarUC.FollowAvatar(ctx, myAvatarID, req.TargetAvatarID)
-	if err != nil {
-		writeFollowErr(w, err)
-		return
-	}
-
-	type followResponse struct {
-		MeAvatarID     string                  `json:"meAvatarId"`
-		TargetAvatarID string                  `json:"targetAvatarId"`
-		Following      bool                    `json:"following"`
-		MeState        avatarstate.AvatarState `json:"meState"`
-		TargetState    avatarstate.AvatarState `json:"targetState"`
-	}
-
-	_ = json.NewEncoder(w).Encode(followResponse{
-		MeAvatarID:     result.MeAvatarID,
-		TargetAvatarID: result.TargetAvatarID,
-		Following:      result.Following,
-		MeState:        result.MeState,
-		TargetState:    result.TargetState,
-	})
-}
-
-func (h *MeAvatarHandler) handleUnfollow(w http.ResponseWriter, r *http.Request, uid string) {
-	ctx := r.Context()
-
-	if h == nil || h.AvatarUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
-		return
-	}
-
-	var req struct {
-		TargetAvatarID string `json:"targetAvatarId"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
-		return
-	}
-
-	if req.TargetAvatarID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "targetAvatarId is required"})
-		return
-	}
-
-	myAvatarID, _, _, err := h.ResolveAvatarByUID(ctx, uid)
-	if err != nil {
-		writeMeAvatarErr(w, err)
-		return
-	}
-
-	result, err := h.AvatarUC.UnfollowAvatar(ctx, myAvatarID, req.TargetAvatarID)
-	if err != nil {
-		writeFollowErr(w, err)
-		return
-	}
-
-	type unfollowResponse struct {
-		MeAvatarID     string                  `json:"meAvatarId"`
-		TargetAvatarID string                  `json:"targetAvatarId"`
-		Following      bool                    `json:"following"`
-		MeState        avatarstate.AvatarState `json:"meState"`
-		TargetState    avatarstate.AvatarState `json:"targetState"`
-	}
-
-	_ = json.NewEncoder(w).Encode(unfollowResponse{
-		MeAvatarID:     result.MeAvatarID,
-		TargetAvatarID: result.TargetAvatarID,
-		Following:      result.Following,
-		MeState:        result.MeState,
-		TargetState:    result.TargetState,
-	})
-}
-
 func writeMeAvatarErr(w http.ResponseWriter, err error) {
 	if err == nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -544,40 +386,6 @@ func writeMeAvatarErr(w http.ResponseWriter, err error) {
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
-		return
-	}
-}
-
-func writeFollowErr(w http.ResponseWriter, err error) {
-	if err == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
-		return
-	}
-
-	switch {
-	case errors.Is(err, avatardom.ErrInvalidID),
-		errors.Is(err, avatarstate.ErrInvalidFollowerAvatarID),
-		errors.Is(err, avatarstate.ErrInvalidFollowingAvatarID),
-		errors.Is(err, avatarstate.ErrInvalidFollowedAt),
-		errors.Is(err, avatarstate.ErrDuplicateFollowerAvatar),
-		errors.Is(err, avatarstate.ErrDuplicateFollowingAvatar),
-		errors.Is(err, avatarstate.ErrSelfFollowerRelation),
-		errors.Is(err, avatarstate.ErrSelfFollowingRelation),
-		errors.Is(err, avatarstate.ErrFollowerCountMismatch),
-		errors.Is(err, avatarstate.ErrFollowingCountMismatch):
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-
-	case isNotFoundLike(err):
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-
-	default:
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 }

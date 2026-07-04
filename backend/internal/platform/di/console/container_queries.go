@@ -152,7 +152,6 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.walletRepo,
 		res.ownerResolveQuery,
 		r.avatarRepo,
-		r.avatarStateRepo,
 		res.mintProductBlueprintResolver,
 	)
 

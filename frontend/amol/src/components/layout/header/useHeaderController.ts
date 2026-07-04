@@ -7,7 +7,7 @@ import { auth } from "../../../lib/firebase";
 import { WALLET_PATH } from "../../../lib/navigation";
 import type { HeaderActionState, HeaderProps } from "./types";
 
-type MeAvatarStateResponse = {
+type MeAvatarResponse = {
   avatarId?: string;
 };
 
@@ -30,6 +30,26 @@ function getApiBaseUrl(): string {
   }
 
   return "";
+}
+
+function unwrapData(value: unknown): unknown {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return record.data ?? value;
+}
+
+function isMeAvatarResponse(value: unknown): value is MeAvatarResponse {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return typeof record.avatarId === "string";
 }
 
 function getCartItemQty(item: CartItemDTO): number {
@@ -63,34 +83,8 @@ function sumCartItemQty(cart: CartDTO): number {
 
   return Object.values(items).reduce(
     (sum, item) => sum + getCartItemQty(item),
-    0
+    0,
   );
-}
-
-async function readResponseErrorMessage(response: Response): Promise<string> {
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    const data = (await response.json().catch(() => null)) as
-      | { error?: unknown; message?: unknown }
-      | null;
-
-    if (typeof data?.error === "string" && data.error.trim() !== "") {
-      return data.error;
-    }
-
-    if (typeof data?.message === "string" && data.message.trim() !== "") {
-      return data.message;
-    }
-  }
-
-  const text = await response.text().catch(() => "");
-
-  if (text.trim() !== "") {
-    return text;
-  }
-
-  return "リクエストに失敗しました。";
 }
 
 async function fetchCurrentAvatarId(args: {
@@ -100,7 +94,7 @@ async function fetchCurrentAvatarId(args: {
   const { apiBaseUrl, currentUser } = args;
   const idToken = await currentUser.getIdToken();
 
-  const response = await fetch(`${apiBaseUrl}/mall/me/avatars/state`, {
+  const response = await fetch(`${apiBaseUrl}/mall/me/avatars`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -110,8 +104,7 @@ async function fetchCurrentAvatarId(args: {
   });
 
   if (!response.ok) {
-    const message = await readResponseErrorMessage(response);
-    throw new Error(message || "現在のアバター情報の取得に失敗しました。");
+    throw new Error("現在のアバター情報の取得に失敗しました。");
   }
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -120,7 +113,13 @@ async function fetchCurrentAvatarId(args: {
     throw new Error("現在のアバター情報APIがJSON以外を返しました。");
   }
 
-  const data = (await response.json()) as MeAvatarStateResponse;
+  const responseBody: unknown = await response.json();
+  const data = unwrapData(responseBody);
+
+  if (!isMeAvatarResponse(data)) {
+    throw new Error("現在のアバター情報APIのレスポンス形式が不正です。");
+  }
+
   const avatarId = data.avatarId?.trim();
 
   if (!avatarId) {
@@ -155,7 +154,7 @@ async function fetchCartItemCount(args: {
         Authorization: `Bearer ${idToken}`,
       },
       credentials: "include",
-    }
+    },
   );
 
   if (!response.ok) {

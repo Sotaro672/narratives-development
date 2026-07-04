@@ -101,6 +101,7 @@ export default function CartPage() {
 
       try {
         const avatarId = await fetchCurrentAvatarId(apiBaseUrl);
+
         const itemsWithCatalog = await fetchCartItemsWithCatalog({
           apiBaseUrl,
           avatarId,
@@ -129,7 +130,7 @@ export default function CartPage() {
       }
     }
 
-    loadCart();
+    void loadCart();
 
     return () => {
       cancelled = true;
@@ -253,9 +254,10 @@ export default function CartPage() {
             <div className="cart-page-list">
               {items.map((item) => {
                 const catalog = item.catalog;
-                const model = getModelVariation(catalog, item.modelId);
+                const modelId = item.modelId || "";
+                const model = getModelVariation(catalog, modelId);
                 const imageUrl = getPrimaryCatalogImage(catalog);
-                const catalogPrice = getModelPrice(catalog, item.modelId);
+                const catalogPrice = getModelPrice(catalog, modelId);
                 const price = catalogPrice ?? item.price ?? null;
                 const lineAmount = price === null ? null : price * item.qty;
                 const isRemoving = removingItemKey === item.itemKey;
@@ -282,7 +284,7 @@ export default function CartPage() {
                       disabled={removingItemKey !== ""}
                       onClick={(event) => {
                         event.stopPropagation();
-                        handleRemoveItem(item);
+                        void handleRemoveItem(item);
                       }}
                     >
                       {isRemoving ? "…" : "×"}

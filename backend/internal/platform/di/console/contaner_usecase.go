@@ -79,7 +79,6 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	avatarUC := uc.NewAvatarUsecase(
 		r.avatarRepo,
-		r.avatarStateRepo,
 		avatarWalletSvc,
 		r.walletRepo,
 		r.cartRepo,

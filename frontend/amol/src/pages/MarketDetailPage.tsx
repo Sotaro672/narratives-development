@@ -13,10 +13,6 @@ import { auth } from "../lib/firebase";
 import "../styles/page-layout.css";
 import "../styles/market-detail-page.css";
 
-type MeAvatarStateResponse = {
-  avatarId?: string;
-};
-
 async function readResponseErrorMessage(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
 
@@ -43,37 +39,6 @@ async function readResponseErrorMessage(response: Response): Promise<string> {
   return "リクエストに失敗しました。";
 }
 
-async function fetchCurrentAvatarId(idToken: string): Promise<string> {
-  const apiBaseUrl = getApiBaseUrl();
-
-  if (!apiBaseUrl) {
-    throw new Error("APIの接続先が設定されていません。");
-  }
-
-  const response = await fetch(`${apiBaseUrl}/mall/me/avatars/state`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    const message = await readResponseErrorMessage(response);
-    throw new Error(message || "現在のアバター情報の取得に失敗しました。");
-  }
-
-  const data = (await response.json()) as MeAvatarStateResponse;
-  const avatarId = data.avatarId?.trim();
-
-  if (!avatarId) {
-    throw new Error("現在のavatarIdが見つかりません。");
-  }
-
-  return avatarId;
-}
-
 async function addResaleProductToCart(args: {
   resaleId: string;
   productId: string;
@@ -91,7 +56,6 @@ async function addResaleProductToCart(args: {
   }
 
   const idToken = await currentUser.getIdToken();
-  const avatarId = await fetchCurrentAvatarId(idToken);
 
   const response = await fetch(`${apiBaseUrl}/mall/me/cart/resales`, {
     method: "POST",
@@ -102,7 +66,6 @@ async function addResaleProductToCart(args: {
     },
     credentials: "include",
     body: JSON.stringify({
-      avatarId,
       resaleId: args.resaleId,
       productId: args.productId,
     }),

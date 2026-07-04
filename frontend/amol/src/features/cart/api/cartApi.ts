@@ -6,7 +6,6 @@ import type {
   CartDTO,
   CartDisplayItem,
   CatalogResponse,
-  MeAvatarStateResponse,
 } from "../types";
 
 type CartItemType = "list" | "resale";
@@ -52,6 +51,30 @@ type CartDisplayItemWithResale = CartDisplayItem & {
   price?: number;
 };
 
+type MeAvatarResponse = {
+  avatarId?: string;
+};
+
+function unwrapData(value: unknown): unknown {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return record.data ?? value;
+}
+
+function isMeAvatarResponse(value: unknown): value is MeAvatarResponse {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return typeof record.avatarId === "string";
+}
+
 export async function readResponseErrorMessage(
   response: Response,
 ): Promise<string> {
@@ -91,12 +114,11 @@ export async function getFirebaseIdToken(): Promise<string> {
   return user.getIdToken();
 }
 
-export async function fetchCurrentAvatarId(
-  apiBaseUrl: string,
-): Promise<string> {
+export async function fetchCurrentAvatarId(apiBaseUrl: string): Promise<string> {
   const idToken = await getFirebaseIdToken();
+  const base = apiBaseUrl.replace(/\/+$/, "");
 
-  const response = await fetch(`${apiBaseUrl}/mall/me/avatars/state`, {
+  const response = await fetch(`${base}/mall/me/avatars`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -116,7 +138,13 @@ export async function fetchCurrentAvatarId(
     throw new Error("現在のアバター情報APIがJSON以外を返しました。");
   }
 
-  const data = (await response.json()) as Partial<MeAvatarStateResponse>;
+  const responseBody: unknown = await response.json();
+  const data = unwrapData(responseBody);
+
+  if (!isMeAvatarResponse(data)) {
+    throw new Error("現在のアバター情報APIのレスポンス形式が不正です。");
+  }
+
   const avatarId = data.avatarId?.trim();
 
   if (!avatarId) {
@@ -133,12 +161,13 @@ async function fetchCartFromPath(args: {
   path: string;
 }): Promise<Response> {
   const { apiBaseUrl, avatarId, idToken, path } = args;
+  const base = apiBaseUrl.replace(/\/+$/, "");
 
   const searchParams = new URLSearchParams({
     avatarId,
   });
 
-  return fetch(`${apiBaseUrl}${path}?${searchParams.toString()}`, {
+  return fetch(`${base}${path}?${searchParams.toString()}`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -152,11 +181,17 @@ export async function fetchCart(
   apiBaseUrl: string,
   avatarId: string,
 ): Promise<CartDTO> {
+  const normalizedAvatarId = avatarId.trim();
+
+  if (!normalizedAvatarId) {
+    throw new Error("現在のavatarIdが見つかりません。");
+  }
+
   const idToken = await getFirebaseIdToken();
 
   const response = await fetchCartFromPath({
     apiBaseUrl,
-    avatarId,
+    avatarId: normalizedAvatarId,
     idToken,
     path: "/mall/me/cart",
   });
@@ -178,7 +213,7 @@ export async function fetchCart(
     avatarId:
       typeof data.avatarId === "string" && data.avatarId.trim() !== ""
         ? data.avatarId
-        : avatarId,
+        : normalizedAvatarId,
     items:
       data.items && (Array.isArray(data.items) || typeof data.items === "object")
         ? data.items
@@ -202,6 +237,7 @@ export async function removeCartItem(args: {
     Boolean(normalized.resaleId || normalized.productId);
 
   const path = isResale ? "/mall/me/cart/resales" : "/mall/me/cart/items";
+  const base = apiBaseUrl.replace(/\/+$/, "");
 
   const body = isResale
     ? {
@@ -216,7 +252,7 @@ export async function removeCartItem(args: {
         modelId: normalized.modelId,
       };
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await fetch(`${base}${path}`, {
     method: "DELETE",
     headers: {
       Accept: "application/json",
@@ -260,9 +296,10 @@ export async function fetchCatalog(
   listId: string,
 ): Promise<CatalogResponse | null> {
   const idToken = await getFirebaseIdToken();
+  const base = apiBaseUrl.replace(/\/+$/, "");
 
   const response = await fetch(
-    `${apiBaseUrl}/mall/catalog/${encodeURIComponent(listId)}`,
+    `${base}/mall/catalog/${encodeURIComponent(listId)}`,
     {
       method: "GET",
       headers: {
@@ -488,6 +525,5 @@ function asNonEmptyString(value: unknown): string {
     return "";
   }
 
-  const trimmed = value.trim();
-  return trimmed;
+  return value.trim();
 }

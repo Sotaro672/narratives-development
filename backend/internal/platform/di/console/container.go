@@ -16,7 +16,6 @@ import (
 	shared "narratives/internal/platform/di/shared"
 
 	avatar "narratives/internal/domain/avatar"
-	avatarstate "narratives/internal/domain/avatarState"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
@@ -38,8 +37,7 @@ type Container struct {
 	ProductBlueprintRepo       pbdomain.Repository
 	ProductBlueprintReviewRepo pbReview.Repository
 
-	AvatarRepo      avatar.Repository
-	AvatarStateRepo avatarstate.Repository
+	AvatarRepo avatar.Repository
 
 	MemberService *memdom.Service
 
@@ -164,7 +162,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		repos.announcementAttachmentRepo,
 		repos.memberRepo,
 		repos.avatarRepo,
-		repos.avatarStateRepo,
 		repos.tokenReaderRepo,
 		res.mintProductBlueprintResolver,
 	)
@@ -181,8 +178,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ProductBlueprintRepo:       repos.productBlueprintRepo,
 		ProductBlueprintReviewRepo: repos.productBlueprintReviewRepo,
 
-		AvatarRepo:      repos.avatarRepo,
-		AvatarStateRepo: repos.avatarStateRepo,
+		AvatarRepo: repos.avatarRepo,
 
 		MemberService: services.memberSvc,
 

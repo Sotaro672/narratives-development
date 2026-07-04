@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\message_usecase.go
+// backend/internal/application/usecase/message_usecase.go
 package usecase
 
 import (
@@ -7,15 +7,13 @@ import (
 	"strings"
 	"time"
 
-	avatardom "narratives/internal/domain/avatar"
-	avatarstate "narratives/internal/domain/avatarState"
+	memberdom "narratives/internal/domain/member"
 	messagedom "narratives/internal/domain/message"
 )
 
 type MessageUsecase struct {
 	msgRepo      MessageRepo
-	avatarRepo   MessageAvatarRepo
-	stRepo       MessageAvatarStateRepo
+	memberRepo   MessageMemberRepo
 	imageStorage MessageImageStorageService
 	idGen        MessageIDGenerator
 
@@ -24,8 +22,7 @@ type MessageUsecase struct {
 
 func NewMessageUsecase(
 	msgRepo MessageRepo,
-	avatarRepo MessageAvatarRepo,
-	stRepo MessageAvatarStateRepo,
+	memberRepo MessageMemberRepo,
 	imageStorage MessageImageStorageService,
 	idGen MessageIDGenerator,
 	now func() time.Time,
@@ -36,8 +33,7 @@ func NewMessageUsecase(
 
 	return &MessageUsecase{
 		msgRepo:      msgRepo,
-		avatarRepo:   avatarRepo,
-		stRepo:       stRepo,
+		memberRepo:   memberRepo,
 		imageStorage: imageStorage,
 		idGen:        idGen,
 		now:          now,
@@ -50,19 +46,15 @@ type MessageRepo interface {
 	Update(ctx context.Context, message messagedom.Message) error
 	Delete(ctx context.Context, id string) error
 
-	ListThread(ctx context.Context, avatarID, peerAvatarID string, filter messagedom.ListFilter) ([]messagedom.Message, error)
-	ListReceived(ctx context.Context, receiverAvatarID string, filter messagedom.ListFilter) ([]messagedom.Message, error)
-	ListSent(ctx context.Context, senderAvatarID string, filter messagedom.ListFilter) ([]messagedom.Message, error)
+	ListThread(ctx context.Context, memberID, peerMemberID string, filter messagedom.ListFilter) ([]messagedom.Message, error)
+	ListReceived(ctx context.Context, receiverMemberID string, filter messagedom.ListFilter) ([]messagedom.Message, error)
+	ListSent(ctx context.Context, senderMemberID string, filter messagedom.ListFilter) ([]messagedom.Message, error)
 
 	MarkAsRead(ctx context.Context, id string, readAt time.Time) error
 }
 
-type MessageAvatarRepo interface {
-	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-}
-
-type MessageAvatarStateRepo interface {
-	GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error)
+type MessageMemberRepo interface {
+	GetByID(ctx context.Context, id string) (memberdom.Member, error)
 }
 
 type MessageIDGenerator interface {
@@ -76,8 +68,9 @@ type MessageImageStorageService interface {
 
 type MessageImageUploadInput struct {
 	MessageID        string
-	SenderAvatarID   string
-	ReceiverAvatarID string
+	CompanyID        string
+	SenderMemberID   string
+	ReceiverMemberID string
 
 	FileName    string
 	ContentType string
@@ -89,8 +82,9 @@ type MessageImageUploadInput struct {
 
 type SendMessageInput struct {
 	ID               string                              `json:"id,omitempty"`
-	SenderAvatarID   string                              `json:"senderAvatarId"`
-	ReceiverAvatarID string                              `json:"receiverAvatarId"`
+	CompanyID        string                              `json:"companyId,omitempty"`
+	SenderMemberID   string                              `json:"senderMemberId"`
+	ReceiverMemberID string                              `json:"receiverMemberId"`
 	Body             string                              `json:"body,omitempty"`
 	Images           []messagedom.MessageImageAttachment `json:"images,omitempty"`
 
@@ -99,29 +93,29 @@ type SendMessageInput struct {
 }
 
 type MessageView struct {
-	ID                 string                              `json:"id"`
-	SenderAvatarID     string                              `json:"senderAvatarId"`
-	SenderAvatarName   string                              `json:"senderAvatarName,omitempty"`
-	SenderAvatarIcon   *string                             `json:"senderAvatarIcon,omitempty"`
-	ReceiverAvatarID   string                              `json:"receiverAvatarId"`
-	ReceiverAvatarName string                              `json:"receiverAvatarName,omitempty"`
-	ReceiverAvatarIcon *string                             `json:"receiverAvatarIcon,omitempty"`
-	PeerAvatarID       string                              `json:"peerAvatarId,omitempty"`
-	PeerAvatarName     string                              `json:"peerAvatarName,omitempty"`
-	PeerAvatarIcon     *string                             `json:"peerAvatarIcon,omitempty"`
-	Body               string                              `json:"body,omitempty"`
-	Images             []messagedom.MessageImageAttachment `json:"images,omitempty"`
-	IsRead             bool                                `json:"isRead"`
-	ReadAt             *time.Time                          `json:"readAt,omitempty"`
-	CreatedAt          time.Time                           `json:"createdAt"`
-	UpdatedAt          time.Time                           `json:"updatedAt"`
+	ID                  string                              `json:"id"`
+	CompanyID           string                              `json:"companyId"`
+	SenderMemberID      string                              `json:"senderMemberId"`
+	SenderMemberName    string                              `json:"senderMemberName,omitempty"`
+	SenderMemberEmail   string                              `json:"senderMemberEmail,omitempty"`
+	ReceiverMemberID    string                              `json:"receiverMemberId"`
+	ReceiverMemberName  string                              `json:"receiverMemberName,omitempty"`
+	ReceiverMemberEmail string                              `json:"receiverMemberEmail,omitempty"`
+	PeerMemberID        string                              `json:"peerMemberId,omitempty"`
+	PeerMemberName      string                              `json:"peerMemberName,omitempty"`
+	PeerMemberEmail     string                              `json:"peerMemberEmail,omitempty"`
+	Body                string                              `json:"body,omitempty"`
+	Images              []messagedom.MessageImageAttachment `json:"images,omitempty"`
+	IsRead              bool                                `json:"isRead"`
+	ReadAt              *time.Time                          `json:"readAt,omitempty"`
+	CreatedAt           time.Time                           `json:"createdAt"`
+	UpdatedAt           time.Time                           `json:"updatedAt"`
 }
 
 var (
-	ErrMessageRepoNotConfigured            = errors.New("message: repo not configured")
-	ErrMessageAvatarRepoNotConfigured      = errors.New("message: avatar repo not configured")
-	ErrMessageAvatarStateRepoNotConfigured = errors.New("message: avatarState repo not configured")
-	ErrMessageImageStorageServiceMissing   = errors.New("message: image storage service not configured")
+	ErrMessageRepoNotConfigured          = errors.New("message: repo not configured")
+	ErrMessageMemberRepoNotConfigured    = errors.New("message: member repo not configured")
+	ErrMessageImageStorageServiceMissing = errors.New("message: image storage service not configured")
 )
 
 func (u *MessageUsecase) SendMessage(ctx context.Context, in SendMessageInput) (messagedom.Message, error) {
@@ -129,15 +123,23 @@ func (u *MessageUsecase) SendMessage(ctx context.Context, in SendMessageInput) (
 		return messagedom.Message{}, ErrMessageRepoNotConfigured
 	}
 
-	messageID := in.ID
+	messageID := strings.TrimSpace(in.ID)
 	if messageID == "" && u.idGen != nil {
-		messageID = u.idGen.NewMessageID()
+		messageID = strings.TrimSpace(u.idGen.NewMessageID())
 	}
 	if messageID == "" {
 		return messagedom.Message{}, messagedom.ErrInvalidID
 	}
 
-	senderState, err := u.ensureCanSend(ctx, in.SenderAvatarID, in.ReceiverAvatarID)
+	senderMemberID := strings.TrimSpace(in.SenderMemberID)
+	receiverMemberID := strings.TrimSpace(in.ReceiverMemberID)
+
+	_, _, companyID, err := u.ensureCanSend(
+		ctx,
+		senderMemberID,
+		receiverMemberID,
+		in.CompanyID,
+	)
 	if err != nil {
 		return messagedom.Message{}, err
 	}
@@ -148,8 +150,9 @@ func (u *MessageUsecase) SendMessage(ctx context.Context, in SendMessageInput) (
 	uploadedImages, err := u.saveMessageImages(
 		ctx,
 		messageID,
-		in.SenderAvatarID,
-		in.ReceiverAvatarID,
+		companyID,
+		senderMemberID,
+		receiverMemberID,
 		in.ImageUploads,
 		now,
 	)
@@ -161,11 +164,12 @@ func (u *MessageUsecase) SendMessage(ctx context.Context, in SendMessageInput) (
 
 	message, err := messagedom.NewForCreate(
 		messageID,
-		in.SenderAvatarID,
-		in.ReceiverAvatarID,
+		senderMemberID,
+		receiverMemberID,
+		companyID,
+		companyID,
 		in.Body,
 		images,
-		senderState,
 		now,
 	)
 	if err != nil {
@@ -182,6 +186,7 @@ func (u *MessageUsecase) SendMessage(ctx context.Context, in SendMessageInput) (
 }
 
 func (u *MessageUsecase) GetByID(ctx context.Context, id string) (messagedom.Message, error) {
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return messagedom.Message{}, messagedom.ErrInvalidID
 	}
@@ -194,97 +199,105 @@ func (u *MessageUsecase) GetByID(ctx context.Context, id string) (messagedom.Mes
 
 func (u *MessageUsecase) ListThread(
 	ctx context.Context,
-	avatarID string,
-	peerAvatarID string,
+	memberID string,
+	peerMemberID string,
 	filter messagedom.ListFilter,
 ) ([]messagedom.Message, error) {
-	if avatarID == "" {
-		return nil, messagedom.ErrInvalidSenderAvatarID
+	memberID = strings.TrimSpace(memberID)
+	peerMemberID = strings.TrimSpace(peerMemberID)
+
+	if memberID == "" {
+		return nil, messagedom.ErrInvalidSenderMemberID
 	}
-	if peerAvatarID == "" {
-		return nil, messagedom.ErrInvalidReceiverAvatarID
+	if peerMemberID == "" {
+		return nil, messagedom.ErrInvalidReceiverMemberID
 	}
-	if avatarID == peerAvatarID {
+	if memberID == peerMemberID {
 		return nil, messagedom.ErrSelfMessageNotAllowed
 	}
 	if u.msgRepo == nil {
 		return nil, ErrMessageRepoNotConfigured
 	}
 
-	return u.msgRepo.ListThread(ctx, avatarID, peerAvatarID, filter)
+	return u.msgRepo.ListThread(ctx, memberID, peerMemberID, filter)
 }
 
 func (u *MessageUsecase) ListThreadViews(
 	ctx context.Context,
-	avatarID string,
-	peerAvatarID string,
+	memberID string,
+	peerMemberID string,
 	filter messagedom.ListFilter,
 ) ([]MessageView, error) {
-	messages, err := u.ListThread(ctx, avatarID, peerAvatarID, filter)
+	messages, err := u.ListThread(ctx, memberID, peerMemberID, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	return u.decorateMessagesWithAvatars(ctx, avatarID, messages), nil
+	return u.decorateMessagesWithMembers(ctx, memberID, messages), nil
 }
 
 func (u *MessageUsecase) ListReceived(
 	ctx context.Context,
-	receiverAvatarID string,
+	receiverMemberID string,
 	filter messagedom.ListFilter,
 ) ([]messagedom.Message, error) {
-	if receiverAvatarID == "" {
-		return nil, messagedom.ErrInvalidReceiverAvatarID
+	receiverMemberID = strings.TrimSpace(receiverMemberID)
+
+	if receiverMemberID == "" {
+		return nil, messagedom.ErrInvalidReceiverMemberID
 	}
 	if u.msgRepo == nil {
 		return nil, ErrMessageRepoNotConfigured
 	}
 
-	return u.msgRepo.ListReceived(ctx, receiverAvatarID, filter)
+	return u.msgRepo.ListReceived(ctx, receiverMemberID, filter)
 }
 
 func (u *MessageUsecase) ListReceivedViews(
 	ctx context.Context,
-	receiverAvatarID string,
+	receiverMemberID string,
 	filter messagedom.ListFilter,
 ) ([]MessageView, error) {
-	messages, err := u.ListReceived(ctx, receiverAvatarID, filter)
+	messages, err := u.ListReceived(ctx, receiverMemberID, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	return u.decorateMessagesWithAvatars(ctx, receiverAvatarID, messages), nil
+	return u.decorateMessagesWithMembers(ctx, receiverMemberID, messages), nil
 }
 
 func (u *MessageUsecase) ListSent(
 	ctx context.Context,
-	senderAvatarID string,
+	senderMemberID string,
 	filter messagedom.ListFilter,
 ) ([]messagedom.Message, error) {
-	if senderAvatarID == "" {
-		return nil, messagedom.ErrInvalidSenderAvatarID
+	senderMemberID = strings.TrimSpace(senderMemberID)
+
+	if senderMemberID == "" {
+		return nil, messagedom.ErrInvalidSenderMemberID
 	}
 	if u.msgRepo == nil {
 		return nil, ErrMessageRepoNotConfigured
 	}
 
-	return u.msgRepo.ListSent(ctx, senderAvatarID, filter)
+	return u.msgRepo.ListSent(ctx, senderMemberID, filter)
 }
 
 func (u *MessageUsecase) ListSentViews(
 	ctx context.Context,
-	senderAvatarID string,
+	senderMemberID string,
 	filter messagedom.ListFilter,
 ) ([]MessageView, error) {
-	messages, err := u.ListSent(ctx, senderAvatarID, filter)
+	messages, err := u.ListSent(ctx, senderMemberID, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	return u.decorateMessagesWithAvatars(ctx, senderAvatarID, messages), nil
+	return u.decorateMessagesWithMembers(ctx, senderMemberID, messages), nil
 }
 
 func (u *MessageUsecase) MarkAsRead(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return messagedom.ErrInvalidID
 	}
@@ -296,6 +309,7 @@ func (u *MessageUsecase) MarkAsRead(ctx context.Context, id string) error {
 }
 
 func (u *MessageUsecase) UpdateBody(ctx context.Context, id string, body string) (messagedom.Message, error) {
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return messagedom.Message{}, messagedom.ErrInvalidID
 	}
@@ -324,6 +338,7 @@ func (u *MessageUsecase) SetImages(
 	id string,
 	images []messagedom.MessageImageAttachment,
 ) (messagedom.Message, error) {
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return messagedom.Message{}, messagedom.ErrInvalidID
 	}
@@ -349,6 +364,7 @@ func (u *MessageUsecase) SetImages(
 }
 
 func (u *MessageUsecase) Delete(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return messagedom.ErrInvalidID
 	}
@@ -361,52 +377,65 @@ func (u *MessageUsecase) Delete(ctx context.Context, id string) error {
 
 func (u *MessageUsecase) ensureCanSend(
 	ctx context.Context,
-	senderAvatarID string,
-	receiverAvatarID string,
-) (avatarstate.AvatarState, error) {
-	if senderAvatarID == "" {
-		return avatarstate.AvatarState{}, messagedom.ErrInvalidSenderAvatarID
+	senderMemberID string,
+	receiverMemberID string,
+	requestCompanyID string,
+) (memberdom.Member, memberdom.Member, string, error) {
+	senderMemberID = strings.TrimSpace(senderMemberID)
+	receiverMemberID = strings.TrimSpace(receiverMemberID)
+	requestCompanyID = strings.TrimSpace(requestCompanyID)
+
+	if senderMemberID == "" {
+		return memberdom.Member{}, memberdom.Member{}, "", messagedom.ErrInvalidSenderMemberID
 	}
-	if receiverAvatarID == "" {
-		return avatarstate.AvatarState{}, messagedom.ErrInvalidReceiverAvatarID
+	if receiverMemberID == "" {
+		return memberdom.Member{}, memberdom.Member{}, "", messagedom.ErrInvalidReceiverMemberID
 	}
-	if senderAvatarID == receiverAvatarID {
-		return avatarstate.AvatarState{}, messagedom.ErrSelfMessageNotAllowed
+	if senderMemberID == receiverMemberID {
+		return memberdom.Member{}, memberdom.Member{}, "", messagedom.ErrSelfMessageNotAllowed
 	}
-	if u.avatarRepo == nil {
-		return avatarstate.AvatarState{}, ErrMessageAvatarRepoNotConfigured
-	}
-	if u.stRepo == nil {
-		return avatarstate.AvatarState{}, ErrMessageAvatarStateRepoNotConfigured
+	if u.memberRepo == nil {
+		return memberdom.Member{}, memberdom.Member{}, "", ErrMessageMemberRepoNotConfigured
 	}
 
-	if _, err := u.avatarRepo.GetByID(ctx, senderAvatarID); err != nil {
-		return avatarstate.AvatarState{}, err
-	}
-	if _, err := u.avatarRepo.GetByID(ctx, receiverAvatarID); err != nil {
-		return avatarstate.AvatarState{}, err
-	}
-
-	senderState, err := u.stRepo.GetByAvatarID(ctx, senderAvatarID)
+	senderMember, err := u.memberRepo.GetByID(ctx, senderMemberID)
 	if err != nil {
-		return avatarstate.AvatarState{}, err
-	}
-	if senderState.ID == "" {
-		senderState.ID = senderAvatarID
+		return memberdom.Member{}, memberdom.Member{}, "", err
 	}
 
-	if err := messagedom.ValidateMessageRelation(senderState, senderAvatarID, receiverAvatarID); err != nil {
-		return avatarstate.AvatarState{}, err
+	receiverMember, err := u.memberRepo.GetByID(ctx, receiverMemberID)
+	if err != nil {
+		return memberdom.Member{}, memberdom.Member{}, "", err
 	}
 
-	return senderState, nil
+	senderCompanyID := strings.TrimSpace(senderMember.CompanyID)
+	receiverCompanyID := strings.TrimSpace(receiverMember.CompanyID)
+
+	if requestCompanyID != "" && senderCompanyID != requestCompanyID {
+		return memberdom.Member{}, memberdom.Member{}, "", messagedom.ErrMessageNotAllowed
+	}
+	if requestCompanyID != "" && receiverCompanyID != requestCompanyID {
+		return memberdom.Member{}, memberdom.Member{}, "", messagedom.ErrMessageNotAllowed
+	}
+
+	if err := messagedom.ValidateMessageRelation(
+		senderMemberID,
+		receiverMemberID,
+		senderCompanyID,
+		receiverCompanyID,
+	); err != nil {
+		return memberdom.Member{}, memberdom.Member{}, "", err
+	}
+
+	return senderMember, receiverMember, senderCompanyID, nil
 }
 
 func (u *MessageUsecase) saveMessageImages(
 	ctx context.Context,
 	messageID string,
-	senderAvatarID string,
-	receiverAvatarID string,
+	companyID string,
+	senderMemberID string,
+	receiverMemberID string,
 	uploads []MessageImageUploadInput,
 	now time.Time,
 ) ([]messagedom.MessageImageAttachment, error) {
@@ -420,7 +449,13 @@ func (u *MessageUsecase) saveMessageImages(
 	images := make([]messagedom.MessageImageAttachment, 0, len(uploads))
 
 	for _, upload := range uploads {
-		upload = normalizeMessageImageUploadInput(upload, messageID, senderAvatarID, receiverAvatarID)
+		upload = normalizeMessageImageUploadInput(
+			upload,
+			messageID,
+			companyID,
+			senderMemberID,
+			receiverMemberID,
+		)
 
 		image, err := u.imageStorage.SaveMessageImage(ctx, upload)
 		if err != nil {
@@ -453,91 +488,98 @@ func (u *MessageUsecase) cleanupUploadedImages(ctx context.Context, images []mes
 	}
 }
 
-func (u *MessageUsecase) decorateMessagesWithAvatars(
+func (u *MessageUsecase) decorateMessagesWithMembers(
 	ctx context.Context,
-	currentAvatarID string,
+	currentMemberID string,
 	messages []messagedom.Message,
 ) []MessageView {
-	avatars := u.avatarMapByMessages(ctx, messages)
+	members := u.memberMapByMessages(ctx, messages)
 
 	views := make([]MessageView, 0, len(messages))
 	for _, message := range messages {
-		views = append(views, newMessageView(message, currentAvatarID, avatars))
+		views = append(views, newMessageView(message, currentMemberID, members))
 	}
 
 	return views
 }
 
-func (u *MessageUsecase) avatarMapByMessages(
+func (u *MessageUsecase) memberMapByMessages(
 	ctx context.Context,
 	messages []messagedom.Message,
-) map[string]avatardom.Avatar {
-	avatars := make(map[string]avatardom.Avatar)
+) map[string]memberdom.Member {
+	members := make(map[string]memberdom.Member)
 
-	if u.avatarRepo == nil {
-		return avatars
+	if u.memberRepo == nil {
+		return members
 	}
 
 	for _, message := range messages {
-		for _, avatarID := range []string{message.SenderAvatarID, message.ReceiverAvatarID} {
-			avatarID = strings.TrimSpace(avatarID)
-			if avatarID == "" {
+		for _, memberID := range []string{message.SenderMemberID, message.ReceiverMemberID} {
+			memberID = strings.TrimSpace(memberID)
+			if memberID == "" {
 				continue
 			}
-			if _, ok := avatars[avatarID]; ok {
+			if _, ok := members[memberID]; ok {
 				continue
 			}
 
-			avatar, err := u.avatarRepo.GetByID(ctx, avatarID)
+			member, err := u.memberRepo.GetByID(ctx, memberID)
 			if err != nil {
 				continue
 			}
 
-			avatars[avatarID] = avatar
+			members[memberID] = member
 		}
 	}
 
-	return avatars
+	return members
 }
 
 func newMessageView(
 	message messagedom.Message,
-	currentAvatarID string,
-	avatars map[string]avatardom.Avatar,
+	currentMemberID string,
+	members map[string]memberdom.Member,
 ) MessageView {
-	sender := avatars[message.SenderAvatarID]
-	receiver := avatars[message.ReceiverAvatarID]
+	sender := members[message.SenderMemberID]
+	receiver := members[message.ReceiverMemberID]
 
-	peerAvatarID := message.SenderAvatarID
-	if peerAvatarID == currentAvatarID {
-		peerAvatarID = message.ReceiverAvatarID
+	peerMemberID := message.SenderMemberID
+	if peerMemberID == currentMemberID {
+		peerMemberID = message.ReceiverMemberID
 	}
 
-	peer := avatars[peerAvatarID]
+	peer := members[peerMemberID]
 
 	return MessageView{
-		ID:                 message.ID,
-		SenderAvatarID:     message.SenderAvatarID,
-		SenderAvatarName:   avatarNameOrID(sender, message.SenderAvatarID),
-		SenderAvatarIcon:   cloneStringPtr(sender.AvatarIcon),
-		ReceiverAvatarID:   message.ReceiverAvatarID,
-		ReceiverAvatarName: avatarNameOrID(receiver, message.ReceiverAvatarID),
-		ReceiverAvatarIcon: cloneStringPtr(receiver.AvatarIcon),
-		PeerAvatarID:       peerAvatarID,
-		PeerAvatarName:     avatarNameOrID(peer, peerAvatarID),
-		PeerAvatarIcon:     cloneStringPtr(peer.AvatarIcon),
-		Body:               message.Body,
-		Images:             message.Images,
-		IsRead:             message.IsRead,
-		ReadAt:             message.ReadAt,
-		CreatedAt:          message.CreatedAt,
-		UpdatedAt:          message.UpdatedAt,
+		ID:                  message.ID,
+		CompanyID:           message.CompanyID,
+		SenderMemberID:      message.SenderMemberID,
+		SenderMemberName:    memberNameOrID(sender, message.SenderMemberID),
+		SenderMemberEmail:   strings.TrimSpace(sender.Email),
+		ReceiverMemberID:    message.ReceiverMemberID,
+		ReceiverMemberName:  memberNameOrID(receiver, message.ReceiverMemberID),
+		ReceiverMemberEmail: strings.TrimSpace(receiver.Email),
+		PeerMemberID:        peerMemberID,
+		PeerMemberName:      memberNameOrID(peer, peerMemberID),
+		PeerMemberEmail:     strings.TrimSpace(peer.Email),
+		Body:                message.Body,
+		Images:              message.Images,
+		IsRead:              message.IsRead,
+		ReadAt:              message.ReadAt,
+		CreatedAt:           message.CreatedAt,
+		UpdatedAt:           message.UpdatedAt,
 	}
 }
 
-func avatarNameOrID(avatar avatardom.Avatar, fallbackID string) string {
-	if name := strings.TrimSpace(avatar.AvatarName); name != "" {
+func memberNameOrID(member memberdom.Member, fallbackID string) string {
+	name := strings.TrimSpace(memberdom.FormatLastFirst(member.LastName, member.FirstName))
+	if name != "" {
 		return name
+	}
+
+	email := strings.TrimSpace(member.Email)
+	if email != "" {
+		return email
 	}
 
 	return strings.TrimSpace(fallbackID)
@@ -546,17 +588,21 @@ func avatarNameOrID(avatar avatardom.Avatar, fallbackID string) string {
 func normalizeMessageImageUploadInput(
 	in MessageImageUploadInput,
 	messageID string,
-	senderAvatarID string,
-	receiverAvatarID string,
+	companyID string,
+	senderMemberID string,
+	receiverMemberID string,
 ) MessageImageUploadInput {
 	if in.MessageID == "" {
 		in.MessageID = messageID
 	}
-	if in.SenderAvatarID == "" {
-		in.SenderAvatarID = senderAvatarID
+	if in.CompanyID == "" {
+		in.CompanyID = companyID
 	}
-	if in.ReceiverAvatarID == "" {
-		in.ReceiverAvatarID = receiverAvatarID
+	if in.SenderMemberID == "" {
+		in.SenderMemberID = senderMemberID
+	}
+	if in.ReceiverMemberID == "" {
+		in.ReceiverMemberID = receiverMemberID
 	}
 
 	return in

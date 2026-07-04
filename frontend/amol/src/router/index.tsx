@@ -32,9 +32,7 @@ import InquiryPage from "../pages/InquiryCreatePage";
 import ChatListPage from "../pages/ChatListPage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import WalletPage from "../pages/WalletPage";
-import FollowPage from "../pages/FollowPage";
 import ContentsPage from "../pages/ContentsPage";
-import AvatarShareQrPage from "../pages/AvatarShareQrPage";
 import AnnouncementPage from "../pages/AnnouncementPage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
@@ -99,22 +97,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <WalletPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/avatars/:avatarId/follow",
-    element: (
-      <ProtectedRoute>
-        <FollowPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/avatars/:avatarId/share-qr",
-    element: (
-      <ProtectedRoute>
-        <AvatarShareQrPage />
       </ProtectedRoute>
     ),
   },

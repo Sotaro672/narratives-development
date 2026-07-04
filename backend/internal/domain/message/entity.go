@@ -5,18 +5,20 @@ import (
 	"errors"
 	"strings"
 	"time"
-
-	avatarstate "narratives/internal/domain/avatarState"
 )
 
-// Message represents a direct message between avatars.
-// A message is allowed when the recipient is either:
-// - in senderState.Following: an avatar the sender follows
-// - in senderState.Followers: an avatar following the sender
+// Message represents a direct message between members in the same company.
+//
+// A message is allowed only when:
+// - senderMemberID is not empty
+// - receiverMemberID is not empty
+// - senderMemberID != receiverMemberID
+// - senderCompanyID and receiverCompanyID are the same non-empty companyId
 type Message struct {
 	ID               string                   `json:"id"`
-	SenderAvatarID   string                   `json:"senderAvatarId"`
-	ReceiverAvatarID string                   `json:"receiverAvatarId"`
+	CompanyID        string                   `json:"companyId"`
+	SenderMemberID   string                   `json:"senderMemberId"`
+	ReceiverMemberID string                   `json:"receiverMemberId"`
 	Body             string                   `json:"body,omitempty"`
 	Images           []MessageImageAttachment `json:"images,omitempty"`
 	IsRead           bool                     `json:"isRead"`
@@ -50,15 +52,16 @@ var (
 // Errors
 var (
 	ErrInvalidID               = errors.New("message: invalid id")
-	ErrInvalidSenderAvatarID   = errors.New("message: invalid senderAvatarId")
-	ErrInvalidReceiverAvatarID = errors.New("message: invalid receiverAvatarId")
+	ErrInvalidCompanyID        = errors.New("message: invalid companyId")
+	ErrInvalidSenderMemberID   = errors.New("message: invalid senderMemberId")
+	ErrInvalidReceiverMemberID = errors.New("message: invalid receiverMemberId")
 	ErrSelfMessageNotAllowed   = errors.New("message: self message is not allowed")
 	ErrInvalidBody             = errors.New("message: invalid body")
 	ErrEmptyMessage            = errors.New("message: body or image is required")
 	ErrInvalidReadAt           = errors.New("message: invalid readAt")
 	ErrInvalidCreatedAt        = errors.New("message: invalid createdAt")
 	ErrInvalidUpdatedAt        = errors.New("message: invalid updatedAt")
-	ErrMessageNotAllowed       = errors.New("message: receiver is not follower or following")
+	ErrMessageNotAllowed       = errors.New("message: receiver member is not in the same company")
 
 	ErrTooManyImages           = errors.New("message: too many images")
 	ErrInvalidImageStoragePath = errors.New("message: invalid image storagePath")
@@ -73,11 +76,16 @@ var (
 // Constructors
 
 func New(
-	id, senderAvatarID, receiverAvatarID, body string,
+	id string,
+	companyID string,
+	senderMemberID string,
+	receiverMemberID string,
+	body string,
 	images []MessageImageAttachment,
 	isRead bool,
 	readAt *time.Time,
-	createdAt, updatedAt time.Time,
+	createdAt time.Time,
+	updatedAt time.Time,
 ) (Message, error) {
 	var readAtUTC *time.Time
 	if readAt != nil {
@@ -87,8 +95,9 @@ func New(
 
 	m := Message{
 		ID:               id,
-		SenderAvatarID:   senderAvatarID,
-		ReceiverAvatarID: receiverAvatarID,
+		CompanyID:        companyID,
+		SenderMemberID:   senderMemberID,
+		ReceiverMemberID: receiverMemberID,
 		Body:             body,
 		Images:           normalizeImageTimes(images),
 		IsRead:           isRead,
@@ -100,24 +109,36 @@ func New(
 	if err := m.validate(); err != nil {
 		return Message{}, err
 	}
+
 	return m, nil
 }
 
 func NewForCreate(
-	id, senderAvatarID, receiverAvatarID, body string,
+	id string,
+	senderMemberID string,
+	receiverMemberID string,
+	senderCompanyID string,
+	receiverCompanyID string,
+	body string,
 	images []MessageImageAttachment,
-	senderState avatarstate.AvatarState,
 	now time.Time,
 ) (Message, error) {
-	if err := ValidateMessageRelation(senderState, senderAvatarID, receiverAvatarID); err != nil {
+	if err := ValidateMessageRelation(
+		senderMemberID,
+		receiverMemberID,
+		senderCompanyID,
+		receiverCompanyID,
+	); err != nil {
 		return Message{}, err
 	}
 
 	now = now.UTC()
+
 	return New(
 		id,
-		senderAvatarID,
-		receiverAvatarID,
+		senderCompanyID,
+		senderMemberID,
+		receiverMemberID,
 		body,
 		images,
 		false,
@@ -182,13 +203,16 @@ func (m Message) validate() error {
 	if m.ID == "" {
 		return ErrInvalidID
 	}
-	if m.SenderAvatarID == "" {
-		return ErrInvalidSenderAvatarID
+	if m.CompanyID == "" {
+		return ErrInvalidCompanyID
 	}
-	if m.ReceiverAvatarID == "" {
-		return ErrInvalidReceiverAvatarID
+	if m.SenderMemberID == "" {
+		return ErrInvalidSenderMemberID
 	}
-	if m.SenderAvatarID == m.ReceiverAvatarID {
+	if m.ReceiverMemberID == "" {
+		return ErrInvalidReceiverMemberID
+	}
+	if m.SenderMemberID == m.ReceiverMemberID {
 		return ErrSelfMessageNotAllowed
 	}
 	if len([]rune(m.Body)) > MaxBodyLength {
@@ -266,46 +290,43 @@ func isValidImageContentType(contentType string) bool {
 }
 
 func normalizeImageTimes(images []MessageImageAttachment) []MessageImageAttachment {
-	for i := range images {
-		images[i].UploadedAt = images[i].UploadedAt.UTC()
+	if len(images) == 0 {
+		return []MessageImageAttachment{}
 	}
-	return images
+
+	out := make([]MessageImageAttachment, len(images))
+	copy(out, images)
+
+	for i := range out {
+		out[i].UploadedAt = out[i].UploadedAt.UTC()
+	}
+
+	return out
 }
 
-// ValidateMessageRelation checks whether receiverAvatarID is either following
-// senderAvatarID or followed by senderAvatarID.
+// ValidateMessageRelation checks whether sender and receiver are different members
+// belonging to the same company.
 func ValidateMessageRelation(
-	senderState avatarstate.AvatarState,
-	senderAvatarID, receiverAvatarID string,
+	senderMemberID string,
+	receiverMemberID string,
+	senderCompanyID string,
+	receiverCompanyID string,
 ) error {
-	if senderAvatarID == "" {
-		return ErrInvalidSenderAvatarID
+	if senderMemberID == "" {
+		return ErrInvalidSenderMemberID
 	}
-	if receiverAvatarID == "" {
-		return ErrInvalidReceiverAvatarID
+	if receiverMemberID == "" {
+		return ErrInvalidReceiverMemberID
 	}
-	if senderAvatarID == receiverAvatarID {
+	if senderMemberID == receiverMemberID {
 		return ErrSelfMessageNotAllowed
 	}
-	if senderState.ID != senderAvatarID {
-		return ErrInvalidSenderAvatarID
+	if senderCompanyID == "" || receiverCompanyID == "" {
+		return ErrInvalidCompanyID
+	}
+	if senderCompanyID != receiverCompanyID {
+		return ErrMessageNotAllowed
 	}
 
-	if hasAvatarID(senderState.Following, receiverAvatarID) {
-		return nil
-	}
-	if hasAvatarID(senderState.Followers, receiverAvatarID) {
-		return nil
-	}
-
-	return ErrMessageNotAllowed
-}
-
-func hasAvatarID(refs []avatarstate.AvatarFollowRef, avatarID string) bool {
-	for _, ref := range refs {
-		if ref.AvatarID == avatarID {
-			return true
-		}
-	}
-	return false
+	return nil
 }

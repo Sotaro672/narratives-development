@@ -4,7 +4,6 @@ package mall
 import (
 	"context"
 	"errors"
-	"strings"
 
 	historydto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
@@ -151,8 +150,6 @@ func (q *HistoryQuery) EnrichOrderPage(
 	for orderIndex := range out.Items {
 		for itemIndex := range out.Items[orderIndex].Items {
 			item := &out.Items[orderIndex].Items[itemIndex]
-
-			normalizeHistoryOrderItem(item)
 
 			inventoryID := item.InventoryID
 			modelID := item.ModelID
@@ -316,12 +313,11 @@ func (q *HistoryQuery) ResolveBlueprintIDsByInventoryID(
 		return "", "", ErrHistoryQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(inventoryID)
-	if id == "" {
+	if inventoryID == "" {
 		return "", "", ErrHistoryInventoryIDEmpty
 	}
 
-	return q.inventoryBlueprintResolver.ResolveBlueprintIDsByInventoryID(ctx, id)
+	return q.inventoryBlueprintResolver.ResolveBlueprintIDsByInventoryID(ctx, inventoryID)
 }
 
 func (q *HistoryQuery) ResolveProductBlueprintInfo(
@@ -332,12 +328,11 @@ func (q *HistoryQuery) ResolveProductBlueprintInfo(
 		return "", "", ErrHistoryQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(productBlueprintID)
-	if id == "" {
+	if productBlueprintID == "" {
 		return "", "", nil
 	}
 
-	pb, pbErr := q.productBlueprintResolver.GetByID(ctx, id)
+	pb, pbErr := q.productBlueprintResolver.GetByID(ctx, productBlueprintID)
 	if pbErr != nil {
 		return "", "", pbErr
 	}
@@ -353,12 +348,11 @@ func (q *HistoryQuery) ResolveTokenBlueprintInfo(
 		return "", "", "", ErrHistoryQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(tokenBlueprintID)
-	if id == "" {
+	if tokenBlueprintID == "" {
 		return "", "", "", nil
 	}
 
-	tb, tbErr := q.tokenBlueprintResolver.GetByID(ctx, id)
+	tb, tbErr := q.tokenBlueprintResolver.GetByID(ctx, tokenBlueprintID)
 	if tbErr != nil {
 		return "", "", "", tbErr
 	}
@@ -380,12 +374,11 @@ func (q *HistoryQuery) ResolveBrandInfo(
 		return "", "", ErrHistoryQueryNotConfigured
 	}
 
-	id := strings.TrimSpace(brandID)
-	if id == "" {
+	if brandID == "" {
 		return "", "", nil
 	}
 
-	b, brandErr := q.brandResolver.GetByID(ctx, id)
+	b, brandErr := q.brandResolver.GetByID(ctx, brandID)
 	if brandErr != nil {
 		return "", "", brandErr
 	}
@@ -402,18 +395,18 @@ func (q *HistoryQuery) ResolveModel(
 	}
 
 	nextInput := historydto.HistoryResolveModelInput{
-		ItemType: strings.TrimSpace(in.ItemType),
+		ItemType: in.ItemType,
 
-		ModelID:     strings.TrimSpace(in.ModelID),
-		InventoryID: strings.TrimSpace(in.InventoryID),
-		ListID:      strings.TrimSpace(in.ListID),
+		ModelID:     in.ModelID,
+		InventoryID: in.InventoryID,
+		ListID:      in.ListID,
 
-		ResaleID: strings.TrimSpace(in.ResaleID),
+		ResaleID: in.ResaleID,
 
-		ProductID:          strings.TrimSpace(in.ProductID),
-		ProductBlueprintID: strings.TrimSpace(in.ProductBlueprintID),
-		TokenBlueprintID:   strings.TrimSpace(in.TokenBlueprintID),
-		BrandID:            strings.TrimSpace(in.BrandID),
+		ProductID:          in.ProductID,
+		ProductBlueprintID: in.ProductBlueprintID,
+		TokenBlueprintID:   in.TokenBlueprintID,
+		BrandID:            in.BrandID,
 	}
 
 	if nextInput.ModelID == "" {
@@ -523,18 +516,18 @@ func historyResolvedModelFromNameResolver(
 	model appresolver.ModelResolved,
 ) historydto.HistoryResolvedModel {
 	out := historydto.HistoryResolvedModel{
-		ItemType: strings.TrimSpace(in.ItemType),
+		ItemType: in.ItemType,
 
-		ModelID:     strings.TrimSpace(in.ModelID),
-		InventoryID: strings.TrimSpace(in.InventoryID),
-		ListID:      strings.TrimSpace(in.ListID),
+		ModelID:     in.ModelID,
+		InventoryID: in.InventoryID,
+		ListID:      in.ListID,
 
-		ResaleID: strings.TrimSpace(in.ResaleID),
+		ResaleID: in.ResaleID,
 
-		ProductID:          strings.TrimSpace(in.ProductID),
-		ProductBlueprintID: strings.TrimSpace(in.ProductBlueprintID),
-		TokenBlueprintID:   strings.TrimSpace(in.TokenBlueprintID),
-		BrandID:            strings.TrimSpace(in.BrandID),
+		ProductID:          in.ProductID,
+		ProductBlueprintID: in.ProductBlueprintID,
+		TokenBlueprintID:   in.TokenBlueprintID,
+		BrandID:            in.BrandID,
 
 		Kind:        model.Kind,
 		ModelNumber: model.ModelNumber,
@@ -557,12 +550,11 @@ func (q *HistoryQuery) resolveProductBlueprintInfo(
 	ctx context.Context,
 	productBlueprintID string,
 ) historyProductBlueprintInfo {
-	id := strings.TrimSpace(productBlueprintID)
-	if id == "" || q == nil || q.productBlueprintResolver == nil {
+	if productBlueprintID == "" || q == nil || q.productBlueprintResolver == nil {
 		return historyProductBlueprintInfo{}
 	}
 
-	productName, brandID, err := q.ResolveProductBlueprintInfo(ctx, id)
+	productName, brandID, err := q.ResolveProductBlueprintInfo(ctx, productBlueprintID)
 	if err != nil {
 		return historyProductBlueprintInfo{}
 	}
@@ -577,12 +569,11 @@ func (q *HistoryQuery) resolveTokenBlueprintInfo(
 	ctx context.Context,
 	tokenBlueprintID string,
 ) historyTokenBlueprintInfo {
-	id := strings.TrimSpace(tokenBlueprintID)
-	if id == "" || q == nil || q.tokenBlueprintResolver == nil {
+	if tokenBlueprintID == "" || q == nil || q.tokenBlueprintResolver == nil {
 		return historyTokenBlueprintInfo{}
 	}
 
-	tokenName, tokenIcon, brandID, err := q.ResolveTokenBlueprintInfo(ctx, id)
+	tokenName, tokenIcon, brandID, err := q.ResolveTokenBlueprintInfo(ctx, tokenBlueprintID)
 	if err != nil {
 		return historyTokenBlueprintInfo{}
 	}
@@ -598,19 +589,18 @@ func (q *HistoryQuery) resolveBrandInfo(
 	ctx context.Context,
 	brandID string,
 ) historyBrandInfo {
-	id := strings.TrimSpace(brandID)
-	if id == "" || q == nil || q.brandResolver == nil {
+	if brandID == "" || q == nil || q.brandResolver == nil {
 		return historyBrandInfo{}
 	}
 
-	brandName, brandIcon, err := q.ResolveBrandInfo(ctx, id)
+	brandName, brandIcon, err := q.ResolveBrandInfo(ctx, brandID)
 	if err != nil {
 		return historyBrandInfo{}
 	}
 
 	return historyBrandInfo{
 		BrandName: brandName,
-		BrandID:   id,
+		BrandID:   brandID,
 		BrandIcon: brandIcon,
 	}
 }
@@ -745,34 +735,15 @@ func applyResolvedModelToItem(
 	}
 }
 
-func normalizeHistoryOrderItem(item *historydto.HistoryOrderItem) {
-	if item == nil {
-		return
-	}
-
-	item.ItemType = strings.TrimSpace(item.ItemType)
-
-	item.ModelID = strings.TrimSpace(item.ModelID)
-	item.InventoryID = strings.TrimSpace(item.InventoryID)
-	item.ListID = strings.TrimSpace(item.ListID)
-
-	item.ResaleID = strings.TrimSpace(item.ResaleID)
-
-	item.ProductID = strings.TrimSpace(item.ProductID)
-	item.ProductBlueprintID = strings.TrimSpace(item.ProductBlueprintID)
-	item.TokenBlueprintID = strings.TrimSpace(item.TokenBlueprintID)
-	item.BrandID = strings.TrimSpace(item.BrandID)
-}
-
 func mergeHistoryBlueprintIDs(
 	base historyBlueprintIDs,
 	next historyBlueprintIDs,
 ) historyBlueprintIDs {
 	if base.ProductBlueprintID == "" {
-		base.ProductBlueprintID = strings.TrimSpace(next.ProductBlueprintID)
+		base.ProductBlueprintID = next.ProductBlueprintID
 	}
 	if base.TokenBlueprintID == "" {
-		base.TokenBlueprintID = strings.TrimSpace(next.TokenBlueprintID)
+		base.TokenBlueprintID = next.TokenBlueprintID
 	}
 	return base
 }

@@ -1,5 +1,5 @@
 // frontend/amol/src/features/wallet/hooks/useWalletPage.ts
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -9,16 +9,8 @@ import {
   fetchWalletAvatar,
 } from "../api/avatarApi";
 import { fetchWalletOrders } from "../api/historyApi";
-import {
-  fetchPublicWalletFollowState,
-  followAvatar,
-} from "../api/walletFollowApi";
 import { fetchMeWalletTokens } from "../api/walletTokenApi";
 import type { WalletTabKey } from "../types";
-import type {
-  PublicWalletFollowTabKey,
-  PublicWalletFollowUser,
-} from "../types/followTypes";
 import type { WalletOrder } from "../types/orderTypes";
 import type { WalletDTO, WalletTokenItem } from "../types/tokenTypes";
 
@@ -35,8 +27,6 @@ export function useWalletPage() {
   const [avatarName, setAvatarName] = useState("");
   const [avatarIcon, setAvatarIcon] = useState("");
   const [profile, setProfile] = useState("");
-  const [followerCount, setFollowerCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
 
   const [wallet, setWallet] = useState<WalletDTO | null>(null);
   const [walletTokens, setWalletTokens] = useState<WalletTokenItem[]>([]);
@@ -51,21 +41,6 @@ export function useWalletPage() {
   const [tokenLoading, setTokenLoading] = useState(false);
   const [tokenError, setTokenError] = useState("");
   const [authResolved, setAuthResolved] = useState(false);
-
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followPosting, setFollowPosting] = useState(false);
-  const [followError, setFollowError] = useState("");
-
-  const [publicFollowActiveTab, setPublicFollowActiveTab] =
-    useState<PublicWalletFollowTabKey>("following");
-  const [publicFollowing, setPublicFollowing] = useState<
-    PublicWalletFollowUser[]
-  >([]);
-  const [publicFollowers, setPublicFollowers] = useState<
-    PublicWalletFollowUser[]
-  >([]);
-  const [publicFollowLoading, setPublicFollowLoading] = useState(false);
-  const [publicFollowError, setPublicFollowError] = useState("");
 
   useEffect(() => {
     const auth = getAuth();
@@ -96,14 +71,6 @@ export function useWalletPage() {
       setTokenError("");
       setOrderLoading(true);
       setOrderError("");
-      setFollowError("");
-      setIsFollowing(false);
-
-      setPublicFollowActiveTab("following");
-      setPublicFollowing([]);
-      setPublicFollowers([]);
-      setPublicFollowLoading(false);
-      setPublicFollowError("");
 
       try {
         if (!BACKEND_BASE_URL) {
@@ -146,8 +113,6 @@ export function useWalletPage() {
         setAvatarName(viewedAvatar.avatarName);
         setAvatarIcon(viewedAvatar.avatarIcon);
         setProfile(viewedAvatar.profile);
-        setFollowerCount(viewedAvatar.followerCount);
-        setFollowingCount(viewedAvatar.followingCount);
 
         if (!nextIsOwnAvatar) {
           setWallet(null);
@@ -155,38 +120,6 @@ export function useWalletPage() {
           setOrderHistory([]);
           setTokenLoading(false);
           setOrderLoading(false);
-          setPublicFollowLoading(true);
-          setPublicFollowError("");
-
-          try {
-            const followState = await fetchPublicWalletFollowState({
-              backendUrl: BACKEND_BASE_URL,
-              idToken,
-              avatarId: nextViewedAvatarId,
-            });
-
-            if (!isMounted) return;
-
-            setFollowerCount(followState.followerCount);
-            setFollowingCount(followState.followingCount);
-            setPublicFollowing(followState.following);
-            setPublicFollowers(followState.followers);
-          } catch (err) {
-            if (!isMounted) return;
-
-            setPublicFollowing([]);
-            setPublicFollowers([]);
-            setPublicFollowError(
-              err instanceof Error
-                ? err.message
-                : "フォロー情報の取得に失敗しました。"
-            );
-          } finally {
-            if (isMounted) {
-              setPublicFollowLoading(false);
-            }
-          }
-
           return;
         }
 
@@ -242,11 +175,8 @@ export function useWalletPage() {
         setWallet(null);
         setWalletTokens([]);
         setOrderHistory([]);
-        setPublicFollowing([]);
-        setPublicFollowers([]);
         setTokenLoading(false);
         setOrderLoading(false);
-        setPublicFollowLoading(false);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -261,48 +191,6 @@ export function useWalletPage() {
     };
   }, [authResolved, navigate, routeAvatarId]);
 
-  const handleFollowAvatar = useCallback(async () => {
-    if (isOwnAvatar || !avatarId || followPosting || isFollowing) {
-      return;
-    }
-
-    setFollowPosting(true);
-    setFollowError("");
-
-    try {
-      if (!BACKEND_BASE_URL) {
-        throw new Error("VITE_API_BASE_URL is not configured.");
-      }
-
-      const auth = getAuth();
-      const user = auth.currentUser;
-
-      if (!user) {
-        navigate(LANDING_PATH, { replace: true });
-        return;
-      }
-
-      const idToken = await user.getIdToken();
-
-      const nextState = await followAvatar({
-        backendUrl: BACKEND_BASE_URL,
-        idToken,
-        targetAvatarId: avatarId,
-      });
-
-      setIsFollowing(true);
-      setFollowerCount(nextState.followerCount ?? followerCount + 1);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "フォローに失敗しました。";
-
-      setFollowError(message);
-      throw err;
-    } finally {
-      setFollowPosting(false);
-    }
-  }, [avatarId, followPosting, followerCount, isFollowing, isOwnAvatar, navigate]);
-
   return {
     avatarId,
     viewedAvatarId,
@@ -310,8 +198,6 @@ export function useWalletPage() {
     avatarName,
     avatarIcon,
     profile,
-    followerCount,
-    followingCount,
     wallet,
     walletTokens,
     orderHistory,
@@ -326,15 +212,5 @@ export function useWalletPage() {
     hasItems: orderHistory.length > 0,
     hasTokens: walletTokens.length > 0,
     pageTitle: avatarName || "ウォレット",
-    isFollowing,
-    followPosting,
-    followError,
-    handleFollowAvatar,
-    publicFollowActiveTab,
-    setPublicFollowActiveTab,
-    publicFollowing,
-    publicFollowers,
-    publicFollowLoading,
-    publicFollowError,
   };
 }

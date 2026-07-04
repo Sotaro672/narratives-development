@@ -1,3 +1,4 @@
+// frontend/amol/src/features/avatar/hooks/useAvatarCreatePage.ts
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { signOut as firebaseSignOut } from "firebase/auth";
@@ -60,18 +61,12 @@ export function useAvatarCreatePage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const backendUrl =
-    import.meta.env.VITE_API_BASE_URL ||"";
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || "";
 
   const service = useMemo(() => {
     return new AvatarCreateService({
       auth,
       backendUrl,
-      logger: (message) => {
-        if (import.meta.env.DEV) {
-          console.log(`[UseAvatarCreate] ${message}`);
-        }
-      },
     });
   }, [backendUrl]);
 

@@ -1,17 +1,13 @@
-//frontend\amol\src\components\layout\header\HeaderActions.tsx
-import { useEffect, useState } from "react";
+// frontend/amol/src/components/layout/header/HeaderActions.tsx
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
 import { useInquiryUnreadCounter } from "../../../features/inquiry/hooks/useInquiryUnreadCounter";
-import { countUnreadReceivedMessages } from "../../../features/message/api/messageApi";
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {
   actions: HeaderActionState;
 };
-
-const MESSAGE_UNREAD_FETCH_LIMIT = 100;
 
 function normalizeCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value)
@@ -55,8 +51,6 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     toggleSettings,
   } = actions;
 
-  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
-
   const { unreadCount: announcementUnreadCount } = useAnnouncementUnreadCount({
     enabled: shouldShowAnnouncementButton,
   });
@@ -65,47 +59,11 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     enabled: shouldShowAnnouncementButton,
   });
 
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadMessageUnreadCount() {
-      if (!shouldShowAnnouncementButton) {
-        setMessageUnreadCount(0);
-        return;
-      }
-
-      try {
-        const unreadCount = await countUnreadReceivedMessages({
-          limit: MESSAGE_UNREAD_FETCH_LIMIT,
-        });
-
-        if (ignore) {
-          return;
-        }
-
-        setMessageUnreadCount(unreadCount);
-      } catch (error) {
-        console.error(error);
-
-        if (!ignore) {
-          setMessageUnreadCount(0);
-        }
-      }
-    }
-
-    void loadMessageUnreadCount();
-
-    return () => {
-      ignore = true;
-    };
-  }, [shouldShowAnnouncementButton]);
-
   const safeCartItemCount = normalizeCount(cartItemCount);
   const safeAnnouncementUnreadCount = normalizeCount(announcementUnreadCount);
   const safeInquiryUnreadCount = normalizeCount(inquiryUnreadCount);
-  const safeMessageUnreadCount = normalizeCount(messageUnreadCount);
 
-  const safeChatUnreadCount = safeInquiryUnreadCount + safeMessageUnreadCount;
+  const safeChatUnreadCount = safeInquiryUnreadCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
   const announcementUnreadBadgeLabel = formatBadgeLabel(

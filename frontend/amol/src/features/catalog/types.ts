@@ -164,15 +164,6 @@ export type CatalogProductBlueprintReviewPage = {
   hasNext: boolean;
 };
 
-export type MeAvatarStateResponse = {
-  avatarId: string;
-  followerCount?: number;
-  followingCount?: number;
-  postCount?: number;
-  lastActiveAt?: string;
-  updatedAt?: string;
-};
-
 export type MeasurementTableRow = {
   id: string;
   size: string;

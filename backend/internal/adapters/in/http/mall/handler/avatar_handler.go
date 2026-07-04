@@ -11,7 +11,6 @@ import (
 
 	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
-	avatarstate "narratives/internal/domain/avatarState"
 )
 
 type AvatarSummaryRepository interface {
@@ -48,28 +47,6 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.post(w, r)
 		return
 
-	case r.Method == http.MethodGet &&
-		strings.HasPrefix(path0, "/mall/avatars/") &&
-		strings.HasSuffix(path0, "/state"):
-		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/state")
-		if !ok {
-			notFound(w)
-			return
-		}
-		h.getState(w, r, id)
-		return
-
-	case r.Method == http.MethodPatch &&
-		strings.HasPrefix(path0, "/mall/avatars/") &&
-		strings.HasSuffix(path0, "/state"):
-		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/state")
-		if !ok {
-			notFound(w)
-			return
-		}
-		h.upsertState(w, r, id)
-		return
-
 	case r.Method == http.MethodGet && strings.HasPrefix(path0, "/mall/avatars/"):
 		id, ok := extractIDFromPath(path0, "/mall/avatars/")
 		if !ok {
@@ -92,31 +69,6 @@ func extractIDFromPath(path0 string, prefix string) (string, bool) {
 	}
 
 	rest := strings.TrimPrefix(path0, prefix)
-	if rest == "" {
-		return "", false
-	}
-
-	parts := strings.Split(rest, "/")
-	id := parts[0]
-	if id == "" {
-		return "", false
-	}
-
-	if len(parts) > 1 {
-		return "", false
-	}
-
-	return id, true
-}
-
-func extractIDFromSubroute(path0 string, prefix string, suffix string) (string, bool) {
-	if !strings.HasPrefix(path0, prefix) || !strings.HasSuffix(path0, suffix) {
-		return "", false
-	}
-
-	rest := strings.TrimPrefix(path0, prefix)
-	rest = strings.TrimSuffix(rest, suffix)
-	rest = strings.Trim(rest, "/")
 	if rest == "" {
 		return "", false
 	}
@@ -212,168 +164,12 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(toAvatarResponse(created))
 }
 
-type resolvedAvatarFollowRefResponse struct {
-	AvatarID   string     `json:"avatarId"`
-	AvatarName string     `json:"avatarName,omitempty"`
-	AvatarIcon string     `json:"avatarIcon,omitempty"`
-	FollowedAt *time.Time `json:"followedAt,omitempty"`
-}
-
-type avatarStatePatchResponse struct {
-	AvatarID       string                            `json:"avatarId"`
-	FollowerCount  *int64                            `json:"followerCount,omitempty"`
-	FollowingCount *int64                            `json:"followingCount,omitempty"`
-	PostCount      *int64                            `json:"postCount,omitempty"`
-	Followers      []resolvedAvatarFollowRefResponse `json:"followers"`
-	Following      []resolvedAvatarFollowRefResponse `json:"following"`
-	LastActiveAt   time.Time                         `json:"lastActiveAt"`
-	UpdatedAt      *time.Time                        `json:"updatedAt,omitempty"`
-}
-
-func (h *AvatarHandler) resolveFollowRefs(
-	ctx context.Context,
-	refs []avatarstate.AvatarFollowRef,
-) []resolvedAvatarFollowRefResponse {
-	if len(refs) == 0 {
-		return []resolvedAvatarFollowRefResponse{}
-	}
-
-	out := make([]resolvedAvatarFollowRefResponse, 0, len(refs))
-
-	for _, ref := range refs {
-		item := resolvedAvatarFollowRefResponse{
-			AvatarID: ref.AvatarID,
-		}
-
-		if !ref.FollowedAt.IsZero() {
-			t := ref.FollowedAt.UTC()
-			item.FollowedAt = &t
-		}
-
-		if h != nil && h.avatarRepo != nil && ref.AvatarID != "" {
-			a, err := h.avatarRepo.GetByID(ctx, ref.AvatarID)
-			if err == nil {
-				item.AvatarName = a.AvatarName
-				if a.AvatarIcon != nil {
-					item.AvatarIcon = *a.AvatarIcon
-				}
-			}
-		}
-
-		out = append(out, item)
-	}
-
-	return out
-}
-
-func (h *AvatarHandler) toAvatarStatePatchResponse(
-	ctx context.Context,
-	avatarID string,
-	st *avatarstate.AvatarState,
-) avatarStatePatchResponse {
-	if st == nil {
-		return avatarStatePatchResponse{
-			AvatarID:  avatarID,
-			Followers: []resolvedAvatarFollowRefResponse{},
-			Following: []resolvedAvatarFollowRefResponse{},
-			UpdatedAt: nil,
-		}
-	}
-
-	return avatarStatePatchResponse{
-		AvatarID:       avatarID,
-		FollowerCount:  st.FollowerCount,
-		FollowingCount: st.FollowingCount,
-		PostCount:      st.PostCount,
-		Followers:      h.resolveFollowRefs(ctx, st.Followers),
-		Following:      h.resolveFollowRefs(ctx, st.Following),
-		LastActiveAt:   st.LastActiveAt,
-		UpdatedAt:      st.UpdatedAt,
-	}
-}
-
-func (h *AvatarHandler) getState(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
-		return
-	}
-
-	data, err := h.uc.GetAggregate(ctx, id)
-	if err != nil {
-		writeAvatarErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(h.toAvatarStatePatchResponse(ctx, id, data.State))
-}
-
-func (h *AvatarHandler) upsertState(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
-		return
-	}
-
-	var body struct {
-		FollowerCount  *int64                         `json:"followerCount,omitempty"`
-		FollowingCount *int64                         `json:"followingCount,omitempty"`
-		PostCount      *int64                         `json:"postCount,omitempty"`
-		Followers      *[]avatarstate.AvatarFollowRef `json:"followers,omitempty"`
-		Following      *[]avatarstate.AvatarFollowRef `json:"following,omitempty"`
-		LastActiveAt   *time.Time                     `json:"lastActiveAt,omitempty"`
-		UpdatedAt      *time.Time                     `json:"updatedAt,omitempty"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	patch := avataruc.AvatarStatePatch{
-		FollowerCount:  body.FollowerCount,
-		FollowingCount: body.FollowingCount,
-		PostCount:      body.PostCount,
-		Followers:      body.Followers,
-		Following:      body.Following,
-		LastActiveAt:   body.LastActiveAt,
-		UpdatedAt:      body.UpdatedAt,
-	}
-
-	updated, err := h.uc.UpdateAvatarState(ctx, id, patch)
-	if err != nil {
-		writeAvatarErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(updated)
-}
-
 type avatarResponse struct {
 	AvatarID string `json:"avatarId"`
 	UserID   string `json:"userId"`
 
 	AvatarName string  `json:"avatarName"`
 	AvatarIcon *string `json:"avatarIcon,omitempty"`
-
-	AvatarState *avatarstate.AvatarState `json:"avatarState,omitempty"`
 
 	WalletAddress *string   `json:"walletAddress,omitempty"`
 	Profile       *string   `json:"profile,omitempty"`
@@ -383,29 +179,17 @@ type avatarResponse struct {
 }
 
 func toAvatarResponse(a avatardom.Avatar) avatarResponse {
-	var stPtr *avatarstate.AvatarState
-	if a.AvatarState.ID != "" {
-		tmp := a.AvatarState
-		stPtr = &tmp
-	}
-
 	return avatarResponse{
 		AvatarID:      a.ID,
 		UserID:        a.UserID,
 		AvatarName:    a.AvatarName,
 		AvatarIcon:    a.AvatarIcon,
-		AvatarState:   stPtr,
 		WalletAddress: a.WalletAddress,
 		Profile:       a.Profile,
 		ExternalLink:  a.ExternalLink,
 		CreatedAt:     a.CreatedAt,
 		UpdatedAt:     a.UpdatedAt,
 	}
-}
-
-type avatarAggregateResponse struct {
-	Avatar avatarResponse           `json:"avatar"`
-	State  *avatarstate.AvatarState `json:"state,omitempty"`
 }
 
 func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
@@ -420,25 +204,6 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
-		return
-	}
-
-	q := r.URL.Query()
-	agg := strings.EqualFold(q.Get("aggregate"), "1") || strings.EqualFold(q.Get("aggregate"), "true")
-
-	if agg {
-		data, err := h.uc.GetAggregate(ctx, id)
-		if err != nil {
-			writeAvatarErr(w, err)
-			return
-		}
-
-		out := avatarAggregateResponse{
-			Avatar: toAvatarResponse(data.Avatar),
-			State:  data.State,
-		}
-
-		_ = json.NewEncoder(w).Encode(out)
 		return
 	}
 
@@ -459,16 +224,7 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 		errors.Is(err, avataruc.ErrInvalidUserUID) ||
 		errors.Is(err, avatardom.ErrInvalidAvatarName) ||
 		errors.Is(err, avatardom.ErrInvalidProfile) ||
-		errors.Is(err, avatardom.ErrInvalidExternalLink) ||
-		errors.Is(err, avatarstate.ErrInvalidFollowerAvatarID) ||
-		errors.Is(err, avatarstate.ErrInvalidFollowingAvatarID) ||
-		errors.Is(err, avatarstate.ErrInvalidFollowedAt) ||
-		errors.Is(err, avatarstate.ErrDuplicateFollowerAvatar) ||
-		errors.Is(err, avatarstate.ErrDuplicateFollowingAvatar) ||
-		errors.Is(err, avatarstate.ErrSelfFollowerRelation) ||
-		errors.Is(err, avatarstate.ErrSelfFollowingRelation) ||
-		errors.Is(err, avatarstate.ErrFollowerCountMismatch) ||
-		errors.Is(err, avatarstate.ErrFollowingCountMismatch) {
+		errors.Is(err, avatardom.ErrInvalidExternalLink) {
 		code = http.StatusBadRequest
 	}
 

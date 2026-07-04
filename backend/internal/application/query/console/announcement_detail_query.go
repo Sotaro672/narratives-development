@@ -10,19 +10,14 @@ import (
 	appresolver "narratives/internal/application/resolver"
 	announcementdom "narratives/internal/domain/announcement"
 	avatardom "narratives/internal/domain/avatar"
-	avatarstatedom "narratives/internal/domain/avatarState"
 	memberdom "narratives/internal/domain/member"
 	tokendom "narratives/internal/domain/token"
 )
 
 type AnnouncementDetailTargetAvatar struct {
-	AvatarID       string                     `json:"avatarId"`
-	AvatarName     string                     `json:"avatarName"`
-	AvatarIcon     string                     `json:"avatarIcon"`
-	AvatarState    avatarstatedom.AvatarState `json:"avatarState"`
-	FollowerCount  int64                      `json:"followerCount"`
-	FollowingCount int64                      `json:"followingCount"`
-	PostCount      int64                      `json:"postCount"`
+	AvatarID   string `json:"avatarId"`
+	AvatarName string `json:"avatarName"`
+	AvatarIcon string `json:"avatarIcon"`
 }
 
 type AnnouncementDetailProductBlueprint struct {
@@ -87,7 +82,6 @@ type AnnouncementDetailQuery struct {
 	attachmentRepo               announcementdom.AttachmentRepository
 	memberRepo                   memberdom.Repository
 	avatarRepo                   avatardom.Repository
-	avatarStateRepo              avatarstatedom.Repository
 	mintRepo                     announcementDetailMintReader
 	mintProductBlueprintResolver announcementDetailMintProductBlueprintResolver
 }
@@ -97,7 +91,6 @@ func NewAnnouncementDetailQuery(
 	attachmentRepo announcementdom.AttachmentRepository,
 	memberRepo memberdom.Repository,
 	avatarRepo avatardom.Repository,
-	avatarStateRepo avatarstatedom.Repository,
 	mintRepo announcementDetailMintReader,
 	mintProductBlueprintResolver announcementDetailMintProductBlueprintResolver,
 ) *AnnouncementDetailQuery {
@@ -106,7 +99,6 @@ func NewAnnouncementDetailQuery(
 		attachmentRepo:               attachmentRepo,
 		memberRepo:                   memberRepo,
 		avatarRepo:                   avatarRepo,
-		avatarStateRepo:              avatarStateRepo,
 		mintRepo:                     mintRepo,
 		mintProductBlueprintResolver: mintProductBlueprintResolver,
 	}
@@ -130,9 +122,6 @@ func (q *AnnouncementDetailQuery) GetByID(
 	}
 	if q.avatarRepo == nil {
 		return AnnouncementDetail{}, errors.New("avatarRepo is nil")
-	}
-	if q.avatarStateRepo == nil {
-		return AnnouncementDetail{}, errors.New("avatarStateRepo is nil")
 	}
 	if q.mintRepo == nil {
 		return AnnouncementDetail{}, errors.New("mintRepo is nil")
@@ -256,9 +245,6 @@ func (q *AnnouncementDetailQuery) resolveTargetAvatars(
 	if q.avatarRepo == nil {
 		return nil, errors.New("avatarRepo is nil")
 	}
-	if q.avatarStateRepo == nil {
-		return nil, errors.New("avatarStateRepo is nil")
-	}
 
 	result := make([]AnnouncementDetailTargetAvatar, 0, len(ids))
 
@@ -268,21 +254,10 @@ func (q *AnnouncementDetailQuery) resolveTargetAvatars(
 			return nil, err
 		}
 
-		state, err := q.avatarStateRepo.GetByAvatarID(ctx, avatarID)
-		if err != nil {
-			if !errors.Is(err, avatarstatedom.ErrNotFound) {
-				return nil, err
-			}
-		}
-
 		result = append(result, AnnouncementDetailTargetAvatar{
-			AvatarID:       avatarID,
-			AvatarName:     a.AvatarName,
-			AvatarIcon:     stringPtrValue(a.AvatarIcon),
-			AvatarState:    state,
-			FollowerCount:  int64PtrValue(state.FollowerCount),
-			FollowingCount: int64PtrValue(state.FollowingCount),
-			PostCount:      int64PtrValue(state.PostCount),
+			AvatarID:   avatarID,
+			AvatarName: a.AvatarName,
+			AvatarIcon: stringPtrValue(a.AvatarIcon),
 		})
 	}
 

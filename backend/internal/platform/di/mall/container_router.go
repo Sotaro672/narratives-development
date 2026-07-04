@@ -10,7 +10,6 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 	firestoreOut "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
-	mallquery "narratives/internal/application/query/mall"
 	"narratives/internal/application/usecase"
 	tokenBlueprint "narratives/internal/domain/tokenBlueprint"
 )
@@ -80,8 +79,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	shipH := notImplemented("ShippingAddress")
 	paymentMethodH := notImplemented("PaymentMethod")
 	avatarH := notImplemented("Avatar")
-	avatarStateH := notImplemented("AvatarState")
-	messageH := notImplemented("Message")
 	walletH := notImplemented("Wallet")
 	meWalletH := notImplemented("MeWallet")
 	cartH := notImplemented("Cart")
@@ -170,21 +167,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// /mall/me/avatars
-	if cont.MeAvatarResolver != nil &&
-		cont.AvatarUC != nil &&
-		cont.AvatarRepo != nil &&
-		cont.Infra != nil &&
-		cont.Infra.Firestore != nil {
-
-		avatarStateRepo := firestoreOut.NewAvatarStateRepositoryFS(cont.Infra.Firestore)
-		avatarStateQuery := mallquery.NewAvatarStateQuery(cont.AvatarRepo, avatarStateRepo)
-
-		meAvatarsH = mallhandler.NewMeAvatarHandler(cont.MeAvatarResolver, cont.AvatarUC, avatarStateQuery)
-	}
-
-	// /mall/me/messages
-	if cont.MeAvatarResolver != nil && cont.MessageUC != nil {
-		messageH = mallhandler.NewMessageHandler(cont.MeAvatarResolver, cont.MessageUC)
+	if cont.MeAvatarResolver != nil && cont.AvatarUC != nil {
+		meAvatarsH = mallhandler.NewMeAvatarHandler(
+			cont.MeAvatarResolver,
+			cont.AvatarUC,
+		)
 	}
 
 	// /mall/me/announcements
@@ -314,12 +301,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Avatar:          avatarH,
 
 		MeAvatar: meAvatarsH,
-
-		AvatarState: avatarStateH,
-		Message:     messageH,
-		Wallet:      walletH,
-		MeWallet:    meWalletH,
-		Cart:        cartH,
+		Wallet:   walletH,
+		MeWallet: meWalletH,
+		Cart:     cartH,
 
 		Market: marketH,
 		Resale: resaleH,

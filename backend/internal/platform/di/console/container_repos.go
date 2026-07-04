@@ -11,7 +11,6 @@ type repos struct {
 	announcementRepo           *fs.AnnouncementRepositoryFS
 	announcementAttachmentRepo *fs.AnnouncementAttachmentRepositoryFS
 	avatarRepo                 *fs.AvatarRepositoryFS
-	avatarStateRepo            *fs.AvatarStateRepositoryFS
 	paymentMethodRepo          *fs.PaymentMethodRepositoryFS
 	brandRepo                  *fs.BrandRepositoryFS
 	companyRepo                *fs.CompanyRepositoryFS
@@ -70,7 +69,6 @@ func buildRepos(c *clients) *repos {
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	announcementAttachmentRepo := fs.NewAnnouncementAttachmentRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
-	avatarStateRepo := fs.NewAvatarStateRepositoryFS(fsClient)
 
 	paymentMethodRepo := fs.NewPaymentMethodRepositoryFS(fsClient)
 	brandRepo := fs.NewBrandRepositoryFS(fsClient)
@@ -124,7 +122,6 @@ func buildRepos(c *clients) *repos {
 		announcementRepo:           announcementRepo,
 		announcementAttachmentRepo: announcementAttachmentRepo,
 		avatarRepo:                 avatarRepo,
-		avatarStateRepo:            avatarStateRepo,
 		paymentMethodRepo:          paymentMethodRepo,
 		brandRepo:                  brandRepo,
 		companyRepo:                companyRepo,

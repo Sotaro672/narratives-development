@@ -10,15 +10,10 @@ type BarcodeDetectorLike = {
   detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
 };
 
-type ScanTarget =
-  | {
-      type: "product";
-      productId: string;
-    }
-  | {
-      type: "avatar";
-      avatarId: string;
-    };
+type ScanTarget = {
+  type: "product";
+  productId: string;
+};
 
 declare global {
   interface Window {
@@ -56,10 +51,6 @@ function normalizeSafeId(raw: string): string | null {
  *   /scan/result/{productId}
  *   productId={productId}
  *   raw productId
- *
- * Avatar Share QR:
- *   https://amol.jp/avatars/{avatarId}
- *   /avatars/{avatarId}
  */
 function safeExtractScanTarget(rawText: string): ScanTarget | null {
   const trimmed = rawText.trim();
@@ -70,21 +61,7 @@ function safeExtractScanTarget(rawText: string): ScanTarget | null {
 
     const pathParts = url.pathname.split("/").filter(Boolean);
 
-    if (pathParts[0] === "avatars" && pathParts[1]) {
-      const avatarId = normalizeSafeId(pathParts[1]);
-
-      if (avatarId) {
-        return {
-          type: "avatar",
-          avatarId,
-        };
-      }
-    }
-
-    const queryProductId =
-      url.searchParams.get("productId") ||
-      url.searchParams.get("productID") ||
-      url.searchParams.get("id");
+    const queryProductId = url.searchParams.get("productId");
 
     if (queryProductId) {
       const productId = normalizeSafeId(queryProductId);
@@ -130,19 +107,7 @@ function safeExtractScanTarget(rawText: string): ScanTarget | null {
     // URL でない場合は下の relative / plain text 処理へ
   }
 
-  const avatarPathMatch = trimmed.match(/\/avatars\/([^/?#]+)(?:[?#].*)?$/);
-  if (avatarPathMatch?.[1]) {
-    const avatarId = normalizeSafeId(avatarPathMatch[1]);
-
-    if (avatarId) {
-      return {
-        type: "avatar",
-        avatarId,
-      };
-    }
-  }
-
-  const queryMatch = trimmed.match(/[?&](?:productId|productID|id)=([^&#]+)/);
+  const queryMatch = trimmed.match(/[?&]productId=([^&#]+)/);
   if (queryMatch?.[1]) {
     const productId = normalizeSafeId(queryMatch[1]);
 
@@ -320,15 +285,6 @@ export default function ScanPage() {
       setScanningLocked(true);
       stopCamera();
 
-      if (target.type === "avatar") {
-        const encodedAvatarId = encodeURIComponent(target.avatarId);
-
-        navigate(`/avatars/${encodedAvatarId}`, {
-          replace: true,
-        });
-        return;
-      }
-
       const encodedProductId = encodeURIComponent(target.productId);
 
       navigate(`/scan/result?productId=${encodedProductId}`, {
@@ -466,7 +422,7 @@ export default function ScanPage() {
         <div className="scan-page__center-guide">
           <div className="scan-page__frame" />
           <p className="scan-page__guide-text">
-            商品またはプロフィール QR コードを枠内に合わせてください
+            商品 QR コードを枠内に合わせてください
           </p>
         </div>
       </div>

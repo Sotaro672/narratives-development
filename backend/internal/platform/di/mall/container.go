@@ -3,8 +3,6 @@ package mall
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"os"
 
@@ -73,26 +71,10 @@ func (g *firebaseAuthEmailGetter) GetEmailByUID(ctx context.Context, uid string)
 	return userRecord.Email, nil
 }
 
-type randomMessageIDGenerator struct{}
-
-func newRandomMessageIDGenerator() usecase.MessageIDGenerator {
-	return randomMessageIDGenerator{}
-}
-
-func (randomMessageIDGenerator) NewMessageID() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return ""
-	}
-
-	return "msg_" + hex.EncodeToString(b[:])
-}
-
 type Container struct {
 	Infra *shared.Infra
 
 	AvatarUC          *usecase.AvatarUsecase
-	MessageUC         *usecase.MessageUsecase
 	SetupUC           *usecase.SetupUsecase
 	ListUC            *usecase.ListUsecase
 	ShippingAddressUC *usecase.ShippingAddressUsecase
@@ -180,8 +162,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	authUserEmailGetter := newFirebaseAuthEmailGetter(infra.FirebaseAuth)
 
 	avatarRepo := outfs.NewAvatarRepositoryFS(fsClient)
-	avatarStateRepo := outfs.NewAvatarStateRepositoryFS(fsClient)
-	messageRepo := outfs.NewMessageRepository(fsClient)
 
 	c.AvatarRepo = avatarRepo
 	c.MeAvatarResolver = avatarRepo
@@ -311,19 +291,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	c.AvatarUC = usecase.NewAvatarUsecase(
 		avatarRepo,
-		avatarStateRepo,
 		avatarWalletSvc,
 		walletRepo,
 		cartRepo,
-		nil,
-	)
-
-	c.MessageUC = usecase.NewMessageUsecase(
-		messageRepo,
-		avatarRepo,
-		avatarStateRepo,
-		nil,
-		newRandomMessageIDGenerator(),
 		nil,
 	)
 
