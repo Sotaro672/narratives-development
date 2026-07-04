@@ -1,10 +1,12 @@
-// frontend/amol/src/pages/ResalePageDetailPage.tsx
+// frontend/amol/src/pages/ResaleDetailPage.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Input from "../components/ui/Input";
 import MediaIcon from "../components/ui/MediaIcon";
 import SectionHeader from "../components/ui/SectionHeader";
+import Textbox from "../components/ui/Textbox";
 import {
   listMyResaleConditionImages,
   listMyResaleListings,
@@ -64,7 +66,7 @@ function sortImages(images: ResaleConditionImage[]): ResaleConditionImage[] {
   });
 }
 
-export default function ResalePageDetailPage() {
+export default function ResaleDetailPage() {
   const navigate = useNavigate();
   const { resaleId } = useParams<{ resaleId: string }>();
 
@@ -86,6 +88,7 @@ export default function ResalePageDetailPage() {
   const brandName = normalizeText(item?.brandName);
   const condition = normalizeText(item?.condition);
   const description = normalizeText(item?.description);
+  const status = normalizeText(item?.status);
 
   const title = productName || tokenName || "出品詳細";
 
@@ -304,42 +307,49 @@ export default function ResalePageDetailPage() {
             <section className="page-card">
               <SectionHeader title="販売情報" titleAs="h2" />
 
-              <dl className="page-definition-list">
-                <div className="page-definition-list__row">
-                  <dt>販売価格</dt>
-                  <dd>{priceLabel}</dd>
-                </div>
+              <div className="page-form">
+                <Input
+                  label="販売価格"
+                  type="text"
+                  value={priceLabel}
+                  readOnly
+                />
 
-                <div className="page-definition-list__row">
-                  <dt>商品の状態</dt>
-                  <dd>{condition || "-"}</dd>
-                </div>
+                <Input
+                  label="商品の状態"
+                  type="text"
+                  value={condition || "-"}
+                  readOnly
+                />
 
-                <div className="page-definition-list__row">
-                  <dt>出品ステータス</dt>
-                  <dd>{normalizeText(item.status) || "-"}</dd>
-                </div>
+                <Input
+                  label="出品ステータス"
+                  type="text"
+                  value={status || "-"}
+                  readOnly
+                />
 
-                <div className="page-definition-list__row">
-                  <dt>出品日時</dt>
-                  <dd>{createdAtLabel}</dd>
-                </div>
+                <Input
+                  label="出品日時"
+                  type="text"
+                  value={createdAtLabel}
+                  readOnly
+                />
 
-                <div className="page-definition-list__row">
-                  <dt>更新日時</dt>
-                  <dd>{updatedAtLabel}</dd>
-                </div>
-              </dl>
-            </section>
+                <Input
+                  label="更新日時"
+                  type="text"
+                  value={updatedAtLabel}
+                  readOnly
+                />
 
-            <section className="page-card">
-              <SectionHeader title="説明文" titleAs="h2" />
-
-              {description ? (
-                <p className="page-card__text">{description}</p>
-              ) : (
-                <p className="page-card__text">説明文はありません。</p>
-              )}
+                <Textbox
+                  label="説明文"
+                  value={description || "説明文はありません。"}
+                  rows={6}
+                  readOnly
+                />
+              </div>
             </section>
           </div>
         ) : null}
