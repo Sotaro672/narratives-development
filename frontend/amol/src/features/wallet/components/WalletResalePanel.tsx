@@ -1,6 +1,5 @@
 // frontend/amol/src/features/wallet/components/WalletResalePanel.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import {
   listMyResaleConditionImages,
@@ -17,6 +16,7 @@ type ResaleImageMap = Record<string, string>;
 
 type WalletResalePanelProps = {
   avatarId?: string;
+  onItemClick?: (resaleId: string, item: ResaleListing) => void;
 };
 
 function formatPrice(value: number | undefined): string {
@@ -87,9 +87,8 @@ function getPrimaryImageUrl(
 
 export default function WalletResalePanel({
   avatarId,
+  onItemClick,
 }: WalletResalePanelProps) {
-  const navigate = useNavigate();
-
   const normalizedAvatarId = String(avatarId ?? "").trim();
   const isPublicAvatarMode = Boolean(normalizedAvatarId);
 
@@ -122,19 +121,6 @@ export default function WalletResalePanel({
       return bTime - aTime;
     });
   }, [items]);
-
-  const handleOpenMarketDetail = useCallback(
-    (resaleId: string | undefined) => {
-      const id = String(resaleId ?? "").trim();
-
-      if (!id) {
-        return;
-      }
-
-      navigate(`/market/${encodeURIComponent(id)}`);
-    },
-    [navigate],
-  );
 
   const loadResaleImages = useCallback(
     async (nextItems: ResaleListing[]): Promise<ResaleImageMap> => {
@@ -212,6 +198,28 @@ export default function WalletResalePanel({
     void loadResales();
   }, [loadResales]);
 
+  const handleItemClick = (item: ResaleListing) => {
+    const resaleId = String(item.id ?? "").trim();
+
+    if (!resaleId || !onItemClick) {
+      return;
+    }
+
+    onItemClick(resaleId, item);
+  };
+
+  const handleItemKeyDown = (
+    event: React.KeyboardEvent<HTMLElement>,
+    item: ResaleListing,
+  ) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    handleItemClick(item);
+  };
+
   if (loading) {
     return (
       <div className="wallet-resale-list">
@@ -256,21 +264,30 @@ export default function WalletResalePanel({
         const productName = textOrEmpty(item.productName);
         const tokenName = textOrEmpty(item.tokenName);
         const brandName = textOrEmpty(item.brandName);
-        const title = productName || tokenName || brandName || "出品商品";
-        const isClickable = Boolean(resaleId);
+
+        const isClickable = Boolean(resaleId && onItemClick);
 
         return (
           <article
             key={resaleId || item.mintAddress}
-            className="wallet-resale-list__item"
+            className={
+              isClickable
+                ? "wallet-resale-list__item wallet-resale-list__item--clickable"
+                : "wallet-resale-list__item"
+            }
+            role={isClickable ? "button" : undefined}
+            tabIndex={isClickable ? 0 : undefined}
+            aria-label={
+              isClickable
+                ? `${productName || tokenName || brandName || "出品商品"}の詳細を開く`
+                : undefined
+            }
+            onClick={isClickable ? () => handleItemClick(item) : undefined}
+            onKeyDown={
+              isClickable ? (event) => handleItemKeyDown(event, item) : undefined
+            }
           >
-            <button
-              type="button"
-              className="wallet-resale-card wallet-resale-card--button"
-              onClick={() => handleOpenMarketDetail(resaleId)}
-              disabled={!isClickable}
-              aria-label={`${title}の詳細を開く`}
-            >
+            <div className="wallet-resale-card">
               <div className="wallet-resale-card__media">
                 {imageUrl ? (
                   <img
@@ -320,7 +337,7 @@ export default function WalletResalePanel({
                   </p>
                 </div>
               </div>
-            </button>
+            </div>
           </article>
         );
       })}

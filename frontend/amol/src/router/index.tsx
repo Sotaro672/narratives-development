@@ -32,6 +32,7 @@ import InquiryPage from "../pages/InquiryCreatePage";
 import ChatListPage from "../pages/ChatListPage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import WalletPage from "../pages/WalletPage";
+import PublicWalletPage from "../pages/PublicWalletPage";
 import ContentsPage from "../pages/ContentsPage";
 import AnnouncementPage from "../pages/AnnouncementPage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
@@ -40,7 +41,8 @@ import ContactPage from "../pages/ContactPage";
 import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
 import PricePlan from "../pages/PricePlan";
-import ResalePage from "../pages/ResalePage";
+import ResalePage from "../pages/ResaleCreatePage";
+import ResalePageDetailPage from "../pages/ResaleDetailPage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 
 function RootPage() {
@@ -96,7 +98,7 @@ export const router = createBrowserRouter([
     path: "/avatars/:avatarId",
     element: (
       <ProtectedRoute>
-        <WalletPage />
+        <PublicWalletPage />
       </ProtectedRoute>
     ),
   },
@@ -125,6 +127,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <MarketDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/resales/:resaleId",
+    element: (
+      <ProtectedRoute>
+        <ResalePageDetailPage />
       </ProtectedRoute>
     ),
   },

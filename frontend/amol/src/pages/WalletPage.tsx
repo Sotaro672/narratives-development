@@ -21,8 +21,6 @@ export default function WalletPage() {
 
   const {
     avatarId,
-    viewedAvatarId,
-    isOwnAvatar,
     avatarName,
     avatarIcon,
     profile,
@@ -77,6 +75,16 @@ export default function WalletPage() {
     navigate(`/brands/${encodeURIComponent(id)}`);
   };
 
+  const handleOpenResaleDetail = (resaleId: string) => {
+    const id = resaleId.trim();
+
+    if (!id) {
+      return;
+    }
+
+    navigate(`/resales/${encodeURIComponent(id)}`);
+  };
+
   const renderTokenList = () => (
     <div className="wallet-page-token-list">
       {tokenLoading ? (
@@ -115,34 +123,30 @@ export default function WalletPage() {
               avatarName={avatarName}
               avatarIcon={avatarIcon}
               profile={profile}
-              isOwnAvatar={isOwnAvatar}
+              isOwnAvatar={true}
             />
 
-            <WalletProfileActions avatarId={avatarId} isOwnAvatar={isOwnAvatar} />
+            <WalletProfileActions avatarId={avatarId} isOwnAvatar={true} />
           </aside>
 
           <div className="wallet-page-layout__main">
-            {isOwnAvatar ? (
-              <>
-                <WalletTabs activeTab={activeTab} onChange={setActiveTab} />
+            <WalletTabs activeTab={activeTab} onChange={setActiveTab} />
 
-                {activeTab === "history" ? (
-                  <WalletHistoryPanel
-                    loading={loading || orderLoading}
-                    error={error || orderError}
-                    hasItems={hasItems}
-                    orderHistory={orderHistory}
-                    onBrandClick={handleOpenBrand}
-                  />
-                ) : null}
+            {activeTab === "history" ? (
+              <WalletHistoryPanel
+                loading={loading || orderLoading}
+                error={error || orderError}
+                hasItems={hasItems}
+                orderHistory={orderHistory}
+                onBrandClick={handleOpenBrand}
+              />
+            ) : null}
 
-                {activeTab === "tokens" ? renderTokenList() : null}
+            {activeTab === "tokens" ? renderTokenList() : null}
 
-                {activeTab === "resales" ? <WalletResalePanel /> : null}
-              </>
-            ) : (
-              <WalletResalePanel avatarId={viewedAvatarId} />
-            )}
+            {activeTab === "resales" ? (
+              <WalletResalePanel onItemClick={handleOpenResaleDetail} />
+            ) : null}
           </div>
         </div>
       </section>
