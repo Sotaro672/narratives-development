@@ -3,8 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import MediaGallery, {
+  type MediaGalleryItem,
+} from "../components/ui/MediaGallery";
 import {
   fetchMarketResaleById,
+  fetchMarketResaleConditionImages,
+  type MarketResaleConditionImage,
   type MarketResaleListing,
 } from "../features/market/marketApi";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
@@ -118,6 +123,63 @@ function formatMeasurements(
     .join(" / ");
 }
 
+function getFileTypeFromUrl(url: string): string {
+  const normalizedUrl = url.toLowerCase();
+
+  if (
+    normalizedUrl.includes(".mp4") ||
+    normalizedUrl.includes(".mov") ||
+    normalizedUrl.includes(".webm")
+  ) {
+    return "video/mp4";
+  }
+
+  return "image/*";
+}
+
+function sortMarketResaleImages(
+  images: MarketResaleConditionImage[],
+): MarketResaleConditionImage[] {
+  return [...images].sort((a, b) => {
+    const aOrder = Number(a.displayOrder ?? 0);
+    const bOrder = Number(b.displayOrder ?? 0);
+
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+
+    return String(a.id || "").localeCompare(String(b.id || ""), "ja");
+  });
+}
+
+function createGalleryItemFromImage(
+  image: MarketResaleConditionImage,
+): MediaGalleryItem {
+  return {
+    id: image.id,
+    url: image.url,
+    fileName: image.fileName || "出品画像",
+    type: image.mimeType || image.type || getFileTypeFromUrl(image.url),
+  };
+}
+
+function createFallbackGalleryItem(
+  item: MarketResaleListingWithModel,
+): MediaGalleryItem | null {
+  const imageUrl = normalizeText(item.imageUrl);
+
+  if (!imageUrl) {
+    return null;
+  }
+
+  return {
+    id: normalizeText(item.imageId) || normalizeText(item.id) || imageUrl,
+    url: imageUrl,
+    fileName: item.productName || item.tokenName || "出品画像",
+    type: getFileTypeFromUrl(imageUrl),
+  };
+}
+
 async function readResponseErrorMessage(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
 
@@ -187,6 +249,8 @@ export default function MarketDetailPage() {
   const { resaleId } = useParams<{ resaleId: string }>();
 
   const [item, setItem] = useState<MarketResaleListingWithModel | null>(null);
+  const [images, setImages] = useState<MarketResaleConditionImage[]>([]);
+  const [activeMediaIndex, setActiveMediaIndex] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [addingToCart, setAddingToCart] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -207,17 +271,25 @@ export default function MarketDetailPage() {
       setError("");
       setCartMessage("");
       setCartErrorMessage("");
+      setActiveMediaIndex(0);
 
       try {
         const data = (await fetchMarketResaleById(
           resaleId,
         )) as MarketResaleListingWithModel;
 
+        const nextImages = await fetchMarketResaleConditionImages(resaleId);
+
         if (!cancelled) {
           setItem(data);
+          setImages(nextImages);
+          setActiveMediaIndex(0);
         }
       } catch (err) {
         if (!cancelled) {
+          setItem(null);
+          setImages([]);
+          setActiveMediaIndex(0);
           setError(
             err instanceof Error
               ? err.message
@@ -249,6 +321,33 @@ export default function MarketDetailPage() {
   const modelKind = normalizeText(item?.kind);
   const modelNumber = normalizeText(item?.modelNumber);
   const modelSize = normalizeText(item?.size);
+  const tokenName = normalizeText(item?.tokenName);
+  const tokenIcon = normalizeText(item?.tokenIcon);
+  const avatarName = normalizeText(item?.avatarName);
+  const avatarIcon = normalizeText(item?.avatarIcon);
+
+  const galleryItems = useMemo<MediaGalleryItem[]>(() => {
+    const fromImages = sortMarketResaleImages(images).map(
+      createGalleryItemFromImage,
+    );
+
+    if (fromImages.length > 0) {
+      return fromImages;
+    }
+
+    if (!item) {
+      return [];
+    }
+
+    const fallbackItem = createFallbackGalleryItem(item);
+
+    return fallbackItem ? [fallbackItem] : [];
+  }, [images, item]);
+
+  const safeActiveMediaIndex =
+    activeMediaIndex >= 0 && activeMediaIndex < galleryItems.length
+      ? activeMediaIndex
+      : 0;
 
   const modelKindLabel = formatModelKind(modelKind);
   const modelColorName = getModelColorName(item?.color);
@@ -272,6 +371,34 @@ export default function MarketDetailPage() {
   const canAddToCart = Boolean(
     item?.id && item?.productId && !loading && !error && !addingToCart,
   );
+
+  function handlePrevMedia() {
+    if (galleryItems.length <= 1) {
+      return;
+    }
+
+    setActiveMediaIndex((current) =>
+      current <= 0 ? galleryItems.length - 1 : current - 1,
+    );
+  }
+
+  function handleNextMedia() {
+    if (galleryItems.length <= 1) {
+      return;
+    }
+
+    setActiveMediaIndex((current) =>
+      current >= galleryItems.length - 1 ? 0 : current + 1,
+    );
+  }
+
+  function handleSelectMedia(index: number) {
+    if (index < 0 || index >= galleryItems.length) {
+      return;
+    }
+
+    setActiveMediaIndex(index);
+  }
 
   async function handleAddToCart() {
     const targetResaleId = item?.id?.trim();
@@ -342,17 +469,16 @@ export default function MarketDetailPage() {
         {!loading && !error && item ? (
           <section className="market-detail-page__card">
             <div className="market-detail-page__image-wrap">
-              {item.imageUrl ? (
-                <img
-                  src={item.imageUrl}
-                  alt={item.productName || item.tokenName || "出品画像"}
-                  className="market-detail-page__image"
-                />
-              ) : (
-                <div className="market-detail-page__image-placeholder">
-                  No Image
-                </div>
-              )}
+              <MediaGallery
+                items={galleryItems}
+                activeIndex={safeActiveMediaIndex}
+                altFallback={item.productName || item.tokenName || "出品画像"}
+                placeholderText="No Image"
+                className="market-detail-page__media-gallery"
+                onPrev={handlePrevMedia}
+                onNext={handleNextMedia}
+                onSelect={handleSelectMedia}
+              />
             </div>
 
             <div className="market-detail-page__content">
@@ -363,6 +489,55 @@ export default function MarketDetailPage() {
               <h1 className="market-detail-page__title">
                 {item.productName || item.tokenName || "商品名未設定"}
               </h1>
+
+              {avatarName || avatarIcon ? (
+                <div className="market-detail-page__seller">
+                  {avatarIcon ? (
+                    <img
+                      src={avatarIcon}
+                      alt={avatarName || "出品者アイコン"}
+                      className="market-detail-page__seller-icon"
+                    />
+                  ) : (
+                    <span
+                      className="market-detail-page__seller-icon market-detail-page__seller-icon--placeholder"
+                      aria-hidden="true"
+                    >
+                      ◎
+                    </span>
+                  )}
+
+                  <div className="market-detail-page__seller-body">
+                    <span className="market-detail-page__seller-label">
+                      出品者
+                    </span>
+                    <span className="market-detail-page__seller-name">
+                      {avatarName || "アバター名未設定"}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {tokenName || tokenIcon ? (
+                <div className="market-detail-page__token">
+                  {tokenIcon ? (
+                    <img
+                      src={tokenIcon}
+                      alt={tokenName || "トークンアイコン"}
+                      className="market-detail-page__token-icon"
+                    />
+                  ) : null}
+
+                  <div className="market-detail-page__token-body">
+                    <span className="market-detail-page__token-label">
+                      トークン
+                    </span>
+                    <span className="market-detail-page__token-name">
+                      {tokenName || "トークン名未設定"}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
 
               <p className="market-detail-page__price">{priceLabel}</p>
 

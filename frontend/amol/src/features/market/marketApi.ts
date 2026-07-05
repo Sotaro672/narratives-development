@@ -11,6 +11,22 @@ export type MarketResaleCondition =
   | "やや傷や汚れあり"
   | "傷や汚れあり";
 
+export type MarketResaleConditionImage = {
+  id: string;
+  resaleId?: string;
+  url: string;
+  objectPath?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  type?: string;
+  displayOrder?: number;
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+};
+
 export type MarketResaleListing = {
   id: string;
   status?: MarketResaleStatus;
@@ -28,7 +44,13 @@ export type MarketResaleListing = {
 
   productName?: string;
   tokenName?: string;
+  tokenIcon?: string;
   brandName?: string;
+  avatarName?: string;
+  avatarIcon?: string;
+
+  images?: MarketResaleConditionImage[];
+  conditionImages?: MarketResaleConditionImage[];
 
   createdBy?: string;
   createdAt?: string;
@@ -53,6 +75,13 @@ export type MarketResaleCursorListResponse = {
 export type MarketResaleDetailResponse = {
   data: MarketResaleListing;
 };
+
+export type MarketResaleConditionImagesResponse =
+  | MarketResaleConditionImage[]
+  | {
+      data?: MarketResaleConditionImage[];
+      items?: MarketResaleConditionImage[];
+    };
 
 export type MarketResaleSortOrder = "asc" | "desc";
 
@@ -112,6 +141,14 @@ function normalizeApiBaseUrl(): string {
   }
 
   return "";
+}
+
+function normalizeString(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
 }
 
 function appendString(
@@ -271,6 +308,36 @@ async function readJsonResponse<T>(
   return data;
 }
 
+function isMarketResaleConditionImage(
+  value: unknown,
+): value is MarketResaleConditionImage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Partial<MarketResaleConditionImage>;
+
+  return normalizeString(record.id) !== "" && normalizeString(record.url) !== "";
+}
+
+function normalizeMarketResaleConditionImagesResponse(
+  response: MarketResaleConditionImagesResponse,
+): MarketResaleConditionImage[] {
+  if (Array.isArray(response)) {
+    return response.filter(isMarketResaleConditionImage);
+  }
+
+  if (Array.isArray(response.data)) {
+    return response.data.filter(isMarketResaleConditionImage);
+  }
+
+  if (Array.isArray(response.items)) {
+    return response.items.filter(isMarketResaleConditionImage);
+  }
+
+  return [];
+}
+
 async function resolveViewerAvatarId(
   apiBaseUrl: string,
   params: FetchMarketResalesParams | FetchMarketResalesByCursorParams,
@@ -315,14 +382,6 @@ async function withResolvedViewerAvatarId<
     ...params,
     viewerAvatarId,
   };
-}
-
-function normalizeString(value: unknown): string {
-  if (typeof value !== "string") {
-    return "";
-  }
-
-  return value.trim();
 }
 
 function firstNonEmptyString(values: unknown): string {
@@ -459,4 +518,37 @@ export async function fetchMarketResaleById(
   );
 
   return result.data;
+}
+
+export async function fetchMarketResaleConditionImages(
+  resaleId: string,
+): Promise<MarketResaleConditionImage[]> {
+  const apiBaseUrl = normalizeApiBaseUrl();
+  const id = resaleId.trim();
+
+  if (!apiBaseUrl) {
+    throw new Error("API Base URLが未設定です。");
+  }
+
+  if (!id) {
+    throw new Error("マーケット出品IDが未指定です。");
+  }
+
+  const response = await fetch(
+    `${apiBaseUrl}${MARKET_RESALES_PATH}/${encodeURIComponent(id)}/images`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "include",
+    },
+  );
+
+  const result = await readJsonResponse<MarketResaleConditionImagesResponse>(
+    response,
+    "マーケット出品画像APIがJSON以外を返しました。",
+  );
+
+  return normalizeMarketResaleConditionImagesResponse(result);
 }

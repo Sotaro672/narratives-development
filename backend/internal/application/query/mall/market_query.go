@@ -4,8 +4,8 @@ package mall
 import (
 	"context"
 	"errors"
-	"strings"
 
+	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
@@ -30,6 +30,7 @@ type MarketResaleRepository interface {
 // - Own resales are excluded from List / ListByCursor when viewer avatarId is provided.
 // - Detail visibility is guarded by status.
 // - Display fields are enriched here.
+// - Images are public only when the parent resale is listing.
 //
 // NOTE:
 // Current implementation treats filter.AvatarIDs as viewer avatarIds for exclusion.
@@ -43,6 +44,7 @@ type MarketQuery struct {
 	productBlueprintRepo productblueprintdom.Repository
 	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
 	brandRepo            branddom.Repository
+	avatarRepo           avatardom.Repository
 }
 
 func NewMarketQuery(
@@ -53,8 +55,9 @@ func NewMarketQuery(
 	productBlueprintRepo productblueprintdom.Repository,
 	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
 	brandRepo branddom.Repository,
+	avatarRepo ...avatardom.Repository,
 ) *MarketQuery {
-	return &MarketQuery{
+	q := &MarketQuery{
 		resaleRepo:           resaleRepo,
 		imageRepo:            imageRepo,
 		productRepo:          productRepo,
@@ -63,6 +66,12 @@ func NewMarketQuery(
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		brandRepo:            brandRepo,
 	}
+
+	if len(avatarRepo) > 0 {
+		q.avatarRepo = avatarRepo[0]
+	}
+
+	return q
 }
 
 func (q *MarketQuery) List(
@@ -137,7 +146,6 @@ func (q *MarketQuery) GetByID(ctx context.Context, id string) (resaledom.Resale,
 		return resaledom.Resale{}, errors.New("not supported: MarketQuery.GetByID")
 	}
 
-	id = strings.TrimSpace(id)
 	if id == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidID
 	}
@@ -154,6 +162,35 @@ func (q *MarketQuery) GetByID(ctx context.Context, id string) (resaledom.Resale,
 	item = q.enrichResaleForDisplay(ctx, item)
 
 	return item, nil
+}
+
+func (q *MarketQuery) ListImagesByResaleID(
+	ctx context.Context,
+	resaleID string,
+) ([]resaledom.ResaleImage, error) {
+	if q == nil || q.resaleRepo == nil || q.imageRepo == nil {
+		return nil, errors.New("not supported: MarketQuery.ListImagesByResaleID")
+	}
+
+	if resaleID == "" {
+		return nil, resaledom.ErrInvalidID
+	}
+
+	item, err := q.resaleRepo.GetByID(ctx, resaleID)
+	if err != nil {
+		return nil, err
+	}
+
+	if item.Status != resaledom.StatusListing {
+		return nil, resaledom.ErrNotFound
+	}
+
+	images, err := q.imageRepo.ListByResaleID(ctx, resaleID)
+	if err != nil {
+		return nil, err
+	}
+
+	return images, nil
 }
 
 func (q *MarketQuery) excludeOwnResales(
@@ -178,7 +215,7 @@ func (q *MarketQuery) excludeOwnResales(
 		}
 
 		for _, own := range ownItems {
-			id := strings.TrimSpace(own.ID)
+			id := own.ID
 			if id == "" {
 				continue
 			}
@@ -193,7 +230,7 @@ func (q *MarketQuery) excludeOwnResales(
 
 	out := make([]resaledom.Resale, 0, len(items))
 	for _, item := range items {
-		id := strings.TrimSpace(item.ID)
+		id := item.ID
 		if id == "" {
 			continue
 		}
@@ -229,8 +266,9 @@ func (q *MarketQuery) enrichResaleForDisplay(
 ) resaledom.Resale {
 	item = q.enrichResaleWithProductAndModel(ctx, item)
 	item = q.enrichResaleWithProductName(ctx, item)
-	item = q.enrichResaleWithTokenName(ctx, item)
+	item = q.enrichResaleWithTokenBlueprint(ctx, item)
 	item = q.enrichResaleWithBrandName(ctx, item)
+	item = q.enrichResaleWithAvatar(ctx, item)
 	item = q.enrichResaleWithImageURL(ctx, item)
 
 	return item
@@ -244,7 +282,7 @@ func (q *MarketQuery) enrichResaleWithProductAndModel(
 		return item
 	}
 
-	productID := strings.TrimSpace(item.ProductID)
+	productID := item.ProductID
 	if productID == "" {
 		return item
 	}
@@ -348,7 +386,7 @@ func (q *MarketQuery) enrichResaleWithProductName(
 		return item
 	}
 
-	productBlueprintID := strings.TrimSpace(item.ProductBlueprintID)
+	productBlueprintID := item.ProductBlueprintID
 	if productBlueprintID == "" {
 		return item
 	}
@@ -358,12 +396,12 @@ func (q *MarketQuery) enrichResaleWithProductName(
 		return item
 	}
 
-	item.ProductName = strings.TrimSpace(pb.ProductName)
+	item.ProductName = pb.ProductName
 
 	return item
 }
 
-func (q *MarketQuery) enrichResaleWithTokenName(
+func (q *MarketQuery) enrichResaleWithTokenBlueprint(
 	ctx context.Context,
 	item resaledom.Resale,
 ) resaledom.Resale {
@@ -371,7 +409,7 @@ func (q *MarketQuery) enrichResaleWithTokenName(
 		return item
 	}
 
-	tokenBlueprintID := strings.TrimSpace(item.TokenBlueprintID)
+	tokenBlueprintID := item.TokenBlueprintID
 	if tokenBlueprintID == "" {
 		return item
 	}
@@ -385,7 +423,8 @@ func (q *MarketQuery) enrichResaleWithTokenName(
 		return item
 	}
 
-	item.TokenName = strings.TrimSpace(tb.Name)
+	item.TokenName = tb.Name
+	item.TokenIcon = tb.IconURL
 
 	return item
 }
@@ -398,7 +437,7 @@ func (q *MarketQuery) enrichResaleWithBrandName(
 		return item
 	}
 
-	brandID := strings.TrimSpace(item.BrandID)
+	brandID := item.BrandID
 	if brandID == "" {
 		return item
 	}
@@ -408,7 +447,34 @@ func (q *MarketQuery) enrichResaleWithBrandName(
 		return item
 	}
 
-	item.BrandName = strings.TrimSpace(brand.Name)
+	item.BrandName = brand.Name
+
+	return item
+}
+
+func (q *MarketQuery) enrichResaleWithAvatar(
+	ctx context.Context,
+	item resaledom.Resale,
+) resaledom.Resale {
+	if q == nil || q.avatarRepo == nil {
+		return item
+	}
+
+	avatarID := item.AvatarID
+	if avatarID == "" {
+		return item
+	}
+
+	avatar, err := q.avatarRepo.GetByID(ctx, avatarID)
+	if err != nil {
+		return item
+	}
+
+	item.AvatarName = avatar.AvatarName
+
+	if avatar.AvatarIcon != nil {
+		item.AvatarIcon = *avatar.AvatarIcon
+	}
 
 	return item
 }
@@ -421,7 +487,7 @@ func (q *MarketQuery) enrichResaleWithImageURL(
 		return item
 	}
 
-	resaleID := strings.TrimSpace(item.ID)
+	resaleID := item.ID
 	if resaleID == "" {
 		return item
 	}
@@ -431,20 +497,20 @@ func (q *MarketQuery) enrichResaleWithImageURL(
 		return item
 	}
 
-	primaryImageID := strings.TrimSpace(item.ImageID)
+	primaryImageID := item.ImageID
 
 	if primaryImageID != "" {
 		for _, image := range images {
-			if strings.TrimSpace(image.ID) == primaryImageID {
-				item.ImageURL = strings.TrimSpace(image.URL)
+			if image.ID == primaryImageID {
+				item.ImageURL = image.URL
 				return item
 			}
 		}
 	}
 
 	for _, image := range images {
-		if strings.TrimSpace(image.URL) != "" {
-			item.ImageURL = strings.TrimSpace(image.URL)
+		if image.URL != "" {
+			item.ImageURL = image.URL
 			return item
 		}
 	}
@@ -476,24 +542,23 @@ func normalizeViewerAvatarIDs(ids []string) []string {
 	out := make([]string, 0, len(ids))
 
 	for _, id := range ids {
-		normalized := strings.TrimSpace(id)
-		if normalized == "" {
+		if id == "" {
 			continue
 		}
 
-		if _, ok := seen[normalized]; ok {
+		if _, ok := seen[id]; ok {
 			continue
 		}
 
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
+		seen[id] = struct{}{}
+		out = append(out, id)
 	}
 
 	return out
 }
 
 func normalizePublicMarketSort(sort resaledom.Sort) resaledom.Sort {
-	column := strings.TrimSpace(sort.Column)
+	column := sort.Column
 	order := sort.Order
 
 	if order != resaledom.SortAsc {
@@ -564,8 +629,6 @@ func normalizePageResultCount(
 }
 
 func normalizePublicMarketCursorPage(page resaledom.CursorPage) resaledom.CursorPage {
-	page.After = strings.TrimSpace(page.After)
-
 	if page.Limit <= 0 {
 		page.Limit = 20
 	}

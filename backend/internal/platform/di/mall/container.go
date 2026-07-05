@@ -272,6 +272,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		productBlueprintRepoFS,
 		tokenBlueprintRepo,
 		brandRepo,
+		avatarRepo,
 	)
 
 	c.OrderMailer = mailadp.NewOrderMailer(

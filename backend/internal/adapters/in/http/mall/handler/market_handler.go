@@ -72,7 +72,23 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(rest, "/")
 	resaleID := strings.TrimSpace(parts[0])
 
-	if resaleID == "" || len(parts) != 1 {
+	if resaleID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	if len(parts) == 2 && strings.TrimSpace(parts[1]) == "images" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.listResaleImages(w, r, resaleID)
+		return
+	}
+
+	if len(parts) != 1 {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
@@ -167,6 +183,26 @@ func (h *MarketHandler) getResale(w http.ResponseWriter, r *http.Request, resale
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"data": item,
+	})
+}
+
+func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request, resaleID string) {
+	ctx := r.Context()
+
+	if h == nil || h.marketQ == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		return
+	}
+
+	images, err := h.marketQ.ListImagesByResaleID(ctx, resaleID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"items": images,
 	})
 }
 

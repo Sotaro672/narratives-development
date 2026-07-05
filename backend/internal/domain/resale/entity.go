@@ -132,7 +132,10 @@ type Resale struct {
 	// Display-only fields resolved by mall resale query.
 	ProductName string `json:"productName,omitempty"`
 	TokenName   string `json:"tokenName,omitempty"`
+	TokenIcon   string `json:"tokenIcon,omitempty"`
 	BrandName   string `json:"brandName,omitempty"`
+	AvatarName  string `json:"avatarName,omitempty"`
+	AvatarIcon  string `json:"avatarIcon,omitempty"`
 	ImageURL    string `json:"imageUrl,omitempty"`
 
 	// Display-only model fields resolved from product.modelId -> model variation.
@@ -191,7 +194,10 @@ func NewForCreate(
 		ImageID:            "",
 		ProductName:        "",
 		TokenName:          "",
+		TokenIcon:          "",
 		BrandName:          "",
+		AvatarName:         "",
+		AvatarIcon:         "",
 		ImageURL:           "",
 		ModelID:            "",
 		Kind:               "",
