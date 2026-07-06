@@ -330,3 +330,145 @@
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+
+.market-detail-page__reviews {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #eee;
+}
+
+.market-detail-page__reviews-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.market-detail-page__reviews-header h2 {
+  margin: 0;
+  color: #222;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.market-detail-page__reviews-status,
+.market-detail-page__reviews-empty {
+  color: #777;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.market-detail-page__reviews-error {
+  margin: 12px 0 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.market-detail-page__review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.market-detail-page__review {
+  padding: 14px;
+  border: 1px solid #e8e8e8;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.market-detail-page__review-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.market-detail-page__review-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.market-detail-page__review-author-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  object-fit: cover;
+  background: #f5f5f5;
+  color: #777;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.market-detail-page__review-author-name {
+  min-width: 0;
+  color: #222;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.market-detail-page__review-rating {
+  flex: 0 0 auto;
+  color: #222;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.market-detail-page__review-title {
+  margin: 12px 0 0;
+  color: #222;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.market-detail-page__review-body {
+  margin: 8px 0 0;
+  color: #444;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.market-detail-page__review-date {
+  display: block;
+  margin-top: 10px;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.market-detail-page__seller--button {
+  appearance: none;
+  width: 100%;
+  border: 1px solid #e8e8e8;
+  cursor: pointer;
+  text-align: left;
+}
+
+.market-detail-page__seller--button:hover:not(:disabled) {
+  background: #fafafa;
+}
+
+.market-detail-page__seller--button:disabled {
+  cursor: default;
+}
+
+.market-detail-page__seller-arrow {
+  margin-left: auto;
+  color: #999;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}

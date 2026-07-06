@@ -7,8 +7,11 @@ import MediaGallery, {
   type MediaGalleryItem,
 } from "../components/ui/MediaGallery";
 import {
+  fetchMarketProductBlueprintReviews,
   fetchMarketResaleById,
   fetchMarketResaleConditionImages,
+  type MarketProductBlueprintReview,
+  type MarketProductBlueprintReviewPage,
   type MarketResaleConditionImage,
   type MarketResaleListing,
 } from "../features/market/marketApi";
@@ -53,6 +56,36 @@ function formatModelKind(value: string): string {
     default:
       return value || "-";
   }
+}
+
+function formatReviewDate(value: string | undefined): string {
+  const text = normalizeText(value);
+
+  if (!text) {
+    return "";
+  }
+
+  const date = new Date(text);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function getRatingStars(value: number | undefined): string {
+  const rating = Math.max(0, Math.min(5, Math.trunc(Number(value ?? 0))));
+
+  if (rating <= 0) {
+    return "評価なし";
+  }
+
+  return "★".repeat(rating) + "☆".repeat(5 - rating);
 }
 
 function getModelColorName(
@@ -244,16 +277,53 @@ async function addResaleProductToCart(args: {
   }
 }
 
+function ReviewAvatar({
+  review,
+}: {
+  review: MarketProductBlueprintReview;
+}) {
+  const avatarName = normalizeText(review.avatarName);
+  const avatarIcon = normalizeText(review.avatarIcon);
+  const avatarId = normalizeText(review.avatarId);
+
+  return (
+    <div className="market-detail-page__review-author">
+      {avatarIcon ? (
+        <img
+          src={avatarIcon}
+          alt={avatarName || avatarId || "レビュー投稿者"}
+          className="market-detail-page__review-author-icon"
+        />
+      ) : (
+        <span
+          className="market-detail-page__review-author-icon market-detail-page__review-author-icon--placeholder"
+          aria-hidden="true"
+        >
+          ◎
+        </span>
+      )}
+
+      <span className="market-detail-page__review-author-name">
+        {avatarName || avatarId || "匿名"}
+      </span>
+    </div>
+  );
+}
+
 export default function MarketDetailPage() {
   const navigate = useNavigate();
   const { resaleId } = useParams<{ resaleId: string }>();
 
   const [item, setItem] = useState<MarketResaleListingWithModel | null>(null);
   const [images, setImages] = useState<MarketResaleConditionImage[]>([]);
+  const [reviews, setReviews] =
+    useState<MarketProductBlueprintReviewPage | null>(null);
   const [activeMediaIndex, setActiveMediaIndex] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
   const [addingToCart, setAddingToCart] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [reviewsError, setReviewsError] = useState<string>("");
   const [cartMessage, setCartMessage] = useState<string>("");
   const [cartErrorMessage, setCartErrorMessage] = useState<string>("");
 
@@ -268,7 +338,9 @@ export default function MarketDetailPage() {
       }
 
       setLoading(true);
+      setLoadingReviews(false);
       setError("");
+      setReviewsError("");
       setCartMessage("");
       setCartErrorMessage("");
       setActiveMediaIndex(0);
@@ -280,15 +352,52 @@ export default function MarketDetailPage() {
 
         const nextImages = await fetchMarketResaleConditionImages(resaleId);
 
-        if (!cancelled) {
-          setItem(data);
-          setImages(nextImages);
-          setActiveMediaIndex(0);
+        if (cancelled) {
+          return;
+        }
+
+        setItem(data);
+        setImages(nextImages);
+        setActiveMediaIndex(0);
+
+        const productBlueprintId = normalizeText(data.productBlueprintId);
+
+        if (!productBlueprintId) {
+          setReviews(null);
+          return;
+        }
+
+        setLoadingReviews(true);
+
+        try {
+          const nextReviews = await fetchMarketProductBlueprintReviews({
+            productBlueprintId,
+            page: 1,
+            perPage: 20,
+          });
+
+          if (!cancelled) {
+            setReviews(nextReviews);
+          }
+        } catch (reviewErr) {
+          if (!cancelled) {
+            setReviews(null);
+            setReviewsError(
+              reviewErr instanceof Error
+                ? reviewErr.message
+                : "レビューの取得に失敗しました。",
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setLoadingReviews(false);
+          }
         }
       } catch (err) {
         if (!cancelled) {
           setItem(null);
           setImages([]);
+          setReviews(null);
           setActiveMediaIndex(0);
           setError(
             err instanceof Error
@@ -323,6 +432,7 @@ export default function MarketDetailPage() {
   const modelSize = normalizeText(item?.size);
   const tokenName = normalizeText(item?.tokenName);
   const tokenIcon = normalizeText(item?.tokenIcon);
+  const sellerAvatarId = normalizeText(item?.avatarId);
   const avatarName = normalizeText(item?.avatarName);
   const avatarIcon = normalizeText(item?.avatarIcon);
 
@@ -398,6 +508,14 @@ export default function MarketDetailPage() {
     }
 
     setActiveMediaIndex(index);
+  }
+
+  function handleOpenSellerAvatar() {
+    if (!sellerAvatarId) {
+      return;
+    }
+
+    navigate(`/avatars/${encodeURIComponent(sellerAvatarId)}`);
   }
 
   async function handleAddToCart() {
@@ -490,8 +608,13 @@ export default function MarketDetailPage() {
                 {item.productName || item.tokenName || "商品名未設定"}
               </h1>
 
-              {avatarName || avatarIcon ? (
-                <div className="market-detail-page__seller">
+              {avatarName || avatarIcon || sellerAvatarId ? (
+                <button
+                  type="button"
+                  className="market-detail-page__seller market-detail-page__seller--button"
+                  onClick={handleOpenSellerAvatar}
+                  disabled={!sellerAvatarId}
+                >
                   {avatarIcon ? (
                     <img
                       src={avatarIcon}
@@ -512,10 +635,19 @@ export default function MarketDetailPage() {
                       出品者
                     </span>
                     <span className="market-detail-page__seller-name">
-                      {avatarName || "アバター名未設定"}
+                      {avatarName || sellerAvatarId || "アバター名未設定"}
                     </span>
                   </div>
-                </div>
+
+                  {sellerAvatarId ? (
+                    <span
+                      className="market-detail-page__seller-arrow"
+                      aria-hidden="true"
+                    >
+                      ›
+                    </span>
+                  ) : null}
+                </button>
               ) : null}
 
               {tokenName || tokenIcon ? (
@@ -620,6 +752,75 @@ export default function MarketDetailPage() {
                   <p>{item.description}</p>
                 </div>
               ) : null}
+
+              <section className="market-detail-page__reviews">
+                <div className="market-detail-page__reviews-header">
+                  <h2>レビュー</h2>
+
+                  {loadingReviews ? (
+                    <span className="market-detail-page__reviews-status">
+                      読み込み中...
+                    </span>
+                  ) : null}
+                </div>
+
+                {reviewsError ? (
+                  <p className="market-detail-page__reviews-error" role="alert">
+                    {reviewsError}
+                  </p>
+                ) : null}
+
+                {!loadingReviews && !reviewsError && reviews?.items.length ? (
+                  <div className="market-detail-page__review-list">
+                    {reviews.items.map((review) => {
+                      const title = normalizeText(review.title);
+                      const body = normalizeText(review.body);
+                      const reviewedAt = formatReviewDate(review.reviewedAt);
+
+                      return (
+                        <article
+                          className="market-detail-page__review"
+                          key={review.id}
+                        >
+                          <div className="market-detail-page__review-top">
+                            <ReviewAvatar review={review} />
+
+                            <span className="market-detail-page__review-rating">
+                              {getRatingStars(review.rating)}
+                            </span>
+                          </div>
+
+                          {title ? (
+                            <h3 className="market-detail-page__review-title">
+                              {title}
+                            </h3>
+                          ) : null}
+
+                          {body ? (
+                            <p className="market-detail-page__review-body">
+                              {body}
+                            </p>
+                          ) : null}
+
+                          {reviewedAt ? (
+                            <time className="market-detail-page__review-date">
+                              {reviewedAt}
+                            </time>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {!loadingReviews &&
+                !reviewsError &&
+                (!reviews || reviews.items.length === 0) ? (
+                  <p className="market-detail-page__reviews-empty">
+                    まだレビューはありません。
+                  </p>
+                ) : null}
+              </section>
 
               {cartMessage ? (
                 <p className="market-detail-page__cart-message">

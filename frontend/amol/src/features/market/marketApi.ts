@@ -27,6 +27,29 @@ export type MarketResaleConditionImage = {
   updatedBy?: string | null;
 };
 
+export type MarketProductBlueprintReview = {
+  id: string;
+  productBlueprintId?: string;
+  avatarId?: string;
+  avatarName?: string;
+  avatarIcon?: string;
+  rating?: number;
+  title?: string;
+  body?: string;
+  helpfulVotes?: number;
+  totalVotes?: number;
+  reviewedAt?: string;
+  status?: string;
+};
+
+export type MarketProductBlueprintReviewPage = {
+  items: MarketProductBlueprintReview[];
+  page: number;
+  perPage: number;
+  total: number;
+  hasNext: boolean;
+};
+
 export type MarketResaleListing = {
   id: string;
   status?: MarketResaleStatus;
@@ -83,6 +106,19 @@ export type MarketResaleConditionImagesResponse =
       items?: MarketResaleConditionImage[];
     };
 
+export type MarketProductBlueprintReviewsResponse =
+  | MarketProductBlueprintReviewPage
+  | {
+      data?: unknown;
+      items?: unknown;
+      reviews?: unknown;
+      page?: unknown;
+      perPage?: unknown;
+      total?: unknown;
+      totalCount?: unknown;
+      hasNext?: unknown;
+    };
+
 export type MarketResaleSortOrder = "asc" | "desc";
 
 export type FetchMarketResalesParams = {
@@ -132,6 +168,8 @@ export type FetchMarketResalesByCursorParams = Omit<
 };
 
 const MARKET_RESALES_PATH = "/mall/market/resales";
+const MARKET_CATALOG_PRODUCT_BLUEPRINTS_PATH =
+  "/mall/catalog/product-blueprints";
 
 function normalizeApiBaseUrl(): string {
   const baseUrl = getApiBaseUrl();
@@ -149,6 +187,31 @@ function normalizeString(value: unknown): string {
   }
 
   return value.trim();
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  return fallback;
+}
+
+function toBoolean(value: unknown): boolean {
+  return value === true;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
 }
 
 function appendString(
@@ -336,6 +399,64 @@ function normalizeMarketResaleConditionImagesResponse(
   }
 
   return [];
+}
+
+function normalizeReview(value: unknown): MarketProductBlueprintReview | null {
+  const record = asRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  const id = normalizeString(record.id);
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    productBlueprintId: normalizeString(record.productBlueprintId),
+    avatarId: normalizeString(record.avatarId),
+    avatarName: normalizeString(record.avatarName),
+    avatarIcon: normalizeString(record.avatarIcon),
+    rating: toFiniteNumber(record.rating),
+    title: normalizeString(record.title),
+    body: normalizeString(record.body),
+    helpfulVotes: toFiniteNumber(record.helpfulVotes),
+    totalVotes: toFiniteNumber(record.totalVotes),
+    reviewedAt: normalizeString(record.reviewedAt || record.createdAt),
+    status: normalizeString(record.status),
+  };
+}
+
+function normalizeMarketProductBlueprintReviewsResponse(
+  response: MarketProductBlueprintReviewsResponse,
+  fallbackPage: number,
+  fallbackPerPage: number,
+): MarketProductBlueprintReviewPage {
+  const root = asRecord(response) ?? {};
+  const data = asRecord(root.data);
+
+  const source = data ?? root;
+
+  const rawItems = Array.isArray(source.items)
+    ? source.items
+    : Array.isArray(source.reviews)
+      ? source.reviews
+      : [];
+
+  const items = rawItems
+    .map(normalizeReview)
+    .filter((item): item is MarketProductBlueprintReview => Boolean(item));
+
+  return {
+    items,
+    page: toFiniteNumber(source.page, fallbackPage) || fallbackPage,
+    perPage: toFiniteNumber(source.perPage, fallbackPerPage) || fallbackPerPage,
+    total: toFiniteNumber(source.total ?? source.totalCount, items.length),
+    hasNext: toBoolean(source.hasNext),
+  };
 }
 
 async function resolveViewerAvatarId(
@@ -551,4 +672,47 @@ export async function fetchMarketResaleConditionImages(
   );
 
   return normalizeMarketResaleConditionImagesResponse(result);
+}
+
+export async function fetchMarketProductBlueprintReviews(args: {
+  productBlueprintId: string;
+  page?: number;
+  perPage?: number;
+}): Promise<MarketProductBlueprintReviewPage> {
+  const apiBaseUrl = normalizeApiBaseUrl();
+  const productBlueprintId = args.productBlueprintId.trim();
+  const page = args.page && args.page > 0 ? args.page : 1;
+  const perPage = args.perPage && args.perPage > 0 ? args.perPage : 20;
+
+  if (!apiBaseUrl) {
+    throw new Error("API Base URLが未設定です。");
+  }
+
+  if (!productBlueprintId) {
+    throw new Error("商品IDが未指定です。");
+  }
+
+  const url = new URL(
+    `${apiBaseUrl}${MARKET_CATALOG_PRODUCT_BLUEPRINTS_PATH}/${encodeURIComponent(
+      productBlueprintId,
+    )}/reviews`,
+  );
+
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("perPage", String(perPage));
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+    credentials: "include",
+  });
+
+  const result = await readJsonResponse<MarketProductBlueprintReviewsResponse>(
+    response,
+    "商品レビューAPIがJSON以外を返しました。",
+  );
+
+  return normalizeMarketProductBlueprintReviewsResponse(result, page, perPage);
 }
