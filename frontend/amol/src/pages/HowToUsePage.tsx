@@ -46,7 +46,7 @@ const sellerSteps: Step[] = [
     title: "トークン設計",
     description:
       "ブロックチェーントークンのアイコン画像とコンテンツ画像、動画をアップロードします。",
-    youtubeUrl: "https://www.youtube.com/embed/8YXxUriOlJQ",
+    youtubeUrl: "https://www.youtube.com/embed/fACaWenex1E",
   },
   {
     number: "05",

@@ -72,6 +72,8 @@ export type UseListCreateResult = {
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
   imageInputRef: ImageInputRef;
   onAddImages: (files: FileList | null) => void;
+  onRemoveImageAt: (idx: number) => void;
+  onClearImages: () => void;
 
   // assignee
   assigneeName: string;
@@ -599,6 +601,8 @@ export function useListCreate(): UseListCreateResult {
     setMainImageIndex,
     imageInputRef,
     onSelectImages,
+    removeImageAt,
+    clearImages,
   } = useListingImages();
 
   const {
@@ -714,6 +718,8 @@ export function useListCreate(): UseListCreateResult {
     setMainImageIndex,
     imageInputRef,
     onAddImages: onSelectImages,
+    onRemoveImageAt: removeImageAt,
+    onClearImages: clearImages,
 
     assigneeName,
     assigneeCandidates,

@@ -39,6 +39,8 @@ export default function InventoryListCreate() {
     mainImageIndex,
     setMainImageIndex,
     onAddImages,
+    onRemoveImageAt,
+    onClearImages,
 
     assigneeName,
     assigneeCandidates,
@@ -107,6 +109,8 @@ export default function InventoryListCreate() {
           mainImageIndex={mainImageIndex}
           setMainImageIndex={setMainImageIndex}
           onAddImages={onAddImages}
+          onRemoveImageAt={onRemoveImageAt}
+          onClearImages={onClearImages}
         />
 
         <Card>

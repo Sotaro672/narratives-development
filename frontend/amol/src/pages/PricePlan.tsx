@@ -51,7 +51,7 @@ const feeCards = [
     label: "販売手数料",
     value: "売上の10%",
     description:
-      "自社ECと接続する場合、APIからの決算額の10%に対して課金いたします。",
+      "自社ECと接続する場合は販売手数料は発生しません。",
   },
 ];
 
@@ -76,12 +76,6 @@ export default function PricePlan() {
             </div>
 
             <section className="price-plan-page__subscription">
-              <div className="price-plan-page__subscription-header">
-                <p className="price-plan-page__eyebrow">Monthly Plan</p>
-                <h3 className="price-plan-page__subscription-title">
-                  プラン別月額利用料金
-                </h3>
-              </div>
 
               <div className="price-plan-page__subscription-content">
                 <div className="price-plan-table-wrap">
