@@ -21,6 +21,23 @@ import "../styles/cart-page.css";
 const MOBILE_PORTRAIT_MEDIA_QUERY =
   "(max-width: 959px) and (orientation: portrait)";
 
+type CartDisplayItemWithResolvedFields = CartDisplayItem & {
+  brandName?: string;
+  imageUrl?: string;
+  listImage?: string;
+  resaleId?: string;
+  title?: string;
+  productName?: string;
+  modelLabel?: string;
+  modelNumber?: string;
+  modelKind?: string;
+  volumeValue?: number;
+  volumeUnit?: string;
+  colorName?: string;
+  size?: string;
+  price?: number;
+};
+
 function getApiBaseUrl(): string {
   const env = import.meta.env.VITE_API_BASE_URL;
 
@@ -31,20 +48,93 @@ function getApiBaseUrl(): string {
   return "";
 }
 
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function asResolvedItem(item: CartDisplayItem): CartDisplayItemWithResolvedFields {
+  return item as CartDisplayItemWithResolvedFields;
+}
+
 function formatAlcoholVolume(item: CartDisplayItem): string {
+  const resolvedItem = asResolvedItem(item);
+
   if (
-    typeof item.volumeValue === "number" &&
-    Number.isFinite(item.volumeValue) &&
-    item.volumeUnit
+    typeof resolvedItem.volumeValue === "number" &&
+    Number.isFinite(resolvedItem.volumeValue) &&
+    resolvedItem.volumeUnit
   ) {
-    return `${item.volumeValue}${item.volumeUnit}`;
+    return `${resolvedItem.volumeValue}${resolvedItem.volumeUnit}`;
   }
 
-  if (item.modelLabel) {
-    return item.modelLabel;
+  if (resolvedItem.modelLabel) {
+    return resolvedItem.modelLabel;
   }
 
   return "-";
+}
+
+function getCartItemBrandName(item: CartDisplayItem): string {
+  const resolvedItem = asResolvedItem(item);
+
+  return (
+    normalizeText(resolvedItem.catalog?.productBlueprint.brandName) ||
+    normalizeText(resolvedItem.brandName) ||
+    "ブランド未設定"
+  );
+}
+
+function getCartItemProductName(item: CartDisplayItem): string {
+  const resolvedItem = asResolvedItem(item);
+
+  return (
+    normalizeText(resolvedItem.catalog?.productBlueprint.productName) ||
+    normalizeText(resolvedItem.productName) ||
+    normalizeText(resolvedItem.catalog?.list.title) ||
+    normalizeText(resolvedItem.title) ||
+    "商品名未設定"
+  );
+}
+
+function getCartItemListTitle(item: CartDisplayItem): string {
+  const resolvedItem = asResolvedItem(item);
+  const catalogTitle = normalizeText(resolvedItem.catalog?.list.title);
+  const itemTitle = normalizeText(resolvedItem.title);
+  const productName = getCartItemProductName(resolvedItem);
+
+  if (catalogTitle && catalogTitle !== productName) {
+    return catalogTitle;
+  }
+
+  if (itemTitle && itemTitle !== productName) {
+    return itemTitle;
+  }
+
+  return "";
+}
+
+function getCartItemImageUrl(item: CartDisplayItem): string {
+  const resolvedItem = asResolvedItem(item);
+
+  return (
+    normalizeText(getPrimaryCatalogImage(resolvedItem.catalog)) ||
+    normalizeText(resolvedItem.imageUrl) ||
+    normalizeText(resolvedItem.listImage)
+  );
+}
+
+function getCartItemNavigationPath(item: CartDisplayItem): string {
+  const resolvedItem = asResolvedItem(item);
+
+  if (resolvedItem.listId) {
+    return `/lists/${encodeURIComponent(resolvedItem.listId)}`;
+  }
+
+  if (resolvedItem.resaleId) {
+    return `/market/resales/${encodeURIComponent(resolvedItem.resaleId)}`;
+  }
+
+  return "";
 }
 
 export default function CartPage() {
@@ -253,30 +343,28 @@ export default function CartPage() {
           <div className="cart-page-content">
             <div className="cart-page-list">
               {items.map((item) => {
-                const catalog = item.catalog;
-                const modelId = item.modelId || "";
+                const resolvedItem = asResolvedItem(item);
+                const catalog = resolvedItem.catalog;
+                const modelId = resolvedItem.modelId || "";
                 const model = getModelVariation(catalog, modelId);
-                const imageUrl = getPrimaryCatalogImage(catalog);
+                const imageUrl = getCartItemImageUrl(resolvedItem);
                 const catalogPrice = getModelPrice(catalog, modelId);
-                const price = catalogPrice ?? item.price ?? null;
-                const lineAmount = price === null ? null : price * item.qty;
-                const isRemoving = removingItemKey === item.itemKey;
-                const isAlcohol = item.modelKind === "alcohol";
-
-                const brandName =
-                  catalog?.productBlueprint.brandName || "ブランド未設定";
-
-                const productName =
-                  catalog?.productBlueprint.productName ||
-                  item.productName ||
-                  catalog?.list.title ||
-                  item.title ||
-                  "商品名未設定";
-
-                const listTitle = catalog?.list.title || item.title || "";
+                const price = catalogPrice ?? resolvedItem.price ?? null;
+                const lineAmount =
+                  price === null ? null : price * resolvedItem.qty;
+                const isRemoving = removingItemKey === resolvedItem.itemKey;
+                const isAlcohol = resolvedItem.modelKind === "alcohol";
+                const brandName = getCartItemBrandName(resolvedItem);
+                const productName = getCartItemProductName(resolvedItem);
+                const listTitle = getCartItemListTitle(resolvedItem);
+                const navigationPath = getCartItemNavigationPath(resolvedItem);
+                const canNavigate = navigationPath !== "";
 
                 return (
-                  <article key={item.itemKey} className="cart-page-item">
+                  <article
+                    key={resolvedItem.itemKey}
+                    className="cart-page-item"
+                  >
                     <button
                       type="button"
                       className="cart-page-item__remove-button"
@@ -284,7 +372,7 @@ export default function CartPage() {
                       disabled={removingItemKey !== ""}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void handleRemoveItem(item);
+                        void handleRemoveItem(resolvedItem);
                       }}
                     >
                       {isRemoving ? "…" : "×"}
@@ -293,10 +381,13 @@ export default function CartPage() {
                     <button
                       type="button"
                       className="cart-page-item__image-button"
+                      disabled={!canNavigate}
                       onClick={() => {
-                        if (item.listId) {
-                          navigate(`/lists/${item.listId}`);
+                        if (!navigationPath) {
+                          return;
                         }
+
+                        navigate(navigationPath);
                       }}
                     >
                       {imageUrl ? (
@@ -328,29 +419,34 @@ export default function CartPage() {
                           <>
                             <div>
                               <dt>品番</dt>
-                              <dd>{item.modelNumber || "-"}</dd>
+                              <dd>{resolvedItem.modelNumber || "-"}</dd>
                             </div>
                             <div>
                               <dt>容量</dt>
-                              <dd>{formatAlcoholVolume(item)}</dd>
+                              <dd>{formatAlcoholVolume(resolvedItem)}</dd>
                             </div>
                           </>
                         ) : (
                           <>
                             <div>
                               <dt>カラー</dt>
-                              <dd>{model?.colorName || item.colorName || "-"}</dd>
+                              <dd>
+                                {model?.colorName ||
+                                  resolvedItem.colorName ||
+                                  resolvedItem.color ||
+                                  "-"}
+                              </dd>
                             </div>
                             <div>
                               <dt>サイズ</dt>
-                              <dd>{model?.size || item.size || "-"}</dd>
+                              <dd>{model?.size || resolvedItem.size || "-"}</dd>
                             </div>
                           </>
                         )}
 
                         <div>
                           <dt>数量</dt>
-                          <dd>{item.qty}</dd>
+                          <dd>{resolvedItem.qty}</dd>
                         </div>
                       </dl>
 

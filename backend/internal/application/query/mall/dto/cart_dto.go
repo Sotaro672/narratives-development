@@ -40,6 +40,9 @@ type CartItemDTO struct {
 	ImageURL  string `json:"imageUrl,omitempty"`  // Resale image URL etc.
 	Price     *int   `json:"price,omitempty"`     // JPY
 
+	// brand fields
+	BrandName string `json:"brandName,omitempty"`
+
 	// product fields
 	ProductName string `json:"productName,omitempty"`
 

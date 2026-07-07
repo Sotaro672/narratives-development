@@ -9,9 +9,12 @@ import (
 
 	malldto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
+	branddom "narratives/internal/domain/brand"
 	cartdom "narratives/internal/domain/cart"
 	invdom "narratives/internal/domain/inventory"
 	ldom "narratives/internal/domain/list"
+	modeldom "narratives/internal/domain/model"
+	productdom "narratives/internal/domain/product"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -47,7 +50,7 @@ type CartQuery struct {
 	// CartRepo is used to read the cart document.
 	CartRepo CartReader
 
-	// ListReader is used to resolve list title, image, and prices.
+	// ListRepo is used to resolve list title, image, and prices.
 	ListRepo ListReader
 
 	// InventoryRepo is used to resolve inventory document ID to blueprint IDs.
@@ -62,7 +65,42 @@ type CartQuery struct {
 	// ResaleImageRepo is used to resolve resale display image.
 	ResaleImageRepo ResaleImageReader
 
+	// ProductRepo is used to resolve resale productId -> modelId.
+	ProductRepo productdom.Repository
+
+	// ModelRepo is used to resolve resale model details and productBlueprintId.
+	ModelRepo modeldom.RepositoryPort
+
+	// BrandRepo is used to resolve resale brandId -> brandName.
+	BrandRepo branddom.Repository
+
 	Resolver *appresolver.NameResolver
+}
+
+type CartQueryOption func(*CartQuery)
+
+func WithCartQueryProductRepo(repo productdom.Repository) CartQueryOption {
+	return func(q *CartQuery) {
+		if q != nil {
+			q.ProductRepo = repo
+		}
+	}
+}
+
+func WithCartQueryModelRepo(repo modeldom.RepositoryPort) CartQueryOption {
+	return func(q *CartQuery) {
+		if q != nil {
+			q.ModelRepo = repo
+		}
+	}
+}
+
+func WithCartQueryBrandRepo(repo branddom.Repository) CartQueryOption {
+	return func(q *CartQuery) {
+		if q != nil {
+			q.BrandRepo = repo
+		}
+	}
 }
 
 func NewCartQuery(
@@ -73,8 +111,9 @@ func NewCartQuery(
 	resaleRepo ResaleReader,
 	resaleImageRepo ResaleImageReader,
 	resolver *appresolver.NameResolver,
+	opts ...CartQueryOption,
 ) *CartQuery {
-	return &CartQuery{
+	q := &CartQuery{
 		CartRepo:             cartRepo,
 		ListRepo:             listRepo,
 		InventoryRepo:        inventoryRepo,
@@ -83,6 +122,14 @@ func NewCartQuery(
 		ResaleImageRepo:      resaleImageRepo,
 		Resolver:             resolver,
 	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(q)
+		}
+	}
+
+	return q
 }
 
 // CartHandler 側の CartQueryService（GetCartQuery）に明示的に合わせる。
@@ -129,7 +176,8 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 	modelIndex := q.fetchModels(ctx, c)
 	resaleIndex := q.fetchResales(ctx, c)
 	resaleImageIndex := q.fetchResaleImages(ctx, c)
-	productNameIndex := q.fetchProductNames(ctx, c, invIndex, resaleIndex)
+	resaleDisplayIndex := q.fetchResaleDisplayMeta(ctx, c, resaleIndex)
+	productNameIndex := q.fetchProductNames(ctx, c, invIndex, resaleIndex, resaleDisplayIndex)
 
 	out := toCartDTO(
 		c,
@@ -140,6 +188,7 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto
 		productNameIndex,
 		resaleIndex,
 		resaleImageIndex,
+		resaleDisplayIndex,
 	)
 
 	return out, nil
@@ -253,6 +302,13 @@ type resaleMeta struct {
 	BrandID            string
 }
 
+type resaleDisplayMeta struct {
+	BrandName          string
+	ModelID            string
+	ProductBlueprintID string
+	Model              modelSimple
+}
+
 func toCartDTO(
 	c *cartdom.Cart,
 	priceIndex map[string]map[string]int,
@@ -262,6 +318,7 @@ func toCartDTO(
 	productNameIndex map[string]string,
 	resaleIndex map[string]resaleMeta,
 	resaleImageIndex map[string]string,
+	resaleDisplayIndex map[string]resaleDisplayMeta,
 ) malldto.CartDTO {
 	out := malldto.CartDTO{
 		AvatarID:  c.ID,
@@ -302,6 +359,7 @@ func toCartDTO(
 				it,
 				resaleIndex,
 				resaleImageIndex,
+				resaleDisplayIndex,
 				productNameIndex,
 			)
 			if !ok {
@@ -380,29 +438,7 @@ func toListCartItemDTO(
 
 	if modelIndex != nil {
 		if ms, ok := modelIndex[modelID]; ok {
-			if ms.Kind != "" {
-				item.ModelKind = ms.Kind
-			}
-			if ms.ModelNumber != "" {
-				item.ModelNumber = ms.ModelNumber
-			}
-			if ms.ModelLabel != "" {
-				item.ModelLabel = ms.ModelLabel
-			}
-
-			if ms.Size != "" {
-				item.Size = ms.Size
-			}
-			if ms.Color != "" {
-				item.Color = ms.Color
-			}
-
-			if ms.VolumeValue != nil {
-				item.VolumeValue = ms.VolumeValue
-			}
-			if ms.VolumeUnit != "" {
-				item.VolumeUnit = ms.VolumeUnit
-			}
+			applyModelSimpleToCartItem(&item, ms)
 		}
 	}
 
@@ -413,6 +449,7 @@ func toResaleCartItemDTO(
 	it cartdom.CartItem,
 	resaleIndex map[string]resaleMeta,
 	resaleImageIndex map[string]string,
+	resaleDisplayIndex map[string]resaleDisplayMeta,
 	productNameIndex map[string]string,
 ) (malldto.CartItemDTO, bool) {
 	if it.ResaleID == "" || it.ProductID == "" {
@@ -461,6 +498,30 @@ func toResaleCartItemDTO(
 		}
 	}
 
+	if resaleDisplayIndex != nil {
+		if display, ok := resaleDisplayIndex[it.ResaleID]; ok {
+			if display.BrandName != "" {
+				item.BrandName = display.BrandName
+			}
+
+			if display.ModelID != "" {
+				item.ModelID = display.ModelID
+			}
+
+			if display.ProductBlueprintID != "" {
+				if item.ProductBlueprintID == "" {
+					item.ProductBlueprintID = display.ProductBlueprintID
+				}
+
+				if pbID == "" {
+					pbID = display.ProductBlueprintID
+				}
+			}
+
+			applyModelSimpleToCartItem(&item, display.Model)
+		}
+	}
+
 	if pbID != "" && productNameIndex != nil {
 		if name, ok := productNameIndex[pbID]; ok && name != "" {
 			item.ProductName = name
@@ -469,6 +530,36 @@ func toResaleCartItemDTO(
 	}
 
 	return item, true
+}
+
+func applyModelSimpleToCartItem(item *malldto.CartItemDTO, ms modelSimple) {
+	if item == nil {
+		return
+	}
+
+	if ms.Kind != "" {
+		item.ModelKind = ms.Kind
+	}
+	if ms.ModelNumber != "" {
+		item.ModelNumber = ms.ModelNumber
+	}
+	if ms.ModelLabel != "" {
+		item.ModelLabel = ms.ModelLabel
+	}
+
+	if ms.Size != "" {
+		item.Size = ms.Size
+	}
+	if ms.Color != "" {
+		item.Color = ms.Color
+	}
+
+	if ms.VolumeValue != nil {
+		item.VolumeValue = ms.VolumeValue
+	}
+	if ms.VolumeUnit != "" {
+		item.VolumeUnit = ms.VolumeUnit
+	}
 }
 
 func toRFC3339Ptr(t time.Time) *string {
@@ -764,6 +855,80 @@ func firstResaleImageURL(images []resaledom.ResaleImage) string {
 	return fallback
 }
 
+func (q *CartQuery) fetchResaleDisplayMeta(
+	ctx context.Context,
+	c *cartdom.Cart,
+	resaleIndex map[string]resaleMeta,
+) map[string]resaleDisplayMeta {
+	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 || len(resaleIndex) == 0 {
+		return nil
+	}
+
+	out := map[string]resaleDisplayMeta{}
+
+	for _, it := range c.Items {
+		if inferCartItemType(it) != cartdom.CartItemTypeResale {
+			continue
+		}
+
+		resaleID := it.ResaleID
+		if resaleID == "" {
+			continue
+		}
+
+		meta, ok := resaleIndex[resaleID]
+		if !ok {
+			continue
+		}
+
+		display := resaleDisplayMeta{
+			ProductBlueprintID: meta.ProductBlueprintID,
+		}
+
+		if q.BrandRepo != nil && meta.BrandID != "" {
+			brand, err := q.BrandRepo.GetByID(ctx, meta.BrandID)
+			if err == nil {
+				display.BrandName = brand.Name
+			}
+		}
+
+		productID := firstNonEmptyString(meta.ProductID, it.ProductID)
+
+		if q.ProductRepo != nil && productID != "" {
+			product, err := q.ProductRepo.GetByID(ctx, productID)
+			if err == nil {
+				display.ModelID = product.ModelID
+			}
+		}
+
+		if q.ModelRepo != nil && display.ModelID != "" {
+			modelVariation, err := q.ModelRepo.GetByID(ctx, display.ModelID)
+			if err == nil {
+				display.ModelID = firstNonEmptyString(display.ModelID, modelVariation.GetID())
+				display.ProductBlueprintID = firstNonEmptyString(
+					display.ProductBlueprintID,
+					modelVariation.GetProductBlueprintID(),
+				)
+				display.Model = modelVariationToSimple(modelVariation)
+			}
+		}
+
+		if display.BrandName == "" &&
+			display.ModelID == "" &&
+			display.ProductBlueprintID == "" &&
+			isEmptyModel(display.Model) {
+			continue
+		}
+
+		out[resaleID] = display
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // ============================================================
 // model resolver lookup
 // ============================================================
@@ -831,6 +996,56 @@ func (q *CartQuery) fetchModels(
 	return out
 }
 
+func modelVariationToSimple(modelVariation modeldom.ModelVariation) modelSimple {
+	if modelVariation == nil {
+		return modelSimple{}
+	}
+
+	ms := modelSimple{
+		ModelNumber: modelVariation.GetModelNumber(),
+	}
+
+	switch mv := modelVariation.(type) {
+	case modeldom.ApparelModelVariation:
+		ms.Kind = string(modeldom.ModelVariationKindApparel)
+		ms.ModelNumber = firstNonEmptyString(ms.ModelNumber, mv.ModelNumber)
+		ms.Size = mv.Size
+		ms.Color = mv.Color.Name
+
+	case *modeldom.ApparelModelVariation:
+		if mv != nil {
+			ms.Kind = string(modeldom.ModelVariationKindApparel)
+			ms.ModelNumber = firstNonEmptyString(ms.ModelNumber, mv.ModelNumber)
+			ms.Size = mv.Size
+			ms.Color = mv.Color.Name
+		}
+
+	case modeldom.AlcoholModelVariation:
+		ms.Kind = string(modeldom.ModelVariationKindAlcohol)
+		ms.ModelNumber = firstNonEmptyString(ms.ModelNumber, mv.ModelNumber)
+		value := mv.Volume.Value
+		if value > 0 {
+			ms.VolumeValue = &value
+		}
+		ms.VolumeUnit = mv.Volume.Unit
+
+	case *modeldom.AlcoholModelVariation:
+		if mv != nil {
+			ms.Kind = string(modeldom.ModelVariationKindAlcohol)
+			ms.ModelNumber = firstNonEmptyString(ms.ModelNumber, mv.ModelNumber)
+			value := mv.Volume.Value
+			if value > 0 {
+				ms.VolumeValue = &value
+			}
+			ms.VolumeUnit = mv.Volume.Unit
+		}
+	}
+
+	ms.ModelLabel = buildModelLabel(ms)
+
+	return ms
+}
+
 func isEmptyModel(ms modelSimple) bool {
 	return ms.Kind == "" &&
 		ms.ModelNumber == "" &&
@@ -879,6 +1094,15 @@ func buildModelLabel(ms modelSimple) string {
 	return ""
 }
 
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 // ============================================================
 // productName lookup
 // ============================================================
@@ -888,6 +1112,7 @@ func (q *CartQuery) fetchProductNames(
 	c *cartdom.Cart,
 	invIndex map[string]invParts,
 	resaleIndex map[string]resaleMeta,
+	resaleDisplayIndex map[string]resaleDisplayMeta,
 ) map[string]string {
 	if q == nil || q.ProductBlueprintRepo == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil
@@ -921,6 +1146,12 @@ func (q *CartQuery) fetchProductNames(
 			if resaleIndex != nil {
 				if meta, ok := resaleIndex[resaleID]; ok {
 					pbID = meta.ProductBlueprintID
+				}
+			}
+
+			if pbID == "" && resaleDisplayIndex != nil {
+				if display, ok := resaleDisplayIndex[resaleID]; ok {
+					pbID = display.ProductBlueprintID
 				}
 			}
 

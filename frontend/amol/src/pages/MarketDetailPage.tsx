@@ -15,6 +15,7 @@ import {
   type MarketResaleConditionImage,
   type MarketResaleListing,
 } from "../features/market/marketApi";
+import { fetchCurrentAvatarId } from "../features/catalog/infrastructure/avatarStateRepository";
 import { getApiBaseUrl } from "../lib/apiBaseUrl";
 import { auth } from "../lib/firebase";
 import { rgbToCssColor, toSafeColorRGB } from "../components/utils/color";
@@ -104,7 +105,9 @@ function getModelColorCssValue(
   return rgbToCssColor(toSafeColorRGB(color.rgb));
 }
 
-function hasModelColor(color: MarketResaleModelColor | null | undefined): boolean {
+function hasModelColor(
+  color: MarketResaleModelColor | null | undefined,
+): boolean {
   if (!color) {
     return false;
   }
@@ -255,9 +258,11 @@ async function addResaleProductToCart(args: {
     throw new Error("APIの接続先が設定されていません。");
   }
 
+  const normalizedApiBaseUrl = apiBaseUrl.replace(/\/+$/, "");
   const idToken = await currentUser.getIdToken();
+  const avatarId = await fetchCurrentAvatarId(normalizedApiBaseUrl);
 
-  const response = await fetch(`${apiBaseUrl}/mall/me/cart/resales`, {
+  const response = await fetch(`${normalizedApiBaseUrl}/mall/me/cart/resales`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -266,6 +271,7 @@ async function addResaleProductToCart(args: {
     },
     credentials: "include",
     body: JSON.stringify({
+      avatarId,
       resaleId: args.resaleId,
       productId: args.productId,
     }),

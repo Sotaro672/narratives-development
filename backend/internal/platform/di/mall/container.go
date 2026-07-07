@@ -439,6 +439,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			resaleRepo,
 			resaleImageRepo,
 			c.NameResolver,
+			mallquery.WithCartQueryProductRepo(productRepo),
+			mallquery.WithCartQueryModelRepo(modelRepoFS),
+			mallquery.WithCartQueryBrandRepo(brandRepo),
 		)
 
 		tokenReader := outfs.NewTokenReaderFS(fsClient)
