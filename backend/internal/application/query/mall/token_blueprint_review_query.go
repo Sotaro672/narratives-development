@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	mallshared "narratives/internal/application/query/mall/shared"
 	"narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	tokenBlueprintReview "narratives/internal/domain/tokenBlueprint_review"
@@ -164,8 +165,18 @@ func (q *TokenBlueprintReviewMallQuery) ListCommentsByTokenBlueprintID(
 		return MallTokenBlueprintCommentListReadModel{}, ErrMallTokenBlueprintIDRequired
 	}
 
-	sort := normalizeCommentSort(in.Sort, common.SortDesc)
-	page := normalizePage(in.Page, 1, 0)
+	sort := mallshared.NormalizeCommonSort(
+		in.Sort,
+		nil,
+		"createdAt",
+		common.SortDesc,
+	)
+	page := mallshared.NormalizeCommonPage(
+		in.Page,
+		1,
+		0,
+		0,
+	)
 
 	res, err := q.uc.ListComments(ctx, usecase.ListCommentsInput{
 		TokenBlueprintID: tokenBlueprintID,
@@ -245,46 +256,6 @@ func (q *TokenBlueprintReviewMallQuery) validateConfigured() error {
 		return ErrMallTokenBlueprintReviewQueryNotConfigured
 	}
 	return nil
-}
-
-func normalizeCommentSort(sort common.Sort, fallbackOrder common.SortOrder) common.Sort {
-	column := strings.TrimSpace(sort.Column)
-	if column == "" {
-		column = "createdAt"
-	}
-
-	order := common.SortOrder(strings.ToLower(strings.TrimSpace(string(sort.Order))))
-	if order != common.SortAsc && order != common.SortDesc {
-		order = fallbackOrder
-	}
-	if order != common.SortAsc && order != common.SortDesc {
-		order = common.SortDesc
-	}
-
-	return common.Sort{
-		Column: column,
-		Order:  order,
-	}
-}
-
-func normalizePage(page common.Page, fallbackNumber int, fallbackPerPage int) common.Page {
-	number := page.Number
-	if number <= 0 {
-		number = fallbackNumber
-	}
-	if number <= 0 {
-		number = 1
-	}
-
-	perPage := page.PerPage
-	if perPage < 0 {
-		perPage = fallbackPerPage
-	}
-
-	return common.Page{
-		Number:  number,
-		PerPage: perPage,
-	}
 }
 
 func formatRFC3339NanoUTC(t time.Time) string {

@@ -4,9 +4,9 @@ package mall
 import (
 	"context"
 	"errors"
-	"sort"
 	"strings"
 
+	mallshared "narratives/internal/application/query/mall/shared"
 	ldom "narratives/internal/domain/list"
 )
 
@@ -54,15 +54,13 @@ func (q *ListQuery) ListIndex(
 		return ListIndexResponseDTO{}, errors.New("mall list query: list repo is nil")
 	}
 
-	if pageNum <= 0 {
-		pageNum = 1
-	}
-	if perPage <= 0 {
-		perPage = 20
-	}
-	if perPage > 50 {
-		perPage = 50
-	}
+	pageNum, perPage = mallshared.NormalizeIntPage(
+		pageNum,
+		perPage,
+		1,
+		20,
+		50,
+	)
 
 	var filter ldom.Filter
 	status := ldom.StatusListing
@@ -168,38 +166,7 @@ func (q *ListQuery) resolveFirebaseStorageImageURL(
 		return "", err
 	}
 
-	if len(images) == 0 {
-		return "", nil
-	}
-
-	primaryImageID := l.ImageID
-	if primaryImageID != "" {
-		for _, img := range images {
-			if img.ID == primaryImageID {
-				return img.URL, nil
-			}
-		}
-	}
-
-	sort.SliceStable(images, func(i, j int) bool {
-		if images[i].DisplayOrder != images[j].DisplayOrder {
-			return images[i].DisplayOrder < images[j].DisplayOrder
-		}
-
-		if !images[i].CreatedAt.Equal(images[j].CreatedAt) {
-			return images[i].CreatedAt.Before(images[j].CreatedAt)
-		}
-
-		return images[i].ID < images[j].ID
-	})
-
-	for _, img := range images {
-		if img.URL != "" {
-			return img.URL, nil
-		}
-	}
-
-	return "", nil
+	return mallshared.SelectPrimaryListImageURL(l, images), nil
 }
 
 func extractMallInventoryAndBlueprintIDs(

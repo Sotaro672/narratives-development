@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	mallshared "narratives/internal/application/query/mall/shared"
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	modeldom "narratives/internal/domain/model"
@@ -249,273 +250,38 @@ func (q *MarketQuery) enrichResalesForDisplay(
 	ctx context.Context,
 	items []resaledom.Resale,
 ) []resaledom.Resale {
-	if len(items) == 0 {
-		return items
-	}
-
-	for i := range items {
-		items[i] = q.enrichResaleForDisplay(ctx, items[i])
-	}
-
-	return items
+	return q.newDisplayEnricher().enrichResalesForDisplay(ctx, items)
 }
 
 func (q *MarketQuery) enrichResaleForDisplay(
 	ctx context.Context,
 	item resaledom.Resale,
 ) resaledom.Resale {
-	item = q.enrichResaleWithProductAndModel(ctx, item)
-	item = q.enrichResaleWithProductName(ctx, item)
-	item = q.enrichResaleWithTokenBlueprint(ctx, item)
-	item = q.enrichResaleWithBrandName(ctx, item)
-	item = q.enrichResaleWithAvatar(ctx, item)
-	item = q.enrichResaleWithImageURL(ctx, item)
-
-	return item
+	return q.newDisplayEnricher().enrichResaleForDisplay(ctx, item)
 }
 
-func (q *MarketQuery) enrichResaleWithProductAndModel(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.productRepo == nil {
-		return item
+func (q *MarketQuery) newDisplayEnricher() *resaleDisplayEnricher {
+	if q == nil {
+		return newResaleDisplayEnricher(resaleDisplayEnricherConfig{})
 	}
 
-	productID := item.ProductID
-	if productID == "" {
-		return item
-	}
+	return newResaleDisplayEnricher(resaleDisplayEnricherConfig{
+		productRepo:          q.productRepo,
+		modelRepo:            q.modelRepo,
+		productBlueprintRepo: q.productBlueprintRepo,
+		tokenBlueprintRepo:   q.tokenBlueprintRepo,
+		brandRepo:            q.brandRepo,
+		imageRepo:            q.imageRepo,
+		avatarRepo:           q.avatarRepo,
 
-	product, err := q.productRepo.GetByID(ctx, productID)
-	if err != nil {
-		return item
-	}
-
-	item.ModelID = product.ModelID
-
-	if q.modelRepo == nil || product.ModelID == "" {
-		return item
-	}
-
-	modelVariation, err := q.modelRepo.GetByID(ctx, product.ModelID)
-	if err != nil {
-		return item
-	}
-
-	item = applyMarketModelVariationToResale(item, modelVariation)
-
-	return item
-}
-
-func applyMarketModelVariationToResale(
-	item resaledom.Resale,
-	modelVariation modeldom.ModelVariation,
-) resaledom.Resale {
-	if modelVariation == nil {
-		return item
-	}
-
-	item.ModelID = modelVariation.GetID()
-	item.ProductBlueprintID = firstNonEmpty(
-		item.ProductBlueprintID,
-		modelVariation.GetProductBlueprintID(),
-	)
-	item.ModelNumber = modelVariation.GetModelNumber()
-
-	switch mv := modelVariation.(type) {
-	case modeldom.ApparelModelVariation:
-		item = applyMarketApparelModelVariationToResale(item, mv)
-
-	case *modeldom.ApparelModelVariation:
-		if mv != nil {
-			item = applyMarketApparelModelVariationToResale(item, *mv)
-		}
-
-	case modeldom.AlcoholModelVariation:
-		item = applyMarketAlcoholModelVariationToResale(item, mv)
-
-	case *modeldom.AlcoholModelVariation:
-		if mv != nil {
-			item = applyMarketAlcoholModelVariationToResale(item, *mv)
-		}
-	}
-
-	return item
-}
-
-func applyMarketApparelModelVariationToResale(
-	item resaledom.Resale,
-	modelVariation modeldom.ApparelModelVariation,
-) resaledom.Resale {
-	item.Kind = string(modeldom.ModelVariationKindApparel)
-	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
-	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
-	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
-	item.Size = modelVariation.Size
-	item.Color = &resaledom.ResaleColor{
-		Name: modelVariation.Color.Name,
-		RGB:  modelVariation.Color.RGB,
-	}
-	item.Measurements = modelVariation.Measurements
-
-	return item
-}
-
-func applyMarketAlcoholModelVariationToResale(
-	item resaledom.Resale,
-	modelVariation modeldom.AlcoholModelVariation,
-) resaledom.Resale {
-	item.Kind = string(modeldom.ModelVariationKindAlcohol)
-	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
-	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
-	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
-	item.Volume = &resaledom.ResaleVolume{
-		Amount: modelVariation.Volume.Value,
-		Unit:   modelVariation.Volume.Unit,
-	}
-
-	return item
-}
-
-func (q *MarketQuery) enrichResaleWithProductName(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.productBlueprintRepo == nil {
-		return item
-	}
-
-	productBlueprintID := item.ProductBlueprintID
-	if productBlueprintID == "" {
-		return item
-	}
-
-	pb, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
-	if err != nil {
-		return item
-	}
-
-	item.ProductName = pb.ProductName
-
-	return item
-}
-
-func (q *MarketQuery) enrichResaleWithTokenBlueprint(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.tokenBlueprintRepo == nil {
-		return item
-	}
-
-	tokenBlueprintID := item.TokenBlueprintID
-	if tokenBlueprintID == "" {
-		return item
-	}
-
-	tb, err := q.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
-	if err != nil {
-		return item
-	}
-
-	if tb == nil {
-		return item
-	}
-
-	item.TokenName = tb.Name
-	item.TokenIcon = tb.IconURL
-
-	return item
-}
-
-func (q *MarketQuery) enrichResaleWithBrandName(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.brandRepo == nil {
-		return item
-	}
-
-	brandID := item.BrandID
-	if brandID == "" {
-		return item
-	}
-
-	brand, err := q.brandRepo.GetByID(ctx, brandID)
-	if err != nil {
-		return item
-	}
-
-	item.BrandName = brand.Name
-
-	return item
-}
-
-func (q *MarketQuery) enrichResaleWithAvatar(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.avatarRepo == nil {
-		return item
-	}
-
-	avatarID := item.AvatarID
-	if avatarID == "" {
-		return item
-	}
-
-	avatar, err := q.avatarRepo.GetByID(ctx, avatarID)
-	if err != nil {
-		return item
-	}
-
-	item.AvatarName = avatar.AvatarName
-
-	if avatar.AvatarIcon != nil {
-		item.AvatarIcon = *avatar.AvatarIcon
-	}
-
-	return item
-}
-
-func (q *MarketQuery) enrichResaleWithImageURL(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.imageRepo == nil {
-		return item
-	}
-
-	resaleID := item.ID
-	if resaleID == "" {
-		return item
-	}
-
-	images, err := q.imageRepo.ListByResaleID(ctx, resaleID)
-	if err != nil || len(images) == 0 {
-		return item
-	}
-
-	primaryImageID := item.ImageID
-
-	if primaryImageID != "" {
-		for _, image := range images {
-			if image.ID == primaryImageID {
-				item.ImageURL = image.URL
-				return item
-			}
-		}
-	}
-
-	for _, image := range images {
-		if image.URL != "" {
-			item.ImageURL = image.URL
-			return item
-		}
-	}
-
-	return item
+		// MarketQuery の既存挙動:
+		// - avatarName/avatarIcon を補完する
+		// - primary resale image URL を補完する
+		// - tokenBlueprint.IconURL は TokenIcon にのみ入れる
+		includeAvatar:               true,
+		includeImage:                true,
+		useTokenIconAsImageFallback: false,
+	})
 }
 
 func forcePublicMarketFilter(filter resaledom.Filter) resaledom.Filter {
@@ -558,46 +324,43 @@ func normalizeViewerAvatarIDs(ids []string) []string {
 }
 
 func normalizePublicMarketSort(sort resaledom.Sort) resaledom.Sort {
-	column := sort.Column
-	order := sort.Order
+	allowedColumns := map[string]string{
+		"createdAt":   "createdAt",
+		"price":       "price",
+		"productName": "productName",
+		"brandName":   "brandName",
+		"tokenName":   "tokenName",
 
-	if order != resaledom.SortAsc {
-		order = resaledom.SortDesc
+		// aliases
+		"updatedAt":  "createdAt",
+		"updated_at": "createdAt",
 	}
 
-	switch column {
-	case "createdAt", "price", "productName", "brandName", "tokenName":
-		return resaledom.Sort{
-			Column: column,
-			Order:  order,
-		}
+	column, order := mallshared.NormalizeSortParts(
+		sort.Column,
+		string(sort.Order),
+		allowedColumns,
+		"createdAt",
+		string(resaledom.SortDesc),
+	)
 
-	case "updatedAt", "updated_at", "":
-		return resaledom.Sort{
-			Column: "createdAt",
-			Order:  order,
-		}
-
-	default:
-		return resaledom.Sort{
-			Column: "createdAt",
-			Order:  order,
-		}
+	return resaledom.Sort{
+		Column: column,
+		Order:  resaledom.SortOrder(order),
 	}
 }
 
 func normalizePublicMarketPage(page resaledom.Page) resaledom.Page {
-	if page.Number <= 0 {
-		page.Number = 1
-	}
+	number, perPage := mallshared.NormalizeIntPage(
+		page.Number,
+		page.PerPage,
+		1,
+		20,
+		100,
+	)
 
-	if page.PerPage <= 0 {
-		page.PerPage = 20
-	}
-
-	if page.PerPage > 100 {
-		page.PerPage = 100
-	}
+	page.Number = number
+	page.PerPage = perPage
 
 	return page
 }
@@ -629,13 +392,7 @@ func normalizePageResultCount(
 }
 
 func normalizePublicMarketCursorPage(page resaledom.CursorPage) resaledom.CursorPage {
-	if page.Limit <= 0 {
-		page.Limit = 20
-	}
-
-	if page.Limit > 100 {
-		page.Limit = 100
-	}
+	page.Limit = mallshared.NormalizeLimit(page.Limit, 20, 100)
 
 	return page
 }

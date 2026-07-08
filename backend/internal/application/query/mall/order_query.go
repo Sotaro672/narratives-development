@@ -7,6 +7,7 @@ import (
 	"log"
 
 	dto "narratives/internal/application/query/mall/dto"
+	mallshared "narratives/internal/application/query/mall/shared"
 	appresolver "narratives/internal/application/resolver"
 	avatardom "narratives/internal/domain/avatar"
 	cart "narratives/internal/domain/cart"
@@ -321,7 +322,7 @@ func (q *OrderQuery) cartItemsToDTOMap(ctx context.Context, items map[string]car
 }
 
 func (q *OrderQuery) cartItemToDTO(ctx context.Context, item cart.CartItem) (dto.CartItemDTO, bool) {
-	switch inferCartItemType(item) {
+	switch mallshared.InferCartItemType(item) {
 	case cart.CartItemTypeList:
 		return q.listCartItemToDTO(ctx, item)
 
@@ -358,69 +359,70 @@ func (q *OrderQuery) resaleCartItemToDTO(ctx context.Context, item cart.CartItem
 		return dto.CartItemDTO{}, false
 	}
 
-	out := dto.CartItemDTO{
-		Type:      string(cart.CartItemTypeResale),
-		ResaleID:  item.ResaleID,
-		ProductID: item.ProductID,
-		Qty:       1,
-	}
-
 	if q == nil {
-		return out, true
+		return mallshared.ResaleCartItemToDTO(
+			mallshared.ResaleCartItemDisplayInput{
+				Item: item,
+			},
+		)
 	}
 
+	var meta *mallshared.ResaleCartItemMeta
 	pbID := ""
 
 	if q.ResaleRepo != nil {
 		r, err := q.ResaleRepo.GetByID(ctx, item.ResaleID)
 		if err == nil {
-			if r.ProductID != "" {
-				out.ProductID = r.ProductID
-			}
-			if r.ProductBlueprintID != "" {
-				out.ProductBlueprintID = r.ProductBlueprintID
-				pbID = r.ProductBlueprintID
-			}
-			if r.TokenBlueprintID != "" {
-				out.TokenBlueprintID = r.TokenBlueprintID
-			}
-			if r.BrandID != "" {
-				out.BrandID = r.BrandID
+			meta = &mallshared.ResaleCartItemMeta{
+				ID:                 r.ID,
+				Price:              r.Price,
+				ProductID:          r.ProductID,
+				ProductBlueprintID: r.ProductBlueprintID,
+				TokenBlueprintID:   r.TokenBlueprintID,
+				BrandID:            r.BrandID,
 			}
 
-			price := r.Price
-			out.Price = &price
+			pbID = r.ProductBlueprintID
 		} else {
 			log.Printf("[mall_order_query] resale query error resaleId=%q err=%v", item.ResaleID, err)
 		}
 	}
 
+	imageURL := ""
+
 	if q.ResaleImageRepo != nil {
 		images, err := q.ResaleImageRepo.ListByResaleID(ctx, item.ResaleID)
 		if err == nil {
-			imageURL := firstResaleImageURL(images)
-			if imageURL != "" {
-				out.ImageURL = imageURL
-				out.ListImage = imageURL
-			}
+			imageURL = mallshared.FirstResaleImageURL(images)
 		} else {
 			log.Printf("[mall_order_query] resale image query error resaleId=%q err=%v", item.ResaleID, err)
 		}
 	}
 
-	if pbID == "" {
-		pbID = out.ProductBlueprintID
+	if pbID == "" && meta != nil {
+		pbID = meta.ProductBlueprintID
 	}
+
+	productName := ""
 
 	if pbID != "" && q.ProductBlueprintRepo != nil {
 		pb, err := q.ProductBlueprintRepo.GetByID(ctx, pbID)
 		if err == nil && pb.ProductName != "" {
-			out.ProductName = pb.ProductName
-			out.Title = pb.ProductName
+			productName = pb.ProductName
 		} else if err != nil {
 			log.Printf("[mall_order_query] product blueprint query error productBlueprintId=%q err=%v", pbID, err)
 		}
 	}
 
-	return out, true
+	return mallshared.ResaleCartItemToDTO(
+		mallshared.ResaleCartItemDisplayInput{
+			Item: item,
+
+			Meta: meta,
+
+			ImageURL: imageURL,
+
+			ProductName: productName,
+		},
+	)
 }

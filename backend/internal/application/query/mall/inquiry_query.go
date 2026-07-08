@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	mallshared "narratives/internal/application/query/mall/shared"
 	inquirydom "narratives/internal/domain/inquiry"
 )
 
@@ -64,13 +65,13 @@ func (q *InquiryQuery) ListByAvatarID(
 
 	filter.AvatarID = &avatarID
 
-	if page.Number <= 0 {
-		page.Number = 1
-	}
-
-	if page.PerPage <= 0 {
-		page.PerPage = 100
-	}
+	page.Number, page.PerPage = mallshared.NormalizeIntPage(
+		page.Number,
+		page.PerPage,
+		1,
+		100,
+		0,
+	)
 
 	return q.repo.ListByAvatarID(ctx, avatarID, filter, sort, page)
 }

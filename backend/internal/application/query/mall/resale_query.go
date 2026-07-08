@@ -146,214 +146,34 @@ func (q *ResaleQuery) enrichResalesForDisplay(
 	ctx context.Context,
 	items []resaledom.Resale,
 ) []resaledom.Resale {
-	if len(items) == 0 {
-		return items
-	}
-
-	for i := range items {
-		items[i] = q.enrichResaleForDisplay(ctx, items[i])
-	}
-
-	return items
+	return q.newDisplayEnricher().enrichResalesForDisplay(ctx, items)
 }
 
 func (q *ResaleQuery) enrichResaleForDisplay(
 	ctx context.Context,
 	item resaledom.Resale,
 ) resaledom.Resale {
-	item = q.enrichResaleWithProductAndModel(ctx, item)
-	item = q.enrichResaleWithProductName(ctx, item)
-	item = q.enrichResaleWithTokenBlueprint(ctx, item)
-	item = q.enrichResaleWithBrandName(ctx, item)
-
-	return item
+	return q.newDisplayEnricher().enrichResaleForDisplay(ctx, item)
 }
 
-func (q *ResaleQuery) enrichResaleWithProductAndModel(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.productRepo == nil {
-		return item
+func (q *ResaleQuery) newDisplayEnricher() *resaleDisplayEnricher {
+	if q == nil {
+		return newResaleDisplayEnricher(resaleDisplayEnricherConfig{})
 	}
 
-	productID := item.ProductID
-	if productID == "" {
-		return item
-	}
+	return newResaleDisplayEnricher(resaleDisplayEnricherConfig{
+		productRepo:          q.productRepo,
+		modelRepo:            q.modelRepo,
+		productBlueprintRepo: q.productBlueprintRepo,
+		tokenBlueprintRepo:   q.tokenBlueprintRepo,
+		brandRepo:            q.brandRepo,
 
-	product, err := q.productRepo.GetByID(ctx, productID)
-	if err != nil {
-		return item
-	}
-
-	item.ModelID = product.ModelID
-
-	if q.modelRepo == nil || product.ModelID == "" {
-		return item
-	}
-
-	modelVariation, err := q.modelRepo.GetByID(ctx, product.ModelID)
-	if err != nil {
-		return item
-	}
-
-	item = applyModelVariationToResale(item, modelVariation)
-
-	return item
-}
-
-func applyModelVariationToResale(
-	item resaledom.Resale,
-	modelVariation modeldom.ModelVariation,
-) resaledom.Resale {
-	if modelVariation == nil {
-		return item
-	}
-
-	item.ModelID = modelVariation.GetID()
-	item.ProductBlueprintID = firstNonEmpty(
-		item.ProductBlueprintID,
-		modelVariation.GetProductBlueprintID(),
-	)
-	item.ModelNumber = modelVariation.GetModelNumber()
-
-	switch mv := modelVariation.(type) {
-	case modeldom.ApparelModelVariation:
-		item = applyApparelModelVariationToResale(item, mv)
-
-	case *modeldom.ApparelModelVariation:
-		if mv != nil {
-			item = applyApparelModelVariationToResale(item, *mv)
-		}
-
-	case modeldom.AlcoholModelVariation:
-		item = applyAlcoholModelVariationToResale(item, mv)
-
-	case *modeldom.AlcoholModelVariation:
-		if mv != nil {
-			item = applyAlcoholModelVariationToResale(item, *mv)
-		}
-	}
-
-	return item
-}
-
-func applyApparelModelVariationToResale(
-	item resaledom.Resale,
-	modelVariation modeldom.ApparelModelVariation,
-) resaledom.Resale {
-	item.Kind = string(modeldom.ModelVariationKindApparel)
-	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
-	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
-	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
-	item.Size = modelVariation.Size
-	item.Color = &resaledom.ResaleColor{
-		Name: modelVariation.Color.Name,
-		RGB:  modelVariation.Color.RGB,
-	}
-	item.Measurements = modelVariation.Measurements
-
-	return item
-}
-
-func applyAlcoholModelVariationToResale(
-	item resaledom.Resale,
-	modelVariation modeldom.AlcoholModelVariation,
-) resaledom.Resale {
-	item.Kind = string(modeldom.ModelVariationKindAlcohol)
-	item.ModelID = firstNonEmpty(item.ModelID, modelVariation.ID)
-	item.ProductBlueprintID = firstNonEmpty(item.ProductBlueprintID, modelVariation.ProductBlueprintID)
-	item.ModelNumber = firstNonEmpty(item.ModelNumber, modelVariation.ModelNumber)
-	item.Volume = &resaledom.ResaleVolume{
-		Amount: modelVariation.Volume.Value,
-		Unit:   modelVariation.Volume.Unit,
-	}
-
-	return item
-}
-
-func (q *ResaleQuery) enrichResaleWithProductName(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.productBlueprintRepo == nil {
-		return item
-	}
-
-	productBlueprintID := item.ProductBlueprintID
-	if productBlueprintID == "" {
-		return item
-	}
-
-	pb, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
-	if err != nil {
-		return item
-	}
-
-	item.ProductName = pb.ProductName
-
-	return item
-}
-
-func (q *ResaleQuery) enrichResaleWithTokenBlueprint(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.tokenBlueprintRepo == nil {
-		return item
-	}
-
-	tokenBlueprintID := item.TokenBlueprintID
-	if tokenBlueprintID == "" {
-		return item
-	}
-
-	tb, err := q.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
-	if err != nil {
-		return item
-	}
-
-	if tb == nil {
-		return item
-	}
-
-	item.TokenName = tb.Name
-
-	if tb.IconURL != "" {
-		item.ImageURL = tb.IconURL
-	}
-
-	return item
-}
-
-func (q *ResaleQuery) enrichResaleWithBrandName(
-	ctx context.Context,
-	item resaledom.Resale,
-) resaledom.Resale {
-	if q == nil || q.brandRepo == nil {
-		return item
-	}
-
-	brandID := item.BrandID
-	if brandID == "" {
-		return item
-	}
-
-	brand, err := q.brandRepo.GetByID(ctx, brandID)
-	if err != nil {
-		return item
-	}
-
-	item.BrandName = brand.Name
-
-	return item
-}
-
-func firstNonEmpty(primary string, fallback string) string {
-	if primary != "" {
-		return primary
-	}
-
-	return fallback
+		// ResaleQuery の既存挙動:
+		// - avatarName/avatarIcon は補完しない
+		// - resale image は ListImages API 側で取得する
+		// - tokenBlueprint.IconURL を ImageURL fallback として使う
+		includeAvatar:               false,
+		includeImage:                false,
+		useTokenIconAsImageFallback: true,
+	})
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	malldto "narratives/internal/application/query/mall/dto"
+	mallshared "narratives/internal/application/query/mall/shared"
 	appresolver "narratives/internal/application/resolver"
 	branddom "narratives/internal/domain/brand"
 	cartdom "narratives/internal/domain/cart"
@@ -215,7 +216,7 @@ func normalizeCart(c *cartdom.Cart) *cartdom.Cart {
 			continue
 		}
 
-		switch inferCartItemType(it) {
+		switch mallshared.InferCartItemType(it) {
 		case cartdom.CartItemTypeList:
 			if it.InventoryID == "" || it.ListID == "" || it.ModelID == "" || it.Qty <= 0 {
 				continue
@@ -246,23 +247,6 @@ func normalizeCart(c *cartdom.Cart) *cartdom.Cart {
 	c.Items = items
 
 	return c
-}
-
-func inferCartItemType(it cartdom.CartItem) cartdom.CartItemType {
-	switch it.Type {
-	case cartdom.CartItemTypeList, cartdom.CartItemTypeResale:
-		return it.Type
-	}
-
-	if it.ResaleID != "" || it.ProductID != "" {
-		return cartdom.CartItemTypeResale
-	}
-
-	if it.InventoryID != "" || it.ListID != "" || it.ModelID != "" {
-		return cartdom.CartItemTypeList
-	}
-
-	return ""
 }
 
 // ============================================================
@@ -338,7 +322,7 @@ func toCartDTO(
 			continue
 		}
 
-		switch inferCartItemType(it) {
+		switch mallshared.InferCartItemType(it) {
 		case cartdom.CartItemTypeList:
 			item, ok := toListCartItemDTO(
 				it,
@@ -456,80 +440,82 @@ func toResaleCartItemDTO(
 		return malldto.CartItemDTO{}, false
 	}
 
-	item := malldto.CartItemDTO{
-		Type:      string(cartdom.CartItemTypeResale),
-		ResaleID:  it.ResaleID,
-		ProductID: it.ProductID,
-		Qty:       1,
-	}
-
+	var meta *mallshared.ResaleCartItemMeta
 	pbID := ""
 
 	if resaleIndex != nil {
-		if meta, ok := resaleIndex[it.ResaleID]; ok {
-			if meta.ProductID != "" {
-				item.ProductID = meta.ProductID
+		if rm, ok := resaleIndex[it.ResaleID]; ok {
+			meta = &mallshared.ResaleCartItemMeta{
+				ID:                 rm.ID,
+				Price:              rm.Price,
+				ProductID:          rm.ProductID,
+				ProductBlueprintID: rm.ProductBlueprintID,
+				TokenBlueprintID:   rm.TokenBlueprintID,
+				BrandID:            rm.BrandID,
 			}
 
-			if meta.ProductBlueprintID != "" {
-				item.ProductBlueprintID = meta.ProductBlueprintID
-				pbID = meta.ProductBlueprintID
-			}
-
-			if meta.TokenBlueprintID != "" {
-				item.TokenBlueprintID = meta.TokenBlueprintID
-			}
-
-			if meta.BrandID != "" {
-				item.BrandID = meta.BrandID
-			}
-
-			price := meta.Price
-			item.Price = &price
+			pbID = rm.ProductBlueprintID
 		}
 	}
 
+	imageURL := ""
 	if resaleImageIndex != nil {
-		if imageURL, ok := resaleImageIndex[it.ResaleID]; ok && imageURL != "" {
-			item.ImageURL = imageURL
-
-			// 既存 frontend が listImage を見ている場合でも表示されるように同じ URL を入れる。
-			item.ListImage = imageURL
-		}
+		imageURL = resaleImageIndex[it.ResaleID]
 	}
+
+	brandName := ""
+	modelID := ""
+	productBlueprintID := ""
+	model := mallshared.CartModelDisplay{}
 
 	if resaleDisplayIndex != nil {
 		if display, ok := resaleDisplayIndex[it.ResaleID]; ok {
-			if display.BrandName != "" {
-				item.BrandName = display.BrandName
+			brandName = display.BrandName
+			modelID = display.ModelID
+			productBlueprintID = display.ProductBlueprintID
+			model = cartModelDisplayFromSimple(display.Model)
+
+			if pbID == "" {
+				pbID = display.ProductBlueprintID
 			}
-
-			if display.ModelID != "" {
-				item.ModelID = display.ModelID
-			}
-
-			if display.ProductBlueprintID != "" {
-				if item.ProductBlueprintID == "" {
-					item.ProductBlueprintID = display.ProductBlueprintID
-				}
-
-				if pbID == "" {
-					pbID = display.ProductBlueprintID
-				}
-			}
-
-			applyModelSimpleToCartItem(&item, display.Model)
 		}
 	}
 
+	productName := ""
 	if pbID != "" && productNameIndex != nil {
-		if name, ok := productNameIndex[pbID]; ok && name != "" {
-			item.ProductName = name
-			item.Title = name
-		}
+		productName = productNameIndex[pbID]
 	}
 
-	return item, true
+	return mallshared.ResaleCartItemToDTO(
+		mallshared.ResaleCartItemDisplayInput{
+			Item: it,
+
+			Meta: meta,
+
+			ImageURL: imageURL,
+
+			BrandName: brandName,
+			ModelID:   modelID,
+			Model:     model,
+
+			ProductBlueprintID: productBlueprintID,
+			ProductName:        productName,
+		},
+	)
+}
+
+func cartModelDisplayFromSimple(ms modelSimple) mallshared.CartModelDisplay {
+	return mallshared.CartModelDisplay{
+		Kind:        ms.Kind,
+		ModelNumber: ms.ModelNumber,
+		ModelLabel:  ms.ModelLabel,
+
+		Size:  ms.Size,
+		Color: ms.Color,
+
+		VolumeValue: ms.VolumeValue,
+		VolumeUnit:  ms.VolumeUnit,
+	}
 }
 
 func applyModelSimpleToCartItem(item *malldto.CartItemDTO, ms modelSimple) {
@@ -586,7 +572,7 @@ func (q *CartQuery) fetchLists(
 	listIDs := make([]string, 0, 8)
 
 	for _, it := range c.Items {
-		if inferCartItemType(it) != cartdom.CartItemTypeList {
+		if mallshared.InferCartItemType(it) != cartdom.CartItemTypeList {
 			continue
 		}
 
@@ -668,7 +654,7 @@ func (q *CartQuery) fetchInventories(
 	invIDs := make([]string, 0, 8)
 
 	for _, it := range c.Items {
-		if inferCartItemType(it) != cartdom.CartItemTypeList {
+		if mallshared.InferCartItemType(it) != cartdom.CartItemTypeList {
 			continue
 		}
 
@@ -730,7 +716,7 @@ func (q *CartQuery) fetchResales(
 	resaleIDs := make([]string, 0, 8)
 
 	for _, it := range c.Items {
-		if inferCartItemType(it) != cartdom.CartItemTypeResale {
+		if mallshared.InferCartItemType(it) != cartdom.CartItemTypeResale {
 			continue
 		}
 
@@ -790,7 +776,7 @@ func (q *CartQuery) fetchResaleImages(
 	resaleIDs := make([]string, 0, 8)
 
 	for _, it := range c.Items {
-		if inferCartItemType(it) != cartdom.CartItemTypeResale {
+		if mallshared.InferCartItemType(it) != cartdom.CartItemTypeResale {
 			continue
 		}
 
@@ -817,7 +803,7 @@ func (q *CartQuery) fetchResaleImages(
 			continue
 		}
 
-		imageURL := firstResaleImageURL(images)
+		imageURL := mallshared.FirstResaleImageURL(images)
 		if imageURL == "" {
 			continue
 		}
@@ -829,30 +815,6 @@ func (q *CartQuery) fetchResaleImages(
 		return nil
 	}
 	return out
-}
-
-func firstResaleImageURL(images []resaledom.ResaleImage) string {
-	if len(images) == 0 {
-		return ""
-	}
-
-	var fallback string
-
-	for _, img := range images {
-		if img.URL == "" {
-			continue
-		}
-
-		if fallback == "" {
-			fallback = img.URL
-		}
-
-		if img.DisplayOrder == 0 {
-			return img.URL
-		}
-	}
-
-	return fallback
 }
 
 func (q *CartQuery) fetchResaleDisplayMeta(
@@ -867,7 +829,7 @@ func (q *CartQuery) fetchResaleDisplayMeta(
 	out := map[string]resaleDisplayMeta{}
 
 	for _, it := range c.Items {
-		if inferCartItemType(it) != cartdom.CartItemTypeResale {
+		if mallshared.InferCartItemType(it) != cartdom.CartItemTypeResale {
 			continue
 		}
 
@@ -948,7 +910,7 @@ func (q *CartQuery) fetchModels(
 	modelIDs := make([]string, 0, 16)
 
 	for _, it := range c.Items {
-		if inferCartItemType(it) != cartdom.CartItemTypeList {
+		if mallshared.InferCartItemType(it) != cartdom.CartItemTypeList {
 			continue
 		}
 
@@ -1124,7 +1086,7 @@ func (q *CartQuery) fetchProductNames(
 	for _, it := range c.Items {
 		pbID := ""
 
-		switch inferCartItemType(it) {
+		switch mallshared.InferCartItemType(it) {
 		case cartdom.CartItemTypeList:
 			invID := it.InventoryID
 			if invID == "" {
