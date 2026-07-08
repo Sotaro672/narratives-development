@@ -49,7 +49,6 @@
 
 .price-plan-page__subscription-content {
   display: grid;
-  grid-template-columns: max-content 240px;
   gap: 24px;
   align-items: start;
   justify-content: center;
@@ -61,6 +60,7 @@
   width: fit-content;
   max-width: 100%;
   min-width: 0;
+  margin: 0 auto;
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid rgba(15, 23, 42, 0.1);
@@ -72,7 +72,7 @@
 
 .price-plan-table {
   width: max-content;
-  min-width: 720px;
+  min-width: 860px;
   border-collapse: collapse;
 }
 
@@ -132,8 +132,12 @@
 
 .price-plan-fee-cards {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+  width: 100%;
+  max-width: 920px;
   min-width: 0;
+  margin: 0 auto;
 }
 
 .price-plan-fee-card {
@@ -169,16 +173,27 @@
   line-height: 1.7;
 }
 
-@media (max-width: 900px) {
-  .price-plan-page__subscription-content {
-    grid-template-columns: 1fr;
-  }
+.price-plan-fee-card__description--emphasis {
+  color: #dc2626;
+  font-weight: 900;
+}
 
+.price-plan-page__table-title {
+  margin: 8px 0 16px;
+  color: #0f172a;
+  font-size: clamp(1.25rem, 2.5vw, 1.7rem);
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 900px) {
   .price-plan-table-wrap {
     margin: 0 auto;
   }
 
   .price-plan-fee-cards {
+    grid-template-columns: 1fr;
     width: 100%;
     max-width: 560px;
     margin: 0 auto;
@@ -216,7 +231,7 @@
   }
 
   .price-plan-table {
-    min-width: 560px;
+    min-width: 720px;
   }
 
   .price-plan-table th,
@@ -249,5 +264,10 @@
 
   .price-plan-fee-card__value {
     font-size: 1.28rem;
+  }
+
+  .price-plan-page__table-title {
+    margin: 4px 0 14px;
+    font-size: 1.22rem;
   }
 }

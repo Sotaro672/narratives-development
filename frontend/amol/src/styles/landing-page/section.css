@@ -1,9 +1,7 @@
+/* frontend/amol/src/styles/landing-page/section.css */
+
 .landing-page-section {
   padding: 16px 32px 32px;
-}
-
-.landing-page-section--with-mobile-footer-action {
-  padding-bottom: 32px;
 }
 
 .landing-page-section__inner {
@@ -22,25 +20,6 @@
   color: var(--color-text);
 }
 
-.landing-page-section__title--page {
-  margin-top: 5px;
-  margin-bottom: 5px;
-  text-align: center;
-}
-
-.landing-page-section__title--legal {
-  text-align: center;
-}
-
-.landing-page-card {
-  display: grid;
-  gap: 16px;
-  padding: 24px;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  background: #ffffff;
-}
-
 .landing-page-card__text {
   margin: 0;
   font-size: 15px;
@@ -48,64 +27,90 @@
   color: var(--color-text);
 }
 
-.landing-page-definition-list {
+.landing-page-hero {
+  padding: 56px 16px 32px;
+}
+
+.landing-page-hero__inner {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+  text-align: center;
+  align-items: center;
+}
+
+.landing-page-hero__content {
   display: grid;
   gap: 16px;
-  margin: 0;
-}
-
-.landing-page-definition-list__row {
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.landing-page-definition-list__row:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.landing-page-definition-list__term {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: #374151;
-}
-
-.landing-page-definition-list__description {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.8;
-  color: var(--color-text);
-}
-
-.landing-page-legal-lead {
-  margin: 0;
+  justify-items: center;
   text-align: center;
 }
 
-@media (max-width: 1023px) {
-  .landing-page-section--with-mobile-footer-action {
-    padding-bottom: calc(var(--footer-action-height, 76px) + 56px);
-  }
+.landing-page-hero__eyebrow {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.04em;
 }
 
-@media (orientation: landscape) {
-  .landing-page-section--with-mobile-footer-action {
-    padding-bottom: 32px;
+.landing-page-hero__title {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.15;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.landing-page-hero__image-wrap {
+  width: 100%;
+  max-width: 620px;
+  height: auto;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+.landing-page-hero__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+@media (min-width: 768px) {
+  .landing-page-hero {
+    padding: 72px 24px 48px;
+  }
+
+  .landing-page-hero__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(520px, 680px);
+    gap: 56px;
+    text-align: center;
+  }
+
+  .landing-page-hero__content {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .landing-page-hero__image-wrap {
+    max-width: 680px;
+    height: 390px;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .landing-page-hero__image {
+    height: 100%;
+    object-fit: cover;
   }
 }
 
 @media (max-width: 640px) {
   .landing-page-section {
     padding: 16px 16px 32px;
-  }
-
-  .landing-page-section--with-mobile-footer-action {
-    padding-bottom: calc(var(--footer-action-height, 72px) + 64px);
   }
 
   .landing-page-section__inner {
@@ -117,47 +122,16 @@
     line-height: 1.35;
   }
 
-  .landing-page-section__title--page,
-  .landing-page-section__title--legal {
-    text-align: left;
-  }
-
-  .landing-page-legal-lead {
-    text-align: left;
-    font-size: 14px;
-    line-height: 1.9;
-  }
-
-  .landing-page-card {
-    padding: 18px 16px;
-    border-radius: 14px;
-  }
-
   .landing-page-card__text {
     font-size: 14px;
     line-height: 1.85;
   }
 
-  .landing-page-definition-list {
-    gap: 14px;
+  .landing-page-hero {
+    padding: 40px 16px 24px;
   }
 
-  .landing-page-definition-list__row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-    padding-bottom: 14px;
-  }
-
-  .landing-page-definition-list__term {
-    font-size: 13px;
-    line-height: 1.5;
-    color: #4b5563;
-  }
-
-  .landing-page-definition-list__description {
-    font-size: 15px;
-    line-height: 1.8;
-    overflow-wrap: anywhere;
-    word-break: normal;
+  .landing-page-hero__title {
+    font-size: 32px;
   }
 }
