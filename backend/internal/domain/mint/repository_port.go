@@ -29,9 +29,113 @@ type MintRepository interface {
 	GetByID(ctx context.Context, id string) (Mint, error)
 
 	// Update:
-	// - 既存 Mint を更新します（minted/mintedAt/onChainTxSignature 更新など）。
+	// - 既存 Mint を更新します。
+	// - status / minted / mintedAt / onChainTxSignature などの親 Mint 状態を更新します。
 	// - 対象が存在しない場合は ErrNotFound を返す想定です。
 	Update(ctx context.Context, m Mint) (Mint, error)
+}
+
+// ------------------------------------------------------
+// Repository Port for MintProductTask
+// ------------------------------------------------------
+//
+// MintProductTaskRepository は、productId 単位の mint task を永続化するポートです。
+//
+// 推奨 Firestore 構造:
+//
+//	mints/{mintID}/products/{productID}
+//
+// 1 product = 1 mint task とし、worker は必ず1件ずつ処理します。
+// これにより、18件を一括mintせず、
+// 「1件mint成功確認 → 次の1件mint」という順次実行を実現します。
+type MintProductTaskRepository interface {
+	// CreateTasks:
+	// - mintID に紐づく productId ごとの MintProductTask を作成します。
+	// - 既に同じ productID の task が存在する場合は、実装側で冪等に扱うことを推奨します。
+	// - 初期 status は PENDING です。
+	CreateTasks(
+		ctx context.Context,
+		mintID string,
+		productIDs []string,
+	) ([]MintProductTask, error)
+
+	// GetByProductID:
+	// - mintID + productID で task を1件取得します。
+	// - 取得できない場合は ErrMintProductTaskNotFound を返す想定です。
+	GetByProductID(
+		ctx context.Context,
+		mintID string,
+		productID string,
+	) (MintProductTask, error)
+
+	// ListByMintID:
+	// - mintID に紐づく task を全件取得します。
+	// - 親 Mint の進捗計算、一覧表示、完了判定に使います。
+	ListByMintID(
+		ctx context.Context,
+		mintID string,
+	) ([]MintProductTask, error)
+
+	// GetNextExecutableTask:
+	// - mintID に紐づく次の実行可能 task を1件取得します。
+	// - 原則として PENDING を優先し、必要に応じて FAILED_RETRYABLE も対象にします。
+	// - 実装側では createdAt / productID などで安定した順序にしてください。
+	// - 対象が存在しない場合は ErrMintProductTaskNotFound を返す想定です。
+	GetNextExecutableTask(
+		ctx context.Context,
+		mintID string,
+	) (MintProductTask, error)
+
+	// MarkMinting:
+	// - 対象 task を MINTING に更新します。
+	// - attemptCount を増やし、mintingStartedAt / updatedAt を更新します。
+	// - 既に MINTING / MINTED の場合は、実装側で排他またはエラーにしてください。
+	MarkMinting(
+		ctx context.Context,
+		mintID string,
+		productID string,
+	) (MintProductTask, error)
+
+	// MarkMinted:
+	// - 対象 task を MINTED に更新します。
+	// - mintAddress / signature / mintedAt / updatedAt を保存します。
+	// - productId 単位で1件mintが成功したときに呼び出します。
+	MarkMinted(
+		ctx context.Context,
+		mintID string,
+		productID string,
+		mintAddress string,
+		signature string,
+	) (MintProductTask, error)
+
+	// MarkFailedRetryable:
+	// - 対象 task を FAILED_RETRYABLE に更新します。
+	// - RPC 429 / timeout / 一時的な外部依存エラーなど、再実行可能な失敗で使います。
+	MarkFailedRetryable(
+		ctx context.Context,
+		mintID string,
+		productID string,
+		message string,
+	) (MintProductTask, error)
+
+	// MarkFailedFatal:
+	// - 対象 task を FAILED_FATAL に更新します。
+	// - metadataURI 不正、ToAddress 不正など、再実行しても成功しない可能性が高い失敗で使います。
+	MarkFailedFatal(
+		ctx context.Context,
+		mintID string,
+		productID string,
+		message string,
+	) (MintProductTask, error)
+
+	// ResetRetryableToPending:
+	// - FAILED_RETRYABLE の task を PENDING に戻します。
+	// - 管理画面からの再実行、または worker の再開処理で使います。
+	ResetRetryableToPending(
+		ctx context.Context,
+		mintID string,
+		productID string,
+	) (MintProductTask, error)
 }
 
 // ============================================================

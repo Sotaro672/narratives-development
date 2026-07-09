@@ -34,6 +34,23 @@ export type TokenBlueprintSummary = {
   iconUrl?: string;
 };
 
+export type MintTaskProgress = {
+  total: number;
+  pending: number;
+  minting: number;
+  minted: number;
+  failedRetryable: number;
+  failedFatal: number;
+  percentage: number;
+};
+
+export type MintQueuedResponse = {
+  mintRequestId: string;
+  productionId: string;
+  status: "QUEUED";
+  message: string;
+};
+
 export interface MintRequestRepository {
   // inspection / mint
   // productions / inspections / mints の docId はすべて同一で、フロントでは productionId を正として扱う
@@ -61,5 +78,5 @@ export interface MintRequestRepository {
     productionId: string,
     tokenBlueprintId: string,
     scheduledBurnDate?: string,
-  ): Promise<unknown | null>;
+  ): Promise<MintQueuedResponse | null>;
 }

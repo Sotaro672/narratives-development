@@ -1,4 +1,4 @@
-// backend\internal\infra\solana\token_transfer_reader.go
+// backend/internal/infra/solana/token_transfer_reader.go
 package solana
 
 import (
@@ -35,12 +35,6 @@ func NewTokenTransferReaderSolana(rpcURL string) *TokenTransferReaderSolana {
 	u := rpcURL
 	if u == "" {
 		u = os.Getenv("SOLANA_RPC_URL")
-	}
-	if u == "" {
-		u = os.Getenv("SOLANA_RPC_ENDPOINT")
-	}
-	if u == "" {
-		u = DevnetEndpoint
 	}
 
 	timeout := defaultTokenTransferReaderHTTPTimeout

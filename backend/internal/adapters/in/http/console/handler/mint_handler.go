@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\mint_handler.go
+// backend/internal/adapters/in/http/console/handler/mint_handler.go
 package consoleHandler
 
 import (
@@ -79,7 +79,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
 		strings.HasSuffix(r.URL.Path, "/mint"):
-		h.mintFromMintRequest(w, r)
+		h.enqueueOrExecuteNextMintTask(w, r)
 		return
 
 	case r.Method == http.MethodGet &&
@@ -105,12 +105,27 @@ type updateMintRequestInfoRequest struct {
 	ScheduledBurnDate *string `json:"scheduledBurnDate"`
 }
 
+type mintQueuedResponse struct {
+	MintRequestID string `json:"mintRequestId"`
+	ProductionID  string `json:"productionId"`
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+}
+
+type mintTaskExecutionResponse struct {
+	MintRequestID string `json:"mintRequestId"`
+	Status        string `json:"status"`
+	Signature     string `json:"signature,omitempty"`
+	MintAddress   string `json:"mintAddress,omitempty"`
+	Slot          uint64 `json:"slot,omitempty"`
+	Message       string `json:"message,omitempty"`
+}
+
 func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mint usecase is not configured"})
 		return
 	}
 
@@ -119,8 +134,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	productionID := strings.Trim(path, "/")
 
 	if productionID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is empty"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "productionId is empty"})
 		return
 	}
 
@@ -131,19 +145,17 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 
 	var req updateMintRequestInfoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	tokenBlueprintID := strings.TrimSpace(req.TokenBlueprintID)
 	if tokenBlueprintID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "tokenBlueprintId is required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tokenBlueprintId is required"})
 		return
 	}
 
-	result, err := h.mintUC.UpdateRequestInfo(
+	_, err := h.mintUC.UpdateRequestInfo(
 		ctx,
 		productionID,
 		tokenBlueprintID,
@@ -151,33 +163,34 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	)
 	if err != nil {
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "companyId is missing"})
 			return
 		}
 
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(result)
+	writeJSON(w, http.StatusAccepted, mintQueuedResponse{
+		MintRequestID: productionID,
+		ProductionID:  productionID,
+		Status:        "QUEUED",
+		Message:       "mint request accepted. product mint tasks will be processed one by one.",
+	})
 }
 
 func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/mint/inspections/")
 	path = strings.Trim(path, "/")
 	if path == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is empty"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "productionId is empty"})
 		return
 	}
 
@@ -191,33 +204,29 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 	detail, err := h.mintRequestQS.GetMintRequestDetail(ctx, productionID)
 	if err != nil {
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "companyId is missing"})
 			return
 		}
 
 		if errors.Is(err, inspectiondom.ErrNotFound) ||
 			errors.Is(err, mintdom.ErrNotFound) ||
 			strings.Contains(strings.ToLower(err.Error()), "not found") {
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint request detail not found"})
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "mint request detail not found"})
 			return
 		}
 
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(detail)
+	writeJSON(w, http.StatusOK, detail)
 }
 
 func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
@@ -237,25 +246,30 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 	)
 	if err != nil {
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "companyId is missing"})
 			return
 		}
 
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(rows)
+	writeJSON(w, http.StatusOK, rows)
 }
 
-func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
+// enqueueOrExecuteNextMintTask は旧 /mint/requests/{id}/mint endpoint の互換口です。
+//
+// 注意:
+//   - 旧実装ではこの endpoint で全件mintを同期実行していました。
+//   - 新実装では MintUsecase.MintFromMintRequest が ExecuteNextMintTask に委譲され、
+//     1回の呼び出しで1 productだけmintします。
+//   - 通常運用では Cloud Tasks / internal worker endpoint から呼び出す想定です。
+//   - 管理画面から手動再開したい場合の fallback endpoint として残します。
+func (h *MintHandler) enqueueOrExecuteNextMintTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mint usecase is not configured"})
 		return
 	}
 
@@ -264,27 +278,48 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 	mintRequestID := strings.Trim(path, "/")
 
 	if mintRequestID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequestId is empty"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mintRequestId is empty"})
+		return
+	}
+
+	if strings.Contains(mintRequestID, "/") {
+		http.NotFound(w, r)
 		return
 	}
 
 	result, err := h.mintUC.MintFromMintRequest(ctx, mintRequestID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		if errors.Is(err, mintdom.ErrMintProductTaskNotFound) {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "no executable mint product task found",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(result)
+	resp := mintTaskExecutionResponse{
+		MintRequestID: mintRequestID,
+		Status:        "MINT_TASK_EXECUTED",
+		Message:       "one mint product task was executed",
+	}
+
+	if result != nil {
+		resp.Signature = result.Signature
+		resp.MintAddress = result.MintAddress
+		resp.Slot = result.Slot
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *MintHandler) getProductBlueprintByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
@@ -292,8 +327,7 @@ func (h *MintHandler) getProductBlueprintByID(w http.ResponseWriter, r *http.Req
 	id := strings.Trim(path, "/")
 
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productBlueprintID is empty"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "productBlueprintID is empty"})
 		return
 	}
 
@@ -304,54 +338,49 @@ func (h *MintHandler) getProductBlueprintByID(w http.ResponseWriter, r *http.Req
 
 	resp, err := h.mintRequestQS.GetProductBlueprintForMint(ctx, id)
 	if err != nil {
-		status := http.StatusInternalServerError
+		statusCode := http.StatusInternalServerError
 		if errors.Is(err, pbpdom.ErrNotFound) {
-			status = http.StatusNotFound
+			statusCode = http.StatusNotFound
 		}
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSON(w, statusCode, map[string]string{"error": err.Error()})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
 	result, err := h.mintRequestQS.ListBrandsForMint(ctx)
 	if err != nil {
-		status := http.StatusInternalServerError
+		statusCode := http.StatusInternalServerError
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
-			status = http.StatusBadRequest
+			statusCode = http.StatusBadRequest
 		}
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSON(w, statusCode, map[string]string{"error": err.Error()})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(result)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.mintRequestQS == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
 	brandID := r.URL.Query().Get("brandId")
 	if brandID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "brandId is required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "brandId is required"})
 		return
 	}
 
@@ -378,12 +407,11 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 		},
 	)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(items)
+	writeJSON(w, http.StatusOK, items)
 }
 
 func parseCommaSeparatedIDs(raw string) []string {

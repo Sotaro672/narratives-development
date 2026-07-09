@@ -56,6 +56,24 @@ function MintingEffectOverlay() {
   );
 }
 
+function clampProgressPercentage(value: unknown): number {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+
+  if (n <= 0) {
+    return 0;
+  }
+
+  if (n >= 100) {
+    return 100;
+  }
+
+  return Math.trunc(n);
+}
+
 export default function MintRequestDetail() {
   const {
     title,
@@ -85,6 +103,9 @@ export default function MintRequestDetail() {
     showBrandSelectorCard,
     showTokenSelectorCard,
 
+    mintProgress,
+    showMintProgress,
+
     showCompleteInspectionButton,
     isCompletingInspection,
     handleCompleteInspection,
@@ -104,6 +125,11 @@ export default function MintRequestDetail() {
   } = useMintRequestDetail();
 
   const handleSave = () => {};
+
+  const progressPercentage = clampProgressPercentage(mintProgress?.percentage);
+  const failedMintCount =
+    Number(mintProgress?.failedRetryable ?? 0) +
+    Number(mintProgress?.failedFatal ?? 0);
 
   return (
     <>
@@ -252,6 +278,46 @@ export default function MintRequestDetail() {
                   <div>
                     ミント数: <strong>{totalMintQuantity}</strong>
                   </div>
+
+                  {showMintProgress && mintProgress && (
+                    <div className="mint-request-progress">
+                      <div className="mint-request-progress__head">
+                        <span>ミント進捗</span>
+                        <strong>
+                          {mintProgress.minted} / {mintProgress.total}
+                        </strong>
+                      </div>
+
+                      <div
+                        className="mint-request-progress__bar"
+                        role="progressbar"
+                        aria-label="ミント進捗"
+                        aria-valuemin={0}
+                        aria-valuemax={mintProgress.total}
+                        aria-valuenow={mintProgress.minted}
+                      >
+                        <div
+                          className="mint-request-progress__fill"
+                          style={{ width: `${progressPercentage}%` }}
+                        />
+                      </div>
+
+                      <div className="mint-request-progress__meta">
+                        <span>{progressPercentage}%</span>
+                        <span>
+                          処理中: {mintProgress.minting} / 待機中:{" "}
+                          {mintProgress.pending}
+                        </span>
+                      </div>
+
+                      {failedMintCount > 0 && (
+                        <div className="mint-request-progress__error">
+                          失敗: {failedMintCount}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div>作成者: {mintCreatedByLabel}</div>
                   <div>作成日時: {mintCreatedAtLabel}</div>
                   <div>焼却予定日: {mintScheduledBurnDateLabel}</div>

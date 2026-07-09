@@ -1,6 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/repository/HttpMintRequestRepository.ts
 
 import type {
+  MintQueuedResponse,
   MintRequestRepository,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
@@ -102,7 +103,7 @@ export class HttpMintRequestRepository implements MintRequestRepository {
     productionId: string,
     tokenBlueprintId: string,
     scheduledBurnDate?: string,
-  ): Promise<unknown | null> {
+  ): Promise<MintQueuedResponse | null> {
     return await postMintRequestHTTP(
       productionId,
       tokenBlueprintId,

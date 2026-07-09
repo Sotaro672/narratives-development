@@ -2,9 +2,11 @@
 package console
 
 import (
+	"context"
 	"os"
 
 	fsrepo "narratives/internal/adapters/out/firestore"
+	cloudtasksadp "narratives/internal/adapters/out/firestore/cloudtasks"
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
 	"narratives/internal/infra/arweave"
@@ -168,7 +170,36 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.inspectionRepo,
 		tokenUC,
 	)
+
 	mintUC.SetInventoryUsecase(inventoryUC)
+
+	// 1件ずつmintするための task repository / token保存 recorder を注入します。
+	//
+	// r.mintRepo は firestore.MintRepositoryFS を想定しており、以下を実装しています。
+	// - mint.MintRepository
+	// - mint.MintProductTaskRepository
+	// - usecase.MintRequestPort
+	// - usecase.MintProductMintRecorder
+	//
+	// これが未注入だと、UpdateRequestInfo 内で
+	// "mint task repo is nil" になり、productId単位の task を作成できません。
+	mintUC.SetMintTaskRepository(r.mintRepo)
+	mintUC.SetMintProductMintRecorder(r.mintRepo)
+
+	// Cloud Tasks へ「次の1件mint処理」を投入する enqueuer を注入します。
+	//
+	// 必須環境変数:
+	// - CLOUD_TASKS_PROJECT_ID
+	// - CLOUD_TASKS_LOCATION
+	// - CLOUD_TASKS_QUEUE_ID
+	// - INTERNAL_BASE_URL
+	// - CLOUD_TASKS_SERVICE_ACCOUNT
+	//
+	// ここが未注入だと、mint request / product tasks は QUEUED になりますが、
+	// 自動で /internal/mint/tasks/{mintID}/execute が呼ばれません。
+	if mintTaskQueue, err := cloudtasksadp.NewMintTaskQueueFromEnv(context.Background()); err == nil && mintTaskQueue != nil {
+		mintUC.SetMintTaskEnqueuer(mintTaskQueue)
+	}
 
 	baseURL := os.Getenv("ARWEAVE_BASE_URL")
 	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")

@@ -13,6 +13,24 @@ type MintModelMetaEntry struct {
 	RGB         *int   `json:"rgb,omitempty"`
 }
 
+// MintTaskProgressDTO is progress information calculated from
+// mints/{mintID}/products subcollection.
+//
+// Total:
+// - Number of product task documents under products subcollection.
+//
+// Minted:
+// - Number of product task documents where status == "MINTED".
+type MintTaskProgressDTO struct {
+	Total           int `json:"total"`
+	Pending         int `json:"pending"`
+	Minting         int `json:"minting"`
+	Minted          int `json:"minted"`
+	FailedRetryable int `json:"failedRetryable"`
+	FailedFatal     int `json:"failedFatal"`
+	Percentage      int `json:"percentage"`
+}
+
 // MintRequestDetailDTO is a detail DTO for mint request detail page.
 // Key is productionId (= inspectionId = mintId).
 type MintRequestDetailDTO struct {
@@ -40,6 +58,7 @@ type MintRequestDetailDTO struct {
 	Production     *ProductionSummaryDTO     `json:"production,omitempty"`
 	Inspection     *InspectionSummaryDTO     `json:"inspection,omitempty"`
 	Mint           *MintSummaryDTO           `json:"mint,omitempty"`
+	MintProgress   *MintTaskProgressDTO      `json:"mintProgress,omitempty"`
 	TokenBlueprint *TokenBlueprintSummaryDTO `json:"tokenBlueprint,omitempty"`
 }
 

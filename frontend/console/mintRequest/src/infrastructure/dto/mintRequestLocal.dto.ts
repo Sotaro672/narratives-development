@@ -6,7 +6,7 @@ import type { MintDTO } from "../api/mintRequestApi";
 import type {
   ProductBlueprintCategorySnapshot,
   CategoryFieldValues,
-} from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+} from "../../../../productBlueprint/src/domain/productBlueprintCategory";
 
 /**
  * ProductBlueprint.modelRefs 取得用 DTO

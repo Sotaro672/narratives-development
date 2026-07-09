@@ -37,10 +37,22 @@ type RouterDeps struct {
 	Models              http.Handler
 	Inspector           http.Handler
 	Mint                http.Handler
-	OwnerResolve        http.Handler
-	Users               http.Handler
-	Invitation          http.Handler
-	Sales               http.Handler
+
+	// Internal handlers
+	//
+	// Cloud Tasks から呼ばれる内部mint worker用です。
+	// endpoint:
+	//   POST /internal/mint/tasks/{mintID}/execute
+	//
+	// 注意:
+	// - 通常のConsole Firebase Authではなく、Cloud Tasks OIDC / Cloud Run Invoker
+	//   または internal secret header で守る想定です。
+	InternalMintTasks http.Handler
+
+	OwnerResolve http.Handler
+	Users        http.Handler
+	Invitation   http.Handler
+	Sales        http.Handler
 
 	TokenBPReview   http.Handler
 	ProductBPReview http.Handler
@@ -221,6 +233,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.Mint)
 		mux.Handle("/mint", h)
 		mux.Handle("/mint/", h)
+	}
+
+	if deps.InternalMintTasks != nil {
+		h := withPublic(deps.InternalMintTasks)
+		mux.Handle("/internal/mint/tasks/", h)
 	}
 
 	if deps.OwnerResolve != nil {

@@ -4,6 +4,7 @@ package console
 import (
 	"log"
 
+	fsrepo "narratives/internal/adapters/out/firestore"
 	companyquery "narratives/internal/application/query/console"
 
 	inspectorquery "narratives/internal/application/query/inspector"
@@ -112,6 +113,11 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		res.nameResolver,
 	)
 
+	var mintTaskProgressQuery companyquery.MintTaskProgressQuery
+	if r.mintRepo != nil && r.mintRepo.Client != nil {
+		mintTaskProgressQuery = fsrepo.NewMintTaskProgressQueryFS(r.mintRepo.Client)
+	}
+
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
 		companyProductionQueryService,
 		r.mintRepo,
@@ -120,6 +126,7 @@ func buildQueries(infra *shared.Infra, r *repos, res *resolvers, u *usecases, s 
 		r.tokenBlueprintRepo,
 		r.brandRepo,
 		r.memberRepo,
+		mintTaskProgressQuery,
 	)
 
 	inventoryManagementQuery := companyquery.NewInventoryManagementQuery(

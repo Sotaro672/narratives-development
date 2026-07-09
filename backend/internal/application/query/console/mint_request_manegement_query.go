@@ -1,3 +1,4 @@
+// backend/internal/application/query/console/mint_request_manegement_query.go
 package query
 
 import (
@@ -18,15 +19,23 @@ import (
 
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
 
+type MintTaskProgressQuery interface {
+	GetMintTaskProgress(
+		ctx context.Context,
+		mintID string,
+	) (*querydto.MintTaskProgressDTO, error)
+}
+
 type MintRequestQueryService struct {
 	productionQuery *CompanyProductionQueryService
 
-	mintRepo   mintdom.MintRepository
-	inspRepo   mintdom.MintInspectionRepo
-	pbRepo     mintdom.MintProductBlueprintRepo
-	tbRepo     tbdom.RepositoryPort
-	brandRepo  branddom.Repository
-	memberRepo memberdom.Repository
+	mintRepo              mintdom.MintRepository
+	inspRepo              mintdom.MintInspectionRepo
+	pbRepo                mintdom.MintProductBlueprintRepo
+	tbRepo                tbdom.RepositoryPort
+	brandRepo             branddom.Repository
+	memberRepo            memberdom.Repository
+	mintTaskProgressQuery MintTaskProgressQuery
 }
 
 func NewMintRequestQueryService(
@@ -37,15 +46,17 @@ func NewMintRequestQueryService(
 	tbRepo tbdom.RepositoryPort,
 	brandRepo branddom.Repository,
 	memberRepo memberdom.Repository,
+	mintTaskProgressQuery MintTaskProgressQuery,
 ) *MintRequestQueryService {
 	return &MintRequestQueryService{
-		productionQuery: productionQuery,
-		mintRepo:        mintRepo,
-		inspRepo:        inspRepo,
-		pbRepo:          pbRepo,
-		tbRepo:          tbRepo,
-		brandRepo:       brandRepo,
-		memberRepo:      memberRepo,
+		productionQuery:       productionQuery,
+		mintRepo:              mintRepo,
+		inspRepo:              inspRepo,
+		pbRepo:                pbRepo,
+		tbRepo:                tbRepo,
+		brandRepo:             brandRepo,
+		memberRepo:            memberRepo,
+		mintTaskProgressQuery: mintTaskProgressQuery,
 	}
 }
 

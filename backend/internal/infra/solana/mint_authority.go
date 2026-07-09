@@ -14,7 +14,7 @@ import (
 	"github.com/blocto/solana-go-sdk/types"
 )
 
-// MintAuthority は Secret Manager に保存してある Devnet 用 mint ウォレットを表します。
+// MintAuthority は Secret Manager に保存してある mint ウォレットを表します。
 type MintAuthority struct {
 	Account types.Account
 }
@@ -63,8 +63,7 @@ func LoadMintAuthority(ctx context.Context) (*MintAuthority, error) {
 	}
 
 	log.Printf(
-		"[narratives-mint] loaded mint authority from Secret Manager: secret=%s pubkey=%s",
-		secretName,
+		"[narratives-mint] loaded mint authority from Secret Manager: pubkey=%s",
 		acc.PublicKey.ToBase58(),
 	)
 

@@ -1,3 +1,4 @@
+// backend/internal/application/query/console/mint_request_detail_query.go
 package query
 
 import (
@@ -145,6 +146,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	requestedByName := ""
 	var mintedAt *time.Time
 	var mintSummary *querydto.MintSummaryDTO
+	var mintProgress *querydto.MintTaskProgressDTO
 
 	if hasMint {
 		requestedBy = m.CreatedBy
@@ -169,6 +171,13 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			ScheduledBurnDate:  m.ScheduledBurnDate,
 			ProductIDs:         products,
 			OnChainTxSignature: m.OnChainTxSignature,
+		}
+
+		if s.mintTaskProgressQuery != nil {
+			progress, progressErr := s.mintTaskProgressQuery.GetMintTaskProgress(ctx, pid)
+			if progressErr == nil {
+				mintProgress = progress
+			}
 		}
 	}
 
@@ -204,10 +213,12 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		CreatedByName:   requestedByName,
 		RequestedByName: requestedByName,
 
-		MintedAt:       mintedAt,
+		MintedAt: mintedAt,
+
 		Production:     prodSummary,
 		Inspection:     inspSummary,
 		Mint:           mintSummary,
+		MintProgress:   mintProgress,
 		ModelMeta:      nil,
 		TokenBlueprint: nil,
 	}

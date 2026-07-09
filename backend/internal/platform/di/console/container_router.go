@@ -7,6 +7,7 @@ import (
 	httpin "narratives/internal/adapters/in/http/console"
 
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
+	internalHandler "narratives/internal/adapters/in/http/handler"
 
 	usecase "narratives/internal/application/usecase"
 
@@ -58,9 +59,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		modelsH      http.Handler
 		usersH       http.Handler
 
-		inspectorH  http.Handler
-		mintH       http.Handler
-		invitationH http.Handler
+		inspectorH         http.Handler
+		mintH              http.Handler
+		internalMintTasksH http.Handler
+		invitationH        http.Handler
 
 		ownerResolveH http.Handler
 	)
@@ -250,6 +252,8 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.MintUC,
 			c.MintRequestQueryService,
 		)
+
+		internalMintTasksH = internalHandler.NewMintTaskHandler(c.MintUC)
 	}
 
 	if c.OwnerResolveQ != nil {
@@ -298,8 +302,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		Users:       usersH,
 		Invitation:  invitationH,
 
-		Inspector: inspectorH,
-		Mint:      mintH,
+		Inspector:         inspectorH,
+		Mint:              mintH,
+		InternalMintTasks: internalMintTasksH,
 
 		OwnerResolve: ownerResolveH,
 	}

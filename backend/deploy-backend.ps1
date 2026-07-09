@@ -44,7 +44,7 @@ function Read-EnvFile([string]$path) {
     $idx = $trim.IndexOf("=")
     if ($idx -lt 1) { continue }
 
-    $key   = $trim.Substring(0, $idx)
+    $key   = $trim.Substring(0, $idx).Trim()
     $value = $trim.Substring($idx + 1)
 
     $map[$key] = (Normalize-EnvValue $value)
@@ -223,13 +223,27 @@ $AllowedKeys = @(
 
   # Solana
   "SOLANA_RPC_URL",
+  "SOLANA_AIRDROP_RPC_URL",
+  "SOLANA_AUTO_AIRDROP_ENABLED",
+  "SOLANA_MIN_FEE_PAYER_BALANCE_SOL",
+  "SOLANA_AIRDROP_AMOUNT_SOL",
   "SOLANA_MINT_KEY_SECRET",
+  "SOLANA_SELLER_FEE_BPS",
 
   # Arweave / Irys
   "ARWEAVE_BASE_URL",
 
   # checkout self-callback base URL
   "SELF_BASE_URL",
+
+  # Cloud Tasks / mint worker
+  "CLOUD_TASKS_PROJECT_ID",
+  "CLOUD_TASKS_LOCATION",
+  "CLOUD_TASKS_QUEUE_ID",
+  "INTERNAL_BASE_URL",
+  "CLOUD_TASKS_SERVICE_ACCOUNT",
+  "CLOUD_TASKS_AUDIENCE",
+  "MINT_TASK_DISPATCH_DELAY_SECONDS",
 
   # Stripe webhook only
   # STRIPE_SECRET_KEY は廃止。Secret Manager の stripe-secret-key を使用する。
@@ -266,6 +280,42 @@ if (-not $envMap.ContainsKey("FIRESTORE_PROJECT_ID")) {
   $envMap["FIRESTORE_PROJECT_ID"] = $ProjectId
 }
 
+if (-not $envMap.ContainsKey("CLOUD_TASKS_PROJECT_ID")) {
+  $envMap["CLOUD_TASKS_PROJECT_ID"] = $ProjectId
+}
+
+if (-not $envMap.ContainsKey("CLOUD_TASKS_LOCATION")) {
+  $envMap["CLOUD_TASKS_LOCATION"] = $Region
+}
+
+if (-not $envMap.ContainsKey("INTERNAL_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])) {
+  if ($envMap.ContainsKey("SELF_BASE_URL") -and -not [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])) {
+    $envMap["INTERNAL_BASE_URL"] = $envMap["SELF_BASE_URL"]
+  }
+}
+
+if (-not $envMap.ContainsKey("SOLANA_RPC_URL") -or [string]::IsNullOrWhiteSpace($envMap["SOLANA_RPC_URL"])) {
+  throw "SOLANA_RPC_URL is required. Set a devnet Solana RPC endpoint in .env before deploying."
+}
+
+if (-not $envMap.ContainsKey("SOLANA_MINT_KEY_SECRET") -or [string]::IsNullOrWhiteSpace($envMap["SOLANA_MINT_KEY_SECRET"])) {
+  throw "SOLANA_MINT_KEY_SECRET is required. Set the Secret Manager version path in .env before deploying."
+}
+
+if ($envMap.ContainsKey("SOLANA_AUTO_AIRDROP_ENABLED") -and $envMap["SOLANA_AUTO_AIRDROP_ENABLED"].ToLower() -eq "true") {
+  if (-not $envMap.ContainsKey("SOLANA_AIRDROP_RPC_URL") -or [string]::IsNullOrWhiteSpace($envMap["SOLANA_AIRDROP_RPC_URL"])) {
+    throw "SOLANA_AIRDROP_RPC_URL is required when SOLANA_AUTO_AIRDROP_ENABLED=true."
+  }
+
+  if (-not $envMap.ContainsKey("SOLANA_MIN_FEE_PAYER_BALANCE_SOL") -or [string]::IsNullOrWhiteSpace($envMap["SOLANA_MIN_FEE_PAYER_BALANCE_SOL"])) {
+    throw "SOLANA_MIN_FEE_PAYER_BALANCE_SOL is required when SOLANA_AUTO_AIRDROP_ENABLED=true."
+  }
+
+  if (-not $envMap.ContainsKey("SOLANA_AIRDROP_AMOUNT_SOL") -or [string]::IsNullOrWhiteSpace($envMap["SOLANA_AIRDROP_AMOUNT_SOL"])) {
+    throw "SOLANA_AIRDROP_AMOUNT_SOL is required when SOLANA_AUTO_AIRDROP_ENABLED=true."
+  }
+}
+
 if (-not $envMap.ContainsKey("SELF_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])) {
   try {
     $selfUrl = (& $GCLOUD run services describe $ServiceName `
@@ -286,6 +336,27 @@ if (-not $envMap.ContainsKey("SELF_BASE_URL") -or [string]::IsNullOrWhiteSpace($
     }
   } catch {
     Write-Warn "Failed to resolve SELF_BASE_URL from Cloud Run. Please set it in .env."
+  }
+}
+
+if (-not $envMap.ContainsKey("INTERNAL_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])) {
+  if ($envMap.ContainsKey("SELF_BASE_URL") -and -not [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])) {
+    $envMap["INTERNAL_BASE_URL"] = $envMap["SELF_BASE_URL"]
+    Write-Ok "INTERNAL_BASE_URL resolved from SELF_BASE_URL: $($envMap["INTERNAL_BASE_URL"])"
+  }
+}
+
+if ($envMap.ContainsKey("CLOUD_TASKS_QUEUE_ID") -or $envMap.ContainsKey("CLOUD_TASKS_SERVICE_ACCOUNT")) {
+  if (-not $envMap.ContainsKey("CLOUD_TASKS_QUEUE_ID") -or [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_QUEUE_ID"])) {
+    throw "CLOUD_TASKS_QUEUE_ID is required when Cloud Tasks mint worker is enabled."
+  }
+
+  if (-not $envMap.ContainsKey("INTERNAL_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])) {
+    throw "INTERNAL_BASE_URL is required when Cloud Tasks mint worker is enabled."
+  }
+
+  if (-not $envMap.ContainsKey("CLOUD_TASKS_SERVICE_ACCOUNT") -or [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_SERVICE_ACCOUNT"])) {
+    throw "CLOUD_TASKS_SERVICE_ACCOUNT is required when Cloud Tasks mint worker is enabled."
   }
 }
 
@@ -312,6 +383,9 @@ $removeEnvVars = @(
   "GOOGLE_APPLICATION_CREDENTIALS",
   "FIRESTORE_CREDENTIALS_FILE",
 
+  # 旧 Solana env
+  "SOLANA_RPC_ENDPOINT",
+
   # 旧 Stripe env
   # Stripe secret は Secret Manager の stripe-secret-key を使用する
   "STRIPE_SECRET_KEY",
@@ -331,10 +405,13 @@ $deployArgs = @(
 
   "--update-env-vars", $envArg,
   "--min-instances", "0",
-  "--max-instances", "5",
+
+  # 暫定的にmint時のRPC負荷を抑える。
+  # 最終的にはmint workerをCloud Tasks化し、worker側だけ concurrency=1 にする。
+  "--max-instances", "2",
   "--memory", "512Mi",
   "--cpu", "1",
-  "--concurrency", "80",
+  "--concurrency", "10",
   "--timeout", "60s",
   "--project", $ProjectId
 )

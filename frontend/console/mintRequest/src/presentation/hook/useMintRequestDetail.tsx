@@ -16,10 +16,7 @@ import {
   toTokenBlueprintOptionVMs,
 } from "../../application/mapper/mintRequestOptionsMapper";
 import { validateCompleteInspection } from "../../application/validator/validateCompleteInspection";
-import {
-  validateMintExecutionResult,
-  validateMintRequestSubmit,
-} from "../../application/validator/validateMintRequestSubmit";
+import { validateMintRequestSubmit } from "../../application/validator/validateMintRequestSubmit";
 
 import type {
   BrandOptionVM as BrandOption,
@@ -44,6 +41,58 @@ import { getProductBlueprintPatch } from "../../application/usecase/getProductBl
 import { listBrandsForMint } from "../../application/usecase/listBrandsForMint";
 import { listTokenBlueprintsByBrand } from "../../application/usecase/listTokenBlueprintsByBrand";
 import { submitMintRequestAndRefresh } from "../../application/usecase/submitMintRequestAndRefresh";
+
+type MintTaskProgressVM = {
+  total: number;
+  pending: number;
+  minting: number;
+  minted: number;
+  failedRetryable: number;
+  failedFatal: number;
+  percentage: number;
+};
+
+function normalizeProgressNumber(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  if (n <= 0) return 0;
+  return Math.trunc(n);
+}
+
+function clampProgressPercentage(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  if (n <= 0) return 0;
+  if (n >= 100) return 100;
+  return Math.trunc(n);
+}
+
+function normalizeMintTaskProgress(raw: unknown): MintTaskProgressVM | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const obj = raw as Record<string, unknown>;
+
+  const total = normalizeProgressNumber(obj.total);
+  const minted = normalizeProgressNumber(obj.minted);
+
+  const calculatedPercentage =
+    total > 0 ? Math.trunc((Math.min(minted, total) / total) * 100) : 0;
+
+  return {
+    total,
+    pending: normalizeProgressNumber(obj.pending),
+    minting: normalizeProgressNumber(obj.minting),
+    minted,
+    failedRetryable: normalizeProgressNumber(obj.failedRetryable),
+    failedFatal: normalizeProgressNumber(obj.failedFatal),
+    percentage:
+      obj.percentage === undefined
+        ? clampProgressPercentage(calculatedPercentage)
+        : clampProgressPercentage(obj.percentage),
+  };
+}
 
 export function useMintRequestDetail() {
   const navigate = useNavigate();
@@ -266,6 +315,44 @@ export function useMintRequestDetail() {
     mintRequestedBrandId,
   } = useMintInfo({ mintDTO, inspectionBatch, pbPatch });
 
+  const mintProgress = React.useMemo(() => {
+    return normalizeMintTaskProgress((mintDTO as any)?.mintProgress);
+  }, [mintDTO]);
+
+  const isMintCompleted = React.useMemo(() => {
+    return Boolean((mint as any)?.minted === true || (mintDTO as any)?.minted === true);
+  }, [mint, mintDTO]);
+
+  const showMintProgress = React.useMemo(() => {
+    return Boolean(
+      isMintRequested &&
+        !isMintCompleted &&
+        mintProgress &&
+        mintProgress.total > 0,
+    );
+  }, [isMintRequested, isMintCompleted, mintProgress]);
+
+  React.useEffect(() => {
+    if (!productionId) return;
+    if (!isMintRequested) return;
+    if (isMintCompleted) return;
+
+    let cancelled = false;
+
+    const timer = window.setInterval(() => {
+      if (cancelled) return;
+
+      reloadDetail().catch(() => {
+        // progress polling の失敗で画面全体のエラーにはしない
+      });
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [productionId, isMintRequested, isMintCompleted, reloadDetail]);
+
   const inspectionStatus = React.useMemo(() => {
     return String((inspectionBatch as any)?.status ?? "").trim();
   }, [inspectionBatch]);
@@ -388,28 +475,17 @@ export function useMintRequestDetail() {
     setError(null);
 
     try {
-      const { updatedBatch, refreshedMint } = await submitMintRequestAndRefresh(
-        validation.productionId,
-        validation.tokenBlueprintId,
-        scheduledBurnDate || undefined,
-      );
+      const { queuedResponse, refreshedMint } =
+        await submitMintRequestAndRefresh(
+          validation.productionId,
+          validation.tokenBlueprintId,
+          scheduledBurnDate || undefined,
+        );
 
-      if (updatedBatch) {
-        setInspectionBatch(updatedBatch as any);
-      }
+      if (!queuedResponse) {
+        setError("ミント申請の受付結果を取得できませんでした。");
 
-      if (refreshedMint) {
-        setMintDTO(refreshedMint as any);
-      }
-
-      const mintResultValidation = validateMintExecutionResult({
-        refreshedMint,
-      });
-
-      if (!mintResultValidation.ok) {
-        setError(mintResultValidation.message);
-
-        alert(`ミント申請に失敗しました: ${mintResultValidation.message}`);
+        alert("ミント申請に失敗しました: 受付結果を取得できませんでした。");
 
         try {
           await reloadDetail();
@@ -420,11 +496,15 @@ export function useMintRequestDetail() {
         return;
       }
 
-      alert(
-        `ミントが完了しました（生産ID: ${validation.productionId} / ミント数: ${totalMintQuantity}）`,
-      );
+      if (refreshedMint) {
+        setMintDTO(refreshedMint as any);
+      }
 
-      navigate(0);
+      await reloadDetail();
+
+      alert(
+        `ミント申請を受け付けました（生産ID: ${queuedResponse.productionId} / ミント数: ${totalMintQuantity}）。順次ミント処理を実行します。`,
+      );
     } catch (e: any) {
       const message = e?.message ?? "不明なエラーが発生しました";
 
@@ -444,7 +524,6 @@ export function useMintRequestDetail() {
     inspectionBatch,
     isInspectionCompleted,
     isMinting,
-    navigate,
     productionId,
     reloadDetail,
     scheduledBurnDate,
@@ -517,10 +596,14 @@ export function useMintRequestDetail() {
     hasMint,
 
     isMintRequested,
+    isMintCompleted,
     isInspectionCompleted,
     showMintButton,
     showBrandSelectorCard,
     showTokenSelectorCard,
+
+    mintProgress,
+    showMintProgress,
 
     showCompleteInspectionButton,
     isCompletingInspection,
