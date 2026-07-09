@@ -15,6 +15,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const authenticationEyebrowRef = useRef<HTMLParagraphElement | null>(null);
   const salesSupportEyebrowRef = useRef<HTMLParagraphElement | null>(null);
+  const fleaMarketEyebrowRef = useRef<HTMLParagraphElement | null>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
@@ -86,6 +87,10 @@ export default function LandingPage() {
 
   const scrollToSalesSupport = () => {
     scrollToElement(salesSupportEyebrowRef.current);
+  };
+
+  const scrollToFleaMarket = () => {
+    scrollToElement(fleaMarketEyebrowRef.current);
   };
 
   return (
@@ -174,6 +179,35 @@ export default function LandingPage() {
                   <img
                     src="/comment.png"
                     alt="商品所有者とのコメント画面"
+                    className="landing-page-feature-card__image"
+                    loading="lazy"
+                  />
+                </div>
+              </article>
+
+              <article
+                className="landing-page-feature-card landing-page-feature-card--clickable"
+                role="button"
+                tabIndex={0}
+                aria-label="フリーマーケットの詳細へ移動"
+                onClick={scrollToFleaMarket}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    scrollToFleaMarket();
+                  }
+                }}
+              >
+                <h2 className="landing-page-feature-card__title">
+                  フリーマーケット
+                </h2>
+                <p className="landing-page-feature-card__text">
+                  フリーマーケットでの売上の5%をブランド様に還元します。
+                </p>
+                <div className="landing-page-feature-card__image-placeholder">
+                  <img
+                    src="/2ndCustomer.png"
+                    alt="フリーマーケットで二次流通した商品の所有者が更新される図"
                     className="landing-page-feature-card__image"
                     loading="lazy"
                   />
@@ -278,7 +312,7 @@ export default function LandingPage() {
               <article className="landing-page-service-case-card landing-page-service-case-card--mall">
                 <div className="landing-page-service-case-card__content">
                   <p className="landing-page-service-case-card__label">
-                    店舗購入のお客様
+                    モール/ECのお客様
                   </p>
                   <h3 className="landing-page-service-case-card__title">
                     QRコードをスキャンで自動更新
@@ -301,13 +335,13 @@ export default function LandingPage() {
               <article className="landing-page-service-case-card landing-page-service-case-card--customer">
                 <div className="landing-page-service-case-card__content">
                   <p className="landing-page-service-case-card__label">
-                    二次流通先のお客様
+                    フリマのお客様
                   </p>
                   <h3 className="landing-page-service-case-card__title">
                     移譲と同時に自動更新
                   </h3>
                   <p className="landing-page-service-case-card__text">
-                    フォロー先、フォロワー間でトークンを渡すことができます。譲渡と同時に所有者名（アバター名）が自動更新されます。
+                    AMOL登録の商品はフリマでの出品を可能にします。購入と同時に所有者名（アバター名）が自動更新されます。
                   </p>
                 </div>
 
@@ -341,16 +375,10 @@ export default function LandingPage() {
 
                 <div className="landing-page-anti-copy__content">
                   <p className="landing-page-anti-copy__text">
-                    QRコード自体は、容易にコピーできます。
-                  </p>
-                  <p className="landing-page-anti-copy__text">
-                    しかし、商品に紐づくブロックチェーントークンの所有権移譲履歴は、正規品の1本だけしか更新されません。
-                  </p>
-                  <p className="landing-page-anti-copy__text">
-                    そのため、コピー品をスキャンしても所有者名義は購入者のアバター名に更新されず、正規品ではないことが判明します。
-                  </p>
-                  <p className="landing-page-anti-copy__text">
-                    つまり偽造業者は、QRコードを複製できてもブロックチェーントークンまでは複製できないため、市場に流通できる商品を増やすことができません。
+                    QRコード自体は、容易にコピーできますが、
+                    ブロックチェーントークンの移譲履歴は枝分かれできません。
+                    模倣品偽造業者が１点の本物からコピー品を量産したとしても、正常に決済処理できるのは１点のみです。
+                    よって偽造業者は模造品から利益を上げることができません。
                   </p>
                 </div>
               </div>
@@ -448,6 +476,85 @@ export default function LandingPage() {
                     <img
                       src="/AfterConnection2.png"
                       alt="二次流通市場でも現在の所有者と繋がれる状態"
+                      className="landing-page-sales-support-benefit__image"
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div className="page-actions">
+              <Button variant="primary" onClick={() => navigate("/how-to-use")}>
+                使い方解説
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section
+          id="flea-market"
+          className="landing-page-section landing-page-sales-support"
+        >
+          <div className="landing-page-section__inner">
+            <div className="landing-page-sales-support__header">
+              <p
+                ref={fleaMarketEyebrowRef}
+                className="landing-page-sales-support__eyebrow"
+              >
+                フリーマーケット
+              </p>
+              <h2 className="landing-page-section__title landing-page-sales-support__title">
+                利益を上げながら模倣品対策
+              </h2>
+              <p className="landing-page-card__text landing-page-sales-support__lead">
+                ブランドが利益を回収できるフリマを提供します。
+              </p>
+            </div>
+
+            <div className="landing-page-sales-support__benefits">
+              <article className="landing-page-sales-support-benefit landing-page-sales-support-benefit--with-image">
+                <div className="landing-page-sales-support-benefit__content">
+                  <p className="landing-page-sales-support-card__label">
+                    真贋証明をフリマにまで届ける
+                  </p>
+
+                  <h3 className="landing-page-sales-support-benefit__title">
+                    真贋証明付きで出品できるフリマ
+                  </h3>
+                  <p className="landing-page-sales-support-benefit__text">
+                    AMOLのフリマでは製造時にブロックチェーントークンを連携した電子名札を発行した商品のみ出品されます。
+                    本物であることが証明されているため、従来のフリマよりも高く販売できることが期待できます。
+                    結果、店舗での購入価格とフリマでの販売価格の差額が縮まり、
+                    これまで手が届かなかったお客様を値下げをせずに新規顧客として迎えられるようになります。
+                  </p>
+                  <div className="landing-page-sales-support-benefit__image-wrap">
+                    <img
+                      src="/freemarket_expect.jpg"
+                      alt="二次流通市場でブランドに利益が還元されにくい状態"
+                      className="landing-page-sales-support-benefit__image"
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              </article>
+
+              <article className="landing-page-sales-support-benefit landing-page-sales-support-benefit--with-image">
+                <div className="landing-page-sales-support-benefit__content">
+                  <p className="landing-page-sales-support-card__label">
+                    ブランドが利益を回収できるフリマ
+                  </p>
+
+                  <h3 className="landing-page-sales-support-benefit__title">
+                    フリーマーケット売上の5%をブランド様に還元
+                  </h3>
+                  <p className="landing-page-sales-support-benefit__text">
+                    AMOL登録商品がフリーマーケットで販売された場合、売上の5%をブランド様に還元します。長く使われる商品ほど、二次流通市場でも継続的な利益機会をつくることができます。
+                  </p>
+                  <div className="landing-page-sales-support-benefit__image-wrap">
+                    <img
+                      src="/freemarket_5percent.jpg"
+                      alt="フリーマーケットでの売上の一部がブランドに還元される状態"
                       className="landing-page-sales-support-benefit__image"
                       loading="lazy"
                     />
