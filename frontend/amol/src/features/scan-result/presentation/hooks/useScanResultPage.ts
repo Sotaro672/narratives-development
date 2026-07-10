@@ -19,7 +19,6 @@ import {
   fetchReviewsByProductBlueprintId,
   getAuthHeadersOrUndefined,
   isOwnedByWalletMintAddress,
-  listSolanaTransfersByMintAddress,
   loadPreviewState,
   resolveOwnedWalletTokenByMintAddress,
   resolveTokenByMintAddress,
@@ -28,7 +27,6 @@ import {
 import type {
   CatalogReviewPage,
   MallOwnerInfo,
-  MallPreviewTransferInfo,
   MallScanTransferResponse,
   MallScanVerifyResponse,
   PreviewState,
@@ -105,9 +103,6 @@ export function useScanResultPage() {
     useState<MallScanVerifyResponse | null>(null);
   const [transferResult, setTransferResult] =
     useState<MallScanTransferResponse | null>(null);
-  const [chainTransfers, setChainTransfers] = useState<MallPreviewTransferInfo[]>(
-    [],
-  );
 
   const [reviews, setReviews] = useState<CatalogReviewPage | null>(null);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
@@ -153,11 +148,10 @@ export function useScanResultPage() {
   const transferTxSignature = transferResult?.txSignature.trim() || "";
   const transferMatched = transferResult?.matched ?? false;
 
-  const displayTransfers = useMemo(() => {
-    const backendTransfers = previewState?.raw.transfers ?? [];
-
-    return backendTransfers.length > 0 ? backendTransfers : chainTransfers;
-  }, [chainTransfers, previewState?.raw.transfers]);
+  const displayTransfers = useMemo(
+    () => previewState?.raw.transfers ?? [],
+    [previewState?.raw.transfers],
+  );
 
   const hasMultipleTransfers = displayTransfers.length >= 2;
 
@@ -197,9 +191,9 @@ export function useScanResultPage() {
     return createScanResultPageViewModel({
       state,
       previewState,
-      chainTransfers,
+      chainTransfers: displayTransfers,
     });
-  }, [chainTransfers, previewState, state]);
+  }, [displayTransfers, previewState, state]);
 
   const transferSuccessModalViewModel = useMemo(() => {
     return createScanTransferSuccessModalViewModel({
@@ -341,7 +335,6 @@ export function useScanResultPage() {
     setOwnedByWalletError(null);
     setPostReviewError(null);
     setReviewPage(1);
-    setChainTransfers([]);
     autoTransferTriggeredRef.current = false;
     transferringRef.current = false;
 
@@ -359,25 +352,6 @@ export function useScanResultPage() {
       }
 
       setPreviewState(nextState);
-
-      const mintAddress = nextState.raw.token?.mintAddress.trim() || "";
-
-      if (mintAddress) {
-        try {
-          const transfers = await listSolanaTransfersByMintAddress({
-            mintAddress,
-            limit: 50,
-          });
-
-          if (mountedRef.current && loadingProductIdRef.current === pid) {
-            setChainTransfers(transfers);
-          }
-        } catch {
-          if (mountedRef.current && loadingProductIdRef.current === pid) {
-            setChainTransfers([]);
-          }
-        }
-      }
 
       await loadAuthFlow(pid);
     } catch (e) {

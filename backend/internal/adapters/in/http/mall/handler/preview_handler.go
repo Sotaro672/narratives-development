@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\mall\handler\preview_handler.go
 package mallHandler
 
 import (

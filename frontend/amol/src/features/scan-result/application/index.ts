@@ -1,5 +1,4 @@
 // frontend/amol/src/features/scan-result/application/index.ts
-
 export * from "./scanAlcoholInfoFactory";
 export * from "./scanNavigationFactory";
 export * from "./scanOwnedWalletUsecase";

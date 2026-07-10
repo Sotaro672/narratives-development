@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -446,7 +447,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 		tokenReader := outfs.NewTokenReaderFS(fsClient)
 
-		solanaTransferReader := solana.NewTokenTransferReaderSolana("")
+		solanaRPCURL := strings.TrimSpace(os.Getenv("SOLANA_RPC_URL"))
+		if solanaRPCURL == "" {
+			return nil, errors.New("di.mall: SOLANA_RPC_URL is not configured")
+		}
+
+		solanaTransferReader := solana.NewTokenTransferReaderSolana(solanaRPCURL)
 		previewTransferReader := outsolana.NewPreviewTransferReader(solanaTransferReader)
 
 		c.PreviewQ = mallquery.NewPreviewQuery(

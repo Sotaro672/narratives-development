@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"time"
 )
@@ -20,6 +19,7 @@ var (
 )
 
 const (
+	solanaDevnetRPCURL                        = "https://api.devnet.solana.com"
 	defaultTokenTransferReaderLimitPerAccount = 50
 	defaultTokenTransferReaderHTTPTimeout     = 20 * time.Second
 )
@@ -31,16 +31,11 @@ type TokenTransferReaderSolana struct {
 	Timeout    time.Duration
 }
 
-func NewTokenTransferReaderSolana(rpcURL string) *TokenTransferReaderSolana {
-	u := rpcURL
-	if u == "" {
-		u = os.Getenv("SOLANA_RPC_URL")
-	}
-
+func NewTokenTransferReaderSolana(_ string) *TokenTransferReaderSolana {
 	timeout := defaultTokenTransferReaderHTTPTimeout
 
 	return &TokenTransferReaderSolana{
-		RPCURL:     u,
+		RPCURL:     solanaDevnetRPCURL,
 		HTTPClient: &http.Client{Timeout: timeout},
 		Commitment: "finalized",
 		Timeout:    timeout,
@@ -92,7 +87,10 @@ func (e *TokenTransferReaderSolana) ListMintTransfers(
 
 	tokenAccounts, err := e.getTokenAccountsByMint(rpcCtx, mintAddress)
 	if err != nil {
-		return ListMintTransfersResult{}, fmt.Errorf("token_transfer_reader: getTokenAccountsByMint: %w", err)
+		return ListMintTransfersResult{}, fmt.Errorf(
+			"token_transfer_reader: getTokenAccountsByMint: %w",
+			err,
+		)
 	}
 
 	signatureSet := map[string]struct{}{}
@@ -118,9 +116,11 @@ func (e *TokenTransferReaderSolana) ListMintTransfers(
 			if sig == "" {
 				continue
 			}
+
 			if _, ok := signatureSet[sig]; ok {
 				continue
 			}
+
 			signatureSet[sig] = struct{}{}
 			signatures = append(signatures, sig)
 		}
@@ -136,18 +136,28 @@ func (e *TokenTransferReaderSolana) ListMintTransfers(
 	for _, sig := range signatures {
 		tx, err := e.getTransaction(rpcCtx, sig)
 		if err != nil {
-			return ListMintTransfersResult{}, fmt.Errorf("token_transfer_reader: getTransaction(%s): %w", sig, err)
+			return ListMintTransfersResult{}, fmt.Errorf(
+				"token_transfer_reader: getTransaction(%s): %w",
+				sig,
+				err,
+			)
 		}
+
 		if tx == nil {
 			continue
 		}
 
-		items := extractMintTransferRecordsFromTransaction(tx, mintAddress)
+		items := extractMintTransferRecordsFromTransaction(
+			tx,
+			mintAddress,
+		)
+
 		for _, it := range items {
 			unix := int64(0)
 			if it.TransferredAt != nil {
 				unix = it.TransferredAt.Unix()
 			}
+
 			records = append(records, sortableTransfer{
 				Record: it,
 				Unix:   unix,
@@ -159,10 +169,15 @@ func (e *TokenTransferReaderSolana) ListMintTransfers(
 		if records[i].Unix != records[j].Unix {
 			return records[i].Unix > records[j].Unix
 		}
-		if records[i].Record.FromWalletAddress != records[j].Record.FromWalletAddress {
-			return records[i].Record.FromWalletAddress > records[j].Record.FromWalletAddress
+
+		if records[i].Record.FromWalletAddress !=
+			records[j].Record.FromWalletAddress {
+			return records[i].Record.FromWalletAddress >
+				records[j].Record.FromWalletAddress
 		}
-		return records[i].Record.ToWalletAddress > records[j].Record.ToWalletAddress
+
+		return records[i].Record.ToWalletAddress >
+			records[j].Record.ToWalletAddress
 	})
 
 	out := make([]MintTransferRecord, 0, len(records))
@@ -176,7 +191,10 @@ func (e *TokenTransferReaderSolana) ListMintTransfers(
 	}, nil
 }
 
-func (e *TokenTransferReaderSolana) getTokenAccountsByMint(ctx context.Context, mintAddress string) ([]string, error) {
+func (e *TokenTransferReaderSolana) getTokenAccountsByMint(
+	ctx context.Context,
+	mintAddress string,
+) ([]string, error) {
 	var out rpcGetProgramAccountsResponse
 
 	if err := e.rpcCall(ctx, "getProgramAccounts", []any{
@@ -201,10 +219,12 @@ func (e *TokenTransferReaderSolana) getTokenAccountsByMint(ctx context.Context, 
 	}
 
 	keys := make([]string, 0, len(out))
+
 	for _, row := range out {
 		if row.Pubkey == "" {
 			continue
 		}
+
 		keys = append(keys, row.Pubkey)
 	}
 
@@ -226,11 +246,13 @@ func (e *TokenTransferReaderSolana) getSignaturesForAddress(
 	if before != "" {
 		cfg["before"] = before
 	}
+
 	if until != "" {
 		cfg["until"] = until
 	}
 
 	var out []rpcSignatureInfo
+
 	if err := e.rpcCall(ctx, "getSignaturesForAddress", []any{
 		address,
 		cfg,
@@ -239,10 +261,12 @@ func (e *TokenTransferReaderSolana) getSignaturesForAddress(
 	}
 
 	res := make([]string, 0, len(out))
+
 	for _, s := range out {
 		if s.Signature == "" {
 			continue
 		}
+
 		res = append(res, s.Signature)
 	}
 
@@ -254,6 +278,7 @@ func (e *TokenTransferReaderSolana) getTransaction(
 	signature string,
 ) (*rpcTransactionResponse, error) {
 	var out *rpcTransactionResponse
+
 	if err := e.rpcCall(ctx, "getTransaction", []any{
 		signature,
 		map[string]any{
@@ -290,15 +315,23 @@ func (e *TokenTransferReaderSolana) rpcCall(
 		return fmt.Errorf("marshal rpc request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.RPCURL, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		e.RPCURL,
+		bytes.NewReader(b),
+	)
 	if err != nil {
 		return fmt.Errorf("new http request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	client := e.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: defaultTokenTransferReaderHTTPTimeout}
+		client = &http.Client{
+			Timeout: defaultTokenTransferReaderHTTPTimeout,
+		}
 	}
 
 	resp, err := client.Do(req)
@@ -313,25 +346,45 @@ func (e *TokenTransferReaderSolana) rpcCall(
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("rpc http status=%d body=%s", resp.StatusCode, string(respBody))
+		return fmt.Errorf(
+			"rpc http status=%d body=%s",
+			resp.StatusCode,
+			string(respBody),
+		)
 	}
 
 	var rpcResp rpcResponse
 	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
-		return fmt.Errorf("unmarshal rpc envelope: %w body=%s", err, string(respBody))
+		return fmt.Errorf(
+			"unmarshal rpc envelope: %w body=%s",
+			err,
+			string(respBody),
+		)
 	}
+
 	if rpcResp.Error != nil {
-		return fmt.Errorf("rpc error code=%d message=%s", rpcResp.Error.Code, rpcResp.Error.Message)
+		return fmt.Errorf(
+			"rpc error code=%d message=%s",
+			rpcResp.Error.Code,
+			rpcResp.Error.Message,
+		)
 	}
 
 	if out == nil {
 		return nil
 	}
-	if len(rpcResp.Result) == 0 || string(rpcResp.Result) == "null" {
+
+	if len(rpcResp.Result) == 0 ||
+		string(rpcResp.Result) == "null" {
 		return nil
 	}
+
 	if err := json.Unmarshal(rpcResp.Result, out); err != nil {
-		return fmt.Errorf("unmarshal rpc result: %w body=%s", err, string(respBody))
+		return fmt.Errorf(
+			"unmarshal rpc result: %w body=%s",
+			err,
+			string(respBody),
+		)
 	}
 
 	return nil
@@ -365,17 +418,21 @@ func extractMintTransferRecordsFromTransaction(
 	}
 
 	accountIndexToOwner := make(map[int]string)
+
 	if tx.Meta != nil {
 		for _, tb := range tx.Meta.PostTokenBalances {
 			if tb.Owner != "" {
 				accountIndexToOwner[tb.AccountIndex] = tb.Owner
 			}
 		}
+
 		for _, tb := range tx.Meta.PreTokenBalances {
-			if tb.Owner != "" {
-				if _, ok := accountIndexToOwner[tb.AccountIndex]; !ok {
-					accountIndexToOwner[tb.AccountIndex] = tb.Owner
-				}
+			if tb.Owner == "" {
+				continue
+			}
+
+			if _, ok := accountIndexToOwner[tb.AccountIndex]; !ok {
+				accountIndexToOwner[tb.AccountIndex] = tb.Owner
 			}
 		}
 	}
@@ -397,18 +454,30 @@ func extractMintTransferRecordsFromTransaction(
 			if mint == "" {
 				mint = mintAddress
 			}
+
 			if mint != mintAddress {
 				continue
 			}
 
 			sourceATA := stringValue(info["source"])
 			destinationATA := stringValue(info["destination"])
+
 			if sourceATA == "" || destinationATA == "" {
 				continue
 			}
 
-			fromWallet := resolveOwnerByTokenAccount(tx, sourceATA, accountIndexToOwner)
-			toWallet := resolveOwnerByTokenAccount(tx, destinationATA, accountIndexToOwner)
+			fromWallet := resolveOwnerByTokenAccount(
+				tx,
+				sourceATA,
+				accountIndexToOwner,
+			)
+
+			toWallet := resolveOwnerByTokenAccount(
+				tx,
+				destinationATA,
+				accountIndexToOwner,
+			)
+
 			if fromWallet == "" || toWallet == "" {
 				continue
 			}
@@ -422,8 +491,11 @@ func extractMintTransferRecordsFromTransaction(
 	}
 
 	if tx.Transaction.Message.Instructions != nil {
-		appendFromInstructions(tx.Transaction.Message.Instructions)
+		appendFromInstructions(
+			tx.Transaction.Message.Instructions,
+		)
 	}
+
 	if tx.Meta != nil {
 		for _, inner := range tx.Meta.InnerInstructions {
 			appendFromInstructions(inner.Instructions)
@@ -433,7 +505,9 @@ func extractMintTransferRecordsFromTransaction(
 	return dedupeTransferRecords(out)
 }
 
-func dedupeTransferRecords(in []MintTransferRecord) []MintTransferRecord {
+func dedupeTransferRecords(
+	in []MintTransferRecord,
+) []MintTransferRecord {
 	if len(in) == 0 {
 		return in
 	}
@@ -443,13 +517,23 @@ func dedupeTransferRecords(in []MintTransferRecord) []MintTransferRecord {
 
 	for _, r := range in {
 		ts := ""
+
 		if r.TransferredAt != nil {
-			ts = r.TransferredAt.UTC().Format(time.RFC3339)
+			ts = r.TransferredAt.UTC().Format(
+				time.RFC3339,
+			)
 		}
-		key := r.FromWalletAddress + "|" + r.ToWalletAddress + "|" + ts
+
+		key := r.FromWalletAddress +
+			"|" +
+			r.ToWalletAddress +
+			"|" +
+			ts
+
 		if _, ok := seen[key]; ok {
 			continue
 		}
+
 		seen[key] = struct{}{}
 		out = append(out, r)
 	}
@@ -457,13 +541,18 @@ func dedupeTransferRecords(in []MintTransferRecord) []MintTransferRecord {
 	return out
 }
 
-func isSPLTokenTransferInstruction(ix rpcParsedInstruction) bool {
+func isSPLTokenTransferInstruction(
+	ix rpcParsedInstruction,
+) bool {
 	program := ix.Program
-	if program != "spl-token" && ix.ProgramID != TokenProgramID {
+
+	if program != "spl-token" &&
+		ix.ProgramID != TokenProgramID {
 		return false
 	}
 
 	t := ix.Parsed.Type
+
 	return t == "transfer" || t == "transferChecked"
 }
 
@@ -477,17 +566,21 @@ func resolveOwnerByTokenAccount(
 	}
 
 	keys := tx.Transaction.Message.AccountKeys
+
 	for i, k := range keys {
 		pubkey := k.Pubkey
 		if pubkey == "" {
 			pubkey = k.String
 		}
+
 		if pubkey != tokenAccount {
 			continue
 		}
+
 		if owner, ok := byIndex[i]; ok {
 			return owner
 		}
+
 		break
 	}
 
@@ -498,20 +591,28 @@ func stringValue(v any) string {
 	switch t := v.(type) {
 	case nil:
 		return ""
+
 	case string:
 		return t
+
 	case json.Number:
 		return t.String()
+
 	case float64:
 		return fmt.Sprintf("%.0f", t)
+
 	case float32:
 		return fmt.Sprintf("%.0f", t)
+
 	case int:
 		return fmt.Sprintf("%d", t)
+
 	case int64:
 		return fmt.Sprintf("%d", t)
+
 	case uint64:
 		return fmt.Sprintf("%d", t)
+
 	default:
 		return ""
 	}
@@ -568,29 +669,36 @@ type rpcAccountKey struct {
 	String string `json:"-"`
 }
 
-func (k *rpcAccountKey) UnmarshalJSON(b []byte) error {
+func (k *rpcAccountKey) UnmarshalJSON(
+	b []byte,
+) error {
 	if len(b) == 0 {
 		return nil
 	}
 
 	if b[0] == '"' {
 		var s string
+
 		if err := json.Unmarshal(b, &s); err != nil {
 			return err
 		}
+
 		k.String = s
 		k.Pubkey = s
+
 		return nil
 	}
 
 	var v struct {
 		Pubkey string `json:"pubkey"`
 	}
+
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
 
 	k.Pubkey = v.Pubkey
+
 	return nil
 }
 
