@@ -1,4 +1,3 @@
-// frontend/amol/src/pages/LandingPage.tsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
@@ -122,8 +121,15 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="landing-page-hero__image-wrap" aria-hidden="true">
-              <img src="/hero.png" alt="" className="landing-page-hero__image" />
+            <div className="landing-page-hero__video-wrap">
+              <iframe
+                className="landing-page-hero__video"
+                src="https://www.youtube.com/embed/fOH4hQUXwhc"
+                title="AMOL 紹介動画"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
             </div>
           </div>
         </section>
@@ -565,7 +571,10 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="pricing" className="landing-page-section landing-page-pricing">
+        <section
+          id="pricing"
+          className="landing-page-section landing-page-pricing"
+        >
           <div className="landing-page-section__inner">
             <div className="landing-page-sales-support__header">
               <p className="landing-page-sales-support__eyebrow">利用料金</p>
@@ -580,7 +589,9 @@ export default function LandingPage() {
             <div className="landing-page-pricing-grid">
               <article className="landing-page-pricing-card">
                 <p className="landing-page-pricing-card__label">基本利用料金</p>
-                <h3 className="landing-page-pricing-card__price">4,990円/月～</h3>
+                <h3 className="landing-page-pricing-card__price">
+                  4,990円/月～
+                </h3>
                 <p className="landing-page-pricing-card__badge">初月無料</p>
                 <p className="landing-page-pricing-card__text">
                   試験運用価格であり、今後金額が上下する可能性があります。
@@ -603,7 +614,8 @@ export default function LandingPage() {
                 </p>
                 <h3 className="landing-page-pricing-card__price">売上の10%</h3>
                 <p className="landing-page-pricing-card__text">
-                  自社ECと接続可能です。<br />
+                  自社ECと接続可能です。
+                  <br />
                   開発費は別途相談させてください。
                 </p>
               </article>

@@ -122,17 +122,17 @@ const buyerSteps: Step[] = [
   },
   {
     number: "04",
-    title: "トークン交換",
-    description:
-      "アバター同士でトークンを交換できます。プレビュー画面では、そのトークンがどのアバターに渡ってきたのかの履歴を確認できます。",
-    youtubeUrl: "https://www.youtube.com/embed/atYk9E9C5aw",
-  },
-  {
-    number: "05",
     title: "お問い合わせ",
     description:
       "購入した商品や取引内容について、購入者Mallから出品者へお問い合わせを送信できます。返信が届いた場合は、問い合わせ詳細からこれまでのやり取りを確認できます。",
     youtubeUrl: "https://www.youtube.com/embed/rxoMwIyRt8Y",
+  },
+    {
+    number: "05",
+    title: "フリマ",
+    description:
+      "所有しているトークンをフリマへ出品することができます。",
+    youtubeUrl: "https://www.youtube.com/embed/Tt2W_l-C79c",
   },
 ];
 
