@@ -11,11 +11,11 @@ export const publicHeaderNavigationItems: HeaderNavigationItem[] = [
   },
   {
     label: "料金プラン",
-    to: "/pricing",
+    to: "/landing#pricing",
   },
   {
-    label: "代表者",
-    to: "/faq",
+    label: "会社概要",
+    to: "/landing#company-overview",
   },
   {
     label: "規約・ポリシー",
@@ -23,6 +23,6 @@ export const publicHeaderNavigationItems: HeaderNavigationItem[] = [
   },
   {
     label: "お問い合わせ",
-    to: "/contact",
+    to: "/landing#contact",
   },
 ];

@@ -37,10 +37,7 @@ import ContentsPage from "../pages/ContentsPage";
 import AnnouncementPage from "../pages/AnnouncementPage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
-import ContactPage from "../pages/ContactPage";
-import VisionPage from "../pages/VisionPage";
 import HowToUsePage from "../pages/HowToUsePage";
-import PricePlan from "../pages/PricePlan";
 import ResalePage from "../pages/ResaleCreatePage";
 import ResalePageDetailPage from "../pages/ResaleDetailPage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
@@ -78,13 +75,10 @@ export const router = createBrowserRouter([
   { path: "/password-reset", element: <PasswordResetPage /> },
 
   { path: "/how-to-use", element: <HowToUsePage /> },
-  { path: "/pricing", element: <PricePlan /> },
   { path: "/resale", element: <ResalePage /> },
-  { path: "/faq", element: <VisionPage /> },
   { path: "/terms", element: <TermsPage /> },
   { path: "/privacy-policy", element: <TermsPage /> },
   { path: "/specified-commercial-transactions", element: <TermsPage /> },
-  { path: "/contact", element: <ContactPage /> },
 
   {
     path: "/avatar",
