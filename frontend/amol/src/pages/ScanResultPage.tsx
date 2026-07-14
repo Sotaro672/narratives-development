@@ -19,7 +19,6 @@ export default function ScanResultPage() {
 
   const {
     state,
-    displayTransfers,
     hasMultipleTransfers,
     load,
     submitReview,
@@ -61,7 +60,9 @@ export default function ScanResultPage() {
     Boolean(reviewBody.trim());
 
   const canOpenInquiryPage =
-    isLoggedIn && Boolean(state.productId.trim()) && !hasMultipleTransfers;
+    isLoggedIn &&
+    Boolean(state.productId.trim()) &&
+    !hasMultipleTransfers;
 
   return (
     <Layout
@@ -98,7 +99,6 @@ export default function ScanResultPage() {
     >
       <ScanResultCard
         state={state}
-        transfers={displayTransfers}
         onRefresh={load}
         onPrevReviewsPage={prevReviewsPage}
         onNextReviewsPage={nextReviewsPage}

@@ -246,27 +246,13 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		return nil, ErrInvalidProductID
 	}
 
-	fmt.Printf(
-		"[preview-query] resolve preview start productID=%s\n",
-		id,
-	)
-
 	p, err := q.ProductRepo.GetByID(ctx, id)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] product resolve failed productID=%s err=%v\n",
-			id,
-			err,
-		)
 		return nil, err
 	}
 
 	modelID := strings.TrimSpace(p.ModelID)
 	if modelID == "" {
-		fmt.Printf(
-			"[preview-query] resolved modelID is empty productID=%s\n",
-			id,
-		)
 		return nil, ErrModelIDEmpty
 	}
 
@@ -277,12 +263,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 
 	pbID, _, err := q.ProductBlueprintRepo.GetIDByModelID(ctx, modelID)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] productBlueprint ID resolve failed productID=%s modelID=%s err=%v\n",
-			id,
-			modelID,
-			err,
-		)
 		return nil, err
 	}
 
@@ -293,12 +273,6 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 
 	pb, err := q.ProductBlueprintRepo.GetByID(ctx, pbID)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] productBlueprint resolve failed productID=%s productBlueprintID=%s err=%v\n",
-			id,
-			pbID,
-			err,
-		)
 		return nil, err
 	}
 
@@ -328,43 +302,22 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	}
 
 	if err := q.fillResolvedModelInfo(ctx, out, modelID, category.Kind); err != nil {
-		fmt.Printf(
-			"[preview-query] model display resolve failed productID=%s modelID=%s err=%v\n",
-			id,
-			modelID,
-			err,
-		)
 		return nil, err
 	}
 
 	if q.TokenRepo == nil {
-		fmt.Printf(
-			"[preview-query] token repo is nil productID=%s\n",
-			id,
-		)
-
 		return out, nil
 	}
 
 	// tokens/{productId}（存在すれば付与）
 	tok, err := q.TokenRepo.GetByProductID(ctx, id)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] token resolve failed productID=%s err=%v\n",
-			id,
-			err,
-		)
 		return nil, err
 	}
 
 	out.Token = tok
 
 	if tok == nil {
-		fmt.Printf(
-			"[preview-query] token not found productID=%s\n",
-			id,
-		)
-
 		return out, nil
 	}
 
@@ -388,14 +341,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 				ctx,
 				tokenBlueprintID,
 			)
-			if perr != nil {
-				fmt.Printf(
-					"[preview-query] tokenBlueprint resolve failed productID=%s tokenBlueprintID=%s err=%v\n",
-					id,
-					tokenBlueprintID,
-					perr,
-				)
-			} else if tb != nil {
+			if perr == nil && tb != nil {
 				tbPatch := tbdom.NewPatchFromTokenBlueprint(tb)
 
 				if strings.TrimSpace(tbPatch.BrandID) != "" &&
@@ -413,23 +359,16 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	}
 
 	// 現在owner解決
-	q.resolveCurrentOwner(ctx, id, tok, out)
+	q.resolveCurrentOwner(ctx, tok, out)
 
 	// transfer履歴と各owner解決
-	q.resolvePreviewTransfers(ctx, id, tok, out)
-
-	fmt.Printf(
-		"[preview-query] resolve preview completed productID=%s transfers=%d\n",
-		id,
-		len(out.Transfers),
-	)
+	q.resolvePreviewTransfers(ctx, tok, out)
 
 	return out, nil
 }
 
 func (q *PreviewQuery) resolveCurrentOwner(
 	ctx context.Context,
-	productID string,
 	tok *dto.TokenInfo,
 	out *dto.PreviewModelInfo,
 ) {
@@ -438,39 +377,20 @@ func (q *PreviewQuery) resolveCurrentOwner(
 	}
 
 	if q == nil || q.OwnerResolveQ == nil {
-		fmt.Printf(
-			"[preview-query] current owner resolver is nil productID=%s\n",
-			productID,
-		)
 		return
 	}
 
 	walletAddress := strings.TrimSpace(tok.ToAddress)
 	if walletAddress == "" {
-		fmt.Printf(
-			"[preview-query] current owner walletAddress is empty productID=%s\n",
-			productID,
-		)
 		return
 	}
 
 	res, err := q.OwnerResolveQ.Resolve(ctx, walletAddress)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] current owner resolve failed productID=%s walletAddress=%s err=%v\n",
-			productID,
-			walletAddress,
-			err,
-		)
 		return
 	}
 
 	if res == nil {
-		fmt.Printf(
-			"[preview-query] current owner resolve returned nil productID=%s walletAddress=%s\n",
-			productID,
-			walletAddress,
-		)
 		return
 	}
 
@@ -482,31 +402,13 @@ func (q *PreviewQuery) resolveCurrentOwner(
 	case sharedquery.OwnerTypeBrand:
 		res.AvatarID = ""
 		res.AvatarName = ""
-
-	default:
-		fmt.Printf(
-			"[preview-query] current owner type unsupported productID=%s walletAddress=%s ownerType=%s\n",
-			productID,
-			walletAddress,
-			res.OwnerType,
-		)
 	}
 
 	out.Owner = res
-
-	fmt.Printf(
-		"[preview-query] current owner resolved productID=%s walletAddress=%s ownerType=%s avatarID=%s brandID=%s\n",
-		productID,
-		walletAddress,
-		res.OwnerType,
-		res.AvatarID,
-		res.BrandID,
-	)
 }
 
 func (q *PreviewQuery) resolvePreviewTransfers(
 	ctx context.Context,
-	productID string,
 	tok *dto.TokenInfo,
 	out *dto.PreviewModelInfo,
 ) {
@@ -520,47 +422,23 @@ func (q *PreviewQuery) resolvePreviewTransfers(
 	}
 
 	if q == nil || q.TransferRepo == nil {
-		fmt.Printf(
-			"[preview-query] transfer repo is nil productID=%s\n",
-			productID,
-		)
 		return
 	}
 
 	if tok == nil {
-		fmt.Printf(
-			"[preview-query] transfer token is nil productID=%s\n",
-			productID,
-		)
 		return
 	}
 
 	mintAddress := strings.TrimSpace(tok.MintAddress)
 	if mintAddress == "" {
-		fmt.Printf(
-			"[preview-query] transfer mintAddress is empty productID=%s\n",
-			productID,
-		)
 		return
 	}
-
-	fmt.Printf(
-		"[preview-query] list transfers start productID=%s mintAddress=%s\n",
-		productID,
-		mintAddress,
-	)
 
 	transfers, err := q.TransferRepo.ListByMintAddress(
 		ctx,
 		mintAddress,
 	)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] list transfers failed productID=%s mintAddress=%s err=%v\n",
-			productID,
-			mintAddress,
-			err,
-		)
 		return
 	}
 
@@ -568,27 +446,12 @@ func (q *PreviewQuery) resolvePreviewTransfers(
 		transfers = make([]dto.PreviewTransferInfo, 0)
 	}
 
-	fmt.Printf(
-		"[preview-query] list transfers succeeded productID=%s mintAddress=%s count=%d\n",
-		productID,
-		mintAddress,
-		len(transfers),
-	)
-
 	resolved := q.resolveTransferOwners(ctx, transfers)
 	if resolved == nil {
 		resolved = make([]dto.PreviewTransferInfo, 0)
 	}
 
 	out.Transfers = resolved
-
-	fmt.Printf(
-		"[preview-query] transfer owners resolved productID=%s mintAddress=%s inputCount=%d outputCount=%d\n",
-		productID,
-		mintAddress,
-		len(transfers),
-		len(resolved),
-	)
 }
 
 // ListEligiblePairsByAvatarID resolves eligible transfer pairs through order.Repository.
@@ -991,11 +854,6 @@ func (q *PreviewQuery) resolveBrandNameForPreview(
 
 	ni, err := q.getBrandNameIcon(ctx, brandID)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] brand display resolve failed brandID=%s err=%v\n",
-			brandID,
-			err,
-		)
 		return ""
 	}
 
@@ -1158,52 +1016,34 @@ func (q *PreviewQuery) resolveTransferOwners(
 		len(transfers),
 	)
 
-	for index, tr := range transfers {
-		item := tr
-
-		item.FromWalletAddress = strings.TrimSpace(
-			item.FromWalletAddress,
+	for _, tr := range transfers {
+		fromWalletAddress := strings.TrimSpace(
+			tr.FromWalletAddress,
 		)
-		item.ToWalletAddress = strings.TrimSpace(
-			item.ToWalletAddress,
+		toWalletAddress := strings.TrimSpace(
+			tr.ToWalletAddress,
 		)
 
-		fmt.Printf(
-			"[preview-query] resolve transfer owners start index=%d fromWalletAddress=%s toWalletAddress=%s\n",
-			index,
-			item.FromWalletAddress,
-			item.ToWalletAddress,
-		)
+		// 画面へ返す transfer 履歴には、所有者を識別する ID だけを設定する。
+		// 元の transfer が持つ walletAddress、署名、日時、表示名、アイコンなどは
+		// dto へコピーしない。
+		item := dto.PreviewTransferInfo{}
 
 		if q == nil || q.OwnerResolveQ == nil {
-			fmt.Printf(
-				"[preview-query] transfer owner resolver is nil index=%d\n",
-				index,
-			)
-
 			out = append(out, item)
 			continue
 		}
 
-		q.resolveTransferFromOwner(
+		q.resolveTransferFromOwnerID(
 			ctx,
-			index,
+			fromWalletAddress,
 			&item,
 		)
 
-		q.resolveTransferToOwner(
+		q.resolveTransferToOwnerID(
 			ctx,
-			index,
+			toWalletAddress,
 			&item,
-		)
-
-		fmt.Printf(
-			"[preview-query] resolve transfer owners completed index=%d fromAvatarID=%s fromBrandID=%s toAvatarID=%s toBrandID=%s\n",
-			index,
-			item.FromAvatarID,
-			item.FromBrandID,
-			item.ToAvatarID,
-			item.ToBrandID,
 		)
 
 		out = append(out, item)
@@ -1212,9 +1052,9 @@ func (q *PreviewQuery) resolveTransferOwners(
 	return out
 }
 
-func (q *PreviewQuery) resolveTransferFromOwner(
+func (q *PreviewQuery) resolveTransferFromOwnerID(
 	ctx context.Context,
-	index int,
+	walletAddress string,
 	item *dto.PreviewTransferInfo,
 ) {
 	if q == nil ||
@@ -1223,14 +1063,8 @@ func (q *PreviewQuery) resolveTransferFromOwner(
 		return
 	}
 
-	walletAddress := strings.TrimSpace(
-		item.FromWalletAddress,
-	)
+	walletAddress = strings.TrimSpace(walletAddress)
 	if walletAddress == "" {
-		fmt.Printf(
-			"[preview-query] from walletAddress is empty index=%d\n",
-			index,
-		)
 		return
 	}
 
@@ -1239,32 +1073,12 @@ func (q *PreviewQuery) resolveTransferFromOwner(
 		walletAddress,
 	)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] resolve from owner failed index=%d walletAddress=%s err=%v\n",
-			index,
-			walletAddress,
-			err,
-		)
 		return
 	}
 
 	if res == nil {
-		fmt.Printf(
-			"[preview-query] resolve from owner returned nil index=%d walletAddress=%s\n",
-			index,
-			walletAddress,
-		)
 		return
 	}
-
-	fmt.Printf(
-		"[preview-query] resolve from owner succeeded index=%d walletAddress=%s ownerType=%s avatarID=%s brandID=%s\n",
-		index,
-		walletAddress,
-		res.OwnerType,
-		res.AvatarID,
-		res.BrandID,
-	)
 
 	switch res.OwnerType {
 	case sharedquery.OwnerTypeAvatar:
@@ -1272,46 +1086,18 @@ func (q *PreviewQuery) resolveTransferFromOwner(
 			res.AvatarID,
 		)
 		item.FromBrandID = ""
-		item.FromBrandName = ""
-		item.FromBrandIcon = ""
-
-		q.fillAvatarTransferDisplay(
-			ctx,
-			item.FromAvatarID,
-			&item.FromAvatarName,
-			&item.FromAvatarIcon,
-			res.AvatarName,
-		)
 
 	case sharedquery.OwnerTypeBrand:
 		item.FromBrandID = strings.TrimSpace(
 			res.BrandID,
 		)
 		item.FromAvatarID = ""
-		item.FromAvatarName = ""
-		item.FromAvatarIcon = ""
-
-		q.fillBrandTransferDisplay(
-			ctx,
-			item.FromBrandID,
-			&item.FromBrandName,
-			&item.FromBrandIcon,
-			res.BrandName,
-		)
-
-	default:
-		fmt.Printf(
-			"[preview-query] unsupported from owner type index=%d walletAddress=%s ownerType=%s\n",
-			index,
-			walletAddress,
-			res.OwnerType,
-		)
 	}
 }
 
-func (q *PreviewQuery) resolveTransferToOwner(
+func (q *PreviewQuery) resolveTransferToOwnerID(
 	ctx context.Context,
-	index int,
+	walletAddress string,
 	item *dto.PreviewTransferInfo,
 ) {
 	if q == nil ||
@@ -1320,14 +1106,8 @@ func (q *PreviewQuery) resolveTransferToOwner(
 		return
 	}
 
-	walletAddress := strings.TrimSpace(
-		item.ToWalletAddress,
-	)
+	walletAddress = strings.TrimSpace(walletAddress)
 	if walletAddress == "" {
-		fmt.Printf(
-			"[preview-query] to walletAddress is empty index=%d\n",
-			index,
-		)
 		return
 	}
 
@@ -1336,32 +1116,12 @@ func (q *PreviewQuery) resolveTransferToOwner(
 		walletAddress,
 	)
 	if err != nil {
-		fmt.Printf(
-			"[preview-query] resolve to owner failed index=%d walletAddress=%s err=%v\n",
-			index,
-			walletAddress,
-			err,
-		)
 		return
 	}
 
 	if res == nil {
-		fmt.Printf(
-			"[preview-query] resolve to owner returned nil index=%d walletAddress=%s\n",
-			index,
-			walletAddress,
-		)
 		return
 	}
-
-	fmt.Printf(
-		"[preview-query] resolve to owner succeeded index=%d walletAddress=%s ownerType=%s avatarID=%s brandID=%s\n",
-		index,
-		walletAddress,
-		res.OwnerType,
-		res.AvatarID,
-		res.BrandID,
-	)
 
 	switch res.OwnerType {
 	case sharedquery.OwnerTypeAvatar:
@@ -1369,172 +1129,11 @@ func (q *PreviewQuery) resolveTransferToOwner(
 			res.AvatarID,
 		)
 		item.ToBrandID = ""
-		item.ToBrandName = ""
-		item.ToBrandIcon = ""
-
-		q.fillAvatarTransferDisplay(
-			ctx,
-			item.ToAvatarID,
-			&item.ToAvatarName,
-			&item.ToAvatarIcon,
-			res.AvatarName,
-		)
 
 	case sharedquery.OwnerTypeBrand:
 		item.ToBrandID = strings.TrimSpace(
 			res.BrandID,
 		)
 		item.ToAvatarID = ""
-		item.ToAvatarName = ""
-		item.ToAvatarIcon = ""
-
-		q.fillBrandTransferDisplay(
-			ctx,
-			item.ToBrandID,
-			&item.ToBrandName,
-			&item.ToBrandIcon,
-			res.BrandName,
-		)
-
-	default:
-		fmt.Printf(
-			"[preview-query] unsupported to owner type index=%d walletAddress=%s ownerType=%s\n",
-			index,
-			walletAddress,
-			res.OwnerType,
-		)
 	}
-}
-
-func (q *PreviewQuery) fillBrandTransferDisplay(
-	ctx context.Context,
-	brandID string,
-	nameOut *string,
-	iconOut *string,
-	fallbackName string,
-) {
-	if nameOut == nil || iconOut == nil {
-		return
-	}
-
-	*nameOut = ""
-	*iconOut = ""
-
-	brandID = strings.TrimSpace(brandID)
-	fallbackName = strings.TrimSpace(fallbackName)
-
-	if q == nil || brandID == "" {
-		if fallbackName != "" {
-			*nameOut = fallbackName
-		}
-		return
-	}
-
-	if q.BrandRepo != nil {
-		ni, err := q.getBrandNameIcon(
-			ctx,
-			brandID,
-		)
-		if err != nil {
-			fmt.Printf(
-				"[preview-query] transfer brand display resolve failed brandID=%s err=%v\n",
-				brandID,
-				err,
-			)
-		} else {
-			*nameOut = strings.TrimSpace(ni.Name)
-			*iconOut = strings.TrimSpace(ni.BrandIcon)
-
-			if *nameOut != "" || *iconOut != "" {
-				fmt.Printf(
-					"[preview-query] transfer brand display resolved brandID=%s hasName=%t hasIcon=%t\n",
-					brandID,
-					*nameOut != "",
-					*iconOut != "",
-				)
-				return
-			}
-		}
-	}
-
-	if fallbackName != "" {
-		*nameOut = fallbackName
-	}
-
-	fmt.Printf(
-		"[preview-query] transfer brand display fallback brandID=%s hasName=%t hasIcon=%t\n",
-		brandID,
-		*nameOut != "",
-		*iconOut != "",
-	)
-}
-
-func (q *PreviewQuery) fillAvatarTransferDisplay(
-	ctx context.Context,
-	avatarID string,
-	nameOut *string,
-	iconOut *string,
-	fallbackName string,
-) {
-	if nameOut == nil || iconOut == nil {
-		return
-	}
-
-	*nameOut = ""
-	*iconOut = ""
-
-	avatarID = strings.TrimSpace(avatarID)
-	fallbackName = strings.TrimSpace(fallbackName)
-
-	if q == nil || avatarID == "" {
-		if fallbackName != "" {
-			*nameOut = fallbackName
-		}
-		return
-	}
-
-	if q.AvatarNameIconRepo != nil {
-		avatar, err := q.AvatarNameIconRepo.GetByID(
-			ctx,
-			avatarID,
-		)
-		if err != nil {
-			fmt.Printf(
-				"[preview-query] transfer avatar display resolve failed avatarID=%s err=%v\n",
-				avatarID,
-				err,
-			)
-		} else {
-			*nameOut = strings.TrimSpace(
-				avatar.AvatarName,
-			)
-
-			if avatar.AvatarIcon != nil {
-				*iconOut = strings.TrimSpace(
-					*avatar.AvatarIcon,
-				)
-			}
-
-			if *nameOut != "" || *iconOut != "" {
-				fmt.Printf(
-					"[preview-query] transfer avatar display resolved avatarID=%s hasName=%t hasIcon=%t\n",
-					avatarID,
-					*nameOut != "",
-					*iconOut != "",
-				)
-				return
-			}
-		}
-	}
-
-	if fallbackName != "" {
-		*nameOut = fallbackName
-	}
-
-	fmt.Printf(
-		"[preview-query] transfer avatar display fallback avatarID=%s hasName=%t hasIcon=%t\n",
-		avatarID,
-		*nameOut != "",
-		*iconOut != "",
-	)
 }

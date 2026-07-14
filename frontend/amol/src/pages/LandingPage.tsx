@@ -71,9 +71,17 @@ const companyOverviewRows = [
     label: "商号又は名称（フリガナ）",
     value: "アモル",
   },
+    {
+    label: "目的",
+    value: "ECサイトの企画、制作、販売、運営及び管理",
+  },
+    {
+    label: "従業員数",
+    value: "1人",
+  },
   {
-    label: "法人番号",
-    value: "5010901059633",
+    label: "資本金",
+    value: "30万円",
   },
   {
     label: "代表者",
@@ -85,11 +93,7 @@ const companyOverviewRows = [
       "東京都世田谷区太子堂４丁目１８番１５号 マガザン三軒茶屋２－３Ｆ－３",
   },
   {
-    label: "法人番号指定年月日",
-    value: "令和8年5月29日",
-  },
-  {
-    label: "最終更新年月日",
+    label: "創業日",
     value: "令和8年5月29日",
   },
 ];

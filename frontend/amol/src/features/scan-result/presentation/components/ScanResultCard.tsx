@@ -6,11 +6,7 @@ import SectionCard from "../../../../components/ui/SectionCard";
 import TextState from "../../../../components/ui/TextState";
 import { rgbToCssColor } from "../../../../components/utils/color";
 import { createScanAlcoholInfo } from "../../application/scanAlcoholInfoFactory";
-import type {
-  MallOwnerInfo,
-  MallPreviewTransferInfo,
-  ScanResultPageState,
-} from "../../types";
+import type { MallOwnerInfo, ScanResultPageState } from "../../types";
 import {
   getNumber,
   getRecord,
@@ -23,11 +19,9 @@ import ScanResultProductSection from "./ScanResultProductSection";
 import ScanResultReviewForm from "./ScanResultReviewForm";
 import ScanResultReviewList from "./ScanResultReviewList";
 import ScanResultTokenSection from "./ScanResultTokenSection";
-import ScanResultTransferHistory from "./ScanResultTransferHistory";
 
 type ScanResultCardProps = {
   state: ScanResultPageState;
-  transfers: MallPreviewTransferInfo[];
   onRefresh: () => void;
   onPrevReviewsPage: () => void;
   onNextReviewsPage: () => void;
@@ -59,7 +53,6 @@ function mallOwnerInfoFromRecord(
 export default function ScanResultCard(props: ScanResultCardProps) {
   const {
     state,
-    transfers,
     onRefresh,
     onPrevReviewsPage,
     onNextReviewsPage,
@@ -229,8 +222,6 @@ export default function ScanResultCard(props: ScanResultCardProps) {
             onOpenTokenContents={onOpenTokenContents}
           />
         ) : null}
-
-        <ScanResultTransferHistory transfers={transfers} />
       </div>
 
       <aside className="scan-result-desktop-side">
