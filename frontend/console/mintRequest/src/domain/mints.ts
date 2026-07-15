@@ -1,6 +1,19 @@
 // frontend/console/mintRequest/src/domain/entity/mints.ts
 
 /**
+ * 親 Mint の進行状態。
+ * backend/internal/domain/mint/entity.go の MintStatus に対応する。
+ */
+export type MintStatus =
+  | "CREATED"
+  | "QUEUED"
+  | "MINTING"
+  | "PARTIALLY_MINTED"
+  | "MINTED"
+  | "FAILED_RETRYABLE"
+  | "FAILED_FATAL";
+
+/**
  * Mint エンティティ (mints テーブル 1 レコード)
  *
  * backend/internal/domain/mint/entity.go の Mint 構造体に対応するフロント側型。
@@ -10,10 +23,10 @@
  * - brandId            : string
  * - tokenBlueprintId   : string
  * - products           : string[]
+ * - status             : MintStatus
  * - createdAt          : string (ISO8601 文字列想定)
  * - createdBy          : string
  * - mintedAt           : string | null
- * - minted             : boolean
  * - scheduledBurnDate  : string | null
  */
 
@@ -34,17 +47,17 @@ export type Mint = {
   /** inspectionResults: passed の productId 一覧（必須 / 空配列不可） */
   products: string[];
 
+  /** 親 Mint の進行状態 */
+  status: MintStatus;
+
   /** 作成日時（ISO8601 文字列） */
   createdAt: string;
 
   /** 作成者（memberId 等） */
   createdBy: string;
 
-  /** ミント完了日時（未ミントの場合は null / undefined） */
+  /** ミント完了日時（未完了の場合は null / undefined） */
   mintedAt?: string | null;
-
-  /** ミント済みフラグ */
-  minted: boolean;
 
   /** 焼却予定日時（未設定の場合は null / undefined） */
   scheduledBurnDate?: string | null;
@@ -65,13 +78,13 @@ export function toMint(raw: any): Mint {
     products: Array.isArray(raw.products)
       ? raw.products.map((p: any) => String(p))
       : [],
+    status: String(raw.status ?? raw.Status ?? "") as MintStatus,
     createdAt: String(raw.createdAt ?? raw.CreatedAt ?? ""),
     createdBy: String(raw.createdBy ?? raw.CreatedBy ?? ""),
     mintedAt:
       raw.mintedAt ?? raw.MintedAt
         ? String(raw.mintedAt ?? raw.MintedAt)
         : null,
-    minted: Boolean(raw.minted ?? raw.Minted),
     scheduledBurnDate:
       raw.scheduledBurnDate ?? raw.ScheduledBurnDate
         ? String(raw.scheduledBurnDate ?? raw.ScheduledBurnDate)

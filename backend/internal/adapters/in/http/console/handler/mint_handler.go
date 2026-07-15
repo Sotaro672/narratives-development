@@ -76,12 +76,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getMintRequestDetailByProductionID(w, r)
 		return
 
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
-		strings.HasSuffix(r.URL.Path, "/mint"):
-		h.enqueueOrExecuteNextMintTask(w, r)
-		return
-
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/mint/product_blueprints/"):
 		h.getProductBlueprintByID(w, r)
@@ -110,15 +104,6 @@ type mintQueuedResponse struct {
 	ProductionID  string `json:"productionId"`
 	Status        string `json:"status"`
 	Message       string `json:"message"`
-}
-
-type mintTaskExecutionResponse struct {
-	MintRequestID string `json:"mintRequestId"`
-	Status        string `json:"status"`
-	Signature     string `json:"signature,omitempty"`
-	MintAddress   string `json:"mintAddress,omitempty"`
-	Slot          uint64 `json:"slot,omitempty"`
-	Message       string `json:"message,omitempty"`
 }
 
 func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +140,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, err := h.mintUC.UpdateRequestInfo(
+	err := h.mintUC.UpdateRequestInfo(
 		ctx,
 		productionID,
 		tokenBlueprintID,
@@ -255,64 +240,6 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 	}
 
 	writeJSON(w, http.StatusOK, rows)
-}
-
-// enqueueOrExecuteNextMintTask は旧 /mint/requests/{id}/mint endpoint の互換口です。
-//
-// 注意:
-//   - 旧実装ではこの endpoint で全件mintを同期実行していました。
-//   - 新実装では MintUsecase.MintFromMintRequest が ExecuteNextMintTask に委譲され、
-//     1回の呼び出しで1 productだけmintします。
-//   - 通常運用では Cloud Tasks / internal worker endpoint から呼び出す想定です。
-//   - 管理画面から手動再開したい場合の fallback endpoint として残します。
-func (h *MintHandler) enqueueOrExecuteNextMintTask(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.mintUC == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mint usecase is not configured"})
-		return
-	}
-
-	path := strings.TrimPrefix(r.URL.Path, "/mint/requests/")
-	path = strings.TrimSuffix(path, "/mint")
-	mintRequestID := strings.Trim(path, "/")
-
-	if mintRequestID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mintRequestId is empty"})
-		return
-	}
-
-	if strings.Contains(mintRequestID, "/") {
-		http.NotFound(w, r)
-		return
-	}
-
-	result, err := h.mintUC.MintFromMintRequest(ctx, mintRequestID)
-	if err != nil {
-		if errors.Is(err, mintdom.ErrMintProductTaskNotFound) {
-			writeJSON(w, http.StatusConflict, map[string]string{
-				"error": "no executable mint product task found",
-			})
-			return
-		}
-
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	resp := mintTaskExecutionResponse{
-		MintRequestID: mintRequestID,
-		Status:        "MINT_TASK_EXECUTED",
-		Message:       "one mint product task was executed",
-	}
-
-	if result != nil {
-		resp.Signature = result.Signature
-		resp.MintAddress = result.MintAddress
-		resp.Slot = result.Slot
-	}
-
-	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *MintHandler) getProductBlueprintByID(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/application/validator/validateCompleteInspection.ts
 
-import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { InspectionBatchDTO } from "../../domain/inspections";
 
 export type ValidateCompleteInspectionInput = {
   inspectionBatch: InspectionBatchDTO | null | undefined;

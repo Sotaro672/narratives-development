@@ -14,7 +14,6 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	mintdom "narratives/internal/domain/mint"
-	tokendom "narratives/internal/domain/token"
 )
 
 // MintRepositoryFS implements mint.MintRepository using Firestore.
@@ -59,42 +58,6 @@ func (r *MintRepositoryFS) taskDoc(mintID string, productID string) *firestore.D
 	return r.taskCol(mintID).Doc(productID)
 }
 
-// s delegates to helper_repository_fs.go's asString(v any).
-func s(v any) string {
-	return asString(v)
-}
-
-// asTimeUTC adapts helper_repository_fs.go's asTime(v any) (time.Time, bool) to UTC time.Time.
-func asTimeUTC(v any) time.Time {
-	if tt, ok := asTime(v); ok {
-		return tt.UTC()
-	}
-	return time.Time{}
-}
-
-func asTimePtr(v any) *time.Time {
-	if v == nil {
-		return nil
-	}
-
-	switch t := v.(type) {
-	case time.Time:
-		if t.IsZero() {
-			return nil
-		}
-		tt := t.UTC()
-		return &tt
-	case *time.Time:
-		if t == nil || t.IsZero() {
-			return nil
-		}
-		tt := t.UTC()
-		return &tt
-	default:
-		return nil
-	}
-}
-
 func decodeStringSlice(v any) []string {
 	if v == nil {
 		return []string{}
@@ -120,62 +83,15 @@ func decodeStringSlice(v any) []string {
 	}
 }
 
-func nonEmptyStringAny(v any) string {
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
-func hasNonZeroTimestampAny(v any) bool {
-	if v == nil {
-		return false
-	}
-
-	switch t := v.(type) {
-	case time.Time:
-		return !t.IsZero()
-	case *time.Time:
-		return t != nil && !t.IsZero()
-	default:
-		return false
-	}
-}
-
-// minted=false なのに mintedAt / 署名があるなど、
-// 「既にミント済みの痕跡」があるかを判定する。
-func hasMintedEvidence(raw map[string]any) bool {
-	if raw == nil {
-		return false
-	}
-
-	if v, ok := raw["mintedAt"]; ok && hasNonZeroTimestampAny(v) {
-		return true
-	}
-
-	for _, k := range []string{"onChainTxSignature", "onchainTxSignature", "txSignature", "signature"} {
-		if s := nonEmptyStringAny(raw[k]); s != "" {
-			return true
-		}
-	}
-
-	return false
-}
-
-func mintStatusFromRaw(raw map[string]any, minted bool) mintdom.MintStatus {
+func mintStatusFromRaw(raw map[string]any) mintdom.MintStatus {
 	statusText := ""
 	if raw != nil {
-		statusText = s(raw["status"])
+		statusText = asString(raw["status"])
 	}
 
 	status := mintdom.MintStatus(statusText)
 	if status.IsValid() {
 		return status
-	}
-
-	if minted {
-		return mintdom.MintStatusMinted
 	}
 
 	return mintdom.MintStatusCreated
@@ -184,7 +100,7 @@ func mintStatusFromRaw(raw map[string]any, minted bool) mintdom.MintStatus {
 func taskStatusFromRaw(raw map[string]any) mintdom.MintProductTaskStatus {
 	statusText := ""
 	if raw != nil {
-		statusText = s(raw["status"])
+		statusText = asString(raw["status"])
 	}
 
 	status := mintdom.MintProductTaskStatus(statusText)
@@ -211,20 +127,18 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	}
 
 	data := doc.Data()
-	minted := asBool(data["minted"])
 
 	m := mintdom.Mint{
 		ID:                 doc.Ref.ID,
-		BrandID:            s(data["brandId"]),
-		TokenBlueprintID:   s(data["tokenBlueprintId"]),
+		BrandID:            asString(data["brandId"]),
+		TokenBlueprintID:   asString(data["tokenBlueprintId"]),
 		Products:           decodeStringSlice(data["products"]),
-		Status:             mintStatusFromRaw(data, minted),
-		CreatedBy:          s(data["createdBy"]),
-		CreatedAt:          asTimeUTC(data["createdAt"]),
-		Minted:             minted,
-		MintedAt:           asTimePtr(data["mintedAt"]),
-		ScheduledBurnDate:  asTimePtr(data["scheduledBurnDate"]),
-		OnChainTxSignature: s(data["onChainTxSignature"]),
+		Status:             mintStatusFromRaw(data),
+		CreatedBy:          asString(data["createdBy"]),
+		CreatedAt:          timeFromMap(data, "createdAt"),
+		MintedAt:           ptrTimeFromMap(data, "mintedAt"),
+		ScheduledBurnDate:  ptrTimeFromMap(data, "scheduledBurnDate"),
+		OnChainTxSignature: asString(data["onChainTxSignature"]),
 	}
 
 	if err := m.Validate(); err != nil {
@@ -256,17 +170,9 @@ func encodeMintProductTask(t mintdom.MintProductTask) map[string]any {
 		data["errorMessage"] = t.ErrorMessage
 	}
 
-	if t.MintingStartedAt != nil && !t.MintingStartedAt.IsZero() {
-		data["mintingStartedAt"] = t.MintingStartedAt.UTC()
-	}
-
-	if t.MintedAt != nil && !t.MintedAt.IsZero() {
-		data["mintedAt"] = t.MintedAt.UTC()
-	}
-
-	if t.LastFailedAt != nil && !t.LastFailedAt.IsZero() {
-		data["lastFailedAt"] = t.LastFailedAt.UTC()
-	}
+	setOptionalTime(data, "mintingStartedAt", t.MintingStartedAt)
+	setOptionalTime(data, "mintedAt", t.MintedAt)
+	setOptionalTime(data, "lastFailedAt", t.LastFailedAt)
 
 	return data
 }
@@ -281,12 +187,12 @@ func decodeMintProductTaskFromDoc(
 
 	data := doc.Data()
 
-	productID := s(data["productId"])
+	productID := asString(data["productId"])
 	if productID == "" {
 		productID = doc.Ref.ID
 	}
 
-	taskMintID := s(data["mintId"])
+	taskMintID := asString(data["mintId"])
 	if taskMintID == "" {
 		taskMintID = mintID
 	}
@@ -297,18 +203,18 @@ func decodeMintProductTaskFromDoc(
 
 		Status: taskStatusFromRaw(data),
 
-		AttemptCount: int(asInt64(data["attemptCount"])),
+		AttemptCount: asInt(data["attemptCount"]),
 
-		MintAddress:  s(data["mintAddress"]),
-		Signature:    s(data["signature"]),
-		ErrorMessage: s(data["errorMessage"]),
+		MintAddress:  asString(data["mintAddress"]),
+		Signature:    asString(data["signature"]),
+		ErrorMessage: asString(data["errorMessage"]),
 
-		CreatedAt: asTimeUTC(data["createdAt"]),
-		UpdatedAt: asTimeUTC(data["updatedAt"]),
+		CreatedAt: timeFromMap(data, "createdAt"),
+		UpdatedAt: timeFromMap(data, "updatedAt"),
 
-		MintingStartedAt: asTimePtr(data["mintingStartedAt"]),
-		MintedAt:         asTimePtr(data["mintedAt"]),
-		LastFailedAt:     asTimePtr(data["lastFailedAt"]),
+		MintingStartedAt: ptrTimeFromMap(data, "mintingStartedAt"),
+		MintedAt:         ptrTimeFromMap(data, "mintedAt"),
+		LastFailedAt:     ptrTimeFromMap(data, "lastFailedAt"),
 	}
 
 	if t.CreatedAt.IsZero() {
@@ -323,44 +229,6 @@ func decodeMintProductTaskFromDoc(
 	}
 
 	return t, nil
-}
-
-func asInt64(v any) int64 {
-	if v == nil {
-		return 0
-	}
-
-	switch n := v.(type) {
-	case int:
-		return int64(n)
-	case int8:
-		return int64(n)
-	case int16:
-		return int64(n)
-	case int32:
-		return int64(n)
-	case int64:
-		return n
-	case uint:
-		return int64(n)
-	case uint8:
-		return int64(n)
-	case uint16:
-		return int64(n)
-	case uint32:
-		return int64(n)
-	case uint64:
-		if n > uint64(^uint(0)>>1) {
-			return 0
-		}
-		return int64(n)
-	case float32:
-		return int64(n)
-	case float64:
-		return int64(n)
-	default:
-		return 0
-	}
 }
 
 // ============================================================
@@ -407,45 +275,36 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 	if exists && existingSnap != nil && existingSnap.Exists() {
 		edata := existingSnap.Data()
 
-		existingMinted := asBool(edata["minted"])
-		existingStatus := mintStatusFromRaw(edata, existingMinted)
+		existingStatus := mintStatusFromRaw(edata)
 
-		data["minted"] = existingMinted
 		data["status"] = string(existingStatus)
 
-		m.Minted = existingMinted
 		m.Status = existingStatus
 
-		if createdAt := asTimeUTC(edata["createdAt"]); !createdAt.IsZero() {
+		if createdAt := timeFromMap(edata, "createdAt"); !createdAt.IsZero() {
 			data["createdAt"] = createdAt
 			m.CreatedAt = createdAt
 		}
 
-		if mintedAt := asTimePtr(edata["mintedAt"]); mintedAt != nil && !mintedAt.IsZero() {
+		if mintedAt := ptrTimeFromMap(edata, "mintedAt"); mintedAt != nil {
 			data["mintedAt"] = mintedAt.UTC()
 			m.MintedAt = mintedAt
 		}
 
-		if scheduledBurnDate := asTimePtr(edata["scheduledBurnDate"]); scheduledBurnDate != nil && !scheduledBurnDate.IsZero() {
+		if scheduledBurnDate := ptrTimeFromMap(edata, "scheduledBurnDate"); scheduledBurnDate != nil {
 			data["scheduledBurnDate"] = scheduledBurnDate.UTC()
 			m.ScheduledBurnDate = scheduledBurnDate
 		}
 
-		if onChainTxSignature := s(edata["onChainTxSignature"]); onChainTxSignature != "" {
+		if onChainTxSignature := asString(edata["onChainTxSignature"]); onChainTxSignature != "" {
 			data["onChainTxSignature"] = onChainTxSignature
 			m.OnChainTxSignature = onChainTxSignature
 		}
 	} else {
 		data["createdAt"] = m.CreatedAt.UTC()
-		data["minted"] = m.Minted
 
-		if m.MintedAt != nil && !m.MintedAt.IsZero() {
-			data["mintedAt"] = m.MintedAt.UTC()
-		}
-
-		if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
-			data["scheduledBurnDate"] = m.ScheduledBurnDate.UTC()
-		}
+		setOptionalTime(data, "mintedAt", m.MintedAt)
+		setOptionalTime(data, "scheduledBurnDate", m.ScheduledBurnDate)
 
 		if m.OnChainTxSignature != "" {
 			data["onChainTxSignature"] = m.OnChainTxSignature
@@ -509,11 +368,7 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 	}
 
 	if m.Status == "" {
-		if m.Minted {
-			m.Status = mintdom.MintStatusMinted
-		} else {
-			m.Status = mintdom.MintStatusCreated
-		}
+		m.Status = mintdom.MintStatusCreated
 	}
 
 	if err := m.Validate(); err != nil {
@@ -526,7 +381,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		"products":         m.Products,
 		"status":           string(m.Status),
 		"createdBy":        m.CreatedBy,
-		"minted":           m.Minted,
 	}
 
 	if m.MintedAt != nil && !m.MintedAt.IsZero() {
@@ -625,7 +479,12 @@ func (r *MintRepositoryFS) CreateTasks(
 			continue
 		}
 		if err != nil && status.Code(err) != codes.NotFound {
-			return nil, fmt.Errorf("get mint product task mintID=%s productID=%s: %w", mintID, productID, err)
+			return nil, fmt.Errorf(
+				"get mint product task mintID=%s productID=%s: %w",
+				mintID,
+				productID,
+				err,
+			)
 		}
 
 		task, err := mintdom.NewMintProductTask(mintID, productID, now)
@@ -684,10 +543,7 @@ func (r *MintRepositoryFS) ListByMintID(
 		return nil, errors.New("mint id is empty")
 	}
 
-	iter := r.taskCol(mintID).
-		OrderBy("createdAt", firestore.Asc).
-		OrderBy("productId", firestore.Asc).
-		Documents(ctx)
+	iter := r.taskCol(mintID).Documents(ctx)
 	defer iter.Stop()
 
 	tasks := []mintdom.MintProductTask{}
@@ -1023,30 +879,22 @@ func (r *MintRepositoryFS) LoadForMinting(
 
 	raw := mintSnap.Data()
 
-	minted := asBool(raw["minted"])
-	if !minted && hasMintedEvidence(raw) {
-		_, _ = r.col().Doc(mintID).Update(ctx, []firestore.Update{
-			{Path: "minted", Value: true},
-			{Path: "status", Value: string(mintdom.MintStatusMinted)},
-		})
+	mintStatus := mintStatusFromRaw(raw)
+	if mintStatus == mintdom.MintStatusMinted {
 		return nil, fmt.Errorf("mint %s is already minted", mintID)
 	}
 
-	if minted {
-		return nil, fmt.Errorf("mint %s is already minted", mintID)
-	}
-
-	brandID := s(raw["brandId"])
+	brandID := asString(raw["brandId"])
 	if brandID == "" {
 		return nil, fmt.Errorf("mint %s has empty brandId", mintID)
 	}
 
-	tbID := s(raw["tokenBlueprintId"])
+	tbID := asString(raw["tokenBlueprintId"])
 	if tbID == "" {
 		return nil, fmt.Errorf("mint %s has empty tokenBlueprintId", mintID)
 	}
 
-	actorID := s(raw["createdBy"])
+	actorID := asString(raw["createdBy"])
 
 	productIDs := decodeStringSlice(raw["products"])
 
@@ -1103,47 +951,9 @@ func (r *MintRepositoryFS) LoadForMinting(
 	return dto, nil
 }
 
-// MarkAsMinted はチェーンミント結果をもとに mints/{mintID} を更新します。
-// mints には mintAddress を保存しない方針のため、mintAddress 更新は行いません。
-func (r *MintRepositoryFS) MarkAsMinted(
-	ctx context.Context,
-	id string,
-	result *tokendom.MintResult,
-) error {
-	if r == nil || r.Client == nil {
-		return fmt.Errorf("MintRepositoryFS is not initialized")
-	}
-
-	if result == nil {
-		return fmt.Errorf("mint result is nil")
-	}
-
-	mintID := id
-	if mintID == "" {
-		return fmt.Errorf("mint id is empty")
-	}
-
-	updates := []firestore.Update{
-		{Path: "minted", Value: true},
-		{Path: "status", Value: string(mintdom.MintStatusMinted)},
-		{Path: "mintedAt", Value: firestore.ServerTimestamp},
-		{Path: "onChainTxSignature", Value: result.Signature},
-	}
-
-	_, err := r.col().Doc(mintID).Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return fmt.Errorf("mint %s not found when updating as minted", mintID)
-		}
-		return fmt.Errorf("update mint %s as minted: %w", mintID, err)
-	}
-
-	return nil
-}
-
 // RecordProductAsMinted は productId 1件分の mint 結果を Firestore に反映します。
 // - tokens コレクションに [productId, mintAddress] を 1:1 で保存（docID=productId）
-// - 親 mints/{mintID} はここでは minted=true にしません。
+// - 親 mints/{mintID} はここでは status=MINTED にしません。
 // - 親の完了更新は、全 MintProductTask が MINTED になった後に MintUsecase.Update 経由で行います。
 func (r *MintRepositoryFS) RecordProductAsMinted(
 	ctx context.Context,
@@ -1178,12 +988,12 @@ func (r *MintRepositoryFS) RecordProductAsMinted(
 
 	raw := mintSnap.Data()
 
-	brandID := s(raw["brandId"])
+	brandID := asString(raw["brandId"])
 	if brandID == "" {
 		return fmt.Errorf("mint %s has empty brandId in RecordProductAsMinted", mintID)
 	}
 
-	tbID := s(raw["tokenBlueprintId"])
+	tbID := asString(raw["tokenBlueprintId"])
 	if tbID == "" {
 		return fmt.Errorf("mint %s has empty tokenBlueprintId in RecordProductAsMinted", mintID)
 	}
@@ -1224,7 +1034,7 @@ func (r *MintRepositoryFS) RecordProductAsMinted(
 		return fmt.Errorf("tokenBlueprint %s has empty metadataUri in RecordProductAsMinted", tbID)
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"brandId":            brandID,
 		"tokenBlueprintId":   tbID,
 		"mintAddress":        mt.Result.MintAddress,
@@ -1235,41 +1045,12 @@ func (r *MintRepositoryFS) RecordProductAsMinted(
 	}
 
 	if _, err := r.tokensCol().Doc(productID).Set(ctx, data, firestore.MergeAll); err != nil {
-		return fmt.Errorf("set token productID=%s mintID=%s: %w", productID, mintID, err)
-	}
-
-	return nil
-}
-
-// MarkProductsAsMinted は旧互換用です。
-// 新しい1件ずつmintフローでは、親 mints/{id} をここで minted=true にしません。
-// 親 Mint の完了更新は、全 product task が MINTED になった後に MintUsecase 側で行います。
-func (r *MintRepositoryFS) MarkProductsAsMinted(
-	ctx context.Context,
-	id string,
-	minted []usecase.MintedTokenForUsecase,
-) error {
-	if r == nil || r.Client == nil {
-		return fmt.Errorf("MintRepositoryFS is not initialized")
-	}
-
-	mintID := id
-	if mintID == "" {
-		return fmt.Errorf("mint id is empty")
-	}
-
-	if len(minted) == 0 {
-		return fmt.Errorf("no minted results provided")
-	}
-
-	for _, mt := range minted {
-		if mt.ProductID == "" || mt.Result == nil {
-			continue
-		}
-
-		if err := r.RecordProductAsMinted(ctx, mintID, mt); err != nil {
-			return err
-		}
+		return fmt.Errorf(
+			"set token productID=%s mintID=%s: %w",
+			productID,
+			mintID,
+			err,
+		)
 	}
 
 	return nil

@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/application/mapper/mintInfoMapper.ts
 
-import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { InspectionBatchDTO } from "../../domain/inspections";
 import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
 import {
   asNonEmptyString,

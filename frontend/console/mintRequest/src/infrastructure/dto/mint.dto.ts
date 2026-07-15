@@ -1,5 +1,6 @@
-// infrastructure/dto/mint.dto.ts
-import type { Mint } from "../../domain/entity/mints";
+// frontend/console/mintRequest/src/infrastructure/dto/mint.dto.ts
+
+import type { Mint } from "../../domain/mints";
 
 export type MintDTO = Mint & {
   createdByName?: string | null;
@@ -12,8 +13,8 @@ export type MintListRowDTO = {
   mintId?: string | null;
   tokenBlueprintId?: string | null;
   tokenName: string;
+  status?: Mint["status"] | null;
   createdByName?: string | null;
   requestedByName?: string | null;
   mintedAt?: string | null;
-  minted?: boolean;
 };

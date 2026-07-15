@@ -100,10 +100,10 @@ type MintSummaryDTO struct {
 	ID                 string     `json:"id"`
 	BrandID            string     `json:"brandId"`
 	TokenBlueprintID   string     `json:"tokenBlueprintId"`
+	Status             string     `json:"status"`
 	CreatedBy          string     `json:"createdBy"`
 	CreatedByName      string     `json:"createdByName,omitempty"`
 	CreatedAt          *time.Time `json:"createdAt,omitempty"`
-	Minted             bool       `json:"minted"`
 	MintedAt           *time.Time `json:"mintedAt,omitempty"`
 	ScheduledBurnDate  *time.Time `json:"scheduledBurnDate,omitempty"`
 	ProductIDs         []string   `json:"productIds,omitempty"`

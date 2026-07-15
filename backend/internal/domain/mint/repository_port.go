@@ -30,7 +30,7 @@ type MintRepository interface {
 
 	// Update:
 	// - 既存 Mint を更新します。
-	// - status / minted / mintedAt / onChainTxSignature などの親 Mint 状態を更新します。
+	// - status / mintedAt / onChainTxSignature などの親 Mint 状態を更新します。
 	// - 対象が存在しない場合は ErrNotFound を返す想定です。
 	Update(ctx context.Context, m Mint) (Mint, error)
 }

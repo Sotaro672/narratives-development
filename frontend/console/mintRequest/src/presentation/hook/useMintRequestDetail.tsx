@@ -4,7 +4,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { InspectionBatchDTO } from "../../domain/inspections";
 import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
 import { completeInspectionByProductionId } from "../../infrastructure/api/mintRequestApi";
 

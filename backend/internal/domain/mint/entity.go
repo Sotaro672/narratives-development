@@ -20,14 +20,13 @@ import (
 // - createdAt          : time.Time
 // - createdBy          : string
 // - mintedAt           : *time.Time
-// - minted             : bool
 // - scheduledBurnDate  : *time.Time
 // - onChainTxSignature : string
 //
 // NOTE:
 // - 1 product = 1 mint task に分解するため、親 Mint は全体進捗を status で管理します。
-// - minted は既存互換のため残します。
-// - 新規実装では status を正とし、全 product task が完了した時点で minted=true にします。
+// - 全 product task が完了した時点で status を MINTED にします。
+// - ミント完了の判定は status == MINTED を正とします。
 type Mint struct {
 	ID string `json:"id"`
 
@@ -41,14 +40,10 @@ type Mint struct {
 	CreatedBy string    `json:"createdBy"`
 
 	MintedAt *time.Time `json:"mintedAt,omitempty"`
-	Minted   bool       `json:"minted"`
 
 	ScheduledBurnDate *time.Time `json:"scheduledBurnDate,omitempty"`
 
-	// 互換用:
-	// 旧フローでは代表tx signatureをここに保持していました。
-	// 1件ごとmint化後は product task 側に signature を持たせ、
-	// 親には最後に成功した signature または代表 signature を保存します。
+	// 全product task完了時の代表signatureを保持します。
 	OnChainTxSignature string `json:"onChainTxSignature,omitempty"`
 }
 
@@ -108,16 +103,17 @@ func (s MintStatus) IsFinished() bool {
 // ------------------------------------------------------
 
 var (
-	ErrInvalidMintID            = errors.New("mint: invalid id")
-	ErrInvalidBrandID           = errors.New("mint: invalid brandId")
-	ErrInvalidTokenBlueprintID  = errors.New("mint: invalid tokenBlueprintId")
-	ErrInvalidProducts          = errors.New("mint: invalid products")
-	ErrInvalidCreatedBy         = errors.New("mint: invalid createdBy")
-	ErrInvalidCreatedAt         = errors.New("mint: invalid createdAt")
-	ErrInvalidMintedAt          = errors.New("mint: invalid mintedAt")
-	ErrInvalidMintStatus        = errors.New("mint: invalid status")
-	ErrInconsistentMintedStatus = errors.New("mint: inconsistent minted / mintedAt / status")
-	ErrNotFound                 = errors.New("mint: not found")
+	ErrInvalidMintID           = errors.New("mint: invalid id")
+	ErrInvalidBrandID          = errors.New("mint: invalid brandId")
+	ErrInvalidTokenBlueprintID = errors.New("mint: invalid tokenBlueprintId")
+	ErrInvalidProducts         = errors.New("mint: invalid products")
+	ErrInvalidCreatedBy        = errors.New("mint: invalid createdBy")
+	ErrInvalidCreatedAt        = errors.New("mint: invalid createdAt")
+	ErrInvalidMintedAt         = errors.New("mint: invalid mintedAt")
+	ErrInvalidMintStatus       = errors.New("mint: invalid status")
+	ErrInconsistentMintStatus  = errors.New("mint: inconsistent status / mintedAt")
+	ErrMintAlreadyMinted       = errors.New("mint: already minted")
+	ErrNotFound                = errors.New("mint: not found")
 )
 
 // ------------------------------------------------------
@@ -165,7 +161,6 @@ func NewMint(
 		CreatedAt:          createdAt.UTC(),
 		CreatedBy:          createdBy,
 		MintedAt:           nil,
-		Minted:             false,
 		ScheduledBurnDate:  nil,
 		OnChainTxSignature: "",
 	}
@@ -185,9 +180,8 @@ func (m *Mint) MarkQueued() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
-
-	if m.Minted {
-		return ErrInconsistentMintedStatus
+	if m.Status == MintStatusMinted {
+		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusQueued
@@ -198,9 +192,8 @@ func (m *Mint) MarkMinting() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
-
-	if m.Minted {
-		return ErrInconsistentMintedStatus
+	if m.Status == MintStatusMinted {
+		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusMinting
@@ -211,16 +204,18 @@ func (m *Mint) MarkPartiallyMinted() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
-
-	if m.Minted {
-		return ErrInconsistentMintedStatus
+	if m.Status == MintStatusMinted {
+		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusPartiallyMinted
 	return m.validate()
 }
 
-func (m *Mint) MarkMinted(now time.Time, representativeSignature string) error {
+func (m *Mint) MarkMinted(
+	now time.Time,
+	representativeSignature string,
+) error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
@@ -229,9 +224,9 @@ func (m *Mint) MarkMinted(now time.Time, representativeSignature string) error {
 	}
 
 	t := now.UTC()
-	m.Minted = true
-	m.MintedAt = &t
+
 	m.Status = MintStatusMinted
+	m.MintedAt = &t
 
 	if representativeSignature != "" {
 		m.OnChainTxSignature = representativeSignature
@@ -244,9 +239,8 @@ func (m *Mint) MarkFailedRetryable() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
-
-	if m.Minted {
-		return ErrInconsistentMintedStatus
+	if m.Status == MintStatusMinted {
+		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusFailedRetryable
@@ -257,9 +251,8 @@ func (m *Mint) MarkFailedFatal() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
-
-	if m.Minted {
-		return ErrInconsistentMintedStatus
+	if m.Status == MintStatusMinted {
+		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusFailedFatal
@@ -297,22 +290,12 @@ func (m Mint) validate() error {
 		return ErrInvalidMintStatus
 	}
 
-	if m.Minted {
-		if m.MintedAt == nil {
-			return ErrInconsistentMintedStatus
+	if status == MintStatusMinted {
+		if m.MintedAt == nil || m.MintedAt.IsZero() {
+			return ErrInvalidMintedAt
 		}
-		if status != MintStatusMinted {
-			return ErrInconsistentMintedStatus
-		}
-	}
-
-	if !m.Minted {
-		if m.MintedAt != nil {
-			return ErrInconsistentMintedStatus
-		}
-		if status == MintStatusMinted {
-			return ErrInconsistentMintedStatus
-		}
+	} else if m.MintedAt != nil {
+		return ErrInconsistentMintStatus
 	}
 
 	for _, productID := range m.Products {

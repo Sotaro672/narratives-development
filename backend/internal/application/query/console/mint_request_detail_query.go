@@ -166,7 +166,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			CreatedBy:          m.CreatedBy,
 			CreatedByName:      requestedByName,
 			CreatedAt:          &m.CreatedAt,
-			Minted:             m.Minted,
 			MintedAt:           m.MintedAt,
 			ScheduledBurnDate:  m.ScheduledBurnDate,
 			ProductIDs:         products,

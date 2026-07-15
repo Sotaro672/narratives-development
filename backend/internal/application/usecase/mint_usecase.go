@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -48,31 +47,19 @@ type MintRequestForUsecase struct {
 }
 
 // MintRequestPort は、MintUsecase から見た「ミント対象 MintRequest」の
-// 取得および更新を行うためのポートです。
-//
-// NOTE:
-// - 旧フローでは MarkProductsAsMinted が親 Mint も minted=true にしていました。
-// - 1件ずつmint化後は、productId単位の token 保存と親 Mint の完了判定を分ける必要があります。
-// - 可能なら MintProductMintRecorder を実装し、MarkProductsAsMinted は互換用に留めてください。
+// 取得を行うためのポートです。
 type MintRequestPort interface {
 	// LoadForMinting:
 	// - ミント実行に必要な情報をロードします。
 	// - TokenBlueprintID / ActorID / ToAddress / ProductIDs / BlueprintName /
 	//   BlueprintSymbol / MetadataURI を返す想定です。
 	LoadForMinting(ctx context.Context, id string) (*MintRequestForUsecase, error)
-
-	// MarkProductsAsMinted:
-	// - 旧互換用。
-	// - productId ごとの mint 結果一覧を保存します。
-	// - 新フローでは、親 Mint を全件完了前に minted=true にしないよう実装側の修正が必要です。
-	MarkProductsAsMinted(ctx context.Context, id string, minted []MintedTokenForUsecase) error
 }
 
-// MintProductMintRecorder は、1 product の mint 成功結果を保存するための新ポートです。
+// MintProductMintRecorder は、1 product の mint 成功結果を保存するためのポートです。
 //
-// 推奨:
 // - Firestore 実装側では productId と mintAddress の 1:1 token record を保存します。
-// - 親 Mint の minted=true 更新はここでは行わず、全 task 完了時に MintUsecase 側で行います。
+// - 親 Mint の status=MINTED 更新はここでは行わず、全 task 完了時に MintUsecase 側で行います。
 type MintProductMintRecorder interface {
 	RecordProductAsMinted(
 		ctx context.Context,
@@ -103,7 +90,11 @@ type MintTaskEnqueuer interface {
 // ============================================================
 
 type TokenBlueprintMetadataEnsurer interface {
-	EnsureMetadataURI(ctx context.Context, tb *tbdom.TokenBlueprint, actorID string) (*tbdom.TokenBlueprint, error)
+	EnsureMetadataURI(
+		ctx context.Context,
+		tb *tbdom.TokenBlueprint,
+		actorID string,
+	) (*tbdom.TokenBlueprint, error)
 }
 
 type TokenBlueprintMintMarker interface {
@@ -145,7 +136,10 @@ func (m *MintResultMapper) FromMint(ent mintdom.Mint) *tokendom.MintResult {
 	}
 }
 
-func (m *MintResultMapper) ApplyOnchainResult(ent *mintdom.Mint, result *tokendom.MintResult) error {
+func (m *MintResultMapper) ApplyOnchainResult(
+	ent *mintdom.Mint,
+	result *tokendom.MintResult,
+) error {
 	if ent == nil {
 		return errors.New("mint entity is nil")
 	}
@@ -232,7 +226,9 @@ func (u *MintUsecase) SetInventoryUsecase(uc *InventoryUsecase) {
 	u.inventoryUC = uc
 }
 
-func (u *MintUsecase) SetMintTaskRepository(repo mintdom.MintProductTaskRepository) {
+func (u *MintUsecase) SetMintTaskRepository(
+	repo mintdom.MintProductTaskRepository,
+) {
 	if u == nil {
 		return
 	}
@@ -246,21 +242,27 @@ func (u *MintUsecase) SetMintTaskEnqueuer(enqueuer MintTaskEnqueuer) {
 	u.mintTaskEnqueuer = enqueuer
 }
 
-func (u *MintUsecase) SetMintProductMintRecorder(recorder MintProductMintRecorder) {
+func (u *MintUsecase) SetMintProductMintRecorder(
+	recorder MintProductMintRecorder,
+) {
 	if u == nil {
 		return
 	}
 	u.mintProductMintRecord = recorder
 }
 
-func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(e TokenBlueprintMetadataEnsurer) {
+func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(
+	e TokenBlueprintMetadataEnsurer,
+) {
 	if u == nil {
 		return
 	}
 	u.tbMetadataEnsurer = e
 }
 
-func (u *MintUsecase) SetTokenBlueprintMintMarker(marker TokenBlueprintMintMarker) {
+func (u *MintUsecase) SetTokenBlueprintMintMarker(
+	marker TokenBlueprintMintMarker,
+) {
 	if u == nil {
 		return
 	}
@@ -269,11 +271,7 @@ func (u *MintUsecase) SetTokenBlueprintMintMarker(marker TokenBlueprintMintMarke
 
 // UpdateRequestInfo は mint request を起票し、productId 単位の mint task を作成します。
 //
-// 旧実装:
-// - mint request 作成後、同じHTTPリクエスト内で MintFromMintRequest を同期実行していました。
-// - 18件一括mint時に RPC 429 / 504 timeout の原因になります。
-//
-// 新実装:
+// 処理:
 // - mint request 作成
 // - productId 単位の MintProductTask を作成
 // - 最初の worker task を enqueue
@@ -283,59 +281,60 @@ func (u *MintUsecase) UpdateRequestInfo(
 	productionID string,
 	tokenBlueprintID string,
 	scheduledBurnDate *string,
-) (*tokendom.MintResult, error) {
+) error {
 	if u == nil {
-		return nil, errors.New("mint usecase is nil")
+		return errors.New("mint usecase is nil")
 	}
 	if u.mintRepo == nil {
-		return nil, errors.New("mint repo is nil")
+		return errors.New("mint repo is nil")
 	}
 	if u.mintTaskRepo == nil {
-		return nil, errors.New("mint task repo is nil")
+		return errors.New("mint task repo is nil")
 	}
 	if u.passedProductLister == nil {
-		return nil, errors.New("passedProductLister is nil")
+		return errors.New("passedProductLister is nil")
 	}
 	if u.tbRepo == nil {
-		return nil, errors.New("tokenBlueprint repo is nil")
+		return errors.New("tokenBlueprint repo is nil")
 	}
 
 	pid := productionID
 	if pid == "" {
-		return nil, errors.New("productionID is empty")
+		return errors.New("productionID is empty")
 	}
 
 	tbID := tokenBlueprintID
 	if tbID == "" {
-		return nil, errors.New("tokenBlueprintID is empty")
+		return errors.New("tokenBlueprintID is empty")
 	}
 
 	memberID := MemberIDFromContext(ctx)
 	if memberID == "" {
-		return nil, errors.New("memberID not found in context")
+		return errors.New("memberID not found in context")
 	}
 
 	now := time.Now().UTC()
 
 	tb, err := u.tbRepo.GetByID(ctx, tbID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if tb == nil {
-		return nil, errors.New("tokenBlueprint not found")
+		return errors.New("tokenBlueprint not found")
 	}
 
 	brandID := tb.BrandID
 	if brandID == "" {
-		return nil, errors.New("brandID is empty on tokenBlueprint")
+		return errors.New("brandID is empty on tokenBlueprint")
 	}
 
-	passedProductIDs, err := u.passedProductLister.ListPassedProductIDsByProductionID(ctx, pid)
+	passedProductIDs, err := u.passedProductLister.
+		ListPassedProductIDsByProductionID(ctx, pid)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if len(passedProductIDs) == 0 {
-		return nil, errors.New("no passed products for this production")
+		return errors.New("no passed products for this production")
 	}
 
 	mintEntity, err := mintdom.NewMint(
@@ -347,18 +346,19 @@ func (u *MintUsecase) UpdateRequestInfo(
 		now,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	mintEntity.ID = pid
-	mintEntity.Minted = false
 	mintEntity.MintedAt = nil
 
 	if scheduledBurnDate != nil {
 		if s := *scheduledBurnDate; s != "" {
 			t, err := time.ParseInLocation("2006-01-02", s, time.UTC)
 			if err != nil {
-				return nil, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
+				return errors.New(
+					"invalid scheduledBurnDate format (expected YYYY-MM-DD)",
+				)
 			}
 			utc := t.UTC()
 			mintEntity.ScheduledBurnDate = &utc
@@ -366,33 +366,35 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	if err := mintEntity.MarkQueued(); err != nil {
-		return nil, err
+		return err
 	}
 
 	if _, err := u.mintRepo.Create(ctx, mintEntity); err != nil {
-		return nil, err
+		return err
 	}
 
-	if _, err := u.mintTaskRepo.CreateTasks(ctx, pid, passedProductIDs); err != nil {
-		return nil, fmt.Errorf("create mint product tasks: %w", err)
+	if _, err := u.mintTaskRepo.CreateTasks(
+		ctx,
+		pid,
+		passedProductIDs,
+	); err != nil {
+		return fmt.Errorf("create mint product tasks: %w", err)
 	}
 
 	if u.mintTaskEnqueuer != nil {
 		if err := u.mintTaskEnqueuer.EnqueueMintTask(ctx, pid); err != nil {
-			return nil, fmt.Errorf("enqueue mint task: %w", err)
+			return fmt.Errorf("enqueue mint task: %w", err)
 		}
 	}
 
-	// 既存 handler 互換のため MintResult を返します。
-	// 本来は handler 側を 202 Accepted + queued DTO に変更するのが理想です。
-	return &tokendom.MintResult{
-		Signature:   "QUEUED",
-		MintAddress: "",
-		Slot:        0,
-	}, nil
+	// handler 側を 202 Accepted + queued DTO に変更するのが理想です。
+	return nil
 }
 
-func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Context, productionID string) string {
+func (u *MintUsecase) resolveProductBlueprintIDFromProduction(
+	ctx context.Context,
+	productionID string,
+) string {
 	if u == nil || u.prodRepo == nil {
 		return ""
 	}
@@ -400,7 +402,8 @@ func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Contex
 		return ""
 	}
 
-	productBlueprintID, err := u.prodRepo.GetProductBlueprintIDByProductionID(ctx, productionID)
+	productBlueprintID, err := u.prodRepo.
+		GetProductBlueprintIDByProductionID(ctx, productionID)
 	if err != nil {
 		return ""
 	}
@@ -408,7 +411,9 @@ func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Contex
 	return productBlueprintID
 }
 
-func lastMintResult(minted []MintedTokenForUsecase) *tokendom.MintResult {
+func lastMintResult(
+	minted []MintedTokenForUsecase,
+) *tokendom.MintResult {
 	for i := len(minted) - 1; i >= 0; i-- {
 		if minted[i].Result != nil {
 			return minted[i].Result
@@ -440,13 +445,23 @@ func (u *MintUsecase) ensureMetadataURI(
 
 	tb, err := u.tbRepo.GetByID(ctx, tbID)
 	if err != nil {
-		return "", fmt.Errorf("get tokenBlueprint for metadata ensure: %w", err)
+		return "", fmt.Errorf(
+			"get tokenBlueprint for metadata ensure: %w",
+			err,
+		)
 	}
 	if tb == nil {
-		return "", fmt.Errorf("tokenBlueprint not found (id=%s)", tbID)
+		return "", fmt.Errorf(
+			"tokenBlueprint not found (id=%s)",
+			tbID,
+		)
 	}
 
-	updated, err := u.tbMetadataEnsurer.EnsureMetadataURI(ctx, tb, actorID)
+	updated, err := u.tbMetadataEnsurer.EnsureMetadataURI(
+		ctx,
+		tb,
+		actorID,
+	)
 	if err != nil {
 		return "", fmt.Errorf("ensure metadata uri: %w", err)
 	}
@@ -457,12 +472,117 @@ func (u *MintUsecase) ensureMetadataURI(
 	return updated.MetadataURI, nil
 }
 
-// MintFromMintRequest は旧互換用です。
+// ReconcileMintCompletion は、親 Mint が MINTING のまま残っている場合に、
+// product task の状態から親 Mint の完了状態を復元します。
 //
-// 新フローでは、HTTPリクエストからこのメソッドを直接呼ばず、
-// ExecuteNextMintTask を worker / Cloud Tasks から呼び出してください。
-func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID string) (*tokendom.MintResult, error) {
-	return u.ExecuteNextMintTask(ctx, mintRequestID)
+// 親 Mint の全 productID に対応する task が存在し、
+// それらが全て MINTED の場合のみ親 Mint を MINTED へ更新します。
+func (u *MintUsecase) ReconcileMintCompletion(
+	ctx context.Context,
+	mintID string,
+) error {
+	if u == nil {
+		return errors.New("mint usecase is nil")
+	}
+	if mintID == "" {
+		return errors.New("mintID is empty")
+	}
+	if u.mintRepo == nil {
+		return errors.New("mint repo is nil")
+	}
+	if u.mintTaskRepo == nil {
+		return errors.New("mint task repo is nil")
+	}
+
+	mintEnt, err := u.mintRepo.GetByID(ctx, mintID)
+	if err != nil {
+		return fmt.Errorf(
+			"get parent mint for reconciliation: %w",
+			err,
+		)
+	}
+
+	if mintEnt.Status != mintdom.MintStatusMinting {
+		return nil
+	}
+
+	tasks, err := u.mintTaskRepo.ListByMintID(ctx, mintID)
+	if err != nil {
+		return fmt.Errorf(
+			"list mint product tasks for reconciliation: %w",
+			err,
+		)
+	}
+	if len(tasks) == 0 {
+		return nil
+	}
+
+	expectedProductIDs := make(
+		map[string]struct{},
+		len(mintEnt.Products),
+	)
+	for _, productID := range mintEnt.Products {
+		if productID == "" {
+			return mintdom.ErrInvalidProducts
+		}
+		expectedProductIDs[productID] = struct{}{}
+	}
+
+	if len(tasks) != len(expectedProductIDs) {
+		return nil
+	}
+
+	seenProductIDs := make(map[string]struct{}, len(tasks))
+	completedAt := time.Time{}
+	representativeSignature := ""
+
+	for _, task := range tasks {
+		if _, exists := expectedProductIDs[task.ProductID]; !exists {
+			return nil
+		}
+		if _, duplicated := seenProductIDs[task.ProductID]; duplicated {
+			return nil
+		}
+		seenProductIDs[task.ProductID] = struct{}{}
+
+		if task.Status != mintdom.MintProductTaskStatusMinted {
+			return nil
+		}
+		if task.MintedAt == nil || task.MintedAt.IsZero() {
+			return nil
+		}
+
+		if completedAt.IsZero() || task.MintedAt.After(completedAt) {
+			completedAt = task.MintedAt.UTC()
+			representativeSignature = task.Signature
+		}
+	}
+
+	if len(seenProductIDs) != len(expectedProductIDs) {
+		return nil
+	}
+	if completedAt.IsZero() {
+		return nil
+	}
+
+	if err := mintEnt.MarkMinted(
+		completedAt,
+		representativeSignature,
+	); err != nil {
+		return fmt.Errorf(
+			"mark parent mint completed during reconciliation: %w",
+			err,
+		)
+	}
+
+	if _, err := u.mintRepo.Update(ctx, mintEnt); err != nil {
+		return fmt.Errorf(
+			"update reconciled parent mint: %w",
+			err,
+		)
+	}
+
+	return nil
 }
 
 // ExecuteNextMintTask は mintID に紐づく次の実行可能 task を1件だけ処理します。
@@ -475,120 +595,97 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 //  5. token record / task / inventory を更新
 //  6. 未完了 task が残っていれば次の worker task を enqueue
 //  7. 全件完了なら親 Mint を MINTED にする
-func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID string) (*tokendom.MintResult, error) {
-	log.Printf("[mint-task-usecase] start mintID=%s", mintRequestID)
-
+func (u *MintUsecase) ExecuteNextMintTask(
+	ctx context.Context,
+	mintRequestID string,
+) (*tokendom.MintResult, error) {
 	if u == nil {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=mint usecase is nil", mintRequestID)
 		return nil, errors.New("mint usecase is nil")
 	}
 	if mintRequestID == "" {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=mintRequestID is empty", mintRequestID)
 		return nil, errors.New("mintRequestID is empty")
 	}
 	if u.mintRepo == nil {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=mint repo is nil", mintRequestID)
 		return nil, errors.New("mint repo is nil")
 	}
 	if u.mintTaskRepo == nil {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=mint task repo is nil", mintRequestID)
 		return nil, errors.New("mint task repo is nil")
 	}
 	if u.mintResultMapper == nil {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=mint result mapper is nil", mintRequestID)
 		return nil, errors.New("mint result mapper is nil")
 	}
-
-	log.Printf("[mint-task-usecase] GetByID start mintID=%s", mintRequestID)
+	if u.mintProductMintRecord == nil {
+		return nil, errors.New("mint product recorder is nil")
+	}
 
 	mintEntValue, err := u.mintRepo.GetByID(ctx, mintRequestID)
 	if err != nil {
-		log.Printf("[mint-task-usecase] GetByID failed mintID=%s error=%v", mintRequestID, err)
 		return nil, err
 	}
 	mintEnt := &mintEntValue
 
-	log.Printf(
-		"[mint-task-usecase] GetByID ok mintID=%s status=%s minted=%t productCount=%d tokenBlueprintID=%s brandID=%s",
-		mintRequestID,
-		mintEnt.Status,
-		mintEnt.Minted,
-		len(mintEnt.Products),
-		mintEnt.TokenBlueprintID,
-		mintEnt.BrandID,
-	)
-
-	if mintEnt.Minted {
-		log.Printf("[mint-task-usecase] parent already minted mintID=%s", mintRequestID)
+	if mintEnt.Status == mintdom.MintStatusMinted {
 		return u.mintResultMapper.FromMint(*mintEnt), nil
 	}
 
 	tbID := mintEnt.TokenBlueprintID
 	if tbID == "" {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=tokenBlueprintID is empty on mint", mintRequestID)
-		return nil, errors.New("tokenBlueprintID is empty on mint")
+		return nil, errors.New(
+			"tokenBlueprintID is empty on mint",
+		)
 	}
 
-	log.Printf("[mint-task-usecase] resolve productBlueprintID start mintID=%s", mintRequestID)
-
-	pbID := u.resolveProductBlueprintIDFromProduction(ctx, mintRequestID)
+	pbID := u.resolveProductBlueprintIDFromProduction(
+		ctx,
+		mintRequestID,
+	)
 	if pbID == "" {
-		log.Printf("[mint-task-usecase] resolve productBlueprintID failed mintID=%s", mintRequestID)
-		return nil, errors.New("productBlueprintID is empty (cannot upsert inventory)")
+		return nil, errors.New(
+			"productBlueprintID is empty (cannot upsert inventory)",
+		)
 	}
-
-	log.Printf("[mint-task-usecase] resolve productBlueprintID ok mintID=%s productBlueprintID=%s", mintRequestID, pbID)
 
 	if len(mintEnt.Products) == 0 {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=no products for this mint request", mintRequestID)
-		return nil, errors.New("no products for this mint request")
+		return nil, errors.New(
+			"no products for this mint request",
+		)
 	}
 
 	if u.tokenMinter == nil {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=token minter is nil", mintRequestID)
 		return nil, errors.New("token minter is nil")
 	}
 	if u.mintRequestPort == nil {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=mint request port is nil", mintRequestID)
 		return nil, errors.New("mint request port is nil")
 	}
 
-	log.Printf("[mint-task-usecase] mark parent minting start mintID=%s", mintRequestID)
-
 	if err := mintEnt.MarkMinting(); err == nil {
-		if _, updateErr := u.mintRepo.Update(ctx, *mintEnt); updateErr != nil {
-			log.Printf("[mint-task-usecase] mark parent minting failed mintID=%s error=%v", mintRequestID, updateErr)
-			return nil, fmt.Errorf("mark parent minting: %w", updateErr)
+		if _, updateErr := u.mintRepo.Update(
+			ctx,
+			*mintEnt,
+		); updateErr != nil {
+			return nil, fmt.Errorf(
+				"mark parent minting: %w",
+				updateErr,
+			)
 		}
-		log.Printf("[mint-task-usecase] mark parent minting ok mintID=%s", mintRequestID)
-	} else {
-		log.Printf("[mint-task-usecase] mark parent minting skipped mintID=%s error=%v", mintRequestID, err)
 	}
 
-	log.Printf("[mint-task-usecase] LoadForMinting start mintID=%s", mintRequestID)
-
-	req, err := u.mintRequestPort.LoadForMinting(ctx, mintRequestID)
+	req, err := u.mintRequestPort.LoadForMinting(
+		ctx,
+		mintRequestID,
+	)
 	if err != nil {
-		log.Printf("[mint-task-usecase] LoadForMinting failed mintID=%s error=%v", mintRequestID, err)
-		return nil, fmt.Errorf("load mint request for minting: %w", err)
+		return nil, fmt.Errorf(
+			"load mint request for minting: %w",
+			err,
+		)
 	}
 	if req == nil {
-		log.Printf("[mint-task-usecase] LoadForMinting failed mintID=%s error=request is nil", mintRequestID)
-		return nil, fmt.Errorf("mint request %s is nil", mintRequestID)
+		return nil, fmt.Errorf(
+			"mint request %s is nil",
+			mintRequestID,
+		)
 	}
-
-	log.Printf(
-		"[mint-task-usecase] LoadForMinting ok mintID=%s reqID=%s productCount=%d tokenBlueprintID=%s actorID=%s hasToAddress=%t hasMetadataURI=%t name=%q symbol=%q",
-		mintRequestID,
-		req.ID,
-		len(req.ProductIDs),
-		req.TokenBlueprintID,
-		req.ActorID,
-		req.ToAddress != "",
-		req.MetadataURI != "",
-		req.BlueprintName,
-		req.BlueprintSymbol,
-	)
 
 	reqID := req.ID
 	if reqID == "" {
@@ -608,15 +705,6 @@ func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID str
 		actorID = MemberIDFromContext(ctx)
 	}
 
-	log.Printf(
-		"[mint-task-usecase] ensureMetadataURI start mintID=%s tokenBlueprintID=%s actorID=%s hasCurrentMetadataURI=%t hasEnsurer=%t",
-		mintRequestID,
-		reqTBID,
-		actorID,
-		req.MetadataURI != "",
-		u.tbMetadataEnsurer != nil,
-	)
-
 	metadataURI, err := u.ensureMetadataURI(
 		ctx,
 		reqTBID,
@@ -624,95 +712,111 @@ func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID str
 		req.MetadataURI,
 	)
 	if err != nil {
-		log.Printf("[mint-task-usecase] ensureMetadataURI failed mintID=%s error=%v", mintRequestID, err)
 		return nil, err
 	}
 	if metadataURI == "" {
-		log.Printf("[mint-task-usecase] ensureMetadataURI failed mintID=%s error=empty MetadataURI", mintRequestID)
-		return nil, fmt.Errorf("mint request %s has empty MetadataURI", reqID)
+		return nil, fmt.Errorf(
+			"mint request %s has empty MetadataURI",
+			reqID,
+		)
 	}
-
-	log.Printf("[mint-task-usecase] ensureMetadataURI ok mintID=%s hasMetadataURI=%t", mintRequestID, metadataURI != "")
 
 	toAddress := req.ToAddress
 	if toAddress == "" {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=empty ToAddress", mintRequestID)
-		return nil, fmt.Errorf("mint request %s has empty ToAddress", reqID)
+		return nil, fmt.Errorf(
+			"mint request %s has empty ToAddress",
+			reqID,
+		)
 	}
 
 	name := req.BlueprintName
 	symbol := req.BlueprintSymbol
 	if name == "" || symbol == "" {
-		log.Printf("[mint-task-usecase] failed mintID=%s error=empty name or symbol name=%q symbol=%q", mintRequestID, name, symbol)
-		return nil, fmt.Errorf("mint request %s has empty name or symbol", reqID)
+		return nil, fmt.Errorf(
+			"mint request %s has empty name or symbol",
+			reqID,
+		)
 	}
 
-	log.Printf("[mint-task-usecase] GetNextExecutableTask start mintID=%s", mintRequestID)
-
-	task, err := u.mintTaskRepo.GetNextExecutableTask(ctx, mintRequestID)
+	task, err := u.mintTaskRepo.GetNextExecutableTask(
+		ctx,
+		mintRequestID,
+	)
 	if err != nil {
-		if errors.Is(err, mintdom.ErrMintProductTaskNotFound) {
-			log.Printf("[mint-task-usecase] GetNextExecutableTask not found mintID=%s; finalizing if all completed", mintRequestID)
-			return u.finalizeMintIfAllTasksCompleted(ctx, mintEnt, reqTBID, actorID)
+		if errors.Is(
+			err,
+			mintdom.ErrMintProductTaskNotFound,
+		) {
+			return u.finalizeMintIfAllTasksCompleted(
+				ctx,
+				mintEnt,
+				reqTBID,
+				actorID,
+			)
 		}
-		log.Printf("[mint-task-usecase] GetNextExecutableTask failed mintID=%s error=%v", mintRequestID, err)
-		return nil, fmt.Errorf("get next executable mint task: %w", err)
+		return nil, fmt.Errorf(
+			"get next executable mint task: %w",
+			err,
+		)
 	}
 
-	log.Printf(
-		"[mint-task-usecase] GetNextExecutableTask ok mintID=%s productID=%s status=%s attemptCount=%d",
+	task, err = u.mintTaskRepo.MarkMinting(
+		ctx,
 		mintRequestID,
 		task.ProductID,
-		task.Status,
-		task.AttemptCount,
 	)
-
-	log.Printf("[mint-task-usecase] MarkMinting task start mintID=%s productID=%s", mintRequestID, task.ProductID)
-
-	task, err = u.mintTaskRepo.MarkMinting(ctx, mintRequestID, task.ProductID)
 	if err != nil {
-		log.Printf("[mint-task-usecase] MarkMinting task failed mintID=%s productID=%s error=%v", mintRequestID, task.ProductID, err)
-		return nil, fmt.Errorf("mark mint product task minting: %w", err)
+		return nil, fmt.Errorf(
+			"mark mint product task minting: %w",
+			err,
+		)
 	}
 
-	log.Printf(
-		"[mint-task-usecase] MarkMinting task ok mintID=%s productID=%s status=%s attemptCount=%d",
-		mintRequestID,
-		task.ProductID,
-		task.Status,
-		task.AttemptCount,
+	minted, err := u.tokenMinter.MintProducts(
+		ctx,
+		MintProductsInput{
+			ToAddress:       toAddress,
+			ProductIDs:      []string{task.ProductID},
+			BlueprintName:   name,
+			BlueprintSymbol: symbol,
+			MetadataURI:     metadataURI,
+		},
 	)
-
-	log.Printf("[mint-task-usecase] MintProducts start mintID=%s productID=%s", mintRequestID, task.ProductID)
-
-	minted, err := u.tokenMinter.MintProducts(ctx, MintProductsInput{
-		ToAddress:       toAddress,
-		ProductIDs:      []string{task.ProductID},
-		BlueprintName:   name,
-		BlueprintSymbol: symbol,
-		MetadataURI:     metadataURI,
-	})
 	if err != nil {
-		log.Printf("[mint-task-usecase] MintProducts failed mintID=%s productID=%s error=%v", mintRequestID, task.ProductID, err)
-
-		if failErr := u.markTaskFailed(ctx, mintRequestID, task.ProductID, err); failErr != nil {
-			log.Printf("[mint-task-usecase] markTaskFailed also failed mintID=%s productID=%s error=%v", mintRequestID, task.ProductID, failErr)
-			return nil, fmt.Errorf("mint product failed: %w; also failed to update task: %v", err, failErr)
+		if failErr := u.markTaskFailed(
+			ctx,
+			mintRequestID,
+			task.ProductID,
+			err,
+		); failErr != nil {
+			return nil, fmt.Errorf(
+				"mint product failed: %w; also failed to update task: %v",
+				err,
+				failErr,
+			)
 		}
 
-		if parentErr := u.markParentFailedRetryable(ctx, mintEnt); parentErr != nil {
-			log.Printf("[mint-task-usecase] markParentFailedRetryable also failed mintID=%s productID=%s error=%v", mintRequestID, task.ProductID, parentErr)
-			return nil, fmt.Errorf("mint product failed: %w; also failed to update parent: %v", err, parentErr)
+		if parentErr := u.markParentFailedRetryable(
+			ctx,
+			mintEnt,
+		); parentErr != nil {
+			return nil, fmt.Errorf(
+				"mint product failed: %w; also failed to update parent: %v",
+				err,
+				parentErr,
+			)
 		}
 
 		return nil, err
 	}
 
-	log.Printf("[mint-task-usecase] MintProducts ok mintID=%s productID=%s resultCount=%d", mintRequestID, task.ProductID, len(minted))
-
 	if len(minted) != 1 {
-		log.Printf("[mint-task-usecase] unexpected minted result count mintID=%s productID=%s count=%d", mintRequestID, task.ProductID, len(minted))
-		return nil, fmt.Errorf("expected exactly one minted result, got %d (mintRequestId=%s productId=%s)", len(minted), mintRequestID, task.ProductID)
+		return nil, fmt.Errorf(
+			"expected exactly one minted result, got %d (mintRequestId=%s productId=%s)",
+			len(minted),
+			mintRequestID,
+			task.ProductID,
+		)
 	}
 
 	mintedOne := minted[0]
@@ -720,7 +824,6 @@ func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID str
 		mintedOne.ProductID = task.ProductID
 	}
 	if mintedOne.ProductID != task.ProductID {
-		log.Printf("[mint-task-usecase] minted productID mismatch mintID=%s taskProductID=%s mintedProductID=%s", mintRequestID, task.ProductID, mintedOne.ProductID)
 		return nil, fmt.Errorf(
 			"minted productID mismatch: task=%s minted=%s",
 			task.ProductID,
@@ -728,29 +831,23 @@ func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID str
 		)
 	}
 	if mintedOne.Result == nil {
-		log.Printf("[mint-task-usecase] minted result nil mintID=%s productID=%s", mintRequestID, task.ProductID)
-		return nil, fmt.Errorf("onchain mint succeeded but result is nil (mintRequestId=%s productId=%s)", mintRequestID, task.ProductID)
+		return nil, fmt.Errorf(
+			"onchain mint succeeded but result is nil (mintRequestId=%s productId=%s)",
+			mintRequestID,
+			task.ProductID,
+		)
 	}
 
-	log.Printf(
-		"[mint-task-usecase] minted result ok mintID=%s productID=%s mintAddress=%s signature=%s slot=%d",
-		mintRequestID,
-		task.ProductID,
-		mintedOne.Result.MintAddress,
-		mintedOne.Result.Signature,
-		mintedOne.Result.Slot,
-	)
-
-	log.Printf("[mint-task-usecase] recordMintedProduct start mintID=%s productID=%s", reqID, mintedOne.ProductID)
-
-	if err := u.recordMintedProduct(ctx, reqID, mintedOne); err != nil {
-		log.Printf("[mint-task-usecase] recordMintedProduct failed mintID=%s productID=%s error=%v", reqID, mintedOne.ProductID, err)
-		return mintedOne.Result, fmt.Errorf("record minted product: %w", err)
+	if err := u.recordMintedProduct(
+		ctx,
+		reqID,
+		mintedOne,
+	); err != nil {
+		return mintedOne.Result, fmt.Errorf(
+			"record minted product: %w",
+			err,
+		)
 	}
-
-	log.Printf("[mint-task-usecase] recordMintedProduct ok mintID=%s productID=%s", reqID, mintedOne.ProductID)
-
-	log.Printf("[mint-task-usecase] MarkMinted task start mintID=%s productID=%s", mintRequestID, task.ProductID)
 
 	if _, err := u.mintTaskRepo.MarkMinted(
 		ctx,
@@ -759,18 +856,17 @@ func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID str
 		mintedOne.Result.MintAddress,
 		mintedOne.Result.Signature,
 	); err != nil {
-		log.Printf("[mint-task-usecase] MarkMinted task failed mintID=%s productID=%s error=%v", mintRequestID, task.ProductID, err)
-		return mintedOne.Result, fmt.Errorf("mark mint product task minted: %w", err)
+		return mintedOne.Result, fmt.Errorf(
+			"mark mint product task minted: %w",
+			err,
+		)
 	}
-
-	log.Printf("[mint-task-usecase] MarkMinted task ok mintID=%s productID=%s", mintRequestID, task.ProductID)
 
 	if u.inventoryUC == nil {
-		log.Printf("[mint-task-usecase] failed mintID=%s productID=%s error=inventory usecase is nil", mintRequestID, task.ProductID)
-		return mintedOne.Result, errors.New("inventory usecase is nil (cannot upsert inventory)")
+		return mintedOne.Result, errors.New(
+			"inventory usecase is nil (cannot upsert inventory)",
+		)
 	}
-
-	log.Printf("[mint-task-usecase] UpsertFromMint start mintID=%s productID=%s productBlueprintID=%s tokenBlueprintID=%s", mintRequestID, task.ProductID, pbID, reqTBID)
 
 	if _, invErr := u.inventoryUC.UpsertFromMint(
 		ctx,
@@ -778,13 +874,8 @@ func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID str
 		pbID,
 		[]string{task.ProductID},
 	); invErr != nil {
-		log.Printf("[mint-task-usecase] UpsertFromMint failed mintID=%s productID=%s error=%v", mintRequestID, task.ProductID, invErr)
 		return mintedOne.Result, invErr
 	}
-
-	log.Printf("[mint-task-usecase] UpsertFromMint ok mintID=%s productID=%s", mintRequestID, task.ProductID)
-
-	log.Printf("[mint-task-usecase] updateParentAndMaybeEnqueueNext start mintID=%s productID=%s", mintRequestID, task.ProductID)
 
 	if err := u.updateParentAndMaybeEnqueueNext(
 		ctx,
@@ -793,12 +884,8 @@ func (u *MintUsecase) ExecuteNextMintTask(ctx context.Context, mintRequestID str
 		actorID,
 		mintedOne.Result.Signature,
 	); err != nil {
-		log.Printf("[mint-task-usecase] updateParentAndMaybeEnqueueNext failed mintID=%s productID=%s error=%v", mintRequestID, task.ProductID, err)
 		return mintedOne.Result, err
 	}
-
-	log.Printf("[mint-task-usecase] updateParentAndMaybeEnqueueNext ok mintID=%s productID=%s", mintRequestID, task.ProductID)
-	log.Printf("[mint-task-usecase] completed mintID=%s productID=%s", mintRequestID, task.ProductID)
 
 	return mintedOne.Result, nil
 }
@@ -811,16 +898,15 @@ func (u *MintUsecase) recordMintedProduct(
 	if u == nil {
 		return errors.New("mint usecase is nil")
 	}
-
-	if u.mintProductMintRecord != nil {
-		return u.mintProductMintRecord.RecordProductAsMinted(ctx, mintID, minted)
+	if u.mintProductMintRecord == nil {
+		return errors.New("mint product recorder is nil")
 	}
 
-	if u.mintRequestPort != nil {
-		return u.mintRequestPort.MarkProductsAsMinted(ctx, mintID, []MintedTokenForUsecase{minted})
-	}
-
-	return errors.New("mint product recorder is nil")
+	return u.mintProductMintRecord.RecordProductAsMinted(
+		ctx,
+		mintID,
+		minted,
+	)
 }
 
 func (u *MintUsecase) markTaskFailed(
@@ -839,11 +925,21 @@ func (u *MintUsecase) markTaskFailed(
 	}
 
 	if isRetryableMintError(err) {
-		_, updateErr := u.mintTaskRepo.MarkFailedRetryable(ctx, mintID, productID, message)
+		_, updateErr := u.mintTaskRepo.MarkFailedRetryable(
+			ctx,
+			mintID,
+			productID,
+			message,
+		)
 		return updateErr
 	}
 
-	_, updateErr := u.mintTaskRepo.MarkFailedFatal(ctx, mintID, productID, message)
+	_, updateErr := u.mintTaskRepo.MarkFailedFatal(
+		ctx,
+		mintID,
+		productID,
+		message,
+	)
 	return updateErr
 }
 
@@ -886,9 +982,15 @@ func (u *MintUsecase) updateParentAndMaybeEnqueueNext(
 		return errors.New("mint repo is nil")
 	}
 
-	tasks, err := u.mintTaskRepo.ListByMintID(ctx, mintEnt.ID)
+	tasks, err := u.mintTaskRepo.ListByMintID(
+		ctx,
+		mintEnt.ID,
+	)
 	if err != nil {
-		return fmt.Errorf("list mint product tasks: %w", err)
+		return fmt.Errorf(
+			"list mint product tasks: %w",
+			err,
+		)
 	}
 
 	total := len(tasks)
@@ -913,16 +1015,26 @@ func (u *MintUsecase) updateParentAndMaybeEnqueueNext(
 	}
 
 	if mintedCount == total {
-		if err := mintEnt.MarkMinted(time.Now().UTC(), latestSignature); err != nil {
+		if err := mintEnt.MarkMinted(
+			time.Now().UTC(),
+			latestSignature,
+		); err != nil {
 			return err
 		}
 
 		if _, err := u.mintRepo.Update(ctx, *mintEnt); err != nil {
-			return fmt.Errorf("mark parent minted: %w", err)
+			return fmt.Errorf(
+				"mark parent minted: %w",
+				err,
+			)
 		}
 
 		if u.tbMintMarker != nil && reqTBID != "" {
-			_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(ctx, reqTBID, actorID)
+			_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(
+				ctx,
+				reqTBID,
+				actorID,
+			)
 		}
 
 		return nil
@@ -934,7 +1046,10 @@ func (u *MintUsecase) updateParentAndMaybeEnqueueNext(
 		}
 
 		if _, err := u.mintRepo.Update(ctx, *mintEnt); err != nil {
-			return fmt.Errorf("mark parent failed fatal: %w", err)
+			return fmt.Errorf(
+				"mark parent failed fatal: %w",
+				err,
+			)
 		}
 
 		return nil
@@ -951,12 +1066,21 @@ func (u *MintUsecase) updateParentAndMaybeEnqueueNext(
 	}
 
 	if _, err := u.mintRepo.Update(ctx, *mintEnt); err != nil {
-		return fmt.Errorf("update parent mint progress: %w", err)
+		return fmt.Errorf(
+			"update parent mint progress: %w",
+			err,
+		)
 	}
 
 	if retryableCount > 0 && u.mintTaskEnqueuer != nil {
-		if err := u.mintTaskEnqueuer.EnqueueMintTask(ctx, mintEnt.ID); err != nil {
-			return fmt.Errorf("enqueue next mint task: %w", err)
+		if err := u.mintTaskEnqueuer.EnqueueMintTask(
+			ctx,
+			mintEnt.ID,
+		); err != nil {
+			return fmt.Errorf(
+				"enqueue next mint task: %w",
+				err,
+			)
 		}
 	}
 
@@ -976,9 +1100,15 @@ func (u *MintUsecase) finalizeMintIfAllTasksCompleted(
 		return nil, errors.New("mint entity is nil")
 	}
 
-	tasks, err := u.mintTaskRepo.ListByMintID(ctx, mintEnt.ID)
+	tasks, err := u.mintTaskRepo.ListByMintID(
+		ctx,
+		mintEnt.ID,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("list mint product tasks: %w", err)
+		return nil, fmt.Errorf(
+			"list mint product tasks: %w",
+			err,
+		)
 	}
 	if len(tasks) == 0 {
 		return nil, mintdom.ErrMintProductTaskNotFound
@@ -1001,16 +1131,26 @@ func (u *MintUsecase) finalizeMintIfAllTasksCompleted(
 		return nil, mintdom.ErrMintProductTaskNotFound
 	}
 
-	if err := mintEnt.MarkMinted(time.Now().UTC(), latestSignature); err != nil {
+	if err := mintEnt.MarkMinted(
+		time.Now().UTC(),
+		latestSignature,
+	); err != nil {
 		return nil, err
 	}
 
 	if _, err := u.mintRepo.Update(ctx, *mintEnt); err != nil {
-		return nil, fmt.Errorf("mark parent minted: %w", err)
+		return nil, fmt.Errorf(
+			"mark parent minted: %w",
+			err,
+		)
 	}
 
 	if u.tbMintMarker != nil && reqTBID != "" {
-		_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(ctx, reqTBID, actorID)
+		_, _ = u.tbMintMarker.MarkTokenBlueprintMinted(
+			ctx,
+			reqTBID,
+			actorID,
+		)
 	}
 
 	return u.mintResultMapper.FromMint(*mintEnt), nil

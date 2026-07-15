@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/infrastructure/dto/mintRequestManagementRaw.dto.ts
 
-import type { InspectionStatus } from "../../domain/entity/inspections";
+import type { InspectionStatus } from "../../domain/inspections";
 
 /**
  * MintRequestQueryService が返す “一覧用 Raw DTO” をそのまま表現。
@@ -32,12 +32,12 @@ export type MintRequestManagementRawDTO = {
 
   productBlueprintId?: string | null;
   scheduledBurnDate?: string | null;
-  minted?: boolean | null;
 
   // raw sub docs
   mint?: {
     tokenBlueprintId?: string | null;
     tokenName?: string | null;
+    status?: string | null;
     mintedAt?: string | null;
     createdBy?: string | null;
   } | null;

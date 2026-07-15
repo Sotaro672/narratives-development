@@ -9,7 +9,7 @@ import {
   completeInspectionHTTP,
 } from "../repository";
 
-import type { InspectionBatchDTO } from "../../domain/entity/inspections";
+import type { InspectionBatchDTO } from "../../domain/inspections";
 import type { MintDTO, MintListRowDTO } from "../dto/mint.dto";
 
 // ===============================
