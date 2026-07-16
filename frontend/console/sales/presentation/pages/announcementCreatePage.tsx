@@ -52,9 +52,14 @@ export default function AnnouncementCreatePage() {
 
   const targetAvatarIds = useMemo(
     () =>
-      owners.map((owner) => owner.avatarId),
+      owners.map(
+        (owner) => owner.avatarId,
+      ),
     [owners],
   );
+
+  const targetAvatarCount =
+    targetAvatarIds.length;
 
   const handleInputChange = useCallback(
     (payload: SubmitPayload) => {
@@ -69,85 +74,96 @@ export default function AnnouncementCreatePage() {
         title: inputPayload.title.trim(),
         text: inputPayload.text.trim(),
         images: inputPayload.images,
-        imageUrls: inputPayload.imageUrls,
+        imageUrls:
+          inputPayload.imageUrls,
       };
     }, [inputPayload]);
 
-  const handleSave = useCallback(async () => {
-    if (isSavingInput || isSendingInput) {
-      return;
-    }
+  const handleSave =
+    useCallback(async () => {
+      if (
+        isSavingInput ||
+        isSendingInput
+      ) {
+        return;
+      }
 
-    setIsSavingInput(true);
+      setIsSavingInput(true);
 
-    try {
-      await onSaveAnnouncement({
-        payload: buildSubmitPayload(),
-        targetAvatarIds,
-      });
+      try {
+        await onSaveAnnouncement({
+          payload:
+            buildSubmitPayload(),
+          targetAvatarIds,
+        });
 
-      window.alert(
-        "告知を保存しました。",
-      );
-    } catch (error) {
-      console.error(
-        "[AnnouncementCreatePage] save announcement failed",
-        error,
-      );
+        window.alert(
+          "告知を保存しました。",
+        );
+      } catch (error) {
+        console.error(
+          "[AnnouncementCreatePage] save announcement failed",
+          error,
+        );
 
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "告知の保存に失敗しました。",
-      );
-    } finally {
-      setIsSavingInput(false);
-    }
-  }, [
-    buildSubmitPayload,
-    isSavingInput,
-    isSendingInput,
-    onSaveAnnouncement,
-    targetAvatarIds,
-  ]);
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "告知の保存に失敗しました。",
+        );
+      } finally {
+        setIsSavingInput(false);
+      }
+    }, [
+      buildSubmitPayload,
+      isSavingInput,
+      isSendingInput,
+      onSaveAnnouncement,
+      targetAvatarIds,
+    ]);
 
-  const handleSend = useCallback(async () => {
-    if (isSavingInput || isSendingInput) {
-      return;
-    }
+  const handleSend =
+    useCallback(async () => {
+      if (
+        isSavingInput ||
+        isSendingInput
+      ) {
+        return;
+      }
 
-    setIsSendingInput(true);
+      setIsSendingInput(true);
 
-    try {
-      await onSendAnnouncement({
-        payload: buildSubmitPayload(),
-        targetAvatarIds,
-      });
+      try {
+        await onSendAnnouncement({
+          payload:
+            buildSubmitPayload(),
+          targetAvatarIds,
+        });
 
-      window.alert(
-        "告知を送信しました。",
-      );
-    } catch (error) {
-      console.error(
-        "[AnnouncementCreatePage] send announcement failed",
-        error,
-      );
+        window.alert(
+          "告知を送信しました。",
+        );
+      } catch (error) {
+        console.error(
+          "[AnnouncementCreatePage] send announcement failed",
+          error,
+        );
 
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "告知の送信に失敗しました。",
-      );
-    } finally {
-      setIsSendingInput(false);
-    }
-  }, [
-    buildSubmitPayload,
-    isSavingInput,
-    isSendingInput,
-    onSendAnnouncement,
-    targetAvatarIds,
-  ]);
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "告知の送信に失敗しました。",
+        );
+      } finally {
+        setIsSendingInput(false);
+      }
+    }, [
+      buildSubmitPayload,
+      isSavingInput,
+      isSendingInput,
+      onSendAnnouncement,
+      targetAvatarIds,
+    ]);
 
   if (!sales) {
     return (
@@ -186,9 +202,16 @@ export default function AnnouncementCreatePage() {
         <AdminCard
           title="管理情報"
           mode="view"
-          createdByName={createdByName}
+          targetAvatarCount={
+            targetAvatarCount
+          }
+          createdByName={
+            createdByName
+          }
           createdAt={createdAt}
-          updatedByName={updatedByName}
+          updatedByName={
+            updatedByName
+          }
           updatedAt={updatedAt}
         />
 

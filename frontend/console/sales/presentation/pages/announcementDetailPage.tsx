@@ -1,11 +1,21 @@
-// frontend\console\sales\presentation\pages\announcementDetailPage.tsx
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+// frontend/console/sales/presentation/pages/announcementDetailPage.tsx
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/presentation/components/AdminCard";
 import LogCard from "../../../log/presentation/LogCard";
 import InputCard from "../components/inputCard";
 import type { SubmitPayload } from "../components/inputCard";
+
 import {
   getAnnouncement,
   markAnnouncementPublished,
@@ -31,24 +41,32 @@ type AnnouncementAttachmentFileLike = {
   objectPath?: string | null;
 };
 
-type AnnouncementWithResolvedFields = Announcement & {
-  attachmentFiles?: AnnouncementAttachmentFileLike[];
-  createdByName?: string | null;
-  updatedByName?: string | null;
-};
+type AnnouncementWithResolvedFields =
+  Announcement & {
+    attachmentFiles?:
+      AnnouncementAttachmentFileLike[];
+    createdByName?: string | null;
+    updatedByName?: string | null;
+  };
 
 function normalizeAvatarIds(
   values: string[] | undefined | null,
 ): string[] {
-  if (!Array.isArray(values)) return [];
+  if (!Array.isArray(values)) {
+    return [];
+  }
 
   const seen = new Set<string>();
   const result: string[] = [];
 
   for (const value of values) {
-    const avatarId = String(value ?? "").trim();
-    if (!avatarId) continue;
-    if (seen.has(avatarId)) continue;
+    const avatarId = String(
+      value ?? "",
+    ).trim();
+
+    if (!avatarId || seen.has(avatarId)) {
+      continue;
+    }
 
     seen.add(avatarId);
     result.push(avatarId);
@@ -58,22 +76,43 @@ function normalizeAvatarIds(
 }
 
 function normalizeAttachmentImageUrls(
-  values: AnnouncementAttachmentFileLike[] | undefined | null,
+  values:
+    | AnnouncementAttachmentFileLike[]
+    | undefined
+    | null,
 ): string[] {
-  if (!Array.isArray(values)) return [];
+  if (!Array.isArray(values)) {
+    return [];
+  }
 
   const seen = new Set<string>();
   const result: string[] = [];
 
   for (const value of values) {
-    const fileUrl = String(value?.fileUrl ?? "").trim();
-    const mimeType = String(value?.mimeType ?? "")
+    const fileUrl = String(
+      value?.fileUrl ?? "",
+    ).trim();
+
+    const mimeType = String(
+      value?.mimeType ?? "",
+    )
       .trim()
       .toLowerCase();
 
-    if (!fileUrl) continue;
-    if (mimeType && !mimeType.startsWith("image/")) continue;
-    if (seen.has(fileUrl)) continue;
+    if (!fileUrl) {
+      continue;
+    }
+
+    if (
+      mimeType &&
+      !mimeType.startsWith("image/")
+    ) {
+      continue;
+    }
+
+    if (seen.has(fileUrl)) {
+      continue;
+    }
 
     seen.add(fileUrl);
     result.push(fileUrl);
@@ -82,12 +121,18 @@ function normalizeAttachmentImageUrls(
   return result;
 }
 
-function toSafeNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
+function toSafeNumber(
+  value: unknown,
+): number {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  ) {
     return value;
   }
 
   const numberValue = Number(value);
+
   if (!Number.isFinite(numberValue)) {
     return 0;
   }
@@ -96,7 +141,9 @@ function toSafeNumber(value: unknown): number {
 }
 
 function getAnnouncementCreatedByName(
-  announcement: AnnouncementWithResolvedFields | null,
+  announcement:
+    | AnnouncementWithResolvedFields
+    | null,
 ): string {
   return String(
     announcement?.createdByName ||
@@ -106,7 +153,9 @@ function getAnnouncementCreatedByName(
 }
 
 function getAnnouncementUpdatedByName(
-  announcement: AnnouncementWithResolvedFields | null,
+  announcement:
+    | AnnouncementWithResolvedFields
+    | null,
 ): string {
   return String(
     announcement?.updatedByName ||
@@ -119,35 +168,63 @@ function buildRetainedAttachmentInputs(params: {
   announcement: AnnouncementWithResolvedFields;
   imageUrls: string[];
 }): AnnouncementAttachmentInput[] {
-  const files = Array.isArray(params.announcement.attachmentFiles)
+  const files = Array.isArray(
+    params.announcement.attachmentFiles,
+  )
     ? params.announcement.attachmentFiles
     : [];
 
   const retainedUrlSet = new Set(
     params.imageUrls
-      .map((url) => String(url ?? "").trim())
+      .map((url) => url.trim())
       .filter(Boolean),
   );
 
   const seen = new Set<string>();
-  const result: AnnouncementAttachmentInput[] = [];
+  const result: AnnouncementAttachmentInput[] =
+    [];
 
   for (const file of files) {
-    const fileUrl = String(file?.fileUrl ?? "").trim();
-    if (!fileUrl) continue;
-    if (!retainedUrlSet.has(fileUrl)) continue;
+    const fileUrl = String(
+      file?.fileUrl ?? "",
+    ).trim();
 
-    const fileName = String(file?.fileName ?? "").trim();
-    const objectPath = String(file?.objectPath ?? "").trim();
-    const mimeType = String(file?.mimeType ?? "").trim();
-    const fileSize = toSafeNumber(file?.fileSize);
+    if (
+      !fileUrl ||
+      !retainedUrlSet.has(fileUrl)
+    ) {
+      continue;
+    }
 
-    if (!fileName || !objectPath) continue;
+    const fileName = String(
+      file?.fileName ?? "",
+    ).trim();
 
-    const dedupeKey = objectPath || fileUrl || fileName;
-    if (seen.has(dedupeKey)) continue;
+    const objectPath = String(
+      file?.objectPath ?? "",
+    ).trim();
+
+    const mimeType = String(
+      file?.mimeType ?? "",
+    ).trim();
+
+    const fileSize = toSafeNumber(
+      file?.fileSize,
+    );
+
+    if (!fileName || !objectPath) {
+      continue;
+    }
+
+    const dedupeKey =
+      objectPath || fileUrl || fileName;
+
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
 
     seen.add(dedupeKey);
+
     result.push({
       fileName,
       fileUrl,
@@ -162,43 +239,69 @@ function buildRetainedAttachmentInputs(params: {
 
 export default function AnnouncementDetailPage() {
   const navigate = useNavigate();
-  const { announcementId } =
-    useParams<{ announcementId: string }>();
+
+  const { announcementId } = useParams<{
+    announcementId: string;
+  }>();
 
   const [announcement, setAnnouncement] =
-    useState<AnnouncementWithResolvedFields | null>(null);
+    useState<AnnouncementWithResolvedFields | null>(
+      null,
+    );
+
   const [inputPayload, setInputPayload] =
-    useState<SubmitPayload>(emptyInputPayload);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSavingInput, setIsSavingInput] = useState(false);
-  const [isSendingInput, setIsSendingInput] = useState(false);
+    useState<SubmitPayload>(
+      emptyInputPayload,
+    );
+
+  const [isEditMode, setIsEditMode] =
+    useState(false);
+
+  const [isLoading, setIsLoading] =
+    useState(false);
+
+  const [isSavingInput, setIsSavingInput] =
+    useState(false);
+
+  const [isSendingInput, setIsSendingInput] =
+    useState(false);
+
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
-  const normalizedAnnouncementId = useMemo(() => {
-    return String(announcementId ?? "").trim();
-  }, [announcementId]);
+  const normalizedAnnouncementId =
+    useMemo(
+      () =>
+        String(
+          announcementId ?? "",
+        ).trim(),
+      [announcementId],
+    );
 
-  const resetFormFromAnnouncement = useCallback(
-    (source: AnnouncementWithResolvedFields) => {
-      setInputPayload({
-        title: source.title,
-        text: source.content,
-        images: [],
-        imageUrls: normalizeAttachmentImageUrls(
-          source.attachmentFiles,
-        ),
-      });
-    },
-    [],
-  );
+  const resetFormFromAnnouncement =
+    useCallback(
+      (
+        source:
+          AnnouncementWithResolvedFields,
+      ) => {
+        setInputPayload({
+          title: source.title,
+          text: source.content,
+          images: [],
+          imageUrls:
+            normalizeAttachmentImageUrls(
+              source.attachmentFiles,
+            ),
+        });
+      },
+      [],
+    );
 
   const load = useCallback(async () => {
     if (!normalizedAnnouncementId) {
       setAnnouncement(null);
       setErrorMessage(
-        "お知らせIDを取得できませんでした。",
+        "告知IDを取得できませんでした。",
       );
       return;
     }
@@ -210,15 +313,17 @@ export default function AnnouncementDetailPage() {
       const result = await getAnnouncement(
         normalizedAnnouncementId,
       );
+
       setAnnouncement(
         result as AnnouncementWithResolvedFields,
       );
     } catch (error) {
       setAnnouncement(null);
+
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "お知らせ詳細の取得に失敗しました。",
+          : "告知詳細の取得に失敗しました。",
       );
     } finally {
       setIsLoading(false);
@@ -227,12 +332,15 @@ export default function AnnouncementDetailPage() {
 
   const reloadAnnouncement = useCallback(
     async (id: string) => {
-      const normalizedId = String(id ?? "").trim();
+      const normalizedId = id.trim();
+
       if (!normalizedId) {
         return null;
       }
 
-      const refreshed = await getAnnouncement(normalizedId);
+      const refreshed =
+        await getAnnouncement(normalizedId);
+
       const next =
         refreshed as AnnouncementWithResolvedFields;
 
@@ -259,43 +367,67 @@ export default function AnnouncementDetailPage() {
     if (announcement.published) {
       setIsEditMode(false);
     }
-  }, [announcement, resetFormFromAnnouncement]);
+  }, [
+    announcement,
+    resetFormFromAnnouncement,
+  ]);
 
   const targetAvatarIds = useMemo(() => {
-    if (!announcement) return [];
+    if (!announcement) {
+      return [];
+    }
 
     return normalizeAvatarIds(
       announcement.targetAvatars,
     );
   }, [announcement]);
 
-  const initialImageUrls = useMemo(() => {
-    return normalizeAttachmentImageUrls(
-      announcement?.attachmentFiles,
-    );
-  }, [announcement]);
+  const targetAvatarCount =
+    targetAvatarIds.length;
+
+  const initialImageUrls = useMemo(
+    () =>
+      normalizeAttachmentImageUrls(
+        announcement?.attachmentFiles,
+      ),
+    [announcement],
+  );
 
   const pageTitle =
-    announcement?.title || "お知らせ詳細";
+    announcement?.title || "告知詳細";
 
   const handleBack = useCallback(() => {
     navigate("/sales");
   }, [navigate]);
 
   const handleEdit = useCallback(() => {
-    if (!announcement || announcement.published) return;
+    if (
+      !announcement ||
+      announcement.published
+    ) {
+      return;
+    }
 
     resetFormFromAnnouncement(announcement);
     setIsEditMode(true);
-  }, [announcement, resetFormFromAnnouncement]);
+  }, [
+    announcement,
+    resetFormFromAnnouncement,
+  ]);
 
-  const handleCancelEdit = useCallback(() => {
-    if (announcement) {
-      resetFormFromAnnouncement(announcement);
-    }
+  const handleCancelEdit =
+    useCallback(() => {
+      if (announcement) {
+        resetFormFromAnnouncement(
+          announcement,
+        );
+      }
 
-    setIsEditMode(false);
-  }, [announcement, resetFormFromAnnouncement]);
+      setIsEditMode(false);
+    }, [
+      announcement,
+      resetFormFromAnnouncement,
+    ]);
 
   const handleInputChange = useCallback(
     (payload: SubmitPayload) => {
@@ -310,7 +442,8 @@ export default function AnnouncementDetailPage() {
         title: inputPayload.title.trim(),
         text: inputPayload.text.trim(),
         images: inputPayload.images,
-        imageUrls: inputPayload.imageUrls,
+        imageUrls:
+          inputPayload.imageUrls,
       };
     }, [inputPayload]);
 
@@ -322,131 +455,192 @@ export default function AnnouncementDetailPage() {
     ).trim();
   }, [announcement]);
 
-  const handleSave = useCallback(async () => {
-    if (!announcement) return;
-    if (announcement.published) return;
-    if (isSavingInput || isSendingInput) return;
-
-    const payload = buildSubmitPayload();
-
-    setIsSavingInput(true);
-
-    try {
-      await updateAnnouncement(announcement.id, {
-        title: payload.title,
-        content: payload.text,
-        targetToken: announcement.targetToken,
-        targetAvatars: targetAvatarIds,
-        published: announcement.published,
-        publishedAt: announcement.publishedAt,
-        attachments: buildRetainedAttachmentInputs({
-          announcement,
-          imageUrls: payload.imageUrls,
-        }),
-        updatedBy: getUpdatedBy(),
-      });
-
-      await reloadAnnouncement(announcement.id);
-
-      setIsEditMode(false);
-      window.alert("お知らせを保存しました。");
-    } catch (error) {
-      console.error(
-        "[AnnouncementDetailPage] save announcement failed",
-        error,
-      );
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "お知らせの保存に失敗しました。",
-      );
-    } finally {
-      setIsSavingInput(false);
-    }
-  }, [
-    announcement,
-    buildSubmitPayload,
-    getUpdatedBy,
-    isSavingInput,
-    isSendingInput,
-    reloadAnnouncement,
-    targetAvatarIds,
-  ]);
-
-  const handleSend = useCallback(async () => {
-    if (!announcement) return;
-    if (announcement.published) return;
-    if (isSavingInput || isSendingInput) return;
-
-    const payload = buildSubmitPayload();
-
-    setIsSendingInput(true);
-
-    try {
-      if (isEditMode) {
-        await updateAnnouncement(announcement.id, {
-          title: payload.title,
-          content: payload.text,
-          targetToken: announcement.targetToken,
-          targetAvatars: targetAvatarIds,
-          published: announcement.published,
-          publishedAt: announcement.publishedAt,
-          attachments: buildRetainedAttachmentInputs({
-            announcement,
-            imageUrls: payload.imageUrls,
-          }),
-          updatedBy: getUpdatedBy(),
-        });
+  const handleSave =
+    useCallback(async () => {
+      if (
+        !announcement ||
+        announcement.published ||
+        isSavingInput ||
+        isSendingInput
+      ) {
+        return;
       }
 
-      await markAnnouncementPublished(announcement.id, {
-        updatedBy: getUpdatedBy(),
-      });
+      const payload =
+        buildSubmitPayload();
 
-      await reloadAnnouncement(announcement.id);
+      setIsSavingInput(true);
 
-      setIsEditMode(false);
-      window.alert("お知らせを送信しました。");
-    } catch (error) {
-      console.error(
-        "[AnnouncementDetailPage] send announcement failed",
-        error,
-      );
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "お知らせの送信に失敗しました。",
-      );
-    } finally {
-      setIsSendingInput(false);
-    }
-  }, [
-    announcement,
-    buildSubmitPayload,
-    getUpdatedBy,
-    isEditMode,
-    isSavingInput,
-    isSendingInput,
-    reloadAnnouncement,
-    targetAvatarIds,
-  ]);
+      try {
+        await updateAnnouncement(
+          announcement.id,
+          {
+            title: payload.title,
+            content: payload.text,
+            targetToken:
+              announcement.targetToken,
+            targetAvatars:
+              targetAvatarIds,
+            published:
+              announcement.published,
+            publishedAt:
+              announcement.publishedAt,
+            attachments:
+              buildRetainedAttachmentInputs(
+                {
+                  announcement,
+                  imageUrls:
+                    payload.imageUrls,
+                },
+              ),
+            updatedBy: getUpdatedBy(),
+          },
+        );
+
+        await reloadAnnouncement(
+          announcement.id,
+        );
+
+        setIsEditMode(false);
+
+        window.alert(
+          "告知を保存しました。",
+        );
+      } catch (error) {
+        console.error(
+          "[AnnouncementDetailPage] save announcement failed",
+          error,
+        );
+
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "告知の保存に失敗しました。",
+        );
+      } finally {
+        setIsSavingInput(false);
+      }
+    }, [
+      announcement,
+      buildSubmitPayload,
+      getUpdatedBy,
+      isSavingInput,
+      isSendingInput,
+      reloadAnnouncement,
+      targetAvatarIds,
+    ]);
+
+  const handleSend =
+    useCallback(async () => {
+      if (
+        !announcement ||
+        announcement.published ||
+        isSavingInput ||
+        isSendingInput
+      ) {
+        return;
+      }
+
+      const payload =
+        buildSubmitPayload();
+
+      setIsSendingInput(true);
+
+      try {
+        if (isEditMode) {
+          await updateAnnouncement(
+            announcement.id,
+            {
+              title: payload.title,
+              content: payload.text,
+              targetToken:
+                announcement.targetToken,
+              targetAvatars:
+                targetAvatarIds,
+              published:
+                announcement.published,
+              publishedAt:
+                announcement.publishedAt,
+              attachments:
+                buildRetainedAttachmentInputs(
+                  {
+                    announcement,
+                    imageUrls:
+                      payload.imageUrls,
+                  },
+                ),
+              updatedBy: getUpdatedBy(),
+            },
+          );
+        }
+
+        await markAnnouncementPublished(
+          announcement.id,
+          {
+            updatedBy: getUpdatedBy(),
+          },
+        );
+
+        await reloadAnnouncement(
+          announcement.id,
+        );
+
+        setIsEditMode(false);
+
+        window.alert(
+          "告知を送信しました。",
+        );
+      } catch (error) {
+        console.error(
+          "[AnnouncementDetailPage] send announcement failed",
+          error,
+        );
+
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "告知の送信に失敗しました。",
+        );
+      } finally {
+        setIsSendingInput(false);
+      }
+    }, [
+      announcement,
+      buildSubmitPayload,
+      getUpdatedBy,
+      isEditMode,
+      isSavingInput,
+      isSendingInput,
+      reloadAnnouncement,
+      targetAvatarIds,
+    ]);
 
   const createdByName =
-    getAnnouncementCreatedByName(announcement);
+    getAnnouncementCreatedByName(
+      announcement,
+    );
+
   const updatedByName =
-    getAnnouncementUpdatedByName(announcement);
-  const createdAt = announcement?.createdAt ?? "";
-  const updatedAt = announcement?.updatedAt ?? "";
+    getAnnouncementUpdatedByName(
+      announcement,
+    );
+
+  const createdAt =
+    announcement?.createdAt ?? "";
+
+  const updatedAt =
+    announcement?.updatedAt ?? "";
 
   const canEditOrSend = Boolean(
-    announcement && !announcement.published,
+    announcement &&
+      !announcement.published,
   );
 
   if (isLoading && !announcement) {
     return (
       <PageStyle
         layout="single"
-        title="お知らせ詳細"
+        title="告知詳細"
         onBack={handleBack}
       >
         <p className="p-4 text-sm text-muted-foreground">
@@ -460,7 +654,7 @@ export default function AnnouncementDetailPage() {
     return (
       <PageStyle
         layout="single"
-        title="お知らせ詳細"
+        title="告知詳細"
         onBack={handleBack}
       >
         <p className="p-4 text-sm text-red-600">
@@ -474,11 +668,11 @@ export default function AnnouncementDetailPage() {
     return (
       <PageStyle
         layout="single"
-        title="お知らせ詳細"
+        title="告知詳細"
         onBack={handleBack}
       >
         <p className="p-4 text-sm text-muted-foreground">
-          表示可能なお知らせ詳細がありません。
+          表示可能な告知詳細がありません。
         </p>
       </PageStyle>
     );
@@ -505,20 +699,36 @@ export default function AnnouncementDetailPage() {
           : undefined
       }
       isSaving={isSavingInput}
-      onSend={canEditOrSend ? handleSend : undefined}
+      onSend={
+        canEditOrSend
+          ? handleSend
+          : undefined
+      }
       isSending={isSendingInput}
     >
       <div className="space-y-4">
         <InputCard
           title="入力"
-          mode={isEditMode ? "edit" : "view"}
-          initialTitle={announcement.title}
-          initialText={announcement.content}
-          initialImages={initialImageUrls}
+          mode={
+            isEditMode
+              ? "edit"
+              : "view"
+          }
+          initialTitle={
+            announcement.title
+          }
+          initialText={
+            announcement.content
+          }
+          initialImages={
+            initialImageUrls
+          }
           saving={isSavingInput}
           sending={isSendingInput}
           onChange={
-            isEditMode ? handleInputChange : undefined
+            isEditMode
+              ? handleInputChange
+              : undefined
           }
         />
       </div>
@@ -527,9 +737,16 @@ export default function AnnouncementDetailPage() {
         <AdminCard
           title="管理情報"
           mode="view"
-          createdByName={createdByName}
+          targetAvatarCount={
+            targetAvatarCount
+          }
+          createdByName={
+            createdByName
+          }
           createdAt={createdAt}
-          updatedByName={updatedByName}
+          updatedByName={
+            updatedByName
+          }
           updatedAt={updatedAt}
         />
 

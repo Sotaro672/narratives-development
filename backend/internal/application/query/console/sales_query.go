@@ -1,3 +1,4 @@
+// backend\internal\application\query\console\sales_query.go
 package query
 
 import (
