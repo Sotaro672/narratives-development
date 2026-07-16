@@ -1,4 +1,3 @@
-// backend/internal/application/query/console/sales_query.go
 package query
 
 import (
@@ -7,7 +6,6 @@ import (
 
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
-	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	common "narratives/internal/domain/common"
 	tokendom "narratives/internal/domain/token"
@@ -16,9 +14,7 @@ import (
 )
 
 type SalesOwner struct {
-	AvatarID   string `json:"avatarId"`
-	AvatarName string `json:"avatarName"`
-	AvatarIcon string `json:"avatarIcon"`
+	AvatarID string `json:"avatarId"`
 }
 
 type SalesProductBlueprint struct {
@@ -61,10 +57,6 @@ type brandReader interface {
 	GetByID(ctx context.Context, id string) (branddom.Brand, error)
 }
 
-type avatarReader interface {
-	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-}
-
 type mintProductBlueprintResolver interface {
 	ResolveByMintAddresses(
 		ctx context.Context,
@@ -78,7 +70,6 @@ type SalesQuery struct {
 	mintRepo                     mintListByTokenBlueprintReader
 	walletRepo                   walletAddressByMintReader
 	ownerResolver                ownerResolveReader
-	avatarRepo                   avatarReader
 	mintProductBlueprintResolver mintProductBlueprintResolver
 }
 
@@ -88,7 +79,6 @@ func NewSalesQuery(
 	mintRepo mintListByTokenBlueprintReader,
 	walletRepo walletAddressByMintReader,
 	ownerResolver ownerResolveReader,
-	avatarRepo avatarReader,
 	mintProductBlueprintResolver mintProductBlueprintResolver,
 ) *SalesQuery {
 	return &SalesQuery{
@@ -97,7 +87,6 @@ func NewSalesQuery(
 		mintRepo:                     mintRepo,
 		walletRepo:                   walletRepo,
 		ownerResolver:                ownerResolver,
-		avatarRepo:                   avatarRepo,
 		mintProductBlueprintResolver: mintProductBlueprintResolver,
 	}
 }
@@ -123,9 +112,6 @@ func (q *SalesQuery) ListByCompanyID(
 	}
 	if q.ownerResolver == nil {
 		return SalesQueryResult{}, errors.New("ownerResolver is nil")
-	}
-	if q.avatarRepo == nil {
-		return SalesQueryResult{}, errors.New("avatarRepo is nil")
 	}
 	if q.mintProductBlueprintResolver == nil {
 		return SalesQueryResult{}, errors.New("mintProductBlueprintResolver is nil")
@@ -284,21 +270,9 @@ func (q *SalesQuery) resolveSalesOwners(
 			continue
 		}
 
-		avatar, err := q.avatarRepo.GetByID(ctx, owner.AvatarID)
-		if err != nil {
-			return nil, err
-		}
-
-		avatarIcon := ""
-		if avatar.AvatarIcon != nil {
-			avatarIcon = *avatar.AvatarIcon
-		}
-
 		seen[owner.AvatarID] = struct{}{}
 		result = append(result, SalesOwner{
-			AvatarID:   owner.AvatarID,
-			AvatarName: avatar.AvatarName,
-			AvatarIcon: avatarIcon,
+			AvatarID: owner.AvatarID,
 		})
 	}
 

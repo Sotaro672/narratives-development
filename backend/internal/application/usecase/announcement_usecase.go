@@ -1,4 +1,3 @@
-// backend\internal\application\usecase\announcement_usecase.go
 package usecase
 
 import (
@@ -14,9 +13,9 @@ import (
 // AnnouncementUsecase coordinates Announcement, avatar read state,
 // and attachment metadata.
 type AnnouncementUsecase struct {
-	annRepo    ann.Repository           // announcement repository
-	avatarRepo ann.AvatarRepository     // announcement avatar repository
-	attRepo    ann.AttachmentRepository // announcement attachment metadata repository
+	annRepo    ann.Repository
+	avatarRepo ann.AvatarRepository
+	attRepo    ann.AttachmentRepository
 
 	now func() time.Time
 }
@@ -267,10 +266,6 @@ type UpsertAnnouncementAvatarInput struct {
 	IsRead   bool
 }
 
-type UpdateAnnouncementAvatarInput struct {
-	IsRead *bool
-}
-
 func (u *AnnouncementUsecase) ListAnnouncementAvatars(
 	ctx context.Context,
 	announcementID string,
@@ -281,31 +276,6 @@ func (u *AnnouncementUsecase) ListAnnouncementAvatars(
 	}
 
 	return u.avatarRepo.ListByAnnouncementID(ctx, announcementID, filter)
-}
-
-func (u *AnnouncementUsecase) GetAnnouncementAvatar(
-	ctx context.Context,
-	announcementID string,
-	avatarID string,
-) (ann.AnnouncementAvatar, error) {
-	if u.avatarRepo == nil {
-		return ann.AnnouncementAvatar{}, ann.ErrNotFound
-	}
-	if avatarID == "" {
-		return ann.AnnouncementAvatar{}, ann.ErrInvalidAvatarID
-	}
-
-	avatars, err := u.avatarRepo.ListByAnnouncementID(ctx, announcementID, ann.AnnouncementAvatarFilter{
-		AvatarIDs: []string{avatarID},
-	})
-	if err != nil {
-		return ann.AnnouncementAvatar{}, err
-	}
-	if len(avatars) == 0 {
-		return ann.AnnouncementAvatar{}, ann.ErrNotFound
-	}
-
-	return avatars[0], nil
 }
 
 // UpsertAnnouncementAvatar is kept as an application-level operation,
@@ -330,30 +300,12 @@ func (u *AnnouncementUsecase) UpsertAnnouncementAvatar(
 		UpdatedAt: &now,
 	}
 
-	return u.avatarRepo.Update(ctx, announcementID, input.AvatarID, patch)
-}
-
-func (u *AnnouncementUsecase) UpdateAnnouncementAvatar(
-	ctx context.Context,
-	announcementID string,
-	avatarID string,
-	input UpdateAnnouncementAvatarInput,
-) (ann.AnnouncementAvatar, error) {
-	if u.avatarRepo == nil {
-		return ann.AnnouncementAvatar{}, ann.ErrNotFound
-	}
-	if avatarID == "" {
-		return ann.AnnouncementAvatar{}, ann.ErrInvalidAvatarID
-	}
-
-	now := u.now()
-
-	patch := ann.AnnouncementAvatarPatch{
-		IsRead:    input.IsRead,
-		UpdatedAt: &now,
-	}
-
-	return u.avatarRepo.Update(ctx, announcementID, avatarID, patch)
+	return u.avatarRepo.Update(
+		ctx,
+		announcementID,
+		input.AvatarID,
+		patch,
+	)
 }
 
 func (u *AnnouncementUsecase) MarkRead(
@@ -373,7 +325,12 @@ func (u *AnnouncementUsecase) MarkRead(
 
 	now := u.now()
 
-	return u.avatarRepo.MarkRead(ctx, announcementID, avatarID, now)
+	return u.avatarRepo.MarkRead(
+		ctx,
+		announcementID,
+		avatarID,
+		now,
+	)
 }
 
 // =======================
@@ -389,9 +346,12 @@ type NewAttachmentInput struct {
 	ObjectPath string
 }
 
-// ReplaceAttachments replaces all attachment metadata of the announcement with the provided inputs.
+// ReplaceAttachments replaces all attachment metadata of the announcement
+// with the provided inputs.
+//
 // Firebase Storage upload/delete is handled by the frontend.
-// This usecase only persists metadata and returns both the saved records and IDs to set into Announcement.Attachments.
+// This usecase only persists metadata and returns both the saved records and IDs
+// to set into Announcement.Attachments.
 func (u *AnnouncementUsecase) ReplaceAttachments(
 	ctx context.Context,
 	announcementID string,
@@ -415,7 +375,11 @@ func (u *AnnouncementUsecase) ReplaceAttachments(
 	}
 
 	for _, f := range current {
-		if err := u.attRepo.Delete(ctx, announcementID, f.FileName); err != nil {
+		if err := u.attRepo.Delete(
+			ctx,
+			announcementID,
+			f.FileName,
+		); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -426,20 +390,26 @@ func (u *AnnouncementUsecase) ReplaceAttachments(
 		if err != nil {
 			return nil, nil, err
 		}
+
 		saved = append(saved, out)
 	}
 
 	return saved, ids, nil
 }
 
-// ReplaceAttachmentsAndSyncAnnouncement replaces attachment metadata and also updates Announcement.Attachments.
+// ReplaceAttachmentsAndSyncAnnouncement replaces attachment metadata and also
+// updates Announcement.Attachments.
 func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 	ctx context.Context,
 	announcementID string,
 	inputs []NewAttachmentInput,
 	updatedBy *string,
 ) (ann.Announcement, []ann.AttachmentFile, error) {
-	saved, ids, err := u.ReplaceAttachments(ctx, announcementID, inputs)
+	saved, ids, err := u.ReplaceAttachments(
+		ctx,
+		announcementID,
+		inputs,
+	)
 	if err != nil {
 		return ann.Announcement{}, nil, err
 	}
@@ -457,7 +427,11 @@ func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 	now := u.now()
 	entity.UpdatedAt = &now
 
-	updated, err := u.annRepo.Update(ctx, announcementID, entity)
+	updated, err := u.annRepo.Update(
+		ctx,
+		announcementID,
+		entity,
+	)
 	if err != nil {
 		return ann.Announcement{}, nil, err
 	}
@@ -466,24 +440,38 @@ func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 }
 
 // =======================
-// Delete with cascade (Announcement -> Attachment metadata)
+// Delete with cascade
+// Announcement -> Attachment metadata
 // =======================
 
-// DeleteAnnouncementCascade deletes related attachment metadata and then deletes the announcement.
-// Firebase Storage objects are not deleted here because file storage is managed by the frontend.
-func (u *AnnouncementUsecase) DeleteAnnouncementCascade(ctx context.Context, announcementID string) error {
+// DeleteAnnouncementCascade deletes related attachment metadata and then
+// deletes the announcement.
+//
+// Firebase Storage objects are not deleted here because file storage is managed
+// by the frontend.
+func (u *AnnouncementUsecase) DeleteAnnouncementCascade(
+	ctx context.Context,
+	announcementID string,
+) error {
 	if announcementID == "" {
 		return ann.ErrInvalidAnnouncementID
 	}
 
 	if u.attRepo != nil {
-		files, err := u.attRepo.ListByAnnouncementID(ctx, announcementID)
+		files, err := u.attRepo.ListByAnnouncementID(
+			ctx,
+			announcementID,
+		)
 		if err != nil {
 			return err
 		}
 
 		for _, f := range files {
-			if err := u.attRepo.Delete(ctx, announcementID, f.FileName); err != nil {
+			if err := u.attRepo.Delete(
+				ctx,
+				announcementID,
+				f.FileName,
+			); err != nil {
 				return err
 			}
 		}
@@ -504,7 +492,9 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(ctx context.Context, ann
 // Helpers
 // =======================
 
-func toNewAttachmentInputs(values []AnnouncementAttachmentInput) []NewAttachmentInput {
+func toNewAttachmentInputs(
+	values []AnnouncementAttachmentInput,
+) []NewAttachmentInput {
 	if len(values) == 0 {
 		return nil
 	}

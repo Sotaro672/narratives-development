@@ -1,4 +1,3 @@
-// backend/internal/application/query/console/announcement_detail_query.go
 package query
 
 import (
@@ -9,16 +8,9 @@ import (
 
 	appresolver "narratives/internal/application/resolver"
 	announcementdom "narratives/internal/domain/announcement"
-	avatardom "narratives/internal/domain/avatar"
 	memberdom "narratives/internal/domain/member"
 	tokendom "narratives/internal/domain/token"
 )
-
-type AnnouncementDetailTargetAvatar struct {
-	AvatarID   string `json:"avatarId"`
-	AvatarName string `json:"avatarName"`
-	AvatarIcon string `json:"avatarIcon"`
-}
 
 type AnnouncementDetailProductBlueprint struct {
 	ProductBlueprintID string `json:"productBlueprintId"`
@@ -36,17 +28,16 @@ type AnnouncementDetailAttachmentFile struct {
 }
 
 type AnnouncementDetail struct {
-	ID                  string                               `json:"id"`
-	Title               string                               `json:"title"`
-	Content             string                               `json:"content"`
-	TargetToken         *string                              `json:"targetToken,omitempty"`
-	TargetAvatars       []string                             `json:"targetAvatars,omitempty"`
-	TargetAvatarDetails []AnnouncementDetailTargetAvatar     `json:"targetAvatarDetails,omitempty"`
-	MintAddresses       []string                             `json:"mintAddresses,omitempty"`
-	ModelIDs            []string                             `json:"modelIds,omitempty"`
-	ProductBlueprints   []AnnouncementDetailProductBlueprint `json:"productBlueprints,omitempty"`
-	Published           bool                                 `json:"published"`
-	PublishedAt         *time.Time                           `json:"publishedAt,omitempty"`
+	ID                string                               `json:"id"`
+	Title             string                               `json:"title"`
+	Content           string                               `json:"content"`
+	TargetToken       *string                              `json:"targetToken,omitempty"`
+	TargetAvatars     []string                             `json:"targetAvatars,omitempty"`
+	MintAddresses     []string                             `json:"mintAddresses,omitempty"`
+	ModelIDs          []string                             `json:"modelIds,omitempty"`
+	ProductBlueprints []AnnouncementDetailProductBlueprint `json:"productBlueprints,omitempty"`
+	Published         bool                                 `json:"published"`
+	PublishedAt       *time.Time                           `json:"publishedAt,omitempty"`
 
 	// Attachments is kept as the announcement attachment ID list.
 	Attachments []string `json:"attachments,omitempty"`
@@ -81,7 +72,6 @@ type AnnouncementDetailQuery struct {
 	announcementRepo             announcementdom.Repository
 	attachmentRepo               announcementdom.AttachmentRepository
 	memberRepo                   memberdom.Repository
-	avatarRepo                   avatardom.Repository
 	mintRepo                     announcementDetailMintReader
 	mintProductBlueprintResolver announcementDetailMintProductBlueprintResolver
 }
@@ -90,7 +80,6 @@ func NewAnnouncementDetailQuery(
 	announcementRepo announcementdom.Repository,
 	attachmentRepo announcementdom.AttachmentRepository,
 	memberRepo memberdom.Repository,
-	avatarRepo avatardom.Repository,
 	mintRepo announcementDetailMintReader,
 	mintProductBlueprintResolver announcementDetailMintProductBlueprintResolver,
 ) *AnnouncementDetailQuery {
@@ -98,7 +87,6 @@ func NewAnnouncementDetailQuery(
 		announcementRepo:             announcementRepo,
 		attachmentRepo:               attachmentRepo,
 		memberRepo:                   memberRepo,
-		avatarRepo:                   avatarRepo,
 		mintRepo:                     mintRepo,
 		mintProductBlueprintResolver: mintProductBlueprintResolver,
 	}
@@ -119,9 +107,6 @@ func (q *AnnouncementDetailQuery) GetByID(
 	}
 	if q.memberRepo == nil {
 		return AnnouncementDetail{}, errors.New("memberRepo is nil")
-	}
-	if q.avatarRepo == nil {
-		return AnnouncementDetail{}, errors.New("avatarRepo is nil")
 	}
 	if q.mintRepo == nil {
 		return AnnouncementDetail{}, errors.New("mintRepo is nil")
@@ -164,11 +149,6 @@ func (q *AnnouncementDetailQuery) toAnnouncementDetail(
 		}
 	}
 
-	targetAvatarDetails, err := q.resolveTargetAvatars(ctx, a.TargetAvatars)
-	if err != nil {
-		return AnnouncementDetail{}, err
-	}
-
 	mintAddresses, modelIDs, productBlueprints, err :=
 		q.resolveProductBlueprintsByTargetToken(ctx, a.TargetToken)
 	if err != nil {
@@ -181,25 +161,24 @@ func (q *AnnouncementDetailQuery) toAnnouncementDetail(
 	}
 
 	return AnnouncementDetail{
-		ID:                  a.ID,
-		Title:               a.Title,
-		Content:             a.Content,
-		TargetToken:         a.TargetToken,
-		TargetAvatars:       normalizeStringSlice(a.TargetAvatars),
-		TargetAvatarDetails: targetAvatarDetails,
-		MintAddresses:       mintAddresses,
-		ModelIDs:            modelIDs,
-		ProductBlueprints:   productBlueprints,
-		Published:           a.Published,
-		PublishedAt:         a.PublishedAt,
-		Attachments:         normalizeStringSlice(a.Attachments),
-		AttachmentFiles:     attachmentFiles,
-		CreatedAt:           a.CreatedAt,
-		CreatedBy:           a.CreatedBy,
-		CreatedByName:       createdByName,
-		UpdatedAt:           a.UpdatedAt,
-		UpdatedBy:           a.UpdatedBy,
-		UpdatedByName:       updatedByName,
+		ID:                a.ID,
+		Title:             a.Title,
+		Content:           a.Content,
+		TargetToken:       a.TargetToken,
+		TargetAvatars:     normalizeStringSlice(a.TargetAvatars),
+		MintAddresses:     mintAddresses,
+		ModelIDs:          modelIDs,
+		ProductBlueprints: productBlueprints,
+		Published:         a.Published,
+		PublishedAt:       a.PublishedAt,
+		Attachments:       normalizeStringSlice(a.Attachments),
+		AttachmentFiles:   attachmentFiles,
+		CreatedAt:         a.CreatedAt,
+		CreatedBy:         a.CreatedBy,
+		CreatedByName:     createdByName,
+		UpdatedAt:         a.UpdatedAt,
+		UpdatedBy:         a.UpdatedBy,
+		UpdatedByName:     updatedByName,
 	}, nil
 }
 
@@ -223,45 +202,15 @@ func (q *AnnouncementDetailQuery) resolveMemberNameByID(
 		return "", err
 	}
 
-	name := memberdom.FormatLastFirst(rec.Member.LastName, rec.Member.FirstName)
+	name := memberdom.FormatLastFirst(
+		rec.Member.LastName,
+		rec.Member.FirstName,
+	)
 	if name != "" {
 		return name, nil
 	}
 
 	return memberID, nil
-}
-
-func (q *AnnouncementDetailQuery) resolveTargetAvatars(
-	ctx context.Context,
-	avatarIDs []string,
-) ([]AnnouncementDetailTargetAvatar, error) {
-	ids := normalizeStringSlice(avatarIDs)
-	if len(ids) == 0 {
-		return []AnnouncementDetailTargetAvatar{}, nil
-	}
-	if q == nil {
-		return nil, errors.New("announcement detail query is nil")
-	}
-	if q.avatarRepo == nil {
-		return nil, errors.New("avatarRepo is nil")
-	}
-
-	result := make([]AnnouncementDetailTargetAvatar, 0, len(ids))
-
-	for _, avatarID := range ids {
-		a, err := q.avatarRepo.GetByID(ctx, avatarID)
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, AnnouncementDetailTargetAvatar{
-			AvatarID:   avatarID,
-			AvatarName: a.AvatarName,
-			AvatarIcon: stringPtrValue(a.AvatarIcon),
-		})
-	}
-
-	return result, nil
 }
 
 func (q *AnnouncementDetailQuery) resolveAttachmentFiles(
@@ -279,7 +228,10 @@ func (q *AnnouncementDetailQuery) resolveAttachmentFiles(
 		return nil, errors.New("attachmentRepo is nil")
 	}
 
-	files, err := q.attachmentRepo.ListByAnnouncementID(ctx, announcementID)
+	files, err := q.attachmentRepo.ListByAnnouncementID(
+		ctx,
+		announcementID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +240,12 @@ func (q *AnnouncementDetailQuery) resolveAttachmentFiles(
 		return []AnnouncementDetailAttachmentFile{}, nil
 	}
 
-	result := make([]AnnouncementDetailAttachmentFile, 0, len(files))
+	result := make(
+		[]AnnouncementDetailAttachmentFile,
+		0,
+		len(files),
+	)
+
 	for _, file := range files {
 		id := strings.TrimSpace(file.ID)
 		fileName := strings.TrimSpace(file.FileName)
@@ -296,19 +253,25 @@ func (q *AnnouncementDetailQuery) resolveAttachmentFiles(
 		mimeType := strings.TrimSpace(file.MimeType)
 		objectPath := strings.TrimSpace(file.ObjectPath)
 
-		if id == "" && fileName == "" && fileURL == "" && objectPath == "" {
+		if id == "" &&
+			fileName == "" &&
+			fileURL == "" &&
+			objectPath == "" {
 			continue
 		}
 
-		result = append(result, AnnouncementDetailAttachmentFile{
-			AnnouncementID: strings.TrimSpace(file.AnnouncementID),
-			ID:             id,
-			FileName:       fileName,
-			FileURL:        fileURL,
-			FileSize:       file.FileSize,
-			MimeType:       mimeType,
-			ObjectPath:     objectPath,
-		})
+		result = append(
+			result,
+			AnnouncementDetailAttachmentFile{
+				AnnouncementID: strings.TrimSpace(file.AnnouncementID),
+				ID:             id,
+				FileName:       fileName,
+				FileURL:        fileURL,
+				FileSize:       file.FileSize,
+				MimeType:       mimeType,
+				ObjectPath:     objectPath,
+			},
+		)
 	}
 
 	return result, nil
@@ -317,23 +280,38 @@ func (q *AnnouncementDetailQuery) resolveAttachmentFiles(
 func (q *AnnouncementDetailQuery) resolveProductBlueprintsByTargetToken(
 	ctx context.Context,
 	targetToken *string,
-) ([]string, []string, []AnnouncementDetailProductBlueprint, error) {
+) (
+	[]string,
+	[]string,
+	[]AnnouncementDetailProductBlueprint,
+	error,
+) {
 	if targetToken == nil {
-		return []string{}, []string{}, []AnnouncementDetailProductBlueprint{}, nil
+		return []string{},
+			[]string{},
+			[]AnnouncementDetailProductBlueprint{},
+			nil
 	}
 
 	tokenBlueprintID := strings.TrimSpace(*targetToken)
 	if tokenBlueprintID == "" {
-		return []string{}, []string{}, []AnnouncementDetailProductBlueprint{}, nil
+		return []string{},
+			[]string{},
+			[]AnnouncementDetailProductBlueprint{},
+			nil
 	}
 	if q == nil {
-		return nil, nil, nil, errors.New("announcement detail query is nil")
+		return nil, nil, nil, errors.New(
+			"announcement detail query is nil",
+		)
 	}
 	if q.mintRepo == nil {
 		return nil, nil, nil, errors.New("mintRepo is nil")
 	}
 	if q.mintProductBlueprintResolver == nil {
-		return nil, nil, nil, errors.New("mintProductBlueprintResolver is nil")
+		return nil, nil, nil, errors.New(
+			"mintProductBlueprintResolver is nil",
+		)
 	}
 
 	mintResult, err := q.mintRepo.ListMintAddressesByTokenBlueprintID(
@@ -344,12 +322,15 @@ func (q *AnnouncementDetailQuery) resolveProductBlueprintsByTargetToken(
 		return nil, nil, nil, err
 	}
 
-	mintAddresses := normalizeStringSlice(mintResult.MintAddresses)
-
-	resolved, err := q.mintProductBlueprintResolver.ResolveByMintAddresses(
-		ctx,
-		mintAddresses,
+	mintAddresses := normalizeStringSlice(
+		mintResult.MintAddresses,
 	)
+
+	resolved, err :=
+		q.mintProductBlueprintResolver.ResolveByMintAddresses(
+			ctx,
+			mintAddresses,
+		)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -361,18 +342,28 @@ func (q *AnnouncementDetailQuery) resolveProductBlueprintsByTargetToken(
 	)
 
 	for _, pb := range resolved.ProductBlueprints {
-		productBlueprintID := strings.TrimSpace(pb.ProductBlueprintID)
-		productName := strings.TrimSpace(pb.ProductName)
+		productBlueprintID := strings.TrimSpace(
+			pb.ProductBlueprintID,
+		)
+		productName := strings.TrimSpace(
+			pb.ProductName,
+		)
 
 		if productBlueprintID == "" {
 			continue
 		}
 
-		productBlueprints = append(productBlueprints, AnnouncementDetailProductBlueprint{
-			ProductBlueprintID: productBlueprintID,
-			ProductName:        productName,
-		})
+		productBlueprints = append(
+			productBlueprints,
+			AnnouncementDetailProductBlueprint{
+				ProductBlueprintID: productBlueprintID,
+				ProductName:        productName,
+			},
+		)
 	}
 
-	return mintAddresses, normalizeStringSlice(resolved.ModelIDs), productBlueprints, nil
+	return mintAddresses,
+		normalizeStringSlice(resolved.ModelIDs),
+		productBlueprints,
+		nil
 }

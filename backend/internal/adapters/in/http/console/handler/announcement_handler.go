@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\console\handler\announcement_handler.go
 package consoleHandler
 
 import (
@@ -38,7 +39,7 @@ func (h *AnnouncementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	path := strings.Trim(r.URL.Path, "/")
+	path := strings.TrimPrefix(r.URL.Path, "/")
 	parts := strings.Split(path, "/")
 
 	if len(parts) == 0 || parts[0] != "announcements" {
@@ -126,7 +127,7 @@ func (h *AnnouncementHandler) listAnnouncements(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	companyID := strings.TrimSpace(r.URL.Query().Get("companyId"))
+	companyID := r.URL.Query().Get("companyId")
 	if companyID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "companyId is required"})
 		return
@@ -147,7 +148,6 @@ func (h *AnnouncementHandler) getAnnouncement(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	announcementID = strings.TrimSpace(announcementID)
 	if announcementID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
@@ -178,15 +178,15 @@ func (h *AnnouncementHandler) createAnnouncement(w http.ResponseWriter, r *http.
 	}
 
 	result, err := h.uc.CreateAnnouncement(r.Context(), uc.CreateAnnouncementInput{
-		ID:            strings.TrimSpace(req.ID),
+		ID:            req.ID,
 		Title:         req.Title,
 		Content:       req.Content,
-		TargetToken:   trimStringPtr(req.TargetToken),
-		TargetAvatars: normalizeAnnouncementStringList(req.TargetAvatars),
+		TargetToken:   req.TargetToken,
+		TargetAvatars: req.TargetAvatars,
 		Attachments:   toAnnouncementAttachmentInputs(req.Attachments),
 		Published:     req.Published,
 		PublishedAt:   req.PublishedAt,
-		CreatedBy:     strings.TrimSpace(req.CreatedBy),
+		CreatedBy:     req.CreatedBy,
 	})
 	if err != nil {
 		writeAnnouncementErr(w, err)
@@ -202,7 +202,6 @@ func (h *AnnouncementHandler) updateAnnouncement(w http.ResponseWriter, r *http.
 		return
 	}
 
-	announcementID = strings.TrimSpace(announcementID)
 	if announcementID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
@@ -217,15 +216,21 @@ func (h *AnnouncementHandler) updateAnnouncement(w http.ResponseWriter, r *http.
 		return
 	}
 
+	var attachments *[]uc.AnnouncementAttachmentInput
+	if req.Attachments != nil {
+		converted := toAnnouncementAttachmentInputs(*req.Attachments)
+		attachments = &converted
+	}
+
 	result, err := h.uc.UpdateAnnouncement(r.Context(), announcementID, uc.UpdateAnnouncementInput{
-		Title:         trimStringPtr(req.Title),
-		Content:       trimStringPtr(req.Content),
-		TargetToken:   trimStringPtr(req.TargetToken),
-		TargetAvatars: normalizeAnnouncementStringListPtr(req.TargetAvatars),
+		Title:         req.Title,
+		Content:       req.Content,
+		TargetToken:   req.TargetToken,
+		TargetAvatars: req.TargetAvatars,
 		Published:     req.Published,
 		PublishedAt:   req.PublishedAt,
-		Attachments:   toAnnouncementAttachmentInputPtr(req.Attachments),
-		UpdatedBy:     trimStringPtr(req.UpdatedBy),
+		Attachments:   attachments,
+		UpdatedBy:     req.UpdatedBy,
 	})
 	if err != nil {
 		writeAnnouncementErr(w, err)
@@ -241,7 +246,6 @@ func (h *AnnouncementHandler) markPublished(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	announcementID = strings.TrimSpace(announcementID)
 	if announcementID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
@@ -258,7 +262,7 @@ func (h *AnnouncementHandler) markPublished(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	result, err := h.uc.MarkPublished(r.Context(), announcementID, trimStringPtr(req.UpdatedBy))
+	result, err := h.uc.MarkPublished(r.Context(), announcementID, req.UpdatedBy)
 	if err != nil {
 		writeAnnouncementErr(w, err)
 		return
@@ -273,7 +277,6 @@ func (h *AnnouncementHandler) deleteAnnouncementCascade(w http.ResponseWriter, r
 		return
 	}
 
-	announcementID = strings.TrimSpace(announcementID)
 	if announcementID == "" {
 		writeAnnouncementJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
@@ -294,100 +297,23 @@ func (h *AnnouncementHandler) deleteAnnouncementCascade(w http.ResponseWriter, r
 func toAnnouncementAttachmentInputs(
 	values []announcementAttachmentRequest,
 ) []uc.AnnouncementAttachmentInput {
-	if len(values) == 0 {
+	if values == nil {
 		return nil
 	}
 
 	result := make([]uc.AnnouncementAttachmentInput, 0, len(values))
-	seen := map[string]struct{}{}
 
 	for _, value := range values {
-		fileName := strings.TrimSpace(value.FileName)
-		fileURL := strings.TrimSpace(value.FileURL)
-		mimeType := strings.TrimSpace(value.MimeType)
-		objectPath := strings.TrimSpace(value.ObjectPath)
-
-		if fileName == "" && fileURL == "" && objectPath == "" {
-			continue
-		}
-
-		dedupeKey := objectPath
-		if dedupeKey == "" {
-			dedupeKey = fileURL
-		}
-		if dedupeKey == "" {
-			dedupeKey = fileName
-		}
-
-		if _, ok := seen[dedupeKey]; ok {
-			continue
-		}
-		seen[dedupeKey] = struct{}{}
-
 		result = append(result, uc.AnnouncementAttachmentInput{
-			FileName:   fileName,
-			FileURL:    fileURL,
+			FileName:   value.FileName,
+			FileURL:    value.FileURL,
 			FileSize:   value.FileSize,
-			MimeType:   mimeType,
-			ObjectPath: objectPath,
+			MimeType:   value.MimeType,
+			ObjectPath: value.ObjectPath,
 		})
 	}
 
 	return result
-}
-
-func toAnnouncementAttachmentInputPtr(
-	values *[]announcementAttachmentRequest,
-) *[]uc.AnnouncementAttachmentInput {
-	if values == nil {
-		return nil
-	}
-
-	converted := toAnnouncementAttachmentInputs(*values)
-	return &converted
-}
-
-func trimStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-
-	trimmed := strings.TrimSpace(*value)
-	return &trimmed
-}
-
-func normalizeAnnouncementStringList(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-
-	seen := map[string]struct{}{}
-	result := make([]string, 0, len(values))
-
-	for _, value := range values {
-		normalized := strings.TrimSpace(value)
-		if normalized == "" {
-			continue
-		}
-
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-
-		seen[normalized] = struct{}{}
-		result = append(result, normalized)
-	}
-
-	return result
-}
-
-func normalizeAnnouncementStringListPtr(values *[]string) *[]string {
-	if values == nil {
-		return nil
-	}
-
-	normalized := normalizeAnnouncementStringList(*values)
-	return &normalized
 }
 
 // =======================

@@ -161,7 +161,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		repos.announcementRepo,
 		repos.announcementAttachmentRepo,
 		repos.memberRepo,
-		repos.avatarRepo,
 		repos.tokenReaderRepo,
 		res.mintProductBlueprintResolver,
 	)
