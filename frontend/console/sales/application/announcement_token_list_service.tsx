@@ -1,19 +1,22 @@
 // frontend/console/sales/application/announcement_token_list_service.tsx
 import {
-  listSalesByCompanyId,
+  listSales,
   type SalesRow,
 } from "../infrastructure/sales_repository_http";
 
-export type AnnouncementTokenListRow = SalesRow & {
-  issueCount: number;
-};
+export type AnnouncementTokenListRow =
+  SalesRow & {
+    issueCount: number;
+  };
 
 export type AnnouncementTokenListSortKey =
   | "tokenName"
   | "brandName"
   | "issueCount";
 
-export type AnnouncementTokenListSortDir = "asc" | "desc";
+export type AnnouncementTokenListSortDir =
+  | "asc"
+  | "desc";
 
 export type AnnouncementTokenListNavigateState = {
   tokenName: string;
@@ -25,17 +28,18 @@ export type AnnouncementTokenListNavigateState = {
   owners: SalesRow["owners"];
 };
 
+/**
+ * GET /salesは認証情報から対象企業を判定する。
+ *
+ * companyIdは呼び出し元との互換性を維持するため
+ * 引数として受け取るが、APIには送信しない。
+ */
 export async function fetchAnnouncementTokenListRows(
-  companyId: string,
+  _companyId: string,
 ): Promise<SalesRow[]> {
-  const id = String(companyId ?? "").trim();
+  const result = await listSales();
 
-  if (!id) {
-    return [];
-  }
-
-  const result = await listSalesByCompanyId(id);
-  return Array.isArray(result.rows) ? result.rows : [];
+  return result.rows;
 }
 
 export function enrichAnnouncementTokenListRows(
@@ -43,9 +47,7 @@ export function enrichAnnouncementTokenListRows(
 ): AnnouncementTokenListRow[] {
   return rows.map((row) => ({
     ...row,
-    issueCount: Array.isArray(row.mintAddresses)
-      ? row.mintAddresses.length
-      : 0,
+    issueCount: row.mintAddresses.length,
   }));
 }
 
@@ -57,24 +59,38 @@ export function sortAnnouncementTokenListRows(
   const next = [...rows];
 
   next.sort((a, b) => {
-    let result = 0;
+    let result: number;
 
     switch (sortKey) {
       case "tokenName":
-        result = compareStrings(a.tokenName ?? "", b.tokenName ?? "");
+        result = compareStrings(
+          a.tokenName,
+          b.tokenName,
+        );
         break;
+
       case "brandName":
-        result = compareStrings(a.brandName ?? "", b.brandName ?? "");
+        result = compareStrings(
+          a.brandName,
+          b.brandName,
+        );
         break;
+
       case "issueCount":
-        result = compareNumbers(a.issueCount ?? 0, b.issueCount ?? 0);
+        result = compareNumbers(
+          a.issueCount,
+          b.issueCount,
+        );
         break;
+
       default:
         result = 0;
         break;
     }
 
-    return sortDir === "asc" ? result : -result;
+    return sortDir === "asc"
+      ? result
+      : -result;
   });
 
   return next;
@@ -97,21 +113,39 @@ export function normalizeAnnouncementTokenListSortKey(
 export function buildAnnouncementTokenListNavigateState(
   row: SalesRow | undefined,
 ): AnnouncementTokenListNavigateState {
+  if (!row) {
+    return {
+      tokenName: "",
+      brandId: "",
+      brandName: "",
+      mintAddresses: [],
+      modelIds: [],
+      productBlueprints: [],
+      owners: [],
+    };
+  }
+
   return {
-    tokenName: row?.tokenName ?? "",
-    brandId: row?.brandId ?? "",
-    brandName: row?.brandName ?? "",
-    mintAddresses: row?.mintAddresses ?? [],
-    modelIds: row?.modelIds ?? [],
-    productBlueprints: row?.productBlueprints ?? [],
-    owners: row?.owners ?? [],
+    tokenName: row.tokenName,
+    brandId: row.brandId,
+    brandName: row.brandName,
+    mintAddresses: row.mintAddresses,
+    modelIds: row.modelIds,
+    productBlueprints: row.productBlueprints,
+    owners: row.owners,
   };
 }
 
-function compareStrings(a: string, b: string): number {
+function compareStrings(
+  a: string,
+  b: string,
+): number {
   return a.localeCompare(b, "ja");
 }
 
-function compareNumbers(a: number, b: number): number {
+function compareNumbers(
+  a: number,
+  b: number,
+): number {
   return a - b;
 }

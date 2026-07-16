@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/announcement_repository_fs.go
 package firestore
 
 import (
@@ -64,7 +63,10 @@ func avatarDoc(client *firestore.Client, announcementID string, avatarID string)
 }
 
 // GetByID retrieves an announcement by ID from Firestore.
-func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (announcement.Announcement, error) {
+func (r *AnnouncementRepositoryFS) GetByID(
+	ctx context.Context,
+	id string,
+) (announcement.Announcement, error) {
 	if r.Client == nil {
 		return announcement.Announcement{}, errors.New("firestore client is nil")
 	}
@@ -95,7 +97,10 @@ func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (anno
 //
 // Attachment metadata is stored under:
 // announcements/{announcementId}/attachments/{attachmentId}
-func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.Announcement) (announcement.Announcement, error) {
+func (r *AnnouncementRepositoryFS) Create(
+	ctx context.Context,
+	a announcement.Announcement,
+) (announcement.Announcement, error) {
 	if r.Client == nil {
 		return announcement.Announcement{}, errors.New("firestore client is nil")
 	}
@@ -114,7 +119,13 @@ func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.An
 		return announcement.Announcement{}, err
 	}
 
-	if err := syncAnnouncementAvatars(ctx, r.Client, a.ID, a.TargetAvatars, a.CreatedAt); err != nil {
+	if err := syncAnnouncementAvatars(
+		ctx,
+		r.Client,
+		a.ID,
+		a.TargetAvatars,
+		a.CreatedAt,
+	); err != nil {
 		return announcement.Announcement{}, err
 	}
 
@@ -154,7 +165,13 @@ func (r *AnnouncementRepositoryFS) Update(
 	}
 
 	if a.UpdatedBy != nil {
-		updates = append(updates, firestore.Update{Path: "UpdatedBy", Value: *a.UpdatedBy})
+		updates = append(
+			updates,
+			firestore.Update{
+				Path:  "UpdatedBy",
+				Value: *a.UpdatedBy,
+			},
+		)
 	}
 
 	if _, err := announcementDoc(r.Client, id).Update(ctx, updates); err != nil {
@@ -169,7 +186,13 @@ func (r *AnnouncementRepositoryFS) Update(
 		createdAt = updatedAt
 	}
 
-	if err := syncAnnouncementAvatars(ctx, r.Client, id, a.TargetAvatars, createdAt); err != nil {
+	if err := syncAnnouncementAvatars(
+		ctx,
+		r.Client,
+		id,
+		a.TargetAvatars,
+		createdAt,
+	); err != nil {
 		return announcement.Announcement{}, err
 	}
 
@@ -205,7 +228,13 @@ func (r *AnnouncementRepositoryFS) MarkPublished(
 	}
 
 	if updatedBy != nil {
-		updates = append(updates, firestore.Update{Path: "UpdatedBy", Value: *updatedBy})
+		updates = append(
+			updates,
+			firestore.Update{
+				Path:  "UpdatedBy",
+				Value: *updatedBy,
+			},
+		)
 	}
 
 	if _, err := announcementDoc(r.Client, id).Update(ctx, updates); err != nil {
@@ -219,7 +248,10 @@ func (r *AnnouncementRepositoryFS) MarkPublished(
 }
 
 // Delete removes an announcement by ID.
-func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error {
+func (r *AnnouncementRepositoryFS) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
@@ -247,10 +279,12 @@ func (r *AnnouncementRepositoryFS) ListByTargetToken(
 	page common.Page,
 ) (common.PageResult[announcement.Announcement], error) {
 	if r.Client == nil {
-		return common.PageResult[announcement.Announcement]{}, errors.New("firestore client is nil")
+		return common.PageResult[announcement.Announcement]{},
+			errors.New("firestore client is nil")
 	}
 	if tokenBlueprintID == "" {
-		return common.PageResult[announcement.Announcement]{}, announcement.ErrInvalidID
+		return common.PageResult[announcement.Announcement]{},
+			announcement.ErrInvalidID
 	}
 
 	iter := announcementCollection(r.Client).
@@ -267,17 +301,20 @@ func (r *AnnouncementRepositoryFS) ListByTargetToken(
 	return paginateAnnouncements(items, page), nil
 }
 
-// ListByTargetAvatar returns published announcements whose avatars subcollection contains avatarID.
+// ListByTargetAvatar returns published announcements whose avatars subcollection
+// contains avatarID.
 func (r *AnnouncementRepositoryFS) ListByTargetAvatar(
 	ctx context.Context,
 	avatarID string,
 	page common.Page,
 ) (common.PageResult[announcement.Announcement], error) {
 	if r.Client == nil {
-		return common.PageResult[announcement.Announcement]{}, errors.New("firestore client is nil")
+		return common.PageResult[announcement.Announcement]{},
+			errors.New("firestore client is nil")
 	}
 	if avatarID == "" {
-		return common.PageResult[announcement.Announcement]{}, announcement.ErrInvalidAvatarID
+		return common.PageResult[announcement.Announcement]{},
+			announcement.ErrInvalidAvatarID
 	}
 
 	iter := r.Client.
@@ -347,7 +384,10 @@ func (r *AnnouncementAvatarRepositoryFS) ListByAnnouncementID(
 		return nil, announcement.ErrInvalidAnnouncementID
 	}
 
-	iter := avatarCollection(r.Client, announcementID).Documents(ctx)
+	iter := avatarCollection(
+		r.Client,
+		announcementID,
+	).Documents(ctx)
 	defer iter.Stop()
 
 	results := []announcement.AnnouncementAvatar{}
@@ -361,7 +401,10 @@ func (r *AnnouncementAvatarRepositoryFS) ListByAnnouncementID(
 			return nil, err
 		}
 
-		avatar, err := announcementAvatarFromDoc(doc, announcementID)
+		avatar, err := announcementAvatarFromDoc(
+			doc,
+			announcementID,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -376,25 +419,32 @@ func (r *AnnouncementAvatarRepositoryFS) ListByAnnouncementID(
 	return results, nil
 }
 
-// Update manages the avatar read state.
-func (r *AnnouncementAvatarRepositoryFS) Update(
+// Upsert creates or updates the avatar read state.
+func (r *AnnouncementAvatarRepositoryFS) Upsert(
 	ctx context.Context,
 	announcementID string,
 	avatarID string,
 	patch announcement.AnnouncementAvatarPatch,
 ) (announcement.AnnouncementAvatar, error) {
 	if r.Client == nil {
-		return announcement.AnnouncementAvatar{}, errors.New("firestore client is nil")
+		return announcement.AnnouncementAvatar{},
+			errors.New("firestore client is nil")
 	}
 	if announcementID == "" {
-		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidAnnouncementID
+		return announcement.AnnouncementAvatar{},
+			announcement.ErrInvalidAnnouncementID
 	}
 	if avatarID == "" {
-		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidAvatarID
+		return announcement.AnnouncementAvatar{},
+			announcement.ErrInvalidAvatarID
 	}
 
 	now := time.Now().UTC()
-	ref := avatarDoc(r.Client, announcementID, avatarID)
+	ref := avatarDoc(
+		r.Client,
+		announcementID,
+		avatarID,
+	)
 
 	data := map[string]any{
 		"announcementId": announcementID,
@@ -422,11 +472,20 @@ func (r *AnnouncementAvatarRepositoryFS) Update(
 		data["updatedAt"] = *patch.UpdatedAt
 	}
 
-	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
+	if _, err := ref.Set(
+		ctx,
+		data,
+		firestore.MergeAll,
+	); err != nil {
 		return announcement.AnnouncementAvatar{}, err
 	}
 
-	return getAnnouncementAvatar(ctx, r.Client, announcementID, avatarID)
+	return getAnnouncementAvatar(
+		ctx,
+		r.Client,
+		announcementID,
+		avatarID,
+	)
 }
 
 // MarkRead marks announcements/{announcementId}/avatars/{avatarId} as read.
@@ -437,19 +496,27 @@ func (r *AnnouncementAvatarRepositoryFS) MarkRead(
 	readAt time.Time,
 ) (announcement.AnnouncementAvatar, error) {
 	if r.Client == nil {
-		return announcement.AnnouncementAvatar{}, errors.New("firestore client is nil")
+		return announcement.AnnouncementAvatar{},
+			errors.New("firestore client is nil")
 	}
 	if announcementID == "" {
-		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidAnnouncementID
+		return announcement.AnnouncementAvatar{},
+			announcement.ErrInvalidAnnouncementID
 	}
 	if avatarID == "" {
-		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidAvatarID
+		return announcement.AnnouncementAvatar{},
+			announcement.ErrInvalidAvatarID
 	}
 	if readAt.IsZero() {
-		return announcement.AnnouncementAvatar{}, announcement.ErrInvalidReadAt
+		return announcement.AnnouncementAvatar{},
+			announcement.ErrInvalidReadAt
 	}
 
-	ref := avatarDoc(r.Client, announcementID, avatarID)
+	ref := avatarDoc(
+		r.Client,
+		announcementID,
+		avatarID,
+	)
 
 	data := map[string]any{
 		"announcementId": announcementID,
@@ -466,14 +533,25 @@ func (r *AnnouncementAvatarRepositoryFS) MarkRead(
 		data["createdAt"] = readAt
 	}
 
-	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
+	if _, err := ref.Set(
+		ctx,
+		data,
+		firestore.MergeAll,
+	); err != nil {
 		return announcement.AnnouncementAvatar{}, err
 	}
 
-	return getAnnouncementAvatar(ctx, r.Client, announcementID, avatarID)
+	return getAnnouncementAvatar(
+		ctx,
+		r.Client,
+		announcementID,
+		avatarID,
+	)
 }
 
-func announcementData(a announcement.Announcement) map[string]any {
+func announcementData(
+	a announcement.Announcement,
+) map[string]any {
 	return map[string]any{
 		"Title":       a.Title,
 		"Content":     a.Content,
@@ -528,7 +606,8 @@ func syncAnnouncementAvatars(
 		if err == nil && doc.Exists() {
 			continue
 		}
-		if err != nil && status.Code(err) != codes.NotFound {
+		if err != nil &&
+			status.Code(err) != codes.NotFound {
 			return err
 		}
 
@@ -556,7 +635,8 @@ func announcementFromDoc(
 	doc *firestore.DocumentSnapshot,
 ) (announcement.Announcement, error) {
 	if doc == nil {
-		return announcement.Announcement{}, announcement.ErrNotFound
+		return announcement.Announcement{},
+			announcement.ErrNotFound
 	}
 
 	var a announcement.Announcement
@@ -566,11 +646,18 @@ func announcementFromDoc(
 
 	a.ID = doc.Ref.ID
 
-	targetAvatarIDs, err := childDocIDs(ctx, doc.Ref.Collection("avatars"))
+	targetAvatarIDs, err := childDocIDs(
+		ctx,
+		doc.Ref.Collection("avatars"),
+	)
 	if err != nil {
 		return announcement.Announcement{}, err
 	}
-	attachmentIDs, err := childDocIDs(ctx, doc.Ref.Collection("attachments"))
+
+	attachmentIDs, err := childDocIDs(
+		ctx,
+		doc.Ref.Collection("attachments"),
+	)
 	if err != nil {
 		return announcement.Announcement{}, err
 	}
@@ -625,7 +712,8 @@ func childDocIDs(
 			return nil, err
 		}
 
-		if doc.Ref != nil && doc.Ref.ID != "" {
+		if doc.Ref != nil &&
+			doc.Ref.ID != "" {
 			ids = append(ids, doc.Ref.ID)
 		}
 	}
@@ -639,15 +727,23 @@ func getAnnouncementAvatar(
 	announcementID string,
 	avatarID string,
 ) (announcement.AnnouncementAvatar, error) {
-	doc, err := avatarDoc(client, announcementID, avatarID).Get(ctx)
+	doc, err := avatarDoc(
+		client,
+		announcementID,
+		avatarID,
+	).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return announcement.AnnouncementAvatar{}, announcement.ErrNotFound
+			return announcement.AnnouncementAvatar{},
+				announcement.ErrNotFound
 		}
 		return announcement.AnnouncementAvatar{}, err
 	}
 
-	return announcementAvatarFromDoc(doc, announcementID)
+	return announcementAvatarFromDoc(
+		doc,
+		announcementID,
+	)
 }
 
 func announcementAvatarFromDoc(
@@ -655,7 +751,8 @@ func announcementAvatarFromDoc(
 	announcementID string,
 ) (announcement.AnnouncementAvatar, error) {
 	if doc == nil {
-		return announcement.AnnouncementAvatar{}, announcement.ErrNotFound
+		return announcement.AnnouncementAvatar{},
+			announcement.ErrNotFound
 	}
 
 	var data announcementAvatarDoc
@@ -685,19 +782,24 @@ func avatarMatchesFilter(
 	filter announcement.AnnouncementAvatarFilter,
 ) bool {
 	if len(filter.AvatarIDs) > 0 {
-		if _, ok := uniqueStringSet(filter.AvatarIDs)[avatar.AvatarID]; !ok {
+		if _, ok := uniqueStringSet(
+			filter.AvatarIDs,
+		)[avatar.AvatarID]; !ok {
 			return false
 		}
 	}
 
-	if filter.IsRead != nil && avatar.IsRead != *filter.IsRead {
+	if filter.IsRead != nil &&
+		avatar.IsRead != *filter.IsRead {
 		return false
 	}
 
 	return true
 }
 
-func uniqueStringSet(values []string) map[string]struct{} {
+func uniqueStringSet(
+	values []string,
+) map[string]struct{} {
 	out := map[string]struct{}{}
 
 	for _, value := range values {
@@ -724,7 +826,12 @@ func paginateAnnouncements(
 		}
 	}
 
-	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
+	pageNum, perPage, _ := fscommon.NormalizePage(
+		page.Number,
+		page.PerPage,
+		50,
+		0,
+	)
 
 	offset := (pageNum - 1) * perPage
 	if offset > total {

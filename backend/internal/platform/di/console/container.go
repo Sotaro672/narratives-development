@@ -1,4 +1,3 @@
-// backend/internal/platform/di/console/container.go
 package console
 
 import (
@@ -114,7 +113,10 @@ type Container struct {
 	NameResolver  *resolver.NameResolver
 }
 
-func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
+func NewContainer(
+	ctx context.Context,
+	infra *shared.Infra,
+) (*Container, error) {
 	clients, err := ensureClients(ctx, infra)
 	if err != nil {
 		return nil, err
@@ -124,7 +126,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	services := buildDomainServices(repos)
 	res := buildResolvers(clients, repos)
 	u := buildUsecases(clients, repos, services, res)
-	q := buildQueries(clients.infra, repos, res, u, services)
+	q := buildQueries(
+		clients.infra,
+		repos,
+		res,
+		u,
+		services,
+	)
 
 	if clients == nil || clients.infra == nil {
 		return nil, errors.New("clients/infra is nil")
@@ -136,34 +144,38 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	var orderMgmtQ *query.OrderManagementQuery
-	if repos.orderConsoleLister != nil && q.inventoryManagementQuery != nil && invBlueprint != nil {
-		orderMgmtQ = query.NewOrderManagementQuery(query.NewOrderManagementQueryParams{
-			Lister:       repos.orderConsoleLister,
-			InvRows:      q.inventoryManagementQuery,
-			InvBlueprint: invBlueprint,
+	if repos.orderConsoleLister != nil &&
+		q.inventoryManagementQuery != nil &&
+		invBlueprint != nil {
+		orderMgmtQ = query.NewOrderManagementQuery(
+			query.NewOrderManagementQueryParams{
+				Lister:       repos.orderConsoleLister,
+				InvRows:      q.inventoryManagementQuery,
+				InvBlueprint: invBlueprint,
 
-			PBName:           repos.productBlueprintRepo,
-			ProductBlueprint: repos.productBlueprintRepo,
-			TBName:           repos.tokenBlueprintRepo,
-			AvatarName:       repos.avatarRepo,
+				PBName:           repos.productBlueprintRepo,
+				ProductBlueprint: repos.productBlueprintRepo,
+				TBName:           repos.tokenBlueprintRepo,
+				AvatarName:       repos.avatarRepo,
 
-			ListReadable:  repos.listRepoFS,
-			ModelResolver: res.nameResolver,
-		})
+				ListReadable:  repos.listRepoFS,
+				ModelResolver: res.nameResolver,
+			},
+		)
 	}
 
-	announcementManagementQuery := query.NewAnnouncementManagementQuery(
-		repos.tokenBlueprintRepo,
-		repos.announcementRepo,
-	)
+	announcementManagementQuery :=
+		query.NewAnnouncementManagementQuery(
+			repos.tokenBlueprintRepo,
+			repos.announcementRepo,
+		)
 
-	announcementDetailQuery := query.NewAnnouncementDetailQuery(
-		repos.announcementRepo,
-		repos.announcementAttachmentRepo,
-		repos.memberRepo,
-		repos.tokenReaderRepo,
-		res.mintProductBlueprintResolver,
-	)
+	announcementDetailQuery :=
+		query.NewAnnouncementDetailQuery(
+			repos.announcementRepo,
+			repos.announcementAttachmentRepo,
+			repos.memberRepo,
+		)
 
 	return &Container{
 		Infra: clients.infra,

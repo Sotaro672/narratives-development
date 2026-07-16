@@ -1,7 +1,7 @@
-//frontend\console\sales\application\announcement_create_service.tsx
-import type { TokenBlueprint } from "../../tokenBlueprint/src/domain/entity/tokenBlueprint";
-import { safeDateTimeLabelJa } from "../../shell/src/shared/util/dateJa";
+// frontend/console/sales/application/announcement_create_service.tsx
+import type { TokenBlueprint } from "../../tokenBlueprint/src/domain/tokenBlueprint";
 import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/src/application/tokenBlueprintDetailService";
+import { safeDateTimeLabelJa } from "../../shell/src/shared/util/dateJa";
 import {
   createAnnouncement,
   markAnnouncementPublished,
@@ -15,15 +15,12 @@ import {
   uploadBytes,
 } from "firebase/storage";
 
+// ============================================================
+// View model
+// ============================================================
+
 export type AnnouncementOwnerVM = {
   avatarId: string;
-  avatarName: string;
-  avatarIconUrl: string;
-  mintAddress: string;
-  productName: string;
-  followerCount: number;
-  followingCount: number;
-  postCount: number;
 };
 
 export type AnnouncementEntity = {
@@ -33,8 +30,6 @@ export type AnnouncementEntity = {
 export type AnnouncementCreateVM = {
   sales: AnnouncementEntity | null;
   title: string;
-  assigneeId: string;
-  assigneeName: string;
   minted: boolean;
 
   createdById: string;
@@ -57,135 +52,74 @@ export type AnnouncementCreateInputPayload = {
 
 export type AnnouncementCreateLocationOwner = {
   avatarId?: string;
-  avatarName?: string;
-  avatarIcon?: string;
-  followerCount?: number;
-  followingCount?: number;
-  postCount?: number;
-};
-
-export type AnnouncementCreateLocationProductBlueprint = {
-  productBlueprintId?: string;
-  productName?: string;
 };
 
 export type AnnouncementCreateLocationState = {
-  mintAddresses?: string[];
   owners?: AnnouncementCreateLocationOwner[];
-  productBlueprints?: AnnouncementCreateLocationProductBlueprint[];
 };
 
-type SaveAnnouncementParams = {
+type AnnouncementActionParams = {
   sales: AnnouncementEntity | null;
   payload: AnnouncementCreateInputPayload;
   createdBy: string;
   targetAvatarIds: string[];
 };
 
-type SendAnnouncementParams = {
-  sales: AnnouncementEntity | null;
-  payload: AnnouncementCreateInputPayload;
-  createdBy: string;
-  targetAvatarIds: string[];
-};
+// ============================================================
+// Normalization helpers
+// ============================================================
 
 function uniqueStrings(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
+  if (!Array.isArray(values)) {
+    return [];
+  }
 
   const seen = new Set<string>();
   const result: string[] = [];
 
-  for (const v of values) {
-    const s = String(v ?? "").trim();
-    if (!s) continue;
-    if (seen.has(s)) continue;
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
 
-    seen.add(s);
-    result.push(s);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    result.push(normalized);
   }
 
   return result;
 }
 
-function toSafeNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    return 0;
-  }
-
-  return n;
-}
-
-function getFirstProductName(productBlueprintsValue: unknown): string {
-  if (
-    !Array.isArray(productBlueprintsValue) ||
-    productBlueprintsValue.length === 0
-  ) {
-    return "";
-  }
-
-  for (const item of productBlueprintsValue) {
-    if (!item || typeof item !== "object") continue;
-
-    const productName = String(
-      (item as AnnouncementCreateLocationProductBlueprint).productName ?? "",
-    ).trim();
-
-    if (productName) {
-      return productName;
-    }
-  }
-
-  return "";
-}
-
 function toOwnersFromState(
   ownersValue: unknown,
-  mintAddressesValue: unknown,
-  productBlueprintsValue: unknown,
 ): AnnouncementOwnerVM[] {
-  const mintAddresses = uniqueStrings(mintAddressesValue);
-  const productName = getFirstProductName(productBlueprintsValue);
-
-  if (!Array.isArray(ownersValue) || ownersValue.length === 0) {
-    return mintAddresses.map((mintAddress) => ({
-      avatarId: "",
-      avatarName: "",
-      avatarIconUrl: "",
-      mintAddress,
-      productName,
-      followerCount: 0,
-      followingCount: 0,
-      postCount: 0,
-    }));
+  if (!Array.isArray(ownersValue)) {
+    return [];
   }
 
-  return ownersValue.map((owner, index) => {
-    const item =
-      owner && typeof owner === "object"
-        ? (owner as AnnouncementCreateLocationOwner)
-        : {};
+  const avatarIds = ownersValue.map((owner) => {
+    if (!owner || typeof owner !== "object") {
+      return "";
+    }
 
-    return {
-      avatarId: String(item.avatarId ?? "").trim(),
-      avatarName: String(item.avatarName ?? "").trim(),
-      avatarIconUrl: String(item.avatarIcon ?? "").trim(),
-      mintAddress: String(mintAddresses[index] ?? "").trim(),
-      productName,
-      followerCount: toSafeNumber(item.followerCount),
-      followingCount: toSafeNumber(item.followingCount),
-      postCount: toSafeNumber(item.postCount),
-    };
+    const item = owner as AnnouncementCreateLocationOwner;
+
+    return String(item.avatarId ?? "").trim();
   });
+
+  return uniqueStrings(avatarIds).map((avatarId) => ({
+    avatarId,
+  }));
 }
 
 function uniqueAvatarIds(values: unknown): string[] {
   return uniqueStrings(values);
 }
+
+// ============================================================
+// Client ID
+// ============================================================
 
 function createClientId(): string {
   if (
@@ -195,11 +129,17 @@ function createClientId(): string {
     return crypto.randomUUID();
   }
 
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  return `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 12)}`;
 }
 
+// ============================================================
+// Attachment helpers
+// ============================================================
+
 function sanitizePathSegment(value: string): string {
-  const normalized = String(value ?? "").trim();
+  const normalized = value.trim();
 
   if (!normalized) {
     return "file";
@@ -212,10 +152,13 @@ function sanitizePathSegment(value: string): string {
 }
 
 function getFileExtension(fileName: string): string {
-  const normalized = String(fileName ?? "").trim();
+  const normalized = fileName.trim();
   const index = normalized.lastIndexOf(".");
 
-  if (index < 0 || index === normalized.length - 1) {
+  if (
+    index < 0 ||
+    index === normalized.length - 1
+  ) {
     return "";
   }
 
@@ -226,19 +169,32 @@ function buildAnnouncementAttachmentStorageFileName(params: {
   file: File;
   index: number;
 }): string {
-  const extension = getFileExtension(params.file.name || "image");
-  const attachmentId = createClientId();
-  const displayOrder = String(params.index + 1).padStart(2, "0");
+  const extension = getFileExtension(
+    params.file.name || "image",
+  );
 
-  return sanitizePathSegment(`${displayOrder}-${attachmentId}${extension}`);
+  const attachmentId = createClientId();
+  const displayOrder = String(params.index + 1).padStart(
+    2,
+    "0",
+  );
+
+  return sanitizePathSegment(
+    `${displayOrder}-${attachmentId}${extension}`,
+  );
 }
 
 function buildAnnouncementAttachmentObjectPath(params: {
   announcementId: string;
   storageFileName: string;
 }): string {
-  const announcementId = sanitizePathSegment(params.announcementId);
-  const storageFileName = sanitizePathSegment(params.storageFileName);
+  const announcementId = sanitizePathSegment(
+    params.announcementId,
+  );
+
+  const storageFileName = sanitizePathSegment(
+    params.storageFileName,
+  );
 
   return [
     "announcements",
@@ -253,17 +209,20 @@ async function uploadAnnouncementImage(params: {
   file: File;
   index: number;
 }): Promise<AnnouncementAttachmentInput> {
-  const storageFileName = buildAnnouncementAttachmentStorageFileName({
-    file: params.file,
-    index: params.index,
-  });
+  const storageFileName =
+    buildAnnouncementAttachmentStorageFileName({
+      file: params.file,
+      index: params.index,
+    });
 
-  const mimeType = String(params.file.type || "application/octet-stream").trim();
+  const mimeType =
+    params.file.type || "application/octet-stream";
 
-  const objectPath = buildAnnouncementAttachmentObjectPath({
-    announcementId: params.announcementId,
-    storageFileName,
-  });
+  const objectPath =
+    buildAnnouncementAttachmentObjectPath({
+      announcementId: params.announcementId,
+      storageFileName,
+    });
 
   const storage = getStorage();
   const ref = storageRef(storage, objectPath);
@@ -292,11 +251,11 @@ async function uploadAnnouncementImages(params: {
   announcementId: string;
   images: File[];
 }): Promise<AnnouncementAttachmentInput[]> {
-  const images = Array.isArray(params.images) ? params.images : [];
-
-  const validImages = images.filter((file) => {
-    return file instanceof File && file.type.startsWith("image/");
-  });
+  const validImages = params.images.filter(
+    (file) =>
+      file instanceof File &&
+      file.type.startsWith("image/"),
+  );
 
   if (validImages.length === 0) {
     return [];
@@ -313,63 +272,99 @@ async function uploadAnnouncementImages(params: {
   );
 }
 
+// ============================================================
+// Location state
+// ============================================================
+
 export function normalizeAnnouncementCreateLocationState(
   state: unknown,
 ): AnnouncementCreateLocationState {
+  if (!state || typeof state !== "object") {
+    return {
+      owners: [],
+    };
+  }
+
   const value =
-    state && typeof state === "object"
-      ? (state as AnnouncementCreateLocationState)
-      : {};
+    state as AnnouncementCreateLocationState;
 
   return {
-    mintAddresses: Array.isArray(value.mintAddresses)
-      ? value.mintAddresses
-      : [],
-    owners: Array.isArray(value.owners) ? value.owners : [],
-    productBlueprints: Array.isArray(value.productBlueprints)
-      ? value.productBlueprints
+    owners: Array.isArray(value.owners)
+      ? value.owners
       : [],
   };
 }
+
+// ============================================================
+// View model builder
+// ============================================================
 
 export function buildAnnouncementCreateVM(
   blueprint: TokenBlueprint | null,
   tokenBlueprintId: string | undefined,
   locationState: AnnouncementCreateLocationState,
 ): AnnouncementCreateVM {
-  const id = String((blueprint as any)?.id ?? tokenBlueprintId ?? "").trim();
+  const blueprintValue = blueprint as
+    | (TokenBlueprint & {
+        id?: string;
+        createdBy?: string;
+        createdByName?: string;
+        createdAt?: string | null;
+        updatedBy?: string;
+        updatedByName?: string;
+        updatedAt?: string | null;
+        minted?: boolean;
+      })
+    | null;
 
-  const sales = id ? { tokenBlueprintId: id } : null;
-  const createdById = String((blueprint as any)?.createdBy ?? "").trim();
-  const updatedById = String((blueprint as any)?.updatedBy ?? "").trim();
+  const id = String(
+    blueprintValue?.id ?? tokenBlueprintId ?? "",
+  ).trim();
+
+  const createdById = String(
+    blueprintValue?.createdBy ?? "",
+  ).trim();
+
+  const updatedById = String(
+    blueprintValue?.updatedBy ?? "",
+  ).trim();
 
   const createdByName =
-    String((blueprint as any)?.createdByName ?? "").trim() || createdById;
+    String(
+      blueprintValue?.createdByName ?? "",
+    ).trim() || createdById;
 
   const updatedByName =
-    String((blueprint as any)?.updatedByName ?? "").trim() || updatedById;
+    String(
+      blueprintValue?.updatedByName ?? "",
+    ).trim() || updatedById;
 
   return {
-    sales,
+    sales: id
+      ? {
+          tokenBlueprintId: id,
+        }
+      : null,
+
     title: "告知",
-    assigneeId: String((blueprint as any)?.assigneeId ?? "").trim(),
-    assigneeName:
-      String((blueprint as any)?.assigneeName ?? "").trim() ||
-      String((blueprint as any)?.assigneeId ?? "").trim(),
-    minted: Boolean((blueprint as any)?.minted),
+    minted: Boolean(blueprintValue?.minted),
 
     createdById,
     createdByName,
-    createdAt: safeDateTimeLabelJa((blueprint as any)?.createdAt, ""),
+    createdAt: safeDateTimeLabelJa(
+      blueprintValue?.createdAt,
+      "",
+    ),
 
     updatedById,
     updatedByName,
-    updatedAt: safeDateTimeLabelJa((blueprint as any)?.updatedAt, ""),
+    updatedAt: safeDateTimeLabelJa(
+      blueprintValue?.updatedAt,
+      "",
+    ),
 
     owners: toOwnersFromState(
       locationState.owners,
-      locationState.mintAddresses,
-      locationState.productBlueprints,
     ),
   };
 }
@@ -378,63 +373,126 @@ export async function fetchAnnouncementCreateVM(
   tokenBlueprintId: string | undefined,
   locationState: AnnouncementCreateLocationState,
 ): Promise<AnnouncementCreateVM> {
-  const id = String(tokenBlueprintId ?? "").trim();
+  const id = String(
+    tokenBlueprintId ?? "",
+  ).trim();
 
   if (!id) {
-    return buildAnnouncementCreateVM(null, tokenBlueprintId, locationState);
+    return buildAnnouncementCreateVM(
+      null,
+      tokenBlueprintId,
+      locationState,
+    );
   }
 
-  const blueprint = await fetchTokenBlueprintDetail(id);
+  const blueprint =
+    await fetchTokenBlueprintDetail(id);
 
-  return buildAnnouncementCreateVM(blueprint, tokenBlueprintId, locationState);
+  return buildAnnouncementCreateVM(
+    blueprint,
+    tokenBlueprintId,
+    locationState,
+  );
 }
 
-function validateAnnouncementPayload(payload: AnnouncementCreateInputPayload) {
-  if (!payload.title) {
-    throw new Error("タイトルを入力してください。");
+// ============================================================
+// Validation
+// ============================================================
+
+function validateAnnouncementPayload(
+  payload: AnnouncementCreateInputPayload,
+): void {
+  if (!payload.title.trim()) {
+    throw new Error(
+      "タイトルを入力してください。",
+    );
   }
 
-  if (!payload.text) {
-    throw new Error("文章を入力してください。");
+  if (!payload.text.trim()) {
+    throw new Error(
+      "本文を入力してください。",
+    );
   }
 }
 
-function validateTargetAvatarIds(targetAvatarIds: string[]) {
-  if (uniqueAvatarIds(targetAvatarIds).length === 0) {
-    throw new Error("告知先のアバターを選択してください。");
+function validateTargetAvatarIds(
+  targetAvatarIds: string[],
+): string[] {
+  const normalizedIds =
+    uniqueAvatarIds(targetAvatarIds);
+
+  if (normalizedIds.length === 0) {
+    throw new Error(
+      "告知先のアバターを選択してください。",
+    );
   }
+
+  return normalizedIds;
 }
 
-export async function saveAnnouncement({
-  sales,
-  payload,
-  createdBy,
-  targetAvatarIds,
-}: SaveAnnouncementParams) {
-  if (!sales?.tokenBlueprintId) {
-    throw new Error("targetToken is required");
+function validateAnnouncementActionParams(
+  params: AnnouncementActionParams,
+): {
+  tokenBlueprintId: string;
+  createdBy: string;
+  targetAvatarIds: string[];
+} {
+  const tokenBlueprintId =
+    params.sales?.tokenBlueprintId.trim() ?? "";
+
+  if (!tokenBlueprintId) {
+    throw new Error(
+      "targetToken is required",
+    );
   }
+
+  const createdBy = params.createdBy.trim();
 
   if (!createdBy) {
-    throw new Error("createdBy is required");
+    throw new Error(
+      "createdBy is required",
+    );
   }
 
-  validateAnnouncementPayload(payload);
-  validateTargetAvatarIds(targetAvatarIds);
+  validateAnnouncementPayload(params.payload);
+
+  return {
+    tokenBlueprintId,
+    createdBy,
+    targetAvatarIds:
+      validateTargetAvatarIds(
+        params.targetAvatarIds,
+      ),
+  };
+}
+
+// ============================================================
+// Service
+// ============================================================
+
+export async function saveAnnouncement(
+  params: AnnouncementActionParams,
+) {
+  const {
+    tokenBlueprintId,
+    createdBy,
+    targetAvatarIds,
+  } = validateAnnouncementActionParams(params);
 
   const announcementId = createClientId();
 
-  const attachments = await uploadAnnouncementImages({
-    announcementId,
-    images: payload.images,
-  });
+  const attachments =
+    await uploadAnnouncementImages({
+      announcementId,
+      images: params.payload.images,
+    });
 
   return createAnnouncement({
     id: announcementId,
-    title: payload.title,
-    content: payload.text,
-    targetToken: sales.tokenBlueprintId,
-    targetAvatars: uniqueAvatarIds(targetAvatarIds),
+    title: params.payload.title.trim(),
+    content: params.payload.text.trim(),
+    targetToken: tokenBlueprintId,
+    targetAvatars: targetAvatarIds,
     attachments,
     published: false,
     publishedAt: null,
@@ -442,53 +500,47 @@ export async function saveAnnouncement({
   });
 }
 
-export async function sendAnnouncement({
-  sales,
-  payload,
-  createdBy,
-  targetAvatarIds,
-}: SendAnnouncementParams) {
-  if (!sales?.tokenBlueprintId) {
-    throw new Error("targetToken is required");
-  }
-
-  if (!createdBy) {
-    throw new Error("createdBy is required");
-  }
-
-  validateAnnouncementPayload(payload);
-  validateTargetAvatarIds(targetAvatarIds);
+export async function sendAnnouncement(
+  params: AnnouncementActionParams,
+) {
+  const {
+    tokenBlueprintId,
+    createdBy,
+    targetAvatarIds,
+  } = validateAnnouncementActionParams(params);
 
   const announcementId = createClientId();
 
-  const attachments = await uploadAnnouncementImages({
-    announcementId,
-    images: payload.images,
-  });
+  const attachments =
+    await uploadAnnouncementImages({
+      announcementId,
+      images: params.payload.images,
+    });
 
   await createAnnouncement({
     id: announcementId,
-    title: payload.title,
-    content: payload.text,
-    targetToken: sales.tokenBlueprintId,
-    targetAvatars: uniqueAvatarIds(targetAvatarIds),
+    title: params.payload.title.trim(),
+    content: params.payload.text.trim(),
+    targetToken: tokenBlueprintId,
+    targetAvatars: targetAvatarIds,
     attachments,
     published: false,
     publishedAt: null,
     createdBy,
   });
 
-  return markAnnouncementPublished(announcementId, {
-    updatedBy: createdBy,
-  });
+  return markAnnouncementPublished(
+    announcementId,
+    {
+      updatedBy: createdBy,
+    },
+  );
 }
 
 export function createEmptyAnnouncementCreateVM(): AnnouncementCreateVM {
   return {
     sales: null,
     title: "告知",
-    assigneeId: "",
-    assigneeName: "",
     minted: false,
 
     createdById: "",

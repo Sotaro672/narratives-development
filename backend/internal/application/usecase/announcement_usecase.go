@@ -278,8 +278,7 @@ func (u *AnnouncementUsecase) ListAnnouncementAvatars(
 	return u.avatarRepo.ListByAnnouncementID(ctx, announcementID, filter)
 }
 
-// UpsertAnnouncementAvatar is kept as an application-level operation,
-// but the repository port is intentionally managed only by Update.
+// UpsertAnnouncementAvatar creates or updates an announcement avatar record.
 func (u *AnnouncementUsecase) UpsertAnnouncementAvatar(
 	ctx context.Context,
 	announcementID string,
@@ -300,7 +299,7 @@ func (u *AnnouncementUsecase) UpsertAnnouncementAvatar(
 		UpdatedAt: &now,
 	}
 
-	return u.avatarRepo.Update(
+	return u.avatarRepo.Upsert(
 		ctx,
 		announcementID,
 		input.AvatarID,
@@ -405,6 +404,10 @@ func (u *AnnouncementUsecase) ReplaceAttachmentsAndSyncAnnouncement(
 	inputs []NewAttachmentInput,
 	updatedBy *string,
 ) (ann.Announcement, []ann.AttachmentFile, error) {
+	if u.annRepo == nil {
+		return ann.Announcement{}, nil, ann.ErrNotFound
+	}
+
 	saved, ids, err := u.ReplaceAttachments(
 		ctx,
 		announcementID,

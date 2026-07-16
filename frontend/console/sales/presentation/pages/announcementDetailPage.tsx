@@ -6,9 +6,6 @@ import AdminCard from "../../../admin/src/presentation/components/AdminCard";
 import LogCard from "../../../log/presentation/LogCard";
 import InputCard from "../components/inputCard";
 import type { SubmitPayload } from "../components/inputCard";
-import SalesOwnersCard, {
-  type SalesOwnerItem,
-} from "../components/salesOwnersCard";
 import {
   getAnnouncement,
   markAnnouncementPublished,
@@ -16,28 +13,12 @@ import {
   type Announcement,
   type AnnouncementAttachmentInput,
 } from "../../infrastructure/announcement_repository_http";
-import { listSales } from "../../infrastructure/sales_repository_http";
 
 const emptyInputPayload: SubmitPayload = {
   title: "",
   text: "",
   images: [],
   imageUrls: [],
-};
-
-type AnnouncementTargetAvatarDetailLike = {
-  avatarId?: string | null;
-  avatarName?: string | null;
-  avatarIcon?: string | null;
-  avatarIconUrl?: string | null;
-  followerCount?: number | null;
-  followingCount?: number | null;
-  postCount?: number | null;
-};
-
-type AnnouncementProductBlueprintLike = {
-  productBlueprintId?: string | null;
-  productName?: string | null;
 };
 
 type AnnouncementAttachmentFileLike = {
@@ -51,36 +32,14 @@ type AnnouncementAttachmentFileLike = {
 };
 
 type AnnouncementWithResolvedFields = Announcement & {
-  tokenName?: string | null;
-  targetAvatarDetails?: AnnouncementTargetAvatarDetailLike[];
-  productBlueprints?: AnnouncementProductBlueprintLike[];
   attachmentFiles?: AnnouncementAttachmentFileLike[];
   createdByName?: string | null;
   updatedByName?: string | null;
 };
 
-type SalesProductBlueprintLike = {
-  productBlueprintId?: string | null;
-  productName?: string | null;
-};
-
-type SalesOwnerLike = {
-  avatarId?: string | null;
-  avatarName?: string | null;
-  avatarIcon?: string | null;
-  avatarIconUrl?: string | null;
-  followerCount?: number | null;
-  followingCount?: number | null;
-  postCount?: number | null;
-};
-
-type SalesRowLike = {
-  tokenBlueprintId?: string | null;
-  owners?: SalesOwnerLike[] | null;
-  productBlueprints?: SalesProductBlueprintLike[] | null;
-};
-
-function normalizeAvatarIds(values: string[] | undefined | null): string[] {
+function normalizeAvatarIds(
+  values: string[] | undefined | null,
+): string[] {
   if (!Array.isArray(values)) return [];
 
   const seen = new Set<string>();
@@ -98,34 +57,6 @@ function normalizeAvatarIds(values: string[] | undefined | null): string[] {
   return result;
 }
 
-function normalizeAvatarDetails(
-  values: AnnouncementTargetAvatarDetailLike[] | undefined | null,
-): AnnouncementTargetAvatarDetailLike[] {
-  if (!Array.isArray(values)) return [];
-
-  const seen = new Set<string>();
-  const result: AnnouncementTargetAvatarDetailLike[] = [];
-
-  for (const value of values) {
-    const avatarId = String(value.avatarId ?? "").trim();
-    if (!avatarId) continue;
-    if (seen.has(avatarId)) continue;
-
-    seen.add(avatarId);
-    result.push({
-      avatarId,
-      avatarName: String(value.avatarName ?? "").trim(),
-      avatarIcon: String(value.avatarIcon ?? "").trim(),
-      avatarIconUrl: String(value.avatarIconUrl ?? "").trim(),
-      followerCount: toSafeNumber(value.followerCount),
-      followingCount: toSafeNumber(value.followingCount),
-      postCount: toSafeNumber(value.postCount),
-    });
-  }
-
-  return result;
-}
-
 function normalizeAttachmentImageUrls(
   values: AnnouncementAttachmentFileLike[] | undefined | null,
 ): string[] {
@@ -136,7 +67,9 @@ function normalizeAttachmentImageUrls(
 
   for (const value of values) {
     const fileUrl = String(value?.fileUrl ?? "").trim();
-    const mimeType = String(value?.mimeType ?? "").trim().toLowerCase();
+    const mimeType = String(value?.mimeType ?? "")
+      .trim()
+      .toLowerCase();
 
     if (!fileUrl) continue;
     if (mimeType && !mimeType.startsWith("image/")) continue;
@@ -154,41 +87,21 @@ function toSafeNumber(value: unknown): number {
     return value;
   }
 
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) {
     return 0;
   }
 
-  return n;
-}
-
-function getAnnouncementTokenName(
-  announcement: AnnouncementWithResolvedFields | null,
-): string {
-  return String(announcement?.tokenName ?? "").trim();
-}
-
-function getAnnouncementProductName(
-  announcement: AnnouncementWithResolvedFields | null,
-): string {
-  const productBlueprints = announcement?.productBlueprints;
-  if (!Array.isArray(productBlueprints)) return "";
-
-  for (const productBlueprint of productBlueprints) {
-    const productName = String(productBlueprint?.productName ?? "").trim();
-    if (productName) {
-      return productName;
-    }
-  }
-
-  return "";
+  return numberValue;
 }
 
 function getAnnouncementCreatedByName(
   announcement: AnnouncementWithResolvedFields | null,
 ): string {
   return String(
-    announcement?.createdByName || announcement?.createdBy || "",
+    announcement?.createdByName ||
+      announcement?.createdBy ||
+      "",
   ).trim();
 }
 
@@ -196,66 +109,10 @@ function getAnnouncementUpdatedByName(
   announcement: AnnouncementWithResolvedFields | null,
 ): string {
   return String(
-    announcement?.updatedByName || announcement?.updatedBy || "",
+    announcement?.updatedByName ||
+      announcement?.updatedBy ||
+      "",
   ).trim();
-}
-
-function getFirstProductNameFromSalesRow(row: SalesRowLike | null): string {
-  const productBlueprints = row?.productBlueprints;
-  if (!Array.isArray(productBlueprints)) return "";
-
-  for (const productBlueprint of productBlueprints) {
-    const productName = String(productBlueprint?.productName ?? "").trim();
-    if (productName) {
-      return productName;
-    }
-  }
-
-  return "";
-}
-
-function normalizeSalesRows(value: unknown): SalesRowLike[] {
-  if (Array.isArray(value)) {
-    return value as SalesRowLike[];
-  }
-
-  if (!value || typeof value !== "object") {
-    return [];
-  }
-
-  const rows = (value as { rows?: unknown }).rows;
-  if (!Array.isArray(rows)) {
-    return [];
-  }
-
-  return rows as SalesRowLike[];
-}
-
-function buildSalesOwnersFromRow(row: SalesRowLike | null): SalesOwnerItem[] {
-  const owners = Array.isArray(row?.owners) ? row.owners : [];
-  const productName = getFirstProductNameFromSalesRow(row);
-
-  const seen = new Set<string>();
-  const result: SalesOwnerItem[] = [];
-
-  for (const owner of owners) {
-    const avatarId = String(owner?.avatarId ?? "").trim();
-    if (!avatarId) continue;
-    if (seen.has(avatarId)) continue;
-
-    seen.add(avatarId);
-    result.push({
-      avatarId,
-      avatarName: String(owner?.avatarName ?? "").trim(),
-      avatarIconUrl: String(owner?.avatarIconUrl || owner?.avatarIcon || "").trim(),
-      productName,
-      followerCount: toSafeNumber(owner?.followerCount),
-      followingCount: toSafeNumber(owner?.followingCount),
-      postCount: toSafeNumber(owner?.postCount),
-    });
-  }
-
-  return result;
 }
 
 function buildRetainedAttachmentInputs(params: {
@@ -267,7 +124,9 @@ function buildRetainedAttachmentInputs(params: {
     : [];
 
   const retainedUrlSet = new Set(
-    params.imageUrls.map((url) => String(url ?? "").trim()).filter(Boolean),
+    params.imageUrls
+      .map((url) => String(url ?? "").trim())
+      .filter(Boolean),
   );
 
   const seen = new Set<string>();
@@ -303,19 +162,19 @@ function buildRetainedAttachmentInputs(params: {
 
 export default function AnnouncementDetailPage() {
   const navigate = useNavigate();
-  const { announcementId } = useParams<{ announcementId: string }>();
+  const { announcementId } =
+    useParams<{ announcementId: string }>();
 
   const [announcement, setAnnouncement] =
     useState<AnnouncementWithResolvedFields | null>(null);
   const [inputPayload, setInputPayload] =
     useState<SubmitPayload>(emptyInputPayload);
-  const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>([]);
-  const [salesOwners, setSalesOwners] = useState<SalesOwnerItem[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingInput, setIsSavingInput] = useState(false);
   const [isSendingInput, setIsSendingInput] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
 
   const normalizedAnnouncementId = useMemo(() => {
     return String(announcementId ?? "").trim();
@@ -327,10 +186,10 @@ export default function AnnouncementDetailPage() {
         title: source.title,
         text: source.content,
         images: [],
-        imageUrls: normalizeAttachmentImageUrls(source.attachmentFiles),
+        imageUrls: normalizeAttachmentImageUrls(
+          source.attachmentFiles,
+        ),
       });
-
-      setSelectedAvatarIds(normalizeAvatarIds(source.targetAvatars));
     },
     [],
   );
@@ -338,7 +197,9 @@ export default function AnnouncementDetailPage() {
   const load = useCallback(async () => {
     if (!normalizedAnnouncementId) {
       setAnnouncement(null);
-      setErrorMessage("告知IDが取得できませんでした。");
+      setErrorMessage(
+        "お知らせIDを取得できませんでした。",
+      );
       return;
     }
 
@@ -346,14 +207,18 @@ export default function AnnouncementDetailPage() {
     setErrorMessage(null);
 
     try {
-      const result = await getAnnouncement(normalizedAnnouncementId);
-      setAnnouncement(result as AnnouncementWithResolvedFields);
+      const result = await getAnnouncement(
+        normalizedAnnouncementId,
+      );
+      setAnnouncement(
+        result as AnnouncementWithResolvedFields,
+      );
     } catch (error) {
       setAnnouncement(null);
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "告知詳細の取得に失敗しました。",
+          : "お知らせ詳細の取得に失敗しました。",
       );
     } finally {
       setIsLoading(false);
@@ -368,7 +233,9 @@ export default function AnnouncementDetailPage() {
       }
 
       const refreshed = await getAnnouncement(normalizedId);
-      const next = refreshed as AnnouncementWithResolvedFields;
+      const next =
+        refreshed as AnnouncementWithResolvedFields;
+
       setAnnouncement(next);
 
       return next;
@@ -376,51 +243,13 @@ export default function AnnouncementDetailPage() {
     [],
   );
 
-  const loadSalesOwners = useCallback(async (targetToken: string) => {
-    const tokenBlueprintId = String(targetToken ?? "").trim();
-    if (!tokenBlueprintId) {
-      setSalesOwners([]);
-      return;
-    }
-
-    try {
-      const result = await listSales();
-      const rows = normalizeSalesRows(result);
-
-      const row =
-        rows.find((item) => {
-          return (
-            String(item?.tokenBlueprintId ?? "").trim() === tokenBlueprintId
-          );
-        }) ?? null;
-
-      setSalesOwners(buildSalesOwnersFromRow(row));
-    } catch (error) {
-      console.error("[AnnouncementDetailPage] load sales owners failed", error);
-      setSalesOwners([]);
-    }
-  }, []);
-
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    const targetToken = String(announcement?.targetToken ?? "").trim();
-
-    if (!targetToken) {
-      setSalesOwners([]);
-      return;
-    }
-
-    void loadSalesOwners(targetToken);
-  }, [announcement?.targetToken, loadSalesOwners]);
-
-  useEffect(() => {
     if (!announcement) {
       setInputPayload(emptyInputPayload);
-      setSelectedAvatarIds([]);
-      setSalesOwners([]);
       setIsEditMode(false);
       return;
     }
@@ -432,12 +261,30 @@ export default function AnnouncementDetailPage() {
     }
   }, [announcement, resetFormFromAnnouncement]);
 
+  const targetAvatarIds = useMemo(() => {
+    if (!announcement) return [];
+
+    return normalizeAvatarIds(
+      announcement.targetAvatars,
+    );
+  }, [announcement]);
+
+  const initialImageUrls = useMemo(() => {
+    return normalizeAttachmentImageUrls(
+      announcement?.attachmentFiles,
+    );
+  }, [announcement]);
+
+  const pageTitle =
+    announcement?.title || "お知らせ詳細";
+
   const handleBack = useCallback(() => {
     navigate("/sales");
   }, [navigate]);
 
   const handleEdit = useCallback(() => {
     if (!announcement || announcement.published) return;
+
     resetFormFromAnnouncement(announcement);
     setIsEditMode(true);
   }, [announcement, resetFormFromAnnouncement]);
@@ -450,26 +297,28 @@ export default function AnnouncementDetailPage() {
     setIsEditMode(false);
   }, [announcement, resetFormFromAnnouncement]);
 
-  const handleInputChange = useCallback((payload: SubmitPayload) => {
-    setInputPayload(payload);
-  }, []);
+  const handleInputChange = useCallback(
+    (payload: SubmitPayload) => {
+      setInputPayload(payload);
+    },
+    [],
+  );
 
-  const handleSelectionChange = useCallback((avatarIds: string[]) => {
-    setSelectedAvatarIds(normalizeAvatarIds(avatarIds));
-  }, []);
-
-  const buildSubmitPayload = useCallback((): SubmitPayload => {
-    return {
-      title: inputPayload.title.trim(),
-      text: inputPayload.text.trim(),
-      images: inputPayload.images,
-      imageUrls: inputPayload.imageUrls,
-    };
-  }, [inputPayload]);
+  const buildSubmitPayload =
+    useCallback((): SubmitPayload => {
+      return {
+        title: inputPayload.title.trim(),
+        text: inputPayload.text.trim(),
+        images: inputPayload.images,
+        imageUrls: inputPayload.imageUrls,
+      };
+    }, [inputPayload]);
 
   const getUpdatedBy = useCallback(() => {
     return String(
-      announcement?.updatedBy ?? announcement?.createdBy ?? "",
+      announcement?.updatedBy ??
+        announcement?.createdBy ??
+        "",
     ).trim();
   }, [announcement]);
 
@@ -487,7 +336,7 @@ export default function AnnouncementDetailPage() {
         title: payload.title,
         content: payload.text,
         targetToken: announcement.targetToken,
-        targetAvatars: selectedAvatarIds,
+        targetAvatars: targetAvatarIds,
         published: announcement.published,
         publishedAt: announcement.publishedAt,
         attachments: buildRetainedAttachmentInputs({
@@ -500,11 +349,16 @@ export default function AnnouncementDetailPage() {
       await reloadAnnouncement(announcement.id);
 
       setIsEditMode(false);
-      window.alert("告知を保存しました。");
+      window.alert("お知らせを保存しました。");
     } catch (error) {
-      console.error("[AnnouncementDetailPage] save announcement failed", error);
+      console.error(
+        "[AnnouncementDetailPage] save announcement failed",
+        error,
+      );
       window.alert(
-        error instanceof Error ? error.message : "告知の保存に失敗しました。",
+        error instanceof Error
+          ? error.message
+          : "お知らせの保存に失敗しました。",
       );
     } finally {
       setIsSavingInput(false);
@@ -516,7 +370,7 @@ export default function AnnouncementDetailPage() {
     isSavingInput,
     isSendingInput,
     reloadAnnouncement,
-    selectedAvatarIds,
+    targetAvatarIds,
   ]);
 
   const handleSend = useCallback(async () => {
@@ -534,7 +388,7 @@ export default function AnnouncementDetailPage() {
           title: payload.title,
           content: payload.text,
           targetToken: announcement.targetToken,
-          targetAvatars: selectedAvatarIds,
+          targetAvatars: targetAvatarIds,
           published: announcement.published,
           publishedAt: announcement.publishedAt,
           attachments: buildRetainedAttachmentInputs({
@@ -552,11 +406,16 @@ export default function AnnouncementDetailPage() {
       await reloadAnnouncement(announcement.id);
 
       setIsEditMode(false);
-      window.alert("告知を送信しました。");
+      window.alert("お知らせを送信しました。");
     } catch (error) {
-      console.error("[AnnouncementDetailPage] send announcement failed", error);
+      console.error(
+        "[AnnouncementDetailPage] send announcement failed",
+        error,
+      );
       window.alert(
-        error instanceof Error ? error.message : "告知の送信に失敗しました。",
+        error instanceof Error
+          ? error.message
+          : "お知らせの送信に失敗しました。",
       );
     } finally {
       setIsSendingInput(false);
@@ -569,96 +428,57 @@ export default function AnnouncementDetailPage() {
     isSavingInput,
     isSendingInput,
     reloadAnnouncement,
-    selectedAvatarIds,
+    targetAvatarIds,
   ]);
 
-  const targetAvatarIds = useMemo(() => {
-    if (!announcement) return [];
-    return normalizeAvatarIds(announcement.targetAvatars);
-  }, [announcement]);
-
-  const visibleSelectedAvatarIds = useMemo(() => {
-    if (isEditMode) {
-      return normalizeAvatarIds(selectedAvatarIds);
-    }
-
-    return targetAvatarIds;
-  }, [isEditMode, selectedAvatarIds, targetAvatarIds]);
-
-  const productName = useMemo(() => {
-    return getAnnouncementProductName(announcement);
-  }, [announcement]);
-
-  const initialImageUrls = useMemo(() => {
-    return normalizeAttachmentImageUrls(announcement?.attachmentFiles);
-  }, [announcement]);
-
-  const fallbackTargetOwners = useMemo<SalesOwnerItem[]>(() => {
-    const details = normalizeAvatarDetails(announcement?.targetAvatarDetails);
-    const detailsByAvatarId = new Map(
-      details.map((detail) => [String(detail.avatarId ?? "").trim(), detail]),
-    );
-
-    return targetAvatarIds.map((avatarId) => {
-      const detail = detailsByAvatarId.get(avatarId);
-      const avatarName = String(detail?.avatarName ?? "").trim();
-      const avatarIcon = String(
-        detail?.avatarIconUrl || detail?.avatarIcon || "",
-      ).trim();
-
-      return {
-        avatarId,
-        avatarName: avatarName || avatarId,
-        avatarIconUrl: avatarIcon,
-        productName,
-        followerCount: toSafeNumber(detail?.followerCount),
-        followingCount: toSafeNumber(detail?.followingCount),
-        postCount: toSafeNumber(detail?.postCount),
-      };
-    });
-  }, [announcement, productName, targetAvatarIds]);
-
-  const owners = useMemo<SalesOwnerItem[]>(() => {
-    if (salesOwners.length > 0) {
-      return salesOwners;
-    }
-
-    return fallbackTargetOwners;
-  }, [fallbackTargetOwners, salesOwners]);
-
-  const pageTitle = useMemo(() => {
-    const tokenName = getAnnouncementTokenName(announcement);
-    return tokenName || productName || "告知詳細";
-  }, [announcement, productName]);
-
-  const createdByName = getAnnouncementCreatedByName(announcement);
-  const updatedByName = getAnnouncementUpdatedByName(announcement);
+  const createdByName =
+    getAnnouncementCreatedByName(announcement);
+  const updatedByName =
+    getAnnouncementUpdatedByName(announcement);
   const createdAt = announcement?.createdAt ?? "";
   const updatedAt = announcement?.updatedAt ?? "";
 
-  const canEditOrSend = Boolean(announcement && !announcement.published);
+  const canEditOrSend = Boolean(
+    announcement && !announcement.published,
+  );
 
   if (isLoading && !announcement) {
     return (
-      <PageStyle layout="single" title="告知詳細" onBack={handleBack}>
-        <p className="p-4 text-sm text-muted-foreground">読み込み中です。</p>
+      <PageStyle
+        layout="single"
+        title="お知らせ詳細"
+        onBack={handleBack}
+      >
+        <p className="p-4 text-sm text-muted-foreground">
+          読み込み中です。
+        </p>
       </PageStyle>
     );
   }
 
   if (errorMessage) {
     return (
-      <PageStyle layout="single" title="告知詳細" onBack={handleBack}>
-        <p className="p-4 text-sm text-red-600">{errorMessage}</p>
+      <PageStyle
+        layout="single"
+        title="お知らせ詳細"
+        onBack={handleBack}
+      >
+        <p className="p-4 text-sm text-red-600">
+          {errorMessage}
+        </p>
       </PageStyle>
     );
   }
 
   if (!announcement) {
     return (
-      <PageStyle layout="single" title="告知詳細" onBack={handleBack}>
+      <PageStyle
+        layout="single"
+        title="お知らせ詳細"
+        onBack={handleBack}
+      >
         <p className="p-4 text-sm text-muted-foreground">
-          表示可能な告知詳細がありません。
+          表示可能なお知らせ詳細がありません。
         </p>
       </PageStyle>
     );
@@ -669,24 +489,26 @@ export default function AnnouncementDetailPage() {
       layout="grid-2"
       title={pageTitle}
       onBack={handleBack}
-      onEdit={canEditOrSend && !isEditMode ? handleEdit : undefined}
-      onCancel={canEditOrSend && isEditMode ? handleCancelEdit : undefined}
-      onSave={canEditOrSend && isEditMode ? handleSave : undefined}
+      onEdit={
+        canEditOrSend && !isEditMode
+          ? handleEdit
+          : undefined
+      }
+      onCancel={
+        canEditOrSend && isEditMode
+          ? handleCancelEdit
+          : undefined
+      }
+      onSave={
+        canEditOrSend && isEditMode
+          ? handleSave
+          : undefined
+      }
       isSaving={isSavingInput}
       onSend={canEditOrSend ? handleSend : undefined}
       isSending={isSendingInput}
     >
       <div className="space-y-4">
-        <div style={{ marginTop: 16 }}>
-          <SalesOwnersCard
-            title="送信対象アバター"
-            mode={isEditMode ? "edit" : "view"}
-            owners={owners}
-            selectedAvatarIds={visibleSelectedAvatarIds}
-            onSelectionChange={isEditMode ? handleSelectionChange : undefined}
-          />
-        </div>
-
         <InputCard
           title="入力"
           mode={isEditMode ? "edit" : "view"}
@@ -695,7 +517,9 @@ export default function AnnouncementDetailPage() {
           initialImages={initialImageUrls}
           saving={isSavingInput}
           sending={isSendingInput}
-          onChange={isEditMode ? handleInputChange : undefined}
+          onChange={
+            isEditMode ? handleInputChange : undefined
+          }
         />
       </div>
 

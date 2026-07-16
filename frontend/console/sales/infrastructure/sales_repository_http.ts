@@ -1,4 +1,4 @@
-// frontend\console\sales\infrastructure\sales_repository_http.ts
+// frontend/console/sales/infrastructure/sales_repository_http.ts
 import { API_BASE } from "../../shell/src/shared/http/apiBase";
 import { getAuthJsonHeaders } from "../../shell/src/shared/http/authHeaders";
 
@@ -8,11 +8,6 @@ import { getAuthJsonHeaders } from "../../shell/src/shared/http/authHeaders";
 
 export type SalesOwner = {
   avatarId: string;
-  avatarName: string;
-  avatarIcon: string;
-  followerCount: number;
-  followingCount: number;
-  postCount: number;
 };
 
 export type SalesProductBlueprint = {
@@ -37,47 +32,13 @@ export type SalesQueryResult = {
 };
 
 // ============================================================
-// API DTOs
-// ============================================================
-
-type ApiSalesOwner = {
-  avatarId?: string | null;
-  avatarName?: string | null;
-  avatarIcon?: string | null;
-  followerCount?: number | null;
-  followingCount?: number | null;
-  postCount?: number | null;
-};
-
-type ApiSalesProductBlueprint = {
-  productBlueprintId?: string | null;
-  productName?: string | null;
-};
-
-type ApiSalesRow = {
-  tokenBlueprintId?: string | null;
-  tokenName?: string | null;
-  brandId?: string | null;
-  brandName?: string | null;
-  mintAddresses?: string[] | null;
-  modelIds?: string[] | null;
-  productBlueprints?: ApiSalesProductBlueprint[] | null;
-  owners?: ApiSalesOwner[] | null;
-};
-
-type ApiSalesQueryResult = {
-  companyId?: string | null;
-  rows?: ApiSalesRow[] | null;
-};
-
-// ============================================================
 // Endpoint
 // ============================================================
 
 const SALES_ENDPOINT = "/sales";
 
 // ============================================================
-// Helpers
+// HTTP helper
 // ============================================================
 
 async function apiGetJson<T>(path: string): Promise<T> {
@@ -98,97 +59,15 @@ async function apiGetJson<T>(path: string): Promise<T> {
     throw new Error(text || `GET ${path} failed: ${res.status}`);
   }
 
-  if (!text) return {} as T;
+  if (!text) {
+    throw new Error(`GET ${path} returned an empty response`);
+  }
 
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(text);
+    throw new Error(`GET ${path} returned invalid JSON`);
   }
-}
-
-function uniqueStrings(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const v of values) {
-    const s = String(v ?? "");
-    if (!s) continue;
-    if (seen.has(s)) continue;
-
-    seen.add(s);
-    result.push(s);
-  }
-
-  return result;
-}
-
-function toSafeNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    return 0;
-  }
-
-  return n;
-}
-
-function fromApiSalesOwner(owner: ApiSalesOwner): SalesOwner {
-  return {
-    avatarId: String(owner?.avatarId ?? ""),
-    avatarName: String(owner?.avatarName ?? ""),
-    avatarIcon: String(owner?.avatarIcon ?? ""),
-    followerCount: toSafeNumber(owner?.followerCount),
-    followingCount: toSafeNumber(owner?.followingCount),
-    postCount: toSafeNumber(owner?.postCount),
-  };
-}
-
-function fromApiSalesProductBlueprint(
-  productBlueprint: ApiSalesProductBlueprint,
-): SalesProductBlueprint {
-  return {
-    productBlueprintId: String(productBlueprint?.productBlueprintId ?? ""),
-    productName: String(productBlueprint?.productName ?? ""),
-  };
-}
-
-function fromApiSalesRow(row: ApiSalesRow): SalesRow {
-  const rawOwners = Array.isArray(row?.owners) ? row.owners : [];
-  const rawProductBlueprints = Array.isArray(row?.productBlueprints)
-    ? row.productBlueprints
-    : [];
-
-  return {
-    tokenBlueprintId: String(row?.tokenBlueprintId ?? ""),
-    tokenName: String(row?.tokenName ?? ""),
-    brandId: String(row?.brandId ?? ""),
-    brandName: String(row?.brandName ?? ""),
-    mintAddresses: uniqueStrings(row?.mintAddresses),
-    modelIds: uniqueStrings(row?.modelIds),
-    productBlueprints: rawProductBlueprints
-      .map(fromApiSalesProductBlueprint)
-      .filter((pb) => pb.productBlueprintId !== ""),
-    owners: rawOwners
-      .map(fromApiSalesOwner)
-      .filter((owner) => owner.avatarId !== ""),
-  };
-}
-
-function fromApiSalesQueryResult(data: ApiSalesQueryResult): SalesQueryResult {
-  const rawRows = Array.isArray(data?.rows) ? data.rows : [];
-
-  return {
-    companyId: String(data?.companyId ?? ""),
-    rows: rawRows
-      .map(fromApiSalesRow)
-      .filter((row) => row.tokenBlueprintId !== ""),
-  };
 }
 
 // ============================================================
@@ -196,26 +75,11 @@ function fromApiSalesQueryResult(data: ApiSalesQueryResult): SalesQueryResult {
 // ============================================================
 
 /**
- * backend: GET /sales
+ * GET /sales
  *
- * companyId は backend 側で middleware.CompanyID(r) から取得する。
- * frontend から query parameter として companyId は送らない。
- */
-export async function listSalesByCompanyId(
-  _companyId?: string,
-): Promise<SalesQueryResult> {
-  const data = await apiGetJson<ApiSalesQueryResult>(SALES_ENDPOINT);
-
-  return fromApiSalesQueryResult(data);
-}
-
-/**
- * backend: GET /sales
- *
- * companyId を frontend 側で持たない呼び出し用。
+ * 対象企業はバックエンドが認証情報から判定するため、
+ * companyIdのクエリパラメーターは送信しない。
  */
 export async function listSales(): Promise<SalesQueryResult> {
-  const data = await apiGetJson<ApiSalesQueryResult>(SALES_ENDPOINT);
-
-  return fromApiSalesQueryResult(data);
+  return apiGetJson<SalesQueryResult>(SALES_ENDPOINT);
 }

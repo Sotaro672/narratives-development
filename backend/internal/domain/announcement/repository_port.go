@@ -9,20 +9,6 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// AnnouncementPatch is a partial update input for announcement records.
-// nil fields are not updated.
-type AnnouncementPatch struct {
-	Title       *string
-	Content     *string
-	TargetToken *string
-	Published   *bool
-	PublishedAt *time.Time
-	Attachments *[]string
-
-	UpdatedAt *time.Time
-	UpdatedBy *string
-}
-
 // AnnouncementAvatarPatch is a partial update input for announcement avatar records.
 // nil fields are not updated.
 type AnnouncementAvatarPatch struct {
@@ -43,45 +29,10 @@ type AttachmentFilePatch struct {
 	UpdatedAt *time.Time
 }
 
-// Filter is the query condition for Announcement repository.
-type Filter struct {
-	TargetToken *string
-
-	// Published status.
-	Published *bool
-
-	// Date range.
-	CreatedFrom   *time.Time
-	CreatedTo     *time.Time
-	UpdatedFrom   *time.Time
-	UpdatedTo     *time.Time
-	PublishedFrom *time.Time
-	PublishedTo   *time.Time
-}
-
 // AnnouncementAvatarFilter is the query condition for AnnouncementAvatar repository.
 type AnnouncementAvatarFilter struct {
-	AnnouncementID  *string
-	AnnouncementIDs []string
-
 	AvatarIDs []string
 	IsRead    *bool
-}
-
-// AttachmentFilter is the query condition for AttachmentFile repository.
-//
-// NOTE:
-// - Attachment file records are scoped by announcementId.
-// - fileName alone should not be used as a global lookup key.
-type AttachmentFilter struct {
-	AnnouncementID  *string
-	AnnouncementIDs []string
-
-	FileNames []string
-	MimeTypes []string
-
-	SizeMin *int64
-	SizeMax *int64
 }
 
 // Common type aliases.
@@ -164,15 +115,15 @@ type Repository interface {
 // Avatar policy:
 // - Avatar record is scoped by announcementId.
 // - avatarID alone should not be used as a global lookup key.
-// - Avatar read state is managed by MarkRead / Update.
+// - Avatar read state is managed by MarkRead / Upsert.
 // - MarkRead should be idempotent.
-// - Update may create the avatar record if it does not exist, depending on implementation policy.
+// - Upsert creates the avatar record when it does not exist.
 type AvatarRepository interface {
 	// Query.
 	ListByAnnouncementID(ctx context.Context, announcementID string, filter AnnouncementAvatarFilter) ([]AnnouncementAvatar, error)
 
-	// Write.
-	Update(ctx context.Context, announcementID string, avatarID string, patch AnnouncementAvatarPatch) (AnnouncementAvatar, error)
+	// Upsert creates or updates the avatar read-state record.
+	Upsert(ctx context.Context, announcementID string, avatarID string, patch AnnouncementAvatarPatch) (AnnouncementAvatar, error)
 
 	// MarkRead marks announcements/{announcementId}/avatars/{avatarId} as read.
 	//
@@ -200,7 +151,6 @@ type AttachmentRepository interface {
 
 	// Write.
 	Create(ctx context.Context, f AttachmentFile) (AttachmentFile, error)
-	Update(ctx context.Context, announcementID string, fileName string, patch AttachmentFilePatch) (AttachmentFile, error)
 
 	// Delete physically deletes an attachment metadata record.
 	Delete(ctx context.Context, announcementID string, fileName string) error
