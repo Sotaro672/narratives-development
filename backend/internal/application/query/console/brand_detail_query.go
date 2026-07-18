@@ -9,12 +9,12 @@ import (
 )
 
 type BrandDetailQuery struct {
-	brandRepo  branddom.RepositoryPort
+	brandRepo  branddom.Repository
 	memberRepo memberdom.Repository
 }
 
 func NewBrandDetailQuery(
-	brandRepo branddom.RepositoryPort,
+	brandRepo branddom.Repository,
 	memberRepo memberdom.Repository,
 ) *BrandDetailQuery {
 	return &BrandDetailQuery{

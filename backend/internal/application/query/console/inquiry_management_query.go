@@ -33,7 +33,7 @@ type InquiryManagementQuery struct {
 	productRepo          productdom.Repository
 	modelRepo            modeldom.RepositoryPort
 	productBlueprintRepo productblueprintdom.Repository
-	brandRepo            branddom.RepositoryPort
+	brandRepo            branddom.Repository
 	avatarRepo           avatardom.Repository
 	userRepo             userdom.RepositoryPort
 }
@@ -44,7 +44,7 @@ func NewInquiryManagementQuery(
 	productRepo productdom.Repository,
 	modelRepo modeldom.RepositoryPort,
 	productBlueprintRepo productblueprintdom.Repository,
-	brandRepo branddom.RepositoryPort,
+	brandRepo branddom.Repository,
 	avatarRepo avatardom.Repository,
 	userRepo userdom.RepositoryPort,
 ) *InquiryManagementQuery {

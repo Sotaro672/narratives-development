@@ -22,20 +22,16 @@ type Brand struct {
 	CreatedBy            *string    `json:"createdBy,omitempty"`
 	UpdatedAt            *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy            *string    `json:"updatedBy,omitempty"`
-	DeletedAt            *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy            *string    `json:"deletedBy,omitempty"`
 }
 
 // Errors
 var (
-	ErrInvalidID            = errors.New("brand: invalid id")
-	ErrInvalidCompanyID     = errors.New("brand: invalid companyId")
-	ErrInvalidName          = errors.New("brand: invalid name")
-	ErrInvalidDescription   = errors.New("brand: invalid description")
-	ErrInvalidURL           = errors.New("brand: invalid url")
-	ErrInvalidWalletAddress = errors.New("brand: invalid walletAddress")
-	ErrInvalidCreatedAt     = errors.New("brand: invalid createdAt")
-	ErrInvalidUpdatedAt     = errors.New("brand: invalid updatedAt")
+	ErrInvalidID        = errors.New("brand: invalid id")
+	ErrInvalidCompanyID = errors.New("brand: invalid companyId")
+	ErrInvalidName      = errors.New("brand: invalid name")
+	ErrInvalidURL       = errors.New("brand: invalid url")
+	ErrInvalidCreatedAt = errors.New("brand: invalid createdAt")
+	ErrInvalidUpdatedAt = errors.New("brand: invalid updatedAt")
 )
 
 // New constructs a Brand aligned to TS Brand.
@@ -62,8 +58,6 @@ func New(
 		CreatedBy:            createdBy,
 		UpdatedAt:            nil,
 		UpdatedBy:            nil,
-		DeletedAt:            nil,
-		DeletedBy:            nil,
 	}
 
 	if err := b.validate(); err != nil {
@@ -114,17 +108,11 @@ func (b Brand) validate() error {
 	if b.UpdatedBy != nil && *b.UpdatedBy == "" {
 		return ErrInvalidID
 	}
-	if b.DeletedBy != nil && *b.DeletedBy == "" {
-		return ErrInvalidID
-	}
 
 	if b.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
 	if b.UpdatedAt != nil && b.UpdatedAt.Before(b.CreatedAt) {
-		return ErrInvalidUpdatedAt
-	}
-	if b.DeletedAt != nil && b.UpdatedAt != nil && b.DeletedAt.Before(*b.UpdatedAt) {
 		return ErrInvalidUpdatedAt
 	}
 	return nil
@@ -153,7 +141,5 @@ type BrandPatch struct {
 	WalletAddress        *string
 	UpdatedAt            *time.Time
 	UpdatedBy            *string
-	DeletedAt            *time.Time
-	DeletedBy            *string
 	CreatedBy            *string
 }

@@ -45,7 +45,7 @@ type InquiryDetailQuery struct {
 	tokenBlueprintRepo   tokenblueprintdom.RepositoryPort
 	tokenQueryRepo       tokendom.TokenQueryPort
 	transferQueryRepo    transferdom.TransferQueryPort
-	brandRepo            branddom.RepositoryPort
+	brandRepo            branddom.Repository
 	avatarRepo           avatardom.Repository
 	userRepo             userdom.RepositoryPort
 	shippingAddressRepo  shippingaddressdom.RepositoryPort
@@ -61,7 +61,7 @@ func NewInquiryDetailQuery(
 	tokenBlueprintRepo tokenblueprintdom.RepositoryPort,
 	tokenQueryRepo tokendom.TokenQueryPort,
 	transferQueryRepo transferdom.TransferQueryPort,
-	brandRepo branddom.RepositoryPort,
+	brandRepo branddom.Repository,
 	avatarRepo avatardom.Repository,
 	userRepo userdom.RepositoryPort,
 	shippingAddressRepo shippingaddressdom.RepositoryPort,

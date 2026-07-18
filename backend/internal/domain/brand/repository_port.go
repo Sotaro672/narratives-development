@@ -4,23 +4,9 @@ package brand
 import (
 	"context"
 	"errors"
-	"time"
 
 	common "narratives/internal/domain/common"
 )
-
-// ========================================
-// Ports (RepositoryPort: query-friendly repository interface)
-// ========================================
-
-// RepositoryPort defines the data access interface for brand domain.
-type RepositoryPort interface {
-	ListByCompanyID(ctx context.Context, companyID string, page Page) (PageResult[Brand], error)
-	GetByID(ctx context.Context, id string) (Brand, error)
-	Create(ctx context.Context, b Brand) (Brand, error)
-	Update(ctx context.Context, id string, patch BrandPatch) (Brand, error)
-	Delete(ctx context.Context, id string) error
-}
 
 // ========================================
 // Filter (align to common.FilterCommon / common.TimeRange)
@@ -38,11 +24,6 @@ type Filter struct {
 	ManagerIDs    []string
 	IsActive      *bool
 	WalletAddress *string
-
-	// Brand 固有: deleted の期間やフラグは必要なら残す
-	DeletedFrom *time.Time
-	DeletedTo   *time.Time
-	Deleted     *bool
 }
 
 // 共通型エイリアス（インフラ非依存）
@@ -85,10 +66,15 @@ type BrandProfile struct {
 // Port (Repository)
 // ========================================
 
+// Repository defines the data access interface for the brand domain.
 type Repository interface {
-	ListByCompanyID(ctx context.Context, companyID string, page Page) (PageResult[Brand], error)
-	GetByID(ctx context.Context, id string) (Brand, error)
+	ListByCompanyID(
+		ctx context.Context,
+		companyID string,
+		page Page,
+	) (PageResult[Brand], error)
 
+	GetByID(ctx context.Context, id string) (Brand, error)
 	Create(ctx context.Context, b Brand) (Brand, error)
 	Update(ctx context.Context, id string, patch BrandPatch) (Brand, error)
 	Delete(ctx context.Context, id string) error
@@ -110,8 +96,16 @@ type MintAuthorityKey struct {
 }
 
 type SolanaBrandWalletService interface {
-	OpenBrandWallet(ctx context.Context, b Brand) (SolanaBrandWallet, error)
-	FreezeBrandWallet(ctx context.Context, wallet SolanaBrandWallet) error
+	OpenBrandWallet(
+		ctx context.Context,
+		b Brand,
+	) (SolanaBrandWallet, error)
+
+	FreezeBrandWallet(
+		ctx context.Context,
+		wallet SolanaBrandWallet,
+	) error
+
 	DelegateTokenOperation(
 		ctx context.Context,
 		brandWallet SolanaBrandWallet,

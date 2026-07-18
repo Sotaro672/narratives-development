@@ -10,7 +10,7 @@ import (
 )
 
 type BrandUsecase struct {
-	brandRepo  branddom.RepositoryPort
+	brandRepo  branddom.Repository
 	memberRepo memberdom.Repository
 	walletSvc  branddom.SolanaBrandWalletService
 	now        func() time.Time
@@ -33,7 +33,7 @@ func WithNow(now func() time.Time) BrandUsecaseOption {
 }
 
 func NewBrandUsecase(
-	brandRepo branddom.RepositoryPort,
+	brandRepo branddom.Repository,
 	memberRepo memberdom.Repository,
 	opts ...BrandUsecaseOption,
 ) *BrandUsecase {
