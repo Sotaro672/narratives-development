@@ -42,7 +42,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 				Resolver: cont.MeAvatarResolver,
 			}
 		} else {
-			avatarCtxMW = &middleware.AvatarContextMiddleware{Resolver: nil}
+			avatarCtxMW = &middleware.AvatarContextMiddleware{
+				Resolver: nil,
+			}
 		}
 	}
 
@@ -53,7 +55,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 	{
 		hasFS := cont.Infra != nil && cont.Infra.Firestore != nil
 		if hasFS {
-			repo := firestoreOut.NewTokenBlueprintRepositoryFS(cont.Infra.Firestore)
+			repo := firestoreOut.NewTokenBlueprintRepositoryFS(
+				cont.Infra.Firestore,
+			)
 			tokenBlueprintRepo = repo
 		}
 	}
@@ -120,7 +124,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// ProductBlueprintReview wiring (catalog composite)
 	if cont.ProductBlueprintReviewUC != nil {
-		pbReviewH = mallhandler.NewProductBlueprintReviewHandler(cont.ProductBlueprintReviewUC)
+		pbReviewH = mallhandler.NewProductBlueprintReviewHandler(
+			cont.ProductBlueprintReviewUC,
+		)
 		catalogH = newCatalogCompositeHandler(catalogH, pbReviewH)
 	}
 
@@ -131,7 +137,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Avatar
 	if cont.AvatarUC != nil {
-		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC, cont.AvatarRepo)
+		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC)
 	}
 
 	// TokenBlueprintReview wiring
@@ -147,18 +153,27 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	if tbReviewH != nil && tbReviewH != http.NotFoundHandler() {
-		tbH = mallhandler.NewTokenBlueprintCompositeHandler(tbH, tbReviewH)
+		tbH = mallhandler.NewTokenBlueprintCompositeHandler(
+			tbH,
+			tbReviewH,
+		)
 	}
 
 	// Core resources
 	if cont.UserUC != nil {
 		userH = mallhandler.NewUserHandler(cont.UserUC)
 	}
+
 	if cont.ShippingAddressUC != nil {
-		shipH = mallhandler.NewShippingAddressHandler(cont.ShippingAddressUC)
+		shipH = mallhandler.NewShippingAddressHandler(
+			cont.ShippingAddressUC,
+		)
 	}
+
 	if cont.PaymentMethodUC != nil {
-		paymentMethodH = mallhandler.NewPaymentMethodHandler(cont.PaymentMethodUC)
+		paymentMethodH = mallhandler.NewPaymentMethodHandler(
+			cont.PaymentMethodUC,
+		)
 	}
 
 	// Wallet (me)
@@ -228,7 +243,10 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Order
 	if cont.OrderUC != nil {
-		orderH = mallhandler.NewOrderHandler(cont.OrderUC, cont.HistoryQ)
+		orderH = mallhandler.NewOrderHandler(
+			cont.OrderUC,
+			cont.HistoryQ,
+		)
 	}
 
 	// Inquiry
@@ -242,14 +260,25 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Preview
 	if cont.PreviewQ != nil {
 		opts := []mallhandler.PreviewHandlerOption{}
+
 		if cont.OwnerResolveQ != nil {
-			opts = append(opts, mallhandler.WithOwnerResolveQuery(cont.OwnerResolveQ))
-		}
-		if cont.NameResolver != nil {
-			opts = append(opts, mallhandler.WithNameResolver(cont.NameResolver))
+			opts = append(
+				opts,
+				mallhandler.WithOwnerResolveQuery(cont.OwnerResolveQ),
+			)
 		}
 
-		previewPublicH = mallhandler.NewPreviewHandler(cont.PreviewQ, opts...)
+		if cont.NameResolver != nil {
+			opts = append(
+				opts,
+				mallhandler.WithNameResolver(cont.NameResolver),
+			)
+		}
+
+		previewPublicH = mallhandler.NewPreviewHandler(
+			cont.PreviewQ,
+			opts...,
+		)
 
 		previewMeH = mallhandler.NewPreviewMeHandler(
 			cont.PreviewQ,
@@ -261,16 +290,23 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Order scan verify
 	if cont.PreviewQ != nil {
-		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(cont.PreviewQ)
+		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(
+			cont.PreviewQ,
+		)
 	}
 
 	// Order scan transfer
 	if cont.TransferUC != nil {
-		orderScanTransferH = mallhandler.NewTransferHandler(cont.TransferUC)
+		orderScanTransferH = mallhandler.NewTransferHandler(
+			cont.TransferUC,
+		)
 	}
 
 	// SignIn: keep a stable no-op endpoint
-	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	signInH := http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -313,11 +349,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		OrderScanVerify:   orderScanVerifyH,
 		OrderScanTransfer: orderScanTransferH,
-		OwnerResolve:      notImplemented("OwnerResolve(endpoint_disabled)"),
-		Payment:           payH,
-		Order:             orderH,
-		Inquiry:           inquiryH,
-		Announcement:      announcementH,
+		OwnerResolve: notImplemented(
+			"OwnerResolve(endpoint_disabled)",
+		),
+		Payment:      payH,
+		Order:        orderH,
+		Inquiry:      inquiryH,
+		Announcement: announcementH,
 
 		SetupStatus: setupStatusH,
 	}
@@ -338,16 +376,24 @@ func Register(mux *http.ServeMux, cont *Container) {
 			return
 		}
 
-		stripeWH := mallwebhook.NewStripeWebhookHandler(cont.PaymentUC, secret)
+		stripeWH := mallwebhook.NewStripeWebhookHandler(
+			cont.PaymentUC,
+			secret,
+		)
 		mux.Handle(StripeWebhookPath, stripeWH)
 		mux.Handle(StripeWebhookPath+"/", stripeWH)
 	}
 }
 
 func transferUsecaseNotConfiguredHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"transfer_usecase_not_configured"}`))
+		_, _ = w.Write(
+			[]byte(`{"error":"transfer_usecase_not_configured"}`),
+		)
 	})
 }

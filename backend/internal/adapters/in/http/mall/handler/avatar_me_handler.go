@@ -15,21 +15,22 @@ import (
 )
 
 // Policy (me-only):
-// - uid は認証コンテキストから取得し、クライアント入力では受けない
-// - avatarId はサーバで uid -> avatarId を解決する
-//
-// IMPORTANT (avatarIcon policy):
-// - 画像アップロードは Firebase Storage 側で行う
-// - PATCH /mall/me/avatars は avatarName/profile/externalLink/avatarIcon を更新する
-// - avatarIcon には Firebase Storage の download URL を保存する
+// - uidは認証コンテキストから取得し、クライアント入力では受けない
+// - avatarIdはサーバー側でuidから解決する
 //
 // Endpoints:
 // - GET    /mall/me/avatars
-// - PATCH  /mall/me/avatars        (avatarName/profile/externalLink/avatarIcon)
+// - PATCH  /mall/me/avatars
 // - DELETE /mall/me/avatars
-
 type MeAvatarResolver interface {
-	ResolveAvatarByUID(ctx context.Context, uid string) (avatarID string, walletAddress string, err error)
+	ResolveAvatarByUID(
+		ctx context.Context,
+		uid string,
+	) (
+		avatarID string,
+		walletAddress string,
+		err error,
+	)
 }
 
 type MeAvatarHandler struct {
@@ -49,7 +50,10 @@ func NewMeAvatarHandler(
 
 const meAvatarsPath = "/mall/me/avatars"
 
-func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MeAvatarHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method == http.MethodOptions {
@@ -59,14 +63,18 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h == nil || h.Repo == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "me_avatar_handler_not_initialized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "me_avatar_handler_not_initialized",
+		})
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing uid"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized: missing uid",
+		})
 		return
 	}
 
@@ -87,15 +95,20 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
 
-func strPtrTrim(s string) *string {
+// emptyToNil は空文字をnilへ変換します。
+// 空白文字の除去や正規化は行いません。
+func emptyToNil(s string) *string {
 	if s == "" {
 		return nil
 	}
+
 	return &s
 }
 
@@ -104,41 +117,37 @@ func (h *MeAvatarHandler) ResolveAvatarByUID(
 	uid string,
 ) (string, string, avatardom.AvatarPatch, error) {
 	if h == nil || h.Repo == nil {
-		return "", "", avatardom.AvatarPatch{}, errors.New("me avatar handler not configured")
+		return "", "", avatardom.AvatarPatch{},
+			errors.New("me avatar handler not configured")
 	}
 
-	avatarID, walletAddress, err := h.Repo.ResolveAvatarByUID(ctx, uid)
+	avatarID, walletAddress, err :=
+		h.Repo.ResolveAvatarByUID(ctx, uid)
 	if err != nil {
 		return "", "", avatardom.AvatarPatch{}, err
 	}
 
 	if avatarID == "" {
-		return "", walletAddress, avatardom.AvatarPatch{}, avatardom.ErrInvalidID
+		return "", walletAddress, avatardom.AvatarPatch{},
+			avatardom.ErrInvalidID
 	}
 
 	base := avatardom.AvatarPatch{
-		UserID:        "",
-		AvatarName:    nil,
-		AvatarIcon:    nil,
-		WalletAddress: strPtrTrim(walletAddress),
-		Profile:       nil,
-		ExternalLink:  nil,
+		WalletAddress: emptyToNil(walletAddress),
 	}
 
 	if h.AvatarUC == nil {
-		base.Sanitize()
 		return avatarID, walletAddress, base, nil
 	}
 
-	av, gerr := h.AvatarUC.GetByID(ctx, avatarID)
-	if gerr != nil {
-		base.Sanitize()
+	av, err := h.AvatarUC.GetByID(ctx, avatarID)
+	if err != nil {
 		return avatarID, walletAddress, base, nil
 	}
 
 	patch := avatardom.AvatarPatch{
 		UserID:        av.UserID,
-		AvatarName:    strPtrTrim(av.AvatarName),
+		AvatarName:    emptyToNil(av.AvatarName),
 		AvatarIcon:    av.AvatarIcon,
 		WalletAddress: av.WalletAddress,
 		Profile:       av.Profile,
@@ -146,10 +155,9 @@ func (h *MeAvatarHandler) ResolveAvatarByUID(
 	}
 
 	if patch.WalletAddress == nil {
-		patch.WalletAddress = strPtrTrim(walletAddress)
+		patch.WalletAddress = emptyToNil(walletAddress)
 	}
 
-	patch.Sanitize()
 	return avatarID, walletAddress, patch, nil
 }
 
@@ -159,30 +167,33 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(
 	patch avatardom.AvatarPatch,
 ) (string, avatardom.AvatarPatch, error) {
 	if h == nil || h.Repo == nil {
-		return "", avatardom.AvatarPatch{}, errors.New("me avatar handler not configured")
+		return "", avatardom.AvatarPatch{},
+			errors.New("me avatar handler not configured")
 	}
 
 	if h.AvatarUC == nil {
-		return "", avatardom.AvatarPatch{}, errors.New("avatar usecase not configured")
+		return "", avatardom.AvatarPatch{},
+			errors.New("avatar usecase not configured")
 	}
 
-	avatarID, walletAddress, _, err := h.ResolveAvatarByUID(ctx, uid)
+	avatarID, walletAddress, _, err :=
+		h.ResolveAvatarByUID(ctx, uid)
 	if err != nil {
 		return "", avatardom.AvatarPatch{}, err
 	}
 
+	// userIdとwalletAddressは本人向けPATCH APIの更新対象外。
 	patch.UserID = ""
 	patch.WalletAddress = nil
-	patch.Sanitize()
 
-	updated, uerr := h.AvatarUC.Update(ctx, avatarID, patch)
-	if uerr != nil {
-		return "", avatardom.AvatarPatch{}, uerr
+	updated, err := h.AvatarUC.Update(ctx, avatarID, patch)
+	if err != nil {
+		return "", avatardom.AvatarPatch{}, err
 	}
 
 	out := avatardom.AvatarPatch{
 		UserID:        updated.UserID,
-		AvatarName:    strPtrTrim(updated.AvatarName),
+		AvatarName:    emptyToNil(updated.AvatarName),
 		AvatarIcon:    updated.AvatarIcon,
 		WalletAddress: updated.WalletAddress,
 		Profile:       updated.Profile,
@@ -190,15 +201,19 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(
 	}
 
 	if out.WalletAddress == nil {
-		out.WalletAddress = strPtrTrim(walletAddress)
+		out.WalletAddress = emptyToNil(walletAddress)
 	}
 
-	out.Sanitize()
 	return avatarID, out, nil
 }
 
-func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid string) {
-	avatarID, _, patch, err := h.ResolveAvatarByUID(r.Context(), uid)
+func (h *MeAvatarHandler) handleGet(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
+	avatarID, _, patch, err :=
+		h.ResolveAvatarByUID(r.Context(), uid)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return
@@ -206,15 +221,18 @@ func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid 
 
 	if avatarID == "" {
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_not_found_for_uid"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar_not_found_for_uid",
+		})
 		return
 	}
 
-	patch.Sanitize()
-
-	if patch.WalletAddress == nil || *patch.WalletAddress == "" {
+	if patch.WalletAddress == nil ||
+		*patch.WalletAddress == "" {
 		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet_address_not_initialized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "wallet_address_not_initialized",
+		})
 		return
 	}
 
@@ -241,7 +259,11 @@ func (h *MeAvatarHandler) handleGet(w http.ResponseWriter, r *http.Request, uid 
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MeAvatarHandler) handlePatch(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
 	type meAvatarUpdateRequest struct {
 		AvatarName   *string `json:"avatarName,omitempty"`
 		Profile      *string `json:"profile,omitempty"`
@@ -252,21 +274,26 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_body"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid_body",
+		})
 		return
 	}
 
-	body := string(raw)
-	if body == "" {
+	if len(raw) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "empty_body"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "empty_body",
+		})
 		return
 	}
 
 	var req meAvatarUpdateRequest
-	if err := json.Unmarshal([]byte(body), &req); err != nil {
+	if err := json.Unmarshal(raw, &req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid_json",
+		})
 		return
 	}
 
@@ -275,36 +302,40 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 		req.ExternalLink == nil &&
 		req.AvatarIcon == nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "no_fields_to_update"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "no_fields_to_update",
+		})
 		return
 	}
 
 	patch := avatardom.AvatarPatch{
-		UserID:        "",
-		AvatarName:    req.AvatarName,
-		AvatarIcon:    req.AvatarIcon,
-		WalletAddress: nil,
-		Profile:       req.Profile,
-		ExternalLink:  req.ExternalLink,
+		AvatarName:   req.AvatarName,
+		AvatarIcon:   req.AvatarIcon,
+		Profile:      req.Profile,
+		ExternalLink: req.ExternalLink,
 	}
 
-	avatarID, outPatch, uerr := h.updateAvatarPatchByUID(r.Context(), uid, patch)
-	if uerr != nil {
-		writeMeAvatarErr(w, uerr)
+	avatarID, outPatch, err :=
+		h.updateAvatarPatchByUID(r.Context(), uid, patch)
+	if err != nil {
+		writeMeAvatarErr(w, err)
 		return
 	}
 
 	if avatarID == "" {
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_not_found_for_uid"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar_not_found_for_uid",
+		})
 		return
 	}
 
-	outPatch.Sanitize()
-
-	if outPatch.WalletAddress == nil || *outPatch.WalletAddress == "" {
+	if outPatch.WalletAddress == nil ||
+		*outPatch.WalletAddress == "" {
 		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet_address_not_initialized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "wallet_address_not_initialized",
+		})
 		return
 	}
 
@@ -331,14 +362,21 @@ func (h *MeAvatarHandler) handlePatch(w http.ResponseWriter, r *http.Request, ui
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func (h *MeAvatarHandler) handleDelete(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MeAvatarHandler) handleDelete(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
 	if h == nil || h.AvatarUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar usecase not configured",
+		})
 		return
 	}
 
-	avatarID, _, _, err := h.ResolveAvatarByUID(r.Context(), uid)
+	avatarID, _, _, err :=
+		h.ResolveAvatarByUID(r.Context(), uid)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return
@@ -355,24 +393,33 @@ func (h *MeAvatarHandler) handleDelete(w http.ResponseWriter, r *http.Request, u
 func writeMeAvatarErr(w http.ResponseWriter, err error) {
 	if err == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "internal_error",
+		})
 		return
 	}
 
 	switch {
 	case isNotFoundLike(err):
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_not_found_for_uid"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar_not_found_for_uid",
+		})
 		return
 
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
 		w.WriteHeader(http.StatusRequestTimeout)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "request_timeout"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "request_timeout",
+		})
 		return
 
 	case errors.Is(err, avatardom.ErrInvalidID):
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_not_found_for_uid"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar_not_found_for_uid",
+		})
 		return
 
 	case errors.Is(err, avatardom.ErrInvalidAvatarName),
@@ -380,12 +427,16 @@ func writeMeAvatarErr(w http.ResponseWriter, err error) {
 		errors.Is(err, avatardom.ErrInvalidProfile),
 		errors.Is(err, avatardom.ErrInvalidExternalLink):
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
 		return
 
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "internal_error",
+		})
 		return
 	}
 }

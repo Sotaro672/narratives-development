@@ -1,21 +1,10 @@
 // backend/internal/domain/avatar/repository_port.go
 package avatar
 
-import (
-	"context"
+import "context"
 
-	common "narratives/internal/domain/common"
-)
-
-// ========================================
-// Patch（部分更新）
-// ========================================
-// nil のフィールドは更新しない契約
-//
-// entity.go を正として:
-// - AvatarIconURL / AvatarIconPath → AvatarIcon
-// - Bio          → Profile
-// - Website      → ExternalLink
+// AvatarPatch はAvatarの部分更新入力です。
+// nilのフィールドは更新しません。
 type AvatarPatch struct {
 	UserID        string  `json:"userId"`
 	AvatarName    *string `json:"avatarName,omitempty"`
@@ -25,60 +14,24 @@ type AvatarPatch struct {
 	ExternalLink  *string `json:"externalLink,omitempty"`
 }
 
-// Sanitize keeps patch fields as-is.
-func (p *AvatarPatch) Sanitize() {
-	if p == nil {
-		return
-	}
-}
-
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
-// 共通定義のエイリアス（ドメイン層はインフラ未依存）
-type Page = common.Page
-type PageResult = common.PageResult[Avatar]
-type SaveOptions = common.SaveOptions
-type RepositoryCRUD = common.RepositoryCRUD[Avatar, AvatarPatch]
-
-// カーソルページング（PG実装が使用）
-type CursorPage = common.CursorPage
-type CursorPageResult = common.CursorPageResult[Avatar]
-
-// ========================================
-// Repository ポート（契約）
-// ========================================
-
+// Repository はAvatar集約の永続化契約です。
 type Repository interface {
-	// avatarId による取得
+	// GetByID はavatarIdでAvatarを取得します。
 	GetByID(ctx context.Context, id string) (Avatar, error)
 
-	// userId による取得
-	// avatar document id は avatarId であり userId ではない。
-	// uid -> avatarId 解決や mall/me/avatar 判定で使用する。
+	// GetByUserID はuserIdでAvatarを取得します。
+	// Avatar document IDはavatarIdであり、userIdではありません。
 	GetByUserID(ctx context.Context, userID string) (Avatar, error)
 
-	// 作成
+	// Create はAvatarを作成します。
 	Create(ctx context.Context, a Avatar) (Avatar, error)
 
-	// 更新
+	// Update はAvatarを部分更新します。
 	Update(ctx context.Context, id string, patch AvatarPatch) (Avatar, error)
 
-	// 削除
+	// Delete はAvatarを削除します。
 	Delete(ctx context.Context, id string) error
 
-	// userId による存在確認
-	// avatar document id は avatarId であり userId ではない。
-	// setup status や mall/me/avatar 判定では userId で存在確認する。
+	// ExistsByUserID はuserIdに対応するAvatarの存在を確認します。
 	ExistsByUserID(ctx context.Context, userID string) (bool, error)
 }

@@ -13,7 +13,7 @@ import (
 // Avatar - ドメインエンティティ
 //
 // avatar_create.dart の入力を正として:
-// - アバターアイコン画像 → AvatarIcon（保存先/URL いずれでも可。アプリ側で統一した値を渡す）
+// - アバターアイコン画像 → AvatarIcon
 // - アバター名           → AvatarName
 // - プロフィール         → Profile
 // - 外部リンク           → ExternalLink
@@ -25,8 +25,8 @@ type Avatar struct {
 
 	AvatarName string `json:"avatarName"`
 
-	// URL と Path を統一して 1 フィールドに
-	// - 例: "https://..." でも "gs://bucket/..." でも "avatars/..." でも可
+	// URLとPathを統一して1フィールドにする。
+	// 例: "https://..."、"gs://bucket/..."、"avatars/..."
 	AvatarIcon *string `json:"avatarIcon,omitempty"`
 
 	WalletAddress *string   `json:"walletAddress,omitempty"`
@@ -36,13 +36,13 @@ type Avatar struct {
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
-// SolanaAvatarWallet
-// Avatar 作成時に Solana ウォレットを開設し、秘密鍵は Secret Manager に保存する設計のため、
-// ドメイン上は「公開鍵アドレス」と「秘密鍵参照（Secret の Version 名など）」だけを保持します。
+// SolanaAvatarWallet はAvatar作成時に開設したSolana walletを表します。
+//
+// 秘密鍵本体ではなく、公開鍵アドレスとSecret Managerの参照先のみを保持します。
 type SolanaAvatarWallet struct {
 	AvatarID   string `json:"avatarId"`
-	Address    string `json:"address"`    // base58 public key
-	SecretName string `json:"secretName"` // projects/<p>/secrets/<s>/versions/<v>
+	Address    string `json:"address"`
+	SecretName string `json:"secretName"`
 }
 
 // Policy
@@ -64,11 +64,10 @@ var (
 	ErrInvalidCreatedAt    = errors.New("avatar: invalid createdAt")
 	ErrInvalidUpdatedAt    = errors.New("avatar: invalid updatedAt")
 
-	// Link errors
 	ErrInvalidWalletAddressLink = errors.New("avatar: invalid walletAddress link")
 )
 
-// New は Avatar を生成するコンストラクタです。
+// New は永続化済みIDを持つAvatarを生成します。
 func New(
 	id string,
 	userID string,
@@ -92,42 +91,52 @@ func New(
 		UpdatedAt:     updatedAt.UTC(),
 	}
 
-	if err := a.validate(); err != nil {
+	if err := a.Validate(); err != nil {
 		return Avatar{}, err
 	}
 
 	return a, nil
 }
 
-// NewForCreate は作成用（now を使い回す）コンストラクタです。
+// NewAvatarInput はAvatar作成時のDomain入力です。
+type NewAvatarInput struct {
+	UserID       string
+	AvatarName   string
+	AvatarIcon   *string
+	WalletAddr   *string
+	Profile      *string
+	ExternalLink *string
+}
+
+// NewForCreate はRepositoryでIDが採番される前のAvatarを生成します。
 func NewForCreate(
 	id string,
-	input struct {
-		UserID       string
-		AvatarName   string
-		AvatarIcon   *string
-		WalletAddr   *string
-		Profile      *string
-		ExternalLink *string
-	},
+	input NewAvatarInput,
 	now time.Time,
 ) (Avatar, error) {
 	now = now.UTC()
 
-	return New(
-		id,
-		input.UserID,
-		input.AvatarName,
-		input.AvatarIcon,
-		input.WalletAddr,
-		input.Profile,
-		input.ExternalLink,
-		now,
-		now,
-	)
+	a := Avatar{
+		ID:            id,
+		UserID:        input.UserID,
+		AvatarName:    input.AvatarName,
+		AvatarIcon:    input.AvatarIcon,
+		WalletAddress: input.WalletAddr,
+		Profile:       input.Profile,
+		ExternalLink:  input.ExternalLink,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	// IDは空でもよい。Repository.Createで採番した後にValidateする。
+	if err := a.validateForCreate(); err != nil {
+		return Avatar{}, err
+	}
+
+	return a, nil
 }
 
-// NewFromStringTimes parses times and delegates to New.
+// NewFromStringTimes はRFC3339文字列を解析してAvatarを生成します。
 func NewFromStringTimes(
 	id string,
 	userID string,
@@ -162,8 +171,7 @@ func NewFromStringTimes(
 	)
 }
 
-// Mutators
-
+// SetAvatarIcon はAvatarIconを更新します。
 func (a *Avatar) SetAvatarIcon(v *string) error {
 	if v != nil && len([]rune(*v)) > MaxIconLength {
 		return ErrInvalidAvatarIcon
@@ -173,11 +181,13 @@ func (a *Avatar) SetAvatarIcon(v *string) error {
 	return nil
 }
 
+// SetWalletAddress はWalletAddressを更新します。
 func (a *Avatar) SetWalletAddress(v *string) error {
 	a.WalletAddress = v
 	return nil
 }
 
+// SetProfile はProfileを更新します。
 func (a *Avatar) SetProfile(v *string) error {
 	if v != nil && len([]rune(*v)) > MaxProfileLength {
 		return ErrInvalidProfile
@@ -187,6 +197,7 @@ func (a *Avatar) SetProfile(v *string) error {
 	return nil
 }
 
+// SetExternalLink はExternalLinkを更新します。
 func (a *Avatar) SetExternalLink(v *string) error {
 	if v != nil {
 		if len([]rune(*v)) > MaxExternalLinkLength {
@@ -202,7 +213,7 @@ func (a *Avatar) SetExternalLink(v *string) error {
 	return nil
 }
 
-// UpdateAvatarName updates avatar name.
+// UpdateAvatarName はAvatarNameを更新します。
 func (a *Avatar) UpdateAvatarName(name string) error {
 	if name == "" || len([]rune(name)) > MaxAvatarNameLength {
 		return ErrInvalidAvatarName
@@ -212,7 +223,7 @@ func (a *Avatar) UpdateAvatarName(name string) error {
 	return nil
 }
 
-// SetUser は与えられた User を所有者として設定します（User.ID を UserID に反映）
+// SetUser はUserを所有者として設定します。
 func (a *Avatar) SetUser(u userdom.User) error {
 	if a == nil {
 		return nil
@@ -227,7 +238,7 @@ func (a *Avatar) SetUser(u userdom.User) error {
 	return nil
 }
 
-// SetWallet sets the wallet link from a Wallet domain object (uses Wallet.WalletAddress).
+// SetWallet はWallet DomainからWalletAddressを設定します。
 func (a *Avatar) SetWallet(w walletdom.Wallet) error {
 	addr := w.WalletAddress
 	if addr == "" {
@@ -238,13 +249,12 @@ func (a *Avatar) SetWallet(w walletdom.Wallet) error {
 	return nil
 }
 
-// ClearWallet removes the wallet link.
+// ClearWallet はWallet linkを解除します。
 func (a *Avatar) ClearWallet() {
 	a.WalletAddress = nil
 }
 
-// ValidateUserLink は UserID が有効か（空でないか）を確認します。
-// 実在性の確認は上位レイヤー（リポジトリやユースケース）で行ってください。
+// ValidateUserLink はUserIDが設定されていることを確認します。
 func (a Avatar) ValidateUserLink() error {
 	if a.UserID == "" {
 		return ErrInvalidUserID
@@ -253,7 +263,7 @@ func (a Avatar) ValidateUserLink() error {
 	return nil
 }
 
-// ValidateWalletLink ensures WalletAddress is present (existence check is upper layer’s responsibility).
+// ValidateWalletLink はWalletAddressが設定されていることを確認します。
 func (a Avatar) ValidateWalletLink() error {
 	if a.WalletAddress == nil || *a.WalletAddress == "" {
 		return ErrInvalidWalletAddressLink
@@ -262,25 +272,83 @@ func (a Avatar) ValidateWalletLink() error {
 	return nil
 }
 
-// Validation
-func (a Avatar) validate() error {
+// ApplyPatch はPatchをAvatarのコピーへ適用し、更新後の不変条件を検証します。
+func (a Avatar) ApplyPatch(
+	patch AvatarPatch,
+	updatedAt time.Time,
+) (Avatar, error) {
+	next := a
+
+	if patch.AvatarName != nil {
+		if err := next.UpdateAvatarName(*patch.AvatarName); err != nil {
+			return Avatar{}, err
+		}
+	}
+
+	if patch.AvatarIcon != nil {
+		if err := next.SetAvatarIcon(patch.AvatarIcon); err != nil {
+			return Avatar{}, err
+		}
+	}
+
+	if patch.WalletAddress != nil {
+		if *patch.WalletAddress == "" {
+			return Avatar{}, ErrInvalidWalletAddressLink
+		}
+
+		if err := next.SetWalletAddress(patch.WalletAddress); err != nil {
+			return Avatar{}, err
+		}
+	}
+
+	if patch.Profile != nil {
+		if err := next.SetProfile(patch.Profile); err != nil {
+			return Avatar{}, err
+		}
+	}
+
+	if patch.ExternalLink != nil {
+		if err := next.SetExternalLink(patch.ExternalLink); err != nil {
+			return Avatar{}, err
+		}
+	}
+
+	next.UpdatedAt = updatedAt.UTC()
+
+	if err := next.Validate(); err != nil {
+		return Avatar{}, err
+	}
+
+	return next, nil
+}
+
+// Validate は永続化対象Avatarのすべての不変条件を検証します。
+func (a Avatar) Validate() error {
 	if a.ID == "" {
 		return ErrInvalidID
 	}
 
+	return a.validateForCreate()
+}
+
+// validateForCreate はID採番前に検証可能な不変条件を確認します。
+func (a Avatar) validateForCreate() error {
 	if a.UserID == "" {
 		return ErrInvalidUserID
 	}
 
-	if a.AvatarName == "" || len([]rune(a.AvatarName)) > MaxAvatarNameLength {
+	if a.AvatarName == "" ||
+		len([]rune(a.AvatarName)) > MaxAvatarNameLength {
 		return ErrInvalidAvatarName
 	}
 
-	if a.AvatarIcon != nil && len([]rune(*a.AvatarIcon)) > MaxIconLength {
+	if a.AvatarIcon != nil &&
+		len([]rune(*a.AvatarIcon)) > MaxIconLength {
 		return ErrInvalidAvatarIcon
 	}
 
-	if a.Profile != nil && len([]rune(*a.Profile)) > MaxProfileLength {
+	if a.Profile != nil &&
+		len([]rune(*a.Profile)) > MaxProfileLength {
 		return ErrInvalidProfile
 	}
 
@@ -298,14 +366,15 @@ func (a Avatar) validate() error {
 		return ErrInvalidCreatedAt
 	}
 
-	if a.UpdatedAt.IsZero() || a.UpdatedAt.Before(a.CreatedAt) {
+	if a.UpdatedAt.IsZero() ||
+		a.UpdatedAt.Before(a.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
 
 	return nil
 }
 
-// External link validator (http/https only)
+// validateExternalLink はhttp/https URLを検証します。
 func validateExternalLink(s string) error {
 	if s == "" {
 		return nil
@@ -325,35 +394,4 @@ func validateExternalLink(s string) error {
 	}
 
 	return nil
-}
-
-// Listing filter/types (used by application usecases)
-type SortBy string
-
-const (
-	SortByCreatedAt SortBy = "created_at"
-	SortByUpdatedAt SortBy = "updated_at"
-	SortByName      SortBy = "avatar_name"
-)
-
-func IsValidSortBy(s SortBy) bool {
-	switch s {
-	case SortByCreatedAt, SortByUpdatedAt, SortByName:
-		return true
-	default:
-		return false
-	}
-}
-
-// ListFilter represents filters and pagination for listing avatars.
-type ListFilter struct {
-	UserID        *string
-	NameContains  string
-	WalletAddress *string
-
-	Limit  int
-	Offset int
-
-	SortBy SortBy
-	Desc   bool
 }

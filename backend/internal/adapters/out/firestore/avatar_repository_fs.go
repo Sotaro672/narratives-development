@@ -14,39 +14,55 @@ import (
 	avdom "narratives/internal/domain/avatar"
 )
 
-// Firestore implementation of avatar.Repository.
+// AvatarRepositoryFS はavatar.RepositoryのFirestore実装です。
 type AvatarRepositoryFS struct {
 	Client *firestore.Client
 }
 
-func NewAvatarRepositoryFS(client *firestore.Client) *AvatarRepositoryFS {
-	return &AvatarRepositoryFS{Client: client}
+func NewAvatarRepositoryFS(
+	client *firestore.Client,
+) *AvatarRepositoryFS {
+	return &AvatarRepositoryFS{
+		Client: client,
+	}
 }
 
 func (r *AvatarRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("avatars")
 }
 
-// Compile-time check: ensure AvatarRepositoryFS satisfies avatar.Repository.
+// Compile-time interface check.
 var _ avdom.Repository = (*AvatarRepositoryFS)(nil)
 
 var (
-	errNotFound             = errors.New("avatar: not found")
-	errAvatarNotFoundForUID = errors.New("avatar_not_found_for_uid")
-	errConflict             = errors.New("avatar: conflict")
-	errBadClient            = errors.New("firestore client is nil")
-	errInvalidWalletAddr    = errors.New("avatar: invalid walletAddress")
-	errWalletAlreadyBound   = errors.New("avatar: walletAddress already set")
+	errNotFound = errors.New(
+		"avatar: not found",
+	)
+	errAvatarNotFoundForUID = errors.New(
+		"avatar_not_found_for_uid",
+	)
+	errConflict = errors.New(
+		"avatar: conflict",
+	)
+	errBadClient = errors.New(
+		"firestore client is nil",
+	)
+	errInvalidWalletAddr = errors.New(
+		"avatar: invalid walletAddress",
+	)
+	errWalletAlreadyBound = errors.New(
+		"avatar: walletAddress already set",
+	)
 )
 
-// ==============================
-// GetByID
-// ==============================
-
-func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avatar, error) {
+func (r *AvatarRepositoryFS) GetByID(
+	ctx context.Context,
+	id string,
+) (avdom.Avatar, error) {
 	if r == nil || r.Client == nil {
 		return avdom.Avatar{}, errBadClient
 	}
+
 	if id == "" {
 		return avdom.Avatar{}, errNotFound
 	}
@@ -58,26 +74,26 @@ func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avat
 	if err != nil {
 		return avdom.Avatar{}, err
 	}
+
 	return r.docToDomain(snap)
 }
 
-// ==============================
-// GetByUserID
-// ==============================
-//
-// Avatar document id は avatarId であり userId ではないため、
-// Firebase UID / userId から avatar document を取得する。
-// uid -> avatarId 解決や mall/me/avatar 判定で使用する。
-func (r *AvatarRepositoryFS) GetByUserID(ctx context.Context, userID string) (avdom.Avatar, error) {
+func (r *AvatarRepositoryFS) GetByUserID(
+	ctx context.Context,
+	userID string,
+) (avdom.Avatar, error) {
 	if r == nil || r.Client == nil {
 		return avdom.Avatar{}, errBadClient
 	}
+
 	if userID == "" {
 		return avdom.Avatar{}, errNotFound
 	}
 
-	q := r.col().Where("userId", "==", userID).Limit(1)
-	iter := q.Documents(ctx)
+	iter := r.col().
+		Where("userId", "==", userID).
+		Limit(1).
+		Documents(ctx)
 	defer iter.Stop()
 
 	doc, err := iter.Next()
@@ -87,30 +103,36 @@ func (r *AvatarRepositoryFS) GetByUserID(ctx context.Context, userID string) (av
 	if err != nil {
 		return avdom.Avatar{}, err
 	}
-	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+
+	if doc == nil ||
+		doc.Ref == nil ||
+		doc.Ref.ID == "" {
 		return avdom.Avatar{}, errNotFound
 	}
 
 	return r.docToDomain(doc)
 }
 
-// ==============================
-// ResolveAvatarByUID
-// ==============================
-//
-// Avatar document id は avatarId であり userId ではないため、
-// Firebase UID から現在の avatarId と walletAddress を解決する。
-// AvatarContextMiddleware / /mall/me/avatars 系の uid -> avatar 解決で使用する。
-func (r *AvatarRepositoryFS) ResolveAvatarByUID(ctx context.Context, uid string) (avatarID string, walletAddress string, err error) {
+func (r *AvatarRepositoryFS) ResolveAvatarByUID(
+	ctx context.Context,
+	uid string,
+) (
+	avatarID string,
+	walletAddress string,
+	err error,
+) {
 	if r == nil || r.Client == nil {
 		return "", "", errBadClient
 	}
+
 	if uid == "" {
 		return "", "", errAvatarNotFoundForUID
 	}
 
-	q := r.col().Where("userId", "==", uid).Limit(1)
-	iter := q.Documents(ctx)
+	iter := r.col().
+		Where("userId", "==", uid).
+		Limit(1).
+		Documents(ctx)
 	defer iter.Stop()
 
 	doc, err := iter.Next()
@@ -120,14 +142,18 @@ func (r *AvatarRepositoryFS) ResolveAvatarByUID(ctx context.Context, uid string)
 	if err != nil {
 		return "", "", err
 	}
-	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+
+	if doc == nil ||
+		doc.Ref == nil ||
+		doc.Ref.ID == "" {
 		return "", "", errAvatarNotFoundForUID
 	}
 
 	avatarID = doc.Ref.ID
 
-	if v, err := doc.DataAt("walletAddress"); err == nil {
-		if s, ok := v.(string); ok {
+	value, dataErr := doc.DataAt("walletAddress")
+	if dataErr == nil {
+		if s, ok := value.(string); ok {
 			walletAddress = s
 		}
 	}
@@ -135,22 +161,22 @@ func (r *AvatarRepositoryFS) ResolveAvatarByUID(ctx context.Context, uid string)
 	return avatarID, walletAddress, nil
 }
 
-// ==============================
-// ExistsByUserID
-// ==============================
-//
-// Avatar document id は avatarId であり userId ではないため、
-// setup status などの owner 判定では userId field を検索する。
-func (r *AvatarRepositoryFS) ExistsByUserID(ctx context.Context, userID string) (bool, error) {
+func (r *AvatarRepositoryFS) ExistsByUserID(
+	ctx context.Context,
+	userID string,
+) (bool, error) {
 	if r == nil || r.Client == nil {
 		return false, errBadClient
 	}
+
 	if userID == "" {
 		return false, nil
 	}
 
-	q := r.col().Where("userId", "==", userID).Limit(1)
-	iter := q.Documents(ctx)
+	iter := r.col().
+		Where("userId", "==", userID).
+		Limit(1).
+		Documents(ctx)
 	defer iter.Stop()
 
 	_, err := iter.Next()
@@ -164,24 +190,26 @@ func (r *AvatarRepositoryFS) ExistsByUserID(ctx context.Context, userID string) 
 	return true, nil
 }
 
-// ==============================
-// Create
-// ==============================
-
-func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.Avatar, error) {
+func (r *AvatarRepositoryFS) Create(
+	ctx context.Context,
+	a avdom.Avatar,
+) (avdom.Avatar, error) {
 	if r == nil || r.Client == nil {
 		return avdom.Avatar{}, errBadClient
 	}
 
 	now := time.Now().UTC()
+
 	if a.CreatedAt.IsZero() {
 		a.CreatedAt = now
 	}
+
 	if a.UpdatedAt.IsZero() {
 		a.UpdatedAt = now
 	}
 
 	var ref *firestore.DocumentRef
+
 	if a.ID == "" {
 		ref = r.col().NewDoc()
 		a.ID = ref.ID
@@ -189,13 +217,18 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 		ref = r.col().Doc(a.ID)
 	}
 
-	// userId は Firebase UID を格納している前提（= /mall/me/avatar 解決キー）
+	// ID採番後、Firestoreへ保存する直前に完全検証する。
+	if err := a.Validate(); err != nil {
+		return avdom.Avatar{}, err
+	}
+
 	data := r.domainToDocData(a)
 
 	if _, err := ref.Create(ctx, data); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
 			return avdom.Avatar{}, errConflict
 		}
+
 		return avdom.Avatar{}, err
 	}
 
@@ -203,40 +236,60 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 	if err != nil {
 		return avdom.Avatar{}, err
 	}
+
 	return r.docToDomain(snap)
 }
 
-// ==============================
-// Update (patch)
-// ==============================
-//
-// 重要: walletAddress は「avatar につき 1回だけ」設定可能。
-// - すでに walletAddress が入っている場合は上書きしない（Conflict）。
-// - 空文字/nil で walletAddress を消すことも許可しない。
-// - 競合を避けるため walletAddress を含む更新は Transaction で行う。
-func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.AvatarPatch) (avdom.Avatar, error) {
+func (r *AvatarRepositoryFS) Update(
+	ctx context.Context,
+	id string,
+	patch avdom.AvatarPatch,
+) (avdom.Avatar, error) {
 	if r == nil || r.Client == nil {
 		return avdom.Avatar{}, errBadClient
 	}
+
 	if id == "" {
 		return avdom.Avatar{}, errNotFound
 	}
 
 	ref := r.col().Doc(id)
 
-	// walletAddress を含む場合は transaction で「未設定ならセット」を保証
 	if patch.WalletAddress != nil {
-		want := *patch.WalletAddress
-		if want == "" {
-			return avdom.Avatar{}, errInvalidWalletAddr
-		}
+		return r.updateWithWalletAddress(
+			ctx,
+			ref,
+			patch,
+		)
+	}
 
-		// sanitize optional strings (empty -> nil)
-		sAvatarIcon := nilIfEmptyPtr(patch.AvatarIcon)
-		sProfile := nilIfEmptyPtr(patch.Profile)
-		sExternalLink := nilIfEmptyPtr(patch.ExternalLink)
+	return r.updateWithoutWalletAddress(
+		ctx,
+		ref,
+		patch,
+	)
+}
 
-		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+func (r *AvatarRepositoryFS) updateWithWalletAddress(
+	ctx context.Context,
+	ref *firestore.DocumentRef,
+	patch avdom.AvatarPatch,
+) (avdom.Avatar, error) {
+	walletAddress := *patch.WalletAddress
+	if walletAddress == "" {
+		return avdom.Avatar{}, errInvalidWalletAddr
+	}
+
+	avatarIcon := nilIfEmptyPtr(patch.AvatarIcon)
+	profile := nilIfEmptyPtr(patch.Profile)
+	externalLink := nilIfEmptyPtr(patch.ExternalLink)
+
+	err := r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
 			snap, err := tx.Get(ref)
 			if status.Code(err) == codes.NotFound {
 				return errNotFound
@@ -245,169 +298,225 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 				return err
 			}
 
-			// 既に walletAddress があるなら上書き禁止
-			existing := getStringField(snap, "walletAddress")
+			updatedAt := time.Now().UTC()
+
+			current, err := r.docToDomain(snap)
+			if err != nil {
+				return err
+			}
+
+			// Transaction内の最新値にPatchを適用して検証する。
+			if _, err := current.ApplyPatch(
+				patch,
+				updatedAt,
+			); err != nil {
+				return err
+			}
+
+			existing := getStringField(
+				snap,
+				"walletAddress",
+			)
 			if existing != "" {
-				// 既に同じ値が入っている場合も「もう開設済み」として Conflict 扱い
 				return errWalletAlreadyBound
 			}
 
-			var updates []firestore.Update
-
-			// walletAddress はこの transaction で一度だけセット可能
-			updates = append(updates, firestore.Update{
-				Path:  "walletAddress",
-				Value: want,
-			})
-
-			if patch.AvatarName != nil {
-				updates = append(updates, firestore.Update{
-					Path:  "avatarName",
-					Value: *patch.AvatarName,
-				})
+			updates := []firestore.Update{
+				{
+					Path:  "walletAddress",
+					Value: walletAddress,
+				},
 			}
 
-			// entity.go 正: AvatarIconURL/Path -> AvatarIcon
+			if patch.AvatarName != nil {
+				updates = append(
+					updates,
+					firestore.Update{
+						Path:  "avatarName",
+						Value: *patch.AvatarName,
+					},
+				)
+			}
+
 			if patch.AvatarIcon != nil {
-				var v any
-				if sAvatarIcon == nil {
-					v = nil
-				} else {
-					v = *sAvatarIcon
+				var value any
+				if avatarIcon != nil {
+					value = *avatarIcon
 				}
-				updates = append(updates, firestore.Update{
-					Path:  "avatarIcon",
-					Value: v,
-				})
+
+				updates = append(
+					updates,
+					firestore.Update{
+						Path:  "avatarIcon",
+						Value: value,
+					},
+				)
 			}
 
 			if patch.Profile != nil {
-				var v any
-				if sProfile == nil {
-					v = nil
-				} else {
-					v = *sProfile
+				var value any
+				if profile != nil {
+					value = *profile
 				}
-				updates = append(updates, firestore.Update{
-					Path:  "profile",
-					Value: v,
-				})
+
+				updates = append(
+					updates,
+					firestore.Update{
+						Path:  "profile",
+						Value: value,
+					},
+				)
 			}
 
 			if patch.ExternalLink != nil {
-				var v any
-				if sExternalLink == nil {
-					v = nil
-				} else {
-					v = *sExternalLink
+				var value any
+				if externalLink != nil {
+					value = *externalLink
 				}
-				updates = append(updates, firestore.Update{
-					Path:  "externalLink",
-					Value: v,
-				})
+
+				updates = append(
+					updates,
+					firestore.Update{
+						Path:  "externalLink",
+						Value: value,
+					},
+				)
 			}
 
-			// Always bump updatedAt
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: time.Now().UTC(),
-			})
+			updates = append(
+				updates,
+				firestore.Update{
+					Path:  "updatedAt",
+					Value: updatedAt,
+				},
+			)
 
 			if err := tx.Update(ref, updates); err != nil {
 				if status.Code(err) == codes.NotFound {
 					return errNotFound
 				}
+
 				return err
 			}
-			return nil
-		})
-		if err != nil {
-			// wallet already set は conflict として返す
-			if errors.Is(err, errWalletAlreadyBound) {
-				return avdom.Avatar{}, errConflict
-			}
-			if errors.Is(err, errNotFound) {
-				return avdom.Avatar{}, errNotFound
-			}
-			return avdom.Avatar{}, err
-		}
 
-		snap, err := ref.Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return avdom.Avatar{}, errNotFound
-			}
+			return nil
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, errWalletAlreadyBound):
+			return avdom.Avatar{}, errConflict
+		case errors.Is(err, errNotFound):
+			return avdom.Avatar{}, errNotFound
+		default:
 			return avdom.Avatar{}, err
 		}
-		return r.docToDomain(snap)
 	}
 
-	// ------------------------------
-	// walletAddress を含まない通常更新
-	// ------------------------------
-
-	// Ensure exists
-	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
+	snap, err := ref.Get(ctx)
+	if status.Code(err) == codes.NotFound {
 		return avdom.Avatar{}, errNotFound
-	} else if err != nil {
+	}
+	if err != nil {
 		return avdom.Avatar{}, err
 	}
 
-	var updates []firestore.Update
+	return r.docToDomain(snap)
+}
+
+func (r *AvatarRepositoryFS) updateWithoutWalletAddress(
+	ctx context.Context,
+	ref *firestore.DocumentRef,
+	patch avdom.AvatarPatch,
+) (avdom.Avatar, error) {
+	currentSnap, err := ref.Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return avdom.Avatar{}, errNotFound
+	}
+	if err != nil {
+		return avdom.Avatar{}, err
+	}
+
+	updates := make([]firestore.Update, 0, 5)
 
 	if patch.AvatarName != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "avatarName",
-			Value: *patch.AvatarName,
-		})
+		updates = append(
+			updates,
+			firestore.Update{
+				Path:  "avatarName",
+				Value: *patch.AvatarName,
+			},
+		)
 	}
 
-	// entity.go 正: AvatarIconURL/Path -> AvatarIcon
 	if patch.AvatarIcon != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "avatarIcon",
-			Value: optionalAvatarString(*patch.AvatarIcon),
-		})
+		updates = append(
+			updates,
+			firestore.Update{
+				Path: "avatarIcon",
+				Value: optionalAvatarString(
+					*patch.AvatarIcon,
+				),
+			},
+		)
 	}
-
-	// walletAddress は通常 Update では扱わない（上書き防止のため）
 
 	if patch.Profile != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "profile",
-			Value: optionalAvatarString(*patch.Profile),
-		})
+		updates = append(
+			updates,
+			firestore.Update{
+				Path: "profile",
+				Value: optionalAvatarString(
+					*patch.Profile,
+				),
+			},
+		)
 	}
 
 	if patch.ExternalLink != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "externalLink",
-			Value: optionalAvatarString(*patch.ExternalLink),
-		})
+		updates = append(
+			updates,
+			firestore.Update{
+				Path: "externalLink",
+				Value: optionalAvatarString(
+					*patch.ExternalLink,
+				),
+			},
+		)
 	}
 
 	if len(updates) == 0 {
-		// no-op: return current
-		snap, err := ref.Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return avdom.Avatar{}, errNotFound
-			}
-			return avdom.Avatar{}, err
-		}
-		return r.docToDomain(snap)
+		return r.docToDomain(currentSnap)
 	}
 
-	// Always bump updatedAt
-	updates = append(updates, firestore.Update{
-		Path:  "updatedAt",
-		Value: time.Now().UTC(),
-	})
+	updatedAt := time.Now().UTC()
+
+	current, err := r.docToDomain(currentSnap)
+	if err != nil {
+		return avdom.Avatar{}, err
+	}
+
+	// Firestoreへ書き込む直前に更新後の集約を検証する。
+	if _, err := current.ApplyPatch(
+		patch,
+		updatedAt,
+	); err != nil {
+		return avdom.Avatar{}, err
+	}
+
+	updates = append(
+		updates,
+		firestore.Update{
+			Path:  "updatedAt",
+			Value: updatedAt,
+		},
+	)
 
 	if _, err := ref.Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return avdom.Avatar{}, errNotFound
 		}
+
 		return avdom.Avatar{}, err
 	}
 
@@ -415,22 +524,24 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 	if err != nil {
 		return avdom.Avatar{}, err
 	}
+
 	return r.docToDomain(snap)
 }
 
-// ==============================
-// Delete
-// ==============================
-
-func (r *AvatarRepositoryFS) Delete(ctx context.Context, id string) error {
+func (r *AvatarRepositoryFS) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if r == nil || r.Client == nil {
 		return errBadClient
 	}
+
 	if id == "" {
 		return errNotFound
 	}
 
 	ref := r.col().Doc(id)
+
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
 		return errNotFound
 	} else if err != nil {
@@ -441,13 +552,10 @@ func (r *AvatarRepositoryFS) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-// ==============================
-// Mapping helpers
-// ==============================
-
-func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom.Avatar, error) {
+func (r *AvatarRepositoryFS) docToDomain(
+	doc *firestore.DocumentSnapshot,
+) (avdom.Avatar, error) {
 	var raw struct {
-		// userId は Firebase UID を格納している前提
 		UserID string `firestore:"userId"`
 
 		AvatarName    string    `firestore:"avatarName"`
@@ -471,68 +579,78 @@ func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom
 		UpdatedAt:  raw.UpdatedAt.UTC(),
 	}
 
-	if raw.AvatarIcon != nil && *raw.AvatarIcon != "" {
-		v := *raw.AvatarIcon
-		a.AvatarIcon = &v
+	if raw.AvatarIcon != nil &&
+		*raw.AvatarIcon != "" {
+		value := *raw.AvatarIcon
+		a.AvatarIcon = &value
 	}
-	if raw.WalletAddress != nil && *raw.WalletAddress != "" {
-		v := *raw.WalletAddress
-		a.WalletAddress = &v
+
+	if raw.WalletAddress != nil &&
+		*raw.WalletAddress != "" {
+		value := *raw.WalletAddress
+		a.WalletAddress = &value
 	}
-	if raw.Profile != nil && *raw.Profile != "" {
-		v := *raw.Profile
-		a.Profile = &v
+
+	if raw.Profile != nil &&
+		*raw.Profile != "" {
+		value := *raw.Profile
+		a.Profile = &value
 	}
-	if raw.ExternalLink != nil && *raw.ExternalLink != "" {
-		v := *raw.ExternalLink
-		a.ExternalLink = &v
+
+	if raw.ExternalLink != nil &&
+		*raw.ExternalLink != "" {
+		value := *raw.ExternalLink
+		a.ExternalLink = &value
 	}
 
 	return a, nil
 }
 
-func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
+func (r *AvatarRepositoryFS) domainToDocData(
+	a avdom.Avatar,
+) map[string]any {
 	data := map[string]any{
-		// userId は Firebase UID を格納している前提
 		"userId":     a.UserID,
 		"avatarName": a.AvatarName,
 		"createdAt":  a.CreatedAt.UTC(),
 		"updatedAt":  a.UpdatedAt.UTC(),
 	}
 
-	if a.AvatarIcon != nil && *a.AvatarIcon != "" {
+	if a.AvatarIcon != nil &&
+		*a.AvatarIcon != "" {
 		data["avatarIcon"] = *a.AvatarIcon
 	}
-	if a.WalletAddress != nil && *a.WalletAddress != "" {
+
+	if a.WalletAddress != nil &&
+		*a.WalletAddress != "" {
 		data["walletAddress"] = *a.WalletAddress
 	}
-	if a.Profile != nil && *a.Profile != "" {
+
+	if a.Profile != nil &&
+		*a.Profile != "" {
 		data["profile"] = *a.Profile
 	}
-	if a.ExternalLink != nil && *a.ExternalLink != "" {
+
+	if a.ExternalLink != nil &&
+		*a.ExternalLink != "" {
 		data["externalLink"] = *a.ExternalLink
 	}
 
 	return data
 }
 
-// ==============================
-// small utils
-// ==============================
-
 func optionalAvatarString(v string) any {
 	if v == "" {
 		return nil
 	}
+
 	return v
 }
 
 func nilIfEmptyPtr(p *string) *string {
-	if p == nil {
+	if p == nil || *p == "" {
 		return nil
 	}
-	if *p == "" {
-		return nil
-	}
+
 	return p
 }

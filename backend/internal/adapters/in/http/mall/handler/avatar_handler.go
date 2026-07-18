@@ -2,7 +2,6 @@
 package mallHandler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,22 +12,13 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 )
 
-type AvatarSummaryRepository interface {
-	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-}
-
 type AvatarHandler struct {
-	uc         *avataruc.AvatarUsecase
-	avatarRepo AvatarSummaryRepository
+	uc *avataruc.AvatarUsecase
 }
 
-func NewAvatarHandler(
-	avatarUC *avataruc.AvatarUsecase,
-	avatarRepo AvatarSummaryRepository,
-) http.Handler {
+func NewAvatarHandler(avatarUC *avataruc.AvatarUsecase) http.Handler {
 	return &AvatarHandler{
-		uc:         avatarUC,
-		avatarRepo: avatarRepo,
+		uc: avatarUC,
 	}
 }
 
@@ -47,18 +37,22 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.post(w, r)
 		return
 
-	case r.Method == http.MethodGet && strings.HasPrefix(path0, "/mall/avatars/"):
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(path0, "/mall/avatars/"):
 		id, ok := extractIDFromPath(path0, "/mall/avatars/")
 		if !ok {
 			notFound(w)
 			return
 		}
+
 		h.get(w, r, id)
 		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
@@ -74,39 +68,11 @@ func extractIDFromPath(path0 string, prefix string) (string, bool) {
 	}
 
 	parts := strings.Split(rest, "/")
-	id := parts[0]
-	if id == "" {
+	if len(parts) != 1 || parts[0] == "" {
 		return "", false
 	}
 
-	if len(parts) > 1 {
-		return "", false
-	}
-
-	return id, true
-}
-
-func headString(b []byte, max int) string {
-	if len(b) == 0 {
-		return ""
-	}
-
-	if len(b) > max {
-		b = b[:max]
-	}
-
-	s := string(b)
-	s = strings.ReplaceAll(s, "\n", "\\n")
-	s = strings.ReplaceAll(s, "\r", "\\r")
-	return s
-}
-
-func ptrLen(p *string) int {
-	if p == nil {
-		return 0
-	}
-
-	return len([]rune(*p))
+	return parts[0], true
 }
 
 func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +80,9 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar usecase not configured",
+		})
 		return
 	}
 
@@ -129,7 +97,9 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -139,9 +109,12 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 			!strings.HasPrefix(s, "http://") &&
 			!strings.HasPrefix(s, "https://") {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_avatar_icon"})
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "invalid_avatar_icon",
+			})
 			return
 		}
+
 		body.AvatarIcon = &s
 	}
 
@@ -192,18 +165,26 @@ func toAvatarResponse(a avatardom.Avatar) avatarResponse {
 	}
 }
 
-func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+func (h *AvatarHandler) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid id",
+		})
 		return
 	}
 
 	if h == nil || h.uc == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar usecase not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "avatar usecase not configured",
+		})
 		return
 	}
 
@@ -223,6 +204,7 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 		errors.Is(err, avatardom.ErrInvalidUserID) ||
 		errors.Is(err, avataruc.ErrInvalidUserUID) ||
 		errors.Is(err, avatardom.ErrInvalidAvatarName) ||
+		errors.Is(err, avatardom.ErrInvalidAvatarIcon) ||
 		errors.Is(err, avatardom.ErrInvalidProfile) ||
 		errors.Is(err, avatardom.ErrInvalidExternalLink) {
 		code = http.StatusBadRequest
@@ -233,7 +215,9 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 	}
 
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": err.Error(),
+	})
 }
 
 func hasErrNotFound(err error) bool {
@@ -242,7 +226,6 @@ func hasErrNotFound(err error) bool {
 	}
 
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not found") || strings.Contains(msg, "not_found")
+	return strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "not_found")
 }
-
-var _ = avatardom.Avatar{}
