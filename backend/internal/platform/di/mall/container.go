@@ -12,7 +12,6 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
-
 	usecase "narratives/internal/application/usecase"
 
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
@@ -23,12 +22,13 @@ import (
 	outsolana "narratives/internal/adapters/out/solana"
 	stripeadapter "narratives/internal/adapters/out/stripe"
 
-	solana "narratives/internal/infra/solana"
-
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	resaledom "narratives/internal/domain/resale"
 	tokenblueprintreview "narratives/internal/domain/tokenBlueprint_review"
+	transferdom "narratives/internal/domain/transfer"
+
+	solana "narratives/internal/infra/solana"
 
 	shared "narratives/internal/platform/di/shared"
 )
@@ -101,19 +101,14 @@ type Container struct {
 	ResaleRepo      resaledom.Repository
 	ResaleImageRepo resaledom.ImageRepository
 
-	// MeAvatarResolver resolves Firebase UID -> avatarId + walletAddress.
-	// AvatarRepositoryFS implements this via ResolveAvatarByUID.
 	MeAvatarResolver mallhandler.MeAvatarResolver
 
 	ProductBlueprintReviewUC *usecase.ProductBlueprintReviewUsecase
 
-	TransferUC *usecase.TransferUsecase
-
+	TransferUC      *usecase.TransferUsecase
 	ShareTransferUC *usecase.ShareTransferUsecase
-
-	PaymentFlowUC *usecase.PaymentFlowUsecase
-
-	InventoryUC *usecase.InventoryUsecase
+	PaymentFlowUC   *usecase.PaymentFlowUsecase
+	InventoryUC     *usecase.InventoryUsecase
 
 	TokenBlueprintReviewRepo tokenblueprintreview.RepositoryPort
 
@@ -128,10 +123,8 @@ type Container struct {
 	AnnouncementQ *mallquery.AnnouncementQueryService
 	ResaleQ       *mallquery.ResaleQuery
 	MarketQ       *mallquery.MarketQuery
-
-	OrderQ *mallquery.OrderQuery
-
-	HistoryQ *mallquery.HistoryQuery
+	OrderQ        *mallquery.OrderQuery
+	HistoryQ      *mallquery.HistoryQuery
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }
@@ -197,20 +190,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
-
 	companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
-
 	cartRepo := outfs.NewCartRepositoryFS(fsClient)
 	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
 	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
-
 	inventoryRepo := outfs.NewInventoryRepositoryFS(fsClient)
-
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
-
 	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
 	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
-
 	inquiryRepo := outfs.NewInquiryRepositoryFS(fsClient)
 	inquiryReplyRepo := outfs.NewInquiryReplyRepositoryFS(fsClient)
 
@@ -239,11 +226,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.TokenBlueprintReviewRepo = outfs.NewTokenBlueprintReviewRepositoryFS(fsClient)
 
 	productBlueprintReviewRepo := outfs.NewProductBlueprintReviewRepositoryFS(fsClient)
-
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
-
 	listImageRecordRepo := outfs.NewListImageRepositoryFS(fsClient)
-
 	resaleRepo := outfs.NewResaleRepositoryFS(fsClient)
 	resaleImageRepo := outfs.NewResaleImageRepositoryFS(fsClient)
 
@@ -500,7 +484,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
 
 		var walletItemUpdater usecase.WalletItemUpdater = walletRepo
-		var transferRepo usecase.TransferRepo = outfs.NewTransferRepositoryFS(fsClient)
+		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
 
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(brandRepo, walletRepo)
 		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
@@ -556,7 +540,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		var tokenResolver usecase.TokenResolver = mallfs.NewTokenResolverFS(fsClient, "tokens")
 		var tokenOwnerUpdater usecase.TokenOwnerUpdater = outfs.NewTokenOwnerUpdaterFS(fsClient)
-		var transferRepo usecase.TransferRepo = outfs.NewTransferRepositoryFS(fsClient)
+		var transferRepo transferdom.RepositoryPort = outfs.NewTransferRepositoryFS(fsClient)
 
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(brandRepo, walletRepo)
 		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)

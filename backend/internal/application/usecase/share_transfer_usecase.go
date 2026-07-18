@@ -32,7 +32,7 @@ type ShareTransferUsecase struct {
 	tokenUpdate  TokenOwnerUpdater
 	walletUpdate AvatarWalletItemTransferUpdater
 	walletSync   AvatarWalletSyncer
-	transferRepo TransferRepo
+	transferRepo transferdom.RepositoryPort
 
 	avatarWallet AvatarWalletResolver
 	secrets      AvatarSecretProvider
@@ -47,7 +47,7 @@ func NewShareTransferUsecase(
 	tokenUpdate TokenOwnerUpdater,
 	walletUpdate AvatarWalletItemTransferUpdater,
 	walletSync AvatarWalletSyncer,
-	transferRepo TransferRepo,
+	transferRepo transferdom.RepositoryPort,
 	avatarWallet AvatarWalletResolver,
 	secrets AvatarSecretProvider,
 	executor TokenTransferExecutor,
@@ -85,6 +85,7 @@ var (
 	ErrShareTransferOwnerMismatch      = errors.New("share_transfer_uc: token current owner mismatch")
 	ErrShareTransferResolveAfterFailed = errors.New("share_transfer_uc: post-transfer resolve failed")
 	ErrShareTransferWalletSyncFailed   = errors.New("share_transfer_uc: wallet sync failed")
+	ErrShareTransferAttemptNotCreated  = errors.New("share_transfer_uc: transfer attempt was not created")
 )
 
 type ShareTransferInput struct {
@@ -194,38 +195,28 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 		return ShareTransferResult{}, ErrShareTransferToWalletEmpty
 	}
 
-	attempt, err := u.transferRepo.NextAttempt(ctx, productID)
-	if err != nil {
-		return ShareTransferResult{}, fmt.Errorf("share_transfer_uc: next attempt failed productId=%s: %w", productID, err)
-	}
-
 	shareRef := buildShareTransferRef(fromAvatarID, toAvatarID, productID)
 
-	tr, err := transferdom.NewPending(
-		attempt,
-		productID,
-		shareRef,
-		toAvatarID,
-		toWallet,
-		mint,
-		now,
-	)
+	tr, err := u.transferRepo.CreateAttempt(ctx, transferdom.CreateAttemptInput{
+		ProductID:       productID,
+		OrderID:         shareRef,
+		AvatarID:        toAvatarID,
+		ToWalletAddress: toWallet,
+		MintAddress:     mint,
+		CreatedAt:       now,
+	})
 	if err != nil {
 		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: build transfer entity failed productId=%s attempt=%d: %w",
-			productID, attempt, err,
+			"share_transfer_uc: create transfer attempt failed productId=%s: %w",
+			productID, err,
 		)
 	}
-
-	if err := u.transferRepo.Create(ctx, tr); err != nil {
-		return ShareTransferResult{}, fmt.Errorf(
-			"share_transfer_uc: create transfer failed productId=%s attempt=%d: %w",
-			productID, attempt, err,
-		)
+	if tr == nil || tr.Attempt <= 0 {
+		return ShareTransferResult{}, ErrShareTransferAttemptNotCreated
 	}
 
 	transferCreated := true
-	transferAttempt := attempt
+	transferAttempt := tr.Attempt
 
 	defer func() {
 		if retErr != nil && transferCreated {
@@ -237,7 +228,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 				ErrorType: &et,
 				ErrorMsg:  &msg,
 			}
-			_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
+			_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p, nil)
 		}
 	}()
 
@@ -256,7 +247,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 			s := *txSig
 			p.TxSignature = &s
 		}
-		_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
+		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p, nil)
 	}
 
 	markSucceeded := func(txSig string) {
@@ -269,7 +260,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 			Status:      &st,
 			TxSignature: &s,
 		}
-		_ = u.transferRepo.Update(context.Background(), productID, transferAttempt, p)
+		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p, nil)
 	}
 
 	if currentOwner != "" && currentOwner != fromWallet {

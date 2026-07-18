@@ -2,23 +2,24 @@
 package transfer
 
 import (
-	"context"
 	"errors"
 	"time"
 )
 
 /*
 責任と機能:
-- Token transfer（移転申請/実行）の結果を永続化するためのドメインエンティティ。
-- カスタマーサポート/監査/再実行のために、成功/失敗・エラー種別・tx署名・対象識別子を保持する。
-- docId は "<productId>__<attempt>" のフラット保存を想定（repo側で組み立てる）。
-  そのため entity 内での "ID" フィールドは不要。
-- 同一 productId で複数回試行があり得るため、Attempt（連番）も保持して履歴性を担保する。
+- Token transferの実行結果を永続化するためのドメインエンティティ。
+- カスタマーサポート、監査、再実行のために、成功・失敗、エラー種別、
+  tx署名、対象識別子を保持する。
+- FirestoreのdocIdは"<productId>__<attempt>"を想定し、
+  Transfer自体にはIDフィールドを持たせない。
+- 同一productIdに対する複数試行を扱うため、Attemptを保持する。
 
 方針:
-- NewPending の引数順を "attempt -> productId -> ..." に統一し、呼び出し側の型不一致を防ぐ。
-  （usecase 側で attempt(int) を先に渡せるようにする）
-- transferredAt は Transfer entity には持たせず、mintAddress 逆引き用の read result として返す。
+- 永続化および参照の契約はrepository_port.goのRepositoryPortへ統一する。
+- TransferにはtransferredAtを持たせない。
+- mintAddressから転送実行日時を取得する場合は、
+  ResolveTransferredAtByMintAddressResultとして返す。
 */
 
 type Status string
@@ -66,22 +67,13 @@ var (
 	ErrInvalidTransferredAt   = errors.New("transfer: invalid transferredAt")
 	ErrInvalidStatus          = errors.New("transfer: invalid status")
 	ErrInvalidCreatedAt       = errors.New("transfer: invalid createdAt")
+	ErrInvalidAttempt         = errors.New("transfer: attempt must be >= 1")
+	ErrEmptyTxSignature       = errors.New("transfer: txSignature is empty")
 )
 
-// TransferQueryPort defines read-only query behavior for transfer lookup.
-//
-// RepositoryPort は Transfer の永続化用、TransferQueryPort は画面/query 用の逆引き専用。
-// mintAddress から transferredAt を取得し、注文特定に使う。
-type TransferQueryPort interface {
-	ResolveTransferredAtByMintAddress(
-		ctx context.Context,
-		mintAddress string,
-	) (ResolveTransferredAtByMintAddressResult, error)
-}
-
-// Transfer represents one attempt of token transfer for a specific product item.
+// Transfer represents one token transfer attempt for a specific product.
 type Transfer struct {
-	// Attempt is a monotonically increasing number for the same ProductID.
+	// Attempt is monotonically increased for the same ProductID.
 	Attempt int `json:"attempt"`
 
 	// Identifiers
@@ -89,27 +81,30 @@ type Transfer struct {
 	OrderID   string `json:"orderId"`
 	AvatarID  string `json:"avatarId"`
 
-	// Token info (audit)
+	// Token information
 	MintAddress string `json:"mintAddress"`
 
-	// Destination / execution
+	// Destination and execution result
 	ToWalletAddress string  `json:"toWalletAddress"`
 	TxSignature     *string `json:"txSignature,omitempty"`
 
-	// Result
+	// Status and error details
 	Status    Status     `json:"status"`
 	ErrorType *ErrorType `json:"errorType,omitempty"`
 	ErrorMsg  *string    `json:"errorMsg,omitempty"`
 
-	// Timestamps
+	// CreatedAt is the time when this transfer attempt was created.
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// ResolveTransferredAtByMintAddressResult represents a lookup result for order identification.
+// ResolveTransferredAtByMintAddressResult represents the result of resolving
+// a successful transfer by mintAddress.
 //
-// Transfer entity には transferredAt を持たせない方針のため、
-// mintAddress から transfer 実行日時を引きたい query では、この read result として返す。
-// transferredAt のみを正とし、transferedAt などの typo field は扱わない。
+// Transfer does not contain TransferredAt. It is returned only by the
+// repository query that resolves the successful transfer execution time.
+//
+// Firestore must use the correctly spelled "transferredAt" field.
+// Legacy spellings such as "transferedAt" are not supported.
 type ResolveTransferredAtByMintAddressResult struct {
 	ProductID     string    `json:"productId"`
 	Attempt       int       `json:"attempt"`
@@ -118,22 +113,18 @@ type ResolveTransferredAtByMintAddressResult struct {
 	TransferredAt time.Time `json:"transferredAt"`
 }
 
-// TransferPatch represents partial updates.
-// A nil field means "no change".
+// TransferPatch represents a partial Transfer update.
+// A nil field means no change.
 type TransferPatch struct {
-	Status       *Status
-	ErrorType    *ErrorType
-	ErrorMsg     *string
-	TxSignature  *string
-	MintAddress  *string
-	ToWalletAddr *string // optional: allow patching destination if needed
+	Status          *Status
+	ErrorType       *ErrorType
+	ErrorMsg        *string
+	TxSignature     *string
+	MintAddress     *string
+	ToWalletAddress *string
 }
 
-// NewPending creates a new Transfer in pending status.
-//
-// NOTE:
-// 引数順を "attempt -> productId -> ..." に統一することで、usecase 側の呼び出しを自然にし、
-// 型不一致（attempt を string 扱い等）を防ぐ。
+// NewPending creates a validated pending Transfer.
 func NewPending(
 	attempt int,
 	productID string,
@@ -144,108 +135,119 @@ func NewPending(
 	createdAt time.Time,
 ) (Transfer, error) {
 	t := Transfer{
-		Attempt:   attempt,
-		ProductID: productID,
-		OrderID:   orderID,
-		AvatarID:  avatarID,
-
-		MintAddress: mintAddress,
-
+		Attempt:         attempt,
+		ProductID:       productID,
+		OrderID:         orderID,
+		AvatarID:        avatarID,
+		MintAddress:     mintAddress,
 		ToWalletAddress: toWalletAddress,
-
-		Status:      StatusPending,
-		ErrorType:   nil,
-		ErrorMsg:    nil,
-		TxSignature: nil,
-
-		CreatedAt: createdAt.UTC(),
+		TxSignature:     nil,
+		Status:          StatusPending,
+		ErrorType:       nil,
+		ErrorMsg:        nil,
+		CreatedAt:       createdAt.UTC(),
 	}
 
 	if err := t.validate(); err != nil {
 		return Transfer{}, err
 	}
+
 	return t, nil
 }
 
-// MarkSucceeded marks transfer as succeeded and stores tx signature.
-func (t *Transfer) MarkSucceeded(txSig string) error {
+// MarkSucceeded marks the Transfer as succeeded and stores its transaction
+// signature.
+func (t *Transfer) MarkSucceeded(txSignature string) error {
 	if t == nil {
 		return nil
 	}
-	if txSig == "" {
-		return errors.New("transfer: txSignature is empty")
+	if txSignature == "" {
+		return ErrEmptyTxSignature
 	}
+
 	t.Status = StatusSucceeded
-	t.TxSignature = &txSig
+	t.TxSignature = &txSignature
 	t.ErrorType = nil
 	t.ErrorMsg = nil
+
 	return nil
 }
 
-// MarkFailed marks transfer as failed with error type and message (optional).
-func (t *Transfer) MarkFailed(errType ErrorType, msg string) error {
+// MarkFailed marks the Transfer as failed.
+func (t *Transfer) MarkFailed(
+	errorType ErrorType,
+	message string,
+) error {
 	if t == nil {
 		return nil
 	}
-	et := errType
-	if string(et) == "" {
-		et = ErrorTypeUnknown
-	}
-	t.Status = StatusFailed
-	t.ErrorType = &et
 
-	m := msg
-	if m == "" {
+	if errorType == "" {
+		errorType = ErrorTypeUnknown
+	}
+
+	t.Status = StatusFailed
+	t.ErrorType = &errorType
+
+	if message == "" {
 		t.ErrorMsg = nil
 	} else {
-		t.ErrorMsg = &m
+		t.ErrorMsg = &message
 	}
+
 	return nil
 }
 
-// ApplyPatch applies partial updates (for repositories/usecases).
-func (t *Transfer) ApplyPatch(p TransferPatch) {
+// ApplyPatch applies a partial update.
+//
+// ApplyPatch does not silently ignore invalid non-nil values. Validation is
+// performed after all specified fields have been applied.
+func (t *Transfer) ApplyPatch(
+	patch TransferPatch,
+) error {
 	if t == nil {
-		return
+		return nil
 	}
-	if p.Status != nil {
-		t.Status = *p.Status
+
+	if patch.Status != nil {
+		t.Status = *patch.Status
 	}
-	if p.ErrorType != nil {
-		et := *p.ErrorType
-		t.ErrorType = &et
+	if patch.ErrorType != nil {
+		errorType := *patch.ErrorType
+		t.ErrorType = &errorType
 	}
-	if p.ErrorMsg != nil {
-		m := *p.ErrorMsg
-		if m == "" {
+	if patch.ErrorMsg != nil {
+		message := *patch.ErrorMsg
+		if message == "" {
 			t.ErrorMsg = nil
 		} else {
-			t.ErrorMsg = &m
+			t.ErrorMsg = &message
 		}
 	}
-	if p.TxSignature != nil {
-		s := *p.TxSignature
-		if s == "" {
+	if patch.TxSignature != nil {
+		txSignature := *patch.TxSignature
+		if txSignature == "" {
 			t.TxSignature = nil
 		} else {
-			t.TxSignature = &s
+			t.TxSignature = &txSignature
 		}
 	}
-	if p.MintAddress != nil {
-		s := *p.MintAddress
-		if s != "" {
-			t.MintAddress = s
-		}
+	if patch.MintAddress != nil {
+		t.MintAddress = *patch.MintAddress
 	}
-	if p.ToWalletAddr != nil {
-		s := *p.ToWalletAddr
-		if s != "" {
-			t.ToWalletAddress = s
-		}
+	if patch.ToWalletAddress != nil {
+		t.ToWalletAddress = *patch.ToWalletAddress
 	}
+
+	return t.validate()
 }
 
-// validate enforces domain invariants.
+// Validate verifies the Transfer's domain invariants.
+func (t Transfer) Validate() error {
+	return t.validate()
+}
+
+// validate enforces Transfer domain invariants.
 func (t Transfer) validate() error {
 	if t.ProductID == "" {
 		return ErrInvalidProductID
@@ -263,16 +265,24 @@ func (t Transfer) validate() error {
 		return ErrInvalidMintAddress
 	}
 	if t.Attempt <= 0 {
-		return errors.New("transfer: attempt must be >= 1")
+		return ErrInvalidAttempt
 	}
+
 	switch t.Status {
 	case StatusPending, StatusSucceeded, StatusFailed:
-		// ok
 	default:
 		return ErrInvalidStatus
 	}
+
 	if t.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
+	if t.Status == StatusSucceeded {
+		if t.TxSignature == nil || *t.TxSignature == "" {
+			return ErrEmptyTxSignature
+		}
+	}
+
 	return nil
 }

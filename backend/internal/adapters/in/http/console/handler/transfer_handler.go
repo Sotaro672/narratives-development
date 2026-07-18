@@ -91,7 +91,8 @@ func (h *TransferHandler) handleGetLatest(w http.ResponseWriter, r *http.Request
 			})
 			return
 		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
 				"error":     "request canceled",
 				"productId": productID,
@@ -122,8 +123,13 @@ func (h *TransferHandler) handleGetAttempt(w http.ResponseWriter, r *http.Reques
 	productID := r.URL.Query().Get("productId")
 	if productID == "" {
 		// between "/console/transfers/" and "/attempts/"
-		productID = extractBetween(path, "/console/transfers/", "/attempts/")
+		productID = extractBetween(
+			path,
+			"/console/transfers/",
+			"/attempts/",
+		)
 	}
+
 	attemptStr := r.URL.Query().Get("attempt")
 	if attemptStr == "" {
 		// last segment after "/attempts/"
@@ -149,11 +155,19 @@ func (h *TransferHandler) handleGetAttempt(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	log.Printf("[console.transfer] get attempt productId=%q attempt=%d", productID, attempt)
+	log.Printf(
+		"[console.transfer] get attempt productId=%q attempt=%d",
+		productID,
+		attempt,
+	)
 
-	t, gerr := h.repo.GetByProductIDAndAttempt(r.Context(), productID, attempt)
-	if gerr != nil {
-		if isNotFound(gerr) {
+	t, err := h.repo.GetByProductIDAndAttempt(
+		r.Context(),
+		productID,
+		attempt,
+	)
+	if err != nil {
+		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"error":     "not found",
 				"productId": productID,
@@ -161,7 +175,8 @@ func (h *TransferHandler) handleGetAttempt(w http.ResponseWriter, r *http.Reques
 			})
 			return
 		}
-		if errors.Is(gerr, context.Canceled) || errors.Is(gerr, context.DeadlineExceeded) {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
 				"error":     "request canceled",
 				"productId": productID,
@@ -191,10 +206,7 @@ func (h *TransferHandler) handleGetAttempt(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *TransferHandler) handleList(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-
-	// list endpoint は Filter/Sort を廃止したため、productId 指定があればその履歴一覧、それ以外はエラーにする
-	productID := q.Get("productId")
+	productID := r.URL.Query().Get("productId")
 	if productID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "productId is required",
@@ -202,11 +214,18 @@ func (h *TransferHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[console.transfer] list attempts productId=%q", productID)
+	log.Printf(
+		"[console.transfer] list attempts productId=%q",
+		productID,
+	)
 
-	res, err := h.repo.ListByProductID(r.Context(), productID)
+	res, err := h.repo.ListByProductID(
+		r.Context(),
+		productID,
+	)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
 				"error": "request canceled",
 			})
@@ -223,83 +242,77 @@ func (h *TransferHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ============================================================
-// helpers (local, safe)
-// ============================================================
-
-func parseIntLoose(s string, def int) int {
-	if s == "" {
-		return def
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil || n <= 0 {
-		return def
-	}
-	return n
-}
-
-func parseBoolLoose(s string) bool {
-	switch strings.ToLower(s) {
-	case "1", "true", "t", "yes", "y", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-func derefStr(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
+// isNotFound determines whether the repository error represents missing data.
 func isNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	// repo 実装が独自 not found error を返す可能性があるため、文字列でも吸収
+
+	if errors.Is(err, transferdom.ErrNotFound) {
+		return true
+	}
+
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not found") || strings.Contains(msg, "no such") || strings.Contains(msg, "missing")
+
+	return strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "no such") ||
+		strings.Contains(msg, "missing")
 }
 
-// extractBetween returns substring between left and right markers.
-// ex: "/console/transfers/p_123/latest", left="/console/transfers/", right="/latest" => "p_123"
-func extractBetween(s, left, right string) string {
+// extractBetween returns the substring between the given markers.
+//
+// Example:
+//
+//	path="/console/transfers/p_123/latest"
+//	left="/console/transfers/"
+//	right="/latest"
+//
+// Result:
+//
+//	"p_123"
+func extractBetween(s string, left string, right string) string {
 	i := strings.Index(s, left)
 	if i < 0 {
 		return ""
 	}
+
 	s = s[i+len(left):]
+
 	j := strings.Index(s, right)
 	if j < 0 {
 		return ""
 	}
+
 	return strings.Trim(s[:j], "/")
 }
 
-// extractLastPathSegment returns the last segment after the given prefix.
+// extractLastPathSegment returns the last path segment following prefix.
+//
 // Example:
-// path="/console/transfers/p_123/attempts/2", prefix="/attempts" => "2"
+//
+//	path="/console/transfers/p_123/attempts/2"
+//	prefix="/attempts"
+//
+// Result:
+//
+//	"2"
 func extractLastPathSegment(path string, prefix string) string {
 	if path == "" {
 		return ""
 	}
 
-	// find prefix position
 	i := strings.LastIndex(path, prefix)
 	if i < 0 {
 		return ""
 	}
 
-	// take substring after prefix
 	s := path[i+len(prefix):]
 	s = strings.Trim(s, "/")
 	if s == "" {
 		return ""
 	}
 
-	// if still contains '/', take last part
 	parts := strings.Split(s, "/")
+
 	return parts[len(parts)-1]
 }
