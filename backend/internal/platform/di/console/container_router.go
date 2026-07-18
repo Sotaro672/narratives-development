@@ -5,13 +5,11 @@ import (
 	"net/http"
 
 	httpin "narratives/internal/adapters/in/http/console"
-
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
 	internalHandler "narratives/internal/adapters/in/http/handler"
-
-	usecase "narratives/internal/application/usecase"
-
 	"narratives/internal/adapters/in/http/middleware"
+	usecase "narratives/internal/application/usecase"
+	walletdom "narratives/internal/domain/wallet"
 )
 
 func (c *Container) RouterDeps() httpin.RouterDeps {
@@ -186,7 +184,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	if c.ProductBlueprintRepo != nil &&
 		c.ProductBlueprintReviewRepo != nil &&
 		c.BrandRepo != nil {
-		var walletRepo usecase.WalletRepository = nil
+		var walletRepo walletdom.Repository
 
 		pbReviewUC := usecase.NewProductBlueprintReviewUsecase(
 			c.ProductBlueprintReviewRepo,

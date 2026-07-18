@@ -17,13 +17,7 @@ import (
 // Brand 固有条件はこの struct に追加します。
 type Filter struct {
 	common.FilterCommon
-
-	CompanyID     *string
-	CompanyIDs    []string
-	ManagerID     *string
-	ManagerIDs    []string
-	IsActive      *bool
-	WalletAddress *string
+	CompanyID *string
 }
 
 // 共通型エイリアス（インフラ非依存）

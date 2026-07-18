@@ -49,9 +49,14 @@ type walletDoc struct {
 }
 
 // GetByAvatarID は avatarId（= ドキュメントID）で 1 件取得します。
-func (r *WalletRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (walletdom.Wallet, error) {
+func (r *WalletRepositoryFS) GetByAvatarID(
+	ctx context.Context,
+	avatarID string,
+) (walletdom.Wallet, error) {
 	if r == nil || r.Client == nil {
-		return walletdom.Wallet{}, errors.New("wallet_repository_fs: firestore client is nil")
+		return walletdom.Wallet{}, errors.New(
+			"wallet_repository_fs: firestore client is nil",
+		)
 	}
 
 	aid := avatarID
@@ -85,7 +90,7 @@ func (r *WalletRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string)
 		return walletdom.Wallet{}, ErrInvalidLastUpdatedAt
 	}
 
-	w, err := walletdom.NewFull(
+	wallet, err := walletdom.NewFull(
 		addr,
 		d.Tokens,
 		d.LastUpdatedAt.UTC(),
@@ -94,21 +99,30 @@ func (r *WalletRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string)
 	if err != nil {
 		return walletdom.Wallet{}, err
 	}
-	return w, nil
+
+	return wallet, nil
 }
 
 // GetByAddress は walletAddress で取得します。
-func (r *WalletRepositoryFS) GetByAddress(ctx context.Context, addr string) (walletdom.Wallet, error) {
+func (r *WalletRepositoryFS) GetByAddress(
+	ctx context.Context,
+	addr string,
+) (walletdom.Wallet, error) {
 	if r == nil || r.Client == nil {
-		return walletdom.Wallet{}, errors.New("wallet_repository_fs: firestore client is nil")
+		return walletdom.Wallet{}, errors.New(
+			"wallet_repository_fs: firestore client is nil",
+		)
 	}
 
-	a := addr
-	if a == "" {
+	address := addr
+	if address == "" {
 		return walletdom.Wallet{}, walletdom.ErrInvalidWalletAddress
 	}
 
-	iter := r.col().Where("walletAddress", "==", a).Limit(1).Documents(ctx)
+	iter := r.col().
+		Where("walletAddress", "==", address).
+		Limit(1).
+		Documents(ctx)
 	defer iter.Stop()
 
 	doc, err := iter.Next()
@@ -132,7 +146,7 @@ func (r *WalletRepositoryFS) GetByAddress(ctx context.Context, addr string) (wal
 		return walletdom.Wallet{}, ErrInvalidLastUpdatedAt
 	}
 
-	w, err := walletdom.NewFull(
+	wallet, err := walletdom.NewFull(
 		d.WalletAddress,
 		d.Tokens,
 		d.LastUpdatedAt.UTC(),
@@ -141,13 +155,20 @@ func (r *WalletRepositoryFS) GetByAddress(ctx context.Context, addr string) (wal
 	if err != nil {
 		return walletdom.Wallet{}, err
 	}
-	return w, nil
+
+	return wallet, nil
 }
 
-// GetWalletAddressByMintAddress は tokens に mintAddress を含む wallet の walletAddress を返します。
-func (r *WalletRepositoryFS) GetWalletAddressByMintAddress(ctx context.Context, mintAddress string) (string, error) {
+// GetWalletAddressByMintAddress は tokens に mintAddress を含む
+// wallet の walletAddress を返します。
+func (r *WalletRepositoryFS) GetWalletAddressByMintAddress(
+	ctx context.Context,
+	mintAddress string,
+) (string, error) {
 	if r == nil || r.Client == nil {
-		return "", errors.New("wallet_repository_fs: firestore client is nil")
+		return "", errors.New(
+			"wallet_repository_fs: firestore client is nil",
+		)
 	}
 
 	mint := mintAddress
@@ -155,7 +176,10 @@ func (r *WalletRepositoryFS) GetWalletAddressByMintAddress(ctx context.Context, 
 		return "", ErrInvalidMintAddress
 	}
 
-	iter := r.col().Where("tokens", "array-contains", mint).Limit(1).Documents(ctx)
+	iter := r.col().
+		Where("tokens", "array-contains", mint).
+		Limit(1).
+		Documents(ctx)
 	defer iter.Stop()
 
 	doc, err := iter.Next()
@@ -179,7 +203,11 @@ func (r *WalletRepositoryFS) GetWalletAddressByMintAddress(ctx context.Context, 
 }
 
 // Save は Wallet を Firestore に保存（upsert）します。
-func (r *WalletRepositoryFS) Save(ctx context.Context, avatarID string, w walletdom.Wallet) error {
+func (r *WalletRepositoryFS) Save(
+	ctx context.Context,
+	avatarID string,
+	wallet walletdom.Wallet,
+) error {
 	if r == nil || r.Client == nil {
 		return errors.New("wallet_repository_fs: firestore client is nil")
 	}
@@ -189,38 +217,43 @@ func (r *WalletRepositoryFS) Save(ctx context.Context, avatarID string, w wallet
 		return ErrInvalidAvatarID
 	}
 
-	addr := w.WalletAddress
+	addr := wallet.WalletAddress
 	if addr == "" {
 		return walletdom.ErrInvalidWalletAddress
 	}
 
 	now := time.Now().UTC()
-	last := w.LastUpdatedAt
+	last := wallet.LastUpdatedAt
 	if last.IsZero() {
 		last = now
 	}
 
-	st := w.Status
-	if string(st) == "" {
-		st = walletdom.StatusActive
+	walletStatus := wallet.Status
+	if string(walletStatus) == "" {
+		walletStatus = walletdom.StatusActive
 	}
 
 	d := walletDoc{
 		WalletAddress: addr,
-		Tokens:        w.Tokens,
+		Tokens:        wallet.Tokens,
 		LastUpdatedAt: last.UTC(),
-		Status:        string(st),
+		Status:        string(walletStatus),
 	}
 
 	_, err := r.col().Doc(aid).Set(ctx, d)
 	return err
 }
 
-// AddMintToAvatarWalletItems は avatar wallet の tokens 配列に mintAddress を冪等追加します。
+// AddMintToAvatarWalletItems は avatar wallet の tokens 配列に
+// mintAddress を冪等追加します。
 // - Firestore の arrayUnion を使うことで、重複追加を防ぎ、並行更新にも強くします。
 // - lastUpdatedAt も更新します。
-// - txSignature は本スキーマに保存先が無いため、この実装では永続化しません。
-func (r *WalletRepositoryFS) AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error {
+func (r *WalletRepositoryFS) AddMintToAvatarWalletItems(
+	ctx context.Context,
+	avatarID string,
+	mintAddress string,
+	now time.Time,
+) error {
 	if r == nil || r.Client == nil {
 		return errors.New("wallet_repository_fs: firestore client is nil")
 	}
@@ -243,8 +276,14 @@ func (r *WalletRepositoryFS) AddMintToAvatarWalletItems(ctx context.Context, ava
 	}
 
 	_, err := r.col().Doc(aid).Update(ctx, []firestore.Update{
-		{Path: "tokens", Value: firestore.ArrayUnion(mint)},
-		{Path: "lastUpdatedAt", Value: at},
+		{
+			Path:  "tokens",
+			Value: firestore.ArrayUnion(mint),
+		},
+		{
+			Path:  "lastUpdatedAt",
+			Value: at,
+		},
 	})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -256,11 +295,16 @@ func (r *WalletRepositoryFS) AddMintToAvatarWalletItems(ctx context.Context, ava
 	return nil
 }
 
-// RemoveMintFromAvatarWalletItems は avatar wallet の tokens 配列から mintAddress を冪等削除します。
+// RemoveMintFromAvatarWalletItems は avatar wallet の tokens 配列から
+// mintAddress を冪等削除します。
 // - Firestore の arrayRemove を使うことで、存在しない値でも安全に実行できます。
 // - lastUpdatedAt も更新します。
-// - txSignature は本スキーマに保存先が無いため、この実装では永続化しません。
-func (r *WalletRepositoryFS) RemoveMintFromAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error {
+func (r *WalletRepositoryFS) RemoveMintFromAvatarWalletItems(
+	ctx context.Context,
+	avatarID string,
+	mintAddress string,
+	now time.Time,
+) error {
 	if r == nil || r.Client == nil {
 		return errors.New("wallet_repository_fs: firestore client is nil")
 	}
@@ -283,8 +327,14 @@ func (r *WalletRepositoryFS) RemoveMintFromAvatarWalletItems(ctx context.Context
 	}
 
 	_, err := r.col().Doc(aid).Update(ctx, []firestore.Update{
-		{Path: "tokens", Value: firestore.ArrayRemove(mint)},
-		{Path: "lastUpdatedAt", Value: at},
+		{
+			Path:  "tokens",
+			Value: firestore.ArrayRemove(mint),
+		},
+		{
+			Path:  "lastUpdatedAt",
+			Value: at,
+		},
 	})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {

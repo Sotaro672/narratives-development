@@ -102,7 +102,7 @@ type TokenOwnerUpdater interface {
 // receiver avatar wallet cache must be updated.
 type WalletItemUpdater interface {
 	// AddMintToAvatarWalletItems ensures mintAddress exists in wallet.tokens (dedup / idempotent).
-	AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error
+	AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time) error
 }
 
 // TransferRepo persists transfer attempts (pending/succeeded/failed).
@@ -412,8 +412,8 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		return TransferByVerifiedScanResult{}, ErrTransferNotConfigured
 	}
 
-	avatarID := strings.TrimSpace(in.AvatarID)
-	productID := strings.TrimSpace(in.ProductID)
+	avatarID := in.AvatarID
+	productID := in.ProductID
 
 	if avatarID == "" {
 		return TransferByVerifiedScanResult{}, ErrTransferAvatarIDEmpty
@@ -434,8 +434,8 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		return TransferByVerifiedScanResult{}, ErrTransferNotMatched
 	}
 
-	scannedModelID := strings.TrimSpace(vres.ScannedModelID)
-	scannedTBID := strings.TrimSpace(vres.ScannedTokenBlueprintID)
+	scannedModelID := vres.ScannedModelID
+	scannedTBID := vres.ScannedTokenBlueprintID
 
 	// 1) token doc
 	tok, err := u.tokenRepo.ResolveTokenByProductID(ctx, productID)
@@ -443,10 +443,10 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: resolve token failed productId=%s: %w", productID, err)
 	}
 
-	brandID := strings.TrimSpace(tok.BrandID)
-	mint := strings.TrimSpace(tok.MintAddress)
-	tokenTBID := strings.TrimSpace(tok.TokenBlueprintID)
-	currentOwner := strings.TrimSpace(tok.ToAddress)
+	brandID := tok.BrandID
+	mint := tok.MintAddress
+	tokenTBID := tok.TokenBlueprintID
+	currentOwner := tok.ToAddress
 
 	if brandID == "" {
 		return TransferByVerifiedScanResult{}, ErrTransferBrandIDEmpty
@@ -753,7 +753,6 @@ func (u *TransferUsecase) resolveListTransferSource(
 	ctx context.Context,
 	brandID string,
 ) (transferExecutionSource, error) {
-	brandID = strings.TrimSpace(brandID)
 	if brandID == "" {
 		return transferExecutionSource{}, ErrTransferBrandIDEmpty
 	}
@@ -793,7 +792,7 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 		return transferExecutionSource{}, ErrTransferResaleNotConfigured
 	}
 
-	resaleID := strings.TrimSpace(target.ResaleID)
+	resaleID := target.ResaleID
 	if resaleID == "" {
 		return transferExecutionSource{}, ErrTransferResaleIDEmpty
 	}
@@ -803,11 +802,11 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 		return transferExecutionSource{}, fmt.Errorf("transfer_uc: resolve resale failed resaleId=%s: %w", resaleID, err)
 	}
 
-	fromAvatarID := strings.TrimSpace(r.AvatarID)
+	fromAvatarID := r.AvatarID
 	if fromAvatarID == "" {
 		return transferExecutionSource{}, ErrTransferResaleSellerAvatarIDEmpty
 	}
-	if fromAvatarID == strings.TrimSpace(buyerAvatarID) {
+	if fromAvatarID == buyerAvatarID {
 		return transferExecutionSource{}, ErrTransferSameAvatar
 	}
 
@@ -851,7 +850,7 @@ func (u *TransferUsecase) updateWalletsAfterTransfer(
 		return u.updateResaleWalletsAfterTransfer(ctx, fromAvatarID, toAvatarID, mint, now, tx)
 
 	case orderdom.OrderItemTypeList:
-		if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, toAvatarID, mint, now, tx); err != nil {
+		if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, toAvatarID, mint, now); err != nil {
 			return fmt.Errorf(
 				"transfer_uc: update receiver wallet items failed avatarId=%s mint=%s tx=%s: %w",
 				toAvatarID, mint, tx, err,
@@ -876,10 +875,6 @@ func (u *TransferUsecase) updateResaleWalletsAfterTransfer(
 		return ErrTransferResaleNotConfigured
 	}
 
-	fromAvatarID = strings.TrimSpace(fromAvatarID)
-	toAvatarID = strings.TrimSpace(toAvatarID)
-	mint = strings.TrimSpace(mint)
-
 	if fromAvatarID == "" {
 		return ErrTransferResaleSellerAvatarIDEmpty
 	}
@@ -890,14 +885,14 @@ func (u *TransferUsecase) updateResaleWalletsAfterTransfer(
 		return ErrTransferMintEmpty
 	}
 
-	if err := u.walletTransferUpdate.RemoveMintFromAvatarWalletItems(ctx, fromAvatarID, mint, now, tx); err != nil {
+	if err := u.walletTransferUpdate.RemoveMintFromAvatarWalletItems(ctx, fromAvatarID, mint, now); err != nil {
 		return fmt.Errorf(
 			"transfer_uc: remove seller wallet item failed avatarId=%s mint=%s tx=%s: %w",
 			fromAvatarID, mint, tx, err,
 		)
 	}
 
-	if err := u.walletTransferUpdate.AddMintToAvatarWalletItems(ctx, toAvatarID, mint, now, tx); err != nil {
+	if err := u.walletTransferUpdate.AddMintToAvatarWalletItems(ctx, toAvatarID, mint, now); err != nil {
 		return fmt.Errorf(
 			"transfer_uc: add buyer wallet item failed avatarId=%s mint=%s tx=%s: %w",
 			toAvatarID, mint, tx, err,
@@ -957,10 +952,6 @@ func findUntransferredTransferTarget(
 	scannedModelID string,
 	scannedTBID string,
 ) (transferTargetItem, bool) {
-	productID = strings.TrimSpace(productID)
-	scannedModelID = strings.TrimSpace(scannedModelID)
-	scannedTBID = strings.TrimSpace(scannedTBID)
-
 	if productID == "" || scannedTBID == "" {
 		return transferTargetItem{}, false
 	}
@@ -987,9 +978,6 @@ func findUntransferredResaleItem(
 	productID string,
 	scannedTBID string,
 ) (transferTargetItem, bool) {
-	productID = strings.TrimSpace(productID)
-	scannedTBID = strings.TrimSpace(scannedTBID)
-
 	if productID == "" || scannedTBID == "" {
 		return transferTargetItem{}, false
 	}
@@ -1004,15 +992,15 @@ func findUntransferredResaleItem(
 			continue
 		}
 
-		if strings.TrimSpace(it.ResaleID) == "" {
+		if it.ResaleID == "" {
 			continue
 		}
 
-		if strings.TrimSpace(it.ProductID) != productID {
+		if it.ProductID != productID {
 			continue
 		}
 
-		itemTBID := strings.TrimSpace(it.TokenBlueprintID)
+		itemTBID := it.TokenBlueprintID
 		if itemTBID == "" {
 			continue
 		}
@@ -1031,12 +1019,12 @@ func findUntransferredResaleItem(
 			ItemKey:  itemKey,
 			ItemType: itemType,
 
-			ResaleID: strings.TrimSpace(it.ResaleID),
+			ResaleID: it.ResaleID,
 
-			ProductID:          strings.TrimSpace(it.ProductID),
-			ProductBlueprintID: strings.TrimSpace(it.ProductBlueprintID),
+			ProductID:          it.ProductID,
+			ProductBlueprintID: it.ProductBlueprintID,
 			TokenBlueprintID:   itemTBID,
-			BrandID:            strings.TrimSpace(it.BrandID),
+			BrandID:            it.BrandID,
 		}, true
 	}
 
@@ -1048,9 +1036,6 @@ func findUntransferredListItem(
 	scannedModelID string,
 	scannedTBID string,
 ) (transferTargetItem, bool) {
-	scannedModelID = strings.TrimSpace(scannedModelID)
-	scannedTBID = strings.TrimSpace(scannedTBID)
-
 	if scannedModelID == "" || scannedTBID == "" {
 		return transferTargetItem{}, false
 	}
@@ -1106,13 +1091,13 @@ func inferTransferOrderItemType(it orderdom.OrderItemSnapshot) orderdom.OrderIte
 		return it.Type
 	}
 
-	if strings.TrimSpace(it.ResaleID) != "" || strings.TrimSpace(it.ProductID) != "" {
+	if it.ResaleID != "" || it.ProductID != "" {
 		return orderdom.OrderItemTypeResale
 	}
 
-	if strings.TrimSpace(it.ModelID) != "" ||
-		strings.TrimSpace(it.InventoryID) != "" ||
-		strings.TrimSpace(it.ListID) != "" {
+	if it.ModelID != "" ||
+		it.InventoryID != "" ||
+		it.ListID != "" {
 		return orderdom.OrderItemTypeList
 	}
 
@@ -1125,14 +1110,14 @@ func buildTransferItemKey(
 ) string {
 	switch itemType {
 	case orderdom.OrderItemTypeResale:
-		resaleID := strings.TrimSpace(it.ResaleID)
+		resaleID := it.ResaleID
 		if resaleID == "" {
 			return ""
 		}
 		return "resale:" + resaleID
 
 	case orderdom.OrderItemTypeList:
-		modelID := strings.TrimSpace(it.ModelID)
+		modelID := it.ModelID
 		if modelID == "" {
 			return ""
 		}
@@ -1145,15 +1130,14 @@ func buildTransferItemKey(
 
 // inventoryId は "__" 区切りで、2つめのセグメントが tokenBlueprintId
 func extractTokenBlueprintIDFromInventoryID(inventoryID string) string {
-	s := strings.TrimSpace(inventoryID)
-	if s == "" {
+	if inventoryID == "" {
 		return ""
 	}
 
-	parts := strings.Split(s, "__")
+	parts := strings.Split(inventoryID, "__")
 	if len(parts) < 2 {
 		return ""
 	}
 
-	return strings.TrimSpace(parts[1])
+	return parts[1]
 }

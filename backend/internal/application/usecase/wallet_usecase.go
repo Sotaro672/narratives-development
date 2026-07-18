@@ -14,19 +14,8 @@ import (
 )
 
 // ============================================================
-// Wallet repository / external ports
+// Application-specific external ports
 // ============================================================
-
-// usecase が必要とするIFをここで定義する（domain の Repository に依存しない）
-type WalletRepository interface {
-	// docId=avatarId
-	GetByAvatarID(ctx context.Context, avatarID string) (walletdom.Wallet, error)
-	Save(ctx context.Context, avatarID string, w walletdom.Wallet) error
-}
-
-type OnchainWalletReader interface {
-	ListOwnedTokenMints(ctx context.Context, walletAddress string) ([]string, error)
-}
 
 // TokenQuery (mintAddress -> productId/docId, brandId, metadataUri)
 type TokenQuery interface {
@@ -66,8 +55,8 @@ type ProductBlueprintReader interface {
 // 依存はすべて NewWalletUsecase 経由で注入する。
 // struct field は外部から直接差し替えできないように private にする。
 type WalletUsecase struct {
-	walletRepo    WalletRepository
-	onchainReader OnchainWalletReader
+	walletRepo    walletdom.Repository
+	onchainReader walletdom.OnchainReader
 	tokenQuery    TokenQuery
 
 	// brandId -> Brand.Name（UI期待値）
@@ -82,8 +71,8 @@ type WalletUsecase struct {
 // NewWalletUsecase is the only wiring entrypoint.
 // All dependencies must be routed through this constructor.
 func NewWalletUsecase(
-	walletRepo WalletRepository,
-	onchainReader OnchainWalletReader,
+	walletRepo walletdom.Repository,
+	onchainReader walletdom.OnchainReader,
 	tokenQuery TokenQuery,
 	brandResolver BrandResolver,
 	productReader ProductReader,
@@ -129,7 +118,10 @@ var (
 // IMPORTANT:
 // on-chain reader 未設定、walletAddress 空、on-chain 取得失敗、sync 失敗の場合は、
 // 既存の GET /mall/me/wallets 挙動に合わせて persisted wallet を返します。
-func (uc *WalletUsecase) GetWalletByAvatarIDWithReadThroughSync(ctx context.Context, avatarID string) (walletdom.Wallet, error) {
+func (uc *WalletUsecase) GetWalletByAvatarIDWithReadThroughSync(
+	ctx context.Context,
+	avatarID string,
+) (walletdom.Wallet, error) {
 	if uc == nil || uc.walletRepo == nil {
 		return walletdom.Wallet{}, ErrWalletUsecaseNotConfigured
 	}
@@ -200,7 +192,10 @@ func (uc *WalletUsecase) GetWalletByAvatarIDWithReadThroughSync(ctx context.Cont
 // ListOwnedTokenMints は walletAddress から on-chain 保有 mint 一覧を取得します。
 //
 // Handler など外側の層は onchainReader に直接触らず、この method 経由で取得する。
-func (uc *WalletUsecase) ListOwnedTokenMints(ctx context.Context, walletAddress string) ([]string, error) {
+func (uc *WalletUsecase) ListOwnedTokenMints(
+	ctx context.Context,
+	walletAddress string,
+) ([]string, error) {
 	if uc == nil {
 		return nil, ErrWalletUsecaseNotConfigured
 	}
@@ -224,7 +219,10 @@ func (uc *WalletUsecase) ListOwnedTokenMints(ctx context.Context, walletAddress 
 // この同期処理は必ず残す。
 // WalletPage を開いた時や /mall/me/wallets/sync から呼ばれ、
 // Solana network 上の保有 mint 一覧を Firestore wallet.tokens に反映する。
-func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) (walletdom.Wallet, error) {
+func (uc *WalletUsecase) SyncWalletTokens(
+	ctx context.Context,
+	avatarID string,
+) (walletdom.Wallet, error) {
 	if uc == nil || uc.walletRepo == nil {
 		return walletdom.Wallet{}, ErrWalletUsecaseNotConfigured
 	}
@@ -272,7 +270,11 @@ func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) 
 // 判定順:
 // 1. persisted wallet.tokens
 // 2. on-chain owned mints
-func (uc *WalletUsecase) EnsureAvatarOwnsMintAddress(ctx context.Context, avatarID string, mintAddress string) error {
+func (uc *WalletUsecase) EnsureAvatarOwnsMintAddress(
+	ctx context.Context,
+	avatarID string,
+	mintAddress string,
+) error {
 	if uc == nil || uc.walletRepo == nil {
 		return ErrWalletUsecaseNotConfigured
 	}
@@ -439,6 +441,7 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 		if uc.brandResolver == nil {
 			return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletBrandResolverNotConfigured
 		}
+
 		n, err := uc.ResolveBrandNameByID(ctx, brandID)
 		if err != nil {
 			return ResolveTokenByMintAddressWithBrandNameResult{}, err
@@ -450,6 +453,7 @@ func (uc *WalletUsecase) ResolveTokenByMintAddressWithBrandName(
 	if uc.productReader == nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, ErrWalletProductReaderNotConfigured
 	}
+
 	p, err := uc.productReader.GetByID(ctx, productID)
 	if err != nil {
 		return ResolveTokenByMintAddressWithBrandNameResult{}, err
