@@ -2,22 +2,24 @@
 package usecase
 
 /*
-責任と機能:
-- PaymentUsecase の公開API（Queries/Commands）と依存注入（DI）を提供する。
-- Payment が succeeded になった後の「後続処理のオーケストレーション」を担う。
+責務:
+- PaymentUsecaseはPaymentの公開API（Query/Command）と依存注入点を提供する。
+- Paymentがsucceededになった後の後続処理をオーケストレーションする。
 
 前提:
 - payment document ID = payment.PaymentID
 - payment.PaymentID = order.ID
-- paymentId は payment document field としては保存しない
-- payment records は削除しない
-- payment updates は UpdateByPaymentID による partial update のみ
+- paymentIdはpayment document fieldとして保存しない
+- payment recordsは削除しない
+- payment updatesはUpdateByPaymentIDによるpartial updateのみ
+- Stripe PaymentIntentはpayment record作成前に作成する
+- StripePaymentIntentIDはpendingを含む全ステータスで必須
 
 支払い成功後の後続処理:
-0) order.Paid=true 更新
-1) resale status=sold 更新（best-effort）
-2) 注文確定メール送信
-3) inventory reserve 更新（best-effort）
+0) order.Paid=true更新
+1) resale status=sold更新（best-effort）
+2) 注文確認メール送信
+3) inventory reserve更新（best-effort）
 4) cart delete（best-effort）
 */
 
@@ -38,39 +40,11 @@ import (
 // Ports
 // ============================================================
 
-// PaymentRepo defines the minimal persistence port needed by PaymentUsecase.
-//
-// current design:
-// - payment document ID = payment.PaymentID
-// - payment.PaymentID must be the same value as order.ID
-// - paymentId is NOT stored as a document field
-// - payment records are not deleted
-// - payment updates are performed by partial update only
-type PaymentRepo interface {
-	// Reads
-	GetByPaymentID(
-		ctx context.Context,
-		paymentID string,
-	) (*paymentdom.Payment, error)
-
-	// Writes
-	Create(
-		ctx context.Context,
-		in paymentdom.CreatePaymentInput,
-	) (*paymentdom.Payment, error)
-
-	UpdateByPaymentID(
-		ctx context.Context,
-		paymentID string,
-		patch paymentdom.UpdatePaymentInput,
-	) (*paymentdom.Payment, error)
-}
-
 // InventoryRepoForPayment is the minimal port for inventory reserve after payment.
 type InventoryRepoForPayment interface {
 	// ReserveByOrder sets:
 	// - stock[modelId].reservedByOrder[orderId] = qty
-	// - reservedCount = sum(reservedByOrder) (repo側で正規化)
+	// - reservedCount = sum(reservedByOrder), normalized by repository
 	ReserveByOrder(
 		ctx context.Context,
 		inventoryID string,
@@ -96,11 +70,11 @@ type OrderRepoForPayment interface {
 
 // ResaleRepoForPayment is the minimal port for updating resale status after payment.
 //
-// resale order item:
+// Resale order item:
 // - order.Items[].Type == "resale"
 // - order.Items[].ResaleID points to resales/{resaleId}
 //
-// PaymentUsecase marks those resale listings as sold after payment succeeded.
+// PaymentUsecase marks those resale listings as sold after payment succeeds.
 type ResaleRepoForPayment interface {
 	GetByID(
 		ctx context.Context,
@@ -116,7 +90,7 @@ type ResaleRepoForPayment interface {
 
 // AuthUserEmailGetter is the minimal port for reading email from Firebase Authentication.
 //
-// Firestore users table does not own email.
+// The Firestore users collection does not own email.
 // PaymentUsecase uses this port only for sending order confirmation mail.
 type AuthUserEmailGetter interface {
 	GetEmailByUID(
@@ -127,8 +101,8 @@ type AuthUserEmailGetter interface {
 
 // MailSenderForPayment is the minimal port for sending order confirmation mail.
 //
-// メール件名・本文の組み立ては application/usecase では行わず、
-// adapter 側の OrderMailer に分離する。
+// The adapter-side OrderMailer is responsible for constructing the mail subject
+// and body.
 type MailSenderForPayment interface {
 	SendOrderConfirmation(
 		ctx context.Context,
@@ -144,15 +118,15 @@ type MailSenderForPayment interface {
 
 // PaymentUsecase orchestrates payment operations.
 type PaymentUsecase struct {
-	repo          PaymentRepo
+	repo          paymentdom.RepositoryPort
 	cartRepo      cartdom.Repository
 	inventoryRepo InventoryRepoForPayment
 	orderRepo     OrderRepoForPayment
 	resaleRepo    ResaleRepoForPayment
 
-	// authUserGetter は Firebase Authentication から
-	// uid に紐づく email を取得する。
-	// Firestore users table に email は持たせない。
+	// authUserGetter gets the email associated with a UID from
+	// Firebase Authentication. Email is not stored in the Firestore
+	// users collection.
 	authUserGetter AuthUserEmailGetter
 	mailSender     MailSenderForPayment
 	mailFrom       string
@@ -161,16 +135,16 @@ type PaymentUsecase struct {
 }
 
 type NewPaymentUsecaseInput struct {
-	PaymentRepo PaymentRepo
+	PaymentRepo paymentdom.RepositoryPort
 
 	CartRepo      cartdom.Repository
 	InventoryRepo InventoryRepoForPayment
 	OrderRepo     OrderRepoForPayment
 	ResaleRepo    ResaleRepoForPayment
 
-	// AuthUserGetter は Firebase Authentication から
-	// email を取得するための port。
-	// 注文確定メール送信時に ord.UserID を uid として利用する。
+	// AuthUserGetter retrieves an email from Firebase Authentication.
+	// order.UserID is used as the Firebase Authentication UID when
+	// sending an order confirmation email.
 	AuthUserGetter AuthUserEmailGetter
 	MailSender     MailSenderForPayment
 	MailFrom       string
@@ -223,12 +197,24 @@ func (u *PaymentUsecase) GetByPaymentID(
 // Commands
 // ============================================================
 
+// Create creates a payment record.
+//
+// The Stripe PaymentIntent must already exist before this method is called.
+// StripePaymentIntentID is required for every payment status, including
+// StatusPending.
+//
+// An empty StripePaymentIntentID is rejected before RepositoryPort.Create
+// is called.
 func (u *PaymentUsecase) Create(
 	ctx context.Context,
 	payment paymentdom.Payment,
 ) (*paymentdom.Payment, error) {
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
+	}
+
+	if payment.StripePaymentIntentID == "" {
+		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
 
 	in := paymentdom.CreatePaymentInput{
@@ -258,8 +244,8 @@ func (u *PaymentUsecase) Create(
 
 // Update partially updates an existing payment document.
 //
-// This method is used by PaymentFlowUsecase after Stripe
-// PaymentIntent state changes.
+// This method is used by PaymentFlowUsecase after the Stripe PaymentIntent
+// state changes.
 //
 // Payment records are not overwritten by Save.
 // Payment records are not deleted.
@@ -274,6 +260,13 @@ func (u *PaymentUsecase) Update(
 	}
 	if paymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
+	}
+
+	// StripePaymentIntentID is optional in an update because nil means
+	// "not updated". When specified, however, it must not be empty.
+	if patch.StripePaymentIntentID != nil &&
+		*patch.StripePaymentIntentID == "" {
+		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
 
 	updated, err := u.repo.UpdateByPaymentID(
@@ -304,20 +297,19 @@ func isPaidStatus(status paymentdom.PaymentStatus) bool {
 // Post-paid flow
 // ============================================================
 
-// handlePostPaidBestEffort runs post-paid side effects
-// in best-effort manner.
+// handlePostPaidBestEffort runs post-paid side effects in a best-effort manner.
 //
-// 前提:
-// - payment / order の docId は同じ
+// Preconditions:
+// - payment document ID and order document ID are the same
 // - rootID = payment.PaymentID
-// - payment.PaymentID は order.ID と同じ値である
+// - payment.PaymentID = order.ID
 //
-// 処理順:
-// 0) order.Paid=true 更新
+// Processing order:
+// 0) order.Paid=true
 // 1) resale status=sold
-// 2) 注文確定メール送信
-// 3) inventory reserve
-// 4) cart delete
+// 2) send order confirmation email
+// 3) reserve inventory
+// 4) delete cart
 func (u *PaymentUsecase) handlePostPaidBestEffort(
 	ctx context.Context,
 	payment *paymentdom.Payment,
@@ -360,7 +352,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 		_ = u.markResalesSoldByOrder(ctx, *order)
 	}
 
-	// 2) 注文確定メール送信
+	// 2) send order confirmation email
 	if order != nil &&
 		u.authUserGetter != nil &&
 		u.mailSender != nil &&
@@ -624,12 +616,12 @@ func extractOrderItems(
 	return items
 }
 
-// aggregateReserveItems aggregates reserve qty by
+// aggregateReserveItems aggregates reserve quantity by
 // inventoryId + modelId.
 //
 // Output order is stable:
-// 1. InventoryID asc
-// 2. ModelID asc
+// 1. InventoryID ascending
+// 2. ModelID ascending
 func aggregateReserveItems(
 	items []reserveItem,
 ) []reserveItem {

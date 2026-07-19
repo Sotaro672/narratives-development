@@ -23,7 +23,10 @@ type PaymentHandler struct {
 
 // OrderQuery is the typed contract PaymentHandler needs.
 type OrderQuery interface {
-	GetOrderContextByUID(ctx context.Context, uid string) (dto.OrderContextDTO, error)
+	GetOrderContextByUID(
+		ctx context.Context,
+		uid string,
+	) (dto.OrderContextDTO, error)
 }
 
 func NewPaymentHandler(
@@ -38,7 +41,10 @@ func NewPaymentHandler(
 	}
 }
 
-func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *PaymentHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method == http.MethodOptions {
@@ -59,17 +65,23 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case r.Method == http.MethodGet && path0 == "/me/payments":
+	case r.Method == http.MethodGet &&
+		path0 == "/me/payments":
 		h.getPaymentsContext(w, r)
 		return
 
-	case r.Method == http.MethodPost && path0 == "/me/payments":
+	case r.Method == http.MethodPost &&
+		path0 == "/me/payments":
 		h.postPayments(w, r)
 		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "not_found",
+			},
+		)
 		return
 	}
 }
@@ -78,34 +90,60 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // GET /me/payments
 // ------------------------------------------------------------
 
-func (h *PaymentHandler) getPaymentsContext(w http.ResponseWriter, r *http.Request) {
+func (h *PaymentHandler) getPaymentsContext(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if h == nil || h.orderQ == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "order_query_not_initialized"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "order_query_not_initialized",
+			},
+		)
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
-	out, err := h.orderQ.GetOrderContextByUID(r.Context(), uid)
+	out, err := h.orderQ.GetOrderContextByUID(
+		r.Context(),
+		uid,
+	)
 	if err != nil {
-		if errors.Is(err, mallquery.ErrNotFound) || payIsNotFoundLike(err) {
+		if errors.Is(err, mallquery.ErrNotFound) ||
+			payIsNotFoundLike(err) {
 			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]string{
+					"error": "not_found",
+				},
+			)
 			return
 		}
 
-		log.Printf("[mall/payments] GET /me/payments failed uid=%q err=%v", uid, err)
+		log.Printf(
+			"[mall/payments] GET /me/payments failed uid=%q err=%v",
+			uid,
+			err,
+		)
+
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error":  "internal_error",
-			"detail": err.Error(),
-		})
+		_ = json.NewEncoder(w).Encode(
+			map[string]any{
+				"error":  "internal_error",
+				"detail": err.Error(),
+			},
+		)
 		return
 	}
 
@@ -121,6 +159,8 @@ type payCreateReq struct {
 	// It must be the same value as order.ID.
 	PaymentID string `json:"paymentId"`
 
+	// Amount is checked against the server-side Order total
+	// by PaymentFlowUsecase.
 	Amount int `json:"amount"`
 
 	PaymentMethodID string `json:"paymentMethodId"`
@@ -133,72 +173,131 @@ type payCreateReq struct {
 	StripePaymentIntentID string `json:"stripePaymentIntentId"`
 }
 
-func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
+func (h *PaymentHandler) postPayments(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if h == nil || h.flowUC == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "payment_flow_usecase_not_initialized"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "payment_flow_usecase_not_initialized",
+			},
+		)
 		return
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
 	if !ok || uid == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
+		return
+	}
+
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
 	var req payCreateReq
+
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error":  "invalid_json",
-			"detail": err.Error(),
-		})
+		_ = json.NewEncoder(w).Encode(
+			map[string]any{
+				"error":  "invalid_json",
+				"detail": err.Error(),
+			},
+		)
 		return
 	}
 
-	req.PaymentID = strings.TrimSpace(req.PaymentID)
-	req.PaymentMethodID = strings.TrimSpace(req.PaymentMethodID)
-	req.StripeCustomerID = strings.TrimSpace(req.StripeCustomerID)
-	req.StripePaymentMethodID = strings.TrimSpace(req.StripePaymentMethodID)
-	req.StripePaymentIntentID = strings.TrimSpace(req.StripePaymentIntentID)
+	req.PaymentID = strings.TrimSpace(
+		req.PaymentID,
+	)
+	req.PaymentMethodID = strings.TrimSpace(
+		req.PaymentMethodID,
+	)
+	req.StripeCustomerID = strings.TrimSpace(
+		req.StripeCustomerID,
+	)
+	req.StripePaymentMethodID = strings.TrimSpace(
+		req.StripePaymentMethodID,
+	)
+	req.StripePaymentIntentID = strings.TrimSpace(
+		req.StripePaymentIntentID,
+	)
 
 	if req.PaymentID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "paymentId_required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "paymentId_required",
+			},
+		)
 		return
 	}
 
 	if req.Amount <= 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "amount_invalid"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "amount_invalid",
+			},
+		)
 		return
 	}
 
 	if req.PaymentMethodID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "paymentMethodId_required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "paymentMethodId_required",
+			},
+		)
 		return
 	}
 
 	if req.StripeCustomerID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "stripeCustomerId_required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "stripeCustomerId_required",
+			},
+		)
 		return
 	}
 
 	if req.StripePaymentMethodID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "stripePaymentMethodId_required"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "stripePaymentMethodId_required",
+			},
+		)
 		return
 	}
 
 	if req.StripePaymentIntentID != "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "stripePaymentIntentId_server_managed"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "stripePaymentIntentId_server_managed",
+			},
+		)
 		return
 	}
 
@@ -207,12 +306,17 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 	result, err := h.flowUC.CreatePaymentAndStartWithResult(
 		r.Context(),
 		usecase.CreatePaymentAndStartInput{
+			// UserIDはrequest bodyから受け取らず、
+			// 認証middlewareが確定したUIDを使用する。
+			UserID: uid,
+
 			PaymentID: req.PaymentID,
 
 			PaymentMethodID: req.PaymentMethodID,
 
-			StripeCustomerID:      req.StripeCustomerID,
-			StripePaymentMethodID: req.StripePaymentMethodID,
+			StripeCustomerID: req.StripeCustomerID,
+			StripePaymentMethodID: req.
+				StripePaymentMethodID,
 
 			Amount: &amount,
 		},
@@ -229,24 +333,25 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 			err,
 		)
 
-		status := http.StatusInternalServerError
-		if payIsBadRequestLike(err) {
-			status = http.StatusBadRequest
-		} else if errors.Is(err, mallquery.ErrNotFound) || payIsNotFoundLike(err) {
-			status = http.StatusNotFound
-		}
+		status := paymentFlowHTTPStatus(err)
 
 		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error":  "payment_flow_failed",
-			"detail": err.Error(),
-		})
+		_ = json.NewEncoder(w).Encode(
+			map[string]any{
+				"error":  "payment_flow_failed",
+				"detail": err.Error(),
+			},
+		)
 		return
 	}
 
 	if result == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "payment_flow_result_empty"})
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "payment_flow_result_empty",
+			},
+		)
 		return
 	}
 
@@ -256,17 +361,20 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 		"paymentId": result.PaymentID,
 		"status":    string(result.Status),
 
-		"stripePaymentIntentId": result.StripePaymentIntentID,
-		"clientSecret":          result.ClientSecret,
-		"requiresAction":        result.RequiresAction,
+		"stripePaymentIntentId": result.
+			StripePaymentIntentID,
+		"clientSecret":   result.ClientSecret,
+		"requiresAction": result.RequiresAction,
 	}
 
 	if result.ErrorType != nil {
 		response["errorType"] = *result.ErrorType
 	}
+
 	if result.ErrorCode != nil {
 		response["errorCode"] = *result.ErrorCode
 	}
+
 	if result.ErrorMessage != nil {
 		response["errorMessage"] = *result.ErrorMessage
 	}
@@ -278,6 +386,76 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 // helpers
 // ------------------------------------------------------------
+
+func paymentFlowHTTPStatus(err error) int {
+	if err == nil {
+		return http.StatusInternalServerError
+	}
+
+	switch {
+	case errors.Is(
+		err,
+		usecase.ErrPaymentFlowOrderAlreadyPaid,
+	):
+		return http.StatusConflict
+
+	case errors.Is(
+		err,
+		mallquery.ErrNotFound,
+	), payIsNotFoundLike(err):
+		return http.StatusNotFound
+
+	case errors.Is(
+		err,
+		usecase.ErrPaymentFlowUserIDEmpty,
+	),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowPaymentIDEmpty,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowPaymentMethodEmpty,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowAmountInvalid,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowOrderIDMismatch,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowOrderOwnerMismatch,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowOrderAmountInvalid,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowOrderAmountMismatch,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowStripeCustomerIDEmpty,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowStripePaymentMethodIDEmpty,
+		),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowStripePaymentIntentIDEmpty,
+		),
+		payIsBadRequestLike(err):
+		return http.StatusBadRequest
+
+	default:
+		return http.StatusInternalServerError
+	}
+}
 
 func payIsNotFoundLike(err error) bool {
 	if err == nil {

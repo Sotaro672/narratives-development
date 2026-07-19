@@ -18,17 +18,24 @@ import (
 //   and builds lightweight optional deps.
 
 var (
-	errWiringNilInfra   = errors.New("di.mall: wiring policy infra is nil")
-	errWiringNilPayment = errors.New("di.mall: payment usecase is nil")
+	errWiringNilInfra       = errors.New("di.mall: wiring policy infra is nil")
+	errWiringNilPayment     = errors.New("di.mall: payment usecase is nil")
+	errWiringNilOrderReader = errors.New("di.mall: payment flow order reader is nil")
 )
 
 // buildPaymentFlowUsecase wires PaymentFlowUsecase conditionally.
 //
-// PaymentFlowUsecase now requires a StripePaymentIntentGateway.
-// If the gateway is not available at this wiring layer, the payment flow is disabled.
+// PaymentFlowUsecase requires:
+// - PaymentUsecase
+// - OrderReaderForPaymentFlow
+// - StripePaymentIntentGateway
+//
+// If the Stripe gateway is unavailable at this wiring layer,
+// the payment flow is disabled.
 func buildPaymentFlowUsecase(
 	infra *shared.Infra,
 	paymentUC *usecase.PaymentUsecase,
+	orderReader usecase.OrderReaderForPaymentFlow,
 ) (*usecase.PaymentFlowUsecase, bool, error) {
 	if infra == nil {
 		return nil, false, errWiringNilInfra
@@ -36,16 +43,25 @@ func buildPaymentFlowUsecase(
 	if paymentUC == nil {
 		return nil, false, errWiringNilPayment
 	}
+	if orderReader == nil {
+		return nil, false, errWiringNilOrderReader
+	}
 
 	paymentIntentGateway := buildStripePaymentIntentGateway(infra)
 	if paymentIntentGateway == nil {
 		return nil, false, nil
 	}
 
-	return usecase.NewPaymentFlowUsecase(paymentUC, paymentIntentGateway), true, nil
+	return usecase.NewPaymentFlowUsecase(
+		paymentUC,
+		orderReader,
+		paymentIntentGateway,
+	), true, nil
 }
 
-func buildStripePaymentIntentGateway(infra *shared.Infra) usecase.StripePaymentIntentGateway {
+func buildStripePaymentIntentGateway(
+	infra *shared.Infra,
+) usecase.StripePaymentIntentGateway {
 	if infra == nil {
 		return nil
 	}
@@ -60,7 +76,9 @@ func buildStripePaymentIntentGateway(infra *shared.Infra) usecase.StripePaymentI
 //
 // NOTE:
 // - PreviewQuery now implements VerifyMatch and can be used as usecase.ScanVerifier.
-func buildScanVerifier(verifier usecase.ScanVerifier) usecase.ScanVerifier {
+func buildScanVerifier(
+	verifier usecase.ScanVerifier,
+) usecase.ScanVerifier {
 	if verifier == nil {
 		return nil
 	}
@@ -78,7 +96,9 @@ func buildScanVerifier(verifier usecase.ScanVerifier) usecase.ScanVerifier {
 // NOTE:
 // - TransferUsecase construction is intentionally NOT done here.
 // - This provider is returned to container.go, where usecases are built when enabled.
-func buildWalletSecretProvider(infra *shared.Infra) (usecase.WalletSecretProvider, error) {
+func buildWalletSecretProvider(
+	infra *shared.Infra,
+) (usecase.WalletSecretProvider, error) {
 	if infra == nil {
 		return nil, errWiringNilInfra
 	}
@@ -89,12 +109,16 @@ func buildWalletSecretProvider(infra *shared.Infra) (usecase.WalletSecretProvide
 
 	projectID := infra.ProjectID
 	if projectID == "" {
-		return nil, errors.New("di.mall: ProjectID is empty (cannot wire WalletSecretProvider)")
+		return nil, errors.New(
+			"di.mall: ProjectID is empty (cannot wire WalletSecretProvider)",
+		)
 	}
 
 	brandPrefix := infra.BrandWalletSecretPrefix
 	if brandPrefix == "" {
-		return nil, errors.New("di.mall: BrandWalletSecretPrefix is empty (cannot wire WalletSecretProvider)")
+		return nil, errors.New(
+			"di.mall: BrandWalletSecretPrefix is empty (cannot wire WalletSecretProvider)",
+		)
 	}
 
 	// Share transfer で avatar signer を使うための prefix。

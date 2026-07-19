@@ -99,21 +99,6 @@ type Order struct {
 	CreatedAt time.Time           `json:"createdAt"`
 }
 
-// OrderPatch represents partial updates to Order fields.
-// A nil field means "no change".
-type OrderPatch struct {
-	UserID   *string
-	AvatarID *string
-	CartID   *string
-
-	ShippingSnapshot      *ShippingSnapshot
-	PaymentMethodSnapshot *PaymentMethodSnapshot
-
-	Paid *bool
-
-	Items *[]OrderItemSnapshot
-}
-
 // ========================================
 // Errors
 // ========================================

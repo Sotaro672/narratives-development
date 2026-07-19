@@ -11,7 +11,11 @@ import (
 // PaymentID is the Firestore payment document ID.
 // It must be the same value as order.ID.
 //
-// 正の Firestore payment record schema:
+// StripePaymentIntentID is required.
+// A Stripe PaymentIntent must be created before RepositoryPort.Create is called.
+// This requirement applies to every payment status, including pending.
+//
+// 正規のFirestore payment record schema:
 //
 //	amount
 //	createdAt
@@ -29,6 +33,9 @@ type CreatePaymentInput struct {
 
 	StripeCustomerID      string `json:"stripeCustomerId"`
 	StripePaymentMethodID string `json:"stripePaymentMethodId"`
+
+	// StripePaymentIntentID is required for every status,
+	// including StatusPending.
 	StripePaymentIntentID string `json:"stripePaymentIntentId"`
 
 	Amount int `json:"amount"`
@@ -42,8 +49,11 @@ type CreatePaymentInput struct {
 
 // UpdatePaymentInput - Payment部分更新（nilは未更新）
 //
-// PaymentID is not included here because update target is selected by paymentID,
-// which must be the same value as order.ID.
+// PaymentID is not included here because the update target is selected
+// by paymentID, which must be the same value as order.ID.
+//
+// StripePaymentIntentID is already required when a payment is created.
+// When StripePaymentIntentID is specified in an update, it must not be empty.
 type UpdatePaymentInput struct {
 	PaymentMethodID *string `json:"paymentMethodId,omitempty"`
 
@@ -62,14 +72,33 @@ type UpdatePaymentInput struct {
 
 // RepositoryPort - ドメインのリポジトリ契約
 type RepositoryPort interface {
-	// 取得
-	GetByPaymentID(ctx context.Context, paymentID string) (*Payment, error)
+	// GetByPaymentID returns a payment by its Firestore document ID.
+	GetByPaymentID(
+		ctx context.Context,
+		paymentID string,
+	) (*Payment, error)
 
-	// 作成
-	Create(ctx context.Context, in CreatePaymentInput) (*Payment, error)
+	// Create creates a payment document.
+	//
+	// The caller must create the Stripe PaymentIntent first and pass its
+	// non-empty ID through CreatePaymentInput.StripePaymentIntentID.
+	//
+	// Implementations must reject an empty StripePaymentIntentID,
+	// including when Status is StatusPending.
+	Create(
+		ctx context.Context,
+		in CreatePaymentInput,
+	) (*Payment, error)
 
-	// 更新
-	UpdateByPaymentID(ctx context.Context, paymentID string, patch UpdatePaymentInput) (*Payment, error)
+	// UpdateByPaymentID partially updates a payment document.
+	//
+	// A nil field means that the field is not updated.
+	// If StripePaymentIntentID is non-nil, its value must not be empty.
+	UpdateByPaymentID(
+		ctx context.Context,
+		paymentID string,
+		patch UpdatePaymentInput,
+	) (*Payment, error)
 }
 
 // 共通エラー

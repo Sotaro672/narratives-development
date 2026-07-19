@@ -33,6 +33,7 @@ func IsValidStatus(s PaymentStatus) bool {
 	if s == "" {
 		return false
 	}
+
 	_, ok := AllowedStatuses[s]
 	return ok
 }
@@ -44,7 +45,7 @@ func IsValidStatus(s PaymentStatus) bool {
 // - PaymentID represents that document ID.
 // - paymentId itself is NOT stored as a field in the payment document.
 //
-// 正の Firestore payment record schema:
+// 正規のFirestore payment record schema:
 //
 //	amount
 //	createdAt
@@ -53,6 +54,9 @@ func IsValidStatus(s PaymentStatus) bool {
 //	stripeCustomerId
 //	stripePaymentIntentId
 //	stripePaymentMethodId
+//
+// stripePaymentIntentId is required for every payment status,
+// including pending.
 type Payment struct {
 	// PaymentID is the Firestore payment document ID.
 	// It must be the same value as order.ID.
@@ -101,6 +105,9 @@ var (
 //
 // paymentID must be the same value as order.ID.
 // The value is used as the Firestore payment document ID.
+//
+// stripePaymentIntentID is required for every status, including pending.
+// A Stripe PaymentIntent must be created before this constructor is called.
 func New(
 	paymentID string,
 	paymentMethodID string,
@@ -115,7 +122,7 @@ func New(
 	createdAt time.Time,
 ) (Payment, error) {
 	st := status
-	if string(st) == "" {
+	if st == "" {
 		st = DefaultStatus
 	}
 
@@ -132,15 +139,18 @@ func New(
 		ErrorMsg:              errorMsg,
 		CreatedAt:             createdAt.UTC(),
 	}
+
 	if err := p.validate(); err != nil {
 		return Payment{}, err
 	}
+
 	return p, nil
 }
 
 // NewWithNow creates a Payment with the provided current time.
 //
 // paymentID must be the same value as order.ID.
+// stripePaymentIntentID is required for every status, including pending.
 func NewWithNow(
 	paymentID string,
 	paymentMethodID string,
@@ -154,7 +164,6 @@ func NewWithNow(
 	errorMsg *string,
 	now time.Time,
 ) (Payment, error) {
-	now = now.UTC()
 	return New(
 		paymentID,
 		paymentMethodID,
@@ -166,7 +175,7 @@ func NewWithNow(
 		errorType,
 		errorCode,
 		errorMsg,
-		now,
+		now.UTC(),
 	)
 }
 
@@ -176,6 +185,7 @@ func (p *Payment) SetPaymentID(paymentID string) error {
 	if paymentID == "" {
 		return ErrInvalidPaymentID
 	}
+
 	p.PaymentID = paymentID
 	return nil
 }
@@ -184,6 +194,7 @@ func (p *Payment) SetStatus(next PaymentStatus) error {
 	if !IsValidStatus(next) {
 		return ErrInvalidStatus
 	}
+
 	p.Status = next
 	return nil
 }
@@ -192,6 +203,7 @@ func (p *Payment) SetPaymentMethodID(paymentMethodID string) error {
 	if paymentMethodID == "" {
 		return ErrInvalidPaymentMethodID
 	}
+
 	p.PaymentMethodID = paymentMethodID
 	return nil
 }
@@ -200,30 +212,39 @@ func (p *Payment) SetStripeCustomerID(stripeCustomerID string) error {
 	if stripeCustomerID == "" {
 		return ErrInvalidStripeCustomerID
 	}
+
 	p.StripeCustomerID = stripeCustomerID
 	return nil
 }
 
-func (p *Payment) SetStripePaymentMethodID(stripePaymentMethodID string) error {
+func (p *Payment) SetStripePaymentMethodID(
+	stripePaymentMethodID string,
+) error {
 	if stripePaymentMethodID == "" {
 		return ErrInvalidStripePaymentMethod
 	}
+
 	p.StripePaymentMethodID = stripePaymentMethodID
 	return nil
 }
 
-func (p *Payment) SetStripePaymentIntentID(stripePaymentIntentID string) error {
+func (p *Payment) SetStripePaymentIntentID(
+	stripePaymentIntentID string,
+) error {
 	if stripePaymentIntentID == "" {
 		return ErrInvalidStripePaymentIntent
 	}
+
 	p.StripePaymentIntentID = stripePaymentIntentID
 	return nil
 }
 
 func (p *Payment) SetAmount(amount int) error {
-	if amount < MinAmount || (MaxAmount > 0 && amount > MaxAmount) {
+	if amount < MinAmount ||
+		(MaxAmount > 0 && amount > MaxAmount) {
 		return ErrInvalidAmount
 	}
+
 	p.Amount = amount
 	return nil
 }
@@ -232,6 +253,7 @@ func (p *Payment) SetErrorType(errType *string) error {
 	if errType != nil && *errType == "" {
 		return ErrInvalidErrorType
 	}
+
 	p.ErrorType = errType
 	return nil
 }
@@ -240,6 +262,7 @@ func (p *Payment) SetErrorCode(errCode *string) error {
 	if errCode != nil && *errCode == "" {
 		return ErrInvalidErrorCode
 	}
+
 	p.ErrorCode = errCode
 	return nil
 }
@@ -248,6 +271,7 @@ func (p *Payment) SetErrorMsg(errMsg *string) error {
 	if errMsg != nil && *errMsg == "" {
 		return ErrInvalidErrorMsg
 	}
+
 	p.ErrorMsg = errMsg
 	return nil
 }
@@ -271,7 +295,16 @@ func (p Payment) validate() error {
 		return ErrInvalidStripePaymentMethod
 	}
 
-	if p.Amount < MinAmount || (MaxAmount > 0 && p.Amount > MaxAmount) {
+	// Stripe PaymentIntent must already exist before the payment entity
+	// or Firestore payment document is created.
+	//
+	// This field is required for every status, including pending.
+	if p.StripePaymentIntentID == "" {
+		return ErrInvalidStripePaymentIntent
+	}
+
+	if p.Amount < MinAmount ||
+		(MaxAmount > 0 && p.Amount > MaxAmount) {
 		return ErrInvalidAmount
 	}
 
@@ -282,21 +315,17 @@ func (p Payment) validate() error {
 	if p.ErrorType != nil && *p.ErrorType == "" {
 		return ErrInvalidErrorType
 	}
+
 	if p.ErrorCode != nil && *p.ErrorCode == "" {
 		return ErrInvalidErrorCode
 	}
+
 	if p.ErrorMsg != nil && *p.ErrorMsg == "" {
 		return ErrInvalidErrorMsg
 	}
 
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
-	}
-
-	// PaymentIntent は backend が Stripe で作成・confirm した後に入る server-managed value。
-	// 初回 pending record 作成時点ではまだ PaymentIntent が存在しないため空を許可する。
-	if p.StripePaymentIntentID == "" && p.Status != StatusPending {
-		return ErrInvalidStripePaymentIntent
 	}
 
 	return nil

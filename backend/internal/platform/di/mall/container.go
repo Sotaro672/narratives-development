@@ -456,6 +456,7 @@ func NewContainer(
 			buildPaymentFlowUsecase(
 				infra,
 				c.PaymentUC,
+				orderRepo,
 			)
 		if err != nil {
 			return nil, err

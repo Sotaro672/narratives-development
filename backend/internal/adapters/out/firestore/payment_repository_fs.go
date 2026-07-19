@@ -14,18 +14,24 @@ import (
 	paymentdom "narratives/internal/domain/payment"
 )
 
-// Firestore-based implementation of Payment repository.
+// PaymentRepositoryFS is the Firestore-based implementation of
+// payment.RepositoryPort.
 //
-// current design:
-// - payment docId = paymentId
+// Current design:
+// - payment document ID = paymentId
 // - paymentId must be the same value as order.ID
-// - paymentId is NOT stored as a document field
+// - paymentId is not stored as a document field
+// - stripePaymentIntentId is required for every status, including pending
 type PaymentRepositoryFS struct {
 	Client *firestore.Client
 }
 
-func NewPaymentRepositoryFS(client *firestore.Client) *PaymentRepositoryFS {
-	return &PaymentRepositoryFS{Client: client}
+func NewPaymentRepositoryFS(
+	client *firestore.Client,
+) *PaymentRepositoryFS {
+	return &PaymentRepositoryFS{
+		Client: client,
+	}
 }
 
 func (r *PaymentRepositoryFS) col() *firestore.CollectionRef {
@@ -36,10 +42,14 @@ func (r *PaymentRepositoryFS) col() *firestore.CollectionRef {
 // payment.RepositoryPort
 // ============================================================
 
-func (r *PaymentRepositoryFS) GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error) {
+func (r *PaymentRepositoryFS) GetByPaymentID(
+	ctx context.Context,
+	paymentID string,
+) (*paymentdom.Payment, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
+
 	if paymentID == "" {
 		return nil, paymentdom.ErrNotFound
 	}
@@ -49,57 +59,39 @@ func (r *PaymentRepositoryFS) GetByPaymentID(ctx context.Context, paymentID stri
 		if status.Code(err) == codes.NotFound {
 			return nil, paymentdom.ErrNotFound
 		}
+
 		return nil, err
 	}
 
-	p, err := docToPayment(snap)
+	payment, err := docToPayment(snap)
 	if err != nil {
 		return nil, err
 	}
 
-	return &p, nil
+	return &payment, nil
 }
 
-func (r *PaymentRepositoryFS) Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error) {
+func (r *PaymentRepositoryFS) Create(
+	ctx context.Context,
+	in paymentdom.CreatePaymentInput,
+) (*paymentdom.Payment, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
+
 	if in.PaymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
 
+	// Validate the complete domain entity before writing anything to
+	// Firestore.
+	//
+	// In particular, StripePaymentIntentID must be non-empty for every
+	// status, including pending. Performing this validation first prevents
+	// an invalid document from being persisted before an error is returned.
 	now := time.Now().UTC()
-	docRef := r.col().Doc(in.PaymentID)
 
-	data := map[string]any{
-		"amount":                in.Amount,
-		"createdAt":             now,
-		"paymentMethodId":       in.PaymentMethodID,
-		"status":                string(in.Status),
-		"stripeCustomerId":      in.StripeCustomerID,
-		"stripePaymentIntentId": in.StripePaymentIntentID,
-		"stripePaymentMethodId": in.StripePaymentMethodID,
-	}
-
-	if in.ErrorType != nil && *in.ErrorType != "" {
-		data["errorType"] = *in.ErrorType
-	}
-	if in.ErrorCode != nil && *in.ErrorCode != "" {
-		data["errorCode"] = *in.ErrorCode
-	}
-	if in.ErrorMsg != nil && *in.ErrorMsg != "" {
-		data["errorMsg"] = *in.ErrorMsg
-	}
-
-	_, err := docRef.Create(ctx, data)
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return nil, paymentdom.ErrConflict
-		}
-		return nil, err
-	}
-
-	p, err := paymentdom.New(
+	payment, err := paymentdom.New(
 		in.PaymentID,
 		in.PaymentMethodID,
 		in.StripeCustomerID,
@@ -116,7 +108,40 @@ func (r *PaymentRepositoryFS) Create(ctx context.Context, in paymentdom.CreatePa
 		return nil, err
 	}
 
-	return &p, nil
+	docRef := r.col().Doc(payment.PaymentID)
+
+	data := map[string]any{
+		"amount":                payment.Amount,
+		"createdAt":             payment.CreatedAt,
+		"paymentMethodId":       payment.PaymentMethodID,
+		"status":                string(payment.Status),
+		"stripeCustomerId":      payment.StripeCustomerID,
+		"stripePaymentIntentId": payment.StripePaymentIntentID,
+		"stripePaymentMethodId": payment.StripePaymentMethodID,
+	}
+
+	if payment.ErrorType != nil {
+		data["errorType"] = *payment.ErrorType
+	}
+
+	if payment.ErrorCode != nil {
+		data["errorCode"] = *payment.ErrorCode
+	}
+
+	if payment.ErrorMsg != nil {
+		data["errorMsg"] = *payment.ErrorMsg
+	}
+
+	_, err = docRef.Create(ctx, data)
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return nil, paymentdom.ErrConflict
+		}
+
+		return nil, err
+	}
+
+	return &payment, nil
 }
 
 func (r *PaymentRepositoryFS) UpdateByPaymentID(
@@ -127,6 +152,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
+
 	if paymentID == "" {
 		return nil, paymentdom.ErrNotFound
 	}
@@ -138,6 +164,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 		if *patch.PaymentMethodID == "" {
 			return nil, paymentdom.ErrInvalidPaymentMethodID
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "paymentMethodId",
 			Value: *patch.PaymentMethodID,
@@ -148,6 +175,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 		if *patch.StripeCustomerID == "" {
 			return nil, paymentdom.ErrInvalidStripeCustomerID
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "stripeCustomerId",
 			Value: *patch.StripeCustomerID,
@@ -158,16 +186,19 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 		if *patch.StripePaymentMethodID == "" {
 			return nil, paymentdom.ErrInvalidStripePaymentMethod
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "stripePaymentMethodId",
 			Value: *patch.StripePaymentMethodID,
 		})
 	}
 
+	// nil means "not updated". A specified value must never be empty.
 	if patch.StripePaymentIntentID != nil {
 		if *patch.StripePaymentIntentID == "" {
 			return nil, paymentdom.ErrInvalidStripePaymentIntent
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "stripePaymentIntentId",
 			Value: *patch.StripePaymentIntentID,
@@ -175,9 +206,12 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 	}
 
 	if patch.Amount != nil {
-		if *patch.Amount < paymentdom.MinAmount || (paymentdom.MaxAmount > 0 && *patch.Amount > paymentdom.MaxAmount) {
+		if *patch.Amount < paymentdom.MinAmount ||
+			(paymentdom.MaxAmount > 0 &&
+				*patch.Amount > paymentdom.MaxAmount) {
 			return nil, paymentdom.ErrInvalidAmount
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "amount",
 			Value: *patch.Amount,
@@ -188,6 +222,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 		if !paymentdom.IsValidStatus(*patch.Status) {
 			return nil, paymentdom.ErrInvalidStatus
 		}
+
 		updates = append(updates, firestore.Update{
 			Path:  "status",
 			Value: string(*patch.Status),
@@ -245,9 +280,12 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 		if status.Code(err) == codes.NotFound {
 			return nil, paymentdom.ErrNotFound
 		}
+
 		return nil, err
 	}
 
+	// Reading through docToPayment validates the complete document after
+	// applying the partial update.
 	return r.GetByPaymentID(ctx, paymentID)
 }
 
@@ -255,54 +293,92 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(
 // Helpers
 // ============================================================
 
-func docToPayment(doc *firestore.DocumentSnapshot) (paymentdom.Payment, error) {
+func docToPayment(
+	doc *firestore.DocumentSnapshot,
+) (paymentdom.Payment, error) {
 	data := doc.Data()
 	if data == nil {
-		return paymentdom.Payment{}, fmt.Errorf("empty payment document: %s", doc.Ref.ID)
+		return paymentdom.Payment{}, fmt.Errorf(
+			"empty payment document: %s",
+			doc.Ref.ID,
+		)
 	}
 
 	paymentID := doc.Ref.ID
 
-	paymentMethodID, err := paymentRequiredString(data, "paymentMethodId")
+	paymentMethodID, err := paymentRequiredString(
+		data,
+		"paymentMethodId",
+	)
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	stripeCustomerID, err := paymentRequiredString(data, "stripeCustomerId")
+	stripeCustomerID, err := paymentRequiredString(
+		data,
+		"stripeCustomerId",
+	)
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	stripePaymentMethodID, err := paymentRequiredString(data, "stripePaymentMethodId")
+	stripePaymentMethodID, err := paymentRequiredString(
+		data,
+		"stripePaymentMethodId",
+	)
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	stripePaymentIntentID, err := paymentRequiredString(data, "stripePaymentIntentId")
+	// stripePaymentIntentId is required regardless of payment status.
+	stripePaymentIntentID, err := paymentRequiredString(
+		data,
+		"stripePaymentIntentId",
+	)
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	amount, err := paymentRequiredInt(data, "amount")
+	amount, err := paymentRequiredInt(
+		data,
+		"amount",
+	)
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	statusText, err := paymentRequiredString(data, "status")
+	statusText, err := paymentRequiredString(
+		data,
+		"status",
+	)
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	createdAt, err := paymentRequiredTime(data, "createdAt")
+	createdAt, err := paymentRequiredTime(
+		data,
+		"createdAt",
+	)
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	errorType := paymentOptionalString(data, "errorType")
-	errorCode := paymentOptionalString(data, "errorCode")
-	errorMsg := paymentOptionalString(data, "errorMsg")
+	// Error information remains optional. These fields are unrelated to
+	// the required stripePaymentIntentId invariant.
+	errorType := paymentOptionalString(
+		data,
+		"errorType",
+	)
+	errorCode := paymentOptionalString(
+		data,
+		"errorCode",
+	)
+	errorMsg := paymentOptionalString(
+		data,
+		"errorMsg",
+	)
 
-	p, err := paymentdom.New(
+	payment, err := paymentdom.New(
 		paymentID,
 		paymentMethodID,
 		stripeCustomerID,
@@ -319,61 +395,91 @@ func docToPayment(doc *firestore.DocumentSnapshot) (paymentdom.Payment, error) {
 		return paymentdom.Payment{}, err
 	}
 
-	return p, nil
+	return payment, nil
 }
 
-func paymentRequiredString(m map[string]any, key string) (string, error) {
-	v, ok := m[key]
-	if !ok || v == nil {
-		return "", fmt.Errorf("payment: missing %s", key)
+func paymentRequiredString(
+	values map[string]any,
+	key string,
+) (string, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return "", fmt.Errorf(
+			"payment: missing %s",
+			key,
+		)
 	}
 
-	s, ok := v.(string)
-	if !ok || s == "" {
-		return "", fmt.Errorf("payment: invalid %s", key)
+	text, ok := value.(string)
+	if !ok || text == "" {
+		return "", fmt.Errorf(
+			"payment: invalid %s",
+			key,
+		)
 	}
 
-	return s, nil
+	return text, nil
 }
 
-func paymentOptionalString(m map[string]any, key string) *string {
-	v, ok := m[key]
-	if !ok || v == nil {
+func paymentOptionalString(
+	values map[string]any,
+	key string,
+) *string {
+	value, ok := values[key]
+	if !ok || value == nil {
 		return nil
 	}
 
-	s, ok := v.(string)
-	if !ok || s == "" {
+	text, ok := value.(string)
+	if !ok || text == "" {
 		return nil
 	}
 
-	return &s
+	return &text
 }
 
-func paymentRequiredInt(m map[string]any, key string) (int, error) {
-	v, ok := m[key]
-	if !ok || v == nil {
-		return 0, fmt.Errorf("payment: missing %s", key)
+func paymentRequiredInt(
+	values map[string]any,
+	key string,
+) (int, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return 0, fmt.Errorf(
+			"payment: missing %s",
+			key,
+		)
 	}
 
-	n, ok := v.(int64)
+	number, ok := value.(int64)
 	if !ok {
-		return 0, fmt.Errorf("payment: invalid %s", key)
+		return 0, fmt.Errorf(
+			"payment: invalid %s",
+			key,
+		)
 	}
 
-	return int(n), nil
+	return int(number), nil
 }
 
-func paymentRequiredTime(m map[string]any, key string) (time.Time, error) {
-	v, ok := m[key]
-	if !ok || v == nil {
-		return time.Time{}, fmt.Errorf("payment: missing %s", key)
+func paymentRequiredTime(
+	values map[string]any,
+	key string,
+) (time.Time, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return time.Time{}, fmt.Errorf(
+			"payment: missing %s",
+			key,
+		)
 	}
 
-	t, ok := v.(time.Time)
-	if !ok || t.IsZero() {
-		return time.Time{}, fmt.Errorf("payment: invalid %s", key)
+	timestamp, ok := value.(time.Time)
+	if !ok || timestamp.IsZero() {
+		return time.Time{}, fmt.Errorf(
+			"payment: invalid %s",
+			key,
+		)
 	}
 
-	return t.UTC(), nil
+	return timestamp.UTC(), nil
 }

@@ -71,24 +71,6 @@ export interface Order {
   createdAt: string;
 }
 
-/**
- * backend/internal/domain/order/entity.go のOrderPatchに対応。
- *
- * undefinedまたはnullは「変更なし」を表す。
- */
-export interface OrderPatch {
-  userId?: string | null;
-  avatarId?: string | null;
-  cartId?: string | null;
-
-  shippingSnapshot?: ShippingSnapshot | null;
-  paymentMethodSnapshot?: PaymentMethodSnapshot | null;
-
-  paid?: boolean | null;
-
-  items?: OrderItemSnapshot[] | null;
-}
-
 export const MIN_ITEMS_REQUIRED = 1;
 
 export function isOrderItemType(value: string): value is OrderItemType {
