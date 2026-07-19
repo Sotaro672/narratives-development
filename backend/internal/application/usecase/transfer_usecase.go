@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	avatardom "narratives/internal/domain/avatar"
@@ -49,34 +48,56 @@ type ScanVerifier interface {
 	) (VerifyResult, error)
 }
 
-// OrderRepoForTransfer provides the order operations required by transfer.
-//
-// itemKey:
-//   - list:<modelId>
-//   - resale:<resaleId>
+type FindEligibleTransferItemInput struct {
+	AvatarID         string
+	ProductID        string
+	ModelID          string
+	TokenBlueprintID string
+}
+
+type TransferTargetItem struct {
+	OrderID   string
+	ItemIndex int
+	ItemType  orderdom.OrderItemType
+
+	InventoryID string
+	ModelID     string
+	ResaleID    string
+
+	ProductID          string
+	ProductBlueprintID string
+	TokenBlueprintID   string
+	BrandID            string
+}
+
+// OrderRepoForTransfer provides exact lookup and state transitions for one
+// transfer-eligible order item. Implementations must use the canonical
+// orderTransferItems read model and must not scan Order documents in memory.
 type OrderRepoForTransfer interface {
-	ListPaidByAvatarID(
+	// FindEligibleTransferItem returns orderdom.ErrNotFound when no paid,
+	// untransferred item exactly matches the input.
+	FindEligibleTransferItem(
 		ctx context.Context,
-		avatarID string,
-	) ([]orderdom.Order, error)
+		in FindEligibleTransferItemInput,
+	) (TransferTargetItem, error)
 
 	LockTransferItem(
 		ctx context.Context,
 		orderID string,
-		itemKey string,
+		itemIndex int,
 		now time.Time,
 	) error
 
 	UnlockTransferItem(
 		ctx context.Context,
 		orderID string,
-		itemKey string,
+		itemIndex int,
 	) error
 
 	MarkTransferredItem(
 		ctx context.Context,
 		orderID string,
-		itemKey string,
+		itemIndex int,
 		at time.Time,
 	) error
 }
@@ -319,9 +340,9 @@ type TransferByVerifiedScanResult struct {
 	MatchedInventoryID string
 	MatchedModelID     string
 
-	MatchedItemKey  string
-	MatchedItemType orderdom.OrderItemType
-	MatchedResaleID string
+	MatchedItemIndex int
+	MatchedItemType  orderdom.OrderItemType
+	MatchedResaleID  string
 
 	ProductID        string
 	MintAddress      string
@@ -333,23 +354,6 @@ type TransferByVerifiedScanResult struct {
 
 	FromDisplayName string
 	ToDisplayName   string
-}
-
-type transferTargetItem struct {
-	OrderID string
-
-	ItemKey  string
-	ItemType orderdom.OrderItemType
-
-	InventoryID string
-	ModelID     string
-
-	ResaleID string
-
-	ProductID          string
-	ProductBlueprintID string
-	TokenBlueprintID   string
-	BrandID            string
 }
 
 type transferExecutionSource struct {
@@ -466,25 +470,30 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			)
 	}
 
-	orders, err := u.orderRepo.ListPaidByAvatarID(
+	target, err := u.orderRepo.FindEligibleTransferItem(
 		ctx,
-		avatarID,
+		FindEligibleTransferItemInput{
+			AvatarID:         avatarID,
+			ProductID:        productID,
+			ModelID:          scannedModelID,
+			TokenBlueprintID: scannedTokenBlueprintID,
+		},
 	)
 	if err != nil {
-		return TransferByVerifiedScanResult{}, err
-	}
-	if len(orders) == 0 {
-		return TransferByVerifiedScanResult{},
-			ErrTransferNoEligibleOrder
-	}
+		if errors.Is(err, orderdom.ErrNotFound) {
+			return TransferByVerifiedScanResult{},
+				ErrTransferNoEligibleOrder
+		}
 
-	target, found := findUntransferredTransferTarget(
-		orders,
-		productID,
-		scannedModelID,
-		scannedTokenBlueprintID,
-	)
-	if !found {
+		return TransferByVerifiedScanResult{},
+			fmt.Errorf(
+				"transfer_uc: find eligible transfer item failed avatarId=%s productId=%s: %w",
+				avatarID,
+				productID,
+				err,
+			)
+	}
+	if target.OrderID == "" || target.ItemIndex < 0 {
 		return TransferByVerifiedScanResult{},
 			ErrTransferNoEligibleOrder
 	}
@@ -494,14 +503,14 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	if err := u.orderRepo.LockTransferItem(
 		ctx,
 		target.OrderID,
-		target.ItemKey,
+		target.ItemIndex,
 		now,
 	); err != nil {
 		return TransferByVerifiedScanResult{},
 			fmt.Errorf(
-				"transfer_uc: lock failed orderId=%s itemKey=%s: %w",
+				"transfer_uc: lock failed orderId=%s itemIndex=%d: %w",
 				target.OrderID,
-				target.ItemKey,
+				target.ItemIndex,
 				err,
 			)
 	}
@@ -549,7 +558,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			_ = u.orderRepo.UnlockTransferItem(
 				context.Background(),
 				target.OrderID,
-				target.ItemKey,
+				target.ItemIndex,
 			)
 		}
 	}()
@@ -702,9 +711,9 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	)
 	if err != nil {
 		message := fmt.Sprintf(
-			"execute transfer failed orderId=%s itemKey=%s mint=%s: %v",
+			"execute transfer failed orderId=%s itemIndex=%d mint=%s: %v",
 			target.OrderID,
-			target.ItemKey,
+			target.ItemIndex,
 			mintAddress,
 			err,
 		)
@@ -717,9 +726,9 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 		return TransferByVerifiedScanResult{},
 			fmt.Errorf(
-				"transfer_uc: execute transfer failed orderId=%s itemKey=%s mint=%s: %w",
+				"transfer_uc: execute transfer failed orderId=%s itemIndex=%d mint=%s: %w",
 				target.OrderID,
-				target.ItemKey,
+				target.ItemIndex,
 				mintAddress,
 				err,
 			)
@@ -753,13 +762,13 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 	if err := u.orderRepo.MarkTransferredItem(
 		ctx,
 		target.OrderID,
-		target.ItemKey,
+		target.ItemIndex,
 		now,
 	); err != nil {
 		message := fmt.Sprintf(
-			"mark transferred failed orderId=%s itemKey=%s tx=%s: %v",
+			"mark transferred failed orderId=%s itemIndex=%d tx=%s: %v",
 			target.OrderID,
-			target.ItemKey,
+			target.ItemIndex,
 			txSignature,
 			err,
 		)
@@ -772,9 +781,9 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 		return TransferByVerifiedScanResult{},
 			fmt.Errorf(
-				"transfer_uc: mark transferred failed orderId=%s itemKey=%s tx=%s: %w",
+				"transfer_uc: mark transferred failed orderId=%s itemIndex=%d tx=%s: %w",
 				target.OrderID,
-				target.ItemKey,
+				target.ItemIndex,
 				txSignature,
 				err,
 			)
@@ -920,9 +929,9 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 		MatchedInventoryID: target.InventoryID,
 		MatchedModelID:     target.ModelID,
 
-		MatchedItemKey:  target.ItemKey,
-		MatchedItemType: target.ItemType,
-		MatchedResaleID: target.ResaleID,
+		MatchedItemIndex: target.ItemIndex,
+		MatchedItemType:  target.ItemType,
+		MatchedResaleID:  target.ResaleID,
 
 		ProductID:        productID,
 		MintAddress:      mintAddress,
@@ -943,7 +952,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 
 func (u *TransferUsecase) resolveTransferSource(
 	ctx context.Context,
-	target transferTargetItem,
+	target TransferTargetItem,
 	brandID string,
 	buyerAvatarID string,
 ) (transferExecutionSource, error) {
@@ -1017,7 +1026,7 @@ func (u *TransferUsecase) resolveListTransferSource(
 
 func (u *TransferUsecase) resolveResaleTransferSource(
 	ctx context.Context,
-	target transferTargetItem,
+	target TransferTargetItem,
 	buyerAvatarID string,
 ) (transferExecutionSource, error) {
 	if u.resaleRepo == nil ||
@@ -1103,7 +1112,7 @@ func (u *TransferUsecase) resolveResaleTransferSource(
 
 func (u *TransferUsecase) updateWalletsAfterTransfer(
 	ctx context.Context,
-	target transferTargetItem,
+	target TransferTargetItem,
 	fromAvatarID string,
 	toAvatarID string,
 	mintAddress string,
@@ -1271,202 +1280,4 @@ func (u *TransferUsecase) resolveAvatarDisplayName(
 	}
 
 	return avatar.AvatarName
-}
-
-// ============================================================
-// Order item matching helpers
-// ============================================================
-
-func findUntransferredTransferTarget(
-	orders []orderdom.Order,
-	productID string,
-	scannedModelID string,
-	scannedTokenBlueprintID string,
-) (transferTargetItem, bool) {
-	if productID == "" ||
-		scannedTokenBlueprintID == "" {
-		return transferTargetItem{}, false
-	}
-
-	for _, order := range orders {
-		if !order.Paid {
-			continue
-		}
-
-		if target, found := findUntransferredResaleItem(
-			order,
-			productID,
-			scannedTokenBlueprintID,
-		); found {
-			return target, true
-		}
-
-		if target, found := findUntransferredListItem(
-			order,
-			scannedModelID,
-			scannedTokenBlueprintID,
-		); found {
-			return target, true
-		}
-	}
-
-	return transferTargetItem{}, false
-}
-
-func findUntransferredResaleItem(
-	order orderdom.Order,
-	productID string,
-	scannedTokenBlueprintID string,
-) (transferTargetItem, bool) {
-	if productID == "" ||
-		scannedTokenBlueprintID == "" {
-		return transferTargetItem{}, false
-	}
-
-	for _, item := range order.Items {
-		// Order domainのTypeを正として使用し、項目内容から推測しない。
-		if item.Type != orderdom.OrderItemTypeResale {
-			continue
-		}
-		if item.Transferred {
-			continue
-		}
-		if item.ResaleID == "" {
-			continue
-		}
-		if item.ProductID != productID {
-			continue
-		}
-		if item.TokenBlueprintID == "" {
-			continue
-		}
-		if item.TokenBlueprintID !=
-			scannedTokenBlueprintID {
-			continue
-		}
-
-		itemKey := buildTransferItemKey(
-			item.Type,
-			item,
-		)
-		if itemKey == "" {
-			continue
-		}
-
-		return transferTargetItem{
-			OrderID: order.ID,
-
-			ItemKey:  itemKey,
-			ItemType: item.Type,
-
-			ResaleID: item.ResaleID,
-
-			ProductID:          item.ProductID,
-			ProductBlueprintID: item.ProductBlueprintID,
-			TokenBlueprintID:   item.TokenBlueprintID,
-			BrandID:            item.BrandID,
-		}, true
-	}
-
-	return transferTargetItem{}, false
-}
-
-func findUntransferredListItem(
-	order orderdom.Order,
-	scannedModelID string,
-	scannedTokenBlueprintID string,
-) (transferTargetItem, bool) {
-	if scannedModelID == "" ||
-		scannedTokenBlueprintID == "" {
-		return transferTargetItem{}, false
-	}
-
-	for _, item := range order.Items {
-		// Order domainのTypeを正として使用し、項目内容から推測しない。
-		if item.Type != orderdom.OrderItemTypeList {
-			continue
-		}
-		if item.ModelID != scannedModelID {
-			continue
-		}
-		if item.InventoryID == "" {
-			continue
-		}
-		if item.Transferred {
-			continue
-		}
-
-		itemTokenBlueprintID :=
-			extractTokenBlueprintIDFromInventoryID(
-				item.InventoryID,
-			)
-		if itemTokenBlueprintID == "" {
-			continue
-		}
-		if itemTokenBlueprintID !=
-			scannedTokenBlueprintID {
-			continue
-		}
-
-		itemKey := buildTransferItemKey(
-			item.Type,
-			item,
-		)
-		if itemKey == "" {
-			continue
-		}
-
-		return transferTargetItem{
-			OrderID: order.ID,
-
-			ItemKey:  itemKey,
-			ItemType: item.Type,
-
-			InventoryID: item.InventoryID,
-			ModelID:     item.ModelID,
-
-			TokenBlueprintID: itemTokenBlueprintID,
-		}, true
-	}
-
-	return transferTargetItem{}, false
-}
-
-func buildTransferItemKey(
-	itemType orderdom.OrderItemType,
-	item orderdom.OrderItemSnapshot,
-) string {
-	switch itemType {
-	case orderdom.OrderItemTypeList:
-		if item.ModelID == "" {
-			return ""
-		}
-		return "list:" + item.ModelID
-
-	case orderdom.OrderItemTypeResale:
-		if item.ResaleID == "" {
-			return ""
-		}
-		return "resale:" + item.ResaleID
-
-	default:
-		return ""
-	}
-}
-
-// inventoryId is expected to contain tokenBlueprintId as the second segment
-// separated by "__".
-func extractTokenBlueprintIDFromInventoryID(
-	inventoryID string,
-) string {
-	if inventoryID == "" {
-		return ""
-	}
-
-	parts := strings.Split(inventoryID, "__")
-	if len(parts) < 2 {
-		return ""
-	}
-
-	return parts[1]
 }

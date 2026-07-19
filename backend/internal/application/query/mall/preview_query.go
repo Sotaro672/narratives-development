@@ -90,6 +90,20 @@ type TransferReader interface {
 	) ([]dto.PreviewTransferInfo, error)
 }
 
+// OrderTransferItemReader reads the canonical orderTransferItems projection.
+// It must not load Order documents and filter their items in memory.
+type OrderTransferItemReader interface {
+	ListEligibleTransferItemsByAvatarID(
+		ctx context.Context,
+		avatarID string,
+	) ([]orderdom.EligibleTransferItem, error)
+
+	FindEligibleTransferItem(
+		ctx context.Context,
+		in appusecase.FindEligibleTransferItemInput,
+	) (appusecase.TransferTargetItem, error)
+}
+
 // ------------------------------------------------------------
 // Purchased DTOs
 // ------------------------------------------------------------
@@ -106,9 +120,8 @@ type TransferReader interface {
 type PurchasedPair struct {
 	OrderID string `json:"orderId"`
 
-	ItemKey   string                 `json:"itemKey,omitempty"`
-	ItemType  orderdom.OrderItemType `json:"itemType,omitempty"`
-	ItemIndex int                    `json:"itemIndex,omitempty"`
+	ItemType  orderdom.OrderItemType `json:"itemType"`
+	ItemIndex int                    `json:"itemIndex"`
 
 	// list item identifiers
 	ModelID     string `json:"modelId,omitempty"`
@@ -146,7 +159,7 @@ type PreviewQuery struct {
 	ProductBlueprintRepo ProductBlueprintReader
 
 	// order scan verify / purchased-side resolver
-	OrderRepo orderdom.Repository
+	OrderTransferItemRepo OrderTransferItemReader
 
 	// modelId -> apparel/alcohol display fields
 	NameResolver *appresolver.NameResolver
@@ -177,7 +190,7 @@ type PreviewQuery struct {
 func NewPreviewQuery(
 	productRepo ProductReader,
 	pbRepo ProductBlueprintReader,
-	orderRepo orderdom.Repository,
+	orderTransferItemRepo OrderTransferItemReader,
 	nameResolver *appresolver.NameResolver,
 	tokenRepo TokenReader,
 	tokenBlueprintRepo tbdom.RepositoryPort,
@@ -187,16 +200,16 @@ func NewPreviewQuery(
 	transferRepo TransferReader,
 ) *PreviewQuery {
 	return &PreviewQuery{
-		ProductRepo:          productRepo,
-		ProductBlueprintRepo: pbRepo,
-		OrderRepo:            orderRepo,
-		NameResolver:         nameResolver,
-		TokenRepo:            tokenRepo,
-		TokenBlueprintRepo:   tokenBlueprintRepo,
-		OwnerResolveQ:        ownerResolveQ,
-		BrandRepo:            brandRepo,
-		AvatarNameIconRepo:   avatarNameIconRepo,
-		TransferRepo:         transferRepo,
+		ProductRepo:           productRepo,
+		ProductBlueprintRepo:  pbRepo,
+		OrderTransferItemRepo: orderTransferItemRepo,
+		NameResolver:          nameResolver,
+		TokenRepo:             tokenRepo,
+		TokenBlueprintRepo:    tokenBlueprintRepo,
+		OwnerResolveQ:         ownerResolveQ,
+		BrandRepo:             brandRepo,
+		AvatarNameIconRepo:    avatarNameIconRepo,
+		TransferRepo:          transferRepo,
 	}
 }
 
@@ -454,27 +467,21 @@ func (q *PreviewQuery) resolvePreviewTransfers(
 	out.Transfers = resolved
 }
 
-// ListEligiblePairsByAvatarID resolves eligible transfer pairs through order.Repository.
+// ListEligiblePairsByAvatarID resolves eligible transfer pairs from the
+// canonical orderTransferItems projection.
 //
-// Repository-side condition:
-// - order.avatarId == avatarID
-// - order.paid == true
-// - item.transferred == false
+// Projection-side condition:
+// - avatarId == avatarID
+// - paid == true
+// - transferred == false
 //
-// list item:
-// - item.modelId is not empty
-// - item.inventoryId is not empty
-// - tokenBlueprintId is derived from item.tokenBlueprintId or inventoryId 2nd segment
-//
-// resale item:
-// - item.resaleId is not empty
-// - item.productId is not empty
-// - item.tokenBlueprintId is not empty
+// All identifiers, including tokenBlueprintId and itemIndex, must be stored as
+// canonical fields. Legacy derivation and fallback are not supported.
 func (q *PreviewQuery) ListEligiblePairsByAvatarID(
 	ctx context.Context,
 	avatarID string,
 ) (OrderPurchasedResult, error) {
-	if q == nil || q.OrderRepo == nil {
+	if q == nil || q.OrderTransferItemRepo == nil {
 		return OrderPurchasedResult{}, ErrOrderPurchasedQueryNotConfigured
 	}
 
@@ -483,7 +490,7 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(
 		return OrderPurchasedResult{}, ErrInvalidAvatarID
 	}
 
-	items, err := q.OrderRepo.ListEligibleTransferItemsByAvatarID(ctx, aid)
+	items, err := q.OrderTransferItemRepo.ListEligibleTransferItemsByAvatarID(ctx, aid)
 	if err != nil {
 		return OrderPurchasedResult{}, err
 	}
@@ -491,9 +498,7 @@ func (q *PreviewQuery) ListEligiblePairsByAvatarID(
 	pairs := make([]PurchasedPair, 0, len(items))
 
 	for _, item := range items {
-		itemType := inferPurchasedItemType(item)
-
-		switch itemType {
+		switch item.ItemType {
 		case orderdom.OrderItemTypeResale:
 			pair, ok := purchasedPairFromResaleItem(item)
 			if !ok {
@@ -525,7 +530,7 @@ func (q *PreviewQuery) VerifyMatch(
 	in appusecase.VerifyInput,
 ) (appusecase.VerifyResult, error) {
 	if q == nil ||
-		q.OrderRepo == nil ||
+		q.OrderTransferItemRepo == nil ||
 		q.ProductRepo == nil ||
 		q.NameResolver == nil {
 		return appusecase.VerifyResult{},
@@ -583,89 +588,46 @@ func (q *PreviewQuery) VerifyMatch(
 			ErrOrderScanVerifyTokenBlueprintEmpty
 	}
 
-	// 2) purchased side: avatarId -> paid orders -> items.transfer=false
-	purchased, err := q.ListEligiblePairsByAvatarID(
+	// 2) purchased side: perform one indexed lookup against orderTransferItems.
+	target, err := q.OrderTransferItemRepo.FindEligibleTransferItem(
 		ctx,
-		avatarID,
+		appusecase.FindEligibleTransferItemInput{
+			AvatarID:         avatarID,
+			ProductID:        productID,
+			ModelID:          scannedModelID,
+			TokenBlueprintID: scannedTokenBlueprintID,
+		},
 	)
 	if err != nil {
+		if errors.Is(err, orderdom.ErrNotFound) {
+			return appusecase.VerifyResult{
+				AvatarID:                avatarID,
+				ProductID:               productID,
+				ScannedModelID:          scannedModelID,
+				ScannedTokenBlueprintID: scannedTokenBlueprintID,
+				PurchasedPairs:          make([]appusecase.ModelTokenPair, 0),
+				Matched:                 false,
+				Match:                   nil,
+			}, nil
+		}
+
 		return appusecase.VerifyResult{},
 			fmt.Errorf(
-				"order_scan_verify_query: purchased pairs resolve failed: %w",
+				"order_scan_verify_query: eligible transfer item lookup failed: %w",
 				err,
 			)
 	}
 
-	seen := map[string]struct{}{}
-	outPairs := make(
-		[]appusecase.ModelTokenPair,
-		0,
-		len(purchased.Pairs),
-	)
+	if target.OrderID == "" || target.ItemIndex < 0 {
+		return appusecase.VerifyResult{},
+			fmt.Errorf(
+				"order_scan_verify_query: invalid eligible transfer item",
+			)
+	}
 
-	var match *appusecase.ModelTokenPair
-
-	for _, p := range purchased.Pairs {
-		tokenBlueprintID := strings.TrimSpace(
-			p.TokenBlueprintID,
-		)
-		if tokenBlueprintID == "" {
-			continue
-		}
-
-		switch p.ItemType {
-		case orderdom.OrderItemTypeResale:
-			if strings.TrimSpace(p.ProductID) != productID {
-				continue
-			}
-
-			if tokenBlueprintID != scannedTokenBlueprintID {
-				continue
-			}
-
-			cp := appusecase.ModelTokenPair{
-				ModelID:          scannedModelID,
-				TokenBlueprintID: tokenBlueprintID,
-			}
-
-			key := cp.ModelID + "::" + cp.TokenBlueprintID
-			if _, ok := seen[key]; !ok {
-				seen[key] = struct{}{}
-				outPairs = append(outPairs, cp)
-			}
-
-			if match == nil {
-				m := cp
-				match = &m
-			}
-
-		case orderdom.OrderItemTypeList:
-			modelID := strings.TrimSpace(p.ModelID)
-			if modelID == "" {
-				continue
-			}
-
-			cp := appusecase.ModelTokenPair{
-				ModelID:          modelID,
-				TokenBlueprintID: tokenBlueprintID,
-			}
-
-			key := cp.ModelID + "::" + cp.TokenBlueprintID
-			if _, ok := seen[key]; !ok {
-				seen[key] = struct{}{}
-				outPairs = append(outPairs, cp)
-			}
-
-			if modelID == scannedModelID &&
-				tokenBlueprintID == scannedTokenBlueprintID &&
-				match == nil {
-				m := cp
-				match = &m
-			}
-
-		default:
-			continue
-		}
+	match := appusecase.ModelTokenPair{
+		ModelID:          scannedModelID,
+		TokenBlueprintID: scannedTokenBlueprintID,
 	}
 
 	return appusecase.VerifyResult{
@@ -673,9 +635,11 @@ func (q *PreviewQuery) VerifyMatch(
 		ProductID:               productID,
 		ScannedModelID:          scannedModelID,
 		ScannedTokenBlueprintID: scannedTokenBlueprintID,
-		PurchasedPairs:          outPairs,
-		Matched:                 match != nil,
-		Match:                   match,
+		PurchasedPairs: []appusecase.ModelTokenPair{
+			match,
+		},
+		Matched: true,
+		Match:   &match,
 	}, nil
 }
 
@@ -697,19 +661,12 @@ func purchasedPairFromListItem(
 		item.TokenBlueprintID,
 	)
 	if tokenBlueprintID == "" {
-		tokenBlueprintID = extractTokenBlueprintIDFromInventoryID(
-			inventoryID,
-		)
-	}
-
-	if tokenBlueprintID == "" {
 		return PurchasedPair{}, false
 	}
 
 	return PurchasedPair{
 		OrderID: item.OrderID,
 
-		ItemKey:   strings.TrimSpace(item.ItemKey),
 		ItemType:  orderdom.OrderItemTypeList,
 		ItemIndex: item.ItemIndex,
 
@@ -739,7 +696,6 @@ func purchasedPairFromResaleItem(
 	return PurchasedPair{
 		OrderID: item.OrderID,
 
-		ItemKey:   strings.TrimSpace(item.ItemKey),
 		ItemType:  orderdom.OrderItemTypeResale,
 		ItemIndex: item.ItemIndex,
 
@@ -750,45 +706,6 @@ func purchasedPairFromResaleItem(
 		TokenBlueprintID:   tokenBlueprintID,
 		BrandID:            strings.TrimSpace(item.BrandID),
 	}, true
-}
-
-func inferPurchasedItemType(
-	item orderdom.EligibleTransferItem,
-) orderdom.OrderItemType {
-	switch item.ItemType {
-	case orderdom.OrderItemTypeList,
-		orderdom.OrderItemTypeResale:
-		return item.ItemType
-	}
-
-	if strings.TrimSpace(item.ResaleID) != "" ||
-		strings.TrimSpace(item.ProductID) != "" {
-		return orderdom.OrderItemTypeResale
-	}
-
-	if strings.TrimSpace(item.ModelID) != "" ||
-		strings.TrimSpace(item.InventoryID) != "" ||
-		strings.TrimSpace(item.ListID) != "" {
-		return orderdom.OrderItemTypeList
-	}
-
-	return ""
-}
-
-func extractTokenBlueprintIDFromInventoryID(
-	inventoryID string,
-) string {
-	inventoryID = strings.TrimSpace(inventoryID)
-	if inventoryID == "" {
-		return ""
-	}
-
-	parts := strings.Split(inventoryID, "__")
-	if len(parts) < 2 {
-		return ""
-	}
-
-	return strings.TrimSpace(parts[1])
 }
 
 func productBlueprintPatchForPreview(

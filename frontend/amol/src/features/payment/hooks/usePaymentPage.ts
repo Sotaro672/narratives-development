@@ -19,7 +19,6 @@ import type {
   CanonicalCartDisplayItem,
   CanonicalShippingAddress,
   CreateOrderRequest,
-  PaymentContext,
   PaymentMethod,
 } from "../types";
 import { getShippingAddressLabel, getUserFullName } from "../utils/format";
@@ -31,7 +30,6 @@ import {
 } from "../utils/guards";
 import {
   buildOrderItems,
-  buildPaymentMethodSnapshot,
   buildShippingSnapshot,
   selectPrimaryPaymentMethod,
   validateOrderItems,
@@ -43,9 +41,6 @@ type UsePaymentPageParams = {
 };
 
 export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
-  const [paymentContext, setPaymentContext] = useState<PaymentContext | null>(
-    null,
-  );
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [cartItems, setCartItems] = useState<CanonicalCartDisplayItem[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -140,7 +135,6 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
           }),
         ]);
 
-      setPaymentContext(context);
       setPaymentMethods(paymentMethodResult.methods);
       setUserProfile(shippingAddressInitialData.userProfile);
 
@@ -175,7 +169,6 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
           : "決済情報の取得に失敗しました。";
 
       showErrorModal(message);
-      setPaymentContext(null);
       setPaymentMethods([]);
       setSelectedPaymentMethodId("");
       setCartItems([]);
@@ -230,14 +223,6 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
       return;
     }
 
-    const avatarId = cartItems[0]?.avatarId || paymentContext?.avatarId || "";
-
-    if (!avatarId) {
-      showErrorModal("avatarIdを取得できませんでした。");
-      return;
-    }
-
-    const cartId = avatarId;
     const orderItems = buildOrderItems(cartItems);
     const orderItemsError = validateOrderItems(orderItems);
 
@@ -252,10 +237,8 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
     try {
       const orderPayload: CreateOrderRequest = {
         id: orderId,
-        avatarId,
-        cartId,
         shippingSnapshot: buildShippingSnapshot(primaryShippingAddress),
-        paymentMethodSnapshot: buildPaymentMethodSnapshot(selectedPaymentMethod),
+        paymentMethodId: selectedPaymentMethod.id,
         items: orderItems,
       };
 

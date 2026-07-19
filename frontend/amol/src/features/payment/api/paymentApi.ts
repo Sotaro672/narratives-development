@@ -1,4 +1,4 @@
-//frontend\amol\src\features\payment\api\paymentApi.ts
+// frontend/amol/src/features/payment/api/paymentApi.ts
 import type {
   CreateOrderRequest,
   CreatePaymentRequest,
@@ -92,8 +92,6 @@ export async function createOrder(
   return {
     ...order,
     id: order.id ?? input.id,
-    avatarId: order.avatarId ?? input.avatarId,
-    cartId: order.cartId ?? input.cartId,
     paid: order.paid ?? false,
   };
 }

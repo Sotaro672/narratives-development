@@ -4,6 +4,7 @@ package mallHandler
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 
 	"narratives/internal/adapters/in/http/middleware"
@@ -13,10 +14,13 @@ import (
 // ScanTransferUsecase is the dependency for:
 // POST /mall/me/orders/scan/transfer
 //
-// 実装は usecase.TransferUsecase 等に接続してください。
-// ここでは handler 側が必要とする最小の形だけを定義します。
+// 螳溯｣・・ usecase.TransferUsecase 遲峨↓謗･邯壹＠縺ｦ縺上□縺輔＞縲・
+// 縺薙％縺ｧ縺ｯ handler 蛛ｴ縺悟ｿ・ｦ√→縺吶ｋ譛蟆上・蠖｢縺縺代ｒ螳夂ｾｩ縺励∪縺吶・
 type ScanTransferUsecase interface {
-	TransferToAvatarByVerifiedScan(ctx context.Context, in usecase.TransferByVerifiedScanInput) (usecase.TransferByVerifiedScanResult, error)
+	TransferToAvatarByVerifiedScan(
+		ctx context.Context,
+		in usecase.TransferByVerifiedScanInput,
+	) (usecase.TransferByVerifiedScanResult, error)
 }
 
 // ScanTransferResult is the response "data" shape expected by frontend.
@@ -44,9 +48,9 @@ type ScanTransferResult struct {
 // TransferHandler handles:
 // POST /mall/me/orders/scan/transfer
 //
-// Option A: anti-spoof を AvatarContextMiddleware に一本化する。
-// - handler は uid->avatarId resolver を持たない
-// - avatarId は request context からのみ取得する（body の avatarId は使わない）
+// Option A: anti-spoof 繧・AvatarContextMiddleware 縺ｫ荳譛ｬ蛹悶☆繧九・
+// - handler 縺ｯ uid->avatarId resolver 繧呈戟縺溘↑縺・
+// - avatarId 縺ｯ request context 縺九ｉ縺ｮ縺ｿ蜿門ｾ励☆繧具ｼ・ody 縺ｮ avatarId 縺ｯ菴ｿ繧上↑縺・ｼ・
 type TransferHandler struct {
 	uc ScanTransferUsecase
 }
@@ -57,7 +61,10 @@ func NewTransferHandler(uc ScanTransferUsecase) http.Handler {
 	return &TransferHandler{uc: uc}
 }
 
-func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *TransferHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Preflight
@@ -127,7 +134,7 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		// NotMatched は 200 + matched=false を返す（従来のアダプタ挙動を維持）
+		// NotMatched 縺ｯ 200 + matched=false 繧定ｿ斐☆・亥ｾ捺擂縺ｮ繧｢繝繝励ち謖吝虚繧堤ｶｭ謖・ｼ・
 		if errors.Is(err, usecase.ErrTransferNotMatched) {
 			out := &ScanTransferResult{
 				AvatarID:  avatarID,
@@ -148,7 +155,9 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
 				"error":     "request canceled",
 				"avatarId":  avatarID,
@@ -156,6 +165,14 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+
+		log.Printf(
+			"[mall/order-scan-transfer] failed avatarId=%s productId=%s err=%v",
+			avatarID,
+			productID,
+			err,
+		)
+
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "transfer failed",
 			"avatarId":  avatarID,
@@ -171,7 +188,7 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		TxSignature:      ucOut.TxSignature,
 		FromDisplayName:  ucOut.FromDisplayName,
 		ToDisplayName:    ucOut.ToDisplayName,
-		UpdatedToAddress: true, // TransferUsecase 内で UpdateToAddressByProductID を実行済み（fail-fast）
+		UpdatedToAddress: true, // TransferUsecase 蜀・〒 UpdateToAddressByProductID 繧貞ｮ溯｡梧ｸ医∩・・ail-fast・・
 		MintAddress:      ucOut.MintAddress,
 	}
 

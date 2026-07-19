@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    /**
+     * Firebase Auth user 自身の補助 profile を読む場合のみ許可。
+     * NOTE:
+     * console の正のユーザー情報は backend /members/me 経由の members。
+     * この users/{userId} は、既存 AuthContext などに残っている
+     * users/{uid} 直読みを一時的に通すための最小許可。
+     */
+    match /users/{userId} {
+      allow get: if request.auth != null
+        && request.auth.uid == userId;
+
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * members は Firestore docId が Firebase UID ではないため、
+     * frontend から直接読ませない。
+     * member 情報は backend の GET /members/me から取得する。
+     */
+    match /members/{memberId} {
+      allow read, write: if false;
+    }
+
+    /**
+     * その他の collection は全拒否。
+     */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

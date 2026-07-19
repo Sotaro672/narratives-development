@@ -59,26 +59,17 @@ export type CartItemType = "list" | "resale";
 
 export type CanonicalCartDisplayItem = CartDisplayItem & {
   avatarId: string;
-
-  /**
-   * type:
-   * - list: 通常販売 item
-   * - resale: 二次流通 item
-   *
-   * 既存レスポンス互換のため optional。
-   * 未指定で inventoryId/listId/modelId がある場合は list item として扱う。
-   */
-  type?: CartItemType;
+  type: CartItemType;
 
   // list item identifiers
   inventoryId?: string;
   listId?: string;
   modelId?: string;
 
-  // resale item identifiers
+  // resale item identifier
   resaleId?: string;
 
-  // product identifiers
+  // product identifiers used by cart display data
   productId?: string;
   productBlueprintId?: string;
   tokenBlueprintId?: string;
@@ -111,57 +102,36 @@ export type OrderShippingSnapshot = {
   country: "JP";
 };
 
-export type OrderPaymentMethodSnapshot = {
-  customerId: string;
-  brand: string;
-  last4: string;
-  expMonth: number;
-  expYear: number;
-  cardholderName: string;
-  isDefault: boolean;
-};
-
-export type ListOrderItemSnapshot = {
+export type ListCreateOrderItemRequest = {
   type: "list";
 
-  inventoryId: string;
   listId: string;
   modelId: string;
-
-  price: number;
   qty: number;
 
   isCanceled: false;
   isDispatched: false;
-  transferred: false;
 };
 
-export type ResaleOrderItemSnapshot = {
+export type ResaleCreateOrderItemRequest = {
   type: "resale";
 
   resaleId: string;
-  productId: string;
-  productBlueprintId: string;
-  tokenBlueprintId: string;
-  brandId: string;
-
-  price: number;
   qty: 1;
 
   isCanceled: false;
   isDispatched: false;
-  transferred: false;
 };
 
-export type OrderItemSnapshot = ListOrderItemSnapshot | ResaleOrderItemSnapshot;
+export type CreateOrderItemRequest =
+  | ListCreateOrderItemRequest
+  | ResaleCreateOrderItemRequest;
 
 export type CreateOrderRequest = {
   id: string;
-  avatarId: string;
-  cartId: string;
   shippingSnapshot: OrderShippingSnapshot;
-  paymentMethodSnapshot: OrderPaymentMethodSnapshot;
-  items: OrderItemSnapshot[];
+  paymentMethodId: string;
+  items: CreateOrderItemRequest[];
 };
 
 export type CreatePaymentRequest = {

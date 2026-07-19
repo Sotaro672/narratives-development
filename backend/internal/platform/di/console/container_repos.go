@@ -22,6 +22,8 @@ type repos struct {
 
 	listImageRecordRepo *fs.ListImageRepositoryFS
 
+	resaleRepo *fs.ResaleRepositoryFS
+
 	memberRepo *fs.MemberRepositoryFS
 	modelRepo  *fs.ModelRepositoryFS
 
@@ -81,6 +83,8 @@ func buildRepos(c *clients) *repos {
 
 	listImageRecordRepo := fs.NewListImageRepositoryFS(fsClient)
 
+	resaleRepo := fs.NewResaleRepositoryFS(fsClient)
+
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
 
@@ -132,6 +136,8 @@ func buildRepos(c *clients) *repos {
 		listRepoFS: listRepoFS,
 
 		listImageRecordRepo: listImageRecordRepo,
+
+		resaleRepo: resaleRepo,
 
 		memberRepo: memberRepo,
 		modelRepo:  modelRepo,

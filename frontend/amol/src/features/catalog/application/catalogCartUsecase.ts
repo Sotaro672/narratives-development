@@ -1,7 +1,5 @@
 // frontend/amol/src/features/catalog/application/catalogCartUsecase.ts
-
 import { addCatalogItemToCart } from "../infrastructure/catalogCartRepository";
-import { fetchCurrentAvatarId } from "../infrastructure/avatarStateRepository";
 import type {
   CatalogModelVariation,
   CatalogResponse,
@@ -26,11 +24,8 @@ export async function addSelectedCatalogItemToCart(args: {
     throw new Error("選択した商品の在庫がありません。");
   }
 
-  const avatarId = await fetchCurrentAvatarId(args.apiBaseUrl);
-
   await addCatalogItemToCart({
     apiBaseUrl: args.apiBaseUrl,
-    avatarId,
     catalog: args.catalog,
     selectedModel: args.selectedModel,
   });

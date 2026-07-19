@@ -14,488 +14,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
-	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
 )
-
-// ============================================================
-// OrderRepoForTransfer (Firestore)
-// ============================================================
-
-var (
-	ErrOrderRepoNotConfigured   = errors.New("order_repo_for_transfer_fs: not configured")
-	ErrInvalidOrderID           = errors.New("order_repo_for_transfer_fs: orderId is empty")
-	ErrInvalidTransferItemKey   = errors.New("order_repo_for_transfer_fs: itemKey is empty")
-	ErrInvalidTransferAvatarID  = errors.New("order_repo_for_transfer_fs: avatarId is empty")
-	ErrOrderNotFound            = errors.New("order_repo_for_transfer_fs: order not found")
-	ErrOrderNotPaid             = errors.New("order_repo_for_transfer_fs: order is not paid")
-	ErrOrderItemsMissing        = errors.New("order_repo_for_transfer_fs: order items missing/invalid")
-	ErrTransferItemNotFound     = errors.New("order_repo_for_transfer_fs: transfer item not found")
-	ErrTransferItemTransferred  = errors.New("order_repo_for_transfer_fs: item already transferred")
-	ErrTransferItemLocked       = errors.New("order_repo_for_transfer_fs: item is locked")
-	ErrTransferItemKeyMalformed = errors.New("order_repo_for_transfer_fs: itemKey is malformed")
-)
-
-const defaultTransferLockTTL = 10 * time.Minute
-
-type OrderRepoForTransferFS struct {
-	Client *firestore.Client
-}
-
-var _ usecase.OrderRepoForTransfer = (*OrderRepoForTransferFS)(nil)
-
-func NewOrderRepoForTransferFS(client *firestore.Client) *OrderRepoForTransferFS {
-	return &OrderRepoForTransferFS{
-		Client: client,
-	}
-}
-
-func (r *OrderRepoForTransferFS) ordersCol() *firestore.CollectionRef {
-	return r.Client.Collection("orders")
-}
-
-func (r *OrderRepoForTransferFS) orderDoc(orderID string) *firestore.DocumentRef {
-	return r.ordersCol().Doc(orderID)
-}
-
-func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarID string) ([]orderdom.Order, error) {
-	if r == nil || r.Client == nil {
-		return nil, ErrOrderRepoNotConfigured
-	}
-	if avatarID == "" {
-		return nil, ErrInvalidTransferAvatarID
-	}
-
-	iter := r.ordersCol().
-		Where("avatarId", "==", avatarID).
-		Documents(ctx)
-	defer iter.Stop()
-
-	out := make([]orderdom.Order, 0, 8)
-
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if doc == nil || doc.Ref == nil {
-			return nil, ErrOrderNotFound
-		}
-
-		raw := doc.Data()
-		if raw == nil {
-			return nil, ErrOrderNotFound
-		}
-
-		paid, ok := raw["paid"].(bool)
-		if !ok {
-			return nil, ErrOrderNotPaid
-		}
-		if !paid {
-			continue
-		}
-
-		o := orderdom.Order{
-			ID:   doc.Ref.ID,
-			Paid: true,
-		}
-
-		if value, ok := raw["userId"].(string); ok {
-			o.UserID = value
-		}
-		if value, ok := raw["avatarId"].(string); ok {
-			o.AvatarID = value
-		}
-		if value, ok := raw["cartId"].(string); ok {
-			o.CartID = value
-		}
-		if createdAt, ok := raw["createdAt"].(time.Time); ok {
-			o.CreatedAt = createdAt.UTC()
-		}
-
-		items, err := parseOrderItems(raw["items"])
-		if err != nil {
-			return nil, err
-		}
-		o.Items = items
-
-		out = append(out, o)
-	}
-
-	return out, nil
-}
-
-func (r *OrderRepoForTransferFS) LockTransferItem(
-	ctx context.Context,
-	orderID string,
-	itemKey string,
-	now time.Time,
-) error {
-	if r == nil || r.Client == nil {
-		return ErrOrderRepoNotConfigured
-	}
-	if orderID == "" {
-		return ErrInvalidOrderID
-	}
-	if itemKey == "" {
-		return ErrInvalidTransferItemKey
-	}
-	if now.IsZero() {
-		return transferdom.ErrInvalidCreatedAt
-	}
-
-	now = now.UTC()
-
-	ref := r.orderDoc(orderID)
-	lockUntil := now.Add(defaultTransferLockTTL)
-
-	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(ref)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return ErrOrderNotFound
-			}
-			return err
-		}
-		if snap == nil || !snap.Exists() {
-			return ErrOrderNotFound
-		}
-
-		raw := snap.Data()
-		if raw == nil {
-			return ErrOrderNotFound
-		}
-
-		paid, ok := raw["paid"].(bool)
-		if !ok || !paid {
-			return ErrOrderNotPaid
-		}
-
-		items, err := rawOrderItemMaps(raw["items"])
-		if err != nil {
-			return err
-		}
-
-		idx, itemMap, err := findItemMapByItemKey(items, itemKey)
-		if err != nil {
-			return err
-		}
-
-		transferred, ok := itemMap["transferred"].(bool)
-		if ok && transferred {
-			return ErrTransferItemTransferred
-		}
-
-		lockedAt, locked := itemMap["transferLockedAt"].(time.Time)
-		if locked && !lockedAt.IsZero() {
-			expiresAt, ok := itemMap["transferLockExpiresAt"].(time.Time)
-			if !ok || expiresAt.IsZero() {
-				return ErrTransferItemLocked
-			}
-			if expiresAt.After(now) {
-				return ErrTransferItemLocked
-			}
-		}
-
-		itemMap["transferLockedAt"] = now
-		itemMap["transferLockExpiresAt"] = lockUntil
-		items[idx] = itemMap
-
-		return tx.Set(ref, map[string]any{
-			"items": items,
-		}, firestore.MergeAll)
-	})
-}
-
-func (r *OrderRepoForTransferFS) UnlockTransferItem(
-	ctx context.Context,
-	orderID string,
-	itemKey string,
-) error {
-	if r == nil || r.Client == nil {
-		return ErrOrderRepoNotConfigured
-	}
-	if orderID == "" {
-		return ErrInvalidOrderID
-	}
-	if itemKey == "" {
-		return ErrInvalidTransferItemKey
-	}
-
-	ref := r.orderDoc(orderID)
-
-	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(ref)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return ErrOrderNotFound
-			}
-			return err
-		}
-		if snap == nil || !snap.Exists() {
-			return ErrOrderNotFound
-		}
-
-		raw := snap.Data()
-		if raw == nil {
-			return ErrOrderNotFound
-		}
-
-		items, err := rawOrderItemMaps(raw["items"])
-		if err != nil {
-			return err
-		}
-
-		idx, itemMap, err := findItemMapByItemKey(items, itemKey)
-		if err != nil {
-			return err
-		}
-
-		delete(itemMap, "transferLockedAt")
-		delete(itemMap, "transferLockExpiresAt")
-		items[idx] = itemMap
-
-		return tx.Set(ref, map[string]any{
-			"items": items,
-		}, firestore.MergeAll)
-	})
-}
-
-func (r *OrderRepoForTransferFS) MarkTransferredItem(
-	ctx context.Context,
-	orderID string,
-	itemKey string,
-	at time.Time,
-) error {
-	if r == nil || r.Client == nil {
-		return ErrOrderRepoNotConfigured
-	}
-	if orderID == "" {
-		return ErrInvalidOrderID
-	}
-	if itemKey == "" {
-		return ErrInvalidTransferItemKey
-	}
-	if at.IsZero() {
-		return transferdom.ErrInvalidTransferredAt
-	}
-
-	at = at.UTC()
-
-	ref := r.orderDoc(orderID)
-
-	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(ref)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return ErrOrderNotFound
-			}
-			return err
-		}
-		if snap == nil || !snap.Exists() {
-			return ErrOrderNotFound
-		}
-
-		raw := snap.Data()
-		if raw == nil {
-			return ErrOrderNotFound
-		}
-
-		paid, ok := raw["paid"].(bool)
-		if !ok || !paid {
-			return ErrOrderNotPaid
-		}
-
-		items, err := rawOrderItemMaps(raw["items"])
-		if err != nil {
-			return err
-		}
-
-		idx, itemMap, err := findItemMapByItemKey(items, itemKey)
-		if err != nil {
-			return err
-		}
-
-		transferred, ok := itemMap["transferred"].(bool)
-		if ok && transferred {
-			return ErrTransferItemTransferred
-		}
-
-		itemMap["transferred"] = true
-		itemMap["transferredAt"] = at
-
-		delete(itemMap, "transferLockedAt")
-		delete(itemMap, "transferLockExpiresAt")
-
-		items[idx] = itemMap
-
-		return tx.Set(ref, map[string]any{
-			"items": items,
-		}, firestore.MergeAll)
-	})
-}
-
-// ============================================================
-// Order helpers
-// ============================================================
-
-func parseOrderItems(value any) ([]orderdom.OrderItemSnapshot, error) {
-	if value == nil {
-		return nil, ErrOrderItemsMissing
-	}
-
-	rawItems, ok := value.([]any)
-	if !ok {
-		return nil, ErrOrderItemsMissing
-	}
-
-	out := make([]orderdom.OrderItemSnapshot, 0, len(rawItems))
-
-	for _, rawItem := range rawItems {
-		itemMap, ok := rawItem.(map[string]any)
-		if !ok || itemMap == nil {
-			return nil, ErrOrderItemsMissing
-		}
-
-		itemType, ok := itemMap["type"].(string)
-		if !ok || itemType == "" {
-			return nil, ErrOrderItemsMissing
-		}
-
-		item := orderdom.OrderItemSnapshot{
-			Type: orderdom.OrderItemType(itemType),
-		}
-
-		if value, ok := itemMap["modelId"].(string); ok {
-			item.ModelID = value
-		}
-		if value, ok := itemMap["inventoryId"].(string); ok {
-			item.InventoryID = value
-		}
-		if value, ok := itemMap["listId"].(string); ok {
-			item.ListID = value
-		}
-		if value, ok := itemMap["resaleId"].(string); ok {
-			item.ResaleID = value
-		}
-		if value, ok := itemMap["productId"].(string); ok {
-			item.ProductID = value
-		}
-		if value, ok := itemMap["productBlueprintId"].(string); ok {
-			item.ProductBlueprintID = value
-		}
-		if value, ok := itemMap["tokenBlueprintId"].(string); ok {
-			item.TokenBlueprintID = value
-		}
-		if value, ok := itemMap["brandId"].(string); ok {
-			item.BrandID = value
-		}
-		if qty, ok := itemMap["qty"].(int64); ok {
-			item.Qty = int(qty)
-		}
-		if price, ok := itemMap["price"].(int64); ok {
-			item.Price = int(price)
-		}
-		if value, ok := itemMap["isCanceled"].(bool); ok {
-			item.IsCanceled = value
-		}
-		if value, ok := itemMap["isDispatched"].(bool); ok {
-			item.IsDispatched = value
-		}
-		if value, ok := itemMap["transferred"].(bool); ok {
-			item.Transferred = value
-		}
-		if value, ok := itemMap["transferredAt"].(time.Time); ok {
-			transferredAt := value.UTC()
-			item.TransferredAt = &transferredAt
-		}
-
-		out = append(out, item)
-	}
-
-	return out, nil
-}
-
-func rawOrderItemMaps(value any) ([]any, error) {
-	if value == nil {
-		return nil, ErrOrderItemsMissing
-	}
-
-	items, ok := value.([]any)
-	if !ok {
-		return nil, ErrOrderItemsMissing
-	}
-
-	return items, nil
-}
-
-func findItemMapByItemKey(items []any, itemKey string) (int, map[string]any, error) {
-	if itemKey == "" {
-		return -1, nil, ErrInvalidTransferItemKey
-	}
-
-	for index, rawItem := range items {
-		itemMap, ok := rawItem.(map[string]any)
-		if !ok || itemMap == nil {
-			return -1, nil, ErrOrderItemsMissing
-		}
-
-		if itemMapMatchesItemKey(itemMap, itemKey) {
-			return index, itemMap, nil
-		}
-	}
-
-	return -1, nil, ErrTransferItemNotFound
-}
-
-func itemMapMatchesItemKey(itemMap map[string]any, itemKey string) bool {
-	if itemMap == nil || itemKey == "" {
-		return false
-	}
-
-	itemType, rawID, ok := parseTransferItemKey(itemKey)
-	if !ok {
-		return false
-	}
-
-	switch itemType {
-	case orderdom.OrderItemTypeList:
-		modelID, ok := itemMap["modelId"].(string)
-		return ok && modelID == rawID
-
-	case orderdom.OrderItemTypeResale:
-		resaleID, ok := itemMap["resaleId"].(string)
-		return ok && resaleID == rawID
-
-	default:
-		return false
-	}
-}
-
-func parseTransferItemKey(itemKey string) (orderdom.OrderItemType, string, bool) {
-	if itemKey == "" {
-		return "", "", false
-	}
-
-	parts := strings.SplitN(itemKey, ":", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		return "", "", false
-	}
-
-	itemType := orderdom.OrderItemType(parts[0])
-
-	switch itemType {
-	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
-		return itemType, parts[1], true
-	default:
-		return "", "", false
-	}
-}
 
 // ============================================================
 // Transfer RepositoryPort (Firestore)
@@ -503,7 +24,6 @@ func parseTransferItemKey(itemKey string) (orderdom.OrderItemType, string, bool)
 
 var (
 	ErrTransferRepoNotConfigured  = errors.New("transfer_repo_fs: not configured")
-	ErrInvalidTransferProductID   = errors.New("transfer_repo_fs: productId is empty")
 	ErrInvalidTransferAttempt     = errors.New("transfer_repo_fs: attempt is invalid")
 	ErrInvalidTransferCounterData = errors.New("transfer_repo_fs: attempt counter is invalid")
 	ErrInvalidTransferData        = errors.New("transfer_repo_fs: transfer data is invalid")
@@ -518,7 +38,9 @@ type TransferRepositoryFS struct {
 
 var _ transferdom.RepositoryPort = (*TransferRepositoryFS)(nil)
 
-func NewTransferRepositoryFS(client *firestore.Client) *TransferRepositoryFS {
+func NewTransferRepositoryFS(
+	client *firestore.Client,
+) *TransferRepositoryFS {
 	return &TransferRepositoryFS{
 		Client: client,
 	}
@@ -539,7 +61,9 @@ func (r *TransferRepositoryFS) transfersCol() *firestore.CollectionRef {
 func (r *TransferRepositoryFS) countersCol() *firestore.CollectionRef {
 	collection := r.AttemptCountersCollection
 	if collection == "" {
-		collection = os.Getenv("TRANSFER_ATTEMPT_COUNTERS_COLLECTION")
+		collection = os.Getenv(
+			"TRANSFER_ATTEMPT_COUNTERS_COLLECTION",
+		)
 	}
 	if collection == "" {
 		collection = "transferAttemptCounters"
@@ -548,11 +72,16 @@ func (r *TransferRepositoryFS) countersCol() *firestore.CollectionRef {
 	return r.Client.Collection(collection)
 }
 
-func (r *TransferRepositoryFS) transferDocID(productID string, attempt int) string {
+func (r *TransferRepositoryFS) transferDocID(
+	productID string,
+	attempt int,
+) string {
 	return productID + "__" + strconv.Itoa(attempt)
 }
 
-func (r *TransferRepositoryFS) counterDoc(productID string) *firestore.DocumentRef {
+func (r *TransferRepositoryFS) counterDoc(
+	productID string,
+) *firestore.DocumentRef {
 	return r.countersCol().Doc(productID)
 }
 
@@ -648,6 +177,7 @@ func (r *TransferRepositoryFS) ListByProductID(
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, *t)
 	}
 
@@ -657,7 +187,10 @@ func (r *TransferRepositoryFS) ListByProductID(
 func (r *TransferRepositoryFS) ResolveTransferredAtByMintAddress(
 	ctx context.Context,
 	mintAddress string,
-) (transferdom.ResolveTransferredAtByMintAddressResult, error) {
+) (
+	transferdom.ResolveTransferredAtByMintAddressResult,
+	error,
+) {
 	if r == nil || r.Client == nil {
 		return transferdom.ResolveTransferredAtByMintAddressResult{},
 			ErrTransferRepoNotConfigured
@@ -669,7 +202,11 @@ func (r *TransferRepositoryFS) ResolveTransferredAtByMintAddress(
 
 	iter := r.transfersCol().
 		Where("mintAddress", "==", mintAddress).
-		Where("status", "==", string(transferdom.StatusSucceeded)).
+		Where(
+			"status",
+			"==",
+			string(transferdom.StatusSucceeded),
+		).
 		OrderBy("transferredAt", firestore.Desc).
 		Limit(1).
 		Documents(ctx)
@@ -681,7 +218,9 @@ func (r *TransferRepositoryFS) ResolveTransferredAtByMintAddress(
 			return transferdom.ResolveTransferredAtByMintAddressResult{},
 				transferdom.ErrNotFound
 		}
-		return transferdom.ResolveTransferredAtByMintAddressResult{}, err
+
+		return transferdom.ResolveTransferredAtByMintAddressResult{},
+			err
 	}
 	if snap == nil || snap.Ref == nil {
 		return transferdom.ResolveTransferredAtByMintAddressResult{},
@@ -741,76 +280,104 @@ func (r *TransferRepositoryFS) CreateAttempt(
 	counterRef := r.counterDoc(in.ProductID)
 	var created transferdom.Transfer
 
-	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		counterSnap, err := tx.Get(counterRef)
+	err := r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			counterSnap, err := tx.Get(counterRef)
 
-		var attempt int
-		counterExists := true
+			var attempt int
+			counterExists := true
 
-		if err != nil {
-			if status.Code(err) != codes.NotFound {
+			if err != nil {
+				if status.Code(err) != codes.NotFound {
+					return err
+				}
+
+				counterExists = false
+				attempt = 1
+			} else {
+				if counterSnap == nil ||
+					!counterSnap.Exists() {
+					return ErrInvalidTransferCounterData
+				}
+
+				raw := counterSnap.Data()
+				if raw == nil {
+					return ErrInvalidTransferCounterData
+				}
+
+				nextAttempt, ok :=
+					raw["nextAttempt"].(int64)
+				if !ok || nextAttempt <= 0 {
+					return ErrInvalidTransferCounterData
+				}
+
+				attempt = int(nextAttempt)
+			}
+
+			t, err := in.NewTransfer(attempt)
+			if err != nil {
 				return err
 			}
 
-			counterExists = false
-			attempt = 1
-		} else {
-			if counterSnap == nil || !counterSnap.Exists() {
-				return ErrInvalidTransferCounterData
-			}
-
-			raw := counterSnap.Data()
-			if raw == nil {
-				return ErrInvalidTransferCounterData
-			}
-
-			nextAttempt, ok := raw["nextAttempt"].(int64)
-			if !ok || nextAttempt <= 0 {
-				return ErrInvalidTransferCounterData
-			}
-
-			attempt = int(nextAttempt)
-		}
-
-		t, err := in.NewTransfer(attempt)
-		if err != nil {
-			return err
-		}
-
-		doc, err := transferDocument(t, t.CreatedAt)
-		if err != nil {
-			return err
-		}
-
-		transferRef := r.transfersCol().
-			Doc(r.transferDocID(t.ProductID, t.Attempt))
-
-		if counterExists {
-			if err := tx.Set(counterRef, map[string]any{
-				"productId":   t.ProductID,
-				"nextAttempt": int64(t.Attempt + 1),
-				"updatedAt":   t.CreatedAt,
-			}, firestore.MergeAll); err != nil {
+			doc, err := transferDocument(
+				t,
+				t.CreatedAt,
+			)
+			if err != nil {
 				return err
 			}
-		} else {
-			if err := tx.Create(counterRef, map[string]any{
-				"productId":     t.ProductID,
-				"nextAttempt":   int64(2),
-				"updatedAt":     t.CreatedAt,
-				"initializedAt": t.CreatedAt,
-			}); err != nil {
+
+			transferRef := r.transfersCol().
+				Doc(
+					r.transferDocID(
+						t.ProductID,
+						t.Attempt,
+					),
+				)
+
+			if counterExists {
+				if err := tx.Set(
+					counterRef,
+					map[string]any{
+						"productId": t.ProductID,
+						"nextAttempt": int64(
+							t.Attempt + 1,
+						),
+						"updatedAt": t.CreatedAt,
+					},
+					firestore.MergeAll,
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := tx.Create(
+					counterRef,
+					map[string]any{
+						"productId":     t.ProductID,
+						"nextAttempt":   int64(2),
+						"updatedAt":     t.CreatedAt,
+						"initializedAt": t.CreatedAt,
+					},
+				); err != nil {
+					return err
+				}
+			}
+
+			if err := tx.Create(
+				transferRef,
+				doc,
+			); err != nil {
 				return err
 			}
-		}
 
-		if err := tx.Create(transferRef, doc); err != nil {
-			return err
-		}
-
-		created = t
-		return nil
-	})
+			created = t
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -877,60 +444,72 @@ func (r *TransferRepositoryFS) Patch(
 
 	var updated transferdom.Transfer
 
-	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(ref)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
+	err := r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			snap, err := tx.Get(ref)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return transferdom.ErrNotFound
+				}
+				return err
+			}
+			if snap == nil || !snap.Exists() {
 				return transferdom.ErrNotFound
 			}
-			return err
-		}
-		if snap == nil || !snap.Exists() {
-			return transferdom.ErrNotFound
-		}
 
-		t, err := transferFromSnapshot(snap)
-		if err != nil {
-			return err
-		}
-		if err := t.ApplyPatch(patch); err != nil {
-			return err
-		}
-
-		now := time.Now().UTC()
-		fields := map[string]any{
-			"updatedAt": now,
-		}
-
-		if patch.Status != nil {
-			fields["status"] = t.Status
-			if t.Status == transferdom.StatusSucceeded {
-				fields["transferredAt"] = now
+			t, err := transferFromSnapshot(snap)
+			if err != nil {
+				return err
 			}
-		}
-		if patch.ErrorType != nil {
-			fields["errorType"] = t.ErrorType
-		}
-		if patch.ErrorMsg != nil {
-			fields["errorMsg"] = t.ErrorMsg
-		}
-		if patch.TxSignature != nil {
-			fields["txSignature"] = t.TxSignature
-		}
-		if patch.MintAddress != nil {
-			fields["mintAddress"] = t.MintAddress
-		}
-		if patch.ToWalletAddress != nil {
-			fields["toWalletAddress"] = t.ToWalletAddress
-		}
+			if err := t.ApplyPatch(patch); err != nil {
+				return err
+			}
 
-		if err := tx.Set(ref, fields, firestore.MergeAll); err != nil {
-			return err
-		}
+			now := time.Now().UTC()
+			fields := map[string]any{
+				"updatedAt": now,
+			}
 
-		updated = *t
-		return nil
-	})
+			if patch.Status != nil {
+				fields["status"] = t.Status
+				if t.Status ==
+					transferdom.StatusSucceeded {
+					fields["transferredAt"] = now
+				}
+			}
+			if patch.ErrorType != nil {
+				fields["errorType"] = t.ErrorType
+			}
+			if patch.ErrorMsg != nil {
+				fields["errorMsg"] = t.ErrorMsg
+			}
+			if patch.TxSignature != nil {
+				fields["txSignature"] = t.TxSignature
+			}
+			if patch.MintAddress != nil {
+				fields["mintAddress"] = t.MintAddress
+			}
+			if patch.ToWalletAddress != nil {
+				fields["toWalletAddress"] =
+					t.ToWalletAddress
+			}
+
+			if err := tx.Set(
+				ref,
+				fields,
+				firestore.MergeAll,
+			); err != nil {
+				return err
+			}
+
+			updated = *t
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -942,8 +521,12 @@ func (r *TransferRepositoryFS) Patch(
 // Transfer helpers
 // ============================================================
 
-func transferFromSnapshot(snap *firestore.DocumentSnapshot) (*transferdom.Transfer, error) {
-	if snap == nil || snap.Ref == nil || !snap.Exists() {
+func transferFromSnapshot(
+	snap *firestore.DocumentSnapshot,
+) (*transferdom.Transfer, error) {
+	if snap == nil ||
+		snap.Ref == nil ||
+		!snap.Exists() {
 		return nil, transferdom.ErrNotFound
 	}
 
@@ -977,7 +560,8 @@ func transferFromSnapshot(snap *firestore.DocumentSnapshot) (*transferdom.Transf
 		return nil, ErrInvalidTransferData
 	}
 
-	toWalletAddress, ok := raw["toWalletAddress"].(string)
+	toWalletAddress, ok :=
+		raw["toWalletAddress"].(string)
 	if !ok || toWalletAddress == "" {
 		return nil, ErrInvalidTransferData
 	}
@@ -1003,7 +587,8 @@ func transferFromSnapshot(snap *firestore.DocumentSnapshot) (*transferdom.Transf
 		CreatedAt:       createdAt.UTC(),
 	}
 
-	if value, exists := raw["txSignature"]; exists && value != nil {
+	if value, exists := raw["txSignature"]; exists &&
+		value != nil {
 		txSignature, ok := value.(string)
 		if !ok {
 			return nil, ErrInvalidTransferData
@@ -1011,16 +596,21 @@ func transferFromSnapshot(snap *firestore.DocumentSnapshot) (*transferdom.Transf
 		t.TxSignature = &txSignature
 	}
 
-	if value, exists := raw["errorType"]; exists && value != nil {
+	if value, exists := raw["errorType"]; exists &&
+		value != nil {
 		rawErrorType, ok := value.(string)
 		if !ok {
 			return nil, ErrInvalidTransferData
 		}
-		errorType := transferdom.ErrorType(rawErrorType)
+
+		errorType := transferdom.ErrorType(
+			rawErrorType,
+		)
 		t.ErrorType = &errorType
 	}
 
-	if value, exists := raw["errorMsg"]; exists && value != nil {
+	if value, exists := raw["errorMsg"]; exists &&
+		value != nil {
 		errorMsg, ok := value.(string)
 		if !ok {
 			return nil, ErrInvalidTransferData
@@ -1035,7 +625,10 @@ func transferFromSnapshot(snap *firestore.DocumentSnapshot) (*transferdom.Transf
 	return &t, nil
 }
 
-func transferDocument(t transferdom.Transfer, updatedAt time.Time) (map[string]any, error) {
+func transferDocument(
+	t transferdom.Transfer,
+	updatedAt time.Time,
+) (map[string]any, error) {
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
@@ -1058,9 +651,12 @@ func transferDocument(t transferdom.Transfer, updatedAt time.Time) (map[string]a
 		"updatedAt":       updatedAt.UTC(),
 	}
 
-	if share, ok := parseShareTransferRef(t.OrderID); ok {
+	if share, ok := parseShareTransferRef(
+		t.OrderID,
+	); ok {
 		if share.ProductID != t.ProductID {
-			return nil, transferdom.ErrInvalidProductID
+			return nil,
+				transferdom.ErrInvalidProductID
 		}
 
 		doc["transferKind"] = "share"
@@ -1085,7 +681,9 @@ type shareTransferRef struct {
 	ProductID    string
 }
 
-func parseShareTransferRef(ref string) (shareTransferRef, bool) {
+func parseShareTransferRef(
+	ref string,
+) (shareTransferRef, bool) {
 	if ref == "" {
 		return shareTransferRef{}, false
 	}
@@ -1097,7 +695,9 @@ func parseShareTransferRef(ref string) (shareTransferRef, bool) {
 	if parts[0] != "share" {
 		return shareTransferRef{}, false
 	}
-	if parts[1] == "" || parts[2] == "" || parts[3] == "" {
+	if parts[1] == "" ||
+		parts[2] == "" ||
+		parts[3] == "" {
 		return shareTransferRef{}, false
 	}
 

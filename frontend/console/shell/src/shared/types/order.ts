@@ -1,163 +1,278 @@
 // frontend/shell/src/shared/types/order.ts
 
 /**
- * LegacyOrderStatus
- * backend/internal/domain/order/entity.go の LegacyOrderStatus に対応。
- *
- * - "paid"
- * - "transferred"
+ * backend/internal/domain/order/entity.go のOrderItemTypeに対応。
  */
-export type LegacyOrderStatus = "paid" | "transferred";
+export type OrderItemType = "list" | "resale";
 
-/** LegacyOrderStatus の妥当性チェック */
-export function isValidLegacyStatus(s: string): s is LegacyOrderStatus {
-  return s === "paid" || s === "transferred";
+export interface ShippingSnapshot {
+  zipCode: string;
+  state: string;
+  city: string;
+  street: string;
+  street2: string;
+  country: string;
+}
+
+export interface PaymentMethodSnapshot {
+  customerId: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  cardholderName: string;
+  isDefault: boolean;
+}
+
+export interface OrderItemSnapshot {
+  type: OrderItemType;
+
+  // list item identifiers
+  modelId?: string;
+  inventoryId?: string;
+  listId?: string;
+
+  // resale item identifier
+  resaleId?: string;
+
+  // product identifiers
+  productId?: string;
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+  brandId?: string;
+
+  qty: number;
+  price: number;
+
+  isCanceled: boolean;
+  isDispatched: boolean;
+
+  transferred: boolean;
+  transferredAt?: string | null;
 }
 
 /**
- * Order
- * backend/internal/domain/order/entity.go および
- * frontend/order/src/domain/entity/order.ts の Order に対応。
+ * backend/internal/domain/order/entity.go のOrderに対応。
  *
- * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）を想定
- * - items は orderItem の ID配列
- * - trackingId, transferredDate, updatedBy, deletedAt, deletedBy は任意
- * - プロパティ名は backend 実装に合わせて `transferredDate`（綴り注意）
+ * 日時はRFC3339形式の文字列を使用する。
  */
 export interface Order {
   id: string;
-  orderNumber: string;
-  status: LegacyOrderStatus;
   userId: string;
-  shippingAddressId: string;
-  billingAddressId: string;
-  listId: string;
-  items: string[];
-  invoiceId: string;
-  paymentId: string;
-  fulfillmentId: string;
-  trackingId?: string | null;
-  transferredDate?: string | null;
+  avatarId: string;
+  cartId: string;
+
+  shippingSnapshot: ShippingSnapshot;
+  paymentMethodSnapshot: PaymentMethodSnapshot;
+
+  paid: boolean;
+
+  items: OrderItemSnapshot[];
   createdAt: string;
-  updatedAt: string;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
 }
 
 /**
- * OrderPatch
- * backend/internal/domain/order/entity.go の OrderPatch に対応。
- * - `undefined` / `null` は「変更なし」を表現する用途を想定。
+ * backend/internal/domain/order/entity.go のOrderPatchに対応。
+ *
+ * undefinedまたはnullは「変更なし」を表す。
  */
 export interface OrderPatch {
-  orderNumber?: string | null;
-  status?: LegacyOrderStatus | null;
   userId?: string | null;
-  shippingAddressId?: string | null;
-  billingAddressId?: string | null;
-  listId?: string | null;
-  items?: string[] | null;
-  invoiceId?: string | null;
-  paymentId?: string | null;
-  fulfillmentId?: string | null;
-  trackingId?: string | null;
-  transferredDate?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
+  avatarId?: string | null;
+  cartId?: string | null;
+
+  shippingSnapshot?: ShippingSnapshot | null;
+  paymentMethodSnapshot?: PaymentMethodSnapshot | null;
+
+  paid?: boolean | null;
+
+  items?: OrderItemSnapshot[] | null;
 }
 
-/**
- * Policy
- * backend/internal/domain/order/entity.go の Policy に対応。
- */
-export const ORDER_NUMBER_REGEX = /^[A-Z0-9\-]{1,32}$/;
 export const MIN_ITEMS_REQUIRED = 1;
 
-/**
- * Order の簡易バリデーション
- * backend の validate() ロジックと整合する範囲でフロント側チェックを行う。
- */
-export function validateOrder(o: Order): boolean {
-  // id
-  if (!o.id || !o.id.trim()) return false;
-
-  // orderNumber
-  if (!o.orderNumber || !o.orderNumber.trim()) return false;
-  if (!ORDER_NUMBER_REGEX.test(o.orderNumber)) return false;
-
-  // status
-  if (!isValidLegacyStatus(o.status)) return false;
-
-  // required ids
-  if (!o.userId?.trim()) return false;
-  if (!o.shippingAddressId?.trim()) return false;
-  if (!o.billingAddressId?.trim()) return false;
-  if (!o.listId?.trim()) return false;
-
-  // items
-  if (!Array.isArray(o.items) || o.items.length < MIN_ITEMS_REQUIRED) {
-    return false;
-  }
-  const seen = new Set<string>();
-  for (const it of o.items) {
-    const v = (it ?? "").trim();
-    if (!v || seen.has(v)) return false;
-    seen.add(v);
-  }
-
-  // invoice / payment / fulfillment
-  if (!o.invoiceId?.trim()) return false;
-  if (!o.paymentId?.trim()) return false;
-  if (!o.fulfillmentId?.trim()) return false;
-
-  // trackingId (任意だが、指定する場合は非空)
-  if (o.trackingId !== undefined && o.trackingId !== null) {
-    if (!o.trackingId.trim()) return false;
-  }
-
-  // createdAt / updatedAt
-  const created = parseIso(o.createdAt);
-  const updated = parseIso(o.updatedAt);
-  if (!created || !updated) return false;
-  if (updated.getTime() < created.getTime()) return false;
-
-  // transferredDate: 任意だが、ある場合は createdAt 以降
-  if (o.transferredDate != null && o.transferredDate !== "") {
-    const td = parseIso(o.transferredDate);
-    if (!td || td.getTime() < created.getTime()) return false;
-  }
-
-  // updatedBy: 任意だが、ある場合は非空
-  if (o.updatedBy != null && o.updatedBy !== "" && !o.updatedBy.trim()) {
-    return false;
-  }
-
-  // deletedAt / deletedBy の整合性
-  const hasDeletedAt =
-    o.deletedAt != null && String(o.deletedAt).trim() !== "";
-  const hasDeletedBy =
-    o.deletedBy != null && String(o.deletedBy).trim() !== "";
-
-  if (hasDeletedAt !== hasDeletedBy) {
-    return false;
-  }
-
-  if (hasDeletedAt && hasDeletedBy) {
-    const da = parseIso(String(o.deletedAt));
-    if (!da) return false;
-    if (da.getTime() < created.getTime()) return false;
-    if (!String(o.deletedBy).trim()) return false;
-  }
-
-  return true;
+export function isOrderItemType(value: string): value is OrderItemType {
+  return value === "list" || value === "resale";
 }
 
-/** ISO8601 文字列を Date に変換（失敗時は null） */
-function parseIso(s: string | null | undefined): Date | null {
-  if (!s) return null;
-  const t = Date.parse(s);
-  if (Number.isNaN(t)) return null;
-  return new Date(t);
+/**
+ * backendの公開Validateと同じ不変条件をフロント側でも検証する。
+ */
+export function validateOrder(order: Order): boolean {
+  if (!isNonEmptyString(order.id)) return false;
+  if (!isNonEmptyString(order.userId)) return false;
+  if (!isNonEmptyString(order.avatarId)) return false;
+  if (!isNonEmptyString(order.cartId)) return false;
+
+  if (!validateShippingSnapshot(order.shippingSnapshot)) {
+    return false;
+  }
+
+  if (!validatePaymentMethodSnapshot(order.paymentMethodSnapshot)) {
+    return false;
+  }
+
+  if (typeof order.paid !== "boolean") {
+    return false;
+  }
+
+  if (
+    !Array.isArray(order.items) ||
+    order.items.length < MIN_ITEMS_REQUIRED
+  ) {
+    return false;
+  }
+
+  for (const item of order.items) {
+    if (!validateOrderItemSnapshot(item)) {
+      return false;
+    }
+  }
+
+  return parseRFC3339(order.createdAt) !== null;
+}
+
+export function validateShippingSnapshot(
+  snapshot: ShippingSnapshot,
+): boolean {
+  if (!snapshot || typeof snapshot !== "object") {
+    return false;
+  }
+
+  return (
+    isNonEmptyString(snapshot.state) &&
+    isNonEmptyString(snapshot.city) &&
+    isNonEmptyString(snapshot.street) &&
+    isNonEmptyString(snapshot.country)
+  );
+}
+
+export function validatePaymentMethodSnapshot(
+  snapshot: PaymentMethodSnapshot,
+): boolean {
+  if (!snapshot || typeof snapshot !== "object") {
+    return false;
+  }
+
+  if (!isNonEmptyString(snapshot.customerId)) return false;
+  if (!isNonEmptyString(snapshot.brand)) return false;
+  if (!isNonEmptyString(snapshot.last4)) return false;
+  if (!isNonEmptyString(snapshot.cardholderName)) return false;
+
+  if (
+    !Number.isInteger(snapshot.expMonth) ||
+    snapshot.expMonth < 1 ||
+    snapshot.expMonth > 12
+  ) {
+    return false;
+  }
+
+  if (
+    !Number.isInteger(snapshot.expYear) ||
+    snapshot.expYear < 2000 ||
+    snapshot.expYear > 9999
+  ) {
+    return false;
+  }
+
+  return typeof snapshot.isDefault === "boolean";
+}
+
+export function validateOrderItemSnapshot(
+  item: OrderItemSnapshot,
+): boolean {
+  if (!item || typeof item !== "object") {
+    return false;
+  }
+
+  if (!isOrderItemType(item.type)) {
+    return false;
+  }
+
+  if (!Number.isInteger(item.qty)) {
+    return false;
+  }
+
+  if (!Number.isInteger(item.price) || item.price < 0) {
+    return false;
+  }
+
+  if (typeof item.isCanceled !== "boolean") {
+    return false;
+  }
+
+  if (typeof item.isDispatched !== "boolean") {
+    return false;
+  }
+
+  if (typeof item.transferred !== "boolean") {
+    return false;
+  }
+
+  if (!validateTransferredState(item)) {
+    return false;
+  }
+
+  switch (item.type) {
+    case "list":
+      return validateListItemSnapshot(item);
+
+    case "resale":
+      return validateResaleItemSnapshot(item);
+  }
+}
+
+function validateListItemSnapshot(
+  item: OrderItemSnapshot,
+): boolean {
+  return (
+    isNonEmptyString(item.modelId) &&
+    isNonEmptyString(item.inventoryId) &&
+    isNonEmptyString(item.listId) &&
+    item.qty > 0
+  );
+}
+
+function validateResaleItemSnapshot(
+  item: OrderItemSnapshot,
+): boolean {
+  return (
+    isNonEmptyString(item.resaleId) &&
+    isNonEmptyString(item.productId) &&
+    isNonEmptyString(item.productBlueprintId) &&
+    isNonEmptyString(item.tokenBlueprintId) &&
+    isNonEmptyString(item.brandId) &&
+    item.qty === 1
+  );
+}
+
+function validateTransferredState(
+  item: OrderItemSnapshot,
+): boolean {
+  if (item.transferred) {
+    return parseRFC3339(item.transferredAt) !== null;
+  }
+
+  return item.transferredAt == null;
+}
+
+function isNonEmptyString(
+  value: string | null | undefined,
+): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+function parseRFC3339(
+  value: string | null | undefined,
+): Date | null {
+  if (!isNonEmptyString(value)) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+
+  return new Date(timestamp);
 }

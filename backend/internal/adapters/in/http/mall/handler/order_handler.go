@@ -63,7 +63,9 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 }
@@ -77,50 +79,31 @@ type shippingSnapshotRequest struct {
 	Country string `json:"country"`
 }
 
-type paymentMethodSnapshotRequest struct {
-	CustomerID     string `json:"customerId"`
-	Brand          string `json:"brand"`
-	Last4          string `json:"last4"`
-	ExpMonth       int    `json:"expMonth"`
-	ExpYear        int    `json:"expYear"`
-	CardholderName string `json:"cardholderName"`
-	IsDefault      bool   `json:"isDefault"`
-}
-
-type orderItemSnapshotRequest struct {
+type orderItemRequest struct {
 	Type string `json:"type"`
 
 	// list item identifiers
-	ModelID     string `json:"modelId"`
-	InventoryID string `json:"inventoryId"`
-	ListID      string `json:"listId"`
+	ListID  string `json:"listId"`
+	ModelID string `json:"modelId"`
 
-	// resale item identifiers
+	// resale item identifier
 	ResaleID string `json:"resaleId"`
 
-	// product identifiers
-	ProductID          string `json:"productId"`
-	ProductBlueprintID string `json:"productBlueprintId"`
-	TokenBlueprintID   string `json:"tokenBlueprintId"`
-	BrandID            string `json:"brandId"`
+	Qty int `json:"qty"`
 
-	Qty   int `json:"qty"`
-	Price int `json:"price"`
-
+	// Reserved for future order creation behavior.
 	IsCanceled   bool `json:"isCanceled"`
 	IsDispatched bool `json:"isDispatched"`
 }
 
 type createOrderRequest struct {
-	ID       string `json:"id"`
-	UserID   string `json:"userId"`
-	AvatarID string `json:"avatarId"`
-	CartID   string `json:"cartId"`
+	ID     string `json:"id"`
+	UserID string `json:"userId"`
 
-	ShippingSnapshot      shippingSnapshotRequest      `json:"shippingSnapshot"`
-	PaymentMethodSnapshot paymentMethodSnapshotRequest `json:"paymentMethodSnapshot"`
+	ShippingSnapshot shippingSnapshotRequest `json:"shippingSnapshot"`
+	PaymentMethodID  string                  `json:"paymentMethodId"`
 
-	Items []orderItemSnapshotRequest `json:"items"`
+	Items []orderItemRequest `json:"items"`
 }
 
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -129,57 +112,69 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_body"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid_body",
+		})
 		return
 	}
 
 	var req createOrderRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid_json",
+		})
 		return
 	}
 
 	authUID, ok := middleware.CurrentUserUID(r)
 	if !ok || authUID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized",
+		})
 		return
 	}
 
 	bodyUID := req.UserID
 	if bodyUID != "" && bodyUID != authUID {
 		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "userId_mismatch"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "userId_mismatch",
+		})
 		return
 	}
 
 	userID := authUID
 
-	avatarID := req.AvatarID
-	if avatarID == "" {
-		avatarID = r.URL.Query().Get("avatarId")
-	}
-	if avatarID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatarId is required"})
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized: missing avatarId",
+		})
 		return
 	}
 
-	cartID := req.CartID
-	if cartID == "" {
+	cartID := avatarID
+
+	if req.PaymentMethodID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "cartId is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "paymentMethodId is required",
+		})
 		return
 	}
 
 	if len(req.Items) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "items is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "items is required",
+		})
 		return
 	}
 
-	ship := orderdom.ShippingSnapshot{
+	shipping := orderdom.ShippingSnapshot{
 		ZipCode: req.ShippingSnapshot.ZipCode,
 		State:   req.ShippingSnapshot.State,
 		City:    req.ShippingSnapshot.City,
@@ -187,40 +182,31 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		Street2: req.ShippingSnapshot.Street2,
 		Country: req.ShippingSnapshot.Country,
 	}
-	if ship.State == "" || ship.City == "" || ship.Street == "" || ship.Country == "" {
+
+	if shipping.State == "" ||
+		shipping.City == "" ||
+		shipping.Street == "" ||
+		shipping.Country == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is invalid"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "shippingSnapshot is invalid",
+		})
 		return
 	}
 
-	paymentMethod := orderdom.PaymentMethodSnapshot{
-		CustomerID:     req.PaymentMethodSnapshot.CustomerID,
-		Brand:          req.PaymentMethodSnapshot.Brand,
-		Last4:          req.PaymentMethodSnapshot.Last4,
-		ExpMonth:       req.PaymentMethodSnapshot.ExpMonth,
-		ExpYear:        req.PaymentMethodSnapshot.ExpYear,
-		CardholderName: req.PaymentMethodSnapshot.CardholderName,
-		IsDefault:      req.PaymentMethodSnapshot.IsDefault,
-	}
-	if paymentMethod.CustomerID == "" ||
-		paymentMethod.Brand == "" ||
-		paymentMethod.Last4 == "" ||
-		paymentMethod.ExpMonth < 1 ||
-		paymentMethod.ExpMonth > 12 ||
-		paymentMethod.ExpYear < 2000 ||
-		paymentMethod.ExpYear > 9999 ||
-		paymentMethod.CardholderName == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "paymentMethodSnapshot is invalid"})
-		return
-	}
+	items := make(
+		[]usecase.CreateOrderItemInput,
+		0,
+		len(req.Items),
+	)
 
-	items := make([]orderdom.OrderItemSnapshot, 0, len(req.Items))
-	for _, it := range req.Items {
-		item, ok := orderItemRequestToSnapshot(it)
+	for _, requestItem := range req.Items {
+		item, ok := orderItemRequestToInput(requestItem)
 		if !ok {
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid item snapshot"})
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "invalid order item",
+			})
 			return
 		}
 
@@ -233,10 +219,9 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		AvatarID: avatarID,
 		CartID:   cartID,
 
-		ShippingSnapshot:      ship,
-		PaymentMethodSnapshot: paymentMethod,
-
-		Items: items,
+		ShippingSnapshot: shipping,
+		PaymentMethodID:  req.PaymentMethodID,
+		Items:            items,
 	}
 
 	out, err := h.uc.Create(ctx, in)
@@ -249,87 +234,44 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func orderItemRequestToSnapshot(it orderItemSnapshotRequest) (orderdom.OrderItemSnapshot, bool) {
-	switch inferOrderItemRequestType(it) {
+func orderItemRequestToInput(
+	item orderItemRequest,
+) (usecase.CreateOrderItemInput, bool) {
+	itemType := orderdom.OrderItemType(item.Type)
+
+	switch itemType {
 	case orderdom.OrderItemTypeList:
-		return listOrderItemRequestToSnapshot(it)
+		if item.ListID == "" ||
+			item.ModelID == "" ||
+			item.Qty <= 0 {
+			return usecase.CreateOrderItemInput{}, false
+		}
+
+		return usecase.CreateOrderItemInput{
+			Type:         orderdom.OrderItemTypeList,
+			ListID:       item.ListID,
+			ModelID:      item.ModelID,
+			Qty:          item.Qty,
+			IsCanceled:   item.IsCanceled,
+			IsDispatched: item.IsDispatched,
+		}, true
 
 	case orderdom.OrderItemTypeResale:
-		return resaleOrderItemRequestToSnapshot(it)
+		if item.ResaleID == "" {
+			return usecase.CreateOrderItemInput{}, false
+		}
+
+		return usecase.CreateOrderItemInput{
+			Type:         orderdom.OrderItemTypeResale,
+			ResaleID:     item.ResaleID,
+			Qty:          1,
+			IsCanceled:   item.IsCanceled,
+			IsDispatched: item.IsDispatched,
+		}, true
 
 	default:
-		return orderdom.OrderItemSnapshot{}, false
+		return usecase.CreateOrderItemInput{}, false
 	}
-}
-
-func listOrderItemRequestToSnapshot(it orderItemSnapshotRequest) (orderdom.OrderItemSnapshot, bool) {
-	mid := it.ModelID
-	iid := it.InventoryID
-	lid := it.ListID
-	qty := it.Qty
-	price := it.Price
-
-	if mid == "" || iid == "" || lid == "" || qty <= 0 || price < 0 {
-		return orderdom.OrderItemSnapshot{}, false
-	}
-
-	return orderdom.OrderItemSnapshot{
-		Type:         orderdom.OrderItemTypeList,
-		ModelID:      mid,
-		InventoryID:  iid,
-		ListID:       lid,
-		Qty:          qty,
-		Price:        price,
-		IsCanceled:   it.IsCanceled,
-		IsDispatched: it.IsDispatched,
-	}, true
-}
-
-func resaleOrderItemRequestToSnapshot(it orderItemSnapshotRequest) (orderdom.OrderItemSnapshot, bool) {
-	qty := it.Qty
-	if qty <= 0 {
-		qty = 1
-	}
-
-	if it.ResaleID == "" ||
-		it.ProductID == "" ||
-		it.ProductBlueprintID == "" ||
-		it.TokenBlueprintID == "" ||
-		it.BrandID == "" ||
-		qty != 1 ||
-		it.Price < 0 {
-		return orderdom.OrderItemSnapshot{}, false
-	}
-
-	return orderdom.OrderItemSnapshot{
-		Type:               orderdom.OrderItemTypeResale,
-		ResaleID:           it.ResaleID,
-		ProductID:          it.ProductID,
-		ProductBlueprintID: it.ProductBlueprintID,
-		TokenBlueprintID:   it.TokenBlueprintID,
-		BrandID:            it.BrandID,
-		Qty:                1,
-		Price:              it.Price,
-		IsCanceled:         it.IsCanceled,
-		IsDispatched:       it.IsDispatched,
-	}, true
-}
-
-func inferOrderItemRequestType(it orderItemSnapshotRequest) orderdom.OrderItemType {
-	switch orderdom.OrderItemType(it.Type) {
-	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
-		return orderdom.OrderItemType(it.Type)
-	}
-
-	if it.ResaleID != "" || it.ProductID != "" {
-		return orderdom.OrderItemTypeResale
-	}
-
-	if it.ModelID != "" || it.InventoryID != "" || it.ListID != "" {
-		return orderdom.OrderItemTypeList
-	}
-
-	return ""
 }
 
 func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
@@ -338,14 +280,21 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing avatarId"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "unauthorized: missing avatarId",
+		})
 		return
 	}
 
 	page := parseOrderPage(r)
 	sort := parseOrderSort(r)
 
-	out, err := h.uc.ListByAvatarID(ctx, avatarID, sort, page)
+	out, err := h.uc.ListByAvatarID(
+		ctx,
+		avatarID,
+		sort,
+		page,
+	)
 	if err != nil {
 		writeOrderErr(w, err)
 		return
@@ -370,7 +319,8 @@ func (h *OrderHandler) enrichOrderHistoryPage(
 	out any,
 ) (historydto.HistoryOrderPage, error) {
 	if h == nil || h.historyQuery == nil {
-		return historydto.HistoryOrderPage{}, errors.New("order handler: history query not configured")
+		return historydto.HistoryOrderPage{},
+			errors.New("order handler: history query not configured")
 	}
 
 	body, err := json.Marshal(out)
@@ -440,21 +390,44 @@ func parsePositiveInt(raw string, fallback int) int {
 }
 
 func writeOrderErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
-	msg := strings.ToLower(err.Error())
-
-	switch {
-	case errors.Is(err, context.Canceled):
-		code = 499
-	case msg == "not_found" || strings.Contains(msg, "not found") || strings.Contains(msg, "not_found"):
-		code = http.StatusNotFound
-	case strings.Contains(msg, "conflict") || strings.Contains(msg, "already exists"):
-		code = http.StatusConflict
-	case strings.Contains(msg, "invalid") || strings.Contains(msg, "required") || strings.Contains(msg, "missing"):
-		code = http.StatusBadRequest
-	default:
-	}
+	code := orderHTTPStatus(err)
 
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": err.Error(),
+	})
+}
+
+func orderHTTPStatus(err error) int {
+	switch {
+	case err == nil:
+		return http.StatusInternalServerError
+
+	case errors.Is(err, context.Canceled):
+		return 499
+
+	case errors.Is(err, orderdom.ErrNotFound):
+		return http.StatusNotFound
+
+	case errors.Is(err, orderdom.ErrConflict):
+		return http.StatusConflict
+
+	case isInvalidOrderError(err):
+		return http.StatusBadRequest
+
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func isInvalidOrderError(err error) bool {
+	return errors.Is(err, orderdom.ErrInvalidID) ||
+		errors.Is(err, orderdom.ErrInvalidUserID) ||
+		errors.Is(err, orderdom.ErrInvalidAvatarID) ||
+		errors.Is(err, orderdom.ErrInvalidCartID) ||
+		errors.Is(err, orderdom.ErrInvalidShippingSnapshot) ||
+		errors.Is(err, orderdom.ErrInvalidPaymentMethod) ||
+		errors.Is(err, orderdom.ErrInvalidItems) ||
+		errors.Is(err, orderdom.ErrInvalidItemSnapshot) ||
+		errors.Is(err, orderdom.ErrInvalidCreatedAt)
 }

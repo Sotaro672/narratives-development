@@ -39,27 +39,31 @@ const (
 
 // OrderItemSnapshot is stored inside Order.Items.
 //
-// list item:
-// - type: "list" or empty for backward compatibility
-// - modelId, inventoryId, listId, qty, price
+// List item:
+//   - type: "list"
+//   - modelId, inventoryId, listId
+//   - productBlueprintId, tokenBlueprintId
+//   - qty, price
 //
-// resale item:
-// - type: "resale"
-// - resaleId, productId, productBlueprintId, tokenBlueprintId, brandId, qty=1, price
+// Resale item:
+//   - type: "resale"
+//   - resaleId, productId
+//   - productBlueprintId, tokenBlueprintId, brandId
+//   - qty=1, price
 //
-// item 単位で配送/キャンセル/移転状態を保持する。
+// Transfer, cancellation, and dispatch state is maintained per item.
 type OrderItemSnapshot struct {
-	Type OrderItemType `json:"type,omitempty"`
+	Type OrderItemType `json:"type"`
 
-	// list item identifiers
+	// List item identifiers.
 	ModelID     string `json:"modelId,omitempty"`
 	InventoryID string `json:"inventoryId,omitempty"`
 	ListID      string `json:"listId,omitempty"`
 
-	// resale item identifiers
+	// Resale item identifier.
 	ResaleID string `json:"resaleId,omitempty"`
 
-	// product identifiers
+	// Product identifiers.
 	ProductID          string `json:"productId,omitempty"`
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
@@ -88,7 +92,7 @@ type Order struct {
 	ShippingSnapshot      ShippingSnapshot      `json:"shippingSnapshot"`
 	PaymentMethodSnapshot PaymentMethodSnapshot `json:"paymentMethodSnapshot"`
 
-	// paid は Order 全体で保持する
+	// Paid is maintained at the Order aggregate level.
 	Paid bool `json:"paid"`
 
 	Items     []OrderItemSnapshot `json:"items"`
@@ -160,9 +164,11 @@ func New(
 		Items:                 items,
 		CreatedAt:             createdAt.UTC(),
 	}
-	if err := o.validate(); err != nil {
+
+	if err := o.Validate(); err != nil {
 		return Order{}, err
 	}
+
 	return o, nil
 }
 
@@ -174,22 +180,29 @@ func (o *Order) ReplaceItems(items []OrderItemSnapshot) error {
 	if err := validateItems(items); err != nil {
 		return err
 	}
+
 	o.Items = items
 	return nil
 }
 
-func (o *Order) UpdateShippingSnapshot(s ShippingSnapshot) error {
+func (o *Order) UpdateShippingSnapshot(
+	s ShippingSnapshot,
+) error {
 	if err := validateShippingSnapshot(s); err != nil {
 		return err
 	}
+
 	o.ShippingSnapshot = s
 	return nil
 }
 
-func (o *Order) UpdatePaymentMethodSnapshot(p PaymentMethodSnapshot) error {
+func (o *Order) UpdatePaymentMethodSnapshot(
+	p PaymentMethodSnapshot,
+) error {
 	if err := validatePaymentMethodSnapshot(p); err != nil {
 		return err
 	}
+
 	o.PaymentMethodSnapshot = p
 	return nil
 }
@@ -198,6 +211,7 @@ func (o *Order) UpdateAvatarID(avatarID string) error {
 	if avatarID == "" {
 		return ErrInvalidAvatarID
 	}
+
 	o.AvatarID = avatarID
 	return nil
 }
@@ -206,7 +220,10 @@ func (o *Order) UpdatePaid(paid bool) {
 	o.Paid = paid
 }
 
-func (o *Order) UpdateItemCanceled(index int, isCanceled bool) error {
+func (o *Order) UpdateItemCanceled(
+	index int,
+	isCanceled bool,
+) error {
 	if o == nil {
 		return ErrInvalidItems
 	}
@@ -218,7 +235,10 @@ func (o *Order) UpdateItemCanceled(index int, isCanceled bool) error {
 	return nil
 }
 
-func (o *Order) UpdateItemDispatched(index int, isDispatched bool) error {
+func (o *Order) UpdateItemDispatched(
+	index int,
+	isDispatched bool,
+) error {
 	if o == nil {
 		return ErrInvalidItems
 	}
@@ -231,8 +251,12 @@ func (o *Order) UpdateItemDispatched(index int, isDispatched bool) error {
 }
 
 // UpdateItemTransferred updates item-level transfer state.
-// transferred=true のときは transferredAt も設定する。
-func (o *Order) UpdateItemTransferred(index int, transferred bool, at time.Time) error {
+// transferred=true requires a non-zero transferredAt value.
+func (o *Order) UpdateItemTransferred(
+	index int,
+	transferred bool,
+	at time.Time,
+) error {
 	if o == nil {
 		return ErrInvalidItems
 	}
@@ -240,16 +264,18 @@ func (o *Order) UpdateItemTransferred(index int, transferred bool, at time.Time)
 		return ErrInvalidItems
 	}
 
-	o.Items[index].Transferred = transferred
 	if transferred {
 		if at.IsZero() {
 			return ErrInvalidItemSnapshot
 		}
-		t := at.UTC()
-		o.Items[index].TransferredAt = &t
+
+		transferredAt := at.UTC()
+		o.Items[index].Transferred = true
+		o.Items[index].TransferredAt = &transferredAt
 		return nil
 	}
 
+	o.Items[index].Transferred = false
 	o.Items[index].TransferredAt = nil
 	return nil
 }
@@ -258,7 +284,12 @@ func (o *Order) UpdateItemTransferred(index int, transferred bool, at time.Time)
 // Validation
 // ========================================
 
-func (o Order) validate() error {
+// Validate verifies all invariants required for persisting an Order.
+//
+// Repository implementations must call Validate immediately before Create or
+// Update so callers cannot bypass domain invariants by invoking the Repository
+// directly.
+func (o Order) Validate() error {
 	if o.ID == "" {
 		return ErrInvalidID
 	}
@@ -271,10 +302,14 @@ func (o Order) validate() error {
 	if o.CartID == "" {
 		return ErrInvalidCartID
 	}
-	if err := validateShippingSnapshot(o.ShippingSnapshot); err != nil {
+	if err := validateShippingSnapshot(
+		o.ShippingSnapshot,
+	); err != nil {
 		return err
 	}
-	if err := validatePaymentMethodSnapshot(o.PaymentMethodSnapshot); err != nil {
+	if err := validatePaymentMethodSnapshot(
+		o.PaymentMethodSnapshot,
+	); err != nil {
 		return err
 	}
 	if err := validateItems(o.Items); err != nil {
@@ -283,10 +318,13 @@ func (o Order) validate() error {
 	if o.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	return nil
 }
 
-func validateShippingSnapshot(s ShippingSnapshot) error {
+func validateShippingSnapshot(
+	s ShippingSnapshot,
+) error {
 	if s.State == "" {
 		return ErrInvalidShippingSnapshot
 	}
@@ -299,10 +337,13 @@ func validateShippingSnapshot(s ShippingSnapshot) error {
 	if s.Country == "" {
 		return ErrInvalidShippingSnapshot
 	}
+
 	return nil
 }
 
-func validatePaymentMethodSnapshot(p PaymentMethodSnapshot) error {
+func validatePaymentMethodSnapshot(
+	p PaymentMethodSnapshot,
+) error {
 	if p.CustomerID == "" {
 		return ErrInvalidPaymentMethod
 	}
@@ -321,6 +362,7 @@ func validatePaymentMethodSnapshot(p PaymentMethodSnapshot) error {
 	if p.CardholderName == "" {
 		return ErrInvalidPaymentMethod
 	}
+
 	return nil
 }
 
@@ -329,8 +371,8 @@ func validateItems(items []OrderItemSnapshot) error {
 		return ErrInvalidItems
 	}
 
-	for _, it := range items {
-		if err := validateItemSnapshot(it); err != nil {
+	for _, item := range items {
+		if err := validateItemSnapshot(item); err != nil {
 			return err
 		}
 	}
@@ -338,90 +380,108 @@ func validateItems(items []OrderItemSnapshot) error {
 	return nil
 }
 
-func validateItemSnapshot(it OrderItemSnapshot) error {
-	switch inferOrderItemType(it) {
+func validateItemSnapshot(
+	item OrderItemSnapshot,
+) error {
+	switch item.Type {
 	case OrderItemTypeList:
-		return validateListItemSnapshot(it)
+		return validateListItemSnapshot(item)
 
 	case OrderItemTypeResale:
-		return validateResaleItemSnapshot(it)
+		return validateResaleItemSnapshot(item)
 
 	default:
 		return ErrInvalidItemSnapshot
 	}
 }
 
-func validateListItemSnapshot(it OrderItemSnapshot) error {
-	if it.ModelID == "" {
+func validateListItemSnapshot(
+	item OrderItemSnapshot,
+) error {
+	if item.ModelID == "" {
 		return ErrInvalidItemSnapshot
 	}
-	if it.InventoryID == "" {
+	if item.InventoryID == "" {
 		return ErrInvalidItemSnapshot
 	}
-	if it.ListID == "" {
+	if item.ListID == "" {
 		return ErrInvalidItemSnapshot
 	}
-	if it.Qty <= 0 {
+	if item.ProductBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
-	if it.Price < 0 {
+	if item.TokenBlueprintID == "" {
 		return ErrInvalidItemSnapshot
 	}
-	if it.Transferred && it.TransferredAt == nil {
+
+	// Resale-only identifiers must not be mixed into a list item.
+	if item.ResaleID != "" ||
+		item.ProductID != "" ||
+		item.BrandID != "" {
 		return ErrInvalidItemSnapshot
 	}
-	if !it.Transferred && it.TransferredAt != nil {
+
+	if item.Qty <= 0 {
+		return ErrInvalidItemSnapshot
+	}
+	if item.Price < 0 {
+		return ErrInvalidItemSnapshot
+	}
+
+	return validateItemTransferState(item)
+}
+
+func validateResaleItemSnapshot(
+	item OrderItemSnapshot,
+) error {
+	if item.ResaleID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if item.ProductID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if item.ProductBlueprintID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if item.TokenBlueprintID == "" {
+		return ErrInvalidItemSnapshot
+	}
+	if item.BrandID == "" {
+		return ErrInvalidItemSnapshot
+	}
+
+	// List-only identifiers must not be mixed into a resale item.
+	if item.ModelID != "" ||
+		item.InventoryID != "" ||
+		item.ListID != "" {
+		return ErrInvalidItemSnapshot
+	}
+
+	if item.Qty != 1 {
+		return ErrInvalidItemSnapshot
+	}
+	if item.Price < 0 {
+		return ErrInvalidItemSnapshot
+	}
+
+	return validateItemTransferState(item)
+}
+
+func validateItemTransferState(
+	item OrderItemSnapshot,
+) error {
+	if item.Transferred {
+		if item.TransferredAt == nil ||
+			item.TransferredAt.IsZero() {
+			return ErrInvalidItemSnapshot
+		}
+
+		return nil
+	}
+
+	if item.TransferredAt != nil {
 		return ErrInvalidItemSnapshot
 	}
 
 	return nil
-}
-
-func validateResaleItemSnapshot(it OrderItemSnapshot) error {
-	if it.ResaleID == "" {
-		return ErrInvalidItemSnapshot
-	}
-	if it.ProductID == "" {
-		return ErrInvalidItemSnapshot
-	}
-	if it.ProductBlueprintID == "" {
-		return ErrInvalidItemSnapshot
-	}
-	if it.TokenBlueprintID == "" {
-		return ErrInvalidItemSnapshot
-	}
-	if it.BrandID == "" {
-		return ErrInvalidItemSnapshot
-	}
-	if it.Qty != 1 {
-		return ErrInvalidItemSnapshot
-	}
-	if it.Price < 0 {
-		return ErrInvalidItemSnapshot
-	}
-	if it.Transferred && it.TransferredAt == nil {
-		return ErrInvalidItemSnapshot
-	}
-	if !it.Transferred && it.TransferredAt != nil {
-		return ErrInvalidItemSnapshot
-	}
-
-	return nil
-}
-
-func inferOrderItemType(it OrderItemSnapshot) OrderItemType {
-	switch it.Type {
-	case OrderItemTypeList, OrderItemTypeResale:
-		return it.Type
-	}
-
-	if it.ResaleID != "" || it.ProductID != "" {
-		return OrderItemTypeResale
-	}
-
-	if it.ModelID != "" || it.InventoryID != "" || it.ListID != "" {
-		return OrderItemTypeList
-	}
-
-	return ""
 }

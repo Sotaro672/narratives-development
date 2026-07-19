@@ -104,7 +104,6 @@ type Transfer struct {
 // repository query that resolves the successful transfer execution time.
 //
 // Firestore must use the correctly spelled "transferredAt" field.
-// Legacy spellings such as "transferedAt" are not supported.
 type ResolveTransferredAtByMintAddressResult struct {
 	ProductID     string    `json:"productId"`
 	Attempt       int       `json:"attempt"`

@@ -13,31 +13,10 @@ import (
 	udom "narratives/internal/domain/user"
 )
 
-// RepositoryPort 実装チェック
 var _ udom.RepositoryPort = (*UserRepositoryFS)(nil)
 
-// =====================================================
-// Firestore User Repository
-// =====================================================
-//
-// Single source of truth: domain/user/entity.go / repository_port.go
-//
-// - docId = uid (= user.ID)
-// - field keys:
-//   first_name, first_name_kana, last_name_kana, last_name
-//   createdAt, updatedAt
-//
-// - Create は users/{id} を新規作成する。既存なら ErrConflict
-// - Update は users/{id} を部分更新する。存在しなければ ErrNotFound
-// - Delete は users/{id} を削除する。存在しなければ ErrNotFound
-// - Upsert は RepositoryPort に無いため実装しない
-//
-// - first_name / first_name_kana / last_name_kana / last_name は任意
-// - nil / missing は "" として扱う
-// - 空文字は未入力状態として保存する
-// - 最大長のみ検証する
-// =====================================================
-
+// UserRepositoryFS implements the User persistence port with Firestore.
+// The document ID is the authenticated user ID.
 type UserRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -50,24 +29,33 @@ func (r *UserRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("users")
 }
 
-// --------------------
-// Read
-// --------------------
+// optionalUserName converts an optional input field to the value expected by
+// the User constructor. Validation remains the domain constructor's concern.
+func optionalUserName(value *string) string {
+	if value == nil {
+		return ""
+	}
 
-func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (*udom.User, error) {
+	return *value
+}
+
+func (r *UserRepositoryFS) GetByID(
+	ctx context.Context,
+	id string,
+) (*udom.User, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return nil, udom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return nil, udom.ErrNotFound
-	}
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, udom.ErrNotFound
+		}
+
 		return nil, err
 	}
 
@@ -79,24 +67,25 @@ func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (*udom.User, 
 	return &u, nil
 }
 
-// GetEmailByID returns users/{userID}.email for payment post-paid mail.
-//
-// RepositoryPort には含めない。
-// PaymentUsecase.UserRepoForPayment が要求する最小 contract 用。
-func (r *UserRepositoryFS) GetEmailByID(ctx context.Context, userID string) (string, error) {
+// GetEmailByID returns users/{userID}.email for payment notifications.
+// This method is used by the narrow payment-side reader contract.
+func (r *UserRepositoryFS) GetEmailByID(
+	ctx context.Context,
+	userID string,
+) (string, error) {
 	if r == nil || r.Client == nil {
 		return "", errors.New("firestore client is nil")
 	}
-
 	if userID == "" {
 		return "", udom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(userID).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return "", udom.ErrNotFound
-	}
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return "", udom.ErrNotFound
+		}
+
 		return "", err
 	}
 
@@ -105,12 +94,12 @@ func (r *UserRepositoryFS) GetEmailByID(ctx context.Context, userID string) (str
 		return "", udom.ErrNotFound
 	}
 
-	v, ok := data["email"]
-	if !ok {
+	value, exists := data["email"]
+	if !exists {
 		return "", nil
 	}
 
-	email, ok := v.(string)
+	email, ok := value.(string)
 	if !ok {
 		return "", nil
 	}
@@ -118,51 +107,24 @@ func (r *UserRepositoryFS) GetEmailByID(ctx context.Context, userID string) (str
 	return email, nil
 }
 
-// --------------------
-// Write
-// --------------------
-
-// Create creates users/{id}.
-// RepositoryPort contract:
-//
-//	Create(ctx context.Context, id string, in CreateUserInput) (*User, error)
-//
-// - id は caller が必ず渡す
-// - docId = uid
-// - 既存 document があれば ErrConflict
-// - CreatedAt / UpdatedAt が未指定なら repository 側で now を補完
-// - first_name / first_name_kana / last_name_kana / last_name は任意
-// - nil は "" として保存
-// - 空文字は未入力状態として保存
-// - 最大長超過のみ ErrInvalidXxx を返す
-func (r *UserRepositoryFS) Create(ctx context.Context, id string, in udom.CreateUserInput) (*udom.User, error) {
+// Create creates users/{id}. Optional name fields are converted to empty
+// strings and validated by the User domain constructor before persistence.
+func (r *UserRepositoryFS) Create(
+	ctx context.Context,
+	id string,
+	in udom.CreateUserInput,
+) (*udom.User, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return nil, udom.ErrInvalidID
 	}
 
-	firstName, err := optionalString(in.FirstName, udom.ErrInvalidFirstName)
-	if err != nil {
-		return nil, err
-	}
-
-	firstNameKana, err := optionalString(in.FirstNameKana, udom.ErrInvalidFirstNameKana)
-	if err != nil {
-		return nil, err
-	}
-
-	lastNameKana, err := optionalString(in.LastNameKana, udom.ErrInvalidLastNameKana)
-	if err != nil {
-		return nil, err
-	}
-
-	lastName, err := optionalString(in.LastName, udom.ErrInvalidLastName)
-	if err != nil {
-		return nil, err
-	}
+	firstName := optionalUserName(in.FirstName)
+	firstNameKana := optionalUserName(in.FirstNameKana)
+	lastNameKana := optionalUserName(in.LastNameKana)
+	lastName := optionalUserName(in.LastName)
 
 	now := time.Now().UTC()
 
@@ -199,7 +161,6 @@ func (r *UserRepositoryFS) Create(ctx context.Context, id string, in udom.Create
 	}
 
 	ref := r.col().Doc(id)
-
 	if _, err := ref.Create(ctx, data); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
 			return nil, udom.ErrConflict
@@ -211,26 +172,20 @@ func (r *UserRepositoryFS) Create(ctx context.Context, id string, in udom.Create
 	return r.GetByID(ctx, id)
 }
 
-// Update updates users/{id} partially.
-// RepositoryPort contract:
-//
-//	Update(ctx context.Context, id string, in UpdateUserInput) (*User, error)
-//
-// - nil は未指定
-// - 空文字は未入力状態として保存
-// - 最大長超過のみ ErrInvalidXxx を返す
-// - UpdatedAt が未指定なら repository 側で now を補完
-func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.UpdateUserInput) (*udom.User, error) {
+// Update partially updates users/{id}. A nil name field means no change.
+func (r *UserRepositoryFS) Update(
+	ctx context.Context,
+	id string,
+	in udom.UpdateUserInput,
+) (*udom.User, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return nil, udom.ErrInvalidID
 	}
 
 	ref := r.col().Doc(id)
-
 	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, udom.ErrNotFound
@@ -239,37 +194,55 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 		return nil, err
 	}
 
-	updates := make([]firestore.Update, 0)
+	updates := make([]firestore.Update, 0, 5)
 
-	setStringUpdate := func(path string, p *string, invalidErr error) error {
-		if p == nil {
+	setStringUpdate := func(
+		path string,
+		value *string,
+		invalidErr error,
+	) error {
+		if value == nil {
 			return nil
 		}
 
-		v := *p
-
-		if len([]rune(v)) > udom.MaxNameLength {
+		if len([]rune(*value)) > udom.MaxNameLength {
 			return invalidErr
 		}
 
 		updates = append(updates, firestore.Update{
 			Path:  path,
-			Value: v,
+			Value: *value,
 		})
 
 		return nil
 	}
 
-	if err := setStringUpdate("first_name", in.FirstName, udom.ErrInvalidFirstName); err != nil {
+	if err := setStringUpdate(
+		"first_name",
+		in.FirstName,
+		udom.ErrInvalidFirstName,
+	); err != nil {
 		return nil, err
 	}
-	if err := setStringUpdate("first_name_kana", in.FirstNameKana, udom.ErrInvalidFirstNameKana); err != nil {
+	if err := setStringUpdate(
+		"first_name_kana",
+		in.FirstNameKana,
+		udom.ErrInvalidFirstNameKana,
+	); err != nil {
 		return nil, err
 	}
-	if err := setStringUpdate("last_name_kana", in.LastNameKana, udom.ErrInvalidLastNameKana); err != nil {
+	if err := setStringUpdate(
+		"last_name_kana",
+		in.LastNameKana,
+		udom.ErrInvalidLastNameKana,
+	); err != nil {
 		return nil, err
 	}
-	if err := setStringUpdate("last_name", in.LastName, udom.ErrInvalidLastName); err != nil {
+	if err := setStringUpdate(
+		"last_name",
+		in.LastName,
+		udom.ErrInvalidLastName,
+	); err != nil {
 		return nil, err
 	}
 
@@ -294,21 +267,18 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 	return r.GetByID(ctx, id)
 }
 
-// Delete deletes users/{id}.
-// RepositoryPort contract:
-//
-//	Delete(ctx context.Context, id string) error
-func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
+func (r *UserRepositoryFS) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if r == nil || r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return udom.ErrInvalidID
 	}
 
 	ref := r.col().Doc(id)
-
 	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return udom.ErrNotFound
@@ -328,12 +298,10 @@ func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// --------------------
-// Firestore -> Domain
-// --------------------
-
-func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
-	if doc == nil {
+func docToUser(
+	doc *firestore.DocumentSnapshot,
+) (udom.User, error) {
+	if doc == nil || doc.Ref == nil || !doc.Exists() {
 		return udom.User{}, udom.ErrNotFound
 	}
 
@@ -343,31 +311,31 @@ func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 	}
 
 	getString := func(key string) string {
-		v, ok := data[key]
+		value, exists := data[key]
+		if !exists {
+			return ""
+		}
+
+		result, ok := value.(string)
 		if !ok {
 			return ""
 		}
 
-		s, ok := v.(string)
-		if !ok {
-			return ""
-		}
-
-		return s
+		return result
 	}
 
 	getTime := func(key string) time.Time {
-		v, ok := data[key]
+		value, exists := data[key]
+		if !exists {
+			return time.Time{}
+		}
+
+		result, ok := value.(time.Time)
 		if !ok {
 			return time.Time{}
 		}
 
-		t, ok := v.(time.Time)
-		if !ok {
-			return time.Time{}
-		}
-
-		return t.UTC()
+		return result.UTC()
 	}
 
 	return udom.New(
@@ -379,18 +347,4 @@ func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 		getTime("createdAt"),
 		getTime("updatedAt"),
 	)
-}
-
-func optionalString(p *string, invalidErr error) (string, error) {
-	if p == nil {
-		return "", nil
-	}
-
-	v := *p
-
-	if len([]rune(v)) > udom.MaxNameLength {
-		return "", invalidErr
-	}
-
-	return v, nil
 }

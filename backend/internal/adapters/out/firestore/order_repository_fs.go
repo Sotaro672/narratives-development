@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	firestorepb "cloud.google.com/go/firestore/apiv1/firestorepb"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,7 +20,17 @@ import (
 	orderdom "narratives/internal/domain/order"
 )
 
-// Firestore implementation of usecase.OrderRepo
+var (
+	ErrOrderRepositoryNotConfigured = errors.New(
+		"order_repository_fs: not configured",
+	)
+	ErrInvalidOrderDocumentData = errors.New(
+		"order_repository_fs: invalid order document data",
+	)
+)
+
+// OrderRepositoryFS is the Firestore implementation of orderdom.Repository.
+// Order writes and orderTransferItems projection writes share one transaction.
 type OrderRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -33,15 +45,26 @@ func (r *OrderRepositoryFS) ordersCol() *firestore.CollectionRef {
 	return r.Client.Collection("orders")
 }
 
-// ========================
-// RepositoryPort impl
-// ========================
+func (r *OrderRepositoryFS) orderTransferItemsCol() *firestore.CollectionRef {
+	return r.Client.Collection("orderTransferItems")
+}
 
-func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Order, error) {
-	if r.Client == nil {
-		return orderdom.Order{}, errors.New("firestore client is nil")
+func (r *OrderRepositoryFS) orderTransferItemDoc(
+	orderID string,
+	itemIndex int,
+) *firestore.DocumentRef {
+	return r.orderTransferItemsCol().Doc(
+		orderID + "__" + strconv.Itoa(itemIndex),
+	)
+}
+
+func (r *OrderRepositoryFS) GetByID(
+	ctx context.Context,
+	id string,
+) (orderdom.Order, error) {
+	if r == nil || r.Client == nil {
+		return orderdom.Order{}, ErrOrderRepositoryNotConfigured
 	}
-
 	if id == "" {
 		return orderdom.Order{}, orderdom.ErrNotFound
 	}
@@ -54,11 +77,7 @@ func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Or
 		return orderdom.Order{}, err
 	}
 
-	o, err := docToOrder(snap)
-	if err != nil {
-		return orderdom.Order{}, err
-	}
-	return o, nil
+	return docToOrder(snap)
 }
 
 func (r *OrderRepositoryFS) ListByAvatarID(
@@ -67,11 +86,17 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 	sort common.Sort,
 	page common.Page,
 ) (common.PageResult[orderdom.Order], error) {
-	if r.Client == nil {
-		return common.PageResult[orderdom.Order]{}, errors.New("firestore client is nil")
+	if r == nil || r.Client == nil {
+		return common.PageResult[orderdom.Order]{},
+			ErrOrderRepositoryNotConfigured
 	}
 
-	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	pageNum, perPage, offset := fscommon.NormalizePage(
+		page.Number,
+		page.PerPage,
+		50,
+		200,
+	)
 
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
@@ -84,37 +109,43 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 		}, nil
 	}
 
-	q := r.ordersCol().
+	baseQuery := r.ordersCol().
 		Where("avatarId", "==", avatarID)
 
-	q = applyOrderSort(q, sort)
-	q = q.Offset(offset).Limit(perPage)
+	total, err := countOrderQuery(ctx, baseQuery)
+	if err != nil {
+		return common.PageResult[orderdom.Order]{}, err
+	}
 
-	it := q.Documents(ctx)
-	defer it.Stop()
+	query := applyOrderSort(baseQuery, sort).
+		Offset(offset).
+		Limit(perPage)
+
+	iter := query.Documents(ctx)
+	defer iter.Stop()
 
 	items := make([]orderdom.Order, 0, perPage)
+
 	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
+		snap, err := iter.Next()
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
 			return common.PageResult[orderdom.Order]{}, err
 		}
 
-		o, err := docToOrder(doc)
+		order, err := docToOrder(snap)
 		if err != nil {
 			return common.PageResult[orderdom.Order]{}, err
 		}
-
-		// Firestore query already filters avatarId, but keep this as a defensive check.
-		if o.AvatarID == avatarID {
-			items = append(items, o)
+		if order.AvatarID != avatarID {
+			return common.PageResult[orderdom.Order]{},
+				ErrInvalidOrderDocumentData
 		}
-	}
 
-	total := len(items)
+		items = append(items, order)
+	}
 
 	return common.PageResult[orderdom.Order]{
 		Items:      items,
@@ -125,219 +156,45 @@ func (r *OrderRepositoryFS) ListByAvatarID(
 	}, nil
 }
 
-// ListTransferredByAvatarIDModelIDAndTransferredAt returns orders that contain
-// transferred items matching avatarId, modelId, and transferredAt.
-//
-// Query condition:
-// - order.avatarId == avatarID
-// - order.paid == true
-//
-// In-memory item filter:
-// - item.modelId == modelID
-// - item.transferred == true
-// - item.transferredAt == transferredAt
-//
-// Firestore cannot reliably query nested array map fields with this full condition,
-// so this repository queries by avatarId/paid first and filters order items here.
-func (r *OrderRepositoryFS) ListTransferredByAvatarIDModelIDAndTransferredAt(
+func (r *OrderRepositoryFS) Create(
 	ctx context.Context,
-	avatarID string,
-	modelID string,
-	transferredAt time.Time,
-	sort common.Sort,
-	page common.Page,
-) (common.PageResult[orderdom.Order], error) {
-	if r.Client == nil {
-		return common.PageResult[orderdom.Order]{}, errors.New("firestore client is nil")
+	o orderdom.Order,
+) (orderdom.Order, error) {
+	if r == nil || r.Client == nil {
+		return orderdom.Order{}, ErrOrderRepositoryNotConfigured
+	}
+	if err := o.Validate(); err != nil {
+		return orderdom.Order{}, err
 	}
 
-	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	orderRef := r.ordersCol().Doc(o.ID)
+	orderData := orderToDoc(o)
 
-	avatarID = strings.TrimSpace(avatarID)
-	modelID = strings.TrimSpace(modelID)
-	transferredAt = transferredAt.UTC()
-
-	if avatarID == "" || modelID == "" || transferredAt.IsZero() {
-		return common.PageResult[orderdom.Order]{
-			Items:      []orderdom.Order{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
+	projectionData, err := orderTransferItemDocuments(o)
+	if err != nil {
+		return orderdom.Order{}, err
 	}
 
-	q := r.ordersCol().
-		Where("avatarId", "==", avatarID).
-		Where("paid", "==", true)
-
-	q = applyOrderSort(q, sort)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	matched := make([]orderdom.Order, 0)
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return common.PageResult[orderdom.Order]{}, err
-		}
-		if doc == nil || doc.Ref == nil {
-			continue
-		}
-
-		o, err := docToOrder(doc)
-		if err != nil {
-			return common.PageResult[orderdom.Order]{}, err
-		}
-
-		// Firestore query already filters avatarId and paid,
-		// but keep these as defensive checks.
-		if o.AvatarID != avatarID {
-			continue
-		}
-		if !o.Paid {
-			continue
-		}
-
-		filteredItems := filterTransferredOrderItemsByModelIDAndTransferredAt(
-			o.Items,
-			modelID,
-			transferredAt,
-		)
-		if len(filteredItems) == 0 {
-			continue
-		}
-
-		o.Items = filteredItems
-		matched = append(matched, o)
-	}
-
-	total := len(matched)
-	paged := paginateOrders(matched, offset, perPage)
-
-	return common.PageResult[orderdom.Order]{
-		Items:      paged,
-		TotalCount: total,
-		TotalPages: fscommon.ComputeTotalPages(total, perPage),
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
-}
-
-// ListEligibleTransferItemsByAvatarID returns paid and untransferred order items for transfer verification.
-//
-// Query condition:
-// - order.avatarId == avatarID
-// - order.paid == true
-//
-// In-memory item filter:
-// - item.transferred == false
-//
-// list item:
-// - item.modelId is not empty
-// - item.inventoryId is not empty
-//
-// resale item:
-// - item.resaleId is not empty
-// - item.productId is not empty
-// - item.tokenBlueprintId is not empty
-func (r *OrderRepositoryFS) ListEligibleTransferItemsByAvatarID(
-	ctx context.Context,
-	avatarID string,
-) ([]orderdom.EligibleTransferItem, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	avatarID = strings.TrimSpace(avatarID)
-	if avatarID == "" {
-		return []orderdom.EligibleTransferItem{}, nil
-	}
-
-	it := r.ordersCol().
-		Where("avatarId", "==", avatarID).
-		Where("paid", "==", true).
-		Documents(ctx)
-	defer it.Stop()
-
-	out := make([]orderdom.EligibleTransferItem, 0)
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if doc == nil || doc.Ref == nil {
-			continue
-		}
-
-		o, err := docToOrder(doc)
-		if err != nil {
-			return nil, err
-		}
-
-		// Firestore query already filters avatarId and paid,
-		// but keep these as defensive checks.
-		if o.AvatarID != avatarID {
-			continue
-		}
-		if !o.Paid {
-			continue
-		}
-
-		for i, item := range o.Items {
-			eligible, ok := eligibleTransferItemFromOrderItem(o.ID, i, item)
-			if !ok {
-				continue
+	err = r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			if err := tx.Create(orderRef, orderData); err != nil {
+				return err
 			}
 
-			out = append(out, eligible)
-		}
-	}
+			for itemIndex, data := range projectionData {
+				ref := r.orderTransferItemDoc(o.ID, itemIndex)
+				if err := tx.Create(ref, data); err != nil {
+					return err
+				}
+			}
 
-	return out, nil
-}
-
-func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (orderdom.Order, error) {
-	if r.Client == nil {
-		return orderdom.Order{}, errors.New("firestore client is nil")
-	}
-
-	id := o.ID
-	now := time.Now().UTC()
-	if o.CreatedAt.IsZero() {
-		o.CreatedAt = now
-	}
-
-	// 起票時は必ず paid=false（orderレベル）
-	o.Paid = false
-
-	// item-level transferred defaults（安全側で初期化）
-	for i := range o.Items {
-		o.Items[i].Transferred = false
-		o.Items[i].TransferredAt = nil
-	}
-
-	var docRef *firestore.DocumentRef
-	if id == "" {
-		docRef = r.ordersCol().NewDoc()
-		o.ID = docRef.ID
-	} else {
-		docRef = r.ordersCol().Doc(id)
-		o.ID = id
-	}
-
-	data := orderToDoc(o)
-
-	_, err := docRef.Create(ctx, data)
+			return nil
+		},
+	)
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
 			return orderdom.Order{}, orderdom.ErrConflict
@@ -345,71 +202,131 @@ func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (order
 		return orderdom.Order{}, err
 	}
 
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return orderdom.Order{}, err
-	}
-	out, err := docToOrder(snap)
-	if err != nil {
-		return orderdom.Order{}, err
-	}
-	return out, nil
+	return o, nil
 }
 
-func (r *OrderRepositoryFS) Update(ctx context.Context, o orderdom.Order, _ *common.SaveOptions) (orderdom.Order, error) {
-	if r.Client == nil {
-		return orderdom.Order{}, errors.New("firestore client is nil")
+func (r *OrderRepositoryFS) Update(
+	ctx context.Context,
+	o orderdom.Order,
+	_ *common.SaveOptions,
+) (orderdom.Order, error) {
+	if r == nil || r.Client == nil {
+		return orderdom.Order{}, ErrOrderRepositoryNotConfigured
 	}
-
-	id := o.ID
-	if id == "" {
+	if o.ID == "" {
 		return orderdom.Order{}, orderdom.ErrNotFound
 	}
-
-	docRef := r.ordersCol().Doc(id)
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return orderdom.Order{}, orderdom.ErrNotFound
-		}
+	if err := o.Validate(); err != nil {
 		return orderdom.Order{}, err
 	}
 
-	o.ID = id
+	orderRef := r.ordersCol().Doc(o.ID)
+	orderData := orderToDoc(o)
 
-	// preserve CreatedAt if missing
-	if o.CreatedAt.IsZero() {
-		existing, err := docToOrder(snap)
-		if err != nil {
-			return orderdom.Order{}, err
-		}
-		if !existing.CreatedAt.IsZero() {
-			o.CreatedAt = existing.CreatedAt
-		}
-	}
-
-	if o.CreatedAt.IsZero() {
-		o.CreatedAt = time.Now().UTC()
-	}
-
-	data := orderToDoc(o)
-
-	_, err = docRef.Set(ctx, data, firestore.MergeAll)
+	newProjectionData, err := orderTransferItemDocuments(o)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
 
-	updatedSnap, err := docRef.Get(ctx)
+	now := time.Now().UTC()
+
+	err = r.Client.RunTransaction(
+		ctx,
+		func(
+			ctx context.Context,
+			tx *firestore.Transaction,
+		) error {
+			existingSnap, err := tx.Get(orderRef)
+			if err != nil {
+				if status.Code(err) == codes.NotFound {
+					return orderdom.ErrNotFound
+				}
+				return err
+			}
+
+			existingOrder, err := docToOrder(existingSnap)
+			if err != nil {
+				return err
+			}
+
+			existingProjections := make(
+				[]orderTransferItemProjection,
+				len(existingOrder.Items),
+			)
+
+			for itemIndex := range existingOrder.Items {
+				ref := r.orderTransferItemDoc(o.ID, itemIndex)
+
+				snap, err := tx.Get(ref)
+				if err != nil {
+					if status.Code(err) == codes.NotFound {
+						return ErrInvalidOrderTransferItemData
+					}
+					return err
+				}
+
+				projection, err :=
+					orderTransferItemFromSnapshot(snap)
+				if err != nil {
+					return err
+				}
+
+				existingProjections[itemIndex] = projection
+			}
+
+			for itemIndex, projection := range existingProjections {
+				locked :=
+					projection.TransferLockExpiresAt != nil &&
+						projection.TransferLockExpiresAt.After(now)
+
+				if !locked {
+					continue
+				}
+
+				if itemIndex >= len(o.Items) ||
+					o.AvatarID != projection.AvatarID ||
+					!o.Paid ||
+					o.Items[itemIndex].Transferred ||
+					!orderItemMatchesProjection(
+						o.Items[itemIndex],
+						projection,
+					) {
+					return ErrTransferItemLocked
+				}
+
+				newProjectionData[itemIndex]["transferLockedAt"] =
+					projection.TransferLockedAt.UTC()
+				newProjectionData[itemIndex]["transferLockExpiresAt"] =
+					projection.TransferLockExpiresAt.UTC()
+			}
+
+			if err := tx.Set(orderRef, orderData); err != nil {
+				return err
+			}
+
+			for itemIndex, data := range newProjectionData {
+				ref := r.orderTransferItemDoc(o.ID, itemIndex)
+				if err := tx.Set(ref, data); err != nil {
+					return err
+				}
+			}
+
+			for itemIndex := len(o.Items); itemIndex < len(existingOrder.Items); itemIndex++ {
+				ref := r.orderTransferItemDoc(o.ID, itemIndex)
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		},
+	)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
-	return docToOrder(updatedSnap)
+
+	return o, nil
 }
-
-// ========================
-// Firestore DTO
-// ========================
 
 type orderDoc struct {
 	UserID   string    `firestore:"userId"`
@@ -444,17 +361,14 @@ type paymentMethodSnapshotDoc struct {
 }
 
 type itemDoc struct {
-	Type string `firestore:"type,omitempty"`
+	Type string `firestore:"type"`
 
-	// list item identifiers
 	ModelID     string `firestore:"modelId,omitempty"`
 	InventoryID string `firestore:"inventoryId,omitempty"`
 	ListID      string `firestore:"listId,omitempty"`
 
-	// resale item identifiers
 	ResaleID string `firestore:"resaleId,omitempty"`
 
-	// product identifiers
 	ProductID          string `firestore:"productId,omitempty"`
 	ProductBlueprintID string `firestore:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `firestore:"tokenBlueprintId,omitempty"`
@@ -470,401 +384,516 @@ type itemDoc struct {
 	TransferredAt *time.Time `firestore:"transferredAt,omitempty"`
 }
 
-// ========================
-// Mapper
-// ========================
-
-// docToOrder converts a Firestore document snapshot to orderdom.Order (NEW schema only).
-// NEW schema:
-// - paid is on order root
-// - transferred/transferredAt are on each item (items[].transferred / items[].transferredAt)
-// - list item fields are stored on items[]
-// - resale item fields are stored on items[]
-func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
-	if doc == nil {
-		return orderdom.Order{}, fmt.Errorf("nil order document")
+func docToOrder(
+	snap *firestore.DocumentSnapshot,
+) (orderdom.Order, error) {
+	if snap == nil || snap.Ref == nil || !snap.Exists() {
+		return orderdom.Order{}, orderdom.ErrNotFound
 	}
 
-	var d orderDoc
-	if err := doc.DataTo(&d); err != nil {
+	if err := validateOrderDocumentShape(snap.Data()); err != nil {
+		return orderdom.Order{}, fmt.Errorf(
+			"order %s: %w",
+			snap.Ref.ID,
+			err,
+		)
+	}
+
+	var doc orderDoc
+	if err := snap.DataTo(&doc); err != nil {
 		return orderdom.Order{}, err
 	}
 
-	items := make([]orderdom.OrderItemSnapshot, 0, len(d.Items))
-	for _, it := range d.Items {
+	items := make(
+		[]orderdom.OrderItemSnapshot,
+		0,
+		len(doc.Items),
+	)
+
+	for _, item := range doc.Items {
 		var transferredAt *time.Time
-		if it.TransferredAt != nil && !it.TransferredAt.IsZero() {
-			t := it.TransferredAt.UTC()
-			transferredAt = &t
+		if item.TransferredAt != nil {
+			value := item.TransferredAt.UTC()
+			transferredAt = &value
 		}
 
-		itemType := orderdom.OrderItemType(strings.TrimSpace(it.Type))
+		items = append(
+			items,
+			orderdom.OrderItemSnapshot{
+				Type: orderdom.OrderItemType(item.Type),
 
-		items = append(items, orderdom.OrderItemSnapshot{
-			Type: itemType,
+				ModelID:     item.ModelID,
+				InventoryID: item.InventoryID,
+				ListID:      item.ListID,
 
-			ModelID:     strings.TrimSpace(it.ModelID),
-			InventoryID: strings.TrimSpace(it.InventoryID),
-			ListID:      strings.TrimSpace(it.ListID),
+				ResaleID: item.ResaleID,
 
-			ResaleID: strings.TrimSpace(it.ResaleID),
+				ProductID:          item.ProductID,
+				ProductBlueprintID: item.ProductBlueprintID,
+				TokenBlueprintID:   item.TokenBlueprintID,
+				BrandID:            item.BrandID,
 
-			ProductID:          strings.TrimSpace(it.ProductID),
-			ProductBlueprintID: strings.TrimSpace(it.ProductBlueprintID),
-			TokenBlueprintID:   strings.TrimSpace(it.TokenBlueprintID),
-			BrandID:            strings.TrimSpace(it.BrandID),
+				Qty:   item.Qty,
+				Price: item.Price,
 
-			Qty:           it.Qty,
-			Price:         it.Price,
-			IsCanceled:    it.IsCanceled,
-			IsDispatched:  it.IsDispatched,
-			Transferred:   it.Transferred,
-			TransferredAt: transferredAt,
-		})
+				IsCanceled:   item.IsCanceled,
+				IsDispatched: item.IsDispatched,
+
+				Transferred:   item.Transferred,
+				TransferredAt: transferredAt,
+			},
+		)
 	}
 
-	o := orderdom.Order{
-		ID:       doc.Ref.ID,
-		UserID:   d.UserID,
-		AvatarID: d.AvatarID,
-		CartID:   d.CartID,
+	order := orderdom.Order{
+		ID:       snap.Ref.ID,
+		UserID:   doc.UserID,
+		AvatarID: doc.AvatarID,
+		CartID:   doc.CartID,
 
 		ShippingSnapshot: orderdom.ShippingSnapshot{
-			ZipCode: d.ShippingSnapshot.ZipCode,
-			State:   d.ShippingSnapshot.State,
-			City:    d.ShippingSnapshot.City,
-			Street:  d.ShippingSnapshot.Street,
-			Street2: d.ShippingSnapshot.Street2,
-			Country: d.ShippingSnapshot.Country,
+			ZipCode: doc.ShippingSnapshot.ZipCode,
+			State:   doc.ShippingSnapshot.State,
+			City:    doc.ShippingSnapshot.City,
+			Street:  doc.ShippingSnapshot.Street,
+			Street2: doc.ShippingSnapshot.Street2,
+			Country: doc.ShippingSnapshot.Country,
 		},
+
 		PaymentMethodSnapshot: orderdom.PaymentMethodSnapshot{
-			CustomerID:     d.PaymentMethodSnapshot.CustomerID,
-			Brand:          d.PaymentMethodSnapshot.Brand,
-			Last4:          d.PaymentMethodSnapshot.Last4,
-			ExpMonth:       d.PaymentMethodSnapshot.ExpMonth,
-			ExpYear:        d.PaymentMethodSnapshot.ExpYear,
-			CardholderName: d.PaymentMethodSnapshot.CardholderName,
-			IsDefault:      d.PaymentMethodSnapshot.IsDefault,
+			CustomerID:     doc.PaymentMethodSnapshot.CustomerID,
+			Brand:          doc.PaymentMethodSnapshot.Brand,
+			Last4:          doc.PaymentMethodSnapshot.Last4,
+			ExpMonth:       doc.PaymentMethodSnapshot.ExpMonth,
+			ExpYear:        doc.PaymentMethodSnapshot.ExpYear,
+			CardholderName: doc.PaymentMethodSnapshot.CardholderName,
+			IsDefault:      doc.PaymentMethodSnapshot.IsDefault,
 		},
 
-		Paid:      d.Paid,
+		Paid:      doc.Paid,
 		Items:     items,
-		CreatedAt: d.CreatedAt.UTC(),
+		CreatedAt: doc.CreatedAt.UTC(),
 	}
 
-	if err := validateDecodedOrder(o); err != nil {
-		return orderdom.Order{}, fmt.Errorf("order %s: %w", doc.Ref.ID, err)
+	if err := order.Validate(); err != nil {
+		return orderdom.Order{}, fmt.Errorf(
+			"order %s: %w",
+			snap.Ref.ID,
+			err,
+		)
 	}
 
-	return o, nil
+	return order, nil
 }
 
-func validateDecodedOrder(o orderdom.Order) error {
-	if o.AvatarID == "" {
-		return fmt.Errorf("missing avatarId")
-	}
-	if o.ShippingSnapshot.State == "" ||
-		o.ShippingSnapshot.City == "" ||
-		o.ShippingSnapshot.Street == "" ||
-		o.ShippingSnapshot.Country == "" {
-		return fmt.Errorf("missing shippingSnapshot")
-	}
-	if o.PaymentMethodSnapshot.CustomerID == "" ||
-		o.PaymentMethodSnapshot.Brand == "" ||
-		o.PaymentMethodSnapshot.Last4 == "" ||
-		o.PaymentMethodSnapshot.ExpMonth < 1 ||
-		o.PaymentMethodSnapshot.ExpMonth > 12 ||
-		o.PaymentMethodSnapshot.ExpYear < 2000 ||
-		o.PaymentMethodSnapshot.ExpYear > 9999 ||
-		o.PaymentMethodSnapshot.CardholderName == "" {
-		return fmt.Errorf("missing paymentMethodSnapshot")
-	}
-	if len(o.Items) == 0 {
-		return fmt.Errorf("missing items")
-	}
-	return nil
-}
-
-// orderToDoc converts orderdom.Order into a Firestore-storable map (NEW schema only).
-// NEW schema:
-// - paid is on order root
-// - transferred/transferredAt are on each item (items[].transferred / items[].transferredAt)
-// - list item fields are stored on items[]
-// - resale item fields are stored on items[]
 func orderToDoc(o orderdom.Order) map[string]any {
-	ship := map[string]any{
-		"zipCode": o.ShippingSnapshot.ZipCode,
-		"state":   o.ShippingSnapshot.State,
-		"city":    o.ShippingSnapshot.City,
-		"street":  o.ShippingSnapshot.Street,
-		"street2": o.ShippingSnapshot.Street2,
-		"country": o.ShippingSnapshot.Country,
-	}
-	paymentMethod := map[string]any{
-		"customerId":     o.PaymentMethodSnapshot.CustomerID,
-		"brand":          o.PaymentMethodSnapshot.Brand,
-		"last4":          o.PaymentMethodSnapshot.Last4,
-		"expMonth":       o.PaymentMethodSnapshot.ExpMonth,
-		"expYear":        o.PaymentMethodSnapshot.ExpYear,
-		"cardholderName": o.PaymentMethodSnapshot.CardholderName,
-		"isDefault":      o.PaymentMethodSnapshot.IsDefault,
-	}
-
 	items := make([]map[string]any, 0, len(o.Items))
-	for _, it := range o.Items {
-		im := orderItemToDocMap(it)
-		items = append(items, im)
+	for _, item := range o.Items {
+		items = append(items, orderItemToDocMap(item))
 	}
 
-	m := map[string]any{
+	return map[string]any{
 		"userId":   o.UserID,
 		"avatarId": o.AvatarID,
 		"cartId":   o.CartID,
 
-		"shippingSnapshot":      ship,
-		"paymentMethodSnapshot": paymentMethod,
+		"shippingSnapshot": map[string]any{
+			"zipCode": o.ShippingSnapshot.ZipCode,
+			"state":   o.ShippingSnapshot.State,
+			"city":    o.ShippingSnapshot.City,
+			"street":  o.ShippingSnapshot.Street,
+			"street2": o.ShippingSnapshot.Street2,
+			"country": o.ShippingSnapshot.Country,
+		},
 
-		"paid": o.Paid,
+		"paymentMethodSnapshot": map[string]any{
+			"customerId":     o.PaymentMethodSnapshot.CustomerID,
+			"brand":          o.PaymentMethodSnapshot.Brand,
+			"last4":          o.PaymentMethodSnapshot.Last4,
+			"expMonth":       o.PaymentMethodSnapshot.ExpMonth,
+			"expYear":        o.PaymentMethodSnapshot.ExpYear,
+			"cardholderName": o.PaymentMethodSnapshot.CardholderName,
+			"isDefault":      o.PaymentMethodSnapshot.IsDefault,
+		},
 
-		"items": items,
+		"paid":      o.Paid,
+		"items":     items,
+		"createdAt": o.CreatedAt.UTC(),
 	}
-
-	if !o.CreatedAt.IsZero() {
-		m["createdAt"] = o.CreatedAt.UTC()
-	}
-
-	return m
 }
 
-func orderItemToDocMap(it orderdom.OrderItemSnapshot) map[string]any {
-	itemType := inferOrderDocItemType(it)
-
-	im := map[string]any{
-		"qty":          it.Qty,
-		"price":        it.Price,
-		"isCanceled":   it.IsCanceled,
-		"isDispatched": it.IsDispatched,
-		"transferred":  it.Transferred,
+func orderItemToDocMap(
+	item orderdom.OrderItemSnapshot,
+) map[string]any {
+	doc := map[string]any{
+		"type":         string(item.Type),
+		"qty":          item.Qty,
+		"price":        item.Price,
+		"isCanceled":   item.IsCanceled,
+		"isDispatched": item.IsDispatched,
+		"transferred":  item.Transferred,
 	}
 
-	if itemType != "" {
-		im["type"] = string(itemType)
-	}
-
-	switch itemType {
-	case orderdom.OrderItemTypeResale:
-		im["resaleId"] = strings.TrimSpace(it.ResaleID)
-		im["productId"] = strings.TrimSpace(it.ProductID)
-		im["productBlueprintId"] = strings.TrimSpace(it.ProductBlueprintID)
-		im["tokenBlueprintId"] = strings.TrimSpace(it.TokenBlueprintID)
-		im["brandId"] = strings.TrimSpace(it.BrandID)
-
+	switch item.Type {
 	case orderdom.OrderItemTypeList:
-		im["modelId"] = strings.TrimSpace(it.ModelID)
-		im["inventoryId"] = strings.TrimSpace(it.InventoryID)
-		im["listId"] = strings.TrimSpace(it.ListID)
+		doc["modelId"] = item.ModelID
+		doc["inventoryId"] = item.InventoryID
+		doc["listId"] = item.ListID
+		doc["productBlueprintId"] =
+			item.ProductBlueprintID
+		doc["tokenBlueprintId"] =
+			item.TokenBlueprintID
+
+	case orderdom.OrderItemTypeResale:
+		doc["resaleId"] = item.ResaleID
+		doc["productId"] = item.ProductID
+		doc["productBlueprintId"] =
+			item.ProductBlueprintID
+		doc["tokenBlueprintId"] =
+			item.TokenBlueprintID
+		doc["brandId"] = item.BrandID
+	}
+
+	if item.Transferred && item.TransferredAt != nil {
+		doc["transferredAt"] =
+			item.TransferredAt.UTC()
+	}
+
+	return doc
+}
+
+func orderTransferItemDocuments(
+	o orderdom.Order,
+) ([]map[string]any, error) {
+	documents := make(
+		[]map[string]any,
+		0,
+		len(o.Items),
+	)
+
+	for itemIndex, item := range o.Items {
+		eligible := orderdom.EligibleTransferItem{
+			OrderID:   o.ID,
+			ItemType:  item.Type,
+			ItemIndex: itemIndex,
+
+			ModelID:     item.ModelID,
+			InventoryID: item.InventoryID,
+			ListID:      item.ListID,
+
+			ResaleID: item.ResaleID,
+
+			ProductID:          item.ProductID,
+			ProductBlueprintID: item.ProductBlueprintID,
+			TokenBlueprintID:   item.TokenBlueprintID,
+			BrandID:            item.BrandID,
+		}
+
+		if err := eligible.Validate(); err != nil {
+			return nil, fmt.Errorf(
+				"order %s item %d: %w",
+				o.ID,
+				itemIndex,
+				err,
+			)
+		}
+
+		doc := map[string]any{
+			"orderId":     o.ID,
+			"avatarId":    o.AvatarID,
+			"itemType":    string(item.Type),
+			"itemIndex":   itemIndex,
+			"paid":        o.Paid,
+			"transferred": item.Transferred,
+			"createdAt":   o.CreatedAt.UTC(),
+		}
+
+		switch item.Type {
+		case orderdom.OrderItemTypeList:
+			doc["modelId"] = item.ModelID
+			doc["inventoryId"] = item.InventoryID
+			doc["listId"] = item.ListID
+			doc["productBlueprintId"] =
+				item.ProductBlueprintID
+			doc["tokenBlueprintId"] =
+				item.TokenBlueprintID
+
+		case orderdom.OrderItemTypeResale:
+			doc["resaleId"] = item.ResaleID
+			doc["productId"] = item.ProductID
+			doc["productBlueprintId"] =
+				item.ProductBlueprintID
+			doc["tokenBlueprintId"] =
+				item.TokenBlueprintID
+			doc["brandId"] = item.BrandID
+		}
+
+		if item.Transferred &&
+			item.TransferredAt != nil {
+			doc["transferredAt"] =
+				item.TransferredAt.UTC()
+		}
+
+		documents = append(documents, doc)
+	}
+
+	return documents, nil
+}
+
+func validateOrderDocumentShape(
+	raw map[string]any,
+) error {
+	if raw == nil {
+		return ErrInvalidOrderDocumentData
+	}
+
+	if _, ok := requiredOrderString(raw, "userId"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+	if _, ok := requiredOrderString(raw, "avatarId"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+	if _, ok := requiredOrderString(raw, "cartId"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+	if _, ok := requiredOrderBool(raw, "paid"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+
+	createdAt, ok := requiredOrderTime(raw, "createdAt")
+	if !ok || createdAt.IsZero() {
+		return ErrInvalidOrderDocumentData
+	}
+
+	rawItems, ok := raw["items"].([]any)
+	if !ok || len(rawItems) == 0 {
+		return ErrInvalidOrderDocumentData
+	}
+
+	for _, rawItem := range rawItems {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			return ErrInvalidOrderDocumentData
+		}
+
+		if err := validateOrderItemDocumentShape(item); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateOrderItemDocumentShape(
+	raw map[string]any,
+) error {
+	itemType, ok := requiredOrderString(raw, "type")
+	if !ok {
+		return ErrInvalidOrderDocumentData
+	}
+
+	if _, ok := requiredOrderInt(raw, "qty"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+	if _, ok := requiredOrderInt(raw, "price"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+	if _, ok := requiredOrderBool(raw, "isCanceled"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+	if _, ok := requiredOrderBool(raw, "isDispatched"); !ok {
+		return ErrInvalidOrderDocumentData
+	}
+
+	transferred, ok :=
+		requiredOrderBool(raw, "transferred")
+	if !ok {
+		return ErrInvalidOrderDocumentData
+	}
+
+	_, transferredAtExists, err :=
+		optionalOrderTime(raw, "transferredAt")
+	if err != nil ||
+		transferred != transferredAtExists {
+		return ErrInvalidOrderDocumentData
+	}
+
+	switch orderdom.OrderItemType(itemType) {
+	case orderdom.OrderItemTypeList:
+		for _, field := range []string{
+			"modelId",
+			"inventoryId",
+			"listId",
+			"productBlueprintId",
+			"tokenBlueprintId",
+		} {
+			if _, ok := requiredOrderString(raw, field); !ok {
+				return ErrInvalidOrderDocumentData
+			}
+		}
+
+	case orderdom.OrderItemTypeResale:
+		for _, field := range []string{
+			"resaleId",
+			"productId",
+			"productBlueprintId",
+			"tokenBlueprintId",
+			"brandId",
+		} {
+			if _, ok := requiredOrderString(raw, field); !ok {
+				return ErrInvalidOrderDocumentData
+			}
+		}
 
 	default:
-		// Keep all known identifier fields for malformed or future-compatible data
-		// instead of silently discarding them.
-		im["modelId"] = strings.TrimSpace(it.ModelID)
-		im["inventoryId"] = strings.TrimSpace(it.InventoryID)
-		im["listId"] = strings.TrimSpace(it.ListID)
-		im["resaleId"] = strings.TrimSpace(it.ResaleID)
-		im["productId"] = strings.TrimSpace(it.ProductID)
-		im["productBlueprintId"] = strings.TrimSpace(it.ProductBlueprintID)
-		im["tokenBlueprintId"] = strings.TrimSpace(it.TokenBlueprintID)
-		im["brandId"] = strings.TrimSpace(it.BrandID)
+		return ErrInvalidOrderDocumentData
 	}
 
-	if it.Transferred && it.TransferredAt != nil && !it.TransferredAt.IsZero() {
-		im["transferredAt"] = it.TransferredAt.UTC()
-	}
-
-	return im
+	return nil
 }
 
-func inferOrderDocItemType(it orderdom.OrderItemSnapshot) orderdom.OrderItemType {
-	switch it.Type {
-	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
-		return it.Type
+func requiredOrderString(
+	raw map[string]any,
+	field string,
+) (string, bool) {
+	value, exists := raw[field]
+	if !exists || value == nil {
+		return "", false
 	}
 
-	if strings.TrimSpace(it.ResaleID) != "" || strings.TrimSpace(it.ProductID) != "" {
-		return orderdom.OrderItemTypeResale
-	}
-
-	if strings.TrimSpace(it.ModelID) != "" ||
-		strings.TrimSpace(it.InventoryID) != "" ||
-		strings.TrimSpace(it.ListID) != "" {
-		return orderdom.OrderItemTypeList
-	}
-
-	return ""
+	result, ok := value.(string)
+	return result, ok && result != ""
 }
 
-// ========================
-// Query helpers
-// ========================
-
-func eligibleTransferItemFromOrderItem(
-	orderID string,
-	itemIndex int,
-	item orderdom.OrderItemSnapshot,
-) (orderdom.EligibleTransferItem, bool) {
-	if item.Transferred {
-		return orderdom.EligibleTransferItem{}, false
+func requiredOrderBool(
+	raw map[string]any,
+	field string,
+) (bool, bool) {
+	value, exists := raw[field]
+	if !exists || value == nil {
+		return false, false
 	}
 
-	itemType := inferOrderDocItemType(item)
+	result, ok := value.(bool)
+	return result, ok
+}
 
-	switch itemType {
-	case orderdom.OrderItemTypeResale:
-		return eligibleResaleTransferItem(orderID, itemIndex, item)
+func requiredOrderInt(
+	raw map[string]any,
+	field string,
+) (int, bool) {
+	value, exists := raw[field]
+	if !exists || value == nil {
+		return 0, false
+	}
 
-	case orderdom.OrderItemTypeList:
-		return eligibleListTransferItem(orderID, itemIndex, item)
+	switch result := value.(type) {
+	case int:
+		return result, true
+
+	case int64:
+		return int(result), true
 
 	default:
-		return orderdom.EligibleTransferItem{}, false
+		return 0, false
 	}
 }
 
-func eligibleListTransferItem(
-	orderID string,
-	itemIndex int,
-	item orderdom.OrderItemSnapshot,
-) (orderdom.EligibleTransferItem, bool) {
-	modelID := strings.TrimSpace(item.ModelID)
-	inventoryID := strings.TrimSpace(item.InventoryID)
-
-	if modelID == "" || inventoryID == "" {
-		return orderdom.EligibleTransferItem{}, false
+func requiredOrderTime(
+	raw map[string]any,
+	field string,
+) (time.Time, bool) {
+	value, exists := raw[field]
+	if !exists || value == nil {
+		return time.Time{}, false
 	}
 
-	itemKey := "list:" + modelID
-
-	return orderdom.EligibleTransferItem{
-		OrderID: orderID,
-
-		ItemKey:   itemKey,
-		ItemType:  orderdom.OrderItemTypeList,
-		ItemIndex: itemIndex,
-
-		ModelID:     modelID,
-		InventoryID: inventoryID,
-		ListID:      strings.TrimSpace(item.ListID),
-
-		ProductID:          strings.TrimSpace(item.ProductID),
-		ProductBlueprintID: strings.TrimSpace(item.ProductBlueprintID),
-		TokenBlueprintID:   strings.TrimSpace(item.TokenBlueprintID),
-		BrandID:            strings.TrimSpace(item.BrandID),
-	}, true
+	result, ok := value.(time.Time)
+	return result, ok && !result.IsZero()
 }
 
-func eligibleResaleTransferItem(
-	orderID string,
-	itemIndex int,
-	item orderdom.OrderItemSnapshot,
-) (orderdom.EligibleTransferItem, bool) {
-	resaleID := strings.TrimSpace(item.ResaleID)
-	productID := strings.TrimSpace(item.ProductID)
-	tokenBlueprintID := strings.TrimSpace(item.TokenBlueprintID)
-
-	if resaleID == "" || productID == "" || tokenBlueprintID == "" {
-		return orderdom.EligibleTransferItem{}, false
+func optionalOrderTime(
+	raw map[string]any,
+	field string,
+) (time.Time, bool, error) {
+	value, exists := raw[field]
+	if !exists || value == nil {
+		return time.Time{}, false, nil
 	}
 
-	itemKey := "resale:" + resaleID
+	result, ok := value.(time.Time)
+	if !ok || result.IsZero() {
+		return time.Time{},
+			false,
+			ErrInvalidOrderDocumentData
+	}
 
-	return orderdom.EligibleTransferItem{
-		OrderID: orderID,
-
-		ItemKey:   itemKey,
-		ItemType:  orderdom.OrderItemTypeResale,
-		ItemIndex: itemIndex,
-
-		ResaleID: resaleID,
-
-		ProductID:          productID,
-		ProductBlueprintID: strings.TrimSpace(item.ProductBlueprintID),
-		TokenBlueprintID:   tokenBlueprintID,
-		BrandID:            strings.TrimSpace(item.BrandID),
-	}, true
+	return result.UTC(), true, nil
 }
 
-func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
-	dir := firestore.Desc
+const orderCountAlias = "total"
+
+func countOrderQuery(
+	ctx context.Context,
+	query firestore.Query,
+) (int, error) {
+	result, err := query.
+		NewAggregationQuery().
+		WithCount(orderCountAlias).
+		Get(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	rawCount, ok := result[orderCountAlias]
+	if !ok {
+		return 0, errors.New(
+			"firestore: order count result is missing",
+		)
+	}
+
+	countValue, ok := rawCount.(*firestorepb.Value)
+	if !ok || countValue == nil {
+		return 0, fmt.Errorf(
+			"firestore: invalid order count result type %T",
+			rawCount,
+		)
+	}
+
+	count64 := countValue.GetIntegerValue()
+	if count64 < 0 {
+		return 0, fmt.Errorf(
+			"firestore: invalid negative order count: %d",
+			count64,
+		)
+	}
+
+	total := int(count64)
+	if int64(total) != count64 {
+		return 0, fmt.Errorf(
+			"firestore: order count overflows int: %d",
+			count64,
+		)
+	}
+
+	return total, nil
+}
+
+func applyOrderSort(
+	query firestore.Query,
+	sort common.Sort,
+) firestore.Query {
+	direction := firestore.Desc
 	if sort.Order == common.SortAsc {
-		dir = firestore.Asc
+		direction = firestore.Asc
 	}
 
-	// absolute source of truth: createdAt only
-	if sort.Column != "" && sort.Column != "createdAt" {
-		return q.OrderBy("createdAt", firestore.Desc).
-			OrderBy(firestore.DocumentID, firestore.Desc)
+	if sort.Column != "" &&
+		sort.Column != orderdom.SortByCreatedAt {
+		direction = firestore.Desc
 	}
 
-	return q.OrderBy("createdAt", dir).
-		OrderBy(firestore.DocumentID, dir)
-}
-
-func filterTransferredOrderItemsByModelIDAndTransferredAt(
-	items []orderdom.OrderItemSnapshot,
-	modelID string,
-	transferredAt time.Time,
-) []orderdom.OrderItemSnapshot {
-	modelID = strings.TrimSpace(modelID)
-	if modelID == "" || transferredAt.IsZero() || len(items) == 0 {
-		return []orderdom.OrderItemSnapshot{}
-	}
-
-	expected := transferredAt.UTC()
-
-	out := make([]orderdom.OrderItemSnapshot, 0, len(items))
-	for _, item := range items {
-		if item.ModelID != modelID {
-			continue
-		}
-		if !item.Transferred {
-			continue
-		}
-		if item.TransferredAt == nil || item.TransferredAt.IsZero() {
-			continue
-		}
-
-		actual := item.TransferredAt.UTC()
-		if !actual.Equal(expected) {
-			continue
-		}
-
-		out = append(out, item)
-	}
-
-	return out
-}
-
-func paginateOrders(items []orderdom.Order, offset int, perPage int) []orderdom.Order {
-	if len(items) == 0 {
-		return []orderdom.Order{}
-	}
-
-	if perPage <= 0 {
-		perPage = len(items)
-	}
-
-	if offset < 0 {
-		offset = 0
-	}
-
-	if offset >= len(items) {
-		return []orderdom.Order{}
-	}
-
-	end := offset + perPage
-	if end > len(items) {
-		end = len(items)
-	}
-
-	return items[offset:end]
+	return query.
+		OrderBy(orderdom.SortByCreatedAt, direction).
+		OrderBy(firestore.DocumentID, direction)
 }

@@ -56,10 +56,17 @@ type usecases struct {
 	authBootstrapSvc *uc.BootstrapService
 }
 
-func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases {
+func buildUsecases(
+	c *clients,
+	r *repos,
+	s *services,
+	res *resolvers,
+) *usecases {
 	var tokenUC *uc.TokenUsecase
 	if c.infra.MintAuthorityKey != nil {
-		solanaClient := solanainfra.NewMintClient(c.infra.MintAuthorityKey)
+		solanaClient := solanainfra.NewMintClient(
+			c.infra.MintAuthorityKey,
+		)
 		tokenUC = uc.NewTokenUsecase(solanaClient)
 	} else {
 		tokenUC = uc.NewTokenUsecase(nil)
@@ -67,8 +74,10 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
 
-	announcementAvatarRepo := fsrepo.NewAnnouncementAvatarRepositoryFS(c.fsClient)
-	announcementAttachmentRepo := fsrepo.NewAnnouncementAttachmentRepositoryFS(c.fsClient)
+	announcementAvatarRepo :=
+		fsrepo.NewAnnouncementAvatarRepositoryFS(c.fsClient)
+	announcementAttachmentRepo :=
+		fsrepo.NewAnnouncementAttachmentRepositoryFS(c.fsClient)
 
 	announcementUC := uc.NewAnnouncementUsecase(
 		r.announcementRepo,
@@ -76,8 +85,14 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		announcementAttachmentRepo,
 	)
 
-	brandWalletSvc := solanainfra.NewBrandWalletService(c.firestoreProjectID)
-	avatarWalletSvc := solanainfra.NewAvatarWalletService(c.firestoreProjectID)
+	brandWalletSvc :=
+		solanainfra.NewBrandWalletService(
+			c.firestoreProjectID,
+		)
+	avatarWalletSvc :=
+		solanainfra.NewAvatarWalletService(
+			c.firestoreProjectID,
+		)
 
 	avatarUC := uc.NewAvatarUsecase(
 		r.avatarRepo,
@@ -100,7 +115,8 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	companyUC := uc.NewCompanyUsecase(r.companyRepo)
 
-	inquiryReplyRepo := fsrepo.NewInquiryReplyRepositoryFS(c.fsClient)
+	inquiryReplyRepo :=
+		fsrepo.NewInquiryReplyRepositoryFS(c.fsClient)
 
 	inquiryUC := uc.NewInquiryUsecase(
 		r.inquiryRepo,
@@ -112,16 +128,21 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		nil,
 	)
 
-	inventoryUC := uc.NewInventoryUsecase(r.inventoryRepo)
+	inventoryUC := uc.NewInventoryUsecase(
+		r.inventoryRepo,
+	)
 	if r.productRepo != nil {
-		if resolver, ok := any(r.productRepo).(uc.ProductModelResolver); ok {
+		if resolver, ok :=
+			any(r.productRepo).(uc.ProductModelResolver); ok {
 			inventoryUC.WithProductModelResolver(resolver)
 		}
 	}
 
-	paymentUC := uc.NewPaymentUsecase(uc.NewPaymentUsecaseInput{
-		PaymentRepo: r.paymentRepo,
-	})
+	paymentUC := uc.NewPaymentUsecase(
+		uc.NewPaymentUsecaseInput{
+			PaymentRepo: r.paymentRepo,
+		},
+	)
 
 	listUC := uc.NewListUsecase(
 		r.listRepoFS,
@@ -133,9 +154,17 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.productBlueprintRepo,
 	)
 
-	orderUC := uc.NewOrderUsecase(r.orderRepo, r.cartRepo)
+	orderUC := uc.NewOrderUsecase(
+		r.orderRepo,
+		r.listRepoFS,
+		r.inventoryRepo,
+		r.resaleRepo,
+		r.paymentMethodRepo,
+	)
 
-	permissionUC := uc.NewPermissionUsecase(r.permissionRepo)
+	permissionUC := uc.NewPermissionUsecase(
+		r.permissionRepo,
+	)
 
 	printUC := uc.NewPrintUsecase(
 		r.productionRepo,
@@ -154,9 +183,10 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		r.productBlueprintReviewRepo,
 	)
 
-	productBlueprintCategoryUC := uc.NewProductBlueprintCategoryUsecase(
-		r.productBlueprintCategoryRepo,
-	)
+	productBlueprintCategoryUC :=
+		uc.NewProductBlueprintCategoryUsecase(
+			r.productBlueprintCategoryRepo,
+		)
 
 	inspectionUC := uc.NewInspectionUsecase(
 		r.inspectionRepo,
@@ -173,7 +203,7 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	mintUC.SetInventoryUsecase(inventoryUC)
 
-	// 1件ずつmintするための task repository / token保存 recorder を注入します。
+	// 1件ずつmintするための task repository / token保存recorder を注入します。
 	//
 	// r.mintRepo は firestore.MintRepositoryFS を想定しており、以下を実装しています。
 	// - mint.MintRepository
@@ -181,31 +211,40 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 	// - usecase.MintRequestPort
 	// - usecase.MintProductMintRecorder
 	//
-	// これが未注入だと、UpdateRequestInfo 内で
-	// "mint task repo is nil" になり、productId単位の task を作成できません。
+	// これが未注入だと、UpdateRequestInfo内で
+	// "mint task repo is nil" となり、productId単位のtaskを作成できません。
 	mintUC.SetMintTaskRepository(r.mintRepo)
 	mintUC.SetMintProductMintRecorder(r.mintRepo)
 
-	// Cloud Tasks へ「次の1件mint処理」を投入する enqueuer を注入します。
+	// Cloud Tasksへ「次の1件mint処理」を投入するenqueuerを注入します。
 	//
-	// 必須環境変数:
+	// 必要環境変数:
 	// - CLOUD_TASKS_PROJECT_ID
 	// - CLOUD_TASKS_LOCATION
 	// - CLOUD_TASKS_QUEUE_ID
 	// - INTERNAL_BASE_URL
 	// - CLOUD_TASKS_SERVICE_ACCOUNT
 	//
-	// ここが未注入だと、mint request / product tasks は QUEUED になりますが、
+	// ここが未注入だと、mint request / product tasks はQUEUEDになっても
 	// 自動で /internal/mint/tasks/{mintID}/execute が呼ばれません。
-	if mintTaskQueue, err := cloudtasksadp.NewMintTaskQueueFromEnv(context.Background()); err == nil && mintTaskQueue != nil {
+	if mintTaskQueue, err :=
+		cloudtasksadp.NewMintTaskQueueFromEnv(
+			context.Background(),
+		); err == nil && mintTaskQueue != nil {
 		mintUC.SetMintTaskEnqueuer(mintTaskQueue)
 	}
 
 	baseURL := os.Getenv("ARWEAVE_BASE_URL")
 	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
-	uploader := arweave.NewHTTPUploader(baseURL, apiKey)
+	uploader := arweave.NewHTTPUploader(
+		baseURL,
+		apiKey,
+	)
 
-	tbReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(c.fsClient)
+	tbReviewRepo :=
+		fsrepo.NewTokenBlueprintReviewRepositoryFS(
+			c.fsClient,
+		)
 
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		r.tokenBlueprintRepo,
@@ -213,21 +252,30 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 		uploader,
 	)
 
-	mintUC.SetTokenBlueprintMetadataEnsurer(tokenBlueprintUC)
-	mintUC.SetTokenBlueprintMintMarker(tokenBlueprintUC)
-
-	shippingAddressUC := uc.NewShippingAddressUsecase(r.shippingAddressRepo)
-
-	tokenBlueprintReviewUC := uc.NewTokenBlueprintReviewUsecase(
-		tbReviewRepo,
-		r.avatarRepo,
-		r.tokenBlueprintRepo,
-		r.brandRepo,
+	mintUC.SetTokenBlueprintMetadataEnsurer(
+		tokenBlueprintUC,
 	)
+	mintUC.SetTokenBlueprintMintMarker(
+		tokenBlueprintUC,
+	)
+
+	shippingAddressUC :=
+		uc.NewShippingAddressUsecase(
+			r.shippingAddressRepo,
+		)
+
+	tokenBlueprintReviewUC :=
+		uc.NewTokenBlueprintReviewUsecase(
+			tbReviewRepo,
+			r.avatarRepo,
+			r.tokenBlueprintRepo,
+			r.brandRepo,
+		)
 
 	userUC := uc.NewUserUsecase(r.userRepo, nil)
 
-	onchainReader := solanainfra.NewOnchainWalletReaderDevnet()
+	onchainReader :=
+		solanainfra.NewOnchainWalletReaderDevnet()
 	tokenQuery := fsrepo.NewTokenReaderFS(c.fsClient)
 
 	walletUC := uc.NewWalletUsecase(
@@ -242,10 +290,11 @@ func buildUsecases(c *clients, r *repos, s *services, res *resolvers) *usecases 
 
 	cartUC := uc.NewCartUsecase(r.cartRepo)
 
-	invitationMailer := mailadp.NewInvitationMailerWithResend(
-		r.companyRepo,
-		r.brandRepo,
-	)
+	invitationMailer :=
+		mailadp.NewInvitationMailerWithResend(
+			r.companyRepo,
+			r.brandRepo,
+		)
 
 	invitationUC := uc.NewInvitationUsecase(
 		r.invitationTokenRepo,

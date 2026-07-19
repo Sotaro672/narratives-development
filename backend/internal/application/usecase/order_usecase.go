@@ -7,58 +7,42 @@ import (
 	"strings"
 	"time"
 
-	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
+	inventorydom "narratives/internal/domain/inventory"
+	listdom "narratives/internal/domain/list"
 	orderdom "narratives/internal/domain/order"
+	paymentmethoddom "narratives/internal/domain/paymentMethod"
+	resaledom "narratives/internal/domain/resale"
 )
-
-// OrderRepo is the persistence port required by OrderUsecase.
-type OrderRepo interface {
-	// Queries
-	GetByID(
-		ctx context.Context,
-		id string,
-	) (orderdom.Order, error)
-
-	ListByAvatarID(
-		ctx context.Context,
-		avatarID string,
-		sort common.Sort,
-		page common.Page,
-	) (common.PageResult[orderdom.Order], error)
-
-	// Commands
-	Create(
-		ctx context.Context,
-		order orderdom.Order,
-	) (orderdom.Order, error)
-
-	Update(
-		ctx context.Context,
-		order orderdom.Order,
-		opts *common.SaveOptions,
-	) (orderdom.Order, error)
-}
 
 // OrderUsecase orchestrates order operations.
 //
-// - /mall/me/orders は Order テーブル起票のみ
-// - Invoice 起票は /mall/me/invoices の責務
-// - Payment 起票は /mall/me/payment(s) の責務
+// - /mall/me/orders は Order の取得・作成を担当する
+// - Invoice の作成は /mall/me/invoices の責務
+// - Payment の作成は /mall/me/payments の責務
 type OrderUsecase struct {
-	repo     OrderRepo
-	cartRepo cartdom.Repository
-	now      func() time.Time
+	repo              orderdom.Repository
+	listRepo          listdom.Repository
+	inventoryRepo     inventorydom.RepositoryPort
+	resaleRepo        resaledom.Repository
+	paymentMethodRepo paymentmethoddom.RepositoryPort
+	now               func() time.Time
 }
 
 func NewOrderUsecase(
-	repo OrderRepo,
-	cartRepo cartdom.Repository,
+	repo orderdom.Repository,
+	listRepo listdom.Repository,
+	inventoryRepo inventorydom.RepositoryPort,
+	resaleRepo resaledom.Repository,
+	paymentMethodRepo paymentmethoddom.RepositoryPort,
 ) *OrderUsecase {
 	return &OrderUsecase{
-		repo:     repo,
-		cartRepo: cartRepo,
-		now:      time.Now,
+		repo:              repo,
+		listRepo:          listRepo,
+		inventoryRepo:     inventoryRepo,
+		resaleRepo:        resaleRepo,
+		paymentMethodRepo: paymentMethodRepo,
+		now:               time.Now,
 	}
 }
 
@@ -97,17 +81,40 @@ func (u *OrderUsecase) ListByAvatarID(
 // Commands
 // =======================
 
+// CreateOrderItemInput contains only values that the client is allowed to
+// select when creating an order.
+//
+// Price, InventoryID, ProductID, ProductBlueprintID,
+// TokenBlueprintID and BrandID are resolved from server-side repositories.
+type CreateOrderItemInput struct {
+	Type orderdom.OrderItemType
+
+	// list item identifiers
+	ListID  string
+	ModelID string
+
+	// resale item identifier
+	ResaleID string
+
+	Qty int
+
+	// Reserved for future order creation behavior.
+	// The current creation policy always persists false.
+	IsCanceled   bool
+	IsDispatched bool
+}
+
 type CreateOrderInput struct {
 	ID       string
 	UserID   string
 	AvatarID string
 	CartID   string
 
-	ShippingSnapshot      orderdom.ShippingSnapshot
-	PaymentMethodSnapshot orderdom.PaymentMethodSnapshot
-	Items                 []orderdom.OrderItemSnapshot
+	ShippingSnapshot orderdom.ShippingSnapshot
+	PaymentMethodID  string
+	Items            []CreateOrderItemInput
 
-	CreatedAt *time.Time // optional; defaults to now
+	CreatedAt *time.Time
 }
 
 func (u *OrderUsecase) Create(
@@ -121,7 +128,6 @@ func (u *OrderUsecase) Create(
 		createdAt = in.CreatedAt.UTC()
 	}
 
-	// IDはdomainで必須。未指定ならここで生成してからNewする。
 	id := in.ID
 	if id == "" {
 		id = u.newOrderID(now)
@@ -136,42 +142,16 @@ func (u *OrderUsecase) Create(
 		Country: in.ShippingSnapshot.Country,
 	}
 
-	paymentMethod := orderdom.PaymentMethodSnapshot{
-		CustomerID:     in.PaymentMethodSnapshot.CustomerID,
-		Brand:          in.PaymentMethodSnapshot.Brand,
-		Last4:          in.PaymentMethodSnapshot.Last4,
-		ExpMonth:       in.PaymentMethodSnapshot.ExpMonth,
-		ExpYear:        in.PaymentMethodSnapshot.ExpYear,
-		CardholderName: in.PaymentMethodSnapshot.CardholderName,
-		IsDefault:      in.PaymentMethodSnapshot.IsDefault,
-	}
-
-	// --- fetch cart to resolve listId for list items only ---
-	cartID := in.CartID
-
-	var cart cartdom.Cart
-	cartLoaded := false
-
-	if u.cartRepo != nil && cartID != "" {
-		foundCart, err := u.cartRepo.GetByAvatarID(
-			ctx,
-			cartID,
-		)
-		if err != nil {
-			return orderdom.Order{}, err
-		}
-
-		if foundCart != nil {
-			cart = *foundCart
-			cartLoaded = true
-		}
-	}
-
-	items, err := normalizeOrderItems(
-		in.Items,
-		cart,
-		cartLoaded,
+	paymentMethod, err := u.resolvePaymentMethodSnapshot(
+		ctx,
+		in.UserID,
+		in.PaymentMethodID,
 	)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	items, err := u.resolveOrderItems(ctx, in.Items)
 	if err != nil {
 		return orderdom.Order{}, err
 	}
@@ -192,6 +172,8 @@ func (u *OrderUsecase) Create(
 
 	order.Paid = false
 
+	// Repository.Create must persist the Order and replace its canonical
+	// orderTransferItems projection in the same Firestore transaction.
 	created, err := u.repo.Create(ctx, order)
 	if err != nil {
 		return orderdom.Order{}, err
@@ -207,10 +189,10 @@ type UpdateOrderInput struct {
 	AvatarID *string
 	CartID   *string
 
-	ShippingSnapshot      *orderdom.ShippingSnapshot
-	PaymentMethodSnapshot *orderdom.PaymentMethodSnapshot
+	ShippingSnapshot *orderdom.ShippingSnapshot
+	PaymentMethodID  *string
 
-	ReplaceItems *[]orderdom.OrderItemSnapshot
+	ReplaceItems *[]CreateOrderItemInput
 }
 
 func (u *OrderUsecase) Update(
@@ -222,16 +204,14 @@ func (u *OrderUsecase) Update(
 		return orderdom.Order{}, err
 	}
 
-	if order.CreatedAt.IsZero() {
-		order.CreatedAt = u.now().UTC()
-	}
-
 	if in.UserID != nil {
 		order.UserID = *in.UserID
 	}
+
 	if in.AvatarID != nil {
 		order.AvatarID = *in.AvatarID
 	}
+
 	if in.CartID != nil {
 		order.CartID = *in.CartID
 	}
@@ -251,15 +231,14 @@ func (u *OrderUsecase) Update(
 		}
 	}
 
-	if in.PaymentMethodSnapshot != nil {
-		paymentMethod := orderdom.PaymentMethodSnapshot{
-			CustomerID:     in.PaymentMethodSnapshot.CustomerID,
-			Brand:          in.PaymentMethodSnapshot.Brand,
-			Last4:          in.PaymentMethodSnapshot.Last4,
-			ExpMonth:       in.PaymentMethodSnapshot.ExpMonth,
-			ExpYear:        in.PaymentMethodSnapshot.ExpYear,
-			CardholderName: in.PaymentMethodSnapshot.CardholderName,
-			IsDefault:      in.PaymentMethodSnapshot.IsDefault,
+	if in.PaymentMethodID != nil {
+		paymentMethod, err := u.resolvePaymentMethodSnapshot(
+			ctx,
+			order.UserID,
+			*in.PaymentMethodID,
+		)
+		if err != nil {
+			return orderdom.Order{}, err
 		}
 
 		if err := order.UpdatePaymentMethodSnapshot(
@@ -270,30 +249,9 @@ func (u *OrderUsecase) Update(
 	}
 
 	if in.ReplaceItems != nil {
-		cartID := order.CartID
-
-		var cart cartdom.Cart
-		cartLoaded := false
-
-		if u.cartRepo != nil && cartID != "" {
-			foundCart, err := u.cartRepo.GetByAvatarID(
-				ctx,
-				cartID,
-			)
-			if err != nil {
-				return orderdom.Order{}, err
-			}
-
-			if foundCart != nil {
-				cart = *foundCart
-				cartLoaded = true
-			}
-		}
-
-		items, err := normalizeOrderItems(
+		items, err := u.resolveOrderItems(
+			ctx,
 			*in.ReplaceItems,
-			cart,
-			cartLoaded,
 		)
 		if err != nil {
 			return orderdom.Order{}, err
@@ -324,17 +282,51 @@ func (u *OrderUsecase) Update(
 		checked.Items = order.Items
 	}
 
+	// Repository.Update must persist the Order and replace its canonical
+	// orderTransferItems projection in the same Firestore transaction.
 	return u.repo.Update(ctx, checked, nil)
 }
 
-// ------------------------------------------------------------
-// item normalization
-// ------------------------------------------------------------
+// =======================
+// Payment method snapshot
+// =======================
 
-func normalizeOrderItems(
-	input []orderdom.OrderItemSnapshot,
-	cart cartdom.Cart,
-	cartLoaded bool,
+func (u *OrderUsecase) resolvePaymentMethodSnapshot(
+	ctx context.Context,
+	userID string,
+	paymentMethodID string,
+) (orderdom.PaymentMethodSnapshot, error) {
+	paymentMethod, err := u.paymentMethodRepo.GetByID(
+		ctx,
+		paymentMethodID,
+	)
+	if err != nil {
+		return orderdom.PaymentMethodSnapshot{}, err
+	}
+
+	if paymentMethod == nil || paymentMethod.UserID != userID {
+		return orderdom.PaymentMethodSnapshot{},
+			orderdom.ErrInvalidPaymentMethod
+	}
+
+	return orderdom.PaymentMethodSnapshot{
+		CustomerID:     paymentMethod.StripeCustomerID,
+		Brand:          paymentMethod.Brand,
+		Last4:          paymentMethod.Last4,
+		ExpMonth:       paymentMethod.ExpMonth,
+		ExpYear:        paymentMethod.ExpYear,
+		CardholderName: paymentMethod.CardholderName,
+		IsDefault:      paymentMethod.IsDefault,
+	}, nil
+}
+
+// =======================
+// Order item snapshots
+// =======================
+
+func (u *OrderUsecase) resolveOrderItems(
+	ctx context.Context,
+	input []CreateOrderItemInput,
 ) ([]orderdom.OrderItemSnapshot, error) {
 	items := make(
 		[]orderdom.OrderItemSnapshot,
@@ -343,26 +335,28 @@ func normalizeOrderItems(
 	)
 
 	for _, item := range input {
-		switch inferOrderInputItemType(item) {
+		switch item.Type {
 		case orderdom.OrderItemTypeList:
-			normalized, err := normalizeListOrderItem(
+			resolved, err := u.resolveListOrderItem(
+				ctx,
 				item,
-				cart,
-				cartLoaded,
 			)
 			if err != nil {
 				return nil, err
 			}
 
-			items = append(items, normalized)
+			items = append(items, resolved)
 
 		case orderdom.OrderItemTypeResale:
-			normalized, err := normalizeResaleOrderItem(item)
+			resolved, err := u.resolveResaleOrderItem(
+				ctx,
+				item,
+			)
 			if err != nil {
 				return nil, err
 			}
 
-			items = append(items, normalized)
+			items = append(items, resolved)
 
 		default:
 			return nil, orderdom.ErrInvalidItemSnapshot
@@ -372,64 +366,73 @@ func normalizeOrderItems(
 	return items, nil
 }
 
-func normalizeListOrderItem(
-	item orderdom.OrderItemSnapshot,
-	cart cartdom.Cart,
-	cartLoaded bool,
+func (u *OrderUsecase) resolveListOrderItem(
+	ctx context.Context,
+	item CreateOrderItemInput,
 ) (orderdom.OrderItemSnapshot, error) {
-	modelID := item.ModelID
-	inventoryID := item.InventoryID
-
-	listID := item.ListID
-	if listID == "" && cartLoaded {
-		resolved, err := resolveListIDFromCart(
-			cart,
-			inventoryID,
-			modelID,
-		)
-		if err != nil {
-			return orderdom.OrderItemSnapshot{}, err
-		}
-
-		listID = resolved
-	}
-
-	return orderdom.OrderItemSnapshot{
-		Type:          orderdom.OrderItemTypeList,
-		ModelID:       modelID,
-		InventoryID:   inventoryID,
-		ListID:        listID,
-		Qty:           item.Qty,
-		Price:         item.Price,
-		IsCanceled:    false,
-		IsDispatched:  false,
-		Transferred:   false,
-		TransferredAt: nil,
-	}, nil
-}
-
-func normalizeResaleOrderItem(
-	item orderdom.OrderItemSnapshot,
-) (orderdom.OrderItemSnapshot, error) {
-	qty := item.Qty
-	if qty <= 0 {
-		qty = 1
-	}
-
-	if qty != 1 {
+	if item.ListID == "" ||
+		item.ModelID == "" ||
+		item.Qty <= 0 {
 		return orderdom.OrderItemSnapshot{},
 			orderdom.ErrInvalidItemSnapshot
 	}
 
+	list, err := u.listRepo.GetByID(
+		ctx,
+		item.ListID,
+	)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+
+	if list.Status != listdom.StatusListing {
+		return orderdom.OrderItemSnapshot{},
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	inventory, err := u.inventoryRepo.GetByID(
+		ctx,
+		list.InventoryID,
+	)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+
+	if inventory.ProductBlueprintID == "" ||
+		inventory.TokenBlueprintID == "" {
+		return orderdom.OrderItemSnapshot{},
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	stock, ok := inventory.Stock[item.ModelID]
+	if !ok {
+		return orderdom.OrderItemSnapshot{},
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	available := stock.Accumulation - stock.ReservedCount
+	if available < item.Qty {
+		return orderdom.OrderItemSnapshot{},
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	price, err := resolveListModelPrice(
+		list,
+		item.ModelID,
+	)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+
 	return orderdom.OrderItemSnapshot{
-		Type:               orderdom.OrderItemTypeResale,
-		ResaleID:           item.ResaleID,
-		ProductID:          item.ProductID,
-		ProductBlueprintID: item.ProductBlueprintID,
-		TokenBlueprintID:   item.TokenBlueprintID,
-		BrandID:            item.BrandID,
-		Qty:                1,
-		Price:              item.Price,
+		Type:               orderdom.OrderItemTypeList,
+		ModelID:            item.ModelID,
+		InventoryID:        list.InventoryID,
+		ListID:             list.ID,
+		ProductBlueprintID: inventory.ProductBlueprintID,
+		TokenBlueprintID:   inventory.TokenBlueprintID,
+		Qty:                item.Qty,
+		Price:              price,
 		IsCanceled:         false,
 		IsDispatched:       false,
 		Transferred:        false,
@@ -437,100 +440,61 @@ func normalizeResaleOrderItem(
 	}, nil
 }
 
-func inferOrderInputItemType(
-	item orderdom.OrderItemSnapshot,
-) orderdom.OrderItemType {
-	switch item.Type {
-	case orderdom.OrderItemTypeList,
-		orderdom.OrderItemTypeResale:
-		return item.Type
-	}
-
-	if item.ResaleID != "" || item.ProductID != "" {
-		return orderdom.OrderItemTypeResale
-	}
-
-	if item.ModelID != "" ||
-		item.InventoryID != "" ||
-		item.ListID != "" {
-		return orderdom.OrderItemTypeList
-	}
-
-	return ""
-}
-
-// ------------------------------------------------------------
-// listId resolution
-// ------------------------------------------------------------
-
-// resolveListIDFromCart finds listId for (inventoryId, modelId)
-// from cart items.
-//
-// If multiple listIds match, returns an error (ambiguous).
-func resolveListIDFromCart(
-	cart cartdom.Cart,
-	inventoryID string,
+func resolveListModelPrice(
+	list listdom.List,
 	modelID string,
-) (string, error) {
-	if inventoryID == "" || modelID == "" {
-		return "",
-			fmt.Errorf(
-				"order_uc: invalid inventoryId/modelId for listId resolution",
-			)
-	}
-
-	if len(cart.Items) == 0 {
-		return "",
-			fmt.Errorf(
-				"order_uc: cart has no items (cannot resolve listId)",
-			)
-	}
-
-	found := ""
-
-	for _, item := range cart.Items {
-		if item.InventoryID != inventoryID ||
-			item.ModelID != modelID {
-			continue
-		}
-
-		listID := item.ListID
-		if listID == "" {
-			continue
-		}
-
-		if found == "" {
-			found = listID
-			continue
-		}
-
-		if found != listID {
-			return "",
-				fmt.Errorf(
-					"order_uc: ambiguous listId for inv=%s model=%s",
-					inventoryID,
-					modelID,
-				)
+) (int, error) {
+	for _, price := range list.Prices {
+		if price.ModelID == modelID {
+			return price.Price, nil
 		}
 	}
 
-	if found == "" {
-		return "",
-			fmt.Errorf(
-				"order_uc: listId not found in cart for inv=%s model=%s",
-				inventoryID,
-				modelID,
-			)
-	}
-
-	return found, nil
+	return 0, orderdom.ErrInvalidItemSnapshot
 }
 
-// ------------------------------------------------------------
-// ID generation
-// ------------------------------------------------------------
+func (u *OrderUsecase) resolveResaleOrderItem(
+	ctx context.Context,
+	item CreateOrderItemInput,
+) (orderdom.OrderItemSnapshot, error) {
+	if item.ResaleID == "" {
+		return orderdom.OrderItemSnapshot{},
+			orderdom.ErrInvalidItemSnapshot
+	}
 
-// newOrderID generates an order id when client didn't specify one.
+	resale, err := u.resaleRepo.GetByID(
+		ctx,
+		item.ResaleID,
+	)
+	if err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+
+	if resale.Status != resaledom.StatusListing {
+		return orderdom.OrderItemSnapshot{},
+			orderdom.ErrInvalidItemSnapshot
+	}
+
+	return orderdom.OrderItemSnapshot{
+		Type:               orderdom.OrderItemTypeResale,
+		ResaleID:           resale.ID,
+		ProductID:          resale.ProductID,
+		ProductBlueprintID: resale.ProductBlueprintID,
+		TokenBlueprintID:   resale.TokenBlueprintID,
+		BrandID:            resale.BrandID,
+		Qty:                1,
+		Price:              resale.Price,
+		IsCanceled:         false,
+		IsDispatched:       false,
+		Transferred:        false,
+		TransferredAt:      nil,
+	}, nil
+}
+
+// =======================
+// ID generation
+// =======================
+
 func (u *OrderUsecase) newOrderID(t time.Time) string {
 	return fmt.Sprintf(
 		"ord_%d",

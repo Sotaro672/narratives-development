@@ -11,10 +11,9 @@ import (
 
 // Filter aligns with entity fields (entity.go as source of truth).
 //
-// NOTE:
 // This filter is used by console/query-side read models.
-// The main Order repository port intentionally does not expose a generic List method.
-// Mall order history must use ListByAvatarID to avoid scanning all orders.
+// The main Order repository port intentionally does not expose a generic List
+// method. Mall order history must use ListByAvatarID.
 type Filter struct {
 	// Exact matches
 	ID       string
@@ -72,31 +71,18 @@ type PageResult = common.PageResult[Order]
 // Update options (optional for adapters)
 type UpdateOptions = common.SaveOptions
 
-// EligibleTransferItem is an order item eligible for token transfer verification.
+// EligibleTransferItem is the canonical orderTransferItems read model returned
+// for an order item that is currently eligible for token transfer.
 //
-// Common expected source condition:
-// - order.avatarId == avatarID
-// - order.paid == true
-// - item.transferred == false
+// Source condition:
+// - avatarId matches the requested avatar
+// - paid == true
+// - transferred == false
 //
-// list item condition:
-// - item.type == "list" or legacy empty
-// - item.modelId is not empty
-// - item.inventoryId is not empty
-//
-// resale item condition:
-// - item.type == "resale"
-// - item.resaleId is not empty
-// - item.productId is not empty
-//
-// ItemKey is the stable transfer lock/mark key used by transfer repositories.
-// Recommended values:
-// - list item:   "list:" + modelId
-// - resale item: "resale:" + resaleId
+// Identity is always orderId + itemIndex. String-derived item keys are not
+// supported.
 type EligibleTransferItem struct {
-	OrderID string
-
-	ItemKey   string
+	OrderID   string
 	ItemType  OrderItemType
 	ItemIndex int
 
@@ -105,63 +91,80 @@ type EligibleTransferItem struct {
 	InventoryID string
 	ListID      string
 
-	// resale item identifiers
+	// resale item identifier
 	ResaleID string
 
-	// product identifiers
+	// canonical product identifiers
 	ProductID          string
 	ProductBlueprintID string
 	TokenBlueprintID   string
 	BrandID            string
 }
 
-// Repository defines the persistence port for Order.
+// Validate verifies that the projection item contains the canonical required
+// identifiers for its explicit item type.
+func (i EligibleTransferItem) Validate() error {
+	if i.OrderID == "" || i.ItemIndex < 0 {
+		return ErrInvalidItemSnapshot
+	}
+
+	switch i.ItemType {
+	case OrderItemTypeList:
+		if i.ModelID == "" ||
+			i.InventoryID == "" ||
+			i.ListID == "" ||
+			i.ProductBlueprintID == "" ||
+			i.TokenBlueprintID == "" {
+			return ErrInvalidItemSnapshot
+		}
+
+	case OrderItemTypeResale:
+		if i.ResaleID == "" ||
+			i.ProductID == "" ||
+			i.ProductBlueprintID == "" ||
+			i.TokenBlueprintID == "" ||
+			i.BrandID == "" {
+			return ErrInvalidItemSnapshot
+		}
+
+	default:
+		return ErrInvalidItemSnapshot
+	}
+
+	return nil
+}
+
+// Repository defines persistence for the Order aggregate.
+//
+// Create and Update must persist the Order and replace all corresponding
+// orderTransferItems projection records atomically. A failed projection write
+// must roll back the Order write, and a failed Order write must not change the
+// projection.
 type Repository interface {
 	// Queries
-	GetByID(ctx context.Context, id string) (Order, error)
-	ListByAvatarID(ctx context.Context, avatarID string, sort Sort, page Page) (PageResult, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (Order, error)
 
-	// ListTransferredByAvatarIDModelIDAndTransferredAt returns orders that contain
-	// transferred list items matching avatarId, modelId, and transferredAt.
-	//
-	// Expected source condition:
-	// - order.avatarId == avatarID
-	// - order.paid == true
-	// - item.modelId == modelID
-	// - item.transferred == true
-	// - item.transferredAt == transferredAt
-	//
-	// Repository implementation is responsible for item-level filtering.
-	// Firestore cannot reliably query nested array map fields with this full condition,
-	// so Firestore adapter may query by avatarId first and filter items in memory.
-	//
-	// NOTE:
-	// This query is list-item oriented and intentionally remains modelId-based
-	// for backward compatibility. Resale transfer history should use productId,
-	// resaleId, or transfer records depending on the caller's requirement.
-	ListTransferredByAvatarIDModelIDAndTransferredAt(
+	ListByAvatarID(
 		ctx context.Context,
 		avatarID string,
-		modelID string,
-		transferredAt time.Time,
 		sort Sort,
 		page Page,
 	) (PageResult, error)
 
-	// Transfer verification query.
-	//
-	// Implementations should return both list and resale items when eligible.
-	// Legacy list items can still be returned with ItemKey empty if the caller
-	// does not use this method for locking, but new transfer paths should prefer
-	// ItemKey.
-	ListEligibleTransferItemsByAvatarID(
-		ctx context.Context,
-		avatarID string,
-	) ([]EligibleTransferItem, error)
-
 	// Commands
-	Create(ctx context.Context, o Order) (Order, error)
-	Update(ctx context.Context, o Order, opts *UpdateOptions) (Order, error)
+	Create(
+		ctx context.Context,
+		o Order,
+	) (Order, error)
+
+	Update(
+		ctx context.Context,
+		o Order,
+		opts *UpdateOptions,
+	) (Order, error)
 }
 
 // Standard repository errors
