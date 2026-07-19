@@ -18,7 +18,7 @@ package usecase
 1) resale status=sold 更新（best-effort）
 2) 注文確定メール送信
 3) inventory reserve 更新（best-effort）
-4) cart clear（best-effort）
+4) cart delete（best-effort）
 */
 
 import (
@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	cartdom "narratives/internal/domain/cart"
 	common "narratives/internal/domain/common"
 	orderdom "narratives/internal/domain/order"
 	paymentdom "narratives/internal/domain/payment"
@@ -47,18 +48,22 @@ import (
 // - payment updates are performed by partial update only
 type PaymentRepo interface {
 	// Reads
-	GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error)
+	GetByPaymentID(
+		ctx context.Context,
+		paymentID string,
+	) (*paymentdom.Payment, error)
 
 	// Writes
-	Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error)
-	UpdateByPaymentID(ctx context.Context, paymentID string, patch paymentdom.UpdatePaymentInput) (*paymentdom.Payment, error)
-}
+	Create(
+		ctx context.Context,
+		in paymentdom.CreatePaymentInput,
+	) (*paymentdom.Payment, error)
 
-// CartRepoForPayment is the minimal port for clearing carts after payment.
-//
-// carts/{cartId} を空にする。
-type CartRepoForPayment interface {
-	Clear(ctx context.Context, cartID string) error
+	UpdateByPaymentID(
+		ctx context.Context,
+		paymentID string,
+		patch paymentdom.UpdatePaymentInput,
+	) (*paymentdom.Payment, error)
 }
 
 // InventoryRepoForPayment is the minimal port for inventory reserve after payment.
@@ -66,13 +71,27 @@ type InventoryRepoForPayment interface {
 	// ReserveByOrder sets:
 	// - stock[modelId].reservedByOrder[orderId] = qty
 	// - reservedCount = sum(reservedByOrder) (repo側で正規化)
-	ReserveByOrder(ctx context.Context, inventoryID string, modelID string, orderID string, qty int) error
+	ReserveByOrder(
+		ctx context.Context,
+		inventoryID string,
+		modelID string,
+		orderID string,
+		qty int,
+	) error
 }
 
 // OrderRepoForPayment is the minimal port for reading/updating orders after payment.
 type OrderRepoForPayment interface {
-	GetByID(ctx context.Context, id string) (orderdom.Order, error)
-	Update(ctx context.Context, o orderdom.Order, opts *common.SaveOptions) (orderdom.Order, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (orderdom.Order, error)
+
+	Update(
+		ctx context.Context,
+		order orderdom.Order,
+		opts *common.SaveOptions,
+	) (orderdom.Order, error)
 }
 
 // ResaleRepoForPayment is the minimal port for updating resale status after payment.
@@ -83,8 +102,16 @@ type OrderRepoForPayment interface {
 //
 // PaymentUsecase marks those resale listings as sold after payment succeeded.
 type ResaleRepoForPayment interface {
-	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
-	Update(ctx context.Context, id string, item resaledom.Resale) (resaledom.Resale, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (resaledom.Resale, error)
+
+	Update(
+		ctx context.Context,
+		id string,
+		item resaledom.Resale,
+	) (resaledom.Resale, error)
 }
 
 // AuthUserEmailGetter is the minimal port for reading email from Firebase Authentication.
@@ -92,7 +119,10 @@ type ResaleRepoForPayment interface {
 // Firestore users table does not own email.
 // PaymentUsecase uses this port only for sending order confirmation mail.
 type AuthUserEmailGetter interface {
-	GetEmailByUID(ctx context.Context, uid string) (string, error)
+	GetEmailByUID(
+		ctx context.Context,
+		uid string,
+	) (string, error)
 }
 
 // MailSenderForPayment is the minimal port for sending order confirmation mail.
@@ -100,7 +130,12 @@ type AuthUserEmailGetter interface {
 // メール件名・本文の組み立ては application/usecase では行わず、
 // adapter 側の OrderMailer に分離する。
 type MailSenderForPayment interface {
-	SendOrderConfirmation(ctx context.Context, from, to string, ord orderdom.Order) error
+	SendOrderConfirmation(
+		ctx context.Context,
+		from string,
+		to string,
+		order orderdom.Order,
+	) error
 }
 
 // ============================================================
@@ -110,12 +145,13 @@ type MailSenderForPayment interface {
 // PaymentUsecase orchestrates payment operations.
 type PaymentUsecase struct {
 	repo          PaymentRepo
-	cartRepo      CartRepoForPayment
+	cartRepo      cartdom.Repository
 	inventoryRepo InventoryRepoForPayment
 	orderRepo     OrderRepoForPayment
 	resaleRepo    ResaleRepoForPayment
 
-	// authUserGetter は Firebase Authentication から uid に紐づく email を取得する。
+	// authUserGetter は Firebase Authentication から
+	// uid に紐づく email を取得する。
 	// Firestore users table に email は持たせない。
 	authUserGetter AuthUserEmailGetter
 	mailSender     MailSenderForPayment
@@ -127,12 +163,13 @@ type PaymentUsecase struct {
 type NewPaymentUsecaseInput struct {
 	PaymentRepo PaymentRepo
 
-	CartRepo      CartRepoForPayment
+	CartRepo      cartdom.Repository
 	InventoryRepo InventoryRepoForPayment
 	OrderRepo     OrderRepoForPayment
 	ResaleRepo    ResaleRepoForPayment
 
-	// AuthUserGetter は Firebase Authentication から email を取得するための port。
+	// AuthUserGetter は Firebase Authentication から
+	// email を取得するための port。
 	// 注文確定メール送信時に ord.UserID を uid として利用する。
 	AuthUserGetter AuthUserEmailGetter
 	MailSender     MailSenderForPayment
@@ -141,7 +178,9 @@ type NewPaymentUsecaseInput struct {
 	Now func() time.Time
 }
 
-func NewPaymentUsecase(in NewPaymentUsecaseInput) *PaymentUsecase {
+func NewPaymentUsecase(
+	in NewPaymentUsecaseInput,
+) *PaymentUsecase {
 	now := in.Now
 	if now == nil {
 		now = time.Now
@@ -166,7 +205,10 @@ func NewPaymentUsecase(in NewPaymentUsecaseInput) *PaymentUsecase {
 // Queries
 // ============================================================
 
-func (u *PaymentUsecase) GetByPaymentID(ctx context.Context, paymentID string) (*paymentdom.Payment, error) {
+func (u *PaymentUsecase) GetByPaymentID(
+	ctx context.Context,
+	paymentID string,
+) (*paymentdom.Payment, error) {
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
@@ -181,22 +223,25 @@ func (u *PaymentUsecase) GetByPaymentID(ctx context.Context, paymentID string) (
 // Commands
 // ============================================================
 
-func (u *PaymentUsecase) Create(ctx context.Context, p paymentdom.Payment) (*paymentdom.Payment, error) {
+func (u *PaymentUsecase) Create(
+	ctx context.Context,
+	payment paymentdom.Payment,
+) (*paymentdom.Payment, error) {
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
 
 	in := paymentdom.CreatePaymentInput{
-		PaymentID:             p.PaymentID,
-		PaymentMethodID:       p.PaymentMethodID,
-		StripeCustomerID:      p.StripeCustomerID,
-		StripePaymentMethodID: p.StripePaymentMethodID,
-		StripePaymentIntentID: p.StripePaymentIntentID,
-		Amount:                p.Amount,
-		Status:                p.Status,
-		ErrorType:             p.ErrorType,
-		ErrorCode:             p.ErrorCode,
-		ErrorMsg:              p.ErrorMsg,
+		PaymentID:             payment.PaymentID,
+		PaymentMethodID:       payment.PaymentMethodID,
+		StripeCustomerID:      payment.StripeCustomerID,
+		StripePaymentMethodID: payment.StripePaymentMethodID,
+		StripePaymentIntentID: payment.StripePaymentIntentID,
+		Amount:                payment.Amount,
+		Status:                payment.Status,
+		ErrorType:             payment.ErrorType,
+		ErrorCode:             payment.ErrorCode,
+		ErrorMsg:              payment.ErrorMsg,
 	}
 
 	created, err := u.repo.Create(ctx, in)
@@ -213,7 +258,8 @@ func (u *PaymentUsecase) Create(ctx context.Context, p paymentdom.Payment) (*pay
 
 // Update partially updates an existing payment document.
 //
-// This method is used by PaymentFlowUsecase after Stripe PaymentIntent state changes.
+// This method is used by PaymentFlowUsecase after Stripe
+// PaymentIntent state changes.
 //
 // Payment records are not overwritten by Save.
 // Payment records are not deleted.
@@ -230,7 +276,11 @@ func (u *PaymentUsecase) Update(
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
 
-	updated, err := u.repo.UpdateByPaymentID(ctx, paymentID, patch)
+	updated, err := u.repo.UpdateByPaymentID(
+		ctx,
+		paymentID,
+		patch,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -246,15 +296,16 @@ func (u *PaymentUsecase) Update(
 // Paid status
 // ============================================================
 
-func isPaidStatus(st paymentdom.PaymentStatus) bool {
-	return st == paymentdom.StatusSucceeded
+func isPaidStatus(status paymentdom.PaymentStatus) bool {
+	return status == paymentdom.StatusSucceeded
 }
 
 // ============================================================
 // Post-paid flow
 // ============================================================
 
-// handlePostPaidBestEffort runs post-paid side effects in best-effort manner.
+// handlePostPaidBestEffort runs post-paid side effects
+// in best-effort manner.
 //
 // 前提:
 // - payment / order の docId は同じ
@@ -266,63 +317,88 @@ func isPaidStatus(st paymentdom.PaymentStatus) bool {
 // 1) resale status=sold
 // 2) 注文確定メール送信
 // 3) inventory reserve
-// 4) cart clear
-func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymentdom.Payment) {
-	if u == nil || p == nil {
+// 4) cart delete
+func (u *PaymentUsecase) handlePostPaidBestEffort(
+	ctx context.Context,
+	payment *paymentdom.Payment,
+) {
+	if u == nil || payment == nil {
 		return
 	}
 
-	rootID := p.PaymentID
+	rootID := payment.PaymentID
 	if rootID == "" {
 		return
 	}
 
-	var ord *orderdom.Order
+	var order *orderdom.Order
+
 	if u.orderRepo != nil {
-		o, getErr := u.orderRepo.GetByID(ctx, rootID)
-		if getErr == nil {
-			ord = &o
+		foundOrder, err := u.orderRepo.GetByID(
+			ctx,
+			rootID,
+		)
+		if err == nil {
+			order = &foundOrder
 		}
 	}
 
 	// 0) order.Paid=true
 	if u.orderRepo != nil {
-		updatedOrder, mkErr := u.markOrderPaidTrue(ctx, rootID, ord)
-		if mkErr == nil && updatedOrder != nil {
-			ord = updatedOrder
+		updatedOrder, err := u.markOrderPaidTrue(
+			ctx,
+			rootID,
+			order,
+		)
+		if err == nil && updatedOrder != nil {
+			order = updatedOrder
 		}
 	}
 
 	// 1) resale status=sold
-	if u.resaleRepo != nil && ord != nil {
-		_ = u.markResalesSoldByOrder(ctx, *ord)
+	if u.resaleRepo != nil && order != nil {
+		_ = u.markResalesSoldByOrder(ctx, *order)
 	}
 
 	// 2) 注文確定メール送信
-	if ord != nil && u.authUserGetter != nil && u.mailSender != nil && u.mailFrom != "" {
-		_ = u.sendOrderConfirmationMail(ctx, *ord)
+	if order != nil &&
+		u.authUserGetter != nil &&
+		u.mailSender != nil &&
+		u.mailFrom != "" {
+		_ = u.sendOrderConfirmationMail(ctx, *order)
 	}
 
 	// 3) inventory reserve
-	if u.inventoryRepo != nil && ord != nil {
-		rawItems := extractOrderItems(*ord)
-		agg := aggregateReserveItems(rawItems)
+	if u.inventoryRepo != nil && order != nil {
+		rawItems := extractOrderItems(*order)
+		aggregatedItems := aggregateReserveItems(rawItems)
 
-		for _, it := range agg {
-			invID := it.InventoryID
-			if invID == "" || it.ModelID == "" || it.Qty <= 0 {
+		for _, item := range aggregatedItems {
+			inventoryID := item.InventoryID
+			if inventoryID == "" ||
+				item.ModelID == "" ||
+				item.Qty <= 0 {
 				continue
 			}
 
-			_ = u.inventoryRepo.ReserveByOrder(ctx, invID, it.ModelID, rootID, it.Qty)
+			_ = u.inventoryRepo.ReserveByOrder(
+				ctx,
+				inventoryID,
+				item.ModelID,
+				rootID,
+				item.Qty,
+			)
 		}
 	}
 
-	// 4) cart clear
-	if u.cartRepo != nil && ord != nil {
-		cartID := ord.CartID
+	// 4) cart delete
+	if u.cartRepo != nil && order != nil {
+		cartID := order.CartID
 		if cartID != "" {
-			_ = u.cartRepo.Clear(ctx, cartID)
+			_ = u.cartRepo.DeleteByAvatarID(
+				ctx,
+				cartID,
+			)
 		}
 	}
 }
@@ -334,23 +410,28 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(ctx context.Context, p *paymen
 func (u *PaymentUsecase) markOrderPaidTrue(
 	ctx context.Context,
 	orderID string,
-	ord *orderdom.Order,
+	order *orderdom.Order,
 ) (*orderdom.Order, error) {
 	if u == nil || u.orderRepo == nil {
-		return ord, nil
+		return order, nil
 	}
 	if orderID == "" {
-		return ord, nil
+		return order, nil
 	}
 
 	var current orderdom.Order
-	if ord != nil {
-		current = *ord
+
+	if order != nil {
+		current = *order
 	} else {
-		fetched, err := u.orderRepo.GetByID(ctx, orderID)
+		fetched, err := u.orderRepo.GetByID(
+			ctx,
+			orderID,
+		)
 		if err != nil {
 			return nil, err
 		}
+
 		current = fetched
 	}
 
@@ -360,7 +441,11 @@ func (u *PaymentUsecase) markOrderPaidTrue(
 
 	current.Paid = true
 
-	updated, err := u.orderRepo.Update(ctx, current, nil)
+	updated, err := u.orderRepo.Update(
+		ctx,
+		current,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -372,12 +457,15 @@ func (u *PaymentUsecase) markOrderPaidTrue(
 // resale.Status = sold
 // ============================================================
 
-func (u *PaymentUsecase) markResalesSoldByOrder(ctx context.Context, ord orderdom.Order) error {
+func (u *PaymentUsecase) markResalesSoldByOrder(
+	ctx context.Context,
+	order orderdom.Order,
+) error {
 	if u == nil || u.resaleRepo == nil {
 		return nil
 	}
 
-	resaleIDs := extractResaleIDsFromOrder(ord)
+	resaleIDs := extractResaleIDsFromOrder(order)
 	if len(resaleIDs) == 0 {
 		return nil
 	}
@@ -385,7 +473,10 @@ func (u *PaymentUsecase) markResalesSoldByOrder(ctx context.Context, ord orderdo
 	now := u.now().UTC()
 
 	for _, resaleID := range resaleIDs {
-		current, err := u.resaleRepo.GetByID(ctx, resaleID)
+		current, err := u.resaleRepo.GetByID(
+			ctx,
+			resaleID,
+		)
 		if err != nil {
 			continue
 		}
@@ -398,57 +489,76 @@ func (u *PaymentUsecase) markResalesSoldByOrder(ctx context.Context, ord orderdo
 			continue
 		}
 
-		_, _ = u.resaleRepo.Update(ctx, resaleID, current)
+		_, _ = u.resaleRepo.Update(
+			ctx,
+			resaleID,
+			current,
+		)
 	}
 
 	return nil
 }
 
-func extractResaleIDsFromOrder(ord orderdom.Order) []string {
-	if len(ord.Items) == 0 {
+func extractResaleIDsFromOrder(
+	order orderdom.Order,
+) []string {
+	if len(order.Items) == 0 {
 		return nil
 	}
 
 	seen := map[string]struct{}{}
-	out := make([]string, 0, len(ord.Items))
+	resaleIDs := make(
+		[]string,
+		0,
+		len(order.Items),
+	)
 
-	for _, it := range ord.Items {
-		if it.Type != orderdom.OrderItemTypeResale {
+	for _, item := range order.Items {
+		if item.Type != orderdom.OrderItemTypeResale {
 			continue
 		}
 
-		resaleID := strings.TrimSpace(it.ResaleID)
+		resaleID := strings.TrimSpace(item.ResaleID)
 		if resaleID == "" {
 			continue
 		}
 
-		if _, ok := seen[resaleID]; ok {
+		if _, exists := seen[resaleID]; exists {
 			continue
 		}
 
 		seen[resaleID] = struct{}{}
-		out = append(out, resaleID)
+		resaleIDs = append(resaleIDs, resaleID)
 	}
 
-	sort.Strings(out)
+	sort.Strings(resaleIDs)
 
-	return out
+	return resaleIDs
 }
 
 // ============================================================
 // Mail
 // ============================================================
 
-func (u *PaymentUsecase) sendOrderConfirmationMail(ctx context.Context, ord orderdom.Order) error {
-	if u == nil || u.authUserGetter == nil || u.mailSender == nil || u.mailFrom == "" {
+func (u *PaymentUsecase) sendOrderConfirmationMail(
+	ctx context.Context,
+	order orderdom.Order,
+) error {
+	if u == nil ||
+		u.authUserGetter == nil ||
+		u.mailSender == nil ||
+		u.mailFrom == "" {
 		return nil
 	}
 
-	if ord.ID == "" || ord.UserID == "" {
+	if order.ID == "" || order.UserID == "" {
 		return nil
 	}
 
-	to, err := u.authUserGetter.GetEmailByUID(ctx, ord.UserID)
+	to, err := u.authUserGetter.GetEmailByUID(
+		ctx,
+		order.UserID,
+	)
 	if err != nil {
 		return err
 	}
@@ -456,7 +566,12 @@ func (u *PaymentUsecase) sendOrderConfirmationMail(ctx context.Context, ord orde
 		return nil
 	}
 
-	return u.mailSender.SendOrderConfirmation(ctx, u.mailFrom, to, ord)
+	return u.mailSender.SendOrderConfirmation(
+		ctx,
+		u.mailFrom,
+		to,
+		order,
+	)
 }
 
 // ============================================================
@@ -475,77 +590,106 @@ type reserveItem struct {
 // - InventoryID empty
 // - ModelID empty
 // - Qty <= 0
-func extractOrderItems(ord orderdom.Order) []reserveItem {
-	if len(ord.Items) == 0 {
+func extractOrderItems(
+	order orderdom.Order,
+) []reserveItem {
+	if len(order.Items) == 0 {
 		return nil
 	}
 
-	out := make([]reserveItem, 0, len(ord.Items))
-	for _, it := range ord.Items {
-		if it.InventoryID == "" || it.ModelID == "" || it.Qty <= 0 {
+	items := make(
+		[]reserveItem,
+		0,
+		len(order.Items),
+	)
+
+	for _, item := range order.Items {
+		if item.InventoryID == "" ||
+			item.ModelID == "" ||
+			item.Qty <= 0 {
 			continue
 		}
 
-		out = append(out, reserveItem{
-			InventoryID: it.InventoryID,
-			ModelID:     it.ModelID,
-			Qty:         it.Qty,
+		items = append(items, reserveItem{
+			InventoryID: item.InventoryID,
+			ModelID:     item.ModelID,
+			Qty:         item.Qty,
 		})
 	}
 
-	if len(out) == 0 {
+	if len(items) == 0 {
 		return nil
 	}
 
-	return out
+	return items
 }
 
-// aggregateReserveItems aggregates reserve qty by inventoryId + modelId.
+// aggregateReserveItems aggregates reserve qty by
+// inventoryId + modelId.
 //
 // Output order is stable:
 // 1. InventoryID asc
 // 2. ModelID asc
-func aggregateReserveItems(items []reserveItem) []reserveItem {
+func aggregateReserveItems(
+	items []reserveItem,
+) []reserveItem {
 	if len(items) == 0 {
 		return nil
 	}
 
 	type key struct {
-		Inv string
-		Mdl string
+		InventoryID string
+		ModelID     string
 	}
 
-	m := map[key]int{}
-	for _, it := range items {
-		inv := it.InventoryID
-		mdl := it.ModelID
+	quantities := map[key]int{}
 
-		if inv == "" || mdl == "" || it.Qty <= 0 {
+	for _, item := range items {
+		inventoryID := item.InventoryID
+		modelID := item.ModelID
+
+		if inventoryID == "" ||
+			modelID == "" ||
+			item.Qty <= 0 {
 			continue
 		}
 
-		m[key{Inv: inv, Mdl: mdl}] += it.Qty
+		itemKey := key{
+			InventoryID: inventoryID,
+			ModelID:     modelID,
+		}
+
+		quantities[itemKey] += item.Qty
 	}
 
-	out := make([]reserveItem, 0, len(m))
-	for k, q := range m {
-		if q <= 0 {
+	aggregated := make(
+		[]reserveItem,
+		0,
+		len(quantities),
+	)
+
+	for itemKey, quantity := range quantities {
+		if quantity <= 0 {
 			continue
 		}
 
-		out = append(out, reserveItem{
-			InventoryID: k.Inv,
-			ModelID:     k.Mdl,
-			Qty:         q,
+		aggregated = append(aggregated, reserveItem{
+			InventoryID: itemKey.InventoryID,
+			ModelID:     itemKey.ModelID,
+			Qty:         quantity,
 		})
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].InventoryID == out[j].InventoryID {
-			return out[i].ModelID < out[j].ModelID
+	sort.Slice(aggregated, func(i, j int) bool {
+		if aggregated[i].InventoryID ==
+			aggregated[j].InventoryID {
+			return aggregated[i].ModelID <
+				aggregated[j].ModelID
 		}
-		return out[i].InventoryID < out[j].InventoryID
+
+		return aggregated[i].InventoryID <
+			aggregated[j].InventoryID
 	})
 
-	return out
+	return aggregated
 }

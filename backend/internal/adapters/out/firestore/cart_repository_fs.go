@@ -26,6 +26,9 @@ type CartRepositoryFS struct {
 	Client *firestore.Client
 }
 
+// Domain Repositoryを唯一の永続化契約としてcompile時に検証する。
+var _ cartdom.Repository = (*CartRepositoryFS)(nil)
+
 func NewCartRepositoryFS(client *firestore.Client) *CartRepositoryFS {
 	return &CartRepositoryFS{Client: client}
 }
@@ -34,30 +37,20 @@ func (r *CartRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("carts")
 }
 
-// GetByID returns cart by docId (= avatarId).
-func (r *CartRepositoryFS) GetByID(ctx context.Context, id string) (cartdom.Cart, error) {
-	c, err := r.GetByAvatarID(ctx, id)
-	if err != nil {
-		return cartdom.Cart{}, err
-	}
-	if c == nil {
-		return cartdom.Cart{}, nil
-	}
-	return *c, nil
-}
-
 // GetByAvatarID returns (nil, nil) if not found.
-func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (*cartdom.Cart, error) {
+func (r *CartRepositoryFS) GetByAvatarID(
+	ctx context.Context,
+	avatarID string,
+) (*cartdom.Cart, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("cart_repository_fs: firestore client is nil")
 	}
 
-	aid := avatarID
-	if aid == "" {
+	if avatarID == "" {
 		return nil, errors.New("cart_repository_fs: avatarID is empty")
 	}
 
-	snap, err := r.col().Doc(aid).Get(ctx)
+	snap, err := r.col().Doc(avatarID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, nil
@@ -70,30 +63,40 @@ func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (
 		return nil, err
 	}
 
-	d := doc.toDomain()
-	d.ID = aid
-	return d, nil
+	cart := doc.toDomain()
+	cart.ID = avatarID
+
+	return cart, nil
 }
 
 // Upsert saves cart by docId=cart.ID (= avatarId).
-func (r *CartRepositoryFS) Upsert(ctx context.Context, c *cartdom.Cart) error {
+func (r *CartRepositoryFS) Upsert(
+	ctx context.Context,
+	cart *cartdom.Cart,
+) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
-	if c == nil {
+	if cart == nil {
 		return errors.New("cart_repository_fs: cart is nil")
 	}
-	if c.ID == "" {
-		return errors.New("cart_repository_fs: Upsert requires cart.ID (= avatarId) as docId")
+	if cart.ID == "" {
+		return errors.New(
+			"cart_repository_fs: Upsert requires cart.ID (= avatarId) as docId",
+		)
 	}
 
-	doc := cartDocFromDomain(c)
+	doc := cartDocFromDomain(cart)
 
-	_, err := r.col().Doc(c.ID).Set(ctx, doc)
+	_, err := r.col().Doc(cart.ID).Set(ctx, doc)
 	return err
 }
 
-func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string) error {
+// DeleteByAvatarID deletes carts/{avatarId}.
+func (r *CartRepositoryFS) DeleteByAvatarID(
+	ctx context.Context,
+	avatarID string,
+) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
@@ -102,41 +105,6 @@ func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string
 	}
 
 	_, err := r.col().Doc(avatarID).Delete(ctx)
-	return err
-}
-
-// Clear empties cart items by docId (= avatarId / cartId).
-func (r *CartRepositoryFS) Clear(ctx context.Context, cartID string) error {
-	if r == nil || r.Client == nil {
-		return errors.New("cart_repository_fs: firestore client is nil")
-	}
-	if cartID == "" {
-		return errors.New("cart_repository_fs: cartID is empty")
-	}
-
-	now := time.Now().UTC()
-	expiresAt := now.Add(cartdom.DefaultCartTTL)
-
-	_, err := r.col().Doc(cartID).Update(ctx, []firestore.Update{
-		{Path: "items", Value: map[string]any{}},
-		{Path: "updatedAt", Value: now},
-		{Path: "expiresAt", Value: expiresAt},
-	})
-	if err == nil {
-		return nil
-	}
-
-	if status.Code(err) == codes.NotFound {
-		doc := cartDoc{
-			Items:     map[string]cartItemDoc{},
-			CreatedAt: now,
-			UpdatedAt: now,
-			ExpiresAt: expiresAt,
-		}
-		_, setErr := r.col().Doc(cartID).Set(ctx, doc)
-		return setErr
-	}
-
 	return err
 }
 
@@ -165,147 +133,171 @@ type cartItemDoc struct {
 	Qty int `firestore:"qty"`
 }
 
-func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
+func cartDocFromSnapshot(
+	snap *firestore.DocumentSnapshot,
+) (cartDoc, error) {
 	if snap == nil {
-		return cartDoc{}, errors.New("cart_repository_fs: snapshot is nil")
+		return cartDoc{}, errors.New(
+			"cart_repository_fs: snapshot is nil",
+		)
 	}
 
 	raw := snap.Data()
 	if raw == nil {
-		return cartDoc{Items: map[string]cartItemDoc{}}, nil
+		return cartDoc{
+			Items: map[string]cartItemDoc{},
+		}, nil
 	}
 
-	out := cartDoc{Items: map[string]cartItemDoc{}}
+	out := cartDoc{
+		Items: map[string]cartItemDoc{},
+	}
 
-	if t, ok := raw["createdAt"]; ok {
-		if tt, ok2 := asTime(t); ok2 {
-			out.CreatedAt = tt
-		}
-	}
-	if t, ok := raw["updatedAt"]; ok {
-		if tt, ok2 := asTime(t); ok2 {
-			out.UpdatedAt = tt
-		}
-	}
-	if t, ok := raw["expiresAt"]; ok {
-		if tt, ok2 := asTime(t); ok2 {
-			out.ExpiresAt = tt
+	if value, ok := raw["createdAt"]; ok {
+		if parsed, valid := asTime(value); valid {
+			out.CreatedAt = parsed
 		}
 	}
 
-	itemsAny, _ := raw["items"]
-	m, ok := itemsAny.(map[string]any)
-	if !ok || m == nil {
+	if value, ok := raw["updatedAt"]; ok {
+		if parsed, valid := asTime(value); valid {
+			out.UpdatedAt = parsed
+		}
+	}
+
+	if value, ok := raw["expiresAt"]; ok {
+		if parsed, valid := asTime(value); valid {
+			out.ExpiresAt = parsed
+		}
+	}
+
+	itemsValue, _ := raw["items"]
+	itemsMap, ok := itemsValue.(map[string]any)
+	if !ok || itemsMap == nil {
 		return out, nil
 	}
 
-	for k, v := range m {
-		if k == "" {
+	for key, value := range itemsMap {
+		if key == "" {
 			continue
 		}
 
-		mv, ok := v.(map[string]any)
+		itemMap, ok := value.(map[string]any)
 		if !ok {
 			continue
 		}
 
 		item := cartItemDoc{
-			Type:        asString(mv["type"]),
-			InventoryID: asString(mv["inventoryId"]),
-			ListID:      asString(mv["listId"]),
-			ModelID:     asString(mv["modelId"]),
-			ResaleID:    asString(mv["resaleId"]),
-			ProductID:   asString(mv["productId"]),
-			Qty:         asInt(mv["qty"]),
+			Type:        asString(itemMap["type"]),
+			InventoryID: asString(itemMap["inventoryId"]),
+			ListID:      asString(itemMap["listId"]),
+			ModelID:     asString(itemMap["modelId"]),
+			ResaleID:    asString(itemMap["resaleId"]),
+			ProductID:   asString(itemMap["productId"]),
+			Qty:         asInt(itemMap["qty"]),
 		}
 
-		normalized, ok := normalizeCartItemDoc(item)
-		if !ok {
+		normalized, valid := normalizeCartItemDoc(item)
+		if !valid {
 			continue
 		}
 
-		out.Items[k] = normalized
+		out.Items[key] = normalized
 	}
 
 	return out, nil
 }
 
-func cartDocFromDomain(c *cartdom.Cart) cartDoc {
+func cartDocFromDomain(cart *cartdom.Cart) cartDoc {
 	items := map[string]cartItemDoc{}
 
-	if c != nil && c.Items != nil {
-		for k, it := range c.Items {
-			if k == "" {
+	if cart != nil && cart.Items != nil {
+		for key, item := range cart.Items {
+			if key == "" {
 				continue
 			}
 
-			normalized, ok := cartItemDocFromDomain(it)
-			if !ok {
+			normalized, valid := cartItemDocFromDomain(item)
+			if !valid {
 				continue
 			}
 
-			items[k] = normalized
+			items[key] = normalized
 		}
 	}
 
 	return cartDoc{
 		Items:     items,
-		CreatedAt: c.CreatedAt,
-		UpdatedAt: c.UpdatedAt,
-		ExpiresAt: c.ExpiresAt,
+		CreatedAt: cart.CreatedAt,
+		UpdatedAt: cart.UpdatedAt,
+		ExpiresAt: cart.ExpiresAt,
 	}
 }
 
-func (d cartDoc) toDomain() *cartdom.Cart {
+func (doc cartDoc) toDomain() *cartdom.Cart {
 	items := map[string]cartdom.CartItem{}
 
-	if d.Items != nil {
-		for k, it := range d.Items {
-			if k == "" {
+	if doc.Items != nil {
+		for key, item := range doc.Items {
+			if key == "" {
 				continue
 			}
 
-			normalized, ok := cartItemDomainFromDoc(it)
-			if !ok {
+			normalized, valid := cartItemDomainFromDoc(item)
+			if !valid {
 				continue
 			}
 
-			items[k] = normalized
+			items[key] = normalized
 		}
 	}
 
 	return &cartdom.Cart{
 		Items:     items,
-		CreatedAt: d.CreatedAt,
-		UpdatedAt: d.UpdatedAt,
-		ExpiresAt: d.ExpiresAt,
+		CreatedAt: doc.CreatedAt,
+		UpdatedAt: doc.UpdatedAt,
+		ExpiresAt: doc.ExpiresAt,
 	}
 }
 
-func cartItemDocFromDomain(it cartdom.CartItem) (cartItemDoc, bool) {
-	switch inferCartItemType(string(it.Type), it.InventoryID, it.ListID, it.ModelID, it.ResaleID, it.ProductID) {
+func cartItemDocFromDomain(
+	item cartdom.CartItem,
+) (cartItemDoc, bool) {
+	itemType := inferCartItemType(
+		string(item.Type),
+		item.InventoryID,
+		item.ListID,
+		item.ModelID,
+		item.ResaleID,
+		item.ProductID,
+	)
+
+	switch itemType {
 	case cartdom.CartItemTypeList:
-		if it.Qty <= 0 || it.InventoryID == "" || it.ListID == "" || it.ModelID == "" {
+		if item.Qty <= 0 ||
+			item.InventoryID == "" ||
+			item.ListID == "" ||
+			item.ModelID == "" {
 			return cartItemDoc{}, false
 		}
 
 		return cartItemDoc{
 			Type:        string(cartdom.CartItemTypeList),
-			InventoryID: it.InventoryID,
-			ListID:      it.ListID,
-			ModelID:     it.ModelID,
-			Qty:         it.Qty,
+			InventoryID: item.InventoryID,
+			ListID:      item.ListID,
+			ModelID:     item.ModelID,
+			Qty:         item.Qty,
 		}, true
 
 	case cartdom.CartItemTypeResale:
-		if it.ResaleID == "" || it.ProductID == "" {
+		if item.ResaleID == "" || item.ProductID == "" {
 			return cartItemDoc{}, false
 		}
 
 		return cartItemDoc{
 			Type:      string(cartdom.CartItemTypeResale),
-			ResaleID:  it.ResaleID,
-			ProductID: it.ProductID,
+			ResaleID:  item.ResaleID,
+			ProductID: item.ProductID,
 			Qty:       1,
 		}, true
 
@@ -314,13 +306,24 @@ func cartItemDocFromDomain(it cartdom.CartItem) (cartItemDoc, bool) {
 	}
 }
 
-func cartItemDomainFromDoc(it cartItemDoc) (cartdom.CartItem, bool) {
-	normalized, ok := normalizeCartItemDoc(it)
-	if !ok {
+func cartItemDomainFromDoc(
+	item cartItemDoc,
+) (cartdom.CartItem, bool) {
+	normalized, valid := normalizeCartItemDoc(item)
+	if !valid {
 		return cartdom.CartItem{}, false
 	}
 
-	switch inferCartItemType(normalized.Type, normalized.InventoryID, normalized.ListID, normalized.ModelID, normalized.ResaleID, normalized.ProductID) {
+	itemType := inferCartItemType(
+		normalized.Type,
+		normalized.InventoryID,
+		normalized.ListID,
+		normalized.ModelID,
+		normalized.ResaleID,
+		normalized.ProductID,
+	)
+
+	switch itemType {
 	case cartdom.CartItemTypeList:
 		return cartdom.CartItem{
 			Type:        cartdom.CartItemTypeList,
@@ -343,30 +346,44 @@ func cartItemDomainFromDoc(it cartItemDoc) (cartdom.CartItem, bool) {
 	}
 }
 
-func normalizeCartItemDoc(it cartItemDoc) (cartItemDoc, bool) {
-	switch inferCartItemType(it.Type, it.InventoryID, it.ListID, it.ModelID, it.ResaleID, it.ProductID) {
+func normalizeCartItemDoc(
+	item cartItemDoc,
+) (cartItemDoc, bool) {
+	itemType := inferCartItemType(
+		item.Type,
+		item.InventoryID,
+		item.ListID,
+		item.ModelID,
+		item.ResaleID,
+		item.ProductID,
+	)
+
+	switch itemType {
 	case cartdom.CartItemTypeList:
-		if it.Qty <= 0 || it.InventoryID == "" || it.ListID == "" || it.ModelID == "" {
+		if item.Qty <= 0 ||
+			item.InventoryID == "" ||
+			item.ListID == "" ||
+			item.ModelID == "" {
 			return cartItemDoc{}, false
 		}
 
 		return cartItemDoc{
 			Type:        string(cartdom.CartItemTypeList),
-			InventoryID: it.InventoryID,
-			ListID:      it.ListID,
-			ModelID:     it.ModelID,
-			Qty:         it.Qty,
+			InventoryID: item.InventoryID,
+			ListID:      item.ListID,
+			ModelID:     item.ModelID,
+			Qty:         item.Qty,
 		}, true
 
 	case cartdom.CartItemTypeResale:
-		if it.ResaleID == "" || it.ProductID == "" {
+		if item.ResaleID == "" || item.ProductID == "" {
 			return cartItemDoc{}, false
 		}
 
 		return cartItemDoc{
 			Type:      string(cartdom.CartItemTypeResale),
-			ResaleID:  it.ResaleID,
-			ProductID: it.ProductID,
+			ResaleID:  item.ResaleID,
+			ProductID: item.ProductID,
 			Qty:       1,
 		}, true
 
@@ -386,7 +403,8 @@ func inferCartItemType(
 	itemType := cartdom.CartItemType(rawType)
 
 	switch itemType {
-	case cartdom.CartItemTypeList, cartdom.CartItemTypeResale:
+	case cartdom.CartItemTypeList,
+		cartdom.CartItemTypeResale:
 		return itemType
 	}
 
@@ -394,7 +412,9 @@ func inferCartItemType(
 		return cartdom.CartItemTypeResale
 	}
 
-	if inventoryID != "" || listID != "" || modelID != "" {
+	if inventoryID != "" ||
+		listID != "" ||
+		modelID != "" {
 		return cartdom.CartItemTypeList
 	}
 

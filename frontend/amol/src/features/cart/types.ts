@@ -291,12 +291,3 @@ export type CatalogResponse = {
   modelVariations: CatalogModelVariation[];
   productReviewSummary?: CatalogProductReviewSummary;
 };
-
-export type MeAvatarStateResponse = {
-  avatarId: string;
-  followerCount?: number;
-  followingCount?: number;
-  postCount?: number;
-  lastActiveAt?: string;
-  updatedAt?: string;
-};

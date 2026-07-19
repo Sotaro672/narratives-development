@@ -7,66 +7,20 @@ import { readResponseErrorMessage } from "../../catalog/infrastructure/httpError
 import type {
   CartDTO,
   CartDisplayItem,
+  CartItemDTO,
+  CartItemType,
   CatalogResponse,
 } from "../types";
 
-type CartItemType = "list" | "resale";
-
-type RawCartItem = {
-  type?: string;
-
-  inventoryId?: string;
-  listId?: string;
-  modelId?: string;
-
-  resaleId?: string;
-  productId?: string;
-  productBlueprintId?: string;
-  tokenBlueprintId?: string;
-  brandId?: string;
-
-  title?: string;
-  productName?: string;
-  listImage?: string;
-  imageUrl?: string;
-
-  price?: number;
-  qty?: number;
-
-  [key: string]: unknown;
-};
-
-type CartDisplayItemWithResale = CartDisplayItem & {
-  type?: CartItemType;
-
-  resaleId?: string;
-  productId?: string;
-  productBlueprintId?: string;
-  tokenBlueprintId?: string;
-  brandId?: string;
-
-  title?: string;
-  productName?: string;
-  listImage?: string;
-  imageUrl?: string;
-
-  price?: number;
-};
-
 async function fetchCartFromPath(args: {
   apiBaseUrl: string;
-  avatarId: string;
   idToken: string;
   path: string;
 }): Promise<Response> {
-  const { apiBaseUrl, avatarId, idToken, path } = args;
+  const { apiBaseUrl, idToken, path } = args;
   const base = apiBaseUrl.replace(/\/+$/, "");
 
-  const searchParams = new URLSearchParams({
-    avatarId,
-  });
-
-  return fetch(`${base}${path}?${searchParams.toString()}`, {
+  return fetch(`${base}${path}`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -92,7 +46,6 @@ export async function fetchCart(
 
   const response = await fetchCartFromPath({
     apiBaseUrl,
-    avatarId: normalizedAvatarId,
     idToken,
     path: "/mall/me/cart",
   });
@@ -112,11 +65,14 @@ export async function fetchCart(
 
   return {
     avatarId:
-      typeof data.avatarId === "string" && data.avatarId.trim() !== ""
+      typeof data.avatarId === "string" &&
+      data.avatarId.trim() !== ""
         ? data.avatarId
         : normalizedAvatarId,
     items:
-      data.items && (Array.isArray(data.items) || typeof data.items === "object")
+      data.items &&
+      !Array.isArray(data.items) &&
+      typeof data.items === "object"
         ? data.items
         : {},
     createdAt: data.createdAt ?? null,
@@ -132,25 +88,22 @@ export async function removeCartItem(args: {
   const { apiBaseUrl, item } = args;
   const idToken = await getFirebaseIdToken();
 
-  const normalized = item as CartDisplayItemWithResale;
-  const isResale =
-    normalized.type === "resale" ||
-    Boolean(normalized.resaleId || normalized.productId);
+  const isResale = item.type === "resale";
+  const path = isResale
+    ? "/mall/me/cart/resales"
+    : "/mall/me/cart/items";
 
-  const path = isResale ? "/mall/me/cart/resales" : "/mall/me/cart/items";
   const base = apiBaseUrl.replace(/\/+$/, "");
 
   const body = isResale
     ? {
-        avatarId: normalized.avatarId,
-        resaleId: normalized.resaleId,
-        productId: normalized.productId,
+        resaleId: item.resaleId,
+        productId: item.productId,
       }
     : {
-        avatarId: normalized.avatarId,
-        inventoryId: normalized.inventoryId,
-        listId: normalized.listId,
-        modelId: normalized.modelId,
+        inventoryId: item.inventoryId,
+        listId: item.listId,
+        modelId: item.modelId,
       };
 
   const response = await fetch(`${base}${path}`, {
@@ -166,24 +119,31 @@ export async function removeCartItem(args: {
 
   if (!response.ok) {
     const message = await readResponseErrorMessage(response);
-    throw new Error(message || "カート商品の削除に失敗しました。");
+    throw new Error(
+      message || "カート商品の削除に失敗しました。",
+    );
   }
 
   const contentType = response.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
-    throw new Error("カート商品削除APIがJSON以外を返しました。");
+    throw new Error(
+      "カート商品削除APIがJSON以外を返しました。",
+    );
   }
 
   const data = (await response.json()) as Partial<CartDTO>;
 
   return {
     avatarId:
-      typeof data.avatarId === "string" && data.avatarId.trim() !== ""
+      typeof data.avatarId === "string" &&
+      data.avatarId.trim() !== ""
         ? data.avatarId
-        : normalized.avatarId,
+        : item.avatarId,
     items:
-      data.items && (Array.isArray(data.items) || typeof data.items === "object")
+      data.items &&
+      !Array.isArray(data.items) &&
+      typeof data.items === "object"
         ? data.items
         : {},
     createdAt: data.createdAt ?? null,
@@ -235,27 +195,25 @@ export async function fetchCartItemsWithCatalog(args: {
 
   return Promise.all(
     baseItems.map(async (item) => {
-      const normalized = item as CartDisplayItemWithResale;
-
-      if (isResaleDisplayItem(normalized)) {
+      if (isResaleDisplayItem(item)) {
         return {
-          ...normalized,
+          ...item,
           catalog: null,
         };
       }
 
       try {
-        const catalog = normalized.listId
-          ? await fetchCatalog(apiBaseUrl, normalized.listId)
+        const catalog = item.listId
+          ? await fetchCatalog(apiBaseUrl, item.listId)
           : null;
 
         return {
-          ...normalized,
+          ...item,
           catalog,
         };
       } catch {
         return {
-          ...normalized,
+          ...item,
           catalog: null,
         };
       }
@@ -263,85 +221,85 @@ export async function fetchCartItemsWithCatalog(args: {
   );
 }
 
-function cartDTOToDisplayItems(cart: CartDTO): CartDisplayItem[] {
+function cartDTOToDisplayItems(
+  cart: CartDTO,
+): CartDisplayItem[] {
   const avatarId = cart.avatarId;
   const rawItems = cart.items;
 
-  if (!rawItems) {
-    return [];
-  }
-
-  if (Array.isArray(rawItems)) {
-    return rawItems
-      .map((item, index) =>
-        rawCartItemToDisplayItem({
-          avatarId,
-          itemKey: String(index),
-          item: item as RawCartItem,
-        }),
-      )
-      .filter((item): item is CartDisplayItem => item !== null);
-  }
-
-  if (typeof rawItems !== "object") {
+  if (
+    !rawItems ||
+    Array.isArray(rawItems) ||
+    typeof rawItems !== "object"
+  ) {
     return [];
   }
 
   return Object.entries(rawItems)
     .map(([itemKey, item]) =>
-      rawCartItemToDisplayItem({
+      cartItemToDisplayItem({
         avatarId,
         itemKey,
-        item: item as RawCartItem,
+        item,
       }),
     )
-    .filter((item): item is CartDisplayItem => item !== null);
+    .filter(
+      (item): item is CartDisplayItem =>
+        item !== null,
+    );
 }
 
-function rawCartItemToDisplayItem(args: {
+function cartItemToDisplayItem(args: {
   avatarId: string;
   itemKey: string;
-  item: RawCartItem;
+  item: CartItemDTO;
 }): CartDisplayItem | null {
   const { avatarId, itemKey, item } = args;
 
-  if (!item || typeof item !== "object") {
-    return null;
-  }
-
-  if (inferRawCartItemType(item) === "resale") {
-    return rawResaleCartItemToDisplayItem({
+  if (item.type === "resale") {
+    return resaleCartItemToDisplayItem({
       avatarId,
       itemKey,
       item,
     });
   }
 
-  return rawListCartItemToDisplayItem({
-    avatarId,
-    itemKey,
-    item,
-  });
+  if (item.type === "list") {
+    return listCartItemToDisplayItem({
+      avatarId,
+      itemKey,
+      item,
+    });
+  }
+
+  return null;
 }
 
-function rawListCartItemToDisplayItem(args: {
+function listCartItemToDisplayItem(args: {
   avatarId: string;
   itemKey: string;
-  item: RawCartItem;
+  item: CartItemDTO;
 }): CartDisplayItem | null {
   const { avatarId, itemKey, item } = args;
 
-  const inventoryId = asNonEmptyString(item.inventoryId);
+  const inventoryId = asNonEmptyString(
+    item.inventoryId,
+  );
   const listId = asNonEmptyString(item.listId);
   const modelId = asNonEmptyString(item.modelId);
   const qty = normalizeQty(item.qty);
 
-  if (!inventoryId || !listId || !modelId || qty <= 0) {
+  if (
+    !inventoryId ||
+    !listId ||
+    !modelId ||
+    qty <= 0
+  ) {
     return null;
   }
 
   return {
-    ...(item as Record<string, unknown>),
+    ...item,
     avatarId,
     itemKey,
     type: "list",
@@ -349,13 +307,14 @@ function rawListCartItemToDisplayItem(args: {
     listId,
     modelId,
     qty,
-  } as CartDisplayItem;
+    catalog: null,
+  };
 }
 
-function rawResaleCartItemToDisplayItem(args: {
+function resaleCartItemToDisplayItem(args: {
   avatarId: string;
   itemKey: string;
-  item: RawCartItem;
+  item: CartItemDTO;
 }): CartDisplayItem | null {
   const { avatarId, itemKey, item } = args;
 
@@ -367,14 +326,18 @@ function rawResaleCartItemToDisplayItem(args: {
   }
 
   return {
-    ...(item as Record<string, unknown>),
+    ...item,
     avatarId,
     itemKey,
     type: "resale",
     resaleId,
     productId,
-    productBlueprintId: asNonEmptyString(item.productBlueprintId),
-    tokenBlueprintId: asNonEmptyString(item.tokenBlueprintId),
+    productBlueprintId: asNonEmptyString(
+      item.productBlueprintId,
+    ),
+    tokenBlueprintId: asNonEmptyString(
+      item.tokenBlueprintId,
+    ),
     brandId: asNonEmptyString(item.brandId),
     title: asNonEmptyString(item.title),
     productName: asNonEmptyString(item.productName),
@@ -382,31 +345,22 @@ function rawResaleCartItemToDisplayItem(args: {
     imageUrl: asNonEmptyString(item.imageUrl),
     price: normalizePrice(item.price),
     qty: 1,
-  } as CartDisplayItem;
+    catalog: null,
+  };
 }
 
-function inferRawCartItemType(item: RawCartItem): CartItemType {
-  if (item.type === "resale") {
-    return "resale";
-  }
-
-  if (item.type === "list") {
-    return "list";
-  }
-
-  if (item.resaleId || item.productId) {
-    return "resale";
-  }
-
-  return "list";
-}
-
-function isResaleDisplayItem(item: CartDisplayItemWithResale): boolean {
-  return item.type === "resale" || Boolean(item.resaleId || item.productId);
+function isResaleDisplayItem(
+  item: CartDisplayItem,
+): boolean {
+  return item.type === "resale";
 }
 
 function normalizeQty(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
     return 1;
   }
 
@@ -414,14 +368,20 @@ function normalizeQty(value: unknown): number {
 }
 
 function normalizePrice(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0
+  ) {
     return 0;
   }
 
   return Math.floor(value);
 }
 
-function asNonEmptyString(value: unknown): string {
+function asNonEmptyString(
+  value: unknown,
+): string {
   if (typeof value !== "string") {
     return "";
   }
