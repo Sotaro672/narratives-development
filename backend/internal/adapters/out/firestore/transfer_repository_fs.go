@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	common "narratives/internal/domain/common"
 	transferdom "narratives/internal/domain/transfer"
 )
 
@@ -31,6 +30,7 @@ var (
 
 type TransferRepositoryFS struct {
 	Client *firestore.Client
+	Now    func() time.Time
 
 	TransfersCollection       string
 	AttemptCountersCollection string
@@ -43,6 +43,7 @@ func NewTransferRepositoryFS(
 ) *TransferRepositoryFS {
 	return &TransferRepositoryFS{
 		Client: client,
+		Now:    time.Now,
 	}
 }
 
@@ -388,18 +389,17 @@ func (r *TransferRepositoryFS) CreateAttempt(
 func (r *TransferRepositoryFS) Save(
 	ctx context.Context,
 	t transferdom.Transfer,
-	opts *common.SaveOptions,
 ) (*transferdom.Transfer, error) {
-	if r == nil || r.Client == nil {
+	if r == nil ||
+		r.Client == nil ||
+		r.Now == nil {
 		return nil, ErrTransferRepoNotConfigured
 	}
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
 
-	_ = opts
-
-	now := time.Now().UTC()
+	now := r.Now().UTC()
 	doc, err := transferDocument(t, now)
 	if err != nil {
 		return nil, err
@@ -425,9 +425,10 @@ func (r *TransferRepositoryFS) Patch(
 	productID string,
 	attempt int,
 	patch transferdom.TransferPatch,
-	opts *common.SaveOptions,
 ) (*transferdom.Transfer, error) {
-	if r == nil || r.Client == nil {
+	if r == nil ||
+		r.Client == nil ||
+		r.Now == nil {
 		return nil, ErrTransferRepoNotConfigured
 	}
 	if productID == "" {
@@ -436,8 +437,6 @@ func (r *TransferRepositoryFS) Patch(
 	if attempt <= 0 {
 		return nil, ErrInvalidTransferAttempt
 	}
-
-	_ = opts
 
 	ref := r.transfersCol().
 		Doc(r.transferDocID(productID, attempt))
@@ -469,7 +468,7 @@ func (r *TransferRepositoryFS) Patch(
 				return err
 			}
 
-			now := time.Now().UTC()
+			now := r.Now().UTC()
 			fields := map[string]any{
 				"updatedAt": now,
 			}

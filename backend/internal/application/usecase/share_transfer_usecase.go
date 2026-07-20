@@ -228,7 +228,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 				ErrorType: &et,
 				ErrorMsg:  &msg,
 			}
-			_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p, nil)
+			_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p)
 		}
 	}()
 
@@ -247,7 +247,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 			s := *txSig
 			p.TxSignature = &s
 		}
-		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p, nil)
+		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p)
 	}
 
 	markSucceeded := func(txSig string) {
@@ -260,7 +260,7 @@ func (u *ShareTransferUsecase) ShareToAvatar(ctx context.Context, in ShareTransf
 			Status:      &st,
 			TxSignature: &s,
 		}
-		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p, nil)
+		_, _ = u.transferRepo.Patch(context.Background(), productID, transferAttempt, p)
 	}
 
 	if currentOwner != "" && currentOwner != fromWallet {

@@ -532,7 +532,6 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 			productID,
 			transferAttempt,
 			patch,
-			nil,
 		)
 		return err
 	}

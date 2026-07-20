@@ -4,8 +4,6 @@ package transfer
 import (
 	"context"
 	"time"
-
-	common "narratives/internal/domain/common"
 )
 
 /*
@@ -150,7 +148,6 @@ type RepositoryPort interface {
 	Save(
 		ctx context.Context,
 		t Transfer,
-		opts *common.SaveOptions,
 	) (*Transfer, error)
 
 	// Patch applies specified fields to the Transfer identified by productId
@@ -163,6 +160,5 @@ type RepositoryPort interface {
 		productID string,
 		attempt int,
 		patch TransferPatch,
-		opts *common.SaveOptions,
 	) (*Transfer, error)
 }
