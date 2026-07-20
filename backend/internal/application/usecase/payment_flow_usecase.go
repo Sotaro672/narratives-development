@@ -14,6 +14,12 @@ import (
 
 // OrderReaderForPaymentFlow provides the server-side order source of truth
 // required before starting a payment.
+//
+// Contract:
+//   - When the requested order does not exist, GetByID must return an error
+//     that is or wraps ErrPaymentFlowOrderNotFound.
+//   - Other repository/infrastructure errors must be returned without being
+//     converted to ErrPaymentFlowOrderNotFound.
 type OrderReaderForPaymentFlow interface {
 	GetByID(
 		ctx context.Context,
@@ -66,8 +72,8 @@ type CreateAndConfirmPaymentIntentResult struct {
 //  6. Let PaymentUsecase run post-paid processing when status is succeeded.
 //
 // Responsibility separation:
-// - /mall/me/orders   : OrderHandler   -> OrderUsecase
-// - /mall/me/payments : PaymentHandler -> PaymentFlowUsecase
+//   - /mall/me/orders   : OrderHandler   -> OrderUsecase
+//   - /mall/me/payments : PaymentHandler -> PaymentFlowUsecase
 type PaymentFlowUsecase struct {
 	paymentUC *PaymentUsecase
 
@@ -119,6 +125,16 @@ var (
 	ErrPaymentFlowOrderReaderMissing = errors.New(
 		"payment_flow: order reader is not configured",
 	)
+
+	// ErrPaymentFlowOrderNotFound is the application-layer identity used when
+	// the authoritative Order does not exist.
+	//
+	// OrderReaderForPaymentFlow implementations must return this error, or an
+	// error wrapping it, only for a genuine not-found result.
+	ErrPaymentFlowOrderNotFound = errors.New(
+		"payment_flow: order not found",
+	)
+
 	ErrPaymentFlowPaymentIDEmpty = errors.New(
 		"payment_flow: paymentId is empty",
 	)
@@ -279,6 +295,9 @@ func (u *PaymentFlowUsecase) CreatePaymentAndStartWithResult(
 		paymentID,
 	)
 	if err != nil {
+		// GetByIDが返したsentinelを%wで保持する。
+		// ErrPaymentFlowOrderNotFoundならHandler側のerrors.Isで404となる。
+		// その他のエラーは同じerror chainのまま500となる。
 		return nil, fmt.Errorf(
 			"payment_flow: get order %q: %w",
 			paymentID,

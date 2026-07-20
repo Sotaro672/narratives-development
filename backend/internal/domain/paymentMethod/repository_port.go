@@ -7,44 +7,39 @@ import (
 	"time"
 )
 
-// 契約（インターフェース）のみ定義。実装はインフラ層に委譲します。
-
-// Create input
+// CreatePaymentMethodInputは、Stripeで作成・確認済みの
+// PaymentMethodを永続化するための入力です。
 //
-// 本番運用では create 時に Stripe へ渡すための入力値も扱います。
-// Firestore 等の永続化では最終的に以下の保存値へ正規化します。
-// - stripeCustomerId
-// - stripePaymentMethodId
-// - brand
-// - last4
-// - expMonth
-// - expYear
-// - cardholderName
-// - isDefault
+// cardNumberおよびcvcなどの生カード情報は扱いません。
+// 生カード情報はStripe.js / Elementsから直接Stripeへ送信し、
+// バックエンドにはStripeが発行した識別子とカード表示情報のみを渡します。
 //
-// 追加で、Stripe 作成用の生入力として以下を受け取ります。
-// - cardNumber
-// - cvc
+// Firestoreなどの永続化では、次の値を保存します。
 //
-// 想定フロー:
-// 1. cardNumber / expMonth / expYear / cvc / cardholderName / brand を Stripe に渡す
-// 2. Stripe から stripePaymentMethodId / last4 等を取得する
-// 3. 最終的な PaymentMethod を保存する
+//   - userId
+//   - stripeCustomerId
+//   - stripePaymentMethodId
+//   - brand
+//   - last4
+//   - expMonth
+//   - expYear
+//   - cardholderName
+//   - isDefault
+//   - createdAt
+//   - updatedAt
 type CreatePaymentMethodInput struct {
 	UserID string `json:"userId"`
 
-	// Stripe 作成・連携用
-	CardNumber     string `json:"cardNumber"`
-	CVC            string `json:"cvc"`
+	// Stripeで作成・確認済みの識別子
+	StripeCustomerID      string `json:"stripeCustomerId"`
+	StripePaymentMethodID string `json:"stripePaymentMethodId"`
+
+	// Stripeから取得したカード表示情報
 	Brand          string `json:"brand"`
+	Last4          string `json:"last4"`
 	ExpMonth       int    `json:"expMonth"`
 	ExpYear        int    `json:"expYear"`
 	CardholderName string `json:"cardholderName"`
-
-	// Stripe / 保存結果
-	StripeCustomerID      string `json:"stripeCustomerId"`
-	StripePaymentMethodID string `json:"stripePaymentMethodId"`
-	Last4                 string `json:"last4"`
 
 	// その他
 	IsDefault bool       `json:"isDefault"`
@@ -52,26 +47,86 @@ type CreatePaymentMethodInput struct {
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 }
 
+// RepositoryPortは、PaymentMethodの永続化操作を定義します。
+//
+// 既定カードの一意性維持と切替は、Repository実装の責務です。
+// Application層から既存の既定カードを個別に解除してはいけません。
+//
+// Repository実装は、既定カードの解除と新しい既定カードの設定を
+// 同一Transaction内で原子的に処理しなければなりません。
 type RepositoryPort interface {
-	// 取得系
-	GetByID(ctx context.Context, id string) (*PaymentMethod, error)
+	// GetByIDは、PaymentMethod IDで取得します。
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (*PaymentMethod, error)
 
-	// user に紐づく paymentMethod 一覧を返す
-	GetByUser(ctx context.Context, userID string) ([]PaymentMethod, error)
+	// GetByUserは、ユーザーに紐づくPaymentMethod一覧を返します。
+	GetByUser(
+		ctx context.Context,
+		userID string,
+	) ([]PaymentMethod, error)
 
-	// user の既定 paymentMethod を返す
-	GetDefaultByUser(ctx context.Context, userID string) (*PaymentMethod, error)
+	// GetDefaultByUserは、ユーザーの既定PaymentMethodを返します。
+	GetDefaultByUser(
+		ctx context.Context,
+		userID string,
+	) (*PaymentMethod, error)
 
-	// Stripe PaymentMethod ID で取得する
-	GetByStripePaymentMethodID(ctx context.Context, stripePaymentMethodID string) (*PaymentMethod, error)
+	// GetByStripePaymentMethodIDは、
+	// Stripe PaymentMethod IDで取得します。
+	GetByStripePaymentMethodID(
+		ctx context.Context,
+		stripePaymentMethodID string,
+	) (*PaymentMethod, error)
 
-	// 変更系
-	Create(ctx context.Context, in CreatePaymentMethodInput) (*PaymentMethod, error)
-	Delete(ctx context.Context, id string) error
+	// Createは、Stripeで作成・確認済みのPaymentMethodを保存します。
+	//
+	// in.IsDefaultがfalseの場合は、PaymentMethodの作成だけを行います。
+	//
+	// in.IsDefaultがtrueの場合、Repository実装は次の処理を
+	// 同一Transaction内で原子的に行わなければなりません。
+	//
+	//  1. 同じユーザーに属する既存PaymentMethodを取得する
+	//  2. 既存のisDefault=trueをfalseへ更新する
+	//  3. 新しいPaymentMethodをisDefault=trueで作成する
+	//
+	// いずれかの処理が失敗した場合は、既存の既定設定を含む
+	// すべての変更をロールバックします。
+	Create(
+		ctx context.Context,
+		in CreatePaymentMethodInput,
+	) (*PaymentMethod, error)
 
-	// user 内の既定 paymentMethod 切替補助
-	ClearDefaultByUser(ctx context.Context, userID string) error
-	SetDefault(ctx context.Context, id string, userID string, updatedAt time.Time) (*PaymentMethod, error)
+	// Deleteは、PaymentMethodを削除します。
+	Delete(
+		ctx context.Context,
+		id string,
+	) error
+
+	// SetDefaultは、指定PaymentMethodをユーザーの既定に設定します。
+	//
+	// Repository実装は次の処理を同一Transaction内で
+	// 原子的に行わなければなりません。
+	//
+	//  1. 指定PaymentMethodを取得する
+	//  2. 指定PaymentMethodがuserIDの所有物であることを確認する
+	//  3. 同じユーザーに属する既存PaymentMethodを取得する
+	//  4. 既存のisDefault=trueをfalseへ更新する
+	//  5. 指定PaymentMethodのisDefaultをtrueへ更新する
+	//  6. 指定PaymentMethodのupdatedAtを更新する
+	//
+	// 対象が存在しない場合、またはuserIDの所有物でない場合は
+	// ErrNotFoundを返します。
+	//
+	// いずれかの処理が失敗した場合は、既存の既定設定を含む
+	// すべての変更をロールバックします。
+	SetDefault(
+		ctx context.Context,
+		id string,
+		userID string,
+		updatedAt time.Time,
+	) (*PaymentMethod, error)
 }
 
 // 共通エラー（契約）

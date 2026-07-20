@@ -4,6 +4,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,77 +12,107 @@ import (
 	shipaddrdom "narratives/internal/domain/shippingAddress"
 )
 
-// ShippingAddressRepo defines the minimal persistence port needed by ShippingAddressUsecase.
+// ShippingAddressRepoはDomain層のRepositoryPortをそのまま使用します。
+// Application層では同じinterfaceを再定義しません。
+type ShippingAddressRepo = shipaddrdom.RepositoryPort
+
+// CreateShippingAddressInputは配送先住所の新規作成入力です。
 //
-// 注意:
-// - GetByID は「存在しない」を shipaddrdom.ErrNotFound で返す前提
-// - Create は「既に存在する」を shipaddrdom.ErrConflict で返す前提
-// - Update は「存在しない」を shipaddrdom.ErrNotFound で返す前提
-// - Upsert(Save) は廃止し、起票は Create のみで行う
-// - ListByUserID は userId に紐づく住所一覧を返す（1ユーザー複数住所）
-// - docId = ShippingAddress.ID = UUID
-// - UserID = owner uid
-type ShippingAddressRepo interface {
-	GetByID(ctx context.Context, id string) (*shipaddrdom.ShippingAddress, error)
-
-	// Exists is optional-ish, but some callers may want it.
-	// 実装が無い場合は GetByID で代替してください。
-	Exists(ctx context.Context, id string) (bool, error)
-
-	// Create creates a new document.
-	Create(ctx context.Context, v shipaddrdom.ShippingAddress) (*shipaddrdom.ShippingAddress, error)
-
-	// Update updates an existing document (no upsert).
-	Update(ctx context.Context, v shipaddrdom.ShippingAddress) (*shipaddrdom.ShippingAddress, error)
-
-	// ListByUserID lists documents by userId (1 user -> many addresses).
-	ListByUserID(ctx context.Context, userID string) ([]shipaddrdom.ShippingAddress, error)
-
-	Delete(ctx context.Context, id string) error
+// ID、UserID、CreatedAtおよびUpdatedAtは受け取りません。
+// IDはUsecaseがUUIDを採番し、UserIDは認証UIDから設定し、
+// 時刻はUsecaseのserver clockから設定します。
+type CreateShippingAddressInput struct {
+	ZipCode string
+	State   string
+	City    string
+	Street  string
+	Street2 string
+	Country string
 }
 
-// ShippingAddressUsecase orchestrates shippingAddress operations.
+// UpdateShippingAddressInputは配送先住所の部分更新入力です。
+//
+// nilは変更なしを表します。
+// Street2は任意項目であるため、空文字を指定すると明示的に消去できます。
+// Countryへ空文字を指定した場合は、Domain規則によりJPへ正規化されます。
+type UpdateShippingAddressInput struct {
+	ZipCode *string
+	State   *string
+	City    *string
+	Street  *string
+	Street2 *string
+	Country *string
+}
+
+// ShippingAddressUsecaseは配送先住所に関する処理を制御します。
 type ShippingAddressUsecase struct {
 	repo ShippingAddressRepo
 
-	// NewShippingAddressUsecase で集中管理する可変依存。
-	// テストでは同一 package 内から差し替え可能。
+	// テスト時に差し替え可能な依存です。
 	newDocID func() string
 	now      func() time.Time
 }
 
-func NewShippingAddressUsecase(repo ShippingAddressRepo) *ShippingAddressUsecase {
+// NewShippingAddressUsecaseはShippingAddressUsecaseを生成します。
+//
+// repoがnilの場合でもconstructor自体は失敗させず、各メソッドの
+// ensureRepoでエラーにします。HTTP HandlerではUsecase自体がnilの場合に
+// 503を返すguardを追加します。
+func NewShippingAddressUsecase(
+	repo ShippingAddressRepo,
+) *ShippingAddressUsecase {
 	return &ShippingAddressUsecase{
 		repo:     repo,
 		newDocID: uuid.NewString,
-		now:      func() time.Time { return time.Now().UTC() },
+		now: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 }
 
 func (u *ShippingAddressUsecase) ensureRepo() error {
-	if u == nil || u.repo == nil {
+	if u == nil {
+		return errors.New("shippingAddress usecase is nil")
+	}
+
+	if u.repo == nil {
 		return errors.New("shippingAddress repo not configured")
 	}
+
 	if u.newDocID == nil {
 		return errors.New("shippingAddress newDocID not configured")
 	}
+
 	if u.now == nil {
 		return errors.New("shippingAddress now not configured")
 	}
+
 	return nil
 }
 
-func validateID(id string) (string, error) {
+func validateShippingAddressID(id string) (string, error) {
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", shipaddrdom.ErrInvalidID
 	}
+
+	if _, err := uuid.Parse(id); err != nil {
+		return "", shipaddrdom.ErrInvalidID
+	}
+
 	return id, nil
 }
 
-func validateUID(uid string) (string, error) {
+func validateShippingAddressUID(uid string) (string, error) {
+	uid = strings.TrimSpace(uid)
 	if uid == "" {
 		return "", shipaddrdom.ErrInvalidUserID
 	}
+
+	if len([]rune(uid)) > shipaddrdom.MaxUserIDLength {
+		return "", shipaddrdom.ErrInvalidUserID
+	}
+
 	return uid, nil
 }
 
@@ -89,131 +120,224 @@ func validateUID(uid string) (string, error) {
 // Queries
 // --------------------
 
-func (u *ShippingAddressUsecase) GetByID(ctx context.Context, id string) (*shipaddrdom.ShippingAddress, error) {
+// GetByIDはdocument IDだけでShippingAddressを取得します。
+//
+// このメソッドは所有者を確認しません。
+// Mallの/me配下の単件取得ではGetByUserを使用してください。
+func (u *ShippingAddressUsecase) GetByID(
+	ctx context.Context,
+	id string,
+) (*shipaddrdom.ShippingAddress, error) {
 	if err := u.ensureRepo(); err != nil {
 		return nil, err
 	}
 
-	tid, err := validateID(id)
+	validID, err := validateShippingAddressID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	return u.repo.GetByID(ctx, tid)
+	return u.repo.GetByID(ctx, validID)
 }
 
-func (u *ShippingAddressUsecase) Exists(ctx context.Context, id string) (bool, error) {
+// GetByUserはdocument IDと認証UIDの両方を条件として取得します。
+//
+// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、
+// いずれもErrNotFoundを返します。
+//
+// Mallの/me配下の単件取得では、このメソッドを使用します。
+func (u *ShippingAddressUsecase) GetByUser(
+	ctx context.Context,
+	id string,
+	uid string,
+) (*shipaddrdom.ShippingAddress, error) {
+	if err := u.ensureRepo(); err != nil {
+		return nil, err
+	}
+
+	validID, err := validateShippingAddressID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	validUID, err := validateShippingAddressUID(uid)
+	if err != nil {
+		return nil, err
+	}
+
+	return u.repo.GetByUser(ctx, validID, validUID)
+}
+
+// Existsはdocument IDに対応するShippingAddressが存在するか返します。
+//
+// このメソッドは所有者を確認しないため、存在確認結果を
+// 外部向けAPIへ直接公開してはいけません。
+func (u *ShippingAddressUsecase) Exists(
+	ctx context.Context,
+	id string,
+) (bool, error) {
 	if err := u.ensureRepo(); err != nil {
 		return false, err
 	}
 
-	tid, err := validateID(id)
+	validID, err := validateShippingAddressID(id)
 	if err != nil {
 		return false, err
 	}
 
-	return u.repo.Exists(ctx, tid)
+	return u.repo.Exists(ctx, validID)
 }
 
-// ListByUserID returns shipping addresses owned by the given user.
-// docId は UUID のまま、userId で絞り込む。
-func (u *ShippingAddressUsecase) ListByUserID(ctx context.Context, uid string) ([]shipaddrdom.ShippingAddress, error) {
+// ListByUserIDは指定ユーザーが所有する配送先住所一覧を返します。
+func (u *ShippingAddressUsecase) ListByUserID(
+	ctx context.Context,
+	uid string,
+) ([]shipaddrdom.ShippingAddress, error) {
 	if err := u.ensureRepo(); err != nil {
 		return nil, err
 	}
 
-	tuid, err := validateUID(uid)
+	validUID, err := validateShippingAddressUID(uid)
 	if err != nil {
 		return nil, err
 	}
 
-	return u.repo.ListByUserID(ctx, tuid)
+	return u.repo.ListByUserID(ctx, validUID)
 }
 
 // --------------------
 // Commands
 // --------------------
 
-// Create creates a new shipping address.
-// - docId は usecase 側で UUID 採番する
-// - userId は auth context 由来の uid で確定する
-// - handler から渡された ID / UserID / CreatedAt / UpdatedAt には依存しない
+// Createは新しい配送先住所を作成します。
+//
+// IDはUsecaseがUUIDを採番します。
+// UserIDは認証UIDから設定します。
+// CreatedAtおよびUpdatedAtはserver clockから設定します。
+// Countryの既定値はDomain constructorが決定します。
 func (u *ShippingAddressUsecase) Create(
 	ctx context.Context,
 	uid string,
-	v shipaddrdom.ShippingAddress,
+	in CreateShippingAddressInput,
 ) (*shipaddrdom.ShippingAddress, error) {
 	if err := u.ensureRepo(); err != nil {
 		return nil, err
 	}
 
-	tuid, err := validateUID(uid)
+	validUID, err := validateShippingAddressUID(uid)
 	if err != nil {
 		return nil, err
 	}
 
-	ent, err := shipaddrdom.NewForCreateWithNow(
-		tuid,
-		v.ZipCode,
-		v.State,
-		v.City,
-		v.Street,
-		v.Street2,
-		v.Country,
-		u.now(),
+	documentID := u.newDocID()
+	if _, err := validateShippingAddressID(documentID); err != nil {
+		return nil, err
+	}
+
+	now := u.now().UTC()
+
+	entity, err := shipaddrdom.NewWithNow(
+		documentID,
+		validUID,
+		in.ZipCode,
+		in.State,
+		in.City,
+		in.Street,
+		in.Street2,
+		in.Country,
+		now,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	ent.ID = u.newDocID()
-	ent.UserID = tuid
-
-	return u.repo.Create(ctx, ent)
+	return u.repo.Create(ctx, entity)
 }
 
-// Update updates an existing shipping address.
-// - 対象 docId は更新時に再採番しない
-// - 更新前に本人の住所かチェックする
-// - CreatedAt / ID / UserID は既存値を保持する
-// - UpdatedAt は usecase 側の now() で更新する
+// Updateは指定ユーザーが所有する配送先住所を部分更新します。
+//
+// Handlerは既存Entityを取得・mergeせず、UpdateShippingAddressInputを
+// そのままこのメソッドへ渡します。
+//
+// Usecaseが所有者確認付き取得、入力merge、Domain更新、永続化を
+// 一度だけ実行します。
+//
+// ID、UserIDおよびCreatedAtは既存値を保持します。
+// UpdatedAtはserver clockで更新します。
 func (u *ShippingAddressUsecase) Update(
 	ctx context.Context,
 	id string,
 	uid string,
-	v shipaddrdom.ShippingAddress,
+	in UpdateShippingAddressInput,
 ) (*shipaddrdom.ShippingAddress, error) {
 	if err := u.ensureRepo(); err != nil {
 		return nil, err
 	}
 
-	tid, err := validateID(id)
+	validID, err := validateShippingAddressID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	tuid, err := validateUID(uid)
+	validUID, err := validateShippingAddressUID(uid)
 	if err != nil {
 		return nil, err
 	}
 
-	current, err := u.repo.GetByID(ctx, tid)
+	current, err := u.repo.GetByUser(
+		ctx,
+		validID,
+		validUID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	if current.UserID != tuid {
+	if current == nil {
 		return nil, shipaddrdom.ErrNotFound
 	}
 
+	zipCode := current.ZipCode
+	state := current.State
+	city := current.City
+	street := current.Street
+	street2 := current.Street2
+	country := current.Country
+
+	if in.ZipCode != nil {
+		zipCode = *in.ZipCode
+	}
+
+	if in.State != nil {
+		state = *in.State
+	}
+
+	if in.City != nil {
+		city = *in.City
+	}
+
+	if in.Street != nil {
+		street = *in.Street
+	}
+
+	if in.Street2 != nil {
+		street2 = *in.Street2
+	}
+
+	if in.Country != nil {
+		country = *in.Country
+	}
+
+	now := u.now().UTC()
+
 	if err := current.UpdateFromForm(
-		v.ZipCode,
-		v.State,
-		v.City,
-		v.Street,
-		v.Street2,
-		v.Country,
-		u.now(),
+		zipCode,
+		state,
+		city,
+		street,
+		street2,
+		country,
+		now,
 	); err != nil {
 		return nil, err
 	}
@@ -221,48 +345,61 @@ func (u *ShippingAddressUsecase) Update(
 	return u.repo.Update(ctx, *current)
 }
 
-// Delete deletes a shipping address by docId.
-// 注意:
-// - この method は本人チェックをしない
-// - /mall/me/... 系では DeleteByUser を使うこと
-func (u *ShippingAddressUsecase) Delete(ctx context.Context, id string) error {
+// Deleteはdocument IDだけで配送先住所を削除します。
+//
+// このメソッドは所有者を確認しません。
+// Mallの/me配下ではDeleteByUserを使用してください。
+func (u *ShippingAddressUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if err := u.ensureRepo(); err != nil {
 		return err
 	}
 
-	tid, err := validateID(id)
+	validID, err := validateShippingAddressID(id)
 	if err != nil {
 		return err
 	}
 
-	return u.repo.Delete(ctx, tid)
+	return u.repo.Delete(ctx, validID)
 }
 
-// DeleteByUser deletes a shipping address after ownership check.
-// /mall/me/... 系ではこちらを使う。
-func (u *ShippingAddressUsecase) DeleteByUser(ctx context.Context, id string, uid string) error {
+// DeleteByUserは所有者を確認して配送先住所を削除します。
+//
+// 対象が存在しない場合と、対象が指定ユーザーの所有物でない場合は、
+// いずれもErrNotFoundを返します。
+func (u *ShippingAddressUsecase) DeleteByUser(
+	ctx context.Context,
+	id string,
+	uid string,
+) error {
 	if err := u.ensureRepo(); err != nil {
 		return err
 	}
 
-	tid, err := validateID(id)
+	validID, err := validateShippingAddressID(id)
 	if err != nil {
 		return err
 	}
 
-	tuid, err := validateUID(uid)
+	validUID, err := validateShippingAddressUID(uid)
 	if err != nil {
 		return err
 	}
 
-	current, err := u.repo.GetByID(ctx, tid)
+	current, err := u.repo.GetByUser(
+		ctx,
+		validID,
+		validUID,
+	)
 	if err != nil {
 		return err
 	}
 
-	if current.UserID != tuid {
+	if current == nil {
 		return shipaddrdom.ErrNotFound
 	}
 
-	return u.repo.Delete(ctx, tid)
+	return u.repo.Delete(ctx, validID)
 }

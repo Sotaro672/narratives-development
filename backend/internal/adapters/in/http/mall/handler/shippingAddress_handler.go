@@ -2,70 +2,126 @@
 package mallHandler
 
 import (
-	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 	shadom "narratives/internal/domain/shippingAddress"
 )
 
-// ShippingAddressHandler は /mall/me/shipping-addresses 関連のエンドポイントを担当します。
+const maxShippingAddressBodyBytes int64 = 1 << 20 // 1 MiB
+
+// ShippingAddressHandlerは、
+// /mall/me/shipping-addresses関連のHTTP endpointを処理します。
 type ShippingAddressHandler struct {
 	uc *usecase.ShippingAddressUsecase
 }
 
-// NewShippingAddressHandler はHTTPハンドラを初期化します。
-func NewShippingAddressHandler(uc *usecase.ShippingAddressUsecase) http.Handler {
-	return &ShippingAddressHandler{uc: uc}
+// NewShippingAddressHandlerはHTTP Handlerを生成します。
+//
+// ucがnilの場合は各endpointで503を返します。
+func NewShippingAddressHandler(
+	uc *usecase.ShippingAddressUsecase,
+) http.Handler {
+	return &ShippingAddressHandler{
+		uc: uc,
+	}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
-func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// shippingAddressCreateRequestは配送先住所の作成requestです。
+//
+// ID、UserID、CreatedAtおよびUpdatedAtは受け取りません。
+// IDと時刻はUsecaseが生成し、UserIDは認証contextから取得します。
+type shippingAddressCreateRequest struct {
+	ZipCode string  `json:"zipCode"`
+	State   string  `json:"state"`
+	City    string  `json:"city"`
+	Street  string  `json:"street"`
+	Street2 *string `json:"street2,omitempty"`
+	Country *string `json:"country,omitempty"`
+}
+
+// shippingAddressUpdateRequestは配送先住所の部分更新requestです。
+//
+// nilは変更なしを表します。
+// Street2へ空文字を指定すると明示的に消去します。
+type shippingAddressUpdateRequest struct {
+	ZipCode *string `json:"zipCode,omitempty"`
+	State   *string `json:"state,omitempty"`
+	City    *string `json:"city,omitempty"`
+	Street  *string `json:"street,omitempty"`
+	Street2 *string `json:"street2,omitempty"`
+	Country *string `json:"country,omitempty"`
+}
+
+// ServeHTTPはshippingAddress endpointのroutingを行います。
+func (h *ShippingAddressHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ✅ 末尾スラッシュを吸収（/mall/... 前提で扱う）
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	// GET /mall/me/shipping-addresses (一覧)
-	case r.Method == http.MethodGet && path == "/mall/me/shipping-addresses":
+	case r.Method == http.MethodGet &&
+		path == "/mall/me/shipping-addresses":
 		h.listMe(w, r)
 		return
 
-	// GET /mall/me/shipping-addresses/{id}
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/me/shipping-addresses/")
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(
+			path,
+			"/mall/me/shipping-addresses/",
+		):
+		id := strings.TrimPrefix(
+			path,
+			"/mall/me/shipping-addresses/",
+		)
 		h.get(w, r, id)
 		return
 
-	// POST /mall/me/shipping-addresses
-	// ✅ 起票は Create のみ（docId は usecase 側でランダム採番）
-	case r.Method == http.MethodPost && path == "/mall/me/shipping-addresses":
+	case r.Method == http.MethodPost &&
+		path == "/mall/me/shipping-addresses":
 		h.post(w, r)
 		return
 
-	// PATCH /mall/me/shipping-addresses/{id}
-	// ✅ 更新は Update のみ（存在しない場合は 404）
-	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/me/shipping-addresses/")
+	case r.Method == http.MethodPatch &&
+		strings.HasPrefix(
+			path,
+			"/mall/me/shipping-addresses/",
+		):
+		id := strings.TrimPrefix(
+			path,
+			"/mall/me/shipping-addresses/",
+		)
 		h.patch(w, r, id)
 		return
 
-	// DELETE /mall/me/shipping-addresses/{id}
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/mall/me/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/mall/me/shipping-addresses/")
+	case r.Method == http.MethodDelete &&
+		strings.HasPrefix(
+			path,
+			"/mall/me/shipping-addresses/",
+		):
+		id := strings.TrimPrefix(
+			path,
+			"/mall/me/shipping-addresses/",
+		)
 		h.del(w, r, id)
 		return
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
-		return
+		writeShippingAddressJSON(
+			w,
+			http.StatusNotFound,
+			map[string]string{
+				"error": "not_found",
+			},
+		)
 	}
 }
 
@@ -73,269 +129,324 @@ func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 // Helpers
 // --------------------
 
-// ✅ /me 系の uid は UserAuthMiddleware により context へ格納されている想定。
-// このハンドラではヘッダ/body から uid を受け取らない
-func (h *ShippingAddressHandler) requireUID(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (h *ShippingAddressHandler) requireUsecase(
+	w http.ResponseWriter,
+) bool {
+	if h != nil && h.uc != nil {
+		return true
+	}
+
+	writeShippingAddressJSON(
+		w,
+		http.StatusServiceUnavailable,
+		map[string]string{
+			"error": "shipping_address_usecase_not_initialized",
+		},
+	)
+
+	return false
+}
+
+// requireUIDは認証middlewareがcontextへ設定したUIDを取得します。
+//
+// header、queryおよびrequest bodyからUIDを受け取りません。
+func (h *ShippingAddressHandler) requireUID(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
 	uid, ok := middleware.CurrentUserUID(r)
-	if ok && uid != "" {
+	if ok && strings.TrimSpace(uid) != "" {
 		return uid, true
 	}
-	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+
+	writeShippingAddressJSON(
+		w,
+		http.StatusUnauthorized,
+		map[string]string{
+			"error": "unauthorized",
+		},
+	)
+
 	return "", false
 }
 
-// --------------------
-// GET /mall/me/shipping-addresses (一覧)
-// --------------------
+// decodeShippingAddressJSONはrequest bodyを厳格にdecodeします。
+//
+//   - 最大サイズは1 MiB
+//   - 未定義fieldを拒否
+//   - JSON値が複数存在するbodyを拒否
+//   - 空bodyを拒否
+func decodeShippingAddressJSON(
+	w http.ResponseWriter,
+	r *http.Request,
+	dst any,
+) error {
+	r.Body = http.MaxBytesReader(
+		w,
+		r.Body,
+		maxShippingAddressBodyBytes,
+	)
 
-func (h *ShippingAddressHandler) listMe(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
 
-	uid, ok := h.requireUID(w, r)
-	if !ok {
-		return
+	if err := decoder.Decode(dst); err != nil {
+		return err
 	}
 
-	addrs, err := h.uc.ListByUserID(ctx, uid)
-	if err != nil {
-		writeShippingAddressErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(addrs)
-}
-
-// --------------------
-// GET /mall/me/shipping-addresses/{id}
-// --------------------
-
-func (h *ShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
-	_, ok := h.requireUID(w, r)
-	if !ok {
-		return
-	}
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	addr, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writeShippingAddressErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(addr)
-}
-
-// --------------------
-// POST /mall/me/shipping-addresses
-// --------------------
-
-func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	uid, ok := h.requireUID(w, r)
-	if !ok {
-		return
-	}
-
-	raw, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
-		return
-	}
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-
-	// frontend/mall の入力欄に合わせる（zipCode/state/city/street/street2）
-	// ✅ docId は usecase がランダム採番（body では受け取らない）
-	// ✅ userId は /me の文脈では受け取らない
-	type createReq struct {
-		ZipCode string  `json:"zipCode"`
-		State   string  `json:"state"`
-		City    string  `json:"city"`
-		Street  string  `json:"street"`
-		Street2 *string `json:"street2,omitempty"`
-		Country *string `json:"country,omitempty"` // UIに無い想定なので任意
-	}
-
-	var req createReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	street2 := ""
-	if req.Street2 != nil {
-		street2 = *req.Street2
-	}
-
-	country := "JP"
-	if req.Country != nil {
-		if c := *req.Country; c != "" {
-			country = c
+	var trailing any
+	err := decoder.Decode(&trailing)
+	if !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New(
+				"request body must contain exactly one JSON value",
+			)
 		}
+
+		return err
 	}
 
-	now := time.Now().UTC()
+	return nil
+}
 
-	// ✅ Create 時は「id なし」を許容する Create 用コンストラクタを使う
-	//    （id は usecase が採番するのでここでは不要）
-	ent, err := shadom.NewForCreateWithNow(
-		uid, // userId は auth から確定
-		req.ZipCode,
-		req.State,
-		req.City,
-		req.Street,
-		street2,
-		country,
-		now,
+func writeShippingAddressJSON(
+	w http.ResponseWriter,
+	status int,
+	body any,
+) {
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func writeInvalidShippingAddressJSON(
+	w http.ResponseWriter,
+) {
+	writeShippingAddressJSON(
+		w,
+		http.StatusBadRequest,
+		map[string]string{
+			"error": "invalid_json",
+		},
+	)
+}
+
+// --------------------
+// GET /mall/me/shipping-addresses
+// --------------------
+
+func (h *ShippingAddressHandler) listMe(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	uid, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
+
+	if !h.requireUsecase(w) {
+		return
+	}
+
+	addresses, err := h.uc.ListByUserID(
+		r.Context(),
+		uid,
 	)
 	if err != nil {
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	created, err := h.uc.Create(ctx, uid, ent)
+	writeShippingAddressJSON(
+		w,
+		http.StatusOK,
+		addresses,
+	)
+}
+
+// --------------------
+// GET /mall/me/shipping-addresses/{id}
+// --------------------
+
+func (h *ShippingAddressHandler) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
+	uid, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
+
+	if !h.requireUsecase(w) {
+		return
+	}
+
+	// document IDと認証UIDの両方を条件として取得します。
+	// 対象が他ユーザーの所有物である場合も404を返します。
+	address, err := h.uc.GetByUser(
+		r.Context(),
+		id,
+		uid,
+	)
 	if err != nil {
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(created)
+	writeShippingAddressJSON(
+		w,
+		http.StatusOK,
+		address,
+	)
+}
+
+// --------------------
+// POST /mall/me/shipping-addresses
+// --------------------
+
+func (h *ShippingAddressHandler) post(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	uid, ok := h.requireUID(w, r)
+	if !ok {
+		return
+	}
+
+	if !h.requireUsecase(w) {
+		return
+	}
+
+	var request shippingAddressCreateRequest
+	if err := decodeShippingAddressJSON(
+		w,
+		r,
+		&request,
+	); err != nil {
+		writeInvalidShippingAddressJSON(w)
+		return
+	}
+
+	street2 := ""
+	if request.Street2 != nil {
+		street2 = *request.Street2
+	}
+
+	country := ""
+	if request.Country != nil {
+		country = *request.Country
+	}
+
+	// HandlerはDTO変換だけを行います。
+	// Domain生成、Countryの既定値、UUID採番および時刻設定は
+	// UsecaseとDomainへ委譲します。
+	input := usecase.CreateShippingAddressInput{
+		ZipCode: request.ZipCode,
+		State:   request.State,
+		City:    request.City,
+		Street:  request.Street,
+		Street2: street2,
+		Country: country,
+	}
+
+	created, err := h.uc.Create(
+		r.Context(),
+		uid,
+		input,
+	)
+	if err != nil {
+		writeShippingAddressErr(w, err)
+		return
+	}
+
+	writeShippingAddressJSON(
+		w,
+		http.StatusCreated,
+		created,
+	)
 }
 
 // --------------------
 // PATCH /mall/me/shipping-addresses/{id}
 // --------------------
 
-func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
+func (h *ShippingAddressHandler) patch(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	uid, ok := h.requireUID(w, r)
 	if !ok {
 		return
 	}
 
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+	if !h.requireUsecase(w) {
 		return
 	}
 
-	raw, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
-		return
-	}
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-
-	// 部分更新（null/未指定は現状維持）
-	type patchReq struct {
-		ZipCode *string `json:"zipCode,omitempty"`
-		State   *string `json:"state,omitempty"`
-		City    *string `json:"city,omitempty"`
-		Street  *string `json:"street,omitempty"`
-		Street2 *string `json:"street2,omitempty"`
-		Country *string `json:"country,omitempty"`
-	}
-
-	var req patchReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	// ✅ まず既存取得（存在しなければ 404）
-	current, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writeShippingAddressErr(w, err)
-		return
-	}
-
-	// マージ（current は *ShippingAddress）
-	zipCode := current.ZipCode
-	state := current.State
-	city := current.City
-	street := current.Street
-	street2 := current.Street2
-	country := current.Country
-
-	if req.ZipCode != nil {
-		zipCode = *req.ZipCode
-	}
-	if req.State != nil {
-		state = *req.State
-	}
-	if req.City != nil {
-		city = *req.City
-	}
-	if req.Street != nil {
-		street = *req.Street
-	}
-	if req.Street2 != nil {
-		street2 = *req.Street2
-	}
-	if req.Country != nil {
-		country = *req.Country
-	}
-	if country == "" {
-		country = "JP"
-	}
-
-	// ドメインの更新メソッドで検証＋更新
-	if err := current.UpdateFromForm(
-		zipCode,
-		state,
-		city,
-		street,
-		street2,
-		country,
-		time.Now().UTC(),
+	var request shippingAddressUpdateRequest
+	if err := decodeShippingAddressJSON(
+		w,
+		r,
+		&request,
 	); err != nil {
-		writeShippingAddressErr(w, err)
+		writeInvalidShippingAddressJSON(w)
 		return
 	}
 
-	updated, err := h.uc.Update(ctx, id, uid, *current)
+	// Handlerでは既存Entityの取得、mergeおよびDomain更新を行いません。
+	// 所有者確認付き取得、merge、Domain検証および永続化は
+	// Usecaseが一度だけ実行します。
+	input := usecase.UpdateShippingAddressInput{
+		ZipCode: request.ZipCode,
+		State:   request.State,
+		City:    request.City,
+		Street:  request.Street,
+		Street2: request.Street2,
+		Country: request.Country,
+	}
+
+	updated, err := h.uc.Update(
+		r.Context(),
+		id,
+		uid,
+		input,
+	)
 	if err != nil {
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(updated)
+	writeShippingAddressJSON(
+		w,
+		http.StatusOK,
+		updated,
+	)
 }
 
 // --------------------
 // DELETE /mall/me/shipping-addresses/{id}
 // --------------------
 
-func (h *ShippingAddressHandler) del(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-
+func (h *ShippingAddressHandler) del(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	uid, ok := h.requireUID(w, r)
 	if !ok {
 		return
 	}
 
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+	if !h.requireUsecase(w) {
 		return
 	}
 
-	// ✅ 本人チェック付き delete（推奨）
-	if err := h.uc.DeleteByUser(ctx, id, uid); err != nil {
+	if err := h.uc.DeleteByUser(
+		r.Context(),
+		id,
+		uid,
+	); err != nil {
 		writeShippingAddressErr(w, err)
 		return
 	}
@@ -343,28 +454,44 @@ func (h *ShippingAddressHandler) del(w http.ResponseWriter, r *http.Request, id 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// エラーハンドリング
-func writeShippingAddressErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
+// --------------------
+// Error mapping
+// --------------------
 
-	switch err {
-	case shadom.ErrInvalidID,
-		shadom.ErrInvalidUserID,
-		shadom.ErrInvalidZipCode,
-		shadom.ErrInvalidState,
-		shadom.ErrInvalidCity,
-		shadom.ErrInvalidStreet,
-		shadom.ErrInvalidStreet2,
-		shadom.ErrInvalidCountry,
-		shadom.ErrInvalidCreatedAt,
-		shadom.ErrInvalidUpdatedAt:
-		code = http.StatusBadRequest
-	case shadom.ErrNotFound:
-		code = http.StatusNotFound
-	case shadom.ErrConflict:
-		code = http.StatusConflict
+func isInvalidShippingAddressError(err error) bool {
+	return errors.Is(err, shadom.ErrInvalidID) ||
+		errors.Is(err, shadom.ErrInvalidUserID) ||
+		errors.Is(err, shadom.ErrInvalidZipCode) ||
+		errors.Is(err, shadom.ErrInvalidState) ||
+		errors.Is(err, shadom.ErrInvalidCity) ||
+		errors.Is(err, shadom.ErrInvalidStreet) ||
+		errors.Is(err, shadom.ErrInvalidCountry) ||
+		errors.Is(err, shadom.ErrInvalidCreatedAt) ||
+		errors.Is(err, shadom.ErrInvalidUpdatedAt)
+}
+
+func writeShippingAddressErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	statusCode := http.StatusInternalServerError
+
+	switch {
+	case isInvalidShippingAddressError(err):
+		statusCode = http.StatusBadRequest
+
+	case errors.Is(err, shadom.ErrNotFound):
+		statusCode = http.StatusNotFound
+
+	case errors.Is(err, shadom.ErrConflict):
+		statusCode = http.StatusConflict
 	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	writeShippingAddressJSON(
+		w,
+		statusCode,
+		map[string]string{
+			"error": err.Error(),
+		},
+	)
 }

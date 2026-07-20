@@ -11,11 +11,16 @@ import (
 )
 
 var (
-	ErrSetupIntentNotImplemented = errors.New("paymentMethod: setup intent not implemented")
-	ErrInvalidCardNumber         = errors.New("paymentMethod: invalid card number")
-	ErrInvalidCVC                = errors.New("paymentMethod: invalid cvc")
+	ErrSetupIntentNotImplemented = errors.New(
+		"paymentMethod: setup intent not implemented",
+	)
 )
 
+// StripePaymentMethodGatewayは、PaymentMethod登録に必要な
+// Stripe CustomerおよびSetupIntentの操作を定義します。
+//
+// cardNumberおよびCVCなどの生カード情報は扱いません。
+// 生カード情報はStripe.js / Elementsから直接Stripeへ送信します。
 type StripePaymentMethodGateway interface {
 	GetOrCreateCustomer(
 		ctx context.Context,
@@ -30,12 +35,13 @@ type StripePaymentMethodGateway interface {
 	) (clientSecret string, err error)
 }
 
-// PaymentMethodSetupIntentResult は setup-intent endpoint 用の返却値です。
+// PaymentMethodSetupIntentResultは、setup-intent endpoint用の返却値です。
 type PaymentMethodSetupIntentResult struct {
 	ClientSecret     string `json:"clientSecret"`
 	StripeCustomerID string `json:"stripeCustomerId"`
 }
 
+// PaymentMethodUsecaseは、PaymentMethodに関するユースケースを提供します。
 type PaymentMethodUsecase struct {
 	repo       pm.RepositoryPort
 	stripeGate StripePaymentMethodGateway
@@ -53,8 +59,10 @@ func NewPaymentMethodUsecase(
 	}
 }
 
-// SetStripeGateway は後から Stripe gateway を注入したい場合に使います。
-func (u *PaymentMethodUsecase) SetStripeGateway(stripeGate StripePaymentMethodGateway) {
+// SetStripeGatewayは、後からStripe gatewayを注入する場合に使用します。
+func (u *PaymentMethodUsecase) SetStripeGateway(
+	stripeGate StripePaymentMethodGateway,
+) {
 	u.stripeGate = stripeGate
 }
 
@@ -62,26 +70,45 @@ func (u *PaymentMethodUsecase) SetStripeGateway(stripeGate StripePaymentMethodGa
 // Queries
 // ============================================================
 
-func (u *PaymentMethodUsecase) GetByID(ctx context.Context, id string) (*pm.PaymentMethod, error) {
+func (u *PaymentMethodUsecase) GetByID(
+	ctx context.Context,
+	id string,
+) (*pm.PaymentMethod, error) {
 	return u.repo.GetByID(ctx, id)
 }
 
-func (u *PaymentMethodUsecase) GetByUser(ctx context.Context, userID string) ([]pm.PaymentMethod, error) {
+func (u *PaymentMethodUsecase) GetByUser(
+	ctx context.Context,
+	userID string,
+) ([]pm.PaymentMethod, error) {
 	return u.repo.GetByUser(ctx, userID)
 }
 
-func (u *PaymentMethodUsecase) GetDefaultByUser(ctx context.Context, userID string) (*pm.PaymentMethod, error) {
+func (u *PaymentMethodUsecase) GetDefaultByUser(
+	ctx context.Context,
+	userID string,
+) (*pm.PaymentMethod, error) {
 	return u.repo.GetDefaultByUser(ctx, userID)
 }
 
-func (u *PaymentMethodUsecase) GetByStripePaymentMethodID(ctx context.Context, stripePaymentMethodID string) (*pm.PaymentMethod, error) {
-	return u.repo.GetByStripePaymentMethodID(ctx, stripePaymentMethodID)
+func (u *PaymentMethodUsecase) GetByStripePaymentMethodID(
+	ctx context.Context,
+	stripePaymentMethodID string,
+) (*pm.PaymentMethod, error) {
+	return u.repo.GetByStripePaymentMethodID(
+		ctx,
+		stripePaymentMethodID,
+	)
 }
 
 // ============================================================
 // Stripe setup-intent
 // ============================================================
 
+// CreateSetupIntentは、Stripe.js / Elementsでカード情報を登録するための
+// SetupIntentを作成します。
+//
+// 生カード番号およびCVCは、このメソッドには渡しません。
 func (u *PaymentMethodUsecase) CreateSetupIntent(
 	ctx context.Context,
 	userID string,
@@ -97,7 +124,11 @@ func (u *PaymentMethodUsecase) CreateSetupIntent(
 		return nil, pm.ErrInvalidCardholderName
 	}
 
-	stripeCustomerID, err := u.stripeGate.GetOrCreateCustomer(ctx, userID, cardholderName)
+	stripeCustomerID, err := u.stripeGate.GetOrCreateCustomer(
+		ctx,
+		userID,
+		cardholderName,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +136,11 @@ func (u *PaymentMethodUsecase) CreateSetupIntent(
 		return nil, pm.ErrInvalidStripeCustomerID
 	}
 
-	clientSecret, err := u.stripeGate.CreateSetupIntent(ctx, stripeCustomerID, cardholderName)
+	clientSecret, err := u.stripeGate.CreateSetupIntent(
+		ctx,
+		stripeCustomerID,
+		cardholderName,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +158,17 @@ func (u *PaymentMethodUsecase) CreateSetupIntent(
 // Commands
 // ============================================================
 
-func (u *PaymentMethodUsecase) Create(ctx context.Context, in pm.CreatePaymentMethodInput) (*pm.PaymentMethod, error) {
+// Createは、Stripeで作成・確認済みのPaymentMethodを保存します。
+//
+// StripePaymentMethodIDやカード表示情報はStripe.js / Elementsによる
+// 登録完了後の値を使用し、生カード番号およびCVCは受け取りません。
+//
+// in.IsDefaultがtrueの場合の「既存の既定解除＋新規カード作成」は、
+// Repository実装が同一Transaction内で原子的に処理します。
+func (u *PaymentMethodUsecase) Create(
+	ctx context.Context,
+	in pm.CreatePaymentMethodInput,
+) (*pm.PaymentMethod, error) {
 	now := u.now().UTC()
 
 	if in.UserID == "" {
@@ -145,63 +190,87 @@ func (u *PaymentMethodUsecase) Create(ctx context.Context, in pm.CreatePaymentMe
 	}
 
 	if in.CreatedAt == nil || in.CreatedAt.IsZero() {
-		t := now
-		in.CreatedAt = &t
+		createdAt := now
+		in.CreatedAt = &createdAt
 	}
 	if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
-		t := now
-		in.UpdatedAt = &t
+		updatedAt := now
+		in.UpdatedAt = &updatedAt
 	}
 
-	// Stripe Customer が未指定なら user 単位で取得または新規作成します。
+	// StripeCustomerIDが未指定の場合は、
+	// ユーザー単位でStripe Customerを取得または作成します。
 	if in.StripeCustomerID == "" {
 		if u.stripeGate == nil {
 			return nil, pm.ErrInvalidStripeCustomerID
 		}
 
-		stripeCustomerID, err := u.stripeGate.GetOrCreateCustomer(ctx, in.UserID, in.CardholderName)
+		stripeCustomerID, err := u.stripeGate.GetOrCreateCustomer(
+			ctx,
+			in.UserID,
+			in.CardholderName,
+		)
 		if err != nil {
 			return nil, err
 		}
 		if stripeCustomerID == "" {
 			return nil, pm.ErrInvalidStripeCustomerID
 		}
+
 		in.StripeCustomerID = stripeCustomerID
 	}
 
-	if in.IsDefault {
-		if err := u.repo.ClearDefaultByUser(ctx, in.UserID); err != nil {
-			return nil, err
-		}
-	}
-
+	// IsDefault=trueの場合でも、Usecaseから既存の既定カードを
+	// 個別に解除しません。
+	//
+	// RepositoryのCreateが、既存の既定解除と新規カード作成を
+	// 同一Transaction内で原子的に処理します。
 	return u.repo.Create(ctx, in)
 }
 
-func (u *PaymentMethodUsecase) Delete(ctx context.Context, id string) error {
+func (u *PaymentMethodUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	return u.repo.Delete(ctx, id)
 }
 
-func (u *PaymentMethodUsecase) SetDefault(ctx context.Context, id string, userID string) (*pm.PaymentMethod, error) {
+// SetDefaultは、指定PaymentMethodをユーザーの既定に設定します。
+//
+// 既存の既定解除と対象カードの既定化は、RepositoryのSetDefaultが
+// 同一Transaction内で原子的に処理します。
+func (u *PaymentMethodUsecase) SetDefault(
+	ctx context.Context,
+	id string,
+	userID string,
+) (*pm.PaymentMethod, error) {
 	now := u.now().UTC()
 
-	if err := u.repo.ClearDefaultByUser(ctx, userID); err != nil {
-		return nil, err
-	}
-
-	return u.repo.SetDefault(ctx, id, userID, now)
+	// Usecaseから既存の既定カードを個別に解除しません。
+	//
+	// RepositoryのSetDefaultが、既存の既定解除と対象カードの更新を
+	// 同一Transaction内で原子的に処理します。
+	return u.repo.SetDefault(
+		ctx,
+		id,
+		userID,
+		now,
+	)
 }
 
-func normalizeLast4(v string) string {
-	digits := make([]rune, 0, len(v))
-	for _, r := range v {
-		if unicode.IsDigit(r) {
-			digits = append(digits, r)
+// normalizeLast4は数字以外を除去し、末尾4桁を返します。
+func normalizeLast4(value string) string {
+	digits := make([]rune, 0, len(value))
+
+	for _, character := range value {
+		if unicode.IsDigit(character) {
+			digits = append(digits, character)
 		}
 	}
 
 	if len(digits) <= 4 {
 		return string(digits)
 	}
+
 	return string(digits[len(digits)-4:])
 }

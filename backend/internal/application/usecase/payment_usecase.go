@@ -3,28 +3,37 @@ package usecase
 
 /*
 責務:
-- PaymentUsecaseはPaymentの公開API（Query/Command）と依存注入点を提供する。
-- Paymentがsucceededになった後の後続処理をオーケストレーションする。
+- Paymentの取得・作成・部分更新を提供する。
+- Stripe webhook eventによるPayment status同期を提供する。
+- succeededへの初回遷移時だけ支払い後処理を実行する。
 
 前提:
 - payment document ID = payment.PaymentID
 - payment.PaymentID = order.ID
 - paymentIdはpayment document fieldとして保存しない
 - payment recordsは削除しない
-- payment updatesはUpdateByPaymentIDによるpartial updateのみ
 - Stripe PaymentIntentはpayment record作成前に作成する
-- StripePaymentIntentIDはpendingを含む全ステータスで必須
+- StripePaymentIntentIDはpendingを含む全statusで必須
 
-支払い成功後の後続処理:
+Stripe状態同期:
+- Stripe由来のstatus更新はApplyStripeEventを使用する。
+- 一般的なUpdateからstatusを変更してはならない。
+- Stripe event IDの重複判定とstatus遷移はRepositoryが
+  Firestore Transaction内で原子的に処理する。
+- PostPaidRequiredはPaymentが初めてsucceededへ遷移した
+  1回だけtrueになる。
+
+支払い成功後の処理:
 0) order.Paid=true更新
 1) resale status=sold更新（best-effort）
-2) 注文確認メール送信
+2) 注文確認メール送信（best-effort）
 3) inventory reserve更新（best-effort）
 4) cart delete（best-effort）
 */
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -40,7 +49,62 @@ import (
 // Ports
 // ============================================================
 
-// InventoryRepoForPayment is the minimal port for inventory reserve after payment.
+// StripePaymentEventRepository applies Stripe events atomically.
+//
+// Implementations must perform the following operations in one transaction:
+//
+//  1. Check whether EventID has already been processed.
+//  2. Read the current Payment.
+//  3. Verify that StripePaymentIntentID matches the Payment.
+//  4. Apply the valid status transition.
+//  5. Record EventID as processed.
+//  6. Set the post-paid execution marker only when the Payment becomes
+//     succeeded for the first time.
+//
+// PostPaidRequired must be true only for the single caller that acquires the
+// post-paid execution marker.
+type StripePaymentEventRepository interface {
+	ApplyStripePaymentEvent(
+		ctx context.Context,
+		in ApplyStripePaymentEventInput,
+	) (*ApplyStripePaymentEventResult, error)
+}
+
+// ApplyStripePaymentEventInput is the application-level input generated from
+// a verified Stripe webhook event.
+type ApplyStripePaymentEventInput struct {
+	EventID string
+
+	PaymentID string
+
+	StripePaymentIntentID string
+
+	Status paymentdom.PaymentStatus
+
+	ErrorType *string
+	ErrorCode *string
+	ErrorMsg  *string
+
+	OccurredAt time.Time
+}
+
+// ApplyStripePaymentEventResult describes the atomic event application result.
+type ApplyStripePaymentEventResult struct {
+	Payment *paymentdom.Payment
+
+	// EventApplied is false when EventID has already been processed.
+	EventApplied bool
+
+	// StatusChanged is true when the stored Payment status changed.
+	StatusChanged bool
+
+	// PostPaidRequired is true only when this application acquired the
+	// first-succeeded post-paid execution marker.
+	PostPaidRequired bool
+}
+
+// InventoryRepoForPayment is the minimal port for inventory reserve after
+// payment.
 type InventoryRepoForPayment interface {
 	// ReserveByOrder sets:
 	// - stock[modelId].reservedByOrder[orderId] = qty
@@ -54,7 +118,8 @@ type InventoryRepoForPayment interface {
 	) error
 }
 
-// OrderRepoForPayment is the minimal port for reading/updating orders after payment.
+// OrderRepoForPayment is the minimal port for reading/updating orders after
+// payment.
 type OrderRepoForPayment interface {
 	GetByID(
 		ctx context.Context,
@@ -68,13 +133,12 @@ type OrderRepoForPayment interface {
 	) (orderdom.Order, error)
 }
 
-// ResaleRepoForPayment is the minimal port for updating resale status after payment.
+// ResaleRepoForPayment is the minimal port for updating resale status after
+// payment.
 //
 // Resale order item:
 // - order.Items[].Type == "resale"
 // - order.Items[].ResaleID points to resales/{resaleId}
-//
-// PaymentUsecase marks those resale listings as sold after payment succeeds.
 type ResaleRepoForPayment interface {
 	GetByID(
 		ctx context.Context,
@@ -88,7 +152,8 @@ type ResaleRepoForPayment interface {
 	) (resaledom.Resale, error)
 }
 
-// AuthUserEmailGetter is the minimal port for reading email from Firebase Authentication.
+// AuthUserEmailGetter is the minimal port for reading email from Firebase
+// Authentication.
 //
 // The Firestore users collection does not own email.
 // PaymentUsecase uses this port only for sending order confirmation mail.
@@ -99,10 +164,8 @@ type AuthUserEmailGetter interface {
 	) (string, error)
 }
 
-// MailSenderForPayment is the minimal port for sending order confirmation mail.
-//
-// The adapter-side OrderMailer is responsible for constructing the mail subject
-// and body.
+// MailSenderForPayment is the minimal port for sending order confirmation
+// mail.
 type MailSenderForPayment interface {
 	SendOrderConfirmation(
 		ctx context.Context,
@@ -113,20 +176,44 @@ type MailSenderForPayment interface {
 }
 
 // ============================================================
+// Errors
+// ============================================================
+
+var (
+	ErrPaymentStripeEventRepositoryMissing = errors.New(
+		"payment: stripe payment event repository is not configured",
+	)
+	ErrPaymentStripeEventIDEmpty = errors.New(
+		"payment: stripe event id is empty",
+	)
+	ErrPaymentStripeEventOccurredAtInvalid = errors.New(
+		"payment: stripe event occurredAt is invalid",
+	)
+	ErrPaymentStatusUpdateRequiresStripeEvent = errors.New(
+		"payment: status update requires Stripe event application",
+	)
+	ErrPaymentStripeEventResultEmpty = errors.New(
+		"payment: stripe event application result is empty",
+	)
+)
+
+// ============================================================
 // Usecase
 // ============================================================
 
 // PaymentUsecase orchestrates payment operations.
 type PaymentUsecase struct {
-	repo          paymentdom.RepositoryPort
+	repo paymentdom.RepositoryPort
+
+	stripeEventRepo StripePaymentEventRepository
+
 	cartRepo      cartdom.Repository
 	inventoryRepo InventoryRepoForPayment
 	orderRepo     OrderRepoForPayment
 	resaleRepo    ResaleRepoForPayment
 
-	// authUserGetter gets the email associated with a UID from
-	// Firebase Authentication. Email is not stored in the Firestore
-	// users collection.
+	// authUserGetter gets the email associated with a UID from Firebase
+	// Authentication. Email is not stored in the Firestore users collection.
 	authUserGetter AuthUserEmailGetter
 	mailSender     MailSenderForPayment
 	mailFrom       string
@@ -137,14 +224,15 @@ type PaymentUsecase struct {
 type NewPaymentUsecaseInput struct {
 	PaymentRepo paymentdom.RepositoryPort
 
+	// StripeEventRepo may be omitted when PaymentRepo also implements
+	// StripePaymentEventRepository.
+	StripeEventRepo StripePaymentEventRepository
+
 	CartRepo      cartdom.Repository
 	InventoryRepo InventoryRepoForPayment
 	OrderRepo     OrderRepoForPayment
 	ResaleRepo    ResaleRepoForPayment
 
-	// AuthUserGetter retrieves an email from Firebase Authentication.
-	// order.UserID is used as the Firebase Authentication UID when
-	// sending an order confirmation email.
 	AuthUserGetter AuthUserEmailGetter
 	MailSender     MailSenderForPayment
 	MailFrom       string
@@ -160,8 +248,18 @@ func NewPaymentUsecase(
 		now = time.Now
 	}
 
+	stripeEventRepo := in.StripeEventRepo
+	if stripeEventRepo == nil && in.PaymentRepo != nil {
+		if repository, ok :=
+			in.PaymentRepo.(StripePaymentEventRepository); ok {
+			stripeEventRepo = repository
+		}
+	}
+
 	return &PaymentUsecase{
-		repo:          in.PaymentRepo,
+		repo:            in.PaymentRepo,
+		stripeEventRepo: stripeEventRepo,
+
 		cartRepo:      in.CartRepo,
 		inventoryRepo: in.InventoryRepo,
 		orderRepo:     in.OrderRepo,
@@ -186,6 +284,8 @@ func (u *PaymentUsecase) GetByPaymentID(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
+
+	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
@@ -197,14 +297,17 @@ func (u *PaymentUsecase) GetByPaymentID(
 // Commands
 // ============================================================
 
-// Create creates a payment record.
+// Create creates a Payment.
 //
-// The Stripe PaymentIntent must already exist before this method is called.
-// StripePaymentIntentID is required for every payment status, including
-// StatusPending.
+// StripePaymentIntentID is required for every status, including pending.
 //
-// An empty StripePaymentIntentID is rejected before RepositoryPort.Create
-// is called.
+// A Payment created as succeeded runs post-paid processing once from this
+// creation path. Later succeeded webhook events must not run the processing
+// again because ApplyStripePaymentEvent must return PostPaidRequired=false
+// for an already-succeeded Payment.
+//
+// The repository implementation must persist the post-paid execution marker
+// when it creates a Payment whose initial status is succeeded.
 func (u *PaymentUsecase) Create(
 	ctx context.Context,
 	payment paymentdom.Payment,
@@ -213,7 +316,13 @@ func (u *PaymentUsecase) Create(
 		return nil, paymentdom.ErrNotFound
 	}
 
-	if payment.StripePaymentIntentID == "" {
+	if strings.TrimSpace(payment.PaymentID) == "" {
+		return nil, paymentdom.ErrInvalidPaymentID
+	}
+
+	if strings.TrimSpace(
+		payment.StripePaymentIntentID,
+	) == "" {
 		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
 
@@ -235,21 +344,19 @@ func (u *PaymentUsecase) Create(
 		return nil, err
 	}
 
-	if created != nil && isPaidStatus(created.Status) {
+	if created != nil &&
+		created.Status == paymentdom.StatusSucceeded {
 		u.handlePostPaidBestEffort(ctx, created)
 	}
 
 	return created, nil
 }
 
-// Update partially updates an existing payment document.
+// Update partially updates an existing Payment.
 //
-// This method is used by PaymentFlowUsecase after the Stripe PaymentIntent
-// state changes.
-//
-// Payment records are not overwritten by Save.
-// Payment records are not deleted.
-// Updates are applied through UpdateByPaymentID only.
+// Stripe status must not be changed through this method. Stripe-originated
+// status changes must use ApplyStripeEvent so that event deduplication,
+// transition validation, and post-paid marker acquisition happen atomically.
 func (u *PaymentUsecase) Update(
 	ctx context.Context,
 	paymentID string,
@@ -258,58 +365,111 @@ func (u *PaymentUsecase) Update(
 	if u == nil || u.repo == nil {
 		return nil, paymentdom.ErrNotFound
 	}
+
+	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
 	}
 
-	// StripePaymentIntentID is optional in an update because nil means
-	// "not updated". When specified, however, it must not be empty.
+	if patch.Status != nil {
+		return nil, ErrPaymentStatusUpdateRequiresStripeEvent
+	}
+
 	if patch.StripePaymentIntentID != nil &&
-		*patch.StripePaymentIntentID == "" {
+		strings.TrimSpace(*patch.StripePaymentIntentID) == "" {
 		return nil, paymentdom.ErrInvalidStripePaymentIntent
 	}
 
-	updated, err := u.repo.UpdateByPaymentID(
+	return u.repo.UpdateByPaymentID(
 		ctx,
 		paymentID,
 		patch,
 	)
+}
+
+// ApplyStripeEvent applies a verified Stripe webhook event.
+//
+// Event deduplication and status transition must be performed atomically by
+// StripePaymentEventRepository.
+//
+// A duplicate event is returned as a successful no-op.
+// Post-paid processing is executed only when PostPaidRequired is true.
+func (u *PaymentUsecase) ApplyStripeEvent(
+	ctx context.Context,
+	in ApplyStripePaymentEventInput,
+) (*paymentdom.Payment, error) {
+	if u == nil || u.repo == nil {
+		return nil, paymentdom.ErrNotFound
+	}
+
+	if u.stripeEventRepo == nil {
+		return nil, ErrPaymentStripeEventRepositoryMissing
+	}
+
+	in.EventID = strings.TrimSpace(in.EventID)
+	in.PaymentID = strings.TrimSpace(in.PaymentID)
+	in.StripePaymentIntentID = strings.TrimSpace(
+		in.StripePaymentIntentID,
+	)
+
+	if in.EventID == "" {
+		return nil, ErrPaymentStripeEventIDEmpty
+	}
+
+	if in.PaymentID == "" {
+		return nil, paymentdom.ErrInvalidPaymentID
+	}
+
+	if in.StripePaymentIntentID == "" {
+		return nil, paymentdom.ErrInvalidStripePaymentIntent
+	}
+
+	if !paymentdom.IsValidStatus(in.Status) {
+		return nil, paymentdom.ErrInvalidStatus
+	}
+
+	if in.OccurredAt.IsZero() {
+		return nil, ErrPaymentStripeEventOccurredAtInvalid
+	}
+
+	in.OccurredAt = in.OccurredAt.UTC()
+
+	result, err :=
+		u.stripeEventRepo.ApplyStripePaymentEvent(
+			ctx,
+			in,
+		)
 	if err != nil {
 		return nil, err
 	}
 
-	if updated != nil && isPaidStatus(updated.Status) {
-		u.handlePostPaidBestEffort(ctx, updated)
+	if result == nil || result.Payment == nil {
+		return nil, ErrPaymentStripeEventResultEmpty
 	}
 
-	return updated, nil
-}
+	if result.PostPaidRequired {
+		u.handlePostPaidBestEffort(
+			ctx,
+			result.Payment,
+		)
+	}
 
-// ============================================================
-// Paid status
-// ============================================================
-
-func isPaidStatus(status paymentdom.PaymentStatus) bool {
-	return status == paymentdom.StatusSucceeded
+	return result.Payment, nil
 }
 
 // ============================================================
 // Post-paid flow
 // ============================================================
 
-// handlePostPaidBestEffort runs post-paid side effects in a best-effort manner.
+// handlePostPaidBestEffort runs post-paid side effects.
 //
-// Preconditions:
-// - payment document ID and order document ID are the same
-// - rootID = payment.PaymentID
-// - payment.PaymentID = order.ID
+// This method may only be called from:
 //
-// Processing order:
-// 0) order.Paid=true
-// 1) resale status=sold
-// 2) send order confirmation email
-// 3) reserve inventory
-// 4) delete cart
+//  1. A successful initial Create whose Repository transaction also stores
+//     the post-paid execution marker.
+//  2. ApplyStripeEvent when PostPaidRequired is true.
+//
+// The Repository guarantees that PostPaidRequired is acquired once.
 func (u *PaymentUsecase) handlePostPaidBestEffort(
 	ctx context.Context,
 	payment *paymentdom.Payment,
@@ -318,7 +478,11 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 		return
 	}
 
-	rootID := payment.PaymentID
+	if payment.Status != paymentdom.StatusSucceeded {
+		return
+	}
+
+	rootID := strings.TrimSpace(payment.PaymentID)
 	if rootID == "" {
 		return
 	}
@@ -349,7 +513,10 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 
 	// 1) resale status=sold
 	if u.resaleRepo != nil && order != nil {
-		_ = u.markResalesSoldByOrder(ctx, *order)
+		_ = u.markResalesSoldByOrder(
+			ctx,
+			*order,
+		)
 	}
 
 	// 2) send order confirmation email
@@ -357,7 +524,10 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 		u.authUserGetter != nil &&
 		u.mailSender != nil &&
 		u.mailFrom != "" {
-		_ = u.sendOrderConfirmationMail(ctx, *order)
+		_ = u.sendOrderConfirmationMail(
+			ctx,
+			*order,
+		)
 	}
 
 	// 3) inventory reserve
@@ -366,8 +536,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 		aggregatedItems := aggregateReserveItems(rawItems)
 
 		for _, item := range aggregatedItems {
-			inventoryID := item.InventoryID
-			if inventoryID == "" ||
+			if item.InventoryID == "" ||
 				item.ModelID == "" ||
 				item.Qty <= 0 {
 				continue
@@ -375,7 +544,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 
 			_ = u.inventoryRepo.ReserveByOrder(
 				ctx,
-				inventoryID,
+				item.InventoryID,
 				item.ModelID,
 				rootID,
 				item.Qty,
@@ -385,7 +554,7 @@ func (u *PaymentUsecase) handlePostPaidBestEffort(
 
 	// 4) cart delete
 	if u.cartRepo != nil && order != nil {
-		cartID := order.CartID
+		cartID := strings.TrimSpace(order.CartID)
 		if cartID != "" {
 			_ = u.cartRepo.DeleteByAvatarID(
 				ctx,
@@ -407,6 +576,8 @@ func (u *PaymentUsecase) markOrderPaidTrue(
 	if u == nil || u.orderRepo == nil {
 		return order, nil
 	}
+
+	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return order, nil
 	}
@@ -462,7 +633,10 @@ func (u *PaymentUsecase) markResalesSoldByOrder(
 		return nil
 	}
 
-	now := u.now().UTC()
+	now := time.Now().UTC()
+	if u.now != nil {
+		now = u.now().UTC()
+	}
 
 	for _, resaleID := range resaleIDs {
 		current, err := u.resaleRepo.GetByID(
@@ -520,7 +694,10 @@ func extractResaleIDsFromOrder(
 		}
 
 		seen[resaleID] = struct{}{}
-		resaleIDs = append(resaleIDs, resaleID)
+		resaleIDs = append(
+			resaleIDs,
+			resaleID,
+		)
 	}
 
 	sort.Strings(resaleIDs)
@@ -543,7 +720,8 @@ func (u *PaymentUsecase) sendOrderConfirmationMail(
 		return nil
 	}
 
-	if order.ID == "" || order.UserID == "" {
+	if strings.TrimSpace(order.ID) == "" ||
+		strings.TrimSpace(order.UserID) == "" {
 		return nil
 	}
 
@@ -554,6 +732,8 @@ func (u *PaymentUsecase) sendOrderConfirmationMail(
 	if err != nil {
 		return err
 	}
+
+	to = strings.TrimSpace(to)
 	if to == "" {
 		return nil
 	}
@@ -596,15 +776,20 @@ func extractOrderItems(
 	)
 
 	for _, item := range order.Items {
-		if item.InventoryID == "" ||
-			item.ModelID == "" ||
+		inventoryID := strings.TrimSpace(
+			item.InventoryID,
+		)
+		modelID := strings.TrimSpace(item.ModelID)
+
+		if inventoryID == "" ||
+			modelID == "" ||
 			item.Qty <= 0 {
 			continue
 		}
 
 		items = append(items, reserveItem{
-			InventoryID: item.InventoryID,
-			ModelID:     item.ModelID,
+			InventoryID: inventoryID,
+			ModelID:     modelID,
 			Qty:         item.Qty,
 		})
 	}
@@ -637,8 +822,10 @@ func aggregateReserveItems(
 	quantities := map[key]int{}
 
 	for _, item := range items {
-		inventoryID := item.InventoryID
-		modelID := item.ModelID
+		inventoryID := strings.TrimSpace(
+			item.InventoryID,
+		)
+		modelID := strings.TrimSpace(item.ModelID)
 
 		if inventoryID == "" ||
 			modelID == "" ||
@@ -665,23 +852,29 @@ func aggregateReserveItems(
 			continue
 		}
 
-		aggregated = append(aggregated, reserveItem{
-			InventoryID: itemKey.InventoryID,
-			ModelID:     itemKey.ModelID,
-			Qty:         quantity,
-		})
+		aggregated = append(
+			aggregated,
+			reserveItem{
+				InventoryID: itemKey.InventoryID,
+				ModelID:     itemKey.ModelID,
+				Qty:         quantity,
+			},
+		)
 	}
 
-	sort.Slice(aggregated, func(i, j int) bool {
-		if aggregated[i].InventoryID ==
-			aggregated[j].InventoryID {
-			return aggregated[i].ModelID <
-				aggregated[j].ModelID
-		}
+	sort.Slice(
+		aggregated,
+		func(i, j int) bool {
+			if aggregated[i].InventoryID ==
+				aggregated[j].InventoryID {
+				return aggregated[i].ModelID <
+					aggregated[j].ModelID
+			}
 
-		return aggregated[i].InventoryID <
-			aggregated[j].InventoryID
-	})
+			return aggregated[i].InventoryID <
+				aggregated[j].InventoryID
+		},
+	)
 
 	return aggregated
 }

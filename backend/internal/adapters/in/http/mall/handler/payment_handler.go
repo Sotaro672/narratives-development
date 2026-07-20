@@ -13,6 +13,7 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	dto "narratives/internal/application/query/mall/dto"
 	usecase "narratives/internal/application/usecase"
+	paymentdom "narratives/internal/domain/payment"
 )
 
 type PaymentHandler struct {
@@ -105,7 +106,7 @@ func (h *PaymentHandler) getPaymentsContext(
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
-	if !ok || uid == "" {
+	if !ok || strings.TrimSpace(uid) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(
 			map[string]string{
@@ -115,13 +116,14 @@ func (h *PaymentHandler) getPaymentsContext(
 		return
 	}
 
+	uid = strings.TrimSpace(uid)
+
 	out, err := h.orderQ.GetOrderContextByUID(
 		r.Context(),
 		uid,
 	)
 	if err != nil {
-		if errors.Is(err, mallquery.ErrNotFound) ||
-			payIsNotFoundLike(err) {
+		if errors.Is(err, mallquery.ErrNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(
 				map[string]string{
@@ -159,9 +161,9 @@ type payCreateReq struct {
 	// It must be the same value as order.ID.
 	PaymentID string `json:"paymentId"`
 
-	// Amount is checked against the server-side Order total
-	// by PaymentFlowUsecase.
-	Amount int `json:"amount"`
+	// Amount is a pointer so that an omitted value can be distinguished
+	// from zero. Zero is valid because payment.MinAmount is zero.
+	Amount *int `json:"amount"`
 
 	PaymentMethodID string `json:"paymentMethodId"`
 
@@ -188,7 +190,7 @@ func (h *PaymentHandler) postPayments(
 	}
 
 	uid, ok := middleware.CurrentUserUID(r)
-	if !ok || uid == "" {
+	if !ok || strings.TrimSpace(uid) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(
 			map[string]string{
@@ -199,15 +201,6 @@ func (h *PaymentHandler) postPayments(
 	}
 
 	uid = strings.TrimSpace(uid)
-	if uid == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(
-			map[string]string{
-				"error": "unauthorized",
-			},
-		)
-		return
-	}
 
 	var req payCreateReq
 
@@ -251,7 +244,29 @@ func (h *PaymentHandler) postPayments(
 		return
 	}
 
-	if req.Amount <= 0 {
+	// Amount is required, but zero is valid.
+	if req.Amount == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "amount_required",
+			},
+		)
+		return
+	}
+
+	if *req.Amount < paymentdom.MinAmount {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "amount_invalid",
+			},
+		)
+		return
+	}
+
+	if paymentdom.MaxAmount > 0 &&
+		*req.Amount > paymentdom.MaxAmount {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(
 			map[string]string{
@@ -301,7 +316,7 @@ func (h *PaymentHandler) postPayments(
 		return
 	}
 
-	amount := req.Amount
+	amount := *req.Amount
 
 	result, err := h.flowUC.CreatePaymentAndStartWithResult(
 		r.Context(),
@@ -329,7 +344,7 @@ func (h *PaymentHandler) postPayments(
 			req.PaymentMethodID,
 			req.StripeCustomerID,
 			req.StripePaymentMethodID,
-			req.Amount,
+			amount,
 			err,
 		)
 
@@ -387,6 +402,10 @@ func (h *PaymentHandler) postPayments(
 // helpers
 // ------------------------------------------------------------
 
+// paymentFlowHTTPStatus classifies errors only by their typed or
+// sentinel identity. Error-message text must not affect the HTTP status.
+//
+// Wrapped errors remain classifiable when each layer wraps them with %w.
 func paymentFlowHTTPStatus(err error) int {
 	if err == nil {
 		return http.StatusInternalServerError
@@ -396,13 +415,25 @@ func paymentFlowHTTPStatus(err error) int {
 	case errors.Is(
 		err,
 		usecase.ErrPaymentFlowOrderAlreadyPaid,
-	):
+	),
+		errors.Is(
+			err,
+			paymentdom.ErrConflict,
+		):
 		return http.StatusConflict
 
 	case errors.Is(
 		err,
 		mallquery.ErrNotFound,
-	), payIsNotFoundLike(err):
+	),
+		errors.Is(
+			err,
+			usecase.ErrPaymentFlowOrderNotFound,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrNotFound,
+		):
 		return http.StatusNotFound
 
 	case errors.Is(
@@ -449,35 +480,49 @@ func paymentFlowHTTPStatus(err error) int {
 			err,
 			usecase.ErrPaymentFlowStripePaymentIntentIDEmpty,
 		),
-		payIsBadRequestLike(err):
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidPaymentID,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidPaymentMethodID,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidStripeCustomerID,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidStripePaymentMethod,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidStripePaymentIntent,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidAmount,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidStatus,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidErrorType,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidErrorCode,
+		),
+		errors.Is(
+			err,
+			paymentdom.ErrInvalidErrorMsg,
+		):
 		return http.StatusBadRequest
 
 	default:
 		return http.StatusInternalServerError
 	}
-}
-
-func payIsNotFoundLike(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	msg := strings.ToLower(err.Error())
-
-	return strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "not_found") ||
-		strings.Contains(msg, "404")
-}
-
-func payIsBadRequestLike(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	msg := strings.ToLower(err.Error())
-
-	return strings.Contains(msg, "invalid") ||
-		strings.Contains(msg, "required") ||
-		strings.Contains(msg, "missing") ||
-		strings.Contains(msg, "empty")
 }
