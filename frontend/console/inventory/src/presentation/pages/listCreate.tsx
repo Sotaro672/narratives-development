@@ -47,8 +47,8 @@ export default function InventoryListCreate() {
     loadingMembers,
     handleSelectAssignee,
 
-    decision,
-    setDecision,
+    status,
+    setStatus,
   } = useListCreate();
 
   const missingModelIdCount = React.useMemo(() => {
@@ -75,17 +75,18 @@ export default function InventoryListCreate() {
   }, [productName, tokenName]);
 
   const assigneeOptions = React.useMemo(() => {
-    return (assigneeCandidates ?? []).map((c) => ({
-      value: c.name,
-      label: c.name,
+    return (assigneeCandidates ?? []).map((candidate) => ({
+      value: candidate.name,
+      label: candidate.name,
     }));
   }, [assigneeCandidates]);
 
   const handleChangeAssignee = React.useCallback(
     (selectedName: string) => {
       const matched = (assigneeCandidates ?? []).find(
-        (c) => c.name === selectedName,
+        (candidate) => candidate.name === selectedName,
       );
+
       if (!matched) return;
 
       handleSelectAssignee(matched.id);
@@ -105,7 +106,9 @@ export default function InventoryListCreate() {
         <ListImageCard
           isEdit={true}
           saving={false}
-          imageUrls={Array.isArray(imagePreviewUrls) ? imagePreviewUrls : []}
+          imageUrls={
+            Array.isArray(imagePreviewUrls) ? imagePreviewUrls : []
+          }
           mainImageIndex={mainImageIndex}
           setMainImageIndex={setMainImageIndex}
           onAddImages={onAddImages}
@@ -116,6 +119,7 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4 space-y-2">
             <div className="text-sm font-medium">タイトル</div>
+
             <input
               value={listingTitle}
               onChange={(e) => setListingTitle(e.target.value)}
@@ -128,6 +132,7 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4 space-y-2">
             <div className="text-sm font-medium">説明</div>
+
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -201,9 +206,11 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択商品</div>
+
             <div className="text-sm text-slate-800 break-all">
               {productBrandName || "未選択"}
             </div>
+
             <div className="text-sm text-slate-800 break-all">
               {productName || "未選択"}
             </div>
@@ -212,10 +219,14 @@ export default function InventoryListCreate() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">選択トークン</div>
+            <div className="text-sm font-medium mb-2">
+              選択トークン
+            </div>
+
             <div className="text-sm text-slate-800 break-all">
               {tokenBrandName || "未選択"}
             </div>
+
             <div className="text-sm text-slate-800 break-all">
               {tokenName || "未選択"}
             </div>
@@ -224,25 +235,31 @@ export default function InventoryListCreate() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">出品｜保留</div>
+            <div className="text-sm font-medium mb-2">
+              ステータス
+            </div>
 
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant={decision === "list" ? "default" : "outline"}
+                variant={
+                  status === "listing" ? "default" : "outline"
+                }
                 size="sm"
                 className="flex-1"
-                onClick={() => setDecision("list")}
+                onClick={() => setStatus("listing")}
               >
                 出品
               </Button>
 
               <Button
                 type="button"
-                variant={decision === "hold" ? "default" : "outline"}
+                variant={
+                  status === "suspended" ? "default" : "outline"
+                }
                 size="sm"
                 className="flex-1"
-                onClick={() => setDecision("hold")}
+                onClick={() => setStatus("suspended")}
               >
                 保留
               </Button>

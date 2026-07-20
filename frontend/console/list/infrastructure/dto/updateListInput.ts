@@ -1,4 +1,6 @@
-//frontend\console\list\src\infrastructure\dto\updateListInput.ts
+// frontend/console/list/src/infrastructure/dto/updateListInput.ts
+import type { ListStatus } from "../../domain/list";
+
 export type UpdateListInput = {
   listId: string;
 
@@ -15,7 +17,7 @@ export type UpdateListInput = {
     rgb?: number | null;
   }>;
 
-  decision?: "list" | "hold";
+  status?: ListStatus;
 
   assigneeId?: string;
   updatedBy?: string;

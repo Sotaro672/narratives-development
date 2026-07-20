@@ -1,12 +1,12 @@
-//frontend\console\list\src\infrastructure\dto\listDetailDto.ts
+// frontend/console/list/src/infrastructure/dto/listDetailDto.ts
+import type { ListStatus } from "../../domain/list";
 import type { ListDetailPriceRowDTO } from "./listPriceRowDto";
 
 export type ListDetailDTO = {
   id: string;
   inventoryId: string;
 
-  status: string;
-  decision: string;
+  status: ListStatus;
 
   title: string;
   description: string;

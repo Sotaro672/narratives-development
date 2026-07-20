@@ -6,13 +6,12 @@
  *
  * - "listing"   : 掲載中
  * - "suspended" : 一時停止
- * - "deleted"   : 削除済み
  */
-export type ListStatus = "listing" | "suspended" | "deleted";
+export type ListStatus = "listing" | "suspended";
 
 /** ListStatus の妥当性チェック */
 export function isValidListStatus(s: string): s is ListStatus {
-  return s === "listing" || s === "suspended" || s === "deleted";
+  return s === "listing" || s === "suspended";
 }
 
 /**
@@ -30,7 +29,7 @@ export interface ListPrice {
  * backend/internal/domain/list/entity.go の List に対応。
  *
  * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）
- * - updatedBy/updatedAt/deletedAt/deletedBy は任意
+ * - updatedBy/updatedAt は任意
  * - imageId は ListImage.id を想定（必須）
  * - prices は { [inventoryId]: ListPrice } の map
  */
@@ -49,8 +48,6 @@ export interface List {
 
   updatedBy?: string | null;
   updatedAt?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
 }
 
 /* =========================================================
@@ -151,7 +148,7 @@ export function validateList(list: List): string[] {
   }
 
   if (!isValidListStatus(list.status)) {
-    errors.push("status must be 'listing' | 'suspended' | 'deleted'");
+    errors.push("status must be 'listing' | 'suspended'");
   }
 
   // prices(map)
@@ -160,35 +157,20 @@ export function validateList(list: List): string[] {
   // updatedAt / updatedBy
   const hasUpdatedAt = !!list.updatedAt?.trim();
   const hasUpdatedBy = !!list.updatedBy?.trim();
+
   if (hasUpdatedAt && !isValidDateTimeString(list.updatedAt)) {
     errors.push("updatedAt must be a valid datetime when set");
   }
+
   if (!hasUpdatedAt && hasUpdatedBy) {
     errors.push("updatedBy must not be set without updatedAt");
   }
+
   if (
     hasUpdatedAt &&
     !isDateTimeOrderValid(list.createdAt, list.updatedAt!)
   ) {
     errors.push("updatedAt must be >= createdAt");
-  }
-
-  // deletedAt / deletedBy （両方 null か両方セット）
-  const hasDeletedAt = !!list.deletedAt?.trim();
-  const hasDeletedBy = !!list.deletedBy?.trim();
-  if (hasDeletedAt && !isValidDateTimeString(list.deletedAt)) {
-    errors.push("deletedAt must be a valid datetime when set");
-  }
-  if (hasDeletedAt !== hasDeletedBy) {
-    errors.push(
-      "deletedAt and deletedBy must be both set or both null",
-    );
-  }
-  if (
-    hasDeletedAt &&
-    !isDateTimeOrderValid(list.createdAt, list.deletedAt!)
-  ) {
-    errors.push("deletedAt must be >= createdAt");
   }
 
   return errors;
@@ -215,6 +197,7 @@ export function aggregateListPrices(
     if (!inventoryId) continue;
 
     const price = v?.price;
+
     if (
       typeof price === "number" &&
       !Number.isNaN(price) &&
@@ -253,7 +236,5 @@ export function normalizeList(input: List): List {
     createdAt: input.createdAt.trim(),
     updatedBy: norm(input.updatedBy),
     updatedAt: norm(input.updatedAt),
-    deletedAt: norm(input.deletedAt),
-    deletedBy: norm(input.deletedBy),
   };
 }

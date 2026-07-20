@@ -1,14 +1,10 @@
 // frontend/console/list/src/application/listManagementService.tsx
-
 import React from "react";
 import {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../shell/src/layout/List/List";
-
 import type { ListStatus } from "../../shell/src/shared/types/list";
-
-// 分割後のHTTP repository入口（index.ts 経由）
 import { fetchListsHTTP } from "../infrastructure/repository";
 import { safeDateTimeLabelJa } from "../../shell/src/shared/util/dateJa";
 
@@ -16,18 +12,14 @@ export type SortKey = "id" | "createdAt" | null;
 
 export type ListManagementRowVM = {
   id: string;
-
   title: string;
   productName: string;
   tokenName: string;
   assigneeName: string;
-
   status: ListStatus;
   statusLabel: string;
-
   createdAt: string;
   createdAtRaw: string;
-
   statusBadgeText: string;
   statusBadgeClass: string;
 };
@@ -51,29 +43,31 @@ export type Filters = {
 export function normalizeStatus(raw: unknown): ListStatus {
   const status = String(raw ?? "").toLowerCase();
 
-  if (status === "list" || status === "listing") return "listing";
-  if (status === "hold" || status === "suspended") return "suspended";
-  if (status === "deleted") return "deleted";
+  if (status === "listing") return "listing";
+  if (status === "suspended") return "suspended";
 
   return "suspended";
 }
 
 export function getStatusLabelJP(status: ListStatus): string {
   if (status === "listing") return "出品中";
-  if (status === "suspended") return "保留中";
-  return "削除済み";
+  return "保留中";
 }
 
 export function buildStatusBadge(
   status: ListStatus,
 ): { text: string; className: string } {
   if (status === "listing") {
-    return { text: "出品中", className: "list-status-badge is-active" };
+    return {
+      text: "出品中",
+      className: "list-status-badge is-active",
+    };
   }
-  if (status === "suspended") {
-    return { text: "保留中", className: "list-status-badge is-paused" };
-  }
-  return { text: "削除済み", className: "list-status-badge is-paused" };
+
+  return {
+    text: "保留中",
+    className: "list-status-badge is-paused",
+  };
 }
 
 /**
@@ -82,18 +76,12 @@ export function buildStatusBadge(
  */
 export function mapAnyToVMRow(x: any): ListManagementRowVM {
   const id = String(x?.id ?? x?.ID ?? "");
-
   const title = String(x?.title ?? "");
-
   const productName = String(x?.productName ?? "");
-
   const tokenName = String(x?.tokenName ?? "");
-
   const assigneeName = String(x?.assigneeName ?? "") || "未設定";
-
-  const st = normalizeStatus(x?.status);
-  const badge = buildStatusBadge(st);
-
+  const status = normalizeStatus(x?.status);
+  const badge = buildStatusBadge(status);
   const createdAtRaw = String(x?.createdAt ?? "");
   const createdAt = safeDateTimeLabelJa(createdAtRaw, "");
 
@@ -103,8 +91,8 @@ export function mapAnyToVMRow(x: any): ListManagementRowVM {
     productName,
     tokenName,
     assigneeName,
-    status: st,
-    statusLabel: getStatusLabelJP(st),
+    status,
+    statusLabel: getStatusLabelJP(status),
     createdAt,
     createdAtRaw,
     statusBadgeText: badge.text,
@@ -126,16 +114,21 @@ export async function loadListManagementRows(): Promise<{
 
     const mapped = items
       .map((x) => mapAnyToVMRow(x as any))
-      .filter((r: ListManagementRowVM) => r.id !== "(missing id)");
+      .filter((row: ListManagementRowVM) => row.id !== "(missing id)");
 
-    return { rows: mapped, error: null };
+    return {
+      rows: mapped,
+      error: null,
+    };
   } catch (e: unknown) {
-    const errMsg =
-      e instanceof Error ? String(e.message) : String(e ?? "unknown_error");
+    const error =
+      e instanceof Error
+        ? String(e.message)
+        : String(e ?? "unknown_error");
 
     return {
       rows: [],
-      error: errMsg,
+      error,
     };
   }
 }
@@ -143,25 +136,50 @@ export async function loadListManagementRows(): Promise<{
 /**
  * Filter options
  */
-export function buildFilterOptions(rows: ListManagementRowVM[]): FilterOptions {
-  const titleOptions = Array.from(new Set(rows.map((r) => r.title)))
-    .filter((v) => String(v ?? "") !== "")
-    .map((v) => ({ value: v, label: v }));
+export function buildFilterOptions(
+  rows: ListManagementRowVM[],
+): FilterOptions {
+  const titleOptions = Array.from(
+    new Set(rows.map((row) => row.title)),
+  )
+    .filter((value) => String(value ?? "") !== "")
+    .map((value) => ({
+      value,
+      label: value,
+    }));
 
-  const productOptions = Array.from(new Set(rows.map((r) => r.productName)))
-    .filter((v) => String(v ?? "") !== "")
-    .map((v) => ({ value: v, label: v }));
+  const productOptions = Array.from(
+    new Set(rows.map((row) => row.productName)),
+  )
+    .filter((value) => String(value ?? "") !== "")
+    .map((value) => ({
+      value,
+      label: value,
+    }));
 
-  const tokenOptions = Array.from(new Set(rows.map((r) => r.tokenName)))
-    .filter((v) => String(v ?? "") !== "")
-    .map((v) => ({ value: v, label: v }));
+  const tokenOptions = Array.from(
+    new Set(rows.map((row) => row.tokenName)),
+  )
+    .filter((value) => String(value ?? "") !== "")
+    .map((value) => ({
+      value,
+      label: value,
+    }));
 
-  const managerOptions = Array.from(new Set(rows.map((r) => r.assigneeName)))
-    .filter((v) => String(v ?? "") !== "")
-    .map((v) => ({ value: v, label: v }));
+  const managerOptions = Array.from(
+    new Set(rows.map((row) => row.assigneeName)),
+  )
+    .filter((value) => String(value ?? "") !== "")
+    .map((value) => ({
+      value,
+      label: value,
+    }));
 
-  const uniqStatus = Array.from(new Set<ListStatus>(rows.map((r) => r.status)));
-  const statusOptions = uniqStatus.map((status) => ({
+  const uniqueStatuses = Array.from(
+    new Set<ListStatus>(rows.map((row) => row.status)),
+  );
+
+  const statusOptions = uniqueStatuses.map((status) => ({
     value: status,
     label: getStatusLabelJP(status),
   }));
@@ -180,22 +198,28 @@ export function buildFilterOptions(rows: ListManagementRowVM[]): FilterOptions {
  */
 export function applyFilters(
   rows: ListManagementRowVM[],
-  f: Filters,
+  filters: Filters,
 ): ListManagementRowVM[] {
   return rows.filter(
-    (r) =>
-      (f.titleFilter.length === 0 || f.titleFilter.includes(r.title)) &&
-      (f.productFilter.length === 0 || f.productFilter.includes(r.productName)) &&
-      (f.tokenFilter.length === 0 || f.tokenFilter.includes(r.tokenName)) &&
-      (f.managerFilter.length === 0 || f.managerFilter.includes(r.assigneeName)) &&
-      (f.statusFilter.length === 0 || f.statusFilter.includes(r.status)),
+    (row) =>
+      (filters.titleFilter.length === 0 ||
+        filters.titleFilter.includes(row.title)) &&
+      (filters.productFilter.length === 0 ||
+        filters.productFilter.includes(row.productName)) &&
+      (filters.tokenFilter.length === 0 ||
+        filters.tokenFilter.includes(row.tokenName)) &&
+      (filters.managerFilter.length === 0 ||
+        filters.managerFilter.includes(row.assigneeName)) &&
+      (filters.statusFilter.length === 0 ||
+        filters.statusFilter.includes(row.status)),
   );
 }
 
-function toTimeMs(v: string): number {
-  const d = new Date(String(v ?? ""));
-  const t = d.getTime();
-  return Number.isFinite(t) ? t : 0;
+function toTimeMs(value: string): number {
+  const date = new Date(String(value ?? ""));
+  const time = date.getTime();
+
+  return Number.isFinite(time) ? time : 0;
 }
 
 /**
@@ -209,17 +233,21 @@ export function applySort(
   if (!activeKey || !direction) return rows;
 
   const data = [...rows];
+
   data.sort((a, b) => {
     if (activeKey === "createdAt") {
-      const ta = toTimeMs(a.createdAtRaw);
-      const tb = toTimeMs(b.createdAtRaw);
-      const cmp = ta - tb;
-      return direction === "asc" ? cmp : -cmp;
+      const timeA = toTimeMs(a.createdAtRaw);
+      const timeB = toTimeMs(b.createdAtRaw);
+      const comparison = timeA - timeB;
+
+      return direction === "asc" ? comparison : -comparison;
     }
 
-    const cmp = a.id.localeCompare(b.id);
-    return direction === "asc" ? cmp : -cmp;
+    const comparison = a.id.localeCompare(b.id);
+
+    return direction === "asc" ? comparison : -comparison;
   });
+
   return data;
 }
 
@@ -230,23 +258,31 @@ export function buildHeaders(args: {
   options: FilterOptions;
   selected: Filters;
   onChange: {
-    setTitleFilter: (v: string[]) => void;
-    setProductFilter: (v: string[]) => void;
-    setTokenFilter: (v: string[]) => void;
-    setManagerFilter: (v: string[]) => void;
-    setStatusFilter: (v: string[]) => void;
+    setTitleFilter: (value: string[]) => void;
+    setProductFilter: (value: string[]) => void;
+    setTokenFilter: (value: string[]) => void;
+    setManagerFilter: (value: string[]) => void;
+    setStatusFilter: (value: string[]) => void;
   };
   sort: {
     activeKey: SortKey;
     direction: "asc" | "desc" | null;
-    onChange: (key: SortKey, dir: "asc" | "desc" | null) => void;
+    onChange: (
+      key: SortKey,
+      direction: "asc" | "desc" | null,
+    ) => void;
   };
 }): React.ReactNode[] {
   const { options, selected, onChange, sort } = args;
 
-  const onChangeCreatedAt = (key: string, nextDirection: "asc" | "desc") => {
-    const k: SortKey = key === "createdAt" ? "createdAt" : null;
-    sort.onChange(k, nextDirection);
+  const onChangeCreatedAt = (
+    key: string,
+    nextDirection: "asc" | "desc",
+  ) => {
+    const sortKey: SortKey =
+      key === "createdAt" ? "createdAt" : null;
+
+    sort.onChange(sortKey, nextDirection);
   };
 
   return [

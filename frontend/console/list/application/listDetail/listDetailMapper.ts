@@ -1,8 +1,7 @@
 // frontend/console/list/src/application/listDetail/listDetailMapper.ts
 
 import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
-
-export type ListingDecisionNorm = "listing" | "holding" | "";
+import type { ListStatus } from "../../domain/list";
 
 // ---------------------------------------------------------
 // Shared helpers
@@ -56,39 +55,16 @@ function toStringOrNull(v: unknown): string | null {
 }
 
 // ---------------------------------------------------------
-// Decision helpers
+// Status helpers
 // ---------------------------------------------------------
 
-/**
- * decision は backend response の decision を正とする。
- * - "listing" => "list"（出品）
- * - "hold"    => "hold"（保留）
- */
-export function normalizeDecision(dto: any): string {
-  const raw = String(dto?.decision ?? "").toLowerCase();
+export function normalizeStatus(v: unknown): ListStatus | "" {
+  const status = String(v ?? "").toLowerCase();
 
-  if (raw === "listing") return "list";
-  if (raw === "hold") return "hold";
-
-  return raw;
-}
-
-export function normalizeListingDecisionNorm(v: unknown): ListingDecisionNorm {
-  const x = String(v ?? "").toLowerCase();
-
-  if (x === "listing" || x === "list") return "listing";
-  if (x === "holding" || x === "hold") return "holding";
+  if (status === "listing") return "listing";
+  if (status === "suspended") return "suspended";
 
   return "";
-}
-
-export function toDecisionForUpdate(v: unknown): "list" | "hold" | undefined {
-  const x = normalizeListingDecisionNorm(v);
-
-  if (x === "listing") return "list";
-  if (x === "holding") return "hold";
-
-  return undefined;
 }
 
 // ---------------------------------------------------------
@@ -147,9 +123,9 @@ export function normalizeImageUrls(dto: any): string[] {
  * - volumeValue
  * - volumeUnit
  */
-export function normalizePriceRows<TRow extends Record<string, any> = any>(
-  dto: any,
-): TRow[] {
+export function normalizePriceRows<
+  TRow extends Record<string, any> = any,
+>(dto: any): TRow[] {
   const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
 
   return rowsRaw.map((r: any, idx: number) => {
@@ -188,7 +164,9 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(
  * PriceCard 編集時、price だけ更新する。
  * kind / modelNumber / size / color / rgb / volumeValue / volumeUnit / stock は row spread で保持する。
  */
-export function updatePriceRowPrice<TRow extends Record<string, any>>(
+export function updatePriceRowPrice<
+  TRow extends Record<string, any>,
+>(
   rows: TRow[] | null | undefined,
   index: number,
   price: number | null,
@@ -205,10 +183,12 @@ export function updatePriceRowPrice<TRow extends Record<string, any>>(
 // detail mapper
 // ---------------------------------------------------------
 
-export function deriveListDetail<TRow extends Record<string, any> = any>(dto: any) {
+export function deriveListDetail<
+  TRow extends Record<string, any> = any,
+>(dto: any) {
   const listingTitle = String(dto?.title ?? "");
   const description = String(dto?.description ?? "");
-  const decision = normalizeDecision(dto);
+  const status = normalizeStatus(dto?.status);
 
   const productBrandId = String(dto?.productBrandId ?? "");
   const productBrandName = String(dto?.productBrandName ?? "");
@@ -222,10 +202,16 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
   const assigneeName = String(dto?.assigneeName ?? "") || "未設定";
 
   const createdByName = String(dto?.createdByName ?? "");
-  const createdAt = safeDateTimeLabelJa(String(dto?.createdAt ?? ""), "");
+  const createdAt = safeDateTimeLabelJa(
+    String(dto?.createdAt ?? ""),
+    "",
+  );
 
   const updatedByName = String(dto?.updatedByName ?? "");
-  const updatedAt = safeDateTimeLabelJa(String(dto?.updatedAt ?? ""), "");
+  const updatedAt = safeDateTimeLabelJa(
+    String(dto?.updatedAt ?? ""),
+    "",
+  );
 
   const imageUrls = normalizeImageUrls(dto);
   const priceRows = normalizePriceRows<TRow>(dto);
@@ -233,7 +219,7 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
   return {
     listingTitle,
     description,
-    decision,
+    status,
 
     productBrandId,
     productBrandName,

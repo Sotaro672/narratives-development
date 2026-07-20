@@ -20,20 +20,27 @@ export default function ListDetail() {
 
   const isEdit = vm.isEdit;
 
-  const headerTitle = isEdit ? vm.draftListingTitle || "出品詳細" : vm.listingTitle || "出品詳細";
+  const headerTitle = isEdit
+    ? vm.draftListingTitle || "出品詳細"
+    : vm.listingTitle || "出品詳細";
 
   const onBackToListManagement = React.useCallback(() => {
     navigate("/list");
   }, [navigate]);
 
-  const effectiveDecision = isEdit ? vm.draftDecision : vm.decisionNorm;
-  const effectivePriceRows = isEdit ? vm.draftPriceRows : vm.priceRows;
+  const effectiveStatus = isEdit
+    ? vm.draftStatus
+    : vm.status;
+
+  const effectivePriceRows = isEdit
+    ? vm.draftPriceRows
+    : vm.priceRows;
 
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
-      vm.setDraftAssigneeId?.(id);
-      vm.onSelectAssignee?.(id);
-      vm.onChangeAssignee?.(id);
+      vm.setDraftAssigneeId(id);
+      vm.onSelectAssignee(id);
+      vm.onChangeAssignee(id);
     },
     [vm],
   );
@@ -54,6 +61,7 @@ export default function ListDetail() {
             読み込み中...
           </div>
         )}
+
         {vm.error && (
           <div className="text-sm text-red-600">
             読み込みに失敗しました: {vm.error}
@@ -65,6 +73,7 @@ export default function ListDetail() {
             保存に失敗しました: {vm.saveError}
           </div>
         )}
+
         {isEdit && vm.saving && (
           <div className="text-xs text-[hsl(var(--muted-foreground))]">
             保存中...
@@ -74,17 +83,27 @@ export default function ListDetail() {
         <ListImageCard
           isEdit={isEdit}
           saving={vm.saving}
-          imageUrls={Array.isArray(vm.imageUrls) ? vm.imageUrls : []}
+          imageUrls={
+            Array.isArray(vm.imageUrls)
+              ? vm.imageUrls
+              : []
+          }
           mainImageIndex={vm.mainImageIndex}
           setMainImageIndex={vm.setMainImageIndex}
-          onAddImages={(files) => vm.onAddImages?.(files)}
-          onRemoveImageAt={(idx) => vm.onRemoveImageAt?.(idx)}
+          onAddImages={(files) =>
+            vm.onAddImages(files)
+          }
+          onRemoveImageAt={(idx) =>
+            vm.onRemoveImageAt(idx)
+          }
           onClearImages={vm.onClearImages}
         />
 
         <Card>
           <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-medium">タイトル</div>
+            <div className="text-sm font-medium">
+              タイトル
+            </div>
 
             {!isEdit && (
               <div className="text-sm text-slate-800 break-words">
@@ -96,7 +115,11 @@ export default function ListDetail() {
               <Input
                 value={vm.draftListingTitle}
                 placeholder="タイトルを入力"
-                onChange={(e) => vm.setDraftListingTitle(e.target.value)}
+                onChange={(e) =>
+                  vm.setDraftListingTitle(
+                    e.target.value,
+                  )
+                }
                 disabled={vm.saving}
               />
             )}
@@ -105,7 +128,9 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4 space-y-2">
-            <div className="text-sm font-medium">説明</div>
+            <div className="text-sm font-medium">
+              説明
+            </div>
 
             {!isEdit && (
               <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">
@@ -117,7 +142,11 @@ export default function ListDetail() {
               <textarea
                 value={vm.draftDescription}
                 placeholder="説明を入力"
-                onChange={(e) => vm.setDraftDescription(e.target.value)}
+                onChange={(e) =>
+                  vm.setDraftDescription(
+                    e.target.value,
+                  )
+                }
                 className="w-full min-h-[120px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
                 disabled={vm.saving}
               />
@@ -130,14 +159,19 @@ export default function ListDetail() {
           rows={effectivePriceRows as any}
           mode={isEdit ? "edit" : "view"}
           currencySymbol="¥"
-          onChangePrice={isEdit ? vm.onChangePrice : undefined}
+          onChangePrice={
+            isEdit
+              ? vm.onChangePrice
+              : undefined
+          }
         />
 
-        {Array.isArray(effectivePriceRows) && effectivePriceRows.length === 0 && (
-          <div className="text-xs text-[hsl(var(--muted-foreground))]">
-            価格情報がありません。
-          </div>
-        )}
+        {Array.isArray(effectivePriceRows) &&
+          effectivePriceRows.length === 0 && (
+            <div className="text-xs text-[hsl(var(--muted-foreground))]">
+              価格情報がありません。
+            </div>
+          )}
       </div>
 
       <div className="space-y-4">
@@ -145,9 +179,21 @@ export default function ListDetail() {
           title="担当者"
           mode={isEdit ? "edit" : "view"}
           assigneeName={vm.assigneeName}
-          onSelectAssignee={isEdit ? handleSelectAssignee : undefined}
-          onEditAssignee={isEdit ? vm.onEditAssignee : undefined}
-          onClickAssignee={isEdit ? vm.onClickAssignee : undefined}
+          onSelectAssignee={
+            isEdit
+              ? handleSelectAssignee
+              : undefined
+          }
+          onEditAssignee={
+            isEdit
+              ? vm.onEditAssignee
+              : undefined
+          }
+          onClickAssignee={
+            isEdit
+              ? vm.onClickAssignee
+              : undefined
+          }
           createdByName={vm.createdByName}
           createdAt={vm.createdAt}
           updatedByName={vm.updatedByName}
@@ -156,10 +202,14 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">選択商品</div>
+            <div className="text-sm font-medium mb-2">
+              選択商品
+            </div>
+
             <div className="text-sm text-slate-800 break-all">
               {vm.productBrandName || "未選択"}
             </div>
+
             <div className="text-sm text-slate-800 break-all">
               {vm.productName || "未選択"}
             </div>
@@ -168,10 +218,14 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">選択トークン</div>
+            <div className="text-sm font-medium mb-2">
+              選択トークン
+            </div>
+
             <div className="text-sm text-slate-800 break-all">
               {vm.tokenBrandName || "未選択"}
             </div>
+
             <div className="text-sm text-slate-800 break-all">
               {vm.tokenName || "未選択"}
             </div>
@@ -180,14 +234,16 @@ export default function ListDetail() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">出品｜保留</div>
+            <div className="text-sm font-medium mb-2">
+              ステータス
+            </div>
 
             {!isEdit && (
               <div className="flex gap-2">
                 <div
                   className={[
                     "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
-                    effectiveDecision === "listing"
+                    effectiveStatus === "listing"
                       ? "bg-slate-900 text-white border-slate-900"
                       : "bg-white text-slate-700 border-slate-200",
                   ].join(" ")}
@@ -198,7 +254,7 @@ export default function ListDetail() {
                 <div
                   className={[
                     "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
-                    effectiveDecision === "holding"
+                    effectiveStatus === "suspended"
                       ? "bg-slate-900 text-white border-slate-900"
                       : "bg-white text-slate-700 border-slate-200",
                   ].join(" ")}
@@ -214,12 +270,16 @@ export default function ListDetail() {
                   type="button"
                   className={[
                     "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
-                    vm.draftDecision === "listing"
+                    vm.draftStatus === "listing"
                       ? "bg-slate-900 text-white border-slate-900"
                       : "bg-white text-slate-700 border-slate-200",
-                    vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                    vm.saving
+                      ? "opacity-60 cursor-not-allowed"
+                      : "cursor-pointer",
                   ].join(" ")}
-                  onClick={() => vm.onToggleDecision("listing")}
+                  onClick={() =>
+                    vm.onToggleStatus("listing")
+                  }
                   disabled={vm.saving}
                 >
                   出品
@@ -229,12 +289,16 @@ export default function ListDetail() {
                   type="button"
                   className={[
                     "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
-                    vm.draftDecision === "holding"
+                    vm.draftStatus === "suspended"
                       ? "bg-slate-900 text-white border-slate-900"
                       : "bg-white text-slate-700 border-slate-200",
-                    vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                    vm.saving
+                      ? "opacity-60 cursor-not-allowed"
+                      : "cursor-pointer",
                   ].join(" ")}
-                  onClick={() => vm.onToggleDecision("holding")}
+                  onClick={() =>
+                    vm.onToggleStatus("suspended")
+                  }
                   disabled={vm.saving}
                 >
                   保留

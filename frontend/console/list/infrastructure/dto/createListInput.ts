@@ -1,4 +1,6 @@
-//frontend\console\list\src\infrastructure\dto\createListInput.ts
+// frontend/console/list/src/infrastructure/dto/createListInput.ts
+import type { ListStatus } from "../../domain/list";
+
 export type CreateListInput = {
   id?: string;
   inventoryId?: string;
@@ -16,7 +18,7 @@ export type CreateListInput = {
     rgb?: number | null;
   }>;
 
-  decision?: "list" | "hold";
+  status?: ListStatus;
 
   assigneeId?: string;
   createdBy?: string;

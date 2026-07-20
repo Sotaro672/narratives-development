@@ -20,6 +20,8 @@ import type {
   ListDTO,
 } from "../../../../list/infrastructure/dto";
 
+import type { ListStatus } from "../../../../list/domain/list";
+
 import { uploadListImageToFirebaseStorage } from "../../../../list/infrastructure/firebase/listImageStorage";
 
 /**
@@ -155,7 +157,11 @@ export type PriceCardProps = {
    * hook 内で displayOrder で並べ替えても、
    * index は「元の rows 配列の index」を返す。
    */
-  onChangePrice?: (index: number, price: number | null, row: PriceRow) => void;
+  onChangePrice?: (
+    index: number,
+    price: number | null,
+    row: PriceRow,
+  ) => void;
 
   currencySymbol?: string;
 };
@@ -207,7 +213,9 @@ export type PriceRowVM = {
   priceInputValue: string;
   priceDisplayText: string;
 
-  onChangePriceInput: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChangePriceInput: (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => void;
 };
 
 export type UsePriceCardResult = {
@@ -226,7 +234,7 @@ export type CreateListInput = {
   inventoryId: string;
   title: string;
   description: string;
-  decision: "list" | "hold";
+  status: ListStatus;
   assigneeId?: string;
   priceRows: CreateListPriceRow[];
 };
@@ -245,15 +253,21 @@ export function resolveListCreateParams(
   } as ResolvedListCreateParams;
 }
 
-export function canFetchListCreate(p: ResolvedListCreateParams): boolean {
+export function canFetchListCreate(
+  p: ResolvedListCreateParams,
+): boolean {
   return Boolean(p.inventoryId);
 }
 
-export function buildListCreateFetchInput(p: ResolvedListCreateParams): {
+export function buildListCreateFetchInput(
+  p: ResolvedListCreateParams,
+): {
   inventoryId?: string;
 } {
   if (!p.inventoryId) {
-    return { inventoryId: undefined };
+    return {
+      inventoryId: undefined,
+    };
   }
 
   return {
@@ -278,27 +292,45 @@ export function shouldRedirectToInventoryIdRoute(_: {
   return false;
 }
 
-export function buildInventoryDetailPath(inventoryId: string): string {
+export function buildInventoryDetailPath(
+  inventoryId: string,
+): string {
   if (!inventoryId) return "/inventory";
+
   return `/inventory/detail/${encodeURIComponent(inventoryId)}`;
 }
 
-export function buildInventoryListCreatePath(inventoryId: string): string {
+export function buildInventoryListCreatePath(
+  inventoryId: string,
+): string {
   if (!inventoryId) return "/inventory/list/create";
+
   return `/inventory/list/create/${encodeURIComponent(inventoryId)}`;
 }
 
-export function buildBackPath(p: ResolvedListCreateParams): string {
-  if (p.inventoryId) return buildInventoryDetailPath(p.inventoryId);
+export function buildBackPath(
+  p: ResolvedListCreateParams,
+): string {
+  if (p.inventoryId) {
+    return buildInventoryDetailPath(p.inventoryId);
+  }
+
   return "/inventory";
 }
 
-export function buildAfterCreatePath(p: ResolvedListCreateParams): string {
-  if (p.inventoryId) return buildInventoryDetailPath(p.inventoryId);
+export function buildAfterCreatePath(
+  p: ResolvedListCreateParams,
+): string {
+  if (p.inventoryId) {
+    return buildInventoryDetailPath(p.inventoryId);
+  }
+
   return "/inventory";
 }
 
-export function extractDisplayStrings(dto: ListCreateDTO | null): {
+export function extractDisplayStrings(
+  dto: ListCreateDTO | null,
+): {
   productBrandName: string;
   productName: string;
   tokenBrandName: string;
@@ -319,7 +351,9 @@ export function extractDisplayStrings(dto: ListCreateDTO | null): {
  * - 並び順は displayOrder（未設定は null を保持）
  * - 名揺れ補完はしない
  */
-export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
+export function mapDTOToPriceRows(
+  dto: ListCreateDTO | null,
+): PriceRow[] {
   const rows = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
 
   return rows.map((r: any) => {
@@ -352,7 +386,9 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
 /**
  * 初期表示用: PriceRow[] を返す
  */
-export function initPriceRowsFromDTO(dto: ListCreateDTO | null): PriceRow[] {
+export function initPriceRowsFromDTO(
+  dto: ListCreateDTO | null,
+): PriceRow[] {
   return mapDTOToPriceRows(dto);
 }
 
@@ -379,7 +415,7 @@ export function buildCreateListInput(args: {
   listingTitle: string;
   description: string;
   priceRows: unknown[];
-  decision: "list" | "hold";
+  status: ListStatus;
   assigneeId?: string;
 }): CreateListInput {
   const priceRows = normalizeCreateListPriceRows(args.priceRows);
@@ -389,18 +425,22 @@ export function buildCreateListInput(args: {
     inventoryId: args.params.inventoryId,
     title: args.listingTitle,
     description: args.description,
-    decision: args.decision,
+    status: args.status,
     assigneeId: args.assigneeId,
     priceRows,
   };
 }
 
-export function validateCreateListInput(input: CreateListInput): void {
+export function validateCreateListInput(
+  input: CreateListInput,
+): void {
   if (!input.title) {
     throw new Error("タイトルを入力してください。");
   }
 
-  const rows = Array.isArray(input.priceRows) ? input.priceRows : [];
+  const rows = Array.isArray(input.priceRows)
+    ? input.priceRows
+    : [];
 
   if (rows.length === 0) {
     throw new Error("価格が未設定です（価格行がありません）。");
@@ -417,7 +457,7 @@ export function validateCreateListInput(input: CreateListInput): void {
 
 /**
  * 複数画像を Firebase Storage へ直接アップロード
- * → backend にメタ情報登録
+ * → backend に画像レコード登録
  * → primary image 設定
  *
  * Policy B:
@@ -435,31 +475,49 @@ export async function uploadListImagesPolicyB(args: {
   mainImageIndex: number;
   createdBy?: string;
 }): Promise<{
-  registered: Array<{ imageId: string; displayOrder: number }>;
+  registered: Array<{
+    imageId: string;
+    displayOrder: number;
+  }>;
   primaryImageId?: string;
 }> {
   const listId = String(args.listId ?? "").trim();
   const files = Array.isArray(args.files) ? args.files : [];
 
-  const requestedMainImageIndex = Number.isFinite(Number(args.mainImageIndex))
+  const requestedMainImageIndex = Number.isFinite(
+    Number(args.mainImageIndex),
+  )
     ? Number(args.mainImageIndex)
     : 0;
 
   const mainImageIndex =
-    requestedMainImageIndex >= 0 && requestedMainImageIndex < files.length
+    requestedMainImageIndex >= 0 &&
+    requestedMainImageIndex < files.length
       ? requestedMainImageIndex
       : 0;
 
-  if (!listId) throw new Error("invalid_list_id");
-  if (files.length === 0) return { registered: [] };
+  if (!listId) {
+    throw new Error("invalid_list_id");
+  }
 
-  const uid = args.createdBy || auth.currentUser?.uid || "system";
+  if (files.length === 0) {
+    return {
+      registered: [],
+    };
+  }
+
+  const uid =
+    args.createdBy || auth.currentUser?.uid || "system";
   const now = new Date().toISOString();
 
-  const registered: Array<{ imageId: string; displayOrder: number }> = [];
+  const registered: Array<{
+    imageId: string;
+    displayOrder: number;
+  }> = [];
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+
     if (!file) continue;
 
     const uploaded = await uploadListImageToFirebaseStorage({
@@ -471,11 +529,7 @@ export async function uploadListImagesPolicyB(args: {
       listId,
       id: uploaded.imageId,
       url: uploaded.url,
-      objectPath: uploaded.objectPath,
-      size: Number(file.size || 0),
       displayOrder: i,
-      fileName: file.name,
-      contentType: file.type || "application/octet-stream",
       createdBy: uid,
       createdAt: now,
     });
@@ -487,7 +541,9 @@ export async function uploadListImagesPolicyB(args: {
   }
 
   const primary =
-    registered.find((x) => x.displayOrder === mainImageIndex) || registered[0];
+    registered.find(
+      (item) => item.displayOrder === mainImageIndex,
+    ) || registered[0];
 
   if (primary?.imageId) {
     await setListPrimaryImageHTTP({
@@ -504,7 +560,9 @@ export async function uploadListImagesPolicyB(args: {
   };
 }
 
-export function _internal_getListIdFromListDTO(dto: ListDTO): string {
+export function _internal_getListIdFromListDTO(
+  dto: ListDTO,
+): string {
   return dto.id;
 }
 
@@ -529,6 +587,7 @@ export async function loadListCreateDTOFromParams(
   const input = buildListCreateFetchInput(p);
 
   const raw = await getListCreateRaw(input);
+
   return mapListCreateDTO(raw);
 }
 
@@ -553,16 +612,24 @@ export async function createListWithImages(args: {
   listingTitle: string;
   description: string;
   priceRows: any[];
-  decision: "list" | "hold";
+  status: ListStatus;
   assigneeId?: string;
 
   images?: File[];
   mainImageIndex?: number;
 
-  onImageUploadFailed?: (message: string, error: unknown) => void;
+  onImageUploadFailed?: (
+    message: string,
+    error: unknown,
+  ) => void;
 }): Promise<ListDTO> {
-  const images = Array.isArray(args.images) ? args.images : [];
-  const mainImageIndex = Number.isFinite(Number(args.mainImageIndex))
+  const images = Array.isArray(args.images)
+    ? args.images
+    : [];
+
+  const mainImageIndex = Number.isFinite(
+    Number(args.mainImageIndex),
+  )
     ? Number(args.mainImageIndex)
     : 0;
 
@@ -572,14 +639,16 @@ export async function createListWithImages(args: {
     listingTitle: args.listingTitle,
     description: args.description,
     priceRows: args.priceRows,
-    decision: args.decision,
+    status: args.status,
     assigneeId: args.assigneeId,
   });
 
   validateCreateListInput(input);
 
   // 2) create list
-  const created = await createListHTTP(input as ListPostCreateListInput);
+  const created = await createListHTTP(
+    input as ListPostCreateListInput,
+  );
 
   const listId = _internal_getListIdFromListDTO(created);
 
@@ -600,7 +669,10 @@ export async function createListWithImages(args: {
         createdBy: auth.currentUser?.uid,
       });
     } catch (error) {
-      args.onImageUploadFailed?.(LIST_IMAGE_UPLOAD_FAILED_MESSAGE, error);
+      args.onImageUploadFailed?.(
+        LIST_IMAGE_UPLOAD_FAILED_MESSAGE,
+        error,
+      );
     }
   }
 

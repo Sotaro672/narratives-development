@@ -11,6 +11,8 @@ import { usePriceCard } from "../../../../list/presentation/hook/usePriceCard";
 import { useAdminCard } from "../../../../admin/src/presentation/hook/useAdminCard";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
+import type { ListStatus } from "../../../../list/domain/list";
+
 import {
   buildAfterCreatePath,
   buildBackPath,
@@ -30,8 +32,6 @@ import {
 import type { ListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.types";
 
 type ImageInputRef = React.RefObject<HTMLInputElement | null>;
-
-type ListingDecision = "list" | "hold";
 
 type AssigneeCandidate = {
   id: string;
@@ -81,9 +81,9 @@ export type UseListCreateResult = {
   loadingMembers: boolean;
   handleSelectAssignee: (id: string) => void;
 
-  // decision
-  decision: ListingDecision;
-  setDecision: React.Dispatch<React.SetStateAction<ListingDecision>>;
+  // status
+  status: ListStatus;
+  setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
 };
 
 type UsePriceRowsResult = {
@@ -157,12 +157,17 @@ function normalizeAssigneeCandidates(
 
 function dedupeFiles(prev: File[], add: File[]): File[] {
   const exists = new Set(
-    prev.map((file: File) => `${file.name}__${file.size}__${file.lastModified}`),
+    prev.map(
+      (file: File) =>
+        `${file.name}__${file.size}__${file.lastModified}`,
+    ),
   );
 
   const filtered = add.filter(
     (file: File) =>
-      !exists.has(`${file.name}__${file.size}__${file.lastModified}`),
+      !exists.has(
+        `${file.name}__${file.size}__${file.lastModified}`,
+      ),
   );
 
   return [...prev, ...filtered];
@@ -201,15 +206,16 @@ function useListCreateParamsAndTitle(): {
   };
 }
 
-function useListingDecision(): {
-  decision: ListingDecision;
-  setDecision: React.Dispatch<React.SetStateAction<ListingDecision>>;
+function useListingStatus(): {
+  status: ListStatus;
+  setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
 } {
-  const [decision, setDecision] = React.useState<ListingDecision>("list");
+  const [status, setStatus] =
+    React.useState<ListStatus>("listing");
 
   return {
-    decision,
-    setDecision,
+    status,
+    setStatus,
   };
 }
 
@@ -219,8 +225,10 @@ function useListingFields(): {
   description: string;
   setDescription: React.Dispatch<React.SetStateAction<string>>;
 } {
-  const [listingTitle, setListingTitle] = React.useState<string>("");
-  const [description, setDescription] = React.useState<string>("");
+  const [listingTitle, setListingTitle] =
+    React.useState<string>("");
+  const [description, setDescription] =
+    React.useState<string>("");
 
   return {
     listingTitle,
@@ -238,15 +246,20 @@ function useListingImages(): {
   imageInputRef: ImageInputRef;
   onSelectImages: (files: FileList | null) => void;
   onDropImages: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragOverImages: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOverImages: (
+    e: React.DragEvent<HTMLDivElement>,
+  ) => void;
   removeImageAt: (idx: number) => void;
   clearImages: () => void;
 } {
   const [images, setImages] = React.useState<File[]>([]);
-  const [mainImageIndex, setMainImageIndex] = React.useState<number>(0);
-  const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
+  const [mainImageIndex, setMainImageIndex] =
+    React.useState<number>(0);
+  const [imagePreviewUrls, setImagePreviewUrls] =
+    React.useState<string[]>([]);
 
-  const imageInputRef = React.useRef<HTMLInputElement | null>(null);
+  const imageInputRef =
+    React.useRef<HTMLInputElement | null>(null);
 
   const appendImages = React.useCallback(
     (filesLike: FileList | File[] | null) => {
@@ -304,7 +317,10 @@ function useListingImages(): {
       return;
     }
 
-    const urls = images.map((file: File) => URL.createObjectURL(file));
+    const urls = images.map((file: File) =>
+      URL.createObjectURL(file),
+    );
+
     setImagePreviewUrls(urls);
 
     return () => {
@@ -320,11 +336,17 @@ function useListingImages(): {
 
   React.useEffect(() => {
     if (images.length === 0) {
-      if (mainImageIndex !== 0) setMainImageIndex(0);
+      if (mainImageIndex !== 0) {
+        setMainImageIndex(0);
+      }
+
       return;
     }
 
-    if (mainImageIndex < 0 || mainImageIndex > images.length - 1) {
+    if (
+      mainImageIndex < 0 ||
+      mainImageIndex > images.length - 1
+    ) {
       setMainImageIndex(0);
     }
   }, [images.length, mainImageIndex]);
@@ -344,7 +366,8 @@ function useListingImages(): {
 }
 
 function usePriceRows(): UsePriceRowsResult {
-  const [priceRows, setPriceRows] = React.useState<PriceRow[]>([]);
+  const [priceRows, setPriceRows] =
+    React.useState<PriceRow[]>([]);
 
   const initializedPriceRowsRef = React.useRef(false);
 
@@ -352,6 +375,7 @@ function usePriceRows(): UsePriceRowsResult {
     (index: number, price: number | null) => {
       setPriceRows((prev) => {
         const next = [...prev];
+
         if (!next[index]) return prev;
 
         next[index] = {
@@ -423,7 +447,8 @@ function useListCreateDTO(args: {
     setPriceRows,
   } = args;
 
-  const [dto, setDTO] = React.useState<ListCreateDTO | null>(null);
+  const [dto, setDTO] =
+    React.useState<ListCreateDTO | null>(null);
   const [loadingDTO, setLoadingDTO] = React.useState(false);
   const [dtoError, setDTOError] = React.useState<string>("");
 
@@ -434,13 +459,16 @@ function useListCreateDTO(args: {
 
     const run = async () => {
       const canFetch = canFetchListCreate(resolvedParams);
+
       if (!canFetch) return;
 
       setLoadingDTO(true);
       setDTOError("");
 
       try {
-        const data = await loadListCreateDTOFromParams(resolvedParams);
+        const data =
+          await loadListCreateDTOFromParams(resolvedParams);
+
         if (cancelled) return;
 
         const gotInventoryId = getInventoryIdFromDTO(data);
@@ -454,9 +482,13 @@ function useListCreateDTO(args: {
           })
         ) {
           redirectedRef.current = true;
-          navigate(buildInventoryListCreatePath(gotInventoryId), {
-            replace: true,
-          });
+
+          navigate(
+            buildInventoryListCreatePath(gotInventoryId),
+            {
+              replace: true,
+            },
+          );
         }
 
         setDTO(data);
@@ -468,10 +500,14 @@ function useListCreateDTO(args: {
       } catch (e) {
         if (cancelled) return;
 
-        const msg = String(e instanceof Error ? e.message : e);
+        const msg = String(
+          e instanceof Error ? e.message : e,
+        );
+
         setDTOError(msg);
       } finally {
         if (cancelled) return;
+
         setLoadingDTO(false);
       }
     };
@@ -489,8 +525,15 @@ function useListCreateDTO(args: {
     initializedPriceRowsRef,
   ]);
 
-  const { productBrandName, productName, tokenBrandName, tokenName } =
-    React.useMemo(() => extractDisplayStrings(dto), [dto]);
+  const {
+    productBrandName,
+    productName,
+    tokenBrandName,
+    tokenName,
+  } = React.useMemo(
+    () => extractDisplayStrings(dto),
+    [dto],
+  );
 
   return {
     dto,
@@ -506,7 +549,7 @@ function useListCreateDTO(args: {
 function useCreateList(args: {
   navigate: NavigateFunction;
   resolvedParams: ResolvedListCreateParams;
-  decision: ListingDecision;
+  status: ListStatus;
   listingTitle: string;
   description: string;
   priceRows: PriceRow[];
@@ -519,7 +562,7 @@ function useCreateList(args: {
   const {
     navigate,
     resolvedParams,
-    decision,
+    status,
     listingTitle,
     description,
     priceRows,
@@ -533,12 +576,17 @@ function useCreateList(args: {
 
     try {
       if (images.length === 0) {
-        const msg = "商品画像は1枚以上必須です。画像を追加してください。";
+        const msg =
+          "商品画像は1枚以上必須です。画像を追加してください。";
+
         alert(msg);
+
         throw new Error(msg);
       }
 
-      const inventoryId = String(resolvedParams.inventoryId ?? "");
+      const inventoryId = String(
+        resolvedParams.inventoryId ?? "",
+      );
 
       await createListWithImages({
         params: {
@@ -548,7 +596,7 @@ function useCreateList(args: {
         listingTitle,
         description,
         priceRows,
-        decision,
+        status,
         assigneeId,
         images,
         mainImageIndex,
@@ -565,12 +613,15 @@ function useCreateList(args: {
 
       navigate(buildAfterCreatePath(resolvedParams));
     } catch (e) {
-      const msg = String(e instanceof Error ? e.message : e);
+      const msg = String(
+        e instanceof Error ? e.message : e,
+      );
+
       alert(msg);
     }
   }, [
     assigneeId,
-    decision,
+    status,
     description,
     images,
     listingTitle,
@@ -586,13 +637,22 @@ function useCreateList(args: {
 }
 
 export function useListCreate(): UseListCreateResult {
-  const { resolvedParams, inventoryId, title } = useListCreateParamsAndTitle();
+  const {
+    resolvedParams,
+    inventoryId,
+    title,
+  } = useListCreateParamsAndTitle();
+
   const { currentMember } = useAuth();
 
-  const { decision, setDecision } = useListingDecision();
+  const { status, setStatus } = useListingStatus();
 
-  const { listingTitle, setListingTitle, description, setDescription } =
-    useListingFields();
+  const {
+    listingTitle,
+    setListingTitle,
+    description,
+    setDescription,
+  } = useListingFields();
 
   const {
     images,
@@ -613,24 +673,33 @@ export function useListCreate(): UseListCreateResult {
     priceCard,
   } = usePriceRows();
 
-  const { navigate, onBack } = useListCreateNavigation(resolvedParams);
+  const { navigate, onBack } =
+    useListCreateNavigation(resolvedParams);
 
-  const { assigneeCandidates: rawAssigneeCandidates, loadingMembers } =
-    useAdminCard();
+  const {
+    assigneeCandidates: rawAssigneeCandidates,
+    loadingMembers,
+  } = useAdminCard();
 
   const assigneeCandidates = React.useMemo(
-    () => normalizeAssigneeCandidates(rawAssigneeCandidates),
+    () =>
+      normalizeAssigneeCandidates(
+        rawAssigneeCandidates,
+      ),
     [rawAssigneeCandidates],
   );
 
-  const [assigneeId, setAssigneeId] = React.useState("");
-  const [assigneeName, setAssigneeName] = React.useState("");
+  const [assigneeId, setAssigneeId] =
+    React.useState("");
+  const [assigneeName, setAssigneeName] =
+    React.useState("");
 
   React.useEffect(() => {
     if (!currentMember) return;
     if (assigneeId) return;
 
     const memberUid = getMemberUid(currentMember);
+
     if (!memberUid) return;
 
     const label = getMemberDisplayName(currentMember);
@@ -642,15 +711,22 @@ export function useListCreate(): UseListCreateResult {
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
       const nextId = String(id ?? "");
+
       if (!nextId) return;
 
-      const matched = assigneeCandidates.find((c) => c.id === nextId);
+      const matched = assigneeCandidates.find(
+        (candidate) => candidate.id === nextId,
+      );
 
       let nextName = "";
+
       if (matched) {
         nextName = matched.name;
-      } else if (getMemberUid(currentMember) === nextId) {
-        nextName = getMemberDisplayName(currentMember);
+      } else if (
+        getMemberUid(currentMember) === nextId
+      ) {
+        nextName =
+          getMemberDisplayName(currentMember);
       } else {
         nextName = nextId;
       }
@@ -680,7 +756,7 @@ export function useListCreate(): UseListCreateResult {
   const { onCreate } = useCreateList({
     navigate,
     resolvedParams,
-    decision,
+    status,
     listingTitle,
     description,
     priceRows,
@@ -726,7 +802,7 @@ export function useListCreate(): UseListCreateResult {
     loadingMembers: Boolean(loadingMembers),
     handleSelectAssignee,
 
-    decision,
-    setDecision,
+    status,
+    setStatus,
   };
 }

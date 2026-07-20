@@ -222,48 +222,33 @@ func (q *ListDetailQuery) BuildListDetailDTO(
 	}
 
 	dto := querydto.ListDetailDTO{
-		ID:          it.ID,
-		InventoryID: invID,
-
-		Status:   string(it.Status),
-		Decision: string(it.Status), // DTO互換維持
-
-		Title:       it.Title,
-		Description: it.Description,
-
-		AssigneeID:   it.AssigneeID,
-		AssigneeName: assigneeName,
-
-		CreatedBy:     it.CreatedBy,
-		CreatedByName: createdByName,
-		CreatedAt:     createdAt,
-
-		UpdatedBy:     updatedByID,
-		UpdatedByName: updatedByName,
-		UpdatedAt:     updatedAt,
-
-		// Policy:
-		// - ImageID は URL ではなく primary imageId
-		ImageID: it.ImageID,
-
+		ID:                 it.ID,
+		InventoryID:        invID,
+		Status:             string(it.Status),
+		Title:              it.Title,
+		Description:        it.Description,
+		AssigneeID:         it.AssigneeID,
+		AssigneeName:       assigneeName,
+		CreatedBy:          it.CreatedBy,
+		CreatedByName:      createdByName,
+		CreatedAt:          createdAt,
+		UpdatedBy:          updatedByID,
+		UpdatedByName:      updatedByName,
+		UpdatedAt:          updatedAt,
+		ImageID:            it.ImageID,
 		ProductBlueprintID: pbID,
 		TokenBlueprintID:   tbID,
-
-		ProductBrandID:   productBrandID,
-		ProductBrandName: productBrandName,
-		ProductName:      productName,
-
-		TokenBrandID:   tokenBrandID,
-		TokenBrandName: tokenBrandName,
-		TokenName:      tokenName,
-
-		ImageURLs: imageURLs,
-		Images:    images,
-
-		PriceRows: priceRows,
-
-		TotalStock:  totalStock,
-		CurrencyJPY: true,
+		ProductBrandID:     productBrandID,
+		ProductBrandName:   productBrandName,
+		ProductName:        productName,
+		TokenBrandID:       tokenBrandID,
+		TokenBrandName:     tokenBrandName,
+		TokenName:          tokenName,
+		ImageURLs:          imageURLs,
+		Images:             images,
+		PriceRows:          priceRows,
+		TotalStock:         totalStock,
+		CurrencyJPY:        true,
 	}
 
 	return dto, nil
