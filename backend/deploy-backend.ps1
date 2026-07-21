@@ -189,6 +189,13 @@ $AllowedKeys = @(
   "CLOUD_TASKS_SERVICE_ACCOUNT",
   "CLOUD_TASKS_AUDIENCE",
   "MINT_TASK_DISPATCH_DELAY_SECONDS",
+  # Cloud Tasks / List save operation retry worker
+  "LIST_SAVE_OPERATION_QUEUE_PROJECT_ID",
+  "LIST_SAVE_OPERATION_QUEUE_LOCATION",
+  "LIST_SAVE_OPERATION_QUEUE_ID",
+  "LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL",
+  "LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL",
+  "LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE",
   # Stripe webhook only
   # STRIPE_SECRET_KEY は廃止。Secret Manager の stripe-secret-key を使用する。
   "STRIPE_WEBHOOK_SECRET"
@@ -224,6 +231,12 @@ if (-not $envMap.ContainsKey("CLOUD_TASKS_PROJECT_ID")) {
 }
 if (-not $envMap.ContainsKey("CLOUD_TASKS_LOCATION")) {
   $envMap["CLOUD_TASKS_LOCATION"] = $Region
+}
+if (-not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_PROJECT_ID") -or [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"])) {
+  $envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"] = $ProjectId
+}
+if (-not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_LOCATION") -or [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"])) {
+  $envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"] = $Region
 }
 if (-not $envMap.ContainsKey("INTERNAL_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])) {
   if ($envMap.ContainsKey("SELF_BASE_URL") -and -not [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])) {
@@ -283,6 +296,38 @@ if ($envMap.ContainsKey("CLOUD_TASKS_QUEUE_ID") -or $envMap.ContainsKey("CLOUD_T
   if (-not $envMap.ContainsKey("CLOUD_TASKS_SERVICE_ACCOUNT") -or [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_SERVICE_ACCOUNT"])) {
     throw "CLOUD_TASKS_SERVICE_ACCOUNT is required when Cloud Tasks mint worker is enabled."
   }
+}
+if (-not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_ID") -or [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_ID"])) {
+  if ($envMap.ContainsKey("CLOUD_TASKS_QUEUE_ID") -and -not [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_QUEUE_ID"])) {
+    $envMap["LIST_SAVE_OPERATION_QUEUE_ID"] = $envMap["CLOUD_TASKS_QUEUE_ID"]
+    Write-Ok "LIST_SAVE_OPERATION_QUEUE_ID resolved from CLOUD_TASKS_QUEUE_ID: $($envMap["LIST_SAVE_OPERATION_QUEUE_ID"])"
+  } else {
+    throw "LIST_SAVE_OPERATION_QUEUE_ID is required. Set it in .env or configure CLOUD_TASKS_QUEUE_ID to reuse the mint worker queue."
+  }
+}
+if (-not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"])) {
+  if ($envMap.ContainsKey("INTERNAL_BASE_URL") -and -not [string]::IsNullOrWhiteSpace($envMap["INTERNAL_BASE_URL"])) {
+    $envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"] = $envMap["INTERNAL_BASE_URL"]
+    Write-Ok "LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL resolved from INTERNAL_BASE_URL: $($envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"])"
+  } else {
+    throw "LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL is required. Set it in .env or configure INTERNAL_BASE_URL."
+  }
+}
+if (-not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL") -or [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"])) {
+  if ($envMap.ContainsKey("CLOUD_TASKS_SERVICE_ACCOUNT") -and -not [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_SERVICE_ACCOUNT"])) {
+    $envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $envMap["CLOUD_TASKS_SERVICE_ACCOUNT"]
+  } else {
+    $envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $RunServiceAccount
+  }
+  Write-Ok "LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL resolved: $($envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"])"
+}
+if (-not $envMap.ContainsKey("LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE") -or [string]::IsNullOrWhiteSpace($envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"])) {
+  if ($envMap.ContainsKey("CLOUD_TASKS_AUDIENCE") -and -not [string]::IsNullOrWhiteSpace($envMap["CLOUD_TASKS_AUDIENCE"])) {
+    $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $envMap["CLOUD_TASKS_AUDIENCE"]
+  } else {
+    $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"]
+  }
+  Write-Ok "LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE resolved: $($envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"])"
 }
 $envPairs = @()
 foreach ($k in $envMap.Keys) {

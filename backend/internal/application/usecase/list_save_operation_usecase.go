@@ -13,13 +13,18 @@ import (
 )
 
 type ListSaveOperationStorage interface {
+	Exists(ctx context.Context, storagePath string) (bool, error)
 	Delete(ctx context.Context, storagePath string) error
+}
+type ListSaveOperationRetryQueue interface {
+	EnqueueRetry(ctx context.Context, operationID string, scheduledAt time.Time) error
 }
 type ListSaveOperationUsecase struct {
 	listRepo         listdom.Repository
 	imageRepo        listdom.ImageRepository
 	operationRepo    listdom.SaveOperationRepository
 	storage          ListSaveOperationStorage
+	retryQueue       ListSaveOperationRetryQueue
 	now              func() time.Time
 	isRetryableError func(error) bool
 }
@@ -28,6 +33,7 @@ type NewListSaveOperationUsecaseParams struct {
 	ImageRepository     listdom.ImageRepository
 	OperationRepository listdom.SaveOperationRepository
 	Storage             ListSaveOperationStorage
+	RetryQueue          ListSaveOperationRetryQueue
 	Now                 func() time.Time
 	IsRetryableError    func(error) bool
 }
@@ -59,6 +65,7 @@ func NewListSaveOperationUsecase(p NewListSaveOperationUsecaseParams) *ListSaveO
 		imageRepo:        p.ImageRepository,
 		operationRepo:    p.OperationRepository,
 		storage:          p.Storage,
+		retryQueue:       p.RetryQueue,
 		now:              now,
 		isRetryableError: isRetryableError,
 	}
@@ -134,6 +141,13 @@ func (uc *ListSaveOperationUsecase) Start(ctx context.Context, input StartListSa
 	}
 	created, err := uc.operationRepo.Create(ctx, operation)
 	if err != nil {
+		if errors.Is(err, listdom.ErrSaveOperationIdempotencyConflict) {
+			existing, getErr := uc.operationRepo.GetByIdempotencyKey(ctx, input.IdempotencyKey)
+			if getErr == nil {
+				return uc.executeLoaded(ctx, existing)
+			}
+			return listdom.SaveOperation{}, errors.Join(err, getErr)
+		}
 		return listdom.SaveOperation{}, err
 	}
 	return uc.executeLoaded(ctx, created)
@@ -304,11 +318,20 @@ func (uc *ListSaveOperationUsecase) executeLoaded(ctx context.Context, operation
 	}
 }
 func (uc *ListSaveOperationUsecase) acknowledgeUploadedImages(ctx context.Context, operation listdom.SaveOperation) (listdom.SaveOperation, error) {
+	if uc.storage == nil {
+		return uc.failExecution(ctx, operation, errors.New("list save operation storage is nil"))
+	}
 	for _, image := range operation.Payload.NewImages {
 		if operation.IsImageUploaded(image.ImageID) {
 			continue
 		}
-		var err error
+		exists, err := uc.storage.Exists(ctx, image.StoragePath)
+		if err != nil {
+			return uc.failExecution(ctx, operation, err)
+		}
+		if !exists {
+			return uc.failExecution(ctx, operation, fmt.Errorf("list save operation storage object not found: %s", image.StoragePath))
+		}
 		operation, err = uc.persistMutation(ctx, operation, func(value *listdom.SaveOperation) error {
 			return value.MarkImageUploaded(image.ImageID, uc.currentTime())
 		})
@@ -447,13 +470,16 @@ func (uc *ListSaveOperationUsecase) compensateLoaded(ctx context.Context, operat
 		}
 	}
 	for _, image := range operation.Payload.NewImages {
+		if !operation.IsImageRegistered(image.ImageID) {
+			continue
+		}
 		err := uc.imageRepo.Delete(ctx, operation.ListID, image.ImageID)
 		if err != nil && !errors.Is(err, listdom.ErrNotFound) {
 			return uc.failCompensation(ctx, operation, err)
 		}
 	}
 	for _, image := range operation.Payload.PreviousImages {
-		if !containsSaveOperationString(operation.Payload.DeleteImageIDs, image.ID) {
+		if !operation.IsImageDeleted(image.ID) {
 			continue
 		}
 		_, err := uc.imageRepo.Create(ctx, image)
@@ -476,8 +502,11 @@ func (uc *ListSaveOperationUsecase) compensateLoaded(ctx context.Context, operat
 		}
 	}
 	for _, image := range operation.Payload.NewImages {
+		if !operation.IsImageUploaded(image.ImageID) {
+			continue
+		}
 		storagePath := strings.TrimSpace(image.StoragePath)
-		if storagePath == "" || containsSaveOperationString(operation.Progress.CompensatedStoragePaths, storagePath) {
+		if containsSaveOperationString(operation.Progress.CompensatedStoragePaths, storagePath) {
 			continue
 		}
 		if uc.storage == nil {
@@ -511,6 +540,11 @@ func (uc *ListSaveOperationUsecase) failExecution(ctx context.Context, operation
 	if persistErr != nil {
 		return operation, errors.Join(cause, persistErr)
 	}
+	if updated.Status == listdom.SaveOperationStatusFailedRetryable {
+		if enqueueErr := uc.enqueueRetry(ctx, updated); enqueueErr != nil {
+			return updated, errors.Join(cause, enqueueErr)
+		}
+	}
 	if updated.Status == listdom.SaveOperationStatusFailedFatal && updated.CanCompensate() {
 		compensated, compensationErr := uc.compensateLoaded(ctx, updated)
 		if compensationErr != nil {
@@ -527,7 +561,19 @@ func (uc *ListSaveOperationUsecase) failCompensation(ctx context.Context, operat
 	if persistErr != nil {
 		return operation, errors.Join(cause, persistErr)
 	}
+	if updated.Status == listdom.SaveOperationStatusFailedRetryable {
+		if enqueueErr := uc.enqueueRetry(ctx, updated); enqueueErr != nil {
+			return updated, errors.Join(cause, enqueueErr)
+		}
+	}
 	return updated, cause
+}
+func (uc *ListSaveOperationUsecase) enqueueRetry(ctx context.Context, operation listdom.SaveOperation) error {
+	if operation.Status != listdom.SaveOperationStatusFailedRetryable || uc.retryQueue == nil {
+		return nil
+	}
+	scheduledAt := uc.currentTime().Add(listSaveOperationRetryDelay(operation.RetryCount))
+	return uc.retryQueue.EnqueueRetry(ctx, operation.ID, scheduledAt)
 }
 func (uc *ListSaveOperationUsecase) persistMutation(ctx context.Context, operation listdom.SaveOperation, mutate func(*listdom.SaveOperation) error) (listdom.SaveOperation, error) {
 	expectedVersion := operation.Version
@@ -667,6 +713,16 @@ func generateSaveOperationID(prefix string) (string, error) {
 		return hex.EncodeToString(value), nil
 	}
 	return prefix + "_" + hex.EncodeToString(value), nil
+}
+func listSaveOperationRetryDelay(retryCount int) time.Duration {
+	switch {
+	case retryCount <= 0:
+		return 30 * time.Second
+	case retryCount == 1:
+		return 2 * time.Minute
+	default:
+		return 10 * time.Minute
+	}
 }
 func defaultListSaveOperationRetryableError(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, listdom.ErrSaveOperationConflict)

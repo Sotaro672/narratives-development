@@ -26,35 +26,36 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		}
 	}
 	var (
-		authBootstrapH       http.Handler
-		accountsH            http.Handler
-		announcementsH       http.Handler
-		permissionsH         http.Handler
-		brandsH              http.Handler
-		companiesH           http.Handler
-		inquiriesH           http.Handler
-		inventoriesH         http.Handler
-		listsH               http.Handler
-		listSaveOperationsH  http.Handler
-		salesH               http.Handler
-		productsPrintH       http.Handler
-		productBPH           http.Handler
-		productBPCategoriesH http.Handler
-		tokenBPH             http.Handler
-		tokenBPReviewH       http.Handler
-		productBPReviewH     http.Handler
-		messagesH            http.Handler
-		ordersH              http.Handler
-		walletsH             http.Handler
-		membersH             http.Handler
-		productionsH         http.Handler
-		modelsH              http.Handler
-		usersH               http.Handler
-		inspectorH           http.Handler
-		mintH                http.Handler
-		internalMintTasksH   http.Handler
-		invitationH          http.Handler
-		ownerResolveH        http.Handler
+		authBootstrapH                  http.Handler
+		accountsH                       http.Handler
+		announcementsH                  http.Handler
+		permissionsH                    http.Handler
+		brandsH                         http.Handler
+		companiesH                      http.Handler
+		inquiriesH                      http.Handler
+		inventoriesH                    http.Handler
+		listsH                          http.Handler
+		listSaveOperationsH             http.Handler
+		internalListSaveOperationTasksH http.Handler
+		salesH                          http.Handler
+		productsPrintH                  http.Handler
+		productBPH                      http.Handler
+		productBPCategoriesH            http.Handler
+		tokenBPH                        http.Handler
+		tokenBPReviewH                  http.Handler
+		productBPReviewH                http.Handler
+		messagesH                       http.Handler
+		ordersH                         http.Handler
+		walletsH                        http.Handler
+		membersH                        http.Handler
+		productionsH                    http.Handler
+		modelsH                         http.Handler
+		usersH                          http.Handler
+		inspectorH                      http.Handler
+		mintH                           http.Handler
+		internalMintTasksH              http.Handler
+		invitationH                     http.Handler
+		ownerResolveH                   http.Handler
 	)
 	if c.AuthBootstrap != nil && bootstrapMw != nil {
 		authBootstrapH = consoleHandler.NewAuthBootstrapHandler(c.AuthBootstrap)
@@ -114,6 +115,11 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	if c.ListSaveOperationUC != nil {
 		listSaveOperationsH = consoleHandler.NewListSaveOperationHandler(
 			consoleHandler.NewListSaveOperationHandlerParams{
+				UC: c.ListSaveOperationUC,
+			},
+		)
+		internalListSaveOperationTasksH = consoleHandler.NewListSaveOperationTaskHandler(
+			consoleHandler.NewListSaveOperationTaskHandlerParams{
 				UC: c.ListSaveOperationUC,
 			},
 		)
@@ -235,36 +241,37 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		)
 	}
 	return httpin.RouterDeps{
-		AuthMw:              authMw,
-		BootstrapMw:         bootstrapMw,
-		AuthBootstrap:       authBootstrapH,
-		Accounts:            accountsH,
-		Announcements:       announcementsH,
-		Permissions:         permissionsH,
-		Brands:              brandsH,
-		Companies:           companiesH,
-		Inquiries:           inquiriesH,
-		Inventories:         inventoriesH,
-		Lists:               listsH,
-		ListSaveOperations:  listSaveOperationsH,
-		Sales:               salesH,
-		ProductsPrint:       productsPrintH,
-		ProductBP:           productBPH,
-		ProductBPCategories: productBPCategoriesH,
-		TokenBP:             tokenBPH,
-		TokenBPReview:       tokenBPReviewH,
-		ProductBPReview:     productBPReviewH,
-		Messages:            messagesH,
-		Orders:              ordersH,
-		Wallets:             walletsH,
-		Members:             membersH,
-		Productions:         productionsH,
-		Models:              modelsH,
-		Users:               usersH,
-		Invitation:          invitationH,
-		Inspector:           inspectorH,
-		Mint:                mintH,
-		InternalMintTasks:   internalMintTasksH,
-		OwnerResolve:        ownerResolveH,
+		AuthMw:                         authMw,
+		BootstrapMw:                    bootstrapMw,
+		AuthBootstrap:                  authBootstrapH,
+		Accounts:                       accountsH,
+		Announcements:                  announcementsH,
+		Permissions:                    permissionsH,
+		Brands:                         brandsH,
+		Companies:                      companiesH,
+		Inquiries:                      inquiriesH,
+		Inventories:                    inventoriesH,
+		Lists:                          listsH,
+		ListSaveOperations:             listSaveOperationsH,
+		InternalListSaveOperationTasks: internalListSaveOperationTasksH,
+		Sales:                          salesH,
+		ProductsPrint:                  productsPrintH,
+		ProductBP:                      productBPH,
+		ProductBPCategories:            productBPCategoriesH,
+		TokenBP:                        tokenBPH,
+		TokenBPReview:                  tokenBPReviewH,
+		ProductBPReview:                productBPReviewH,
+		Messages:                       messagesH,
+		Orders:                         ordersH,
+		Wallets:                        walletsH,
+		Members:                        membersH,
+		Productions:                    productionsH,
+		Models:                         modelsH,
+		Users:                          usersH,
+		Invitation:                     invitationH,
+		Inspector:                      inspectorH,
+		Mint:                           mintH,
+		InternalMintTasks:              internalMintTasksH,
+		OwnerResolve:                   ownerResolveH,
 	}
 }

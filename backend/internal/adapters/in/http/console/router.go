@@ -38,20 +38,25 @@ type RouterDeps struct {
 	Mint                http.Handler
 	// Internal handlers
 	//
-	// Cloud Tasks から呼ばれる内部mint worker用です。
+	// Cloud Tasksから呼ばれる内部mint worker用です。
 	// endpoint:
 	//   POST /internal/mint/tasks/{mintID}/execute
 	//
+	// Cloud Tasksから呼ばれるList保存Operationの内部worker用です。
+	// endpoint:
+	//   POST /internal/list/save-operations/{operationId}/retry
+	//
 	// 注意:
 	// - 通常のConsole Firebase Authではなく、Cloud Tasks OIDC / Cloud Run Invoker
-	//   または internal secret header で守る想定です。
-	InternalMintTasks http.Handler
-	OwnerResolve      http.Handler
-	Users             http.Handler
-	Invitation        http.Handler
-	Sales             http.Handler
-	TokenBPReview     http.Handler
-	ProductBPReview   http.Handler
+	//   またはinternal secret headerで守る想定です。
+	InternalMintTasks              http.Handler
+	InternalListSaveOperationTasks http.Handler
+	OwnerResolve                   http.Handler
+	Users                          http.Handler
+	Invitation                     http.Handler
+	Sales                          http.Handler
+	TokenBPReview                  http.Handler
+	ProductBPReview                http.Handler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -208,6 +213,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.InternalMintTasks != nil {
 		h := withPublic(deps.InternalMintTasks)
 		mux.Handle("/internal/mint/tasks/", h)
+	}
+	if deps.InternalListSaveOperationTasks != nil {
+		h := withPublic(deps.InternalListSaveOperationTasks)
+		mux.Handle("/internal/list/save-operations/", h)
 	}
 	if deps.OwnerResolve != nil {
 		h := withAuth(deps.OwnerResolve)

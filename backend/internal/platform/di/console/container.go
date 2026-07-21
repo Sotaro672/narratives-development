@@ -4,6 +4,7 @@ package console
 import (
 	"context"
 	"errors"
+	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	firebaseadp "narratives/internal/adapters/out/firebase"
 	query "narratives/internal/application/query/console"
 	inspectorquery "narratives/internal/application/query/inspector"
@@ -87,6 +88,7 @@ type Container struct {
 	AuthBootstrap                   *uc.BootstrapService
 	NameResolver                    *resolver.NameResolver
 	listSaveOperationStorage        *firebaseadp.ListSaveOperationStorage
+	listSaveOperationRetryQueue     *listcloudtasksadp.ListSaveOperationQueue
 }
 
 func NewContainer(
@@ -118,10 +120,19 @@ func NewContainer(
 		services,
 	)
 	if clients == nil || clients.infra == nil {
-		if u.listSaveOperationStorage != nil {
-			_ = u.listSaveOperationStorage.Close()
+		var queueErr error
+		if u != nil && u.listSaveOperationRetryQueue != nil {
+			queueErr = u.listSaveOperationRetryQueue.Close()
 		}
-		return nil, errors.New("clients/infra is nil")
+		var storageErr error
+		if u != nil && u.listSaveOperationStorage != nil {
+			storageErr = u.listSaveOperationStorage.Close()
+		}
+		return nil, errors.Join(
+			errors.New("clients/infra is nil"),
+			queueErr,
+			storageErr,
+		)
 	}
 	var invBlueprint query.InventoryBlueprintResolver
 	if repos.inventoryRepo != nil {
@@ -220,11 +231,16 @@ func NewContainer(
 		AuthBootstrap:                   u.authBootstrapSvc,
 		NameResolver:                    res.nameResolver,
 		listSaveOperationStorage:        u.listSaveOperationStorage,
+		listSaveOperationRetryQueue:     u.listSaveOperationRetryQueue,
 	}, nil
 }
 func (c *Container) Close() error {
 	if c == nil {
 		return nil
+	}
+	var queueErr error
+	if c.listSaveOperationRetryQueue != nil {
+		queueErr = c.listSaveOperationRetryQueue.Close()
 	}
 	var storageErr error
 	if c.listSaveOperationStorage != nil {
@@ -234,5 +250,9 @@ func (c *Container) Close() error {
 	if c.Infra != nil {
 		infraErr = c.Infra.Close()
 	}
-	return errors.Join(storageErr, infraErr)
+	return errors.Join(
+		queueErr,
+		storageErr,
+		infraErr,
+	)
 }

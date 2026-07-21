@@ -3,6 +3,7 @@ package console
 
 import (
 	"context"
+	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	firebaseadp "narratives/internal/adapters/out/firebase"
 	fsrepo "narratives/internal/adapters/out/firestore"
 	cloudtasksadp "narratives/internal/adapters/out/firestore/cloudtasks"
@@ -14,38 +15,39 @@ import (
 )
 
 type usecases struct {
-	tokenUC                    *uc.TokenUsecase
-	accountUC                  *uc.AccountUsecase
-	announcementUC             *uc.AnnouncementUsecase
-	avatarUC                   *uc.AvatarUsecase
-	paymentMethodUC            *uc.PaymentMethodUsecase
-	brandUC                    *uc.BrandUsecase
-	companyUC                  *uc.CompanyUsecase
-	inquiryUC                  *uc.InquiryUsecase
-	inventoryUC                *uc.InventoryUsecase
-	listUC                     *uc.ListUsecase
-	listSaveOperationUC        *uc.ListSaveOperationUsecase
-	listSaveOperationStorage   *firebaseadp.ListSaveOperationStorage
-	memberUC                   *uc.MemberUsecase
-	modelUC                    *uc.ModelUsecase
-	orderUC                    *uc.OrderUsecase
-	paymentUC                  *uc.PaymentUsecase
-	permissionUC               *uc.PermissionUsecase
-	printUC                    *uc.PrintUsecase
-	productionUC               *uc.ProductionUsecase
-	productBlueprintUC         *uc.ProductBlueprintUsecase
-	productBlueprintCategoryUC *uc.ProductBlueprintCategoryUsecase
-	inspectionUC               *uc.InspectionUsecase
-	mintUC                     *uc.MintUsecase
-	shippingAddressUC          *uc.ShippingAddressUsecase
-	tokenBlueprintUC           *uc.TokenBlueprintUsecase
-	tokenBlueprintReviewUC     *uc.TokenBlueprintReviewUsecase
-	productBlueprintReviewUC   *uc.ProductBlueprintReviewUsecase
-	userUC                     *uc.UserUsecase
-	walletUC                   *uc.WalletUsecase
-	cartUC                     *uc.CartUsecase
-	invitationUC               uc.InvitationUsecasePort
-	authBootstrapSvc           *uc.BootstrapService
+	tokenUC                     *uc.TokenUsecase
+	accountUC                   *uc.AccountUsecase
+	announcementUC              *uc.AnnouncementUsecase
+	avatarUC                    *uc.AvatarUsecase
+	paymentMethodUC             *uc.PaymentMethodUsecase
+	brandUC                     *uc.BrandUsecase
+	companyUC                   *uc.CompanyUsecase
+	inquiryUC                   *uc.InquiryUsecase
+	inventoryUC                 *uc.InventoryUsecase
+	listUC                      *uc.ListUsecase
+	listSaveOperationUC         *uc.ListSaveOperationUsecase
+	listSaveOperationStorage    *firebaseadp.ListSaveOperationStorage
+	listSaveOperationRetryQueue *listcloudtasksadp.ListSaveOperationQueue
+	memberUC                    *uc.MemberUsecase
+	modelUC                     *uc.ModelUsecase
+	orderUC                     *uc.OrderUsecase
+	paymentUC                   *uc.PaymentUsecase
+	permissionUC                *uc.PermissionUsecase
+	printUC                     *uc.PrintUsecase
+	productionUC                *uc.ProductionUsecase
+	productBlueprintUC          *uc.ProductBlueprintUsecase
+	productBlueprintCategoryUC  *uc.ProductBlueprintCategoryUsecase
+	inspectionUC                *uc.InspectionUsecase
+	mintUC                      *uc.MintUsecase
+	shippingAddressUC           *uc.ShippingAddressUsecase
+	tokenBlueprintUC            *uc.TokenBlueprintUsecase
+	tokenBlueprintReviewUC      *uc.TokenBlueprintReviewUsecase
+	productBlueprintReviewUC    *uc.ProductBlueprintReviewUsecase
+	userUC                      *uc.UserUsecase
+	walletUC                    *uc.WalletUsecase
+	cartUC                      *uc.CartUsecase
+	invitationUC                uc.InvitationUsecasePort
+	authBootstrapSvc            *uc.BootstrapService
 }
 
 func buildUsecases(
@@ -126,12 +128,18 @@ func buildUsecases(
 	if err != nil {
 		return nil, err
 	}
+	listSaveOperationRetryQueue, err := listcloudtasksadp.NewListSaveOperationQueueFromEnv(ctx)
+	if err != nil {
+		_ = listSaveOperationStorage.Close()
+		return nil, err
+	}
 	listSaveOperationUC := uc.NewListSaveOperationUsecase(
 		uc.NewListSaveOperationUsecaseParams{
 			ListRepository:      r.listRepoFS,
 			ImageRepository:     r.listImageRecordRepo,
 			OperationRepository: r.listSaveOperationRepo,
 			Storage:             listSaveOperationStorage,
+			RetryQueue:          listSaveOperationRetryQueue,
 		},
 	)
 	modelUC := uc.NewModelUsecase(
@@ -267,32 +275,33 @@ func buildUsecases(
 	_ = s
 	_ = res
 	return &usecases{
-		tokenUC:                    tokenUC,
-		accountUC:                  accountUC,
-		announcementUC:             announcementUC,
-		avatarUC:                   avatarUC,
-		paymentMethodUC:            paymentMethodUC,
-		brandUC:                    brandUC,
-		companyUC:                  companyUC,
-		inquiryUC:                  inquiryUC,
-		inventoryUC:                inventoryUC,
-		listUC:                     listUC,
-		listSaveOperationUC:        listSaveOperationUC,
-		listSaveOperationStorage:   listSaveOperationStorage,
-		memberUC:                   memberUC,
-		modelUC:                    modelUC,
-		orderUC:                    orderUC,
-		paymentUC:                  paymentUC,
-		permissionUC:               permissionUC,
-		printUC:                    printUC,
-		productionUC:               productionUC,
-		productBlueprintUC:         productBlueprintUC,
-		productBlueprintCategoryUC: productBlueprintCategoryUC,
-		inspectionUC:               inspectionUC,
-		mintUC:                     mintUC,
-		shippingAddressUC:          shippingAddressUC,
-		tokenBlueprintUC:           tokenBlueprintUC,
-		tokenBlueprintReviewUC:     tokenBlueprintReviewUC,
+		tokenUC:                     tokenUC,
+		accountUC:                   accountUC,
+		announcementUC:              announcementUC,
+		avatarUC:                    avatarUC,
+		paymentMethodUC:             paymentMethodUC,
+		brandUC:                     brandUC,
+		companyUC:                   companyUC,
+		inquiryUC:                   inquiryUC,
+		inventoryUC:                 inventoryUC,
+		listUC:                      listUC,
+		listSaveOperationUC:         listSaveOperationUC,
+		listSaveOperationStorage:    listSaveOperationStorage,
+		listSaveOperationRetryQueue: listSaveOperationRetryQueue,
+		memberUC:                    memberUC,
+		modelUC:                     modelUC,
+		orderUC:                     orderUC,
+		paymentUC:                   paymentUC,
+		permissionUC:                permissionUC,
+		printUC:                     printUC,
+		productionUC:                productionUC,
+		productBlueprintUC:          productBlueprintUC,
+		productBlueprintCategoryUC:  productBlueprintCategoryUC,
+		inspectionUC:                inspectionUC,
+		mintUC:                      mintUC,
+		shippingAddressUC:           shippingAddressUC,
+		tokenBlueprintUC:            tokenBlueprintUC,
+		tokenBlueprintReviewUC:      tokenBlueprintReviewUC,
 		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {
 			if r.productBlueprintReviewRepo == nil ||
 				r.productBlueprintRepo == nil ||
