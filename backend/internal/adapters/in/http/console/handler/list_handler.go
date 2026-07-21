@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\list_handler.go
+// backend/internal/adapters/in/http/console/handler/list_handler.go
 package consoleHandler
 
 import (
@@ -196,6 +196,7 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
 		}
+
 		writeConsoleListErr(w, err)
 		return
 	}
@@ -245,6 +246,7 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
 		}
+
 		writeConsoleListErr(w, err)
 		return
 	}
@@ -355,11 +357,11 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 
 	if vv := qp["modelIds"]; len(vv) > 0 {
 		for _, x := range vv {
-			f.ModelNumbers = append(f.ModelNumbers, splitCSV(x)...)
+			f.ModelIDs = append(f.ModelIDs, splitCSV(x)...)
 		}
 	} else if vv := qp["model_ids"]; len(vv) > 0 {
 		for _, x := range vv {
-			f.ModelNumbers = append(f.ModelNumbers, splitCSV(x)...)
+			f.ModelIDs = append(f.ModelIDs, splitCSV(x)...)
 		}
 	}
 
@@ -376,6 +378,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
 		}
+
 		writeConsoleListErr(w, err)
 		return
 	}
@@ -405,6 +408,7 @@ func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
 		}
+
 		writeConsoleListErr(w, err)
 		return
 	}
@@ -412,7 +416,12 @@ func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
-func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID string, imageID string) {
+func (h *ListHandler) deleteImage(
+	w http.ResponseWriter,
+	r *http.Request,
+	listID string,
+	imageID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
@@ -457,7 +466,11 @@ func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID
 // - frontend uploads images directly to Firebase Storage.
 // - backend receives and stores only the Firebase Storage download URL.
 // - backend does not validate or persist objectPath, fileName, contentType, or size.
-func (h *ListHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r *http.Request, listID string) {
+func (h *ListHandler) createImageFromFirebaseStorage(
+	w http.ResponseWriter,
+	r *http.Request,
+	listID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
@@ -541,7 +554,11 @@ func (h *ListHandler) createImageFromFirebaseStorage(w http.ResponseWriter, r *h
 	_ = json.NewEncoder(w).Encode(img)
 }
 
-func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, listID string) {
+func (h *ListHandler) setPrimaryImage(
+	w http.ResponseWriter,
+	r *http.Request,
+	listID string,
+) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
@@ -576,7 +593,13 @@ func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, li
 		}
 	}
 
-	item, err := h.uc.SetPrimaryImage(ctx, listID, imageID, now, req.UpdatedBy)
+	item, err := h.uc.SetPrimaryImage(
+		ctx,
+		listID,
+		imageID,
+		now,
+		req.UpdatedBy,
+	)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
