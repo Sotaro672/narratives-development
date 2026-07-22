@@ -1,3 +1,4 @@
+//frontend\console\permission\src\presentation\routes\routes.tsx
 import type { RouteObject } from "react-router-dom";
 import PermissionList from "../../presentation/pages/permissionList";
 import PermissionDetail from "../../presentation/pages/permissionDetail";

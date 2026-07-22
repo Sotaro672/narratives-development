@@ -1,3 +1,4 @@
+//frontend\console\transaction\src\presentation\routes\routes.tsx
 import type { RouteObject } from "react-router-dom";
 import TransactionsList from "../../presentation/pages/transactionList";
 import TransactionDetail from "../../presentation/pages/transactionDetail";

@@ -1,120 +1,305 @@
-// frontend/shell/src/router/routes.tsx
+// frontend/console/shell/src/routes/routes.tsx
 import type { RouteObject } from "react-router-dom";
 
-import inquiryRoutesRaw from "../../../inquiry/presentation/routes/routes";
-const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
+import InquiryManagement from "../../../inquiry/presentation/pages/inquiryManagement";
+import InquiryDetail from "../../../inquiry/presentation/pages/inquiryDetail";
 
-import productBlueprintRoutesRaw from "../../../productBlueprint/src/presentation/routes/routes";
-const productBlueprintRoutes = productBlueprintRoutesRaw as unknown as RouteObject[];
+import ProductBlueprintManagement from "../../../productBlueprint/src/presentation/pages/productBlueprintManagement";
+import ProductBlueprintDetail from "../../../productBlueprint/src/presentation/pages/productBlueprintDetail";
+import ProductBlueprintCreate from "../../../productBlueprint/src/presentation/pages/productBlueprintCreate";
 
-import productionRoutesRaw from "../../../production/src/presentation/routes/routes";
-const productionRoutes = productionRoutesRaw as unknown as RouteObject[];
+import ProductionManagement from "../../../production/src/presentation/pages/productionManagement";
+import ProductionDetail from "../../../production/src/presentation/pages/productionDetail";
+import ProductionCreate from "../../../production/src/presentation/pages/productionCreate";
 
-import inventoryRoutesRaw from "../../../inventory/src/presentation/routes/routes";
-const inventoryRoutes = inventoryRoutesRaw as unknown as RouteObject[];
+import InventoryManagementPage from "../../../inventory/src/presentation/pages/inventoryManagement";
+import InventoryDetailPage from "../../../inventory/src/presentation/pages/inventoryDetail";
+import InventoryListCreatePage from "../../../inventory/src/presentation/pages/listCreate";
 
-import tokenBlueprintRoutesRaw from "../../../tokenBlueprint/src/presentation/routes/routes";
-const tokenBlueprintRoutes = tokenBlueprintRoutesRaw as unknown as RouteObject[];
+import TokenBlueprintManagement from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintManagement";
+import TokenBlueprintDetail from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintDetail";
+import TokenBlueprintCreate from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintCreate";
 
-import mintRequestRoutesRaw from "../../../mintRequest/src/presentation/routes/routes";
-const mintRequestRoutes = mintRequestRoutesRaw as unknown as RouteObject[];
+import MintRequestManagement from "../../../mintRequest/src/presentation/pages/mintRequestManagement";
+import MintRequestDetail from "../../../mintRequest/src/presentation/pages/mintRequestDetail";
 
-import listRoutesRaw from "../../../list/presentation/routes/routes";
-const listRoutes = listRoutesRaw as unknown as RouteObject[];
+import ProductBlueprintReviewManagement from "../../../productBlueprintReview/src/presentation/pages/productBlueprintReviewManagement";
+import ProductBlueprintReviewDetail from "../../../productBlueprintReview/src/presentation/pages/productBlueprintReviewDetail";
 
-import orderRoutesRaw from "../../../order/src/presentation/routes/routes";
-const orderRoutes = orderRoutesRaw as unknown as RouteObject[];
+import TokenBlueprintReviewManagement from "../../../tokenBlueprintReview/src/presentation/pages/tokenBlueprintReviewManagement";
+import TokenBlueprintReviewDetail from "../../../tokenBlueprintReview/src/presentation/pages/tokenBlueprintReviewDetail";
 
-import memberRoutesRaw from "../../../member/src/presentation/routes/routes";
-const memberRoutes = memberRoutesRaw as unknown as RouteObject[];
+import ListManagement from "../../../list/presentation/pages/listManagement";
+import ListDetail from "../../../list/presentation/pages/listDetail";
 
-import brandRoutesRaw from "../../../brand/src/presentation/routes/routes";
-const brandRoutes = brandRoutesRaw as unknown as RouteObject[];
+import OrderManagement from "../../../order/src/presentation/pages/orderManagement";
+import OrderDetail from "../../../order/src/presentation/pages/orderDetail";
 
-import permissionRoutesRaw from "../../../permission/src/presentation/routes/routes";
-const permissionRoutes = permissionRoutesRaw as unknown as RouteObject[];
+import MemberManagement from "../../../member/src/presentation/pages/memberManagement";
+import MemberDetail from "../../../member/src/presentation/pages/memberDetail";
+import MemberCreate from "../../../member/src/presentation/pages/memberCreate";
 
-import accountRoutesRaw from "../../../account/presentation/routes/routes";
-const accountRoutes = accountRoutesRaw as unknown as RouteObject[];
+import BrandManagement from "../../../brand/src/presentation/pages/brandManagement";
+import BrandCreate from "../../../brand/src/presentation/pages/brandCreate";
+import BrandDetail from "../../../brand/src/presentation/pages/brandDetail";
 
-import transactionRoutesRaw from "../../../transaction/src/presentation/routes/routes";
-const transactionRoutes = transactionRoutesRaw as unknown as RouteObject[];
+import PermissionList from "../../../permission/src/presentation/pages/permissionList";
+import PermissionDetail from "../../../permission/src/presentation/pages/permissionDetail";
 
-import productBlueprintReviewRoutesRaw from "../../../productBlueprintReview/src/presentation/routes/routes";
-const productBlueprintReviewRoutes =
-  productBlueprintReviewRoutesRaw as unknown as RouteObject[];
+import AccountManagement from "../../../account/presentation/pages/accountManagement";
 
-import tokenBlueprintReviewRoutesRaw from "../../../tokenBlueprintReview/src/presentation/routes/routes";
-const tokenBlueprintReviewRoutes =
-  tokenBlueprintReviewRoutesRaw as unknown as RouteObject[];
+import TransactionsList from "../../../transaction/src/presentation/pages/transactionList";
+import TransactionDetail from "../../../transaction/src/presentation/pages/transactionDetail";
 
-import salesRoutesRaw from "../../../sales/presentation/routes/routes";
-const salesRoutes = salesRoutesRaw as unknown as RouteObject[];
+import AnnouncementManagementPage from "../../../sales/presentation/pages/announcementManagement";
+import AnnouncementCreatePage from "../../../sales/presentation/pages/announcementCreatePage";
+import AnnouncementTokenListPage from "../../../sales/presentation/pages/announcementTokenListPage";
+import AnnouncementDetailPage from "../../../sales/presentation/pages/announcementDetailPage";
 
 export const routes: RouteObject[] = [
   {
     path: "/inquiry",
-    children: inquiryRoutes,
+    children: [
+      {
+        path: "",
+        element: <InquiryManagement />,
+      },
+      {
+        path: ":inquiryId",
+        element: <InquiryDetail />,
+      },
+    ],
   },
   {
     path: "/productBlueprint",
-    children: productBlueprintRoutes,
+    children: [
+      {
+        path: "",
+        element: <ProductBlueprintManagement />,
+      },
+      {
+        path: "detail/:blueprintId",
+        element: <ProductBlueprintDetail />,
+      },
+      {
+        path: "create",
+        element: <ProductBlueprintCreate />,
+      },
+    ],
   },
   {
     path: "/production",
-    children: productionRoutes,
+    children: [
+      {
+        path: "",
+        element: <ProductionManagement />,
+      },
+      {
+        path: ":productionId",
+        element: <ProductionDetail />,
+      },
+      {
+        path: "create",
+        element: <ProductionCreate />,
+      },
+    ],
   },
   {
     path: "/inventory",
-    children: inventoryRoutes,
+    children: [
+      {
+        path: "",
+        element: <InventoryManagementPage />,
+      },
+      {
+        path: "detail/:inventoryId",
+        element: <InventoryDetailPage />,
+      },
+      {
+        path: "list/create/:inventoryId",
+        element: <InventoryListCreatePage />,
+      },
+    ],
   },
   {
     path: "/tokenBlueprint",
-    children: tokenBlueprintRoutes,
+    children: [
+      {
+        path: "",
+        element: <TokenBlueprintManagement />,
+      },
+      {
+        path: ":tokenBlueprintId",
+        element: <TokenBlueprintDetail />,
+      },
+      {
+        path: "create",
+        element: <TokenBlueprintCreate />,
+      },
+    ],
   },
   {
     path: "/mintRequest",
-    children: mintRequestRoutes,
+    children: [
+      {
+        path: "",
+        element: <MintRequestManagement />,
+      },
+      {
+        path: ":requestId",
+        element: <MintRequestDetail />,
+      },
+    ],
   },
   {
     path: "/productBlueprintReview",
-    children: productBlueprintReviewRoutes,
+    children: [
+      {
+        path: "",
+        element: <ProductBlueprintReviewManagement />,
+      },
+      {
+        path: ":productBlueprintReviewId",
+        element: <ProductBlueprintReviewDetail />,
+      },
+    ],
   },
   {
     path: "/tokenBlueprintReview",
-    children: tokenBlueprintReviewRoutes,
+    children: [
+      {
+        path: "",
+        element: <TokenBlueprintReviewManagement />,
+      },
+      {
+        path: ":tokenBlueprintReviewId",
+        element: <TokenBlueprintReviewDetail />,
+      },
+    ],
   },
   {
     path: "/list",
-    children: listRoutes,
+    children: [
+      {
+        path: "",
+        element: <ListManagement />,
+      },
+      {
+        path: ":listId",
+        element: <ListDetail />,
+      },
+    ],
   },
   {
     path: "/order",
-    children: orderRoutes,
+    children: [
+      {
+        path: "",
+        element: <OrderManagement />,
+      },
+      {
+        path: ":orderId",
+        element: <OrderDetail />,
+      },
+    ],
   },
   {
     path: "/member",
-    children: memberRoutes,
+    children: [
+      {
+        path: "",
+        element: <MemberManagement />,
+      },
+      {
+        /**
+         * このURLパラメータはFirestore member docIdではなく、
+         * Firebase Auth UID。
+         *
+         * backend:
+         * - GET /members/{uid} はFirebase UID専用
+         * - PATCH /members/{docId} はFirestore member docId専用
+         */
+        path: ":memberUid",
+        element: <MemberDetail />,
+      },
+      {
+        path: "create",
+        element: <MemberCreate />,
+      },
+    ],
   },
   {
     path: "/brand",
-    children: brandRoutes,
+    children: [
+      {
+        path: "",
+        element: <BrandManagement />,
+      },
+      {
+        path: "create",
+        element: <BrandCreate />,
+      },
+      {
+        path: ":brandId",
+        element: <BrandDetail />,
+      },
+    ],
   },
   {
     path: "/permission",
-    children: permissionRoutes,
+    children: [
+      {
+        path: "",
+        element: <PermissionList />,
+      },
+      {
+        path: ":permissionId",
+        element: <PermissionDetail />,
+      },
+    ],
   },
   {
     path: "/account",
-    children: accountRoutes,
+    children: [
+      {
+        path: "",
+        element: <AccountManagement />,
+      },
+    ],
   },
   {
     path: "/transaction",
-    children: transactionRoutes,
+    children: [
+      {
+        path: "",
+        element: <TransactionsList />,
+      },
+      {
+        path: ":transactionId",
+        element: <TransactionDetail />,
+      },
+    ],
   },
   {
     path: "/sales",
-    children: salesRoutes,
+    children: [
+      {
+        path: "",
+        element: <AnnouncementManagementPage />,
+      },
+      {
+        path: "create",
+        element: <AnnouncementTokenListPage />,
+      },
+      {
+        path: ":tokenBlueprintId/create",
+        element: <AnnouncementCreatePage />,
+      },
+      {
+        path: "announcements/:announcementId",
+        element: <AnnouncementDetailPage />,
+      },
+    ],
   },
 ];
 
