@@ -1,4 +1,4 @@
-//frontend\amol\src\pages\ResalePage.tsx
+//frontend\amol\src\pages\ResaleCreatePage.tsx
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 

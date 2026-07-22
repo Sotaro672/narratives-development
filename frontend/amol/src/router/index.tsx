@@ -38,8 +38,8 @@ import AnnouncementPage from "../pages/AnnouncementPage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
 import HowToUsePage from "../pages/HowToUsePage";
-import ResalePage from "../pages/ResaleCreatePage";
-import ResalePageDetailPage from "../pages/ResaleDetailPage";
+import ResaleCreatePage from "../pages/ResaleCreatePage";
+import ResaleDetailPage from "../pages/ResaleDetailPage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 
 function RootPage() {
@@ -65,20 +65,56 @@ function RootPage() {
 }
 
 export const router = createBrowserRouter([
-  { path: "/", element: <RootPage /> },
-  { path: "/landing", element: <LandingPage /> },
+  {
+    path: "/",
+    element: <RootPage />,
+  },
+  {
+    path: "/landing",
+    element: <LandingPage />,
+  },
 
-  { path: "/signin", element: <SignInPage /> },
-  { path: "/signin/select", element: <SignInSelectPage /> },
-  { path: "/signup", element: <SignUpPage /> },
-  { path: "/verification-sent", element: <VerificationSentPage /> },
-  { path: "/password-reset", element: <PasswordResetPage /> },
+  {
+    path: "/signin",
+    element: <SignInPage />,
+  },
+  {
+    path: "/signin/select",
+    element: <SignInSelectPage />,
+  },
+  {
+    path: "/signup",
+    element: <SignUpPage />,
+  },
+  {
+    path: "/verification-sent",
+    element: <VerificationSentPage />,
+  },
+  {
+    path: "/password-reset",
+    element: <PasswordResetPage />,
+  },
 
-  { path: "/how-to-use", element: <HowToUsePage /> },
-  { path: "/resale", element: <ResalePage /> },
-  { path: "/terms", element: <TermsPage /> },
-  { path: "/privacy-policy", element: <TermsPage /> },
-  { path: "/specified-commercial-transactions", element: <TermsPage /> },
+  {
+    path: "/how-to-use",
+    element: <HowToUsePage />,
+  },
+  {
+    path: "/resale",
+    element: <ResaleCreatePage />,
+  },
+  {
+    path: "/terms",
+    element: <TermsPage />,
+  },
+  {
+    path: "/privacy-policy",
+    element: <TermsPage />,
+  },
+  {
+    path: "/specified-commercial-transactions",
+    element: <TermsPage />,
+  },
 
   {
     path: "/avatar",
@@ -128,7 +164,7 @@ export const router = createBrowserRouter([
     path: "/resales/:resaleId",
     element: (
       <ProtectedRoute>
-        <ResalePageDetailPage />
+        <ResaleDetailPage />
       </ProtectedRoute>
     ),
   },
