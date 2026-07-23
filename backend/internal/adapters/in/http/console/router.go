@@ -2,8 +2,9 @@
 package httpin
 
 import (
-	"narratives/internal/adapters/in/http/middleware"
 	"net/http"
+
+	"narratives/internal/adapters/in/http/middleware"
 )
 
 // RouterDeps は「ルーティングに必要なもの」だけを受け取る。
@@ -13,6 +14,7 @@ type RouterDeps struct {
 	// Middlewares（生成はDI側）
 	AuthMw      *middleware.AuthMiddleware
 	BootstrapMw *middleware.BootstrapAuthMiddleware
+
 	// Handlers（生成はDI側）
 	AuthBootstrap       http.Handler
 	Accounts            http.Handler
@@ -36,6 +38,7 @@ type RouterDeps struct {
 	Models              http.Handler
 	Inspector           http.Handler
 	Mint                http.Handler
+
 	// Internal handlers
 	//
 	// Cloud Tasksから呼ばれる内部mint worker用です。
@@ -46,78 +49,107 @@ type RouterDeps struct {
 	// endpoint:
 	//   POST /internal/list/save-operations/{operationId}/retry
 	//
+	// Cloud Tasksから呼ばれる招待メール送信worker用です。
+	// endpoint:
+	//   POST /internal/invitations/deliveries/process
+	//
+	// Cloud Scheduler等から呼ばれる期限到来delivery投入用です。
+	// endpoint:
+	//   POST /internal/invitations/deliveries/dispatch-due
+	//
 	// 注意:
 	// - 通常のConsole Firebase Authではなく、Cloud Tasks OIDC / Cloud Run Invoker
-	//   またはinternal secret headerで守る想定です。
-	InternalMintTasks              http.Handler
-	InternalListSaveOperationTasks http.Handler
-	OwnerResolve                   http.Handler
-	Users                          http.Handler
-	Invitation                     http.Handler
-	Sales                          http.Handler
-	TokenBPReview                  http.Handler
-	ProductBPReview                http.Handler
+	//   または各internal handlerの認証処理で保護します。
+	InternalMintTasks                  http.Handler
+	InternalListSaveOperationTasks     http.Handler
+	InternalInvitationDeliveryProcess  http.Handler
+	InternalInvitationDeliveryDispatch http.Handler
+
+	OwnerResolve    http.Handler
+	Users           http.Handler
+	Invitation      http.Handler
+	Sales           http.Handler
+	TokenBPReview   http.Handler
+	ProductBPReview http.Handler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := http.NewServeMux()
+
 	withAuth := func(h http.Handler) http.Handler {
 		h = middleware.CORS(h)
 		if deps.AuthMw == nil {
 			return h
 		}
+
 		return deps.AuthMw.Handler(h)
 	}
+
 	withBootstrap := func(h http.Handler) http.Handler {
 		h = middleware.CORS(h)
 		if deps.BootstrapMw == nil {
 			return h
 		}
+
 		return deps.BootstrapMw.Handler(h)
 	}
+
 	withPublic := func(h http.Handler) http.Handler {
 		return middleware.CORS(h)
 	}
+
 	if deps.AuthBootstrap != nil {
-		mux.Handle("/auth/bootstrap", withBootstrap(deps.AuthBootstrap))
+		mux.Handle(
+			"/auth/bootstrap",
+			withBootstrap(deps.AuthBootstrap),
+		)
 	}
+
 	if deps.Invitation != nil {
 		authInvitation := withAuth(deps.Invitation)
 		mux.Handle("/invitations", authInvitation)
+
 		publicInvitation := withPublic(deps.Invitation)
 		mux.Handle("/invitations/validate", publicInvitation)
 		mux.Handle("/invitations/complete", publicInvitation)
 	}
+
 	if deps.Accounts != nil {
 		h := withAuth(deps.Accounts)
 		mux.Handle("/accounts", h)
 		mux.Handle("/accounts/", h)
 	}
+
 	if deps.Announcements != nil {
 		h := withAuth(deps.Announcements)
 		mux.Handle("/announcements", h)
 		mux.Handle("/announcements/", h)
 	}
+
 	if deps.Permissions != nil {
 		h := withAuth(deps.Permissions)
 		mux.Handle("/permissions", h)
 		mux.Handle("/permissions/", h)
 	}
+
 	if deps.Brands != nil {
 		h := withAuth(deps.Brands)
 		mux.Handle("/brands", h)
 		mux.Handle("/brands/", h)
 	}
+
 	if deps.Companies != nil {
 		h := withAuth(deps.Companies)
 		mux.Handle("/companies", h)
 		mux.Handle("/companies/", h)
 	}
+
 	if deps.Inquiries != nil {
 		h := withAuth(deps.Inquiries)
 		mux.Handle("/inquiries", h)
 		mux.Handle("/inquiries/", h)
 	}
+
 	if deps.Inventories != nil {
 		h := withAuth(deps.Inventories)
 		mux.Handle("/inventories", h)
@@ -125,113 +157,168 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/inventory", h)
 		mux.Handle("/inventory/", h)
 	}
+
 	if deps.ListSaveOperations != nil {
 		h := withAuth(deps.ListSaveOperations)
 		mux.Handle("/lists/save-operations", h)
 		mux.Handle("/lists/save-operations/", h)
 	}
+
 	if deps.Lists != nil {
 		h := withAuth(deps.Lists)
 		mux.Handle("/lists", h)
 		mux.Handle("/lists/", h)
 	}
+
 	if deps.ProductsPrint != nil {
 		h := withAuth(deps.ProductsPrint)
 		mux.Handle("/products", h)
 		mux.Handle("/products/", h)
 		mux.Handle("/products/print-logs", h)
 	}
+
 	if deps.ProductBP != nil {
 		h := withAuth(deps.ProductBP)
 		mux.Handle("/product-blueprints", h)
 		mux.Handle("/product-blueprints/", h)
 	}
+
 	if deps.ProductBPCategories != nil {
 		h := withAuth(deps.ProductBPCategories)
 		mux.Handle("/console/product-blueprint-categories", h)
 		mux.Handle("/console/product-blueprint-categories/", h)
 	}
+
 	if deps.TokenBP != nil {
 		h := withAuth(deps.TokenBP)
 		mux.Handle("/token-blueprints", h)
 		mux.Handle("/token-blueprints/", h)
 	}
+
 	if deps.TokenBPReview != nil {
 		h := withAuth(deps.TokenBPReview)
 		mux.Handle("/token-blueprint-reviews", h)
 		mux.Handle("/token-blueprint-reviews/", h)
 	}
+
 	if deps.ProductBPReview != nil {
 		h := withAuth(deps.ProductBPReview)
 		mux.Handle("/product-blueprint-reviews", h)
 		mux.Handle("/product-blueprint-reviews/", h)
 	}
+
 	if deps.Messages != nil {
 		h := withAuth(deps.Messages)
 		mux.Handle("/messages", h)
 		mux.Handle("/messages/", h)
 	}
+
 	if deps.Orders != nil {
 		h := withAuth(deps.Orders)
 		mux.Handle("/orders", h)
 		mux.Handle("/orders/", h)
 	}
+
 	if deps.Wallets != nil {
 		h := withAuth(deps.Wallets)
 		mux.Handle("/wallets", h)
 		mux.Handle("/wallets/", h)
 	}
+
 	if deps.Members != nil {
-		mux.Handle("/members", withAuth(deps.Members))
+		mux.Handle(
+			"/members",
+			withAuth(deps.Members),
+		)
+
 		// /members/me は初回ログイン直後にも呼ばれるため、
-		// 通常 AuthMiddleware ではなく BootstrapAuthMiddleware を通す。
-		// member 未作成時は handler 側で 404 を返す。
-		mux.Handle("/members/me", withBootstrap(deps.Members))
-		mux.Handle("/members/", withAuth(deps.Members))
+		// 通常AuthMiddlewareではなくBootstrapAuthMiddlewareを通す。
+		// member未作成時はhandler側で404を返す。
+		mux.Handle(
+			"/members/me",
+			withBootstrap(deps.Members),
+		)
+
+		mux.Handle(
+			"/members/",
+			withAuth(deps.Members),
+		)
 	}
+
 	if deps.Productions != nil {
 		h := withAuth(deps.Productions)
 		mux.Handle("/productions", h)
 		mux.Handle("/productions/", h)
 	}
+
 	if deps.Models != nil {
 		h := withAuth(deps.Models)
 		mux.Handle("/models", h)
 		mux.Handle("/models/", h)
 	}
+
 	if deps.Inspector != nil {
 		h := withAuth(deps.Inspector)
 		mux.Handle("/inspector/products/", h)
 		mux.Handle("/products/inspections", h)
 		mux.Handle("/products/inspections/", h)
 	}
+
 	if deps.Mint != nil {
 		h := withAuth(deps.Mint)
 		mux.Handle("/mint", h)
 		mux.Handle("/mint/", h)
 	}
+
 	if deps.InternalMintTasks != nil {
 		h := withPublic(deps.InternalMintTasks)
 		mux.Handle("/internal/mint/tasks/", h)
 	}
+
 	if deps.InternalListSaveOperationTasks != nil {
 		h := withPublic(deps.InternalListSaveOperationTasks)
 		mux.Handle("/internal/list/save-operations/", h)
 	}
+
+	if deps.InternalInvitationDeliveryProcess != nil {
+		h := withPublic(
+			deps.InternalInvitationDeliveryProcess,
+		)
+
+		mux.Handle(
+			"/internal/invitations/deliveries/process",
+			h,
+		)
+	}
+
+	if deps.InternalInvitationDeliveryDispatch != nil {
+		h := withPublic(
+			deps.InternalInvitationDeliveryDispatch,
+		)
+
+		mux.Handle(
+			"/internal/invitations/deliveries/dispatch-due",
+			h,
+		)
+	}
+
 	if deps.OwnerResolve != nil {
 		h := withAuth(deps.OwnerResolve)
 		mux.Handle("/owners/resolve", h)
 		mux.Handle("/owners/resolve/", h)
 	}
+
 	if deps.Users != nil {
 		h := withAuth(deps.Users)
 		mux.Handle("/users", h)
 		mux.Handle("/users/", h)
 	}
+
 	if deps.Sales != nil {
 		h := withAuth(deps.Sales)
 		mux.Handle("/sales", h)
 		mux.Handle("/sales/", h)
 	}
+
 	return mux
 }

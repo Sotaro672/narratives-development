@@ -40,8 +40,6 @@ type Deps struct {
 	// /mall/me/avatar (resolve avatarId by current user uid)
 	MeAvatar http.Handler
 
-	AvatarState http.Handler
-
 	// public: /mall/wallets
 	Wallet http.Handler
 
@@ -106,6 +104,7 @@ func handleSafe(mux *http.ServeMux, pattern string, h http.Handler, name string)
 		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
 		h = http.NotFoundHandler()
 	}
+
 	mux.Handle(pattern, h)
 }
 
@@ -122,6 +121,7 @@ func handleSafeAuth(mux *http.ServeMux, pattern string, h http.Handler, name str
 		handleSafe(mux, pattern, h, name)
 		return
 	}
+
 	handleSafe(mux, pattern, auth(h), name)
 }
 
@@ -281,10 +281,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	// me avatar
 	handleSafeAuthAvatar(mux, "/mall/me/avatars", deps.MeAvatar, "MeAvatar", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/avatars/", deps.MeAvatar, "MeAvatar", auth, avatar)
-
-	// avatar states (me)
-	handleSafeAuthAvatar(mux, "/mall/me/avatar-states", deps.AvatarState, "AvatarState(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/avatar-states/", deps.AvatarState, "AvatarState(me)", auth, avatar)
 
 	// wallet (me)
 	handleSafeAuthAvatar(mux, "/mall/me/wallets", deps.MeWallet, "MeWallet", auth, avatar)

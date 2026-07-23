@@ -42,7 +42,7 @@ type Page = common.Page
 
 // ============================================================
 // DTOs for application/handler layers
-// entity に id を持たせず、docId は外側の DTO で扱う
+// entityにIDを持たせず、docIDは外側のDTOで扱う
 // ============================================================
 
 type Record struct {
@@ -61,16 +61,16 @@ type RecordPageResult struct {
 // Repository is the persistence port for the Member aggregate.
 //
 // 方針:
-//   - docId による単体取得は GetByID を使う。
-//   - Firebase UID による単体取得は GetByUID を使う。
-//   - entity.Member には docId を持たせないため、GetByID / GetByUID は Record を返す。
-//   - Exists は廃止する。存在確認は GetByID / GetByUID の ErrNotFound で判定する。
-//   - Save は廃止し、Update に置き換える。
-//   - Delete は物理削除として扱う。DeletedAt / DeletedBy による論理削除は扱わない。
-//   - List 系は ListByCompanyID に統一する。
-//   - email などでの検索が必要な場合は ListByCompanyID + Filter を使う。
+//   - docIDによる単体取得はGetByIDを使う。
+//   - Firebase UIDによる単体取得はGetByUIDを使う。
+//   - entity.MemberにはdocIDを持たせないため、GetByIDとGetByUIDはRecordを返す。
+//   - Existsは廃止する。存在確認はGetByIDまたはGetByUIDのErrNotFoundで判定する。
+//   - Saveは廃止し、Updateに置き換える。
+//   - Deleteは物理削除として扱う。DeletedAtまたはDeletedByによる論理削除は扱わない。
+//   - List系はListByCompanyIDに統一する。
+//   - emailなどでの検索が必要な場合はListByCompanyIDとFilterを使う。
 type Repository interface {
-	// Create creates a member and returns the created Firestore docId.
+	// Create creates a member and returns the created Firestore document ID.
 	Create(ctx context.Context, m Member) (Record, error)
 
 	// GetByID returns a member record by Firestore document ID.
@@ -80,15 +80,15 @@ type Repository interface {
 	GetByUID(ctx context.Context, uid string) (Record, error)
 
 	// Update updates an existing member by Firestore document ID.
-	// This replaces Save / SaveByDocID.
+	// This replaces Save and SaveByDocID.
 	Update(ctx context.Context, id string, patch MemberPatch) (Record, error)
 
 	// Delete physically deletes a member by Firestore document ID.
-	// It does not perform logical deletion with DeletedAt / DeletedBy.
+	// It does not perform logical deletion with DeletedAt or DeletedBy.
 	Delete(ctx context.Context, id string) error
 
 	// ListByCompanyID returns members scoped by companyID.
-	// This is the only List method in this repository port.
+	// This is the only list method in this repository port.
 	ListByCompanyID(
 		ctx context.Context,
 		companyID string,
@@ -97,33 +97,31 @@ type Repository interface {
 	) (RecordPageResult, error)
 }
 
-var (
-	// 招待トークンが見つからない場合
-	ErrInvitationTokenNotFound = errors.New("invitation: token not found")
-	// 必要なら衝突エラーなども今後追加可能
-	// ErrInvitationTokenConflict = errors.New("invitation: token conflict")
-)
-
 // ============================================================
-// Service: member 領域のユースケース的な便宜関数
+// Service: member領域のユースケース的な便宜関数
 // ============================================================
 
-// Service は member 領域のユースケース的な便宜関数を提供します。
+// Serviceはmember領域のユースケース的な便宜関数を提供します。
 type Service struct {
 	repo Repository
 }
 
-// NewService は member.Service を生成します。
+// NewServiceはmember.Serviceを生成します。
 func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo: repo,
+	}
 }
 
-// GetNameLastFirstByUID は Firebase Auth UID から Member を取得し、
+// GetNameLastFirstByUIDはFirebase Auth UIDからMemberを取得し、
 // 「lastName firstName」の順で整形した表示名を返します。
-// - lastName / firstName の両方が存在: "last first"
+// - lastNameとfirstNameの両方が存在: "last first"
 // - 片方のみ存在: その値のみ
 // - どちらも空: ""
-func (s *Service) GetNameLastFirstByUID(ctx context.Context, uid string) (string, error) {
+func (s *Service) GetNameLastFirstByUID(
+	ctx context.Context,
+	uid string,
+) (string, error) {
 	if uid == "" {
 		return "", errors.New("member: uid is empty")
 	}
@@ -133,12 +131,15 @@ func (s *Service) GetNameLastFirstByUID(ctx context.Context, uid string) (string
 		return "", err
 	}
 
-	return FormatLastFirst(rec.Member.LastName, rec.Member.FirstName), nil
+	return FormatLastFirst(
+		rec.Member.LastName,
+		rec.Member.FirstName,
+	), nil
 }
 
-// FormatLastFirst は「姓→名」の順で半角スペース区切りの表示名を返します。
+// FormatLastFirstは「姓→名」の順で半角スペース区切りの表示名を返します。
 // 空要素は除外され、両方空の場合は空文字を返します。
-func FormatLastFirst(lastName, firstName string) string {
+func FormatLastFirst(lastName string, firstName string) string {
 	switch {
 	case lastName != "" && firstName != "":
 		return lastName + " " + firstName

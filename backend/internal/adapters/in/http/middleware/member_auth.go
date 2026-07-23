@@ -3,8 +3,6 @@ package middleware
 
 import (
 	"context"
-	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -68,8 +66,6 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		log.Printf("[auth] bearer token received (len=%d) path=%s", len(idToken), r.URL.Path)
-
 		// Firebase ID トークン検証
 		token, err := m.FirebaseAuth.VerifyIDToken(r.Context(), idToken)
 		if err != nil {
@@ -97,12 +93,7 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			cid, e := r2.GetCompanyIDByFirebaseUID(r.Context(), uid)
 			if e == nil {
 				companyID = strings.TrimSpace(cid)
-				log.Printf("[auth] resolved companyId by firebase uid uid=%s companyId=%q", uid, companyID)
-			} else {
-				log.Printf("[auth] GetCompanyIDByFirebaseUID failed uid=%s err=%v", uid, e)
 			}
-		} else {
-			log.Printf("[auth] repo-ext MemberCompanyIDReader not implemented uid=%s", uid)
 		}
 
 		if companyID != "" {
@@ -126,41 +117,21 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 				if member.CompanyID == "" {
 					member.CompanyID = companyID
 				}
-
-				log.Printf(
-					"[auth] member resolved uid=%s memberDocID=%s companyId=%q",
-					uid,
-					memberDocID,
-					member.CompanyID,
-				)
-			} else if e != nil {
-				log.Printf("[auth] ListByCompanyID failed uid=%s companyId=%q err=%v", uid, companyID, e)
-			} else {
-				log.Printf("[auth] member not found by uid uid=%s companyId=%q", uid, companyID)
 			}
 		}
 
 		// company 境界必須
 		if companyID == "" {
-			log.Printf("[auth] forbidden: companyId not resolved uid=%s", uid)
 			http.Error(w, "companyId not resolved for current user", http.StatusForbidden)
 			return
 		}
 
 		if !memberOK {
-			log.Printf("[auth] forbidden: member not found uid=%s companyId=%q", uid, companyID)
 			http.Error(w, "member not found", http.StatusForbidden)
 			return
 		}
 
 		if member.CompanyID != "" && member.CompanyID != companyID {
-			log.Printf(
-				"[auth] forbidden: company mismatch uid=%s memberDocID=%s memberCompanyId=%q resolvedCompanyId=%q",
-				uid,
-				memberDocID,
-				member.CompanyID,
-				companyID,
-			)
 			http.Error(w, "companyId mismatch for current user", http.StatusForbidden)
 			return
 		}
@@ -197,14 +168,6 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// companyId 格納（必須）
 		ctx = usecase.WithCompanyID(ctx, companyID)
 		ctx = context.WithValue(ctx, ctxKeyCompanyID, companyID)
-
-		log.Printf(
-			"[auth] context set uid=%s memberDocID=%s companyId=%q path=%s",
-			uid,
-			memberDocID,
-			companyID,
-			r.URL.Path,
-		)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -291,5 +254,3 @@ func CurrentMemberID(r *http.Request) (string, bool) {
 	}
 	return "", false
 }
-
-var _ = errors.New

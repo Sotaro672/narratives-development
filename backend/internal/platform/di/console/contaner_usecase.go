@@ -3,6 +3,8 @@ package console
 
 import (
 	"context"
+	"os"
+
 	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	firebaseadp "narratives/internal/adapters/out/firebase"
 	fsrepo "narratives/internal/adapters/out/firestore"
@@ -11,7 +13,6 @@ import (
 	uc "narratives/internal/application/usecase"
 	"narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
-	"os"
 )
 
 type usecases struct {
@@ -47,6 +48,8 @@ type usecases struct {
 	walletUC                    *uc.WalletUsecase
 	cartUC                      *uc.CartUsecase
 	invitationUC                uc.InvitationUsecasePort
+	invitationDeliveryUC        uc.InvitationDeliveryUsecasePort
+	invitationDeliveryQueue     *listcloudtasksadp.InvitationDeliveryQueue
 	authBootstrapSvc            *uc.BootstrapService
 }
 
@@ -58,6 +61,7 @@ func buildUsecases(
 	res *resolvers,
 ) (*usecases, error) {
 	var tokenUC *uc.TokenUsecase
+
 	if c.infra.MintAuthorityKey != nil {
 		solanaClient := solanainfra.NewMintClient(
 			c.infra.MintAuthorityKey,
@@ -66,20 +70,33 @@ func buildUsecases(
 	} else {
 		tokenUC = uc.NewTokenUsecase(nil)
 	}
+
 	accountUC := uc.NewAccountUsecase(r.accountRepo)
-	announcementAvatarRepo := fsrepo.NewAnnouncementAvatarRepositoryFS(c.fsClient)
-	announcementAttachmentRepo := fsrepo.NewAnnouncementAttachmentRepositoryFS(c.fsClient)
+
+	announcementAvatarRepo :=
+		fsrepo.NewAnnouncementAvatarRepositoryFS(
+			c.fsClient,
+		)
+
+	announcementAttachmentRepo :=
+		fsrepo.NewAnnouncementAttachmentRepositoryFS(
+			c.fsClient,
+		)
+
 	announcementUC := uc.NewAnnouncementUsecase(
 		r.announcementRepo,
 		announcementAvatarRepo,
 		announcementAttachmentRepo,
 	)
+
 	brandWalletSvc := solanainfra.NewBrandWalletService(
 		c.firestoreProjectID,
 	)
+
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(
 		c.firestoreProjectID,
 	)
+
 	avatarUC := uc.NewAvatarUsecase(
 		r.avatarRepo,
 		avatarWalletSvc,
@@ -87,17 +104,27 @@ func buildUsecases(
 		r.cartRepo,
 		nil,
 	)
+
 	paymentMethodUC := uc.NewPaymentMethodUsecase(
 		r.paymentMethodRepo,
 		c.infra.PaymentMethodGateway,
 	)
+
 	brandUC := uc.NewBrandUsecase(
 		r.brandRepo,
 		r.memberRepo,
 		uc.WithBrandWalletService(brandWalletSvc),
 	)
-	companyUC := uc.NewCompanyUsecase(r.companyRepo)
-	inquiryReplyRepo := fsrepo.NewInquiryReplyRepositoryFS(c.fsClient)
+
+	companyUC := uc.NewCompanyUsecase(
+		r.companyRepo,
+	)
+
+	inquiryReplyRepo :=
+		fsrepo.NewInquiryReplyRepositoryFS(
+			c.fsClient,
+		)
+
 	inquiryUC := uc.NewInquiryUsecase(
 		r.inquiryRepo,
 		inquiryReplyRepo,
@@ -107,32 +134,47 @@ func buildUsecases(
 		nil,
 		nil,
 	)
+
 	inventoryUC := uc.NewInventoryUsecase(
 		r.inventoryRepo,
 	)
+
 	if r.productRepo != nil {
 		if resolver, ok := any(r.productRepo).(uc.ProductModelResolver); ok {
-			inventoryUC.WithProductModelResolver(resolver)
+			inventoryUC.WithProductModelResolver(
+				resolver,
+			)
 		}
 	}
+
 	paymentUC := uc.NewPaymentUsecase(
 		uc.NewPaymentUsecaseInput{
 			PaymentRepo: r.paymentRepo,
 		},
 	)
+
 	listUC := uc.NewListUsecase(
 		r.listRepoFS,
 		r.listImageRecordRepo,
 	)
-	listSaveOperationStorage, err := firebaseadp.NewListSaveOperationStorageFromEnv(ctx)
+
+	listSaveOperationStorage, err :=
+		firebaseadp.NewListSaveOperationStorageFromEnv(
+			ctx,
+		)
 	if err != nil {
 		return nil, err
 	}
-	listSaveOperationRetryQueue, err := listcloudtasksadp.NewListSaveOperationQueueFromEnv(ctx)
+
+	listSaveOperationRetryQueue, err :=
+		listcloudtasksadp.NewListSaveOperationQueueFromEnv(
+			ctx,
+		)
 	if err != nil {
 		_ = listSaveOperationStorage.Close()
 		return nil, err
 	}
+
 	listSaveOperationUC := uc.NewListSaveOperationUsecase(
 		uc.NewListSaveOperationUsecaseParams{
 			ListRepository:      r.listRepoFS,
@@ -142,10 +184,12 @@ func buildUsecases(
 			RetryQueue:          listSaveOperationRetryQueue,
 		},
 	)
+
 	modelUC := uc.NewModelUsecase(
 		r.modelRepo,
 		r.productBlueprintRepo,
 	)
+
 	orderUC := uc.NewOrderUsecase(
 		r.orderRepo,
 		r.listRepoFS,
@@ -153,9 +197,11 @@ func buildUsecases(
 		r.resaleRepo,
 		r.paymentMethodRepo,
 	)
+
 	permissionUC := uc.NewPermissionUsecase(
 		r.permissionRepo,
 	)
+
 	printUC := uc.NewPrintUsecase(
 		r.productionRepo,
 		r.productRepo,
@@ -163,20 +209,26 @@ func buildUsecases(
 		r.inspectionRepo,
 		r.productBlueprintRepo,
 	)
+
 	productionUC := uc.NewProductionUsecase(
 		r.productionRepo,
 	)
+
 	productBlueprintUC := uc.NewProductBlueprintUsecase(
 		r.productBlueprintRepo,
 		r.productBlueprintReviewRepo,
 	)
-	productBlueprintCategoryUC := uc.NewProductBlueprintCategoryUsecase(
-		r.productBlueprintCategoryRepo,
-	)
+
+	productBlueprintCategoryUC :=
+		uc.NewProductBlueprintCategoryUsecase(
+			r.productBlueprintCategoryRepo,
+		)
+
 	inspectionUC := uc.NewInspectionUsecase(
 		r.inspectionRepo,
 		r.productRepo,
 	)
+
 	mintUC := uc.NewMintUsecase(
 		r.productionRepo,
 		r.tokenBlueprintRepo,
@@ -184,67 +236,85 @@ func buildUsecases(
 		r.inspectionRepo,
 		tokenUC,
 	)
-	mintUC.SetInventoryUsecase(inventoryUC)
-	// 1件ずつmintするための task repository / token保存recorder を注入します。
-	//
-	// r.mintRepo は firestore.MintRepositoryFS を想定しており、以下を実装しています。
-	// - mint.MintRepository
-	// - mint.MintProductTaskRepository
-	// - usecase.MintRequestPort
-	// - usecase.MintProductMintRecorder
-	//
-	// これが未注入だと、UpdateRequestInfo内で
-	// "mint task repo is nil" となり、productId単位のtaskを作成できません。
-	mintUC.SetMintTaskRepository(r.mintRepo)
-	mintUC.SetMintProductMintRecorder(r.mintRepo)
-	// Cloud Tasksへ「次の1件mint処理」を投入するenqueuerを注入します。
-	//
-	// 必要環境変数:
-	// - CLOUD_TASKS_PROJECT_ID
-	// - CLOUD_TASKS_LOCATION
-	// - CLOUD_TASKS_QUEUE_ID
-	// - INTERNAL_BASE_URL
-	// - CLOUD_TASKS_SERVICE_ACCOUNT
-	//
-	// ここが未注入だと、mint request / product tasks はQUEUEDになっても
-	// 自動で /internal/mint/tasks/{mintID}/execute が呼ばれません。
-	if mintTaskQueue, err := cloudtasksadp.NewMintTaskQueueFromEnv(
-		context.Background(),
-	); err == nil && mintTaskQueue != nil {
-		mintUC.SetMintTaskEnqueuer(mintTaskQueue)
+
+	mintUC.SetInventoryUsecase(
+		inventoryUC,
+	)
+
+	// 1件ずつmintするためのtask repositoryと
+	// token保存recorderを注入します。
+	mintUC.SetMintTaskRepository(
+		r.mintRepo,
+	)
+	mintUC.SetMintProductMintRecorder(
+		r.mintRepo,
+	)
+
+	// Cloud Tasksへ次のmint処理を投入するenqueuerを注入します。
+	if mintTaskQueue, err :=
+		cloudtasksadp.NewMintTaskQueueFromEnv(
+			context.Background(),
+		); err == nil && mintTaskQueue != nil {
+		mintUC.SetMintTaskEnqueuer(
+			mintTaskQueue,
+		)
 	}
-	baseURL := os.Getenv("ARWEAVE_BASE_URL")
-	apiKey := os.Getenv("IRYS_SERVICE_API_KEY")
+
+	baseURL := os.Getenv(
+		"ARWEAVE_BASE_URL",
+	)
+	apiKey := os.Getenv(
+		"IRYS_SERVICE_API_KEY",
+	)
+
 	uploader := arweave.NewHTTPUploader(
 		baseURL,
 		apiKey,
 	)
-	tbReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(
-		c.fsClient,
-	)
+
+	tbReviewRepo :=
+		fsrepo.NewTokenBlueprintReviewRepositoryFS(
+			c.fsClient,
+		)
+
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		r.tokenBlueprintRepo,
 		tbReviewRepo,
 		uploader,
 	)
+
 	mintUC.SetTokenBlueprintMetadataEnsurer(
 		tokenBlueprintUC,
 	)
 	mintUC.SetTokenBlueprintMintMarker(
 		tokenBlueprintUC,
 	)
-	shippingAddressUC := uc.NewShippingAddressUsecase(
-		r.shippingAddressRepo,
+
+	shippingAddressUC :=
+		uc.NewShippingAddressUsecase(
+			r.shippingAddressRepo,
+		)
+
+	tokenBlueprintReviewUC :=
+		uc.NewTokenBlueprintReviewUsecase(
+			tbReviewRepo,
+			r.avatarRepo,
+			r.tokenBlueprintRepo,
+			r.brandRepo,
+		)
+
+	userUC := uc.NewUserUsecase(
+		r.userRepo,
+		nil,
 	)
-	tokenBlueprintReviewUC := uc.NewTokenBlueprintReviewUsecase(
-		tbReviewRepo,
-		r.avatarRepo,
-		r.tokenBlueprintRepo,
-		r.brandRepo,
+
+	onchainReader :=
+		solanainfra.NewOnchainWalletReaderDevnet()
+
+	tokenQuery := fsrepo.NewTokenReaderFS(
+		c.fsClient,
 	)
-	userUC := uc.NewUserUsecase(r.userRepo, nil)
-	onchainReader := solanainfra.NewOnchainWalletReaderDevnet()
-	tokenQuery := fsrepo.NewTokenReaderFS(c.fsClient)
+
 	walletUC := uc.NewWalletUsecase(
 		r.walletRepo,
 		onchainReader,
@@ -254,26 +324,53 @@ func buildUsecases(
 		r.productBlueprintRepo,
 		r.productBlueprintRepo,
 	)
-	cartUC := uc.NewCartUsecase(r.cartRepo)
-	invitationMailer := mailadp.NewInvitationMailerWithResend(
-		r.companyRepo,
-		r.brandRepo,
+
+	cartUC := uc.NewCartUsecase(
+		r.cartRepo,
 	)
+
+	invitationDeliveryQueue, err :=
+		listcloudtasksadp.NewInvitationDeliveryQueueFromEnv(
+			ctx,
+		)
+	if err != nil {
+		_ = listSaveOperationStorage.Close()
+		return nil, err
+	}
+
+	invitationMailer :=
+		mailadp.NewInvitationMailerWithResend(
+			r.companyRepo,
+			r.brandRepo,
+		)
+
+	invitationDeliveryUC :=
+		uc.NewInvitationDeliveryUsecase(
+			r.invitationTokenRepo,
+			invitationMailer,
+			invitationDeliveryQueue,
+		)
+
 	invitationUC := uc.NewInvitationUsecase(
 		r.invitationTokenRepo,
+		r.invitationTokenRepo,
 		r.memberRepo,
-		invitationMailer,
+		invitationDeliveryQueue,
 	)
+
 	memberUC := uc.NewMemberUsecase(
 		r.memberRepo,
 		invitationUC,
 	)
+
 	authBootstrapSvc := &uc.BootstrapService{
 		Members:   r.memberRepo,
 		Companies: r.companyRepo,
 	}
+
 	_ = s
 	_ = res
+
 	return &usecases{
 		tokenUC:                     tokenUC,
 		accountUC:                   accountUC,
@@ -302,12 +399,14 @@ func buildUsecases(
 		shippingAddressUC:           shippingAddressUC,
 		tokenBlueprintUC:            tokenBlueprintUC,
 		tokenBlueprintReviewUC:      tokenBlueprintReviewUC,
+
 		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {
 			if r.productBlueprintReviewRepo == nil ||
 				r.productBlueprintRepo == nil ||
 				r.walletRepo == nil {
 				return nil
 			}
+
 			return uc.NewProductBlueprintReviewUsecase(
 				r.productBlueprintReviewRepo,
 				r.walletRepo,
@@ -322,10 +421,13 @@ func buildUsecases(
 				nil,
 			)
 		}(),
-		userUC:           userUC,
-		walletUC:         walletUC,
-		cartUC:           cartUC,
-		invitationUC:     invitationUC,
-		authBootstrapSvc: authBootstrapSvc,
+
+		userUC:                  userUC,
+		walletUC:                walletUC,
+		cartUC:                  cartUC,
+		invitationUC:            invitationUC,
+		invitationDeliveryUC:    invitationDeliveryUC,
+		invitationDeliveryQueue: invitationDeliveryQueue,
+		authBootstrapSvc:        authBootstrapSvc,
 	}, nil
 }

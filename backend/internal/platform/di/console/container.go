@@ -4,6 +4,7 @@ package console
 import (
 	"context"
 	"errors"
+
 	listcloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	firebaseadp "narratives/internal/adapters/out/firebase"
 	query "narratives/internal/application/query/console"
@@ -85,10 +86,12 @@ type Container struct {
 	InspectionUC                    *uc.InspectionUsecase
 	MintUC                          *uc.MintUsecase
 	InvitationUC                    uc.InvitationUsecasePort
+	InvitationDeliveryUC            uc.InvitationDeliveryUsecasePort
 	AuthBootstrap                   *uc.BootstrapService
 	NameResolver                    *resolver.NameResolver
 	listSaveOperationStorage        *firebaseadp.ListSaveOperationStorage
 	listSaveOperationRetryQueue     *listcloudtasksadp.ListSaveOperationQueue
+	invitationDeliveryQueue         *listcloudtasksadp.InvitationDeliveryQueue
 }
 
 func NewContainer(
@@ -99,9 +102,11 @@ func NewContainer(
 	if err != nil {
 		return nil, err
 	}
+
 	repos := buildRepos(clients)
 	services := buildDomainServices(repos)
 	res := buildResolvers(clients, repos)
+
 	u, err := buildUsecases(
 		ctx,
 		clients,
@@ -112,6 +117,7 @@ func NewContainer(
 	if err != nil {
 		return nil, err
 	}
+
 	q := buildQueries(
 		clients.infra,
 		repos,
@@ -119,25 +125,36 @@ func NewContainer(
 		u,
 		services,
 	)
+
 	if clients == nil || clients.infra == nil {
-		var queueErr error
-		if u != nil && u.listSaveOperationRetryQueue != nil {
-			queueErr = u.listSaveOperationRetryQueue.Close()
+		var invitationQueueErr error
+		if u != nil && u.invitationDeliveryQueue != nil {
+			invitationQueueErr = u.invitationDeliveryQueue.Close()
 		}
+
+		var listQueueErr error
+		if u != nil && u.listSaveOperationRetryQueue != nil {
+			listQueueErr = u.listSaveOperationRetryQueue.Close()
+		}
+
 		var storageErr error
 		if u != nil && u.listSaveOperationStorage != nil {
 			storageErr = u.listSaveOperationStorage.Close()
 		}
+
 		return nil, errors.Join(
 			errors.New("clients/infra is nil"),
-			queueErr,
+			invitationQueueErr,
+			listQueueErr,
 			storageErr,
 		)
 	}
+
 	var invBlueprint query.InventoryBlueprintResolver
 	if repos.inventoryRepo != nil {
 		invBlueprint = repos.inventoryRepo
 	}
+
 	var orderMgmtQ *query.OrderManagementQuery
 	if repos.orderConsoleLister != nil &&
 		q.inventoryManagementQuery != nil &&
@@ -156,15 +173,18 @@ func NewContainer(
 			},
 		)
 	}
+
 	announcementManagementQuery := query.NewAnnouncementManagementQuery(
 		repos.tokenBlueprintRepo,
 		repos.announcementRepo,
 	)
+
 	announcementDetailQuery := query.NewAnnouncementDetailQuery(
 		repos.announcementRepo,
 		repos.announcementAttachmentRepo,
 		repos.memberRepo,
 	)
+
 	return &Container{
 		Infra:                           clients.infra,
 		MemberRepo:                      repos.memberRepo,
@@ -228,30 +248,43 @@ func NewContainer(
 		InspectionUC:                    u.inspectionUC,
 		MintUC:                          u.mintUC,
 		InvitationUC:                    u.invitationUC,
+		InvitationDeliveryUC:            u.invitationDeliveryUC,
 		AuthBootstrap:                   u.authBootstrapSvc,
 		NameResolver:                    res.nameResolver,
 		listSaveOperationStorage:        u.listSaveOperationStorage,
 		listSaveOperationRetryQueue:     u.listSaveOperationRetryQueue,
+		invitationDeliveryQueue:         u.invitationDeliveryQueue,
 	}, nil
 }
+
 func (c *Container) Close() error {
 	if c == nil {
 		return nil
 	}
-	var queueErr error
-	if c.listSaveOperationRetryQueue != nil {
-		queueErr = c.listSaveOperationRetryQueue.Close()
+
+	var invitationQueueErr error
+	if c.invitationDeliveryQueue != nil {
+		invitationQueueErr = c.invitationDeliveryQueue.Close()
 	}
+
+	var listQueueErr error
+	if c.listSaveOperationRetryQueue != nil {
+		listQueueErr = c.listSaveOperationRetryQueue.Close()
+	}
+
 	var storageErr error
 	if c.listSaveOperationStorage != nil {
 		storageErr = c.listSaveOperationStorage.Close()
 	}
+
 	var infraErr error
 	if c.Infra != nil {
 		infraErr = c.Infra.Close()
 	}
+
 	return errors.Join(
-		queueErr,
+		invitationQueueErr,
+		listQueueErr,
 		storageErr,
 		infraErr,
 	)

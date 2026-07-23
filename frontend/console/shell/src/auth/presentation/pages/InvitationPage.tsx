@@ -1,5 +1,4 @@
 // frontend/console/shell/src/auth/presentation/pages/InvitationPage.tsx
-// frontend/console/shell/src/auth/presentation/pages/InvitationPage.tsx
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { Input } from "../../../shared/ui/input";
