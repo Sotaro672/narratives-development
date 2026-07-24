@@ -6,23 +6,27 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	usecase "narratives/internal/application/usecase"
-	modeldom "narratives/internal/domain/model"
 	"net/http"
 	"strings"
 	"time"
+
+	usecase "narratives/internal/application/usecase"
+	modeldom "narratives/internal/domain/model"
 )
 
 var (
 	ErrModelAccessPolicyNotConfigured = errors.New(
 		"model access policy is not configured",
 	)
+
 	ErrModelUnauthenticated = errors.New(
 		"model access unauthenticated",
 	)
+
 	ErrModelForbidden = errors.New(
 		"model access forbidden",
 	)
+
 	ErrProductBlueprintPrinted = errors.New(
 		"product blueprint is already printed",
 	)
@@ -36,30 +40,32 @@ const (
 	ModelAccessWrite
 )
 
-// ProductBlueprintAccessはModel APIの認可判定に必要なPB情報だけを表します。
+// ProductBlueprintAccessはModel APIの認可判定に必要な
+// ProductBlueprint情報だけを表します。
 type ProductBlueprintAccess struct {
 	CompanyID string
 	Printed   bool
 }
 
-// ProductBlueprintAccessLoaderはPBの所有会社とprinted状態を取得します。
+// ProductBlueprintAccessLoaderはProductBlueprintの所有会社と
+// printed状態を取得します。
 type ProductBlueprintAccessLoader func(
 	ctx context.Context,
 	productBlueprintID string,
 ) (ProductBlueprintAccess, error)
 
-// ModelAccessPolicyは全Model APIで共通利用する
-// company境界・printed lockです。
+// ModelAccessPolicyは、全Model APIで共通利用する
+// company境界とprinted lockを扱います。
 //
 // Read:
 //   - 認証ContextのcompanyIdを取得する
-//   - PBの所有会社と一致することを確認する
+//   - ProductBlueprintの所有会社と一致することを確認する
 //
 // Write:
-//   - Readの確認に加え、PBがprinted=falseであることを確認する
+//   - Readの確認に加え、ProductBlueprintがprinted=falseであることを確認する
 //
 // Model IDを受け取るAPIでは、HandlerがModelを取得して
-// productBlueprintIdを解決した後、このPB判定を実行します。
+// productBlueprintIdを解決した後、この判定を実行します。
 type ModelAccessPolicy struct {
 	loadProductBlueprintAccess ProductBlueprintAccessLoader
 }
@@ -71,6 +77,7 @@ func NewModelAccessPolicy(
 		loadProductBlueprintAccess: loadProductBlueprintAccess,
 	}
 }
+
 func (p *ModelAccessPolicy) RequireProductBlueprint(
 	ctx context.Context,
 	productBlueprintID string,
@@ -80,13 +87,16 @@ func (p *ModelAccessPolicy) RequireProductBlueprint(
 		p.loadProductBlueprintAccess == nil {
 		return ErrModelAccessPolicyNotConfigured
 	}
+
 	if productBlueprintID == "" {
 		return modeldom.ErrInvalidBlueprintID
 	}
+
 	companyID := usecase.CompanyIDFromContext(ctx)
 	if companyID == "" {
 		return ErrModelUnauthenticated
 	}
+
 	access, err := p.loadProductBlueprintAccess(
 		ctx,
 		productBlueprintID,
@@ -94,13 +104,17 @@ func (p *ModelAccessPolicy) RequireProductBlueprint(
 	if err != nil {
 		return err
 	}
+
 	if access.CompanyID == "" ||
 		access.CompanyID != companyID {
 		return ErrModelForbidden
 	}
-	if mode == ModelAccessWrite && access.Printed {
+
+	if mode == ModelAccessWrite &&
+		access.Printed {
 		return ErrProductBlueprintPrinted
 	}
+
 	return nil
 }
 
@@ -110,7 +124,7 @@ type ModelHandler struct {
 	accessPolicy *ModelAccessPolicy
 }
 
-// NewModelHandlerはHTTPハンドラを初期化します。
+// NewModelHandlerはHTTP Handlerを初期化します。
 func NewModelHandler(
 	uc *usecase.ModelUsecase,
 	accessPolicy *ModelAccessPolicy,
@@ -121,7 +135,7 @@ func NewModelHandler(
 	}
 }
 
-// ServeHTTPはHTTPルーティングの入口です。
+// ServeHTTPはHTTP routingの入口です。
 func (h *ModelHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -130,6 +144,16 @@ func (h *ModelHandler) ServeHTTP(
 		"Content-Type",
 		"application/json",
 	)
+
+	if h == nil || h.uc == nil {
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"model handler is not initialized",
+		)
+		return
+	}
+
 	switch {
 	// ------------------------------------------------------------
 	// GET /models/by-blueprint/{productBlueprintID}/variations
@@ -143,12 +167,13 @@ func (h *ModelHandler) ServeHTTP(
 			r.URL.Path,
 			"/models/by-blueprint/",
 		)
+
 		rest = strings.Trim(rest, "/")
 		parts := strings.Split(rest, "/")
+
 		if len(parts) == 2 &&
 			parts[0] != "" &&
-			parts[1] == "variations" &&
-			!strings.Contains(parts[0], "/") {
+			parts[1] == "variations" {
 			h.listVariationsByProductBlueprintID(
 				w,
 				r,
@@ -156,8 +181,10 @@ func (h *ModelHandler) ServeHTTP(
 			)
 			return
 		}
+
 		writeNotFound(w)
 		return
+
 	// ------------------------------------------------------------
 	// GET /models/{id}
 	// ------------------------------------------------------------
@@ -170,13 +197,21 @@ func (h *ModelHandler) ServeHTTP(
 			r.URL.Path,
 			"/models/",
 		)
+
 		id = strings.Trim(id, "/")
+
 		if isSingleModelIDPath(id) {
-			h.getVariation(w, r, id)
+			h.getVariation(
+				w,
+				r,
+				id,
+			)
 			return
 		}
+
 		writeNotFound(w)
 		return
+
 	// ------------------------------------------------------------
 	// POST /models/{productBlueprintID}/variations
 	// ------------------------------------------------------------
@@ -189,12 +224,13 @@ func (h *ModelHandler) ServeHTTP(
 			r.URL.Path,
 			"/models/",
 		)
+
 		rest = strings.Trim(rest, "/")
 		parts := strings.Split(rest, "/")
+
 		if len(parts) == 2 &&
 			parts[0] != "" &&
-			parts[1] == "variations" &&
-			!strings.Contains(parts[0], "/") {
+			parts[1] == "variations" {
 			h.createVariation(
 				w,
 				r,
@@ -202,9 +238,12 @@ func (h *ModelHandler) ServeHTTP(
 			)
 			return
 		}
+
 		writeNotFound(w)
 		return
+
 	// ------------------------------------------------------------
+	// PUT /models/{productBlueprintID}/variations
 	// PUT /models/{id}
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPut &&
@@ -212,17 +251,37 @@ func (h *ModelHandler) ServeHTTP(
 			r.URL.Path,
 			"/models/",
 		):
-		id := strings.TrimPrefix(
+		rest := strings.TrimPrefix(
 			r.URL.Path,
 			"/models/",
 		)
-		id = strings.Trim(id, "/")
-		if isSingleModelIDPath(id) {
-			h.updateVariation(w, r, id)
+
+		rest = strings.Trim(rest, "/")
+		parts := strings.Split(rest, "/")
+
+		if len(parts) == 2 &&
+			parts[0] != "" &&
+			parts[1] == "variations" {
+			h.replaceVariations(
+				w,
+				r,
+				parts[0],
+			)
 			return
 		}
+
+		if isSingleModelIDPath(rest) {
+			h.updateVariation(
+				w,
+				r,
+				rest,
+			)
+			return
+		}
+
 		writeNotFound(w)
 		return
+
 	// ------------------------------------------------------------
 	// DELETE /models/{id}
 	// ------------------------------------------------------------
@@ -235,13 +294,21 @@ func (h *ModelHandler) ServeHTTP(
 			r.URL.Path,
 			"/models/",
 		)
+
 		id = strings.Trim(id, "/")
+
 		if isSingleModelIDPath(id) {
-			h.deleteVariation(w, r, id)
+			h.deleteVariation(
+				w,
+				r,
+				id,
+			)
 			return
 		}
+
 		writeNotFound(w)
 		return
+
 	default:
 		writeNotFound(w)
 		return
@@ -249,7 +316,9 @@ func (h *ModelHandler) ServeHTTP(
 }
 
 // isSingleModelIDPathは/models/{id}系の単体ID pathだけを許可します。
-func isSingleModelIDPath(id string) bool {
+func isSingleModelIDPath(
+	id string,
+) bool {
 	return id != "" &&
 		id != "by-blueprint" &&
 		id != "variations" &&
@@ -267,33 +336,42 @@ func isSingleModelIDPath(id string) bool {
 // ------------------------------------------------------------
 // Request DTOs
 // ------------------------------------------------------------
-// modelVariationRequestはCREATE / UPDATEのrequestです。
+
+// modelVariationRequestはCREATEとUPDATEのrequestです。
 // productBlueprintIdはpathだけを正とするためbodyでは受け取りません。
 type modelVariationRequest struct {
-	// 必須: "apparel"または"alcohol"
 	Kind string `json:"kind"`
-	// common
+
 	ModelNumber string `json:"modelNumber"`
-	// apparel
+
 	Size         string         `json:"size,omitempty"`
 	Color        string         `json:"color,omitempty"`
 	RGB          int            `json:"rgb"`
 	Measurements map[string]int `json:"measurements,omitempty"`
-	// alcohol
+
 	Volume modeldom.Volume `json:"volume,omitempty"`
+}
+
+// replaceModelVariationsRequestはProductBlueprint配下の
+// Model variationを一括置換するrequestです。
+type replaceModelVariationsRequest struct {
+	Variations []modelVariationRequest `json:"variations"`
 }
 
 // ------------------------------------------------------------
 // Response DTOs
 // ------------------------------------------------------------
+
 type colorDTO struct {
 	Name string `json:"name"`
 	RGB  int    `json:"rgb"`
 }
+
 type volumeDTO struct {
 	Value int    `json:"value"`
 	Unit  string `json:"unit"`
 }
+
 type modelVariationDTO struct {
 	ID                 string         `json:"id"`
 	ProductBlueprintID string         `json:"productBlueprintId"`
@@ -312,12 +390,14 @@ type modelVariationDTO struct {
 // ------------------------------------------------------------
 // POST /models/{productBlueprintID}/variations
 // ------------------------------------------------------------
+
 func (h *ModelHandler) createVariation(
 	w http.ResponseWriter,
 	r *http.Request,
 	productBlueprintID string,
 ) {
 	ctx := r.Context()
+
 	if productBlueprintID == "" {
 		writeJSONError(
 			w,
@@ -326,6 +406,7 @@ func (h *ModelHandler) createVariation(
 		)
 		return
 	}
+
 	if err := h.accessPolicy.RequireProductBlueprint(
 		ctx,
 		productBlueprintID,
@@ -334,10 +415,12 @@ func (h *ModelHandler) createVariation(
 		writeModelErr(w, err)
 		return
 	}
-	var req modelVariationRequest
+
+	var request modelVariationRequest
+
 	if err := decodeStrictJSON(
 		r,
-		&req,
+		&request,
 	); err != nil {
 		writeJSONError(
 			w,
@@ -346,41 +429,56 @@ func (h *ModelHandler) createVariation(
 		)
 		return
 	}
-	newVar, err := toNewModelVariation(
+
+	newVariation, err := toNewModelVariation(
 		productBlueprintID,
-		req,
+		request,
 	)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
-	if err := newVar.Validate(); err != nil {
+
+	if err := newVariation.Validate(); err != nil {
 		writeModelErr(w, err)
 		return
 	}
-	mv, err := h.uc.Create(ctx, newVar)
+
+	created, err := h.uc.Create(
+		ctx,
+		newVariation,
+	)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
-	dto, err := toModelVariationDTO(mv)
+
+	dto, err := toModelVariationDTO(created)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(dto)
 }
 
 // ------------------------------------------------------------
-// GET /models/by-blueprint/{productBlueprintID}/variations
+// PUT /models/{productBlueprintID}/variations
 // ------------------------------------------------------------
-func (h *ModelHandler) listVariationsByProductBlueprintID(
+
+// replaceVariationsはProductBlueprint配下のModel variationを
+// 単一requestで一括置換します。
+//
+// 既存documentの削除と新規documentの作成はRepository側の
+// 単一transaction内で実行されます。
+func (h *ModelHandler) replaceVariations(
 	w http.ResponseWriter,
 	r *http.Request,
 	productBlueprintID string,
 ) {
 	ctx := r.Context()
+
 	if productBlueprintID == "" {
 		writeJSONError(
 			w,
@@ -389,6 +487,97 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 		)
 		return
 	}
+
+	if err := h.accessPolicy.RequireProductBlueprint(
+		ctx,
+		productBlueprintID,
+		ModelAccessWrite,
+	); err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	var request replaceModelVariationsRequest
+
+	if err := decodeStrictJSON(
+		r,
+		&request,
+	); err != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid json",
+		)
+		return
+	}
+
+	newVariations := make(
+		[]modeldom.NewModelVariation,
+		0,
+		len(request.Variations),
+	)
+
+	for _, variationRequest := range request.Variations {
+		newVariation, err := toNewModelVariation(
+			productBlueprintID,
+			variationRequest,
+		)
+		if err != nil {
+			writeModelErr(w, err)
+			return
+		}
+
+		if err := newVariation.Validate(); err != nil {
+			writeModelErr(w, err)
+			return
+		}
+
+		newVariations = append(
+			newVariations,
+			newVariation,
+		)
+	}
+
+	replaced, err := h.uc.ReplaceByProductBlueprintID(
+		ctx,
+		productBlueprintID,
+		newVariations,
+	)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	dtos, err := toModelVariationDTOs(replaced)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(dtos)
+}
+
+// ------------------------------------------------------------
+// GET /models/by-blueprint/{productBlueprintID}/variations
+// ------------------------------------------------------------
+
+func (h *ModelHandler) listVariationsByProductBlueprintID(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+) {
+	ctx := r.Context()
+
+	if productBlueprintID == "" {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid productBlueprintID",
+		)
+		return
+	}
+
 	if err := h.accessPolicy.RequireProductBlueprint(
 		ctx,
 		productBlueprintID,
@@ -397,6 +586,7 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 		writeModelErr(w, err)
 		return
 	}
+
 	variations, err := h.uc.ListByProductBlueprintID(
 		ctx,
 		productBlueprintID,
@@ -405,13 +595,13 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 		writeModelErr(w, err)
 		return
 	}
-	dtos, err := toModelVariationDTOs(
-		variations,
-	)
+
+	dtos, err := toModelVariationDTOs(variations)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(dtos)
 }
@@ -419,12 +609,14 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 // ------------------------------------------------------------
 // GET /models/{id}
 // ------------------------------------------------------------
+
 func (h *ModelHandler) getVariation(
 	w http.ResponseWriter,
 	r *http.Request,
 	id string,
 ) {
 	ctx := r.Context()
+
 	if id == "" {
 		writeJSONError(
 			w,
@@ -433,24 +625,39 @@ func (h *ModelHandler) getVariation(
 		)
 		return
 	}
-	mv, err := h.uc.GetByID(ctx, id)
+
+	variation, err := h.uc.GetByID(
+		ctx,
+		id,
+	)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
+	if variation == nil {
+		writeModelErr(
+			w,
+			modeldom.ErrNotFound,
+		)
+		return
+	}
+
 	if err := h.accessPolicy.RequireProductBlueprint(
 		ctx,
-		mv.GetProductBlueprintID(),
+		variation.GetProductBlueprintID(),
 		ModelAccessRead,
 	); err != nil {
 		writeModelErr(w, err)
 		return
 	}
-	dto, err := toModelVariationDTO(mv)
+
+	dto, err := toModelVariationDTO(variation)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(dto)
 }
@@ -458,12 +665,14 @@ func (h *ModelHandler) getVariation(
 // ------------------------------------------------------------
 // PUT /models/{id}
 // ------------------------------------------------------------
+
 func (h *ModelHandler) updateVariation(
 	w http.ResponseWriter,
 	r *http.Request,
 	id string,
 ) {
 	ctx := r.Context()
+
 	if id == "" {
 		writeJSONError(
 			w,
@@ -472,11 +681,24 @@ func (h *ModelHandler) updateVariation(
 		)
 		return
 	}
-	current, err := h.uc.GetByID(ctx, id)
+
+	current, err := h.uc.GetByID(
+		ctx,
+		id,
+	)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
+	if current == nil {
+		writeModelErr(
+			w,
+			modeldom.ErrNotFound,
+		)
+		return
+	}
+
 	if err := h.accessPolicy.RequireProductBlueprint(
 		ctx,
 		current.GetProductBlueprintID(),
@@ -485,10 +707,12 @@ func (h *ModelHandler) updateVariation(
 		writeModelErr(w, err)
 		return
 	}
-	var req modelVariationRequest
+
+	var request modelVariationRequest
+
 	if err := decodeStrictJSON(
 		r,
-		&req,
+		&request,
 	); err != nil {
 		writeJSONError(
 			w,
@@ -497,12 +721,21 @@ func (h *ModelHandler) updateVariation(
 		)
 		return
 	}
-	updates, err := toModelVariationUpdate(req)
+
+	updates, err := toModelVariationUpdate(request)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
-	mv, err := h.uc.Update(
+
+	if err := updates.Validate(
+		current.GetKind(),
+	); err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	updated, err := h.uc.Update(
 		ctx,
 		id,
 		updates,
@@ -511,11 +744,13 @@ func (h *ModelHandler) updateVariation(
 		writeModelErr(w, err)
 		return
 	}
-	dto, err := toModelVariationDTO(mv)
+
+	dto, err := toModelVariationDTO(updated)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(dto)
 }
@@ -523,12 +758,14 @@ func (h *ModelHandler) updateVariation(
 // ------------------------------------------------------------
 // DELETE /models/{id}
 // ------------------------------------------------------------
+
 func (h *ModelHandler) deleteVariation(
 	w http.ResponseWriter,
 	r *http.Request,
 	id string,
 ) {
 	ctx := r.Context()
+
 	if id == "" {
 		writeJSONError(
 			w,
@@ -537,11 +774,24 @@ func (h *ModelHandler) deleteVariation(
 		)
 		return
 	}
-	current, err := h.uc.GetByID(ctx, id)
+
+	current, err := h.uc.GetByID(
+		ctx,
+		id,
+	)
 	if err != nil {
 		writeModelErr(w, err)
 		return
 	}
+
+	if current == nil {
+		writeModelErr(
+			w,
+			modeldom.ErrNotFound,
+		)
+		return
+	}
+
 	if err := h.accessPolicy.RequireProductBlueprint(
 		ctx,
 		current.GetProductBlueprintID(),
@@ -550,6 +800,7 @@ func (h *ModelHandler) deleteVariation(
 		writeModelErr(w, err)
 		return
 	}
+
 	if err := h.uc.Delete(
 		ctx,
 		id,
@@ -557,191 +808,225 @@ func (h *ModelHandler) deleteVariation(
 		writeModelErr(w, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // ------------------------------------------------------------
-// Mapper
+// Request mapper
 // ------------------------------------------------------------
+
 func cloneMeasurements(
-	in map[string]int,
-) modeldom.Measurements {
-	if len(in) == 0 {
-		return nil
+	input map[string]int,
+) (modeldom.Measurements, error) {
+	if input == nil {
+		return nil, nil
 	}
+
 	measurements := make(
 		modeldom.Measurements,
-		len(in),
+		len(input),
 	)
-	for key, value := range in {
-		if key == "" {
-			continue
+
+	for key, value := range input {
+		if key == "" || value < 0 {
+			return nil, modeldom.ErrInvalidMeasurements
 		}
+
 		measurements[key] = value
 	}
+
 	if len(measurements) == 0 {
-		return nil
+		return nil, nil
 	}
-	return measurements
+
+	return measurements, nil
 }
 
 // toNewModelVariationはrequestを
-// category-specificなdomain inputへ変換します。
+// category-specificなDomain入力へ変換します。
 func toNewModelVariation(
 	productBlueprintID string,
-	req modelVariationRequest,
+	request modelVariationRequest,
 ) (modeldom.NewModelVariation, error) {
-	switch req.Kind {
-	case string(
-		modeldom.ModelVariationKindApparel,
-	):
+	if productBlueprintID == "" {
+		return modeldom.NewModelVariation{},
+			modeldom.ErrInvalidBlueprintID
+	}
+
+	switch request.Kind {
+	case string(modeldom.ModelVariationKindApparel):
+		measurements, err := cloneMeasurements(
+			request.Measurements,
+		)
+		if err != nil {
+			return modeldom.NewModelVariation{}, err
+		}
+
 		return modeldom.NewModelVariationFromApparel(
 			modeldom.NewApparelModelVariation{
 				ProductBlueprintID: productBlueprintID,
-				ModelNumber:        req.ModelNumber,
-				Size:               req.Size,
+				ModelNumber:        request.ModelNumber,
+				Size:               request.Size,
 				Color: modeldom.Color{
-					Name: req.Color,
-					RGB:  req.RGB,
+					Name: request.Color,
+					RGB:  request.RGB,
 				},
-				Measurements: cloneMeasurements(
-					req.Measurements,
-				),
+				Measurements: measurements,
 			},
 		), nil
-	case string(
-		modeldom.ModelVariationKindAlcohol,
-	):
+
+	case string(modeldom.ModelVariationKindAlcohol):
 		return modeldom.NewModelVariationFromAlcohol(
 			modeldom.NewAlcoholModelVariation{
 				ProductBlueprintID: productBlueprintID,
-				ModelNumber:        req.ModelNumber,
-				Volume:             req.Volume,
+				ModelNumber:        request.ModelNumber,
+				Volume:             request.Volume,
 			},
 		), nil
+
 	default:
 		return modeldom.NewModelVariation{},
-			modeldom.ErrInvalid
+			modeldom.ErrInvalidKind
 	}
 }
 
 // toModelVariationUpdateはrequestを
-// category-specificなupdate DTOへ変換します。
+// category-specificな更新入力へ変換します。
 func toModelVariationUpdate(
-	req modelVariationRequest,
+	request modelVariationRequest,
 ) (modeldom.ModelVariationUpdate, error) {
-	modelNumber := req.ModelNumber
-	switch req.Kind {
-	case string(
-		modeldom.ModelVariationKindApparel,
-	):
-		size := req.Size
-		color := modeldom.Color{
-			Name: req.Color,
-			RGB:  req.RGB,
+	modelNumber := request.ModelNumber
+
+	switch request.Kind {
+	case string(modeldom.ModelVariationKindApparel):
+		measurements, err := cloneMeasurements(
+			request.Measurements,
+		)
+		if err != nil {
+			return modeldom.ModelVariationUpdate{}, err
 		}
+
+		size := request.Size
+
+		color := modeldom.Color{
+			Name: request.Color,
+			RGB:  request.RGB,
+		}
+
 		return modeldom.ModelVariationUpdate{
-			ModelNumber: &modelNumber,
-			Size:        &size,
-			Color:       &color,
-			Measurements: cloneMeasurements(
-				req.Measurements,
-			),
+			ModelNumber:  &modelNumber,
+			Size:         &size,
+			Color:        &color,
+			Measurements: measurements,
 		}, nil
-	case string(
-		modeldom.ModelVariationKindAlcohol,
-	):
-		volume := req.Volume
+
+	case string(modeldom.ModelVariationKindAlcohol):
+		volume := request.Volume
+
 		return modeldom.ModelVariationUpdate{
 			ModelNumber: &modelNumber,
 			Volume:      &volume,
 		}, nil
+
 	default:
 		return modeldom.ModelVariationUpdate{},
-			modeldom.ErrInvalid
+			modeldom.ErrInvalidKind
 	}
 }
+
+// ------------------------------------------------------------
+// Response mapper
+// ------------------------------------------------------------
+
 func toModelVariationDTO(
-	mv modeldom.ModelVariation,
+	variation modeldom.ModelVariation,
 ) (modelVariationDTO, error) {
-	if mv == nil {
+	if variation == nil {
 		return modelVariationDTO{},
 			modeldom.ErrInvalid
 	}
-	switch variation := mv.(type) {
+
+	switch modelVariation := variation.(type) {
 	case modeldom.ApparelModelVariation:
 		return toApparelModelVariationDTO(
-			variation,
+			modelVariation,
 		), nil
+
 	case modeldom.AlcoholModelVariation:
 		return toAlcoholModelVariationDTO(
-			variation,
+			modelVariation,
 		), nil
+
 	default:
 		return modelVariationDTO{},
-			modeldom.ErrInvalid
+			modeldom.ErrInvalidKind
 	}
 }
+
 func toApparelModelVariationDTO(
-	mv modeldom.ApparelModelVariation,
+	variation modeldom.ApparelModelVariation,
 ) modelVariationDTO {
 	return modelVariationDTO{
-		ID:                 mv.ID,
-		ProductBlueprintID: mv.ProductBlueprintID,
+		ID:                 variation.ID,
+		ProductBlueprintID: variation.ProductBlueprintID,
 		Kind: string(
 			modeldom.ModelVariationKindApparel,
 		),
-		ModelNumber: mv.ModelNumber,
-		Size:        mv.Size,
+		ModelNumber: variation.ModelNumber,
+		Size:        variation.Size,
 		Color: &colorDTO{
-			Name: mv.Color.Name,
-			RGB:  mv.Color.RGB,
+			Name: variation.Color.Name,
+			RGB:  variation.Color.RGB,
 		},
 		Measurements: cloneMeasurementsForDTO(
-			mv.Measurements,
+			variation.Measurements,
 		),
 		CreatedAt: timePtrToRFC3339(
-			&mv.CreatedAt,
+			&variation.CreatedAt,
 		),
-		CreatedBy: mv.CreatedBy,
+		CreatedBy: variation.CreatedBy,
 		UpdatedAt: timePtrToRFC3339(
-			&mv.UpdatedAt,
+			&variation.UpdatedAt,
 		),
-		UpdatedBy: mv.UpdatedBy,
+		UpdatedBy: variation.UpdatedBy,
 	}
 }
+
 func toAlcoholModelVariationDTO(
-	mv modeldom.AlcoholModelVariation,
+	variation modeldom.AlcoholModelVariation,
 ) modelVariationDTO {
 	return modelVariationDTO{
-		ID:                 mv.ID,
-		ProductBlueprintID: mv.ProductBlueprintID,
+		ID:                 variation.ID,
+		ProductBlueprintID: variation.ProductBlueprintID,
 		Kind: string(
 			modeldom.ModelVariationKindAlcohol,
 		),
-		ModelNumber: mv.ModelNumber,
+		ModelNumber: variation.ModelNumber,
 		Volume: &volumeDTO{
-			Value: mv.Volume.Value,
-			Unit:  mv.Volume.Unit,
+			Value: variation.Volume.Value,
+			Unit:  variation.Volume.Unit,
 		},
 		CreatedAt: timePtrToRFC3339(
-			&mv.CreatedAt,
+			&variation.CreatedAt,
 		),
-		CreatedBy: mv.CreatedBy,
+		CreatedBy: variation.CreatedBy,
 		UpdatedAt: timePtrToRFC3339(
-			&mv.UpdatedAt,
+			&variation.UpdatedAt,
 		),
-		UpdatedBy: mv.UpdatedBy,
+		UpdatedBy: variation.UpdatedBy,
 	}
 }
+
 func toModelVariationDTOs(
 	variations []modeldom.ModelVariation,
 ) ([]modelVariationDTO, error) {
-	out := make(
+	output := make(
 		[]modelVariationDTO,
 		0,
 		len(variations),
 	)
+
 	for _, variation := range variations {
 		dto, err := toModelVariationDTO(
 			variation,
@@ -749,68 +1034,91 @@ func toModelVariationDTOs(
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, dto)
+
+		output = append(
+			output,
+			dto,
+		)
 	}
-	return out, nil
+
+	return output, nil
 }
+
 func cloneMeasurementsForDTO(
 	measurements modeldom.Measurements,
 ) map[string]int {
 	if measurements == nil {
 		return nil
 	}
-	out := make(
+
+	output := make(
 		map[string]int,
 		len(measurements),
 	)
+
 	for key, value := range measurements {
-		out[key] = value
+		output[key] = value
 	}
-	return out
+
+	return output
 }
+
 func timePtrToRFC3339(
-	t *time.Time,
+	value *time.Time,
 ) *string {
-	if t == nil || t.IsZero() {
+	if value == nil || value.IsZero() {
 		return nil
 	}
-	formatted := t.UTC().Format(
+
+	formatted := value.UTC().Format(
 		time.RFC3339,
 	)
+
 	return &formatted
 }
 
 // ------------------------------------------------------------
 // JSON helpers
 // ------------------------------------------------------------
+
 // decodeStrictJSONは未定義フィールドを拒否します。
-// これによりbody側へproductBlueprintIdを送った場合も400になります。
+// body側へproductBlueprintIdを送った場合も400を返します。
 func decodeStrictJSON(
 	r *http.Request,
-	dst any,
+	destination any,
 ) error {
+	if r == nil || r.Body == nil {
+		return errors.New("request body is required")
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
+
+	if err := decoder.Decode(destination); err != nil {
 		return err
 	}
-	var trailing any
+
+	var trailingValue any
+
 	if err := decoder.Decode(
-		&trailing,
+		&trailingValue,
 	); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return errors.New(
 				"multiple json values are not allowed",
 			)
 		}
+
 		return err
 	}
+
 	return nil
 }
 
 // ------------------------------------------------------------
 // Error helpers
 // ------------------------------------------------------------
+
 func writeNotFound(
 	w http.ResponseWriter,
 ) {
@@ -820,39 +1128,46 @@ func writeNotFound(
 		"not_found",
 	)
 }
+
 func writeJSONError(
 	w http.ResponseWriter,
 	statusCode int,
 	message string,
 ) {
 	w.WriteHeader(statusCode)
+
 	_ = json.NewEncoder(w).Encode(
 		map[string]string{
 			"error": message,
 		},
 	)
 }
+
 func writeModelErr(
 	w http.ResponseWriter,
 	err error,
 ) {
-	code := http.StatusInternalServerError
+	statusCode := http.StatusInternalServerError
+
 	switch {
 	case errors.Is(
 		err,
 		ErrModelUnauthenticated,
 	):
-		code = http.StatusUnauthorized
+		statusCode = http.StatusUnauthorized
+
 	case errors.Is(
 		err,
 		ErrModelForbidden,
 	):
-		code = http.StatusForbidden
+		statusCode = http.StatusForbidden
+
 	case errors.Is(
 		err,
 		ErrProductBlueprintPrinted,
 	):
-		code = http.StatusConflict
+		statusCode = http.StatusConflict
+
 	case errors.Is(
 		err,
 		modeldom.ErrInvalidID,
@@ -891,23 +1206,38 @@ func writeModelErr(
 		),
 		errors.Is(
 			err,
+			modeldom.ErrInvalidKind,
+		),
+		errors.Is(
+			err,
+			modeldom.ErrProductMismatch,
+		),
+		errors.Is(
+			err,
 			modeldom.ErrInvalid,
 		):
-		code = http.StatusBadRequest
+		statusCode = http.StatusBadRequest
+
 	case errors.Is(
 		err,
 		modeldom.ErrNotFound,
 	):
-		code = http.StatusNotFound
+		statusCode = http.StatusNotFound
+
 	case errors.Is(
 		err,
-		modeldom.ErrConflict,
-	):
-		code = http.StatusConflict
+		modeldom.ErrAtomicReplaceLimitExceeded,
+	),
+		errors.Is(
+			err,
+			modeldom.ErrConflict,
+		):
+		statusCode = http.StatusConflict
 	}
+
 	writeJSONError(
 		w,
-		code,
+		statusCode,
 		err.Error(),
 	)
 }
