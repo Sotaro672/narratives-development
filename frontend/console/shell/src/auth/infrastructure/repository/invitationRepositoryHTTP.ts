@@ -7,23 +7,13 @@ import { buildConsoleUrl } from "../../../shared/http/apiBase";
 // ------------------------------
 
 export type InvitationInfo = {
-  memberId: string;
-  companyId: string;
   companyName?: string;
-  assignedBrandIds: string[];
   brandNames?: string[];
-  permissions: string[];
-  email?: string;
 };
 
 export type ValidateResponse = {
-  email: string;
-  memberId?: string;
-  companyId?: string;
   companyName?: string;
-  assignedBrandIds?: string[];
   brandNames?: string[];
-  permissions?: string[];
 };
 
 export type CompleteInvitationBackendPayload = {
@@ -78,15 +68,19 @@ function normalizeCompleteInvitationPayload(
   if (!normalized.token) {
     throw new Error("token が指定されていません。");
   }
+
   if (!normalized.lastName) {
     throw new Error("lastName が指定されていません。");
   }
+
   if (!normalized.lastNameKana) {
     throw new Error("lastNameKana が指定されていません。");
   }
+
   if (!normalized.firstName) {
     throw new Error("firstName が指定されていません。");
   }
+
   if (!normalized.firstNameKana) {
     throw new Error("firstNameKana が指定されていません。");
   }
@@ -94,70 +88,27 @@ function normalizeCompleteInvitationPayload(
   return normalized;
 }
 
-function normalizeInvitationInfo(data: InvitationInfo): InvitationInfo {
-  const companyId = safeTrim(data.companyId);
-  const companyName = safeTrim(data.companyName);
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
-  const assignedBrandIds = Array.isArray(data.assignedBrandIds)
-    ? data.assignedBrandIds
-        .map((id) => safeTrim(id))
-        .filter((id) => id.length > 0)
-    : [];
+  const normalized = value
+    .map((item) => safeTrim(item))
+    .filter((item) => item.length > 0);
 
-  const brandNames = Array.isArray(data.brandNames)
-    ? data.brandNames
-        .map((name) => safeTrim(name))
-        .filter((name) => name.length > 0)
-    : [];
-
-  return {
-    memberId: safeTrim(data.memberId),
-    companyId,
-    companyName: companyName || companyId,
-    assignedBrandIds,
-    brandNames: brandNames.length > 0 ? brandNames : assignedBrandIds,
-    permissions: Array.isArray(data.permissions)
-      ? data.permissions
-          .map((permission) => safeTrim(permission))
-          .filter((permission) => permission.length > 0)
-      : [],
-    email: safeTrim(data.email) || undefined,
-  };
+  return Array.from(new Set(normalized));
 }
 
-function normalizeValidateResponse(data: ValidateResponse): ValidateResponse {
-  const companyId = safeTrim(data.companyId);
+function normalizeValidateResponse(
+  data: ValidateResponse,
+): ValidateResponse {
   const companyName = safeTrim(data.companyName);
-
-  const assignedBrandIds = Array.isArray(data.assignedBrandIds)
-    ? data.assignedBrandIds
-        .map((id) => safeTrim(id))
-        .filter((id) => id.length > 0)
-    : [];
-
-  const brandNames = Array.isArray(data.brandNames)
-    ? data.brandNames
-        .map((name) => safeTrim(name))
-        .filter((name) => name.length > 0)
-    : [];
+  const brandNames = normalizeStringArray(data.brandNames);
 
   return {
-    email: safeTrim(data.email),
-    memberId: safeTrim(data.memberId) || undefined,
-    companyId: companyId || undefined,
-    companyName: companyName || companyId || undefined,
-    assignedBrandIds: assignedBrandIds.length > 0 ? assignedBrandIds : undefined,
-    brandNames:
-      brandNames.length > 0
-        ? brandNames
-        : assignedBrandIds.length > 0
-          ? assignedBrandIds
-          : undefined,
-    permissions: Array.isArray(data.permissions)
-      ? data.permissions
-          .map((permission) => safeTrim(permission))
-          .filter((permission) => permission.length > 0)
-      : undefined,
+    companyName: companyName || undefined,
+    brandNames: brandNames.length > 0 ? brandNames : undefined,
   };
 }
 
@@ -166,15 +117,10 @@ function validateResponseToInvitationInfo(
 ): InvitationInfo {
   const normalized = normalizeValidateResponse(data);
 
-  return normalizeInvitationInfo({
-    memberId: normalized.memberId ?? "",
-    companyId: normalized.companyId ?? "",
+  return {
     companyName: normalized.companyName,
-    assignedBrandIds: normalized.assignedBrandIds ?? [],
     brandNames: normalized.brandNames,
-    permissions: normalized.permissions ?? [],
-    email: normalized.email || undefined,
-  });
+  };
 }
 
 async function parseErrorMessage(
@@ -214,14 +160,15 @@ export async function fetchInvitationInfo(
 // validateInvitation
 // - POST /invitations/validate
 // - 招待受諾前の公開APIのためAuthorizationは付与しない
+// - 会社名とブランド名以外の機微情報は取得しない
 // ------------------------------
 
 export async function validateInvitation(
   token: string,
 ): Promise<ValidateResponse> {
-  const trimmedToken = token.trim();
+  const normalizedToken = safeTrim(token);
 
-  if (!trimmedToken) {
+  if (!normalizedToken) {
     throw new Error("token が指定されていません。");
   }
 
@@ -233,7 +180,7 @@ export async function validateInvitation(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      token: trimmedToken,
+      token: normalizedToken,
     }),
   });
 
@@ -247,6 +194,10 @@ export async function validateInvitation(
     );
 
     throw new Error(message);
+  }
+
+  if (!text) {
+    return {};
   }
 
   const data = JSON.parse(text) as ValidateResponse;

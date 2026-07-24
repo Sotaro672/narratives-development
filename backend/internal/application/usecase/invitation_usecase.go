@@ -15,7 +15,7 @@ import (
 // Inbound Ports
 // ==============================
 
-// InvitationQueryPort は、招待リンクのtokenからInvitationInfoを取得するユースケースです。
+// InvitationQueryPortは、招待リンクのtokenからInvitationInfoを取得するユースケースです。
 type InvitationQueryPort interface {
 	GetInvitationInfo(
 		ctx context.Context,
@@ -23,7 +23,7 @@ type InvitationQueryPort interface {
 	) (*invdom.InvitationInfo, error)
 }
 
-// InvitationCommandPort は、招待deliveryを作成または再利用し、
+// InvitationCommandPortは、招待deliveryを作成または再利用し、
 // メール送信queueへ投入するユースケースです。
 //
 // tokenは内部処理だけで使用し、呼出元には返しません。
@@ -34,7 +34,7 @@ type InvitationCommandPort interface {
 	) error
 }
 
-// InvitationCompletePort は、招待完了処理を行うユースケースです。
+// InvitationCompletePortは、招待完了処理を行うユースケースです。
 type InvitationCompletePort interface {
 	CompleteInvitation(
 		ctx context.Context,
@@ -42,7 +42,7 @@ type InvitationCompletePort interface {
 	) error
 }
 
-// InvitationUsecasePort は、招待に関するQuery、Command、Completeをまとめた入口です。
+// InvitationUsecasePortは、招待に関するQuery、Command、Completeをまとめた入口です。
 type InvitationUsecasePort interface {
 	InvitationQueryPort
 	InvitationCommandPort
@@ -78,11 +78,13 @@ type invitationUsecase struct {
 	deliveryQueue          InvitationDeliveryQueuePort
 }
 
-// NewInvitationUsecase は、招待ユースケースの唯一の生成入口です。
+// NewInvitationUsecaseは、招待ユースケースの唯一の生成入口です。
 //
 // invitationTokenRepo:
 //   - tokenの検証
-//   - 招待完了
+//   - 招待完了時のMember更新
+//   - member UID mappingの更新
+//   - token消費
 //
 // invitationDeliveryRepo:
 //   - tokenとdelivery outboxの作成または再利用
@@ -170,7 +172,10 @@ func (u *invitationUsecase) GetInvitationInfo(
 			return nil, invdom.ErrInvitationTokenNotFound
 		}
 
-		return nil, err
+		return nil, fmt.Errorf(
+			"normalize invitation info failed: %w",
+			err,
+		)
 	}
 
 	return &normalizedInfo, nil
@@ -398,6 +403,8 @@ func (u *invitationUsecase) CompleteInvitation(
 		}
 	}
 
+	// Member更新、member UID mapping更新、token消費は、
+	// Repository実装の同一Firestore transaction内で一体的に実行する。
 	if err := u.invitationTokenRepo.CompleteInvitation(
 		ctx,
 		completion,

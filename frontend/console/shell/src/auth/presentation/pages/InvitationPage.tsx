@@ -7,7 +7,7 @@ import { useInvitationPage } from "../hook/useInvitationPage";
 /**
  * 招待ページ（画面幅いっぱい・白背景）
  * - 上部に説明文
- * - 割り当て情報 → 氏名 → パスワード
+ * - 所属情報 → メールアドレス → 氏名 → パスワード
  * - ボタンは画面下部中央
  */
 export default function InvitationPage() {
@@ -17,6 +17,7 @@ export default function InvitationPage() {
   const {
     formRef,
     email,
+    setEmail,
     lastName,
     setLastName,
     lastNameKana,
@@ -29,9 +30,6 @@ export default function InvitationPage() {
     setPassword,
     passwordConfirm,
     setPasswordConfirm,
-    companyId,
-    assignedBrandIds,
-    permissions,
     companyName,
     assignedBrandNames,
     setToken,
@@ -44,46 +42,18 @@ export default function InvitationPage() {
     }
   }, [invitationToken, setToken]);
 
-  const companyText = companyName || companyId || "-";
+  const companyText = companyName || "-";
 
   const assignedBrandText =
     assignedBrandNames.length > 0
       ? assignedBrandNames.join(", ")
-      : assignedBrandIds.length > 0
-        ? assignedBrandIds.join(", ")
-        : "-";
-
-  const permissionsText =
-    permissions.length > 0 ? permissions.join(", ") : "-";
-
-  const emailText = email || "-";
-
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[InvitationPage] invitation info", {
-      token: invitationToken,
-      companyId,
-      companyName,
-      assignedBrandIds,
-      assignedBrandNames,
-      permissions,
-      email,
-    });
-  }, [
-    invitationToken,
-    companyId,
-    companyName,
-    assignedBrandIds,
-    assignedBrandNames,
-    permissions,
-    email,
-  ]);
+      : "-";
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-10 flex flex-col">
         <p className="text-sm text-slate-700 mb-6">
-          招待内容を確認し、氏名とパスワードを設定してください。
+          招待内容を確認し、メールアドレス、氏名、パスワードを設定してください。
         </p>
 
         <form
@@ -93,7 +63,6 @@ export default function InvitationPage() {
           noValidate
         >
           <section className="space-y-3">
-
             <div>
               <label className="block text-sm text-slate-600 mb-1">
                 会社名
@@ -111,30 +80,30 @@ export default function InvitationPage() {
                 {assignedBrandText}
               </p>
             </div>
+          </section>
 
-            <div>
-              <label className="block text-sm text-slate-600 mb-1">
-                権限
-              </label>
-              <p className="text-sm text-slate-900 bg-white rounded px-3 py-2 border border-slate-300 whitespace-pre-wrap break-all">
-                {permissionsText}
-              </p>
-            </div>
-
+          <section className="space-y-4">
             <div>
               <label className="block text-sm text-slate-600 mb-1">
                 メールアドレス
               </label>
-              <p className="text-sm text-slate-900 bg-white rounded px-3 py-2 border border-slate-300 break-all">
-                {emailText}
-              </p>
+              <Input
+                type="email"
+                variant="default"
+                className="w-full rounded border border-slate-300 bg-white px-3 py-2"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@example.com"
+              />
             </div>
           </section>
 
           <section className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-slate-600 mb-1">姓</label>
+                <label className="block text-sm text-slate-600 mb-1">
+                  姓
+                </label>
                 <Input
                   variant="default"
                   className="w-full rounded border border-slate-300 bg-white px-3 py-2"
@@ -143,6 +112,7 @@ export default function InvitationPage() {
                   placeholder="山田"
                 />
               </div>
+
               <div>
                 <label className="block text-sm text-slate-600 mb-1">
                   姓（かな）
@@ -159,7 +129,9 @@ export default function InvitationPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-slate-600 mb-1">名</label>
+                <label className="block text-sm text-slate-600 mb-1">
+                  名
+                </label>
                 <Input
                   variant="default"
                   className="w-full rounded border border-slate-300 bg-white px-3 py-2"
@@ -168,6 +140,7 @@ export default function InvitationPage() {
                   placeholder="太郎"
                 />
               </div>
+
               <div>
                 <label className="block text-sm text-slate-600 mb-1">
                   名（かな）

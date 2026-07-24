@@ -11,7 +11,6 @@ import (
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	invitationdom "narratives/internal/domain/invitation"
-	permdom "narratives/internal/domain/permission"
 )
 
 const invitationPageURL = "https://narratives-console-dev.web.app/invitation"
@@ -151,41 +150,6 @@ func (m *InvitationMailer) resolveBrandDisplayNames(
 	return results
 }
 
-func (m *InvitationMailer) resolvePermissionDisplayNamesJa(
-	permissionNames []string,
-) []string {
-	normalizedPermissionNames :=
-		normalizeInvitationDisplayValues(
-			permissionNames,
-		)
-
-	if len(normalizedPermissionNames) == 0 {
-		return nil
-	}
-
-	results := make(
-		[]string,
-		0,
-		len(normalizedPermissionNames),
-	)
-
-	for _, permissionName := range normalizedPermissionNames {
-		displayName, ok :=
-			permdom.DisplayNameJaFromPermissionName(
-				permissionName,
-			)
-
-		if ok && displayName != "" {
-			results = append(results, displayName)
-			continue
-		}
-
-		results = append(results, permissionName)
-	}
-
-	return results
-}
-
 // SendInvitationEmailは、InvitationDeliveryUsecaseから受け取った
 // delivery情報を使用して招待メールを送信します。
 //
@@ -270,15 +234,6 @@ func (m *InvitationMailer) SendInvitationEmail(
 		", ",
 	)
 
-	permissionLabels :=
-		m.resolvePermissionDisplayNamesJa(
-			info.Permissions,
-		)
-	permissionsDisplay := strings.Join(
-		permissionLabels,
-		", ",
-	)
-
 	body := fmt.Sprintf(
 		`管理者から「AMOL Console」へのメンバー招待が届いています。
 
@@ -288,10 +243,10 @@ func (m *InvitationMailer) SendInvitationEmail(
 %s
 
 【所属情報（参考表示）】
-Company    : %s
-Brands     : %s
-Permissions: %s
+Company: %s
+Brands : %s
 
+※権限情報はアカウント登録完了後に確認できます。
 ※本メールに心当たりがない場合は、このメッセージは破棄してください。
 
 --
@@ -299,7 +254,6 @@ AMOL Console`,
 		invitationURL,
 		companyDisplay,
 		brandsDisplay,
-		permissionsDisplay,
 	)
 
 	sendResult, err := m.client.SendWithResult(
