@@ -5,8 +5,11 @@ import type * as React from "react";
 import type { MeasurementOption } from "../domain/entity/catalog";
 
 /**
- * モデル作成（CreateModelVariation など）のための
- * アプリケーション層の型定義とユーティリティをまとめるファイル。
+ * Model variation作成画面で使用する型定義と
+ * 表示用ユーティリティをまとめる。
+ *
+ * ProductBlueprintは容量を保持しない。
+ * Alcohol商品の容量はModel variationのVolumeだけを正とする。
  */
 
 /* =========================================================
@@ -23,7 +26,7 @@ export type Volume = {
 export type ModelVariationMode = "edit" | "view";
 
 /* =========================================================
- * SizeVariationCard / apparel Variation 関連の正規型
+ * SizeVariationCard / apparel variation
  * =======================================================*/
 
 export type SizeRow = {
@@ -43,16 +46,14 @@ export type SizeRow = {
 };
 
 /* =========================================================
- * VolumeVariationCard / alcohol Variation 関連の正規型
+ * VolumeVariationCard / alcohol variation
  * =======================================================*/
 
 /**
- * alcohol model variation は容量のみを model 側の正とする。
+ * Alcohol商品の容量入力行。
  *
- * 例:
- * - 720 ml
- * - 1000 ml
- * - 1800 ml
+ * 容量はProductBlueprintやcategoryFieldsには保存せず、
+ * Model variationのvolumeとして保存する。
  */
 export type VolumeRow = {
   id: string;
@@ -61,23 +62,24 @@ export type VolumeRow = {
 };
 
 /**
- * 既存の SizeLike 相当として、画面表示用に容量を label 化した型。
- * ModelNumberCard を流用する場合は sizeLabel に "720ml" のような値を入れる。
+ * Alcohol variationの画面表示用データ。
+ *
+ * volumeLabelは保持しない。
+ * 表示文字列はtoVolumeLabel(volume)で都度生成する。
  */
 export type VolumeLike = {
   id: string;
-  volumeLabel: string;
   volume: Volume;
 };
 
 /* =========================================================
- * ModelNumber 関連
+ * ModelNumber
  * =======================================================*/
 
 /**
- * apparel 用 modelNumber。
+ * Apparel用model number。
  *
- * size + color ごとに modelNumber を持つ。
+ * sizeとcolorの組み合わせごとにmodel numberを持つ。
  */
 export type ApparelModelNumber = {
   kind?: "apparel";
@@ -88,25 +90,25 @@ export type ApparelModelNumber = {
 };
 
 /**
- * alcohol 用 modelNumber。
+ * Alcohol用model number。
  *
- * volume ごとに modelNumber を持つ。
+ * 容量はvolumeだけを正とする。
+ * 表示用のvolumeLabelは保持しない。
  */
 export type AlcoholModelNumber = {
   kind: "alcohol";
   volume: Volume;
-  volumeLabel: string;
   code: string;
 };
 
 /**
- * 既存互換:
- * 既存コードで ModelNumber を apparel 前提として参照している箇所を壊さないため、
- * ModelNumber は従来通り apparel 用の alias とする。
+ * 既存のApparel向け利用箇所で使用する型。
  */
 export type ModelNumber = ApparelModelNumber;
 
-export type AnyModelNumber = ApparelModelNumber | AlcoholModelNumber;
+export type AnyModelNumber =
+  | ApparelModelNumber
+  | AlcoholModelNumber;
 
 export type SizeLike = {
   id: string;
@@ -131,7 +133,10 @@ export type UseModelCardParams = {
 };
 
 export type UseModelCardResult = {
-  getCode: (sizeLabel: string, color: string) => string;
+  getCode: (
+    sizeLabel: string,
+    color: string,
+  ) => string;
   onChangeModelNumber: (
     sizeLabel: string,
     color: string,
@@ -148,26 +153,37 @@ export type UseAlcoholModelCardParams = {
   kind: "alcohol";
   volumes: VolumeLike[];
   modelNumbers: AlcoholModelNumber[];
-  onChangeModelNumber?: (volumeLabel: string, nextCode: string) => void;
+  onChangeModelNumber?: (
+    volume: Volume,
+    nextCode: string,
+  ) => void;
 };
 
 export type UseAlcoholModelCardResult = {
-  getCode: (volumeLabel: string) => string;
-  onChangeModelNumber: (volumeLabel: string, nextCode: string) => void;
+  getCode: (volume: Volume) => string;
+  onChangeModelNumber: (
+    volume: Volume,
+    nextCode: string,
+  ) => void;
   flatModelNumbers: AlcoholModelNumber[];
 };
 
 /* =========================================================
- * SizeVariationCard 関連
+ * SizeVariationCard
  * =======================================================*/
 
-export type SizePatch = Partial<Omit<SizeRow, "id">>;
+export type SizePatch = Partial<
+  Omit<SizeRow, "id">
+>;
 
 export type UseSizeVariationCardParams = {
   sizes: SizeRow[];
   mode?: ModelVariationMode;
   measurementOptions?: MeasurementOption[];
-  onChangeSize?: (id: string, patch: SizePatch) => void;
+  onChangeSize?: (
+    id: string,
+    patch: SizePatch,
+  ) => void;
 };
 
 export type UseSizeVariationCardResult = {
@@ -180,19 +196,26 @@ export type UseSizeVariationCardResult = {
   handleChange: (
     id: string,
     key: keyof Omit<SizeRow, "id">,
-  ) => (e: React.ChangeEvent<HTMLInputElement>) => void;
+  ) => (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => void;
 };
 
 /* =========================================================
- * VolumeVariationCard 関連
+ * VolumeVariationCard
  * =======================================================*/
 
-export type VolumePatch = Partial<Omit<VolumeRow, "id">>;
+export type VolumePatch = Partial<
+  Omit<VolumeRow, "id">
+>;
 
 export type UseVolumeVariationCardParams = {
   volumes: VolumeRow[];
   mode?: ModelVariationMode;
-  onChangeVolume?: (id: string, patch: VolumePatch) => void;
+  onChangeVolume?: (
+    id: string,
+    patch: VolumePatch,
+  ) => void;
 };
 
 export type UseVolumeVariationCardResult = {
@@ -204,57 +227,78 @@ export type UseVolumeVariationCardResult = {
   handleChange: (
     id: string,
     key: keyof Omit<VolumeRow, "id">,
-  ) => (e: React.ChangeEvent<HTMLInputElement>) => void;
+  ) => (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => void;
 };
 
 /* =========================================================
- * Helpers
+ * Volume helpers
  * =======================================================*/
 
-export function toVolumeLabel(volume: Volume): string {
-  const value = Number.isFinite(volume.value) ? volume.value : 0;
-  const unit = volume.unit.trim() || "ml";
+/**
+ * Volumeを比較やMapのkeyに使用できる文字列へ変換する。
+ *
+ * この値は保存用データではなく、画面内での照合にだけ使用する。
+ */
+export function toVolumeKey(
+  volume: Volume,
+): string {
+  const value = Number.isFinite(volume.value)
+    ? volume.value
+    : 0;
+
+  const unit = volume.unit || "ml";
+
+  return `${value}:${unit}`;
+}
+
+/**
+ * Model variationのVolumeから表示文字列を生成する。
+ *
+ * 表示文字列は派生値であり、保存対象にはしない。
+ */
+export function toVolumeLabel(
+  volume: Volume,
+): string {
+  const value = Number.isFinite(volume.value)
+    ? volume.value
+    : 0;
+
+  const unit = volume.unit || "ml";
 
   return `${value}${unit}`;
 }
 
-export function volumeRowToVolume(row: VolumeRow): Volume {
+/**
+ * 入力行をModel variation保存用のVolumeへ変換する。
+ */
+export function volumeRowToVolume(
+  row: VolumeRow,
+): Volume {
   return {
     value: row.volumeValue,
-    unit: row.volumeUnit,
+    unit: row.volumeUnit || "ml",
   };
 }
 
-export function volumeRowToVolumeLike(row: VolumeRow): VolumeLike {
-  const volume = volumeRowToVolume(row);
-
+/**
+ * 入力行をAlcohol variationの画面表示用データへ変換する。
+ */
+export function volumeRowToVolumeLike(
+  row: VolumeRow,
+): VolumeLike {
   return {
     id: row.id,
-    volume,
-    volumeLabel: toVolumeLabel(volume),
+    volume: volumeRowToVolume(row),
   };
 }
 
-export function volumeRowsToVolumeLikes(rows: VolumeRow[]): VolumeLike[] {
+/**
+ * 複数の容量入力行を画面表示用データへ変換する。
+ */
+export function volumeRowsToVolumeLikes(
+  rows: VolumeRow[],
+): VolumeLike[] {
   return rows.map(volumeRowToVolumeLike);
-}
-
-export function parseVolumeLabel(label: string): Volume {
-  const trimmed = label.trim();
-
-  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
-  if (!match) {
-    return {
-      value: 0,
-      unit: "ml",
-    };
-  }
-
-  const value = Number(match[1]);
-  const unit = match[2] || "ml";
-
-  return {
-    value: Number.isFinite(value) ? value : 0,
-    unit,
-  };
 }

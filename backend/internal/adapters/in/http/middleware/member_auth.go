@@ -206,10 +206,12 @@ func CompanyID(r *http.Request) (string, bool) {
 	if v == nil {
 		return "", false
 	}
+
 	s, ok := v.(string)
 	if !ok || s == "" {
 		return "", false
 	}
+
 	return s, true
 }
 
@@ -220,6 +222,7 @@ func CurrentUIDAndEmail(r *http.Request) (uid string, email string, ok bool) {
 	if !okUID || u == "" {
 		return "", "", false
 	}
+
 	uid = u
 
 	if vEmail := r.Context().Value(ctxKeyEmail); vEmail != nil {
@@ -237,20 +240,11 @@ func CurrentFullName(r *http.Request) (string, bool) {
 	if v == nil {
 		return "", false
 	}
+
 	s, ok := v.(string)
 	if !ok || s == "" {
 		return "", false
 	}
-	return s, true
-}
 
-// CurrentMemberID は現在ログイン中の member docId を取得します。
-// usecase.WithMemberID で context に格納される値を参照したい場合は、
-// application/usecase 側の getter を使ってください。
-func CurrentMemberID(r *http.Request) (string, bool) {
-	member, ok := CurrentMember(r)
-	if !ok || member == nil {
-		return "", false
-	}
-	return "", false
+	return s, true
 }

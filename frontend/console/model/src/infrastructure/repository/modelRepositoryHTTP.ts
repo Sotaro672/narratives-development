@@ -1,4 +1,4 @@
-// frontend/console/model/src/infrastructure/repository/modelRepositoryHTTP.ts
+// frontend/console/model/src/infrastructure/repository/http/modelRepositoryHTTP.ts
 
 import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
 import {
@@ -39,7 +39,7 @@ export type CreateModelVariationRequest =
   | CreateAlcoholModelVariationRequest;
 
 /* =========================================================
- * 正スキーマ（backend response は camelCase を正とする）
+ * 正スキーマ
  * =======================================================*/
 
 export type ApparelModelVariationResponse = {
@@ -72,7 +72,7 @@ export type ModelVariationResponse =
   | AlcoholModelVariationResponse;
 
 /* =========================================================
- * Type guards / helpers
+ * Helpers
  * =======================================================*/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,13 +88,20 @@ function isAlcoholCreatePayload(
 function cleanMeasurements(
   value?: Record<string, number | null | undefined>,
 ): Record<string, number> | undefined {
-  if (!value) return undefined;
+  if (!value) {
+    return undefined;
+  }
 
   const out: Record<string, number> = {};
 
   for (const [key, rawValue] of Object.entries(value)) {
-    if (!key) continue;
-    if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) continue;
+    if (!key) {
+      continue;
+    }
+
+    if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
+      continue;
+    }
 
     out[key] = rawValue;
   }
@@ -102,9 +109,13 @@ function cleanMeasurements(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-function parseModelVariationResponse(json: unknown): ModelVariationResponse {
+function parseModelVariationResponse(
+  json: unknown,
+): ModelVariationResponse {
   if (!isRecord(json)) {
-    throw new Error("modelRepositoryHTTP: model variation response is not an object");
+    throw new Error(
+      "modelRepositoryHTTP: model variation response is not an object",
+    );
   }
 
   if (
@@ -113,20 +124,30 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
     typeof json.kind !== "string" ||
     typeof json.modelNumber !== "string"
   ) {
-    throw new Error("modelRepositoryHTTP: model variation response has invalid base fields");
+    throw new Error(
+      "modelRepositoryHTTP: model variation response has invalid base fields",
+    );
   }
 
   const base = {
     id: json.id,
     productBlueprintId: json.productBlueprintId,
     modelNumber: json.modelNumber,
-    createdAt: typeof json.createdAt === "string" ? json.createdAt : undefined,
-    updatedAt: typeof json.updatedAt === "string" ? json.updatedAt : undefined,
+    createdAt:
+      typeof json.createdAt === "string"
+        ? json.createdAt
+        : undefined,
+    updatedAt:
+      typeof json.updatedAt === "string"
+        ? json.updatedAt
+        : undefined,
   };
 
   if (json.kind === "alcohol") {
     if (!isRecord(json.volume)) {
-      throw new Error("modelRepositoryHTTP: alcohol model variation response has invalid volume");
+      throw new Error(
+        "modelRepositoryHTTP: alcohol model variation response has invalid volume",
+      );
     }
 
     if (
@@ -134,7 +155,9 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
       !Number.isFinite(json.volume.value) ||
       typeof json.volume.unit !== "string"
     ) {
-      throw new Error("modelRepositoryHTTP: alcohol model variation response has invalid volume fields");
+      throw new Error(
+        "modelRepositoryHTTP: alcohol model variation response has invalid volume fields",
+      );
     }
 
     return {
@@ -149,11 +172,15 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
 
   if (json.kind === "apparel") {
     if (typeof json.size !== "string") {
-      throw new Error("modelRepositoryHTTP: apparel model variation response has invalid size");
+      throw new Error(
+        "modelRepositoryHTTP: apparel model variation response has invalid size",
+      );
     }
 
     if (!isRecord(json.color)) {
-      throw new Error("modelRepositoryHTTP: apparel model variation response has invalid color");
+      throw new Error(
+        "modelRepositoryHTTP: apparel model variation response has invalid color",
+      );
     }
 
     if (
@@ -161,21 +188,32 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
       typeof json.color.rgb !== "number" ||
       !Number.isFinite(json.color.rgb)
     ) {
-      throw new Error("modelRepositoryHTTP: apparel model variation response has invalid color fields");
+      throw new Error(
+        "modelRepositoryHTTP: apparel model variation response has invalid color fields",
+      );
     }
 
     const measurements: Record<string, number> = {};
 
     if (json.measurements !== undefined) {
       if (!isRecord(json.measurements)) {
-        throw new Error("modelRepositoryHTTP: apparel model variation response has invalid measurements");
+        throw new Error(
+          "modelRepositoryHTTP: apparel model variation response has invalid measurements",
+        );
       }
 
       for (const [key, rawValue] of Object.entries(json.measurements)) {
-        if (!key) continue;
+        if (!key) {
+          continue;
+        }
 
-        if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
-          throw new Error("modelRepositoryHTTP: apparel model variation response has invalid measurement value");
+        if (
+          typeof rawValue !== "number" ||
+          !Number.isFinite(rawValue)
+        ) {
+          throw new Error(
+            "modelRepositoryHTTP: apparel model variation response has invalid measurement value",
+          );
         }
 
         measurements[key] = rawValue;
@@ -191,24 +229,183 @@ function parseModelVariationResponse(json: unknown): ModelVariationResponse {
         rgb: json.color.rgb,
       },
       measurements:
-        Object.keys(measurements).length > 0 ? measurements : undefined,
+        Object.keys(measurements).length > 0
+          ? measurements
+          : undefined,
     };
   }
 
-  throw new Error(`modelRepositoryHTTP: unsupported model variation kind: ${json.kind}`);
+  throw new Error(
+    `modelRepositoryHTTP: unsupported model variation kind: ${json.kind}`,
+  );
 }
 
-/**
- * POST /models/{productBlueprintId}/variations の成功レスポンスから id を決定する
- * - 正は JSON body の id
- * - Location header fallback は使わない
- */
-function resolveCreatedVariationId(json: unknown): string {
-  if (!isRecord(json) || typeof json.id !== "string" || !json.id.trim()) {
+function resolveCreatedVariationId(
+  json: unknown,
+  locationHeader: string | null,
+): string {
+  if (isRecord(json)) {
+    if (typeof json.id === "string" && json.id.trim()) {
+      return json.id.trim();
+    }
+
+    if (
+      isRecord(json.data) &&
+      typeof json.data.id === "string" &&
+      json.data.id.trim()
+    ) {
+      return json.data.id.trim();
+    }
+
+    if (
+      isRecord(json.modelVariation) &&
+      typeof json.modelVariation.id === "string" &&
+      json.modelVariation.id.trim()
+    ) {
+      return json.modelVariation.id.trim();
+    }
+  }
+
+  const location = String(locationHeader ?? "").trim();
+
+  if (!location) {
     return "";
   }
 
-  return json.id.trim();
+  const match = location.match(
+    /\/models\/([^/?#]+)(?:[/?#]|$)/,
+  );
+
+  if (!match?.[1]) {
+    return "";
+  }
+
+  return decodeURIComponent(match[1]).trim();
+}
+
+function normalizeVolume(volume: Volume): Volume {
+  return {
+    value:
+      typeof volume.value === "number" &&
+      Number.isFinite(volume.value)
+        ? volume.value
+        : 0,
+    unit: String(volume.unit ?? "").trim() || "ml",
+  };
+}
+
+function volumeKey(volume: Volume): string {
+  const normalized = normalizeVolume(volume);
+
+  if (normalized.value <= 0) {
+    return "";
+  }
+
+  return `${normalized.value}${normalized.unit}`;
+}
+
+function sameCreatePayload(
+  payload: CreateModelVariationRequest,
+  variation: ModelVariationResponse,
+): boolean {
+  if (payload.kind !== variation.kind) {
+    return false;
+  }
+
+  if (
+    payload.modelNumber.trim() !==
+    variation.modelNumber.trim()
+  ) {
+    return false;
+  }
+
+  if (
+    payload.kind === "alcohol" &&
+    variation.kind === "alcohol"
+  ) {
+    return volumeKey(payload.volume) === volumeKey(variation.volume);
+  }
+
+  if (
+    payload.kind === "apparel" &&
+    variation.kind === "apparel"
+  ) {
+    return (
+      payload.size.trim() === variation.size.trim() &&
+      payload.color.trim() === variation.color.name.trim()
+    );
+  }
+
+  return false;
+}
+
+function withResolvedId(
+  json: unknown,
+  id: string,
+  payload: CreateModelVariationRequest,
+  productBlueprintId: string,
+): unknown {
+  if (isRecord(json)) {
+    const base = {
+      ...json,
+      id,
+      productBlueprintId,
+      kind: payload.kind,
+      modelNumber:
+        typeof json.modelNumber === "string"
+          ? json.modelNumber
+          : payload.modelNumber,
+    };
+
+    if (payload.kind === "alcohol") {
+      return {
+        ...base,
+        volume: isRecord(json.volume)
+          ? json.volume
+          : payload.volume,
+      };
+    }
+
+    return {
+      ...base,
+      size:
+        typeof json.size === "string"
+          ? json.size
+          : payload.size,
+      color: isRecord(json.color)
+        ? json.color
+        : {
+            name: payload.color,
+            rgb: payload.rgb,
+          },
+      measurements: isRecord(json.measurements)
+        ? json.measurements
+        : cleanMeasurements(payload.measurements),
+    };
+  }
+
+  if (payload.kind === "alcohol") {
+    return {
+      id,
+      productBlueprintId,
+      kind: "alcohol",
+      modelNumber: payload.modelNumber,
+      volume: payload.volume,
+    };
+  }
+
+  return {
+    id,
+    productBlueprintId,
+    kind: "apparel",
+    modelNumber: payload.modelNumber,
+    size: payload.size,
+    color: {
+      name: payload.color,
+      rgb: payload.rgb,
+    },
+    measurements: cleanMeasurements(payload.measurements),
+  };
 }
 
 function toCreateRequestBody(
@@ -220,7 +417,7 @@ function toCreateRequestBody(
       kind: "alcohol",
       productBlueprintId,
       modelNumber: payload.modelNumber,
-      volume: payload.volume,
+      volume: normalizeVolume(payload.volume),
     };
   }
 
@@ -235,6 +432,24 @@ function toCreateRequestBody(
   };
 }
 
+function parseErrorDetail(text: string): string {
+  if (!text) {
+    return "";
+  }
+
+  try {
+    const detail: unknown = JSON.parse(text);
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    return JSON.stringify(detail);
+  } catch {
+    return text;
+  }
+}
+
 /* =========================================================
  * POST /models/{productBlueprintId}/variations
  * =======================================================*/
@@ -243,18 +458,24 @@ export async function createModelVariation(
   productBlueprintId: string,
   payload: CreateModelVariationRequest,
 ): Promise<ModelVariationResponse> {
-  const normalizedProductBlueprintId = productBlueprintId.trim();
+  const normalizedProductBlueprintId =
+    productBlueprintId.trim();
 
   const url = `${API_BASE}/models/${encodeURIComponent(
     normalizedProductBlueprintId,
   )}/variations`;
 
-  const body = toCreateRequestBody(normalizedProductBlueprintId, {
+  const normalizedPayload = {
     ...payload,
     productBlueprintId: normalizedProductBlueprintId,
-  } as CreateModelVariationRequest);
+  } as CreateModelVariationRequest;
 
-  const res = await fetch(url, {
+  const body = toCreateRequestBody(
+    normalizedProductBlueprintId,
+    normalizedPayload,
+  );
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       ...(await getAuthJsonHeadersOrThrow()),
@@ -263,35 +484,57 @@ export async function createModelVariation(
     body: JSON.stringify(body),
   });
 
-  const text = await res.text().catch(() => "");
+  const text = await response.text().catch(() => "");
 
-  if (!res.ok) {
-    let detail: unknown = text;
-
-    try {
-      detail = text ? JSON.parse(text) : undefined;
-    } catch {
-      //
-    }
-
-    const msg =
-      typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : "";
+  if (!response.ok) {
+    const detail = parseErrorDetail(text);
 
     throw new Error(
-      `モデルバリエーションの作成に失敗しました (${res.status}) ${
-        res.statusText ?? ""
-      } ${msg}`,
+      `モデルバリエーションの作成に失敗しました (${response.status}) ${
+        response.statusText ?? ""
+      } ${detail}`,
     );
   }
 
-  const json = text ? JSON.parse(text) : {};
-  const id = resolveCreatedVariationId(json);
+  const json: unknown = text ? JSON.parse(text) : {};
+  let id = resolveCreatedVariationId(
+    json,
+    response.headers.get("Location"),
+  );
 
   if (!id) {
-    throw new Error("modelRepositoryHTTP: 作成成功後の model id を取得できませんでした");
+    const variations =
+      await listModelVariationsByProductBlueprintId(
+        normalizedProductBlueprintId,
+      );
+
+    const matched = [...variations]
+      .reverse()
+      .find((variation) =>
+        sameCreatePayload(normalizedPayload, variation),
+      );
+
+    id = matched?.id.trim() ?? "";
+
+    if (matched && id) {
+      return matched;
+    }
   }
 
-  return parseModelVariationResponse(json);
+  if (!id) {
+    throw new Error(
+      "modelRepositoryHTTP: 作成成功後のmodel variation IDを取得できませんでした",
+    );
+  }
+
+  return parseModelVariationResponse(
+    withResolvedId(
+      json,
+      id,
+      normalizedPayload,
+      normalizedProductBlueprintId,
+    ),
+  );
 }
 
 /* =========================================================
@@ -302,18 +545,26 @@ export async function createModelVariations(
   productBlueprintId: string,
   variations: CreateModelVariationRequest[],
 ): Promise<string[]> {
-  const normalizedProductBlueprintId = productBlueprintId.trim();
+  const normalizedProductBlueprintId =
+    productBlueprintId.trim();
+
   const ids: string[] = [];
 
   for (const variation of variations) {
-    const created = await createModelVariation(normalizedProductBlueprintId, {
-      ...variation,
-      productBlueprintId: normalizedProductBlueprintId,
-    } as CreateModelVariationRequest);
+    const created = await createModelVariation(
+      normalizedProductBlueprintId,
+      {
+        ...variation,
+        productBlueprintId: normalizedProductBlueprintId,
+      } as CreateModelVariationRequest,
+    );
 
     const id = created.id.trim();
+
     if (!id) {
-      throw new Error("modelRepositoryHTTP: 作成済み variation の id が空です");
+      throw new Error(
+        "modelRepositoryHTTP: 作成済みmodel variationのIDが空です",
+      );
     }
 
     ids.push(id);
@@ -329,9 +580,13 @@ export async function createModelVariations(
 export async function getModelVariationById(
   modelId: string,
 ): Promise<ModelVariationResponse> {
-  const url = `${API_BASE}/models/${encodeURIComponent(modelId.trim())}`;
+  const normalizedModelId = modelId.trim();
 
-  const res = await fetch(url, {
+  const url = `${API_BASE}/models/${encodeURIComponent(
+    normalizedModelId,
+  )}`;
+
+  const response = await fetch(url, {
     method: "GET",
     headers: {
       ...(await getAuthHeadersOrThrow()),
@@ -339,15 +594,19 @@ export async function getModelVariationById(
     },
   });
 
-  const text = await res.text().catch(() => "");
+  const text = await response.text().catch(() => "");
 
-  if (!res.ok) {
+  if (!response.ok) {
+    const detail = parseErrorDetail(text);
+
     throw new Error(
-      `モデルバリエーション取得失敗 (${res.status}) ${res.statusText}`,
+      `モデルバリエーション取得失敗 (${response.status}) ${
+        response.statusText
+      } ${detail}`,
     );
   }
 
-  const json = text ? JSON.parse(text) : {};
+  const json: unknown = text ? JSON.parse(text) : {};
 
   return parseModelVariationResponse(json);
 }
@@ -359,13 +618,14 @@ export async function getModelVariationById(
 export async function listModelVariationsByProductBlueprintId(
   productBlueprintId: string,
 ): Promise<ModelVariationResponse[]> {
-  const normalizedProductBlueprintId = productBlueprintId.trim();
+  const normalizedProductBlueprintId =
+    productBlueprintId.trim();
 
   const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(
     normalizedProductBlueprintId,
   )}/variations`;
 
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     method: "GET",
     headers: {
       ...(await getAuthHeadersOrThrow()),
@@ -373,19 +633,27 @@ export async function listModelVariationsByProductBlueprintId(
     },
   });
 
-  const text = await res.text().catch(() => "");
+  const text = await response.text().catch(() => "");
 
-  if (!res.ok) {
+  if (!response.ok) {
+    const detail = parseErrorDetail(text);
+
     throw new Error(
-      `モデルバリエーション一覧取得失敗 (${res.status}) ${res.statusText}`,
+      `モデルバリエーション一覧取得失敗 (${response.status}) ${
+        response.statusText
+      } ${detail}`,
     );
   }
 
-  const json = text ? JSON.parse(text) : [];
+  const json: unknown = text ? JSON.parse(text) : [];
 
   if (!Array.isArray(json)) {
-    throw new Error("modelRepositoryHTTP: model variation list response is not an array");
+    throw new Error(
+      "modelRepositoryHTTP: model variation list response is not an array",
+    );
   }
 
-  return json.map(parseModelVariationResponse);
+  return json.map((variation) =>
+    parseModelVariationResponse(variation),
+  );
 }
