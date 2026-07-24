@@ -7,11 +7,11 @@ import (
 )
 
 // ========================================
-// Create/Update inputs (contract only)
+// Create/Update inputs
 // ========================================
 
 type CreateInput struct {
-	// ★ Create時に usecase で生成して渡す
+	// Create時にUsecaseで生成して渡す。
 	ID string `json:"id"`
 
 	ProductName string `json:"productName"`
@@ -20,95 +20,125 @@ type CreateInput struct {
 	BrandID   string `json:"brandId"`
 	CompanyID string `json:"companyId"`
 
-	// productBlueprintCategories の正データから usecase で生成して渡す denormalized snapshot
+	// productBlueprintCategoriesの正データから
+	// Usecaseで生成して渡すdenormalized snapshot。
 	ProductBlueprintCategory ProductBlueprintCategorySnapshot `json:"productBlueprintCategory"`
 
-	// CategoryFields はカテゴリ別の productBlueprint 入力値を保持する。
+	// CategoryFieldsはカテゴリ別のProductBlueprint入力値を保持する。
 	//
 	// 例:
-	// - alcohol.sake:
-	//   vintage, region, material, alcoholContent, volume
-	// - apparel.tops:
-	//   weight, fit, material
-	// - cosmetics.skincare:
-	//   material, volume
+	//   - alcohol.sake:
+	//     vintage、region、material、alcoholContent
+	//   - apparel.tops:
+	//     weight、fit、material
+	//   - cosmetics.skincare:
+	//     material、volume
 	//
-	// brandId / productName / productIdTagType / description など、
-	// ProductBlueprint の共通 field はここには入れない。
+	// Alcoholの容量はCategoryFieldsへ保存せず、
+	// Model variationのVolumeだけを正とする。
+	//
+	// color、size、measurementsなどのModel variation固有値も
+	// CategoryFieldsへ保存しない。
+	//
+	// brandId、productName、productIdTagType、descriptionなどの
+	// ProductBlueprint共通fieldもここには入れない。
 	CategoryFields CategoryFields `json:"categoryFields,omitempty"`
 
 	ProductIdTag ProductIDTag `json:"productIdTag"`
 	AssigneeID   string       `json:"assigneeId"`
 
-	// ★ modelRefs（modelId + displayOrder）
-	// NOTE:
-	// - create 時点では空でもよい
-	// - modelRefs は ModelUsecase 側で models collection を正として同期する
-	// - 永続化は adapter 側で modelRefs として保存する想定
+	// ModelRefsはmodelIdとdisplayOrderを保持する。
+	//
+	// create時点では空でもよい。
+	// ModelRefsはModelUsecase側でmodels collectionを正として同期する。
+	// 永続化層ではmodelRefsとして保存する。
 	ModelRefs []ModelRef `json:"modelRefs,omitempty"`
 
 	CreatedBy *string    `json:"createdBy,omitempty"`
-	CreatedAt *time.Time `json:"createdAt,omitempty"` // ★ usecase が必ず埋める（domain.validate が必須）
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
 }
 
 type Patch struct {
 	ProductName *string `json:"productName,omitempty"`
 	Description *string `json:"description,omitempty"`
 
-	// ✅ 既存：更新に使うID
+	// ProductBlueprintに保存するBrand ID。
 	BrandID *string `json:"brandId,omitempty"`
 
-	// ✅ 追加：表示用（InventoryDetailなど read-model で埋める）
-	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
+	// BrandNameはread-modelで使用する表示用項目。
+	// ProductBlueprint Repositoryでは永続化しない。
 	BrandName *string `json:"brandName,omitempty"`
 
-	// ✅ company (read-only display fields)
-	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
-	CompanyID   *string `json:"companyId,omitempty"`
+	// CompanyIDはProductBlueprintに保存するCompany ID。
+	//
+	// マルチテナント境界に関わるため、通常の更新処理では
+	// 原則として変更しない。変更を許可する場合はUsecase側で
+	// 認可と整合性を確認してから設定する。
+	CompanyID *string `json:"companyId,omitempty"`
+
+	// CompanyNameはread-modelで使用する表示用項目。
+	// ProductBlueprint Repositoryでは永続化しない。
 	CompanyName *string `json:"companyName,omitempty"`
 
-	// productBlueprintCategories の正データから usecase で生成して渡す denormalized snapshot
+	// productBlueprintCategoriesの正データから
+	// Usecaseで生成して渡すdenormalized snapshot。
 	ProductBlueprintCategory *ProductBlueprintCategorySnapshot `json:"productBlueprintCategory,omitempty"`
 
-	// CategoryFields はカテゴリ別の productBlueprint 入力値を保持する。
+	// CategoryFieldsはカテゴリ別のProductBlueprint入力値を保持する。
 	//
 	// 例:
-	// - alcohol.sake:
-	//   vintage, region, material, alcoholContent, volume
-	// - apparel.tops:
-	//   weight, fit, material
-	// - cosmetics.skincare:
-	//   material, volume
+	//   - alcohol.sake:
+	//     vintage、region、material、alcoholContent
+	//   - apparel.tops:
+	//     weight、fit、material
+	//   - cosmetics.skincare:
+	//     material、volume
 	//
-	// nil の場合は更新しない。
-	// 空 map の場合は categoryFields を空に更新する想定。
+	// Alcoholの容量はCategoryFieldsへ保存せず、
+	// Model variationのVolumeだけを正とする。
+	//
+	// nilの場合は更新しない。
+	// 空mapの場合はCategoryFieldsを空に更新する。
 	CategoryFields *CategoryFields `json:"categoryFields,omitempty"`
 
 	ProductIdTag *ProductIDTag `json:"productIdTag,omitempty"`
 	AssigneeID   *string       `json:"assigneeId,omitempty"`
 
-	// ★ modelRefs を受ける（displayOrder 含む）
-	// NOTE:
-	// - modelRefs は通常の ProductBlueprint 更新 API では原則変更しない
-	// - modelRefs の同期は ModelUsecase + ReplaceModelRefsWithoutTouch を正とする
-	// - 既存の read/write 互換で Patch に残すが、command usecase 側では基本的に渡さない
+	// ModelRefsはmodelIdとdisplayOrderを保持する。
+	//
+	// 通常のProductBlueprint更新APIでは原則変更しない。
+	// ModelRefsの同期はModelUsecaseと
+	// ReplaceModelRefsWithoutTouchを正とする。
+	//
+	// 既存のread/write互換のためPatchに残すが、
+	// command Usecase側では基本的に設定しない。
 	ModelRefs *[]ModelRef `json:"modelRefs,omitempty"`
+
+	// UpdatedByは認証ContextからUsecaseが設定する内部項目。
+	//
+	// HTTP request bodyから任意の更新者IDを受け取らないため、
+	// JSONのencode/decode対象にはしない。
+	UpdatedBy *string `json:"-"`
 }
 
 // ========================================
-// Query contracts (filters/sort/paging)
+// Query contracts
 // ========================================
 
 type Filter struct {
-	CompanyID   string // ★ 必須: マルチテナント境界
+	// CompanyIDはマルチテナント境界として必須。
+	CompanyID string
+
 	SearchTerm  string
 	BrandIDs    []string
 	AssigneeIDs []string
 
-	// カテゴリ検索用。
-	// productBlueprint 側では denormalized field を検索対象にする。
-	ProductBlueprintCategoryIDs   []string
+	// カテゴリ検索ではProductBlueprintに保存した
+	// denormalized fieldを検索対象にする。
+	ProductBlueprintCategoryIDs []string
+
 	ProductBlueprintCategoryCodes []string
+
 	ProductBlueprintCategoryKinds []string
 
 	TagTypes []ProductIDTagType
@@ -120,55 +150,108 @@ type Page struct {
 }
 
 type PageResult struct {
-	Items      []ProductBlueprint
+	Items []ProductBlueprint
+
 	TotalCount int
 	TotalPages int
-	Page       int
-	PerPage    int
+
+	Page    int
+	PerPage int
 }
 
 // ========================================
-// Repository Port (interface contracts only)
+// Repository Port
 // ========================================
 
 type Repository interface {
-	// Read (live)
-	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
+	// Read
 
-	// companyId 単位で ProductBlueprint 一覧を取得する唯一の正規 port。
-	// ID 一覧が必要な場合も、この戻り値から呼び出し側で ID を抽出する。
-	ListByCompanyID(ctx context.Context, companyID string) ([]ProductBlueprint, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (ProductBlueprint, error)
 
-	// brandId から productBlueprint の ID 一覧を取得するヘルパ。
-	ListIDsByBrandID(ctx context.Context, brandID string) ([]string, error)
+	// ListByCompanyIDはcompanyId単位でProductBlueprint一覧を
+	// 取得する正規Port。
+	//
+	// ID一覧が必要な場合も、戻り値から呼出側でIDを抽出する。
+	ListByCompanyID(
+		ctx context.Context,
+		companyID string,
+	) ([]ProductBlueprint, error)
 
-	// modelId(=variationId想定) から、その model を含む ProductBlueprint の ID と modelRefs を取得する。
+	// ListIDsByBrandIDはbrandIdに紐づく
+	// ProductBlueprint ID一覧を取得する。
+	ListIDsByBrandID(
+		ctx context.Context,
+		brandID string,
+	) ([]string, error)
+
+	// GetIDByModelIDはmodelIdから、そのModelが属する
+	// ProductBlueprint IDとModelRefsを取得する。
 	//
 	// 戻り値:
-	// - productBlueprintID: model が紐づく ProductBlueprint の ID
-	// - modelRefs: 対象 ProductBlueprint の modelRefs（displayOrder 含む）
+	//   - productBlueprintID:
+	//     Modelが紐づくProductBlueprint ID
+	//   - modelRefs:
+	//     対象ProductBlueprintのModelRefs
 	//
-	// NOTE:
-	// - productBlueprintId だけが必要な caller は第1戻り値を使う。
-	// - displayOrder が必要な caller は第2戻り値の modelRefs から対象 modelId を探す。
-	GetIDByModelID(ctx context.Context, modelID string) (string, []ModelRef, error)
+	// ProductBlueprint IDだけが必要なcallerは第1戻り値を使う。
+	// DisplayOrderが必要なcallerは第2戻り値から対象Modelを探す。
+	GetIDByModelID(
+		ctx context.Context,
+		modelID string,
+	) (
+		string,
+		[]ModelRef,
+		error,
+	)
 
-	// Write (live)
-	Create(ctx context.Context, in CreateInput) (ProductBlueprint, error)
-	Update(ctx context.Context, id string, patch Patch) (ProductBlueprint, error)
+	// Write
 
-	// Delete physically removes a ProductBlueprint by ID.
-	Delete(ctx context.Context, id string) error
+	Create(
+		ctx context.Context,
+		in CreateInput,
+	) (ProductBlueprint, error)
 
-	// ProductBlueprint の modelRefs（modelId + displayOrder）を置き換える。
+	Update(
+		ctx context.Context,
+		id string,
+		patch Patch,
+	) (ProductBlueprint, error)
+
+	// DeleteはProductBlueprintを物理削除する。
 	//
-	// NOTE:
-	// - ModelUsecase が models collection を正として同期するために使う。
-	// - refs は repository 実装側で displayOrder 昇順に正規化し、1..N に再採番してよい。
-	// - refs が空の場合は modelRefs を空配列に置き換える。
-	// - updatedAt / updatedBy は更新しない。
-	ReplaceModelRefsWithoutTouch(ctx context.Context, id string, refs []ModelRef) (ProductBlueprint, error)
+	// ProductBlueprintの論理削除設計が導入されるまでは、
+	// 現行の物理削除契約を維持する。
+	Delete(
+		ctx context.Context,
+		id string,
+	) error
 
-	// printed: false → true への状態遷移。
-	MarkPrinted(ctx context.Context, id string) (ProductBlueprint, error)
+	// ReplaceModelRefsWithoutTouchはProductBlueprintの
+	// ModelRefsを置換する。
+	//
+	// ModelUsecaseがmodels collectionを正として同期するために使う。
+	//
+	// Repository実装側では次を保証する。
+	//   - DisplayOrder順に正規化する
+	//   - 空IDと重複IDを除外する
+	//   - DisplayOrderを1..Nへ再採番する
+	//   - refsが空の場合は空配列へ置換する
+	//   - UpdatedAtとUpdatedByは更新しない
+	//   - Printed済みの場合は更新を拒否する
+	ReplaceModelRefsWithoutTouch(
+		ctx context.Context,
+		id string,
+		refs []ModelRef,
+	) (ProductBlueprint, error)
+
+	// MarkPrintedはPrintedをfalseからtrueへ遷移させる。
+	//
+	// すでにPrinted=trueの場合は成功として扱う冪等な操作とする。
+	MarkPrinted(
+		ctx context.Context,
+		id string,
+	) (ProductBlueprint, error)
 }

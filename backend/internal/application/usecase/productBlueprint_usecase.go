@@ -16,14 +16,19 @@ import (
 type ProductBlueprintUsecase struct {
 	repo ProductBlueprintRepo
 
-	// ProductBlueprint 起票時に productBlueprintReview 側も初期化するためのポート
-	// NOTE: NewProductBlueprintUsecase が唯一の入口となるよう、外から With で差し込まない。
+	// ProductBlueprint起票時にproductBlueprintReview側も
+	// 初期化するためのPort。
+	//
+	// NewProductBlueprintUsecaseを唯一の初期化経路とし、
+	// 外部からWith形式では差し込まない。
 	reviewInit ProductBlueprintReviewInitializer
 }
 
-// NewProductBlueprintUsecase を唯一の出入り口にするため、reviewInit をコンストラクタ引数にする。
-// - reviewInit が nil の場合は初期化をスキップ（既存互換）
-// - 「必ず作りたい」場合は DI 側で non-nil を渡す
+// NewProductBlueprintUsecaseはProductBlueprintUsecaseの
+// 唯一の初期化経路です。
+//
+// reviewInitがnilの場合は、既存互換のため
+// ProductBlueprintReviewの初期化を省略します。
 func NewProductBlueprintUsecase(
 	repo ProductBlueprintRepo,
 	reviewInit ProductBlueprintReviewInitializer,
@@ -38,28 +43,48 @@ func NewProductBlueprintUsecase(
 // Ports
 // ------------------------------------------------------------
 
-// ProductBlueprintRepo defines the minimal persistence port needed by ProductBlueprintUsecase.
-// NOTE:
-// ProductBlueprintUsecase は command 専用に寄せる。
-// 一覧/詳細など画面構築用 read model は application/query/console 側へ分離する。
-// modelRefs の同期は ModelUsecase 側で models collection を正として行う。
+// ProductBlueprintRepoはProductBlueprintUsecaseが必要とする
+// command側の最小永続化Portです。
+//
+// 一覧・詳細などの画面構築用read modelは
+// application/query/console側へ分離します。
+//
+// ModelRefsの同期はModelUsecase側でmodels collectionを正として
+// 実行します。
 type ProductBlueprintRepo interface {
-	// Read for command-side existence/company-boundary checks.
-	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+	// Read for command-side existence and company-boundary checks.
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (productbpdom.ProductBlueprint, error)
 
-	// printed フラグを true（印刷済み）に更新する
-	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+	// MarkPrintedはprintedをtrueへ更新します。
+	MarkPrinted(
+		ctx context.Context,
+		id string,
+	) (productbpdom.ProductBlueprint, error)
 
 	// Write
-	Create(ctx context.Context, in productbpdom.CreateInput) (productbpdom.ProductBlueprint, error)
-	Update(ctx context.Context, id string, patch productbpdom.Patch) (productbpdom.ProductBlueprint, error)
+	Create(
+		ctx context.Context,
+		in productbpdom.CreateInput,
+	) (productbpdom.ProductBlueprint, error)
 
-	// Delete (physical)
-	Delete(ctx context.Context, id string) error
+	Update(
+		ctx context.Context,
+		id string,
+		patch productbpdom.Patch,
+	) (productbpdom.ProductBlueprint, error)
+
+	// Delete physically removes a ProductBlueprint.
+	Delete(
+		ctx context.Context,
+		id string,
+	) error
 }
 
-// ProductBlueprintReviewInitializer は ProductBlueprint 起票時に、
-// レビュー側の「商品単位初期化ドキュメント」等を作成するためのポート。
+// ProductBlueprintReviewInitializerはProductBlueprint起票時に、
+// Review側の商品単位初期化documentを作成するためのPortです。
 type ProductBlueprintReviewInitializer interface {
 	InitForProductBlueprint(
 		ctx context.Context,
@@ -75,58 +100,84 @@ type ProductBlueprintReviewInitializer interface {
 // ------------------------------------------------------------
 
 // Create creates a ProductBlueprint.
-// NOTE: usecase の公開APIは ProductBlueprint を受け取り、repo には CreateInput を渡す。
-func (u *ProductBlueprintUsecase) Create(
+//
+// Usecaseの公開APIはProductBlueprintを受け取り、
+// RepositoryへはCreateInputを渡します。
+func (
+	u *ProductBlueprintUsecase,
+) Create(
 	ctx context.Context,
-	v productbpdom.ProductBlueprint,
+	value productbpdom.ProductBlueprint,
 ) (productbpdom.ProductBlueprint, error) {
-	cid := CompanyIDFromContext(ctx)
-	if cid == "" {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
+	if u == nil || u.repo == nil {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInternal
 	}
 
-	// Create時に usecase でID生成 + CreatedAtセット（domain.validate が必須）
-	id := productbpdom.NewID()
+	companyID := CompanyIDFromContext(ctx)
+	if companyID == "" {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInvalidCompanyID
+	}
+
+	// NewIDはcrypto/randの生成に失敗した場合に
+	// errorを返すため、必ず処理する。
+	id, err := productbpdom.NewID()
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+
 	now := time.Now().UTC()
-	createdAt := &now
+	createdAt := now
 
-	in := productbpdom.CreateInput{
-		ID:          id,
-		ProductName: v.ProductName,
-		Description: v.Description,
+	input := productbpdom.CreateInput{
+		ID: id,
 
-		BrandID: v.BrandID,
+		ProductName: value.ProductName,
+		Description: value.Description,
 
-		// productBlueprintCategories の正データから生成済みの denormalized snapshot
-		ProductBlueprintCategory: v.ProductBlueprintCategory,
+		BrandID: value.BrandID,
 
-		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
-		// ProductBlueprint 直下ではなく CategoryFields に集約する。
-		CategoryFields: cloneCategoryFields(v.CategoryFields),
+		// productBlueprintCategoriesの正データから生成済みの
+		// denormalized snapshot。
+		ProductBlueprintCategory: value.ProductBlueprintCategory,
 
-		ProductIdTag: v.ProductIdTag,
-		AssigneeID:   v.AssigneeID,
+		// カテゴリ依存項目はProductBlueprint直下ではなく
+		// CategoryFieldsへ集約する。
+		CategoryFields: cloneCategoryFields(
+			value.CategoryFields,
+		),
 
-		// NOTE: companyId は auth context を正とする（越境防止）
-		CompanyID: cid,
+		ProductIdTag: value.ProductIdTag,
+		AssigneeID:   value.AssigneeID,
 
-		CreatedBy: v.CreatedBy,
+		// companyIdは認証Contextを正とし、
+		// request由来の値は使用しない。
+		CompanyID: companyID,
 
-		// domain.validate が CreatedAt 必須なので必ず埋める
-		CreatedAt: createdAt,
+		CreatedBy: value.CreatedBy,
 
-		// modelRefs は ModelUsecase 側で models collection を正として同期する
+		// Domain validationでCreatedAtが必須のため、
+		// Usecaseで必ず設定する。
+		CreatedAt: &createdAt,
+
+		// ModelRefsはModelUsecase側でmodels collectionを正として
+		// 同期するため、起票時点では空にする。
 		ModelRefs: nil,
 	}
 
-	created, err := u.repo.Create(ctx, in)
+	created, err := u.repo.Create(
+		ctx,
+		input,
+	)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
 
 	// ------------------------------------------------------------
-	// productBlueprintReview 側の初期化（起票）
+	// ProductBlueprintReviewの初期化
 	// ------------------------------------------------------------
+
 	if u.reviewInit != nil {
 		if err := u.reviewInit.InitForProductBlueprint(
 			ctx,
@@ -135,7 +186,6 @@ func (u *ProductBlueprintUsecase) Create(
 			created.CreatedAt,
 			created.CreatedBy,
 		); err != nil {
-			// 方針: 二重起票の整合を優先して失敗扱い
 			return productbpdom.ProductBlueprint{}, err
 		}
 	}
@@ -143,17 +193,51 @@ func (u *ProductBlueprintUsecase) Create(
 	return created, nil
 }
 
-// MarkPrinted は printed フラグを true（印刷済み）に更新するユースケース。
-// Handler から /product-blueprints/{id}/mark-printed などで呼ばれる想定。
-func (u *ProductBlueprintUsecase) MarkPrinted(
+// MarkPrintedはprintedをtrueへ更新します。
+//
+// Handlerから
+// /product-blueprints/{id}/mark-printed
+// などで呼び出される想定です。
+func (
+	u *ProductBlueprintUsecase,
+) MarkPrinted(
 	ctx context.Context,
 	id string,
 ) (productbpdom.ProductBlueprint, error) {
-	if id == "" {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
+	if u == nil || u.repo == nil {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInternal
 	}
 
-	updated, err := u.repo.MarkPrinted(ctx, id)
+	if id == "" {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInvalidID
+	}
+
+	companyID := CompanyIDFromContext(ctx)
+	if companyID == "" {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInvalidCompanyID
+	}
+
+	current, err := u.repo.GetByID(
+		ctx,
+		id,
+	)
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+
+	if current.CompanyID == "" ||
+		current.CompanyID != companyID {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrForbidden
+	}
+
+	updated, err := u.repo.MarkPrinted(
+		ctx,
+		id,
+	)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
@@ -162,64 +246,116 @@ func (u *ProductBlueprintUsecase) MarkPrinted(
 }
 
 // Update updates a ProductBlueprint using Patch.
-// - companyId 境界は usecase でチェック（id が漏れても越境更新しない）
-// - Update API では modelRefs を受け取らない方針のため、Patch には modelRefs を入れない（= 変更しない）
-func (u *ProductBlueprintUsecase) Update(
+//
+//   - companyId境界はUsecaseで確認する。
+//   - Update APIではModelRefsを受け取らない。
+//   - ModelRefsの同期はModelUsecaseを正とする。
+//   - UpdatedByはHTTP bodyから直接受け取らず、
+//     Usecaseが保持する更新者情報をRepositoryへ渡す。
+func (
+	u *ProductBlueprintUsecase,
+) Update(
 	ctx context.Context,
-	v productbpdom.ProductBlueprint,
+	value productbpdom.ProductBlueprint,
 ) (productbpdom.ProductBlueprint, error) {
-	id := v.ID
+	if u == nil || u.repo == nil {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInternal
+	}
+
+	id := value.ID
 	if id == "" {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInvalidID
 	}
 
-	cid := CompanyIDFromContext(ctx)
-	if cid == "" {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
+	companyID := CompanyIDFromContext(ctx)
+	if companyID == "" {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrInvalidCompanyID
 	}
 
-	// 既存取得（越境更新の防止、NotFound 明確化、printed 等の参照にも使える）
-	current, err := u.repo.GetByID(ctx, id)
+	// 既存Entityを取得し、company境界とprinted状態を確認する。
+	current, err := u.repo.GetByID(
+		ctx,
+		id,
+	)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
-	if current.CompanyID == "" || current.CompanyID != cid {
-		// company 境界違反（id を推測されても更新できないようにする）
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrForbidden
+
+	if current.CompanyID == "" ||
+		current.CompanyID != companyID {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrForbidden
 	}
 
-	// Patch を組み立て（Update で変更したい項目のみ）
-	name := v.ProductName
-	description := v.Description
-	brandID := v.BrandID
-	category := v.ProductBlueprintCategory
-	categoryFields := cloneCategoryFields(v.CategoryFields)
-	tag := v.ProductIdTag
-	assigneeID := v.AssigneeID
+	if current.Printed {
+		return productbpdom.ProductBlueprint{},
+			productbpdom.ErrForbidden
+	}
 
-	var categoryFieldsPtr *productbpdom.CategoryFields
-	if categoryFields != nil {
-		categoryFieldsPtr = &categoryFields
+	productName := value.ProductName
+	description := value.Description
+	brandID := value.BrandID
+	category := value.ProductBlueprintCategory
+	productIDTag := value.ProductIdTag
+	assigneeID := value.AssigneeID
+
+	var categoryFieldsPointer *productbpdom.CategoryFields
+
+	// nilは「更新しない」、空mapは「空へ更新する」を表す。
+	if value.CategoryFields != nil {
+		categoryFields :=
+			cloneCategoryFields(
+				value.CategoryFields,
+			)
+
+		categoryFieldsPointer =
+			&categoryFields
+	}
+
+	updatedBy := value.UpdatedBy
+
+	// 呼出側で新しい更新者が設定されていない場合は、
+	// 現在保存されているUpdatedByを維持する。
+	if updatedBy == nil {
+		updatedBy = current.UpdatedBy
 	}
 
 	patch := productbpdom.Patch{
-		ProductName: &name,
+		ProductName: &productName,
 		Description: &description,
 
 		BrandID: &brandID,
 
-		// productBlueprintCategories の正データから生成済みの denormalized snapshot
+		// productBlueprintCategoriesの正データから生成済みの
+		// denormalized snapshot。
 		ProductBlueprintCategory: &category,
 
-		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
-		// ProductBlueprint 直下ではなく CategoryFields に集約する。
-		CategoryFields: categoryFieldsPtr,
+		CategoryFields: categoryFieldsPointer,
 
-		ProductIdTag: &tag,
-		AssigneeID:   &assigneeID,
+		ProductIdTag: &productIDTag,
+
+		AssigneeID: &assigneeID,
+
+		// HTTP request bodyからは受け取らず、
+		// UsecaseからRepositoryへ渡す内部値。
+		UpdatedBy: updatedBy,
+
+		// CompanyIDは通常更新しない。
+		CompanyID: nil,
+
+		// ModelRefsはModelUsecase側で同期するため、
+		// 通常のProductBlueprint更新では渡さない。
+		ModelRefs: nil,
 	}
 
-	updated, err := u.repo.Update(ctx, id, patch)
+	updated, err := u.repo.Update(
+		ctx,
+		id,
+		patch,
+	)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
@@ -228,51 +364,178 @@ func (u *ProductBlueprintUsecase) Update(
 }
 
 // Delete physically deletes a ProductBlueprint.
-func (u *ProductBlueprintUsecase) Delete(
+func (
+	u *ProductBlueprintUsecase,
+) Delete(
 	ctx context.Context,
 	id string,
 ) error {
+	if u == nil || u.repo == nil {
+		return productbpdom.ErrInternal
+	}
+
 	if id == "" {
 		return productbpdom.ErrInvalidID
 	}
 
-	cid := CompanyIDFromContext(ctx)
-	if cid == "" {
+	companyID := CompanyIDFromContext(ctx)
+	if companyID == "" {
 		return productbpdom.ErrInvalidCompanyID
 	}
 
-	current, err := u.repo.GetByID(ctx, id)
+	current, err := u.repo.GetByID(
+		ctx,
+		id,
+	)
 	if err != nil {
 		return err
 	}
 
-	if current.CompanyID == "" || current.CompanyID != cid {
+	if current.CompanyID == "" ||
+		current.CompanyID != companyID {
 		return productbpdom.ErrForbidden
 	}
 
-	return u.repo.Delete(ctx, id)
+	if current.Printed {
+		return productbpdom.ErrForbidden
+	}
+
+	return u.repo.Delete(
+		ctx,
+		id,
+	)
 }
 
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
 
-func cloneCategoryFields(in productbpdom.CategoryFields) productbpdom.CategoryFields {
-	if len(in) == 0 {
+func cloneCategoryFields(
+	input productbpdom.CategoryFields,
+) productbpdom.CategoryFields {
+	if input == nil {
 		return nil
 	}
 
-	out := make(productbpdom.CategoryFields, len(in))
-	for key, value := range in {
+	output := make(
+		productbpdom.CategoryFields,
+		len(input),
+	)
+
+	for key, value := range input {
 		if key == "" {
 			continue
 		}
-		out[key] = value
+
+		output[key] = cloneCategoryFieldValue(
+			value,
+		)
 	}
 
-	if len(out) == 0 {
-		return nil
-	}
+	return output
+}
 
-	return out
+func cloneCategoryFieldValue(
+	value any,
+) any {
+	switch typedValue := value.(type) {
+	case map[string]any:
+		output := make(
+			map[string]any,
+			len(typedValue),
+		)
+
+		for key, nestedValue := range typedValue {
+			output[key] =
+				cloneCategoryFieldValue(
+					nestedValue,
+				)
+		}
+
+		return output
+
+	case []any:
+		output := make(
+			[]any,
+			len(typedValue),
+		)
+
+		for index, nestedValue := range typedValue {
+			output[index] =
+				cloneCategoryFieldValue(
+					nestedValue,
+				)
+		}
+
+		return output
+
+	case []string:
+		return append(
+			[]string(nil),
+			typedValue...,
+		)
+
+	case []int:
+		return append(
+			[]int(nil),
+			typedValue...,
+		)
+
+	case []float64:
+		return append(
+			[]float64(nil),
+			typedValue...,
+		)
+
+	case map[string]string:
+		output := make(
+			map[string]string,
+			len(typedValue),
+		)
+
+		for key, nestedValue := range typedValue {
+			output[key] = nestedValue
+		}
+
+		return output
+
+	case map[string]int:
+		output := make(
+			map[string]int,
+			len(typedValue),
+		)
+
+		for key, nestedValue := range typedValue {
+			output[key] = nestedValue
+		}
+
+		return output
+
+	case map[string]float64:
+		output := make(
+			map[string]float64,
+			len(typedValue),
+		)
+
+		for key, nestedValue := range typedValue {
+			output[key] = nestedValue
+		}
+
+		return output
+
+	case map[string]bool:
+		output := make(
+			map[string]bool,
+			len(typedValue),
+		)
+
+		for key, nestedValue := range typedValue {
+			output[key] = nestedValue
+		}
+
+		return output
+
+	default:
+		return value
+	}
 }

@@ -23,37 +23,53 @@ import (
 // ============================================================
 
 type InventoryRepository interface {
-	GetByID(ctx context.Context, id string) (invdom.Mint, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (invdom.Mint, error)
 }
 
 type ProductBlueprintRepository interface {
-	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (pbdom.ProductBlueprint, error)
 }
 
 type TokenBlueprintPatchRepository interface {
-	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (*tbdom.TokenBlueprint, error)
 }
 
 // ProductBlueprintReview repository (read-only minimal for catalog)
-// CatalogQuery では summary のみ利用するため、最小契約にする
+//
+// CatalogQueryではsummaryのみ利用するため、最小契約にする。
 type ProductBlueprintReviewRepository interface {
 	GetProductSummary(
 		ctx context.Context,
 		productBlueprintID string,
 		status productBlueprintReview.ReviewStatus,
-	) (productBlueprintReview.ProductReviewSummary, error)
+	) (
+		productBlueprintReview.ProductReviewSummary,
+		error,
+	)
 }
 
 // ListImage repository (read-only minimal for catalog)
 //
-// Firebase Storage 移行後:
-// - domain/listImage は削除済み
-// - ListImage は domain/list.ListImage を使う
-// - ListImage.URL は Firebase Storage downloadURL
-// - backend は GCS bucket / public URL を組み立てない
+// Firebase Storage移行後:
+//   - domain/listImageは削除済み
+//   - ListImageはdomain/list.ListImageを使う
+//   - ListImage.URLはFirebase Storage downloadURL
+//   - backendはGCS bucket / public URLを組み立てない
 type ListImageRepository interface {
-	// listId 配下の画像一覧（displayOrder を含む前提）
-	ListByListID(ctx context.Context, listID string) ([]ldom.ListImage, error)
+	// listId配下の画像一覧を取得する。
+	ListByListID(
+		ctx context.Context,
+		listID string,
+	) ([]ldom.ListImage, error)
 }
 
 // ============================================================
@@ -69,10 +85,8 @@ type CatalogQuery struct {
 
 	ModelRepo modeldom.RepositoryPort
 
-	// product blueprint reviews
 	ProductBlueprintReviewRepo ProductBlueprintReviewRepository
 
-	// list images
 	ListImageRepo ListImageRepository
 
 	NameResolver *appresolver.NameResolver
@@ -86,7 +100,7 @@ type CatalogQuery struct {
 // All dependencies must be routed through this constructor.
 func NewCatalogQuery(
 	listRepo ldom.Repository,
-	invRepo InventoryRepository,
+	inventoryRepo InventoryRepository,
 	productRepo ProductBlueprintRepository,
 	modelRepo modeldom.RepositoryPort,
 	listImageRepo ListImageRepository,
@@ -95,14 +109,19 @@ func NewCatalogQuery(
 	nameResolver *appresolver.NameResolver,
 ) *CatalogQuery {
 	return &CatalogQuery{
-		ListRepo:                   listRepo,
-		InventoryRepo:              invRepo,
-		ProductRepo:                productRepo,
-		TokenRepo:                  tokenRepo,
-		ModelRepo:                  modelRepo,
+		ListRepo: listRepo,
+
+		InventoryRepo: inventoryRepo,
+		ProductRepo:   productRepo,
+		TokenRepo:     tokenRepo,
+
+		ModelRepo: modelRepo,
+
 		ProductBlueprintReviewRepo: productBlueprintReviewRepo,
-		ListImageRepo:              listImageRepo,
-		NameResolver:               nameResolver,
+
+		ListImageRepo: listImageRepo,
+
+		NameResolver: nameResolver,
 	}
 }
 
@@ -110,446 +129,721 @@ func NewCatalogQuery(
 // Public APIs
 // ============================================================
 
-func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.CatalogDTO, error) {
+func (
+	q *CatalogQuery,
+) GetByListID(
+	ctx context.Context,
+	listID string,
+) (dto.CatalogDTO, error) {
 	if q == nil || q.ListRepo == nil {
-		return dto.CatalogDTO{}, errors.New("catalog query: list repo is nil")
+		return dto.CatalogDTO{},
+			errors.New(
+				"catalog query: list repo is nil",
+			)
 	}
+
 	if listID == "" {
-		return dto.CatalogDTO{}, ldom.ErrNotFound
+		return dto.CatalogDTO{},
+			ldom.ErrNotFound
 	}
 
 	// ------------------------------------------------------------
-	// List (must)
+	// List
 	// ------------------------------------------------------------
-	l, err := q.ListRepo.GetByID(ctx, listID)
+
+	listItem, err :=
+		q.ListRepo.GetByID(
+			ctx,
+			listID,
+		)
 	if err != nil {
 		return dto.CatalogDTO{}, err
 	}
-	if l.Status != ldom.StatusListing {
-		return dto.CatalogDTO{}, ldom.ErrNotFound
+
+	if listItem.Status != ldom.StatusListing {
+		return dto.CatalogDTO{},
+			ldom.ErrNotFound
 	}
 
-	out := dto.CatalogDTO{
-		List: toCatalogListDTO(l),
-	}
-
-	// ------------------------------------------------------------
-	// ListImages (must)
-	// ------------------------------------------------------------
-	{
-		imgs, imgErr := q.loadListImages(ctx, out.List.ID)
-		if imgErr != "" {
-			return dto.CatalogDTO{}, fmt.Errorf("listImages failed: %s", imgErr)
-		}
-		out.ListImages = imgs
+	output := dto.CatalogDTO{
+		List: toCatalogListDTO(listItem),
 	}
 
 	// ------------------------------------------------------------
-	// Inventory (must; inventoryId only)
+	// List images
 	// ------------------------------------------------------------
+
+	listImages, listImagesError :=
+		q.loadListImages(
+			ctx,
+			output.List.ID,
+		)
+	if listImagesError != "" {
+		return dto.CatalogDTO{},
+			fmt.Errorf(
+				"listImages failed: %s",
+				listImagesError,
+			)
+	}
+
+	output.ListImages = listImages
+
+	// ------------------------------------------------------------
+	// Inventory
+	// ------------------------------------------------------------
+
 	if q.InventoryRepo == nil {
-		return dto.CatalogDTO{}, errors.New("inventory repo is nil")
+		return dto.CatalogDTO{},
+			errors.New(
+				"inventory repo is nil",
+			)
 	}
 
-	invID := out.List.InventoryID
-	if invID == "" {
-		return dto.CatalogDTO{}, errors.New("inventoryId is empty")
+	inventoryID := output.List.InventoryID
+
+	if inventoryID == "" {
+		return dto.CatalogDTO{},
+			errors.New(
+				"inventoryId is empty",
+			)
 	}
 
-	m, invErr := q.InventoryRepo.GetByID(ctx, invID)
-	if invErr != nil {
-		return dto.CatalogDTO{}, invErr
+	inventory, err :=
+		q.InventoryRepo.GetByID(
+			ctx,
+			inventoryID,
+		)
+	if err != nil {
+		return dto.CatalogDTO{}, err
 	}
 
-	invDTO := toCatalogInventoryDTOFromMint(m)
-	if invDTO == nil {
-		return dto.CatalogDTO{}, errors.New("inventory dto is nil")
+	inventoryDTO :=
+		toCatalogInventoryDTOFromMint(
+			inventory,
+		)
+
+	if inventoryDTO == nil {
+		return dto.CatalogDTO{},
+			errors.New(
+				"inventory dto is nil",
+			)
 	}
-	out.Inventory = invDTO
+
+	output.Inventory = inventoryDTO
 
 	// ============================================================
-	// SOURCE OF TRUTH: inventoryId -> inventoryDTO -> (pbId/tbId)
-	// list 側の ProductBlueprintID / TokenBlueprintID は一切参照しない
+	// SOURCE OF TRUTH:
+	// inventoryId -> inventoryDTO -> productBlueprintId/tokenBlueprintId
+	//
+	// List側のProductBlueprintIDとTokenBlueprintIDは参照しない。
 	// ============================================================
 
 	// ------------------------------------------------------------
-	// ProductBlueprint (must; inventory route ONLY)
+	// ProductBlueprint
 	// ------------------------------------------------------------
-	resolvedPBID := invDTO.ProductBlueprintID
-	if resolvedPBID == "" {
-		return dto.CatalogDTO{}, errors.New("productBlueprintId is empty on inventory")
+
+	resolvedProductBlueprintID :=
+		inventoryDTO.ProductBlueprintID
+
+	if resolvedProductBlueprintID == "" {
+		return dto.CatalogDTO{},
+			errors.New(
+				"productBlueprintId is empty on inventory",
+			)
 	}
 
 	if q.ProductRepo == nil {
-		return dto.CatalogDTO{}, errors.New("product repo is nil")
+		return dto.CatalogDTO{},
+			errors.New(
+				"product repo is nil",
+			)
 	}
 
-	pb, pbErr := q.ProductRepo.GetByID(ctx, resolvedPBID)
-	if pbErr != nil {
-		return dto.CatalogDTO{}, pbErr
+	productBlueprint, err :=
+		q.ProductRepo.GetByID(
+			ctx,
+			resolvedProductBlueprintID,
+		)
+	if err != nil {
+		return dto.CatalogDTO{}, err
 	}
 
-	pbDTO := toCatalogProductBlueprintDTO(&pb)
+	productBlueprintDTO :=
+		toCatalogProductBlueprintDTO(
+			&productBlueprint,
+		)
+
 	if q.NameResolver != nil {
-		fillProductBlueprintNames(ctx, q.NameResolver, &pbDTO)
+		fillProductBlueprintNames(
+			ctx,
+			q.NameResolver,
+			&productBlueprintDTO,
+		)
 	}
-	out.ProductBlueprint = &pbDTO
+
+	output.ProductBlueprint =
+		&productBlueprintDTO
 
 	// ------------------------------------------------------------
-	// ProductBlueprintReview summary (must)
-	// productBlueprintId == docId
+	// ProductBlueprintReview summary
 	// ------------------------------------------------------------
+
 	if q.ProductBlueprintReviewRepo == nil {
-		return dto.CatalogDTO{}, errors.New("productBlueprintReview repo is nil")
+		return dto.CatalogDTO{},
+			errors.New(
+				"productBlueprintReview repo is nil",
+			)
 	}
 
-	reviewStatus := productBlueprintReview.ReviewStatusPublished
+	reviewStatus :=
+		productBlueprintReview.
+			ReviewStatusPublished
 
-	summary, sumErr := q.ProductBlueprintReviewRepo.GetProductSummary(ctx, resolvedPBID, reviewStatus)
-	if sumErr != nil {
-		return dto.CatalogDTO{}, sumErr
+	reviewSummary, err :=
+		q.ProductBlueprintReviewRepo.
+			GetProductSummary(
+				ctx,
+				resolvedProductBlueprintID,
+				reviewStatus,
+			)
+	if err != nil {
+		return dto.CatalogDTO{}, err
 	}
-	out.ProductReviewSummary = toCatalogProductReviewSummaryDTO(summary)
+
+	output.ProductReviewSummary =
+		toCatalogProductReviewSummaryDTO(
+			reviewSummary,
+		)
 
 	// ------------------------------------------------------------
-	// TokenBlueprint (must; inventory route ONLY) -> dto.CatalogTokenBlueprintDTO
+	// TokenBlueprint
 	// ------------------------------------------------------------
-	resolvedTBID := invDTO.TokenBlueprintID
-	if resolvedTBID == "" {
-		return dto.CatalogDTO{}, errors.New("tokenBlueprintId is empty on inventory")
+
+	resolvedTokenBlueprintID :=
+		inventoryDTO.TokenBlueprintID
+
+	if resolvedTokenBlueprintID == "" {
+		return dto.CatalogDTO{},
+			errors.New(
+				"tokenBlueprintId is empty on inventory",
+			)
 	}
 
 	if q.TokenRepo == nil {
-		return dto.CatalogDTO{}, errors.New("tokenBlueprint repo is nil")
+		return dto.CatalogDTO{},
+			errors.New(
+				"tokenBlueprint repo is nil",
+			)
 	}
 
-	tokenBlueprint, tbErr := q.TokenRepo.GetByID(ctx, resolvedTBID)
-	if tbErr != nil {
-		return dto.CatalogDTO{}, tbErr
+	tokenBlueprint, err :=
+		q.TokenRepo.GetByID(
+			ctx,
+			resolvedTokenBlueprintID,
+		)
+	if err != nil {
+		return dto.CatalogDTO{}, err
 	}
+
 	if tokenBlueprint == nil {
-		return dto.CatalogDTO{}, tbdom.ErrNotFound
+		return dto.CatalogDTO{},
+			tbdom.ErrNotFound
 	}
 
-	p := toTokenBlueprintPatch(tokenBlueprint)
+	tokenBlueprintPatch :=
+		toTokenBlueprintPatch(
+			tokenBlueprint,
+		)
+
 	if q.NameResolver != nil {
-		fillTokenBlueprintPatchNames(ctx, q.NameResolver, &p)
+		fillTokenBlueprintPatchNames(
+			ctx,
+			q.NameResolver,
+			&tokenBlueprintPatch,
+		)
 	}
 
 	companyName := ""
+
 	if q.NameResolver != nil {
-		companyName = q.NameResolver.ResolveCompanyName(ctx, p.CompanyID)
+		companyName =
+			q.NameResolver.ResolveCompanyName(
+				ctx,
+				tokenBlueprintPatch.CompanyID,
+			)
+
 		if companyName == "" {
-			brandCompanyID := q.NameResolver.ResolveBrandCompanyID(ctx, p.BrandID)
+			brandCompanyID :=
+				q.NameResolver.
+					ResolveBrandCompanyID(
+						ctx,
+						tokenBlueprintPatch.BrandID,
+					)
+
 			if brandCompanyID != "" {
-				companyName = q.NameResolver.ResolveCompanyName(ctx, brandCompanyID)
+				companyName =
+					q.NameResolver.
+						ResolveCompanyName(
+							ctx,
+							brandCompanyID,
+						)
 			}
 		}
 	}
 
-	// Firebase Storage 移行後:
-	// - Patch.IconURL には Firebase Storage の downloadURL が入る
-	// - GCS objectPath から URL を解決しない
-	// - gcs.NewTokenIconURLResolver / TokenIconObjectPath は使わない
-	resolvedIconURL := p.IconURL
+	// Firebase Storage移行後:
+	//   - Patch.IconURLにはFirebase StorageのdownloadURLが入る
+	//   - GCS objectPathからURLを解決しない
+	//   - TokenIconObjectPathは使わない
+	resolvedIconURL :=
+		tokenBlueprintPatch.IconURL
 
-	tb := dto.CatalogTokenBlueprintDTO{
-		ID:          p.ID,
-		TokenName:   p.TokenName,
-		Symbol:      p.Symbol,
-		BrandID:     p.BrandID,
-		BrandName:   p.BrandName,
-		CompanyName: companyName,
-		Description: p.Description,
-		TokenIcon:   resolvedIconURL,
-	}
-	out.TokenBlueprint = &tb
+	tokenBlueprintDTO :=
+		dto.CatalogTokenBlueprintDTO{
+			ID: tokenBlueprintPatch.ID,
+
+			TokenName: tokenBlueprintPatch.TokenName,
+
+			Symbol: tokenBlueprintPatch.Symbol,
+
+			BrandID: tokenBlueprintPatch.BrandID,
+
+			BrandName: tokenBlueprintPatch.BrandName,
+
+			CompanyName: companyName,
+
+			Description: tokenBlueprintPatch.Description,
+
+			TokenIcon: resolvedIconURL,
+		}
+
+	output.TokenBlueprint =
+		&tokenBlueprintDTO
 
 	// ------------------------------------------------------------
-	// Models (must; ProductBlueprintID comes from inventory route ONLY)
+	// Models
 	// ------------------------------------------------------------
+
 	if q.ModelRepo == nil {
-		return dto.CatalogDTO{}, errors.New("model repo is nil")
+		return dto.CatalogDTO{},
+			errors.New(
+				"model repo is nil",
+			)
 	}
+
 	if q.NameResolver == nil {
-		return dto.CatalogDTO{}, errors.New("name resolver is nil")
+		return dto.CatalogDTO{},
+			errors.New(
+				"name resolver is nil",
+			)
 	}
 
-	variations, mvErr := q.ModelRepo.ListByProductBlueprintID(ctx, resolvedPBID)
-	if mvErr != nil {
-		return dto.CatalogDTO{}, mvErr
+	variations, err :=
+		q.ModelRepo.
+			ListByProductBlueprintID(
+				ctx,
+				resolvedProductBlueprintID,
+			)
+	if err != nil {
+		return dto.CatalogDTO{}, err
 	}
 
-	items := make([]dto.CatalogModelVariationDTO, 0, len(variations))
-	for _, mv := range variations {
-		if mv == nil {
-			return dto.CatalogDTO{}, errors.New("model variation is nil")
+	modelVariationItems := make(
+		[]dto.CatalogModelVariationDTO,
+		0,
+		len(variations),
+	)
+
+	for _, variation := range variations {
+		if variation == nil {
+			return dto.CatalogDTO{},
+				errors.New(
+					"model variation is nil",
+				)
 		}
 
-		modelID := mv.GetID()
+		modelID := variation.GetID()
+
 		if modelID == "" {
-			return dto.CatalogDTO{}, errors.New("model variation id is empty")
+			return dto.CatalogDTO{},
+				errors.New(
+					"model variation id is empty",
+				)
 		}
 
-		resolved := q.NameResolver.ResolveModelResolved(ctx, modelID)
+		resolved :=
+			q.NameResolver.
+				ResolveModelResolved(
+					ctx,
+					modelID,
+				)
+
 		if resolved.Kind == "" {
-			return dto.CatalogDTO{}, fmt.Errorf("model variation resolve failed: modelId=%s", modelID)
+			return dto.CatalogDTO{},
+				fmt.Errorf(
+					"model variation resolve failed: modelId=%s",
+					modelID,
+				)
 		}
 
-		items = append(items, toCatalogModelVariationDTOFromResolved(
-			modelID,
-			resolvedPBID,
-			resolved,
-		))
+		modelVariationItems = append(
+			modelVariationItems,
+			toCatalogModelVariationDTOFromResolved(
+				modelID,
+				resolvedProductBlueprintID,
+				resolved,
+			),
+		)
 	}
 
-	attachStockToModelVariations(&items, invDTO)
-	out.ModelVariations = items
+	attachStockToModelVariations(
+		&modelVariationItems,
+		inventoryDTO,
+	)
 
-	return out, nil
+	output.ModelVariations =
+		modelVariationItems
+
+	return output, nil
 }
 
 // ============================================================
-// ListImages (listId -> listImage[])
-// - best-effort: ListImageRepo が nil の場合はエラーにせず空で返す
-// - sort: displayOrder asc (known first), then id asc
-//
-// Firebase Storage migration policy:
-// - ListImage は domain/list.ListImage を使う
-// - ListImage.URL は Firebase Storage downloadURL
-// - backend は GCS bucket / public URL を組み立てない
-// - backend は objectPath / fileName / size を扱わない
+// ListImages
 // ============================================================
 
-// loadListImages returns DTO-ready list images + error string (empty means OK).
-func (q *CatalogQuery) loadListImages(ctx context.Context, listID string) ([]dto.CatalogListImageDTO, string) {
+// loadListImages returns DTO-ready list images and an error string.
+// Empty error string means success.
+func (
+	q *CatalogQuery,
+) loadListImages(
+	ctx context.Context,
+	listID string,
+) ([]dto.CatalogListImageDTO, string) {
 	if listID == "" {
 		return nil, "listId is empty"
 	}
 
-	// best-effort: repo が無ければ壊さない（catalogの必須要件にしない）
-	if q == nil || q.ListImageRepo == nil {
+	if q == nil ||
+		q.ListImageRepo == nil {
 		return nil, ""
 	}
 
-	imgs, err := q.ListImageRepo.ListByListID(ctx, listID)
+	listImages, err :=
+		q.ListImageRepo.ListByListID(
+			ctx,
+			listID,
+		)
 	if err != nil {
 		return nil, err.Error()
 	}
 
-	out := make([]dto.CatalogListImageDTO, 0, len(imgs))
-	seen := map[string]struct{}{}
+	output := make(
+		[]dto.CatalogListImageDTO,
+		0,
+		len(listImages),
+	)
 
-	for _, it := range imgs {
-		id := it.ID
+	seen := make(map[string]struct{})
+
+	for _, listImage := range listImages {
+		id := listImage.ID
+
 		if id == "" {
 			continue
 		}
-		if _, ok := seen[id]; ok {
+
+		if _, exists := seen[id]; exists {
 			continue
 		}
+
 		seen[id] = struct{}{}
 
-		out = append(out, toCatalogListImageDTO(it))
+		output = append(
+			output,
+			toCatalogListImageDTO(
+				listImage,
+			),
+		)
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
+	sort.Slice(
+		output,
+		func(i, j int) bool {
+			left := output[i]
+			right := output[j]
 
-		ao := a.DisplayOrder
-		bo := b.DisplayOrder
+			leftOrder := left.DisplayOrder
+			rightOrder := right.DisplayOrder
 
-		aKnown := ao > 0
-		bKnown := bo > 0
+			leftKnown := leftOrder > 0
+			rightKnown := rightOrder > 0
 
-		// known first
-		if aKnown != bKnown {
-			return aKnown
-		}
+			if leftKnown != rightKnown {
+				return leftKnown
+			}
 
-		// both known: order asc
-		if aKnown && bKnown && ao != bo {
-			return ao < bo
-		}
+			if leftKnown &&
+				rightKnown &&
+				leftOrder != rightOrder {
+				return leftOrder <
+					rightOrder
+			}
 
-		// fallback: id asc
-		return a.ID < b.ID
-	})
+			return left.ID < right.ID
+		},
+	)
 
-	return out, ""
+	return output, ""
 }
 
 // ============================================================
 // Mappers
 // ============================================================
 
-func toCatalogListDTO(l ldom.List) dto.CatalogListDTO {
+func toCatalogListDTO(
+	listItem ldom.List,
+) dto.CatalogListDTO {
 	return dto.CatalogListDTO{
-		ID:          l.ID,
-		Title:       l.Title,
-		Description: l.Description,
-		Image:       l.ImageID, // primary image docID (not URL)
-		Prices:      l.Prices,
+		ID: listItem.ID,
 
-		InventoryID: l.InventoryID,
+		Title: listItem.Title,
+
+		Description: listItem.Description,
+
+		Image: listItem.ImageID,
+
+		Prices: listItem.Prices,
+
+		InventoryID: listItem.InventoryID,
 	}
 }
 
-func toCatalogListImageDTO(img ldom.ListImage) dto.CatalogListImageDTO {
+func toCatalogListImageDTO(
+	listImage ldom.ListImage,
+) dto.CatalogListImageDTO {
 	return dto.CatalogListImageDTO{
-		ID:     img.ID,
-		ListID: img.ListID,
-		URL:    img.URL,
+		ID: listImage.ID,
+
+		ListID: listImage.ListID,
+
+		URL: listImage.URL,
+
 		DisplayOrder: func() int {
-			if img.DisplayOrder <= 0 {
+			if listImage.DisplayOrder <= 0 {
 				return 0
 			}
-			return img.DisplayOrder
+
+			return listImage.DisplayOrder
 		}(),
 	}
 }
 
 func toCatalogProductBlueprintDTO(
-	pb *pbdom.ProductBlueprint,
+	productBlueprint *pbdom.ProductBlueprint,
 ) dto.CatalogProductBlueprintDTO {
-	if pb == nil {
+	if productBlueprint == nil {
 		return dto.CatalogProductBlueprintDTO{}
 	}
 
-	category := pb.ProductBlueprintCategory
+	category :=
+		productBlueprint.
+			ProductBlueprintCategory
 
-	out := dto.CatalogProductBlueprintDTO{
-		ID:          pb.ID,
-		ProductName: pb.ProductName,
-		BrandID:     pb.BrandID,
-		CompanyID:   pb.CompanyID,
+	output :=
+		dto.CatalogProductBlueprintDTO{
+			ID: productBlueprint.ID,
 
-		Printed:          pb.Printed,
-		ProductIDTagType: pb.ProductIdTag.Type,
+			ProductName: productBlueprint.ProductName,
 
-		ProductBlueprintCategoryID:     category.ID,
-		ProductBlueprintCategoryCode:   category.Code,
-		ProductBlueprintCategoryKind:   string(category.Kind),
-		ProductBlueprintCategoryNameEn: category.NameEn,
-		ProductBlueprintCategoryNameJa: category.NameJa,
-		ProductBlueprintCategoryPath:   append([]string(nil), category.Path...),
+			BrandID: productBlueprint.BrandID,
 
-		CategoryFields: cloneCatalogCategoryFields(pb.CategoryFields),
+			CompanyID: productBlueprint.CompanyID,
 
-		ModelRefs: nil,
-	}
+			Printed: productBlueprint.Printed,
 
-	if len(pb.ModelRefs) > 0 {
-		refs := make(
+			ProductIDTagType: string(
+				productBlueprint.
+					ProductIdTag.
+					Type,
+			),
+
+			ProductBlueprintCategoryID: category.ID,
+
+			ProductBlueprintCategoryCode: category.Code,
+
+			ProductBlueprintCategoryKind: string(category.Kind),
+
+			ProductBlueprintCategoryNameEn: category.NameEn,
+
+			ProductBlueprintCategoryNameJa: category.NameJa,
+
+			ProductBlueprintCategoryPath: append(
+				[]string(nil),
+				category.Path...,
+			),
+
+			CategoryFields: cloneCatalogCategoryFields(
+				productBlueprint.
+					CategoryFields,
+			),
+
+			ModelRefs: nil,
+		}
+
+	if len(productBlueprint.ModelRefs) > 0 {
+		modelRefs := make(
 			[]dto.CatalogProductBlueprintModelRefDTO,
 			0,
-			len(pb.ModelRefs),
+			len(productBlueprint.ModelRefs),
 		)
 
-		for _, r := range pb.ModelRefs {
-			if r.ModelID == "" {
+		for _, modelRef := range productBlueprint.ModelRefs {
+			if modelRef.ModelID == "" {
 				continue
 			}
 
-			refs = append(refs, dto.CatalogProductBlueprintModelRefDTO{
-				ModelID:      r.ModelID,
-				DisplayOrder: r.DisplayOrder,
-			})
+			modelRefs = append(
+				modelRefs,
+				dto.CatalogProductBlueprintModelRefDTO{
+					ModelID: modelRef.ModelID,
+
+					DisplayOrder: modelRef.DisplayOrder,
+				},
+			)
 		}
 
-		if len(refs) > 0 {
-			out.ModelRefs = refs
+		if len(modelRefs) > 0 {
+			output.ModelRefs = modelRefs
 		}
 	}
 
-	return out
+	return output
 }
 
-func cloneCatalogCategoryFields(fields pbdom.CategoryFields) map[string]any {
+func cloneCatalogCategoryFields(
+	fields pbdom.CategoryFields,
+) map[string]any {
 	if len(fields) == 0 {
 		return nil
 	}
 
-	out := make(map[string]any, len(fields))
+	output := make(
+		map[string]any,
+		len(fields),
+	)
 
 	for key, value := range fields {
-		if key == "" || value == nil {
+		if key == "" ||
+			value == nil {
 			continue
 		}
 
-		out[key] = value
+		output[key] = value
 	}
 
-	if len(out) == 0 {
+	if len(output) == 0 {
 		return nil
 	}
 
-	return out
+	return output
 }
 
 // Mint -> CatalogInventoryDTO
-// Firestore 正:
-// productBlueprintId / tokenBlueprintId / modelIds / stock.*.accumulation / stock.*.reservedCount
-func toCatalogInventoryDTOFromMint(m invdom.Mint) *dto.CatalogInventoryDTO {
-	out := &dto.CatalogInventoryDTO{
-		ID:                 m.ID,
-		ProductBlueprintID: m.ProductBlueprintID,
-		TokenBlueprintID:   m.TokenBlueprintID,
-		ModelIDs:           append([]string{}, m.ModelIDs...),
-		Stock:              map[string]dto.CatalogInventoryModelStockDTO{},
+//
+// Firestore source of truth:
+// productBlueprintId / tokenBlueprintId / modelIds /
+// stock.*.accumulation / stock.*.reservedCount
+func toCatalogInventoryDTOFromMint(
+	mint invdom.Mint,
+) *dto.CatalogInventoryDTO {
+	output := &dto.CatalogInventoryDTO{
+		ID: mint.ID,
+
+		ProductBlueprintID: mint.ProductBlueprintID,
+
+		TokenBlueprintID: mint.TokenBlueprintID,
+
+		ModelIDs: append(
+			[]string{},
+			mint.ModelIDs...,
+		),
+
+		Stock: map[string]dto.
+			CatalogInventoryModelStockDTO{},
 	}
 
-	if m.Stock == nil {
-		return out
+	if mint.Stock == nil {
+		return output
 	}
 
-	for modelID, ms := range m.Stock {
+	for modelID, modelStock := range mint.Stock {
 		if modelID == "" {
 			continue
 		}
 
-		out.Stock[modelID] = dto.CatalogInventoryModelStockDTO{
-			Accumulation:  ms.Accumulation,
-			ReservedCount: ms.ReservedCount,
-		}
+		output.Stock[modelID] =
+			dto.CatalogInventoryModelStockDTO{
+				Accumulation: modelStock.Accumulation,
+
+				ReservedCount: modelStock.ReservedCount,
+			}
 	}
 
-	return out
+	return output
 }
 
-func toTokenBlueprintPatch(tb *tbdom.TokenBlueprint) tbdom.Patch {
-	if tb == nil {
+func toTokenBlueprintPatch(
+	tokenBlueprint *tbdom.TokenBlueprint,
+) tbdom.Patch {
+	if tokenBlueprint == nil {
 		return tbdom.Patch{}
 	}
 
 	return tbdom.Patch{
-		ID:          tb.ID,
-		TokenName:   tb.Name,
-		Symbol:      tb.Symbol,
-		BrandID:     tb.BrandID,
-		BrandName:   "",
-		CompanyID:   tb.CompanyID,
-		Description: tb.Description,
-		Minted:      tb.Minted,
-		MetadataURI: tb.MetadataURI,
-		IconURL:     tb.IconURL,
+		ID: tokenBlueprint.ID,
+
+		TokenName: tokenBlueprint.Name,
+
+		Symbol: tokenBlueprint.Symbol,
+
+		BrandID: tokenBlueprint.BrandID,
+
+		BrandName: "",
+
+		CompanyID: tokenBlueprint.CompanyID,
+
+		Description: tokenBlueprint.Description,
+
+		Minted: tokenBlueprint.Minted,
+
+		MetadataURI: tokenBlueprint.MetadataURI,
+
+		IconURL: tokenBlueprint.IconURL,
 	}
 }
 
-// ProductBlueprintReview summary -> CatalogProductReviewSummaryDTO
 func toCatalogProductReviewSummaryDTO(
-	s productBlueprintReview.ProductReviewSummary,
+	summary productBlueprintReview.
+		ProductReviewSummary,
 ) *dto.CatalogProductReviewSummaryDTO {
 	return &dto.CatalogProductReviewSummaryDTO{
-		ProductBlueprintID: s.ProductBlueprintID,
-		Status:             s.Status,
-		TotalCount:         s.TotalCount,
-		AverageRating:      s.AverageRating,
-		Rating5Count:       s.Rating5Count,
-		Rating4Count:       s.Rating4Count,
-		Rating3Count:       s.Rating3Count,
-		Rating2Count:       s.Rating2Count,
-		Rating1Count:       s.Rating1Count,
+		ProductBlueprintID: summary.ProductBlueprintID,
+
+		Status: summary.Status,
+
+		TotalCount: summary.TotalCount,
+
+		AverageRating: summary.AverageRating,
+
+		Rating5Count: summary.Rating5Count,
+
+		Rating4Count: summary.Rating4Count,
+
+		Rating3Count: summary.Rating3Count,
+
+		Rating2Count: summary.Rating2Count,
+
+		Rating1Count: summary.Rating1Count,
 	}
 }
 
@@ -558,64 +852,107 @@ func toCatalogModelVariationDTOFromResolved(
 	productBlueprintID string,
 	resolved appresolver.ModelResolved,
 ) dto.CatalogModelVariationDTO {
-	out := dto.CatalogModelVariationDTO{
-		ID:                 modelID,
-		ProductBlueprintID: productBlueprintID,
-		Kind:               resolved.Kind,
-		ModelNumber:        resolved.ModelNumber,
+	output :=
+		dto.CatalogModelVariationDTO{
+			ID: modelID,
 
-		Size:      resolved.Size,
-		ColorName: resolved.Color,
+			ProductBlueprintID: productBlueprintID,
 
-		VolumeUnit: resolved.VolumeUnit,
+			Kind: resolved.Kind,
 
-		Measurements: map[string]int{},
-		StockKeys:    0,
-	}
+			ModelNumber: resolved.ModelNumber,
+
+			Size: resolved.Size,
+
+			ColorName: resolved.Color,
+
+			VolumeUnit: resolved.VolumeUnit,
+
+			Measurements: map[string]int{},
+
+			StockKeys: 0,
+		}
 
 	if resolved.RGB != nil {
-		out.ColorRGB = *resolved.RGB
+		output.ColorRGB =
+			*resolved.RGB
 	}
 
 	if resolved.VolumeValue != nil {
-		v := float64(*resolved.VolumeValue)
-		out.VolumeValue = &v
+		value :=
+			float64(
+				*resolved.VolumeValue,
+			)
+
+		output.VolumeValue = &value
 	}
 
-	return out
+	return output
 }
 
 // ============================================================
 // Name resolvers
 // ============================================================
 
-func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver, dtoPB *dto.CatalogProductBlueprintDTO) {
-	if r == nil || dtoPB == nil {
+func fillProductBlueprintNames(
+	ctx context.Context,
+	resolver *appresolver.NameResolver,
+	productBlueprintDTO *dto.CatalogProductBlueprintDTO,
+) {
+	if resolver == nil ||
+		productBlueprintDTO == nil {
 		return
 	}
 
-	if dtoPB.BrandID != "" {
-		if bn := r.ResolveBrandName(ctx, dtoPB.BrandID); bn != "" {
-			dtoPB.BrandName = bn
+	if productBlueprintDTO.BrandID != "" {
+		brandName :=
+			resolver.ResolveBrandName(
+				ctx,
+				productBlueprintDTO.BrandID,
+			)
+
+		if brandName != "" {
+			productBlueprintDTO.BrandName =
+				brandName
 		}
 	}
 
-	if dtoPB.CompanyID != "" {
-		if cn := r.ResolveCompanyName(ctx, dtoPB.CompanyID); cn != "" {
-			dtoPB.CompanyName = cn
+	if productBlueprintDTO.CompanyID != "" {
+		companyName :=
+			resolver.ResolveCompanyName(
+				ctx,
+				productBlueprintDTO.CompanyID,
+			)
+
+		if companyName != "" {
+			productBlueprintDTO.CompanyName =
+				companyName
 		}
 	}
 }
 
-// tbdom.Patch は value 型（string/bool）前提。CompanyName は存在しない。
-func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolver, p *tbdom.Patch) {
-	if r == nil || p == nil {
+// tbdom.Patchはvalue型を前提とする。
+// CompanyNameは存在しない。
+func fillTokenBlueprintPatchNames(
+	ctx context.Context,
+	resolver *appresolver.NameResolver,
+	patch *tbdom.Patch,
+) {
+	if resolver == nil ||
+		patch == nil {
 		return
 	}
 
-	if p.BrandID != "" && p.BrandName == "" {
-		if bn := r.ResolveBrandName(ctx, p.BrandID); bn != "" {
-			p.BrandName = bn
+	if patch.BrandID != "" &&
+		patch.BrandName == "" {
+		brandName :=
+			resolver.ResolveBrandName(
+				ctx,
+				patch.BrandID,
+			)
+
+		if brandName != "" {
+			patch.BrandName = brandName
 		}
 	}
 }
@@ -624,22 +961,34 @@ func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolv
 // Stock helpers
 // ============================================================
 
-func stockKeyCount(stock map[string]dto.CatalogInventoryModelStockDTO) int {
+func stockKeyCount(
+	stock map[string]dto.
+		CatalogInventoryModelStockDTO,
+) int {
 	return len(stock)
 }
 
 // attachStockToModelVariations sets StockKeys only.
-func attachStockToModelVariations(items *[]dto.CatalogModelVariationDTO, inv *dto.CatalogInventoryDTO) {
-	if items == nil || len(*items) == 0 {
+func attachStockToModelVariations(
+	items *[]dto.CatalogModelVariationDTO,
+	inventory *dto.CatalogInventoryDTO,
+) {
+	if items == nil ||
+		len(*items) == 0 {
 		return
 	}
 
 	stockKeys := 0
-	if inv != nil {
-		stockKeys = stockKeyCount(inv.Stock)
+
+	if inventory != nil {
+		stockKeys =
+			stockKeyCount(
+				inventory.Stock,
+			)
 	}
 
-	for i := range *items {
-		(*items)[i].StockKeys = stockKeys
+	for index := range *items {
+		(*items)[index].StockKeys =
+			stockKeys
 	}
 }
