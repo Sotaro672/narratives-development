@@ -12,16 +12,17 @@ import (
 // ------------------------------------------------------------
 // ProductBlueprintModelRefPort
 // ------------------------------------------------------------
+
+// ProductBlueprintModelRefPortは、models collectionを正として
+// ProductBlueprintのmodelRefsを同期するためのportです。
 //
-// ModelUsecase が models collection を正として
-// productBlueprint.modelRefs を同期するための port。
-//
-// NOTE:
-// - ProductBlueprint の通常更新責務は持たない。
-// - modelRefs の置き換えだけを扱う。
-// - ReplaceModelRefsWithoutTouch は updatedAt / updatedBy を触らない。
+// ProductBlueprintの通常更新は扱わず、modelRefsの置換だけを扱います。
+// ReplaceModelRefsWithoutTouchはupdatedAtとupdatedByを変更しません。
 type ProductBlueprintModelRefPort interface {
-	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+	GetByID(
+		ctx context.Context,
+		id string,
+	) (productbpdom.ProductBlueprint, error)
 
 	ReplaceModelRefsWithoutTouch(
 		ctx context.Context,
@@ -33,28 +34,22 @@ type ProductBlueprintModelRefPort interface {
 // ------------------------------------------------------------
 // ModelUsecase
 // ------------------------------------------------------------
-//
-// Mall handler から model.RepositoryPort として渡したいので、
-// ModelUsecase 自体が modeldom.RepositoryPort を実装する（= repo に委譲する）。
-//
-// NOTE:
-// Product-level metadata は productBlueprint.CategoryFields に集約する方針。
-//
-// この usecase は category-specific model variation の操作を担当する。
-// apparel では size / color / measurements を扱う。
-// alcohol では volume のみを扱う。
-// どの category で model variation を作成するかは、
-// productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
-//
-// modelRefs は ProductBlueprintUsecase ではなく、ModelUsecase 側で
-// models collection を正として同期する。
-// ------------------------------------------------------------
 
+// ModelUsecaseはcategory-specificなModel variationの操作を担当します。
+//
+// Product-level metadataはProductBlueprint.CategoryFieldsを正とします。
+// Apparelではsize、color、measurementsを扱います。
+// Alcoholではvolumeだけを扱います。
+//
+// models collectionを正として、変更後に
+// ProductBlueprint.modelRefsを同期します。
 type ModelUsecase struct {
 	repo modeldom.RepositoryPort
 
 	productBlueprintRefs ProductBlueprintModelRefPort
 }
+
+var _ modeldom.RepositoryPort = (*ModelUsecase)(nil)
 
 func NewModelUsecase(
 	repo modeldom.RepositoryPort,
@@ -74,256 +69,418 @@ func (u *ModelUsecase) ListByProductBlueprintID(
 	ctx context.Context,
 	productBlueprintID string,
 ) ([]modeldom.ModelVariation, error) {
-	if u.repo == nil {
+	if u == nil || u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
+
 	if productBlueprintID == "" {
 		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
-	return u.repo.ListByProductBlueprintID(ctx, productBlueprintID)
+	return u.repo.ListByProductBlueprintID(
+		ctx,
+		productBlueprintID,
+	)
 }
 
-// GetByID returns a category-specific ModelVariation by variation ID.
-//
-// NOTE:
-//   - MintRequest detail / InspectionResultCard などで、
-//     modelId から modelNumber / size / color / volume を単体解決する用途。
-//   - 永続化の正は repository なので、usecase では repo.GetByID に委譲する。
-//   - productBlueprint.modelRefs の同期は不要。
+// GetByIDはvariation IDからcategory-specificなModel variationを取得します。
 func (u *ModelUsecase) GetByID(
 	ctx context.Context,
 	variationID string,
 ) (modeldom.ModelVariation, error) {
-	if u.repo == nil {
+	if u == nil || u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
+
 	if variationID == "" {
 		return nil, modeldom.ErrInvalidID
 	}
 
-	return u.repo.GetByID(ctx, variationID)
+	return u.repo.GetByID(
+		ctx,
+		variationID,
+	)
 }
 
-// Create creates a category-specific ModelVariation.
+// Createはcategory-specificなModel variationを作成します。
 //
-// NOTE:
-//   - apparel では NewModelVariation.Apparel を使う。
-//   - alcohol では NewModelVariation.Alcohol を使う。
-//   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
-//   - alcohol では Volume のみを variation field として扱う。
-//   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
-//   - 作成後、models collection を正として productBlueprint.modelRefs を同期する。
+// 作成後、models collectionを正として
+// ProductBlueprint.modelRefsを同期します。
 func (u *ModelUsecase) Create(
 	ctx context.Context,
-	v modeldom.NewModelVariation,
+	variation modeldom.NewModelVariation,
 ) (modeldom.ModelVariation, error) {
-	if u.repo == nil {
+	if u == nil || u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
-	if err := v.Validate(); err != nil {
+
+	if err := variation.Validate(); err != nil {
 		return nil, err
 	}
 
-	created, err := u.repo.Create(ctx, v)
+	productBlueprintID := variation.ProductBlueprintID()
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+
+	created, err := u.repo.Create(
+		ctx,
+		variation,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := u.syncProductBlueprintModelRefs(ctx, v.ProductBlueprintID()); err != nil {
+	if err := u.syncProductBlueprintModelRefs(
+		ctx,
+		productBlueprintID,
+	); err != nil {
 		return nil, err
 	}
 
 	return created, nil
 }
 
-// Update updates a category-specific ModelVariation.
+// Updateはcategory-specificなModel variationを更新します。
 //
-// NOTE:
-//   - apparel では size / color / measurements 更新に対応する。
-//   - alcohol では volume 更新に対応する。
-//   - 一括差し替えは行わない。
-//   - 削除が必要な variation は Delete を個別に呼び出す。
-//   - 履歴は保存しない。
-//   - modelId 自体は変わらないため、modelRefs の同期は行わない。
+// 既存variationを取得してkindを確定した後、
+// kindに対して更新内容が有効であることを検証します。
+// Model IDは変わらないためmodelRefsの同期は行いません。
 func (u *ModelUsecase) Update(
 	ctx context.Context,
 	variationID string,
 	updates modeldom.ModelVariationUpdate,
 ) (modeldom.ModelVariation, error) {
-	if u.repo == nil {
+	if u == nil || u.repo == nil {
 		return nil, modeldom.ErrNotFound
 	}
+
 	if variationID == "" {
 		return nil, modeldom.ErrInvalidID
 	}
 
-	updated, err := u.repo.Update(ctx, variationID, updates)
+	current, err := u.repo.GetByID(
+		ctx,
+		variationID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return updated, nil
+	if current == nil {
+		return nil, modeldom.ErrNotFound
+	}
+
+	if err := updates.Validate(
+		current.GetKind(),
+	); err != nil {
+		return nil, err
+	}
+
+	return u.repo.Update(
+		ctx,
+		variationID,
+		updates,
+	)
 }
 
-// Delete physically deletes a category-specific ModelVariation.
+// Deleteはcategory-specificなModel variationを物理削除します。
 //
-// NOTE:
-//   - repository は対象 document を物理削除する。
-//   - 削除前に productBlueprintID を保持する。
-//   - 削除後、models collection を正として productBlueprint.modelRefs を同期する。
+// 削除前にProductBlueprint IDを取得し、削除後に
+// ProductBlueprint.modelRefsを同期します。
 func (u *ModelUsecase) Delete(
 	ctx context.Context,
 	variationID string,
 ) error {
-	if u.repo == nil {
+	if u == nil || u.repo == nil {
 		return modeldom.ErrNotFound
 	}
+
 	if variationID == "" {
 		return modeldom.ErrInvalidID
 	}
 
-	current, err := u.repo.GetByID(ctx, variationID)
+	current, err := u.repo.GetByID(
+		ctx,
+		variationID,
+	)
 	if err != nil {
 		return err
 	}
 
-	productBlueprintID := modelVariationProductBlueprintID(current)
+	if current == nil {
+		return modeldom.ErrNotFound
+	}
+
+	productBlueprintID := current.GetProductBlueprintID()
 	if productBlueprintID == "" {
 		return modeldom.ErrInvalidBlueprintID
 	}
 
-	if err := u.repo.Delete(ctx, variationID); err != nil {
+	if err := u.repo.Delete(
+		ctx,
+		variationID,
+	); err != nil {
 		return err
 	}
 
-	return u.syncProductBlueprintModelRefs(ctx, productBlueprintID)
+	return u.syncProductBlueprintModelRefs(
+		ctx,
+		productBlueprintID,
+	)
+}
+
+// ReplaceByProductBlueprintIDは、指定されたProductBlueprintに属する
+// Model variationを一括置換します。
+//
+// 既存variationの削除と新規variationの作成は、Repository側の
+// 単一transaction内で実行されます。
+//
+// 置換後、作成されたModel variationを正として
+// ProductBlueprint.modelRefsを同期します。
+func (u *ModelUsecase) ReplaceByProductBlueprintID(
+	ctx context.Context,
+	productBlueprintID string,
+	variations []modeldom.NewModelVariation,
+) ([]modeldom.ModelVariation, error) {
+	if u == nil || u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+
+	for _, variation := range variations {
+		if err := variation.Validate(); err != nil {
+			return nil, err
+		}
+
+		if variation.ProductBlueprintID() != productBlueprintID {
+			return nil, modeldom.ErrProductMismatch
+		}
+	}
+
+	replaced, err := u.repo.ReplaceByProductBlueprintID(
+		ctx,
+		productBlueprintID,
+		variations,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := u.syncProductBlueprintModelRefsFromVariations(
+		ctx,
+		productBlueprintID,
+		replaced,
+	); err != nil {
+		return nil, err
+	}
+
+	return replaced, nil
 }
 
 // ------------------------------------------------------------
-// productBlueprint.modelRefs sync
+// ProductBlueprint.modelRefs sync
 // ------------------------------------------------------------
 
 func (u *ModelUsecase) syncProductBlueprintModelRefs(
 	ctx context.Context,
 	productBlueprintID string,
 ) error {
-	if u.repo == nil {
+	if u == nil || u.repo == nil {
 		return modeldom.ErrNotFound
 	}
+
 	if u.productBlueprintRefs == nil {
 		return nil
 	}
+
 	if productBlueprintID == "" {
 		return modeldom.ErrInvalidBlueprintID
 	}
 
-	pb, err := u.productBlueprintRefs.GetByID(ctx, productBlueprintID)
+	variations, err := u.repo.ListByProductBlueprintID(
+		ctx,
+		productBlueprintID,
+	)
 	if err != nil {
 		return err
 	}
 
-	models, err := u.repo.ListByProductBlueprintID(ctx, productBlueprintID)
+	return u.syncProductBlueprintModelRefsFromVariations(
+		ctx,
+		productBlueprintID,
+		variations,
+	)
+}
+
+func (u *ModelUsecase) syncProductBlueprintModelRefsFromVariations(
+	ctx context.Context,
+	productBlueprintID string,
+	variations []modeldom.ModelVariation,
+) error {
+	if u == nil {
+		return modeldom.ErrNotFound
+	}
+
+	if u.productBlueprintRefs == nil {
+		return nil
+	}
+
+	if productBlueprintID == "" {
+		return modeldom.ErrInvalidBlueprintID
+	}
+
+	productBlueprint, err := u.productBlueprintRefs.GetByID(
+		ctx,
+		productBlueprintID,
+	)
 	if err != nil {
 		return err
 	}
 
-	refs := rebuildModelRefsPreservingOrder(pb.ModelRefs, models)
+	for _, variation := range variations {
+		if variation == nil {
+			return modeldom.ErrInvalid
+		}
+
+		if variation.GetProductBlueprintID() != productBlueprintID {
+			return modeldom.ErrProductMismatch
+		}
+
+		if err := variation.Validate(); err != nil {
+			return err
+		}
+	}
+
+	refs := rebuildModelRefsPreservingOrder(
+		productBlueprint.ModelRefs,
+		variations,
+	)
 
 	_, err = u.productBlueprintRefs.ReplaceModelRefsWithoutTouch(
 		ctx,
 		productBlueprintID,
 		refs,
 	)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return err
 }
 
 func rebuildModelRefsPreservingOrder(
 	current []productbpdom.ModelRef,
-	models []modeldom.ModelVariation,
+	variations []modeldom.ModelVariation,
 ) []productbpdom.ModelRef {
-	existingModelIDs := make(map[string]struct{}, len(models))
-	modelIDsInListOrder := make([]string, 0, len(models))
+	existingModelIDs := make(
+		map[string]struct{},
+		len(variations),
+	)
 
-	for _, model := range models {
-		modelID := modelVariationID(model)
+	modelIDsInListOrder := make(
+		[]string,
+		0,
+		len(variations),
+	)
+
+	for _, variation := range variations {
+		if variation == nil {
+			continue
+		}
+
+		modelID := variation.GetID()
 		if modelID == "" {
 			continue
 		}
-		if _, ok := existingModelIDs[modelID]; ok {
+
+		if _, exists := existingModelIDs[modelID]; exists {
 			continue
 		}
 
 		existingModelIDs[modelID] = struct{}{}
-		modelIDsInListOrder = append(modelIDsInListOrder, modelID)
+		modelIDsInListOrder = append(
+			modelIDsInListOrder,
+			modelID,
+		)
 	}
 
-	used := make(map[string]struct{}, len(modelIDsInListOrder))
-	orderedIDs := make([]string, 0, len(modelIDsInListOrder))
+	usedModelIDs := make(
+		map[string]struct{},
+		len(modelIDsInListOrder),
+	)
 
-	currentCopy := append([]productbpdom.ModelRef(nil), current...)
-	sort.SliceStable(currentCopy, func(i, j int) bool {
-		return currentCopy[i].DisplayOrder < currentCopy[j].DisplayOrder
-	})
+	orderedModelIDs := make(
+		[]string,
+		0,
+		len(modelIDsInListOrder),
+	)
+
+	currentCopy := append(
+		[]productbpdom.ModelRef(nil),
+		current...,
+	)
+
+	sort.SliceStable(
+		currentCopy,
+		func(i, j int) bool {
+			return currentCopy[i].DisplayOrder <
+				currentCopy[j].DisplayOrder
+		},
+	)
 
 	for _, ref := range currentCopy {
 		modelID := ref.ModelID
 		if modelID == "" {
 			continue
 		}
-		if _, ok := existingModelIDs[modelID]; !ok {
-			continue
-		}
-		if _, ok := used[modelID]; ok {
+
+		if _, exists := existingModelIDs[modelID]; !exists {
 			continue
 		}
 
-		used[modelID] = struct{}{}
-		orderedIDs = append(orderedIDs, modelID)
+		if _, alreadyUsed := usedModelIDs[modelID]; alreadyUsed {
+			continue
+		}
+
+		usedModelIDs[modelID] = struct{}{}
+		orderedModelIDs = append(
+			orderedModelIDs,
+			modelID,
+		)
 	}
 
 	for _, modelID := range modelIDsInListOrder {
 		if modelID == "" {
 			continue
 		}
-		if _, ok := used[modelID]; ok {
+
+		if _, alreadyUsed := usedModelIDs[modelID]; alreadyUsed {
 			continue
 		}
 
-		used[modelID] = struct{}{}
-		orderedIDs = append(orderedIDs, modelID)
+		usedModelIDs[modelID] = struct{}{}
+		orderedModelIDs = append(
+			orderedModelIDs,
+			modelID,
+		)
 	}
 
-	refs := make([]productbpdom.ModelRef, 0, len(orderedIDs))
-	for i, modelID := range orderedIDs {
-		refs = append(refs, productbpdom.ModelRef{
-			ModelID:      modelID,
-			DisplayOrder: i + 1,
-		})
+	refs := make(
+		[]productbpdom.ModelRef,
+		0,
+		len(orderedModelIDs),
+	)
+
+	for index, modelID := range orderedModelIDs {
+		refs = append(
+			refs,
+			productbpdom.ModelRef{
+				ModelID:      modelID,
+				DisplayOrder: index + 1,
+			},
+		)
 	}
 
 	return refs
-}
-
-func modelVariationID(v modeldom.ModelVariation) string {
-	if v == nil {
-		return ""
-	}
-
-	return v.GetID()
-}
-
-func modelVariationProductBlueprintID(v modeldom.ModelVariation) string {
-	switch x := v.(type) {
-	case modeldom.ApparelModelVariation:
-		return x.ProductBlueprintID
-	case modeldom.AlcoholModelVariation:
-		return x.ProductBlueprintID
-	default:
-		return ""
-	}
 }

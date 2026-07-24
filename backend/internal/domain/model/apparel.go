@@ -1,15 +1,17 @@
-// backend/internal/domain/model/apparel.go
 // Responsibility: apparel category model variation definitions.
 //
 // NOTE:
-//   - common.go 側に ModelVariation / ModelData / Model の共通定義があるため、
+//   - common.go側にModelVariation / ModelDataの共通定義があるため、
 //     このファイルでは再定義しない。
-//   - apparel 専用の variation は ApparelModelVariation として定義する。
-//   - apparel.tops / apparel.bottoms / apparel.dress は Color / Size / Measurements を使う。
-//   - apparel.outerwear / apparel.shoes は Color / Size を使い、Measurements は空でもよい。
-//   - apparel.accessory / apparel.bag は原則 model variation を作成しない。
-//   - どのカテゴリで Measurements を必須にするかは、
-//     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
+//   - apparel専用のvariationはApparelModelVariationとして定義する。
+//   - apparel.tops / apparel.bottoms / apparel.dressは
+//     Color / Size / Measurementsを使う。
+//   - apparel.outerwear / apparel.shoesはColor / Sizeを使い、
+//     Measurementsは空でもよい。
+//   - apparel.accessory / apparel.bagは原則model variationを作成しない。
+//   - Measurementsの必須判定は
+//     productBlueprintCategory/input_schema.goのschemaを
+//     application/usecase側で参照して行う。
 package model
 
 import (
@@ -18,68 +20,74 @@ import (
 )
 
 var (
-	ErrProductIDRequired          = errors.New("productId is required")
-	ErrVariationIDRequired        = errors.New("variationId is required")
-	ErrTargetVariationNotFound    = errors.New("target variation not found")
-	ErrNoVariationsFoundForSize   = errors.New("no variations found for size")
-	ErrNoVariationsFoundForColor  = errors.New("no variations found for color")
+	ErrProductIDRequired = errors.New("productId is required")
+
+	ErrVariationIDRequired = errors.New("variationId is required")
+
+	ErrTargetVariationNotFound = errors.New("target variation not found")
+
+	ErrNoVariationsFoundForSize = errors.New("no variations found for size")
+
+	ErrNoVariationsFoundForColor = errors.New("no variations found for color")
+
 	ErrProductBlueprintIDNotFound = errors.New("product blueprint id not found")
-	ErrProductBlueprintNotFound   = errors.New("product blueprint not found")
-	ErrVariationNotFound          = errors.New("variation not found")
+
+	ErrProductBlueprintNotFound = errors.New("product blueprint not found")
+
+	ErrVariationNotFound = errors.New("variation not found")
 )
 
-// ==========================
-// Types
-// ==========================
-
-// Color はカラーバリエーションを表す値オブジェクト。
-// - Name: 表示名（例: "Green", "ネイビー"）
-// - RGB : 0xRRGGBB などの int 表現を想定
+// Colorはカラーバリエーションを表す値オブジェクトです。
+// RGBは0x000000から0xFFFFFFまでの24bit整数を使用します。
 type Color struct {
 	Name string
 	RGB  int
 }
 
-// Measurements は apparel の採寸値を表すマップ型エイリアス。
-// 例:
-// - shoulderWidth
-// - bodyWidth
-// - bodyLength
-// - sleeveLength
-// - waist
-// - hip
-// - inseam
-//
-// NOTE:
-// apparel.tops / apparel.bottoms / apparel.dress では measurements を使う。
-// apparel.outerwear / apparel.shoes では measurements は空でもよい。
-// apparel.accessory / apparel.bag は原則 model variation 自体を作成しない。
-//
-// Firestore アダプタなどから model.Measurements 型として利用する。
-type Measurements = map[string]int
+func (c Color) Validate() error {
+	if c.Name == "" {
+		return ErrInvalidColor
+	}
 
-// ApparelModelVariation は apparel 用の model variation。
-//
-// category ごとの扱い:
-//   - apparel.tops:
-//     Color / Size / Measurements を使う
-//   - apparel.bottoms:
-//     Color / Size / Measurements を使う
-//   - apparel.dress:
-//     Color / Size / Measurements を使う
-//   - apparel.outerwear:
-//     Color / Size を使う。Measurements は空でもよい
-//   - apparel.shoes:
-//     Color / Size を使う。Measurements は空でもよい
-//   - apparel.accessory:
-//     原則 model variation を作成しない
-//   - apparel.bag:
-//     原則 model variation を作成しない
-//
-// NOTE:
-// ModelNumber は現行実装で必須として扱う。
-// 画面上の入力仕様から外す場合でも、既存の model 参照・表示・在庫連携が
-// ModelNumber を前提にしている可能性があるため、現時点では必須を維持する。
+	if c.RGB < 0 || c.RGB > 0xFFFFFF {
+		return ErrInvalidColor
+	}
+
+	return nil
+}
+
+// Measurementsはapparelの採寸値を表します。
+// nilと空mapのどちらも有効です。
+type Measurements map[string]int
+
+func (m Measurements) Validate() error {
+	for key, value := range m {
+		if key == "" || value < 0 {
+			return ErrInvalidMeasurements
+		}
+	}
+
+	return nil
+}
+
+func (m Measurements) Clone() Measurements {
+	if m == nil {
+		return nil
+	}
+
+	out := make(
+		Measurements,
+		len(m),
+	)
+
+	for key, value := range m {
+		out[key] = value
+	}
+
+	return out
+}
+
+// ApparelModelVariationはapparel用のmodel variationです。
 type ApparelModelVariation struct {
 	ID                 string
 	ProductBlueprintID string
@@ -93,13 +101,8 @@ type ApparelModelVariation struct {
 	UpdatedBy          *string
 }
 
-// NewApparelModelVariation は apparel model variation の新規作成時に使う入力モデル。
-// 既存の ApparelModelVariation から ID や監査情報だけを省いた形。
-//
-// NOTE:
-// Measurements は nil / 空 map を許容する。
-// measurements 必須カテゴリかどうかは、この domain ではなく
-// application/usecase 側で productBlueprintCategory schema を参照して判定する。
+// NewApparelModelVariationは
+// apparel model variationの新規作成入力です。
 type NewApparelModelVariation struct {
 	ProductBlueprintID string
 	ModelNumber        string
@@ -108,9 +111,7 @@ type NewApparelModelVariation struct {
 	Measurements       Measurements
 }
 
-// ApparelItemSpec は apparel model variation を商品個体・表示用途向けに
-// 簡易化した read model 的な値。
-// Measurements はカテゴリによって nil / 空 map の場合がある。
+// ApparelItemSpecは商品個体・表示用途向けのread modelです。
 type ApparelItemSpec struct {
 	ModelNumber  string
 	Size         string
@@ -130,158 +131,124 @@ type ModelNumber struct {
 	ModelNumber string
 }
 
-// ==========================
-// Errors
-// ==========================
-
 var (
-	ErrInvalidID            = errors.New("model: invalid id")
-	ErrInvalidProductID     = errors.New("model: invalid productId")
-	ErrInvalidBlueprintID   = errors.New("model: invalid productBlueprintId")
-	ErrInvalidModelNumber   = errors.New("model: invalid modelNumber")
-	ErrInvalidSize          = errors.New("model: invalid size")
-	ErrInvalidColor         = errors.New("model: invalid color")
-	ErrInvalidMeasurements  = errors.New("model: invalid measurements")
-	ErrInvalidUpdatedAt     = errors.New("model: invalid updatedAt")
+	ErrInvalidID = errors.New("model: invalid id")
+
+	ErrInvalidProductID = errors.New("model: invalid productId")
+
+	ErrInvalidBlueprintID = errors.New("model: invalid productBlueprintId")
+
+	ErrInvalidModelNumber = errors.New("model: invalid modelNumber")
+
+	ErrInvalidSize = errors.New("model: invalid size")
+
+	ErrInvalidColor = errors.New("model: invalid color")
+
+	ErrInvalidMeasurements = errors.New("model: invalid measurements")
+
+	ErrInvalidUpdatedAt = errors.New("model: invalid updatedAt")
+
 	ErrDuplicateVariationID = errors.New("model: duplicate variation id")
-	ErrProductMismatch      = errors.New("model: variation.productBlueprintId mismatch")
+
+	ErrProductMismatch = errors.New(
+		"model: variation.productBlueprintId mismatch",
+	)
 )
 
-// ==========================
-// Policy
-// ==========================
-
-var AllowedSizes = map[string]struct{}{}
-var AllowedColors = map[string]struct{}{}
-
-// ==========================
-// Validation
-// ==========================
-
 func (mv ApparelModelVariation) Validate() error {
-	return mv.validate()
-}
-
-func (mv ApparelModelVariation) validate() error {
 	if mv.ID == "" {
 		return ErrInvalidID
 	}
+
 	if mv.ProductBlueprintID == "" {
 		return ErrInvalidBlueprintID
 	}
+
 	if mv.ModelNumber == "" {
 		return ErrInvalidModelNumber
 	}
+
 	if mv.Size == "" {
 		return ErrInvalidSize
 	}
-	if mv.Color.Name == "" {
-		return ErrInvalidColor
-	}
-	if mv.Color.RGB < 0 {
-		return ErrInvalidColor
-	}
-	if !sizeAllowed(mv.Size) {
-		return ErrInvalidSize
-	}
-	if !colorAllowed(mv.Color.Name) {
-		return ErrInvalidColor
+
+	if err := mv.Color.Validate(); err != nil {
+		return err
 	}
 
-	// Measurements は nil / 空 map を許容する。
-	// measurements 必須カテゴリかどうかは productBlueprintCategory schema を
-	// application/usecase 側で参照して判定する。
-	for k, v := range mv.Measurements {
-		if k == "" {
-			return ErrInvalidMeasurements
-		}
-		if v < 0 {
-			return ErrInvalidMeasurements
-		}
+	if err := mv.Measurements.Validate(); err != nil {
+		return err
 	}
 
-	// CreatedAt / UpdatedAt はゼロ値許容（リポジトリや Usecase 側で設定）
 	return nil
 }
-
-// ==========================
-// Common interface helpers
-// ==========================
 
 func (mv ApparelModelVariation) GetID() string {
 	return mv.ID
 }
 
-func (mv ApparelModelVariation) GetProductBlueprintID() string {
+func (
+	mv ApparelModelVariation,
+) GetProductBlueprintID() string {
 	return mv.ProductBlueprintID
 }
 
-func (mv ApparelModelVariation) GetModelNumber() string {
+func (
+	mv ApparelModelVariation,
+) GetKind() ModelVariationKind {
+	return ModelVariationKindApparel
+}
+
+func (
+	mv ApparelModelVariation,
+) GetModelNumber() string {
 	return mv.ModelNumber
 }
 
-// ==========================
-// Behavior（ApparelModelVariation）
-// ==========================
-
-func (mv *ApparelModelVariation) SetMeasurement(key string, value int) error {
+func (
+	mv *ApparelModelVariation,
+) SetMeasurement(
+	key string,
+	value int,
+) error {
 	if key == "" || value < 0 {
 		return ErrInvalidMeasurements
 	}
+
 	if mv.Measurements == nil {
-		mv.Measurements = make(Measurements, 1)
+		mv.Measurements = make(
+			Measurements,
+			1,
+		)
 	}
+
 	mv.Measurements[key] = value
 
 	return nil
 }
 
-func (mv *ApparelModelVariation) RemoveMeasurement(key string) {
+func (
+	mv *ApparelModelVariation,
+) RemoveMeasurement(
+	key string,
+) {
 	if mv.Measurements == nil {
 		return
 	}
-	delete(mv.Measurements, key)
+
+	delete(
+		mv.Measurements,
+		key,
+	)
 }
 
-func (mv ApparelModelVariation) ToItemSpec() ApparelItemSpec {
+func (
+	mv ApparelModelVariation,
+) ToItemSpec() ApparelItemSpec {
 	return ApparelItemSpec{
 		ModelNumber:  mv.ModelNumber,
 		Size:         mv.Size,
 		Color:        mv.Color.Name,
-		Measurements: cloneMeasurements(mv.Measurements),
+		Measurements: mv.Measurements.Clone(),
 	}
-}
-
-// ==========================
-// Helpers
-// ==========================
-
-func sizeAllowed(size string) bool {
-	if len(AllowedSizes) == 0 {
-		return true
-	}
-	_, ok := AllowedSizes[size]
-
-	return ok
-}
-
-func colorAllowed(colorName string) bool {
-	if len(AllowedColors) == 0 {
-		return true
-	}
-	_, ok := AllowedColors[colorName]
-
-	return ok
-}
-
-func cloneMeasurements(m Measurements) Measurements {
-	if m == nil {
-		return nil
-	}
-	out := make(Measurements, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-
-	return out
 }

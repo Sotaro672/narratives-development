@@ -6,15 +6,7 @@ import (
 	"errors"
 )
 
-// ModelVariationKind は category-specific model variation の種別を表す。
-//
-// NOTE:
-//   - repository port 自体は productBlueprintID 配下の model variation 永続化のみを扱う。
-//   - category ごとの入力仕様・variation を作る/作らない判定は、
-//     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
-//   - Product-level metadata は productBlueprint.CategoryFields に集約する。
-//   - alcohol の vintage / region / material / alcoholContent などは ProductBlueprint.CategoryFields 側を正とし、
-//     model variation では容量のみを扱う。
+// ModelVariationKindは、category-specificなModel variationの種別を表す。
 type ModelVariationKind string
 
 const (
@@ -22,16 +14,10 @@ const (
 	ModelVariationKindAlcohol ModelVariationKind = "alcohol"
 )
 
-// NewModelVariation は category-specific model variation の新規作成入力。
+// NewModelVariationは、category-specificなModel variationの新規作成入力。
 //
-// NOTE:
-//   - apparel では NewApparelModelVariation を使う。
-//   - alcohol では NewAlcoholModelVariation を使う。
-//   - 今後 category が増える場合も、repository port の method は増やさず、
-//     NewModelVariation の組み立て・validation・mapping を application/usecase 側で吸収する。
-//   - Product-level metadata は productBlueprint.CategoryFields に集約する。
-//   - alcohol の vintage / region / material / alcoholContent などは ProductBlueprint.CategoryFields 側を正とし、
-//     model variation では容量のみを扱う。
+// Product-level metadataはProductBlueprint側を正とする。
+// Alcohol Model variationは容量だけを保持する。
 type NewModelVariation struct {
 	Kind ModelVariationKind
 
@@ -39,144 +25,234 @@ type NewModelVariation struct {
 	Alcohol *NewAlcoholModelVariation
 }
 
-func NewModelVariationFromApparel(v NewApparelModelVariation) NewModelVariation {
+func NewModelVariationFromApparel(
+	variation NewApparelModelVariation,
+) NewModelVariation {
 	return NewModelVariation{
 		Kind:    ModelVariationKindApparel,
-		Apparel: &v,
+		Apparel: &variation,
 	}
 }
 
-func NewModelVariationFromAlcohol(v NewAlcoholModelVariation) NewModelVariation {
+func NewModelVariationFromAlcohol(
+	variation NewAlcoholModelVariation,
+) NewModelVariation {
 	return NewModelVariation{
 		Kind:    ModelVariationKindAlcohol,
-		Alcohol: &v,
+		Alcohol: &variation,
 	}
 }
 
-func (v NewModelVariation) ProductBlueprintID() string {
-	switch v.Kind {
+// ProductBlueprintIDは、category-specificな入力から
+// ProductBlueprint IDを取得する。
+func (variation NewModelVariation) ProductBlueprintID() string {
+	switch variation.Kind {
 	case ModelVariationKindApparel:
-		if v.Apparel == nil {
+		if variation.Apparel == nil {
 			return ""
 		}
 
-		return v.Apparel.ProductBlueprintID
+		return variation.Apparel.ProductBlueprintID
 
 	case ModelVariationKindAlcohol:
-		if v.Alcohol == nil {
+		if variation.Alcohol == nil {
 			return ""
 		}
 
-		return v.Alcohol.ProductBlueprintID
+		return variation.Alcohol.ProductBlueprintID
 
 	default:
 		return ""
 	}
 }
 
-func (v NewModelVariation) Validate() error {
-	switch v.Kind {
+// Validateは、新規作成入力のkindとcategory-specificな内容を検証する。
+func (variation NewModelVariation) Validate() error {
+	switch variation.Kind {
 	case ModelVariationKindApparel:
-		if v.Apparel == nil {
+		if variation.Apparel == nil {
 			return ErrInvalid
 		}
-		if v.Apparel.ProductBlueprintID == "" {
+
+		// 異なるkindの入力が同時に設定されることを許可しない。
+		if variation.Alcohol != nil {
+			return ErrInvalid
+		}
+
+		if variation.Apparel.ProductBlueprintID == "" {
 			return ErrInvalidBlueprintID
 		}
-		if v.Apparel.ModelNumber == "" {
+
+		if variation.Apparel.ModelNumber == "" {
 			return ErrInvalidModelNumber
 		}
-		if v.Apparel.Size == "" {
+
+		if variation.Apparel.Size == "" {
 			return ErrInvalidSize
 		}
-		if v.Apparel.Color.Name == "" {
-			return ErrInvalidColor
+
+		if err := variation.Apparel.Color.Validate(); err != nil {
+			return err
 		}
-		if v.Apparel.Color.RGB < 0 {
-			return ErrInvalidColor
-		}
-		for k, value := range v.Apparel.Measurements {
-			if k == "" || value < 0 {
-				return ErrInvalidMeasurements
-			}
+
+		if err := variation.Apparel.Measurements.Validate(); err != nil {
+			return err
 		}
 
 		return nil
 
 	case ModelVariationKindAlcohol:
-		if v.Alcohol == nil {
+		if variation.Alcohol == nil {
 			return ErrInvalid
 		}
-		if v.Alcohol.ProductBlueprintID == "" {
+
+		// 異なるkindの入力が同時に設定されることを許可しない。
+		if variation.Apparel != nil {
+			return ErrInvalid
+		}
+
+		if variation.Alcohol.ProductBlueprintID == "" {
 			return ErrInvalidBlueprintID
 		}
-		if v.Alcohol.ModelNumber == "" {
+
+		if variation.Alcohol.ModelNumber == "" {
 			return ErrInvalidModelNumber
 		}
 
-		return v.Alcohol.Volume.Validate()
+		return variation.Alcohol.Volume.Validate()
 
 	default:
-		return ErrInvalid
+		return ErrInvalidKind
 	}
 }
 
-// ModelVariationUpdate corresponds to TS: Partial<Omit<ModelVariation, 'id'>>
+// ModelVariationUpdateは、Model variationの部分更新入力。
 //
-// NOTE:
-//   - apparel では size / color / measurements 更新に対応する。
-//   - alcohol では volume 更新に対応する。
-//   - Measurements / Volume は nil なら更新スキップ。
-//   - apparel.outerwear / apparel.shoes では Measurements は空でもよい。
-//   - measurements 必須判定は productBlueprintCategory schema を
-//     application/usecase 側で参照して行う。
+// MeasurementsまたはVolumeがnilの場合は、その項目の更新を行わない。
+// category schemaに基づくMeasurementsの必須判定はUsecase側で行う。
 type ModelVariationUpdate struct {
-	Size         *string      `json:"size,omitempty"`
-	Color        *Color       `json:"color,omitempty"` // 部分更新したい場合は構造に注意
-	ModelNumber  *string      `json:"modelNumber,omitempty"`
-	Measurements Measurements `json:"measurements,omitempty"` // nil なら更新スキップ
-
-	// alcohol 用。
-	// nil なら更新スキップ。
-	Volume *Volume `json:"volume,omitempty"`
+	Size         *string
+	Color        *Color
+	ModelNumber  *string
+	Measurements Measurements
+	Volume       *Volume
 }
 
-// RepositoryPort abstracts model variation data access.
+// Validateは、既存Model variationのkindに対して
+// 更新内容が有効であることを検証する。
+func (update ModelVariationUpdate) Validate(
+	kind ModelVariationKind,
+) error {
+	if update.ModelNumber != nil &&
+		*update.ModelNumber == "" {
+		return ErrInvalidModelNumber
+	}
+
+	switch kind {
+	case ModelVariationKindApparel:
+		// ApparelにAlcohol専用項目を設定することを許可しない。
+		if update.Volume != nil {
+			return ErrInvalid
+		}
+
+		if update.Size != nil &&
+			*update.Size == "" {
+			return ErrInvalidSize
+		}
+
+		if update.Color != nil {
+			if err := update.Color.Validate(); err != nil {
+				return err
+			}
+		}
+
+		if err := update.Measurements.Validate(); err != nil {
+			return err
+		}
+
+		return nil
+
+	case ModelVariationKindAlcohol:
+		// AlcoholにApparel専用項目を設定することを許可しない。
+		if update.Size != nil ||
+			update.Color != nil ||
+			update.Measurements != nil {
+			return ErrInvalid
+		}
+
+		if update.Volume != nil {
+			return update.Volume.Validate()
+		}
+
+		return nil
+
+	default:
+		return ErrInvalidKind
+	}
+}
+
+// RepositoryPortは、Model variationの永続化境界を表す。
 //
-// NOTE:
-//   - model variation は productBlueprint に従属するため、
-//     productBlueprintID を超えた横断 List は持たない。
-//   - Product-level metadata は productBlueprint.CategoryFields に集約する。
-//   - この port は category-specific model variation の永続化境界として扱う。
-//   - apparel では size / color / measurements を使う。
-//   - alcohol では volume のみを使う。
-//   - どの category で model variation を作成するかは、
-//     productBlueprintCategory/input_schema.go の schema を application/usecase 側で参照して判断する。
-//   - size / color / volume / modelNumber などの表示用 aggregation は repository port ではなく、
-//     application/query/read model 側で ListByProductBlueprintID の結果から組み立てる。
+// Model variationはProductBlueprintに従属するため、
+// ProductBlueprintを横断する汎用Listは公開しない。
 type RepositoryPort interface {
-	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]ModelVariation, error)
-	GetByID(ctx context.Context, variationID string) (ModelVariation, error)
+	ListByProductBlueprintID(
+		ctx context.Context,
+		productBlueprintID string,
+	) ([]ModelVariation, error)
 
-	// Create creates a category-specific model variation.
+	GetByID(
+		ctx context.Context,
+		variationID string,
+	) (ModelVariation, error)
+
+	Create(
+		ctx context.Context,
+		variation NewModelVariation,
+	) (ModelVariation, error)
+
+	Update(
+		ctx context.Context,
+		variationID string,
+		updates ModelVariationUpdate,
+	) (ModelVariation, error)
+
+	Delete(
+		ctx context.Context,
+		variationID string,
+	) error
+
+	// ReplaceByProductBlueprintIDは、指定したProductBlueprintに属する
+	// 既存variationの削除と新規variationの作成を、単一の原子的処理として行う。
 	//
-	// NOTE:
-	//   - 新規作成では productID は使わず、NewModelVariation.ProductBlueprintID() で紐付ける。
-	//   - apparel.outerwear / apparel.shoes では Measurements は nil / 空でもよい。
-	//   - alcohol では Volume のみを variation field として扱う。
-	//   - measurements 必須カテゴリかどうかは usecase 側で category schema を参照して判定する。
-	Create(ctx context.Context, variation NewModelVariation) (ModelVariation, error)
-
-	Update(ctx context.Context, variationID string, updates ModelVariationUpdate) (ModelVariation, error)
-	Delete(ctx context.Context, variationID string) error
+	// 永続化基盤のtransaction上限を超える場合は、
+	// 書込み開始前にErrAtomicReplaceLimitExceededを返す。
+	ReplaceByProductBlueprintID(
+		ctx context.Context,
+		productBlueprintID string,
+		variations []NewModelVariation,
+	) ([]ModelVariation, error)
 }
 
-// Common repository errors
+// Repository共通エラー。
 var (
-	ErrNotFound = errors.New("model: not found")
-	ErrConflict = errors.New("model: conflict")
-	ErrInvalid  = errors.New("model: invalid")
-)
+	ErrNotFound = errors.New(
+		"model: not found",
+	)
 
-// Compat alias if some code refers to Repository
-type Repository = RepositoryPort
+	ErrConflict = errors.New(
+		"model: conflict",
+	)
+
+	ErrInvalid = errors.New(
+		"model: invalid",
+	)
+
+	ErrInvalidKind = errors.New(
+		"model: invalid kind",
+	)
+
+	ErrAtomicReplaceLimitExceeded = errors.New(
+		"model: atomic replace write limit exceeded",
+	)
+)
