@@ -1,21 +1,19 @@
 // frontend/console/shell/src/auth/application/invitationService.tsx
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../infrastructure/config/firebaseClient";
-import { mapPermissionNamesToDescriptionsJa } from "../../../../permission/src/application/permissionCatalog";
 
-// API 呼び出し系は infra/api に委譲
+import { mapPermissionNamesToDescriptionsJa } from "../../../../permission/src/application/permissionCatalog";
 import {
+  completeInvitationOnBackend,
   fetchInvitationInfo as fetchInvitationInfoApi,
   validateInvitation,
-  completeInvitationOnBackend,
-} from "../infrastructure/api/invitationApi";
-import type { InvitationInfo as InvitationInfoApi } from "../infrastructure/api/invitationApi";
+} from "../infrastructure/repository/invitationRepositoryHTTP";
+import type { InvitationInfo as InvitationInfoApi } from "../infrastructure/repository/invitationRepositoryHTTP";
+import { auth } from "../infrastructure/config/firebaseClient";
 
 // ------------------------------
 // 型定義
 // ------------------------------
 
-// API から返る InvitationInfo 型を application からも使えるように re-export
 export type InvitationInfo = InvitationInfoApi;
 
 export type CompleteInvitationParams = {
@@ -32,7 +30,7 @@ export type CompleteInvitationParams = {
 };
 
 // ------------------------------
-// API ラッパー（従来の呼び出し口を維持）
+// APIラッパー
 // ------------------------------
 
 export async function fetchInvitationInfo(
@@ -42,7 +40,7 @@ export async function fetchInvitationInfo(
 }
 
 // ------------------------------
-// 招待の完了フロー（Firebase 認証 + backend API）
+// 招待の完了フロー
 // ------------------------------
 
 export async function completeInvitation(
@@ -70,46 +68,64 @@ export async function completeInvitation(
   if (!trimmedToken) {
     throw new Error("招待トークンが指定されていません。");
   }
+
   if (!trimmedLastName) {
     throw new Error("姓が指定されていません。");
   }
+
   if (!trimmedLastNameKana) {
     throw new Error("姓（かな）が指定されていません。");
   }
+
   if (!trimmedFirstName) {
     throw new Error("名が指定されていません。");
   }
+
   if (!trimmedFirstNameKana) {
     throw new Error("名（かな）が指定されていません。");
   }
+
   if (!password || !passwordConfirm) {
     throw new Error("パスワードが指定されていません。");
   }
+
   if (password !== passwordConfirm) {
     throw new Error("パスワードが一致していません。");
   }
 
-  // 1) backend: POST /invitations/validate
+  // 1. 招待トークンを検証する
   const validateData = await validateInvitation(trimmedToken);
 
   const email = (validateData.email ?? "").trim();
+
   if (!email) {
-    throw new Error("招待情報にメールアドレスが含まれていません。");
+    throw new Error(
+      "招待情報にメールアドレスが含まれていません。",
+    );
   }
 
-  const effectiveCompanyId = validateData.companyId ?? companyId;
-  const effectiveBrandIds = validateData.assignedBrandIds ?? assignedBrandIds;
-  const effectivePermissions = validateData.permissions ?? permissions;
+  const effectiveCompanyId =
+    validateData.companyId ?? companyId;
 
-  // 未ログイン招待画面では /companies/{id} / /brands/{id} は認証必須のため呼ばない。
-  // 表示名は POST /invitations/validate のレスポンスに含まれる companyName / brandNames を使う。
-  const companyName = validateData.companyName ?? effectiveCompanyId;
+  const effectiveBrandIds =
+    validateData.assignedBrandIds ?? assignedBrandIds;
+
+  const effectivePermissions =
+    validateData.permissions ?? permissions;
+
+  const companyName =
+    validateData.companyName ?? effectiveCompanyId;
+
   const brandNames =
-    validateData.brandNames && validateData.brandNames.length > 0
+    validateData.brandNames &&
+    validateData.brandNames.length > 0
       ? validateData.brandNames
       : effectiveBrandIds;
+
   const permissionDescriptions =
-    mapPermissionNamesToDescriptionsJa(effectivePermissions);
+    mapPermissionNamesToDescriptionsJa(
+      effectivePermissions,
+    );
 
   // eslint-disable-next-line no-console
   console.log("[InvitationService] display info:", {
@@ -121,17 +137,23 @@ export async function completeInvitation(
     permissionDescriptionsJa: permissionDescriptions,
   });
 
-  // 2) Firebase: createUserWithEmailAndPassword
-  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  // 2. Firebase Authenticationへユーザーを作成する
+  // createUserWithEmailAndPassword成功後は、
+  // 作成されたユーザーがauth.currentUserになる。
+  await createUserWithEmailAndPassword(
+    auth,
+    email,
+    password,
+  );
 
-  // 3) backend: POST /invitations/complete
+  // 3. Backendで招待を完了する
+  // Repositoryがauth.currentUserからID tokenを取得して
+  // Authorizationヘッダーへ設定する。
   await completeInvitationOnBackend({
     token: trimmedToken,
-    uid: cred.user.uid,
     lastName: trimmedLastName,
     lastNameKana: trimmedLastNameKana,
     firstName: trimmedFirstName,
     firstNameKana: trimmedFirstNameKana,
-    email,
   });
 }

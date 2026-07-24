@@ -14,27 +14,13 @@ import (
 	permdom "narratives/internal/domain/permission"
 )
 
-const fixedInvitationConsoleBaseURL = "https://narratives-console-dev.web.app"
+const invitationPageURL = "https://narratives-console-dev.web.app/invitation"
 
 type BrandNameResolver interface {
 	GetByID(
 		ctx context.Context,
 		id string,
 	) (branddom.Brand, error)
-}
-
-// EmailClientは、既存のAuthMailer、ContactMailerなどが使用する
-// 従来のメール送信契約です。
-//
-// 既存メール機能との互換性を維持するため、このinterfaceは変更しません。
-type EmailClient interface {
-	Send(
-		ctx context.Context,
-		from string,
-		to string,
-		subject string,
-		body string,
-	) error
 }
 
 // EmailSendResultは、招待メール送信時に必要なprovider側の結果です。
@@ -61,7 +47,6 @@ type InvitationEmailClient interface {
 type InvitationMailer struct {
 	client            InvitationEmailClient
 	fromAddress       string
-	consoleBaseURL    string
 	companyRepo       companydom.Repository
 	brandNameResolver BrandNameResolver
 }
@@ -71,19 +56,12 @@ var _ invitationuc.InvitationDeliveryMailerPort = (*InvitationMailer)(nil)
 func NewInvitationMailer(
 	client InvitationEmailClient,
 	fromAddress string,
-	consoleBaseURL string,
 	companyRepo companydom.Repository,
 	brandResolver BrandNameResolver,
 ) *InvitationMailer {
-	baseURL := strings.TrimSpace(consoleBaseURL)
-	if baseURL == "" {
-		baseURL = fixedInvitationConsoleBaseURL
-	}
-
 	return &InvitationMailer{
 		client:            client,
-		fromAddress:       strings.TrimSpace(fromAddress),
-		consoleBaseURL:    strings.TrimRight(baseURL, "/"),
+		fromAddress:       fromAddress,
 		companyRepo:       companyRepo,
 		brandNameResolver: brandResolver,
 	}
@@ -92,26 +70,12 @@ func NewInvitationMailer(
 func (m *InvitationMailer) buildInvitationURL(
 	token string,
 ) string {
-	base := fixedInvitationConsoleBaseURL
-
-	if m != nil {
-		configuredBaseURL := strings.TrimSpace(
-			m.consoleBaseURL,
-		)
-		if configuredBaseURL != "" {
-			base = configuredBaseURL
-		}
-	}
-
-	base = strings.TrimRight(base, "/")
-	token = strings.TrimSpace(token)
-
 	values := url.Values{}
 	values.Set("token", token)
 
 	return fmt.Sprintf(
-		"%s/invitation?%s",
-		base,
+		"%s?%s",
+		invitationPageURL,
 		values.Encode(),
 	)
 }
@@ -120,7 +84,6 @@ func (m *InvitationMailer) resolveCompanyDisplayName(
 	ctx context.Context,
 	companyID string,
 ) string {
-	companyID = strings.TrimSpace(companyID)
 	if companyID == "" {
 		return ""
 	}
@@ -137,9 +100,7 @@ func (m *InvitationMailer) resolveCompanyDisplayName(
 		return companyID
 	}
 
-	companyName := strings.TrimSpace(
-		companyEntity.Name,
-	)
+	companyName := companyEntity.Name
 	if companyName == "" {
 		return companyID
 	}
@@ -178,9 +139,7 @@ func (m *InvitationMailer) resolveBrandDisplayNames(
 			continue
 		}
 
-		brandName := strings.TrimSpace(
-			brandEntity.Name,
-		)
+		brandName := brandEntity.Name
 		if brandName == "" {
 			results = append(results, brandID)
 			continue
@@ -216,7 +175,6 @@ func (m *InvitationMailer) resolvePermissionDisplayNamesJa(
 				permissionName,
 			)
 
-		displayName = strings.TrimSpace(displayName)
 		if ok && displayName != "" {
 			results = append(results, displayName)
 			continue
@@ -251,32 +209,28 @@ func (m *InvitationMailer) SendInvitationEmail(
 			)
 	}
 
-	fromAddress := strings.TrimSpace(m.fromAddress)
+	fromAddress := m.fromAddress
 	if fromAddress == "" {
 		return invitationuc.InvitationMailSendResult{
 			Retryable: false,
 		}, fmt.Errorf("from address is empty")
 	}
 
-	idempotencyKey := strings.TrimSpace(
-		message.IdempotencyKey,
-	)
+	idempotencyKey := message.IdempotencyKey
 	if idempotencyKey == "" {
 		return invitationuc.InvitationMailSendResult{
 			Retryable: false,
 		}, invitationdom.ErrInvitationDeliveryIDRequired
 	}
 
-	toEmail := strings.ToLower(
-		strings.TrimSpace(message.ToEmail),
-	)
+	toEmail := strings.ToLower(message.ToEmail)
 	if toEmail == "" {
 		return invitationuc.InvitationMailSendResult{
 			Retryable: false,
 		}, invitationdom.ErrInvitationEmailRequired
 	}
 
-	token := strings.TrimSpace(message.Token)
+	token := message.Token
 	if token == "" {
 		return invitationuc.InvitationMailSendResult{
 			Retryable: false,
@@ -330,12 +284,13 @@ func (m *InvitationMailer) SendInvitationEmail(
 
 下記のリンクを開き、パスワード設定およびプロフィール情報の登録を行ってください。
 
-  招待リンク: %s
+招待ページ:
+%s
 
 【所属情報（参考表示）】
-  Company    : %s
-  Brands     : %s
-  Permissions: %s
+Company    : %s
+Brands     : %s
+Permissions: %s
 
 ※本メールに心当たりがない場合は、このメッセージは破棄してください。
 
@@ -357,10 +312,8 @@ AMOL Console`,
 	)
 	if err != nil {
 		return invitationuc.InvitationMailSendResult{
-				ProviderMessageID: strings.TrimSpace(
-					sendResult.ProviderMessageID,
-				),
-				Retryable: sendResult.Retryable,
+				ProviderMessageID: sendResult.ProviderMessageID,
+				Retryable:         sendResult.Retryable,
 			}, fmt.Errorf(
 				"send invitation email failed: to=%s: %w",
 				toEmail,
@@ -369,10 +322,8 @@ AMOL Console`,
 	}
 
 	return invitationuc.InvitationMailSendResult{
-		ProviderMessageID: strings.TrimSpace(
-			sendResult.ProviderMessageID,
-		),
-		Retryable: false,
+		ProviderMessageID: sendResult.ProviderMessageID,
+		Retryable:         false,
 	}, nil
 }
 
@@ -394,7 +345,6 @@ func normalizeInvitationDisplayValues(
 	)
 
 	for _, value := range values {
-		value = strings.TrimSpace(value)
 		if value == "" {
 			continue
 		}

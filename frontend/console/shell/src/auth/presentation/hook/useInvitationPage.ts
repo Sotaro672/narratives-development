@@ -1,14 +1,11 @@
 // frontend/console/shell/src/auth/presentation/hook/useInvitationPage.ts
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  fetchInvitationInfo,
-  completeInvitation,
-} from "../../application/invitationService";
 
-// ★ サインイン用
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../infrastructure/config/firebaseClient";
+import {
+  completeInvitation,
+  fetchInvitationInfo,
+} from "../../application/invitationService";
 
 export function useInvitationPage() {
   const navigate = useNavigate();
@@ -23,7 +20,7 @@ export function useInvitationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ---- email（追加） ----
+  // ---- email ----
   const [email, setEmail] = useState<string>("");
 
   // ---- 氏名系 ----
@@ -46,7 +43,7 @@ export function useInvitationPage() {
   const [assignedBrandNames, setAssignedBrandNames] = useState<string[]>([]);
 
   // ============================================================
-  // 🔥 token が設定されたら backend から InvitationInfo を取得
+  // tokenが設定されたらBackendからInvitationInfoを取得
   // ============================================================
   useEffect(() => {
     if (!token) return;
@@ -58,17 +55,17 @@ export function useInvitationPage() {
       try {
         const data = await fetchInvitationInfo(token);
 
-        // 📨 email
-        if (data.email) setEmail(data.email);
+        if (data.email) {
+          setEmail(data.email);
+        }
 
-        // ID はそのまま state に保持
-        setCompanyId(data.companyId);
         const brands = data.assignedBrandIds || [];
         const perms = data.permissions || [];
+
+        setCompanyId(data.companyId);
         setAssignedBrandIds(brands);
         setPermissions(perms);
 
-        // 名前解決済みの値も保持
         setCompanyName(data.companyName ?? data.companyId ?? "");
         setAssignedBrandNames(data.brandNames ?? brands);
 
@@ -84,7 +81,11 @@ export function useInvitationPage() {
         });
       } catch (e: any) {
         // eslint-disable-next-line no-console
-        console.error("[InvitationPage] failed to load invitation info", e);
+        console.error(
+          "[InvitationPage] failed to load invitation info",
+          e,
+        );
+
         setError(e?.message ?? "Unknown error");
       } finally {
         setLoading(false);
@@ -126,19 +127,23 @@ export function useInvitationPage() {
         permissions,
       });
 
-      // バリデーション
       if (!token) {
-        setError("招待トークンが無効です。招待リンクを再度ご確認ください。");
+        setError(
+          "招待トークンが無効です。招待リンクを再度ご確認ください。",
+        );
         return;
       }
+
       if (!password || !passwordConfirm) {
         setError("パスワードを入力してください。");
         return;
       }
+
       if (password !== passwordConfirm) {
         setError("パスワードが一致しません。");
         return;
       }
+
       if (!email) {
         setError("招待情報にメールアドレスがありません。");
         return;
@@ -147,7 +152,7 @@ export function useInvitationPage() {
       setLoading(true);
 
       try {
-        // 1) 招待完了 (backend + Firebase createUser + verify mail)
+        // Firebaseユーザー作成、Auth state更新、Backend招待完了を実行する。
         await completeInvitation({
           token,
           lastName,
@@ -161,18 +166,14 @@ export function useInvitationPage() {
           permissions,
         });
 
-        // 2) ★ Firebase Authentication へサインイン
-        //    （作成した email / password をそのまま使用）
-        await signInWithEmailAndPassword(auth, email, password);
-
         // eslint-disable-next-line no-console
-        console.log("[Invitation:create] completed & signed in for:", email);
+        console.log("[Invitation:create] completed for:", email);
 
-        // 3) ★ shell 内へ遷移
         navigate("/", { replace: true });
       } catch (e: any) {
         // eslint-disable-next-line no-console
         console.error("[InvitationPage] handleSubmit error", e);
+
         setError(e?.message ?? "Unexpected error");
       } finally {
         setLoading(false);
@@ -196,7 +197,6 @@ export function useInvitationPage() {
     ],
   );
 
-  // ---- return ----
   return {
     formRef,
 
@@ -204,7 +204,7 @@ export function useInvitationPage() {
     token,
     setToken,
 
-    // email（UI 側で表示も可能）
+    // email
     email,
 
     // ローディング・エラー

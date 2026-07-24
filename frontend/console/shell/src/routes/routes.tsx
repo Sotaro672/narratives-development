@@ -1,6 +1,8 @@
 // frontend/console/shell/src/routes/routes.tsx
 import type { RouteObject } from "react-router-dom";
 
+import InvitationPage from "../auth/presentation/pages/InvitationPage";
+
 import InquiryManagement from "../../../inquiry/presentation/pages/inquiryManagement";
 import InquiryDetail from "../../../inquiry/presentation/pages/inquiryDetail";
 
@@ -57,6 +59,10 @@ import AnnouncementTokenListPage from "../../../sales/presentation/pages/announc
 import AnnouncementDetailPage from "../../../sales/presentation/pages/announcementDetailPage";
 
 export const routes: RouteObject[] = [
+  {
+    path: "/invitation",
+    element: <InvitationPage />,
+  },
   {
     path: "/inquiry",
     children: [

@@ -4,86 +4,102 @@ package mail
 import (
 	"log"
 	"os"
+	"strings"
 
 	companydom "narratives/internal/domain/company"
 )
 
 // 環境変数名（Cloud Run / ローカル共通）
 const (
-	envResendAPIKey   = "RESEND_API_KEY"
-	envResendFrom     = "RESEND_FROM"      // 例: no-reply@amol.jp
-	envConsoleBaseURL = "CONSOLE_BASE_URL" // 例: https://amol.jp
+	envResendAPIKey = "RESEND_API_KEY"
+	envResendFrom   = "RESEND_FROM"
 )
 
-// NewInvitationMailerWithResend は、Resend を使った InvitationMailer を生成します。
+// NewInvitationMailerWithResendは、Resendを使ったInvitationMailerを生成します。
 //
-// - RESEND_API_KEY  : Resend の API キー
-// - RESEND_FROM     : 送信元メールアドレス
-// - CONSOLE_BASE_URL: https://amol.jp
+// - RESEND_API_KEY: ResendのAPIキー
+// - RESEND_FROM  : 送信元メールアドレス
 //
-// companyRepo には CompanyID から Company を取得する company.Repository、
-// brandResolver には BrandID から Brand を取得する Repository / Resolver を渡してください。
+// companyRepoにはCompanyIDからCompanyを取得するcompany.Repository、
+// brandResolverにはBrandIDからBrandを取得するRepositoryまたはResolverを渡します。
 func NewInvitationMailerWithResend(
 	companyRepo companydom.Repository,
 	brandResolver BrandNameResolver,
 ) *InvitationMailer {
-	apiKey := os.Getenv(envResendAPIKey)
-	fromAddr := os.Getenv(envResendFrom)
-	consoleBaseURL := os.Getenv(envConsoleBaseURL)
+	apiKey := strings.TrimSpace(
+		os.Getenv(envResendAPIKey),
+	)
+	fromAddress := strings.TrimSpace(
+		os.Getenv(envResendFrom),
+	)
 
 	if apiKey == "" {
-		log.Printf("[mail] WARN: RESEND_API_KEY is empty. InvitationMailer will fail to send mail.")
+		log.Printf(
+			"[mail] WARN: RESEND_API_KEY is empty. InvitationMailer will fail to send mail.",
+		)
 	}
-	if fromAddr == "" {
-		log.Printf("[mail] WARN: RESEND_FROM is empty. InvitationMailer will fail to send mail.")
-	}
-	if consoleBaseURL == "" {
-		consoleBaseURL = "https://amol.jp"
-		log.Printf("[mail] INFO: CONSOLE_BASE_URL is empty. default=%s", consoleBaseURL)
+
+	if fromAddress == "" {
+		log.Printf(
+			"[mail] WARN: RESEND_FROM is empty. InvitationMailer will fail to send mail.",
+		)
 	}
 
 	client := NewResendClient(apiKey)
 
 	mailer := NewInvitationMailer(
 		client,
-		fromAddr,
-		consoleBaseURL,
+		fromAddress,
 		companyRepo,
 		brandResolver,
 	)
 
-	log.Printf("[mail] InvitationMailerWithResend initialized. from=%s baseURL=%s",
-		fromAddr, consoleBaseURL)
+	log.Printf(
+		"[mail] InvitationMailerWithResend initialized. from=%s",
+		fromAddress,
+	)
 
 	return mailer
 }
 
-// NewAuthMailerWithResend は、Resend を使った AuthMailer を生成します。
+// NewAuthMailerWithResendは、Resendを使ったAuthMailerを生成します。
 //
-// - RESEND_API_KEY: Resend の API キー
-// - RESEND_FROM   : 送信元メールアドレス
+// - RESEND_API_KEY: ResendのAPIキー
+// - RESEND_FROM  : 送信元メールアドレス
 //
-// Firebase Auth の標準メール送信ではなく、Backend 側で生成した認証リンクを
-// Resend 経由で送信するために使用します。
+// Firebase Authの標準メール送信ではなく、Backend側で生成した認証リンクを
+// Resend経由で送信するために使用します。
 func NewAuthMailerWithResend() *AuthMailer {
-	apiKey := os.Getenv(envResendAPIKey)
-	fromAddr := os.Getenv(envResendFrom)
+	apiKey := strings.TrimSpace(
+		os.Getenv(envResendAPIKey),
+	)
+	fromAddress := strings.TrimSpace(
+		os.Getenv(envResendFrom),
+	)
 
 	if apiKey == "" {
-		log.Printf("[mail] WARN: RESEND_API_KEY is empty. AuthMailer will fail to send mail.")
+		log.Printf(
+			"[mail] WARN: RESEND_API_KEY is empty. AuthMailer will fail to send mail.",
+		)
 	}
-	if fromAddr == "" {
-		log.Printf("[mail] WARN: RESEND_FROM is empty. AuthMailer will fail to send mail.")
+
+	if fromAddress == "" {
+		log.Printf(
+			"[mail] WARN: RESEND_FROM is empty. AuthMailer will fail to send mail.",
+		)
 	}
 
 	client := NewResendClient(apiKey)
 
 	mailer := NewAuthMailer(
 		client,
-		fromAddr,
+		fromAddress,
 	)
 
-	log.Printf("[mail] AuthMailerWithResend initialized. from=%s", fromAddr)
+	log.Printf(
+		"[mail] AuthMailerWithResend initialized. from=%s",
+		fromAddress,
+	)
 
 	return mailer
 }
