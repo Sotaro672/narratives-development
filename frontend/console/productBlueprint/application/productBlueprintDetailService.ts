@@ -13,7 +13,7 @@ import type {
   AlcoholModelNumber,
   Volume,
   VolumeRow,
-} from "../../../model/src/application/modelCreateService";
+} from "../../model/src/application/modelCreateService";
 
 import { updateProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
@@ -24,19 +24,19 @@ import {
 } from "../infrastructure/api/productBlueprintDetailApi";
 
 import { authorizedFetch } from "../infrastructure/httpClient/authorizedFetch";
-import { hexToRgbInt } from "../../../shell/src/shared/util/color";
+import { hexToRgbInt } from "../../shell/src/shared/util/color";
 
 import {
   updateModelVariation,
   type ModelVariationUpdateRequest,
   deleteRemovedModelVariations,
   type ModelVariationResponse as ModelUpdateServiceVariationResponse,
-} from "../../../model/src/application/modelUpdateService";
+} from "../../model/src/application/modelUpdateService";
 
 import {
   createModelVariations,
   type CreateModelVariationRequest,
-} from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
+} from "../../model/src/infrastructure/repository/modelRepositoryHTTP";
 
 const makeApparelKey = (sizeLabel: string, color: string): string =>
   `${String(sizeLabel ?? "").trim()}__${String(color ?? "").trim()}`;
@@ -455,7 +455,6 @@ async function updateApparelModelVariations(args: {
 
     const createReq: CreateModelVariationRequest = {
       kind: "apparel",
-      productBlueprintId,
       modelNumber,
       size: sizeLabel,
       color: colorName,
@@ -583,7 +582,6 @@ async function updateAlcoholModelVariations(args: {
 
     const createReq: CreateModelVariationRequest = {
       kind: "alcohol",
-      productBlueprintId,
       modelNumber: modelNumber.code,
       volume: modelNumber.volume,
     };

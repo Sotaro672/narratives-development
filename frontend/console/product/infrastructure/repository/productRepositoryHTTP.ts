@@ -1,7 +1,7 @@
 // frontend/console/product/src/infrastructure/repository/productRepositoryHTTP.ts
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
-import { getAuthJsonHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { getAuthJsonHeadersOrThrow } from "../../../shell/src/shared/http/authHeaders";
 
 /* ---------------------------------------------------------
  * print_log 作成 API:

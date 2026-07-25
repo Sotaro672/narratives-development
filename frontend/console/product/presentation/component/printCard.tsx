@@ -7,8 +7,8 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
-import { Button } from "../../../../shell/src/shared/ui/button";
+} from "../../../shell/src/shared/ui/card";
+import { Button } from "../../../shell/src/shared/ui/button";
 
 type PrintCardProps = {
   printing: boolean;
