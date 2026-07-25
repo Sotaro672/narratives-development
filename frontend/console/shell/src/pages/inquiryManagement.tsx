@@ -11,7 +11,7 @@ import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 import {
   listInquiriesHTTP,
   type InquiryManagementItem,
-} from "../../infrastructure/inquiryRepositoryHTTP";
+} from "../../../inquiry/infrastructure/inquiryRepositoryHTTP";
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
 const INQUIRY_DETAIL_ROUTE_BASE = "/inquiry";

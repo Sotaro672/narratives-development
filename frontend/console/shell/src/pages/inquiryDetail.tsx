@@ -13,8 +13,8 @@ import {
 } from "../../../shell/src/shared/ui/card";
 import ReplyModal, {
   type ReplyUploadImage,
-} from "../components/replyModal";
-import "../style/inquiry-page.css";
+} from "../../../inquiry/presentation/components/replyModal";
+import "../styles/inquiry-page.css";
 import {
   getInquiryHTTP,
   reopenInquiryHTTP,
@@ -22,7 +22,7 @@ import {
   resolveInquiryHTTP,
   uploadInquiryReplyImagesToStorage,
   type InquiryDetail as InquiryDetailDTO,
-} from "../../infrastructure/inquiryRepositoryHTTP";
+} from "../../../inquiry/infrastructure/inquiryRepositoryHTTP";
 
 const INQUIRY_READ_STATE_CHANGED_EVENT = "inquiry:read-state-changed";
 

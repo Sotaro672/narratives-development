@@ -3,7 +3,7 @@ import { useState } from "react";
 import Header from "../auth/presentation/components/Header";
 import Sidebar from "../layout/Sidebar/Sidebar";
 import Main from "../layout/Main/Main";
-import "./MainPage.css";
+import "../styles/MainPage.css";
 
 export default function MainPage() {
   // 現状は常に開いた状態だが、将来のUI拡張に備えて state は残しておく

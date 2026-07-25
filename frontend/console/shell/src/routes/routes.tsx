@@ -1,10 +1,11 @@
 // frontend/console/shell/src/routes/routes.tsx
+
 import type { RouteObject } from "react-router-dom";
 
 import InvitationPage from "../auth/presentation/pages/InvitationPage";
 
-import InquiryManagement from "../../../inquiry/presentation/pages/inquiryManagement";
-import InquiryDetail from "../../../inquiry/presentation/pages/inquiryDetail";
+import InquiryManagement from "../pages/inquiryManagement";
+import InquiryDetail from "../pages/inquiryDetail";
 
 import ProductBlueprintManagement from "../../../productBlueprint/presentation/pages/productBlueprintManagement";
 import ProductBlueprintDetail from "../../../productBlueprint/presentation/pages/productBlueprintDetail";
