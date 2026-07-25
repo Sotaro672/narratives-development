@@ -17,6 +17,11 @@ node_modules/
 dist/
 build/
 out/
+
+# backend/internal/adapters/out is source code, not a build output
+!backend/internal/adapters/out/
+!backend/internal/adapters/out/**
+
 coverage/
 .next/
 .nuxt/
