@@ -671,6 +671,12 @@ type ProductBlueprint struct {
 	// 印刷後はProductBlueprintと配下Modelの変更を禁止します。
 	Printed bool
 
+	// DeletionLifecycleはProductBlueprintと配下Modelに共通する
+	// 論理削除・復旧・物理削除予定時刻を保持します。
+	//
+	// Statusが空の既存Documentはcommon側でactiveとして扱います。
+	common.DeletionLifecycle
+
 	CreatedBy *string
 	CreatedAt time.Time
 	UpdatedBy *string
@@ -733,6 +739,14 @@ var (
 	ErrCategoryFieldsValidatorNotConfigured = errors.New(
 		"productBlueprint: categoryFields validator is not configured",
 	)
+
+	ErrInvalidDeletionState = errors.New(
+		"productBlueprint: invalid deletion state",
+	)
+
+	ErrRestorePeriodExpired = errors.New(
+		"productBlueprint: restore period expired",
+	)
 )
 
 // ======================================
@@ -768,6 +782,8 @@ func New(
 
 		ModelRefs: nil,
 		Printed:   false,
+
+		DeletionLifecycle: common.NewActiveDeletionLifecycle(),
 
 		CreatedBy: createdBy,
 		CreatedAt: createdAt.UTC(),
@@ -805,11 +821,142 @@ func (
 	return productBlueprint.canModify()
 }
 
-// canModifyは印刷後の変更禁止規則を表します。
+// canModifyは印刷後または論理削除後の変更禁止規則を表します。
 func (
 	productBlueprint ProductBlueprint,
 ) canModify() bool {
-	return !productBlueprint.Printed
+	return !productBlueprint.Printed &&
+		productBlueprint.
+			DeletionLifecycle.
+			IsActive()
+}
+
+// SoftDeleteはProductBlueprintを論理削除状態へ遷移させます。
+//
+// printed=trueの場合は削除できません。
+// 同じProductBlueprintへ複数回実行した場合は冪等に成功し、
+// 最初のDeletedAtとPurgeAtを維持します。
+func (
+	productBlueprint *ProductBlueprint,
+) SoftDelete(
+	now time.Time,
+	deletedBy *string,
+) error {
+	if productBlueprint == nil {
+		return ErrInvalid
+	}
+
+	if productBlueprint.Printed {
+		return ErrForbidden
+	}
+
+	if !productBlueprint.
+		DeletionLifecycle.
+		HasConsistentDeletionState() {
+		return ErrInvalidDeletionState
+	}
+
+	if productBlueprint.
+		DeletionLifecycle.
+		IsDeleted() {
+		return nil
+	}
+
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	now = now.UTC()
+
+	productBlueprint.
+		DeletionLifecycle.
+		MarkDeleted(
+			now,
+			deletedBy,
+		)
+
+	productBlueprint.touch(
+		now,
+		deletedBy,
+	)
+
+	return nil
+}
+
+// Restoreは論理削除済みProductBlueprintを復旧します。
+//
+// now < PurgeAtの場合のみ復旧可能です。
+// now == PurgeAtまたはnow > PurgeAtの場合は復旧できません。
+func (
+	productBlueprint *ProductBlueprint,
+) Restore(
+	now time.Time,
+	restoredBy *string,
+) error {
+	if productBlueprint == nil {
+		return ErrInvalid
+	}
+
+	if productBlueprint.Printed {
+		return ErrForbidden
+	}
+
+	if !productBlueprint.
+		DeletionLifecycle.
+		HasConsistentDeletionState() {
+		return ErrInvalidDeletionState
+	}
+
+	if productBlueprint.
+		DeletionLifecycle.
+		IsActive() {
+		return nil
+	}
+
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	now = now.UTC()
+
+	if !productBlueprint.
+		DeletionLifecycle.
+		CanRestore(now) {
+		return ErrRestorePeriodExpired
+	}
+
+	productBlueprint.
+		DeletionLifecycle.
+		Restore()
+
+	productBlueprint.touch(
+		now,
+		restoredBy,
+	)
+
+	return nil
+}
+
+// CanRestoreは指定時刻時点で復旧可能か返します。
+func (
+	productBlueprint ProductBlueprint,
+) CanRestore(
+	now time.Time,
+) bool {
+	return productBlueprint.
+		DeletionLifecycle.
+		CanRestore(now)
+}
+
+// IsPurgeEligibleは指定時刻時点で物理削除対象か返します。
+func (
+	productBlueprint ProductBlueprint,
+) IsPurgeEligible(
+	now time.Time,
+) bool {
+	return productBlueprint.
+		DeletionLifecycle.
+		IsPurgeEligible(now)
 }
 
 // MarkPrintedはProductBlueprintを印刷済みに変更します。
@@ -828,6 +975,12 @@ func (
 
 	if productBlueprint.Printed {
 		return nil
+	}
+
+	if !productBlueprint.
+		DeletionLifecycle.
+		IsActive() {
+		return ErrForbidden
 	}
 
 	if err := productBlueprint.validate(); err != nil {
@@ -1238,6 +1391,12 @@ func (
 ) validate() error {
 	if productBlueprint.ID == "" {
 		return ErrInvalidID
+	}
+
+	if !productBlueprint.
+		DeletionLifecycle.
+		HasConsistentDeletionState() {
+		return ErrInvalidDeletionState
 	}
 
 	if productBlueprint.ProductName == "" {

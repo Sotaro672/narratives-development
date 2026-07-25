@@ -166,29 +166,59 @@ type PageResult struct {
 type Repository interface {
 	// Read
 
+	// GetByIDは通常利用可能なactive状態のProductBlueprintだけを返す。
+	//
+	// 論理削除済みProductBlueprintはErrNotFoundとして扱う。
+	// 復旧処理ではGetByIDIncludingDeletedを使用する。
 	GetByID(
 		ctx context.Context,
 		id string,
 	) (ProductBlueprint, error)
 
-	// ListByCompanyIDはcompanyId単位でProductBlueprint一覧を
-	// 取得する正規Port。
+	// GetByIDIncludingDeletedはactiveとdeletedの両方を取得する。
 	//
+	// 論理削除、復旧、物理削除判定などのライフサイクル処理専用とし、
+	// 通常の一覧・詳細・Catalog処理では使用しない。
+	GetByIDIncludingDeleted(
+		ctx context.Context,
+		id string,
+	) (ProductBlueprint, error)
+
+	// ListByCompanyIDはcompanyId単位でactive状態の
+	// ProductBlueprint一覧を取得する正規Port。
+	//
+	// 論理削除済みProductBlueprintは返さない。
 	// ID一覧が必要な場合も、戻り値から呼出側でIDを抽出する。
 	ListByCompanyID(
 		ctx context.Context,
 		companyID string,
 	) ([]ProductBlueprint, error)
 
-	// ListIDsByBrandIDはbrandIdに紐づく
+	// ListDeletedByCompanyIDはcompanyId単位で論理削除済みの
+	// ProductBlueprint一覧を取得する。
+	//
+	// 復旧可能期間を過ぎ、物理削除バッチの実行を待っている
+	// ProductBlueprintも含めて返してよい。
+	//
+	// 復旧可能かどうかはProductBlueprint.CanRestoreで判定する。
+	ListDeletedByCompanyID(
+		ctx context.Context,
+		companyID string,
+	) ([]ProductBlueprint, error)
+
+	// ListIDsByBrandIDはbrandIdに紐づくactive状態の
 	// ProductBlueprint ID一覧を取得する。
+	//
+	// 論理削除済みProductBlueprintは返さない。
 	ListIDsByBrandID(
 		ctx context.Context,
 		brandID string,
 	) ([]string, error)
 
 	// GetIDByModelIDはmodelIdから、そのModelが属する
-	// ProductBlueprint IDとModelRefsを取得する。
+	// active状態のProductBlueprint IDとModelRefsを取得する。
+	//
+	// ProductBlueprintまたはModelが論理削除済みの場合は返さない。
 	//
 	// 戻り値:
 	//   - productBlueprintID:
@@ -214,20 +244,54 @@ type Repository interface {
 		in CreateInput,
 	) (ProductBlueprint, error)
 
+	// Updateはactiveかつprinted=falseのProductBlueprintだけを更新する。
+	//
+	// 論理削除済みまたは印刷済みの場合は更新を拒否する。
 	Update(
 		ctx context.Context,
 		id string,
 		patch Patch,
 	) (ProductBlueprint, error)
 
-	// DeleteはProductBlueprintを物理削除する。
+	// SoftDeleteはProductBlueprintと配下Modelを論理削除する。
 	//
-	// ProductBlueprintの論理削除設計が導入されるまでは、
-	// 現行の物理削除契約を維持する。
-	Delete(
+	// Repository実装では、同一Transactionまたは同一WriteBatch内で
+	// 次の条件を再確認する。
+	//   - ProductBlueprint.companyId == companyID
+	//   - ProductBlueprint.printed == false
+	//   - ProductBlueprint.status == active
+	//   - 配下Modelが対象ProductBlueprintに属している
+	//
+	// ProductBlueprintと配下Modelには同一のdeletedAtとpurgeAtを設定する。
+	//
+	// 同じProductBlueprintがすでに論理削除済みの場合は、
+	// 最初のdeletedAtとpurgeAtを維持して冪等に成功してよい。
+	SoftDelete(
 		ctx context.Context,
 		id string,
-	) error
+		companyID string,
+		deletedBy *string,
+		deletedAt time.Time,
+	) (ProductBlueprint, error)
+
+	// RestoreはProductBlueprintと配下Modelを同時に復旧する。
+	//
+	// Repository実装では、同一Transactionまたは同一WriteBatch内で
+	// 次の条件を再確認する。
+	//   - ProductBlueprint.companyId == companyID
+	//   - ProductBlueprint.printed == false
+	//   - ProductBlueprint.status == deleted
+	//   - restoredAt < ProductBlueprint.purgeAt
+	//   - 配下Modelが物理削除されず残っている
+	//
+	// ProductBlueprintまたは配下Modelの一部だけを復旧してはならない。
+	Restore(
+		ctx context.Context,
+		id string,
+		companyID string,
+		restoredBy *string,
+		restoredAt time.Time,
+	) (ProductBlueprint, error)
 
 	// ReplaceModelRefsWithoutTouchはProductBlueprintの
 	// ModelRefsを置換する。
@@ -235,12 +299,13 @@ type Repository interface {
 	// ModelUsecaseがmodels collectionを正として同期するために使う。
 	//
 	// Repository実装側では次を保証する。
+	//   - ProductBlueprint.status == active
+	//   - ProductBlueprint.printed == false
 	//   - DisplayOrder順に正規化する
 	//   - 空IDと重複IDを除外する
 	//   - DisplayOrderを1..Nへ再採番する
 	//   - refsが空の場合は空配列へ置換する
 	//   - UpdatedAtとUpdatedByは更新しない
-	//   - Printed済みの場合は更新を拒否する
 	ReplaceModelRefsWithoutTouch(
 		ctx context.Context,
 		id string,
@@ -249,9 +314,58 @@ type Repository interface {
 
 	// MarkPrintedはPrintedをfalseからtrueへ遷移させる。
 	//
+	// Repository実装ではTransaction内で次を確認する。
+	//   - ProductBlueprint.status == active
+	//   - ProductBlueprint.printed == false
+	//
+	// 論理削除済みの場合は印刷済みへ変更できない。
 	// すでにPrinted=trueの場合は成功として扱う冪等な操作とする。
 	MarkPrinted(
 		ctx context.Context,
 		id string,
 	) (ProductBlueprint, error)
+}
+
+// ========================================
+// Purge Repository Port
+// ========================================
+
+// PurgeRepositoryは復旧期限を経過したProductBlueprintと
+// 配下Modelを物理削除するバッチ専用Portです。
+//
+// 通常のHTTP HandlerやProductBlueprintUsecaseからは参照せず、
+// ProductBlueprintPurgeUsecaseだけが利用します。
+type PurgeRepository interface {
+	// ListPurgeCandidatesは物理削除対象を取得する。
+	//
+	// 対象条件:
+	//   - status == deleted
+	//   - purgeAt <= now
+	//
+	// limitは1回のバッチで処理する最大件数です。
+	ListPurgeCandidates(
+		ctx context.Context,
+		now time.Time,
+		limit int,
+	) ([]ProductBlueprint, error)
+
+	// PurgeWithModelsはProductBlueprintと配下Modelを物理削除する。
+	//
+	// 物理削除直前に、Transaction内で次を再確認する。
+	//   - ProductBlueprint.status == deleted
+	//   - ProductBlueprint.printed == false
+	//   - ProductBlueprint.purgeAt <= now
+	//   - ProductBlueprint.purgeAt == expectedPurgeAt
+	//
+	// expectedPurgeAtとの一致確認により、候補取得後に復旧された
+	// ProductBlueprintを誤って物理削除することを防ぐ。
+	//
+	// 削除順は配下Modelおよび関連Documentを先にし、
+	// ProductBlueprint本体を最後にする。
+	PurgeWithModels(
+		ctx context.Context,
+		productBlueprintID string,
+		expectedPurgeAt time.Time,
+		now time.Time,
+	) error
 }

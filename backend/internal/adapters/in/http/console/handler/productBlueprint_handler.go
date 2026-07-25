@@ -2,7 +2,9 @@
 package consoleHandler
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -13,7 +15,7 @@ import (
 	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
-// ProductBlueprintHandler は ProductBlueprint 用の HTTP ハンドラです。
+// ProductBlueprintHandlerはProductBlueprint用のHTTP Handlerです。
 type ProductBlueprintHandler struct {
 	uc              *pbuc.ProductBlueprintUsecase
 	managementQuery *pbquery.ProductBlueprintManagementQuery
@@ -32,35 +34,113 @@ func NewProductBlueprintHandler(
 	}
 }
 
-func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func (
+	h *ProductBlueprintHandler,
+) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
 
-	path := strings.TrimRight(r.URL.Path, "/")
+	path := strings.TrimRight(
+		r.URL.Path,
+		"/",
+	)
 
 	switch {
-	case r.Method == http.MethodGet && path == "/product-blueprints":
+	case r.Method == http.MethodGet &&
+		path == "/product-blueprints":
 		h.list(w, r)
 
-	case r.Method == http.MethodPost && path == "/product-blueprints":
+	case r.Method == http.MethodPost &&
+		path == "/product-blueprints":
 		h.post(w, r)
 
-	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
-		strings.HasPrefix(path, "/product-blueprints/"):
-		id := strings.TrimPrefix(path, "/product-blueprints/")
-		h.update(w, r, id)
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(
+			path,
+			"/product-blueprints/",
+		) &&
+		strings.HasSuffix(
+			path,
+			"/restore",
+		):
+		id := strings.TrimSuffix(
+			strings.TrimPrefix(
+				path,
+				"/product-blueprints/",
+			),
+			"/restore",
+		)
+
+		h.restore(
+			w,
+			r,
+			id,
+		)
+
+	case (r.Method == http.MethodPut ||
+		r.Method == http.MethodPatch) &&
+		strings.HasPrefix(
+			path,
+			"/product-blueprints/",
+		):
+		id := strings.TrimPrefix(
+			path,
+			"/product-blueprints/",
+		)
+
+		h.update(
+			w,
+			r,
+			id,
+		)
 
 	case r.Method == http.MethodDelete &&
-		strings.HasPrefix(path, "/product-blueprints/"):
-		id := strings.TrimPrefix(path, "/product-blueprints/")
-		h.delete(w, r, id)
+		strings.HasPrefix(
+			path,
+			"/product-blueprints/",
+		):
+		id := strings.TrimPrefix(
+			path,
+			"/product-blueprints/",
+		)
 
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/product-blueprints/"):
-		id := strings.TrimPrefix(path, "/product-blueprints/")
-		h.get(w, r, id)
+		h.softDelete(
+			w,
+			r,
+			id,
+		)
+
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(
+			path,
+			"/product-blueprints/",
+		):
+		id := strings.TrimPrefix(
+			path,
+			"/product-blueprints/",
+		)
+
+		h.get(
+			w,
+			r,
+			id,
+		)
 
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		w.WriteHeader(
+			http.StatusNotFound,
+		)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "not_found",
+			},
+		)
 	}
 }
 
@@ -80,30 +160,38 @@ type CreateProductBlueprintInput struct {
 	ProductName string `json:"productName"`
 	Description string `json:"description"`
 
-	BrandId   string `json:"brandId"`
+	BrandId string `json:"brandId"`
+
+	// CompanyIdは既存Frontendとの入力互換のため保持します。
+	//
+	// 永続化に使用するcompanyIdは認証Contextを正とし、
+	// ProductBlueprintUsecase側で設定します。
 	CompanyId string `json:"companyId"`
 
 	ProductBlueprintCategory categorydom.Snapshot `json:"productBlueprintCategory"`
 
-	// CategoryFields はカテゴリ別の productBlueprint 入力値を受け取る。
+	// CategoryFieldsはカテゴリ別のProductBlueprint入力値を受け取ります。
 	//
 	// 例:
-	// - alcohol.sake:
-	//   vintage, region, material, alcoholContent, volume
-	// - apparel.tops:
-	//   weight, fit, material
-	// - cosmetics.skincare:
-	//   material, volume
+	//   - alcohol.sake:
+	//     vintage、region、material、alcoholContent
+	//   - apparel.tops:
+	//     weight、fit、material
+	//   - cosmetics.skincare:
+	//     material、volume
 	//
-	// brandId / productName / productIdTagType / description などの共通 field はここには入れない。
+	// Alcoholの容量はここへ保存せず、
+	// Model variationのVolumeだけを正とします。
+	//
+	// brandId、productName、productIdTagType、descriptionなどの
+	// 共通fieldはここには入れません。
 	CategoryFields map[string]any `json:"categoryFields,omitempty"`
 
-	// 当面 frontend では qr 固定。
-	// DTO としては既存互換のため productIdTag.type を受ける。
+	// 当面Frontendではqr固定です。
+	// DTOとしては既存互換のためproductIdTag.typeを受け取ります。
 	ProductIdTag ProductIdTagInput `json:"productIdTag"`
 
 	AssigneeId string `json:"assigneeId"`
-	CreatedBy  string `json:"createdBy,omitempty"`
 }
 
 // ---------------------------------------------------
@@ -114,26 +202,31 @@ type UpdateProductBlueprintInput struct {
 	ProductName string `json:"productName"`
 	Description string `json:"description"`
 
-	BrandId   string `json:"brandId"`
+	BrandId string `json:"brandId"`
+
+	// CompanyIdは既存Frontendとの入力互換のため保持します。
+	//
+	// 通常更新ではcompanyIdを変更せず、
+	// ProductBlueprintUsecase側で認証Contextとの境界を確認します。
 	CompanyId string `json:"companyId"`
 
 	ProductBlueprintCategory categorydom.Snapshot `json:"productBlueprintCategory"`
 
-	// nil / empty の扱いは handler / usecase / repository 側の方針に従う。
-	// 今回の endpoint 実装では nil または空 map は nil として domain へ渡す。
-	CategoryFields map[string]any `json:"categoryFields,omitempty"`
+	// nilは「更新しない」、空mapは「空へ更新する」を表します。
+	//
+	// mapへのポインタにすることで、JSON上の未指定と空objectを
+	// 区別します。
+	CategoryFields *map[string]any `json:"categoryFields,omitempty"`
 
-	// 当面 frontend では qr 固定。
-	// DTO としては既存互換のため productIdTag.type を受ける。
+	// 当面Frontendではqr固定です。
+	// DTOとしては既存互換のためproductIdTag.typeを受け取ります。
 	ProductIdTag ProductIdTagInput `json:"productIdTag"`
 
 	AssigneeId string `json:"assigneeId"`
-	UpdatedBy  string `json:"updatedBy,omitempty"`
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints (list)
-// - query 側で name 解決済みを返す
+// GET /product-blueprints
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
@@ -149,8 +242,7 @@ type ProductBlueprintListOutput struct {
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints/{id} (detail)
-// - query 側で name 解決済みを返す
+// GET /product-blueprints/{id}
 // ---------------------------------------------------
 
 type ModelRefOutput struct {
@@ -170,15 +262,10 @@ type ProductBlueprintDetailOutput struct {
 	ProductBlueprintCategoryId string               `json:"productBlueprintCategoryId"`
 	ProductBlueprintCategory   categorydom.Snapshot `json:"productBlueprintCategory"`
 
-	// CategoryFields はカテゴリ別の productBlueprint 入力値。
+	// CategoryFieldsはカテゴリ別のProductBlueprint入力値です。
 	//
-	// 例:
-	// - alcohol.sake:
-	//   vintage, region, material, alcoholContent, volume
-	// - apparel.tops:
-	//   weight, fit, material
-	// - cosmetics.skincare:
-	//   material, volume
+	// Alcoholの容量はCategoryFieldsへ保存せず、
+	// Model variationのVolumeだけを正とします。
 	CategoryFields map[string]any `json:"categoryFields,omitempty"`
 
 	ProductIdTag *struct {
@@ -198,396 +285,802 @@ type ProductBlueprintDetailOutput struct {
 	UpdatedByName string `json:"updatedByName"`
 	UpdatedAt     string `json:"updatedAt"`
 
-	// modelRefs（model docId + displayOrder）
 	ModelRefs []ModelRefOutput `json:"modelRefs,omitempty"`
 }
 
 // ---------------------------------------------------
-// internal normalizers
+// Internal normalizers
 // ---------------------------------------------------
 
-func normalizeTagType(s string) pbdom.ProductIDTagType {
-	switch s {
-	case "qr", "QRコード", "QR":
+func normalizeTagType(
+	value string,
+) pbdom.ProductIDTagType {
+	switch value {
+	case "qr",
+		"QRコード",
+		"QR":
 		return pbdom.TagQR
-	case "nfc", "NFC":
+
+	case "nfc",
+		"NFC":
 		return pbdom.TagNFC
+
 	default:
-		return pbdom.ProductIDTagType(s)
+		return pbdom.ProductIDTagType(
+			value,
+		)
 	}
 }
 
-func toCategorySnapshot(in categorydom.Snapshot) pbdom.ProductBlueprintCategorySnapshot {
+func toCategorySnapshot(
+	input categorydom.Snapshot,
+) pbdom.ProductBlueprintCategorySnapshot {
 	return pbdom.ProductBlueprintCategorySnapshot{
-		ID:     string(in.ID),
-		Code:   string(in.Code),
-		NameJa: in.NameJa,
-		NameEn: in.NameEn,
-		Kind:   in.Kind,
-		Path:   append([]string(nil), in.Path...),
+		ID:     string(input.ID),
+		Code:   string(input.Code),
+		NameJa: input.NameJa,
+		NameEn: input.NameEn,
+		Kind:   input.Kind,
+		Path: append(
+			[]string(nil),
+			input.Path...,
+		),
 	}
 }
 
 func toCategoryOutput(
-	in pbdom.ProductBlueprintCategorySnapshot,
+	input pbdom.ProductBlueprintCategorySnapshot,
 ) categorydom.Snapshot {
 	return categorydom.Snapshot{
-		ID:     categorydom.CategoryID(in.ID),
-		Code:   categorydom.CategoryCode(in.Code),
-		NameJa: in.NameJa,
-		NameEn: in.NameEn,
-		Kind:   categorydom.CategoryKind(in.Kind),
-		Path:   append([]string(nil), in.Path...),
+		ID: categorydom.CategoryID(
+			input.ID,
+		),
+		Code: categorydom.CategoryCode(
+			input.Code,
+		),
+		NameJa: input.NameJa,
+		NameEn: input.NameEn,
+		Kind: categorydom.CategoryKind(
+			input.Kind,
+		),
+		Path: append(
+			[]string(nil),
+			input.Path...,
+		),
 	}
 }
 
-func normalizeCategoryFields(in map[string]any) pbdom.CategoryFields {
-	if len(in) == 0 {
+func normalizeCategoryFields(
+	input map[string]any,
+) pbdom.CategoryFields {
+	if input == nil {
 		return nil
 	}
 
-	out := make(pbdom.CategoryFields, len(in))
-	for key, value := range in {
+	output := make(
+		pbdom.CategoryFields,
+		len(input),
+	)
+
+	for key, value := range input {
 		if key == "" {
 			continue
 		}
-		out[key] = value
+
+		output[key] = value
 	}
 
-	if len(out) == 0 {
+	return output
+}
+
+func memberIDPointerFromContext(
+	ctx context.Context,
+) *string {
+	memberID := pbuc.MemberIDFromContext(
+		ctx,
+	)
+
+	if memberID == "" {
 		return nil
 	}
 
-	return out
+	return &memberID
+}
+
+func validProductBlueprintID(
+	id string,
+) bool {
+	return id != "" &&
+		!strings.Contains(
+			id,
+			"/",
+		)
 }
 
 // ---------------------------------------------------
 // POST /product-blueprints
 // ---------------------------------------------------
 
-func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
+func (
+	h *ProductBlueprintHandler,
+) post(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 
-	var in CreateProductBlueprintInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+	var input CreateProductBlueprintInput
+
+	if err := json.NewDecoder(
+		r.Body,
+	).Decode(
+		&input,
+	); err != nil {
+		w.WriteHeader(
+			http.StatusBadRequest,
+		)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid json",
+			},
+		)
+
 		return
 	}
 
-	var createdBy *string
-	if in.CreatedBy != "" {
-		createdBy = &in.CreatedBy
-	}
+	productBlueprint := pbdom.ProductBlueprint{
+		ProductName: input.ProductName,
+		Description: input.Description,
 
-	pb := pbdom.ProductBlueprint{
-		ProductName: in.ProductName,
-		Description: in.Description,
+		BrandID: input.BrandId,
 
-		BrandID:   in.BrandId,
-		CompanyID: in.CompanyId,
+		// CompanyIDはProductBlueprintUsecaseが
+		// 認証Contextから設定します。
+		CompanyID: "",
 
-		// ProductBlueprintCategory は productBlueprintCategory entity の Snapshot を正として受け取り、
-		// productBlueprint domain の denormalized snapshot へ変換する。
-		ProductBlueprintCategory: toCategorySnapshot(in.ProductBlueprintCategory),
+		ProductBlueprintCategory: toCategorySnapshot(
+			input.ProductBlueprintCategory,
+		),
 
-		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
-		// ProductBlueprint 直下ではなく CategoryFields に集約する。
-		CategoryFields: normalizeCategoryFields(in.CategoryFields),
+		CategoryFields: normalizeCategoryFields(
+			input.CategoryFields,
+		),
 
-		AssigneeID: in.AssigneeId,
+		AssigneeID: input.AssigneeId,
 
-		CreatedBy: createdBy,
+		CreatedBy: memberIDPointerFromContext(
+			ctx,
+		),
 
-		// printed は bool。create 時は常に false（未印刷）
 		Printed: false,
 
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: normalizeTagType(in.ProductIdTag.Type),
+			Type: normalizeTagType(
+				input.ProductIdTag.Type,
+			),
 		},
 	}
 
-	created, err := h.uc.Create(ctx, pb)
+	created, err := h.uc.Create(
+		ctx,
+		productBlueprint,
+	)
 	if err != nil {
-		writeProductBlueprintErr(w, err)
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
 		return
 	}
 
-	row, err := h.detailQuery.GetByID(ctx, created.ID)
+	row, err := h.detailQuery.GetByID(
+		ctx,
+		created.ID,
+	)
 	if err != nil {
-		writeProductBlueprintErr(w, err)
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
 		return
 	}
 
-	out := h.toDetailOutput(row)
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(out)
+	output := h.toDetailOutput(
+		row,
+	)
+
+	w.WriteHeader(
+		http.StatusCreated,
+	)
+
+	_ = json.NewEncoder(w).Encode(
+		output,
+	)
 }
 
 // ---------------------------------------------------
 // PUT/PATCH /product-blueprints/{id}
 // ---------------------------------------------------
 
-func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+func (
+	h *ProductBlueprintHandler,
+) update(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+	if !validProductBlueprintID(id) {
+		w.WriteHeader(
+			http.StatusBadRequest,
+		)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
+
 		return
 	}
 
-	var in UpdateProductBlueprintInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+	var input UpdateProductBlueprintInput
+
+	if err := json.NewDecoder(
+		r.Body,
+	).Decode(
+		&input,
+	); err != nil {
+		w.WriteHeader(
+			http.StatusBadRequest,
+		)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid json",
+			},
+		)
+
 		return
 	}
 
-	var updatedBy *string
-	if in.UpdatedBy != "" {
-		updatedBy = &in.UpdatedBy
+	var categoryFields pbdom.CategoryFields
+
+	if input.CategoryFields != nil {
+		categoryFields =
+			normalizeCategoryFields(
+				*input.CategoryFields,
+			)
 	}
 
-	// printed は更新させない（印刷済み化は別ユースケースが適切）
-	pb := pbdom.ProductBlueprint{
+	// Printedは通常更新APIでは変更しません。
+	// 印刷済み化はMarkPrinted Usecaseだけを正とします。
+	productBlueprint := pbdom.ProductBlueprint{
 		ID:          id,
-		ProductName: in.ProductName,
-		Description: in.Description,
+		ProductName: input.ProductName,
+		Description: input.Description,
 
-		BrandID:   in.BrandId,
-		CompanyID: in.CompanyId,
+		BrandID: input.BrandId,
 
-		// ProductBlueprintCategory は productBlueprintCategory entity の Snapshot を正として受け取り、
-		// productBlueprint domain の denormalized snapshot へ変換する。
-		ProductBlueprintCategory: toCategorySnapshot(in.ProductBlueprintCategory),
+		// CompanyIDは通常更新では変更しません。
+		// Usecaseが現在のEntityと認証Contextを比較します。
+		CompanyID: "",
 
-		// fit / material / weight / qualityAssurance などカテゴリ依存項目は
-		// ProductBlueprint 直下ではなく CategoryFields に集約する。
-		CategoryFields: normalizeCategoryFields(in.CategoryFields),
+		ProductBlueprintCategory: toCategorySnapshot(
+			input.ProductBlueprintCategory,
+		),
 
-		AssigneeID: in.AssigneeId,
-		UpdatedBy:  updatedBy,
+		CategoryFields: categoryFields,
+
+		AssigneeID: input.AssigneeId,
+
+		UpdatedBy: memberIDPointerFromContext(
+			ctx,
+		),
 
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: normalizeTagType(in.ProductIdTag.Type),
+			Type: normalizeTagType(
+				input.ProductIdTag.Type,
+			),
 		},
 	}
 
-	updated, err := h.uc.Update(ctx, pb)
+	updated, err := h.uc.Update(
+		ctx,
+		productBlueprint,
+	)
 	if err != nil {
-		writeProductBlueprintErr(w, err)
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
 		return
 	}
 
-	row, err := h.detailQuery.GetByID(ctx, updated.ID)
+	row, err := h.detailQuery.GetByID(
+		ctx,
+		updated.ID,
+	)
 	if err != nil {
-		writeProductBlueprintErr(w, err)
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
 		return
 	}
 
-	out := h.toDetailOutput(row)
-	_ = json.NewEncoder(w).Encode(out)
+	output := h.toDetailOutput(
+		row,
+	)
+
+	_ = json.NewEncoder(w).Encode(
+		output,
+	)
 }
 
 // ---------------------------------------------------
 // DELETE /product-blueprints/{id}
 // ---------------------------------------------------
 
-func (h *ProductBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
-	_ = r
+// softDeleteはProductBlueprintと配下Modelを論理削除します。
+//
+// DocumentはこのHandlerから物理削除しません。
+// 物理削除は復旧期限経過後にPurge batchだけが実行します。
+func (
+	h *ProductBlueprintHandler,
+) softDelete(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
+	ctx := r.Context()
 
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+	if !validProductBlueprintID(id) {
+		w.WriteHeader(
+			http.StatusBadRequest,
+		)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
+
 		return
 	}
 
-	if err := h.uc.Delete(r.Context(), id); err != nil {
-		writeProductBlueprintErr(w, err)
+	_, err := h.uc.SoftDelete(
+		ctx,
+		id,
+		memberIDPointerFromContext(
+			ctx,
+		),
+	)
+	if err != nil {
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(
+		http.StatusNoContent,
+	)
+}
+
+// ---------------------------------------------------
+// POST /product-blueprints/{id}/restore
+// ---------------------------------------------------
+
+// restoreは論理削除から30日以内のProductBlueprintと
+// 配下Modelを復旧します。
+func (
+	h *ProductBlueprintHandler,
+) restore(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
+	ctx := r.Context()
+
+	if !validProductBlueprintID(id) {
+		w.WriteHeader(
+			http.StatusBadRequest,
+		)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
+
+		return
+	}
+
+	restored, err := h.uc.Restore(
+		ctx,
+		id,
+		memberIDPointerFromContext(
+			ctx,
+		),
+	)
+	if err != nil {
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
+		return
+	}
+
+	// Restore後はactive状態へ戻っているため、
+	// 通常のDetailQueryから取得します。
+	row, err := h.detailQuery.GetByID(
+		ctx,
+		restored.ID,
+	)
+	if err != nil {
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
+		return
+	}
+
+	output := h.toDetailOutput(
+		row,
+	)
+
+	_ = json.NewEncoder(w).Encode(
+		output,
+	)
 }
 
 // ---------------------------------------------------
 // GET /product-blueprints/{id}
 // ---------------------------------------------------
 
-func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+func (
+	h *ProductBlueprintHandler,
+) get(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+	if !validProductBlueprintID(id) {
+		w.WriteHeader(
+			http.StatusBadRequest,
+		)
+
+		_ = json.NewEncoder(w).Encode(
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
+
 		return
 	}
 
-	pb, err := h.detailQuery.GetByID(ctx, id)
+	productBlueprint, err :=
+		h.detailQuery.GetByID(
+			ctx,
+			id,
+		)
 	if err != nil {
-		writeProductBlueprintErr(w, err)
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
 		return
 	}
 
-	out := h.toDetailOutput(pb)
-	_ = json.NewEncoder(w).Encode(out)
+	output := h.toDetailOutput(
+		productBlueprint,
+	)
+
+	_ = json.NewEncoder(w).Encode(
+		output,
+	)
 }
 
 // ---------------------------------------------------
 // GET /product-blueprints
 // ---------------------------------------------------
 
-func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
+func (
+	h *ProductBlueprintHandler,
+) list(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 
-	rows, err := h.managementQuery.ListByCompanyID(ctx)
+	rows, err :=
+		h.managementQuery.
+			ListByCompanyID(ctx)
 	if err != nil {
-		writeProductBlueprintErr(w, err)
+		writeProductBlueprintErr(
+			w,
+			err,
+		)
+
 		return
 	}
 
-	out := make([]ProductBlueprintListOutput, 0, len(rows))
+	output := make(
+		[]ProductBlueprintListOutput,
+		0,
+		len(rows),
+	)
+
 	for _, row := range rows {
-		pb := row.ProductBlueprint
+		productBlueprint :=
+			row.ProductBlueprint
 
 		createdAt := ""
-		if !pb.CreatedAt.IsZero() {
-			createdAt = pb.CreatedAt.Format(time.RFC3339)
+
+		if !productBlueprint.
+			CreatedAt.
+			IsZero() {
+			createdAt =
+				productBlueprint.
+					CreatedAt.
+					Format(
+						time.RFC3339,
+					)
 		}
 
 		updatedAt := ""
-		if !pb.UpdatedAt.IsZero() {
-			updatedAt = pb.UpdatedAt.Format(time.RFC3339)
+
+		if !productBlueprint.
+			UpdatedAt.
+			IsZero() {
+			updatedAt =
+				productBlueprint.
+					UpdatedAt.
+					Format(
+						time.RFC3339,
+					)
 		}
 
-		out = append(out, ProductBlueprintListOutput{
-			ID:            pb.ID,
-			ProductName:   pb.ProductName,
-			BrandName:     row.Names.BrandName,
-			AssigneeName:  row.Names.AssigneeName,
-			Printed:       pb.Printed,
-			CreatedByName: row.Names.CreatedByName,
-			UpdatedByName: row.Names.UpdatedByName,
-			CreatedAt:     createdAt,
-			UpdatedAt:     updatedAt,
-		})
+		output = append(
+			output,
+			ProductBlueprintListOutput{
+				ID: productBlueprint.ID,
+
+				ProductName: productBlueprint.ProductName,
+
+				BrandName: row.Names.BrandName,
+
+				AssigneeName: row.Names.AssigneeName,
+
+				Printed: productBlueprint.Printed,
+
+				CreatedByName: row.Names.CreatedByName,
+
+				UpdatedByName: row.Names.UpdatedByName,
+
+				CreatedAt: createdAt,
+
+				UpdatedAt: updatedAt,
+			},
+		)
 	}
 
-	_ = json.NewEncoder(w).Encode(out)
+	_ = json.NewEncoder(w).Encode(
+		output,
+	)
 }
 
 // ---------------------------------------------------
-// DTO assembler (detail)
+// DTO assembler
 // ---------------------------------------------------
 
-func (h *ProductBlueprintHandler) toDetailOutput(
+func (
+	h *ProductBlueprintHandler,
+) toDetailOutput(
 	row pbquery.ProductBlueprintResolved,
 ) ProductBlueprintDetailOutput {
-	pb := row.ProductBlueprint
+	productBlueprint :=
+		row.ProductBlueprint
 
 	createdBy := ""
-	if pb.CreatedBy != nil {
-		createdBy = *pb.CreatedBy
+
+	if productBlueprint.CreatedBy != nil {
+		createdBy =
+			*productBlueprint.CreatedBy
 	}
 
 	updatedBy := ""
-	if pb.UpdatedBy != nil {
-		updatedBy = *pb.UpdatedBy
+
+	if productBlueprint.UpdatedBy != nil {
+		updatedBy =
+			*productBlueprint.UpdatedBy
 	}
 
 	createdAt := ""
-	if !pb.CreatedAt.IsZero() {
-		createdAt = pb.CreatedAt.Format(time.RFC3339)
+
+	if !productBlueprint.
+		CreatedAt.
+		IsZero() {
+		createdAt =
+			productBlueprint.
+				CreatedAt.
+				Format(
+					time.RFC3339,
+				)
 	}
 
 	updatedAt := ""
-	if !pb.UpdatedAt.IsZero() {
-		updatedAt = pb.UpdatedAt.Format(time.RFC3339)
+
+	if !productBlueprint.
+		UpdatedAt.
+		IsZero() {
+		updatedAt =
+			productBlueprint.
+				UpdatedAt.
+				Format(
+					time.RFC3339,
+				)
 	}
 
-	var tag *struct {
+	var productIDTag *struct {
 		Type string `json:"type"`
 	}
-	if string(pb.ProductIdTag.Type) != "" {
-		tag = &struct {
+
+	if string(
+		productBlueprint.
+			ProductIdTag.
+			Type,
+	) != "" {
+		productIDTag = &struct {
 			Type string `json:"type"`
 		}{
-			Type: string(pb.ProductIdTag.Type),
+			Type: string(
+				productBlueprint.
+					ProductIdTag.
+					Type,
+			),
 		}
 	}
 
-	category := toCategoryOutput(pb.ProductBlueprintCategory)
+	category :=
+		toCategoryOutput(
+			productBlueprint.
+				ProductBlueprintCategory,
+		)
 
 	var modelRefs []ModelRefOutput
-	if len(pb.ModelRefs) > 0 {
-		modelRefs = make([]ModelRefOutput, 0, len(pb.ModelRefs))
-		for _, mr := range pb.ModelRefs {
-			modelID := mr.ModelID
-			if modelID == "" {
+
+	if len(productBlueprint.ModelRefs) > 0 {
+		modelRefs = make(
+			[]ModelRefOutput,
+			0,
+			len(productBlueprint.ModelRefs),
+		)
+
+		for _, modelRef := range productBlueprint.ModelRefs {
+			if modelRef.ModelID == "" {
 				continue
 			}
-			modelRefs = append(modelRefs, ModelRefOutput{
-				ModelId:      modelID,
-				DisplayOrder: mr.DisplayOrder,
-			})
+
+			modelRefs = append(
+				modelRefs,
+				ModelRefOutput{
+					ModelId: modelRef.ModelID,
+
+					DisplayOrder: modelRef.DisplayOrder,
+				},
+			)
 		}
 	}
 
 	return ProductBlueprintDetailOutput{
-		ID:          pb.ID,
-		ProductName: pb.ProductName,
-		Description: pb.Description,
+		ID: productBlueprint.ID,
 
-		CompanyId: pb.CompanyID,
-		BrandId:   pb.BrandID,
+		ProductName: productBlueprint.ProductName,
+
+		Description: productBlueprint.Description,
+
+		CompanyId: productBlueprint.CompanyID,
+
+		BrandId: productBlueprint.BrandID,
+
 		BrandName: row.Names.BrandName,
 
-		ProductBlueprintCategoryId: pb.ProductBlueprintCategory.ID,
-		ProductBlueprintCategory:   category,
+		ProductBlueprintCategoryId: productBlueprint.
+			ProductBlueprintCategory.
+			ID,
 
-		CategoryFields: map[string]any(pb.CategoryFields),
+		ProductBlueprintCategory: category,
 
-		ProductIdTag: tag,
+		CategoryFields: map[string]any(
+			productBlueprint.
+				CategoryFields,
+		),
 
-		AssigneeId:   pb.AssigneeID,
+		ProductIdTag: productIDTag,
+
+		AssigneeId: productBlueprint.AssigneeID,
+
 		AssigneeName: row.Names.AssigneeName,
 
-		Printed: pb.Printed,
+		Printed: productBlueprint.Printed,
 
-		CreatedBy:     createdBy,
+		CreatedBy: createdBy,
+
 		CreatedByName: row.Names.CreatedByName,
-		CreatedAt:     createdAt,
 
-		UpdatedBy:     updatedBy,
+		CreatedAt: createdAt,
+
+		UpdatedBy: updatedBy,
+
 		UpdatedByName: row.Names.UpdatedByName,
-		UpdatedAt:     updatedAt,
+
+		UpdatedAt: updatedAt,
 
 		ModelRefs: modelRefs,
 	}
 }
 
 // ---------------------------------------------------
-// error helpers
+// Error helpers
 // ---------------------------------------------------
 
-func writeProductBlueprintErr(w http.ResponseWriter, err error) {
+func writeProductBlueprintErr(
+	w http.ResponseWriter,
+	err error,
+) {
 	code := http.StatusInternalServerError
 
 	switch {
+	case errors.Is(
+		err,
+		pbdom.ErrRestorePeriodExpired,
+	):
+		code = http.StatusGone
+
+	case errors.Is(
+		err,
+		pbdom.ErrInvalidDeletionState,
+	):
+		code = http.StatusConflict
+
 	case pbdom.IsInvalid(err):
 		code = http.StatusBadRequest
+
 	case pbdom.IsNotFound(err):
 		code = http.StatusNotFound
+
 	case pbdom.IsConflict(err):
 		code = http.StatusConflict
+
 	case pbdom.IsUnauthorized(err):
 		code = http.StatusUnauthorized
+
 	case pbdom.IsForbidden(err):
 		code = http.StatusForbidden
-	default:
 	}
 
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	w.WriteHeader(
+		code,
+	)
+
+	_ = json.NewEncoder(w).Encode(
+		map[string]string{
+			"error": err.Error(),
+		},
+	)
 }
