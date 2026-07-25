@@ -14,9 +14,9 @@ import ProductionManagement from "../../../production/presentation/pages/product
 import ProductionDetail from "../../../production/presentation/pages/productionDetail";
 import ProductionCreate from "../../../production/presentation/pages/productionCreate";
 
-import InventoryManagementPage from "../../../inventory/src/presentation/pages/inventoryManagement";
-import InventoryDetailPage from "../../../inventory/src/presentation/pages/inventoryDetail";
-import InventoryListCreatePage from "../../../inventory/src/presentation/pages/listCreate";
+import InventoryManagementPage from "../../../inventory/presentation/pages/inventoryManagement";
+import InventoryDetailPage from "../../../inventory/presentation/pages/inventoryDetail";
+import InventoryListCreatePage from "../../../inventory/presentation/pages/listCreate";
 
 import TokenBlueprintManagement from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintManagement";
 import TokenBlueprintDetail from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintDetail";

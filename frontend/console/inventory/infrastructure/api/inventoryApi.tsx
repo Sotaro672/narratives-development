@@ -1,7 +1,7 @@
 // frontend/console/inventory/src/infrastructure/api/inventoryApi.tsx
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { getAuthHeadersOrThrow } from "../../../shell/src/shared/http/authHeaders";
 
 // ---------------------------------------------------------
 // Shared helpers

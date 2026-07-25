@@ -7,11 +7,11 @@ import {
   type NavigateFunction,
 } from "react-router-dom";
 
-import { usePriceCard } from "../../../../list/presentation/hook/usePriceCard";
-import { useAdminCard } from "../../../../admin/src/presentation/hook/useAdminCard";
-import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
+import { useAdminCard } from "../../../admin/src/presentation/hook/useAdminCard";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-import type { ListStatus } from "../../../../list/domain/list";
+import type { ListStatus } from "../../../list/domain/list";
 
 import {
   buildAfterCreatePath,

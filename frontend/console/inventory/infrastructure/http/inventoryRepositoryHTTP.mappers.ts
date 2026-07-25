@@ -12,7 +12,7 @@ import type {
 import type {
   ProductBlueprintCategoryKind,
   ProductBlueprintCategorySnapshot,
-} from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+} from "../../../productBlueprint/domain/productBlueprintCategory";
 
 // =========================================================
 // /inventory を正とする mapper

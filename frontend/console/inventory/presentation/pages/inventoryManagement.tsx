@@ -1,5 +1,5 @@
 // frontend/console/inventory/src/presentation/pages/inventoryManagement.tsx
-import List from "../../../../shell/src/layout/List/List";
+import List from "../../../shell/src/layout/List/List";
 import "../styles/inventory.css";
 
 import { useInventoryManagement } from "../hook/useInventoryManagement";

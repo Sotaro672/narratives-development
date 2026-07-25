@@ -3,7 +3,7 @@
 import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
-} from "../../../../productBlueprint/src/domain/entity/productBlueprintCategory";
+} from "../../../productBlueprint/domain/productBlueprintCategory";
 
 // ---------------------------------------------------------
 // Inventory 用：商品情報ヘッダー DTO

@@ -7,22 +7,22 @@ import { getListCreateRaw } from "../../infrastructure/api/listCreateApi";
 import type { ListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.types";
 import { mapListCreateDTO } from "../../infrastructure/http/listCreateRepositoryHTTP.mappers";
 
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 import {
   createListHTTP,
   saveListImageFromFirebaseStorageHTTP,
   setListPrimaryImageHTTP,
-} from "../../../../list/infrastructure/repository";
+} from "../../../list/infrastructure/repository";
 
 import type {
   CreateListInput as ListPostCreateListInput,
   ListDTO,
-} from "../../../../list/infrastructure/dto";
+} from "../../../list/infrastructure/dto";
 
-import type { ListStatus } from "../../../../list/domain/list";
+import type { ListStatus } from "../../../list/domain/list";
 
-import { uploadListImageToFirebaseStorage } from "../../../../list/infrastructure/firebase/listImageStorage";
+import { uploadListImageToFirebaseStorage } from "../../../list/infrastructure/firebase/listImageStorage";
 
 /**
  * Hook 側で使う Ref 型（useRef<HTMLInputElement | null>(null) を許容）

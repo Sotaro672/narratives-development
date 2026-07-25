@@ -2,15 +2,15 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import ProductBlueprintCard from "../../../../productBlueprint/presentation/cards/productBlueprintForm";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import ProductBlueprintCard from "../../../productBlueprint/presentation/cards/productBlueprintForm";
 import InventoryCard from "../components/inventoryCard";
 
 // TokenBlueprintCard（view-only）
 import TokenBlueprintCard, {
   type TokenBlueprintCardViewModel,
   type TokenBlueprintCardHandlers,
-} from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
+} from "../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 
 import { useInventoryDetail } from "../hook/useInventoryDetail";
 import type { InventoryDetailViewModel } from "../../application/inventoryDetail/inventoryDetail.types";

@@ -4,7 +4,7 @@ import React from "react";
 import {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
+} from "../../shell/src/layout/List/List";
 
 import { fetchInventoryListDTO } from "../infrastructure/http/inventoryRepositoryHTTP";
 

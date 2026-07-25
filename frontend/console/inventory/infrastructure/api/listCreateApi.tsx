@@ -1,10 +1,10 @@
 // frontend/console/inventory/src/infrastructure/api/listCreateApi.tsx
 
 // ✅ Shared console API base (修正案A)
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
 
 // ✅ Shared auth headers (shell authService を委譲)
-import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
+import { getAuthHeadersOrThrow } from "../../../shell/src/shared/http/authHeaders";
 
 // ---------------------------------------------------------
 // Shared helpers

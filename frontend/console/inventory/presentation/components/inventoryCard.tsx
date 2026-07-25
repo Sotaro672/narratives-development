@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -15,11 +15,11 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../../shell/src/shared/ui/table";
+} from "../../../shell/src/shared/ui/table";
 
 import type { InventoryRow } from "../../application/inventoryTypes";
 
-import { rgbIntToHex } from "../../../../shell/src/shared/util/color";
+import { rgbIntToHex } from "../../../shell/src/shared/util/color";
 
 type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 
