@@ -3,25 +3,25 @@
 import * as React from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import { AdminCard } from "../../../features/admin/presentation/components/AdminCard";
-import ProductBlueprintCard from "../../../features/productBlueprint/presentation/cards/productBlueprintForm";
+import { AdminCard } from "../features/admin/presentation/components/AdminCard";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 import {
   ProductBlueprintBrandCard,
   ProductBlueprintCategoryCard,
-} from "../../../features/productBlueprint/presentation/cards/classification";
-import CategoryFieldsCard from "../../../features/productBlueprint/presentation/cards/categoryFields";
-import ColorVariationCard from "../../../features/model/presentation/components/ColorVariationCard";
-import SizeVariationCard from "../../../features/model/presentation/components/SizeVariationCard";
-import ModelNumberCard from "../../../features/model/presentation/components/ModelNumberCard";
-import VolumeCard from "../../../features/model/presentation/components/VolumeCard";
-import AlcoholModelNumberCard from "../../../features/model/presentation/components/AlcoholModelNumberCard";
+} from "../features/productBlueprint/presentation/cards/classification";
+import CategoryFieldsCard from "../features/productBlueprint/presentation/cards/categoryFields";
+import ColorVariationCard from "../features/model/presentation/components/ColorVariationCard";
+import SizeVariationCard from "../features/model/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../features/model/presentation/components/ModelNumberCard";
+import VolumeCard from "../features/model/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../features/model/presentation/components/AlcoholModelNumberCard";
 
 // モデルナンバー用のロジックは model 側の hook を利用
-import { useModelCard } from "../../../features/model/presentation/hook/useModelCard";
+import { useModelCard } from "../features/model/presentation/hook/useModelCard";
 
-import { useProductBlueprintCreate } from "../../../features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate";
+import { useProductBlueprintCreate } from "../features/productBlueprint/presentation/hooks/create/useProductBlueprintCreate";
 
-import type { CategoryFieldValues } from "../../../features/productBlueprint/domain/productBlueprintCategory";
+import type { CategoryFieldValues } from "../features/productBlueprint/domain/productBlueprintCategory";
 
 function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (

@@ -2,7 +2,7 @@
 import List from "../layout/List/List";
 import "../styles/list.css";
 
-import { useListManagement } from "../../../features/list/presentation/hook/useListManagement";
+import { useListManagement } from "../features/list/presentation/hook/useListManagement";
 
 export default function ListManagementPage() {
   const { vm, handlers, isResetting } = useListManagement(); // ✅ 追加（hook 側で返す必要あり）

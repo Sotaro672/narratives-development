@@ -3,22 +3,22 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../features/admin/presentation/components/AdminCard";
-import TokenBlueprintCard from "../../../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
-import TokenContentsCard from "../../../features/tokenBlueprint/presentation/components/tokenContentsCard";
+import AdminCard from "../features/admin/presentation/components/AdminCard";
+import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
 
-import { useTokenBlueprintCreate } from "../../../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
-import { useTokenBlueprintCard } from "../../../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
-import { useAdminCard as useAdminCardHook } from "../../../features/admin/presentation/hook/useAdminCard";
+import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
+import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
+import { useAdminCard as useAdminCardHook } from "../features/admin/presentation/hook/useAdminCard";
 
 import type {
   TokenBlueprint,
   ContentFile,
   FirebaseStorageTokenContent,
-} from "../../../features/tokenBlueprint/domain/tokenBlueprint";
+} from "../features/tokenBlueprint/domain/tokenBlueprint";
 
-import { patchTokenBlueprintContentFiles } from "../../../features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
-import { uploadTokenBlueprintContentToFirebaseStorage } from "../../../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
+import { patchTokenBlueprintContentFiles } from "../features/tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
+import { uploadTokenBlueprintContentToFirebaseStorage } from "../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
 
 function guessContentType(file: File): FirebaseStorageTokenContent["type"] {
   const mime = file.type.toLowerCase();

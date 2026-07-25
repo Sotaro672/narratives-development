@@ -6,8 +6,8 @@ import List, {
   FilterableTableHeader,
 } from "../layout/List/List";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
-import { useTokenBlueprintReviewManagement } from "../../../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewManagement";
-import type { TokenBlueprintReviewAggregate } from "../../../features/tokenBlueprintReview/domain/entity";
+import { useTokenBlueprintReviewManagement } from "../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewManagement";
+import type { TokenBlueprintReviewAggregate } from "../features/tokenBlueprintReview/domain/entity";
 
 export default function TokenBlueprintReviewManagementPage() {
   const {

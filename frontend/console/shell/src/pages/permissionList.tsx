@@ -1,7 +1,7 @@
 // frontend\console\shell\src\pages\permissionList.tsx
 
 import List from "../layout/List/List";
-import { usePermissionList } from "../../../features/permission/presentation/hook/usePermissionList";
+import { usePermissionList } from "../features/permission/presentation/hook/usePermissionList";
 
 export default function PermissionList() {
   const { headers, filteredRows, goDetail, handleReset } = usePermissionList();

@@ -3,17 +3,17 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../layout/PageStyle/PageStyle";
-import ProductBlueprintCard from "../../../features/productBlueprint/presentation/cards/productBlueprintForm";
-import InventoryCard from "../../../features/inventory/presentation/components/inventoryCard";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
 
 // TokenBlueprintCard（view-only）
 import TokenBlueprintCard, {
   type TokenBlueprintCardViewModel,
   type TokenBlueprintCardHandlers,
-} from "../../../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+} from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 
-import { useInventoryDetail } from "../../../features/inventory/presentation/hook/useInventoryDetail";
-import type { InventoryDetailViewModel } from "../../../features/inventory/application/inventoryDetail/inventoryDetail.types";
+import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
+import type { InventoryDetailViewModel } from "../features/inventory/application/inventoryDetail/inventoryDetail.types";
 
 type ProductBlueprintCardPatch = React.ComponentProps<
   typeof ProductBlueprintCard

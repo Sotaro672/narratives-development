@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../features/admin/presentation/components/AdminCard";
-import LogCard from "../../../features/log/presentation/LogCard";
+import AdminCard from "../features/admin/presentation/components/AdminCard";
+import LogCard from "../features/log/presentation/LogCard";
 
 import Pagination from "../shared/ui/pagination";
 import RefreshButton from "../shared/ui/refresh";
@@ -13,7 +13,7 @@ import { Button } from "../shared/ui/button";
 
 import { ratingToStars, statusLabelJa } from "../shared/format/review";
 
-import { useProductBlueprintReviewDetail } from "../../../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewDetail";
+import { useProductBlueprintReviewDetail } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewDetail";
 
 import "../styles/productBlueprintReview.css";
 

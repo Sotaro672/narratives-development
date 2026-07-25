@@ -1,7 +1,7 @@
 // frontend\console\shell\src\pages\mintRequestManagement.tsx
 import List from "../layout/List/List";
 import "../styles/mintRequest.css";
-import { useMintRequestManagement } from "../../../features/mintRequest/presentation/hook/useMintRequestManagement";
+import { useMintRequestManagement } from "../features/mintRequest/presentation/hook/useMintRequestManagement";
 
 export default function MintRequestManagementPage() {
   const {

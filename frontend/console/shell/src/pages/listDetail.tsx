@@ -7,10 +7,10 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { Input } from "../shared/ui/input";
 
-import PriceCard from "../../../features/list/presentation/components/priceCard";
-import AdminCard from "../../../features/admin/presentation/components/AdminCard";
-import ListImageCard from "../../../features/list/presentation/components/listImageCard";
-import { useListDetail } from "../../../features/list/presentation/hook/useListDetail";
+import PriceCard from "../features/list/presentation/components/priceCard";
+import AdminCard from "../features/admin/presentation/components/AdminCard";
+import ListImageCard from "../features/list/presentation/components/listImageCard";
+import { useListDetail } from "../features/list/presentation/hook/useListDetail";
 
 export default function ListDetail() {
   const navigate = useNavigate();

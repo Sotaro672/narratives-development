@@ -4,8 +4,8 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
-import type { TokenBlueprint } from "../../../features/tokenBlueprint/domain/tokenBlueprint";
-import { useTokenBlueprintManagement } from "../../../features/tokenBlueprint/presentation/hook/useTokenBlueprintManagement";
+import type { TokenBlueprint } from "../features/tokenBlueprint/domain/tokenBlueprint";
+import { useTokenBlueprintManagement } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintManagement";
 
 export default function TokenBlueprintManagementPage() {
   const {

@@ -3,7 +3,7 @@ import List from "../layout/List/List";
 import "../styles/order.css";
 
 import { safeDateLabelJa } from "../shared/util/dateJa";
-import { useOrderManagement } from "../../../features/order/presentation/hooks/useOrderManagement";
+import { useOrderManagement } from "../features/order/presentation/hooks/useOrderManagement";
 
 export default function OrderManagementPage() {
   const { rows, headers, errorMsg, isResetting, goDetail, reset } =

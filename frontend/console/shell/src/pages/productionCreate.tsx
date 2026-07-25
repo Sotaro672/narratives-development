@@ -1,7 +1,7 @@
 // frontend\console\shell\src\pages\productionCreate.tsx
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../features/admin/presentation/components/AdminCard";
+import AdminCard from "../features/admin/presentation/components/AdminCard";
 
 import {
   Card,
@@ -16,7 +16,7 @@ import {
   PopoverContent,
 } from "../shared/ui/popover";
 
-import ProductBlueprintCard from "../../../features/productBlueprint/presentation/cards/productBlueprintForm";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 
 // Table UI
 import {
@@ -29,10 +29,10 @@ import {
 } from "../shared/ui/table";
 
 // named import に戻す（TS1192 対策）
-import { useProductionCreate } from "../../../features/production/presentation/hook/useProductionCreate";
+import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
 
 // ProductionQuantityCard（InventoryCard互換デザイン）
-import ProductionQuantityCard from "../../../features/production/presentation/components/productionQuantityCard";
+import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
 
 import "../styles/production.css";
 

@@ -16,10 +16,10 @@ import {
   PopoverContent,
 } from "../shared/ui/popover";
 
-import ProductBlueprintCard from "../../../features/productBlueprint/presentation/cards/productBlueprintForm";
-import InspectionResultCard from "../../../features/mintRequest/presentation/components/inspectionResultCard";
-import TokenBlueprintCard from "../../../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
-import { useMintRequestDetail } from "../../../features/mintRequest/presentation/hook/useMintRequestDetail";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import InspectionResultCard from "../features/mintRequest/presentation/components/inspectionResultCard";
+import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+import { useMintRequestDetail } from "../features/mintRequest/presentation/hook/useMintRequestDetail";
 
 import "../styles/mintRequest.css";
 

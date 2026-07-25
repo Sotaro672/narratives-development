@@ -2,25 +2,25 @@
 
 import React from "react";
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../features/admin/presentation/components/AdminCard";
+import AdminCard from "../features/admin/presentation/components/AdminCard";
 
-import ProductBlueprintCard from "../../../features/productBlueprint/presentation/cards/productBlueprintForm";
-import ProductionQuantityCard from "../../../features/production/presentation/components/productionQuantityCard";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
 
-import { useProductionDetail } from "../../../features/production/presentation/hook/useProductionDetail";
+import { useProductionDetail } from "../features/production/presentation/hook/useProductionDetail";
 import "../styles/production.css";
 
-import LogCard from "../../../features/log/presentation/LogCard";
+import LogCard from "../features/log/presentation/LogCard";
 
 // usePrintCard Hook（print_log + QR 情報取得）
 // modelId を正にした版（QuantityRowBase: modelId）
-import { usePrintCard } from "../../../features/product/presentation/hook/usePrintCard";
+import { usePrintCard } from "../features/product/presentation/hook/usePrintCard";
 
 // 分離した印刷カードコンポーネント
-import PrintCard from "../../../features/product/presentation/component/printCard";
+import PrintCard from "../features/product/presentation/component/printCard";
 
 // Presentation 正: ProductionQuantityRowVM（キーは modelId）
-import type { ProductionQuantityRowVM } from "../../../features/production/presentation/viewModels/productionQuantityRowVM";
+import type { ProductionQuantityRowVM } from "../features/production/presentation/viewModels/productionQuantityRowVM";
 
 export default function ProductionDetail() {
   const {

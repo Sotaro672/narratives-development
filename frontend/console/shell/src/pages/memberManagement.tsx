@@ -5,7 +5,7 @@ import List, {
   SortableTableHeader,
 } from "../layout/List/List";
 import "../styles/member.css";
-import { useMemberList } from "../../../features/member/presentation/hooks/useMemberList";
+import { useMemberList } from "../features/member/presentation/hooks/useMemberList";
 
 import Pagination from "../shared/ui/pagination";
 
