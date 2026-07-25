@@ -2,17 +2,17 @@
 
 import * as React from "react";
 
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../cards/productBlueprintForm";
 import ProductBlueprintClassificationCard from "../cards/classification/ProductBlueprintClassificationCard";
 import CategoryFieldsCard from "../cards/categoryFields";
-import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
-import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
-import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
-import VolumeCard from "../../../../model/src/presentation/components/VolumeCard";
-import AlcoholModelNumberCard from "../../../../model/src/presentation/components/AlcoholModelNumberCard";
-import LogCard from "../../../../log/presentation/LogCard";
+import ColorVariationCard from "../../../model/src/presentation/components/ColorVariationCard";
+import SizeVariationCard from "../../../model/src/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../../../model/src/presentation/components/ModelNumberCard";
+import VolumeCard from "../../../model/src/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../../../model/src/presentation/components/AlcoholModelNumberCard";
+import LogCard from "../../../log/presentation/LogCard";
 
 import { useProductBlueprintDetail } from "../hooks/detail/useProductBlueprintDetail";
 

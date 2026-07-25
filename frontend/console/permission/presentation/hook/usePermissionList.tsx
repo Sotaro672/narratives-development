@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
-import { FilterableTableHeader } from "../../../../shell/src/layout/List/List";
-import type { Permission } from "../../../../shell/src/shared/types/permission";
+import { FilterableTableHeader } from "../../../shell/src/layout/List/List";
+import type { Permission } from "../../../shell/src/shared/types/permission";
 import { PermissionRepositoryHTTP } from "../../infrastructure/http/permissionRepositoryHTTP";
 
 type UsePermissionListResult = {

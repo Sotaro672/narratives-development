@@ -1,10 +1,10 @@
 // frontend/console/productBlueprint/src/infrastructure/repository/productBlueprintRepositoryHTTP.ts
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,
   getAuthJsonHeadersOrThrow,
-} from "../../../../shell/src/shared/http/authHeaders";
+} from "../../../shell/src/shared/http/authHeaders";
 
 // application 層の型だけを type import
 import type { CreateProductBlueprintParams } from "../../application/productBlueprintCreateService";

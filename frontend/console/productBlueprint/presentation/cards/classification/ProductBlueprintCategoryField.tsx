@@ -2,15 +2,15 @@
 
 import * as React from "react";
 
-import { Button } from "../../../../../shell/src/shared/ui/button";
-import { Input } from "../../../../../shell/src/shared/ui/input";
+import { Button } from "../../../../shell/src/shared/ui/button";
+import { Input } from "../../../../shell/src/shared/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "../../../../../shell/src/shared/ui/popover";
+} from "../../../../shell/src/shared/ui/popover";
 
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/entity/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
 
 export type ProductBlueprintCategoryOption = ProductBlueprintCategorySnapshot;
 

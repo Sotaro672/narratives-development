@@ -1,14 +1,14 @@
 // frontend/console/productBlueprint/src/infrastructure/api/productBlueprintDetailApi.ts
 
-import { getAuthHeaders } from "../../../../shell/src/auth/application/authService";
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
-import { fetchJSON } from "../../../../shell/src/shared/http/fetchJSON";
+import { getAuthHeaders } from "../../../shell/src/auth/application/authService";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { fetchJSON } from "../../../shell/src/shared/http/fetchJSON";
 
 import type {
   CategoryFieldValues,
   ProductBlueprintCategoryKind,
   ProductBlueprintCategorySnapshot,
-} from "../../domain/entity/productBlueprintCategory";
+} from "../../domain/productBlueprintCategory";
 
 export type { UpdateProductBlueprintParams } from "./productBlueprintUpdateApi";
 

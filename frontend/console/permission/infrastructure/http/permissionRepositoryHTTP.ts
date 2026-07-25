@@ -1,12 +1,12 @@
 // frontend/console/permission/src/infrastructure/http/permissionRepositoryHTTP.ts
 
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 import type { Permission } from "../../domain/entity/permission";
 import type {
   Page,
   PageResult,
   Sort,
-} from "../../../../shell/src/shared/types/common/common";
+} from "../../../shell/src/shared/types/common/common";
 
 // ─────────────────────────────────────────────
 // Backend base URL（.env 未設定でも Cloud Run にフォールバック）

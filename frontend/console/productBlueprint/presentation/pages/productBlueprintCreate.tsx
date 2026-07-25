@@ -2,26 +2,26 @@
 
 import * as React from "react";
 
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import { AdminCard } from "../../../../admin/src/presentation/components/AdminCard";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import { AdminCard } from "../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../cards/productBlueprintForm";
 import {
   ProductBlueprintBrandCard,
   ProductBlueprintCategoryCard,
 } from "../cards/classification";
 import CategoryFieldsCard from "../cards/categoryFields";
-import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
-import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
-import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
-import VolumeCard from "../../../../model/src/presentation/components/VolumeCard";
-import AlcoholModelNumberCard from "../../../../model/src/presentation/components/AlcoholModelNumberCard";
+import ColorVariationCard from "../../../model/src/presentation/components/ColorVariationCard";
+import SizeVariationCard from "../../../model/src/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../../../model/src/presentation/components/ModelNumberCard";
+import VolumeCard from "../../../model/src/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../../../model/src/presentation/components/AlcoholModelNumberCard";
 
 // モデルナンバー用のロジックは model 側の hook を利用
-import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
+import { useModelCard } from "../../../model/src/presentation/hook/useModelCard";
 
 import { useProductBlueprintCreate } from "../hooks/create/useProductBlueprintCreate";
 
-import type { CategoryFieldValues } from "../../domain/entity/productBlueprintCategory";
+import type { CategoryFieldValues } from "../../domain/productBlueprintCategory";
 
 function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (

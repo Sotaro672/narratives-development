@@ -7,7 +7,7 @@ import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTT
 import {
   groupPermissionsByCategory,
   type PermissionCategory,
-} from "../../../permission/src/application/permissionCatalog";
+} from "../../../permission/application/permissionCatalog";
 
 const memberRepo = new MemberRepositoryHTTP();
 

@@ -17,7 +17,7 @@ import type {
 } from "../../../shell/src/shared/types/permission";
 
 // Permission Repository (GET /permissions)
-import { PermissionRepositoryHTTP } from "../../../permission/src/infrastructure/http/permissionRepositoryHTTP";
+import { PermissionRepositoryHTTP } from "../../../permission/infrastructure/http/permissionRepositoryHTTP";
 
 // Brand Domain
 import type { Brand } from "../../../brand/src/domain/entity/brand";

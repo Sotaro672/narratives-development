@@ -7,13 +7,13 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../../shell/src/shared/ui";
-import { Input } from "../../../../../shell/src/shared/ui/input";
+} from "../../../../shell/src/shared/ui";
+import { Input } from "../../../../shell/src/shared/ui/input";
 
 import type {
   CategoryFieldValues,
   ProductBlueprintCategorySnapshot,
-} from "../../../domain/entity/productBlueprintCategory";
+} from "../../../domain/productBlueprintCategory";
 
 import ProductBlueprintBasicFields from "./ProductBlueprintBasicFields";
 import { resolveProductBlueprintCategoryLabel } from "../classification/ProductBlueprintCategoryField";

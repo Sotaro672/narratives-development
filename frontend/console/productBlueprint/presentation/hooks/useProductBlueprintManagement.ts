@@ -11,7 +11,7 @@ import {
   type SortDirection,
 } from "../../application/productBlueprintManagementService";
 
-import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 
 export interface UseProductBlueprintManagementResult {
   rows: UiRow[];

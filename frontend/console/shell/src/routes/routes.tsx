@@ -6,13 +6,13 @@ import InvitationPage from "../auth/presentation/pages/InvitationPage";
 import InquiryManagement from "../../../inquiry/presentation/pages/inquiryManagement";
 import InquiryDetail from "../../../inquiry/presentation/pages/inquiryDetail";
 
-import ProductBlueprintManagement from "../../../productBlueprint/src/presentation/pages/productBlueprintManagement";
-import ProductBlueprintDetail from "../../../productBlueprint/src/presentation/pages/productBlueprintDetail";
-import ProductBlueprintCreate from "../../../productBlueprint/src/presentation/pages/productBlueprintCreate";
+import ProductBlueprintManagement from "../../../productBlueprint/presentation/pages/productBlueprintManagement";
+import ProductBlueprintDetail from "../../../productBlueprint/presentation/pages/productBlueprintDetail";
+import ProductBlueprintCreate from "../../../productBlueprint/presentation/pages/productBlueprintCreate";
 
-import ProductionManagement from "../../../production/src/presentation/pages/productionManagement";
-import ProductionDetail from "../../../production/src/presentation/pages/productionDetail";
-import ProductionCreate from "../../../production/src/presentation/pages/productionCreate";
+import ProductionManagement from "../../../production/presentation/pages/productionManagement";
+import ProductionDetail from "../../../production/presentation/pages/productionDetail";
+import ProductionCreate from "../../../production/presentation/pages/productionCreate";
 
 import InventoryManagementPage from "../../../inventory/src/presentation/pages/inventoryManagement";
 import InventoryDetailPage from "../../../inventory/src/presentation/pages/inventoryDetail";
@@ -34,8 +34,8 @@ import TokenBlueprintReviewDetail from "../../../tokenBlueprintReview/src/presen
 import ListManagement from "../../../list/presentation/pages/listManagement";
 import ListDetail from "../../../list/presentation/pages/listDetail";
 
-import OrderManagement from "../../../order/src/presentation/pages/orderManagement";
-import OrderDetail from "../../../order/src/presentation/pages/orderDetail";
+import OrderManagement from "../../../order/presentation/pages/orderManagement";
+import OrderDetail from "../../../order/presentation/pages/orderDetail";
 
 import MemberManagement from "../../../member/src/presentation/pages/memberManagement";
 import MemberDetail from "../../../member/src/presentation/pages/memberDetail";
@@ -45,8 +45,8 @@ import BrandManagement from "../../../brand/src/presentation/pages/brandManageme
 import BrandCreate from "../../../brand/src/presentation/pages/brandCreate";
 import BrandDetail from "../../../brand/src/presentation/pages/brandDetail";
 
-import PermissionList from "../../../permission/src/presentation/pages/permissionList";
-import PermissionDetail from "../../../permission/src/presentation/pages/permissionDetail";
+import PermissionList from "../../../permission/presentation/pages/permissionList";
+import PermissionDetail from "../../../permission/presentation/pages/permissionDetail";
 
 import AccountManagement from "../../../account/presentation/pages/accountManagement";
 

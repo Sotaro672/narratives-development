@@ -1,7 +1,7 @@
 // frontend/console/productBlueprint/src/infrastructure/httpClient/authorizedFetch.ts
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { getAuthHeadersOrThrow } from "../../../shell/src/shared/http/authHeaders";
 
 /**
  * Normalized error for HTTP failures.

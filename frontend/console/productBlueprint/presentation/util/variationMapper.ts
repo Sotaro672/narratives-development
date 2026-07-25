@@ -1,20 +1,20 @@
-// frontend/console/productBlueprint/src/presentation/util/variationMapper.ts
+// frontend/console/productBlueprint/presentation/util/variationMapper.ts
 
 import type {
   ApparelModelNumberRow as ModelNumberRow,
   ApparelSizeRow as SizeRow,
-} from "../../domain/entity/apparel";
+} from "../../domain/apparel";
 
 import type {
   AlcoholModelNumber,
   Volume,
   VolumeRow,
-} from "../../../../model/src/application/modelCreateService";
+} from "../../../model/src/application/modelCreateService";
 
 import {
   rgbIntToHex,
   coerceRgbInt,
-} from "../../../../shell/src/shared/util/color";
+} from "../../../shell/src/shared/util/color";
 
 type AnyVar = any;
 
@@ -127,11 +127,13 @@ function isAlcoholVariation(value: AnyVar): boolean {
 
 function isBottomsLikeCategory(categoryCode: string): boolean {
   const normalized = s(categoryCode).toLowerCase();
+
   return normalized === "apparel.bottoms";
 }
 
 function isDressLikeCategory(categoryCode: string): boolean {
   const normalized = s(categoryCode).toLowerCase();
+
   return normalized === "apparel.dress";
 }
 
@@ -275,6 +277,7 @@ export function buildSizeRows(
       base.inseam = merged["股下"];
       base.thigh = merged["わたり幅"];
       base.hemWidth = merged["裾幅"];
+
       return base;
     }
 
@@ -286,6 +289,7 @@ export function buildSizeRows(
       base.sleeveLength = merged["袖丈"];
       base.waist = merged["ウエスト"];
       base.hip = merged["ヒップ"];
+
       return base;
     }
 
@@ -302,7 +306,9 @@ export function buildSizeRows(
 /**
  * apparel variations から ModelNumberRow[]（size/color/code）を構築
  */
-export function buildModelNumberRows(varsAny: unknown[]): ModelNumberRow[] {
+export function buildModelNumberRows(
+  varsAny: unknown[],
+): ModelNumberRow[] {
   const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
 
   return list
@@ -324,7 +330,9 @@ export function buildModelNumberRows(varsAny: unknown[]): ModelNumberRow[] {
 /**
  * alcohol variations から VolumeRow[] を構築
  */
-export function buildVolumeRows(varsAny: unknown[]): VolumeRow[] {
+export function buildVolumeRows(
+  varsAny: unknown[],
+): VolumeRow[] {
   const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
   const seen = new Set<string>();
   const rows: VolumeRow[] = [];
@@ -365,37 +373,37 @@ export function buildAlcoholModelNumberRows(
   varsAny: unknown[],
 ): AlcoholModelNumber[] {
   const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
+  const rows: AlcoholModelNumber[] = [];
 
-  return list
-    .filter(isAlcoholVariation)
-    .map((variation) => {
-      const volume = pickVolume(variation);
-      const code = pickModelNumber(variation);
+  for (const variation of list) {
+    if (!isAlcoholVariation(variation)) {
+      continue;
+    }
 
-      if (!volume) {
-        return null;
-      }
+    const volume = pickVolume(variation);
 
-      const volumeLabel = toVolumeLabel(volume);
+    if (!volume) {
+      continue;
+    }
 
-      if (!volumeLabel && !code) {
-        return null;
-      }
+    const code = pickModelNumber(variation);
 
-      return {
-        kind: "alcohol" as const,
-        volume,
-        volumeLabel,
-        code,
-      };
-    })
-    .filter((row): row is AlcoholModelNumber => row !== null);
+    rows.push({
+      kind: "alcohol",
+      volume,
+      code,
+    });
+  }
+
+  return rows;
 }
 
 /**
  * apparel variations から colorRgbMap を構築
  */
-export function buildColorRgbMap(varsAny: unknown[]): Record<string, string> {
+export function buildColorRgbMap(
+  varsAny: unknown[],
+): Record<string, string> {
   const list = Array.isArray(varsAny) ? (varsAny as AnyVar[]) : [];
   const rgbMap: Record<string, string> = {};
 

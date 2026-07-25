@@ -8,9 +8,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../../shell/src/shared/ui";
+} from "../../../../shell/src/shared/ui";
 
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/entity/productBlueprintCategory";
+import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
 
 import ProductBlueprintBrandField, {
   type BrandOption,

@@ -15,7 +15,7 @@ import {
   type QrPdfItem,
 } from "../utils/qrPdfBuilder";
 
-import { notifyPrintLogCompleted } from "../../production/src/application/detail/notifyPrintLogCompleted";
+import { notifyPrintLogCompleted } from "../../production/application/detail/notifyPrintLogCompleted";
 
 export type { PrintRow, ProductSummaryForPrint, PrintLogForPrint };
 

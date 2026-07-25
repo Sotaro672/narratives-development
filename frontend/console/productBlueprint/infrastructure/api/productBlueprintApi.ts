@@ -1,12 +1,12 @@
 // frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
-import { getAuthHeadersOrThrow } from "../../../../shell/src/shared/http/authHeaders";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { getAuthHeadersOrThrow } from "../../../shell/src/shared/http/authHeaders";
 
 import type {
   ProductBlueprintCategory,
   ProductBlueprintCategoryKind,
-} from "../../domain/entity/productBlueprintCategory";
+} from "../../domain/productBlueprintCategory";
 
 type ProductBlueprintCategoryListResponse = {
   items: ProductBlueprintCategory[];

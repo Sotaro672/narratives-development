@@ -3,14 +3,14 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { Brand } from "../../../../../brand/src/domain/entity/brand";
+import type { Brand } from "../../../../brand/src/domain/entity/brand";
 import type {
   ModelNumber,
   VolumeRow,
   AlcoholModelNumber,
-} from "../../../../../model/src/application/modelCreateService";
+} from "../../../../model/src/application/modelCreateService";
 
-import { useAuth } from "../../../../../shell/src/auth/presentation/hook/useCurrentMember";
+import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
 import {
   type MeasurementOption,

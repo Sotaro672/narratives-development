@@ -1,6 +1,6 @@
 // frontend/permission/src/pages/permissionDetail.tsx
 import * as React from "react";
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
   CardHeader,
@@ -8,7 +8,7 @@ import {
   CardContent,
   CardLabel,
   CardReadonly,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 
 // Hook（抽出先）
 import { usePermissionDetail } from "../hook/usePermissionDetail";

@@ -8,14 +8,14 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../../shell/src/shared/ui";
-import { Button } from "../../../../../shell/src/shared/ui/button";
-import { Input } from "../../../../../shell/src/shared/ui/input";
+} from "../../../../shell/src/shared/ui";
+import { Button } from "../../../../shell/src/shared/ui/button";
+import { Input } from "../../../../shell/src/shared/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "../../../../../shell/src/shared/ui/popover";
+} from "../../../../shell/src/shared/ui/popover";
 
 import { FIT_OPTIONS, type Fit } from "../../../domain/apparel";
 

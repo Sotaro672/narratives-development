@@ -8,7 +8,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "../../../../../shell/src/shared/ui";
+} from "../../../../shell/src/shared/ui";
 
 import ProductBlueprintBrandField, {
   type BrandOption,

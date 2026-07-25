@@ -2,7 +2,7 @@
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../../shell/src/layout/List/List";
+} from "../../../shell/src/layout/List/List";
 import { useProductBlueprintManagement } from "../hooks/useProductBlueprintManagement";
 
 export default function ProductBlueprintManagement() {

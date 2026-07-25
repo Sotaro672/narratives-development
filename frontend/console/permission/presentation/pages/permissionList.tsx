@@ -1,6 +1,6 @@
 // frontend/console/permission/src/presentation/pages/permissionList.tsx
 
-import List from "../../../../shell/src/layout/List/List";
+import List from "../../../shell/src/layout/List/List";
 import { usePermissionList } from "../hook/usePermissionList";
 
 export default function PermissionList() {

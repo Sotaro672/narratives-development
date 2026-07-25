@@ -5,14 +5,14 @@ import * as React from "react";
 import type {
   ApparelModelNumberRow as ModelNumberRow,
   ApparelSizeRow as SizeRow,
-} from "../../../domain/entity/apparel";
+} from "../../../domain/apparel";
 
 import type {
   AlcoholModelNumber,
   VolumeRow,
-} from "../../../../../model/src/application/modelCreateService";
+} from "../../../../model/src/application/modelCreateService";
 
-import { useModelCard } from "../../../../../model/src/presentation/hook/useModelCard";
+import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
 
 /**
  * UI state derived from ModelVariation list (already mapped by variationMapper, etc.)
@@ -142,6 +142,15 @@ function toVolumeLabel(
   return `${value}${unit}`;
 }
 
+function toAlcoholModelNumberVolumeLabel(
+  modelNumber: AlcoholModelNumber,
+): string {
+  return toVolumeLabel({
+    volumeValue: modelNumber.volume.value,
+    volumeUnit: modelNumber.volume.unit,
+  });
+}
+
 /**
  * Presentation-level editor state for variations
  * (colors/sizes/modelNumbers/colorRgbMap/volumes/alcoholModelNumbers).
@@ -214,7 +223,11 @@ export function useVariationsEditor(
           return copy;
         }
 
-        const next: ModelNumberRow = { size: sizeLabel, color, code: trimmed };
+        const next: ModelNumberRow = {
+          size: sizeLabel,
+          color,
+          code: trimmed,
+        };
 
         if (idx === -1) {
           return [...prev, next];
@@ -265,7 +278,9 @@ export function useVariationsEditor(
       return next;
     });
 
-    setModelNumbers((prevMN) => prevMN.filter((m) => m.color !== key));
+    setModelNumbers((prevMN) =>
+      prevMN.filter((modelNumber) => modelNumber.color !== key),
+    );
   }, []);
 
   const onChangeColorRgb = React.useCallback((name: string, hex: string) => {
@@ -291,15 +306,17 @@ export function useVariationsEditor(
   // ---------------------------------
   const onRemoveSize = React.useCallback((id: string) => {
     setSizes((prev) => {
-      const target = prev.find((s) => s.id === id);
-      const next = prev.filter((s) => s.id !== id);
+      const target = prev.find((size) => size.id === id);
+      const next = prev.filter((size) => size.id !== id);
 
       if (target) {
         const sizeLabel = (target.sizeLabel ?? "").trim();
 
         if (sizeLabel) {
-          setModelNumbers((prevMN) =>
-            prevMN.filter((m) => m.size !== sizeLabel),
+          setModelNumbers((prevModelNumbers) =>
+            prevModelNumbers.filter(
+              (modelNumber) => modelNumber.size !== sizeLabel,
+            ),
           );
         }
       }
@@ -317,14 +334,13 @@ export function useVariationsEditor(
       const safePatch: Partial<Omit<SizeRow, "id">> = { ...patch };
 
       const clampField = (key: keyof Omit<SizeRow, "id">) => {
-        const v = safePatch[key];
+        const value = safePatch[key];
 
-        if (typeof v === "number") {
-          safePatch[key] = (v < 0 ? 0 : v) as never;
+        if (typeof value === "number") {
+          safePatch[key] = (value < 0 ? 0 : value) as never;
         }
       };
 
-      // model/src/domain/entity/catalog.ts の SizeRow 正規 field に合わせる
       // トップス
       clampField("length");
       clampField("width");
@@ -355,14 +371,19 @@ export function useVariationsEditor(
         if (!nextLabel) {
           if (prevLabel) {
             setModelNumbers((prev) =>
-              prev.filter((modelNumber) => modelNumber.size !== prevLabel),
+              prev.filter(
+                (modelNumber) => modelNumber.size !== prevLabel,
+              ),
             );
           }
         } else if (prevLabel) {
           setModelNumbers((prev) =>
             prev.map((modelNumber) =>
               modelNumber.size === prevLabel
-                ? { ...modelNumber, size: nextLabel }
+                ? {
+                    ...modelNumber,
+                    size: nextLabel,
+                  }
                 : modelNumber,
             ),
           );
@@ -370,7 +391,14 @@ export function useVariationsEditor(
       }
 
       setSizes((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),
+        prev.map((size) =>
+          size.id === id
+            ? {
+                ...size,
+                ...safePatch,
+              }
+            : size,
+        ),
       );
     },
     [sizes],
@@ -388,11 +416,16 @@ export function useVariationsEditor(
       const target = volumes.find((volume) => volume.id === id);
       const targetLabel = target ? toVolumeLabel(target) : "";
 
-      setVolumes((prev) => prev.filter((volume) => volume.id !== id));
+      setVolumes((prev) =>
+        prev.filter((volume) => volume.id !== id),
+      );
 
       if (targetLabel) {
         setAlcoholModelNumbers((prev) =>
-          prev.filter((modelNumber) => modelNumber.volumeLabel !== targetLabel),
+          prev.filter(
+            (modelNumber) =>
+              toAlcoholModelNumberVolumeLabel(modelNumber) !== targetLabel,
+          ),
         );
       }
     },
@@ -404,33 +437,44 @@ export function useVariationsEditor(
       const safePatch: Partial<Omit<VolumeRow, "id">> = { ...patch };
 
       if (safePatch.volumeValue !== undefined) {
-        safePatch.volumeValue = normalizeVolumeValue(safePatch.volumeValue);
+        safePatch.volumeValue = normalizeVolumeValue(
+          safePatch.volumeValue,
+        );
       }
 
       if (safePatch.volumeUnit !== undefined) {
-        safePatch.volumeUnit = normalizeVolumeUnit(safePatch.volumeUnit);
+        safePatch.volumeUnit = normalizeVolumeUnit(
+          safePatch.volumeUnit,
+        );
       }
 
       const prevRow = volumes.find((volume) => volume.id === id);
       const prevLabel = prevRow ? toVolumeLabel(prevRow) : "";
 
       const nextRow: VolumeRow | null = prevRow
-        ? { ...prevRow, ...safePatch }
+        ? {
+            ...prevRow,
+            ...safePatch,
+          }
         : null;
 
       const nextLabel = nextRow ? toVolumeLabel(nextRow) : "";
 
-      if (prevLabel && nextRow && nextLabel && prevLabel !== nextLabel) {
+      if (
+        prevLabel &&
+        nextRow &&
+        nextLabel &&
+        prevLabel !== nextLabel
+      ) {
         setAlcoholModelNumbers((prev) =>
           prev.map((modelNumber) =>
-            modelNumber.volumeLabel === prevLabel
+            toAlcoholModelNumberVolumeLabel(modelNumber) === prevLabel
               ? {
                   ...modelNumber,
                   volume: {
                     value: nextRow.volumeValue,
                     unit: nextRow.volumeUnit,
                   },
-                  volumeLabel: nextLabel,
                 }
               : modelNumber,
           ),
@@ -439,13 +483,21 @@ export function useVariationsEditor(
 
       if (prevLabel && !nextLabel) {
         setAlcoholModelNumbers((prev) =>
-          prev.filter((modelNumber) => modelNumber.volumeLabel !== prevLabel),
+          prev.filter(
+            (modelNumber) =>
+              toAlcoholModelNumberVolumeLabel(modelNumber) !== prevLabel,
+          ),
         );
       }
 
       setVolumes((prev) =>
         prev.map((volume) =>
-          volume.id === id ? { ...volume, ...safePatch } : volume,
+          volume.id === id
+            ? {
+                ...volume,
+                ...safePatch,
+              }
+            : volume,
         ),
       );
     },
@@ -460,7 +512,9 @@ export function useVariationsEditor(
         return;
       }
 
-      const volumeRow = volumes.find((volume) => toVolumeLabel(volume) === label);
+      const volumeRow = volumes.find(
+        (volume) => toVolumeLabel(volume) === label,
+      );
 
       if (!volumeRow) {
         return;
@@ -468,7 +522,8 @@ export function useVariationsEditor(
 
       setAlcoholModelNumbers((prev) => {
         const index = prev.findIndex(
-          (modelNumber) => modelNumber.volumeLabel === label,
+          (modelNumber) =>
+            toAlcoholModelNumberVolumeLabel(modelNumber) === label,
         );
 
         const trimmed = nextCode.trim();
@@ -489,7 +544,6 @@ export function useVariationsEditor(
             value: volumeRow.volumeValue,
             unit: volumeRow.volumeUnit,
           },
-          volumeLabel: label,
           code: trimmed,
         };
 
@@ -499,6 +553,7 @@ export function useVariationsEditor(
 
         const copy = [...prev];
         copy[index] = next;
+
         return copy;
       });
     },
@@ -517,7 +572,9 @@ export function useVariationsEditor(
       sizes
         .map((size) => size.sizeLabel)
         .map((value) =>
-          typeof value === "string" ? value.trim() : String(value ?? "").trim(),
+          typeof value === "string"
+            ? value.trim()
+            : String(value ?? "").trim(),
         )
         .filter(Boolean),
     );
@@ -525,7 +582,8 @@ export function useVariationsEditor(
     setModelNumbers((prev) =>
       prev.filter(
         (modelNumber) =>
-          validColors.has(modelNumber.color) && validSizes.has(modelNumber.size),
+          validColors.has(modelNumber.color) &&
+          validSizes.has(modelNumber.size),
       ),
     );
   }, [colors, sizes]);
@@ -537,7 +595,9 @@ export function useVariationsEditor(
 
     setAlcoholModelNumbers((prev) =>
       prev.filter((modelNumber) =>
-        validVolumeLabels.has(modelNumber.volumeLabel),
+        validVolumeLabels.has(
+          toAlcoholModelNumberVolumeLabel(modelNumber),
+        ),
       ),
     );
   }, [volumes]);
