@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprintReview/src/presentation/component/review_aggregate_card.tsx
 
-import "../../style/tokenBlueprintReview.css";
+import "../../../shell/src/styles/tokenBlueprintReview.css";
 
 type ReviewAggregateCardProps = {
   likeCount: number;

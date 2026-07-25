@@ -1,6 +1,6 @@
 // frontend/console/shell/src/auth/presentation/components/Header.tsx
 import { UserRound, ChevronDown } from "lucide-react";
-import "../styles/auth.css";
+import "../../../styles/auth.css";
 import AdminPanel from "./AdminPanel";
 import { useHeader } from "../hook/useHeader";
 

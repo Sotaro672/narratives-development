@@ -13,7 +13,7 @@ import ReviewCard from "../../../tokenBlueprintReview/presentation/component/rev
 import { useTokenBlueprintReviewDetail } from "../../../tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail";
 import type { Comment } from "../../../tokenBlueprintReview/domain/entity";
 
-import "../../style/tokenBlueprintReview.css";
+import "../styles/tokenBlueprintReview.css";
 
 export default function TokenBlueprintReviewDetail() {
   const { vm, handlers } = useTokenBlueprintReviewDetail();

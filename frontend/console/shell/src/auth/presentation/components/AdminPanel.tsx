@@ -1,6 +1,6 @@
 // frontend/console/shell/src/auth/presentation/components/AdminPanel.tsx
 import { LogOut } from "lucide-react";
-import "../styles/auth.css";
+import "../../../styles/auth.css";
 import { Input } from "../../../shared/ui/input";
 import { useAdminPanel } from "../hook/useAdminPanel";
 

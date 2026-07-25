@@ -15,7 +15,7 @@ import { ratingToStars, statusLabelJa } from "../shared/format/review";
 
 import { useProductBlueprintReviewDetail } from "../../../productBlueprintReview/presentation/hook/useProductBlueprintReviewDetail";
 
-import "../../style/productBlueprintReview.css";
+import "../styles/productBlueprintReview.css";
 
 type DetailNavState = {
   ProductBlueprintID?: string;
