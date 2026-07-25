@@ -18,7 +18,7 @@ import {
 
 import ProductBlueprintCard from "../../../productBlueprint/presentation/cards/productBlueprintForm";
 import InspectionResultCard from "../components/inspectionResultCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
+import TokenBlueprintCard from "../../../tokenBlueprint/presentation/components/tokenBlueprintCard";
 import { useMintRequestDetail } from "../hook/useMintRequestDetail";
 
 import "../styles/mintRequest.css";

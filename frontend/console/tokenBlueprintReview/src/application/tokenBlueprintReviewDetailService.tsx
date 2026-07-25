@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprintReview/src/application/tokenBlueprintReviewDetailService.tsx
 
-import type { TokenBlueprint } from "../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
+import type { TokenBlueprint } from "../../../tokenBlueprint/domain/tokenBlueprint";
 import type {
   Comment,
   TokenBlueprintReviewAggregate,
@@ -16,7 +16,7 @@ import {
   reactToCommentAsBrand,
 } from "../infrastructure/tokenBlueprintReviewRepositoryHTTP";
 
-import { fetchTokenBlueprintById } from "../../../tokenBlueprint/src/infrastructure/repository/tokenBlueprintRepositoryHTTP";
+import { fetchTokenBlueprintById } from "../../../tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 /**
  * 詳細取得（リポジトリのラッパー）

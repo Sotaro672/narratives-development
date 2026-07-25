@@ -18,15 +18,15 @@ import InventoryManagementPage from "../../../inventory/presentation/pages/inven
 import InventoryDetailPage from "../../../inventory/presentation/pages/inventoryDetail";
 import InventoryListCreatePage from "../../../inventory/presentation/pages/listCreate";
 
-import TokenBlueprintManagement from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintManagement";
-import TokenBlueprintDetail from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintDetail";
-import TokenBlueprintCreate from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintCreate";
+import TokenBlueprintManagement from "../../../tokenBlueprint/presentation/pages/tokenBlueprintManagement";
+import TokenBlueprintDetail from "../../../tokenBlueprint/presentation/pages/tokenBlueprintDetail";
+import TokenBlueprintCreate from "../../../tokenBlueprint/presentation/pages/tokenBlueprintCreate";
 
 import MintRequestManagement from "../../../mintRequest/presentation/pages/mintRequestManagement";
 import MintRequestDetail from "../../../mintRequest/presentation/pages/mintRequestDetail";
 
-import ProductBlueprintReviewManagement from "../../../productBlueprintReview/src/presentation/pages/productBlueprintReviewManagement";
-import ProductBlueprintReviewDetail from "../../../productBlueprintReview/src/presentation/pages/productBlueprintReviewDetail";
+import ProductBlueprintReviewManagement from "../../../productBlueprintReview/presentation/pages/productBlueprintReviewManagement";
+import ProductBlueprintReviewDetail from "../../../productBlueprintReview/presentation/pages/productBlueprintReviewDetail";
 
 import TokenBlueprintReviewManagement from "../../../tokenBlueprintReview/src/presentation/pages/tokenBlueprintReviewManagement";
 import TokenBlueprintReviewDetail from "../../../tokenBlueprintReview/src/presentation/pages/tokenBlueprintReviewDetail";

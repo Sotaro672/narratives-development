@@ -1,6 +1,6 @@
 // frontend/console/sales/application/announcement_create_service.tsx
-import type { TokenBlueprint } from "../../tokenBlueprint/src/domain/tokenBlueprint";
-import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/src/application/tokenBlueprintDetailService";
+import type { TokenBlueprint } from "../../tokenBlueprint/domain/tokenBlueprint";
+import { fetchTokenBlueprintDetail } from "../../tokenBlueprint/application/tokenBlueprintDetailService";
 import { safeDateTimeLabelJa } from "../../shell/src/shared/util/dateJa";
 import {
   createAnnouncement,

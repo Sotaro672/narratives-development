@@ -10,7 +10,7 @@ import InventoryCard from "../components/inventoryCard";
 import TokenBlueprintCard, {
   type TokenBlueprintCardViewModel,
   type TokenBlueprintCardHandlers,
-} from "../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
+} from "../../../tokenBlueprint/presentation/components/tokenBlueprintCard";
 
 import { useInventoryDetail } from "../hook/useInventoryDetail";
 import type { InventoryDetailViewModel } from "../../application/inventoryDetail/inventoryDetail.types";
