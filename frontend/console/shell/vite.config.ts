@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { federation } from "@module-federation/vite";
-import mfOptions from "./module-federation.config";
+
 
 // ============================================================================
 // Vite 設定ファイル
@@ -19,7 +19,6 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),          // ✅ Tailwind v4 plugin
-    federation(mfOptions),  // ✅ Module Federation 設定
   ],
   server: {
     port: 4000,

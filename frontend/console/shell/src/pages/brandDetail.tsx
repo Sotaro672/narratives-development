@@ -16,8 +16,8 @@ import {
 
 import { Input } from "../../../shell/src/shared/ui/input";
 
-import { useBrandDetail } from "../hook/useBrandDetail";
-import { ManagerCard } from "./components/ManagerCard";
+import { useBrandDetail } from "../../../brand/presentation/hook/useBrandDetail";
+import { ManagerCard } from "../../../brand/presentation/components/ManagerCard";
 
 export default function BrandDetail() {
   const {

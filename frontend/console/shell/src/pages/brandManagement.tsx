@@ -6,7 +6,7 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import "../styles/brand.css";
-import { useBrandManagement } from "../hook/useBrandManagement";
+import { useBrandManagement } from "../../../brand/presentation/hook/useBrandManagement";
 
 export default function BrandManagementPage() {
   const navigate = useNavigate();

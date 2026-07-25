@@ -1,4 +1,4 @@
-// frontend/console/brand/src/presentation/pages/components/ManagerCard.tsx
+// frontend\console\brand\presentation\components\ManagerCard.tsx
 
 import * as React from "react";
 
@@ -7,17 +7,17 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 
-import { Button } from "../../../../shell/src/shared/ui/button";
+import { Button } from "../../../shell/src/shared/ui/button";
 
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../shell/src/shared/ui/popover";
+} from "../../../shell/src/shared/ui/popover";
 
-import "../../styles/brand.css";
+import "../../../shell/src/styles/brand.css";
 
 export type ManagerCandidate = {
   id: string;
