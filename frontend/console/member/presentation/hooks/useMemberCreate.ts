@@ -3,16 +3,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Member } from "../../domain/entity/member";
 
 // ★ ログイン情報（companyId）は AuthContext から取得
-import { useAuthContext } from "../../../../shell/src/auth/application/AuthContext";
+import { useAuthContext } from "../../../shell/src/auth/application/AuthContext";
 
 // Permission のカテゴリ型（＝新しい「役割」概念）
 import type {
   Permission,
   PermissionCategory,
-} from "../../../../shell/src/shared/types/permission";
+} from "../../../shell/src/shared/types/permission";
 
 // Brand ドメイン型
-import type { Brand } from "../../../../brand/src/domain/entity/brand";
+import type { Brand } from "../../../brand/src/domain/entity/brand";
 
 // アプリケーションサービス（API 呼び出しロジックなど）
 import {

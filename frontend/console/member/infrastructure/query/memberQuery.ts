@@ -3,9 +3,9 @@
 
 import type { Member } from "../../domain/entity/member";
 import type { MemberFilter } from "../../domain/repository/memberRepository";
-import type { Page } from "../../../../shell/src/shared/types/common/common";
-import { DEFAULT_PAGE_LIMIT } from "../../../../shell/src/shared/types/common/common";
-import { buildConsoleUrl } from "../../../../shell/src/shared/http/apiBase";
+import type { Page } from "../../../shell/src/shared/types/common/common";
+import { DEFAULT_PAGE_LIMIT } from "../../../shell/src/shared/types/common/common";
+import { buildConsoleUrl } from "../../../shell/src/shared/http/apiBase";
 
 // ─────────────────────────────────────────────
 // URL builder（HTTP は叩かない）

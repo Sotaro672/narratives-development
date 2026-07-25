@@ -2,26 +2,26 @@
 
 import type { Member } from "../domain/entity/member";
 import type { MemberFilter } from "../domain/repository/memberRepository";
-import type { Page } from "../../../shell/src/shared/types/common/common";
+import type { Page } from "../../shell/src/shared/types/common/common";
 
 // 認証（IDトークン取得用）
-import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { auth } from "../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // Shared API base
-import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../shell/src/shared/http/apiBase";
 
 // Permission 型
 import type {
   Permission,
   PermissionCategory,
-} from "../../../shell/src/shared/types/permission";
+} from "../../shell/src/shared/types/permission";
 
 // Permission Repository (GET /permissions)
-import { PermissionRepositoryHTTP } from "../../../permission/infrastructure/http/permissionRepositoryHTTP";
+import { PermissionRepositoryHTTP } from "../../permission/infrastructure/http/permissionRepositoryHTTP";
 
 // Brand Domain
-import type { Brand } from "../../../brand/src/domain/entity/brand";
-import { BrandRepositoryHTTP } from "../../../brand/src/infrastructure/http/brandRepositoryHTTP";
+import type { Brand } from "../../brand/src/domain/entity/brand";
+import { BrandRepositoryHTTP } from "../../brand/src/infrastructure/http/brandRepositoryHTTP";
 
 // Member Repository（HTTP 層）
 import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";

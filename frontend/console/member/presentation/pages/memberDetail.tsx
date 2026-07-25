@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import MemberDetailCard from "../components/MemberCard";
 import { useMemberDetail } from "../hooks/useMemberDetail";
 import {
@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 import { BrandCard } from "../components/BrandCard";
 
 export default function MemberDetail() {

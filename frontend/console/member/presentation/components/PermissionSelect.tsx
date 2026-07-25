@@ -4,22 +4,22 @@ import * as React from "react";
 import type {
   Permission,
   PermissionCategory,
-} from "../../../../shell/src/shared/types/permission";
+} from "../../../shell/src/shared/types/permission";
 
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../shell/src/shared/ui/popover";
-import { Button } from "../../../../shell/src/shared/ui/button";
+} from "../../../shell/src/shared/ui/popover";
+import { Button } from "../../../shell/src/shared/ui/button";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
-import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
-import { Badge } from "../../../../shell/src/shared/ui/badge";
+} from "../../../shell/src/shared/ui/card";
+import { Checkbox } from "../../../shell/src/shared/ui/checkbox";
+import { Badge } from "../../../shell/src/shared/ui/badge";
 
 type PermissionCategoryView = {
   key: PermissionCategory;

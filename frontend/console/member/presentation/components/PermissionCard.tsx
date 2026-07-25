@@ -6,8 +6,8 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
-import type { PermissionCategory } from "../../../../shell/src/shared/types/permission";
+} from "../../../shell/src/shared/ui/card";
+import type { PermissionCategory } from "../../../shell/src/shared/types/permission";
 
 type PermissionCardProps = {
   /** メンバーに付与されている Permission.Name の配列 */

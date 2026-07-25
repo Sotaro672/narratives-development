@@ -1,13 +1,13 @@
 // frontend/console/member/src/application/memberDetailService.ts
 
 import type { Member } from "../domain/entity/member";
-import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { auth } from "../../shell/src/auth/infrastructure/config/firebaseClient";
 import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";
 
 import {
   groupPermissionsByCategory,
   type PermissionCategory,
-} from "../../../permission/application/permissionCatalog";
+} from "../../permission/application/permissionCatalog";
 
 const memberRepo = new MemberRepositoryHTTP();
 

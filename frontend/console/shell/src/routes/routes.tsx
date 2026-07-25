@@ -37,9 +37,9 @@ import ListDetail from "../../../list/presentation/pages/listDetail";
 import OrderManagement from "../../../order/presentation/pages/orderManagement";
 import OrderDetail from "../../../order/presentation/pages/orderDetail";
 
-import MemberManagement from "../../../member/src/presentation/pages/memberManagement";
-import MemberDetail from "../../../member/src/presentation/pages/memberDetail";
-import MemberCreate from "../../../member/src/presentation/pages/memberCreate";
+import MemberManagement from "../../../member/presentation/pages/memberManagement";
+import MemberDetail from "../../../member/presentation/pages/memberDetail";
+import MemberCreate from "../../../member/presentation/pages/memberCreate";
 
 import BrandManagement from "../../../brand/src/presentation/pages/brandManagement";
 import BrandCreate from "../../../brand/src/presentation/pages/brandCreate";

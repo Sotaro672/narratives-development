@@ -12,16 +12,16 @@ import type {
   CursorPage,
   CursorPageResult,
   SaveOptions,
-} from "../../../../shell/src/shared/types/common/common";
+} from "../../../shell/src/shared/types/common/common";
 import type { Member, MemberPatch } from "../../domain/entity/member";
 
-import { buildConsoleUrl } from "../../../../shell/src/shared/http/apiBase";
+import { buildConsoleUrl } from "../../../shell/src/shared/http/apiBase";
 import {
   getAuthHeaders,
   getAuthJsonHeaders,
-} from "../../../../shell/src/shared/http/authHeaders";
-import { fetchJSON } from "../../../../shell/src/shared/http/fetchJSON";
-import { withQuery } from "../../../../shell/src/shared/http/queryString";
+} from "../../../shell/src/shared/http/authHeaders";
+import { fetchJSON } from "../../../shell/src/shared/http/fetchJSON";
+import { withQuery } from "../../../shell/src/shared/http/queryString";
 
 export class MemberRepositoryHTTP implements MemberRepository {
   /**

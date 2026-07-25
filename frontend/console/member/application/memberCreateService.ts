@@ -2,7 +2,7 @@
 import type { Member } from "../domain/entity/member";
 
 // 認証（IDトークン取得用）
-import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { auth } from "../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // memberService から API_BASE を利用（同じバックエンドURLを共有）
 import { API_BASE } from "./memberListService";

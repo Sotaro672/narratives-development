@@ -4,17 +4,17 @@
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 import {
   fetchMemberListWithToken,
-} from "../../../member/src/infrastructure/query/memberQuery";
+} from "../../../member/infrastructure/query/memberQuery";
 import type {
   MemberFilter,
-} from "../../../member/src/domain/repository/memberRepository";
+} from "../../../member/domain/repository/memberRepository";
 import type {
   Page,
 } from "../../../shell/src/shared/types/common/common";
 import {
   DEFAULT_PAGE,
 } from "../../../shell/src/shared/types/common/common";
-import type { Member } from "../../../member/src/domain/entity/member";
+import type { Member } from "../../../member/domain/entity/member";
 
 export type AssigneeCandidate = {
   id: string;

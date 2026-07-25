@@ -13,13 +13,13 @@ import { fetchMemberDetailByUid } from "../../application/memberDetailService";
 import {
   listBrands,
   type BrandRow,
-} from "../../../../brand/src/application/brandService";
+} from "../../../brand/src/application/brandService";
 
 // PermissionCategory 型（backend の PermissionCategory と対応）
-import type { PermissionCategory } from "../../../../shell/src/shared/types/permission";
+import type { PermissionCategory } from "../../../shell/src/shared/types/permission";
 
 // ★ 権限名 → カテゴリ別グルーピング（TS 版カタログヘルパ）
-import { groupPermissionsByCategory } from "../../../../permission/application/permissionCatalog";
+import { groupPermissionsByCategory } from "../../../permission/application/permissionCatalog";
 
 /**
  * メンバー詳細 hook

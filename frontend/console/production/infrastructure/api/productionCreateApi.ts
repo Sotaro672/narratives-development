@@ -6,7 +6,7 @@
 
 import type { Brand } from "../../../brand/src/domain/entity/brand";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-import type { Member } from "../../../member/src/domain/entity/member";
+import type { Member } from "../../../member/domain/entity/member";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
 
 import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
@@ -15,8 +15,8 @@ import {
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
 } from "../../../productBlueprint/application/productBlueprintDetailService";
-import { scopedFilterByCompanyId } from "../../../member/src/domain/repository/memberRepository";
-import { MemberRepositoryHTTP } from "../../../member/src/infrastructure/http/memberRepositoryHTTP";
+import { scopedFilterByCompanyId } from "../../../member/domain/repository/memberRepository";
+import { MemberRepositoryHTTP } from "../../../member/infrastructure/http/memberRepositoryHTTP";
 
 // 型を必要ならアプリ層に再エクスポート
 export type {

@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../../shell/src/layout/List/List";
+} from "../../../shell/src/layout/List/List";
 import "../styles/member.css";
 import { useMemberList } from "../hooks/useMemberList";
 
-import Pagination from "../../../../shell/src/shared/ui/pagination";
+import Pagination from "../../../shell/src/shared/ui/pagination";
 
 export default function MemberManagementPage() {
   const navigate = useNavigate();

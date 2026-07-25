@@ -1,8 +1,8 @@
 // frontend/console/production/src/presentation/create/mappers.ts
 
 import type { Brand } from "../../../brand/src/domain/entity/brand";
-import type { Member } from "../../../member/src/domain/entity/member";
-import { getMemberFullName } from "../../../member/src/domain/entity/member";
+import type { Member } from "../../../member/domain/entity/member";
+import { getMemberFullName } from "../../../member/domain/entity/member";
 
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";

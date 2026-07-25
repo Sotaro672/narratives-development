@@ -5,10 +5,10 @@ import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../shell/src/shared/ui/popover";
-import { Button } from "../../../../shell/src/shared/ui/button";
-import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
-import { Badge } from "../../../../shell/src/shared/ui/badge";
+} from "../../../shell/src/shared/ui/popover";
+import { Button } from "../../../shell/src/shared/ui/button";
+import { Checkbox } from "../../../shell/src/shared/ui/checkbox";
+import { Badge } from "../../../shell/src/shared/ui/badge";
 
 type BrandSelectProps = {
   brandRows: BrandRow[];

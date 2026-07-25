@@ -6,9 +6,9 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
-import { Badge } from "../../../../shell/src/shared/ui/badge";
-import type { BrandRow } from "../../../../brand/src/application/brandService";
+} from "../../../shell/src/shared/ui/card";
+import { Badge } from "../../../shell/src/shared/ui/badge";
+import type { BrandRow } from "../../../brand/src/application/brandService";
 
 export function BrandCard({
   assignedBrands,

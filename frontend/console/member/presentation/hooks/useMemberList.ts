@@ -4,11 +4,11 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 
 import type { Member } from "../../domain/entity/member";
 import type { MemberFilter } from "../../domain/repository/memberRepository";
-import type { Page } from "../../../../shell/src/shared/types/common/common";
+import type { Page } from "../../../shell/src/shared/types/common/common";
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_LIMIT,
-} from "../../../../shell/src/shared/types/common/common";
+} from "../../../shell/src/shared/types/common/common";
 
 import {
   fetchMemberList,

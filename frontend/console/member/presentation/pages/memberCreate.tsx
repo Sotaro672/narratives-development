@@ -1,9 +1,9 @@
 // frontend/console/member/src/presentation/pages/memberCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { useMemberCreate } from "../hooks/useMemberCreate";
-import { Input } from "../../../../shell/src/shared/ui/input";
+import { Input } from "../../../shell/src/shared/ui/input";
 
 import { BrandSelect } from "../components/BrandSelect";
 import { PermissionSelect } from "../components/PermissionSelect";
