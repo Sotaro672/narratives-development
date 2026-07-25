@@ -1,0 +1,59 @@
+// frontend/console/shell/src/pages/index.ts
+
+export { default as AuthPage } from "./AuthPage";
+export { default as InvitationPage } from "./InvitationPage";
+
+export { default as InquiryManagement } from "./inquiryManagement";
+export { default as InquiryDetail } from "./inquiryDetail";
+
+export { default as ProductBlueprintManagement } from "./productBlueprintManagement";
+export { default as ProductBlueprintDetail } from "./productBlueprintDetail";
+export { default as ProductBlueprintCreate } from "./productBlueprintCreate";
+
+export { default as ProductionManagement } from "./productionManagement";
+export { default as ProductionDetail } from "./productionDetail";
+export { default as ProductionCreate } from "./productionCreate";
+
+export { default as InventoryManagementPage } from "./inventoryManagement";
+export { default as InventoryDetailPage } from "./inventoryDetail";
+export { default as InventoryListCreatePage } from "./listCreate";
+
+export { default as TokenBlueprintManagement } from "./tokenBlueprintManagement";
+export { default as TokenBlueprintDetail } from "./tokenBlueprintDetail";
+export { default as TokenBlueprintCreate } from "./tokenBlueprintCreate";
+
+export { default as MintRequestManagement } from "./mintRequestManagement";
+export { default as MintRequestDetail } from "./mintRequestDetail";
+
+export { default as ProductBlueprintReviewManagement } from "./productBlueprintReviewManagement";
+export { default as ProductBlueprintReviewDetail } from "./productBlueprintReviewDetail";
+
+export { default as TokenBlueprintReviewManagement } from "./tokenBlueprintReviewManagement";
+export { default as TokenBlueprintReviewDetail } from "./tokenBlueprintReviewDetail";
+
+export { default as ListManagement } from "./listManagement";
+export { default as ListDetail } from "./listDetail";
+
+export { default as OrderManagement } from "./orderManagement";
+export { default as OrderDetail } from "./orderDetail";
+
+export { default as MemberManagement } from "./memberManagement";
+export { default as MemberDetail } from "./memberDetail";
+export { default as MemberCreate } from "./memberCreate";
+
+export { default as BrandManagement } from "./brandManagement";
+export { default as BrandCreate } from "./brandCreate";
+export { default as BrandDetail } from "./brandDetail";
+
+export { default as PermissionList } from "./permissionList";
+export { default as PermissionDetail } from "./permissionDetail";
+
+export { default as AccountManagement } from "./accountManagement";
+
+export { default as TransactionsList } from "./transactionList";
+export { default as TransactionDetail } from "./transactionDetail";
+
+export { default as AnnouncementManagementPage } from "./announcementManagement";
+export { default as AnnouncementCreatePage } from "./announcementCreatePage";
+export { default as AnnouncementTokenListPage } from "./announcementTokenListPage";
+export { default as AnnouncementDetailPage } from "./announcementDetailPage";

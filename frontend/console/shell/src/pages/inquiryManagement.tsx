@@ -1,4 +1,4 @@
-// frontend/inquiry/src/presentation/pages/InquiryManagement.tsx
+// frontend\console\shell\src\pages\inquiryManagement.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 

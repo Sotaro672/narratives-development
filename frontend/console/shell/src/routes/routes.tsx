@@ -2,64 +2,55 @@
 
 import type { RouteObject } from "react-router-dom";
 
-import InvitationPage from "../auth/presentation/pages/InvitationPage";
-
-import InquiryManagement from "../pages/inquiryManagement";
-import InquiryDetail from "../pages/inquiryDetail";
-
-import ProductBlueprintManagement from "../../../productBlueprint/presentation/pages/productBlueprintManagement";
-import ProductBlueprintDetail from "../../../productBlueprint/presentation/pages/productBlueprintDetail";
-import ProductBlueprintCreate from "../../../productBlueprint/presentation/pages/productBlueprintCreate";
-
-import ProductionManagement from "../../../production/presentation/pages/productionManagement";
-import ProductionDetail from "../../../production/presentation/pages/productionDetail";
-import ProductionCreate from "../../../production/presentation/pages/productionCreate";
-
-import InventoryManagementPage from "../../../inventory/presentation/pages/inventoryManagement";
-import InventoryDetailPage from "../../../inventory/presentation/pages/inventoryDetail";
-import InventoryListCreatePage from "../../../inventory/presentation/pages/listCreate";
-
-import TokenBlueprintManagement from "../../../tokenBlueprint/presentation/pages/tokenBlueprintManagement";
-import TokenBlueprintDetail from "../../../tokenBlueprint/presentation/pages/tokenBlueprintDetail";
-import TokenBlueprintCreate from "../../../tokenBlueprint/presentation/pages/tokenBlueprintCreate";
-
-import MintRequestManagement from "../../../mintRequest/presentation/pages/mintRequestManagement";
-import MintRequestDetail from "../../../mintRequest/presentation/pages/mintRequestDetail";
-
-import ProductBlueprintReviewManagement from "../../../productBlueprintReview/presentation/pages/productBlueprintReviewManagement";
-import ProductBlueprintReviewDetail from "../../../productBlueprintReview/presentation/pages/productBlueprintReviewDetail";
-
-import TokenBlueprintReviewManagement from "../../../tokenBlueprintReview/presentation/pages/tokenBlueprintReviewManagement";
-import TokenBlueprintReviewDetail from "../../../tokenBlueprintReview/presentation/pages/tokenBlueprintReviewDetail";
-
-import ListManagement from "../../../list/presentation/pages/listManagement";
-import ListDetail from "../../../list/presentation/pages/listDetail";
-
-import OrderManagement from "../../../order/presentation/pages/orderManagement";
-import OrderDetail from "../../../order/presentation/pages/orderDetail";
-
-import MemberManagement from "../../../member/presentation/pages/memberManagement";
-import MemberDetail from "../../../member/presentation/pages/memberDetail";
-import MemberCreate from "../../../member/presentation/pages/memberCreate";
-
-import BrandManagement from "../pages/brandManagement";
-import BrandCreate from "../pages/brandCreate";
-import BrandDetail from "../pages/brandDetail";
-
-import PermissionList from "../../../permission/presentation/pages/permissionList";
-import PermissionDetail from "../../../permission/presentation/pages/permissionDetail";
-
-import AccountManagement from "../../../account/presentation/pages/accountManagement";
-
-import TransactionsList from "../../../transaction/src/presentation/pages/transactionList";
-import TransactionDetail from "../../../transaction/src/presentation/pages/transactionDetail";
-
-import AnnouncementManagementPage from "../../../sales/presentation/pages/announcementManagement";
-import AnnouncementCreatePage from "../../../sales/presentation/pages/announcementCreatePage";
-import AnnouncementTokenListPage from "../../../sales/presentation/pages/announcementTokenListPage";
-import AnnouncementDetailPage from "../../../sales/presentation/pages/announcementDetailPage";
+import {
+  AuthPage,
+  InvitationPage,
+  InquiryManagement,
+  InquiryDetail,
+  ProductBlueprintManagement,
+  ProductBlueprintDetail,
+  ProductBlueprintCreate,
+  ProductionManagement,
+  ProductionDetail,
+  ProductionCreate,
+  InventoryManagementPage,
+  InventoryDetailPage,
+  InventoryListCreatePage,
+  TokenBlueprintManagement,
+  TokenBlueprintDetail,
+  TokenBlueprintCreate,
+  MintRequestManagement,
+  MintRequestDetail,
+  ProductBlueprintReviewManagement,
+  ProductBlueprintReviewDetail,
+  TokenBlueprintReviewManagement,
+  TokenBlueprintReviewDetail,
+  ListManagement,
+  ListDetail,
+  OrderManagement,
+  OrderDetail,
+  MemberManagement,
+  MemberDetail,
+  MemberCreate,
+  BrandManagement,
+  BrandCreate,
+  BrandDetail,
+  PermissionList,
+  PermissionDetail,
+  AccountManagement,
+  TransactionsList,
+  TransactionDetail,
+  AnnouncementManagementPage,
+  AnnouncementCreatePage,
+  AnnouncementTokenListPage,
+  AnnouncementDetailPage,
+} from "../pages";
 
 export const routes: RouteObject[] = [
+  {
+    path: "/auth",
+    element: <AuthPage />,
+  },
   {
     path: "/invitation",
     element: <InvitationPage />,
@@ -218,14 +209,6 @@ export const routes: RouteObject[] = [
         element: <MemberManagement />,
       },
       {
-        /**
-         * このURLパラメータはFirestore member docIdではなく、
-         * Firebase Auth UID。
-         *
-         * backend:
-         * - GET /members/{uid} はFirebase UID専用
-         * - PATCH /members/{docId} はFirestore member docId専用
-         */
         path: ":memberUid",
         element: <MemberDetail />,
       },

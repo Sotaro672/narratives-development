@@ -23,5 +23,5 @@
     "types": ["vite/client"]
   },
 
-  "include": ["src", "../brand/src/infrastructure/storage"]
+  "include": ["src", "../brand/src/infrastructure/storage", "src/pages/tokenBlueprintDetail.tsx"]
 }

@@ -1,4 +1,4 @@
-// frontend/console/brand/src/presentation/pages/brandCreate.tsx
+// frontend\console\shell\src\pages\brandCreate.tsx
 import { Upload, X } from "lucide-react";
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";

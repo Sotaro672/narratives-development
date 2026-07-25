@@ -7,8 +7,8 @@ import {
   useLocation,
 } from "react-router-dom";
 import MainPage from "../pages/MainPage";
-import AuthPage from "../auth/presentation/pages/AuthPage";
-import InvitationPage from "../auth/presentation/pages/InvitationPage";
+import AuthPage from "../pages/AuthPage";
+import InvitationPage from "../pages/InvitationPage";
 import { AuthProvider } from "../auth/application/AuthContext";
 import { useAuth } from "../auth/presentation/hook/useCurrentMember";
 

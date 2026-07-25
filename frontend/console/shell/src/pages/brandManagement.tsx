@@ -1,4 +1,4 @@
-// frontend/console/brand/src/presentation/pages/brandManagement.tsx
+// frontend\console\shell\src\pages\brandManagement.tsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import List, {

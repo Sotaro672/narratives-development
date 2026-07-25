@@ -1,4 +1,4 @@
-// frontend/console/brand/src/presentation/pages/brandDetail.tsx
+// frontend\console\shell\src\pages\brandDetail.tsx
 
 import { Upload, X } from "lucide-react";
 
