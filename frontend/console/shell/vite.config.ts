@@ -1,37 +1,46 @@
-// frontend\console\shell\vite.config.ts
+// frontend/console/shell/vite.config.ts
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { federation } from "@module-federation/vite";
-
-
-// ============================================================================
-// Vite 設定ファイル
-// Firebase Hosting 対応版
-// ============================================================================
-// - base: "/" により SPA ルーティングを正しく処理
-// - outDir: "dist" → Firebase "public": "shell/dist" と一致させる
-// - Module Federation, Tailwind v4, React18 に対応
-// ============================================================================
 
 export default defineConfig({
-  base: "/", // ✅ Firebase Hosting / BrowserRouter 対応（重要）
+  base: "/",
+
   plugins: [
     react(),
-    tailwindcss(),          // ✅ Tailwind v4 plugin
+    tailwindcss(),
   ],
+
+  resolve: {
+    dedupe: [
+      "react",
+      "react-dom",
+      "react-router",
+      "react-router-dom",
+      "lucide-react",
+      "@tanstack/react-query",
+      "@apollo/client",
+      "firebase",
+      "qrcode",
+      "react-color",
+      "pdf-lib",
+    ],
+  },
+
   server: {
     port: 4000,
     open: true,
   },
+
   build: {
     target: "esnext",
     modulePreload: false,
-    outDir: "dist",         // ✅ ビルド出力先 (Hostingのpublic=shell/distと一致)
+    outDir: "dist",
     emptyOutDir: true,
   },
-  // Firebase など外部環境変数を import.meta.env.* で扱う
+
   define: {
-    "process.env": {}, // Nodeのprocess参照エラー防止 (Viteでの安全策)
+    "process.env": {},
   },
 });
