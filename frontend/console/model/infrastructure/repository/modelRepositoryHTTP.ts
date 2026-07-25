@@ -1,10 +1,10 @@
 // frontend/console/model/src/infrastructure/repository/http/modelRepositoryHTTP.ts
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,
   getAuthJsonHeadersOrThrow,
-} from "../../../../shell/src/shared/http/authHeaders";
+} from "../../../shell/src/shared/http/authHeaders";
 
 /* =========================================================
  * Request types

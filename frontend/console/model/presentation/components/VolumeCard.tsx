@@ -8,9 +8,9 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui";
-import { Button } from "../../../../shell/src/shared/ui/button";
-import { Input } from "../../../../shell/src/shared/ui/input";
+} from "../../../shell/src/shared/ui";
+import { Button } from "../../../shell/src/shared/ui/button";
+import { Input } from "../../../shell/src/shared/ui/input";
 import {
   Table,
   TableHeader,
@@ -18,7 +18,7 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../../shell/src/shared/ui/table";
+} from "../../../shell/src/shared/ui/table";
 
 import type { VolumeRow } from "../../application/modelCreateService";
 

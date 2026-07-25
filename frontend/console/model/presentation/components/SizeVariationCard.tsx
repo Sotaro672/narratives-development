@@ -7,9 +7,9 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui";
-import { Button } from "../../../../shell/src/shared/ui/button";
-import { Input } from "../../../../shell/src/shared/ui/input";
+} from "../../../shell/src/shared/ui";
+import { Button } from "../../../shell/src/shared/ui/button";
+import { Input } from "../../../shell/src/shared/ui/input";
 import {
   Table,
   TableHeader,
@@ -17,14 +17,14 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../../shell/src/shared/ui/table";
+} from "../../../shell/src/shared/ui/table";
 import "../styles/model.css";
 import "../../../../shell/src/shared/ui/card.css";
 
 // ★ productBlueprint 側の catalog を import
 import type {
   MeasurementOption,
-} from "../../../../productBlueprint/src/domain/entity/apparel";
+} from "../../../productBlueprint/domain/apparel";
 
 // ロジックは hook 側に集約
 import {

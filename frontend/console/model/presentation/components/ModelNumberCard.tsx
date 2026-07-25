@@ -7,8 +7,8 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui";
-import { Input } from "../../../../shell/src/shared/ui/input";
+} from "../../../shell/src/shared/ui";
+import { Input } from "../../../shell/src/shared/ui/input";
 import {
   Table,
   TableHeader,
@@ -16,7 +16,7 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../../shell/src/shared/ui/table";
+} from "../../../shell/src/shared/ui/table";
 
 /**
  * サイズ行の見た目用の最小情報

@@ -10,14 +10,14 @@ import {
   ProductBlueprintCategoryCard,
 } from "../cards/classification";
 import CategoryFieldsCard from "../cards/categoryFields";
-import ColorVariationCard from "../../../model/src/presentation/components/ColorVariationCard";
-import SizeVariationCard from "../../../model/src/presentation/components/SizeVariationCard";
-import ModelNumberCard from "../../../model/src/presentation/components/ModelNumberCard";
-import VolumeCard from "../../../model/src/presentation/components/VolumeCard";
-import AlcoholModelNumberCard from "../../../model/src/presentation/components/AlcoholModelNumberCard";
+import ColorVariationCard from "../../../model/presentation/components/ColorVariationCard";
+import SizeVariationCard from "../../../model/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../../../model/presentation/components/ModelNumberCard";
+import VolumeCard from "../../../model/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../../../model/presentation/components/AlcoholModelNumberCard";
 
 // モデルナンバー用のロジックは model 側の hook を利用
-import { useModelCard } from "../../../model/src/presentation/hook/useModelCard";
+import { useModelCard } from "../../../model/presentation/hook/useModelCard";
 
 import { useProductBlueprintCreate } from "../hooks/create/useProductBlueprintCreate";
 

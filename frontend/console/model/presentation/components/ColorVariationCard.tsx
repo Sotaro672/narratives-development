@@ -7,8 +7,8 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui";
-import { Button } from "../../../../shell/src/shared/ui/button";
+} from "../../../shell/src/shared/ui";
+import { Button } from "../../../shell/src/shared/ui/button";
 import "../styles/model.css";
 import "../../../../shell/src/shared/ui/card.css";
 
@@ -19,7 +19,7 @@ import {
   TableRow,
   TableHead,
   TableCell,
-} from "../../../../shell/src/shared/ui/table";
+} from "../../../shell/src/shared/ui/table";
 
 import { SketchPicker } from "react-color";
 

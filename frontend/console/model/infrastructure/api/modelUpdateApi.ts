@@ -1,11 +1,11 @@
 // frontend/console/model/src/infrastructure/api/modelUpdateApi.ts
 /// <reference types="vite/client" />
 
-import { API_BASE } from "../../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../../shell/src/shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,
   getAuthJsonHeadersOrThrow,
-} from "../../../../shell/src/shared/http/authHeaders";
+} from "../../../shell/src/shared/http/authHeaders";
 
 /* =========================================================
  * Types

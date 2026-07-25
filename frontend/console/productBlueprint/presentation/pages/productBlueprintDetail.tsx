@@ -7,11 +7,11 @@ import AdminCard from "../../../admin/presentation/components/AdminCard";
 import ProductBlueprintCard from "../cards/productBlueprintForm";
 import ProductBlueprintClassificationCard from "../cards/classification/ProductBlueprintClassificationCard";
 import CategoryFieldsCard from "../cards/categoryFields";
-import ColorVariationCard from "../../../model/src/presentation/components/ColorVariationCard";
-import SizeVariationCard from "../../../model/src/presentation/components/SizeVariationCard";
-import ModelNumberCard from "../../../model/src/presentation/components/ModelNumberCard";
-import VolumeCard from "../../../model/src/presentation/components/VolumeCard";
-import AlcoholModelNumberCard from "../../../model/src/presentation/components/AlcoholModelNumberCard";
+import ColorVariationCard from "../../../model/presentation/components/ColorVariationCard";
+import SizeVariationCard from "../../../model/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../../../model/presentation/components/ModelNumberCard";
+import VolumeCard from "../../../model/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../../../model/presentation/components/AlcoholModelNumberCard";
 import LogCard from "../../../log/presentation/LogCard";
 
 import { useProductBlueprintDetail } from "../hooks/detail/useProductBlueprintDetail";
