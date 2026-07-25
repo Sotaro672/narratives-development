@@ -22,8 +22,8 @@ import TokenBlueprintManagement from "../../../tokenBlueprint/src/presentation/p
 import TokenBlueprintDetail from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintDetail";
 import TokenBlueprintCreate from "../../../tokenBlueprint/src/presentation/pages/tokenBlueprintCreate";
 
-import MintRequestManagement from "../../../mintRequest/src/presentation/pages/mintRequestManagement";
-import MintRequestDetail from "../../../mintRequest/src/presentation/pages/mintRequestDetail";
+import MintRequestManagement from "../../../mintRequest/presentation/pages/mintRequestManagement";
+import MintRequestDetail from "../../../mintRequest/presentation/pages/mintRequestDetail";
 
 import ProductBlueprintReviewManagement from "../../../productBlueprintReview/src/presentation/pages/productBlueprintReviewManagement";
 import ProductBlueprintReviewDetail from "../../../productBlueprintReview/src/presentation/pages/productBlueprintReviewDetail";

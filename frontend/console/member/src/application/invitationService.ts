@@ -25,10 +25,6 @@ export async function sendMemberInvitation(
   }
 
   if (!email) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      "[invitationService.sendMemberInvitation] email が空のため、招待メールは送信しません。",
-    );
     return;
   }
 
@@ -42,13 +38,6 @@ export async function sendMemberInvitation(
   const payload: SendInvitationRequest = {
     memberId: normalizedMemberId,
   };
-
-  // eslint-disable-next-line no-console
-  console.log(
-    "[invitationService.sendMemberInvitation] POST /invitations",
-    inviteUrl,
-    payload,
-  );
 
   const inviteRes = await fetch(inviteUrl, {
     method: "POST",
@@ -65,9 +54,4 @@ export async function sendMemberInvitation(
       `招待メール送信に失敗しました。status=${inviteRes.status} body=${inviteText}`,
     );
   }
-
-  // eslint-disable-next-line no-console
-  console.log(
-    "[invitationService.sendMemberInvitation] 招待メール送信リクエスト成功",
-  );
 }
