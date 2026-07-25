@@ -25,7 +25,7 @@ import {
 
 import {
   fetchBrandsForCurrentCompany,
-} from "../../../brand/src/infrastructure/http/brandRepositoryHTTP";
+} from "../../../brand/infrastructure/http/brandRepositoryHTTP";
 
 import { uploadTokenBlueprintIconToFirebaseStorage } from "../infrastructure/storage/tokenBlueprintAssetStorage";
 

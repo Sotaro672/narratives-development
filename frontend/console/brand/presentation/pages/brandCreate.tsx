@@ -1,7 +1,7 @@
 // frontend/console/brand/src/presentation/pages/brandCreate.tsx
 import { Upload, X } from "lucide-react";
 
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 
 import {
   Card,
@@ -11,7 +11,7 @@ import {
   CardLabel,
   CardInput,
   CardSelect,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 
 import { useBrandCreate } from "../hook/useBrandCreate";
 

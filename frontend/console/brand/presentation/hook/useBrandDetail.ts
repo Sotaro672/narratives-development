@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
-import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import { safeDateLabelJa } from "../../../shell/src/shared/util/dateJa";
 
 export interface BrandDetailData {
   id: string;

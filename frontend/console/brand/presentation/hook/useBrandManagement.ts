@@ -1,12 +1,12 @@
 // frontend/console/brand/src/presentation/hook/useBrandManagement.ts
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
 
 import type { BrandRow as BrandRowBase } from "../../application/brandService";
 import { listBrands } from "../../application/brandService";
 
 // 共通型（SortOrder など）
-import type { SortOrder } from "../../../../shell/src/shared/types/common/common";
+import type { SortOrder } from "../../../shell/src/shared/types/common/common";
 
 export type SortKey = "registeredAt" | "updatedAt" | null;
 export type StatusFilterValue = "active" | "inactive";

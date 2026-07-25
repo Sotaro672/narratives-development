@@ -9,14 +9,14 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
-import type { Member } from "../../../../member/domain/entity/member";
-import type { MemberFilter } from "../../../../member/domain/repository/memberRepository";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
+import type { Member } from "../../../member/domain/entity/member";
+import type { MemberFilter } from "../../../member/domain/repository/memberRepository";
 import type { Brand } from "../../domain/entity/brand";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 
-import { MemberRepositoryHTTP } from "../../../../member/infrastructure/http/memberRepositoryHTTP";
+import { MemberRepositoryHTTP } from "../../../member/infrastructure/http/memberRepositoryHTTP";
 
 const memberRepo = new MemberRepositoryHTTP();
 

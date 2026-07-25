@@ -1,10 +1,10 @@
 //frontend\console\brand\src\infrastructure\http\brandRepositoryHTTP.ts
 import type { Brand, BrandPatch } from "../../domain/entity/brand";
-import { getConsoleApiBase } from "../../../../shell/src/shared/http/apiBase";
+import { getConsoleApiBase } from "../../../shell/src/shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,
   getAuthJsonHeadersOrThrow,
-} from "../../../../shell/src/shared/http/authHeaders";
+} from "../../../shell/src/shared/http/authHeaders";
 
 export interface BrandFilter {
   companyId?: string;

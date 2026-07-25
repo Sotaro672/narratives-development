@@ -13,7 +13,7 @@ import { fetchMemberDetailByUid } from "../../application/memberDetailService";
 import {
   listBrands,
   type BrandRow,
-} from "../../../brand/src/application/brandService";
+} from "../../../brand/application/brandService";
 
 // PermissionCategory 型（backend の PermissionCategory と対応）
 import type { PermissionCategory } from "../../../shell/src/shared/types/permission";

@@ -4,12 +4,12 @@
 //   - 実際の HTTP / Firestore などの呼び出しを集約
 // ======================================================================
 
-import type { Brand } from "../../../brand/src/domain/entity/brand";
+import type { Brand } from "../../../brand/domain/entity/brand";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import type { Member } from "../../../member/domain/entity/member";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
 
-import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
+import { fetchAllBrandsForCompany } from "../../../brand/infrastructure/query/brandQuery";
 import { fetchProductBlueprintManagementRows } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import {
   getProductBlueprintDetail,

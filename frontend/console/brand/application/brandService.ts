@@ -2,7 +2,7 @@
 /// <reference types="vite/client" />
 
 import { brandRepositoryHTTP } from "../infrastructure/http/brandRepositoryHTTP";
-import { safeDateLabelJa } from "../../../shell/src/shared/util/dateJa";
+import { safeDateLabelJa } from "../../shell/src/shared/util/dateJa";
 
 export type BrandRow = {
   id: string;

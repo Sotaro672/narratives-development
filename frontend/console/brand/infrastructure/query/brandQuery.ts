@@ -11,7 +11,7 @@ import {
 import {
   DEFAULT_PAGE_LIMIT,
   type PageResult,
-} from "../../../../shell/src/shared/types/common/common";
+} from "../../../shell/src/shared/types/common/common";
 
 /**
  * Brand 一覧取得時のオプション

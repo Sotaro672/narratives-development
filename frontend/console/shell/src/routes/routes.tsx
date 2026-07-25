@@ -41,9 +41,9 @@ import MemberManagement from "../../../member/presentation/pages/memberManagemen
 import MemberDetail from "../../../member/presentation/pages/memberDetail";
 import MemberCreate from "../../../member/presentation/pages/memberCreate";
 
-import BrandManagement from "../../../brand/src/presentation/pages/brandManagement";
-import BrandCreate from "../../../brand/src/presentation/pages/brandCreate";
-import BrandDetail from "../../../brand/src/presentation/pages/brandDetail";
+import BrandManagement from "../../../brand/presentation/pages/brandManagement";
+import BrandCreate from "../../../brand/presentation/pages/brandCreate";
+import BrandDetail from "../../../brand/presentation/pages/brandDetail";
 
 import PermissionList from "../../../permission/presentation/pages/permissionList";
 import PermissionDetail from "../../../permission/presentation/pages/permissionDetail";

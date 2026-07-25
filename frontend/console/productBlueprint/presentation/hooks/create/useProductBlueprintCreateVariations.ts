@@ -6,7 +6,7 @@ import type {
   AlcoholModelNumber,
   ModelNumber,
   VolumeRow,
-} from "../../../../../model/src/application/modelCreateService";
+} from "../../../../model/src/application/modelCreateService";
 
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
@@ -55,7 +55,9 @@ function newVolumeRow(): VolumeRow {
   };
 }
 
-function toVolumeLabel(row: Pick<VolumeRow, "volumeValue" | "volumeUnit">): string {
+function toVolumeLabel(
+  row: Pick<VolumeRow, "volumeValue" | "volumeUnit">,
+): string {
   const value =
     typeof row.volumeValue === "number" && Number.isFinite(row.volumeValue)
       ? row.volumeValue
@@ -68,6 +70,15 @@ function toVolumeLabel(row: Pick<VolumeRow, "volumeValue" | "volumeUnit">): stri
   }
 
   return `${value}${unit}`;
+}
+
+function toAlcoholModelNumberVolumeLabel(
+  modelNumber: AlcoholModelNumber,
+): string {
+  return toVolumeLabel({
+    volumeValue: modelNumber.volume.value,
+    volumeUnit: modelNumber.volume.unit,
+  });
 }
 
 export type UseProductBlueprintCreateVariationsResult = {
@@ -95,7 +106,10 @@ export type UseProductBlueprintCreateVariationsResult = {
 
   onAddSize: () => void;
   onRemoveSize: (id: string) => void;
-  onChangeSize: (id: string, patch: Partial<Omit<SizeRow, "id">>) => void;
+  onChangeSize: (
+    id: string,
+    patch: Partial<Omit<SizeRow, "id">>,
+  ) => void;
 
   onChangeModelNumber: (
     sizeLabel: string,
@@ -105,7 +119,10 @@ export type UseProductBlueprintCreateVariationsResult = {
 
   onAddVolume: () => void;
   onRemoveVolume: (id: string) => void;
-  onChangeVolume: (id: string, patch: Partial<Omit<VolumeRow, "id">>) => void;
+  onChangeVolume: (
+    id: string,
+    patch: Partial<Omit<VolumeRow, "id">>,
+  ) => void;
   onChangeAlcoholModelNumber: (
     volumeLabel: string,
     nextCode: string,
@@ -119,9 +136,9 @@ export function useProductBlueprintCreateVariations(
 ): UseProductBlueprintCreateVariationsResult {
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([]);
-  const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>(
-    {},
-  );
+  const [colorRgbMap, setColorRgbMap] = React.useState<
+    Record<string, string>
+  >({});
 
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers, setModelNumbers] = React.useState<ModelNumber[]>([]);
@@ -182,7 +199,11 @@ export function useProductBlueprintCreateVariations(
       setVolumes([]);
       setAlcoholModelNumbers([]);
     }
-  }, [isApparelCategory, isAlcoholCategory, resetVariations]);
+  }, [
+    isApparelCategory,
+    isAlcoholCategory,
+    resetVariations,
+  ]);
 
   const onAddColor = React.useCallback(() => {
     if (!isApparelCategory) {
@@ -197,7 +218,11 @@ export function useProductBlueprintCreateVariations(
 
     setColors((prev) => [...prev, value]);
     setColorInput("");
-  }, [isApparelCategory, colorInput, colors]);
+  }, [
+    isApparelCategory,
+    colorInput,
+    colors,
+  ]);
 
   const onRemoveColor = React.useCallback((name: string) => {
     const colorName = name.trim();
@@ -206,7 +231,9 @@ export function useProductBlueprintCreateVariations(
       return;
     }
 
-    setColors((prev) => prev.filter((color) => color !== colorName));
+    setColors((prev) =>
+      prev.filter((color) => color !== colorName),
+    );
 
     setColorRgbMap((prev) => {
       const next = { ...prev };
@@ -215,7 +242,9 @@ export function useProductBlueprintCreateVariations(
     });
 
     setModelNumbers((prev) =>
-      prev.filter((modelNumber) => modelNumber.color !== colorName),
+      prev.filter(
+        (modelNumber) => modelNumber.color !== colorName,
+      ),
     );
   }, []);
 
@@ -252,11 +281,15 @@ export function useProductBlueprintCreateVariations(
           ? labelRaw.trim()
           : String(labelRaw ?? "").trim();
 
-      setSizes((prev) => prev.filter((size) => size.id !== id));
+      setSizes((prev) =>
+        prev.filter((size) => size.id !== id),
+      );
 
       if (sizeLabel) {
         setModelNumbers((prev) =>
-          prev.filter((modelNumber) => modelNumber.size !== sizeLabel),
+          prev.filter(
+            (modelNumber) => modelNumber.size !== sizeLabel,
+          ),
         );
       }
     },
@@ -264,10 +297,17 @@ export function useProductBlueprintCreateVariations(
   );
 
   const onChangeSize = React.useCallback(
-    (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
-      const safePatch: Partial<Omit<SizeRow, "id">> = { ...patch };
+    (
+      id: string,
+      patch: Partial<Omit<SizeRow, "id">>,
+    ) => {
+      const safePatch: Partial<Omit<SizeRow, "id">> = {
+        ...patch,
+      };
 
-      const clampField = (key: keyof Omit<SizeRow, "id">) => {
+      const clampField = (
+        key: keyof Omit<SizeRow, "id">,
+      ) => {
         const value = safePatch[key];
 
         if (typeof value === "number") {
@@ -290,7 +330,9 @@ export function useProductBlueprintCreateVariations(
       clampField("thigh");
       clampField("hemWidth");
 
-      const prevRow = sizes.find((size) => size.id === id);
+      const prevRow = sizes.find(
+        (size) => size.id === id,
+      );
       const prevLabelRaw = prevRow?.sizeLabel;
       const prevLabel =
         typeof prevLabelRaw === "string"
@@ -305,18 +347,27 @@ export function useProductBlueprintCreateVariations(
             ? null
             : String(nextLabelRaw).trim();
 
-      if (nextLabel !== null && nextLabel !== prevLabel) {
+      if (
+        nextLabel !== null &&
+        nextLabel !== prevLabel
+      ) {
         if (!nextLabel) {
           if (prevLabel) {
             setModelNumbers((prev) =>
-              prev.filter((modelNumber) => modelNumber.size !== prevLabel),
+              prev.filter(
+                (modelNumber) =>
+                  modelNumber.size !== prevLabel,
+              ),
             );
           }
         } else if (prevLabel) {
           setModelNumbers((prev) =>
             prev.map((modelNumber) =>
               modelNumber.size === prevLabel
-                ? { ...modelNumber, size: nextLabel }
+                ? {
+                    ...modelNumber,
+                    size: nextLabel,
+                  }
                 : modelNumber,
             ),
           );
@@ -324,18 +375,30 @@ export function useProductBlueprintCreateVariations(
       }
 
       setSizes((prev) =>
-        prev.map((size) => (size.id === id ? { ...size, ...safePatch } : size)),
+        prev.map((size) =>
+          size.id === id
+            ? {
+                ...size,
+                ...safePatch,
+              }
+            : size,
+        ),
       );
     },
     [sizes],
   );
 
   const onChangeModelNumber = React.useCallback(
-    (sizeLabel: string, color: string, nextCode: string) => {
+    (
+      sizeLabel: string,
+      color: string,
+      nextCode: string,
+    ) => {
       setModelNumbers((prev) => {
         const index = prev.findIndex(
           (modelNumber) =>
-            modelNumber.size === sizeLabel && modelNumber.color === color,
+            modelNumber.size === sizeLabel &&
+            modelNumber.color === color,
         );
 
         const trimmed = nextCode.trim();
@@ -363,6 +426,7 @@ export function useProductBlueprintCreateVariations(
 
         const copy = [...prev];
         copy[index] = next;
+
         return copy;
       });
     },
@@ -379,15 +443,24 @@ export function useProductBlueprintCreateVariations(
 
   const onRemoveVolume = React.useCallback(
     (id: string) => {
-      const target = volumes.find((volume) => volume.id === id);
-      const targetLabel = target ? toVolumeLabel(target) : "";
+      const target = volumes.find(
+        (volume) => volume.id === id,
+      );
+      const targetLabel = target
+        ? toVolumeLabel(target)
+        : "";
 
-      setVolumes((prev) => prev.filter((volume) => volume.id !== id));
+      setVolumes((prev) =>
+        prev.filter((volume) => volume.id !== id),
+      );
 
       if (targetLabel) {
         setAlcoholModelNumbers((prev) =>
           prev.filter(
-            (modelNumber) => modelNumber.volumeLabel !== targetLabel,
+            (modelNumber) =>
+              toAlcoholModelNumberVolumeLabel(
+                modelNumber,
+              ) !== targetLabel,
           ),
         );
       }
@@ -396,8 +469,15 @@ export function useProductBlueprintCreateVariations(
   );
 
   const onChangeVolume = React.useCallback(
-    (id: string, patch: Partial<Omit<VolumeRow, "id">>) => {
-      const safePatch: Partial<Omit<VolumeRow, "id">> = { ...patch };
+    (
+      id: string,
+      patch: Partial<Omit<VolumeRow, "id">>,
+    ) => {
+      const safePatch: Partial<
+        Omit<VolumeRow, "id">
+      > = {
+        ...patch,
+      };
 
       if (
         typeof safePatch.volumeValue === "number" &&
@@ -406,27 +486,49 @@ export function useProductBlueprintCreateVariations(
         safePatch.volumeValue = 0;
       }
 
-      if (typeof safePatch.volumeUnit === "string") {
-        safePatch.volumeUnit = safePatch.volumeUnit.trim() || "ml";
+      if (
+        typeof safePatch.volumeUnit === "string"
+      ) {
+        safePatch.volumeUnit =
+          safePatch.volumeUnit.trim() || "ml";
       }
 
-      const prevRow = volumes.find((volume) => volume.id === id);
-      const prevLabel = prevRow ? toVolumeLabel(prevRow) : "";
+      const prevRow = volumes.find(
+        (volume) => volume.id === id,
+      );
+      const prevLabel = prevRow
+        ? toVolumeLabel(prevRow)
+        : "";
 
-      const nextRow = prevRow ? { ...prevRow, ...safePatch } : null;
-      const nextLabel = nextRow ? toVolumeLabel(nextRow) : "";
+      const nextRow = prevRow
+        ? {
+            ...prevRow,
+            ...safePatch,
+          }
+        : null;
 
-      if (prevLabel && nextLabel && prevLabel !== nextLabel) {
+      const nextLabel = nextRow
+        ? toVolumeLabel(nextRow)
+        : "";
+
+      if (
+        prevLabel &&
+        nextLabel &&
+        prevLabel !== nextLabel
+      ) {
         setAlcoholModelNumbers((prev) =>
           prev.map((modelNumber) =>
-            modelNumber.volumeLabel === prevLabel
+            toAlcoholModelNumberVolumeLabel(
+              modelNumber,
+            ) === prevLabel
               ? {
                   ...modelNumber,
                   volume: {
-                    value: nextRow?.volumeValue ?? 0,
-                    unit: nextRow?.volumeUnit ?? "ml",
+                    value:
+                      nextRow?.volumeValue ?? 0,
+                    unit:
+                      nextRow?.volumeUnit ?? "ml",
                   },
-                  volumeLabel: nextLabel,
                 }
               : modelNumber,
           ),
@@ -435,82 +537,106 @@ export function useProductBlueprintCreateVariations(
 
       if (prevLabel && !nextLabel) {
         setAlcoholModelNumbers((prev) =>
-          prev.filter((modelNumber) => modelNumber.volumeLabel !== prevLabel),
+          prev.filter(
+            (modelNumber) =>
+              toAlcoholModelNumberVolumeLabel(
+                modelNumber,
+              ) !== prevLabel,
+          ),
         );
       }
 
       setVolumes((prev) =>
         prev.map((volume) =>
-          volume.id === id ? { ...volume, ...safePatch } : volume,
+          volume.id === id
+            ? {
+                ...volume,
+                ...safePatch,
+              }
+            : volume,
         ),
       );
     },
     [volumes],
   );
 
-  const onChangeAlcoholModelNumber = React.useCallback(
-    (volumeLabel: string, nextCode: string) => {
-      const label = volumeLabel.trim();
+  const onChangeAlcoholModelNumber =
+    React.useCallback(
+      (
+        volumeLabel: string,
+        nextCode: string,
+      ) => {
+        const label = volumeLabel.trim();
 
-      if (!label) {
-        return;
-      }
+        if (!label) {
+          return;
+        }
 
-      const volumeRow = volumes.find((volume) => toVolumeLabel(volume) === label);
-
-      if (!volumeRow) {
-        return;
-      }
-
-      setAlcoholModelNumbers((prev) => {
-        const index = prev.findIndex(
-          (modelNumber) => modelNumber.volumeLabel === label,
+        const volumeRow = volumes.find(
+          (volume) =>
+            toVolumeLabel(volume) === label,
         );
 
-        const trimmed = nextCode.trim();
+        if (!volumeRow) {
+          return;
+        }
 
-        if (!trimmed) {
+        setAlcoholModelNumbers((prev) => {
+          const index = prev.findIndex(
+            (modelNumber) =>
+              toAlcoholModelNumberVolumeLabel(
+                modelNumber,
+              ) === label,
+          );
+
+          const trimmed = nextCode.trim();
+
+          if (!trimmed) {
+            if (index === -1) {
+              return prev;
+            }
+
+            const copy = [...prev];
+            copy.splice(index, 1);
+            return copy;
+          }
+
+          const next: AlcoholModelNumber = {
+            kind: "alcohol",
+            volume: {
+              value: volumeRow.volumeValue,
+              unit: volumeRow.volumeUnit,
+            },
+            code: trimmed,
+          };
+
           if (index === -1) {
-            return prev;
+            return [...prev, next];
           }
 
           const copy = [...prev];
-          copy.splice(index, 1);
+          copy[index] = next;
+
           return copy;
-        }
-
-        const next: AlcoholModelNumber = {
-          kind: "alcohol",
-          volume: {
-            value: volumeRow.volumeValue,
-            unit: volumeRow.volumeUnit,
-          },
-          volumeLabel: label,
-          code: trimmed,
-        };
-
-        if (index === -1) {
-          return [...prev, next];
-        }
-
-        const copy = [...prev];
-        copy[index] = next;
-        return copy;
-      });
-    },
-    [volumes],
-  );
+        });
+      },
+      [volumes],
+    );
 
   React.useEffect(() => {
     const validColors = new Set(
-      colors.map((color) => color.trim()).filter(Boolean),
+      colors
+        .map((color) => color.trim())
+        .filter(Boolean),
     );
 
     const validSizes = new Set(
       sizes
         .map((size) => size.sizeLabel)
         .map((value) =>
-          typeof value === "string" ? value.trim() : String(value ?? "").trim(),
+          typeof value === "string"
+            ? value.trim()
+            : String(value ?? "").trim(),
         )
         .filter(Boolean),
     );
@@ -518,19 +644,29 @@ export function useProductBlueprintCreateVariations(
     setModelNumbers((prev) =>
       prev.filter(
         (modelNumber) =>
-          validColors.has(modelNumber.color) && validSizes.has(modelNumber.size),
+          validColors.has(modelNumber.color) &&
+          validSizes.has(modelNumber.size),
       ),
     );
-  }, [colors, sizes]);
+  }, [
+    colors,
+    sizes,
+  ]);
 
   React.useEffect(() => {
     const validVolumeLabels = new Set(
-      volumes.map(toVolumeLabel).filter(Boolean),
+      volumes
+        .map(toVolumeLabel)
+        .filter(Boolean),
     );
 
     setAlcoholModelNumbers((prev) =>
       prev.filter((modelNumber) =>
-        validVolumeLabels.has(modelNumber.volumeLabel),
+        validVolumeLabels.has(
+          toAlcoholModelNumberVolumeLabel(
+            modelNumber,
+          ),
+        ),
       ),
     );
   }, [volumes]);

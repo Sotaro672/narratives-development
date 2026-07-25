@@ -9,7 +9,7 @@ import {
 import type {
   ProductBlueprintCategory,
   ProductBlueprintCategorySnapshot,
-} from "../../../domain/entity/productBlueprintCategory";
+} from "../../../domain/productBlueprintCategory";
 
 function toProductBlueprintCategorySnapshot(
   category: ProductBlueprintCategory,

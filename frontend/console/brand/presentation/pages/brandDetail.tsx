@@ -4,7 +4,7 @@ import { Upload, X } from "lucide-react";
 
 import "../styles/brand.css";
 
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 
 import {
   Card,
@@ -12,9 +12,9 @@ import {
   CardTitle,
   CardContent,
   CardLabel,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 
-import { Input } from "../../../../shell/src/shared/ui/input";
+import { Input } from "../../../shell/src/shared/ui/input";
 
 import { useBrandDetail } from "../hook/useBrandDetail";
 import { ManagerCard } from "./components/ManagerCard";

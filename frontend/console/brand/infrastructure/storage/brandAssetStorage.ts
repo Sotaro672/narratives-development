@@ -1,7 +1,7 @@
 // frontend/console/brand/src/infrastructure/storage/brandAssetStorage.ts
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
-import { storage } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { storage } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 export type BrandAssetTarget = "brandIcon" | "brandBackgroundImage";
 

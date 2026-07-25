@@ -7,15 +7,15 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../../shell/src/shared/ui/card";
+} from "../../../../shell/src/shared/ui/card";
 
-import { Button } from "../../../../../shell/src/shared/ui/button";
+import { Button } from "../../../../shell/src/shared/ui/button";
 
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../../shell/src/shared/ui/popover";
+} from "../../../../shell/src/shared/ui/popover";
 
 import "../../styles/brand.css";
 

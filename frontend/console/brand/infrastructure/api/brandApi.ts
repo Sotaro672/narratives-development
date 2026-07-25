@@ -1,5 +1,5 @@
 //frontend\console\brand\src\infrastructure\api\brandApi.ts
-import type { Brand, BrandPatch } from "../../../../brand/src/domain/entity/brand";
+import type { Brand, BrandPatch } from "../../domain/entity/brand";
 import { brandRepositoryHTTP } from "../http/brandRepositoryHTTP";
 
 /* ------------------------------------------------------------

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { Brand } from "../../../../brand/src/domain/entity/brand";
+import type { Brand } from "../../../../brand/domain/entity/brand";
 import type {
   ModelNumber,
   VolumeRow,
