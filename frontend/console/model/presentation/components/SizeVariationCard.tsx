@@ -18,8 +18,6 @@ import {
   TableRow,
   TableCell,
 } from "../../../shell/src/shared/ui/table";
-import "../styles/model.css";
-import "../../../shell/src/shared/ui/card.css";
 
 // ★ productBlueprint 側の catalog を import
 import type {
