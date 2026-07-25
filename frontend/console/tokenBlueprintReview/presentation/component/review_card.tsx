@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { Comment, ReactionType } from "../../domain/entity";
-import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
-import { Button } from "../../../../shell/src/shared/ui/button";
+import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
+import { Button } from "../../../shell/src/shared/ui/button";
 type ReviewCardProps = {
   item: Comment;
   repliesByParentId?: Map<string, Comment[]>;

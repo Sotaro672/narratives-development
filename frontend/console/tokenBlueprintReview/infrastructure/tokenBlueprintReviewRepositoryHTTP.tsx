@@ -15,8 +15,8 @@ import {
   fromApiComment,
 } from "./mappers";
 
-import { API_BASE } from "../../../shell/src/shared/http/apiBase";
-import { getAuthJsonHeaders } from "../../../shell/src/shared/http/authHeaders";
+import { API_BASE } from "../../shell/src/shared/http/apiBase";
+import { getAuthJsonHeaders } from "../../shell/src/shared/http/authHeaders";
 
 /**
  * console(brand) 用 TokenBlueprintReview HTTP repository

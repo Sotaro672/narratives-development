@@ -1,11 +1,12 @@
-// frontend/console/tokenBlueprintReview/src/presentation/hook/use_tokenBlueprintReviewDetail.tsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+// frontend/console/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail.tsx
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import type {
   TokenBlueprint,
   ContentFile,
-} from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
+} from "../../../tokenBlueprint/domain/tokenBlueprint";
 
 import {
   fetchTokenBlueprintReviewDetail,
@@ -16,8 +17,6 @@ import {
   removeBrandComment,
   reactBrandToComment,
 } from "../../application/tokenBlueprintReviewDetailService";
-
-import type { FirebaseStorageTokenContent } from "../../../../shell/src/shared/types/tokenContents";
 
 import type {
   TokenBlueprintReviewAggregate,
@@ -35,7 +34,7 @@ type UseTokenBlueprintReviewDetailVM = {
   updatedByName: string;
   updatedAt: string;
 
-  tokenContents: FirebaseStorageTokenContent[];
+  tokenContents: ContentFile[];
 
   reviewAggregate: TokenBlueprintReviewAggregate | null;
   comments: Comment[];
@@ -57,7 +56,10 @@ type UseTokenBlueprintReviewDetailHandlers = {
     options?: { commentId?: string },
   ) => Promise<Comment>;
   deleteComment: (commentId: string) => Promise<void>;
-  reactToComment: (commentId: string, type: ReactionType) => Promise<Comment>;
+  reactToComment: (
+    commentId: string,
+    type: ReactionType,
+  ) => Promise<Comment>;
 };
 
 export type UseTokenBlueprintReviewDetailResult = {
@@ -65,20 +67,8 @@ export type UseTokenBlueprintReviewDetailResult = {
   handlers: UseTokenBlueprintReviewDetailHandlers;
 };
 
-function toTokenContents(
-  contentFiles: ContentFile[],
-): FirebaseStorageTokenContent[] {
-  return contentFiles
-    .filter((file) => Boolean(file.url))
-    .map((file) => ({
-      id: file.id,
-      name: file.name,
-      type: file.type,
-      contentType: file.contentType,
-      size: file.size,
-      objectPath: file.objectPath,
-      url: file.url as string,
-    }));
+function toTokenContents(contentFiles: ContentFile[]): ContentFile[] {
+  return contentFiles.filter((file) => Boolean(file.url));
 }
 
 export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailResult {
@@ -155,7 +145,7 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
     return blueprint?.updatedAt || "";
   }, [blueprint]);
 
-  const tokenContents: FirebaseStorageTokenContent[] = useMemo(() => {
+  const tokenContents = useMemo<ContentFile[]>(() => {
     return toTokenContents(blueprint?.contentFiles ?? []);
   }, [blueprint]);
 
@@ -201,7 +191,12 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
       setSubmitting(true);
 
       try {
-        const created = await postBrandReply(id, parentCommentId, body, options);
+        const created = await postBrandReply(
+          id,
+          parentCommentId,
+          body,
+          options,
+        );
         await reload();
         return created;
       } finally {
@@ -242,7 +237,9 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
       try {
         const updated = await reactBrandToComment(id, commentId, type);
         setComments((prev) =>
-          prev.map((c) => (c.commentId === updated.commentId ? updated : c)),
+          prev.map((comment) =>
+            comment.commentId === updated.commentId ? updated : comment,
+          ),
         );
         return updated;
       } finally {
@@ -255,7 +252,11 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
   const vm: UseTokenBlueprintReviewDetailVM = {
     blueprint,
     title: "トークン設計レビュー",
-    assigneeName: assignee || blueprint?.assigneeName || blueprint?.assigneeId || "",
+    assigneeName:
+      assignee ||
+      blueprint?.assigneeName ||
+      blueprint?.assigneeId ||
+      "",
 
     createdByName,
     createdAt,

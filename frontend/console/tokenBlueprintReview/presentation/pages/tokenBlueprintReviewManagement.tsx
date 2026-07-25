@@ -4,8 +4,8 @@ import React from "react";
 import List, {
   SortableTableHeader,
   FilterableTableHeader,
-} from "../../../../shell/src/layout/List/List";
-import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";
+} from "../../../shell/src/layout/List/List";
+import { safeDateTimeLabelJa } from "../../../shell/src/shared/util/dateJa";
 import { useTokenBlueprintReviewManagement } from "../hook/use_tokenBlueprintReviewManagement";
 import type { TokenBlueprintReviewAggregate } from "../../domain/entity";
 

@@ -1,7 +1,7 @@
 // frontend/console/tokenBlueprintReview/src/presentation/hook/use_tokenBlueprintReviewManagement.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
 import {
   type SortKey,
   type SortDir,

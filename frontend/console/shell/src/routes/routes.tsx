@@ -28,8 +28,8 @@ import MintRequestDetail from "../../../mintRequest/presentation/pages/mintReque
 import ProductBlueprintReviewManagement from "../../../productBlueprintReview/presentation/pages/productBlueprintReviewManagement";
 import ProductBlueprintReviewDetail from "../../../productBlueprintReview/presentation/pages/productBlueprintReviewDetail";
 
-import TokenBlueprintReviewManagement from "../../../tokenBlueprintReview/src/presentation/pages/tokenBlueprintReviewManagement";
-import TokenBlueprintReviewDetail from "../../../tokenBlueprintReview/src/presentation/pages/tokenBlueprintReviewDetail";
+import TokenBlueprintReviewManagement from "../../../tokenBlueprintReview/presentation/pages/tokenBlueprintReviewManagement";
+import TokenBlueprintReviewDetail from "../../../tokenBlueprintReview/presentation/pages/tokenBlueprintReviewDetail";
 
 import ListManagement from "../../../list/presentation/pages/listManagement";
 import ListDetail from "../../../list/presentation/pages/listDetail";
