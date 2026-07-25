@@ -10,7 +10,7 @@ import {
 } from "../shared/ui/card";
 
 // Hook（抽出先）
-import { usePermissionDetail } from "../../../permission/presentation/hook/usePermissionDetail";
+import { usePermissionDetail } from "../../../features/permission/presentation/hook/usePermissionDetail";
 
 export default function PermissionDetail() {
   const { permission, title, handleBack } = usePermissionDetail();

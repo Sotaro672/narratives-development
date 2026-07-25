@@ -7,8 +7,8 @@ import List, {
   SortableTableHeader,
 } from "../layout/List/List";
 import FilterableTableHeader from "../shared/ui/filterable-table-header";
-import { buildAnnouncementTokenListNavigateState } from "../../../sales/application/announcement_token_list_service";
-import { useAnnouncementTokenListPage } from "../../../sales/presentation/hook/useAnnouncementTokenListPage";
+import { buildAnnouncementTokenListNavigateState } from "../../../features/sales/application/announcement_token_list_service";
+import { useAnnouncementTokenListPage } from "../../../features/sales/presentation/hook/useAnnouncementTokenListPage";
 
 export default function AnnouncementTokenListPage() {
   const navigate = useNavigate();

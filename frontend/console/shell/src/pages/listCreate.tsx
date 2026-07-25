@@ -7,9 +7,9 @@ import { Card, CardContent } from "../shared/ui/card";
 import { Button } from "../shared/ui/button";
 import { Select } from "../shared/ui/select";
 
-import PriceCard from "../../../list/presentation/components/priceCard";
-import ListImageCard from "../../../list/presentation/components/listImageCard";
-import { useListCreate } from "../../../inventory/presentation/hook/useListCreate";
+import PriceCard from "../../../features/list/presentation/components/priceCard";
+import ListImageCard from "../../../features/list/presentation/components/listImageCard";
+import { useListCreate } from "../../../features/inventory/presentation/hook/useListCreate";
 
 function s(v: unknown): string {
   return String(v ?? "").trim();

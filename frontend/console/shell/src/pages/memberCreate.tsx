@@ -2,11 +2,11 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import PageStyle from "../layout/PageStyle/PageStyle";
-import { useMemberCreate } from "../../../member/presentation/hooks/useMemberCreate";
+import { useMemberCreate } from "../../../features/member/presentation/hooks/useMemberCreate";
 import { Input } from "../shared/ui/input";
 
-import { BrandSelect } from "../../../member/presentation/components/BrandSelect";
-import { PermissionSelect } from "../../../member/presentation/components/PermissionSelect";
+import { BrandSelect } from "../../../features/member/presentation/components/BrandSelect";
+import { PermissionSelect } from "../../../features/member/presentation/components/PermissionSelect";
 
 import "../styles/member.css";
 

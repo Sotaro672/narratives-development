@@ -5,7 +5,7 @@ import List, {
 } from "../layout/List/List";
 import FilterableTableHeader from "../shared/ui/filterable-table-header";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
-import { useAnnouncementManagement } from "../../../sales/presentation/hook/useAnnouncementManagement";
+import { useAnnouncementManagement } from "../../../features/sales/presentation/hook/useAnnouncementManagement";
 
 export default function AnnouncementManagementPage() {
   const {

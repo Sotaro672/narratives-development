@@ -19,7 +19,7 @@ import {
   formatJPY,
   useOrderDetail,
   OrderDetailItemDTO,
-} from "../../../order/presentation/hooks/useOrderDetail";
+} from "../../../features/order/presentation/hooks/useOrderDetail";
 
 function isAlcoholItem(it: OrderDetailItemDTO): boolean {
   return (

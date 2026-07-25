@@ -3,23 +3,23 @@
 import * as React from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/presentation/components/AdminCard";
-import ProductBlueprintCard from "../../../productBlueprint/presentation/cards/productBlueprintForm";
-import ProductBlueprintClassificationCard from "../../../productBlueprint/presentation/cards/classification/ProductBlueprintClassificationCard";
-import CategoryFieldsCard from "../../../productBlueprint/presentation/cards/categoryFields";
-import ColorVariationCard from "../../../model/presentation/components/ColorVariationCard";
-import SizeVariationCard from "../../../model/presentation/components/SizeVariationCard";
-import ModelNumberCard from "../../../model/presentation/components/ModelNumberCard";
-import VolumeCard from "../../../model/presentation/components/VolumeCard";
-import AlcoholModelNumberCard from "../../../model/presentation/components/AlcoholModelNumberCard";
-import LogCard from "../../../log/presentation/LogCard";
+import AdminCard from "../../../features/admin/presentation/components/AdminCard";
+import ProductBlueprintCard from "../../../features/productBlueprint/presentation/cards/productBlueprintForm";
+import ProductBlueprintClassificationCard from "../../../features/productBlueprint/presentation/cards/classification/ProductBlueprintClassificationCard";
+import CategoryFieldsCard from "../../../features/productBlueprint/presentation/cards/categoryFields";
+import ColorVariationCard from "../../../features/model/presentation/components/ColorVariationCard";
+import SizeVariationCard from "../../../features/model/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../../../features/model/presentation/components/ModelNumberCard";
+import VolumeCard from "../../../features/model/presentation/components/VolumeCard";
+import AlcoholModelNumberCard from "../../../features/model/presentation/components/AlcoholModelNumberCard";
+import LogCard from "../../../features/log/presentation/LogCard";
 
-import { useProductBlueprintDetail } from "../../../productBlueprint/presentation/hooks/detail/useProductBlueprintDetail";
+import { useProductBlueprintDetail } from "../../../features/productBlueprint/presentation/hooks/detail/useProductBlueprintDetail";
 
 import {
   APPAREL_CATEGORY_MEASUREMENT_OPTIONS,
   isApparelCategoryCode,
-} from "../../../productBlueprint/domain/apparel";
+} from "../../../features/productBlueprint/domain/apparel";
 
 function shouldShowApparelVariationCards(categoryCode: string): boolean {
   return (

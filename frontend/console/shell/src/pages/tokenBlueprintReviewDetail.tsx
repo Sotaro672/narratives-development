@@ -1,17 +1,17 @@
 // frontend\console\shell\src\pages\tokenBlueprintReviewDetail.tsx
 import { useMemo, useState } from "react";
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/presentation/components/AdminCard";
-import TokenContentsCard from "../../../tokenBlueprint/presentation/components/tokenContentsCard";
-import LogCard from "../../../log/presentation/LogCard";
+import AdminCard from "../../../features/admin/presentation/components/AdminCard";
+import TokenContentsCard from "../../../features/tokenBlueprint/presentation/components/tokenContentsCard";
+import LogCard from "../../../features/log/presentation/LogCard";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { Button } from "../shared/ui/button";
 
-import ReviewAggregateCard from "../../../tokenBlueprintReview/presentation/component/review_aggregate_card";
-import ReviewCard from "../../../tokenBlueprintReview/presentation/component/review_card";
+import ReviewAggregateCard from "../../../features/tokenBlueprintReview/presentation/component/review_aggregate_card";
+import ReviewCard from "../../../features/tokenBlueprintReview/presentation/component/review_card";
 
-import { useTokenBlueprintReviewDetail } from "../../../tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail";
-import type { Comment } from "../../../tokenBlueprintReview/domain/entity";
+import { useTokenBlueprintReviewDetail } from "../../../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail";
+import type { Comment } from "../../../features/tokenBlueprintReview/domain/entity";
 
 import "../styles/tokenBlueprintReview.css";
 

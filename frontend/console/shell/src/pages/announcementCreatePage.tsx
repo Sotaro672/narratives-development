@@ -6,12 +6,12 @@ import {
 } from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/presentation/components/AdminCard";
-import LogCard from "../../../log/presentation/LogCard";
-import InputCard from "../../../sales/presentation/components/inputCard";
-import type { SubmitPayload } from "../../../sales/presentation/components/inputCard";
+import AdminCard from "../../../features/admin/presentation/components/AdminCard";
+import LogCard from "../../../features/log/presentation/LogCard";
+import InputCard from "../../../features/sales/presentation/components/inputCard";
+import type { SubmitPayload } from "../../../features/sales/presentation/components/inputCard";
 
-import { useAnnouncementCreatePage } from "../../../sales/presentation/hook/useAnnouncementCreatePage";
+import { useAnnouncementCreatePage } from "../../../features/sales/presentation/hook/useAnnouncementCreatePage";
 
 const initialInputPayload: SubmitPayload = {
   title: "",

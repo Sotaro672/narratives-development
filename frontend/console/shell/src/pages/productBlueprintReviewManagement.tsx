@@ -1,7 +1,7 @@
 // frontend\console\shell\src\pages\productBlueprintReviewManagement.tsx
 
 import List, { FilterableTableHeader } from "../layout/List/List";
-import { useProductBlueprintReviewManagement } from "../../../productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement";
+import { useProductBlueprintReviewManagement } from "../../../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement";
 
 type Option = { Value: string; Label: string };
 

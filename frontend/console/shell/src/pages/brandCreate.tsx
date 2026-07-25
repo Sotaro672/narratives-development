@@ -13,7 +13,7 @@ import {
   CardSelect,
 } from "../../../shell/src/shared/ui/card";
 
-import { useBrandCreate } from "../../../brand/presentation/hook/useBrandCreate";
+import { useBrandCreate } from "../../../features/brand/presentation/hook/useBrandCreate";
 
 export default function BrandCreate() {
   const {

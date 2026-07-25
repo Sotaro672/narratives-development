@@ -3,15 +3,15 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../layout/PageStyle/PageStyle";
-import MemberDetailCard from "../../../member/presentation/components/MemberCard";
-import { useMemberDetail } from "../../../member/presentation/hooks/useMemberDetail";
+import MemberDetailCard from "../../../features/member/presentation/components/MemberCard";
+import { useMemberDetail } from "../../../features/member/presentation/hooks/useMemberDetail";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
 } from "../shared/ui/card";
-import { BrandCard } from "../../../member/presentation/components/BrandCard";
+import { BrandCard } from "../../../features/member/presentation/components/BrandCard";
 
 export default function MemberDetail() {
   const navigate = useNavigate();

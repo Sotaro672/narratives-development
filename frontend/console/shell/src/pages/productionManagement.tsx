@@ -1,6 +1,6 @@
 // frontend\console\shell\src\pages\productionManagement.tsx
 
-import { useProductionManagement } from "../../../production/presentation/hook/useProductionManagement";
+import { useProductionManagement } from "../../../features/production/presentation/hook/useProductionManagement";
 import List from "../layout/List/List";
 
 export default function ProductionManagement() {

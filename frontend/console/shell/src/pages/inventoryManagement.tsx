@@ -2,8 +2,8 @@
 import List from "../layout/List/List";
 import "../styles/inventory.css";
 
-import { useInventoryManagement } from "../../../inventory/presentation/hook/useInventoryManagement";
-import { buildInventoryHeaders } from "../../../inventory/application/inventoryManagementService";
+import { useInventoryManagement } from "../../../features/inventory/presentation/hook/useInventoryManagement";
+import { buildInventoryHeaders } from "../../../features/inventory/application/inventoryManagementService";
 
 /** 在庫管理ページ（スタイル＋レイアウト中心） */
 export default function InventoryManagementPage() {

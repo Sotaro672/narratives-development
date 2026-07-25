@@ -1,12 +1,12 @@
 // frontend\console\shell\src\pages\tokenBlueprintDetail.tsx
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/presentation/components/AdminCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/presentation/components/tokenBlueprintCard";
-import TokenContentsCard from "../../../tokenBlueprint/presentation/components/tokenContentsCard";
-import LogCard from "../../../log/presentation/LogCard";
+import AdminCard from "../../../features/admin/presentation/components/AdminCard";
+import TokenBlueprintCard from "../../../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+import TokenContentsCard from "../../../features/tokenBlueprint/presentation/components/tokenContentsCard";
+import LogCard from "../../../features/log/presentation/LogCard";
 
-import { useTokenBlueprintDetail } from "../../../tokenBlueprint/presentation/hook/useTokenBlueprintDetail";
+import { useTokenBlueprintDetail } from "../../../features/tokenBlueprint/presentation/hook/useTokenBlueprintDetail";
 
 export default function TokenBlueprintDetail() {
   const { vm, handlers } = useTokenBlueprintDetail();
