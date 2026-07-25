@@ -16,7 +16,7 @@ node_modules/
 # Build outputs
 dist/
 build/
-out/
+/out/
 coverage/
 .next/
 .nuxt/
@@ -35,8 +35,6 @@ ui-debug.log
 *.dll
 *.so
 *.dylib
-backend/api.exe
-backend/*.exe
 
 # Go
 bin/
