@@ -2,7 +2,7 @@
 
 import React from "react";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../admin/presentation/components/AdminCard";
 
 import ProductBlueprintCard from "../../../productBlueprint/presentation/cards/productBlueprintForm";
 import ProductionQuantityCard from "../components/productionQuantityCard";

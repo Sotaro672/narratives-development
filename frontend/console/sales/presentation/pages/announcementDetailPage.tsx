@@ -11,7 +11,7 @@ import {
 } from "react-router-dom";
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../admin/presentation/components/AdminCard";
 import LogCard from "../../../log/presentation/LogCard";
 import InputCard from "../components/inputCard";
 import type { SubmitPayload } from "../components/inputCard";

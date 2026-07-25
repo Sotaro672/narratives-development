@@ -3,13 +3,13 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../../admin/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../components/tokenContentsCard";
 
 import { useTokenBlueprintCreate } from "../hook/useTokenBlueprintCreate";
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
-import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
+import { useAdminCard as useAdminCardHook } from "../../../../admin/presentation/hook/useAdminCard";
 
 import type {
   TokenBlueprint,

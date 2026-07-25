@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../admin/presentation/components/AdminCard";
 import ProductBlueprintCard from "../cards/productBlueprintForm";
 import ProductBlueprintClassificationCard from "../cards/classification/ProductBlueprintClassificationCard";
 import CategoryFieldsCard from "../cards/categoryFields";

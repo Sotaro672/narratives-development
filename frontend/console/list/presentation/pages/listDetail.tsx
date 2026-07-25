@@ -9,7 +9,7 @@ import { Card, CardContent } from "../../../shell/src/shared/ui/card";
 import { Input } from "../../../shell/src/shared/ui/input";
 
 import PriceCard from "../components/priceCard";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../admin/presentation/components/AdminCard";
 import ListImageCard from "../components/listImageCard";
 import { useListDetail } from "../hook/useListDetail";
 

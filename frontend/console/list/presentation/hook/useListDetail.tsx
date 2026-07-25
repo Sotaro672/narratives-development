@@ -7,7 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { usePriceCard } from "./usePriceCard";
 
 // 型は inventory/application を正とする
-import type { PriceRow } from "../../../inventory/src/application/listCreate/listCreateService";
+import type { PriceRow } from "../../../inventory/application/listCreate/listCreateService";
 
 // Firebase Auth
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";

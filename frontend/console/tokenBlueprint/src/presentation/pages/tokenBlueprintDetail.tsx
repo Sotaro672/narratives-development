@@ -1,7 +1,7 @@
 // frontend/console/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../../admin/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../components/tokenContentsCard";
 import LogCard from "../../../../log/presentation/LogCard";

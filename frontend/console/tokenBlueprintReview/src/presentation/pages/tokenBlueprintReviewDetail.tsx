@@ -1,7 +1,7 @@
 // frontend/console/tokenBlueprintReview/src/presentation/pages/tokenBlueprintReviewDetail.tsx
 import { useMemo, useState } from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../../admin/presentation/components/AdminCard";
 import TokenContentsCard from "../../../../tokenBlueprint/src/presentation/components/tokenContentsCard";
 import LogCard from "../../../../log/presentation/LogCard";
 import { safeDateTimeLabelJa } from "../../../../shell/src/shared/util/dateJa";

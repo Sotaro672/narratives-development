@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+import AdminCard from "../../../../admin/presentation/components/AdminCard";
 import LogCard from "../../../../log/presentation/LogCard";
 
 import Pagination from "../../../../shell/src/shared/ui/pagination";
