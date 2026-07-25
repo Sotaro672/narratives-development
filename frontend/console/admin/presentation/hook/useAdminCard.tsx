@@ -1,7 +1,7 @@
 // frontend/console/admin/src/presentation/hook/useAdminCard.tsx
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+import { useAuth } from "../../../shell/src/auth/presentation/hook/useCurrentMember";
 
 // AdminService
 import {
