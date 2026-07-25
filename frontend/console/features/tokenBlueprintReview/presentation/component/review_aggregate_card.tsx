@@ -1,5 +1,4 @@
-// frontend/console/tokenBlueprintReview/src/presentation/component/review_aggregate_card.tsx
-
+// frontend\console\features\tokenBlueprintReview\presentation\component\review_aggregate_card.tsx
 import "../../../../shell/src/styles/tokenBlueprintReview.css";
 
 type ReviewAggregateCardProps = {
