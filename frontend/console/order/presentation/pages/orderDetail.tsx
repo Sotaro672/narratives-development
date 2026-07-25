@@ -1,19 +1,19 @@
 // frontend/console/order/src/presentation/pages/orderDetail.tsx
-import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shell/src/shared/ui/card";
+} from "../../../shell/src/shared/ui/card";
 
-import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import { safeDateLabelJa } from "../../../shell/src/shared/util/dateJa";
 
 // RGB utility
 import {
   coerceRgbInt,
   rgbIntToHex,
-} from "../../../../shell/src/shared/util/color";
+} from "../../../shell/src/shared/util/color";
 
 import {
   formatJPY,

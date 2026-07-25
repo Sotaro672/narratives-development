@@ -4,8 +4,8 @@
 // - GET /orders/items
 // - GET /orders/inventory-ids
 
-import { getAuthHeaders } from "../../../shell/src/shared/http/authHeaders";
-import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { getAuthHeaders } from "../../shell/src/shared/http/authHeaders";
+import { API_BASE } from "../../shell/src/shared/http/apiBase";
 
 export type SortOrder = "asc" | "desc";
 

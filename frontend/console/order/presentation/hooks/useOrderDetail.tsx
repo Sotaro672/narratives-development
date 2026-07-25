@@ -6,7 +6,7 @@ import {
   createOrderRepository,
   Order,
 } from "../../infrastructure/repostiroty";
-import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import { safeDateLabelJa } from "../../../shell/src/shared/util/dateJa";
 
 import {
   buildOrderDetailFromAllowedItems,

@@ -1,8 +1,8 @@
 // frontend/console/order/src/presentation/pages/orderManagement.tsx
-import List from "../../../../shell/src/layout/List/List";
+import List from "../../../shell/src/layout/List/List";
 import "../styles/order.css";
 
-import { safeDateLabelJa } from "../../../../shell/src/shared/util/dateJa";
+import { safeDateLabelJa } from "../../../shell/src/shared/util/dateJa";
 import { useOrderManagement } from "../hooks/useOrderManagement";
 
 export default function OrderManagementPage() {

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   SortableTableHeader,
   FilterableTableHeader,
-} from "../../../../shell/src/layout/List/List";
+} from "../../../shell/src/layout/List/List";
 
 import { createOrderRepository } from "../../infrastructure/repostiroty";
 import {
