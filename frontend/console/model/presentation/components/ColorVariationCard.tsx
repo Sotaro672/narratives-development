@@ -10,7 +10,7 @@ import {
 } from "../../../shell/src/shared/ui";
 import { Button } from "../../../shell/src/shared/ui/button";
 import "../styles/model.css";
-import "../../../../shell/src/shared/ui/card.css";
+import "../../../shell/src/shared/ui/card.css";
 
 import {
   Table,

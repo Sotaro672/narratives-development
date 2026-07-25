@@ -10,9 +10,9 @@ import type {
 import type {
   AlcoholModelNumber,
   VolumeRow,
-} from "../../../../model/src/application/modelCreateService";
+} from "../../../../model/application/modelCreateService";
 
-import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
+import { useModelCard } from "../../../../model/presentation/hook/useModelCard";
 
 /**
  * UI state derived from ModelVariation list (already mapped by variationMapper, etc.)

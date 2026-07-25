@@ -15,7 +15,7 @@ import type {
   AlcoholModelNumber,
   Volume,
   VolumeRow,
-} from "../../model/src/application/modelCreateService";
+} from "../../model/application/modelCreateService";
 
 import type {
   CategoryFieldValues,
@@ -31,7 +31,7 @@ import { createProductBlueprintHTTP } from "../infrastructure/repository/product
 import {
   createModelVariations,
   type CreateModelVariationRequest,
-} from "../../model/src/infrastructure/repository/modelRepositoryHTTP";
+} from "../../model/infrastructure/repository/modelRepositoryHTTP";
 
 // ------------------------------------------------------
 // Product ID Tag

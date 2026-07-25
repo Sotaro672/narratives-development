@@ -23,7 +23,7 @@ import { isAlcoholCategoryCode } from "../../../domain/alcohol";
 import type {
   AlcoholModelNumber,
   VolumeRow,
-} from "../../../../model/src/application/modelCreateService";
+} from "../../../../model/application/modelCreateService";
 
 import type {
   CategoryFieldValue,

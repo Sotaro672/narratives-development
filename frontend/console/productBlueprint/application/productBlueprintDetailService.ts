@@ -13,7 +13,7 @@ import type {
   AlcoholModelNumber,
   Volume,
   VolumeRow,
-} from "../../model/src/application/modelCreateService";
+} from "../../model/application/modelCreateService";
 
 import { updateProductBlueprintHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
@@ -31,12 +31,12 @@ import {
   type ModelVariationUpdateRequest,
   deleteRemovedModelVariations,
   type ModelVariationResponse as ModelUpdateServiceVariationResponse,
-} from "../../model/src/application/modelUpdateService";
+} from "../../model/application/modelUpdateService";
 
 import {
   createModelVariations,
   type CreateModelVariationRequest,
-} from "../../model/src/infrastructure/repository/modelRepositoryHTTP";
+} from "../../model/infrastructure/repository/modelRepositoryHTTP";
 
 const makeApparelKey = (sizeLabel: string, color: string): string =>
   `${String(sizeLabel ?? "").trim()}__${String(color ?? "").trim()}`;
