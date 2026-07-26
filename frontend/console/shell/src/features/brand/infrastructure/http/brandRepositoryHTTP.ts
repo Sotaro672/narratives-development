@@ -1,6 +1,9 @@
-// frontend\console\shell\src\features\brand\infrastructure\http\brandRepositoryHTTP.ts
+// frontend/console/shell/src/features/brand/infrastructure/http/brandRepositoryHTTP.ts
 
-import type { Brand, BrandPatch } from "../../domain/brand";
+import type {
+  Brand,
+  BrandPatch,
+} from "../../../../shared/types/brand";
 import { getConsoleApiBase } from "../../../../shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,
@@ -40,7 +43,8 @@ async function httpRequest<T>(
     );
   }
 
-  const looksLikeHTML = /^\s*<!doctype html>|^\s*<html/i.test(text);
+  const looksLikeHTML =
+    /^\s*<!doctype html>|^\s*<html/i.test(text);
 
   if (looksLikeHTML) {
     throw new Error(
@@ -82,10 +86,15 @@ export class BrandRepositoryHTTP {
   private readonly baseUrl: string;
 
   constructor(baseUrl: string = BASE_URL) {
-    this.baseUrl = String(baseUrl ?? "").replace(/\/+$/g, "");
+    this.baseUrl = String(baseUrl ?? "").replace(
+      /\/+$/g,
+      "",
+    );
 
     if (!this.baseUrl) {
-      throw new Error("[BrandRepositoryHTTP] baseUrl is empty.");
+      throw new Error(
+        "[BrandRepositoryHTTP] baseUrl is empty.",
+      );
     }
   }
 
@@ -153,31 +162,35 @@ export class BrandRepositoryHTTP {
       ? `${this.baseUrl}?${query}`
       : this.baseUrl;
 
-    const raw = (await authed<any>(url, {
-      method: "GET",
-    })) ?? {};
+    const raw =
+      (await authed<any>(url, {
+        method: "GET",
+      })) ?? {};
 
     const items = (raw.items ?? []) as any[];
 
-    const normalizedItems: Brand[] = items.map((brand) => ({
-      id: brand.id ?? "",
-      companyId: brand.companyId ?? "",
-      name: brand.name ?? "",
-      description: brand.description ?? "",
-      websiteUrl: brand.websiteUrl ?? "",
-      brandIcon: brand.brandIcon ?? "",
-      brandBackgroundImage: brand.brandBackgroundImage ?? "",
-      isActive: Boolean(brand.isActive ?? false),
-      managerId: brand.managerId ?? null,
-      memberName: brand.memberName ?? null,
-      walletAddress: brand.walletAddress ?? "",
-      createdAt: brand.createdAt ?? "",
-      createdBy: brand.createdBy ?? null,
-      updatedAt: brand.updatedAt ?? null,
-      updatedBy: brand.updatedBy ?? null,
-      deletedAt: brand.deletedAt ?? null,
-      deletedBy: brand.deletedBy ?? null,
-    }));
+    const normalizedItems: Brand[] = items.map(
+      (brand) => ({
+        id: brand.id ?? "",
+        companyId: brand.companyId ?? "",
+        name: brand.name ?? "",
+        description: brand.description ?? "",
+        websiteUrl: brand.websiteUrl ?? "",
+        brandIcon: brand.brandIcon ?? "",
+        brandBackgroundImage:
+          brand.brandBackgroundImage ?? "",
+        isActive: Boolean(brand.isActive ?? false),
+        managerId: brand.managerId ?? null,
+        memberName: brand.memberName ?? null,
+        walletAddress: brand.walletAddress ?? "",
+        createdAt: brand.createdAt ?? "",
+        createdBy: brand.createdBy ?? null,
+        updatedAt: brand.updatedAt ?? null,
+        updatedBy: brand.updatedBy ?? null,
+        deletedAt: brand.deletedAt ?? null,
+        deletedBy: brand.deletedBy ?? null,
+      }),
+    );
 
     return {
       items: normalizedItems,
@@ -193,7 +206,8 @@ export class BrandRepositoryHTTP {
   }
 }
 
-export const brandRepositoryHTTP = new BrandRepositoryHTTP();
+export const brandRepositoryHTTP =
+  new BrandRepositoryHTTP();
 
 export async function fetchBrandNameById(
   brandId: string,
@@ -205,18 +219,11 @@ export async function fetchBrandNameById(
   }
 
   try {
-    const brand = await brandRepositoryHTTP.getById(id);
+    const brand =
+      await brandRepositoryHTTP.getById(id);
 
     return brand.name ?? "";
-  } catch (err) {
-    console.warn(
-      "[fetchBrandNameById] failed to get brand name",
-      {
-        brandId: id,
-        err,
-      },
-    );
-
+  } catch {
     return id;
   }
 }
@@ -238,14 +245,7 @@ export async function fetchBrandsForCurrentCompany(
       id: String(brand.id ?? ""),
       name: String(brand.name ?? ""),
     }));
-  } catch (err) {
-    console.warn(
-      "[fetchBrandsForCurrentCompany] failed to list brands",
-      {
-        err,
-      },
-    );
-
+  } catch {
     return [];
   }
 }

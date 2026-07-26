@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
+} from "../layout/List/List";
 import "../styles/brand.css";
 import { useBrandManagement } from "../features/brand/presentation/hook/useBrandManagement";
 

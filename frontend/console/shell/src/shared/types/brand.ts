@@ -104,10 +104,6 @@ export function validateBrand(brand: Brand): string[] {
     errors.push("name is required");
   }
 
-  if (!brand.description) {
-    errors.push("description is required");
-  }
-
   if (!brand.walletAddress) {
     errors.push("walletAddress is required");
   }

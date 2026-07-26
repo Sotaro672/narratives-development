@@ -18,7 +18,9 @@ type BrandUsecase struct {
 
 type BrandUsecaseOption func(*BrandUsecase)
 
-func WithBrandWalletService(svc branddom.SolanaBrandWalletService) BrandUsecaseOption {
+func WithBrandWalletService(
+	svc branddom.SolanaBrandWalletService,
+) BrandUsecaseOption {
 	return func(u *BrandUsecase) {
 		u.walletSvc = svc
 	}
@@ -53,7 +55,10 @@ func NewBrandUsecase(
 	return u
 }
 
-func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
+func (u *BrandUsecase) Create(
+	ctx context.Context,
+	b branddom.Brand,
+) (branddom.Brand, error) {
 	if cid := CompanyIDFromContext(ctx); cid != "" {
 		b.CompanyID = cid
 	}
@@ -66,64 +71,107 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 		b.CreatedAt = u.now().UTC()
 	}
 
+	var (
+		managerID     string
+		managerRecord memberdom.Record
+		hasManager    bool
+	)
+
+	if b.ManagerID != nil &&
+		*b.ManagerID != "" &&
+		u.memberRepo != nil {
+		managerID = *b.ManagerID
+
+		rec, err := u.memberRepo.GetByID(
+			ctx,
+			managerID,
+		)
+		if err != nil {
+			return branddom.Brand{}, err
+		}
+
+		if rec.Member.CompanyID != b.CompanyID {
+			return branddom.Brand{}, memberdom.ErrNotFound
+		}
+
+		managerRecord = rec
+		hasManager = true
+	}
+
 	created, err := u.brandRepo.Create(ctx, b)
 	if err != nil {
 		return created, err
 	}
 
-	wa := created.WalletAddress
-	if u.walletSvc != nil && (wa == "" || wa == "pending") {
-		wallet, werr := u.walletSvc.OpenBrandWallet(ctx, created)
-		if werr == nil && wallet.Address != "" {
-			walletAddress := wallet.Address
+	if hasManager {
+		brandID := created.ID
+		found := false
+
+		for _, assignedBrandID := range managerRecord.Member.AssignedBrands {
+			if assignedBrandID == brandID {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			assignedBrands := append(
+				[]string(nil),
+				managerRecord.Member.AssignedBrands...,
+			)
+			assignedBrands = append(
+				assignedBrands,
+				brandID,
+			)
+
 			updatedAt := u.now().UTC()
 
-			updated, errUpdate := u.brandRepo.Update(ctx, created.ID, branddom.BrandPatch{
-				WalletAddress: &walletAddress,
-				UpdatedAt:     &updatedAt,
-			})
-			if errUpdate == nil {
-				created = updated
-			} else {
-				created.WalletAddress = walletAddress
+			_, err = u.memberRepo.Update(
+				ctx,
+				managerID,
+				memberdom.MemberPatch{
+					AssignedBrands: &assignedBrands,
+					UpdatedAt:      &updatedAt,
+				},
+			)
+			if err != nil {
+				return created, err
 			}
 		}
 	}
 
-	if created.ManagerID == nil || *created.ManagerID == "" {
-		return created, nil
-	}
+	wa := created.WalletAddress
 
-	if u.memberRepo == nil {
-		return created, nil
-	}
+	if u.walletSvc != nil &&
+		(wa == "" || wa == "pending") {
+		wallet, walletErr :=
+			u.walletSvc.OpenBrandWallet(
+				ctx,
+				created,
+			)
 
-	managerUID := *created.ManagerID
+		if walletErr == nil && wallet.Address != "" {
+			walletAddress := wallet.Address
+			updatedAt := u.now().UTC()
 
-	rec, err := u.memberRepo.GetByUID(ctx, managerUID)
-	if err != nil {
-		return created, nil
-	}
+			updated, updateErr :=
+				u.brandRepo.Update(
+					ctx,
+					created.ID,
+					branddom.BrandPatch{
+						WalletAddress: &walletAddress,
+						UpdatedAt:     &updatedAt,
+					},
+				)
 
-	brandID := created.ID
-	found := false
-	for _, bid := range rec.Member.AssignedBrands {
-		if bid == brandID {
-			found = true
-			break
+			if updateErr == nil {
+				created = updated
+			} else {
+				created.WalletAddress =
+					walletAddress
+			}
 		}
 	}
-
-	if found {
-		return created, nil
-	}
-
-	assignedBrands := append([]string(nil), rec.Member.AssignedBrands...)
-	assignedBrands = append(assignedBrands, brandID)
-
-	_, _ = u.memberRepo.Update(ctx, managerUID, memberdom.MemberPatch{
-		AssignedBrands: &assignedBrands,
-	})
 
 	return created, nil
 }
@@ -134,7 +182,8 @@ func (u *BrandUsecase) Update(
 	patch branddom.BrandPatch,
 ) (branddom.Brand, error) {
 	if id == "" {
-		return branddom.Brand{}, branddom.ErrInvalidID
+		return branddom.Brand{},
+			branddom.ErrInvalidID
 	}
 
 	if cid := CompanyIDFromContext(ctx); cid != "" {
@@ -149,7 +198,10 @@ func (u *BrandUsecase) Update(
 	return u.brandRepo.Update(ctx, id, patch)
 }
 
-func (u *BrandUsecase) Delete(ctx context.Context, id string) error {
+func (u *BrandUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if id == "" {
 		return branddom.ErrInvalidID
 	}

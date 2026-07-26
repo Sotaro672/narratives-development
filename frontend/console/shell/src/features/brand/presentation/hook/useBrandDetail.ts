@@ -21,7 +21,7 @@ import {
   BRAND_IMAGE_ALLOWED_MIME_TYPES,
   type BrandImageTarget,
 } from "../../config/brandImagePolicy.generated";
-import type { BrandPatch } from "../../domain/brand";
+import type { BrandPatch } from "../../../../shared/types/brand";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 

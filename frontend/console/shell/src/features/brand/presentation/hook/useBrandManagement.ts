@@ -1,14 +1,26 @@
 // frontend/console/shell/src/features/brand/presentation/hook/useBrandManagement.ts
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import type { SortOrder } from "../../../../shared/types/common/common";
+import { safeDateLabelJa } from "../../../../shared/util/dateJa";
 
 import type { BrandRow as BrandRowBase } from "../../application/brandService";
 import { listBrands } from "../../application/brandService";
 
-export type SortKey = "registeredAt" | "updatedAt" | null;
-export type StatusFilterValue = "active" | "inactive";
+export type SortKey =
+  | "registeredAt"
+  | "updatedAt"
+  | null;
+
+export type StatusFilterValue =
+  | "active"
+  | "inactive";
 
 export type BrandRow = BrandRowBase & {
   updatedAt: string;
@@ -19,34 +31,53 @@ type ManagerOption = {
   label: string;
 };
 
-const toTs = (yyyyMd: string): number => {
-  if (!yyyyMd) {
+const toTs = (value: string): number => {
+  const normalizedDate = safeDateLabelJa(
+    value,
+    "",
+  );
+
+  if (!normalizedDate) {
     return 0;
   }
 
-  const [year, month, day] = yyyyMd
+  const [year, month, day] = normalizedDate
     .split("/")
-    .map((value) => parseInt(value, 10));
+    .map((part) => parseInt(part, 10));
+
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day)
+  ) {
+    return 0;
+  }
 
   return new Date(
     year,
-    (month || 1) - 1,
-    day || 1,
+    month - 1,
+    day,
   ).getTime();
 };
 
 export function useBrandManagement() {
-  const [baseRows, setBaseRows] = useState<BrandRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  const [isResetting, setIsResetting] = useState(false);
-
-  const [statusFilter, setStatusFilter] = useState<
-    StatusFilterValue[]
+  const [baseRows, setBaseRows] = useState<
+    BrandRow[]
   >([]);
 
-  const [managerFilter, setManagerFilter] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [error, setError] =
+    useState<Error | null>(null);
+
+  const [isResetting, setIsResetting] =
+    useState(false);
+
+  const [statusFilter, setStatusFilter] =
+    useState<StatusFilterValue[]>([]);
+
+  const [managerFilter, setManagerFilter] =
+    useState<string[]>([]);
 
   const [activeKey, setActiveKey] =
     useState<SortKey>("registeredAt");
@@ -54,13 +85,15 @@ export function useBrandManagement() {
   const [direction, setDirection] =
     useState<SortOrder | null>("desc");
 
-  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadKey, setReloadKey] =
+    useState(0);
 
-  const [managerOptions, setManagerOptions] = useState<
-    ManagerOption[]
-  >([]);
+  const [managerOptions, setManagerOptions] =
+    useState<ManagerOption[]>([]);
 
-  const statusBadgeClass = (isActive: boolean): string =>
+  const statusBadgeClass = (
+    isActive: boolean,
+  ): string =>
     `brand-status-badge ${
       isActive ? "is-active" : "is-inactive"
     }`;
@@ -76,23 +109,27 @@ export function useBrandManagement() {
 
         const rawRows = await listBrands();
 
-        const rows: BrandRow[] = (
-          rawRows as (BrandRowBase & {
-            updatedAt?: string;
-          })[]
-        ).map((brand) => {
-          const rawUpdatedAt = brand.updatedAt ?? "";
+        const rows: BrandRow[] = rawRows.map(
+          (brand) => {
+            const registeredAt =
+              safeDateLabelJa(
+                brand.registeredAt,
+                "",
+              );
 
-          const updatedAt =
-            rawUpdatedAt !== ""
-              ? rawUpdatedAt
-              : brand.registeredAt ?? "";
+            const updatedAt =
+              safeDateLabelJa(
+                brand.updatedAt,
+                registeredAt,
+              );
 
-          return {
-            ...brand,
-            updatedAt,
-          };
-        });
+            return {
+              ...brand,
+              registeredAt,
+              updatedAt,
+            };
+          },
+        );
 
         if (!cancelled) {
           setBaseRows(rows);
@@ -128,19 +165,27 @@ export function useBrandManagement() {
     const options: ManagerOption[] = [];
 
     for (const brand of baseRows) {
-      const managerId = brand.managerId ?? "";
+      const managerId =
+        brand.managerId ?? "";
 
-      if (!managerId || seen.has(managerId)) {
+      if (
+        !managerId ||
+        seen.has(managerId)
+      ) {
         continue;
       }
 
       seen.add(managerId);
 
-      const memberName = brand.memberName ?? "";
+      const memberName =
+        brand.memberName ?? "";
 
       options.push({
         value: managerId,
-        label: memberName !== "" ? memberName : managerId,
+        label:
+          memberName !== ""
+            ? memberName
+            : managerId,
       });
     }
 
@@ -151,42 +196,68 @@ export function useBrandManagement() {
     const values = Array.from(
       new Set<StatusFilterValue>(
         baseRows.map((brand) =>
-          brand.isActive ? "active" : "inactive",
+          brand.isActive
+            ? "active"
+            : "inactive",
         ),
       ),
     );
 
     return values.map((value) => ({
       value,
-      label: value === "active" ? "アクティブ" : "停止",
+      label:
+        value === "active"
+          ? "アクティブ"
+          : "停止",
     }));
   }, [baseRows]);
 
   const rows = useMemo(() => {
-    let filteredRows = baseRows.filter((brand) => {
-      const statusValue: StatusFilterValue =
-        brand.isActive ? "active" : "inactive";
+    let filteredRows = baseRows.filter(
+      (brand) => {
+        const statusValue:
+          StatusFilterValue =
+          brand.isActive
+            ? "active"
+            : "inactive";
 
-      const statusMatches =
-        statusFilter.length === 0 ||
-        statusFilter.includes(statusValue);
+        const statusMatches =
+          statusFilter.length === 0 ||
+          statusFilter.includes(
+            statusValue,
+          );
 
-      const managerId = brand.managerId ?? "";
+        const managerId =
+          brand.managerId ?? "";
 
-      const managerMatches =
-        managerFilter.length === 0 ||
-        (
-          managerId !== "" &&
-          managerFilter.includes(managerId)
+        const managerMatches =
+          managerFilter.length === 0 ||
+          (
+            managerId !== "" &&
+            managerFilter.includes(
+              managerId,
+            )
+          );
+
+        return (
+          statusMatches &&
+          managerMatches
         );
-
-      return statusMatches && managerMatches;
-    });
+      },
+    );
 
     if (activeKey && direction) {
-      filteredRows = [...filteredRows].sort(
-        (firstBrand, secondBrand) => {
-          if (activeKey === "registeredAt") {
+      filteredRows = [
+        ...filteredRows,
+      ].sort(
+        (
+          firstBrand,
+          secondBrand,
+        ) => {
+          if (
+            activeKey ===
+            "registeredAt"
+          ) {
             const firstValue = toTs(
               firstBrand.registeredAt,
             );
@@ -200,7 +271,9 @@ export function useBrandManagement() {
               : secondValue - firstValue;
           }
 
-          if (activeKey === "updatedAt") {
+          if (
+            activeKey === "updatedAt"
+          ) {
             const firstValue = toTs(
               firstBrand.updatedAt,
             );
@@ -233,7 +306,10 @@ export function useBrandManagement() {
     setManagerFilter([]);
     setActiveKey("registeredAt");
     setDirection("desc");
-    setReloadKey((current) => current + 1);
+
+    setReloadKey(
+      (current) => current + 1,
+    );
   }, []);
 
   return {
