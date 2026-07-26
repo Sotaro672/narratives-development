@@ -36,6 +36,13 @@ export default function BrandDetail() {
     saving,
     error,
 
+    managerCandidates,
+    loadingMembers,
+    memberError,
+
+    editingManagerName,
+    handleSelectManager,
+
     brandImageAccept,
 
     brandIconInputRef,
@@ -60,7 +67,8 @@ export default function BrandDetail() {
     handleClearBrandBackground,
   } = useBrandDetail();
 
-  const canEditImage = isEditing && !saving;
+  const canEditImage =
+    isEditing && !saving;
 
   const hero = (
     <Card>
@@ -69,7 +77,7 @@ export default function BrandDetail() {
           <div className="py-6 text-left text-sm text-muted-foreground">
             読み込み中...
           </div>
-        ) : error ? (
+        ) : error && !isEditing ? (
           <div className="py-6 text-left text-sm text-red-600 whitespace-pre-wrap">
             {error.message}
           </div>
@@ -78,7 +86,9 @@ export default function BrandDetail() {
             <div className="brand-hero__cover">
               {brandBackgroundPreviewUrl ? (
                 <img
-                  src={brandBackgroundPreviewUrl}
+                  src={
+                    brandBackgroundPreviewUrl
+                  }
                   alt="ブランド背景画像"
                   className="brand-hero__cover-image"
                   onClick={
@@ -118,10 +128,14 @@ export default function BrandDetail() {
 
               {isEditing && (
                 <input
-                  ref={brandBackgroundInputRef}
+                  ref={
+                    brandBackgroundInputRef
+                  }
                   type="file"
                   accept={brandImageAccept}
-                  style={{ display: "none" }}
+                  style={{
+                    display: "none",
+                  }}
                   onChange={
                     handleBrandBackgroundChange
                   }
@@ -163,7 +177,9 @@ export default function BrandDetail() {
 
                 {brandBackgroundImageError && (
                   <p className="mt-2 text-xs text-red-500">
-                    {brandBackgroundImageError}
+                    {
+                      brandBackgroundImageError
+                    }
                   </p>
                 )}
               </>
@@ -174,7 +190,9 @@ export default function BrandDetail() {
                 <div className="brand-hero__avatar">
                   {brandIconPreviewUrl ? (
                     <img
-                      src={brandIconPreviewUrl}
+                      src={
+                        brandIconPreviewUrl
+                      }
                       alt="ブランドアイコン"
                       className="brand-hero__avatar-image"
                       onClick={
@@ -217,7 +235,9 @@ export default function BrandDetail() {
                       ref={brandIconInputRef}
                       type="file"
                       accept={brandImageAccept}
-                      style={{ display: "none" }}
+                      style={{
+                        display: "none",
+                      }}
                       onChange={
                         handleBrandIconChange
                       }
@@ -276,8 +296,10 @@ export default function BrandDetail() {
                 </div>
 
                 <div className="brand-hero__sub">
-                  {brand.managerName ||
-                    "責任者未設定"}
+                  {isEditing
+                    ? editingManagerName
+                    : brand.managerName ||
+                      "責任者未設定"}
                 </div>
 
                 <div className="brand-hero__sub">
@@ -301,7 +323,9 @@ export default function BrandDetail() {
 
       <Card>
         <CardHeader>
-          <CardTitle>基本情報</CardTitle>
+          <CardTitle>
+            基本情報
+          </CardTitle>
         </CardHeader>
 
         <CardContent>
@@ -309,12 +333,14 @@ export default function BrandDetail() {
             <div className="text-left text-sm text-muted-foreground">
               読み込み中...
             </div>
-          ) : error ? (
-            <div className="text-left text-sm text-red-600 whitespace-pre-wrap">
-              {error.message}
-            </div>
           ) : (
             <>
+              {error && isEditing && (
+                <div className="mb-4 text-left text-sm text-red-600 whitespace-pre-wrap">
+                  {error.message}
+                </div>
+              )}
+
               <CardLabel htmlFor="brand-name">
                 ブランド名
               </CardLabel>
@@ -332,7 +358,8 @@ export default function BrandDetail() {
                     setDraft(
                       (currentDraft) => ({
                         ...currentDraft,
-                        name: event.target.value,
+                        name:
+                          event.target.value,
                       }),
                     )
                   }
@@ -353,7 +380,9 @@ export default function BrandDetail() {
               ) : (
                 <textarea
                   id="brand-description"
-                  value={draft.description}
+                  value={
+                    draft.description
+                  }
                   placeholder="説明"
                   onChange={(event) =>
                     setDraft(
@@ -412,11 +441,35 @@ export default function BrandDetail() {
   const right = (
     <div className="space-y-4">
       <ManagerCard
-        managerName={brand.managerName}
-        managerId={brand.managerId}
-        registeredAt={brand.registeredAt}
+        managerName={
+          isEditing
+            ? editingManagerName
+            : brand.managerName
+        }
+        managerId={
+          isEditing
+            ? draft.managerId
+            : brand.managerId
+        }
+        managerCandidates={
+          managerCandidates
+        }
+        loadingMembers={
+          loadingMembers
+        }
+        memberError={memberError}
+        onSelectManager={
+          handleSelectManager
+        }
+        registeredAt={
+          brand.registeredAt
+        }
         updatedAt={brand.updatedAt}
-        mode={isEditing ? "edit" : "view"}
+        mode={
+          isEditing
+            ? "edit"
+            : "view"
+        }
       />
     </div>
   );
@@ -424,7 +477,10 @@ export default function BrandDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title={brand.name || "ブランド詳細"}
+      title={
+        brand.name ||
+        "ブランド詳細"
+      }
       onBack={handleBack}
       onEdit={
         !isEditing && !loading

@@ -12,11 +12,10 @@ const currentDir = path.dirname(currentFile);
 //
 // consoleRootDir:
 // frontend/console
-//
-// frontendRootDir:
-// frontend
-const consoleRootDir = path.resolve(currentDir, "..");
-const frontendRootDir = path.resolve(currentDir, "../..");
+const consoleRootDir = path.resolve(
+  currentDir,
+  "..",
+);
 
 const policyPath = path.join(
   consoleRootDir,
@@ -29,16 +28,19 @@ const frontendOutputPath = path.join(
 );
 
 const storageRulesTemplatePath = path.join(
-  frontendRootDir,
+  consoleRootDir,
   "storage.rules.template",
 );
 
 const storageRulesOutputPath = path.join(
-  frontendRootDir,
+  consoleRootDir,
   "storage.rules",
 );
 
-function ensureFileExists(filePath, label) {
+function ensureFileExists(
+  filePath,
+  label,
+) {
   if (!fs.existsSync(filePath)) {
     throw new Error(
       `${label} が見つかりません。\n` +
@@ -68,18 +70,24 @@ try {
   policy = JSON.parse(policyText);
 } catch (error) {
   throw new Error(
-    `brandImagePolicy.jsonのJSON形式が不正です。\n` +
-      `${error instanceof Error ? error.message : String(error)}`,
+    "brandImagePolicy.jsonのJSON形式が不正です。\n" +
+      `${
+        error instanceof Error
+          ? error.message
+          : String(error)
+      }`,
   );
 }
 
-const allowedMimeTypes = policy.allowedMimeTypes;
+const allowedMimeTypes =
+  policy.allowedMimeTypes;
 
 const iconMaxBytes =
   policy.targets?.brandIcon?.maxBytes;
 
 const backgroundMaxBytes =
-  policy.targets?.brandBackgroundImage?.maxBytes;
+  policy.targets?.brandBackgroundImage
+    ?.maxBytes;
 
 if (
   !Array.isArray(allowedMimeTypes) ||
@@ -164,8 +172,12 @@ const requiredPlaceholders = [
   "__BRAND_BACKGROUND_MAX_BYTES__",
 ];
 
-for (const placeholder of requiredPlaceholders) {
-  if (!rulesTemplate.includes(placeholder)) {
+for (
+  const placeholder of requiredPlaceholders
+) {
+  if (
+    !rulesTemplate.includes(placeholder)
+  ) {
     throw new Error(
       `storage.rules.templateに${placeholder}がありません。`,
     );
@@ -186,21 +198,28 @@ const storageRules = rulesTemplate
     String(backgroundMaxBytes),
   );
 
-fs.mkdirSync(
-  path.dirname(storageRulesOutputPath),
-  {
-    recursive: true,
-  },
-);
-
 fs.writeFileSync(
   storageRulesOutputPath,
   storageRules,
   "utf8",
 );
 
-console.log("Brand image policy files generated.");
-console.log(`Policy: ${policyPath}`);
-console.log(`Frontend: ${frontendOutputPath}`);
-console.log(`Storage Rules Template: ${storageRulesTemplatePath}`);
-console.log(`Storage Rules: ${storageRulesOutputPath}`);
+console.log(
+  "Brand image policy files generated.",
+);
+
+console.log(
+  `Policy: ${policyPath}`,
+);
+
+console.log(
+  `Frontend: ${frontendOutputPath}`,
+);
+
+console.log(
+  `Storage Rules Template: ${storageRulesTemplatePath}`,
+);
+
+console.log(
+  `Storage Rules: ${storageRulesOutputPath}`,
+);

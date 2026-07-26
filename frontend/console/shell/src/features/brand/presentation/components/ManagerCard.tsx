@@ -1,4 +1,4 @@
-// frontend\console\brand\presentation\components\ManagerCard.tsx
+// frontend/console/shell/src/features/brand/presentation/components/ManagerCard.tsx
 
 import * as React from "react";
 
@@ -32,9 +32,8 @@ export type ManagerCardProps = {
 
   managerCandidates?: ManagerCandidate[];
   loadingMembers?: boolean;
+  memberError?: string | null;
 
-  openManagerPopover?: boolean;
-  setOpenManagerPopover?: (v: boolean) => void;
   onSelectManager?: (id: string) => void;
 
   registeredAt?: string | null;
@@ -43,7 +42,6 @@ export type ManagerCardProps = {
   onEditManager?: () => void;
   onClickManager?: () => void;
 
-  /** 表示モード（編集 or 閲覧） */
   mode?: "edit" | "view";
 };
 
@@ -55,9 +53,8 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
 
   managerCandidates,
   loadingMembers,
+  memberError,
 
-  openManagerPopover,
-  setOpenManagerPopover,
   onSelectManager,
 
   registeredAt,
@@ -77,48 +74,43 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
 
   const effectiveLoading = Boolean(loadingMembers);
 
-  const effectiveOpen =
-    typeof openManagerPopover === "boolean" ? openManagerPopover : false;
-
-  const effectiveSetOpen = setOpenManagerPopover;
-
   const handleTriggerClick = () => {
-    if (!isEdit) return;
+    if (!isEdit) {
+      return;
+    }
 
     onClickManager?.();
     onEditManager?.();
-
-    if (typeof effectiveOpen === "boolean" && effectiveSetOpen) {
-      effectiveSetOpen(!effectiveOpen);
-    }
   };
 
   const handleSelect = (id: string) => {
-    if (!isEdit) return;
+    if (!isEdit) {
+      return;
+    }
+
     onSelectManager?.(id);
   };
 
   return (
     <Card className="admin-card">
       <CardHeader className="admin-card__header">
-        <CardTitle className="admin-card__title">{title}</CardTitle>
+        <CardTitle className="admin-card__title">
+          {title}
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="admin-card__body space-y-4">
-        {/* 責任者 */}
         <div className="admin-card__section">
-          <div className="admin-card__label text-xs text-slate-500 mb-1">
+          <div className="admin-card__label mb-1 text-xs text-slate-500">
             責任者
           </div>
 
-          {/* view */}
           {!isEdit && (
-            <div className="text-sm text-slate-800 py-1">
-              {effectiveManagerName || "未設定"}
+            <div className="py-1 text-sm text-slate-800">
+              {effectiveManagerName}
             </div>
           )}
 
-          {/* edit */}
           {isEdit && (
             <Popover>
               <PopoverTrigger>
@@ -126,41 +118,63 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="w-full justify-between admin-card__assignee-btn"
+                  className="admin-card__assignee-btn w-full justify-between"
                   onClick={handleTriggerClick}
                 >
-                  <span>{effectiveManagerName || "未設定"}</span>
-                  <span className="text-[11px] text-slate-400" />
+                  <span>{effectiveManagerName}</span>
+
+                  <span className="text-[11px] text-slate-400">
+                    選択
+                  </span>
                 </Button>
               </PopoverTrigger>
 
-              <PopoverContent className="p-2 space-y-1 admin-card__popover">
+              <PopoverContent className="admin-card__popover space-y-1 p-2">
                 {effectiveLoading && (
                   <p className="text-xs text-slate-400">
                     責任者を読み込み中です…
                   </p>
                 )}
 
+                {!effectiveLoading && memberError && (
+                  <p className="whitespace-pre-wrap text-xs text-red-500">
+                    {memberError}
+                  </p>
+                )}
+
                 {!effectiveLoading &&
-                  effectiveCandidates &&
+                  !memberError &&
                   effectiveCandidates.length > 0 && (
                     <div className="space-y-1">
-                      {effectiveCandidates.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className="block w-full text-left px-2 py-1 rounded hover:bg-slate-100 text-sm"
-                          onClick={() => handleSelect(c.id)}
-                        >
-                          {c.name}
-                        </button>
-                      ))}
+                      {effectiveCandidates.map((candidate) => {
+                        const isSelected =
+                          candidate.id === managerId;
+
+                        return (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            className={[
+                              "block w-full rounded px-2 py-1 text-left text-sm",
+                              "hover:bg-slate-100",
+                              isSelected
+                                ? "bg-slate-100 font-semibold"
+                                : "",
+                            ].join(" ")}
+                            onClick={() =>
+                              handleSelect(candidate.id)
+                            }
+                          >
+                            {candidate.name}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 
                 {!effectiveLoading &&
-                  (!effectiveCandidates ||
-                    effectiveCandidates.length === 0) && (
+                  !memberError &&
+                  effectiveCandidates.length === 0 && (
                     <p className="text-xs text-slate-400">
                       責任者候補がありません。
                     </p>
@@ -170,11 +184,15 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
           )}
         </div>
 
-        {/* 登録 / 更新（AdminCard と同じ “情報ブロック” 形式） */}
         {(registeredAt || updatedAt) && (
           <div className="admin-card__section space-y-1 text-xs text-slate-500">
-            {registeredAt && <div>登録日: {registeredAt}</div>}
-            {updatedAt && <div>更新日: {updatedAt}</div>}
+            {registeredAt && (
+              <div>登録日: {registeredAt}</div>
+            )}
+
+            {updatedAt && (
+              <div>更新日: {updatedAt}</div>
+            )}
           </div>
         )}
       </CardContent>

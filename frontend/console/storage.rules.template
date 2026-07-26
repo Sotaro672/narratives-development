@@ -6,36 +6,37 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function memberUIDDocument() {
-      return firestore.get(
+    function belongsToCompany(companyId) {
+      let memberUIDDocument = firestore.get(
         /databases/(default)/documents/memberUIDs/$(request.auth.uid)
       );
-    }
 
-    function belongsToCompany(companyId) {
+      let memberDocument = firestore.get(
+        /databases/(default)/documents/members/$(memberUIDDocument.data.memberId)
+      );
+
       return isSignedIn()
-        && memberUIDDocument().data.companyId is string
-        && memberUIDDocument().data.companyId == companyId;
+        && memberUIDDocument.data.memberId is string
+        && memberDocument.data.companyId is string
+        && memberDocument.data.companyId == companyId;
     }
 
     function isAllowedMimeType() {
       return request.resource.contentType is string
         && (
-          request.resource.contentType == 'image/jpeg'
-          || request.resource.contentType == 'image/png'
-          || request.resource.contentType == 'image/webp'
+          __ALLOWED_MIME_CONDITION__
         );
     }
 
     function isValidBrandIcon() {
       return request.resource != null
-        && request.resource.size <= 2097152
+        && request.resource.size <= __BRAND_ICON_MAX_BYTES__
         && isAllowedMimeType();
     }
 
     function isValidBrandBackgroundImage() {
       return request.resource != null
-        && request.resource.size <= 5242880
+        && request.resource.size <= __BRAND_BACKGROUND_MAX_BYTES__
         && isAllowedMimeType();
     }
 
