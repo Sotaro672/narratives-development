@@ -1,4 +1,5 @@
 // frontend/console/shell/src/auth/presentation/hook/useCurrentMember.ts
+
 /// <reference types="vite/client" />
 
 import { useEffect, useMemo, useState } from "react";
@@ -10,10 +11,42 @@ import {
   clearCompanyNameCache,
 } from "../../application/companyService";
 
-import { fetchCurrentMember } from "../../application/memberService";
+import {
+  getCurrentMember,
+  type CurrentMemberResponse,
+} from "../../application/authService";
 
 // Domain 型
 import type { MemberDTO } from "../../domain/entity/member";
+
+function mapCurrentMemberResponse(
+  member: CurrentMemberResponse | null,
+): MemberDTO | null {
+  if (!member) {
+    return null;
+  }
+
+  const id = String(member.id ?? "").trim();
+  const companyId = String(member.companyId ?? "").trim();
+
+  if (!id || !companyId) {
+    return null;
+  }
+
+  const uid = String(member.uid ?? "").trim();
+
+  return {
+    id,
+    uid: uid || null,
+    firstName: member.firstName ?? null,
+    lastName: member.lastName ?? null,
+    firstNameKana: member.firstNameKana ?? null,
+    lastNameKana: member.lastNameKana ?? null,
+    email: member.email ?? null,
+    companyId,
+    displayName: member.displayName ?? null,
+  };
+}
 
 /**
  * useAuth:
@@ -22,7 +55,7 @@ import type { MemberDTO } from "../../domain/entity/member";
  * - backend から companyName を取得
  */
 export function useAuth() {
-  const ctx = useAuthContext(); // { user, loading }
+  const ctx = useAuthContext();
 
   const uid = ctx.user?.uid ?? "";
   const companyIdFromCtx = ctx.user?.companyId?.trim() ?? "";
@@ -59,18 +92,28 @@ export function useAuth() {
 
       try {
         const name = await getCompanyNameByIdCached(effectiveCompanyId);
-        if (!disposed) setCompanyName(name);
-      } catch (e: any) {
+
+        if (!disposed) {
+          setCompanyName(name);
+        }
+      } catch (error: unknown) {
         if (!disposed) {
           setCompanyName(null);
-          setCompanyError(e?.message ?? "failed to fetch company name");
+          setCompanyError(
+            error instanceof Error
+              ? error.message
+              : "failed to fetch company name",
+          );
         }
       } finally {
-        if (!disposed) setLoadingCompanyName(false);
+        if (!disposed) {
+          setLoadingCompanyName(false);
+        }
       }
     }
 
-    run();
+    void run();
+
     return () => {
       disposed = true;
     };
@@ -78,6 +121,7 @@ export function useAuth() {
 
   // -------------------------------
   // Fetch currentMember
+  //   - bootstrap 完了前の取得失敗を考慮して再試行
   // -------------------------------
   useEffect(() => {
     let disposed = false;
@@ -86,26 +130,54 @@ export function useAuth() {
       if (!uid) {
         setCurrentMember(null);
         setMemberError(null);
+        setLoadingMember(false);
         return;
       }
 
+      setCurrentMember(null);
       setLoadingMember(true);
       setMemberError(null);
 
       try {
-        const m = await fetchCurrentMember();
-        if (!disposed) setCurrentMember(m);
-      } catch (e: any) {
+        const response = await getCurrentMember({
+          retries: 8,
+          retryDelayMs: 250,
+        });
+
+        if (disposed) {
+          return;
+        }
+
+        const member = mapCurrentMemberResponse(response);
+
+        if (!member) {
+          setCurrentMember(null);
+          setMemberError(
+            "ログインユーザーの会社情報を確認できませんでした。",
+          );
+          return;
+        }
+
+        setCurrentMember(member);
+        setMemberError(null);
+      } catch (error: unknown) {
         if (!disposed) {
           setCurrentMember(null);
-          setMemberError(e?.message ?? "failed to fetch member");
+          setMemberError(
+            error instanceof Error
+              ? error.message
+              : "failed to fetch member",
+          );
         }
       } finally {
-        if (!disposed) setLoadingMember(false);
+        if (!disposed) {
+          setLoadingMember(false);
+        }
       }
     }
 
     void loadMember();
+
     return () => {
       disposed = true;
     };

@@ -1,4 +1,5 @@
 // frontend/console/shell/src/app/App.tsx
+
 import {
   BrowserRouter,
   Routes,
@@ -6,6 +7,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
+
 import MainPage from "../pages/MainPage";
 import AuthPage from "../pages/AuthPage";
 import InvitationPage from "../pages/InvitationPage";
@@ -16,29 +18,58 @@ function InvitationRoute() {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const token = searchParams.get("token");
-  if (!token) return <Navigate to="/" replace />;
+
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
+
   return <InvitationPage />;
 }
 
 function RootContent() {
-  const { user, loading } = useAuth();
+  const {
+    user,
+    loading,
+    currentMember,
+    loadingMember,
+    memberError,
+  } = useAuth();
+
   const location = useLocation();
 
   if (loading) {
-    return <div style={{ padding: 24 }}>認証状態を確認しています...</div>;
+    return (
+      <div style={{ padding: 24 }}>
+        認証状態を確認しています...
+      </div>
+    );
   }
 
   return (
     <Routes>
       <Route path="/invitation" element={<InvitationRoute />} />
+
       <Route
         path="/*"
         element={
-          user ? (
-            // ルート遷移のたびに MainPage/Header を必ず build し直す
-            <MainPage key={location.key} />
-          ) : (
+          !user ? (
             <AuthPage />
+          ) : loadingMember ? (
+            <div style={{ padding: 24 }}>
+              会社情報を準備しています...
+            </div>
+          ) : memberError ? (
+            <div style={{ padding: 24 }}>
+              {memberError}
+            </div>
+          ) : !currentMember?.companyId ? (
+            <div style={{ padding: 24 }}>
+              会社情報を確認しています...
+            </div>
+          ) : (
+            // 会社情報の取得完了後にのみMainPageを構築する
+            // ルート遷移のたびにMainPage/Headerを必ず構築し直す
+            <MainPage key={location.key} />
           )
         }
       />
