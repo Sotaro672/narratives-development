@@ -275,9 +275,6 @@ func Register(mux *http.ServeMux, deps Deps, auth func(http.Handler) http.Handle
 	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
 
-	handleSafeAuthAvatar(mux, "/mall/me/brands", deps.Brand, "Brand(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/brands/", deps.Brand, "Brand(me)", auth, avatar)
-
 	// me avatar
 	handleSafeAuthAvatar(mux, "/mall/me/avatars", deps.MeAvatar, "MeAvatar", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/avatars/", deps.MeAvatar, "MeAvatar", auth, avatar)

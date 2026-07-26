@@ -4,7 +4,7 @@
 //   - 実際のHTTP / Firestoreなどの呼び出しを集約
 // ======================================================================
 
-import type { Brand } from "../../../brand/domain/entity/brand";
+import type { Brand } from "../../../brand/domain/brand";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import type { Member } from "../../../member/domain/entity/member";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";

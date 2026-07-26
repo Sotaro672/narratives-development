@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/brand/application/brandService.ts
 /// <reference types="vite/client" />
 
-import type { Brand } from "../domain/entity/brand";
+import type { Brand } from "../../../shared/types/brand";
 import { brandRepositoryHTTP } from "../infrastructure/http/brandRepositoryHTTP";
 import { safeDateLabelJa } from "../../../shared/util/dateJa";
 

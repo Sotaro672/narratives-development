@@ -1,3 +1,4 @@
+//frontend\console\shell\src\features\brand\application\brandImageValidation.ts
 import {
   BRAND_IMAGE_ALLOWED_MIME_TYPES,
   BRAND_IMAGE_MAX_BYTES,

@@ -1,6 +1,6 @@
 // frontend\console\shell\src\features\brand\infrastructure\http\brandRepositoryHTTP.ts
 
-import type { Brand, BrandPatch } from "../../domain/entity/brand";
+import type { Brand, BrandPatch } from "../../domain/brand";
 import { getConsoleApiBase } from "../../../../shared/http/apiBase";
 import {
   getAuthHeadersOrThrow,

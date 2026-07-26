@@ -12,7 +12,7 @@ import type {
 } from "../../../../shared/types/permission";
 
 // Brand ドメイン型
-import type { Brand } from "../../../brand/domain/entity/brand";
+import type { Brand } from "../../../brand/domain/brand";
 
 // アプリケーションサービス（API 呼び出しロジックなど）
 import {

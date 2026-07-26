@@ -29,7 +29,7 @@ import {
 } from "../create/mappers";
 
 // 型（既存）
-import type { Brand } from "../../../brand/domain/entity/brand";
+import type { Brand } from "../../../brand/domain/brand";
 import type { Member } from "../../../member/domain/entity/member";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";

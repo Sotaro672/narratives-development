@@ -20,7 +20,7 @@ import type {
 import { PermissionRepositoryHTTP } from "../../permission/infrastructure/http/permissionRepositoryHTTP";
 
 // Brand Domain
-import type { Brand } from "../../brand/domain/entity/brand";
+import type { Brand } from "../../brand/domain/brand";
 import { BrandRepositoryHTTP } from "../../brand/infrastructure/http/brandRepositoryHTTP";
 
 // Member Repository（HTTP 層）

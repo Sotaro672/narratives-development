@@ -1,12 +1,16 @@
-// frontend/shell/src/shared/types/brand.ts
+// frontend/console/shell/src/shared/types/brand.ts
 
 /**
  * Brand
- * backend/internal/domain/brand/entity.go に対応する共通型。
+ * backend/internal/adapters/in/http/console/handler/brand_handler.go の
+ * brandDTO に対応する共通型。
  *
- * - 日付は ISO8601 文字列
- * - status は持たず isActive のみを使用
- * - managerId, websiteUrl など一部は任意
+ * Brand 型はこのファイルのみを正規定義とし、
+ * features/brand や auth 配下では再定義しない。
+ *
+ * - 日付は ISO 8601 文字列として扱う
+ * - status は持たず isActive を使用する
+ * - memberName は一覧・詳細表示用の派生値
  */
 export interface Brand {
   id: string;
@@ -15,16 +19,25 @@ export interface Brand {
   name: string;
   description: string;
 
-  /** 公式サイトURL。空文字 or undefined は未設定扱い */
+  /** 公式WebサイトURL。未設定の場合は空文字または undefined */
   websiteUrl?: string;
 
-  /** 有効フラグ（status 代替） */
+  /** ブランドアイコン画像のURL。未設定の場合は空文字または undefined */
+  brandIcon?: string;
+
+  /** ブランド背景画像のURL。未設定の場合は空文字または undefined */
+  brandBackgroundImage?: string;
+
+  /** ブランドの有効状態 */
   isActive: boolean;
 
-  /** ブランド責任者 Member ID（任意） */
+  /** ブランド責任者のMember ID */
   managerId?: string | null;
 
-  /** ブロックチェーン上のウォレットアドレス（必須） */
+  /** ブランド責任者の表示名。APIレスポンス表示用 */
+  memberName?: string | null;
+
+  /** ブロックチェーン上のウォレットアドレス */
   walletAddress: string;
 
   /** 作成情報 */
@@ -42,52 +55,94 @@ export interface Brand {
 
 /**
  * BrandPatch
- * 部分更新用（backend の BrandPatch に対応）
- * - undefined: 変更なし
- * - null: クリア（API仕様による）
+ * PATCH /brands/{id} のリクエストボディに対応する部分更新型。
+ *
+ * - undefined: リクエストへ含めず、現在値を変更しない
+ * - null: API側で許可されている項目のみクリア値として扱う
+ * - memberName は表示用の派生値なので更新対象に含めない
  */
 export interface BrandPatch {
-  companyId?: string | null;
   name?: string | null;
   description?: string | null;
   websiteUrl?: string | null;
+  brandIcon?: string | null;
+  brandBackgroundImage?: string | null;
   isActive?: boolean | null;
   managerId?: string | null;
-  walletAddress?: string | null;
-
-  createdBy?: string | null;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
 }
 
-/**
- * 共通ユーティリティ
- */
+/** URL形式かどうかを簡易確認する。空値は未設定として許可する。 */
+export function isValidUrl(value?: string | null): boolean {
+  if (value === undefined || value === null || value === "") {
+    return true;
+  }
 
-/** URL形式かどうか簡易チェック */
-export function isValidUrl(value?: string): boolean {
-  if (!value || !value.trim()) return true;
   try {
-    const u = new URL(value);
-    return Boolean(u.protocol && u.host);
+    const url = new URL(value);
+    return Boolean(url.protocol && url.host);
   } catch {
     return false;
   }
 }
 
-/** フロント側簡易バリデーション */
-export function validateBrand(b: Brand): string[] {
+/**
+ * Brandのフロントエンド側簡易バリデーション。
+ * trimによる補正は行わず、入力値をそのまま判定する。
+ */
+export function validateBrand(brand: Brand): string[] {
   const errors: string[] = [];
 
-  if (!b.name?.trim()) errors.push("ブランド名は必須です");
-  if (!b.description?.trim()) errors.push("ブランド説明は必須です");
-  if (!b.walletAddress?.trim()) errors.push("ウォレットアドレスは必須です");
+  if (!brand.id) {
+    errors.push("id is required");
+  }
 
-  if (b.websiteUrl && !isValidUrl(b.websiteUrl)) {
-    errors.push("有効なURLを入力してください");
+  if (!brand.companyId) {
+    errors.push("companyId is required");
+  }
+
+  if (!brand.name) {
+    errors.push("name is required");
+  }
+
+  if (!brand.description) {
+    errors.push("description is required");
+  }
+
+  if (!brand.walletAddress) {
+    errors.push("walletAddress is required");
+  }
+
+  if (!isValidUrl(brand.websiteUrl)) {
+    errors.push("websiteUrl must be a valid URL");
   }
 
   return errors;
+}
+
+/** Brandを有効化した新しいオブジェクトを返す。 */
+export function activateBrand(
+  brand: Brand,
+  updatedAt: string,
+  updatedBy?: string | null,
+): Brand {
+  return {
+    ...brand,
+    isActive: true,
+    updatedAt,
+    updatedBy: updatedBy ?? brand.updatedBy ?? null,
+  };
+}
+
+/** Brandを無効化した新しいオブジェクトを返す。 */
+export function deactivateBrand(
+  brand: Brand,
+  updatedAt: string,
+  updatedBy?: string | null,
+): Brand {
+  return {
+    ...brand,
+    isActive: false,
+    updatedAt,
+    updatedBy: updatedBy ?? brand.updatedBy ?? null,
+  };
 }

@@ -16,7 +16,7 @@ import type { Member } from "../../../member/domain/entity/member";
 import type { MemberFilter } from "../../../member/domain/repository/memberRepository";
 import { MemberRepositoryHTTP } from "../../../member/infrastructure/http/memberRepositoryHTTP";
 
-import type { Brand } from "../../domain/entity/brand";
+import type { Brand } from "../../../../shared/types/brand";
 import { validateBrandImage } from "../../application/brandImageValidation";
 import {
   BRAND_IMAGE_ALLOWED_MIME_TYPES,
