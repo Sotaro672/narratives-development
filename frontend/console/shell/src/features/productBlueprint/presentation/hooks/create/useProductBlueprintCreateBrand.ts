@@ -1,14 +1,18 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreateBrand.ts
+// frontend/console/shell/src/features/productBlueprint/presentation/hooks/useProductBlueprintCreateBrand.ts
 
 import * as React from "react";
 
-import type { Brand } from "../../../../brand/domain/entity/brand";
-import { fetchAllBrandsForCompany } from "../../../../brand/infrastructure/query/brandQuery";
+import { listBrands } from "../../../../brand/application/brandService";
+
+export type BrandOption = {
+  id: string;
+  name: string;
+};
 
 export type UseProductBlueprintCreateBrandResult = {
   brandId: string;
   brandName: string;
-  brandOptions: Brand[];
+  brandOptions: BrandOption[];
   brandLoading: boolean;
   brandError: Error | null;
   onChangeBrandId: (id: string) => void;
@@ -18,33 +22,66 @@ export function useProductBlueprintCreateBrand(
   companyId: string,
 ): UseProductBlueprintCreateBrandResult {
   const [brandId, setBrandId] = React.useState("");
-  const [brandOptions, setBrandOptions] = React.useState<Brand[]>([]);
-  const [brandLoading, setBrandLoading] = React.useState(false);
-  const [brandError, setBrandError] = React.useState<Error | null>(null);
+  const [brandOptions, setBrandOptions] = React.useState<
+    BrandOption[]
+  >([]);
+  const [brandLoading, setBrandLoading] =
+    React.useState(false);
+  const [brandError, setBrandError] =
+    React.useState<Error | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
 
     async function loadBrands() {
       if (!companyId) {
+        setBrandId("");
         setBrandOptions([]);
+        setBrandLoading(false);
+        setBrandError(null);
         return;
       }
 
-      setBrandLoading(true);
-      setBrandError(null);
-
       try {
-        const items = await fetchAllBrandsForCompany(companyId, true);
+        setBrandLoading(true);
+        setBrandError(null);
+
+        const brands = await listBrands();
+
+        const options: BrandOption[] = brands
+          .filter((brand) => brand.isActive)
+          .map((brand) => ({
+            id: brand.id,
+            name: brand.name,
+          }));
 
         if (!cancelled) {
-          setBrandOptions(items);
+          setBrandOptions(options);
+
+          setBrandId((currentBrandId) => {
+            if (
+              currentBrandId &&
+              options.some(
+                (option) =>
+                  option.id === currentBrandId,
+              )
+            ) {
+              return currentBrandId;
+            }
+
+            return "";
+          });
         }
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-
+      } catch (error: unknown) {
         if (!cancelled) {
-          setBrandError(err);
+          const normalizedError =
+            error instanceof Error
+              ? error
+              : new Error(String(error));
+
+          setBrandId("");
+          setBrandOptions([]);
+          setBrandError(normalizedError);
         }
       } finally {
         if (!cancelled) {
@@ -61,9 +98,23 @@ export function useProductBlueprintCreateBrand(
   }, [companyId]);
 
   const brandName = React.useMemo(() => {
-    const found = brandOptions.find((brand) => brand.id === brandId);
-    return found?.name ?? "";
+    if (!brandId) {
+      return "";
+    }
+
+    return (
+      brandOptions.find(
+        (brand) => brand.id === brandId,
+      )?.name ?? ""
+    );
   }, [brandId, brandOptions]);
+
+  const onChangeBrandId = React.useCallback(
+    (id: string) => {
+      setBrandId(id);
+    },
+    [],
+  );
 
   return {
     brandId,
@@ -71,6 +122,6 @@ export function useProductBlueprintCreateBrand(
     brandOptions,
     brandLoading,
     brandError,
-    onChangeBrandId: setBrandId,
+    onChangeBrandId,
   };
 }
