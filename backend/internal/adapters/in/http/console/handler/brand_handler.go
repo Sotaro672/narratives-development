@@ -84,7 +84,7 @@ type brandDTO struct {
 	BrandIcon            string     `json:"brandIcon,omitempty"`
 	BrandBackgroundImage string     `json:"brandBackgroundImage,omitempty"`
 	IsActive             bool       `json:"isActive"`
-	ManagerID            *string    `json:"manager,omitempty"`
+	ManagerID            *string    `json:"managerId,omitempty"`
 	MemberName           string     `json:"memberName"`
 	WalletAddress        string     `json:"walletAddress"`
 	CreatedAt            time.Time  `json:"createdAt"`
@@ -156,7 +156,7 @@ func (h *BrandHandler) create(
 		BrandIcon            string  `json:"brandIcon"`
 		BrandBackgroundImage string  `json:"brandBackgroundImage"`
 		IsActive             *bool   `json:"isActive"`
-		ManagerID            *string `json:"manager"`
+		ManagerID            *string `json:"managerId"`
 		CreatedBy            *string `json:"createdBy"`
 	}
 
@@ -240,11 +240,11 @@ func (h *BrandHandler) create(
 
 	var managerID *string
 	if in.ManagerID != nil {
-		value, err := shared.StrictRequired(*in.ManagerID, "manager")
+		value, err := shared.StrictRequired(*in.ManagerID, "managerId")
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid manager",
+				"error": "invalid managerId",
 			})
 			return
 		}
@@ -331,7 +331,7 @@ func (h *BrandHandler) update(
 		BrandIcon            *string `json:"brandIcon"`
 		BrandBackgroundImage *string `json:"brandBackgroundImage"`
 		IsActive             *bool   `json:"isActive"`
-		ManagerID            *string `json:"manager"`
+		ManagerID            *string `json:"managerId"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -407,11 +407,11 @@ func (h *BrandHandler) update(
 	}
 
 	if in.ManagerID != nil {
-		value, err := shared.StrictRequired(*in.ManagerID, "manager")
+		value, err := shared.StrictRequired(*in.ManagerID, "managerId")
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid manager",
+				"error": "invalid managerId",
 			})
 			return
 		}
