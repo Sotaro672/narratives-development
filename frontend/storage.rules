@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function memberUIDDocument() {
+      return firestore.get(
+        /databases/(default)/documents/memberUIDs/$(request.auth.uid)
+      );
+    }
+
+    function belongsToCompany(companyId) {
+      return isSignedIn()
+        && memberUIDDocument().data.companyId is string
+        && memberUIDDocument().data.companyId == companyId;
+    }
+
+    function isAllowedMimeType() {
+      return request.resource.contentType is string
+        && (
+          request.resource.contentType == 'image/jpeg'
+          || request.resource.contentType == 'image/png'
+          || request.resource.contentType == 'image/webp'
+        );
+    }
+
+    function isValidBrandIcon() {
+      return request.resource != null
+        && request.resource.size <= 2097152
+        && isAllowedMimeType();
+    }
+
+    function isValidBrandBackgroundImage() {
+      return request.resource != null
+        && request.resource.size <= 5242880
+        && isAllowedMimeType();
+    }
+
+    match /brands/{companyId}/{brandId}/brandIcon {
+      allow read: if true;
+
+      allow create, update: if belongsToCompany(companyId)
+        && isValidBrandIcon();
+
+      allow delete: if belongsToCompany(companyId);
+    }
+
+    match /brands/{companyId}/{brandId}/brandBackgroundImage {
+      allow read: if true;
+
+      allow create, update: if belongsToCompany(companyId)
+        && isValidBrandBackgroundImage();
+
+      allow delete: if belongsToCompany(companyId);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

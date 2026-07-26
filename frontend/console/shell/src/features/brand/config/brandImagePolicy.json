@@ -1,0 +1,15 @@
+{
+  "allowedMimeTypes": [
+    "image/jpeg",
+    "image/png",
+    "image/webp"
+  ],
+  "targets": {
+    "brandIcon": {
+      "maxBytes": 2097152
+    },
+    "brandBackgroundImage": {
+      "maxBytes": 5242880
+    }
+  }
+}

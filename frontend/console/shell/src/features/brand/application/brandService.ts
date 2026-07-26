@@ -1,6 +1,7 @@
-// frontend/console/brand/src/application/brandService.ts
+// frontend/console/shell/src/features/brand/application/brandService.ts
 /// <reference types="vite/client" />
 
+import type { Brand } from "../domain/entity/brand";
 import { brandRepositoryHTTP } from "../infrastructure/http/brandRepositoryHTTP";
 import { safeDateLabelJa } from "../../../shared/util/dateJa";
 
@@ -8,68 +9,44 @@ export type BrandRow = {
   id: string;
   name: string;
   isActive: boolean;
-  managerId?: string | null; // memberId
-  memberName?: string; // 「姓 名」
-  registeredAt: string; // YYYY/MM/DD
-  updatedAt: string; // YYYY/MM/DD
+  managerId: string | null;
+  memberName: string;
+  registeredAt: string;
+  updatedAt: string;
 };
 
-// backend から返ってくる Brand の最小形
-type Brand = {
-  id: string;
-  companyId?: string | null;
-  name?: string | null;
-  description?: string | null;
-  websiteUrl?: string | null;
-  brandIcon?: string | null;
-  brandBackgroundImage?: string | null;
-  isActive?: boolean | null;
-
-  // backend DTO は managerId / memberName が来る
-  managerId?: string | null;
-  memberName?: string | null;
-
-  walletAddress?: string | null;
-  createdAt?: string | null;
-  createdBy?: string | null;
-  updatedAt?: string | null;
-  updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-};
-
-// backend brand 名：返答をそのまま受け渡す（trim しない）
-export function formatBrandName(name: string | null | undefined): string {
+// Backendのブランド名をそのまま受け渡す
+export function formatBrandName(
+  name: string | null | undefined,
+): string {
   return name ?? "";
 }
 
 // ===========================
-// companyId のブランド一覧取得
-// - backend 返答をなるべくそのまま使う（trimしない）
-// - 責任者名は backend の memberName をそのまま memberName に入れる
+// ブランド一覧取得
+// - BackendにはpageとperPageのみを送る
+// - Backend側で認証中ユーザーのcompanyIdに絞り込む
+// - 責任者名はmemberNameをそのまま使用する
 // ===========================
-export async function listBrands(companyId: string): Promise<BrandRow[]> {
-  if (!companyId) return [];
-
+export async function listBrands(): Promise<BrandRow[]> {
   const page = await brandRepositoryHTTP.list({
-    filter: {
-      deleted: false,
-      isActive: true,
-    },
-    sort: { column: "created_at", order: "desc" },
     page: 1,
     perPage: 200,
   });
 
-  const brands = (page.items ?? []) as Brand[];
-
-  return brands.map((b) => ({
-    id: b.id,
-    name: formatBrandName(b.name),
-    isActive: !!b.isActive,
-    managerId: b.managerId ?? null,
-    memberName: b.memberName ?? "",
-    registeredAt: safeDateLabelJa(b.createdAt ?? "", ""),
-    updatedAt: safeDateLabelJa(b.updatedAt ?? "", ""),
+  return page.items.map((brand: Brand) => ({
+    id: brand.id,
+    name: formatBrandName(brand.name),
+    isActive: Boolean(brand.isActive),
+    managerId: brand.managerId ?? null,
+    memberName: brand.memberName ?? "",
+    registeredAt: safeDateLabelJa(
+      brand.createdAt ?? "",
+      "",
+    ),
+    updatedAt: safeDateLabelJa(
+      brand.updatedAt ?? "",
+      "",
+    ),
   }));
 }

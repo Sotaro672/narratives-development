@@ -1,63 +1,70 @@
-// frontend/console/brand/src/presentation/hook/useBrandManagement.ts
-import { useMemo, useState, useCallback, useEffect } from "react";
-import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
+// frontend/console/shell/src/features/brand/presentation/hook/useBrandManagement.ts
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import type { SortOrder } from "../../../../shared/types/common/common";
 
 import type { BrandRow as BrandRowBase } from "../../application/brandService";
 import { listBrands } from "../../application/brandService";
 
-// 共通型（SortOrder など）
-import type { SortOrder } from "../../../../shared/types/common/common";
-
 export type SortKey = "registeredAt" | "updatedAt" | null;
 export type StatusFilterValue = "active" | "inactive";
 
-// BrandRow をローカルで拡張して updatedAt を必須にする
 export type BrandRow = BrandRowBase & {
   updatedAt: string;
 };
 
-// フィルタ用オプション型（FilterableTableHeader と互換）
 type ManagerOption = {
   value: string;
   label: string;
 };
 
-const toTs = (yyyyMd: string) => {
-  if (!yyyyMd) return 0;
-  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
-  return new Date(y, (m || 1) - 1, d || 1).getTime();
+const toTs = (yyyyMd: string): number => {
+  if (!yyyyMd) {
+    return 0;
+  }
+
+  const [year, month, day] = yyyyMd
+    .split("/")
+    .map((value) => parseInt(value, 10));
+
+  return new Date(
+    year,
+    (month || 1) - 1,
+    day || 1,
+  ).getTime();
 };
 
 export function useBrandManagement() {
-  const { currentMember } = useAuth();
-  const companyId = currentMember?.companyId ?? "";
-
   const [baseRows, setBaseRows] = useState<BrandRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // リフレッシュボタン回転用（List の isResetting に渡す）
   const [isResetting, setIsResetting] = useState(false);
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue[]>([]);
+  const [statusFilter, setStatusFilter] = useState<
+    StatusFilterValue[]
+  >([]);
 
-  // managerId フィルタ
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
 
-  const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
-  const [direction, setDirection] = useState<SortOrder | null>("desc");
+  const [activeKey, setActiveKey] =
+    useState<SortKey>("registeredAt");
 
-  // リロード用キー（Refreshボタン押下で再読み込みさせる）
+  const [direction, setDirection] =
+    useState<SortOrder | null>("desc");
+
   const [reloadKey, setReloadKey] = useState(0);
 
-  // 責任者フィルタ用オプション（backend の memberName を label にする）
-  const [managerOptions, setManagerOptions] = useState<ManagerOption[]>([]);
+  const [managerOptions, setManagerOptions] = useState<
+    ManagerOption[]
+  >([]);
 
-  // ステータスバッジ className（現状は使っていなくても残しておく）
-  const statusBadgeClass = (isActive: boolean) =>
-    `brand-status-badge ${isActive ? "is-active" : "is-inactive"}`;
+  const statusBadgeClass = (isActive: boolean): string =>
+    `brand-status-badge ${
+      isActive ? "is-active" : "is-inactive"
+    }`;
 
-  // データ読み込み
   useEffect(() => {
     let cancelled = false;
 
@@ -67,34 +74,37 @@ export function useBrandManagement() {
         setIsResetting(true);
         setError(null);
 
-        if (!companyId) {
-          setBaseRows([]);
-          setManagerOptions([]);
-          return;
-        }
+        const rawRows = await listBrands();
 
-        const rawRows = await listBrands(companyId);
-
-        // updatedAt を必須プロパティとして付与（加工は最小：空なら registeredAt を使う）
         const rows: BrandRow[] = (
-          rawRows as (BrandRowBase & { updatedAt?: string })[]
-        ).map((b) => {
-          const rawUpdated = b.updatedAt ?? "";
-          const safeUpdated = rawUpdated !== "" ? rawUpdated : b.registeredAt ?? "";
+          rawRows as (BrandRowBase & {
+            updatedAt?: string;
+          })[]
+        ).map((brand) => {
+          const rawUpdatedAt = brand.updatedAt ?? "";
+
+          const updatedAt =
+            rawUpdatedAt !== ""
+              ? rawUpdatedAt
+              : brand.registeredAt ?? "";
 
           return {
-            ...b,
-            updatedAt: safeUpdated,
+            ...brand,
+            updatedAt,
           };
         });
 
         if (!cancelled) {
           setBaseRows(rows);
         }
-      } catch (e: any) {
+      } catch (error: unknown) {
         if (!cancelled) {
-          const err = e instanceof Error ? e : new Error(String(e));
-          setError(err);
+          const normalizedError =
+            error instanceof Error
+              ? error
+              : new Error(String(error));
+
+          setError(normalizedError);
           setBaseRows([]);
           setManagerOptions([]);
         }
@@ -107,84 +117,123 @@ export function useBrandManagement() {
     };
 
     void load();
+
     return () => {
       cancelled = true;
     };
-  }, [companyId, reloadKey]);
+  }, [reloadKey]);
 
-  // baseRows から「責任者名付きオプション」を構築（memberName をそのまま label に）
   useEffect(() => {
     const seen = new Set<string>();
-    const opts: ManagerOption[] = [];
+    const options: ManagerOption[] = [];
 
-    for (const b of baseRows) {
-      const id = b.managerId ?? "";
-      if (!id) continue;
-      if (seen.has(id)) continue;
-      seen.add(id);
+    for (const brand of baseRows) {
+      const managerId = brand.managerId ?? "";
 
-      // backend の memberName（= managerName）を優先。無ければ id を表示。
-      const label = b.memberName ?? "";
-      opts.push({ value: id, label: label !== "" ? label : id });
+      if (!managerId || seen.has(managerId)) {
+        continue;
+      }
+
+      seen.add(managerId);
+
+      const memberName = brand.memberName ?? "";
+
+      options.push({
+        value: managerId,
+        label: memberName !== "" ? memberName : managerId,
+      });
     }
 
-    setManagerOptions(opts);
+    setManagerOptions(options);
   }, [baseRows]);
 
-  // ステータスフィルタ
   const statusOptions = useMemo(() => {
     const values = Array.from(
       new Set<StatusFilterValue>(
-        baseRows.map((b) => (b.isActive ? "active" : "inactive")),
+        baseRows.map((brand) =>
+          brand.isActive ? "active" : "inactive",
+        ),
       ),
     );
-    return values.map((v) => ({
-      value: v,
-      label: v === "active" ? "アクティブ" : "停止",
+
+    return values.map((value) => ({
+      value,
+      label: value === "active" ? "アクティブ" : "停止",
     }));
   }, [baseRows]);
 
-  // フィルタ＋ソート
   const rows = useMemo(() => {
-    let data = baseRows.filter((b) => {
-      const statusValue: StatusFilterValue = b.isActive ? "active" : "inactive";
+    let filteredRows = baseRows.filter((brand) => {
+      const statusValue: StatusFilterValue =
+        brand.isActive ? "active" : "inactive";
 
-      const statusOk =
-        statusFilter.length === 0 || statusFilter.includes(statusValue);
+      const statusMatches =
+        statusFilter.length === 0 ||
+        statusFilter.includes(statusValue);
 
-      const managerValue = b.managerId ?? "";
-      const managerOk =
+      const managerId = brand.managerId ?? "";
+
+      const managerMatches =
         managerFilter.length === 0 ||
-        (managerValue !== "" && managerFilter.includes(managerValue));
+        (
+          managerId !== "" &&
+          managerFilter.includes(managerId)
+        );
 
-      return statusOk && managerOk;
+      return statusMatches && managerMatches;
     });
 
     if (activeKey && direction) {
-      data = [...data].sort((a, b) => {
-        if (activeKey === "registeredAt") {
-          const av = toTs(a.registeredAt);
-          const bv = toTs(b.registeredAt);
-          return direction === "asc" ? av - bv : bv - av;
-        }
-        if (activeKey === "updatedAt") {
-          const av = toTs(a.updatedAt);
-          const bv = toTs(b.updatedAt);
-          return direction === "asc" ? av - bv : bv - av;
-        }
-        return 0;
-      });
-    }
-    return data;
-  }, [baseRows, statusFilter, managerFilter, activeKey, direction]);
+      filteredRows = [...filteredRows].sort(
+        (firstBrand, secondBrand) => {
+          if (activeKey === "registeredAt") {
+            const firstValue = toTs(
+              firstBrand.registeredAt,
+            );
 
-  // Refreshボタン用：フィルタとソートを初期化し、一覧も再取得
+            const secondValue = toTs(
+              secondBrand.registeredAt,
+            );
+
+            return direction === "asc"
+              ? firstValue - secondValue
+              : secondValue - firstValue;
+          }
+
+          if (activeKey === "updatedAt") {
+            const firstValue = toTs(
+              firstBrand.updatedAt,
+            );
+
+            const secondValue = toTs(
+              secondBrand.updatedAt,
+            );
+
+            return direction === "asc"
+              ? firstValue - secondValue
+              : secondValue - firstValue;
+          }
+
+          return 0;
+        },
+      );
+    }
+
+    return filteredRows;
+  }, [
+    baseRows,
+    statusFilter,
+    managerFilter,
+    activeKey,
+    direction,
+  ]);
+
   const resetFilters = useCallback(() => {
     setStatusFilter([]);
     setManagerFilter([]);
     setActiveKey("registeredAt");
     setDirection("desc");
-    setReloadKey((k) => k + 1);
+    setReloadKey((current) => current + 1);
   }, []);
 
   return {
@@ -194,7 +243,6 @@ export function useBrandManagement() {
 
     loading,
     error,
-
     isResetting,
 
     statusFilter,
