@@ -1,6 +1,5 @@
 // frontend/console/member/src/presentation/components/PermissionCard.tsx
 
-import * as React from "react";
 import {
   Card,
   CardHeader,
