@@ -1,7 +1,7 @@
 // frontend/console/mintRequest/src/infrastructure/dto/mintRequestLocal.dto.ts
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
-import type { MintDTO } from "../api/mintRequestApi";
+import type { MintDTO } from "./mint.dto";
 
 import type {
   ProductBlueprintCategorySnapshot,

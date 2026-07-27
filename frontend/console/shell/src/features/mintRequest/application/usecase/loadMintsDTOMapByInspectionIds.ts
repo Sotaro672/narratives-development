@@ -1,11 +1,11 @@
-// frontend/console/mintRequest/src/application/usecase/loadMintsDTOMapByInspectionIds.ts
+// frontend/console/shell/src/features/mintRequest/application/usecase/loadMintsDTOMapByInspectionIds.ts
 
-import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
+import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import { fetchMintsByProductionIdsHTTP } from "../../infrastructure/repository";
 
 /**
  * MintDTO を productionIds でまとめて取得する。
- * - 詳細画面や “mint存在判定以外の情報” が必要になった場合のため
+ * - 詳細画面や「mint存在判定以外の情報」が必要になった場合のため
  *
  * NOTE:
  * 旧 inspectionIds 名は使わず、productionIds を正とする。
@@ -20,5 +20,5 @@ export async function loadMintsDTOMapByProductionIds(
   if (ids.length === 0) return {};
 
   const m = await fetchMintsByProductionIdsHTTP(ids);
-  return (m ?? {}) as Record<string, MintDTO>;
+  return m ?? {};
 }

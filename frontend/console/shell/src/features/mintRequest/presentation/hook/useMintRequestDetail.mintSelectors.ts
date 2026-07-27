@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
-import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
+import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import { asNonEmptyString } from "../../application/util/primitive";
 
 import {

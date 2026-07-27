@@ -5,8 +5,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
-import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
-import { completeInspectionByProductionId } from "../../infrastructure/api/mintRequestApi";
+import type { MintDTO } from "../../infrastructure/dto/mint.dto";
+import { completeInspectionHTTP } from "../../infrastructure/repository";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
@@ -426,9 +426,9 @@ export function useMintRequestDetail() {
     setIsCompletingInspection(true);
 
     try {
-      const updatedBatch = await completeInspectionByProductionId(
-        validation.productionId,
-      );
+const updatedBatch = await completeInspectionHTTP(
+  validation.productionId,
+);
 
       if (updatedBatch) {
         setInspectionBatch(updatedBatch as any);

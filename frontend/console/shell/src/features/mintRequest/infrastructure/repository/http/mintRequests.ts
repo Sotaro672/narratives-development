@@ -3,7 +3,7 @@
 import { API_BASE } from "../../../../../shared/http/apiBase";
 import { getAuthJsonHeadersOrThrow } from "../../../../../shared/http/authHeaders";
 
-import type { MintDTO, MintListRowDTO } from "../../api/mintRequestApi";
+import type { MintDTO, MintListRowDTO } from "../../dto/mint.dto";
 
 import type { MintRequestManagementRowDTO } from "../../../application/dto/mintRequestManagementRow";
 import type { MintStatus } from "../../../domain/mints";

@@ -1,5 +1,5 @@
 //frontend\console\production\src\infrastructure\http\productBlueprintClient.ts
-import { API_BASE } from "../../../shell/src/shared/http/apiBase";
+import { API_BASE } from "../../../../shared/http/apiBase";
 
 export async function fetchProductBlueprintById(params: {
   productBlueprintId: string;

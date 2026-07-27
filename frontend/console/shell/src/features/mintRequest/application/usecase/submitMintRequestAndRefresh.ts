@@ -1,6 +1,6 @@
 // frontend/console/mintRequest/src/application/usecase/submitMintRequestAndRefresh.ts
 
-import type { MintDTO } from "../../infrastructure/api/mintRequestApi";
+import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import type { MintQueuedResponse } from "../port/MintRequestRepository";
 
 import {
