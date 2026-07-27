@@ -5,11 +5,11 @@ import {
   safeDateTimeLabelJa,
 } from "../../../../shared/util/dateJa";
 
+import type { MintInfo } from "../../application/mapper/mintInfoMapper";
 import type {
   BrandSummary,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
-import type { MintInfo } from "../../application/mapper/mintInfoMapper";
 import { asNonEmptyString } from "../../application/util/primitive";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
@@ -159,29 +159,16 @@ export function buildMintLabels(params: {
   /**
    * mintsドキュメントを作成した人の表示値。
    *
-   * 優先順位:
-   * 1. createdByName
-   * 2. createdBy
+   * createdByNameはselector側で、
+   * createdByNameからcreatedByへのfallbackまで完了している。
+   *
+   * MintInfo由来の値はApplication層で正規化済みのため、
+   * Presentation層では再正規化しない。
    *
    * requestedBy系からのfallbackは行わない。
    */
-  const mintCreatedByLabel = (() => {
-    const creatorName =
-      asNonEmptyString(
-        createdByName,
-      );
-
-    if (creatorName) {
-      return creatorName;
-    }
-
-    const creatorId =
-      asNonEmptyString(
-        mint?.createdBy,
-      );
-
-    return creatorId || "（不明）";
-  })();
+  const mintCreatedByLabel =
+    createdByName || "（不明）";
 
   const mintScheduledBurnDateLabel =
     safeDateLabelJa(
@@ -195,10 +182,11 @@ export function buildMintLabels(params: {
       "（未完了）",
     );
 
+  /**
+   * MintInfoへの変換時に正規化済み。
+   */
   const onChainTxSignature =
-    asNonEmptyString(
-      mint?.onChainTxSignature,
-    );
+    mint?.onChainTxSignature ?? "";
 
   return {
     mintCreatedAtLabel,

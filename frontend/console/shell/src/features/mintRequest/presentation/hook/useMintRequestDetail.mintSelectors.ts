@@ -52,26 +52,22 @@ export function useMintInfo({
    * 2. createdBy
    *
    * requestedBy系からのfallbackは行わない。
+   *
+   * MintInfoはApplication層で正規化済みのため、
+   * Presentation層では再正規化しない。
    */
   const createdByName:
     | string
     | null = React.useMemo(() => {
-    const creatorName =
-      asNonEmptyString(
-        mint?.createdByName,
-      );
-
-    if (creatorName) {
-      return creatorName;
-    }
-
-    const creatorId =
-      asNonEmptyString(
-        mint?.createdBy,
-      );
-
-    return creatorId || null;
-  }, [mint]);
+    return (
+      mint?.createdByName ||
+      mint?.createdBy ||
+      null
+    );
+  }, [
+    mint?.createdByName,
+    mint?.createdBy,
+  ]);
 
   /**
    * Mint申請ボタンを押した人の表示値。
@@ -81,60 +77,56 @@ export function useMintInfo({
    * 2. requestedBy
    *
    * createdBy系からのfallbackは行わない。
+   *
+   * MintInfoはApplication層で正規化済みのため、
+   * Presentation層では再正規化しない。
    */
   const requestedByName:
     | string
     | null = React.useMemo(() => {
-    const requesterName =
-      asNonEmptyString(
-        mint?.requestedByName,
-      );
-
-    if (requesterName) {
-      return requesterName;
-    }
-
-    const requesterId =
-      asNonEmptyString(
-        mint?.requestedBy,
-      );
-
-    return requesterId || null;
-  }, [mint]);
+    return (
+      mint?.requestedByName ||
+      mint?.requestedBy ||
+      null
+    );
+  }, [
+    mint?.requestedByName,
+    mint?.requestedBy,
+  ]);
 
   /**
    * Mintで選択されたToken Blueprint ID。
+   *
+   * MintInfoはApplication層で正規化済みのため、
+   * Presentation層では再正規化しない。
    */
   const mintRequestedTokenBlueprintId =
     React.useMemo(() => {
-      return asNonEmptyString(
-        mint?.tokenBlueprintId,
-      );
-    }, [mint]);
+      return mint?.tokenBlueprintId || "";
+    }, [mint?.tokenBlueprintId]);
 
   /**
    * Mintで選択されたブランドID。
    *
    * Mint側にbrandIdが存在しない場合だけ、
    * Product Blueprint側のbrandIdを使用する。
+   *
+   * mint.brandIdはApplication層で正規化済み。
+   * pbPatch.brandIdだけは未正規化のため、
+   * asNonEmptyStringを適用する。
    */
   const mintRequestedBrandId =
     React.useMemo(() => {
-      const brandIdFromMint =
-        asNonEmptyString(
-          mint?.brandId,
-        );
-
-      if (brandIdFromMint) {
-        return brandIdFromMint;
+      if (mint?.brandId) {
+        return mint.brandId;
       }
 
       return asNonEmptyString(
         pbPatch?.brandId,
       );
     }, [
-      mint,
-      pbPatch,
+      mint?.brandId,
+      pbPatch?.brandId,
     ]);
 
   return {

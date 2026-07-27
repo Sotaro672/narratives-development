@@ -9,8 +9,6 @@ import type {
   MintTaskProgress,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
-import { asNonEmptyString } from "../../application/util/primitive";
-
 import { getMintRequestDetail } from "../../application/usecase/getMintRequestDetail";
 
 import { validateCompleteInspection } from "../../application/validator/validateCompleteInspection";
@@ -567,17 +565,9 @@ export function useMintRequestDetail() {
 
   const tokenBlueprintIdForPatch =
     React.useMemo(() => {
-      const selectedId =
-        asNonEmptyString(
-          selectedTokenBlueprintId,
-        );
-
-      if (selectedId) {
-        return selectedId;
-      }
-
-      return asNonEmptyString(
-        mintRequestedTokenBlueprintId,
+      return (
+        selectedTokenBlueprintId ||
+        mintRequestedTokenBlueprintId
       );
     }, [
       selectedTokenBlueprintId,
