@@ -24,25 +24,6 @@ export function asNumber0(v: unknown): number {
 }
 
 /**
- * Uniq + trim + drop empty.
- */
-export function uniqStrings(xs: unknown[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-
-  for (const x of xs ?? []) {
-    const s = String(x ?? "").trim();
-    if (!s) continue;
-    if (seen.has(s)) continue;
-
-    seen.add(s);
-    out.push(s);
-  }
-
-  return out;
-}
-
-/**
  * Attempt to produce ISO string from common inputs.
  * - string: return as-is
  * - Date: toISOString

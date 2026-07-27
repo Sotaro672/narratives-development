@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/mintRequest/application/mapper/mintInfoMapper.ts
 
-import type { MintStatus } from "../../domain/mints";
 import type { InspectionBatchDTO } from "../../domain/inspections";
+import type { MintStatus } from "../../domain/mints";
 import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 
 import {
@@ -21,15 +21,38 @@ export type MintInfo = {
 
   status: MintStatus;
 
-  requestedByName?: string | null;
-
+  /**
+   * mintsドキュメントを作成したmemberId。
+   */
   createdBy: string;
-  createdByName?: string | null;
+
+  /**
+   * createdByに対応する表示名。
+   */
+  createdByName: string | null;
+
+  /**
+   * mintsドキュメントの作成日時。
+   */
   createdAt: string | null;
 
-  mintedAt?: string | null;
-  onChainTxSignature?: string | null;
-  scheduledBurnDate?: string | null;
+  /**
+   * Mint申請ボタンを押したmemberId。
+   *
+   * Mint未申請の場合はnull。
+   */
+  requestedBy: string | null;
+
+  /**
+   * requestedByに対応する表示名。
+   *
+   * Mint未申請の場合、または表示名を取得できない場合はnull。
+   */
+  requestedByName: string | null;
+
+  mintedAt: string | null;
+  onChainTxSignature: string | null;
+  scheduledBurnDate: string | null;
 };
 
 /**
@@ -50,11 +73,18 @@ type InspectionBatchWithMintDTO =
 /**
  * MintDTOから画面表示用のMintInfoを生成する。
  *
- * ミント状態はmintedフラグを再生成せず、
- * Backendと共通のstatusを正とする。
+ * createdByとrequestedByは、それぞれ独立したデータとして扱う。
  *
- * - status !== "MINTED": ミント中
- * - status === "MINTED": ミント完了
+ * - createdBy:
+ *   mintsドキュメントを作成したmemberId
+ *
+ * - requestedBy:
+ *   Mint申請ボタンを押したmemberId
+ *
+ * createdBy系とrequestedBy系の間でfallbackや値の補完は行わない。
+ *
+ * Mint状態についても、このmapperでは再解釈せず、
+ * Backendと共通のstatusをそのまま使用する。
  */
 export function extractMintInfoFromMintDTO(
   mintDTO: MintDTO | null | undefined,
@@ -80,11 +110,6 @@ export function extractMintInfoFromMintDTO(
       mintDTO.tokenBlueprintId,
     );
 
-  const requestedByName =
-    asNonEmptyString(
-      mintDTO.requestedByName,
-    );
-
   const createdBy = asNonEmptyString(
     mintDTO.createdBy,
   );
@@ -92,16 +117,30 @@ export function extractMintInfoFromMintDTO(
   const createdByName =
     asNonEmptyString(
       mintDTO.createdByName,
-    );
+    ) || null;
+
+  const requestedBy =
+    asNonEmptyString(
+      mintDTO.requestedBy,
+    ) || null;
+
+  const requestedByName =
+    asNonEmptyString(
+      mintDTO.requestedByName,
+    ) || null;
 
   const createdAt =
     asNonEmptyString(
-      asMaybeISO(mintDTO.createdAt),
+      asMaybeISO(
+        mintDTO.createdAt,
+      ),
     ) || null;
 
   const mintedAt =
     asNonEmptyString(
-      asMaybeISO(mintDTO.mintedAt),
+      asMaybeISO(
+        mintDTO.mintedAt,
+      ),
     ) || null;
 
   const onChainTxSignature =
@@ -124,13 +163,12 @@ export function extractMintInfoFromMintDTO(
 
     status: mintDTO.status,
 
-    requestedByName:
-      requestedByName || null,
-
     createdBy,
-    createdByName:
-      createdByName || null,
+    createdByName,
     createdAt,
+
+    requestedBy,
+    requestedByName,
 
     mintedAt,
     onChainTxSignature,

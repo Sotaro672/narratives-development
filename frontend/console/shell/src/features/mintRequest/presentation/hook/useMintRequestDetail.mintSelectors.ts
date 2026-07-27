@@ -2,13 +2,12 @@
 
 import * as React from "react";
 
-import { asNonEmptyString } from "../../application/util/primitive";
-
 import {
   extractMintInfoFromBatch,
   extractMintInfoFromMintDTO,
   type MintInfo,
 } from "../../application/mapper/mintInfoMapper";
+import { asNonEmptyString } from "../../application/util/primitive";
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
 import type { MintDTO } from "../../infrastructure/dto/mint.dto";
@@ -63,25 +62,17 @@ export function useMintInfo({
     mint?.status === "MINTED";
 
   /**
-   * ミント実行者の表示名。
+   * mintsドキュメントを作成した人の表示値。
    *
    * 優先順位:
-   * 1. requestedByName
-   * 2. createdByName
-   * 3. createdBy
+   * 1. createdByName
+   * 2. createdBy
+   *
+   * requestedBy系からのfallbackは行わない。
    */
-  const requestedByName:
+  const createdByName:
     | string
     | null = React.useMemo(() => {
-    const requestedName =
-      asNonEmptyString(
-        mint?.requestedByName,
-      );
-
-    if (requestedName) {
-      return requestedName;
-    }
-
     const creatorName =
       asNonEmptyString(
         mint?.createdByName,
@@ -97,6 +88,35 @@ export function useMintInfo({
       );
 
     return creatorId || null;
+  }, [mint]);
+
+  /**
+   * Mint申請ボタンを押した人の表示値。
+   *
+   * 優先順位:
+   * 1. requestedByName
+   * 2. requestedBy
+   *
+   * createdBy系からのfallbackは行わない。
+   */
+  const requestedByName:
+    | string
+    | null = React.useMemo(() => {
+    const requesterName =
+      asNonEmptyString(
+        mint?.requestedByName,
+      );
+
+    if (requesterName) {
+      return requesterName;
+    }
+
+    const requesterId =
+      asNonEmptyString(
+        mint?.requestedBy,
+      );
+
+    return requesterId || null;
   }, [mint]);
 
   const mintRequestedTokenBlueprintId =
@@ -130,6 +150,7 @@ export function useMintInfo({
     hasMint,
     isMinting,
     isMintCompleted,
+    createdByName,
     requestedByName,
     mintRequestedTokenBlueprintId,
     mintRequestedBrandId,

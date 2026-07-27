@@ -21,51 +21,28 @@ export type MintStatus =
  * ISO 8601形式の文字列として扱う。
  */
 export type Mint = {
-  /**
-   * MintのドキュメントID。
-   */
   id: string;
-
-  /**
-   * Mintに紐づくブランドID。
-   */
   brandId: string;
-
-  /**
-   * Mintに紐づくトークン設計ID。
-   */
   tokenBlueprintId: string;
-
-  /**
-   * inspectionResultがpassedであるproductIdの一覧。
-   */
   products: string[];
-
-  /**
-   * 親Mintの進行状態。
-   */
   status: MintStatus;
 
   /**
-   * 作成日時。
-   * ISO 8601形式の文字列を想定する。
+   * Mintドキュメントの作成日時。
    */
   createdAt: string;
 
   /**
-   * 作成者のmemberId。
+   * Mintドキュメントを作成したmemberId。
    */
   createdBy: string;
 
   /**
-   * ミント完了日時。
-   * 未完了の場合はnullまたは未設定。
+   * Mint申請ボタンを押したmemberId。
+   * Mint未申請の場合は未設定。
    */
-  mintedAt?: string | null;
+  requestedBy?: string | null;
 
-  /**
-   * 焼却予定日時。
-   * 未設定の場合はnullまたは未設定。
-   */
+  mintedAt?: string | null;
   scheduledBurnDate?: string | null;
 };

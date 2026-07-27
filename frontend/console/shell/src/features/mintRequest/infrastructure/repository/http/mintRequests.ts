@@ -308,15 +308,32 @@ function mergeMintDTOFromRow(
 
     status,
 
+    /**
+     * createdBy系は、mintsドキュメントを作成した人の情報として扱う。
+     * requestedBy系からのfallbackは行わない。
+     */
+    createdBy:
+      mintRaw?.createdBy ??
+      rawRow.createdBy ??
+      null,
+
     createdByName:
-      rawRow.requestedByName ??
-      rawRow.createdByName ??
       mintRaw?.createdByName ??
+      rawRow.createdByName ??
+      null,
+
+    /**
+     * requestedBy系は、Mint申請ボタンを押した人の情報として扱う。
+     * createdBy系からのfallbackは行わない。
+     */
+    requestedBy:
+      mintRaw?.requestedBy ??
+      rawRow.requestedBy ??
       null,
 
     requestedByName:
-      rawRow.requestedByName ??
       mintRaw?.requestedByName ??
+      rawRow.requestedByName ??
       null,
 
     onChainTxSignature:

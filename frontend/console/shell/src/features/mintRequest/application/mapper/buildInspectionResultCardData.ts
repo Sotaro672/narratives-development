@@ -6,11 +6,6 @@ import type {
   ProductBlueprintPatchDTO,
 } from "../../infrastructure/dto/mintRequestLocal.dto";
 
-export type ProductBlueprintModelRefLike = {
-  modelId?: string | null;
-  displayOrder?: number | null;
-};
-
 export type InspectionResultRow = {
   modelNumber: string;
   size: string;
@@ -75,41 +70,48 @@ export type InspectionResultCardData = {
 };
 
 function toText(value: unknown): string {
-  if (value === null || value === undefined) return "";
+  if (value === null || value === undefined) {
+    return "";
+  }
 
   if (typeof value === "string") {
     return value.trim();
   }
 
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
     return String(value);
   }
 
   return "";
 }
 
+/**
+ * modelRefsはInfrastructure層で正規化済みのため、
+ * Application層では再検証せず、そのまま対応表へ変換する。
+ */
 function buildDisplayOrderByModelId(
-  modelRefs: ProductBlueprintModelRefLike[] | null | undefined,
+  modelRefs: ProductBlueprintPatchDTO["modelRefs"],
 ): Record<string, number> {
-  const out: Record<string, number> = {};
-
-  for (const ref of modelRefs ?? []) {
-    const modelId = toText(ref?.modelId);
-    const displayOrder = ref?.displayOrder;
-
-    if (!modelId) continue;
-    if (typeof displayOrder !== "number") continue;
-    if (!Number.isFinite(displayOrder)) continue;
-
-    out[modelId] = displayOrder;
-  }
-
-  return out;
+  return Object.fromEntries(
+    (modelRefs ?? []).map((ref) => [
+      ref.modelId,
+      ref.displayOrder,
+    ]),
+  );
 }
 
 function buildMergedModelMeta(
-  batchMeta: Record<string, MintModelMetaEntryDTO> | null | undefined,
-  resolvedMeta: Record<string, MintModelMetaEntryDTO> | null | undefined,
+  batchMeta:
+    | Record<string, MintModelMetaEntryDTO>
+    | null
+    | undefined,
+  resolvedMeta:
+    | Record<string, MintModelMetaEntryDTO>
+    | null
+    | undefined,
 ): Record<string, MintModelMetaEntryDTO> {
   return {
     ...(batchMeta ?? {}),
@@ -120,7 +122,10 @@ function buildMergedModelMeta(
 function resolveCategoryKind(
   batch: InspectionBatchForCard | null | undefined,
 ): string {
-  return toText(batch?.productBlueprintPatch?.productBlueprintCategory?.kind);
+  return toText(
+    batch?.productBlueprintPatch
+      ?.productBlueprintCategory?.kind,
+  );
 }
 
 function buildVolumeLabel(params: {
@@ -128,14 +133,24 @@ function buildVolumeLabel(params: {
   volumeUnit: string | null | undefined;
   isAlcohol: boolean;
 }): string {
-  const { volume, volumeUnit, isAlcohol } = params;
+  const {
+    volume,
+    volumeUnit,
+    isAlcohol,
+  } = params;
 
-  if (!isAlcohol) return "";
+  if (!isAlcohol) {
+    return "";
+  }
 
   const volumeText = toText(volume);
-  if (!volumeText) return "";
 
-  const unitText = toText(volumeUnit) || "ml";
+  if (!volumeText) {
+    return "";
+  }
+
+  const unitText =
+    toText(volumeUnit) || "ml";
 
   return `${volumeText}${unitText}`;
 }
@@ -143,16 +158,19 @@ function buildVolumeLabel(params: {
 export function getInspectionModelIds(
   batch: InspectionBatch | null | undefined,
 ): string[] {
-  if (!batch?.inspections) return [];
-
-  const set = new Set<string>();
-
-  for (const inspection of batch.inspections ?? []) {
-    const modelId = toText((inspection as any)?.modelId);
-    if (modelId) set.add(modelId);
+  if (!batch?.inspections) {
+    return [];
   }
 
-  return Array.from(set);
+  const modelIds = new Set<string>();
+
+  for (const inspection of batch.inspections) {
+    if (inspection.modelId) {
+      modelIds.add(inspection.modelId);
+    }
+  }
+
+  return Array.from(modelIds);
 }
 
 export function getMissingModelIds(input: {
@@ -162,7 +180,9 @@ export function getMissingModelIds(input: {
   const modelIds = input.modelIds ?? [];
   const modelMeta = input.modelMeta ?? {};
 
-  return modelIds.filter((modelId) => !modelMeta[modelId]);
+  return modelIds.filter(
+    (modelId) => !modelMeta[modelId],
+  );
 }
 
 export function buildInspectionResultCardData(
@@ -181,18 +201,22 @@ export function buildInspectionResultCardData(
     };
   }
 
-  const categoryKind = resolveCategoryKind(batch);
-  const isAlcohol = categoryKind === "alcohol";
-  const showVolumeColumn = isAlcohol;
+  const categoryKind =
+    resolveCategoryKind(batch);
 
-  const mergedModelMeta = buildMergedModelMeta(
-    batch.modelMeta,
-    input.resolvedMeta,
-  );
+  const isAlcohol =
+    categoryKind === "alcohol";
 
-  const displayOrderByModelId = buildDisplayOrderByModelId(
-    batch.productBlueprintPatch?.modelRefs,
-  );
+  const mergedModelMeta =
+    buildMergedModelMeta(
+      batch.modelMeta,
+      input.resolvedMeta,
+    );
+
+  const displayOrderByModelId =
+    buildDisplayOrderByModelId(
+      batch.productBlueprintPatch?.modelRefs,
+    );
 
   const aggregation = new Map<
     string,
@@ -203,55 +227,80 @@ export function buildInspectionResultCardData(
     }
   >();
 
-  for (const inspection of batch.inspections ?? []) {
-    const modelId = toText((inspection as any)?.modelId);
-    if (!modelId) continue;
+  for (const inspection of batch.inspections) {
+    const modelId = inspection.modelId;
 
-    const modelNumberFromInspection = toText(
-      (inspection as any)?.modelNumber,
-    );
+    if (!modelId) {
+      continue;
+    }
+
+    const modelNumberFromInspection =
+      toText(inspection.modelNumber);
 
     const entry =
       aggregation.get(modelId) ?? {
-        modelNumber: modelNumberFromInspection,
+        modelNumber:
+          modelNumberFromInspection,
         passed: 0,
         total: 0,
       };
 
     entry.total += 1;
 
-    if ((inspection as any)?.inspectionResult === "passed") {
+    if (
+      inspection.inspectionResult === "passed"
+    ) {
       entry.passed += 1;
     }
 
-    if (!entry.modelNumber && modelNumberFromInspection) {
-      entry.modelNumber = modelNumberFromInspection;
+    if (
+      !entry.modelNumber &&
+      modelNumberFromInspection
+    ) {
+      entry.modelNumber =
+        modelNumberFromInspection;
     }
 
     aggregation.set(modelId, entry);
   }
 
-  const rowsWithOrder: Array<InspectionResultRow & { __order: number }> = [];
-  const INF = Number.POSITIVE_INFINITY;
+  const rowsWithOrder: Array<
+    InspectionResultRow & {
+      __order: number;
+    }
+  > = [];
 
-  for (const [modelId, agg] of aggregation.entries()) {
-    const meta = mergedModelMeta[modelId];
+  const fallbackOrder =
+    Number.POSITIVE_INFINITY;
 
-    const displayModelNumber = meta?.modelNumber || agg.modelNumber || modelId;
+  for (
+    const [modelId, aggregated] of
+    aggregation.entries()
+  ) {
+    const meta =
+      mergedModelMeta[modelId];
+
+    const displayModelNumber =
+      meta?.modelNumber ||
+      aggregated.modelNumber ||
+      modelId;
 
     const order =
-      typeof displayOrderByModelId[modelId] === "number" &&
-      Number.isFinite(displayOrderByModelId[modelId])
-        ? displayOrderByModelId[modelId]
-        : INF;
+      displayOrderByModelId[modelId] ??
+      fallbackOrder;
 
-    const volume = meta?.volume ?? null;
-    const volumeUnit = meta?.volumeUnit ?? null;
-    const volumeLabel = buildVolumeLabel({
-      volume,
-      volumeUnit,
-      isAlcohol,
-    });
+    const volume =
+      meta?.volume ?? null;
+
+    const volumeUnit =
+      meta?.volumeUnit ?? null;
+
+    const volumeLabel =
+      buildVolumeLabel({
+        volume,
+        volumeUnit,
+        isAlcohol,
+      });
 
     rowsWithOrder.push({
       __order: order,
@@ -264,8 +313,10 @@ export function buildInspectionResultCardData(
       volumeUnit,
       volumeLabel,
 
-      passedQuantity: agg.passed,
-      quantity: agg.total,
+      passedQuantity:
+        aggregated.passed,
+      quantity:
+        aggregated.total,
     });
   }
 
@@ -274,31 +325,38 @@ export function buildInspectionResultCardData(
       return a.__order - b.__order;
     }
 
-    return String(a.modelNumber ?? "").localeCompare(
-      String(b.modelNumber ?? ""),
+    return a.modelNumber.localeCompare(
+      b.modelNumber,
     );
   });
 
-  const rows = rowsWithOrder.map(({ __order, ...row }) => row);
+  const rows = rowsWithOrder.map(
+    ({ __order, ...row }) => row,
+  );
 
   const totalPassed = rows.reduce(
-    (sum, row) => sum + (row.passedQuantity || 0),
+    (sum, row) =>
+      sum + row.passedQuantity,
     0,
   );
 
   const totalQuantity = rows.reduce(
-    (sum, row) => sum + (row.quantity || 0),
+    (sum, row) =>
+      sum + row.quantity,
     0,
   );
 
-  const productName = toText((batch as any)?.productName);
+  const productName =
+    toText(batch.productName);
 
   return {
-    title: productName ? `検査結果：${productName}` : "モデル別検査結果",
+    title: productName
+      ? `検査結果：${productName}`
+      : "モデル別検査結果",
     rows,
     totalPassed,
     totalQuantity,
     categoryKind,
-    showVolumeColumn,
+    showVolumeColumn: isAlcohol,
   };
 }
