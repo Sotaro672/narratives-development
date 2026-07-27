@@ -14,11 +14,19 @@ import { asNonEmptyString } from "../../application/util/primitive";
 
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
+import type { ProductBlueprintCardProps } from "../../../productBlueprint/presentation/cards/productBlueprintForm/productBlueprintCard";
 import type {
-  ProductBlueprintCardVM as ProductBlueprintCardViewModel,
-  TokenBlueprintCardHandlersVM as TokenBlueprintCardHandlers,
-  TokenBlueprintCardVM as TokenBlueprintCardViewModel,
-} from "../viewModel/mintRequestDetail.vm";
+  TokenBlueprintCardHandlers,
+  TokenBlueprintCardViewModel,
+} from "../../../tokenBlueprint/presentation/components/tokenBlueprintCard";
+
+type ProductBlueprintCardViewModel =
+  Pick<
+    ProductBlueprintCardProps,
+    | "productName"
+    | "brandName"
+    | "productBlueprintCategory"
+  >;
 
 export function buildProductBlueprintCardView(
   pbPatch: ProductBlueprintPatchDTO | null,
@@ -112,12 +120,16 @@ export function buildTokenBlueprintCardVm(params: {
 
   return {
     id: tokenBlueprintId,
-    tokenName,
+    name: tokenName,
     symbol,
     brandId,
     brandName,
     description,
     iconUrl,
+    minted:
+      selectedTokenBlueprint?.minted ??
+      false,
+    iconFile: null,
     isEditMode: false,
     brandOptions,
   };

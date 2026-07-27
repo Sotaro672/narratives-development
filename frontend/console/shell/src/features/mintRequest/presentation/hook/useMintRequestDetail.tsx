@@ -27,12 +27,6 @@ import {
 } from "../../infrastructure/repository";
 import { HttpMintRequestRepository } from "../../infrastructure/repository/HttpMintRequestRepository";
 
-import type {
-  ProductBlueprintCardVM as ProductBlueprintCardViewModel,
-  TokenBlueprintCardHandlersVM as TokenBlueprintCardHandlers,
-  TokenBlueprintCardVM as TokenBlueprintCardViewModel,
-} from "../viewModel/mintRequestDetail.vm";
-
 import { useInspectionResultCard } from "./useInspectionResultCard";
 import { useMintInfo } from "./useMintRequestDetail.mintSelectors";
 import { useMintAutoSelection } from "./useMintRequestDetail.useMintAutoSelection";
@@ -376,15 +370,14 @@ export function useMintRequestDetail() {
   const totalMintQuantity =
     inspectionCardData.totalPassed;
 
-  const productBlueprintCardView:
-    | ProductBlueprintCardViewModel
-    | null = React.useMemo(
-    () =>
-      buildProductBlueprintCardView(
-        pbPatch,
-      ),
-    [pbPatch],
-  );
+  const productBlueprintCardView =
+    React.useMemo(
+      () =>
+        buildProductBlueprintCardView(
+          pbPatch,
+        ),
+      [pbPatch],
+    );
 
   const onBack = React.useCallback(() => {
     navigate(
@@ -758,37 +751,35 @@ export function useMintRequestDetail() {
       ],
     );
 
-  const tokenBlueprintCardVm:
-    | TokenBlueprintCardViewModel
-    | null = React.useMemo(
-    () =>
-      buildTokenBlueprintCardVm({
+  const tokenBlueprintCardVm =
+    React.useMemo(
+      () =>
+        buildTokenBlueprintCardVm({
+          selectedTokenBlueprint,
+          tokenBlueprintIdForPatch,
+          selectedBrandName,
+          pbPatch,
+          brandOptions,
+        }),
+      [
         selectedTokenBlueprint,
         tokenBlueprintIdForPatch,
         selectedBrandName,
         pbPatch,
         brandOptions,
-      }),
-    [
-      selectedTokenBlueprint,
-      tokenBlueprintIdForPatch,
-      selectedBrandName,
-      pbPatch,
-      brandOptions,
-    ],
-  );
+      ],
+    );
 
-  const tokenBlueprintCardHandlers:
-    TokenBlueprintCardHandlers =
-      React.useMemo(
-        () =>
-          buildTokenBlueprintCardHandlers(
-            tokenBlueprintCardVm?.iconUrl,
-          ),
-        [
+  const tokenBlueprintCardHandlers =
+    React.useMemo(
+      () =>
+        buildTokenBlueprintCardHandlers(
           tokenBlueprintCardVm?.iconUrl,
-        ],
-      );
+        ),
+      [
+        tokenBlueprintCardVm?.iconUrl,
+      ],
+    );
 
   const {
     mintCreatedAtLabel,
