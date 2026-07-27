@@ -18,7 +18,10 @@ import { validateMintRequestSubmit } from "../../application/validator/validateM
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
 
-import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
+import type {
+  MintModelMetaEntryDTO,
+  ProductBlueprintPatchDTO,
+} from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import {
   completeInspectionHTTP,
@@ -196,6 +199,7 @@ export function useMintRequestDetail() {
       );
 
       setMintInfo(detail.mint);
+
       setMintProgress(
         detail.mintProgress,
       );
@@ -235,6 +239,7 @@ export function useMintRequestDetail() {
         );
 
         setMintInfo(detail.mint);
+
         setMintProgress(
           detail.mintProgress,
         );
@@ -321,8 +326,42 @@ export function useMintRequestDetail() {
         return undefined;
       }
 
+      /**
+       * InspectionBatchDTO.modelMetaは、
+       * modelIdをRecordのキーとして保持している。
+       *
+       * InspectionResultCard側ではBackendの
+       * MintModelMetaEntryDTOに合わせて、
+       * 値側にもmodelIdを含める。
+       */
+      const modelMeta = Object.entries(
+        inspectionBatch.modelMeta ?? {},
+      ).reduce<
+        Record<
+          string,
+          MintModelMetaEntryDTO
+        >
+      >(
+        (
+          result,
+          [modelId, meta],
+        ) => {
+          result[modelId] = {
+            modelId,
+            size: meta.size,
+            colorName:
+              meta.colorName,
+            rgb: meta.rgb,
+          };
+
+          return result;
+        },
+        {},
+      );
+
       return {
         ...inspectionBatch,
+        modelMeta,
         productBlueprintPatch:
           pbPatch ?? null,
       };

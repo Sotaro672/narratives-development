@@ -9,7 +9,7 @@ import type {
 } from "../../../productBlueprint/domain/productBlueprintCategory";
 
 /**
- * ProductBlueprint.modelRefs 取得用DTO。
+ * ProductBlueprint.modelRefs取得用DTO。
  *
  * displayOrderはProductBlueprint側にのみ存在する前提のため、
  * UIはこの値を正として扱う。
@@ -101,23 +101,106 @@ export type TokenBlueprintForMintDTO = {
   iconUrl?: string;
 };
 
-export type MintModelMetaEntryDTO = {
-  modelNumber?: string | null;
-  size?: string | null;
-  colorName?: string | null;
-  rgb?: number | null;
+/**
+ * BackendのModelVariationKind。
+ */
+export type ModelVariationKindForMint =
+  | "apparel"
+  | "alcohol";
 
-  /**
-   * alcohol対応。
-   *
-   * model variation側で容量と単位を扱う。
-   *
-   * 表示例:
-   * - volume: 720
-   * - volumeUnit: "ml"
-   */
-  volume?: string | number | null;
-  volumeUnit?: string | null;
+/**
+ * Backendのmodel.Volumeで許可されている単位。
+ */
+export type ModelVolumeUnitForMint =
+  | "ml"
+  | "L";
+
+/**
+ * apparel variationのカラー情報。
+ */
+export type ModelColorForMintDTO = {
+  name: string;
+  rgb: number;
+};
+
+/**
+ * alcohol variationの容量情報。
+ */
+export type ModelVolumeForMintDTO = {
+  value: number;
+  unit: ModelVolumeUnitForMint;
+};
+
+/**
+ * GET /models/{id}で返される共通フィールド。
+ */
+type ModelVariationBaseForMintDTO = {
+  id: string;
+  productBlueprintId: string;
+  modelNumber: string;
+
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+/**
+ * apparel用のModel variation。
+ */
+export type ApparelModelVariationForMintDTO =
+  ModelVariationBaseForMintDTO & {
+    kind: "apparel";
+
+    size: string;
+    color: ModelColorForMintDTO;
+    measurements?: Record<string, number>;
+
+    volume?: never;
+  };
+
+/**
+ * alcohol用のModel variation。
+ */
+export type AlcoholModelVariationForMintDTO =
+  ModelVariationBaseForMintDTO & {
+    kind: "alcohol";
+
+    volume: ModelVolumeForMintDTO;
+
+    size?: never;
+    color?: never;
+    measurements?: never;
+  };
+
+/**
+ * GET /models/{id}の正規レスポンス。
+ *
+ * kindを判別キーとしてapparelとalcoholを区別する。
+ */
+export type ModelVariationForMintDTO =
+  | ApparelModelVariationForMintDTO
+  | AlcoholModelVariationForMintDTO;
+
+/**
+ * ミント申請詳細画面で使用するモデル表示情報。
+ *
+ * modelIdをキーとしたRecord内で使用するが、
+ * BackendのMintModelMetaEntryにもmodelIdが含まれるため保持する。
+ *
+ * volumeとvolumeUnitは、
+ * GET /models/{id}によるalcoholモデル補完用フィールド。
+ */
+export type MintModelMetaEntryDTO = {
+  modelId: string;
+
+  modelNumber?: string;
+  size?: string;
+  colorName?: string;
+  rgb?: number;
+
+  volume?: number;
+  volumeUnit?: ModelVolumeUnitForMint;
 };
 
 /**
@@ -151,23 +234,4 @@ export type MintRequestDetailDTO = {
   productBlueprintId?: string | null;
 
   [key: string]: any;
-};
-
-export type ModelVariationForMintDTO = {
-  id: string;
-  modelNumber: string | null;
-  size: string | null;
-  colorName: string | null;
-  rgb: number | null;
-
-  /**
-   * alcohol対応。
-   *
-   * model variation側で容量と単位を扱う。
-   *
-   * Backend・mapper側ではvolumeUnitへ正規化する。
-   * 例: "ml", "L"
-   */
-  volume?: string | number | null;
-  volumeUnit?: string | null;
 };
