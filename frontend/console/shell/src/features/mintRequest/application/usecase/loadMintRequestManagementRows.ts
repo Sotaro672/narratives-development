@@ -38,20 +38,28 @@ export type ViewRow = {
   inspectionStatus: InspectionStatus;
 
   /**
-   * 既存画面との互換用。
-   * requestedByNameと同じ表示名を保持する。
+   * mintsドキュメントを作成したmemberId。
+   */
+  createdBy: string | null;
+
+  /**
+   * mintsドキュメントを作成したメンバーの表示名。
    */
   createdByName: string | null;
 
   /**
-   * ミント申請者の表示名。
+   * Mint申請ボタンを押したmemberId。
+   */
+  requestedBy: string | null;
+
+  /**
+   * Mint申請ボタンを押したメンバーの表示名。
    */
   requestedByName: string | null;
 
   mintedAt: string | null;
 
   tokenBlueprintId: string | null;
-  requestedBy: string | null;
 
   /**
    * 詳細画面で使用する情報。
@@ -98,19 +106,30 @@ function deriveRowStatus(args: {
   mintedAt: string | null;
   minted: boolean;
 }): MintRequestRowStatus {
-  if (args.minted || Boolean(args.mintedAt)) {
+  if (
+    args.minted ||
+    Boolean(
+      asNonEmptyString(args.mintedAt),
+    )
+  ) {
     return "minted";
   }
 
   const hasRequestSignal =
     Boolean(
-      asNonEmptyString(args.tokenBlueprintId),
+      asNonEmptyString(
+        args.tokenBlueprintId,
+      ),
     ) ||
     Boolean(
-      asNonEmptyString(args.tokenName),
+      asNonEmptyString(
+        args.tokenName,
+      ),
     ) ||
     Boolean(
-      asNonEmptyString(args.requestedBy),
+      asNonEmptyString(
+        args.requestedBy,
+      ),
     );
 
   return hasRequestSignal
@@ -121,15 +140,17 @@ function deriveRowStatus(args: {
 function mapDTOToRow(
   dto: MintRequestManagementRowDTO,
 ): ViewRow {
-  const raw = dto as Record<string, unknown>;
+  const raw =
+    dto as Record<string, unknown>;
 
   /**
    * productionIdを正とする。
    * id / inspectionIdによる旧形式のfallbackは行わない。
    */
-  const productionId = asNonEmptyString(
-    raw.productionId,
-  );
+  const productionId =
+    asNonEmptyString(
+      raw.productionId,
+    );
 
   if (!productionId) {
     throw new Error(
@@ -137,60 +158,83 @@ function mapDTOToRow(
     );
   }
 
-  const tokenName = asStringOrNull(
-    raw.tokenName,
-  );
+  const tokenName =
+    asStringOrNull(
+      raw.tokenName,
+    );
 
-  const productName = asStringOrNull(
-    raw.productName,
-  );
+  const productName =
+    asStringOrNull(
+      raw.productName,
+    );
 
-  const mintQuantity = asNumber0(
-    raw.mintQuantity,
-  );
+  const mintQuantity =
+    asNumber0(
+      raw.mintQuantity,
+    );
 
-  const productionQuantity = asNumber0(
-    raw.productionQuantity,
-  );
+  const productionQuantity =
+    asNumber0(
+      raw.productionQuantity,
+    );
 
   const inspectionStatus =
     normalizeInspectionStatus(
       raw.inspectionStatus,
     );
 
-  const requestedBy = asStringOrNull(
-    raw.requestedBy,
-  );
+  /**
+   * mintsドキュメントを作成したメンバー。
+   *
+   * requestedBy系からのfallbackは行わない。
+   */
+  const createdBy =
+    asStringOrNull(
+      raw.createdBy,
+    );
 
   /**
-   * requestedByNameを正とする。
+   * createdByNameがない場合は、
+   * 対応するcreatedByのみを表示値として使用する。
+   */
+  const createdByName =
+    asStringOrNull(
+      raw.createdByName,
+    ) ??
+    createdBy;
+
+  /**
+   * Mint申請ボタンを押したメンバー。
    *
-   * 現行Backendとの互換のため、値がない場合のみ
-   * createdByName、requestedByの順で補完する。
+   * createdBy系からのfallbackは行わない。
+   */
+  const requestedBy =
+    asStringOrNull(
+      raw.requestedBy,
+    );
+
+  /**
+   * requestedByNameがない場合は、
+   * 対応するrequestedByのみを表示値として使用する。
    */
   const requestedByName =
     asStringOrNull(
       raw.requestedByName,
     ) ??
-    asStringOrNull(
-      raw.createdByName,
-    ) ??
     requestedBy;
 
-  /**
-   * 既存画面との互換用フィールド。
-   */
-  const createdByName = requestedByName;
-
-  const mintedAt = asStringOrNull(
-    raw.mintedAt,
-  );
+  const mintedAt =
+    asStringOrNull(
+      raw.mintedAt,
+    );
 
   const minted =
     typeof raw.minted === "boolean"
       ? raw.minted
       : Boolean(
-          asNonEmptyString(mintedAt),
+          asNonEmptyString(
+            mintedAt,
+          ),
         );
 
   const tokenBlueprintId =
@@ -208,13 +252,14 @@ function mapDTOToRow(
       raw.scheduledBurnDate,
     );
 
-  const status = deriveRowStatus({
-    tokenBlueprintId,
-    tokenName,
-    requestedBy,
-    mintedAt,
-    minted,
-  });
+  const status =
+    deriveRowStatus({
+      tokenBlueprintId,
+      tokenName,
+      requestedBy,
+      mintedAt,
+      minted,
+    });
 
   return {
     id: productionId,
@@ -228,12 +273,15 @@ function mapDTOToRow(
     status,
     inspectionStatus,
 
+    createdBy,
     createdByName,
+
+    requestedBy,
     requestedByName,
+
     mintedAt,
 
     tokenBlueprintId,
-    requestedBy,
 
     productBlueprintId,
     scheduledBurnDate,
@@ -264,10 +312,11 @@ export async function loadMintRequestManagementRows(): Promise<
     return [];
   }
 
-  const rows = await fetchMintRequestRowsHTTP(
-    productionIds,
-    "list",
-  );
+  const rows =
+    await fetchMintRequestRowsHTTP(
+      productionIds,
+      "list",
+    );
 
   return rows.map(mapDTOToRow);
 }

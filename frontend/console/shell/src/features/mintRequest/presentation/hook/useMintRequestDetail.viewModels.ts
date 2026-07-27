@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/presentation/hook/useMintRequestDetail.viewModels.ts
+// frontend/console/shell/src/features/mintRequest/presentation/hook/useMintRequestDetail.viewModels.ts
 
 import {
   safeDateLabelJa,
@@ -143,11 +143,11 @@ export function buildTokenBlueprintCardHandlers(
 
 export function buildMintLabels(params: {
   mint: MintInfo | null;
-  requestedByName: string | null;
+  createdByName: string | null;
 }) {
   const {
     mint,
-    requestedByName,
+    createdByName,
   } = params;
 
   const mintCreatedAtLabel =
@@ -156,22 +156,31 @@ export function buildMintLabels(params: {
       "（未登録）",
     );
 
+  /**
+   * mintsドキュメントを作成した人の表示値。
+   *
+   * 優先順位:
+   * 1. createdByName
+   * 2. createdBy
+   *
+   * requestedBy系からのfallbackは行わない。
+   */
   const mintCreatedByLabel = (() => {
-    const requestedBy =
+    const creatorName =
       asNonEmptyString(
-        requestedByName,
+        createdByName,
       );
 
-    if (requestedBy) {
-      return requestedBy;
+    if (creatorName) {
+      return creatorName;
     }
 
-    const createdBy =
+    const creatorId =
       asNonEmptyString(
         mint?.createdBy,
       );
 
-    return createdBy || "（不明）";
+    return creatorId || "（不明）";
   })();
 
   const mintScheduledBurnDateLabel =

@@ -3,8 +3,10 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import type { MintInfo } from "../../application/mapper/mintInfoMapper";
 import type {
   BrandSummary,
+  MintTaskProgress,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
 import { asNonEmptyString } from "../../application/util/primitive";
@@ -16,7 +18,6 @@ import { validateMintRequestSubmit } from "../../application/validator/validateM
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
 
-import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 import {
@@ -88,8 +89,13 @@ export function useMintRequestDetail() {
       null,
     );
 
-  const [mintDTO, setMintDTO] =
-    React.useState<MintDTO | null>(null);
+  const [mintInfo, setMintInfo] =
+    React.useState<MintInfo | null>(null);
+
+  const [mintProgress, setMintProgress] =
+    React.useState<MintTaskProgress | null>(
+      null,
+    );
 
   const [
     productBlueprintId,
@@ -189,7 +195,10 @@ export function useMintRequestDetail() {
         detail.inspectionBatch,
       );
 
-      setMintDTO(detail.mintDTO);
+      setMintInfo(detail.mint);
+      setMintProgress(
+        detail.mintProgress,
+      );
 
       setProductBlueprintId(
         detail.productBlueprintId || "",
@@ -225,7 +234,10 @@ export function useMintRequestDetail() {
           detail.inspectionBatch,
         );
 
-        setMintDTO(detail.mintDTO);
+        setMintInfo(detail.mint);
+        setMintProgress(
+          detail.mintProgress,
+        );
 
         setProductBlueprintId(
           detail.productBlueprintId || "",
@@ -407,12 +419,12 @@ export function useMintRequestDetail() {
     hasMint,
     isMinting: isMintProcessing,
     isMintCompleted,
+    createdByName,
     requestedByName,
     mintRequestedTokenBlueprintId,
     mintRequestedBrandId,
   } = useMintInfo({
-    mintDTO,
-    inspectionBatch,
+    mint: mintInfo,
     pbPatch,
   });
 
@@ -423,9 +435,6 @@ export function useMintRequestDetail() {
   const isMinting =
     isSubmittingMintRequest ||
     isMintProcessing;
-
-  const mintProgress =
-    mintDTO?.mintProgress ?? null;
 
   const showMintProgress =
     React.useMemo(() => {
@@ -762,11 +771,11 @@ export function useMintRequestDetail() {
     () =>
       buildMintLabels({
         mint,
-        requestedByName,
+        createdByName,
       }),
     [
       mint,
-      requestedByName,
+      createdByName,
     ],
   );
 

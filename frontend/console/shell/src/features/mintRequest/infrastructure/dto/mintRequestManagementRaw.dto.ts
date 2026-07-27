@@ -1,19 +1,20 @@
-// frontend/console/mintRequest/src/infrastructure/dto/mintRequestManagementRaw.dto.ts
+// frontend/console/shell/src/features/mintRequest/infrastructure/dto/mintRequestManagementRaw.dto.ts
 
 import type { InspectionStatus } from "../../domain/inspections";
 
 /**
- * MintRequestQueryService が返す “一覧用 Raw DTO” をそのまま表現。
+ * MintRequestQueryService が返す一覧用Raw DTO。
  *
  * 前提:
- * - productionId と inspectionId の docId は同一
- * - フロントでは productionId を正とする
- * - id / inspectionId / casing fallback / old DTO 名は扱わない
+ * - productionIdとinspectionIdのdocIdは同一
+ * - フロントではproductionIdを正とする
+ * - id / inspectionId / casing fallback / old DTO名は扱わない
+ * - createdByとrequestedByは相互補完しない
  */
 export type MintRequestManagementRawDTO = {
   productionId: string;
 
-  // list fields
+  tokenBlueprintId?: string | null;
   tokenName?: string | null;
   productName?: string | null;
 
@@ -22,35 +23,30 @@ export type MintRequestManagementRawDTO = {
 
   inspectionStatus?: InspectionStatus | string | null;
 
+  createdBy?: string | null;
+  createdByName?: string | null;
+
   requestedBy?: string | null;
   requestedByName?: string | null;
-  createdByName?: string | null;
 
   mintedAt?: string | null;
 
-  tokenBlueprintId?: string | null;
-
-  productBlueprintId?: string | null;
-  scheduledBurnDate?: string | null;
-
-  // raw sub docs
   mint?: {
+    id?: string | null;
+
+    brandId?: string | null;
     tokenBlueprintId?: string | null;
-    tokenName?: string | null;
+
+    products?: string[] | null;
     status?: string | null;
-    mintedAt?: string | null;
+
+    createdAt?: string | null;
     createdBy?: string | null;
-  } | null;
+    requestedBy?: string | null;
 
-  inspection?: {
-    status?: InspectionStatus | string | null;
-    productName?: string | null;
-  } | null;
-};
+    mintedAt?: string | null;
+    scheduledBurnDate?: string | null;
 
-/**
- * レスポンスが `{ items: [...] }` の場合の wrapper
- */
-export type MintRequestManagementRawResponseDTO = {
-  items?: MintRequestManagementRawDTO[] | null;
+    onChainTxSignature?: string | null;
+  } | null;
 };

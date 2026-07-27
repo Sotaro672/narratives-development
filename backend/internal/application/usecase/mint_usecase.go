@@ -143,6 +143,7 @@ func (m *MintResultMapper) ApplyOnchainResult(
 	if ent == nil {
 		return errors.New("mint entity is nil")
 	}
+
 	if result == nil {
 		return nil
 	}
@@ -232,6 +233,7 @@ func (u *MintUsecase) SetMintTaskRepository(
 	if u == nil {
 		return
 	}
+
 	u.mintTaskRepo = repo
 }
 
@@ -239,6 +241,7 @@ func (u *MintUsecase) SetMintTaskEnqueuer(enqueuer MintTaskEnqueuer) {
 	if u == nil {
 		return
 	}
+
 	u.mintTaskEnqueuer = enqueuer
 }
 
@@ -248,6 +251,7 @@ func (u *MintUsecase) SetMintProductMintRecorder(
 	if u == nil {
 		return
 	}
+
 	u.mintProductMintRecord = recorder
 }
 
@@ -257,6 +261,7 @@ func (u *MintUsecase) SetTokenBlueprintMetadataEnsurer(
 	if u == nil {
 		return
 	}
+
 	u.tbMetadataEnsurer = e
 }
 
@@ -266,6 +271,7 @@ func (u *MintUsecase) SetTokenBlueprintMintMarker(
 	if u == nil {
 		return
 	}
+
 	u.tbMintMarker = marker
 }
 
@@ -285,15 +291,19 @@ func (u *MintUsecase) UpdateRequestInfo(
 	if u == nil {
 		return errors.New("mint usecase is nil")
 	}
+
 	if u.mintRepo == nil {
 		return errors.New("mint repo is nil")
 	}
+
 	if u.mintTaskRepo == nil {
 		return errors.New("mint task repo is nil")
 	}
+
 	if u.passedProductLister == nil {
 		return errors.New("passedProductLister is nil")
 	}
+
 	if u.tbRepo == nil {
 		return errors.New("tokenBlueprint repo is nil")
 	}
@@ -319,6 +329,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 	if err != nil {
 		return err
 	}
+
 	if tb == nil {
 		return errors.New("tokenBlueprint not found")
 	}
@@ -333,6 +344,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 	if err != nil {
 		return err
 	}
+
 	if len(passedProductIDs) == 0 {
 		return errors.New("no passed products for this production")
 	}
@@ -360,12 +372,13 @@ func (u *MintUsecase) UpdateRequestInfo(
 					"invalid scheduledBurnDate format (expected YYYY-MM-DD)",
 				)
 			}
+
 			utc := t.UTC()
 			mintEntity.ScheduledBurnDate = &utc
 		}
 	}
 
-	if err := mintEntity.MarkQueued(); err != nil {
+	if err := mintEntity.MarkQueued(memberID); err != nil {
 		return err
 	}
 
@@ -398,6 +411,7 @@ func (u *MintUsecase) resolveProductBlueprintIDFromProduction(
 	if u == nil || u.prodRepo == nil {
 		return ""
 	}
+
 	if productionID == "" {
 		return ""
 	}
@@ -419,6 +433,7 @@ func lastMintResult(
 			return minted[i].Result
 		}
 	}
+
 	return nil
 }
 
@@ -450,6 +465,7 @@ func (u *MintUsecase) ensureMetadataURI(
 			err,
 		)
 	}
+
 	if tb == nil {
 		return "", fmt.Errorf(
 			"tokenBlueprint not found (id=%s)",
@@ -465,6 +481,7 @@ func (u *MintUsecase) ensureMetadataURI(
 	if err != nil {
 		return "", fmt.Errorf("ensure metadata uri: %w", err)
 	}
+
 	if updated == nil {
 		updated = tb
 	}
@@ -484,12 +501,15 @@ func (u *MintUsecase) ReconcileMintCompletion(
 	if u == nil {
 		return errors.New("mint usecase is nil")
 	}
+
 	if mintID == "" {
 		return errors.New("mintID is empty")
 	}
+
 	if u.mintRepo == nil {
 		return errors.New("mint repo is nil")
 	}
+
 	if u.mintTaskRepo == nil {
 		return errors.New("mint task repo is nil")
 	}
@@ -513,6 +533,7 @@ func (u *MintUsecase) ReconcileMintCompletion(
 			err,
 		)
 	}
+
 	if len(tasks) == 0 {
 		return nil
 	}
@@ -521,10 +542,12 @@ func (u *MintUsecase) ReconcileMintCompletion(
 		map[string]struct{},
 		len(mintEnt.Products),
 	)
+
 	for _, productID := range mintEnt.Products {
 		if productID == "" {
 			return mintdom.ErrInvalidProducts
 		}
+
 		expectedProductIDs[productID] = struct{}{}
 	}
 
@@ -540,14 +563,17 @@ func (u *MintUsecase) ReconcileMintCompletion(
 		if _, exists := expectedProductIDs[task.ProductID]; !exists {
 			return nil
 		}
+
 		if _, duplicated := seenProductIDs[task.ProductID]; duplicated {
 			return nil
 		}
+
 		seenProductIDs[task.ProductID] = struct{}{}
 
 		if task.Status != mintdom.MintProductTaskStatusMinted {
 			return nil
 		}
+
 		if task.MintedAt == nil || task.MintedAt.IsZero() {
 			return nil
 		}
@@ -561,6 +587,7 @@ func (u *MintUsecase) ReconcileMintCompletion(
 	if len(seenProductIDs) != len(expectedProductIDs) {
 		return nil
 	}
+
 	if completedAt.IsZero() {
 		return nil
 	}
@@ -602,18 +629,23 @@ func (u *MintUsecase) ExecuteNextMintTask(
 	if u == nil {
 		return nil, errors.New("mint usecase is nil")
 	}
+
 	if mintRequestID == "" {
 		return nil, errors.New("mintRequestID is empty")
 	}
+
 	if u.mintRepo == nil {
 		return nil, errors.New("mint repo is nil")
 	}
+
 	if u.mintTaskRepo == nil {
 		return nil, errors.New("mint task repo is nil")
 	}
+
 	if u.mintResultMapper == nil {
 		return nil, errors.New("mint result mapper is nil")
 	}
+
 	if u.mintProductMintRecord == nil {
 		return nil, errors.New("mint product recorder is nil")
 	}
@@ -622,6 +654,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 	if err != nil {
 		return nil, err
 	}
+
 	mintEnt := &mintEntValue
 
 	if mintEnt.Status == mintdom.MintStatusMinted {
@@ -654,6 +687,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 	if u.tokenMinter == nil {
 		return nil, errors.New("token minter is nil")
 	}
+
 	if u.mintRequestPort == nil {
 		return nil, errors.New("mint request port is nil")
 	}
@@ -680,6 +714,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 			err,
 		)
 	}
+
 	if req == nil {
 		return nil, fmt.Errorf(
 			"mint request %s is nil",
@@ -701,6 +736,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 	if actorID == "" {
 		actorID = mintEnt.CreatedBy
 	}
+
 	if actorID == "" {
 		actorID = MemberIDFromContext(ctx)
 	}
@@ -714,6 +750,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 	if err != nil {
 		return nil, err
 	}
+
 	if metadataURI == "" {
 		return nil, fmt.Errorf(
 			"mint request %s has empty MetadataURI",
@@ -754,6 +791,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 				actorID,
 			)
 		}
+
 		return nil, fmt.Errorf(
 			"get next executable mint task: %w",
 			err,
@@ -823,6 +861,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 	if mintedOne.ProductID == "" {
 		mintedOne.ProductID = task.ProductID
 	}
+
 	if mintedOne.ProductID != task.ProductID {
 		return nil, fmt.Errorf(
 			"minted productID mismatch: task=%s minted=%s",
@@ -830,6 +869,7 @@ func (u *MintUsecase) ExecuteNextMintTask(
 			mintedOne.ProductID,
 		)
 	}
+
 	if mintedOne.Result == nil {
 		return nil, fmt.Errorf(
 			"onchain mint succeeded but result is nil (mintRequestId=%s productId=%s)",
@@ -898,6 +938,7 @@ func (u *MintUsecase) recordMintedProduct(
 	if u == nil {
 		return errors.New("mint usecase is nil")
 	}
+
 	if u.mintProductMintRecord == nil {
 		return errors.New("mint product recorder is nil")
 	}
@@ -931,6 +972,7 @@ func (u *MintUsecase) markTaskFailed(
 			productID,
 			message,
 		)
+
 		return updateErr
 	}
 
@@ -940,6 +982,7 @@ func (u *MintUsecase) markTaskFailed(
 		productID,
 		message,
 	)
+
 	return updateErr
 }
 
@@ -950,6 +993,7 @@ func (u *MintUsecase) markParentFailedRetryable(
 	if u == nil || u.mintRepo == nil {
 		return errors.New("mint repo is nil")
 	}
+
 	if mintEnt == nil {
 		return errors.New("mint entity is nil")
 	}
@@ -959,6 +1003,7 @@ func (u *MintUsecase) markParentFailedRetryable(
 	}
 
 	_, err := u.mintRepo.Update(ctx, *mintEnt)
+
 	return err
 }
 
@@ -972,12 +1017,15 @@ func (u *MintUsecase) updateParentAndMaybeEnqueueNext(
 	if u == nil {
 		return errors.New("mint usecase is nil")
 	}
+
 	if mintEnt == nil {
 		return errors.New("mint entity is nil")
 	}
+
 	if u.mintTaskRepo == nil {
 		return errors.New("mint task repo is nil")
 	}
+
 	if u.mintRepo == nil {
 		return errors.New("mint repo is nil")
 	}
@@ -1006,8 +1054,10 @@ func (u *MintUsecase) updateParentAndMaybeEnqueueNext(
 		switch task.Status {
 		case mintdom.MintProductTaskStatusMinted:
 			mintedCount++
+
 		case mintdom.MintProductTaskStatusFailedFatal:
 			fatalCount++
+
 		case mintdom.MintProductTaskStatusPending,
 			mintdom.MintProductTaskStatusFailedRetryable:
 			retryableCount++
@@ -1096,6 +1146,7 @@ func (u *MintUsecase) finalizeMintIfAllTasksCompleted(
 	if u == nil {
 		return nil, errors.New("mint usecase is nil")
 	}
+
 	if mintEnt == nil {
 		return nil, errors.New("mint entity is nil")
 	}
@@ -1110,6 +1161,7 @@ func (u *MintUsecase) finalizeMintIfAllTasksCompleted(
 			err,
 		)
 	}
+
 	if len(tasks) == 0 {
 		return nil, mintdom.ErrMintProductTaskNotFound
 	}
@@ -1122,6 +1174,7 @@ func (u *MintUsecase) finalizeMintIfAllTasksCompleted(
 			allMinted = false
 			break
 		}
+
 		if task.Signature != "" {
 			latestSignature = task.Signature
 		}

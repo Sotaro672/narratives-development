@@ -30,6 +30,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 	var prod ProductionListItemDTO
 	foundProd := false
+
 	for _, p := range prods {
 		if p.ID == pid {
 			prod = p
@@ -37,11 +38,15 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			break
 		}
 	}
+
 	if !foundProd {
 		return nil, errors.New("production not found")
 	}
 
-	batches, err := s.listInspectionBatchesByProductionIDs(ctx, []string{pid})
+	batches, err := s.listInspectionBatchesByProductionIDs(
+		ctx,
+		[]string{pid},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -66,35 +71,57 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		Inspections   []inspectionItemLite `json:"inspections"`
 	}
 
-	inspectionBatches := make([]inspectionBatchLite, 0, len(batches))
+	inspectionBatches := make(
+		[]inspectionBatchLite,
+		0,
+		len(batches),
+	)
+
 	for _, b := range batches {
 		row := inspectionBatchLite{
 			ProductionID:  b.ProductionID,
 			Status:        string(b.Status),
 			TotalPassed:   b.TotalPassed,
 			TotalQuantity: len(b.Inspections),
-			Inspections:   make([]inspectionItemLite, 0, len(b.Inspections)),
+			Inspections: make(
+				[]inspectionItemLite,
+				0,
+				len(b.Inspections),
+			),
 		}
 
 		for _, it := range b.Inspections {
-			row.Inspections = append(row.Inspections, inspectionItemLite{
-				ProductID:        it.ProductID,
-				ModelID:          it.ModelID,
-				InspectionResult: inspectionResultString(it.InspectionResult),
-				RGB:              nil,
-				Size:             "",
-				Color:            "",
-				ModelNumber:      "",
-				InspectedBy:      stringPtrValue(it.InspectedBy),
-				InspectedAt:      timePtrString(it.InspectedAt),
-			})
+			row.Inspections = append(
+				row.Inspections,
+				inspectionItemLite{
+					ProductID: it.ProductID,
+					ModelID:   it.ModelID,
+					InspectionResult: inspectionResultString(
+						it.InspectionResult,
+					),
+					RGB:         nil,
+					Size:        "",
+					Color:       "",
+					ModelNumber: "",
+					InspectedBy: stringPtrValue(
+						it.InspectedBy,
+					),
+					InspectedAt: timePtrString(
+						it.InspectedAt,
+					),
+				},
+			)
 		}
 
-		inspectionBatches = append(inspectionBatches, row)
+		inspectionBatches = append(
+			inspectionBatches,
+			row,
+		)
 	}
 
 	var insp inspectionBatchLite
 	hasInsp := false
+
 	for _, b := range inspectionBatches {
 		if b.ProductionID == pid {
 			insp = b
@@ -103,10 +130,14 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 	}
 
-	mintsByPID, err := s.listMintsByProductionIDs(ctx, []string{pid})
+	mintsByPID, err := s.listMintsByProductionIDs(
+		ctx,
+		[]string{pid},
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	m, hasMint := mintsByPID[pid]
 
 	productName := prod.ProductName
@@ -115,10 +146,14 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	prodQty := prod.TotalQuantity
 	inspStatus := "notYet"
 
-	inspectionItems := make([]querydto.InspectionItemDTO, 0)
+	inspectionItems := make(
+		[]querydto.InspectionItemDTO,
+		0,
+	)
 
 	if hasInsp {
 		mintQty = insp.TotalPassed
+
 		if insp.Status != "" {
 			inspStatus = insp.Status
 		}
@@ -136,35 +171,66 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 				InspectedAt:      it.InspectedAt,
 			}
 
-			inspectionItems = append(inspectionItems, row)
+			inspectionItems = append(
+				inspectionItems,
+				row,
+			)
 		}
 	}
 
 	tokenBlueprintID := ""
 	tokenName := ""
+
+	createdBy := ""
+	createdByName := ""
+
 	requestedBy := ""
 	requestedByName := ""
+
 	var mintedAt *time.Time
 	var mintSummary *querydto.MintSummaryDTO
 	var mintProgress *querydto.MintTaskProgressDTO
 
 	if hasMint {
-		requestedBy = m.CreatedBy
+		createdBy = m.CreatedBy
+		requestedBy = m.RequestedBy
+
 		mintedAt = m.MintedAt
 		tokenBlueprintID = m.TokenBlueprintID
 
-		tokenName = s.resolveTokenName(ctx, tokenBlueprintID)
-		requestedByName = s.resolveMemberNameByID(ctx, requestedBy)
+		tokenName = s.resolveTokenName(
+			ctx,
+			tokenBlueprintID,
+		)
 
-		products := make([]string, 0, len(m.Products))
-		products = append(products, m.Products...)
+		createdByName = s.resolveMemberNameByID(
+			ctx,
+			createdBy,
+		)
+
+		requestedByName = s.resolveMemberNameByID(
+			ctx,
+			requestedBy,
+		)
+
+		products := make(
+			[]string,
+			0,
+			len(m.Products),
+		)
+
+		products = append(
+			products,
+			m.Products...,
+		)
 
 		mintSummary = &querydto.MintSummaryDTO{
 			ID:                 m.ID,
 			BrandID:            m.BrandID,
 			TokenBlueprintID:   m.TokenBlueprintID,
-			CreatedBy:          m.CreatedBy,
-			CreatedByName:      requestedByName,
+			Status:             string(m.Status),
+			CreatedBy:          createdBy,
+			CreatedByName:      createdByName,
 			CreatedAt:          &m.CreatedAt,
 			MintedAt:           m.MintedAt,
 			ScheduledBurnDate:  m.ScheduledBurnDate,
@@ -173,7 +239,12 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 
 		if s.mintTaskProgressQuery != nil {
-			progress, progressErr := s.mintTaskProgressQuery.GetMintTaskProgress(ctx, pid)
+			progress, progressErr :=
+				s.mintTaskProgressQuery.GetMintTaskProgress(
+					ctx,
+					pid,
+				)
+
 			if progressErr == nil {
 				mintProgress = progress
 			}
@@ -187,6 +258,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	}
 
 	var inspSummary *querydto.InspectionSummaryDTO
+
 	if hasInsp {
 		inspSummary = &querydto.InspectionSummaryDTO{
 			ProductionID: insp.ProductionID,
@@ -208,8 +280,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		ProductionQuantity: prodQty,
 		InspectionStatus:   inspStatus,
 
+		CreatedByName:   createdByName,
 		RequestedBy:     requestedBy,
-		CreatedByName:   requestedByName,
 		RequestedByName: requestedByName,
 
 		MintedAt: mintedAt,
@@ -225,10 +297,13 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	return out, nil
 }
 
-func inspectionResultString(v *inspectiondom.InspectionResult) string {
+func inspectionResultString(
+	v *inspectiondom.InspectionResult,
+) string {
 	if v == nil {
 		return ""
 	}
+
 	return string(*v)
 }
 
@@ -236,6 +311,7 @@ func stringPtrValue(v *string) string {
 	if v == nil {
 		return ""
 	}
+
 	return *v
 }
 
@@ -243,5 +319,6 @@ func timePtrString(v *time.Time) string {
 	if v == nil || v.IsZero() {
 		return ""
 	}
+
 	return v.UTC().Format(time.RFC3339)
 }

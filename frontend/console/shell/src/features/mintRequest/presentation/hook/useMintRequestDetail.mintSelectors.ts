@@ -2,47 +2,30 @@
 
 import * as React from "react";
 
-import {
-  extractMintInfoFromBatch,
-  extractMintInfoFromMintDTO,
-  type MintInfo,
-} from "../../application/mapper/mintInfoMapper";
+import type { MintInfo } from "../../application/mapper/mintInfoMapper";
 import { asNonEmptyString } from "../../application/util/primitive";
 
-import type { InspectionBatchDTO } from "../../domain/inspections";
-import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import type { ProductBlueprintPatchDTO } from "../../infrastructure/dto/mintRequestLocal.dto";
 
 type UseMintInfoParams = {
-  mintDTO: MintDTO | null;
-  inspectionBatch: InspectionBatchDTO | null;
+  /**
+   * Application層でMintDTOから変換済みのMint情報。
+   *
+   * Presentation層ではMintDTOを直接扱わない。
+   */
+  mint: MintInfo | null;
+
+  /**
+   * MintにbrandIdが存在しない場合に使用する
+   * Product Blueprint側の補助情報。
+   */
   pbPatch: ProductBlueprintPatchDTO | null;
 };
 
 export function useMintInfo({
-  mintDTO,
-  inspectionBatch,
+  mint,
   pbPatch,
 }: UseMintInfoParams) {
-  const mint: MintInfo | null =
-    React.useMemo(() => {
-      const mintInfoFromDTO =
-        extractMintInfoFromMintDTO(
-          mintDTO,
-        );
-
-      if (mintInfoFromDTO) {
-        return mintInfoFromDTO;
-      }
-
-      return extractMintInfoFromBatch(
-        inspectionBatch,
-      );
-    }, [
-      mintDTO,
-      inspectionBatch,
-    ]);
-
   const hasMint = mint !== null;
 
   /**
@@ -119,6 +102,9 @@ export function useMintInfo({
     return requesterId || null;
   }, [mint]);
 
+  /**
+   * Mintで選択されたToken Blueprint ID。
+   */
   const mintRequestedTokenBlueprintId =
     React.useMemo(() => {
       return asNonEmptyString(
@@ -126,6 +112,12 @@ export function useMintInfo({
       );
     }, [mint]);
 
+  /**
+   * Mintで選択されたブランドID。
+   *
+   * Mint側にbrandIdが存在しない場合だけ、
+   * Product Blueprint側のbrandIdを使用する。
+   */
   const mintRequestedBrandId =
     React.useMemo(() => {
       const brandIdFromMint =

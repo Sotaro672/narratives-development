@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/presentation/hook/useMintRequestManagement.tsx
+// frontend/console/shell/src/features/mintRequest/presentation/hook/useMintRequestManagement.tsx
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,9 +14,6 @@ import {
   loadMintRequestManagementRows,
   type ViewRow as ManagementRow,
 } from "../../application/usecase/loadMintRequestManagementRows";
-
-// ✅ presentation VM（画面の入出力型）
-import type { MintRequestManagementRowVM } from "../viewModel/mintRequestManagement.vm";
 
 // ✅ presentation formatter
 import { inspectionStatusLabel } from "../formatter/inspectionStatusLabel";
@@ -54,51 +51,107 @@ const toTs = (s: string | null | undefined): number | null => {
 
   const dt = new Date(year, month - 1, day, hh, mm, ss);
   const ts = dt.getTime();
+
   return Number.isNaN(ts) ? null : ts;
 };
 
 // Sorting key
-type SortKey = "mintedAt" | "mintQuantity" | "productionQuantity" | null;
+type SortKey =
+  | "mintedAt"
+  | "mintQuantity"
+  | "productionQuantity"
+  | null;
 
-const normalizeText = (v: string | null | undefined): string => {
-  return typeof v === "string" ? v.trim() : "";
+const normalizeText = (
+  value: string | null | undefined,
+): string => {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 };
 
-const asInspectionStatus = (v: string): InspectionStatus | null => {
-  const s = String(v ?? "").trim();
-  if (s === "inspecting" || s === "completed" || s === "notYet") {
-    return s as InspectionStatus;
+const asInspectionStatus = (
+  value: string,
+): InspectionStatus | null => {
+  const status = String(value ?? "").trim();
+
+  if (
+    status === "inspecting" ||
+    status === "completed" ||
+    status === "notYet"
+  ) {
+    return status as InspectionStatus;
   }
+
   return null;
 };
 
-const toManagementRowVM = (r: ManagementRow): MintRequestManagementRowVM => {
-  // ✅ minted のときは「ミント完了」を優先、それ以外は検査ステータス表示
+/**
+ * 一覧画面でのみ使用する表示用の行型。
+ *
+ * 削除済みのMintRequestManagementRowVMには依存せず、
+ * Application層のManagementRowへ表示ラベルだけを追加する。
+ */
+type ManagementPresentationRow = ManagementRow & {
+  statusLabel: string;
+};
+
+const toPresentationRow = (
+  row: ManagementRow,
+): ManagementPresentationRow => {
+  // mintedのときは「ミント完了」を優先し、
+  // それ以外は検品ステータスを表示する。
   const statusLabel =
-    r.status === "minted" ? "ミント完了" : inspectionStatusLabel(r.inspectionStatus);
+    row.status === "minted"
+      ? "ミント完了"
+      : inspectionStatusLabel(
+          row.inspectionStatus,
+        );
 
   return {
-    ...r,
-    requestedByName: r.requestedByName,
+    ...row,
 
-    // ✅ mintedAt 表示は "yyyy/mm/dd hh:mm:ss" に固定（dateJa.ts の確定版を利用）
-    mintedAt: r.mintedAt ? safeDateTimeLabelJa(r.mintedAt, "") : null,
+    // mintedAt表示は
+    // "yyyy/mm/dd hh:mm:ss"に統一する。
+    mintedAt: row.mintedAt
+      ? safeDateTimeLabelJa(
+          row.mintedAt,
+          "",
+        )
+      : null,
 
-    // ✅ 表示ラベル
     statusLabel,
   };
+};
+
+const getErrorMessage = (
+  error: unknown,
+): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Failed to fetch mint requests";
 };
 
 export const useMintRequestManagement = () => {
   const navigate = useNavigate();
 
   // ---------------------------
-  // データ取得（usecase に委譲）
+  // データ取得（usecaseに委譲）
   // ---------------------------
-  const [rawRows, setRawRows] = useState<MintRequestManagementRowVM[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [isResetting, setIsResetting] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [rawRows, setRawRows] = useState<
+    ManagementPresentationRow[]
+  >([]);
+
+  const [loading, setLoading] =
+    useState<boolean>(false);
+
+  const [isResetting, setIsResetting] =
+    useState<boolean>(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
 
   const fetchRows = useCallback(async () => {
     setIsResetting(true);
@@ -106,12 +159,20 @@ export const useMintRequestManagement = () => {
     setError(null);
 
     try {
-      const rows = await loadMintRequestManagementRows();
-      const vms = (rows ?? []).map(toManagementRowVM);
-      setRawRows(vms);
-    } catch (e: any) {
+      const rows =
+        await loadMintRequestManagementRows();
+
+      const presentationRows =
+        (rows ?? []).map(
+          toPresentationRow,
+        );
+
+      setRawRows(presentationRows);
+    } catch (fetchError: unknown) {
       setRawRows([]);
-      setError(e?.message ?? "Failed to fetch mint requests");
+      setError(
+        getErrorMessage(fetchError),
+      );
     } finally {
       setLoading(false);
       setIsResetting(false);
@@ -127,16 +188,27 @@ export const useMintRequestManagement = () => {
       setError(null);
 
       try {
-        const rows = await loadMintRequestManagementRows();
+        const rows =
+          await loadMintRequestManagementRows();
 
         if (!cancelled) {
-          const vms = (rows ?? []).map(toManagementRowVM);
-          setRawRows(vms);
+          const presentationRows =
+            (rows ?? []).map(
+              toPresentationRow,
+            );
+
+          setRawRows(
+            presentationRows,
+          );
         }
-      } catch (e: any) {
+      } catch (fetchError: unknown) {
         if (!cancelled) {
           setRawRows([]);
-          setError(e?.message ?? "Failed to fetch mint requests");
+          setError(
+            getErrorMessage(
+              fetchError,
+            ),
+          );
         }
       } finally {
         if (!cancelled) {
@@ -146,7 +218,8 @@ export const useMintRequestManagement = () => {
       }
     };
 
-    run();
+    void run();
+
     return () => {
       cancelled = true;
     };
@@ -155,104 +228,238 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   // Filters
   // ---------------------------
-  const [tokenFilter, setTokenFilter] = useState<string[]>([]);
-  const [productionFilter, setProductionFilter] = useState<string[]>([]);
-  const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<InspectionStatus[]>([]);
+  const [tokenFilter, setTokenFilter] =
+    useState<string[]>([]);
+
+  const [
+    productionFilter,
+    setProductionFilter,
+  ] = useState<string[]>([]);
+
+  const [
+    requesterFilter,
+    setRequesterFilter,
+  ] = useState<string[]>([]);
+
+  const [statusFilter, setStatusFilter] =
+    useState<InspectionStatus[]>([]);
 
   // Sorting（デフォルト：mintedAt DESC）
-  const [sortKey, setSortKey] = useState<SortKey>("mintedAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>("desc");
+  const [sortKey, setSortKey] =
+    useState<SortKey>("mintedAt");
+
+  const [sortDir, setSortDir] =
+    useState<
+      "asc" | "desc" | null
+    >("desc");
 
   // ---------------------------
   // Filter options
   // ---------------------------
   const tokenOptions = useMemo(() => {
-    const s = new Set<string>();
-    rawRows.forEach((r) => {
-      const v = normalizeText(r.tokenName ?? null);
-      if (v) s.add(v);
+    const values = new Set<string>();
+
+    rawRows.forEach((row) => {
+      const value = normalizeText(
+        row.tokenName,
+      );
+
+      if (value) {
+        values.add(value);
+      }
     });
-    return [...s].map((v) => ({ value: v, label: v }));
+
+    return [...values].map(
+      (value) => ({
+        value,
+        label: value,
+      }),
+    );
   }, [rawRows]);
 
-  const productionOptions = useMemo(() => {
-    const s = new Set<string>();
-    rawRows.forEach((r) => {
-      const v = normalizeText(r.productName ?? null);
-      if (v) s.add(v);
-    });
-    return [...s].map((v) => ({ value: v, label: v }));
-  }, [rawRows]);
+  const productionOptions =
+    useMemo(() => {
+      const values = new Set<string>();
 
-  const requesterOptions = useMemo(() => {
-    const s = new Set<string>();
-    rawRows.forEach((r) => {
-      const v = normalizeText(r.requestedByName ?? null);
-      if (v) s.add(v);
-    });
-    return [...s].map((v) => ({ value: v, label: v }));
-  }, [rawRows]);
+      rawRows.forEach((row) => {
+        const value = normalizeText(
+          row.productName,
+        );
+
+        if (value) {
+          values.add(value);
+        }
+      });
+
+      return [...values].map(
+        (value) => ({
+          value,
+          label: value,
+        }),
+      );
+    }, [rawRows]);
+
+  const requesterOptions =
+    useMemo(() => {
+      const values = new Set<string>();
+
+      rawRows.forEach((row) => {
+        const value = normalizeText(
+          row.requestedByName,
+        );
+
+        if (value) {
+          values.add(value);
+        }
+      });
+
+      return [...values].map(
+        (value) => ({
+          value,
+          label: value,
+        }),
+      );
+    }, [rawRows]);
 
   const statusOptions = useMemo(() => {
-    const s = new Set<InspectionStatus>();
-    rawRows.forEach((r) => {
-      if (r.inspectionStatus) s.add(r.inspectionStatus);
+    const values =
+      new Set<InspectionStatus>();
+
+    rawRows.forEach((row) => {
+      if (row.inspectionStatus) {
+        values.add(
+          row.inspectionStatus,
+        );
+      }
     });
 
-    return [...s].map((v) => ({
-      value: v,
-      label: inspectionStatusLabel(v),
-    }));
+    return [...values].map(
+      (value) => ({
+        value,
+        label:
+          inspectionStatusLabel(
+            value,
+          ),
+      }),
+    );
   }, [rawRows]);
 
   // ---------------------------
   // Filter + sort rows
   // ---------------------------
   const rows = useMemo(() => {
-    let data = rawRows.filter((r) => {
-      const token = normalizeText(r.tokenName ?? null);
-      const product = normalizeText(r.productName ?? null);
-      const requester = normalizeText(r.requestedByName ?? null);
+    let data = rawRows.filter(
+      (row) => {
+        const token = normalizeText(
+          row.tokenName,
+        );
 
-      const tokenOk =
-        tokenFilter.length === 0 || (token && tokenFilter.includes(token));
-      const productionOk =
-        productionFilter.length === 0 ||
-        (product && productionFilter.includes(product));
-      const requesterOk =
-        requesterFilter.length === 0 || requesterFilter.includes(requester);
+        const product =
+          normalizeText(
+            row.productName,
+          );
 
-      const st = (r.inspectionStatus ?? ("notYet" as any)) as InspectionStatus;
-      const statusOk = statusFilter.length === 0 || statusFilter.includes(st);
+        const requester =
+          normalizeText(
+            row.requestedByName,
+          );
 
-      return tokenOk && productionOk && requesterOk && statusOk;
-    });
+        const tokenOk =
+          tokenFilter.length === 0 ||
+          (
+            token !== "" &&
+            tokenFilter.includes(
+              token,
+            )
+          );
+
+        const productionOk =
+          productionFilter.length === 0 ||
+          (
+            product !== "" &&
+            productionFilter.includes(
+              product,
+            )
+          );
+
+        const requesterOk =
+          requesterFilter.length === 0 ||
+          requesterFilter.includes(
+            requester,
+          );
+
+        const statusOk =
+          statusFilter.length === 0 ||
+          statusFilter.includes(
+            row.inspectionStatus,
+          );
+
+        return (
+          tokenOk &&
+          productionOk &&
+          requesterOk &&
+          statusOk
+        );
+      },
+    );
 
     if (sortKey && sortDir) {
-      data = [...data].sort((a, b) => {
-        if (sortKey === "mintQuantity") {
+      data = [...data].sort(
+        (a, b) => {
+          if (
+            sortKey ===
+            "mintQuantity"
+          ) {
+            return sortDir === "asc"
+              ? a.mintQuantity -
+                  b.mintQuantity
+              : b.mintQuantity -
+                  a.mintQuantity;
+          }
+
+          if (
+            sortKey ===
+            "productionQuantity"
+          ) {
+            return sortDir === "asc"
+              ? a.productionQuantity -
+                  b.productionQuantity
+              : b.productionQuantity -
+                  a.productionQuantity;
+          }
+
+          // mintedAt未設定・不正値は、
+          // asc/descにかかわらず末尾にする。
+          const aTimestamp = toTs(
+            a.mintedAt,
+          );
+
+          const bTimestamp = toTs(
+            b.mintedAt,
+          );
+
+          if (
+            aTimestamp === null &&
+            bTimestamp === null
+          ) {
+            return 0;
+          }
+
+          if (aTimestamp === null) {
+            return 1;
+          }
+
+          if (bTimestamp === null) {
+            return -1;
+          }
+
           return sortDir === "asc"
-            ? (a.mintQuantity ?? 0) - (b.mintQuantity ?? 0)
-            : (b.mintQuantity ?? 0) - (a.mintQuantity ?? 0);
-        }
-
-        if (sortKey === "productionQuantity") {
-          return sortDir === "asc"
-            ? (a.productionQuantity ?? 0) - (b.productionQuantity ?? 0)
-            : (b.productionQuantity ?? 0) - (a.productionQuantity ?? 0);
-        }
-
-        // mintedAt: 未設定/不正は常に末尾（asc/desc とも）
-        const av = toTs(a.mintedAt ?? null);
-        const bv = toTs(b.mintedAt ?? null);
-
-        if (av === null && bv === null) return 0;
-        if (av === null) return 1;
-        if (bv === null) return -1;
-
-        return sortDir === "asc" ? av - bv : bv - av;
-      });
+            ? aTimestamp -
+                bTimestamp
+            : bTimestamp -
+                aTimestamp;
+        },
+      );
     }
 
     return data;
@@ -269,9 +476,16 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   // 画面遷移
   // ---------------------------
-  const goDetail = (id: string) => {
-    navigate(`/mintRequest/${encodeURIComponent(id)}`);
-  };
+  const goDetail = useCallback(
+    (id: string) => {
+      navigate(
+        `/mintRequest/${encodeURIComponent(
+          id,
+        )}`,
+      );
+    },
+    [navigate],
+  );
 
   // ---------------------------
   // テーブルヘッダ
@@ -289,17 +503,21 @@ export const useMintRequestManagement = () => {
       label="プロダクト名"
       options={productionOptions}
       selected={productionFilter}
-      onChange={setProductionFilter}
+      onChange={
+        setProductionFilter
+      }
     />,
     <SortableTableHeader
       key="mintQuantity"
       label="Mint数量"
       sortKey="mintQuantity"
       activeKey={sortKey}
-      direction={sortDir ?? null}
-      onChange={(key, dir) => {
-        setSortKey(key as SortKey);
-        setSortDir(dir);
+      direction={sortDir}
+      onChange={(key, direction) => {
+        setSortKey(
+          key as SortKey,
+        );
+        setSortDir(direction);
       }}
     />,
     <SortableTableHeader
@@ -307,10 +525,12 @@ export const useMintRequestManagement = () => {
       label="生産量"
       sortKey="productionQuantity"
       activeKey={sortKey}
-      direction={sortDir ?? null}
-      onChange={(key, dir) => {
-        setSortKey(key as SortKey);
-        setSortDir(dir);
+      direction={sortDir}
+      onChange={(key, direction) => {
+        setSortKey(
+          key as SortKey,
+        );
+        setSortDir(direction);
       }}
     />,
     <FilterableTableHeader
@@ -319,9 +539,19 @@ export const useMintRequestManagement = () => {
       options={statusOptions}
       selected={statusFilter}
       onChange={(next: string[]) => {
-        const mapped = (next ?? [])
-          .map((v) => asInspectionStatus(v))
-          .filter((v): v is InspectionStatus => v !== null);
+        const mapped = (
+          next ?? []
+        )
+          .map(
+            asInspectionStatus,
+          )
+          .filter(
+            (
+              value,
+            ): value is InspectionStatus =>
+              value !== null,
+          );
+
         setStatusFilter(mapped);
       }}
     />,
@@ -330,42 +560,58 @@ export const useMintRequestManagement = () => {
       label="リクエスト者"
       options={requesterOptions}
       selected={requesterFilter}
-      onChange={setRequesterFilter}
+      onChange={
+        setRequesterFilter
+      }
     />,
     <SortableTableHeader
       key="mintedAt"
       label="Mint実行日時"
       sortKey="mintedAt"
       activeKey={sortKey}
-      direction={sortDir ?? null}
-      onChange={(key, dir) => {
-        setSortKey(key as SortKey);
-        setSortDir(dir);
+      direction={sortDir}
+      onChange={(key, direction) => {
+        setSortKey(
+          key as SortKey,
+        );
+        setSortDir(direction);
       }}
     />,
   ];
 
-  const onReset = async () => {
+  const onReset = useCallback(async () => {
     setTokenFilter([]);
     setProductionFilter([]);
     setRequesterFilter([]);
     setStatusFilter([]);
     setSortKey("mintedAt");
     setSortDir("desc");
+
     await fetchRows();
-  };
+  }, [fetchRows]);
 
-  const handleRowClick = (id: string) => goDetail(id);
-
-  const handleRowKeyDown = (
-    e: React.KeyboardEvent<HTMLTableRowElement>,
-    id: string,
-  ) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
+  const handleRowClick = useCallback(
+    (id: string) => {
       goDetail(id);
-    }
-  };
+    },
+    [goDetail],
+  );
+
+  const handleRowKeyDown = useCallback(
+    (
+      event: React.KeyboardEvent<HTMLTableRowElement>,
+      id: string,
+    ) => {
+      if (
+        event.key === "Enter" ||
+        event.key === " "
+      ) {
+        event.preventDefault();
+        goDetail(id);
+      }
+    },
+    [goDetail],
+  );
 
   return {
     headers,

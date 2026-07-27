@@ -19,9 +19,18 @@ import (
 // - status             : string
 // - createdAt          : time.Time
 // - createdBy          : string
+// - requestedBy        : string
 // - mintedAt           : *time.Time
 // - scheduledBurnDate  : *time.Time
 // - onChainTxSignature : string
+//
+// createdBy:
+// - mintsドキュメントを作成したmemberId。
+//
+// requestedBy:
+// - Mint申請ボタンを押したmemberId。
+// - Mint作成直後のCREATED状態では空を許可する。
+// - QUEUED以降の状態では必須とする。
 //
 // NOTE:
 // - 1 product = 1 mint task に分解するため、親 Mint は全体進捗を status で管理します。
@@ -38,6 +47,8 @@ type Mint struct {
 
 	CreatedAt time.Time `json:"createdAt"`
 	CreatedBy string    `json:"createdBy"`
+
+	RequestedBy string `json:"requestedBy,omitempty"`
 
 	MintedAt *time.Time `json:"mintedAt,omitempty"`
 
@@ -108,6 +119,7 @@ var (
 	ErrInvalidTokenBlueprintID = errors.New("mint: invalid tokenBlueprintId")
 	ErrInvalidProducts         = errors.New("mint: invalid products")
 	ErrInvalidCreatedBy        = errors.New("mint: invalid createdBy")
+	ErrInvalidRequestedBy      = errors.New("mint: invalid requestedBy")
 	ErrInvalidCreatedAt        = errors.New("mint: invalid createdAt")
 	ErrInvalidMintedAt         = errors.New("mint: invalid mintedAt")
 	ErrInvalidMintStatus       = errors.New("mint: invalid status")
@@ -120,8 +132,9 @@ var (
 // Constructors
 // ------------------------------------------------------
 //
-// NewMint : brandId / tokenBlueprintId / products / createdBy / createdAt を受け取って
-// Mint エンティティを生成する。
+// NewMint:
+// - createdByはmintsドキュメントを作成したmemberId
+// - requestedByはMint申請時にMarkQueuedで設定する
 func NewMint(
 	id string,
 	brandID string,
@@ -160,6 +173,7 @@ func NewMint(
 		Status:             MintStatusCreated,
 		CreatedAt:          createdAt.UTC(),
 		CreatedBy:          createdBy,
+		RequestedBy:        "",
 		MintedAt:           nil,
 		ScheduledBurnDate:  nil,
 		OnChainTxSignature: "",
@@ -176,15 +190,28 @@ func NewMint(
 // Behavior
 // ------------------------------------------------------
 
-func (m *Mint) MarkQueued() error {
+// MarkQueuedはMint申請を受け付け、
+// Mint申請ボタンを押したmemberIdをrequestedByとして記録する。
+//
+// createdByは変更しない。
+func (m *Mint) MarkQueued(
+	requestedBy string,
+) error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
+
 	if m.Status == MintStatusMinted {
 		return ErrMintAlreadyMinted
 	}
 
+	if requestedBy == "" {
+		return ErrInvalidRequestedBy
+	}
+
+	m.RequestedBy = requestedBy
 	m.Status = MintStatusQueued
+
 	return m.validate()
 }
 
@@ -192,11 +219,13 @@ func (m *Mint) MarkMinting() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
+
 	if m.Status == MintStatusMinted {
 		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusMinting
+
 	return m.validate()
 }
 
@@ -204,11 +233,13 @@ func (m *Mint) MarkPartiallyMinted() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
+
 	if m.Status == MintStatusMinted {
 		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusPartiallyMinted
+
 	return m.validate()
 }
 
@@ -219,6 +250,7 @@ func (m *Mint) MarkMinted(
 	if m == nil {
 		return ErrInvalidMintID
 	}
+
 	if now.IsZero() {
 		return ErrInvalidMintedAt
 	}
@@ -229,7 +261,8 @@ func (m *Mint) MarkMinted(
 	m.MintedAt = &t
 
 	if representativeSignature != "" {
-		m.OnChainTxSignature = representativeSignature
+		m.OnChainTxSignature =
+			representativeSignature
 	}
 
 	return m.validate()
@@ -239,11 +272,13 @@ func (m *Mint) MarkFailedRetryable() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
+
 	if m.Status == MintStatusMinted {
 		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusFailedRetryable
+
 	return m.validate()
 }
 
@@ -251,11 +286,13 @@ func (m *Mint) MarkFailedFatal() error {
 	if m == nil {
 		return ErrInvalidMintID
 	}
+
 	if m.Status == MintStatusMinted {
 		return ErrMintAlreadyMinted
 	}
 
 	m.Status = MintStatusFailedFatal
+
 	return m.validate()
 }
 
@@ -267,21 +304,29 @@ func (m *Mint) MarkFailedFatal() error {
 //   - nil でも OK（empty slice と同等扱い）
 //   - 非空の場合、productId が空文字でないことだけを見る
 //   - 件数 0 でエラーにはしない（Usecase 側でチェック済み）
+//
+// RequestedBy については：
+//   - CREATED状態では空を許可する
+//   - QUEUED以降の状態では必須とする
 func (m Mint) validate() error {
 	if m.BrandID == "" {
 		return ErrInvalidBrandID
 	}
+
 	if m.TokenBlueprintID == "" {
 		return ErrInvalidTokenBlueprintID
 	}
+
 	if m.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	if m.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
 
 	status := m.Status
+
 	if status == "" {
 		status = MintStatusCreated
 	}
@@ -290,8 +335,14 @@ func (m Mint) validate() error {
 		return ErrInvalidMintStatus
 	}
 
+	if status != MintStatusCreated &&
+		m.RequestedBy == "" {
+		return ErrInvalidRequestedBy
+	}
+
 	if status == MintStatusMinted {
-		if m.MintedAt == nil || m.MintedAt.IsZero() {
+		if m.MintedAt == nil ||
+			m.MintedAt.IsZero() {
 			return ErrInvalidMintedAt
 		}
 	} else if m.MintedAt != nil {
