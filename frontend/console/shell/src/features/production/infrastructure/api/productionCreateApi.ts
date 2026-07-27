@@ -4,9 +4,9 @@
 //   - 実際のHTTP / Firestoreなどの呼び出しを集約
 // ======================================================================
 
-import type { Brand } from "../../../brand/domain/brand";
+import type { Brand } from "../../../../shared/types/brand";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
-import type { Member } from "../../../member/domain/entity/member";
+import type { Member } from "../../../../shared/types/member";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
 
 import { brandRepositoryHTTP } from "../../../brand/infrastructure/http/brandRepositoryHTTP";
@@ -15,7 +15,6 @@ import {
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
 } from "../../../productBlueprint/application/productBlueprintDetailService";
-import { scopedFilterByCompanyId } from "../../../member/domain/repository/memberRepository";
 import { MemberRepositoryHTTP } from "../../../member/infrastructure/http/memberRepositoryHTTP";
 
 // 型をアプリケーション層へ再エクスポート
@@ -80,17 +79,13 @@ export async function loadDetailAndModels(
 // ======================================================================
 // 担当者一覧API
 // ======================================================================
-export async function loadAssigneeCandidates(
-  companyId: string,
-): Promise<Member[]> {
+// companyIdによるスコープはBackend側で、
+// 認証中MemberのcompanyIdを基に適用する。
+// ======================================================================
+export async function loadAssigneeCandidates(): Promise<
+  Member[]
+> {
   try {
-    const filter = scopedFilterByCompanyId(
-      companyId,
-      {
-        status: "active",
-      },
-    );
-
     const repository =
       new MemberRepositoryHTTP();
 
@@ -102,10 +97,12 @@ export async function loadAssigneeCandidates(
 
     const result = await repository.list(
       page,
-      filter,
+      {
+        status: "active",
+      },
     );
 
-    return result.items ?? [];
+    return result.items;
   } catch {
     return [];
   }

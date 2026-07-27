@@ -1,71 +1,155 @@
+// frontend/console/shell/src/auth/application/memberService.ts
 /// <reference types="vite/client" />
 
-import type { MemberDTO } from "../domain/entity/member";
+import type { MemberDTO } from "../../shared/types/member";
 import {
   fetchCurrentMemberRaw,
   updateCurrentMemberProfileRaw,
 } from "../infrastructure/repository/authRepositoryHTTP";
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function toStringValue(value: unknown): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
+}
+
+function toNullableString(
+  value: unknown,
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return normalized || null;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(
+      (item): item is string =>
+        typeof item === "string",
+    )
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function toAssignedBrands(
+  value: unknown,
+): string[] | null {
+  const assignedBrands = toStringArray(value);
+
+  return assignedBrands.length > 0
+    ? assignedBrands
+    : null;
+}
+
 // -------------------------------
-// 共通: 生 JSON → MemberDTO 変換
+// 共通: 生JSON → MemberDTO変換
 // -------------------------------
+
 function mapRawToMemberDTO(
-  raw: any,
+  raw: unknown,
   fallbackEmail?: string | null,
 ): MemberDTO {
-  const firstName =
-    raw?.firstName && String(raw.firstName).trim() !== ""
-      ? String(raw.firstName).trim()
-      : null;
+  if (!isRecord(raw)) {
+    throw new Error(
+      "現在のメンバーレスポンスの形式が不正です。",
+    );
+  }
 
-  const lastName =
-    raw?.lastName && String(raw.lastName).trim() !== ""
-      ? String(raw.lastName).trim()
-      : null;
+  const firstName = toStringValue(raw.firstName);
+  const lastName = toStringValue(raw.lastName);
 
-  const firstNameKana =
-    raw?.firstNameKana && String(raw.firstNameKana).trim() !== ""
-      ? String(raw.firstNameKana).trim()
-      : null;
+  const displayNameFromResponse = toStringValue(
+    raw.displayName,
+  );
 
-  const lastNameKana =
-    raw?.lastNameKana && String(raw.lastNameKana).trim() !== ""
-      ? String(raw.lastNameKana).trim()
-      : null;
+  const displayNameFromNameParts = [
+    lastName,
+    firstName,
+  ]
+    .filter((value) => value.length > 0)
+    .join(" ");
 
-  const displayNameFromResponse =
-    raw?.displayName && String(raw.displayName).trim() !== ""
-      ? String(raw.displayName).trim()
-      : null;
-
-  const displayNameFromNameParts =
-    `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
+  const responseEmail = toStringValue(raw.email);
+  const normalizedFallbackEmail =
+    typeof fallbackEmail === "string"
+      ? fallbackEmail.trim()
+      : "";
 
   return {
-    // backend response の id は Firestore members の docId
-    id: String(raw?.id ?? "").trim(),
+    // Backend responseのidはFirestore membersのdocId
+    id: toStringValue(raw.id),
 
-    // Firebase Auth UID は backend response の uid を正とする
-    uid: String(raw?.uid ?? "").trim(),
+    // Firebase Authentication UIDはBackend responseを正とする
+    uid: toStringValue(raw.uid),
 
     firstName,
     lastName,
-    firstNameKana,
-    lastNameKana,
-    email: raw?.email ?? fallbackEmail ?? null,
-    companyId: raw?.companyId ?? "",
+    firstNameKana: toStringValue(
+      raw.firstNameKana,
+    ),
+    lastNameKana: toStringValue(
+      raw.lastNameKana,
+    ),
 
-    // backend response の displayName を正とする
-    displayName: displayNameFromResponse ?? displayNameFromNameParts,
+    email:
+      responseEmail ||
+      normalizedFallbackEmail,
+
+    permissions: toStringArray(
+      raw.permissions,
+    ),
+
+    assignedBrands: toAssignedBrands(
+      raw.assignedBrands,
+    ),
+
+    companyId: toStringValue(raw.companyId),
+    status: toStringValue(raw.status),
+
+    createdAt: toStringValue(raw.createdAt),
+    updatedAt: toNullableString(
+      raw.updatedAt,
+    ),
+    updatedBy: toNullableString(
+      raw.updatedBy,
+    ),
+
+    // Backend responseのdisplayNameを正とし、
+    // 存在しない場合のみ姓名から生成する
+    displayName:
+      displayNameFromResponse ||
+      displayNameFromNameParts,
   };
 }
 
 // -------------------------------
 // 現在メンバー取得
 // -------------------------------
+
 export async function fetchCurrentMember(): Promise<MemberDTO | null> {
   const raw = await fetchCurrentMemberRaw();
-  if (!raw) return null;
+
+  if (!raw) {
+    return null;
+  }
 
   return mapRawToMemberDTO(raw);
 }
@@ -73,9 +157,18 @@ export async function fetchCurrentMember(): Promise<MemberDTO | null> {
 // -------------------------------
 // プロファイル更新
 // -------------------------------
+
 export type UpdateMemberProfileInput = {
-  // PATCH /members/{docId} 用
+  // PATCH /members/{docId}用
   id: string;
+  firstName: string;
+  lastName: string;
+  firstNameKana: string;
+  lastNameKana: string;
+  email?: string | null;
+};
+
+type UpdateMemberProfilePayload = {
   firstName: string;
   lastName: string;
   firstNameKana: string;
@@ -86,7 +179,7 @@ export type UpdateMemberProfileInput = {
 export async function updateCurrentMemberProfile(
   input: UpdateMemberProfileInput,
 ): Promise<MemberDTO | null> {
-  const payload: any = {
+  const payload: UpdateMemberProfilePayload = {
     firstName: input.firstName,
     lastName: input.lastName,
     firstNameKana: input.firstNameKana,
@@ -97,8 +190,17 @@ export async function updateCurrentMemberProfile(
     payload.email = input.email;
   }
 
-  const raw = await updateCurrentMemberProfileRaw(input.id, payload);
-  if (!raw) return null;
+  const raw = await updateCurrentMemberProfileRaw(
+    input.id,
+    payload,
+  );
 
-  return mapRawToMemberDTO(raw, input.email ?? null);
+  if (!raw) {
+    return null;
+  }
+
+  return mapRawToMemberDTO(
+    raw,
+    input.email ?? null,
+  );
 }

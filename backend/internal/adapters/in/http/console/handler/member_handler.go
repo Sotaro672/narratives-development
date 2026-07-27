@@ -11,6 +11,7 @@ import (
 	httpmw "narratives/internal/adapters/in/http/middleware"
 	consolequery "narratives/internal/application/query/console"
 	memberusecase "narratives/internal/application/usecase"
+	common "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
 )
 
@@ -59,7 +60,10 @@ type memberResponse struct {
 	DisplayName    string     `json:"displayName,omitempty"`
 }
 
-func toMemberResponse(docID string, m memberdom.Member) memberResponse {
+func toMemberResponse(
+	docID string,
+	m memberdom.Member,
+) memberResponse {
 	return memberResponse{
 		ID:             docID,
 		UID:            m.UID,
@@ -75,7 +79,10 @@ func toMemberResponse(docID string, m memberdom.Member) memberResponse {
 		CreatedAt:      m.CreatedAt,
 		UpdatedAt:      m.UpdatedAt,
 		UpdatedBy:      m.UpdatedBy,
-		DisplayName:    memberdom.FormatLastFirst(m.LastName, m.FirstName),
+		DisplayName: memberdom.FormatLastFirst(
+			m.LastName,
+			m.FirstName,
+		),
 	}
 }
 
@@ -90,7 +97,10 @@ func toMemberResponse(docID string, m memberdom.Member) memberResponse {
 // - GET /members/{uid} は Firebase UID 専用として扱う。
 // - PATCH /members/{id} は member docId 専用として扱う。
 // - DELETE /members/{id} は member docId 専用として扱う。
-func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MemberHandler) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.Header().Set("Content-Type", "application/json")
 
 	path := strings.TrimRight(r.URL.Path, "/")
@@ -104,9 +114,11 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPost:
 			h.create(w, r)
 			return
+
 		case http.MethodGet:
 			h.list(w, r)
 			return
+
 		default:
 			methodNotAllowed(w)
 			return
@@ -138,7 +150,13 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(parts) == 1 {
 			idOrUID := strings.TrimSpace(parts[0])
 			if idOrUID == "" {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+				writeJSON(
+					w,
+					http.StatusBadRequest,
+					map[string]string{
+						"error": "invalid id",
+					},
+				)
 				return
 			}
 
@@ -146,12 +164,15 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case http.MethodGet:
 				h.getByUID(w, r, idOrUID)
 				return
+
 			case http.MethodPatch:
 				h.update(w, r, idOrUID)
 				return
+
 			case http.MethodDelete:
 				h.delete(w, r, idOrUID)
 				return
+
 			default:
 				methodNotAllowed(w)
 				return
@@ -159,7 +180,13 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+	writeJSON(
+		w,
+		http.StatusNotFound,
+		map[string]string{
+			"error": "not_found",
+		},
+	)
 }
 
 // -----------------------------------------------------------------------------
@@ -181,43 +208,68 @@ type memberCreateRequest struct {
 	Status         string   `json:"status,omitempty"`
 }
 
-func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
+func (h *MemberHandler) create(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 
 	var req memberCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid json",
+			},
+		)
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
-	rec, err := h.memberUC.Create(ctx, memberusecase.CreateMemberInput{
-		// 通常 console member 作成では request body の uid を信用しない。
-		// 招待前 member として uid 空で作成する。
-		UID: "",
+	rec, err := h.memberUC.Create(
+		ctx,
+		memberusecase.CreateMemberInput{
+			// 通常 console member 作成では request body の uid を信用しない。
+			// 招待前 member として uid 空で作成する。
+			UID: "",
 
-		FirstName:      req.FirstName,
-		LastName:       req.LastName,
-		FirstNameKana:  req.FirstNameKana,
-		LastNameKana:   req.LastNameKana,
-		Email:          req.Email,
-		Permissions:    req.Permissions,
-		AssignedBrands: req.AssignedBrands,
+			FirstName:      req.FirstName,
+			LastName:       req.LastName,
+			FirstNameKana:  req.FirstNameKana,
+			LastNameKana:   req.LastNameKana,
+			Email:          req.Email,
+			Permissions:    req.Permissions,
+			AssignedBrands: req.AssignedBrands,
 
-		CompanyID: me.CompanyID,
-		Status:    req.Status,
-	})
+			CompanyID: me.CompanyID,
+			Status:    req.Status,
+		},
+	)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toMemberResponse(rec.DocID, rec.Member))
+	writeJSON(
+		w,
+		http.StatusCreated,
+		toMemberResponse(
+			rec.DocID,
+			rec.Member,
+		),
+	)
 }
 
 // -----------------------------------------------------------------------------
@@ -235,64 +287,112 @@ type memberUpdateRequest struct {
 	Status         *string   `json:"status,omitempty"`
 }
 
-func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+func (h *MemberHandler) update(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
 	var req memberUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid json",
+			},
+		)
 		return
 	}
 
-	rec, err := h.memberUC.Update(ctx, memberusecase.UpdateMemberInput{
-		MemberID:  id,
-		CompanyID: me.CompanyID,
+	rec, err := h.memberUC.Update(
+		ctx,
+		memberusecase.UpdateMemberInput{
+			MemberID:  id,
+			CompanyID: me.CompanyID,
 
-		FirstName:      req.FirstName,
-		LastName:       req.LastName,
-		FirstNameKana:  req.FirstNameKana,
-		LastNameKana:   req.LastNameKana,
-		Email:          req.Email,
-		Permissions:    req.Permissions,
-		AssignedBrands: req.AssignedBrands,
-		Status:         req.Status,
-	})
+			FirstName:      req.FirstName,
+			LastName:       req.LastName,
+			FirstNameKana:  req.FirstNameKana,
+			LastNameKana:   req.LastNameKana,
+			Email:          req.Email,
+			Permissions:    req.Permissions,
+			AssignedBrands: req.AssignedBrands,
+			Status:         req.Status,
+		},
+	)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
+	writeJSON(
+		w,
+		http.StatusOK,
+		toMemberResponse(
+			rec.DocID,
+			rec.Member,
+		),
+	)
 }
 
 // -----------------------------------------------------------------------------
 // DELETE /members/{id}
 // -----------------------------------------------------------------------------
 
-func (h *MemberHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
+func (h *MemberHandler) delete(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid id",
+			},
+		)
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
@@ -301,7 +401,13 @@ func (h *MemberHandler) delete(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"id": id})
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]string{
+			"id": id,
+		},
+	)
 }
 
 // -----------------------------------------------------------------------------
@@ -313,38 +419,77 @@ func (h *MemberHandler) delete(w http.ResponseWriter, r *http.Request, id string
 // MemberManagementQuery に移譲する。
 // handler は HTTP query parameter の読み取り、認証 company scope の取得、
 // response DTO への変換だけを担当する。
-func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
+func (h *MemberHandler) list(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 	qv := r.URL.Query()
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
-	res, err := h.managementQuery.ListByCompanyID(ctx, consolequery.MemberListInput{
-		CompanyID: me.CompanyID,
+	res, err := h.managementQuery.ListByCompanyID(
+		ctx,
+		consolequery.MemberListInput{
+			CompanyID: me.CompanyID,
 
-		SearchQuery: qv.Get("q"),
-		UID:         qv.Get("uid"),
-		Status:      qv.Get("status"),
-		BrandIDs:    splitCSV(qv.Get("brandIds")),
+			SearchQuery: qv.Get("q"),
+			UID:         qv.Get("uid"),
+			Status:      qv.Get("status"),
+			BrandIDs:    splitCSV(qv.Get("brandIds")),
 
-		Page:    parseIntDefault(qv.Get("page"), 1),
-		PerPage: parseIntDefault(qv.Get("perPage"), 50),
-	})
+			Page: parseIntDefault(
+				qv.Get("page"),
+				1,
+			),
+			PerPage: parseIntDefault(
+				qv.Get("perPage"),
+				50,
+			),
+		},
+	)
 	if err != nil {
 		writeMemberErr(w, err)
 		return
 	}
 
-	items := make([]memberResponse, 0, len(res.Items))
+	items := make(
+		[]memberResponse,
+		0,
+		len(res.Items),
+	)
+
 	for _, rec := range res.Items {
-		items = append(items, toMemberResponse(rec.DocID, rec.Member))
+		items = append(
+			items,
+			toMemberResponse(
+				rec.DocID,
+				rec.Member,
+			),
+		)
 	}
 
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(
+		w,
+		http.StatusOK,
+		common.PageResult[memberResponse]{
+			Items:      items,
+			TotalCount: res.TotalCount,
+			TotalPages: res.TotalPages,
+			Page:       res.Page,
+			PerPage:    res.PerPage,
+		},
+	)
 }
 
 // -----------------------------------------------------------------------------
@@ -355,19 +500,37 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 // /members/me は BootstrapAuthMiddleware 配下でも動く必要がある。
 // そのため CurrentMember には依存しない。
 // Firebase UID は Authorization token から取得し、GetByUID で member を取得する。
-func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
+func (h *MemberHandler) me(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	uid, _, ok := httpmw.CurrentUIDAndEmail(r)
 	if !ok || strings.TrimSpace(uid) == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
-	rec, err := h.memberUC.GetCurrentMember(r.Context(), memberusecase.GetCurrentMemberInput{
-		FirebaseUID: uid,
-	})
+	rec, err := h.memberUC.GetCurrentMember(
+		r.Context(),
+		memberusecase.GetCurrentMemberInput{
+			FirebaseUID: uid,
+		},
+	)
 	if err != nil {
 		if errors.Is(err, memberdom.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "member not found"})
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": "member not found",
+				},
+			)
 			return
 		}
 
@@ -375,7 +538,14 @@ func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
+	writeJSON(
+		w,
+		http.StatusOK,
+		toMemberResponse(
+			rec.DocID,
+			rec.Member,
+		),
+	)
 }
 
 // -----------------------------------------------------------------------------
@@ -391,25 +561,54 @@ func (h *MemberHandler) me(w http.ResponseWriter, r *http.Request) {
 // 取得処理と company scope 判定は MemberDetailQuery に移譲する。
 // handler は uid validation、認証 company scope の取得、
 // response DTO への変換だけを担当する。
-func (h *MemberHandler) getByUID(w http.ResponseWriter, r *http.Request, uid string) {
+func (h *MemberHandler) getByUID(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+) {
 	ctx := r.Context()
 
 	uid = strings.TrimSpace(uid)
 	if uid == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid uid"})
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid uid",
+			},
+		)
 		return
 	}
 
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
 		return
 	}
 
-	rec, err := h.detailQuery.GetByUID(ctx, uid, me.CompanyID)
+	rec, err := h.detailQuery.GetByUID(
+		ctx,
+		uid,
+		me.CompanyID,
+	)
 	if err != nil {
-		if errors.Is(err, consolequery.ErrMemberForbidden) {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		if errors.Is(
+			err,
+			consolequery.ErrMemberForbidden,
+		) {
+			writeJSON(
+				w,
+				http.StatusForbidden,
+				map[string]string{
+					"error": "forbidden",
+				},
+			)
 			return
 		}
 
@@ -417,19 +616,30 @@ func (h *MemberHandler) getByUID(w http.ResponseWriter, r *http.Request, uid str
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toMemberResponse(rec.DocID, rec.Member))
+	writeJSON(
+		w,
+		http.StatusOK,
+		toMemberResponse(
+			rec.DocID,
+			rec.Member,
+		),
+	)
 }
 
 // -----------------------------------------------------------------------------
 // Error responses
 // -----------------------------------------------------------------------------
 
-func writeMemberErr(w http.ResponseWriter, err error) {
+func writeMemberErr(
+	w http.ResponseWriter,
+	err error,
+) {
 	code := http.StatusInternalServerError
 
 	switch {
 	case errors.Is(err, memberdom.ErrNotFound):
 		code = http.StatusNotFound
+
 	case errors.Is(err, memberdom.ErrInvalidUID),
 		errors.Is(err, memberdom.ErrInvalidEmail),
 		errors.Is(err, memberdom.ErrInvalidFirstName),
@@ -441,11 +651,22 @@ func writeMemberErr(w http.ResponseWriter, err error) {
 		errors.Is(err, memberdom.ErrInvalidUpdatedBy),
 		errors.Is(err, memberdom.ErrInvalidStatus):
 		code = http.StatusBadRequest
+
 	case errors.Is(err, memberdom.ErrConflict):
 		code = http.StatusConflict
-	case errors.Is(err, memberdom.ErrPreconditionFailed):
+
+	case errors.Is(
+		err,
+		memberdom.ErrPreconditionFailed,
+	):
 		code = http.StatusPreconditionFailed
 	}
 
-	writeJSON(w, code, map[string]string{"error": err.Error()})
+	writeJSON(
+		w,
+		code,
+		map[string]string{
+			"error": err.Error(),
+		},
+	)
 }

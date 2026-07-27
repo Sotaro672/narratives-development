@@ -1,6 +1,6 @@
-// frontend/console/member/src/application/memberDetailService.ts
+// frontend/console/shell/src/features/member/application/memberDetailService.ts
 
-import type { Member } from "../domain/entity/member";
+import type { Member } from "../../../shared/types/member";
 import { auth } from "../../../auth/infrastructure/config/firebaseClient";
 import { MemberRepositoryHTTP } from "../infrastructure/http/memberRepositoryHTTP";
 
@@ -11,58 +11,65 @@ import {
 
 const memberRepo = new MemberRepositoryHTTP();
 
+export type MemberDetail = Member & {
+  permissionGroups: ReturnType<
+    typeof groupPermissionsByCategory
+  >;
+  permissionCategories: PermissionCategory[];
+};
+
 /**
  * メンバー詳細取得
  *
  * IMPORTANT:
- * - backend の GET /members/{uid} は Firebase UID 専用
- * - Firestore member docId ではなく Firebase Auth UID を渡すこと
+ * - BackendのGET /members/{uid}はFirebase UID専用
+ * - Firestore MemberのdocIdではなくFirebase Auth UIDを渡す
  */
 export async function fetchMemberDetailByUid(
   uid: string,
-): Promise<Member | null> {
+): Promise<MemberDetail | null> {
   const firebaseUid = String(uid ?? "").trim();
-  if (!firebaseUid) return null;
 
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error("未認証のためメンバー情報を取得できません。");
+  if (!firebaseUid) {
+    return null;
   }
 
-  const raw = await memberRepo.getByUid(firebaseUid);
-  if (!raw) return null;
+  const currentUser = auth.currentUser;
 
-  const noFirst =
-    raw.firstName === null ||
-    raw.firstName === undefined ||
-    raw.firstName === "";
+  if (!currentUser) {
+    throw new Error(
+      "未認証のためメンバー情報を取得できません。",
+    );
+  }
 
-  const noLast =
-    raw.lastName === null ||
-    raw.lastName === undefined ||
-    raw.lastName === "";
+  const member = await memberRepo.getByUid(
+    firebaseUid,
+  );
 
-  const permissions: string[] = raw.permissions ?? [];
+  if (!member) {
+    return null;
+  }
 
-  const permissionGroups = groupPermissionsByCategory(permissions);
+  const permissionGroups =
+    groupPermissionsByCategory(
+      member.permissions,
+    );
 
-  const permissionCategories: PermissionCategory[] = Object.keys(
-    permissionGroups,
-  ) as PermissionCategory[];
+  const permissionCategories =
+    Object.keys(
+      permissionGroups,
+    ) as PermissionCategory[];
 
   return {
-    ...raw,
+    ...member,
 
-    // raw.id は backend が返す Firestore member docId
-    id: raw.id,
+    // member.idはBackendが返すFirestore MemberのdocId
+    id: member.id,
 
-    // raw.uid は Firebase Auth UID
-    uid: raw.uid ?? firebaseUid,
-
-    firstName: noFirst ? null : raw.firstName ?? null,
-    lastName: noLast ? null : raw.lastName ?? null,
+    // 招待前などで空の場合は検索に使用したFirebase UIDを補完
+    uid: member.uid || firebaseUid,
 
     permissionGroups,
     permissionCategories,
-  } as Member;
+  };
 }

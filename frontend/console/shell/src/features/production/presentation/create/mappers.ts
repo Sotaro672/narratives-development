@@ -1,8 +1,7 @@
 // frontend/console/shell/src/features/production/presentation/create/mappers.ts
 
 import type { Brand } from "../../../../shared/types/brand";
-import type { Member } from "../../../member/domain/entity/member";
-import { getMemberFullName } from "../../../member/domain/entity/member";
+import type { Member } from "../../../../shared/types/member";
 
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
@@ -21,6 +20,23 @@ function normalizeProductBlueprintCategorySnapshot(
   }
 
   return value as ProductBlueprintCategorySnapshot;
+}
+
+function getMemberFullName(
+  member: Member,
+): string {
+  const displayName = member.displayName.trim();
+
+  if (displayName) {
+    return displayName;
+  }
+
+  return [
+    member.lastName,
+    member.firstName,
+  ]
+    .filter((value) => value.length > 0)
+    .join(" ");
 }
 
 function isApparelModelVariation(
@@ -200,16 +216,14 @@ export function buildSelectedForCard(
 // ======================================================================
 // production 作成時に assigneeId として保存される値は、
 // Firestore members の docId ではなく Firebase Auth UID を正とする。
-// そのため option.id には m.id ではなく m.uid を入れる。
+// そのため option.id には member.id ではなく member.uid を入れる。
 // ======================================================================
 export function buildAssigneeOptions(
   members: Member[],
 ): Array<{ id: string; name: string }> {
   return members
     .map((member) => {
-      const uid = String(
-        (member as any).uid ?? "",
-      ).trim();
+      const uid = member.uid.trim();
 
       return {
         id: uid,

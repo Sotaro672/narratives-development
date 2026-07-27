@@ -1,238 +1,341 @@
-// frontend/console/member/src/presentation/hooks/useMemberCreate.ts
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Member } from "../../domain/entity/member";
+// frontend/console/shell/src/features/member/presentation/hooks/useMemberCreate.ts
 
-// ★ ログイン情報（companyId）は AuthContext から取得
-import { useAuthContext } from "../../../../auth/application/AuthContext";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 
-// Permission のカテゴリ型（＝新しい「役割」概念）
+import type { Member } from "../../../../shared/types/member";
+
 import type {
   Permission,
   PermissionCategory,
 } from "../../../../shared/types/permission";
 
-// Brand ドメイン型
-import type { Brand } from "../../../brand/domain/brand";
+import type { Brand } from "../../../../shared/types/brand";
 
-// アプリケーションサービス（API 呼び出しロジックなど）
 import {
   fetchAllPermissions,
   fetchBrandsForCurrentMember,
   groupPermissionsByCategory,
 } from "../../application/memberListService";
 
-// メンバー作成 & 招待メール送信
-import { createMember, parseCommaSeparated } from "../../application/memberCreateService";
+import {
+  createMember,
+  parseCommaSeparated,
+} from "../../application/memberCreateService";
+
 import { sendMemberInvitation } from "../../application/invitationService";
 
-// UI 用 BrandRow 型（テーブル表示用）
 export type BrandRow = {
   id: string;
   name: string;
   isActive: boolean;
-  registeredAt: string; // YYYY/MM/DD
+  registeredAt: string;
 };
 
 export type UseMemberCreateOptions = {
-  /** 作成成功時に呼ばれます（呼び出し元で navigate などを実施） */
+  /**
+   * 作成成功時に呼び出す。
+   * 呼び出し元で画面遷移などを行う。
+   */
   onSuccess?: (created: Member) => void;
 };
 
-// ISO → YYYY/MM/DD
-function formatDateYmd(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}/${m}/${day}`;
+function formatDateYmd(
+  iso?: string | null,
+): string {
+  if (!iso) {
+    return "";
+  }
+
+  const date = new Date(iso);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(
+    date.getMonth() + 1,
+  ).padStart(2, "0");
+  const day = String(
+    date.getDate(),
+  ).padStart(2, "0");
+
+  return `${year}/${month}/${day}`;
 }
 
-// Brand[] → BrandRow[]
-function toBrandRows(brands: Brand[]): BrandRow[] {
-  return brands.map((b) => ({
-    id: b.id,
-    name: String(b.name ?? "").trim(),
-    isActive: Boolean(b.isActive ?? true),
-    registeredAt: formatDateYmd(b.createdAt),
+function toBrandRows(
+  brands: Brand[],
+): BrandRow[] {
+  return brands.map((brand) => ({
+    id: brand.id,
+    name: String(brand.name ?? "").trim(),
+    isActive: Boolean(
+      brand.isActive ?? true,
+    ),
+    registeredAt: formatDateYmd(
+      brand.createdAt,
+    ),
   }));
 }
 
-export function useMemberCreate(options?: UseMemberCreateOptions) {
-  // 認証中ユーザ（companyId / uid は AuthContext からも使える）
-  const { user } = useAuthContext();
-  const authCompanyId = user?.companyId ?? null;
-  const currentMemberId = user?.uid ?? null;
+function getErrorMessage(
+  error: unknown,
+): string {
+  return error instanceof Error
+    ? error.message
+    : String(error);
+}
 
-  // ---- フォーム状態 ----
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [firstNameKana, setFirstNameKana] = useState("");
-  const [lastNameKana, setLastNameKana] = useState("");
-  const [email, setEmail] = useState("");
+export function useMemberCreate(
+  options?: UseMemberCreateOptions,
+) {
+  const [firstName, setFirstName] =
+    useState("");
 
-  // 新: PermissionCategory が「役割」相当
-  const [category, setCategory] = useState<PermissionCategory>("brand");
+  const [lastName, setLastName] =
+    useState("");
 
-  // 任意：テキスト入力でも permissions / brands を指定できるよう残しておく
-  const [permissionsText, setPermissionsText] = useState(""); // カンマ区切り
-  const [brandsText, setBrandsText] = useState(""); // カンマ区切り
+  const [
+    firstNameKana,
+    setFirstNameKana,
+  ] = useState("");
 
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [
+    lastNameKana,
+    setLastNameKana,
+  ] = useState("");
 
-  // ===== 権限カテゴリ情報（カテゴリ選択の Popover で利用） =====
-  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
+  const [email, setEmail] =
+    useState("");
 
-  // 初回マウント時に backend から権限一覧を取得
+  const [category, setCategory] =
+    useState<PermissionCategory>("brand");
+
+  const [
+    permissionsText,
+    setPermissionsText,
+  ] = useState("");
+
+  const [
+    brandsText,
+    setBrandsText,
+  ] = useState("");
+
+  const [
+    submitting,
+    setSubmitting,
+  ] = useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const [
+    allPermissions,
+    setAllPermissions,
+  ] = useState<Permission[]>([]);
+
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    async function loadPermissions() {
       try {
-        const items = await fetchAllPermissions(); // Service 経由
-        setAllPermissions(items);
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error("[useMemberCreate] failed to load permissions", e);
-        setAllPermissions([]);
+        const items =
+          await fetchAllPermissions();
+
+        if (!cancelled) {
+          setAllPermissions(items);
+        }
+      } catch {
+        if (!cancelled) {
+          setAllPermissions([]);
+        }
       }
-    })();
+    }
+
+    void loadPermissions();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // カテゴリごとにグルーピング
-  const permissionsByCategory: Record<PermissionCategory, Permission[]> =
+  const permissionsByCategory: Record<
+    PermissionCategory,
+    Permission[]
+  > = useMemo(
+    () =>
+      groupPermissionsByCategory(
+        allPermissions,
+      ),
+    [allPermissions],
+  );
+
+  const permissionCategories =
     useMemo(
-      () => groupPermissionsByCategory(allPermissions),
-      [allPermissions],
+      () =>
+        (
+          Object.keys(
+            permissionsByCategory,
+          ) as PermissionCategory[]
+        ).map((permissionCategory) => ({
+          key: permissionCategory,
+          count:
+            permissionsByCategory[
+              permissionCategory
+            ]?.length ?? 0,
+          permissions:
+            permissionsByCategory[
+              permissionCategory
+            ] ?? [],
+        })),
+      [permissionsByCategory],
     );
 
-  // UIで扱いやすい配列形式（カテゴリ名・件数・配列）
-  const permissionCategories = useMemo(
-    () =>
-      (Object.keys(permissionsByCategory) as PermissionCategory[]).map(
-        (cat) => ({
-          key: cat,
-          count: permissionsByCategory[cat]?.length ?? 0,
-          permissions: permissionsByCategory[cat] ?? [],
-        }),
-      ),
-    [permissionsByCategory],
-  );
+  const permissionCategoryList =
+    useMemo(
+      () =>
+        Object.keys(
+          permissionsByCategory,
+        ) as PermissionCategory[],
+      [permissionsByCategory],
+    );
 
-  // 選択肢としてのカテゴリ一覧
-  const permissionCategoryList = useMemo(
-    () => Object.keys(permissionsByCategory) as PermissionCategory[],
-    [permissionsByCategory],
-  );
+  const [allBrands, setAllBrands] =
+    useState<Brand[]>([]);
 
-  // ===== ブランド（currentMember.companyId ベースで取得） =====
-  const [allBrands, setAllBrands] = useState<Brand[]>([]);
-  const [brandRows, setBrandRows] = useState<BrandRow[]>([]);
+  const [brandRows, setBrandRows] =
+    useState<BrandRow[]>([]);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    async function loadBrands() {
       try {
-        // ★ ここで memberService 経由で currentMember → companyId → brands を取得
-        const brands = await fetchBrandsForCurrentMember();
-        setAllBrands(brands);
-        setBrandRows(toBrandRows(brands));
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(
-          "[useMemberCreate] failed to load brands via memberService",
-          e,
-        );
-        setAllBrands([]);
-        setBrandRows([]);
+        const brands =
+          await fetchBrandsForCurrentMember();
+
+        if (!cancelled) {
+          setAllBrands(brands);
+          setBrandRows(
+            toBrandRows(brands),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setAllBrands([]);
+          setBrandRows([]);
+        }
       }
-    })();
+    }
+
+    void loadBrands();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /**
-   * メンバー作成 + 招待メール送信
-   * overrides で permissions / assignedBrandIds を画面側から上書き可能
+   * Memberを作成し、招待メールを送信する。
+   *
+   * overridesでpermissionsとassignedBrandIdsを
+   * 画面側から上書きできる。
    */
   const handleSubmit = useCallback(
     async (
-      e?: React.FormEvent,
+      event?: FormEvent,
       overrides?: {
         permissions?: string[];
         assignedBrandIds?: string[];
       },
     ) => {
-      e?.preventDefault?.();
+      event?.preventDefault();
+
       setError(null);
       setSubmitting(true);
+
       try {
-        // 役割カテゴリ由来の権限
         const permissionsFromCategory =
-          permissionsByCategory[category]?.map((p) => (p as any).name) ?? [];
+          permissionsByCategory[
+            category
+          ]?.map(
+            (permission) =>
+              permission.name,
+          ) ?? [];
 
-        // テキスト入力由来の権限
-        const permissionsFromText = permissionsText
-          ? parseCommaSeparated(permissionsText)
-          : [];
+        const permissionsFromText =
+          permissionsText
+            ? parseCommaSeparated(
+                permissionsText,
+              )
+            : [];
 
-        // マージ & 重複除去
-        const mergedPermissions = Array.from(
-          new Set([...permissionsFromCategory, ...permissionsFromText]),
-        );
+        const mergedPermissions =
+          Array.from(
+            new Set([
+              ...permissionsFromCategory,
+              ...permissionsFromText,
+            ]),
+          );
 
-        // 画面からの上書きがあればそちらを優先
         const finalPermissions =
-          overrides?.permissions && overrides.permissions.length > 0
+          overrides?.permissions &&
+          overrides.permissions.length > 0
             ? overrides.permissions
             : mergedPermissions;
 
-        // brandsText からのフォールバック
-        const fallbackBrandIds = brandsText
-          ? parseCommaSeparated(brandsText)
-          : [];
+        const fallbackBrandIds =
+          brandsText
+            ? parseCommaSeparated(
+                brandsText,
+              )
+            : [];
 
         const finalAssignedBrandIds =
-          overrides?.assignedBrandIds && overrides.assignedBrandIds.length > 0
+          overrides?.assignedBrandIds &&
+          overrides.assignedBrandIds
+            .length > 0
             ? overrides.assignedBrandIds
             : fallbackBrandIds;
 
-        // デバッグログ
-        // eslint-disable-next-line no-console
-        console.log("[useMemberCreate] submit payload (frontend)", {
-          permissionsFromCategory,
-          permissionsFromText,
-          mergedPermissions,
-          finalPermissions,
-          fallbackBrandIds,
-          finalAssignedBrandIds,
-        });
+        const created =
+          await createMember({
+            firstName,
+            lastName,
+            firstNameKana,
+            lastNameKana,
+            email,
+            permissions:
+              finalPermissions,
+            assignedBrandIds:
+              finalAssignedBrandIds,
+          });
 
-        // 1. メンバー作成
-        const created = await createMember({
-          firstName,
-          lastName,
-          firstNameKana,
-          lastNameKana,
-          email,
-          permissions: finalPermissions,
-          assignedBrandIds: finalAssignedBrandIds,
-          authCompanyId,
-          currentMemberId,
-        });
-
-        // 2. 招待メール送信（失敗してもフォームエラーにはしない）
         try {
-          await sendMemberInvitation(created.id, created.email ?? null);
-        } catch (inviteErr) {
-          // eslint-disable-next-line no-console
-          console.error(
-            "[useMemberCreate] 招待メール送信中にエラーが発生しました",
-            inviteErr,
+          await sendMemberInvitation(
+            created.id,
+            created.email,
           );
+        } catch {
+          // Member作成自体は成功しているため、
+          // 招待メール送信失敗をフォームエラーにはしない。
         }
 
-        // 呼び出し元へ通知
-        options?.onSuccess?.(created);
-      } catch (err: any) {
-        setError(err?.message ?? String(err));
+        options?.onSuccess?.(
+          created,
+        );
+      } catch (submitError: unknown) {
+        setError(
+          getErrorMessage(
+            submitError,
+          ),
+        );
       } finally {
         setSubmitting(false);
       }
@@ -247,17 +350,11 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       category,
       permissionsText,
       brandsText,
-      authCompanyId,
-      currentMemberId,
       options,
     ],
   );
 
-  // ─────────────────────────────────────────────────────────────
-  // 戻り値
-  // ─────────────────────────────────────────────────────────────
   return {
-    // 値
     firstName,
     lastName,
     firstNameKana,
@@ -269,17 +366,14 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     submitting,
     error,
 
-    // 権限データ（カテゴリ表示用）
     allPermissions,
     permissionsByCategory,
     permissionCategories,
     permissionCategoryList,
 
-    // ブランド（UI での表示・選択に利用可能）
     allBrands,
     brandRows,
 
-    // セッター
     setFirstName,
     setLastName,
     setFirstNameKana,
@@ -290,7 +384,6 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     setBrandsText,
     setError,
 
-    // 動作
     handleSubmit,
   };
 }

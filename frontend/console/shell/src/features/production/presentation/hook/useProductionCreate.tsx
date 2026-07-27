@@ -1,4 +1,4 @@
-// frontend/console/production/src/presentation/hook/useProductionCreate.tsx
+// frontend/console/shell/src/features/production/presentation/hook/useProductionCreate.tsx
 
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,13 +13,13 @@ import {
   loadAssigneeCandidates,
 } from "../../infrastructure/api/productionCreateApi";
 
-// Detail 側の index builder（VM builder が要求するため）
+// Detail側のindex builder（VM builderが要求するため）
 import {
   buildModelIndexFromVariations,
   type ModelVariationSummary,
 } from "../../application/detail/index";
 
-// Presentation(UI) 変換（既存 mappers）
+// Presentation(UI)変換
 import {
   buildBrandOptions,
   filterProductBlueprintsByBrand,
@@ -28,9 +28,9 @@ import {
   buildAssigneeOptions,
 } from "../create/mappers";
 
-// 型（既存）
-import type { Brand } from "../../../brand/domain/brand";
-import type { Member } from "../../../member/domain/entity/member";
+// 型
+import type { Brand } from "../../../../shared/types/brand";
+import type { Member } from "../../../../shared/types/member";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/infrastructure/query/productBlueprintQuery";
 import type { ModelVariationResponse } from "../../../productBlueprint/application/productBlueprintDetailService";
 import type { ProductBlueprintForCard } from "../create/types";
@@ -41,10 +41,10 @@ import {
   createProduction,
 } from "../../application/create/ProductionCreateService";
 
-// Application Port 実装（HTTP Adapter）
+// Application Port実装（HTTP Adapter）
 import { ProductionRepositoryHTTP } from "../../infrastructure/http/productionRepositoryHTTP";
 
-// ViewModel（方針B / 以降はキー名を modelId に統一）
+// ViewModel（方針B／以降はキー名をmodelIdに統一）
 import type { ProductionQuantityRowVM } from "../viewModels/productionQuantityRowVM";
 import { buildProductionQuantityRowVMs } from "../viewModels/buildProductionQuantityRowVMs";
 
@@ -57,50 +57,79 @@ export function useProductionCreate() {
   const navigate = useNavigate();
 
   // ==========================
-  // currentMember 情報
+  // currentMember情報
   // ==========================
   const { currentMember, user } = useAuth();
-  const creator = currentMember?.displayName?.trim() || "-";
 
-  // createdBy は members docId ではなく Firebase Auth UID を保存する。
-  // currentMember.uid が backend response の影響で docId になる可能性があるため、
-  // AuthContext の user.uid を最優先にする。
-  const currentMemberUid = user?.uid ?? currentMember?.uid ?? null;
+  const creator =
+    currentMember?.displayName?.trim() || "-";
 
-  const companyId = currentMember?.companyId?.trim() ?? "";
+  // createdByはmembers docIdではなくFirebase Auth UIDを保存する。
+  // currentMember.uidがBackend responseの影響でdocIdになる可能性があるため、
+  // AuthContextのuser.uidを最優先にする。
+  const currentMemberUid =
+    user?.uid ?? currentMember?.uid ?? null;
 
   // ==========================
-  // 商品設計一覧 / 選択状態
+  // 商品設計一覧／選択状態
   // ==========================
-  const [allProductBlueprints, setAllProductBlueprints] = React.useState<
+  const [
+    allProductBlueprints,
+    setAllProductBlueprints,
+  ] = React.useState<
     ProductBlueprintManagementRow[]
   >([]);
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
 
-  // 選択中の商品設計 詳細 + models
-  const [selectedDetail, setSelectedDetail] = React.useState<any | null>(null);
-  const [modelVariations, setModelVariations] = React.useState<
+  const [
+    selectedId,
+    setSelectedId,
+  ] = React.useState<string | null>(null);
+
+  const [
+    selectedBrand,
+    setSelectedBrand,
+  ] = React.useState<string | null>(null);
+
+  // 選択中の商品設計 詳細＋models
+  const [
+    selectedDetail,
+    setSelectedDetail,
+  ] = React.useState<any | null>(null);
+
+  const [
+    modelVariations,
+    setModelVariations,
+  ] = React.useState<
     ModelVariationResponse[]
   >([]);
 
-  // VM builder が要求する modelIndex
-  const [modelIndex, setModelIndex] = React.useState<
+  // VM builderが要求するmodelIndex
+  const [
+    modelIndex,
+    setModelIndex,
+  ] = React.useState<
     Record<string, ModelVariationSummary>
   >({});
 
   // ==========================
-  // 生産数 rows（VM 正）
+  // 生産数rows（VM正）
   // ==========================
-  const [quantityRowVMs, setQuantityRowVMs] = React.useState<
+  const [
+    quantityRowVMs,
+    setQuantityRowVMs,
+  ] = React.useState<
     ProductionQuantityRowVM[]
   >([]);
 
   // ==========================
   // 管理情報（担当者など）
   // ==========================
-  const [assignee, setAssignee] = React.useState("未設定");
-  const [assigneeId, setAssigneeId] = React.useState<string | null>(null);
+  const [assignee, setAssignee] =
+    React.useState("未設定");
+
+  const [assigneeId, setAssigneeId] =
+    React.useState<string | null>(null);
+
   const [createdAt] = React.useState(() =>
     new Date().toLocaleDateString("ja-JP"),
   );
@@ -115,46 +144,76 @@ export function useProductionCreate() {
   // ==========================
   // ブランド一覧
   // ==========================
-  const [brands, setBrands] = React.useState<Brand[]>([]);
+  const [brands, setBrands] =
+    React.useState<Brand[]>([]);
 
   React.useEffect(() => {
     loadBrands()
-      .then((items: Brand[]) => setBrands(items))
+      .then((items: Brand[]) =>
+        setBrands(items),
+      )
       .catch(() => setBrands([]));
   }, []);
 
-  const brandOptions = React.useMemo(() => buildBrandOptions(brands), [brands]);
+  const brandOptions = React.useMemo(
+    () => buildBrandOptions(brands),
+    [brands],
+  );
 
   // ==========================
   // 商品設計一覧取得
   // ==========================
   React.useEffect(() => {
     loadProductBlueprints()
-      .then((rows: ProductBlueprintManagementRow[]) =>
-        setAllProductBlueprints(rows),
+      .then(
+        (
+          rows: ProductBlueprintManagementRow[],
+        ) => setAllProductBlueprints(rows),
       )
-      .catch(() => setAllProductBlueprints([]));
+      .catch(() =>
+        setAllProductBlueprints([]),
+      );
   }, []);
 
   // ブランドでフィルタ
-  const filteredBlueprints = React.useMemo(
-    () => filterProductBlueprintsByBrand(allProductBlueprints, selectedBrand),
-    [allProductBlueprints, selectedBrand],
-  );
+  const filteredBlueprints =
+    React.useMemo(
+      () =>
+        filterProductBlueprintsByBrand(
+          allProductBlueprints,
+          selectedBrand,
+        ),
+      [
+        allProductBlueprints,
+        selectedBrand,
+      ],
+    );
 
   const productRows = React.useMemo(
-    () => buildProductRows(filteredBlueprints),
+    () =>
+      buildProductRows(
+        filteredBlueprints,
+      ),
     [filteredBlueprints],
   );
 
   // 選択中の行
-  const selectedMgmtRow = React.useMemo(
-    () => allProductBlueprints.find((pb) => pb.id === selectedId) ?? null,
-    [allProductBlueprints, selectedId],
-  );
+  const selectedMgmtRow =
+    React.useMemo(
+      () =>
+        allProductBlueprints.find(
+          (productBlueprint) =>
+            productBlueprint.id ===
+            selectedId,
+        ) ?? null,
+      [
+        allProductBlueprints,
+        selectedId,
+      ],
+    );
 
   // ==========================
-  // 詳細 + modelVariations + modelIndex
+  // 詳細＋modelVariations＋modelIndex
   // ==========================
   React.useEffect(() => {
     if (!selectedId) {
@@ -165,30 +224,46 @@ export function useProductionCreate() {
       return;
     }
 
+    const productBlueprintId = selectedId;
     let cancelled = false;
 
-    (async () => {
+    async function loadSelectedDetail() {
       try {
-        const { detail, models } = await loadDetailAndModels(selectedId);
+        const { detail, models } =
+          await loadDetailAndModels(
+            productBlueprintId,
+          );
 
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
-        const safeModels = Array.isArray(models)
-          ? (models as ModelVariationResponse[])
-          : [];
+        const safeModels =
+          Array.isArray(models)
+            ? (models as ModelVariationResponse[])
+            : [];
 
         setSelectedDetail(detail);
         setModelVariations(safeModels);
-        setModelIndex(buildModelIndexFromVariations(safeModels as any));
+
+        setModelIndex(
+          buildModelIndexFromVariations(
+            safeModels as any,
+          ),
+        );
       } catch {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         setSelectedDetail(null);
         setModelVariations([]);
         setModelIndex({});
         setQuantityRowVMs([]);
       }
-    })();
+    }
+
+    void loadSelectedDetail();
 
     return () => {
       cancelled = true;
@@ -196,11 +271,11 @@ export function useProductionCreate() {
   }, [selectedId]);
 
   // ==========================
-  // detail.modelRefs + modelVariations → VM rows
-  // - create 画面では /models/by-blueprint/{id}/variations を行の母数として扱う
-  // - modelRefs は displayOrder 補正にのみ利用する
-  // - builder は backend の production.Models 形式
-  //   （ModelID/Quantity/DisplayOrder）を正として読む
+  // detail.modelRefs＋modelVariations → VM rows
+  // - create画面では/models/by-blueprint/{id}/variationsを行の母数として扱う
+  // - modelRefsはdisplayOrder補正にのみ利用する
+  // - builderはBackendのproduction.Models形式
+  //   （ModelID／Quantity／DisplayOrder）を正として読む
   // ==========================
   React.useEffect(() => {
     if (!selectedId) {
@@ -208,54 +283,78 @@ export function useProductionCreate() {
       return;
     }
 
-    const safeModels: ModelVariationResponse[] = Array.isArray(modelVariations)
-      ? modelVariations
+    const safeModels:
+      ModelVariationResponse[] =
+      Array.isArray(modelVariations)
+        ? modelVariations
+        : [];
+
+    const refs = Array.isArray(
+      selectedDetail?.modelRefs,
+    )
+      ? ((selectedDetail.modelRefs as ProductBlueprintModelRef[]) ??
+        [])
       : [];
 
-    const refs = Array.isArray(selectedDetail?.modelRefs)
-      ? ((selectedDetail.modelRefs as ProductBlueprintModelRef[]) ?? [])
-      : [];
-
-    const orderByModelId = new Map<string, number>();
+    const orderByModelId =
+      new Map<string, number>();
 
     for (const ref of refs) {
-      const modelId = String(ref?.modelId ?? "").trim();
+      const modelId = String(
+        ref?.modelId ?? "",
+      ).trim();
 
       if (!modelId) {
         continue;
       }
 
-      const displayOrderNum =
+      const displayOrderNumber =
         typeof ref?.displayOrder === "number"
           ? ref.displayOrder
           : Number(ref?.displayOrder);
 
-      if (!Number.isFinite(displayOrderNum)) {
+      if (
+        !Number.isFinite(
+          displayOrderNumber,
+        )
+      ) {
         continue;
       }
 
-      orderByModelId.set(modelId, displayOrderNum);
+      orderByModelId.set(
+        modelId,
+        displayOrderNumber,
+      );
     }
 
     const fallbackModels = safeModels
-      .map((model: any, index: number) => {
-        const modelId = String(model?.id ?? "").trim();
+      .map(
+        (
+          model: any,
+          index: number,
+        ) => {
+          const modelId = String(
+            model?.id ?? "",
+          ).trim();
 
-        if (!modelId) {
-          return null;
-        }
+          if (!modelId) {
+            return null;
+          }
 
-        const order = orderByModelId.get(modelId);
+          const order =
+            orderByModelId.get(modelId);
 
-        return {
-          ModelID: modelId,
-          Quantity: 0,
-          DisplayOrder:
-            typeof order === "number" && Number.isFinite(order)
-              ? order
-              : index + 1,
-        };
-      })
+          return {
+            ModelID: modelId,
+            Quantity: 0,
+            DisplayOrder:
+              typeof order === "number" &&
+              Number.isFinite(order)
+                ? order
+                : index + 1,
+          };
+        },
+      )
       .filter(
         (
           model,
@@ -266,44 +365,71 @@ export function useProductionCreate() {
         } => model !== null,
       );
 
-    const pseudoModels = fallbackModels;
+    const pseudoModels =
+      fallbackModels;
 
-    const vms = buildProductionQuantityRowVMs(pseudoModels, modelIndex);
-    setQuantityRowVMs(vms);
-  }, [selectedId, modelVariations, selectedDetail, modelIndex]);
+    const viewModels =
+      buildProductionQuantityRowVMs(
+        pseudoModels,
+        modelIndex,
+      );
+
+    setQuantityRowVMs(viewModels);
+  }, [
+    selectedId,
+    modelVariations,
+    selectedDetail,
+    modelIndex,
+  ]);
 
   // ==========================
-  // ProductBlueprintCard 表示用データ
+  // ProductBlueprintCard表示用データ
   // ==========================
-  const selectedProductBlueprintForCard: ProductBlueprintForCard =
+  const selectedProductBlueprintForCard:
+    ProductBlueprintForCard =
     React.useMemo(
-      () => buildSelectedForCard(selectedDetail, selectedMgmtRow),
-      [selectedDetail, selectedMgmtRow],
+      () =>
+        buildSelectedForCard(
+          selectedDetail,
+          selectedMgmtRow,
+        ),
+      [
+        selectedDetail,
+        selectedMgmtRow,
+      ],
     );
 
   const hasSelectedProductBlueprint =
-    selectedDetail != null || selectedMgmtRow != null;
+    selectedDetail !== null ||
+    selectedMgmtRow !== null;
 
   // ==========================
   // 担当者候補
   // ==========================
-  const [assigneeCandidates, setAssigneeCandidates] = React.useState<Member[]>(
-    [],
-  );
-  const [loadingMembers, setLoadingMembers] = React.useState(false);
+  const [
+    assigneeCandidates,
+    setAssigneeCandidates,
+  ] = React.useState<Member[]>([]);
+
+  const [
+    loadingMembers,
+    setLoadingMembers,
+  ] = React.useState(false);
 
   React.useEffect(() => {
-    if (!companyId) return;
-
     let cancelled = false;
 
-    (async () => {
+    async function loadMembers() {
       try {
         setLoadingMembers(true);
-        const members: Member[] = await loadAssigneeCandidates(companyId);
+
+        const members: Member[] =
+          await loadAssigneeCandidates();
 
         if (!cancelled) {
-          setAssigneeCandidates(members);
+          setAssigneeCandidates(
+            members,
+          );
         }
       } catch {
         if (!cancelled) {
@@ -314,84 +440,134 @@ export function useProductionCreate() {
           setLoadingMembers(false);
         }
       }
-    })();
+    }
+
+    void loadMembers();
 
     return () => {
       cancelled = true;
     };
-  }, [companyId]);
+  }, []);
 
-  const assigneeOptions = React.useMemo(
-    () =>
-      buildAssigneeOptions(assigneeCandidates) as Array<{
-        id: string;
-        name: string;
-      }>,
-    [assigneeCandidates],
-  );
+  const assigneeOptions =
+    React.useMemo(
+      () =>
+        buildAssigneeOptions(
+          assigneeCandidates,
+        ) as Array<{
+          id: string;
+          name: string;
+        }>,
+      [assigneeCandidates],
+    );
 
-  const handleSelectAssignee = React.useCallback(
-    (id: string) => {
-      const selected = assigneeOptions.find(
-        (option: { id: string; name: string }) => option.id === id,
-      );
+  const handleSelectAssignee =
+    React.useCallback(
+      (id: string) => {
+        const selected =
+          assigneeOptions.find(
+            (option: {
+              id: string;
+              name: string;
+            }) => option.id === id,
+          );
 
-      const name = selected?.name ?? "未設定";
+        const name =
+          selected?.name ?? "未設定";
 
-      setAssigneeId(id);
-      setAssignee(name);
-    },
-    [assigneeOptions],
-  );
+        setAssigneeId(id);
+        setAssignee(name);
+      },
+      [assigneeOptions],
+    );
 
   // ==========================
-  // 保存（バックエンドへ POST）
+  // 保存（BackendへPOST）
   // ==========================
-  const handleSave = React.useCallback(async () => {
-    if (!selectedId) {
-      alert("商品設計を選択してください");
-      return;
-    }
+  const handleSave =
+    React.useCallback(async () => {
+      if (!selectedId) {
+        alert(
+          "商品設計を選択してください",
+        );
+        return;
+      }
 
-    if (!assigneeId) {
-      alert("担当者を選択してください");
-      return;
-    }
+      if (!assigneeId) {
+        alert(
+          "担当者を選択してください",
+        );
+        return;
+      }
 
-    if (!currentMemberUid) {
-      alert("ログインユーザー情報を取得できませんでした");
-      return;
-    }
+      if (!currentMemberUid) {
+        alert(
+          "ログインユーザー情報を取得できませんでした",
+        );
+        return;
+      }
 
-    const payload = buildProductionPayload({
-      productBlueprintId: selectedId,
+      const payload =
+        buildProductionPayload({
+          productBlueprintId:
+            selectedId,
+          assigneeId,
+          rows: (
+            Array.isArray(
+              quantityRowVMs,
+            )
+              ? quantityRowVMs
+              : []
+          ).map(
+            (
+              viewModel,
+              index,
+            ) => {
+              const modelId =
+                String(
+                  viewModel.modelId ?? "",
+                ).trim() ||
+                String(index);
+
+              return {
+                modelId,
+                quantity:
+                  viewModel.quantity ?? 0,
+              };
+            },
+          ),
+          currentMemberUid,
+        });
+
+      try {
+        const repository =
+          new ProductionRepositoryHTTP();
+
+        await createProduction(
+          repository,
+          payload,
+        );
+
+        alert(
+          "生産計画を作成しました",
+        );
+
+        navigate("/production");
+      } catch {
+        alert(
+          "生産計画の作成に失敗しました",
+        );
+      }
+    }, [
+      selectedId,
       assigneeId,
-      rows: (Array.isArray(quantityRowVMs) ? quantityRowVMs : []).map(
-        (vm, index) => {
-          const modelId = String(vm.modelId ?? "").trim() || String(index);
-
-          return {
-            modelId,
-            quantity: vm.quantity ?? 0,
-          };
-        },
-      ),
+      quantityRowVMs,
       currentMemberUid,
-    });
-
-    try {
-      const repo = new ProductionRepositoryHTTP();
-      await createProduction(repo, payload);
-
-      alert("生産計画を作成しました");
-      navigate("/production");
-    } catch {
-      alert("生産計画の作成に失敗しました");
-    }
-  }, [selectedId, assigneeId, quantityRowVMs, currentMemberUid, navigate]);
+      navigate,
+    ]);
 
   // ==========================
-  // hook 返却値（productionCreate.tsx が期待）
+  // hook返却値
   // ==========================
   return {
     onBack: handleBack,
@@ -405,18 +581,24 @@ export function useProductionCreate() {
     createdAt,
     assigneeOptions,
     loadingMembers,
-    onSelectAssignee: handleSelectAssignee,
+    onSelectAssignee:
+      handleSelectAssignee,
 
     selectedBrand,
     brandOptions,
-    selectBrand: setSelectedBrand,
+    selectBrand:
+      setSelectedBrand,
 
     productRows,
-    selectedProductId: selectedId,
-    selectProductById: setSelectedId,
+    selectedProductId:
+      selectedId,
+    selectProductById:
+      setSelectedId,
 
-    modelVariationsForCard: quantityRowVMs,
-    setQuantityRows: setQuantityRowVMs,
+    modelVariationsForCard:
+      quantityRowVMs,
+    setQuantityRows:
+      setQuantityRowVMs,
   };
 }
 

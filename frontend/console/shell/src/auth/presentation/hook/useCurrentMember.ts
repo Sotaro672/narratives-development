@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "../../application/AuthContext";
 
-// Application 層のサービス
+// Application層のサービス
 import {
   getCompanyNameByIdCached,
   clearCompanyNameCache,
@@ -16,8 +16,52 @@ import {
   type CurrentMemberResponse,
 } from "../../application/authService";
 
-// Domain 型
-import type { MemberDTO } from "../../domain/entity/member";
+// 共通Member型
+import type { MemberDTO } from "../../../shared/types/member";
+
+type UnknownRecord = Record<string, unknown>;
+
+function toStringValue(value: unknown): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
+}
+
+function toNullableString(
+  value: unknown,
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return normalized || null;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(
+      (item): item is string =>
+        typeof item === "string",
+    )
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function toAssignedBrands(
+  value: unknown,
+): string[] | null {
+  const assignedBrands = toStringArray(value);
+
+  return assignedBrands.length > 0
+    ? assignedBrands
+    : null;
+}
 
 function mapCurrentMemberResponse(
   member: CurrentMemberResponse | null,
@@ -26,59 +70,114 @@ function mapCurrentMemberResponse(
     return null;
   }
 
-  const id = String(member.id ?? "").trim();
-  const companyId = String(member.companyId ?? "").trim();
+  const raw = member as unknown as UnknownRecord;
+
+  const id = toStringValue(raw.id);
+  const companyId = toStringValue(raw.companyId);
 
   if (!id || !companyId) {
     return null;
   }
 
-  const uid = String(member.uid ?? "").trim();
+  const firstName = toStringValue(raw.firstName);
+  const lastName = toStringValue(raw.lastName);
+
+  const displayNameFromResponse = toStringValue(
+    raw.displayName,
+  );
+
+  const displayNameFromNameParts = [
+    lastName,
+    firstName,
+  ]
+    .filter((value) => value.length > 0)
+    .join(" ");
 
   return {
     id,
-    uid: uid || null,
-    firstName: member.firstName ?? null,
-    lastName: member.lastName ?? null,
-    firstNameKana: member.firstNameKana ?? null,
-    lastNameKana: member.lastNameKana ?? null,
-    email: member.email ?? null,
+    uid: toStringValue(raw.uid),
+
+    firstName,
+    lastName,
+    firstNameKana: toStringValue(
+      raw.firstNameKana,
+    ),
+    lastNameKana: toStringValue(
+      raw.lastNameKana,
+    ),
+
+    email: toStringValue(raw.email),
+
+    permissions: toStringArray(
+      raw.permissions,
+    ),
+
+    assignedBrands: toAssignedBrands(
+      raw.assignedBrands,
+    ),
+
     companyId,
-    displayName: member.displayName ?? null,
+    status: toStringValue(raw.status),
+
+    createdAt: toStringValue(raw.createdAt),
+    updatedAt: toNullableString(
+      raw.updatedAt,
+    ),
+    updatedBy: toNullableString(
+      raw.updatedBy,
+    ),
+
+    displayName:
+      displayNameFromResponse ||
+      displayNameFromNameParts,
   };
 }
 
 /**
  * useAuth:
- * - AuthContext からログイン中の user を取得
- * - backend から currentMember を取得
- * - backend から companyName を取得
+ * - AuthContextからログイン中のuserを取得
+ * - BackendからcurrentMemberを取得
+ * - BackendからcompanyNameを取得
  */
 export function useAuth() {
   const ctx = useAuthContext();
 
   const uid = ctx.user?.uid ?? "";
-  const companyIdFromCtx = ctx.user?.companyId?.trim() ?? "";
+  const companyIdFromCtx =
+    ctx.user?.companyId?.trim() ?? "";
 
-  const [companyName, setCompanyName] = useState<string | null>(null);
-  const [loadingCompanyName, setLoadingCompanyName] = useState(false);
-  const [companyError, setCompanyError] = useState<string | null>(null);
+  const [companyName, setCompanyName] =
+    useState<string | null>(null);
 
-  const [currentMember, setCurrentMember] = useState<MemberDTO | null>(null);
-  const [loadingMember, setLoadingMember] = useState(false);
-  const [memberError, setMemberError] = useState<string | null>(null);
+  const [
+    loadingCompanyName,
+    setLoadingCompanyName,
+  ] = useState(false);
+
+  const [companyError, setCompanyError] =
+    useState<string | null>(null);
+
+  const [currentMember, setCurrentMember] =
+    useState<MemberDTO | null>(null);
+
+  const [loadingMember, setLoadingMember] =
+    useState(false);
+
+  const [memberError, setMemberError] =
+    useState<string | null>(null);
 
   // -------------------------------
   // Fetch companyName
-  //   - currentMember.companyId を最優先
-  //   - 無ければ Firebase Auth の companyId を使用
+  // - currentMember.companyIdを最優先
+  // - なければFirebase AuthのcompanyIdを使用
   // -------------------------------
   useEffect(() => {
     let disposed = false;
 
     async function run() {
       const effectiveCompanyId =
-        (currentMember?.companyId ?? "").trim() || companyIdFromCtx;
+        currentMember?.companyId.trim() ||
+        companyIdFromCtx;
 
       if (!effectiveCompanyId) {
         setCompanyName(null);
@@ -91,7 +190,10 @@ export function useAuth() {
       setCompanyError(null);
 
       try {
-        const name = await getCompanyNameByIdCached(effectiveCompanyId);
+        const name =
+          await getCompanyNameByIdCached(
+            effectiveCompanyId,
+          );
 
         if (!disposed) {
           setCompanyName(name);
@@ -117,11 +219,14 @@ export function useAuth() {
     return () => {
       disposed = true;
     };
-  }, [companyIdFromCtx, currentMember?.companyId]);
+  }, [
+    companyIdFromCtx,
+    currentMember?.companyId,
+  ]);
 
   // -------------------------------
   // Fetch currentMember
-  //   - bootstrap 完了前の取得失敗を考慮して再試行
+  // - Bootstrap完了前の取得失敗を考慮して再試行
   // -------------------------------
   useEffect(() => {
     let disposed = false;
@@ -148,7 +253,8 @@ export function useAuth() {
           return;
         }
 
-        const member = mapCurrentMemberResponse(response);
+        const member =
+          mapCurrentMemberResponse(response);
 
         if (!member) {
           setCurrentMember(null);

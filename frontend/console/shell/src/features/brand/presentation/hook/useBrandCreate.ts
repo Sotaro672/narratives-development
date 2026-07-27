@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../../../auth/presentation/hook/useCurrentMember";
 
-import type { Member } from "../../../member/domain/entity/member";
+import type { Member } from "../../../../shared/types/member";
 import type { MemberFilter } from "../../../member/domain/repository/memberRepository";
 import { MemberRepositoryHTTP } from "../../../member/infrastructure/http/memberRepositoryHTTP";
 
