@@ -1,113 +1,103 @@
-// frontend/console/mintRequest/src/infrastructure/repository/HttpMintRequestRepository.ts
+// frontend/console/shell/src/features/mintRequest/infrastructure/repository/HttpMintRequestRepository.ts
 
 import type {
-  MintQueuedResponse,
+  BrandSummary,
   MintRequestRepository,
   TokenBlueprintSummary,
 } from "../../application/port/MintRequestRepository";
 
+import type { InspectionBatchDTO } from "../../domain/inspections";
+
+import type { MintDTO } from "../dto/mint.dto";
+import type { ProductBlueprintPatchDTO } from "../dto/mintRequestLocal.dto";
+
+import { fetchBrandsForMintHTTP } from "./http/brands";
+import { fetchInspectionByProductionIdHTTP } from "./http/inspections";
+import { fetchMintByProductionIdHTTP } from "./http/mintRequests";
 import {
-  fetchInspectionByProductionIdHTTP,
-  fetchMintByProductionIdHTTP,
   fetchProductBlueprintIdByProductionIdHTTP,
-  fetchProductBlueprintPatchHTTP,
-  fetchBrandsForMintHTTP,
-  fetchTokenBlueprintsByBrandHTTP,
-  postMintRequestHTTP,
-} from "../repository";
+} from "./http/productions";
+import { fetchProductBlueprintPatchHTTP } from "./http/productBlueprintPatch";
+import { fetchTokenBlueprintsByBrandHTTP } from "./http/tokenBlueprints";
 
-export class HttpMintRequestRepository implements MintRequestRepository {
-  async fetchInspectionByProductionId(
+/**
+ * MintRequestRepositoryのHTTP実装。
+ *
+ * HTTPレスポンスの正規化は各HTTP関数側で行い、
+ * このクラスは取得処理をApplication層のPortへ接続する。
+ *
+ * ミント申請の送信はsubmitMintRequestAndRefreshから
+ * postMintRequestHTTPを直接呼び出すため、このRepositoryでは扱わない。
+ */
+export class HttpMintRequestRepository
+  implements MintRequestRepository
+{
+  /**
+   * productionIdに紐づく検品バッチを取得する。
+   */
+  fetchInspectionByProductionId(
     productionId: string,
-  ): Promise<unknown | null> {
-    return await fetchInspectionByProductionIdHTTP(productionId).catch(
-      () => null,
-    );
+  ): Promise<InspectionBatchDTO | null> {
+    return fetchInspectionByProductionIdHTTP(
+      productionId,
+    ).catch(() => null);
   }
 
-  async fetchMintByProductionId(
+  /**
+   * productionIdに紐づくMint情報を取得する。
+   *
+   * productions、inspections、mintsの
+   * ドキュメントIDは同一であり、
+   * フロントエンドではproductionIdを正とする。
+   */
+  fetchMintByProductionId(
     productionId: string,
-  ): Promise<unknown | null> {
-    return await fetchMintByProductionIdHTTP(productionId).catch(() => null);
+  ): Promise<MintDTO | null> {
+    return fetchMintByProductionIdHTTP(
+      productionId,
+    ).catch(() => null);
   }
 
-  async fetchProductBlueprintIdByProductionId(
+  /**
+   * productionIdに紐づくproductBlueprintIdを取得する。
+   */
+  fetchProductBlueprintIdByProductionId(
     productionId: string,
   ): Promise<string | null> {
-    return await fetchProductBlueprintIdByProductionIdHTTP(productionId).catch(
-      () => null,
-    );
+    return fetchProductBlueprintIdByProductionIdHTTP(
+      productionId,
+    ).catch(() => null);
   }
 
-  async fetchProductBlueprintPatch(
+  /**
+   * productBlueprintIdに紐づく
+   * プロダクト設計情報を取得する。
+   */
+  fetchProductBlueprintPatch(
     productBlueprintId: string,
-  ): Promise<unknown | null> {
-    return await fetchProductBlueprintPatchHTTP(productBlueprintId).catch(
-      () => null,
-    );
+  ): Promise<ProductBlueprintPatchDTO | null> {
+    return fetchProductBlueprintPatchHTTP(
+      productBlueprintId,
+    ).catch(() => null);
   }
 
-  async fetchBrandsForMint(): Promise<{ id: string; name: string }[]> {
-    const brands = await fetchBrandsForMintHTTP().catch(() => []);
-
-    return (brands ?? [])
-      .map((b: any) => ({
-        id: String(b?.id ?? "").trim(),
-        name: String(b?.name ?? "").trim(),
-      }))
-      .filter((b: any) => b.id && b.name);
-  }
-
-  async fetchTokenBlueprintsByBrand(
-    brandId: string,
-  ): Promise<TokenBlueprintSummary[]> {
-    const list = await fetchTokenBlueprintsByBrandHTTP(brandId).catch(
+  /**
+   * ミント申請画面で選択可能なブランドを取得する。
+   */
+  fetchBrandsForMint(): Promise<BrandSummary[]> {
+    return fetchBrandsForMintHTTP().catch(
       () => [],
     );
-
-    return (list ?? [])
-      .map((tb: any) => {
-        const tokenName = String(tb?.tokenName ?? tb?.name ?? "").trim();
-
-        return {
-          id: String(tb?.id ?? "").trim(),
-
-          // selector 表示用
-          name: tokenName,
-
-          // TokenBlueprintCard 表示用
-          tokenName,
-
-          symbol: String(tb?.symbol ?? "").trim(),
-
-          brandId: String(tb?.brandId ?? "").trim() || undefined,
-          brandName: String(tb?.brandName ?? "").trim() || undefined,
-          companyId: String(tb?.companyId ?? "").trim() || undefined,
-
-          description: String(tb?.description ?? "").trim() || undefined,
-          minted:
-            typeof tb?.minted === "boolean"
-              ? tb.minted
-              : String(tb?.minted ?? "").trim().toLowerCase() === "true",
-          metadataUri: String(tb?.metadataUri ?? "").trim() || undefined,
-
-          iconUrl: String(tb?.iconUrl ?? "").trim() || undefined,
-        };
-      })
-      .filter((tb: TokenBlueprintSummary) =>
-        Boolean(tb.id && tb.name && tb.symbol),
-      );
   }
 
-  async postMintRequest(
-    productionId: string,
-    tokenBlueprintId: string,
-    scheduledBurnDate?: string,
-  ): Promise<MintQueuedResponse | null> {
-    return await postMintRequestHTTP(
-      productionId,
-      tokenBlueprintId,
-      scheduledBurnDate,
-    ).catch(() => null);
+  /**
+   * 指定ブランドに紐づくトークン設計を取得する。
+   */
+  fetchTokenBlueprintsByBrand(
+    brandId: string,
+  ): Promise<TokenBlueprintSummary[]> {
+    return fetchTokenBlueprintsByBrandHTTP(
+      brandId,
+    ).catch(() => []);
   }
 }

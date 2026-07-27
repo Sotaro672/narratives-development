@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/application/validator/validateMintRequestSubmit.ts
+// frontend/console/shell/src/features/mintRequest/application/validator/validateMintRequestSubmit.ts
 
 import type { InspectionBatchDTO } from "../../domain/inspections";
 
@@ -8,8 +8,13 @@ export type ValidateMintRequestSubmitInput = {
   selectedTokenBlueprintId: string | null | undefined;
 
   /**
-   * URL param 由来の productionId。
-   * route 名が requestId のままでも、application では productionId として扱う。
+   * URL param由来のproductionId。
+   *
+   * route名がrequestIdのままでも、
+   * application層ではproductionIdとして扱う。
+   *
+   * inspectionBatch.productionIdを優先し、
+   * inspectionBatch側が空の場合のみfallbackとして使用する。
    */
   productionId?: string | null;
 };
@@ -25,31 +30,19 @@ export type ValidateMintRequestSubmitResult =
       message: string;
     };
 
-export type ValidateMintExecutionResultInput = {
-  refreshedMint: unknown;
-};
-
-export type ValidateMintExecutionResultResult =
-  | {
-      ok: true;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getBoolean(value: unknown): boolean {
-  return value === true;
-}
-
+/**
+ * ミント申請を送信できる状態か検証する。
+ *
+ * Backendはミントを同期実行せず、
+ * 202 Accepted / QUEUEDを返して順次処理する。
+ *
+ * そのため、このvalidatorでは次の入力条件だけを検証する。
+ *
+ * - 検品バッチが取得済みである
+ * - 検品が完了している
+ * - トークン設計が選択されている
+ * - productionIdが特定できる
+ */
 export function validateMintRequestSubmit(
   input: ValidateMintRequestSubmitInput,
 ): ValidateMintRequestSubmitResult {
@@ -69,7 +62,9 @@ export function validateMintRequestSubmit(
     };
   }
 
-  const tokenBlueprintId = String(input.selectedTokenBlueprintId ?? "").trim();
+  const tokenBlueprintId = String(
+    input.selectedTokenBlueprintId ?? "",
+  ).trim();
 
   if (!tokenBlueprintId) {
     return {
@@ -78,9 +73,16 @@ export function validateMintRequestSubmit(
     };
   }
 
-  const productionId = String(
-    (inspectionBatch as any).productionId ?? input.productionId ?? "",
+  const inspectionProductionId = String(
+    inspectionBatch.productionId ?? "",
   ).trim();
+
+  const routeProductionId = String(
+    input.productionId ?? "",
+  ).trim();
+
+  const productionId =
+    inspectionProductionId || routeProductionId;
 
   if (!productionId) {
     return {
@@ -93,42 +95,5 @@ export function validateMintRequestSubmit(
     ok: true,
     productionId,
     tokenBlueprintId,
-  };
-}
-
-export function validateMintExecutionResult(
-  input: ValidateMintExecutionResultInput,
-): ValidateMintExecutionResultResult {
-  const mint = input.refreshedMint;
-
-  if (!isRecord(mint)) {
-    return {
-      ok: false,
-      message:
-        "ミント申請は作成されましたが、ミント結果を取得できませんでした。画面を更新してミント状態を確認してください。",
-    };
-  }
-
-  const minted = getBoolean(mint.minted);
-  const txSignature = getString(mint.onChainTxSignature);
-
-  if (!minted) {
-    return {
-      ok: false,
-      message:
-        "ミント申請は作成されましたが、オンチェーンのミント完了を確認できませんでした。minted が false のため、バックエンドログを確認してください。",
-    };
-  }
-
-  if (!txSignature) {
-    return {
-      ok: false,
-      message:
-        "ミント申請は作成されましたが、トランザクション署名を確認できませんでした。onChainTxSignature が空のため、ミント結果を確認してください。",
-    };
-  }
-
-  return {
-    ok: true,
   };
 }

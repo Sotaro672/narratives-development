@@ -1,47 +1,38 @@
-// frontend/console/mintRequest/src/application/usecase/submitMintRequestAndRefresh.ts
+// frontend/console/shell/src/features/mintRequest/application/usecase/submitMintRequestAndRefresh.ts
 
-import type { MintDTO } from "../../infrastructure/dto/mint.dto";
 import type { MintQueuedResponse } from "../port/MintRequestRepository";
 
-import {
-  postMintRequestHTTP,
-  fetchMintByProductionIdHTTP,
-} from "../../infrastructure/repository";
+import { postMintRequestHTTP } from "../../infrastructure/repository";
 
 /**
- * mint request を送信し、mint を再取得して返す。
+ * ミント申請を送信する。
  *
- * NOTE:
- * - Backend は同期mint結果ではなく 202 Accepted / QUEUED を返す。
- * - updatedBatch は返らないため、queuedResponse と refreshedMint を返す。
+ * Backendは同期的にミントを完了せず、
+ * 202 Accepted / QUEUEDを返してミント処理を開始する。
+ *
+ * ミント情報の再取得はこのUsecaseでは行わず、
+ * 呼び出し側のreload処理に任せる。
  */
 export async function submitMintRequestAndRefresh(
   productionId: string,
   tokenBlueprintId: string,
   scheduledBurnDate?: string,
-): Promise<{
-  queuedResponse: MintQueuedResponse | null;
-  refreshedMint: MintDTO | null;
-}> {
-  const pid = String(productionId ?? "").trim();
-  const tbId = String(tokenBlueprintId ?? "").trim();
+): Promise<MintQueuedResponse | null> {
+  const normalizedProductionId = productionId.trim();
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedScheduledBurnDate =
+    scheduledBurnDate?.trim() || undefined;
 
-  if (!pid || !tbId) {
-    return { queuedResponse: null, refreshedMint: null };
+  if (
+    !normalizedProductionId ||
+    !normalizedTokenBlueprintId
+  ) {
+    return null;
   }
 
-  const queuedResponse = await postMintRequestHTTP(
-    pid,
-    tbId,
-    scheduledBurnDate,
-  ).catch(() => null);
-
-  const refreshedMint = await fetchMintByProductionIdHTTP(pid).catch(
-    () => null,
+  return postMintRequestHTTP(
+    normalizedProductionId,
+    normalizedTokenBlueprintId,
+    normalizedScheduledBurnDate,
   );
-
-  return {
-    queuedResponse: queuedResponse ?? null,
-    refreshedMint: refreshedMint ?? null,
-  };
 }
