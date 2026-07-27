@@ -199,7 +199,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const brand =
     useProductBlueprintCreateBrand(effectiveCompanyId);
-  const category = useProductBlueprintCreateCategory();
+
+  const category =
+    useProductBlueprintCreateCategory();
 
   const categoryFields =
     useProductBlueprintCreateCategoryFields(
@@ -213,8 +215,10 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const [assigneeId, setAssigneeId] =
     React.useState("");
+
   const [assigneeName, setAssigneeName] =
     React.useState("");
+
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
@@ -228,6 +232,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     }
 
     const memberId = currentMember.id;
+
     const label =
       getMemberDisplayLabel(currentMember);
 
@@ -252,6 +257,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         category.productBlueprintCategoryId,
       productBlueprintCategory:
         category.productBlueprintCategory,
+      categoryFields: sanitizedCategoryFields,
       weight: categoryFields.weight,
       isApparelCategory:
         variations.isApparelCategory,
@@ -273,6 +279,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         category.onChangeProductBlueprintCategory(
           nextCategory,
         );
+
         categoryFields.resetCategoryFields();
         variations.resetVariations();
       },
@@ -288,6 +295,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
           "\n- ",
         )}`,
       );
+
       return;
     }
 
@@ -295,11 +303,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       alert(
         "companyId が取得できません。ログインし直してください。",
       );
+
       return;
     }
 
     if (!category.productBlueprintCategory) {
       alert("商品カテゴリを選択してください。");
+
       return;
     }
 
@@ -323,12 +333,15 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       colors: variations.isApparelCategory
         ? variations.colors
         : [],
+
       colorRgbMap: variations.isApparelCategory
         ? variations.colorRgbMap
         : {},
+
       sizes: variations.isApparelCategory
         ? variations.sizes
         : [],
+
       modelNumbers: variations.isApparelCategory
         ? variations.modelNumbers
         : [],
@@ -340,6 +353,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       volumes: variations.isAlcoholCategory
         ? variations.volumes
         : [],
+
       alcoholModelNumbers:
         variations.isAlcoholCategory
           ? variations.alcoholModelNumbers
@@ -353,6 +367,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     try {
       const created =
         await createProductBlueprint(apiParams);
+
       const createdId = String(
         (created as any)?.id ?? "",
       );
@@ -363,6 +378,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         navigate(
           `/productBlueprint/detail/${createdId}`,
         );
+
         return;
       }
 
@@ -449,26 +465,35 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     productBlueprintCategoryId:
       category.productBlueprintCategoryId,
+
     productBlueprintCategory:
       category.productBlueprintCategory,
+
     productBlueprintCategoryLabel:
       category.productBlueprintCategoryLabel,
+
     productBlueprintCategoryOptions:
       category.productBlueprintCategoryOptions,
+
     productBlueprintCategoryLoading:
       category.productBlueprintCategoryLoading,
+
     productBlueprintCategoryError:
       category.productBlueprintCategoryError,
+
     isApparelCategory:
       variations.isApparelCategory,
+
     isAlcoholCategory:
       variations.isAlcoholCategory,
 
     fit: categoryFields.fit,
     material: categoryFields.material,
     weight: categoryFields.weight,
+
     qualityAssurance:
       categoryFields.qualityAssurance,
+
     categoryFields: sanitizedCategoryFields,
 
     measurementOptions:
@@ -481,6 +506,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     modelNumbers: variations.modelNumbers,
 
     volumes: variations.volumes,
+
     alcoholModelNumbers:
       variations.alcoholModelNumbers,
 
@@ -496,31 +522,41 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onChangeProductBlueprintCategory,
 
     onChangeFit: categoryFields.onChangeFit,
+
     onChangeMaterial:
       categoryFields.onChangeMaterial,
+
     onChangeWeight:
       categoryFields.onChangeWeight,
+
     onChangeQualityAssurance:
       categoryFields.onChangeQualityAssurance,
+
     onChangeCategoryField:
       categoryFields.onChangeCategoryField,
 
     onChangeColorInput:
       variations.onChangeColorInput,
+
     onAddColor: variations.onAddColor,
     onRemoveColor: variations.onRemoveColor,
+
     onChangeColorRgb:
       variations.onChangeColorRgb,
 
     onAddSize: variations.onAddSize,
     onRemoveSize: variations.onRemoveSize,
     onChangeSize: variations.onChangeSize,
+
     onChangeModelNumber:
       variations.onChangeModelNumber,
 
     onAddVolume: variations.onAddVolume,
     onRemoveVolume: variations.onRemoveVolume,
-    onChangeVolume: variations.onChangeVolume,
+
+    onChangeVolume:
+      variations.onChangeVolume,
+
     onChangeAlcoholModelNumber:
       variations.onChangeAlcoholModelNumber,
 

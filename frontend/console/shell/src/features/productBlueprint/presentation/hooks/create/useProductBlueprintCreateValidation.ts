@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/presentation/hooks/create/useProductBlueprintCreateValidation.ts
+// frontend/console/shell/src/features/productBlueprint/presentation/hooks/create/useProductBlueprintCreateValidation.ts
 
 import * as React from "react";
 
@@ -8,7 +8,11 @@ import type {
   VolumeRow,
 } from "../../../../model/application/modelCreateService";
 import type { ApparelSizeRow } from "../../../domain/apparel";
-import type { ProductBlueprintCategorySnapshot } from "../../../domain/productBlueprintCategory";
+import {
+  isValidWashTags,
+  type CategoryFieldValues,
+  type ProductBlueprintCategorySnapshot,
+} from "../../../domain/productBlueprintCategory";
 
 export type UseProductBlueprintCreateValidationParams = {
   companyId: string;
@@ -16,6 +20,15 @@ export type UseProductBlueprintCreateValidationParams = {
   brandId: string;
   productBlueprintCategoryId: string;
   productBlueprintCategory: ProductBlueprintCategorySnapshot | null;
+
+  /**
+   * ProductBlueprint.categoryFields に保存する
+   * カテゴリ固有の入力値。
+   *
+   * apparel では washTags を必須とする。
+   */
+  categoryFields: CategoryFieldValues;
+
   weight: number;
 
   isApparelCategory: boolean;
@@ -40,7 +53,10 @@ function normalizeString(value: unknown): string {
 }
 
 function toVolumeLabel(
-  volume: Pick<VolumeRow, "volumeValue" | "volumeUnit">,
+  volume: Pick<
+    VolumeRow,
+    "volumeValue" | "volumeUnit"
+  >,
 ): string {
   const value =
     typeof volume.volumeValue === "number" &&
@@ -48,7 +64,8 @@ function toVolumeLabel(
       ? volume.volumeValue
       : 0;
 
-  const unit = normalizeString(volume.volumeUnit) || "ml";
+  const unit =
+    normalizeString(volume.volumeUnit) || "ml";
 
   if (value <= 0) {
     return "";
@@ -69,20 +86,22 @@ function toAlcoholModelNumberVolumeLabel(
 function hasEmptyModelNumberValue(
   modelNumber: ModelNumber,
 ): boolean {
-  return Object.values(modelNumber).some((value) => {
-    if (value == null) {
-      return true;
-    }
+  return Object.values(modelNumber).some(
+    (value) => {
+      if (value == null) {
+        return true;
+      }
 
-    if (
-      typeof value === "string" &&
-      value.trim() === ""
-    ) {
-      return true;
-    }
+      if (
+        typeof value === "string" &&
+        value.trim() === ""
+      ) {
+        return true;
+      }
 
-    return false;
-  });
+      return false;
+    },
+  );
 }
 
 function hasEmptyAlcoholModelNumberValue(
@@ -92,7 +111,11 @@ function hasEmptyAlcoholModelNumberValue(
     return true;
   }
 
-  if (!toAlcoholModelNumberVolumeLabel(modelNumber)) {
+  if (
+    !toAlcoholModelNumberVolumeLabel(
+      modelNumber,
+    )
+  ) {
     return true;
   }
 
@@ -116,14 +139,18 @@ export function useProductBlueprintCreateValidation(
     }
 
     if (!params.brandId) {
-      errors.push("ブランドを選択してください。");
+      errors.push(
+        "ブランドを選択してください。",
+      );
     }
 
     if (
       !params.productBlueprintCategoryId ||
       !params.productBlueprintCategory
     ) {
-      errors.push("商品カテゴリを選択してください。");
+      errors.push(
+        "商品カテゴリを選択してください。",
+      );
     }
 
     if (params.weight < 0) {
@@ -133,6 +160,16 @@ export function useProductBlueprintCreateValidation(
     }
 
     if (params.isApparelCategory) {
+      if (
+        !isValidWashTags(
+          params.categoryFields.washTags,
+        )
+      ) {
+        errors.push(
+          "洗濯表示を1つ以上選択してください。",
+        );
+      }
+
       if (params.colors.length === 0) {
         errors.push(
           "カラーバリエーションを1つ以上登録してください。",
@@ -162,9 +199,14 @@ export function useProductBlueprintCreateValidation(
         }
       }
 
-      if (params.modelNumbers.length > 0) {
-        const seenCodes = new Set<string>();
-        const duplicateCodes = new Set<string>();
+      if (
+        params.modelNumbers.length > 0
+      ) {
+        const seenCodes =
+          new Set<string>();
+
+        const duplicateCodes =
+          new Set<string>();
 
         params.modelNumbers.forEach(
           (modelNumber) => {
@@ -183,7 +225,9 @@ export function useProductBlueprintCreateValidation(
           },
         );
 
-        if (duplicateCodes.size > 0) {
+        if (
+          duplicateCodes.size > 0
+        ) {
           errors.push(
             `モデルナンバーが重複しています。（重複コード: ${Array.from(
               duplicateCodes,
@@ -193,8 +237,11 @@ export function useProductBlueprintCreateValidation(
       }
 
       if (params.sizes.length > 0) {
-        const seenSizes = new Set<string>();
-        const duplicateSizes = new Set<string>();
+        const seenSizes =
+          new Set<string>();
+
+        const duplicateSizes =
+          new Set<string>();
 
         params.sizes.forEach((size) => {
           const label = normalizeString(
@@ -212,7 +259,9 @@ export function useProductBlueprintCreateValidation(
           }
         });
 
-        if (duplicateSizes.size > 0) {
+        if (
+          duplicateSizes.size > 0
+        ) {
           errors.push(
             `サイズ名が重複しています。（重複サイズ: ${Array.from(
               duplicateSizes,
@@ -230,7 +279,8 @@ export function useProductBlueprintCreateValidation(
       }
 
       if (
-        params.alcoholModelNumbers.length === 0
+        params.alcoholModelNumbers
+          .length === 0
       ) {
         errors.push(
           "容量ごとのモデルナンバーを1つ以上登録してください。",
@@ -249,29 +299,40 @@ export function useProductBlueprintCreateValidation(
       }
 
       if (params.volumes.length > 0) {
-        const seenVolumes = new Set<string>();
+        const seenVolumes =
+          new Set<string>();
+
         const duplicateVolumes =
           new Set<string>();
 
-        params.volumes.forEach((volume) => {
-          const label = toVolumeLabel(volume);
+        params.volumes.forEach(
+          (volume) => {
+            const label =
+              toVolumeLabel(volume);
 
-          if (!label) {
-            errors.push(
-              "容量は 0 より大きい値を入力してください。",
-            );
+            if (!label) {
+              errors.push(
+                "容量は 0 より大きい値を入力してください。",
+              );
 
-            return;
-          }
+              return;
+            }
 
-          if (seenVolumes.has(label)) {
-            duplicateVolumes.add(label);
-          } else {
-            seenVolumes.add(label);
-          }
-        });
+            if (
+              seenVolumes.has(label)
+            ) {
+              duplicateVolumes.add(
+                label,
+              );
+            } else {
+              seenVolumes.add(label);
+            }
+          },
+        );
 
-        if (duplicateVolumes.size > 0) {
+        if (
+          duplicateVolumes.size > 0
+        ) {
           errors.push(
             `容量が重複しています。（重複容量: ${Array.from(
               duplicateVolumes,
@@ -281,9 +342,12 @@ export function useProductBlueprintCreateValidation(
       }
 
       if (
-        params.alcoholModelNumbers.length > 0
+        params.alcoholModelNumbers
+          .length > 0
       ) {
-        const seenCodes = new Set<string>();
+        const seenCodes =
+          new Set<string>();
+
         const duplicateCodes =
           new Set<string>();
 
@@ -304,7 +368,9 @@ export function useProductBlueprintCreateValidation(
           },
         );
 
-        if (duplicateCodes.size > 0) {
+        if (
+          duplicateCodes.size > 0
+        ) {
           errors.push(
             `モデルナンバーが重複しています。（重複コード: ${Array.from(
               duplicateCodes,
@@ -315,13 +381,15 @@ export function useProductBlueprintCreateValidation(
 
       if (
         params.volumes.length > 0 &&
-        params.alcoholModelNumbers.length > 0
+        params.alcoholModelNumbers
+          .length > 0
       ) {
-        const validVolumeLabels = new Set(
-          params.volumes
-            .map(toVolumeLabel)
-            .filter(Boolean),
-        );
+        const validVolumeLabels =
+          new Set(
+            params.volumes
+              .map(toVolumeLabel)
+              .filter(Boolean),
+          );
 
         const missingModelNumberVolumes =
           params.volumes
@@ -338,7 +406,8 @@ export function useProductBlueprintCreateValidation(
             );
 
         if (
-          missingModelNumberVolumes.length > 0
+          missingModelNumberVolumes
+            .length > 0
         ) {
           errors.push(
             `モデルナンバー未入力の容量があります。（対象: ${missingModelNumberVolumes.join(
@@ -355,11 +424,14 @@ export function useProductBlueprintCreateValidation(
             .filter(Boolean)
             .filter(
               (label) =>
-                !validVolumeLabels.has(label),
+                !validVolumeLabels.has(
+                  label,
+                ),
             );
 
         if (
-          invalidModelNumberVolumes.length > 0
+          invalidModelNumberVolumes
+            .length > 0
         ) {
           errors.push(
             `存在しない容量に紐づくモデルナンバーがあります。（対象: ${invalidModelNumberVolumes.join(

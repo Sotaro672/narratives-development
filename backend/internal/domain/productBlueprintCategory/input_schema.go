@@ -137,6 +137,14 @@ var (
 		Required: false,
 	}
 
+	fieldWashTags = CategoryInputFieldDefinition{
+		Scope:    InputFieldScopeProductBlueprint,
+		Key:      "washTags",
+		Label:    "洗濯表示",
+		Type:     InputFieldTypeMultiSelect,
+		Required: true,
+	}
+
 	fieldAlcoholContent = CategoryInputFieldDefinition{
 		Scope:    InputFieldScopeProductBlueprint,
 		Key:      "alcoholContent",
@@ -268,6 +276,11 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 
 	// ------------------------------------------------------------
 	// apparel
+	// productBlueprint:
+	// brandId, productName, productIdTagType, description,
+	// category-specific fields, washTags
+	// model:
+	// category-specific model fields
 	// ------------------------------------------------------------
 	CategoryCodeApparelAccessory: {
 		CategoryCode:   CategoryCodeApparelAccessory,
@@ -275,6 +288,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 		CategoryNameJa: "アクセサリー",
 		ProductBlueprintFields: withCommonProductBlueprintFields(
 			fieldMaterial,
+			fieldWashTags,
 		),
 		ModelFields: nil,
 	},
@@ -284,6 +298,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 		CategoryNameJa: "バッグ",
 		ProductBlueprintFields: withCommonProductBlueprintFields(
 			fieldMaterial,
+			fieldWashTags,
 		),
 		ModelFields: nil,
 	},
@@ -295,6 +310,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 			fieldWeight,
 			fieldFit,
 			fieldMaterial,
+			fieldWashTags,
 		),
 		ModelFields: modelFieldsColorSizeMeasurements,
 	},
@@ -306,6 +322,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 			fieldWeight,
 			fieldFit,
 			fieldMaterial,
+			fieldWashTags,
 		),
 		ModelFields: modelFieldsColorSizeMeasurements,
 	},
@@ -315,6 +332,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 		CategoryNameJa: "アウター",
 		ProductBlueprintFields: withCommonProductBlueprintFields(
 			fieldMaterial,
+			fieldWashTags,
 		),
 		ModelFields: modelFieldsColorSize,
 	},
@@ -324,6 +342,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 		CategoryNameJa: "靴",
 		ProductBlueprintFields: withCommonProductBlueprintFields(
 			fieldMaterial,
+			fieldWashTags,
 		),
 		ModelFields: modelFieldsColorSize,
 	},
@@ -335,6 +354,7 @@ var categoryInputSchemaRegistry = map[string]CategoryInputSchema{
 			fieldWeight,
 			fieldFit,
 			fieldMaterial,
+			fieldWashTags,
 		),
 		ModelFields: modelFieldsColorSizeMeasurements,
 	},
